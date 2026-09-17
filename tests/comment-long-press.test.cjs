@@ -14,6 +14,9 @@ const { getAllCommands } = jiti(
 const { pinCommentGroupFirst } = jiti(
   path.join(root, "src/lib/htc/pinCommentGroupFirst.ts")
 );
+const { isCommentCreatedByUser } = jiti(
+  path.join(root, "src/lib/htc/isCommentCreatedByUser.ts")
+);
 
 test("comment commands already list Edit comment first", () => {
   const groups = getAllCommands({
@@ -51,4 +54,44 @@ test("pinCommentGroupFirst puts Comment above Frequently used and leaves Edit fi
 test("pinCommentGroupFirst is a no-op when there is no Comment group", () => {
   const groups = [{ group: "Task", commandLists: [] }];
   assert.strictEqual(pinCommentGroupFirst(groups), groups);
+});
+
+test("own comment with only creator.id still lists Edit first", () => {
+  const own = isCommentCreatedByUser({ creator: { id: 42 } }, 42);
+  assert.equal(own, true);
+  const groups = getAllCommands({
+    context: "Task",
+    commentOptions: {
+      isApple: false,
+      isCurrentUserCreator: own,
+      isPinned: false,
+      isStarred: false,
+    },
+  });
+  assert.equal(groups[0].group, "Comment");
+  assert.equal(groups[0].commandLists[0].key, "editcomment");
+  assert.equal(groups[0].commandLists[0].name, "Edit comment");
+});
+
+test("creatorId-only match still counts as own comment", () => {
+  assert.equal(isCommentCreatedByUser({ creatorId: 7 }, 7), true);
+  assert.equal(isCommentCreatedByUser({ creatorId: "7" }, 7), true);
+});
+
+test("someone else's comment does not get Edit", () => {
+  const own = isCommentCreatedByUser(
+    { creatorId: 1, creator: { id: 1 } },
+    42
+  );
+  assert.equal(own, false);
+  const groups = getAllCommands({
+    context: "Task",
+    commentOptions: {
+      isApple: false,
+      isCurrentUserCreator: own,
+      isPinned: false,
+      isStarred: false,
+    },
+  });
+  assert.notEqual(groups[0].commandLists[0].key, "editcomment");
 });

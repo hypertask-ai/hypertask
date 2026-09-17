@@ -21,6 +21,7 @@ import SwipeableCommentRow from "./SwipeableCommentRow";
 import { Reply } from "lucide-react";
 import { useFlag } from "@/hooks/useFlag";
 import { HTPR_6514_COMMENT_LONG_PRESS_FLAG } from "@/lib/flags/keys";
+import { isCommentCreatedByUser } from "@/lib/htc/isCommentCreatedByUser";
 const CommentReactions = dynamic(() => import("./CommentReactions"));
 
 const CommentReadReceipts = () => {
@@ -126,8 +127,8 @@ const CommentsContainer = () => {
     handleDoubleTap();
   }
   const isCurrentUserCreator = useMemo(
-    () => comment.creator?.id === currentUser?.id,
-    [comment.creator?.id, currentUser?.id]
+    () => isCommentCreatedByUser(comment, currentUser?.id),
+    [comment, currentUser?.id]
   );
   const _mbl = useContext(MobileViewContext);
   const commentId = Number(comment.id);
@@ -237,7 +238,7 @@ const CommentsContainer = () => {
                         rounded-sm
                         ${styles.hellow}
                         ${
-                          comment.creator?.id === currentUser?.id
+                          isCommentCreatedByUser(comment, currentUser?.id)
                             ? "bg-self-comment"
                             : // they look the same now but wasn't always t
                               "bg-comment-description"

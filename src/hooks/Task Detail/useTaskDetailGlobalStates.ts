@@ -60,6 +60,7 @@ import { useGetUserPreferences } from "../General/useGetUserPreferences";
 import { wrapBlockQuote } from "@/utils/helperFunctions/TaskDetail";
 import type { SerializedAgentRunActivity } from "@/lib/agentRuns/model";
 import { mergeTaskThreadFeed } from "@/lib/agentRuns/taskActivityFeed";
+import { isCommentCreatedByUser } from "@/lib/htc/isCommentCreatedByUser";
 
 // import useSetStickyHeight from "./useSetStickyHeight";
 export type TReturnFocusedEl =
@@ -584,7 +585,7 @@ const useTaskDetailGlobalStates = (
     currentIndex: number,
     shouldTriggerAi: boolean = false
   ) => {
-    if (comments[currentIndex]?.creatorId === currentUser.id) {
+    if (isCommentCreatedByUser(comments[currentIndex], currentUser?.id)) {
       const editModeToSelect: ITaskDetailEditMode = shouldTriggerAi
         ? "edit-comment-ai"
         : "edit-comment";
@@ -713,8 +714,10 @@ const useTaskDetailGlobalStates = (
     const comment = comments[index];
     return {
       isApple,
-      isCurrentUserCreator:
-        comments[index]?.creatorId === currentUser.id,
+      isCurrentUserCreator: isCommentCreatedByUser(
+        comments[index],
+        currentUser?.id,
+      ),
       isPinned: !!comment?.savedContent?.find((item) => item.type === "Public"),
       isStarred: !!comment?.savedContent?.find(
         (item) => item.type === "Private"
