@@ -45,7 +45,33 @@ function loadCatalog(filePath = catalogPath()) {
       throw new Error(`${task.id} is missing expect.stdoutIncludes`);
     }
   }
+  assertCatalogToolsAreInProduct(raw.tasks);
   return raw;
+}
+
+function assertCatalogToolsAreInProduct(tasks) {
+  const metadataPath = path.join(
+    __dirname,
+    "..",
+    "..",
+    "..",
+    "src",
+    "lib",
+    "mcp-server",
+    "config",
+    "tool-metadata.ts",
+  );
+  const metadata = fs.readFileSync(metadataPath, "utf8");
+  for (const task of tasks) {
+    for (const tool of task.mcp.tools) {
+      const suffix = String(tool.name || "").replace(/^hypertask_/, "");
+      if (!metadata.includes(`buildToolName('${suffix}')`)) {
+        throw new Error(
+          `${task.id} uses ${tool.name}, which is not in the production MCP tool registry`,
+        );
+      }
+    }
+  }
 }
 
 module.exports = {

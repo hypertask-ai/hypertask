@@ -18,14 +18,13 @@ function rate(value: number): string {
 }
 
 function tokens(value: number | null, source?: McpClientEvalUsageSource): string {
-  if (!Number.isFinite(value)) return "—";
+  if (source === "unavailable" || value == null || !Number.isFinite(value)) return "—";
   if (source === "estimate") return `est. ${value}`;
   return String(value);
 }
 
 function time(value: number | null, source?: string): string {
-  if (!Number.isFinite(value)) return "—";
-  if (source === "unavailable") return "—";
+  if (source === "unavailable" || value == null || !Number.isFinite(value)) return "—";
   return `${value} ms`;
 }
 
@@ -74,11 +73,45 @@ function McpClientEvalPanel() {
             {report.summary.byTransport && (
               <>
                 {" "}
-                · MCP {report.summary.byTransport.mcp.wallMs} ms · CLI{" "}
-                {report.summary.byTransport.cli.wallMs} ms
+                · MCP {time(report.summary.byTransport.mcp.wallMs, "measured")} · CLI{" "}
+                {time(report.summary.byTransport.cli.wallMs, "measured")}
               </>
             )}
           </p>
+          {report.summary.byTransport && (
+            <div className="mb-4 overflow-x-auto">
+              <table className="w-full text-left text-dense">
+                <thead>
+                  <tr className="text-text-light-gray">
+                    <th className="py-1.5 pr-3 font-medium">Path</th>
+                    <th className="py-1.5 pr-3 font-medium">Pass</th>
+                    <th className="py-1.5 pr-3 font-medium">Time</th>
+                    <th className="py-1.5 font-medium">Tool calls</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {TRANSPORTS.map((transport) => {
+                    const slice = report.summary.byTransport?.[transport];
+                    if (!slice) return null;
+                    return (
+                      <tr
+                        key={transport}
+                        className="border-t border-border-light-gray-thin"
+                      >
+                        <td className="py-1.5 pr-3 uppercase">{transport}</td>
+                        <td className="py-1.5 pr-3">{rate(slice.successRate)}</td>
+                        <td className="py-1.5 pr-3">
+                          {time(slice.wallMs, "measured")}
+                        </td>
+                        <td className="py-1.5">{slice.toolCalls}</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+          {report.rows.length > 0 && (
           <div className="overflow-x-auto">
             <table className="w-full text-left text-dense">
               <thead>
@@ -95,7 +128,8 @@ function McpClientEvalPanel() {
               <tbody>
                 {CLIENTS.flatMap((client) =>
                   TRANSPORTS.map((transport) => {
-                    const slice = report.summary.byClient[client][transport];
+                    const slice = report.summary.byClient[client]?.[transport];
+                    if (!slice || slice.tasks === 0) return null;
                     return (
                       <tr
                         key={`${client}-${transport}`}
@@ -111,7 +145,7 @@ function McpClientEvalPanel() {
                           {tokens(slice.tokensOut, slice.usageSource)}
                         </td>
                         <td className="py-1.5 pr-3">
-                          {time(slice.wallMs, slice.usageSource)}
+                          {time(slice.wallMs, slice.wallSource)}
                         </td>
                         <td className="py-1.5">{slice.toolCalls}</td>
                       </tr>
@@ -121,6 +155,8 @@ function McpClientEvalPanel() {
               </tbody>
             </table>
           </div>
+          )}
+          {report.rows.length > 0 && (
           <div className="mt-4 overflow-x-auto">
             <table className="w-full text-left text-dense">
               <thead>
@@ -160,6 +196,7 @@ function McpClientEvalPanel() {
               </tbody>
             </table>
           </div>
+          )}
         </>
       )}
     </section>

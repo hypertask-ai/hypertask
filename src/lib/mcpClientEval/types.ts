@@ -30,12 +30,13 @@ export type McpClientEvalSlice = {
   passed: number;
   failed: number;
   successRate: number;
-  tokensIn: number;
-  tokensOut: number;
-  wallMs: number;
+  tokensIn: number | null;
+  tokensOut: number | null;
+  wallMs: number | null;
   toolCalls: number;
   live?: number;
   usageSource?: McpClientEvalUsageSource;
+  wallSource?: McpClientEvalWallSource;
 };
 
 export type McpClientEvalSurface = {

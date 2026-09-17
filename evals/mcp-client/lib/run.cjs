@@ -125,15 +125,35 @@ async function runLiveRow(task, client, transport, ctx) {
   if (!clientAvailable(client, ctx.env)) {
     return {
       skipped: true,
-      reason: `${client} adapter did not run`,
+      unavailable: true,
+      reason: `${client} adapter is not available`,
     };
   }
   if (task.mutating && ctx.env.EVAL_LIVE_WRITES !== "1") {
-    return { skipped: true, reason: "mutating live writes are disabled" };
+    return { skipped: true, unavailable: true, reason: "mutating live writes are disabled" };
+  }
+  if (task.mutating && !ctx.env.EVAL_PROJECT_ID) {
+    return {
+      skipped: false,
+      row: rowFromParts({
+        task,
+        client,
+        transport,
+        grade: {
+          pass: false,
+          reason: "live writes require EVAL_PROJECT_ID for an isolated project",
+        },
+        usage: emptyUsage("unavailable"),
+        wallMs: null,
+        wallSource: "unavailable",
+        mode: "live",
+        executor: `${client}:${transport}`,
+      }),
+    };
   }
   const live = runClientAdapter(client, task, transport, { env: ctx.env });
-  if (!live.executed) {
-    return { skipped: true, reason: live.error };
+  if (!live.attempted) {
+    return { skipped: true, unavailable: true, reason: live.error };
   }
   const grade = live.error
     ? { pass: false, reason: live.error }
@@ -163,32 +183,30 @@ function summarize(rows) {
         (row) => row.client === client && row.transport === transport,
       );
       const passed = subset.filter((row) => row.pass).length;
+      const tokenRows = subset.filter((row) => Number.isFinite(row.tokensIn) || Number.isFinite(row.tokensOut));
+      const wallRows = subset.filter((row) => Number.isFinite(row.wallMs));
       byClient[client][transport] = {
         tasks: subset.length,
         passed,
         failed: subset.length - passed,
         successRate: subset.length === 0 ? 0 : passed / subset.length,
-        tokensIn: subset.reduce(
-          (sum, row) => sum + (Number.isFinite(row.tokensIn) ? row.tokensIn : 0),
-          0,
-        ),
-        tokensOut: subset.reduce(
-          (sum, row) => sum + (Number.isFinite(row.tokensOut) ? row.tokensOut : 0),
-          0,
-        ),
-        wallMs: subset.reduce(
-          (sum, row) => sum + (Number.isFinite(row.wallMs) ? row.wallMs : 0),
-          0,
-        ),
+        tokensIn: tokenRows.length
+          ? tokenRows.reduce((sum, row) => sum + (Number.isFinite(row.tokensIn) ? row.tokensIn : 0), 0)
+          : null,
+        tokensOut: tokenRows.length
+          ? tokenRows.reduce((sum, row) => sum + (Number.isFinite(row.tokensOut) ? row.tokensOut : 0), 0)
+          : null,
+        wallMs: wallRows.length
+          ? wallRows.reduce((sum, row) => sum + row.wallMs, 0)
+          : null,
         toolCalls: subset.reduce((sum, row) => sum + row.toolCalls, 0),
         live: subset.filter((row) => row.mode === "live").length,
-        usageSource: subset.some((row) => row.usageSource === "provider")
+        usageSource: tokenRows.some((row) => row.usageSource === "provider")
           ? "provider"
-          : subset.some((row) => row.usageSource === "transcript")
+          : tokenRows.some((row) => row.usageSource === "transcript")
             ? "transcript"
-            : subset.some((row) => row.usageSource === "estimate")
-              ? "estimate"
-              : "unavailable",
+            : "unavailable",
+        wallSource: wallRows.length ? wallRows[0].wallSource || "measured" : "unavailable",
       };
     }
   }
@@ -275,19 +293,6 @@ async function runSurfaceCatalog(catalog, options) {
           toolCalls: toolCallsFor(task, transport),
           executor: live.executor,
         });
-        if (options.recordTranscripts) {
-          for (const client of CLIENTS) {
-            recordings.push({
-              taskId: task.id,
-              client,
-              transport,
-              observation: live.observation,
-              usage: emptyUsage("unavailable"),
-              wallMs: live.wallMs,
-              wallSource: "measured",
-            });
-          }
-        }
       }
     }
   });
@@ -298,60 +303,46 @@ async function runEval(options = {}) {
   const catalog = loadCatalog(options.catalogPath);
   const mode = options.mode || "fixture";
   const env = options.env || process.env;
-  let transcripts;
+  let transcripts = { version: catalog.version, recordings: [] };
   try {
     transcripts = loadTranscripts(options.transcriptsPath || transcriptsPath());
-  } catch (error) {
-    if (!options.recordTranscripts) throw error;
+  } catch {
     transcripts = { version: catalog.version, recordings: [] };
   }
-  let byRecording = indexTranscripts(transcripts);
+  const byRecording = indexTranscripts(transcripts);
   const rows = [];
   let surfaces = [];
 
-  if (mode === "fixture" || options.recordTranscripts) {
-    const executed = await runSurfaceCatalog(catalog, {
-      allowWrites: true,
-      recordTranscripts: Boolean(options.recordTranscripts),
-    });
+  if (mode === "fixture") {
+    const executed = await runSurfaceCatalog(catalog, { allowWrites: true });
     surfaces = executed.surfaces;
-    if (options.recordTranscripts) {
-      const dest = options.transcriptsOut || transcriptsPath();
-      fs.writeFileSync(
-        dest,
-        `${JSON.stringify({ version: catalog.version, recordings: executed.recordings }, null, 2)}\n`,
-      );
-      transcripts = loadTranscripts(dest);
-      byRecording = indexTranscripts(transcripts);
-    }
   }
 
-  for (const task of catalog.tasks) {
-    for (const client of CLIENTS) {
-      for (const transport of TRANSPORTS) {
-        if (mode === "live") {
+  if (mode === "live") {
+    for (const task of catalog.tasks) {
+      for (const client of CLIENTS) {
+        for (const transport of TRANSPORTS) {
           const live = await runLiveRow(task, client, transport, {
             env,
             hypertaskBin: options.hypertaskBin,
           });
-          if (!live.skipped) {
-            rows.push(live.row);
-            continue;
-          }
+          if (!live.skipped) rows.push(live.row);
         }
-        rows.push(
-          replayFromTranscript(
-            task,
-            client,
-            transport,
-            byRecording.get(recordingKey(task.id, client, transport)),
-          ),
-        );
+      }
+    }
+  } else if (mode === "replay") {
+    for (const task of catalog.tasks) {
+      for (const client of CLIENTS) {
+        for (const transport of TRANSPORTS) {
+          const recording = byRecording.get(recordingKey(task.id, client, transport));
+          if (!recording || recording.provenance !== `${client}:${transport}`) continue;
+          rows.push(replayFromTranscript(task, client, transport, recording));
+        }
       }
     }
   }
 
-  const surfaceSummary = summarizeSurfaces(surfaces);
+  const surfaceSummary = surfaces.length ? summarizeSurfaces(surfaces) : undefined;
   const failedSurfaces = surfaces.filter((row) => !row.pass).length;
 
   return {
@@ -364,7 +355,7 @@ async function runEval(options = {}) {
     surfaces,
     summary: {
       ...summarize(rows),
-      byTransport: surfaceSummary,
+      ...(surfaceSummary ? { byTransport: surfaceSummary } : {}),
       surfaceFailed: failedSurfaces,
     },
   };

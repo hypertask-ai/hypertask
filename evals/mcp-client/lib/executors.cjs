@@ -281,10 +281,14 @@ function clientAvailable(client, env = process.env) {
 function runClientAdapter(client, task, transport, { env } = {}) {
   const spec = CLIENT_SPECS[client];
   if (!spec) {
-    return { executed: false, error: `unknown client ${client}` };
+    return { attempted: false, executed: false, error: `unknown client ${client}` };
   }
   if (!clientAvailable(client, env)) {
-    return { executed: false, error: `${client} adapter is not available` };
+    return {
+      attempted: false,
+      executed: false,
+      error: `${client} adapter is not available`,
+    };
   }
   const started = Date.now();
   const result = spawnSync(clientBin(client, env), spec.args(task, transport), {
@@ -295,17 +299,19 @@ function runClientAdapter(client, task, transport, { env } = {}) {
   const stdout = result.stdout || "";
   const observation = observationFromClient(task, transport, stdout);
   const usage = usageFromClientJson(parseJsonBlobs(stdout));
+  const error =
+    result.status === 0
+      ? null
+      : result.stderr || `${client} exited ${result.status}`;
   return {
     observation,
     usage,
     wallMs: Date.now() - started,
     wallSource: "measured",
-    executed: result.status === 0,
+    attempted: true,
+    executed: true,
     executor: `${client}:${transport}`,
-    error:
-      result.status === 0
-        ? null
-        : result.stderr || `${client} exited ${result.status}`,
+    error,
   };
 }
 

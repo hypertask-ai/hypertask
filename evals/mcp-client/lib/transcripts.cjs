@@ -9,8 +9,8 @@ function transcriptsPath() {
 
 function loadTranscripts(filePath = transcriptsPath()) {
   const raw = JSON.parse(fs.readFileSync(filePath, "utf8"));
-  if (!Array.isArray(raw.recordings) || raw.recordings.length === 0) {
-    throw new Error("Transcripts must contain independent recordings");
+  if (!Array.isArray(raw.recordings)) {
+    throw new Error("Transcripts must contain a recordings array");
   }
   return raw;
 }
@@ -32,6 +32,7 @@ function indexTranscripts(transcripts) {
 
 function isIndependentRecording(task, recording, transport) {
   if (!recording?.observation) return false;
+  if (recording.provenance !== `${recording.client}:${transport}`) return false;
   const stdout =
     transport === "mcp"
       ? (recording.observation.tools || []).some((tool) => tool.stdout)
