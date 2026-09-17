@@ -497,22 +497,58 @@ elif [ -z "$out" ] || [ "$out" = "/dev/stdout" ]; then
 fi
 `;
 
+function gitIdentityEnv(extraEnv = {}) {
+  return {
+    ...process.env,
+    ...extraEnv,
+    GIT_AUTHOR_NAME: extraEnv.GIT_AUTHOR_NAME || "drift-test",
+    GIT_AUTHOR_EMAIL: extraEnv.GIT_AUTHOR_EMAIL || "drift-test@example.com",
+    GIT_COMMITTER_NAME: extraEnv.GIT_COMMITTER_NAME || "drift-test",
+    GIT_COMMITTER_EMAIL: extraEnv.GIT_COMMITTER_EMAIL || "drift-test@example.com",
+  };
+}
+
 function git(cwd, args, extraEnv = {}) {
-  const result = spawnSync("git", args, {
-    cwd,
-    encoding: "utf8",
-    env: {
-      ...process.env,
-      GIT_AUTHOR_NAME: "drift-test",
-      GIT_AUTHOR_EMAIL: "drift-test@example.com",
-      GIT_COMMITTER_NAME: "drift-test",
-      GIT_COMMITTER_EMAIL: "drift-test@example.com",
-      ...extraEnv,
+  const result = spawnSync(
+    "git",
+    [
+      "-c",
+      "user.name=drift-test",
+      "-c",
+      "user.email=drift-test@example.com",
+      ...args,
+    ],
+    {
+      cwd,
+      encoding: "utf8",
+      env: gitIdentityEnv(extraEnv),
     },
-  });
+  );
   assert.equal(result.status, 0, result.stderr);
   return result.stdout.trim();
 }
+
+test("temp-repo commits work when the runner has no git author identity", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "prod-health-identity-"));
+  const noIdentity = {
+    GIT_AUTHOR_NAME: "",
+    GIT_AUTHOR_EMAIL: "",
+    GIT_COMMITTER_NAME: "",
+    GIT_COMMITTER_EMAIL: "",
+    GIT_CONFIG_NOSYSTEM: "1",
+    GIT_CONFIG_GLOBAL: "/dev/null",
+    HOME: directory,
+  };
+  try {
+    git(directory, ["init"], noIdentity);
+    await writeFile(join(directory, "app.js"), "v1\n");
+    git(directory, ["add", "app.js"], noIdentity);
+    git(directory, ["commit", "-m", "identity"], noIdentity);
+    assert.match(git(directory, ["rev-parse", "HEAD"], noIdentity), /^[0-9a-f]{40}$/);
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
 
 async function runDriftCheck({
   docsOnly = false,
@@ -697,16 +733,21 @@ function makeCommitChild(parent, { appChange = false, message = "htpr-6511-child
   }
   const child = spawnSync(
     "git",
-    ["commit-tree", tree, "-p", parent, "-m", message],
+    [
+      "-c",
+      "user.name=drift-test",
+      "-c",
+      "user.email=drift-test@example.com",
+      "commit-tree",
+      tree,
+      "-p",
+      parent,
+      "-m",
+      message,
+    ],
     {
       encoding: "utf8",
-      env: {
-        ...process.env,
-        GIT_AUTHOR_NAME: "drift-test",
-        GIT_AUTHOR_EMAIL: "drift-test@example.com",
-        GIT_COMMITTER_NAME: "drift-test",
-        GIT_COMMITTER_EMAIL: "drift-test@example.com",
-      },
+      env: gitIdentityEnv(),
     },
   );
   assert.equal(child.status, 0, child.stderr);

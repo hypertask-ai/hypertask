@@ -266,8 +266,9 @@ jobs:
       # clean skip; here a skip would be the same false green that let PR #2789's
       # task-write outage through (HTPR-5467).
       # PR lane: run only the tests that reference something this PR touched.
-      # The full suite is the production lane's job (below), where a red run
-      # auto-reverts and Vercel keeps the previous deployment live. Selection
+      # The full suite is the production lane's job (below). A red unit-test
+      # run no longer reverts or rolls back; only a failed live-site health
+      # check may undo the deploy (HTPR-6548). Selection
       # falls back to the whole suite whenever it cannot be confident
       # (dependency/schema change, wide fan-out, nothing matched).
       - name: Select tests for changed files
@@ -340,11 +341,11 @@ jobs:
 
   auto-revert-production:
     name: auto-revert-production
-    # The PR lane only ran a scoped subset, so production is where the full suite
-    # first sees the merged result. A red suite on production's branch gets
-    # undone automatically instead of waiting for someone to notice. Only the
-    # test step arms this: an npm ci or runner hiccup must not revert a good
-    # commit.
+    # A red unit-test run on production used to revert the merge and request a
+    # Vercel rollback. That is wrong: tests can flake while the live site is
+    # fine (HTPR-6548). This job still starts when the suite is red, but it
+    # only reverts when THIS deploy's live-site health check failed. A healthy
+    # or unfinished health check leaves the live website unchanged.
     needs: ci-tests
     if: always() && github.event_name == 'push' && needs.ci-tests.outputs.test_failed == 'true'
     # This push-only job holds the merge token; PR code never runs in it.
@@ -402,29 +403,28 @@ jobs:
             RESULT=$(node .github/scripts/emergency-rollback.mjs "$GITHUB_SHA" 2>/dev/null) || true
             ACTION=$(printf '%s' "${RESULT:-}" | jq -r '.action // empty' 2>/dev/null) || true
             REASON=$(printf '%s' "${RESULT:-}" | jq -r '.reason // empty' 2>/dev/null) || true
-            DEPLOY_ID=$(printf '%s' "${RESULT:-}" | jq -r '.deploymentId // empty' 2>/dev/null) || true
-            INSPECTOR_URL=$(printf '%s' "${RESULT:-}" | jq -r '.inspectorUrl // "https://vercel.com/dashboard"' 2>/dev/null) || true
-            HTTP_STATUS=$(printf '%s' "${RESULT:-}" | jq -r '.httpStatus // empty' 2>/dev/null) || true
             ROLLBACK_STATUS="${ACTION:-failed}"
 
             case "$ROLLBACK_STATUS" in
               requested)
-                ROLLBACK_TEXT="Emergency rollback REQUESTED (deployment $DEPLOY_ID, HTTP ${HTTP_STATUS:-none}) - verify production NOW: $INSPECTOR_URL"
+                ROLLBACK_TEXT="We asked Vercel to put the previous live version back. Check https://app.hypertask.ai now."
                 ;;
               skip)
-                ROLLBACK_TEXT="${REASON:-Production already moved on}. Verify production manually."
+                ROLLBACK_TEXT="The live website was not changed. ${REASON:-Production already moved on}."
                 ;;
               *)
                 ROLLBACK_STATUS="failed"
-                ROLLBACK_TEXT="Emergency rollback could not be requested (${REASON:-the script produced no result}) - the bad deployment is still live in production, act now."
+                ROLLBACK_TEXT="We could not restore the previous live version. The current deploy may still be live. Check https://app.hypertask.ai now."
                 ;;
             esac
             echo "::notice::Emergency rollback: $RESULT"
 
             if [ "$ROLLBACK_STATUS" = "failed" ]; then
-              MSG="🔴🔴 hypertasks: production red for $GITHUB_SHA, auto-revert could not apply ($1). $ROLLBACK_TEXT $RUN_URL"
+              MSG="The live website may still be on a broken deploy. A git undo did not apply ($1). $ROLLBACK_TEXT $RUN_URL"
+            elif [ "$ROLLBACK_STATUS" = "requested" ]; then
+              MSG="The live website failed its health check. A git undo did not apply ($1). $ROLLBACK_TEXT $RUN_URL"
             else
-              MSG="🔴 hypertasks: production red for $GITHUB_SHA, auto-revert could not apply ($1). $ROLLBACK_TEXT $RUN_URL"
+              MSG="A git undo did not apply ($1). $ROLLBACK_TEXT $RUN_URL"
             fi
             send_alert "$MSG"
           }
@@ -432,7 +432,7 @@ jobs:
           stop_without_revert() {
             local reason="$1"
             local run_url="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
-            send_alert "🔴 hypertasks: production tests are red for $GITHUB_SHA, but auto-revert skipped it: $reason. $run_url"
+            send_alert "The production test run failed. Auto-revert did not change the live website. $reason $run_url"
             echo "::error::Auto-revert skipped $GITHUB_SHA: $reason"
             exit 1
           }
@@ -452,11 +452,11 @@ jobs:
             stop_without_revert "the production update did not contain exactly one commit"
           fi
 
-          if ! PREFLIGHT=$(node .github/scripts/should-auto-revert.mjs "$GITHUB_REPOSITORY" "$BEFORE_SHA"); then
-            stop_without_revert "the previous test lookup process failed"
+          if ! PREFLIGHT=$(node .github/scripts/should-auto-revert.mjs "$GITHUB_REPOSITORY" "$GITHUB_SHA"); then
+            stop_without_revert "the live-site health lookup process failed"
           fi
           PREFLIGHT_ACTION=$(printf '%s' "$PREFLIGHT" | jq -r '.action // "skip"' 2>/dev/null || true)
-          PREFLIGHT_REASON=$(printf '%s' "$PREFLIGHT" | jq -r '.reason // "the previous test result was malformed"' 2>/dev/null || true)
+          PREFLIGHT_REASON=$(printf '%s' "$PREFLIGHT" | jq -r '.reason // "the live-site health result was malformed"' 2>/dev/null || true)
           if [ "$PREFLIGHT_ACTION" != "proceed" ]; then
             stop_without_revert "$PREFLIGHT_REASON"
           fi
@@ -493,13 +493,13 @@ jobs:
             git revert --abort || true
             emergency_rollback "does not revert cleanly"
             if [ -n "$PR_NUMBER" ]; then
-              gh pr comment "$PR_NUMBER" --body "The full test suite failed on production for \`$GITHUB_SHA\` and the commit does not revert cleanly. $ROLLBACK_TEXT $RUN_URL"
+              gh pr comment "$PR_NUMBER" --body "The live website failed its health check after \`$GITHUB_SHA\` and the commit does not undo cleanly. $ROLLBACK_TEXT $RUN_URL"
             fi
             echo "::error::$GITHUB_SHA does not revert cleanly; $ROLLBACK_TEXT"
             exit 1
           fi
           git commit --quiet -m "Revert \"$SUBJECT\"" -m "Auto-revert-of: $GITHUB_SHA"
-          BODY="The full test suite failed on production for \`$GITHUB_SHA\` after merge, so it was reverted to stop production shipping a red build. Run: $RUN_URL"
+          BODY="The live website failed its health check after \`$GITHUB_SHA\` merged, so that commit was undone. Check https://app.hypertask.ai. Run: $RUN_URL"
           # --force-with-lease is the compare-and-swap: the push is refused
           # unless the branch is still exactly the commit that failed, so a
           # revert can never land on top of newer work. The credential helper

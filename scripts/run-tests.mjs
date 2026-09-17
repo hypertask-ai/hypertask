@@ -64,6 +64,13 @@ const isolatedCjsTests = new Set([
   "tests/mcp-usage-auth.test.cjs",
   "tests/mcp-usage-route.test.cjs",
   "tests/oauth-authorize-session-identity.test.cjs",
+  // HTPR-6548: these leaked require.cache or shared fixtures into the
+  // concurrent suite and failed on unchanged production code. One process
+  // each, before the shared run.
+  "tests/agent-run-activities.test.cjs",
+  "tests/action-archive-cache.test.cjs",
+  "tests/feature-flags.test.cjs",
+  "tests/feature-flags-routes.test.cjs",
 ]);
 
 console.log(
@@ -74,7 +81,11 @@ if (cjsTests.length > 0) {
   const isolated = cjsTests.filter((file) => isolatedCjsTests.has(file));
   const shared = cjsTests.filter((file) => !isolatedCjsTests.has(file));
   for (const file of isolated) {
-    run(process.execPath, ["--test", file], `Isolated Node test: ${file}`);
+    run(
+      process.execPath,
+      ["--test", "--test-concurrency=1", file],
+      `Isolated Node test: ${file}`,
+    );
   }
   if (shared.length > 0) {
     // Cap at 4 workers: the default (one per core) put 18+ node processes on

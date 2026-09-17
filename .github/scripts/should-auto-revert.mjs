@@ -1,5 +1,5 @@
 const API = "https://api.github.com";
-const WORKFLOW = "ci-tests.yml";
+const HEALTH_CONTEXT = "prod-health-gate";
 const MAX_LOOKUP_ATTEMPTS = 3;
 const LOOKUP_INTERVAL_MS = 10_000;
 const SHA_PATTERN = /^[0-9a-f]{40}$/;
@@ -23,67 +23,52 @@ async function getJson(fetchImpl, url, token) {
   }
 }
 
-function newestExactRun(runs, previousSha, branch) {
-  return runs
-    .filter(
-      (run) =>
-        run?.event === "push" &&
-        run?.head_branch === branch &&
-        run?.head_sha === previousSha &&
-        run?.status === "completed",
-    )
-    .sort(
-      (a, b) =>
-        (b.id ?? 0) - (a.id ?? 0) ||
-        (b.run_attempt ?? 0) - (a.run_attempt ?? 0),
-    )[0];
+function healthGateState(payload) {
+  const statuses = Array.isArray(payload?.statuses) ? payload.statuses : [];
+  const gate = statuses.find((status) => status?.context === HEALTH_CONTEXT);
+  return gate?.state ?? "";
 }
 
 export async function shouldAutoRevert(
   repository,
-  previousSha,
+  currentSha,
   token,
   fetchImpl = fetch,
   delayImpl = delay,
-  branch = "production",
 ) {
-  if (!repository || !SHA_PATTERN.test(previousSha) || !token) {
-    return { action: "skip", reason: "previous production CI could not be identified safely" };
+  if (!repository || !SHA_PATTERN.test(currentSha) || !token) {
+    return {
+      action: "skip",
+      reason: "this deploy's live-site health check could not be identified safely",
+    };
   }
 
-  const runsUrl =
-    `${API}/repos/${repository}/actions/workflows/${WORKFLOW}/runs` +
-    `?branch=${encodeURIComponent(branch)}&event=push&head_sha=${previousSha}` +
-    `&status=completed&per_page=10`;
-  let lastReason = "no completed workflow run found";
+  const statusUrl =
+    `${API}/repos/${repository}/commits/${currentSha}/status?per_page=100`;
+  let lastReason = "live-site health check has not finished for this deploy";
 
   for (let attempt = 1; attempt <= MAX_LOOKUP_ATTEMPTS; attempt += 1) {
-    const runsResult = await getJson(fetchImpl, runsUrl, token);
-    if (!runsResult.ok) {
-      lastReason = `workflow lookup failed: ${runsResult.reason}`;
+    const statusResult = await getJson(fetchImpl, statusUrl, token);
+    if (!statusResult.ok) {
+      lastReason = `live-site health lookup failed: ${statusResult.reason}`;
     } else {
-      const run = newestExactRun(runsResult.data?.workflow_runs ?? [], previousSha, branch);
-      if (run?.id) {
-        const jobsResult = await getJson(
-          fetchImpl,
-          `${API}/repos/${repository}/actions/runs/${run.id}/jobs?filter=latest&per_page=100`,
-          token,
-        );
-        if (!jobsResult.ok) {
-          lastReason = `job lookup failed: ${jobsResult.reason}`;
-        } else {
-          const job = (jobsResult.data?.jobs ?? []).find((candidate) => candidate?.name === "ci-tests");
-          if (job?.conclusion === "success") {
-            return { action: "proceed", reason: `previous production ci-tests passed in run ${run.id}` };
-          }
-          if (job?.conclusion) {
-            return {
-              action: "skip",
-              reason: `previous production ci-tests did not pass (${job.conclusion}) in run ${run.id}`,
-            };
-          }
-          lastReason = `ci-tests result missing from completed run ${run.id}`;
-        }
+      const state = healthGateState(statusResult.data);
+      if (state === "failure") {
+        return {
+          action: "proceed",
+          reason: "the live website failed its health check for this deploy",
+        };
+      }
+      if (state === "success") {
+        return {
+          action: "skip",
+          reason: "the live website is healthy; a unit-test failure is not a reason to revert",
+        };
+      }
+      if (state === "pending") {
+        lastReason = "live-site health check is still running for this deploy";
+      } else {
+        lastReason = "live-site health check has not finished for this deploy";
       }
     }
 
@@ -94,10 +79,10 @@ export async function shouldAutoRevert(
 }
 
 async function main() {
-  const [repository, previousSha] = process.argv.slice(2);
+  const [repository, currentSha] = process.argv.slice(2);
   const result = await shouldAutoRevert(
     repository,
-    previousSha,
+    currentSha,
     process.env.GH_TOKEN || "",
   );
   console.log(JSON.stringify(result));
