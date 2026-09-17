@@ -276,6 +276,7 @@ model User {
   // HTPR-4146: Better Auth phase 0 columns, unused until BETTER_AUTH_ENABLED=1.
   emailVerified      Boolean        @default(false)
   updatedAt          DateTime       @default(now()) @updatedAt
+  googleCalendarGeneration Int @default(0)
   mcpTokensRevokedAt DateTime?     // Timestamp when all MCP tokens were revoked for this user
   tasks              Task[]
   comments           Comment[]

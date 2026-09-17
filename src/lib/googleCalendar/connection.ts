@@ -195,9 +195,9 @@ export async function getGoogleCalendarAccountGeneration(
 ): Promise<number | null> {
   const user = await prisma.user.findUnique({
     where: { id: userId },
-    select: { joinedAt: true },
+    select: { googleCalendarGeneration: true },
   });
-  return user?.joinedAt.getTime() ?? null;
+  return user?.googleCalendarGeneration ?? null;
 }
 
 export async function connectGoogleCalendarUser(
@@ -247,14 +247,16 @@ export async function connectGoogleCalendarUser(
         syncError: null,
       };
       return await prisma.$transaction(async (tx) => {
-        const [user] = await tx.$queryRaw<Array<{ joinedAt: Date }>>`
-          SELECT "joinedAt"
+        const [user] = await tx.$queryRaw<
+          Array<{ googleCalendarGeneration: number }>
+        >`
+          SELECT "googleCalendarGeneration"
           FROM "User"
           WHERE "id" = ${userId}
           FOR UPDATE
         `;
         lease.assertOwned();
-        if (!user || user.joinedAt.getTime() !== accountGeneration) {
+        if (!user || user.googleCalendarGeneration !== accountGeneration) {
           throw new Error("Google Calendar account changed during setup");
         }
         if (existing) {
@@ -331,9 +333,15 @@ export async function requestGoogleCalendarDisconnect(
 ): Promise<boolean> {
   const result = await withGoogleCalendarUserLock(userId, async (lease) => {
     lease.assertOwned();
-    const updated = await prisma.googleCalendarConnection.updateMany({
-      where: { userId },
-      data: googleCalendarDisconnectData(),
+    const updated = await prisma.$transaction(async (tx) => {
+      await tx.user.update({
+        where: { id: userId },
+        data: { googleCalendarGeneration: { increment: 1 } },
+      });
+      return tx.googleCalendarConnection.updateMany({
+        where: { userId },
+        data: googleCalendarDisconnectData(),
+      });
     });
     return updated.count === 1;
   });

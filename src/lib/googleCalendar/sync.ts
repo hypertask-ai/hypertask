@@ -4,7 +4,6 @@ import prisma from "@/lib/prisma";
 import { getProjectWhere } from "@/utils/controllers/projects/getAllIncludes";
 import {
   createGoogleCalendar,
-  deleteGoogleCalendar,
   deleteGoogleCalendarEvent,
   googleCalendarEventBody,
   googleCalendarEventId,
@@ -80,31 +79,6 @@ async function revokeAndDeleteDisconnectedConnection(
   });
 }
 
-async function finishDisconnect(
-  connection: {
-    calendarId: string;
-    disconnectRequestedAt: Date;
-    encryptedRefreshToken: string;
-    userId: number;
-  },
-  accessToken: string,
-  lease: GoogleCalendarLease,
-): Promise<void> {
-  const remaining = await listGoogleCalendarEvents(
-    connection.calendarId,
-    accessToken,
-    false,
-    fetch,
-    lease.assertOwned,
-  );
-  lease.assertOwned();
-  if (remaining.every((event) => event.status === "cancelled")) {
-    await deleteGoogleCalendar(connection.calendarId, accessToken);
-    lease.assertOwned();
-  }
-  await revokeAndDeleteDisconnectedConnection(connection, lease);
-}
-
 async function cleanupConnection(
   connection: {
     calendarId: string;
@@ -149,9 +123,8 @@ async function cleanupConnection(
   }
   const disconnectRequestedAt = connection.disconnectRequestedAt;
   if (disconnectRequestedAt) {
-    await finishDisconnect(
+    await revokeAndDeleteDisconnectedConnection(
       { ...connection, disconnectRequestedAt },
-      accessToken,
       lease,
     );
     return;

@@ -1,3 +1,6 @@
+ALTER TABLE "User"
+ADD COLUMN "googleCalendarGeneration" INTEGER NOT NULL DEFAULT 0;
+
 CREATE TABLE "GoogleCalendarConnection" (
     "userId" INTEGER NOT NULL,
     "encryptedAccessToken" TEXT NOT NULL,

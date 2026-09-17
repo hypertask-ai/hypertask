@@ -187,7 +187,8 @@ test.beforeEach(() => {
   updatedEvents = [];
 });
 
-test("safe disconnect removes managed events but preserves a calendar with personal events", async () => {
+test("disconnect removes managed events but always preserves the calendar", async () => {
+  remainingEvents = [];
   assert.equal(await sync.sweepGoogleCalendarConnections(), 1);
   assert.deepEqual(deletedEvents, ["htask1"]);
   assert.equal(deletedCalendar, false);

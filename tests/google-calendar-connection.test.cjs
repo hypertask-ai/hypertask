@@ -4,7 +4,7 @@ const test = require("node:test");
 const { createJiti } = require("jiti");
 
 const root = path.resolve(__dirname, "..");
-let accountGeneration = new Date("2026-09-08T10:00:00.000Z");
+let accountGeneration = 0;
 let row;
 let refreshError;
 let updateCount = 1;
@@ -42,16 +42,21 @@ const googleCalendarConnection = {
     return { count: updateCount };
   },
 };
+const user = {
+  findUnique: async () => ({ googleCalendarGeneration: accountGeneration }),
+  update: async ({ data }) => {
+    accountGeneration += data.googleCalendarGeneration.increment;
+  },
+};
 const prisma = {
   $transaction: async (action) =>
     action({
-      $queryRaw: async () => [{ joinedAt: accountGeneration }],
+      $queryRaw: async () => [{ googleCalendarGeneration: accountGeneration }],
       googleCalendarConnection,
+      user,
     }),
   googleCalendarConnection,
-  user: {
-    findUnique: async () => ({ joinedAt: accountGeneration }),
-  },
+  user,
 };
 stub("src/lib/prisma.ts", { default: prisma });
 stub("src/lib/redis.ts", {
@@ -135,7 +140,7 @@ test("a stale OAuth callback cannot overwrite a changed connection", async () =>
         refreshToken: "stale-refresh-token",
         subject: "google-user",
       },
-      accountGeneration.getTime(),
+      accountGeneration,
     ),
     /connection changed during setup/,
   );
@@ -150,7 +155,7 @@ test("a stale OAuth callback cannot overwrite a changed connection", async () =>
 test("account reset invalidates an in-flight first connection", async () => {
   row = null;
   updateCount = 1;
-  accountGeneration = new Date("2026-09-08T11:00:00.000Z");
+  accountGeneration = 1;
 
   await assert.rejects(
     connection.connectGoogleCalendarUser(
@@ -162,11 +167,48 @@ test("account reset invalidates an in-flight first connection", async () => {
         refreshToken: "stale-refresh-token",
         subject: "google-user",
       },
-      new Date("2026-09-08T10:00:00.000Z").getTime(),
+      0,
     ),
     /account changed during setup/,
   );
   assert.equal(row, null);
+});
+
+test("disconnect invalidates an in-flight OAuth callback", async () => {
+  accountGeneration = 0;
+  updateCount = 1;
+  row = {
+    calendarId: "calendar",
+    calendarSummary: "Hypertask",
+    cleanupPending: false,
+    disconnectRequestedAt: null,
+    encryptedAccessToken: "access-token",
+    encryptedRefreshToken: "refresh-token",
+    googleSubject: "google-user",
+    syncEnabled: true,
+    updatedAt: new Date("2026-09-08T12:00:00.000Z"),
+  };
+
+  assert.equal(await connection.requestGoogleCalendarDisconnect(6), true);
+  const disconnectRequestedAt = row.disconnectRequestedAt;
+  assert.equal(accountGeneration, 1);
+
+  await assert.rejects(
+    connection.connectGoogleCalendarUser(
+      6,
+      {
+        accessToken: "stale-access-token",
+        email: "owner@example.com",
+        expiresAt: new Date("2026-09-08T14:00:00.000Z"),
+        refreshToken: "stale-refresh-token",
+        subject: "google-user",
+      },
+      0,
+    ),
+    /account changed during setup/,
+  );
+  assert.equal(row.disconnectRequestedAt, disconnectRequestedAt);
+  assert.equal(row.syncEnabled, false);
 });
 
 test("an expired lease rejects later calendar writes", async () => {
@@ -207,7 +249,7 @@ test("reconnecting resumes cleanup without turning sync back on", async () => {
       refreshToken: "new-refresh-token",
       subject: "google-user",
     },
-    accountGeneration.getTime(),
+    accountGeneration,
   );
   assert.equal(result.syncEnabled, false);
   assert.equal(row.cleanupPending, true);

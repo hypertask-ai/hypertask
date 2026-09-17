@@ -90,6 +90,7 @@ export const resetUserAccount = async (
             await tx.user.update({
                 where: { id: userToResetId },
                 data: {
+                    googleCalendarGeneration: { increment: 1 },
                     joinedAt: new Date()
                 }
             });
