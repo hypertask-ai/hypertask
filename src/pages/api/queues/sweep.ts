@@ -21,6 +21,7 @@ import { sweepAgentWebhookDeliveries } from "@/lib/agentWebhooks/delivery";
 import { sweepPendingAgentTaskCreatedWebhooks } from "@/lib/agentWebhooks/taskCreatedRecovery";
 import { sweepBoardWebhookDeliveries } from "@/lib/mcp/webhooks/outboxDelivery";
 import { sweepExpiredAgentChatTurns } from "@/lib/agentRuns/service";
+import { sweepGoogleCalendarConnections } from "@/lib/googleCalendar/sync";
 
 // Overlap guard: a Redis NX lease with a TTL just under the 1-min cron interval,
 // so an overlapping tick no-ops instead of double-processing the findMany-then-act
@@ -48,6 +49,7 @@ interface SweepSummary {
   agentWebhooks: number;
   agentTaskCreated: number;
   boardWebhooks: number;
+  googleCalendars: number;
 }
 
 type ClaimedReminderRow = {
@@ -216,6 +218,7 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
   // redundant work on a rare overlap.
   let haveLease = true;
   let redis: Awaited<ReturnType<typeof getRedis>> | undefined;
+  const leaseStartedAt = Date.now();
   try {
     redis = await getRedis();
     haveLease =
@@ -249,6 +252,7 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
     agentWebhooks: 0,
     agentTaskCreated: 0,
     boardWebhooks: 0,
+    googleCalendars: 0,
   };
 
   try {
@@ -317,6 +321,15 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
       summary.boardWebhooks = await sweepBoardWebhookDeliveries();
     } catch (error) {
       console.log("🚀 ~ sweep ~ boardWebhooks error:", error);
+    }
+
+    try {
+      summary.googleCalendars = await sweepGoogleCalendarConnections({
+        deadlineAt:
+          leaseStartedAt + (SWEEP_LEASE_TTL_SECONDS - 10) * 1000,
+      });
+    } catch (error) {
+      console.log("🚀 ~ sweep ~ googleCalendars error:", error);
     }
 
     return res.status(200).json(summary);
