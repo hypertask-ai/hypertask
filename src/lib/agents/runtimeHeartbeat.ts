@@ -258,17 +258,29 @@ export async function acceptAgentRuntimeHeartbeat(input: {
       saveResult.nextSequence,
     );
   }
+  const heartbeatWhere = {
+    id: agent.id,
+    userId: input.userId,
+    revokedAt: null,
+    runtimeGeneration: input.authenticatedGeneration,
+  } satisfies Prisma.AgentWhereInput;
   const heartbeat = await input.db.agent.updateMany({
     where: {
-      id: agent.id,
-      userId: input.userId,
-      revokedAt: null,
-      runtimeGeneration: input.authenticatedGeneration,
+      ...heartbeatWhere,
+      OR: [{ heartbeatAt: null }, { heartbeatAt: { lt: now } }],
     },
     data: { heartbeatAt: now },
   });
   if (heartbeat.count !== 1) {
-    throw new RuntimeHeartbeatError("Agent does not exist", 404);
+    // A newer concurrent heartbeat wins; only a revoked or replaced runtime
+    // turns this accepted snapshot into a missing-agent response.
+    const currentAgent = await input.db.agent.findFirst({
+      where: heartbeatWhere,
+      select: { id: true },
+    });
+    if (!currentAgent) {
+      throw new RuntimeHeartbeatError("Agent does not exist", 404);
+    }
   }
   return snapshot;
 }

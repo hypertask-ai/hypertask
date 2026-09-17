@@ -268,6 +268,7 @@ test("managed heartbeat resolves trusted task fields and drops foreign or sensit
       userId: 6,
       revokedAt: null,
       runtimeGeneration: 7,
+      OR: [{ heartbeatAt: null }, { heartbeatAt: { lt: now } }],
     },
     data: { heartbeatAt: now },
   });
@@ -295,13 +296,15 @@ test("managed heartbeat resolves trusted task fields and drops foreign or sensit
 
 test("a credential-shaped scope label never reaches the runtime snapshot", async () => {
   const saved = [];
+  let agentReads = 0;
   const db = {
     agent: {
       async findFirst() {
+        agentReads += 1;
         return { id: "agent-1", runtimeGeneration: 7, members: [{ projectId: 15 }] };
       },
       async updateMany() {
-        return { count: 1 };
+        return { count: 0 };
       },
     },
     task: { async findMany() { return []; } },
@@ -326,6 +329,7 @@ test("a credential-shaped scope label never reaches the runtime snapshot", async
   });
 
   assert.equal(result.scopeLabel, null);
+  assert.equal(agentReads, 2, "a newer concurrent heartbeat is revalidated, not overwritten");
   assert.doesNotMatch(JSON.stringify(saved), /htk_should_never_render/);
 });
 
