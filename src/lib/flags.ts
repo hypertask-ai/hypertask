@@ -56,8 +56,10 @@ import {
   MY_TASKS_LIVE_UPDATES_FLAG,
   MY_TASKS_QUICK_ADD_FLAG,
   MY_TASKS_SNOOZE_FLAG,
+  MY_TASKS_OVERDUE_BADGES_FLAG,
   HTPR_6427_ROW_SHORTCUTS_FLAG,
   HTPR_6514_COMMENT_LONG_PRESS_FLAG,
+  HTPR_6516_AGENT_ATTRIBUTION_FLAG,
   HTPR_6512_SEED_TEAM_AGENT_FLAG,
   HTPR_6532_STATELESS_MCP_FLAG,
   HTPR_6530_MCP_LIST_QUERY_FLAG,
@@ -92,6 +94,12 @@ const FEATURE_FLAG_DEFINITIONS = [
     shippedOn: "2026-09-16",
     description:
       "Shows a QA-only email and password sign-in page so an outside test robot can open the real app behind login. The page and route exist only when the server has the QA login secrets.",
+  },
+  {
+    key: HTPR_6516_AGENT_ATTRIBUTION_FLAG,
+    shippedOn: "2026-09-16",
+    description:
+      "Shows the agent that made a comment, move, assignment or label change by the name it acted under, including after that agent is deleted. Without it a retired agent reads as Private agent.",
   },
   {
     key: HTPR_6530_MCP_LIST_QUERY_FLAG,
@@ -511,6 +519,12 @@ const FEATURE_FLAG_DEFINITIONS = [
     shippedOn: "2026-09-15",
     description:
       "On My Tasks, H opens the existing Remind Me picker. The chosen date hides the row here and in Inbox until it returns to both.",
+  },
+  {
+    key: MY_TASKS_OVERDUE_BADGES_FLAG,
+    shippedOn: "2026-09-15",
+    description:
+      "Shows a red overdue count next to each My Tasks view tab and board split tab. Hidden when the count is zero. Counts follow the filters that are on.",
   },
   // ponytail: `shippedOn` is the calendar day the key first reached production, written by hand
   // because git history is not readable at runtime. Backfilled with

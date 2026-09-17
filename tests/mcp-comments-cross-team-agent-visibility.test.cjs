@@ -42,6 +42,36 @@ function loadRoute(comments) {
     },
     "@/lib/prisma": { __esModule: true, default: prisma },
     "@/lib/mcp/agents": { mcpVisibleAgentSelect, mapVisibleMcpAgent },
+    "@/lib/agents/publicAgent": {
+      resolvePublicAgentDisplayName({ hasAgentRow, visibleAgent, storedDisplayName, attributionEnabled }) {
+        if (hasAgentRow && !visibleAgent) return "Private agent";
+        if (!attributionEnabled && !hasAgentRow && storedDisplayName) return "Private agent";
+        const stored = storedDisplayName && String(storedDisplayName).trim();
+        if (stored) return stored;
+        const live =
+          visibleAgent &&
+          visibleAgent.displayName &&
+          String(visibleAgent.displayName).trim();
+        return live || null;
+      },
+      overlayDurableAgentDisplayName(mapped, opts) {
+        if (!opts.attributionEnabled) return mapped;
+        const name = (function resolve({ hasAgentRow, visibleAgent, storedDisplayName }) {
+          if (hasAgentRow && !visibleAgent) return "Private agent";
+          const stored = storedDisplayName && String(storedDisplayName).trim();
+          if (stored) return stored;
+          const live =
+            visibleAgent &&
+            visibleAgent.displayName &&
+            String(visibleAgent.displayName).trim();
+          return live || null;
+        })(opts);
+        const next = { ...mapped };
+        if (name) next.agent_display_name = name;
+        else delete next.agent_display_name;
+        return next;
+      },
+    },
     "@/utils/controllers/urls/extractUrlsFromContent": {
       buildMcpImageUrls: () => [],
       persistUrlsForComment: async () => {},
@@ -91,6 +121,22 @@ function loadRoute(comments) {
     "@/lib/mcp/comments/reactionResponse": {
       commentReactionInclude: {},
       mapMcpCommentReaction: (r) => r,
+    },
+    "@/lib/flags": {
+      HTPR_6516_AGENT_ATTRIBUTION_FLAG: "htpr-6516-agent-attribution",
+      HTPR_6530_MCP_LIST_QUERY_FLAG: "htpr-6530-mcp-list-query",
+      isFeatureEnabled: async () => false,
+    },
+    "@/lib/flags/keys": {
+      HTPR_6516_AGENT_ATTRIBUTION_FLAG: "htpr-6516-agent-attribution",
+    },
+    "@/lib/mcp/listQuery": {
+      parseNumericCursor: () => null,
+      parseUpdatedSince: () => null,
+      projectRows: (rows) => rows,
+    },
+    "@/lib/mcp/readListQuery": {
+      readEnabledListQuery: () => ({ listQuery: null }),
     },
   };
   const loaded = new Module(routePath);

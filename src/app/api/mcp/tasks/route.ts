@@ -764,6 +764,7 @@ export async function GET(request: NextRequest) {
       ? taskList.map((task) => withTaskPresentation(task))
       : taskList
     const projectedTasks = listQuery?.fields.length
+      // @ts-expect-error TaskListItem has no string index signature
       ? projectRows(presentedTasks as Array<Record<string, unknown>>, listQuery.fields)
       : presentedTasks
 

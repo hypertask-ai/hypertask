@@ -4,6 +4,7 @@ import useClickOutside from "@/hooks/MultiPages/useClickOutside";
 import { useFlag } from "@/hooks/useFlag";
 import { MOBILE_TARGET } from "@/lib/configs/general.config";
 import { MY_TASKS_VIEWS_FLAG } from "@/lib/flags/keys";
+import { MY_TASKS_OVERDUE_BADGES_FLAG } from "@/lib/flags/keys";
 import type { MyTasksSavedView } from "@/models/MyTasksView";
 import { House, MoreHorizontal, Plus } from "lucide-react";
 import { useRef, useState } from "react";
@@ -20,6 +21,8 @@ interface Props {
   onRename: (viewId: number, name: string) => void;
   onDelete: (viewId: number) => void;
   onSetDefault: (viewId: number) => void;
+  overdueAll?: number;
+  overdueByViewId?: Record<number, number>;
 }
 
 const MyTasksViewTabs = ({
@@ -34,12 +37,26 @@ const MyTasksViewTabs = ({
   onRename,
   onDelete,
   onSetDefault,
+  overdueAll = 0,
+  overdueByViewId = {},
 }: Props) => {
   const myTasksViewsEnabled = useFlag(MY_TASKS_VIEWS_FLAG);
+  const overdueBadgesEnabled = useFlag(MY_TASKS_OVERDUE_BADGES_FLAG);
   const [actionsOpen, setActionsOpen] = useState(false);
   const actionsRef = useRef<HTMLDivElement>(null);
   useClickOutside(actionsRef, () => setActionsOpen(false));
   const activeView = views.find((view) => view.id === activeViewId);
+  const overdueBadge = (count: number) =>
+    overdueBadgesEnabled && count > 0 ? (
+      <span
+        data-htpr-6459-my-tasks-overdue-badges=""
+        className="text-micro font-semibold text-destructive"
+      >
+        {count}
+      </span>
+    ) : null;
+  const overdueLabel = (name: string, count: number) =>
+    overdueBadgesEnabled && count > 0 ? `${name}, ${count} overdue` : undefined;
 
   const saveAs = () => {
     const name = window.prompt("Name this view")?.trim();
@@ -68,6 +85,7 @@ const MyTasksViewTabs = ({
         <button
           type="button"
           onClick={() => onSelect(null)}
+          aria-label={overdueLabel("All", overdueAll)}
           className={`flex items-center gap-1 whitespace-nowrap rounded-[4px] px-3 py-1.5 text-dense leading-none transition-colors ${
             activeViewId === null
               ? "bg-containerBackground font-semibold text-white-black"
@@ -75,15 +93,18 @@ const MyTasksViewTabs = ({
           }`}
         >
           All
+          {overdueBadge(overdueAll)}
         </button>
         {views.map((view) => {
           const active = view.id === activeViewId;
+          const overdueCount = overdueByViewId[view.id] ?? 0;
           return (
             <button
               key={view.id}
               type="button"
               title={view.name}
               onClick={() => onSelect(view.id)}
+              aria-label={overdueLabel(view.name, overdueCount)}
               className={`flex items-center gap-1 whitespace-nowrap rounded-[4px] px-3 py-1.5 text-dense leading-none transition-colors ${
                 active
                   ? "bg-containerBackground font-semibold text-white-black"
@@ -92,6 +113,7 @@ const MyTasksViewTabs = ({
             >
               {view.isDefault && <House size={14} strokeWidth={1.5} />}
               {view.name}
+              {overdueBadge(overdueCount)}
             </button>
           );
         })}

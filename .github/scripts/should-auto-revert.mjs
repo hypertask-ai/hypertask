@@ -39,7 +39,7 @@ function newestExactRun(runs, previousSha, branch) {
     )[0];
 }
 
-export async function shouldAutoRevert(
+export async function previousProductionTestResult(
   repository,
   previousSha,
   token,
@@ -48,7 +48,7 @@ export async function shouldAutoRevert(
   branch = "production",
 ) {
   if (!repository || !SHA_PATTERN.test(previousSha) || !token) {
-    return { action: "skip", reason: "previous production CI could not be identified safely" };
+    return { status: "unknown", reason: "previous production test result could not be identified" };
   }
 
   const runsUrl =
@@ -73,13 +73,10 @@ export async function shouldAutoRevert(
           lastReason = `job lookup failed: ${jobsResult.reason}`;
         } else {
           const job = (jobsResult.data?.jobs ?? []).find((candidate) => candidate?.name === "ci-tests");
-          if (job?.conclusion === "success") {
-            return { action: "proceed", reason: `previous production ci-tests passed in run ${run.id}` };
-          }
           if (job?.conclusion) {
             return {
-              action: "skip",
-              reason: `previous production ci-tests did not pass (${job.conclusion}) in run ${run.id}`,
+              status: job.conclusion,
+              reason: `previous production tests concluded ${job.conclusion} in run ${run.id}`,
             };
           }
           lastReason = `ci-tests result missing from completed run ${run.id}`;
@@ -90,12 +87,12 @@ export async function shouldAutoRevert(
     if (attempt < MAX_LOOKUP_ATTEMPTS) await delayImpl(LOOKUP_INTERVAL_MS);
   }
 
-  return { action: "skip", reason: `${lastReason} after ${MAX_LOOKUP_ATTEMPTS} attempts` };
+  return { status: "unknown", reason: `${lastReason} after ${MAX_LOOKUP_ATTEMPTS} attempts` };
 }
 
 async function main() {
   const [repository, previousSha] = process.argv.slice(2);
-  const result = await shouldAutoRevert(
+  const result = await previousProductionTestResult(
     repository,
     previousSha,
     process.env.GH_TOKEN || "",

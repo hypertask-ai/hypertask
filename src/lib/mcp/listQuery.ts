@@ -311,8 +311,18 @@ export function hasPrWhere(hasPr?: string | null): Record<string, unknown> | nul
   if (value === 'false' || value === 'no' || value === 'none') {
     return { pullRequests: { none: {} } }
   }
-  if (value === 'red' || value === 'failing' || value === 'checks_red') {
+  // failing is CI only. red / checks_red match the board badge: failing or closed.
+  if (value === 'failing') {
     return { pullRequests: { some: { checkState: 'failing' } } }
+  }
+  if (value === 'red' || value === 'checks_red') {
+    return {
+      pullRequests: {
+        some: {
+          OR: [{ checkState: 'failing' }, { lifecycle: 'closed' }],
+        },
+      },
+    }
   }
   if (value === 'green' || value === 'passing') {
     return { pullRequests: { some: { checkState: 'passing' } } }
@@ -338,6 +348,26 @@ function pickPath(row: Record<string, unknown>, field: string): unknown {
     }, row)
   }
   return row[field]
+}
+
+/** Keep a projected list under the 2 KB acceptance budget: rows plus paging only. */
+export function projectedListEnvelope<T>(
+  items: T[],
+  extras: { total?: number; limit?: number; nextCursor?: string | null },
+): {
+  success: true
+  tasks: T[]
+  total: number
+  limit: number
+  nextCursor: string | null
+} {
+  return {
+    success: true,
+    tasks: items,
+    total: extras.total ?? items.length,
+    limit: extras.limit ?? items.length,
+    nextCursor: extras.nextCursor ?? null,
+  }
 }
 
 export function projectRows<T extends Record<string, unknown>>(

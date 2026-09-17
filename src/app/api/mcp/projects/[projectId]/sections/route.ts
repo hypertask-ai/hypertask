@@ -322,6 +322,7 @@ export async function GET(request: NextRequest, props: { params: Promise<{ proje
     )
 
     const projected = listQuery
+      // @ts-expect-error SectionListItem has no string index signature
       ? tryApplyCollectionQuery(sectionList as Array<Record<string, unknown>>, listQuery, {
           searchFields: ['section_title'],
         })

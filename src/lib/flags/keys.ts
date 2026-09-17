@@ -66,9 +66,12 @@ export const MY_TASKS_SCOPES_FLAG = "htpr-6457-my-tasks-scopes";
 export const MY_TASKS_LIVE_UPDATES_FLAG = "htpr-6458-my-tasks-live-updates";
 export const MY_TASKS_QUICK_ADD_FLAG = "htpr-6460-my-tasks-quick-add";
 export const MY_TASKS_SNOOZE_FLAG = "htpr-6461-my-tasks-snooze";
+export const MY_TASKS_OVERDUE_BADGES_FLAG = "htpr-6459-my-tasks-overdue-badges";
 export const HTPR_6427_ROW_SHORTCUTS_FLAG = "htpr-6427-row-shortcuts";
 export const HTPR_6514_COMMENT_LONG_PRESS_FLAG =
   "htpr-6514-comment-long-press";
+export const HTPR_6516_AGENT_ATTRIBUTION_FLAG =
+  "htpr-6516-agent-attribution";
 export const HTPR_6512_SEED_TEAM_AGENT_FLAG = "htpr-6512-seed-team-agent";
 export const HTPR_6532_STATELESS_MCP_FLAG = "htpr-6532-stateless-mcp";
 export const HTPR_6530_MCP_LIST_QUERY_FLAG = "htpr-6530-mcp-list-query";
