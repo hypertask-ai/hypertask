@@ -60,6 +60,7 @@ import {
   mergeActiveViewOverdueCounts,
   msUntilNextLocalMidnight,
   parseMyTasksViewOverdueCounts,
+  type MyTasksViewOverdueCounts,
 } from "@/lib/myTasksOverdueCountUtils";
 import { browserTimeZone } from "@/lib/myTasksTimeZone";
 import { effectiveMyTasksScopes } from "@/lib/myTasksScopes";
@@ -129,6 +130,7 @@ interface IProps {
   /** Server 6455 check so the first paint is already time-grouped. */
   timeGroupEnabled?: boolean;
   scopesEnabled?: boolean;
+  initialViewOverdueCounts?: MyTasksViewOverdueCounts;
 }
 
 const MY_TASKS_SORTING_MODE = "DueDate" as TBoardSortingViewMode;
@@ -153,6 +155,7 @@ const MyTasks = ({
   viewsEnabled = false,
   timeGroupEnabled = false,
   scopesEnabled = false,
+  initialViewOverdueCounts: _initialViewOverdueCounts = EMPTY_MY_TASKS_VIEW_OVERDUE_COUNTS,
 }: IProps) => {
   const isMbl = useContext(MobileViewContext);
   const appShellRailOn = useRecoilValue(appShellRailAtom) && !isMbl;

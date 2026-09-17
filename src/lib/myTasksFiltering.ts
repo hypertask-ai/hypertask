@@ -1,5 +1,5 @@
 import type { ISection } from "@/models/model";
-import { addDays, endOfDay } from "date-fns";
+import { addDays, endOfDay, endOfWeek, startOfDay, startOfWeek } from "date-fns";
 import {
   addDaysInTimeZone,
   endOfDayInTimeZone,
@@ -81,22 +81,44 @@ const matchesDueDate = (
 
   const dueTime = taskTime(task.dueDate);
   if (dueTime === null) return false;
-  const { todayStart, todayEnd, weekStart, weekEnd } = myTasksDayBounds(
-    now,
-    timeZone,
-  );
+  if (timeZone) {
+    const { todayStart, todayEnd, weekStart, weekEnd } = myTasksDayBounds(
+      now,
+      timeZone,
+    );
+    if (dueDate === "overdue") return dueTime < todayStart.getTime();
+    if (dueDate === "today") {
+      return dueTime >= todayStart.getTime() && dueTime <= todayEnd.getTime();
+    }
+    if (dueDate === "this_week") {
+      return dueTime >= weekStart.getTime() && dueTime <= weekEnd.getTime();
+    }
+    return (
+      dueTime >= todayStart.getTime() &&
+      dueTime <=
+        endOfDayInTimeZone(
+          addDaysInTimeZone(todayStart, 6, timeZone),
+          timeZone,
+        ).getTime()
+    );
+  }
+  const todayStart = startOfDay(now);
+  const todayEnd = endOfDay(now);
 
   if (dueDate === "overdue") return dueTime < todayStart.getTime();
   if (dueDate === "today") {
     return dueTime >= todayStart.getTime() && dueTime <= todayEnd.getTime();
   }
   if (dueDate === "this_week") {
-    return dueTime >= weekStart.getTime() && dueTime <= weekEnd.getTime();
+    return (
+      dueTime >= startOfWeek(now, { weekStartsOn: 1 }).getTime() &&
+      dueTime <= endOfWeek(now, { weekStartsOn: 1 }).getTime()
+    );
   }
-  const rangeEnd = timeZone
-    ? endOfDayInTimeZone(addDaysInTimeZone(todayStart, 6, timeZone), timeZone)
-    : endOfDay(addDays(todayStart, 6));
-  return dueTime >= todayStart.getTime() && dueTime <= rangeEnd.getTime();
+  return (
+    dueTime >= todayStart.getTime() &&
+    dueTime <= endOfDay(addDays(todayStart, 6)).getTime()
+  );
 };
 
 const compareOptional = (
@@ -207,7 +229,10 @@ const matchesFlatTaskFilters = (
   }
   const starred = Boolean(task.savedContent?.length);
   if (filters.starred !== null && starred !== filters.starred) return false;
-  if (!matchesDueDate(task, filters.dueDate, now, timeZone)) return false;
+  if (timeZone) {
+    if (!matchesDueDate(task, filters.dueDate, now, timeZone)) return false;
+  } else
+  if (!matchesDueDate(task, filters.dueDate, now)) return false;
   if (!matchesRange(task.createdAt, filters.createdRange)) return false;
   if (!matchesRange(task.updatedAt ?? task.createdAt, filters.updatedRange)) {
     return false;
@@ -272,7 +297,10 @@ export function applyMyTasksView(
         }
         return matchesFilterSettings(task, config, options.runtimeContext);
       }
-      return matchesFlatTaskFilters(task, filters, now, options.timeZone);
+      if (options.timeZone) {
+        return matchesFlatTaskFilters(task, filters, now, options.timeZone);
+      }
+      return matchesFlatTaskFilters(task, filters, now);
     })
     .sort(myTasksSortComparator(config, now));
 }

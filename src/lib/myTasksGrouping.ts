@@ -1,4 +1,5 @@
 import type { ISection, ITask } from "@/models/model";
+import { endOfDay, endOfWeek, startOfDay } from "date-fns";
 import { myTasksDayBounds } from "@/lib/myTasksTimeZone";
 
 export type MyTasksBoardTask = {
@@ -103,10 +104,22 @@ export function classifyMyTasksTimeBucket(
   const time = new Date(dueDate).getTime();
   if (!Number.isFinite(time)) return "No due date";
 
-  const { todayStart, todayEnd, weekEnd } = myTasksDayBounds(now, timeZone);
-  if (time < todayStart.getTime()) return "Overdue";
-  if (time <= todayEnd.getTime()) return "Today";
-  if (time <= weekEnd.getTime()) return "This week";
+  if (timeZone) {
+    const { todayStart, todayEnd, weekEnd } = myTasksDayBounds(now, timeZone);
+    if (time < todayStart.getTime()) return "Overdue";
+    if (time <= todayEnd.getTime()) return "Today";
+    if (time <= weekEnd.getTime()) return "This week";
+    return "Later";
+  }
+
+  const todayStart = startOfDay(now).getTime();
+  if (time < todayStart) return "Overdue";
+
+  const todayEnd = endOfDay(now).getTime();
+  if (time <= todayEnd) return "Today";
+
+  const weekEnd = endOfWeek(now, { weekStartsOn: 1 }).getTime();
+  if (time <= weekEnd) return "This week";
   return "Later";
 }
 

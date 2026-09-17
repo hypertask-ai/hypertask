@@ -57,7 +57,7 @@ export async function getMyTasksOverdueCounts(args: {
   snoozeEnabled: boolean;
   applyFilterSettings: boolean;
   now?: Date;
-  timeZone: string;
+  timeZone?: string;
 }): Promise<MyTasksViewOverdueCounts> {
   const now = args.now ?? new Date();
   const queryScopes = args.scopesEnabled
