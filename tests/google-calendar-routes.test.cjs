@@ -95,6 +95,25 @@ test("connection routes require a signed user and same-origin mutations", async 
   assert.equal(disconnectedUserId, null);
 });
 
+test("same-origin mutations work behind the production proxy", async () => {
+  const proxiedRequest = new NextRequest(
+    "http://internal:3000/api/google-calendar/connection",
+    {
+      method: "PATCH",
+      headers: {
+        "content-type": "application/json",
+        origin: "https://app.hypertask.ai",
+        "x-forwarded-host": "app.hypertask.ai",
+        "x-forwarded-proto": "https",
+      },
+      body: JSON.stringify({ syncEnabled: false }),
+    },
+  );
+
+  assert.equal((await route.PATCH(proxiedRequest)).status, 200);
+  assert.deepEqual(syncChange, { syncEnabled: false, userId: 6 });
+});
+
 test("flag off blocks enabling but still allows cleanup and disconnect", async () => {
   enabled = false;
   assert.equal((await route.GET(request("GET"))).status, 404);

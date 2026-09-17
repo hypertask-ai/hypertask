@@ -218,6 +218,7 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
   // redundant work on a rare overlap.
   let haveLease = true;
   let redis: Awaited<ReturnType<typeof getRedis>> | undefined;
+  const leaseStartedAt = Date.now();
   try {
     redis = await getRedis();
     haveLease =
@@ -323,7 +324,10 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
     }
 
     try {
-      summary.googleCalendars = await sweepGoogleCalendarConnections();
+      summary.googleCalendars = await sweepGoogleCalendarConnections({
+        deadlineAt:
+          leaseStartedAt + (SWEEP_LEASE_TTL_SECONDS - 10) * 1000,
+      });
     } catch (error) {
       console.log("🚀 ~ sweep ~ googleCalendars error:", error);
     }

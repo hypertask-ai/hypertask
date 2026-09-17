@@ -35,6 +35,13 @@ export type GoogleCalendarLease = {
 export const googleCalendarEnabledFor = (userId: number) =>
   isFeatureEnabled(GOOGLE_CALENDAR_FLAG, userId);
 
+export const googleCalendarDisconnectData = () => ({
+  cleanupPending: true,
+  disconnectRequestedAt: new Date(),
+  syncEnabled: false,
+  syncError: null,
+});
+
 async function releaseLock(key: string, value: string): Promise<void> {
   const redis = await getRedis();
   await redis.eval(
@@ -303,12 +310,7 @@ export async function requestGoogleCalendarDisconnect(
     lease.assertOwned();
     const updated = await prisma.googleCalendarConnection.updateMany({
       where: { userId },
-      data: {
-        cleanupPending: true,
-        disconnectRequestedAt: new Date(),
-        syncEnabled: false,
-        syncError: null,
-      },
+      data: googleCalendarDisconnectData(),
     });
     return updated.count === 1;
   });

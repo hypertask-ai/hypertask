@@ -55,7 +55,7 @@ export function noStore(body: unknown, status = 200): NextResponse {
 }
 
 export const trustedMutationOrigin = (request: NextRequest) =>
-  request.headers.get("origin") === request.nextUrl.origin;
+  request.headers.get("origin") === new URL(getRequestBaseUrl(request)).origin;
 
 export function setOAuthAttemptCookie(
   response: NextResponse,
@@ -67,7 +67,7 @@ export function setOAuthAttemptCookie(
     maxAge: GOOGLE_CALENDAR_OAUTH_ATTEMPT_MAX_AGE_SECONDS,
     path: GOOGLE_CALENDAR_OAUTH_CALLBACK_PATH,
     sameSite: "lax",
-    secure: request.nextUrl.protocol === "https:",
+    secure: new URL(getRequestBaseUrl(request)).protocol === "https:",
   });
 }
 

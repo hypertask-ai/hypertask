@@ -1,4 +1,5 @@
 const assert = require("node:assert/strict");
+const fs = require("node:fs");
 const path = require("node:path");
 const test = require("node:test");
 const { createJiti } = require("jiti");
@@ -268,6 +269,34 @@ test("partial cleanup yields to other connections after one bounded batch", asyn
   assert.equal(connection.cleanupPending, true);
 });
 
+test("disconnect finishes calendars larger than one cleanup batch", async () => {
+  managedEvents = Array.from({ length: 21 }, (_, index) => ({
+    id: `htask${index + 1}`,
+  }));
+
+  assert.equal(await sync.sweepGoogleCalendarConnections(), 1);
+  assert.equal(deletedEvents.length, 20);
+  assert.notEqual(connection, null);
+
+  managedEvents = [{ id: "htask21" }];
+  assert.equal(await sync.sweepGoogleCalendarConnections(), 1);
+  assert.deepEqual(deletedEvents, [
+    ...Array.from({ length: 20 }, (_, index) => `htask${index + 1}`),
+    "htask21",
+  ]);
+  assert.equal(connection, null);
+  assert.equal(revokedToken, "refresh-token");
+});
+
+test("calendar work does not start after the shared sweep deadline", async () => {
+  assert.equal(
+    await sync.sweepGoogleCalendarConnections({ deadlineAt: Date.now() - 1 }),
+    0,
+  );
+  assert.deepEqual(deletedEvents, []);
+  assert.notEqual(connection, null);
+});
+
 test("a failed replacement-calendar save deletes the new remote calendar", async () => {
   connection.cleanupPending = false;
   connection.disconnectRequestedAt = null;
@@ -304,6 +333,20 @@ test("a deleted user triggers remote calendar cleanup", async () => {
   assert.equal(await sync.sweepGoogleCalendarConnections(), 1);
   assert.deepEqual(deletedEvents, ["htask1"]);
   assert.equal(connection, null);
+});
+
+test("account cleanup paths queue paused calendars for disconnect", () => {
+  for (const relativePath of [
+    "src/lib/demo/cleanupGuest.ts",
+    "src/utils/controllers/users/resetUserAccount.ts",
+  ]) {
+    const source = fs.readFileSync(path.join(root, relativePath), "utf8");
+    assert.match(
+      source,
+      /googleCalendarConnection\.updateMany\([\s\S]*googleCalendarDisconnectData\(\)/,
+      relativePath,
+    );
+  }
 });
 
 test("disconnect retries when Google token revocation fails", async () => {

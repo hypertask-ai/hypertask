@@ -33,6 +33,7 @@ const OPERATIONS_PER_CONNECTION = 20;
 const RETRYABLE_SYNC_ERROR = "Calendar updates failed. Hypertask will retry.";
 
 class GoogleCalendarSyncPausedError extends Error {}
+class GoogleCalendarSweepDeadlineError extends Error {}
 
 async function runGoogleCalendarOperations(
   operations: Array<() => Promise<void>>,
@@ -197,7 +198,7 @@ async function loadDesiredTasks(
     );
     if (tasks.length > MAX_TASKS_PER_CALENDAR) {
       throw new GoogleCalendarSyncPausedError(
-        "Calendar updates paused because more than 10,000 tasks have due dates.",
+        `Calendar updates paused because more than ${MAX_TASKS_PER_CALENDAR.toLocaleString("en-US")} tasks have due dates.`,
       );
     }
     if (page.length < 1000) return tasks;
@@ -293,10 +294,21 @@ async function syncConnection(
   });
 }
 
-async function processConnection(userId: number): Promise<boolean> {
+async function processConnection(
+  userId: number,
+  deadlineAt?: number,
+): Promise<boolean> {
   const result = await withGoogleCalendarUserLock(
     userId,
-    async (lease) => {
+    async (baseLease) => {
+      const lease: GoogleCalendarLease = {
+        assertOwned: () => {
+          baseLease.assertOwned();
+          if (deadlineAt && Date.now() >= deadlineAt) {
+            throw new GoogleCalendarSweepDeadlineError();
+          }
+        },
+      };
       try {
         let connection = await prisma.googleCalendarConnection.findUnique({
           where: { userId },
@@ -401,6 +413,7 @@ async function processConnection(userId: number): Promise<boolean> {
         }
         return true;
       } catch (error) {
+        if (error instanceof GoogleCalendarSweepDeadlineError) throw error;
         console.error("Google Calendar sync failed", userId, error);
         if (error instanceof GoogleCalendarLockLostError) throw error;
         lease.assertOwned();
@@ -421,7 +434,10 @@ async function processConnection(userId: number): Promise<boolean> {
   return result === true;
 }
 
-export async function sweepGoogleCalendarConnections(): Promise<number> {
+export async function sweepGoogleCalendarConnections({
+  deadlineAt,
+}: { deadlineAt?: number } = {}): Promise<number> {
+  if (deadlineAt && Date.now() >= deadlineAt) return 0;
   const connections = await prisma.googleCalendarConnection.findMany({
     where: {
       OR: [
@@ -437,12 +453,14 @@ export async function sweepGoogleCalendarConnections(): Promise<number> {
   });
   let processed = 0;
   for (const connection of connections) {
+    if (deadlineAt && Date.now() >= deadlineAt) break;
     try {
-      if (await processConnection(connection.userId)) {
+      if (await processConnection(connection.userId, deadlineAt)) {
         processed += 1;
         if (processed >= CONNECTIONS_PER_SWEEP) break;
       }
     } catch (error) {
+      if (error instanceof GoogleCalendarSweepDeadlineError) break;
       console.error("Google Calendar sync failed", connection.userId, error);
     }
   }

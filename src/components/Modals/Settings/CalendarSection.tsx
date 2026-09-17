@@ -32,6 +32,7 @@ import SettingsToggle from "./SettingsToggle";
 
 const WEEK_START_OPTIONS = ["monday", "sunday"] as const;
 const CONNECTION_POLL_INTERVAL_MS = 5000;
+const CONNECTION_POLL_LIMIT = 12;
 
 type GoogleCalendarConnection = {
   calendarSummary: string;
@@ -107,16 +108,19 @@ const CalendarSection = () => {
 
   useEffect(() => {
     if (
-      !connection?.disconnectRequestedAt &&
-      !connection?.cleanupPending &&
-      (!connection?.syncEnabled || connection.lastSyncedAt)
+      connection?.syncError ||
+      (!connection?.disconnectRequestedAt &&
+        !connection?.cleanupPending &&
+        (!connection?.syncEnabled || connection.lastSyncedAt))
     )
       return;
+    let attempts = 0;
     let cancelled = false;
     let timer: number | undefined;
     const poll = async () => {
       await refreshConnection();
-      if (!cancelled)
+      attempts += 1;
+      if (!cancelled && attempts < CONNECTION_POLL_LIMIT)
         timer = window.setTimeout(poll, CONNECTION_POLL_INTERVAL_MS);
     };
     timer = window.setTimeout(poll, CONNECTION_POLL_INTERVAL_MS);
@@ -129,6 +133,7 @@ const CalendarSection = () => {
     connection?.disconnectRequestedAt,
     connection?.lastSyncedAt,
     connection?.syncEnabled,
+    connection?.syncError,
     refreshConnection,
   ]);
 
