@@ -78,7 +78,7 @@ import {
   AGENT_CHAT_PARKED_MESSAGE,
   AGENT_CHAT_STOP_AND_TIMEOUT_FEATURE_FLAG,
 } from "@/lib/agentRuns/model";
-import { CONFIRMED_PROPOSAL_HEADING_FLAG, HTPR_6283_AGENT_CHAT_LIVE_SORT_FLAG, HTPR_6407_MOBILE_AGENT_CHAT_LAYOUT_FLAG, HTPR_6476_MOBILE_AGENT_CHAT_FULLSCREEN_FLAG } from "@/lib/flags/keys";
+import { CONFIRMED_PROPOSAL_HEADING_FLAG, HTPR_6283_AGENT_CHAT_LIVE_SORT_FLAG, HTPR_6407_MOBILE_AGENT_CHAT_LAYOUT_FLAG, HTPR_6476_MOBILE_AGENT_CHAT_FULLSCREEN_FLAG, HTPR_6553_AGENT_CHAT_POLLING_FLAG } from "@/lib/flags/keys";
 import { useMobileVisualViewport } from "@/hooks/General/useMobileVisualViewport";
 import { getAgentChatMobileBottomInset } from "@/lib/mobileCommentViewport";
 import { getLastBoardTeam, setLastBoardTeam } from "@/lib/lastBoardTeam";
@@ -647,6 +647,7 @@ const AgentChatClient = (props: IProp) => {
   }, [rosterStatusEnabled]);
   const liveSortEnabled = useFlag(HTPR_6283_AGENT_CHAT_LIVE_SORT_FLAG);
   const chatStopAndTimeoutEnabled = useFlag(AGENT_CHAT_STOP_AND_TIMEOUT_FEATURE_FLAG);
+  const pollingChatEnabled = useFlag(HTPR_6553_AGENT_CHAT_POLLING_FLAG);
   const appShellRailOn = useRecoilValue(appShellRailAtom) && !isMbl;
   const setMobileTopBarTitle = useSetRecoilState(mobileTopBarTitleAtom);
   const setAgentChatMobileFullscreen = useSetRecoilState(
@@ -694,6 +695,9 @@ const AgentChatClient = (props: IProp) => {
   // order).
   const blockedQueueIdRef = useRef<string | null>(null);
   const [deliveryNotice, setDeliveryNotice] = useState(false);
+  const [deliveryMode, setDeliveryMode] = useState<
+    "webhook" | "polling" | null
+  >(null);
   // When the current wait for this session's reply began (last send, or first
   // noticed); the awaiting poll stops 15 minutes after it.
   const [awaitingSince, setAwaitingSince] = useState<{
@@ -885,6 +889,7 @@ const AgentChatClient = (props: IProp) => {
         activity?: AgentChatActivity[];
         error?: string;
         chatEnabled?: boolean;
+        deliveryMode?: "webhook" | "polling" | null;
         awaiting?: boolean;
         viewer?: { draft: string | null; unreadCount: number } | null;
         sharedConversationEnabled?: boolean;
@@ -905,15 +910,14 @@ const AgentChatClient = (props: IProp) => {
       setActivity(Array.isArray(data.activity) ? data.activity : []);
       setAwaiting(Boolean(data.awaiting));
       setMessagesError(null);
-      // Same signal a failed send sets: no live webhook subscribed to
-      // chat.message, so the human side of the notice must survive a reload.
-      // The parked line already says it in the thread; two copies of the same
-      // sentence is noise.
-      if (
+      setDeliveryMode(data.deliveryMode ?? null);
+      // Same signal a failed send sets: no live delivery path means the human
+      // side of the notice must survive a reload. The parked line already says
+      // it in the thread, so two copies of the same sentence would be noise.
+      setDeliveryNotice(
         data.chatEnabled === false &&
-        data.messages.at(-1)?.content !== AGENT_CHAT_PARKED_MESSAGE
-      )
-        setDeliveryNotice(true);
+          data.messages.at(-1)?.content !== AGENT_CHAT_PARKED_MESSAGE,
+      );
       // First load of this thread: reconcile the two draft copies. Whatever is
       // on this device wins, because it is what was typed most recently here,
       // and it gets pushed up so the next device sees it. An empty device slot
@@ -1040,6 +1044,7 @@ const AgentChatClient = (props: IProp) => {
     setAwaiting(false);
     setStopping(false);
     setDeliveryNotice(false);
+    setDeliveryMode(null);
     setDraft("");
     dismissMention();
   };
@@ -1079,6 +1084,7 @@ const AgentChatClient = (props: IProp) => {
         setAwaiting(false);
         setStopping(false);
         setDeliveryNotice(false);
+        setDeliveryMode(null);
         // This same path runs for a reload (the ?agent= effect calls it), so
         // restoring here covers both switching agents and coming back.
         setDraft(restored);
@@ -2141,6 +2147,9 @@ const AgentChatClient = (props: IProp) => {
           {!mobileFullscreenChrome && (
             <p className="truncate text-meta text-text-light-gray">
               {chatStatusText(selectedAgent)}
+              {pollingChatEnabled && deliveryMode === "polling"
+                ? " · polling"
+                : ""}
             </p>
           )}
         </div>

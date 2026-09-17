@@ -139,6 +139,7 @@ test("offline or disabled snapshots fall back to the inferred board queue", () =
 test("managed heartbeat resolves trusted task fields and drops foreign or sensitive input", async () => {
   const saved = [];
   let agentQuery;
+  let heartbeatUpdate;
   let taskWhere;
   const db = {
     agent: {
@@ -149,6 +150,10 @@ test("managed heartbeat resolves trusted task fields and drops foreign or sensit
           runtimeGeneration: 7,
           members: [{ projectId: 15 }],
         };
+      },
+      async updateMany(query) {
+        heartbeatUpdate = query;
+        return { count: 1 };
       },
     },
     task: {
@@ -257,6 +262,15 @@ test("managed heartbeat resolves trusted task fields and drops foreign or sensit
   assert.equal(saved[0][0], "agent-1");
   assert.equal(saved[0][1], 7);
   assert.equal(saved[0][2], result);
+  assert.deepEqual(heartbeatUpdate, {
+    where: {
+      id: "agent-1",
+      userId: 6,
+      revokedAt: null,
+      runtimeGeneration: 7,
+    },
+    data: { heartbeatAt: now },
+  });
   assert.equal(result.sequence, 42);
   assert.equal(result.lastProgressAt, now.toISOString());
   assert.deepEqual(result.sourceSections, [
@@ -285,6 +299,9 @@ test("a credential-shaped scope label never reaches the runtime snapshot", async
     agent: {
       async findFirst() {
         return { id: "agent-1", runtimeGeneration: 7, members: [{ projectId: 15 }] };
+      },
+      async updateMany() {
+        return { count: 1 };
       },
     },
     task: { async findMany() { return []; } },

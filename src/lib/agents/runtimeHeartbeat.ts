@@ -258,5 +258,17 @@ export async function acceptAgentRuntimeHeartbeat(input: {
       saveResult.nextSequence,
     );
   }
+  const heartbeat = await input.db.agent.updateMany({
+    where: {
+      id: agent.id,
+      userId: input.userId,
+      revokedAt: null,
+      runtimeGeneration: input.authenticatedGeneration,
+    },
+    data: { heartbeatAt: now },
+  });
+  if (heartbeat.count !== 1) {
+    throw new RuntimeHeartbeatError("Agent does not exist", 404);
+  }
   return snapshot;
 }
