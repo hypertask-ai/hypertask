@@ -1,6 +1,7 @@
 "use strict";
 
 const http = require("node:http");
+const https = require("node:https");
 const path = require("node:path");
 const { createRequire } = require("node:module");
 const { spawnSync } = require("node:child_process");
@@ -20,7 +21,21 @@ function resolveHypertaskBin(env = process.env) {
   return env.EVAL_HYPERTASK_BIN || which("hypertask") || "";
 }
 
+function disableKeepAlive() {
+  http.globalAgent.keepAlive = false;
+  https.globalAgent.keepAlive = false;
+  try {
+    const axios = requireFromRepo("axios");
+    axios.defaults.httpAgent = new http.Agent({ keepAlive: false });
+    axios.defaults.httpsAgent = new https.Agent({ keepAlive: false });
+    axios.defaults.headers.common.Connection = "close";
+  } catch {
+    // axios loads with the MCP stack
+  }
+}
+
 function loadProductionMcp() {
+  disableKeepAlive();
   const jiti = requireFromRepo("jiti")(__filename, {
     interopDefault: true,
     alias: { "@": SRC_ROOT },
@@ -122,8 +137,9 @@ async function startProductionMcpServer(apiUrl, board) {
   });
 }
 
-async function startProductionHarness(board, env = process.env) {
-  const api = await startIsolatedApi(board);
+async function startProductionHarness(board, env = process.env, { boardFile } = {}) {
+  disableKeepAlive();
+  const api = await startIsolatedApi(board, { boardFile: boardFile || env.EVAL_FIXTURE_BOARD });
   try {
     const mcp = await startProductionMcpServer(api.apiUrl, board);
     const hypertaskBin = resolveHypertaskBin(env);
@@ -147,6 +163,7 @@ async function startProductionHarness(board, env = process.env) {
         EVAL_API_URL: api.apiUrl,
         EVAL_MCP_URL: mcp.url,
         EVAL_TOKEN: EVAL_TOKEN,
+        EVAL_FIXTURE_BOARD: boardFile || env.EVAL_FIXTURE_BOARD,
       },
       snapshot: api.snapshot,
       close: async () => {

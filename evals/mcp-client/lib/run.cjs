@@ -108,7 +108,11 @@ function replayFromTranscript(task, client, transport, recording) {
   });
 }
 
-async function executeSurface(task, transport, ctx) {
+function isTransientSurfaceError(error) {
+  return /ECONNRESET|ECONNREFUSED|EPIPE|socket hang up|Network error/i.test(String(error || ""));
+}
+
+async function executeSurfaceOnce(task, transport, ctx) {
   if (transport === "mcp") {
     return runMcpSurface(task, {
       url: ctx.mcpUrl,
@@ -123,6 +127,24 @@ async function executeSurface(task, transport, ctx) {
     apiUrl: ctx.env?.EVAL_API_URL,
     token: ctx.token || ctx.env?.EVAL_TOKEN,
   });
+}
+
+async function executeSurface(task, transport, ctx) {
+  let live = await executeSurfaceOnce(task, transport, ctx).catch((error) => ({
+    error: error.message,
+    observation: {},
+    wallMs: 0,
+    executor: transport,
+  }));
+  if (live.error && isTransientSurfaceError(live.error)) {
+    live = await executeSurfaceOnce(task, transport, ctx).catch((error) => ({
+      error: error.message,
+      observation: {},
+      wallMs: 0,
+      executor: transport,
+    }));
+  }
+  return live;
 }
 
 async function runLiveRow(task, client, transport, ctx) {
@@ -267,7 +289,7 @@ async function withIsolatedFixture(run, env = process.env) {
     `mcp-client-eval-${process.pid}-${Date.now()}-${Math.random().toString(16).slice(2)}.json`,
   );
   writeBoardFile(board, boardFile);
-  const harness = await startProductionHarness(board, env);
+  const harness = await startProductionHarness(board, env, { boardFile });
   try {
     return await run({
       board,
@@ -275,7 +297,10 @@ async function withIsolatedFixture(run, env = process.env) {
       mcpUrl: harness.mcpUrl,
       token: harness.token,
       hypertaskBin: harness.hypertaskBin,
-      env: harness.env,
+      env: {
+        ...harness.env,
+        EVAL_FIXTURE_BOARD: boardFile,
+      },
       close: harness.close,
     });
   } finally {

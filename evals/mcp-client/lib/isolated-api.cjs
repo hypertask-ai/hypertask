@@ -2,7 +2,7 @@
 
 const http = require("node:http");
 const { URL } = require("node:url");
-const { snapshotState } = require("./fixture.cjs");
+const { snapshotState, writeBoardFile } = require("./fixture.cjs");
 
 const SECTION_IDS = { Bugs: 1, QA: 2, Done: 3 };
 
@@ -358,13 +358,14 @@ function handleIsolatedRequest(board, req, body) {
   };
 }
 
-function startIsolatedApi(board) {
+function startIsolatedApi(board, { boardFile } = {}) {
   const server = http.createServer(async (req, res) => {
     req.on("error", () => {});
     res.on("error", () => {});
     try {
       const body = req.method === "GET" || req.method === "HEAD" ? {} : await readJsonBody(req);
       const result = handleIsolatedRequest(board, req, body);
+      if (boardFile) writeBoardFile(board, boardFile);
       res.writeHead(result.status, {
         "content-type": "application/json",
         connection: "close",

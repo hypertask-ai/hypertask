@@ -19,7 +19,13 @@ function liveClientsFromEnv(env = process.env) {
     .filter(Boolean);
 }
 
-function postJson(url, body, headers = {}) {
+function isTransientNetworkError(error) {
+  return /ECONNRESET|ECONNREFUSED|EPIPE|socket hang up|Network error/i.test(
+    String(error?.message || error || ""),
+  );
+}
+
+function postJsonOnce(url, body, headers = {}) {
   return new Promise((resolve, reject) => {
     const target = new URL(url);
     const payload = JSON.stringify(body);
@@ -34,6 +40,7 @@ function postJson(url, body, headers = {}) {
           "content-type": "application/json",
           "content-length": Buffer.byteLength(payload),
           accept: "application/json, text/event-stream",
+          connection: "close",
           ...headers,
         },
       },
@@ -50,6 +57,19 @@ function postJson(url, body, headers = {}) {
     req.write(payload);
     req.end();
   });
+}
+
+async function postJson(url, body, headers = {}) {
+  let lastError;
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    try {
+      return await postJsonOnce(url, body, headers);
+    } catch (error) {
+      lastError = error;
+      if (!isTransientNetworkError(error) || attempt === 2) throw error;
+    }
+  }
+  throw lastError;
 }
 
 function extractMcpText(raw) {
@@ -70,7 +90,7 @@ async function runMcpSurface(task, { url, token, board } = {}) {
     if (!url) {
       throw new Error("MCP executor needs the production MCP URL");
     }
-    const response = await postJson(
+    let response = await postJson(
       url,
       {
         jsonrpc: "2.0",
@@ -80,6 +100,18 @@ async function runMcpSurface(task, { url, token, board } = {}) {
       },
       token ? { authorization: `Bearer ${token}` } : {},
     );
+    if (isTransientNetworkError(extractMcpText(response.raw))) {
+      response = await postJson(
+        url,
+        {
+          jsonrpc: "2.0",
+          id: tools.length + 1,
+          method: "tools/call",
+          params: { name: tool.name, arguments: tool.args || {} },
+        },
+        token ? { authorization: `Bearer ${token}` } : {},
+      );
+    }
     tools.push({
       name: tool.name,
       args: tool.args || {},

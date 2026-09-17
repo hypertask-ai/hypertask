@@ -61,7 +61,12 @@ test("fixture mode measures surfaces and does not fabricate client rows", async 
   assert.equal(report.rows.length, 0);
   assert.equal(report.summary.successRate, null);
   assert.equal(report.surfaces.length, 40);
-  assert.equal(report.summary.surfaceFailed, 0);
+  const failedSurfaces = report.surfaces.filter((row) => !row.pass);
+  assert.equal(
+    failedSurfaces.length,
+    0,
+    failedSurfaces.map((row) => `${row.taskId} ${row.transport}: ${row.reason}`).join("; "),
+  );
   assert.ok(report.summary.byTransport.mcp.wallMs > 0);
   assert.ok(report.summary.byTransport.cli.wallMs > 0);
 });
