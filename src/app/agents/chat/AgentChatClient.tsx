@@ -121,8 +121,9 @@ const ACTIVITY_POLL_MS = 5000;
 // or expires, so idle chats need a low-frequency refresh of their own.
 const CHAT_AVAILABILITY_POLL_MS = 30_000;
 // Realtime still refetches when the reply lands; the interval is only a
-// fallback, so stop it after this long waiting on the same session.
-const AWAITING_POLL_MAX_MS = 15 * 60 * 1000;
+// fallback. Polling chat surfaces a generic failure after this bound.
+const AWAITING_POLL_MAX_MS = 3 * 60 * 1000;
+const LEGACY_AWAITING_POLL_MAX_MS = 15 * 60 * 1000;
 const MAX_MESSAGE_LENGTH = 8000;
 const DETAILS_COLLAPSED_KEY = "agentChat.detailsCollapsed";
 
@@ -701,12 +702,13 @@ const AgentChatClient = (props: IProp) => {
   const [deliveryMode, setDeliveryMode] = useState<
     "webhook" | "polling" | null
   >(null);
-  // When the current wait for this session's reply began (last send, or first
-  // noticed); the awaiting poll stops 15 minutes after it.
+  // When the current wait for this session's reply began (last send, or the
+  // stored human message time after a reload).
   const [awaitingSince, setAwaitingSince] = useState<{
     sessionId: string;
     at: number;
   } | null>(null);
+  const [replyTimedOut, setReplyTimedOut] = useState(false);
   const [detailsCollapsed, setDetailsCollapsed] = useState(false);
   const [detailsSheetOpen, setDetailsSheetOpen] = useState(false);
   const detailsDialogRef = useRef<HTMLDialogElement>(null);
@@ -1048,6 +1050,7 @@ const AgentChatClient = (props: IProp) => {
     setStopping(false);
     setDeliveryNotice(false);
     setDeliveryMode(null);
+    setReplyTimedOut(false);
     setDraft("");
     dismissMention();
   };
@@ -1088,6 +1091,7 @@ const AgentChatClient = (props: IProp) => {
         setStopping(false);
         setDeliveryNotice(false);
         setDeliveryMode(null);
+        setReplyTimedOut(false);
         // This same path runs for a reload (the ?agent= effect calls it), so
         // restoring here covers both switching agents and coming back.
         setDraft(restored);
@@ -1178,7 +1182,11 @@ const AgentChatClient = (props: IProp) => {
   const extraRowsRevision = agentChatExtraRowsRevision({
     queuedMessageIds: queuedMessages.map((item) => item.id),
     queuedRowsVisible: chatStopAndTimeoutEnabled && activeFeedFilter !== "activity",
-    typingRowVisible: awaiting && activeFeedFilter !== "activity" && !deliveryNotice,
+    typingRowVisible:
+      awaiting &&
+      activeFeedFilter !== "activity" &&
+      !deliveryNotice &&
+      !replyTimedOut,
   });
 
   // Jump to the bottom when the feed gains or replaces an item (own send,
@@ -1244,16 +1252,24 @@ const AgentChatClient = (props: IProp) => {
   }, [awaiting]);
 
   // Record when the current wait began so the poll below can time out; a new
-  // wait for the same session (a fresh send) restarts the clock.
+  // wait for the same session (a fresh send) restarts the clock. On reload the
+  // stored message time prevents an old unanswered turn looking fresh again.
   useEffect(() => {
     if (!awaiting || !session) {
       setAwaitingSince(null);
+      setReplyTimedOut(false);
       return;
     }
+    const latestMessageAt = Date.parse(messages?.at(-1)?.createdAt ?? "");
     setAwaitingSince((prev) =>
-      prev?.sessionId === session.id ? prev : { sessionId: session.id, at: Date.now() },
+      prev?.sessionId === session.id
+        ? prev
+        : {
+            sessionId: session.id,
+            at: Number.isNaN(latestMessageAt) ? Date.now() : latestMessageAt,
+          },
     );
-  }, [awaiting, session]);
+  }, [awaiting, messages, session]);
 
   useEffect(() => {
     if (!awaiting || !session) return;
@@ -1262,18 +1278,39 @@ const AgentChatClient = (props: IProp) => {
     if (deliveryNotice) return;
     const sinceAt =
       awaitingSince?.sessionId === session.id ? awaitingSince.at : Date.now();
-    const remaining = sinceAt + AWAITING_POLL_MAX_MS - Date.now();
-    if (remaining <= 0) return;
+    const maxWait = pollingChatEnabled
+      ? AWAITING_POLL_MAX_MS
+      : LEGACY_AWAITING_POLL_MAX_MS;
+    const remaining = sinceAt + maxWait - Date.now();
+    const markTimedOut = () => {
+      if (!pollingChatEnabled) return;
+      console.error("[agent-chat] no reply after three minutes");
+      setReplyTimedOut(true);
+    };
+    if (remaining <= 0) {
+      markTimedOut();
+      return;
+    }
     const id = setInterval(
       () => void loadMessages(session.id),
       AWAITING_POLL_MS,
     );
-    const stop = setTimeout(() => clearInterval(id), remaining);
+    const stop = setTimeout(() => {
+      clearInterval(id);
+      markTimedOut();
+    }, remaining);
     return () => {
       clearInterval(id);
       clearTimeout(stop);
     };
-  }, [awaiting, session, deliveryNotice, awaitingSince, loadMessages]);
+  }, [
+    awaiting,
+    session,
+    deliveryNotice,
+    awaitingSince,
+    loadMessages,
+    pollingChatEnabled,
+  ]);
 
   // Activity rows arrive without a chat reply, so they are not covered by the
   // reply poll above. loadMessages drops stale responses by generation, so an
@@ -1523,7 +1560,8 @@ const AgentChatClient = (props: IProp) => {
     };
     setDeliveryNotice(false);
     setAwaiting(true);
-    // A new message restarts the 15 minute awaiting-poll bound.
+    setReplyTimedOut(false);
+    // A new message restarts the awaiting-poll bound.
     setAwaitingSince(null);
     setMessages((prev) => [...(prev ?? []), optimistic]);
     sendingRef.current = true;
@@ -2299,8 +2337,14 @@ const AgentChatClient = (props: IProp) => {
                 className="flex items-center gap-2 text-meta text-text-light-gray"
                 role="status"
               >
-                <TypingIndicator />
-                <span>{selectedAgent.displayName} is working</span>
+                {replyTimedOut ? (
+                  <span>no reply, error logged</span>
+                ) : (
+                  <>
+                    <TypingIndicator />
+                    <span>{selectedAgent.displayName} is working</span>
+                  </>
+                )}
                 {chatStopAndTimeoutEnabled && (
                   <button
                     type="button"

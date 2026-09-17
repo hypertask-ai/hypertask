@@ -102,7 +102,7 @@ stubModule("src/lib/agents/chatAccess.ts", {
 });
 stubModule("src/lib/flags.ts", {
   AGENT_CHAT_TICKET_CONFIRM_FLAG: "htpr-6006-chat-confirm-ticket",
-  isFeatureEnabled: async () => false,
+  isFeatureEnabled: async (key) => key === "htpr-6154-chat-stop-and-timeout",
 });
 stubModule("src/lib/agents/chatBroadcast.ts", {
   broadcastChatSession: async () => null,
@@ -152,6 +152,27 @@ async function fetchPending() {
   return { response, body: await response.json() };
 }
 
+async function postReply(agentId = "agent-polling") {
+  authContext = {
+    agentId,
+    user: { id: 6, displayName: "Valentin" },
+  };
+  const response = await replyRoute.POST(
+    new Request(
+      "https://app.hypertask.ai/api/mcp/chat/sessions/session-1/messages",
+      {
+        method: "POST",
+        body: JSON.stringify({
+          text: "Yes, I am here.",
+          replyToMessageId: "message-1",
+        }),
+      },
+    ),
+    { params: Promise.resolve({ sessionId: "session-1" }) },
+  );
+  return { response, body: await response.json() };
+}
+
 test.beforeEach(() => {
   authContext = {
     agentId: "agent-polling",
@@ -194,29 +215,77 @@ test("pending returns the daemon payload and marks each message delivered", asyn
   assert.deepEqual(second.body.messages, []);
 });
 
-test("the daemon can reply to the exact message returned by pending", async () => {
-  const pending = await fetchPending();
-  const [message] = pending.body.messages;
-  const response = await replyRoute.POST(
-    new Request(
-      `https://app.hypertask.ai/api/mcp/chat/sessions/${message.sessionId}/messages`,
-      {
-        method: "POST",
-        body: JSON.stringify({
-          text: "Yes, I am here.",
-          replyToMessageId: message.id,
-        }),
-      },
-    ),
-    { params: Promise.resolve({ sessionId: message.sessionId }) },
-  );
-  const body = await response.json();
+test("the fetching agent can reply after pending marks the message delivered", async () => {
+  await fetchPending();
+  assert.equal(pendingRows[0].isDelivered, true);
+
+  const { response, body } = await postReply();
 
   assert.equal(response.status, 200);
   assert.equal(body.success, true);
   assert.equal(replies.length, 1);
-  assert.equal(replies[0].replyToMessageId, message.id);
+  assert.equal(replies[0].replyToMessageId, "message-1");
   assert.equal(replies[0].authorAgentId, "agent-polling");
+});
+
+test("the owning agent can reply while the message is still pending", async () => {
+  assert.equal(pendingRows[0].isDelivered, false);
+
+  const { response, body } = await postReply();
+
+  assert.equal(response.status, 200);
+  assert.equal(body.success, true);
+  assert.equal(replies.length, 1);
+  assert.equal(replies[0].authorAgentId, "agent-polling");
+});
+
+test("a different agent cannot reply to the pending message", async () => {
+  const { response, body } = await postReply("agent-other");
+
+  assert.equal(response.status, 404);
+  assert.equal(body.success, false);
+  assert.equal(replies.length, 0);
+});
+
+test("failed and cancelled turns remain terminal", async () => {
+  for (const content of ["Agent did not answer, try again", "Run stopped"]) {
+    replies = [{
+      id: `terminal-${replies.length + 1}`,
+      sessionId: "session-1",
+      role: "assistant",
+      content,
+      isDelivered: false,
+      replyToMessageId: "message-1",
+      createdAt: new Date(),
+    }];
+
+    const { response, body } = await postReply();
+
+    assert.equal(response.status, 409);
+    assert.equal(body.success, false);
+    assert.match(body.error, /no longer active/);
+    assert.equal(replies.length, 1);
+  }
+});
+
+test("a replied turn returns the stored reply without creating another", async () => {
+  replies = [{
+    id: "reply-existing",
+    sessionId: "session-1",
+    role: "assistant",
+    content: "Already answered",
+    isDelivered: true,
+    replyToMessageId: "message-1",
+    authorAgentId: "agent-polling",
+    createdAt: new Date(),
+  }];
+
+  const { response, body } = await postReply();
+
+  assert.equal(response.status, 200);
+  assert.equal(body.success, true);
+  assert.equal(body.duplicate, true);
+  assert.equal(replies.length, 1);
 });
 
 test("an active webhook agent remains on the webhook path", async () => {
