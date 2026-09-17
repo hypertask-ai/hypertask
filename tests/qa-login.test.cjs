@@ -44,6 +44,12 @@ test("QA login is off when either secret is missing", () => {
 
   const missingPassword = loadQaLogin({ QA_LOGIN_EMAIL: "qa@example.test" });
   assert.equal(missingPassword.isQaLoginConfigured(), false);
+
+  const shortPassword = loadQaLogin({
+    QA_LOGIN_EMAIL: "qa@example.test",
+    QA_LOGIN_PASSWORD: "correct-horse",
+  });
+  assert.equal(shortPassword.isQaLoginConfigured(), false);
 });
 
 test("QA login compares secrets without hashing the password", () => {
@@ -63,21 +69,29 @@ test("QA login accepts only the configured email and password", () => {
     isQaLoginConfigured,
   } = loadQaLogin({
     QA_LOGIN_EMAIL: "  QA@Example.TEST ",
-    QA_LOGIN_PASSWORD: "correct-horse",
+    QA_LOGIN_PASSWORD: "correct-horse-battery-staple-32b",
   });
 
   assert.equal(isQaLoginConfigured(), true);
   const config = getQaLoginConfig();
   assert.deepEqual(config, {
     email: "qa@example.test",
-    password: "correct-horse",
+    password: "correct-horse-battery-staple-32b",
   });
   assert.equal(
-    qaLoginCredentialsMatch("qa@example.test", "correct-horse", config),
+    qaLoginCredentialsMatch(
+      "qa@example.test",
+      "correct-horse-battery-staple-32b",
+      config,
+    ),
     true,
   );
   assert.equal(
-    qaLoginCredentialsMatch("other@example.test", "correct-horse", config),
+    qaLoginCredentialsMatch(
+      "other@example.test",
+      "correct-horse-battery-staple-32b",
+      config,
+    ),
     false,
   );
   assert.equal(
@@ -120,6 +134,11 @@ test("the QA login page and route stay hidden without the secrets", () => {
     path.join(root, "src/app/qa/login/QaLoginForm.tsx"),
     "utf8",
   );
+  const envExample = fs.readFileSync(path.join(root, ".env.example"), "utf8");
+  const qaLogin = fs.readFileSync(
+    path.join(root, "src/lib/auth/qaLogin.ts"),
+    "utf8",
+  );
 
   assert.match(page, /isQaLoginConfigured/);
   assert.match(page, /const flagged = await isFeatureEnabled/);
@@ -143,11 +162,15 @@ test("the QA login page and route stay hidden without the secrets", () => {
   assert.match(form, /type="password"/);
   assert.match(form, /Sign in/);
   assert.match(form, /rounded-sm/);
+  assert.match(form, /px-4/);
+  assert.doesNotMatch(form, /px-5/);
   assert.match(form, /bg-shadcn-primary/);
   assert.match(form, /text-destructive/);
   assert.match(form, /\/api\/auth\/qa-login/);
   assert.doesNotMatch(form, /rounded-full/);
   assert.doesNotMatch(form, /#4c5362/);
+  assert.match(qaLogin, /QA_LOGIN_PASSWORD_MIN_BYTES = 32/);
+  assert.match(envExample, /openssl rand -base64 32/);
 });
 
 test("logged-out visitors can reach /qa/login", () => {

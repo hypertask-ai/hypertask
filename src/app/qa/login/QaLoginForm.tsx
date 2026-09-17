@@ -4,9 +4,9 @@ import { FormEvent, useState } from "react";
 import { useRouter } from "next/navigation";
 
 const inputClass =
-  "h-12 w-full rounded-sm border-0 bg-cardBackground px-5 text-content text-white-black outline-none placeholder:text-text-light-gray focus:ring-0";
+  "h-12 w-full rounded-sm border-0 bg-cardBackground px-4 text-content text-white-black outline-none placeholder:text-text-light-gray focus:ring-0";
 const buttonClass =
-  "h-12 w-full rounded-sm bg-shadcn-primary px-5 text-content text-primary-foreground shadow-none hover:opacity-90 focus:ring-0 disabled:cursor-not-allowed disabled:opacity-50";
+  "h-12 w-full rounded-sm bg-shadcn-primary px-4 text-content text-primary-foreground shadow-none hover:opacity-90 focus:ring-0 disabled:cursor-not-allowed disabled:opacity-50";
 
 export function QaLoginForm() {
   const router = useRouter();

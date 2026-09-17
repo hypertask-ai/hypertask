@@ -3,6 +3,7 @@ import { timingSafeEqual } from "node:crypto";
 import { FEATURE_FLAG_QA_USER_ID } from "@/lib/flags";
 
 export const QA_LOGIN_USER_ID = FEATURE_FLAG_QA_USER_ID;
+export const QA_LOGIN_PASSWORD_MIN_BYTES = 32;
 
 export type QaLoginConfig = {
   email: string;
@@ -16,7 +17,12 @@ export function normalizeQaLoginEmail(email: string): string {
 export function getQaLoginConfig(): QaLoginConfig | null {
   const email = normalizeQaLoginEmail(process.env.QA_LOGIN_EMAIL ?? "");
   const password = process.env.QA_LOGIN_PASSWORD ?? "";
-  if (!email || !password) return null;
+  if (
+    !email ||
+    Buffer.byteLength(password, "utf8") < QA_LOGIN_PASSWORD_MIN_BYTES
+  ) {
+    return null;
+  }
   return { email, password };
 }
 
