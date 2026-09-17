@@ -37,6 +37,7 @@ import { PriorityConstants, type IPrioritiesConstants } from "@/lib/constants/co
 import { MOBILE_TARGET } from "@/lib/configs/general.config";
 import {
   myTasksAPIRoute,
+  myTasksOverdueCountsAPIRoute,
   myTasksViewAPIRoute,
   myTasksViewsAPIRoute,
 } from "@/lib/constants/APIRouteConstants";
@@ -55,6 +56,13 @@ import {
   getMyTasksSplitIndex,
   groupMyTasksByTime,
 } from "@/lib/myTasksGrouping";
+import {
+  EMPTY_MY_TASKS_VIEW_OVERDUE_COUNTS,
+  mergeActiveViewOverdueCounts,
+  msUntilNextLocalMidnight,
+  parseMyTasksViewOverdueCounts,
+  type MyTasksViewOverdueCounts,
+} from "@/lib/myTasksOverdueCountUtils";
 import { effectiveMyTasksScopes } from "@/lib/myTasksScopes";
 import type {
   MyTasksBoardMetadata,
@@ -122,6 +130,7 @@ interface IProps {
   /** Server 6455 check so the first paint is already time-grouped. */
   timeGroupEnabled?: boolean;
   scopesEnabled?: boolean;
+  initialViewOverdueCounts?: MyTasksViewOverdueCounts;
 }
 
 const MY_TASKS_SORTING_MODE = "DueDate" as TBoardSortingViewMode;
@@ -146,6 +155,7 @@ const MyTasks = ({
   viewsEnabled = false,
   timeGroupEnabled = false,
   scopesEnabled = false,
+  initialViewOverdueCounts = EMPTY_MY_TASKS_VIEW_OVERDUE_COUNTS,
 }: IProps) => {
   const isMbl = useContext(MobileViewContext);
   const appShellRailOn = useRecoilValue(appShellRailAtom) && !isMbl;
@@ -196,6 +206,11 @@ const MyTasks = ({
   );
   const [viewBusy, setViewBusy] = useState(false);
   const [dateFilterVersion, setDateFilterVersion] = useState(0);
+  const [remoteOverdueCounts, setRemoteOverdueCounts] = useState(
+    initialViewOverdueCounts,
+  );
+  const [overdueCountsVersion, setOverdueCountsVersion] = useState(0);
+  const overdueCountsFetchToken = useRef(0);
   const [columnsPickerOpen, setColumnsPickerOpen] = useState(false);
   const [columnsPickerRequest, setColumnsPickerRequest] = useRecoilState(
     myTasksTableColumnsPickerRequestAtom,
@@ -280,6 +295,7 @@ const MyTasks = ({
   useEffect(() => () => reconcileRunner.cancel(), [reconcileRunner]);
   const onMyTasksReconcile = useCallback(() => {
     reconcileRunner.request();
+    setOverdueCountsVersion((version) => version + 1);
   }, [reconcileRunner]);
   useMyTasksRealtime(
     currentUser.id,
@@ -293,7 +309,10 @@ const MyTasks = ({
   }, [liveUpdatesEnabled, reconcileRunner, reconcileScopes.join(",")]);
 
   useEffect(() => {
-    const onSnoozeChanged = () => reconcileRunner.request();
+    const onSnoozeChanged = () => {
+      reconcileRunner.request();
+      setOverdueCountsVersion((version) => version + 1);
+    };
     window.addEventListener("my-tasks-snooze-changed", onSnoozeChanged);
     return () =>
       window.removeEventListener("my-tasks-snooze-changed", onSnoozeChanged);
@@ -427,8 +446,55 @@ const MyTasks = ({
     if (!viewsFeatureEnabled && !overdueBadgesEnabled) return;
     const refreshDateFilters = () => setDateFilterVersion((version) => version + 1);
     window.addEventListener("focus", refreshDateFilters);
-    return () => window.removeEventListener("focus", refreshDateFilters);
+    let timer: number | undefined;
+    const scheduleMidnight = () => {
+      timer = window.setTimeout(() => {
+        refreshDateFilters();
+        scheduleMidnight();
+      }, msUntilNextLocalMidnight());
+    };
+    scheduleMidnight();
+    return () => {
+      window.removeEventListener("focus", refreshDateFilters);
+      if (timer !== undefined) window.clearTimeout(timer);
+    };
   }, [overdueBadgesEnabled, viewsFeatureEnabled]);
+
+  const overdueViewsKey = JSON.stringify(
+    views.map((view) => [view.id, view.config]),
+  );
+  useEffect(() => {
+    if (!overdueBadgesEnabled || !viewsFeatureEnabled) return;
+    const token = ++overdueCountsFetchToken.current;
+    let cancelled = false;
+    void (async () => {
+      try {
+        const response = await fetch(myTasksOverdueCountsAPIRoute, {
+          cache: "no-store",
+          credentials: "same-origin",
+        });
+        if (!response.ok || cancelled || token !== overdueCountsFetchToken.current) {
+          return;
+        }
+        const parsed = parseMyTasksViewOverdueCounts(await response.json());
+        if (!parsed || cancelled || token !== overdueCountsFetchToken.current) {
+          return;
+        }
+        setRemoteOverdueCounts(parsed);
+      } catch {
+        // Keep the last good counts; the active tab still overlays from sections.
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    dateFilterVersion,
+    overdueBadgesEnabled,
+    overdueCountsVersion,
+    overdueViewsKey,
+    viewsFeatureEnabled,
+  ]);
 
   const activeView = views.find((view) => view.id === activeViewId);
   const baselineConfig = parseMyTasksViewConfig(
@@ -1007,43 +1073,33 @@ const boardTabCounts = useMemo(() => {
 
   const viewOverdueCounts = useMemo(() => {
     if (!overdueBadgesEnabled || !viewsFeatureEnabled) {
-      return { all: 0, byViewId: {} as Record<number, number> };
+      return EMPTY_MY_TASKS_VIEW_OVERDUE_COUNTS;
     }
     const now = new Date();
     const options = {
       applyFilterSettings: filterParityEnabled,
       runtimeContext,
     };
-    const allConfig =
-      activeViewId === null
-        ? viewConfig
-        : parseMyTasksViewConfig(DEFAULT_MY_TASKS_VIEW_CONFIG);
-    const byViewId: Record<number, number> = {};
-    for (const view of views) {
-      const config =
-        view.id === activeViewId
-          ? viewConfig
-          : parseMyTasksViewConfig(view.config);
-      byViewId[view.id] = overdueCountForMyTasksView(
-        sections,
-        config,
-        now,
-        options,
-      );
-    }
-    return {
-      all: overdueCountForMyTasksView(sections, allConfig, now, options),
-      byViewId,
-    };
+    const activeCount = overdueCountForMyTasksView(
+      sections,
+      viewConfig,
+      now,
+      options,
+    );
+    return mergeActiveViewOverdueCounts(
+      remoteOverdueCounts,
+      activeViewId,
+      activeCount,
+    );
   }, [
     activeViewId,
     dateFilterVersion,
     filterParityEnabled,
     overdueBadgesEnabled,
+    remoteOverdueCounts,
     runtimeContext,
     sections,
     viewConfig,
-    views,
     viewsFeatureEnabled,
   ]);
 

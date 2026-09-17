@@ -300,7 +300,7 @@ export const SplitTitle = ({
         {overdueCount > 0 ? (
           <span
             data-htpr-6459-my-tasks-overdue-badges=""
-            className="font-semibold footer_tags text-micro text-[#FE525A]"
+            className="font-semibold footer_tags text-micro text-destructive"
           >
             {overdueCount}
           </span>

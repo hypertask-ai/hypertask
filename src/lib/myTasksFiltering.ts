@@ -272,15 +272,30 @@ export function applyMyTasksView(
 }
 
 /** Overdue rows that remain after a saved (or dirty) My Tasks view's filters. */
+export function overdueCountForMyTasksTasks(
+  tasks: MyTasksTask[],
+  rawConfig: MyTasksViewConfig,
+  now: Date = new Date(),
+  options: ApplyMyTasksViewOptions = {},
+): number {
+  return countMyTasksOverdue(
+    applyMyTasksView(tasks, rawConfig, now, options),
+    now,
+  );
+}
+
 export function overdueCountForMyTasksView(
   sections: ISection[],
   rawConfig: MyTasksViewConfig,
   now: Date = new Date(),
   options: ApplyMyTasksViewOptions = {},
 ): number {
-  const config = parseMyTasksViewConfig(rawConfig);
-  const flat = sections.flatMap((section) => section.items as MyTasksTask[]);
-  return countMyTasksOverdue(applyMyTasksView(flat, config, now, options), now);
+  return overdueCountForMyTasksTasks(
+    sections.flatMap((section) => section.items as MyTasksTask[]),
+    rawConfig,
+    now,
+    options,
+  );
 }
 
 export function sortMyTasksViewSections(

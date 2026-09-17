@@ -49,7 +49,7 @@ const MyTasksViewTabs = ({
     overdueBadgesEnabled && count > 0 ? (
       <span
         data-htpr-6459-my-tasks-overdue-badges=""
-        className="text-micro font-semibold text-[#FE525A]"
+        className="text-micro font-semibold text-destructive"
       >
         {count}
       </span>
