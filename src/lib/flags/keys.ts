@@ -81,6 +81,8 @@ export const HTPR_6536_QA_LOGIN_FLAG = "htpr-6536-qa-login";
 export const HTPR_6551_QUIET_RUN_ACTIVITY_FLAG =
   "htpr-6551-quiet-run-activity";
 export const HTPR_6555_IDLE_COMMENT_MIC_FLAG = "htpr-6555-idle-comment-mic";
+export const HTPR_6553_AGENT_CHAT_POLLING_FLAG =
+  "htpr-6553-agent-chat-polling";
 /** Sent on chat.message when HTPR-6407 is on so agent replies lead with the next action. */
 export const AGENT_CHAT_ADHD_REPLY_GUIDANCE =
   "Lead with the next action. Keep replies short. Number steps. End with one concrete next action when something remains open.";

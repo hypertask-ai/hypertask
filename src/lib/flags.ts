@@ -68,6 +68,7 @@ import {
   HTPR_6536_QA_LOGIN_FLAG,
   HTPR_6551_QUIET_RUN_ACTIVITY_FLAG,
   HTPR_6555_IDLE_COMMENT_MIC_FLAG,
+  HTPR_6553_AGENT_CHAT_POLLING_FLAG,
 } from "@/lib/flags/keys";
 
 // Re-exported so server code keeps importing keys from here. Client components must
@@ -96,6 +97,12 @@ const FEATURE_FLAG_DEFINITIONS = [
     shippedOn: "2026-09-17",
     description:
       "Shows the microphone on the closed task-detail comment bar so you can start dictating with one tap instead of tapping the text first.",
+  },
+  {
+    key: HTPR_6553_AGENT_CHAT_POLLING_FLAG,
+    shippedOn: "2026-09-17",
+    description:
+      "Lets a recently heartbeating agent runtime receive Agent Chat through polling when it has no webhook, and labels that chat as polling.",
   },
   {
     key: HTPR_6551_QUIET_RUN_ACTIVITY_FLAG,
