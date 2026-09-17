@@ -1,5 +1,4 @@
 import { scrypt, timingSafeEqual } from "node:crypto";
-import { promisify } from "node:util";
 
 import { FEATURE_FLAG_QA_USER_ID } from "@/lib/flags";
 
@@ -7,7 +6,6 @@ export const QA_LOGIN_USER_ID = FEATURE_FLAG_QA_USER_ID;
 export const QA_LOGIN_PASSWORD_MIN_BYTES = 32;
 const QA_LOGIN_SCRYPT_KEYLEN = 64;
 const QA_LOGIN_SCRYPT_SALT = Buffer.from("htpr-6536-qa-login");
-const scryptAsync = promisify(scrypt);
 
 export type QaLoginConfig = {
   email: string;
@@ -51,13 +49,19 @@ function timingSafeStringEqual(left: string, right: string): boolean {
 let cachedPassword = "";
 let cachedDigest: Buffer | null = null;
 
-async function scryptQaLoginSecret(secret: string): Promise<Buffer> {
-  return (await scryptAsync(
-    secret,
-    QA_LOGIN_SCRYPT_SALT,
-    QA_LOGIN_SCRYPT_KEYLEN,
-    { N: 16384, r: 8, p: 1 },
-  )) as Buffer;
+function scryptQaLoginSecret(secret: string): Promise<Buffer> {
+  return new Promise((resolve, reject) => {
+    scrypt(
+      secret,
+      QA_LOGIN_SCRYPT_SALT,
+      QA_LOGIN_SCRYPT_KEYLEN,
+      { N: 16384, r: 8, p: 1 },
+      (error, derivedKey) => {
+        if (error) reject(error);
+        else resolve(derivedKey);
+      },
+    );
+  });
 }
 
 async function configuredPasswordDigest(password: string): Promise<Buffer> {
