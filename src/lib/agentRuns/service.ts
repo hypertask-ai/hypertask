@@ -4,6 +4,7 @@ import {
   Status,
   type AgentRun,
   type AgentRunActivity,
+  type AgentRunStatus,
 } from "@prisma/client";
 import type { NextRequest } from "next/server";
 import { getSessionUser } from "@/lib/auth/getSessionUser";
@@ -12,7 +13,11 @@ import {
   persistAgentWebhookEvent,
   publishAgentWebhookDeliveries,
 } from "@/lib/agentWebhooks/outbox";
-import { featureFlagCandidateUserIds, isFeatureEnabled } from "@/lib/flags";
+import {
+  HTPR_6551_QUIET_RUN_ACTIVITY_FLAG,
+  featureFlagCandidateUserIds,
+  isFeatureEnabled,
+} from "@/lib/flags";
 import { broadcastChatSession } from "@/lib/agents/chatBroadcast";
 import { validateMcpAuth } from "@/lib/mcp/auth";
 import prisma from "@/lib/prisma";
@@ -35,6 +40,7 @@ import {
   storedAgentRunActivityOptions,
   type AgentRunActivityInput,
   type AgentRunContext,
+  type RuntimeAgentRunInput,
 } from "./model";
 import {
   persistAgentRunActivity,
@@ -129,6 +135,106 @@ export async function agentRunActivitiesEnabledFor(
   );
 }
 
+export async function runtimeAgentRunsEnabledFor(
+  principal: AgentRunPrincipal,
+): Promise<boolean> {
+  return (
+    (await agentRunsEnabledFor(principal)) &&
+    (await isFeatureEnabled(
+      HTPR_6551_QUIET_RUN_ACTIVITY_FLAG,
+      principal.userId,
+    ))
+  );
+}
+
+export async function createRuntimeAgentRun(
+  principal: AgentRunPrincipal,
+  input: RuntimeAgentRunInput,
+  now = new Date(),
+) {
+  if (!principal.agentId) return null;
+  const agentId = principal.agentId;
+
+  const result = await prisma.$transaction(async (tx) => {
+    const task = await tx.task.findFirst({
+      where: {
+        id: input.taskId,
+        status: { not: Status.Deleted },
+        project: {
+          status: { not: Status.Deleted },
+          members: {
+            some: { agentId, status: "Accepted" },
+          },
+        },
+      },
+      select: { id: true },
+    });
+    if (!task) return null;
+
+    const context = { taskId: task.id, chatSessionId: null };
+    const data = {
+      id: crypto.randomUUID(),
+      agentId,
+      ...context,
+      trigger: "RUNTIME" as const,
+      title: input.title,
+      status: "ACTIVE" as const,
+      createdAt: now,
+      lastActivityAt: now,
+    };
+    let inserted = await tx.agentRun.createMany({
+      data: [data],
+      skipDuplicates: true,
+    });
+    if (inserted.count === 0) {
+      const reactivated = await tx.agentRun.updateMany({
+        where: {
+          agentId,
+          ...context,
+          status: { in: NONTERMINAL_AGENT_RUN_STATUSES },
+        },
+        data: {
+          status: "ACTIVE",
+          lastActivityAt: now,
+          ...(input.title ? { title: input.title } : {}),
+        },
+      });
+      if (reactivated.count === 0) {
+        inserted = await tx.agentRun.createMany({
+          data: [data],
+          skipDuplicates: true,
+        });
+        if (inserted.count === 0) {
+          throw new Error("Agent run changed while opening the runtime run");
+        }
+      }
+    }
+
+    const run = await tx.agentRun.findFirst({
+      where: {
+        agentId,
+        ...context,
+        status: { in: NONTERMINAL_AGENT_RUN_STATUSES },
+      },
+    });
+    return run ? { run: serializeAgentRun(run), taskId: task.id } : null;
+  });
+
+  if (result) {
+    void broadcastTaskComment(result.taskId, {
+      originUserId: principal.userId,
+    }).catch((error) =>
+      console.warn("[agent-run] runtime run task broadcast failed", error),
+    );
+    void broadcast(userChannel(principal.userId), AGENT_CHAT_EVENT, {
+      agentId,
+    }).catch((error) =>
+      console.warn("[agent-run] runtime run agent broadcast failed", error),
+    );
+  }
+  return result?.run ?? null;
+}
+
 export async function readAgentRun(
   principal: AgentRunPrincipal,
   id: string,
@@ -176,6 +282,7 @@ export async function stopAgentRun(
   principal: AgentRunPrincipal,
   id: string,
   now = new Date(),
+  finalStatus: Extract<AgentRunStatus, "DONE" | "STOPPED"> = "STOPPED",
 ) {
   const result = await prisma.$transaction(async (tx) => {
     const run = (await tx.agentRun.findFirst({
@@ -203,7 +310,7 @@ export async function stopAgentRun(
         status: { in: NONTERMINAL_AGENT_RUN_STATUSES },
       },
       data: {
-        status: "STOPPED",
+        status: finalStatus,
         stoppedById,
         lastActivityAt: now,
       },
@@ -219,7 +326,7 @@ export async function stopAgentRun(
 
     const stoppedRun = {
       ...run,
-      status: "STOPPED" as const,
+      status: finalStatus,
       stoppedById,
       lastActivityAt: now,
     };

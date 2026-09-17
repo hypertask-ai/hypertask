@@ -3,8 +3,13 @@ import {
   agentRunsEnabledFor,
   authenticateAgentRunRequest,
   browserMutationIsSameOrigin,
+  runtimeAgentRunsEnabledFor,
   stopAgentRun,
 } from "@/lib/agentRuns/service";
+import {
+  AgentRunInputError,
+  parseAgentRunStopInput,
+} from "@/lib/agentRuns/model";
 import { checkMcpRateLimit } from "@/lib/mcp/auth";
 
 export const runtime = "nodejs";
@@ -41,11 +46,29 @@ export async function POST(
       return noStore({ success: false, error: "Run not found" }, 404);
     }
 
+    const rawBody = await request.text();
+    let body: unknown = null;
+    if (rawBody.trim()) {
+      try {
+        body = JSON.parse(rawBody);
+      } catch {
+        throw new AgentRunInputError("Invalid JSON request body");
+      }
+      if (!(await runtimeAgentRunsEnabledFor(principal))) {
+        return noStore({ success: false, error: "Run not found" }, 404);
+      }
+    }
+    const finalStatus = parseAgentRunStopInput(body);
     const id = (await params).id.trim();
-    const run = id ? await stopAgentRun(principal, id) : null;
+    const run = id
+      ? await stopAgentRun(principal, id, new Date(), finalStatus)
+      : null;
     if (!run) return noStore({ success: false, error: "Run not found" }, 404);
     return noStore({ success: true, run });
   } catch (error) {
+    if (error instanceof AgentRunInputError) {
+      return noStore({ success: false, error: error.message }, 400);
+    }
     console.error("[agent-run] stop failed", error);
     return noStore({ success: false, error: "Failed to stop agent run" }, 500);
   }

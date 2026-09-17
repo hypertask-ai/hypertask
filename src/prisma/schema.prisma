@@ -229,6 +229,7 @@ enum AgentRunTrigger {
   MENTION
   ASSIGNED
   CHAT
+  RUNTIME
 }
 
 enum AgentRunStatus {
@@ -2398,6 +2399,7 @@ model AgentRun {
   chatSession    ChatSession?    @relation(fields: [chatSessionId], references: [id], onDelete: Cascade)
   chatPromptMessageId String?
   trigger        AgentRunTrigger
+  title          String?         @db.VarChar(250)
   status         AgentRunStatus  @default(ACTIVE)
   createdAt      DateTime        @default(now())
   lastActivityAt DateTime        @default(now())
