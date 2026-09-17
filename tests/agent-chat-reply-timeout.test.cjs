@@ -19,6 +19,11 @@ test("polling chat replaces working with a generic notice after three minutes", 
     source,
     /replyTimedOut \? \([\s\S]*no reply, error logged[\s\S]*is working/,
   );
+  assert.match(
+    source,
+    /replyTimedOut \? \([\s\S]*?\)\}\s*\{chatStopAndTimeoutEnabled[\s\S]*handleStop/,
+    "the timeout notice must keep the Stop recovery action available",
+  );
   assert.doesNotMatch(source, /replyTimedOut \? \([\s\S]{0,200}(error\?\.|messagesError)/);
 });
 

@@ -2343,17 +2343,17 @@ const AgentChatClient = (props: IProp) => {
                   <>
                     <TypingIndicator />
                     <span>{selectedAgent.displayName} is working</span>
-                    {chatStopAndTimeoutEnabled && (
-                      <button
-                        type="button"
-                        onClick={() => void handleStop()}
-                        disabled={stopping}
-                        className="font-medium hover:text-white-black disabled:opacity-50"
-                      >
-                        {stopping ? "Stopping…" : "Stop"}
-                      </button>
-                    )}
                   </>
+                )}
+                {chatStopAndTimeoutEnabled && (
+                  <button
+                    type="button"
+                    onClick={() => void handleStop()}
+                    disabled={stopping}
+                    className="font-medium hover:text-white-black disabled:opacity-50"
+                  >
+                    {stopping ? "Stopping…" : "Stop"}
+                  </button>
                 )}
               </div>
             )}
