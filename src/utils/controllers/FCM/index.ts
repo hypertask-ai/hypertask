@@ -1,10 +1,9 @@
 import axios from "axios";
 import fcmConfig from "@/utils/api/fcmConfig";
 import { FCMDeviceInfo } from "@/models/model";
-import { cert, getApps, initializeApp } from "firebase-admin/app";
 import { getMessaging, type Message } from "firebase-admin/messaging";
+import { getFirebaseAdmin } from "@/lib/firebase-admin";
 import prisma from "@/lib/prisma";
-import { getFirebaseServiceAccount } from "@/lib/firebaseServiceAccount";
 import { resolveNotificationChannelPreference } from "@/utils/controllers/notifications/shouldNotify";
 import { NotificationType } from "@prisma/client";
 
@@ -162,16 +161,7 @@ export const filterDevicesByPreferences = async ({
 }
 
 // Initialize Firebase Admin SDK
-if (!getApps().length) {
-    const serviceAccount = getFirebaseServiceAccount();
-    initializeApp({
-      credential: cert({
-        projectId: serviceAccount.project_id,
-        clientEmail: serviceAccount.client_email,
-        privateKey: serviceAccount.private_key,
-      }),
-    });
-  }
+getFirebaseAdmin();
 
 // FCM rejects any message whose data payload exceeds 4KB. The whole comment was
 // packed into data.comment, so a long comment meant no push at all, and the
