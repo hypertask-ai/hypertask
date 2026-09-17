@@ -4,6 +4,7 @@ import {
   addDaysInTimeZone,
   endOfDayInTimeZone,
   myTasksDayBounds,
+  wallTimeInTimeZone,
 } from "@/lib/myTasksTimeZone";
 import type { IPrioritiesConstants } from "@/lib/constants/constants";
 import { compareMyTasksByDueDate } from "@/lib/myTasksGrouping";
@@ -51,8 +52,22 @@ const taskTime = (value: Date | string | null | undefined): number | null => {
 
 const dateOnly = /^\d{4}-\d{2}-\d{2}$/;
 
-const rangeBoundary = (value: string, end: boolean): number | null => {
+const rangeBoundary = (
+  value: string,
+  end: boolean,
+  timeZone?: string,
+): number | null => {
   const isDateOnly = dateOnly.test(value);
+  if (isDateOnly && timeZone) {
+    const [year, month, day] = value.split("-").map(Number);
+    const bound = end
+      ? endOfDayInTimeZone(
+          wallTimeInTimeZone(timeZone, year, month, day, 12, 0, 0, 0),
+          timeZone,
+        )
+      : wallTimeInTimeZone(timeZone, year, month, day, 0, 0, 0, 0);
+    return bound.getTime();
+  }
   const date = new Date(isDateOnly ? `${value}T00:00:00` : value);
   const time = (end && isDateOnly ? endOfDay(date) : date).getTime();
   return Number.isFinite(time) ? time : null;
@@ -61,11 +76,12 @@ const rangeBoundary = (value: string, end: boolean): number | null => {
 const matchesRange = (
   value: Date | string | null | undefined,
   range: MyTasksDateRange | null,
+  timeZone?: string,
 ): boolean => {
   if (!range) return true;
   const time = taskTime(value);
-  const from = rangeBoundary(range.from, false);
-  const to = rangeBoundary(range.to, true);
+  const from = rangeBoundary(range.from, false, timeZone);
+  const to = rangeBoundary(range.to, true, timeZone);
   return time !== null && from !== null && to !== null && time >= from && time <= to;
 };
 
@@ -76,7 +92,10 @@ const matchesDueDate = (
   timeZone?: string,
 ): boolean => {
   if (!dueDate) return true;
-  if (typeof dueDate === "object") return matchesRange(task.dueDate, dueDate);
+  if (typeof dueDate === "object") {
+    if (timeZone) return matchesRange(task.dueDate, dueDate, timeZone);
+    return matchesRange(task.dueDate, dueDate);
+  }
   if (dueDate === "no_due_date") return !task.dueDate;
 
   const dueTime = taskTime(task.dueDate);
@@ -233,9 +252,18 @@ const matchesFlatTaskFilters = (
     if (!matchesDueDate(task, filters.dueDate, now, timeZone)) return false;
   } else
   if (!matchesDueDate(task, filters.dueDate, now)) return false;
+  if (timeZone) {
+    if (!matchesRange(task.createdAt, filters.createdRange, timeZone)) {
+      return false;
+    }
+    if (!matchesRange(task.updatedAt ?? task.createdAt, filters.updatedRange, timeZone)) {
+      return false;
+    }
+  } else {
   if (!matchesRange(task.createdAt, filters.createdRange)) return false;
   if (!matchesRange(task.updatedAt ?? task.createdAt, filters.updatedRange)) {
     return false;
+  }
   }
   return true;
 };

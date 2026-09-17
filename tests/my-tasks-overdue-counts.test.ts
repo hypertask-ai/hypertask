@@ -16,7 +16,7 @@ const USER_ID = 6;
 
 const task = (
   id: number,
-  overrides: Partial<MyTasksTask> = {},
+  overrides: Record<string, unknown> = {},
 ): MyTasksTask =>
   ({
     id,
@@ -35,13 +35,13 @@ const task = (
     ...overrides,
   }) as MyTasksTask;
 
-const assigned = (id: number, overrides: Partial<MyTasksTask> = {}) =>
+const assigned = (id: number, overrides: Record<string, unknown> = {}) =>
   task(id, {
-    assignees: [{ userId: USER_ID, agentId: null }],
+    assignees: [{ userId: USER_ID }],
     ...overrides,
   });
 
-const createdOnly = (id: number, overrides: Partial<MyTasksTask> = {}) =>
+const createdOnly = (id: number, overrides: Record<string, unknown> = {}) =>
   task(id, { userId: USER_ID, assignees: [], ...overrides });
 
 const membership = {

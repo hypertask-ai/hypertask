@@ -10,6 +10,7 @@ import {
 import {
   parseIanaTimeZone,
   startOfDayInTimeZone,
+  startOfWeekInTimeZone,
 } from "../src/lib/myTasksTimeZone";
 import { classifyMyTasksTimeBucket } from "../src/lib/myTasksGrouping";
 
@@ -97,4 +98,15 @@ test("startOfDayInTimeZone and overdue buckets follow the named zone", () => {
   const due = new Date("2026-09-16T14:00:00.000Z");
   assert.equal(classifyMyTasksTimeBucket(due, now, "UTC"), "Today");
   assert.equal(classifyMyTasksTimeBucket(due, now, "Asia/Tokyo"), "Overdue");
+});
+
+test("startOfWeekInTimeZone stays on Monday in UTC+14", () => {
+  const mondayMorningOnKiritimati = new Date("2026-09-13T12:00:00.000Z");
+  const start = startOfWeekInTimeZone(
+    mondayMorningOnKiritimati,
+    "Pacific/Kiritimati",
+  );
+  assert.equal(start.toISOString(), "2026-09-13T10:00:00.000Z");
+  const tuesdayIfBugged = new Date("2026-09-14T10:00:00.000Z");
+  assert.ok(start.getTime() < tuesdayIfBugged.getTime());
 });

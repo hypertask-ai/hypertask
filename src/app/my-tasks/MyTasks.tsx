@@ -285,6 +285,7 @@ const MyTasks = ({
           if (payload.nearestSnoozeUntil !== undefined) {
             setNearestSnoozeUntil(payload.nearestSnoozeUntil ?? null);
           }
+          setOverdueCountsVersion((version) => version + 1);
         },
         onError: () => {
           toast.error("Unable to refresh My Tasks");
@@ -295,7 +296,6 @@ const MyTasks = ({
   useEffect(() => () => reconcileRunner.cancel(), [reconcileRunner]);
   const onMyTasksReconcile = useCallback(() => {
     reconcileRunner.request();
-    setOverdueCountsVersion((version) => version + 1);
   }, [reconcileRunner]);
   useMyTasksRealtime(
     currentUser.id,

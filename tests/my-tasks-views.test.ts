@@ -22,7 +22,7 @@ const NOW = new Date("2026-09-14T12:00:00.000Z");
 
 const task = (
   id: number,
-  overrides: Partial<MyTasksTask> = {},
+  overrides: Record<string, unknown> = {},
 ): MyTasksTask =>
   ({
     id,

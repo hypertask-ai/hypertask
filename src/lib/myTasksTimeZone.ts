@@ -63,7 +63,7 @@ const tzOffsetMs = (instant: Date, timeZone: string): number => {
   );
 };
 
-function wallTimeInTimeZone(
+export function wallTimeInTimeZone(
   timeZone: string,
   year: number,
   month: number,
@@ -100,6 +100,20 @@ export function endOfDayInTimeZone(now: Date, timeZone: string): Date {
   return wallTimeInTimeZone(timeZone, year, month, day, 23, 59, 59, 999);
 }
 
+const shiftCivilDate = (
+  year: number,
+  month: number,
+  day: number,
+  delta: number,
+): { year: number; month: number; day: number } => {
+  const utc = new Date(Date.UTC(year, month - 1, day + delta));
+  return {
+    year: utc.getUTCFullYear(),
+    month: utc.getUTCMonth() + 1,
+    day: utc.getUTCDate(),
+  };
+};
+
 export function startOfWeekInTimeZone(
   now: Date,
   timeZone: string,
@@ -114,8 +128,17 @@ export function startOfWeekInTimeZone(
   const [year, month, day] = dateKeyInTimeZone(now, timeZone)
     .split("-")
     .map(Number);
-  const utcNoon = Date.UTC(year, month - 1, day - delta, 12, 0, 0);
-  return startOfDayInTimeZone(new Date(utcNoon), timeZone);
+  const monday = shiftCivilDate(year, month, day, -delta);
+  return wallTimeInTimeZone(
+    timeZone,
+    monday.year,
+    monday.month,
+    monday.day,
+    0,
+    0,
+    0,
+    0,
+  );
 }
 
 export function endOfWeekInTimeZone(
@@ -127,8 +150,17 @@ export function endOfWeekInTimeZone(
   const [year, month, day] = dateKeyInTimeZone(start, timeZone)
     .split("-")
     .map(Number);
-  const utcNoon = Date.UTC(year, month - 1, day + 6, 12, 0, 0);
-  return endOfDayInTimeZone(new Date(utcNoon), timeZone);
+  const sunday = shiftCivilDate(year, month, day, 6);
+  return wallTimeInTimeZone(
+    timeZone,
+    sunday.year,
+    sunday.month,
+    sunday.day,
+    23,
+    59,
+    59,
+    999,
+  );
 }
 
 export type MyTasksDayBounds = {
@@ -167,8 +199,6 @@ export function addDaysInTimeZone(
   const [year, month, day] = dateKeyInTimeZone(now, timeZone)
     .split("-")
     .map(Number);
-  return startOfDayInTimeZone(
-    new Date(Date.UTC(year, month - 1, day + days, 12, 0, 0)),
-    timeZone,
-  );
+  const next = shiftCivilDate(year, month, day, days);
+  return wallTimeInTimeZone(timeZone, next.year, next.month, next.day, 0, 0, 0, 0);
 }
