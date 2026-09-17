@@ -5236,26 +5236,21 @@ function buildTools(
         );
         return sanitizeForJson({
           success: true,
-          comments: comments.map((comment) =>
-            input.include_activity
+          comments: comments.map((comment, index) => {
+            const mapped = input.include_activity
               ? withActivityMetadata(
-                  applyDurableCommentAttribution(
-                    mapCommentToResponse(comment, user.id, task.projectId),
-                    comment,
-                    user.id,
-                    task.projectId,
-                    attributionEnabled
-                  ),
+                  mapCommentToResponse(comment, user.id, task.projectId),
                   comment.activity
                 )
-              : applyDurableCommentAttribution(
-                  mapCommentToResponse(comment, user.id, task.projectId),
-                  comment,
-                  user.id,
-                  task.projectId,
-                  attributionEnabled
-                )
-          ),
+              : mapCommentToResponse(comment, user.id, task.projectId)
+            return applyDurableCommentAttribution(
+              mapped,
+              comments[index],
+              user.id,
+              task.projectId,
+              attributionEnabled
+            )
+          }),
           total,
           limit: input.limit,
           offset: input.offset,
@@ -7178,6 +7173,13 @@ function buildTools(
 
         void broadcastTaskComment(task.id, { originUserId: user.id });
 
+        const mappedCreatedComment = commentWithAttachments
+            ? mapCommentToResponse(
+                commentWithAttachments,
+                user.id,
+                taskWithOwner.projectId
+              )
+            : { id: comment.id, text: sanitizedText };
         return sanitizeForJson({
           success: true,
           task: {
@@ -7187,17 +7189,13 @@ function buildTools(
           },
           comment: commentWithAttachments
             ? applyDurableCommentAttribution(
-                mapCommentToResponse(
-                  commentWithAttachments,
-                  user.id,
-                  taskWithOwner.projectId
-                ),
+                mappedCreatedComment,
                 commentWithAttachments,
                 user.id,
                 taskWithOwner.projectId,
                 await isFeatureEnabled(HTPR_6516_AGENT_ATTRIBUTION_FLAG, user.id)
               )
-            : { id: comment.id, text: sanitizedText },
+            : mappedCreatedComment,
           url: buildMcpTaskUrl(taskWithOwner.projectId, taskWithOwner.uniqueIndex),
         });
         };
@@ -7721,21 +7719,24 @@ function buildTools(
 
         void broadcastTaskComment(comment.task.id, { originUserId: user.id });
 
+        const mappedUpdatedComment = updatedComment
+            ? mapCommentToResponse(
+                updatedComment,
+                user.id,
+                comment.task.projectId
+              )
+            : { id: input.comment_id, text: sanitizedText };
         return sanitizeForJson({
           success: true,
           comment: updatedComment
             ? applyDurableCommentAttribution(
-                mapCommentToResponse(
-                  updatedComment,
-                  user.id,
-                  comment.task.projectId
-                ),
+                mappedUpdatedComment,
                 updatedComment,
                 user.id,
                 comment.task.projectId,
                 await isFeatureEnabled(HTPR_6516_AGENT_ATTRIBUTION_FLAG, user.id)
               )
-            : { id: input.comment_id, text: sanitizedText },
+            : mappedUpdatedComment,
         });
       }),
     }),

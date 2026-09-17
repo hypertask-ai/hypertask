@@ -250,6 +250,9 @@ function loadCommentsRoute({
       HTPR_6530_MCP_LIST_QUERY_FLAG: 'htpr-6530-mcp-list-query',
       isFeatureEnabled: async () => false,
     },
+    '@/lib/flags/keys': {
+      HTPR_6516_AGENT_ATTRIBUTION_FLAG: 'htpr-6516-agent-attribution',
+    },
     '@/lib/mcp/listQuery': {
       parseNumericCursor: () => null,
       parseUpdatedSince: () => null,

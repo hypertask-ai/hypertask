@@ -39,11 +39,8 @@ import {
   type McpCommentReaction,
 } from '@/lib/mcp/comments/reactionResponse'
 import { resolvePublicAgentDisplayName } from '@/lib/agents/publicAgent'
-import {
-  HTPR_6516_AGENT_ATTRIBUTION_FLAG,
-  HTPR_6530_MCP_LIST_QUERY_FLAG,
-  isFeatureEnabled,
-} from '@/lib/flags'
+import { HTPR_6530_MCP_LIST_QUERY_FLAG, isFeatureEnabled } from '@/lib/flags'
+import { HTPR_6516_AGENT_ATTRIBUTION_FLAG } from '@/lib/flags/keys'
 import { parseNumericCursor, parseUpdatedSince, projectRows } from '@/lib/mcp/listQuery'
 import { readEnabledListQuery } from '@/lib/mcp/readListQuery'
 
@@ -365,9 +362,11 @@ export async function GET(request: NextRequest) {
 
     // Transform to response format
     const commentList: CommentItem[] = comments.map((comment) =>
+      mapCommentToResponse(comment, user.id, task.projectId, includeActivity)
+    ).map((mapped, index) =>
       applyDurableCommentAttribution(
-        mapCommentToResponse(comment, user.id, task.projectId, includeActivity),
-        comment,
+        mapped,
+        comments[index],
         user.id,
         task.projectId,
         attributionEnabled
@@ -888,8 +887,11 @@ export async function POST(request: NextRequest) {
           user.id
         )
         const mappedComment = commentWithAttachments
+          ? mapCommentToResponse(commentWithAttachments, user.id, task.projectId)
+          : null
+        const attributedComment = mappedComment
           ? applyDurableCommentAttribution(
-              mapCommentToResponse(commentWithAttachments, user.id, task.projectId),
+              mappedComment,
               commentWithAttachments,
               user.id,
               task.projectId,
@@ -908,11 +910,11 @@ export async function POST(request: NextRequest) {
             text: comment.text || sanitizedText,
             createdAt: (comment.createdAt instanceof Date ? comment.createdAt : new Date()).toISOString(),
             creatorId: comment.creatorId || user.id,
-            ...(mappedComment?.agent ? { agent: mappedComment.agent } : {}),
-            ...(mappedComment?.agent_display_name
-              ? { agent_display_name: mappedComment.agent_display_name }
+            ...(attributedComment?.agent ? { agent: attributedComment.agent } : {}),
+            ...(attributedComment?.agent_display_name
+              ? { agent_display_name: attributedComment.agent_display_name }
               : {}),
-            attachments: mappedComment?.attachments?.map(att => ({
+            attachments: attributedComment?.attachments?.map(att => ({
               id: att.id,
               fileName: att.fileName,
               fileType: att.fileType,
