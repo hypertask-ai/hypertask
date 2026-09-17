@@ -35,7 +35,7 @@ export async function GET(request: NextRequest) {
         where: {
           status: "Accepted",
           agentId: { not: null },
-          agent: { revokedAt: null },
+          agent: { revokedAt: null, archivedAt: null },
         },
         orderBy: { agent: { displayName: "asc" } },
         select: {

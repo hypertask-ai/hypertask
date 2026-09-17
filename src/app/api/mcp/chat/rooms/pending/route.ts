@@ -32,6 +32,7 @@ export async function GET(request: NextRequest) {
     const deliveries = await prisma.agentRoomDelivery.findMany({
       where: {
         agentId: ctx.agentId,
+        agent: { revokedAt: null, archivedAt: null },
         handledAt: null,
         message: {
           stoppedAt: null,
@@ -39,7 +40,11 @@ export async function GET(request: NextRequest) {
             project: {
               status: "Normal",
               members: {
-                some: { agentId: ctx.agentId, status: "Accepted" },
+                some: {
+                  agentId: ctx.agentId,
+                  status: "Accepted",
+                  agent: { revokedAt: null, archivedAt: null },
+                },
               },
             },
           },

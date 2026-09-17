@@ -16,6 +16,7 @@ let createdMessages;
 let createdRuns;
 let routedDeliveries;
 let handledDeliveries;
+let pendingDeliveries;
 
 function stubModule(relativePath, exports) {
   const filename = path.join(root, relativePath);
@@ -70,7 +71,15 @@ const tx = {
     update: async () => {
       handledDeliveries += 1;
     },
-    updateMany: async () => ({ count: 1 }),
+    updateMany: async () => {
+      const count = pendingDeliveries;
+      pendingDeliveries = 0;
+      return { count };
+    },
+    create: async ({ data }) => {
+      routedDeliveries.push(data);
+      return data;
+    },
     createMany: async ({ data }) => {
       routedDeliveries.push(...data);
       return { count: data.length };
@@ -84,6 +93,7 @@ const tx = {
     }),
   },
   member: {
+    findFirst: async () => ({ agentId: "product" }),
     findMany: async () => agents.map((agent) => ({ agent })),
   },
   agentRun: {
@@ -126,6 +136,7 @@ test.beforeEach(() => {
   createdRuns = [];
   routedDeliveries = [];
   handledDeliveries = 0;
+  pendingDeliveries = 1;
 });
 
 test("an agent reply becomes a ticket run note and routes named bots", async () => {
@@ -173,6 +184,23 @@ test("the third bot turn records the reply but does not route a fourth", async (
   );
 });
 
+test("the last daily turn closes pending handoffs and adds a transcript marker", async () => {
+  turnsUsed = 49;
+  const result = await service.createAgentRoomReply({
+    roomId: "room-1",
+    agentId: "product",
+    text: "Dev 2, continue tomorrow.",
+    replyToMessageId: "human-1",
+  });
+
+  assert.deepEqual(result.routedTo, []);
+  assert.equal(pendingDeliveries, 0);
+  assert.equal(
+    createdMessages.at(-1).content,
+    service.AGENT_ROOM_DAILY_BUDGET_MESSAGE,
+  );
+});
+
 test("the daily room budget refuses another bot turn before writing", async () => {
   turnsUsed = 50;
   await assert.rejects(
@@ -189,6 +217,23 @@ test("the daily room budget refuses another bot turn before writing", async () =
   );
   assert.equal(createdMessages.length, 0);
   assert.equal(createdRuns.length, 0);
+});
+
+test("a capped room refuses a human message instead of leaving it pending", async () => {
+  turnsUsed = 50;
+  await assert.rejects(
+    service.createHumanAgentRoomMessage({
+      roomId: "room-1",
+      userId: 42,
+      text: "Start another exchange.",
+    }),
+    (error) =>
+      error instanceof service.AgentRoomError &&
+      error.status === 429 &&
+      error.message === "Daily room turn budget reached",
+  );
+  assert.equal(createdMessages.length, 0);
+  assert.deepEqual(routedDeliveries, []);
 });
 
 test("mark handled acknowledges only the addressed agent delivery", async () => {
@@ -213,4 +258,16 @@ test("stop ends a pending turn and records the stop in the transcript", async ()
   );
   assert.equal(createdMessages.length, 1);
   assert.equal(createdMessages[0].content, service.AGENT_ROOM_STOPPED_MESSAGE);
+});
+
+test("stop does not add a marker after delivery is already complete", async () => {
+  pendingDeliveries = 0;
+  assert.equal(
+    await service.stopAgentRoomTurn({
+      roomId: "room-1",
+      messageId: "human-1",
+    }),
+    false,
+  );
+  assert.equal(createdMessages.length, 0);
 });

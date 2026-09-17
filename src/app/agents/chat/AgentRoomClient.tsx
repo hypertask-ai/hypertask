@@ -80,7 +80,7 @@ function RoomMessageBubble({ message }: { message: RoomMessage }) {
           name={message.author.displayName}
           photoURL={message.author.photoURL}
           size={28}
-          className="shrink-0 text-[10px]"
+          className="shrink-0 text-micro"
         />
       ) : message.author?.photoURL ? (
         <img
@@ -95,7 +95,9 @@ function RoomMessageBubble({ message }: { message: RoomMessage }) {
       )}
       <div className={cn("flex max-w-[80%] flex-col", human && "items-end")}>
         <div className="mb-1 flex items-center gap-2 text-micro text-text-light-gray">
-          <span>{message.author?.displayName ?? "Room"}</span>
+          <span>
+            {message.author?.displayName ?? (human ? "Former member" : "Room")}
+          </span>
           {message.task?.ticketNumber && (
             <span className="font-medium text-hypertasks-purple">
               {message.task.ticketNumber}
@@ -117,7 +119,7 @@ function RoomMessageBubble({ message }: { message: RoomMessage }) {
         <time
           dateTime={message.createdAt}
           title={new Date(message.createdAt).toLocaleString()}
-          className="mt-0.5 text-[10px] text-text-light-gray"
+          className="mt-0.5 text-micro text-text-light-gray"
         >
           {formatDateDifference(new Date(message.createdAt))}
         </time>
@@ -145,6 +147,7 @@ export default function AgentRoomClient() {
   const [sending, setSending] = useState(false);
   const [stoppingMessageId, setStoppingMessageId] = useState<string | null>(null);
   const messageListRef = useRef<HTMLDivElement>(null);
+  const activeRoomIdRef = useRef<string | null>(null);
   const composerEditorRef = useRef<Editor | null>(null);
   const composerRef = useRef<HTMLTextAreaElement>(null);
 
@@ -203,6 +206,7 @@ export default function AgentRoomClient() {
     if (!response.ok || !body.success) {
       throw new Error(body.error ?? "Failed to load board room");
     }
+    if (activeRoomIdRef.current !== roomId) return;
     setDetails(body);
     setError(null);
   }, []);
@@ -217,19 +221,39 @@ export default function AgentRoomClient() {
 
   useEffect(() => {
     if (!selectedSummary) {
+      activeRoomIdRef.current = null;
       setDetails(null);
       return;
     }
     let cancelled = false;
-    let interval: ReturnType<typeof setInterval> | null = null;
+    let activeRoomId: string | null = null;
+    let pollTimer: ReturnType<typeof setTimeout> | null = null;
     setLoading(true);
     ensureRoom(selectedSummary)
       .then(async (roomId) => {
         if (cancelled) return;
+        activeRoomId = roomId;
+        activeRoomIdRef.current = roomId;
         await loadDetails(roomId);
-        if (!cancelled) {
-          interval = setInterval(() => void loadDetails(roomId), ROOM_POLL_MS);
-        }
+
+        const poll = async () => {
+          if (cancelled) return;
+          if (document.visibilityState === "visible") {
+            try {
+              await loadDetails(roomId);
+            } catch (reason) {
+              if (!cancelled && activeRoomIdRef.current === roomId) {
+                setError(
+                  reason instanceof Error
+                    ? reason.message
+                    : "Failed to refresh room",
+                );
+              }
+            }
+          }
+          if (!cancelled) pollTimer = setTimeout(poll, ROOM_POLL_MS);
+        };
+        if (!cancelled) pollTimer = setTimeout(poll, ROOM_POLL_MS);
       })
       .catch((reason) => {
         if (!cancelled) {
@@ -243,7 +267,10 @@ export default function AgentRoomClient() {
       });
     return () => {
       cancelled = true;
-      if (interval) clearInterval(interval);
+      if (pollTimer) clearTimeout(pollTimer);
+      if (activeRoomIdRef.current === activeRoomId) {
+        activeRoomIdRef.current = null;
+      }
     };
   }, [ensureRoom, loadDetails, selectedSummary]);
 
@@ -332,7 +359,7 @@ export default function AgentRoomClient() {
   };
 
   return (
-    <div className="flex h-[100dvh] min-h-0 bg-modalBackground text-white-black">
+    <div className="flex h-[100dvh] min-h-0 bg-pageBackground text-white-black">
       <aside
         className={cn(
           "w-[300px] shrink-0 border-r border-comment-description-border",
@@ -342,7 +369,7 @@ export default function AgentRoomClient() {
       >
         <div className="border-b border-comment-description-border px-4 py-4">
           <div className="flex items-center justify-between gap-2">
-            <h1 className="text-[16px] font-semibold">Board rooms</h1>
+            <h1 className="text-emphasis font-semibold">Board rooms</h1>
             <button
               type="button"
               onClick={() => router.push("/agents/chat")}
@@ -394,12 +421,12 @@ export default function AgentRoomClient() {
                   router.replace("/agents/chat?view=rooms");
                 }}
                 aria-label="Back to board rooms"
-                className="md:hidden"
+                className="flex h-11 w-11 shrink-0 items-center justify-center md:hidden"
               >
                 <ArrowLeft size={16} />
               </button>
               <Hash size={16} className="text-text-light-gray" />
-              <h2 className="min-w-0 flex-1 truncate text-[14px] font-semibold">
+              <h2 className="min-w-0 flex-1 truncate text-content font-semibold">
                 {details?.room.name ?? selectedSummary?.name ?? "Board room"}
               </h2>
               {details && (
@@ -409,18 +436,17 @@ export default function AgentRoomClient() {
               )}
             </div>
             <div className="mt-2 flex items-center gap-2 overflow-x-auto">
-              <Users size={13} className="shrink-0 text-text-light-gray" />
+              <Users size={14} className="shrink-0 text-text-light-gray" />
               {(details?.agents ?? selectedSummary?.agents ?? []).map((agent) => (
                 <span
                   key={agent.id}
-                  className="inline-flex shrink-0 items-center gap-1.5 rounded-full bg-cardBackground px-2 py-1 text-micro"
+                  className="inline-flex shrink-0 items-center gap-1.5 rounded-[4px] bg-cardBackground px-2 py-1 text-micro"
                 >
                   <AgentAvatar
                     agentId={agent.id}
                     name={agent.displayName}
                     photoURL={agent.photoURL}
                     size={18}
-                    className="text-[8px]"
                   />
                   {agent.displayName}
                 </span>

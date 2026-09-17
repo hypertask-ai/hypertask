@@ -22,7 +22,7 @@ export async function loadUserAgentRoom(roomId: string, userId: number) {
 
 export async function loadAgentTokenRoom(roomId: string, agentId: string) {
   const agent = await prisma.agent.findFirst({
-    where: { id: agentId, revokedAt: null },
+    where: { id: agentId, revokedAt: null, archivedAt: null },
     select: { id: true, userId: true },
   });
   if (
@@ -36,7 +36,13 @@ export async function loadAgentTokenRoom(roomId: string, agentId: string) {
       id: roomId,
       project: {
         status: "Normal",
-        members: { some: { agentId, status: "Accepted" } },
+        members: {
+          some: {
+            agentId,
+            status: "Accepted",
+            agent: { revokedAt: null, archivedAt: null },
+          },
+        },
       },
     },
     include: {

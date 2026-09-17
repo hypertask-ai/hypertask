@@ -28,7 +28,7 @@ CREATE TABLE "AgentRoomMessage" (
     CONSTRAINT "AgentRoomMessage_pkey" PRIMARY KEY ("id"),
     CONSTRAINT "AgentRoomMessage_botTurnDepth_check" CHECK ("botTurnDepth" BETWEEN 0 AND 3),
     CONSTRAINT "AgentRoomMessage_author_check" CHECK (
-      ("role" = 'human' AND "authorUserId" IS NOT NULL AND "authorAgentId" IS NULL)
+      ("role" = 'human' AND "authorAgentId" IS NULL)
       OR ("role" = 'assistant' AND "authorUserId" IS NULL)
     )
 );

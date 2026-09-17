@@ -12,6 +12,8 @@ export const AGENT_ROOM_TRANSCRIPT_LIMIT = 200;
 export const AGENT_ROOM_STOPPED_MESSAGE = "Turn stopped";
 export const AGENT_ROOM_TURN_LIMIT_MESSAGE =
   "Bot exchange limit reached. Continue this work on the ticket.";
+export const AGENT_ROOM_DAILY_BUDGET_MESSAGE =
+  "Daily room turn budget reached. Continue tomorrow.";
 
 export class AgentRoomError extends Error {
   constructor(
@@ -111,7 +113,7 @@ export async function listAgentRoom(roomId: string, now = new Date()) {
         project: { agentRoom: { id: roomId } },
         status: "Accepted",
         agentId: { not: null },
-        agent: { revokedAt: null },
+        agent: { revokedAt: null, archivedAt: null },
       },
       orderBy: { agent: { displayName: "asc" } },
       select: {
@@ -163,17 +165,31 @@ export async function createHumanAgentRoomMessage(input: {
   userId: number;
   text: string;
   ticketNumber?: string | null;
+  now?: Date;
 }) {
   const text = input.text.trim();
   if (!text || text.length > AGENT_ROOM_MAX_MESSAGE_LENGTH) {
     throw new AgentRoomError("Message must be 1 to 8000 characters", 400);
   }
 
+  const now = input.now ?? new Date();
   return prisma.$transaction(async (tx) => {
     const [room] = await tx.$queryRaw<
-      Array<{ id: string; projectId: number }>
-    >`SELECT "id", "projectId" FROM "AgentRoom" WHERE "id" = ${input.roomId} FOR UPDATE`;
+      Array<{ id: string; projectId: number; dailyTurnBudget: number }>
+    >`SELECT "id", "projectId", "dailyTurnBudget" FROM "AgentRoom" WHERE "id" = ${input.roomId} FOR UPDATE`;
     if (!room) throw new AgentRoomError("Room not found", 404);
+
+    const { start, end } = roomBudgetWindow(now);
+    const turnsUsed = await tx.agentRoomMessage.count({
+      where: {
+        roomId: room.id,
+        authorAgentId: { not: null },
+        createdAt: { gte: start, lt: end },
+      },
+    });
+    if (turnsUsed >= room.dailyTurnBudget) {
+      throw new AgentRoomError("Daily room turn budget reached", 429);
+    }
 
     const productBot = await tx.member.findFirst({
       where: {
@@ -181,6 +197,7 @@ export async function createHumanAgentRoomMessage(input: {
         status: "Accepted",
         agent: {
           revokedAt: null,
+          archivedAt: null,
           displayName: { equals: "Product Bot", mode: "insensitive" },
         },
       },
@@ -203,6 +220,7 @@ export async function createHumanAgentRoomMessage(input: {
         exchangeId: crypto.randomUUID(),
         authorUserId: input.userId,
         taskId: task?.id,
+        createdAt: now,
       },
       include: roomMessageInclude,
     });
@@ -363,7 +381,7 @@ export async function createAgentRoomReply(input: {
           projectId: room.projectId,
           status: "Accepted",
           agentId: { not: null },
-          agent: { revokedAt: null },
+          agent: { revokedAt: null, archivedAt: null },
         },
         select: { agent: { select: { id: true, displayName: true } } },
       })
@@ -371,8 +389,9 @@ export async function createAgentRoomReply(input: {
     const addressed = mentionedRoomAgents(text, boardAgents, input.agentId);
     const turnLimitReached =
       exchangeTurns + 1 >= AGENT_ROOM_BOT_TURN_LIMIT;
-    const routedTo = turnLimitReached ? [] : addressed;
-    if (turnLimitReached) {
+    const dailyBudgetReached = turnsUsed + 1 >= room.dailyTurnBudget;
+    const routedTo = turnLimitReached || dailyBudgetReached ? [] : addressed;
+    if (turnLimitReached || dailyBudgetReached) {
       await tx.agentRoomDelivery.updateMany({
         where: {
           handledAt: null,
@@ -383,12 +402,14 @@ export async function createAgentRoomReply(input: {
       await tx.agentRoomMessage.create({
         data: {
           roomId: room.id,
-          content: AGENT_ROOM_TURN_LIMIT_MESSAGE,
+          content: turnLimitReached
+            ? AGENT_ROOM_TURN_LIMIT_MESSAGE
+            : AGENT_ROOM_DAILY_BUDGET_MESSAGE,
           role: "assistant",
           exchangeId: delivery.message.exchangeId,
           botTurnDepth,
           taskId: task?.id,
-          createdAt: now,
+          createdAt: new Date(now.getTime() + 1),
         },
       });
     } else if (routedTo.length > 0) {
@@ -442,15 +463,16 @@ export async function stopAgentRoomTurn(input: {
       select: { exchangeId: true },
     });
     if (!target) return false;
+    const stoppedDeliveries = await tx.agentRoomDelivery.updateMany({
+      where: { messageId: input.messageId, handledAt: null },
+      data: { handledAt: now },
+    });
+    if (stoppedDeliveries.count === 0) return false;
     const stopped = await tx.agentRoomMessage.updateMany({
       where: { id: input.messageId, roomId: room.id, stoppedAt: null },
       data: { stoppedAt: now },
     });
     if (stopped.count === 0) return false;
-    await tx.agentRoomDelivery.updateMany({
-      where: { messageId: input.messageId, handledAt: null },
-      data: { handledAt: now },
-    });
     await tx.agentRoomMessage.create({
       data: {
         roomId: room.id,

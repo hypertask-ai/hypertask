@@ -21,6 +21,14 @@ test("the database enforces one room per board and one delivery per target", () 
   assert.match(migration, /AgentRoomMessage_botTurnDepth_check/);
   assert.match(migration, /"botTurnDepth" BETWEEN 0 AND 3/);
   assert.match(migration, /AgentRoomMessage_author_check/);
+  assert.match(
+    migration,
+    /role" = 'human' AND "authorAgentId" IS NULL/,
+  );
+  assert.match(
+    migration,
+    /authorUserId_fkey[\s\S]*ON DELETE SET NULL/,
+  );
 });
 
 test("room runtime APIs expose poll, transcript reply, and handled acknowledgement", () => {
@@ -41,10 +49,14 @@ test("the flagged room screen reuses the existing composer and shows safeguards"
   const page = read("src/app/agents/chat/page.tsx");
   const directChat = read("src/app/agents/chat/AgentChatClient.tsx");
   const room = read("src/app/agents/chat/AgentRoomClient.tsx");
-  assert.match(page, /agentRoomsEnabled/);
+  assert.match(page, /isFeatureEnabled/);
+  assert.match(page, /HTPR_6557_AGENT_ROOMS_FLAG/);
   assert.match(directChat, /Board rooms/);
   assert.match(room, /AI_Tiptap_Container/);
   assert.match(room, /turns today/);
   assert.match(room, /"Stopping…" : "Stop"/);
   assert.match(room, /Product Bot can call in another bot by name/);
+  assert.match(room, /activeRoomIdRef\.current !== roomId/);
+  assert.match(room, /document\.visibilityState === "visible"/);
+  assert.doesNotMatch(room, /setInterval/);
 });
