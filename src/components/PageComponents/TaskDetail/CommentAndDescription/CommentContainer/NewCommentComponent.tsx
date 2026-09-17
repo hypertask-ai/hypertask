@@ -611,8 +611,8 @@ const NewCommentComponent = (
     isMbl,
     showIdleMic = false,
     idleRecording = false,
-    onIdleRecordingChange,
-    onIdleDictation,
+    onIdleRecordingChange = () => {},
+    onIdleDictation = () => {},
   }:{
     isMbl:boolean;
     showIdleMic?:boolean;
@@ -655,8 +655,8 @@ const NewCommentComponent = (
           <AudioButton
             editor={null}
             id="create-comment-audio-button"
-            callbackHandler={onIdleDictation ?? (() => {})}
-            toggleRecording={onIdleRecordingChange ?? (() => {})}
+            callbackHandler={onIdleDictation}
+            toggleRecording={onIdleRecordingChange}
             ariaLabel="Start dictation"
             wrapperClassName={idleRecording ? "flex-1 w-full" : undefined}
           />
