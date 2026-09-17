@@ -1,4 +1,5 @@
-import { scryptSync, timingSafeEqual } from "node:crypto";
+import { scrypt, timingSafeEqual } from "node:crypto";
+import { promisify } from "node:util";
 
 import { FEATURE_FLAG_QA_USER_ID } from "@/lib/flags";
 
@@ -6,6 +7,7 @@ export const QA_LOGIN_USER_ID = FEATURE_FLAG_QA_USER_ID;
 export const QA_LOGIN_PASSWORD_MIN_BYTES = 32;
 const QA_LOGIN_SCRYPT_KEYLEN = 64;
 const QA_LOGIN_SCRYPT_SALT = Buffer.from("htpr-6536-qa-login");
+const scryptAsync = promisify(scrypt);
 
 export type QaLoginConfig = {
   email: string;
@@ -46,25 +48,39 @@ function timingSafeStringEqual(left: string, right: string): boolean {
   );
 }
 
-function scryptQaLoginSecret(secret: string): Buffer {
-  return scryptSync(secret, QA_LOGIN_SCRYPT_SALT, QA_LOGIN_SCRYPT_KEYLEN, {
-    N: 16384,
-    r: 8,
-    p: 1,
-  });
+let cachedPassword = "";
+let cachedDigest: Buffer | null = null;
+
+async function scryptQaLoginSecret(secret: string): Promise<Buffer> {
+  return (await scryptAsync(
+    secret,
+    QA_LOGIN_SCRYPT_SALT,
+    QA_LOGIN_SCRYPT_KEYLEN,
+    { N: 16384, r: 8, p: 1 },
+  )) as Buffer;
 }
 
-export function qaLoginCredentialsMatch(
+async function configuredPasswordDigest(password: string): Promise<Buffer> {
+  if (cachedDigest && cachedPassword === password) {
+    return cachedDigest;
+  }
+  const digest = await scryptQaLoginSecret(password);
+  cachedPassword = password;
+  cachedDigest = digest;
+  return digest;
+}
+
+export async function qaLoginCredentialsMatch(
   email: string,
   password: string,
   config: QaLoginConfig,
-): boolean {
+): Promise<boolean> {
   const emailOk = timingSafeStringEqual(
     normalizeQaLoginEmail(email),
     config.email,
   );
-  const expected = scryptQaLoginSecret(config.password);
-  const given = scryptQaLoginSecret(password);
+  const expected = await configuredPasswordDigest(config.password);
+  const given = await scryptQaLoginSecret(password);
   const passwordOk =
     expected.length === given.length && timingSafeEqual(expected, given);
   return emailOk && passwordOk;

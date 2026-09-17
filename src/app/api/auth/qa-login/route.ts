@@ -101,7 +101,7 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  if (!qaLoginCredentialsMatch(normalizedEmail, password, config)) {
+  if (!(await qaLoginCredentialsMatch(normalizedEmail, password, config))) {
     logQaLogin("invalid", normalizedEmail);
     return invalidCredentials();
   }

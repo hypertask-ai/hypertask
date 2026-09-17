@@ -53,18 +53,20 @@ test("QA login is off when either secret is missing", () => {
   assert.equal(shortPassword.isQaLoginConfigured(), false);
 });
 
-test("QA login hashes the password with scrypt, not SHA-256", () => {
+test("QA login hashes the password with async scrypt, not SHA-256", () => {
   const source = fs.readFileSync(
     path.join(root, "src/lib/auth/qaLogin.ts"),
     "utf8",
   );
-  assert.match(source, /scryptSync/);
+  assert.match(source, /scryptAsync/);
+  assert.match(source, /promisify\(scrypt\)/);
   assert.match(source, /timingSafeEqual/);
+  assert.doesNotMatch(source, /scryptSync/);
   assert.doesNotMatch(source, /createHash/);
   assert.doesNotMatch(source, /sha256/);
 });
 
-test("QA login accepts only the configured email and password", () => {
+test("QA login accepts only the configured email and password", async () => {
   const {
     getQaLoginConfig,
     qaLoginCredentialsMatch,
@@ -81,7 +83,7 @@ test("QA login accepts only the configured email and password", () => {
     password: strongQaPassword,
   });
   assert.equal(
-    qaLoginCredentialsMatch(
+    await qaLoginCredentialsMatch(
       "qa@example.test",
       strongQaPassword,
       config,
@@ -89,7 +91,7 @@ test("QA login accepts only the configured email and password", () => {
     true,
   );
   assert.equal(
-    qaLoginCredentialsMatch(
+    await qaLoginCredentialsMatch(
       "other@example.test",
       strongQaPassword,
       config,
@@ -97,7 +99,7 @@ test("QA login accepts only the configured email and password", () => {
     false,
   );
   assert.equal(
-    qaLoginCredentialsMatch("qa@example.test", "wrong-password", config),
+    await qaLoginCredentialsMatch("qa@example.test", "wrong-password", config),
     false,
   );
 });
@@ -153,7 +155,7 @@ test("the QA login page and route stay hidden without the secrets", () => {
   assert.match(route, /if \(!isQaLoginConfigured\(\)\)/);
   assert.match(route, /const flagged = await isFeatureEnabled/);
   assert.match(route, /status: 404/);
-  assert.match(route, /qaLoginCredentialsMatch/);
+  assert.match(route, /await qaLoginCredentialsMatch/);
   assert.match(route, /QA_LOGIN_USER_ID/);
   assert.match(route, /onboardingTourStatus: true/);
   assert.match(route, /console\.info\("\[qa-login\]"/);
