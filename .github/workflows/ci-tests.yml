@@ -312,6 +312,7 @@ jobs:
       - name: Test with coverage collection
         id: push-test
         if: github.event_name == 'push'
+        shell: bash
         env:
           NODE_V8_COVERAGE: coverage/raw
           HT_REQUIRE_PG_TESTS: "1"

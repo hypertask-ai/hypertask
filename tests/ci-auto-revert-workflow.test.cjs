@@ -129,6 +129,7 @@ test("a production unit-test failure can only warn", async () => {
   const end = workflow.indexOf("  production-cli-parity:", start);
   const warningJob = workflow.slice(start, end);
 
+  assert.match(workflow, /id: push-test[\s\S]*?shell: bash[\s\S]*?run: npm test 2>&1 \| tee/);
   assert.match(warningJob, /name: production-test-warning/);
   assert.match(warningJob, /permissions:\n\s+actions: read\n\s+contents: read/);
   assert.match(warningJob, /FAILED_TESTS: \$\{\{ needs\.ci-tests\.outputs\.failed_tests \}\}/);
