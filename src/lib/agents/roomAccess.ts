@@ -2,8 +2,6 @@ import prisma from "@/lib/prisma";
 import { HTPR_6557_AGENT_ROOMS_FLAG, isFeatureEnabled } from "@/lib/flags";
 import { getProjectWhere } from "@/utils/controllers/projects/getAllIncludes";
 
-export const AGENT_ROOM_NOT_FOUND = "Room not found";
-
 export const agentRoomsEnabled = (userId: number) =>
   isFeatureEnabled(HTPR_6557_AGENT_ROOMS_FLAG, userId);
 
@@ -45,27 +43,4 @@ export async function loadAgentTokenRoom(roomId: string, agentId: string) {
       project: { select: { id: true, name: true, title: true } },
     },
   });
-}
-
-export async function listRoomAgents(projectId: number) {
-  const members = await prisma.member.findMany({
-    where: {
-      projectId,
-      status: "Accepted",
-      agentId: { not: null },
-      agent: { revokedAt: null },
-    },
-    orderBy: { agent: { displayName: "asc" } },
-    select: {
-      agent: {
-        select: {
-          id: true,
-          displayName: true,
-          photoURL: true,
-          runtimeType: true,
-        },
-      },
-    },
-  });
-  return members.flatMap(({ agent }) => (agent ? [agent] : []));
 }
