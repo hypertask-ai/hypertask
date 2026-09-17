@@ -32,7 +32,9 @@ export function mapTaskAssignee(a: {
     const mapped: McpTaskAssignee = {
         id: a.user.id,
         email: a.user.email,
-        displayName: a.user.displayName || undefined,
+        // An agent assignment stores the owner's user row. Print the agent
+        // name, or task get and the CLI still show the owner.
+        displayName: agent?.displayName || a.user.displayName || undefined,
     };
     const agentAssigner = mapVisibleMcpAgent(a.agentAssigner, userId, projectId);
     if (agent) mapped.agent = agent;
