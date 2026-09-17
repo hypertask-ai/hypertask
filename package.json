@@ -101,7 +101,7 @@
     "eslint": "^10.10.0",
     "eslint-config-next": "^16.3.5",
     "firebase": "^12.18.0",
-    "firebase-admin": "^12.3.1",
+    "firebase-admin": "^14.4.0",
     "formik": "^2.4.5",
     "heic2any": "^0.0.4",
     "install": "^0.13.0",
