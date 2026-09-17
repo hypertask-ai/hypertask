@@ -5,7 +5,13 @@ const crypto = require("node:crypto");
 const http = require("node:http");
 const { URL } = require("node:url");
 const { readBoardFile, snapshotState } = require("./fixture.cjs");
-const { boardStateOrCli, liveIsolationFromEnv } = require("./isolation.cjs");
+const {
+  boardStateOrCli,
+  captureStateViaCli,
+  expandSelfAssign,
+  liveIsolationFromEnv,
+  resolveEvaluator,
+} = require("./isolation.cjs");
 
 function which(bin) {
   const result = spawnSync("which", [bin], { encoding: "utf8" });
@@ -90,7 +96,7 @@ async function runMcpSurface(task, { url, token, board } = {}) {
     if (!url) {
       throw new Error("MCP executor needs the production MCP URL");
     }
-    let response = await postJson(
+    const response = await postJson(
       url,
       {
         jsonrpc: "2.0",
@@ -100,18 +106,6 @@ async function runMcpSurface(task, { url, token, board } = {}) {
       },
       token ? { authorization: `Bearer ${token}` } : {},
     );
-    if (isTransientNetworkError(extractMcpText(response.raw))) {
-      response = await postJson(
-        url,
-        {
-          jsonrpc: "2.0",
-          id: tools.length + 1,
-          method: "tools/call",
-          params: { name: tool.name, arguments: tool.args || {} },
-        },
-        token ? { authorization: `Bearer ${token}` } : {},
-      );
-    }
     tools.push({
       name: tool.name,
       args: tool.args || {},
@@ -141,11 +135,11 @@ function syncBoardFromFile(board, env) {
   return board;
 }
 
-function cliArgv(command, { apiUrl, token } = {}) {
+function cliArgv(command, { apiUrl, token, userId } = {}) {
   const prefix = ["--json"];
   if (apiUrl) prefix.push("--api-url", apiUrl);
   if (token) prefix.push("--token", token);
-  return [...prefix, ...command.argv];
+  return [...prefix, ...expandSelfAssign(command.argv, userId)];
 }
 
 function spawnAsync(bin, argv, { env, timeout } = {}) {
@@ -186,10 +180,12 @@ async function runCliSurface(task, { hypertaskBin, env, board, apiUrl, token } =
   }
   const started = Date.now();
   const commands = [];
+  const evaluator = resolveEvaluator(env, hypertaskBin);
   for (const command of task.cli.commands) {
     const argv = cliArgv(command, {
       apiUrl: apiUrl || env?.EVAL_API_URL,
       token: token || env?.EVAL_TOKEN,
+      userId: evaluator.userId,
     });
     const result = await spawnAsync(hypertaskBin, argv, { env, timeout: 8_000 });
     commands.push({
@@ -351,6 +347,8 @@ function runClientAdapter(client, task, transport, { env, isolation, hypertaskBi
       error: `${client} adapter is not available`,
     };
   }
+  const isolationNow = isolation || liveIsolationFromEnv(env);
+  const before = captureStateViaCli(env, isolationNow, hypertaskBin);
   const started = Date.now();
   const argv = spec.args(task, transport);
   const result = spawnSync(clientBin(client, env), argv, {
@@ -359,12 +357,7 @@ function runClientAdapter(client, task, transport, { env, isolation, hypertaskBi
     timeout: 120_000,
   });
   const stdout = result.stdout || "";
-  const state = boardStateOrCli(
-    null,
-    env,
-    isolation || liveIsolationFromEnv(env),
-    hypertaskBin,
-  );
+  const state = boardStateOrCli(null, env, isolationNow, hypertaskBin, before);
   const observation = observationFromClient(task, transport, stdout, state);
   const usage = usageFromClientJson(parseJsonBlobs(stdout));
   const error =
@@ -387,6 +380,7 @@ function runClientAdapter(client, task, transport, { env, isolation, hypertaskBi
 
 module.exports = {
   which,
+  isTransientNetworkError,
   liveClientsFromEnv,
   postJson,
   runMcpSurface,

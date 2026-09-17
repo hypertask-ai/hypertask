@@ -36,7 +36,9 @@ node evals/mcp-client/run.mjs --mode live --label live --require-clients claude,
 Mutating live tasks refuse unless `EVAL_PROJECT_ID` names an isolated project.
 Every prompt, MCP argument, and CLI argument is rewritten onto that project
 before the client runs. After each live call, the harness reads the board
-through an independent `hypertask` path and grades that state.
+through an independent `hypertask` path and grades a per-row delta, so later
+clients are not failed by earlier comments or creates. `--self` is expanded to
+the authenticated evaluator id when the released CLI still requires a value.
 
 ## When it runs
 

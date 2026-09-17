@@ -4,18 +4,13 @@ const http = require("node:http");
 const https = require("node:https");
 const path = require("node:path");
 const { createRequire } = require("node:module");
-const { spawnSync } = require("node:child_process");
 const { startIsolatedApi } = require("./isolated-api.cjs");
+const { which } = require("./executors.cjs");
 
 const SRC_ROOT = path.resolve(__dirname, "..", "..", "..", "src");
 const REPO_ROOT = path.resolve(__dirname, "..", "..", "..");
 const EVAL_TOKEN = "eval-token";
 const requireFromRepo = createRequire(path.join(REPO_ROOT, "package.json"));
-
-function which(bin) {
-  const result = spawnSync("which", [bin], { encoding: "utf8" });
-  return result.status === 0 ? result.stdout.trim() : "";
-}
 
 function resolveHypertaskBin(env = process.env) {
   return env.EVAL_HYPERTASK_BIN || which("hypertask") || "";

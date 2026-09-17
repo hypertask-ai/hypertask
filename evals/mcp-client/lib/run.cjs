@@ -10,6 +10,7 @@ const { createBoard, writeBoardFile } = require("./fixture.cjs");
 const { startProductionHarness, resolveHypertaskBin } = require("./production.cjs");
 const {
   clientAvailable,
+  isTransientNetworkError,
   runClientAdapter,
   runCliSurface,
   runMcpSurface,
@@ -108,10 +109,6 @@ function replayFromTranscript(task, client, transport, recording) {
   });
 }
 
-function isTransientSurfaceError(error) {
-  return /ECONNRESET|ECONNREFUSED|EPIPE|socket hang up|Network error/i.test(String(error || ""));
-}
-
 async function executeSurfaceOnce(task, transport, ctx) {
   if (transport === "mcp") {
     return runMcpSurface(task, {
@@ -136,7 +133,7 @@ async function executeSurface(task, transport, ctx) {
     wallMs: 0,
     executor: transport,
   }));
-  if (live.error && isTransientSurfaceError(live.error)) {
+  if (!task.mutating && live.error && isTransientNetworkError(live.error)) {
     live = await executeSurfaceOnce(task, transport, ctx).catch((error) => ({
       error: error.message,
       observation: {},

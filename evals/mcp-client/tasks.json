@@ -401,8 +401,7 @@
               "task",
               "assign",
               "EVAL-1",
-              "--assignee",
-              "1"
+              "--self"
             ]
           }
         ]
@@ -411,6 +410,11 @@
         "stdoutIncludes": [
           "Assigned"
         ],
+        "state": {
+          "assignees": [
+            "me"
+          ]
+        },
         "jsonContains": {
           "success": true
         },

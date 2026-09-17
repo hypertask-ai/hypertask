@@ -3,15 +3,71 @@
 const { spawnSync } = require("node:child_process");
 const { snapshotState } = require("./fixture.cjs");
 
+function cliPrefix(env) {
+  const prefix = ["--json"];
+  if (env.EVAL_API_URL) prefix.push("--api-url", env.EVAL_API_URL);
+  if (env.EVAL_TOKEN) prefix.push("--token", env.EVAL_TOKEN);
+  return prefix;
+}
+
+function runHypertaskJson(hypertaskBin, env, argv) {
+  if (!hypertaskBin) return {};
+  const result = spawnSync(hypertaskBin, [...cliPrefix(env), ...argv], {
+    encoding: "utf8",
+    env,
+    timeout: 30_000,
+  });
+  try {
+    return JSON.parse(result.stdout || "{}");
+  } catch {
+    return {};
+  }
+}
+
+function countList(payload) {
+  if (Array.isArray(payload?.tasks)) return payload.tasks.length;
+  if (Array.isArray(payload?.comments)) return payload.comments.length;
+  if (Array.isArray(payload?.entries)) return payload.entries.length;
+  if (Array.isArray(payload?.logs)) return payload.logs.length;
+  if (Array.isArray(payload?.items)) return payload.items.length;
+  if (Array.isArray(payload?.timeLogs)) return payload.timeLogs.length;
+  if (typeof payload?.total === "number") return payload.total;
+  if (typeof payload?.count === "number") return payload.count;
+  return 0;
+}
+
 function liveIsolationFromEnv(env = process.env) {
   const projectId = env.EVAL_PROJECT_ID ? Number(env.EVAL_PROJECT_ID) : null;
   const ticket = env.EVAL_TICKET || "";
   const taskId = env.EVAL_TASK_ID ? Number(env.EVAL_TASK_ID) : null;
+  const userId = env.EVAL_USER_ID ? Number(env.EVAL_USER_ID) : null;
+  const userName = env.EVAL_USER_NAME || "";
   if (!projectId) return null;
   return {
     projectId,
     ticket: ticket || "EVAL-1",
     taskId: Number.isFinite(taskId) ? taskId : 1,
+    userId: Number.isFinite(userId) ? userId : 1,
+    userName: userName || "me",
+  };
+}
+
+function resolveEvaluator(env, hypertaskBin) {
+  if (env?.EVAL_USER_ID) {
+    return {
+      userId: Number(env.EVAL_USER_ID),
+      userName: env.EVAL_USER_NAME || "me",
+    };
+  }
+  const hello =
+    runHypertaskJson(hypertaskBin, env, ["status"]) ||
+    runHypertaskJson(hypertaskBin, env, ["context"]);
+  const user = hello.user || hello.profile || hello;
+  const userId = Number(user?.id || user?.userId || hello?.userId);
+  const userName = user?.displayName || user?.name || env?.EVAL_USER_NAME || "me";
+  return {
+    userId: Number.isFinite(userId) ? userId : 1,
+    userName,
   };
 }
 
@@ -44,6 +100,10 @@ function bindTask(task, isolation) {
           next[key] = isolation.ticket;
           continue;
         }
+        if (key === "assignees" && Array.isArray(child)) {
+          next[key] = child.map((name) => (name === "me" ? isolation.userName || name : name));
+          continue;
+        }
         next[key] = replace(child);
       }
       return next;
@@ -65,46 +125,71 @@ function bindTask(task, isolation) {
   return bound;
 }
 
-function captureStateViaCli(env, isolation, hypertaskBin) {
-  if (!hypertaskBin || !isolation?.ticket) return undefined;
-  const prefix = ["--json"];
-  if (env.EVAL_API_URL) prefix.push("--api-url", env.EVAL_API_URL);
-  if (env.EVAL_TOKEN) prefix.push("--token", env.EVAL_TOKEN);
-  const get = spawnSync(hypertaskBin, [...prefix, "task", "get", isolation.ticket], {
-    encoding: "utf8",
-    env,
-    timeout: 30_000,
-  });
-  const comments = spawnSync(hypertaskBin, [...prefix, "comment", "list", isolation.ticket], {
-    encoding: "utf8",
-    env,
-    timeout: 30_000,
-  });
-  try {
-    const task = JSON.parse(get.stdout || "{}");
-    const commentPayload = JSON.parse(comments.stdout || "{}");
-    const commentCount = Array.isArray(commentPayload.comments)
-      ? commentPayload.comments.length
-      : Array.isArray(task.comments)
-        ? task.comments.length
-        : undefined;
-    return {
-      ticket: task.ticketNumber || isolation.ticket,
-      title: task.title,
-      section: task.section,
-      commentCount,
-      createdCount: undefined,
-      timeLogCount: undefined,
-      assignees: (task.assignees || []).map((item) => item.displayName || item.email || item),
-    };
-  } catch {
-    return undefined;
+function expandSelfAssign(argv, userId) {
+  const next = [];
+  for (const part of argv || []) {
+    if (part === "--self") {
+      next.push("--assignee", String(userId || 1));
+      continue;
+    }
+    next.push(part);
   }
+  return next;
 }
 
-function boardStateOrCli(board, env, isolation, hypertaskBin) {
+function captureStateViaCli(env, isolation, hypertaskBin) {
+  if (!hypertaskBin || !isolation?.ticket) return undefined;
+  const task = runHypertaskJson(hypertaskBin, env, ["task", "get", isolation.ticket]);
+  const comments = runHypertaskJson(hypertaskBin, env, ["comment", "list", isolation.ticket]);
+  const created = runHypertaskJson(hypertaskBin, env, [
+    "task",
+    "list",
+    "--project",
+    String(isolation.projectId),
+    "--search",
+    "Eval fixture note",
+  ]);
+  const timeLogs = runHypertaskJson(hypertaskBin, env, [
+    "time",
+    "report",
+    "--task",
+    String(isolation.taskId || isolation.ticket),
+  ]);
+  const commentCount = Array.isArray(comments.comments)
+    ? comments.comments.length
+    : Array.isArray(task.comments)
+      ? task.comments.length
+      : countList(comments);
+  return {
+    ticket: task.ticketNumber || isolation.ticket,
+    title: task.title,
+    section: task.section,
+    commentCount,
+    createdCount: countList(created),
+    timeLogCount: countList(timeLogs),
+    assignees: (task.assignees || []).map((item) => item.displayName || item.email || item),
+  };
+}
+
+function numberOrZero(value) {
+  return Number.isFinite(value) ? value : 0;
+}
+
+function deltaState(before, after) {
+  if (!after) return after;
+  if (!before) return after;
+  return {
+    ...after,
+    commentCount: 1 + numberOrZero(after.commentCount) - numberOrZero(before.commentCount),
+    createdCount: numberOrZero(after.createdCount) - numberOrZero(before.createdCount),
+    timeLogCount: numberOrZero(after.timeLogCount) - numberOrZero(before.timeLogCount),
+  };
+}
+
+function boardStateOrCli(board, env, isolation, hypertaskBin, before) {
   if (board) return snapshotState(board);
-  return captureStateViaCli(env, isolation, hypertaskBin);
+  const after = captureStateViaCli(env, isolation, hypertaskBin);
+  return before ? deltaState(before, after) : after;
 }
 
 function missingRequiredClients(rows, required) {
@@ -121,8 +206,11 @@ function missingRequiredClients(rows, required) {
 
 module.exports = {
   liveIsolationFromEnv,
+  resolveEvaluator,
   bindTask,
+  expandSelfAssign,
   captureStateViaCli,
+  deltaState,
   boardStateOrCli,
   missingRequiredClients,
 };

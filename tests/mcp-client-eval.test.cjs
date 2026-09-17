@@ -150,3 +150,28 @@ test("a broken fixture CLI fails the surface check", async () => {
 test("CLIENTS stay the three named product clients", () => {
   assert.deepEqual(CLIENTS, ["claude", "cursor", "codex"]);
 });
+
+test("live state grading uses per-row deltas and expands --self", () => {
+  const { deltaState, expandSelfAssign } = require(
+    path.join(root, "evals/mcp-client/lib/isolation.cjs"),
+  );
+  assert.deepEqual(
+    deltaState(
+      { commentCount: 4, createdCount: 2, timeLogCount: 3 },
+      { commentCount: 5, createdCount: 3, timeLogCount: 4, title: "Eval fixture note" },
+    ),
+    {
+      commentCount: 2,
+      createdCount: 1,
+      timeLogCount: 1,
+      title: "Eval fixture note",
+    },
+  );
+  assert.deepEqual(expandSelfAssign(["task", "assign", "EVAL-1", "--self"], 7), [
+    "task",
+    "assign",
+    "EVAL-1",
+    "--assignee",
+    "7",
+  ]);
+});
