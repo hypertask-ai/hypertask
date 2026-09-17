@@ -1,38 +1,38 @@
-import admin from 'firebase-admin'
+import { cert, getApp, getApps, initializeApp, type App } from 'firebase-admin/app'
+import { getAuth as getFirebaseAuth } from 'firebase-admin/auth'
 import { getFirebaseServiceAccount } from '@/lib/firebaseServiceAccount'
 
 // Centralized Firebase Admin initialization to avoid conflicts
-let firebaseAdminApp: admin.app.App
+let firebaseAdminApp: App
 
-export function getFirebaseAdmin(): admin.app.App {
+export function getFirebaseAdmin(): App {
   if (!firebaseAdminApp) {
-    try {
-      // Check if app already exists
-      firebaseAdminApp = admin.app()
-    } catch {
-      // Initialize if it doesn't exist
+    const existing = getApps()
+    if (existing.length > 0) {
+      firebaseAdminApp = getApp()
+    } else {
       const serviceAccount = getFirebaseServiceAccount()
 
       console.log(`🔥 Initializing Firebase Admin for project: ${serviceAccount.project_id}`)
-      
-      firebaseAdminApp = admin.initializeApp({
-        credential: admin.credential.cert({
+
+      firebaseAdminApp = initializeApp({
+        credential: cert({
           projectId: serviceAccount.project_id,
           clientEmail: serviceAccount.client_email,
           privateKey: serviceAccount.private_key,
         }),
         projectId: serviceAccount.project_id,
       })
-      
+
       console.log(`✅ Firebase Admin initialized successfully for project: ${firebaseAdminApp.options.projectId}`)
     }
   }
-  
+
   return firebaseAdminApp
 }
 
 export function getAuth() {
-  return getFirebaseAdmin().auth()
+  return getFirebaseAuth(getFirebaseAdmin())
 }
 
 // Debug function to check Firebase configuration
@@ -44,4 +44,4 @@ export function debugFirebaseAdmin() {
     hasPrivateKey: !!(app.options.credential as any)?.privateKey,
     appName: app.name,
   }
-} 
+}

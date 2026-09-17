@@ -1,8 +1,8 @@
 import axios from "axios";
 import fcmConfig from "@/utils/api/fcmConfig";
 import { FCMDeviceInfo } from "@/models/model";
-import admin from "firebase-admin";
-import { Message } from "firebase-admin/messaging";
+import { cert, getApps, initializeApp } from "firebase-admin/app";
+import { getMessaging, type Message } from "firebase-admin/messaging";
 import prisma from "@/lib/prisma";
 import { getFirebaseServiceAccount } from "@/lib/firebaseServiceAccount";
 import { resolveNotificationChannelPreference } from "@/utils/controllers/notifications/shouldNotify";
@@ -162,10 +162,14 @@ export const filterDevicesByPreferences = async ({
 }
 
 // Initialize Firebase Admin SDK
-if (!admin.apps.length) {
+if (!getApps().length) {
     const serviceAccount = getFirebaseServiceAccount();
-    admin.initializeApp({
-      credential: admin.credential.cert(serviceAccount),
+    initializeApp({
+      credential: cert({
+        projectId: serviceAccount.project_id,
+        clientEmail: serviceAccount.client_email,
+        privateKey: serviceAccount.private_key,
+      }),
     });
   }
 
@@ -277,7 +281,7 @@ export const sendDataOnlyFcm = async (
     await deliveryOptions?.beforeDelivery?.();
     let deliveryResolved = false;
     try {
-      const response = await admin.messaging().send(body);
+      const response = await getMessaging().send(body);
       console.log("🚀 ~ sendDataOnlyFcm ~ response:", response);
       deliveryResolved = true;
     } catch (error) {
@@ -395,7 +399,7 @@ export const sendDataNewCommentFCM = async(props:newCommentFCM) => {
         payload.data = { ...(props.data || {}), click_action: link };
         
         try {
-            const response = await admin.messaging().send(payload);
+            const response = await getMessaging().send(payload);
             console.log("🚀 ~ sendDataNewCommentFCM ~ response:", response)
             
         } catch (error) {
