@@ -1,5 +1,13 @@
 import type { IProject } from "@/models/model";
 
+export function settingsUserId(
+  currentUser: { id?: unknown } | null | undefined,
+): number | null {
+  const raw = currentUser?.id;
+  const id = typeof raw === "number" ? raw : Number(raw);
+  return Number.isFinite(id) && id > 0 ? id : null;
+}
+
 export function getSettingsProjectForTeam(
   teamId: string | null,
   currentProject: IProject | null,

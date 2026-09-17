@@ -62,6 +62,7 @@ let snippetsRequest: Promise<ISnippet[]> | null = null;
 let lastFocusedEditor: Editor | null = null;
 let forcedPickerEditor: Editor | null = null;
 const editorsByMode = new Map<string, Editor>();
+const editorReadyListeners = new Set<(mode: string, editor: Editor) => void>();
 
 export const getSnippets = async () => {
   if (cachedSnippets) return cachedSnippets;
@@ -92,6 +93,16 @@ export const registerTiptapEditor = (
   editor: Editor,
 ) => {
   editorsByMode.set(mode, editor);
+  editorReadyListeners.forEach((listener) => listener(mode, editor));
+};
+
+export const subscribeTiptapEditorReady = (
+  listener: (mode: string, editor: Editor) => void,
+) => {
+  editorReadyListeners.add(listener);
+  return () => {
+    editorReadyListeners.delete(listener);
+  };
 };
 
 export const focusTiptapEditor = (editor: Editor) => {

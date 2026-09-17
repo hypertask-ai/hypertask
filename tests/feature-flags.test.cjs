@@ -137,6 +137,7 @@ test("declared flags remain listed with ticket details and can be changed", asyn
   assert.deepEqual(
     listed.map(({ key, mode, updatedAt }) => ({ key, mode, updatedAt })),
     [
+      { key: "htpr-3533-google-calendar", mode: "OWNER_AND_QA", updatedAt: null },
       {
         key: "htpr-4228-admin-only-time-reports",
         mode: "OWNER_AND_QA",
@@ -411,6 +412,16 @@ test("declared flags remain listed with ticket details and can be changed", asyn
       },
       {
         key: "htpr-6551-quiet-run-activity",
+        mode: "OWNER_AND_QA",
+        updatedAt: null,
+      },
+      {
+        key: "htpr-6553-agent-chat-polling",
+        mode: "OWNER_AND_QA",
+        updatedAt: null,
+      },
+      {
+        key: "htpr-6555-idle-comment-mic",
         mode: "OWNER_AND_QA",
         updatedAt: null,
       },

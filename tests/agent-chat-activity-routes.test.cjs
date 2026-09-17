@@ -76,6 +76,7 @@ stub("src/lib/flags.ts", {
     // HTPR-6322: the history route also reads the parked-reply flag, which
     // decides whether a stored parked notice is visible to this reader.
     if (key === "htpr-6322-agent-chat-parked-reply") return false;
+    if (key === "htpr-6553-agent-chat-polling") return false;
     // Shared-chat rollout is evaluated against the agent owner before history
     // loads. Keep it on here so this suite stays about activity rows.
     if (key === "htpr-6002-shared-agent-chat") return true;
@@ -238,7 +239,7 @@ test("ordinary MCP transcript reads preserve all normal messages without activit
 test("activity rows keep refreshing without a pending reply, and uncached", () => {
   const polling = chatClientSource.slice(
     chatClientSource.indexOf("// Activity rows arrive without a chat reply"),
-    chatClientSource.indexOf("// Realtime nudge"),
+    chatClientSource.indexOf("// Poll delivery availability"),
   );
 
   // 5s keeps the ticket's "within 10 seconds" promise with one request in hand.
@@ -256,4 +257,16 @@ test("activity rows keep refreshing without a pending reply, and uncached", () =
   assert.match(polling, /document\.visibilityState !== "visible"/);
   assert.match(polling, /addEventListener\("visibilitychange", onVisibility\)/);
   assert.match(polling, /removeEventListener\("visibilitychange", onVisibility\)/);
+});
+
+test("polling delivery status refreshes while an idle chat stays open", () => {
+  const polling = chatClientSource.slice(
+    chatClientSource.indexOf("// Poll delivery availability"),
+    chatClientSource.indexOf("// Realtime nudge"),
+  );
+
+  assert.match(chatClientSource, /const CHAT_AVAILABILITY_POLL_MS = 30_000/);
+  assert.match(polling, /pollingChatEnabled/);
+  assert.match(polling, /setInterval\([\s\S]*?CHAT_AVAILABILITY_POLL_MS/);
+  assert.match(polling, /document\.visibilityState !== "visible"/);
 });
