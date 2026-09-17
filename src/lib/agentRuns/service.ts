@@ -652,7 +652,6 @@ export async function listTaskAgentRunActivities(
       type: { not: AgentRunActivityType.RESPONSE },
       run: {
         taskId,
-        agent: { userId },
         task: {
           status: { not: Status.Deleted },
           project: {
