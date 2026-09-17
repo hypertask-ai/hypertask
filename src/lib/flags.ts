@@ -61,6 +61,7 @@ import {
   HTPR_6514_COMMENT_LONG_PRESS_FLAG,
   HTPR_6516_AGENT_ATTRIBUTION_FLAG,
   HTPR_6512_SEED_TEAM_AGENT_FLAG,
+  HTPR_6533_MCP_CLIENT_EVAL_FLAG,
   HTPR_6532_STATELESS_MCP_FLAG,
   HTPR_6530_MCP_LIST_QUERY_FLAG,
   HTPR_6531_DEFERRED_MCP_TOOLS_FLAG,
@@ -88,6 +89,12 @@ const FEATURE_FLAG_QA_USER = {
 const RETIRED_FEATURE_FLAG_KEYS = new Set(["hyfa-43-factory-owner-preview"]);
 
 const FEATURE_FLAG_DEFINITIONS = [
+  {
+    key: HTPR_6533_MCP_CLIENT_EVAL_FLAG,
+    shippedOn: "2026-09-16",
+    description:
+      "Shows the MCP versus CLI eval table on the agents dashboard: success rate, tokens, wall time, and tool calls for Claude, Cursor, and Codex.",
+  },
   {
     key: HTPR_6516_AGENT_ATTRIBUTION_FLAG,
     shippedOn: "2026-09-16",

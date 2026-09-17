@@ -1,0 +1,764 @@
+{
+  "version": 2,
+  "projectId": 99,
+  "ticketPrefix": "EVAL",
+  "fixtureTicket": "EVAL-1",
+  "tasks": [
+    {
+      "id": "find-overdue",
+      "prompt": "Find my overdue tickets on project 99.",
+      "mutating": false,
+      "mcp": {
+        "tools": [
+          {
+            "name": "hypertask_list_tasks",
+            "args": {
+              "project_id": 99,
+              "assigned_to": "me"
+            }
+          }
+        ]
+      },
+      "cli": {
+        "commands": [
+          {
+            "argv": [
+              "task",
+              "list",
+              "--project",
+              "99",
+              "--assigned-to",
+              "me",
+              "--has-due-date"
+            ]
+          }
+        ]
+      },
+      "expect": {
+        "stdoutIncludes": [
+          "EVAL-1",
+          "overdue"
+        ],
+        "jsonContains": {
+          "success": true
+        },
+        "exitCode": 0
+      }
+    },
+    {
+      "id": "comment-ticket",
+      "prompt": "Comment on EVAL-1 with a short status note.",
+      "mutating": true,
+      "mcp": {
+        "tools": [
+          {
+            "name": "hypertask_add_comment_to_task",
+            "args": {
+              "ticket_number": "EVAL-1",
+              "text": "<p>eval status</p>"
+            }
+          }
+        ]
+      },
+      "cli": {
+        "commands": [
+          {
+            "argv": [
+              "comment",
+              "add",
+              "EVAL-1",
+              "--text",
+              "<p>eval status</p>"
+            ]
+          }
+        ]
+      },
+      "expect": {
+        "stdoutIncludes": [
+          "success"
+        ],
+        "state": {
+          "commentCount": 2
+        },
+        "jsonContains": {
+          "success": true
+        },
+        "exitCode": 0
+      }
+    },
+    {
+      "id": "move-to-qa",
+      "prompt": "Move EVAL-1 to QA.",
+      "mutating": true,
+      "mcp": {
+        "tools": [
+          {
+            "name": "hypertask_update_task",
+            "args": {
+              "ticket_number": "EVAL-1",
+              "sectionId": 2
+            }
+          }
+        ]
+      },
+      "cli": {
+        "commands": [
+          {
+            "argv": [
+              "task",
+              "move",
+              "EVAL-1",
+              "--section",
+              "QA"
+            ]
+          }
+        ]
+      },
+      "expect": {
+        "stdoutIncludes": [
+          "QA"
+        ],
+        "state": {
+          "section": "QA"
+        },
+        "jsonContains": {
+          "success": true
+        },
+        "exitCode": 0
+      }
+    },
+    {
+      "id": "get-ticket",
+      "prompt": "Get EVAL-1 and tell me its section and assignees.",
+      "mutating": false,
+      "mcp": {
+        "tools": [
+          {
+            "name": "hypertask_get_tasks",
+            "args": {
+              "ticket_number": [
+                "EVAL-1"
+              ]
+            }
+          }
+        ]
+      },
+      "cli": {
+        "commands": [
+          {
+            "argv": [
+              "task",
+              "get",
+              "EVAL-1"
+            ]
+          }
+        ]
+      },
+      "expect": {
+        "stdoutIncludes": [
+          "EVAL-1"
+        ],
+        "jsonContains": {
+          "success": true
+        },
+        "exitCode": 0
+      }
+    },
+    {
+      "id": "search-tickets",
+      "prompt": "Search project 99 for MCP eval harness tickets.",
+      "mutating": false,
+      "mcp": {
+        "tools": [
+          {
+            "name": "hypertask_search_tasks",
+            "args": {
+              "query": "MCP eval harness",
+              "project_id": 99
+            }
+          }
+        ]
+      },
+      "cli": {
+        "commands": [
+          {
+            "argv": [
+              "search",
+              "MCP eval harness",
+              "--project",
+              "99"
+            ]
+          }
+        ]
+      },
+      "expect": {
+        "stdoutIncludes": [
+          "MCP eval harness"
+        ],
+        "jsonContains": {
+          "success": true
+        },
+        "exitCode": 0
+      }
+    },
+    {
+      "id": "list-board-tasks",
+      "prompt": "List open tasks on project 99.",
+      "mutating": false,
+      "mcp": {
+        "tools": [
+          {
+            "name": "hypertask_list_tasks",
+            "args": {
+              "project_id": 99
+            }
+          }
+        ]
+      },
+      "cli": {
+        "commands": [
+          {
+            "argv": [
+              "task",
+              "list",
+              "--project",
+              "99"
+            ]
+          }
+        ]
+      },
+      "expect": {
+        "stdoutIncludes": [
+          "EVAL-1"
+        ],
+        "jsonContains": {
+          "success": true
+        },
+        "exitCode": 0
+      }
+    },
+    {
+      "id": "list-comments",
+      "prompt": "List comments on EVAL-1.",
+      "mutating": false,
+      "mcp": {
+        "tools": [
+          {
+            "name": "hypertask_get_comments_for_task",
+            "args": {
+              "ticket_number": "EVAL-1"
+            }
+          }
+        ]
+      },
+      "cli": {
+        "commands": [
+          {
+            "argv": [
+              "comment",
+              "list",
+              "EVAL-1"
+            ]
+          }
+        ]
+      },
+      "expect": {
+        "stdoutIncludes": [
+          "existing comment"
+        ],
+        "jsonContains": {
+          "success": true
+        },
+        "exitCode": 0
+      }
+    },
+    {
+      "id": "list-sections",
+      "prompt": "List the columns on project 99.",
+      "mutating": false,
+      "mcp": {
+        "tools": [
+          {
+            "name": "hypertask_section",
+            "args": {
+              "action": "list",
+              "project_id": 99
+            }
+          }
+        ]
+      },
+      "cli": {
+        "commands": [
+          {
+            "argv": [
+              "section",
+              "list",
+              "--project",
+              "99"
+            ]
+          }
+        ]
+      },
+      "expect": {
+        "stdoutIncludes": [
+          "Bugs"
+        ],
+        "jsonContains": {
+          "success": true
+        },
+        "exitCode": 0
+      }
+    },
+    {
+      "id": "list-projects",
+      "prompt": "List the boards I can see.",
+      "mutating": false,
+      "mcp": {
+        "tools": [
+          {
+            "name": "hypertask_list_projects",
+            "args": {}
+          }
+        ]
+      },
+      "cli": {
+        "commands": [
+          {
+            "argv": [
+              "project",
+              "list"
+            ]
+          }
+        ]
+      },
+      "expect": {
+        "stdoutIncludes": [
+          "Eval Board"
+        ],
+        "jsonContains": {
+          "success": true
+        },
+        "exitCode": 0
+      }
+    },
+    {
+      "id": "hello-context",
+      "prompt": "Who am I, and what can I do in Hypertask right now?",
+      "mutating": false,
+      "mcp": {
+        "tools": [
+          {
+            "name": "hypertask_hello",
+            "args": {}
+          }
+        ]
+      },
+      "cli": {
+        "commands": [
+          {
+            "argv": [
+              "status"
+            ]
+          }
+        ],
+        "expect": {
+          "stdoutIncludes": [
+            "authenticated"
+          ],
+          "jsonContains": null,
+          "exitCode": 0
+        }
+      },
+      "expect": {
+        "stdoutIncludes": [
+          "Eval User"
+        ],
+        "jsonContains": {
+          "success": true
+        },
+        "exitCode": 0
+      }
+    },
+    {
+      "id": "assign-self",
+      "prompt": "Assign EVAL-1 to me.",
+      "mutating": true,
+      "mcp": {
+        "tools": [
+          {
+            "name": "hypertask_assign_user",
+            "args": {
+              "ticket_number": "EVAL-1",
+              "assign_self": true
+            }
+          }
+        ]
+      },
+      "cli": {
+        "commands": [
+          {
+            "argv": [
+              "task",
+              "assign",
+              "EVAL-1",
+              "--self"
+            ]
+          }
+        ]
+      },
+      "expect": {
+        "stdoutIncludes": [
+          "Assigned"
+        ],
+        "state": {
+          "assignees": [
+            "me"
+          ]
+        },
+        "jsonContains": {
+          "success": true
+        },
+        "exitCode": 0
+      }
+    },
+    {
+      "id": "create-task",
+      "prompt": "Create a task titled Eval fixture note on project 99.",
+      "mutating": true,
+      "mcp": {
+        "tools": [
+          {
+            "name": "hypertask_create_task",
+            "args": {
+              "project_id": 99,
+              "title": "Eval fixture note"
+            }
+          }
+        ]
+      },
+      "cli": {
+        "commands": [
+          {
+            "argv": [
+              "task",
+              "create",
+              "--project",
+              "99",
+              "--title",
+              "Eval fixture note"
+            ]
+          }
+        ]
+      },
+      "expect": {
+        "stdoutIncludes": [
+          "Eval fixture note"
+        ],
+        "state": {
+          "createdCount": 1
+        },
+        "jsonContains": {
+          "success": true
+        },
+        "exitCode": 0
+      }
+    },
+    {
+      "id": "update-title",
+      "prompt": "Update the title of EVAL-1.",
+      "mutating": true,
+      "mcp": {
+        "tools": [
+          {
+            "name": "hypertask_update_task",
+            "args": {
+              "ticket_number": "EVAL-1",
+              "title": "Eval fixture ticket updated"
+            }
+          }
+        ]
+      },
+      "cli": {
+        "commands": [
+          {
+            "argv": [
+              "task",
+              "update",
+              "EVAL-1",
+              "--title",
+              "Eval fixture ticket updated"
+            ]
+          }
+        ]
+      },
+      "expect": {
+        "stdoutIncludes": [
+          "Eval fixture ticket updated"
+        ],
+        "state": {
+          "title": "Eval fixture ticket updated"
+        },
+        "jsonContains": {
+          "success": true
+        },
+        "exitCode": 0
+      }
+    },
+    {
+      "id": "list-labels",
+      "prompt": "List labels on project 99.",
+      "mutating": false,
+      "mcp": {
+        "tools": [
+          {
+            "name": "hypertask_list_labels",
+            "args": {
+              "project_id": 99
+            }
+          }
+        ]
+      },
+      "cli": {
+        "commands": [
+          {
+            "argv": [
+              "labels",
+              "list",
+              "--project",
+              "99"
+            ]
+          }
+        ]
+      },
+      "expect": {
+        "stdoutIncludes": [
+          "mcp"
+        ],
+        "jsonContains": {
+          "success": true
+        },
+        "exitCode": 0
+      }
+    },
+    {
+      "id": "list-inbox",
+      "prompt": "Show my inbox.",
+      "mutating": false,
+      "mcp": {
+        "tools": [
+          {
+            "name": "hypertask_inbox_list",
+            "args": {}
+          }
+        ]
+      },
+      "cli": {
+        "commands": [
+          {
+            "argv": [
+              "inbox",
+              "list"
+            ]
+          }
+        ]
+      },
+      "expect": {
+        "stdoutIncludes": [
+          "Inbox note"
+        ],
+        "jsonContains": {
+          "success": true
+        },
+        "exitCode": 0
+      }
+    },
+    {
+      "id": "log-time",
+      "prompt": "Log 15 minutes on EVAL-1.",
+      "mutating": true,
+      "mcp": {
+        "tools": [
+          {
+            "name": "hypertask_time",
+            "args": {
+              "action": "log",
+              "task": "EVAL-1",
+              "minutes": 15
+            }
+          }
+        ]
+      },
+      "cli": {
+        "commands": [
+          {
+            "argv": [
+              "time",
+              "log",
+              "EVAL-1",
+              "15"
+            ]
+          }
+        ]
+      },
+      "expect": {
+        "stdoutIncludes": [
+          "15"
+        ],
+        "state": {
+          "timeLogCount": 1
+        },
+        "jsonContains": {
+          "success": true
+        },
+        "exitCode": 0
+      }
+    },
+    {
+      "id": "next-tasks",
+      "prompt": "What should I work on next on project 99?",
+      "mutating": false,
+      "mcp": {
+        "tools": [
+          {
+            "name": "hypertask_next_tasks",
+            "args": {
+              "project_id": 99
+            }
+          }
+        ]
+      },
+      "cli": {
+        "commands": [
+          {
+            "argv": [
+              "task",
+              "next",
+              "--project",
+              "99"
+            ]
+          }
+        ]
+      },
+      "expect": {
+        "stdoutIncludes": [
+          "EVAL-1"
+        ],
+        "jsonContains": {
+          "success": true
+        },
+        "exitCode": 0
+      }
+    },
+    {
+      "id": "task-context",
+      "prompt": "Give me the context pack for EVAL-1.",
+      "mutating": false,
+      "mcp": {
+        "tools": [
+          {
+            "name": "hypertask_task_context",
+            "args": {
+              "task_id": 1,
+              "project_id": 99
+            }
+          }
+        ]
+      },
+      "cli": {
+        "commands": [
+          {
+            "argv": [
+              "task",
+              "context",
+              "EVAL-1"
+            ]
+          }
+        ]
+      },
+      "expect": {
+        "stdoutIncludes": [
+          "EVAL-1"
+        ],
+        "jsonContains": {
+          "success": true
+        },
+        "exitCode": 0
+      }
+    },
+    {
+      "id": "list-members",
+      "prompt": "Who is on project 99?",
+      "mutating": false,
+      "mcp": {
+        "tools": [
+          {
+            "name": "hypertask_list_project_members",
+            "args": {
+              "project_id": 99
+            }
+          }
+        ]
+      },
+      "cli": {
+        "commands": [
+          {
+            "argv": [
+              "project",
+              "members",
+              "99"
+            ]
+          }
+        ]
+      },
+      "expect": {
+        "stdoutIncludes": [
+          "Eval User"
+        ],
+        "jsonContains": {
+          "success": true
+        },
+        "exitCode": 0
+      }
+    },
+    {
+      "id": "search-help",
+      "prompt": "How do I connect Claude to the Hypertask MCP server?",
+      "mutating": false,
+      "mcp": {
+        "tools": [
+          {
+            "name": "hypertask_search_help_docs",
+            "args": {
+              "query": "connect Claude MCP"
+            }
+          }
+        ]
+      },
+      "cli": {
+        "commands": [
+          {
+            "argv": [
+              "capabilities"
+            ]
+          }
+        ],
+        "expect": {
+          "stdoutIncludes": [
+            "hypertask"
+          ],
+          "jsonContains": null,
+          "exitCode": 0
+        }
+      },
+      "expect": {
+        "stdoutIncludes": [
+          "Claude"
+        ],
+        "jsonContains": {
+          "success": true
+        },
+        "exitCode": 0
+      }
+    }
+  ]
+}
