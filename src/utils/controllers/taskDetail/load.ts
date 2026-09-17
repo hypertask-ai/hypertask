@@ -504,19 +504,19 @@ function commentsQuery(db: Db, taskId: number, userId: number) {
 }
 
 function applyDurableAgentAttribution(comments: IComment[], attributionEnabled: boolean) {
-  return comments.map((comment) => {
+  for (const comment of comments) {
     const row = comment as IComment & {
       hasLiveAgentRow?: boolean;
       storedAgentDisplayName?: string | null;
     };
     const stored = row.storedAgentDisplayName?.trim();
-    const agentDisplayName =
-      attributionEnabled && !row.hasLiveAgentRow && stored
-        ? stored
-        : comment.agentDisplayName;
-    const { hasLiveAgentRow: _hasLive, storedAgentDisplayName: _stored, ...rest } = row;
-    return { ...rest, agentDisplayName } as IComment;
-  });
+    if (attributionEnabled && !row.hasLiveAgentRow && stored) {
+      comment.agentDisplayName = stored;
+    }
+    delete row.hasLiveAgentRow;
+    delete row.storedAgentDisplayName;
+  }
+  return comments;
 }
 
 export async function fetchCommentsForTask(
@@ -529,9 +529,8 @@ export async function fetchCommentsForTask(
     userId,
   );
   const comments = await commentsQuery(db, taskId, userId);
-  return sanitizeAgentCredentials(
-    applyDurableAgentAttribution(comments, attributionEnabled),
-  ) as IComment[];
+  applyDurableAgentAttribution(comments, attributionEnabled);
+  return sanitizeAgentCredentials(comments) as IComment[];
 }
 
 export async function fetchDescriptionReactionsWithDb(
@@ -644,9 +643,8 @@ export async function fetchCommentsForSlug(slug: TaskDetailSlug, userId: number)
     LEFT JOIN saved_by_comment sbc ON sbc."commentId" = bc.id
     ORDER BY bc."createdAt" ASC
   `;
-  return sanitizeAgentCredentials(
-    applyDurableAgentAttribution(comments, attributionEnabled),
-  ) as IComment[];
+  applyDurableAgentAttribution(comments, attributionEnabled);
+  return sanitizeAgentCredentials(comments) as IComment[];
 }
 
 // ── Benchmark-only legacy queries ───────────────────────────────────────────
