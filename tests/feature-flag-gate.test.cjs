@@ -368,6 +368,20 @@ test("a one-commit git revert of production is exempt", async (t) => {
   assert.match(result.reason, /Verified auto-revert/);
 });
 
+test("a one-commit Auto-revert-of production commit is exempt", async (t) => {
+  const { dir, git } = makeRepo(t);
+  commit(git, "initial");
+  writeFile(dir, "src/components/Widget.tsx", "export const Widget = () => <div />;\n");
+  const base = commit(git, "HTPR-4 [FEATURE] add widget");
+  git(["revert", "--no-commit", base]);
+  const title = 'Revert "HTPR-4 [FEATURE] add widget"';
+  git(["commit", "-q", "-m", title, "-m", `Auto-revert-of: ${base}`]);
+  const head = git(["rev-parse", "HEAD"]).trim();
+  const result = await evaluate(title, base, head, dir);
+  assert.equal(result.pass, true);
+  assert.match(result.reason, /Verified auto-revert/);
+});
+
 test("FEATURE UI changes without a flag fail", async (t) => {
   const { dir, git } = makeRepo(t);
   const base = commit(git, "base");
