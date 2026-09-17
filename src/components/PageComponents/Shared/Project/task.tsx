@@ -1,4 +1,5 @@
 import {
+  IAgent,
   IEstimate,
   IPriority,
   IProject,
@@ -6,6 +7,7 @@ import {
   ITaskLabel,
   IUser,
 } from "@/models/model";
+import { splitAssignees } from "@/lib/assignees";
 import { TBoardSubtaskSetting } from "@/models/Views/model";
 import TaskDraggableContainer from "../../Kanban/KanbanTaskComponents/TaskDraggableContainer";
 import FlattenedParentTask from "../../Kanban/KanbanTaskComponents/FlattenedParentTask";
@@ -29,11 +31,8 @@ export const ReadOnlyTask = ({
   currentSetting: TBoardSubtaskSetting;
   project: IProject;
 }) => {
-  const assignees = task.assignees
-    ? task.assignees.map((item: { user: any }) =>
-        "user" in item ? item.user : item
-      )
-    : [];
+  const { humanAssignees, agentAssignees } = splitAssignees(task.assignees);
+  const assignees = [...humanAssignees, ...agentAssignees];
 
   return (
     <div
@@ -99,7 +98,7 @@ const TaskTopRow = ({
   countSubtasks,
   subTaskSetting,
 }: {
-  assignees: IUser[];
+  assignees: (IUser | IAgent)[];
   ticketNumber: string;
   _count: any;
   countSubtasks: number;
@@ -123,9 +122,10 @@ const TaskTopRow = ({
         <div className="flex items-center ">
           {assignees
             .slice(0, 5)
-            .map((user: IUser, index: React.Key | null | undefined) => (
+            .map((user: IUser | IAgent, index: React.Key | null | undefined) => (
               <UserAvatar
                 key={index}
+                agentId={typeof user.id === "string" ? user.id : undefined}
                 alt=""
                 name={user.displayName}
                 photoURL={user.photoURL}

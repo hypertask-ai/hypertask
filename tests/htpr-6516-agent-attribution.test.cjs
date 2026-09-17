@@ -22,6 +22,12 @@ const {
   PRIVATE_AGENT_DISPLAY_NAME,
   resolvePublicAgentDisplayName,
 } = jiti(path.join(root, "src/lib/agents/publicAgent.ts"));
+const { mapTaskAssignee } = jiti(
+  path.join(root, "src/lib/mcp/tasks/mappers.ts"),
+);
+const { assigneePublicName, splitAssignees } = jiti(
+  path.join(root, "src/lib/assignees.ts"),
+);
 
 function read(relativePath) {
   return fs.readFileSync(path.join(root, relativePath), "utf8");
@@ -119,6 +125,40 @@ test("read paths gate durable attribution behind htpr-6516-agent-attribution", (
       `${relativePath} must check the rollout flag`,
     );
   }
+});
+
+test("task get/list print the agent name on an agent assignment, not the owner", () => {
+  const mapped = mapTaskAssignee(
+    {
+      user: { id: 6, email: "valentin.yeo@gmail.com", displayName: "Valentin Yeo" },
+      agent: {
+        id: "1a6dd89d-5fff-4c1b-9610-0a4270a7f2c7",
+        userId: 6,
+        visibility: "PRIVATE",
+        members: [],
+        displayName: "Dev 2",
+      },
+    },
+    6,
+    15,
+  );
+  assert.equal(mapped.displayName, "Dev 2");
+  assert.equal(mapped.agent.id, "1a6dd89d-5fff-4c1b-9610-0a4270a7f2c7");
+  assert.equal(mapped.id, 6);
+});
+
+test("inbox and shared cards read the agent name from the assignee row", () => {
+  const row = {
+    id: 1,
+    userId: 6,
+    agentId: "1a6dd89d-5fff-4c1b-9610-0a4270a7f2c7",
+    user: { id: 6, displayName: "Valentin Yeo" },
+    agent: { id: "1a6dd89d-5fff-4c1b-9610-0a4270a7f2c7", displayName: "Dev 2" },
+  };
+  assert.equal(assigneePublicName(row), "Dev 2");
+  const { humanAssignees, agentAssignees } = splitAssignees([row]);
+  assert.equal(humanAssignees.length, 0);
+  assert.equal(agentAssignees[0].displayName, "Dev 2");
 });
 
 test("MCP label writes pass the acting agent into the activity", () => {

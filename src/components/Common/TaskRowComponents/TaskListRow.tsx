@@ -1,4 +1,5 @@
 import { ITask } from "@/models/model";
+import { assigneePublicName } from "@/lib/assignees";
 import React from "react";
 import { convertToPlain } from "@/utils/helperFunctions/helperFunctions";
 import formatDateDifference, {
@@ -51,7 +52,7 @@ export const TaskListRow = (props: IProps) => {
     task.assignees && task.assignees.length > 0
       ? task.assignees
           .slice(0, 5)
-          .map((assignee) => assignee.user?.displayName)
+          .map((assignee) => assigneePublicName(assignee))
           .filter(Boolean)
           .join(", ")
       : task.user?.displayName || "";
