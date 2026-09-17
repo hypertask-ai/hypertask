@@ -2,8 +2,6 @@ import { NextRequest, NextResponse } from 'next/server'
 import { validateMcpAuth, checkMcpRateLimit } from '@/lib/mcp/auth'
 import type { McpAgentSummary } from '@/lib/mcp/agents'
 import { mapVisibleMcpAgent, mcpVisibleAgentSelect } from '@/lib/mcp/agents'
-import { resolvePublicAgentDisplayName } from '@/lib/agents/publicAgent'
-import { HTPR_6516_AGENT_ATTRIBUTION_FLAG, isFeatureEnabled } from '@/lib/flags'
 import prisma from '@/lib/prisma'
 import { convertPlainTextMentionsToHtml } from '@/utils/controllers/comments/processMentions'
 import { updateCommentService } from '@/utils/controllers/comments/updateCommentService'
@@ -311,10 +309,6 @@ export async function PATCH(request: NextRequest, props: { params: Promise<{ com
     const hasAgentAttribution = Boolean(
       commentWithAgent?.agent || commentWithAgent?.agentDisplayName
     )
-    const attributionEnabled = await isFeatureEnabled(
-      HTPR_6516_AGENT_ATTRIBUTION_FLAG,
-      user.id
-    )
 
     const response: UpdateCommentResponse = {
       success: true,
@@ -328,16 +322,6 @@ export async function PATCH(request: NextRequest, props: { params: Promise<{ com
           ? { agent_display_name: agent?.displayName || 'Private agent' }
           : {}),
       }
-    }
-    if (attributionEnabled) {
-      const agentDisplayName = resolvePublicAgentDisplayName({
-        hasAgentRow: Boolean(commentWithAgent?.agent),
-        visibleAgent: agent,
-        storedDisplayName: commentWithAgent?.agentDisplayName,
-        attributionEnabled: true,
-      })
-      if (agentDisplayName) response.comment.agent_display_name = agentDisplayName
-      else delete response.comment.agent_display_name
     }
 
     void broadcastTaskComment(comment.task.id, { originUserId: user.id })

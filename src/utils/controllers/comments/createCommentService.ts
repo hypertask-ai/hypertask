@@ -702,21 +702,12 @@ export async function createCommentService(params: CreateCommentParams) {
       const selectedRun = agentRunSelection
         ? await persistAgentRunSelection(tx, agentRunSelection)
         : null;
-      const actingAgentName = agentId
-        ? (
-            await tx.agent.findUnique({
-              where: { id: agentId },
-              select: { displayName: true },
-            })
-          )?.displayName ?? null
-        : null;
       const comment = await tx.comment.create({
         data: {
           text,
           creatorId,
           taskId,
           agentId,
-          ...(actingAgentName ? { agentDisplayName: actingAgentName } : {}),
         },
       });
       let inboundProcessingStartedAt: Date | null = null;

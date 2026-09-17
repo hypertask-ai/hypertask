@@ -16,7 +16,6 @@ import {
     publishAgentWebhookDeliveries,
 } from '@/lib/agentWebhooks/outbox';
 import type { AgentWebhookTaskLabel } from '@/lib/agentWebhooks/events';
-import type { ActingAgent } from '@/lib/agents/activityAttribution';
 
 const agentLabelRefs = (
     taskLabels: Array<{ label: { id: string; value: string | null } }>,
@@ -272,8 +271,7 @@ export async function setTaskLabels(
     taskId: number,
     projectId: number,
     labelIds: (string | number)[],
-    userObj: { id: number; email: string; displayName?: string | null; photoURL?: string | null },
-    fromAgent?: ActingAgent | null,
+    userObj: { id: number; email: string; displayName?: string | null; photoURL?: string | null }
 ): Promise<void> {
     const resolvedIds = await resolveLabelIds(projectId, labelIds);
     const deliveryIds = await prisma.$transaction(async (tx) => {
@@ -302,7 +300,6 @@ export async function setTaskLabels(
                     toTaskLabel: taskLabel as any,
                     taskId,
                     status: 'Removed',
-                    fromAgent,
                     transaction: tx,
                 });
             }
@@ -318,7 +315,6 @@ export async function setTaskLabels(
                 toTaskLabel: taskLabel as any,
                 taskId,
                 status: 'Assigned',
-                fromAgent,
                 transaction: tx,
             });
         }
@@ -359,8 +355,7 @@ export async function mutateTaskLabels(
         remove?: (string | number)[];
         skipIfPresent?: (string | number)[];
     },
-    userObj: { id: number; email: string; displayName?: string | null; photoURL?: string | null },
-    fromAgent?: ActingAgent | null,
+    userObj: { id: number; email: string; displayName?: string | null; photoURL?: string | null }
 ): Promise<void> {
     const addIds = await resolveLabelIds(projectId, changes.add ?? []);
     const removeIds = await resolveLabelIds(projectId, changes.remove ?? []);
@@ -387,7 +382,6 @@ export async function mutateTaskLabels(
                     toTaskLabel: taskLabel as any,
                     taskId,
                     status: 'Removed',
-                    fromAgent,
                     transaction: tx,
                 });
             }
@@ -405,7 +399,6 @@ export async function mutateTaskLabels(
                 toTaskLabel: taskLabel as any,
                 taskId,
                 status: 'Assigned',
-                fromAgent,
                 transaction: tx,
             });
         }

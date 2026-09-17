@@ -9,7 +9,6 @@ import {
   sanitizeAgentCredentials,
   type PublicAgent,
 } from "@/lib/agents/publicAgent";
-import { HTPR_6516_AGENT_ATTRIBUTION_FLAG, isFeatureEnabled } from "@/lib/flags";
 import {
   accessibleAgentMembershipWhere,
   boardAgentVisibilityWhere,
@@ -432,8 +431,6 @@ function commentsQuery(db: Db, taskId: number, userId: number) {
         CASE WHEN agent_visibility.hidden THEN NULL ELSE c."agentId" END AS "agentId",
         CASE WHEN agent_visibility.hidden THEN 'Private agent'
           ELSE c."agentDisplayName" END AS "agentDisplayName",
-        agent.id IS NOT NULL AS "hasLiveAgentRow",
-        c."agentDisplayName" AS "storedAgentDisplayName",
         ${publicCommentCreator} AS creator,
         ${publicCommentAgent} AS agent
       FROM "Comment" c
@@ -490,7 +487,6 @@ function commentsQuery(db: Db, taskId: number, userId: number) {
     )
     SELECT bc.id, bc.text, bc.summary, bc."taskId", bc."creatorId", bc."createdAt",
       bc.activity, bc."seen", bc."agentId", bc."agentDisplayName",
-      bc."hasLiveAgentRow", bc."storedAgentDisplayName",
       COALESCE(rbc.reactions, '[]'::jsonb) AS reactions,
       COALESCE(abc.attachments, '[]'::jsonb) AS attachments,
       COALESCE(sbc."savedContent", '[]'::jsonb) AS "savedContent",
@@ -503,35 +499,13 @@ function commentsQuery(db: Db, taskId: number, userId: number) {
   `;
 }
 
-function applyDurableAgentAttribution(comments: IComment[], attributionEnabled: boolean) {
-  return comments.map((comment) => {
-    const row = comment as IComment & {
-      hasLiveAgentRow?: boolean;
-      storedAgentDisplayName?: string | null;
-    };
-    const stored = row.storedAgentDisplayName?.trim();
-    const agentDisplayName =
-      attributionEnabled && !row.hasLiveAgentRow && stored
-        ? stored
-        : comment.agentDisplayName;
-    const { hasLiveAgentRow: _hasLive, storedAgentDisplayName: _stored, ...rest } = row;
-    return { ...rest, agentDisplayName } as IComment;
-  });
-}
-
 export async function fetchCommentsForTask(
   taskId: number,
   userId: number,
   db: Db = prisma
 ) {
-  const attributionEnabled = await isFeatureEnabled(
-    HTPR_6516_AGENT_ATTRIBUTION_FLAG,
-    userId,
-  );
   const comments = await commentsQuery(db, taskId, userId);
-  return sanitizeAgentCredentials(
-    applyDurableAgentAttribution(comments, attributionEnabled),
-  ) as IComment[];
+  return sanitizeAgentCredentials(comments) as IComment[];
 }
 
 export async function fetchDescriptionReactionsWithDb(
@@ -553,10 +527,6 @@ export async function fetchDescriptionReactionsWithDb(
 
 export async function fetchCommentsForSlug(slug: TaskDetailSlug, userId: number) {
   const { projectId, uniqueIndex } = slug;
-  const attributionEnabled = await isFeatureEnabled(
-    HTPR_6516_AGENT_ATTRIBUTION_FLAG,
-    userId,
-  );
   const comments = await prisma.$queryRaw<IComment[]>`
     WITH authorized_task AS (
       SELECT t.id, t."projectId" FROM "Task" t
@@ -576,8 +546,6 @@ export async function fetchCommentsForSlug(slug: TaskDetailSlug, userId: number)
         CASE WHEN agent_visibility.hidden THEN NULL ELSE c."agentId" END AS "agentId",
         CASE WHEN agent_visibility.hidden THEN 'Private agent'
           ELSE c."agentDisplayName" END AS "agentDisplayName",
-        agent.id IS NOT NULL AS "hasLiveAgentRow",
-        c."agentDisplayName" AS "storedAgentDisplayName",
         ${publicCommentCreator} AS creator,
         ${publicCommentAgent} AS agent
       FROM "Comment" c
@@ -633,7 +601,6 @@ export async function fetchCommentsForSlug(slug: TaskDetailSlug, userId: number)
     )
     SELECT bc.id, bc.text, bc.summary, bc."taskId", bc."creatorId", bc."createdAt",
       bc.activity, bc."seen", bc."agentId", bc."agentDisplayName",
-      bc."hasLiveAgentRow", bc."storedAgentDisplayName",
       COALESCE(rbc.reactions, '[]'::jsonb) AS reactions,
       COALESCE(abc.attachments, '[]'::jsonb) AS attachments,
       COALESCE(sbc."savedContent", '[]'::jsonb) AS "savedContent",
@@ -644,9 +611,7 @@ export async function fetchCommentsForSlug(slug: TaskDetailSlug, userId: number)
     LEFT JOIN saved_by_comment sbc ON sbc."commentId" = bc.id
     ORDER BY bc."createdAt" ASC
   `;
-  return sanitizeAgentCredentials(
-    applyDurableAgentAttribution(comments, attributionEnabled),
-  ) as IComment[];
+  return sanitizeAgentCredentials(comments) as IComment[];
 }
 
 // ── Benchmark-only legacy queries ───────────────────────────────────────────

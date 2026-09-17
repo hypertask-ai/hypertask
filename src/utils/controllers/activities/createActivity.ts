@@ -9,10 +9,7 @@ import {
 } from "@/models/ActivityModels.ts";
 import scheduleTaskSummaryGeneration from "@/pages/api/queues/FAST/generateSummary";
 import { sanitizeAgentCredentials } from "@/lib/agents/publicAgent";
-import {
-  activityAgentDisplayName,
-  activityAgentId,
-} from "@/lib/agents/activityAttribution";
+import { activityAgentId } from "@/lib/agents/activityAttribution";
 import type { Prisma } from "@prisma/client";
 
 interface IProps {
@@ -51,9 +48,6 @@ const createActivity = async ({
       // inside the activity JSON, so a change can be traced back to the agent
       // that made it the same way agent comments and page versions already are.
       agentId: activityAgentId(safeActivityBody),
-      // Deleting the agent clears agentId, so the name is copied now rather
-      // than backfilled at delete time: a retired agent still reads as itself.
-      agentDisplayName: activityAgentDisplayName(safeActivityBody),
     },
   });
   // Get the current updatedByUserIds for the task

@@ -385,11 +385,6 @@ test("declared flags remain listed with ticket details and can be changed", asyn
         updatedAt: null,
       },
       {
-        key: "htpr-6516-agent-attribution",
-        mode: "OWNER_AND_QA",
-        updatedAt: null,
-      },
-      {
         key: "htpr-6530-mcp-list-query",
         mode: "OWNER_AND_QA",
         updatedAt: null,
