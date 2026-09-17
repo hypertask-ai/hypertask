@@ -66,6 +66,7 @@ import {
   HTPR_6531_DEFERRED_MCP_TOOLS_FLAG,
   HTPR_6473_GET_AGENT_FLAG,
   HTPR_6536_QA_LOGIN_FLAG,
+  HTPR_6555_IDLE_COMMENT_MIC_FLAG,
 } from "@/lib/flags/keys";
 
 // Re-exported so server code keeps importing keys from here. Client components must
@@ -89,6 +90,12 @@ const FEATURE_FLAG_QA_USER = {
 const RETIRED_FEATURE_FLAG_KEYS = new Set(["hyfa-43-factory-owner-preview"]);
 
 const FEATURE_FLAG_DEFINITIONS = [
+  {
+    key: HTPR_6555_IDLE_COMMENT_MIC_FLAG,
+    shippedOn: "2026-09-17",
+    description:
+      "Shows the microphone on the closed task-detail comment bar so you can start dictating with one tap instead of tapping the text first.",
+  },
   {
     key: HTPR_6536_QA_LOGIN_FLAG,
     shippedOn: "2026-09-16",
