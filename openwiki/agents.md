@@ -1,6 +1,6 @@
 # Universal agent onboarding
 
-**Last updated:** 2026-08-30
+**Last updated:** 2026-09-16
 
 This is the shared operating guide for every agent provider. The provider may change; the board, repository, and CI rules do not.
 
@@ -18,9 +18,9 @@ Use the approved Zig CLI as **`hypertask`** or its **`hypertask`** symlink, the 
 
 Before writing code for a ticket:
 
-- Assign the ticket to Valentin (user ID `6`) without replacing other assignees.
-- Move it to **In Progress**.
-- Leave a short comment saying the session is actively working it.
+- Claim it as Product Bot: `htbot comment add <PREFIX-NNN> --text "<p><strong>Claimed.</strong> Session working it now.</p>"`. Never write in Valentin's name or assign userId 6. Only Valentin assigns himself.
+- Move it to **In Progress** with `htbot task move`.
+- The in-flight signal is a **Claimed.** comment plus In Progress.
 
 When finished, report the changed files, verification performed, remaining risks, and the pull request or deployment URL. Mention Hypertask tickets with their full clickable URLs.
 
@@ -107,7 +107,7 @@ This only changes **Hypertask board operations**. It does not change the GitHub 
 - Preserve unrelated dirty worktree changes. Never use `git stash`, broad resets, or destructive cleanup.
 - Read the relevant architecture and workflow docs before editing code.
 - Run focused tests and inspect `git diff --check` before handing work off.
-- Vercel previews are opt-in. If one was requested, do not repeatedly reload it while queued; poll deployment status headlessly, then verify once ready.
+- Every pushed branch already gets a Vercel preview. Verification is opt-in. If you need that preview, do not reload it while queued; poll deployment status headlessly, then verify once ready.
 
 ## Worktree and branch cleanup
 

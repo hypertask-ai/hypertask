@@ -10,6 +10,8 @@ import {
   listOwnedAgents,
   type AgentManagementDatabase,
 } from './ownedAgents'
+import { HTPR_6530_MCP_LIST_QUERY_FLAG, isFeatureEnabled } from '@/lib/flags'
+import { readEnabledListQuery, tryApplyCollectionQuery } from '@/lib/mcp/readListQuery'
 
 export async function handleListAgentsRequest(
   request: NextRequest,
@@ -53,6 +55,26 @@ export async function handleListAgentsRequest(
     prisma as unknown as AgentManagementDatabase,
     ctx.user.id
   )
-
-  return NextResponse.json({ success: true, agents })
+  const listQueryEnabled = await isFeatureEnabled(HTPR_6530_MCP_LIST_QUERY_FLAG, ctx.user.id)
+  const parsedListQuery = readEnabledListQuery(
+    listQueryEnabled,
+    request.nextUrl.searchParams,
+  )
+  if (parsedListQuery.error) return parsedListQuery.error
+  const listQuery = parsedListQuery.listQuery
+  if (!listQuery) {
+    return NextResponse.json({ success: true, agents })
+  }
+  const projected = tryApplyCollectionQuery(
+    agents as unknown as Array<Record<string, unknown>>,
+    listQuery,
+    { searchFields: ['display_name', 'id'] },
+  )
+  if (!projected.ok) return projected.error
+  return NextResponse.json({
+    success: true,
+    agents: projected.value.items,
+    total: projected.value.total,
+    nextCursor: projected.value.nextCursor,
+  })
 }

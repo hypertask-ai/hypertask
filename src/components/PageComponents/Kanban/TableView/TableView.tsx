@@ -1,5 +1,5 @@
 "use client";
-import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import type { DragEvent as ReactDragEvent, PointerEvent as ReactPointerEvent } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useRecoilState, useRecoilValue, useSetRecoilState } from "@/lib/state";
@@ -27,6 +27,7 @@ import useHypertasksRecoilStates from "@/hooks/RecoilRoot/useHypertasksRecoilSta
 import { useDeviceContext } from "@/lib/contexts/deviceContext";
 import { isFavoriteBoardShortcut } from "@/lib/constants/shortcuts";
 import { KeyCodes } from "@/lib/constants/keyboard-handler";
+import globalConstants from "@/lib/constants";
 import { shouldRunArchiveShortcut } from "@/lib/keyboard/archiveShortcutGuard";
 import {
   getTaskShortcutAction,
@@ -83,6 +84,9 @@ import { useStarAndPin } from "@/hooks/Task Detail/useStarAndPin";
 import { splitAssignees } from "@/lib/assignees";
 import { useTaskProjectFallback } from "@/lib/keyboard/taskProjectFallback";
 import { taskBaseUri } from "@/utils";
+import SelectionCheckbox from "@/components/Common/selection-checkbox";
+import { useMyTasksBulkSelectionOptional } from "@/lib/contexts/MyTasks/BulkSelectionContext";
+import { visibleTasksFromRows } from "@/lib/myTasksBulkSelection";
 
 const HypertasksCommands = lazy(() => import("@/components/commands"));
 const AssignModal = lazy(
@@ -109,12 +113,14 @@ type TableViewProps = {
   handleBoardChange?: (index: number, sectionsFromCallback: ISection[]) => void;
   myTasksSort?: MyTasksViewConfig["sort"];
   myTasksSortKey?: number | null;
-  /** HTPR-6461: My Tasks snooze surface, independent of Views/sort. */
+  /** HTPR-6461: My Tasks Remind Me also hides the row until that date. */
   myTasksSnoozeActive?: boolean;
   onMyTasksSortChange?: (sort: MyTasksViewConfig["sort"]) => void;
   /** Controlled My Tasks columns. When set, never reads/writes the board localStorage atom. */
   myTasksVisibleColumns?: string[];
   onMyTasksVisibleColumnsChange?: (columns: string[]) => void;
+  /** Explicit My Tasks opt-in. Never inferred from a null project (HTPR-6444). */
+  enableMyTasksBulkSelection?: boolean;
 };
 const TASK_SHORTCUT_COMMAND_MODES: Partial<
   Record<TaskShortcutAction, CommandMode>
@@ -433,10 +439,11 @@ const TableView = ({
   onMyTasksSortChange,
   myTasksVisibleColumns,
   onMyTasksVisibleColumnsChange,
+  enableMyTasksBulkSelection = false,
 }: TableViewProps) => {
   const queryClient = useQueryClient();
   const rowShortcutsEnabled = useFlag(HTPR_6427_ROW_SHORTCUTS_FLAG);
-  const myTasksSnoozeFlag = useFlag(MY_TASKS_SNOOZE_FLAG);
+  const myTasksSnoozeFlag = useFlag(MY_TASKS_SNOOZE_FLAG); // HTPR-6461: H opens Remind Me
   const myTasksSnoozeEnabled = myTasksSnoozeFlag && Boolean(myTasksSnoozeActive);
   const myTasksTableColumnsFlag = useFlag(MY_TASKS_TABLE_COLUMNS_FLAG);
   const router = useRouter();
@@ -447,6 +454,7 @@ const TableView = ({
   const { starTask } = useStarAndPin();
   const [showCommands, setShowCommands] = useRecoilState(showCommandsAtom);
   const persistedActiveItem = useRecoilValue(activeItemAtom);
+  const myTasksBulk = useMyTasksBulkSelectionOptional();
   const showArchivedOnBoard = useShowArchivedOnBoard(_currentProject);
   const isApple = useDeviceContext();
   const setTasksPlayList = useSetRecoilState(tasksPlayListAtom);
@@ -542,6 +550,7 @@ const TableView = ({
   const { setTableSortViewAndReturn, changeBoardLayout } = useKanbanViews(_currentProject);
   const didRestore = useRef(false);
   const timerToggling = useRef(false);
+  const lastGAt = useRef<number | null>(null);
   // View switch (or unsaved-view create/delete) changes which saved sort applies;
   // re-derive local state from the new active view rather than keeping the old one.
   const activeSortViewId =
@@ -772,25 +781,27 @@ const TableView = ({
   // it (see ColumnResizeHandle's onPointerDown), after which it's a fixed track
   // like every other column and the whole table's width becomes the sum of its
   // columns (horizontal scroll takes over via tableMinWidth below).
-  const gridTemplateColumns = useMemo(
-    () =>
-      visibleColumns
-        .map((column) =>
-          column.key === "title" && columnWidths.title === undefined
-            ? `minmax(${getColumnWidth(column)}px,1fr)`
-            : `${getColumnWidth(column)}px`
-        )
-        .join(" "),
-    [visibleColumns, getColumnWidth, columnWidths]
-  );
+  const gridTemplateColumns = useMemo(() => {
+    const columns = visibleColumns
+      .map((column) =>
+        column.key === "title" && columnWidths.title === undefined
+          ? `minmax(${getColumnWidth(column)}px,1fr)`
+          : `${getColumnWidth(column)}px`
+      )
+      .join(" ");
+    return enableMyTasksBulkSelection ? `24px ${columns}` : columns;
+  }, [visibleColumns, getColumnWidth, columnWidths, enableMyTasksBulkSelection]);
   // The grid tracks are fixed/min px, so the rows only paint as wide as their
   // box. Without a min-width matching the columns, the section cards stop at
   // the viewport edge and everything scrolled past it is blank. gap 8px per
   // gutter + 40px row padding.
-  const tableMinWidth = useMemo(
-    () => visibleColumns.reduce((total, column) => total + getColumnWidth(column), 0) + Math.max(visibleColumns.length - 1, 0) * 8 + 40,
-    [visibleColumns, getColumnWidth]
-  );
+  const tableMinWidth = useMemo(() => {
+    const columnsWidth =
+      visibleColumns.reduce((total, column) => total + getColumnWidth(column), 0) +
+      Math.max(visibleColumns.length - 1, 0) * 8 +
+      40;
+    return enableMyTasksBulkSelection ? columnsWidth + 24 + 8 : columnsWidth;
+  }, [visibleColumns, getColumnWidth, enableMyTasksBulkSelection]);
   // Reorders storedVisibleColumns in place when a header cell is dropped on
   // another (feature 2) — the SAME atom the "Configure table columns" picker
   // reads/writes, so drag-reordering the header and the picker stay in sync.
@@ -906,6 +917,16 @@ const TableView = ({
     crossBoardPrioritySortEnabled,
     savedViewPrioritySort,
   ]);
+
+  useEffect(() => {
+    if (!enableMyTasksBulkSelection || !myTasksBulk) return;
+    myTasksBulk.registerExcludedUpdater(setExcludedTaskIds);
+  }, [enableMyTasksBulkSelection, myTasksBulk]);
+
+  useEffect(() => {
+    if (!enableMyTasksBulkSelection || !myTasksBulk) return;
+    myTasksBulk.setVisibleItems(visibleTasksFromRows(rows));
+  }, [enableMyTasksBulkSelection, myTasksBulk, rows]);
 
   // HTPR-4876: table view rendered <HypertasksCommands /> with no context, so
   // the palette fell back to "Others" and every Task- or Kanban-gated command
@@ -1222,11 +1243,8 @@ const TableView = ({
   const runTaskShortcut = useCallback(
     (event: KeyboardEvent, row: Row | undefined, index: number) => {
       if (!row || !isTaskRow(row)) return false;
-      const assignmentId = row.task.currentUserAssignmentId;
       if (
         myTasksSnoozeEnabled &&
-        typeof assignmentId === "number" &&
-        assignmentId > 0 &&
         event.keyCode === KeyCodes.H &&
         !event.shiftKey &&
         !event.altKey &&
@@ -1234,12 +1252,23 @@ const TableView = ({
         !event.metaKey &&
         !event.repeat
       ) {
+        const now = Date.now();
+        if (
+          lastGAt.current &&
+          now - lastGAt.current < globalConstants.gThenKeyDelay
+        ) {
+          return false;
+        }
         event.preventDefault();
         updateActiveItemAndItemInView(row.task);
         setShowCommands({
           show: true,
-          mode: CommandMode.MyTasksSnooze,
-          payload: { assignmentId },
+          mode: CommandMode.RemindMe,
+          payload: {
+            returnsToMyTasks:
+              typeof row.task.currentUserAssignmentId === "number" &&
+              row.task.currentUserAssignmentId > 0,
+          },
         });
         return true;
       }
@@ -1355,6 +1384,15 @@ const TableView = ({
         return;
       }
       if (
+        e.keyCode === KeyCodes.G &&
+        !e.shiftKey &&
+        !e.altKey &&
+        !e.ctrlKey &&
+        !e.metaKey
+      ) {
+        lastGAt.current = Date.now();
+      }
+      if (
         (rowShortcutsEnabled &&
           shouldIgnoreTaskShortcutTarget(e.target as HTMLElement | null)) ||
         returnIfModalOrInputActive() ||
@@ -1371,10 +1409,35 @@ const TableView = ({
       // under modifiers on some browsers.
       if ((e.ctrlKey || e.metaKey) && e.keyCode === KeyCodes.E) {
         const row = rows[selectedIndex];
+        if (
+          enableMyTasksBulkSelection &&
+          myTasksBulk &&
+          myTasksBulk.selectedCount > 0
+        ) {
+          e.preventDefault();
+          if (!shouldRunArchiveShortcut(e)) return;
+          void myTasksBulk.archiveSelected();
+          return;
+        }
         if (!row || !isTaskRow(row)) return;
         e.preventDefault();
         if (!shouldRunArchiveShortcut(e)) return;
         void archiveTaskFromTable(row.task);
+        return;
+      }
+      if (
+        enableMyTasksBulkSelection &&
+        myTasksBulk &&
+        e.keyCode === KeyCodes.X &&
+        !e.ctrlKey &&
+        !e.metaKey &&
+        !e.altKey &&
+        !e.repeat
+      ) {
+        const row = rows[selectedIndex];
+        if (!row || !isTaskRow(row)) return;
+        e.preventDefault();
+        myTasksBulk.toggleTaskSelection(row.task.id, e.shiftKey);
         return;
       }
       // [c] creates a task; /project is excluded from the global handler because
@@ -1419,7 +1482,7 @@ const TableView = ({
     };
     document.addEventListener("keydown", handleKeyDown);
     return () => document.removeEventListener("keydown", handleKeyDown);
-  }, [_currentProject, _sections, archiveTaskFromTable, assignTask, changeBoardLayout, createTaskInCurrentTableContext, expandSection, focusTo, handleBoardChange, openTask, rows, rowShortcutsEnabled, runTaskShortcut, selectedIndex, setShowCommands, showCommands.show, toggleSelectedTaskTimer]);
+  }, [_currentProject, _sections, archiveTaskFromTable, assignTask, changeBoardLayout, createTaskInCurrentTableContext, enableMyTasksBulkSelection, expandSection, focusTo, handleBoardChange, myTasksBulk, openTask, rows, rowShortcutsEnabled, runTaskShortcut, selectedIndex, setShowCommands, showCommands.show, toggleSelectedTaskTimer]);
 
   const renderTaskRow = (task: ITask, flatIndex: number) => {
     const selected = selectedIndex === flatIndex;
@@ -1650,10 +1713,23 @@ const TableView = ({
         onMouseEnter={() => handleMouseEnter(flatIndex)}
         onMouseLeave={handleMouseLeave}
         style={{ gridTemplateColumns }}
-        className={`${TABLE_GRID_CLASS} table-view-row cursor-pointer items-center gap-2 py-[6px] md:py-[8px] px-[20px] md:px-5 rounded-md md:border-l-4 text-meta md:text-dense outline-none ${
+        className={`${TABLE_GRID_CLASS} table-view-row group/selection_row cursor-pointer items-center gap-2 py-[6px] md:py-[8px] px-[20px] md:px-5 rounded-md md:border-l-4 text-meta md:text-dense outline-none ${
           selected ? "md:bg-active-elementBg md:border-l-selected-item-border" : "md:border-l-transparent bg-transparent"
         }`}
       >
+        {enableMyTasksBulkSelection && myTasksBulk ? (
+          <SelectionCheckbox
+            id={task.id}
+            isChecked={myTasksBulk.isSelected(task.id)}
+            alwaysVisible={myTasksBulk.selectedCount > 0}
+            groupName="selection_row"
+            borderColorClass="!border-text-light-gray"
+            checkmarkColorClass="text-white-black"
+            onClick={(_id, event) => {
+              myTasksBulk.toggleTaskSelection(task.id, Boolean(event?.shiftKey));
+            }}
+          />
+        ) : null}
         {visibleColumns.map((column) => renderCell(column.key))}
       </li>
     );
@@ -1661,6 +1737,26 @@ const TableView = ({
 
   const selectedAssignees = splitAssignees(assignTask?.assignees);
   let cursor = -1;
+  let bulkSelectAllHeader: ReactNode = null;
+  if (enableMyTasksBulkSelection && myTasksBulk) {
+    if (myTasksBulk.selectedCount > 0) {
+      bulkSelectAllHeader = (
+        <SelectionCheckbox
+          id="my-tasks-select-all"
+          isChecked={myTasksBulk.isAllSelected}
+          alwaysVisible
+          borderColorClass="!border-text-light-gray"
+          checkmarkColorClass="text-white-black"
+          onClick={() => myTasksBulk.selectAllVisible()}
+        />
+      );
+    } else {
+      bulkSelectAllHeader = (
+        <span aria-hidden className="block h-[15px] w-[15px]" />
+      );
+    }
+  }
+
   return (
     // h-full fills the flex-sized board column (rail shell), so the horizontal
     // scrollbar sits at the bottom of the viewport instead of under the last row.
@@ -1689,6 +1785,7 @@ const TableView = ({
             />
           )}
           <div style={{ gridTemplateColumns }} className={`${TABLE_GRID_CLASS} table-view-header group/header sticky top-0 z-10 items-center gap-2 bg-taskDetailPage px-[20px] md:px-5 py-2 text-micro font-semibold uppercase text-text-light-gray`}>
+            {bulkSelectAllHeader}
             {visibleColumns.map((column) => {
               const sortIndex = sortState.findIndex((level) => level.column === column.key);
               const activeSort = sortState[sortIndex];

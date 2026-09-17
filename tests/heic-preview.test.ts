@@ -12,7 +12,10 @@ import {
   getDirectUploadSizeError,
   DIRECT_UPLOAD_MAX_FILES,
 } from "../src/lib/storage/directUpload";
-import { isEmbeddableMediaFile } from "../src/components/RTE/Extensions/resizableMedia/mediaPasteDropPlugin/mediaPasteDropPlugin";
+import {
+  getMediaPasteDropPlugin,
+  isEmbeddableMediaFile,
+} from "../src/components/RTE/Extensions/resizableMedia/mediaPasteDropPlugin/mediaPasteDropPlugin";
 
 const STORAGE = "https://files.example.com/attachments/1700_abc_IMG_4821.HEIC";
 
@@ -132,6 +135,99 @@ test("a pasted HEIC with no MIME type is embedded rather than dropped", () => {
     ),
     true,
   );
+});
+
+test("a HEIC exposed only through clipboard files is handled and inserted", async () => {
+  const example = new File([new Uint8Array(1)], "example.heic", { type: "" });
+  let prevented = false;
+  let uploadStarted = false;
+  let uploadedFile: File | undefined;
+  let insertedNode: {
+    type: { name: string };
+    attrs: Record<string, unknown>;
+    nodeSize: number;
+  } | undefined;
+  const transaction = {
+    replaceSelectionWith(node: typeof insertedNode) {
+      insertedNode = node;
+      return transaction;
+    },
+    doc: {
+      descendants(callback: (node: typeof insertedNode, pos: number) => void) {
+        callback(insertedNode, 0);
+      },
+    },
+    setNodeMarkup(_pos: number, _type: unknown, attrs: Record<string, unknown>) {
+      if (insertedNode) insertedNode.attrs = attrs;
+    },
+  };
+  const view = {
+    state: {
+      schema: {
+        nodes: {
+          resizableMedia: {
+            create: (attrs: Record<string, unknown>) => ({
+              type: { name: "resizableMedia" },
+              attrs,
+              nodeSize: 1,
+            }),
+          },
+        },
+      },
+      tr: transaction,
+    },
+    dispatch() {},
+  };
+  const event = {
+    clipboardData: {
+      items: [] as unknown as DataTransferItemList,
+      files: [example] as unknown as FileList,
+    },
+    preventDefault() {
+      prevented = true;
+    },
+  };
+  let finishUpload: () => void;
+  const uploadFinished = new Promise<void>((resolve) => {
+    finishUpload = resolve;
+  });
+  const plugin = getMediaPasteDropPlugin({
+    onUploadStart() {
+      uploadStarted = true;
+    },
+    onUploadEnd() {
+      finishUpload();
+    },
+    async uploadFn(file: File) {
+      uploadedFile = file;
+      return STORAGE;
+    },
+  });
+  const originalWarn = console.warn;
+  console.warn = () => {};
+
+  try {
+    const handled = plugin.props.handlePaste?.call(
+      plugin,
+      view as never,
+      event as unknown as ClipboardEvent,
+      undefined as never,
+    );
+
+    assert.equal(handled, true);
+    assert.equal(prevented, true);
+    assert.equal(uploadStarted, true);
+    assert.equal(insertedNode?.attrs["media-type"], "img");
+    assert.equal(insertedNode?.attrs.isLoading, true);
+    await uploadFinished;
+  } finally {
+    console.warn = originalWarn;
+  }
+
+  assert.equal(uploadedFile, example);
+  assert.equal(insertedNode?.attrs.src, STORAGE);
+  assert.equal(insertedNode?.attrs.originalSrc, null);
+  assert.equal(insertedNode?.attrs.isLoading, false);
 });
 
 test("the paste filter still accepts ordinary media and still rejects documents", () => {

@@ -39,7 +39,13 @@ import {
   type McpCommentReaction,
 } from '@/lib/mcp/comments/reactionResponse'
 import { resolvePublicAgentDisplayName } from '@/lib/agents/publicAgent'
-import { HTPR_6516_AGENT_ATTRIBUTION_FLAG, isFeatureEnabled } from '@/lib/flags'
+import {
+  HTPR_6516_AGENT_ATTRIBUTION_FLAG,
+  HTPR_6530_MCP_LIST_QUERY_FLAG,
+  isFeatureEnabled,
+} from '@/lib/flags'
+import { parseNumericCursor, parseUpdatedSince, projectRows } from '@/lib/mcp/listQuery'
+import { readEnabledListQuery } from '@/lib/mcp/readListQuery'
 
 export interface CommentItem {
   id: number
@@ -75,6 +81,7 @@ export interface ListCommentsResponse {
   total: number
   limit: number
   offset: number
+  nextCursor?: string | null
 }
 
 export interface McpMentionInput {
@@ -230,6 +237,10 @@ export async function GET(request: NextRequest) {
     const requestedSortOrder = searchParams.get('sort_order')
     const sortOrder = requestedSortOrder || 'desc'
     const includeActivity = searchParams.get('include_activity') === 'true'
+    const listQueryEnabled = await isFeatureEnabled(HTPR_6530_MCP_LIST_QUERY_FLAG, user.id)
+    const parsedListQuery = readEnabledListQuery(listQueryEnabled, searchParams)
+    if (parsedListQuery.error) return parsedListQuery.error
+    const listQuery = parsedListQuery.listQuery
 
     // Validate task identifier
     const validation = validateTaskIdentifier({ task_id: taskId, ticket_number: ticketNumber, unique_index: uniqueIndex, project_id: projectId })
@@ -269,6 +280,46 @@ export async function GET(request: NextRequest) {
     const commentWhere: Prisma.CommentWhereInput = includeActivity
       ? { taskId: task.id }
       : { taskId: task.id, activity: { equals: Prisma.DbNull } }
+    if (listQuery?.query) {
+      commentWhere.text = { contains: listQuery.query, mode: 'insensitive' }
+    }
+    if (listQuery?.filter.updated_since) {
+      const since = parseUpdatedSince(listQuery.filter.updated_since)
+      if (!since) {
+        return NextResponse.json(
+          {
+            success: false,
+            error: 'Validation error',
+            message: 'filter.updated_since must be an ISO datetime',
+          },
+          { status: 400 },
+        )
+      }
+      commentWhere.createdAt = { gte: since }
+    }
+
+    const COMMENT_SORT_FIELDS = ['createdAt', 'id'] as const
+    if (listQuery?.sortBy && !COMMENT_SORT_FIELDS.includes(listQuery.sortBy as 'createdAt' | 'id')) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: 'Validation error',
+          message: 'sort must be createdAt or id',
+        },
+        { status: 400 },
+      )
+    }
+    const cursorId = listQuery?.cursor ? parseNumericCursor(listQuery.cursor) : null
+    if (listQuery?.cursor && cursorId === null) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: 'Validation error',
+          message: 'cursor must be a previous nextCursor value',
+        },
+        { status: 400 },
+      )
+    }
 
     // Count the same row set returned below so pagination metadata stays accurate.
     const total = await prisma.comment.count({
@@ -276,17 +327,23 @@ export async function GET(request: NextRequest) {
     })
 
     // History reads oldest-first, like the app endpoint, unless the caller asked
-    // for an order explicitly. An explicit sort_order always wins.
-    const effectiveSortOrder =
-      includeActivity && !requestedSortOrder ? 'asc' : (sortOrder as 'asc' | 'desc')
+    // for an order explicitly. An explicit sort_order always wins over shared sort.
+    const sortField = listQuery?.sortBy === 'id' ? 'id' : 'createdAt'
+    const effectiveSortOrder = requestedSortOrder
+      ? (requestedSortOrder as 'asc' | 'desc')
+      : listQuery?.sortOrder ??
+        (includeActivity ? 'asc' : (sortOrder as 'asc' | 'desc'))
+    const pageLimit = listQuery?.limit ?? limit
     const comments = await prisma.comment.findMany({
       where: commentWhere,
       include: commentInclude(user.id, task.projectId),
-      orderBy: {
-        createdAt: effectiveSortOrder
-      },
-      take: limit,
-      skip: offset
+      orderBy: [
+        { [sortField]: effectiveSortOrder },
+        { id: effectiveSortOrder },
+      ],
+      take: pageLimit,
+      skip: cursorId ? 1 : offset,
+      ...(cursorId ? { cursor: { id: cursorId } } : {}),
     })
 
     const attributionEnabled = await isFeatureEnabled(
@@ -301,10 +358,16 @@ export async function GET(request: NextRequest) {
 
     const response: ListCommentsResponse = {
       success: true,
-      comments: commentList,
+      comments: (listQuery?.fields.length
+        // @ts-expect-error CommentItem has no string index signature
+        ? projectRows(commentList as Array<Record<string, unknown>>, listQuery.fields)
+        : commentList) as CommentItem[],
       total,
-      limit,
-      offset
+      limit: pageLimit,
+      offset: cursorId ? 0 : offset,
+      ...(listQueryEnabled
+        ? { nextCursor: comments.length === pageLimit ? String(comments[comments.length - 1].id) : null }
+        : {}),
     }
 
     return NextResponse.json(response)

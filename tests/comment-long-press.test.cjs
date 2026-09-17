@@ -11,6 +11,9 @@ const { CommandMode } = jiti(path.join(root, "src/models/enums.ts"));
 const { getAllCommands } = jiti(
   path.join(root, "src/components/Modals/commands/HTC/AllCommands.ts")
 );
+const { pinCommentGroupFirst } = jiti(
+  path.join(root, "src/lib/htc/pinCommentGroupFirst.ts")
+);
 
 test("comment commands already list Edit comment first", () => {
   const groups = getAllCommands({
@@ -25,4 +28,27 @@ test("comment commands already list Edit comment first", () => {
   assert.equal(groups[0].group, "Comment");
   assert.equal(groups[0].commandLists[0].key, "editcomment");
   assert.equal(groups[0].commandLists[0].commandMode, CommandMode.EditComment);
+});
+
+test("pinCommentGroupFirst puts Comment above Frequently used and leaves Edit first", () => {
+  const comment = {
+    group: "Comment",
+    commandLists: [
+      { key: "editcomment", name: "Edit comment" },
+      { key: "deletemessage", name: "Delete comment" },
+    ],
+  };
+  const frequentlyUsed = {
+    group: "Frequently used",
+    commandLists: [{ key: "createTask", name: "Create task" }],
+  };
+  const pinned = pinCommentGroupFirst([frequentlyUsed, comment]);
+  assert.equal(pinned[0].group, "Comment");
+  assert.equal(pinned[0].commandLists[0].key, "editcomment");
+  assert.equal(pinned[1].group, "Frequently used");
+});
+
+test("pinCommentGroupFirst is a no-op when there is no Comment group", () => {
+  const groups = [{ group: "Task", commandLists: [] }];
+  assert.strictEqual(pinCommentGroupFirst(groups), groups);
 });

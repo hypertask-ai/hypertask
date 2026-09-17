@@ -213,6 +213,8 @@ export enum CommandMode {
   AgentChatNextTeam,
   AgentChatPreviousTeam,
   ArchiveInboxCluster,
+  // Retired; keep the ordinal so a persisted MyTasksSnooze mode does not
+  // remap a later appended command during deploy.
   MyTasksSnooze,
 }
 

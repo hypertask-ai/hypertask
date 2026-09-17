@@ -2,6 +2,14 @@ import { NextRequest, NextResponse } from 'next/server'
 import { validateMcpAuth, checkMcpRateLimit } from '@/lib/mcp/auth'
 import { getProjectListingWhere } from '@/utils/controllers/projects/getAllIncludes'
 import prisma from '@/lib/prisma'
+import { HTPR_6530_MCP_LIST_QUERY_FLAG, isFeatureEnabled } from '@/lib/flags'
+import {
+  normalizeTaskStatus,
+  parseNumericCursor,
+  parseUpdatedSince,
+  projectRows,
+} from '@/lib/mcp/listQuery'
+import { readEnabledListQuery } from '@/lib/mcp/readListQuery'
 
 export interface ProjectLabel {
   id: string
@@ -36,6 +44,7 @@ export interface ListProjectsResponse {
   total: number
   limit: number
   offset: number
+  nextCursor?: string | null
 }
 
 /**
@@ -71,12 +80,38 @@ export async function GET(request: NextRequest) {
     const user = ctx.user;
     // Parse query parameters
     const searchParams = request.nextUrl.searchParams
-    const status = searchParams.get('status') as 'Normal' | 'Archive' | 'Deleted' | null
-    const search = searchParams.get('search') || undefined
-    const limit = Math.min(parseInt(searchParams.get('limit') || '50'), 100) // Max 100
+    const listQueryEnabled = await isFeatureEnabled(HTPR_6530_MCP_LIST_QUERY_FLAG, user.id)
+    const parsedListQuery = readEnabledListQuery(listQueryEnabled, searchParams)
+    if (parsedListQuery.error) return parsedListQuery.error
+    const listQuery = parsedListQuery.listQuery
+    const rawStatus = listQuery?.filter.status ?? searchParams.get('status')
+    const status = rawStatus ? normalizeTaskStatus(rawStatus) : null
+    if (rawStatus && !status) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: 'Validation error',
+          message: 'filter.status must be open, Normal, Archive, or Deleted',
+        },
+        { status: 400 },
+      )
+    }
+    const search = listQuery?.query || searchParams.get('search') || undefined
+    const limit = Math.min(listQuery?.limit ?? parseInt(searchParams.get('limit') || '50'), 100) // Max 100
     const offset = Math.max(parseInt(searchParams.get('offset') || '0'), 0)
-    const sortBy = searchParams.get('sort_by') || 'title'
-    const sortOrder = searchParams.get('sort_order') || 'asc'
+    const sortBy = listQuery?.sortBy || searchParams.get('sort_by') || 'title'
+    const sortOrder = listQuery?.sortOrder || searchParams.get('sort_order') || 'asc'
+    const cursorId = listQuery?.cursor ? parseNumericCursor(listQuery.cursor) : null
+    if (listQuery?.cursor && cursorId === null) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: 'Validation error',
+          message: 'cursor must be a previous nextCursor value',
+        },
+        { status: 400 },
+      )
+    }
 
     const where: any = {
       status: status ?? 'Normal',
@@ -94,6 +129,20 @@ export async function GET(request: NextRequest) {
             ]
           : []),
       ],
+    }
+    if (listQuery?.filter.updated_since) {
+      const since = parseUpdatedSince(listQuery.filter.updated_since)
+      if (!since) {
+        return NextResponse.json(
+          {
+            success: false,
+            error: 'Validation error',
+            message: 'filter.updated_since must be an ISO datetime',
+          },
+          { status: 400 },
+        )
+      }
+      where.updatedAt = { gte: since }
     }
 
     // Build orderBy
@@ -154,10 +203,10 @@ export async function GET(request: NextRequest) {
           }
         }
       },
-      orderBy,
+      orderBy: [orderBy, { id: 'asc' as const }],
       take: limit,
-      skip: offset,
-   
+      skip: cursorId ? 1 : offset,
+      ...(cursorId ? { cursor: { id: cursorId } } : {}),
     })
 
     // Transform to response format
@@ -187,10 +236,16 @@ export async function GET(request: NextRequest) {
 
     const response: ListProjectsResponse = {
       success: true,
-      projects: projectList,
+      projects: (listQuery?.fields.length
+        // @ts-expect-error ProjectListItem has no string index signature
+        ? projectRows(projectList as Array<Record<string, unknown>>, listQuery.fields)
+        : projectList) as ProjectListItem[],
       total,
       limit,
-      offset
+      offset: cursorId ? 0 : offset,
+      ...(listQueryEnabled
+        ? { nextCursor: projects.length === limit ? String(projects[projects.length - 1].id) : null }
+        : {}),
     }
 
     return NextResponse.json(response)

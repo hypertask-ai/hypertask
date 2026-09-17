@@ -48,15 +48,12 @@ import axios from "axios";
 import { useRouter, usePathname } from "next/navigation";
 import toast from "react-hot-toast";
 import { parseCookies } from "nookies";
-import formatDateDifference from "@/utils/generateTime";
 import { useQueryClient } from "@tanstack/react-query";
 import { createTeam } from "@/utils/api/Homepage";
 import { markAsUnseen } from "@/utils/api/Inbox";
 import { setRecurrenceApiHandler } from "@/utils/api/Task Detail";
 import type { PickerOption } from "./Modals/OptionPicker";
 import { RECURRENCE_LABELS, RECURRENCE_RULES } from "@/lib/recurrence";
-import { myTasksSnoozeAPIRoute } from "@/lib/constants/APIRouteConstants";
-import MyTasksSnoozeModal from "@/app/my-tasks/MyTasksSnoozeModal";
 import {
   LEARN_TUTORIAL_COLUMN_CREATED_EVENT,
   type LearnTutorialColumnCreatedDetail,
@@ -83,10 +80,6 @@ const ConfirmDeleteBoard = dynamic(
   () => import("./Modals/commands/confirmDeleteBoard")
 );
 const ManageLabels = dynamic(() => import("./Modals/ManageLabels"));
-const CreateLabel = dynamic(() => import("./Modals/CreateLabel/CreateLabel"));
-const RemindMeComponent = dynamic(
-  () => import("./Modals/RemindMe/RemindMeComponent")
-);
 const TrialModal = dynamic(() => import("./Modals/TrialPlan/TrialModal"));
 const SubtaskLinkingModal = dynamic(
   () => import("./Modals/SubtaskLinkingModal/SubtaskLinking")
@@ -170,6 +163,8 @@ import useInviteCallbackHandlers from "@/hooks/MultiPages/useInviteCallbackHandl
 import useDarkMode from "@/hooks/MultiPages/HTC/useDarkMode";
 import { useGetBoardInviteURL } from "@/hooks/Homepage/Invites/useGetBoardInviteURL";
 import Commands from "./Modals/commands/HTC/commands";
+import "./Modals/commands/HTC/AllCommands";
+import RemindMeComponent from "./Modals/RemindMe/RemindMeComponent";
 import { useGetSingleTask } from "@/hooks/MultiPages/Tasks/useGetTask";
 import useHypertasksRecoilStates from "@/hooks/RecoilRoot/useHypertasksRecoilStates";
 import { constructPricingPageUrl } from "@/utils/helperFunctions/helperFunctions";
@@ -209,14 +204,17 @@ import { timeQuickLogTaskUrl } from "@/lib/timeQuickLog";
 import { useGlobalUIState } from "./ProviderGlobal/useGlobalUIState";
 import { buildFullScreenChatPath } from "@/lib/aiChatDisplayMode";
 import { useUndoContext } from "@/hooks/General/useUndo";
+import CreateLabel from "./Modals/CreateLabel/CreateLabel";
 import { useKanbanBulkSelectionOptional } from "@/lib/contexts/Kanban/BulkSelectionContext";
+import { useMyTasksBulkSelectionOptional } from "@/lib/contexts/MyTasks/BulkSelectionContext";
+import { MIXED_BOARD_MESSAGE, sharedProjectId } from "@/lib/myTasksBulkSelection";
 import {
   openTaskTemplateDraft,
   taskTemplatePickerForProject,
   type TaskTemplatePickerState,
 } from "@/lib/taskTemplatePrefill";
 import { useFlag } from "@/hooks/useFlag";
-import { HTPR_6427_ROW_SHORTCUTS_FLAG, MY_TASKS_SNOOZE_FLAG, MY_TASKS_TABLE_COLUMNS_FLAG, MY_TASKS_VIEWS_FLAG } from "@/lib/flags/keys";
+import { HTPR_6427_ROW_SHORTCUTS_FLAG, MY_TASKS_BULK_SELECTION_FLAG, MY_TASKS_SNOOZE_FLAG, MY_TASKS_TABLE_COLUMNS_FLAG, MY_TASKS_VIEWS_FLAG } from "@/lib/flags/keys";
 import { useTaskProjectFallback } from "@/lib/keyboard/taskProjectFallback";
 import { writeTextToClipboard } from "@/lib/utils/clipboard";
 
@@ -231,7 +229,8 @@ const HypertasksCommands = ({ callbackHandler, contextOptions }: IHTCProps) => {
   const rowShortcutsEnabled = useFlag(HTPR_6427_ROW_SHORTCUTS_FLAG);
   const myTasksViewsEnabled = useFlag(MY_TASKS_VIEWS_FLAG);
   const myTasksTableColumnsEnabled = useFlag(MY_TASKS_TABLE_COLUMNS_FLAG);
-  const myTasksSnoozeEnabled = useFlag(MY_TASKS_SNOOZE_FLAG);
+  const myTasksSnoozeEnabled = useFlag(MY_TASKS_SNOOZE_FLAG); // HTPR-6461: Remind Me also hides My Tasks
+  const myTasksBulkSelectionEnabled = useFlag(MY_TASKS_BULK_SELECTION_FLAG);
   const activeSectionId = useRecoilValue(activeSectionIdAtom);
   const {
     updateTaskInCache,
@@ -262,9 +261,15 @@ const HypertasksCommands = ({ callbackHandler, contextOptions }: IHTCProps) => {
   const { openAnnouncements } = useGlobalUIState();
   const billing = useCurrentBoardBilling();
   const { undoLatest } = useUndoContext();
-  const bulkSelection = useKanbanBulkSelectionOptional();
+  const kanbanBulkSelection = useKanbanBulkSelectionOptional();
+  const myTasksBulkFromContext = useMyTasksBulkSelectionOptional();
+  const myTasksBulkSelection = myTasksBulkSelectionEnabled
+    ? myTasksBulkFromContext
+    : undefined;
+  const bulkSelection = kanbanBulkSelection ?? myTasksBulkSelection;
   const hasBulkSelection = (bulkSelection?.selectedCount ?? 0) > 0;
   const bulkTasks = bulkSelection?.selectedTasks ?? [];
+  const bulkProjectId = sharedProjectId(bulkTasks);
   const paletteContextOptions = hasBulkSelection
     ? {
         ...contextOptions,
@@ -317,6 +322,11 @@ const HypertasksCommands = ({ callbackHandler, contextOptions }: IHTCProps) => {
   const onMyTasks = !!pathname?.startsWith(globalConstants.myTasksRoute);
   const { startTour, setSelectedTourId, endTour } = useTourContext();
   const [_currentProject, setCurrentProject] = useRecoilState(currentProjectAtom);
+  // My Tasks bulk must use the selection's shared board only. Falling back to
+  // currentProjectAtom would load columns/labels from a previously opened board.
+  const bulkActionProjectId = myTasksBulkSelection
+    ? bulkProjectId
+    : (bulkProjectId ?? _currentProject?.id ?? null);
   const boardLayout = useRecoilValue(boardLayoutAtom);
   const [, setTableVisibleColumns] = useRecoilState(tableVisibleColumnsAtom);
   const [, setMyTasksColumnsPickerRequest] = useRecoilState(
@@ -441,6 +451,36 @@ const HypertasksCommands = ({ callbackHandler, contextOptions }: IHTCProps) => {
     openSettings("appearance");
     boardCloseHandler();
   }, [showCommands.mode, showCommands.show]);
+
+  useEffect(() => {
+    if (
+      commandMode !== CommandMode.MyTasksSnooze &&
+      showCommands.mode !== CommandMode.MyTasksSnooze
+    ) {
+      return;
+    }
+    if (myTasksSnoozeEnabled) {
+      if (commandMode !== CommandMode.RemindMe) setCommandMode(CommandMode.RemindMe);
+      if (showCommands.mode !== CommandMode.RemindMe) {
+        setShowCommands((prev) => ({ ...prev, mode: CommandMode.RemindMe }));
+      }
+      return;
+    }
+    boardCloseHandler();
+  }, [commandMode, myTasksSnoozeEnabled, showCommands.mode]);
+
+  useEffect(() => {
+    if (!hasBulkSelection || bulkActionProjectId) return;
+    if (
+      commandMode !== CommandMode.OpenAssignModal &&
+      commandMode !== CommandMode.LabelModal &&
+      commandMode !== CommandMode.MoveToColumn
+    ) {
+      return;
+    }
+    toast.error(MIXED_BOARD_MESSAGE);
+    boardCloseHandler();
+  }, [bulkActionProjectId, commandMode, hasBulkSelection]);
 
   // ---- HTPR-4885/4886/4888: repeat rules, task templates, status updates ----
   const [taskTemplatePicker, setTaskTemplatePicker] =
@@ -1380,7 +1420,12 @@ const HypertasksCommands = ({ callbackHandler, contextOptions }: IHTCProps) => {
         setReminderHandler();
         return;
       case CommandMode.MyTasksSnooze:
-        // Modal opens via commandMode === MyTasksSnooze below.
+        if (myTasksSnoozeEnabled) {
+          setCommandMode(CommandMode.RemindMe);
+          setShowCommands((prev) => ({ ...prev, mode: CommandMode.RemindMe }));
+        } else {
+          boardCloseHandler();
+        }
         return;
       case CommandMode.RemoveParent:
         removeParentHandler();
@@ -1980,6 +2025,9 @@ const HypertasksCommands = ({ callbackHandler, contextOptions }: IHTCProps) => {
   // ============ toggle estimate modal
   const togglRemindMeModal = async (refresh?: boolean) => {
     boardCloseHandler();
+    if (refresh && myTasksSnoozeEnabled) {
+      window.dispatchEvent(new CustomEvent("my-tasks-snooze-changed"));
+    }
   };
 
   // ============ toggle estimate modal
@@ -2262,9 +2310,11 @@ const HypertasksCommands = ({ callbackHandler, contextOptions }: IHTCProps) => {
             />
           )}
           {commandMode === CommandMode.OpenAssignModal && (
-            hasBulkSelection && bulkSelection && bulkTasks[0] ? (
+            myTasksBulkSelectionEnabled && hasBulkSelection && !kanbanBulkSelection ? (
+              bulkSelection && bulkTasks[0] && bulkActionProjectId ? (
               <AssignModal
                 onClose={boardCloseHandler}
+                project={{ id: bulkActionProjectId } as IProject}
                 task={{
                   id: bulkTasks[0].id,
                   title: bulkTasks[0].title,
@@ -2276,6 +2326,24 @@ const HypertasksCommands = ({ callbackHandler, contextOptions }: IHTCProps) => {
                   bulkSelection.assignSelected(assignee, "assign")
                 }
               />
+              ) : null
+            ) : hasBulkSelection ? (
+              bulkSelection && bulkTasks[0] && bulkActionProjectId ? (
+              <AssignModal
+                onClose={boardCloseHandler}
+                project={{ id: bulkActionProjectId } as IProject}
+                task={{
+                  id: bulkTasks[0].id,
+                  title: bulkTasks[0].title,
+                  link: "",
+                }}
+                assignees={_activeTaskAssignees}
+                bulkTaskIds={bulkTasks.map((task) => task.id)}
+                onBulkAssign={(assignee) =>
+                  bulkSelection.assignSelected(assignee, "assign")
+                }
+              />
+              ) : null
             ) : inViewObject.taskId ? (
             <AssignModal
               onClose={toggleAssignModal}
@@ -2339,14 +2407,11 @@ const HypertasksCommands = ({ callbackHandler, contextOptions }: IHTCProps) => {
           )}
 
           {
-            // _currentProject?.sorting_mode==="Manual"&&
             commandMode === CommandMode.MoveToColumn &&
-            hasBulkSelection &&
-            bulkSelection &&
-            bulkTasks[0] &&
-            _currentProject ? (
+            (hasBulkSelection ? (
+              bulkSelection && bulkTasks[0] && bulkActionProjectId ? (
               <MoveToColumn
-                projectId={_currentProject.id}
+                projectId={bulkActionProjectId}
                 task={{
                   taskId: bulkTasks[0].id,
                   projectId: bulkTasks[0].projectId,
@@ -2357,8 +2422,9 @@ const HypertasksCommands = ({ callbackHandler, contextOptions }: IHTCProps) => {
                 moveTaskToColumnHandler={boardCloseHandler}
                 title="Move selected tasks to column"
               />
+              ) : null
             ) : (
-            contextOptions?.task && commandMode === CommandMode.MoveToColumn && !hasBulkSelection && (
+            contextOptions?.task && (
               <MoveToColumn
                 projectId={contextOptions.task.projectId}
                 task={contextOptions.task}
@@ -2368,7 +2434,7 @@ const HypertasksCommands = ({ callbackHandler, contextOptions }: IHTCProps) => {
                 }}
               />
             )
-            )
+            ))
           }
           {(commandMode === CommandMode.ManageColumn ||
             commandMode === CommandMode.DeleteColumn ||
@@ -2436,9 +2502,10 @@ const HypertasksCommands = ({ callbackHandler, contextOptions }: IHTCProps) => {
           )}
 
           {commandMode === CommandMode.LabelModal && (
-            hasBulkSelection && bulkSelection ? (
+            hasBulkSelection ? (
+              bulkSelection && bulkActionProjectId ? (
               <CreateLabel
-                currentProject={_currentProject ?? undefined}
+                currentProject={{ id: bulkActionProjectId } as IProject}
                 taskIds={bulkTasks.map((task) => task.id)}
                 onBulkLabel={(label) => bulkSelection.labelSelected(label)}
                 closeHandler={boardCloseHandler}
@@ -2450,6 +2517,7 @@ const HypertasksCommands = ({ callbackHandler, contextOptions }: IHTCProps) => {
                   setCommandMode(CommandMode.ManageLabels);
                 }}
               />
+              ) : null
             ) : (
             <CreateLabel
               closeHandler={toggleLabelModal}
@@ -2464,44 +2532,22 @@ const HypertasksCommands = ({ callbackHandler, contextOptions }: IHTCProps) => {
             />
             )
           )}
-          {commandMode === CommandMode.RemindMe && (
-            <RemindMeComponent closeHandler={togglRemindMeModal} />
-          )}
-          {commandMode === CommandMode.MyTasksSnooze && myTasksSnoozeEnabled && (
-            <MyTasksSnoozeModal
+          {(commandMode === CommandMode.RemindMe ||
+            (myTasksSnoozeEnabled && commandMode === CommandMode.MyTasksSnooze)) && (
+            <RemindMeComponent
               closeHandler={togglRemindMeModal}
-              onPickDate={async (date) => {
-                const assignmentId =
-                  typeof showCommands.payload?.assignmentId === "number"
-                    ? showCommands.payload.assignmentId
-                    : undefined;
-                if (!assignmentId) {
-                  toast.error("Only tasks assigned to you can be snoozed.");
-                  return;
-                }
-                const response = await fetch(myTasksSnoozeAPIRoute, {
-                  method: "POST",
-                  headers: { "Content-Type": "application/json" },
-                  credentials: "same-origin",
-                  body: JSON.stringify({
-                    assignmentId,
-                    snoozeUntil: date,
-                  }),
-                });
-                if (!response.ok) {
-                  const body = await response.json().catch(() => null);
-                  throw new Error(
-                    typeof body?.error === "string"
-                      ? body.error
-                      : "Unable to snooze task",
-                  );
-                }
-                toast(
-                  "Hidden from My Tasks until " +
-                    formatDateDifference(date, true),
-                );
-                window.dispatchEvent(new CustomEvent("my-tasks-snooze-changed"));
-              }}
+              remindTask={
+                contextOptions?.taskOptions?.isMyTasks ||
+                showCommands.payload?.returnsToMyTasks
+                  ? false
+                  : undefined
+              }
+              returnsToMyTasks={
+                myTasksSnoozeEnabled &&
+                (typeof showCommands.payload?.returnsToMyTasks === "boolean"
+                  ? showCommands.payload.returnsToMyTasks
+                  : Boolean(contextOptions?.taskOptions?.isMyTasks))
+              }
             />
           )}
           {commandMode === CommandMode.SubtaskSettings && (

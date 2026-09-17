@@ -1,4 +1,6 @@
 import { defineConfig } from "eslint/config";
+import { fixupConfigRules } from "@eslint/compat";
+import tsParser from "@typescript-eslint/parser";
 import nextCoreWebVitals from "eslint-config-next/core-web-vitals";
 import { styleGuideRuleRegistrationConfig } from "./eslint-local-rules/style-guide.mjs";
 import path from "node:path";
@@ -6,6 +8,10 @@ import { fileURLToPath } from "node:url";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
+
+// eslint-config-next still ships ESLint 9-era plugins (react, jsx-a11y, import)
+// whose rules call context.getFilename(). ESLint 10 removed those methods.
+const nextConfigs = fixupConfigRules(nextCoreWebVitals);
 
 export default defineConfig([
   {
@@ -17,7 +23,15 @@ export default defineConfig([
       reportUnusedDisableDirectives: "off",
     },
   },
-  ...nextCoreWebVitals,
+  ...nextConfigs,
+  {
+    // Next's bundled Babel parser has no ScopeManager#addGlobals, which
+    // ESLint 10 calls during SourceCode.finalize. typescript-eslint 8.56+
+    // implements that method, so use it for JS as well as TS.
+    languageOptions: {
+      parser: tsParser,
+    },
+  },
   // YPER4-5 enables the exported rule set after it adds suppressions for existing violations.
   styleGuideRuleRegistrationConfig,
   {
@@ -26,7 +40,11 @@ export default defineConfig([
     files: ["src/components/**/*.{ts,tsx}", "src/hooks/**/*.{ts,tsx}", "src/app/**/*.tsx"],
     // The one server-rendered page that reads a flag directly. Exempt this file,
     // not every page.tsx: a page carrying "use client" is a browser bundle too.
-    ignores: ["src/app/admin/flags/page.tsx"],
+    ignores: [
+      "src/app/admin/flags/page.tsx",
+      // HTPR-4857: server component; gates the public /add-to-slack page.
+      "src/app/add-to-slack/page.tsx",
+    ],
     rules: {
       // Types are erased, so a type-only import never reaches the bundle.
       "@typescript-eslint/no-restricted-imports": [
@@ -45,7 +63,7 @@ export default defineConfig([
     },
   },
   {
-    plugins: { "react-hooks": nextCoreWebVitals[0].plugins["react-hooks"] },
+    plugins: { "react-hooks": nextConfigs[0].plugins["react-hooks"] },
     rules: {
       // eslint-config-next 16 pulls in eslint-plugin-react-hooks' new React
       // Compiler readiness rules, which flag hundreds of pre-existing patterns across

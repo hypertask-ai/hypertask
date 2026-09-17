@@ -15,6 +15,7 @@ import {
   ProjectAdminInputSchema,
 } from '../../validations/project.validation';
 import { buildPaginationMetadata } from '../../utils/pagination';
+import { appendListQueryParams } from '@/lib/mcp/listQuery';
 
 export interface ProjectLabel {
   id: string;
@@ -183,6 +184,7 @@ export class ProjectService {
       if (validatedInput.sort_order) {
         queryParams.append('sort_order', validatedInput.sort_order);
       }
+      appendListQueryParams(queryParams, validatedInput)
 
       const response = await this.apiClient.makeRequest<ListProjectsResponse>(
         `/mcp/projects?${queryParams.toString()}`,
@@ -380,6 +382,7 @@ export class ProjectService {
       if (validatedInput.include_hidden !== undefined) {
         queryParams.append('include_hidden', String(validatedInput.include_hidden));
       }
+      appendListQueryParams(queryParams, validatedInput)
 
       const response = await this.apiClient.makeRequest<ListSectionsResponse>(
         `/mcp/projects/${projectId}/sections?${queryParams.toString()}`,
@@ -496,9 +499,12 @@ export class ProjectService {
 
     try {
       const validatedInput = ListLabelsInputSchema.parse(params);
+      const queryParams = new URLSearchParams();
+      appendListQueryParams(queryParams, validatedInput)
+      const labelQuery = queryParams.toString()
 
       const response = await this.apiClient.makeRequest<ListLabelsResponse>(
-        `/mcp/projects/${validatedInput.project_id}/labels`,
+        `/mcp/projects/${validatedInput.project_id}/labels${labelQuery ? `?${labelQuery}` : ''}`,
         {
           method: 'GET',
         },

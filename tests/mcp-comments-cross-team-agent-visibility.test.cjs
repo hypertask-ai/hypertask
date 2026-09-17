@@ -55,10 +55,6 @@ function loadRoute(comments) {
         return live || null;
       },
     },
-    "@/lib/flags": {
-      HTPR_6516_AGENT_ATTRIBUTION_FLAG: "htpr-6516-agent-attribution",
-      isFeatureEnabled: async () => false,
-    },
     "@/utils/controllers/urls/extractUrlsFromContent": {
       buildMcpImageUrls: () => [],
       persistUrlsForComment: async () => {},
@@ -108,6 +104,19 @@ function loadRoute(comments) {
     "@/lib/mcp/comments/reactionResponse": {
       commentReactionInclude: {},
       mapMcpCommentReaction: (r) => r,
+    },
+    "@/lib/flags": {
+      HTPR_6516_AGENT_ATTRIBUTION_FLAG: "htpr-6516-agent-attribution",
+      HTPR_6530_MCP_LIST_QUERY_FLAG: "htpr-6530-mcp-list-query",
+      isFeatureEnabled: async () => false,
+    },
+    "@/lib/mcp/listQuery": {
+      parseNumericCursor: () => null,
+      parseUpdatedSince: () => null,
+      projectRows: (rows) => rows,
+    },
+    "@/lib/mcp/readListQuery": {
+      readEnabledListQuery: () => ({ listQuery: null }),
     },
   };
   const loaded = new Module(routePath);
