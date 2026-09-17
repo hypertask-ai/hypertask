@@ -28,3 +28,24 @@ test("the idle mobile comment placeholder reuses AudioButton behind the ticket f
   assert.match(placeholder, /event\.stopPropagation\(\)/);
   assert.match(placeholder, /ariaLabel="Start dictation"/);
 });
+
+test("idle dictation waits for the editor-ready callback instead of a one-second poll", () => {
+  const dictationEffect = newComment.slice(
+    newComment.indexOf("applyPendingIdleDictation"),
+    newComment.indexOf("Track composer focus"),
+  );
+  assert.match(dictationEffect, /subscribeTiptapEditorReady/);
+  assert.doesNotMatch(dictationEffect, /attempts < 40/);
+  assert.doesNotMatch(dictationEffect, /setTimeout\(applyPending/);
+  assert.match(dictationEffect, /pendingIdleDictationRef\.current = null/);
+
+  const snippets = fs.readFileSync(
+    path.join(__dirname, "../src/lib/snippets.ts"),
+    "utf8",
+  );
+  assert.match(snippets, /export const subscribeTiptapEditorReady/);
+  assert.match(
+    snippets,
+    /editorReadyListeners\.forEach\(\(listener\) => listener\(mode, editor\)\)/,
+  );
+});

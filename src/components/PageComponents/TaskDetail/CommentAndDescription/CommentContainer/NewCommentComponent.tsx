@@ -29,6 +29,7 @@ import {
   getTiptapEditorForMode,
   OPEN_COMMENT_SNIPPET_EVENT,
   openSnippetPicker,
+  subscribeTiptapEditorReady,
 } from "@/lib/snippets";
 import {
   getMobileCommentViewportGeometry,
@@ -170,11 +171,24 @@ const NewCommentComponent = (
         }
         event.stopPropagation();
       };
+      const applyPendingIdleDictation = () => {
+        const pending = pendingIdleDictationRef.current;
+        if (!pending) return false;
+        const editor = getTiptapEditorForMode("create-comment");
+        if (!editor || editor.isDestroyed) return false;
+        const ran = pending.setContent
+          ? editor.chain().setContent(pending.text).focus("end").run()
+          : editor.chain().focus().insertContent(pending.text).run();
+        if (!ran) return false;
+        pendingIdleDictationRef.current = null;
+        return true;
+      };
       const handleIdleDictation = (text: string, setContent?: boolean) => {
         pendingIdleDictationRef.current = { text, setContent };
         setHasMountedCommentEditor(true);
         forceOpenEdit("comment");
         setCurrentId("comment-input");
+        applyPendingIdleDictation();
       };
       const handleOpenCommentEditor = () => {
         if (idleRecording) return;
@@ -190,6 +204,7 @@ const NewCommentComponent = (
         const editor = getTiptapEditorForMode("create-comment");
         if (editor && !editor.isDestroyed && !editor.isFocused)
           editor.commands.focus("end");
+        applyPendingIdleDictation();
       }
       const redirectMiddleware = (obj: RedirectAPIParams) =>{
         redirectAPI(obj);
@@ -203,31 +218,10 @@ const NewCommentComponent = (
       }, [shouldMountCommentEditor]);
 
       useEffect(() => {
-        if (!shouldRenderCommentEditor || !pendingIdleDictationRef.current) return;
-
-        let timeoutId: number | undefined;
-        let attempts = 0;
-        const applyPendingDictation = () => {
-          const pending = pendingIdleDictationRef.current;
-          if (!pending) return;
-          const editor = getTiptapEditorForMode("create-comment");
-          if (editor && !editor.isDestroyed) {
-            pendingIdleDictationRef.current = null;
-            if (pending.setContent) {
-              editor.chain().setContent(pending.text).focus("end").run();
-            } else {
-              editor.chain().focus().insertContent(pending.text).run();
-            }
-            return;
-          }
-          attempts += 1;
-          if (attempts < 40) timeoutId = window.setTimeout(applyPendingDictation, 25);
-        };
-
-        applyPendingDictation();
-        return () => {
-          if (timeoutId) window.clearTimeout(timeoutId);
-        };
+        applyPendingIdleDictation();
+        return subscribeTiptapEditorReady((mode) => {
+          if (mode === "create-comment") applyPendingIdleDictation();
+        });
       }, [shouldRenderCommentEditor, hasMountedCommentEditor]);
 
       // Track composer focus and publish it to the global tab bar. focusin/
