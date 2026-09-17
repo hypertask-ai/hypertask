@@ -1,4 +1,4 @@
-import { createHash, timingSafeEqual } from "node:crypto";
+import { timingSafeEqual } from "node:crypto";
 
 import { FEATURE_FLAG_QA_USER_ID } from "@/lib/flags";
 
@@ -24,8 +24,18 @@ export function isQaLoginConfigured(): boolean {
   return getQaLoginConfig() !== null;
 }
 
-export function digestQaLoginValue(value: string): Buffer {
-  return createHash("sha256").update(value).digest();
+function timingSafeStringEqual(left: string, right: string): boolean {
+  const leftBuffer = Buffer.from(left);
+  const rightBuffer = Buffer.from(right);
+  const size = Math.max(leftBuffer.length, rightBuffer.length, 1);
+  const paddedLeft = Buffer.alloc(size);
+  const paddedRight = Buffer.alloc(size);
+  leftBuffer.copy(paddedLeft);
+  rightBuffer.copy(paddedRight);
+  return (
+    timingSafeEqual(paddedLeft, paddedRight) &&
+    leftBuffer.length === rightBuffer.length
+  );
 }
 
 export function qaLoginCredentialsMatch(
@@ -33,13 +43,10 @@ export function qaLoginCredentialsMatch(
   password: string,
   config: QaLoginConfig,
 ): boolean {
-  const emailOk = timingSafeEqual(
-    digestQaLoginValue(normalizeQaLoginEmail(email)),
-    digestQaLoginValue(config.email),
+  const emailOk = timingSafeStringEqual(
+    normalizeQaLoginEmail(email),
+    config.email,
   );
-  const passwordOk = timingSafeEqual(
-    digestQaLoginValue(password),
-    digestQaLoginValue(config.password),
-  );
+  const passwordOk = timingSafeStringEqual(password, config.password);
   return emailOk && passwordOk;
 }

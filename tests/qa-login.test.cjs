@@ -46,6 +46,16 @@ test("QA login is off when either secret is missing", () => {
   assert.equal(missingPassword.isQaLoginConfigured(), false);
 });
 
+test("QA login compares secrets without hashing the password", () => {
+  const source = fs.readFileSync(
+    path.join(root, "src/lib/auth/qaLogin.ts"),
+    "utf8",
+  );
+  assert.match(source, /timingSafeEqual/);
+  assert.doesNotMatch(source, /createHash/);
+  assert.doesNotMatch(source, /sha256/);
+});
+
 test("QA login accepts only the configured email and password", () => {
   const {
     getQaLoginConfig,
@@ -112,20 +122,32 @@ test("the QA login page and route stay hidden without the secrets", () => {
   );
 
   assert.match(page, /isQaLoginConfigured/);
-  assert.match(page, /isFeatureEnabled\(HTPR_6536_QA_LOGIN_FLAG,/);
+  assert.match(page, /const flagged = await isFeatureEnabled/);
+  assert.match(page, /HTPR_6536_QA_LOGIN_FLAG/);
   assert.match(page, /notFound\(\)/);
+  assert.match(page, /shouldShowMobileTabBar\("\/qa\/login"\)/);
+  assert.match(page, /bg-pageBackground/);
+  assert.match(page, /text-heading/);
+  assert.doesNotMatch(page, /flagged = true/);
   assert.match(route, /if \(!isQaLoginConfigured\(\)\)/);
+  assert.match(route, /const flagged = await isFeatureEnabled/);
   assert.match(route, /status: 404/);
   assert.match(route, /qaLoginCredentialsMatch/);
   assert.match(route, /QA_LOGIN_USER_ID/);
+  assert.match(route, /onboardingTourStatus: true/);
   assert.match(route, /console\.info\("\[qa-login\]"/);
   assert.doesNotMatch(route, /password:/);
+  assert.doesNotMatch(route, /return true;/);
   assert.match(form, /htmlFor="email"/);
   assert.match(form, /htmlFor="password"/);
   assert.match(form, /type="password"/);
   assert.match(form, /Sign in/);
-  assert.match(form, /!border-\[#4c5362\]/);
+  assert.match(form, /rounded-sm/);
+  assert.match(form, /bg-shadcn-primary/);
+  assert.match(form, /text-destructive/);
   assert.match(form, /\/api\/auth\/qa-login/);
+  assert.doesNotMatch(form, /rounded-full/);
+  assert.doesNotMatch(form, /#4c5362/);
 });
 
 test("logged-out visitors can reach /qa/login", () => {

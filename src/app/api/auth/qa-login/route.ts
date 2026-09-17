@@ -35,20 +35,20 @@ function invalidCredentials() {
   );
 }
 
-async function isQaLoginFlagOn() {
-  try {
-    return await isFeatureEnabled(HTPR_6536_QA_LOGIN_FLAG, QA_LOGIN_USER_ID);
-  } catch {
-    return true;
-  }
-}
-
 export async function POST(request: NextRequest) {
   if (!isQaLoginConfigured()) {
     return new NextResponse(null, { status: 404 });
   }
 
-  if (!(await isQaLoginFlagOn())) {
+  try {
+    const flagged = await isFeatureEnabled(
+      HTPR_6536_QA_LOGIN_FLAG,
+      QA_LOGIN_USER_ID,
+    );
+    if (!flagged) {
+      return new NextResponse(null, { status: 404 });
+    }
+  } catch {
     return new NextResponse(null, { status: 404 });
   }
 
@@ -114,6 +114,12 @@ export async function POST(request: NextRequest) {
       displayName: true,
       photoURL: true,
       uid: true,
+      UserSetting: {
+        select: {
+          onboardingTourStatus: true,
+          onboardingTutorialStatus: true,
+        },
+      },
     },
   });
 

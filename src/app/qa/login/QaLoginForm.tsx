@@ -4,9 +4,9 @@ import { FormEvent, useState } from "react";
 import { useRouter } from "next/navigation";
 
 const inputClass =
-  "w-full !h-12 !rounded-full !border !border-[#4c5362] !bg-[#212429] !px-[22px] !py-0 !text-[15px] text-white placeholder:!text-[#8e9093] outline-none focus:!border-[#8e9093] focus:!ring-0";
+  "h-12 w-full rounded-sm border-0 bg-cardBackground px-5 text-content text-white-black outline-none placeholder:text-text-light-gray focus:ring-0";
 const buttonClass =
-  "w-full !h-12 !rounded-lg !px-4 !py-0 !text-[15px] !shadow-none !bg-[#333B47] !text-white hover:!bg-[#4f5766] focus:!ring-0 focus:!ring-offset-0 disabled:opacity-50 disabled:cursor-not-allowed";
+  "h-12 w-full rounded-sm bg-shadcn-primary px-5 text-content text-primary-foreground shadow-none hover:opacity-90 focus:ring-0 disabled:cursor-not-allowed disabled:opacity-50";
 
 export function QaLoginForm() {
   const router = useRouter();
@@ -49,7 +49,10 @@ export function QaLoginForm() {
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
       <div>
-        <label htmlFor="email" className="mb-2 block text-[15px] text-[#8e9093]">
+        <label
+          htmlFor="email"
+          className="mb-2 block text-content text-text-light-gray"
+        >
           Email address
         </label>
         <input
@@ -67,7 +70,7 @@ export function QaLoginForm() {
       <div>
         <label
           htmlFor="password"
-          className="mb-2 block text-[15px] text-[#8e9093]"
+          className="mb-2 block text-content text-text-light-gray"
         >
           Password
         </label>
@@ -87,7 +90,7 @@ export function QaLoginForm() {
         {isLoading ? "Signing in..." : "Sign in"}
       </button>
       {error ? (
-        <p className="text-left text-[15px] text-red-400">{error}</p>
+        <p className="text-left text-content text-destructive">{error}</p>
       ) : null}
     </form>
   );
