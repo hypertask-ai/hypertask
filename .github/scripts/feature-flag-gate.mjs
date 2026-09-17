@@ -1739,7 +1739,8 @@ function isVerifiedAutoRevert(title, baseSha, headSha) {
   if (git(["rev-list", "--count", `${mergeBase}..${headSha}`]).trim() !== "1") return false;
   const message = git(["show", "-s", "--format=%s%n%b", headSha]);
   if (message.split("\n", 1)[0] !== title) return false;
-  const reverted = message.match(/This reverts commit ([0-9a-f]{40})\./)?.[1];
+  const reverted = message.match(/This reverts commit ([0-9a-f]{40})\./)?.[1]
+    ?? message.match(/^Auto-revert-of: ([0-9a-f]{40})$/m)?.[1];
   if (!reverted) return false;
   try {
     git(["merge-base", "--is-ancestor", reverted, baseSha]);
