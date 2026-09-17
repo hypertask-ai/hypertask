@@ -3,9 +3,13 @@ import { NextRequest, NextResponse } from "next/server";
 import { getRequestBaseUrl } from "@/lib/auth/requestBaseUrl";
 import { getServerCookieUser } from "@/lib/auth/serverUser";
 import { createSlackOAuthState } from "@/lib/slack/oauthState";
-import { hasTeamMembershipAccess } from "@/utils/controllers/teams/hasTeamMembershipAccess";
+import {
+  findFirstAccessibleTeamId,
+  hasTeamMembershipAccess,
+} from "@/utils/controllers/teams/hasTeamMembershipAccess";
 
 import { buildSlackAuthorizeUrl } from "@/lib/slack/authorize";
+import { resolveSlackInstallTeamId } from "@/lib/slack/installTeam";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -18,15 +22,18 @@ export async function GET(request: NextRequest) {
     return NextResponse.redirect(loginUrl);
   }
 
-  const teamId = request.nextUrl.searchParams.get("teamId")?.trim();
+  const requestedTeamId = request.nextUrl.searchParams.get("teamId");
+  const teamId = await resolveSlackInstallTeamId(user.id, requestedTeamId, {
+    firstTeamId: findFirstAccessibleTeamId,
+    hasAccess: hasTeamMembershipAccess,
+  });
   if (!teamId) {
     return NextResponse.redirect(
-      settingsRedirect(request, "error", "missing_team"),
-    );
-  }
-  if (!(await hasTeamMembershipAccess(user.id, teamId))) {
-    return NextResponse.redirect(
-      settingsRedirect(request, "error", "team_access_denied"),
+      settingsRedirect(
+        request,
+        "error",
+        requestedTeamId?.trim() ? "team_access_denied" : "missing_team",
+      ),
     );
   }
 

@@ -408,6 +408,8 @@ test("Slack authorize URLs use the allowlisted request origin", () => {
     "utf8",
   );
   assert.match(installRoute, /getRequestBaseUrl\(request\)/);
+  assert.match(installRoute, /resolveSlackInstallTeamId/);
+  assert.match(installRoute, /findFirstAccessibleTeamId/);
   assert.doesNotMatch(installRoute, /new URL\(request\.url\)\.origin/);
   assert.match(oauthRoute, /getRequestBaseUrl\(request\)/);
   assert.match(page, /getRequestBaseUrl\(/);
@@ -507,6 +509,44 @@ test("Slack task data responses stay private to the requesting member", () => {
   assert.match(chat, /postSlackEphemeralMessage\(/);
 });
 
+test("Connect Slack stays a real link when settings has no selected team yet", () => {
+  const { slackConnectHref } = loadTs("src/lib/slack/installTeam.ts");
+  const section = fs.readFileSync(
+    path.join(root, "src/components/Modals/Settings/SlackSection.tsx"),
+    "utf8",
+  );
+
+  assert.match(section, /slackConnectHref\(teamId\)/);
+  assert.doesNotMatch(section, /aria-disabled=\{!teamId\}/);
+  assert.doesNotMatch(
+    section,
+    /teamId \? "" : "pointer-events-none text-text-light-gray"/,
+  );
+
+  assert.equal(slackConnectHref(null), "/api/slack/install");
+  assert.equal(slackConnectHref(""), "/api/slack/install");
+  assert.equal(
+    slackConnectHref("team-a"),
+    "/api/slack/install?teamId=team-a",
+  );
+});
+
+test("install without a team query uses the member's first team and refuses a foreign team", async () => {
+  const { resolveSlackInstallTeamId } = loadTs("src/lib/slack/installTeam.ts");
+  const access = {
+    async firstTeamId() {
+      return "team-a";
+    },
+    async hasAccess(_userId, teamId) {
+      return teamId === "team-a";
+    },
+  };
+
+  assert.equal(await resolveSlackInstallTeamId(6, null, access), "team-a");
+  assert.equal(await resolveSlackInstallTeamId(6, "  team-a  ", access), "team-a");
+  assert.equal(await resolveSlackInstallTeamId(6, "team-b", access), null);
+});
+
 test("routes create-task mentions before chat and handles DMs and assistant threads", () => {
   const { routeSlackEvent } = loadTs("src/lib/slack/eventRouting.ts");
 
@@ -547,6 +587,36 @@ test("routes create-task mentions before chat and handles DMs and assistant thre
       assistant_thread: { channel_id: "D1", thread_ts: "4.0" },
     }),
     "assistant_welcome",
+  );
+  assert.equal(
+    routeSlackEvent({
+      type: "message",
+      channel_type: "channel",
+      channel: "C1",
+      ts: "5.0",
+      user: "U1",
+      text: "See HTPR-4370",
+    }),
+    "ambient_message",
+  );
+  assert.equal(
+    routeSlackEvent({
+      type: "message",
+      channel: "C2147483705",
+      ts: "6.0",
+      user: "U1",
+      text: "See HTPR-4370",
+    }),
+    "ambient_message",
+  );
+  assert.equal(
+    routeSlackEvent({
+      type: "message",
+      channel: "D1",
+      ts: "7.0",
+      user: "U1",
+    }),
+    "ignore",
   );
 });
 
