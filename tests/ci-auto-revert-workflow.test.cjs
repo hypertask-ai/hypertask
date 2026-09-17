@@ -5,24 +5,31 @@ const path = require("node:path");
 const { pathToFileURL } = require("node:url");
 
 const workflowPath = path.resolve(__dirname, "../.github/workflows/ci-tests.yml");
+const healthWorkflowPath = path.resolve(__dirname, "../.github/workflows/prod-health.yml");
 const scriptUrl = pathToFileURL(
   path.resolve(__dirname, "../.github/scripts/should-auto-revert.mjs"),
 ).href;
-const CURRENT_SHA = "1111111111111111111111111111111111111111";
+const PREVIOUS_SHA = "1111111111111111111111111111111111111111";
+const OTHER_SHA = "2222222222222222222222222222222222222222";
 
 function response(status, body) {
   return { ok: status >= 200 && status < 300, status, json: async () => body };
 }
 
-function statuses(state) {
-  const payload = { statuses: [] };
-  if (state) payload.statuses.push({ context: "prod-health-gate", state });
-  payload.statuses.push({ context: "ci-tests", state: "failure" });
-  return payload;
+function run(id, overrides = {}) {
+  return {
+    id,
+    event: "push",
+    head_branch: "production",
+    head_sha: PREVIOUS_SHA,
+    status: "completed",
+    run_attempt: 1,
+    ...overrides,
+  };
 }
 
 async function evaluate(queues) {
-  const { shouldAutoRevert } = await import(scriptUrl);
+  const { previousProductionTestResult } = await import(scriptUrl);
   const calls = [];
   const cursors = {};
   const fetchImpl = async (url) => {
@@ -35,9 +42,9 @@ async function evaluate(queues) {
     return entries[Math.min(index, entries.length - 1)];
   };
   const delays = [];
-  const result = await shouldAutoRevert(
+  const result = await previousProductionTestResult(
     "hypertask-ai/hypertask",
-    CURRENT_SHA,
+    PREVIOUS_SHA,
     "test-token",
     fetchImpl,
     async (ms) => delays.push(ms),
@@ -45,92 +52,105 @@ async function evaluate(queues) {
   return { result, calls, delays };
 }
 
-const statusPrefix =
-  "https://api.github.com/repos/hypertask-ai/hypertask/commits/1111111111111111111111111111111111111111/status";
+const runsPrefix = "https://api.github.com/repos/hypertask-ai/hypertask/actions/workflows/ci-tests.yml/runs";
+const jobsPrefix = "https://api.github.com/repos/hypertask-ai/hypertask/actions/runs/";
 
-test("only a failed live-site health check on this deploy allows a revert", async () => {
+test("the newest exact production push is reported for context", async () => {
   const { result, calls } = await evaluate({
-    [statusPrefix]: [response(200, statuses("failure"))],
+    [runsPrefix]: [
+      response(200, {
+        workflow_runs: [
+          run(20, { run_attempt: 3 }),
+          run(21, { run_attempt: 1 }),
+          run(99, { event: "pull_request" }),
+          run(98, { head_branch: "other" }),
+          run(97, { head_sha: OTHER_SHA }),
+        ],
+      }),
+    ],
+    [`${jobsPrefix}21/jobs`]: [
+      response(200, { jobs: [{ name: "ci-tests", conclusion: "success" }] }),
+    ],
   });
 
-  assert.equal(result.action, "proceed");
-  assert.match(result.reason, /live website failed its health check/);
-  assert.match(calls[0], /commits\/1111.*\/status/);
-  assert.equal(calls.length, 1);
+  assert.equal(result.status, "success");
+  assert.match(result.reason, /concluded success in run 21/);
+  assert.match(calls[0], /branch=production&event=push&head_sha=1111/);
+  assert.match(calls[1], /actions\/runs\/21\/jobs\?filter=latest/);
 });
 
-test("a healthy live site blocks the revert even when unit tests are red", async () => {
+test("a failed previous run is informational and returned immediately", async () => {
   const { result, calls, delays } = await evaluate({
-    [statusPrefix]: [response(200, statuses("success"))],
+    [runsPrefix]: [response(200, { workflow_runs: [run(30)] })],
+    [`${jobsPrefix}30/jobs`]: [
+      response(200, { jobs: [{ name: "ci-tests", conclusion: "failure" }] }),
+    ],
   });
 
-  assert.equal(result.action, "skip");
-  assert.match(result.reason, /live website is healthy/);
-  assert.match(result.reason, /unit-test failure is not a reason/);
-  assert.equal(calls.length, 1);
+  assert.equal(result.status, "failure");
+  assert.match(result.reason, /concluded failure in run 30/);
+  assert.equal(calls.length, 2);
   assert.deepEqual(delays, []);
 });
 
-test("a missing or unfinished health check fails closed without reverting", async () => {
+test("missing or mismatched previous runs retry and report unknown", async () => {
   const { result, calls, delays } = await evaluate({
-    [statusPrefix]: [response(200, statuses(""))],
+    [runsPrefix]: [
+      response(200, {
+        workflow_runs: [
+          run(40, { event: "pull_request" }),
+          run(41, { head_branch: "other" }),
+          run(42, { head_sha: OTHER_SHA }),
+        ],
+      }),
+    ],
   });
 
-  assert.equal(result.action, "skip");
-  assert.match(result.reason, /has not finished/);
+  assert.equal(result.status, "unknown");
   assert.match(result.reason, /after 3 attempts/);
   assert.equal(calls.length, 3);
   assert.deepEqual(delays, [10_000, 10_000]);
 });
 
-test("GitHub API failures retry and then fail closed", async () => {
+test("GitHub API failures retry and report unknown", async () => {
   const { result, calls, delays } = await evaluate({
-    [statusPrefix]: [response(503, {})],
+    [runsPrefix]: [response(503, {})],
   });
 
-  assert.equal(result.action, "skip");
-  assert.match(result.reason, /live-site health lookup failed: HTTP 503/);
+  assert.equal(result.status, "unknown");
+  assert.match(result.reason, /workflow lookup failed: HTTP 503/);
   assert.equal(calls.length, 3);
   assert.deepEqual(delays, [10_000, 10_000]);
 });
 
-test("the workflow checks this deploy's live health and never the previous unit-test run", async () => {
+test("a production unit-test failure can only warn", async () => {
   const workflow = await readFile(workflowPath, "utf8");
-  const preflight = workflow.indexOf("node .github/scripts/should-auto-revert.mjs");
-  const revert = workflow.indexOf('git revert $MAINLINE --no-commit "$GITHUB_SHA"');
-  const rollback = workflow.indexOf('emergency_rollback "push refused');
+  const start = workflow.indexOf("  production-test-warning:");
+  const end = workflow.indexOf("  production-cli-parity:", start);
+  const warningJob = workflow.slice(start, end);
 
-  assert.match(workflow, /auto-revert-production:[\s\S]*?permissions:\n\s+actions: read/);
-  assert.match(workflow, /BEFORE_SHA: \$\{\{ github\.event\.before \}\}/);
-  assert.match(workflow, /GH_TOKEN: \$\{\{ github\.token \}\}/);
+  assert.match(workflow, /id: push-test[\s\S]*?shell: bash[\s\S]*?run: npm test 2>&1 \| tee/);
+  assert.match(warningJob, /name: production-test-warning/);
+  assert.match(warningJob, /permissions:\n\s+actions: read\n\s+contents: read/);
+  assert.match(warningJob, /FAILED_TESTS: \$\{\{ needs\.ci-tests\.outputs\.failed_tests \}\}/);
+  assert.match(warningJob, /::notice::Previous run:/);
   assert.match(
-    workflow,
-    /should-auto-revert\.mjs "\$GITHUB_REPOSITORY" "\$GITHUB_SHA"/,
+    warningJob,
+    /What failed: %s\\nLive site changed: no\\nNext: production stays live while the test failure is investigated\\nRun: %s/,
   );
-  assert.doesNotMatch(workflow, /should-auto-revert\.mjs "\$GITHUB_REPOSITORY" "\$BEFORE_SHA"/);
-  assert.doesNotMatch(workflow, /actions\/workflows\/ci-tests\.yml\/runs/);
-  assert.doesNotMatch(workflow, /secrets\.AUTOMERGE_TOKEN \|\| github\.token/);
-  assert.ok(preflight >= 0 && preflight < revert, "health preflight must run before git revert");
-  assert.ok(preflight < rollback, "health preflight must run before Vercel rollback");
-  assert.match(workflow, /stop_without_revert\(\) \{[\s\S]*?send_alert[\s\S]*?exit 1/);
-  assert.match(workflow, /if ! COMMIT_COUNT=\$\(git rev-list --count[\s\S]*?stop_without_revert/);
-  assert.match(workflow, /if ! PREFLIGHT=\$\(node \.github\/scripts\/should-auto-revert\.mjs[\s\S]*?stop_without_revert/);
-  assert.match(workflow, /if ! git fetch --quiet origin "\$GITHUB_REF_NAME"; then\n\s+stop_without_revert/);
-  assert.match(workflow, /if \[ "\$PREFLIGHT_ACTION" != "proceed" \]; then\n\s+stop_without_revert/);
-  assert.match(workflow, /did not change the live website/);
-  assert.match(workflow, /Check https:\/\/app\.hypertask\.ai/);
+  assert.doesNotMatch(warningJob, /contents: write|pull-requests: write/);
+  assert.doesNotMatch(
+    warningJob,
+    /git (?:revert|push)|gh pr (?:create|merge)|emergency-rollback|VERCEL_TOKEN|deploymentId/,
+  );
 });
 
-test("the runner isolates the three production-flake suites before the shared run", async () => {
-  const source = await readFile(path.resolve(__dirname, "../scripts/run-tests.mjs"), "utf8");
-  for (const file of [
-    "tests/agent-run-activities.test.cjs",
-    "tests/action-archive-cache.test.cjs",
-    "tests/feature-flags.test.cjs",
-  ]) {
-    assert.match(source, new RegExp(file.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
-  }
-  const isolatedAt = source.indexOf("tests/agent-run-activities.test.cjs");
-  const sharedAt = source.indexOf('"Node test suite"');
-  assert.ok(isolatedAt !== -1 && isolatedAt < sharedAt);
+test("only the live production health workflow retains rollback authority", async () => {
+  const workflow = await readFile(workflowPath, "utf8");
+  const healthWorkflow = await readFile(healthWorkflowPath, "utf8");
+
+  assert.doesNotMatch(workflow, /emergency-rollback\.mjs|api\.vercel\.com\/v10\/projects\/.*\/promote/);
+  assert.match(healthWorkflow, /The FINAL attempt decides rollback/);
+  assert.match(healthWorkflow, /if ! \$unchallenged_failure; then/);
+  assert.match(healthWorkflow, /promote\/\$PREV_UID/);
 });

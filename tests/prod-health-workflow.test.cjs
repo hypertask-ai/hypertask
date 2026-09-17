@@ -497,33 +497,29 @@ elif [ -z "$out" ] || [ "$out" = "/dev/stdout" ]; then
 fi
 `;
 
-function gitIdentityEnv(extraEnv = {}) {
-  return {
-    ...process.env,
-    ...extraEnv,
-    GIT_AUTHOR_NAME: extraEnv.GIT_AUTHOR_NAME || "drift-test",
-    GIT_AUTHOR_EMAIL: extraEnv.GIT_AUTHOR_EMAIL || "drift-test@example.com",
-    GIT_COMMITTER_NAME: extraEnv.GIT_COMMITTER_NAME || "drift-test",
-    GIT_COMMITTER_EMAIL: extraEnv.GIT_COMMITTER_EMAIL || "drift-test@example.com",
-  };
-}
-
 function git(cwd, args, extraEnv = {}) {
-  const result = spawnSync(
-    "git",
-    [
-      "-c",
-      "user.name=drift-test",
-      "-c",
-      "user.email=drift-test@example.com",
-      ...args,
-    ],
-    {
-      cwd,
-      encoding: "utf8",
-      env: gitIdentityEnv(extraEnv),
+  const result = spawnSync("git", [
+    "-c",
+    "user.name=drift-test",
+    "-c",
+    "user.email=drift-test@example.com",
+    ...args,
+  ], {
+    cwd,
+    encoding: "utf8",
+    env: {
+      ...process.env,
+      GIT_AUTHOR_NAME: "drift-test",
+      GIT_AUTHOR_EMAIL: "drift-test@example.com",
+      GIT_COMMITTER_NAME: "drift-test",
+      GIT_COMMITTER_EMAIL: "drift-test@example.com",
+      ...extraEnv,
+      GIT_AUTHOR_NAME: extraEnv.GIT_AUTHOR_NAME || "drift-test",
+      GIT_AUTHOR_EMAIL: extraEnv.GIT_AUTHOR_EMAIL || "drift-test@example.com",
+      GIT_COMMITTER_NAME: extraEnv.GIT_COMMITTER_NAME || "drift-test",
+      GIT_COMMITTER_EMAIL: extraEnv.GIT_COMMITTER_EMAIL || "drift-test@example.com",
     },
-  );
+  });
   assert.equal(result.status, 0, result.stderr);
   return result.stdout.trim();
 }
@@ -733,21 +729,16 @@ function makeCommitChild(parent, { appChange = false, message = "htpr-6511-child
   }
   const child = spawnSync(
     "git",
-    [
-      "-c",
-      "user.name=drift-test",
-      "-c",
-      "user.email=drift-test@example.com",
-      "commit-tree",
-      tree,
-      "-p",
-      parent,
-      "-m",
-      message,
-    ],
+    ["-c", "user.name=drift-test", "-c", "user.email=drift-test@example.com", "commit-tree", tree, "-p", parent, "-m", message],
     {
       encoding: "utf8",
-      env: gitIdentityEnv(),
+      env: {
+        ...process.env,
+        GIT_AUTHOR_NAME: "drift-test",
+        GIT_AUTHOR_EMAIL: "drift-test@example.com",
+        GIT_COMMITTER_NAME: "drift-test",
+        GIT_COMMITTER_EMAIL: "drift-test@example.com",
+      },
     },
   );
   assert.equal(child.status, 0, child.stderr);
