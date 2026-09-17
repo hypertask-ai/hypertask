@@ -64,13 +64,13 @@ const comment = (id, createdAt, activity = null) => ({
   createdAt,
   activity,
 });
-const runActivity = (id, type, createdAt) => ({
+const runActivity = (id, type, createdAt, options = null) => ({
   id,
   runId: "run-1",
   type,
   text: id,
   link: null,
-  options: null,
+  options,
   selectedOption: null,
   selectedAt: null,
   selectedBy: null,
@@ -109,6 +109,41 @@ test("task thread feed merges chronologically without changing comment indexes",
       "comment-11",
       "agent-activity-error",
       "comment-12",
+    ],
+  );
+});
+
+test("quiet activity rows follow the history toggle but keep questions visible", () => {
+  const activities = [
+    runActivity("thought", "thought", "2026-09-17T10:00:00.000Z"),
+    runActivity(
+      "question",
+      "elicitation",
+      "2026-09-17T10:01:00.000Z",
+      [{ value: "yes", label: "Yes" }],
+    ),
+    runActivity("error", "error", "2026-09-17T10:02:00.000Z"),
+  ];
+
+  assert.deepEqual(
+    mergeTaskThreadFeed([], activities, false, false).map(({ id }) => id),
+    [
+      "agent-activity-thought",
+      "agent-activity-question",
+      "agent-activity-error",
+    ],
+    "flag off preserves the existing feed",
+  );
+  assert.deepEqual(
+    mergeTaskThreadFeed([], activities, false, true).map(({ id }) => id),
+    ["agent-activity-question"],
+  );
+  assert.deepEqual(
+    mergeTaskThreadFeed([], activities, true, true).map(({ id }) => id),
+    [
+      "agent-activity-thought",
+      "agent-activity-question",
+      "agent-activity-error",
     ],
   );
 });

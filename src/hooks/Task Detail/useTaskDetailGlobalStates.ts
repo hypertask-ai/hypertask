@@ -61,6 +61,8 @@ import { wrapBlockQuote } from "@/utils/helperFunctions/TaskDetail";
 import type { SerializedAgentRunActivity } from "@/lib/agentRuns/model";
 import { mergeTaskThreadFeed } from "@/lib/agentRuns/taskActivityFeed";
 import { isCommentCreatedByUser } from "@/lib/htc/isCommentCreatedByUser";
+import { useFlag } from "@/hooks/useFlag";
+import { HTPR_6551_QUIET_RUN_ACTIVITY_FLAG } from "@/lib/flags/keys";
 
 // import useSetStickyHeight from "./useSetStickyHeight";
 export type TReturnFocusedEl =
@@ -168,6 +170,7 @@ const useTaskDetailGlobalStates = (
   const listRef = useRef<HTMLDivElement | null>(null);
 
   // -------- History (activity) events: hidden by default; toggle to show --------
+  const quietRunActivityEnabled = useFlag(HTPR_6551_QUIET_RUN_ACTIVITY_FLAG);
   const [showHistory, setShowHistory] = useRecoilState(showTaskHistoryAtom);
   const toggleHistory = useCallback(
     () => setShowHistory((prev) => !prev),
@@ -177,8 +180,16 @@ const useTaskDetailGlobalStates = (
   // handlers and `comment-${i}` DOM ids remain aligned while passive agent rows
   // are interleaved chronologically.
   const visibleFeedItems = useMemo(
-    () => mergeTaskThreadFeed(comments, agentRunActivities, showHistory),
-    [agentRunActivities, comments, showHistory],
+    quietRunActivityEnabled
+      ? () =>
+          mergeTaskThreadFeed(
+            comments,
+            agentRunActivities,
+            showHistory,
+            true,
+          )
+      : () => mergeTaskThreadFeed(comments, agentRunActivities, showHistory),
+    [agentRunActivities, comments, quietRunActivityEnabled, showHistory],
   );
   const visibleCommentIndices = useMemo(
     () =>

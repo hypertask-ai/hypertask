@@ -410,6 +410,11 @@ test("declared flags remain listed with ticket details and can be changed", asyn
         updatedAt: null,
       },
       {
+        key: "htpr-6551-quiet-run-activity",
+        mode: "OWNER_AND_QA",
+        updatedAt: null,
+      },
+      {
         key: "htpr-6555-idle-comment-mic",
         mode: "OWNER_AND_QA",
         updatedAt: null,
