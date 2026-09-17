@@ -17,7 +17,8 @@ const newComment = fs.readFileSync(
 test("the idle mobile comment placeholder reuses AudioButton behind the ticket flag", () => {
   assert.match(newComment, /HTPR_6555_IDLE_COMMENT_MIC_FLAG/);
   assert.match(newComment, /from "@\/components\/RTE\/Components\/AudioButton"/);
-  assert.match(newComment, /showIdleMic=\{idleCommentMicEnabled\}/);
+  assert.match(newComment, /idleCommentMicEnabled \? \(/);
+  assert.match(newComment, /showIdleMic/);
 
   const placeholder = newComment.slice(
     newComment.indexOf("const NewCommentPlaceholder"),

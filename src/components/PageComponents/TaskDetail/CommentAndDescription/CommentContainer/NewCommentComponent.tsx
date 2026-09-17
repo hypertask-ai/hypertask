@@ -587,14 +587,16 @@ const NewCommentComponent = (
                         reply={replyQuote}
                         createNewComment={editMode==="comment" || editMode === "new-comment-ai"}
                       />
-                      ) : (
+                      ) : idleCommentMicEnabled ? (
                         <NewCommentPlaceholder
                           isMbl={_mbl}
-                          showIdleMic={idleCommentMicEnabled}
+                          showIdleMic
                           idleRecording={idleRecording}
                           onIdleRecordingChange={setIdleRecording}
                           onIdleDictation={handleIdleDictation}
                         />
+                      ) : (
+                        <NewCommentPlaceholder isMbl={_mbl} />
                       )}
                       </div>
 
