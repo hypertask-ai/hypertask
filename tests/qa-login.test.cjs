@@ -5,6 +5,7 @@ const path = require("node:path");
 const ts = require("typescript");
 
 const root = path.resolve(__dirname, "..");
+const strongQaPassword = "q".repeat(32);
 
 function loadTypescriptModule(relativePath, aliases = {}) {
   const filename = path.join(root, relativePath);
@@ -69,19 +70,19 @@ test("QA login accepts only the configured email and password", () => {
     isQaLoginConfigured,
   } = loadQaLogin({
     QA_LOGIN_EMAIL: "  QA@Example.TEST ",
-    QA_LOGIN_PASSWORD: "correct-horse-battery-staple-32b",
+    QA_LOGIN_PASSWORD: strongQaPassword,
   });
 
   assert.equal(isQaLoginConfigured(), true);
   const config = getQaLoginConfig();
   assert.deepEqual(config, {
     email: "qa@example.test",
-    password: "correct-horse-battery-staple-32b",
+    password: strongQaPassword,
   });
   assert.equal(
     qaLoginCredentialsMatch(
       "qa@example.test",
-      "correct-horse-battery-staple-32b",
+      strongQaPassword,
       config,
     ),
     true,
@@ -89,7 +90,7 @@ test("QA login accepts only the configured email and password", () => {
   assert.equal(
     qaLoginCredentialsMatch(
       "other@example.test",
-      "correct-horse-battery-staple-32b",
+      strongQaPassword,
       config,
     ),
     false,
