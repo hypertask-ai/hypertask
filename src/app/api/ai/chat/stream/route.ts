@@ -5234,27 +5234,30 @@ function buildTools(
           HTPR_6516_AGENT_ATTRIBUTION_FLAG,
           user.id
         );
-        return sanitizeForJson({
+        const commentsPayload = {
           success: true,
-          comments: comments.map((comment, index) => {
-            const mapped = input.include_activity
+          comments: comments.map((comment) =>
+            input.include_activity
               ? withActivityMetadata(
                   mapCommentToResponse(comment, user.id, task.projectId),
                   comment.activity
                 )
               : mapCommentToResponse(comment, user.id, task.projectId)
-            return applyDurableCommentAttribution(
-              mapped,
-              comments[index],
-              user.id,
-              task.projectId,
-              attributionEnabled
-            )
-          }),
+          ),
           total,
           limit: input.limit,
           offset: input.offset,
-        });
+        };
+        commentsPayload.comments = commentsPayload.comments.map((mapped, index) =>
+          applyDurableCommentAttribution(
+            mapped,
+            comments[index],
+            user.id,
+            task.projectId,
+            attributionEnabled
+          )
+        );
+        return sanitizeForJson(commentsPayload);
       },
     }),
 
@@ -7173,14 +7176,7 @@ function buildTools(
 
         void broadcastTaskComment(task.id, { originUserId: user.id });
 
-        const mappedCreatedComment = commentWithAttachments
-            ? mapCommentToResponse(
-                commentWithAttachments,
-                user.id,
-                taskWithOwner.projectId
-              )
-            : { id: comment.id, text: sanitizedText };
-        return sanitizeForJson({
+        const createdCommentPayload = {
           success: true,
           task: {
             id: taskWithOwner.id,
@@ -7188,16 +7184,24 @@ function buildTools(
             url: buildMcpTaskUrl(taskWithOwner.projectId, taskWithOwner.uniqueIndex),
           },
           comment: commentWithAttachments
-            ? applyDurableCommentAttribution(
-                mappedCreatedComment,
+            ? mapCommentToResponse(
                 commentWithAttachments,
                 user.id,
-                taskWithOwner.projectId,
-                await isFeatureEnabled(HTPR_6516_AGENT_ATTRIBUTION_FLAG, user.id)
+                taskWithOwner.projectId
               )
-            : mappedCreatedComment,
+            : { id: comment.id, text: sanitizedText },
           url: buildMcpTaskUrl(taskWithOwner.projectId, taskWithOwner.uniqueIndex),
-        });
+        };
+        if (commentWithAttachments) {
+          createdCommentPayload.comment = applyDurableCommentAttribution(
+            createdCommentPayload.comment,
+            commentWithAttachments,
+            user.id,
+            taskWithOwner.projectId,
+            await isFeatureEnabled(HTPR_6516_AGENT_ATTRIBUTION_FLAG, user.id)
+          );
+        }
+        return sanitizeForJson(createdCommentPayload);
         };
 
         const results = await Promise.all(
@@ -7719,25 +7723,26 @@ function buildTools(
 
         void broadcastTaskComment(comment.task.id, { originUserId: user.id });
 
-        const mappedUpdatedComment = updatedComment
+        const updatedCommentPayload = {
+          success: true,
+          comment: updatedComment
             ? mapCommentToResponse(
                 updatedComment,
                 user.id,
                 comment.task.projectId
               )
-            : { id: input.comment_id, text: sanitizedText };
-        return sanitizeForJson({
-          success: true,
-          comment: updatedComment
-            ? applyDurableCommentAttribution(
-                mappedUpdatedComment,
-                updatedComment,
-                user.id,
-                comment.task.projectId,
-                await isFeatureEnabled(HTPR_6516_AGENT_ATTRIBUTION_FLAG, user.id)
-              )
-            : mappedUpdatedComment,
-        });
+            : { id: input.comment_id, text: sanitizedText },
+        };
+        if (updatedComment) {
+          updatedCommentPayload.comment = applyDurableCommentAttribution(
+            updatedCommentPayload.comment,
+            updatedComment,
+            user.id,
+            comment.task.projectId,
+            await isFeatureEnabled(HTPR_6516_AGENT_ATTRIBUTION_FLAG, user.id)
+          );
+        }
+        return sanitizeForJson(updatedCommentPayload);
       }),
     }),
 
