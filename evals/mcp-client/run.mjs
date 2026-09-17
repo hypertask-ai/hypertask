@@ -15,7 +15,7 @@ function argValue(flag, fallback) {
   return args[index + 1] || fallback;
 }
 
-const mode = argValue("--mode", "replay");
+const mode = argValue("--mode", "fixture");
 const label = argValue("--label", "pre-6478");
 const dest = path.resolve(
   argValue(
@@ -27,10 +27,11 @@ const baselineDest = path.resolve(
   argValue("--baseline-out", path.join(here, "baselines", "pre-6478.json")),
 );
 
-const report = runEval({
+const report = await runEval({
   mode,
   label,
   baseline: label,
+  recordTranscripts: args.includes("--write-transcripts"),
 });
 
 writeReport(report, dest);
@@ -42,7 +43,7 @@ const { summary } = report;
 process.stdout.write(
   `${report.rows.length} rows · ${summary.passed}/${summary.tasks} passed · ${(
     summary.successRate * 100
-  ).toFixed(1)}%\n`,
+  ).toFixed(1)}% · surfaces ${summary.surfaceFailed || 0} failed\n`,
 );
 
-if (summary.failed > 0) process.exit(1);
+if (summary.failed > 0 || (summary.surfaceFailed || 0) > 0) process.exit(1);

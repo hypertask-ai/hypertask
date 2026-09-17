@@ -7,6 +7,7 @@ import type {
   McpClientEvalClient,
   McpClientEvalReport,
   McpClientEvalTransport,
+  McpClientEvalUsageSource,
 } from "@/lib/mcpClientEval/types";
 
 const CLIENTS: McpClientEvalClient[] = ["claude", "cursor", "codex"];
@@ -14,6 +15,18 @@ const TRANSPORTS: McpClientEvalTransport[] = ["mcp", "cli"];
 
 function rate(value: number): string {
   return `${Math.round(value * 100)}%`;
+}
+
+function tokens(value: number | null, source?: McpClientEvalUsageSource): string {
+  if (!Number.isFinite(value)) return "—";
+  if (source === "estimate") return `est. ${value}`;
+  return String(value);
+}
+
+function time(value: number | null, source?: string): string {
+  if (!Number.isFinite(value)) return "—";
+  if (source === "unavailable") return "—";
+  return `${value} ms`;
 }
 
 function McpClientEvalPanel() {
@@ -49,18 +62,25 @@ function McpClientEvalPanel() {
 
   return (
     <section className="mt-8">
-      <h2 className="text-[13px] font-medium text-text-light-gray mb-3">
+      <h2 className="text-dense font-medium text-text-light-gray mb-3">
         MCP client eval
       </h2>
-      {error && <p className="text-[13px] text-red-500">{error}</p>}
+      {error && <p className="text-dense text-destructive">{error}</p>}
       {report && (
         <>
-          <p className="mb-3 text-[13px] text-text-light-gray">
+          <p className="mb-3 text-dense text-text-light-gray">
             {report.label} · {new Date(report.generatedAt).toLocaleString()} ·{" "}
             {rate(report.summary.successRate)} pass
+            {report.summary.byTransport && (
+              <>
+                {" "}
+                · MCP {report.summary.byTransport.mcp.wallMs} ms · CLI{" "}
+                {report.summary.byTransport.cli.wallMs} ms
+              </>
+            )}
           </p>
           <div className="overflow-x-auto">
-            <table className="w-full text-left text-[13px]">
+            <table className="w-full text-left text-dense">
               <thead>
                 <tr className="text-text-light-gray">
                   <th className="py-1.5 pr-3 font-medium">Client</th>
@@ -79,14 +99,20 @@ function McpClientEvalPanel() {
                     return (
                       <tr
                         key={`${client}-${transport}`}
-                        className="border-t border-white/10"
+                        className="border-t border-border-light-gray-thin"
                       >
                         <td className="py-1.5 pr-3 capitalize">{client}</td>
                         <td className="py-1.5 pr-3 uppercase">{transport}</td>
                         <td className="py-1.5 pr-3">{rate(slice.successRate)}</td>
-                        <td className="py-1.5 pr-3">{slice.tokensIn}</td>
-                        <td className="py-1.5 pr-3">{slice.tokensOut}</td>
-                        <td className="py-1.5 pr-3">{slice.wallMs} ms</td>
+                        <td className="py-1.5 pr-3">
+                          {tokens(slice.tokensIn, slice.usageSource)}
+                        </td>
+                        <td className="py-1.5 pr-3">
+                          {tokens(slice.tokensOut, slice.usageSource)}
+                        </td>
+                        <td className="py-1.5 pr-3">
+                          {time(slice.wallMs, slice.usageSource)}
+                        </td>
                         <td className="py-1.5">{slice.toolCalls}</td>
                       </tr>
                     );
@@ -96,7 +122,7 @@ function McpClientEvalPanel() {
             </table>
           </div>
           <div className="mt-4 overflow-x-auto">
-            <table className="w-full text-left text-[13px]">
+            <table className="w-full text-left text-dense">
               <thead>
                 <tr className="text-text-light-gray">
                   <th className="py-1.5 pr-3 font-medium">Task</th>
@@ -113,15 +139,21 @@ function McpClientEvalPanel() {
                 {report.rows.map((row) => (
                   <tr
                     key={`${row.taskId}-${row.client}-${row.transport}`}
-                    className="border-t border-white/10"
+                    className="border-t border-border-light-gray-thin"
                   >
                     <td className="py-1.5 pr-3">{row.taskId}</td>
                     <td className="py-1.5 pr-3 capitalize">{row.client}</td>
                     <td className="py-1.5 pr-3 uppercase">{row.transport}</td>
                     <td className="py-1.5 pr-3">{row.pass ? "pass" : "fail"}</td>
-                    <td className="py-1.5 pr-3">{row.tokensIn}</td>
-                    <td className="py-1.5 pr-3">{row.tokensOut}</td>
-                    <td className="py-1.5 pr-3">{row.wallMs} ms</td>
+                    <td className="py-1.5 pr-3">
+                      {tokens(row.tokensIn, row.usageSource)}
+                    </td>
+                    <td className="py-1.5 pr-3">
+                      {tokens(row.tokensOut, row.usageSource)}
+                    </td>
+                    <td className="py-1.5 pr-3">
+                      {time(row.wallMs, row.wallSource)}
+                    </td>
                     <td className="py-1.5">{row.toolCalls}</td>
                   </tr>
                 ))}

@@ -33,7 +33,28 @@ function estimateUsage(task, client, transport) {
     (CLIENT_PROMPT_OVERHEAD[client] || 0) +
     (TRANSPORT_TOOL_OVERHEAD[transport] || 0) * toolCalls;
   const tokensOut = planTokens + 24;
-  return { tokensIn, tokensOut, toolCalls };
+  return {
+    tokensIn,
+    tokensOut,
+    toolCalls,
+    source: "estimate",
+  };
+}
+
+function measuredUsage(usage, fallback) {
+  if (usage && (usage.source === "provider" || usage.source === "transcript")) {
+    return {
+      tokensIn: Number.isFinite(usage.tokensIn) ? usage.tokensIn : null,
+      tokensOut: Number.isFinite(usage.tokensOut) ? usage.tokensOut : null,
+      source: usage.source,
+    };
+  }
+  return {
+    tokensIn: null,
+    tokensOut: null,
+    source: usage?.source || fallback || "unavailable",
+    estimate: fallback === "estimate" || usage?.source === "estimate" ? usage || null : null,
+  };
 }
 
 module.exports = {
@@ -41,4 +62,5 @@ module.exports = {
   TRANSPORT_TOOL_OVERHEAD,
   estimateTokens,
   estimateUsage,
+  measuredUsage,
 };

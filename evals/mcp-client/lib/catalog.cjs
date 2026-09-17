@@ -40,6 +40,10 @@ function loadCatalog(filePath = catalogPath()) {
         throw new Error(`${task.id} CLI command is empty`);
       }
     }
+    const expect = task.expect || {};
+    if (!Array.isArray(expect.stdoutIncludes) || expect.stdoutIncludes.length === 0) {
+      throw new Error(`${task.id} is missing expect.stdoutIncludes`);
+    }
   }
   return raw;
 }

@@ -14,14 +14,13 @@ on:
       - ".github/workflows/mcp-client-eval.yml"
   workflow_dispatch:
 
-permissions:
-  contents: read
-
 jobs:
   mcp-client-eval:
     name: mcp-client-eval
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    permissions:
+      contents: read
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
@@ -29,13 +28,48 @@ jobs:
         with:
           node-version: 20
 
-      - name: Grade the 20-task catalog
+      - name: Grade the 20-task catalog against isolated fixtures
         run: node --test tests/mcp-client-eval.test.cjs
 
-      - name: Write the replay report
-        run: node evals/mcp-client/run.mjs --mode replay --label pre-6478
+      - name: Write the fixture report
+        run: node evals/mcp-client/run.mjs --mode fixture --label weekly
 
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: mcp-client-eval-report
           path: src/lib/mcpClientEval/latest.json
+
+  publish-eval-report:
+    name: publish-eval-report
+    needs: mcp-client-eval
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - uses: actions/download-artifact@7a0c4c269abb142cd0f7adaa5bb6378ca1972986 # v4
+        with:
+          name: mcp-client-eval-report
+          path: /tmp/mcp-client-eval
+
+      - name: Publish latest.json to eval-reports
+        run: |
+          set -euo pipefail
+          git fetch origin eval-reports:eval-reports || true
+          if git show-ref --verify --quiet refs/heads/eval-reports; then
+            git checkout eval-reports
+          else
+            git checkout --orphan eval-reports
+            git rm -rf --quiet . || true
+          fi
+          cp /tmp/mcp-client-eval/latest.json latest.json
+          git add latest.json
+          if git diff --cached --quiet; then
+            echo "No report change"
+            exit 0
+          fi
+          git -c user.name="github-actions[bot]" -c user.email="41898282+github-actions[bot]@users.noreply.github.com" \
+            commit -m "Publish MCP client eval report"
+          git push origin HEAD:eval-reports
