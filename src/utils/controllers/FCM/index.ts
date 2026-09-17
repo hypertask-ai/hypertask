@@ -160,9 +160,6 @@ export const filterDevicesByPreferences = async ({
     return userPreferenceMap;
 }
 
-// Initialize Firebase Admin SDK
-getFirebaseAdmin();
-
 // FCM rejects any message whose data payload exceeds 4KB. The whole comment was
 // packed into data.comment, so a long comment meant no push at all, and the
 // rejection was logged as an ordinary error while the caller reported success
@@ -271,7 +268,7 @@ export const sendDataOnlyFcm = async (
     await deliveryOptions?.beforeDelivery?.();
     let deliveryResolved = false;
     try {
-      const response = await getMessaging().send(body);
+      const response = await getMessaging(getFirebaseAdmin()).send(body);
       console.log("🚀 ~ sendDataOnlyFcm ~ response:", response);
       deliveryResolved = true;
     } catch (error) {
@@ -389,7 +386,7 @@ export const sendDataNewCommentFCM = async(props:newCommentFCM) => {
         payload.data = { ...(props.data || {}), click_action: link };
         
         try {
-            const response = await getMessaging().send(payload);
+            const response = await getMessaging(getFirebaseAdmin()).send(payload);
             console.log("🚀 ~ sendDataNewCommentFCM ~ response:", response)
             
         } catch (error) {

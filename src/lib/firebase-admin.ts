@@ -1,33 +1,39 @@
-import { cert, getApp, getApps, initializeApp, type App } from 'firebase-admin/app'
+import { cert, getApp, initializeApp, type App } from 'firebase-admin/app'
 import { getAuth as getFirebaseAuth } from 'firebase-admin/auth'
 import { getFirebaseServiceAccount } from '@/lib/firebaseServiceAccount'
 
 // Centralized Firebase Admin initialization to avoid conflicts
-let firebaseAdminApp: App
+let firebaseAdminApp: App | undefined
 
 export function getFirebaseAdmin(): App {
-  if (!firebaseAdminApp) {
-    const existing = getApps()
-    if (existing.length > 0) {
-      firebaseAdminApp = getApp()
-    } else {
-      const serviceAccount = getFirebaseServiceAccount()
+  if (firebaseAdminApp) return firebaseAdminApp
 
-      console.log(`🔥 Initializing Firebase Admin for project: ${serviceAccount.project_id}`)
-
-      firebaseAdminApp = initializeApp({
-        credential: cert({
-          projectId: serviceAccount.project_id,
-          clientEmail: serviceAccount.client_email,
-          privateKey: serviceAccount.private_key,
-        }),
-        projectId: serviceAccount.project_id,
-      })
-
-      console.log(`✅ Firebase Admin initialized successfully for project: ${firebaseAdminApp.options.projectId}`)
-    }
+  try {
+    firebaseAdminApp = getApp()
+    return firebaseAdminApp
+  } catch {
+    // Default app is missing.
   }
 
+  const serviceAccount = getFirebaseServiceAccount()
+
+  console.log(`🔥 Initializing Firebase Admin for project: ${serviceAccount.project_id}`)
+
+  try {
+    firebaseAdminApp = initializeApp({
+      credential: cert({
+        projectId: serviceAccount.project_id,
+        clientEmail: serviceAccount.client_email,
+        privateKey: serviceAccount.private_key,
+      }),
+      projectId: serviceAccount.project_id,
+    })
+  } catch {
+    // A second bundle copy may have created the default app first.
+    firebaseAdminApp = getApp()
+  }
+
+  console.log(`✅ Firebase Admin initialized successfully for project: ${firebaseAdminApp.options.projectId}`)
   return firebaseAdminApp
 }
 

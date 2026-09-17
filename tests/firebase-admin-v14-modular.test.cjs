@@ -87,9 +87,23 @@ test("src no longer uses the v14-removed namespaced admin API", () => {
   }
 });
 
+function serviceAccountStub() {
+  return {
+    "@/lib/firebaseServiceAccount": {
+      getFirebaseServiceAccount() {
+        return {
+          project_id: "demo-project",
+          client_email: "admin@demo",
+          private_key: "-----BEGIN PRIVATE KEY-----\\ndemo\\n-----END PRIVATE KEY-----\\n",
+        };
+      },
+    },
+  };
+}
+
 test("getFirebaseAdmin initializes through firebase-admin/app and getAuth uses firebase-admin/auth", () => {
   const app = { options: { projectId: "demo-project", credential: {} }, name: "[DEFAULT]" };
-  const calls = { initializeApp: 0, cert: 0, getAuth: 0 };
+  const calls = { initializeApp: 0, cert: 0, getAuth: 0, getApp: 0 };
   const { getFirebaseAdmin, getAuth } = loadTypeScript("src/lib/firebase-admin.ts", {
     "firebase-admin/app": {
       cert(serviceAccount) {
@@ -98,11 +112,12 @@ test("getFirebaseAdmin initializes through firebase-admin/app and getAuth uses f
         assert.equal(serviceAccount.clientEmail, "admin@demo");
         return { kind: "cert" };
       },
-      getApps() {
-        return [];
-      },
       getApp() {
-        throw new Error("getApp should not run when no app exists yet");
+        calls.getApp += 1;
+        if (calls.initializeApp === 0) {
+          throw new Error("default app missing");
+        }
+        return app;
       },
       initializeApp(options) {
         calls.initializeApp += 1;
@@ -118,20 +133,86 @@ test("getFirebaseAdmin initializes through firebase-admin/app and getAuth uses f
         return { verifyIdToken: async () => ({ uid: "user-1" }) };
       },
     },
-    "@/lib/firebaseServiceAccount": {
-      getFirebaseServiceAccount() {
-        return {
-          project_id: "demo-project",
-          client_email: "admin@demo",
-          private_key: "-----BEGIN PRIVATE KEY-----\\ndemo\\n-----END PRIVATE KEY-----\\n",
-        };
-      },
-    },
+    ...serviceAccountStub(),
   });
 
   assert.equal(getFirebaseAdmin(), app);
   assert.equal(getFirebaseAdmin(), app);
   const auth = getAuth();
   assert.equal(typeof auth.verifyIdToken, "function");
-  assert.deepEqual(calls, { initializeApp: 1, cert: 1, getAuth: 1 });
+  assert.deepEqual(calls, { initializeApp: 1, cert: 1, getAuth: 1, getApp: 1 });
+});
+
+test("getFirebaseAdmin reuses a default app instead of treating any named app as enough", () => {
+  const defaultApp = { options: { projectId: "demo-project", credential: {} }, name: "[DEFAULT]" };
+  const calls = { initializeApp: 0, getApp: 0 };
+  const { getFirebaseAdmin } = loadTypeScript("src/lib/firebase-admin.ts", {
+    "firebase-admin/app": {
+      cert() {
+        throw new Error("cert should not run when the default app already exists");
+      },
+      getApp() {
+        calls.getApp += 1;
+        return defaultApp;
+      },
+      initializeApp() {
+        calls.initializeApp += 1;
+        throw new Error("initializeApp should not run when getApp succeeds");
+      },
+    },
+    "firebase-admin/auth": {
+      getAuth() {
+        throw new Error("unused");
+      },
+    },
+    ...serviceAccountStub(),
+  });
+
+  assert.equal(getFirebaseAdmin(), defaultApp);
+  assert.deepEqual(calls, { initializeApp: 0, getApp: 1 });
+});
+
+test("getFirebaseAdmin recovers when initializeApp loses the already-exists race", () => {
+  const defaultApp = { options: { projectId: "demo-project", credential: {} }, name: "[DEFAULT]" };
+  const calls = { initializeApp: 0, getApp: 0 };
+  const { getFirebaseAdmin } = loadTypeScript("src/lib/firebase-admin.ts", {
+    "firebase-admin/app": {
+      cert() {
+        return { kind: "cert" };
+      },
+      getApp() {
+        calls.getApp += 1;
+        if (calls.initializeApp === 0) {
+          throw new Error("default app missing");
+        }
+        return defaultApp;
+      },
+      initializeApp() {
+        calls.initializeApp += 1;
+        throw new Error("already exists");
+      },
+    },
+    "firebase-admin/auth": {
+      getAuth() {
+        throw new Error("unused");
+      },
+    },
+    ...serviceAccountStub(),
+  });
+
+  assert.equal(getFirebaseAdmin(), defaultApp);
+  assert.deepEqual(calls, { initializeApp: 1, getApp: 2 });
+});
+
+test("FCM does not initialize Firebase while the module is loading", () => {
+  const source = fs.readFileSync(
+    path.join(root, "src/utils/controllers/FCM/index.ts"),
+    "utf8",
+  );
+  assert.equal(
+    /^\s*getFirebaseAdmin\(\);\s*$/m.test(source),
+    false,
+    "FCM must not call getFirebaseAdmin at import time; /api/tasks/single loads this module",
+  );
+  assert.match(source, /getMessaging\(getFirebaseAdmin\(\)\)/);
 });
