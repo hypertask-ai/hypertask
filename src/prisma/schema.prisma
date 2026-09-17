@@ -340,6 +340,7 @@ model User {
   decisionRequestsAnswered DecisionRequest[]             @relation("DecisionRequestAnsweredBy")
   webhookSubscriptions     WebhookSubscription[]
   authoredChatMessages     ChatMessage[]                 @relation("ChatMessageAuthorUser")
+  authoredAgentRoomMessages AgentRoomMessage[]           @relation("AgentRoomMessageAuthorUser")
   stoppedAgentRuns         AgentRun[]                    @relation("AgentRunStoppedBy")
   selectedAgentRunActivities AgentRunActivity[]           @relation("AgentRunActivitySelectedBy")
   aiSkills                  AI_Skill[]                  @relation("AI_SkillOwner")
@@ -802,6 +803,7 @@ model Project {
   taskTemplates          TaskTemplate[]
   customFields           CustomField[]
   projectMutes           ProjectMute[]
+  agentRoom              AgentRoom?
   targetDate             DateTime?
   milestones             ProjectMilestone[]
   statusUpdates          ProjectStatusUpdate[]
@@ -1145,6 +1147,7 @@ model Task {
   taskLease           TaskLease?
   agentRuns           AgentRun[]
   chatTicketProposal  ChatTicketProposal?
+  agentRoomMessages   AgentRoomMessage[]
 
   // @@index([projectId, deletedAt, updatedAt]) // Composite index for your exact query
   // @@index([updatedAt]) // For ordering
@@ -2210,6 +2213,60 @@ model ApiKey {
   @@index([userId, revokedAt])
 }
 
+model AgentRoom {
+  id              String   @id @default(uuid())
+  projectId       Int      @unique
+  project         Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  dailyTurnBudget Int      @default(50)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  messages        AgentRoomMessage[]
+
+  @@index([updatedAt])
+}
+
+model AgentRoomMessage {
+  id               String   @id @default(uuid())
+  roomId           String
+  room             AgentRoom @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  content          String   @db.Text
+  role             ChatRole
+  exchangeId       String
+  botTurnDepth     Int      @default(0)
+  createdAt        DateTime @default(now())
+  stoppedAt        DateTime?
+  replyToMessageId String?
+  replyToMessage   AgentRoomMessage? @relation("AgentRoomMessageReplies", fields: [replyToMessageId], references: [id], onDelete: SetNull)
+  replies          AgentRoomMessage[] @relation("AgentRoomMessageReplies")
+  authorUserId     Int?
+  authorUser       User?    @relation("AgentRoomMessageAuthorUser", fields: [authorUserId], references: [id], onDelete: SetNull)
+  authorAgentId    String?
+  authorAgent      Agent?   @relation("AgentRoomMessageAuthorAgent", fields: [authorAgentId], references: [id], onDelete: SetNull)
+  taskId           Int?
+  task             Task?    @relation(fields: [taskId], references: [id], onDelete: SetNull)
+  deliveries       AgentRoomDelivery[]
+
+  @@unique([replyToMessageId, authorAgentId])
+  @@index([roomId, exchangeId])
+  @@index([roomId, createdAt, id])
+  @@index([authorUserId])
+  @@index([authorAgentId])
+  @@index([taskId])
+}
+
+model AgentRoomDelivery {
+  id        String   @id @default(uuid())
+  messageId String
+  message   AgentRoomMessage @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  agentId   String
+  agent     Agent    @relation(fields: [agentId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+  handledAt DateTime?
+
+  @@unique([messageId, agentId])
+  @@index([agentId, handledAt, createdAt])
+}
+
 model ChatSession {
   id String @id @default(uuid())
   createdAt DateTime @default(now())
@@ -2405,6 +2462,8 @@ model Agent {
   agentWebhookSubscription  AgentWebhookSubscription?
   chatSessions              ChatSession[]
   authoredChatMessages      ChatMessage[] @relation("ChatMessageAuthorAgent")
+  authoredAgentRoomMessages AgentRoomMessage[] @relation("AgentRoomMessageAuthorAgent")
+  agentRoomDeliveries       AgentRoomDelivery[]
   runs                      AgentRun[]
   byokApiKeys               AgentByokApiKey[]
 
