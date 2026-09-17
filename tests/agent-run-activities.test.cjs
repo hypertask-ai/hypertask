@@ -1376,6 +1376,9 @@ function atomicCommentHarness() {
         return { count: 1 };
       },
     },
+    agent: {
+      findUnique: async () => ({ displayName: "Agent" }),
+    },
     comment: {
       create: async ({ data }) => {
         if (failure === "comment") throw new Error("comment write failed");
