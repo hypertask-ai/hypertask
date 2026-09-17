@@ -11,6 +11,8 @@ import {
   BillingActionRow,
   settingsActionButtonClass,
 } from "./SettingsBillingRow";
+import { slackConnectHref } from "@/lib/slack/installTeam";
+
 import SettingsSectionShell from "./SettingsSectionShell";
 import { useSettingsTeam } from "./useSettingsTeam";
 
@@ -129,17 +131,7 @@ const SlackSection = () => {
                 </button>
               </div>
             ) : (
-              <a
-                aria-disabled={!teamId}
-                className={`${settingsActionButtonClass} ${
-                  teamId ? "" : "pointer-events-none text-text-light-gray"
-                }`}
-                href={
-                  teamId
-                    ? `/api/slack/install?teamId=${encodeURIComponent(teamId)}`
-                    : undefined
-                }
-              >
+              <a className={settingsActionButtonClass} href={slackConnectHref(teamId)}>
                 Connect Slack
               </a>
             )
