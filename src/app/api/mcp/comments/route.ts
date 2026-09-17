@@ -39,6 +39,7 @@ import {
   type McpCommentReaction,
 } from '@/lib/mcp/comments/reactionResponse'
 import { resolvePublicAgentDisplayName } from '@/lib/agents/publicAgent'
+import { HTPR_6516_AGENT_ATTRIBUTION_FLAG, isFeatureEnabled } from '@/lib/flags'
 
 export interface CommentItem {
   id: number
@@ -154,14 +155,22 @@ function mapCommentToResponse(
   comment: any,
   userId: number,
   projectId: number,
-  includeActivity = false
+  includeActivity = false,
+  attributionEnabled = false
 ): CommentItem {
   const agent = mapVisibleMcpAgent(comment.agent, userId, projectId)
-  const agentDisplayName = resolvePublicAgentDisplayName({
-    hasAgentRow: Boolean(comment.agent),
-    visibleAgent: agent,
-    storedDisplayName: comment.agentDisplayName,
-  })
+  const agentVisible = !comment.agent ? !comment.agentDisplayName : Boolean(agent)
+  const agentDisplayName = agentVisible
+    ? comment.agentDisplayName
+    : 'Private agent'
+  const resolvedDisplayName = attributionEnabled
+    ? resolvePublicAgentDisplayName({
+        hasAgentRow: Boolean(comment.agent),
+        visibleAgent: agent,
+        storedDisplayName: comment.agentDisplayName,
+        attributionEnabled: true,
+      })
+    : agentDisplayName
   const mappedComment: CommentItem = {
     id: comment.id,
     text: comment.text,
@@ -174,8 +183,8 @@ function mapCommentToResponse(
       displayName: comment.creator.displayName || undefined
     } : undefined,
     ...(agent ? { agent } : {}),
-    ...(agentDisplayName
-      ? { agent_display_name: agentDisplayName }
+    ...(resolvedDisplayName
+      ? { agent_display_name: resolvedDisplayName }
       : {}),
     attachments: comment.attachments.map((a: any) => ({
       id: a.id,
@@ -280,9 +289,14 @@ export async function GET(request: NextRequest) {
       skip: offset
     })
 
+    const attributionEnabled = await isFeatureEnabled(
+      HTPR_6516_AGENT_ATTRIBUTION_FLAG,
+      user.id
+    )
+
     // Transform to response format
     const commentList: CommentItem[] = comments.map((comment) =>
-      mapCommentToResponse(comment, user.id, task.projectId, includeActivity)
+      mapCommentToResponse(comment, user.id, task.projectId, includeActivity, attributionEnabled)
     )
 
     const response: ListCommentsResponse = {
@@ -788,8 +802,18 @@ export async function POST(request: NextRequest) {
           include: commentInclude(user.id, task.projectId)
         })
 
+        const attributionEnabled = await isFeatureEnabled(
+          HTPR_6516_AGENT_ATTRIBUTION_FLAG,
+          user.id
+        )
         const mappedComment = commentWithAttachments
-          ? mapCommentToResponse(commentWithAttachments, user.id, task.projectId)
+          ? mapCommentToResponse(
+              commentWithAttachments,
+              user.id,
+              task.projectId,
+              false,
+              attributionEnabled
+            )
           : null
 
         const sessionAgent = await getMcpSessionAgentSummary(ctx.agentId, user.id);

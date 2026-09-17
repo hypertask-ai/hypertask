@@ -54,14 +54,24 @@ test("a deleted agent's stored name is public; a hidden living agent is not", ()
       hasAgentRow: false,
       visibleAgent: null,
       storedDisplayName: "Cursor Dev",
+      attributionEnabled: true,
     }),
     "Cursor Dev",
+  );
+  assert.equal(
+    resolvePublicAgentDisplayName({
+      hasAgentRow: false,
+      visibleAgent: null,
+      storedDisplayName: "Cursor Dev",
+    }),
+    PRIVATE_AGENT_DISPLAY_NAME,
   );
   assert.equal(
     resolvePublicAgentDisplayName({
       hasAgentRow: true,
       visibleAgent: null,
       storedDisplayName: "Secret Bot",
+      attributionEnabled: true,
     }),
     PRIVATE_AGENT_DISPLAY_NAME,
   );
@@ -70,6 +80,7 @@ test("a deleted agent's stored name is public; a hidden living agent is not", ()
       hasAgentRow: true,
       visibleAgent: { displayName: "Dev 1" },
       storedDisplayName: "Dev 1",
+      attributionEnabled: true,
     }),
     "Dev 1",
   );
@@ -78,6 +89,7 @@ test("a deleted agent's stored name is public; a hidden living agent is not", ()
       hasAgentRow: false,
       visibleAgent: null,
       storedDisplayName: null,
+      attributionEnabled: true,
     }),
     null,
   );
@@ -90,6 +102,23 @@ test("createActivity and createCommentService stamp agentDisplayName on insert",
     "src/utils/controllers/comments/createCommentService.ts",
   );
   assert.match(comment, /agentDisplayName: actingAgentName/);
+});
+
+test("read paths gate durable attribution behind htpr-6516-agent-attribution", () => {
+  for (const relativePath of [
+    "src/app/api/mcp/comments/route.ts",
+    "src/app/api/mcp/comments/[comment_id]/route.ts",
+    "src/app/api/mcp/tasks/context/route.ts",
+    "src/app/api/ai/chat/stream/route.ts",
+    "src/utils/controllers/taskDetail/load.ts",
+  ]) {
+    const source = read(relativePath);
+    assert.match(
+      source,
+      /isFeatureEnabled\(\s*HTPR_6516_AGENT_ATTRIBUTION_FLAG/,
+      `${relativePath} must check the rollout flag`,
+    );
+  }
 });
 
 test("MCP label writes pass the acting agent into the activity", () => {

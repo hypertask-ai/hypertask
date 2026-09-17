@@ -16,6 +16,7 @@ import {
 import { findTaskByIdentifier } from '@/lib/mcp/tasks/resolveTask';
 import { mapVisibleMcpAgent, mcpVisibleAgentSelect } from '@/lib/mcp/agents';
 import { resolvePublicAgentDisplayName } from '@/lib/agents/publicAgent';
+import { HTPR_6516_AGENT_ATTRIBUTION_FLAG, isFeatureEnabled } from '@/lib/flags';
 import { getProjectWhere } from '@/utils/controllers/projects/getAllIncludes';
 
 const FULL_COMMENT_LIMIT = 20;
@@ -227,20 +228,33 @@ export async function GET(request: NextRequest) {
     }
 
     const mappedTask = mapTaskToMcpGetResponse(task, ctx.user.id);
+    const attributionEnabled = await isFeatureEnabled(
+      HTPR_6516_AGENT_ATTRIBUTION_FLAG,
+      ctx.user.id
+    );
     const comments = recentComments.reverse().map((comment) => {
       const agent = mapVisibleMcpAgent(comment.agent, ctx.user.id, projectId);
+      const hasAgentAttribution = Boolean(comment.agent || comment.agentDisplayName);
       const agentDisplayName = resolvePublicAgentDisplayName({
         hasAgentRow: Boolean(comment.agent),
         visibleAgent: agent,
         storedDisplayName: comment.agentDisplayName,
+        attributionEnabled,
       });
       return {
         id: comment.id,
-        author:
-          agentDisplayName ||
-          comment.creator?.displayName ||
-          comment.creator?.email ||
-          'Unknown',
+        author: hasAgentAttribution
+          ? agent?.displayName || 'Private agent'
+          : comment.creator?.displayName || comment.creator?.email || 'Unknown',
+        ...(attributionEnabled
+          ? {
+              author:
+                agentDisplayName ||
+                comment.creator?.displayName ||
+                comment.creator?.email ||
+                'Unknown',
+            }
+          : {}),
         text: comment.text,
         createdAt: comment.createdAt.toISOString(),
       };

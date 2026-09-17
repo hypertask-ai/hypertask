@@ -65,7 +65,7 @@ producer PR → DeepSeek PRs on Hold (if lower-trust)
 
 An agent association on a ticket is only a marker. The session acts as an agent only when its bearer JWT contains that agent's `agentId` claim.
 
-Comments, assignments, section moves, label changes, and edits made with that token store the agent id and the agent name at write time. Task get, task list, comment list, and the activity history then show that agent (name and id), not the owner. After the agent is deleted the stored name still shows; it never becomes the owner's name or "Private agent" for a named bot. Existing rows are left as they were.
+Comments, assignments, section moves, label changes, and edits made with that token store the agent id and the agent name at write time. Task get, task list, comment list, and the activity history then show that agent (name and id), not the owner. After the agent is deleted the stored name still shows when `htpr-6516-agent-attribution` is on; without the flag a retired bot still reads as "Private agent". Existing rows are left as they were.
 
 The Zig CLI accepts the same managed-agent bearer token as MCP. **`hypertask`** is the native binary and **`hypertask`** is a symlink to it. Use the token per process:
 

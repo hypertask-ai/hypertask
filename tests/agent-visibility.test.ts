@@ -383,21 +383,17 @@ async function main() {
   assert.doesNotMatch(taskDetailLoad, /hiddenCommentAgent\(userId\)/);
   assert.equal(
     taskDetailLoad.match(
-      /hiddenCommentAgent\(userId, Prisma\.sql`comment_task\."projectId"`\)/g,
+      /hiddenCommentAgent\(userId, Prisma\.sql`comment_task\."projectId"`, attributionEnabled\)/g,
     )?.length,
     2,
   );
   assert.match(
     taskDetailLoad,
-    /hiddenCommentAgent\(userId, Prisma\.sql`ti\."projectId"`\)/,
-  );
-  assert.doesNotMatch(
-    taskDetailLoad,
-    /agent\.id IS NULL AND c\."agentDisplayName" IS NOT NULL/,
+    /hiddenCommentAgent\(userId, Prisma\.sql`ti\."projectId"`, attributionEnabled\)/,
   );
   assert.match(
     taskDetailLoad,
-    /agent\.id IS NOT NULL/,
+    /agent\.id IS NULL AND c\."agentDisplayName" IS NOT NULL/,
   );
   assert.match(taskDetailLoad, /visibility_agent_member\."agentId" = agent\.id/);
   assert.match(

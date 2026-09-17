@@ -56,6 +56,7 @@ import { isFeatureEnabled } from "@/lib/flags";
 import { HTPR_6278_CHAT_TURN_FAILURE_FLAG } from "@/lib/flags/keys";
 import { HTPR_6284_AGENT_MENTION_ROUTING_FLAG } from "@/lib/flags/keys";
 import { HTPR_6320_AI_OBSERVABILITY_FLAG } from "@/lib/flags/keys";
+import { HTPR_6516_AGENT_ATTRIBUTION_FLAG } from "@/lib/flags/keys";
 import { reportError } from "@/lib/errors/reportError";
 import { toErrorMessage } from "@/lib/api/errorMessage";
 import {
@@ -1917,12 +1918,19 @@ const stripInlineDataUris = (html: string) =>
     ? html.replace(/\bdata:[^;,\s"')]+;base64,[A-Za-z0-9+/=]+/g, "[inline image]")
     : html;
 
-function mapCommentToResponse(comment: any, userId: number, projectId: number) {
+function mapCommentToResponse(
+  comment: any,
+  userId: number,
+  projectId: number,
+  attributionEnabled = false
+) {
   const agent = mapVisibleMcpAgent(comment.agent, userId, projectId);
+  const hasAgentAttribution = Boolean(comment.agent || comment.agentDisplayName);
   const agentDisplayName = resolvePublicAgentDisplayName({
     hasAgentRow: Boolean(comment.agent),
     visibleAgent: agent,
     storedDisplayName: comment.agentDisplayName,
+    attributionEnabled,
   });
   const text = stripInlineDataUris(comment.text);
   return {
@@ -1939,8 +1947,12 @@ function mapCommentToResponse(comment: any, userId: number, projectId: number) {
         }
       : undefined,
     ...(agent ? { agent } : {}),
-    ...(agentDisplayName
-      ? { agent_display_name: agentDisplayName }
+    ...(attributionEnabled
+      ? agentDisplayName
+        ? { agent_display_name: agentDisplayName }
+        : {}
+      : hasAgentAttribution
+      ? { agent_display_name: agent?.displayName || "Private agent" }
       : {}),
     attachments: (comment.attachments ?? []).map((attachment: any) => ({
       id: attachment.id,
@@ -4692,6 +4704,10 @@ function buildTools(
         }
 
         const mappedTask = mapTaskToMcpGetResponse(task, user.id);
+        const attributionEnabled = await isFeatureEnabled(
+          HTPR_6516_AGENT_ATTRIBUTION_FLAG,
+          user.id
+        );
         const comments = recentComments.reverse().map((comment) => {
           const agent = mapVisibleMcpAgent(
             comment.agent,
@@ -4702,11 +4718,14 @@ function buildTools(
             hasAgentRow: Boolean(comment.agent),
             visibleAgent: agent,
             storedDisplayName: comment.agentDisplayName,
+            attributionEnabled,
           });
           return {
             id: comment.id,
             author:
               agentDisplayName ||
+              agent?.displayName ||
+              (comment.agent || comment.agentDisplayName ? "Private agent" : undefined) ||
               comment.creator?.displayName ||
               comment.creator?.email ||
               "Unknown",
@@ -5197,15 +5216,29 @@ function buildTools(
           }),
         ]);
 
+        const attributionEnabled = await isFeatureEnabled(
+          HTPR_6516_AGENT_ATTRIBUTION_FLAG,
+          user.id
+        );
         return sanitizeForJson({
           success: true,
           comments: comments.map((comment) =>
             input.include_activity
               ? withActivityMetadata(
-                  mapCommentToResponse(comment, user.id, task.projectId),
+                  mapCommentToResponse(
+                    comment,
+                    user.id,
+                    task.projectId,
+                    attributionEnabled
+                  ),
                   comment.activity
                 )
-              : mapCommentToResponse(comment, user.id, task.projectId)
+              : mapCommentToResponse(
+                  comment,
+                  user.id,
+                  task.projectId,
+                  attributionEnabled
+                )
           ),
           total,
           limit: input.limit,
@@ -7140,7 +7173,8 @@ function buildTools(
             ? mapCommentToResponse(
                 commentWithAttachments,
                 user.id,
-                taskWithOwner.projectId
+                taskWithOwner.projectId,
+                await isFeatureEnabled(HTPR_6516_AGENT_ATTRIBUTION_FLAG, user.id)
               )
             : { id: comment.id, text: sanitizedText },
           url: buildMcpTaskUrl(taskWithOwner.projectId, taskWithOwner.uniqueIndex),
@@ -7672,7 +7706,8 @@ function buildTools(
             ? mapCommentToResponse(
                 updatedComment,
                 user.id,
-                comment.task.projectId
+                comment.task.projectId,
+                await isFeatureEnabled(HTPR_6516_AGENT_ATTRIBUTION_FLAG, user.id)
               )
             : { id: input.comment_id, text: sanitizedText },
         });

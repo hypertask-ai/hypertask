@@ -79,8 +79,9 @@ function loadRoute(comments) {
           : undefined,
     },
     "@/lib/agents/publicAgent": {
-      resolvePublicAgentDisplayName({ hasAgentRow, visibleAgent, storedDisplayName }) {
+      resolvePublicAgentDisplayName({ hasAgentRow, visibleAgent, storedDisplayName, attributionEnabled }) {
         if (hasAgentRow && !visibleAgent) return "Private agent";
+        if (!attributionEnabled && !hasAgentRow && storedDisplayName) return "Private agent";
         const stored = storedDisplayName && String(storedDisplayName).trim();
         if (stored) return stored;
         const live =
@@ -89,6 +90,10 @@ function loadRoute(comments) {
           String(visibleAgent.displayName).trim();
         return live || null;
       },
+    },
+    "@/lib/flags": {
+      HTPR_6516_AGENT_ATTRIBUTION_FLAG: "htpr-6516-agent-attribution",
+      isFeatureEnabled: async () => false,
     },
     "@/utils/controllers/projects/getAllIncludes": {
       getProjectWhere: () => ({}),
@@ -159,7 +164,7 @@ test("task context redacts deleted, private, and unshared team agent names", asy
   assert.equal(response.status, 200);
   assert.deepEqual(
     response.body.comments.map(({ author }) => author),
-    ["Human", "Shared helper", "Private agent", "Private agent", "Deleted helper"],
+    ["Human", "Shared helper", "Private agent", "Private agent", "Private agent"],
   );
   assert.deepEqual(route.getCommentQuery().select.agent.select, {
     viewerId: 6,
