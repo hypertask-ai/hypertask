@@ -53,11 +53,12 @@ test("QA login is off when either secret is missing", () => {
   assert.equal(shortPassword.isQaLoginConfigured(), false);
 });
 
-test("QA login compares secrets without hashing the password", () => {
+test("QA login hashes the password with scrypt, not SHA-256", () => {
   const source = fs.readFileSync(
     path.join(root, "src/lib/auth/qaLogin.ts"),
     "utf8",
   );
+  assert.match(source, /scryptSync/);
   assert.match(source, /timingSafeEqual/);
   assert.doesNotMatch(source, /createHash/);
   assert.doesNotMatch(source, /sha256/);

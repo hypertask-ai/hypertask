@@ -1,9 +1,11 @@
-import { timingSafeEqual } from "node:crypto";
+import { scryptSync, timingSafeEqual } from "node:crypto";
 
 import { FEATURE_FLAG_QA_USER_ID } from "@/lib/flags";
 
 export const QA_LOGIN_USER_ID = FEATURE_FLAG_QA_USER_ID;
 export const QA_LOGIN_PASSWORD_MIN_BYTES = 32;
+const QA_LOGIN_SCRYPT_KEYLEN = 64;
+const QA_LOGIN_SCRYPT_SALT = Buffer.from("htpr-6536-qa-login");
 
 export type QaLoginConfig = {
   email: string;
@@ -44,6 +46,14 @@ function timingSafeStringEqual(left: string, right: string): boolean {
   );
 }
 
+function scryptQaLoginSecret(secret: string): Buffer {
+  return scryptSync(secret, QA_LOGIN_SCRYPT_SALT, QA_LOGIN_SCRYPT_KEYLEN, {
+    N: 16384,
+    r: 8,
+    p: 1,
+  });
+}
+
 export function qaLoginCredentialsMatch(
   email: string,
   password: string,
@@ -53,6 +63,9 @@ export function qaLoginCredentialsMatch(
     normalizeQaLoginEmail(email),
     config.email,
   );
-  const passwordOk = timingSafeStringEqual(password, config.password);
+  const expected = scryptQaLoginSecret(config.password);
+  const given = scryptQaLoginSecret(password);
+  const passwordOk =
+    expected.length === given.length && timingSafeEqual(expected, given);
   return emailOk && passwordOk;
 }
