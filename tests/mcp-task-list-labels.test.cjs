@@ -55,6 +55,14 @@ function loadMappers() {
   return loaded.exports;
 }
 
+test("the MCP task list applies the shared query, filter, fields contract", () => {
+  assert.match(routeSource, /readEnabledListQuery/);
+  assert.match(routeSource, /hasPrWhere/);
+  assert.match(routeSource, /HTPR_6530_MCP_LIST_QUERY_FLAG/);
+  assert.match(routeSource, /projectRows/);
+  assert.match(routeSource, /withTaskPresentation/);
+});
+
 test("the MCP task list selects labels in the paginated task query", () => {
   const listQueryStart = routeSource.indexOf("// Get tasks");
   const listQueryEnd = routeSource.indexOf("// Get metadata counts");
@@ -236,7 +244,7 @@ test("the paginated task list selects and serializes the permanent-delete deadli
     listQueryEnd,
   );
   const listResponseEnd = routeSource.indexOf(
-    "// A full page in cursor mode",
+    "// A full page implies there may be more rows",
     listResponseStart,
   );
   assert.notEqual(listQueryStart, -1);

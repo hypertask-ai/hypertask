@@ -4,6 +4,8 @@ import { getProjectWhere } from '@/utils/controllers/projects/getAllIncludes'
 import prisma from '@/lib/prisma'
 import { createSection } from '@/lib/mcp/sections/services'
 import { broadcastBoardChange } from '@/lib/realtime/server'
+import { HTPR_6530_MCP_LIST_QUERY_FLAG, isFeatureEnabled } from '@/lib/flags'
+import { readEnabledListQuery, tryApplyCollectionQuery } from '@/lib/mcp/readListQuery'
 
 export interface SectionListItem {
   id: number
@@ -23,6 +25,7 @@ export interface ListSectionsResponse {
   success: boolean
   sections: SectionListItem[]
   projectId: number
+  nextCursor?: string | null
 }
 
 export interface CreateSectionSuccessResponse {
@@ -258,6 +261,10 @@ export async function GET(request: NextRequest, props: { params: Promise<{ proje
     // Parse query parameters
     const searchParams = request.nextUrl.searchParams
     const includeHidden = searchParams.get('include_hidden') === 'true'
+    const listQueryEnabled = await isFeatureEnabled(HTPR_6530_MCP_LIST_QUERY_FLAG, user.id)
+    const parsedListQuery = readEnabledListQuery(listQueryEnabled, searchParams)
+    if (parsedListQuery.error) return parsedListQuery.error
+    const listQuery = parsedListQuery.listQuery
 
     // Build where clause
     const where: any = {
@@ -314,10 +321,18 @@ export async function GET(request: NextRequest, props: { params: Promise<{ proje
       })
     )
 
+    const projected = listQuery
+      // @ts-expect-error SectionListItem has no string index signature
+      ? tryApplyCollectionQuery(sectionList as Array<Record<string, unknown>>, listQuery, {
+          searchFields: ['section_title'],
+        })
+      : null
+    if (projected && !projected.ok) return projected.error
     const response: ListSectionsResponse = {
       success: true,
-      sections: sectionList,
-      projectId
+      sections: (projected?.value.items ?? sectionList) as SectionListItem[],
+      projectId,
+      ...(listQueryEnabled ? { nextCursor: projected?.value.nextCursor ?? null } : {}),
     }
 
     return NextResponse.json(response)

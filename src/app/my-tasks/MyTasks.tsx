@@ -17,7 +17,9 @@ import {
   MY_TASKS_TABLE_COLUMNS_FLAG,
   MY_TASKS_TIME_GROUP_FLAG,
   MY_TASKS_QUICK_ADD_FLAG,
+  MY_TASKS_OVERDUE_BADGES_FLAG,
   MY_TASKS_VIEWS_FLAG,
+  MY_TASKS_BULK_SELECTION_FLAG,
 } from "@/lib/flags/keys";
 import {
   buildMyTasksListUrl,
@@ -29,10 +31,13 @@ import {
   myTasksQuickAddTaskVisibleInPayload,
 } from "@/lib/myTasks/quickAddHelpers";
 import { useMyTasksRealtime } from "@/hooks/realtime/useMyTasksRealtime";
+import { MyTasksBulkSelectionProvider } from "@/lib/contexts/MyTasks/BulkSelectionContext";
+import MyTasksBulkActionBar from "@/components/PageComponents/MyTasks/MyTasksBulkActionBar";
 import { PriorityConstants, type IPrioritiesConstants } from "@/lib/constants/constants";
 import { MOBILE_TARGET } from "@/lib/configs/general.config";
 import {
   myTasksAPIRoute,
+  myTasksOverdueCountsAPIRoute,
   myTasksViewAPIRoute,
   myTasksViewsAPIRoute,
 } from "@/lib/constants/APIRouteConstants";
@@ -41,13 +46,22 @@ import { useRecoilState, useRecoilValue } from "@/lib/state";
 import { filterMyTasksByPriority } from "@/lib/myTasksFiltering";
 import {
   applyMyTasksView,
+  overdueCountForMyTasksView,
   sortMyTasksViewSections,
   type MyTasksTask,
 } from "@/lib/myTasksFiltering";
 import {
   getMyTasksSplitIndex,
   groupMyTasksByTime,
+  splitTabOverdueCounts,
 } from "@/lib/myTasksGrouping";
+import {
+  EMPTY_MY_TASKS_VIEW_OVERDUE_COUNTS,
+  mergeActiveViewOverdueCounts,
+  msUntilNextLocalMidnight,
+  parseMyTasksViewOverdueCounts,
+} from "@/lib/myTasksOverdueCountUtils";
+import { browserTimeZone } from "@/lib/myTasksTimeZone";
 import { effectiveMyTasksScopes } from "@/lib/myTasksScopes";
 import type {
   MyTasksBoardMetadata,
@@ -173,6 +187,7 @@ const MyTasks = ({
   const myTasksScopesFlag = useFlag(MY_TASKS_SCOPES_FLAG); // HTPR-6457 Involvement UI
   const myTasksSnoozeEnabled = useFlag(MY_TASKS_SNOOZE_FLAG);
   const myTasksQuickAddEnabled = useFlag(MY_TASKS_QUICK_ADD_FLAG);
+  const overdueBadgesEnabled = useFlag(MY_TASKS_OVERDUE_BADGES_FLAG);
   const filterParityEnabled = useFlag(MY_TASKS_FILTER_PARITY_FLAG);
   const viewsFeatureEnabled = viewsEnabled && myTasksViewsEnabled;
   const tableColumnsFeatureEnabled =
@@ -188,6 +203,11 @@ const MyTasks = ({
   );
   const [viewBusy, setViewBusy] = useState(false);
   const [dateFilterVersion, setDateFilterVersion] = useState(0);
+  const [remoteOverdueCounts, setRemoteOverdueCounts] = useState(
+    EMPTY_MY_TASKS_VIEW_OVERDUE_COUNTS,
+  );
+  const [overdueCountsVersion, setOverdueCountsVersion] = useState(0);
+  const overdueCountsFetchToken = useRef(0);
   const [columnsPickerOpen, setColumnsPickerOpen] = useState(false);
   const [columnsPickerRequest, setColumnsPickerRequest] = useRecoilState(
     myTasksTableColumnsPickerRequestAtom,
@@ -195,6 +215,7 @@ const MyTasks = ({
   const lastColumnsPickerRequest = useRef(columnsPickerRequest);
 
   const filterEnabled = useFlag(MY_TASKS_PRIORITY_FILTER_FLAG);
+  const myTasksBulkSelectionEnabled = useFlag(MY_TASKS_BULK_SELECTION_FLAG);
   // My Tasks spans every board, so unlike board filters (which persist to a
   // saved view) this selection lives in state only and resets on reload.
   const [prioritySelection, setPrioritySelection] = useState<
@@ -261,6 +282,7 @@ const MyTasks = ({
           if (payload.nearestSnoozeUntil !== undefined) {
             setNearestSnoozeUntil(payload.nearestSnoozeUntil ?? null);
           }
+          setOverdueCountsVersion((version) => version + 1);
         },
         onError: () => {
           toast.error("Unable to refresh My Tasks");
@@ -289,6 +311,15 @@ const MyTasks = ({
     return () =>
       window.removeEventListener("my-tasks-snooze-changed", onSnoozeChanged);
   }, [reconcileRunner]);
+
+  useEffect(() => {
+    if (!overdueBadgesEnabled) return;
+    const bumpOverdueCounts = () =>
+      setOverdueCountsVersion((version) => version + 1);
+    window.addEventListener("my-tasks-snooze-changed", bumpOverdueCounts);
+    return () =>
+      window.removeEventListener("my-tasks-snooze-changed", bumpOverdueCounts);
+  }, [overdueBadgesEnabled]);
 
   useEffect(() => {
     if (!myTasksSnoozeEnabled) return;
@@ -420,6 +451,72 @@ const MyTasks = ({
     window.addEventListener("focus", refreshDateFilters);
     return () => window.removeEventListener("focus", refreshDateFilters);
   }, [viewsFeatureEnabled]);
+
+  useEffect(() => {
+    if (!overdueBadgesEnabled) return;
+    const refreshDateFilters = () => setDateFilterVersion((version) => version + 1);
+    window.addEventListener("focus", refreshDateFilters);
+    let timer: number | undefined;
+    const scheduleMidnight = () => {
+      timer = window.setTimeout(() => {
+        refreshDateFilters();
+        scheduleMidnight();
+      }, msUntilNextLocalMidnight());
+    };
+    scheduleMidnight();
+    return () => {
+      window.removeEventListener("focus", refreshDateFilters);
+      if (timer !== undefined) window.clearTimeout(timer);
+    };
+  }, [overdueBadgesEnabled]);
+
+  const overdueViewsKey = JSON.stringify(
+    views.map((view) => [view.id, view.config]),
+  );
+  const runningTaskIdsKey = Array.isArray(runningTimerEntries)
+    ? runningTimerEntries
+        .map((timer) => timer.taskId)
+        .sort((a, b) => a - b)
+        .join(",")
+    : "";
+  useEffect(() => {
+    if (!overdueBadgesEnabled || !viewsFeatureEnabled) return;
+    const timeZone = browserTimeZone();
+    if (!timeZone) return;
+    const token = ++overdueCountsFetchToken.current;
+    let cancelled = false;
+    void (async () => {
+      try {
+        const response = await fetch(
+          `${myTasksOverdueCountsAPIRoute}?timeZone=${encodeURIComponent(timeZone)}`,
+          {
+            cache: "no-store",
+            credentials: "same-origin",
+          },
+        );
+        if (!response.ok || cancelled || token !== overdueCountsFetchToken.current) {
+          return;
+        }
+        const parsed = parseMyTasksViewOverdueCounts(await response.json());
+        if (!parsed || cancelled || token !== overdueCountsFetchToken.current) {
+          return;
+        }
+        setRemoteOverdueCounts(parsed);
+      } catch {
+        // Keep the last good counts; the active tab still overlays from sections.
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    dateFilterVersion,
+    overdueBadgesEnabled,
+    overdueCountsVersion,
+    overdueViewsKey,
+    runningTaskIdsKey,
+    viewsFeatureEnabled,
+  ]);
 
   const activeView = views.find((view) => view.id === activeViewId);
   const baselineConfig = parseMyTasksViewConfig(
@@ -708,6 +805,7 @@ const MyTasks = ({
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.defaultPrevented) return;
       if (
         event.key === "Escape" &&
         !showCommands.show &&
@@ -995,6 +1093,59 @@ const boardTabCounts = useMemo(() => {
     return index === 0 ? totalCount : filteredSections[index - 1]?.items.length ?? 0;
   };
 
+  const viewOverdueCounts = useMemo(() => {
+    if (!overdueBadgesEnabled || !viewsFeatureEnabled) {
+      return EMPTY_MY_TASKS_VIEW_OVERDUE_COUNTS;
+    }
+    const now = new Date();
+    const options = {
+      applyFilterSettings: filterParityEnabled,
+      runtimeContext,
+    };
+    const activeCount = overdueCountForMyTasksView(
+      sections,
+      viewConfig,
+      now,
+      options,
+    );
+    return mergeActiveViewOverdueCounts(
+      remoteOverdueCounts,
+      activeViewId,
+      activeCount,
+    );
+  }, [
+    activeViewId,
+    dateFilterVersion,
+    filterParityEnabled,
+    overdueBadgesEnabled,
+    remoteOverdueCounts,
+    runtimeContext,
+    sections,
+    viewConfig,
+    viewsFeatureEnabled,
+  ]);
+
+  const splitOverdueCounts = useMemo(() => {
+    if (!overdueBadgesEnabled) return [] as number[];
+    return splitTabOverdueCounts(
+      groupBy,
+      allTasksForBoardTabs,
+      availableBoards,
+      filteredSections,
+      new Date(),
+    );
+  }, [
+    allTasksForBoardTabs,
+    availableBoards,
+    dateFilterVersion,
+    filteredSections,
+    groupBy,
+    overdueBadgesEnabled,
+  ]);
+
+  const tabOverdue = (index: number) =>
+    overdueBadgesEnabled ? (splitOverdueCounts[index] ?? 0) : 0;
+
   const togglePriority = (priority: IPrioritiesConstants) =>
     setPrioritySelection((current) =>
       current.some((p) => p.priority_index === priority.priority_index)
@@ -1012,6 +1163,7 @@ const boardTabCounts = useMemo(() => {
         project: item,
         length: tabLength(index),
         hasUnseen: false,
+        overdueCount: tabOverdue(index),
       }}
     />
   ));
@@ -1035,6 +1187,8 @@ const boardTabCounts = useMemo(() => {
             onRename={(viewId, name) => void renameView(viewId, name)}
             onDelete={(viewId) => void deleteView(viewId)}
             onSetDefault={(viewId) => void setDefaultView(viewId)}
+            overdueAll={viewOverdueCounts.all}
+            overdueByViewId={viewOverdueCounts.byViewId}
           />
         </div>
       )}
@@ -1161,6 +1315,13 @@ const boardTabCounts = useMemo(() => {
             onRefresh={refreshMyTasksAfterQuickAdd}
           />
         ) : null}
+        <MyTasksBulkSelectionProvider
+          enabled={myTasksBulkSelectionEnabled}
+          resetSelectionKey={`${activeViewId ?? "all"}:${activeSplit}:${prioritySelection
+            .map((priority) => priority.priority_index)
+            .join(",")}`}
+          onAfterMutation={() => reconcileRunner.request()}
+        >
         <TableView
           filteredSections={visibleSections}
           _sections={visibleSections}
@@ -1175,7 +1336,10 @@ const boardTabCounts = useMemo(() => {
           onMyTasksVisibleColumnsChange={
             tableColumnsFeatureEnabled ? updateTableVisibleColumns : undefined
           }
+          enableMyTasksBulkSelection={myTasksBulkSelectionEnabled}
         />
+        {myTasksBulkSelectionEnabled ? <MyTasksBulkActionBar /> : null}
+        </MyTasksBulkSelectionProvider>
       </div>
 
       <div className="flex inbox_footer @md:hidden no-scrollbar scrollbar-none @md:gap-8 w-100 bg-hoverCardBackground h-20 @md:h-8 inbox_title">

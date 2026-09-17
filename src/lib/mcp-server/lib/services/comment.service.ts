@@ -16,6 +16,7 @@ import {
   idempotencyKeyForInvocation,
   type McpInvocationIdentity,
 } from '../../utils/invocation-idempotency';
+import { appendListQueryParams } from '@/lib/mcp/listQuery';
 
 export interface CommentResponse {
   success: boolean;
@@ -217,6 +218,7 @@ export class CommentService {
       if (validatedInput.include_activity) {
         queryParams.append('include_activity', 'true');
       }
+      appendListQueryParams(queryParams, validatedInput)
 
       const response = await this.apiClient.makeRequest<GetCommentsResponse>(
         `/mcp/comments?${queryParams.toString()}`,

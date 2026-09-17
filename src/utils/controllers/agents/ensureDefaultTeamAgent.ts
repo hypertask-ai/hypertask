@@ -26,6 +26,52 @@ function acceptedHumanBoardWhere(userId: number): Prisma.ProjectWhereInput {
   };
 }
 
+/** Same access GET /api/agents already granted before it calls seed. */
+function accessibleTeamWhere(userId: number): Prisma.TeamWhereInput {
+  return {
+    OR: [
+      { googleAccount: { is: { userId } } },
+      { members: { some: { userId, status: "Accepted" } } },
+      {
+        projects: {
+          some: {
+            status: "Normal",
+            OR: [
+              { ownerId: userId },
+              { members: { some: { userId, agentId: null } } },
+            ],
+          },
+        },
+      },
+    ],
+  };
+}
+
+async function findTeamAccessBoard(
+  database: Pick<PrismaClient, "project" | "team">,
+  userId: number,
+  teamId: string,
+) {
+  const canUseTeam = await database.team.findFirst({
+    where: { id: teamId, ...accessibleTeamWhere(userId) },
+    select: { id: true },
+  });
+  if (!canUseTeam) return null;
+
+  return database.project.findFirst({
+    where: {
+      teamId,
+      status: "Normal",
+      OR: [
+        { ownerId: userId },
+        { members: { some: { userId, agentId: null } } },
+      ],
+    },
+    select: { id: true },
+    orderBy: { id: "desc" },
+  });
+}
+
 async function findActiveOwnedAgentOnTeam(
   database: AgentLookupClient,
   userId: number,
@@ -70,6 +116,33 @@ export async function ensureDefaultTeamAgent(
     select: { id: true },
     orderBy: { id: "desc" },
   });
+  if (!board) {
+    const teamBoard = await findTeamAccessBoard(database, userId, teamId);
+    if (teamBoard) {
+      return database.$transaction(async (tx) => {
+        await lockTeamAgentSeed(tx, userId, teamId);
+        const raced = await findActiveOwnedAgentOnTeam(tx, userId, teamId);
+        if (raced) return { id: raced.id, created: false };
+
+        const agent = await tx.agent.create({
+          data: {
+            displayName: DEFAULT_SEEDED_AGENT_NAME,
+            userId,
+            runtimeType: "NATIVE",
+          },
+          select: { id: true },
+        });
+        await tx.member.create({
+          data: {
+            projectId: teamBoard.id,
+            userId,
+            agentId: agent.id,
+          },
+        });
+        return { id: agent.id, created: true };
+      });
+    }
+  }
   if (!board) return null;
 
   return database.$transaction(async (tx) => {
@@ -114,6 +187,13 @@ export async function ensureDefaultAgentsOnAccessibleTeams(
         .filter((teamId): teamId is string => Boolean(teamId)),
     ),
   ];
+  const extraTeams = await database.team.findMany({
+    where: accessibleTeamWhere(userId),
+    select: { id: true },
+  });
+  for (const team of extraTeams) {
+    if (!teamIds.includes(team.id)) teamIds.push(team.id);
+  }
 
   let created = 0;
   for (const teamId of teamIds) {

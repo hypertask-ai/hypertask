@@ -4,6 +4,8 @@ import prisma from '@/lib/prisma'
 import { validateProjectAccess } from '@/lib/mcp/tasks/services'
 import { broadcastBoardChange } from '@/lib/realtime/server'
 import { readJsonBody } from '@/lib/mcp/readJsonBody'
+import { HTPR_6530_MCP_LIST_QUERY_FLAG, isFeatureEnabled } from '@/lib/flags'
+import { readEnabledListQuery, tryApplyCollectionQuery } from '@/lib/mcp/readListQuery'
 
 /**
  * GET /api/mcp/projects/:projectId/labels
@@ -51,11 +53,24 @@ export async function GET(request: NextRequest, props: { params: Promise<{ proje
       select: { id: true, value: true },
       orderBy: { value: 'asc' },
     })
+    const mapped = labels.map((label) => ({ id: label.id, name: label.value || '' }))
+    const listQueryEnabled = await isFeatureEnabled(HTPR_6530_MCP_LIST_QUERY_FLAG, user.id)
+    const parsedListQuery = readEnabledListQuery(
+      listQueryEnabled,
+      request.nextUrl.searchParams,
+    )
+    if (parsedListQuery.error) return parsedListQuery.error
+    const listQuery = parsedListQuery.listQuery
+    const projected = listQuery
+      ? tryApplyCollectionQuery(mapped, listQuery, { searchFields: ['name'] })
+      : null
+    if (projected && !projected.ok) return projected.error
 
     return NextResponse.json({
       success: true,
       projectId,
-      labels: labels.map((label) => ({ id: label.id, name: label.value || '' })),
+      labels: projected?.value.items ?? mapped,
+      ...(listQueryEnabled ? { nextCursor: projected?.value.nextCursor ?? null } : {}),
     })
   } catch (error) {
     return NextResponse.json(
