@@ -312,6 +312,7 @@ export async function setGoogleCalendarSyncEnabled(
         ? {
             cleanupPending: false,
             disconnectRequestedAt: null,
+            lastSyncedAt: null,
             syncEnabled: true,
             syncError: null,
           }

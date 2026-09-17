@@ -100,6 +100,22 @@ test("a stale disable request cannot cancel a queued disconnect", async () => {
   assert.equal(row.syncEnabled, false);
 });
 
+test("re-enabling sync starts a fresh completion cycle", async () => {
+  updateCount = 1;
+  row = {
+    cleanupPending: true,
+    disconnectRequestedAt: null,
+    lastSyncedAt: new Date("2026-09-08T12:00:00.000Z"),
+    syncEnabled: false,
+    syncError: null,
+  };
+
+  assert.equal(await connection.setGoogleCalendarSyncEnabled(6, true), true);
+  assert.equal(row.cleanupPending, false);
+  assert.equal(row.lastSyncedAt, null);
+  assert.equal(row.syncEnabled, true);
+});
+
 test("an invalid grant stops retrying until the user reconnects", async () => {
   updateWhere = null;
   updateCount = 1;

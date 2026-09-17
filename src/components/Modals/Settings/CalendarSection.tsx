@@ -107,9 +107,11 @@ const CalendarSection = () => {
   }, [refreshConnection]);
 
   useEffect(() => {
+    const retrying = connection?.syncError?.endsWith("will retry.");
     if (
-      connection?.syncError ||
-      (!connection?.disconnectRequestedAt &&
+      (connection?.syncError && !retrying) ||
+      (!retrying &&
+        !connection?.disconnectRequestedAt &&
         !connection?.cleanupPending &&
         (!connection?.syncEnabled || connection.lastSyncedAt))
     )
