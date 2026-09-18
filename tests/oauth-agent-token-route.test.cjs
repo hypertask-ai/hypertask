@@ -30,10 +30,12 @@ const challenge = crypto.createHash('sha256').update(verifier).digest('base64url
 const calls = {
   agentLookups: [],
   clientLocks: [],
+  featureChecks: [],
   ownerUpdates: [],
   usedUpdates: [],
 }
 let currentAgent = null
+let teamScopeFeatureEnabled = true
 
 const authCode = {
   code: 'one-time-code',
@@ -46,6 +48,15 @@ const authCode = {
   firebase_uid: owner.uid,
   user: owner,
 }
+
+stubModule('src/lib/flags.ts', {
+  HTPR_6542_TEAM_SCOPED_MANAGEMENT_KEYS_FLAG:
+    'htpr-6542-team-scoped-management-keys',
+  isFeatureEnabled: async (key, userId) => {
+    calls.featureChecks.push({ key, userId })
+    return teamScopeFeatureEnabled
+  },
+})
 
 stubModule('src/lib/prisma.ts', {
   default: {
@@ -222,6 +233,8 @@ test('OAuth exchange preserves a team-bound agent grant', async () => {
     credentialTeamId: 'team-a',
     credentialTeamAccessBinding: 'owner:account-a:3',
   }
+  teamScopeFeatureEnabled = true
+  calls.featureChecks.length = 0
 
   const response = await POST(tokenRequest())
   const body = await response.json()
@@ -233,6 +246,43 @@ test('OAuth exchange preserves a team-bound agent grant', async () => {
   assert.equal(response.status, 200)
   assert.equal(decoded.agentTeamId, 'team-a')
   assert.equal(decoded.agentTeamAccessBinding, 'owner:account-a:3')
+  assert.deepEqual(calls.featureChecks, [{
+    key: 'htpr-6542-team-scoped-management-keys',
+    userId: owner.id,
+  }])
+})
+
+test('OAuth exchange rejects a team-bound agent while the feature is off', async () => {
+  currentAgent = {
+    ...storedCredential(managedToken()),
+    credentialTeamId: 'team-a',
+    credentialTeamAccessBinding: 'owner:account-a:3',
+  }
+  teamScopeFeatureEnabled = false
+  calls.featureChecks.length = 0
+  calls.clientLocks.length = 0
+  calls.ownerUpdates.length = 0
+  calls.usedUpdates.length = 0
+
+  try {
+    const response = await POST(tokenRequest())
+    const body = await response.json()
+
+    assert.equal(response.status, 400)
+    assert.deepEqual(body, {
+      error: 'invalid_grant',
+      error_description: 'Team-scoped agent access is disabled.',
+    })
+    assert.deepEqual(calls.featureChecks, [{
+      key: 'htpr-6542-team-scoped-management-keys',
+      userId: owner.id,
+    }])
+    assert.equal(calls.clientLocks.length, 0)
+    assert.equal(calls.ownerUpdates.length, 0)
+    assert.equal(calls.usedUpdates.length, 0)
+  } finally {
+    teamScopeFeatureEnabled = true
+  }
 })
 
 test('OAuth exchange rejects an agent row carrying no generation', async (t) => {

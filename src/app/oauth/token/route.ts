@@ -8,6 +8,10 @@ import {
   createOAuthToken,
   storedAgentTokenGeneration,
 } from '@/lib/mcp/auth'
+import {
+  HTPR_6542_TEAM_SCOPED_MANAGEMENT_KEYS_FLAG,
+  isFeatureEnabled,
+} from '@/lib/flags'
 
 class OAuthTokenSigningError extends Error {
   constructor(readonly originalError: unknown) {
@@ -420,6 +424,22 @@ export async function POST(request: NextRequest) {
           teamId: agent.credentialTeamId,
           accessBinding: agent.credentialTeamAccessBinding,
         }
+      }
+
+      if (
+        agentTeamScope &&
+        !(await isFeatureEnabled(
+          HTPR_6542_TEAM_SCOPED_MANAGEMENT_KEYS_FLAG,
+          authCode.user.id
+        ))
+      ) {
+        return NextResponse.json(
+          {
+            error: 'invalid_grant',
+            error_description: 'Team-scoped agent access is disabled.',
+          },
+          { status: 400 }
+        )
       }
 
       if (!agentTokenJti) {
