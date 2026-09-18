@@ -292,38 +292,20 @@ const useSections = ({
         return prev;
       });
     }
-    // [alt] + [c] opens fast entry at the top without replacing [c].
+    // [alt] + [c] opens fast entry without replacing the existing C shortcuts.
     else if (
       quickEntryEnabled &&
       e.keyCode === KeyCodes.C &&
-      e.altKey && !e.shiftKey && !(e.ctrlKey || e.metaKey) &&
+      e.altKey && !(e.ctrlKey || e.metaKey) &&
       document?.activeElement?.tagName !== "INPUT" &&
       !lastgPress.current && !lastGPress.current
     ) {
       e.preventDefault();
-      createTaskAt("top", {
+      const position = e.shiftKey ? "bottom" : "top";
+      createTaskAt(position, {
         sectionId,
         sectionTitle: title,
-        position: "top",
-      }, undefined, true);
-      setKeypressed((prev: any) => {
-        prev[e.key] = false;
-        return prev;
-      });
-    }
-    // [alt] + [shift] + [c] opens fast entry at the bottom.
-    else if (
-      quickEntryEnabled &&
-      e.keyCode === KeyCodes.C &&
-      e.altKey && e.shiftKey && !(e.ctrlKey || e.metaKey) &&
-      document?.activeElement?.tagName !== "INPUT" &&
-      !lastgPress.current && !lastGPress.current
-    ) {
-      e.preventDefault();
-      createTaskAt("bottom", {
-        sectionId,
-        sectionTitle: title,
-        position: "bottom",
+        position,
       }, undefined, true);
       setKeypressed((prev: any) => {
         prev[e.key] = false;
