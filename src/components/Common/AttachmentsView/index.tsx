@@ -90,9 +90,9 @@ const AttachmentView = (props: IProps) => {
                 >
                   <div
                     onClick={() => showModalAttachment(index)}
-                    className="attachment-tile flex min-h-0 min-w-0 w-full flex-col items-center justify-start rounded-md border border-comment-description-border bg-[var(--bg-comment-description)] p-1 text-white-black hover:bg-hoverCardBackground"
+                    className="attachment-tile flex min-h-0 min-w-0 w-full flex-col items-center justify-start rounded-md border border-comment-description-border bg-comment-description p-1 text-white-black hover:bg-hoverCardBackground"
                   >
-                    <div className="flex h-[52px] w-[52px] shrink-0 items-center justify-center rounded-md bg-[var(--bg-comment-description)]">
+                    <div className="flex h-[52px] w-[52px] shrink-0 items-center justify-center rounded-md bg-comment-description">
                       {isImage ? (
                         <img
                           className="h-full w-full rounded-md object-contain"
@@ -121,10 +121,10 @@ const AttachmentView = (props: IProps) => {
               >
                 <div
                   onClick={() => showModalAttachment(index)}
-                  className="attachment-tile flex h-full w-full flex-col items-center justify-end rounded-md border border-comment-description-border bg-[var(--bg-comment-description)] p-2 text-white-black hover:bg-hoverCardBackground"
+                  className="attachment-tile flex h-full w-full flex-col items-center justify-end rounded-md border border-comment-description-border bg-comment-description p-2 text-white-black hover:bg-hoverCardBackground"
                 >
                   <div
-                    className={`grid bg-[var(--bg-comment-description)] ${isImage ? "p-1" : "p-4"}`}
+                    className={`grid bg-comment-description ${isImage ? "p-1" : "p-4"}`}
                   >
                     {isImage ? (
                       <img
