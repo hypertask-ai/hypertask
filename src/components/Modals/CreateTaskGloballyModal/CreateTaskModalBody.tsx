@@ -67,17 +67,18 @@ const CreateTaskModalBody: React.FC<IProps> = ({ }) => {
     }, []);
 
     useEffect(() => {
-        if (!descriptionFirstMobile || descriptionFocusSet.current || editMode === "Description-ai") return
-        descriptionFocusSet.current = true
-        setEditMode("Description")
-        setCurrentFocusedElement("Description")
-    }, [descriptionFirstMobile, editMode, setCurrentFocusedElement, setEditMode])
-
-    useEffect(() => {
-        if (descriptionFirstMobile && (titleGenerationError || currentFocusedElement === "Title")) {
+        if (!descriptionFirstMobile) return
+        if (!descriptionFocusSet.current) {
+            if (editMode === "Description-ai") return
+            descriptionFocusSet.current = true
+            setEditMode("Description")
+            setCurrentFocusedElement("Description")
+            return
+        }
+        if (titleGenerationError || currentFocusedElement === "Title") {
             setExpandedMobileSection("title")
         }
-    }, [currentFocusedElement, descriptionFirstMobile, titleGenerationError])
+    }, [currentFocusedElement, descriptionFirstMobile, editMode, setCurrentFocusedElement, setEditMode, titleGenerationError])
 
     const toggleMobileSection = (section: "title" | "properties") => {
         const nextSection = expandedMobileSection === section ? null : section

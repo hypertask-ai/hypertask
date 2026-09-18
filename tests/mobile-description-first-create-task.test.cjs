@@ -50,7 +50,7 @@ test("mobile header keeps board visible and title plus properties collapsed", ()
   );
   assert.match(
     body,
-    /titleGenerationError \|\| currentFocusedElement === "Title"[\s\S]*?setExpandedMobileSection\("title"\)/,
+    /if \(!descriptionFocusSet\.current\)[\s\S]*?setCurrentFocusedElement\("Description"\)[\s\S]*?return[\s\S]*?titleGenerationError \|\| currentFocusedElement === "Title"[\s\S]*?setExpandedMobileSection\("title"\)/,
   );
   assert.match(body, /mobileShowPills=\{expandedMobileSection === "properties"\}/);
   assert.match(body, /mobileRaisedPanel/);
