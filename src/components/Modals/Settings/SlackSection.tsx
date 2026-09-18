@@ -144,7 +144,7 @@ const SlackSection = () => {
               <div className="relative w-[230px]">
                 <select
                   aria-label="Default Slack project"
-                  className="w-full appearance-none rounded-[4px] bg-active-modal-element px-2 py-1 pr-8 text-dense leading-normal text-white-black shadow-[0_6px_20px_rgba(0,0,0,0.22)] outline-none transition-colors hover:bg-hoverCardBackground disabled:cursor-not-allowed disabled:opacity-50"
+                  className="w-full appearance-none rounded-[4px] bg-active-modal-element px-2 py-1 pr-8 text-dense leading-normal text-white-black outline-none transition-colors hover:bg-hoverCardBackground disabled:cursor-not-allowed disabled:opacity-50"
                   disabled={savingDefaultProject}
                   onChange={(event) => updateDefaultProject(event.target.value)}
                   value={install.defaultProjectId ?? ""}
