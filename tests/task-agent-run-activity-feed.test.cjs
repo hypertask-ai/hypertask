@@ -77,6 +77,20 @@ const runActivity = (id, type, createdAt, options = null) => ({
   createdAt,
 });
 
+test("task history starts hidden when no preference has been saved", () => {
+  const storeSource = fs.readFileSync(
+    path.join(root, "src/store/index.ts"),
+    "utf8",
+  );
+  const historyAtom = storeSource.match(
+    /export const showTaskHistoryAtom[\s\S]*?\n\}\);/,
+  );
+
+  assert.ok(historyAtom, "showTaskHistoryAtom should exist");
+  assert.match(historyAtom[0], /default: false/);
+  assert.match(historyAtom[0], /effects_UNSTABLE: \[persistAtom\]/);
+});
+
 test("task thread feed merges chronologically without changing comment indexes", () => {
   const comments = [
     comment(10, "2026-09-04T10:00:00.000Z"),
