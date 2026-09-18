@@ -9,7 +9,7 @@ const stubModule = (relativePath, exports) => {
   require.cache[filename] = { id: filename, filename, loaded: true, exports };
 };
 
-function loadService(storedComment) {
+function loadService(storedComment, featureEnabled = true) {
   const calls = {
     lookup: [],
     transactions: 0,
@@ -89,6 +89,7 @@ function loadService(storedComment) {
     "src/utils/controllers/comments/processMentions.ts",
     "src/utils/controllers/comments/readReceipts.ts",
     "src/lib/ai/hyperAiConfirmation.ts",
+    "src/lib/flags.ts",
   ]) {
     delete require.cache[modulePath(relativePath)];
   }
@@ -112,6 +113,9 @@ function loadService(storedComment) {
   stubModule("src/lib/ai/hyperAiConfirmation.ts", {
     invalidateHyperAiCommentOrigin: async (commentId) =>
       calls.invalidations.push(commentId),
+  });
+  stubModule("src/lib/flags.ts", {
+    isFeatureEnabled: async () => featureEnabled,
   });
 
   const jiti = require("jiti")(
@@ -176,7 +180,7 @@ test("editing an agent comment preserves its creator and agent attribution", asy
   assert.equal(updated.agentId, agent.id);
   assert.deepEqual(updated.agent, agent);
   assert.deepEqual(calls.commentUpdates[0].data, {
-    text: "edited by the owner",
+    text: "<p>edited by the owner</p>",
     summary: null,
   });
   assert.ok(calls.commentUpdates[0].include.agent);

@@ -21,7 +21,10 @@ import { broadcastTaskComment } from '@/lib/realtime/server'
 import { sanitizeRichHtml } from '@/utils/helperFunctions/sanitizeRichHtml'
 import { extractTipTapContent } from '@/utils/helperFunctions/multiPages'
 import { normalizeBlockHtml } from '@/lib/mcp/normalizeBlockHtml'
-import { formatRichTextInput } from '@/utils/helperFunctions/markdownToHtml'
+import {
+  formatRichTextInput,
+  isAcceptedRichTextInput,
+} from '@/utils/helperFunctions/markdownToHtml'
 import { buildFieldError } from '@/lib/mcp/fieldError'
 import { CONTENT_TYPE_ALLOWED_VALUES } from '@/lib/mcp/tasks/validators'
 import { withActivityMetadata } from '@/lib/mcp/comments/activityMetadata'
@@ -40,7 +43,10 @@ import {
 } from '@/lib/mcp/comments/reactionResponse'
 import { overlayDurableAgentDisplayName } from '@/lib/agents/publicAgent'
 import { HTPR_6530_MCP_LIST_QUERY_FLAG, isFeatureEnabled } from '@/lib/flags'
-import { HTPR_6516_AGENT_ATTRIBUTION_FLAG } from '@/lib/flags/keys'
+import {
+  HTPR_6516_AGENT_ATTRIBUTION_FLAG,
+  HTPR_6561_DESCRIPTION_STRUCTURE_FLAG,
+} from '@/lib/flags/keys'
 import { parseNumericCursor, parseUpdatedSince, projectRows } from '@/lib/mcp/listQuery'
 import { readEnabledListQuery } from '@/lib/mcp/readListQuery'
 
@@ -543,6 +549,23 @@ export async function POST(request: NextRequest) {
             'content_type',
             'Invalid content_type. Must be one of: html, markdown',
             CONTENT_TYPE_ALLOWED_VALUES
+          ),
+          ...(dryRun && { valid: false })
+        },
+        { status: 400 }
+      )
+    }
+
+    if (
+      !isAcceptedRichTextInput(text, content_type) &&
+      !(await isFeatureEnabled(HTPR_6561_DESCRIPTION_STRUCTURE_FLAG, user.id))
+    ) {
+      return NextResponse.json(
+        {
+          ...buildFieldError(
+            'invalid_field',
+            'text',
+            'Comment text must be HTML or structural markdown. Plain text is not enabled.'
           ),
           ...(dryRun && { valid: false })
         },

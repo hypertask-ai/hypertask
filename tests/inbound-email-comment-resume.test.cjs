@@ -225,6 +225,9 @@ test("a failed inbound reply resumes its comment without repeating durable effec
     "src/lib/configs/general.config.ts": {
       generalConfig: { hyperAiId: 332 },
     },
+    "src/lib/flags.ts": {
+      isFeatureEnabled: async () => true,
+    },
     "src/utils/controllers/comments/agentInvocationCorrelation.ts": {
       buildAgentInvocationSelector: () => null,
       claimPendingAgentInvocation: async () => null,

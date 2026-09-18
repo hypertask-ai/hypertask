@@ -3,6 +3,7 @@ import test from 'node:test'
 
 import { UpdateTaskInputSchema } from '../src/lib/mcp-server/validations/task.validation'
 import { normalizeTaskInput } from '../src/lib/mcp-server/utils/normalize-task-input'
+import { isAcceptedRichTextInput } from '../src/utils/helperFunctions/markdownToHtml'
 
 test('update_task keeps descriptions that link to another Hypertask ticket', () => {
   const input = {
@@ -17,6 +18,13 @@ test('update_task keeps descriptions that link to another Hypertask ticket', () 
 
   assert.equal(result.success, true)
   assert.deepEqual(normalized, input)
+})
+
+test('plain text is distinguishable from the previously accepted rich-text contract', () => {
+  assert.equal(isAcceptedRichTextInput('Plain API description'), false)
+  assert.equal(isAcceptedRichTextInput('<p>HTML description</p>', 'html'), true)
+  assert.equal(isAcceptedRichTextInput('**Markdown description**'), true)
+  assert.equal(isAcceptedRichTextInput('Plain markdown description', 'markdown'), true)
 })
 
 test('task reference normalization still accepts a Hypertask URL as ticket_number', () => {

@@ -10,6 +10,9 @@ import { processMentionsFromCommentText } from './processMentions'
 import { omitCommentSeen } from './readReceipts'
 import { invalidateHyperAiCommentOrigin } from '@/lib/ai/hyperAiConfirmation'
 import { publicAgentSelect } from '@/lib/agents/publicAgent'
+import { normalizeBlockHtml } from '@/lib/mcp/normalizeBlockHtml'
+import { isFeatureEnabled } from '@/lib/flags'
+import { HTPR_6561_DESCRIPTION_STRUCTURE_FLAG } from '@/lib/flags/keys'
 import { normalizeRichTextStructure } from '@/utils/helperFunctions/normalizeRichTextStructure'
 
 export interface UpdateCommentParams {
@@ -33,7 +36,13 @@ export interface UpdateCommentParams {
  */
 export async function updateCommentService(params: UpdateCommentParams) {
   const { commentId, text: inputText, userId, agentId, attachments, replaceAttachments } = params
-  const text = normalizeRichTextStructure(inputText)
+  const normalizePlainText = await isFeatureEnabled(
+    HTPR_6561_DESCRIPTION_STRUCTURE_FLAG,
+    userId
+  )
+  const text = normalizePlainText
+    ? normalizeBlockHtml(inputText)
+    : normalizeRichTextStructure(inputText)
 
   const comment = await prisma.comment.findFirst({
     where: { id: commentId, creatorId: userId },
