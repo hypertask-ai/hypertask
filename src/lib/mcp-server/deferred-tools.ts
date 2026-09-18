@@ -60,6 +60,15 @@ const META_LIST_SCHEMAS: Record<string, Record<string, unknown>> = {
   },
 }
 
+const META_OUTPUT_SCHEMAS: Record<string, Record<string, unknown>> = {
+  [SEARCH_TOOLS_NAME]: {
+    type: 'object',
+    properties: { tools: { type: 'array', items: { type: 'object' } } },
+    required: ['tools'],
+  },
+  [DESCRIBE_TOOL_NAME]: TOOL_OUTPUT_SCHEMA,
+}
+
 function deferredDescription(tool: { name: string; description: string }): string {
   return summaryForToolName(tool.name, firstSentence(tool.description))
 }
@@ -70,6 +79,15 @@ export function listToolsDeferred(tools: readonly CatalogTool[]): ListedTool[] {
     description: deferredDescription(tool),
     inputSchema: META_LIST_SCHEMAS[tool.name] ?? MINIMAL_INPUT_SCHEMA,
   }))
+}
+
+export function listMetaTools(tools: readonly CatalogTool[]): ListedTool[] {
+  return listToolsDeferred(tools)
+    .filter((tool) => tool.name in META_LIST_SCHEMAS)
+    .map((tool) => ({
+      ...tool,
+      outputSchema: META_OUTPUT_SCHEMAS[tool.name],
+    }))
 }
 
 export function listToolsFull(tools: readonly CatalogTool[]): ListedTool[] {
