@@ -481,11 +481,9 @@ const DeveloperAccessSection = () => {
         ) : managementKeys.length ? (
           <div className="flex flex-col">
             {managementKeys.map((key) => {
-              const teamLabel = managementKeyTeamLabel(
-                key.teamScoped,
-                key.team,
-                teamScopedKeysEnabled,
-              );
+              const teamLabel = teamScopedKeysEnabled
+                ? managementKeyTeamLabel(key.teamScoped, key.team, true)
+                : managementKeyTeamLabel(key.teamScoped, key.team, false);
               return (
                 <div
                   className="border-b border-border-light-gray-thin px-2 py-3 last:border-b-0"
