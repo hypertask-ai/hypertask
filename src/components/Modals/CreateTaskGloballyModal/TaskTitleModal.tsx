@@ -11,7 +11,7 @@ import { X } from 'lucide-react';
 import { AudioButton } from '@/components/RTE/Components/AudioButton';
 import { hasDescriptionContent } from '@/lib/ai/autoDescriptionSuggestion';
 
-const TaskTitleModal = () => {
+const TaskTitleModal = ({ mobileCompact = false }: { mobileCompact?: boolean }) => {
     const _mbl = useContext(MobileViewContext);
     const { dynamicElementRef } = useSetStickyHeight()
     const textAreaRef = useRef<HTMLTextAreaElement>(null);
@@ -107,11 +107,11 @@ const TaskTitleModal = () => {
             <div
                 id="title-input-container-create-task-modal"
                 ref={dynamicElementRef}
-                className={`flex flex-col sm:sticky text-white-black  
-                        z-50 pt-9  top-0 bg-inherit  w-[100%]
-                        m-0
-                        ${_mbl ? "items-start  sticky top-0 border-b  border-light-black-border-1" : "items-baseline pb-[16px]"}
-                        pb-3
+                className={`flex flex-col text-white-black w-full m-0
+                        ${mobileCompact
+                            ? "px-[18px] py-2"
+                            : "sm:sticky z-50 pt-9 top-0 bg-inherit pb-3"}
+                        ${_mbl && !mobileCompact ? "items-start sticky top-0 border-b border-light-black-border-1" : "items-baseline sm:pb-[16px]"}
                         `}
             >
                 <div className={`
@@ -119,7 +119,7 @@ const TaskTitleModal = () => {
                                     
                                     `}>
                     <div
-                        className="flex items-center gap-2 xs:px-[18px] sm:pl-[20px] sm:pr-0 "
+                        className={`flex items-center gap-2 ${mobileCompact ? "w-full" : "xs:px-[18px] sm:pl-[20px] sm:pr-0"}`}
                         tabIndex={0}
                         id="title"
                         style={{ flex: 1 }}
@@ -136,7 +136,7 @@ const TaskTitleModal = () => {
                                     }
                                     rows={1}
                                     ref={textAreaRef}
-                                    autoFocus
+                                    autoFocus={!mobileCompact}
                                     placeholder='Enter task title here'
                                     disabled={isGeneratingTitle}
                                     aria-busy={isGeneratingTitle}
@@ -213,7 +213,7 @@ const TaskTitleModal = () => {
                         reload (HTPR-5518). It sits in the sticky title row,
                         clear of the AI writer's send button that got the old
                         bottom-right Back pill removed (HTPR-5147). */}
-                    {_mbl && (
+                    {_mbl && !mobileCompact && (
                         <button
                             type="button"
                             data-mobile-new-task-close

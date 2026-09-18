@@ -21,7 +21,13 @@ import CreateLabel from '../CreateLabel/CreateLabel'
 import SetProjectsModal from '../SetProjectModal/SetProjectModal'
 import AssigneesContainerCreateTaskGlobally from './AssigneesTaskGlobal/AssigneesContainerCreateTaskGlobally'
 
-export const MobileCreateTaskProperties = () => {
+export const MobileCreateTaskProperties = ({
+    hideBoard = false,
+    showPills = true,
+}: {
+    hideBoard?: boolean
+    showPills?: boolean
+}) => {
     const {
         toggleMoveModal, showMoveModal, setShowMoveModal,
         showPriorityModal, togglePriorityModal, toggleShowSizeModal,
@@ -93,35 +99,40 @@ export const MobileCreateTaskProperties = () => {
 
     return (
         <>
-            <div className="flex flex-wrap gap-2 px-2 pb-2">
-                {propertyPills.slice(0, 3).map((property) => (
-                    <button
-                        key={property.label}
-                        type="button"
-                        onClick={property.onClick}
-                        className="min-h-11 rounded-sm px-3 text-content text-white-black hover:bg-hover-active"
-                    >
-                        <span className="text-text-light-gray">{property.label}:</span>{" "}
-                        <strong>{property.value}</strong>
-                    </button>
-                ))}
-                <AssigneesContainerCreateTaskGlobally
-                    compact
-                    showModal={showAssignModal}
-                    toggleModal={toggleAssigneeModal}
-                />
-                {propertyPills.slice(3).map((property) => (
-                    <button
-                        key={property.label}
-                        type="button"
-                        onClick={property.onClick}
-                        className="min-h-11 rounded-sm px-3 text-content text-white-black hover:bg-hover-active"
-                    >
-                        <span className="text-text-light-gray">{property.label}:</span>{" "}
-                        <strong>{property.value}</strong>
-                    </button>
-                ))}
-            </div>
+            {showPills && (
+                <div
+                    data-mobile-new-task-properties
+                    className="flex flex-wrap gap-2 rounded-[4px] bg-comment-description px-2 py-2 shadow-md"
+                >
+                    {propertyPills.filter((property) => !hideBoard || property.label !== "Board").slice(0, hideBoard ? 2 : 3).map((property) => (
+                        <button
+                            key={property.label}
+                            type="button"
+                            onClick={property.onClick}
+                            className="min-h-11 rounded-sm px-3 text-content text-white-black hover:bg-hover-active"
+                        >
+                            <span className="text-text-light-gray">{property.label}:</span>{" "}
+                            <strong>{property.value}</strong>
+                        </button>
+                    ))}
+                    <AssigneesContainerCreateTaskGlobally
+                        compact
+                        showModal={showAssignModal}
+                        toggleModal={toggleAssigneeModal}
+                    />
+                    {propertyPills.slice(3).map((property) => (
+                        <button
+                            key={property.label}
+                            type="button"
+                            onClick={property.onClick}
+                            className="min-h-11 rounded-sm px-3 text-content text-white-black hover:bg-hover-active"
+                        >
+                            <span className="text-text-light-gray">{property.label}:</span>{" "}
+                            <strong>{property.value}</strong>
+                        </button>
+                    ))}
+                </div>
+            )}
             {showTagsModal && <CreateLabel previouslyAddedFilters={formValues.tags ?? []} mode="CreateTaskGlobally" closeHandlerForCreateNewTask={labelsHandler} currentProject={formValues.currentProject} />}
             {showSizeModal && <TaskEstimateModal mode="TaskModalGlobally" closeHandler={estimateHandler} />}
             {formValues.currentProject && showMoveModal && <MoveToColumn mode="CreatingTask" callback={callbackForMoveModal} projectId={formValues.currentProject.id} moveTaskToColumnHandler={toggleMoveModal} />}
@@ -133,7 +144,13 @@ export const MobileCreateTaskProperties = () => {
     )
 }
 
-const TaskInfoColumnGloballyCreate = () => {
+const TaskInfoColumnGloballyCreate = ({
+    mobileHideBoard = false,
+    mobileShowPills = true,
+}: {
+    mobileHideBoard?: boolean
+    mobileShowPills?: boolean
+} = {}) => {
     const {
         toggleMoveModal, showMoveModal, setShowMoveModal,
         showPriorityModal, togglePriorityModal, toggleShowSizeModal,
@@ -160,7 +177,12 @@ const TaskInfoColumnGloballyCreate = () => {
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [allProjects.length])
 
-    if (_mbl) return <MobileCreateTaskProperties />
+    if (_mbl) return (
+        <MobileCreateTaskProperties
+            hideBoard={mobileHideBoard}
+            showPills={mobileShowPills}
+        />
+    )
 
     const callbackForMoveModal = (section: ISection) => {
         setShowMoveModal(false)

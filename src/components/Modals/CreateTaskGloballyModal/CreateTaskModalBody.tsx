@@ -1,5 +1,5 @@
 import { useContextCreateTaskModal } from '@/lib/contexts/Multipages/CreateTaskGloballyContexts/useContextCreateTaskModal'
-import { ReactNode, useEffect, useContext, useCallback, useRef } from 'react'
+import { ReactNode, useEffect, useContext, useCallback, useRef, useState } from 'react'
 import DescriptionCreateTaskModal from './DescriptionCreateTaskModal'
 import TaskTitleModal from './TaskTitleModal'
 import TaskDetailMainContainer from '@/components/PageComponents/TaskDetail/TaskDetailMainContainer'
@@ -8,7 +8,7 @@ import { useRecoilState } from '@/lib/state'
 import { currentProjectAtom } from '@/store'
 // import AssigneesContainerCreateTaskGlobally from './AssigneesTaskGlobal/AssigneesContainerCreateTaskGlobally'
 import { useDeviceContext } from '@/lib/contexts/deviceContext'
-import { ArrowLeft } from "lucide-react";
+import { ArrowLeft, ChevronDown, X } from "lucide-react";
 import dynamic from 'next/dynamic'
 import toast from 'react-hot-toast'
 import { useContextCreateTaskInfoColumn } from '@/lib/contexts/Multipages/CreateTaskGloballyContexts/useContextCreateTaskGloballyInfoColumn'
@@ -20,6 +20,8 @@ import { DIV_ID_CONSTANTS } from '@/lib/configs/general.config'
 import { KeyCodes } from '@/lib/constants/keyboard-handler'
 import { armBackDismiss } from '@/lib/mobile/backDismiss'
 import { usePathname } from 'next/navigation'
+import { useFlag } from '@/hooks/useFlag'
+import { HTPR_6556_MOBILE_DESCRIPTION_FIRST_FLAG } from '@/lib/flags/keys'
 const Tooltip = dynamic(() => import("@/components/Common/Tooltip"), { ssr: false })
 // const AssigneesContainerCreateTaskGlobally = dynamic(() => import("./AssigneesTaskGlobal/AssigneesContainerCreateTaskGlobally"), { ssr: false })
 // const DescriptionCreateTaskModal = dynamic(()=>import("./DescriptionCreateTaskModal"),{ssr:false})
@@ -40,13 +42,18 @@ const CreateTaskModalBody: React.FC<IProps> = ({ }) => {
     const { editMode, focusOn, setEditMode, setCurrentFocusedElement,
         currentFocusedElement, closeHandler,
         showAssignModal, setShowAssignModal, uploadInProgress, showConfirmationModal, onConfirmDiscard, onCancelDiscard,
-        userInput: userPrompt, parentTaskInfo, isRecording, hasUnsavedChanges
+        userInput: userPrompt, parentTaskInfo, isRecording, hasUnsavedChanges,
+        formValues, titleGenerationError,
     } = useContextCreateTaskModal()
 
     const {
         toggleMoveModal, toggleShowSizeModal, toggleDueDateModal,
         toggleShowTagsModal, togglePriorityModal, toggleProjectsModal,
     } = useContextCreateTaskInfoColumn()
+    const descriptionFirstEnabled = useFlag(HTPR_6556_MOBILE_DESCRIPTION_FIRST_FLAG)
+    const descriptionFirstMobile = Boolean(_mbl && descriptionFirstEnabled)
+    const [expandedMobileSection, setExpandedMobileSection] = useState<"title" | "properties" | null>(null)
+    const descriptionFocusSet = useRef(false)
 
     const { continueTourInModal, isTourActive, endTour } = useTourContext();
 
@@ -58,6 +65,32 @@ const CreateTaskModalBody: React.FC<IProps> = ({ }) => {
             continueTourInModal();
         }
     }, []);
+
+    useEffect(() => {
+        if (!descriptionFirstMobile || descriptionFocusSet.current || editMode === "Description-ai") return
+        descriptionFocusSet.current = true
+        setEditMode("Description")
+        setCurrentFocusedElement("Description")
+    }, [descriptionFirstMobile, editMode, setCurrentFocusedElement, setEditMode])
+
+    useEffect(() => {
+        if (descriptionFirstMobile && titleGenerationError) {
+            setExpandedMobileSection("title")
+        }
+    }, [descriptionFirstMobile, titleGenerationError])
+
+    const toggleMobileSection = (section: "title" | "properties") => {
+        const nextSection = expandedMobileSection === section ? null : section
+        setExpandedMobileSection(nextSection)
+        if (nextSection === "title") {
+            setEditMode("title")
+            setCurrentFocusedElement("Title")
+        } else if (section === "title") {
+            setEditMode("Description")
+            setCurrentFocusedElement("Description")
+        }
+    }
+
     const toggleModal = () => {
         setShowAssignModal((prev: boolean) => {
             if (prev) {
@@ -287,7 +320,56 @@ const CreateTaskModalBody: React.FC<IProps> = ({ }) => {
             bodyClassName={_mbl ? 'overflow-y-auto': 'task-detail-horizontal-padding'}
             key={`project-${_currentProject?.id}`}>
                 <BackButton />
-                <TaskTitleModal />
+                {descriptionFirstMobile && (
+                    <div
+                        data-mobile-description-first-header
+                        className="sticky top-0 z-50 flex w-full flex-col gap-2 border-b border-light-black-border-1 bg-taskDetal-container px-[18px] pb-3 pt-3"
+                    >
+                        <div className="flex items-center gap-2">
+                            <button
+                                type="button"
+                                onClick={toggleProjectsModal}
+                                className="flex min-h-11 min-w-0 flex-1 items-center gap-1 rounded-[4px] bg-comment-description px-3 text-left text-content text-white-black"
+                            >
+                                <span className="shrink-0 text-text-light-gray">Board:</span>
+                                <strong className="truncate">{formValues.currentProject?.title ?? "Choose board"}</strong>
+                                <ChevronDown className="ml-auto shrink-0" size={16} strokeWidth={1.75} aria-hidden />
+                            </button>
+                            <button
+                                type="button"
+                                aria-label="Close new task"
+                                onClick={() => closeHandler(false)}
+                                className="flex h-11 w-11 shrink-0 items-center justify-center text-icon-dark-gray"
+                            >
+                                <X size={18} strokeWidth={1.75} aria-hidden />
+                            </button>
+                        </div>
+                        <div className="flex gap-2">
+                            <button
+                                type="button"
+                                aria-expanded={expandedMobileSection === "title"}
+                                onClick={() => toggleMobileSection("title")}
+                                className="flex min-h-11 min-w-0 flex-1 items-center gap-1 rounded-[4px] bg-cardBackground px-3 text-left text-content text-white-black"
+                            >
+                                <span className="shrink-0 text-text-light-gray">Title:</span>
+                                <strong className="truncate">{formValues.title.trim() || "Add"}</strong>
+                                <ChevronDown className="ml-auto shrink-0" size={16} strokeWidth={1.75} aria-hidden />
+                            </button>
+                            <button
+                                type="button"
+                                aria-expanded={expandedMobileSection === "properties"}
+                                onClick={() => toggleMobileSection("properties")}
+                                className="flex min-h-11 flex-1 items-center justify-between rounded-[4px] bg-cardBackground px-3 text-content font-semibold text-white-black"
+                            >
+                                Properties
+                                <ChevronDown size={16} strokeWidth={1.75} aria-hidden />
+                            </button>
+                        </div>
+                    </div>
+                )}
+                <div className={descriptionFirstMobile && expandedMobileSection !== "title" ? "hidden" : "contents"}>
+                    <TaskTitleModal mobileCompact={descriptionFirstMobile} />
+                </div>
 
                 {parentTaskInfo && (
                     <span className="mt-0 px-2 pb-3 text-icon-dark-gray text-dense">
@@ -314,16 +396,19 @@ const CreateTaskModalBody: React.FC<IProps> = ({ }) => {
                     }}
                 >
 
-                    {/* Mobile properties sit above the description in the AI-first
-                        classic-form layout. Desktop keeps its existing column. */}
-                    {_mbl && (
+                    {_mbl && (descriptionFirstMobile ? (
+                        <TaskInfoColumnGloballyCreate
+                            mobileHideBoard
+                            mobileShowPills={expandedMobileSection === "properties"}
+                        />
+                    ) : (
                         <TaskInfoColumnContainer
                             heightVariant="fit"
                             className="shrink-0"
                         >
                             <TaskInfoColumnGloballyCreate />
                         </TaskInfoColumnContainer>
-                    )}
+                    ))}
                     {/* ======================= Left half ================= */}
                     <DescriptionCreateTaskModal />
                     {/* ======================= Right half ================= */}

@@ -426,6 +426,11 @@ test("declared flags remain listed with ticket details and can be changed", asyn
         updatedAt: null,
       },
       {
+        key: "htpr-6556-mobile-description-first",
+        mode: "OWNER_AND_QA",
+        updatedAt: null,
+      },
+      {
         key: "htpr-6557-agent-rooms",
         mode: "OWNER_AND_QA",
         updatedAt: null,

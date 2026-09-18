@@ -87,6 +87,8 @@ export const HTPR_6553_AGENT_CHAT_POLLING_FLAG =
 export const HTPR_6557_AGENT_ROOMS_FLAG = "htpr-6557-agent-rooms";
 export const HTPR_6559_KEEP_DIRECT_TASK_OPEN_FLAG =
   "htpr-6559-keep-direct-task-open-after-comment";
+export const HTPR_6556_MOBILE_DESCRIPTION_FIRST_FLAG =
+  "htpr-6556-mobile-description-first";
 /** Sent on chat.message when HTPR-6407 is on so agent replies lead with the next action. */
 export const AGENT_CHAT_ADHD_REPLY_GUIDANCE =
   "Lead with the next action. Keep replies short. Number steps. End with one concrete next action when something remains open.";

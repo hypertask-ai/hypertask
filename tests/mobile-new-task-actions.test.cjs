@@ -52,12 +52,15 @@ test("Task Writer and Save stay fixed after attachment actions", () => {
   assert.ok(aiIndex >= 0 && aiIndex < saveIndex, "Save stays last, under the thumb");
 });
 
-test("mobile exposes one Save action and no overflow menu", () => {
+test("each mobile flow exposes one raw Save action and no overflow menu", () => {
   assert.doesNotMatch(mobileBar, /aria-label="More task actions"/);
   assert.doesNotMatch(mobileBar, /<details/);
   assert.doesNotMatch(mobileBar, /Save and close/);
   assert.doesNotMatch(mobileBar, /Save and create new task/);
-  assert.equal((mobileBar.match(/label="Save"/g) || []).length, 1);
+  assert.equal((mobileBar.match(/label="Save"/g) || []).length, 2);
+  assert.equal((mobileBar.match(/label="Save with task writer"/g) || []).length, 1);
+  assert.match(mobileBar, /!descriptionFirst && hasText/);
+  assert.match(mobileBar, /descriptionFirst && hasText/);
   assert.match(mobileBar, /Attach files/);
   assert.match(mobileBar, /MOBILE_TARGET/);
 });
@@ -151,8 +154,8 @@ test("transcription keeps the mobile action row in its recording layout", () => 
   );
   assert.equal(
     (mobileBar.match(/!isDictating &&/g) || []).length,
-    3,
-    "attach, AI, and Save stay hidden through transcription",
+    4,
+    "attach, AI, raw Save, and Task Writer save stay hidden through transcription",
   );
   assert.doesNotMatch(mobileBar, /!isRecording &&/);
 });
@@ -187,7 +190,7 @@ test("mobile new-task flow keeps the Back pill removed", () => {
 
 test("mobile new-task fields follow writing order without remounting a second tree", () => {
   assert.equal(
-    (createTaskBodySource.match(/<TaskTitleModal \/>/g) || []).length,
+    (createTaskBodySource.match(/<TaskTitleModal(?:\s|>)/g) || []).length,
     1,
   );
   assert.equal(
@@ -200,7 +203,7 @@ test("mobile new-task fields follow writing order without remounting a second tr
   );
   assert.match(
     createTaskBodySource,
-    /<TaskTitleModal \/>[\s\S]*?<TaskInfoColumnContainer[\s\S]*?<DescriptionCreateTaskModal \/>/,
+    /<TaskTitleModal[\s\S]*?<TaskInfoColumnContainer[\s\S]*?<DescriptionCreateTaskModal \/>/,
   );
   assert.match(createTaskBodySource, /_mbl \?[\s\S]*?"flex-col gap-2/);
   assert.doesNotMatch(createTaskBodySource, /flex-col-reverse/);

@@ -72,6 +72,7 @@ import {
   HTPR_6553_AGENT_CHAT_POLLING_FLAG,
   HTPR_6557_AGENT_ROOMS_FLAG,
   HTPR_6559_KEEP_DIRECT_TASK_OPEN_FLAG,
+  HTPR_6556_MOBILE_DESCRIPTION_FIRST_FLAG,
 } from "@/lib/flags/keys";
 
 // Re-exported so server code keeps importing keys from here. Client components must
@@ -95,6 +96,12 @@ const FEATURE_FLAG_QA_USER = {
 const RETIRED_FEATURE_FLAG_KEYS = new Set(["hyfa-43-factory-owner-preview"]);
 
 const FEATURE_FLAG_DEFINITIONS = [
+  {
+    key: HTPR_6556_MOBILE_DESCRIPTION_FIRST_FLAG,
+    shippedOn: "2026-09-18",
+    description:
+      "Focuses mobile task creation on one description box, with collapsed title and properties plus raw and Task Writer save actions.",
+  },
   {
     key: HTPR_6559_KEEP_DIRECT_TASK_OPEN_FLAG,
     shippedOn: "2026-09-18",
