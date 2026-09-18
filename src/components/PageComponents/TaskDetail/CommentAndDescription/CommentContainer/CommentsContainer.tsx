@@ -20,7 +20,10 @@ import ReplyToComment from "./CommentOptions/ReplyToComment";
 import SwipeableCommentRow from "./SwipeableCommentRow";
 import { Reply } from "lucide-react";
 import { useFlag } from "@/hooks/useFlag";
-import { HTPR_6514_COMMENT_LONG_PRESS_FLAG } from "@/lib/flags/keys";
+import {
+  HTPR_6514_COMMENT_LONG_PRESS_FLAG,
+  HTPR_6554_LIGHT_COMMENT_SEPARATION_FLAG,
+} from "@/lib/flags/keys";
 import { isCommentCreatedByUser } from "@/lib/htc/isCommentCreatedByUser";
 const CommentReactions = dynamic(() => import("./CommentReactions"));
 
@@ -82,6 +85,9 @@ const CommentsContainer = () => {
   const [currentUser, _setCurrentUser] = useRecoilState(currentUserAtom);
   const [, setShowCommands] = useRecoilState(showCommandsAtom);
   const commentLongPress = useFlag(HTPR_6514_COMMENT_LONG_PRESS_FLAG);
+  const lightCommentSeparationEnabled = useFlag(
+    HTPR_6554_LIGHT_COMMENT_SEPARATION_FLAG,
+  );
   const bind = useDoubleTap(handleDoubleTap, 200, {
     onSingleTap: handleSingleTap,
   });
@@ -173,6 +179,10 @@ const CommentsContainer = () => {
               }`
         }
         outline-none  comment-container ${
+          lightCommentSeparationEnabled && !isStacked && !comment.activity
+            ? "comment-separation-card"
+            : ""
+        } ${
           isStacked || comment.activity ? "my-[4px] cursor-pointer" : "my-[8px]"
         }`}
         key={comment.id}
@@ -237,6 +247,11 @@ const CommentsContainer = () => {
         className={`
                         rounded-sm
                         ${styles.hellow}
+                        ${
+                          lightCommentSeparationEnabled
+                            ? "comment-separation-card"
+                            : ""
+                        }
                         ${
                           isCommentCreatedByUser(comment, currentUser?.id)
                             ? "bg-self-comment"

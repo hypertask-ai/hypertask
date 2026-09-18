@@ -84,6 +84,8 @@ export const HTPR_6551_QUIET_RUN_ACTIVITY_FLAG =
 export const HTPR_6555_IDLE_COMMENT_MIC_FLAG = "htpr-6555-idle-comment-mic";
 export const HTPR_6553_AGENT_CHAT_POLLING_FLAG =
   "htpr-6553-agent-chat-polling";
+export const HTPR_6554_LIGHT_COMMENT_SEPARATION_FLAG =
+  "htpr-6554-light-comment-separation";
 export const HTPR_6557_AGENT_ROOMS_FLAG = "htpr-6557-agent-rooms";
 export const HTPR_6559_KEEP_DIRECT_TASK_OPEN_FLAG =
   "htpr-6559-keep-direct-task-open-after-comment";
