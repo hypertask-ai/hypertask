@@ -23,6 +23,9 @@ class OAuthTokenSigningError extends Error {
   }
 }
 
+class OAuthAgentGrantError extends Error {}
+class OAuthAgentFeatureDisabledError extends Error {}
+
 const MOBILE_REDIRECT_URI = 'hypertask-native://oauth/callback'
 const MOBILE_ACCESS_TOKEN_EXPIRY_SECONDS = 60 * 60
 const DEFAULT_ACCESS_TOKEN_EXPIRY_SECONDS = 90 * 24 * 60 * 60
@@ -430,49 +433,6 @@ export async function POST(request: NextRequest) {
         }
       }
 
-      if (agentTeamScope) {
-        if (
-          !(await isFeatureEnabled(
-            HTPR_6542_TEAM_SCOPED_MANAGEMENT_KEYS_FLAG,
-            authCode.user.id
-          ))
-        ) {
-          return NextResponse.json(
-            {
-              error: 'invalid_grant',
-              error_description: 'Team-scoped agent access is disabled.',
-            },
-            { status: 400 }
-          )
-        }
-
-        const [team, scopedAgent] = await Promise.all([
-          getManagementKeyTeam(authCode.user.id, agentTeamScope.teamId),
-          prisma.agent.findFirst({
-            where: {
-              id: agentId,
-              userId: authCode.user.id,
-              revokedAt: null,
-              ...agentWithinTeamWhere(agentTeamScope.teamId),
-            },
-            select: { id: true },
-          }),
-        ])
-        if (
-          !team ||
-          team.accessBinding !== agentTeamScope.accessBinding ||
-          !scopedAgent
-        ) {
-          return NextResponse.json(
-            {
-              error: 'invalid_grant',
-              error_description: 'The selected agent team grant is no longer valid.',
-            },
-            { status: 400 }
-          )
-        }
-      }
-
       if (!agentTokenJti) {
         return NextResponse.json(
           {
@@ -515,6 +475,55 @@ export async function POST(request: NextRequest) {
           WHERE "client_id" = ${authCode.client_id}
           FOR UPDATE
         `
+
+        if (agentId) {
+          if (
+            agentTeamScope &&
+            !(await isFeatureEnabled(
+              HTPR_6542_TEAM_SCOPED_MANAGEMENT_KEYS_FLAG,
+              authCode.user.id,
+              tx
+            ))
+          ) {
+            throw new OAuthAgentFeatureDisabledError()
+          }
+
+          const currentAgent = await tx.agent.findFirst({
+            where: {
+              id: agentId,
+              userId: authCode.user.id,
+              revokedAt: null,
+              ...(agentTeamScope
+                ? agentWithinTeamWhere(agentTeamScope.teamId)
+                : {}),
+            },
+            select: {
+              mcpTokenJti: true,
+              credentialTeamId: true,
+              credentialTeamAccessBinding: true,
+            },
+          })
+          const currentTeam = agentTeamScope
+            ? await getManagementKeyTeam(
+                authCode.user.id,
+                agentTeamScope.teamId,
+                tx
+              )
+            : null
+          if (
+            storedAgentTokenGeneration(currentAgent) !== agentTokenJti ||
+            (currentAgent?.credentialTeamId ?? undefined) !==
+              agentTeamScope?.teamId ||
+            (currentAgent?.credentialTeamAccessBinding ?? undefined) !==
+              agentTeamScope?.accessBinding ||
+            (agentTeamScope &&
+              (!currentTeam ||
+                currentTeam.accessBinding !== agentTeamScope.accessBinding))
+          ) {
+            throw new OAuthAgentGrantError()
+          }
+        }
+
         const consumed = await tx.oAuthAuthorizationCode.updateMany({
           where: { code: code as string, used: false },
           data: { used: true }
@@ -557,7 +566,7 @@ export async function POST(request: NextRequest) {
         } catch (error) {
           throw new OAuthTokenSigningError(error)
         }
-      })
+      }, { isolationLevel: 'Serializable' })
 
       if (!session) {
         return NextResponse.json(
@@ -567,6 +576,24 @@ export async function POST(request: NextRequest) {
       }
     } catch (error) {
       if (error instanceof OAuthTokenSigningError) throw error.originalError
+      if (error instanceof OAuthAgentFeatureDisabledError) {
+        return NextResponse.json(
+          {
+            error: 'invalid_grant',
+            error_description: 'Team-scoped agent access is disabled.',
+          },
+          { status: 400 }
+        )
+      }
+      if (error instanceof OAuthAgentGrantError) {
+        return NextResponse.json(
+          {
+            error: 'invalid_grant',
+            error_description: 'The selected agent credential is no longer valid.',
+          },
+          { status: 400 }
+        )
+      }
 
       console.error('Error marking authorization code as used:', error)
       return NextResponse.json(

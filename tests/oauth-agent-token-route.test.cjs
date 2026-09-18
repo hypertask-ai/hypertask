@@ -33,6 +33,7 @@ const calls = {
   featureChecks: [],
   ownerUpdates: [],
   teamLookups: [],
+  transactions: [],
   usedUpdates: [],
 }
 let currentAgent = null
@@ -71,24 +72,40 @@ stubModule('src/lib/flags.ts', {
 
 stubModule('src/lib/prisma.ts', {
   default: {
-    $transaction: async (callback) => callback({
-      $queryRaw: async (strings, ...values) => {
-        calls.clientLocks.push({ sql: strings.join('?'), values })
-        return [{ client_id: authCode.client_id }]
-      },
-      oAuthClient: {
-        updateMany: async (args) => {
-          calls.ownerUpdates.push(args)
-          return { count: 1 }
+    $transaction: async (callback, options) => {
+      calls.transactions.push(options)
+      return callback({
+        $queryRaw: async (strings, ...values) => {
+          calls.clientLocks.push({ sql: strings.join('?'), values })
+          return [{ client_id: authCode.client_id }]
         },
-      },
-      oAuthAuthorizationCode: {
-        updateMany: async (args) => {
-          calls.usedUpdates.push(args)
-          return { count: 1 }
+        oAuthClient: {
+          updateMany: async (args) => {
+            calls.ownerUpdates.push(args)
+            return { count: 1 }
+          },
         },
-      },
-    }),
+        oAuthAuthorizationCode: {
+          updateMany: async (args) => {
+            calls.usedUpdates.push(args)
+            return { count: 1 }
+          },
+        },
+        agent: {
+          findFirst: async (args) => {
+            calls.agentLookups.push(args)
+            if (args.where.members && !agentWithinTeam) return null
+            return currentAgent ? { id: agentId, ...currentAgent } : null
+          },
+        },
+        team: {
+          findFirst: async (args) => {
+            calls.teamLookups.push(args)
+            return currentTeam
+          },
+        },
+      })
+    },
     oAuthAuthorizationCode: {
       findUnique: async () => authCode,
     },
@@ -256,6 +273,7 @@ test('OAuth exchange preserves a team-bound agent grant', async () => {
   agentWithinTeam = true
   calls.featureChecks.length = 0
   calls.teamLookups.length = 0
+  calls.transactions.length = 0
 
   const response = await POST(tokenRequest())
   const body = await response.json()
@@ -272,6 +290,7 @@ test('OAuth exchange preserves a team-bound agent grant', async () => {
     userId: owner.id,
   }])
   assert.equal(calls.teamLookups.length, 1)
+  assert.deepEqual(calls.transactions, [{ isolationLevel: 'Serializable' }])
 })
 
 test('OAuth exchange rejects a team-bound agent while the feature is off', async () => {
@@ -285,6 +304,7 @@ test('OAuth exchange rejects a team-bound agent while the feature is off', async
   calls.clientLocks.length = 0
   calls.ownerUpdates.length = 0
   calls.teamLookups.length = 0
+  calls.transactions.length = 0
   calls.usedUpdates.length = 0
 
   try {
@@ -300,9 +320,10 @@ test('OAuth exchange rejects a team-bound agent while the feature is off', async
       key: 'htpr-6542-team-scoped-management-keys',
       userId: owner.id,
     }])
-    assert.equal(calls.clientLocks.length, 0)
+    assert.equal(calls.clientLocks.length, 1)
     assert.equal(calls.ownerUpdates.length, 0)
     assert.equal(calls.teamLookups.length, 0)
+    assert.deepEqual(calls.transactions, [{ isolationLevel: 'Serializable' }])
     assert.equal(calls.usedUpdates.length, 0)
   } finally {
     teamScopeFeatureEnabled = true
@@ -333,9 +354,9 @@ test('OAuth exchange rejects stale team-bound agent grants', async (t) => {
         assert.equal(response.status, 400)
         assert.deepEqual(body, {
           error: 'invalid_grant',
-          error_description: 'The selected agent team grant is no longer valid.',
+          error_description: 'The selected agent credential is no longer valid.',
         })
-        assert.equal(calls.clientLocks.length, 0)
+        assert.equal(calls.clientLocks.length, 1)
         assert.equal(calls.ownerUpdates.length, 0)
         assert.equal(calls.usedUpdates.length, 0)
       } finally {
