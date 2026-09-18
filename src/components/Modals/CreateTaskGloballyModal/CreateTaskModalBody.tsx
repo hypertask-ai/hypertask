@@ -85,7 +85,7 @@ const CreateTaskModalBody: React.FC<IProps> = ({ }) => {
         if (nextSection === "title") {
             setEditMode("title")
             setCurrentFocusedElement("Title")
-        } else if (section === "title") {
+        } else {
             setEditMode("Description")
             setCurrentFocusedElement("Description")
         }
@@ -333,7 +333,7 @@ const CreateTaskModalBody: React.FC<IProps> = ({ }) => {
                             >
                                 <span className="shrink-0 text-text-light-gray">Board:</span>
                                 <strong className="truncate">{formValues.currentProject?.title ?? "Choose board"}</strong>
-                                <ChevronDown className="ml-auto shrink-0" size={16} strokeWidth={1.75} aria-hidden />
+                                <ChevronDown className="ml-auto shrink-0" size={16} strokeWidth={1.5} aria-hidden />
                             </button>
                             <button
                                 type="button"
@@ -341,7 +341,7 @@ const CreateTaskModalBody: React.FC<IProps> = ({ }) => {
                                 onClick={() => closeHandler(false)}
                                 className="flex h-11 w-11 shrink-0 items-center justify-center text-icon-dark-gray"
                             >
-                                <X size={18} strokeWidth={1.75} aria-hidden />
+                                <X size={18} strokeWidth={1.5} aria-hidden />
                             </button>
                         </div>
                         <div className="flex gap-2">
@@ -353,7 +353,7 @@ const CreateTaskModalBody: React.FC<IProps> = ({ }) => {
                             >
                                 <span className="shrink-0 text-text-light-gray">Title:</span>
                                 <strong className="truncate">{formValues.title.trim() || "Add"}</strong>
-                                <ChevronDown className="ml-auto shrink-0" size={16} strokeWidth={1.75} aria-hidden />
+                                <ChevronDown className="ml-auto shrink-0" size={16} strokeWidth={1.5} aria-hidden />
                             </button>
                             <button
                                 type="button"
@@ -362,7 +362,7 @@ const CreateTaskModalBody: React.FC<IProps> = ({ }) => {
                                 className="flex min-h-11 flex-1 items-center justify-between rounded-[4px] bg-cardBackground px-3 text-content font-semibold text-white-black"
                             >
                                 Properties
-                                <ChevronDown size={16} strokeWidth={1.75} aria-hidden />
+                                <ChevronDown size={16} strokeWidth={1.5} aria-hidden />
                             </button>
                         </div>
                     </div>

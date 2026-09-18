@@ -1069,7 +1069,7 @@ const MobileBottomBar: React.FC<IMobileBottomBar> = ({
           </div>
           <div
             data-mobile-primary-save
-            className="[&>span]:!border-transparent [&>span]:!bg-hypertasks-ai-purple [&>span]:!px-3 [&>span]:!text-white"
+            className="[&>span]:!border-transparent [&>span]:!bg-shadcn-primary [&>span]:!px-3 [&>span]:!text-primary-foreground"
           >
             <ActionButton
               ref={saveRef}

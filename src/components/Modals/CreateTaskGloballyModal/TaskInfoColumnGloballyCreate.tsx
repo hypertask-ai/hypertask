@@ -102,7 +102,7 @@ export const MobileCreateTaskProperties = ({
             {showPills && (
                 <div
                     data-mobile-new-task-properties
-                    className="flex flex-wrap gap-2 rounded-[4px] bg-comment-description px-2 py-2 shadow-md"
+                    className="flex flex-wrap gap-2 rounded-[5px] bg-comment-description px-2 py-2 shadow-md"
                 >
                     {propertyPills.filter((property) => !hideBoard || property.label !== "Board").slice(0, hideBoard ? 2 : 3).map((property) => (
                         <button

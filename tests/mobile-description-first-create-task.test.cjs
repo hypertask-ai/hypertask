@@ -44,6 +44,10 @@ test("mobile header keeps board visible and title plus properties collapsed", ()
     body,
     /descriptionFirstMobile && expandedMobileSection !== "title" \? "hidden" : "contents"/,
   );
+  assert.match(
+    body,
+    /if \(nextSection === "title"\)[\s\S]*?setCurrentFocusedElement\("Title"\)[\s\S]*?else \{[\s\S]*?setCurrentFocusedElement\("Description"\)/,
+  );
   assert.match(body, /mobileShowPills=\{expandedMobileSection === "properties"\}/);
   assert.match(properties, /showPills && \(/);
   assert.match(properties, /!hideBoard \|\| property\.label !== "Board"/);
@@ -62,7 +66,7 @@ test("description-first actions offer raw save and primary Task Writer save", ()
   );
   assert.match(
     mobileBar,
-    /data-mobile-primary-save[\s\S]*?bg-hypertasks-ai-purple/,
+    /data-mobile-primary-save[\s\S]*?bg-shadcn-primary[\s\S]*?text-primary-foreground/,
   );
 });
 
