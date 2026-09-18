@@ -43,8 +43,12 @@ test("Porcelain gives enabled posted comments a visible hairline without changin
   );
 
   assert.ok(rule, "missing Porcelain comment card rule");
-  assert.match(rule.groups.declarations, /outline:\s*1px solid #e2e2e6/);
+  assert.match(
+    rule.groups.declarations,
+    /outline:\s*1px solid var\(--border-light-gray-thin\)/,
+  );
   assert.match(rule.groups.declarations, /outline-offset:\s*-1px/);
+  assert.match(porcelain, /--border-light-gray-thin:\s*#e2e2e6/);
   assert.notEqual("#e2e2e6", "#f9f9fa");
   assert.notEqual("#e2e2e6", "#ffffff");
 });
