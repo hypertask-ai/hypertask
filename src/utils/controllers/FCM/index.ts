@@ -1,8 +1,7 @@
 import axios from "axios";
 import fcmConfig from "@/utils/api/fcmConfig";
 import { FCMDeviceInfo } from "@/models/model";
-import { getMessaging, type Message } from "firebase-admin/messaging";
-import { getFirebaseAdmin } from "@/lib/firebase-admin";
+import type { Message } from "firebase-admin/messaging";
 import prisma from "@/lib/prisma";
 import { resolveNotificationChannelPreference } from "@/utils/controllers/notifications/shouldNotify";
 import { NotificationType } from "@prisma/client";
@@ -168,6 +167,14 @@ export const filterDevicesByPreferences = async ({
 const FCM_DATA_LIMIT_BYTES = 4096;
 const FCM_COMMENT_TEXT_BUDGET = 1500;
 
+const sendFirebaseMessage = async (message: Message) => {
+  const [{ getMessaging }, { getFirebaseAdmin }] = await Promise.all([
+    import("firebase-admin/messaging"),
+    import("@/lib/firebase-admin"),
+  ]);
+  return getMessaging(getFirebaseAdmin()).send(message);
+};
+
 const fcmCommentPayload = (comment: any, creator: any) => {
   const text = typeof comment?.text === "string" ? comment.text : "";
   const truncated = text.length > FCM_COMMENT_TEXT_BUDGET;
@@ -268,7 +275,7 @@ export const sendDataOnlyFcm = async (
     await deliveryOptions?.beforeDelivery?.();
     let deliveryResolved = false;
     try {
-      const response = await getMessaging(getFirebaseAdmin()).send(body);
+      const response = await sendFirebaseMessage(body);
       console.log("🚀 ~ sendDataOnlyFcm ~ response:", response);
       deliveryResolved = true;
     } catch (error) {
@@ -386,7 +393,7 @@ export const sendDataNewCommentFCM = async(props:newCommentFCM) => {
         payload.data = { ...(props.data || {}), click_action: link };
         
         try {
-            const response = await getMessaging(getFirebaseAdmin()).send(payload);
+            const response = await sendFirebaseMessage(payload);
             console.log("🚀 ~ sendDataNewCommentFCM ~ response:", response)
             
         } catch (error) {

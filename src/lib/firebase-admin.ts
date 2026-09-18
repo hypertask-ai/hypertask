@@ -28,9 +28,13 @@ export function getFirebaseAdmin(): App {
       }),
       projectId: serviceAccount.project_id,
     })
-  } catch {
-    // A second bundle copy may have created the default app first.
-    firebaseAdminApp = getApp()
+  } catch (initializationError) {
+    try {
+      // A second bundle copy may have created the default app first.
+      firebaseAdminApp = getApp()
+    } catch {
+      throw initializationError
+    }
   }
 
   console.log(`✅ Firebase Admin initialized successfully for project: ${firebaseAdminApp.options.projectId}`)

@@ -204,15 +204,47 @@ test("getFirebaseAdmin recovers when initializeApp loses the already-exists race
   assert.deepEqual(calls, { initializeApp: 1, getApp: 2 });
 });
 
-test("FCM does not initialize Firebase while the module is loading", () => {
+test("getFirebaseAdmin preserves the initialization error when no app won the race", () => {
+  const initializationError = new Error("invalid service account");
+  const { getFirebaseAdmin } = loadTypeScript("src/lib/firebase-admin.ts", {
+    "firebase-admin/app": {
+      cert() {
+        return { kind: "cert" };
+      },
+      getApp() {
+        throw new Error("default app missing");
+      },
+      initializeApp() {
+        throw initializationError;
+      },
+    },
+    "firebase-admin/auth": {
+      getAuth() {
+        throw new Error("unused");
+      },
+    },
+    ...serviceAccountStub(),
+  });
+
+  assert.throws(() => getFirebaseAdmin(), (error) => error === initializationError);
+});
+
+test("FCM loads Firebase only when it sends a push", () => {
   const source = fs.readFileSync(
     path.join(root, "src/utils/controllers/FCM/index.ts"),
     "utf8",
   );
-  assert.equal(
-    /^\s*getFirebaseAdmin\(\);\s*$/m.test(source),
-    false,
-    "FCM must not call getFirebaseAdmin at import time; /api/tasks/single loads this module",
+  assert.doesNotMatch(
+    source,
+    /^import (?!type\b).*from ["']firebase-admin(?:\/messaging)?["'];?$/m,
+    "FCM must not load Firebase at import time; /api/tasks/single imports this module",
   );
-  assert.match(source, /getMessaging\(getFirebaseAdmin\(\)\)/);
+  assert.doesNotMatch(
+    source,
+    /^import (?!type\b).*from ["']@\/lib\/firebase-admin["'];?$/m,
+    "FCM must not load the Firebase wrapper at import time",
+  );
+  assert.match(source, /import\(["']firebase-admin\/messaging["']\)/);
+  assert.match(source, /import\(["']@\/lib\/firebase-admin["']\)/);
+  assert.match(source, /getMessaging\(getFirebaseAdmin\(\)\)\.send\(message\)/);
 });
