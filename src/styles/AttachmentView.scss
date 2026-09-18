@@ -5,6 +5,18 @@
     border-bottom-left-radius: 4px;
     border-bottom-right-radius: 4px;
 }
+
+.attachment-tile.bg-comment-description {
+    border: 1px solid var(--color-border-comment-description) !important;
+    border-radius: 5px !important;
+    box-shadow: none !important;
+
+    > .bg-comment-description {
+        border: 0 !important;
+        border-radius: 4px !important;
+        box-shadow: none !important;
+    }
+}
 .preview-modal{
     .modal-content{
         background-color: rgba(0, 0, 0, 0.90) !important;
