@@ -47,49 +47,46 @@ export type ListedTool = {
 
 const MINIMAL_INPUT_SCHEMA: Record<string, unknown> = { type: 'object' }
 
-const META_LIST_SCHEMAS: Record<
-  string,
-  { inputSchema: Record<string, unknown>; outputSchema: Record<string, unknown> }
-> = {
+const META_LIST_SCHEMAS: Record<string, Record<string, unknown>> = {
   [SEARCH_TOOLS_NAME]: {
-    inputSchema: {
-      type: 'object',
-      properties: { query: { type: 'string' }, limit: { type: 'integer' } },
-      required: ['query'],
-    },
-    outputSchema: {
-      type: 'object',
-      properties: { tools: { type: 'array', items: { type: 'object' } } },
-      required: ['tools'],
-    },
+    type: 'object',
+    properties: { query: { type: 'string' }, limit: { type: 'integer' } },
+    required: ['query'],
   },
   [DESCRIBE_TOOL_NAME]: {
-    inputSchema: {
-      type: 'object',
-      properties: { name: { type: 'string' } },
-      required: ['name'],
-    },
-    outputSchema: TOOL_OUTPUT_SCHEMA,
+    type: 'object',
+    properties: { name: { type: 'string' } },
+    required: ['name'],
   },
+}
+
+const META_OUTPUT_SCHEMAS: Record<string, Record<string, unknown>> = {
+  [SEARCH_TOOLS_NAME]: {
+    type: 'object',
+    properties: { tools: { type: 'array', items: { type: 'object' } } },
+    required: ['tools'],
+  },
+  [DESCRIBE_TOOL_NAME]: TOOL_OUTPUT_SCHEMA,
 }
 
 function deferredDescription(tool: { name: string; description: string }): string {
   return summaryForToolName(tool.name, firstSentence(tool.description))
 }
 
-export function listToolsDeferred(
-  tools: readonly CatalogTool[],
-  metaOnly = false
-): ListedTool[] {
-  return tools
-    .filter((tool) => !metaOnly || tool.name in META_LIST_SCHEMAS)
+export function listToolsDeferred(tools: readonly CatalogTool[]): ListedTool[] {
+  return tools.map((tool) => ({
+    name: tool.name,
+    description: deferredDescription(tool),
+    inputSchema: META_LIST_SCHEMAS[tool.name] ?? MINIMAL_INPUT_SCHEMA,
+  }))
+}
+
+export function listMetaTools(tools: readonly CatalogTool[]): ListedTool[] {
+  return listToolsDeferred(tools)
+    .filter((tool) => tool.name in META_LIST_SCHEMAS)
     .map((tool) => ({
-      name: tool.name,
-      description: deferredDescription(tool),
-      inputSchema: META_LIST_SCHEMAS[tool.name]?.inputSchema ?? MINIMAL_INPUT_SCHEMA,
-      ...(META_LIST_SCHEMAS[tool.name]?.outputSchema
-        ? { outputSchema: META_LIST_SCHEMAS[tool.name].outputSchema }
-        : {}),
+      ...tool,
+      outputSchema: META_OUTPUT_SCHEMAS[tool.name],
     }))
 }
 

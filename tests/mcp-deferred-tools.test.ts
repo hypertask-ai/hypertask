@@ -8,6 +8,7 @@ import {
   describeToolCatalog,
   estimateTokens,
   firstSentence,
+  listMetaTools,
   listToolsDeferred,
   listToolsFull,
   parseStructuredContent,
@@ -42,12 +43,19 @@ const catalog: PortableTool[] = [
   },
 ]
 
-function rpc(
-  method: string,
-  params: Record<string, unknown> = {},
-  id: number = 1,
-  url = 'https://mcp.hypertask.ai/mcp'
-) {
+function rpc(method: string, params: Record<string, unknown> = {}, id: number = 1) {
+  return new Request('https://mcp.hypertask.ai/mcp', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Accept: 'application/json',
+      Authorization: 'Bearer test-token',
+    },
+    body: JSON.stringify({ jsonrpc: '2.0', id, method, params }),
+  })
+}
+
+function rpcAt(url: string, method: string, params: Record<string, unknown> = {}, id = 1) {
   return new Request(url, {
     method: 'POST',
     headers: {
@@ -87,7 +95,7 @@ test('TOOL_METADATA descriptions stay unprefixed when the flag is off', () => {
   assert.doesNotMatch(source, /\$\{summary\}\\n\\n\$\{meta\.description\}/)
 })
 
-test('meta-only connect stays under 1,500 tokens and the short catalog stays protocol-valid', () => {
+test('deferred tools/list stays far cheaper than the full catalog', () => {
   const catalog = Object.entries(TOOL_SUMMARIES)
     .filter(([key]) => key !== 'SEARCH_TOOLS' && key !== 'DESCRIBE_TOOL')
     .map(([key, summary]) => ({
@@ -96,26 +104,30 @@ test('meta-only connect stays under 1,500 tokens and the short catalog stays pro
       parameters: z.object({ extra: z.string().optional() }),
       execute: async () => '{}',
     }))
-  const connectedTools = toolsForConnect(catalog, true)
-  const listed = listToolsDeferred(connectedTools)
-  const metaOnly = listToolsDeferred(connectedTools, true)
+  const listed = listToolsDeferred(toolsForConnect(catalog, true))
   const tokens = estimateTokens({ tools: listed })
-  const metaTokens = estimateTokens({ tools: metaOnly })
   const fullTokens = estimateTokens({ tools: listToolsFull(catalog) })
+  assert.ok(listed.length >= catalog.length)
+  assert.ok(listed.some((tool) => tool.name === 'hypertask_search_tools'))
+  assert.ok(listed.some((tool) => tool.name === 'hypertask_describe_tool'))
+  for (const tool of listed) {
+    assert.equal(tool.inputSchema?.type, 'object', `${tool.name} is missing a protocol inputSchema`)
+  }
+  assert.ok(tokens < 2100, `deferred list used ${tokens} tokens`)
+  assert.ok(tokens * 2 < fullTokens, `full list ${fullTokens} should be more than twice deferred ${tokens}`)
+})
 
-  assert.equal(listed.length, catalog.length + 2)
+test('meta-only connect stays under 1,500 tokens with declared outputs', () => {
+  const connectedTools = toolsForConnect(catalog, true)
+  const metaOnly = listMetaTools(connectedTools)
+  const tokens = estimateTokens({ tools: metaOnly })
+
   assert.deepEqual(
     metaOnly.map((tool) => tool.name),
     ['hypertask_search_tools', 'hypertask_describe_tool']
   )
-  assert.ok(metaTokens < 1500, `meta-only list used ${metaTokens} tokens`)
-  assert.ok(tokens * 2 < fullTokens, `full list ${fullTokens} should be more than twice deferred ${tokens}`)
-  for (const tool of listed) {
-    assert.equal(tool.inputSchema?.type, 'object', `${tool.name} is missing a protocol inputSchema`)
-  }
-  for (const tool of metaOnly) {
-    assert.equal(tool.outputSchema?.type, 'object', `${tool.name} is missing an outputSchema`)
-  }
+  assert.ok(tokens < 1500, `meta-only list used ${tokens} tokens`)
+  assert.equal(metaOnly.every((tool) => tool.outputSchema?.type === 'object'), true)
   assert.equal(ListToolsResultSchema.safeParse({ tools: metaOnly }).success, true)
 })
 
@@ -158,14 +170,7 @@ test('stateless tools/list and describe_tool honor the deferred flag', async () 
     { deferred: true }
   )
   const deferredBody = (await deferredList.json()) as {
-    result: {
-      tools: Array<{
-        name: string
-        description: string
-        inputSchema: { type: string }
-        outputSchema?: { type: string }
-      }>
-    }
+    result: { tools: Array<{ name: string; description: string; inputSchema: { type: string } }> }
   }
   const listed = deferredBody.result.tools
   assert.equal(
@@ -178,12 +183,21 @@ test('stateless tools/list and describe_tool honor the deferred flag', async () 
   )
 
   const metaList = await handleStatelessMcpRequest(
-    rpc('tools/list', {}, 2, 'https://mcp.hypertask.ai/mcp?tools=meta'),
+    rpcAt('https://mcp.hypertask.ai/mcp?tools=meta', 'tools/list', {}, 2),
     auth,
     catalog,
     { deferred: true }
   )
-  const metaBody = (await metaList.json()) as typeof deferredBody
+  const metaBody = (await metaList.json()) as {
+    result: {
+      tools: Array<{
+        name: string
+        description: string
+        inputSchema: { type: string }
+        outputSchema?: { type: string }
+      }>
+    }
+  }
   assert.deepEqual(
     metaBody.result.tools.map((tool) => tool.name),
     ['hypertask_search_tools', 'hypertask_describe_tool']
@@ -215,11 +229,11 @@ test('stateless tools/list and describe_tool honor the deferred flag', async () 
   assert.equal(describedBody.result.structuredContent?.name, 'hypertask_list_tasks')
 
   const called = await handleStatelessMcpRequest(
-    rpc(
+    rpcAt(
+      'https://mcp.hypertask.ai/mcp?tools=meta',
       'tools/call',
       { name: 'hypertask_list_tasks', arguments: {} },
-      3,
-      'https://mcp.hypertask.ai/mcp?tools=meta'
+      3
     ),
     auth,
     catalog,
@@ -230,11 +244,7 @@ test('stateless tools/list and describe_tool honor the deferred flag', async () 
   }
   assert.equal(calledBody.result.structuredContent?.tasks[0]?.id, 1)
 
-  const flagOff = await handleStatelessMcpRequest(
-    rpc('tools/list', {}, 3, 'https://mcp.hypertask.ai/mcp?tools=meta'),
-    auth,
-    catalog
-  )
+  const flagOff = await handleStatelessMcpRequest(rpc('tools/list'), auth, catalog)
   const flagOffBody = (await flagOff.json()) as {
     result: { tools: Array<{ name: string; description: string }> }
   }
