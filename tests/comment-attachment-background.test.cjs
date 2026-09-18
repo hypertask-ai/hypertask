@@ -31,9 +31,13 @@ test("attachment thumbnails use comment surface tokens in every theme", () => {
   assert.equal(tiles.length, 2);
   for (const tile of tiles) {
     assert.match(tile, /border-comment-description-border/);
-    assert.match(tile, /bg-comment-description/);
+    assert.match(tile, /bg-\[var\(--bg-comment-description\)\]/);
     assert.match(tile, /hover:bg-hoverCardBackground/);
   }
+  assert.equal(
+    attachmentView.match(/bg-\[var\(--bg-comment-description\)\]/g)?.length,
+    4,
+  );
   assert.doesNotMatch(attachmentView, /bg-\[#27292D\]|bg-secondary/);
   for (const theme of themes) {
     assert.doesNotMatch(theme, /\.attachment-tile(?:-name)?(?:\:hover)?\s*\{/);
