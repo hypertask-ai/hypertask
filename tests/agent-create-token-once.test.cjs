@@ -27,6 +27,9 @@ function loadCreateModule({
   mintedToken = "minted-token",
   validateManagementOrSessionAuth = async () => null,
   hasManagementWritePermission = () => true,
+  managementAgentTokenScope = () => undefined,
+  agentWithinTeamWhere = () => ({}),
+  getAccessibleAgentBoard = async () => null,
 } = {}) {
   const mod = { exports: {} };
   const mockRequire = (request) => {
@@ -36,6 +39,7 @@ function loadCreateModule({
         validateManagementOrSessionAuth,
         validateMcpAuth: async () => null,
         createMcpToken: () => mintedToken,
+        managementAgentTokenScope,
         agentTokenCredentialFields: () => ({
           mcpTokenHash: "hash",
           mcpTokenJti: "jti",
@@ -55,13 +59,16 @@ function loadCreateModule({
     if (request === "@/lib/mcp/managementPermissions") {
       return { hasManagementWritePermission };
     }
+    if (request === "@/lib/mcp/managementKeyTeamScope") {
+      return { agentWithinTeamWhere };
+    }
     if (request === "@/lib/prisma") {
       // esModuleInterop's __importDefault wraps a plain object as
       // { default: mod } itself, so the mock must NOT pre-wrap it.
       return prisma;
     }
     if (request === "@/utils/controllers/agents/boardMembers") {
-      return { getAccessibleAgentBoard: async () => null };
+      return { getAccessibleAgentBoard };
     }
     if (request === "@/utils/controllers/agents/teamScope") {
       return {
@@ -161,6 +168,53 @@ test("a successful create returns the token exactly once, alongside the agent", 
   // The response is the only place the token appears; nothing else in the
   // payload repeats or derives it.
   assert.doesNotMatch(JSON.stringify(data.agent), /one-time-token/);
+});
+
+test("a team-scoped key cannot create an agent on another team's board", async () => {
+  let duplicateWhere;
+  const prisma = {
+    agent: {
+      findFirst: async ({ where }) => {
+        duplicateWhere = where;
+        return null;
+      },
+    },
+  };
+  const { createAgentForUser } = loadCreateModule({
+    prisma,
+    agentWithinTeamWhere: (teamId) => ({ onlyTeam: teamId }),
+    getAccessibleAgentBoard: async () => ({ id: 15, teamId: "team-b" }),
+  });
+
+  const res = await createAgentForUser(
+    request({ display_name: "Build Agent", project_ids: [15] }),
+    { id: 6, email: "a@b.com" },
+    { teamId: "team-a", accessBinding: "member:membership-a" },
+  );
+
+  assert.equal(res.status, 403);
+  assert.match((await res.json()).error, /only in its own team/i);
+  assert.deepEqual(duplicateWhere, {
+    userId: 6,
+    displayName: "Build Agent",
+    revokedAt: null,
+    onlyTeam: "team-a",
+  });
+});
+
+test("a team-scoped key must create an agent on at least one board", async () => {
+  const prisma = { agent: { findFirst: async () => null } };
+  const { createAgentForUser } = loadCreateModule({ prisma });
+
+  const res = await createAgentForUser(
+    request({ display_name: "Build Agent" }),
+    { id: 6, email: "a@b.com" },
+    { teamId: "team-a", accessBinding: "member:membership-a" },
+  );
+
+  assert.equal(res.status, 400);
+  const data = await res.json();
+  assert.equal(data.field, "project_ids");
 });
 
 test("the browser-session route rejects an unauthenticated request before any validation", async () => {

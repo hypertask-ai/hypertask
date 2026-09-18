@@ -18,10 +18,12 @@ import {
   agentTokenCredentialFields,
   checkMcpRateLimit,
   createMcpToken,
+  managementAgentTokenScope,
   validateMcpAuth,
 } from '@/lib/mcp/auth'
 import { buildFieldError } from '@/lib/mcp/fieldError'
 import { hasManagementWritePermission } from '@/lib/mcp/managementPermissions'
+import { agentWithinTeamWhere } from '@/lib/mcp/managementKeyTeamScope'
 import prisma from '@/lib/prisma'
 import { getAccessibleAgentBoard } from '@/utils/controllers/agents/boardMembers'
 import { NextRequest, NextResponse } from 'next/server'
@@ -50,8 +52,8 @@ type AgentPatchBody = {
 }
 
 export const agentLifecycleDeps: AgentLifecycleDeps = {
-  mintToken: (userId, email, agentId) =>
-    createMcpToken(userId, email, undefined, agentId),
+  mintToken: (userId, email, agentId, teamScope) =>
+    createMcpToken(userId, email, undefined, agentId, teamScope),
   clearRuntime: (agentId) => clearAgentRuntimeSnapshot(agentId),
   credentialFields: (token) => agentTokenCredentialFields(token),
 }
@@ -109,12 +111,17 @@ export async function handleArchiveAgentRequest(
     )
   }
 
+  const agentScope = ctx.management?.teamId
+    ? agentWithinTeamWhere(ctx.management.teamId)
+    : {}
+
   try {
     const archived = await archiveOwnedAgent(
       prisma as unknown as AgentLifecycleDatabase,
       ctx.user.id,
       agentId,
-      true
+      true,
+      agentScope
     )
     if (archived.status === 'not_found') return notFound()
 
@@ -183,6 +190,10 @@ export async function handlePatchAgentRequest(
     )
   }
 
+  const agentScope = ctx.management?.teamId
+    ? agentWithinTeamWhere(ctx.management.teamId)
+    : {}
+
   let body: AgentPatchBody
   try {
     body = (await request.json()) as AgentPatchBody
@@ -236,7 +247,8 @@ export async function handlePatchAgentRequest(
         prisma as unknown as AgentBoardUpdateDatabase,
         getAccessibleAgentBoard,
         ctx.user.id,
-        input
+        input,
+        ctx.management?.teamId
       )
       return NextResponse.json({
         success: true,
@@ -287,7 +299,12 @@ export async function handlePatchAgentRequest(
         { status: 400 }
       )
     }
-    const result = await setOwnedAgentVisibility(agentId, ctx.user.id, body.visibility)
+    const result = await setOwnedAgentVisibility(
+      agentId,
+      ctx.user.id,
+      body.visibility,
+      agentScope
+    )
     if (!result.ok) {
       return NextResponse.json(
         { success: false, error: result.error },
@@ -295,7 +312,7 @@ export async function handlePatchAgentRequest(
       )
     }
     const row = await prisma.agent.findFirst({
-      where: { id: agentId },
+      where: { id: agentId, userId: ctx.user.id, ...agentScope },
       select: {
         id: true,
         displayName: true,
@@ -375,7 +392,8 @@ export async function handlePatchAgentRequest(
       database,
       ctx.user.id,
       agentId,
-      body.archived as boolean
+      body.archived as boolean,
+      agentScope
     )
     if (archived.status === 'not_found') return notFound()
     currentAgent = archived.agent
@@ -386,7 +404,9 @@ export async function handlePatchAgentRequest(
       database,
       agentLifecycleDeps,
       ctx.user.id,
-      agentId
+      agentId,
+      agentScope,
+      managementAgentTokenScope(ctx.management)
     )
     if (result.status === 'not_found') return notFound()
     if (result.status === 'runtime_invalidation_failed') {
@@ -414,7 +434,8 @@ export async function handlePatchAgentRequest(
       database,
       ctx.user.id,
       agentId,
-      displayName!
+      displayName!,
+      agentScope
     )
     if (renamed.status === 'not_found') return notFound()
     currentAgent = renamed.agent

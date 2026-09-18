@@ -66,7 +66,8 @@ export async function handleDeleteAgentRequest(
     prisma as unknown as AgentManagementDatabase,
     ctx.user.id,
     agentId,
-    clearAgentRuntimeSnapshot
+    clearAgentRuntimeSnapshot,
+    ctx.management?.teamId
   )
   if (!deletedAgent) {
     return NextResponse.json(

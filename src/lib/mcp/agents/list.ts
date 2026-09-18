@@ -53,7 +53,8 @@ export async function handleListAgentsRequest(
 
   const agents = await listOwnedAgents(
     prisma as unknown as AgentManagementDatabase,
-    ctx.user.id
+    ctx.user.id,
+    ctx.management?.teamId
   )
   const listQueryEnabled = await isFeatureEnabled(HTPR_6530_MCP_LIST_QUERY_FLAG, ctx.user.id)
   const parsedListQuery = readEnabledListQuery(

@@ -94,6 +94,8 @@ export const HTPR_6556_MOBILE_DESCRIPTION_FIRST_FLAG =
   "htpr-6556-mobile-description-first";
 export const HTPR_6561_DESCRIPTION_STRUCTURE_FLAG =
   "htpr-6561-preserve-ai-edited-description-structure";
+export const HTPR_6542_TEAM_SCOPED_MANAGEMENT_KEYS_FLAG =
+  "htpr-6542-team-scoped-management-keys";
 /** Sent on chat.message when HTPR-6407 is on so agent replies lead with the next action. */
 export const AGENT_CHAT_ADHD_REPLY_GUIDANCE =
   "Lead with the next action. Keep replies short. Number steps. End with one concrete next action when something remains open.";

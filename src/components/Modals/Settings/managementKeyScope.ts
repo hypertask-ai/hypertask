@@ -7,6 +7,22 @@ import {
 
 export type ManagementKeyPermissionMap = Record<string, string[]>
 
+export const managementKeyTeamIdForRequest = (
+  enabled: boolean,
+  teamId: string | null,
+) => (enabled ? teamId : null)
+
+export const managementKeyTeamLabel = (
+  teamScoped: boolean,
+  team: { title: string | null } | null,
+  enabled: boolean,
+) => {
+  if (teamScoped && !enabled) return "Team key disabled"
+  if (!enabled) return null
+  if (!teamScoped) return "Whole account"
+  return team?.title || (team ? "Untitled team" : "Team unavailable")
+}
+
 export const managementKeyScopeLabel = (
   permissions: ManagementKeyPermissionMap,
 ) => {

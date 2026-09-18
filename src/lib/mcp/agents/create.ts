@@ -1,13 +1,16 @@
 import {
   agentTokenCredentialFields,
+  type AgentTokenTeamScope,
   checkMcpRateLimit,
   createMcpToken,
+  managementAgentTokenScope,
   type McpAuthContext,
   validateManagementOrSessionAuth,
   validateMcpAuth,
 } from '@/lib/mcp/auth'
 import { buildFieldError } from '@/lib/mcp/fieldError'
 import { hasManagementWritePermission } from '@/lib/mcp/managementPermissions'
+import { agentWithinTeamWhere } from '@/lib/mcp/managementKeyTeamScope'
 import prisma from '@/lib/prisma'
 import { getAccessibleAgentBoard } from '@/utils/controllers/agents/boardMembers'
 import { lockTeamAgentSeed } from '@/utils/controllers/agents/ensureDefaultTeamAgent'
@@ -74,13 +77,19 @@ export async function handleCreateAgentRequest(
     )
   }
 
-  return createAgentForUser(request, ctx.user)
+  return createAgentForUser(
+    request,
+    ctx.user,
+    managementAgentTokenScope(ctx.management)
+  )
 }
 
 export async function createAgentForUser(
   request: NextRequest,
-  user: McpAuthContext['user']
+  user: McpAuthContext['user'],
+  teamScope?: AgentTokenTeamScope
 ): Promise<NextResponse> {
+  const teamId = teamScope?.teamId
 
   let body: CreateAgentBody
   try {
@@ -129,6 +138,7 @@ export async function createAgentForUser(
       userId: user.id,
       displayName,
       revokedAt: null,
+      ...(teamId ? agentWithinTeamWhere(teamId) : {}),
     },
     select: { id: true },
   })
@@ -136,7 +146,9 @@ export async function createAgentForUser(
     return NextResponse.json(
       {
         success: false,
-        error: `An agent named "${displayName}" already exists (id ${existingAgent.id}). Its token is shown only at creation. Rotate it with POST /api/mcp/admin/agents/${existingAgent.id}/token or the MCP rotate-token endpoint; rotating invalidates the old token.`,
+        error: teamId
+          ? `An agent named "${displayName}" already exists in this team.`
+          : `An agent named "${displayName}" already exists (id ${existingAgent.id}). Its token is shown only at creation. Rotate it with POST /api/mcp/admin/agents/${existingAgent.id}/token or the MCP rotate-token endpoint; rotating invalidates the old token.`,
       },
       { status: 409 }
     )
@@ -171,6 +183,13 @@ export async function createAgentForUser(
     }
     projectIds = [...new Set(body.project_ids as number[])]
   }
+  if (teamId && projectIds.length === 0) {
+    return fieldError(
+      'missing_field',
+      'project_ids',
+      'A team-scoped key must add the agent to at least one team board'
+    )
+  }
 
   const projects = []
   for (const projectId of projectIds) {
@@ -185,6 +204,15 @@ export async function createAgentForUser(
       )
     }
     projects.push(project)
+  }
+  if (teamId && projects.some((project) => project.teamId !== teamId)) {
+    return NextResponse.json(
+      {
+        success: false,
+        error: 'A team-scoped key can create agents only in its own team',
+      },
+      { status: 403 }
+    )
   }
 
   const memberTeamIds = projects.map((project) => project.teamId)
@@ -228,7 +256,8 @@ export async function createAgentForUser(
       user.id,
       user.email,
       undefined,
-      createdAgent.id
+      createdAgent.id,
+      teamScope
     )
 
     await tx.agent.update({
