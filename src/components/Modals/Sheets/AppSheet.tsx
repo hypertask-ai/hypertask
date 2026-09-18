@@ -1,14 +1,39 @@
-import React, { useEffect } from "react";
-import { Sheet } from "react-modal-sheet";
+import React, { useEffect, useState } from "react";
+import { Sheet, useScrollPosition } from "react-modal-sheet";
 import type { ComponentPropsWithoutRef } from "react";
 import { cn } from "@/utils/undoActions/helperFuncs";
 
 export const APP_SHEET_Z_INDEX = 9990;
 
-/** Use inside `AppSheet` children when you need scroll-linked drag (same Sheet context). */
-export const SheetScroller = Sheet.Scroller;
+type ScrollPosition = "top" | "bottom" | "middle" | undefined;
 
-type SheetDetent = "full-height" | "content-height";
+const SheetScrollerContext = React.createContext<{
+  isOpen: boolean;
+  onScrollPosition: (position: ScrollPosition) => void;
+} | null>(null);
+
+/** Use inside an `AppSheet` with `customScroller` for a fixed header or footer. */
+export const SheetScroller = (props: ComponentPropsWithoutRef<"div">) => {
+  const context = React.useContext(SheetScrollerContext);
+  const onScrollPosition = context?.onScrollPosition;
+  const { scrollRef, scrollPosition } = useScrollPosition({
+    debounceDelay: 0,
+    isEnabled: context?.isOpen ?? false,
+  });
+
+  useEffect(() => {
+    onScrollPosition?.(scrollPosition);
+  }, [onScrollPosition, scrollPosition]);
+
+  useEffect(
+    () => () => onScrollPosition?.(undefined),
+    [onScrollPosition],
+  );
+
+  return <div {...props} ref={scrollRef} />;
+};
+
+type SheetDetent = "default" | "content" | "full";
 
 type RootSheetProps = Pick<
   ComponentPropsWithoutRef<typeof Sheet>,
@@ -30,6 +55,7 @@ export interface AppSheetProps extends RootSheetProps {
   defaultLibraryHeader?: boolean;
   panelClassName?: string;
   bodyClassName?: string;
+  customScroller?: boolean;
   backdropClassName?: string;
   /** Applied to `Sheet.Header` (library, custom, or collapsed). */
   headerClassName?: string;
@@ -60,13 +86,14 @@ export const AppSheet: React.FC<AppSheetProps> = ({
   defaultLibraryHeader = true,
   panelClassName,
   bodyClassName,
+  customScroller = false,
   backdropClassName,
   headerClassName,
   handleRowClassName,
   handleBarClassName,
   headerCollapsedInnerClassName,
   zIndex = APP_SHEET_Z_INDEX,
-  detent = "content-height",
+  detent = "content",
   disableScrollLocking = false,
   sheetClassName,
   sheetStyle,
@@ -77,6 +104,9 @@ export const AppSheet: React.FC<AppSheetProps> = ({
   onOpenStart,
   onOpenEnd,
 }) => {
+  const [customScrollPosition, setCustomScrollPosition] =
+    useState<ScrollPosition>();
+
   useEffect(() => {
     if (!isOpen) return;
     const onKeyDown = (e: KeyboardEvent) => {
@@ -106,6 +136,7 @@ export const AppSheet: React.FC<AppSheetProps> = ({
       isOpen={isOpen}
       onClose={onClose}
       detent={detent}
+      avoidKeyboard={false}
       disableScrollLocking={disableScrollLocking}
       className={cn(sheetClassName)}
       style={{ zIndex, ...sheetStyle }}
@@ -118,13 +149,27 @@ export const AppSheet: React.FC<AppSheetProps> = ({
       onOpenStart={onOpenStart}
       onOpenEnd={onOpenEnd}
     >
-      <Sheet.Container
-        className={cn(panelClassName)}
-        style={containerStyle}
+      <SheetScrollerContext.Provider
+        value={{ isOpen, onScrollPosition: setCustomScrollPosition }}
       >
-        {headerEl}
-        <Sheet.Content className={cn(bodyClassName)}>{children}</Sheet.Content>
-      </Sheet.Container>
+        <Sheet.Container
+          className={cn(panelClassName)}
+          style={containerStyle}
+        >
+          {headerEl}
+          <Sheet.Content
+            disableScroll={customScroller}
+            disableDrag={
+              customScroller &&
+              customScrollPosition !== undefined &&
+              customScrollPosition !== "top"
+            }
+            scrollClassName={cn(bodyClassName)}
+          >
+            {children}
+          </Sheet.Content>
+        </Sheet.Container>
+      </SheetScrollerContext.Provider>
       <Sheet.Backdrop
         className={cn(backdropClassName)}
         onTap={(event) => {

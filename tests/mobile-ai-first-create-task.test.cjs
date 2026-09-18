@@ -99,7 +99,7 @@ test("mobile create writer matches the approved stripped-down hierarchy", () => 
   assert.doesNotMatch(intro, /rounded-full|border-border-light-gray-thin/);
   assert.match(
     writerContainer,
-    /detent=\{isMobileCreateFlow \? "content-height" : "full-height"\}/,
+    /detent=\{isMobileCreateFlow \? "content" : "default"\}/,
   );
   assert.match(
     writerContainer,
