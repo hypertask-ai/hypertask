@@ -12,10 +12,12 @@ const { measuredUsage } = require(path.join(root, "evals/mcp-client/lib/tokens.c
 const { gradeObservation, gradeMcpPlan } = require(
   path.join(root, "evals/mcp-client/lib/grade.cjs"),
 );
-const { clientAvailable, runClientAdapter } = require(
+const { clientAvailable, runClientAdapter, which } = require(
   path.join(root, "evals/mcp-client/lib/executors.cjs"),
 );
 const { runEval } = require(path.join(root, "evals/mcp-client/lib/run.cjs"));
+
+const hasNativeCli = Boolean(process.env.EVAL_HYPERTASK_BIN || which("hypertask"));
 
 test("catalog has 20 unique Hypertask tasks with MCP, CLI, and outcome assertions", () => {
   const catalog = loadCatalog();
@@ -52,24 +54,28 @@ test("wrong MCP tool, extra call, or wrong stdout fails", () => {
   assert.equal(grade.pass, false);
 });
 
-test("fixture mode measures surfaces and does not fabricate client rows", async () => {
-  const report = await runEval({
-    now: "2026-09-17T06:00:00.000Z",
-    label: "pre-6478",
-    mode: "fixture",
-  });
-  assert.equal(report.rows.length, 0);
-  assert.equal(report.summary.successRate, null);
-  assert.equal(report.surfaces.length, 40);
-  const failedSurfaces = report.surfaces.filter((row) => !row.pass);
-  assert.equal(
-    failedSurfaces.length,
-    0,
-    failedSurfaces.map((row) => `${row.taskId} ${row.transport}: ${row.reason}`).join("; "),
-  );
-  assert.ok(report.summary.byTransport.mcp.wallMs > 0);
-  assert.ok(report.summary.byTransport.cli.wallMs > 0);
-});
+test(
+  "fixture mode measures surfaces and does not fabricate client rows",
+  { skip: hasNativeCli ? false : "native CLI unavailable" },
+  async () => {
+    const report = await runEval({
+      now: "2026-09-17T06:00:00.000Z",
+      label: "pre-6478",
+      mode: "fixture",
+    });
+    assert.equal(report.rows.length, 0);
+    assert.equal(report.summary.successRate, null);
+    assert.equal(report.surfaces.length, 40);
+    const failedSurfaces = report.surfaces.filter((row) => !row.pass);
+    assert.equal(
+      failedSurfaces.length,
+      0,
+      failedSurfaces.map((row) => `${row.taskId} ${row.transport}: ${row.reason}`).join("; "),
+    );
+    assert.ok(report.summary.byTransport.mcp.wallMs > 0);
+    assert.ok(report.summary.byTransport.cli.wallMs > 0);
+  },
+);
 
 test("live mode omits unavailable clients instead of replaying a pass", async () => {
   const report = await runEval({
