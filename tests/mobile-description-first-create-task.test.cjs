@@ -50,7 +50,11 @@ test("mobile header keeps board visible and title plus properties collapsed", ()
   );
   assert.match(
     body,
-    /if \(!descriptionFocusSet\.current\)[\s\S]*?setCurrentFocusedElement\("Description"\)[\s\S]*?return[\s\S]*?titleGenerationError \|\| currentFocusedElement === "Title"[\s\S]*?setExpandedMobileSection\("title"\)/,
+    /if \(!descriptionFocusSet\.current\) \{\s*descriptionFocusSet\.current = true\s*if \(editMode === "Description-ai"\) return/,
+  );
+  assert.match(
+    body,
+    /setCurrentFocusedElement\("Description"\)[\s\S]*?return[\s\S]*?titleGenerationError \|\| currentFocusedElement === "Title"[\s\S]*?setExpandedMobileSection\("title"\)/,
   );
   assert.match(body, /mobileShowPills=\{expandedMobileSection === "properties"\}/);
   assert.match(body, /mobileRaisedPanel/);

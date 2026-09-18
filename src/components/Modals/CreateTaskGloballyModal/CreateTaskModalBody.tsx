@@ -69,8 +69,8 @@ const CreateTaskModalBody: React.FC<IProps> = ({ }) => {
     useEffect(() => {
         if (!descriptionFirstMobile) return
         if (!descriptionFocusSet.current) {
-            if (editMode === "Description-ai") return
             descriptionFocusSet.current = true
+            if (editMode === "Description-ai") return
             setEditMode("Description")
             setCurrentFocusedElement("Description")
             return
