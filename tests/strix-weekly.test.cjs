@@ -27,6 +27,16 @@ test('weekly Strix cleanup removes only its own sandbox', async (t) => {
   await mockCommand(bin, 'curl', 'echo "curl $*" >> "$COMMAND_LOG"')
   await mockCommand(
     bin,
+    'git',
+    `echo "git $*" >> "$COMMAND_LOG"
+if [[ "$1" == "rev-parse" ]]; then
+  echo weekly-base
+elif [[ "$1" == "diff" && "\${NO_CHANGED_FILES:-0}" != "1" ]]; then
+  printf 'src/changed.ts\\nsrc/other.ts\\n'
+fi`,
+  )
+  await mockCommand(
+    bin,
     'docker',
     `echo "docker $*" >> "$COMMAND_LOG"
 if [[ "$1" == "rm" && "\${FAIL_DOCKER_RM:-0}" == "1" ]]; then
@@ -40,7 +50,9 @@ fi`,
   await mockCommand(
     bin,
     'strix',
-    'echo "strix network=${STRIX_DOCKER_SANDBOX_NETWORK:-} image=${STRIX_IMAGE:-}" >> "$COMMAND_LOG"',
+    `echo "strix network=\${STRIX_DOCKER_SANDBOX_NETWORK:-} image=\${STRIX_IMAGE:-} args=$*" >> "$COMMAND_LOG"
+[[ "\${FAIL_STRIX:-0}" != "1" ]] || exit 1
+mkdir -p "$STRIX_APP/strix_runs/test"`,
   )
   await mockCommand(bin, 'python3', 'echo "python3 $*" >> "$COMMAND_LOG"')
 
@@ -68,12 +80,34 @@ fi`,
     commands,
     /strix network=strix-weekly-\S+ image=ghcr\.io\/usestrix\/strix-sandbox:1\.1\.0/,
   )
+  assert.match(commands, /git rev-parse --verify production@\{7 days ago\}/)
+  assert.match(commands, /git diff --name-only --diff-filter=ACMR weekly-base\.\.\.HEAD/)
+  assert.match(commands, /args=-n -m standard --scope-mode diff --diff-base weekly-base --target \./)
 
   const healthChecks = commands
     .split('\n')
     .filter((line) => line.startsWith('curl ') && line.includes('/health'))
   assert.ok(healthChecks.length >= 2)
   for (const command of healthChecks) assert.match(command, /--max-time 2/)
+
+  const noChangesLog = join(root, 'no-changes.log')
+  await execFileAsync('/bin/bash', ['scripts/strix-weekly.sh'], {
+    cwd: process.cwd(),
+    env: { ...env, COMMAND_LOG: noChangesLog, NO_CHANGED_FILES: '1' },
+  })
+  const noChangesCommands = await readFile(noChangesLog, 'utf8')
+  assert.doesNotMatch(noChangesCommands, /^strix /m)
+  assert.doesNotMatch(noChangesCommands, /^python3 /m)
+
+  const failedScanLog = join(root, 'failed-scan.log')
+  await assert.rejects(
+    execFileAsync('/bin/bash', ['scripts/strix-weekly.sh'], {
+      cwd: process.cwd(),
+      env: { ...env, COMMAND_LOG: failedScanLog, FAIL_STRIX: '1' },
+    }),
+  )
+  const failedScanCommands = await readFile(failedScanLog, 'utf8')
+  assert.doesNotMatch(failedScanCommands, /^python3 /m)
 
   await assert.rejects(
     execFileAsync('/bin/bash', ['scripts/strix-weekly.sh'], {
