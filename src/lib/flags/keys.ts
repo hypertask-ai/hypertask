@@ -17,6 +17,8 @@ export const AGENT_CHAT_SKILLS_FLAG = "htpr-6035-agent-chat-skills";
 export const AGENT_CHAT_TICKET_CONFIRM_FLAG = "htpr-6006-chat-confirm-ticket";
 export const HTPR_6157_AUTO_DESCRIPTION_FLAG =
   "htpr-6157-new-task-auto-description";
+export const HTPR_6175_QUICK_ENTRY_CARDS_FLAG =
+  "htpr-6175-quick-entry-cards";
 export const AUTO_TASK_DESCRIPTIONS_FLAG = "htpr-6177-auto-task-descriptions";
 export const FLAG_TICKET_TITLE_FLAG = "htpr-6176-flag-ticket-title";
 export const FLAG_SORT_FILTER_FLAG = "htpr-6179-flag-sort-filter";
