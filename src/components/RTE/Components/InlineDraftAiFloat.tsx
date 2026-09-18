@@ -1107,7 +1107,7 @@ const InlineDraftAiFloat = ({
         ariaLabel="Write with AI"
         defaultLibraryHeader={false}
         zIndex={MOBILE_OVERLAY_SHEET_Z}
-        detent="full-height"
+        detent="default"
         disableScrollLocking
         onOpenStart={focusPromptInSheet}
         onOpenEnd={focusPromptInSheet}

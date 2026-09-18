@@ -202,6 +202,8 @@ test('POST follows the feature flag; OPTIONS stays stateless', () => {
   assert.equal(usesStatelessMcpTransport('OPTIONS', false), true)
   assert.equal(usesStatelessMcpTransport('GET', false), false)
   assert.equal(usesStatelessMcpTransport('DELETE', false), false)
+  assert.equal(usesStatelessMcpTransport('PUT', false), false)
+  assert.equal(usesStatelessMcpTransport('PATCH', false), false)
   assert.equal(usesStatelessMcpTransport('POST', true), true)
   assert.equal(usesStatelessMcpTransport('GET', true), true)
 })

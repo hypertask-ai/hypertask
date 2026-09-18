@@ -16,6 +16,7 @@ const jiti = require("jiti")(
 const {
   getInitialSettingsTeamId,
   getSettingsProjectForTeam,
+  settingsUserId,
 } = jiti(path.join(root, "src/lib/settingsTeamSelection.ts"));
 const { deriveTeamBilling } = jiti(
   path.join(root, "src/lib/deriveCurrentBoardBilling.ts"),
@@ -26,6 +27,13 @@ const projects = [
   { id: 2, teamId: "team-b", title: "B board" },
   { id: 3, teamId: "team-b", title: "B second board" },
 ];
+
+test("settings team queries accept a cookie user id stored as a string", () => {
+  assert.equal(settingsUserId({ id: 6 }), 6);
+  assert.equal(settingsUserId({ id: "6" }), 6);
+  assert.equal(settingsUserId({ id: "0" }), null);
+  assert.equal(settingsUserId(null), null);
+});
 
 test("the selected settings team overrides a stale current board", () => {
   assert.equal(

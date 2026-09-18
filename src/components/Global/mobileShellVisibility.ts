@@ -3,6 +3,7 @@ const hiddenShellPaths = [
   "/interactive-onboarding",
   "/learn",
   "/login",
+  "/qa/login",
   "/new",
   "/onboarding",
   "/settings",

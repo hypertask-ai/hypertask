@@ -1,5 +1,6 @@
 import type { ISection, ITask } from "@/models/model";
 import { endOfDay, endOfWeek, startOfDay } from "date-fns";
+import { myTasksDayBounds } from "@/lib/myTasksTimeZone";
 
 export type MyTasksBoardTask = {
   id: number;
@@ -58,13 +59,58 @@ export function getMyTasksSplitIndex(
  * Same calendar rules as My Tasks due-date filters: Overdue is before the
  * start of today, not "due earlier this afternoon".
  */
+export function isMyTasksOverdue(
+  dueDate: Date | string | null | undefined,
+  now: Date = new Date(),
+  timeZone?: string,
+): boolean {
+  return classifyMyTasksTimeBucket(dueDate, now, timeZone) === "Overdue";
+}
+
+export function countMyTasksOverdue(
+  tasks: Array<{ dueDate?: Date | string | null }>,
+  now: Date = new Date(),
+  timeZone?: string,
+): number {
+  let count = 0;
+  for (const task of tasks) {
+    if (isMyTasksOverdue(task.dueDate, now, timeZone)) count += 1;
+  }
+  return count;
+}
+
+export function countMyTasksOverdueByBoard(
+  tasks: MyTasksBoardTask[],
+  now: Date = new Date(),
+  timeZone?: string,
+): { total: number; byBoardId: Map<number, number> } {
+  const byBoardId = new Map<number, number>();
+  let total = 0;
+  for (const task of tasks) {
+    if (!isMyTasksOverdue(task.dueDate, now, timeZone)) continue;
+    total += 1;
+    const boardId = task.project?.id ?? task.projectId;
+    byBoardId.set(boardId, (byBoardId.get(boardId) ?? 0) + 1);
+  }
+  return { total, byBoardId };
+}
+
 export function classifyMyTasksTimeBucket(
   dueDate: Date | string | null | undefined,
   now: Date = new Date(),
+  timeZone?: string,
 ): MyTasksTimeBucket {
   if (!dueDate) return "No due date";
   const time = new Date(dueDate).getTime();
   if (!Number.isFinite(time)) return "No due date";
+
+  if (timeZone) {
+    const { todayStart, todayEnd, weekEnd } = myTasksDayBounds(now, timeZone);
+    if (time < todayStart.getTime()) return "Overdue";
+    if (time <= todayEnd.getTime()) return "Today";
+    if (time <= weekEnd.getTime()) return "This week";
+    return "Later";
+  }
 
   const todayStart = startOfDay(now).getTime();
   if (time < todayStart) return "Overdue";
@@ -75,6 +121,25 @@ export function classifyMyTasksTimeBucket(
   const weekEnd = endOfWeek(now, { weekStartsOn: 1 }).getTime();
   if (time <= weekEnd) return "This week";
   return "Later";
+}
+
+/** Board-tab overdue counts. Time grouping still tabs by board, not by bucket. */
+export function splitTabOverdueCounts(
+  groupBy: string,
+  tasks: MyTasksBoardTask[],
+  boards: Array<{ id: number }>,
+  sections: Array<{ items: Array<{ dueDate?: Date | string | null }> }>,
+  now: Date,
+  timeZone?: string,
+): number[] {
+  if (groupBy === "time") {
+    const { total, byBoardId } = countMyTasksOverdueByBoard(tasks, now, timeZone);
+    return [total, ...boards.map((board) => byBoardId.get(board.id) ?? 0)];
+  }
+  const sectionCounts = sections.map((section) =>
+    countMyTasksOverdue(section.items, now, timeZone),
+  );
+  return [sectionCounts.reduce((sum, count) => sum + count, 0), ...sectionCounts];
 }
 
 /** Pure time grouping for My Tasks when a saved view asks for groupBy time. */

@@ -1,6 +1,7 @@
 import authConfig from '@/lib/configs/auth.config';
 import { companyRoleOptions, companySizeOptions } from '@/lib/constants/constants';
 import prisma from '@/lib/prisma';
+import { googleCalendarDisconnectData } from '@/lib/googleCalendar/connection';
 import { IUser } from '@/models/model';
 import { CompleteOnboardingFirstStep } from '@/utils/controllers/users/completeOnboardingStep';
 
@@ -89,8 +90,13 @@ export const resetUserAccount = async (
             await tx.user.update({
                 where: { id: userToResetId },
                 data: {
+                    googleCalendarGeneration: { increment: 1 },
                     joinedAt: new Date()
                 }
+            });
+            await tx.googleCalendarConnection.updateMany({
+                where: { userId: userToResetId },
+                data: googleCalendarDisconnectData()
             });
 
             // 2. Transfer project ownership (or archive when there is no transferee)

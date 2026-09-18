@@ -52,6 +52,7 @@ export const AGENT_RUN_ACTIVITY_TYPES = [
   "error",
   "elicitation",
 ] as const;
+export const AGENT_RUN_TITLE_MAX_LENGTH = 250;
 export const AGENT_RUN_ACTIVITY_TEXT_MAX_LENGTH = 8_000;
 export const AGENT_RUN_ACTIVITY_LINK_MAX_LENGTH = 2_048;
 export const AGENT_RUN_ACTIVITY_OPTION_MAX_LENGTH = 256;
@@ -83,6 +84,7 @@ export type SerializedAgentRunActivity = {
   createdAt: string;
 };
 
+export class AgentRunInputError extends Error {}
 export class AgentRunActivityInputError extends Error {}
 export class AgentRunNotActiveError extends Error {}
 export class AgentRunActivityConflictError extends Error {}
@@ -137,7 +139,7 @@ export function serializeAgentRun(
     | "createdAt"
     | "lastActivityAt"
     | "stoppedById"
-  >,
+  > & { title?: string | null },
 ): AgentWebhookRun {
   return {
     id: run.id,
@@ -145,6 +147,7 @@ export function serializeAgentRun(
     taskId: run.taskId,
     chatSessionId: run.chatSessionId,
     trigger: run.trigger.toLowerCase() as AgentWebhookRun["trigger"],
+    ...(run.title ? { title: run.title } : {}),
     status: run.status.toLowerCase() as AgentWebhookRun["status"],
     createdAt: run.createdAt.toISOString(),
     lastActivityAt: run.lastActivityAt.toISOString(),
@@ -156,6 +159,49 @@ function objectRecord(value: unknown): Record<string, unknown> | null {
   return value !== null && typeof value === "object" && !Array.isArray(value)
     ? (value as Record<string, unknown>)
     : null;
+}
+
+export type RuntimeAgentRunInput = {
+  taskId: number;
+  title: string | null;
+  source: "runtime";
+};
+
+export function parseRuntimeAgentRunInput(value: unknown): RuntimeAgentRunInput {
+  const body = objectRecord(value);
+  if (!body) throw new AgentRunInputError("request body must be an object");
+  const allowedFields = new Set(["taskId", "title", "source"]);
+  const unknownField = Object.keys(body).find((key) => !allowedFields.has(key));
+  if (unknownField) throw new AgentRunInputError(`unknown field: ${unknownField}`);
+  if (!Number.isSafeInteger(body.taskId) || Number(body.taskId) < 1) {
+    throw new AgentRunInputError("taskId must be a positive integer");
+  }
+  if (body.source !== "runtime") {
+    throw new AgentRunInputError('source must be "runtime"');
+  }
+
+  let title: string | null = null;
+  if (body.title !== undefined && body.title !== null) {
+    title = typeof body.title === "string" ? body.title.trim() : "";
+    if (!title || title.length > AGENT_RUN_TITLE_MAX_LENGTH) {
+      throw new AgentRunInputError(
+        `title must be 1 to ${AGENT_RUN_TITLE_MAX_LENGTH} characters`,
+      );
+    }
+  }
+  return { taskId: Number(body.taskId), title, source: "runtime" };
+}
+
+export function parseAgentRunStopInput(value: unknown): "DONE" | "STOPPED" {
+  if (value === null || value === undefined) return "STOPPED";
+  const body = objectRecord(value);
+  if (!body) throw new AgentRunInputError("request body must be an object");
+  const unknownField = Object.keys(body).find((key) => key !== "status");
+  if (unknownField) throw new AgentRunInputError(`unknown field: ${unknownField}`);
+  if (body.status === undefined) return "STOPPED";
+  if (body.status === "done") return "DONE";
+  if (body.status === "stopped") return "STOPPED";
+  throw new AgentRunInputError('status must be "done" or "stopped"');
 }
 
 function parseActivityOptions(value: unknown): AgentRunActivityOption[] {

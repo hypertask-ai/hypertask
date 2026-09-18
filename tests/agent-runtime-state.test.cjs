@@ -139,6 +139,7 @@ test("offline or disabled snapshots fall back to the inferred board queue", () =
 test("managed heartbeat resolves trusted task fields and drops foreign or sensitive input", async () => {
   const saved = [];
   let agentQuery;
+  let heartbeatUpdate;
   let taskWhere;
   const db = {
     agent: {
@@ -149,6 +150,10 @@ test("managed heartbeat resolves trusted task fields and drops foreign or sensit
           runtimeGeneration: 7,
           members: [{ projectId: 15 }],
         };
+      },
+      async updateMany(query) {
+        heartbeatUpdate = query;
+        return { count: 1 };
       },
     },
     task: {
@@ -257,6 +262,16 @@ test("managed heartbeat resolves trusted task fields and drops foreign or sensit
   assert.equal(saved[0][0], "agent-1");
   assert.equal(saved[0][1], 7);
   assert.equal(saved[0][2], result);
+  assert.deepEqual(heartbeatUpdate, {
+    where: {
+      id: "agent-1",
+      userId: 6,
+      revokedAt: null,
+      runtimeGeneration: 7,
+      OR: [{ heartbeatAt: null }, { heartbeatAt: { lt: now } }],
+    },
+    data: { heartbeatAt: now },
+  });
   assert.equal(result.sequence, 42);
   assert.equal(result.lastProgressAt, now.toISOString());
   assert.deepEqual(result.sourceSections, [
@@ -281,10 +296,15 @@ test("managed heartbeat resolves trusted task fields and drops foreign or sensit
 
 test("a credential-shaped scope label never reaches the runtime snapshot", async () => {
   const saved = [];
+  let agentReads = 0;
   const db = {
     agent: {
       async findFirst() {
+        agentReads += 1;
         return { id: "agent-1", runtimeGeneration: 7, members: [{ projectId: 15 }] };
+      },
+      async updateMany() {
+        return { count: 0 };
       },
     },
     task: { async findMany() { return []; } },
@@ -309,6 +329,7 @@ test("a credential-shaped scope label never reaches the runtime snapshot", async
   });
 
   assert.equal(result.scopeLabel, null);
+  assert.equal(agentReads, 2, "a newer concurrent heartbeat is revalidated, not overwritten");
   assert.doesNotMatch(JSON.stringify(saved), /htk_should_never_render/);
 });
 

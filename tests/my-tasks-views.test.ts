@@ -3,8 +3,10 @@ import test from "node:test";
 
 import {
   applyMyTasksView,
+  overdueCountForMyTasksView,
   type MyTasksTask,
 } from "../src/lib/myTasksFiltering";
+import type { ISection } from "../src/models/model";
 import {
   migrateFlatFiltersToFilterSettings,
   myTasksParityFilterCount,
@@ -20,7 +22,7 @@ const NOW = new Date("2026-09-14T12:00:00.000Z");
 
 const task = (
   id: number,
-  overrides: Partial<MyTasksTask> = {},
+  overrides: Record<string, unknown> = {},
 ): MyTasksTask =>
   ({
     id,
@@ -36,7 +38,7 @@ const task = (
     subTasks: [],
     myTasksSection: { id: 11, isDone: false },
     ...overrides,
-  }) as MyTasksTask;
+  }) as unknown as MyTasksTask;
 
 const config = (
   overrides: Partial<MyTasksViewConfig> = {},
@@ -515,5 +517,52 @@ test("filterSettings path still applies flat starred:false", () => {
     ).map(({ id }) => id),
     // Priority keeps both; not-starred drops the starred task.
     [2],
+  );
+});
+
+const viewSection = (
+  items: MyTasksTask[],
+  projectId: number,
+): ISection =>
+  ({
+    sectionId: projectId,
+    projectId,
+    section_title: `Board ${projectId}`,
+    items,
+  }) as ISection;
+
+test("overdueCountForMyTasksView follows the active view filters", () => {
+  const sections = [
+    viewSection(
+      [
+        task(1, { dueDate: new Date("2026-09-13T20:00:00.000Z"), projectId: 1 }),
+        task(2, { dueDate: new Date("2026-09-14T18:00:00.000Z"), projectId: 1 }),
+      ],
+      1,
+    ),
+    viewSection(
+      [
+        task(3, {
+          dueDate: new Date("2026-09-12T09:00:00.000Z"),
+          projectId: 2,
+          project: { id: 2, title: "Other" },
+        }),
+      ],
+      2,
+    ),
+  ];
+
+  assert.equal(overdueCountForMyTasksView(sections, config(), NOW), 2);
+  assert.equal(
+    overdueCountForMyTasksView(sections, config({ boardIds: [2] }), NOW),
+    1,
+  );
+  assert.equal(
+    overdueCountForMyTasksView(
+      sections,
+      config({ filters: { dueDate: "today" } } as Partial<MyTasksViewConfig>),
+      NOW,
+    ),
+    0,
   );
 });

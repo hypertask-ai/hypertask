@@ -44,6 +44,8 @@ export default defineConfig([
       "src/app/admin/flags/page.tsx",
       // HTPR-4857: server component; gates the public /add-to-slack page.
       "src/app/add-to-slack/page.tsx",
+      // HTPR-6536: server component; gates the public /qa/login page.
+      "src/app/qa/login/page.tsx",
     ],
     rules: {
       // Types are erased, so a type-only import never reaches the bundle.

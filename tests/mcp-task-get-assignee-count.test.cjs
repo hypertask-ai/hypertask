@@ -39,6 +39,27 @@ test("mapTaskToMcpGetResponse reports assigneeCount matching the assignee list",
   assert.equal(out.assigneeCount, 2);
 });
 
+test("an agent assignment lists the agent name, not the owner's", () => {
+  const task = {
+    ...baseTask,
+    assignees: [
+      {
+        user: { id: 6, email: "v@x.io", displayName: "Valentin Yeo" },
+        agent: {
+          id: "1a6dd89d-5fff-4c1b-9610-0a4270a7f2c7",
+          userId: 6,
+          visibility: "PRIVATE",
+          members: [],
+          displayName: "Dev 2",
+        },
+      },
+    ],
+  };
+  const out = mapTaskToMcpGetResponse(task, 6);
+  assert.equal(out.assignees[0].displayName, "Dev 2");
+  assert.equal(out.assignees[0].agent.id, "1a6dd89d-5fff-4c1b-9610-0a4270a7f2c7");
+});
+
 test("assigneeCount counts only the assignees the response actually lists", () => {
   // An agent assignee the caller cannot see is filtered out of `assignees`;
   // the count must not diverge from the list it is a count of.

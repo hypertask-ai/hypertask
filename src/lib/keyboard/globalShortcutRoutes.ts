@@ -3,10 +3,12 @@ const GLOBAL_SHORTCUT_BLOCKED_ROUTES = [
   "/learn",
   "/share",
   "/new",
+  "/qa/login",
 ] as const;
 
 const GLOBAL_CREATE_TASK_BLOCKED_ROUTES = [
   "/login",
+  "/qa/login",
   "/project",
   "/detail",
   "/onboarding",

@@ -78,7 +78,7 @@ import {
   AGENT_CHAT_PARKED_MESSAGE,
   AGENT_CHAT_STOP_AND_TIMEOUT_FEATURE_FLAG,
 } from "@/lib/agentRuns/model";
-import { CONFIRMED_PROPOSAL_HEADING_FLAG, HTPR_6283_AGENT_CHAT_LIVE_SORT_FLAG, HTPR_6407_MOBILE_AGENT_CHAT_LAYOUT_FLAG, HTPR_6476_MOBILE_AGENT_CHAT_FULLSCREEN_FLAG } from "@/lib/flags/keys";
+import { CONFIRMED_PROPOSAL_HEADING_FLAG, HTPR_6283_AGENT_CHAT_LIVE_SORT_FLAG, HTPR_6407_MOBILE_AGENT_CHAT_LAYOUT_FLAG, HTPR_6476_MOBILE_AGENT_CHAT_FULLSCREEN_FLAG, HTPR_6553_AGENT_CHAT_POLLING_FLAG } from "@/lib/flags/keys";
 import { useMobileVisualViewport } from "@/hooks/General/useMobileVisualViewport";
 import { getAgentChatMobileBottomInset } from "@/lib/mobileCommentViewport";
 import { getLastBoardTeam, setLastBoardTeam } from "@/lib/lastBoardTeam";
@@ -117,9 +117,13 @@ const AWAITING_POLL_MS = 4000;
 // The passive activity feed has no realtime channel of its own, so it needs a
 // poll of its own to meet the 10-second freshness the ticket asks for.
 const ACTIVITY_POLL_MS = 5000;
+// Availability changes without a chat event when a runtime heartbeat starts
+// or expires, so idle chats need a low-frequency refresh of their own.
+const CHAT_AVAILABILITY_POLL_MS = 30_000;
 // Realtime still refetches when the reply lands; the interval is only a
-// fallback, so stop it after this long waiting on the same session.
-const AWAITING_POLL_MAX_MS = 15 * 60 * 1000;
+// fallback. Polling chat surfaces a generic failure after this bound.
+const AWAITING_POLL_MAX_MS = 3 * 60 * 1000;
+const LEGACY_AWAITING_POLL_MAX_MS = 15 * 60 * 1000;
 const MAX_MESSAGE_LENGTH = 8000;
 const DETAILS_COLLAPSED_KEY = "agentChat.detailsCollapsed";
 
@@ -619,6 +623,7 @@ function RosterRow({
 
 interface IProp {
   currentUser: IUser;
+  roomsEnabled: boolean;
 }
 
 // Stable reference so the "@" mention effect below does not see a new
@@ -626,7 +631,7 @@ interface IProp {
 const EMPTY_PROJECTS: IProject[] = [];
 
 const AgentChatClient = (props: IProp) => {
-  const { currentUser } = props;
+  const { currentUser, roomsEnabled } = props;
   const router = useRouter();
   const searchParams = useSearchParams();
   const isMbl = useContext(MobileViewContext);
@@ -647,6 +652,7 @@ const AgentChatClient = (props: IProp) => {
   }, [rosterStatusEnabled]);
   const liveSortEnabled = useFlag(HTPR_6283_AGENT_CHAT_LIVE_SORT_FLAG);
   const chatStopAndTimeoutEnabled = useFlag(AGENT_CHAT_STOP_AND_TIMEOUT_FEATURE_FLAG);
+  const pollingChatEnabled = useFlag(HTPR_6553_AGENT_CHAT_POLLING_FLAG);
   const appShellRailOn = useRecoilValue(appShellRailAtom) && !isMbl;
   const setMobileTopBarTitle = useSetRecoilState(mobileTopBarTitleAtom);
   const setAgentChatMobileFullscreen = useSetRecoilState(
@@ -694,12 +700,16 @@ const AgentChatClient = (props: IProp) => {
   // order).
   const blockedQueueIdRef = useRef<string | null>(null);
   const [deliveryNotice, setDeliveryNotice] = useState(false);
-  // When the current wait for this session's reply began (last send, or first
-  // noticed); the awaiting poll stops 15 minutes after it.
+  const [deliveryMode, setDeliveryMode] = useState<
+    "webhook" | "polling" | null
+  >(null);
+  // When the current wait for this session's reply began (last send, or the
+  // stored human message time after a reload).
   const [awaitingSince, setAwaitingSince] = useState<{
     sessionId: string;
     at: number;
   } | null>(null);
+  const [replyTimedOut, setReplyTimedOut] = useState(false);
   const [detailsCollapsed, setDetailsCollapsed] = useState(false);
   const [detailsSheetOpen, setDetailsSheetOpen] = useState(false);
   const detailsDialogRef = useRef<HTMLDialogElement>(null);
@@ -885,6 +895,7 @@ const AgentChatClient = (props: IProp) => {
         activity?: AgentChatActivity[];
         error?: string;
         chatEnabled?: boolean;
+        deliveryMode?: "webhook" | "polling" | null;
         awaiting?: boolean;
         viewer?: { draft: string | null; unreadCount: number } | null;
         sharedConversationEnabled?: boolean;
@@ -905,15 +916,14 @@ const AgentChatClient = (props: IProp) => {
       setActivity(Array.isArray(data.activity) ? data.activity : []);
       setAwaiting(Boolean(data.awaiting));
       setMessagesError(null);
-      // Same signal a failed send sets: no live webhook subscribed to
-      // chat.message, so the human side of the notice must survive a reload.
-      // The parked line already says it in the thread; two copies of the same
-      // sentence is noise.
-      if (
+      setDeliveryMode(data.deliveryMode ?? null);
+      // Same signal a failed send sets: no live delivery path means the human
+      // side of the notice must survive a reload. The parked line already says
+      // it in the thread, so two copies of the same sentence would be noise.
+      setDeliveryNotice(
         data.chatEnabled === false &&
-        data.messages.at(-1)?.content !== AGENT_CHAT_PARKED_MESSAGE
-      )
-        setDeliveryNotice(true);
+          data.messages.at(-1)?.content !== AGENT_CHAT_PARKED_MESSAGE,
+      );
       // First load of this thread: reconcile the two draft copies. Whatever is
       // on this device wins, because it is what was typed most recently here,
       // and it gets pushed up so the next device sees it. An empty device slot
@@ -1040,6 +1050,8 @@ const AgentChatClient = (props: IProp) => {
     setAwaiting(false);
     setStopping(false);
     setDeliveryNotice(false);
+    setDeliveryMode(null);
+    setReplyTimedOut(false);
     setDraft("");
     dismissMention();
   };
@@ -1079,6 +1091,8 @@ const AgentChatClient = (props: IProp) => {
         setAwaiting(false);
         setStopping(false);
         setDeliveryNotice(false);
+        setDeliveryMode(null);
+        setReplyTimedOut(false);
         // This same path runs for a reload (the ?agent= effect calls it), so
         // restoring here covers both switching agents and coming back.
         setDraft(restored);
@@ -1169,7 +1183,11 @@ const AgentChatClient = (props: IProp) => {
   const extraRowsRevision = agentChatExtraRowsRevision({
     queuedMessageIds: queuedMessages.map((item) => item.id),
     queuedRowsVisible: chatStopAndTimeoutEnabled && activeFeedFilter !== "activity",
-    typingRowVisible: awaiting && activeFeedFilter !== "activity" && !deliveryNotice,
+    typingRowVisible:
+      awaiting &&
+      activeFeedFilter !== "activity" &&
+      !deliveryNotice &&
+      !replyTimedOut,
   });
 
   // Jump to the bottom when the feed gains or replaces an item (own send,
@@ -1235,16 +1253,24 @@ const AgentChatClient = (props: IProp) => {
   }, [awaiting]);
 
   // Record when the current wait began so the poll below can time out; a new
-  // wait for the same session (a fresh send) restarts the clock.
+  // wait for the same session (a fresh send) restarts the clock. On reload the
+  // stored message time prevents an old unanswered turn looking fresh again.
   useEffect(() => {
     if (!awaiting || !session) {
       setAwaitingSince(null);
+      setReplyTimedOut(false);
       return;
     }
+    const latestMessageAt = Date.parse(messages?.at(-1)?.createdAt ?? "");
     setAwaitingSince((prev) =>
-      prev?.sessionId === session.id ? prev : { sessionId: session.id, at: Date.now() },
+      prev?.sessionId === session.id
+        ? prev
+        : {
+            sessionId: session.id,
+            at: Number.isNaN(latestMessageAt) ? Date.now() : latestMessageAt,
+          },
     );
-  }, [awaiting, session]);
+  }, [awaiting, messages, session]);
 
   useEffect(() => {
     if (!awaiting || !session) return;
@@ -1253,18 +1279,39 @@ const AgentChatClient = (props: IProp) => {
     if (deliveryNotice) return;
     const sinceAt =
       awaitingSince?.sessionId === session.id ? awaitingSince.at : Date.now();
-    const remaining = sinceAt + AWAITING_POLL_MAX_MS - Date.now();
-    if (remaining <= 0) return;
+    const maxWait = pollingChatEnabled
+      ? AWAITING_POLL_MAX_MS
+      : LEGACY_AWAITING_POLL_MAX_MS;
+    const remaining = sinceAt + maxWait - Date.now();
+    const markTimedOut = () => {
+      if (!pollingChatEnabled) return;
+      console.error("[agent-chat] no reply after three minutes");
+      setReplyTimedOut(true);
+    };
+    if (remaining <= 0) {
+      markTimedOut();
+      return;
+    }
     const id = setInterval(
       () => void loadMessages(session.id),
       AWAITING_POLL_MS,
     );
-    const stop = setTimeout(() => clearInterval(id), remaining);
+    const stop = setTimeout(() => {
+      clearInterval(id);
+      markTimedOut();
+    }, remaining);
     return () => {
       clearInterval(id);
       clearTimeout(stop);
     };
-  }, [awaiting, session, deliveryNotice, awaitingSince, loadMessages]);
+  }, [
+    awaiting,
+    session,
+    deliveryNotice,
+    awaitingSince,
+    loadMessages,
+    pollingChatEnabled,
+  ]);
 
   // Activity rows arrive without a chat reply, so they are not covered by the
   // reply poll above. loadMessages drops stale responses by generation, so an
@@ -1296,6 +1343,42 @@ const AgentChatClient = (props: IProp) => {
       stop();
     };
   }, [session, activityRowsEnabled, loadMessages]);
+
+  // Poll delivery availability while an idle chat has no faster reply or
+  // activity poll, including a catch-up as soon as a hidden tab returns.
+  useEffect(() => {
+    if (!session || !pollingChatEnabled || awaiting || activityRowsEnabled) return;
+    let id: ReturnType<typeof setInterval> | undefined;
+    const start = () => {
+      if (id === undefined) {
+        id = setInterval(
+          () => void loadMessages(session.id),
+          CHAT_AVAILABILITY_POLL_MS,
+        );
+      }
+    };
+    const stop = () => {
+      if (id !== undefined) clearInterval(id);
+      id = undefined;
+    };
+    const onVisibility = () => {
+      if (document.visibilityState !== "visible") return stop();
+      void loadMessages(session.id);
+      start();
+    };
+    if (document.visibilityState === "visible") start();
+    document.addEventListener("visibilitychange", onVisibility);
+    return () => {
+      document.removeEventListener("visibilitychange", onVisibility);
+      stop();
+    };
+  }, [
+    activityRowsEnabled,
+    awaiting,
+    loadMessages,
+    pollingChatEnabled,
+    session,
+  ]);
 
   // Realtime nudge: the send route broadcasts agent-chat:changed on this
   // user's private channel; refetch instead of waiting for the next poll.
@@ -1478,7 +1561,8 @@ const AgentChatClient = (props: IProp) => {
     };
     setDeliveryNotice(false);
     setAwaiting(true);
-    // A new message restarts the 15 minute awaiting-poll bound.
+    setReplyTimedOut(false);
+    // A new message restarts the awaiting-poll bound.
     setAwaitingSince(null);
     setMessages((prev) => [...(prev ?? []), optimistic]);
     sendingRef.current = true;
@@ -2060,6 +2144,16 @@ const AgentChatClient = (props: IProp) => {
             <Plus size={16} />
           </button>
         </div>
+        {roomsEnabled && (
+          <button
+            type="button"
+            onClick={() => router.push("/agents/chat?view=rooms")}
+            className="mt-2 flex w-full items-center justify-between rounded-[4px] bg-cardBackground px-3 py-2 text-left text-dense hover:bg-hoverCardBackground"
+          >
+            <span>Board rooms</span>
+            <span className="text-meta text-text-light-gray">All bots</span>
+          </button>
+        )}
         <input
           value={search}
           onChange={(e) => setSearch(e.target.value)}
@@ -2141,6 +2235,9 @@ const AgentChatClient = (props: IProp) => {
           {!mobileFullscreenChrome && (
             <p className="truncate text-meta text-text-light-gray">
               {chatStatusText(selectedAgent)}
+              {pollingChatEnabled && deliveryMode === "polling"
+                ? " · polling"
+                : ""}
             </p>
           )}
         </div>
@@ -2251,8 +2348,14 @@ const AgentChatClient = (props: IProp) => {
                 className="flex items-center gap-2 text-meta text-text-light-gray"
                 role="status"
               >
-                <TypingIndicator />
-                <span>{selectedAgent.displayName} is working</span>
+                {replyTimedOut ? (
+                  <span>no reply, error logged</span>
+                ) : (
+                  <>
+                    <TypingIndicator />
+                    <span>{selectedAgent.displayName} is working</span>
+                  </>
+                )}
                 {chatStopAndTimeoutEnabled && (
                   <button
                     type="button"

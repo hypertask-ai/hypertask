@@ -19,6 +19,8 @@ import {
   isAgentChatSystemMessage,
 } from "@/lib/agentRuns/model";
 import { readAgentChatTurn } from "@/lib/agentRuns/service";
+import { agentChatDeliveryMode } from "@/lib/agents/chatAvailability";
+import { HTPR_6553_AGENT_CHAT_POLLING_FLAG } from "@/lib/flags/keys";
 
 export const runtime = "nodejs";
 
@@ -79,7 +81,7 @@ export async function GET(
     const access = await loadUserAgentChatSession({
       sessionId,
       userId,
-      select: {},
+      select: { agent: { select: { heartbeatAt: true } } },
     });
     if (!access.ok) {
       return NextResponse.json(
@@ -127,6 +129,10 @@ export async function GET(
     // message, exactly as it does today.
     const parkedReplyEnabled = await isFeatureEnabled(
       AGENT_CHAT_PARKED_REPLY_FLAG,
+      userId,
+    );
+    const pollingChatEnabledForUser = await isFeatureEnabled(
+      HTPR_6553_AGENT_CHAT_POLLING_FLAG,
       userId,
     );
     // Reconciling the turn is a side effect of reading it; if it fails the
@@ -208,9 +214,12 @@ export async function GET(
     const viewer = participant
       ? { draft: participant.draft, unreadCount: unreadCount ?? 0 }
       : null;
-    const chatEnabled = Boolean(
-      subscription?.active && subscription.events.includes("chat.message")
-    );
+    const deliveryMode = agentChatDeliveryMode({
+      heartbeatAt: pollingChatEnabledForUser
+        ? session.agent?.heartbeatAt ?? null
+        : null,
+      subscription,
+    });
 
     return NextResponse.json({
       success: true,
@@ -247,7 +256,8 @@ export async function GET(
           joinedAt: participant.joinedAt,
         })) ?? null,
       sharedConversationEnabled: access.sharedConversationEnabled === true,
-      chatEnabled,
+      chatEnabled: deliveryMode !== null,
+      deliveryMode,
     });
   } catch (error: any) {
     console.error("🚀 ~ GET ~ Error loading agent chat session", error);

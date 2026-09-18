@@ -23,6 +23,7 @@ export const FLAG_SORT_FILTER_FLAG = "htpr-6179-flag-sort-filter";
 export const INBOX_ARCHIVE_CLUSTER_FLAG = "htpr-6160-inbox-archive-cluster";
 export const FLAG_SHIP_DATE_CLUSTER_FLAG = "htpr-6191-flag-ship-date-clusters";
 export const FIGMA_CONNECT_FLAG = "htpr-6136-figma-connect";
+export const GOOGLE_CALENDAR_FLAG = "htpr-3533-google-calendar";
 export const PAGE_MENTIONS_FLAG = "htpr-5898-page-mentions";
 export const COLUMN_ALL_VIEWS_FLAG = "htpr-5937-show-column-in-all-views";
 export const FLAG_REMOVAL_COUNTDOWN_FLAG = "htpr-6193-flag-removal-countdown";
@@ -66,14 +67,30 @@ export const MY_TASKS_SCOPES_FLAG = "htpr-6457-my-tasks-scopes";
 export const MY_TASKS_LIVE_UPDATES_FLAG = "htpr-6458-my-tasks-live-updates";
 export const MY_TASKS_QUICK_ADD_FLAG = "htpr-6460-my-tasks-quick-add";
 export const MY_TASKS_SNOOZE_FLAG = "htpr-6461-my-tasks-snooze";
+export const MY_TASKS_OVERDUE_BADGES_FLAG = "htpr-6459-my-tasks-overdue-badges";
 export const HTPR_6427_ROW_SHORTCUTS_FLAG = "htpr-6427-row-shortcuts";
 export const HTPR_6514_COMMENT_LONG_PRESS_FLAG =
   "htpr-6514-comment-long-press";
+export const HTPR_6516_AGENT_ATTRIBUTION_FLAG =
+  "htpr-6516-agent-attribution";
 export const HTPR_6512_SEED_TEAM_AGENT_FLAG = "htpr-6512-seed-team-agent";
 export const HTPR_6532_STATELESS_MCP_FLAG = "htpr-6532-stateless-mcp";
 export const HTPR_6530_MCP_LIST_QUERY_FLAG = "htpr-6530-mcp-list-query";
 export const HTPR_6531_DEFERRED_MCP_TOOLS_FLAG = "htpr-6531-deferred-mcp-tools";
 export const HTPR_6473_GET_AGENT_FLAG = "htpr-6473-get-agent";
+export const HTPR_6536_QA_LOGIN_FLAG = "htpr-6536-qa-login";
+export const HTPR_6551_QUIET_RUN_ACTIVITY_FLAG =
+  "htpr-6551-quiet-run-activity";
+export const HTPR_6555_IDLE_COMMENT_MIC_FLAG = "htpr-6555-idle-comment-mic";
+export const HTPR_6553_AGENT_CHAT_POLLING_FLAG =
+  "htpr-6553-agent-chat-polling";
+export const HTPR_6554_LIGHT_COMMENT_SEPARATION_FLAG =
+  "htpr-6554-light-comment-separation";
+export const HTPR_6557_AGENT_ROOMS_FLAG = "htpr-6557-agent-rooms";
+export const HTPR_6559_KEEP_DIRECT_TASK_OPEN_FLAG =
+  "htpr-6559-keep-direct-task-open-after-comment";
+export const HTPR_6556_MOBILE_DESCRIPTION_FIRST_FLAG =
+  "htpr-6556-mobile-description-first";
 /** Sent on chat.message when HTPR-6407 is on so agent replies lead with the next action. */
 export const AGENT_CHAT_ADHD_REPLY_GUIDANCE =
   "Lead with the next action. Keep replies short. Number steps. End with one concrete next action when something remains open.";

@@ -221,9 +221,10 @@ const AI_Options = ({
         <AppSheet
           isOpen={actionSheetOpen}
           onClose={() => setActionSheetOpen(false)}
-          detent="content-height"
+          detent="content"
           sheetClassName="!z-[13000]"
           disableScrollLocking
+          customScroller
           ariaLabel="Other apply and refine actions"
           panelClassName={nestedSheetContainerClass}
           bodyClassName="!bg-comment-description pb-[max(0.75rem,env(safe-area-inset-bottom))]"
@@ -231,7 +232,7 @@ const AI_Options = ({
           <p className="px-3 pt-1 pb-2 text-dense font-medium text-text-light-gray">
             Other apply &amp; refine actions
           </p>
-          <SheetScroller draggableAt="top" className="max-h-[min(70dvh,520px)]">
+          <SheetScroller className="max-h-[min(70dvh,520px)]">
             {secondaryOptions.map((option, index) => (
               <button
                 key={`${option.action}-${index}`}

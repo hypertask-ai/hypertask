@@ -55,10 +55,13 @@ if (requested.length > 0) {
 const cjsTests = selected.filter((file) => file.endsWith(".test.cjs"));
 const tsTests = selected.filter((file) => file.endsWith(".test.ts"));
 
-// These route tests deliberately replace TypeScript modules through
-// require.cache. Run them in separate workers before the shared suite so their
-// fixtures cannot race with one another or with another cache-mutating test.
+// These tests replace TypeScript modules through require.cache or inspect
+// repository-wide contract files. Run them one at a time before the shared
+// suite so their fixtures cannot overlap with another test file.
 const isolatedCjsTests = new Set([
+  "tests/action-archive-cache.test.cjs",
+  "tests/agent-run-activities.test.cjs",
+  "tests/feature-flags.test.cjs",
   "tests/management-key-route.test.cjs",
   "tests/management-key-route-wiring.test.cjs",
   "tests/mcp-usage-auth.test.cjs",

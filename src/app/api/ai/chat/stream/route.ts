@@ -56,6 +56,7 @@ import { isFeatureEnabled } from "@/lib/flags";
 import { HTPR_6278_CHAT_TURN_FAILURE_FLAG } from "@/lib/flags/keys";
 import { HTPR_6284_AGENT_MENTION_ROUTING_FLAG } from "@/lib/flags/keys";
 import { HTPR_6320_AI_OBSERVABILITY_FLAG } from "@/lib/flags/keys";
+import { HTPR_6516_AGENT_ATTRIBUTION_FLAG } from "@/lib/flags/keys";
 import { reportError } from "@/lib/errors/reportError";
 import { toErrorMessage } from "@/lib/api/errorMessage";
 import {
@@ -92,6 +93,10 @@ import {
   mapVisibleMcpAgent,
   mcpVisibleAgentSelect,
 } from "@/lib/mcp/agents";
+import {
+  overlayDurableAgentDisplayName,
+  resolvePublicAgentDisplayName,
+} from "@/lib/agents/publicAgent";
 import {
   listOwnedAgents,
   type AgentManagementDatabase,
@@ -1954,6 +1959,21 @@ function mapCommentToResponse(comment: any, userId: number, projectId: number) {
       userId: reaction.userId,
     })),
   };
+}
+
+function applyDurableCommentAttribution<T extends object>(
+  mapped: T,
+  comment: any,
+  userId: number,
+  projectId: number,
+  attributionEnabled: boolean
+): T {
+  return overlayDurableAgentDisplayName(mapped, {
+    hasAgentRow: Boolean(comment.agent),
+    visibleAgent: mapVisibleMcpAgent(comment.agent, userId, projectId),
+    storedDisplayName: comment.agentDisplayName,
+    attributionEnabled,
+  });
 }
 
 function mapDraftToResponse(draft: any) {
@@ -4687,12 +4707,22 @@ function buildTools(
         }
 
         const mappedTask = mapTaskToMcpGetResponse(task, user.id);
+        const attributionEnabled = await isFeatureEnabled(
+          HTPR_6516_AGENT_ATTRIBUTION_FLAG,
+          user.id
+        );
         const comments = recentComments.reverse().map((comment) => {
           const agent = mapVisibleMcpAgent(
             comment.agent,
             user.id,
             input.project_id
           );
+          const agentDisplayName = resolvePublicAgentDisplayName({
+            hasAgentRow: Boolean(comment.agent),
+            visibleAgent: agent,
+            storedDisplayName: comment.agentDisplayName,
+            attributionEnabled,
+          });
           return {
             id: comment.id,
             author:
@@ -4701,6 +4731,15 @@ function buildTools(
               comment.creator?.displayName ||
               comment.creator?.email ||
               "Unknown",
+            ...(attributionEnabled
+              ? {
+                  author:
+                    agentDisplayName ||
+                    comment.creator?.displayName ||
+                    comment.creator?.email ||
+                    "Unknown",
+                }
+              : {}),
             text: stripInlineDataUris(comment.text),
             createdAt: comment.createdAt.toISOString(),
           };
@@ -5188,7 +5227,11 @@ function buildTools(
           }),
         ]);
 
-        return sanitizeForJson({
+        const attributionEnabled = await isFeatureEnabled(
+          HTPR_6516_AGENT_ATTRIBUTION_FLAG,
+          user.id
+        );
+        const commentsPayload = {
           success: true,
           comments: comments.map((comment) =>
             input.include_activity
@@ -5201,7 +5244,17 @@ function buildTools(
           total,
           limit: input.limit,
           offset: input.offset,
-        });
+        };
+        commentsPayload.comments = commentsPayload.comments.map((mapped, index) =>
+          applyDurableCommentAttribution(
+            mapped,
+            comments[index],
+            user.id,
+            task.projectId,
+            attributionEnabled
+          )
+        );
+        return sanitizeForJson(commentsPayload);
       },
     }),
 
@@ -7120,7 +7173,7 @@ function buildTools(
 
         void broadcastTaskComment(task.id, { originUserId: user.id });
 
-        return sanitizeForJson({
+        const createdCommentPayload = {
           success: true,
           task: {
             id: taskWithOwner.id,
@@ -7135,7 +7188,17 @@ function buildTools(
               )
             : { id: comment.id, text: sanitizedText },
           url: buildMcpTaskUrl(taskWithOwner.projectId, taskWithOwner.uniqueIndex),
-        });
+        };
+        if (commentWithAttachments) {
+          createdCommentPayload.comment = applyDurableCommentAttribution(
+            createdCommentPayload.comment,
+            commentWithAttachments,
+            user.id,
+            taskWithOwner.projectId,
+            await isFeatureEnabled(HTPR_6516_AGENT_ATTRIBUTION_FLAG, user.id)
+          );
+        }
+        return sanitizeForJson(createdCommentPayload);
         };
 
         const results = await Promise.all(
@@ -7657,7 +7720,7 @@ function buildTools(
 
         void broadcastTaskComment(comment.task.id, { originUserId: user.id });
 
-        return sanitizeForJson({
+        const updatedCommentPayload = {
           success: true,
           comment: updatedComment
             ? mapCommentToResponse(
@@ -7666,7 +7729,17 @@ function buildTools(
                 comment.task.projectId
               )
             : { id: input.comment_id, text: sanitizedText },
-        });
+        };
+        if (updatedComment) {
+          updatedCommentPayload.comment = applyDurableCommentAttribution(
+            updatedCommentPayload.comment,
+            updatedComment,
+            user.id,
+            comment.task.projectId,
+            await isFeatureEnabled(HTPR_6516_AGENT_ATTRIBUTION_FLAG, user.id)
+          );
+        }
+        return sanitizeForJson(updatedCommentPayload);
       }),
     }),
 

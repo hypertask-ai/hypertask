@@ -78,6 +78,23 @@ function loadRoute(comments) {
           ? { id: agent.id, displayName: agent.displayName }
           : undefined,
     },
+    "@/lib/agents/publicAgent": {
+      resolvePublicAgentDisplayName({ hasAgentRow, visibleAgent, storedDisplayName, attributionEnabled }) {
+        if (hasAgentRow && !visibleAgent) return "Private agent";
+        if (!attributionEnabled && !hasAgentRow && storedDisplayName) return "Private agent";
+        const stored = storedDisplayName && String(storedDisplayName).trim();
+        if (stored) return stored;
+        const live =
+          visibleAgent &&
+          visibleAgent.displayName &&
+          String(visibleAgent.displayName).trim();
+        return live || null;
+      },
+    },
+    "@/lib/flags": {
+      HTPR_6516_AGENT_ATTRIBUTION_FLAG: "htpr-6516-agent-attribution",
+      isFeatureEnabled: async () => false,
+    },
     "@/utils/controllers/projects/getAllIncludes": {
       getProjectWhere: () => ({}),
     },
