@@ -1516,26 +1516,26 @@ const TaskDetail: React.FC<TaskDetailProps> = ({
 
   const handleReactToCommentFromHTC = useCallback(() => {
     const commentIndex = getCurrentCommentIndex();
-    if (!commentIndex) return;
+    if (commentIndex == null) return;
     toggleEmojiPicker(commentIndex);
   }, [currentId, comments]);
 
   const handleReplyCommentFromHTC = useCallback(() => {
     const commentIndex = getCurrentCommentIndex();
-    if (!commentIndex) return;
+    if (commentIndex == null) return;
     replyToCommentHandler(commentIndex);
   }, [currentId, comments]);
 
   const handleEditCommentFromHTC = useCallback(() => {
     const commentIndex = getCurrentCommentIndex();
-    if (!commentIndex) return;
+    if (commentIndex == null) return;
     editCommentHandler(commentIndex);
   }, [currentId, comments]);
 
   const handleStarCommentFromHTC = useCallback(
     (type: ViewVisibility) => {
       const commentIndex = getCurrentCommentIndex();
-      if (!commentIndex) return;
+      if (commentIndex == null) return;
       console.log(
         "🚀 ~ handleStarCommentFromHTC ~ commentIndex:",
         comments[commentIndex]
@@ -1548,7 +1548,7 @@ const TaskDetail: React.FC<TaskDetailProps> = ({
   //callback for creating task from comment from htc
   const createTaskFromCommentHTC = useCallback(() => {
     const commentIndex = getCurrentCommentIndex(true);
-    if (!commentIndex) return;
+    if (commentIndex == null) return;
 
     const linkhtml = taskDetailConfig.urls.templates.commentLink(
       currentTask?.projectId!,

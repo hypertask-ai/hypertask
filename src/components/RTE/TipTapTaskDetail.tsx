@@ -89,6 +89,7 @@ import {
 import { armBackDismiss } from "@/lib/mobile/backDismiss";
 import { useMobileVisualViewport } from "@/hooks/General/useMobileVisualViewport";
 import { useFlag } from "@/hooks/useFlag";
+import { HTPR_6559_KEEP_DIRECT_TASK_OPEN_FLAG } from "@/lib/flags/keys";
 const SetLinkModal = dynamic(
   () => import("../Modals/LinksModal/SetLinkModal"),
   {
@@ -214,6 +215,7 @@ const Tiptap = ({
   const consistentCommentShortcuts = useFlag(
     "htpr-5913-consistent-comment-shortcuts",
   );
+  const keepDirectTaskOpen = useFlag(HTPR_6559_KEEP_DIRECT_TASK_OPEN_FLAG);
   const draftQueryKey = ["draft for [task,userId]:", currentTask?.id, currentUser?.id];
   
   // State
@@ -538,8 +540,7 @@ const Tiptap = ({
   };
 
   // A task can still carry an inbox notification when opened from another
-  // surface. The send button follows the Inbox preference; the consistent
-  // Ctrl/Cmd+Enter shortcut always advances.
+  // surface. The fix limits advancement to Inbox lineage while its flag is on.
   const sendComment = (alwaysAdvance = false) => {
     const tutorialState = currentUser?.id
       ? parseLearnTutorialState(
@@ -554,7 +555,8 @@ const Tiptap = ({
     );
     return handleCallback(
       !preserveTutorialInbox &&
-        (alwaysAdvance || (isInboxFlow && inInbox && advanceOnSend))
+        ((alwaysAdvance && (!keepDirectTaskOpen || isInboxFlow)) ||
+          (isInboxFlow && inInbox && advanceOnSend))
         ? "moveToNext"
         : undefined,
       !preserveTutorialInbox && inInbox,
@@ -735,6 +737,7 @@ const Tiptap = ({
         shiftKey: e.shiftKey,
         altKey: e.altKey,
         consistentCommentShortcuts,
+        keepDirectTaskOpen,
         isInboxFlow,
         isCommentMode: mode === "create-comment",
         inInbox,

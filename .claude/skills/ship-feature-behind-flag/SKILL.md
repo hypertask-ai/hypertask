@@ -27,7 +27,7 @@ Use with `ticket-lifecycle` (company pack) (board mechanics), `verify-on-phone` 
    **If the feature needs a database migration:** see `ticket-lifecycle` step 9 for the lane table (including the additive-migration exception) and pick `--lane` from there.
    Mark the PR gate met with the PR URL as evidence: `$COMPANY_SKILLS_DIR/ticket-lifecycle/scripts/gates.sh met <PREFIX-NNN> "<gate>" --evidence "<PR URL>"`.
 10. **Expect the `feature-flag-gate` check.** It mechanically blocks a feature or UI PR that omits the flag. It lets a `[BUGFIX]` or `[INFRA]`-titled PR through without one only when the diff adds at most 150 UI lines, or is a verified auto-revert. API-only changes fall outside the mechanical check but the server-side rule in step 5 still applies, and no exemption waives semantic review.
-11. **Hand to QA** with a ticket comment naming the flag key exactly, so QA can turn it on for their own account.
+11. **Hand to QA only after the PR is merged and the production health check passes.** Name the flag key exactly in the ticket comment so QA can turn it on for their own account. An open PR or a preview is not ready for production QA.
 12. **The moment the flagged feature is live on production**, post a ticket comment that @mentions Valentin with the flag key, one line on what it does, and the link `https://app.hypertask.ai/admin/flags`. The mention markup is:
    `<span data-type="mention" class="mention" data-id="Valentin Yeo" data-label="name-6">Valentin Yeo</span>`
    Without the mention he never learns the flag exists.

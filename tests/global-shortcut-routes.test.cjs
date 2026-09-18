@@ -103,12 +103,14 @@ test("global shortcuts remain blocked on isolated public and setup routes", () =
     "/learn",
     "/share/public-task",
     "/new",
+    "/qa/login",
   ]) {
     assert.equal(areGlobalShortcutsEnabled(pathname), false, pathname);
   }
 
   for (const pathname of [
     "/login",
+    "/qa/login",
     "/project",
     "/detail/project-15/5607",
     "/inbox",

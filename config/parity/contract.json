@@ -50,7 +50,9 @@
       "matches": {
         "api": [
           "^(GET|POST) /api/mcp/chat/sessions/\\[sessionId\\]/messages$",
-          "^GET /api/mcp/chat/pending$",
+          "^(GET|POST) /api/mcp/chat/rooms/\\[roomId\\]/messages$",
+          "^GET /api/mcp/chat/(pending|rooms/pending)$",
+          "^POST /api/mcp/chat/rooms/messages/\\[messageId\\]/handled$",
           "^POST /api/mcp/chat/activity$",
           "^POST /api/mcp/agents/runs/\\[id\\]/activities$",
           "^POST /api/mcp/agents/runs/\\[id\\]/activities/\\[activityId\\]/select$"
@@ -61,13 +63,6 @@
         "cli": "The agent worker runtime posts replies with its own bearer token; the CLI has no agent-side chat command.",
         "ai_chat": "Agent Chat is the surface itself; native agents answer in-process without this route.",
         "hyperai": "HyperAI inherits the human session and never speaks as an external agent."
-      },
-      "planned": {
-        "api": {
-          "issue": "https://app.hypertask.ai/detail/project-15/312",
-          "expires": "2026-10-14",
-          "entries": ["GET /api/mcp/chat/pending"]
-        }
       }
     },
     {
