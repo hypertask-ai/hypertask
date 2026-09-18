@@ -435,7 +435,7 @@ export function getUpdateTaskBaseSchema() {
         .trim()
         .min(1)
         .optional()
-        .describe('Task description. HTML or structural markdown; content_type can explicitly select either format.'),
+        .describe('Task description. Plain text is wrapped in paragraphs; HTML and structural markdown are preserved.'),
       content_type: taskContentTypeSchema,
       priority: priorityIndexSchema, // Use index (0-4) instead of string
       estimate: estimateIndexOptionalSchema,
@@ -660,7 +660,7 @@ export function getCreateTaskInputSchema() {
         .trim()
         .min(1)
         .optional()
-        .describe('Task description. HTML or structural markdown; content_type can explicitly select either format.'),
+        .describe('Task description. Plain text is wrapped in paragraphs; HTML and structural markdown are preserved.'),
       content_type: taskContentTypeSchema,
       section_id: z.coerce
         .number()

@@ -58,7 +58,7 @@ export function getAddCommentInputSchema() {
       .trim()
       .min(1, 'Comment text cannot be empty')
       .max(config.limits.commentTextMaxLength, `Comment text cannot exceed ${config.limits.commentTextMaxLength} characters`)
-      .describe('Comment text. HTML or structural markdown; content_type can explicitly select either format. Use @DisplayName with matching mentions entries.'),
+      .describe('Comment text. Plain text is wrapped in paragraphs; HTML and structural markdown are preserved. Use @DisplayName with matching mentions entries.'),
     content_type: commentContentTypeSchema,
     mentions: z
       .array(mentionSchema)
@@ -174,7 +174,7 @@ export function getAddCommentBaseSchema() {
         .trim()
         .min(1, 'Comment text cannot be empty')
         .max(config.limits.commentTextMaxLength, `Comment text cannot exceed ${config.limits.commentTextMaxLength} characters`)
-        .describe('Comment text. HTML or structural markdown; content_type can explicitly select either format. Use @DisplayName with matching mentions entries.'),
+        .describe('Comment text. Plain text is wrapped in paragraphs; HTML and structural markdown are preserved. Use @DisplayName with matching mentions entries.'),
       content_type: commentContentTypeSchema,
       mentions: z
         .array(mentionSchema)
@@ -304,7 +304,7 @@ export function getAddCommentCrudBaseSchema() {
         .min(1, 'Comment text cannot be empty')
         .max(config.limits.commentTextMaxLength, `Comment text cannot exceed ${config.limits.commentTextMaxLength} characters`)
         .optional()
-        .describe('Comment text for add/update. HTML or structural markdown; content_type can explicitly select either format.'),
+        .describe('Comment text for add/update. Plain text is wrapped in paragraphs; HTML and structural markdown are preserved.'),
       content_type: commentContentTypeSchema,
       mentions: z
         .array(mentionSchema)
