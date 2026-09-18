@@ -32,10 +32,21 @@ const calls = {
   clientLocks: [],
   featureChecks: [],
   ownerUpdates: [],
+  teamLookups: [],
   usedUpdates: [],
 }
 let currentAgent = null
+let currentTeam = null
+let agentWithinTeam = true
 let teamScopeFeatureEnabled = true
+
+const teamGrant = {
+  id: 'team-a',
+  title: 'Team A',
+  googleAccount: { id: 'account-a', userId: owner.id },
+  managementKeyOwnerGeneration: 3,
+  members: [],
+}
 
 const authCode = {
   code: 'one-time-code',
@@ -87,7 +98,14 @@ stubModule('src/lib/prisma.ts', {
     agent: {
       findFirst: async (args) => {
         calls.agentLookups.push(args)
+        if (args.where.members && !agentWithinTeam) return null
         return currentAgent ? { id: agentId, ...currentAgent } : null
+      },
+    },
+    team: {
+      findFirst: async (args) => {
+        calls.teamLookups.push(args)
+        return currentTeam
       },
     },
     user: {
@@ -234,7 +252,10 @@ test('OAuth exchange preserves a team-bound agent grant', async () => {
     credentialTeamAccessBinding: 'owner:account-a:3',
   }
   teamScopeFeatureEnabled = true
+  currentTeam = teamGrant
+  agentWithinTeam = true
   calls.featureChecks.length = 0
+  calls.teamLookups.length = 0
 
   const response = await POST(tokenRequest())
   const body = await response.json()
@@ -250,6 +271,7 @@ test('OAuth exchange preserves a team-bound agent grant', async () => {
     key: 'htpr-6542-team-scoped-management-keys',
     userId: owner.id,
   }])
+  assert.equal(calls.teamLookups.length, 1)
 })
 
 test('OAuth exchange rejects a team-bound agent while the feature is off', async () => {
@@ -262,6 +284,7 @@ test('OAuth exchange rejects a team-bound agent while the feature is off', async
   calls.featureChecks.length = 0
   calls.clientLocks.length = 0
   calls.ownerUpdates.length = 0
+  calls.teamLookups.length = 0
   calls.usedUpdates.length = 0
 
   try {
@@ -279,9 +302,47 @@ test('OAuth exchange rejects a team-bound agent while the feature is off', async
     }])
     assert.equal(calls.clientLocks.length, 0)
     assert.equal(calls.ownerUpdates.length, 0)
+    assert.equal(calls.teamLookups.length, 0)
     assert.equal(calls.usedUpdates.length, 0)
   } finally {
     teamScopeFeatureEnabled = true
+  }
+})
+
+test('OAuth exchange rejects stale team-bound agent grants', async (t) => {
+  for (const state of ['access-changed', 'agent-moved']) {
+    await t.test(state, async () => {
+      currentAgent = {
+        ...storedCredential(managedToken()),
+        credentialTeamId: 'team-a',
+        credentialTeamAccessBinding: 'owner:account-a:3',
+      }
+      teamScopeFeatureEnabled = true
+      currentTeam = state === 'access-changed'
+        ? { ...teamGrant, managementKeyOwnerGeneration: 4 }
+        : teamGrant
+      agentWithinTeam = state !== 'agent-moved'
+      calls.clientLocks.length = 0
+      calls.ownerUpdates.length = 0
+      calls.usedUpdates.length = 0
+
+      try {
+        const response = await POST(tokenRequest())
+        const body = await response.json()
+
+        assert.equal(response.status, 400)
+        assert.deepEqual(body, {
+          error: 'invalid_grant',
+          error_description: 'The selected agent team grant is no longer valid.',
+        })
+        assert.equal(calls.clientLocks.length, 0)
+        assert.equal(calls.ownerUpdates.length, 0)
+        assert.equal(calls.usedUpdates.length, 0)
+      } finally {
+        currentTeam = teamGrant
+        agentWithinTeam = true
+      }
+    })
   }
 })
 

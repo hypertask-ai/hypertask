@@ -12,6 +12,10 @@ import {
   HTPR_6542_TEAM_SCOPED_MANAGEMENT_KEYS_FLAG,
   isFeatureEnabled,
 } from '@/lib/flags'
+import {
+  agentWithinTeamWhere,
+  getManagementKeyTeam,
+} from '@/lib/mcp/managementKeyTeamScope'
 
 class OAuthTokenSigningError extends Error {
   constructor(readonly originalError: unknown) {
@@ -426,20 +430,47 @@ export async function POST(request: NextRequest) {
         }
       }
 
-      if (
-        agentTeamScope &&
-        !(await isFeatureEnabled(
-          HTPR_6542_TEAM_SCOPED_MANAGEMENT_KEYS_FLAG,
-          authCode.user.id
-        ))
-      ) {
-        return NextResponse.json(
-          {
-            error: 'invalid_grant',
-            error_description: 'Team-scoped agent access is disabled.',
-          },
-          { status: 400 }
-        )
+      if (agentTeamScope) {
+        if (
+          !(await isFeatureEnabled(
+            HTPR_6542_TEAM_SCOPED_MANAGEMENT_KEYS_FLAG,
+            authCode.user.id
+          ))
+        ) {
+          return NextResponse.json(
+            {
+              error: 'invalid_grant',
+              error_description: 'Team-scoped agent access is disabled.',
+            },
+            { status: 400 }
+          )
+        }
+
+        const [team, scopedAgent] = await Promise.all([
+          getManagementKeyTeam(authCode.user.id, agentTeamScope.teamId),
+          prisma.agent.findFirst({
+            where: {
+              id: agentId,
+              userId: authCode.user.id,
+              revokedAt: null,
+              ...agentWithinTeamWhere(agentTeamScope.teamId),
+            },
+            select: { id: true },
+          }),
+        ])
+        if (
+          !team ||
+          team.accessBinding !== agentTeamScope.accessBinding ||
+          !scopedAgent
+        ) {
+          return NextResponse.json(
+            {
+              error: 'invalid_grant',
+              error_description: 'The selected agent team grant is no longer valid.',
+            },
+            { status: 400 }
+          )
+        }
       }
 
       if (!agentTokenJti) {
