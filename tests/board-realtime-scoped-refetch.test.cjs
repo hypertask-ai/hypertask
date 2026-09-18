@@ -17,6 +17,7 @@ const {
   path.join(root, "src/lib/boardSync/reconcileActiveBoardQuery.ts"),
 );
 const {
+  createBoardRealtimeEventHandler,
   shouldUseScopedBoardReconcile,
 } = jiti(
   path.join(root, "src/lib/realtime/boardRealtimeEventHandler.ts"),
@@ -233,4 +234,36 @@ test("useBoardRealtime still wires the extracted handler and scoped route", () =
   assert.match(source, /useFlag\(SCOPED_BOARD_REFETCH_FLAG\)/);
   assert.match(source, /if \(scopedRefetch\) return reconcileActiveBoardTasks/);
   assert.match(source, /reconcileActiveBoardTasks/);
+});
+
+test("create, move, and archive board events each trigger reconciliation", () => {
+  const reconciliations = [];
+  const onBoardEvent = createBoardRealtimeEventHandler((trigger) => {
+    reconciliations.push(trigger);
+  });
+
+  onBoardEvent({ action: "create" });
+  onBoardEvent({ action: "move" });
+  onBoardEvent({ action: "archive" });
+
+  assert.deepEqual(reconciliations, ["event", "event", "event"]);
+});
+
+test("the visible board subscribes before deferred startup work is released", () => {
+  const source = require("fs").readFileSync(
+    path.join(
+      root,
+      "src/components/PageComponents/Kanban/KanbanHomepageComponents/Homepage.tsx",
+    ),
+    "utf8",
+  );
+  const subscription = source.match(/useBoardRealtime\([\s\S]*?\);/u)?.[0];
+  const hook = require("fs").readFileSync(
+    path.join(root, "src/hooks/realtime/useBoardRealtime.ts"),
+    "utf8",
+  );
+
+  assert.ok(subscription, "the board must mount its realtime subscription");
+  assert.doesNotMatch(subscription, /enabled\s*:/u);
+  assert.doesNotMatch(hook, /options\?\.enabled/u);
 });

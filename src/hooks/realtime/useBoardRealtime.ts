@@ -27,7 +27,7 @@ export { createBoardRealtimeEventHandler } from "@/lib/realtime/boardRealtimeEve
 // CLI edits must still refresh your own open board.
 export function useBoardRealtime(
   projectId: number | null | undefined,
-  options?: { accountId?: number; enabled?: boolean },
+  options?: { accountId?: number },
 ): void {
   const queryClient = useQueryClient();
   const scopedRefetch = useFlag(SCOPED_BOARD_REFETCH_FLAG);
@@ -37,13 +37,9 @@ export function useBoardRealtime(
   };
   const eventReconcile = pickEventReconcile();
   const wasConnected = useRef(false);
-  const needsCatchUp = useRef(options?.enabled === false);
 
   useEffect(() => {
-    if (projectId == null || options?.enabled === false) {
-      if (options?.enabled === false) needsCatchUp.current = true;
-      return;
-    }
+    if (projectId == null) return;
 
     let cancelled = false;
     let unsubscribe: (() => void) | undefined;
@@ -117,19 +113,6 @@ export function useBoardRealtime(
       const channel = client.subscribe(channelName);
       const onBoardEvent = createBoardRealtimeEventHandler(refetch);
       channel.bind(BOARD_EVENT, onBoardEvent);
-      // Mobile defers this connection until after usable paint. Reconcile once
-      // on that false→true transition so an event that landed during the gap
-      // cannot leave the freshly rendered Board stale.
-      if (needsCatchUp.current) {
-        needsCatchUp.current = false;
-        void reconcileActiveBoardQuery(queryClient, projectId).catch(
-          () => undefined,
-        );
-        void queryClient.refetchQueries({
-          exact: true,
-          queryKey: projectPlanningQueryKey(projectId),
-        });
-      }
       // Reconnect safety-net: pull once after a dropped connection recovers.
       // Skipped on the INITIAL connection (HTPR-3998) — the queries are already
       // fetching on mount, so refetching there just doubled every page load.
@@ -156,7 +139,6 @@ export function useBoardRealtime(
     };
   }, [
     options?.accountId,
-    options?.enabled,
     projectId,
     queryClient,
     scopedRefetch,
