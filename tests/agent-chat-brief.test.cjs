@@ -51,6 +51,10 @@ function loadMessageRoute({
     },
     $transaction: async (operation) =>
       operation({
+        $queryRaw: async () => [{ heartbeatAt: null }],
+        agentWebhookSubscription: {
+          findUnique: async () => ({ active: true }),
+        },
         chatMessage: {
           create: async ({ data }) => ({
             id: "message-1",

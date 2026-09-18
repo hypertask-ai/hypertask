@@ -136,6 +136,10 @@ test("prompt growth remains bounded by the keyboard-visible viewport", () => {
   assert.match(container, /bottom: writerViewport\.bottomInset/);
   assert.match(container, /maxHeight: `\$\{writerViewport\.visibleHeight\}px`/);
   assert.match(container, /SheetScroller[\s\S]*?className="flex-1 min-h-0/);
+  assert.match(
+    appSheet,
+    /export const SheetScroller[\s\S]*?className=\{cn\("overflow-y-auto", className\)\}/,
+  );
 });
 
 test("desktop Task Writer retains its existing alignment and input styling", () => {

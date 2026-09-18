@@ -39,8 +39,12 @@ function loadMessageRoute({
   flag = model.AGENT_CHAT_PARKED_REPLY_FLAG,
   flagEnabled = true,
   deliveryIds = [],
+  heartbeatAt = null,
+  activeWebhook = false,
+  pollingEnabled = true,
 } = {}) {
   const writes = [];
+  const updates = [];
   const broadcasts = [];
   let sequence = 0;
   const create = async (model, { data }) => {
@@ -68,7 +72,17 @@ function loadMessageRoute({
     },
     $transaction: async (operation) =>
       operation({
-        chatMessage: { create: (args) => create("chatMessage", args) },
+        $queryRaw: async () => [{ heartbeatAt }],
+        agentWebhookSubscription: {
+          findUnique: async () => (activeWebhook ? { active: true } : null),
+        },
+        chatMessage: {
+          create: (args) => create("chatMessage", args),
+          update: async (args) => {
+            updates.push(args);
+            return {};
+          },
+        },
         chatSession: { update: async () => ({}) },
         chatSessionParticipant: { updateMany: async () => ({ count: 1 }) },
       }),
@@ -98,7 +112,10 @@ function loadMessageRoute({
     AGENT_CHAT_BRIEF_FLAG: "htpr-6155-chat-agent-brief",
     // Keyed, so a notice gated on the wrong flag fails here instead of
     // passing because some other flag happened to be on.
-    isFeatureEnabled: async (key) => (key === flag ? flagEnabled : false),
+    isFeatureEnabled: async (key) => {
+      if (key === "htpr-6553-agent-chat-polling") return pollingEnabled;
+      return key === flag ? flagEnabled : false;
+    },
   });
   stubModule("src/lib/agents/chatBrief.ts", {
     buildAgentChatBrief: async () => null,
@@ -113,7 +130,7 @@ function loadMessageRoute({
     path.join(root, `tests/agent-chat-parked-reply-route-${++routeLoad}.cjs`),
     { alias: { "@": path.join(root, "src") }, interopDefault: true },
   )(routePath);
-  return { route, writes, broadcasts };
+  return { route, writes, updates, broadcasts };
 }
 
 async function send(route, text = "are you there?") {
@@ -150,13 +167,33 @@ test("a message nobody is listening for is answered in the thread", async () => 
   assert.equal(body.notice.content, model.AGENT_CHAT_PARKED_MESSAGE);
 });
 
-test("a message a runtime did receive is left for that runtime to answer", async () => {
-  const { route, writes } = loadMessageRoute({ deliveryIds: ["delivery-1"] });
+test("a webhook runtime keeps the existing delivery path", async () => {
+  const { route, writes, updates } = loadMessageRoute({
+    deliveryIds: ["delivery-1"],
+    activeWebhook: true,
+    heartbeatAt: new Date(),
+  });
   const { body } = await send(route);
 
   assert.equal(body.delivered, true);
   assert.equal(body.notice, null);
   assert.equal(writes.length, 1, "only the human message is written");
+  assert.equal(updates.length, 0, "webhook messages remain delivered at creation");
+});
+
+test("a fresh polling runtime queues an undelivered message without a parked notice", async () => {
+  const { route, writes, updates } = loadMessageRoute({ heartbeatAt: new Date() });
+  const { body } = await send(route);
+
+  assert.equal(body.delivered, true);
+  assert.equal(body.notice, null);
+  assert.equal(writes.length, 1, "only the human message is written");
+  assert.deepEqual(updates, [
+    {
+      where: { id: "chatMessage-1" },
+      data: { isDelivered: false },
+    },
+  ]);
 });
 
 test("with the flag off the thread keeps today's behaviour", async () => {
@@ -280,7 +317,12 @@ test("the runtime's own transcript never carries the parked line", async () => {
  * The browser's read of the thread. Two rows are stored: the human message
  * and, after it, the parked notice the send path wrote.
  */
-function loadHistoryRoute({ flagEnabled }) {
+function loadHistoryRoute({
+  flagEnabled,
+  heartbeatAt = null,
+  subscription = { active: false, events: [] },
+  pollingEnabled = true,
+}) {
   const counts = [];
   // Newest first: the route reads descending and flips, like Prisma would.
   const rows = [
@@ -305,7 +347,7 @@ function loadHistoryRoute({ flagEnabled }) {
         id: "session-1",
         agentId: "agent-parked",
         // chatAccess evaluates the shared-chat flag against the agent owner.
-        agent: { userId: 6 },
+        agent: { userId: 6, heartbeatAt },
       }),
     },
     chatMessage: {
@@ -325,7 +367,7 @@ function loadHistoryRoute({ flagEnabled }) {
       findMany: async () => [],
     },
     agentWebhookSubscription: {
-      findUnique: async () => ({ active: false, events: [] }),
+      findUnique: async () => subscription,
     },
   };
   stubModule("src/lib/auth/getSessionUser.ts", {
@@ -336,6 +378,7 @@ function loadHistoryRoute({ flagEnabled }) {
     SHARED_AGENT_CHAT_FLAG: "htpr-6002-shared-agent-chat",
     isFeatureEnabled: async (key) => {
       if (key === "htpr-6002-shared-agent-chat") return true;
+      if (key === "htpr-6553-agent-chat-polling") return pollingEnabled;
       return key === model.AGENT_CHAT_PARKED_REPLY_FLAG ? flagEnabled : false;
     },
   });
@@ -362,8 +405,8 @@ function loadHistoryRoute({ flagEnabled }) {
   return { route, counts };
 }
 
-async function readHistory(flagEnabled) {
-  const { route, counts } = loadHistoryRoute({ flagEnabled });
+async function readHistory(flagEnabled, availability = {}) {
+  const { route, counts } = loadHistoryRoute({ flagEnabled, ...availability });
   const response = await route.GET(
     new Request("https://app.hypertask.ai/api/agent-chat/session-1"),
     { params: Promise.resolve({ sessionId: "session-1" }) },
@@ -379,6 +422,32 @@ test("a reader inside the rollout sees the parked line", async () => {
     ["human", "system"],
   );
   assert.equal(body.awaiting, false, "the thread is answered, not waiting");
+});
+
+test("the page reports a fresh heartbeat as polling chat", async () => {
+  const { body } = await readHistory(true, { heartbeatAt: new Date() });
+
+  assert.equal(body.chatEnabled, true);
+  assert.equal(body.deliveryMode, "polling");
+});
+
+test("the page expires polling chat after two minutes", async () => {
+  const { body } = await readHistory(true, {
+    heartbeatAt: new Date(Date.now() - 2 * 60 * 1000),
+  });
+
+  assert.equal(body.chatEnabled, false);
+  assert.equal(body.deliveryMode, null);
+});
+
+test("the page keeps webhook chat ahead of a fresh heartbeat", async () => {
+  const { body } = await readHistory(true, {
+    heartbeatAt: new Date(),
+    subscription: { active: true, events: ["chat.message"] },
+  });
+
+  assert.equal(body.chatEnabled, true);
+  assert.equal(body.deliveryMode, "webhook");
 });
 
 test("a reader outside the rollout keeps today's thread", async () => {

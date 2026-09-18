@@ -20,7 +20,11 @@ import ReplyToComment from "./CommentOptions/ReplyToComment";
 import SwipeableCommentRow from "./SwipeableCommentRow";
 import { Reply } from "lucide-react";
 import { useFlag } from "@/hooks/useFlag";
-import { HTPR_6514_COMMENT_LONG_PRESS_FLAG } from "@/lib/flags/keys";
+import {
+  HTPR_6514_COMMENT_LONG_PRESS_FLAG,
+  HTPR_6554_LIGHT_COMMENT_SEPARATION_FLAG,
+} from "@/lib/flags/keys";
+import { isCommentCreatedByUser } from "@/lib/htc/isCommentCreatedByUser";
 const CommentReactions = dynamic(() => import("./CommentReactions"));
 
 const CommentReadReceipts = () => {
@@ -81,6 +85,9 @@ const CommentsContainer = () => {
   const [currentUser, _setCurrentUser] = useRecoilState(currentUserAtom);
   const [, setShowCommands] = useRecoilState(showCommandsAtom);
   const commentLongPress = useFlag(HTPR_6514_COMMENT_LONG_PRESS_FLAG);
+  const lightCommentSeparationEnabled = useFlag(
+    HTPR_6554_LIGHT_COMMENT_SEPARATION_FLAG,
+  );
   const bind = useDoubleTap(handleDoubleTap, 200, {
     onSingleTap: handleSingleTap,
   });
@@ -126,8 +133,8 @@ const CommentsContainer = () => {
     handleDoubleTap();
   }
   const isCurrentUserCreator = useMemo(
-    () => comment.creator?.id === currentUser?.id,
-    [comment.creator?.id, currentUser?.id]
+    () => isCommentCreatedByUser(comment, currentUser?.id),
+    [comment, currentUser?.id]
   );
   const _mbl = useContext(MobileViewContext);
   const commentId = Number(comment.id);
@@ -148,7 +155,7 @@ const CommentsContainer = () => {
       <div
         className={`
         border-l-4 rounded
-        ${isStacked || comment.activity ? "" : " shadow-md "}
+        ${isStacked || comment.activity ? "" : " shadow-md bg-comment-description "}
         ${
           currentId === `comment-${i}` || currentId === `comment-${i}-input`
             ? `${
@@ -167,11 +174,15 @@ const CommentsContainer = () => {
                       pinned
                         ? "border-[#FFB980]"
                         : " border-comment-description-border"
-                    }  text-white-black bg-comment-description`
+                    }  text-white-black`
                   : "border-transparent hover:bg-active-elementBg "
               }`
         }
         outline-none  comment-container ${
+          lightCommentSeparationEnabled && !isStacked && !comment.activity
+            ? "comment-separation-card"
+            : ""
+        } ${
           isStacked || comment.activity ? "my-[4px] cursor-pointer" : "my-[8px]"
         }`}
         key={comment.id}
@@ -237,7 +248,12 @@ const CommentsContainer = () => {
                         rounded-sm
                         ${styles.hellow}
                         ${
-                          comment.creator?.id === currentUser?.id
+                          lightCommentSeparationEnabled
+                            ? "comment-separation-card"
+                            : ""
+                        }
+                        ${
+                          isCommentCreatedByUser(comment, currentUser?.id)
                             ? "bg-self-comment"
                             : // they look the same now but wasn't always t
                               "bg-comment-description"

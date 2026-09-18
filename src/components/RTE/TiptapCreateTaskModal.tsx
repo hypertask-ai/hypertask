@@ -43,6 +43,7 @@ import { DIV_ID_CONSTANTS } from "@/lib/configs/general.config";
 import { useTourContext } from "@/lib/tours/context/TourContext";
 import { usePathname } from "next/navigation";
 import { closeBackDismissBeforeNavigation } from "@/lib/mobile/backDismiss";
+import { cn } from "@/utils/undoActions/helperFuncs";
 import { useGetAllProjectLabels } from "@/hooks/MultiPages/useGetAllProjectLabels";
 import { useGetAllMembersForAssign } from "@/hooks/MultiPages/useGetMembersForAssignees";
 import type {
@@ -81,7 +82,10 @@ import {
   type TaskCreateTraceScope,
 } from "@/lib/analytics/productPerformance";
 import { useFlag } from "@/hooks/useFlag";
-import { HTPR_6157_AUTO_DESCRIPTION_FLAG } from "@/lib/flags/keys";
+import {
+  HTPR_6157_AUTO_DESCRIPTION_FLAG,
+  HTPR_6556_MOBILE_DESCRIPTION_FIRST_FLAG,
+} from "@/lib/flags/keys";
 import {
   createTaskUploadCount,
   discardUnboundCreateTaskUploads,
@@ -98,6 +102,9 @@ const TiptapCreateTaskModal = () => {
   );
   const newTaskAutoDescriptionEnabled = useFlag(
     HTPR_6157_AUTO_DESCRIPTION_FLAG,
+  );
+  const descriptionFirstEnabled = useFlag(
+    HTPR_6556_MOBILE_DESCRIPTION_FIRST_FLAG,
   );
   // HTPR-6177: automatic description drafting is owner-only until it is ready.
   const autoTaskDescriptionsEnabled = useFlag("htpr-6177-auto-task-descriptions");
@@ -1198,7 +1205,10 @@ const TiptapCreateTaskModal = () => {
                     id="create-task-tiptap-description"
                     // onFocus={handleFocus}
                     onDrop={onDropHandler}
-                    className="max-h-[60svh] scrollbar-none max-w-full cursor-text pt-2 min-h-[80px] overflow-y-auto overflow-x-hidden"
+                    className={cn(
+                      "max-h-[60svh] scrollbar-none max-w-full cursor-text pt-2 overflow-y-auto overflow-x-hidden",
+                      isMbl && descriptionFirstEnabled ? "min-h-[42svh]" : "min-h-[80px]",
+                    )}
                     editor={editor}
                   />
                 </>

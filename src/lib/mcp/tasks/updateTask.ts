@@ -20,7 +20,12 @@ import { broadcastTaskUpdates } from "@/lib/mcp/tasks/broadcastTaskUpdates";
 import { sanitizeRichHtml } from "@/utils/helperFunctions/sanitizeRichHtml";
 import { normalizeBlockHtml } from "@/lib/mcp/normalizeBlockHtml";
 import { signSession, SESSION_COOKIE } from "@/lib/auth/session";
-import { formatRichTextInput } from "@/utils/helperFunctions/markdownToHtml";
+import {
+    formatRichTextInput,
+    isAcceptedRichTextInput,
+} from "@/utils/helperFunctions/markdownToHtml";
+import { isFeatureEnabled } from "@/lib/flags";
+import { HTPR_6561_DESCRIPTION_STRUCTURE_FLAG } from "@/lib/flags/keys";
 import { buildFieldError } from "@/lib/mcp/fieldError";
 import { requireRole } from "@/lib/mcp/agents/scopes";
 import { assertAgentAssignmentChangeAllowed } from "@/lib/mcp/tasks/agentMutationFence";
@@ -372,6 +377,32 @@ export async function executeTaskUpdate({
         return NextResponse.json(
             {
                 ...buildFieldError('invalid_field', 'description', 'description must be a string'),
+                ...(dryRun && { valid: false })
+            },
+            { status: 400 }
+        )
+    }
+    if (requestBody.description !== undefined && requestBody.description.trim().length === 0) {
+        return NextResponse.json(
+            {
+                ...buildFieldError('invalid_field', 'description', 'Description cannot be empty'),
+                ...(dryRun && { valid: false })
+            },
+            { status: 400 }
+        )
+    }
+    if (
+        requestBody.description !== undefined &&
+        !isAcceptedRichTextInput(requestBody.description, requestBody.content_type) &&
+        !(await isFeatureEnabled(HTPR_6561_DESCRIPTION_STRUCTURE_FLAG, user.id))
+    ) {
+        return NextResponse.json(
+            {
+                ...buildFieldError(
+                    'invalid_field',
+                    'description',
+                    'Description must be HTML or structural markdown. Plain text is not enabled.'
+                ),
                 ...(dryRun && { valid: false })
             },
             { status: 400 }

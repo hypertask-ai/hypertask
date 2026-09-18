@@ -22,6 +22,7 @@ import {
   AGENT_VISIBILITY_FLAG,
   FEATURE_FLAG_DETAILS_FLAG,
   FIGMA_CONNECT_FLAG,
+  GOOGLE_CALENDAR_FLAG,
   FLAG_REMOVAL_COUNTDOWN_FLAG,
   CONFIRMED_PROPOSAL_HEADING_FLAG,
   LAZY_EMOJI_LIST_FLAG,
@@ -66,6 +67,15 @@ import {
   HTPR_6530_MCP_LIST_QUERY_FLAG,
   HTPR_6531_DEFERRED_MCP_TOOLS_FLAG,
   HTPR_6473_GET_AGENT_FLAG,
+  HTPR_6536_QA_LOGIN_FLAG,
+  HTPR_6551_QUIET_RUN_ACTIVITY_FLAG,
+  HTPR_6555_IDLE_COMMENT_MIC_FLAG,
+  HTPR_6553_AGENT_CHAT_POLLING_FLAG,
+  HTPR_6554_LIGHT_COMMENT_SEPARATION_FLAG,
+  HTPR_6557_AGENT_ROOMS_FLAG,
+  HTPR_6559_KEEP_DIRECT_TASK_OPEN_FLAG,
+  HTPR_6556_MOBILE_DESCRIPTION_FIRST_FLAG,
+  HTPR_6561_DESCRIPTION_STRUCTURE_FLAG,
 } from "@/lib/flags/keys";
 
 // Re-exported so server code keeps importing keys from here. Client components must
@@ -89,6 +99,60 @@ const FEATURE_FLAG_QA_USER = {
 const RETIRED_FEATURE_FLAG_KEYS = new Set(["hyfa-43-factory-owner-preview"]);
 
 const FEATURE_FLAG_DEFINITIONS = [
+  {
+    key: HTPR_6561_DESCRIPTION_STRUCTURE_FLAG,
+    shippedOn: "2026-09-18",
+    description:
+      "Preserves description headings, paragraphs, lists, and bold text when AI Chat edits a task, and stores bare API text as editor paragraphs.",
+  },
+  {
+    key: HTPR_6554_LIGHT_COMMENT_SEPARATION_FLAG,
+    shippedOn: "2026-09-18",
+    description:
+      "Adds a quiet outline around posted comments in the Porcelain theme so adjacent comments stay distinct on phone and desktop.",
+  },
+  {
+    key: HTPR_6556_MOBILE_DESCRIPTION_FIRST_FLAG,
+    shippedOn: "2026-09-18",
+    description:
+      "Focuses mobile task creation on one description box, with collapsed title and properties plus raw and Task Writer save actions.",
+  },
+  {
+    key: HTPR_6559_KEEP_DIRECT_TASK_OPEN_FLAG,
+    shippedOn: "2026-09-18",
+    description:
+      "Keeps a task open after Ctrl or Command plus Enter unless it was opened through the Inbox cycle.",
+  },
+  {
+    key: HTPR_6557_AGENT_ROOMS_FLAG,
+    shippedOn: "2026-09-18",
+    description:
+      "Adds one shared Agent Chat room per board, with named bot handoffs, a three-turn bot limit, Stop, and a visible daily turn budget.",
+  },
+  {
+    key: HTPR_6555_IDLE_COMMENT_MIC_FLAG,
+    shippedOn: "2026-09-17",
+    description:
+      "Shows the microphone on the closed task-detail comment bar so you can start dictating with one tap instead of tapping the text first.",
+  },
+  {
+    key: HTPR_6553_AGENT_CHAT_POLLING_FLAG,
+    shippedOn: "2026-09-17",
+    description:
+      "Lets a recently heartbeating agent runtime receive Agent Chat through polling when it has no webhook, and labels that chat as polling.",
+  },
+  {
+    key: HTPR_6551_QUIET_RUN_ACTIVITY_FLAG,
+    shippedOn: "2026-09-17",
+    description:
+      "Lets agent runtimes open and close ticket runs, and keeps passive run updates behind the task history toggle while questions stay visible.",
+  },
+  {
+    key: HTPR_6536_QA_LOGIN_FLAG,
+    shippedOn: "2026-09-16",
+    description:
+      "Shows a QA-only email and password sign-in page so an outside test robot can open the real app behind login. The page and route exist only when the server has the QA login secrets.",
+  },
   {
     key: HTPR_6533_MCP_CLIENT_EVAL_FLAG,
     shippedOn: "2026-09-16",
@@ -184,6 +248,12 @@ const FEATURE_FLAG_DEFINITIONS = [
     shippedOn: "2026-09-08",
     description:
       "Ends AI Chat turns that run out of time with a clear, saved failure message instead of a silent disconnect, and shows the server's real refusal instead of 'Connection lost'.",
+  },
+  {
+    key: GOOGLE_CALENDAR_FLAG,
+    shippedOn: "2026-09-08",
+    description:
+      "Lets each user connect Google Calendar and keep assigned tasks with due dates in a dedicated Hypertask calendar.",
   },
   {
     key: AGENT_VISIBILITY_FLAG,

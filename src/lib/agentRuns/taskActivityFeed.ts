@@ -31,6 +31,7 @@ export function mergeTaskThreadFeed(
   comments: IComment[],
   activities: SerializedAgentRunActivity[],
   showHistory: boolean,
+  quietActivityRows = false,
 ): TaskThreadFeedItem[] {
   const feed: TaskThreadFeedItem[] = [];
 
@@ -44,9 +45,11 @@ export function mergeTaskThreadFeed(
     });
   });
 
-  // Run progress is conversation content, not task audit history, so it remains visible.
   activities.forEach((activity, activityIndex) => {
     if (activity.type === "response") return;
+    const needsHumanResponse =
+      activity.type === "elicitation" && Boolean(activity.options?.length);
+    if (quietActivityRows && !showHistory && !needsHumanResponse) return;
     feed.push({
       kind: "agent-activity",
       activityIndex,

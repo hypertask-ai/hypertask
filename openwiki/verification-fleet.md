@@ -80,6 +80,8 @@ Status as of 2026-09-16. TestSprite provides a small production API contract sui
 
 The backend suite covers MCP identity/context, immutable QA-board validation, projects and sections, task create/read/update/move/search/archive, labels, and HTML comment create/list. The label-filter contract guards the regression tracked at https://app.hypertask.ai/detail/project-15/6475. The frontend suite covers `/login`, the logged-out `/pricing` redirect, `/developers`, and a public 404. Its project URL is deliberately `/login`: booting a browser at `/` provisions a guest demo board and violates the suite's isolation rule.
 
+A signed-in web check starts at `/qa/login`. That page and `POST /api/auth/qa-login` exist only when `QA_LOGIN_EMAIL` and `QA_LOGIN_PASSWORD` are set, the password is at least 32 bytes, and flag `htpr-6536-qa-login` is on. If the flag cannot be read, both return 404. They sign in only the QA user (userId 985). The submitted password is checked with scrypt, not SHA-256. Any other email is refused. Rotate the password env value if it leaks.
+
 Credentials are local only. Source `/home/valentin/.config/testsprite/credentials.env` for the TestSprite key. The backend project's Bearer credential is the account-scoped MCP token for QA userId 985, sourced from `/home/valentin/.config/hypertask-videos/storageState-qa.warmed.json`; rotate the project credential when that QA session token expires. Never copy either value into a test or this repository.
 
 ```bash

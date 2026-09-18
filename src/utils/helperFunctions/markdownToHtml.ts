@@ -74,6 +74,17 @@ export function hasMarkdownStructure(value: string): boolean {
   return state.hasStructure && !state.hasHtml
 }
 
+export function isAcceptedRichTextInput(
+  value: string,
+  contentType?: 'html' | 'markdown'
+): boolean {
+  return (
+    contentType === 'markdown' ||
+    /<[a-z][\s\S]*>/i.test(value.trim()) ||
+    (contentType === undefined && hasMarkdownStructure(value))
+  )
+}
+
 export function formatRichTextInput(
   value: string,
   contentType?: 'html' | 'markdown'

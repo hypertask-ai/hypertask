@@ -70,8 +70,9 @@ export const MobileBottomSheet = ({
       onClose={onClose}
       ariaLabel={ariaLabel}
       labelledBy={labelledBy}
-      detent={fullHeight ? "full-height" : "content-height"}
+      detent={fullHeight ? "default" : "content"}
       disableScrollLocking
+      customScroller
       defaultLibraryHeader={false}
       zIndex={zIndex}
       onCloseEnd={onCloseEnd}
@@ -84,7 +85,6 @@ export const MobileBottomSheet = ({
       containerStyle={containerStyle}
     >
       <SheetScroller
-        draggableAt="top"
         className={cn("min-h-0 flex-1 overflow-y-auto no-scrollbar", contentClassName)}
       >
         {children}

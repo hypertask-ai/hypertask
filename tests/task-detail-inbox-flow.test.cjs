@@ -133,6 +133,7 @@ test("comment Enter shortcut modifiers resolve to one action", () => {
     shiftKey: false,
     altKey: false,
     consistentCommentShortcuts: false,
+    keepDirectTaskOpen: false,
     isInboxFlow: true,
     isCommentMode: true,
     inInbox: true,
@@ -140,13 +141,30 @@ test("comment Enter shortcut modifiers resolve to one action", () => {
   const cases = [
     { name: "ordinary send", changes: {}, expected: "send" },
     {
-      name: "consistent send and move outside Inbox",
+      name: "consistent send advances through Inbox",
+      changes: {
+        consistentCommentShortcuts: true,
+        keepDirectTaskOpen: true,
+      },
+      expected: "send-and-move",
+    },
+    {
+      name: "consistent send keeps the previous direct-task behavior while the fix is off",
       changes: {
         consistentCommentShortcuts: true,
         isInboxFlow: false,
-        inInbox: false,
+        keepDirectTaskOpen: false,
       },
       expected: "send-and-move",
+    },
+    {
+      name: "consistent send stays on directly opened tasks when the fix is on",
+      changes: {
+        consistentCommentShortcuts: true,
+        isInboxFlow: false,
+        keepDirectTaskOpen: true,
+      },
+      expected: "send",
     },
     {
       name: "consistent send and stay without Inbox lineage",
@@ -229,9 +247,9 @@ test("comment Enter shortcut modifiers resolve to one action", () => {
   }
 });
 
-test("comment shortcut discovery follows the owner-only flag", () => {
-  const taskView = (enabled, isApple = false) =>
-    getKeyboardShortcuts(isApple, false, enabled).find(
+test("comment shortcut discovery follows both comment flags", () => {
+  const taskView = (enabled, isApple = false, keepDirectTaskOpen = false) =>
+    getKeyboardShortcuts(isApple, false, enabled, keepDirectTaskOpen).find(
       (group) => group.title === "Task View",
     ).sub;
 
@@ -245,13 +263,18 @@ test("comment shortcut discovery follows the owner-only flag", () => {
       shortcut.shortTitle.startsWith("Send comment"),
     ),
   );
+  assert.ok(
+    taskView(true).some(
+      (shortcut) => shortcut.shortTitle === "Send comment and move to next task",
+    ),
+  );
   assert.deepEqual(
-    taskView(true).filter((shortcut) =>
+    taskView(true, false, true).filter((shortcut) =>
       shortcut.shortTitle.startsWith("Send comment"),
     ),
     [
       {
-        shortTitle: "Send comment and move to next task",
+        shortTitle: "Send comment and advance in Inbox",
         pressKey: ["CTRL", "ENTER"],
       },
       {
@@ -261,8 +284,8 @@ test("comment shortcut discovery follows the owner-only flag", () => {
     ],
   );
   assert.deepEqual(
-    taskView(true, true).find(
-      (shortcut) => shortcut.shortTitle === "Send comment and move to next task",
+    taskView(true, true, true).find(
+      (shortcut) => shortcut.shortTitle === "Send comment and advance in Inbox",
     ).pressKey,
     ["CMD", "ENTER"],
   );
@@ -273,15 +296,22 @@ test("comment shortcut discovery follows the owner-only flag", () => {
   ]) {
     const source = read(file);
     assert.match(source, /useFlag\(\s*"htpr-5913-consistent-comment-shortcuts"/);
+    assert.match(source, /useFlag\(\s*HTPR_6559_KEEP_DIRECT_TASK_OPEN_FLAG/);
     assert.match(
       source,
-      /getKeyboardShortcuts\([\s\S]*?consistentCommentShortcuts/,
+      /getKeyboardShortcuts\([\s\S]*?consistentCommentShortcuts,[\s\S]*?keepDirectTaskOpen/,
     );
   }
 
   const registry = read("docs/keyboard-shortcuts-registry.md");
-  assert.match(registry, /`Mod\+ENTER` \| With the owner-only/);
-  assert.match(registry, /`Mod\+Shift\+ENTER` \| With the same flag/);
+  assert.match(
+    registry,
+    /`Mod\+ENTER` \| With `htpr-5913-consistent-comment-shortcuts`:[\s\S]*?`htpr-6559-keep-direct-task-open-after-comment`/,
+  );
+  assert.match(
+    registry,
+    /`Mod\+Shift\+ENTER` \| With `htpr-5913-consistent-comment-shortcuts`/,
+  );
 });
 
 test("all nested task links apply the Inbox marker to their navigation target", () => {

@@ -29,7 +29,6 @@ import {
   labelsAssignSchema,
 } from './common/filters';
 import { inlineAttachmentsSchema } from './attachment.validation';
-import { hasMarkdownStructure } from '../../../utils/helperFunctions/markdownToHtml';
 
 const config = getConfig();
 
@@ -433,6 +432,7 @@ export function getUpdateTaskBaseSchema() {
       title: z.string().min(1).optional(),
       description: z
         .string()
+        .trim()
         .min(1)
         .optional()
         .describe('Task description. HTML or structural markdown; content_type can explicitly select either format.'),
@@ -464,15 +464,6 @@ export function getUpdateTaskInputSchema() {
   const baseSchema = getUpdateTaskBaseSchema();
 
   return baseSchema
-    .refine(
-      (data) =>
-        data.description === undefined ||
-        isAcceptedRichText(data.description, data.content_type),
-      {
-        message: 'Description must be HTML or structural markdown such as a list, emphasis, code, or link. Plain text is not accepted.',
-        path: ['description'],
-      }
-    )
     .refine(
       (data) => {
         // At least one identification method must be provided
@@ -652,31 +643,6 @@ export const AssignUserInputSchema = getAssignUserInputSchema();
 export type AssignUserInput = z.infer<typeof AssignUserInputSchema>;
 
 /**
- * Check if text appears to be HTML format
- * Simple heuristic: checks for HTML tags
- */
-function isHtmlFormat(text: string): boolean {
-  if (!text || typeof text !== 'string') {
-    return false;
-  }
-  
-  // Check for HTML tags (basic pattern)
-  const htmlTagPattern = /<[a-z][\s\S]*>/i;
-  return htmlTagPattern.test(text.trim());
-}
-
-function isAcceptedRichText(
-  text: string,
-  contentType?: 'html' | 'markdown'
-): boolean {
-  return (
-    contentType === 'markdown' ||
-    isHtmlFormat(text) ||
-    (contentType === undefined && hasMarkdownStructure(text))
-  );
-}
-
-/**
  * Schema for create_task tool input
  * Requires project_id and title, optional description, section, priority, estimate
  */
@@ -691,6 +657,8 @@ export function getCreateTaskInputSchema() {
       title: z.string().min(1).max(500).describe('The title of the task'),
       description: z
         .string()
+        .trim()
+        .min(1)
         .optional()
         .describe('Task description. HTML or structural markdown; content_type can explicitly select either format.'),
       content_type: taskContentTypeSchema,
@@ -716,16 +684,7 @@ export function getCreateTaskInputSchema() {
       assignee: z.array(z.number().int().positive()).optional(),
       attachments: inlineAttachmentsSchema,
     })
-    .strict()
-    .refine(
-      (data) =>
-        data.description === undefined ||
-        isAcceptedRichText(data.description, data.content_type),
-      {
-        message: 'Description must be HTML or structural markdown such as a list, emphasis, code, or link. Plain text is not accepted.',
-        path: ['description'],
-      }
-    );
+    .strict();
 }
 
 export const CreateTaskInputSchema = getCreateTaskInputSchema();
