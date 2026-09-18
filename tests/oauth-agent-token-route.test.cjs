@@ -39,6 +39,7 @@ const calls = {
 let currentAgent = null
 let currentTeam = null
 let agentWithinTeam = true
+let serializableFailures = 0
 let teamScopeFeatureEnabled = true
 
 const teamGrant = {
@@ -74,6 +75,10 @@ stubModule('src/lib/prisma.ts', {
   default: {
     $transaction: async (callback, options) => {
       calls.transactions.push(options)
+      if (serializableFailures > 0) {
+        serializableFailures -= 1
+        throw Object.assign(new Error('serialization conflict'), { code: 'P2034' })
+      }
       return callback({
         $queryRaw: async (strings, ...values) => {
           calls.clientLocks.push({ sql: strings.join('?'), values })
@@ -260,6 +265,31 @@ test('OAuth exchange binds a unique credential to the stored managed generation'
     data: { owner_id: owner.id },
   }])
   assert.equal(calls.usedUpdates.length, 1)
+})
+
+test('OAuth exchange retries serializable conflicts', async () => {
+  currentAgent = storedCredential(managedToken())
+  currentTeam = null
+  serializableFailures = 1
+  calls.clientLocks.length = 0
+  calls.ownerUpdates.length = 0
+  calls.transactions.length = 0
+  calls.usedUpdates.length = 0
+
+  try {
+    const response = await POST(tokenRequest())
+
+    assert.equal(response.status, 200)
+    assert.deepEqual(calls.transactions, [
+      { isolationLevel: 'Serializable' },
+      { isolationLevel: 'Serializable' },
+    ])
+    assert.equal(calls.clientLocks.length, 1)
+    assert.equal(calls.ownerUpdates.length, 1)
+    assert.equal(calls.usedUpdates.length, 1)
+  } finally {
+    serializableFailures = 0
+  }
 })
 
 test('OAuth exchange preserves a team-bound agent grant', async () => {

@@ -459,114 +459,127 @@ export async function POST(request: NextRequest) {
     const accessTokenExpirySeconds = isRefreshCapableMobile
       ? MOBILE_ACCESS_TOKEN_EXPIRY_SECONDS
       : DEFAULT_ACCESS_TOKEN_EXPIRY_SECONDS
-    let session: { accessToken: string; refreshToken?: string } | null
+    let session: { accessToken: string; refreshToken?: string } | null = null
 
     // The conditional write is the one-time consume gate. Token signing stays
     // in the same transaction so a signing failure rolls the consume back.
     // Concurrent requests may validate the same unused snapshot, but only one
     // transaction can consume the code and return a token.
     try {
-      session = await prisma.$transaction(async (tx) => {
-        // Match deletion's parent-before-children lock order so ownership claims
-        // and one-time code consumption cannot deadlock with client removal.
-        await tx.$queryRaw<Array<{ client_id: string }>>`
-          SELECT "client_id"
-          FROM "OAuthClient"
-          WHERE "client_id" = ${authCode.client_id}
-          FOR UPDATE
-        `
-
-        if (agentId) {
-          if (
-            agentTeamScope &&
-            !(await isFeatureEnabled(
-              HTPR_6542_TEAM_SCOPED_MANAGEMENT_KEYS_FLAG,
-              authCode.user.id,
-              tx
-            ))
-          ) {
-            throw new OAuthAgentFeatureDisabledError()
-          }
-
-          const currentAgent = await tx.agent.findFirst({
-            where: {
-              id: agentId,
-              userId: authCode.user.id,
-              revokedAt: null,
-              ...(agentTeamScope
-                ? agentWithinTeamWhere(agentTeamScope.teamId)
-                : {}),
-            },
-            select: {
-              mcpTokenJti: true,
-              credentialTeamId: true,
-              credentialTeamAccessBinding: true,
-            },
-          })
-          const currentTeam = agentTeamScope
-            ? await getManagementKeyTeam(
-                authCode.user.id,
-                agentTeamScope.teamId,
-                tx
-              )
-            : null
-          if (
-            storedAgentTokenGeneration(currentAgent) !== agentTokenJti ||
-            (currentAgent?.credentialTeamId ?? undefined) !==
-              agentTeamScope?.teamId ||
-            (currentAgent?.credentialTeamAccessBinding ?? undefined) !==
-              agentTeamScope?.accessBinding ||
-            (agentTeamScope &&
-              (!currentTeam ||
-                currentTeam.accessBinding !== agentTeamScope.accessBinding))
-          ) {
-            throw new OAuthAgentGrantError()
-          }
-        }
-
-        const consumed = await tx.oAuthAuthorizationCode.updateMany({
-          where: { code: code as string, used: false },
-          data: { used: true }
-        })
-        if (consumed.count !== 1) return null
-
-        await tx.oAuthClient.updateMany({
-          where: { client_id: authCode.client_id, owner_id: null },
-          data: { owner_id: authCode.user.id },
-        })
-
+      for (let attempt = 0; attempt < SERIALIZABLE_ATTEMPTS; attempt += 1) {
         try {
-          const accessToken = createOAuthToken(
-            authCode.firebase_uid,
-            authCode.user.id,
-            authCode.user.email,
-            authCode.client_id,
-            accessTokenExpirySeconds,
-            agentId,
-            agentTokenJti,
-            agentTeamScope
-          )
-          if (!isRefreshCapableMobile) return { accessToken }
+          session = await prisma.$transaction(async (tx) => {
+            // Match deletion's parent-before-children lock order so ownership claims
+            // and one-time code consumption cannot deadlock with client removal.
+            await tx.$queryRaw<Array<{ client_id: string }>>`
+              SELECT "client_id"
+              FROM "OAuthClient"
+              WHERE "client_id" = ${authCode.client_id}
+              FOR UPDATE
+            `
 
-          const accessIdentity = accessTokenIdentity(accessToken)
-          const refreshToken = createRefreshToken()
-          await tx.oAuthRefreshToken.create({
-            data: {
-              tokenHash: refreshTokenHash(refreshToken),
-              familyId: randomUUID(),
-              clientId: authCode.client_id,
-              userId: authCode.user.id,
-              firebaseUid: authCode.firebase_uid,
-              accessTokenJti: accessIdentity.jti,
-              accessTokenExpiresAt: accessIdentity.expiresAt,
-              expiresAt: new Date(Date.now() + REFRESH_TOKEN_EXPIRY_SECONDS * 1000),
-            },
-          })
-          return { accessToken, refreshToken }
+            if (agentId) {
+              if (
+                agentTeamScope &&
+                !(await isFeatureEnabled(
+                  HTPR_6542_TEAM_SCOPED_MANAGEMENT_KEYS_FLAG,
+                  authCode.user.id,
+                  tx
+                ))
+              ) {
+                throw new OAuthAgentFeatureDisabledError()
+              }
+
+              const currentAgent = await tx.agent.findFirst({
+                where: {
+                  id: agentId,
+                  userId: authCode.user.id,
+                  revokedAt: null,
+                  ...(agentTeamScope
+                    ? agentWithinTeamWhere(agentTeamScope.teamId)
+                    : {}),
+                },
+                select: {
+                  mcpTokenJti: true,
+                  credentialTeamId: true,
+                  credentialTeamAccessBinding: true,
+                },
+              })
+              const currentTeam = agentTeamScope
+                ? await getManagementKeyTeam(
+                    authCode.user.id,
+                    agentTeamScope.teamId,
+                    tx
+                  )
+                : null
+              if (
+                storedAgentTokenGeneration(currentAgent) !== agentTokenJti ||
+                (currentAgent?.credentialTeamId ?? undefined) !==
+                  agentTeamScope?.teamId ||
+                (currentAgent?.credentialTeamAccessBinding ?? undefined) !==
+                  agentTeamScope?.accessBinding ||
+                (agentTeamScope &&
+                  (!currentTeam ||
+                    currentTeam.accessBinding !== agentTeamScope.accessBinding))
+              ) {
+                throw new OAuthAgentGrantError()
+              }
+            }
+
+            const consumed = await tx.oAuthAuthorizationCode.updateMany({
+              where: { code: code as string, used: false },
+              data: { used: true }
+            })
+            if (consumed.count !== 1) return null
+
+            await tx.oAuthClient.updateMany({
+              where: { client_id: authCode.client_id, owner_id: null },
+              data: { owner_id: authCode.user.id },
+            })
+
+            try {
+              const accessToken = createOAuthToken(
+                authCode.firebase_uid,
+                authCode.user.id,
+                authCode.user.email,
+                authCode.client_id,
+                accessTokenExpirySeconds,
+                agentId,
+                agentTokenJti,
+                agentTeamScope
+              )
+              if (!isRefreshCapableMobile) return { accessToken }
+
+              const accessIdentity = accessTokenIdentity(accessToken)
+              const refreshToken = createRefreshToken()
+              await tx.oAuthRefreshToken.create({
+                data: {
+                  tokenHash: refreshTokenHash(refreshToken),
+                  familyId: randomUUID(),
+                  clientId: authCode.client_id,
+                  userId: authCode.user.id,
+                  firebaseUid: authCode.firebase_uid,
+                  accessTokenJti: accessIdentity.jti,
+                  accessTokenExpiresAt: accessIdentity.expiresAt,
+                  expiresAt: new Date(Date.now() + REFRESH_TOKEN_EXPIRY_SECONDS * 1000),
+                },
+              })
+              return { accessToken, refreshToken }
+            } catch (error) {
+              throw new OAuthTokenSigningError(error)
+            }
+          }, { isolationLevel: 'Serializable' })
+          break
         } catch (error) {
-          throw new OAuthTokenSigningError(error)
+          if (
+            (error as { code?: string })?.code === 'P2034' &&
+            attempt < SERIALIZABLE_ATTEMPTS - 1
+          ) {
+            continue
+          }
+          throw error
         }
-      }, { isolationLevel: 'Serializable' })
+      }
 
       if (!session) {
         return NextResponse.json(
