@@ -103,11 +103,12 @@ export function searchToolCatalog(
   query: string,
   limit = 20
 ): Array<{ name: string; description: string }> {
-  const needle = query.trim().toLowerCase()
+  const normalize = (value: string) => value.trim().toLowerCase().replace(/[_\s]+/g, ' ')
+  const needle = normalize(query)
   const ranked = tools
     .map((tool) => {
-      const name = tool.name.toLowerCase()
-      const description = tool.description.toLowerCase()
+      const name = normalize(tool.name)
+      const description = normalize(tool.description)
       const nameHit = needle.length === 0 || name.includes(needle)
       const descHit = needle.length > 0 && description.includes(needle)
       if (!nameHit && !descHit) return null
