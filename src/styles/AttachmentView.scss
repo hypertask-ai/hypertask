@@ -8,12 +8,12 @@
 
 .attachment-tile.bg-comment-description {
     border: 1px solid var(--color-border-comment-description) !important;
-    border-radius: 0.375rem !important;
+    border-radius: 5px !important;
     box-shadow: none !important;
 
     > .bg-comment-description {
         border: 0 !important;
-        border-radius: 0.375rem !important;
+        border-radius: 4px !important;
         box-shadow: none !important;
     }
 }

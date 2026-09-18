@@ -44,10 +44,10 @@ test("attachment thumbnails use comment surface tokens in every theme", () => {
 test("attachment thumbnails opt out of nested comment card chrome", () => {
   assert.match(
     attachmentStyles,
-    /\.attachment-tile\.bg-comment-description\s*\{[\s\S]*?border:\s*1px solid var\(--color-border-comment-description\) !important;[\s\S]*?box-shadow:\s*none !important;/,
+    /\.attachment-tile\.bg-comment-description\s*\{[\s\S]*?border:\s*1px solid var\(--color-border-comment-description\) !important;[\s\S]*?border-radius:\s*5px !important;[\s\S]*?box-shadow:\s*none !important;/,
   );
   assert.match(
     attachmentStyles,
-    /> \.bg-comment-description\s*\{[\s\S]*?border:\s*0 !important;[\s\S]*?box-shadow:\s*none !important;/,
+    /> \.bg-comment-description\s*\{[\s\S]*?border:\s*0 !important;[\s\S]*?border-radius:\s*4px !important;[\s\S]*?box-shadow:\s*none !important;/,
   );
 });
