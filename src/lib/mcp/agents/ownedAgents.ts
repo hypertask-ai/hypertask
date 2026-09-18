@@ -295,8 +295,7 @@ export async function deleteOwnedAgent(
   database: AgentManagementDatabase,
   userId: number,
   agentId: string,
-  invalidateRuntime?: (agentId: string, fenceGeneration?: number) => Promise<void>,
-  teamId?: string
+  invalidateRuntime?: (agentId: string, fenceGeneration?: number) => Promise<void>
 ): Promise<DeleteOwnedAgentResult | null> {
   let deleted: (DeleteOwnedAgentResult & { runtime_generation: number }) | null = null
 
@@ -304,15 +303,14 @@ export async function deleteOwnedAgent(
     try {
       deleted = await database.$transaction(
         async (transaction) => {
-          const scopeWhere = teamId ? agentWithinTeamWhere(teamId) : {}
           const agent = await transaction.agent.findFirst({
-            where: { id: agentId, userId, ...scopeWhere },
+            where: { id: agentId, userId },
             select: { id: true, displayName: true, runtimeGeneration: true },
           })
           if (!agent) return null
 
           const claimed = await transaction.agent.updateMany({
-            where: { id: agent.id, userId, ...scopeWhere },
+            where: { id: agent.id, userId },
             data: { runtimeGeneration: { increment: 1 } },
           })
           if (claimed.count !== 1) return null

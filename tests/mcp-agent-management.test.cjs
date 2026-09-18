@@ -317,6 +317,10 @@ test('delete refuses an unowned agent without changing related rows', async () =
     'utf8'
   )
   assert.match(route, /!deletedAgent[\s\S]*?'Agent not found'[\s\S]*?status: 404/)
+  assert.match(
+    route,
+    /ctx\.management\?\.teamId[\s\S]*?'Team-scoped management keys cannot delete agents'[\s\S]*?status: 403[\s\S]*?deleteOwnedAgent/
+  )
 })
 
 test('delete stays successful when post-commit runtime cleanup fails', async () => {

@@ -49,6 +49,16 @@ export async function handleDeleteAgentRequest(
       { status: 403 }
     )
   }
+  // Hard deletion rewrites historical references across boards, which a team key cannot authorize.
+  if (ctx.management?.teamId) {
+    return NextResponse.json(
+      {
+        success: false,
+        error: 'Team-scoped management keys cannot delete agents',
+      },
+      { status: 403 }
+    )
+  }
 
   const agentId = rawAgentId.trim()
   if (!agentId) {
@@ -66,8 +76,7 @@ export async function handleDeleteAgentRequest(
     prisma as unknown as AgentManagementDatabase,
     ctx.user.id,
     agentId,
-    clearAgentRuntimeSnapshot,
-    ctx.management?.teamId
+    clearAgentRuntimeSnapshot
   )
   if (!deletedAgent) {
     return NextResponse.json(
