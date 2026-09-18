@@ -65,7 +65,7 @@ function McpClientEvalPanel() {
   if (!enabled || (!report && !error)) return null;
 
   return (
-    <section className="mt-8">
+    <section className="mt-6">
       <h2 className="text-dense font-medium text-text-light-gray mb-3">
         MCP client eval
       </h2>

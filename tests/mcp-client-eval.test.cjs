@@ -18,6 +18,9 @@ const { clientAvailable, parseJsonBlobs, runClientAdapter, which } = require(
 const { observedToolCalls, runEval } = require(
   path.join(root, "evals/mcp-client/lib/run.cjs"),
 );
+const { mergePublishedReport } = require(
+  path.join(root, "evals/mcp-client/lib/merge-report.cjs"),
+);
 
 const hasNativeCli = Boolean(process.env.EVAL_HYPERTASK_BIN || which("hypertask"));
 
@@ -78,6 +81,66 @@ test(
     assert.ok(report.summary.byTransport.cli.wallMs > 0);
   },
 );
+
+test("weekly surface publication preserves live client measurements", () => {
+  const liveRows = [{ taskId: "get-ticket", client: "claude", transport: "mcp" }];
+  const liveByClient = { claude: { mcp: { tasks: 1, passed: 1 } } };
+  const previous = {
+    generatedAt: "2026-09-16T06:00:00.000Z",
+    label: "live",
+    mode: "live",
+    rows: liveRows,
+    surfaces: [{ taskId: "old", transport: "mcp" }],
+    summary: {
+      tasks: 1,
+      passed: 1,
+      failed: 0,
+      successRate: 1,
+      byClient: liveByClient,
+      byTransport: { mcp: { tasks: 1, passed: 0 } },
+      surfaceFailed: 1,
+    },
+  };
+  const fixture = {
+    generatedAt: "2026-09-17T06:00:00.000Z",
+    label: "weekly",
+    mode: "fixture",
+    rows: [],
+    surfaces: [{ taskId: "get-ticket", transport: "mcp", pass: true }],
+    summary: {
+      tasks: 0,
+      passed: 0,
+      failed: 0,
+      successRate: null,
+      byClient: {},
+      byTransport: { mcp: { tasks: 1, passed: 1 } },
+      surfaceFailed: 0,
+    },
+  };
+
+  const merged = mergePublishedReport(previous, fixture);
+
+  assert.deepEqual(merged.rows, liveRows);
+  assert.deepEqual(merged.summary.byClient, liveByClient);
+  assert.deepEqual(merged.surfaces, fixture.surfaces);
+  assert.deepEqual(merged.summary.byTransport, fixture.summary.byTransport);
+  assert.equal(merged.summary.surfaceFailed, 0);
+  assert.equal(merged.generatedAt, previous.generatedAt);
+  assert.equal(merged.label, previous.label);
+  assert.deepEqual(previous.surfaces, [{ taskId: "old", transport: "mcp" }]);
+});
+
+test("weekly surface publication replaces a report without client rows", () => {
+  const fixture = {
+    rows: [],
+    surfaces: [],
+    summary: { byClient: {}, byTransport: { mcp: {}, cli: {} } },
+  };
+  assert.deepEqual(
+    mergePublishedReport({ rows: [], summary: { byClient: {} } }, fixture),
+    fixture,
+  );
+});
 
 test("live mode omits unavailable clients instead of replaying a pass", async () => {
   const report = await runEval({

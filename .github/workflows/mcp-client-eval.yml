@@ -80,14 +80,22 @@ jobs:
       - name: Publish latest.json to eval-reports
         run: |
           set -euo pipefail
-          git fetch origin eval-reports:eval-reports || true
-          if git show-ref --verify --quiet refs/heads/eval-reports; then
+          fixture=/tmp/mcp-client-eval/latest.json
+          merged=/tmp/mcp-client-eval/published.json
+          if git ls-remote --exit-code --heads origin eval-reports >/dev/null; then
+            git fetch origin eval-reports:eval-reports
+            git show eval-reports:latest.json > /tmp/mcp-client-eval/previous.json
+            node evals/mcp-client/lib/merge-report.cjs \
+              /tmp/mcp-client-eval/previous.json "$fixture" "$merged"
             git checkout eval-reports
           else
+            status=$?
+            if [ "$status" -ne 2 ]; then exit "$status"; fi
+            cp "$fixture" "$merged"
             git checkout --orphan eval-reports
             git rm -rf --quiet . || true
           fi
-          cp /tmp/mcp-client-eval/latest.json latest.json
+          cp "$merged" latest.json
           git add latest.json
           if git diff --cached --quiet; then
             echo "No report change"

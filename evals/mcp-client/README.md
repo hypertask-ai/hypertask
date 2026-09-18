@@ -9,8 +9,8 @@ Cursor, or Codex.
 
 A client row is live only when that named client actually ran. An attempted
 nonzero exit or timeout is a failed live row. Missing clients are omitted, not
-replaced with a passing replay. Scheduled publication fails unless Claude,
-Cursor, and Codex each produced MCP and CLI rows.
+replaced with a passing replay. Live runs that require named clients fail unless
+each required client produced MCP and CLI rows.
 
 Token counts are shown only when a provider supplied them. Unavailable usage
 renders as a dash, never zero. When a report has no client rows, the agents
@@ -51,8 +51,10 @@ the authenticated evaluator id when the released CLI still requires a value.
 
 Weekly CI publishes `latest.json` to the `eval-reports` branch. It does not
 label fixture output as Claude, Cursor, or Codex because hosted CI has no
-provider credentials. Run live mode from an authenticated client environment
-to add those client rows. The agents dashboard reads the published report,
-then falls back to the last committed report.
+provider credentials. When live client rows already exist, publication updates
+only the fixture surfaces and transport summary; it preserves the live rows,
+client summary, label, and capture time. Run live mode from an authenticated
+client environment to replace those client rows. The agents dashboard reads
+the published report, then falls back to the last committed report.
 
 Results show on `/agents` when the `htpr-6533-mcp-client-eval` flag is on.
