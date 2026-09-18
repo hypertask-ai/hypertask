@@ -15,6 +15,7 @@ on:
 
 permissions:
   actions: read
+  checks: read
   contents: read
   statuses: read
 
@@ -94,6 +95,8 @@ jobs:
             exit 0
           fi
 
+          # These allowlists are the ticket's explicit credit boundary. Other
+          # runtime paths intentionally do not spend TestSprite plan credits.
           web=false
           backend=false
           while IFS= read -r file; do
@@ -121,15 +124,16 @@ jobs:
         id: day
         if: steps.scope.outputs.relevant == 'true' && inputs.force != true
         env:
+          RUN_ATTEMPT: ${{ github.run_attempt }}
           RUN_ID: ${{ github.run_id }}
         run: |
           date=$(date -u +%F)
           prefix="testsprite-production-quota-$date-"
-          printf '%s\n' "$RUN_ID" > "$RUNNER_TEMP/testsprite-quota-marker"
+          printf '%s-%s\n' "$RUN_ID" "$RUN_ATTEMPT" > "$RUNNER_TEMP/testsprite-quota-marker"
           {
             echo "date=$date"
             echo "cache-prefix=$prefix"
-            echo "cache-key=$prefix$RUN_ID"
+            echo "cache-key=$prefix$RUN_ID-$RUN_ATTEMPT"
           } >> "$GITHUB_OUTPUT"
 
       - name: Reserve a daily run
@@ -157,6 +161,8 @@ jobs:
             exit 0
           fi
 
+          # The save action atomically finalizes this run's unique marker before
+          # admission. Later markers cannot displace its creation-time rank.
           keys=$(gh api "repos/$REPOSITORY/actions/caches?key=$CACHE_PREFIX&per_page=100" \
             --jq '[.actions_caches[] | {created_at, id, key}] | sort_by(.created_at, .id) | .[].key')
           rank=$(printf '%s\n' "$keys" | awk -v key="$CACHE_KEY" '$0 == key { print NR; exit }')
