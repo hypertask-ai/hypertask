@@ -179,20 +179,6 @@ html.porcelain {
   font-family: var(--font-plex), ui-sans-serif, system-ui, sans-serif;
 }
 
-.porcelain .attachment-tile {
-  background: #f5f5f6 !important;
-  border: 1px solid #e2e2e6;
-  color: #18181b;
-}
-
-.porcelain .attachment-tile:hover {
-  background: #ececef !important;
-}
-
-.porcelain .attachment-tile-name {
-  color: #18181b;
-}
-
 .porcelain .ai-chat-sidebar {
   border-left: 1px solid #dcdce1;
 }

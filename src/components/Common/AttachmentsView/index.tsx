@@ -90,9 +90,9 @@ const AttachmentView = (props: IProps) => {
                 >
                   <div
                     onClick={() => showModalAttachment(index)}
-                    className="attachment-tile flex min-h-0 min-w-0 w-full flex-col items-center justify-start rounded-md bg-[#27292D] p-1 text-white"
+                    className="attachment-tile flex min-h-0 min-w-0 w-full flex-col items-center justify-start rounded-md border border-comment-description-border bg-comment-description p-1 text-white-black hover:bg-hoverCardBackground"
                   >
-                    <div className="flex h-[52px] w-[52px] shrink-0 items-center justify-center rounded-md bg-secondary">
+                    <div className="flex h-[52px] w-[52px] shrink-0 items-center justify-center rounded-md bg-comment-description">
                       {isImage ? (
                         <img
                           className="h-full w-full rounded-md object-contain"
@@ -101,7 +101,7 @@ const AttachmentView = (props: IProps) => {
                           onError={() => markUnrenderable(attachment.fileSource)}
                         />
                       ) : (
-                        <Paperclip size={18} className="text-display text-white/90" strokeWidth={1.75} />
+                        <Paperclip size={18} className="text-display text-heading" strokeWidth={1.75} />
                       )}
                     </div>
                     <span
@@ -121,10 +121,10 @@ const AttachmentView = (props: IProps) => {
               >
                 <div
                   onClick={() => showModalAttachment(index)}
-                  className="attachment-tile flex h-full w-full flex-col items-center justify-end rounded-md bg-[#27292D] p-2 text-white-black"
+                  className="attachment-tile flex h-full w-full flex-col items-center justify-end rounded-md border border-comment-description-border bg-comment-description p-2 text-white-black hover:bg-hoverCardBackground"
                 >
                   <div
-                    className={`grid bg-secondary ${isImage ? "p-1" : "p-4"}`}
+                    className={`grid bg-comment-description ${isImage ? "p-1" : "p-4"}`}
                   >
                     {isImage ? (
                       <img
@@ -138,7 +138,7 @@ const AttachmentView = (props: IProps) => {
                       <Paperclip size={18} className="text-heading text-center rounded-md" strokeWidth={1.75} />
                     )}
                   </div>
-                  <span className="attachment-tile-name line-clamp-1 h-[30px] w-[60px] overflow-hidden py-2 text-center text-dense text-white">
+                  <span className="attachment-tile-name line-clamp-1 h-[30px] w-[60px] overflow-hidden py-2 text-center text-dense text-white-black">
                     {attachment.fileName}
                   </span>
                 </div>

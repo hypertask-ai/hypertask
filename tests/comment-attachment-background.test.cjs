@@ -9,7 +9,11 @@ const read = (relativePath) =>
 const comments = read(
   "src/components/PageComponents/TaskDetail/CommentAndDescription/CommentContainer/CommentsContainer.tsx",
 );
+const attachmentView = read("src/components/Common/AttachmentsView/index.tsx");
 const graphite = read("src/styles/tailwindThemes/graphite.css");
+const themes = ["amoled", "dia", "graphite", "porcelain"].map((theme) =>
+  read(`src/styles/tailwindThemes/${theme}.css`),
+);
 
 test("selected desktop comments keep their surface behind transparent attachments", () => {
   assert.match(
@@ -20,4 +24,18 @@ test("selected desktop comments keep their surface behind transparent attachment
     graphite,
     /\.graphite \.main-attachment-container\s*\{[\s\S]*?background:\s*transparent;/,
   );
+});
+
+test("attachment thumbnails use comment surface tokens in every theme", () => {
+  const tiles = attachmentView.match(/className="attachment-tile [^"]+"/g) ?? [];
+  assert.equal(tiles.length, 2);
+  for (const tile of tiles) {
+    assert.match(tile, /border-comment-description-border/);
+    assert.match(tile, /bg-comment-description/);
+    assert.match(tile, /hover:bg-hoverCardBackground/);
+  }
+  assert.doesNotMatch(attachmentView, /bg-\[#27292D\]|bg-secondary/);
+  for (const theme of themes) {
+    assert.doesNotMatch(theme, /\.attachment-tile(?:-name)?(?:\:hover)?\s*\{/);
+  }
 });
