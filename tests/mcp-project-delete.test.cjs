@@ -6,7 +6,7 @@ const ts = require("typescript");
 
 const routePath = path.resolve(
   __dirname,
-  "../src/app/api/mcp/projects/[projectId]/route.ts",
+  "../src/app/api/mcp/projects/archive/route.ts",
 );
 
 function loadRoute({ authenticated = true, enabled = true, result } = {}) {
@@ -29,6 +29,10 @@ function loadRoute({ authenticated = true, enabled = true, result } = {}) {
       validateMcpAuth: async () =>
         authenticated ? { user: { id: 6 }, agentId: "agent-1" } : null,
     },
+    "@/lib/prisma": {
+      __esModule: true,
+      default: { project: {} },
+    },
     "@/lib/flags": {
       HTPR_6470_PROJECT_DELETE_FLAG: "htpr-6470-project-delete",
       isFeatureEnabled: async () => enabled,
@@ -47,15 +51,14 @@ function loadRoute({ authenticated = true, enabled = true, result } = {}) {
     routeModule.exports,
     (request) => stubs[request] ?? require(request),
   );
-  return { DELETE: routeModule.exports.DELETE, calls };
+  return { POST: routeModule.exports.POST, calls };
 }
 
-const request = {};
-const context = (projectId) => ({ params: Promise.resolve({ projectId }) });
+const request = (body) => ({ json: async () => body });
 
 test("project deletion is unavailable while its feature flag is off", async () => {
   const route = loadRoute({ enabled: false });
-  const response = await route.DELETE(request, context("15"));
+  const response = await route.POST(request({ project_id: 15, status: "Deleted" }));
 
   assert.equal(response.status, 404);
   assert.deepEqual(route.calls, []);
@@ -63,7 +66,7 @@ test("project deletion is unavailable while its feature flag is off", async () =
 
 test("project deletion requires MCP authentication", async () => {
   const route = loadRoute({ authenticated: false });
-  const response = await route.DELETE(request, context("15"));
+  const response = await route.POST(request({ project_id: 15, status: "Deleted" }));
 
   assert.equal(response.status, 401);
   assert.deepEqual(route.calls, []);
@@ -71,7 +74,7 @@ test("project deletion requires MCP authentication", async () => {
 
 test("project deletion rejects an invalid project id", async () => {
   const route = loadRoute();
-  const response = await route.DELETE(request, context("not-a-number"));
+  const response = await route.POST(request({ project_id: "not-a-number", status: "Deleted" }));
 
   assert.equal(response.status, 400);
   assert.deepEqual(route.calls, []);
@@ -79,7 +82,7 @@ test("project deletion rejects an invalid project id", async () => {
 
 test("project deletion uses the web UI deletion controller for the authenticated user", async () => {
   const route = loadRoute();
-  const response = await route.DELETE(request, context("15"));
+  const response = await route.POST(request({ project_id: 15, status: "Deleted" }));
 
   assert.equal(response.status, 200);
   assert.deepEqual(response.body, { message: "Success" });
@@ -93,7 +96,7 @@ test("project deletion preserves authorization failures from the web UI controll
       json: { message: "Only Board owner or admin can delete this board." },
     },
   });
-  const response = await route.DELETE(request, context("15"));
+  const response = await route.POST(request({ project_id: 15, status: "Deleted" }));
 
   assert.equal(response.status, 401);
   assert.deepEqual(route.calls, [{ projectId: 15, userId: 6 }]);
