@@ -107,11 +107,12 @@ const TaskTitleModal = ({ mobileCompact = false }: { mobileCompact?: boolean }) 
             <div
                 id="title-input-container-create-task-modal"
                 ref={dynamicElementRef}
-                className={`flex flex-col text-white-black w-full m-0
-                        ${mobileCompact
-                            ? "px-[18px] py-2"
-                            : "sm:sticky z-50 pt-9 top-0 bg-inherit pb-3"}
-                        ${_mbl && !mobileCompact ? "items-start sticky top-0 border-b border-light-black-border-1" : "items-baseline sm:pb-[16px]"}
+                className={`flex flex-col sm:sticky text-white-black
+                        z-50 pt-9  top-0 bg-inherit  w-[100%]
+                        m-0
+                        ${_mbl ? "items-start  sticky top-0 border-b  border-light-black-border-1" : "items-baseline pb-[16px]"}
+                        pb-3
+                        ${mobileCompact ? "!static !border-b-0 !px-4 !py-2 [&>div>div]:!px-0" : ""}
                         `}
             >
                 <div className={`
@@ -119,7 +120,7 @@ const TaskTitleModal = ({ mobileCompact = false }: { mobileCompact?: boolean }) 
                                     
                                     `}>
                     <div
-                        className={`flex items-center gap-2 ${mobileCompact ? "w-full" : "xs:px-[18px] sm:pl-[20px] sm:pr-0"}`}
+                        className="flex items-center gap-2 xs:px-[18px] sm:pl-[20px] sm:pr-0 "
                         tabIndex={0}
                         id="title"
                         style={{ flex: 1 }}
