@@ -48,7 +48,14 @@ test("mobile header keeps board visible and title plus properties collapsed", ()
     body,
     /if \(nextSection === "title"\)[\s\S]*?setCurrentFocusedElement\("Title"\)[\s\S]*?else \{[\s\S]*?setCurrentFocusedElement\("Description"\)/,
   );
+  assert.match(
+    body,
+    /titleGenerationError \|\| currentFocusedElement === "Title"[\s\S]*?setExpandedMobileSection\("title"\)/,
+  );
   assert.match(body, /mobileShowPills=\{expandedMobileSection === "properties"\}/);
+  assert.match(body, /mobileRaisedPanel/);
+  assert.match(properties, /raisedPanel = false/);
+  assert.match(properties, /: "flex flex-wrap gap-2 px-2 pb-2"/);
   assert.match(properties, /showPills && \(/);
   assert.match(properties, /!hideBoard \|\| property\.label !== "Board"/);
 });

@@ -74,10 +74,10 @@ const CreateTaskModalBody: React.FC<IProps> = ({ }) => {
     }, [descriptionFirstMobile, editMode, setCurrentFocusedElement, setEditMode])
 
     useEffect(() => {
-        if (descriptionFirstMobile && titleGenerationError) {
+        if (descriptionFirstMobile && (titleGenerationError || currentFocusedElement === "Title")) {
             setExpandedMobileSection("title")
         }
-    }, [descriptionFirstMobile, titleGenerationError])
+    }, [currentFocusedElement, descriptionFirstMobile, titleGenerationError])
 
     const toggleMobileSection = (section: "title" | "properties") => {
         const nextSection = expandedMobileSection === section ? null : section
@@ -400,6 +400,7 @@ const CreateTaskModalBody: React.FC<IProps> = ({ }) => {
                         <TaskInfoColumnGloballyCreate
                             mobileHideBoard
                             mobileShowPills={expandedMobileSection === "properties"}
+                            mobileRaisedPanel
                         />
                     ) : (
                         <TaskInfoColumnContainer
