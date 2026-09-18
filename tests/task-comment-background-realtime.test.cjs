@@ -90,6 +90,8 @@ function createHarness({
   const warnings = [];
   const refetches = [];
   const refetchResolvers = [];
+  const taskRefreshes = [];
+  const fetchedTask = { id: 42, projectId: 15, uniqueIndex: 42 };
   const clientPromise = new Promise((resolve, reject) => {
     resolveClient = resolve;
     rejectClient = reject;
@@ -183,9 +185,12 @@ function createHarness({
           }),
       },
       "@/lib/realtime/taskDetailRefresh": {
-        mergeRealtimeTaskDetail: (currentTask) => currentTask,
-        refreshTaskDetailQueryCache: async () => null,
-        shouldApplyRealtimeTaskDetail: () => false,
+        mergeRealtimeTaskDetail: (_currentTask, task) => task,
+        refreshTaskDetailQueryCache: async (args) => {
+          taskRefreshes.push(args);
+          return fetchedTask;
+        },
+        shouldApplyRealtimeTaskDetail: () => true,
         shouldRefetchTaskDetail: () => true,
         shouldSyncTaskDetailContent: () => false,
       },
@@ -239,8 +244,8 @@ function createHarness({
       channelRegistered = false;
       channel.subscribed = false;
     },
-    render() {
-      hook.useTaskCommentsRealtime(42);
+    render(options) {
+      hook.useTaskCommentsRealtime(42, options);
     },
     resolveDelayedConnection() {
       delayedConnectionResolver?.(client);
@@ -263,6 +268,7 @@ function createHarness({
       channel.emit("pusher:subscription_succeeded");
     },
     subscribeCount: () => subscribeCount,
+    taskRefreshes,
     setVisibility(visibilityState) {
       documentTarget.visibilityState = visibilityState;
       documentTarget.dispatch("visibilitychange");
@@ -352,6 +358,30 @@ test("a rejected realtime client starts fallback reconciliation", async () => {
     assert.equal(harness.intervalCount(), 1);
     assert.equal(harness.refetches.length, 1);
     assert.equal(harness.warnings.length, 1);
+  });
+});
+
+test("fallback reconciliation refreshes the open task as well as comments", async () => {
+  await withHarness({}, async (harness) => {
+    const taskUpdates = [];
+    harness.render({
+      taskProjectId: 15,
+      taskUniqueIndex: 42,
+      setCurrentTask(update) {
+        taskUpdates.push(update(null));
+      },
+    });
+    harness.connectWithoutRealtime();
+    await settle();
+    harness.tickIntervals();
+    await settle();
+
+    assert.equal(harness.refetches.length, 2);
+    assert.equal(harness.taskRefreshes.length, 2);
+    assert.deepEqual(taskUpdates, [
+      { id: 42, projectId: 15, uniqueIndex: 42 },
+      { id: 42, projectId: 15, uniqueIndex: 42 },
+    ]);
   });
 });
 

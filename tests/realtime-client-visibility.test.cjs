@@ -99,23 +99,29 @@ function fakeHeadlessBrowser(search = "") {
   return result;
 }
 
-test("automated browser contexts always disable realtime", () => {
+test("automated browsers can explicitly enable realtime for verification", () => {
   const { REALTIME_DISABLED_STORAGE_KEY, realtimeDisabledForBrowser } = loadTs(
     "src/lib/realtime/client.ts",
   );
   const { browser, values } = fakeBrowser("?realtime=on", true);
-  assert.equal(realtimeDisabledForBrowser(browser), true);
-  assert.equal(values.get(REALTIME_DISABLED_STORAGE_KEY), "1");
+  assert.equal(realtimeDisabledForBrowser(browser), false);
+  assert.equal(values.has(REALTIME_DISABLED_STORAGE_KEY), false);
 });
 
-test("headless agent-browser contexts disable realtime without webdriver", () => {
+test("headless browsers can explicitly enable realtime for verification", () => {
   const { REALTIME_DISABLED_STORAGE_KEY, realtimeDisabledForBrowser } = loadTs(
     "src/lib/realtime/client.ts",
   );
   const { browser, values } = fakeHeadlessBrowser("?realtime=on");
 
-  assert.equal(realtimeDisabledForBrowser(browser), true);
-  assert.equal(values.get(REALTIME_DISABLED_STORAGE_KEY), "1");
+  assert.equal(realtimeDisabledForBrowser(browser), false);
+  assert.equal(values.has(REALTIME_DISABLED_STORAGE_KEY), false);
+});
+
+test("automated browsers still disable realtime by default", () => {
+  const { realtimeDisabledForBrowser } = loadTs("src/lib/realtime/client.ts");
+  assert.equal(realtimeDisabledForBrowser(fakeBrowser("", true).browser), true);
+  assert.equal(realtimeDisabledForBrowser(fakeHeadlessBrowser().browser), true);
 });
 
 test("managed Multiprompt agent panes always disable realtime", () => {
