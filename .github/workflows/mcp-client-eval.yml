@@ -1,0 +1,106 @@
+name: MCP client eval
+
+on:
+  schedule:
+    - cron: "0 6 * * 1"
+  pull_request:
+    paths:
+      - "evals/mcp-client/**"
+      - "src/lib/mcp-server/**"
+      - "src/lib/mcp/**"
+      - "src/app/api/mcp/**"
+      - "src/app/mcp/**"
+      - "src/lib/mcpClientEval/**"
+      - ".github/workflows/mcp-client-eval.yml"
+  workflow_dispatch:
+
+jobs:
+  mcp-client-eval:
+    name: mcp-client-eval
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install Node dependencies
+        run: |
+          npm ci --ignore-scripts
+          npx prisma generate
+
+      - name: Install the native hypertask CLI
+        run: |
+          set -euo pipefail
+          curl -fsSL -o /tmp/hypertask \
+            https://github.com/hypertask-ai/cli/releases/download/v0.2.2/hypertask-linux-x86_64
+          echo "15453538cd3ca912acf096c7a2b5bb353754d3a65d3607cfbb4ab890f806b674  /tmp/hypertask" | sha256sum -c -
+          chmod +x /tmp/hypertask
+          echo "/tmp" >> "$GITHUB_PATH"
+          echo "EVAL_HYPERTASK_BIN=/tmp/hypertask" >> "$GITHUB_ENV"
+
+      - name: Grade the 20-task catalog against isolated fixtures
+        run: node --test tests/mcp-client-eval.test.cjs
+        env:
+          EVAL_HYPERTASK_BIN: /tmp/hypertask
+
+      - name: Write the production-surface report
+        run: |
+          label=weekly
+          if [ "$GITHUB_EVENT_NAME" = "pull_request" ]; then label=pr; fi
+          node evals/mcp-client/run.mjs --mode fixture --label "$label"
+        env:
+          EVAL_HYPERTASK_BIN: /tmp/hypertask
+
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: mcp-client-eval-report
+          path: src/lib/mcpClientEval/latest.json
+
+  publish-eval-report:
+    name: publish-eval-report
+    needs: mcp-client-eval
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - uses: actions/download-artifact@7a0c4c269abb142cd0f7adaa5bb6378ca1972986 # v4
+        with:
+          name: mcp-client-eval-report
+          path: /tmp/mcp-client-eval
+
+      - name: Publish latest.json to eval-reports
+        run: |
+          set -euo pipefail
+          fixture=/tmp/mcp-client-eval/latest.json
+          merged=/tmp/mcp-client-eval/published.json
+          if git ls-remote --exit-code --heads origin eval-reports >/dev/null; then
+            git fetch origin eval-reports:eval-reports
+            git show eval-reports:latest.json > /tmp/mcp-client-eval/previous.json
+            node evals/mcp-client/lib/merge-report.cjs \
+              /tmp/mcp-client-eval/previous.json "$fixture" "$merged"
+            git checkout eval-reports
+          else
+            status=$?
+            if [ "$status" -ne 2 ]; then exit "$status"; fi
+            cp "$fixture" "$merged"
+            git checkout --orphan eval-reports
+            git rm -rf --quiet . || true
+          fi
+          cp "$merged" latest.json
+          git add latest.json
+          if git diff --cached --quiet; then
+            echo "No report change"
+            exit 0
+          fi
+          git -c user.name="github-actions[bot]" -c user.email="41898282+github-actions[bot]@users.noreply.github.com" \
+            commit -m "Publish MCP client eval report"
+          git push origin HEAD:eval-reports

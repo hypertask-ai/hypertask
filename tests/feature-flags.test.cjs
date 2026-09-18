@@ -406,6 +406,11 @@ test("declared flags remain listed with ticket details and can be changed", asyn
         updatedAt: null,
       },
       {
+        key: "htpr-6533-mcp-client-eval",
+        mode: "OWNER_AND_QA",
+        updatedAt: null,
+      },
+      {
         key: "htpr-6536-qa-login",
         mode: "OWNER_AND_QA",
         updatedAt: null,
