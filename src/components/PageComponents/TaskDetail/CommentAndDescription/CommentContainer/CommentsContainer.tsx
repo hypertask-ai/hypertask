@@ -155,7 +155,7 @@ const CommentsContainer = () => {
       <div
         className={`
         border-l-4 rounded
-        ${isStacked || comment.activity ? "" : " shadow-md "}
+        ${isStacked || comment.activity ? "" : " shadow-md bg-comment-description "}
         ${
           currentId === `comment-${i}` || currentId === `comment-${i}-input`
             ? `${
@@ -174,7 +174,7 @@ const CommentsContainer = () => {
                       pinned
                         ? "border-[#FFB980]"
                         : " border-comment-description-border"
-                    }  text-white-black bg-comment-description`
+                    }  text-white-black`
                   : "border-transparent hover:bg-active-elementBg "
               }`
         }
