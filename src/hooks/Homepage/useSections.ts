@@ -81,7 +81,7 @@ const useSections = ({
   const isApple = useDeviceContext()
   const isMbl = useContext(MobileViewContext);
   const aiFirstTaskWriterEnabled = useFlag("htpr-6141-ai-first-task-writer");
-  const quickEntryEnabled = useFlag("htpr-6175-quick-entry-cards");
+  const quickEntryCardsEnabled = useFlag("htpr-6175-quick-entry-cards");
   const { navigate } = useHypertasksNavigate();
   const sectionListenerKeyRef = useRef<string | null>(null);
   if (!sectionListenerKeyRef.current) {
@@ -108,7 +108,7 @@ const useSections = ({
       (isMbl && aiFirstTaskWriterEnabled ? MOBILE_AI_TASK_WRITER_FOCUS : undefined);
     // The column plus signs and Alt+C request quick entry. Existing creation
     // shortcuts keep opening the full editor even while the flag is enabled.
-    if (quickEntryEnabled && useQuickEntry && !editFocus) {
+    if (quickEntryCardsEnabled && useQuickEntry && !editFocus) {
       setShowAddItem(true);
       setPosition(position);
       return;
@@ -149,7 +149,7 @@ const useSections = ({
     isApple,
     index,
     navigate,
-    quickEntryEnabled,
+    quickEntryCardsEnabled,
     sectionId,
     title,
     _currentProject,
@@ -161,7 +161,7 @@ const useSections = ({
     isApple,
     index,
     navigate,
-    quickEntryEnabled,
+    quickEntryCardsEnabled,
     sectionId,
     title,
     _currentProject,
@@ -176,7 +176,7 @@ const useSections = ({
       isApple,
       index,
       navigate,
-      quickEntryEnabled,
+      quickEntryCardsEnabled,
       sectionId,
       title,
       _currentProject,
@@ -294,7 +294,7 @@ const useSections = ({
     }
     // [alt] + [c] opens fast entry without replacing the existing C shortcuts.
     else if (
-      quickEntryEnabled &&
+      quickEntryCardsEnabled &&
       e.keyCode === KeyCodes.C &&
       e.altKey && !(e.ctrlKey || e.metaKey) &&
       document?.activeElement?.tagName !== "INPUT" &&
