@@ -7,10 +7,6 @@ on:
     branches: [production]
   workflow_dispatch:
 
-concurrency:
-  group: testsprite-production
-  cancel-in-progress: false
-
 permissions:
   contents: read
   statuses: read
