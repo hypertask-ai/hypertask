@@ -43,7 +43,7 @@ import {
 } from "@/lib/mcp/webhooks/outbox";
 import type { WebhookDelivery } from "@/lib/mcp/webhooks/events";
 import { generalConfig } from "@/lib/configs/general.config";
-import { normalizeRichTextStructure } from "@/utils/helperFunctions/normalizeRichTextStructure";
+import { normalizeBlockHtml } from "@/lib/mcp/normalizeBlockHtml";
 import {
   buildAgentInvocationSelector,
   claimPendingAgentInvocation,
@@ -494,7 +494,7 @@ export async function createCommentService(params: CreateCommentParams) {
   ) {
     throw new Error("Agent selection does not match this task comment");
   }
-  const text = normalizeRichTextStructure(inputText);
+  const text = normalizeBlockHtml(inputText);
 
   const task = await prisma.task.findFirst({
     where: {

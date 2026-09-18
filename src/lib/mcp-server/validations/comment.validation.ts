@@ -12,7 +12,6 @@ import {
 import { paginationSchema, sortOrderSchema } from './common/pagination';
 import { type ListQuerySchemaOptions, withListQuerySchema } from './common/listQuery';
 import { inlineAttachmentsSchema } from './attachment.validation';
-import { hasMarkdownStructure } from '../../../utils/helperFunctions/markdownToHtml';
 
 const config = getConfig();
 
@@ -58,7 +57,7 @@ export function getAddCommentInputSchema() {
       .string()
       .min(1, 'Comment text cannot be empty')
       .max(config.limits.commentTextMaxLength, `Comment text cannot exceed ${config.limits.commentTextMaxLength} characters`)
-      .describe('Comment text. HTML or structural markdown; content_type can explicitly select either format. Use @DisplayName with matching mentions entries.'),
+      .describe('Comment text. Plain text is wrapped in paragraphs; HTML and structural markdown are preserved. Use @DisplayName with matching mentions entries.'),
     content_type: commentContentTypeSchema,
     mentions: z
       .array(mentionSchema)
@@ -77,13 +76,6 @@ export function getAddCommentInputSchema() {
       {
         message: 'Provide either reply_to_comment_id or reply_to_invocation_id, not both',
         path: ['reply_to_invocation_id'],
-      }
-    )
-    .refine(
-      (data) => isAcceptedRichText(data.text, data.content_type),
-      {
-        message: 'Comment text must be HTML or structural markdown such as a list, emphasis, code, or link. Plain text is not accepted.',
-        path: ['text'],
       }
     )
     .refine(
@@ -180,7 +172,7 @@ export function getAddCommentBaseSchema() {
         .string()
         .min(1, 'Comment text cannot be empty')
         .max(config.limits.commentTextMaxLength, `Comment text cannot exceed ${config.limits.commentTextMaxLength} characters`)
-        .describe('Comment text. HTML or structural markdown; content_type can explicitly select either format. Use @DisplayName with matching mentions entries.'),
+        .describe('Comment text. Plain text is wrapped in paragraphs; HTML and structural markdown are preserved. Use @DisplayName with matching mentions entries.'),
       content_type: commentContentTypeSchema,
       mentions: z
         .array(mentionSchema)
@@ -191,31 +183,6 @@ export function getAddCommentBaseSchema() {
       reply_to_invocation_id: replyToInvocationIdSchema,
     })
     .strict();
-}
-
-/**
- * Check if text appears to be HTML format
- * Simple heuristic: checks for HTML tags
- */
-function isHtmlFormat(text: string): boolean {
-  if (!text || typeof text !== 'string') {
-    return false;
-  }
-  
-  // Check for HTML tags (basic pattern)
-  const htmlTagPattern = /<[a-z][\s\S]*>/i;
-  return htmlTagPattern.test(text.trim());
-}
-
-function isAcceptedRichText(
-  text: string,
-  contentType?: 'html' | 'markdown'
-): boolean {
-  return (
-    contentType === 'markdown' ||
-    isHtmlFormat(text) ||
-    (contentType === undefined && hasMarkdownStructure(text))
-  );
 }
 
 /**
@@ -333,7 +300,7 @@ export function getAddCommentCrudBaseSchema() {
         .string()
         .max(config.limits.commentTextMaxLength, `Comment text cannot exceed ${config.limits.commentTextMaxLength} characters`)
         .optional()
-        .describe('Comment text for add/update. HTML or structural markdown; content_type can explicitly select either format.'),
+        .describe('Comment text for add/update. Plain text is wrapped in paragraphs; HTML and structural markdown are preserved.'),
       content_type: commentContentTypeSchema,
       mentions: z
         .array(mentionSchema)
@@ -426,12 +393,6 @@ export function getAddCommentCrudInputSchema() {
             message: 'For action add: text is required',
             path: ['text'],
           });
-        } else if (!isAcceptedRichText(text, content_type)) {
-          ctx.addIssue({
-            code: z.ZodIssueCode.custom,
-            message: 'Comment text must be HTML or structural markdown such as a list, emphasis, code, or link.',
-            path: ['text'],
-          });
         }
       }
 
@@ -447,12 +408,6 @@ export function getAddCommentCrudInputSchema() {
           ctx.addIssue({
             code: z.ZodIssueCode.custom,
             message: 'For action update: text is required',
-            path: ['text'],
-          });
-        } else if (!isAcceptedRichText(text, content_type)) {
-          ctx.addIssue({
-            code: z.ZodIssueCode.custom,
-            message: 'Comment text must be HTML or structural markdown such as a list, emphasis, code, or link.',
             path: ['text'],
           });
         }

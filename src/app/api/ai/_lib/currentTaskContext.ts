@@ -196,7 +196,7 @@ export function formatTaskContext(
   },
   role: "primary" | "related" = "primary"
 ): string {
-  const description = htmlToText(task.description_?.content ?? "");
+  const descriptionHtml = task.description_?.content?.trim() ?? "";
   const comments = task.comments
     .map((c) => {
       const text = htmlToText(
@@ -224,7 +224,7 @@ export function formatTaskContext(
   return [
     heading,
     `Title: ${task.title}`,
-    `Description: ${description || "(empty)"}`,
+    `Description HTML (preserve this block structure when editing): ${descriptionHtml || "(empty)"}`,
     "",
     "Comments (oldest first):",
     comments.length ? comments.join("\n") : "(no comments)",

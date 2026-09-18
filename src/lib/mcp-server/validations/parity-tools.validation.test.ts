@@ -57,15 +57,20 @@ function demo() {
     markdown
   )
   assert.equal(AddCommentInputSchema.parse({ task_id: 1, text: markdown }).text, markdown)
-  rejects(
-    AddCommentInputSchema,
-    { task_id: 1, text: 'Cost is 2 * 3 and the range is one - two' },
-    'incidental asterisks and dashes are plain prose, not structural markdown'
+  assert.equal(
+    AddCommentInputSchema.parse({
+      task_id: 1,
+      text: 'Cost is 2 * 3 and the range is one - two',
+    }).text,
+    'Cost is 2 * 3 and the range is one - two'
   )
-  rejects(
-    AddCommentInputSchema,
-    { task_id: 1, text: markdown, content_type: 'html' },
-    'explicit HTML must not be reinterpreted as markdown'
+  assert.equal(
+    AddCommentInputSchema.parse({
+      task_id: 1,
+      text: 'Plain API comment',
+      content_type: 'html',
+    }).text,
+    'Plain API comment'
   )
   assert.equal(
     AddCommentCrudInputSchema.parse({
@@ -124,6 +129,10 @@ function demo() {
   assert.equal(
     UpdateTaskInputSchema.parse({ task_id: 1, description: markdown }).description,
     markdown
+  )
+  assert.equal(
+    UpdateTaskInputSchema.parse({ task_id: 1, description: 'Plain API description' }).description,
+    'Plain API description'
   )
 
   // page_history: restoring without naming a version would archive-or-restore

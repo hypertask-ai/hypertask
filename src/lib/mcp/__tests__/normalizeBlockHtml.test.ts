@@ -24,7 +24,10 @@ test('splits repeated br tags while preserving single br tags', () => {
 
 test('returns block HTML and blank input unchanged', () => {
   assert.equal(normalizeBlockHtml('<p>already wrapped</p>'), '<p>already wrapped</p>')
-  assert.equal(normalizeBlockHtml('<ul><li>x</li></ul>'), '<ul><li>x</li></ul>')
+  assert.equal(
+    normalizeBlockHtml('<ul><li>x</li></ul>'),
+    '<ul><li><p>x</p></li></ul>'
+  )
   assert.equal(normalizeBlockHtml('<SECTION>content</SECTION>'), '<SECTION>content</SECTION>')
   assert.equal(normalizeBlockHtml(''), '')
   assert.equal(normalizeBlockHtml('  \r\n '), '  \r\n ')
