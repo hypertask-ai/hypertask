@@ -81,6 +81,7 @@ export const HTPR_6532_STATELESS_MCP_FLAG = "htpr-6532-stateless-mcp";
 export const HTPR_6530_MCP_LIST_QUERY_FLAG = "htpr-6530-mcp-list-query";
 export const HTPR_6531_DEFERRED_MCP_TOOLS_FLAG = "htpr-6531-deferred-mcp-tools";
 export const HTPR_6473_GET_AGENT_FLAG = "htpr-6473-get-agent";
+export const HTPR_6470_PROJECT_DELETE_FLAG = "htpr-6470-project-delete";
 export const HTPR_6536_QA_LOGIN_FLAG = "htpr-6536-qa-login";
 export const HTPR_6551_QUIET_RUN_ACTIVITY_FLAG =
   "htpr-6551-quiet-run-activity";
