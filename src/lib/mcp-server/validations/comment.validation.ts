@@ -55,6 +55,7 @@ export function getAddCommentInputSchema() {
   const baseSchema = createTaskIdentificationBaseSchema().extend({
     text: z
       .string()
+      .trim()
       .min(1, 'Comment text cannot be empty')
       .max(config.limits.commentTextMaxLength, `Comment text cannot exceed ${config.limits.commentTextMaxLength} characters`)
       .describe('Comment text. Plain text is wrapped in paragraphs; HTML and structural markdown are preserved. Use @DisplayName with matching mentions entries.'),
@@ -170,6 +171,7 @@ export function getAddCommentBaseSchema() {
     .extend({
       text: z
         .string()
+        .trim()
         .min(1, 'Comment text cannot be empty')
         .max(config.limits.commentTextMaxLength, `Comment text cannot exceed ${config.limits.commentTextMaxLength} characters`)
         .describe('Comment text. Plain text is wrapped in paragraphs; HTML and structural markdown are preserved. Use @DisplayName with matching mentions entries.'),
@@ -298,6 +300,8 @@ export function getAddCommentCrudBaseSchema() {
         .describe('Comment ID. Required for update and delete. Obtain from get_comments_for_task.'),
       text: z
         .string()
+        .trim()
+        .min(1, 'Comment text cannot be empty')
         .max(config.limits.commentTextMaxLength, `Comment text cannot exceed ${config.limits.commentTextMaxLength} characters`)
         .optional()
         .describe('Comment text for add/update. Plain text is wrapped in paragraphs; HTML and structural markdown are preserved.'),

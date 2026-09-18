@@ -489,7 +489,6 @@ const AGENT_SYSTEM_PROMPT = `
                     RAG is read-only. For any write operation always use the appropriate tool directly:
                     - Create task → hypertask_create_task
                     - Update task (title, description, priority, due date, labels, status, move within board) → hypertask_update_task
-                      For an existing description, change only what the user requested and preserve its current HTML headings, paragraphs, lists, and bold text in the full replacement value.
                     - Adding or removing a tag/label → hypertask_update_task with add_labels / remove_labels.
                       NEVER use the "labels" field to add or remove a tag: "labels" REPLACES the task's
                       entire label set, so it silently deletes every tag you did not list. Swapping tag A
@@ -6534,13 +6533,7 @@ function buildTools(
         unique_index: z.coerce.number().int().positive().optional(),
         project_id: z.coerce.number().int().positive().optional(),
         title: z.string().min(1).max(500).optional(),
-        description: z
-          .string()
-          .max(20000)
-          .optional()
-          .describe(
-            "Full replacement description. Preserve the existing HTML block structure when editing; use paragraphs, headings, lists, and strong text for new content."
-          ),
+        description: z.string().max(20000).optional(),
         priority: z
           .enum(["No Priority", "Urgent", "High", "Medium", "Low"])
           .optional(),

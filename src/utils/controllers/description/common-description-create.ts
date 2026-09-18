@@ -2,6 +2,9 @@ import prisma from "@/lib/prisma";
 import { assertAgentAssignmentChangeAllowed } from "@/lib/mcp/tasks/agentMutationFence";
 import type { Prisma } from "@prisma/client";
 import { normalizeBlockHtml } from "@/lib/mcp/normalizeBlockHtml";
+import { isFeatureEnabled } from "@/lib/flags";
+import { HTPR_6561_DESCRIPTION_STRUCTURE_FLAG } from "@/lib/flags/keys";
+import { normalizeRichTextStructure } from "@/utils/helperFunctions/normalizeRichTextStructure";
 
 interface IParams {
   taskId: number;
@@ -34,7 +37,13 @@ const upsertTaskDescription = async (
   transaction?: Prisma.TransactionClient
 ) => {
   const { taskId, creatorId, content: inputContent = "", agentId, actingUserId } = data;
-  const content = normalizeBlockHtml(inputContent);
+  const normalizePlainText = await isFeatureEnabled(
+    HTPR_6561_DESCRIPTION_STRUCTURE_FLAG,
+    actingUserId
+  );
+  const content = normalizePlainText
+    ? normalizeBlockHtml(inputContent)
+    : normalizeRichTextStructure(inputContent);
 
   const upsert = async (tx: Prisma.TransactionClient) => {
     // Description writes are task mutations too. Acquire the same

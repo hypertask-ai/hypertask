@@ -194,6 +194,7 @@ test("an escalation comment rolls back when task.escalated cannot persist", asyn
     "src/utils/controllers/comments/processMentions.ts",
     "src/utils/controllers/tasks/single.ts",
     "src/utils/controllers/comments/createCommentService.ts",
+    "src/lib/flags.ts",
   ];
   const originalCache = new Map(Object.entries(require.cache));
   const stubModule = (relativePath, exports) => {
@@ -211,6 +212,7 @@ test("an escalation comment rolls back when task.escalated cannot persist", asyn
       processMentionsFromCommentText: async () => undefined,
     });
     stubModule("src/utils/controllers/tasks/single.ts", { updateTaskSingle: async () => task });
+    stubModule("src/lib/flags.ts", { isFeatureEnabled: async () => true });
     const serviceJiti = createJiti(
       path.join(root, "tests/task-created-webhook-atomicity-service.cjs"),
       { alias: { "@": path.join(root, "src") }, cache: false, interopDefault: true },

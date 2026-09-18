@@ -74,6 +74,7 @@ import {
   HTPR_6557_AGENT_ROOMS_FLAG,
   HTPR_6559_KEEP_DIRECT_TASK_OPEN_FLAG,
   HTPR_6556_MOBILE_DESCRIPTION_FIRST_FLAG,
+  HTPR_6561_DESCRIPTION_STRUCTURE_FLAG,
 } from "@/lib/flags/keys";
 
 // Re-exported so server code keeps importing keys from here. Client components must
@@ -97,6 +98,12 @@ const FEATURE_FLAG_QA_USER = {
 const RETIRED_FEATURE_FLAG_KEYS = new Set(["hyfa-43-factory-owner-preview"]);
 
 const FEATURE_FLAG_DEFINITIONS = [
+  {
+    key: HTPR_6561_DESCRIPTION_STRUCTURE_FLAG,
+    shippedOn: "2026-09-18",
+    description:
+      "Preserves description headings, paragraphs, lists, and bold text when AI Chat edits a task, and stores bare API text as editor paragraphs.",
+  },
   {
     key: HTPR_6554_LIGHT_COMMENT_SEPARATION_FLAG,
     shippedOn: "2026-09-18",

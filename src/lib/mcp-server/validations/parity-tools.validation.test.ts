@@ -72,6 +72,16 @@ function demo() {
     }).text,
     'Plain API comment'
   )
+  rejects(
+    AddCommentInputSchema,
+    { task_id: 1, text: '   \n  ' },
+    'add comment text must contain visible content'
+  )
+  rejects(
+    AddCommentCrudInputSchema,
+    { action: 'add', task_id: 1, text: '   \n  ' },
+    'CRUD add comment text must contain visible content'
+  )
   assert.equal(
     AddCommentCrudInputSchema.parse({
       action: 'update',
@@ -133,6 +143,16 @@ function demo() {
   assert.equal(
     UpdateTaskInputSchema.parse({ task_id: 1, description: 'Plain API description' }).description,
     'Plain API description'
+  )
+  rejects(
+    UpdateTaskInputSchema,
+    { task_id: 1, description: '   \n  ' },
+    'task updates must not erase a description with whitespace'
+  )
+  rejects(
+    CreateTaskInputSchema,
+    { project_id: 1, title: 'Whitespace description', description: '   \n  ' },
+    'task creation descriptions must contain visible content when provided'
   )
 
   // page_history: restoring without naming a version would archive-or-restore

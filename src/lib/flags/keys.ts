@@ -91,6 +91,8 @@ export const HTPR_6559_KEEP_DIRECT_TASK_OPEN_FLAG =
   "htpr-6559-keep-direct-task-open-after-comment";
 export const HTPR_6556_MOBILE_DESCRIPTION_FIRST_FLAG =
   "htpr-6556-mobile-description-first";
+export const HTPR_6561_DESCRIPTION_STRUCTURE_FLAG =
+  "htpr-6561-preserve-ai-edited-description-structure";
 /** Sent on chat.message when HTPR-6407 is on so agent replies lead with the next action. */
 export const AGENT_CHAT_ADHD_REPLY_GUIDANCE =
   "Lead with the next action. Keep replies short. Number steps. End with one concrete next action when something remains open.";

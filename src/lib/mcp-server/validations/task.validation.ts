@@ -432,6 +432,7 @@ export function getUpdateTaskBaseSchema() {
       title: z.string().min(1).optional(),
       description: z
         .string()
+        .trim()
         .min(1)
         .optional()
         .describe('Task description. Plain text is wrapped in paragraphs; HTML and structural markdown are preserved.'),
@@ -656,6 +657,8 @@ export function getCreateTaskInputSchema() {
       title: z.string().min(1).max(500).describe('The title of the task'),
       description: z
         .string()
+        .trim()
+        .min(1)
         .optional()
         .describe('Task description. Plain text is wrapped in paragraphs; HTML and structural markdown are preserved.'),
       content_type: taskContentTypeSchema,
