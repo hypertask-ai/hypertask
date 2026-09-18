@@ -471,8 +471,10 @@ const DeveloperAccessSection = () => {
 
       <SettingsCard title="Management keys">
         <p className="px-2 text-dense font-medium leading-relaxed text-text-light-gray">
-          Keys that manage your agents and credentials. Create and revoke them
-          in Management keys.
+          {teamScopedKeysEnabled
+            ? "Keys that manage agents for your whole account or one team."
+            : "Keys that manage your agents and credentials."}{" "}
+          Create and revoke them in Management keys.
         </p>
         {isLoading ? (
           <p className="px-2 py-2 text-dense font-medium text-text-light-gray">
@@ -481,9 +483,11 @@ const DeveloperAccessSection = () => {
         ) : managementKeys.length ? (
           <div className="flex flex-col">
             {managementKeys.map((key) => {
-              const teamLabel = teamScopedKeysEnabled
-                ? managementKeyTeamLabel(key.teamScoped, key.team, true)
-                : managementKeyTeamLabel(key.teamScoped, key.team, false);
+              const teamLabel = managementKeyTeamLabel(
+                key.teamScoped,
+                key.team,
+                teamScopedKeysEnabled,
+              );
               return (
                 <div
                   className="border-b border-border-light-gray-thin px-2 py-3 last:border-b-0"
