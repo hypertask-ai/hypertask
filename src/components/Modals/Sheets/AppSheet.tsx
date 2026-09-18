@@ -13,7 +13,10 @@ const SheetScrollerContext = React.createContext<{
 } | null>(null);
 
 /** Use inside an `AppSheet` with `customScroller` for a fixed header or footer. */
-export const SheetScroller = (props: ComponentPropsWithoutRef<"div">) => {
+export const SheetScroller = ({
+  className,
+  ...props
+}: ComponentPropsWithoutRef<"div">) => {
   const context = React.useContext(SheetScrollerContext);
   const onScrollPosition = context?.onScrollPosition;
   const { scrollRef, scrollPosition } = useScrollPosition({
@@ -30,7 +33,13 @@ export const SheetScroller = (props: ComponentPropsWithoutRef<"div">) => {
     [onScrollPosition],
   );
 
-  return <div {...props} ref={scrollRef} />;
+  return (
+    <div
+      {...props}
+      ref={scrollRef}
+      className={cn("overflow-y-auto", className)}
+    />
+  );
 };
 
 type SheetDetent = "default" | "content" | "full";
