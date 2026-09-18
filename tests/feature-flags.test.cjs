@@ -366,6 +366,11 @@ test("declared flags remain listed with ticket details and can be changed", asyn
         updatedAt: null,
       },
       {
+        key: "htpr-6470-project-delete",
+        mode: "OWNER_AND_QA",
+        updatedAt: null,
+      },
+      {
         key: "htpr-6473-get-agent",
         mode: "OWNER_AND_QA",
         updatedAt: null,
