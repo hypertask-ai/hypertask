@@ -98,9 +98,6 @@ def source_evidence(finding):
         try:
             lines = candidate.read_text(encoding="utf-8").splitlines()
         except (OSError, UnicodeDecodeError):
-            snippet = location.get("snippet")
-            if snippet:
-                evidence.append(f"{raw_path}\n{snippet}")
             continue
         numbered = "\n".join(
             f"{number}: {lines[number - 1]}"
@@ -110,7 +107,7 @@ def source_evidence(finding):
 
     if evidence:
         return "\n\n".join(evidence)[:30_000]
-    return str(finding.get("evidence") or "No current source excerpt was available.")[:30_000]
+    return None
 
 
 def parse_confirmation(content):
@@ -127,9 +124,12 @@ def parse_confirmation(content):
 
 
 def confirm_finding(finding):
+    source = source_evidence(finding)
+    if not source:
+        raise ValueError("finding has no readable current-source evidence")
     prompt = CONFIRM_PROMPT.format(
         finding=json.dumps(finding, ensure_ascii=False, indent=2)[:30_000],
-        source=source_evidence(finding),
+        source=source,
     )
     payload = json.dumps(
         {

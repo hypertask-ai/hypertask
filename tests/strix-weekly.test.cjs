@@ -31,8 +31,9 @@ test('weekly Strix cleanup removes only its own sandbox', async (t) => {
     `echo "git $*" >> "$COMMAND_LOG"
 if [[ "$1" == "rev-parse" ]]; then
   echo weekly-base
-elif [[ "$1" == "diff" && "\${NO_CHANGED_FILES:-0}" != "1" ]]; then
-  printf 'src/changed.ts\\nsrc/other.ts\\n'
+elif [[ "$1" == "diff" ]]; then
+  [[ "\${FAIL_GIT_DIFF:-0}" != "1" ]] || exit 1
+  [[ "\${NO_CHANGED_FILES:-0}" == "1" ]] || printf 'src/changed.ts\\0src/other.ts\\0'
 fi`,
   )
   await mockCommand(
@@ -81,7 +82,7 @@ mkdir -p "$STRIX_APP/strix_runs/test"`,
     /strix network=strix-weekly-\S+ image=ghcr\.io\/usestrix\/strix-sandbox:1\.1\.0/,
   )
   assert.match(commands, /git rev-parse --verify production@\{7 days ago\}/)
-  assert.match(commands, /git diff --name-only --diff-filter=ACMR weekly-base\.\.\.HEAD/)
+  assert.match(commands, /git diff --name-only --diff-filter=ACMR -z weekly-base\.\.\.HEAD/)
   assert.match(commands, /args=-n -m standard --scope-mode diff --diff-base weekly-base --target \./)
 
   const healthChecks = commands
@@ -98,6 +99,17 @@ mkdir -p "$STRIX_APP/strix_runs/test"`,
   const noChangesCommands = await readFile(noChangesLog, 'utf8')
   assert.doesNotMatch(noChangesCommands, /^strix /m)
   assert.doesNotMatch(noChangesCommands, /^python3 /m)
+
+  const failedDiffLog = join(root, 'failed-diff.log')
+  await assert.rejects(
+    execFileAsync('/bin/bash', ['scripts/strix-weekly.sh'], {
+      cwd: process.cwd(),
+      env: { ...env, COMMAND_LOG: failedDiffLog, FAIL_GIT_DIFF: '1' },
+    }),
+  )
+  const failedDiffCommands = await readFile(failedDiffLog, 'utf8')
+  assert.doesNotMatch(failedDiffCommands, /^strix /m)
+  assert.doesNotMatch(failedDiffCommands, /^python3 /m)
 
   const failedScanLog = join(root, 'failed-scan.log')
   await assert.rejects(

@@ -9,7 +9,7 @@ const { promisify } = require('node:util')
 
 const execFileAsync = promisify(execFile)
 
-async function runFiler(t, verdicts) {
+async function runFiler(t, verdicts, options = {}) {
   const root = await mkdtemp(join(tmpdir(), 'strix-file-tickets-'))
   const run = join(root, 'run')
   const app = join(root, 'app')
@@ -35,7 +35,9 @@ async function runFiler(t, verdicts) {
         impact: 'People could read another account.',
         technical_analysis: 'The lookup accepts an account id without an owner filter.',
         reproduction: ['Call the route with another account id.'],
-        code_locations: [{ file: 'src/example.ts', start_line: 1, end_line: 3 }],
+        code_locations: options.codeLocations ?? [
+          { file: 'src/example.ts', start_line: 1, end_line: 3 },
+        ],
       },
     ]),
   )
@@ -106,5 +108,16 @@ test('Strix filer rejects a finding when either confirmation disagrees', async (
 
   assert.match(result.stdout, /skip \(not confirmed twice:/)
   assert.equal(result.requests.length, 2)
+  await assert.rejects(readFile(result.capture, 'utf8'), { code: 'ENOENT' })
+})
+
+test('Strix filer rejects findings without readable current source', async (t) => {
+  const result = await runFiler(t, ['confirmed', 'confirmed'], {
+    codeLocations: [{ file: 'src/missing.ts', snippet: 'scanner-provided evidence' }],
+  })
+
+  assert.match(result.stdout, /skip \(confirmation failed\):/)
+  assert.match(result.stdout, /no readable current-source evidence/)
+  assert.equal(result.requests.length, 0)
   await assert.rejects(readFile(result.capture, 'utf8'), { code: 'ENOENT' })
 })

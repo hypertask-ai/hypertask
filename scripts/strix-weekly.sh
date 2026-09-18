@@ -32,10 +32,12 @@ curl -sf -o /dev/null --connect-timeout 2 --max-time 2 http://127.0.0.1:48100/he
 
 SANDBOX_NETWORK="strix-weekly-$(date +%s)-$$"
 docker network create "$SANDBOX_NETWORK" >/dev/null || exit 1
+DIFF_FILES=""
 cleanup() {
   status=$?
   cleanup_failed=0
   trap - EXIT
+  [ -z "$DIFF_FILES" ] || rm -f "$DIFF_FILES"
   docker ps -aq --filter "network=$SANDBOX_NETWORK" --filter "ancestor=$SANDBOX_IMAGE" \
     | xargs -r docker rm -f || cleanup_failed=1
   docker network rm "$SANDBOX_NETWORK" >/dev/null 2>&1 || {
@@ -64,7 +66,17 @@ DIFF_BASE=$(git rev-parse --verify "$DIFF_BASE_REF") || {
   echo "Could not resolve weekly diff base: $DIFF_BASE_REF"
   exit 1
 }
-mapfile -t CHANGED_FILES < <(git diff --name-only --diff-filter=ACMR "$DIFF_BASE"...HEAD)
+DIFF_FILES=$(mktemp) || {
+  echo "Could not create changed-file list"
+  exit 1
+}
+if ! git diff --name-only --diff-filter=ACMR -z "$DIFF_BASE"...HEAD >"$DIFF_FILES"; then
+  echo "Could not list files changed since $DIFF_BASE_REF"
+  exit 1
+fi
+mapfile -d '' -t CHANGED_FILES <"$DIFF_FILES"
+rm -f "$DIFF_FILES"
+DIFF_FILES=""
 if [ "${#CHANGED_FILES[@]}" -eq 0 ]; then
   echo "No files changed since $DIFF_BASE_REF; nothing to scan"
   echo "=== done $(date -Is) ==="
