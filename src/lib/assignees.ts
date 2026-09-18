@@ -11,7 +11,13 @@ type AssigneeRow = {
 };
 
 export const isAgentAssigneeRow = (assignee: AssigneeRow) =>
-  assignee.agentId != null;
+  assignee.agentId != null || assignee.agent != null;
+
+export const assigneePublicName = (assignee: AssigneeRow) =>
+  assignee.agent?.displayName ??
+  assignee.user?.displayName ??
+  assignee.displayName ??
+  "";
 
 export const isAgentOption = (
   assignee: IUser | IAgent,

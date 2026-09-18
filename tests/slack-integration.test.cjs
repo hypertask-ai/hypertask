@@ -355,6 +355,78 @@ test("Slack link state and two-party confirmation are signed, expiring, and sing
   );
 });
 
+test("Marketplace OAuth errors are not swallowed by the no-state resume", () => {
+  const oauthRoute = fs.readFileSync(
+    path.join(root, "src/app/api/slack/oauth_redirect/route.ts"),
+    "utf8",
+  );
+  const errorCheck = oauthRoute.indexOf(
+    'searchParams.get("error")',
+  );
+  const missingCode = oauthRoute.indexOf("missing_code");
+  const noState = oauthRoute.indexOf('searchParams.get("state")');
+  assert.ok(errorCheck !== -1 && missingCode !== -1 && noState !== -1);
+  assert.ok(
+    errorCheck < noState && missingCode < noState,
+    "slackError and missing code must run before the no-state resume",
+  );
+});
+
+test("Add to Slack page uses the card surface and 12-16px padding", () => {
+  const page = fs.readFileSync(
+    path.join(root, "src/app/add-to-slack/page.tsx"),
+    "utf8",
+  );
+  assert.match(page, /bg-cardBackground/);
+  assert.match(page, /px-4/);
+  assert.doesNotMatch(page, /bg-containerBackground/);
+  assert.doesNotMatch(page, /\bp-8\b/);
+  assert.doesNotMatch(page, /font-medium/);
+  assert.match(page, /text-content/);
+  assert.match(page, /bg-shadcn-primary/);
+  assert.match(page, /rounded-\[5px\]/);
+  const scopesHeading = page.indexOf("What the bot can read");
+  const cta = page.indexOf("Add to Slack");
+  assert.ok(scopesHeading !== -1 && cta !== -1);
+  assert.ok(
+    scopesHeading < cta,
+    "the primary Add to Slack action must come last",
+  );
+});
+
+test("Slack authorize URLs use the allowlisted request origin", () => {
+  const installRoute = fs.readFileSync(
+    path.join(root, "src/app/api/slack/install/route.ts"),
+    "utf8",
+  );
+  const oauthRoute = fs.readFileSync(
+    path.join(root, "src/app/api/slack/oauth_redirect/route.ts"),
+    "utf8",
+  );
+  const page = fs.readFileSync(
+    path.join(root, "src/app/add-to-slack/page.tsx"),
+    "utf8",
+  );
+  assert.match(installRoute, /getRequestBaseUrl\(request\)/);
+  assert.match(installRoute, /resolveSlackInstallTeamId/);
+  assert.match(installRoute, /findSoleAccessibleTeamId/);
+  assert.doesNotMatch(installRoute, /new URL\(request\.url\)\.origin/);
+  assert.match(oauthRoute, /getRequestBaseUrl\(request\)/);
+  assert.match(page, /getRequestBaseUrl\(/);
+});
+
+test("the public Add to Slack page is open during incomplete onboarding", () => {
+  const proxy = fs.readFileSync(path.join(root, "src/proxy.ts"), "utf8");
+  const unauthenticatedAllow = proxy.indexOf("currentPath === '/add-to-slack'");
+  const onboardingExempt = proxy.indexOf("currentPath !== '/add-to-slack'");
+  assert.notEqual(unauthenticatedAllow, -1);
+  assert.notEqual(onboardingExempt, -1);
+  assert.ok(
+    unauthenticatedAllow < onboardingExempt,
+    "the public path must be allowed before the authenticated onboarding redirect",
+  );
+});
+
 test("Slack writes require a linked actor and authorized project", () => {
   const eventsRoute = fs.readFileSync(
     path.join(root, "src/app/api/slack/events/route.ts"),
@@ -370,6 +442,9 @@ test("Slack writes require a linked actor and authorized project", () => {
   );
 
   assert.match(eventsRoute, /slackUserId: event\.user/);
+  assert.match(eventsRoute, /skipped_undecryptable/);
+  assert.match(eventsRoute, /skipped_missing_timestamp/);
+  assert.match(eventsRoute, /status: 500/);
   assert.match(taskCreate, /resolveSlackActor\(event\.slackTeamId, event\.slackUserId\)/);
   assert.match(taskCreate, /getProjectWhere\(actor\.user\.id\)/);
   assert.match(taskCreate, /userId: actor\.user\.id/);
@@ -434,6 +509,62 @@ test("Slack task data responses stay private to the requesting member", () => {
   assert.match(chat, /postSlackEphemeralMessage\(/);
 });
 
+test("Connect Slack stays a real link when settings has no selected team yet", () => {
+  const { slackConnectHref } = loadTs("src/lib/slack/installTeam.ts");
+  const section = fs.readFileSync(
+    path.join(root, "src/components/Modals/Settings/SlackSection.tsx"),
+    "utf8",
+  );
+
+  assert.match(section, /slackConnectHref\(teamId\)/);
+  assert.doesNotMatch(section, /aria-disabled=\{!teamId\}/);
+  assert.doesNotMatch(
+    section,
+    /teamId \? "" : "pointer-events-none text-text-light-gray"/,
+  );
+
+  assert.equal(slackConnectHref(null), "/api/slack/install");
+  assert.equal(slackConnectHref(""), "/api/slack/install");
+  assert.equal(
+    slackConnectHref("team-a"),
+    "/api/slack/install?teamId=team-a",
+  );
+});
+
+test("install without a team query uses the sole team and refuses a foreign team", async () => {
+  const { resolveSlackInstallTeamId } = loadTs("src/lib/slack/installTeam.ts");
+  const hasAccess = async (_userId, teamId) => teamId === "team-a";
+  const soleTeam = async () => "team-a";
+  const manyTeams = async () => null;
+
+  assert.equal(
+    await resolveSlackInstallTeamId(6, null, hasAccess, soleTeam),
+    "team-a",
+  );
+  assert.equal(
+    await resolveSlackInstallTeamId(6, null, hasAccess, manyTeams),
+    null,
+  );
+  assert.equal(
+    await resolveSlackInstallTeamId(6, "  team-a  ", hasAccess, manyTeams),
+    "team-a",
+  );
+  assert.equal(
+    await resolveSlackInstallTeamId(6, "team-b", hasAccess, soleTeam),
+    null,
+  );
+});
+
+test("a missing install team is only inferred when the member has exactly one team", () => {
+  const access = fs.readFileSync(
+    path.join(root, "src/utils/controllers/teams/hasTeamMembershipAccess.ts"),
+    "utf8",
+  );
+  assert.match(access, /export async function findSoleAccessibleTeamId/);
+  assert.match(access, /take:\s*2/);
+  assert.match(access, /teams\.length === 1/);
+});
+
 test("routes create-task mentions before chat and handles DMs and assistant threads", () => {
   const { routeSlackEvent } = loadTs("src/lib/slack/eventRouting.ts");
 
@@ -474,6 +605,36 @@ test("routes create-task mentions before chat and handles DMs and assistant thre
       assistant_thread: { channel_id: "D1", thread_ts: "4.0" },
     }),
     "assistant_welcome",
+  );
+  assert.equal(
+    routeSlackEvent({
+      type: "message",
+      channel_type: "channel",
+      channel: "C1",
+      ts: "5.0",
+      user: "U1",
+      text: "See HTPR-4370",
+    }),
+    "ambient_message",
+  );
+  assert.equal(
+    routeSlackEvent({
+      type: "message",
+      channel: "C2147483705",
+      ts: "6.0",
+      user: "U1",
+      text: "See HTPR-4370",
+    }),
+    "ambient_message",
+  );
+  assert.equal(
+    routeSlackEvent({
+      type: "message",
+      channel: "D1",
+      ts: "7.0",
+      user: "U1",
+    }),
+    "ignore",
   );
 });
 
@@ -518,8 +679,10 @@ test("truncates Slack transcripts from the head and keeps recent messages", () =
 });
 
 test("Slack manifest covers commands, chat events, and required scopes", () => {
-  const installRoute = fs.readFileSync(
-    path.join(root, "src/app/api/slack/install/route.ts"),
+  // HTPR-4857: the scope list now lives in the shared authorize module used by
+  // both the Settings install route and the public /add-to-slack page.
+  const authorizeModule = fs.readFileSync(
+    path.join(root, "src/lib/slack/authorize.ts"),
     "utf8",
   );
   const manifest = JSON.parse(
@@ -541,7 +704,7 @@ test("Slack manifest covers commands, chat events, and required scopes", () => {
     "users:read.email",
   ]) {
     assert.ok(scopes.includes(scope), scope);
-    assert.match(installRoute, new RegExp(`"${scope.replace(".", "\\.")}"`));
+    assert.match(authorizeModule, new RegExp(`"${scope.replace(".", "\\.")}"`));
   }
   assert.equal(
     manifest.features.slash_commands[0].url,

@@ -1,25 +1,18 @@
 import { NextRequest, NextResponse } from "next/server";
 
+import { getRequestBaseUrl } from "@/lib/auth/requestBaseUrl";
 import { getServerCookieUser } from "@/lib/auth/serverUser";
 import { createSlackOAuthState } from "@/lib/slack/oauthState";
-import { hasTeamMembershipAccess } from "@/utils/controllers/teams/hasTeamMembershipAccess";
+import {
+  findSoleAccessibleTeamId,
+  hasTeamMembershipAccess,
+} from "@/utils/controllers/teams/hasTeamMembershipAccess";
+
+import { buildSlackAuthorizeUrl } from "@/lib/slack/authorize";
+import { resolveSlackInstallTeamId } from "@/lib/slack/installTeam";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
-
-// users:read is required by the cron worker's users.info calls.
-const SLACK_BOT_SCOPES = [
-  "app_mentions:read",
-  "assistant:write",
-  "channels:history",
-  "commands",
-  "groups:history",
-  "im:history",
-  "chat:write",
-  "team:read",
-  "users:read",
-  "users:read.email",
-];
 
 export async function GET(request: NextRequest) {
   const user = await getServerCookieUser();
@@ -29,32 +22,32 @@ export async function GET(request: NextRequest) {
     return NextResponse.redirect(loginUrl);
   }
 
-  const teamId = request.nextUrl.searchParams.get("teamId")?.trim();
+  const requestedTeamId = request.nextUrl.searchParams.get("teamId");
+  const teamId = await resolveSlackInstallTeamId(
+    user.id,
+    requestedTeamId,
+    hasTeamMembershipAccess,
+    findSoleAccessibleTeamId,
+  );
   if (!teamId) {
     return NextResponse.redirect(
-      settingsRedirect(request, "error", "missing_team"),
-    );
-  }
-  if (!(await hasTeamMembershipAccess(user.id, teamId))) {
-    return NextResponse.redirect(
-      settingsRedirect(request, "error", "team_access_denied"),
+      settingsRedirect(
+        request,
+        "error",
+        requestedTeamId?.trim() ? "team_access_denied" : "missing_team",
+      ),
     );
   }
 
-  const clientId = process.env.SLACK_CLIENT_ID?.trim();
   const clientSecret = process.env.SLACK_CLIENT_SECRET?.trim();
-  if (!clientId || !clientSecret) {
-    console.error("Slack OAuth is missing SLACK_CLIENT_ID or SLACK_CLIENT_SECRET");
+  const authorizeUrl = buildSlackAuthorizeUrl(getRequestBaseUrl(request));
+  if (!clientSecret || !authorizeUrl) {
+    console.error("Slack OAuth is not configured: SLACK_CLIENT_ID or SLACK_CLIENT_SECRET is missing");
     return NextResponse.redirect(
       settingsRedirect(request, "error", "not_configured"),
     );
   }
 
-  const redirectUri = new URL("/api/slack/oauth_redirect", request.url);
-  const authorizeUrl = new URL("https://slack.com/oauth/v2/authorize");
-  authorizeUrl.searchParams.set("client_id", clientId);
-  authorizeUrl.searchParams.set("scope", SLACK_BOT_SCOPES.join(","));
-  authorizeUrl.searchParams.set("redirect_uri", redirectUri.toString());
   authorizeUrl.searchParams.set(
     "state",
     createSlackOAuthState({ teamId, userId: user.id }, clientSecret),

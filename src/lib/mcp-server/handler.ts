@@ -15,6 +15,7 @@ import { HTPR_6531_DEFERRED_MCP_TOOLS_FLAG } from '@/lib/flags'
 import { HTPR_6530_MCP_LIST_QUERY_FLAG } from '@/lib/flags'
 import { resolvePortableTools } from './listQueryContract'
 import { NextRequest } from 'next/server'
+import { handleMcpHttp, usesStatelessMcpTransport } from './mcp-http'
 import {
   handleStatelessMcpRequest,
   mcpUnauthorizedResponse,
@@ -137,6 +138,9 @@ async function boundMcpRequest(request: Request): Promise<Request> {
 }
 
 const portableTools = MCP_TOOLS as PortableTool[]
+function optionsPortableTools() {
+  return portableTools
+}
 
 /** Bound JSON-RPC transport bytes before the MCP handler parses tool arguments. */
 export async function mcpHandler(request: Request): Promise<Response> {
@@ -156,7 +160,7 @@ export async function mcpHandler(request: Request): Promise<Response> {
   }
 
   if (working.method === 'OPTIONS') {
-    return handleStatelessMcpRequest(working, null, portableTools)
+    return handleStatelessMcpRequest(working, null, optionsPortableTools())
   }
 
   const bearer = extractBearerToken(working.headers.get('Authorization'))
@@ -176,6 +180,16 @@ export async function mcpHandler(request: Request): Promise<Response> {
   const deferred =
     Number.isFinite(userId) &&
     (await isFeatureEnabled(HTPR_6531_DEFERRED_MCP_TOOLS_FLAG, userId).catch(() => false))
+
+  // Stateless POST/GET/DELETE stay behind htpr-6532-stateless-mcp (Owner+QA).
+  // OPTIONS has no session. Everyone else keeps the existing session handler.
+  if (usesStatelessMcpTransport(working.method, stateless)) {
+    return handleMcpHttp(working, {
+      authenticate: async () => authInfo,
+      tools: portableTools,
+      deferredEnabled: async () => deferred,
+    })
+  }
 
   if (stateless) {
     if (deferred) {

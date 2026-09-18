@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import { z } from 'zod'
-import { handleMcpHttp } from '../src/lib/mcp-server/mcp-http'
+import { handleMcpHttp, usesStatelessMcpTransport } from '../src/lib/mcp-server/mcp-http'
 import {
   handleStatelessMcpRequest,
   type PortableTool,
@@ -197,7 +197,18 @@ function publicHandler(options: { deferred?: boolean } = {}) {
     })
 }
 
-test('flagged stateless HTTP wrapper interleaves two isolated instances', async () => {
+test('POST follows the feature flag; OPTIONS stays stateless', () => {
+  assert.equal(usesStatelessMcpTransport('POST', false), false)
+  assert.equal(usesStatelessMcpTransport('OPTIONS', false), true)
+  assert.equal(usesStatelessMcpTransport('GET', false), false)
+  assert.equal(usesStatelessMcpTransport('DELETE', false), false)
+  assert.equal(usesStatelessMcpTransport('PUT', false), false)
+  assert.equal(usesStatelessMcpTransport('PATCH', false), false)
+  assert.equal(usesStatelessMcpTransport('POST', true), true)
+  assert.equal(usesStatelessMcpTransport('GET', true), true)
+})
+
+test('public HTTP wrapper interleaves two isolated instances without a session flag', async () => {
   const instanceA = publicHandler()
   const instanceB = publicHandler()
 

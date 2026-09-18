@@ -47,6 +47,8 @@ import { MOBILE_TARGET } from "@/lib/configs/general.config";
 import { SendArrow } from "@/components/Common/SendArrow";
 import type { DictationCoordinator } from "@/lib/dictationCoordinator";
 import { discardUnboundCreateTaskUploads } from "@/lib/createTaskAttachmentUploads";
+import { useFlag } from "@/hooks/useFlag";
+import { HTPR_6556_MOBILE_DESCRIPTION_FIRST_FLAG } from "@/lib/flags/keys";
 
 interface IProps {
   /** create-task-modal only: the modal's title field has text. Save must
@@ -115,6 +117,7 @@ const AttachmentsUpload = (props: IProps) => {
     backgroundTaskUploads = false,
   } = props;
   const _mbl = useContext(MobileViewContext);
+  const descriptionFirstEnabled = useFlag(HTPR_6556_MOBILE_DESCRIPTION_FIRST_FLAG);
   // Reactive: Tiptap v3 useEditor does not re-render on typing, so subscribe
   // (same pattern as the AI-chat composer) or Send/mic state lags behind text.
   const hasText =
@@ -800,6 +803,7 @@ const AttachmentsUpload = (props: IProps) => {
             dictationCoordinator={dictationCoordinator}
             toggleAiTaskWriter={toggleAiTaskWriter}
             isAiTaskWriterOpen={isAiTaskWriterOpen}
+            descriptionFirst={descriptionFirstEnabled}
           />
         ) : (
           // ========================================================== DESKTOP ==============================
@@ -898,6 +902,7 @@ interface IMobileBottomBar {
   dictationCoordinator?: DictationCoordinator;
   toggleAiTaskWriter?: () => void;
   isAiTaskWriterOpen?: boolean;
+  descriptionFirst?: boolean;
 }
 
 const ActionButton = React.forwardRef<HTMLSpanElement, any>(({ label, onClick }, ref) => {
@@ -940,6 +945,7 @@ const MobileBottomBar: React.FC<IMobileBottomBar> = ({
   dictationCoordinator,
   toggleAiTaskWriter,
   isAiTaskWriterOpen,
+  descriptionFirst = false,
 }) => {
   const saveRef = useRef<HTMLSpanElement>(null);
   const wasDictating = useRef(false);
@@ -1021,7 +1027,7 @@ const MobileBottomBar: React.FC<IMobileBottomBar> = ({
           visualizerClassName="!mb-0 w-full"
         />
       )}
-      {!isDictating && toggleAiTaskWriter && (
+      {!isDictating && !descriptionFirst && toggleAiTaskWriter && (
         <button
           type="button"
           id="create-task-modal-ai-writer-button"
@@ -1041,7 +1047,7 @@ const MobileBottomBar: React.FC<IMobileBottomBar> = ({
       {/* Dictation is how tasks get created on a phone: it went missing when this
           bar stopped reusing the desktop row. Keep this instance mounted while
           recording so the first tap's MediaRecorder is not discarded. */}
-      {!isDictating && hasText && (
+      {!isDictating && !descriptionFirst && hasText && (
         <div
           data-mobile-primary-save
           className="order-6 shrink-0 [&>span]:!border-transparent [&>span]:!bg-shadcn-primary [&>span]:!text-primary-foreground"
@@ -1051,6 +1057,26 @@ const MobileBottomBar: React.FC<IMobileBottomBar> = ({
             label="Save"
             onClick={() => sendOnClick && sendOnClick("Save")}
           />
+        </div>
+      )}
+      {!isDictating && descriptionFirst && hasText && (
+        <div className="order-6 ml-auto flex shrink-0 items-center gap-2">
+          <div className="[&>span]:!border-transparent [&>span]:!text-icon-dark-gray">
+            <ActionButton
+              label="Save"
+              onClick={() => sendOnClick && sendOnClick("Save")}
+            />
+          </div>
+          <div
+            data-mobile-primary-save
+            className="[&>span]:!border-transparent [&>span]:!bg-shadcn-primary [&>span]:!px-3 [&>span]:!text-primary-foreground"
+          >
+            <ActionButton
+              ref={saveRef}
+              label="Save with task writer"
+              onClick={toggleAiTaskWriter}
+            />
+          </div>
         </div>
       )}
 

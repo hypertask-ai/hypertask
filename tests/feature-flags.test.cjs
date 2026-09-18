@@ -137,11 +137,13 @@ test("declared flags remain listed with ticket details and can be changed", asyn
   assert.deepEqual(
     listed.map(({ key, mode, updatedAt }) => ({ key, mode, updatedAt })),
     [
+      { key: "htpr-3533-google-calendar", mode: "OWNER_AND_QA", updatedAt: null },
       {
         key: "htpr-4228-admin-only-time-reports",
         mode: "OWNER_AND_QA",
         updatedAt: null,
       },
+      { key: "htpr-4857-add-to-slack", mode: "OWNER_AND_QA", updatedAt: null },
       { key: "htpr-5898-page-mentions", mode: "OWNER_AND_QA", updatedAt: null },
       { key: "htpr-5906-shortcut-nudges", mode: "OWNER_AND_QA", updatedAt: null },
       {
@@ -319,6 +321,11 @@ test("declared flags remain listed with ticket details and can be changed", asyn
         updatedAt: null,
       },
       {
+        key: "htpr-6444-my-tasks-bulk-selection",
+        mode: "OWNER_AND_QA",
+        updatedAt: null,
+      },
+      {
         key: "htpr-6447-my-tasks-filter-parity",
         mode: "OWNER_AND_QA",
         updatedAt: null,
@@ -340,6 +347,11 @@ test("declared flags remain listed with ticket details and can be changed", asyn
       },
       {
         key: "htpr-6458-my-tasks-live-updates",
+        mode: "OWNER_AND_QA",
+        updatedAt: null,
+      },
+      {
+        key: "htpr-6459-my-tasks-overdue-badges",
         mode: "OWNER_AND_QA",
         updatedAt: null,
       },
@@ -374,12 +386,62 @@ test("declared flags remain listed with ticket details and can be changed", asyn
         updatedAt: null,
       },
       {
+        key: "htpr-6516-agent-attribution",
+        mode: "OWNER_AND_QA",
+        updatedAt: null,
+      },
+      {
+        key: "htpr-6530-mcp-list-query",
+        mode: "OWNER_AND_QA",
+        updatedAt: null,
+      },
+      {
         key: "htpr-6531-deferred-mcp-tools",
         mode: "OWNER_AND_QA",
         updatedAt: null,
       },
       {
         key: "htpr-6532-stateless-mcp",
+        mode: "OWNER_AND_QA",
+        updatedAt: null,
+      },
+      {
+        key: "htpr-6536-qa-login",
+        mode: "OWNER_AND_QA",
+        updatedAt: null,
+      },
+      {
+        key: "htpr-6551-quiet-run-activity",
+        mode: "OWNER_AND_QA",
+        updatedAt: null,
+      },
+      {
+        key: "htpr-6553-agent-chat-polling",
+        mode: "OWNER_AND_QA",
+        updatedAt: null,
+      },
+      {
+        key: "htpr-6554-light-comment-separation",
+        mode: "OWNER_AND_QA",
+        updatedAt: null,
+      },
+      {
+        key: "htpr-6555-idle-comment-mic",
+        mode: "OWNER_AND_QA",
+        updatedAt: null,
+      },
+      {
+        key: "htpr-6556-mobile-description-first",
+        mode: "OWNER_AND_QA",
+        updatedAt: null,
+      },
+      {
+        key: "htpr-6557-agent-rooms",
+        mode: "OWNER_AND_QA",
+        updatedAt: null,
+      },
+      {
+        key: "htpr-6559-keep-direct-task-open-after-comment",
         mode: "OWNER_AND_QA",
         updatedAt: null,
       },

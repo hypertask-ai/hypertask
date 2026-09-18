@@ -1,4 +1,5 @@
 import prisma from "@/lib/prisma";
+import { googleCalendarDisconnectData } from "@/lib/googleCalendar/connection";
 
 import { GUEST_UID_PREFIX } from "./guest";
 
@@ -230,6 +231,13 @@ export async function deleteGuestCascade(userId: number): Promise<void> {
   await prisma.userPicture.deleteMany({ where: { userId } });
   await prisma.user_Activity.deleteMany({ where: { userId } });
   await prisma.googleAccount.deleteMany({ where: { userId } });
+
+  // Keep the grant row after user deletion so the calendar sweep can remove
+  // Hypertask's remote data and revoke the Google token.
+  await prisma.googleCalendarConnection.updateMany({
+    where: { userId },
+    data: googleCalendarDisconnectData(),
+  });
 
   // BetterAuthSession/BetterAuthAccount cascade from the user row itself.
   await prisma.user.delete({ where: { id: userId } });

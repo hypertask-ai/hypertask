@@ -208,12 +208,12 @@ export const activeBuiltinViewsAtom = atom<Record<number, string>>({
     key: "activeBuiltinViews",
     default: {},
 });
-// Show history/activity events in the task detail feed. Shown by default;
-// the toggle (pill / Ctrl+Shift+H / Ctrl+K) hides them. Persisted per-user so
+// Show history/activity events in the task detail feed. Hidden by default;
+// the toggle (pill / Ctrl+Shift+H / Ctrl+K) reveals them. Persisted per-user so
 // a user's choice sticks across sessions.
 export const showTaskHistoryAtom = atom<boolean>({
     key: "showTaskHistory",
-    default: true,
+    default: false,
     effects_UNSTABLE: [persistAtom],
 });
 export const showArchivedOnBoardAtom = atom<boolean>({

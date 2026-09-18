@@ -12,6 +12,7 @@ import {
   parseListQueryFromSearchParams,
   parseSort,
   parseUpdatedSince,
+  projectedListEnvelope,
   projectRows,
   resolveListLimit,
   taskUrlFromListItem,
@@ -71,7 +72,13 @@ function demo() {
   )
 
   assert.deepEqual(parseSort('title'), { sortBy: 'title', sortOrder: 'asc' })
-  assert.deepEqual(hasPrWhere('red'), { pullRequests: { some: { checkState: 'failing' } } })
+  assert.deepEqual(hasPrWhere('failing'), { pullRequests: { some: { checkState: 'failing' } } })
+  assert.deepEqual(hasPrWhere('red'), {
+    pullRequests: {
+      some: { OR: [{ checkState: 'failing' }, { lifecycle: 'closed' }] },
+    },
+  })
+  assert.deepEqual(hasPrWhere('checks_red'), hasPrWhere('red'))
   assert.deepEqual(hasPrWhere('false'), { pullRequests: { none: {} } })
   assert.equal(hasPrWhere('unknown'), null)
 
@@ -90,18 +97,20 @@ function demo() {
     }),
   }))
   const projected = projectRows(fatRows, ['title', 'url'])
-  const payload = JSON.stringify({
-    success: true,
-    tasks: projected,
-    total: fatRows.length,
-    limit: fatRows.length,
-    offset: 0,
-    nextCursor: null,
-  })
+  const payload = JSON.stringify(
+    projectedListEnvelope(projected, {
+      total: fatRows.length,
+      limit: fatRows.length,
+      nextCursor: null,
+    }),
+  )
+  const envelope = JSON.parse(payload)
   assert.ok(
     Buffer.byteLength(payload) < 2048,
     `acceptance payload should stay under 2 KB, got ${Buffer.byteLength(payload)}`,
   )
+  assert.equal('has_more' in envelope, false)
+  assert.equal('offset' in envelope, false)
   assert.deepEqual(Object.keys(projected[0]), ['title', 'url'])
   assert.ok(!payload.includes('metadata'))
   assert.ok(!payload.includes('description'))

@@ -432,6 +432,29 @@ test("stop is idempotent, records a human stopper, and emits once", async () => 
   assert.deepEqual(published, ["stop-delivery"]);
 });
 
+test("an agent can close its runtime run with a done status", async () => {
+  const row = runRow({ trigger: "RUNTIME", title: "Runtime work" });
+  const { service, stopEvents } = loadService({ rows: [row] });
+  const agentPrincipal = {
+    userId: 6,
+    agentId: "agent-1",
+    displayName: "Runtime agent",
+    source: "agent",
+  };
+
+  const result = await service.stopAgentRun(
+    agentPrincipal,
+    row.id,
+    new Date("2026-09-17T12:00:00.000Z"),
+    "DONE",
+  );
+
+  assert.equal(result.status, "done");
+  assert.equal(row.status, "DONE");
+  assert.equal(row.stoppedById, null);
+  assert.equal(stopEvents[0].run.status, "done");
+});
+
 test("a different agent cannot read or stop another agent's run", async () => {
   const row = runRow();
   const { service, stopEvents } = loadService({ rows: [row] });

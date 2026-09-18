@@ -57,7 +57,7 @@ test("description and owned-comment double taps retain their existing entry poin
   assert.match(commentText, /carouselAttachments=\{comment\.attachments\}[\s\S]*?attachments=\{isMobile && isEditing \? comment\.attachments : undefined\}/);
   assert.match(
     taskDetailState,
-    /comments\[currentIndex\]\?\.creatorId === currentUser\.id[\s\S]*?setEditState\(currentIndex\)/,
+    /isCommentCreatedByUser\(comments\[currentIndex\], currentUser\?\.id\)[\s\S]*?setEditState\(currentIndex\)/,
   );
 });
 

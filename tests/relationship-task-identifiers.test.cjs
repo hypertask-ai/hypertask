@@ -6,7 +6,7 @@ const path = require("node:path");
 const root = path.resolve(__dirname, "..");
 const jiti = require("jiti")(
   path.join(root, "tests/relationship-task-identifiers-entry.cjs"),
-  { interopDefault: true, cache: false }
+  { interopDefault: true, cache: false, alias: { "@": path.join(root, "src") } }
 );
 const {
   FindRelatedTasksInputSchema,

@@ -22,6 +22,7 @@ import {
   AGENT_VISIBILITY_FLAG,
   FEATURE_FLAG_DETAILS_FLAG,
   FIGMA_CONNECT_FLAG,
+  GOOGLE_CALENDAR_FLAG,
   FLAG_REMOVAL_COUNTDOWN_FLAG,
   CONFIRMED_PROPOSAL_HEADING_FLAG,
   LAZY_EMOJI_LIST_FLAG,
@@ -36,6 +37,7 @@ import {
   MANAGER_LOOP_ACTIVITY_FLAG,
   MY_TASKS_PRIORITY_FILTER_FLAG,
   HTPR_4228_ADMIN_ONLY_TIME_REPORTS_FLAG,
+  HTPR_4857_ADD_TO_SLACK_FLAG,
   HTPR_6283_AGENT_CHAT_LIVE_SORT_FLAG,
   HTPR_6284_AGENT_MENTION_ROUTING_FLAG,
   HTPR_6320_AI_OBSERVABILITY_FLAG,
@@ -47,6 +49,7 @@ import {
   MY_TASKS_SHORTCUTS_WIDTH_FLAG,
   HTPR_6372_SEARCH_RANKING_FLAG,
   MY_TASKS_VIEWS_FLAG,
+  MY_TASKS_BULK_SELECTION_FLAG,
   MY_TASKS_FILTER_PARITY_FLAG,
   MY_TASKS_TIME_GROUP_FLAG,
   MY_TASKS_TABLE_COLUMNS_FLAG,
@@ -54,13 +57,23 @@ import {
   MY_TASKS_LIVE_UPDATES_FLAG,
   MY_TASKS_QUICK_ADD_FLAG,
   MY_TASKS_SNOOZE_FLAG,
+  MY_TASKS_OVERDUE_BADGES_FLAG,
   HTPR_6427_ROW_SHORTCUTS_FLAG,
   HTPR_6514_COMMENT_LONG_PRESS_FLAG,
+  HTPR_6516_AGENT_ATTRIBUTION_FLAG,
   HTPR_6512_SEED_TEAM_AGENT_FLAG,
   HTPR_6532_STATELESS_MCP_FLAG,
   HTPR_6530_MCP_LIST_QUERY_FLAG,
   HTPR_6531_DEFERRED_MCP_TOOLS_FLAG,
   HTPR_6473_GET_AGENT_FLAG,
+  HTPR_6536_QA_LOGIN_FLAG,
+  HTPR_6551_QUIET_RUN_ACTIVITY_FLAG,
+  HTPR_6555_IDLE_COMMENT_MIC_FLAG,
+  HTPR_6553_AGENT_CHAT_POLLING_FLAG,
+  HTPR_6554_LIGHT_COMMENT_SEPARATION_FLAG,
+  HTPR_6557_AGENT_ROOMS_FLAG,
+  HTPR_6559_KEEP_DIRECT_TASK_OPEN_FLAG,
+  HTPR_6556_MOBILE_DESCRIPTION_FIRST_FLAG,
 } from "@/lib/flags/keys";
 
 // Re-exported so server code keeps importing keys from here. Client components must
@@ -84,6 +97,60 @@ const FEATURE_FLAG_QA_USER = {
 const RETIRED_FEATURE_FLAG_KEYS = new Set(["hyfa-43-factory-owner-preview"]);
 
 const FEATURE_FLAG_DEFINITIONS = [
+  {
+    key: HTPR_6554_LIGHT_COMMENT_SEPARATION_FLAG,
+    shippedOn: "2026-09-18",
+    description:
+      "Adds a quiet outline around posted comments in the Porcelain theme so adjacent comments stay distinct on phone and desktop.",
+  },
+  {
+    key: HTPR_6556_MOBILE_DESCRIPTION_FIRST_FLAG,
+    shippedOn: "2026-09-18",
+    description:
+      "Focuses mobile task creation on one description box, with collapsed title and properties plus raw and Task Writer save actions.",
+  },
+  {
+    key: HTPR_6559_KEEP_DIRECT_TASK_OPEN_FLAG,
+    shippedOn: "2026-09-18",
+    description:
+      "Keeps a task open after Ctrl or Command plus Enter unless it was opened through the Inbox cycle.",
+  },
+  {
+    key: HTPR_6557_AGENT_ROOMS_FLAG,
+    shippedOn: "2026-09-18",
+    description:
+      "Adds one shared Agent Chat room per board, with named bot handoffs, a three-turn bot limit, Stop, and a visible daily turn budget.",
+  },
+  {
+    key: HTPR_6555_IDLE_COMMENT_MIC_FLAG,
+    shippedOn: "2026-09-17",
+    description:
+      "Shows the microphone on the closed task-detail comment bar so you can start dictating with one tap instead of tapping the text first.",
+  },
+  {
+    key: HTPR_6553_AGENT_CHAT_POLLING_FLAG,
+    shippedOn: "2026-09-17",
+    description:
+      "Lets a recently heartbeating agent runtime receive Agent Chat through polling when it has no webhook, and labels that chat as polling.",
+  },
+  {
+    key: HTPR_6551_QUIET_RUN_ACTIVITY_FLAG,
+    shippedOn: "2026-09-17",
+    description:
+      "Lets agent runtimes open and close ticket runs, and keeps passive run updates behind the task history toggle while questions stay visible.",
+  },
+  {
+    key: HTPR_6536_QA_LOGIN_FLAG,
+    shippedOn: "2026-09-16",
+    description:
+      "Shows a QA-only email and password sign-in page so an outside test robot can open the real app behind login. The page and route exist only when the server has the QA login secrets.",
+  },
+  {
+    key: HTPR_6516_AGENT_ATTRIBUTION_FLAG,
+    shippedOn: "2026-09-16",
+    description:
+      "Shows the agent that made a comment, move, assignment or label change by the name it acted under, including after that agent is deleted. Without it a retired agent reads as Private agent.",
+  },
   {
     key: HTPR_6530_MCP_LIST_QUERY_FLAG,
     shippedOn: "2026-09-16",
@@ -139,6 +206,12 @@ const FEATURE_FLAG_DEFINITIONS = [
       "In time reports, plain board members see only their own logged time; board owners and admins still see everyone's entries and keep the user filter.",
   },
   {
+    key: HTPR_4857_ADD_TO_SLACK_FLAG,
+    shippedOn: "2026-09-09",
+    description:
+      "Enables the public /add-to-slack page and the Slack Marketplace install resume path (callback without signed state sends visitors to login, then Settings completes the link). Flip to Everyone before the Slack Marketplace submission.",
+  },
+  {
     key: LOCAL_WRITING_ASSISTANCE_FLAG,
     shippedOn: "2026-09-09",
     description:
@@ -161,6 +234,12 @@ const FEATURE_FLAG_DEFINITIONS = [
     shippedOn: "2026-09-08",
     description:
       "Ends AI Chat turns that run out of time with a clear, saved failure message instead of a silent disconnect, and shows the server's real refusal instead of 'Connection lost'.",
+  },
+  {
+    key: GOOGLE_CALENDAR_FLAG,
+    shippedOn: "2026-09-08",
+    description:
+      "Lets each user connect Google Calendar and keep assigned tasks with due dates in a dedicated Hypertask calendar.",
   },
   {
     key: AGENT_VISIBILITY_FLAG,
@@ -450,6 +529,12 @@ const FEATURE_FLAG_DEFINITIONS = [
       "Adds personal saved views to My Tasks with board, column, task filters, done visibility, and sorting.",
   },
   {
+    key: MY_TASKS_BULK_SELECTION_FLAG,
+    shippedOn: "2026-09-16",
+    description:
+      "Adds Inbox-style multi-select on My Tasks with bulk archive, assign, label, and move to column.",
+  },
+  {
     key: MY_TASKS_FILTER_PARITY_FLAG,
     shippedOn: "2026-09-14",
     description:
@@ -490,6 +575,12 @@ const FEATURE_FLAG_DEFINITIONS = [
     shippedOn: "2026-09-15",
     description:
       "On My Tasks, H opens the existing Remind Me picker. The chosen date hides the row here and in Inbox until it returns to both.",
+  },
+  {
+    key: MY_TASKS_OVERDUE_BADGES_FLAG,
+    shippedOn: "2026-09-15",
+    description:
+      "Shows a red overdue count next to each My Tasks view tab and board split tab. Hidden when the count is zero. Counts follow the filters that are on.",
   },
   // ponytail: `shippedOn` is the calendar day the key first reached production, written by hand
   // because git history is not readable at runtime. Backfilled with

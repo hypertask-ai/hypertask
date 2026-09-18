@@ -27,6 +27,49 @@ const agentRelationKeys = new Set([
 
 export const PRIVATE_AGENT_DISPLAY_NAME = "Private agent";
 
+/**
+ * A living agent the viewer cannot see stays "Private agent". A deleted agent
+ * has no row left, so the name copied at write time is what we show — never
+ * the owner's name. Callers must pass attributionEnabled from
+ * isFeatureEnabled(HTPR_6516_AGENT_ATTRIBUTION_FLAG, userId). When the flag is
+ * off, a stored name with no live row stays "Private agent".
+ */
+export function resolvePublicAgentDisplayName(opts: {
+  hasAgentRow: boolean;
+  visibleAgent?: { displayName?: string | null } | null;
+  storedDisplayName?: string | null;
+  attributionEnabled?: boolean;
+}): string | null {
+  if (opts.hasAgentRow && !opts.visibleAgent) return PRIVATE_AGENT_DISPLAY_NAME;
+  if (!opts.attributionEnabled && !opts.hasAgentRow && opts.storedDisplayName) {
+    return PRIVATE_AGENT_DISPLAY_NAME;
+  }
+  const stored = opts.storedDisplayName?.trim();
+  if (stored) return stored;
+  const live = opts.visibleAgent?.displayName?.trim();
+  return live || null;
+}
+
+export function overlayDurableAgentDisplayName<T extends object>(
+  mapped: T,
+  opts: {
+    hasAgentRow: boolean;
+    visibleAgent?: { displayName?: string | null } | null;
+    storedDisplayName?: string | null;
+    attributionEnabled?: boolean;
+  }
+): T {
+  if (!opts.attributionEnabled) return mapped;
+  const agentDisplayName = resolvePublicAgentDisplayName({
+    ...opts,
+    attributionEnabled: true,
+  });
+  const next = { ...mapped } as T & { agent_display_name?: string };
+  if (agentDisplayName) next.agent_display_name = agentDisplayName;
+  else delete next.agent_display_name;
+  return next;
+}
+
 const privateAgentAttribution = {
   displayName: PRIVATE_AGENT_DISPLAY_NAME,
   photoURL: null,
