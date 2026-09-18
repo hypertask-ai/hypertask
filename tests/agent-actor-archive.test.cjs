@@ -468,8 +468,15 @@ test("authenticated agents cannot Archive or Delete a Done task", async () => {
     section: {
       findMany: async ({ where }) => {
         calls.findMany += 1;
-        assert.deepEqual(where.id.in, [DONE_SECTION_ID]);
-        return [{ id: DONE_SECTION_ID, section_title: "Done", isDone: true }];
+        assert.deepEqual(where.projectId.in, [MEMBER_PROJECT]);
+        return [
+          {
+            id: DONE_SECTION_ID,
+            projectId: MEMBER_PROJECT,
+            section_title: "Done",
+            isDone: true,
+          },
+        ];
       },
     },
     task: {
@@ -488,7 +495,12 @@ test("authenticated agents cannot Archive or Delete a Done task", async () => {
     () =>
       assertAgentMayLeaveDone(
         tx,
-        { sectionId: DONE_SECTION_ID, status: "Normal" },
+        {
+          id: TASK_ID,
+          projectId: MEMBER_PROJECT,
+          sectionId: DONE_SECTION_ID,
+          status: "Normal",
+        },
         "Archive",
         AGENT_ID,
       ),
@@ -500,7 +512,12 @@ test("authenticated agents cannot Archive or Delete a Done task", async () => {
     () =>
       assertAgentMayLeaveDone(
         tx,
-        { sectionId: DONE_SECTION_ID, status: "Normal" },
+        {
+          id: TASK_ID,
+          projectId: MEMBER_PROJECT,
+          sectionId: DONE_SECTION_ID,
+          status: "Normal",
+        },
         "Deleted",
         AGENT_ID,
       ),
@@ -515,13 +532,20 @@ test("a Done descendant blocks agent soft-delete before any tree mutation", asyn
   const tx = {
     section: {
       findMany: async ({ where }) => {
-        assert.deepEqual(
-          [...where.id.in].sort((a, b) => a - b),
-          [ACTIVE_SECTION_ID, DONE_SECTION_ID],
-        );
+        assert.deepEqual(where.projectId.in, [MEMBER_PROJECT]);
         return [
-          { id: ACTIVE_SECTION_ID, section_title: "In Progress", isDone: false },
-          { id: DONE_SECTION_ID, section_title: "Done", isDone: true },
+          {
+            id: ACTIVE_SECTION_ID,
+            projectId: MEMBER_PROJECT,
+            section_title: "In Progress",
+            isDone: false,
+          },
+          {
+            id: DONE_SECTION_ID,
+            projectId: MEMBER_PROJECT,
+            section_title: "Done",
+            isDone: true,
+          },
         ];
       },
     },
@@ -546,11 +570,13 @@ test("a Done descendant blocks agent soft-delete before any tree mutation", asyn
         [
           {
             id: TASK_ID,
+            projectId: MEMBER_PROJECT,
             sectionId: ACTIVE_SECTION_ID,
             status: "Normal",
           },
           {
             id: CHILD_TASK_ID,
+            projectId: MEMBER_PROJECT,
             sectionId: DONE_SECTION_ID,
             status: "Normal",
           },
@@ -570,7 +596,10 @@ test("soft-delete tree path checks every locked task before updateMany", () => {
     "utf8",
   );
   assert.match(source, /assertAgentMayLeaveDoneForTasks/);
-  assert.match(source, /SELECT id, status, "sectionId", "hardDeleteProcessingAt"/);
+  assert.match(
+    source,
+    /SELECT id, "projectId", status, "sectionId", "hardDeleteProcessingAt"/,
+  );
   assert.doesNotMatch(
     source,
     /assertAgentMayLeaveDone\(\s*tx,\s*root/,
@@ -581,31 +610,98 @@ test("soft-delete tree path checks every locked task before updateMany", () => {
   assert.ok(guardAt > 0 && mutateAt > guardAt);
 });
 
-test("humans may Archive Done tasks and agents may archive non-Done work", async () => {
+test("agents cannot archive or delete a task after it moves out of Done", async () => {
   const tx = {
     section: {
+      findMany: async () => [
+        {
+          id: ACTIVE_SECTION_ID,
+          projectId: MEMBER_PROJECT,
+          section_title: "Bugs",
+          isDone: false,
+        },
+        {
+          id: DONE_SECTION_ID,
+          projectId: MEMBER_PROJECT,
+          section_title: "Done",
+          isDone: true,
+        },
+      ],
+    },
+    taskSectionEvent: {
       findMany: async ({ where }) => {
-        return where.id.in.map((id) =>
-          id === DONE_SECTION_ID
-            ? { id, section_title: "Done", isDone: true }
-            : { id, section_title: "In Progress", isDone: false },
-        );
+        assert.deepEqual(where.taskId.in, [TASK_ID]);
+        return [{ taskId: TASK_ID, from: "Done", to: "Bugs" }];
+      },
+    },
+  };
+  const task = {
+    id: TASK_ID,
+    projectId: MEMBER_PROJECT,
+    sectionId: ACTIVE_SECTION_ID,
+    status: "Normal",
+  };
+
+  await assert.rejects(
+    () => assertAgentMayLeaveDone(tx, task, "Archive", AGENT_ID),
+    AgentDoneLifecycleDeniedError,
+  );
+  await assert.rejects(
+    () => assertAgentMayLeaveDone(tx, task, "Deleted", AGENT_ID),
+    AgentDoneLifecycleDeniedError,
+  );
+});
+
+test("humans may clean up previously Done QA fixtures and agents may archive active work", async () => {
+  const calls = { sectionEvents: 0 };
+  const tx = {
+    section: {
+      findMany: async () => [
+        {
+          id: ACTIVE_SECTION_ID,
+          projectId: MEMBER_PROJECT,
+          section_title: "In Progress",
+          isDone: false,
+        },
+        {
+          id: DONE_SECTION_ID,
+          projectId: MEMBER_PROJECT,
+          section_title: "Done",
+          isDone: true,
+        },
+      ],
+    },
+    taskSectionEvent: {
+      findMany: async () => {
+        calls.sectionEvents += 1;
+        return [];
       },
     },
   };
 
   await assertAgentMayLeaveDone(
     tx,
-    { sectionId: DONE_SECTION_ID, status: "Normal" },
+    {
+      id: TASK_ID,
+      projectId: MEMBER_PROJECT,
+      sectionId: ACTIVE_SECTION_ID,
+      status: "Normal",
+    },
     "Archive",
     null,
   );
   await assertAgentMayLeaveDone(
     tx,
-    { sectionId: ACTIVE_SECTION_ID, status: "Normal" },
+    {
+      id: CHILD_TASK_ID,
+      projectId: MEMBER_PROJECT,
+      sectionId: ACTIVE_SECTION_ID,
+      status: "Normal",
+    },
     "Archive",
     AGENT_ID,
   );
+  assert.equal(calls.sectionEvents, 1);
 });
 
 test("MCP updateTask signs the internal session with ctx.agentId", () => {
@@ -619,12 +715,12 @@ test("MCP updateTask signs the internal session with ctx.agentId", () => {
   );
 });
 
-test("Done guard documents current-section-only limit", () => {
+test("Done guard follows immutable section events after later moves", () => {
   const source = fs.readFileSync(
     path.join(root, "src/lib/mcp/tasks/agentDoneLifecycle.ts"),
     "utf8",
   );
-  assert.match(source, /current section only/i);
-  assert.match(source, /out of Done[\s\S]*archives\/deletes/i);
-  assert.match(source, /not immutable human-final-review/i);
+  assert.match(source, /taskSectionEvent\.findMany/);
+  assert.match(source, /Section events preserve the rule after a task moves out of Done/);
+  assert.doesNotMatch(source, /current section only/i);
 });
