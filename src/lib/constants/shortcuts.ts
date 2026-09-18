@@ -150,7 +150,7 @@ export const getKeyboardShortcuts = (
         { shortTitle: "Activate description/comment or reply to comment", pressKey: ["ENTER"] },
         ...(consistentCommentShortcuts
           ? [
-              { shortTitle: "Send comment and move to next task", pressKey: [cmdControl, "ENTER"] },
+              { shortTitle: "Send comment and advance in Inbox", pressKey: [cmdControl, "ENTER"] },
               { shortTitle: "Send comment and stay on task", pressKey: [cmdControl, "SHIFT", "ENTER"] },
             ]
           : [

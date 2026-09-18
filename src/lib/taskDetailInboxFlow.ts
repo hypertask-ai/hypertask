@@ -91,7 +91,7 @@ export function resolveCommentEnterShortcutAction({
   if (!commandKey || key !== "Enter") return null;
 
   if (consistentCommentShortcuts && isCommentMode && !altKey) {
-    return shiftKey ? "send-and-stay" : "send-and-move";
+    return shiftKey || !isInboxFlow ? "send-and-stay" : "send-and-move";
   }
   if (shiftKey && !altKey) {
     if (!isInboxFlow) return "ignore";

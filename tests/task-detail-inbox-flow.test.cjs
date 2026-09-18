@@ -140,13 +140,17 @@ test("comment Enter shortcut modifiers resolve to one action", () => {
   const cases = [
     { name: "ordinary send", changes: {}, expected: "send" },
     {
-      name: "consistent send and move outside Inbox",
+      name: "consistent send advances through Inbox",
+      changes: { consistentCommentShortcuts: true },
+      expected: "send-and-move",
+    },
+    {
+      name: "consistent send stays on directly opened tasks",
       changes: {
         consistentCommentShortcuts: true,
         isInboxFlow: false,
-        inInbox: false,
       },
-      expected: "send-and-move",
+      expected: "send-and-stay",
     },
     {
       name: "consistent send and stay without Inbox lineage",
@@ -251,7 +255,7 @@ test("comment shortcut discovery follows the owner-only flag", () => {
     ),
     [
       {
-        shortTitle: "Send comment and move to next task",
+        shortTitle: "Send comment and advance in Inbox",
         pressKey: ["CTRL", "ENTER"],
       },
       {
@@ -262,7 +266,7 @@ test("comment shortcut discovery follows the owner-only flag", () => {
   );
   assert.deepEqual(
     taskView(true, true).find(
-      (shortcut) => shortcut.shortTitle === "Send comment and move to next task",
+      (shortcut) => shortcut.shortTitle === "Send comment and advance in Inbox",
     ).pressKey,
     ["CMD", "ENTER"],
   );

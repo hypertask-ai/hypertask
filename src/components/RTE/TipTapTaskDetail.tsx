@@ -538,8 +538,7 @@ const Tiptap = ({
   };
 
   // A task can still carry an inbox notification when opened from another
-  // surface. The send button follows the Inbox preference; the consistent
-  // Ctrl/Cmd+Enter shortcut always advances.
+  // surface. Only a task opened through the Inbox flow may advance after send.
   const sendComment = (alwaysAdvance = false) => {
     const tutorialState = currentUser?.id
       ? parseLearnTutorialState(
@@ -554,7 +553,8 @@ const Tiptap = ({
     );
     return handleCallback(
       !preserveTutorialInbox &&
-        (alwaysAdvance || (isInboxFlow && inInbox && advanceOnSend))
+        isInboxFlow &&
+        (alwaysAdvance || (inInbox && advanceOnSend))
         ? "moveToNext"
         : undefined,
       !preserveTutorialInbox && inInbox,
