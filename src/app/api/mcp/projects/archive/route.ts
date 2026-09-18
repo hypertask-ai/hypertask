@@ -1,14 +1,17 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { validateMcpAuth, checkMcpRateLimit } from '@/lib/mcp/auth'
 import prisma from '@/lib/prisma'
+import {
+  HTPR_6470_PROJECT_DELETE_FLAG,
+  isFeatureEnabled,
+} from '@/lib/flags'
+import deleteProject from '@/utils/controllers/projects/delete'
 
 /**
- * Archive or unarchive a board.
+ * Archive, restore, or explicitly delete a board.
  *
- * The CLI could create boards but never remove them, so throwaway test boards
- * piled up with no way to clear them from any machine-facing surface
- * (HTPR-4780). Archive only, and only for the owner: it is reversible, and
- * deletion of a whole board is not something an agent should be able to do.
+ * Archive and restore remain owner-only and reversible. Delete reuses the web
+ * app's owner-or-admin lifecycle path and is separately feature-gated.
  */
 export async function POST(request: NextRequest) {
   try {
@@ -42,11 +45,19 @@ export async function POST(request: NextRequest) {
     }
 
     const status = body.status === undefined ? 'Archive' : body.status
-    if (status !== 'Archive' && status !== 'Normal') {
+    if (status !== 'Archive' && status !== 'Normal' && status !== 'Deleted') {
       return NextResponse.json(
-        { success: false, error: "status must be 'Archive' or 'Normal'" },
+        { success: false, error: "status must be 'Archive', 'Normal', or 'Deleted'" },
         { status: 400 }
       )
+    }
+
+    if (status === 'Deleted') {
+      if (!(await isFeatureEnabled(HTPR_6470_PROJECT_DELETE_FLAG, ctx.user.id))) {
+        return NextResponse.json({ success: false, error: 'Not found' }, { status: 404 })
+      }
+      const response = await deleteProject(projectId, ctx.user.id)
+      return NextResponse.json(response.json, { status: response.status })
     }
 
     // Owner only. A member archiving a shared board would take it away from
