@@ -169,7 +169,8 @@ test("secondary global startup follows the Board release policy", () => {
   );
   assert.match(
     homepageSource,
-    /useBoardRealtime[\s\S]*?enabled: secondaryStartupEnabled/,
+    /useBoardRealtime\(_currentProject\?\.id, \{\s*accountId: currentUser\.id,\s*\}\)/,
+    "the visible Board must subscribe without waiting for secondary startup",
   );
   assert.match(
     landingSource,
@@ -202,8 +203,8 @@ test("secondary global startup follows the Board release policy", () => {
   );
   assert.match(
     boardRealtimeSource,
-    /needsCatchUp\.current[\s\S]*?reconcileActiveBoardQuery\(queryClient, projectId\)/,
-    "deferred realtime must reconcile events missed before subscription",
+    /onSubscriptionSucceeded[\s\S]*?reconcileActiveBoardQuery\(queryClient, projectId\)[\s\S]*?pusher:subscription_succeeded/,
+    "realtime must reconcile events missed before the initial subscription",
   );
   assert.match(
     timeTrackingSource,
