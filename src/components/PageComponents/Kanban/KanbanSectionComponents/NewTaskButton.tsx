@@ -1,4 +1,5 @@
 import Tooltip from '@/components/Common/Tooltip';
+import { useFlag } from '@/hooks/useFlag';
 import { TDefaultEditFocus, TSectionPayload } from '@/models/CreateTaskModalModels/model';
 import React, { useState } from 'react'
 import { DroppableStateSnapshot } from '@hello-pangea/dnd';
@@ -18,6 +19,9 @@ interface INewTaskButton{
 }
 
 const NewTaskButton:React.FC<INewTaskButton> = ({buttonPosition, createTaskAt, snapshot, sectionPayload}) => {
+    const quickEntryCardsEnabled = useFlag("htpr-6175-quick-entry-cards");
+    let quickEntryRequested: true | undefined;
+    if (quickEntryCardsEnabled) quickEntryRequested = true;
     
     // ============= for top of section on section title. 
     if (buttonPosition == "top"){
@@ -25,7 +29,7 @@ const NewTaskButton:React.FC<INewTaskButton> = ({buttonPosition, createTaskAt, s
         const bottom = -15
         return(
             <div     
-                onClick={()=>createTaskAt("top", sectionPayload, undefined, true)}
+                onClick={()=>createTaskAt("top", sectionPayload, undefined, quickEntryRequested)}
                 className="
                 group create-new-task-button
                 scale-100  relative group-hover/main:scale-100 cursor-pointer">
@@ -38,7 +42,7 @@ const NewTaskButton:React.FC<INewTaskButton> = ({buttonPosition, createTaskAt, s
     else if (buttonPosition ==="bottom" && !snapshot?.isDraggingOver){
         return (
             <div 
-            onClick={()=>createTaskAt("bottom", sectionPayload, undefined, true)}
+            onClick={()=>createTaskAt("bottom", sectionPayload, undefined, quickEntryRequested)}
             className="
                 group
                 scale-100 sm:scale-0 hover:bg-opacity-70 cursor-pointer  bg-opacity-20  
