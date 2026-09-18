@@ -1,4 +1,5 @@
 import { consumeEarlyAppShellBootstrapSlice } from "@/lib/appShellBootstrap/client";
+import { selectFavorites } from "@/utils/api/global/apiHelpers/favoritesResponse";
 import axios from "axios"
 
 
@@ -10,7 +11,7 @@ export const getAllFavorites = async (userSettingId:string|null) => {
             const bootstrapped = await consumeEarlyAppShellBootstrapSlice<unknown[]>("favorites");
             if (Array.isArray(bootstrapped)) return bootstrapped;
             const favoritesAll = await axios.get("/api/favorites/getFavorites")
-            return favoritesAll.data;
+            return selectFavorites(favoritesAll.data);
         } catch (error) {
             // Handle the error or return a default value
             console.error("Error getting Assignees and Members:", error);

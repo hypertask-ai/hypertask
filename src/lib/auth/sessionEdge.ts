@@ -3,6 +3,7 @@ const TOKEN_PART_PATTERN = /^[A-Za-z0-9_-]+$/
 type SessionPayload = {
   id: number
   email?: string
+  agentId?: string
 }
 
 type SignedSessionPayload = SessionPayload & {
@@ -81,6 +82,8 @@ export async function verifySessionEdge(
       typeof payload.id !== 'number' ||
       !Number.isFinite(payload.id) ||
       (payload.email !== undefined && typeof payload.email !== 'string') ||
+      (payload.agentId !== undefined &&
+        (typeof payload.agentId !== 'string' || payload.agentId.length === 0)) ||
       typeof payload.exp !== 'number' ||
       !Number.isFinite(payload.exp) ||
       payload.exp <= Math.floor(Date.now() / 1000)
@@ -91,6 +94,7 @@ export async function verifySessionEdge(
     return {
       id: payload.id,
       ...(payload.email !== undefined ? { email: payload.email } : {}),
+      ...(payload.agentId !== undefined ? { agentId: payload.agentId } : {}),
     }
   } catch {
     return null

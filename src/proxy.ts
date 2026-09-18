@@ -242,6 +242,11 @@ async function authMiddleware(request: NextRequest) {
       currentPath.startsWith(share) ||
       currentPath.startsWith('/demo') ||
       currentPath.startsWith('/verify-email') ||
+      // HTPR-4857: public Slack Marketplace install page (flag-gated in the page itself).
+      currentPath === '/add-to-slack' ||
+      // HTPR-6536: QA password login for TestSprite. The page 404s without env.
+      currentPath === '/qa/login' ||
+      currentPath.startsWith('/qa/login/') ||
       currentPath.startsWith('/firebase-messaging-sw.js')) {
       // console.log('✅ Allowing public route:', currentPath);
       return NextResponse.next();
@@ -426,6 +431,8 @@ async function authMiddleware(request: NextRequest) {
   if (
     !checkIfOnboarded(user) &&
     currentPath !== onboarding &&
+    currentPath !== '/add-to-slack' &&
+    currentPath !== '/qa/login' &&
     !currentPath.startsWith(share) &&
     !currentPath.startsWith('/cli-auth')
   ) {

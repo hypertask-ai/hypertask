@@ -33,6 +33,12 @@ export function isEmbeddableMediaFile(file: File | null): boolean {
   return isHeicByMetadata(file.type, file.name);
 }
 
+export function extractEmbeddableClipboardFiles(
+  clipboardData: Pick<DataTransfer, "files"> | null | undefined,
+): File[] {
+  return Array.from(clipboardData?.files ?? []).filter(isEmbeddableMediaFile);
+}
+
 export const getMediaPasteDropPlugin = (options:any) => {
   let isShiftPressed = false; // Shift+paste opts out of the URL unfurl, as in the Loom/Figma extensions
   return new Plugin({
@@ -62,6 +68,14 @@ export const getMediaPasteDropPlugin = (options:any) => {
           if (!file) return false;
           
           handleFileUpload(file, view, schema, options);
+          return true;
+        }
+
+        // Edge can expose a file paste here without a matching file item.
+        const clipboardFiles = extractEmbeddableClipboardFiles(event.clipboardData);
+        if (clipboardFiles.length > 0) {
+          event.preventDefault();
+          handleFileUpload(clipboardFiles[0], view, schema, options);
           return true;
         }
         

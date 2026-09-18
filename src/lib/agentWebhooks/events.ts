@@ -215,6 +215,8 @@ export type AgentWebhookChat = {
   messageId: string;
   text: string;
   userName: string | null;
+  /** Optional reply-style hint for the agent runtime (HTPR-6407). */
+  replyGuidance?: string;
 };
 
 export type AgentWebhookRun = {
@@ -222,7 +224,8 @@ export type AgentWebhookRun = {
   agentId: string;
   taskId: number | null;
   chatSessionId: string | null;
-  trigger: "mention" | "assigned" | "chat";
+  trigger: "mention" | "assigned" | "chat" | "runtime";
+  title?: string;
   status: "active" | "stale" | "stopped" | "done";
   createdAt: string;
   lastActivityAt: string;

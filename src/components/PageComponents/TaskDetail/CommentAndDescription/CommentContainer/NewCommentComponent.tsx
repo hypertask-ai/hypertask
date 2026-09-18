@@ -29,6 +29,7 @@ import {
   getTiptapEditorForMode,
   OPEN_COMMENT_SNIPPET_EVENT,
   openSnippetPicker,
+  subscribeTiptapEditorReady,
 } from "@/lib/snippets";
 import {
   getMobileCommentViewportGeometry,
@@ -37,6 +38,9 @@ import {
 import { shouldShowMobileDock } from "@/components/Global/mobileShellVisibility";
 import { usePathname } from "next/navigation";
 import { getTaskDraftContent } from "@/components/RTE/draftSync";
+import { AudioButton } from "@/components/RTE/Components/AudioButton";
+import { useFlag } from "@/hooks/useFlag";
+import { HTPR_6555_IDLE_COMMENT_MIC_FLAG } from "@/lib/flags/keys";
 
 const MOBILE_DOCK_FALLBACK_HEIGHT = 64;
 
@@ -106,6 +110,12 @@ const NewCommentComponent = (
         hasDraftContent ||
         Boolean(replyQuote);
       const [hasMountedCommentEditor, setHasMountedCommentEditor] = useState(shouldMountCommentEditor);
+      const idleCommentMicEnabled = useFlag(HTPR_6555_IDLE_COMMENT_MIC_FLAG);
+      const [idleRecording, setIdleRecording] = useState(false);
+      const pendingIdleDictationRef = useRef<{
+        text: string;
+        setContent?: boolean;
+      } | null>(null);
       // Desktop: always render the editor (unfocused) so the composer shows its
       // active toolbar at rest instead of a blank placeholder. The focus effect
       // only fires on currentId === "comment-input", so mounting stays cursor-free
@@ -161,7 +171,27 @@ const NewCommentComponent = (
         }
         event.stopPropagation();
       };
+      const applyPendingIdleDictation = () => {
+        const pending = pendingIdleDictationRef.current;
+        if (!pending) return false;
+        const editor = getTiptapEditorForMode("create-comment");
+        if (!editor || editor.isDestroyed) return false;
+        const ran = pending.setContent
+          ? editor.chain().setContent(pending.text).focus("end").run()
+          : editor.chain().focus().insertContent(pending.text).run();
+        if (!ran) return false;
+        pendingIdleDictationRef.current = null;
+        return true;
+      };
+      const handleIdleDictation = (text: string, setContent?: boolean) => {
+        pendingIdleDictationRef.current = { text, setContent };
+        setHasMountedCommentEditor(true);
+        forceOpenEdit("comment");
+        setCurrentId("comment-input");
+        applyPendingIdleDictation();
+      };
       const handleOpenCommentEditor = () => {
+        if (idleRecording) return;
         setHasMountedCommentEditor(true);
         forceOpenEdit("comment");
         setCurrentId("comment-input");
@@ -174,6 +204,7 @@ const NewCommentComponent = (
         const editor = getTiptapEditorForMode("create-comment");
         if (editor && !editor.isDestroyed && !editor.isFocused)
           editor.commands.focus("end");
+        applyPendingIdleDictation();
       }
       const redirectMiddleware = (obj: RedirectAPIParams) =>{
         redirectAPI(obj);
@@ -185,6 +216,13 @@ const NewCommentComponent = (
       useEffect(() => {
         if (shouldMountCommentEditor) setHasMountedCommentEditor(true);
       }, [shouldMountCommentEditor]);
+
+      useEffect(() => {
+        applyPendingIdleDictation();
+        return subscribeTiptapEditorReady((mode) => {
+          if (mode === "create-comment") applyPendingIdleDictation();
+        });
+      }, [shouldRenderCommentEditor, hasMountedCommentEditor]);
 
       // Track composer focus and publish it to the global tab bar. focusin/
       // focusout bubble, so we catch the editor and every toolbar control
@@ -474,7 +512,7 @@ const NewCommentComponent = (
                               createNewComment={editMode==="comment" || editMode === "new-comment-ai"}
                           />
                         ) : (
-                          <NewCommentPlaceholder isMbl={_mbl}/>
+                          <NewCommentPlaceholder isMbl={_mbl} />
                         )}
                       </div>
                   </div>
@@ -543,8 +581,16 @@ const NewCommentComponent = (
                         reply={replyQuote}
                         createNewComment={editMode==="comment" || editMode === "new-comment-ai"}
                       />
+                      ) : idleCommentMicEnabled ? (
+                        <NewCommentPlaceholder
+                          isMbl={_mbl}
+                          showIdleMic
+                          idleRecording={idleRecording}
+                          onIdleRecordingChange={setIdleRecording}
+                          onIdleDictation={handleIdleDictation}
+                        />
                       ) : (
-                        <NewCommentPlaceholder isMbl={_mbl}/>
+                        <NewCommentPlaceholder isMbl={_mbl} />
                       )}
                       </div>
 
@@ -557,21 +603,34 @@ const NewCommentComponent = (
       );
   };
 
-  const NewCommentPlaceholder = ({isMbl}:{isMbl:boolean}) => (
+  const NewCommentPlaceholder = ({
+    isMbl,
+    showIdleMic = false,
+    idleRecording = false,
+    onIdleRecordingChange = () => {},
+    onIdleDictation = () => {},
+  }:{
+    isMbl:boolean;
+    showIdleMic?:boolean;
+    idleRecording?:boolean;
+    onIdleRecordingChange?:(recording: boolean) => void;
+    onIdleDictation?:(text: string, setContent?: boolean) => void;
+  }) => (
     <div
       id="comment-input"
       tabIndex={isMbl ? -1 : 0}
       className={`w-full outline-none ${
         isMbl
-          ? "flex bg-transparent"
+          ? "flex items-center gap-2 bg-transparent"
           : "flex flex-col bg-comment-description"
       }`}
     >
+      {!idleRecording && (
       <div
         id="comment-input-input"
         className={`w-full break-normal ${
           isMbl
-            ? "min-h-[39px] max-h-[80px] py-[8px]"
+            ? "min-h-[39px] max-h-[80px] min-w-0 flex-1 py-[8px]"
             : "min-h-[80px] max-w-[85cqw] @sm:max-w-[560px] @md:max-w-full"
         }`}
       >
@@ -582,6 +641,23 @@ const NewCommentComponent = (
           {isMbl ? "Add a comment…" : "Tip: Hit CTRL+M to comment"}
         </p>
       </div>
+      )}
+      {isMbl && showIdleMic && (
+        <div
+          className={idleRecording ? "min-w-0 flex-1" : "ml-auto shrink-0"}
+          onClick={(event) => event.stopPropagation()}
+          onPointerDown={(event) => event.stopPropagation()}
+        >
+          <AudioButton
+            editor={null}
+            id="create-comment-audio-button"
+            callbackHandler={onIdleDictation}
+            toggleRecording={onIdleRecordingChange}
+            ariaLabel="Start dictation"
+            wrapperClassName={idleRecording ? "flex-1 w-full" : undefined}
+          />
+        </div>
+      )}
       {!isMbl && <div aria-hidden="true" className="h-[37px] w-full" />}
     </div>
   )

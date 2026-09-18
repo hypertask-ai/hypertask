@@ -15,6 +15,7 @@ import { IconoirKanban } from "@/components/Common/IconoirIcons";
 import { PlugZap } from "lucide-react";
 import AgentWebhookPanel from "@/components/Modals/Agent/AgentWebhookPanel";
 import AgentSelect, { AgentOption } from "./AgentSelect";
+import McpClientEvalPanel from "./McpClientEvalPanel";
 import WorkingSpinner from "./WorkingSpinner";
 import AgentAvatar from "@/components/Agents/AgentAvatar";
 import {
@@ -61,6 +62,9 @@ type TAgent = {
   providerKey?: { provider: string; maskedKey: string } | null;
   heartbeatAt: string | null;
   lastPostedAt?: string | null;
+  // Most recent Agent Chat message in this person's own thread with the
+  // agent -- distinct from lastPostedAt's board comments (HTPR-6283).
+  lastChatMessageAt?: string | null;
   boards?: TAgentBoard[];
   // Messages in this agent's shared chat thread that arrived after this person
   // last caught up. Private to them: it is read off their own participant row.
@@ -697,6 +701,8 @@ const AgentsRegister = (props: IProp) => {
             ))}
           </div>
         )}
+
+        <McpClientEvalPanel />
       </div>
     </div>
   );

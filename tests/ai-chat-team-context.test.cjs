@@ -235,6 +235,118 @@ test("new global chat uses the strongest team across ownership and memberships",
   );
 });
 
+test("agent chat without an agent board reuses the session project team", async () => {
+  const resolveChatTeamContext = loadResolver(
+    {
+      chatSession: {
+        findFirst: async () => ({ projectId: 73, agentId: "agent-1" }),
+      },
+      project: {
+        findFirst: async ({ where }) => {
+          if (where.id === 73) {
+            return {
+              id: 73,
+              teamId: "session-team",
+              team: { aiProviderSettings: null },
+            };
+          }
+          return null;
+        },
+      },
+      team: {
+        findMany: async () => {
+          throw new Error("session board must win over account fallback");
+        },
+      },
+    },
+    (userId) => ({ accessFor: userId }),
+  );
+
+  assert.deepEqual(
+    await resolveChatTeamContext({
+      userId: 6,
+      sessionId: "agent-session-with-board",
+    }),
+    {
+      teamId: "session-team",
+      projectId: 73,
+      aiProviderSettings: null,
+    },
+  );
+});
+
+test("agent chat without an agent board uses the account team", async () => {
+  const resolveChatTeamContext = loadResolver({
+    chatSession: {
+      findFirst: async () => ({ projectId: null, agentId: "agent-1" }),
+    },
+    project: {
+      findFirst: async () => null,
+    },
+    team: {
+      findMany: async () => [
+        {
+          id: "account-team",
+          aiProviderSettings: { aiChat: "paid" },
+          activeSubscriptionPlanId: "sub-paid",
+          compedUntil: null,
+          subscriptionPlan: [
+            {
+              subscriptionId: "sub-paid",
+              subscriptionStatus: "active",
+              priceId: "price_1TMlqDIhmcH60VccRZGW1xK3",
+            },
+          ],
+        },
+      ],
+    },
+  });
+
+  assert.deepEqual(
+    await resolveChatTeamContext({
+      userId: 6,
+      sessionId: "agent-session-no-board",
+    }),
+    {
+      teamId: "account-team",
+      projectId: null,
+      aiProviderSettings: { aiChat: "paid" },
+    },
+  );
+});
+
+test("agent chat without an agent board still fails closed on invalid page context", async () => {
+  let accountQueries = 0;
+  const resolveChatTeamContext = loadResolver({
+    chatSession: {
+      findFirst: async () => ({ projectId: null, agentId: "agent-1" }),
+    },
+    project: {
+      findFirst: async () => null,
+    },
+    team: {
+      findFirst: async () => {
+        accountQueries += 1;
+        return null;
+      },
+      findMany: async () => {
+        accountQueries += 1;
+        throw new Error("invalid page context must not use account fallback");
+      },
+    },
+  });
+
+  assert.equal(
+    await resolveChatTeamContext({
+      userId: 6,
+      sessionId: "agent-session-no-board",
+      requestedProjectId: 999,
+    }),
+    null,
+  );
+  assert.equal(accountQueries, 0);
+});
+
 test("native agent board survives invalid page context without account fallback", async () => {
   let projectQueries = 0;
   const resolveChatTeamContext = loadResolver({

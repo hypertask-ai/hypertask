@@ -6,6 +6,13 @@ export type SlackEvent = {
     thread_ts?: string;
     user_id?: string;
   };
+  // tokens_revoked payload fields (HTPR-4857): Slack sends user IDs, split
+  // by OAuth kind.
+  event_ts?: string;
+  tokens?: {
+    oauth?: string[];
+    bot?: string[];
+  };
   bot_id?: string;
   channel?: string;
   channel_type?: string;
@@ -89,6 +96,15 @@ export function isGeneralChatEvent(
   );
 }
 
+function isPublicOrPrivateChannel(event: SlackEvent): boolean {
+  if (event.channel_type === "channel" || event.channel_type === "group") {
+    return true;
+  }
+  if (event.channel_type) return false;
+  const channelId = event.channel ?? "";
+  return channelId.startsWith("C") || channelId.startsWith("G");
+}
+
 export function isHumanChannelMessage(
   event: SlackEvent | undefined,
 ): event is SlackEvent & {
@@ -98,8 +114,8 @@ export function isHumanChannelMessage(
 } {
   return Boolean(
     event?.type === "message" &&
-      (event.channel_type === "channel" || event.channel_type === "group") &&
       event.channel &&
+      isPublicOrPrivateChannel(event) &&
       event.ts &&
       event.user &&
       !event.bot_id &&

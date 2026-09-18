@@ -32,12 +32,32 @@ export function mapTaskAssignee(a: {
     const mapped: McpTaskAssignee = {
         id: a.user.id,
         email: a.user.email,
-        displayName: a.user.displayName || undefined,
+        // An agent assignment stores the owner's user row. Print the agent
+        // name, or task get and the CLI still show the owner.
+        displayName: agent?.displayName || a.user.displayName || undefined,
     };
     const agentAssigner = mapVisibleMcpAgent(a.agentAssigner, userId, projectId);
     if (agent) mapped.agent = agent;
     if (agentAssigner) mapped.agentAssigner = agentAssigner;
     return mapped;
+}
+
+/** Nest the creating agent under createdBy the same way assignees nest agent. */
+export function mapTaskCreatedBy(
+    user: { id: number; email: string; displayName: string | null } | null | undefined,
+    agent: Parameters<typeof mapVisibleMcpAgent>[0],
+    userId: number,
+    projectId: number,
+): NonNullable<TaskDetail['createdBy']> | undefined {
+    if (!user) return undefined;
+    const createdBy: NonNullable<TaskDetail['createdBy']> = {
+        id: user.id,
+        email: user.email,
+        displayName: user.displayName || undefined,
+    };
+    const visibleAgent = mapVisibleMcpAgent(agent, userId, projectId);
+    if (visibleAgent) createdBy.agent = visibleAgent;
+    return createdBy;
 }
 
 export const mcpTaskLabelSelect = {
@@ -303,13 +323,7 @@ export function mapTaskToMcpGetResponse(task: any, userId: number) {
             warnDays: task.project?.staleWarnDays,
             hotDays: task.project?.staleHotDays,
         }),
-        createdBy: task.user
-            ? {
-                  id: task.user.id,
-                  email: task.user.email,
-                  displayName: task.user.displayName || undefined,
-              }
-            : undefined,
+        createdBy: mapTaskCreatedBy(task.user, task.agent, userId, task.projectId),
     };
 
     const agent = mapVisibleMcpAgent(task.agent, userId, task.projectId);
@@ -398,11 +412,7 @@ export function mapTaskToDetail(task: any, userId: number): TaskDetail {
             warnDays: task.project?.staleWarnDays,
             hotDays: task.project?.staleHotDays,
         }),
-        createdBy: task.user ? {
-            id: task.user.id,
-            email: task.user.email,
-            displayName: task.user.displayName || undefined
-        } : undefined,
+        createdBy: mapTaskCreatedBy(task.user, task.agent, userId, task.projectId),
         ...(taskAgent ? { agent: taskAgent } : {}),
     };
 }

@@ -21,6 +21,7 @@ import { ScrollSetting } from "@prisma/client";
 import { getTaskReadStateLastReadAt } from "@/utils/controllers/tasks/markRead";
 import { filterCommentReadReceipts } from "@/utils/controllers/comments/readReceipts";
 import { listTaskAgentRunActivities } from "@/lib/agentRuns/service";
+import Unauthorized from "../../unauthorized/page";
 
 
 export async function generateMetadata(props: any): Promise<Metadata> {
@@ -95,7 +96,7 @@ export default async function Page(
 
   task = taskResult;
   if (!task) {
-    redirect("/unauthorized");
+    return <Unauthorized />;
   }
 
   [lastReadAt, agentRunActivities] = await Promise.all([

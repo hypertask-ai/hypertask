@@ -1,0 +1,12 @@
+{
+  "$schema": "https://raw.githubusercontent.com/TestSprite/testsprite-cli/v0.11.0/schemas/plan.schema.json",
+  "projectId": "411d64f3-c9ec-4032-a4e5-ad0e3f6f57d9",
+  "type": "frontend",
+  "name": "QA login signs the test robot into the app",
+  "planSteps": [
+    {"type": "action", "description": "Navigate directly to the QA test login page at /qa/login"},
+    {"type": "assertion", "description": "The page heading is 'QA test login' and the form shows an email field labelled 'Email address', a password field labelled 'Password', and a 'Sign in' button"},
+    {"type": "action", "description": "Type the QA account email into the Email address field and the QA login password into the Password field, then click Sign in"},
+    {"type": "assertion", "description": "The browser leaves /qa/login and /login and lands inside the signed-in app on a project board, not on a public marketing or sign-in page"}
+  ]
+}

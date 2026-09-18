@@ -99,6 +99,15 @@ test("a nested move payload no longer reaches the caller as [object Object]", ()
 // Error there serialised to `{"message":{}}` and printed "[object Object]".
 function loadDeleteController(deleteOutcome) {
   const stubs = {
+    "@/lib/mcp/tasks/agentDoneLifecycle": execute(
+      compile("src/lib/mcp/tasks/agentDoneLifecycle.ts"),
+      {
+        "@/lib/mcp/boards/columnRole": execute(
+          compile("src/lib/mcp/boards/columnRole.ts"),
+          {},
+        ),
+      },
+    ),
     "@/lib/prisma": { __esModule: true, default: {} },
     "@/models/ActivityModels.ts": {},
     "@/models/model": {},

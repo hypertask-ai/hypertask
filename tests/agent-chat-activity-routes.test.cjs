@@ -38,6 +38,8 @@ const prisma = {
       id: "session-1",
       agentId: "agent-1",
       userId: 6,
+      // chatAccess evaluates the shared-chat flag against the agent owner.
+      agent: { userId: 6 },
       ...(select.user ? { user: { displayName: "Valentin" } } : {}),
     }),
   },
@@ -65,11 +67,19 @@ stub("src/lib/agents/visibility.ts", { accessibleAgentWhere: () => ({}) });
 stub("src/lib/agentRuns/service.ts", { readAgentChatTurn: async () => ({ awaiting: true }) });
 stub("src/lib/flags.ts", {
   AGENT_CHAT_TICKET_CONFIRM_FLAG: "htpr-6006-chat-confirm-ticket",
+  SHARED_AGENT_CHAT_FLAG: "htpr-6002-shared-agent-chat",
   isFeatureEnabled: async (key, userId) => {
     assert.equal(userId, 6);
     // The history route also reads the ticket-confirmation flag; only the
     // activity flag is under test here.
     if (key === "htpr-6006-chat-confirm-ticket") return false;
+    // HTPR-6322: the history route also reads the parked-reply flag, which
+    // decides whether a stored parked notice is visible to this reader.
+    if (key === "htpr-6322-agent-chat-parked-reply") return false;
+    if (key === "htpr-6553-agent-chat-polling") return false;
+    // Shared-chat rollout is evaluated against the agent owner before history
+    // loads. Keep it on here so this suite stays about activity rows.
+    if (key === "htpr-6002-shared-agent-chat") return true;
     assert.equal(key, "htpr-6094-agent-activity-rows");
     return flagEnabled;
   },
@@ -229,7 +239,7 @@ test("ordinary MCP transcript reads preserve all normal messages without activit
 test("activity rows keep refreshing without a pending reply, and uncached", () => {
   const polling = chatClientSource.slice(
     chatClientSource.indexOf("// Activity rows arrive without a chat reply"),
-    chatClientSource.indexOf("// Realtime nudge"),
+    chatClientSource.indexOf("// Poll delivery availability"),
   );
 
   // 5s keeps the ticket's "within 10 seconds" promise with one request in hand.
@@ -247,4 +257,16 @@ test("activity rows keep refreshing without a pending reply, and uncached", () =
   assert.match(polling, /document\.visibilityState !== "visible"/);
   assert.match(polling, /addEventListener\("visibilitychange", onVisibility\)/);
   assert.match(polling, /removeEventListener\("visibilitychange", onVisibility\)/);
+});
+
+test("polling delivery status refreshes while an idle chat stays open", () => {
+  const polling = chatClientSource.slice(
+    chatClientSource.indexOf("// Poll delivery availability"),
+    chatClientSource.indexOf("// Realtime nudge"),
+  );
+
+  assert.match(chatClientSource, /const CHAT_AVAILABILITY_POLL_MS = 30_000/);
+  assert.match(polling, /pollingChatEnabled/);
+  assert.match(polling, /setInterval\([\s\S]*?CHAT_AVAILABILITY_POLL_MS/);
+  assert.match(polling, /document\.visibilityState !== "visible"/);
 });

@@ -11,6 +11,7 @@ import { deriveTeamBilling } from "@/lib/deriveCurrentBoardBilling";
 import {
   getInitialSettingsTeamId,
   getSettingsProjectForTeam,
+  settingsUserId,
 } from "@/lib/settingsTeamSelection";
 import { IProject, ITeam, IUser } from "@/models/model";
 import {
@@ -66,11 +67,12 @@ export const useSettingsTeam = () => {
   const currentUser = useRecoilValue(currentUserAtom);
   const [currentProject, setCurrentProject] = useRecoilState(currentProjectAtom);
   const [teamId, setTeamId] = useRecoilState(selectedSettingsTeamIdAtom);
+  const userId = settingsUserId(currentUser);
   const {
     data: teamsData = [],
     isFetched: teamsFetched,
     isLoading: teamsLoading,
-  } = useGetAllTeamsMinimal(currentUser?.id ?? null);
+  } = useGetAllTeamsMinimal(userId);
   const {
     data: projectsData = [],
     isFetched: projectsFetched,
@@ -157,7 +159,7 @@ export const useSettingsTeam = () => {
   ]);
 
   const teamQuery = useQuery<ITeam | null>({
-    queryKey: ["settingsTeam", currentUser?.id, teamId],
+    queryKey: ["settingsTeam", userId, teamId],
     queryFn: async () => {
       const response = await axios.get<ITeam>("/api/teams/getTeam", {
         params: { teamId },
@@ -174,7 +176,7 @@ export const useSettingsTeam = () => {
     isLoading: membersLoading,
     refetch: refetchMembers,
   } = useGetAllTeamMembers(
-    ["settingsTeamMembers", currentUser?.id, teamId],
+    ["settingsTeamMembers", userId, teamId],
     teamId ?? "",
     EMPTY_MEMBERS_DATA
   );

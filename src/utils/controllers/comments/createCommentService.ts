@@ -43,6 +43,9 @@ import {
 } from "@/lib/mcp/webhooks/outbox";
 import type { WebhookDelivery } from "@/lib/mcp/webhooks/events";
 import { generalConfig } from "@/lib/configs/general.config";
+import { normalizeBlockHtml } from "@/lib/mcp/normalizeBlockHtml";
+import { isFeatureEnabled } from "@/lib/flags";
+import { HTPR_6561_DESCRIPTION_STRUCTURE_FLAG } from "@/lib/flags/keys";
 import { normalizeRichTextStructure } from "@/utils/helperFunctions/normalizeRichTextStructure";
 import {
   buildAgentInvocationSelector,
@@ -494,7 +497,13 @@ export async function createCommentService(params: CreateCommentParams) {
   ) {
     throw new Error("Agent selection does not match this task comment");
   }
-  const text = normalizeRichTextStructure(inputText);
+  const normalizePlainText = await isFeatureEnabled(
+    HTPR_6561_DESCRIPTION_STRUCTURE_FLAG,
+    accessUserId ?? currentUser.id
+  );
+  const text = normalizePlainText
+    ? normalizeBlockHtml(inputText)
+    : normalizeRichTextStructure(inputText);
 
   const task = await prisma.task.findFirst({
     where: {
@@ -702,12 +711,21 @@ export async function createCommentService(params: CreateCommentParams) {
       const selectedRun = agentRunSelection
         ? await persistAgentRunSelection(tx, agentRunSelection)
         : null;
+      const actingAgentName = agentId
+        ? (
+            await tx.agent.findUnique({
+              where: { id: agentId },
+              select: { displayName: true },
+            })
+          )?.displayName ?? null
+        : null;
       const comment = await tx.comment.create({
         data: {
           text,
           creatorId,
           taskId,
           agentId,
+          ...(actingAgentName ? { agentDisplayName: actingAgentName } : {}),
         },
       });
       let inboundProcessingStartedAt: Date | null = null;

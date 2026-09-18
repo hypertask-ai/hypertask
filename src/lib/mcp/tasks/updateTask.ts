@@ -20,7 +20,12 @@ import { broadcastTaskUpdates } from "@/lib/mcp/tasks/broadcastTaskUpdates";
 import { sanitizeRichHtml } from "@/utils/helperFunctions/sanitizeRichHtml";
 import { normalizeBlockHtml } from "@/lib/mcp/normalizeBlockHtml";
 import { signSession, SESSION_COOKIE } from "@/lib/auth/session";
-import { formatRichTextInput } from "@/utils/helperFunctions/markdownToHtml";
+import {
+    formatRichTextInput,
+    isAcceptedRichTextInput,
+} from "@/utils/helperFunctions/markdownToHtml";
+import { isFeatureEnabled } from "@/lib/flags";
+import { HTPR_6561_DESCRIPTION_STRUCTURE_FLAG } from "@/lib/flags/keys";
 import { buildFieldError } from "@/lib/mcp/fieldError";
 import { requireRole } from "@/lib/mcp/agents/scopes";
 import { assertAgentAssignmentChangeAllowed } from "@/lib/mcp/tasks/agentMutationFence";
@@ -36,6 +41,7 @@ import {
     isActiveTaskMutationTarget,
 } from "@/lib/mcp/tasks/activeTaskMutation";
 import { toErrorMessage } from "@/lib/api/errorMessage";
+import { actingAgentSelect } from "@/lib/agents/activityAttribution";
 import { parseGithubPullRequestUrl } from "@/lib/pullRequests/githubPullRequests";
 import {
     linkTaskPullRequest,
@@ -50,6 +56,7 @@ export interface UpdateTaskResponse {
     /** MCP session agent that performed this action */
     agent?: McpAgentSummary;
     message?: string;
+    failed_tasks?: Array<{ taskId: number; error: string; status?: number; code?: string }>;
 }
 
 interface UpdateTaskErrorResponse {
@@ -370,6 +377,32 @@ export async function executeTaskUpdate({
         return NextResponse.json(
             {
                 ...buildFieldError('invalid_field', 'description', 'description must be a string'),
+                ...(dryRun && { valid: false })
+            },
+            { status: 400 }
+        )
+    }
+    if (requestBody.description !== undefined && requestBody.description.trim().length === 0) {
+        return NextResponse.json(
+            {
+                ...buildFieldError('invalid_field', 'description', 'Description cannot be empty'),
+                ...(dryRun && { valid: false })
+            },
+            { status: 400 }
+        )
+    }
+    if (
+        requestBody.description !== undefined &&
+        !isAcceptedRichTextInput(requestBody.description, requestBody.content_type) &&
+        !(await isFeatureEnabled(HTPR_6561_DESCRIPTION_STRUCTURE_FLAG, user.id))
+    ) {
+        return NextResponse.json(
+            {
+                ...buildFieldError(
+                    'invalid_field',
+                    'description',
+                    'Description must be HTML or structural markdown. Plain text is not enabled.'
+                ),
                 ...(dryRun && { valid: false })
             },
             { status: 400 }
@@ -713,7 +746,14 @@ export async function executeTaskUpdate({
         displayName: userObj.displayName,
         photoURL: userObj.photoURL ?? undefined
     }));
-    const sessionToken = signSession({ id: userObj.id, email: userObj.email });
+    // HTPR-6376: stamp the authenticated MCP agent on the internal session so
+    // legacy routes like (un)archive can attribute the actor without trusting
+    // a forgeable JSON body field alone.
+    const sessionToken = signSession({
+        id: userObj.id,
+        email: userObj.email,
+        ...(ctx.agentId ? { agentId: ctx.agentId } : {}),
+    });
     const authCookieHeader = `nookies_user=${encodeURIComponent(userCookie)}; ${SESSION_COOKIE}=${sessionToken}`;
 
     // Handle priority/estimate constants
@@ -753,6 +793,12 @@ export async function executeTaskUpdate({
     }
 
     const persistTaskUpdates = async (): Promise<UpdateTaskResponse> => {
+    const actingAgent = ctx.agentId
+        ? await prisma.agent.findUnique({
+            where: { id: ctx.agentId, revokedAt: null },
+            select: actingAgentSelect,
+        })
+        : null;
     // Update all tasks in parallel
     const updatePromises: Promise<TaskUpdateResult>[] = tasks.map(
         async (task): Promise<TaskUpdateResult> => {
@@ -961,7 +1007,8 @@ export async function executeTaskUpdate({
                         task.id,
                         task.projectId,
                         requestBody.labels!,
-                        userObj
+                        userObj,
+                        actingAgent
                     );
                 } catch (labelError) {
                     console.warn(`[MCP Update Task] Failed to update labels for task ${task.id}:`, labelError);
@@ -980,7 +1027,8 @@ export async function executeTaskUpdate({
                             remove: requestBody.remove_labels,
                             skipIfPresent: requestBody.skip_if_labels_present,
                         },
-                        userObj
+                        userObj,
+                        actingAgent
                     );
                 } catch (labelError) {
                     console.warn(`[MCP Update Task] Failed to mutate labels for task ${task.id}:`, labelError);
@@ -990,9 +1038,18 @@ export async function executeTaskUpdate({
 
             if (hasContractFieldUpdate) {
                 try {
-                    await prisma.task.update({
-                        where: { id: task.id },
-                        data: { ...contractFieldUpdates },
+                    await prisma.$transaction(async (tx) => {
+                        await assertAgentAssignmentChangeAllowed(
+                            tx,
+                            task.id,
+                            ctx.agentId,
+                            user.id,
+                            { allowHumanOverride: !ctx.agentId },
+                        );
+                        await tx.task.update({
+                            where: { id: task.id },
+                            data: { ...contractFieldUpdates, updatedAt: new Date() },
+                        });
                     });
                 } catch (contractFieldError) {
                     console.warn(`[MCP Update Task] Failed to update contract fields for task ${task.id}:`, contractFieldError);
@@ -1205,6 +1262,16 @@ export async function executeTaskUpdate({
         // Backward compatibility: include single task field when only one task is updated
         ...(mappedTasks.length === 1 ? { task: mappedTasks[0] } : {}),
         message,
+        ...(failedTasks.length
+            ? {
+                  failed_tasks: failedTasks.map(({ taskId, error, status, code }) => ({
+                      taskId,
+                      error,
+                      status,
+                      code,
+                  })),
+              }
+            : {}),
         ...(sessionAgent ? { agent: sessionAgent } : {}),
     }
 

@@ -18,7 +18,6 @@ const TEST_MODEL_KEYS: Partial<Record<TByokProviderKey, TAiModelKey>> = {
   openai: "gpt-5.4-mini",
   claude: "claude-haiku-4.5",
   google: "gemini-3.5-flash-lite",
-  xai: "grok-4.1-fast",
   deepseek: "deepseek-v4-flash",
   moonshot: "kimi-k2.5",
   zhipu: "glm-5.2",

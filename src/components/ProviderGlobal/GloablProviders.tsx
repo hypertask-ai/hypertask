@@ -34,8 +34,10 @@ import {
   showAccountSwitcherAtom,
   appShellRailAtom,
   currentUserAtom,
+  currentProjectAtom,
   lastUsedBoardsAtom,
   agentChatTeamCycleAtom,
+  agentChatMobileFullscreenAtom,
 } from "@/store";
 import { orderTeamsForSwitcher } from "@/lib/teamSwitcherOrder";
 import { getLastBoardTeam, setLastBoardTeam } from "@/lib/lastBoardTeam";
@@ -169,6 +171,8 @@ import { useGetAllProjectsMinimal } from "@/hooks/MultiPages/useGetAllProjectsMi
 import { useProjectQuery } from "@/hooks/General/useProjectQuery";
 import { markBoardSwitchIntent } from "@/lib/analytics/boardSwitchLatency";
 import { useEmojiFrequencyHydration } from "@/hooks/General/useEmojiFrequencyHydration";
+import { useFlag } from "@/hooks/useFlag";
+import { MY_TASKS_SHORTCUTS_WIDTH_FLAG, HTPR_6476_MOBILE_AGENT_CHAT_FULLSCREEN_FLAG } from "@/lib/flags/keys";
 
 import AIChatClosedLayout from "../AI_CHAT/AI_Chat_Closed_Layout";
 import FullScreenChatLoading from "../AI_CHAT/FullScreenChatLoading";
@@ -183,8 +187,10 @@ import {
 import {
   areGlobalShortcutsEnabled,
   isGlobalCreateTaskShortcut,
+  shouldOpenGlobalCreateTask,
 } from "@/lib/keyboard/globalShortcutRoutes";
 import useAppShellSurfaceShortcuts from "@/hooks/Homepage/useAppShellSurfaceShortcuts";
+import { boardContextFromPath, buildSearchUrl } from "@/lib/searchArchive";
 
 // React.lazy is intentional here. next/dynamic emits route preload hints for
 // rendered boundaries, which fetched these chunks while the chat was closed.
@@ -246,6 +252,7 @@ import {
   shouldShowMobilePrimaryDock,
   shouldShowMobileCreateTaskButton,
   shouldEnableMobilePullDownCommand,
+  isAgentChatPath,
 } from "../Global/mobileShellVisibility";
 import { BoardStartupContext } from "@/lib/contexts/boardStartupContext";
 import {
@@ -302,8 +309,10 @@ export default function GlobalProvider({
   const isApple = useDeviceContext();
   const mbl = useContext(MobileViewContext);
   const pathname = usePathname();
+  const myTasksShortcutsWidthEnabled = useFlag(MY_TASKS_SHORTCUTS_WIDTH_FLAG);
   useAppShellSurfaceShortcuts();
   const startupUser = useRecoilValue(currentUserAtom);
+  const currentProject = useRecoilValue(currentProjectAtom);
   const projectRoute = pathname?.startsWith("/project") ?? false;
   const startupUserMatchesSession =
     authenticatedUserId !== null && startupUser?.id === authenticatedUserId;
@@ -411,7 +420,13 @@ export default function GlobalProvider({
     showMcpTokenModalAtom,
   );
   const isFullScreenChat = pathname?.startsWith("/chat") ?? false;
+  const isAgentChatPage = pathname?.startsWith("/agents/chat") ?? false;
   const isTaskDetailPage = pathname?.startsWith("/detail") ?? false;
+  const agentChatMobileFullscreenFlag = useFlag(
+    HTPR_6476_MOBILE_AGENT_CHAT_FULLSCREEN_FLAG,
+  );
+  const shouldMountAgentChatRuntime =
+    isAgentChatPage && mbl && agentChatMobileFullscreenFlag;
   const [chatRuntimeMounted, setChatRuntimeMounted] = useState(
     isFullScreenChat || showAiChatInterface,
   );
@@ -419,6 +434,7 @@ export default function GlobalProvider({
   const shouldMountChatRuntime =
     chatRuntimeMounted ||
     isFullScreenChat ||
+    shouldMountAgentChatRuntime ||
     isTaskDetailPage ||
     showAiChatInterface;
   useEffect(() => {
@@ -563,8 +579,18 @@ export default function GlobalProvider({
   // The mobile shell (top bar + pull-to-command) is present on every root view
   // including task detail. The bottom dock is the exception: hidden on detail
   // (shouldShowMobileDock) so the composer owns the bottom edge.
-  const showMobileTabBar =
+  // HTPR-6476: Agent Chat with an agent open owns the whole phone screen.
+  const agentChatMobileFullscreenAtomOn = useRecoilValue(
+    agentChatMobileFullscreenAtom,
+  );
+  // Keep the path/auth shell check separate so the ticket flag can gate the
+  // rendered chrome in JSX (feature-flag-gate requires that shape).
+  const showMobileShellPath =
     mbl && Boolean(currentUser?.id) && shouldShowMobileTabBar(pathname);
+  const agentChatHidesMobileShell =
+    (agentChatMobileFullscreenFlag && agentChatMobileFullscreenAtomOn) ||
+    (agentChatMobileFullscreenFlag && isAgentChatPath(pathname));
+  const showMobileTabBar = showMobileShellPath && !agentChatHidesMobileShell;
   // Entering the mobile comment composer hides the bottom nav so the sheet
   // sits directly on the keyboard (the top bar stays for the back button).
   const commentComposerOpen = useRecoilValue(mobileCommentComposerOpenAtom);
@@ -572,7 +598,8 @@ export default function GlobalProvider({
     mbl &&
     Boolean(currentUser?.id) &&
     shouldShowMobileDock(pathname) &&
-    !commentComposerOpen;
+    !commentComposerOpen &&
+    !agentChatHidesMobileShell;
   const showMobileBottomNav =
     showMobileBottomInset && shouldShowMobilePrimaryDock(pathname);
   // Pull-to-command follows the shell, not the dock, so it stays live on detail
@@ -1096,9 +1123,9 @@ export default function GlobalProvider({
         e.preventDefault();
         lastgClick.current = null;
         return navigate("Calendar");
-      } else if (!pathname?.startsWith("/my-tasks")) {
-        // My Tasks is read-only, so [c] stays unclaimed there rather than
-        // being swallowed by a preventDefault that opens nothing.
+      } else if (
+        shouldOpenGlobalCreateTask(pathname, myTasksShortcutsWidthEnabled)
+      ) {
         e.preventDefault();
         toggleCreateTaskGlobally();
       }
@@ -1143,7 +1170,14 @@ export default function GlobalProvider({
       !window.location.pathname.includes("/search")
     ) {
       e.preventDefault();
-      router.push("/search?searchTerm=");
+      router.push(
+        buildSearchUrl(
+          "",
+          null,
+          false,
+          boardContextFromPath(pathname, currentProject?.id)
+        )
+      );
     }
   };
 
@@ -1376,7 +1410,9 @@ export default function GlobalProvider({
         />
       )}
 
-      {showMobileTabBar && (
+      {(agentChatMobileFullscreenFlag && agentChatMobileFullscreenAtomOn) ||
+      (agentChatMobileFullscreenFlag && isAgentChatPath(pathname)) ? null : (
+        showMobileShellPath && (
         <>
           <MobileTopBar
             currentUser={currentUser}
@@ -1390,6 +1426,7 @@ export default function GlobalProvider({
             <MobilePullDownCommand />
           )}
         </>
+        )
       )}
 
       {showAnnouncements && (
@@ -1412,7 +1449,9 @@ export default function GlobalProvider({
         {shouldMountChatRuntime ? (
           <Suspense
             fallback={
-              isFullScreenChat || isTaskDetailPage ? (
+              isFullScreenChat ||
+              shouldMountAgentChatRuntime ||
+              isTaskDetailPage ? (
                 <FullScreenChatLoading />
               ) : (
                 <AIChatClosedLayout

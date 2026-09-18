@@ -6,6 +6,13 @@ const handler: NextApiHandler = async (
   req: NextApiRequest,
   res: NextApiResponse
 ) => {
+  // Same private headers as /api/comments/getByTask. Without them Vercel
+  // defaults this cookie-authenticated payload to `public`, so a realtime
+  // refetch can reuse a pre-change response while comments (private,
+  // no-store) still update — QA fail #2 on HTPR-6281.
+  res.setHeader("Cache-Control", "private, no-store");
+  res.setHeader("Vary", "Cookie");
+
   if (req.method === "GET") {
     try {
       const { project, uniqueIndex } = req.query;

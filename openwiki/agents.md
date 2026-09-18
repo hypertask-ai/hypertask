@@ -1,6 +1,6 @@
 # Universal agent onboarding
 
-**Last updated:** 2026-08-30
+**Last updated:** 2026-09-16
 
 This is the shared operating guide for every agent provider. The provider may change; the board, repository, and CI rules do not.
 
@@ -18,9 +18,9 @@ Use the approved Zig CLI as **`hypertask`** or its **`hypertask`** symlink, the 
 
 Before writing code for a ticket:
 
-- Assign the ticket to Valentin (user ID `6`) without replacing other assignees.
-- Move it to **In Progress**.
-- Leave a short comment saying the session is actively working it.
+- Claim it as Product Bot: `htbot comment add <PREFIX-NNN> --text "<p><strong>Claimed.</strong> Session working it now.</p>"`. Never write in Valentin's name or assign userId 6. Only Valentin assigns himself.
+- Move it to **In Progress** with `htbot task move`.
+- The in-flight signal is a **Claimed.** comment plus In Progress.
 
 When finished, report the changed files, verification performed, remaining risks, and the pull request or deployment URL. Mention Hypertask tickets with their full clickable URLs.
 
@@ -65,6 +65,8 @@ producer PR → DeepSeek PRs on Hold (if lower-trust)
 
 An agent association on a ticket is only a marker. The session acts as an agent only when its bearer JWT contains that agent's `agentId` claim.
 
+Comments, assignments, section moves, label changes, and edits made with that token store the agent id and the agent name at write time. Task get, task list, comment list, and the activity history then show that agent (name and id), not the owner. After the agent is deleted the stored name still shows when `htpr-6516-agent-attribution` is on; without the flag a retired bot still reads as "Private agent". Existing rows are left as they were.
+
 The Zig CLI accepts the same managed-agent bearer token as MCP. **`hypertask`** is the native binary and **`hypertask`** is a symlink to it. Use the token per process:
 
 ```bash
@@ -105,7 +107,7 @@ This only changes **Hypertask board operations**. It does not change the GitHub 
 - Preserve unrelated dirty worktree changes. Never use `git stash`, broad resets, or destructive cleanup.
 - Read the relevant architecture and workflow docs before editing code.
 - Run focused tests and inspect `git diff --check` before handing work off.
-- Vercel previews are opt-in. If one was requested, do not repeatedly reload it while queued; poll deployment status headlessly, then verify once ready.
+- Every pushed branch already gets a Vercel preview. Verification is opt-in. If you need that preview, do not reload it while queued; poll deployment status headlessly, then verify once ready.
 
 ## Worktree and branch cleanup
 

@@ -50,7 +50,7 @@ test('include_activity=true drops the DbNull filter and passes through the MCP c
   // sort_order from the caller must still win.
   assert.match(
     routeSource,
-    /includeActivity && !requestedSortOrder \? 'asc' : \(sortOrder as 'asc' \| 'desc'\)/
+    /includeActivity \? 'asc' : \(sortOrder as 'asc' \| 'desc'\)/
   )
   assert.equal(
     GetCommentsInputSchema.parse({
@@ -72,6 +72,8 @@ test('comment agent identities are filtered for the task board', () => {
     /mapVisibleMcpAgent\(comment\.agent, userId, projectId\)/
   )
   assert.match(routeSource, /!comment\.agent \? !comment\.agentDisplayName/)
+  assert.match(routeSource, /isFeatureEnabled\(\s*HTPR_6516_AGENT_ATTRIBUTION_FLAG/)
+  assert.match(routeSource, /overlayDurableAgentDisplayName\(/)
   assert.match(
     routeSource,
     /mapCommentToResponse\(comment, user\.id, task\.projectId, includeActivity\)/

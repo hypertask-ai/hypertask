@@ -7,7 +7,7 @@ const jiti = require("jiti")(__filename, {
   interopDefault: true,
   alias: { "@": path.join(root, "src") },
 });
-const { createPromptForTiptapForwardSlash } = jiti(
+const { createPromptForTiptapForwardSlash, TASK_AUTHORING_STYLE } = jiti(
   path.join(root, "src/app/api/ai/_lib/editorAi.ts"),
 );
 
@@ -30,4 +30,16 @@ test("ImproveReadability uses the Structured prompt for every input length", () 
     assert.match(improve, /Keep all links from the input intact/i);
     assert.doesNotMatch(improve, /apply SKILL 1 \(unslop\) only/i);
   }
+});
+
+test("WriteContent applies the authoring skills without replacing the request", () => {
+  const instruction = "Keep exactly three numbered steps and preserve this template";
+  const prompt = createPromptForTiptapForwardSlash(
+    "WriteContent",
+    "",
+    instruction,
+  );
+
+  assert.match(prompt, new RegExp(instruction));
+  assert.ok(prompt.includes(TASK_AUTHORING_STYLE));
 });

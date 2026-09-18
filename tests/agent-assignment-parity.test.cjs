@@ -6,6 +6,7 @@ const path = require("node:path");
 const root = path.resolve(__dirname, "..");
 const jiti = require("jiti")(path.join(root, "tests/agent-assignment-parity-entry.cjs"), {
   interopDefault: true,
+  alias: { "@": path.join(root, "src") },
 });
 const { AssignUserInputSchema } = jiti(
   path.join(root, "src/lib/mcp-server/validations/task.validation.ts")

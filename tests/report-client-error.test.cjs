@@ -121,6 +121,19 @@ test("client error reporting ignores only React Fizz discarded-segment races", (
 
   reportClientError({
     source: "window.onerror",
+    message: "TypeError: b is null",
+    stack:
+      "$RS@https://app.hypertask.ai/detail/project-339/1677:40:137275\n" +
+      "@https://app.hypertask.ai/detail/project-339/1677:40:137349",
+  });
+  assert.equal(
+    beacons.length,
+    0,
+    "Firefox 136 reports the same discarded Fizz race as TypeError: b is null",
+  );
+
+  reportClientError({
+    source: "window.onerror",
     message: "Cannot read properties of null (reading 'parentNode')",
     stack: "TypeError: Cannot read properties of null (reading 'parentNode')\n    at updateTask (app.js:1:2)",
   });
@@ -143,6 +156,36 @@ test("client error reporting ignores only React Fizz discarded-segment races", (
     stack: "TypeError: Cannot read properties of null (reading 'parentNode')\n    at $RS (https://app.hypertask.ai/:1:2)",
   });
   assert.equal(beacons.length, 3, "non-window failures still report");
+});
+
+test("Firefox TypeError ident is null without $RS still reports", () => {
+  const beacons = [];
+  const reportClientError = loadReportClientError({
+    Blob,
+    navigator: {
+      webdriver: false,
+      userAgent:
+        "Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:136.0) Gecko/20100101 Firefox/136.0",
+      sendBeacon(url, body) {
+        beacons.push({ url, body });
+        return true;
+      },
+    },
+    window: { location: { href: "https://app.hypertask.ai/detail/project-15/6423" } },
+  });
+
+  reportClientError({
+    source: "window.onerror",
+    message: "TypeError: b is null",
+    stack:
+      "updateTask@https://app.hypertask.ai/app.js:1:2\n" +
+      "@https://app.hypertask.ai/app.js:1:40",
+  });
+  assert.equal(
+    beacons.length,
+    1,
+    "application TypeError ident is null without $RS still reports",
+  );
 });
 
 test("prefixed Firefox application parentNode failures still report", () => {

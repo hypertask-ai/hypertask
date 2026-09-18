@@ -14,4 +14,6 @@ regexes = [
   '''sk_test_placeholder''',
   # Feature-flag keys are always "htpr-<ticket>-<slug>", never credentials.
   '''htpr-[0-9]{3,6}-[a-z0-9-]+''',
+  # QA login unit-test fixture, never a live secret.
+  '''correct-horse-battery-staple-32b''',
 ]

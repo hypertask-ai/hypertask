@@ -10,8 +10,8 @@ import {
   createTaskIdentificationBaseSchema,
 } from './common/task-identification';
 import { paginationSchema, sortOrderSchema } from './common/pagination';
+import { type ListQuerySchemaOptions, withListQuerySchema } from './common/listQuery';
 import { inlineAttachmentsSchema } from './attachment.validation';
-import { hasMarkdownStructure } from '../../../utils/helperFunctions/markdownToHtml';
 
 const config = getConfig();
 
@@ -55,6 +55,7 @@ export function getAddCommentInputSchema() {
   const baseSchema = createTaskIdentificationBaseSchema().extend({
     text: z
       .string()
+      .trim()
       .min(1, 'Comment text cannot be empty')
       .max(config.limits.commentTextMaxLength, `Comment text cannot exceed ${config.limits.commentTextMaxLength} characters`)
       .describe('Comment text. HTML or structural markdown; content_type can explicitly select either format. Use @DisplayName with matching mentions entries.'),
@@ -76,13 +77,6 @@ export function getAddCommentInputSchema() {
       {
         message: 'Provide either reply_to_comment_id or reply_to_invocation_id, not both',
         path: ['reply_to_invocation_id'],
-      }
-    )
-    .refine(
-      (data) => isAcceptedRichText(data.text, data.content_type),
-      {
-        message: 'Comment text must be HTML or structural markdown such as a list, emphasis, code, or link. Plain text is not accepted.',
-        path: ['text'],
       }
     )
     .refine(
@@ -177,6 +171,7 @@ export function getAddCommentBaseSchema() {
     .extend({
       text: z
         .string()
+        .trim()
         .min(1, 'Comment text cannot be empty')
         .max(config.limits.commentTextMaxLength, `Comment text cannot exceed ${config.limits.commentTextMaxLength} characters`)
         .describe('Comment text. HTML or structural markdown; content_type can explicitly select either format. Use @DisplayName with matching mentions entries.'),
@@ -190,31 +185,6 @@ export function getAddCommentBaseSchema() {
       reply_to_invocation_id: replyToInvocationIdSchema,
     })
     .strict();
-}
-
-/**
- * Check if text appears to be HTML format
- * Simple heuristic: checks for HTML tags
- */
-function isHtmlFormat(text: string): boolean {
-  if (!text || typeof text !== 'string') {
-    return false;
-  }
-  
-  // Check for HTML tags (basic pattern)
-  const htmlTagPattern = /<[a-z][\s\S]*>/i;
-  return htmlTagPattern.test(text.trim());
-}
-
-function isAcceptedRichText(
-  text: string,
-  contentType?: 'html' | 'markdown'
-): boolean {
-  return (
-    contentType === 'markdown' ||
-    isHtmlFormat(text) ||
-    (contentType === undefined && hasMarkdownStructure(text))
-  );
 }
 
 /**
@@ -244,9 +214,11 @@ export function validateAndSanitizeAddCommentInput(input: unknown): AddCommentIn
  * Base schema for get_comments tool (without refine validation)
  * Used for FastMCP parameter validation
  */
-export function getGetCommentsBaseSchema() {
-  return createTaskIdentificationBaseSchema()
-    .merge(paginationSchema)
+export function getGetCommentsBaseSchema(options?: ListQuerySchemaOptions) {
+  return withListQuerySchema(
+    createTaskIdentificationBaseSchema().merge(paginationSchema),
+    options,
+  )
     .extend({
       sort_order: sortOrderSchema,
       include_activity: z
@@ -261,17 +233,8 @@ export function getGetCommentsBaseSchema() {
  * Schema for get_comments tool input (with refine validation)
  * Either task_id or ticket_number must be provided
  */
-export function getGetCommentsInputSchema() {
-  const baseSchema = createTaskIdentificationBaseSchema()
-    .merge(paginationSchema)
-    .extend({
-      sort_order: sortOrderSchema,
-      include_activity: z
-        .boolean()
-        .default(false)
-        .describe('Include task activity history such as label, move, assignment, and priority changes. Defaults to false.'),
-    })
-    .strict();
+export function getGetCommentsInputSchema(options?: ListQuerySchemaOptions) {
+  const baseSchema = getGetCommentsBaseSchema(options);
 
   return baseSchema
     .refine(
@@ -313,7 +276,7 @@ export function getGetCommentsInputSchema() {
     );
 }
 
-export const GetCommentsInputSchema = getGetCommentsInputSchema();
+export const GetCommentsInputSchema = getGetCommentsInputSchema({ listQuery: true });
 export type GetCommentsInput = z.infer<typeof GetCommentsInputSchema>;
 
 /**
@@ -337,6 +300,8 @@ export function getAddCommentCrudBaseSchema() {
         .describe('Comment ID. Required for update and delete. Obtain from get_comments_for_task.'),
       text: z
         .string()
+        .trim()
+        .min(1, 'Comment text cannot be empty')
         .max(config.limits.commentTextMaxLength, `Comment text cannot exceed ${config.limits.commentTextMaxLength} characters`)
         .optional()
         .describe('Comment text for add/update. HTML or structural markdown; content_type can explicitly select either format.'),
@@ -432,12 +397,6 @@ export function getAddCommentCrudInputSchema() {
             message: 'For action add: text is required',
             path: ['text'],
           });
-        } else if (!isAcceptedRichText(text, content_type)) {
-          ctx.addIssue({
-            code: z.ZodIssueCode.custom,
-            message: 'Comment text must be HTML or structural markdown such as a list, emphasis, code, or link.',
-            path: ['text'],
-          });
         }
       }
 
@@ -453,12 +412,6 @@ export function getAddCommentCrudInputSchema() {
           ctx.addIssue({
             code: z.ZodIssueCode.custom,
             message: 'For action update: text is required',
-            path: ['text'],
-          });
-        } else if (!isAcceptedRichText(text, content_type)) {
-          ctx.addIssue({
-            code: z.ZodIssueCode.custom,
-            message: 'Comment text must be HTML or structural markdown such as a list, emphasis, code, or link.',
             path: ['text'],
           });
         }

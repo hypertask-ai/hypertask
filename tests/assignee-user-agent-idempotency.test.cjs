@@ -27,9 +27,23 @@ const load = (javascript, stubs) => {
 };
 
 const matches = (row, where) =>
-  Object.entries(where).every(
-    ([key, value]) => value === undefined || row[key] === value,
-  );
+  Object.entries(where).every(([key, value]) => {
+    if (value === undefined) return true;
+    if (key === "OR" && Array.isArray(value)) {
+      return value.some((clause) => matches(row, clause));
+    }
+    if (
+      value &&
+      typeof value === "object" &&
+      Array.isArray(value.in)
+    ) {
+      return value.in.includes(row[key]);
+    }
+    if (key === "agent" && value && typeof value === "object") {
+      return matches(row.agent ?? { userId: row.userId }, value);
+    }
+    return row[key] === value;
+  });
 
 test("a human assignment coexists with an agent owned by the same user", async () => {
   const owner = {
@@ -69,12 +83,24 @@ test("a human assignment coexists with an agent owned by the same user", async (
   };
 
   const findAssignment = (where) => rows.find((row) => matches(row, where)) ?? null;
+  const findAssignments = (where) => {
+    if (!where) return [...rows];
+    // Board visibility listing uses nested agent filters we do not model; when
+    // the OR is only the authorized userId unassign policy, filter precisely.
+    const authorizedUnassign =
+      Array.isArray(where.OR) &&
+      where.OR.length === 2 &&
+      where.OR.some((clause) => clause.agentId === null) &&
+      where.OR.some((clause) => clause.agent && clause.agent.userId != null);
+    if (where.OR && !authorizedUnassign) return [...rows];
+    return rows.filter((row) => matches(row, where));
+  };
   const prisma = {
     task: { findUnique: async () => task },
     agent: { findFirst: async () => ({ userId: owner.id }) },
     assignees: {
       findFirst: async ({ where }) => findAssignment(where),
-      findMany: async () => [...rows],
+      findMany: async ({ where } = {}) => findAssignments(where),
     },
     subscribedDevices: { findMany: async () => [] },
     notification: {
@@ -223,14 +249,15 @@ test("a human assignment coexists with an agent owned by the same user", async (
   });
   assert.equal(unassigned.status, 200);
   assert.equal(unassigned.json.assignStatus, "Unassigned");
-  assert.deepEqual(
-    unassigned.json.body.map(({ userId, agentId }) => ({ userId, agentId })),
-    [{ userId: owner.id, agentId: agentAssignment.agentId }],
-  );
+  // HTPR-6428: userId unassign clears every row for that user, including the
+  // agent self-assign that shares the same userId.
+  assert.deepEqual(unassigned.json.body, []);
+  assert.equal(rows.length, 0);
   assert.equal(calls.transactions, 2);
   assert.equal(calls.fences, 2);
   assert.equal(calls.cancellations, 2);
 
+  rows.push({ ...agentAssignment });
   const toggledOn = await assign(owner, owner.id, task.id, undefined, undefined, {
     intent: "toggle",
   });
@@ -257,10 +284,17 @@ test("a human assignment coexists with an agent owned by the same user", async (
   assert.deepEqual(calls.activities, [
     "Assigned",
     "Unassigned",
+    "Unassigned",
     "Assigned",
     "Unassigned",
   ]);
   assert.deepEqual(calls.notificationDeletes, [
+    {
+      type: "Assigned",
+      taskId: task.id,
+      userId: owner.id,
+      agentId: agentAssignment.agentId,
+    },
     { type: "Assigned", taskId: task.id, userId: owner.id, agentId: null },
     { type: "Assigned", taskId: task.id, userId: owner.id, agentId: null },
   ]);
@@ -285,7 +319,10 @@ test("a human assignment coexists with an agent owned by the same user", async (
     [{ userId: owner.id, agentId: agentAssignment.agentId }],
   );
   assert.equal(calls.cancellations, 4);
-  assert.deepEqual(calls.fenceOptions.at(-1), { allowHumanOverride: false });
+  assert.deepEqual(calls.fenceOptions.at(-1), {
+    allowHumanOverride: false,
+    allowNonNormalLeaseAdoption: true,
+  });
 
   const staleToggle = await assign(
     owner,
@@ -318,7 +355,7 @@ test("a human assignment coexists with an agent owned by the same user", async (
   );
   assert.equal(projectOnly.status, 200);
 
-  rows.push(agentAssignment);
+  rows.push({ ...agentAssignment });
   const sectionOnly = await assign(
     owner,
     owner.id,

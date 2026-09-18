@@ -11,6 +11,7 @@ import {
 import {
   createImageAllowanceMiddleware,
   createSharedAllowanceMiddleware,
+  gatewayCatalogModelSlug,
 } from "@/app/api/ai/_lib/sharedAllowance";
 import {
   getAiModelDefinition,
@@ -31,6 +32,13 @@ import {
   normalizeCustomEndpointConfig,
   type CustomEndpointConfig,
 } from "@/lib/ai/customEndpoint";
+
+export class AiGatewayKeyRequiredError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "AiGatewayKeyRequiredError";
+  }
+}
 
 export { isCustomEndpointConfig };
 
@@ -61,6 +69,7 @@ export type AiGatewayTags = {
 export type GatewayTaggedProviderOptions = AiProviderOptions & {
   gateway: {
     tags: string[];
+    models?: string[];
   };
 };
 
@@ -96,7 +105,9 @@ export function gatewayFundingSourceForApiKey(
 }
 
 function gatewayLanguageModel(modelSlug: string, gatewayApiKey: string) {
-  const model = createGateway({ apiKey: gatewayApiKey })(modelSlug);
+  const model = createGateway({ apiKey: gatewayApiKey })(
+    gatewayCatalogModelSlug(modelSlug),
+  );
   const fundingSource = gatewayFundingSourceForApiKey(gatewayApiKey);
   return fundingSource !== "customer"
     ? wrapLanguageModel({
@@ -115,7 +126,9 @@ function gatewayLanguageModel(modelSlug: string, gatewayApiKey: string) {
 }
 
 function gatewayImageModel(modelSlug: string, gatewayApiKey: string) {
-  const model = createGateway({ apiKey: gatewayApiKey }).imageModel(modelSlug);
+  const model = createGateway({ apiKey: gatewayApiKey }).imageModel(
+    gatewayCatalogModelSlug(modelSlug),
+  );
   const fundingSource = gatewayFundingSourceForApiKey(gatewayApiKey);
   return fundingSource !== "customer"
     ? wrapImageModel({
@@ -214,7 +227,7 @@ export function resolveAiModel(
   }
 
   if (!directApiKey && gatewaySlug) {
-    throw new Error(
+    throw new AiGatewayKeyRequiredError(
       `A dedicated team AI Gateway key or direct BYOK key is required for ${provider} text inference.`,
     );
   }
@@ -277,7 +290,7 @@ export function resolveGatewayModel(
     return gatewayLanguageModel(modelSlug, teamKey);
   }
 
-  throw new Error(
+  throw new AiGatewayKeyRequiredError(
     `A dedicated team AI Gateway key is required to run "${modelSlug}".`,
   );
 }
@@ -293,7 +306,7 @@ export function resolveGatewayImageModel(
     return gatewayImageModel(modelSlug, teamKey);
   }
 
-  throw new Error(
+  throw new AiGatewayKeyRequiredError(
     `A dedicated team AI Gateway key is required to run "${modelSlug}".`,
   );
 }
@@ -322,7 +335,11 @@ export function gatewayProviderOptionsForModel(
     gatewayTags.push(`user:${tags.userId}`);
   }
 
-  return { gateway: { tags: gatewayTags } };
+  return {
+    gateway: {
+      tags: gatewayTags,
+    },
+  };
 }
 
 export function mergeAiProviderOptions(

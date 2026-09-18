@@ -11,6 +11,9 @@ import { IdempotencyInProgressError, normalizeIdempotencyKey, withIdempotency } 
 import { buildFieldError } from '@/lib/mcp/fieldError';
 import { requireRole } from '@/lib/mcp/agents/scopes';
 import { readJsonBody } from '@/lib/mcp/readJsonBody';
+import { isFeatureEnabled } from '@/lib/flags';
+import { HTPR_6561_DESCRIPTION_STRUCTURE_FLAG } from '@/lib/flags/keys';
+import { isAcceptedRichTextInput } from '@/utils/helperFunctions/markdownToHtml';
 
 export interface CreateTaskResponse {
     success: boolean;
@@ -85,6 +88,35 @@ export async function POST(request: NextRequest) {
         
         if (!validation.valid) {
             return validation.response;
+        }
+
+        if (body.description !== undefined && body.description.trim().length === 0) {
+            return NextResponse.json(
+                {
+                    ...buildFieldError('invalid_field', 'description', 'Description cannot be empty'),
+                    ...(dryRun && { valid: false }),
+                    ...(correlationId && { correlationId })
+                },
+                { status: 400 }
+            );
+        }
+        if (
+            body.description !== undefined &&
+            !isAcceptedRichTextInput(body.description, body.content_type) &&
+            !(await isFeatureEnabled(HTPR_6561_DESCRIPTION_STRUCTURE_FLAG, user.id))
+        ) {
+            return NextResponse.json(
+                {
+                    ...buildFieldError(
+                        'invalid_field',
+                        'description',
+                        'Description must be HTML or structural markdown. Plain text is not enabled.'
+                    ),
+                    ...(dryRun && { valid: false }),
+                    ...(correlationId && { correlationId })
+                },
+                { status: 400 }
+            );
         }
 
         const { project_id, title, description, section_id, priority, estimate, due_date, images, labels, parent_task_id, assignee_ids } = validation.data;

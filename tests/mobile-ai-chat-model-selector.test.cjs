@@ -22,7 +22,6 @@ let enabledProviders = [
   "alibaba",
   "zhipu",
   "google",
-  "xai",
 ];
 const pushedRoutes = [];
 
@@ -135,7 +134,6 @@ test("mobile model gauge offers the four approved choices and preserves guarded 
       "alibaba",
       "zhipu",
       "google",
-      "xai",
     ];
     pushedRoutes.length = 0;
     const lunaHigh = selectedOption("gpt-5.6-luna-high");

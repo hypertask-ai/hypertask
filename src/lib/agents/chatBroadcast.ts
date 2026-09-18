@@ -30,11 +30,6 @@ export async function broadcastChatSession(
   } catch (error) {
     console.warn("[agent-chat] participant fan-out lookup failed", sessionId, error);
   }
-  // ponytail: a participant row outlives the access that created it, so someone
-  // who left the team keeps getting pinged until the row is cleaned up. The
-  // ping carries nothing but the session id and their own refetch is authorized
-  // separately, so it leaks no content. Filter here if participant rows ever
-  // start being removed on access change.
   // Awaited, not fired and forgotten: the freeze this function exists to
   // survive would drop a send that had been started but not finished. One
   // failed channel must not take the others down with it, so each carries its

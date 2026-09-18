@@ -33,6 +33,36 @@ export interface MobileCommentViewportGeometry {
 const finiteNonNegative = (value: number) =>
   Number.isFinite(value) ? Math.max(0, value) : 0;
 
+/** Tab bar is h-16 plus the 1px top border. Used when --mobile-dock-h is 0px or short. */
+export const MOBILE_PRIMARY_DOCK_MIN_PX = 65;
+
+export const parseCssPixelLength = (value: string): number => {
+  const parsed = Number.parseFloat(value);
+  return Number.isFinite(parsed) ? Math.max(0, parsed) : 0;
+};
+
+/**
+ * Agent Chat used to keep the tab bar visible and pad above it. Full-screen
+ * Agent Chat (HTPR-6476) hides the dock, so only the keyboard inset matters.
+ * Callers add env(safe-area-inset-bottom) via CSS when the keyboard is closed.
+ */
+export const getAgentChatMobileBottomInset = ({
+  dockHeight,
+  keyboardInset,
+  hideDock = false,
+}: {
+  dockHeight: number;
+  keyboardInset: number;
+  hideDock?: boolean;
+}): number => {
+  if (finiteNonNegative(keyboardInset) > 0) return 0;
+  if (hideDock) return 0;
+  return Math.max(
+    finiteNonNegative(dockHeight),
+    MOBILE_PRIMARY_DOCK_MIN_PX,
+  );
+};
+
 export const getMobileVisualViewportGeometry = ({
   layoutViewportHeight,
   visualViewportHeight,

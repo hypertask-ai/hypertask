@@ -122,6 +122,12 @@
   border-color: #d2d2d8;
 }
 
+/* An inset outline leaves the existing pinned and selected comment borders intact. */
+.porcelain .comment-separation-card {
+  outline: 1px solid var(--border-light-gray-thin);
+  outline-offset: -1px;
+}
+
 .porcelain .section-container {
   border: 1px solid #e2e2e6;
 }

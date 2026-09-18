@@ -993,7 +993,8 @@ const AITaskWriterContainer: React.FC<
             prompt.setSelectionRange(prompt.value.length, prompt.value.length);
             hasFocusedMobilePrompt.current = true;
           }}
-          detent={isMobileCreateFlow ? "content-height" : "full-height"}
+          detent={isMobileCreateFlow ? "content" : "default"}
+          customScroller={!isMobileCreateFlow}
           sheetClassName="!z-[12000]"
           // dvh tracks the LAYOUT viewport, which does not shrink when the
           // on-screen keyboard opens, so the keyboard slid up over the writer's
@@ -1029,7 +1030,6 @@ const AITaskWriterContainer: React.FC<
           </div>
           {!isMobileCreateFlow && currentDisplayResponse && (
             <SheetScroller
-              draggableAt="top"
               className="flex-1 min-h-0 scrollbar-thin scrollbar-track-white-black-inverted scrollbar-thumb-white-black"
             >
               <div className="animate-fadeIn pr-1">{responseBodyEl}</div>

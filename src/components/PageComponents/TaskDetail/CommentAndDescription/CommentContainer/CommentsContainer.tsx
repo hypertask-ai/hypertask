@@ -19,6 +19,12 @@ import { DELIBERATE_DOUBLE_CLICK_MS } from "@/lib/constants/TaskDetail";
 import ReplyToComment from "./CommentOptions/ReplyToComment";
 import SwipeableCommentRow from "./SwipeableCommentRow";
 import { Reply } from "lucide-react";
+import { useFlag } from "@/hooks/useFlag";
+import {
+  HTPR_6514_COMMENT_LONG_PRESS_FLAG,
+  HTPR_6554_LIGHT_COMMENT_SEPARATION_FLAG,
+} from "@/lib/flags/keys";
+import { isCommentCreatedByUser } from "@/lib/htc/isCommentCreatedByUser";
 const CommentReactions = dynamic(() => import("./CommentReactions"));
 
 const CommentReadReceipts = () => {
@@ -78,6 +84,10 @@ const CommentsContainer = () => {
     useDescriptionAndCommentsContext();
   const [currentUser, _setCurrentUser] = useRecoilState(currentUserAtom);
   const [, setShowCommands] = useRecoilState(showCommandsAtom);
+  const commentLongPress = useFlag(HTPR_6514_COMMENT_LONG_PRESS_FLAG);
+  const lightCommentSeparationEnabled = useFlag(
+    HTPR_6554_LIGHT_COMMENT_SEPARATION_FLAG,
+  );
   const bind = useDoubleTap(handleDoubleTap, 200, {
     onSingleTap: handleSingleTap,
   });
@@ -123,8 +133,8 @@ const CommentsContainer = () => {
     handleDoubleTap();
   }
   const isCurrentUserCreator = useMemo(
-    () => comment.creator?.id === currentUser?.id,
-    [comment.creator?.id, currentUser?.id]
+    () => isCommentCreatedByUser(comment, currentUser?.id),
+    [comment, currentUser?.id]
   );
   const _mbl = useContext(MobileViewContext);
   const commentId = Number(comment.id);
@@ -145,7 +155,7 @@ const CommentsContainer = () => {
       <div
         className={`
         border-l-4 rounded
-        ${isStacked || comment.activity ? "" : " shadow-md "}
+        ${isStacked || comment.activity ? "" : " shadow-md bg-comment-description "}
         ${
           currentId === `comment-${i}` || currentId === `comment-${i}-input`
             ? `${
@@ -164,11 +174,15 @@ const CommentsContainer = () => {
                       pinned
                         ? "border-[#FFB980]"
                         : " border-comment-description-border"
-                    }  text-white-black bg-comment-description`
+                    }  text-white-black`
                   : "border-transparent hover:bg-active-elementBg "
               }`
         }
         outline-none  comment-container ${
+          lightCommentSeparationEnabled && !isStacked && !comment.activity
+            ? "comment-separation-card"
+            : ""
+        } ${
           isStacked || comment.activity ? "my-[4px] cursor-pointer" : "my-[8px]"
         }`}
         key={comment.id}
@@ -216,6 +230,59 @@ const CommentsContainer = () => {
       </>
     );
   } else {
+    const openCommentCommands = () => {
+      // Select the comment first: the menu labels come from commentIndex,
+      // but the action handlers resolve their target from currentId.
+      // Without this, actions (incl. delete) would hit the previously
+      // selected comment.
+      setCurrentId(`comment-${i}`);
+      setShowCommands({
+        show: true,
+        mode: CommandMode.Command,
+        commentIndex: i,
+      });
+    };
+    const commentBubble = (
+      <div
+        className={`
+                        rounded-sm
+                        ${styles.hellow}
+                        ${
+                          lightCommentSeparationEnabled
+                            ? "comment-separation-card"
+                            : ""
+                        }
+                        ${
+                          isCommentCreatedByUser(comment, currentUser?.id)
+                            ? "bg-self-comment"
+                            : // they look the same now but wasn't always t
+                              "bg-comment-description"
+                        }`}
+      >
+        <CommentText />
+
+        {comment.attachments && editState !== i && (
+          <AttachmentView
+            active={
+              currentId === `comment-${i}` ||
+              currentId === `comment-${i}-input`
+            }
+            attachments={comment.attachments}
+            setCarousalItems={setCarousalItems}
+            compact={true}
+          />
+        )}
+
+        <div className="flex items-center justify-start gap-2">
+          <CommentReactions />
+          <Reply size={14}
+            className={"text-emphasis mt-2 text-white-black"}
+            onClick={() => replyToCommentHandler(i)}
+           strokeWidth={1.75}/>
+        </div>
+        <CommentReadReceipts />
+      </div>
+    );
     return !comment.activity ? (
       <div {...bind} className={`py-1`} id={`comment-${comment.id}`}>
         {isFirstNewComment ? (
@@ -226,55 +293,15 @@ const CommentsContainer = () => {
           </div>
         ) : null}
         <CommentCreatedBy />
-        <SwipeableCommentRow
-          onMore={() => {
-            // Select the swiped comment first: the menu labels come from
-            // commentIndex, but the action handlers resolve their target from
-            // currentId. Without this, actions (incl. delete) would hit the
-            // previously selected comment.
-            setCurrentId(`comment-${i}`);
-            setShowCommands({
-              show: true,
-              mode: CommandMode.Command,
-              commentIndex: i,
-            });
-          }}
-        >
-          <div
-            className={`
-                        rounded-sm
-                        ${styles.hellow}
-                        ${
-                          comment.creator?.id === currentUser?.id
-                            ? "bg-self-comment"
-                            : // they look the same now but wasn't always t
-                              "bg-comment-description"
-                        }`}
-          >
-            <CommentText />
-
-            {comment.attachments && editState !== i && (
-              <AttachmentView
-                active={
-                  currentId === `comment-${i}` ||
-                  currentId === `comment-${i}-input`
-                }
-                attachments={comment.attachments}
-                setCarousalItems={setCarousalItems}
-                compact={true}
-              />
-            )}
-
-            <div className="flex items-center justify-start gap-2">
-              <CommentReactions />
-              <Reply size={14}
-                className={"text-emphasis mt-2 text-white-black"}
-                onClick={() => replyToCommentHandler(i)}
-               strokeWidth={1.75}/>
-            </div>
-            <CommentReadReceipts />
-          </div>
-        </SwipeableCommentRow>
+        {commentLongPress ? (
+          <SwipeableCommentRow useLongPress onMore={openCommentCommands}>
+            {commentBubble}
+          </SwipeableCommentRow>
+        ) : (
+          <SwipeableCommentRow onMore={openCommentCommands}>
+            {commentBubble}
+          </SwipeableCommentRow>
+        )}
       </div>
     ) : (
       <CommentTaskActivity />

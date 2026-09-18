@@ -3,10 +3,12 @@ const GLOBAL_SHORTCUT_BLOCKED_ROUTES = [
   "/learn",
   "/share",
   "/new",
+  "/qa/login",
 ] as const;
 
 const GLOBAL_CREATE_TASK_BLOCKED_ROUTES = [
   "/login",
+  "/qa/login",
   "/project",
   "/detail",
   "/onboarding",
@@ -28,6 +30,11 @@ export const areGlobalShortcutsEnabled = (
 export const isGlobalCreateTaskShortcutEnabled = (
   pathname: string | null | undefined,
 ) => !startsWithAny(pathname, GLOBAL_CREATE_TASK_BLOCKED_ROUTES);
+
+export const shouldOpenGlobalCreateTask = (
+  pathname: string | null | undefined,
+  myTasksShortcutsEnabled: boolean,
+) => myTasksShortcutsEnabled || !pathname?.startsWith("/my-tasks");
 
 type GlobalCreateTaskKeyboardEvent = Pick<
   KeyboardEvent,

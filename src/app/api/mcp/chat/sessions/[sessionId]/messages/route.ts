@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { checkMcpRateLimit, validateMcpAuth } from '@/lib/mcp/auth'
 import prisma from '@/lib/prisma'
 import type { Prisma } from '@prisma/client'
-import { AGENT_CHAT_STOPPED_MESSAGE, AGENT_CHAT_STOP_AND_TIMEOUT_FEATURE_FLAG, AGENT_CHAT_TIMEOUT_MESSAGE, NONTERMINAL_AGENT_RUN_STATUSES, isAgentChatSystemMessage } from '@/lib/agentRuns/model'
+import { AGENT_CHAT_SYSTEM_MESSAGES, isAgentChatSystemMessage } from '@/lib/agentRuns/model'
 import { broadcastChatSession } from '@/lib/agents/chatBroadcast'
 import { listAgentChatActivity } from '@/lib/agents/agentChatActivity'
 import { activityContextMessages, asksForAgentActivity } from '@/lib/agents/chatActivityFeed'
@@ -74,7 +74,7 @@ export async function GET(
       await prisma.chatMessage.findMany({
         where: {
           sessionId: session.id,
-          NOT: { role: 'assistant', isDelivered: false, content: { in: [AGENT_CHAT_TIMEOUT_MESSAGE, AGENT_CHAT_STOPPED_MESSAGE] } },
+          NOT: { role: 'assistant', isDelivered: false, content: { in: [...AGENT_CHAT_SYSTEM_MESSAGES] } },
         },
         orderBy: { createdAt: 'desc' },
         take: TRANSCRIPT_LIMIT,
@@ -190,7 +190,6 @@ export async function POST(
       )
     }
     const session = access.session
-    const exactChatReply = await isFeatureEnabled(AGENT_CHAT_STOP_AND_TIMEOUT_FEATURE_FLAG, session.userId)
 
     const serialize = ({ id, role, content, createdAt, ticketProposal }: {
       id: string
@@ -301,16 +300,10 @@ export async function POST(
     try {
       message = await prisma.$transaction(async (tx) => {
         // This update is first on purpose: it takes the ChatSession row lock, so
-        // the turn-validity checks below cannot race a concurrent reply or stop.
+        // a reply cannot race a timeout, cancellation, or another reply. Session
+        // access above already proves this token belongs to the addressed agent.
         await tx.chatSession.update({ where: { id: session.id }, data: { updatedAt: new Date() } })
-        if (exactChatReply && !(await tx.agentRun.findFirst({ where: { agentId: session.agentId!, chatSessionId: session.id, status: { in: NONTERMINAL_AGENT_RUN_STATUSES }, chatPromptMessageId: replyToMessageId }, select: { id: true } }))) throw new Error('This chat turn is no longer active')
         if (await tx.chatMessage.findUnique({ where: { replyToMessageId } })) throw Object.assign(new Error('Concurrent reply'), { code: 'P2002' })
-        if (exactChatReply) {
-          // Behind the flag only: without it a reply to an older turn still
-          // stores, exactly as it did before this ticket.
-          const latest = await tx.chatMessage.findFirst({ where: { sessionId: session.id }, orderBy: [{ createdAt: 'desc' }, { id: 'desc' }], select: { id: true, role: true } })
-          if (latest?.id !== replyToMessageId || latest.role !== 'human') throw new Error('This chat turn is no longer active')
-        }
         const created = await tx.chatMessage.create({
           data: {
             sessionId: session.id,
@@ -332,7 +325,6 @@ export async function POST(
         return created
       })
     } catch (error: any) {
-      if (error?.message === 'This chat turn is no longer active') return NextResponse.json({ success: false, error: error.message }, { status: 409 })
       // Lost a race against a concurrent reply with the same idempotency key.
       if (error?.code !== 'P2002') throw error
       const existing = await prisma.chatMessage.findUnique({

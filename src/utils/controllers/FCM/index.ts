@@ -1,10 +1,8 @@
 import axios from "axios";
 import fcmConfig from "@/utils/api/fcmConfig";
 import { FCMDeviceInfo } from "@/models/model";
-import admin from "firebase-admin";
-import { Message } from "firebase-admin/messaging";
+import type { Message } from "firebase-admin/messaging";
 import prisma from "@/lib/prisma";
-import { getFirebaseServiceAccount } from "@/lib/firebaseServiceAccount";
 import { resolveNotificationChannelPreference } from "@/utils/controllers/notifications/shouldNotify";
 import { NotificationType } from "@prisma/client";
 
@@ -161,14 +159,6 @@ export const filterDevicesByPreferences = async ({
     return userPreferenceMap;
 }
 
-// Initialize Firebase Admin SDK
-if (!admin.apps.length) {
-    const serviceAccount = getFirebaseServiceAccount();
-    admin.initializeApp({
-      credential: admin.credential.cert(serviceAccount),
-    });
-  }
-
 // FCM rejects any message whose data payload exceeds 4KB. The whole comment was
 // packed into data.comment, so a long comment meant no push at all, and the
 // rejection was logged as an ordinary error while the caller reported success
@@ -176,6 +166,14 @@ if (!admin.apps.length) {
 // app fetches the real comment when it opens the link.
 const FCM_DATA_LIMIT_BYTES = 4096;
 const FCM_COMMENT_TEXT_BUDGET = 1500;
+
+const sendFirebaseMessage = async (message: Message) => {
+  const [{ getMessaging }, { getFirebaseAdmin }] = await Promise.all([
+    import("firebase-admin/messaging"),
+    import("@/lib/firebase-admin"),
+  ]);
+  return getMessaging(getFirebaseAdmin()).send(message);
+};
 
 const fcmCommentPayload = (comment: any, creator: any) => {
   const text = typeof comment?.text === "string" ? comment.text : "";
@@ -277,7 +275,7 @@ export const sendDataOnlyFcm = async (
     await deliveryOptions?.beforeDelivery?.();
     let deliveryResolved = false;
     try {
-      const response = await admin.messaging().send(body);
+      const response = await sendFirebaseMessage(body);
       console.log("🚀 ~ sendDataOnlyFcm ~ response:", response);
       deliveryResolved = true;
     } catch (error) {
@@ -395,7 +393,7 @@ export const sendDataNewCommentFCM = async(props:newCommentFCM) => {
         payload.data = { ...(props.data || {}), click_action: link };
         
         try {
-            const response = await admin.messaging().send(payload);
+            const response = await sendFirebaseMessage(payload);
             console.log("🚀 ~ sendDataNewCommentFCM ~ response:", response)
             
         } catch (error) {

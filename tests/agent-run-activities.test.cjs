@@ -176,7 +176,7 @@ function fakeDatabase(initialRuns = [], initialActivities = []) {
             .filter(
               (run) =>
                 run.taskId === runWhere.taskId &&
-                run.ownerId === runWhere.agent.userId &&
+                (!runWhere.agent || run.ownerId === runWhere.agent.userId) &&
                 matchesTaskAccess(run, runWhere.task),
             )
             .map(({ id }) => id),
@@ -708,24 +708,24 @@ test("task activity refreshes Agent Chat without creating a chat message", async
   assert.equal(harness.db.messages.length, 0);
 });
 
-test("task activity feed only returns flag-enabled runs owned by an authorized viewer", async () => {
+test("task activity feed returns all agent runs on an authorized task", async () => {
   const ownedRun = runRow();
-  const otherRun = runRow({ id: "run-2", ownerId: 7 });
+  const otherAgentRun = runRow({ id: "run-2", ownerId: 7 });
   const inaccessibleRun = runRow({ id: "run-3", projectOwnerId: 7 });
   const activities = [
     activityRow(),
-    activityRow({ id: "activity-2", runId: otherRun.id }),
+    activityRow({ id: "activity-2", runId: otherAgentRun.id }),
     activityRow({ id: "activity-3", runId: inaccessibleRun.id }),
     activityRow({ id: "activity-4", type: "RESPONSE" }),
   ];
   const harness = loadService({
-    runs: [ownedRun, otherRun, inaccessibleRun],
+    runs: [ownedRun, otherAgentRun, inaccessibleRun],
     activities,
   });
 
   assert.deepEqual(
     await harness.service.listTaskAgentRunActivities(6, 42),
-    [model.serializeAgentRunActivity(activities[0])],
+    activities.slice(0, 2).map(model.serializeAgentRunActivity),
   );
 
   const disabled = loadService({
@@ -1375,6 +1375,9 @@ function atomicCommentHarness() {
         Object.assign(activity, data);
         return { count: 1 };
       },
+    },
+    agent: {
+      findUnique: async () => ({ displayName: "Agent" }),
     },
     comment: {
       create: async ({ data }) => {

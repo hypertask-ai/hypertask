@@ -5,6 +5,7 @@ import { IAgent, IUser } from "@/models/model";
 import { getActiveFiltersFromProject } from "@/utils/helperFunctions/Views/ViewsHelperFunctions";
 import { useRecoilValue } from "@/lib/state";
 import type { CalendarUserSummary } from "@/lib/calendarSync/contract";
+import { useMyTasksFilterController } from "@/lib/myTasksFilterContext";
 import type { UserSelectionEntry } from "@/components/Modals/UserSelectionModal";
 
 export const useCreatedByFilter = ({
@@ -14,10 +15,11 @@ export const useCreatedByFilter = ({
 }: {
     createdByHandler: (param?: IUser | CalendarUserSummary) => Promise<void>;
     calendarMembers?: CalendarUserSummary[];
-    view: "Kanban" | "Calendar";
+    view: "Kanban" | "Calendar" | "MyTasks";
 }) => {
     const currentProject = useRecoilValue(currentProjectAtom);
     const calendarTaskFilters = useRecoilValue(calendarTaskFiltersAtom);
+    const myTasksFilters = useMyTasksFilterController();
     const { data: membersAndOwner } = useGetAllMembersForAssign(
         ["created-by-filter", currentProject?.id ?? -1],
         currentProject?.id!
@@ -29,7 +31,7 @@ export const useCreatedByFilter = ({
     const allUsers = useMemo(() => {
         const uniqueUsersMap = new Map<number, IUser | CalendarUserSummary>();
 
-        if (view === "Calendar" && calendarMembers?.length) {
+        if ((view === "Calendar" || view === "MyTasks") && calendarMembers?.length) {
             for (const user of calendarMembers) {
                 if (user) uniqueUsersMap.set(user.id, user);
             }
@@ -50,8 +52,11 @@ export const useCreatedByFilter = ({
         if (view === "Calendar") {
             return calendarTaskFilters.createdBy;
         }
+        if (view === "MyTasks") {
+            return myTasksFilters?.activeFilters.addedFilters.find((x) => x.type === "CreatedBy")?.searchPayload.flatMap((x: { id: number }) => x.id) ?? [];
+        }
         return activeFilters?.searchPayload.flatMap((x: { id: number }) => x.id) ?? [];
-    }, [view, calendarTaskFilters.createdBy, activeFilters]);
+    }, [view, calendarTaskFilters.createdBy, activeFilters, myTasksFilters?.activeFilters]);
 
     const onSelectHandler = (
         selectedUsers?: UserSelectionEntry | UserSelectionEntry[],

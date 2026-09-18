@@ -3,12 +3,18 @@ const hiddenShellPaths = [
   "/interactive-onboarding",
   "/learn",
   "/login",
+  "/qa/login",
   "/new",
   "/onboarding",
   "/settings",
   "/share",
   "/trial-plan-confirmation",
 ];
+
+export const isAgentChatPath = (pathname: string | null) =>
+  Boolean(
+    pathname === "/agents/chat" || pathname?.startsWith("/agents/chat/"),
+  );
 
 export const shouldShowMobileTabBar = (pathname: string | null) =>
   Boolean(

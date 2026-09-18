@@ -183,11 +183,16 @@ export async function resolveChatTeamContext({
         team: { select: { aiProviderSettings: true } },
       },
     });
-    if (!project?.teamId) return null;
-    return teamContext({
-      id: project.teamId,
-      aiProviderSettings: project.team?.aiProviderSettings,
-    });
+    if (project?.teamId) {
+      return teamContext({
+        id: project.teamId,
+        aiProviderSettings: project.team?.aiProviderSettings,
+      });
+    }
+    // An agent with no board of its own still has to bill someone. Fall
+    // through to the session board or the user's strongest team. Explicit
+    // invalid page context still fails closed below, so we never pick an
+    // unrelated account team just because the requested board was wrong.
   }
 
   // Invalid request context must not select an unrelated account team. Native

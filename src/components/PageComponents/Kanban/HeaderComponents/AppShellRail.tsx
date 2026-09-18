@@ -300,6 +300,7 @@ const AppShellRail = ({
               icon={<IconoirSearch size={18} strokeWidth={1.5} />}
               tooltipPosition={{ left: tooltipLeft, bottom: -8 }}
               keyCombination={["6"]}
+              fromProject={boardProject.id}
             />
           ) : (
             <button

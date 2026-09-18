@@ -28,7 +28,7 @@ interface IProps {
     const [currentUser,_] = useRecoilState(currentUserAtom);
 
     // =================== react query
-    const {data:favoritesTQ}  = useGetAllFavorites(currentUser.UserSettingId, currentUser.id)
+    const {data:favoritesTQ}  = useGetAllFavorites(currentUser.UserSettingId)
     const {data:allTeamsTQ} = useGetAllTeamsMinimal(currentUser.id)
 
     // =================== refs

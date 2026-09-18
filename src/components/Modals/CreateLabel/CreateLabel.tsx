@@ -121,7 +121,7 @@ const CreateLabel: React.FC<Props> = ({
     isRefetching,
     refetch,
   } = useGetAllProjectLabels(
-    mode === "CreateTaskGlobally"
+    taskIds?.length || mode === "CreateTaskGlobally"
       ? currentProject?.id
       : inViewObject.taskProjectId
   );

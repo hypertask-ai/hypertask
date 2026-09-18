@@ -289,7 +289,6 @@ export async function handlePatchAgentRequest(
     }
     const result = await setOwnedAgentVisibility(agentId, ctx.user.id, body.visibility)
     if (!result.ok) {
-      // Notably the 409 refusing TEAM sharing while no provider key is enabled.
       return NextResponse.json(
         { success: false, error: result.error },
         { status: result.status }
@@ -312,6 +311,7 @@ export async function handlePatchAgentRequest(
     return NextResponse.json({
       success: true,
       agent: { ...describe(row), visibility: result.visibility },
+      ...(result.warning ? { warning: result.warning } : {}),
     })
   }
   if (!wantsLaunch && !wantsArchive && !wantsRename) {

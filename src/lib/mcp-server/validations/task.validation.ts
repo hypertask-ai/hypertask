@@ -16,6 +16,7 @@ import {
   sortOrderSchema,
   createSearchPaginationSchema,
 } from './common/pagination';
+import { type ListQuerySchemaOptions, withListQuerySchema } from './common/listQuery';
 import {
   priorityFilterNoNoneSchema,
   priorityFilterSchema,
@@ -28,7 +29,6 @@ import {
   labelsAssignSchema,
 } from './common/filters';
 import { inlineAttachmentsSchema } from './attachment.validation';
-import { hasMarkdownStructure } from '../../../utils/helperFunctions/markdownToHtml';
 
 const config = getConfig();
 
@@ -279,79 +279,95 @@ export function getGetTasksBaseSchema() {
 /**
  * Schema for list_tasks tool input
  */
-export function getListTasksInputSchema() {
-  return z
-    .object({
-      project_id: z.number().int().positive().optional(),
-      /** Prefer this for filtering; aligns with GET /mcp/tasks?section_id= when the API expects a column id. */
-      section_id: z.coerce.number().int().positive().optional(),
-      section: z.string().min(1).optional(),
-      assigned_to: assignedToFilterSchema,
-      priority: priorityFilterNoNoneSchema,
-      has_due_date: z.boolean().optional(),
-      due_date_before: z.string().datetime().optional(),
-      due_date_after: z.string().datetime().optional(),
-      status: statusFilterSchema,
-      labels: labelsFilterSchema,
-      created_by: z.number().int().positive().optional(),
-      updated_since: z.string().datetime().optional(),
-      created_since: z.string().datetime().optional(),
-      has_comments: z.boolean().optional(),
-      has_attachments: z.boolean().optional(),
-      search: z.string().min(1).optional(),
-    })
-    .merge(paginationSchema)
+const listTasksBaseSchema = z
+  .object({
+    project_id: z.number().int().positive().optional(),
+    /** Prefer this for filtering; aligns with GET /mcp/tasks?section_id= when the API expects a column id. */
+    section_id: z.coerce.number().int().positive().optional(),
+    section: z.string().min(1).optional(),
+    assigned_to: assignedToFilterSchema,
+    priority: priorityFilterNoNoneSchema,
+    has_due_date: z.boolean().optional(),
+    due_date_before: z.string().datetime().optional(),
+    due_date_after: z.string().datetime().optional(),
+    status: statusFilterSchema,
+    labels: labelsFilterSchema,
+    created_by: z.number().int().positive().optional(),
+    updated_since: z.string().datetime().optional(),
+    created_since: z.string().datetime().optional(),
+    has_comments: z.boolean().optional(),
+    has_attachments: z.boolean().optional(),
+    search: z.string().min(1).optional(),
+  })
+  .merge(paginationSchema)
+
+function finishListTasksSchema<T extends z.ZodObject<z.ZodRawShape>>(schema: T) {
+  return schema
     .extend({
       sort_by: sortBySchema,
       sort_order: sortOrderSchema,
     })
-    .strict();
+    .strict()
 }
 
-export const ListTasksInputSchema = getListTasksInputSchema();
+export function getListTasksInputSchema(options?: ListQuerySchemaOptions) {
+  return finishListTasksSchema(withListQuerySchema(listTasksBaseSchema, options))
+}
+
+export const ListTasksInputSchema = finishListTasksSchema(
+  withListQuerySchema(listTasksBaseSchema, { listQuery: true }),
+)
 export type ListTasksInput = z.infer<typeof ListTasksInputSchema>;
 
 /**
  * Schema for search_tasks tool input (basic)
  */
-export function getSearchTasksInputSchema() {
-  return z
-    .object({
-      query: z
-        .string()
-        .max(config.limits.searchQueryMaxLength, `Search query cannot exceed ${config.limits.searchQueryMaxLength} characters`),
-      board_id: z.number().int().positive().optional(),
-      project_id: z.number().int().positive().optional(),
-    })
-    .merge(createSearchPaginationSchema(config.limits.searchLimitMax, config.limits.searchLimitDefault))
-    .strict();
+const searchTasksBaseSchema = z
+  .object({
+    query: z
+      .string()
+      .max(config.limits.searchQueryMaxLength, `Search query cannot exceed ${config.limits.searchQueryMaxLength} characters`),
+    board_id: z.number().int().positive().optional(),
+    project_id: z.number().int().positive().optional(),
+  })
+  .merge(createSearchPaginationSchema(config.limits.searchLimitMax, config.limits.searchLimitDefault))
+
+export function getSearchTasksInputSchema(options?: ListQuerySchemaOptions) {
+  return withListQuerySchema(searchTasksBaseSchema, options, { omitQuery: true }).strict()
 }
 
-export const SearchTasksInputSchema = getSearchTasksInputSchema();
+export const SearchTasksInputSchema = withListQuerySchema(searchTasksBaseSchema, { listQuery: true }, {
+  omitQuery: true,
+}).strict()
 export type SearchTasksInput = z.infer<typeof SearchTasksInputSchema>;
 
 /**
  * Enhanced schema for search_tasks tool input with additional filters
  */
-export function getEnhancedSearchTasksInputSchema() {
-  return z
-    .object({
-      query: z
-        .string()
-        .max(config.limits.searchQueryMaxLength, `Search query cannot exceed ${config.limits.searchQueryMaxLength} characters`),
-      board_id: z.number().int().positive().optional(),
-      project_id: z.number().int().positive().optional(),
-      assigned_to: assignedToSearchFilterSchema,
-      priority: priorityFilterSchema,
-      section: z.string().min(1).optional(),
-      has_due_date: z.boolean().optional(),
-      status: statusFilterSchema,
-    })
-    .merge(createSearchPaginationSchema(config.limits.searchLimitMax, config.limits.searchLimitDefault))
-    .strict();
+const enhancedSearchTasksBaseSchema = z
+  .object({
+    query: z
+      .string()
+      .max(config.limits.searchQueryMaxLength, `Search query cannot exceed ${config.limits.searchQueryMaxLength} characters`),
+    board_id: z.number().int().positive().optional(),
+    project_id: z.number().int().positive().optional(),
+    assigned_to: assignedToSearchFilterSchema,
+    priority: priorityFilterSchema,
+    section: z.string().min(1).optional(),
+    has_due_date: z.boolean().optional(),
+    status: statusFilterSchema,
+  })
+  .merge(createSearchPaginationSchema(config.limits.searchLimitMax, config.limits.searchLimitDefault))
+
+export function getEnhancedSearchTasksInputSchema(options?: ListQuerySchemaOptions) {
+  return withListQuerySchema(enhancedSearchTasksBaseSchema, options, { omitQuery: true }).strict()
 }
 
-export const EnhancedSearchTasksInputSchema = getEnhancedSearchTasksInputSchema();
+export const EnhancedSearchTasksInputSchema = withListQuerySchema(
+  enhancedSearchTasksBaseSchema,
+  { listQuery: true },
+  { omitQuery: true },
+).strict()
 export type EnhancedSearchTasksInput = z.infer<typeof EnhancedSearchTasksInputSchema>;
 
 /**
@@ -416,6 +432,7 @@ export function getUpdateTaskBaseSchema() {
       title: z.string().min(1).optional(),
       description: z
         .string()
+        .trim()
         .min(1)
         .optional()
         .describe('Task description. HTML or structural markdown; content_type can explicitly select either format.'),
@@ -447,15 +464,6 @@ export function getUpdateTaskInputSchema() {
   const baseSchema = getUpdateTaskBaseSchema();
 
   return baseSchema
-    .refine(
-      (data) =>
-        data.description === undefined ||
-        isAcceptedRichText(data.description, data.content_type),
-      {
-        message: 'Description must be HTML or structural markdown such as a list, emphasis, code, or link. Plain text is not accepted.',
-        path: ['description'],
-      }
-    )
     .refine(
       (data) => {
         // At least one identification method must be provided
@@ -635,31 +643,6 @@ export const AssignUserInputSchema = getAssignUserInputSchema();
 export type AssignUserInput = z.infer<typeof AssignUserInputSchema>;
 
 /**
- * Check if text appears to be HTML format
- * Simple heuristic: checks for HTML tags
- */
-function isHtmlFormat(text: string): boolean {
-  if (!text || typeof text !== 'string') {
-    return false;
-  }
-  
-  // Check for HTML tags (basic pattern)
-  const htmlTagPattern = /<[a-z][\s\S]*>/i;
-  return htmlTagPattern.test(text.trim());
-}
-
-function isAcceptedRichText(
-  text: string,
-  contentType?: 'html' | 'markdown'
-): boolean {
-  return (
-    contentType === 'markdown' ||
-    isHtmlFormat(text) ||
-    (contentType === undefined && hasMarkdownStructure(text))
-  );
-}
-
-/**
  * Schema for create_task tool input
  * Requires project_id and title, optional description, section, priority, estimate
  */
@@ -674,6 +657,8 @@ export function getCreateTaskInputSchema() {
       title: z.string().min(1).max(500).describe('The title of the task'),
       description: z
         .string()
+        .trim()
+        .min(1)
         .optional()
         .describe('Task description. HTML or structural markdown; content_type can explicitly select either format.'),
       content_type: taskContentTypeSchema,
@@ -699,16 +684,7 @@ export function getCreateTaskInputSchema() {
       assignee: z.array(z.number().int().positive()).optional(),
       attachments: inlineAttachmentsSchema,
     })
-    .strict()
-    .refine(
-      (data) =>
-        data.description === undefined ||
-        isAcceptedRichText(data.description, data.content_type),
-      {
-        message: 'Description must be HTML or structural markdown such as a list, emphasis, code, or link. Plain text is not accepted.',
-        path: ['description'],
-      }
-    );
+    .strict();
 }
 
 export const CreateTaskInputSchema = getCreateTaskInputSchema();

@@ -5,10 +5,14 @@ import { getProjectMembers } from "@/utils/controllers/projects/getProjectMember
 import prisma from "@/lib/prisma";
 import { addMemberController } from "@/pages/api/invite/createInviteLink";
 import { addAgentToBoard } from "@/utils/controllers/agents/boardMembers";
+import { addExistingUserToProject } from "@/utils/controllers/members/addExistingUserToProject";
+import isProjectAdmin from "@/utils/controllers/projects/isProjectAdmin";
 import { readJsonBody } from "@/lib/mcp/readJsonBody";
-
-const UUID_PATTERN =
-  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+import {
+  mcpAddedMemberResponse,
+  mcpPendingInviteResponse,
+  resolveMcpAddMemberTarget,
+} from "@/lib/mcp/projects/addMemberTarget";
 
 /**
  * GET /api/mcp/projects/:projectId/members
@@ -141,7 +145,7 @@ export async function POST(request: NextRequest, props: { params: Promise<{ proj
     if (access.error) {
       const message =
         access.error.status === 403
-          ? "User does not have permission to view members of this project"
+          ? "User does not have permission to add members to this project"
           : access.error.message;
       return NextResponse.json(
         {
@@ -152,40 +156,36 @@ export async function POST(request: NextRequest, props: { params: Promise<{ proj
       );
     }
 
-    const parsedBody = await readJsonBody<{ userToAdd?: unknown }>(request)
-    if (!parsedBody.ok) return parsedBody.response
-    const body = parsedBody.body
-    const { userToAdd } = body;
-
-    const isNonEmptyString = (val: any): val is string =>
-      typeof val === "string" && val.trim().length > 0;
-
-    const isPositiveInteger = (val: any): val is number =>
-      typeof val === "number" && Number.isInteger(val) && val > 0;
-
-    // Allow userToAdd to be either a valid email string, positive integer ID, or agent UUID
-    if (
-      !userToAdd ||
-      !(
-        (isNonEmptyString(userToAdd) &&
-          (/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(userToAdd) ||
-            UUID_PATTERN.test(userToAdd))) ||
-        isPositiveInteger(userToAdd)
-      )
-    ) {
+    // Match board remove-member: owner or project Admin may change membership.
+    // validateProjectAccess alone only proves read/use access.
+    if (!(await isProjectAdmin(user.id, projectId))) {
       return NextResponse.json(
         {
           success: false,
-          error:
-            "userToAdd must be a non-empty email string, a positive integer user ID, or an agent UUID",
+          error: "Only the board owner or a project admin can add members",
+        },
+        { status: 403 }
+      );
+    }
+
+    const parsedBody = await readJsonBody<{ userToAdd?: unknown }>(request)
+    if (!parsedBody.ok) return parsedBody.response
+    const body = parsedBody.body
+    const target = resolveMcpAddMemberTarget(body.userToAdd);
+
+    if (target.kind === "invalid") {
+      return NextResponse.json(
+        {
+          success: false,
+          error: target.reason,
           details: { field: "userToAdd", code: "invalid_type" },
         },
         { status: 400 }
       );
     }
 
-    if (isNonEmptyString(userToAdd) && UUID_PATTERN.test(userToAdd)) {
-      const result = await addAgentToBoard(projectId, userToAdd, ctx.user.id);
+    if (target.kind === "agent") {
+      const result = await addAgentToBoard(projectId, target.agentId, ctx.user.id);
 
       if (!result.ok) {
         return NextResponse.json(
@@ -201,6 +201,7 @@ export async function POST(request: NextRequest, props: { params: Promise<{ proj
         {
           success: true,
           projectId,
+          status: "added",
           agent: {
             id: result.member.agent.id,
             displayName: result.member.agent.displayName,
@@ -210,44 +211,40 @@ export async function POST(request: NextRequest, props: { params: Promise<{ proj
       );
     }
 
-    let emailToAdd: string | null = null;
-
-    if (isNonEmptyString(userToAdd)) {
-      // If userToAdd is a valid email string
-      emailToAdd = userToAdd;
-    } else if (isPositiveInteger(userToAdd)) {
-      // If userToAdd is a positive integer, treat as user ID and look up the email
-      const foundUser = await prisma.user.findUnique({
-        where: { id: userToAdd },
-        select: { email: true }
-      });
-      if (foundUser && typeof foundUser.email === "string" && foundUser.email.length > 0) {
-        emailToAdd = foundUser.email;
-      } else {
+    if (target.kind === "user_id") {
+      // HTPR-6408: numeric IDs are direct adds. Email invites stay consent-based.
+      const result = await addExistingUserToProject(projectId, target.userId);
+      if (!result.ok) {
         return NextResponse.json(
           {
             success: false,
-            error: "User ID does not exist or does not have a valid email",
-            details: { field: "userToAdd", code: "user_not_found" }
+            error: result.message,
           },
-          { status: 404 }
+          { status: result.status }
         );
       }
-    }
-
-    if (!emailToAdd) {
       return NextResponse.json(
-        {
-          success: false,
-          error: "Could not resolve a valid email address to add",
-          details: { field: "userToAdd", code: "missing_email" },
-        },
-        { status: 400 }
+        mcpAddedMemberResponse(projectId, result.outcome, result.member),
+        { status: 200 }
       );
     }
 
-    
-    //Alright so this is where we are going to basically run the function to add a user to the project.
+    const emailToAdd = target.email;
+    const existingEmailUser = await prisma.user.findFirst({
+      where: { email: emailToAdd },
+      select: { id: true, displayName: true, email: true },
+    });
+    const existingEmailMember = existingEmailUser
+      ? await prisma.member.findFirst({
+          where: {
+            projectId,
+            userId: existingEmailUser.id,
+            agentId: null,
+          },
+          select: { id: true },
+        })
+      : null;
+
     const result = await addMemberController(ctx.user.id, projectId, [emailToAdd]);
 
     if (result.status !== 200) {
@@ -260,12 +257,55 @@ export async function POST(request: NextRequest, props: { params: Promise<{ proj
       );
     }
 
+    const pendingInvite = await prisma.invite.findFirst({
+      where: {
+        projectId,
+        expired: false,
+        emails: { has: emailToAdd },
+      },
+      orderBy: { invitedAt: "desc" },
+      select: { id: true },
+    });
+
+    if (pendingInvite) {
+      return NextResponse.json(
+        mcpPendingInviteResponse(projectId, pendingInvite.id),
+        { status: 200 }
+      );
+    }
+
+    // Email belonged to an existing team member; addMemberController added them.
+    if (existingEmailUser) {
+      const member =
+        existingEmailMember ??
+        (await prisma.member.findFirst({
+          where: { projectId, userId: existingEmailUser.id, agentId: null },
+          select: { id: true },
+        }));
+      if (member) {
+        return NextResponse.json(
+          mcpAddedMemberResponse(
+            projectId,
+            existingEmailMember ? "already_member" : "added",
+            {
+              id: member.id,
+              userId: existingEmailUser.id,
+              displayName: existingEmailUser.displayName,
+              email: existingEmailUser.email,
+            },
+          ),
+          { status: 200 }
+        );
+      }
+    }
+
     return NextResponse.json(
       {
-        success: true,
-        projectId,
+        success: false,
+        error:
+          "Invite did not create a pending invite or add the user as a member",
       },
-      { status: 200 }
+      { status: 500 }
     );
   } catch (err) {
     console.error("[MCP Add Project Member] Error:", err);

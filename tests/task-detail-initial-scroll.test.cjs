@@ -200,3 +200,26 @@ test("the task detail virtualizer leaves row-resize scroll compensation to the b
     "tanstack's JS scroll correction must stay off; native scroll anchoring owns re-measure compensation, otherwise opening a modal (Share task) re-scrolls the window and the task detail jumps"
   );
 });
+
+test("task detail isolates HypertasksCommands in Suspense so Share cannot remount the page (HTPR-6277)", () => {
+  const source = fs.readFileSync(
+    path.join(root, "src/app/detail/[...slug]/TaskDetailComp.tsx"),
+    "utf8"
+  );
+  const commandsMount = sourceBetween(
+    source,
+    "{!embedded && showCommands.show && (",
+    "{showShortucts && <KeyboardShortcuts />}"
+  );
+
+  assert.match(
+    source,
+    /import\s*\{[^}]*\bSuspense\b[^}]*\}\s*from\s*"react"/,
+    "Suspense must be imported so command-modal chunk loads stay local"
+  );
+  assert.match(
+    commandsMount,
+    /<Suspense\s+fallback=\{null\}>\s*<HypertasksCommands[\s\S]*?<\/Suspense>/,
+    "HypertasksCommands must sit in a null-fallback Suspense; otherwise ShareTaskModal's dynamic() import bubbles into page.tsx Suspense, the task detail falls back to Loading..., and scroll jumps to the top"
+  );
+});

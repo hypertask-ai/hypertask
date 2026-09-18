@@ -6,6 +6,7 @@ import NativeEmoji from "../Common/NativeEmoji";
 import MobileReactorsSheet from "../Common/MobileReactorsSheet";
 import { MobileViewContext } from "@/lib/contexts/mobileContext";
 import { createPortal } from "react-dom";
+import { getFixedOverlayPosition } from "@/lib/emojiPickerPosition";
 
 // eslint-disable-next-line react/display-name
 const EmojiComponent = memo(
@@ -83,10 +84,19 @@ const EmojiComponent = memo(
     const calculateTooltipPosition = () => {
       if (tooltipTrigger.current) {
         const rect = tooltipTrigger.current.getBoundingClientRect();
-
+        const position = getFixedOverlayPosition(rect, {
+          height: 40,
+          width: 220,
+          viewportHeight: window.innerHeight,
+          viewportWidth: window.innerWidth,
+          gap: 0,
+        });
         setPickerPosition({
-          top: rect.top + window.scrollY,
-          left: rect.left + window.scrollX + 22.5,
+          top: position.top,
+          left: Math.max(
+            8,
+            Math.min(rect.left + 22.5, window.innerWidth - 220 - 8),
+          ),
         });
       }
     };
@@ -148,12 +158,12 @@ const EmojiComponent = memo(
           />
         )}
 
-        {!_mbl && isHovered &&
+        {!_mbl && isHovered && portalRoot &&
           createPortal(
             <div // This is your .emoji-picker-wrapper equivalent
               className="emoji-component-tooltip" // Use a more descriptive class name
               style={{
-                position: "absolute", // Position relative to the document body
+                position: "fixed",
                 top: pickerPosition.top,
                 left: pickerPosition.left,
                 zIndex: 9999, // Ensure it's on top of everything
@@ -169,7 +179,7 @@ const EmojiComponent = memo(
                 />
               </div>
             </div>,
-            document.getElementById("portal-root")!
+            portalRoot
           )}
       </>
     );

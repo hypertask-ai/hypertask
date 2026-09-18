@@ -10,6 +10,15 @@ const routeSource = fs.readFileSync(
   "utf8"
 );
 
+function loadToErrorMessage() {
+  const jiti = require("jiti")(__filename, {
+    interopDefault: true,
+    alias: { "@": path.join(__dirname, "..", "src") },
+  });
+  return jiti(path.join(__dirname, "../src/lib/api/errorMessage.ts"))
+    .toErrorMessage;
+}
+
 function loadErrorFormatters(logs = []) {
   const start = routeSource.indexOf("function errorMessage");
   assert.notEqual(start, -1, "errorMessage must exist in the chat route");
@@ -23,8 +32,9 @@ function loadErrorFormatters(logs = []) {
   return new Function(
     "console",
     "z",
+    "toErrorMessage",
     `${javascript}; return { errorMessage, userFacingErrorMessage, requestErrorMessage };`
-  )(logger, z);
+  )(logger, z, loadToErrorMessage());
 }
 
 function loadChatRequestSchema() {
@@ -108,6 +118,23 @@ test("model-facing errorMessage still returns non-Prisma errors verbatim", () =>
   assert.equal(errorMessage(new Error(message)), message);
 });
 
+test("handled chat errors unwrap non-Error provider payloads", () => {
+  const { errorMessage } = loadErrorFormatters();
+
+  assert.equal(
+    errorMessage({
+      error: { message: "AI Gateway rejected google/gemini-3.5-flash-lite" },
+      statusCode: 404,
+    }),
+    "AI Gateway rejected google/gemini-3.5-flash-lite",
+  );
+  assert.match(
+    routeSource,
+    /await reportHandledChatError\(error, "model-stream", \{\s*model: selected\.resolvedModelId,\s*provider: selected\.usageProvider,\s*\}\)/,
+  );
+  console.log("chat error unwrap verification passed");
+});
+
 test("request validation names an empty message without leaking Zod detail", () => {
   const logs = [];
   const { requestErrorMessage } = loadErrorFormatters(logs);
@@ -169,7 +196,7 @@ test("model-selection errors remain user-actionable and pass through unchanged",
 test("expected plan-access guidance is not reported as a product bug", () => {
   assert.match(
     routeSource,
-    /if \(error instanceof Error && error\.name === "AiPlanAccessError"\) return;/
+    /if \(\s*error instanceof Error &&\s*\(error\.name === "AiPlanAccessError" \|\|\s*error\.name === "AiGatewayKeyRequiredError"\)\s*\) \{\s*return;\s*\}/
   );
 
   const planGateSource = fs.readFileSync(

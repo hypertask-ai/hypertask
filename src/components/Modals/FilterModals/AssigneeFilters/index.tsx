@@ -19,7 +19,7 @@ type AssigneeOption = IUser | CalendarUserSummary | IAgent;
 interface IProps {
   closeHandler: (param?: AssigneeOption) => Promise<void>;
   calendarAssignees?: CalendarUserSummary[];
-  view: "Kanban" | "Calendar";
+  view: "Kanban" | "Calendar" | "MyTasks";
 }
 
 const AssigneeFilters = ({ closeHandler, calendarAssignees, view }: IProps) => {

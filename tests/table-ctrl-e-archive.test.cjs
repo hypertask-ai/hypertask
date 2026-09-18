@@ -22,7 +22,7 @@ test("Table view owns Ctrl/Cmd+E and archives only the selected task once", () =
   assert.notEqual(shortcutStart, -1, "the table archive shortcut must exist");
   assert.match(
     ctrlEBranch,
-    /\(e\.ctrlKey \|\| e\.metaKey\) && e\.key\.toLowerCase\(\) === "e"/,
+    /\(e\.ctrlKey \|\| e\.metaKey\) && e\.keyCode === KeyCodes\.E/,
   );
 
   const preventDefaultAt = ctrlEBranch.indexOf("e.preventDefault()");
@@ -35,6 +35,7 @@ test("Table view owns Ctrl/Cmd+E and archives only the selected task once", () =
   assert.ok(preventDefaultAt >= 0, "Edge's native Ctrl+E action must be suppressed");
   assert.ok(repeatGuardAt >= 0, "held-key repeats must be ignored");
   assert.match(tableView, /from "@\/lib\/keyboard\/archiveShortcutGuard"/);
+  assert.match(tableView, /from "@\/lib\/constants\/keyboard-handler"/);
   assert.ok(selectedRowAt >= 0, "the selected table row must supply the task");
   assert.ok(archiveAt >= 0, "the selected task must be archived");
   assert.ok(
@@ -51,4 +52,25 @@ test("Table archive supports both board rows and cross-board My Tasks rows", () 
   assert.match(archiveHelper, /removeFromListWithStatus\(/);
   assert.match(archiveHelper, /globalAPIHandlers\.archiveTask\(task\.id, "Archive"\)/);
   assert.match(archiveHelper, /router\.refresh\(\)/);
+  // My Tasks has no board cache: hide the row immediately so Ctrl+E is visible
+  // before the server refresh returns (HTPR-6445).
+  assert.match(archiveHelper, /setExcludedTaskIds/);
+  assert.match(tableView, /excludedTaskIds/);
+  assert.match(
+    tableView,
+    /Drop optimistic exclusions once the server list no longer contains them/,
+  );
+});
+
+test("Table rows take DOM focus on hover so Ctrl+E is not blocked by leftover chat focus", () => {
+  assert.match(tableView, /focusRowElement/);
+  assert.match(tableView, /tabIndex=\{-1\}/);
+  assert.match(
+    tableView,
+    /Kanban cards take DOM focus on hover[\s\S]*HTPR-6445/,
+  );
+  const mouseEnterStart = tableView.indexOf("const handleMouseEnter");
+  const mouseEnterEnd = tableView.indexOf("const handleMouseLeave", mouseEnterStart);
+  const mouseEnter = tableView.slice(mouseEnterStart, mouseEnterEnd);
+  assert.match(mouseEnter, /focusRowElement\(row\.task\.id\)/);
 });

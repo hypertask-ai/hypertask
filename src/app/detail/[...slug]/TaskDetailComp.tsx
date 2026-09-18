@@ -41,6 +41,7 @@ import axios from "axios";
 import DescriptionAndCommentsProvider from "@/lib/contexts/TaskDetail/DescriptionProvider";
 
 import {
+  Suspense,
   useCallback,
   useContext,
   useEffect,
@@ -1515,26 +1516,26 @@ const TaskDetail: React.FC<TaskDetailProps> = ({
 
   const handleReactToCommentFromHTC = useCallback(() => {
     const commentIndex = getCurrentCommentIndex();
-    if (!commentIndex) return;
+    if (commentIndex == null) return;
     toggleEmojiPicker(commentIndex);
   }, [currentId, comments]);
 
   const handleReplyCommentFromHTC = useCallback(() => {
     const commentIndex = getCurrentCommentIndex();
-    if (!commentIndex) return;
+    if (commentIndex == null) return;
     replyToCommentHandler(commentIndex);
   }, [currentId, comments]);
 
   const handleEditCommentFromHTC = useCallback(() => {
     const commentIndex = getCurrentCommentIndex();
-    if (!commentIndex) return;
+    if (commentIndex == null) return;
     editCommentHandler(commentIndex);
   }, [currentId, comments]);
 
   const handleStarCommentFromHTC = useCallback(
     (type: ViewVisibility) => {
       const commentIndex = getCurrentCommentIndex();
-      if (!commentIndex) return;
+      if (commentIndex == null) return;
       console.log(
         "🚀 ~ handleStarCommentFromHTC ~ commentIndex:",
         comments[commentIndex]
@@ -1547,7 +1548,7 @@ const TaskDetail: React.FC<TaskDetailProps> = ({
   //callback for creating task from comment from htc
   const createTaskFromCommentHTC = useCallback(() => {
     const commentIndex = getCurrentCommentIndex(true);
-    if (!commentIndex) return;
+    if (commentIndex == null) return;
 
     const linkhtml = taskDetailConfig.urls.templates.commentLink(
       currentTask?.projectId!,
@@ -2351,11 +2352,18 @@ const TaskDetail: React.FC<TaskDetailProps> = ({
 
   const content = (
     <>
+      {/* HTPR-6277: command modals (ShareTaskModal, etc.) are next/dynamic and
+          suspend on first open. Without a local boundary that suspend bubbles
+          into page.tsx's Suspense, the whole task detail swaps to "Loading...",
+          document height collapses, and window scroll jumps to 0. Homepage and
+          TableView already isolate commands the same way. */}
       {!embedded && showCommands.show && (
-        <HypertasksCommands
-          callbackHandler={callback}
-          contextOptions={commandContextOptions}
-        />
+        <Suspense fallback={null}>
+          <HypertasksCommands
+            callbackHandler={callback}
+            contextOptions={commandContextOptions}
+          />
+        </Suspense>
       )}
       {showShortucts && <KeyboardShortcuts />}
       <>

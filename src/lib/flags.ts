@@ -4,12 +4,17 @@ import type {
 } from "@prisma/client";
 import prisma from "@/lib/prisma";
 import { getSessionUser } from "@/lib/auth/getSessionUser";
-import { AGENT_CHAT_STOP_AND_TIMEOUT_FEATURE_FLAG } from "@/lib/agentRuns/model";
+import {
+  AGENT_CHAT_PARKED_REPLY_FLAG,
+  AGENT_CHAT_STOP_AND_TIMEOUT_FEATURE_FLAG,
+} from "@/lib/agentRuns/model";
+
 import {
   AGENT_CHAT_BRIEF_FLAG,
   AGENT_CHAT_SKILLS_FLAG,
   AGENT_CHAT_TICKET_CONFIRM_FLAG,
   AUTO_TASK_DESCRIPTIONS_FLAG,
+  HTPR_6157_AUTO_DESCRIPTION_FLAG,
   COLUMN_ALL_VIEWS_FLAG,
   CORE_ACTIONS_SMOKE_FLAG,
   HEIC_ATTACHMENTS_FLAG,
@@ -17,20 +22,60 @@ import {
   AGENT_VISIBILITY_FLAG,
   FEATURE_FLAG_DETAILS_FLAG,
   FIGMA_CONNECT_FLAG,
+  GOOGLE_CALENDAR_FLAG,
   FLAG_REMOVAL_COUNTDOWN_FLAG,
   CONFIRMED_PROPOSAL_HEADING_FLAG,
   LAZY_EMOJI_LIST_FLAG,
+  LOCAL_WRITING_ASSISTANCE_FLAG,
   FLAG_SHIP_DATE_CLUSTER_FLAG,
   FLAG_SORT_FILTER_FLAG,
   FLAG_TICKET_TITLE_FLAG,
   INBOX_ARCHIVE_CLUSTER_FLAG,
   PAGE_MENTIONS_FLAG,
   SHORTCUT_NUDGES_FLAG,
+  SHARED_AGENT_CHAT_FLAG,
   MANAGER_LOOP_ACTIVITY_FLAG,
   MY_TASKS_PRIORITY_FILTER_FLAG,
   HTPR_4228_ADMIN_ONLY_TIME_REPORTS_FLAG,
+  HTPR_4857_ADD_TO_SLACK_FLAG,
+  HTPR_6283_AGENT_CHAT_LIVE_SORT_FLAG,
   HTPR_6284_AGENT_MENTION_ROUTING_FLAG,
+  HTPR_6320_AI_OBSERVABILITY_FLAG,
+  HTPR_6407_MOBILE_AGENT_CHAT_LAYOUT_FLAG,
+  HTPR_6476_MOBILE_AGENT_CHAT_FULLSCREEN_FLAG,
   POSTHOG_ERROR_ALERT_FLAG,
+  SCOPED_BOARD_REFETCH_FLAG,
+  MY_TASKS_CROSS_BOARD_PRIORITY_SORT_FLAG,
+  MY_TASKS_SHORTCUTS_WIDTH_FLAG,
+  HTPR_6372_SEARCH_RANKING_FLAG,
+  MY_TASKS_VIEWS_FLAG,
+  MY_TASKS_BULK_SELECTION_FLAG,
+  MY_TASKS_FILTER_PARITY_FLAG,
+  MY_TASKS_TIME_GROUP_FLAG,
+  MY_TASKS_TABLE_COLUMNS_FLAG,
+  MY_TASKS_SCOPES_FLAG,
+  MY_TASKS_LIVE_UPDATES_FLAG,
+  MY_TASKS_QUICK_ADD_FLAG,
+  MY_TASKS_SNOOZE_FLAG,
+  MY_TASKS_OVERDUE_BADGES_FLAG,
+  HTPR_6427_ROW_SHORTCUTS_FLAG,
+  HTPR_6514_COMMENT_LONG_PRESS_FLAG,
+  HTPR_6516_AGENT_ATTRIBUTION_FLAG,
+  HTPR_6512_SEED_TEAM_AGENT_FLAG,
+  HTPR_6533_MCP_CLIENT_EVAL_FLAG,
+  HTPR_6532_STATELESS_MCP_FLAG,
+  HTPR_6530_MCP_LIST_QUERY_FLAG,
+  HTPR_6531_DEFERRED_MCP_TOOLS_FLAG,
+  HTPR_6473_GET_AGENT_FLAG,
+  HTPR_6536_QA_LOGIN_FLAG,
+  HTPR_6551_QUIET_RUN_ACTIVITY_FLAG,
+  HTPR_6555_IDLE_COMMENT_MIC_FLAG,
+  HTPR_6553_AGENT_CHAT_POLLING_FLAG,
+  HTPR_6554_LIGHT_COMMENT_SEPARATION_FLAG,
+  HTPR_6557_AGENT_ROOMS_FLAG,
+  HTPR_6559_KEEP_DIRECT_TASK_OPEN_FLAG,
+  HTPR_6556_MOBILE_DESCRIPTION_FIRST_FLAG,
+  HTPR_6561_DESCRIPTION_STRUCTURE_FLAG,
 } from "@/lib/flags/keys";
 
 // Re-exported so server code keeps importing keys from here. Client components must
@@ -49,12 +94,148 @@ const FEATURE_FLAG_QA_USER = {
   email: "valentin@hypertask.ai",
 } as const;
 
+// Keep the OFF database row so older deployments also fail closed, while the current app hides
+// and rejects the retired flag until those deployments are outside the rollback window.
+const RETIRED_FEATURE_FLAG_KEYS = new Set(["hyfa-43-factory-owner-preview"]);
+
 const FEATURE_FLAG_DEFINITIONS = [
+  {
+    key: HTPR_6561_DESCRIPTION_STRUCTURE_FLAG,
+    shippedOn: "2026-09-18",
+    description:
+      "Preserves description headings, paragraphs, lists, and bold text when AI Chat edits a task, and stores bare API text as editor paragraphs.",
+  },
+  {
+    key: HTPR_6554_LIGHT_COMMENT_SEPARATION_FLAG,
+    shippedOn: "2026-09-18",
+    description:
+      "Adds a quiet outline around posted comments in the Porcelain theme so adjacent comments stay distinct on phone and desktop.",
+  },
+  {
+    key: HTPR_6556_MOBILE_DESCRIPTION_FIRST_FLAG,
+    shippedOn: "2026-09-18",
+    description:
+      "Focuses mobile task creation on one description box, with collapsed title and properties plus raw and Task Writer save actions.",
+  },
+  {
+    key: HTPR_6559_KEEP_DIRECT_TASK_OPEN_FLAG,
+    shippedOn: "2026-09-18",
+    description:
+      "Keeps a task open after Ctrl or Command plus Enter unless it was opened through the Inbox cycle.",
+  },
+  {
+    key: HTPR_6557_AGENT_ROOMS_FLAG,
+    shippedOn: "2026-09-18",
+    description:
+      "Adds one shared Agent Chat room per board, with named bot handoffs, a three-turn bot limit, Stop, and a visible daily turn budget.",
+  },
+  {
+    key: HTPR_6555_IDLE_COMMENT_MIC_FLAG,
+    shippedOn: "2026-09-17",
+    description:
+      "Shows the microphone on the closed task-detail comment bar so you can start dictating with one tap instead of tapping the text first.",
+  },
+  {
+    key: HTPR_6553_AGENT_CHAT_POLLING_FLAG,
+    shippedOn: "2026-09-17",
+    description:
+      "Lets a recently heartbeating agent runtime receive Agent Chat through polling when it has no webhook, and labels that chat as polling.",
+  },
+  {
+    key: HTPR_6551_QUIET_RUN_ACTIVITY_FLAG,
+    shippedOn: "2026-09-17",
+    description:
+      "Lets agent runtimes open and close ticket runs, and keeps passive run updates behind the task history toggle while questions stay visible.",
+  },
+  {
+    key: HTPR_6536_QA_LOGIN_FLAG,
+    shippedOn: "2026-09-16",
+    description:
+      "Shows a QA-only email and password sign-in page so an outside test robot can open the real app behind login. The page and route exist only when the server has the QA login secrets.",
+  },
+  {
+    key: HTPR_6533_MCP_CLIENT_EVAL_FLAG,
+    shippedOn: "2026-09-16",
+    description:
+      "Shows the MCP versus CLI eval table on the agents dashboard: success rate, tokens, wall time, and tool calls for Claude, Cursor, and Codex.",
+  },
+  {
+    key: HTPR_6516_AGENT_ATTRIBUTION_FLAG,
+    shippedOn: "2026-09-16",
+    description:
+      "Shows the agent that made a comment, move, assignment or label change by the name it acted under, including after that agent is deleted. Without it a retired agent reads as Private agent.",
+  },
+  {
+    key: HTPR_6530_MCP_LIST_QUERY_FLAG,
+    shippedOn: "2026-09-16",
+    description:
+      "Lets MCP list and search tools take query, filter, sort, fields, limit, and cursor so one call can return only the rows and columns the client asked for.",
+  },
+  {
+    key: HTPR_6473_GET_AGENT_FLAG,
+    shippedOn: "2026-09-16",
+    description:
+      "Lets hypertask agents get load one owned agent's mission text, boards, created time, and revoked state.",
+  },
+  {
+    key: HTPR_6531_DEFERRED_MCP_TOOLS_FLAG,
+    shippedOn: "2026-09-16",
+    description:
+      "MCP tools/list sends one short line per tool on connect. Full schemas load through hypertask_describe_tool, and hypertask_search_tools finds a tool by name.",
+  },
+  {
+    key: HTPR_6532_STATELESS_MCP_FLAG,
+    shippedOn: "2026-09-16",
+    description:
+      "Serves MCP over stateless Streamable HTTP: each request carries its own bearer token, session ids are ignored, and any server instance can answer any call.",
+  },
+  {
+    key: HTPR_6512_SEED_TEAM_AGENT_FLAG,
+    shippedOn: "2026-09-16",
+    description:
+      "When Owner or QA opens Agent Chat or lists a team that has no live agent they can see, seed a Hyper AI agent on a board of that team so the roster is not empty.",
+  },
+  {
+    key: HTPR_6514_COMMENT_LONG_PRESS_FLAG,
+    shippedOn: "2026-09-15",
+    description:
+      "On a phone, press and hold a comment to open the Command Center with comment actions at the top and Edit first. Swipe on a comment is off so it does not fight the task swipe.",
+  },
+  {
+    key: HTPR_6427_ROW_SHORTCUTS_FLAG,
+    shippedOn: "2026-09-14",
+    description:
+      "Lets the selected table or My Tasks row use the same task property shortcuts as a Kanban card without opening the task.",
+  },
+  {
+    key: HTPR_6320_AI_OBSERVABILITY_FLAG,
+    shippedOn: "2026-09-09",
+    description:
+      "Records every AI Chat turn in PostHog AI observability (user, model, tokens, time taken, and failures). No chat text is stored.",
+  },
   {
     key: HTPR_4228_ADMIN_ONLY_TIME_REPORTS_FLAG,
     shippedOn: "2026-09-09",
     description:
       "In time reports, plain board members see only their own logged time; board owners and admins still see everyone's entries and keep the user filter.",
+  },
+  {
+    key: HTPR_4857_ADD_TO_SLACK_FLAG,
+    shippedOn: "2026-09-09",
+    description:
+      "Enables the public /add-to-slack page and the Slack Marketplace install resume path (callback without signed state sends visitors to login, then Settings completes the link). Flip to Everyone before the Slack Marketplace submission.",
+  },
+  {
+    key: LOCAL_WRITING_ASSISTANCE_FLAG,
+    shippedOn: "2026-09-09",
+    description:
+      "Capitalizes the first letter typed in a paragraph or after sentence punctuation when the browser does not do it itself.",
+  },
+  {
+    key: MY_TASKS_CROSS_BOARD_PRIORITY_SORT_FLAG,
+    shippedOn: "2026-09-10",
+    description:
+      "Sorting My Tasks by priority interleaves tasks from every board by priority level, instead of only reordering the tasks within each board's group.",
   },
   {
     key: HTPR_6284_AGENT_MENTION_ROUTING_FLAG,
@@ -69,10 +250,22 @@ const FEATURE_FLAG_DEFINITIONS = [
       "Ends AI Chat turns that run out of time with a clear, saved failure message instead of a silent disconnect, and shows the server's real refusal instead of 'Connection lost'.",
   },
   {
+    key: GOOGLE_CALENDAR_FLAG,
+    shippedOn: "2026-09-08",
+    description:
+      "Lets each user connect Google Calendar and keep assigned tasks with due dates in a dedicated Hypertask calendar.",
+  },
+  {
     key: AGENT_VISIBILITY_FLAG,
     shippedOn: "2026-09-08",
     description:
       "Lets the CLI and MCP change an agent's visibility between PRIVATE and TEAM, like the web dashboard already can.",
+  },
+  {
+    key: SHARED_AGENT_CHAT_FLAG,
+    shippedOn: "2026-09-08",
+    description:
+      "Shares one agent conversation across authorized teammates, with private unread position and drafts for each person.",
   },
   {
     key: HEIC_ATTACHMENTS_FLAG,
@@ -166,6 +359,18 @@ const FEATURE_FLAG_DEFINITIONS = [
     description: "Keeps the full Agent Chat visible on mobile when the keyboard is open.",
   },
   {
+    key: HTPR_6407_MOBILE_AGENT_CHAT_LAYOUT_FLAG,
+    shippedOn: "2026-09-11",
+    description:
+      "Pins the Agent Chat composer on mobile, keeps one message scroller, shows the agent name in the top bar, and makes mic dictation use the agent's board.",
+  },
+  {
+    key: HTPR_6476_MOBILE_AGENT_CHAT_FULLSCREEN_FLAG,
+    shippedOn: "2026-09-14",
+    description:
+      "On mobile Agent Chat with an agent open: hide the app top bar and bottom nav, slim the header to back plus name, and reuse the AI chat TipTap composer, mic, and send.",
+  },
+  {
     key: "htpr-6287-agent-chat-roster-status",
     shippedOn: "2026-09-08",
     description: "Shows real per-agent status (active, idle, out of tokens, inactive) in the Agent Chat sidebar.",
@@ -189,6 +394,18 @@ const FEATURE_FLAG_DEFINITIONS = [
     key: "htpr-6141-ai-first-task-writer",
     shippedOn: "2026-09-04",
     description: "Opens the AI task writer from a column plus instead of the classic new-task form.",
+  },
+  {
+    key: "htpr-6363-task-writer-research",
+    shippedOn: "2026-09-11",
+    description:
+      "Restores board research in the AI task writer: related tickets, Done-style examples, open questions, and refine search from user text.",
+  },
+  {
+    key: HTPR_6157_AUTO_DESCRIPTION_FLAG,
+    shippedOn: "2026-09-09",
+    description:
+      "Shows automatic Task Writer drafts in the desktop create-task modal after a title pause.",
   },
   {
     key: "htpr-6175-quick-entry-cards",
@@ -228,6 +445,12 @@ const FEATURE_FLAG_DEFINITIONS = [
     shippedOn: "2026-09-06",
     description:
       "Lets people stop stuck Agent Chat turns and ends unanswered turns after five minutes.",
+  },
+  {
+    key: AGENT_CHAT_PARKED_REPLY_FLAG,
+    shippedOn: "2026-09-09",
+    description:
+      "Replies in the thread with one line saying an agent is parked when no runtime is connected to its chat, instead of leaving the message unanswered.",
   },
   {
     key: PAGE_MENTIONS_FLAG,
@@ -288,6 +511,90 @@ const FEATURE_FLAG_DEFINITIONS = [
     shippedOn: "2026-09-09",
     description:
       "Adds a priority filter to the My Tasks page. Picking one or more priority levels shows only those tasks; the choice resets when the page reloads.",
+  },
+  {
+    key: HTPR_6283_AGENT_CHAT_LIVE_SORT_FLAG,
+    shippedOn: "2026-09-08",
+    description:
+      "Sorts the Agent Chat list by most recent chat message instead of a fixed order, and reorders live as messages arrive.",
+  },
+  {
+    key: SCOPED_BOARD_REFETCH_FLAG,
+    shippedOn: "2026-09-12",
+    description:
+      "On a live board change, reloads only the board that changed instead of every board in the account, so updates appear with one request. Other boards' names still refresh when the tab reconnects or you move between boards.",
+  },
+  {
+    key: MY_TASKS_SHORTCUTS_WIDTH_FLAG,
+    shippedOn: "2026-09-14",
+    description:
+      "Enables global shortcuts on My Tasks, remembers the selected board in the URL, and uses the full available page width.",
+  },
+  {
+    key: HTPR_6372_SEARCH_RANKING_FLAG,
+    shippedOn: "2026-09-14",
+    description:
+      "Hides search results that do not contain every word you typed, and when you open search from a board, shows that board's matches first.",
+  },
+  {
+    key: MY_TASKS_VIEWS_FLAG,
+    shippedOn: "2026-09-14",
+    description:
+      "Adds personal saved views to My Tasks with board, column, task filters, done visibility, and sorting.",
+  },
+  {
+    key: MY_TASKS_BULK_SELECTION_FLAG,
+    shippedOn: "2026-09-16",
+    description:
+      "Adds Inbox-style multi-select on My Tasks with bulk archive, assign, label, and move to column.",
+  },
+  {
+    key: MY_TASKS_FILTER_PARITY_FLAG,
+    shippedOn: "2026-09-14",
+    description:
+      "Opens the same Kanban filter menu on My Tasks, including match all/any, clear all, and the filters that were still missing.",
+  },
+  {
+    key: MY_TASKS_TIME_GROUP_FLAG,
+    shippedOn: "2026-09-14",
+    description:
+      "Groups My Tasks by due time (Overdue, Today, This week, Later, No due date) by default, with board grouping still available per saved view.",
+  },
+  {
+    key: MY_TASKS_TABLE_COLUMNS_FLAG,
+    shippedOn: "2026-09-15",
+    description:
+      "Lets you choose which My Tasks table columns show, and saves that choice in the active My Tasks view.",
+  },
+  {
+    key: MY_TASKS_SCOPES_FLAG,
+    shippedOn: "2026-09-15",
+    description:
+      "Lets My Tasks show tasks you created, were mentioned in, or watch, not only tasks assigned to you. Multi-select, saved per view.",
+  },
+  {
+    key: MY_TASKS_LIVE_UPDATES_FLAG,
+    shippedOn: "2026-09-15",
+    description:
+      "Updates My Tasks rows live when another tab, the CLI, or an agent changes a task, without reloading the page.",
+  },
+  {
+    key: MY_TASKS_QUICK_ADD_FLAG,
+    shippedOn: "2026-09-15",
+    description:
+      "Adds a quick-add row at the top of My Tasks that creates a task on the view's default board, assigned to you.",
+  },
+  {
+    key: MY_TASKS_SNOOZE_FLAG,
+    shippedOn: "2026-09-15",
+    description:
+      "On My Tasks, H opens the existing Remind Me picker. The chosen date hides the row here and in Inbox until it returns to both.",
+  },
+  {
+    key: MY_TASKS_OVERDUE_BADGES_FLAG,
+    shippedOn: "2026-09-15",
+    description:
+      "Shows a red overdue count next to each My Tasks view tab and board split tab. Hidden when the count is zero. Counts follow the filters that are on.",
   },
   // ponytail: `shippedOn` is the calendar day the key first reached production, written by hand
   // because git history is not readable at runtime. Backfilled with
@@ -426,6 +733,7 @@ export async function featureFlagCandidateUserIds(
   key: string,
   db: FeatureFlagDatabase = prisma,
 ): Promise<number[] | null> {
+  if (RETIRED_FEATURE_FLAG_KEYS.has(key)) return [];
   const row = await db.featureFlag.findUnique({ where: { key }, select: { mode: true } });
   const mode = row?.mode ?? DEFAULT_FEATURE_FLAG_MODE;
   if (mode === "EVERYONE") return null;
@@ -440,6 +748,7 @@ export async function isFeatureEnabled(
   userId: number,
   db: FeatureFlagDatabase = prisma,
 ): Promise<boolean> {
+  if (RETIRED_FEATURE_FLAG_KEYS.has(key)) return false;
   const row = await db.featureFlag.findUnique({
     where: { key },
     select: { mode: true },
@@ -458,10 +767,12 @@ export async function isFeatureEnabled(
 export async function listFeatureFlagModes(
   options: { includeTicketTitles?: boolean } = {},
 ): Promise<FeatureFlagRow[]> {
-  const stored = await prisma.featureFlag.findMany({
-    select: FEATURE_FLAG_ROW_SELECT,
-    orderBy: { key: "asc" },
-  });
+  const stored = (
+    await prisma.featureFlag.findMany({
+      select: FEATURE_FLAG_ROW_SELECT,
+      orderBy: { key: "asc" },
+    })
+  ).filter(({ key }) => !RETIRED_FEATURE_FLAG_KEYS.has(key));
   const ticketTitleByNumber = options.includeTicketTitles
     ? await loadFeatureFlagTicketTitles([
         ...new Set([...FEATURE_FLAG_KEYS, ...stored.map(({ key }) => key)]),
@@ -511,6 +822,9 @@ export async function setFeatureFlagMode(
   if (!validFeatureFlagKey(key) || !FEATURE_FLAG_MODES.includes(mode)) {
     throw new FeatureFlagInputError("Invalid feature flag");
   }
+  if (RETIRED_FEATURE_FLAG_KEYS.has(key)) {
+    throw new FeatureFlagInputError("Unknown feature flag");
+  }
   const declared = (FEATURE_FLAG_KEYS as readonly string[]).includes(key);
 
   const row = await prisma.$transaction(async (tx) => {
@@ -549,6 +863,7 @@ export async function setFeatureFlagMode(
  */
 export async function setFeatureFlagKeep(key: string, keep: boolean): Promise<FeatureFlagRow> {
   if (!validFeatureFlagKey(key)) throw new FeatureFlagInputError("Invalid feature flag");
+  if (RETIRED_FEATURE_FLAG_KEYS.has(key)) throw new FeatureFlagInputError("Unknown feature flag");
   const declared = (FEATURE_FLAG_KEYS as readonly string[]).includes(key);
   const stored = await prisma.featureFlag.findUnique({ where: { key }, select: { key: true } });
   if (!declared && !stored) throw new FeatureFlagInputError("Unknown feature flag");

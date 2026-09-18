@@ -256,9 +256,7 @@ export default function PostHogAnalytics({
     const installAttempt = ++webVitalsInstallAttemptRef.current;
     webVitalsInstallStateRef.current = "installing";
     try {
-      const { onCLS, onFCP, onFID, onINP, onLCP, onTTFB } = await import(
-        "web-vitals"
-      );
+      const { onCLS, onFCP, onINP, onLCP, onTTFB } = await import("web-vitals");
       const latestIdentity = latestIdentityRef.current;
       if (
         installAttempt !== webVitalsInstallAttemptRef.current ||
@@ -283,7 +281,6 @@ export default function PostHogAnalytics({
       webVitalsInstallStateRef.current = "installed";
       onCLS(reportWebVital);
       onFCP(reportWebVital);
-      onFID(reportWebVital);
       onINP(reportWebVital);
       onLCP(reportWebVital);
       onTTFB(reportWebVital);

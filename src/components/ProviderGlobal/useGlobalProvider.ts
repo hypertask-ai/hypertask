@@ -18,7 +18,6 @@ const useGlobalProvider = (secondaryStartupEnabled = true) => {
   const [currentUser, ___] = useRecoilState(currentUserAtom);
   const { data: favoritesTQ } = useGetAllFavorites(
     currentUser?.UserSettingId ?? null,
-    undefined,
     { enabled: secondaryStartupEnabled },
   );
   const [favorites, setFavorites] = useState<IFavorites[]>([]);
@@ -26,7 +25,8 @@ const useGlobalProvider = (secondaryStartupEnabled = true) => {
   const searchParams = useSearchParams();
 
   useEffect(() => {
-    if (favorites && pathname?.startsWith("/project")) {
+    // HTPR-6401: a poisoned query cache once handed findIndex a number.
+    if (Array.isArray(favorites) && pathname?.startsWith("/project")) {
       const currId = searchParams?.get("id");
       const currIndex = favorites.findIndex(
         (project: { id: { toString: () => string } }) =>
@@ -38,7 +38,7 @@ const useGlobalProvider = (secondaryStartupEnabled = true) => {
 
   // ------- on favorites update
   useEffect(() => {
-    setFavorites(favoritesTQ);
+    setFavorites(Array.isArray(favoritesTQ) ? favoritesTQ : []);
   }, [favoritesTQ]);
 
   useEffect(() => {

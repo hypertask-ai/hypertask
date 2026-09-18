@@ -424,6 +424,8 @@ export interface IAssignees {
   agent?: IAgent;
   agentAssignerId?: string;
   agentAssigner?: IAgent;
+  /** Never serialized to clients; use ITask.currentUserSnoozeUntil. */
+  snoozeUntil?: string | null;
 }
 
 export interface IAgentLastOAuthMcpClient {
@@ -515,6 +517,10 @@ export interface ITaskPullRequest {
 
 export interface ITask {
   assignees?: IAssignees[];
+  /** HTPR-6461: caller's person assignment id for My Tasks snooze. */
+  currentUserAssignmentId?: number | null;
+  /** HTPR-6461: caller's snooze-until ISO; never other users' values. */
+  currentUserSnoozeUntil?: string | null;
   notifications?: INotification[];
   title: string;
   ticketNumber?: string;
@@ -1143,6 +1149,8 @@ export interface IAllCommands {
     isArchived: boolean;
     hasNotifications: boolean;
     isKanban: boolean;
+    /** HTPR-6461: My Tasks surface; shows Remind me so the date also hides the row. */
+    isMyTasks?: boolean;
     hasSubtasks: boolean;
     hasParent: boolean;
     isStarred: boolean;
@@ -1178,6 +1186,7 @@ export interface ITypedTask {
   uniqueIndex: number;
   commentText?: string;
   descriptionText?: string;
+  searchGroup?: "current-board" | "other";
 }
 
 export type IgnoreItemType =

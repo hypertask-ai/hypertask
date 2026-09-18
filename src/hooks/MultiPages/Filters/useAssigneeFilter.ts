@@ -7,13 +7,14 @@ import { getActiveFiltersFromProject } from "@/utils/helperFunctions/Views/Views
 import { KeyCodes } from "@/lib/constants/keyboard-handler";
 import { useAgents } from "@/hooks/MultiPages/useAgents";
 import type { CalendarUserSummary } from "@/lib/calendarSync/contract";
+import { useMyTasksFilterController } from "@/lib/myTasksFilterContext";
 
 type AssigneeOption = IUser | CalendarUserSummary | IAgent;
 
 interface IProps {
   closeHandler: (param?: AssigneeOption) => Promise<void>;
   calendarAssignees?: CalendarUserSummary[];
-  view: "Kanban" | "Calendar";
+  view: "Kanban" | "Calendar" | "MyTasks";
 }
 
 export const useAssigneeFilter = ({
@@ -38,6 +39,7 @@ export const useAssigneeFilter = ({
     [filteredAssignees],
   );
   const calendarTaskFilters = useRecoilValue(calendarTaskFiltersAtom);
+  const myTasksFilters = useMyTasksFilterController();
 
   const activeFilters = getActiveFiltersFromProject(
     currentProject,
@@ -50,6 +52,13 @@ export const useAssigneeFilter = ({
         ...calendarTaskFilters.assigneeAgents,
       ];
     }
+    if (view === "MyTasks") {
+      return (
+        myTasksFilters?.activeFilters.addedFilters
+          .find((x) => x.type === "Assignees")
+          ?.searchPayload.flatMap((x: { id: number | string }) => x.id) ?? []
+      );
+    }
     return (
       activeFilters?.searchPayload.flatMap(
         (x: { id: number | string }) => x.id,
@@ -60,13 +69,17 @@ export const useAssigneeFilter = ({
     calendarTaskFilters.assignees,
     calendarTaskFilters.assigneeAgents,
     activeFilters,
+    myTasksFilters?.activeFilters,
   ]);
 
   const assigneeSource = useMemo(() => {
     const uniqueUsersMap = new Map<number, IUser | CalendarUserSummary>();
     const uniqueAgentsMap = new Map<string, IAgent>();
 
-    if (view === "Calendar" && calendarAssignees?.length) {
+    if (
+      (view === "Calendar" || view === "MyTasks") &&
+      calendarAssignees?.length
+    ) {
       for (const user of calendarAssignees) {
         if (user) uniqueUsersMap.set(user.id, user);
       }

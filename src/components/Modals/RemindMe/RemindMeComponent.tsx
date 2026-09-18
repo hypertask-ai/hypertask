@@ -18,6 +18,7 @@ import { ChevronDown, CircleCheck, Clock, Search } from "lucide-react";
 import { MobileViewContext } from "@/lib/contexts/mobileContext";
 import useQueryState from "@/hooks/MultiPages/useQueryState";
 import { useFlag } from "@/hooks/useFlag";
+import { MY_TASKS_SNOOZE_FLAG } from "@/lib/flags/keys";
 import { MobileBottomSheet } from "@/components/Modals/Sheets";
 
 // Bulk action interface for better type safety
@@ -33,6 +34,8 @@ type Props = {
   // New props for bulk actions
   isBulkMode?: boolean;
   bulkItems?: BulkActionInbox[];
+  /** True when the current user has a person assignment, so Remind Me also hides My Tasks. */
+  returnsToMyTasks?: boolean;
 }
 
 export interface DisplayDate {
@@ -42,7 +45,7 @@ export interface DisplayDate {
 }
 
 const RemindMeComponent = (props: Props) => {
-  const { closeHandler, remindTask, isBulkMode = false, bulkItems = [] } = props
+  const { closeHandler, remindTask, isBulkMode = false, bulkItems = [], returnsToMyTasks = false } = props
   const taskRef = useRef<HTMLDivElement>(null);
   const [inViewObject, __] = useRecoilState(inViewObjectAtom);
   const [currentUser, ____] = useRecoilState(currentUserAtom);
@@ -64,6 +67,11 @@ const RemindMeComponent = (props: Props) => {
   const [filteredOptions, setFilteredOptions] = useState<(DisplayDate | undefined)[]>(defaultOptions);
   const _mbl = useContext(MobileViewContext);
   const mobileSafeAreaEnabled = useFlag("htpr-6130-mobile-reminder-safe-area");
+  const myTasksSnoozeEnabled = useFlag(MY_TASKS_SNOOZE_FLAG);
+  const hideOnMyTasks = myTasksSnoozeEnabled && returnsToMyTasks;
+  const returnCopy = hideOnMyTasks
+    ? "inbox and My Tasks at "
+    : "inbox at ";
   
   const handleInputChange = (event: ChangeEvent<HTMLInputElement>) => {
     const input = event.target.value;
@@ -129,7 +137,7 @@ const RemindMeComponent = (props: Props) => {
         
         const taskCount = bulkItems.length;
         const taskText = taskCount === 1 ? "task" : "tasks";
-        toast(`${taskCount} ${taskText} will reappear in inbox at ` + formatDateDifference(reminderDate!, true))
+        toast(`${taskCount} ${taskText} will reappear in ${returnCopy}` + formatDateDifference(reminderDate!, true))
         
         closeHandler(true)
       } catch (error) {
@@ -150,10 +158,14 @@ const RemindMeComponent = (props: Props) => {
       
       console.log("🚀 ~ createReminder ~ reminderOption, reminderDate", reminderType, reminderDate)
       setLastUsedReminder({ date: reminderDate!, display: "last used" })
-      archiveNotificationGetter(body, "Remind", null)
-      
-      toast("Task will reappear in inbox at " + formatDateDifference(reminderDate!, true))
-      closeHandler(true)
+      try {
+        await archiveNotificationGetter(body, "Remind", null)
+        toast("Task will reappear in " + returnCopy + formatDateDifference(reminderDate!, true))
+        closeHandler(true)
+      } catch (error) {
+        console.error("Error creating reminder:", error);
+        toast.error("Failed to create the reminder. Please try again.");
+      }
     }
   }
 
@@ -257,6 +269,7 @@ const RemindMeComponent = (props: Props) => {
         bottomSafeAreaFloor={mobileSafeAreaEnabled}
         bottomSlot={mobileSearchInput}
       >
+        {myTasksSnoozeEnabled ? <span className="hidden" data-htpr-6461-my-tasks-snooze aria-hidden /> : null}
         <h3 className="px-4 pb-1 pt-2 text-micro font-semibold uppercase tracking-wider text-text-light-gray">
           {getHeaderText()}
         </h3>
@@ -305,6 +318,7 @@ const RemindMeComponent = (props: Props) => {
       contentClassName="rounded-[5px] overflow-hidden"
     >
       <ModalBody className="p-0 rounded-[5px]">
+        {myTasksSnoozeEnabled ? <span className="hidden" data-htpr-6461-my-tasks-snooze aria-hidden /> : null}
         <div className="flex items-center gap-2.5 border-b border-light-black-border-1 px-4">
           <Search strokeWidth={1.75} size={13} className="shrink-0 text-text-light-gray" />
           <ModalInput

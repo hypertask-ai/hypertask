@@ -178,6 +178,7 @@ function agent(overrides = {}) {
     archivedAt: null,
     runtimeGeneration: 1,
     createdAt: new Date('2026-08-06T10:00:00.000Z'),
+    visibility: 'PRIVATE',
     mcpToken: 'must-never-leak',
     mcpTokenExpiresAt: new Date('2026-09-06T10:00:00.000Z'),
     members: [
@@ -204,6 +205,7 @@ test('agent list excludes all token material', async () => {
       display_name: 'Build Agent',
       revoked: false,
       created_at: '2026-08-06T10:00:00.000Z',
+      visibility: 'PRIVATE',
       boards: [{ id: 15, name: 'Hypertask Product' }],
     },
   ])

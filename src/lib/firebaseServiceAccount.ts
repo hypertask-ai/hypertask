@@ -16,7 +16,7 @@ type FirebaseServiceAccount = {
 
 let cached: FirebaseServiceAccount | undefined;
 
-// Returns `any` to match the shape firebase-admin's credential.cert() expects at
+// Returns `any` to match the shape firebase-admin's cert() expects at
 // runtime (it accepts the raw snake_case service-account JSON), mirroring the
 // original `require('@/service_key.json')` which was also untyped.
 export function getFirebaseServiceAccount(): any {

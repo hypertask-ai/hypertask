@@ -185,7 +185,7 @@ const CustomCalendarScreen: React.FC<IScreenProps> = ({ closebackHandler,isActiv
         )}
       </span>
       <Calendar
-        initialFocus
+        autoFocus
         mode="single"
         defaultMonth={date}
         selected={date}

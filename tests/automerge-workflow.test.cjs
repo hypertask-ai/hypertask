@@ -22,7 +22,7 @@ async function workflowScript() {
     .join('\n')
 }
 
-async function runWorkflow({ failTemp = false, failList = false, failView = false, malformedView = false, failLabels = false, failMerge = false, failMergeability = false, unknownMergeability = false, omitAppSmoke = false, speed = false, speedQa = true, speedQaCreator = 'owner', title, previousSpeedTitle = false, changedFile = 'src/safe.ts', comments } = {}) {
+async function runWorkflow({ failTemp = false, failList = false, failView = false, malformedView = false, failLabels = false, failMerge = false, failMergeability = false, failFeatureGate = false, featureGated = false, exemptUi = false, invalidGateDecision = false, forkHead = false, sharedHead = false, unknownMergeability = false, omitAppSmoke = false, speed = false, speedQa = true, speedQaCreator = 'owner', title, previousSpeedTitle = false, changedFile = 'src/safe.ts', comments } = {}) {
   const directory = await mkdtemp(join(tmpdir(), 'automerge-workflow-'))
   const bin = join(directory, 'bin')
   const runnerTemp = join(directory, 'runner-temp')
@@ -52,8 +52,18 @@ if [ "$1 $2" = "pr view" ]; then
     exit 0
   fi
   cat <<'JSON'
-{"number":42,"title":${JSON.stringify(prTitle)},"isDraft":false,"isCrossRepository":false,"mergeable":"${failMergeability || unknownMergeability ? 'UNKNOWN' : 'MERGEABLE'}","baseRefName":"production","headRefOid":"${head}","headRepositoryOwner":{"login":"owner"},"labels":[],"statusCheckRollup":[${omitAppSmoke ? '' : '{"name":"app-smoke","conclusion":"SUCCESS","startedAt":"2026-08-11T10:00:00Z"},'}{"name":"ci-tests","conclusion":"SUCCESS","startedAt":"2026-08-11T10:00:00Z"},{"name":"claude-review","conclusion":"SUCCESS","startedAt":"2026-08-11T10:00:00Z"},{"name":"next-public-secrets","conclusion":"SUCCESS","startedAt":"2026-08-11T10:00:00Z"},{"name":"revert-guard","conclusion":"SUCCESS","startedAt":"2026-08-11T10:00:00Z"},{"name":"pr-title","conclusion":"SUCCESS","startedAt":"2026-08-11T10:00:00Z"},{"name":"visual-regression","conclusion":"SUCCESS","startedAt":"2026-08-11T10:00:00Z"},{"name":"speed-evidence","conclusion":"SUCCESS","startedAt":"2026-08-11T10:00:00Z"},{"name":"speed-qa","conclusion":"SUCCESS","startedAt":"2026-08-11T10:00:00Z"},{"name":"vercel-build","conclusion":"SUCCESS","startedAt":"2026-08-11T10:00:00Z"}],"comments":${commentsJson}}
+{"number":42,"title":${JSON.stringify(prTitle)},"isDraft":false,"isCrossRepository":false,"mergeable":"${failMergeability || unknownMergeability ? 'UNKNOWN' : 'MERGEABLE'}","baseRefName":"production","headRefOid":"${head}","headRepositoryOwner":{"login":"owner"},"labels":[],"statusCheckRollup":[${omitAppSmoke ? '' : '{"name":"app-smoke","conclusion":"SUCCESS","startedAt":"2026-08-11T10:00:00Z"},'}{"name":"ci-tests","conclusion":"SUCCESS","startedAt":"2026-08-11T10:00:00Z"},{"name":"claude-review","conclusion":"SUCCESS","startedAt":"2026-08-11T10:00:00Z"},{"name":"next-public-secrets","conclusion":"SUCCESS","startedAt":"2026-08-11T10:00:00Z"},{"name":"revert-guard","conclusion":"SUCCESS","startedAt":"2026-08-11T10:00:00Z"},{"name":"pr-title","conclusion":"SUCCESS","startedAt":"2026-08-11T10:00:00Z"},{"name":"feature-flag-gate","conclusion":"SUCCESS","startedAt":"2026-08-11T10:00:00Z"},{"name":"visual-regression","conclusion":"SUCCESS","startedAt":"2026-08-11T10:00:00Z"},{"name":"speed-evidence","conclusion":"SUCCESS","startedAt":"2026-08-11T10:00:00Z"},{"name":"speed-qa","conclusion":"SUCCESS","startedAt":"2026-08-11T10:00:00Z"},{"name":"vercel-build","conclusion":"SUCCESS","startedAt":"2026-08-11T10:00:00Z"}],"comments":${commentsJson}}
 JSON
+  exit 0
+fi
+if [ "$1" = "api" ] && [[ " $* " == *"repos/owner/repository/pulls/42"* ]]; then
+  cat <<'JSON'
+{"state":"open","title":${JSON.stringify(prTitle)},"base":{"ref":"production","sha":"${'b'.repeat(40)}"},"head":{"sha":"${head}","repo":{"full_name":"${forkHead ? 'external/repository' : 'owner/repository'}"}}}
+JSON
+  exit 0
+fi
+if [ "$1" = "api" ] && [[ " $* " == *"pulls?state=open&base=production"* ]]; then
+  echo '${JSON.stringify([[{ head: { sha: head } }, ...(sharedHead ? [{ head: { sha: head } }] : [])]])}'
   exit 0
 fi
 if [ "$1" = "api" ] && [[ " $* " == *"/issues/42/events"* ]]; then
@@ -72,11 +82,38 @@ fi
 echo "unexpected gh call: $*" >&2
 exit 2
 `
+  const node = `#!/usr/bin/env bash
+if [ "$1" = ".github/scripts/feature-flag-gate.mjs" ]; then
+  if [ "$#" -ne 5 ] || [ "$2" != "$EXPECTED_PR_TITLE" ] || [ "$3" != "$EXPECTED_BASE_SHA" ] || [ "$4" != "$EXPECTED_HEAD_SHA" ]; then
+    echo "unexpected feature flag gate arguments: $*" >&2
+    exit 2
+  fi
+  if [ "\${GH_STUB_FAIL_FEATURE_GATE:-}" = "1" ]; then echo "feature flag required"; exit 1; fi
+  decision_file="\${5:-}"
+  if [ "\${GH_STUB_INVALID_GATE_DECISION:-}" = "1" ]; then
+    printf 'invalid\n' >"$decision_file"
+    echo "feature flag gate passed"
+  elif [ "\${GH_STUB_FEATURE_GATED:-}" = "1" ]; then
+    printf 'feature-gated-ui\n' >"$decision_file"
+    echo "[FEATURE] calls ticket-specific feature gate htpr-1-test in changed code covering every UI entry from src/app/page.tsx."
+  elif [ "\${GH_STUB_EXEMPT_UI:-}" = "1" ]; then
+    printf 'exempt-ui\n' >"$decision_file"
+    echo "[BUGFIX] is exempt (14 UI lines added)."
+  else
+    printf 'automerge\n' >"$decision_file"
+    echo "feature flag gate passed"
+  fi
+  exit 0
+fi
+exec ${JSON.stringify(process.execPath)} "$@"
+`
   await writeFile(join(bin, 'gh'), gh)
+  await writeFile(join(bin, 'git'), '#!/usr/bin/env bash\nexit 0\n')
+  await writeFile(join(bin, 'node'), node)
+  await writeFile(join(bin, 'npm'), '#!/usr/bin/env bash\nexit 0\n')
   await writeFile(join(bin, 'sleep'), '#!/usr/bin/env bash\nexit 0\n')
   if (failTemp) await writeFile(join(bin, 'mktemp'), '#!/usr/bin/env bash\nexit 1\n')
-  await chmod(join(bin, 'gh'), 0o755)
-  await chmod(join(bin, 'sleep'), 0o755)
+  for (const command of ['gh', 'git', 'node', 'npm', 'sleep']) await chmod(join(bin, command), 0o755)
   if (failTemp) await chmod(join(bin, 'mktemp'), 0o755)
 
   try {
@@ -98,7 +135,14 @@ exit 2
         GH_STUB_FAIL_LABELS: failLabels ? '1' : '',
         GH_STUB_FAIL_MERGE: failMerge ? '1' : '',
         GH_STUB_FAIL_MERGEABILITY: failMergeability ? '1' : '',
+        GH_STUB_FAIL_FEATURE_GATE: failFeatureGate ? '1' : '',
+        GH_STUB_FEATURE_GATED: featureGated ? '1' : '',
+        GH_STUB_EXEMPT_UI: exemptUi ? '1' : '',
+        GH_STUB_INVALID_GATE_DECISION: invalidGateDecision ? '1' : '',
         GH_STUB_UNKNOWN_MERGEABILITY: unknownMergeability ? '1' : '',
+        EXPECTED_PR_TITLE: prTitle,
+        EXPECTED_BASE_SHA: 'b'.repeat(40),
+        EXPECTED_HEAD_SHA: head,
       },
     })
     return { result, scratchEntries: await readdir(runnerTemp), head }
@@ -110,10 +154,33 @@ exit 2
 test('auto-merge uses job-private temporary files on shared runners', async () => {
   const workflow = await readFile('.github/workflows/automerge.yml', 'utf8')
 
+  assert.match(workflow, /timeout-minutes: 30/)
   assert.match(workflow, /mktemp -d "\$\{RUNNER_TEMP:-\/tmp\}\/hypertask-automerge\.XXXXXX"/)
   assert.match(workflow, /trap 'rm -rf "\$AUTOMERGE_TMP"' EXIT/)
   assert.match(workflow, /PR_JSON="\$AUTOMERGE_TMP\/pr\.json"/)
   assert.match(workflow, /PR_FILES="\$AUTOMERGE_TMP\/pr\.files"/)
+  assert.match(workflow, /cache-dependency-path: \.github\/scripts\/feature-flag-parser\/package-lock\.json/)
+  assert.match(workflow, /npm ci --prefix "\$parser_dir" --ignore-scripts --no-audit --no-fund/)
+  assert.match(workflow, /feature-flag-parser\/package-lock\.json "\$parser_dir\/"/)
+  assert.match(workflow, /"\$GATE_DECISION"/)
+  assert.match(workflow, /FEATURE_FLAG_PR_LABELS/)
+  assert.match(
+    workflow,
+    /git fetch --no-tags origin \+refs\/heads\/production:refs\/remotes\/origin\/production "refs\/pull\/\$PR\/head"/,
+  )
+  assert.match(workflow, /--argjson labels "\$FEATURE_FLAG_PR_LABELS"/)
+  assert.match(workflow, /git reset --hard origin\/production/)
+  assert.match(workflow, /Refreshing trusted production checkout before feature-flag evaluation/)
+  assert.match(
+    workflow,
+    /git reset --hard origin\/production[\s\S]*?parser_ready=0[\s\S]*?if ! ensure_feature_flag_parser; then/,
+  )
+  assert.ok(
+    workflow.indexOf("git reset --hard origin/production") <
+      workflow.lastIndexOf("if ! ensure_feature_flag_parser; then"),
+  )
+  assert.doesNotMatch(workflow, /Trusted production checkout drifted during automerge/)
+  assert.doesNotMatch(workflow, /grep .*"\$GATE_REASON"/)
   assert.doesNotMatch(workflow, />\/tmp\/pr\.(?:json|files)/)
 })
 
@@ -142,7 +209,55 @@ test('auto-merge evaluates and merges a ready PR with isolated scratch state', a
   assert.equal(result.status, 0, result.stderr)
   assert.match(result.stdout, /MERGED #42/)
   assert.match(result.stdout, /check pr-title = SUCCESS/)
+  assert.match(result.stdout, /feature-flag-gate re-evaluation = PASS/)
   assert.deepEqual(scratchEntries, [])
+})
+
+test('auto-merge re-evaluates current feature-flag metadata before merging', async () => {
+  const { result, scratchEntries } = await runWorkflow({ failFeatureGate: true })
+
+  assert.equal(result.status, 0, result.stderr)
+  assert.match(result.stdout, /current feature-flag gate failed: feature flag required/)
+  assert.doesNotMatch(result.stdout, /MERGED #42/)
+  assert.deepEqual(scratchEntries, [])
+})
+
+test('auto-merge keeps feature-gated UI under owner review', async () => {
+  const { result, scratchEntries } = await runWorkflow({ featureGated: true })
+
+  assert.equal(result.status, 0, result.stderr)
+  assert.match(result.stdout, /feature-gated UI requires owner review/)
+  assert.doesNotMatch(result.stdout, /MERGED #42/)
+  assert.deepEqual(scratchEntries, [])
+})
+
+test('auto-merge keeps exempt UI under owner review', async () => {
+  const { result, scratchEntries } = await runWorkflow({ exemptUi: true })
+
+  assert.equal(result.status, 0, result.stderr)
+  assert.match(result.stdout, /exempt UI requires owner review/)
+  assert.doesNotMatch(result.stdout, /MERGED #42/)
+  assert.deepEqual(scratchEntries, [])
+})
+
+test('auto-merge fails closed on an invalid gate decision', async () => {
+  const { result, scratchEntries } = await runWorkflow({ invalidGateDecision: true })
+
+  assert.equal(result.status, 1, result.stderr)
+  assert.match(result.stdout, /invalid merge decision/)
+  assert.doesNotMatch(result.stdout, /MERGED #42/)
+  assert.deepEqual(scratchEntries, [])
+})
+
+test('auto-merge refuses fork and shared heads at the final feature-flag boundary', async () => {
+  for (const options of [{ forkHead: true }, { sharedHead: true }]) {
+    const { result, scratchEntries } = await runWorkflow(options)
+
+    assert.equal(result.status, 0, result.stderr)
+    assert.match(result.stdout, /fork or shared PR head requires owner review/)
+    assert.doesNotMatch(result.stdout, /MERGED #42/)
+    assert.deepEqual(scratchEntries, [])
+  }
 })
 
 test('auto-merge refuses a PR without the app smoke result', async () => {

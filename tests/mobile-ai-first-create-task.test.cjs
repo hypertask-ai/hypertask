@@ -99,7 +99,7 @@ test("mobile create writer matches the approved stripped-down hierarchy", () => 
   assert.doesNotMatch(intro, /rounded-full|border-border-light-gray-thin/);
   assert.match(
     writerContainer,
-    /detent=\{isMobileCreateFlow \? "content-height" : "full-height"\}/,
+    /detent=\{isMobileCreateFlow \? "content" : "default"\}/,
   );
   assert.match(
     writerContainer,
@@ -258,12 +258,14 @@ test("board create entry points follow the AI-first flag", async () => {
     ]),
   );
   let aiFirstTaskWriterEnabled = false;
+  let quickEntryEnabled = false;
   const moduleMocks = new Map([
     [path.join(root, "src/hooks/useFlag.tsx"), {
-      // Key-aware: useSections also reads the quick-entry flag, which must not
-      // follow the AI-first flag's value here.
-      useFlag: (key) =>
-        key === "htpr-6141-ai-first-task-writer" && aiFirstTaskWriterEnabled,
+      useFlag: (key) => {
+        if (key === "htpr-6141-ai-first-task-writer") return aiFirstTaskWriterEnabled;
+        if (key === "htpr-6175-quick-entry-cards") return quickEntryEnabled;
+        return false;
+      },
     }],
     [path.join(root, "src/lib/state.tsx"), {
       useRecoilState: (atom) => React.useState(atom.default),
@@ -343,7 +345,7 @@ test("board create entry points follow the AI-first flag", async () => {
       path.join(root, "src/lib/contexts/mobileContext.tsx"),
     );
     const Harness = () => {
-      const { createTaskAt } = useSections({
+      const { createTaskAt, position, showAddItem } = useSections({
         items: [],
         active: true,
         index: 0,
@@ -351,11 +353,18 @@ test("board create entry points follow the AI-first flag", async () => {
         sectionId: 9190,
         projectId: 15,
       });
-      return React.createElement(NewTaskButton, {
-        buttonPosition: "top",
-        createTaskAt,
-        sectionPayload,
-      });
+      return React.createElement(
+        "div",
+        {
+          "data-quick-entry-open": showAddItem ? "true" : "false",
+          "data-quick-entry-position": position ?? "",
+        },
+        React.createElement(NewTaskButton, {
+          buttonPosition: "top",
+          createTaskAt,
+          sectionPayload,
+        }),
+      );
     };
     const container = document.getElementById("root");
     const { createRoot } = require("react-dom/client");
@@ -376,11 +385,20 @@ test("board create entry points follow the AI-first flag", async () => {
         container.querySelector(".create-new-task-button").click();
       });
     };
-    const dispatchShortcut = async ({ key, code, keyCode, ctrlKey = false }) => {
+    const dispatchShortcut = async ({
+      key,
+      code,
+      keyCode,
+      altKey = false,
+      ctrlKey = false,
+      shiftKey = false,
+    }) => {
       const shortcut = new KeyboardEvent("keydown", {
         key,
         code,
+        altKey,
         ctrlKey,
+        shiftKey,
         bubbles: true,
       });
       Object.defineProperty(shortcut, "keyCode", { value: keyCode });
@@ -409,6 +427,37 @@ test("board create entry points follow the AI-first flag", async () => {
       { payload: sectionPayload, defaultEditFocus: MOBILE_AI_TASK_WRITER_FOCUS },
       { payload: sectionPayload, defaultEditFocus: undefined },
       { payload: sectionPayload, defaultEditFocus: undefined },
+    ]);
+
+    aiFirstTaskWriterEnabled = false;
+    quickEntryEnabled = true;
+    await renderHarness(false);
+    const modalCallsBeforeQuickEntry = createCalls.length;
+
+    await clickColumnPlus();
+    assert.equal(createCalls.length, modalCallsBeforeQuickEntry);
+    assert.equal(container.firstElementChild.dataset.quickEntryOpen, "true");
+    assert.equal(container.firstElementChild.dataset.quickEntryPosition, "top");
+
+    await dispatchShortcut({ key: "c", code: "KeyC", keyCode: 67 });
+    await dispatchShortcut({ key: "c", code: "KeyC", keyCode: 67, altKey: true });
+    assert.equal(container.firstElementChild.dataset.quickEntryPosition, "top");
+    await dispatchShortcut({
+      key: "C",
+      code: "KeyC",
+      keyCode: 67,
+      altKey: true,
+      shiftKey: true,
+    });
+    assert.equal(container.firstElementChild.dataset.quickEntryPosition, "bottom");
+    await dispatchShortcut({ key: "C", code: "KeyC", keyCode: 67, shiftKey: true });
+
+    assert.deepEqual(createCalls.slice(modalCallsBeforeQuickEntry), [
+      { payload: sectionPayload, defaultEditFocus: undefined },
+      {
+        payload: { sectionId: 9190, sectionTitle: "Backlog", position: "bottom" },
+        defaultEditFocus: undefined,
+      },
     ]);
   } finally {
     if (reactRoot) await React.act(async () => reactRoot.unmount());

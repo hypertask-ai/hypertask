@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { randomUUID } from "node:crypto";
+import { waitUntil } from "@vercel/functions";
 import { CustomFieldType, DecisionRequestStatus, Prisma } from "@prisma/client";
 import {
   generateText,
@@ -54,7 +55,14 @@ import { resolveAgentModelPin } from "@/lib/nativeAgent/modelPin";
 import { isFeatureEnabled } from "@/lib/flags";
 import { HTPR_6278_CHAT_TURN_FAILURE_FLAG } from "@/lib/flags/keys";
 import { HTPR_6284_AGENT_MENTION_ROUTING_FLAG } from "@/lib/flags/keys";
+import { HTPR_6320_AI_OBSERVABILITY_FLAG } from "@/lib/flags/keys";
+import { HTPR_6516_AGENT_ATTRIBUTION_FLAG } from "@/lib/flags/keys";
 import { reportError } from "@/lib/errors/reportError";
+import { toErrorMessage } from "@/lib/api/errorMessage";
+import {
+  recordAiChatTurn,
+  type AiChatTurnOutcome,
+} from "@/lib/telemetry/aiChatObservability";
 import { searchHelpDocs } from "@/lib/help-docs/searchHelpDocs";
 import { retrieveBoardKnowledge } from "@/lib/rag/retrieveBoardKnowledge";
 import { logAiUsage } from "@/app/api/ai/_lib/aiUsage";
@@ -85,6 +93,10 @@ import {
   mapVisibleMcpAgent,
   mcpVisibleAgentSelect,
 } from "@/lib/mcp/agents";
+import {
+  overlayDurableAgentDisplayName,
+  resolvePublicAgentDisplayName,
+} from "@/lib/agents/publicAgent";
 import {
   listOwnedAgents,
   type AgentManagementDatabase,
@@ -815,15 +827,31 @@ function createSseErrorResponse(message: string, status?: number) {
 }
 
 function errorMessage(error: unknown) {
-  if (typeof error === "string") return error;
   // Prisma/driver errors carry schema and query detail, so those stay internal.
-  // Everything else is our own thrown message, which the model needs verbatim
-  // to correct itself (validation errors, tool preconditions, ambiguity hints).
-  if (error instanceof Error && !error.name.startsWith("Prisma")) {
-    return error.message;
+  if (error instanceof Error && error.name.startsWith("Prisma")) {
+    console.error("[ai/chat/stream] internal error", error);
+    return "Sorry, an error occurred while processing your request.";
   }
-  console.error("[ai/chat/stream] internal error", error);
-  return "Sorry, an error occurred while processing your request.";
+  // Tool loops and the error ticket need the provider's real text. The SDK
+  // sometimes hands us a plain object, not an Error, and the generic fallback
+  // then files a ticket with no cause.
+  return toErrorMessage(
+    error,
+    "Sorry, an error occurred while processing your request.",
+  );
+}
+
+function handledErrorExtra(error: unknown) {
+  if (!error || typeof error !== "object") return {};
+  const record = error as Record<string, unknown>;
+  const extra: Record<string, string | number | boolean | null> = {};
+  for (const key of ["statusCode", "status"] as const) {
+    const value = record[key];
+    if (typeof value === "number" && Number.isFinite(value)) {
+      extra[key] = value;
+    }
+  }
+  return extra;
 }
 
 /** The allowance stop unwrapped from the SDK's retry chain, or null. */
@@ -916,9 +944,19 @@ function requestErrorMessage(
   }.`;
 }
 
-async function reportHandledChatError(error: unknown, stage: string) {
+async function reportHandledChatError(
+  error: unknown,
+  stage: string,
+  extra?: Record<string, string | number | boolean | null>,
+) {
   if (includedAllowanceError(error)) return;
-  if (error instanceof Error && error.name === "AiPlanAccessError") return;
+  if (
+    error instanceof Error &&
+    (error.name === "AiPlanAccessError" ||
+      error.name === "AiGatewayKeyRequiredError")
+  ) {
+    return;
+  }
   const normalized =
     error instanceof Error ? error : new Error(errorMessage(error));
   await reportError({
@@ -926,7 +964,7 @@ async function reportHandledChatError(error: unknown, stage: string) {
     stack: normalized.stack,
     url: "/api/ai/chat/stream",
     source: "handled",
-    extra: { stage },
+    extra: { stage, ...handledErrorExtra(error), ...extra },
   });
 }
 
@@ -1921,6 +1959,21 @@ function mapCommentToResponse(comment: any, userId: number, projectId: number) {
       userId: reaction.userId,
     })),
   };
+}
+
+function applyDurableCommentAttribution<T extends object>(
+  mapped: T,
+  comment: any,
+  userId: number,
+  projectId: number,
+  attributionEnabled: boolean
+): T {
+  return overlayDurableAgentDisplayName(mapped, {
+    hasAgentRow: Boolean(comment.agent),
+    visibleAgent: mapVisibleMcpAgent(comment.agent, userId, projectId),
+    storedDisplayName: comment.agentDisplayName,
+    attributionEnabled,
+  });
 }
 
 function mapDraftToResponse(draft: any) {
@@ -4654,12 +4707,22 @@ function buildTools(
         }
 
         const mappedTask = mapTaskToMcpGetResponse(task, user.id);
+        const attributionEnabled = await isFeatureEnabled(
+          HTPR_6516_AGENT_ATTRIBUTION_FLAG,
+          user.id
+        );
         const comments = recentComments.reverse().map((comment) => {
           const agent = mapVisibleMcpAgent(
             comment.agent,
             user.id,
             input.project_id
           );
+          const agentDisplayName = resolvePublicAgentDisplayName({
+            hasAgentRow: Boolean(comment.agent),
+            visibleAgent: agent,
+            storedDisplayName: comment.agentDisplayName,
+            attributionEnabled,
+          });
           return {
             id: comment.id,
             author:
@@ -4668,6 +4731,15 @@ function buildTools(
               comment.creator?.displayName ||
               comment.creator?.email ||
               "Unknown",
+            ...(attributionEnabled
+              ? {
+                  author:
+                    agentDisplayName ||
+                    comment.creator?.displayName ||
+                    comment.creator?.email ||
+                    "Unknown",
+                }
+              : {}),
             text: stripInlineDataUris(comment.text),
             createdAt: comment.createdAt.toISOString(),
           };
@@ -5155,7 +5227,11 @@ function buildTools(
           }),
         ]);
 
-        return sanitizeForJson({
+        const attributionEnabled = await isFeatureEnabled(
+          HTPR_6516_AGENT_ATTRIBUTION_FLAG,
+          user.id
+        );
+        const commentsPayload = {
           success: true,
           comments: comments.map((comment) =>
             input.include_activity
@@ -5168,7 +5244,17 @@ function buildTools(
           total,
           limit: input.limit,
           offset: input.offset,
-        });
+        };
+        commentsPayload.comments = commentsPayload.comments.map((mapped, index) =>
+          applyDurableCommentAttribution(
+            mapped,
+            comments[index],
+            user.id,
+            task.projectId,
+            attributionEnabled
+          )
+        );
+        return sanitizeForJson(commentsPayload);
       },
     }),
 
@@ -7087,7 +7173,7 @@ function buildTools(
 
         void broadcastTaskComment(task.id, { originUserId: user.id });
 
-        return sanitizeForJson({
+        const createdCommentPayload = {
           success: true,
           task: {
             id: taskWithOwner.id,
@@ -7102,7 +7188,17 @@ function buildTools(
               )
             : { id: comment.id, text: sanitizedText },
           url: buildMcpTaskUrl(taskWithOwner.projectId, taskWithOwner.uniqueIndex),
-        });
+        };
+        if (commentWithAttachments) {
+          createdCommentPayload.comment = applyDurableCommentAttribution(
+            createdCommentPayload.comment,
+            commentWithAttachments,
+            user.id,
+            taskWithOwner.projectId,
+            await isFeatureEnabled(HTPR_6516_AGENT_ATTRIBUTION_FLAG, user.id)
+          );
+        }
+        return sanitizeForJson(createdCommentPayload);
         };
 
         const results = await Promise.all(
@@ -7624,7 +7720,7 @@ function buildTools(
 
         void broadcastTaskComment(comment.task.id, { originUserId: user.id });
 
-        return sanitizeForJson({
+        const updatedCommentPayload = {
           success: true,
           comment: updatedComment
             ? mapCommentToResponse(
@@ -7633,7 +7729,17 @@ function buildTools(
                 comment.task.projectId
               )
             : { id: input.comment_id, text: sanitizedText },
-        });
+        };
+        if (updatedComment) {
+          updatedCommentPayload.comment = applyDurableCommentAttribution(
+            updatedCommentPayload.comment,
+            updatedComment,
+            user.id,
+            comment.task.projectId,
+            await isFeatureEnabled(HTPR_6516_AGENT_ATTRIBUTION_FLAG, user.id)
+          );
+        }
+        return sanitizeForJson(updatedCommentPayload);
       }),
     }),
 
@@ -9715,6 +9821,12 @@ export async function POST(request: NextRequest) {
     HTPR_6278_CHAT_TURN_FAILURE_FLAG,
     dbUser.id,
   );
+  // HTPR-6320: one flag read per turn decides whether this turn is recorded in
+  // PostHog AI observability.
+  const aiObservabilityEnabled = await isFeatureEnabled(
+    HTPR_6320_AI_OBSERVABILITY_FLAG,
+    dbUser.id,
+  );
 
   let userMessagePersisted = false;
   if (body.session_id && body.user_message_id) {
@@ -9820,6 +9932,7 @@ export async function POST(request: NextRequest) {
     provider: ProviderId;
     usageProvider: string;
     modelId: string;
+    resolvedModelId: string;
     model: LanguageModel;
     settings: { temperature?: number; maxOutputTokens?: number };
     providerOptions?: AiProviderOptions;
@@ -10238,6 +10351,51 @@ export async function POST(request: NextRequest) {
         }
       };
 
+      // HTPR-6320: one turn = one PostHog AI observability generation. Declared
+      // outside the try below so every exit path, including the catch and
+      // finally, can name its outcome.
+      // All of it is best effort and never changes what the user receives.
+      let generationStartedAt = Date.now();
+      let observedAgentId = actingAgent?.id ?? null;
+      let observedModel = selected.resolvedModelId;
+      let observedProvider = selected.usageProvider;
+      let turnUsage: { inputTokens?: number; outputTokens?: number } | undefined;
+      let generationFinishedWithError = false;
+      let turnOutcomeRecorded = false;
+      const recordTurnOutcome = (
+        outcome: AiChatTurnOutcome,
+        error?: unknown,
+      ) => {
+        if (!aiObservabilityEnabled || turnOutcomeRecorded) return;
+        turnOutcomeRecorded = true;
+        const observation = recordAiChatTurn({
+          userId: dbUser.id,
+          projectId: usageProjectId,
+          taskId: contextTaskId,
+          agentId: observedAgentId,
+          model: observedModel,
+          provider: observedProvider,
+          traceId: streamId,
+          outcome,
+          latencyMs: Date.now() - generationStartedAt,
+          inputTokens: turnUsage?.inputTokens,
+          outputTokens: turnUsage?.outputTokens,
+          error,
+        }).catch((observationError) => {
+          console.warn(
+            "[ai/chat/stream] turn observation failed",
+            observationError,
+          );
+        });
+        try {
+          waitUntil(observation);
+        } catch (observationError) {
+          console.warn(
+            "[ai/chat/stream] turn observation could not outlive the request",
+            observationError,
+          );
+        }
+      };
       try {
         const skillResolution = await resolveSkillsForAiRequest(
           requestMessage,
@@ -10305,6 +10463,10 @@ export async function POST(request: NextRequest) {
             send("status", {
               content: `Asking ${routedAgent.displayName}...`,
             });
+            generationStartedAt = Date.now();
+            observedAgentId = routedAgent.id;
+            observedModel = "fleet-agent";
+            observedProvider = "hypertask";
             const fleet = await askFleetAgent({
               agentId: routedAgent.id,
               question: resolvedBody.message,
@@ -10317,12 +10479,14 @@ export async function POST(request: NextRequest) {
             });
 
             if (turnDeadlineHit) {
+              recordTurnOutcome("failed", AI_CHAT_TURN_DEADLINE_REASON);
               await endDeadlineTurn();
               return;
             }
             // Deadline wins over the generic cancelled branch: both abort the
             // provider signal, and only the deadline path runs its cleanup.
             if (cancelled || providerAbort.signal.aborted) {
+              recordTurnOutcome("cancelled");
               if (heartbeatExecutionId && !heartbeatExecutionTerminal) {
                 await failHeartbeatExecution(
                   heartbeatExecutionId,
@@ -10429,6 +10593,11 @@ export async function POST(request: NextRequest) {
               }
             }
 
+            recordTurnOutcome(
+              fleet.success ? "ok" : "failed",
+              fleet.success ? undefined : fleet.error,
+            );
+
             if (heartbeatExecutionId && !heartbeatExecutionTerminal) {
               if (assistantPersisted) {
                 await completeHeartbeatExecution(heartbeatExecutionId);
@@ -10534,6 +10703,8 @@ export async function POST(request: NextRequest) {
             throw new Error("Heartbeat durable reservation could not start");
           }
         }
+        // $ai_latency measures the generation itself, not the turn setup.
+        generationStartedAt = Date.now();
         const result = streamText({
           model: selected.model,
           instructions,
@@ -10542,7 +10713,12 @@ export async function POST(request: NextRequest) {
           stopWhen: stepCountIs(MAX_TOOL_STEPS),
           maxRetries: 2,
           abortSignal: providerAbort.signal,
-          onFinish: async ({ usage }) => {
+          onFinish: async ({ usage, finishReason }) => {
+            turnUsage = {
+              inputTokens: usage.inputTokens ?? undefined,
+              outputTokens: usage.outputTokens ?? undefined,
+            };
+            generationFinishedWithError = finishReason === "error";
             await logAiUsage({
               userId: dbUser.id,
               teamId: gatewayTags.teamId ?? null,
@@ -10560,6 +10736,7 @@ export async function POST(request: NextRequest) {
             });
           },
           onError: async ({ error }) => {
+            recordTurnOutcome(cancelled ? "cancelled" : "failed", error);
             if (errorSent) return;
             errorSent = true;
             if (cancelled) {
@@ -10597,7 +10774,10 @@ export async function POST(request: NextRequest) {
               );
               heartbeatExecutionTerminal = true;
             }
-            await reportHandledChatError(error, "model-stream");
+            await reportHandledChatError(error, "model-stream", {
+              model: selected.resolvedModelId,
+              provider: selected.usageProvider,
+            });
           },
           providerOptions: selected.providerOptions,
           ...selected.settings,
@@ -10648,6 +10828,12 @@ export async function POST(request: NextRequest) {
               });
               reachedStepLimit =
                 reachedStepLimit || retry.steps.length >= MAX_TOOL_STEPS;
+              turnUsage = {
+                inputTokens:
+                  (turnUsage?.inputTokens ?? 0) + (retry.usage.inputTokens ?? 0),
+                outputTokens:
+                  (turnUsage?.outputTokens ?? 0) + (retry.usage.outputTokens ?? 0),
+              };
               await logAiUsage({
                 userId: dbUser.id,
                 teamId: gatewayTags.teamId ?? null,
@@ -10663,6 +10849,7 @@ export async function POST(request: NextRequest) {
               });
               const retryText = retry.text?.trim() ?? "";
               if (retryText) {
+                generationFinishedWithError = retry.finishReason === "error";
                 chunks.push(retryText);
                 send("content", { content: retryText });
               }
@@ -10693,6 +10880,14 @@ export async function POST(request: NextRequest) {
           });
           send("content", { content: fallback });
           chunks.push(fallback);
+          recordTurnOutcome(
+            "failed",
+            emptyCompletionError ?? "AI generation returned no visible reply",
+          );
+        } else if (generationFinishedWithError) {
+          recordTurnOutcome("failed", "AI generation finished with an error");
+        } else {
+          recordTurnOutcome("ok");
         }
 
         // The provider/tool phase is over: a deadline from here on must not
@@ -10824,6 +11019,7 @@ export async function POST(request: NextRequest) {
           assistant_persisted: assistantPersisted,
         });
       } catch (error) {
+        recordTurnOutcome(cancelled ? "cancelled" : "failed", error);
         if (cancelled) {
           if (!doneSent) {
             finish("error", { cancelled: true, content: "Stream cancelled." });
@@ -10841,7 +11037,10 @@ export async function POST(request: NextRequest) {
           return;
         }
         console.error("[ai/chat/stream] stream error", error);
-        await reportHandledChatError(error, "stream-handler");
+        await reportHandledChatError(error, "stream-handler", {
+          model: selected.resolvedModelId,
+          provider: selected.usageProvider,
+        });
         if (!errorSent) {
           errorSent = true;
           send("error", {
@@ -10858,6 +11057,10 @@ export async function POST(request: NextRequest) {
           heartbeatExecutionTerminal = true;
         }
       } finally {
+        // Every model exit above names its outcome before reaching here. This
+        // only covers a turn that ended before the model ever ran, and records
+        // it only when cancellation gives it a real terminal outcome.
+        if (cancelled) recordTurnOutcome("cancelled");
         turnDeadline?.clear();
         stopCancellationWatch();
         await releaseAiChatStreamLease(streamLease);

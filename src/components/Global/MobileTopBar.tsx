@@ -26,16 +26,20 @@ const MobileTopBar = ({
   const headerRef = useRef<HTMLElement>(null);
 
   const onCalendar = pathname?.startsWith("/calendar") ?? false;
+  const onAgentChat = pathname?.startsWith("/agents/chat") ?? false;
   const onDetail = pathname?.startsWith("/detail") ?? false;
   const onProject = pathname?.startsWith("/project") ?? false;
   const deferredControlsReady = !onProject || boardUsable;
-  const fallbackTitle = onCalendar
-    ? calendarTitle ?? "Calendar"
-    : pathname?.startsWith("/inbox")
-      ? "Inbox"
-      : pathname?.startsWith("/search")
-        ? "Search"
-        : "Board";
+  let fallbackTitle = "Board";
+  if (onCalendar) {
+    fallbackTitle = calendarTitle ?? "Calendar";
+  } else if (onAgentChat) {
+    fallbackTitle = calendarTitle ?? "Agents";
+  } else if (pathname?.startsWith("/inbox")) {
+    fallbackTitle = "Inbox";
+  } else if (pathname?.startsWith("/search")) {
+    fallbackTitle = "Search";
+  }
 
   // On the task-detail page the top bar collapses on scroll so the sticky task
   // headline takes the top edge. We translate it up by the scroll offset

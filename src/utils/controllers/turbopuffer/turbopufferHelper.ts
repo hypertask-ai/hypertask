@@ -3,6 +3,10 @@ import { createHash } from "crypto";
 
 import prisma from "@/lib/prisma";
 import turbopuffer, { turbopufferNamespaces } from "@/lib/turbopuffer";
+import {
+  parseTicketSearchQuery,
+  type TicketSearchQuery,
+} from "@/utils/controllers/search/rankHits";
 import { buildCustomInstructionSearchFilters } from "@/app/api/ai/_lib/boardMemoryContract";
 
 type SearchStatus = "Normal" | "Archive" | "Deleted";
@@ -144,12 +148,6 @@ export type TurbopufferCustomInstructionFileRow = {
 
 type TurbopufferVectorRow<T> = T & {
   vector?: number[];
-};
-
-type TicketSearchQuery = {
-  prefix: string | null;
-  uniqueIndex: number;
-  normalizedQuery: string;
 };
 
 export const taskNamespaceSchema = {
@@ -296,31 +294,6 @@ const buildCommentBm25RankBy = (query: string) => [
     ["searchText", "BM25", query, { last_as_prefix: true }],
   ],
 ];
-
-function parseTicketSearchQuery(query: string): TicketSearchQuery | null {
-  const prefixedMatch = query.match(/^([A-Za-z]{2,10})[-\s]?(\d{1,7})$/);
-  if (prefixedMatch) {
-    const prefix = prefixedMatch[1].toUpperCase();
-    const uniqueIndex = Number(prefixedMatch[2]);
-
-    return {
-      prefix,
-      uniqueIndex,
-      normalizedQuery: `${prefix}-${uniqueIndex}`,
-    };
-  }
-
-  const bareMatch = query.match(/^(\d{1,7})$/);
-  if (bareMatch) {
-    return {
-      prefix: null,
-      uniqueIndex: Number(bareMatch[1]),
-      normalizedQuery: query,
-    };
-  }
-
-  return null;
-}
 
 export function buildTurbopufferTaskRow(
   task: TaskForTurbopuffer

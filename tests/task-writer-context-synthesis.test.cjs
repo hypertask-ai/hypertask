@@ -221,6 +221,39 @@ test("full ticket formatting keeps chronology and labels supporting tickets", ()
   assert.ok(related.indexOf("Oldest comment") < related.indexOf("Newest comment"));
 });
 
+test("full ticket formatting keeps description block structure for edits", () => {
+  const context = formatTaskContext({
+    id: 1705,
+    title: "Restrict cart actions",
+    ticketNumber: "INNE-1705",
+    description_: {
+      content:
+        "<h2>Problem Context</h2><p>Checkout is restricted.</p><h2>Evidence</h2><ul><li><p><strong>Cart</strong> is restricted.</p></li></ul>",
+    },
+    comments: [],
+  }, "primary", true);
+
+  assert.match(
+    context,
+    /Description HTML \(preserve this block structure when editing\): <h2>Problem Context<\/h2><p>Checkout is restricted\.<\/p><h2>Evidence<\/h2><ul><li><p><strong>Cart<\/strong> is restricted\.<\/p><\/li><\/ul>/,
+  );
+});
+
+test("full ticket formatting keeps flattened description context when the flag is off", () => {
+  const context = formatTaskContext({
+    id: 1705,
+    title: "Restrict cart actions",
+    ticketNumber: "INNE-1705",
+    description_: {
+      content: "<h2>Problem Context</h2><p><strong>Checkout</strong> is restricted.</p>",
+    },
+    comments: [],
+  });
+
+  assert.match(context, /Description: Problem Context Checkout is restricted\./);
+  assert.doesNotMatch(context, /Description HTML|<h2>|<strong>/);
+});
+
 test("AI Task Writer sends the current task id so the server can load every comment", () => {
   const currentTask = {
     id: 101,

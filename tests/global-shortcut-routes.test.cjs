@@ -8,6 +8,7 @@ const {
   areGlobalShortcutsEnabled,
   isGlobalCreateTaskShortcut,
   isGlobalCreateTaskShortcutEnabled,
+  shouldOpenGlobalCreateTask,
 } = jiti(path.join(__dirname, "../src/lib/keyboard/globalShortcutRoutes.ts"));
 
 test("global shortcuts stay enabled on agent and settings pages", () => {
@@ -60,6 +61,22 @@ test("C opens task creation from agent and settings pages", () => {
   );
 });
 
+test("the My Tasks flag lifts only its global create-task carve-out", () => {
+  assert.equal(shouldOpenGlobalCreateTask("/my-tasks", false), false);
+  assert.equal(shouldOpenGlobalCreateTask("/my-tasks", true), true);
+  assert.equal(shouldOpenGlobalCreateTask("/my-tasks/", true), true);
+  assert.equal(shouldOpenGlobalCreateTask("/agents", false), true);
+
+  const provider = fs.readFileSync(
+    path.join(__dirname, "../src/components/ProviderGlobal/GloablProviders.tsx"),
+    "utf8",
+  );
+  assert.match(
+    provider,
+    /shouldOpenGlobalCreateTask\(pathname, myTasksShortcutsWidthEnabled\)/,
+  );
+});
+
 test("modified C presses remain available to their platform shortcuts", () => {
   for (const modifier of ["ctrlKey", "metaKey", "shiftKey"]) {
     assert.equal(
@@ -86,12 +103,14 @@ test("global shortcuts remain blocked on isolated public and setup routes", () =
     "/learn",
     "/share/public-task",
     "/new",
+    "/qa/login",
   ]) {
     assert.equal(areGlobalShortcutsEnabled(pathname), false, pathname);
   }
 
   for (const pathname of [
     "/login",
+    "/qa/login",
     "/project",
     "/detail/project-15/5607",
     "/inbox",
