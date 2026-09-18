@@ -136,6 +136,9 @@ test('search_tools matches names first and describe_tool returns shared $defs', 
   assert.equal(hits[0]?.name, 'hypertask_list_tasks')
   assert.equal(hits[0]?.description, TOOL_SUMMARIES.LIST_TASKS)
 
+  const naturalLanguageHits = searchToolCatalog(catalog, 'list tasks')
+  assert.equal(naturalLanguageHits[0]?.name, 'hypertask_list_tasks')
+
   const described = describeToolCatalog(catalog, 'hypertask_list_tasks')
   assert.ok(described)
   assert.equal(described.description, catalog[0].description)
