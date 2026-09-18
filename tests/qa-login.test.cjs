@@ -158,7 +158,11 @@ test("the QA login page and route stay hidden without the secrets", () => {
   assert.match(route, /await qaLoginCredentialsMatch/);
   assert.match(route, /QA_LOGIN_USER_ID/);
   assert.match(route, /onboardingTourStatus: true/);
-  assert.match(route, /console\.info\("\[qa-login\]"/);
+  assert.match(route, /console\.info\("\[qa-login\]", \{ outcome \}\)/);
+  assert.doesNotMatch(
+    route,
+    /console\.info\("\[qa-login\]", \{ outcome, email \}\)/,
+  );
   assert.doesNotMatch(route, /password:/);
   assert.doesNotMatch(route, /return true;/);
   assert.match(form, /htmlFor="email"/);
