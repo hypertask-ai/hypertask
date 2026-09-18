@@ -10,6 +10,7 @@ import { MobileViewContext } from "@/lib/contexts/mobileContext";
 import { useRecoilValue } from "@/lib/state";
 import { appShellRailAtom } from "@/store";
 import { useFlag } from "@/hooks/useFlag";
+import { HTPR_6559_KEEP_DIRECT_TASK_OPEN_FLAG } from "@/lib/flags/keys";
 
 const ShortcutsSection = () => {
   const isApple = useDeviceContext();
@@ -18,10 +19,12 @@ const ShortcutsSection = () => {
   const consistentCommentShortcuts = useFlag(
     "htpr-5913-consistent-comment-shortcuts",
   );
+  const keepDirectTaskOpen = useFlag(HTPR_6559_KEEP_DIRECT_TASK_OPEN_FLAG);
   const shortcutGroups = getKeyboardShortcuts(
     isApple,
     appShellRailOn,
     consistentCommentShortcuts,
+    keepDirectTaskOpen,
   );
   const [searchTerm, setSearchTerm] = useState("");
 

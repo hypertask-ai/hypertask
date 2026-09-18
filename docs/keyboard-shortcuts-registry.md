@@ -91,8 +91,8 @@ G-chords (`G` then second key): `I` inbox, `B` task board, `C` calendar, `A` all
 | `Mod+Shift+D` | Speech to text | palette |
 | `Mod+Shift+F` | Dictate and improve | cheatsheet |
 | `Mod+Shift+,` | Discard draft | cheatsheet |
-| `Mod+ENTER` | With the owner-only `htpr-5913-consistent-comment-shortcuts` flag: post a new comment, staying on the current task unless its URL carries `inboxFlow=true`; Inbox flow advances to the next item. Otherwise, save the active text entry as before. | `TipTapTaskDetail.tsx` |
-| `Mod+Shift+ENTER` | With the same flag: post a new comment and stay on the task. Description and existing-comment edits keep their previous behavior. | `TipTapTaskDetail.tsx` |
+| `Mod+ENTER` | With `htpr-5913-consistent-comment-shortcuts`: post a new comment and move to the next task. When `htpr-6559-keep-direct-task-open-after-comment` is also enabled, stay on the current task unless its URL carries `inboxFlow=true`; Inbox flow still advances. Otherwise, save the active text entry as before. | `TipTapTaskDetail.tsx` |
+| `Mod+Shift+ENTER` | With `htpr-5913-consistent-comment-shortcuts`: post a new comment and stay on the task. Description and existing-comment edits keep their previous behavior. | `TipTapTaskDetail.tsx` |
 
 ## Inbox
 

@@ -11,6 +11,7 @@ import {
 import { getKeyboardShortcuts } from "@/lib/constants/shortcuts";
 import { MobileViewContext } from "@/lib/contexts/mobileContext";
 import { useFlag } from "@/hooks/useFlag";
+import { HTPR_6559_KEEP_DIRECT_TASK_OPEN_FLAG } from "@/lib/flags/keys";
 
 const KeyboardShortcuts = () => {
   const isApple = useDeviceContext();
@@ -19,12 +20,14 @@ const KeyboardShortcuts = () => {
   const consistentCommentShortcuts = useFlag(
     "htpr-5913-consistent-comment-shortcuts",
   );
+  const keepDirectTaskOpen = useFlag(HTPR_6559_KEEP_DIRECT_TASK_OPEN_FLAG);
   const [_showShortcuts, setShowShortcuts] = useRecoilState(showShortcutsAtom);
   const [keyword, setKeyword] = useState("");
   const mainData = getKeyboardShortcuts(
     isApple,
     appShellRailOn,
     consistentCommentShortcuts,
+    keepDirectTaskOpen,
   );
   const [filteredShortcuts, setFilteredShortcuts] = useState(mainData);
 

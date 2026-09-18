@@ -71,6 +71,7 @@ import {
   HTPR_6555_IDLE_COMMENT_MIC_FLAG,
   HTPR_6553_AGENT_CHAT_POLLING_FLAG,
   HTPR_6557_AGENT_ROOMS_FLAG,
+  HTPR_6559_KEEP_DIRECT_TASK_OPEN_FLAG,
 } from "@/lib/flags/keys";
 
 // Re-exported so server code keeps importing keys from here. Client components must
@@ -94,6 +95,12 @@ const FEATURE_FLAG_QA_USER = {
 const RETIRED_FEATURE_FLAG_KEYS = new Set(["hyfa-43-factory-owner-preview"]);
 
 const FEATURE_FLAG_DEFINITIONS = [
+  {
+    key: HTPR_6559_KEEP_DIRECT_TASK_OPEN_FLAG,
+    shippedOn: "2026-09-18",
+    description:
+      "Keeps a task open after Ctrl or Command plus Enter unless it was opened through the Inbox cycle.",
+  },
   {
     key: HTPR_6557_AGENT_ROOMS_FLAG,
     shippedOn: "2026-09-18",

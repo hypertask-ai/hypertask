@@ -135,7 +135,7 @@ test("the tutorial comment does not consume its seeded inbox notification", () =
   assert.match(sendComment, /!preserveTutorialInbox && inInbox/);
   assert.match(
     sendComment,
-    /!preserveTutorialInbox &&\s*isInboxFlow &&\s*\(alwaysAdvance \|\| \(inInbox && advanceOnSend\)\)/,
+    /!preserveTutorialInbox &&\s*\(!keepDirectTaskOpen \|\| isInboxFlow\) &&\s*\(alwaysAdvance \|\| \(inInbox && advanceOnSend\)\)/,
   );
 });
 
@@ -143,6 +143,10 @@ test("comment shortcuts use the gated save-then-move path", () => {
   assert.match(
     tiptap,
     /useFlag\(\s*"htpr-5913-consistent-comment-shortcuts",?\s*\)/,
+  );
+  assert.match(
+    tiptap,
+    /useFlag\(\s*HTPR_6559_KEEP_DIRECT_TASK_OPEN_FLAG,?\s*\)/,
   );
 
   const shortcutStart = tiptap.indexOf("// Enter key combinations");
