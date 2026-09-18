@@ -24,9 +24,11 @@ import AssigneesContainerCreateTaskGlobally from './AssigneesTaskGlobal/Assignee
 export const MobileCreateTaskProperties = ({
     hideBoard = false,
     showPills = true,
+    raisedPanel = false,
 }: {
     hideBoard?: boolean
     showPills?: boolean
+    raisedPanel?: boolean
 }) => {
     const {
         toggleMoveModal, showMoveModal, setShowMoveModal,
@@ -102,7 +104,9 @@ export const MobileCreateTaskProperties = ({
             {showPills && (
                 <div
                     data-mobile-new-task-properties
-                    className="flex flex-wrap gap-2 rounded-[5px] bg-comment-description px-2 py-2 shadow-md"
+                    className={raisedPanel
+                        ? "flex flex-wrap gap-2 rounded-[5px] bg-comment-description px-2 py-2 shadow-md"
+                        : "flex flex-wrap gap-2 px-2 pb-2"}
                 >
                     {propertyPills.filter((property) => !hideBoard || property.label !== "Board").slice(0, hideBoard ? 2 : 3).map((property) => (
                         <button
@@ -147,9 +151,11 @@ export const MobileCreateTaskProperties = ({
 const TaskInfoColumnGloballyCreate = ({
     mobileHideBoard = false,
     mobileShowPills = true,
+    mobileRaisedPanel = false,
 }: {
     mobileHideBoard?: boolean
     mobileShowPills?: boolean
+    mobileRaisedPanel?: boolean
 } = {}) => {
     const {
         toggleMoveModal, showMoveModal, setShowMoveModal,
@@ -181,6 +187,7 @@ const TaskInfoColumnGloballyCreate = ({
         <MobileCreateTaskProperties
             hideBoard={mobileHideBoard}
             showPills={mobileShowPills}
+            raisedPanel={mobileRaisedPanel}
         />
     )
 
