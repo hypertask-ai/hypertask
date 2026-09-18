@@ -95,8 +95,6 @@ jobs:
             exit 0
           fi
 
-          # These allowlists are the ticket's explicit credit boundary. Other
-          # runtime paths intentionally do not spend TestSprite plan credits.
           web=false
           backend=false
           while IFS= read -r file; do
@@ -104,7 +102,7 @@ jobs:
               src/app/*|src/components/*|src/pages/*|public/*) web=true ;;
             esac
             case "$file" in
-              src/app/api/*|src/lib/*|prisma/*) backend=true ;;
+              src/app/api/*|src/lib/*|src/utils/controllers/*|prisma/*) backend=true ;;
             esac
           done < <(git diff --name-only "$before_sha" "$AFTER_SHA")
 
