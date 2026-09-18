@@ -194,7 +194,7 @@ test("running timers are pinned before the 1000-row report cap", () => {
   assert.ok(pin !== -1 && pin < cap);
 });
 
-test("time reports retain history from accessible archived boards", async () => {
+test("flag-off time reports retain archived history but fail closed to the caller", async () => {
   const source = read("src/lib/timeTracking.ts");
   const start = source.indexOf("export async function listReport(");
   const end = source.indexOf("\nexport async function updateEntry(", start);
@@ -235,8 +235,13 @@ test("time reports retain history from accessible archived boards", async () => 
     () => 0
   );
 
-  await loaded.exports.listReport(6);
+  await loaded.exports.listReport(6, {
+    filterUserId: 7,
+    adminProjectIds: [16],
+  });
 
+  assert.equal(reportWhere.userId, 6);
+  assert.equal(reportWhere.OR, undefined);
   assert.deepEqual(reportWhere.task.project.status, {
     in: ["Normal", "Archive"],
   });
@@ -438,6 +443,11 @@ test("the flag-gated report route hides the user filter without other-user scope
   assert.match(route, /HTPR_4228_ADMIN_ONLY_TIME_REPORTS_FLAG/);
   assert.match(route, /isFeatureEnabled\(/);
   assert.match(route, /administeredProjectIds\(auth\.userId/);
+  assert.match(
+    route,
+    /canViewOthers = reportsEnabled && adminProjectIds\.length > 0/,
+    "flag-off reports must never expose another member's entries"
+  );
   assert.match(route, /canViewOthers,/);
   assert.match(
     route,

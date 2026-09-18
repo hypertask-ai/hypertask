@@ -23,23 +23,23 @@ export async function GET(request: NextRequest) {
   );
   if (!parsed.success) return invalidFilterResponse(parsed.filter);
 
-  const adminOnly = await isFeatureEnabled(
+  const reportsEnabled = await isFeatureEnabled(
     HTPR_4228_ADMIN_ONLY_TIME_REPORTS_FLAG,
     auth.userId
   );
-  const adminProjectIds = adminOnly
+  const adminProjectIds = reportsEnabled
     ? await administeredProjectIds(auth.userId, {
         teamId: parsed.filters.teamId,
         boardIds: parsed.filters.boardIds,
       })
     : [];
-  const canViewOthers = !adminOnly || adminProjectIds.length > 0;
+  const canViewOthers = reportsEnabled && adminProjectIds.length > 0;
   // A stale "user" URL parameter must not turn the report empty for a plain
   // member (no UI to clear it), so the filter only applies with the scope.
   const entries = await listReport(auth.userId, {
     ...parsed.filters,
     ...(canViewOthers ? {} : { filterUserIds: undefined }),
-    ...(adminOnly ? { adminProjectIds } : {}),
+    adminProjectIds,
   });
 
   return NextResponse.json({
