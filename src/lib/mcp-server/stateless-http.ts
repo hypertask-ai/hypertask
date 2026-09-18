@@ -205,8 +205,9 @@ async function dispatchMethod(
       return jsonRpcResult(id, {})
     case 'tools/list':
       if (deferred) {
+        const metaOnly = new URL(request.url).searchParams.get('tools') === 'meta'
         return jsonRpcResult(id, {
-          tools: listToolsDeferred(tools),
+          tools: listToolsDeferred(tools, metaOnly),
         })
       }
       return jsonRpcResult(id, {
