@@ -13,7 +13,6 @@ import SettingsCodeRow from "./SettingsCodeRow";
 import SettingsSectionShell from "./SettingsSectionShell";
 import {
   managementKeyScopeLabel,
-  managementKeyTeamIdForRequest,
   managementKeyTeamLabel,
 } from "./managementKeyScope";
 import {
@@ -109,10 +108,7 @@ const ManagementKeysSection = () => {
     event.preventDefault();
     const trimmedName = name.trim();
     if (!trimmedName) return;
-    const requestTeamId = managementKeyTeamIdForRequest(
-      teamScopedKeysEnabled,
-      teamId,
-    );
+    const requestTeamId = teamScopedKeysEnabled ? teamId : null;
 
     try {
       const result = await createKey({

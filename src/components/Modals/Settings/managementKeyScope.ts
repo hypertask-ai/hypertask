@@ -7,11 +7,6 @@ import {
 
 export type ManagementKeyPermissionMap = Record<string, string[]>
 
-export const managementKeyTeamIdForRequest = (
-  enabled: boolean,
-  teamId: string | null,
-) => (enabled ? teamId : null)
-
 export const managementKeyTeamLabel = (
   teamScoped: boolean,
   team: { title: string | null } | null,

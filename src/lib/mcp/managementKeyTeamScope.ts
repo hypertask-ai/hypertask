@@ -66,11 +66,12 @@ export async function getManagementKeyTeam(
   if (!team) return null;
 
   const isOwner = team.googleAccount.userId === userId;
-  const accessBinding = isOwner
-    ? `owner:${team.googleAccount.id}`
-    : team.members[0]
-      ? `member:${team.members[0].id}`
-      : null;
+  let accessBinding: string | null = null;
+  if (isOwner) {
+    accessBinding = `owner:${team.googleAccount.id}`;
+  } else if (team.members[0]) {
+    accessBinding = `member:${team.members[0].id}`;
+  }
   if (!accessBinding) return null;
 
   return {

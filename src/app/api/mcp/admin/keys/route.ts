@@ -76,13 +76,15 @@ export async function GET(request: NextRequest) {
       },
     })
 
-    const teams = teamScopedKeysEnabled
-      ? scopedTeamId
-        ? [await getManagementKeyTeam(ctx.user.id, scopedTeamId)].filter(
-            (team) => team !== null
-          )
-        : await listManagementKeyTeams(ctx.user.id)
-      : []
+    let teams: Awaited<ReturnType<typeof listManagementKeyTeams>> = []
+    if (teamScopedKeysEnabled) {
+      if (scopedTeamId) {
+        const scopedTeam = await getManagementKeyTeam(ctx.user.id, scopedTeamId)
+        if (scopedTeam) teams = [scopedTeam]
+      } else {
+        teams = await listManagementKeyTeams(ctx.user.id)
+      }
+    }
 
     return NextResponse.json({
       success: true,
