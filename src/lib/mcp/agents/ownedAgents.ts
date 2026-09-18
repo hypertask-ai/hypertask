@@ -1,4 +1,6 @@
-import type { PrismaClient } from '@prisma/client'
+import type { Prisma, PrismaClient } from '@prisma/client'
+
+import { agentWithinTeamWhere } from '@/lib/mcp/managementKeyTeamScope'
 
 export type OwnedAgentRow = {
   id: string
@@ -25,9 +27,13 @@ type AgentRowForDelete = {
 type AgentManagementTransaction = {
   agent: {
     findFirst(args: {
-      where: { id: string; userId: number }
+      where: Prisma.AgentWhereInput
       select: { id: true; displayName: true; runtimeGeneration: true }
     }): Promise<AgentRowForDelete | null>
+    updateMany(args: {
+      where: Prisma.AgentWhereInput
+      data: { runtimeGeneration: { increment: 1 } }
+    }): Promise<WriteCount>
     delete(args: { where: { id: string } }): Promise<unknown>
   }
   assignees: {
@@ -142,7 +148,7 @@ type AgentManagementTransaction = {
 export type AgentManagementDatabase = AgentManagementTransaction & {
   agent: AgentManagementTransaction['agent'] & {
     findMany(args: {
-      where: { userId: number; archivedAt: null }
+      where: Prisma.AgentWhereInput
       orderBy: { createdAt: 'desc' }
       select: {
         id: true
@@ -189,10 +195,15 @@ export type DeleteOwnedAgentResult = {
 
 export async function listOwnedAgents(
   database: AgentManagementDatabase,
-  userId: number
+  userId: number,
+  teamId?: string
 ): Promise<OwnedAgent[]> {
   const agents = await database.agent.findMany({
-    where: { userId, archivedAt: null },
+    where: {
+      userId,
+      archivedAt: null,
+      ...(teamId ? agentWithinTeamWhere(teamId) : {}),
+    },
     orderBy: { createdAt: 'desc' },
     select: {
       id: true,
@@ -235,10 +246,16 @@ function toOwnedAgent(agent: OwnedAgentRow): OwnedAgent {
 export async function getOwnedAgent(
   database: Pick<PrismaClient, 'agent'>,
   userId: number,
-  agentId: string
+  agentId: string,
+  teamId?: string
 ): Promise<OwnedAgentDetail | null> {
   const agent = await database.agent.findFirst({
-    where: { id: agentId, userId, archivedAt: null },
+    where: {
+      id: agentId,
+      userId,
+      archivedAt: null,
+      ...(teamId ? agentWithinTeamWhere(teamId) : {}),
+    },
     select: {
       id: true,
       displayName: true,
@@ -291,6 +308,12 @@ export async function deleteOwnedAgent(
             select: { id: true, displayName: true, runtimeGeneration: true },
           })
           if (!agent) return null
+
+          const claimed = await transaction.agent.updateMany({
+            where: { id: agent.id, userId },
+            data: { runtimeGeneration: { increment: 1 } },
+          })
+          if (claimed.count !== 1) return null
 
           const tombstonedComments = await transaction.comment.updateMany({
             where: { agentId: agent.id },

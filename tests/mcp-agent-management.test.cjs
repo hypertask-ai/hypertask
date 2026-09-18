@@ -66,12 +66,20 @@ function createDatabase({
       },
       findFirst: async (args) => {
         calls.findFirst.push(args)
-        return (
-          state.agents.find(
-            (agent) =>
-              agent.id === args.where.id && agent.userId === args.where.userId
-          ) ?? null
+        const found = state.agents.find(
+          (agent) =>
+            agent.id === args.where.id && agent.userId === args.where.userId
         )
+        return found ? { ...found } : null
+      },
+      updateMany: async (args) => {
+        const matchingAgent = state.agents.find(
+          (agent) =>
+            agent.id === args.where.id && agent.userId === args.where.userId
+        )
+        if (!matchingAgent) return { count: 0 }
+        matchingAgent.runtimeGeneration += args.data.runtimeGeneration.increment
+        return { count: 1 }
       },
       delete: async (args) => {
         calls.agentDeletes.push(args)
@@ -253,6 +261,25 @@ test('agent list returns only agents owned by the authenticated user', async () 
   assert.deepEqual(calls.findMany[0].where, { userId: 6, archivedAt: null })
 })
 
+test('team-scoped agent list applies the exact-team predicate', async () => {
+  const { database, calls } = createDatabase({ agents: [agent()] })
+
+  await listOwnedAgents(database, 6, 'team-a')
+
+  assert.deepEqual(calls.findMany[0].where, {
+    userId: 6,
+    archivedAt: null,
+    members: {
+      some: { project: { teamId: 'team-a' } },
+      none: {
+        project: {
+          OR: [{ teamId: null }, { teamId: { not: 'team-a' } }],
+        },
+      },
+    },
+  })
+})
+
 test('agent list hides archived owned agents', async () => {
   const { database, calls } = createDatabase({
     agents: [
@@ -290,6 +317,10 @@ test('delete refuses an unowned agent without changing related rows', async () =
     'utf8'
   )
   assert.match(route, /!deletedAgent[\s\S]*?'Agent not found'[\s\S]*?status: 404/)
+  assert.match(
+    route,
+    /ctx\.management\?\.teamId[\s\S]*?'Team-scoped management keys cannot delete agents'[\s\S]*?status: 403[\s\S]*?deleteOwnedAgent/
+  )
 })
 
 test('delete stays successful when post-commit runtime cleanup fails', async () => {
@@ -430,7 +461,7 @@ test('token rotation reactivates a revoked agent owned by the caller', () => {
 
   assert.match(
     source,
-    /where:\s*\{\s*id: agentId,\s*userId: ctx\.user\.id,[\s\S]*?runtimeType: 'EXTERNAL',\s*\}/
+    /where:\s*\{\s*id: agentId,\s*userId: ctx\.user\.id,[\s\S]*?runtimeType: 'EXTERNAL',[\s\S]*?\}/
   )
   assert.doesNotMatch(
     source,

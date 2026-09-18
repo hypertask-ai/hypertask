@@ -1,15 +1,20 @@
 "use client";
 
-import { useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import toast from "react-hot-toast";
 
 import ConfirmDialog from "@/components/Modals/Common Modals/ConfirmDialog";
+import { useFlag } from "@/hooks/useFlag";
+import { HTPR_6542_TEAM_SCOPED_MANAGEMENT_KEYS_FLAG } from "@/lib/flags/keys";
 import { cn } from "@/utils/undoActions/helperFuncs";
 import SettingsCard from "./SettingsCard";
 import { settingsActionButtonClass } from "./SettingsBillingRow";
 import SettingsCodeRow from "./SettingsCodeRow";
 import SettingsSectionShell from "./SettingsSectionShell";
-import { managementKeyScopeLabel } from "./managementKeyScope";
+import {
+  managementKeyScopeLabel,
+  managementKeyTeamLabel,
+} from "./managementKeyScope";
 import {
   useManagementKeys,
   type ManagementKey,
@@ -32,10 +37,12 @@ const inputClass =
 const ChoiceButton = ({
   active,
   children,
+  disabled = false,
   onClick,
 }: {
   active: boolean;
   children: string;
+  disabled?: boolean;
   onClick: () => void;
 }) => (
   <button
@@ -43,7 +50,9 @@ const ChoiceButton = ({
     className={cn(
       settingsActionButtonClass,
       active ? "bg-active-modal-element" : "text-text-light-gray",
+      disabled && "cursor-not-allowed opacity-50",
     )}
+    disabled={disabled}
     onClick={onClick}
     type="button"
   >
@@ -53,9 +62,30 @@ const ChoiceButton = ({
 
 const formatDate = (value: string) => new Date(value).toLocaleDateString();
 
+const teamScopeDescription = (
+  scope: ManagementKeyScope,
+  teamId: string | null,
+) => {
+  if (scope === "full") {
+    return "Full access stays account-wide because data routes are not team-scoped.";
+  }
+  if (!teamId) {
+    return scope === "usage"
+      ? "This key can read usage for any team you own."
+      : "This key can manage agents and keys across your account.";
+  }
+  return scope === "usage"
+    ? "This key reads usage only for the selected team."
+    : "This key manages agents and keys only in the selected team.";
+};
+
 const ManagementKeysSection = () => {
+  const teamScopedKeysEnabled = useFlag(
+    HTPR_6542_TEAM_SCOPED_MANAGEMENT_KEYS_FLAG,
+  );
   const {
     keys,
+    teams,
     error,
     isCreating,
     isLoading,
@@ -65,24 +95,32 @@ const ManagementKeysSection = () => {
   } = useManagementKeys();
   const [name, setName] = useState("");
   const [scope, setScope] = useState<ManagementKeyScope>("management");
+  const [teamId, setTeamId] = useState<string | null>(null);
   const [expiresInDays, setExpiresInDays] = useState<number | undefined>();
   const [createdKey, setCreatedKey] = useState<string | null>(null);
   const [keyToRevoke, setKeyToRevoke] = useState<ManagementKey | null>(null);
+
+  useEffect(() => {
+    if (!teamScopedKeysEnabled) setTeamId(null);
+  }, [teamScopedKeysEnabled]);
 
   const handleCreate = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     const trimmedName = name.trim();
     if (!trimmedName) return;
+    const requestTeamId = teamScopedKeysEnabled ? teamId : null;
 
     try {
       const result = await createKey({
         name: trimmedName,
         scope,
+        ...(requestTeamId ? { teamId: requestTeamId } : {}),
         ...(expiresInDays ? { expiresInDays } : {}),
       });
       setCreatedKey(result.key);
       setName("");
       setScope("management");
+      setTeamId(null);
       setExpiresInDays(undefined);
       toast.success("Management key created");
     } catch (requestError) {
@@ -156,18 +194,58 @@ const ManagementKeysSection = () => {
               </ChoiceButton>
               <ChoiceButton
                 active={scope === "usage"}
-                onClick={() => setScope("usage")}
+                onClick={() => {
+                  setScope("usage");
+                  if (
+                    teamId &&
+                    !teams.find((team) => team.id === teamId)?.isOwner
+                  ) {
+                    setTeamId(null);
+                  }
+                }}
               >
                 Usage
               </ChoiceButton>
               <ChoiceButton
                 active={scope === "full"}
+                disabled={teamId !== null}
                 onClick={() => setScope("full")}
               >
                 Full access
               </ChoiceButton>
             </div>
           </div>
+
+          {teamScopedKeysEnabled && (
+            <div className="flex flex-col gap-1 px-2">
+              <span className="text-dense font-semibold text-white-black">
+                Team
+              </span>
+              <div className="flex flex-wrap gap-2">
+                <ChoiceButton
+                  active={teamId === null}
+                  onClick={() => setTeamId(null)}
+                >
+                  Whole account
+                </ChoiceButton>
+                {teams.map((team) => (
+                  <ChoiceButton
+                    active={teamId === team.id}
+                    disabled={
+                      scope === "full" || (scope === "usage" && !team.isOwner)
+                    }
+                    key={team.id}
+                    onClick={() => setTeamId(team.id)}
+                  >
+                    {team.title || "Untitled team"}
+                  </ChoiceButton>
+                ))}
+              </div>
+              <span className="text-micro font-medium text-text-light-gray">
+                {teamScopeDescription(scope, teamId)}
+              </span>
+            </div>
+          )}
 
           <div className="flex flex-col gap-1 px-2">
             <span className="text-dense font-semibold text-white-black">
@@ -245,6 +323,19 @@ const ManagementKeysSection = () => {
                     <span className="rounded-[4px] bg-active-modal-element px-1.5 py-[1px] text-micro font-medium text-text-light-gray">
                       {managementKeyScopeLabel(key.permissions)}
                     </span>
+                    {managementKeyTeamLabel(
+                      key.teamScoped,
+                      key.team,
+                      teamScopedKeysEnabled,
+                    ) && (
+                      <span className="rounded-[4px] bg-active-modal-element px-1.5 py-[1px] text-micro font-medium text-text-light-gray">
+                        {managementKeyTeamLabel(
+                          key.teamScoped,
+                          key.team,
+                          teamScopedKeysEnabled,
+                        )}
+                      </span>
+                    )}
                     {!key.enabled && (
                       <span className="text-micro font-medium text-text-light-gray">
                         Revoked
@@ -252,7 +343,7 @@ const ManagementKeysSection = () => {
                     )}
                   </div>
                   <p className="font-mono text-micro text-text-light-gray">
-                    {key.start || "htmk_"}…
+                    {key.start || (key.teamScoped ? "httk_" : "htmk_")}…
                   </p>
                   <p className="mt-1 text-micro font-medium text-text-light-gray">
                     Created {formatDate(key.createdAt)} · Last used{" "}

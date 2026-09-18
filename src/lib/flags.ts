@@ -76,6 +76,7 @@ import {
   HTPR_6559_KEEP_DIRECT_TASK_OPEN_FLAG,
   HTPR_6556_MOBILE_DESCRIPTION_FIRST_FLAG,
   HTPR_6561_DESCRIPTION_STRUCTURE_FLAG,
+  HTPR_6542_TEAM_SCOPED_MANAGEMENT_KEYS_FLAG,
 } from "@/lib/flags/keys";
 
 // Re-exported so server code keeps importing keys from here. Client components must
@@ -99,6 +100,12 @@ const FEATURE_FLAG_QA_USER = {
 const RETIRED_FEATURE_FLAG_KEYS = new Set(["hyfa-43-factory-owner-preview"]);
 
 const FEATURE_FLAG_DEFINITIONS = [
+  {
+    key: HTPR_6542_TEAM_SCOPED_MANAGEMENT_KEYS_FLAG,
+    shippedOn: "2026-09-18",
+    description:
+      "Lets management keys be limited to one team while existing account-wide keys keep their current access.",
+  },
   {
     key: HTPR_6561_DESCRIPTION_STRUCTURE_FLAG,
     shippedOn: "2026-09-18",

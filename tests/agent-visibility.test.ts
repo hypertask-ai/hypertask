@@ -173,9 +173,9 @@ async function main() {
   const nativeNoKeyTx = {
     agent: {
       findFirst: async () => ({ id: "owned-agent", runtimeType: "NATIVE" }),
-      update: async () => {
+      updateMany: async () => {
         updateCount += 1;
-        return { visibility: "TEAM" };
+        return { count: 1 };
       },
     },
     agentByokApiKey: { count: async () => 0 },
@@ -238,8 +238,9 @@ async function main() {
         assert.deepEqual(where, { id: "another-users-agent", userId: 42 });
         return null;
       },
-      update: async () => {
+      updateMany: async () => {
         guessedUpdateCount += 1;
+        return { count: 1 };
       },
     },
   } as any;

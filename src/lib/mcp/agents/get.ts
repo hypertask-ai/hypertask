@@ -72,7 +72,12 @@ export async function handleGetAgentRequest(
     )
   }
 
-  const agent = await getOwnedAgent(prisma, ctx.user.id, agentId)
+  const agent = await getOwnedAgent(
+    prisma,
+    ctx.user.id,
+    agentId,
+    ctx.management?.teamId
+  )
   if (!agent) {
     return NextResponse.json(
       { success: false, error: 'Agent not found' },

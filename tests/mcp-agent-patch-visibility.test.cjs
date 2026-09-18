@@ -34,6 +34,9 @@ function loadReal(relativePath) {
   loaded.filename = filePath;
   loaded.require = (request) => {
     if (request === "@/lib/prisma") return { __esModule: true, default: {} };
+    if (request === "@/lib/mcp/managementKeyTeamScope") {
+      return { __esModule: true, agentWithinTeamWhere: () => ({}) };
+    }
     return require(request);
   };
   loaded._compile(transpile(relativePath), filePath);
@@ -94,7 +97,11 @@ function loadHandler({ user, visibilityResult, agentRow, flagEnabled } = {}) {
         validateMcpAuth: async () => state.user,
         agentTokenCredentialFields: () => ({}),
         createMcpToken: async () => "token",
+        managementAgentTokenScope: () => undefined,
       };
+    }
+    if (request === "@/lib/mcp/managementKeyTeamScope") {
+      return { __esModule: true, agentWithinTeamWhere: () => ({}) };
     }
     if (request === "@/lib/prisma") {
       return {

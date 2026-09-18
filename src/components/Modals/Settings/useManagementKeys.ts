@@ -13,12 +13,21 @@ export type ManagementKey = {
   lastRequest: string | null;
   expiresAt: string | null;
   createdAt: string;
+  teamScoped: boolean;
+  team: { id: string; title: string | null } | null;
+};
+
+export type ManagementKeyTeam = {
+  id: string;
+  title: string | null;
+  isOwner: boolean;
 };
 
 type CreateManagementKeyInput = {
   name: string;
   scope: ManagementKeyScope;
   expiresInDays?: number;
+  teamId?: string;
 };
 
 export type CreatedManagementKey = {
@@ -47,6 +56,7 @@ const readResponse = async <T extends ApiResponse>(response: Response) => {
 
 export const useManagementKeys = () => {
   const [keys, setKeys] = useState<ManagementKey[]>([]);
+  const [teams, setTeams] = useState<ManagementKeyTeam[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isCreating, setIsCreating] = useState(false);
   const [revokingKeyId, setRevokingKeyId] = useState<string | null>(null);
@@ -59,10 +69,11 @@ export const useManagementKeys = () => {
       const response = await fetch("/api/mcp/admin/keys", {
         credentials: "include",
       });
-      const data = await readResponse<ApiResponse & { keys: ManagementKey[] }>(
-        response,
-      );
+      const data = await readResponse<
+        ApiResponse & { keys: ManagementKey[]; teams?: ManagementKeyTeam[] }
+      >(response);
       setKeys(data.keys.map(normalizeKey));
+      setTeams(data.teams ?? []);
     } catch (requestError) {
       setError(
         requestError instanceof Error
@@ -121,6 +132,7 @@ export const useManagementKeys = () => {
 
   return {
     keys,
+    teams,
     error,
     isLoading,
     isCreating,

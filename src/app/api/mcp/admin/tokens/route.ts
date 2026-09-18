@@ -37,6 +37,15 @@ export async function POST(request: NextRequest) {
 
   const ctx = await validateManagementOrSessionAuth(request, "write");
   if (!ctx) return createUnauthorizedResponse();
+  if (ctx.management?.teamId) {
+    return NextResponse.json(
+      {
+        success: false,
+        error: "Team-scoped keys cannot create account-wide tokens.",
+      },
+      { status: 403 },
+    );
+  }
 
   try {
     const input = mintTokenSchema.parse(await request.json());
@@ -65,6 +74,15 @@ export async function DELETE(request: NextRequest) {
 
   const ctx = await validateManagementOrSessionAuth(request, "write");
   if (!ctx) return createUnauthorizedResponse();
+  if (ctx.management?.teamId) {
+    return NextResponse.json(
+      {
+        success: false,
+        error: "Team-scoped keys cannot revoke account-wide tokens.",
+      },
+      { status: 403 },
+    );
+  }
 
   try {
     const input = revokeTokenSchema.parse(await request.json());

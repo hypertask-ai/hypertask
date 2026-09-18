@@ -88,7 +88,7 @@ function loadRoute({
             return {
               valid: Boolean(permissions),
               key: permissions
-                ? { id: 1, referenceId: "6", permissions }
+                ? { id: 1, referenceId: "6", prefix: "htmk_", permissions }
                 : null,
             };
           },
@@ -731,6 +731,34 @@ test("usage route binds ownership to the authenticated key identity", async () =
     assert.deepEqual(prisma.teamFindFirstArgs.where.googleAccount, {
       userId,
     });
+  } finally {
+    restore();
+  }
+});
+
+test("team-scoped usage keys reject another team before querying usage", async () => {
+  const prisma = prismaFixture();
+  const { route, restore } = loadRoute({
+    authContext: {
+      user: { id: 6, email: "owner@example.test" },
+      agentId: null,
+      management: {
+        keyId: "1",
+        permissions: { usage: ["read"] },
+        teamId: TEAM_ID,
+      },
+    },
+    funding: null,
+    gatewayResponse: Response.json({ results: [] }),
+    prisma,
+  });
+
+  try {
+    const response = await route.GET(request(`?team_id=${OTHER_TEAM_ID}`));
+    assert.equal(response.status, 403);
+    assert.match((await response.json()).error, /only for its own team/i);
+    assert.equal(prisma.teamFindFirstArgs, undefined);
+    assert.equal(prisma.aggregateCalls ?? 0, 0);
   } finally {
     restore();
   }

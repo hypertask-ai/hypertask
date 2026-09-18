@@ -3,8 +3,13 @@ import { z } from 'zod'
 
 import { auth } from '@/lib/auth/betterAuth'
 import {
+  HTPR_6542_TEAM_SCOPED_MANAGEMENT_KEYS_FLAG,
+  isFeatureEnabled,
+} from '@/lib/flags'
+import {
   checkMcpRateLimit,
   createUnauthorizedResponse,
+  MANAGEMENT_KEY_PREFIX,
   validateManagementOrSessionAuth,
 } from '@/lib/mcp/auth'
 import {
@@ -16,6 +21,11 @@ import {
   parseManagementPermissions,
   USAGE_READ_KEY_PERMISSIONS,
 } from '@/lib/mcp/managementPermissions'
+import {
+  getManagementKeyTeam,
+  listManagementKeyTeams,
+  TEAM_MANAGEMENT_KEY_PREFIX,
+} from '@/lib/mcp/managementKeyTeamScope'
 import prisma from '@/lib/prisma'
 
 export const runtime = 'nodejs'
@@ -25,6 +35,7 @@ const createKeySchema = z.object({
   name: z.string().trim().min(1).max(32),
   scope: z.enum(['management', 'usage', 'full']).default('management'),
   expiresInDays: z.number().int().min(1).max(365).optional(),
+  teamId: z.string().uuid().optional(),
 })
 
 const deleteKeySchema = z.object({
@@ -39,14 +50,20 @@ export async function GET(request: NextRequest) {
   if (!ctx) return createUnauthorizedResponse()
 
   try {
+    const scopedTeamId = ctx.management?.teamId
+    const teamScopedKeysEnabled = await isFeatureEnabled(
+      HTPR_6542_TEAM_SCOPED_MANAGEMENT_KEYS_FLAG,
+      ctx.user.id
+    )
     const rows = await prisma.betterAuthApiKey.findMany({
       where: {
         userId: ctx.user.id,
-        prefix: 'htmk_',
+        prefix: teamScopedKeysEnabled
+          ? { in: [MANAGEMENT_KEY_PREFIX, TEAM_MANAGEMENT_KEY_PREFIX] }
+          : MANAGEMENT_KEY_PREFIX,
+        ...(scopedTeamId ? { teamId: scopedTeamId } : {}),
       },
-      orderBy: {
-        createdAt: 'desc',
-      },
+      orderBy: { createdAt: 'desc' },
       select: {
         id: true,
         name: true,
@@ -56,16 +73,31 @@ export async function GET(request: NextRequest) {
         lastRequest: true,
         expiresAt: true,
         createdAt: true,
+        prefix: true,
+        team: { select: { id: true, title: true } },
       },
     })
 
+    let teams: Awaited<ReturnType<typeof listManagementKeyTeams>> = []
+    if (teamScopedKeysEnabled) {
+      if (scopedTeamId) {
+        const scopedTeam = await getManagementKeyTeam(ctx.user.id, scopedTeamId)
+        if (scopedTeam) teams = [scopedTeam]
+      } else {
+        teams = await listManagementKeyTeams(ctx.user.id)
+      }
+    }
+
     return NextResponse.json({
       success: true,
-      keys: rows.map((row) => ({
+      keys: rows.map(({ prefix, ...row }) => ({
         ...row,
         id: String(row.id),
         permissions: parseManagementPermissions(row.permissions),
+        teamScoped: prefix === TEAM_MANAGEMENT_KEY_PREFIX,
+        team: teamScopedKeysEnabled ? row.team : null,
       })),
+      teams,
     })
   } catch (error) {
     console.error('[Management Keys] Failed to list keys:', error)
@@ -85,6 +117,64 @@ export async function POST(request: NextRequest) {
 
   try {
     const input = createKeySchema.parse(await request.json())
+    const callerTeamId = ctx.management?.teamId
+    if (callerTeamId && input.teamId && input.teamId !== callerTeamId) {
+      return NextResponse.json(
+        {
+          success: false,
+          error:
+            'The authenticated management key cannot create a key for another team.',
+        },
+        { status: 403 }
+      )
+    }
+
+    const teamId = callerTeamId ?? input.teamId
+    let team: Awaited<ReturnType<typeof getManagementKeyTeam>> = null
+    if (teamId) {
+      if (
+        !(await isFeatureEnabled(
+          HTPR_6542_TEAM_SCOPED_MANAGEMENT_KEYS_FLAG,
+          ctx.user.id
+        ))
+      ) {
+        return NextResponse.json(
+          {
+            success: false,
+            error: 'Team-scoped management keys are not enabled.',
+          },
+          { status: 403 }
+        )
+      }
+      if (input.scope === 'full') {
+        return NextResponse.json(
+          {
+            success: false,
+            error: 'Full access is available only for whole-account keys.',
+            reason: 'unsupported_scope',
+          },
+          { status: 400 }
+        )
+      }
+
+      team = await getManagementKeyTeam(ctx.user.id, teamId)
+      if (!team) {
+        return NextResponse.json(
+          { success: false, error: 'Team not found or access denied.' },
+          { status: 403 }
+        )
+      }
+      if (input.scope === 'usage' && !team.isOwner) {
+        return NextResponse.json(
+          {
+            success: false,
+            error: 'Usage keys can be limited only to teams you own.',
+          },
+          { status: 403 }
+        )
+      }
+    }
+
     let permissions = MANAGEMENT_KEY_PERMISSIONS
     if (input.scope === 'full') {
       permissions = FULL_MANAGEMENT_KEY_PERMISSIONS
@@ -101,8 +191,7 @@ export async function POST(request: NextRequest) {
           isPermissionSubset(
             FULL_MANAGEMENT_KEY_PERMISSIONS,
             ctx.management.permissions
-          ) ||
-          hasLegacyFullPermissionShape(ctx.management.permissions)
+          ) || hasLegacyFullPermissionShape(ctx.management.permissions)
       } else {
         canGrant = isPermissionSubset(permissions, ctx.management.permissions)
       }
@@ -112,7 +201,8 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(
         {
           success: false,
-          error: 'The authenticated management key cannot grant the requested scope.',
+          error:
+            'The authenticated management key cannot grant the requested scope.',
           reason: 'insufficient_scope',
         },
         { status: 403 }
@@ -124,11 +214,49 @@ export async function POST(request: NextRequest) {
         name: input.name,
         userId: String(ctx.user.id),
         permissions,
+        ...(teamId ? { prefix: TEAM_MANAGEMENT_KEY_PREFIX } : {}),
         ...(input.expiresInDays
           ? { expiresIn: input.expiresInDays * 24 * 60 * 60 }
           : {}),
       },
     })
+
+    if (teamId) {
+      try {
+        const createdId = Number(created.id)
+        if (!Number.isSafeInteger(createdId) || createdId <= 0) {
+          throw new Error('Management key provider returned an invalid id')
+        }
+        const linked = await prisma.betterAuthApiKey.updateMany({
+          where: {
+            id: createdId,
+            userId: ctx.user.id,
+            prefix: TEAM_MANAGEMENT_KEY_PREFIX,
+            teamId: null,
+          },
+          data: { teamId, teamAccessBinding: team!.accessBinding },
+        })
+        if (linked.count !== 1) {
+          throw new Error('Failed to attach management key to team')
+        }
+      } catch (error) {
+        try {
+          await auth.api.updateApiKey({
+            body: {
+              keyId: String(created.id),
+              userId: String(ctx.user.id),
+              enabled: false,
+            },
+          })
+        } catch (disableError) {
+          console.error(
+            '[Management Keys] Failed to disable an unlinked team key:',
+            disableError
+          )
+        }
+        throw error
+      }
+    }
 
     return NextResponse.json(
       {
@@ -143,6 +271,8 @@ export async function POST(request: NextRequest) {
           lastRequest: created.lastRequest,
           expiresAt: created.expiresAt,
           createdAt: created.createdAt,
+          teamScoped: Boolean(teamId),
+          team: team ? { id: team.id, title: team.title } : null,
         },
         warning: 'Store this key securely. It will not be shown again.',
       },
@@ -184,11 +314,10 @@ export async function DELETE(request: NextRequest) {
       where: {
         id: keyId,
         userId: ctx.user.id,
-        prefix: 'htmk_',
+        prefix: { in: [MANAGEMENT_KEY_PREFIX, TEAM_MANAGEMENT_KEY_PREFIX] },
+        ...(ctx.management?.teamId ? { teamId: ctx.management.teamId } : {}),
       },
-      select: {
-        id: true,
-      },
+      select: { id: true },
     })
 
     if (!ownedKey) {

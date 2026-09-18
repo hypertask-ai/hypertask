@@ -30,10 +30,25 @@ const challenge = crypto.createHash('sha256').update(verifier).digest('base64url
 const calls = {
   agentLookups: [],
   clientLocks: [],
+  featureChecks: [],
   ownerUpdates: [],
+  teamLookups: [],
+  transactions: [],
   usedUpdates: [],
 }
 let currentAgent = null
+let currentTeam = null
+let agentWithinTeam = true
+let serializableFailures = 0
+let teamScopeFeatureEnabled = true
+
+const teamGrant = {
+  id: 'team-a',
+  title: 'Team A',
+  googleAccount: { id: 'account-a', userId: owner.id },
+  managementKeyOwnerGeneration: 3,
+  members: [],
+}
 
 const authCode = {
   code: 'one-time-code',
@@ -47,26 +62,55 @@ const authCode = {
   user: owner,
 }
 
+stubModule('src/lib/flags.ts', {
+  HTPR_6542_TEAM_SCOPED_MANAGEMENT_KEYS_FLAG:
+    'htpr-6542-team-scoped-management-keys',
+  isFeatureEnabled: async (key, userId) => {
+    calls.featureChecks.push({ key, userId })
+    return teamScopeFeatureEnabled
+  },
+})
+
 stubModule('src/lib/prisma.ts', {
   default: {
-    $transaction: async (callback) => callback({
-      $queryRaw: async (strings, ...values) => {
-        calls.clientLocks.push({ sql: strings.join('?'), values })
-        return [{ client_id: authCode.client_id }]
-      },
-      oAuthClient: {
-        updateMany: async (args) => {
-          calls.ownerUpdates.push(args)
-          return { count: 1 }
+    $transaction: async (callback, options) => {
+      calls.transactions.push(options)
+      if (serializableFailures > 0) {
+        serializableFailures -= 1
+        throw Object.assign(new Error('serialization conflict'), { code: 'P2034' })
+      }
+      return callback({
+        $queryRaw: async (strings, ...values) => {
+          calls.clientLocks.push({ sql: strings.join('?'), values })
+          return [{ client_id: authCode.client_id }]
         },
-      },
-      oAuthAuthorizationCode: {
-        updateMany: async (args) => {
-          calls.usedUpdates.push(args)
-          return { count: 1 }
+        oAuthClient: {
+          updateMany: async (args) => {
+            calls.ownerUpdates.push(args)
+            return { count: 1 }
+          },
         },
-      },
-    }),
+        oAuthAuthorizationCode: {
+          updateMany: async (args) => {
+            calls.usedUpdates.push(args)
+            return { count: 1 }
+          },
+        },
+        agent: {
+          findFirst: async (args) => {
+            calls.agentLookups.push(args)
+            if (args.where.members && !agentWithinTeam) return null
+            return currentAgent ? { id: agentId, ...currentAgent } : null
+          },
+        },
+        team: {
+          findFirst: async (args) => {
+            calls.teamLookups.push(args)
+            return currentTeam
+          },
+        },
+      })
+    },
     oAuthAuthorizationCode: {
       findUnique: async () => authCode,
     },
@@ -76,7 +120,14 @@ stubModule('src/lib/prisma.ts', {
     agent: {
       findFirst: async (args) => {
         calls.agentLookups.push(args)
+        if (args.where.members && !agentWithinTeam) return null
         return currentAgent ? { id: agentId, ...currentAgent } : null
+      },
+    },
+    team: {
+      findFirst: async (args) => {
+        calls.teamLookups.push(args)
+        return currentTeam
       },
     },
     user: {
@@ -200,7 +251,11 @@ test('OAuth exchange binds a unique credential to the stored managed generation'
   assert.equal(decoded.exp, undefined)
   assert.deepEqual(calls.agentLookups[0], {
     where: { id: agentId, userId: owner.id, revokedAt: null },
-    select: { mcpTokenJti: true },
+    select: {
+      mcpTokenJti: true,
+      credentialTeamId: true,
+      credentialTeamAccessBinding: true,
+    },
   })
   assert.equal(calls.clientLocks.length, 1)
   assert.match(calls.clientLocks[0].sql, /WHERE "client_id" = \?\s+FOR UPDATE/)
@@ -210,6 +265,136 @@ test('OAuth exchange binds a unique credential to the stored managed generation'
     data: { owner_id: owner.id },
   }])
   assert.equal(calls.usedUpdates.length, 1)
+})
+
+test('OAuth exchange retries serializable conflicts', async () => {
+  currentAgent = storedCredential(managedToken())
+  currentTeam = null
+  serializableFailures = 1
+  calls.clientLocks.length = 0
+  calls.ownerUpdates.length = 0
+  calls.transactions.length = 0
+  calls.usedUpdates.length = 0
+
+  try {
+    const response = await POST(tokenRequest())
+
+    assert.equal(response.status, 200)
+    assert.deepEqual(calls.transactions, [
+      { isolationLevel: 'Serializable' },
+      { isolationLevel: 'Serializable' },
+    ])
+    assert.equal(calls.clientLocks.length, 1)
+    assert.equal(calls.ownerUpdates.length, 1)
+    assert.equal(calls.usedUpdates.length, 1)
+  } finally {
+    serializableFailures = 0
+  }
+})
+
+test('OAuth exchange preserves a team-bound agent grant', async () => {
+  currentAgent = {
+    ...storedCredential(managedToken()),
+    credentialTeamId: 'team-a',
+    credentialTeamAccessBinding: 'owner:account-a:3',
+  }
+  teamScopeFeatureEnabled = true
+  currentTeam = teamGrant
+  agentWithinTeam = true
+  calls.featureChecks.length = 0
+  calls.teamLookups.length = 0
+  calls.transactions.length = 0
+
+  const response = await POST(tokenRequest())
+  const body = await response.json()
+  const decoded = jwt.verify(body.access_token, process.env.JWT_SECRET, {
+    issuer: 'hypertask',
+    audience: 'http://localhost:3001',
+  })
+
+  assert.equal(response.status, 200)
+  assert.equal(decoded.agentTeamId, 'team-a')
+  assert.equal(decoded.agentTeamAccessBinding, 'owner:account-a:3')
+  assert.deepEqual(calls.featureChecks, [{
+    key: 'htpr-6542-team-scoped-management-keys',
+    userId: owner.id,
+  }])
+  assert.equal(calls.teamLookups.length, 1)
+  assert.deepEqual(calls.transactions, [{ isolationLevel: 'Serializable' }])
+})
+
+test('OAuth exchange rejects a team-bound agent while the feature is off', async () => {
+  currentAgent = {
+    ...storedCredential(managedToken()),
+    credentialTeamId: 'team-a',
+    credentialTeamAccessBinding: 'owner:account-a:3',
+  }
+  teamScopeFeatureEnabled = false
+  calls.featureChecks.length = 0
+  calls.clientLocks.length = 0
+  calls.ownerUpdates.length = 0
+  calls.teamLookups.length = 0
+  calls.transactions.length = 0
+  calls.usedUpdates.length = 0
+
+  try {
+    const response = await POST(tokenRequest())
+    const body = await response.json()
+
+    assert.equal(response.status, 400)
+    assert.deepEqual(body, {
+      error: 'invalid_grant',
+      error_description: 'Team-scoped agent access is disabled.',
+    })
+    assert.deepEqual(calls.featureChecks, [{
+      key: 'htpr-6542-team-scoped-management-keys',
+      userId: owner.id,
+    }])
+    assert.equal(calls.clientLocks.length, 1)
+    assert.equal(calls.ownerUpdates.length, 0)
+    assert.equal(calls.teamLookups.length, 0)
+    assert.deepEqual(calls.transactions, [{ isolationLevel: 'Serializable' }])
+    assert.equal(calls.usedUpdates.length, 0)
+  } finally {
+    teamScopeFeatureEnabled = true
+  }
+})
+
+test('OAuth exchange rejects stale team-bound agent grants', async (t) => {
+  for (const state of ['access-changed', 'agent-moved']) {
+    await t.test(state, async () => {
+      currentAgent = {
+        ...storedCredential(managedToken()),
+        credentialTeamId: 'team-a',
+        credentialTeamAccessBinding: 'owner:account-a:3',
+      }
+      teamScopeFeatureEnabled = true
+      currentTeam = state === 'access-changed'
+        ? { ...teamGrant, managementKeyOwnerGeneration: 4 }
+        : teamGrant
+      agentWithinTeam = state !== 'agent-moved'
+      calls.clientLocks.length = 0
+      calls.ownerUpdates.length = 0
+      calls.usedUpdates.length = 0
+
+      try {
+        const response = await POST(tokenRequest())
+        const body = await response.json()
+
+        assert.equal(response.status, 400)
+        assert.deepEqual(body, {
+          error: 'invalid_grant',
+          error_description: 'The selected agent credential is no longer valid.',
+        })
+        assert.equal(calls.clientLocks.length, 1)
+        assert.equal(calls.ownerUpdates.length, 0)
+        assert.equal(calls.usedUpdates.length, 0)
+      } finally {
+        currentTeam = teamGrant
+        agentWithinTeam = true
+      }
+    })
+  }
 })
 
 test('OAuth exchange rejects an agent row carrying no generation', async (t) => {
@@ -241,7 +426,11 @@ test('OAuth exchange never reads a generation belonging to another owner', async
         userId: owner.id,
         revokedAt: null,
       })
-      assert.deepEqual(lookup.select, { mcpTokenJti: true })
+      assert.deepEqual(lookup.select, {
+        mcpTokenJti: true,
+        credentialTeamId: true,
+        credentialTeamAccessBinding: true,
+      })
     })
   }
 })

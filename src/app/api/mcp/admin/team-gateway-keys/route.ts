@@ -132,6 +132,12 @@ export async function GET(request: NextRequest) {
 
   const ctx = await validateManagementOrSessionAuth(request, "read");
   if (!ctx) return createUnauthorizedResponse();
+  if (ctx.management?.teamId) {
+    return NextResponse.json(
+      { success: false, error: "Forbidden" },
+      { status: 403 },
+    );
+  }
   if (!isPlatformGatewayAdmin(ctx.user)) {
     return NextResponse.json({ success: false, error: "Forbidden" }, { status: 403 });
   }
@@ -185,6 +191,12 @@ export async function POST(request: NextRequest) {
 
   const ctx = await validateManagementOrSessionAuth(request, "write");
   if (!ctx) return createUnauthorizedResponse();
+  if (ctx.management?.teamId) {
+    return NextResponse.json(
+      { success: false, error: "Forbidden" },
+      { status: 403 },
+    );
+  }
   if (!isPlatformGatewayAdmin(ctx.user)) {
     return NextResponse.json({ success: false, error: "Forbidden" }, { status: 403 });
   }
