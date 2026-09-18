@@ -12,10 +12,12 @@ const { measuredUsage } = require(path.join(root, "evals/mcp-client/lib/tokens.c
 const { gradeObservation, gradeMcpPlan } = require(
   path.join(root, "evals/mcp-client/lib/grade.cjs"),
 );
-const { clientAvailable, runClientAdapter, which } = require(
+const { clientAvailable, parseJsonBlobs, runClientAdapter, which } = require(
   path.join(root, "evals/mcp-client/lib/executors.cjs"),
 );
-const { runEval } = require(path.join(root, "evals/mcp-client/lib/run.cjs"));
+const { observedToolCalls, runEval } = require(
+  path.join(root, "evals/mcp-client/lib/run.cjs"),
+);
 
 const hasNativeCli = Boolean(process.env.EVAL_HYPERTASK_BIN || which("hypertask"));
 
@@ -103,7 +105,54 @@ test("an attempted live client failure is a failed live row", () => {
   fs.rmSync(broken, { force: true });
 });
 
-test("live writes fail closed without an isolated project id", async () => {
+test("native client JSONL keeps each event separate", () => {
+  assert.deepEqual(
+    parseJsonBlobs('{"type":"tool","name":"first"}\n{"type":"usage","input_tokens":12}\n'),
+    [
+      { type: "tool", name: "first" },
+      { type: "usage", input_tokens: 12 },
+    ],
+  );
+});
+
+test("live metrics count observed calls and exclude verification time", () => {
+  const catalog = loadCatalog();
+  const clientBin = path.join(os.tmpdir(), `measured-claude-${process.pid}`);
+  const hypertaskBin = path.join(os.tmpdir(), `slow-hypertask-${process.pid}`);
+  fs.writeFileSync(
+    clientBin,
+    "#!/bin/sh\nprintf '%s\\n' '{\"tools\":[{\"name\":\"hypertask_get_task\",\"args\":{}}]}'\n",
+  );
+  fs.writeFileSync(hypertaskBin, "#!/bin/sh\nsleep 0.05\nprintf '%s\\n' '{}'\n");
+  fs.chmodSync(clientBin, 0o755);
+  fs.chmodSync(hypertaskBin, 0o755);
+  try {
+    const started = Date.now();
+    const live = runClientAdapter("claude", catalog.tasks[0], "mcp", {
+      env: {
+        ...process.env,
+        EVAL_LIVE_CLIENTS: "claude",
+        CLAUDE_BIN: clientBin,
+      },
+      isolation: {
+        projectId: 4242,
+        ticket: "ISO-1",
+        taskId: 88,
+        userId: 7,
+        userName: "Eval Agent",
+      },
+      hypertaskBin,
+    });
+    const totalMs = Date.now() - started;
+    assert.equal(observedToolCalls(live.observation, "mcp"), 1);
+    assert.ok(totalMs - live.wallMs >= 300, `${live.wallMs} should exclude ${totalMs} total ms`);
+  } finally {
+    fs.rmSync(clientBin, { force: true });
+    fs.rmSync(hypertaskBin, { force: true });
+  }
+});
+
+test("live writes fail closed without explicit isolation identifiers", async () => {
   const report = await runEval({
     now: "2026-09-17T06:00:00.000Z",
     label: "writes",
@@ -157,9 +206,26 @@ test("CLIENTS stay the three named product clients", () => {
   assert.deepEqual(CLIENTS, ["claude", "cursor", "codex"]);
 });
 
-test("live state grading uses per-row deltas and expands --self", () => {
-  const { deltaState, expandSelfAssign } = require(
+test("live state grading requires explicit isolation and expands --self", () => {
+  const { deltaState, expandSelfAssign, liveIsolationFromEnv } = require(
     path.join(root, "evals/mcp-client/lib/isolation.cjs"),
+  );
+  assert.equal(liveIsolationFromEnv({ EVAL_PROJECT_ID: "4242" }), null);
+  assert.deepEqual(
+    liveIsolationFromEnv({
+      EVAL_PROJECT_ID: "4242",
+      EVAL_TICKET: "ISO-1",
+      EVAL_TASK_ID: "88",
+      EVAL_USER_ID: "7",
+      EVAL_USER_NAME: "Eval Agent",
+    }),
+    {
+      projectId: 4242,
+      ticket: "ISO-1",
+      taskId: 88,
+      userId: 7,
+      userName: "Eval Agent",
+    },
   );
   assert.deepEqual(
     deltaState(

@@ -28,13 +28,17 @@ Live clients, only when those binaries are present:
 EVAL_LIVE_CLIENTS=claude,cursor,codex \
 EVAL_PROJECT_ID=4242 \
 EVAL_TICKET=ISO-1 \
+EVAL_TASK_ID=88 \
+EVAL_USER_ID=7 \
+EVAL_USER_NAME='Eval Agent' \
 EVAL_LIVE_WRITES=1 \
 EVAL_MEASURE_SURFACES=1 \
 node evals/mcp-client/run.mjs --mode live --label live --require-clients claude,cursor,codex --write-transcripts
 ```
 
-Mutating live tasks refuse unless `EVAL_PROJECT_ID` names an isolated project.
-Every prompt, MCP argument, and CLI argument is rewritten onto that project
+Live tasks refuse unless the project, ticket, task, evaluator ID, and evaluator
+name are all explicit. The project must be dedicated to evals. Every prompt,
+MCP argument, and CLI argument is rewritten onto that project
 before the client runs. After each live call, the harness reads the board
 through an independent `hypertask` path and grades a per-row delta, so later
 clients are not failed by earlier comments or creates. `--self` is expanded to
@@ -42,11 +46,13 @@ the authenticated evaluator id when the released CLI still requires a value.
 
 ## When it runs
 
-- Weekly, Monday 06:00 UTC, in live mode
-- On any PR that touches MCP server, CLI, or eval paths, as a surface check
+- Weekly, Monday 06:00 UTC, as an isolated MCP-versus-CLI surface check
+- On any PR that touches MCP server, CLI, or eval paths, as the same surface check
 
-Weekly runs publish `latest.json` to the `eval-reports` branch only after every
-required client produced rows. The agents dashboard reads that file, then falls
-back to the last committed report.
+Weekly CI publishes `latest.json` to the `eval-reports` branch. It does not
+label fixture output as Claude, Cursor, or Codex because hosted CI has no
+provider credentials. Run live mode from an authenticated client environment
+to add those client rows. The agents dashboard reads the published report,
+then falls back to the last committed report.
 
 Results show on `/agents` when the `htpr-6533-mcp-client-eval` flag is on.

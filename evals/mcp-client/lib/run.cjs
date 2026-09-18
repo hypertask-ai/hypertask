@@ -29,8 +29,9 @@ const {
   writeTranscripts,
 } = require("./transcripts.cjs");
 
-function toolCallsFor(task, transport) {
-  return transport === "mcp" ? task.mcp.tools.length : task.cli.commands.length;
+function observedToolCalls(observation, transport) {
+  const calls = transport === "mcp" ? observation?.tools : observation?.commands;
+  return Array.isArray(calls) ? calls.length : null;
 }
 
 function emptyUsage(source) {
@@ -45,6 +46,7 @@ function rowFromParts({
   usage,
   wallMs,
   wallSource,
+  toolCalls,
   mode,
   executor,
 }) {
@@ -60,7 +62,7 @@ function rowFromParts({
     usageSource: usage.source,
     wallMs,
     wallSource,
-    toolCalls: toolCallsFor(task, transport),
+    toolCalls,
     mutating: Boolean(task.mutating),
     mode,
     executor,
@@ -77,6 +79,7 @@ function replayFromTranscript(task, client, transport, recording) {
       usage: emptyUsage("unavailable"),
       wallMs: null,
       wallSource: "unavailable",
+      toolCalls: null,
       mode: "replay",
       executor: "transcript",
     });
@@ -90,6 +93,7 @@ function replayFromTranscript(task, client, transport, recording) {
       usage: emptyUsage("unavailable"),
       wallMs: null,
       wallSource: "unavailable",
+      toolCalls: null,
       mode: "replay",
       executor: "transcript",
     });
@@ -104,6 +108,7 @@ function replayFromTranscript(task, client, transport, recording) {
     usage,
     wallMs: Number.isFinite(recording.wallMs) ? recording.wallMs : null,
     wallSource: recording.wallSource || "transcript",
+    toolCalls: observedToolCalls(recording.observation, transport),
     mode: "replay",
     executor: "transcript",
   });
@@ -154,10 +159,7 @@ async function runLiveRow(task, client, transport, ctx) {
       reason: `${client} adapter is not available`,
     };
   }
-  if (task.mutating && ctx.env.EVAL_LIVE_WRITES !== "1") {
-    return { skipped: true, unavailable: true, reason: "mutating live writes are disabled" };
-  }
-  if (task.mutating && !isolation) {
+  if (!isolation) {
     return {
       skipped: false,
       row: rowFromParts({
@@ -166,15 +168,20 @@ async function runLiveRow(task, client, transport, ctx) {
         transport,
         grade: {
           pass: false,
-          reason: "live writes require EVAL_PROJECT_ID for an isolated project",
+          reason:
+            "live runs require explicit EVAL_PROJECT_ID, EVAL_TICKET, EVAL_TASK_ID, EVAL_USER_ID, and EVAL_USER_NAME isolation",
         },
         usage: emptyUsage("unavailable"),
         wallMs: null,
         wallSource: "unavailable",
+        toolCalls: 0,
         mode: "live",
         executor: `${client}:${transport}`,
       }),
     };
+  }
+  if (task.mutating && ctx.env.EVAL_LIVE_WRITES !== "1") {
+    return { skipped: true, unavailable: true, reason: "mutating live writes are disabled" };
   }
   const live = runClientAdapter(client, bound, transport, {
     env: ctx.env,
@@ -210,6 +217,7 @@ async function runLiveRow(task, client, transport, ctx) {
       usage: measuredUsage(live.usage, "unavailable"),
       wallMs: live.wallMs,
       wallSource: live.wallSource,
+      toolCalls: observedToolCalls(live.observation, transport),
       mode: "live",
       executor: live.executor,
     }),
@@ -227,6 +235,7 @@ function summarize(rows) {
       const passed = subset.filter((row) => row.pass).length;
       const tokenRows = subset.filter((row) => Number.isFinite(row.tokensIn) || Number.isFinite(row.tokensOut));
       const wallRows = subset.filter((row) => Number.isFinite(row.wallMs));
+      const toolCallRows = subset.filter((row) => Number.isFinite(row.toolCalls));
       byClient[client][transport] = {
         tasks: subset.length,
         passed,
@@ -241,7 +250,9 @@ function summarize(rows) {
         wallMs: wallRows.length
           ? wallRows.reduce((sum, row) => sum + row.wallMs, 0)
           : null,
-        toolCalls: subset.reduce((sum, row) => sum + row.toolCalls, 0),
+        toolCalls: toolCallRows.length
+          ? toolCallRows.reduce((sum, row) => sum + row.toolCalls, 0)
+          : null,
         live: subset.filter((row) => row.mode === "live").length,
         usageSource: tokenRows.some((row) => row.usageSource === "provider")
           ? "provider"
@@ -267,13 +278,16 @@ function summarizeSurfaces(surfaces) {
   for (const transport of TRANSPORTS) {
     const subset = surfaces.filter((row) => row.transport === transport);
     const passed = subset.filter((row) => row.pass).length;
+    const toolCallRows = subset.filter((row) => Number.isFinite(row.toolCalls));
     byTransport[transport] = {
       tasks: subset.length,
       passed,
       failed: subset.length - passed,
       successRate: subset.length === 0 ? 0 : passed / subset.length,
       wallMs: subset.reduce((sum, row) => sum + row.wallMs, 0),
-      toolCalls: subset.reduce((sum, row) => sum + row.toolCalls, 0),
+      toolCalls: toolCallRows.length
+        ? toolCallRows.reduce((sum, row) => sum + row.toolCalls, 0)
+        : null,
     };
   }
   return byTransport;
@@ -315,7 +329,6 @@ function resetBoard(board, boardFile) {
 
 async function runSurfaceCatalog(catalog, options) {
   const surfaces = [];
-  const recordings = [];
   await withIsolatedFixture(async (ctx) => {
     if (!ctx.hypertaskBin) {
       throw new Error("native hypertask CLI is required for CLI surface measurements");
@@ -340,24 +353,13 @@ async function runSurfaceCatalog(catalog, options) {
           reason: grade.reason,
           wallMs: live.wallMs,
           wallSource: "measured",
-          toolCalls: toolCallsFor(task, transport),
+          toolCalls: observedToolCalls(live.observation, transport),
           executor: live.executor,
         });
-        if (options.record && live.observation) {
-          recordings.push({
-            taskId: task.id,
-            transport,
-            provenance: live.executor,
-            capturedAt: new Date().toISOString(),
-            observation: live.observation,
-            wallMs: live.wallMs,
-            wallSource: "measured",
-          });
-        }
       }
     }
   }, options.env);
-  return { surfaces, recordings };
+  return surfaces;
 }
 
 async function runEval(options = {}) {
@@ -379,12 +381,10 @@ async function runEval(options = {}) {
     mode === "fixture" ||
     (mode === "live" && options.surfaces !== false && (options.surfaces === true || env.EVAL_MEASURE_SURFACES === "1"));
   if (measureSurfaces) {
-    const executed = await runSurfaceCatalog(catalog, {
+    surfaces = await runSurfaceCatalog(catalog, {
       allowWrites: true,
       env,
-      record: Boolean(options.recordTranscripts),
     });
-    surfaces = executed.surfaces;
   }
 
   if (mode === "live") {
@@ -473,6 +473,7 @@ function writeReport(report, dest) {
 module.exports = {
   CLIENTS,
   TRANSPORTS,
+  observedToolCalls,
   replayFromTranscript,
   runEval,
   summarize,

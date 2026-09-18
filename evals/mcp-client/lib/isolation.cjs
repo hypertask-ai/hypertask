@@ -42,14 +42,19 @@ function liveIsolationFromEnv(env = process.env) {
   const taskId = env.EVAL_TASK_ID ? Number(env.EVAL_TASK_ID) : null;
   const userId = env.EVAL_USER_ID ? Number(env.EVAL_USER_ID) : null;
   const userName = env.EVAL_USER_NAME || "";
-  if (!projectId) return null;
-  return {
-    projectId,
-    ticket: ticket || "EVAL-1",
-    taskId: Number.isFinite(taskId) ? taskId : 1,
-    userId: Number.isFinite(userId) ? userId : 1,
-    userName: userName || "me",
-  };
+  if (
+    !Number.isInteger(projectId) ||
+    projectId <= 0 ||
+    !ticket ||
+    !Number.isInteger(taskId) ||
+    taskId <= 0 ||
+    !Number.isInteger(userId) ||
+    userId <= 0 ||
+    !userName
+  ) {
+    return null;
+  }
+  return { projectId, ticket, taskId, userId, userName };
 }
 
 function resolveEvaluator(env, hypertaskBin) {

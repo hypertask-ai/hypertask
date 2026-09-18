@@ -6,10 +6,6 @@ const path = require("node:path");
 const FIXTURE_PROJECT_ID = 99;
 const FIXTURE_TICKET = "EVAL-1";
 
-function clone(value) {
-  return JSON.parse(JSON.stringify(value));
-}
-
 function createBoard() {
   return {
     projectId: FIXTURE_PROJECT_ID,
@@ -54,7 +50,6 @@ function readBoardFile(filePath) {
 module.exports = {
   FIXTURE_PROJECT_ID,
   FIXTURE_TICKET,
-  clone,
   createBoard,
   snapshotState,
   writeBoardFile,

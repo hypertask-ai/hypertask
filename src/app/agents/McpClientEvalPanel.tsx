@@ -29,6 +29,10 @@ function time(value: number | null, source?: string): string {
   return `${value} ms`;
 }
 
+function calls(value: number | null): string {
+  return value == null || !Number.isFinite(value) ? "—" : String(value);
+}
+
 function McpClientEvalPanel() {
   const enabled = useFlag(HTPR_6533_MCP_CLIENT_EVAL_FLAG);
   const [report, setReport] = useState<McpClientEvalReport | null>(null);
@@ -108,7 +112,7 @@ function McpClientEvalPanel() {
                         <td className="py-1.5 pr-3">
                           {time(slice.wallMs, "measured")}
                         </td>
-                        <td className="py-1.5">{slice.toolCalls}</td>
+                        <td className="py-1.5">{calls(slice.toolCalls)}</td>
                       </tr>
                     );
                   })}
@@ -152,7 +156,7 @@ function McpClientEvalPanel() {
                         <td className="py-1.5 pr-3">
                           {time(slice.wallMs, slice.wallSource)}
                         </td>
-                        <td className="py-1.5">{slice.toolCalls}</td>
+                        <td className="py-1.5">{calls(slice.toolCalls)}</td>
                       </tr>
                     );
                   }),
@@ -195,7 +199,7 @@ function McpClientEvalPanel() {
                     <td className="py-1.5 pr-3">
                       {time(row.wallMs, row.wallSource)}
                     </td>
-                    <td className="py-1.5">{row.toolCalls}</td>
+                    <td className="py-1.5">{calls(row.toolCalls)}</td>
                   </tr>
                 ))}
               </tbody>

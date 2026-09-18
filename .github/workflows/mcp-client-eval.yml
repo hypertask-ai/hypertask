@@ -39,7 +39,9 @@ jobs:
           set -euo pipefail
           curl -fsSL -o /tmp/hypertask \
             https://github.com/hypertask-ai/cli/releases/download/v0.2.2/hypertask-linux-x86_64
+          echo "15453538cd3ca912acf096c7a2b5bb353754d3a65d3607cfbb4ab890f806b674  /tmp/hypertask" | sha256sum -c -
           chmod +x /tmp/hypertask
+          echo "/tmp" >> "$GITHUB_PATH"
           echo "EVAL_HYPERTASK_BIN=/tmp/hypertask" >> "$GITHUB_ENV"
 
       - name: Grade the 20-task catalog against isolated fixtures
@@ -48,21 +50,12 @@ jobs:
           EVAL_HYPERTASK_BIN: /tmp/hypertask
 
       - name: Write the production-surface report
-        if: github.event_name == 'pull_request'
-        run: node evals/mcp-client/run.mjs --mode fixture --label pr
+        run: |
+          label=weekly
+          if [ "$GITHUB_EVENT_NAME" = "pull_request" ]; then label=pr; fi
+          node evals/mcp-client/run.mjs --mode fixture --label "$label"
         env:
           EVAL_HYPERTASK_BIN: /tmp/hypertask
-
-      - name: Run live clients against an isolated project
-        if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
-        env:
-          EVAL_HYPERTASK_BIN: /tmp/hypertask
-          EVAL_LIVE_CLIENTS: claude,cursor,codex
-          EVAL_LIVE_WRITES: "1"
-          EVAL_MEASURE_SURFACES: "1"
-          EVAL_PROJECT_ID: ${{ secrets.EVAL_PROJECT_ID }}
-          EVAL_REQUIRE_CLIENTS: claude,cursor,codex
-        run: node evals/mcp-client/run.mjs --mode live --label weekly --require-clients claude,cursor,codex
 
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:

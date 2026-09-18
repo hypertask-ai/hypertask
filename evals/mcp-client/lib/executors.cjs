@@ -239,16 +239,26 @@ function buildClientPrompt(task, transport) {
 }
 
 function parseJsonBlobs(text) {
+  const raw = String(text || "").trim();
+  if (!raw) return [];
   try {
-    return [JSON.parse(text)];
+    return [JSON.parse(raw)];
   } catch {
-    const matches = String(text || "").match(/\{[\s\S]*\}/g) || [];
     const parsed = [];
-    for (const match of matches) {
+    for (const line of raw.split(/\r?\n/)) {
+      const candidate = line.replace(/^data:\s*/, "").trim();
+      if (!candidate || candidate === "[DONE]") continue;
       try {
-        parsed.push(JSON.parse(match));
+        parsed.push(JSON.parse(candidate));
       } catch {
-        // ignore partial objects
+        const start = candidate.indexOf("{");
+        const end = candidate.lastIndexOf("}");
+        if (start < 0 || end <= start) continue;
+        try {
+          parsed.push(JSON.parse(candidate.slice(start, end + 1)));
+        } catch {
+          // Ignore non-JSON log lines.
+        }
       }
     }
     return parsed;
@@ -356,6 +366,7 @@ function runClientAdapter(client, task, transport, { env, isolation, hypertaskBi
     env,
     timeout: 120_000,
   });
+  const wallMs = Date.now() - started;
   const stdout = result.stdout || "";
   const state = boardStateOrCli(null, env, isolationNow, hypertaskBin, before);
   const observation = observationFromClient(task, transport, stdout, state);
@@ -367,7 +378,7 @@ function runClientAdapter(client, task, transport, { env, isolation, hypertaskBi
   return {
     observation,
     usage,
-    wallMs: Date.now() - started,
+    wallMs,
     wallSource: "measured",
     attempted: true,
     executed: true,
@@ -382,6 +393,7 @@ module.exports = {
   which,
   isTransientNetworkError,
   liveClientsFromEnv,
+  parseJsonBlobs,
   postJson,
   runMcpSurface,
   runCliSurface,

@@ -19,7 +19,7 @@ export type McpClientEvalRow = {
   usageSource: McpClientEvalUsageSource;
   wallMs: number | null;
   wallSource: McpClientEvalWallSource;
-  toolCalls: number;
+  toolCalls: number | null;
   mutating: boolean;
   mode: "replay" | "live";
   executor: string;
@@ -33,7 +33,7 @@ export type McpClientEvalSlice = {
   tokensIn: number | null;
   tokensOut: number | null;
   wallMs: number | null;
-  toolCalls: number;
+  toolCalls: number | null;
   live?: number;
   usageSource?: McpClientEvalUsageSource;
   wallSource?: McpClientEvalWallSource;
@@ -46,7 +46,7 @@ export type McpClientEvalSurface = {
   reason: string | null;
   wallMs: number;
   wallSource: "measured";
-  toolCalls: number;
+  toolCalls: number | null;
   executor: string;
 };
 
@@ -72,7 +72,7 @@ export type McpClientEvalReport = {
         failed: number;
         successRate: number;
         wallMs: number;
-        toolCalls: number;
+        toolCalls: number | null;
       }
     >;
     byClient: Record<
