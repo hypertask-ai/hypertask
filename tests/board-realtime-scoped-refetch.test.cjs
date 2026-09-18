@@ -1,6 +1,8 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
+const fs = require("node:fs");
 const path = require("node:path");
+const ts = require("typescript");
 
 const root = path.resolve(__dirname, "..");
 const { createJiti } = require("jiti");
@@ -26,6 +28,56 @@ const {
 const USER_ID = 6;
 const PROJECT_ID = 15;
 const PROJECTS_ALL_KEY = ["projectsAll"];
+
+function loadTypeScriptModule(filename, stubs) {
+  const source = fs.readFileSync(filename, "utf8");
+  const javascript = ts.transpileModule(source, {
+    compilerOptions: {
+      esModuleInterop: true,
+      module: ts.ModuleKind.CommonJS,
+      target: ts.ScriptTarget.ES2020,
+    },
+    fileName: filename,
+  }).outputText;
+  const loadedModule = { exports: {} };
+  const localRequire = (request) => stubs[request] ?? require(request);
+
+  new Function(
+    "module",
+    "exports",
+    "require",
+    "__filename",
+    "__dirname",
+    javascript,
+  )(
+    loadedModule,
+    loadedModule.exports,
+    localRequire,
+    filename,
+    path.dirname(filename),
+  );
+  return loadedModule.exports;
+}
+
+function createBindingTarget(properties = {}) {
+  const bindings = new Map();
+  return {
+    ...properties,
+    bind(event, callback) {
+      const callbacks = bindings.get(event) ?? new Set();
+      callbacks.add(callback);
+      bindings.set(event, callbacks);
+    },
+    emit(event, payload) {
+      for (const callback of bindings.get(event) ?? []) callback(payload);
+    },
+    unbind(event, callback) {
+      bindings.get(event)?.delete(callback);
+    },
+  };
+}
+
+const settle = () => new Promise((resolve) => setImmediate(resolve));
 
 const changedPayload = {
   project: { id: PROJECT_ID, name: "Renamed by someone else" },
@@ -249,8 +301,95 @@ test("create, move, and archive board events each trigger reconciliation", () =>
   assert.deepEqual(reconciliations, ["event", "event", "event"]);
 });
 
+test("an event missed during initial connection is recovered after subscription", async () => {
+  let cleanup;
+  let resolveClient;
+  let renderedTasks = ["before"];
+  let serverTasks = renderedTasks;
+  let boardReconciles = 0;
+  const planningRefetches = [];
+  const channel = createBindingTarget({ subscribed: false });
+  const connection = createBindingTarget({ state: "connecting" });
+  const client = {
+    connection,
+    subscribe: () => channel,
+    unsubscribe() {},
+  };
+  const clientPromise = new Promise((resolve) => {
+    resolveClient = resolve;
+  });
+  const queryClient = {
+    refetchQueries: async (options) => {
+      planningRefetches.push(options);
+    },
+  };
+  const hook = loadTypeScriptModule(
+    path.join(root, "src/hooks/realtime/useBoardRealtime.ts"),
+    {
+      react: {
+        useEffect(effect) {
+          cleanup = effect();
+        },
+        useRef(initialValue) {
+          return { current: initialValue };
+        },
+      },
+      "@tanstack/react-query": { useQueryClient: () => queryClient },
+      "@/lib/realtime/client": {
+        connectRealtimeClient: () => clientPromise,
+        releaseRealtimeClientIfIdle() {},
+      },
+      "@/lib/projectPlanning": {
+        projectPlanningQueryKey: (projectId) => ["planning", projectId],
+      },
+      "@/lib/realtime/shared": {
+        BOARD_EVENT: "board:changed",
+        boardChannel: (projectId) => `private-board-${projectId}`,
+      },
+      "@/lib/boardSync/reconcileActiveBoardQuery": {
+        reconcileActiveBoardQuery: async () => {
+          boardReconciles += 1;
+          renderedTasks = serverTasks;
+        },
+        reconcileActiveBoardTasks: async () => {},
+      },
+      "@/lib/realtime/latencyCanary": {
+        runRealtimeReconciliation: ({ reconcile }) => reconcile(),
+      },
+      "@/hooks/useFlag": { useFlag: () => false },
+      "@/lib/flags/keys": { SCOPED_BOARD_REFETCH_FLAG: "scoped" },
+      "@/lib/realtime/boardRealtimeEventHandler": {
+        createBoardRealtimeEventHandler: (refetch) => () => refetch("event"),
+      },
+    },
+  );
+
+  hook.useBoardRealtime(PROJECT_ID, { accountId: USER_ID });
+  serverTasks = ["created while connecting"];
+  resolveClient(client);
+  await settle();
+
+  assert.deepEqual(renderedTasks, ["before"]);
+  connection.state = "connected";
+  connection.emit("connected");
+  channel.subscribed = true;
+  channel.emit("pusher:subscription_succeeded");
+  await settle();
+
+  assert.deepEqual(renderedTasks, ["created while connecting"]);
+  assert.equal(boardReconciles, 1);
+  assert.deepEqual(planningRefetches, [
+    { exact: true, queryKey: ["planning", PROJECT_ID] },
+  ]);
+
+  channel.emit("pusher:subscription_succeeded");
+  await settle();
+  assert.equal(boardReconciles, 1);
+  cleanup?.();
+});
+
 test("the visible board subscribes before deferred startup work is released", () => {
-  const source = require("fs").readFileSync(
+  const source = fs.readFileSync(
     path.join(
       root,
       "src/components/PageComponents/Kanban/KanbanHomepageComponents/Homepage.tsx",
