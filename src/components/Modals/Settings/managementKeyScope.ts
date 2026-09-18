@@ -10,10 +10,9 @@ export type ManagementKeyPermissionMap = Record<string, string[]>
 export const managementKeyTeamLabel = (
   teamScoped: boolean,
   team: { title: string | null } | null,
-  enabled: boolean,
+  featureEnabled: boolean,
 ) => {
-  if (teamScoped && !enabled) return "Team key disabled"
-  if (!enabled) return null
+  if (!featureEnabled) return null
   if (!teamScoped) return "Whole account"
   return team?.title || (team ? "Untitled team" : "Team unavailable")
 }

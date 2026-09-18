@@ -200,7 +200,11 @@ test('OAuth exchange binds a unique credential to the stored managed generation'
   assert.equal(decoded.exp, undefined)
   assert.deepEqual(calls.agentLookups[0], {
     where: { id: agentId, userId: owner.id, revokedAt: null },
-    select: { mcpTokenJti: true },
+    select: {
+      mcpTokenJti: true,
+      credentialTeamId: true,
+      credentialTeamAccessBinding: true,
+    },
   })
   assert.equal(calls.clientLocks.length, 1)
   assert.match(calls.clientLocks[0].sql, /WHERE "client_id" = \?\s+FOR UPDATE/)
@@ -210,6 +214,25 @@ test('OAuth exchange binds a unique credential to the stored managed generation'
     data: { owner_id: owner.id },
   }])
   assert.equal(calls.usedUpdates.length, 1)
+})
+
+test('OAuth exchange preserves a team-bound agent grant', async () => {
+  currentAgent = {
+    ...storedCredential(managedToken()),
+    credentialTeamId: 'team-a',
+    credentialTeamAccessBinding: 'owner:account-a:3',
+  }
+
+  const response = await POST(tokenRequest())
+  const body = await response.json()
+  const decoded = jwt.verify(body.access_token, process.env.JWT_SECRET, {
+    issuer: 'hypertask',
+    audience: 'http://localhost:3001',
+  })
+
+  assert.equal(response.status, 200)
+  assert.equal(decoded.agentTeamId, 'team-a')
+  assert.equal(decoded.agentTeamAccessBinding, 'owner:account-a:3')
 })
 
 test('OAuth exchange rejects an agent row carrying no generation', async (t) => {
@@ -241,7 +264,11 @@ test('OAuth exchange never reads a generation belonging to another owner', async
         userId: owner.id,
         revokedAt: null,
       })
-      assert.deepEqual(lookup.select, { mcpTokenJti: true })
+      assert.deepEqual(lookup.select, {
+        mcpTokenJti: true,
+        credentialTeamId: true,
+        credentialTeamAccessBinding: true,
+      })
     })
   }
 })

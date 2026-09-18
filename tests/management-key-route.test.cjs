@@ -38,15 +38,15 @@ let rateLimitResponse = null;
 let featureEnabled = true;
 const calls = [];
 const linkedKeys = [];
+const listQueries = [];
 const serial = { concurrency: false };
 
 stubModule("src/lib/mcp/auth.ts", {
   checkMcpRateLimit: async () => rateLimitResponse,
-  // The sibling integration suite drives the real validator. This unit stub
-  // still enforces the route's required action so it cannot silently weaken
-  // POST authorization while provider behavior is isolated here.
-  validateManagementOrSessionAuth: async (_request, requiredAction) =>
-    requiredAction === "write" ? context : null,
+  MANAGEMENT_KEY_PREFIX: "htmk_",
+  // The sibling integration suite drives the real validator while this suite
+  // isolates provider and route behavior.
+  validateManagementOrSessionAuth: async () => context,
   createUnauthorizedResponse: () => Response.json({ success: false }, { status: 401 }),
 });
 stubModule("src/lib/auth/betterAuth.ts", {
@@ -90,6 +90,10 @@ stubModule("src/lib/mcp/managementKeyTeamScope.ts", {
 stubModule("src/lib/prisma.ts", {
   default: {
     betterAuthApiKey: {
+      findMany: async (args) => {
+        listQueries.push(args);
+        return [];
+      },
       updateMany: async (args) => {
         linkedKeys.push(args);
         return { count: 1 };
@@ -106,7 +110,7 @@ const jiti = require("jiti")(
     interopDefault: true,
   },
 );
-const { POST } = jiti(path.join(root, routePath));
+const { GET, POST } = jiti(path.join(root, routePath));
 
 function request(body) {
   return new NextRequest("https://app.hypertask.ai/api/mcp/admin/keys", {
@@ -127,6 +131,7 @@ function rawRequest(body) {
 test.beforeEach(() => {
   featureEnabled = true;
   linkedKeys.length = 0;
+  listQueries.length = 0;
 });
 
 test.after(() => {
@@ -137,6 +142,38 @@ test.after(() => {
       delete require.cache[filename];
     }
   }
+});
+
+test("key inventory hides team keys while rollout is off", serial, async () => {
+  context = {
+    user: { id: 6, email: "owner@example.test" },
+    agentId: null,
+  };
+  featureEnabled = false;
+
+  const response = await GET(
+    new NextRequest("https://app.hypertask.ai/api/mcp/admin/keys"),
+  );
+
+  assert.equal(response.status, 200);
+  assert.equal(listQueries[0].where.prefix, "htmk_");
+  assert.deepEqual((await response.json()).keys, []);
+});
+
+test("key inventory includes team keys while rollout is on", serial, async () => {
+  context = {
+    user: { id: 6, email: "owner@example.test" },
+    agentId: null,
+  };
+
+  const response = await GET(
+    new NextRequest("https://app.hypertask.ai/api/mcp/admin/keys"),
+  );
+
+  assert.equal(response.status, 200);
+  assert.deepEqual(listQueries[0].where.prefix, {
+    in: ["htmk_", "httk_"],
+  });
 });
 
 test("the key route creates a usage-only key", serial, async () => {

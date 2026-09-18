@@ -4,6 +4,7 @@ import jwt from 'jsonwebtoken'
 import prisma from '@/lib/prisma'
 import { validatePKCE } from '@/lib/oauth/pkce'
 import {
+  type AgentTokenTeamScope,
   createOAuthToken,
   storedAgentTokenGeneration,
 } from '@/lib/mcp/auth'
@@ -385,6 +386,7 @@ export async function POST(request: NextRequest) {
 
     const agentId = authCode.agent_id ?? undefined
     let agentTokenJti: string | undefined
+    let agentTeamScope: AgentTokenTeamScope | undefined
     if (agentId) {
       const agent = await prisma.agent.findFirst({
         where: {
@@ -392,11 +394,33 @@ export async function POST(request: NextRequest) {
           userId: authCode.user.id,
           revokedAt: null,
         },
-        select: { mcpTokenJti: true },
+        select: {
+          mcpTokenJti: true,
+          credentialTeamId: true,
+          credentialTeamAccessBinding: true,
+        },
       })
       // The lookup above is already scoped to this owner and to a live agent,
       // so a generation read here can never belong to another owner's agent.
       agentTokenJti = storedAgentTokenGeneration(agent) ?? undefined
+      if (
+        Boolean(agent?.credentialTeamId) !==
+        Boolean(agent?.credentialTeamAccessBinding)
+      ) {
+        return NextResponse.json(
+          {
+            error: 'invalid_grant',
+            error_description: 'The selected agent has an incomplete team grant.',
+          },
+          { status: 400 }
+        )
+      }
+      if (agent?.credentialTeamId && agent.credentialTeamAccessBinding) {
+        agentTeamScope = {
+          teamId: agent.credentialTeamId,
+          accessBinding: agent.credentialTeamAccessBinding,
+        }
+      }
 
       if (!agentTokenJti) {
         return NextResponse.json(
@@ -459,7 +483,8 @@ export async function POST(request: NextRequest) {
             authCode.client_id,
             accessTokenExpirySeconds,
             agentId,
-            agentTokenJti
+            agentTokenJti,
+            agentTeamScope
           )
           if (!isRefreshCapableMobile) return { accessToken }
 

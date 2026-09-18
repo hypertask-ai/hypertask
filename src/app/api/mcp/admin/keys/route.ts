@@ -58,7 +58,9 @@ export async function GET(request: NextRequest) {
     const rows = await prisma.betterAuthApiKey.findMany({
       where: {
         userId: ctx.user.id,
-        prefix: { in: [MANAGEMENT_KEY_PREFIX, TEAM_MANAGEMENT_KEY_PREFIX] },
+        prefix: teamScopedKeysEnabled
+          ? { in: [MANAGEMENT_KEY_PREFIX, TEAM_MANAGEMENT_KEY_PREFIX] }
+          : MANAGEMENT_KEY_PREFIX,
         ...(scopedTeamId ? { teamId: scopedTeamId } : {}),
       },
       orderBy: { createdAt: 'desc' },

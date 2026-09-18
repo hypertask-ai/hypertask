@@ -202,6 +202,47 @@ test("a team-scoped key cannot create an agent on another team's board", async (
   });
 });
 
+test("a team-scoped agent stores its grant for derived OAuth credentials", async () => {
+  let credentialUpdate;
+  const prisma = {
+    agent: {
+      findFirst: async () => null,
+      create: async ({ data }) => ({
+        id: "new-agent",
+        displayName: data.displayName,
+        photoURL: null,
+      }),
+      update: async ({ data }) => {
+        credentialUpdate = data;
+        return {};
+      },
+    },
+    member: { createMany: async () => ({ count: 1 }) },
+    $transaction: async (fn) => fn(prisma),
+  };
+  const teamScope = {
+    teamId: "team-a",
+    accessBinding: "member:membership-a",
+  };
+  const { createAgentForUser } = loadCreateModule({
+    prisma,
+    getAccessibleAgentBoard: async () => ({ id: 15, teamId: "team-a" }),
+  });
+
+  const response = await createAgentForUser(
+    request({ display_name: "Build Agent", project_ids: [15] }),
+    { id: 6, email: "a@b.com" },
+    teamScope,
+  );
+
+  assert.equal(response.status, 201);
+  assert.equal(credentialUpdate.credentialTeamId, teamScope.teamId);
+  assert.equal(
+    credentialUpdate.credentialTeamAccessBinding,
+    teamScope.accessBinding,
+  );
+});
+
 test("a team-scoped key must create an agent on at least one board", async () => {
   const prisma = { agent: { findFirst: async () => null } };
   const { createAgentForUser } = loadCreateModule({ prisma });

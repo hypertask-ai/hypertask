@@ -41,9 +41,11 @@ export async function GET(_request: NextRequest) {
 
     const now = new Date()
 
-    const [teamScopedKeysEnabled, restKeys, managementRows, connections] =
-      await Promise.all([
-      isFeatureEnabled(HTPR_6542_TEAM_SCOPED_MANAGEMENT_KEYS_FLAG, user.id),
+    const teamScopedKeysEnabled = await isFeatureEnabled(
+      HTPR_6542_TEAM_SCOPED_MANAGEMENT_KEYS_FLAG,
+      user.id
+    )
+    const [restKeys, managementRows, connections] = await Promise.all([
       prisma.apiKey.findMany({
         where: { userId: user.id },
         select: apiKeySelect,
@@ -52,9 +54,11 @@ export async function GET(_request: NextRequest) {
       prisma.betterAuthApiKey.findMany({
         where: {
           userId: user.id,
-          prefix: {
-            in: [ACCOUNT_MANAGEMENT_KEY_PREFIX, TEAM_MANAGEMENT_KEY_PREFIX],
-          },
+          prefix: teamScopedKeysEnabled
+            ? {
+                in: [ACCOUNT_MANAGEMENT_KEY_PREFIX, TEAM_MANAGEMENT_KEY_PREFIX],
+              }
+            : ACCOUNT_MANAGEMENT_KEY_PREFIX,
         },
         select: {
           id: true,

@@ -265,6 +265,8 @@ export async function createAgentForUser(
       data: {
         ...agentTokenCredentialFields(token),
         mcpTokenExpiresAt: null,
+        credentialTeamId: teamScope?.teamId ?? null,
+        credentialTeamAccessBinding: teamScope?.accessBinding ?? null,
       },
     })
 

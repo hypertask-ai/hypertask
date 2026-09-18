@@ -55,6 +55,8 @@ export type AgentLifecycleDatabase = {
         mcpTokenHash: string | null
         mcpTokenJti: string | null
         mcpTokenExpiresAt: null
+        credentialTeamId: string | null
+        credentialTeamAccessBinding: string | null
         runtimeGeneration: { increment: number }
       }
     }): Promise<{ count: number }>
@@ -165,6 +167,8 @@ export async function launchOwnedAgent(
       revokedAt: null,
       ...deps.credentialFields(issuedCredential),
       mcpTokenExpiresAt: null,
+      credentialTeamId: tokenTeamScope?.teamId ?? null,
+      credentialTeamAccessBinding: tokenTeamScope?.accessBinding ?? null,
       runtimeGeneration: { increment: 1 },
     },
   })

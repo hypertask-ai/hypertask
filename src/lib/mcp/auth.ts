@@ -1041,6 +1041,8 @@ export function createMcpToken(
  * @param clientId OAuth client registration bound to this credential
  * @param expiresIn Expiration in seconds (default: 90 days). Ignored when agentId is set (no JWT exp).
  * @param agentId Optional agent UUID; when set, token has no expiry.
+ * @param agentTokenJti Current agent credential generation.
+ * @param agentTeamScope Optional team grant carried by a team-bound agent.
  * @returns JWT token string
  */
 const MCP_OAUTH_TOKEN_EXPIRY = 90 * 24 * 60 * 60; // 90 days
@@ -1052,7 +1054,8 @@ export function createOAuthToken(
   clientId: string,
   expiresIn: number = MCP_OAUTH_TOKEN_EXPIRY,
   agentId?: string | null,
-  agentTokenJti?: string | null
+  agentTokenJti?: string | null,
+  agentTeamScope?: AgentTokenTeamScope
 ): string {
   if (!JWT_SECRET) {
     throw new Error('JWT_SECRET not configured')
@@ -1083,6 +1086,16 @@ export function createOAuthToken(
     // Every OAuth credential keeps a unique jti. A separate private claim ties
     // it to the managed agent's revocable generation.
     payload[AGENT_TOKEN_GENERATION_CLAIM] = agentTokenJti
+  }
+  if (agentTeamScope) {
+    if (!agentId) {
+      throw new Error('A team-bound OAuth token requires an agent id')
+    }
+    if (!agentTeamScope.teamId || !agentTeamScope.accessBinding) {
+      throw new Error('A team-bound OAuth token requires a complete team scope')
+    }
+    payload[AGENT_TEAM_ID_CLAIM] = agentTeamScope.teamId
+    payload[AGENT_TEAM_ACCESS_BINDING_CLAIM] = agentTeamScope.accessBinding
   }
 
   return jwt.sign(payload as jwt.JwtPayload, JWT_SECRET, {

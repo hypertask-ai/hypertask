@@ -643,6 +643,7 @@ model Team {
   survey                       Json?
   googleAccountId              String
   googleAccount                GoogleAccount      @relation(fields: [googleAccountId], references: [id])
+  managementKeyOwnerGeneration Int                @default(0)
   team_activity                Team_Activity?
   byokApiKeys                  TeamByokApiKey[]
   managementApiKeys            BetterAuthApiKey[]
@@ -1498,6 +1499,7 @@ model Member_Team {
   status        InviteStatus   @default(Accepted)
   invitedAt     DateTime?
   acceptedAt    DateTime?
+  managementKeyAccessGeneration Int @default(0)
   notifications Notification[]
 
   teamId String
@@ -2432,6 +2434,8 @@ model Agent {
   mcpTokenHash              String?   @db.VarChar(64)
   mcpTokenJti               String?
   mcpTokenExpiresAt         DateTime?
+  credentialTeamId            String?
+  credentialTeamAccessBinding String?
   // Monotonic credential/runtime generation. Heartbeats from a destroyed or
   // rotated token can never replace state from a newer generation.
   runtimeGeneration         Int       @default(1)

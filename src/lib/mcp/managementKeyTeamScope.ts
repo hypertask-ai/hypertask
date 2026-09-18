@@ -56,9 +56,10 @@ export async function getManagementKeyTeam(
       id: true,
       title: true,
       googleAccount: { select: { id: true, userId: true } },
+      managementKeyOwnerGeneration: true,
       members: {
         where: { userId, status: InviteStatus.Accepted },
-        select: { id: true },
+        select: { id: true, managementKeyAccessGeneration: true },
         take: 1,
       },
     },
@@ -68,9 +69,9 @@ export async function getManagementKeyTeam(
   const isOwner = team.googleAccount.userId === userId;
   let accessBinding: string | null = null;
   if (isOwner) {
-    accessBinding = `owner:${team.googleAccount.id}`;
+    accessBinding = `owner:${team.googleAccount.id}:${team.managementKeyOwnerGeneration}`;
   } else if (team.members[0]) {
-    accessBinding = `member:${team.members[0].id}`;
+    accessBinding = `member:${team.members[0].id}:${team.members[0].managementKeyAccessGeneration}`;
   }
   if (!accessBinding) return null;
 

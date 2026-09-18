@@ -121,12 +121,13 @@ export async function handleRotateAgentTokenRequest(
     )
   }
 
+  const teamScope = managementAgentTokenScope(ctx.management)
   const token = createMcpToken(
     ctx.user.id,
     ctx.user.email,
     undefined,
     agent.id,
-    managementAgentTokenScope(ctx.management)
+    teamScope
   )
   const updated = await prisma.agent.updateMany({
     where: {
@@ -139,6 +140,8 @@ export async function handleRotateAgentTokenRequest(
     data: {
       ...agentTokenCredentialFields(token),
       mcpTokenExpiresAt: null,
+      credentialTeamId: teamScope?.teamId ?? null,
+      credentialTeamAccessBinding: teamScope?.accessBinding ?? null,
       revokedAt: null,
       runtimeGeneration: { increment: 1 },
     },
