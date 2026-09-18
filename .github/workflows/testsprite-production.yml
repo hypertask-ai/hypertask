@@ -1,0 +1,119 @@
+name: TestSprite production QA
+
+on:
+  workflow_run:
+    workflows: ["Prod Health Check + Auto-Rollback"]
+    types: [completed]
+    branches: [production]
+  workflow_dispatch:
+
+concurrency:
+  group: testsprite-production
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  statuses: read
+
+jobs:
+  testsprite:
+    if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.event == 'push'
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Confirm the deploy passed production health checks
+        id: deploy
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPOSITORY: ${{ github.repository }}
+          SHA: ${{ github.event.workflow_run.head_sha }}
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "run=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          state=$(gh api "repos/$REPOSITORY/commits/$SHA/status" \
+            --jq '[.statuses[] | select(.context == "prod-health-gate")][0].state // ""')
+          if [ "$state" = "success" ]; then
+            echo "run=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "run=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::Skipping TestSprite because this SHA was not confirmed as a healthy live deploy."
+          fi
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        if: steps.deploy.outputs.run == 'true'
+        with:
+          node-version: 22
+
+      - name: Install TestSprite CLI
+        if: steps.deploy.outputs.run == 'true'
+        run: npm install --global @testsprite/testsprite-cli@0.11.0
+
+      - name: Configure the frontend QA login
+        id: configure
+        if: steps.deploy.outputs.run == 'true'
+        env:
+          QA_LOGIN_EMAIL: ${{ secrets.QA_LOGIN_EMAIL }}
+          QA_LOGIN_PASSWORD: ${{ secrets.QA_LOGIN_PASSWORD }}
+          TESTSPRITE_API_KEY: ${{ secrets.TESTSPRITE_API_KEY }}
+        run: |
+          umask 077
+          password_file="$RUNNER_TEMP/qa-login-password"
+          trap 'rm -f "$password_file"' EXIT
+          printf '%s' "$QA_LOGIN_PASSWORD" > "$password_file"
+          testsprite project update 411d64f3-c9ec-4032-a4e5-ad0e3f6f57d9 \
+            --url https://app.hypertask.ai/qa/login \
+            --username "$QA_LOGIN_EMAIL" \
+            --password-file "$password_file" >/dev/null
+
+      - name: Run frontend tests
+        id: frontend
+        if: steps.deploy.outputs.run == 'true' && steps.configure.outcome == 'success'
+        continue-on-error: true
+        env:
+          TESTSPRITE_API_KEY: ${{ secrets.TESTSPRITE_API_KEY }}
+        run: |
+          mkdir -p testsprite-reports
+          testsprite --output json test run --all \
+            --project 411d64f3-c9ec-4032-a4e5-ad0e3f6f57d9 \
+            --wait --timeout 1200 \
+            --report junit --report-file testsprite-reports/frontend-junit.xml \
+            --summary-file testsprite-reports/frontend-summary.json \
+            > testsprite-reports/frontend-result.json
+
+      - name: Run backend tests
+        id: backend
+        if: always() && steps.deploy.outputs.run == 'true'
+        continue-on-error: true
+        env:
+          TESTSPRITE_API_KEY: ${{ secrets.TESTSPRITE_API_KEY }}
+        run: |
+          mkdir -p testsprite-reports
+          testsprite --output json test run --all \
+            --project 64648e88-03a4-4355-9e14-dc28f4e8cc7e \
+            --wait --timeout 1200 \
+            --report junit --report-file testsprite-reports/backend-junit.xml \
+            --summary-file testsprite-reports/backend-summary.json \
+            > testsprite-reports/backend-result.json
+
+      - name: Upload TestSprite reports
+        if: always() && steps.deploy.outputs.run == 'true'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: testsprite-production-reports
+          path: testsprite-reports/
+          retention-days: 14
+
+      - name: Report TestSprite result
+        if: always() && steps.deploy.outputs.run == 'true'
+        env:
+          CONFIGURE: ${{ steps.configure.outcome }}
+          FRONTEND: ${{ steps.frontend.outcome }}
+          BACKEND: ${{ steps.backend.outcome }}
+        run: |
+          if [ "$CONFIGURE" != "success" ] || [ "$FRONTEND" != "success" ] || [ "$BACKEND" != "success" ]; then
+            echo "::error::TestSprite production QA failed."
+            exit 1
+          fi
