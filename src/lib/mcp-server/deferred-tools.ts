@@ -108,6 +108,11 @@ export function searchToolCatalog(
     .map((tool) => {
       const name = tool.name.toLowerCase()
       const description = tool.description.toLowerCase()
+      const spacedNeedle = needle.replace(/\s+/g, ' ')
+      const spacedName = name.replace(/_/g, ' ')
+      if (spacedNeedle.length > 0 && spacedName.includes(spacedNeedle)) {
+        return { name: tool.name, description: deferredDescription(tool), score: 0 }
+      }
       const nameHit = needle.length === 0 || name.includes(needle)
       const descHit = needle.length > 0 && description.includes(needle)
       if (!nameHit && !descHit) return null
