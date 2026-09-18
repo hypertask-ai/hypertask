@@ -135,7 +135,7 @@ test("the tutorial comment does not consume its seeded inbox notification", () =
   assert.match(sendComment, /!preserveTutorialInbox && inInbox/);
   assert.match(
     sendComment,
-    /!preserveTutorialInbox &&\s*\(!keepDirectTaskOpen \|\| isInboxFlow\) &&\s*\(alwaysAdvance \|\| \(inInbox && advanceOnSend\)\)/,
+    /!preserveTutorialInbox &&\s*\(\s*\(alwaysAdvance && \(!keepDirectTaskOpen \|\| isInboxFlow\)\) \|\|\s*\(isInboxFlow && inInbox && advanceOnSend\)\s*\)/,
   );
 });
 

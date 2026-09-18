@@ -555,8 +555,8 @@ const Tiptap = ({
     );
     return handleCallback(
       !preserveTutorialInbox &&
-        (!keepDirectTaskOpen || isInboxFlow) &&
-        (alwaysAdvance || (inInbox && advanceOnSend))
+        ((alwaysAdvance && (!keepDirectTaskOpen || isInboxFlow)) ||
+          (isInboxFlow && inInbox && advanceOnSend))
         ? "moveToNext"
         : undefined,
       !preserveTutorialInbox && inInbox,

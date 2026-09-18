@@ -93,9 +93,8 @@ export function resolveCommentEnterShortcutAction({
   if (!commandKey || key !== "Enter") return null;
 
   if (consistentCommentShortcuts && isCommentMode && !altKey) {
-    return shiftKey || (keepDirectTaskOpen && !isInboxFlow)
-      ? "send-and-stay"
-      : "send-and-move";
+    if (shiftKey) return "send-and-stay";
+    return keepDirectTaskOpen && !isInboxFlow ? "send" : "send-and-move";
   }
   if (shiftKey && !altKey) {
     if (!isInboxFlow) return "ignore";

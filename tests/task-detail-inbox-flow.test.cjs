@@ -164,7 +164,7 @@ test("comment Enter shortcut modifiers resolve to one action", () => {
         isInboxFlow: false,
         keepDirectTaskOpen: true,
       },
-      expected: "send-and-stay",
+      expected: "send",
     },
     {
       name: "consistent send and stay without Inbox lineage",
