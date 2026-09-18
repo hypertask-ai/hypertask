@@ -580,7 +580,7 @@ export async function GET(request: NextRequest) {
     } else if (sortBy === 'createdAt') {
       orderBy.push({ createdAt: sortOrder }, { id: 'asc' })
     } else if (sortBy === 'updatedAt') {
-      orderBy.push({ updatedAt: sortOrder }, { id: 'asc' })
+      orderBy.push({ updatedAt: { sort: sortOrder, nulls: 'last' } }, { id: 'asc' })
     } else if (sortBy === 'dueDate') {
       orderBy.push({ dueDate: sortOrder }, { id: 'asc' })
     } else if (sortBy === 'priority') {
