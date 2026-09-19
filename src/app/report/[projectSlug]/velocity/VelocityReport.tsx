@@ -201,7 +201,7 @@ const CreatedFinishedChart = ({ report }: { report: VelocityReportData }) => {
             / Finished / Live / Released, or once it is archived.
           </p>
         )}
-      <div className="rounded-[4px] bg-hoverCardBackground p-4 shadow-md">
+      <div className="rounded-[5px] bg-hoverCardBackground p-4 shadow-md">
         <div className="w-full max-w-full overflow-x-auto">
           <div className="flex h-48 min-w-[640px] items-end gap-2">
             {report.buckets.map((bucket, index) => {
@@ -263,7 +263,7 @@ const Speed = ({ report }: { report: VelocityReportData }) => {
         </p>
       </div>
       <div className="grid min-w-0 gap-3 md:grid-cols-3">
-        <div className="min-w-0 rounded-[4px] bg-hoverCardBackground p-4 shadow-md">
+        <div className="min-w-0 rounded-[5px] bg-hoverCardBackground p-4 shadow-md">
           <p className="text-dense text-text-light-gray">
             Time to finish a ticket
           </p>
@@ -283,7 +283,7 @@ const Speed = ({ report }: { report: VelocityReportData }) => {
             {finishTimeComparison(report)}
           </p>
         </div>
-        <div className="min-w-0 rounded-[4px] bg-hoverCardBackground p-4 shadow-md">
+        <div className="min-w-0 rounded-[5px] bg-hoverCardBackground p-4 shadow-md">
           <p className="text-dense text-text-light-gray">
             Tickets finished per week
           </p>
@@ -299,7 +299,7 @@ const Speed = ({ report }: { report: VelocityReportData }) => {
             {finishedComparison(report)}
           </p>
         </div>
-        <div className="min-w-0 rounded-[4px] bg-hoverCardBackground p-4 shadow-md">
+        <div className="min-w-0 rounded-[5px] bg-hoverCardBackground p-4 shadow-md">
           <p className="text-dense text-text-light-gray">
             Oldest ticket still open
           </p>
@@ -334,7 +334,7 @@ const OpenTickets = ({ report }: { report: VelocityReportData }) => {
           movement
         </span>
       </div>
-      <div className="rounded-[4px] bg-hoverCardBackground p-4 shadow-md">
+      <div className="rounded-[5px] bg-hoverCardBackground p-4 shadow-md">
         {report.now.columns.length === 0 ? (
           <p className="text-dense text-text-light-gray">No open tickets.</p>
         ) : (
@@ -376,7 +376,7 @@ const People = ({ report }: { report: VelocityReportData }) => (
         {inPeriod(report)}
       </span>
     </div>
-    <div className="w-full max-w-full overflow-x-auto rounded-[4px] bg-hoverCardBackground py-2 shadow-md">
+    <div className="w-full max-w-full overflow-x-auto rounded-[5px] bg-hoverCardBackground py-2 shadow-md">
       <div className="min-w-[640px]">
         <div className="grid grid-cols-[minmax(180px,1fr)_100px_100px_140px] gap-2 px-5 py-2 text-micro font-semibold uppercase text-text-light-gray">
           <span>Member</span>
@@ -419,16 +419,16 @@ const WorkedOn = ({ report }: { report: VelocityReportData }) => (
         Tickets worked on
       </h2>
       <p className="mt-1 text-dense text-text-light-gray">
-        Updated, commented, moved, or linked to a pull request merged in this
-        period.
+        Up to 100 most recently active tickets updated, commented, moved, or
+        linked to a pull request merged in this period.
       </p>
     </div>
     {report.workedOn.length === 0 ? (
-      <div className="rounded-[4px] bg-hoverCardBackground p-4 text-dense text-text-light-gray shadow-md">
+      <div className="rounded-[5px] bg-hoverCardBackground p-4 text-dense text-text-light-gray shadow-md">
         No tickets were worked on in this period.
       </div>
     ) : (
-      <div className="flex flex-col gap-px overflow-hidden rounded-[4px] bg-pageBackground shadow-md">
+      <div className="flex flex-col gap-px overflow-hidden rounded-[5px] bg-pageBackground shadow-md">
         {report.workedOn.map((task) => (
           <div
             key={task.id}
@@ -484,16 +484,20 @@ const VelocityReport = ({
   const to = searchParams?.get("to");
   const maxDate = new Date().toISOString().slice(0, 10);
   const range = resolveVelocityRange(searchParams?.get("range"), from, to);
+  const customFrom =
+    range.key === "custom" ? range.start?.slice(0, 10) ?? from : from;
+  const customTo =
+    range.key === "custom" ? range.end?.slice(0, 10) ?? to : to;
   const reportParams = new URLSearchParams({
     projectId: String(projectId),
     range: range.key,
   });
-  if (range.key === "custom" && from && to) {
-    reportParams.set("from", from);
-    reportParams.set("to", to);
+  if (range.key === "custom" && customFrom && customTo) {
+    reportParams.set("from", customFrom);
+    reportParams.set("to", customTo);
   }
   const { data, isError, isLoading } = useQuery<VelocityReportData>({
-    queryKey: ["velocityReport", projectId, range.key, from, to],
+    queryKey: ["velocityReport", projectId, range.key, customFrom, customTo],
     queryFn: async () => {
       const response = await axios.get<VelocityReportData>(
         `/api/reports/velocity?${reportParams.toString()}`
@@ -560,43 +564,43 @@ const VelocityReport = ({
               ))}
             </div>
           </div>
-          {range.key === "custom" && from && to && (
+          {range.key === "custom" && customFrom && customTo && (
             <div className="mt-3 flex flex-wrap items-end gap-3">
               <label className="flex min-w-[150px] flex-col gap-1 text-meta text-text-light-gray">
                 From
                 <input
-                  className="h-9 rounded-[4px] border border-border bg-containerBackground px-3 text-dense text-white-black outline-none dark:[&::-webkit-calendar-picker-indicator]:invert"
-                  max={to < maxDate ? to : maxDate}
+                  className="h-9 rounded-[4px] bg-newcomment-well px-3 text-dense text-white-black outline-none dark:[&::-webkit-calendar-picker-indicator]:invert"
+                  max={customTo < maxDate ? customTo : maxDate}
                   onChange={(event) => {
                     const nextFrom = event.target.value;
                     if (!nextFrom) return;
                     replaceSearchParams({
                       from: nextFrom,
-                      ...(nextFrom > to ? { to: nextFrom } : {}),
+                      ...(nextFrom > customTo ? { to: nextFrom } : {}),
                     });
                   }}
                   onClick={(event) => event.currentTarget.showPicker?.()}
                   type="date"
-                  value={from}
+                  value={customFrom}
                 />
               </label>
               <label className="flex min-w-[150px] flex-col gap-1 text-meta text-text-light-gray">
                 To
                 <input
-                  className="h-9 rounded-[4px] border border-border bg-containerBackground px-3 text-dense text-white-black outline-none dark:[&::-webkit-calendar-picker-indicator]:invert"
+                  className="h-9 rounded-[4px] bg-newcomment-well px-3 text-dense text-white-black outline-none dark:[&::-webkit-calendar-picker-indicator]:invert"
                   max={maxDate}
-                  min={from}
+                  min={customFrom}
                   onChange={(event) => {
                     const nextTo = event.target.value;
                     if (!nextTo) return;
                     replaceSearchParams({
                       to: nextTo,
-                      ...(nextTo < from ? { from: nextTo } : {}),
+                      ...(nextTo < customFrom ? { from: nextTo } : {}),
                     });
                   }}
                   onClick={(event) => event.currentTarget.showPicker?.()}
                   type="date"
-                  value={to}
+                  value={customTo}
                 />
               </label>
             </div>
@@ -610,19 +614,19 @@ const VelocityReport = ({
         </header>
 
         {isLoading && (
-          <div className="rounded-[4px] bg-hoverCardBackground p-8 text-center text-dense text-text-light-gray shadow-md">
+          <div className="rounded-[5px] bg-hoverCardBackground p-8 text-center text-dense text-text-light-gray shadow-md">
             Loading…
           </div>
         )}
 
         {isError && (
-          <div className="rounded-[4px] bg-hoverCardBackground p-8 text-center text-dense text-text-light-gray shadow-md">
+          <div className="rounded-[5px] bg-hoverCardBackground p-8 text-center text-dense text-text-light-gray shadow-md">
             Unable to load the board analytics.
           </div>
         )}
 
         {data && isEmptyReport(data) && (
-          <div className="rounded-[4px] bg-hoverCardBackground p-8 text-center text-dense text-text-light-gray shadow-md">
+          <div className="rounded-[5px] bg-hoverCardBackground p-8 text-center text-dense text-text-light-gray shadow-md">
             There is nothing to report yet.
           </div>
         )}

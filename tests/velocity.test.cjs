@@ -60,6 +60,14 @@ test("yesterday and custom ranges use bounded UTC dates", () => {
   assert.equal(custom.start, "2026-07-20T00:00:00.000Z");
   assert.equal(custom.end, now.toISOString());
   assert.equal(custom.days, 8);
+  const capped = resolveVelocityRange(
+    "custom",
+    "2025-01-01",
+    "2026-07-27",
+    now
+  );
+  assert.equal(capped.end, "2025-12-31T23:59:59.999Z");
+  assert.equal(capped.days, 365);
   assert.strictEqual(
     resolveVelocityRange("custom", "2026-07-28", "2026-07-29", now),
     VELOCITY_RANGES.find(({ key }) => key === "7d")

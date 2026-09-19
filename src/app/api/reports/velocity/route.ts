@@ -1,3 +1,4 @@
+import { getSessionUser } from "@/lib/auth/getSessionUser";
 import prisma from "@/lib/prisma";
 import { isFeatureEnabled } from "@/lib/flags";
 import { HTPR_6585_BOARD_REPORTS_FLAG } from "@/lib/flags/keys";
@@ -9,27 +10,14 @@ import {
 } from "@/lib/velocity";
 import { doneColumnTitles, isDoneByName } from "@/lib/doneColumns";
 import { getProjectWhere } from "@/utils/controllers/projects/getAllIncludes";
-import { cookies } from "next/headers";
 import { NextRequest, NextResponse } from "next/server";
 
-type CookieUser = { id?: number };
-
-async function getCurrentUserFromCookies(): Promise<CookieUser | null> {
-  try {
-    const cookieStore = await cookies();
-    const userCookie = cookieStore.get("nookies_user");
-    if (!userCookie?.value) return null;
-    return JSON.parse(userCookie.value) as CookieUser;
-  } catch (error) {
-    console.log("🚀 ~ getCurrentUserFromCookies ~ error:", error);
-    return null;
-  }
-}
+const WORKED_ON_TASK_LIMIT = 100;
+const MERGED_PULL_REQUEST_LIMIT = 5;
 
 export async function GET(request: NextRequest) {
-  const cookieUser = await getCurrentUserFromCookies();
-  const userId = Number(cookieUser?.id);
-  if (!Number.isInteger(userId) || userId <= 0) {
+  const userId = (await getSessionUser(request.headers))?.userId;
+  if (!userId) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
   if (!(await isFeatureEnabled(HTPR_6585_BOARD_REPORTS_FLAG, userId))) {
@@ -89,7 +77,14 @@ export async function GET(request: NextRequest) {
     const selectedWindow = { gte: windowStart, lte: windowEnd };
 
     // Scans every non-deleted open board task; fine on demand, but use groupBy on a hot path.
-    const [tasks, comments, workedOnTasks] = await Promise.all([
+    const [
+      tasks,
+      comments,
+      updatedTaskActivity,
+      commentActivity,
+      moveActivity,
+      mergedPullRequestActivity,
+    ] = await Promise.all([
       prisma.task.findMany({
         where: {
           projectId,
@@ -128,58 +123,55 @@ export async function GET(request: NextRequest) {
           projectId,
           deletedAt: null,
           status: { not: "Deleted" },
-          OR: [
-            { updatedAt: selectedWindow },
-            {
-              comments: {
-                some: {
-                  createdAt: selectedWindow,
-                  OR: [{ creatorId: { not: null } }, { agentId: { not: null } }],
-                },
-              },
-            },
-            {
-              sectionEvents: {
-                some: { timestamp: selectedWindow },
-              },
-            },
-            {
-              pullRequests: {
-                some: {
-                  lifecycle: "merged",
-                  sourceUpdatedAt: selectedWindow,
-                },
-              },
-            },
-          ],
+          updatedAt: selectedWindow,
         },
-        select: {
-          id: true,
-          projectId: true,
-          uniqueIndex: true,
-          ticketNumber: true,
-          title: true,
-          createdAt: true,
-          updatedAt: true,
-          comments: {
-            where: {
-              createdAt: selectedWindow,
-              OR: [{ creatorId: { not: null } }, { agentId: { not: null } }],
-            },
-            select: { createdAt: true },
-          },
-          sectionEvents: {
-            where: { timestamp: selectedWindow },
-            select: { timestamp: true },
-          },
-          pullRequests: {
-            where: {
-              lifecycle: "merged",
-              sourceUpdatedAt: selectedWindow,
-            },
-            select: { title: true, url: true, sourceUpdatedAt: true },
+        orderBy: { updatedAt: "desc" },
+        take: WORKED_ON_TASK_LIMIT,
+        select: { id: true, createdAt: true, updatedAt: true },
+      }),
+      prisma.comment.groupBy({
+        by: ["taskId"],
+        where: {
+          createdAt: selectedWindow,
+          OR: [{ creatorId: { not: null } }, { agentId: { not: null } }],
+          task: {
+            projectId,
+            deletedAt: null,
+            status: { not: "Deleted" },
           },
         },
+        _max: { createdAt: true },
+        orderBy: { _max: { createdAt: "desc" } },
+        take: WORKED_ON_TASK_LIMIT,
+      }),
+      prisma.taskSectionEvent.groupBy({
+        by: ["taskId"],
+        where: {
+          timestamp: selectedWindow,
+          task: {
+            projectId,
+            deletedAt: null,
+            status: { not: "Deleted" },
+          },
+        },
+        _max: { timestamp: true },
+        orderBy: { _max: { timestamp: "desc" } },
+        take: WORKED_ON_TASK_LIMIT,
+      }),
+      prisma.taskPullRequest.groupBy({
+        by: ["taskId"],
+        where: {
+          lifecycle: "merged",
+          sourceUpdatedAt: selectedWindow,
+          task: {
+            projectId,
+            deletedAt: null,
+            status: { not: "Deleted" },
+          },
+        },
+        _max: { sourceUpdatedAt: true },
+        orderBy: { _max: { sourceUpdatedAt: "desc" } },
+        take: WORKED_ON_TASK_LIMIT,
       }),
     ]);
 
@@ -205,42 +197,86 @@ export async function GET(request: NextRequest) {
         ]
       )
     );
-    const inWindow = (date: Date | null) =>
-      date !== null && date >= windowStart && date <= windowEnd;
-    const workedOn = workedOnTasks
-      .flatMap((task) => {
-        const wasUpdated =
-          task.updatedAt > task.createdAt && inWindow(task.updatedAt);
-        const activities = [
-          ...(wasUpdated ? ["Updated"] : []),
-          ...(task.comments.length ? ["Commented"] : []),
-          ...(task.sectionEvents.length ? ["Moved"] : []),
-          ...(task.pullRequests.length ? ["Merged PR"] : []),
-        ];
-        const activityDates = [
-          ...(wasUpdated ? [task.updatedAt] : []),
-          ...task.comments.map((comment) => comment.createdAt),
-          ...task.sectionEvents.map((event) => event.timestamp),
-          ...task.pullRequests.flatMap((pullRequest) =>
-            pullRequest.sourceUpdatedAt ? [pullRequest.sourceUpdatedAt] : []
-          ),
-        ];
-        if (activityDates.length === 0) return [];
+    const activityByTask = new Map<
+      number,
+      { activities: Set<string>; lastActivityAt: Date }
+    >();
+    const recordActivity = (taskId: number, activity: string, at: Date | null) => {
+      if (!at) return;
+      const existing = activityByTask.get(taskId);
+      if (existing) {
+        existing.activities.add(activity);
+        if (at > existing.lastActivityAt) existing.lastActivityAt = at;
+        return;
+      }
+      activityByTask.set(taskId, {
+        activities: new Set([activity]),
+        lastActivityAt: at,
+      });
+    };
+    updatedTaskActivity.forEach((task) => {
+      if (task.updatedAt && task.updatedAt > task.createdAt) {
+        recordActivity(task.id, "Updated", task.updatedAt);
+      }
+    });
+    commentActivity.forEach((activity) =>
+      recordActivity(activity.taskId, "Commented", activity._max.createdAt)
+    );
+    moveActivity.forEach((activity) =>
+      recordActivity(activity.taskId, "Moved", activity._max.timestamp)
+    );
+    mergedPullRequestActivity.forEach((activity) =>
+      recordActivity(
+        activity.taskId,
+        "Merged PR",
+        activity._max.sourceUpdatedAt
+      )
+    );
 
-        return [{
+    const workedOnTaskIds = Array.from(activityByTask.entries())
+      .sort((left, right) =>
+        right[1].lastActivityAt.getTime() - left[1].lastActivityAt.getTime()
+      )
+      .slice(0, WORKED_ON_TASK_LIMIT)
+      .map(([taskId]) => taskId);
+    const workedOnTasks = workedOnTaskIds.length === 0
+      ? []
+      : await prisma.task.findMany({
+          where: {
+            id: { in: workedOnTaskIds },
+            projectId,
+            deletedAt: null,
+            status: { not: "Deleted" },
+          },
+          select: {
+            id: true,
+            projectId: true,
+            uniqueIndex: true,
+            ticketNumber: true,
+            title: true,
+            pullRequests: {
+              where: {
+                lifecycle: "merged",
+                sourceUpdatedAt: selectedWindow,
+              },
+              orderBy: { sourceUpdatedAt: "desc" },
+              take: MERGED_PULL_REQUEST_LIMIT,
+              select: { title: true, url: true },
+            },
+          },
+        });
+    const workedOn = workedOnTasks
+      .map((task) => {
+        const activity = activityByTask.get(task.id)!;
+        return {
           id: task.id,
           ticketNumber: task.ticketNumber ?? String(task.uniqueIndex),
           title: task.title,
           href: `/detail/project-${task.projectId}/${task.uniqueIndex}`,
-          activities,
-          lastActivityAt: new Date(
-            Math.max(...activityDates.map((date) => date.getTime()))
-          ).toISOString(),
-          mergedPullRequests: task.pullRequests.map((pullRequest) => ({
-            title: pullRequest.title,
-            url: pullRequest.url,
-          })),
-        }];
+          activities: Array.from(activity.activities),
+          lastActivityAt: activity.lastActivityAt.toISOString(),
+          mergedPullRequests: task.pullRequests,
+        };
       })
       .sort((a, b) => b.lastActivityAt.localeCompare(a.lastActivityAt));
 

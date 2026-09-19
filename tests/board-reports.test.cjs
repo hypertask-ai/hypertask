@@ -57,10 +57,16 @@ test("board analytics exposes the required live ranges and worked-ticket links",
   assert.match(ui, /<Link[\s\S]*task\.href/);
   assert.match(ui, /task\.mergedPullRequests\.map/);
 
-  assert.match(route, /comments:\s*\{[\s\S]*createdAt: selectedWindow/);
-  assert.match(route, /sectionEvents:\s*\{[\s\S]*timestamp: selectedWindow/);
-  assert.match(route, /pullRequests:\s*\{[\s\S]*lifecycle: "merged"/);
-  assert.doesNotMatch(route, /take:\s*200/);
+  assert.match(route, /getSessionUser\(request\.headers\)/);
+  assert.doesNotMatch(route, /nookies_user/);
+  assert.match(route, /prisma\.comment\.groupBy\(\{[\s\S]*by: \["taskId"\]/);
+  assert.match(route, /prisma\.taskSectionEvent\.groupBy\(\{/);
+  assert.match(route, /prisma\.taskPullRequest\.groupBy\(\{/);
+  assert.match(route, /take: WORKED_ON_TASK_LIMIT/);
+  assert.match(route, /take: MERGED_PULL_REQUEST_LIMIT/);
+  assert.match(ui, /value=\{customFrom\}/);
+  assert.match(ui, /value=\{customTo\}/);
+  assert.doesNotMatch(ui, /border border-border/);
 });
 
 test("report commands disappear when board reports are disabled", () => {
