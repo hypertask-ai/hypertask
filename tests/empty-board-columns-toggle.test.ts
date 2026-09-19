@@ -20,6 +20,7 @@ import {
   createBoardReadModelSnapshot,
   materializeBoardReadModelSnapshot,
 } from "../src/lib/boardSync/contract";
+import { persistDisabledStagedEmptySections } from "../src/utils/controllers/projects/views/viewsHelperAPIfunctions";
 
 const root = path.resolve(__dirname, "..");
 
@@ -353,6 +354,155 @@ test("disabling staging preserves unrelated unsaved edits", () => {
     disabled.user_project_views[0].unsavedView?.board_sorting_order,
     "Ascending",
   );
+});
+
+test("flag-off cleanup preserves an unsaved view modified after the stale read", async () => {
+  const applied = {
+    ...view("speed", "Show"),
+    board_sorting_order: "Descending",
+    ViewLastUsed: [{ board_empty_sections: "Hidden" }],
+  };
+  const staleProject = projectWith({
+    unsaved: view("unsaved", "Show", true),
+    applied: applied as never,
+  }).project_view;
+  const currentState = {
+    default_view: null,
+    user_project_views: [{
+      userId: 42,
+      project_view_id: "project-view",
+      appliedViewId: "speed",
+      unsavedViewId: "unsaved",
+      view_order: null,
+      appliedView: applied,
+      unsavedView: {
+        ...view("unsaved", "Show", true),
+        board_sorting_order: "Ascending",
+      },
+    }],
+  };
+  const calls = { locks: 0, detached: 0, deleted: 0, updated: [] as unknown[] };
+  const tx = {
+    $queryRaw: async () => {
+      calls.locks += 1;
+      return calls.locks === 1 ? [{ unsavedViewId: "unsaved" }] : [{ id: "unsaved" }];
+    },
+    project_View: { findUnique: async () => currentState },
+    user_Project_View: {
+      updateMany: async () => {
+        calls.detached += 1;
+        return { count: 1 };
+      },
+    },
+    view: {
+      deleteMany: async () => {
+        calls.deleted += 1;
+        return { count: 1 };
+      },
+      updateMany: async (args: unknown) => {
+        calls.updated.push(args);
+        return { count: 1 };
+      },
+    },
+  };
+  const database = {
+    $transaction: async (operation: (client: typeof tx) => Promise<unknown>) => operation(tx),
+  };
+
+  const normalized = await persistDisabledStagedEmptySections(
+    staleProject as never,
+    42,
+    database as never,
+  );
+
+  assert.equal(calls.locks, 2);
+  assert.equal(calls.detached, 0);
+  assert.equal(calls.deleted, 0);
+  assert.equal(calls.updated.length, 1);
+  assert.deepEqual(
+    (calls.updated[0] as { data: unknown }).data,
+    {
+      board_empty_sections: "Hidden",
+      board_empty_sections_staged: false,
+    },
+  );
+  assert.equal(
+    normalized.user_project_views[0].unsavedView?.board_sorting_order,
+    "Ascending",
+  );
+  assert.equal(
+    normalized.user_project_views[0].unsavedView?.board_empty_sections,
+    "Hidden",
+  );
+  assert.equal(
+    normalized.user_project_views[0].unsavedView?.board_empty_sections_staged,
+    false,
+  );
+});
+
+test("flag-off cleanup detaches a currently staged-only unsaved view", async () => {
+  const applied = {
+    ...view("speed", "Show"),
+    ViewLastUsed: [{ board_empty_sections: "Hidden" }],
+  };
+  const staleProject = projectWith({
+    unsaved: {
+      ...view("unsaved", "Show", true),
+      board_sorting_order: "Ascending",
+    } as never,
+    applied: applied as never,
+  }).project_view;
+  const currentState = {
+    default_view: null,
+    user_project_views: [{
+      userId: 42,
+      project_view_id: "project-view",
+      appliedViewId: "speed",
+      unsavedViewId: "unsaved",
+      view_order: null,
+      appliedView: applied,
+      unsavedView: view("unsaved", "Show", true),
+    }],
+  };
+  const calls = { locks: 0, detached: 0, deleted: 0, updated: 0 };
+  const tx = {
+    $queryRaw: async () => {
+      calls.locks += 1;
+      return calls.locks === 1 ? [{ unsavedViewId: "unsaved" }] : [{ id: "unsaved" }];
+    },
+    project_View: { findUnique: async () => currentState },
+    user_Project_View: {
+      updateMany: async () => {
+        calls.detached += 1;
+        return { count: 1 };
+      },
+    },
+    view: {
+      deleteMany: async () => {
+        calls.deleted += 1;
+        return { count: 1 };
+      },
+      updateMany: async () => {
+        calls.updated += 1;
+        return { count: 1 };
+      },
+    },
+  };
+  const database = {
+    $transaction: async (operation: (client: typeof tx) => Promise<unknown>) => operation(tx),
+  };
+
+  const normalized = await persistDisabledStagedEmptySections(
+    staleProject as never,
+    42,
+    database as never,
+  );
+
+  assert.equal(calls.locks, 2);
+  assert.equal(calls.detached, 1);
+  assert.equal(calls.deleted, 1);
+  assert.equal(calls.updated, 0);
+  assert.equal(normalized.user_project_views[0].unsavedView, undefined);
 });
 
 test("a URL-pinned view keeps its personal setting through snapshot restore", () => {
