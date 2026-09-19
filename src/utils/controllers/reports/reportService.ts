@@ -63,7 +63,7 @@ function validateTitle(title: string): string {
 // Slugs that already name a built-in report route under /report/project-N/.
 // A stored report with one of these slugs would be shadowed by the static
 // segment and could never render, so reject it at the write path.
-export const RESERVED_REPORT_SLUGS = ["native", "velocity"];
+export const RESERVED_REPORT_SLUGS = ["velocity"];
 
 export function validateSlug(slug: string): string {
   const normalized = typeof slug === "string" ? normalizeReportSlug(slug) : "";

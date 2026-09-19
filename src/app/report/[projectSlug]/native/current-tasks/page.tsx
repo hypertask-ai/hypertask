@@ -44,7 +44,7 @@ const CountBreakdown = ({
         </h2>
         <p className="mt-1 text-dense text-text-light-gray">{description}</p>
       </div>
-      <div className="rounded-[5px] bg-hoverCardBackground p-4 shadow-md">
+      <div className="rounded-[5px] bg-cardBackground p-4 shadow-md">
         {groups.length === 0 ? (
           <p className="text-dense text-text-light-gray">No current tasks.</p>
         ) : (
