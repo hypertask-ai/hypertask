@@ -1,4 +1,6 @@
 import UpdateKanban from "@/hooks/MultiPages/useUpdateTaskInBoards";
+import { useFlag } from "@/hooks/useFlag";
+import { HTPR_6588_EMPTY_COLUMNS_SAVE_VIEW_FLAG } from "@/lib/flags/keys";
 import {
   deleteRenameViewAPIRoute,
   resetToDefaultAPIRoute,
@@ -68,6 +70,7 @@ let emptySectionMutationId = 0
 const emptySectionMutations = new Map<string, TEmptySectionMutationState>()
 
 const useKanbanViews = (project: IProject | null) => {
+  const emptyColumnsSaveViewEnabled = useFlag(HTPR_6588_EMPTY_COLUMNS_SAVE_VIEW_FLAG);
   const hasUserSelectedView =
     project?.project_view?.user_project_views[0]?.appliedView;
   const { getProjectIdxAndAllData, updateProjectView } =
@@ -287,6 +290,18 @@ const useKanbanViews = (project: IProject | null) => {
     project: IProject,
     emptySection: TBoardEmptySections
   ) => {
+    if (emptyColumnsSaveViewEnabled) {
+      return apiHandler(
+        (queuedProject) => buildUnsavedBody(queuedProject, {
+          board_empty_sections: emptySection,
+        }),
+        project,
+        (succeeded) => {
+          if (!succeeded) toast.error("Empty column visibility could not be saved")
+        },
+      )
+    }
+
     const mutationId = ++emptySectionMutationId
     const targetView =
       project.project_view?.user_project_views[0]?.appliedView ??

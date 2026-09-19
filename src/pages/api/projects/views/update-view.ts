@@ -1,5 +1,9 @@
 // route = "/api/projects/views/update-view"
 import prisma from "@/lib/prisma";
+import {
+  HTPR_6588_EMPTY_COLUMNS_SAVE_VIEW_FLAG,
+  isFeatureEnabled,
+} from "@/lib/flags";
 import { broadcastBoardChange } from "@/lib/realtime/server";
 import {
   isBoardEmptySectionSetting,
@@ -130,6 +134,10 @@ const handler: NextApiHandler = async (
         broadcastBoardChange(projectId, { originUserId: currentUser.id });
         return res.status(200).json({ viewId, board_layout: boardLayout });
       }
+      const emptyColumnsSaveViewEnabled = await isFeatureEnabled(
+        HTPR_6588_EMPTY_COLUMNS_SAVE_VIEW_FLAG,
+        currentUser.id,
+      );
       const projectView = await prisma.project_View.upsert({
         create: {
           // ... data to create a User_Project_View
@@ -205,6 +213,12 @@ const handler: NextApiHandler = async (
           },
         },
       });
+      if (emptyColumnsSaveViewEnabled) {
+        await prisma.view_Last_Used.updateMany({
+          where: { userId: currentUser.id, viewId },
+          data: { board_empty_sections: null },
+        });
+      }
 
       const updatedUserProjectView = await prisma.user_Project_View.upsert({
         create: {

@@ -222,7 +222,7 @@ test("an optimistic Show render keeps the automatic save attempt latched", () =>
   );
 });
 
-test("a personal setting overrides shared and legacy unsaved values", () => {
+test("an unsaved empty-column change overrides the previous personal setting", () => {
   const applied = {
     ...view("speed", "Show"),
     ViewLastUsed: [{ board_empty_sections: "Hidden" }],
@@ -234,7 +234,7 @@ test("a personal setting overrides shared and legacy unsaved values", () => {
 
   assert.equal(
     getActiveEmptySectionSettingFromProject(project as never),
-    "Hidden",
+    "Show",
   );
   assert.equal(
     getEmptySectionSettingForView(project.project_view as never, "speed"),
@@ -396,7 +396,7 @@ test("a successful earlier toggle becomes the rollback baseline", () => {
   );
 });
 
-test("the command toggles both directions through the optimistic shared save", () => {
+test("the legacy command fallback keeps its optimistic personal save", () => {
   const saveHookSource = fs.readFileSync(
     path.join(root, "src/hooks/Homepage/Views/useKanbanViews.ts"),
     "utf8",
@@ -416,10 +416,11 @@ test("the command toggles both directions through the optimistic shared save", (
   assert.match(toggleSource, /current === "Hidden" \? "Show" : "Hidden"/);
   assert.match(saveSource, /beginEmptySectionMutation/);
   assert.match(saveSource, /settleEmptySectionMutation/);
+  const legacySource = saveSource.slice(saveSource.indexOf("const mutationId"));
   assert.ok(
-    saveSource.indexOf("beginEmptySectionMutation") <
-      saveSource.indexOf("apiHandler("),
-    "the active board must update before the network request starts",
+    legacySource.indexOf("beginEmptySectionMutation") <
+      legacySource.indexOf("enqueueBoardViewMutation("),
+    "the legacy active board must update before its network request starts",
   );
 });
 
@@ -436,7 +437,7 @@ test("the canonical URL view reaches the durable unsaved-view branch", () => {
   assert.match(source.slice(durableWrite), /board_empty_sections/);
 });
 
-test("the command saves against the URL-pinned view instead of the raw cache view", () => {
+test("the flagged command stages empty-column changes in the save-view routine", () => {
   const source = fs.readFileSync(
     path.join(root, "src/hooks/Homepage/Views/useKanbanViews.ts"),
     "utf8",
@@ -445,8 +446,20 @@ test("the command saves against the URL-pinned view instead of the raw cache vie
   const nextFunction = source.indexOf("const saveStalenessToViewAPI", saveStart);
   const saveSource = source.slice(saveStart, nextFunction);
 
-  assert.match(saveSource, /project\.project_view\?\.user_project_views\[0\]\?\.appliedView/);
-  assert.match(saveSource, /viewId: targetViewId/);
+  assert.match(source, /useFlag\(HTPR_6588_EMPTY_COLUMNS_SAVE_VIEW_FLAG\)/);
+  assert.match(saveSource, /if \(emptyColumnsSaveViewEnabled\)/);
+  assert.match(saveSource, /buildUnsavedBody\(queuedProject, \{\s*board_empty_sections: emptySection/);
   assert.match(saveSource, /updateMode: PERSONAL_EMPTY_SECTIONS_UPDATE_MODE/);
-  assert.doesNotMatch(saveSource, /baseViewId/);
+  assert.ok(
+    saveSource.indexOf("if (emptyColumnsSaveViewEnabled)") <
+      saveSource.indexOf("updateMode: PERSONAL_EMPTY_SECTIONS_UPDATE_MODE"),
+    "the flagged save-view path must run before the legacy personal auto-save",
+  );
+
+  const updateRoute = fs.readFileSync(
+    path.join(root, "src/pages/api/projects/views/update-view.ts"),
+    "utf8",
+  );
+  assert.match(updateRoute, /isFeatureEnabled\(\s*HTPR_6588_EMPTY_COLUMNS_SAVE_VIEW_FLAG/);
+  assert.match(updateRoute, /data: \{ board_empty_sections: null \}/);
 });
