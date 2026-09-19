@@ -153,7 +153,7 @@ test('directory profiles and the OpenAI challenge are behind the ticket feature 
   assert.match(flags, /key: HTPR_4638_AI_DIRECTORY_METADATA_FLAG/)
   assert.match(handler, /isFeatureEnabled\(HTPR_4638_AI_DIRECTORY_METADATA_FLAG, userId\)/)
   assert.match(handler, /directoryProfileFromUrl\(working\.url\)/)
-  assert.match(handler, /toolsForDirectoryProfile\(requestTools, directoryProfile\)/)
+  assert.match(handler, /toolsForDirectoryProfile\(portableTools, directoryProfile\)/)
   assert.match(challenge, /OPENAI_APPS_CHALLENGE_TOKEN/)
   assert.match(challenge, /if \(!enabled \|\| !token\) return new Response\('Not found', \{ status: 404 \}\)/)
   assert.match(challenge, /'Content-Type': 'text\/plain; charset=utf-8'/)

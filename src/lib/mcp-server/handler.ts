@@ -10,13 +10,10 @@ import {
 import { MCP_ATTACHMENT_MAX_REQUEST_BYTES } from '@/lib/mcp/attachments/constants'
 import { extractBearerToken, validateMcpAuth } from '@/lib/mcp/auth'
 import { hasAnyManagementPermission } from '@/lib/mcp/managementPermissions'
-import {
-  HTPR_4638_AI_DIRECTORY_METADATA_FLAG,
-  HTPR_6530_MCP_LIST_QUERY_FLAG,
-  HTPR_6531_DEFERRED_MCP_TOOLS_FLAG,
-  HTPR_6532_STATELESS_MCP_FLAG,
-  isFeatureEnabled,
-} from '@/lib/flags'
+import { HTPR_6532_STATELESS_MCP_FLAG, isFeatureEnabled } from '@/lib/flags'
+import { HTPR_6531_DEFERRED_MCP_TOOLS_FLAG } from '@/lib/flags'
+import { HTPR_6530_MCP_LIST_QUERY_FLAG } from '@/lib/flags'
+import { HTPR_4638_AI_DIRECTORY_METADATA_FLAG } from '@/lib/flags'
 import { resolvePortableTools } from './listQueryContract'
 import { directoryProfileFromUrl, toolsForDirectoryProfile } from './tool-annotations'
 import { NextRequest } from 'next/server'
@@ -76,9 +73,8 @@ function bindMcpTools(tools: readonly PortableTool[]) {
   )
 }
 
-const portableTools = MCP_TOOLS as PortableTool[]
-const handler = bindMcpTools(portableTools)
-const listQueryHandler = bindMcpTools(resolvePortableTools(portableTools, true))
+const handler = bindMcpTools(MCP_TOOLS as PortableTool[])
+const listQueryHandler = bindMcpTools(resolvePortableTools(MCP_TOOLS as PortableTool[], true))
 
 async function verifyToken(_request: Request, bearerToken?: string): Promise<AuthInfo | undefined> {
   if (!bearerToken) return undefined
@@ -143,6 +139,7 @@ async function boundMcpRequest(request: Request): Promise<Request> {
   } as RequestInit & { duplex: 'half' })
 }
 
+const portableTools = MCP_TOOLS as PortableTool[]
 function optionsPortableTools() {
   return portableTools
 }
@@ -178,7 +175,7 @@ export async function mcpHandler(request: Request): Promise<Response> {
   const listQueryEnabled =
     Number.isFinite(userId) &&
     (await isFeatureEnabled(HTPR_6530_MCP_LIST_QUERY_FLAG, userId).catch(() => false))
-  const requestTools = resolvePortableTools(portableTools, listQueryEnabled)
+  const portableTools = resolvePortableTools(MCP_TOOLS as PortableTool[], listQueryEnabled)
   const stateless =
     Number.isFinite(userId) &&
     (await isFeatureEnabled(HTPR_6532_STATELESS_MCP_FLAG, userId).catch(() => false))
@@ -194,7 +191,7 @@ export async function mcpHandler(request: Request): Promise<Response> {
     // Directory scanners need the complete schemas, independent of per-user catalog experiments.
     return handleMcpHttp(working, {
       authenticate: async () => authInfo,
-      tools: toolsForDirectoryProfile(requestTools, directoryProfile),
+      tools: toolsForDirectoryProfile(portableTools, directoryProfile),
     })
   }
 
@@ -203,19 +200,19 @@ export async function mcpHandler(request: Request): Promise<Response> {
   if (usesStatelessMcpTransport(working.method, stateless)) {
     return handleMcpHttp(working, {
       authenticate: async () => authInfo,
-      tools: requestTools,
+      tools: portableTools,
       deferredEnabled: async () => deferred,
     })
   }
 
   if (stateless) {
     if (deferred) {
-      return handleStatelessMcpRequest(working, authInfo, requestTools, { deferred: true })
+      return handleStatelessMcpRequest(working, authInfo, portableTools, { deferred: true })
     }
-    return handleStatelessMcpRequest(working, authInfo, requestTools)
+    return handleStatelessMcpRequest(working, authInfo, portableTools)
   }
   if (deferred) {
-    return handleStatelessMcpRequest(working, authInfo, requestTools, { deferred: true })
+    return handleStatelessMcpRequest(working, authInfo, portableTools, { deferred: true })
   }
 
   return listQueryEnabled
