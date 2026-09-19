@@ -72,14 +72,14 @@ test('comment agent identities keep the acting bot on the ticket', () => {
   assert.match(routeSource, /overlayDurableAgentDisplayName\(/)
   assert.match(
     routeSource,
-    /mapCommentToResponse\(comment, user\.id, task\.projectId, includeActivity\)/
+    /mapCommentToResponse\( comment, user\.id, task\.projectId, includeActivity, attributionEnabled \)/
   )
 })
 
 test('activity serialization preserves TaskLabel status and label payload', () => {
   assert.match(
     routeSource,
-    /if \(!includeActivity\) return mappedComment return withActivityMetadata\(mappedComment, comment\.activity\)/
+    /if \(!includeActivity\) return mappedComment return withActivityMetadata\(mappedComment, comment\.activity, attributionEnabled\)/
   )
 
   const activity = {
@@ -87,6 +87,7 @@ test('activity serialization preserves TaskLabel status and label payload', () =
     status: 'Removed',
     data: {
       fromUser: { id: 6, displayName: 'Valentin' },
+      fromAgent: { id: 'agent-1', displayName: 'Dev 1' },
       toLabel: { label: { id: 75, value: 'Recovery' } },
     },
   }
@@ -100,6 +101,11 @@ test('activity serialization preserves TaskLabel status and label payload', () =
   assert.equal(serialized.activity.status, 'Removed')
   assert.equal(serialized.activity.data.toLabel.label.value, 'Recovery')
   assert.equal(serialized.activity.data.fromUser.displayName, 'Valentin')
+  assert.equal(serialized.activity.data.fromAgent, undefined)
+  assert.equal(
+    withActivityMetadata({ id: 5107 }, activity, true).activity.data.fromAgent.displayName,
+    'Dev 1'
+  )
 
   const comment = withActivityMetadata({ id: 5108, text: '<p>Done</p>' }, null)
   assert.equal(comment.type, 'comment')

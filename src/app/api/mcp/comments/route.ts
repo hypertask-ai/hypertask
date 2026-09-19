@@ -167,7 +167,8 @@ function mapCommentToResponse(
   comment: any,
   userId: number,
   projectId: number,
-  includeActivity = false
+  includeActivity = false,
+  attributionEnabled = false
 ): CommentItem {
   const agent = mapVisibleMcpAgent(comment.agent, userId, projectId)
   const agentVisible = !comment.agent ? !comment.agentDisplayName : Boolean(agent)
@@ -201,7 +202,7 @@ function mapCommentToResponse(
 
   if (!includeActivity) return mappedComment
 
-  return withActivityMetadata(mappedComment, comment.activity)
+  return withActivityMetadata(mappedComment, comment.activity, attributionEnabled)
 }
 
 function applyDurableCommentAttribution<T extends object>(
@@ -376,7 +377,13 @@ export async function GET(request: NextRequest) {
 
     // Transform to response format
     const commentList: CommentItem[] = comments.map((comment) =>
-      mapCommentToResponse(comment, user.id, task.projectId, includeActivity)
+      mapCommentToResponse(
+        comment,
+        user.id,
+        task.projectId,
+        includeActivity,
+        attributionEnabled
+      )
     ).map((mapped, index) =>
       applyDurableCommentAttribution(
         mapped,

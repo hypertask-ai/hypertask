@@ -18,6 +18,7 @@ import {
 } from "@/lib/agents/visibility";
 import { visibleUserInboxWhere } from "@/utils/controllers/notifications/visibleInboxScope";
 import { sanitizeAgentAssigneeOwner } from "@/lib/assignees";
+import { gateActivityAgentAttribution } from "@/lib/agents/activityAttribution";
 
 type Db = Pick<PrismaClient, "$queryRaw">;
 
@@ -434,18 +435,19 @@ export async function fetchTaskDetail(
     task.projectId,
   );
   const attributedAgent = attributionEnabled && task.agent
-    ? (projectPublicAgent(task.agent) as PublicAgent)
+    ? {
+        id: task.agent.id,
+        displayName: task.agent.displayName,
+        photoURL: task.agent.photoURL,
+      }
     : visibleAgent;
-  const publicAttributedAgent = attributedAgent && attributionEnabled
-    ? (({ userId: _ownerId, ...agentOnly }) => agentOnly)(attributedAgent)
-    : attributedAgent;
   return {
     ...task,
     assignees: attributionEnabled
       ? task.assignees.map(sanitizeAgentAssigneeOwner)
       : task.assignees,
-    agentId: publicAttributedAgent ? task.agentId : null,
-    agent: publicAttributedAgent,
+    agentId: attributedAgent ? task.agentId : null,
+    agent: attributedAgent,
     description_: task.description_
       ? { ...task.description_, reactions }
       : task.description_,
@@ -553,7 +555,11 @@ function applyDurableAgentAttribution(comments: IComment[], attributionEnabled: 
         ? stored
         : comment.agentDisplayName;
     const { hasLiveAgentRow: _hasLive, storedAgentDisplayName: _stored, ...rest } = row;
-    return { ...rest, agentDisplayName } as IComment;
+    return {
+      ...rest,
+      agentDisplayName,
+      activity: gateActivityAgentAttribution(comment.activity, attributionEnabled),
+    } as IComment;
   });
 }
 

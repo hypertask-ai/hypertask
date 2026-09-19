@@ -17,6 +17,7 @@ const jiti = require("jiti")(__filename, {
 const {
   activityAgentDisplayName,
   activityAgentId,
+  gateActivityAgentAttribution,
 } = jiti(path.join(root, "src/lib/agents/activityAttribution.ts"));
 const {
   PRIVATE_AGENT_DISPLAY_NAME,
@@ -55,6 +56,23 @@ test("activity JSON yields both the agent id and the name copied at write time",
   );
   assert.equal(activityAgentDisplayName(labelActivity), "Dev 1");
   assert.equal(activityAgentDisplayName({ type: "TaskLabel", data: {} }), null);
+});
+
+test("new activity attribution is redacted until the rollout flag is enabled", () => {
+  const activity = {
+    type: "TaskLabel",
+    data: {
+      fromUser: { id: 6, displayName: "Owner" },
+      fromAgent: { id: "agent-1", displayName: "Dev 1" },
+      toLabel: { label: { value: "QA" } },
+    },
+  };
+  const hidden = gateActivityAgentAttribution(activity, false);
+  assert.equal(hidden.data.fromAgent, undefined);
+  assert.equal(hidden.data.fromUser.displayName, "Owner");
+  assert.equal(hidden.data.toLabel.label.value, "QA");
+  assert.deepEqual(gateActivityAgentAttribution(activity, true), activity);
+  assert.equal(activity.data.fromAgent.displayName, "Dev 1");
 });
 
 test("a deleted agent's stored name is public; a hidden living agent is not", () => {
@@ -267,6 +285,12 @@ test("board payloads strip the backing owner from agent assignments", () => {
   assert.match(board, /isFeatureEnabled\(\s*HTPR_6516_AGENT_ATTRIBUTION_FLAG/);
   assert.match(board, /task\.assignees\.map\(sanitizeAgentAssigneeOwner\)/);
   assert.match(detail, /task\.assignees\.map\(sanitizeAgentAssigneeOwner\)/);
+  const attributedTaskAgent = detail.match(
+    /const attributedAgent = attributionEnabled[\s\S]*?: visibleAgent;/,
+  )?.[0];
+  assert.ok(attributedTaskAgent);
+  assert.match(attributedTaskAgent, /id: task\.agent\.id/);
+  assert.doesNotMatch(attributedTaskAgent, /userId|permissions|heartbeatAt|revokedAt/);
 });
 
 test("cookie label and waiting-on writes stamp fromAgent from the session", () => {

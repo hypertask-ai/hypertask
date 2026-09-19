@@ -379,7 +379,7 @@ async function main() {
   assert.match(agentRoute, /warning: result\.warning/);
   assert.match(
     taskDetailLoad,
-    /agentId: publicAttributedAgent \? task\.agentId : null,[\s\S]*agent: publicAttributedAgent/,
+    /agentId: attributedAgent \? task\.agentId : null,[\s\S]*agent: attributedAgent/,
   );
   assert.equal(taskDetailLoad.match(/\$\{hiddenCommentAgent\(/g)?.length, 3);
   assert.match(
