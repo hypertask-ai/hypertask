@@ -2,7 +2,7 @@
 
 The Sunday 03:00 host cron runs an installed copy of `scripts/strix-weekly.sh` at `~/.local/lib/strix-runner/`. It uses the existing ChatGPT subscription through the loopback proxy on port 48100. This is a source review of changes since the last successful scan. It does not test the live browser, login flow, or production API.
 
-The runner fetches the public repository's `production` branch into its own bare repository and checks out the exact revision in a private run directory. The first run reviews the preceding seven days. Later runs resume from the last successful revision. Developer checkouts, untracked files and local credentials are not copied.
+The runner fetches the public repository's `production` branch into its own bare repository and checks out the exact revision in a private run directory. The first run reviews the preceding seven days. Later runs resume from the last successful revision. The snapshot is mounted read-only in the sandbox. This avoids Strix copying thousands of files one at a time. Developer checkouts, untracked files and local credentials are not copied.
 
 Each run has its own Docker network, output directory and log. The sandbox has a 6 GB memory limit, 3 CPUs and 512 processes. A run stops after 45 minutes or a $30 model cost estimate. That estimate bounds subscription usage; it is not a separate API purchase. The runner removes only containers on its own network.
 

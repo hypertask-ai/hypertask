@@ -69,7 +69,7 @@ export STRIX_REASONING_EFFORT=medium STRIX_TELEMETRY=false
 export STRIX_SANDBOX_MEM_LIMIT=6g STRIX_SANDBOX_CPUS=3 STRIX_SANDBOX_PIDS_LIMIT=512
 cd "$JOB"
 timeout --signal=TERM --kill-after=60 "${STRIX_TIMEOUT:-2700}" strix -n -m "${STRIX_SCAN_MODE:-standard}" \
-  --scope-mode diff --diff-base "$BASE" --target "$JOB/source" --max-budget-usd "$BUDGET" \
+  --scope-mode diff --diff-base "$BASE" --mount "$JOB/source" --max-budget-usd "$BUDGET" \
   --instruction 'Authorized source-only security review of the injected changed-file scope. Prioritize authentication, API and MCP authorization, browser sessions, injection, SSRF and secret exposure. Use targeted source inspection and small local reproductions. Never access live application URLs or remote services. Do not run repository-wide scanners. Keep delegation small and finish within the budget. Report concrete file:line evidence. If any requested review remains unfinished, explicitly write COVERAGE_INCOMPLETE in the final report. Only after reviewing the changed scope, write COVERAGE_COMPLETE in the methodology. Do not claim a clean bill of health for the whole application.'
 RUN=$(python3 "$SCRIPT_DIR/strix-check-run.py" "$JOB/strix_runs")
 STRIX_APP="$JOB/source" STRIX_FILED_STATE="$STATE/filed-titles.json" python3 "$SCRIPT_DIR/strix-file-tickets.py" "$RUN"
