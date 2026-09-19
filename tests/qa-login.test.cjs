@@ -125,6 +125,93 @@ test("QA login rate limit refuses a burst after the IP or email budget", () => {
   );
 });
 
+test("QA login redirects to a visible board with two seeded cards", async () => {
+  let projectQuery;
+  class MockNextResponse {
+    constructor(body = null, init = {}) {
+      this.body = body;
+      this.status = init.status ?? 200;
+      this.cookies = { set: () => {} };
+    }
+
+    static json(body, init = {}) {
+      const response = new MockNextResponse(body, init);
+      response.data = body;
+      return response;
+    }
+  }
+
+  const prisma = {
+    user: {
+      findFirst: async () => ({
+        id: 985,
+        email: "qa@example.test",
+        displayName: "QA",
+        photoURL: null,
+        uid: "qa-uid",
+        UserSetting: null,
+      }),
+    },
+    project: {
+      findMany: async (query) => {
+        projectQuery = query;
+        return [
+          { id: 41, tasks: [{ id: 1 }] },
+          { id: 42, tasks: [{ id: 2 }, { id: 3 }] },
+        ];
+      },
+    },
+  };
+  const { POST } = loadTypescriptModule("src/app/api/auth/qa-login/route.ts", {
+    "next/server": { NextRequest: class {}, NextResponse: MockNextResponse },
+    "@/lib/flags": { isFeatureEnabled: async () => true },
+    "@/lib/flags/keys": { HTPR_6536_QA_LOGIN_FLAG: "qa-login" },
+    "@/lib/prisma": { __esModule: true, default: prisma },
+    "@/lib/auth/slimUserCookie": { slimUserForCookie: (user) => user },
+    "@/lib/auth/themeCookie": { seedResponseThemeCookie: () => {} },
+    "@/lib/auth/session": {
+      SESSION_COOKIE: "session",
+      SESSION_TTL_SECONDS: 3600,
+      clearBetterAuthSessionCookies: () => {},
+      sessionCookieOptions: () => ({}),
+      signSession: () => "signed-session",
+    },
+    "@/lib/auth/qaLogin": {
+      QA_LOGIN_USER_ID: 985,
+      getQaLoginConfig: () => ({ email: "qa@example.test", password: strongQaPassword }),
+      isQaLoginConfigured: () => true,
+      normalizeQaLoginEmail: (email) => email.trim().toLowerCase(),
+      qaLoginCredentialsMatch: async () => true,
+    },
+    "@/lib/auth/qaLoginRateLimit": {
+      claimQaLoginAttempt: async () => ({ allowed: true }),
+      getQaLoginClientIp: () => "192.0.2.1",
+    },
+  });
+
+  const response = await POST({
+    json: async () => ({ email: "qa@example.test", password: strongQaPassword }),
+  });
+
+  assert.equal(response.data.redirectUrl, "/project?id=42");
+  assert.deepEqual(projectQuery, {
+    where: {
+      ownerId: 985,
+      status: "Normal",
+      teamId: { not: null },
+    },
+    select: {
+      id: true,
+      tasks: {
+        where: { status: "Normal" },
+        select: { id: true },
+        take: 2,
+      },
+    },
+    orderBy: { id: "asc" },
+  });
+});
+
 test("the QA login page and route stay hidden without the secrets", () => {
   const page = fs.readFileSync(
     path.join(root, "src/app/qa/login/page.tsx"),

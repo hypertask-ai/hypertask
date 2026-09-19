@@ -128,11 +128,23 @@ export async function POST(request: NextRequest) {
     return invalidCredentials();
   }
 
-  const ownedBoard = await prisma.project.findFirst({
-    where: { ownerId: userData.id },
-    select: { id: true },
+  const ownedBoards = await prisma.project.findMany({
+    where: {
+      ownerId: userData.id,
+      status: "Normal",
+      teamId: { not: null },
+    },
+    select: {
+      id: true,
+      tasks: {
+        where: { status: "Normal" },
+        select: { id: true },
+        take: 2,
+      },
+    },
     orderBy: { id: "asc" },
   });
+  const ownedBoard = ownedBoards.find(({ tasks }) => tasks.length >= 2);
 
   const redirectUrl = ownedBoard ? `/project?id=${ownedBoard.id}` : "/";
   const response = NextResponse.json({
