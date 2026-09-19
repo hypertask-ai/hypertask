@@ -203,7 +203,7 @@ test("secondary global startup follows the Board release policy", () => {
   );
   assert.match(
     boardRealtimeSource,
-    /onSubscriptionSucceeded[\s\S]*?reconcileActiveBoardQuery\(queryClient, (?:projectId|activeProjectId)\)[\s\S]*?pusher:subscription_succeeded/,
+    /onSubscriptionSucceeded[\s\S]*?reconcileActiveBoardQuery\(queryClient, projectId\)[\s\S]*?pusher:subscription_succeeded/,
     "realtime must reconcile events missed before the initial subscription",
   );
   assert.match(

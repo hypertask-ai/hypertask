@@ -42,7 +42,6 @@ export function useBoardRealtime(
 
   useEffect(() => {
     if (projectId == null) return;
-    const activeProjectId = projectId;
 
     let cancelled = false;
     let unsubscribe: (() => void) | undefined;
@@ -51,7 +50,6 @@ export function useBoardRealtime(
     let fallbackActive = false;
     let fallbackTimer: ReturnType<typeof setInterval> | null = null;
     let fallbackWarningLogged = false;
-    let connectionAttemptInFlight = false;
 
     const runScopedReconcile = async (userId: number): Promise<void> => {
       scopedDirty = true;
@@ -64,7 +62,7 @@ export function useBoardRealtime(
         try {
           do {
             scopedDirty = false;
-            await reconcileActiveBoardTasks(queryClient, activeProjectId, userId);
+            await reconcileActiveBoardTasks(queryClient, projectId, userId);
           } while (scopedDirty);
         } finally {
           scopedDrain = null;
@@ -82,10 +80,10 @@ export function useBoardRealtime(
           trigger === "event" &&
           userId !== undefined
             ? runScopedReconcile(userId)
-            : reconcileActiveBoardQuery(queryClient, activeProjectId),
+            : reconcileActiveBoardQuery(queryClient, projectId),
           queryClient.refetchQueries({
             exact: true,
-            queryKey: projectPlanningQueryKey(activeProjectId),
+            queryKey: projectPlanningQueryKey(projectId),
           }),
         ]).then(() => undefined);
       if (userId === undefined) {
@@ -103,7 +101,7 @@ export function useBoardRealtime(
             "/api/projects/getAll",
             "/api/projects/planning",
           ],
-          projectId: activeProjectId,
+          projectId,
         });
       }
     };
@@ -116,7 +114,7 @@ export function useBoardRealtime(
     const runFallbackCycle = () => {
       if (!fallbackActive) return;
       if (canReconcile()) refetch("reconnect");
-      void connectAndSubscribe();
+      connectAndSubscribe();
     };
     const stopFallback = () => {
       fallbackActive = false;
@@ -144,101 +142,71 @@ export function useBoardRealtime(
       window.addEventListener("online", onOnline);
     }
 
-    async function connectAndSubscribe() {
-      if (cancelled || connectionAttemptInFlight) return;
-      connectionAttemptInFlight = true;
-      try {
-        const client = await connectRealtimeClient().catch(() => null);
-        if (!client) {
-          startFallback("unavailable");
-          return;
-        }
-        if (cancelled) {
-          releaseRealtimeClientIfIdle(client);
-          return;
-        }
-
-        const channelName = boardChannel(activeProjectId);
-        if (unsubscribe) {
-          const channelStillRegistered = client
-            .allChannels()
-            .some((channel) => channel.name === channelName);
-          if (channelStillRegistered) return;
-          const teardown = unsubscribe;
-          unsubscribe = undefined;
-          teardown();
-        }
-
-        const channel = client.subscribe(channelName);
-        const onBoardEvent = createBoardRealtimeEventHandler(refetch);
-        let initialCatchUpComplete = false;
-        // The initial board query can settle before Pusher finishes subscribing.
-        // Pull once after server confirmation to recover events from that gap.
-        const onSubscriptionSucceeded = () => {
-          if (initialCatchUpComplete || cancelled) return;
-          initialCatchUpComplete = true;
-          stopFallback();
-          void reconcileActiveBoardQuery(queryClient, activeProjectId).catch(
-            () => undefined,
-          );
-          void queryClient
-            .refetchQueries({
-              exact: true,
-              queryKey: projectPlanningQueryKey(activeProjectId),
-            })
-            .catch(() => undefined);
-        };
-        const onSubscriptionError = () => {
-          if (cancelled) return;
-          const teardown = unsubscribe;
-          unsubscribe = undefined;
-          teardown?.();
-          startFallback("failed");
-        };
-        const onConnectionStateChange = ({ current }: { current?: string }) => {
-          if (
-            current === "unavailable" ||
-            current === "failed" ||
-            current === "disconnected"
-          ) {
-            startFallback(current);
-          }
-        };
-        channel.bind(BOARD_EVENT, onBoardEvent);
-        channel.bind("pusher:subscription_succeeded", onSubscriptionSucceeded);
-        channel.bind("pusher:subscription_error", onSubscriptionError);
-        client.connection.bind("state_change", onConnectionStateChange);
-        // Reconnect safety-net: pull once after a dropped connection recovers.
-        // The initial connection is covered by the subscription catch-up above.
-        // Mounted while already connected (e.g. view opened later in the session):
-        // count that as connected so a real drop+recover still refetches.
-        if (client.connection.state === "connected") wasConnected.current = true;
-        const onConnected = () => {
-          if (wasConnected.current) refetch("reconnect");
-          wasConnected.current = true;
-        };
-        client.connection.bind("connected", onConnected);
-
-        unsubscribe = () => {
-          channel.unbind(BOARD_EVENT, onBoardEvent);
-          channel.unbind(
-            "pusher:subscription_succeeded",
-            onSubscriptionSucceeded,
-          );
-          channel.unbind("pusher:subscription_error", onSubscriptionError);
-          client.connection.unbind("state_change", onConnectionStateChange);
-          client.connection.unbind("connected", onConnected);
-          client.unsubscribe(channelName);
-          releaseRealtimeClientIfIdle(client);
-        };
-        if (channel.subscribed) onSubscriptionSucceeded();
-        onConnectionStateChange({ current: client.connection.state });
-      } finally {
-        connectionAttemptInFlight = false;
+    const connectAndSubscribe = () =>
+    void (async () => {
+      const client = await connectRealtimeClient();
+      if (!client) startFallback("unavailable");
+      if (!client) return;
+      if (cancelled) {
+        releaseRealtimeClientIfIdle(client);
+        return;
       }
-    }
 
-    void connectAndSubscribe();
+      const channelName = boardChannel(projectId);
+      const channel = client.subscribe(channelName);
+      const onBoardEvent = createBoardRealtimeEventHandler(refetch);
+      let initialCatchUpComplete = false;
+      // The initial board query can settle before Pusher finishes subscribing.
+      // Pull once after server confirmation to recover events from that gap.
+      const onSubscriptionSucceeded = () => {
+        if (initialCatchUpComplete) return;
+        initialCatchUpComplete = true;
+        stopFallback();
+        void reconcileActiveBoardQuery(queryClient, projectId).catch(
+          () => undefined,
+        );
+        void queryClient
+          .refetchQueries({
+            exact: true,
+            queryKey: projectPlanningQueryKey(projectId),
+          })
+          .catch(() => undefined);
+      };
+      const onSubscriptionError = () => {
+        if (cancelled) return;
+        const teardown = unsubscribe;
+        unsubscribe = undefined;
+        teardown?.();
+        startFallback("failed");
+      };
+      channel.bind(BOARD_EVENT, onBoardEvent);
+      channel.bind("pusher:subscription_succeeded", onSubscriptionSucceeded);
+      channel.bind("pusher:subscription_error", onSubscriptionError);
+      if (channel.subscribed) onSubscriptionSucceeded();
+      // Reconnect safety-net: pull once after a dropped connection recovers.
+      // The initial connection is covered by the subscription catch-up above.
+      // Mounted while already connected (e.g. view opened later in the session):
+      // count that as connected so a real drop+recover still refetches.
+      if (client.connection.state === "connected") wasConnected.current = true;
+      const onConnected = () => {
+        if (wasConnected.current) refetch("reconnect");
+        wasConnected.current = true;
+      };
+      client.connection.bind("connected", onConnected);
+
+      unsubscribe = () => {
+        channel.unbind(BOARD_EVENT, onBoardEvent);
+        channel.unbind(
+          "pusher:subscription_succeeded",
+          onSubscriptionSucceeded,
+        );
+        channel.unbind("pusher:subscription_error", onSubscriptionError);
+        client.connection.unbind("connected", onConnected);
+        client.unsubscribe(channelName);
+        releaseRealtimeClientIfIdle(client);
+      };
+    })();
+    connectAndSubscribe();
 
     return () => {
       cancelled = true;
