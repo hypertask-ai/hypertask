@@ -64,7 +64,7 @@ if [ -z "$BASE" ] && [ -f "$STATE/last-success" ]; then BASE=$(cat "$STATE/last-
 if [ -z "$BASE" ]; then BASE=$(git -C "$STATE/source.git" rev-list -1 --before='7 days ago' "$REVISION"); fi
 [ -n "$BASE" ] || BASE=$(git -C "$STATE/source.git" rev-list --max-parents=0 "$REVISION" | tail -1)
 git -C "$STATE/source.git" merge-base --is-ancestor "$BASE" "$REVISION"
-git clone --quiet --shared --no-checkout "$STATE/source.git" "$JOB/source"
+git clone --quiet --no-hardlinks --no-checkout "$STATE/source.git" "$JOB/source"
 git -C "$JOB/source" checkout --quiet --detach "$REVISION"
 git -C "$JOB/source" diff --name-only --diff-filter=ACMR "$BASE" "$REVISION" > "$JOB/changed-files.txt"
 printf 'Revision: %s\nBase: %s\n' "$REVISION" "$BASE"

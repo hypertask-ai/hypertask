@@ -69,6 +69,7 @@ data={'status':'completed' if complete else 'budget_exceeded','scan_results':{'s
         self.assertEqual(status['status'],'completed')
         self.assertEqual((state/'last-success').read_text().strip(),self.git('rev-parse','HEAD'))
         self.assertFalse((Path(status['job'])/'source/.env').exists())
+        self.assertFalse((Path(status['job'])/'source/.git/objects/info/alternates').exists())
 
     def test_no_changes_skips_scan(self):
         self.env['STRIX_DIFF_BASE']=self.git('rev-parse','HEAD')
