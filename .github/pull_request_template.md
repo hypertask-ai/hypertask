@@ -8,9 +8,9 @@
 
 ## Components reused
 
-<!-- Required for UI changes. List every new control and the existing component file it reuses. Paths must exist on the base branch. Example: `Filter button` -> `src/components/PageComponents/Kanban/HeaderComponents/HeaderIconWrapper.tsx`. Write "No new controls" when the UI changes without adding a control. -->
+<!-- Required for UI changes. Map every new control's changed file to the existing component it imports and reuses. Reused paths must exist on the base branch. Write "No new controls" when the UI changes without adding a control. -->
 
-- `Control` -> `src/components/...`
+- `Control` in `src/path/to/control.tsx` -> `src/components/reused.tsx`
 
 ## Automated test evidence
 

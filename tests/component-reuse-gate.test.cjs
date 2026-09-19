@@ -10,6 +10,10 @@ const root = path.resolve(__dirname, "..");
 const scriptUrl = pathToFileURL(path.join(root, ".github/scripts/component-reuse-gate.mjs")).href;
 const reusePath = "src/components/PageComponents/Kanban/HeaderComponents/HeaderIconWrapper.tsx";
 
+function declaration(control, source, reused = reusePath) {
+  return `- \`${control}\` in \`${source}\` -> \`${reused}\``;
+}
+
 function writeFile(dir, relative, content) {
   const full = path.join(dir, relative);
   fs.mkdirSync(path.dirname(full), { recursive: true });
@@ -80,12 +84,17 @@ test("inline menu markup without the section is rejected", async (t) => {
   assert.equal((await evaluate("", base, head, dir)).pass, false);
 });
 
-test("a declaration naming an existing component passes", async (t) => {
+test("a declaration mapping the changed file to an imported base component passes", async (t) => {
   const { dir, git } = makeRepo(t);
   const base = commit(git, "base");
-  writeFile(dir, "src/components/NewToolbar.tsx", "export const NewToolbar = () => <div />;\n");
+  const source = "src/components/NewToolbar.tsx";
+  writeFile(
+    dir,
+    source,
+    'import HeaderIconWrapper from "@/components/PageComponents/Kanban/HeaderComponents/HeaderIconWrapper";\nexport const NewToolbar = () => <HeaderIconWrapper />;\n',
+  );
   const head = commit(git, "new toolbar");
-  const body = `## Components reused\n\n- \`Toolbar button\` -> \`${reusePath}\`\n\n## Tests\n- passed`;
+  const body = `## Components reused\n\n${declaration("Toolbar button", source)}\n\n## Tests\n- passed`;
 
   const result = await evaluate(body, base, head, dir);
   assert.equal(result.pass, true);
@@ -95,12 +104,13 @@ test("a declaration naming an existing component passes", async (t) => {
 test("a declaration naming a missing or newly added component is rejected", async (t) => {
   const { dir, git } = makeRepo(t);
   const base = commit(git, "base");
-  writeFile(dir, "src/components/NewToolbar.tsx", "export const NewToolbar = () => <div />;\n");
+  const source = "src/components/NewToolbar.tsx";
+  writeFile(dir, source, "export const NewToolbar = () => <div />;\n");
   const head = commit(git, "new toolbar");
 
-  for (const namedPath of ["src/components/DoesNotExist.tsx", "src/components/NewToolbar.tsx"]) {
+  for (const namedPath of ["src/components/DoesNotExist.tsx", source]) {
     const result = await evaluate(
-      `## Components reused\n\n- \`Toolbar\` -> \`${namedPath}\``,
+      `## Components reused\n\n${declaration("Toolbar", source, namedPath)}`,
       base,
       head,
       dir,
@@ -108,4 +118,64 @@ test("a declaration naming a missing or newly added component is rejected", asyn
     assert.equal(result.pass, false, namedPath);
     assert.match(result.message, /do not exist on the base branch/);
   }
+});
+
+test("every triggering file needs its own mapping", async (t) => {
+  const { dir, git } = makeRepo(t);
+  const base = commit(git, "base");
+  const first = "src/components/FirstControl.tsx";
+  const second = "src/components/SecondControl.tsx";
+  const content = 'import HeaderIconWrapper from "@/components/PageComponents/Kanban/HeaderComponents/HeaderIconWrapper";\nexport const Control = () => <HeaderIconWrapper />;\n';
+  writeFile(dir, first, content);
+  writeFile(dir, second, content);
+  const head = commit(git, "two controls");
+
+  const result = await evaluate(`## Components reused\n\n${declaration("First", first)}`, base, head, dir);
+  assert.equal(result.pass, false);
+  assert.match(result.message, /SecondControl\.tsx/);
+  assert.match(result.message, /no control mapping/);
+});
+
+test("the reused component must be imported by the mapped control file", async (t) => {
+  const { dir, git } = makeRepo(t);
+  const base = commit(git, "base");
+  const source = "src/components/NewToolbar.tsx";
+  writeFile(
+    dir,
+    source,
+    '// import HeaderIconWrapper from "@/components/PageComponents/Kanban/HeaderComponents/HeaderIconWrapper";\nexport const NewToolbar = () => <div />;\n',
+  );
+  const head = commit(git, "unrelated declaration");
+
+  const result = await evaluate(`## Components reused\n\n${declaration("Toolbar", source)}`, base, head, dir);
+  assert.equal(result.pass, false);
+  assert.match(result.message, /must be imported by its control file/);
+});
+
+test("JavaScript component files require reuse declarations", async (t) => {
+  const { dir, git } = makeRepo(t);
+  const base = commit(git, "base");
+  writeFile(dir, "src/components/NewToolbar.js", "export const NewToolbar = () => <div />;\n");
+  const head = commit(git, "JavaScript control");
+
+  const result = await evaluate("", base, head, dir);
+  assert.equal(result.pass, false);
+  assert.match(result.message, /NewToolbar\.js/);
+});
+
+test("co-located tests, stories, and fixtures do not require declarations", async (t) => {
+  const { dir, git } = makeRepo(t);
+  const base = commit(git, "base");
+  for (const path of [
+    "src/components/Widget.test.tsx",
+    "src/components/Widget.spec.jsx",
+    "src/components/Widget.stories.tsx",
+    "src/components/Widget.fixture.tsx",
+    "src/components/fixtures/Widget.tsx",
+  ]) {
+    writeFile(dir, path, "export const Example = () => <div />;\n");
+  }
+  const head = commit(git, "component fixtures");
+
+  assert.equal((await evaluate("", base, head, dir)).pass, true);
 });

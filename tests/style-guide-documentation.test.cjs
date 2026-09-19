@@ -149,10 +149,14 @@ test("the reference composer still implements the documented geometry", () => {
 
 test("the component reuse contract names real canonical components", () => {
   const page = read(".claude/skills/canonical-components.md");
-  const paths = [...page.matchAll(/`(src\/components\/[^`]+\.[cm]?[jt]sx?)`/g)].map((match) => match[1]);
+  const componentTable = page.slice(0, page.indexOf("## How to use the list"));
+  const paths = [...componentTable.matchAll(/`(src\/components\/[^`]+\.[cm]?[jt]sx?)`/g)].map((match) => match[1]);
+  const template = read(".github/pull_request_template.md");
 
   assert.match(guide, /Every PR that touches the UI must name the existing component it reuses for each new control\./);
-  assert.match(read(".github/pull_request_template.md"), /^## Components reused$/m);
+  assert.match(template, /^## Components reused$/m);
+  assert.match(template, /`Control` in `src\/path\/to\/control\.tsx` -> `src\/components\/reused\.tsx`/);
+  assert.match(guide, /must exist on the pull request's base branch and be imported by the changed file/);
   assert.ok(paths.length >= 6);
   for (const componentPath of paths) {
     assert.ok(fs.existsSync(path.join(root, componentPath)), `missing canonical component: ${componentPath}`);
