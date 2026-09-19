@@ -14,37 +14,17 @@ const humanProjectAccessBranches = (
   userId: number,
   agentId?: string | null,
 ): Prisma.ProjectWhereInput[] => {
-  if (!agentId) {
-    return [
-      { ownerId: userId },
-      { members: { some: { userId, agentId: null } } },
-    ];
-  }
+  if (agentId) return [];
 
-  const activeAgent = { id: agentId, userId, revokedAt: null };
   return [
-    {
-      owner: {
-        id: userId,
-        agents: { some: activeAgent },
-      },
-    },
-    {
-      members: {
-        some: {
-          userId,
-          agentId: null,
-          user: { agents: { some: activeAgent } },
-        },
-      },
-    },
+    { ownerId: userId },
+    { members: { some: { userId, agentId: null } } },
   ];
 };
 
 // Authorization for reading task content from a specific board. Unlike
-// getProjectWhere this intentionally permits legacy teamless boards. A
-// delegate keeps its connecting human's owner/member scope and may additionally
-// access boards where that owned, active agent is a member.
+// getProjectWhere this intentionally permits legacy teamless boards. Agent
+// callers remain limited to boards where that exact active agent is a member.
 export const projectContentAccessWhere = (
   userId: number,
   agentId?: string | null
@@ -106,11 +86,8 @@ export const getProjectWhere = (
   ],
 });
 
-// Board discovery is deliberately narrower than delegate authorization. An
-// agent may act as its connecting human on routes that target a known board,
-// but board pickers and bootstrap payloads must expose only boards where that
-// agent was explicitly added. Otherwise a single-board token enumerates every
-// board its owner can access (HTPR-5208).
+// Board discovery for an agent exposes only boards where that exact active
+// agent was explicitly added. Human callers keep their owner/member scope.
 export const getProjectListingWhere = (
   userId: number,
   agentId?: string | null
