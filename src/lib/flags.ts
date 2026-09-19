@@ -81,6 +81,7 @@ import {
   HTPR_6542_TEAM_SCOPED_MANAGEMENT_KEYS_FLAG,
   HTPR_6585_BOARD_REPORTS_FLAG,
   HTPR_6588_EMPTY_COLUMNS_SAVE_VIEW_FLAG,
+  HTPR_6572_MY_TASKS_BOARD_TOOLBAR_FLAG,
 } from "@/lib/flags/keys";
 
 // Re-exported so server code keeps importing keys from here. Client components must
@@ -104,6 +105,12 @@ const FEATURE_FLAG_QA_USER = {
 const RETIRED_FEATURE_FLAG_KEYS = new Set(["hyfa-43-factory-owner-preview"]);
 
 const FEATURE_FLAG_DEFINITIONS = [
+  {
+    key: HTPR_6572_MY_TASKS_BOARD_TOOLBAR_FLAG,
+    shippedOn: "2026-09-19",
+    description:
+      "Replaces the custom My Tasks controls with the board's view, filter, sort, timer, and save controls.",
+  },
   {
     key: HTPR_6585_BOARD_REPORTS_FLAG,
     shippedOn: "2026-09-19",

@@ -97,7 +97,7 @@ const ShellViewControls = ({ project }: { project: IProject }) => {
   )
 }
 
-const ViewControlButton = ({
+export const ViewControlButton = ({
   active = false,
   children,
   keyCombination = [],

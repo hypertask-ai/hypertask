@@ -1,6 +1,7 @@
 /* General Background Colors */
 :root {
   --primary: 221.2 83.2% 53.3%;
+  --color-unsaved-view: #e28c28;
 
   --bg-pageBackground: rgb(255, 255, 255);
   --bg-taskDetailPage: rgb(250, 250, 252);

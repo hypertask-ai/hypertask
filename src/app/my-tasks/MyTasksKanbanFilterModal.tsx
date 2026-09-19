@@ -9,6 +9,7 @@ import type {
 import type { SerializableFilterSettings } from "@/lib/filterSettingsMutations";
 import { MY_TASKS_FILTER_PARITY_FLAG } from "@/lib/flags/keys";
 import { MyTasksFilterProvider } from "@/lib/myTasksFilterContext";
+import type { MyTasksScope } from "@/lib/myTasksScopes";
 
 type Props = {
   settings: SerializableFilterSettings | null | undefined;
@@ -18,6 +19,9 @@ type Props = {
   onClearNotStarred: () => void;
   members: CalendarUserSummary[];
   labels: CalendarLabelSummary[];
+  scopes: MyTasksScope[];
+  involvementEnabled: boolean;
+  onScopesChange: (scopes: MyTasksScope[]) => void;
   onClose: () => void;
 };
 
@@ -30,6 +34,9 @@ export default function MyTasksKanbanFilterModal({
   onClearNotStarred,
   members,
   labels,
+  scopes,
+  involvementEnabled,
+  onScopesChange,
   onClose,
 }: Props) {
   const filterParityEnabled = useFlag(MY_TASKS_FILTER_PARITY_FLAG);
@@ -42,6 +49,9 @@ export default function MyTasksKanbanFilterModal({
       onClearAll={onClearAll}
       members={members}
       labels={labels}
+      scopes={scopes}
+      involvementEnabled={involvementEnabled}
+      onScopesChange={onScopesChange}
     >
       {notStarred ? (
         <div className="pointer-events-none fixed inset-x-0 top-3 z-[80] flex justify-center px-3">

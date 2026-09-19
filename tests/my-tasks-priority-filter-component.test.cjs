@@ -31,6 +31,9 @@ const stubSourceModule = (relativePath, exports) =>
 const flagValues = { "htpr-6312-my-tasks-priority-filter": true };
 const tableViewProps = [];
 let backCalls = 0;
+let quickAddRenders = 0;
+const viewControlProps = [];
+const viewTabsProps = [];
 
 stubSourceModule("src/hooks/useFlag.tsx", {
   useFlag: (key) => flagValues[key] ?? false,
@@ -64,11 +67,20 @@ stubSourceModule("src/components/PageComponents/Kanban/TableView/TableView.tsx",
 stubSourceModule("src/components/PageComponents/Kanban/TableView/TableColumnsPicker.tsx", {
   default: () => null,
 });
-stubSourceModule("src/app/my-tasks/MyTasksViewControls.tsx", {
+stubSourceModule("src/components/Modals/Kanban/BoardPriorityMode.tsx", {
   default: () => null,
 });
+stubSourceModule("src/app/my-tasks/MyTasksViewControls.tsx", {
+  default: (props) => {
+    viewControlProps.push(props);
+    return React.createElement("div", { "data-testid": "my-tasks-view-controls" });
+  },
+});
 stubSourceModule("src/app/my-tasks/MyTasksViewTabs.tsx", {
-  default: () => null,
+  default: (props) => {
+    viewTabsProps.push(props);
+    return React.createElement("div", { "data-testid": "my-tasks-view-tabs" });
+  },
 });
 stubSourceModule("src/components/PageComponents/Kanban/HeaderComponents/AppShellRail.tsx", {
   default: () => null,
@@ -94,10 +106,13 @@ stubSourceModule("src/lib/myTasks/reconcileMyTasks.ts", {
   parseMyTasksListPayload: () => null,
 });
 stubSourceModule("src/app/my-tasks/MyTasksQuickAdd.tsx", {
-  default: () => null,
+  default: () => {
+    quickAddRenders += 1;
+    return React.createElement("div", { "data-testid": "my-tasks-quick-add" });
+  },
 });
 stubSourceModule("src/components/Common/TaskRowComponents/TaskListRow.tsx", {
-  SplitTitle: () => null,
+  SplitTitle: () => React.createElement("div", { "data-testid": "my-tasks-split-tab" }),
 });
 stubSourceModule("src/styles/search.module.scss", {
   links_modal: "",
@@ -229,6 +244,44 @@ test("flag turning off mid-session stops filtering and hides the control", () =>
   assert.deepEqual(lastViewItems(), [1, 2, 3, 4], "filtering stops when the flag goes off");
 
   act(() => { reactRoot.unmount(); });
+  delete global.window;
+  delete global.document;
+  delete global.IS_REACT_ACT_ENVIRONMENT;
+});
+
+test("board toolbar flag removes duplicate My Tasks rows and quick add", () => {
+  const dom = new JSDOM("<!doctype html><html><body><div id='root'></div></body></html>", { url: "https://app.hypertask.ai/my-tasks" });
+  global.window = dom.window;
+  global.document = dom.window.document;
+  global.IS_REACT_ACT_ENVIRONMENT = true;
+  flagValues["htpr-6422-my-tasks-views"] = true;
+  flagValues["htpr-6460-my-tasks-quick-add"] = true;
+  flagValues["htpr-6572-my-tasks-board-toolbar"] = true;
+  quickAddRenders = 0;
+  viewControlProps.length = 0;
+  viewTabsProps.length = 0;
+
+  const rootEl = dom.window.document.getElementById("root");
+  const reactRoot = createRoot(rootEl);
+  act(() => {
+    reactRoot.render(React.createElement(MyTasks, {
+      sections,
+      tabs: ["All", "Board A", "Board B"],
+      currentUser: { id: 6 },
+      viewsEnabled: true,
+      initialViews: [],
+    }));
+  });
+
+  assert.equal(quickAddRenders, 0, "the board toolbar removes the quick-add row");
+  assert.equal(dom.window.document.querySelectorAll('[data-testid="my-tasks-split-tab"]').length, 0, "the duplicate board tab row is removed");
+  assert.equal(viewControlProps.at(-1)?.boardToolbar, true);
+  assert.equal(viewTabsProps.at(-1)?.boardToolbar, true);
+
+  act(() => { reactRoot.unmount(); });
+  delete flagValues["htpr-6422-my-tasks-views"];
+  delete flagValues["htpr-6460-my-tasks-quick-add"];
+  delete flagValues["htpr-6572-my-tasks-board-toolbar"];
   delete global.window;
   delete global.document;
   delete global.IS_REACT_ACT_ENVIRONMENT;

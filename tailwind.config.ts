@@ -40,6 +40,7 @@ const config: Config = {
         "dark-background":"#0E0E0E",
         "white-black":"var(--color-white-black)",
         "text-light-gray":"var(--color-text-light-gray)",
+        "unsaved-view":"var(--color-unsaved-view)",
         "white-black-inverted":"var(--color-white-black-inverted)",
         hoverCardBackground:"var(--hover-cardBackground)",       
         "selected-item-border":"var(--border-active)",
