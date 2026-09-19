@@ -542,6 +542,15 @@ test("the flagged command stages empty-column changes in the save-view routine",
   assert.match(unsavedRoute, /clearProjectViewPersonalEmptySections/);
   assert.match(unsavedRoute, /const clearPersonalEmptySectionsOverride/);
   assert.match(unsavedRoute, /data: \{ board_empty_sections: null \}/);
+  const transientStart = unsavedRoute.indexOf("if (\n        shouldUseTransientTabSettings(");
+  const durableStart = unsavedRoute.indexOf("const resolvedAppliedViewId", transientStart);
+  const transientSource = unsavedRoute.slice(transientStart, durableStart);
+  assert.doesNotMatch(transientSource, /clearPersonalEmptySectionsOverride\(\)/);
+  assert.match(transientSource, /clearProjectViewPersonalEmptySections/);
+  assert.match(
+    unsavedRoute.slice(durableStart),
+    /if \(stagesEmptySections\) {\s*await clearPersonalEmptySectionsOverride\(\)/,
+  );
 
   const updateRoute = fs.readFileSync(
     path.join(root, "src/pages/api/projects/views/update-view.ts"),

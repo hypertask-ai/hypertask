@@ -292,15 +292,16 @@ const useKanbanViews = (project: IProject | null) => {
     emptySection: TBoardEmptySections
   ) => {
     const mutationId = ++emptySectionMutationId
+    const { allData, projectToUpdateIndex } = getProjectIdxAndAllData(project.id)
+    const cachedProject = allData?.updatedProjects[projectToUpdateIndex]
+    const currentProject = cachedProject ?? project
     const targetView =
-      project.project_view?.user_project_views[0]?.appliedView ??
-      project.project_view?.default_view
+      currentProject.project_view?.user_project_views[0]?.appliedView ??
+      currentProject.project_view?.default_view
     const targetViewId = targetView?.id
     const mutationMode = emptyColumnsSaveViewEnabled ? "staged" : "personal"
     const mutationKey = `${project.id}:${targetViewId ?? "unsaved"}:${mutationMode}`
-    const { allData, projectToUpdateIndex } = getProjectIdxAndAllData(project.id)
-    const cachedProject = allData?.updatedProjects[projectToUpdateIndex]
-    const projectView = cachedProject?.project_view ?? project.project_view
+    const projectView = currentProject.project_view
     if (projectView && projectToUpdateIndex !== -1) {
       const optimistic = beginEmptySectionMutation(
         emptySectionMutations.get(mutationKey),

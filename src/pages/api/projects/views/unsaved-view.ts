@@ -4,6 +4,7 @@ import {
   isFeatureEnabled,
 } from "@/lib/flags";
 import prisma from "@/lib/prisma";
+import type { IProjectView } from "@/models/model";
 import {
   isBoardEmptySectionSetting,
   STAGED_EMPTY_SECTIONS_UPDATE_MODE,
@@ -157,17 +158,19 @@ const handler: NextApiHandler = async (
       ) {
         return res.status(403).json({ message: "View is not accessible" });
       }
-      const personalEmptySectionsViewId =
-        baseView?.id ??
-        user_project_view?.appliedView?.id ??
-        projectView.default_view?.id;
+      const hasValidEmptySections =
+        isBoardEmptySectionSetting(board_empty_sections);
       const stagesEmptySections =
         req.body.updateMode === STAGED_EMPTY_SECTIONS_UPDATE_MODE &&
-        isBoardEmptySectionSetting(board_empty_sections) &&
+        hasValidEmptySections &&
         await isFeatureEnabled(
           HTPR_6588_EMPTY_COLUMNS_SAVE_VIEW_FLAG,
           currentUser.id,
         );
+      const personalEmptySectionsViewId =
+        baseView?.id ??
+        user_project_view?.appliedView?.id ??
+        projectView.default_view?.id;
       const clearPersonalEmptySectionsOverride = async () => {
         if (!stagesEmptySections || !personalEmptySectionsViewId) return;
         await prisma.view_Last_Used.updateMany({
@@ -253,12 +256,18 @@ const handler: NextApiHandler = async (
         if (!projectViewResponse) {
           return res.status(404).json({ message: "Project view not found" });
         }
+        const masksPersonalEmptySections =
+          hasValidEmptySections &&
+          (stagesEmptySections || await isFeatureEnabled(
+            HTPR_6588_EMPTY_COLUMNS_SAVE_VIEW_FLAG,
+            currentUser.id,
+          ));
         const transientProjectView =
-          stagesEmptySections && personalEmptySectionsViewId
+          masksPersonalEmptySections && personalEmptySectionsViewId
             ? clearProjectViewPersonalEmptySections(
-                projectViewResponse,
+                projectViewResponse as unknown as IProjectView,
                 personalEmptySectionsViewId,
-              )
+              ) as unknown as typeof projectViewResponse
             : projectViewResponse;
         return res.status(200).json(
           applyTransientTabSettings(
@@ -492,7 +501,9 @@ const handler: NextApiHandler = async (
         }
       }
 
-      await clearPersonalEmptySectionsOverride();
+      if (stagesEmptySections) {
+        await clearPersonalEmptySectionsOverride();
+      }
       const project_view_updated = await getProjectView(
         projectId,
         currentUser.id
