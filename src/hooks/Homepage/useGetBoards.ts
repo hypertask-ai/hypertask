@@ -22,6 +22,10 @@ import {
 } from "@/lib/boardSync/revocationTombstone";
 
 export const PROJECTS_ALL_QUERY_KEY = ["projectsAll"] as const;
+const PROJECTS_ALL_HYDRATING_QUERY_KEY = [
+  ...PROJECTS_ALL_QUERY_KEY,
+  "hydrating",
+] as const;
 export const PROJECTS_ALL_STALE_TIME_MS = 30 * 1000;
 export const BOARD_TASKS_STALE_TIME_MS = 5 * 60 * 1000;
 
@@ -321,7 +325,9 @@ export const useGetAllBoards = (
   }, []);
 
   const query = useQuery({
-    queryKey: PROJECTS_ALL_QUERY_KEY,
+    queryKey: hydrated
+      ? PROJECTS_ALL_QUERY_KEY
+      : PROJECTS_ALL_HYDRATING_QUERY_KEY,
     enabled: hydrated && (options?.enabled ?? true),
     queryFn: async ({ signal }) => {
       const generation = ++requestGenerationRef.current;
@@ -531,6 +537,7 @@ export const useGetAllBoards = (
 
   useEffect(() => {
     if (
+      !hydrated ||
       !shouldRequestProjectsAuthorizationForScope({
         required: requiresScopedAuthorization,
         scopeKey: currentScopeKey,
@@ -565,6 +572,7 @@ export const useGetAllBoards = (
     };
   }, [
     currentScopeKey,
+    hydrated,
     query.refetch,
     queryClient,
     requiresScopedAuthorization,

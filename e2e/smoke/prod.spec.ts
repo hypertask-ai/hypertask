@@ -116,7 +116,7 @@ const VIEWS: Array<{
   { name: 'new-task modal', path: '/new', title: 'New', selector: '#createTaskModal' },
 ]
 
-const ERROR_MARKERS = [/something went wrong/i, /application error/i, /internal server error/i]
+const ERROR_PAGE_PREFIX = /^(?:application error|internal server error)/i
 
 // A Vercel bot challenge on the runner's IP is not a broken view — the health
 // job in prod-health.yml treats the same signal as unrunnable, never a
@@ -245,10 +245,12 @@ for (const view of VIEWS) {
       expect(title, `${viewPath} titled "${title}"`).not.toMatch(view.notTitle)
     }
 
-    const bodyText = await page.locator('body').innerText()
-    for (const marker of ERROR_MARKERS) {
-      expect(bodyText, `${viewPath} rendered an error page`).not.toMatch(marker)
-    }
+    await expect(
+      page.getByRole('heading', { name: /^Something went wrong!?$/i }),
+      `${viewPath} rendered an error page`,
+    ).toHaveCount(0)
+    const bodyText = (await page.locator('body').innerText()).trim()
+    expect(bodyText, `${viewPath} rendered an error page`).not.toMatch(ERROR_PAGE_PREFIX)
 
     expect(pageErrors, `${viewPath} threw a page error: ${pageErrors[0]?.message}`).toHaveLength(0)
   })
