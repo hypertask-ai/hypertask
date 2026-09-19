@@ -1,8 +1,7 @@
 import {
-    mapVisibleMcpAgent,
-    mcpVisibleAgentSelect,
+    mapAttributedMcpAgent,
+    mcpAgentSelect,
 } from '@/lib/mcp/agents';
-import { accessibleAgentWhere } from '@/lib/agents/visibility';
 import { taskStaleness } from '@/lib/staleness';
 import { derivePullRequestDisplayState } from '@/lib/pullRequests/githubPullRequests';
 import { McpTaskAssignee, TaskDetail } from './types';
@@ -23,11 +22,10 @@ export function mapTaskDescriptionContent(task: {
 
 export function mapTaskAssignee(a: {
     user: { id: number; email: string; displayName: string | null };
-    agent?: Parameters<typeof mapVisibleMcpAgent>[0];
-    agentAssigner?: Parameters<typeof mapVisibleMcpAgent>[0];
-}, userId: number, projectId: number): McpTaskAssignee | undefined {
-    const agent = mapVisibleMcpAgent(a.agent, userId, projectId);
-    if (a.agent && !agent) return undefined;
+    agent?: Parameters<typeof mapAttributedMcpAgent>[0];
+    agentAssigner?: Parameters<typeof mapAttributedMcpAgent>[0];
+}, _userId?: number, _projectId?: number): McpTaskAssignee | undefined {
+    const agent = mapAttributedMcpAgent(a.agent);
 
     const mapped: McpTaskAssignee = {
         id: a.user.id,
@@ -36,7 +34,7 @@ export function mapTaskAssignee(a: {
         // name, or task get and the CLI still show the owner.
         displayName: agent?.displayName || a.user.displayName || undefined,
     };
-    const agentAssigner = mapVisibleMcpAgent(a.agentAssigner, userId, projectId);
+    const agentAssigner = mapAttributedMcpAgent(a.agentAssigner);
     if (agent) mapped.agent = agent;
     if (agentAssigner) mapped.agentAssigner = agentAssigner;
     return mapped;
@@ -45,9 +43,9 @@ export function mapTaskAssignee(a: {
 /** Nest the creating agent under createdBy the same way assignees nest agent. */
 export function mapTaskCreatedBy(
     user: { id: number; email: string; displayName: string | null } | null | undefined,
-    agent: Parameters<typeof mapVisibleMcpAgent>[0],
-    userId: number,
-    projectId: number,
+    agent: Parameters<typeof mapAttributedMcpAgent>[0],
+    _userId?: number,
+    _projectId?: number,
 ): NonNullable<TaskDetail['createdBy']> | undefined {
     if (!user) return undefined;
     const createdBy: NonNullable<TaskDetail['createdBy']> = {
@@ -55,8 +53,8 @@ export function mapTaskCreatedBy(
         email: user.email,
         displayName: user.displayName || undefined,
     };
-    const visibleAgent = mapVisibleMcpAgent(agent, userId, projectId);
-    if (visibleAgent) createdBy.agent = visibleAgent;
+    const attributedAgent = mapAttributedMcpAgent(agent);
+    if (attributedAgent) createdBy.agent = attributedAgent;
     return createdBy;
 }
 
@@ -88,15 +86,9 @@ export function taskDetailInclude(userId: number) {
     description_: true,
     estimate: true,
     agent: {
-        select: mcpVisibleAgentSelect(userId),
+        select: mcpAgentSelect,
     },
     assignees: {
-        where: {
-            OR: [
-                { agentId: null },
-                { agent: accessibleAgentWhere(userId) },
-            ],
-        },
         include: {
             user: {
                 select: {
@@ -105,8 +97,8 @@ export function taskDetailInclude(userId: number) {
                     displayName: true
                 }
             },
-            agent: { select: mcpVisibleAgentSelect(userId) },
-            agentAssigner: { select: mcpVisibleAgentSelect(userId) },
+            agent: { select: mcpAgentSelect },
+            agentAssigner: { select: mcpAgentSelect },
         }
     },
     followers: {
@@ -326,16 +318,16 @@ export function mapTaskToMcpGetResponse(task: any, userId: number) {
         createdBy: mapTaskCreatedBy(task.user, task.agent, userId, task.projectId),
     };
 
-    const agent = mapVisibleMcpAgent(task.agent, userId, task.projectId);
-    // Count the already-filtered, visibility-checked assignee list so the
-    // number always matches what the response actually lists (HTPR-6279).
+    const agent = mapAttributedMcpAgent(task.agent);
+    // Count the already-mapped assignee list so the number always matches
+    // what the response actually lists (HTPR-6279).
     const withAssigneeCount = { ...mapped, assigneeCount: mapped.assignees.length };
     return agent ? { ...withAssigneeCount, agent } : withAssigneeCount;
 }
 
 export function mapTaskToDetail(task: any, userId: number): TaskDetail {
     const descriptionContent = mapTaskDescriptionContent(task);
-    const taskAgent = mapVisibleMcpAgent(task.agent, userId, task.projectId);
+    const taskAgent = mapAttributedMcpAgent(task.agent);
 
     return {
         id: task.id,

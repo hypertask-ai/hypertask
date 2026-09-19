@@ -90,7 +90,7 @@ import notificationGetAll, {
 import { getStructuredInboxForAgent } from "@/utils/controllers/notifications/getStructuredInboxForAgent";
 import { turbopufferSearchTaskIds } from "@/utils/controllers/search/document";
 import {
-  mapVisibleMcpAgent,
+  mapAttributedMcpAgent,
   mcpVisibleAgentSelect,
 } from "@/lib/mcp/agents";
 import {
@@ -1889,7 +1889,7 @@ function mapTaskToDetail(task: any, userId: number) {
 }
 
 function mapTaskSearchItem(task: any, userId: number) {
-  const agent = mapVisibleMcpAgent(task.agent, userId, task.projectId);
+  const agent = mapAttributedMcpAgent(task.agent);
   return {
     id: task.id,
     task_id: task.id,
@@ -1921,8 +1921,8 @@ const stripInlineDataUris = (html: string) =>
     ? html.replace(/\bdata:[^;,\s"')]+;base64,[A-Za-z0-9+/=]+/g, "[inline image]")
     : html;
 
-function mapCommentToResponse(comment: any, userId: number, projectId: number) {
-  const agent = mapVisibleMcpAgent(comment.agent, userId, projectId);
+function mapCommentToResponse(comment: any, _userId: number, _projectId: number) {
+  const agent = mapAttributedMcpAgent(comment.agent);
   const hasAgentAttribution = Boolean(comment.agent || comment.agentDisplayName);
   const text = stripInlineDataUris(comment.text);
   return {
@@ -1940,7 +1940,11 @@ function mapCommentToResponse(comment: any, userId: number, projectId: number) {
       : undefined,
     ...(agent ? { agent } : {}),
     ...(hasAgentAttribution
-      ? { agent_display_name: agent?.displayName || "Private agent" }
+      ? {
+          agent_display_name: agent
+            ? comment.agentDisplayName || agent.displayName
+            : "Private agent",
+        }
       : {}),
     attachments: (comment.attachments ?? []).map((attachment: any) => ({
       id: attachment.id,
@@ -1964,13 +1968,13 @@ function mapCommentToResponse(comment: any, userId: number, projectId: number) {
 function applyDurableCommentAttribution<T extends object>(
   mapped: T,
   comment: any,
-  userId: number,
-  projectId: number,
+  _userId: number,
+  _projectId: number,
   attributionEnabled: boolean
 ): T {
   return overlayDurableAgentDisplayName(mapped, {
     hasAgentRow: Boolean(comment.agent),
-    visibleAgent: mapVisibleMcpAgent(comment.agent, userId, projectId),
+    visibleAgent: mapAttributedMcpAgent(comment.agent),
     storedDisplayName: comment.agentDisplayName,
     attributionEnabled,
   });
@@ -4298,14 +4302,8 @@ function buildTools(
         return sanitizeForJson({
           success: true,
           tasks: tasks.map((task) => {
-            const agent = mapVisibleMcpAgent(task.agent, user.id, task.projectId);
-            const assigneeCount = task.assignees.filter(
-              (assignee) =>
-                !assignee.agent ||
-                Boolean(
-                  mapVisibleMcpAgent(assignee.agent, user.id, task.projectId)
-                )
-            ).length;
+            const agent = mapAttributedMcpAgent(task.agent);
+            const assigneeCount = task.assignees.length;
             return {
               id: task.id,
               task_id: task.id,
@@ -4712,11 +4710,7 @@ function buildTools(
           user.id
         );
         const comments = recentComments.reverse().map((comment) => {
-          const agent = mapVisibleMcpAgent(
-            comment.agent,
-            user.id,
-            input.project_id
-          );
+          const agent = mapAttributedMcpAgent(comment.agent);
           const agentDisplayName = resolvePublicAgentDisplayName({
             hasAgentRow: Boolean(comment.agent),
             visibleAgent: agent,
@@ -4727,7 +4721,8 @@ function buildTools(
             id: comment.id,
             author:
               agent?.displayName ||
-              (comment.agent || comment.agentDisplayName ? "Private agent" : undefined) ||
+              comment.agentDisplayName ||
+              (comment.agent ? "Private agent" : undefined) ||
               comment.creator?.displayName ||
               comment.creator?.email ||
               "Unknown",

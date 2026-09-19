@@ -65,13 +65,9 @@ test('include_activity=true drops the DbNull filter and passes through the MCP c
   )
 })
 
-test('comment agent identities are filtered for the task board', () => {
+test('comment agent identities keep the acting bot on the ticket', () => {
   assert.match(routeSource, /select: mcpVisibleAgentSelect\(userId, projectId\)/)
-  assert.match(
-    routeSource,
-    /mapVisibleMcpAgent\(comment\.agent, userId, projectId\)/
-  )
-  assert.match(routeSource, /!comment\.agent \? !comment\.agentDisplayName/)
+  assert.match(routeSource, /mapAttributedMcpAgent\(comment\.agent\)/)
   assert.match(routeSource, /isFeatureEnabled\(\s*HTPR_6516_AGENT_ATTRIBUTION_FLAG/)
   assert.match(routeSource, /overlayDurableAgentDisplayName\(/)
   assert.match(

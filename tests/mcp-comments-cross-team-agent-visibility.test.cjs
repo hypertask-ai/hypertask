@@ -13,6 +13,7 @@ const routePath = path.join(root, "src/app/api/mcp/comments/route.ts");
 const {
   mcpVisibleAgentSelect,
   mapVisibleMcpAgent,
+  mapAttributedMcpAgent,
   transpile,
 } = require(path.join(root, "tests/helpers/load-mcp-agents.cjs"));
 
@@ -41,10 +42,9 @@ function loadRoute(comments) {
       validateMcpAuth: async () => ({ user: { id: 6 }, agentId: null }),
     },
     "@/lib/prisma": { __esModule: true, default: prisma },
-    "@/lib/mcp/agents": { mcpVisibleAgentSelect, mapVisibleMcpAgent },
+    "@/lib/mcp/agents": { mcpVisibleAgentSelect, mapVisibleMcpAgent, mapAttributedMcpAgent },
     "@/lib/agents/publicAgent": {
       resolvePublicAgentDisplayName({ hasAgentRow, visibleAgent, storedDisplayName, attributionEnabled }) {
-        if (hasAgentRow && !visibleAgent) return "Private agent";
         if (!attributionEnabled && !hasAgentRow && storedDisplayName) return "Private agent";
         const stored = storedDisplayName && String(storedDisplayName).trim();
         if (stored) return stored;
@@ -52,19 +52,22 @@ function loadRoute(comments) {
           visibleAgent &&
           visibleAgent.displayName &&
           String(visibleAgent.displayName).trim();
-        return live || null;
+        if (live) return live;
+        if (hasAgentRow && !visibleAgent) return "Private agent";
+        return null;
       },
       overlayDurableAgentDisplayName(mapped, opts) {
         if (!opts.attributionEnabled) return mapped;
         const name = (function resolve({ hasAgentRow, visibleAgent, storedDisplayName }) {
-          if (hasAgentRow && !visibleAgent) return "Private agent";
           const stored = storedDisplayName && String(storedDisplayName).trim();
           if (stored) return stored;
           const live =
             visibleAgent &&
             visibleAgent.displayName &&
             String(visibleAgent.displayName).trim();
-          return live || null;
+          if (live) return live;
+          if (hasAgentRow && !visibleAgent) return "Private agent";
+          return null;
         })(opts);
         const next = { ...mapped };
         if (name) next.agent_display_name = name;
@@ -164,7 +167,7 @@ function commentFixture(overrides) {
   };
 }
 
-test("comments GET keeps a same-team agent visible but hides a different team's agent", async () => {
+test("comments GET names every bot that already wrote on the ticket", async () => {
   const outsiderAgent = {
     id: "outsider-agent",
     displayName: "Outsider Team Agent",
@@ -207,8 +210,8 @@ test("comments GET keeps a same-team agent visible but hides a different team's 
   assert.equal(response.status, 200);
   const [outsiderComment, insiderComment] = response.body.comments;
 
-  assert.equal(outsiderComment.agent, undefined);
-  assert.equal(outsiderComment.agent_display_name, "Private agent");
+  assert.equal(outsiderComment.agent?.id, "outsider-agent");
+  assert.equal(outsiderComment.agent_display_name, "Outsider Team Agent");
 
   assert.equal(insiderComment.agent?.id, "insider-agent");
   assert.equal(insiderComment.agent_display_name, "Insider Team Agent");

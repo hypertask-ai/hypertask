@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { validateMcpAuth, checkMcpRateLimit } from '@/lib/mcp/auth'
 import type { McpAgentSummary } from '@/lib/mcp/agents'
-import { mapVisibleMcpAgent, mcpVisibleAgentSelect } from '@/lib/mcp/agents'
+import { mapAttributedMcpAgent, mcpVisibleAgentSelect } from '@/lib/mcp/agents'
 import { resolvePublicAgentDisplayName } from '@/lib/agents/publicAgent'
 import {
   HTPR_6516_AGENT_ATTRIBUTION_FLAG,
@@ -323,11 +323,7 @@ export async function PATCH(request: NextRequest, props: { params: Promise<{ com
         },
       },
     })
-    const agent = mapVisibleMcpAgent(
-      commentWithAgent?.agent,
-      user.id,
-      comment.task.projectId
-    )
+    const agent = mapAttributedMcpAgent(commentWithAgent?.agent)
     const hasAgentAttribution = Boolean(
       commentWithAgent?.agent || commentWithAgent?.agentDisplayName
     )
@@ -345,7 +341,10 @@ export async function PATCH(request: NextRequest, props: { params: Promise<{ com
         creatorId: updatedComment.creatorId ?? undefined,
         ...(agent ? { agent } : {}),
         ...(hasAgentAttribution
-          ? { agent_display_name: agent?.displayName || 'Private agent' }
+          ? {
+              agent_display_name:
+                commentWithAgent?.agentDisplayName || agent?.displayName,
+            }
           : {}),
       }
     }

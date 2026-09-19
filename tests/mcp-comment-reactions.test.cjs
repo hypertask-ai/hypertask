@@ -187,6 +187,8 @@ function loadCommentsRoute({
     },
     '@/lib/mcp/agents': {
       getMcpSessionAgentSummary: async () => null,
+      mapAttributedMcpAgent: (agent) =>
+        agent ? { id: agent.id, displayName: agent.displayName } : undefined,
       mapVisibleMcpAgent: (agent, userId, projectId) =>
         agent && (agent.userId === userId ||
           (agent.visibility === 'TEAM' &&
@@ -371,8 +373,11 @@ test('MCP comments response includes mapped active reactions', async () => {
     emoji: '👀',
     userId: 9,
   }])
-  assert.equal(response.body.comments[1].agent, undefined)
-  assert.equal(response.body.comments[1].agent_display_name, 'Private agent')
+  assert.deepEqual(response.body.comments[1].agent, {
+    id: 'private-agent',
+    displayName: 'Private helper',
+  })
+  assert.equal(response.body.comments[1].agent_display_name, 'Private helper')
   assert.deepEqual(
     route.queryCalls[0].include.reactions,
     commentReactionInclude
@@ -401,18 +406,11 @@ test('MCP comments keeps private agent identity for its owner', async () => {
   assert.equal(response.body.comments[1].agent_display_name, 'Private helper')
 })
 
-test('MCP comments only exposes a team agent when the caller shares a board', async () => {
+test('MCP comments names a team agent that already wrote on the ticket', async () => {
   const route = loadCommentsRoute()
   route.commentsFixture[1].agent.visibility = 'TEAM'
 
-  let response = await route.GET({
-    nextUrl: { searchParams: new URLSearchParams({ task_id: '42' }) },
-  })
-  assert.equal(response.body.comments[1].agent, undefined)
-  assert.equal(response.body.comments[1].agent_display_name, 'Private agent')
-
-  route.commentsFixture[1].agent.members = [{ projectId: 15 }]
-  response = await route.GET({
+  const response = await route.GET({
     nextUrl: { searchParams: new URLSearchParams({ task_id: '42' }) },
   })
   assert.deepEqual(response.body.comments[1].agent, {

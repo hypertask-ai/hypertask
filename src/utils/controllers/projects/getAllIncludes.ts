@@ -170,12 +170,6 @@ export const getTaskIncludeLayers = ({
   const count = { _count: getTaskCountSelect(userId) };
   const assignees = {
     assignees: {
-      where: {
-        OR: [
-          { agentId: null },
-          { agent: boardAgentVisibilityWhere(userId) },
-        ],
-      },
       include: {
         user: {
           select: {
@@ -294,12 +288,6 @@ export const getBoardTaskInclude = (
     layers.count,
     {
       assignees: {
-        where: {
-          OR: [
-            { agentId: null },
-            { agent: boardAgentVisibilityWhere(options.userId) },
-          ],
-        },
         select: {
           id: true,
           userId: true,

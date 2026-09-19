@@ -54,7 +54,7 @@ test("activity JSON yields both the agent id and the name copied at write time",
   assert.equal(activityAgentDisplayName({ type: "TaskLabel", data: {} }), null);
 });
 
-test("a deleted agent's stored name is public; a hidden living agent is not", () => {
+test("a named board action stays named even when the agent is directory-private", () => {
   assert.equal(
     resolvePublicAgentDisplayName({
       hasAgentRow: false,
@@ -76,10 +76,10 @@ test("a deleted agent's stored name is public; a hidden living agent is not", ()
     resolvePublicAgentDisplayName({
       hasAgentRow: true,
       visibleAgent: null,
-      storedDisplayName: "Secret Bot",
+      storedDisplayName: "QA 1",
       attributionEnabled: true,
     }),
-    PRIVATE_AGENT_DISPLAY_NAME,
+    "QA 1",
   );
   assert.equal(
     resolvePublicAgentDisplayName({
@@ -145,6 +145,25 @@ test("task get/list print the agent name on an agent assignment, not the owner",
   assert.equal(mapped.displayName, "Dev 2");
   assert.equal(mapped.agent.id, "1a6dd89d-5fff-4c1b-9610-0a4270a7f2c7");
   assert.equal(mapped.id, 6);
+});
+
+test("a board member who does not own the bot still sees that bot on the ticket", () => {
+  const mapped = mapTaskAssignee(
+    {
+      user: { id: 6, email: "valentin.yeo@gmail.com", displayName: "Valentin Yeo" },
+      agent: {
+        id: "b7ad06ff-1aaa-4a64-937d-f7fd801506e5",
+        userId: 6,
+        visibility: "PRIVATE",
+        members: [],
+        displayName: "QA 1",
+      },
+    },
+    99,
+    15,
+  );
+  assert.equal(mapped.displayName, "QA 1");
+  assert.equal(mapped.agent.id, "b7ad06ff-1aaa-4a64-937d-f7fd801506e5");
 });
 
 test("inbox and shared cards read the agent name from the assignee row", () => {

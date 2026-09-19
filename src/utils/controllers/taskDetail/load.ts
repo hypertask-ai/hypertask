@@ -12,7 +12,6 @@ import {
 import { HTPR_6516_AGENT_ATTRIBUTION_FLAG, isFeatureEnabled } from "@/lib/flags";
 import {
   accessibleAgentMembershipWhere,
-  boardAgentVisibilityWhere,
   isAgentVisibleToUser,
   type AgentVisibility,
 } from "@/lib/agents/visibility";
@@ -38,44 +37,8 @@ const publicCommentCreator = Prisma.sql`
   ) END
 `;
 
-const hasAccessibleAgentProject = (
-  userId: number,
-  projectId: Prisma.Sql,
-) => Prisma.sql`
-  EXISTS (
-    SELECT 1
-    FROM "Member" visibility_agent_member
-    INNER JOIN "Project" visibility_project
-      ON visibility_project.id = visibility_agent_member."projectId"
-    WHERE visibility_agent_member."agentId" = agent.id
-      AND visibility_agent_member."projectId" = ${projectId}
-      AND visibility_project.status = 'Normal'::"Status"
-      AND (
-        visibility_project."ownerId" = ${userId}
-        OR EXISTS (
-          SELECT 1
-          FROM "Member" visibility_user_member
-          WHERE visibility_user_member."projectId" = visibility_project.id
-            AND visibility_user_member."userId" = ${userId}
-            AND visibility_user_member."agentId" IS NULL
-        )
-      )
-  )
-`;
-
-const hiddenCommentAgent = (
-  userId: number,
-  projectId: Prisma.Sql,
-) => Prisma.sql`
+const hiddenCommentAgent = Prisma.sql`
   (agent.id IS NULL AND c."agentDisplayName" IS NOT NULL)
-  OR (
-    agent.id IS NOT NULL
-    AND agent."userId" <> ${userId}
-    AND NOT (
-      agent.visibility = 'TEAM'::"AgentVisibility"
-      AND (${hasAccessibleAgentProject(userId, projectId)})
-    )
-  )
 `;
 
 const publicCommentAgent = Prisma.sql`
@@ -211,12 +174,6 @@ export function taskDetailInclude(userId: number, projectId: number) {
       },
     },
     assignees: {
-      where: {
-        OR: [
-          { agentId: null },
-          { agent: boardAgentVisibilityWhere(userId) },
-        ],
-      },
       include: {
         user: { select: userSelect },
         agent: { select: { id: true, displayName: true, photoURL: true } },
@@ -412,11 +369,13 @@ export async function fetchTaskDetail(
   if (!task) return null;
 
   const reactions = await fetchDescriptionReactions(task.description_?.id ?? "");
-  const visibleAgent = projectVisibleTaskAgent(task.agent, userId, task.projectId);
+  const attributedAgent = task.agent
+    ? (projectPublicAgent(task.agent) as PublicAgent)
+    : null;
   return {
     ...task,
-    agentId: visibleAgent ? task.agentId : null,
-    agent: visibleAgent,
+    agentId: attributedAgent ? task.agentId : null,
+    agent: attributedAgent,
     description_: task.description_
       ? { ...task.description_, reactions }
       : task.description_,
@@ -441,7 +400,7 @@ function commentsQuery(db: Db, taskId: number, userId: number) {
       LEFT JOIN "User" creator ON c."creatorId" = creator."id"
       LEFT JOIN "Agent" agent ON c."agentId" = agent."id"
       LEFT JOIN LATERAL (
-        SELECT (${hiddenCommentAgent(userId, Prisma.sql`comment_task."projectId"`)}) AS hidden
+        SELECT (${hiddenCommentAgent}) AS hidden
       ) agent_visibility ON TRUE
       LEFT JOIN "User" activity_from_user ON activity_from_user.id =
         CASE WHEN c.activity->>'type' = 'TaskAssigned'
@@ -585,7 +544,7 @@ export async function fetchCommentsForSlug(slug: TaskDetailSlug, userId: number)
       LEFT JOIN "User" creator ON c."creatorId" = creator."id"
       LEFT JOIN "Agent" agent ON c."agentId" = agent."id"
       LEFT JOIN LATERAL (
-        SELECT (${hiddenCommentAgent(userId, Prisma.sql`ti."projectId"`)}) AS hidden
+        SELECT (${hiddenCommentAgent}) AS hidden
       ) agent_visibility ON TRUE
       LEFT JOIN "User" activity_from_user ON activity_from_user.id =
         CASE WHEN c.activity->>'type' = 'TaskAssigned'
@@ -682,7 +641,7 @@ export function legacyCommentsQuery(db: Db, taskId: number, userId: number) {
     LEFT JOIN "User" creator ON c."creatorId" = creator."id"
     LEFT JOIN "Agent" agent ON c."agentId" = agent."id"
     LEFT JOIN LATERAL (
-      SELECT (${hiddenCommentAgent(userId, Prisma.sql`comment_task."projectId"`)}) AS hidden
+      SELECT (${hiddenCommentAgent}) AS hidden
     ) agent_visibility ON TRUE
     WHERE c."taskId" = ${taskId}
     GROUP BY c.id, c.text, c.summary, c."taskId", c."creatorId", c."createdAt",

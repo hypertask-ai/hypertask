@@ -14,7 +14,7 @@ import {
   taskMcpGetInclude,
 } from '@/lib/mcp/tasks/mappers';
 import { findTaskByIdentifier } from '@/lib/mcp/tasks/resolveTask';
-import { mapVisibleMcpAgent, mcpVisibleAgentSelect } from '@/lib/mcp/agents';
+import { mapAttributedMcpAgent, mcpVisibleAgentSelect } from '@/lib/mcp/agents';
 import { resolvePublicAgentDisplayName } from '@/lib/agents/publicAgent';
 import { HTPR_6516_AGENT_ATTRIBUTION_FLAG, isFeatureEnabled } from '@/lib/flags';
 import { getProjectWhere } from '@/utils/controllers/projects/getAllIncludes';
@@ -233,7 +233,7 @@ export async function GET(request: NextRequest) {
       ctx.user.id
     );
     const comments = recentComments.reverse().map((comment) => {
-      const agent = mapVisibleMcpAgent(comment.agent, ctx.user.id, projectId);
+      const agent = mapAttributedMcpAgent(comment.agent);
       const hasAgentAttribution = Boolean(comment.agent || comment.agentDisplayName);
       const agentDisplayName = resolvePublicAgentDisplayName({
         hasAgentRow: Boolean(comment.agent),
@@ -244,7 +244,9 @@ export async function GET(request: NextRequest) {
       return {
         id: comment.id,
         author: hasAgentAttribution
-          ? agent?.displayName || 'Private agent'
+          ? (comment.agent
+              ? comment.agentDisplayName || agent?.displayName
+              : undefined) || 'Private agent'
           : comment.creator?.displayName || comment.creator?.email || 'Unknown',
         ...(attributionEnabled
           ? {

@@ -4,7 +4,7 @@ import { validateMcpAuth, checkMcpRateLimit, mcpUnauthorizedResponse } from '@/l
 import type { McpAgentSummary } from '@/lib/mcp/agents'
 import {
   getMcpSessionAgentSummary,
-  mapVisibleMcpAgent,
+  mapAttributedMcpAgent,
   mcpVisibleAgentSelect,
 } from '@/lib/mcp/agents'
 import prisma from '@/lib/prisma'
@@ -164,15 +164,16 @@ const commentInclude = (userId: number, projectId: number) => ({
 // retain the app endpoint's raw activity payload and add an explicit row type.
 function mapCommentToResponse(
   comment: any,
-  userId: number,
-  projectId: number,
+  _userId: number,
+  _projectId: number,
   includeActivity = false
 ): CommentItem {
-  const agent = mapVisibleMcpAgent(comment.agent, userId, projectId)
-  const agentVisible = !comment.agent ? !comment.agentDisplayName : Boolean(agent)
-  const agentDisplayName = agentVisible
-    ? comment.agentDisplayName
-    : 'Private agent'
+  const agent = mapAttributedMcpAgent(comment.agent)
+  const agentDisplayName = agent
+    ? comment.agentDisplayName || agent.displayName
+    : comment.agentDisplayName
+      ? 'Private agent'
+      : undefined
   const mappedComment: CommentItem = {
     id: comment.id,
     text: comment.text,
@@ -206,13 +207,13 @@ function mapCommentToResponse(
 function applyDurableCommentAttribution<T extends object>(
   mapped: T,
   comment: any,
-  userId: number,
-  projectId: number,
+  _userId: number,
+  _projectId: number,
   attributionEnabled: boolean
 ): T {
   return overlayDurableAgentDisplayName(mapped, {
     hasAgentRow: Boolean(comment.agent),
-    visibleAgent: mapVisibleMcpAgent(comment.agent, userId, projectId),
+    visibleAgent: mapAttributedMcpAgent(comment.agent),
     storedDisplayName: comment.agentDisplayName,
     attributionEnabled,
   })

@@ -70,6 +70,8 @@ function loadRoute(comments) {
     },
     "@/lib/mcp/agents": {
       mcpVisibleAgentSelect: (userId, projectId) => ({ viewerId: userId, projectId }),
+      mapAttributedMcpAgent: (agent) =>
+        agent ? { id: agent.id, displayName: agent.displayName } : undefined,
       mapVisibleMcpAgent: (agent, userId, projectId) =>
         agent &&
         (agent.userId === userId ||
@@ -80,7 +82,6 @@ function loadRoute(comments) {
     },
     "@/lib/agents/publicAgent": {
       resolvePublicAgentDisplayName({ hasAgentRow, visibleAgent, storedDisplayName, attributionEnabled }) {
-        if (hasAgentRow && !visibleAgent) return "Private agent";
         if (!attributionEnabled && !hasAgentRow && storedDisplayName) return "Private agent";
         const stored = storedDisplayName && String(storedDisplayName).trim();
         if (stored) return stored;
@@ -88,7 +89,9 @@ function loadRoute(comments) {
           visibleAgent &&
           visibleAgent.displayName &&
           String(visibleAgent.displayName).trim();
-        return live || null;
+        if (live) return live;
+        if (hasAgentRow && !visibleAgent) return "Private agent";
+        return null;
       },
     },
     "@/lib/flags": {
@@ -120,7 +123,7 @@ function comment(overrides) {
   };
 }
 
-test("task context redacts deleted, private, and unshared team agent names", async () => {
+test("task context names living bots on the ticket and redacts a deleted bot when the flag is off", async () => {
   const privateAgent = {
     id: "private-agent",
     displayName: "Private helper",
@@ -164,7 +167,7 @@ test("task context redacts deleted, private, and unshared team agent names", asy
   assert.equal(response.status, 200);
   assert.deepEqual(
     response.body.comments.map(({ author }) => author),
-    ["Human", "Shared helper", "Private agent", "Private agent", "Private agent"],
+    ["Human", "Shared helper", "Team helper", "Private helper", "Private agent"],
   );
   assert.deepEqual(route.getCommentQuery().select.agent.select, {
     viewerId: 6,
