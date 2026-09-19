@@ -9,7 +9,7 @@ Use before `fix-bug` or `ship-feature-behind-flag` on any ticket touching UI. Th
 
 ## Steps
 
-1. **List the UI elements the ticket needs.** Write down every control: input, button, list, dialog, composer, mic, send, avatar, chip, whatever the ticket calls for. Don't start on the first one until the whole list exists — a partial list is how the third element quietly becomes a new component nobody checked for.
+1. **List the UI elements the ticket needs.** Write down every control: input, button, list, dialog, composer, mic, send, avatar, chip, whatever the ticket calls for. Don't start on the first one until the whole list exists — a partial list is how the third element quietly becomes a new component nobody checked for. For toolbar buttons, menus, dialogs, tabs, tables, and saved views, start with `.claude/skills/canonical-components.md`.
 2. **For each element, grep the app repo for the existing component** before writing anything. Search `src/components` and `src/app`:
    ```
    grep -ril "AudioButton\|composer\|ChatInput" ~/projects/hypertask-oss/src/components | head
@@ -22,9 +22,11 @@ Use before `fix-bug` or `ship-feature-behind-flag` on any ticket touching UI. Th
 3. **Reuse it as is. Props only.** Import the component and pass it the props it already takes. Don't fork it, don't copy its internals into a new file "to customize", don't wrap it in a new component that just re-renders it with a different name. When the owner selects an existing trigger, keep that exact trigger instead of adding a parallel button or label.
 4. **A new component is allowed only when no existing one can do the job.** Say what you checked and why it doesn't fit. Put that reason on the ticket comment and, one line, in the PR summary. Rules 2 (Simplicity First) and 3 (Surgical Changes) in `reference/karpathy-rules.md` back this: no abstractions for single-use code, touch only what you must.
 5. **Never re-implement layout that already exists for the same kind of screen.** A mobile full-screen chat is the AI chat's mobile layout (`AI_Chat_Layout.tsx` and friends in `src/components/AI_CHAT/`), not a new page shell that happens to look similar.
-6. **Check before hand-off:**
+6. **Name every reused component in the PR.** In **Components reused**, add one line per new control with the existing `src/components/...` file path. The required gate rejects a new component file or inline menu when this section is missing, empty, or names a path that did not exist on the base branch.
+7. **Check before hand-off:**
    - Your grep shows no new component whose name resembles an existing one (a `ChatComposer2`, a `MicButtonNew`, a `CustomSendArrow` next to the real `SendArrow` is a red flag, not a variant).
    - The PR diff touches existing components, not new copies of them.
+   - The PR's **Components reused** lines cover every new control and every named path exists on the base branch.
 
 ## Notes
 

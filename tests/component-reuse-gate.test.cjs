@@ -1,0 +1,111 @@
+const assert = require("node:assert/strict");
+const test = require("node:test");
+const path = require("node:path");
+const os = require("node:os");
+const fs = require("node:fs");
+const { execFileSync } = require("node:child_process");
+const { pathToFileURL } = require("node:url");
+
+const root = path.resolve(__dirname, "..");
+const scriptUrl = pathToFileURL(path.join(root, ".github/scripts/component-reuse-gate.mjs")).href;
+const reusePath = "src/components/PageComponents/Kanban/HeaderComponents/HeaderIconWrapper.tsx";
+
+function writeFile(dir, relative, content) {
+  const full = path.join(dir, relative);
+  fs.mkdirSync(path.dirname(full), { recursive: true });
+  fs.writeFileSync(full, content);
+}
+
+function makeRepo(t) {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "component-reuse-gate-"));
+  t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+  const git = (args) => execFileSync("git", args, { cwd: dir, encoding: "utf8" });
+  git(["init", "-q"]);
+  git(["config", "user.email", "test@example.com"]);
+  git(["config", "user.name", "Test"]);
+  writeFile(dir, reusePath, "export default function HeaderIconWrapper() { return null; }\n");
+  return { dir, git };
+}
+
+function commit(git, message) {
+  git(["add", "-A"]);
+  git(["commit", "-q", "-m", message]);
+  return git(["rev-parse", "HEAD"]).trim();
+}
+
+async function evaluate(prBody, baseSha, headSha, cwd) {
+  const original = process.cwd();
+  process.chdir(cwd);
+  try {
+    const { evaluateComponentReuse } = await import(scriptUrl);
+    return evaluateComponentReuse({ prBody, baseSha, headSha });
+  } finally {
+    process.chdir(original);
+  }
+}
+
+test("non-UI changes do not require a component declaration", async (t) => {
+  const { dir, git } = makeRepo(t);
+  const base = commit(git, "base");
+  writeFile(dir, "src/lib/value.ts", "export const value = 1;\n");
+  writeFile(dir, "src/components/value.ts", "export const componentValue = 1;\n");
+  const head = commit(git, "backend");
+
+  assert.equal((await evaluate("", base, head, dir)).pass, true);
+});
+
+test("a new component without the section is rejected with the rule", async (t) => {
+  const { dir, git } = makeRepo(t);
+  const base = commit(git, "base");
+  writeFile(dir, "src/components/NewToolbar.tsx", "export const NewToolbar = () => <div />;\n");
+  const head = commit(git, "new toolbar");
+
+  const result = await evaluate("## Outcome\nNew toolbar", base, head, dir);
+  assert.equal(result.pass, false);
+  assert.match(result.message, /^Every PR that touches the UI must name the existing component it reuses for each new control\./);
+  assert.match(result.message, /src\/components\/NewToolbar\.tsx/);
+});
+
+test("inline menu markup without the section is rejected", async (t) => {
+  const { dir, git } = makeRepo(t);
+  writeFile(dir, "src/app/example/page.tsx", "export default function Page() { return <button>Open</button>; }\n");
+  const base = commit(git, "base");
+  writeFile(
+    dir,
+    "src/app/example/page.tsx",
+    'export default function Page() { return <><button aria-haspopup="menu">Open</button><div role="menu">Item</div></>; }\n',
+  );
+  const head = commit(git, "inline menu");
+
+  assert.equal((await evaluate("", base, head, dir)).pass, false);
+});
+
+test("a declaration naming an existing component passes", async (t) => {
+  const { dir, git } = makeRepo(t);
+  const base = commit(git, "base");
+  writeFile(dir, "src/components/NewToolbar.tsx", "export const NewToolbar = () => <div />;\n");
+  const head = commit(git, "new toolbar");
+  const body = `## Components reused\n\n- \`Toolbar button\` -> \`${reusePath}\`\n\n## Tests\n- passed`;
+
+  const result = await evaluate(body, base, head, dir);
+  assert.equal(result.pass, true);
+  assert.match(result.message, new RegExp(reusePath.replaceAll("/", "\\/")));
+});
+
+test("a declaration naming a missing or newly added component is rejected", async (t) => {
+  const { dir, git } = makeRepo(t);
+  const base = commit(git, "base");
+  writeFile(dir, "src/components/NewToolbar.tsx", "export const NewToolbar = () => <div />;\n");
+  const head = commit(git, "new toolbar");
+
+  for (const namedPath of ["src/components/DoesNotExist.tsx", "src/components/NewToolbar.tsx"]) {
+    const result = await evaluate(
+      `## Components reused\n\n- \`Toolbar\` -> \`${namedPath}\``,
+      base,
+      head,
+      dir,
+    );
+    assert.equal(result.pass, false, namedPath);
+    assert.match(result.message, /do not exist on the base branch/);
+  }
+});

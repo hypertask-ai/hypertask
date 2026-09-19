@@ -53,6 +53,8 @@ required_checks:
 feature_flag_gate:
   workflow: .github/workflows/feature-flag-gate.yml
   decision_script: .github/scripts/feature-flag-gate.mjs
+  component_reuse_script: .github/scripts/component-reuse-gate.mjs
+  component_reuse_requires: "A Components reused PR section naming base-branch component paths for new component files and inline menus"
   runs_on: ubuntu-latest
   trusted_script_source: production_base_commit
   parser_lock: .github/scripts/feature-flag-parser/package-lock.json

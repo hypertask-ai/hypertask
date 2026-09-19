@@ -134,9 +134,28 @@ The mobile comment composer is the reference for combining shape, spacing, token
 
 Relevant markup lives in `NewCommentComponent.tsx`; action ordering lives in `AttachmentsUpload/index.tsx` and `mobileCommentComposer.ts`. Preserve the single-row ordering because re-parenting the microphone destroys an in-flight recording.
 
+## Canonical component compositions
+
+Start with these production components instead of adding another visual pattern:
+
+| Control | Existing component | Reference composition |
+|---|---|---|
+| Toolbar icon button | `src/components/PageComponents/Kanban/HeaderComponents/HeaderIconWrapper.tsx` | `src/components/PageComponents/Kanban/HeaderComponents/ShellViewControls.tsx` |
+| Menu | `src/components/commands.tsx` | `src/components/Modals/commands/HTC/CommandList.tsx` |
+| Dialog | `src/components/Common/CommonModalComponents/index.tsx` | `src/components/Modals/Common Modals/ConfirmDialog.tsx` |
+| View tabs | `src/components/PageComponents/Kanban/HeaderComponents/ViewTabsBar.tsx` | `src/components/Global/MobileBoardViewPicker.tsx` |
+| Task table | `src/components/PageComponents/Kanban/TableView/TableView.tsx` | `src/components/PageComponents/Kanban/TableView/TableColumnsPicker.tsx` |
+| Saved views | `src/components/PageComponents/Kanban/HeaderComponents/SaveViewHeaderKanban.tsx` | `src/components/Modals/ViewModals/ManageViewsModals.tsx` |
+
+Add actions to the command palette instead of building a local dropdown. Extend the existing tabs, table, and saved-view compositions instead of placing a second version beside them.
+
 ## Pull request review contract
 
 For changed user-facing UI, review the changed lines against this guide.
+
+Every PR that touches the UI must name the existing component it reuses for each new control. Put one line per control under `## Components reused`, with the existing `src/components/...` file path in backticks. The path must exist on the pull request's base branch.
+
+A new component file under `src/components`, or inline menu markup, is a `major` finding when the section is missing or empty, or when a named component path does not exist. Quote the rule above in the finding and cite the changed control. A complete declaration with existing paths satisfies this check.
 
 A style finding gates only when the diff itself proves that the pull request introduced or materially extended a violation. Cite the changed file and line, name the violated rule, and point to the conforming token or nearby reference pattern. Report that concrete violation as `major` so `claude-review` blocks it.
 
