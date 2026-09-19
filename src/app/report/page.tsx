@@ -2,7 +2,10 @@ import type { Metadata } from "next";
 
 import { requireServerCookieUser } from "@/lib/auth/serverUser";
 import type { IUser } from "@/models/model";
-import { listAllReportsForUser } from "@/utils/controllers/reports/reportService";
+import {
+  listAllReportsForUser,
+  nativeReportsEnabledForUser,
+} from "@/utils/controllers/reports/reportService";
 import ReportsOverview from "./ReportsOverview";
 
 export const metadata: Metadata = {
@@ -11,7 +14,16 @@ export const metadata: Metadata = {
 
 export default async function Page() {
   const user: IUser = await requireServerCookieUser();
-  const data = await listAllReportsForUser(user.id);
+  const [data, nativeReportsEnabled] = await Promise.all([
+    listAllReportsForUser(user.id),
+    nativeReportsEnabledForUser(user.id),
+  ]);
 
-  return <ReportsOverview currentUser={user} {...data} />;
+  return (
+    <ReportsOverview
+      currentUser={user}
+      nativeReportsEnabled={nativeReportsEnabled}
+      {...data}
+    />
+  );
 }
