@@ -165,83 +165,86 @@ for (const view of VIEWS) {
       }, true)
     })
 
-    let response
     try {
-      response = await page.goto(viewPath, { waitUntil: 'load' })
-    } catch (err) {
-      if (isUnrunnableError(err)) {
-        markUnrunnable(`navigation infrastructure failed on ${viewPath}`)
+      let response
+      try {
+        response = await page.goto(viewPath, { waitUntil: 'load' })
+      } catch (err) {
+        if (isUnrunnableError(err)) {
+          markUnrunnable(`navigation infrastructure failed on ${viewPath}`)
+        }
+        throw err
       }
-      throw err
-    }
 
-    if (isBotChallenge(response)) {
-      abortUnrunnable(`Vercel bot-challenged the runner IP on ${viewPath}`)
-    }
+      if (isBotChallenge(response)) {
+        abortUnrunnable(`Vercel bot-challenged the runner IP on ${viewPath}`)
+      }
 
-    if (response && (response.status() === 401 || response.status() === 403)) {
-      abortUnrunnable(`smoke session got HTTP ${response.status()} on ${viewPath}`)
-    }
-    if (page.url().includes(LOGIN_PATH)) {
-      abortUnrunnable(`smoke session redirected to ${LOGIN_PATH} on ${viewPath}`)
-    }
+      if (response && (response.status() === 401 || response.status() === 403)) {
+        abortUnrunnable(`smoke session got HTTP ${response.status()} on ${viewPath}`)
+      }
+      if (page.url().includes(LOGIN_PATH)) {
+        abortUnrunnable(`smoke session redirected to ${LOGIN_PATH} on ${viewPath}`)
+      }
 
-    expect(response, `no response for ${viewPath}`).toBeTruthy()
-    expect(response!.status(), `${viewPath} returned ${response!.status()}`).toBeLessThan(400)
+      expect(response, `no response for ${viewPath}`).toBeTruthy()
+      expect(response!.status(), `${viewPath} returned ${response!.status()}`).toBeLessThan(400)
 
-    // A 2xx response alone doesn't prove the view rendered — a blank or
-    // loading-only shell must fail too (PR #366 review). Wait until the body
-    // carries real content and the "Loading..." Suspense fallback is gone.
-    await expect
-      .poll(
-        async () => (await page.locator('body').innerText()).trim().length,
-        { timeout: 15_000 },
-      )
-      .toBeGreaterThan(30)
-    await expect(page.locator('text=/^loading/i')).toHaveCount(0, { timeout: 15_000 })
+      // A 2xx response alone doesn't prove the view rendered — a blank or
+      // loading-only shell must fail too (PR #366 review). Wait until the body
+      // carries real content and the "Loading..." Suspense fallback is gone.
+      await expect
+        .poll(
+          async () => (await page.locator('body').innerText()).trim().length,
+          { timeout: 15_000 },
+        )
+        .toBeGreaterThan(30)
+      await expect(page.locator('text=/^loading/i')).toHaveCount(0, { timeout: 15_000 })
 
-    // The route-specific element from VIEWS: a shell that renders 30+ chars
-    // of chrome (nav, header) without the actual view still needs to fail
-    // here (round-4 review). Each selector is a real, verified element from
-    // the view's own component, not a generic wrapper.
-    const target = page.locator(view.selector).first()
-    if (view.attachedOnly) {
-      await expect(target, `${viewPath} missing "${view.selector}"`).toBeAttached({ timeout: 15_000 })
-    } else {
-      await expect(target, `${viewPath} missing "${view.selector}"`).toBeVisible({ timeout: 15_000 })
-    }
+      // The route-specific element from VIEWS: a shell that renders 30+ chars
+      // of chrome (nav, header) without the actual view still needs to fail
+      // here (round-4 review). Each selector is a real, verified element from
+      // the view's own component, not a generic wrapper.
+      const target = page.locator(view.selector).first()
+      if (view.attachedOnly) {
+        await expect(target, `${viewPath} missing "${view.selector}"`).toBeAttached({ timeout: 15_000 })
+      } else {
+        await expect(target, `${viewPath} missing "${view.selector}"`).toBeVisible({ timeout: 15_000 })
+      }
 
-    // An auth redirect on one view means the session broke mid-run or the
-    // route is misbehaving; either way this is not a passing check.
-    expect(page.url(), `${viewPath} redirected to ${page.url()}`).not.toContain(LOGIN_PATH)
+      // An auth redirect on one view means the session broke mid-run or the
+      // route is misbehaving; either way this is not a passing check.
+      expect(page.url(), `${viewPath} redirected to ${page.url()}`).not.toContain(LOGIN_PATH)
 
-    const title = await page.title()
-    if (view.title) {
-      expect(title, `${viewPath} titled "${title}", expected "${view.title}"`).toBe(view.title)
-    }
-    if (view.titlePattern) {
-      expect(title, `${viewPath} titled "${title}", expected it to match ${view.titlePattern}`).toMatch(view.titlePattern)
-    }
-    if (view.notTitle) {
-      expect(title, `${viewPath} titled "${title}"`).not.toMatch(view.notTitle)
-    }
+      const title = await page.title()
+      if (view.title) {
+        expect(title, `${viewPath} titled "${title}", expected "${view.title}"`).toBe(view.title)
+      }
+      if (view.titlePattern) {
+        expect(title, `${viewPath} titled "${title}", expected it to match ${view.titlePattern}`).toMatch(view.titlePattern)
+      }
+      if (view.notTitle) {
+        expect(title, `${viewPath} titled "${title}"`).not.toMatch(view.notTitle)
+      }
 
-    const bodyText = await page.locator('body').innerText()
-    for (const marker of ERROR_MARKERS) {
-      expect(bodyText, `${viewPath} rendered an error page`).not.toMatch(marker)
-    }
+      const bodyText = await page.locator('body').innerText()
+      for (const marker of ERROR_MARKERS) {
+        expect(bodyText, `${viewPath} rendered an error page`).not.toMatch(marker)
+      }
 
-    if (pageErrors.some((error) => /(?:Minified React error #418|Hydration failed)/i.test(error.message))) {
-      const diagnostic = await page.evaluate(() =>
-        (window as typeof window & { __htHydrationDiagnostic?: unknown }).__htHydrationDiagnostic,
-      )
-      const diagnosticJson = JSON.stringify(diagnostic, null, 2)
-      console.error(`HYDRATION_DIAGNOSTIC ${viewPath}\n${diagnosticJson}`)
-      await testInfo.attach('hydration-diagnostic', {
-        body: diagnosticJson,
-        contentType: 'application/json',
-      })
+      expect(pageErrors, `${viewPath} threw a page error: ${pageErrors[0]?.message}`).toHaveLength(0)
+    } finally {
+      if (pageErrors.some((error) => /(?:Minified React error #418|Hydration failed)/i.test(error.message))) {
+        const diagnostic = await page.evaluate(() =>
+          (window as typeof window & { __htHydrationDiagnostic?: unknown }).__htHydrationDiagnostic,
+        )
+        const diagnosticJson = JSON.stringify(diagnostic, null, 2)
+        console.error(`HYDRATION_DIAGNOSTIC ${viewPath}\n${diagnosticJson}`)
+        await testInfo.attach('hydration-diagnostic', {
+          body: diagnosticJson,
+          contentType: 'application/json',
+        })
+      }
     }
-    expect(pageErrors, `${viewPath} threw a page error: ${pageErrors[0]?.message}`).toHaveLength(0)
   })
 }

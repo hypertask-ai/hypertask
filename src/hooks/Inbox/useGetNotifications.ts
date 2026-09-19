@@ -27,6 +27,7 @@ import {
   type InboxReadModelRevision,
 } from "@/lib/inboxSync/revision";
 import { filterInboxReadModelByProjectAccess } from "@/lib/inboxSync/contract";
+import { useHydrated } from "@/hooks/General/useHydrated";
 
 export const INBOX_QUERY_KEY = ["inbox"] as const;
 export const INBOX_QUERY_STALE_TIME_MS = 30 * 1000;
@@ -425,15 +426,18 @@ export const notificationCountQueryOptions = (userId: number) => ({
 export const useGetNotificationCount = (
   userId: number,
   options?: { enabled?: boolean },
-) =>
-  useQuery({
+) => {
+  const hydrated = useHydrated();
+  return useQuery({
     ...notificationCountQueryOptions(userId),
-    enabled: options?.enabled ?? true,
+    enabled: hydrated && (options?.enabled ?? true),
     initialData: { all: 0, unseen: 0 },
     initialDataUpdatedAt: 0,
   });
+};
 
 export const useGetNotifications = (userId: number) => {
+  const hydrated = useHydrated();
   const queryClient = useQueryClient();
   const searchParams = useSearchParams();
   const parameter = searchParams?.get(BOARD_SYNC_PILOT_PARAM) ?? null;
@@ -455,6 +459,7 @@ export const useGetNotifications = (userId: number) => {
   const queryKey = useMemo(() => inboxDataQueryKey(userId), [userId]);
   const query = useQuery({
     queryKey,
+    enabled: hydrated,
     queryFn: () =>
       fetchInboxPayload(
         userId,

@@ -14,6 +14,7 @@ import {
 } from "@tanstack/react-query";
 import { useEffect, useLayoutEffect, useRef } from "react";
 import { discardEarlyBoardBootstrap } from "@/lib/boardBootstrap/earlyBoardBootstrap";
+import { useHydrated } from "@/hooks/General/useHydrated";
 import { MOBILE_BOARD_SWITCHER_QUERY_KEY } from "@/hooks/MultiPages/useGetAllAccessibleBoardList";
 import {
   persistBoardRevocationFallback,
@@ -279,6 +280,7 @@ export const useGetAllBoards = (
     onCriticalBoardRequestSettled?: () => void;
   }
 ) => {
+  const hydrated = useHydrated();
   const queryClient = useQueryClient();
   const accountIdRef = useRef(user.id);
   const optionsRef = useRef(options);
@@ -320,7 +322,7 @@ export const useGetAllBoards = (
 
   const query = useQuery({
     queryKey: PROJECTS_ALL_QUERY_KEY,
-    enabled: options?.enabled ?? true,
+    enabled: hydrated && (options?.enabled ?? true),
     queryFn: async ({ signal }) => {
       const generation = ++requestGenerationRef.current;
       const requestId = nextProjectsAuthorizationRequestId();
