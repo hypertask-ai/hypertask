@@ -45,6 +45,8 @@ const projectWith = ({
   id: 15,
   project_view: {
     id: "project-view",
+    board_empty_sections_staging_enabled:
+      unsaved?.board_empty_sections_staged === true,
     default_view: defaultView,
     allViews: [defaultView, applied].filter(Boolean),
     user_project_views: [{ unsavedView: unsaved, appliedView: applied }],
@@ -245,7 +247,7 @@ test("a personal setting overrides shared and legacy unsaved values", () => {
   );
   assert.equal(
     getActiveEmptySectionSettingFromProjectView(
-      maskPersonalEmptySectionsForUnsavedView(project.project_view as never),
+      maskPersonalEmptySectionsForUnsavedView(project.project_view as never, true),
     ),
     "Hidden",
     "ordinary unsaved edits must keep the personal preference",
@@ -277,11 +279,24 @@ test("a staged unsaved choice outranks but does not erase the personal setting",
 
   const masked = maskPersonalEmptySectionsForUnsavedView(
     project.project_view as never,
+    true,
   );
 
   assert.equal(
     getActiveEmptySectionSettingFromProjectView(masked),
     "Show",
+  );
+  const disabled = maskPersonalEmptySectionsForUnsavedView(
+    project.project_view as never,
+    false,
+  );
+  assert.equal(
+    getActiveEmptySectionSettingFromProjectView(disabled),
+    "Hidden",
+  );
+  assert.equal(
+    disabled.user_project_views[0].unsavedView?.board_empty_sections_staged,
+    false,
   );
   assert.equal(
     getActiveEmptySectionSettingFromProject(project as never),
@@ -295,7 +310,10 @@ test("a staged unsaved choice outranks but does not erase the personal setting",
   );
   assert.equal(
     getActiveEmptySectionSettingFromProjectView(
-      maskPersonalEmptySectionsForUnsavedView(resetProject.project_view as never),
+      maskPersonalEmptySectionsForUnsavedView(
+        resetProject.project_view as never,
+        true,
+      ),
     ),
     "Hidden",
     "removing the unsaved view must reveal the retained personal setting",
@@ -445,6 +463,36 @@ test("a successful earlier toggle becomes the rollback baseline", () => {
       project_view: secondFailure.projectView,
     } as never),
     "Hidden",
+  );
+});
+
+test("a staged optimistic toggle patches the existing unsaved view", () => {
+  const applied = {
+    ...view("speed", "Show"),
+    ViewLastUsed: [{ board_empty_sections: "Show" }],
+  };
+  const project = projectWith({
+    unsaved: view("unsaved", "Hidden", true),
+    applied: applied as never,
+  });
+
+  const mutation = beginEmptySectionMutation(
+    undefined,
+    project.project_view as never,
+    { id: 1, setting: "Show", viewId: "speed", staged: true },
+  );
+
+  assert.equal(
+    getActiveEmptySectionSettingFromProjectView(mutation.projectView),
+    "Show",
+  );
+  assert.equal(
+    mutation.projectView.user_project_views[0].unsavedView?.board_empty_sections,
+    "Show",
+  );
+  assert.equal(
+    mutation.projectView.user_project_views[0].unsavedView?.board_empty_sections_staged,
+    true,
   );
 });
 

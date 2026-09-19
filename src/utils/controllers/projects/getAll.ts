@@ -77,9 +77,8 @@ const getAll = async (
       json: projects.map((project) => {
         const sanitizedProject = sanitizeProjectBoardFilters(project);
         if (
-          !emptyColumnsSaveViewEnabled ||
           !("project_view" in sanitizedProject) ||
-          !sanitizedProject.project_view
+          !sanitizedProject.project_view?.user_project_views[0]?.unsavedView
         ) {
           return sanitizedProject;
         }
@@ -87,6 +86,7 @@ const getAll = async (
           ...sanitizedProject,
           project_view: maskPersonalEmptySectionsForUnsavedView(
             sanitizedProject.project_view as unknown as IProjectView,
+            emptyColumnsSaveViewEnabled,
           ) as unknown as typeof sanitizedProject.project_view,
         };
       }),

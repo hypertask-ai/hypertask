@@ -158,19 +158,23 @@ const handler: NextApiHandler = async (
       }
       const hasValidEmptySections =
         isBoardEmptySectionSetting(board_empty_sections);
-      const stagesEmptySections =
-        req.body.updateMode === STAGED_EMPTY_SECTIONS_UPDATE_MODE &&
+      const emptyColumnsSaveViewEnabled =
         hasValidEmptySections &&
         await isFeatureEnabled(
           HTPR_6588_EMPTY_COLUMNS_SAVE_VIEW_FLAG,
           currentUser.id,
         );
+      const stagesEmptySections =
+        req.body.updateMode === STAGED_EMPTY_SECTIONS_UPDATE_MODE &&
+        emptyColumnsSaveViewEnabled;
       const personalEmptySectionsViewId =
         baseView?.id ??
         user_project_view?.appliedView?.id ??
         projectView.default_view?.id;
-      const preservesStagedEmptySections =
+      const hasStagedEmptySections =
         user_project_view?.unsavedView?.board_empty_sections_staged === true;
+      const preservesStagedEmptySections =
+        emptyColumnsSaveViewEnabled && hasStagedEmptySections;
       const personalEmptySections =
         (stagesEmptySections || preservesStagedEmptySections) &&
         personalEmptySectionsViewId
@@ -260,18 +264,20 @@ const handler: NextApiHandler = async (
         if (!projectViewResponse) {
           return res.status(404).json({ message: "Project view not found" });
         }
-        return res.status(200).json(
-          applyTransientTabSettings(
-            projectViewResponse,
-            currentUser.id,
-            baseViewId == null ? null : baseView,
-            {
-              ...settingsFromReqBody,
-              board_empty_sections_staged: stagesEmptySections,
-            },
-            !isDeepEqual(settingsFromReqBody, comparisonSettings),
-          )
+        const transientProjectView = applyTransientTabSettings(
+          projectViewResponse,
+          currentUser.id,
+          baseViewId == null ? null : baseView,
+          {
+            ...settingsFromReqBody,
+            board_empty_sections_staged: stagesEmptySections,
+          },
+          !isDeepEqual(settingsFromReqBody, comparisonSettings),
         );
+        return res.status(200).json({
+          ...transientProjectView,
+          board_empty_sections_staging_enabled: emptyColumnsSaveViewEnabled,
+        });
       }
 
       const resolvedAppliedViewId =
@@ -444,7 +450,9 @@ const handler: NextApiHandler = async (
                 board_empty_sections,
                 ...(stagesEmptySections
                   ? { board_empty_sections_staged: true }
-                  : {}),
+                  : hasStagedEmptySections && !emptyColumnsSaveViewEnabled
+                    ? { board_empty_sections_staged: false }
+                    : {}),
                 board_staleness: board_staleness ?? null,
                 board_show_archived: resolvedShowArchived,
                 table_sort_column: sanitizedTableSort.column,

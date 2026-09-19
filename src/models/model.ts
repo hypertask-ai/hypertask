@@ -384,6 +384,7 @@ export interface IProjectView {
   default_view_order?: string[] | null;
   default_view_id?: string;
   default_view?: IView;
+  board_empty_sections_staging_enabled?: boolean;
 }
 
 export interface IUserProjectView {

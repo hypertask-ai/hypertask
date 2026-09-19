@@ -89,9 +89,12 @@ const getBoardTasks = async (
       : tasksWithWaitingOnUsers;
 
     const sanitizedProject = sanitizeProjectBoardFilters(project);
-    if (emptyColumnsSaveViewEnabled && sanitizedProject.project_view) {
+    if (
+      sanitizedProject.project_view?.user_project_views[0]?.unsavedView
+    ) {
       sanitizedProject.project_view = maskPersonalEmptySectionsForUnsavedView(
         sanitizedProject.project_view as unknown as IProjectView,
+        emptyColumnsSaveViewEnabled,
       ) as unknown as typeof sanitizedProject.project_view;
     }
     const { allViews = [], ...projectView } =

@@ -77,17 +77,16 @@ const getProjectView = async (projectId: number, currentUserId: number) => {
     },
   });
   const sanitizedProjectView = sanitizeProjectViewBoardFilters(project_view_updated);
-  if (
-    !sanitizedProjectView?.user_project_views[0]?.unsavedView ||
-    !await isFeatureEnabled(
-      HTPR_6588_EMPTY_COLUMNS_SAVE_VIEW_FLAG,
-      currentUserId,
-    )
-  ) {
+  if (!sanitizedProjectView?.user_project_views[0]?.unsavedView) {
     return sanitizedProjectView;
   }
+  const emptyColumnsSaveViewEnabled = await isFeatureEnabled(
+    HTPR_6588_EMPTY_COLUMNS_SAVE_VIEW_FLAG,
+    currentUserId,
+  );
   return maskPersonalEmptySectionsForUnsavedView(
     sanitizedProjectView as unknown as IProjectView,
+    emptyColumnsSaveViewEnabled,
   ) as unknown as typeof sanitizedProjectView;
 };
 
