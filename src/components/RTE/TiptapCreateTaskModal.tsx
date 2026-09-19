@@ -1127,7 +1127,11 @@ const TiptapCreateTaskModal = () => {
           <div
             id={divIds.popoverContainer}
             className={`w-full absolute z-[1000] ${
-              shouldShowAiTaskWriter ? "block h-full" : "hidden h-0"
+              shouldShowAiTaskWriter
+                ? isSavingWithTaskWriter
+                  ? "pointer-events-none h-0"
+                  : "block h-full"
+                : "hidden h-0"
             }`}
           >
             {shouldShowAiTaskWriter && (

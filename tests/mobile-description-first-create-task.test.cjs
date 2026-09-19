@@ -87,6 +87,11 @@ test("description-first actions save with Task Writer without opening its sheet"
   );
   assert.match(createTaskEditor, /createTaskInBackground=\{isSavingWithTaskWriter\}/);
   assert.match(
+    createTaskEditor,
+    /isSavingWithTaskWriter[\s\S]*?"pointer-events-none h-0"/,
+    "the background writer must not cover or intercept the visible task form",
+  );
+  assert.match(
     mobileBar,
     /data-mobile-primary-save[\s\S]*?bg-shadcn-primary[\s\S]*?text-primary-foreground/,
   );
