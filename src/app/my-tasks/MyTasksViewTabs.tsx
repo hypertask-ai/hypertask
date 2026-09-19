@@ -6,7 +6,7 @@ import { MOBILE_TARGET } from "@/lib/configs/general.config";
 import { MY_TASKS_VIEWS_FLAG } from "@/lib/flags/keys";
 import { MY_TASKS_OVERDUE_BADGES_FLAG } from "@/lib/flags/keys";
 import type { MyTasksSavedView } from "@/models/MyTasksView";
-import { House, MoreHorizontal, Plus } from "lucide-react";
+import { House, MoreHorizontal, Plus, Settings2 } from "lucide-react";
 import { useRef, useState } from "react";
 
 interface Props {
@@ -23,6 +23,7 @@ interface Props {
   onSetDefault: (viewId: number) => void;
   overdueAll?: number;
   overdueByViewId?: Record<number, number>;
+  boardToolbar?: boolean;
 }
 
 const MyTasksViewTabs = ({
@@ -39,6 +40,7 @@ const MyTasksViewTabs = ({
   onSetDefault,
   overdueAll = 0,
   overdueByViewId = {},
+  boardToolbar = false,
 }: Props) => {
   const myTasksViewsEnabled = useFlag(MY_TASKS_VIEWS_FLAG);
   const overdueBadgesEnabled = useFlag(MY_TASKS_OVERDUE_BADGES_FLAG);
@@ -75,6 +77,89 @@ const MyTasksViewTabs = ({
     onDelete(activeView.id);
     setActionsOpen(false);
   };
+
+  const activeViewActions = activeView ? (
+    <>
+      <button
+        type="button"
+        onClick={rename}
+        className="w-full px-3 py-2 text-left text-white-black hover:bg-hover-active"
+      >
+        Rename
+      </button>
+      {!activeView.isDefault ? (
+        <button
+          type="button"
+          onClick={() => {
+            onSetDefault(activeView.id);
+            setActionsOpen(false);
+          }}
+          className="w-full px-3 py-2 text-left text-white-black hover:bg-hover-active"
+        >
+          Set as default
+        </button>
+      ) : null}
+      <button
+        type="button"
+        onClick={remove}
+        className="w-full px-3 py-2 text-left text-destructive hover:bg-hover-active"
+      >
+        Delete
+      </button>
+    </>
+  ) : null;
+
+  if (myTasksViewsEnabled && boardToolbar) {
+    return (
+      <div className="pills-row relative flex min-w-0 flex-1 items-start">
+        <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
+          <BoardViewButton
+            active={activeViewId === null}
+            label="All"
+            count={overdueBadgesEnabled ? overdueAll : 0}
+            onClick={() => onSelect(null)}
+          />
+          {views.map((view) => (
+            <BoardViewButton
+              key={view.id}
+              active={view.id === activeViewId}
+              label={view.name}
+              count={overdueBadgesEnabled ? (overdueByViewId[view.id] ?? 0) : 0}
+              isDefault={view.isDefault}
+              onClick={() => onSelect(view.id)}
+            />
+          ))}
+          <div ref={actionsRef} className="relative flex h-8 items-center">
+            <button
+              type="button"
+              aria-label="Manage views"
+              aria-expanded={actionsOpen}
+              onClick={() => setActionsOpen((open) => !open)}
+              className="group relative flex size-8 items-center justify-center text-text-light-gray hover:text-white-black"
+            >
+              <Settings2 size={14} strokeWidth={1.75} />
+            </button>
+            {actionsOpen && (
+              <div className="absolute left-0 top-full z-40 mt-1 min-w-[180px] rounded-[5px] bg-modalBackground py-1 text-content shadow-md">
+                <button
+                  type="button"
+                  disabled={busy}
+                  onClick={() => {
+                    saveAs();
+                    setActionsOpen(false);
+                  }}
+                  className="w-full px-3 py-2 text-left text-white-black hover:bg-hover-active disabled:opacity-50"
+                >
+                  Save as new view
+                </button>
+                {activeViewActions}
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return myTasksViewsEnabled ? (
     <div className="pills-row relative flex w-full min-w-0 items-center gap-2">
@@ -165,32 +250,7 @@ const MyTasksViewTabs = ({
           </button>
           {actionsOpen && (
             <div className="absolute right-0 top-full z-40 mt-1 min-w-[170px] rounded-[5px] bg-modalBackground py-1 text-content shadow-md">
-              <button
-                type="button"
-                onClick={rename}
-                className="w-full px-3 py-2 text-left text-white-black hover:bg-hover-active"
-              >
-                Rename
-              </button>
-              {!activeView.isDefault && (
-                <button
-                  type="button"
-                  onClick={() => {
-                    onSetDefault(activeView.id);
-                    setActionsOpen(false);
-                  }}
-                  className="w-full px-3 py-2 text-left text-white-black hover:bg-hover-active"
-                >
-                  Set as default
-                </button>
-              )}
-              <button
-                type="button"
-                onClick={remove}
-                className="w-full px-3 py-2 text-left text-destructive hover:bg-hover-active"
-              >
-                Delete
-              </button>
+              {activeViewActions}
             </div>
           )}
         </div>
@@ -198,5 +258,36 @@ const MyTasksViewTabs = ({
     </div>
   ) : null;
 };
+
+const BoardViewButton = ({
+  active,
+  count,
+  isDefault = false,
+  label,
+  onClick,
+}: {
+  active: boolean;
+  count: number;
+  isDefault?: boolean;
+  label: string;
+  onClick: () => void;
+}) => (
+  <button
+    type="button"
+    title={label}
+    onClick={onClick}
+    className={`relative flex h-8 max-w-full min-w-0 items-center gap-1 whitespace-nowrap pr-4 text-content transition-opacity ${
+      active
+        ? "font-semibold text-white-black"
+        : "text-text-light-gray opacity-90 hover:opacity-100"
+    }`}
+  >
+    {isDefault ? <House size={13} strokeWidth={1.75} className="shrink-0" /> : null}
+    <span className="max-w-[min(18rem,calc(100vw-8rem))] truncate">{label}</span>
+    {count > 0 ? (
+      <span className="text-micro font-semibold text-destructive">{count}</span>
+    ) : null}
+  </button>
+);
 
 export default MyTasksViewTabs;

@@ -1,6 +1,7 @@
 /* AMOLED Theme Background Colors */
 .amoled {
   --primary: 222 9% 46%;
+  --color-unsaved-view: #e28c28;
 
   --bg-pageBackground: #000000;
   --bg-taskDetailPage: #000000;

@@ -16,6 +16,7 @@ type Props = {
     sort?: TBoardSortingLevel | null;
     onSortChange?: (sort: TBoardSortingLevel | null) => void | Promise<void>;
     maxLevels?: number;
+    availableModes?: SortingMode[];
 }
 
 const ascendingSortingModes = new Set<SortingMode>([
@@ -56,7 +57,7 @@ const BoardPriorityMode = (props: Props) => {
             : [{ mode: activeSortingView, order: activeSortingOrder }, ...getActiveSortingStackFromProject(_currentProject)]
     );
     const [selectedPriority, setSelectedPriority] = useState<SortingMode>();
-    const priorityModes: SortingMode[] = ["UpdatedAt", "Priority", "DueDate", "Size", "Assignee", "Title", "TicketNumber", "TimeInColumn", "TimeOnBoard", "TimeWithoutComment", "CreatedAt", "SectionChangedAt", "LastCommentAt", "Manual"]
+    const priorityModes: SortingMode[] = props.availableModes ?? ["UpdatedAt", "Priority", "DueDate", "Size", "Assignee", "Title", "TicketNumber", "TimeInColumn", "TimeOnBoard", "TimeWithoutComment", "CreatedAt", "SectionChangedAt", "LastCommentAt", "Manual"]
     const [filteredPriorities, setFilteredPriorities] = useState<SortingMode[]>(priorityModes);
 
     const onKeyChange = (e: ChangeEvent<HTMLInputElement>) => {

@@ -57,8 +57,29 @@ export const useFilterView = (view: "Kanban" | "Calendar" | "MyTasks") => {
     []
   );
 
-  const sourceList =
-    view === "Calendar" ? calendarFilterList : filterCommandLists;
+  const myTasksFilterList = useMemo(
+    () =>
+      myTasksFilters?.involvementEnabled
+        ? [
+            ...filterCommandLists,
+            {
+              key: "involvement",
+              name: "Involvement",
+              type: FilterCommandMode.Involvement,
+              commandMode: FilterCommandMode.Involvement,
+            },
+          ]
+        : filterCommandLists,
+    [myTasksFilters?.involvementEnabled],
+  );
+  let sourceList = filterCommandLists;
+  if (view === "Calendar") sourceList = calendarFilterList;
+  if (view === "MyTasks") sourceList = myTasksFilterList;
+  const hasInvolvementFilter = Boolean(
+    view === "MyTasks" &&
+      myTasksFilters?.involvementEnabled &&
+      !(myTasksFilters.scopes.length === 1 && myTasksFilters.scopes[0] === "assigned"),
+  );
 
   const reOrder = useCallback(
     (activeFilters: TFilter[]) => {
@@ -79,7 +100,7 @@ export const useFilterView = (view: "Kanban" | "Calendar" | "MyTasks") => {
         }
         return calendarFilterList;
       }
-      if (activeFilters.length === 0) {
+      if (activeFilters.length === 0 && !hasInvolvementFilter) {
         return sourceList.filter(
           (x) =>
             x.type !== FilterCommandMode.ClearAll &&
@@ -105,7 +126,13 @@ export const useFilterView = (view: "Kanban" | "Calendar" | "MyTasks") => {
       });
       return clearAll ? [clearAll, ...applied] : applied;
     },
-    [view, calendarFilterList, sourceList, calendarTaskFilters]
+    [
+      view,
+      calendarFilterList,
+      sourceList,
+      calendarTaskFilters,
+      hasInvolvementFilter,
+    ]
   );
 
   const [filteredCommands, setFilteredCommands] = useState<IFilterCommandList[]>(
