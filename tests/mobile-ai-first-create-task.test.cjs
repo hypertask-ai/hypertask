@@ -297,6 +297,10 @@ test("board create entry points follow the AI-first flag", async () => {
   let aiFirstTaskWriterEnabled = false;
   let quickEntryEnabled = false;
   let quickEntryItems = [];
+  const activeViewLabels = [
+    { id: "label-in-view", value: "In view" },
+  ];
+  const quickEntryCreateCalls = [];
   const activeItemWrites = [];
   const moduleMocks = new Map([
     [path.join(root, "src/hooks/useFlag.tsx"), {
@@ -312,10 +316,15 @@ test("board create entry points follow the AI-first flag", async () => {
     }],
     [path.join(root, "src/store/index.ts"), {
       activeItemAtom: { default: null },
-      currentProjectAtom: { default: undefined },
+      currentProjectAtom: { default: { id: 15 } },
     }],
     [path.join(root, "src/hooks/MultiPages/useAddDeleteTaskInBoards.tsx"), {
-      default: () => ({ createItem: () => {} }),
+      default: () => ({
+        createItem: async (params) => {
+          quickEntryCreateCalls.push(params);
+          return true;
+        },
+      }),
     }],
     [path.join(root, "src/hooks/RecoilRoot/useHypertasksRecoilStates.ts"), {
       default: () => ({ toggleCreateTaskGlobally }),
@@ -325,6 +334,15 @@ test("board create entry points follow the AI-first flag", async () => {
     }],
     [path.join(root, "src/utils/helperFunctions/helperFunctions.ts"), {
       returnIfModalOrInputActive: () => false,
+    }],
+    [path.join(root, "src/utils/helperFunctions/Views/ViewsHelperFunctions.ts"), {
+      getActiveFiltersFromProject: () => ({
+        matchFilters: "ANY",
+        addedFilters: [{
+          type: "Labels",
+          searchPayload: activeViewLabels,
+        }],
+      }),
     }],
     [path.join(root, "src/hooks/MultiPages/Route/useHypertasksNavigate.ts"), {
       default: () => ({ navigate: () => {} }),
@@ -348,6 +366,7 @@ test("board create entry points follow the AI-first flag", async () => {
     createCalls.push({ payload, defaultEditFocus });
   }
   let reactRoot;
+  let invokeQuickEntry;
 
   try {
     global.window = testDom.window;
@@ -405,6 +424,7 @@ test("board create entry points follow the AI-first flag", async () => {
         sectionId: 9190,
         projectId: 15,
       });
+      invokeQuickEntry = invokeCreateItem;
       return React.createElement(
         "div",
         {
@@ -515,6 +535,13 @@ test("board create entry points follow the AI-first flag", async () => {
     assert.equal(createCalls.length, modalCallsBeforeQuickEntry);
     assert.equal(container.firstElementChild.dataset.quickEntryOpen, "true");
     assert.equal(container.firstElementChild.dataset.quickEntryPosition, "top");
+    await React.act(async () => {
+      await invokeQuickEntry("Visible in filtered view", true);
+    });
+    assert.deepEqual(
+      quickEntryCreateCalls.at(-1).item.tags,
+      activeViewLabels,
+    );
     await cancelQuickEntry();
     assert.equal(container.firstElementChild.dataset.quickEntryOpen, "false");
     assert.ok(container.querySelector(".create-new-task-button"));
@@ -576,6 +603,141 @@ test("board create entry points follow the AI-first flag", async () => {
       testDom.window.HTMLElement.prototype.scrollIntoView = previousScrollIntoView;
     }
     testDom.window.close();
+    for (const [name, descriptor] of previousGlobals) {
+      if (descriptor === undefined) delete global[name];
+      else Object.defineProperty(global, name, descriptor);
+    }
+  }
+});
+
+test("inline board creation persists labels through the shared create path", async () => {
+  const dom = new JSDOM("<!doctype html><div id='root'></div>", {
+    url: "https://app.hypertask.ai/project/15",
+  });
+  const previousGlobals = new Map(
+    ["window", "document", "navigator", "IS_REACT_ACT_ENVIRONMENT"].map((name) => [
+      name,
+      Object.getOwnPropertyDescriptor(global, name),
+    ]),
+  );
+  const project = {
+    id: 15,
+    uniqueIdentifier: "HTPR",
+    sorting_mode: "Priority",
+    sections: [{ sectionId: 9190, items: [] }],
+  };
+  const currentProjectAtom = {};
+  const currentUserAtom = {};
+  const createRequests = [];
+  let hook;
+  let reactRoot;
+  const moduleMocks = new Map([
+    [path.join(root, "src/store/index.ts"), {
+      activeSectionAtom: {},
+      currentProjectAtom,
+      currentUserAtom,
+    }],
+    [path.join(root, "src/lib/state.tsx"), {
+      useRecoilValue: (atom) => atom === currentProjectAtom ? project : { id: 7 },
+    }],
+    [require.resolve("jotai"), {
+      useStore: () => ({ get: () => 0 }),
+    }],
+    [require.resolve("@tanstack/react-query"), {
+      useQueryClient: () => ({
+        invalidateQueries: async () => {},
+        setQueryData: () => {},
+      }),
+    }],
+    [path.join(root, "src/hooks/MultiPages/useUpdateTaskInBoards.tsx"), {
+      default: () => ({
+        getProjectIdxAndAllData: async () => ({
+          allData: { updatedProjects: [project] },
+          projectToUpdateIndex: 0,
+        }),
+        mutationHandler: () => {},
+        updateActiveItemAndItemInView: () => {},
+      }),
+    }],
+    [path.join(root, "src/utils/generateRank.ts"), {
+      default: () => "inline-rank",
+    }],
+    [path.join(root, "src/utils/helperFunctions/helperFunctions.ts"), {
+      returnSortedItems: (items) => items,
+    }],
+    [path.join(root, "src/utils/api/global/apiHelpers/createTaskGloballycontroller.ts"), {
+      default: async (request) => {
+        createRequests.push(request);
+        return {
+          error: false,
+          resposne: {
+            newTask: {
+              id: 1001,
+              projectId: 15,
+              sectionId: 9190,
+              ranking: "inline-rank",
+              taskLabels: request.tags.map((label) => ({ label })),
+            },
+          },
+        };
+      },
+    }],
+  ]);
+  const previousModules = new Map(
+    [...moduleMocks].map(([filename]) => [filename, require.cache[filename]]),
+  );
+
+  try {
+    global.window = dom.window;
+    global.document = dom.window.document;
+    global.navigator = dom.window.navigator;
+    global.IS_REACT_ACT_ENVIRONMENT = true;
+    for (const [filename, exports] of moduleMocks) {
+      require.cache[filename] = {
+        id: filename,
+        filename,
+        loaded: true,
+        exports,
+      };
+    }
+    const hookJiti = createJiti(__filename, {
+      alias: { "@": path.join(root, "src") },
+      interopDefault: true,
+      jsx: true,
+    });
+    const useAddDeleteTaskInBoards = hookJiti(
+      path.join(root, "src/hooks/MultiPages/useAddDeleteTaskInBoards.tsx"),
+    ).default;
+    const Harness = () => {
+      hook = useAddDeleteTaskInBoards();
+      return null;
+    };
+    const { createRoot } = require("react-dom/client");
+    reactRoot = createRoot(document.getElementById("root"));
+    await React.act(async () => reactRoot.render(React.createElement(Harness)));
+
+    const tags = [{ id: "label-in-view", value: "In view" }];
+    const created = await hook.createItem({
+      sectionId: 9190,
+      section: "Backlog",
+      item: { title: "Visible in filtered view", tags },
+      position: "top",
+      createAnother: true,
+      projectId: 15,
+    });
+
+    assert.equal(created, true);
+    assert.equal(createRequests.length, 1);
+    assert.deepEqual(createRequests[0].tags, tags);
+    assert.equal(createRequests[0].projectIdentifier, "HTPR");
+    assert.equal(createRequests[0].priority.Priority_Value, "Urgent");
+  } finally {
+    if (reactRoot) await React.act(async () => reactRoot.unmount());
+    for (const [filename, previous] of previousModules) {
+      if (previous === undefined) delete require.cache[filename];
+      else require.cache[filename] = previous;
+    }
+    dom.window.close();
     for (const [name, descriptor] of previousGlobals) {
       if (descriptor === undefined) delete global[name];
       else Object.defineProperty(global, name, descriptor);

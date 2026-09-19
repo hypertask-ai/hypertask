@@ -18,6 +18,7 @@ import { KeyCodes } from "@/lib/constants/keyboard-handler";
 import useHypertasksNavigate from "../MultiPages/Route/useHypertasksNavigate";
 import { MobileViewContext } from "@/lib/contexts/mobileContext";
 import { useFlag } from "@/hooks/useFlag";
+import { getActiveFiltersFromProject } from "@/utils/helperFunctions/Views/ViewsHelperFunctions";
 
 type SectionKeydownHandler = (event: KeyboardEvent) => void;
 
@@ -118,10 +119,14 @@ const useSections = ({
 
   // ======================== user presses [Enter] to CREATE a task, keeping the box open for the next one
   const invokeCreateItem = async (taskTitle: string, createAnother: boolean): Promise<boolean> => {
+    const tags = getActiveFiltersFromProject(_currentProject).addedFilters.find(
+      (filter) => filter.type === "Labels",
+    )?.searchPayload;
     const itemToCreate = {
       title: taskTitle,
       description: "",
       id: -1,
+      tags,
     };
     if (!position) return false;
     const created = await createItem({
