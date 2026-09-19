@@ -6,9 +6,9 @@ The runner fetches the public repository's `production` branch into its own bare
 
 Each run has its own Docker network, output directory and log. The sandbox has a 6 GB memory limit, 3 CPUs and 512 processes. A run stops after 45 minutes or a $30 model cost estimate. That estimate bounds subscription usage; it is not a separate API purchase. The runner removes only containers on its own network.
 
-A successful exit from Strix is insufficient. The runner requires one report in its own output directory, completed run metadata, and an explicit statement that the requested scope was reviewed. Reports that admit incomplete coverage fail. This checks the report's consistency; it cannot independently prove that the model reviewed every line.
+Strix exit code 2 means it found vulnerabilities and must continue to report validation. Neither exit code 0 nor 2 proves that a scan completed. The runner requires one report in its own output directory, completed run metadata, and an explicit statement that the requested scope was reviewed. Reports that admit incomplete coverage fail. This checks the report's consistency; it cannot independently prove that the model reviewed every line.
 
-Findings need two confirmation checks before filing on board 15. Filing uses `htbot`, the approved Product Bot wrapper. It never loads a personal token or assigns Valentin. Confirmation or filing errors fail the job and retain the previous baseline. Successfully filed titles are saved immediately so a later retry does not duplicate them.
+Findings need two confirmation checks before filing on board 15. Both checks receive the reported source plus nearby caller and test context, so a misleading helper comment cannot stand in for its actual use. Filing uses `htbot`, the approved Product Bot wrapper. It never loads a personal token or assigns Valentin. Confirmation or filing errors fail the job and retain the previous baseline. Successfully filed titles are saved immediately so a later retry does not duplicate them.
 
 Install the three scripts together:
 

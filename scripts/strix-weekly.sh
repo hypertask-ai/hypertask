@@ -52,7 +52,7 @@ tmp=path.with_suffix('.tmp')
 tmp.write_text(json.dumps(dict(status='running',job=job,started_at=datetime.datetime.now(datetime.timezone.utc).isoformat()),indent=2)+'\n')
 os.replace(tmp,path)
 PY_STATUS
-for command in strix docker git curl timeout python3 htbot; do command -v "$command" >/dev/null; done
+for command in strix docker git curl timeout python3 htbot rg; do command -v "$command" >/dev/null; done
 systemctl --user start strix-chatgpt-proxy.service
 curl --fail --silent --show-error --retry 10 --retry-connrefused --retry-delay 1 --max-time 10 http://127.0.0.1:48100/health >/dev/null
 # Fetch into our own mirror. Never scan a developer's dirty checkout or .env files.
@@ -77,9 +77,12 @@ export STRIX_LLM=openai/gpt-5.6-sol LLM_API_KEY=chatgpt-oauth LLM_API_BASE=http:
 export STRIX_REASONING_EFFORT=medium STRIX_TELEMETRY=false
 export STRIX_SANDBOX_MEM_LIMIT=6g STRIX_SANDBOX_CPUS=3 STRIX_SANDBOX_PIDS_LIMIT=512
 cd "$JOB"
+scan_exit=0
 timeout --signal=TERM --kill-after=60 "${STRIX_TIMEOUT:-2700}" strix -n -m "${STRIX_SCAN_MODE:-standard}" \
   --scope-mode diff --diff-base "$BASE" --mount "$JOB/source" --max-budget-usd "$BUDGET" \
-  --instruction 'Authorized source-only security review of the injected changed-file scope. Prioritize authentication, API and MCP authorization, browser sessions, injection, SSRF and secret exposure. Use targeted source inspection and small local reproductions. Never access live application URLs or remote services. Do not run repository-wide scanners. Keep delegation small and finish within the budget. Report concrete file:line evidence. If any requested review remains unfinished, explicitly write COVERAGE_INCOMPLETE in the final report. Only after reviewing the changed scope, write COVERAGE_COMPLETE in the methodology. Do not claim a clean bill of health for the whole application.'
+  --instruction 'Authorized source-only security review of the injected changed-file scope. Prioritize authentication, API and MCP authorization, browser sessions, injection, SSRF and secret exposure. Use targeted source inspection and small local reproductions. Never access live application URLs or remote services. Do not run repository-wide scanners. Keep delegation small and finish within the budget. Report concrete file:line evidence. If any requested review remains unfinished, explicitly write COVERAGE_INCOMPLETE in the final report. Only after reviewing the changed scope, write COVERAGE_COMPLETE in the methodology. Do not claim a clean bill of health for the whole application.' || scan_exit=$?
+# Strix uses 2 for findings, including on incomplete scans. Validate the report next.
+if [ "$scan_exit" -ne 0 ] && [ "$scan_exit" -ne 2 ]; then exit "$scan_exit"; fi
 RUN=$(python3 "$SCRIPT_DIR/strix-check-run.py" "$JOB/strix_runs")
 STRIX_APP="$JOB/source" STRIX_FILED_STATE="$STATE/filed-titles.json" python3 "$SCRIPT_DIR/strix-file-tickets.py" "$RUN"
 STATUS=completed
