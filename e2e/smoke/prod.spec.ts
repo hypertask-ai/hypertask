@@ -125,11 +125,64 @@ function isBotChallenge(response: import('@playwright/test').Response | null): b
   return response?.headers()['x-vercel-mitigated'] === 'challenge'
 }
 
+test.afterEach(async ({ page }, testInfo) => {
+  let diagnostic: unknown
+  try {
+    diagnostic = await page.evaluate(() =>
+      (window as typeof window & { __htHydrationDiagnostic?: unknown }).__htHydrationDiagnostic,
+    )
+  } catch {
+    return
+  }
+  if (!diagnostic) return
+
+  const diagnosticJson = JSON.stringify(diagnostic, null, 2)
+  console.error(`HYDRATION_DIAGNOSTIC ${testInfo.title}\n${diagnosticJson}`)
+  await testInfo.attach('hydration-diagnostic', {
+    body: diagnosticJson,
+    contentType: 'application/json',
+  })
+})
+
 for (const view of VIEWS) {
   test(`${view.name} loads`, async ({ page }) => {
     const viewPath = typeof view.path === 'function' ? view.path() : view.path
     const pageErrors: Error[] = []
     page.on('pageerror', (err) => pageErrors.push(err))
+    await page.addInitScript(() => {
+      const mutations: string[] = []
+      const summarizeNode = (node: Node) => {
+        if (!(node instanceof Element)) return node.nodeName.toLowerCase()
+        const id = node.id ? `#${node.id}` : ''
+        const classes = Array.from(node.classList).slice(0, 4).map((name) => `.${name}`).join('')
+        return `${node.tagName.toLowerCase()}${id}${classes}`
+      }
+      const summarizeRecord = (record: MutationRecord) => JSON.stringify({
+        at: Math.round(performance.now()),
+        readyState: document.readyState,
+        target: summarizeNode(record.target),
+        added: Array.from(record.addedNodes, summarizeNode),
+        removed: Array.from(record.removedNodes, summarizeNode),
+      })
+      const observer = new MutationObserver((records) => {
+        mutations.push(...records.map(summarizeRecord))
+        if (mutations.length > 100) mutations.splice(0, mutations.length - 100)
+      })
+      observer.observe(document, { childList: true, subtree: true })
+      window.addEventListener('error', (event) => {
+        if (!/(?:Minified React error #418|Hydration failed)/i.test(event.message)) return
+        const error = event.error as Error & { cause?: unknown; componentStack?: string; digest?: string }
+        const pending = observer.takeRecords().map(summarizeRecord)
+        ;(window as typeof window & { __htHydrationDiagnostic?: unknown }).__htHydrationDiagnostic = {
+          message: event.message,
+          stack: error?.stack,
+          componentStack: error?.componentStack,
+          digest: error?.digest,
+          cause: error?.cause instanceof Error ? `${error.cause.message}\n${error.cause.stack ?? ''}` : String(error?.cause ?? ''),
+          mutations: [...mutations, ...pending].slice(-100),
+        }
+      }, true)
+    })
 
     let response
     try {
