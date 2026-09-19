@@ -124,3 +124,17 @@ test("Task Writer result still creates the finished ticket directly", () => {
     /isMbl && descriptionFirstEnabled \? "min-h-\[42svh\]"/,
   );
 });
+
+test("Task Writer snapshots the current editor content when direct save starts", () => {
+  assert.match(
+    createTaskEditor,
+    /const saveWithTaskWriter = \(\) => \{[\s\S]*?resolveTaskWriterDescription\(\s*editor\?\.getHTML\(\),\s*formValues\.description,?\s*\)[\s\S]*?taskWriterSubmittedDescriptionRef\.current/,
+  );
+});
+
+test("Task Writer direct save blocks create-task keyboard shortcuts", () => {
+  assert.match(
+    createTaskEditor,
+    /if \(cmdControl && e\.key === "Enter"\) \{\s*if \(isSavingWithTaskWriter\) return;/,
+  );
+});

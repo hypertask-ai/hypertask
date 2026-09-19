@@ -781,7 +781,10 @@ const TiptapCreateTaskModal = () => {
   const saveWithTaskWriter = () => {
     if (isSavingWithTaskWriter) return;
     aiPromptRef.current = undefined;
-    taskWriterSubmittedDescriptionRef.current = taskWriterDescription;
+    taskWriterSubmittedDescriptionRef.current = resolveTaskWriterDescription(
+      editor?.getHTML(),
+      formValues.description,
+    );
     setHasOpenedClassicForm(true);
     setIsSavingWithTaskWriter(true);
     setShouldShowAITaskWriter(true);
@@ -929,6 +932,7 @@ const TiptapCreateTaskModal = () => {
     var cmdControl = (isApple && e.metaKey) || (!isApple && e.ctrlKey);
     if (showAssignModal || isRecording) return;
     if (cmdControl && e.key === "Enter") {
+      if (isSavingWithTaskWriter) return;
       // When AI Task Writer is visible and focused, let it handle Ctrl+Enter to send the prompt
       if (shouldShowAiTaskWriter) {
         const aiWriterEl = document.getElementById(divIds.popoverId);
