@@ -20,6 +20,7 @@ import {
 } from "@/lib/flags";
 import { sanitizeAgentAssigneeOwner } from "@/lib/assignees";
 import type { IProjectView } from "@/models/model";
+import { persistDisabledStagedEmptySections } from "@/utils/controllers/projects/views/viewsHelperAPIfunctions";
 import { maskPersonalEmptySectionsForUnsavedView } from "@/utils/helperFunctions/Views/ViewsHelperFunctions";
 
 /**
@@ -92,9 +93,11 @@ const getBoardTasks = async (
     if (
       sanitizedProject.project_view?.user_project_views[0]?.unsavedView
     ) {
-      sanitizedProject.project_view = maskPersonalEmptySectionsForUnsavedView(
-        sanitizedProject.project_view as unknown as IProjectView,
-        emptyColumnsSaveViewEnabled,
+      const projectView = sanitizedProject.project_view as unknown as IProjectView;
+      sanitizedProject.project_view = (
+        emptyColumnsSaveViewEnabled
+          ? maskPersonalEmptySectionsForUnsavedView(projectView, true)
+          : await persistDisabledStagedEmptySections(projectView, userId)
       ) as unknown as typeof sanitizedProject.project_view;
     }
     const { allViews = [], ...projectView } =

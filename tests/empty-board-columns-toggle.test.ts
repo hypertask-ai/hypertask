@@ -295,8 +295,9 @@ test("a staged unsaved choice outranks but does not erase the personal setting",
     "Hidden",
   );
   assert.equal(
-    disabled.user_project_views[0].unsavedView?.board_empty_sections_staged,
-    false,
+    disabled.user_project_views[0].unsavedView,
+    undefined,
+    "disabling the flag removes a staged-only unsaved view",
   );
   assert.equal(
     getActiveEmptySectionSettingFromProject(project as never),
@@ -319,6 +320,39 @@ test("a staged unsaved choice outranks but does not erase the personal setting",
     "removing the unsaved view must reveal the retained personal setting",
   );
   assert.equal(applied.ViewLastUsed[0].board_empty_sections, "Hidden");
+});
+
+test("disabling staging preserves unrelated unsaved edits", () => {
+  const applied = {
+    ...view("speed", "Show"),
+    board_sorting_order: "Descending",
+    ViewLastUsed: [{ board_empty_sections: "Hidden" }],
+  };
+  const project = projectWith({
+    unsaved: {
+      ...view("unsaved", "Show", true),
+      board_sorting_order: "Ascending",
+    } as never,
+    applied: applied as never,
+  });
+
+  const disabled = maskPersonalEmptySectionsForUnsavedView(
+    project.project_view as never,
+    false,
+  );
+
+  assert.equal(
+    disabled.user_project_views[0].unsavedView?.board_empty_sections,
+    "Hidden",
+  );
+  assert.equal(
+    disabled.user_project_views[0].unsavedView?.board_empty_sections_staged,
+    false,
+  );
+  assert.equal(
+    disabled.user_project_views[0].unsavedView?.board_sorting_order,
+    "Ascending",
+  );
 });
 
 test("a URL-pinned view keeps its personal setting through snapshot restore", () => {
@@ -609,6 +643,7 @@ test("the flagged command stages empty-column changes in the save-view routine",
   );
   assert.match(unsavedRoute, /isFeatureEnabled\(\s*HTPR_6588_EMPTY_COLUMNS_SAVE_VIEW_FLAG/);
   assert.match(unsavedRoute, /req\.body\.updateMode === STAGED_EMPTY_SECTIONS_UPDATE_MODE/);
+  assert.match(unsavedRoute, /return res\.status\(409\)/);
   assert.match(unsavedRoute, /board_empty_sections_staged: stagesEmptySections/);
   assert.match(unsavedRoute, /\? \{ board_empty_sections_staged: true \}/);
   assert.match(
@@ -624,6 +659,9 @@ test("the flagged command stages empty-column changes in the save-view routine",
   );
   assert.match(projectViewReader, /isFeatureEnabled\(\s*HTPR_6588_EMPTY_COLUMNS_SAVE_VIEW_FLAG/);
   assert.match(projectViewReader, /maskPersonalEmptySectionsForUnsavedView/);
+  assert.match(projectViewReader, /persistDisabledStagedEmptySections/);
+  assert.match(projectViewReader, /data: \{ unsavedViewId: null \}/);
+  assert.match(projectViewReader, /board_empty_sections_staged: false/);
 
   const boardReader = fs.readFileSync(
     path.join(root, "src/utils/controllers/projects/getBoardTasks.ts"),

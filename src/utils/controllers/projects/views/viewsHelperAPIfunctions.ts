@@ -5,7 +5,51 @@ import {
 import prisma from "@/lib/prisma";
 import type { IProjectView } from "@/models/model";
 import { sanitizeProjectViewBoardFilters } from "@/utils/helperFunctions/Views/BoardFilterSanitizer";
-import { maskPersonalEmptySectionsForUnsavedView } from "@/utils/helperFunctions/Views/ViewsHelperFunctions";
+import {
+  maskPersonalEmptySectionsForUnsavedView,
+  normalizeDisabledStagedEmptySections,
+} from "@/utils/helperFunctions/Views/ViewsHelperFunctions";
+
+export const persistDisabledStagedEmptySections = async (
+  projectView: IProjectView,
+  currentUserId: number,
+): Promise<IProjectView> => {
+  const normalization = normalizeDisabledStagedEmptySections(projectView);
+  if (!normalization.unsavedViewId || !normalization.restoredSetting) {
+    return normalization.projectView;
+  }
+
+  await prisma.$transaction(async (tx) => {
+    if (normalization.stagedOnly) {
+      await tx.user_Project_View.updateMany({
+        where: {
+          userId: currentUserId,
+          project_view_id: projectView.id,
+          unsavedViewId: normalization.unsavedViewId,
+        },
+        data: { unsavedViewId: null },
+      });
+      await tx.view.deleteMany({
+        where: {
+          id: normalization.unsavedViewId,
+          userId: currentUserId,
+        },
+      });
+      return;
+    }
+    await tx.view.updateMany({
+      where: {
+        id: normalization.unsavedViewId,
+        userId: currentUserId,
+      },
+      data: {
+        board_empty_sections: normalization.restoredSetting,
+        board_empty_sections_staged: false,
+      },
+    });
+  });
+  return normalization.projectView;
+};
 
 const getProjectView = async (projectId: number, currentUserId: number) => {
   const project_view_updated = await prisma.project_View.findUnique({
@@ -84,10 +128,11 @@ const getProjectView = async (projectId: number, currentUserId: number) => {
     HTPR_6588_EMPTY_COLUMNS_SAVE_VIEW_FLAG,
     currentUserId,
   );
-  return maskPersonalEmptySectionsForUnsavedView(
-    sanitizedProjectView as unknown as IProjectView,
-    emptyColumnsSaveViewEnabled,
-  ) as unknown as typeof sanitizedProjectView;
+  const typedProjectView = sanitizedProjectView as unknown as IProjectView;
+  const normalizedProjectView = emptyColumnsSaveViewEnabled
+    ? maskPersonalEmptySectionsForUnsavedView(typedProjectView, true)
+    : await persistDisabledStagedEmptySections(typedProjectView, currentUserId);
+  return normalizedProjectView as unknown as typeof sanitizedProjectView;
 };
 
 export const getUniqueSlug = async (

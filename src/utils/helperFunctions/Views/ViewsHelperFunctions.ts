@@ -8,7 +8,7 @@ import {
   TBoardSortingViewOrder,
   TBoardSubtaskSetting,
 } from "@/models/Views/model";
-import { deepCopy, getFromLocalStorage } from "@/utils/helperFunctions/helperFunctions";
+import { deepCopy, getFromLocalStorage, isDeepEqual } from "@/utils/helperFunctions/helperFunctions";
 import axios from "axios";
 import { defaultFilterSettings, getFilteredSections } from "./FilterHelperFunctions";
 import sortByStringParam from "@/utils/sortByParam";
@@ -465,6 +465,83 @@ export const clearProjectViewPersonalEmptySections = (
   viewId: string,
 ): IProjectView => patchProjectViewPersonalEmptySections(projectView, viewId, null)
 
+const comparableViewSettings = (
+  view: IView,
+  boardEmptySections = view.board_empty_sections,
+) => ({
+  board_columns_view: view.board_columns_view,
+  board_filters: view.board_filters,
+  board_sorting_mode: view.board_sorting_mode,
+  board_sorting_order: view.board_sorting_order,
+  board_sorting_stack: view.board_sorting_stack ?? [],
+  board_subtask_setting: view.board_subtask_setting,
+  board_empty_sections: boardEmptySections,
+  board_staleness: view.board_staleness ?? null,
+  board_show_archived: view.board_show_archived ?? null,
+  table_sort_column: view.table_sort_column ?? null,
+  table_sort_direction: view.table_sort_direction ?? null,
+  board_layout: view.board_layout ?? null,
+})
+
+export type TDisabledStagedEmptySectionsNormalization = {
+  projectView: IProjectView
+  unsavedViewId?: string
+  stagedOnly: boolean
+  restoredSetting?: TBoardEmptySections
+}
+
+export const normalizeDisabledStagedEmptySections = (
+  projectView: IProjectView,
+): TDisabledStagedEmptySectionsNormalization => {
+  const row = projectView.user_project_views[0]
+  const unsavedView = row?.unsavedView
+  const baseView = row?.appliedView ?? projectView.default_view
+  if (!unsavedView?.board_empty_sections_staged || !baseView) {
+    return { projectView, stagedOnly: false }
+  }
+
+  const restoredSetting =
+    personalEmptySectionSetting(baseView) ??
+    baseView.board_empty_sections ??
+    "Show"
+  const normalizedUnsaved = {
+    ...unsavedView,
+    board_empty_sections: restoredSetting,
+    board_empty_sections_staged: false,
+  }
+  const stagedOnly = isDeepEqual(
+    comparableViewSettings(normalizedUnsaved),
+    comparableViewSettings(baseView, restoredSetting),
+  )
+  const unsavedViewId = unsavedView.id
+
+  return {
+    unsavedViewId,
+    stagedOnly,
+    restoredSetting,
+    projectView: {
+      ...projectView,
+      board_empty_sections_staging_enabled: false,
+      allViews: projectView.allViews
+        ?.filter((view) => !stagedOnly || view.id !== unsavedViewId)
+        .map((view) =>
+          !stagedOnly && view.id === unsavedViewId
+            ? normalizedUnsaved
+            : view
+        ),
+      user_project_views: projectView.user_project_views.map((entry, index) =>
+        index === 0
+          ? {
+              ...entry,
+              unsavedViewId: stagedOnly ? undefined : unsavedViewId,
+              unsavedView: stagedOnly ? undefined : normalizedUnsaved,
+            }
+          : entry
+      ),
+    },
+  }
+}
+
 export const maskPersonalEmptySectionsForUnsavedView = (
   projectView: IProjectView,
   stagingEnabled: boolean,
@@ -476,20 +553,7 @@ export const maskPersonalEmptySectionsForUnsavedView = (
   const row = withFlag.user_project_views[0]
   if (!row?.unsavedView?.board_empty_sections_staged) return withFlag
   if (!stagingEnabled) {
-    return {
-      ...withFlag,
-      user_project_views: withFlag.user_project_views.map((entry, index) =>
-        index === 0
-          ? {
-              ...entry,
-              unsavedView: {
-                ...entry.unsavedView!,
-                board_empty_sections_staged: false,
-              },
-            }
-          : entry
-      ),
-    }
+    return normalizeDisabledStagedEmptySections(withFlag).projectView
   }
   const baseView = row.appliedView ?? withFlag.default_view
   return baseView

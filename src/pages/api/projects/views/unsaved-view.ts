@@ -158,15 +158,19 @@ const handler: NextApiHandler = async (
       }
       const hasValidEmptySections =
         isBoardEmptySectionSetting(board_empty_sections);
+      const requestsStagedEmptySections =
+        req.body.updateMode === STAGED_EMPTY_SECTIONS_UPDATE_MODE;
       const emptyColumnsSaveViewEnabled =
         hasValidEmptySections &&
         await isFeatureEnabled(
           HTPR_6588_EMPTY_COLUMNS_SAVE_VIEW_FLAG,
           currentUser.id,
         );
+      if (requestsStagedEmptySections && !emptyColumnsSaveViewEnabled) {
+        return res.status(409).json({ message: "Staged empty columns are disabled" });
+      }
       const stagesEmptySections =
-        req.body.updateMode === STAGED_EMPTY_SECTIONS_UPDATE_MODE &&
-        emptyColumnsSaveViewEnabled;
+        requestsStagedEmptySections && emptyColumnsSaveViewEnabled;
       const personalEmptySectionsViewId =
         baseView?.id ??
         user_project_view?.appliedView?.id ??

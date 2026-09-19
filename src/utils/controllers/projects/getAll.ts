@@ -10,6 +10,7 @@ import {
   getProjectWhere,
   projectBootstrapSelect,
 } from "./getAllIncludes";
+import { persistDisabledStagedEmptySections } from "@/utils/controllers/projects/views/viewsHelperAPIfunctions";
 import { sanitizeProjectBoardFilters } from "@/utils/helperFunctions/Views/BoardFilterSanitizer";
 import { maskPersonalEmptySectionsForUnsavedView } from "@/utils/helperFunctions/Views/ViewsHelperFunctions";
 
@@ -74,7 +75,7 @@ const getAll = async (
 
     return {
       status: 200,
-      json: projects.map((project) => {
+      json: await Promise.all(projects.map(async (project) => {
         const sanitizedProject = sanitizeProjectBoardFilters(project);
         if (
           !("project_view" in sanitizedProject) ||
@@ -82,14 +83,19 @@ const getAll = async (
         ) {
           return sanitizedProject;
         }
+        const projectView = sanitizedProject.project_view as unknown as IProjectView;
+        if (!projectView.user_project_views[0]?.unsavedView) {
+          return sanitizedProject;
+        }
         return {
           ...sanitizedProject,
-          project_view: maskPersonalEmptySectionsForUnsavedView(
-            sanitizedProject.project_view as unknown as IProjectView,
-            emptyColumnsSaveViewEnabled,
+          project_view: (
+            emptyColumnsSaveViewEnabled
+              ? maskPersonalEmptySectionsForUnsavedView(projectView, true)
+              : await persistDisabledStagedEmptySections(projectView, userId)
           ) as unknown as typeof sanitizedProject.project_view,
         };
-      }),
+      })),
     };
   } catch (error) {
     console.log(error);
