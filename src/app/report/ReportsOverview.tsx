@@ -74,12 +74,12 @@ const ReportsOverview = ({
   currentUser,
   reports,
   builtins,
-  nativeReportsEnabled,
+  nativeReportsEnabled = false,
 }: {
   currentUser: IUser;
   reports: ReportRow[];
   builtins: BuiltinRow[];
-  nativeReportsEnabled: boolean;
+  nativeReportsEnabled?: boolean;
 }) => (
   <ReportShell currentUser={currentUser}>
     <header>
