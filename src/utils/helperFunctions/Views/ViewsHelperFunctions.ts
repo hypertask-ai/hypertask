@@ -352,6 +352,32 @@ export const getActiveFiltersFromProject = (project?:IProject|null):IFilterSetti
     return deepCopy(unsaved??applied??defaultView??defaultFilterSettings)
 }
 
+export const stageBoardFiltersInProjectView = (
+    projectView: IProjectView,
+    filters: IFilterSettings,
+): IProjectView => {
+    const row = projectView.user_project_views[0]
+    const activeView = row?.unsavedView ?? row?.appliedView ?? projectView.default_view
+    if (!row || !activeView) return projectView
+
+    const unsavedView = {
+        ...activeView,
+        board_filters: deepCopy(filters),
+    }
+
+    return {
+        ...projectView,
+        user_project_views: [
+            {
+                ...row,
+                unsavedView,
+                unsavedViewId: unsavedView.id,
+            },
+            ...projectView.user_project_views.slice(1),
+        ],
+    }
+}
+
 export const getActiveSubtaskSettingFromProject = (project?:IProject|null):TBoardSubtaskSetting=>{
   const view = project?.project_view?.user_project_views[0]
   if (!project || !view) return DEFAULT_SUBTASK_SETTING
