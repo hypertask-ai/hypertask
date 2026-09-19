@@ -57,8 +57,8 @@ test('OpenAI annotations distinguish reads, writes, destructive actions, and pub
     destructiveHint: false,
     openWorldHint: false,
   })
-  assert.deepEqual(openAiDirectoryToolAnnotations('hypertask_delete_agent'), {
-    title: 'Delete Agent',
+  assert.deepEqual(openAiDirectoryToolAnnotations('hypertask_link_tasks'), {
+    title: 'Link Tasks',
     readOnlyHint: false,
     destructiveHint: true,
     openWorldHint: false,
