@@ -43,6 +43,15 @@ PY
 trap finish EXIT
 trap 'exit 130' INT
 trap 'exit 143' TERM
+python3 - "$STATE" "$JOB" <<'PY_STATUS'
+import datetime,json,os,sys
+from pathlib import Path
+state,job=sys.argv[1:]
+path=Path(state)/'latest.json'
+tmp=path.with_suffix('.tmp')
+tmp.write_text(json.dumps(dict(status='running',job=job,started_at=datetime.datetime.now(datetime.timezone.utc).isoformat()),indent=2)+'\n')
+os.replace(tmp,path)
+PY_STATUS
 for command in strix docker git curl timeout python3 htbot; do command -v "$command" >/dev/null; done
 systemctl --user start strix-chatgpt-proxy.service
 curl --fail --silent --show-error --retry 10 --retry-connrefused --retry-delay 1 --max-time 10 http://127.0.0.1:48100/health >/dev/null
