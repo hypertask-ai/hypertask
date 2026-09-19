@@ -180,6 +180,7 @@ const handler: NextApiHandler = async (
                 : { board_sorting_stack: view_settings.board_sorting_stack ?? [] }),
               board_subtask_setting: view_settings.board_subtask_setting,
               board_empty_sections: view_settings.board_empty_sections,
+              board_empty_sections_staged: false,
               board_staleness: view_settings.board_staleness ?? null,
               // Same reason as the sorting stack: a filter-only save omits this field, and
               // defaulting to null would wipe a view's saved "show archived" choice.

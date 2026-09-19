@@ -961,6 +961,7 @@ model View {
   board_sorting_order   SortingOrder     @default(Descending)
   board_subtask_setting SubtaskSetting   @default(Flattened_Card)
   board_empty_sections  EmptySections    @default(Show)
+  board_empty_sections_staged Boolean       @default(false)
   // null inherits the board's Project.stalenessEnabled; true/false overrides per view.
   board_staleness       Boolean?
   // null inherits the browser-level "show archived tasks" preference; true/false

@@ -404,12 +404,16 @@ export const getActiveEmptySectionSettingFromProjectView = (
         .map(personalEmptySectionSetting)
         .find((setting) => setting !== undefined)
     : undefined
-  // Saved-view preferences intentionally outrank stale legacy unsaved values; callers only
-  // persist to an unsaved view when the board has no applied or default saved view.
   const unsaved = row?.unsavedView?.board_empty_sections
   const applied = row?.appliedView?.board_empty_sections
   const defaultView = projectView?.default_view?.board_empty_sections
-  return deepCopy(personal ?? unsaved ?? applied ?? defaultView ?? "Show")
+  // Only an explicit staged toggle outranks the old personal preference. Ordinary
+  // unsaved view changes keep the legacy precedence until the feature is used.
+  return deepCopy(
+    row?.unsavedView?.board_empty_sections_staged
+      ? unsaved ?? personal ?? applied ?? defaultView ?? "Show"
+      : personal ?? unsaved ?? applied ?? defaultView ?? "Show"
+  )
 }
 
 export const getActiveEmptySectionSettingFromProject = (project?:IProject|null):TBoardEmptySections=>
@@ -465,7 +469,7 @@ export const maskPersonalEmptySectionsForUnsavedView = (
 ): IProjectView => {
   const row = projectView.user_project_views[0]
   const baseView = row?.appliedView ?? projectView.default_view
-  return row?.unsavedView && baseView
+  return row?.unsavedView?.board_empty_sections_staged && baseView
     ? clearProjectViewPersonalEmptySections(projectView, baseView.id)
     : projectView
 }

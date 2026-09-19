@@ -4,7 +4,6 @@ import fs from "node:fs";
 import path from "node:path";
 import {
   beginEmptySectionMutation,
-  clearProjectViewPersonalEmptySections,
   getActiveEmptySectionSettingFromProject,
   getActiveEmptySectionSettingFromProjectView,
   getEmptySectionSettingForView,
@@ -24,9 +23,14 @@ import {
 
 const root = path.resolve(__dirname, "..");
 
-const view = (id: string, setting: "Show" | "Hidden") => ({
+const view = (
+  id: string,
+  setting: "Show" | "Hidden",
+  staged = false,
+) => ({
   id,
   board_empty_sections: setting,
+  board_empty_sections_staged: staged,
 });
 
 const projectWith = ({
@@ -240,6 +244,13 @@ test("a personal setting overrides shared and legacy unsaved values", () => {
     "Hidden",
   );
   assert.equal(
+    getActiveEmptySectionSettingFromProjectView(
+      maskPersonalEmptySectionsForUnsavedView(project.project_view as never),
+    ),
+    "Hidden",
+    "ordinary unsaved edits must keep the personal preference",
+  );
+  assert.equal(
     getEmptySectionSettingForView(project.project_view as never, "speed"),
     "Hidden",
   );
@@ -254,13 +265,13 @@ test("a personal setting overrides shared and legacy unsaved values", () => {
   );
 });
 
-test("a transient staged choice masks the personal setting without mutating it", () => {
+test("a staged unsaved choice outranks but does not erase the personal setting", () => {
   const applied = {
     ...view("speed", "Show"),
     ViewLastUsed: [{ board_empty_sections: "Hidden" }],
   };
   const project = projectWith({
-    unsaved: view("unsaved", "Show"),
+    unsaved: view("unsaved", "Show", true),
     applied: applied as never,
   });
 
@@ -274,10 +285,14 @@ test("a transient staged choice masks the personal setting without mutating it",
   );
   assert.equal(
     getActiveEmptySectionSettingFromProject(project as never),
-    "Hidden",
+    "Show",
   );
 
   const resetProject = projectWith({ applied: applied as never });
+  assert.equal(
+    getActiveEmptySectionSettingFromProject(resetProject as never),
+    "Hidden",
+  );
   assert.equal(
     getActiveEmptySectionSettingFromProjectView(
       maskPersonalEmptySectionsForUnsavedView(resetProject.project_view as never),
@@ -285,6 +300,7 @@ test("a transient staged choice masks the personal setting without mutating it",
     "Hidden",
     "removing the unsaved view must reveal the retained personal setting",
   );
+  assert.equal(applied.ViewLastUsed[0].board_empty_sections, "Hidden");
 });
 
 test("a URL-pinned view keeps its personal setting through snapshot restore", () => {
@@ -448,13 +464,10 @@ test("a failed rapid staged toggle returns to the last successful choice", () =>
     first.projectView,
     { id: 2, setting: "Show", viewId: "speed", staged: true },
   );
-  const persistedHidden = clearProjectViewPersonalEmptySections(
-    projectWith({
-      unsaved: view("unsaved", "Hidden"),
-      applied: applied as never,
-    }).project_view as never,
-    "speed",
-  );
+  const persistedHidden = projectWith({
+    unsaved: view("unsaved", "Hidden", true),
+    applied: applied as never,
+  }).project_view as never;
 
   const firstSuccess = settleEmptySectionMutation(
     second.state,
@@ -547,8 +560,15 @@ test("the flagged command stages empty-column changes in the save-view routine",
     "utf8",
   );
   assert.match(unsavedRoute, /isFeatureEnabled\(\s*HTPR_6588_EMPTY_COLUMNS_SAVE_VIEW_FLAG/);
-  assert.match(unsavedRoute, /maskPersonalEmptySectionsForUnsavedView/);
+  assert.match(unsavedRoute, /req\.body\.updateMode === STAGED_EMPTY_SECTIONS_UPDATE_MODE/);
+  assert.match(unsavedRoute, /board_empty_sections_staged: stagesEmptySections/);
+  assert.match(unsavedRoute, /\? \{ board_empty_sections_staged: true \}/);
+  assert.match(
+    unsavedRoute,
+    /personalEmptySections \?\? comparisonView\.board_empty_sections/,
+  );
   assert.doesNotMatch(unsavedRoute, /view_Last_Used\.updateMany/);
+  assert.doesNotMatch(unsavedRoute, /clearProjectViewPersonalEmptySections/);
 
   const projectViewReader = fs.readFileSync(
     path.join(root, "src/utils/controllers/projects/views/viewsHelperAPIfunctions.ts"),
@@ -564,10 +584,33 @@ test("the flagged command stages empty-column changes in the save-view routine",
   assert.match(boardReader, /HTPR_6588_EMPTY_COLUMNS_SAVE_VIEW_FLAG/);
   assert.match(boardReader, /maskPersonalEmptySectionsForUnsavedView/);
 
+  const schema = fs.readFileSync(
+    path.join(root, "src/prisma/schema.prisma"),
+    "utf8",
+  );
+  const migration = fs.readFileSync(
+    path.join(
+      root,
+      "src/prisma/migrations/20260919100000_stage_empty_sections_in_unsaved_view/migration.sql",
+    ),
+    "utf8",
+  );
+  assert.match(schema, /board_empty_sections_staged Boolean\s+@default\(false\)/);
+  assert.match(migration, /ADD COLUMN "board_empty_sections_staged" BOOLEAN NOT NULL DEFAULT false/);
+
   const updateRoute = fs.readFileSync(
     path.join(root, "src/pages/api/projects/views/update-view.ts"),
     "utf8",
   );
   assert.match(updateRoute, /isFeatureEnabled\(\s*HTPR_6588_EMPTY_COLUMNS_SAVE_VIEW_FLAG/);
+  assert.match(updateRoute, /board_empty_sections_staged: false/);
   assert.match(updateRoute, /data: \{ board_empty_sections: null \}/);
+
+  const createRoute = fs.readFileSync(
+    path.join(root, "src/pages/api/projects/views/create-view.ts"),
+    "utf8",
+  );
+  assert.match(createRoute, /isFeatureEnabled\(\s*HTPR_6588_EMPTY_COLUMNS_SAVE_VIEW_FLAG/);
+  assert.match(createRoute, /board_empty_sections_staged: false/);
+  assert.match(createRoute, /data: \{ board_empty_sections: null \}/);
 });
