@@ -48,7 +48,6 @@ export function useBoardRealtime(
     let unsubscribe: (() => void) | undefined;
     let scopedDirty = false;
     let scopedDrain: Promise<void> | null = null;
-    let subscriptionHealthy = false;
     let fallbackActive = false;
     let fallbackTimer: ReturnType<typeof setInterval> | null = null;
     let fallbackWarningLogged = false;
@@ -114,26 +113,18 @@ export function useBoardRealtime(
       (typeof document === "undefined" ||
         document.visibilityState === "visible") &&
       (typeof navigator === "undefined" || navigator.onLine !== false);
-    const reconcileWhileUnhealthy = () => {
-      if (fallbackActive && !subscriptionHealthy && canReconcile()) {
-        refetch("reconnect");
-      }
-    };
     const runFallbackCycle = () => {
       if (!fallbackActive) return;
-      reconcileWhileUnhealthy();
+      if (canReconcile()) refetch("reconnect");
       void connectAndSubscribe();
     };
     const stopFallback = () => {
-      subscriptionHealthy = true;
       fallbackActive = false;
       if (fallbackTimer !== null) clearInterval(fallbackTimer);
       fallbackTimer = null;
     };
     const startFallback = (reason: string) => {
-      if (cancelled) return;
-      subscriptionHealthy = false;
-      if (fallbackActive) return;
+      if (cancelled || fallbackActive) return;
       fallbackActive = true;
       if (!fallbackWarningLogged) {
         console.warn(
@@ -142,10 +133,7 @@ export function useBoardRealtime(
         fallbackWarningLogged = true;
       }
       runFallbackCycle();
-      fallbackTimer = setInterval(
-        runFallbackCycle,
-        BOARD_RECONCILE_INTERVAL_MS,
-      );
+      fallbackTimer = setInterval(runFallbackCycle, BOARD_RECONCILE_INTERVAL_MS);
     };
     const onVisibilityChange = () => runFallbackCycle();
     const onOnline = () => runFallbackCycle();
