@@ -222,7 +222,7 @@ test("an optimistic Show render keeps the automatic save attempt latched", () =>
   );
 });
 
-test("an unsaved empty-column change overrides the previous personal setting", () => {
+test("a personal setting overrides shared and legacy unsaved values", () => {
   const applied = {
     ...view("speed", "Show"),
     ViewLastUsed: [{ board_empty_sections: "Hidden" }],
@@ -234,7 +234,7 @@ test("an unsaved empty-column change overrides the previous personal setting", (
 
   assert.equal(
     getActiveEmptySectionSettingFromProject(project as never),
-    "Show",
+    "Hidden",
   );
   assert.equal(
     getEmptySectionSettingForView(project.project_view as never, "speed"),
@@ -449,6 +449,11 @@ test("the flagged command stages empty-column changes in the save-view routine",
   assert.match(source, /useFlag\(HTPR_6588_EMPTY_COLUMNS_SAVE_VIEW_FLAG\)/);
   assert.match(saveSource, /if \(emptyColumnsSaveViewEnabled\)/);
   assert.match(saveSource, /buildUnsavedBody\(queuedProject, \{\s*board_empty_sections: emptySection/);
+  const flaggedSource = saveSource.slice(0, saveSource.indexOf("const mutationId"));
+  assert.match(
+    flaggedSource,
+    /patchProjectViewEmptySections\(projectView, emptySection, targetViewId\)/,
+  );
   assert.match(saveSource, /updateMode: PERSONAL_EMPTY_SECTIONS_UPDATE_MODE/);
   assert.ok(
     saveSource.indexOf("if (emptyColumnsSaveViewEnabled)") <
