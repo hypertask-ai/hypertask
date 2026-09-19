@@ -1,5 +1,5 @@
 /* eslint-disable react-hooks/exhaustive-deps */
-import React, { useCallback, useContext, useMemo, useRef, useState } from "react";
+import React, { useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { useRecoilValue } from "@/lib/state";
 import { useStore } from "jotai";
 import Section, { LARGE_BOARD_PROGRESSIVE_RENDER_THRESHOLD } from "../KanbanSectionComponents/section";
@@ -219,7 +219,8 @@ const HomePage = ({
   const { archiveNotificationGetter } = useGlobalFocusHandler()
   const { currentSetting } = useSubTask()
   const queryClient = useQueryClient();
-  const { setBoardColumnsViewAPI } = useKanbanViews(_currentProject);
+  const { setBoardColumnsViewAPI, saveEmptySectionsAPI } = useKanbanViews(_currentProject);
+  const autoShowingEmptySections = useRef<number | null>(null);
   useBoardRealtime(_currentProject?.id, {
     accountId: currentUser.id,
   });
@@ -846,9 +847,20 @@ const HomePage = ({
   const tasksHydrated = Array.isArray(_currentProject?.tasks)
   const isEmptyBoard = tasksHydrated && sectionsToDisplay.length === 0
 
-  const emptyStateDetection = isEmptyBoard
+  const emptyStateDetection = tasksHydrated
     ? detectEmptyBoardState(_sections, filteredSections, _currentProject)
     : null;
+
+  useEffect(() => {
+    if (emptyStateDetection?.cause !== "empty_sections_hidden") {
+      autoShowingEmptySections.current = null;
+      return;
+    }
+    if (autoShowingEmptySections.current === _currentProject.id) return;
+
+    autoShowingEmptySections.current = _currentProject.id;
+    void saveEmptySectionsAPI(_currentProject, "Show");
+  }, [emptyStateDetection?.cause, _currentProject]);
 
   const renderSections = (archivedTasks?: ITask[]) =>
     displaySections && displaySections.map((sec, index) => (
