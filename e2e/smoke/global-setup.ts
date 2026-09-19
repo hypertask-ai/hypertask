@@ -55,8 +55,9 @@ export default async function globalSetup(config: FullConfig) {
     const login = await loginResponse.json() as { success?: boolean; redirectUrl?: string }
     if (!login.success || typeof login.redirectUrl !== 'string') fail('QA smoke login returned an invalid response')
 
-    const boardId = /^\/project\?id=(\d+)$/.exec(login.redirectUrl)?.[1]
-    if (!boardId) fail('QA smoke account has no owned board')
+    const loginBoardId = /^\/project\?id=(\d+)$/.exec(login.redirectUrl)?.[1]
+    if (!loginBoardId) fail('QA smoke account has no owned board')
+    const boardId = '2144'
 
     const fixtureResponse = await context.request.post('/api/projects/boardTasks', {
       data: { projectId: Number(boardId) },
