@@ -38,6 +38,7 @@ import {
   MY_TASKS_PRIORITY_FILTER_FLAG,
   HTPR_4228_ADMIN_ONLY_TIME_REPORTS_FLAG,
   HTPR_4857_ADD_TO_SLACK_FLAG,
+  NATIVE_REPORTS_ENABLED,
   HTPR_6283_AGENT_CHAT_LIVE_SORT_FLAG,
   HTPR_6284_AGENT_MENTION_ROUTING_FLAG,
   HTPR_6320_AI_OBSERVABILITY_FLAG,
@@ -116,6 +117,12 @@ const FEATURE_FLAG_DEFINITIONS = [
     shippedOn: "2026-09-19",
     description:
       "Shows one live analytics dashboard for the last opened board, with date ranges, worked-on tickets, finish time, weekly completions, and active people.",
+  },
+  {
+    key: NATIVE_REPORTS_ENABLED,
+    shippedOn: "2026-09-19",
+    description:
+      "Shows a live board report with current task counts by section and assignee.",
   },
   {
     key: HTPR_6588_EMPTY_COLUMNS_SAVE_VIEW_FLAG,

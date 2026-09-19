@@ -8,7 +8,10 @@ import { resolveBoardRouteTitleRequest } from "@/lib/boardRouteTitle";
 import { isFeatureEnabled } from "@/lib/flags";
 import { HTPR_6585_BOARD_REPORTS_FLAG } from "@/lib/flags/keys";
 import type { IUser } from "@/models/model";
-import { listAllReportsForUser } from "@/utils/controllers/reports/reportService";
+import {
+  listAllReportsForUser,
+  nativeReportsEnabledForUser,
+} from "@/utils/controllers/reports/reportService";
 import ReportsOverview from "./ReportsOverview";
 
 export const metadata: Metadata = {
@@ -26,10 +29,16 @@ export default async function Page() {
     {},
     cookieStore.get("previousBoard")?.value
   );
-  const data = await listAllReportsForUser(
-    user.id,
-    projectId ? Number(projectId) : null
-  );
+  const [data, nativeReportsEnabled] = await Promise.all([
+    listAllReportsForUser(user.id, projectId ? Number(projectId) : null),
+    nativeReportsEnabledForUser(user.id),
+  ]);
 
-  return <ReportsOverview currentUser={user} {...data} />;
+  return (
+    <ReportsOverview
+      currentUser={user}
+      nativeReportsEnabled={nativeReportsEnabled}
+      {...data}
+    />
+  );
 }
