@@ -38,7 +38,8 @@ This skill covers the flag-exempt fixes: a crash, a 500, wrong or lost data, res
    Mark the PR gate met with the PR URL as evidence: `$COMPANY_SKILLS_DIR/ticket-lifecycle/scripts/gates.sh met <PREFIX-NNN> "<gate>" --evidence "<PR URL>"`.
 12. **Request full CI if the workflow would otherwise skip it**, and confirm required checks and review pass on the final commit head before hand-off. A skipped test job is not a pass. If checks read green but GitHub still blocks the merge, look for cancelled duplicate runs of those required jobs and rerun only those, one at a time. Never bypass branch protection and never toggle a label to force a merge green.
 13. **Re-read the ticket's latest comments before merging.** A green CI run does not override a correction posted after it. Don't restart a full review cycle for a small follow-up fix; a fresh look at the delta on top of the already-reviewed diff is enough.
-14. **Hand to QA** with a ticket comment naming the PR, what to check, and any access QA needs to reach it (login, feature flag, URL) so it isn't blocked chasing that itself.
+14. **Activate self-hosted runtime changes before QA.** Installing files is not deployment: restart every affected service, then verify its running process loaded the new version. Never hand QA a runtime while affected processes still hold the old code.
+15. **Hand to QA** with a ticket comment naming the PR, what to check, and any access QA needs to reach it (login, feature flag, URL) so it isn't blocked chasing that itself.
 
 ## Conventions (from `~/projects/hypertasks/AGENTS.md` and `~/.claude/CLAUDE.md`)
 
