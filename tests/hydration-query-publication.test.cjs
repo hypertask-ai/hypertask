@@ -28,7 +28,9 @@ const read = (relativePath) =>
 function QueryView({ request, onRequest, onPublished }) {
   const hydrated = useHydrated();
   const query = useQuery({
-    queryKey: ["hydration-publication"],
+    queryKey: hydrated
+      ? ["hydration-publication"]
+      : ["hydration-publication", "placeholder"],
     queryFn: () => {
       onRequest();
       return request;
@@ -36,6 +38,7 @@ function QueryView({ request, onRequest, onPublished }) {
     enabled: hydrated,
     initialData: "server-placeholder",
     initialDataUpdatedAt: 0,
+    staleTime: 30_000,
   });
   React.useEffect(() => {
     if (query.data === "early-result") onPublished();
@@ -58,15 +61,23 @@ test("hydration-sensitive production queries and flags use the component gate", 
 
   assert.match(
     inbox,
-    /export const useGetNotifications[\s\S]*?const query = useQuery\(\{\s*queryKey,\s*enabled: hydrated,/,
+    /export const useGetNotifications[\s\S]*?const query = useQuery\(\{\s*queryKey: hydrated\s*\? queryKey\s*: \[\.\.\.queryKey, "hydration-placeholder"\],\s*enabled: hydrated,/,
   );
   assert.match(inbox, /enabled: hydrated && \(options\?\.enabled \?\? true\)/);
+  assert.match(
+    inbox,
+    /queryKey: hydrated\s*\? queryOptions\.queryKey\s*: \[\.\.\.queryOptions\.queryKey, "hydration-placeholder"\]/,
+  );
   assert.match(boards, /enabled: hydrated && \(options\?\.enabled \?\? true\)/);
+  assert.match(
+    boards,
+    /queryKey: hydrated\s*\? PROJECTS_ALL_QUERY_KEY\s*: \[\.\.\.PROJECTS_ALL_QUERY_KEY, "hydration-placeholder", user\.id\]/,
+  );
   assert.match(flags, /const flags = useContext\(FeatureFlagsContext\)/);
   assert.match(flags, /return hydrated && flags\[key\] === true/);
 });
 
-test("an early result is not published until its component hydrates", { timeout: 5_000 }, async () => {
+test("shared early results stay hidden until each consumer hydrates", { timeout: 5_000 }, async () => {
   const earlyResult = Promise.resolve("early-result");
   let requests = 0;
   const onRequest = () => {
@@ -80,9 +91,10 @@ test("an early result is not published until its component hydrates", { timeout:
   assert.equal(requests, 0);
   await earlyResult;
 
-  const dom = new JSDOM(`<div id="root">${serverMarkup}</div>`, {
-    url: "https://app.hypertask.ai/inbox",
-  });
+  const dom = new JSDOM(
+    `<div id="first">${serverMarkup}</div><div id="late">${serverMarkup}</div>`,
+    { url: "https://app.hypertask.ai/inbox" },
+  );
   const testGlobals = {
     window: dom.window,
     document: dom.window.document,
@@ -105,30 +117,61 @@ test("an early result is not published until its component hydrates", { timeout:
   }
 
   const recoverableErrors = [];
-  const container = dom.window.document.getElementById("root");
-  let resolvePublished;
-  const published = new Promise((resolve) => {
-    resolvePublished = resolve;
+  const firstContainer = dom.window.document.getElementById("first");
+  const lateContainer = dom.window.document.getElementById("late");
+  const queryClient = new QueryClient();
+  let resolveFirstPublished;
+  const firstPublished = new Promise((resolve) => {
+    resolveFirstPublished = resolve;
   });
-  const onPublished = () => resolvePublished();
-  let hydratedRoot;
+  let resolveLatePublished;
+  const latePublished = new Promise((resolve) => {
+    resolveLatePublished = resolve;
+  });
+  const waitForPublication = (publication, consumer) => {
+    let timeout;
+    return Promise.race([
+      publication,
+      new Promise((_, reject) => {
+        timeout = setTimeout(
+          () => reject(new Error(`${consumer} did not publish`)),
+          1_000,
+        );
+      }),
+    ]).finally(() => clearTimeout(timeout));
+  };
+  let firstRoot;
+  let lateRoot;
   try {
     await React.act(async () => {
-      hydratedRoot = hydrateRoot(
-        container,
-        tree(new QueryClient(), earlyResult, onRequest, onPublished),
+      firstRoot = hydrateRoot(
+        firstContainer,
+        tree(queryClient, earlyResult, onRequest, resolveFirstPublished),
         { onRecoverableError: (error) => recoverableErrors.push(error) },
       );
     });
-    await React.act(() => published);
+    await React.act(() => waitForPublication(firstPublished, "first consumer"));
+
+    assert.equal(firstContainer.textContent, "early-result");
+    assert.equal(lateContainer.textContent, "server-placeholder");
+
+    await React.act(async () => {
+      lateRoot = hydrateRoot(
+        lateContainer,
+        tree(queryClient, earlyResult, onRequest, resolveLatePublished),
+        { onRecoverableError: (error) => recoverableErrors.push(error) },
+      );
+    });
+    await React.act(() => waitForPublication(latePublished, "late consumer"));
 
     assert.equal(recoverableErrors.length, 0);
     assert.equal(requests, 1);
-    assert.equal(container.textContent, "early-result");
+    assert.equal(lateContainer.textContent, "early-result");
   } finally {
-    if (hydratedRoot) {
-      await React.act(async () => hydratedRoot.unmount());
-    }
+    await React.act(async () => {
+      firstRoot?.unmount();
+      lateRoot?.unmount();
+    });
     dom.window.close();
     for (const [key, descriptor] of previousGlobals) {
       if (descriptor) Object.defineProperty(global, key, descriptor);

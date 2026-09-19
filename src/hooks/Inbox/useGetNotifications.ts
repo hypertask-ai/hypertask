@@ -428,8 +428,12 @@ export const useGetNotificationCount = (
   options?: { enabled?: boolean },
 ) => {
   const hydrated = useHydrated();
+  const queryOptions = notificationCountQueryOptions(userId);
   return useQuery({
-    ...notificationCountQueryOptions(userId),
+    ...queryOptions,
+    queryKey: hydrated
+      ? queryOptions.queryKey
+      : [...queryOptions.queryKey, "hydration-placeholder"],
     enabled: hydrated && (options?.enabled ?? true),
     initialData: { all: 0, unseen: 0 },
     initialDataUpdatedAt: 0,
@@ -458,7 +462,9 @@ export const useGetNotifications = (userId: number) => {
   }, [userId]);
   const queryKey = useMemo(() => inboxDataQueryKey(userId), [userId]);
   const query = useQuery({
-    queryKey,
+    queryKey: hydrated
+      ? queryKey
+      : [...queryKey, "hydration-placeholder"],
     enabled: hydrated,
     queryFn: () =>
       fetchInboxPayload(

@@ -321,7 +321,9 @@ export const useGetAllBoards = (
   }, []);
 
   const query = useQuery({
-    queryKey: PROJECTS_ALL_QUERY_KEY,
+    queryKey: hydrated
+      ? PROJECTS_ALL_QUERY_KEY
+      : [...PROJECTS_ALL_QUERY_KEY, "hydration-placeholder", user.id],
     enabled: hydrated && (options?.enabled ?? true),
     queryFn: async ({ signal }) => {
       const generation = ++requestGenerationRef.current;
