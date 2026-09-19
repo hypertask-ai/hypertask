@@ -74,6 +74,9 @@ function createBindingTarget(properties = {}) {
     unbind(event, callback) {
       bindings.get(event)?.delete(callback);
     },
+    bindingCount(event) {
+      return bindings.get(event)?.size ?? 0;
+    },
   };
 }
 
@@ -386,6 +389,210 @@ test("an event missed during initial connection is recovered after subscription"
   await settle();
   assert.equal(boardReconciles, 1);
   cleanup?.();
+});
+
+test("an unavailable board subscription starts an immediate reconciliation fallback", async () => {
+  let cleanup;
+  let boardReconciles = 0;
+  const listeners = new Map();
+  const originalDocument = global.document;
+  const originalWindow = global.window;
+  const originalNavigator = global.navigator;
+  global.document = {
+    visibilityState: "visible",
+    addEventListener(event, callback) {
+      listeners.set(`document:${event}`, callback);
+    },
+    removeEventListener(event) {
+      listeners.delete(`document:${event}`);
+    },
+  };
+  global.window = {
+    addEventListener(event, callback) {
+      listeners.set(`window:${event}`, callback);
+    },
+    removeEventListener(event) {
+      listeners.delete(`window:${event}`);
+    },
+  };
+  Object.defineProperty(global, "navigator", {
+    configurable: true,
+    value: { onLine: true },
+  });
+
+  try {
+    const hook = loadTypeScriptModule(
+      path.join(root, "src/hooks/realtime/useBoardRealtime.ts"),
+      {
+        react: {
+          useEffect(effect) {
+            cleanup = effect();
+          },
+          useRef(initialValue) {
+            return { current: initialValue };
+          },
+        },
+        "@tanstack/react-query": {
+          useQueryClient: () => ({ refetchQueries: async () => {} }),
+        },
+        "@/lib/realtime/client": {
+          connectRealtimeClient: async () => null,
+          releaseRealtimeClientIfIdle() {},
+        },
+        "@/lib/projectPlanning": {
+          projectPlanningQueryKey: (projectId) => ["planning", projectId],
+        },
+        "@/lib/realtime/shared": {
+          BOARD_EVENT: "board:changed",
+          boardChannel: (projectId) => `private-board-${projectId}`,
+        },
+        "@/lib/boardSync/reconcileActiveBoardQuery": {
+          reconcileActiveBoardQuery: async () => {
+            boardReconciles += 1;
+          },
+          reconcileActiveBoardTasks: async () => {},
+        },
+        "@/lib/realtime/latencyCanary": {
+          runRealtimeReconciliation: ({ reconcile }) => reconcile(),
+        },
+        "@/hooks/useFlag": { useFlag: () => false },
+        "@/lib/flags/keys": { SCOPED_BOARD_REFETCH_FLAG: "scoped" },
+        "@/lib/realtime/boardRealtimeEventHandler": {
+          createBoardRealtimeEventHandler: (refetch) => () => refetch("event"),
+        },
+      },
+    );
+
+    hook.useBoardRealtime(PROJECT_ID, { accountId: USER_ID });
+    await settle();
+
+    assert.equal(boardReconciles, 1);
+    assert.equal(listeners.has("document:visibilitychange"), true);
+    assert.equal(listeners.has("window:online"), true);
+    cleanup?.();
+    assert.equal(listeners.size, 0);
+  } finally {
+    global.document = originalDocument;
+    global.window = originalWindow;
+    Object.defineProperty(global, "navigator", {
+      configurable: true,
+      value: originalNavigator,
+    });
+  }
+});
+
+test("fallback cycles serialize connection attempts and replace failed subscriptions", async () => {
+  let cleanup;
+  let connectCalls = 0;
+  let subscribeCalls = 0;
+  let unsubscribeCalls = 0;
+  let resolveRetry;
+  let timerId = 0;
+  const timers = new Map();
+  const originalSetInterval = global.setInterval;
+  const originalClearInterval = global.clearInterval;
+  const channel = createBindingTarget({ subscribed: false });
+  const connection = createBindingTarget({ state: "connecting" });
+  const client = {
+    connection,
+    subscribe() {
+      subscribeCalls += 1;
+      return channel;
+    },
+    unsubscribe() {
+      unsubscribeCalls += 1;
+    },
+  };
+  const retryPromise = new Promise((resolve) => {
+    resolveRetry = resolve;
+  });
+  global.setInterval = (callback) => {
+    timerId += 1;
+    timers.set(timerId, callback);
+    return timerId;
+  };
+  global.clearInterval = (id) => timers.delete(id);
+
+  try {
+    const hook = loadTypeScriptModule(
+      path.join(root, "src/hooks/realtime/useBoardRealtime.ts"),
+      {
+        react: {
+          useEffect(effect) {
+            cleanup = effect();
+          },
+          useRef(initialValue) {
+            return { current: initialValue };
+          },
+        },
+        "@tanstack/react-query": {
+          useQueryClient: () => ({ refetchQueries: async () => {} }),
+        },
+        "@/lib/realtime/client": {
+          connectRealtimeClient() {
+            connectCalls += 1;
+            if (connectCalls === 1) return Promise.resolve(null);
+            if (connectCalls === 2) return retryPromise;
+            return new Promise(() => {});
+          },
+          releaseRealtimeClientIfIdle() {},
+        },
+        "@/lib/projectPlanning": {
+          projectPlanningQueryKey: (projectId) => ["planning", projectId],
+        },
+        "@/lib/realtime/shared": {
+          BOARD_EVENT: "board:changed",
+          boardChannel: (projectId) => `private-board-${projectId}`,
+        },
+        "@/lib/boardSync/reconcileActiveBoardQuery": {
+          reconcileActiveBoardQuery: async () => {},
+          reconcileActiveBoardTasks: async () => {},
+        },
+        "@/lib/realtime/latencyCanary": {
+          runRealtimeReconciliation: ({ reconcile }) => reconcile(),
+        },
+        "@/hooks/useFlag": { useFlag: () => false },
+        "@/lib/flags/keys": { SCOPED_BOARD_REFETCH_FLAG: "scoped" },
+        "@/lib/realtime/boardRealtimeEventHandler": {
+          createBoardRealtimeEventHandler: (refetch) => () => refetch("event"),
+        },
+      },
+    );
+
+    hook.useBoardRealtime(PROJECT_ID, { accountId: USER_ID });
+    await settle();
+    assert.equal(connectCalls, 1);
+    assert.equal(timers.size, 1);
+
+    const fallbackCycle = [...timers.values()][0];
+    fallbackCycle();
+    fallbackCycle();
+    fallbackCycle();
+    assert.equal(connectCalls, 2);
+    assert.equal(subscribeCalls, 0);
+
+    resolveRetry(client);
+    await settle();
+    assert.equal(subscribeCalls, 1);
+    assert.equal(channel.bindingCount("board:changed"), 1);
+    fallbackCycle();
+    assert.equal(connectCalls, 2);
+
+    channel.subscribed = true;
+    channel.emit("pusher:subscription_succeeded");
+    assert.equal(timers.size, 0);
+
+    connection.state = "unavailable";
+    connection.emit("state_change", { current: "unavailable" });
+    assert.equal(unsubscribeCalls, 1);
+    assert.equal(channel.bindingCount("board:changed"), 0);
+    assert.equal(connectCalls, 3);
+    assert.equal(timers.size, 1);
+  } finally {
+    cleanup?.();
+    global.setInterval = originalSetInterval;
+    global.clearInterval = originalClearInterval;
+  }
 });
 
 test("the visible board subscribes before deferred startup work is released", () => {
