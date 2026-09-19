@@ -21,6 +21,11 @@ function loadController(prisma, calls) {
 
   const stubs = {
     "@/lib/prisma": { __esModule: true, default: prisma },
+    "@/lib/flags": {
+      HTPR_6516_AGENT_ATTRIBUTION_FLAG: "htpr-6516-agent-attribution",
+      isFeatureEnabled: async () => false,
+    },
+    "@/lib/assignees": { sanitizeAgentAssigneeOwner: (assignee) => assignee },
     "./getAllIncludes": {
       getBoardTaskInclude: (options) => {
         calls.push(["board-task-include", options]);
@@ -110,6 +115,7 @@ test("board payload checks access before querying task content", async () => {
     userId: 6,
     userDbId: 6,
     currentUserId: 6,
+    attributionEnabled: false,
   });
   assert.deepEqual(calls.find(([name]) => name === "open-blockers")[1], [
     { id: 101 },

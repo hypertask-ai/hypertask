@@ -13,6 +13,8 @@ Use with `ticket-lifecycle` (board mechanics), `simplify-before-pr` and `design-
 
 This skill covers the flag-exempt fixes: a crash, a 500, wrong or lost data, restoring exactly the prior behaviour, performance work with identical output, a security fix, a dependency or CI change, a spelling correction. **"Flag-exempt" is not the same as "invisible".** Restoring a broken screen changes what is on it, and a spelling fix changes what a user reads. So step 7 still applies whenever the result shows up on screen: no flag, but still a phone screenshot. If the fix would add or change behaviour a user has never seen before (not a restoration), read `ship-feature-behind-flag` step 2 and decide there before you start.
 
+**Board action attribution is not agent-directory visibility.** If an agent commented, assigned, moved, labeled, or created a ticket, every board member who can see that ticket sees that agent's name and avatar. PRIVATE hides an agent from pickers, the agent list, and chat. It never turns a named board action into "Private agent" or the owner's name.
+
 ## Steps
 
 1. **If the ticket touches UI, run `reuse-existing-ui` first.** Before writing a line of code for any bug whose fix changes what's on screen, work through `reuse-existing-ui/SKILL.md`: list the UI elements the fix needs and reuse the existing component for each. A bug fix that quietly rebuilds a component instead of fixing the real one is not a fix.

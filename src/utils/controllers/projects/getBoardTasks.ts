@@ -13,6 +13,8 @@ import {
   attachOpenBlockingTasks,
   type TaskWithBlockingRelations,
 } from "@/utils/controllers/tasks/attachOpenBlockingTasks";
+import { HTPR_6516_AGENT_ATTRIBUTION_FLAG, isFeatureEnabled } from "@/lib/flags";
+import { sanitizeAgentAssigneeOwner } from "@/lib/assignees";
 
 /**
  * Tasks/views for one board in the BoardTasksPayload client contract. The
@@ -47,11 +49,20 @@ const getBoardTasks = async (
       return { status: 403, json: { message: "No access to this board" } };
     }
 
+    const attributionEnabled = await isFeatureEnabled(
+      HTPR_6516_AGENT_ATTRIBUTION_FLAG,
+      userId,
+    );
     const tasks = await prisma.task.findMany({
       where: { projectId, ...getTaskWhere() },
       omit: taskBoardOmit,
       include: {
-        ...getBoardTaskInclude({ userId, userDbId: userId, currentUserId }),
+        ...getBoardTaskInclude({
+          userId,
+          userDbId: userId,
+          currentUserId,
+          attributionEnabled,
+        }),
         customFieldValues: {
           select: { fieldId: true, value: true, numericValue: true },
         },
@@ -61,6 +72,12 @@ const getBoardTasks = async (
       tasks as Array<(typeof tasks)[number] & TaskWithBlockingRelations>,
     );
     const tasksWithWaitingOnUsers = await attachWaitingOnUsers(tasksWithOpenBlockers);
+    const serializedTasks = attributionEnabled
+      ? tasksWithWaitingOnUsers.map((task) => ({
+          ...task,
+          assignees: task.assignees.map(sanitizeAgentAssigneeOwner),
+        }))
+      : tasksWithWaitingOnUsers;
 
     const sanitizedProject = sanitizeProjectBoardFilters(project);
     const { allViews = [], ...projectView } =
@@ -73,7 +90,7 @@ const getBoardTasks = async (
       status: 200,
       json: {
         project: projectPayload,
-        tasks: tasksWithWaitingOnUsers,
+        tasks: serializedTasks,
         allViews,
       },
     };

@@ -77,3 +77,22 @@ test("assigneeCount counts only the assignees the response actually lists", () =
   assert.equal(out.assignees.length, 1);
   assert.equal(out.assigneeCount, 1);
 });
+
+test("flagged agent assignments omit the backing owner's identity", () => {
+  const task = {
+    ...baseTask,
+    assignees: [
+      { user: { id: 6, email: "v@x.io", displayName: "Valentin Yeo" } },
+      {
+        user: { id: 6, email: "v@x.io", displayName: "Valentin Yeo" },
+        agent: { id: "not-visible", userId: 999, visibility: "PRIVATE", members: [], displayName: "Ghost" },
+      },
+    ],
+  };
+  const out = mapTaskToMcpGetResponse(task, 6, true);
+  assert.equal(out.assignees.length, 2);
+  assert.equal(out.assigneeCount, 2);
+  assert.equal(out.assignees[1].displayName, "Ghost");
+  assert.equal(out.assignees[1].id, undefined);
+  assert.equal(out.assignees[1].email, undefined);
+});

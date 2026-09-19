@@ -3,6 +3,9 @@ import { useDeviceContext } from "@/lib/contexts/deviceContext";
 import { IComment, ITask } from "@/models/model";
 import formatDateDifference from "@/utils/generateTime";
 import { convertToPlain } from "@/utils/helperFunctions/helperFunctions";
+import { commentActorName } from "@/lib/assignees";
+import { useFlag } from "@/hooks/useFlag";
+import { HTPR_6516_AGENT_ATTRIBUTION_FLAG } from "@/lib/flags/keys";
 import { Circle, Star, Check, Pin } from "lucide-react";
 
 
@@ -38,6 +41,8 @@ export const SavedContentRow = ({
   pinComments = false,
   archiveNotificationHandler,
 }: IProps) => {
+  const attributionEnabled = useFlag(HTPR_6516_AGENT_ATTRIBUTION_FLAG);
+
   return (
     <div
       id={`task-row-${index}`}
@@ -54,7 +59,7 @@ export const SavedContentRow = ({
     >
       {starType === "Comment" && comment ? (
         <CreatorName
-          name={comment.creator?.displayName}
+          name={attributionEnabled ? commentActorName(comment) : comment.creator?.displayName}
           count={task._count?.comments ?? 0}
           updatedAt={updatedAt}
         />

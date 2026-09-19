@@ -2,6 +2,8 @@
 
 import type { NextApiRequest, NextApiResponse } from 'next'
 import prisma from "@/lib/prisma";
+import { actingAgentSelect } from '@/lib/agents/activityAttribution';
+import { resolveActingAgentFromCookies } from '@/lib/auth/resolveActingAgent';
 import createLabelActivity from '@/utils/controllers/activities/createLabelActivity';
 import { broadcastBoardChange } from '@/lib/realtime/server';
 import { scheduleBackfillAiLabel } from '@/lib/ai/labelClassifier';
@@ -36,6 +38,16 @@ export default  async function handler(
       if (aiPrompt) return res.status(403).json({ message: "Forbidden" });
       throw error;
     }
+    const actingAgent = resolveActingAgentFromCookies(req.cookies, req.body?.agentId);
+    if (!actingAgent.ok) {
+      return res.status(actingAgent.status).json({ message: actingAgent.message });
+    }
+    const fromAgent = actingAgent.agentId
+      ? await prisma.agent.findFirst({
+          where: { id: actingAgent.agentId, revokedAt: null },
+          select: actingAgentSelect,
+        })
+      : null;
     // Smart labels run an LLM classification pass on every task in the
     // project (cost), so require project membership before setting one.
     if (aiPrompt) {
@@ -134,6 +146,7 @@ export default  async function handler(
           toTaskLabel: labelToCheck as any,
           taskId,
           status: "Created",
+          fromAgent,
           transaction: tx,
         });
         const agentWebhookDeliveryIds = await persistAgentTaskUpdatedWebhook(tx, {

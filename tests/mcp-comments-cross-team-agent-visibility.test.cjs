@@ -12,6 +12,7 @@ const routePath = path.join(root, "src/app/api/mcp/comments/route.ts");
 
 const {
   mcpVisibleAgentSelect,
+  mapAttributedMcpAgent,
   mapVisibleMcpAgent,
   transpile,
 } = require(path.join(root, "tests/helpers/load-mcp-agents.cjs"));
@@ -41,7 +42,11 @@ function loadRoute(comments) {
       validateMcpAuth: async () => ({ user: { id: 6 }, agentId: null }),
     },
     "@/lib/prisma": { __esModule: true, default: prisma },
-    "@/lib/mcp/agents": { mcpVisibleAgentSelect, mapVisibleMcpAgent },
+    "@/lib/mcp/agents": {
+      mcpVisibleAgentSelect,
+      mapAttributedMcpAgent,
+      mapVisibleMcpAgent,
+    },
     "@/lib/agents/publicAgent": {
       resolvePublicAgentDisplayName({ hasAgentRow, visibleAgent, storedDisplayName, attributionEnabled }) {
         if (hasAgentRow && !visibleAgent) return "Private agent";
@@ -125,7 +130,8 @@ function loadRoute(comments) {
     "@/lib/flags": {
       HTPR_6516_AGENT_ATTRIBUTION_FLAG: "htpr-6516-agent-attribution",
       HTPR_6530_MCP_LIST_QUERY_FLAG: "htpr-6530-mcp-list-query",
-      isFeatureEnabled: async () => false,
+      isFeatureEnabled: async (flag) =>
+        flag === "htpr-6516-agent-attribution" && Boolean(comments.attributionEnabled),
     },
     "@/lib/flags/keys": {
       HTPR_6516_AGENT_ATTRIBUTION_FLAG: "htpr-6516-agent-attribution",
@@ -216,4 +222,31 @@ test("comments GET keeps a same-team agent visible but hides a different team's 
   // The visibility select and the response mapper must both be scoped to the
   // viewed task's own project (15), not the requester's user id alone.
   assert.equal(route.getQuery().include.agent.select.members.where.project.id, 15);
+});
+
+test("flagged comments name an attributed agent outside the viewer's team", async () => {
+  const comments = [
+    commentFixture({
+      agentDisplayName: "Outsider Team Agent",
+      agent: {
+        id: "outsider-agent",
+        displayName: "Outsider Team Agent",
+        photoURL: null,
+        userId: 42,
+        visibility: "TEAM",
+        members: [],
+      },
+    }),
+  ];
+  comments.attributionEnabled = true;
+
+  const response = await loadRoute(comments).GET({
+    nextUrl: {
+      searchParams: new URLSearchParams({ task_id: "100" }),
+    },
+  });
+
+  assert.equal(response.status, 200);
+  assert.equal(response.body.comments[0].agent?.id, "outsider-agent");
+  assert.equal(response.body.comments[0].agent_display_name, "Outsider Team Agent");
 });

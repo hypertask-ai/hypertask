@@ -187,6 +187,8 @@ function loadCommentsRoute({
     },
     '@/lib/mcp/agents': {
       getMcpSessionAgentSummary: async () => null,
+      mapAttributedMcpAgent: (agent) =>
+        agent ? { id: agent.id, displayName: agent.displayName } : undefined,
       mapVisibleMcpAgent: (agent, userId, projectId) =>
         agent && (agent.userId === userId ||
           (agent.visibility === 'TEAM' &&

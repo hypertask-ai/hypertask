@@ -8,6 +8,7 @@ export type GetAllIncludesOptions = {
   userId: number;
   userDbId: number;
   currentUserId?: number;
+  attributionEnabled?: boolean;
 };
 
 const humanProjectAccessBranches = (
@@ -143,16 +144,21 @@ export const getTaskNotificationsInclude = (
 export const getTaskIncludeLayers = ({
   userId,
   userDbId,
+  attributionEnabled = false,
 }: GetAllIncludesOptions): Record<string, Prisma.TaskInclude> => {
   const count = { _count: getTaskCountSelect(userId) };
   const assignees = {
     assignees: {
-      where: {
-        OR: [
-          { agentId: null },
-          { agent: boardAgentVisibilityWhere(userId) },
-        ],
-      },
+      ...(attributionEnabled
+        ? {}
+        : {
+            where: {
+              OR: [
+                { agentId: null },
+                { agent: boardAgentVisibilityWhere(userId) },
+              ],
+            },
+          }),
       include: {
         user: {
           select: {
@@ -271,12 +277,16 @@ export const getBoardTaskInclude = (
     layers.count,
     {
       assignees: {
-        where: {
-          OR: [
-            { agentId: null },
-            { agent: boardAgentVisibilityWhere(options.userId) },
-          ],
-        },
+        ...(options.attributionEnabled
+          ? {}
+          : {
+              where: {
+                OR: [
+                  { agentId: null },
+                  { agent: boardAgentVisibilityWhere(options.userId) },
+                ],
+              },
+            }),
         select: {
           id: true,
           userId: true,

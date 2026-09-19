@@ -68,7 +68,9 @@ function cookieValue(header, name) {
 const { signSession, verifySession, SESSION_COOKIE } = loadTs(
   "src/lib/auth/session.ts",
 );
-const { resolveActingAgent } = loadTs("src/lib/auth/resolveActingAgent.ts");
+const { resolveActingAgent } = loadTs("src/lib/auth/resolveActingAgent.ts", {
+  "./session": { SESSION_COOKIE, verifySession },
+});
 const {
   assertAgentMayLeaveDone,
   assertAgentMayLeaveDoneForTasks,

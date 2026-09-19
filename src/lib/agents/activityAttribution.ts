@@ -30,6 +30,33 @@ export function activityAgentDisplayName(activityBody: unknown): string | null {
     : null;
 }
 
+export function gateActivityAgentAttribution<T>(
+  activityBody: T,
+  attributionEnabled: boolean,
+): T {
+  if (
+    attributionEnabled ||
+    activityBody === null ||
+    typeof activityBody !== "object" ||
+    Array.isArray(activityBody)
+  ) {
+    return activityBody;
+  }
+
+  const activity = activityBody as Record<string, unknown>;
+  if (activity.type !== "TaskLabel" && activity.type !== "TaskWaitingOn") {
+    return activityBody;
+  }
+
+  const data = activity.data;
+  if (data === null || typeof data !== "object" || Array.isArray(data)) {
+    return activityBody;
+  }
+
+  const { fromAgent: _fromAgent, ...safeData } = data as Record<string, unknown>;
+  return { ...activity, data: safeData } as T;
+}
+
 export const actingAgentSelect = {
   id: true,
   userId: true,

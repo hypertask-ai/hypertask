@@ -1,3 +1,5 @@
+import { SESSION_COOKIE, verifySession } from './session'
+
 /**
  * Bind actor identity (create, archive, delete) to a signed session agent claim.
  *
@@ -43,4 +45,15 @@ export function resolveActingAgent(input: {
     }
   }
   return { ok: true, agentId: sessionAgentId }
+}
+
+export function resolveActingAgentFromCookies(
+  cookies: { [key: string]: string | undefined } | undefined,
+  bodyAgentId?: unknown,
+): ActingAgentResolution {
+  const signedSession = cookies ? verifySession(cookies[SESSION_COOKIE]) : null
+  return resolveActingAgent({
+    sessionAgentId: signedSession?.agentId ?? null,
+    bodyAgentId,
+  })
 }

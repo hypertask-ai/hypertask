@@ -90,6 +90,7 @@ import notificationGetAll, {
 import { getStructuredInboxForAgent } from "@/utils/controllers/notifications/getStructuredInboxForAgent";
 import { turbopufferSearchTaskIds } from "@/utils/controllers/search/document";
 import {
+  mapAttributedMcpAgent,
   mapVisibleMcpAgent,
   mcpVisibleAgentSelect,
 } from "@/lib/mcp/agents";
@@ -1968,12 +1969,24 @@ function applyDurableCommentAttribution<T extends object>(
   projectId: number,
   attributionEnabled: boolean
 ): T {
+  if (!attributionEnabled)
   return overlayDurableAgentDisplayName(mapped, {
     hasAgentRow: Boolean(comment.agent),
     visibleAgent: mapVisibleMcpAgent(comment.agent, userId, projectId),
     storedDisplayName: comment.agentDisplayName,
     attributionEnabled,
   });
+
+  const agent = mapAttributedMcpAgent(comment.agent);
+  return overlayDurableAgentDisplayName(
+    { ...mapped, ...(agent ? { agent } : {}) },
+    {
+      hasAgentRow: Boolean(comment.agent),
+      visibleAgent: agent,
+      storedDisplayName: comment.agentDisplayName,
+      attributionEnabled,
+    },
+  );
 }
 
 function mapDraftToResponse(draft: any) {
