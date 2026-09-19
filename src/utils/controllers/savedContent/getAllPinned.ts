@@ -1,8 +1,17 @@
 import prisma from "@/lib/prisma";
-import { fetchProjectIds, includeSavedContentComment } from "./helper";
+import { HTPR_6516_AGENT_ATTRIBUTION_FLAG, isFeatureEnabled } from "@/lib/flags";
+import {
+  fetchProjectIds,
+  includeSavedContentComment,
+  savedCommentInclude,
+} from "./helper";
 
 export const getAllPinned = async (userId: number) => {
   try {
+    const attributionEnabled = await isFeatureEnabled(
+      HTPR_6516_AGENT_ATTRIBUTION_FLAG,
+      userId,
+    );
     const projectIds = await fetchProjectIds(userId);
     const personalPins = await prisma.savedContent.findMany({
       where: {
@@ -13,11 +22,7 @@ export const getAllPinned = async (userId: number) => {
       },
       include: {
         task: includeSavedContentComment(userId),
-        comment: {
-          include: {
-            creator: true,
-          },
-        },
+        comment: savedCommentInclude(attributionEnabled),
       },
       orderBy: {
         task: {
@@ -35,11 +40,7 @@ export const getAllPinned = async (userId: number) => {
       },
       include: {
         task: includeSavedContentComment(userId),
-        comment: {
-          include: {
-            creator: true,
-          },
-        },
+        comment: savedCommentInclude(attributionEnabled),
       },
       orderBy: {
         task: {

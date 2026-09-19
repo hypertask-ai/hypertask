@@ -60,7 +60,9 @@ test("an agent assignment lists the agent name, not the owner's", () => {
   assert.equal(out.assignees[0].agent.id, "1a6dd89d-5fff-4c1b-9610-0a4270a7f2c7");
 });
 
-test("assigneeCount counts every assignee already on the ticket, including a private bot", () => {
+test("assigneeCount counts only the assignees the response actually lists", () => {
+  // An agent assignee the caller cannot see is filtered out of `assignees`;
+  // the count must not diverge from the list it is a count of.
   const task = {
     ...baseTask,
     assignees: [
@@ -72,7 +74,25 @@ test("assigneeCount counts every assignee already on the ticket, including a pri
     ],
   };
   const out = mapTaskToMcpGetResponse(task, 6);
+  assert.equal(out.assignees.length, 1);
+  assert.equal(out.assigneeCount, 1);
+});
+
+test("flagged agent assignments omit the backing owner's identity", () => {
+  const task = {
+    ...baseTask,
+    assignees: [
+      { user: { id: 6, email: "v@x.io", displayName: "Valentin Yeo" } },
+      {
+        user: { id: 6, email: "v@x.io", displayName: "Valentin Yeo" },
+        agent: { id: "not-visible", userId: 999, visibility: "PRIVATE", members: [], displayName: "Ghost" },
+      },
+    ],
+  };
+  const out = mapTaskToMcpGetResponse(task, 6, true);
   assert.equal(out.assignees.length, 2);
   assert.equal(out.assigneeCount, 2);
   assert.equal(out.assignees[1].displayName, "Ghost");
+  assert.equal(out.assignees[1].id, undefined);
+  assert.equal(out.assignees[1].email, undefined);
 });

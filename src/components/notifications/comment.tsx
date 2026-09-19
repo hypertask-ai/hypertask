@@ -1,4 +1,6 @@
 import { commentActorName } from '@/lib/assignees'
+import { useFlag } from '@/hooks/useFlag'
+import { HTPR_6516_AGENT_ATTRIBUTION_FLAG } from '@/lib/flags/keys'
 import { INotification } from '@/models/model'
 import formatDateDifference from '@/utils/generateTime';
 import { convertToPlain } from '@/utils/helperFunctions/helperFunctions';
@@ -16,11 +18,12 @@ interface Props {
 const NotificationComment = (props: Props) => {
  
     const { notification, markAsDone, _selectedInbox, setSelectedInbox, openTask } = props
+    const attributionEnabled = useFlag(HTPR_6516_AGENT_ATTRIBUTION_FLAG)
 
     return (
         <div id={`inbox-${notification.id}`} onClick={() => openTask()} onMouseEnter={() => setSelectedInbox()} key={notification.id} className={`flex space-x-8 h-[70] py-2 border-l-8 border-transparent px-4 rounded-md ${(_selectedInbox && _selectedInbox.id === notification.id) ? "bg-[#363A40]  border-l-[#7396CB]" : "transparent"} justify-between  w-full flex-col md:flex-row`}>
             <div className='flex space-x-6 w-1/5'>
-                <span style={{ fontSize: 14, color: 'whire' }}>{commentActorName(notification.comment)}</span>
+                <span style={{ fontSize: 14, color: 'whire' }}>{attributionEnabled ? commentActorName(notification.comment) : notification.comment?.creator?.displayName ?? ''}</span>
             </div>
             <div className='  truncate flex-1 flex-column w-1/4'>
                 <span style={{ fontSize: 14, color: 'whire' }}>{notification.comment?.task?.title ?? ''}</span>

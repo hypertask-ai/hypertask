@@ -28,13 +28,13 @@ const agentRelationKeys = new Set([
 export const PRIVATE_AGENT_DISPLAY_NAME = "Private agent";
 
 /**
- * A named board action keeps that name for anyone who can see the ticket.
- * PRIVATE visibility is for pickers and the agent list, not comments or
- * history. A deleted agent has no row left, so the name copied at write time
- * is what we show, never the owner's name. Callers must pass
- * attributionEnabled from isFeatureEnabled(HTPR_6516_AGENT_ATTRIBUTION_FLAG,
- * userId). When the flag is off, a stored name with no live row stays
- * "Private agent".
+ * A living agent the viewer cannot see stays "Private agent". A deleted agent
+ * has no row left, so the name copied at write time is what we show — never
+ * the owner's name. Callers must pass attributionEnabled from
+ * isFeatureEnabled(HTPR_6516_AGENT_ATTRIBUTION_FLAG, userId). When the flag is
+ * off, a stored name with no live row stays "Private agent".
+ * With attribution enabled, a named board action keeps its acting-agent name;
+ * PRIVATE visibility still controls directory and picker discovery.
  */
 export function resolvePublicAgentDisplayName(opts: {
   hasAgentRow: boolean;
@@ -42,15 +42,19 @@ export function resolvePublicAgentDisplayName(opts: {
   storedDisplayName?: string | null;
   attributionEnabled?: boolean;
 }): string | null {
+  if (opts.attributionEnabled) {
+    const attributedName = opts.storedDisplayName?.trim();
+    if (attributedName) return attributedName;
+    return opts.visibleAgent?.displayName?.trim() || null;
+  }
+  if (opts.hasAgentRow && !opts.visibleAgent) return PRIVATE_AGENT_DISPLAY_NAME;
   if (!opts.attributionEnabled && !opts.hasAgentRow && opts.storedDisplayName) {
     return PRIVATE_AGENT_DISPLAY_NAME;
   }
   const stored = opts.storedDisplayName?.trim();
   if (stored) return stored;
   const live = opts.visibleAgent?.displayName?.trim();
-  if (live) return live;
-  if (opts.hasAgentRow && !opts.visibleAgent) return PRIVATE_AGENT_DISPLAY_NAME;
-  return null;
+  return live || null;
 }
 
 export function overlayDurableAgentDisplayName<T extends object>(

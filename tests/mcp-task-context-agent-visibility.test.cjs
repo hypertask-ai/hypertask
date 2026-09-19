@@ -82,6 +82,7 @@ function loadRoute(comments) {
     },
     "@/lib/agents/publicAgent": {
       resolvePublicAgentDisplayName({ hasAgentRow, visibleAgent, storedDisplayName, attributionEnabled }) {
+        if (hasAgentRow && !visibleAgent) return "Private agent";
         if (!attributionEnabled && !hasAgentRow && storedDisplayName) return "Private agent";
         const stored = storedDisplayName && String(storedDisplayName).trim();
         if (stored) return stored;
@@ -89,14 +90,12 @@ function loadRoute(comments) {
           visibleAgent &&
           visibleAgent.displayName &&
           String(visibleAgent.displayName).trim();
-        if (live) return live;
-        if (hasAgentRow && !visibleAgent) return "Private agent";
-        return null;
+        return live || null;
       },
     },
     "@/lib/flags": {
       HTPR_6516_AGENT_ATTRIBUTION_FLAG: "htpr-6516-agent-attribution",
-      isFeatureEnabled: async () => false,
+      isFeatureEnabled: async () => Boolean(comments.attributionEnabled),
     },
     "@/utils/controllers/projects/getAllIncludes": {
       getProjectWhere: () => ({}),
@@ -123,7 +122,7 @@ function comment(overrides) {
   };
 }
 
-test("task context names living bots on the ticket and redacts a deleted bot when the flag is off", async () => {
+test("task context redacts deleted, private, and unshared team agent names", async () => {
   const privateAgent = {
     id: "private-agent",
     displayName: "Private helper",
@@ -167,10 +166,35 @@ test("task context names living bots on the ticket and redacts a deleted bot whe
   assert.equal(response.status, 200);
   assert.deepEqual(
     response.body.comments.map(({ author }) => author),
-    ["Human", "Shared helper", "Team helper", "Private helper", "Private agent"],
+    ["Human", "Shared helper", "Private agent", "Private agent", "Private agent"],
   );
   assert.deepEqual(route.getCommentQuery().select.agent.select, {
     viewerId: 6,
     projectId: 15,
   });
+});
+
+test("flagged task context names an attributed private agent", async () => {
+  const comments = [
+    comment({
+      agentDisplayName: "Private helper",
+      agent: {
+        id: "private-agent",
+        displayName: "Private helper",
+        userId: 9,
+        visibility: "PRIVATE",
+        members: [],
+      },
+    }),
+  ];
+  comments.attributionEnabled = true;
+
+  const response = await loadRoute(comments).GET({
+    nextUrl: {
+      searchParams: new URLSearchParams({ task_id: "42", project_id: "15" }),
+    },
+  });
+
+  assert.equal(response.status, 200);
+  assert.equal(response.body.comments[0].author, "Private helper");
 });

@@ -12,8 +12,8 @@ const routePath = path.join(root, "src/app/api/mcp/comments/route.ts");
 
 const {
   mcpVisibleAgentSelect,
-  mapVisibleMcpAgent,
   mapAttributedMcpAgent,
+  mapVisibleMcpAgent,
   transpile,
 } = require(path.join(root, "tests/helpers/load-mcp-agents.cjs"));
 
@@ -42,9 +42,14 @@ function loadRoute(comments) {
       validateMcpAuth: async () => ({ user: { id: 6 }, agentId: null }),
     },
     "@/lib/prisma": { __esModule: true, default: prisma },
-    "@/lib/mcp/agents": { mcpVisibleAgentSelect, mapVisibleMcpAgent, mapAttributedMcpAgent },
+    "@/lib/mcp/agents": {
+      mcpVisibleAgentSelect,
+      mapAttributedMcpAgent,
+      mapVisibleMcpAgent,
+    },
     "@/lib/agents/publicAgent": {
       resolvePublicAgentDisplayName({ hasAgentRow, visibleAgent, storedDisplayName, attributionEnabled }) {
+        if (hasAgentRow && !visibleAgent) return "Private agent";
         if (!attributionEnabled && !hasAgentRow && storedDisplayName) return "Private agent";
         const stored = storedDisplayName && String(storedDisplayName).trim();
         if (stored) return stored;
@@ -52,22 +57,19 @@ function loadRoute(comments) {
           visibleAgent &&
           visibleAgent.displayName &&
           String(visibleAgent.displayName).trim();
-        if (live) return live;
-        if (hasAgentRow && !visibleAgent) return "Private agent";
-        return null;
+        return live || null;
       },
       overlayDurableAgentDisplayName(mapped, opts) {
         if (!opts.attributionEnabled) return mapped;
         const name = (function resolve({ hasAgentRow, visibleAgent, storedDisplayName }) {
+          if (hasAgentRow && !visibleAgent) return "Private agent";
           const stored = storedDisplayName && String(storedDisplayName).trim();
           if (stored) return stored;
           const live =
             visibleAgent &&
             visibleAgent.displayName &&
             String(visibleAgent.displayName).trim();
-          if (live) return live;
-          if (hasAgentRow && !visibleAgent) return "Private agent";
-          return null;
+          return live || null;
         })(opts);
         const next = { ...mapped };
         if (name) next.agent_display_name = name;
@@ -128,7 +130,8 @@ function loadRoute(comments) {
     "@/lib/flags": {
       HTPR_6516_AGENT_ATTRIBUTION_FLAG: "htpr-6516-agent-attribution",
       HTPR_6530_MCP_LIST_QUERY_FLAG: "htpr-6530-mcp-list-query",
-      isFeatureEnabled: async () => false,
+      isFeatureEnabled: async (flag) =>
+        flag === "htpr-6516-agent-attribution" && Boolean(comments.attributionEnabled),
     },
     "@/lib/flags/keys": {
       HTPR_6516_AGENT_ATTRIBUTION_FLAG: "htpr-6516-agent-attribution",
@@ -167,7 +170,7 @@ function commentFixture(overrides) {
   };
 }
 
-test("comments GET names every bot that already wrote on the ticket", async () => {
+test("comments GET keeps a same-team agent visible but hides a different team's agent", async () => {
   const outsiderAgent = {
     id: "outsider-agent",
     displayName: "Outsider Team Agent",
@@ -210,8 +213,8 @@ test("comments GET names every bot that already wrote on the ticket", async () =
   assert.equal(response.status, 200);
   const [outsiderComment, insiderComment] = response.body.comments;
 
-  assert.equal(outsiderComment.agent?.id, "outsider-agent");
-  assert.equal(outsiderComment.agent_display_name, "Outsider Team Agent");
+  assert.equal(outsiderComment.agent, undefined);
+  assert.equal(outsiderComment.agent_display_name, "Private agent");
 
   assert.equal(insiderComment.agent?.id, "insider-agent");
   assert.equal(insiderComment.agent_display_name, "Insider Team Agent");
@@ -219,4 +222,31 @@ test("comments GET names every bot that already wrote on the ticket", async () =
   // The visibility select and the response mapper must both be scoped to the
   // viewed task's own project (15), not the requester's user id alone.
   assert.equal(route.getQuery().include.agent.select.members.where.project.id, 15);
+});
+
+test("flagged comments name an attributed agent outside the viewer's team", async () => {
+  const comments = [
+    commentFixture({
+      agentDisplayName: "Outsider Team Agent",
+      agent: {
+        id: "outsider-agent",
+        displayName: "Outsider Team Agent",
+        photoURL: null,
+        userId: 42,
+        visibility: "TEAM",
+        members: [],
+      },
+    }),
+  ];
+  comments.attributionEnabled = true;
+
+  const response = await loadRoute(comments).GET({
+    nextUrl: {
+      searchParams: new URLSearchParams({ task_id: "100" }),
+    },
+  });
+
+  assert.equal(response.status, 200);
+  assert.equal(response.body.comments[0].agent?.id, "outsider-agent");
+  assert.equal(response.body.comments[0].agent_display_name, "Outsider Team Agent");
 });

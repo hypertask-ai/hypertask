@@ -1,7 +1,10 @@
 import {
     mapAttributedMcpAgent,
+    mapVisibleMcpAgent,
     mcpAgentSelect,
+    mcpVisibleAgentSelect,
 } from '@/lib/mcp/agents';
+import { accessibleAgentWhere } from '@/lib/agents/visibility';
 import { taskStaleness } from '@/lib/staleness';
 import { derivePullRequestDisplayState } from '@/lib/pullRequests/githubPullRequests';
 import { McpTaskAssignee, TaskDetail } from './types';
@@ -22,40 +25,73 @@ export function mapTaskDescriptionContent(task: {
 
 export function mapTaskAssignee(a: {
     user: { id: number; email: string; displayName: string | null };
-    agent?: Parameters<typeof mapAttributedMcpAgent>[0];
-    agentAssigner?: Parameters<typeof mapAttributedMcpAgent>[0];
-}, _userId?: number, _projectId?: number): McpTaskAssignee | undefined {
-    const agent = mapAttributedMcpAgent(a.agent);
+    agent?: Parameters<typeof mapVisibleMcpAgent>[0];
+    agentAssigner?: Parameters<typeof mapVisibleMcpAgent>[0];
+}, userId: number, projectId: number, attributionEnabled = false): McpTaskAssignee | undefined {
+    if (!attributionEnabled) {
+        const agent = mapVisibleMcpAgent(a.agent, userId, projectId);
+        if (a.agent && !agent) return undefined;
 
-    const mapped: McpTaskAssignee = {
+        const mapped: McpTaskAssignee = {
+            id: a.user.id,
+            email: a.user.email,
+            // An agent assignment stores the owner's user row. Print the agent
+            // name, or task get and the CLI still show the owner.
+            displayName: agent?.displayName || a.user.displayName || undefined,
+        };
+        const agentAssigner = mapVisibleMcpAgent(a.agentAssigner, userId, projectId);
+        if (agent) mapped.agent = agent;
+        if (agentAssigner) mapped.agentAssigner = agentAssigner;
+        return mapped;
+    }
+
+    const agent = mapAttributedMcpAgent(a.agent);
+    const agentAssigner = mapAttributedMcpAgent(a.agentAssigner);
+    if (agent) {
+        return {
+            displayName: agent.displayName,
+            agent,
+            ...(agentAssigner ? { agentAssigner } : {}),
+        };
+    }
+
+    return {
         id: a.user.id,
         email: a.user.email,
-        // An agent assignment stores the owner's user row. Print the agent
-        // name, or task get and the CLI still show the owner.
-        displayName: agent?.displayName || a.user.displayName || undefined,
+        displayName: a.user.displayName || undefined,
+        ...(agentAssigner ? { agentAssigner } : {}),
     };
-    const agentAssigner = mapAttributedMcpAgent(a.agentAssigner);
-    if (agent) mapped.agent = agent;
-    if (agentAssigner) mapped.agentAssigner = agentAssigner;
-    return mapped;
 }
 
 /** Nest the creating agent under createdBy the same way assignees nest agent. */
 export function mapTaskCreatedBy(
     user: { id: number; email: string; displayName: string | null } | null | undefined,
-    agent: Parameters<typeof mapAttributedMcpAgent>[0],
-    _userId?: number,
-    _projectId?: number,
+    agent: Parameters<typeof mapVisibleMcpAgent>[0],
+    userId: number,
+    projectId: number,
+    attributionEnabled = false,
 ): NonNullable<TaskDetail['createdBy']> | undefined {
     if (!user) return undefined;
-    const createdBy: NonNullable<TaskDetail['createdBy']> = {
+    if (!attributionEnabled) {
+        const createdBy: NonNullable<TaskDetail['createdBy']> = {
+            id: user.id,
+            email: user.email,
+            displayName: user.displayName || undefined,
+        };
+        const visibleAgent = mapVisibleMcpAgent(agent, userId, projectId);
+        if (visibleAgent) createdBy.agent = visibleAgent;
+        return createdBy;
+    }
+
+    const attributedAgent = mapAttributedMcpAgent(agent);
+    if (attributedAgent) {
+        return { displayName: attributedAgent.displayName, agent: attributedAgent };
+    }
+    return {
         id: user.id,
         email: user.email,
         displayName: user.displayName || undefined,
     };
-    const attributedAgent = mapAttributedMcpAgent(agent);
-    if (attributedAgent) createdBy.agent = attributedAgent;
-    return createdBy;
 }
 
 export const mcpTaskLabelSelect = {
@@ -72,7 +108,7 @@ export function mapMcpTaskLabel(taskLabel: {
     };
 }
 
-export function taskDetailInclude(userId: number) {
+export function taskDetailInclude(userId: number, attributionEnabled = false) {
     return {
     project: {
         select: {
@@ -86,9 +122,17 @@ export function taskDetailInclude(userId: number) {
     description_: true,
     estimate: true,
     agent: {
-        select: mcpAgentSelect,
+        select: mcpVisibleAgentSelect(userId),
+        ...(attributionEnabled ? { select: mcpAgentSelect } : {}),
     },
     assignees: {
+        where: {
+            OR: [
+                { agentId: null },
+                { agent: accessibleAgentWhere(userId) },
+            ],
+        },
+        ...(attributionEnabled ? { where: undefined } : {}),
         include: {
             user: {
                 select: {
@@ -97,8 +141,14 @@ export function taskDetailInclude(userId: number) {
                     displayName: true
                 }
             },
-            agent: { select: mcpAgentSelect },
-            agentAssigner: { select: mcpAgentSelect },
+            agent: { select: mcpVisibleAgentSelect(userId) },
+            agentAssigner: { select: mcpVisibleAgentSelect(userId) },
+            ...(attributionEnabled
+                ? {
+                      agent: { select: mcpAgentSelect },
+                      agentAssigner: { select: mcpAgentSelect },
+                  }
+                : {}),
         }
     },
     followers: {
@@ -159,9 +209,9 @@ export function taskDetailInclude(userId: number) {
 }
 
 /** GET /api/mcp/tasks single-task lookup (includes hierarchy fields). */
-export function taskMcpGetInclude(userId: number) {
+export function taskMcpGetInclude(userId: number, attributionEnabled = false) {
     return {
-    ...taskDetailInclude(userId),
+    ...taskDetailInclude(userId, attributionEnabled),
     attachments: {
         select: {
             id: true,
@@ -200,7 +250,11 @@ export function taskMcpGetInclude(userId: number) {
     };
 }
 
-export function mapTaskToMcpGetResponse(task: any, userId: number) {
+export function mapTaskToMcpGetResponse(
+    task: any,
+    userId: number,
+    attributionEnabled = false,
+) {
     const subTasks = Array.isArray(task.subTasks)
         ? task.subTasks.map(
               (st: {
@@ -262,7 +316,7 @@ export function mapTaskToMcpGetResponse(task: any, userId: number) {
         verifyCommand: task.verifyCommand || undefined,
         assignees: (task.assignees ?? [])
             .map((assignee: any) =>
-                mapTaskAssignee(assignee, userId, task.projectId)
+                mapTaskAssignee(assignee, userId, task.projectId, attributionEnabled)
             )
             .filter((assignee: McpTaskAssignee | undefined): assignee is McpTaskAssignee =>
                 Boolean(assignee)
@@ -315,19 +369,34 @@ export function mapTaskToMcpGetResponse(task: any, userId: number) {
             warnDays: task.project?.staleWarnDays,
             hotDays: task.project?.staleHotDays,
         }),
-        createdBy: mapTaskCreatedBy(task.user, task.agent, userId, task.projectId),
+        createdBy: mapTaskCreatedBy(
+            task.user,
+            task.agent,
+            userId,
+            task.projectId,
+            attributionEnabled,
+        ),
     };
 
-    const agent = mapAttributedMcpAgent(task.agent);
-    // Count the already-mapped assignee list so the number always matches
-    // what the response actually lists (HTPR-6279).
+    const agent = attributionEnabled
+        ? mapAttributedMcpAgent(task.agent)
+        : mapVisibleMcpAgent(task.agent, userId, task.projectId);
+    // Count the already-filtered, visibility-checked assignee list so the
+    // number always matches what the response actually lists (HTPR-6279).
+    // With attribution enabled, the mapper includes agent-only rows instead.
     const withAssigneeCount = { ...mapped, assigneeCount: mapped.assignees.length };
     return agent ? { ...withAssigneeCount, agent } : withAssigneeCount;
 }
 
-export function mapTaskToDetail(task: any, userId: number): TaskDetail {
+export function mapTaskToDetail(
+    task: any,
+    userId: number,
+    attributionEnabled = false,
+): TaskDetail {
     const descriptionContent = mapTaskDescriptionContent(task);
-    const taskAgent = mapAttributedMcpAgent(task.agent);
+    const taskAgent = attributionEnabled
+        ? mapAttributedMcpAgent(task.agent)
+        : mapVisibleMcpAgent(task.agent, userId, task.projectId);
 
     return {
         id: task.id,
@@ -358,7 +427,7 @@ export function mapTaskToDetail(task: any, userId: number): TaskDetail {
         verifyCommand: task.verifyCommand || undefined,
         assignees: task.assignees
             ?.map((assignee: any) =>
-                mapTaskAssignee(assignee, userId, task.projectId)
+                mapTaskAssignee(assignee, userId, task.projectId, attributionEnabled)
             )
             .filter((assignee: McpTaskAssignee | undefined): assignee is McpTaskAssignee =>
                 Boolean(assignee)
@@ -404,7 +473,13 @@ export function mapTaskToDetail(task: any, userId: number): TaskDetail {
             warnDays: task.project?.staleWarnDays,
             hotDays: task.project?.staleHotDays,
         }),
-        createdBy: mapTaskCreatedBy(task.user, task.agent, userId, task.projectId),
+        createdBy: mapTaskCreatedBy(
+            task.user,
+            task.agent,
+            userId,
+            task.projectId,
+            attributionEnabled,
+        ),
         ...(taskAgent ? { agent: taskAgent } : {}),
     };
 }

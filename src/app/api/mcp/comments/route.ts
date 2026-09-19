@@ -5,6 +5,7 @@ import type { McpAgentSummary } from '@/lib/mcp/agents'
 import {
   getMcpSessionAgentSummary,
   mapAttributedMcpAgent,
+  mapVisibleMcpAgent,
   mcpVisibleAgentSelect,
 } from '@/lib/mcp/agents'
 import prisma from '@/lib/prisma'
@@ -164,16 +165,15 @@ const commentInclude = (userId: number, projectId: number) => ({
 // retain the app endpoint's raw activity payload and add an explicit row type.
 function mapCommentToResponse(
   comment: any,
-  _userId: number,
-  _projectId: number,
+  userId: number,
+  projectId: number,
   includeActivity = false
 ): CommentItem {
-  const agent = mapAttributedMcpAgent(comment.agent)
-  const agentDisplayName = agent
-    ? comment.agentDisplayName || agent.displayName
-    : comment.agentDisplayName
-      ? 'Private agent'
-      : undefined
+  const agent = mapVisibleMcpAgent(comment.agent, userId, projectId)
+  const agentVisible = !comment.agent ? !comment.agentDisplayName : Boolean(agent)
+  const agentDisplayName = agentVisible
+    ? comment.agentDisplayName
+    : 'Private agent'
   const mappedComment: CommentItem = {
     id: comment.id,
     text: comment.text,
@@ -207,16 +207,29 @@ function mapCommentToResponse(
 function applyDurableCommentAttribution<T extends object>(
   mapped: T,
   comment: any,
-  _userId: number,
-  _projectId: number,
+  userId: number,
+  projectId: number,
   attributionEnabled: boolean
 ): T {
-  return overlayDurableAgentDisplayName(mapped, {
-    hasAgentRow: Boolean(comment.agent),
-    visibleAgent: mapAttributedMcpAgent(comment.agent),
-    storedDisplayName: comment.agentDisplayName,
-    attributionEnabled,
-  })
+  if (!attributionEnabled) {
+    return overlayDurableAgentDisplayName(mapped, {
+      hasAgentRow: Boolean(comment.agent),
+      visibleAgent: mapVisibleMcpAgent(comment.agent, userId, projectId),
+      storedDisplayName: comment.agentDisplayName,
+      attributionEnabled,
+    })
+  }
+
+  const agent = mapAttributedMcpAgent(comment.agent)
+  return overlayDurableAgentDisplayName(
+    { ...mapped, ...(agent ? { agent } : {}) },
+    {
+      hasAgentRow: Boolean(comment.agent),
+      visibleAgent: agent,
+      storedDisplayName: comment.agentDisplayName,
+      attributionEnabled,
+    }
+  )
 }
 
 /**

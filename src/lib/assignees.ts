@@ -13,6 +13,17 @@ type AssigneeRow = {
 export const isAgentAssigneeRow = (assignee: AssigneeRow) =>
   assignee.agentId != null || assignee.agent != null;
 
+export const sanitizeAgentAssigneeOwner = <T extends {
+  agentId?: string | null;
+  agent?: unknown;
+  userId?: number | null;
+  user?: unknown;
+}>(assignee: T) => {
+  if (assignee.agentId == null && assignee.agent == null) return assignee;
+  const { user: _user, userId: _userId, ...agentOnly } = assignee;
+  return agentOnly;
+};
+
 export const assigneePublicName = (assignee: AssigneeRow) =>
   assignee.agent?.displayName ??
   assignee.user?.displayName ??

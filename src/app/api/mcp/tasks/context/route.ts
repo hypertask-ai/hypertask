@@ -14,7 +14,11 @@ import {
   taskMcpGetInclude,
 } from '@/lib/mcp/tasks/mappers';
 import { findTaskByIdentifier } from '@/lib/mcp/tasks/resolveTask';
-import { mapAttributedMcpAgent, mcpVisibleAgentSelect } from '@/lib/mcp/agents';
+import {
+  mapAttributedMcpAgent,
+  mapVisibleMcpAgent,
+  mcpVisibleAgentSelect,
+} from '@/lib/mcp/agents';
 import { resolvePublicAgentDisplayName } from '@/lib/agents/publicAgent';
 import { HTPR_6516_AGENT_ATTRIBUTION_FLAG, isFeatureEnabled } from '@/lib/flags';
 import { getProjectWhere } from '@/utils/controllers/projects/getAllIncludes';
@@ -132,6 +136,10 @@ export async function GET(request: NextRequest) {
     const commentLimit = summary
       ? SUMMARY_COMMENT_LIMIT
       : FULL_COMMENT_LIMIT;
+    const attributionEnabled = await isFeatureEnabled(
+      HTPR_6516_AGENT_ATTRIBUTION_FLAG,
+      ctx.user.id
+    );
 
     const [task, commentCount, recentComments, prComments, relations] =
       await Promise.all([
@@ -142,7 +150,7 @@ export async function GET(request: NextRequest) {
             status: { not: 'Deleted' },
           },
           include: {
-            ...taskMcpGetInclude(ctx.user.id),
+            ...taskMcpGetInclude(ctx.user.id, attributionEnabled),
             pullRequests: {
               orderBy: { createdAt: 'asc' },
               select: {
@@ -227,13 +235,15 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    const mappedTask = mapTaskToMcpGetResponse(task, ctx.user.id);
-    const attributionEnabled = await isFeatureEnabled(
-      HTPR_6516_AGENT_ATTRIBUTION_FLAG,
-      ctx.user.id
+    const mappedTask = mapTaskToMcpGetResponse(
+      task,
+      ctx.user.id,
+      attributionEnabled,
     );
     const comments = recentComments.reverse().map((comment) => {
-      const agent = mapAttributedMcpAgent(comment.agent);
+      const agent = attributionEnabled
+        ? mapAttributedMcpAgent(comment.agent)
+        : mapVisibleMcpAgent(comment.agent, ctx.user.id, projectId);
       const hasAgentAttribution = Boolean(comment.agent || comment.agentDisplayName);
       const agentDisplayName = resolvePublicAgentDisplayName({
         hasAgentRow: Boolean(comment.agent),
@@ -244,9 +254,7 @@ export async function GET(request: NextRequest) {
       return {
         id: comment.id,
         author: hasAgentAttribution
-          ? (comment.agent
-              ? comment.agentDisplayName || agent?.displayName
-              : undefined) || 'Private agent'
+          ? agent?.displayName || 'Private agent'
           : comment.creator?.displayName || comment.creator?.email || 'Unknown',
         ...(attributionEnabled
           ? {

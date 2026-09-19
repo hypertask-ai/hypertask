@@ -115,6 +115,7 @@ test("read paths gate durable attribution behind htpr-6516-agent-attribution", (
     "src/app/api/mcp/comments/route.ts",
     "src/app/api/mcp/comments/[comment_id]/route.ts",
     "src/app/api/mcp/tasks/context/route.ts",
+    "src/app/api/mcp/tasks/route.ts",
     "src/app/api/ai/chat/stream/route.ts",
     "src/utils/controllers/taskDetail/load.ts",
   ]) {
@@ -141,10 +142,12 @@ test("task get/list print the agent name on an agent assignment, not the owner",
     },
     6,
     15,
+    true,
   );
   assert.equal(mapped.displayName, "Dev 2");
   assert.equal(mapped.agent.id, "1a6dd89d-5fff-4c1b-9610-0a4270a7f2c7");
-  assert.equal(mapped.id, 6);
+  assert.equal(mapped.id, undefined);
+  assert.equal(mapped.email, undefined);
 });
 
 test("a board member who does not own the bot still sees that bot on the ticket", () => {
@@ -161,9 +164,31 @@ test("a board member who does not own the bot still sees that bot on the ticket"
     },
     99,
     15,
+    true,
   );
   assert.equal(mapped.displayName, "QA 1");
   assert.equal(mapped.agent.id, "b7ad06ff-1aaa-4a64-937d-f7fd801506e5");
+  assert.equal(mapped.id, undefined);
+  assert.equal(mapped.email, undefined);
+});
+
+test("flag-off task mapping keeps private agents hidden", () => {
+  const mapped = mapTaskAssignee(
+    {
+      user: { id: 6, email: "valentin.yeo@gmail.com", displayName: "Valentin Yeo" },
+      agent: {
+        id: "b7ad06ff-1aaa-4a64-937d-f7fd801506e5",
+        userId: 6,
+        visibility: "PRIVATE",
+        members: [],
+        displayName: "QA 1",
+      },
+    },
+    99,
+    15,
+    false,
+  );
+  assert.equal(mapped, undefined);
 });
 
 test("inbox and shared cards read the agent name from the assignee row", () => {
@@ -197,8 +222,38 @@ test("saved and inbox comment rows prefer the agent name over the owner", () => 
     "src/components/PageComponents/Starred/SavedContentRow.tsx",
   );
   const inbox = read("src/components/notifications/comment.tsx");
-  assert.match(saved, /commentActorName\(comment\)/);
-  assert.match(inbox, /commentActorName\(notification\.comment\)/);
+  for (const source of [saved, inbox]) {
+    assert.match(source, /useFlag\(HTPR_6516_AGENT_ATTRIBUTION_FLAG\)/);
+  }
+  assert.match(
+    saved,
+    /attributionEnabled \? commentActorName\(comment\) : comment\.creator\?\.displayName/,
+  );
+  assert.match(
+    inbox,
+    /attributionEnabled \? commentActorName\(notification\.comment\) : notification\.comment\?\.creator\?\.displayName/,
+  );
+});
+
+test("saved-comment loaders omit durable attribution while the flag is off", () => {
+  for (const relativePath of [
+    "src/utils/controllers/savedContent/getAllStarred.ts",
+    "src/utils/controllers/savedContent/getAllPinned.ts",
+  ]) {
+    const source = read(relativePath);
+    assert.match(source, /isFeatureEnabled\(\s*HTPR_6516_AGENT_ATTRIBUTION_FLAG/);
+    assert.match(source, /savedCommentInclude\(attributionEnabled\)/);
+  }
+  const helper = read("src/utils/controllers/savedContent/helper.ts");
+  assert.match(helper, /omit: \{ agentId: true, agentDisplayName: true \}/);
+});
+
+test("board payloads strip the backing owner from agent assignments", () => {
+  const board = read("src/utils/controllers/projects/getBoardTasks.ts");
+  const detail = read("src/utils/controllers/taskDetail/load.ts");
+  assert.match(board, /isFeatureEnabled\(\s*HTPR_6516_AGENT_ATTRIBUTION_FLAG/);
+  assert.match(board, /task\.assignees\.map\(sanitizeAgentAssigneeOwner\)/);
+  assert.match(detail, /task\.assignees\.map\(sanitizeAgentAssigneeOwner\)/);
 });
 
 test("cookie label and waiting-on writes stamp fromAgent from the session", () => {

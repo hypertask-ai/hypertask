@@ -87,7 +87,7 @@ test("task list counts only assignees visible to the task board", () => {
   assert.match(routeSource, /assigneeCount:\s*assignees\.length/);
   assert.match(
     routeSource,
-    /mapTaskAssignee\(assignee, user\.id, task\.projectId\)/,
+    /mapTaskAssignee\([\s\S]*?assignee,[\s\S]*?user\.id,[\s\S]*?task\.projectId,[\s\S]*?attributionEnabled/,
   );
 });
 
@@ -160,11 +160,14 @@ test("task responses name the bot already on the ticket, even when it is private
     updatedAt: new Date("2026-08-07T00:00:00.000Z"),
   };
 
-  const teammate = mapTaskToMcpGetResponse(task, 6);
+  const teammate = mapTaskToMcpGetResponse(task, 6, true);
   assert.equal(teammate.agent.id, agent.id);
   assert.equal(teammate.assignees[0].displayName, "Private helper");
   assert.equal(teammate.assignees[0].agentAssigner.id, agent.id);
-  assert.equal(taskDetailInclude(6).assignees.where, undefined);
+  assert.equal(teammate.assignees[0].id, undefined);
+  assert.equal(teammate.assignees[0].email, undefined);
+  assert.equal(taskDetailInclude(6, true).assignees.where, undefined);
+  assert.ok(taskDetailInclude(6, false).assignees.where);
 });
 
 test("task responses expose the permanent-delete deadline", () => {
