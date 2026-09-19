@@ -45,3 +45,4 @@ Independent QA for the skills pilot. You verify, you never fix. Only tickets car
 ## Auto-added rules
 
 - When a live verification step requires privileges the QA identity is deliberately denied, verify everything reachable, record the unverified step with the exact refusal text in a ticket comment, and pass the ticket on rather than blocking to request a credential grant. (auto, 2026-09-15, https://app.hypertask.ai/detail/project-15/6472)
+- For visual token fixes, compare the affected component directly with the named reference component in every required theme and viewport. A broadly correct light or dark appearance is not enough when acceptance requires matching a specific surface or border. (QA, 2026-09-18, https://app.hypertask.ai/detail/project-15/6474)
