@@ -408,14 +408,11 @@ const useSections = ({
 
   // =================== user presses escape or blurs out
   const onCancelCreate = () => {
+    const itemToFocus = items[position === "top" ? 0 : items.length - 1];
     setShowAddItem(false);
     setPosition(null);
-    document
-      .getElementById(
-        `task-${items[position == "top" ? 0 : items.length - 1]?.id}`
-      )
-      ?.focus();
-    setActiveItem(items[items.length - 1]?.id ?? null);
+    document.getElementById(`task-${itemToFocus?.id}`)?.focus();
+    setActiveItem(itemToFocus?.id ?? null);
   };
 
 
