@@ -1073,8 +1073,8 @@ const MobileBottomBar: React.FC<IMobileBottomBar> = ({
           >
             <ActionButton
               ref={saveRef}
-              label="Save with task writer"
-              onClick={toggleAiTaskWriter}
+              label={isAiTaskWriterOpen ? "Saving..." : "Save with task writer"}
+              onClick={isAiTaskWriterOpen ? undefined : toggleAiTaskWriter}
             />
           </div>
         </div>
