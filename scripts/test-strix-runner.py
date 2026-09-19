@@ -52,6 +52,9 @@ p=pathlib.Path('strix_runs/owned');p.mkdir(parents=True)
 complete=mode!='budget'
 data={'status':'completed' if complete else 'budget_exceeded','scan_results':{'scan_completed':complete,'methodology':'COVERAGE_COMPLETE','technical_analysis':'Incomplete' if mode=='incomplete' else 'Reviewed changes'}}
 (p/'run.json').write_text(json.dumps(data));(p/'penetration_test_report.md').write_text('Report')
+if mode=='findings':
+ (p/'vulnerabilities.json').write_text(json.dumps([{'title':'Informational fixture','severity':'low'}]))
+ sys.exit(2)
 ''',
         }.items():
             p=bin / name;p.write_text(body);p.chmod(0o755)
@@ -70,6 +73,12 @@ data={'status':'completed' if complete else 'budget_exceeded','scan_results':{'s
         self.assertEqual((state/'last-success').read_text().strip(),self.git('rev-parse','HEAD'))
         self.assertFalse((Path(status['job'])/'source/.env').exists())
         self.assertFalse((Path(status['job'])/'source/.git/objects/info/alternates').exists())
+
+    def test_findings_exit_code_still_checks_and_files_report(self):
+        result,status,state=self.run_scan('findings')
+        self.assertEqual(result.returncode,0,result.stdout+result.stderr)
+        self.assertEqual(status['status'],'completed')
+        self.assertTrue((state/'last-success').exists())
 
     def test_no_changes_skips_scan(self):
         self.env['STRIX_DIFF_BASE']=self.git('rev-parse','HEAD')
@@ -107,6 +116,17 @@ class ReportTests(unittest.TestCase):
             for n in ['one','two']:
                 p=Path(temp)/n;p.mkdir();(p/'run.json').write_text('{}')
             with self.assertRaises(ValueError):validator.validate(temp)
+
+    def test_confirmation_includes_actual_callers(self):
+        reporter=load('strix-file-tickets')
+        with tempfile.TemporaryDirectory() as temp:
+            root=Path(temp);(root/'src').mkdir()
+            (root/'src/helper.ts').write_text('export function decide(count, limit) { return count > limit }\n')
+            (root/'src/caller.ts').write_text('const count = await redis.incr(key)\nconst decision = decide(count, limit)\n')
+            with patch.object(reporter,'APP',root):
+                source=reporter.source_evidence({'code_locations':[{'file':'src/helper.ts','start_line':1,'end_line':1}]})
+                self.assertIn('Caller/test context: src/caller.ts',source)
+                self.assertIn('redis.incr(key)',source)
 
     def test_filing_uses_agent_wrapper_without_assignment(self):
         reporter=load('strix-file-tickets')
