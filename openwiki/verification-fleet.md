@@ -84,6 +84,8 @@ A signed-in web check starts at `/qa/login`. That page and `POST /api/auth/qa-lo
 
 Credentials are local only. Source `/home/valentin/.config/testsprite/credentials.env` for the TestSprite key. The backend project's Bearer credential is the account-scoped MCP token for QA userId 985, sourced from `/home/valentin/.config/hypertask-videos/storageState-qa.warmed.json`; rotate the project credential when that QA session token expires. Never copy either value into a test or this repository.
 
+For credential-backed frontend tests, never print `testsprite test steps` output: TestSprite expands the stored username and password into those diagnostics. Use `test run --wait --summary-file` and report only the run ID and aggregate status. If diagnostics expose a credential, rotate it in the TestSprite project, Vercel Production, the GitHub secret, and local secure storage, then deploy Production before rerunning the test.
+
 ```bash
 source /home/valentin/.config/testsprite/credentials.env
 testsprite test run --all --project 64648e88-03a4-4355-9e14-dc28f4e8cc7e --wait --timeout 1200

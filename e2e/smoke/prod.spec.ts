@@ -4,6 +4,7 @@ import path from 'node:path'
 
 const PREFLIGHT_FILE = path.join(__dirname, '.state', 'preflight.json')
 const APPLICATION_FAILURE_FILE = path.join(__dirname, '.state', 'application-failure.json')
+const FIXTURE_FILE = path.join(__dirname, '.state', 'fixture.json')
 const LOGIN_PATH = '/login'
 
 const RUNNER_ERROR_MARKERS = [
@@ -40,6 +41,16 @@ function isUnrunnableError(err: unknown): boolean {
     RUNNER_ERROR_MARKERS.some((marker) => marker.test(message))
 }
 
+function fixturePath(key: 'boardPath' | 'taskPath'): string {
+  try {
+    const fixture = JSON.parse(readFileSync(FIXTURE_FILE, 'utf8')) as Record<string, unknown>
+    if (typeof fixture[key] === 'string' && fixture[key]) return fixture[key]
+  } catch {
+    // The preflight normally catches this; keep a later runner/file failure from authorizing rollback.
+  }
+  abortUnrunnable(`smoke fixture is missing ${key}`)
+}
+
 test.afterEach(({ page }, testInfo) => {
   if (page.url().includes(LOGIN_PATH)) {
     markUnrunnable(`smoke session redirected to ${LOGIN_PATH} during the view checks`)
@@ -66,8 +77,7 @@ test.afterEach(({ page }, testInfo) => {
 // this proves the right route rendered server-side AND client-side.
 const VIEWS: Array<{
   name: string
-  path: string | undefined
-  requiresFixture?: boolean
+  path: string | (() => string)
   title?: string
   titlePattern?: RegExp
   notTitle?: RegExp
@@ -84,11 +94,11 @@ const VIEWS: Array<{
   { name: 'board list', path: '/all-tasks', title: 'All tasks', selector: '#users-list' },
   // buildBoardRouteTitle: "<board> • Hypertask", bare "Hypertask" = no board data.
   // .kanban-column-title — src/components/PageComponents/Kanban/KanbanSectionComponents/section.tsx
-  { name: 'kanban board', path: process.env.SMOKE_BOARD_PATH, requiresFixture: true, titlePattern: /• Hypertask$/, notTitle: /^Hypertask$/, selector: '.kanban-column-title' },
+  { name: 'kanban board', path: () => fixturePath('boardPath'), titlePattern: /• Hypertask$/, notTitle: /^Hypertask$/, selector: '.kanban-column-title' },
   // Task detail: "<ticket> <title> - Hypertask"; a missing task renders
   // "undefined undefined - Hypertask".
   // <textarea id="title-input"> — src/components/PageComponents/TaskDetail/TopRow/TaskTitle.tsx
-  { name: 'task detail', path: process.env.SMOKE_TASK_PATH, requiresFixture: true, titlePattern: / - Hypertask$/, notTitle: /undefined/, selector: '#title-input' },
+  { name: 'task detail', path: () => fixturePath('taskPath'), titlePattern: / - Hypertask$/, notTitle: /undefined/, selector: '#title-input' },
   // Hidden (display:none, aria-hidden) span the inbox flips to "true" once
   // its notifications query resolves — present regardless of empty/non-empty
   // state or viewport, so assert presence, not visibility.
@@ -117,34 +127,33 @@ function isBotChallenge(response: import('@playwright/test').Response | null): b
 
 for (const view of VIEWS) {
   test(`${view.name} loads`, async ({ page }) => {
-    test.skip(view.requiresFixture === true && !view.path, `no seeded fixture (${view.name} not opened)`)
-
+    const viewPath = typeof view.path === 'function' ? view.path() : view.path
     const pageErrors: Error[] = []
     page.on('pageerror', (err) => pageErrors.push(err))
 
     let response
     try {
-      response = await page.goto(view.path!, { waitUntil: 'load' })
+      response = await page.goto(viewPath, { waitUntil: 'load' })
     } catch (err) {
       if (isUnrunnableError(err)) {
-        markUnrunnable(`navigation infrastructure failed on ${view.path}`)
+        markUnrunnable(`navigation infrastructure failed on ${viewPath}`)
       }
       throw err
     }
 
     if (isBotChallenge(response)) {
-      abortUnrunnable(`Vercel bot-challenged the runner IP on ${view.path}`)
+      abortUnrunnable(`Vercel bot-challenged the runner IP on ${viewPath}`)
     }
 
     if (response && (response.status() === 401 || response.status() === 403)) {
-      abortUnrunnable(`smoke session got HTTP ${response.status()} on ${view.path}`)
+      abortUnrunnable(`smoke session got HTTP ${response.status()} on ${viewPath}`)
     }
     if (page.url().includes(LOGIN_PATH)) {
-      abortUnrunnable(`smoke session redirected to ${LOGIN_PATH} on ${view.path}`)
+      abortUnrunnable(`smoke session redirected to ${LOGIN_PATH} on ${viewPath}`)
     }
 
-    expect(response, `no response for ${view.path}`).toBeTruthy()
-    expect(response!.status(), `${view.path} returned ${response!.status()}`).toBeLessThan(400)
+    expect(response, `no response for ${viewPath}`).toBeTruthy()
+    expect(response!.status(), `${viewPath} returned ${response!.status()}`).toBeLessThan(400)
 
     // A 2xx response alone doesn't prove the view rendered — a blank or
     // loading-only shell must fail too (PR #366 review). Wait until the body
@@ -163,31 +172,31 @@ for (const view of VIEWS) {
     // the view's own component, not a generic wrapper.
     const target = page.locator(view.selector).first()
     if (view.attachedOnly) {
-      await expect(target, `${view.path} missing "${view.selector}"`).toBeAttached({ timeout: 15_000 })
+      await expect(target, `${viewPath} missing "${view.selector}"`).toBeAttached({ timeout: 15_000 })
     } else {
-      await expect(target, `${view.path} missing "${view.selector}"`).toBeVisible({ timeout: 15_000 })
+      await expect(target, `${viewPath} missing "${view.selector}"`).toBeVisible({ timeout: 15_000 })
     }
 
     // An auth redirect on one view means the session broke mid-run or the
     // route is misbehaving; either way this is not a passing check.
-    expect(page.url(), `${view.path} redirected to ${page.url()}`).not.toContain(LOGIN_PATH)
+    expect(page.url(), `${viewPath} redirected to ${page.url()}`).not.toContain(LOGIN_PATH)
 
     const title = await page.title()
     if (view.title) {
-      expect(title, `${view.path} titled "${title}", expected "${view.title}"`).toBe(view.title)
+      expect(title, `${viewPath} titled "${title}", expected "${view.title}"`).toBe(view.title)
     }
     if (view.titlePattern) {
-      expect(title, `${view.path} titled "${title}", expected it to match ${view.titlePattern}`).toMatch(view.titlePattern)
+      expect(title, `${viewPath} titled "${title}", expected it to match ${view.titlePattern}`).toMatch(view.titlePattern)
     }
     if (view.notTitle) {
-      expect(title, `${view.path} titled "${title}"`).not.toMatch(view.notTitle)
+      expect(title, `${viewPath} titled "${title}"`).not.toMatch(view.notTitle)
     }
 
     const bodyText = await page.locator('body').innerText()
     for (const marker of ERROR_MARKERS) {
-      expect(bodyText, `${view.path} rendered an error page`).not.toMatch(marker)
+      expect(bodyText, `${viewPath} rendered an error page`).not.toMatch(marker)
     }
 
-    expect(pageErrors, `${view.path} threw a page error: ${pageErrors[0]?.message}`).toHaveLength(0)
+    expect(pageErrors, `${viewPath} threw a page error: ${pageErrors[0]?.message}`).toHaveLength(0)
   })
 }

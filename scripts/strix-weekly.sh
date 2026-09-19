@@ -32,10 +32,12 @@ curl -sf -o /dev/null --connect-timeout 2 --max-time 2 http://127.0.0.1:48100/he
 
 SANDBOX_NETWORK="strix-weekly-$(date +%s)-$$"
 docker network create "$SANDBOX_NETWORK" >/dev/null || exit 1
+DIFF_FILES=""
 cleanup() {
   status=$?
   cleanup_failed=0
   trap - EXIT
+  [ -z "$DIFF_FILES" ] || rm -f "$DIFF_FILES"
   docker ps -aq --filter "network=$SANDBOX_NETWORK" --filter "ancestor=$SANDBOX_IMAGE" \
     | xargs -r docker rm -f || cleanup_failed=1
   docker network rm "$SANDBOX_NETWORK" >/dev/null 2>&1 || {
@@ -59,13 +61,45 @@ export LLM_API_KEY="chatgpt-oauth"
 export LLM_API_BASE="http://127.0.0.1:48100/v1"
 export STRIX_REASONING_EFFORT="medium"
 
-strix -n -m standard \
-  --scope-mode full \
-  --target ./src \
+DIFF_BASE_REF=${STRIX_DIFF_BASE:-production@{7 days ago}}
+DIFF_BASE=$(git rev-parse --verify "$DIFF_BASE_REF") || {
+  echo "Could not resolve weekly diff base: $DIFF_BASE_REF"
+  exit 1
+}
+DIFF_FILES=$(mktemp) || {
+  echo "Could not create changed-file list"
+  exit 1
+}
+if ! git diff --name-only --diff-filter=ACMR -z "$DIFF_BASE"...HEAD >"$DIFF_FILES"; then
+  echo "Could not list files changed since $DIFF_BASE_REF"
+  exit 1
+fi
+mapfile -d '' -t CHANGED_FILES <"$DIFF_FILES"
+rm -f "$DIFF_FILES"
+DIFF_FILES=""
+if [ "${#CHANGED_FILES[@]}" -eq 0 ]; then
+  echo "No files changed since $DIFF_BASE_REF; nothing to scan"
+  echo "=== done $(date -Is) ==="
+  exit 0
+fi
+printf 'Scanning %d file(s) changed since %s:\n' "${#CHANGED_FILES[@]}" "$DIFF_BASE_REF"
+printf '  %s\n' "${CHANGED_FILES[@]}"
+
+if ! strix -n -m standard \
+  --scope-mode diff \
+  --diff-base "$DIFF_BASE" \
+  --target . \
   --max-budget-usd "$BUDGET" \
-  --instruction "Authorized white-box security review of our local Next.js source only. Prioritize JWT and Firebase authentication, MCP bearer-token scoping, IDOR and broken authorization on API routes, secret exposure, injection, SSRF, and unsafe deserialization. Report concrete file:line findings. Do not access any live or remote application URL."
+  --instruction "Authorized white-box security review of our local Next.js source only. Analyze and report findings only when they relate to files in the injected changed-file scope. Prioritize JWT and Firebase authentication, MCP bearer-token scoping, IDOR and broken authorization on API routes, secret exposure, injection, SSRF, and unsafe deserialization. Report concrete file:line findings. Do not access any live or remote application URL."; then
+  echo "Strix scan failed; no findings will be filed"
+  exit 1
+fi
 
 RUN=$(ls -dt "$APP"/strix_runs/*/ 2>/dev/null | head -1)
+if [ -z "$RUN" ]; then
+  echo "Strix produced no run directory; no findings will be filed"
+  exit 1
+fi
 echo "run dir: $RUN"
 python3 "$APP/scripts/strix-file-tickets.py" "$RUN"
 echo "=== done $(date -Is) ==="

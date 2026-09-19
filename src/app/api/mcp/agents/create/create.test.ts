@@ -25,12 +25,14 @@ async function demo() {
     import('@/lib/prisma'),
     import('@/lib/auth/betterAuth'),
     import('@/lib/mcp/auth'),
-    import('./route'),
+    import('../../admin/agents/route'),
   ])
 
   const prismaMock = prisma as any
   const authApi = auth.api as any
   const originalAgentFindFirst = prismaMock.agent.findFirst
+  const originalAgentFindUnique = prismaMock.agent.findUnique
+  const originalMemberFindFirst = prismaMock.member.findFirst
   const originalProjectFindFirst = prismaMock.project.findFirst
   const originalUserFindUnique = prismaMock.user.findUnique
   const originalRevokedTokenFindFirst =
@@ -64,7 +66,7 @@ async function demo() {
     'agent-caller'
   )
   const request = (token: string, body: unknown) =>
-    new NextRequest('http://localhost/api/mcp/agents/create', {
+    new NextRequest('http://localhost/api/mcp/admin/agents', {
       method: 'POST',
       headers: {
         Authorization: `Bearer ${token}`,
@@ -85,18 +87,25 @@ async function demo() {
       where.id === 'agent-caller'
         ? { id: 'agent-caller', ...agentTokenCredentialFields(agentToken) }
         : null
+    prismaMock.agent.findUnique = async ({ where }: Record<string, any>) =>
+      where.id === 'agent-caller'
+        ? { permissions: { role: 'write' } }
+        : null
+    prismaMock.member.findFirst = async ({ where }: Record<string, any>) =>
+      where.agentId === 'agent-caller' ? { id: 1 } : null
 
     const agentResponse = await POST(
       request(agentToken, { display_name: 'Nested agent' })
     )
     const agentBody = await json(agentResponse)
     assert.equal(agentResponse.status, 403)
-    assert.equal(agentBody.error, 'Agents cannot create other agents')
+    assert.equal(agentBody.error, 'Agents can provision only read-role agents')
 
     authApi.verifyApiKey = async ({ body }: Record<string, any>) => ({
       valid: true,
       key: {
         id: 'management-key',
+        prefix: 'htmk_',
         referenceId: String(user.id),
         permissions:
           body.key === 'htmk_management-test'
@@ -120,10 +129,10 @@ async function demo() {
       })
     )
     const noPermissionBody = await json(noPermissionResponse)
-    assert.equal(noPermissionResponse.status, 403)
+    assert.equal(noPermissionResponse.status, 401)
     assert.equal(
       noPermissionBody.error,
-      'Management key does not have permission to create agents'
+      'Unauthorized. Invalid or missing authentication token.'
     )
 
     prismaMock.project.findFirst = async ({
@@ -165,6 +174,7 @@ async function demo() {
     }
     prismaMock.$transaction = async (callback: (tx: any) => unknown) =>
       callback({
+        $queryRaw: async () => [],
         agent: {
           create: async (args: Record<string, any>) => {
             agentCreateData.push(args.data)
@@ -191,6 +201,23 @@ async function demo() {
         },
       })
 
+    const delegatedResponse = await POST(
+      request(agentToken, {
+        display_name: 'Parity CI reader',
+        project_ids: [1],
+        role: 'read',
+      })
+    )
+    assert.equal(delegatedResponse.status, 201)
+    assert.deepEqual(agentCreateData[0], {
+      displayName: 'Parity CI reader',
+      userId: user.id,
+      permissions: { role: 'read' },
+    })
+    assert.deepEqual(createManyData, [
+      { projectId: 1, userId: user.id, agentId: 'created-agent' },
+    ])
+
     const managementResponse = await POST(
       request('htmk_management-test', {
         display_name: 'Management-created agent',
@@ -200,7 +227,7 @@ async function demo() {
     const managementBody = await json(managementResponse)
     assert.equal(managementResponse.status, 201)
     assert.equal(managementBody.agent.display_name, 'Management-created agent')
-    assert.deepEqual(agentCreateData[0], {
+    assert.deepEqual(agentCreateData[1], {
       displayName: 'Management-created agent',
       userId: user.id,
       permissions: { role: 'write' },
@@ -231,7 +258,7 @@ async function demo() {
       photo_url: 'https://files.example.com/default-agent.png',
     })
     assert.equal(typeof successBody.token, 'string')
-    assert.deepEqual(agentCreateData[1], {
+    assert.deepEqual(agentCreateData[2], {
       displayName: 'Build bot',
       userId: user.id,
       permissions: { role: 'write' },
@@ -249,6 +276,8 @@ async function demo() {
     ])
   } finally {
     prismaMock.agent.findFirst = originalAgentFindFirst
+    prismaMock.agent.findUnique = originalAgentFindUnique
+    prismaMock.member.findFirst = originalMemberFindFirst
     prismaMock.project.findFirst = originalProjectFindFirst
     prismaMock.user.findUnique = originalUserFindUnique
     prismaMock.revokedToken.findFirst =

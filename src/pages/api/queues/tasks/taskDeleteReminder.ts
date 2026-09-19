@@ -138,6 +138,7 @@ export async function updateTaskAndSubtasks(
 type TaskTreeRow = { id: number }
 type LockedTaskTreeRow = {
   id: number
+  projectId: number
   status: string
   sectionId: number | null
   hardDeleteProcessingAt: Date | null
@@ -176,7 +177,7 @@ async function updateTaskTreeStatus(
     // the claim rechecks status after commit and skips. If deletion claimed
     // first, recovery observes processing state and leaves the task Deleted.
     const lockedRows = await tx.$queryRaw<LockedTaskTreeRow[]>`
-      SELECT id, status, "sectionId", "hardDeleteProcessingAt"
+      SELECT id, "projectId", status, "sectionId", "hardDeleteProcessingAt"
       FROM "Task"
       WHERE id IN (${Prisma.join(taskIds)})
       ORDER BY id

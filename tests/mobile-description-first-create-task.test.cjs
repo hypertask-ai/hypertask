@@ -14,6 +14,7 @@ const properties = read(
 );
 const attachments = read("src/components/Common/AttachmentsUpload/index.tsx");
 const createTaskEditor = read("src/components/RTE/TiptapCreateTaskModal.tsx");
+const audioButton = read("src/components/RTE/Components/AudioButton.tsx");
 const flagKeys = read("src/lib/flags/keys.ts");
 const flags = read("src/lib/flags.ts");
 
@@ -36,6 +37,11 @@ test("description-first mobile creation is owner and QA flagged", () => {
 
 test("mobile header keeps board visible and title plus properties collapsed", () => {
   assert.match(body, /data-mobile-description-first-header/);
+  assert.match(
+    body,
+    /pt-\[calc\(max\(env\(safe-area-inset-top\),28px\)\+0\.75rem\)\]/,
+    "the full-screen header must clear Android's status bar even when its WebView reports a zero safe-area inset",
+  );
   assert.match(body, /onClick=\{toggleProjectsModal\}/);
   assert.match(body, />Board:<\/span>/);
   assert.match(body, /aria-expanded=\{expandedMobileSection === "title"\}/);
@@ -64,20 +70,47 @@ test("mobile header keeps board visible and title plus properties collapsed", ()
   assert.match(properties, /!hideBoard \|\| property\.label !== "Board"/);
 });
 
-test("description-first actions offer raw save and primary Task Writer save", () => {
+test("description-first actions save with Task Writer without opening its sheet", () => {
   assert.match(mobileBar, /descriptionFirst && hasText/);
   assert.match(
     mobileBar,
     /label="Save"[\s\S]*?sendOnClick && sendOnClick\("Save"\)/,
   );
-  assert.match(mobileBar, /label="Save with task writer"/);
+  assert.match(mobileBar, /isAiTaskWriterOpen \? "Saving\.\.\." : "Save with task writer"/);
+  assert.match(attachments, /aria-disabled=\{disabled \|\| undefined\}/);
+  assert.match(attachments, /aria-busy=\{busy \|\| undefined\}/);
   assert.match(
     mobileBar,
-    /label="Save with task writer"[\s\S]*?onClick=\{toggleAiTaskWriter\}/,
+    /label=\{isAiTaskWriterOpen[\s\S]*?disabled=\{isAiTaskWriterOpen\}[\s\S]*?busy=\{isAiTaskWriterOpen\}/,
+  );
+  assert.match(
+    createTaskEditor,
+    /const saveWithTaskWriter = \(\) => \{[\s\S]*?setShouldShowAITaskWriter\(true\)/,
+  );
+  assert.match(
+    createTaskEditor,
+    /toggleAiTaskWriter=\{[\s\S]*?descriptionFirstEnabled[\s\S]*?saveWithTaskWriter/,
+  );
+  assert.match(createTaskEditor, /createTaskInBackground=\{isSavingWithTaskWriter\}/);
+  assert.match(
+    createTaskEditor,
+    /isSavingWithTaskWriter[\s\S]*?"pointer-events-none h-0"/,
+    "the background writer must not cover or intercept the visible task form",
   );
   assert.match(
     mobileBar,
     /data-mobile-primary-save[\s\S]*?bg-shadcn-primary[\s\S]*?text-primary-foreground/,
+  );
+});
+
+test("mobile new-task dictation keeps the editor and keyboard active", () => {
+  assert.match(
+    createTaskEditor,
+    /if \(isRecording && editor && !keepMobileEditorActiveDuringDictation\)/,
+  );
+  assert.match(
+    audioButton,
+    /isMobileNewTask[\s\S]*?onPointerDown=\{\(event\) => \{[\s\S]*?event\.preventDefault\(\)/,
   );
 });
 
@@ -89,5 +122,19 @@ test("Task Writer result still creates the finished ticket directly", () => {
   assert.match(
     createTaskEditor,
     /isMbl && descriptionFirstEnabled \? "min-h-\[42svh\]"/,
+  );
+});
+
+test("Task Writer snapshots the current editor content when direct save starts", () => {
+  assert.match(
+    createTaskEditor,
+    /const saveWithTaskWriter = \(\) => \{[\s\S]*?resolveTaskWriterDescription\(\s*editor\?\.getHTML\(\),\s*formValues\.description,?\s*\)[\s\S]*?taskWriterSubmittedDescriptionRef\.current/,
+  );
+});
+
+test("Task Writer direct save blocks create-task keyboard shortcuts", () => {
+  assert.match(
+    createTaskEditor,
+    /if \(cmdControl && e\.key === "Enter"\) \{\s*if \(isSavingWithTaskWriter\) return;/,
   );
 });

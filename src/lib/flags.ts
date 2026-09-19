@@ -62,10 +62,12 @@ import {
   HTPR_6514_COMMENT_LONG_PRESS_FLAG,
   HTPR_6516_AGENT_ATTRIBUTION_FLAG,
   HTPR_6512_SEED_TEAM_AGENT_FLAG,
+  HTPR_6533_MCP_CLIENT_EVAL_FLAG,
   HTPR_6532_STATELESS_MCP_FLAG,
   HTPR_6530_MCP_LIST_QUERY_FLAG,
   HTPR_6531_DEFERRED_MCP_TOOLS_FLAG,
   HTPR_6473_GET_AGENT_FLAG,
+  HTPR_6470_PROJECT_DELETE_FLAG,
   HTPR_6536_QA_LOGIN_FLAG,
   HTPR_6551_QUIET_RUN_ACTIVITY_FLAG,
   HTPR_6555_IDLE_COMMENT_MIC_FLAG,
@@ -75,6 +77,7 @@ import {
   HTPR_6559_KEEP_DIRECT_TASK_OPEN_FLAG,
   HTPR_6556_MOBILE_DESCRIPTION_FIRST_FLAG,
   HTPR_6561_DESCRIPTION_STRUCTURE_FLAG,
+  HTPR_6542_TEAM_SCOPED_MANAGEMENT_KEYS_FLAG,
 } from "@/lib/flags/keys";
 
 // Re-exported so server code keeps importing keys from here. Client components must
@@ -98,6 +101,18 @@ const FEATURE_FLAG_QA_USER = {
 const RETIRED_FEATURE_FLAG_KEYS = new Set(["hyfa-43-factory-owner-preview"]);
 
 const FEATURE_FLAG_DEFINITIONS = [
+  {
+    key: HTPR_6470_PROJECT_DELETE_FLAG,
+    shippedOn: "2026-09-18",
+    description:
+      "Lets board owners and admins permanently delete a board and its tasks through the Hypertask CLI after explicit confirmation.",
+  },
+  {
+    key: HTPR_6542_TEAM_SCOPED_MANAGEMENT_KEYS_FLAG,
+    shippedOn: "2026-09-18",
+    description:
+      "Lets management keys be limited to one team while existing account-wide keys keep their current access.",
+  },
   {
     key: HTPR_6561_DESCRIPTION_STRUCTURE_FLAG,
     shippedOn: "2026-09-18",
@@ -151,6 +166,12 @@ const FEATURE_FLAG_DEFINITIONS = [
     shippedOn: "2026-09-16",
     description:
       "Shows a QA-only email and password sign-in page so an outside test robot can open the real app behind login. The page and route exist only when the server has the QA login secrets.",
+  },
+  {
+    key: HTPR_6533_MCP_CLIENT_EVAL_FLAG,
+    shippedOn: "2026-09-16",
+    description:
+      "Shows the MCP versus CLI eval table on the agents dashboard: success rate, tokens, wall time, and tool calls for Claude, Cursor, and Codex.",
   },
   {
     key: HTPR_6516_AGENT_ATTRIBUTION_FLAG,

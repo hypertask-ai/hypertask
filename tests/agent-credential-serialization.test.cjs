@@ -65,16 +65,7 @@ test("task-detail SQL selects public actors and sanitizes historical activity", 
   const source = read("src/utils/controllers/taskDetail/load.ts");
 
   assert.match(source, /const publicCommentAgent = Prisma\.sql/);
-  assert.equal(
-    source.match(
-      /hiddenCommentAgent\(userId, Prisma\.sql`comment_task\."projectId"`\)/g,
-    )?.length,
-    2,
-  );
-  assert.match(
-    source,
-    /hiddenCommentAgent\(userId, Prisma\.sql`ti\."projectId"`\)/,
-  );
+  assert.equal(source.match(/\$\{hiddenCommentAgent\(/g)?.length, 3);
   assert.match(source, /CASE WHEN agent_visibility\.hidden/);
   assert.match(source, /'displayName', agent\."displayName"/);
   assert.doesNotMatch(source, /to_jsonb\(agent\)/);

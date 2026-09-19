@@ -25,6 +25,8 @@ const stubbedPaths = [
   "src/lib/redis.ts",
   "src/lib/apiKeys.ts",
   "src/lib/auth/getSessionUser.ts",
+  "src/lib/flags.ts",
+  "src/lib/mcp/managementKeyTeamScope.ts",
   "src/utils/controllers/logs/createLog.ts",
 ];
 const originalModules = new Map(
@@ -43,11 +45,29 @@ const DEFAULT_USER = {
   displayName: "Owner",
 };
 let configuredUser = DEFAULT_USER;
+let teamGrant = {
+  id: "team-a",
+  title: "Alpha",
+  isOwner: false,
+  accessBinding: "member:membership-a",
+};
+let storedTeamBinding = "member:membership-a";
+let disabledTeamKeys = 0;
 stubModule("src/lib/prisma.ts", {
   default: {
     user: {
       findUnique: async ({ where }) =>
         configuredUser?.id === where.id ? configuredUser : null,
+    },
+    betterAuthApiKey: {
+      findFirst: async () => ({
+        teamId: "team-a",
+        teamAccessBinding: storedTeamBinding,
+      }),
+      updateMany: async () => {
+        disabledTeamKeys += 1;
+        return { count: 1 };
+      },
     },
   },
 });
@@ -69,6 +89,7 @@ stubModule("src/lib/auth/betterAuth.ts", {
                 id: 1,
                 referenceId:
                   body.key === "htmk_missing-user" ? "7" : "6",
+                prefix: body.key.startsWith("httk_") ? "httk_" : "htmk_",
                 permissions: tokenPermissions,
               },
             }
@@ -88,6 +109,17 @@ stubModule("src/lib/redis.ts", {
 });
 stubModule("src/lib/apiKeys.ts", { hashApiKey: (value) => value });
 stubModule("src/lib/auth/getSessionUser.ts", { getSessionUser: async () => null });
+stubModule("src/lib/flags.ts", {
+  HTPR_6542_TEAM_SCOPED_MANAGEMENT_KEYS_FLAG:
+    "htpr-6542-team-scoped-management-keys",
+  isFeatureEnabled: async () => true,
+});
+stubModule("src/lib/mcp/managementKeyTeamScope.ts", {
+  ACCOUNT_MANAGEMENT_KEY_PREFIX: "htmk_",
+  TEAM_MANAGEMENT_KEY_PREFIX: "httk_",
+  agentWithinTeamWhere: (teamId) => ({ teamId }),
+  getManagementKeyTeam: async () => teamGrant,
+});
 stubModule("src/utils/controllers/logs/createLog.ts", { default: async () => {} });
 
 const jiti = require("jiti")(
@@ -143,6 +175,14 @@ test.beforeEach(() => {
   rejectedTokens.clear();
   rateLimitKeys.length = 0;
   configuredUser = DEFAULT_USER;
+  teamGrant = {
+    id: "team-a",
+    title: "Alpha",
+    isOwner: false,
+    accessBinding: "member:membership-a",
+  };
+  storedTeamBinding = "member:membership-a";
+  disabledTeamKeys = 0;
 });
 
 test("the shared bearer parser keeps rate limiting aligned with auth", async () => {
@@ -162,8 +202,9 @@ test("the shared bearer parser keeps rate limiting aligned with auth", async () 
   );
 });
 
-test("management-key classification is limited to the management prefix", () => {
+test("management-key classification accepts account and team prefixes", () => {
   assert.equal(isManagementKeyToken("htmk_test"), true);
+  assert.equal(isManagementKeyToken("httk_test"), true);
   assert.equal(isManagementKeyToken("htk_test"), false);
   assert.equal(isManagementKeyToken("Bearer htmk_test"), false);
   assert.equal(isManagementKeyToken(""), false);
@@ -228,6 +269,27 @@ test("usage auth accepts usage-scoped and legacy data-management keys", async ()
   configuredUser = null;
   permissionsByToken.set("htmk_test", { usage: ["read"] });
   assert.equal(await validateUsageReadAuth(request()), null);
+});
+
+test("team keys are disabled after access loss or a new membership", async () => {
+  permissionsByToken.set("httk_test", { usage: ["read"] });
+
+  const active = await validateUsageReadAuth(request("httk_test"));
+  assert.equal(active?.management?.teamId, "team-a");
+  assert.equal(disabledTeamKeys, 0);
+
+  teamGrant = null;
+  assert.equal(await validateUsageReadAuth(request("httk_test")), null);
+  assert.equal(disabledTeamKeys, 1);
+
+  teamGrant = {
+    id: "team-a",
+    title: "Alpha",
+    isOwner: false,
+    accessBinding: "member:new-membership",
+  };
+  assert.equal(await validateUsageReadAuth(request("httk_test")), null);
+  assert.equal(disabledTeamKeys, 2);
 });
 
 test("usage auth rejects non-management bearer tokens", async () => {

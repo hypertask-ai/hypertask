@@ -15,6 +15,7 @@ import { IconoirKanban } from "@/components/Common/IconoirIcons";
 import { PlugZap } from "lucide-react";
 import AgentWebhookPanel from "@/components/Modals/Agent/AgentWebhookPanel";
 import AgentSelect, { AgentOption } from "./AgentSelect";
+import McpClientEvalPanel from "./McpClientEvalPanel";
 import WorkingSpinner from "./WorkingSpinner";
 import AgentAvatar from "@/components/Agents/AgentAvatar";
 import {
@@ -700,6 +701,8 @@ const AgentsRegister = (props: IProp) => {
             ))}
           </div>
         )}
+
+        <McpClientEvalPanel />
       </div>
     </div>
   );

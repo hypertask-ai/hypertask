@@ -2,7 +2,11 @@ import { NextRequest, NextResponse } from 'next/server'
 import { validateMcpAuth, checkMcpRateLimit, mcpUnauthorizedResponse } from '@/lib/mcp/auth'
 import { getProjectWhere } from '@/utils/controllers/projects/getAllIncludes'
 import type { McpAgentSummary } from '@/lib/mcp/agents'
-import { mapVisibleMcpAgent, mcpVisibleAgentSelect } from '@/lib/mcp/agents'
+import {
+  mapAttributedMcpAgent,
+  mapVisibleMcpAgent,
+  mcpVisibleAgentSelect,
+} from '@/lib/mcp/agents'
 import { accessibleAgentWhere } from '@/lib/agents/visibility'
 import type { McpTaskAssignee } from '@/lib/mcp/tasks/types'
 import {
@@ -16,7 +20,11 @@ import {
 import { mcpTaskUserCommentCount } from '@/lib/mcp/tasks/mappers'
 import { decodeCursor, encodeCursor } from '@/lib/mcp/pagination/cursor'
 import prisma from '@/lib/prisma'
-import { HTPR_6530_MCP_LIST_QUERY_FLAG, isFeatureEnabled } from '@/lib/flags'
+import {
+  HTPR_6516_AGENT_ATTRIBUTION_FLAG,
+  HTPR_6530_MCP_LIST_QUERY_FLAG,
+  isFeatureEnabled,
+} from '@/lib/flags'
 import {
   hasPrWhere,
   normalizeTaskStatus,
@@ -166,6 +174,10 @@ export async function GET(request: NextRequest) {
     }
     const user = ctx.user;
     userObj = user
+    const attributionEnabled = await isFeatureEnabled(
+      HTPR_6516_AGENT_ATTRIBUTION_FLAG,
+      user.id,
+    )
     // Parse query parameters
     const searchParams = request.nextUrl.searchParams
     const query = Object.fromEntries(searchParams)
@@ -292,7 +304,7 @@ export async function GET(request: NextRequest) {
         const tasks = await prisma.task.findMany({
           where,
           include: {
-            ...taskMcpGetInclude(user.id),
+            ...taskMcpGetInclude(user.id, attributionEnabled),
             savedContent: {
               where: { userId: ctx.agentId ? -1 : user.id, commentId: null, type: 'Private' },
               select: { id: true, type: true },
@@ -319,13 +331,13 @@ export async function GET(request: NextRequest) {
         if (legacyTicketNumber && !ticketNumbers && tasks.length === 1) {
           return NextResponse.json({
             success: true,
-            task: mapTaskToMcpGetResponse(tasks[0], user.id)
+            task: mapTaskToMcpGetResponse(tasks[0], user.id, attributionEnabled)
           })
         }
 
         return NextResponse.json({
           success: true,
-          tasks: tasks.map((task) => mapTaskToMcpGetResponse(task, user.id))
+          tasks: tasks.map((task) => mapTaskToMcpGetResponse(task, user.id, attributionEnabled))
         })
       }
     }
@@ -580,7 +592,7 @@ export async function GET(request: NextRequest) {
     } else if (sortBy === 'createdAt') {
       orderBy.push({ createdAt: sortOrder }, { id: 'asc' })
     } else if (sortBy === 'updatedAt') {
-      orderBy.push({ updatedAt: sortOrder }, { id: 'asc' })
+      orderBy.push({ updatedAt: { sort: sortOrder, nulls: 'last' } }, { id: 'asc' })
     } else if (sortBy === 'dueDate') {
       orderBy.push({ dueDate: sortOrder }, { id: 'asc' })
     } else if (sortBy === 'priority') {
@@ -647,12 +659,16 @@ export async function GET(request: NextRequest) {
           select: mcpVisibleAgentSelect(user.id),
         },
         assignees: {
-          where: {
-            OR: [
-              { agentId: null },
-              { agent: accessibleAgentWhere(user.id) },
-            ],
-          },
+          ...(attributionEnabled
+            ? {}
+            : {
+                where: {
+                  OR: [
+                    { agentId: null },
+                    { agent: accessibleAgentWhere(user.id) },
+                  ],
+                },
+              }),
           include: {
             user: {
               select: {
@@ -661,8 +677,12 @@ export async function GET(request: NextRequest) {
                 displayName: true,
               },
             },
-            agent: { select: mcpVisibleAgentSelect(user.id) },
-            agentAssigner: { select: mcpVisibleAgentSelect(user.id) },
+            agent: {
+              select: mcpVisibleAgentSelect(user.id),
+            },
+            agentAssigner: {
+              select: mcpVisibleAgentSelect(user.id),
+            },
           },
         },
         taskLabels: {
@@ -714,9 +734,16 @@ export async function GET(request: NextRequest) {
 
     // Transform to response format
     const taskList: TaskListItem[] = tasks.map(task => {
-      const agent = mapVisibleMcpAgent(task.agent, user.id, task.projectId)
+      const agent = attributionEnabled
+        ? mapAttributedMcpAgent(task.agent)
+        : mapVisibleMcpAgent(task.agent, user.id, task.projectId)
       const assignees = task.assignees
-        .map((assignee) => mapTaskAssignee(assignee, user.id, task.projectId))
+        .map((assignee) => mapTaskAssignee(
+          assignee,
+          user.id,
+          task.projectId,
+          attributionEnabled,
+        ))
         .filter((assignee): assignee is McpTaskAssignee => Boolean(assignee))
       return {
         id: task.id,

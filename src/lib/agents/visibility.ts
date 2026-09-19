@@ -105,9 +105,16 @@ export async function setOwnedAgentVisibility(
   agentId: string,
   userId: number,
   visibility: AgentVisibility,
+  scopeWhere: Prisma.AgentWhereInput = {},
 ) {
   return serializableAgentChange((tx) =>
-    setOwnedAgentVisibilityInTransaction(tx, agentId, userId, visibility),
+    setOwnedAgentVisibilityInTransaction(
+      tx,
+      agentId,
+      userId,
+      visibility,
+      scopeWhere,
+    ),
   );
 }
 
@@ -116,9 +123,10 @@ export async function setOwnedAgentVisibilityInTransaction(
   agentId: string,
   userId: number,
   visibility: AgentVisibility,
+  scopeWhere: Prisma.AgentWhereInput = {},
 ) {
   const agent = await tx.agent.findFirst({
-    where: { id: agentId, userId },
+    where: { id: agentId, userId, ...scopeWhere },
     select: { id: true, runtimeType: true },
   });
   if (!agent) {
@@ -135,14 +143,16 @@ export async function setOwnedAgentVisibilityInTransaction(
     }
   }
 
-  const updated = await tx.agent.update({
-    where: { id: agentId },
+  const updated = await tx.agent.updateMany({
+    where: { id: agentId, userId, ...scopeWhere },
     data: { visibility },
-    select: { visibility: true },
   });
+  if (updated.count !== 1) {
+    return { ok: false as const, status: 404, error: "Agent does not exist" };
+  }
   return {
     ok: true as const,
-    visibility: updated.visibility,
+    visibility,
     ...(warning ? { warning } : {}),
   };
 }

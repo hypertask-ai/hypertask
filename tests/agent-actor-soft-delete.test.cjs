@@ -15,6 +15,7 @@ const ts = require("typescript");
 const root = path.resolve(__dirname, "..");
 const MEMBER_USER_ID = 6;
 const TASK_ID = 6376;
+const MEMBER_PROJECT = 15;
 const DONE_SECTION_ID = 12;
 const ACTIVE_SECTION_ID = 10;
 const AGENT_ID = "agent-writer-6376";
@@ -69,12 +70,17 @@ function cookieValue(header, name) {
 const { signSession, verifySession, SESSION_COOKIE } = loadTs(
   "src/lib/auth/session.ts",
 );
-const { resolveActingAgent } = loadTs("src/lib/auth/resolveActingAgent.ts");
+const { resolveActingAgent } = loadTs("src/lib/auth/resolveActingAgent.ts", {
+  "./session": { SESSION_COOKIE, verifySession },
+});
 const agentDoneLifecycle = loadTs("src/lib/mcp/tasks/agentDoneLifecycle.ts", {
   "@/lib/mcp/boards/columnRole": loadTs("src/lib/mcp/boards/columnRole.ts"),
 });
 
-function loadDeleteHandler({ sectionId = ACTIVE_SECTION_ID } = {}) {
+function loadDeleteHandler({
+  sectionId = ACTIVE_SECTION_ID,
+  sectionEvents = [],
+} = {}) {
   const sideEffects = {
     treeAgentIds: [],
     updateMany: 0,
@@ -89,6 +95,7 @@ function loadDeleteHandler({ sectionId = ACTIVE_SECTION_ID } = {}) {
         return [
           {
             id: TASK_ID,
+            projectId: MEMBER_PROJECT,
             status: "Normal",
             sectionId,
             hardDeleteProcessingAt: null,
@@ -113,12 +120,23 @@ function loadDeleteHandler({ sectionId = ACTIVE_SECTION_ID } = {}) {
       deleteMany: async () => ({ count: 0 }),
     },
     section: {
-      findMany: async ({ where }) =>
-        where.id.in.map((id) =>
-          id === DONE_SECTION_ID
-            ? { id, section_title: "Done", isDone: true }
-            : { id, section_title: "In Progress", isDone: false },
-        ),
+      findMany: async () => [
+        {
+          id: ACTIVE_SECTION_ID,
+          projectId: MEMBER_PROJECT,
+          section_title: "In Progress",
+          isDone: false,
+        },
+        {
+          id: DONE_SECTION_ID,
+          projectId: MEMBER_PROJECT,
+          section_title: "Done",
+          isDone: true,
+        },
+      ],
+    },
+    taskSectionEvent: {
+      findMany: async () => sectionEvents,
     },
   };
 
@@ -258,6 +276,22 @@ test("signed agent soft-delete omitting body agentId still hits the Done tree gu
   const result = await callDelete(handler, {
     sessionAgentId: AGENT_ID,
     // body.agentId intentionally omitted
+  });
+
+  assert.equal(result.status, 403);
+  assert.equal(result.payload.code, "agent_done_lifecycle_denied");
+  assert.deepEqual(sideEffects.treeAgentIds, [AGENT_ID]);
+  assert.equal(sideEffects.updateMany, 0);
+  assert.equal(sideEffects.scheduledJobs, 0);
+});
+
+test("signed agents cannot soft-delete a task after it moves out of Done", async () => {
+  const { handler, sideEffects } = loadDeleteHandler({
+    sectionId: ACTIVE_SECTION_ID,
+    sectionEvents: [{ taskId: TASK_ID, from: "Done", to: "Bugs" }],
+  });
+  const result = await callDelete(handler, {
+    sessionAgentId: AGENT_ID,
   });
 
   assert.equal(result.status, 403);

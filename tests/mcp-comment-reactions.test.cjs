@@ -187,6 +187,8 @@ function loadCommentsRoute({
     },
     '@/lib/mcp/agents': {
       getMcpSessionAgentSummary: async () => null,
+      mapAttributedMcpAgent: (agent) =>
+        agent ? { id: agent.id, displayName: agent.displayName } : undefined,
       mapVisibleMcpAgent: (agent, userId, projectId) =>
         agent && (agent.userId === userId ||
           (agent.visibility === 'TEAM' &&
@@ -251,6 +253,8 @@ function loadCommentsRoute({
     '@/lib/mcp/normalizeBlockHtml': { normalizeBlockHtml: (text) => text },
     '@/utils/helperFunctions/markdownToHtml': {
       formatRichTextInput: (text) => text,
+      isAcceptedRichTextInput: (text, contentType) =>
+        contentType === 'markdown' || /<[a-z][\s\S]*>/i.test(text.trim()),
     },
     '@/lib/mcp/fieldError': { buildFieldError: () => ({}) },
     '@/lib/mcp/tasks/validators': { CONTENT_TYPE_ALLOWED_VALUES: ['html', 'markdown'] },

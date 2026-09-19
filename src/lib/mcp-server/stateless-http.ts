@@ -2,6 +2,7 @@ import crypto from 'node:crypto'
 import { z } from 'zod'
 import type { AuthInfo } from '@modelcontextprotocol/sdk/server/auth/types.js'
 import { listToolsDeferred, parseStructuredContent, toolsForConnect } from './deferred-tools'
+import { listMetaTools } from './deferred-tools'
 
 export const MCP_SERVER_INFO = {
   name: 'hyperTask',
@@ -205,6 +206,12 @@ async function dispatchMethod(
       return jsonRpcResult(id, {})
     case 'tools/list':
       if (deferred) {
+        const metaOnly = new URL(request.url).searchParams.get('tools') === 'meta'
+        if (metaOnly) {
+          return jsonRpcResult(id, {
+            tools: listMetaTools(tools),
+          })
+        }
         return jsonRpcResult(id, {
           tools: listToolsDeferred(tools),
         })

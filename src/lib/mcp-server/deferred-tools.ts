@@ -60,6 +60,15 @@ const META_LIST_SCHEMAS: Record<string, Record<string, unknown>> = {
   },
 }
 
+const META_OUTPUT_SCHEMAS: Record<string, Record<string, unknown>> = {
+  [SEARCH_TOOLS_NAME]: {
+    type: 'object',
+    properties: { tools: { type: 'array', items: { type: 'object' } } },
+    required: ['tools'],
+  },
+  [DESCRIBE_TOOL_NAME]: TOOL_OUTPUT_SCHEMA,
+}
+
 function deferredDescription(tool: { name: string; description: string }): string {
   return summaryForToolName(tool.name, firstSentence(tool.description))
 }
@@ -70,6 +79,15 @@ export function listToolsDeferred(tools: readonly CatalogTool[]): ListedTool[] {
     description: deferredDescription(tool),
     inputSchema: META_LIST_SCHEMAS[tool.name] ?? MINIMAL_INPUT_SCHEMA,
   }))
+}
+
+export function listMetaTools(tools: readonly CatalogTool[]): ListedTool[] {
+  return listToolsDeferred(tools)
+    .filter((tool) => tool.name in META_LIST_SCHEMAS)
+    .map((tool) => ({
+      ...tool,
+      outputSchema: META_OUTPUT_SCHEMAS[tool.name],
+    }))
 }
 
 export function listToolsFull(tools: readonly CatalogTool[]): ListedTool[] {
@@ -90,6 +108,11 @@ export function searchToolCatalog(
     .map((tool) => {
       const name = tool.name.toLowerCase()
       const description = tool.description.toLowerCase()
+      const spacedNeedle = needle.replace(/\s+/g, ' ')
+      const spacedName = name.replace(/_/g, ' ')
+      if (spacedNeedle.length > 0 && spacedName.includes(spacedNeedle)) {
+        return { name: tool.name, description: deferredDescription(tool), score: 0 }
+      }
       const nameHit = needle.length === 0 || name.includes(needle)
       const descHit = needle.length > 0 && description.includes(needle)
       if (!nameHit && !descHit) return null

@@ -81,7 +81,7 @@ const useSections = ({
   const isApple = useDeviceContext()
   const isMbl = useContext(MobileViewContext);
   const aiFirstTaskWriterEnabled = useFlag("htpr-6141-ai-first-task-writer");
-  const quickEntryEnabled = useFlag("htpr-6175-quick-entry-cards");
+  const quickEntryCardsEnabled = useFlag("htpr-6175-quick-entry-cards");
   const { navigate } = useHypertasksNavigate();
   const sectionListenerKeyRef = useRef<string | null>(null);
   if (!sectionListenerKeyRef.current) {
@@ -97,14 +97,18 @@ const useSections = ({
   }, []);
 
   // ======================== create new task at given position
-  const createTaskAt = (position: "top"|"bottom", sectionPayload?:TSectionPayload, defaultEditFocus?:TDefaultEditFocus) => {
+  const createTaskAt = (
+    position: "top"|"bottom",
+    sectionPayload?: TSectionPayload,
+    defaultEditFocus?: TDefaultEditFocus,
+    useQuickEntry = false,
+  ) => {
     const editFocus =
       defaultEditFocus ??
       (isMbl && aiFirstTaskWriterEnabled ? MOBILE_AI_TASK_WRITER_FOCUS : undefined);
-    // Quick entry only replaces the plain "add a card" path. Asking for a
-    // specific editor focus (the AI writer on Ctrl+J or mobile) still opens
-    // the full modal, which is the only place that focus means anything.
-    if (quickEntryEnabled && !editFocus) {
+    // The column plus signs and Alt+C request quick entry. Existing creation
+    // shortcuts keep opening the full editor even while the flag is enabled.
+    if (quickEntryCardsEnabled && useQuickEntry && !editFocus) {
       setShowAddItem(true);
       setPosition(position);
       return;
@@ -145,6 +149,7 @@ const useSections = ({
     isApple,
     index,
     navigate,
+    quickEntryCardsEnabled,
     sectionId,
     title,
     _currentProject,
@@ -156,6 +161,7 @@ const useSections = ({
     isApple,
     index,
     navigate,
+    quickEntryCardsEnabled,
     sectionId,
     title,
     _currentProject,
@@ -170,6 +176,7 @@ const useSections = ({
       isApple,
       index,
       navigate,
+      quickEntryCardsEnabled,
       sectionId,
       title,
       _currentProject,
@@ -285,11 +292,31 @@ const useSections = ({
         return prev;
       });
     }
-    // [c] for creating task (only if not using G shortcut, matches expected Kanban behavior too)
+    // [alt] + [c] opens fast entry without replacing the existing C shortcuts.
+    else if (
+      quickEntryCardsEnabled &&
+      e.keyCode === KeyCodes.C &&
+      e.altKey && !(e.ctrlKey || e.metaKey) &&
+      document?.activeElement?.tagName !== "INPUT" &&
+      !lastgPress.current && !lastGPress.current
+    ) {
+      e.preventDefault();
+      const position = e.shiftKey ? "bottom" : "top";
+      createTaskAt(position, {
+        sectionId,
+        sectionTitle: title,
+        position,
+      }, undefined, true);
+      setKeypressed((prev: any) => {
+        prev[e.key] = false;
+        return prev;
+      });
+    }
+    // [c] for regular task creation (only if not using G shortcut)
     else if (
       e.keyCode === KeyCodes.C &&
       document?.activeElement?.tagName !== "INPUT" &&
-      !(e.shiftKey || e.ctrlKey || e.metaKey) &&
+      !(e.altKey || e.shiftKey || e.ctrlKey || e.metaKey) &&
       !lastgPress.current && !lastGPress.current
     ) {
       e.preventDefault();
@@ -338,7 +365,7 @@ const useSections = ({
     // [shift] + [c] for creating task at bottom
     else if (
       e.keyCode === KeyCodes.C &&
-      e.shiftKey && !(e.ctrlKey || e.metaKey)&&
+      e.shiftKey && !e.altKey && !(e.ctrlKey || e.metaKey)&&
       document?.activeElement?.tagName !== "INPUT" && lastgPress.current === null
     ) {
       e.preventDefault();
@@ -383,13 +410,16 @@ const useSections = ({
   const onCancelCreate = () => {
     setShowAddItem(false);
     setPosition(null);
-    console.log(position);
     document
       .getElementById(
-        `task-${items[position == "top" ? 0 : items?.length - 1]?.id}`
+        `task-${items[position == "top" ? 0 : items.length - 1]?.id}`
       )
       ?.focus();
-    setActiveItem(items[items?.length - 1]?.id);
+    if (position === "top") {
+      setActiveItem(items[0]?.id ?? null);
+      return;
+    }
+    setActiveItem(items[items.length - 1]?.id ?? null);
   };
 
 

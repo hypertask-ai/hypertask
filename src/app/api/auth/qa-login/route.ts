@@ -24,8 +24,8 @@ import {
   getQaLoginClientIp,
 } from "@/lib/auth/qaLoginRateLimit";
 
-function logQaLogin(outcome: string, email: string) {
-  console.info("[qa-login]", { outcome, email });
+function logQaLogin(outcome: string) {
+  console.info("[qa-login]", { outcome });
 }
 
 function invalidCredentials() {
@@ -59,7 +59,7 @@ export async function POST(request: NextRequest) {
 
   const clientIp = getQaLoginClientIp(request);
   if (!clientIp) {
-    logQaLogin("unavailable", "");
+    logQaLogin("unavailable");
     return NextResponse.json(
       { success: false, error: "Sign-in is temporarily unavailable." },
       { status: 503 },
@@ -76,7 +76,7 @@ export async function POST(request: NextRequest) {
     email = typeof body.email === "string" ? body.email : "";
     password = typeof body.password === "string" ? body.password : "";
   } catch {
-    logQaLogin("invalid_body", "");
+    logQaLogin("invalid_body");
     return NextResponse.json(
       { success: false, error: "Email and password are required" },
       { status: 400 },
@@ -85,7 +85,7 @@ export async function POST(request: NextRequest) {
 
   const normalizedEmail = normalizeQaLoginEmail(email);
   if (!normalizedEmail || !password || normalizedEmail.length > 320) {
-    logQaLogin("invalid_body", normalizedEmail);
+    logQaLogin("invalid_body");
     return NextResponse.json(
       { success: false, error: "Email and password are required" },
       { status: 400 },
@@ -94,7 +94,7 @@ export async function POST(request: NextRequest) {
 
   const attempt = await claimQaLoginAttempt(normalizedEmail, clientIp);
   if (!attempt.allowed) {
-    logQaLogin("rate_limited", normalizedEmail);
+    logQaLogin("rate_limited");
     return NextResponse.json(
       { success: false, error: "Too many sign-in attempts. Try again later." },
       { status: 429 },
@@ -102,7 +102,7 @@ export async function POST(request: NextRequest) {
   }
 
   if (!(await qaLoginCredentialsMatch(normalizedEmail, password, config))) {
-    logQaLogin("invalid", normalizedEmail);
+    logQaLogin("invalid");
     return invalidCredentials();
   }
 
@@ -124,7 +124,7 @@ export async function POST(request: NextRequest) {
   });
 
   if (!userData || userData.id !== QA_LOGIN_USER_ID) {
-    logQaLogin("wrong_user", normalizedEmail);
+    logQaLogin("wrong_user");
     return invalidCredentials();
   }
 
@@ -172,6 +172,6 @@ export async function POST(request: NextRequest) {
     });
   }
 
-  logQaLogin("success", normalizedEmail);
+  logQaLogin("success");
   return response;
 }

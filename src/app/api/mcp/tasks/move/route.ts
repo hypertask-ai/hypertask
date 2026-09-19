@@ -11,6 +11,7 @@ import {
 } from "@/lib/mcp/tasks/services";
 import { broadcastBoardChange } from "@/lib/realtime/server";
 import { withAdoptedAgentMutationLease } from "@/lib/mcp/tasks/agentMutationLeaseAdoption";
+import { HTPR_6516_AGENT_ATTRIBUTION_FLAG, isFeatureEnabled } from "@/lib/flags";
 
 interface MoveTaskBody {
   task_id?: number;
@@ -279,9 +280,13 @@ export async function POST(request: NextRequest) {
     void broadcastBoardChange(taskRef.projectId, { originUserId: user.id });
     void broadcastBoardChange(target_project_id, { originUserId: user.id });
 
+    const attributionEnabled = await isFeatureEnabled(
+      HTPR_6516_AGENT_ATTRIBUTION_FLAG,
+      user.id,
+    );
     const fullTask = await prisma.task.findUnique({
       where: { id: taskRef.id },
-      include: taskDetailInclude(user.id),
+      include: taskDetailInclude(user.id, attributionEnabled),
     });
 
     const sessionAgent = await getMcpSessionAgentSummary(ctx.agentId, user.id);
@@ -291,7 +296,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(
         {
           success: true,
-          task: mapTaskToDetail(result.task!, user.id),
+          task: mapTaskToDetail(result.task!, user.id, attributionEnabled),
           message: "Task moved successfully",
           ...agentField,
         },
@@ -302,7 +307,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json(
       {
         success: true,
-        task: mapTaskToDetail(fullTask, user.id),
+        task: mapTaskToDetail(fullTask, user.id, attributionEnabled),
         message: "Task moved successfully",
         ...agentField,
       },

@@ -26,7 +26,14 @@ function loadCreateModule({
   prisma,
   mintedToken = "minted-token",
   validateManagementOrSessionAuth = async () => null,
+  validateMcpAuth = async () => null,
   hasManagementWritePermission = () => true,
+  managementAgentTokenScope = () => undefined,
+  agentWithinTeamWhere = () => ({}),
+  getAgentTeamId = () => null,
+  getAccessibleAgentBoard = async () => null,
+  isAgentOnBoard = async () => false,
+  requireRole = async () => null,
 } = {}) {
   const mod = { exports: {} };
   const mockRequire = (request) => {
@@ -34,8 +41,9 @@ function loadCreateModule({
       return {
         checkMcpRateLimit: async () => null,
         validateManagementOrSessionAuth,
-        validateMcpAuth: async () => null,
+        validateMcpAuth,
         createMcpToken: () => mintedToken,
+        managementAgentTokenScope,
         agentTokenCredentialFields: () => ({
           mcpTokenHash: "hash",
           mcpTokenJti: "jti",
@@ -55,18 +63,24 @@ function loadCreateModule({
     if (request === "@/lib/mcp/managementPermissions") {
       return { hasManagementWritePermission };
     }
+    if (request === "@/lib/mcp/managementKeyTeamScope") {
+      return { agentWithinTeamWhere };
+    }
     if (request === "@/lib/prisma") {
       // esModuleInterop's __importDefault wraps a plain object as
       // { default: mod } itself, so the mock must NOT pre-wrap it.
       return prisma;
     }
     if (request === "@/utils/controllers/agents/boardMembers") {
-      return { getAccessibleAgentBoard: async () => null };
+      return { getAccessibleAgentBoard, isAgentOnBoard };
+    }
+    if (request === "./scopes") {
+      return { requireRole };
     }
     if (request === "@/utils/controllers/agents/teamScope") {
       return {
         canAttachAgentToTeam: () => true,
-        getAgentTeamId: () => null,
+        getAgentTeamId,
       };
     }
     if (request === "@/utils/controllers/agents/ensureDefaultTeamAgent") {
@@ -163,6 +177,93 @@ test("a successful create returns the token exactly once, alongside the agent", 
   assert.doesNotMatch(JSON.stringify(data.agent), /one-time-token/);
 });
 
+test("a team-scoped key cannot create an agent on another team's board", async () => {
+  let duplicateWhere;
+  const prisma = {
+    agent: {
+      findFirst: async ({ where }) => {
+        duplicateWhere = where;
+        return null;
+      },
+    },
+  };
+  const { createAgentForUser } = loadCreateModule({
+    prisma,
+    agentWithinTeamWhere: (teamId) => ({ onlyTeam: teamId }),
+    getAccessibleAgentBoard: async () => ({ id: 15, teamId: "team-b" }),
+  });
+
+  const res = await createAgentForUser(
+    request({ display_name: "Build Agent", project_ids: [15] }),
+    { id: 6, email: "a@b.com" },
+    { teamId: "team-a", accessBinding: "member:membership-a" },
+  );
+
+  assert.equal(res.status, 403);
+  assert.match((await res.json()).error, /only in its own team/i);
+  assert.equal(
+    duplicateWhere,
+    undefined,
+    "cross-team requests fail before checking names",
+  );
+});
+
+test("a team-scoped agent stores its grant for derived OAuth credentials", async () => {
+  let credentialUpdate;
+  const prisma = {
+    agent: {
+      findFirst: async () => null,
+      create: async ({ data }) => ({
+        id: "new-agent",
+        displayName: data.displayName,
+        photoURL: null,
+      }),
+      update: async ({ data }) => {
+        credentialUpdate = data;
+        return {};
+      },
+    },
+    member: { createMany: async () => ({ count: 1 }) },
+    $transaction: async (fn) => fn(prisma),
+  };
+  const teamScope = {
+    teamId: "team-a",
+    accessBinding: "member:membership-a",
+  };
+  const { createAgentForUser } = loadCreateModule({
+    prisma,
+    getAccessibleAgentBoard: async () => ({ id: 15, teamId: "team-a" }),
+  });
+
+  const response = await createAgentForUser(
+    request({ display_name: "Build Agent", project_ids: [15] }),
+    { id: 6, email: "a@b.com" },
+    teamScope,
+  );
+
+  assert.equal(response.status, 201);
+  assert.equal(credentialUpdate.credentialTeamId, teamScope.teamId);
+  assert.equal(
+    credentialUpdate.credentialTeamAccessBinding,
+    teamScope.accessBinding,
+  );
+});
+
+test("a team-scoped key must create an agent on at least one board", async () => {
+  const prisma = { agent: { findFirst: async () => null } };
+  const { createAgentForUser } = loadCreateModule({ prisma });
+
+  const res = await createAgentForUser(
+    request({ display_name: "Build Agent" }),
+    { id: 6, email: "a@b.com" },
+    { teamId: "team-a", accessBinding: "member:membership-a" },
+  );
+
+  assert.equal(res.status, 400);
+  const data = await res.json();
+  assert.equal(data.field, "project_ids");
+});
+
 test("the browser-session route rejects an unauthenticated request before any validation", async () => {
   const { handleCreateAgentRequest } = loadCreateModule({
     prisma: {},
@@ -226,4 +327,100 @@ test("an authorized browser session (no management key) can create an agent and 
   const data = await res.json();
   assert.equal(data.success, true);
   assert.equal(data.token, "session-token");
+});
+
+test("the CLI management route lets a write agent provision a board-bound read agent", async () => {
+  let createdData;
+  let duplicateWhere;
+  let memberData;
+  const prisma = {
+    agent: {
+      findFirst: async ({ where }) => {
+        duplicateWhere = where;
+        return where.onlyTeam === "team-a" ? null : { id: "other-team-agent" };
+      },
+      create: async ({ data }) => {
+        createdData = data;
+        return { id: "ci-reader", displayName: data.displayName, photoURL: null };
+      },
+      update: async () => ({}),
+    },
+    member: {
+      createMany: async ({ data }) => {
+        memberData = data;
+        return { count: data.length };
+      },
+    },
+    $transaction: async (fn) => fn(prisma),
+  };
+  const caller = {
+    user: { id: 6, email: "a@b.com" },
+    agentId: "provisioning-agent",
+  };
+  let requiredRole;
+  const { handleCreateAgentRequest } = loadCreateModule({
+    prisma,
+    mintedToken: "read-token",
+    validateMcpAuth: async () => caller,
+    requireRole: async (ctx, role) => {
+      assert.equal(ctx, caller);
+      requiredRole = role;
+      return null;
+    },
+    agentWithinTeamWhere: (teamId) => ({ onlyTeam: teamId }),
+    getAgentTeamId: () => "team-a",
+    getAccessibleAgentBoard: async () => ({ id: 15, teamId: "team-a" }),
+    isAgentOnBoard: async (projectId, agentId) =>
+      projectId === 15 && agentId === caller.agentId,
+  });
+
+  const res = await handleCreateAgentRequest(
+    request({
+      display_name: "Parity CI reader",
+      project_ids: [15],
+      role: "read",
+    }),
+    "management",
+  );
+
+  assert.equal(res.status, 201);
+  assert.equal(requiredRole, "write");
+  assert.equal(duplicateWhere.onlyTeam, "team-a");
+  assert.deepEqual(createdData.permissions, { role: "read" });
+  assert.deepEqual(memberData, [
+    { projectId: 15, userId: 6, agentId: "ci-reader" },
+  ]);
+  assert.equal((await res.json()).token, "read-token");
+});
+
+test("agent provisioning cannot mint a write token or target another board", async () => {
+  const prisma = { agent: { findFirst: async () => null } };
+  const caller = {
+    user: { id: 6, email: "a@b.com" },
+    agentId: "provisioning-agent",
+  };
+  const { handleCreateAgentRequest } = loadCreateModule({
+    prisma,
+    validateMcpAuth: async () => caller,
+    requireRole: async () => null,
+    getAccessibleAgentBoard: async (projectId) => ({
+      id: projectId,
+      teamId: "team-a",
+    }),
+    isAgentOnBoard: async (projectId) => projectId === 15,
+  });
+
+  const writeResponse = await handleCreateAgentRequest(
+    request({ display_name: "Writer", project_ids: [15], role: "write" }),
+    "management",
+  );
+  assert.equal(writeResponse.status, 403);
+  assert.match((await writeResponse.json()).error, /only read-role agents/i);
+
+  const otherBoardResponse = await handleCreateAgentRequest(
+    request({ display_name: "Other reader", project_ids: [16], role: "read" }),
+    "management",
+  );
+  assert.equal(otherBoardResponse.status, 403);
+  assert.match((await otherBoardResponse.json()).error, /must already belong/i);
 });

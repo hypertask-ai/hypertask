@@ -1,0 +1,262 @@
+name: TestSprite production QA
+
+on:
+  workflow_run:
+    workflows: ["Prod Health Check + Auto-Rollback"]
+    types: [completed]
+    branches: [production]
+  workflow_dispatch:
+    inputs:
+      force:
+        description: Run both TestSprite projects regardless of changed files or the daily cap
+        required: false
+        type: boolean
+        default: false
+
+permissions:
+  actions: read
+  checks: read
+  contents: read
+  statuses: read
+
+jobs:
+  testsprite:
+    if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.event == 'push'
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Confirm the deploy passed production health checks
+        id: deploy
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPOSITORY: ${{ github.repository }}
+          SHA: ${{ github.event.workflow_run.head_sha }}
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "run=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          state=$(gh api "repos/$REPOSITORY/commits/$SHA/status" \
+            --jq '[.statuses[] | select(.context == "prod-health-gate")][0].state // ""')
+          if [ "$state" = "success" ]; then
+            echo "run=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "run=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::Skipping TestSprite because this SHA was not confirmed as a healthy live deploy."
+          fi
+
+      - name: Check out the deployed commit
+        if: steps.deploy.outputs.run == 'true'
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
+          fetch-depth: 0
+
+      - name: Find relevant changes
+        id: scope
+        if: steps.deploy.outputs.run == 'true'
+        env:
+          AFTER_SHA: ${{ github.event.workflow_run.head_sha || github.sha }}
+          CHECK_SUITE_ID: ${{ github.event.workflow_run.check_suite_id }}
+          FORCE: ${{ inputs.force }}
+          GH_TOKEN: ${{ github.token }}
+          REPOSITORY: ${{ github.repository }}
+          RUN_ID: ${{ github.run_id }}
+        run: |
+          if [ "$FORCE" = "true" ]; then
+            {
+              echo "web=true"
+              echo "backend=true"
+              echo "relevant=true"
+            } >> "$GITHUB_OUTPUT"
+            echo "::notice::Force enabled; running both TestSprite projects without change filtering."
+            exit 0
+          fi
+
+          before_sha=""
+          if [ -n "$CHECK_SUITE_ID" ]; then
+            before_sha=$(gh api "repos/$REPOSITORY/check-suites/$CHECK_SUITE_ID" --jq '.before_sha // ""')
+          fi
+
+          if ! [[ "$before_sha" =~ ^[0-9a-f]{40}$ ]] || [ "$before_sha" = "0000000000000000000000000000000000000000" ]; then
+            before_sha=$(gh api --paginate \
+              "repos/$REPOSITORY/actions/workflows/testsprite-production.yml/runs?branch=production&status=success&per_page=100" \
+              --jq ".workflow_runs[] | select(.id != $RUN_ID) | .head_sha" | sed -n '1p')
+          fi
+
+          if ! [[ "$before_sha" =~ ^[0-9a-f]{40}$ ]] || ! git cat-file -e "$before_sha^{commit}" 2>/dev/null; then
+            {
+              echo "web=true"
+              echo "backend=true"
+              echo "relevant=true"
+            } >> "$GITHUB_OUTPUT"
+            echo "::warning::No usable previous deploy SHA was found; running both TestSprite projects to avoid missing coverage."
+            exit 0
+          fi
+
+          web=false
+          backend=false
+          while IFS= read -r file; do
+            case "$file" in
+              src/app/*|src/components/*|src/pages/*|public/*) web=true ;;
+            esac
+            case "$file" in
+              src/app/api/*|src/lib/*|src/utils/controllers/*|prisma/*) backend=true ;;
+            esac
+          done < <(git diff --name-only "$before_sha" "$AFTER_SHA")
+
+          relevant=false
+          if [ "$web" = "true" ] || [ "$backend" = "true" ]; then
+            relevant=true
+          else
+            echo "::notice::Skipping TestSprite because $before_sha..$AFTER_SHA contains no web or backend project changes."
+          fi
+          {
+            echo "web=$web"
+            echo "backend=$backend"
+            echo "relevant=$relevant"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Create today's run marker
+        id: day
+        if: steps.scope.outputs.relevant == 'true' && inputs.force != true
+        env:
+          RUN_ATTEMPT: ${{ github.run_attempt }}
+          RUN_ID: ${{ github.run_id }}
+        run: |
+          date=$(date -u +%F)
+          prefix="testsprite-production-quota-$date-"
+          printf '%s-%s\n' "$RUN_ID" "$RUN_ATTEMPT" > "$RUNNER_TEMP/testsprite-quota-marker"
+          {
+            echo "date=$date"
+            echo "cache-prefix=$prefix"
+            echo "cache-key=$prefix$RUN_ID-$RUN_ATTEMPT"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Reserve a daily run
+        if: steps.scope.outputs.relevant == 'true' && inputs.force != true
+        continue-on-error: true
+        uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: ${{ runner.temp }}/testsprite-quota-marker
+          key: ${{ steps.day.outputs.cache-key }}
+
+      - name: Apply daily run cap
+        id: quota
+        if: always() && steps.scope.outputs.relevant == 'true'
+        env:
+          CACHE_KEY: ${{ steps.day.outputs.cache-key }}
+          CACHE_PREFIX: ${{ steps.day.outputs.cache-prefix }}
+          DATE: ${{ steps.day.outputs.date }}
+          FORCE: ${{ inputs.force }}
+          GH_TOKEN: ${{ github.token }}
+          REPOSITORY: ${{ github.repository }}
+        run: |
+          if [ "$FORCE" = "true" ]; then
+            echo "run=true" >> "$GITHUB_OUTPUT"
+            echo "::notice::Force enabled; bypassing the daily TestSprite cap."
+            exit 0
+          fi
+
+          # The save action atomically finalizes this run's unique marker before
+          # admission. Later markers cannot displace its creation-time rank.
+          keys=$(gh api "repos/$REPOSITORY/actions/caches?key=$CACHE_PREFIX&per_page=100" \
+            --jq '[.actions_caches[] | {created_at, id, key}] | sort_by(.created_at, .id) | .[].key')
+          rank=$(printf '%s\n' "$keys" | awk -v key="$CACHE_KEY" '$0 == key { print NR; exit }')
+          if [ -z "$rank" ]; then
+            echo "run=false" >> "$GITHUB_OUTPUT"
+            echo "::warning::Skipping TestSprite because the daily quota marker could not be reserved."
+          elif [ "$rank" -gt 4 ]; then
+            echo "run=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::Skipping TestSprite because 4 production QA runs have already started on $DATE UTC."
+          else
+            echo "run=true" >> "$GITHUB_OUTPUT"
+            echo "count=$rank" >> "$GITHUB_OUTPUT"
+            echo "::notice::Using TestSprite production QA run $rank of 4 for $DATE UTC."
+          fi
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        if: steps.quota.outputs.run == 'true'
+        with:
+          node-version: 22
+
+      - name: Install TestSprite CLI
+        if: steps.quota.outputs.run == 'true'
+        run: npm install --global @testsprite/testsprite-cli@0.11.0
+
+      - name: Configure the frontend QA login
+        id: configure
+        if: steps.quota.outputs.run == 'true' && steps.scope.outputs.web == 'true'
+        env:
+          QA_LOGIN_EMAIL: ${{ secrets.QA_LOGIN_EMAIL }}
+          QA_LOGIN_PASSWORD: ${{ secrets.QA_LOGIN_PASSWORD }}
+          TESTSPRITE_API_KEY: ${{ secrets.TESTSPRITE_API_KEY }}
+        run: |
+          umask 077
+          password_file="$RUNNER_TEMP/qa-login-password"
+          trap 'rm -f "$password_file"' EXIT
+          printf '%s' "$QA_LOGIN_PASSWORD" > "$password_file"
+          testsprite project update 411d64f3-c9ec-4032-a4e5-ad0e3f6f57d9 \
+            --url https://app.hypertask.ai/qa/login \
+            --username "$QA_LOGIN_EMAIL" \
+            --password-file "$password_file" >/dev/null
+
+      - name: Run frontend tests
+        id: frontend
+        if: steps.quota.outputs.run == 'true' && steps.scope.outputs.web == 'true' && steps.configure.outcome == 'success'
+        continue-on-error: true
+        env:
+          TESTSPRITE_API_KEY: ${{ secrets.TESTSPRITE_API_KEY }}
+        run: |
+          mkdir -p testsprite-reports
+          testsprite --output json test run --all \
+            --project 411d64f3-c9ec-4032-a4e5-ad0e3f6f57d9 \
+            --wait --timeout 1200 \
+            --report junit --report-file testsprite-reports/frontend-junit.xml \
+            --summary-file testsprite-reports/frontend-summary.json \
+            > testsprite-reports/frontend-result.json
+
+      - name: Run backend tests
+        id: backend
+        if: always() && steps.quota.outputs.run == 'true' && steps.scope.outputs.backend == 'true'
+        continue-on-error: true
+        env:
+          TESTSPRITE_API_KEY: ${{ secrets.TESTSPRITE_API_KEY }}
+        run: |
+          mkdir -p testsprite-reports
+          testsprite --output json test run --all \
+            --project 64648e88-03a4-4355-9e14-dc28f4e8cc7e \
+            --wait --timeout 1200 \
+            --report junit --report-file testsprite-reports/backend-junit.xml \
+            --summary-file testsprite-reports/backend-summary.json \
+            > testsprite-reports/backend-result.json
+
+      - name: Upload TestSprite reports
+        if: always() && steps.quota.outputs.run == 'true'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: testsprite-production-reports
+          path: testsprite-reports/
+          retention-days: 14
+
+      - name: Report TestSprite result
+        if: always() && steps.quota.outputs.run == 'true'
+        env:
+          BACKEND: ${{ steps.backend.outcome }}
+          CONFIGURE: ${{ steps.configure.outcome }}
+          FRONTEND: ${{ steps.frontend.outcome }}
+          RUN_BACKEND: ${{ steps.scope.outputs.backend }}
+          RUN_WEB: ${{ steps.scope.outputs.web }}
+        run: |
+          failed=false
+          if [ "$RUN_WEB" = "true" ] && { [ "$CONFIGURE" != "success" ] || [ "$FRONTEND" != "success" ]; }; then
+            failed=true
+          fi
+          if [ "$RUN_BACKEND" = "true" ] && [ "$BACKEND" != "success" ]; then
+            failed=true
+          fi
+          if [ "$failed" = "true" ]; then
+            echo "::error::TestSprite production QA failed."
+            exit 1
+          fi

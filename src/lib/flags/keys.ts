@@ -17,6 +17,8 @@ export const AGENT_CHAT_SKILLS_FLAG = "htpr-6035-agent-chat-skills";
 export const AGENT_CHAT_TICKET_CONFIRM_FLAG = "htpr-6006-chat-confirm-ticket";
 export const HTPR_6157_AUTO_DESCRIPTION_FLAG =
   "htpr-6157-new-task-auto-description";
+export const HTPR_6175_QUICK_ENTRY_CARDS_FLAG =
+  "htpr-6175-quick-entry-cards";
 export const AUTO_TASK_DESCRIPTIONS_FLAG = "htpr-6177-auto-task-descriptions";
 export const FLAG_TICKET_TITLE_FLAG = "htpr-6176-flag-ticket-title";
 export const FLAG_SORT_FILTER_FLAG = "htpr-6179-flag-sort-filter";
@@ -74,10 +76,12 @@ export const HTPR_6514_COMMENT_LONG_PRESS_FLAG =
 export const HTPR_6516_AGENT_ATTRIBUTION_FLAG =
   "htpr-6516-agent-attribution";
 export const HTPR_6512_SEED_TEAM_AGENT_FLAG = "htpr-6512-seed-team-agent";
+export const HTPR_6533_MCP_CLIENT_EVAL_FLAG = "htpr-6533-mcp-client-eval";
 export const HTPR_6532_STATELESS_MCP_FLAG = "htpr-6532-stateless-mcp";
 export const HTPR_6530_MCP_LIST_QUERY_FLAG = "htpr-6530-mcp-list-query";
 export const HTPR_6531_DEFERRED_MCP_TOOLS_FLAG = "htpr-6531-deferred-mcp-tools";
 export const HTPR_6473_GET_AGENT_FLAG = "htpr-6473-get-agent";
+export const HTPR_6470_PROJECT_DELETE_FLAG = "htpr-6470-project-delete";
 export const HTPR_6536_QA_LOGIN_FLAG = "htpr-6536-qa-login";
 export const HTPR_6551_QUIET_RUN_ACTIVITY_FLAG =
   "htpr-6551-quiet-run-activity";
@@ -93,6 +97,8 @@ export const HTPR_6556_MOBILE_DESCRIPTION_FIRST_FLAG =
   "htpr-6556-mobile-description-first";
 export const HTPR_6561_DESCRIPTION_STRUCTURE_FLAG =
   "htpr-6561-preserve-ai-edited-description-structure";
+export const HTPR_6542_TEAM_SCOPED_MANAGEMENT_KEYS_FLAG =
+  "htpr-6542-team-scoped-management-keys";
 /** Sent on chat.message when HTPR-6407 is on so agent replies lead with the next action. */
 export const AGENT_CHAT_ADHD_REPLY_GUIDANCE =
   "Lead with the next action. Keep replies short. Number steps. End with one concrete next action when something remains open.";

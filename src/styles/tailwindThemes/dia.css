@@ -334,17 +334,3 @@
 .dia .comment-edit-container {
   background: transparent;
 }
-
-.dia .attachment-tile {
-  background: #f1eee7 !important;
-  border: 1px solid #e9e4da;
-  color: #1f1d1a;
-}
-
-.dia .attachment-tile:hover {
-  background: #deede2 !important;
-}
-
-.dia .attachment-tile-name {
-  color: #1f1d1a;
-}

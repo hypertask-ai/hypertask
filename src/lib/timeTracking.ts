@@ -356,11 +356,11 @@ export async function listReport(
     adminProjectIds?: number[];
   } = {}
 ) {
-  const adminOnly = await isFeatureEnabled(
+  const reportsEnabled = await isFeatureEnabled(
     HTPR_4228_ADMIN_ONLY_TIME_REPORTS_FLAG,
     userId
   );
-  const adminProjectIds = adminOnly
+  const adminProjectIds = reportsEnabled
     ? (options.adminProjectIds ??
       (await administeredProjectIds(userId, {
         teamId: options.teamId,
@@ -368,10 +368,9 @@ export async function listReport(
       })))
     : [];
   const adminSet = new Set(adminProjectIds);
-  // HTPR-4228: reports show all members' entries only to board owners and
-  // admins; plain members are limited to their own history. Applied in the
-  // query so the 1000-row cap cannot push out a member's own entries.
-  const seesOthers = !adminOnly || adminProjectIds.length > 0;
+  // Other people's entries are protected data. The flag may grant reports to
+  // an owner or admin, but disabling it must fall back to the caller's history.
+  const seesOthers = adminProjectIds.length > 0;
 
   const entries = await prisma.timeEntry.findMany({
     where: {
@@ -394,7 +393,7 @@ export async function listReport(
           }
         : {}),
       ...(options.runningOnly ? { endedAt: null } : {}),
-      ...(adminOnly && adminProjectIds.length
+      ...(adminProjectIds.length
         ? { OR: [{ userId }, { task: { projectId: { in: adminProjectIds } } }] }
         : {}),
       task: {
@@ -438,22 +437,7 @@ export async function listReport(
     return runningDifference || b.startedAt.getTime() - a.startedAt.getTime();
   });
 
-  const manageableProjectIds = adminOnly
-    ? adminSet
-    : new Set(
-        (
-          await Promise.all(
-            [...new Set(entries.map((entry) => entry.task.projectId))].map(
-              async (projectId) => ({
-                canManage: await isProjectAdmin(userId, projectId),
-                projectId,
-              })
-            )
-          )
-        )
-          .filter(({ canManage }) => canManage)
-          .map(({ projectId }) => projectId)
-      );
+  const manageableProjectIds = adminSet;
 
   return entries.map(({ task, user, ...entry }) => ({
     id: entry.id,
