@@ -77,6 +77,12 @@ test("description-first actions save with Task Writer without opening its sheet"
     /label="Save"[\s\S]*?sendOnClick && sendOnClick\("Save"\)/,
   );
   assert.match(mobileBar, /isAiTaskWriterOpen \? "Saving\.\.\." : "Save with task writer"/);
+  assert.match(attachments, /aria-disabled=\{disabled \|\| undefined\}/);
+  assert.match(attachments, /aria-busy=\{busy \|\| undefined\}/);
+  assert.match(
+    mobileBar,
+    /label=\{isAiTaskWriterOpen[\s\S]*?disabled=\{isAiTaskWriterOpen\}[\s\S]*?busy=\{isAiTaskWriterOpen\}/,
+  );
   assert.match(
     createTaskEditor,
     /const saveWithTaskWriter = \(\) => \{[\s\S]*?setShouldShowAITaskWriter\(true\)/,

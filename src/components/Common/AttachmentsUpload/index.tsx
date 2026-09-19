@@ -905,31 +905,36 @@ interface IMobileBottomBar {
   descriptionFirst?: boolean;
 }
 
-const ActionButton = React.forwardRef<HTMLSpanElement, any>(({ label, onClick }, ref) => {
-  return (
-    <span
-      ref={ref}
-      role="button"
-      tabIndex={0}
-      className={cn(
-        MOBILE_TARGET,
-        "rounded-sm px-2 border-thin border-icon-dark-gray cursor-pointer whitespace-nowrap"
-      )}
-      onClick={(e) => {
-        e.stopPropagation();
-        onClick && onClick(e);
-      }}
-      onKeyDown={(e) => {
-        if (e.key !== "Enter" && e.key !== " ") return;
-        e.preventDefault();
-        e.stopPropagation();
-        onClick && onClick(e);
-      }}
-    >
-      {label}
-    </span>
-  );
-});
+const ActionButton = React.forwardRef<HTMLSpanElement, any>(
+  ({ label, onClick, disabled = false, busy = false }, ref) => {
+    return (
+      <span
+        ref={ref}
+        role="button"
+        tabIndex={disabled ? -1 : 0}
+        aria-disabled={disabled || undefined}
+        aria-busy={busy || undefined}
+        className={cn(
+          MOBILE_TARGET,
+          "rounded-sm px-2 border-thin border-icon-dark-gray whitespace-nowrap",
+          disabled ? "cursor-not-allowed opacity-40" : "cursor-pointer",
+        )}
+        onClick={(e) => {
+          e.stopPropagation();
+          if (!disabled) onClick?.(e);
+        }}
+        onKeyDown={(e) => {
+          if (disabled || (e.key !== "Enter" && e.key !== " ")) return;
+          e.preventDefault();
+          e.stopPropagation();
+          onClick?.(e);
+        }}
+      >
+        {label}
+      </span>
+    );
+  },
+);
 ActionButton.displayName = "ActionButton";
 
 const MobileBottomBar: React.FC<IMobileBottomBar> = ({
@@ -1064,6 +1069,7 @@ const MobileBottomBar: React.FC<IMobileBottomBar> = ({
           <div className="[&>span]:!border-transparent [&>span]:!text-icon-dark-gray">
             <ActionButton
               label="Save"
+              disabled={isAiTaskWriterOpen}
               onClick={() => sendOnClick && sendOnClick("Save")}
             />
           </div>
@@ -1074,7 +1080,9 @@ const MobileBottomBar: React.FC<IMobileBottomBar> = ({
             <ActionButton
               ref={saveRef}
               label={isAiTaskWriterOpen ? "Saving..." : "Save with task writer"}
-              onClick={isAiTaskWriterOpen ? undefined : toggleAiTaskWriter}
+              disabled={isAiTaskWriterOpen}
+              busy={isAiTaskWriterOpen}
+              onClick={toggleAiTaskWriter}
             />
           </div>
         </div>
