@@ -296,6 +296,7 @@ test("board create entry points follow the AI-first flag", async () => {
   const previousScrollIntoView = testDom.window.HTMLElement.prototype.scrollIntoView;
   let aiFirstTaskWriterEnabled = false;
   let quickEntryEnabled = false;
+  let quickEntryItems = [];
   const activeItemWrites = [];
   const moduleMocks = new Map([
     [path.join(root, "src/hooks/useFlag.tsx"), {
@@ -397,7 +398,7 @@ test("board create entry points follow the AI-first flag", async () => {
         showAddItem,
         topInputRef,
       } = useSections({
-        items: [],
+        items: quickEntryItems,
         active: true,
         index: 0,
         title: "Backlog",
@@ -423,6 +424,12 @@ test("board create entry points follow the AI-first flag", async () => {
               createTaskAt,
               sectionPayload,
             }),
+        ...quickEntryItems.map((item) =>
+          React.createElement("button", {
+            id: `task-${item.id}`,
+            key: item.id,
+          }),
+        ),
       );
     };
     const container = document.getElementById("root");
@@ -536,6 +543,27 @@ test("board create entry points follow the AI-first flag", async () => {
         defaultEditFocus: undefined,
       },
     ]);
+
+    quickEntryItems = [
+      { id: 1001, projectId: 15, uniqueIndex: 1001 },
+      { id: 1002, projectId: 15, uniqueIndex: 1002 },
+    ];
+    await renderHarness(false);
+
+    await dispatchShortcut({ key: "c", code: "KeyC", keyCode: 67, altKey: true });
+    await cancelQuickEntry();
+    assert.equal(activeItemWrites.at(-1), 1001);
+    assert.equal(document.activeElement?.id, "task-1001");
+    await dispatchShortcut({
+      key: "C",
+      code: "KeyC",
+      keyCode: 67,
+      altKey: true,
+      shiftKey: true,
+    });
+    await cancelQuickEntry();
+    assert.equal(activeItemWrites.at(-1), 1002);
+    assert.equal(document.activeElement?.id, "task-1002");
   } finally {
     if (reactRoot) await React.act(async () => reactRoot.unmount());
     for (const [filename, previous] of previousModules) {

@@ -415,6 +415,10 @@ const useSections = ({
         `task-${items[position == "top" ? 0 : items.length - 1]?.id}`
       )
       ?.focus();
+    if (position === "top") {
+      setActiveItem(items[0]?.id ?? null);
+      return;
+    }
     setActiveItem(items[items.length - 1]?.id ?? null);
   };
 
