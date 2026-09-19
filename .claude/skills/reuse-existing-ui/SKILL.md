@@ -22,11 +22,11 @@ Use before `fix-bug` or `ship-feature-behind-flag` on any ticket touching UI. Th
 3. **Reuse it as is. Props only.** Import the component and pass it the props it already takes. Don't fork it, don't copy its internals into a new file "to customize", don't wrap it in a new component that just re-renders it with a different name. When the owner selects an existing trigger, keep that exact trigger instead of adding a parallel button or label.
 4. **A new component is allowed only when no existing one can do the job.** Say what you checked and why it doesn't fit. Put that reason on the ticket comment and, one line, in the PR summary. Rules 2 (Simplicity First) and 3 (Surgical Changes) in `reference/karpathy-rules.md` back this: no abstractions for single-use code, touch only what you must.
 5. **Never re-implement layout that already exists for the same kind of screen.** A mobile full-screen chat is the AI chat's mobile layout (`AI_Chat_Layout.tsx` and friends in `src/components/AI_CHAT/`), not a new page shell that happens to look similar.
-6. **Name every reused component in the PR.** In **Components reused**, map every new control's changed file to the existing component it imports. The required gate rejects a new component file or inline menu when its changed file has no mapping, or when the named component is absent from the base branch or not imported by that file.
+6. **Name every reused component in the PR.** In **Components reused**, map every changed exported control to the existing component binding it uses. The required gate rejects a new or renamed component file or inline menu when a control has no unique mapping, or when the named component is absent from the base branch or unused by that control. If none fits, use the template's structured no-reuse form with a specific reason.
 7. **Check before hand-off:**
    - Your grep shows no new component whose name resembles an existing one (a `ChatComposer2`, a `MicButtonNew`, a `CustomSendArrow` next to the real `SendArrow` is a red flag, not a variant).
    - The PR diff touches existing components, not new copies of them.
-   - The PR's **Components reused** lines cover every new control; each changed file imports its named path, and every named path exists on the base branch.
+   - The PR's **Components reused** lines cover every changed exported control; each reused binding is used by its named control and exists on the base branch, or has a specific no-reuse reason.
 
 ## Notes
 

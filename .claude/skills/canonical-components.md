@@ -17,4 +17,4 @@ Use these production components before adding markup for a new control. The firs
 - Compose dialogs from the common modal container, header, rows, and footer.
 - Extend the existing tabs, table, or saved-view composition instead of adding a second version beside it.
 - If none fits, follow `reuse-existing-ui`: record what you checked and why the existing component cannot do the job.
-- In the pull request's **Components reused** section, map each new control's changed file to the imported base-branch component: `Control` in `src/path/to/control.tsx` -> `src/components/reused.tsx`.
+- In the pull request's **Components reused** section, map each changed exported control to the base-branch component binding it uses: `ExportedControl` in `src/path/to/control.tsx` -> `src/components/reused.tsx`. If none fits, use `ExportedControl` in `src/path/to/control.tsx` -> No existing component fits: `specific justification`.

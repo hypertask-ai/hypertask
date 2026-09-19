@@ -32,6 +32,7 @@ function changedPaths(baseSha, headSha, filter) {
   return git([
     "diff",
     "--name-only",
+    "--find-renames",
     "-z",
     `--diff-filter=${filter}`,
     `${baseSha}...${headSha}`,
@@ -67,12 +68,19 @@ function reuseSection(prBody) {
 
 function declaredMappings(section) {
   if (!section) return [];
-  const pattern = /^\s*-\s+`([^`\r\n]+)`\s+in\s+`(src\/[^`\r\n]+\.[cm]?[jt]sx?)`\s*->\s*`(src\/components\/[^`\r\n]+\.[cm]?[jt]sx?)`\s*$/gm;
-  return [...section.matchAll(pattern)].map((match) => ({
-    control: match[1].trim(),
-    source: match[2],
-    reused: match[3],
-  }));
+  const mappings = [];
+  const reusedPattern = /^\s*-\s+`([^`\r\n]+)`\s+in\s+`(src\/[^`\r\n]+\.[cm]?[jt]sx?)`\s*->\s*`(src\/components\/[^`\r\n]+\.[cm]?[jt]sx?)`\s*$/;
+  const noReusePattern = /^\s*-\s+`([^`\r\n]+)`\s+in\s+`(src\/[^`\r\n]+\.[cm]?[jt]sx?)`\s*->\s*No existing component fits:\s*`([^`\r\n]+)`\s*$/;
+  for (const line of section.split("\n")) {
+    const reused = reusedPattern.exec(line);
+    const noReuse = noReusePattern.exec(line);
+    if (reused) {
+      mappings.push({ control: reused[1].trim(), source: reused[2], reused: reused[3], reason: null });
+    } else if (noReuse) {
+      mappings.push({ control: noReuse[1].trim(), source: noReuse[2], reused: null, reason: noReuse[3].trim() });
+    }
+  }
+  return mappings;
 }
 
 function pathExistsOnBase(baseSha, path) {
@@ -104,51 +112,195 @@ function resolveImport(sourcePath, specifier) {
   return specifier.startsWith("src/") ? specifier : null;
 }
 
-function importedSpecifiers(source, sourcePath) {
+function parseSource(source, sourcePath) {
   const scriptKind = sourcePath.endsWith(".tsx") ? typescript.ScriptKind.TSX
     : sourcePath.endsWith(".jsx") ? typescript.ScriptKind.JSX
       : sourcePath.endsWith(".js") ? typescript.ScriptKind.JS
         : typescript.ScriptKind.TS;
-  const sourceFile = typescript.createSourceFile(
+  return typescript.createSourceFile(
     sourcePath,
     source,
     typescript.ScriptTarget.Latest,
     true,
     scriptKind,
   );
-  const specifiers = [];
-  const visit = (node) => {
-    if ((typescript.isImportDeclaration(node) || typescript.isExportDeclaration(node)) &&
-        node.moduleSpecifier && typescript.isStringLiteralLike(node.moduleSpecifier)) {
-      specifiers.push(node.moduleSpecifier.text);
-    } else if (typescript.isCallExpression(node) && node.arguments.length === 1 &&
-               typescript.isStringLiteralLike(node.arguments[0]) &&
-               (node.expression.kind === typescript.SyntaxKind.ImportKeyword ||
-                (typescript.isIdentifier(node.expression) && node.expression.text === "require"))) {
-      specifiers.push(node.arguments[0].text);
-    }
-    typescript.forEachChild(node, visit);
-  };
-  visit(sourceFile);
-  return specifiers;
 }
 
-function importsComponent(headSha, sourcePath, componentPath) {
-  const specifiers = importedSpecifiers(sourceAt(headSha, sourcePath), sourcePath)
-    .map((specifier) => resolveImport(sourcePath, specifier))
-    .filter(Boolean);
+function addedLineNumbers(baseSha, headSha, path) {
+  const diff = git(["diff", "--unified=0", "--no-renames", `${baseSha}...${headSha}`, "--", path]);
+  const lines = new Set();
+  for (const row of diff.split("\n")) {
+    const hunk = /^@@ -\d+(?:,\d+)? \+(\d+)(?:,(\d+))? @@/.exec(row);
+    if (!hunk) continue;
+    const start = Number(hunk[1]);
+    const count = hunk[2] === undefined ? 1 : Number(hunk[2]);
+    for (let line = start; line < start + count; line += 1) lines.add(line);
+  }
+  return lines;
+}
+
+function hasModifier(node, kind) {
+  return node.modifiers?.some((modifier) => modifier.kind === kind) ?? false;
+}
+
+function containsJsx(node) {
+  let found = false;
+  const visit = (child) => {
+    if (typescript.isJsxElement(child) || typescript.isJsxSelfClosingElement(child) ||
+        typescript.isJsxFragment(child)) {
+      found = true;
+      return;
+    }
+    if (!found) typescript.forEachChild(child, visit);
+  };
+  visit(node);
+  return found;
+}
+
+function touchesAddedLine(node, sourceFile, addedLines) {
+  const first = sourceFile.getLineAndCharacterOfPosition(node.getStart(sourceFile)).line + 1;
+  const last = sourceFile.getLineAndCharacterOfPosition(node.getEnd()).line + 1;
+  for (let line = first; line <= last; line += 1) {
+    if (addedLines.has(line)) return true;
+  }
+  return false;
+}
+
+function controlsInFile(baseSha, headSha, sourcePath) {
+  const sourceFile = parseSource(sourceAt(headSha, sourcePath), sourcePath);
+  const addedLines = addedLineNumbers(baseSha, headSha, sourcePath);
+  const definitions = new Map();
+  const controls = new Map();
+  const aliases = [];
+
+  for (const statement of sourceFile.statements) {
+    if (typescript.isExportDeclaration(statement) && !statement.moduleSpecifier &&
+        statement.exportClause && typescript.isNamedExports(statement.exportClause)) {
+      for (const element of statement.exportClause.elements) {
+        aliases.push({ exported: element.name.text, local: element.propertyName?.text ?? element.name.text });
+      }
+      continue;
+    }
+
+    if ((typescript.isFunctionDeclaration(statement) || typescript.isClassDeclaration(statement)) &&
+        statement.name && containsJsx(statement)) {
+      definitions.set(statement.name.text, statement);
+      if (hasModifier(statement, typescript.SyntaxKind.ExportKeyword)) {
+        controls.set(statement.name.text, statement);
+      }
+      continue;
+    }
+
+    if (typescript.isVariableStatement(statement)) {
+      const exported = hasModifier(statement, typescript.SyntaxKind.ExportKeyword);
+      for (const declaration of statement.declarationList.declarations) {
+        if (!typescript.isIdentifier(declaration.name) || !declaration.initializer ||
+            !containsJsx(declaration.initializer)) continue;
+        definitions.set(declaration.name.text, declaration.initializer);
+        if (exported) controls.set(declaration.name.text, declaration.initializer);
+      }
+      continue;
+    }
+
+    if (typescript.isExportAssignment(statement)) {
+      if (typescript.isIdentifier(statement.expression)) {
+        aliases.push({ exported: statement.expression.text, local: statement.expression.text });
+      } else if (containsJsx(statement.expression)) {
+        controls.set("default", statement.expression);
+      }
+    }
+  }
+
+  for (const { exported, local } of aliases) {
+    const definition = definitions.get(local);
+    if (definition) controls.set(exported, definition);
+  }
+
+  return new Map([...controls].filter(([, node]) => touchesAddedLine(node, sourceFile, addedLines)));
+}
+
+function moduleMatches(sourcePath, specifier, componentPath) {
+  const resolved = resolveImport(sourcePath, specifier);
+  if (!resolved) return false;
+  const imported = withoutExtension(resolved);
   const component = withoutExtension(componentPath);
-  return specifiers.some((specifier) => {
-    const imported = withoutExtension(specifier);
-    return imported === component || `${imported}/index` === component;
-  });
+  return imported === component || `${imported}/index` === component;
+}
+
+function bindingNames(name) {
+  if (typescript.isIdentifier(name)) return [name.text];
+  const names = [];
+  for (const element of name.elements) {
+    if (!typescript.isOmittedExpression(element)) names.push(...bindingNames(element.name));
+  }
+  return names;
+}
+
+function importedBindings(sourceFile, sourcePath, componentPath) {
+  const bindings = [];
+  for (const statement of sourceFile.statements) {
+    if (typescript.isImportDeclaration(statement) && statement.importClause &&
+        !statement.importClause.isTypeOnly && typescript.isStringLiteralLike(statement.moduleSpecifier) &&
+        moduleMatches(sourcePath, statement.moduleSpecifier.text, componentPath)) {
+      if (statement.importClause.name) bindings.push(statement.importClause.name.text);
+      const named = statement.importClause.namedBindings;
+      if (named && typescript.isNamespaceImport(named)) bindings.push(named.name.text);
+      if (named && typescript.isNamedImports(named)) {
+        for (const element of named.elements) {
+          if (!element.isTypeOnly) bindings.push(element.name.text);
+        }
+      }
+    }
+
+    if (!typescript.isVariableStatement(statement)) continue;
+    for (const declaration of statement.declarationList.declarations) {
+      const call = declaration.initializer;
+      if (!call || !typescript.isCallExpression(call) || call.arguments.length !== 1 ||
+          !typescript.isIdentifier(call.expression) || call.expression.text !== "require" ||
+          !typescript.isStringLiteralLike(call.arguments[0]) ||
+          !moduleMatches(sourcePath, call.arguments[0].text, componentPath)) continue;
+      bindings.push(...bindingNames(declaration.name));
+    }
+  }
+  return bindings;
+}
+
+function bindingUsedByControl(controlNode, binding) {
+  let used = false;
+  const visit = (node) => {
+    if (typescript.isIdentifier(node) && node.text === binding) {
+      let parent = node.parent;
+      let typeOnly = false;
+      while (parent && parent !== controlNode) {
+        if (typescript.isTypeNode(parent)) {
+          typeOnly = true;
+          break;
+        }
+        parent = parent.parent;
+      }
+      if (!typeOnly) used = true;
+    }
+    if (!used) typescript.forEachChild(node, visit);
+  };
+  visit(controlNode);
+  return used;
+}
+
+function controlUsesComponent(sourcePath, componentPath, controlNode) {
+  const sourceFile = controlNode.getSourceFile();
+  return importedBindings(sourceFile, sourcePath, componentPath)
+    .some((binding) => bindingUsedByControl(controlNode, binding));
+}
+
+function controlKey(source, control) {
+  return `${source}\0${control}`;
 }
 
 export function evaluateComponentReuse({ prBody, baseSha, headSha }) {
-  const addedComponents = changedPaths(baseSha, headSha, "A").filter((path) =>
+  const addedComponents = changedPaths(baseSha, headSha, "AR").filter((path) =>
     COMPONENT_FILE.test(path) && isProductionUiFile(path),
   );
-  const inlineMenus = changedPaths(baseSha, headSha, "AM").filter((path) =>
+  const inlineMenus = changedPaths(baseSha, headSha, "AMR").filter((path) =>
     isProductionUiFile(path) && INLINE_MENU.test(addedText(baseSha, headSha, path)),
   );
   const triggeringFiles = [...new Set([...addedComponents, ...inlineMenus])];
@@ -157,11 +309,25 @@ export function evaluateComponentReuse({ prBody, baseSha, headSha }) {
     return { pass: true, message: "No new component file or inline menu needs a reuse declaration." };
   }
 
+  const controls = new Map();
+  const unidentified = [];
+  for (const source of triggeringFiles) {
+    const found = controlsInFile(baseSha, headSha, source);
+    if (found.size === 0) unidentified.push(source);
+    for (const [control, node] of found) controls.set(controlKey(source, control), node);
+  }
+  if (unidentified.length > 0) {
+    return {
+      pass: false,
+      message: `${COMPONENT_REUSE_RULE} No changed exported JSX control could be identified in: ${unidentified.join(", ")}.`,
+    };
+  }
+
   const section = reuseSection(prBody);
   if (!section) {
     return {
       pass: false,
-      message: `${COMPONENT_REUSE_RULE} Add a non-empty "## Components reused" section for ${triggeringFiles.join(", ")}.`,
+      message: `${COMPONENT_REUSE_RULE} Add a non-empty "## Components reused" section for ${[...controls.keys()].map((key) => key.replace("\0", ":")).join(", ")}.`,
     };
   }
 
@@ -169,28 +335,46 @@ export function evaluateComponentReuse({ prBody, baseSha, headSha }) {
   if (mappings.length === 0 || mappings.some(({ control }) => !control)) {
     return {
       pass: false,
-      message: `${COMPONENT_REUSE_RULE} Use \`Control\` in \`src/path/to/control.tsx\` -> \`src/components/reused.tsx\` for each control.`,
+      message: `${COMPONENT_REUSE_RULE} Use \`ExportedControl\` in \`src/path/to/control.tsx\` -> \`src/components/reused.tsx\` for each control.`,
     };
   }
 
-  const declaredSources = new Set(mappings.map(({ source }) => source));
-  const missingSources = triggeringFiles.filter((path) => !declaredSources.has(path));
-  if (missingSources.length > 0) {
+  const mappingKeys = mappings.map(({ source, control }) => controlKey(source, control));
+  const duplicates = mappingKeys.filter((key, index) => mappingKeys.indexOf(key) !== index);
+  if (duplicates.length > 0) {
     return {
       pass: false,
-      message: `${COMPONENT_REUSE_RULE} These changed files have no control mapping: ${missingSources.join(", ")}.`,
+      message: `${COMPONENT_REUSE_RULE} Each exported control must appear exactly once; duplicate mappings: ${[...new Set(duplicates)].map((key) => key.replace("\0", ":")).join(", ")}.`,
     };
   }
 
-  const extraSources = [...declaredSources].filter((path) => !triggeringFiles.includes(path));
-  if (extraSources.length > 0) {
+  const declaredKeys = new Set(mappingKeys);
+  const missingControls = [...controls.keys()].filter((key) => !declaredKeys.has(key));
+  if (missingControls.length > 0) {
     return {
       pass: false,
-      message: `${COMPONENT_REUSE_RULE} These mappings do not identify a triggering file: ${extraSources.join(", ")}.`,
+      message: `${COMPONENT_REUSE_RULE} These changed exported controls have no mapping: ${missingControls.map((key) => key.replace("\0", ":")).join(", ")}.`,
     };
   }
 
-  const reusedPaths = [...new Set(mappings.map(({ reused }) => reused))];
+  const extraControls = [...declaredKeys].filter((key) => !controls.has(key));
+  if (extraControls.length > 0) {
+    return {
+      pass: false,
+      message: `${COMPONENT_REUSE_RULE} These mappings do not identify a changed exported control: ${extraControls.map((key) => key.replace("\0", ":")).join(", ")}.`,
+    };
+  }
+
+  const weakReasons = mappings.filter(({ reused, reason }) => !reused && (reason?.length ?? 0) < 20);
+  if (weakReasons.length > 0) {
+    return {
+      pass: false,
+      message: `${COMPONENT_REUSE_RULE} "No existing component fits" needs a specific justification of at least 20 characters.`,
+    };
+  }
+
+  const reusedMappings = mappings.filter(({ reused }) => reused);
+  const reusedPaths = [...new Set(reusedMappings.map(({ reused }) => reused))];
   const missing = reusedPaths.filter((path) => !pathExistsOnBase(baseSha, path));
   if (missing.length > 0) {
     return {
@@ -199,17 +383,20 @@ export function evaluateComponentReuse({ prBody, baseSha, headSha }) {
     };
   }
 
-  const unused = mappings.filter(({ source, reused }) => !importsComponent(headSha, source, reused));
+  const unused = reusedMappings.filter(({ source, control, reused }) =>
+    !controlUsesComponent(source, reused, controls.get(controlKey(source, control))),
+  );
   if (unused.length > 0) {
     return {
       pass: false,
-      message: `${COMPONENT_REUSE_RULE} Each named component must be imported by its control file: ${unused.map(({ source, reused }) => `${source} -> ${reused}`).join(", ")}.`,
+      message: `${COMPONENT_REUSE_RULE} Each imported component must be used by its named control: ${unused.map(({ source, control, reused }) => `${source}:${control} -> ${reused}`).join(", ")}.`,
     };
   }
 
+  const justified = mappings.length - reusedMappings.length;
   return {
     pass: true,
-    message: `Components reused: ${reusedPaths.join(", ")}.`,
+    message: `Components reused: ${reusedPaths.join(", ") || "none"}; justified new controls: ${justified}.`,
   };
 }
 

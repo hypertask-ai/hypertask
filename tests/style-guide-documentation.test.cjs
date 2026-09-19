@@ -155,8 +155,10 @@ test("the component reuse contract names real canonical components", () => {
 
   assert.match(guide, /Every PR that touches the UI must name the existing component it reuses for each new control\./);
   assert.match(template, /^## Components reused$/m);
-  assert.match(template, /`Control` in `src\/path\/to\/control\.tsx` -> `src\/components\/reused\.tsx`/);
-  assert.match(guide, /must exist on the pull request's base branch and be imported by the changed file/);
+  assert.match(template, /`ExportedControl` in `src\/path\/to\/control\.tsx` -> `src\/components\/reused\.tsx`/);
+  assert.match(template, /No existing component fits: `specific justification`/);
+  assert.match(guide, /must exist on the pull request's base branch/);
+  assert.match(guide, /an exported control has no unique mapping/);
   assert.ok(paths.length >= 6);
   for (const componentPath of paths) {
     assert.ok(fs.existsSync(path.join(root, componentPath)), `missing canonical component: ${componentPath}`);

@@ -8,9 +8,9 @@
 
 ## Components reused
 
-<!-- Required for UI changes. Map every new control's changed file to the existing component it imports and reuses. Reused paths must exist on the base branch. Write "No new controls" when the UI changes without adding a control. -->
+<!-- Required for UI changes. Map each changed exported control to the existing component binding it uses. Reused paths must exist on the base branch. If none fits, use: `ExportedControl` in `src/path/to/control.tsx` -> No existing component fits: `specific justification`. Write "No new controls" when the UI changes without adding a control. -->
 
-- `Control` in `src/path/to/control.tsx` -> `src/components/reused.tsx`
+- `ExportedControl` in `src/path/to/control.tsx` -> `src/components/reused.tsx`
 
 ## Automated test evidence
 

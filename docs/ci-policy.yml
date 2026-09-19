@@ -54,7 +54,7 @@ feature_flag_gate:
   workflow: .github/workflows/feature-flag-gate.yml
   decision_script: .github/scripts/feature-flag-gate.mjs
   component_reuse_script: .github/scripts/component-reuse-gate.mjs
-  component_reuse_requires: "A Components reused PR section mapping each production component file or inline menu to an imported base-branch component"
+  component_reuse_requires: "A Components reused PR section mapping each changed exported control to a used base-branch component binding or a specific no-reuse reason"
   runs_on: ubuntu-latest
   trusted_script_source: production_base_commit
   parser_lock: .github/scripts/feature-flag-parser/package-lock.json

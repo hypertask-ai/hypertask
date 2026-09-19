@@ -153,9 +153,9 @@ Add actions to the command palette instead of building a local dropdown. Extend 
 
 For changed user-facing UI, review the changed lines against this guide.
 
-Every PR that touches the UI must name the existing component it reuses for each new control. Under `## Components reused`, map each control and its changed file to the existing component: `Control` in `src/path/to/control.tsx` -> `src/components/reused.tsx`. The reused path must exist on the pull request's base branch and be imported by the changed file.
+Every PR that touches the UI must name the existing component it reuses for each new control. Under `## Components reused`, map each changed exported control to the component binding it uses: `ExportedControl` in `src/path/to/control.tsx` -> `src/components/reused.tsx`. The reused path must exist on the pull request's base branch. When no component fits, use `ExportedControl` in `src/path/to/control.tsx` -> No existing component fits: `specific justification`.
 
-A new JavaScript or TSX component file under `src/components`, or inline menu markup, is a `major` finding when the section is missing, a triggering file has no mapping, or a named component is missing or unused. Tests, stories, and fixtures are excluded. Quote the rule above in the finding and cite the changed control. A complete declaration with imported base-branch paths satisfies this check.
+A new or renamed JavaScript/TSX component file under `src/components`, or inline menu markup, is a `major` finding when the section is missing, an exported control has no unique mapping, or a named component is missing or unused by that control. Tests, stories, and fixtures are excluded. Quote the rule above in the finding and cite the changed control. Complete declarations with used base-branch bindings or specific no-reuse reasons satisfy this check.
 
 A style finding gates only when the diff itself proves that the pull request introduced or materially extended a violation. Cite the changed file and line, name the violated rule, and point to the conforming token or nearby reference pattern. Report that concrete violation as `major` so `claude-review` blocks it.
 
