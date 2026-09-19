@@ -56,7 +56,10 @@ test("hydration-sensitive production queries and flags use the component gate", 
   const boards = read("src/hooks/Homepage/useGetBoards.ts");
   const flags = read("src/hooks/useFlag.tsx");
 
-  assert.match(inbox, /enabled: hydrated/);
+  assert.match(
+    inbox,
+    /export const useGetNotifications[\s\S]*?const query = useQuery\(\{\s*queryKey,\s*enabled: hydrated,/,
+  );
   assert.match(inbox, /enabled: hydrated && \(options\?\.enabled \?\? true\)/);
   assert.match(boards, /enabled: hydrated && \(options\?\.enabled \?\? true\)/);
   assert.match(flags, /const flags = useContext\(FeatureFlagsContext\)/);
