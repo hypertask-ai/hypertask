@@ -163,6 +163,8 @@ const TiptapCreateTaskModal = () => {
   const [shouldShowAiTaskWriter, setShouldShowAITaskWriter] = useState(
     editMode === "Description-ai" ? true : false
   );
+  const [isSavingWithTaskWriter, setIsSavingWithTaskWriter] = useState(false);
+  const taskWriterSubmittedDescriptionRef = useRef<string | undefined>(undefined);
   const [autoDescriptionVisible, setAutoDescriptionVisible] = useState(false);
   const [autoDescriptionDismissed, setAutoDescriptionDismissed] = useState(false);
   const [autoDescriptionTakeover, setAutoDescriptionTakeover] =
@@ -195,6 +197,8 @@ const TiptapCreateTaskModal = () => {
   );
   const closeAiTaskWriter = () => {
     aiPromptRef.current = undefined;
+    taskWriterSubmittedDescriptionRef.current = undefined;
+    setIsSavingWithTaskWriter(false);
     setShouldShowAITaskWriter(false);
   };
   const toggleAiTaskWriterVisibility = () => {
@@ -533,6 +537,8 @@ const TiptapCreateTaskModal = () => {
     setAutoDescriptionDismissed(false);
     setAutoDescriptionTakeover(null);
     setHasOpenedClassicForm(false);
+    taskWriterSubmittedDescriptionRef.current = undefined;
+    setIsSavingWithTaskWriter(false);
     setShouldShowAITaskWriter(false);
     editor?.chain().unsetHighlight().clearContent().run();
     setUploadingStateCreateTaskModal(undefined);
@@ -772,6 +778,15 @@ const TiptapCreateTaskModal = () => {
       setEditMode("Description-ai");
   };
 
+  const saveWithTaskWriter = () => {
+    if (isSavingWithTaskWriter) return;
+    aiPromptRef.current = undefined;
+    taskWriterSubmittedDescriptionRef.current = taskWriterDescription;
+    setHasOpenedClassicForm(true);
+    setIsSavingWithTaskWriter(true);
+    setShouldShowAITaskWriter(true);
+  };
+
   const showClassicForm = useCallback(() => {
     setHasOpenedClassicForm(true);
     closeAiTaskWriter();
@@ -779,6 +794,12 @@ const TiptapCreateTaskModal = () => {
     setEditMode(null);
     setCurrentFocusedElement("Description");
   }, [closeAiTaskWriter, editor, setCurrentFocusedElement, setEditMode]);
+
+  const handleCreateTaskError = useCallback(() => {
+    showClassicForm();
+    handleFocus(true);
+    toast.error("Task Writer could not save. Your draft is still here.");
+  }, [showClassicForm, handleFocus]);
 
   const applyCreateTaskResult = useCallback(
     async (
@@ -806,6 +827,7 @@ const TiptapCreateTaskModal = () => {
         result,
         attachments,
         openingSectionIdRef.current,
+        taskWriterSubmittedDescriptionRef.current,
       );
 
       if (mergedFormValues.title !== formValues.title) {
@@ -1075,12 +1097,14 @@ const TiptapCreateTaskModal = () => {
   }, [shouldShowAiTaskWriter]);
 
   useEffect(() => {
-    if (isRecording && editor) {
+    const keepMobileEditorActiveDuringDictation =
+      Boolean(isMbl && descriptionFirstEnabled);
+    if (isRecording && editor && !keepMobileEditorActiveDuringDictation) {
       editor.setEditable(false);
     } else if (!isRecording && editor) {
       editor.setEditable(true);
     }
-  }, [editor, isRecording]);
+  }, [descriptionFirstEnabled, editor, isMbl, isRecording]);
 
   return (
     <>
@@ -1103,7 +1127,11 @@ const TiptapCreateTaskModal = () => {
           <div
             id={divIds.popoverContainer}
             className={`w-full absolute z-[1000] ${
-              shouldShowAiTaskWriter ? "block h-full" : "hidden h-0"
+              shouldShowAiTaskWriter
+                ? isSavingWithTaskWriter
+                  ? "pointer-events-none h-0"
+                  : "block h-full"
+                : "hidden h-0"
             }`}
           >
             {shouldShowAiTaskWriter && (
@@ -1119,6 +1147,8 @@ const TiptapCreateTaskModal = () => {
                 projectSections={projectSections}
                 projectAssignees={projectAssignees}
                 mobileCreateTask={mobileCreateTask}
+                createTaskInBackground={isSavingWithTaskWriter}
+                onCreateTaskError={handleCreateTaskError}
                 applyCreateTaskResult={applyCreateTaskResult}
                 project={projectForContext}
                 EscapeHandler={() => {
@@ -1271,7 +1301,11 @@ const TiptapCreateTaskModal = () => {
               toggleRecording={toggleRecording}
               isRecording={isRecording}
               dictationCoordinator={dictationCoordinator}
-              toggleAiTaskWriter={toggleAiTaskWriter}
+              toggleAiTaskWriter={
+                isMbl && descriptionFirstEnabled
+                  ? saveWithTaskWriter
+                  : toggleAiTaskWriter
+              }
               isAiTaskWriterOpen={shouldShowAiTaskWriter}
               backgroundTaskUploads={backgroundTaskUploadsEnabled}
             />

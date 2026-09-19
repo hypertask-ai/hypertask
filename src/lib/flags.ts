@@ -67,6 +67,7 @@ import {
   HTPR_6530_MCP_LIST_QUERY_FLAG,
   HTPR_6531_DEFERRED_MCP_TOOLS_FLAG,
   HTPR_6473_GET_AGENT_FLAG,
+  HTPR_6470_PROJECT_DELETE_FLAG,
   HTPR_6536_QA_LOGIN_FLAG,
   HTPR_6551_QUIET_RUN_ACTIVITY_FLAG,
   HTPR_6555_IDLE_COMMENT_MIC_FLAG,
@@ -100,6 +101,12 @@ const FEATURE_FLAG_QA_USER = {
 const RETIRED_FEATURE_FLAG_KEYS = new Set(["hyfa-43-factory-owner-preview"]);
 
 const FEATURE_FLAG_DEFINITIONS = [
+  {
+    key: HTPR_6470_PROJECT_DELETE_FLAG,
+    shippedOn: "2026-09-18",
+    description:
+      "Lets board owners and admins permanently delete a board and its tasks through the Hypertask CLI after explicit confirmation.",
+  },
   {
     key: HTPR_6542_TEAM_SCOPED_MANAGEMENT_KEYS_FLAG,
     shippedOn: "2026-09-18",
