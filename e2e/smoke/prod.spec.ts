@@ -133,9 +133,10 @@ for (const view of VIEWS) {
     await page.addInitScript(() => {
       const mutations: string[] = []
       const summarizeNode = (node: Node) => {
-        if (node.nodeType === Node.TEXT_NODE) return `#text:${node.textContent?.trim().slice(0, 120)}`
-        if (!(node instanceof Element)) return node.nodeName
-        return node.outerHTML.slice(0, 500)
+        if (!(node instanceof Element)) return node.nodeName.toLowerCase()
+        const id = node.id ? `#${node.id}` : ''
+        const classes = Array.from(node.classList).slice(0, 4).map((name) => `.${name}`).join('')
+        return `${node.tagName.toLowerCase()}${id}${classes}`
       }
       const summarizeRecord = (record: MutationRecord) => JSON.stringify({
         at: Math.round(performance.now()),
@@ -234,8 +235,10 @@ for (const view of VIEWS) {
       const diagnostic = await page.evaluate(() =>
         (window as typeof window & { __htHydrationDiagnostic?: unknown }).__htHydrationDiagnostic,
       )
+      const diagnosticJson = JSON.stringify(diagnostic, null, 2)
+      console.error(`HYDRATION_DIAGNOSTIC ${viewPath}\n${diagnosticJson}`)
       await testInfo.attach('hydration-diagnostic', {
-        body: JSON.stringify(diagnostic, null, 2),
+        body: diagnosticJson,
         contentType: 'application/json',
       })
     }
