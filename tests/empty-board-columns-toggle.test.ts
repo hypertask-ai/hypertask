@@ -423,6 +423,50 @@ test("a successful earlier toggle becomes the rollback baseline", () => {
   );
 });
 
+test("a failed rapid staged toggle returns to the last successful choice", () => {
+  const applied = {
+    ...view("speed", "Show"),
+    ViewLastUsed: [{ board_empty_sections: "Show" }],
+  };
+  const project = projectWith({ applied: applied as never });
+  const first = beginEmptySectionMutation(
+    undefined,
+    project.project_view as never,
+    { id: 1, setting: "Hidden", viewId: "speed", staged: true },
+  );
+  const second = beginEmptySectionMutation(
+    first.state,
+    first.projectView,
+    { id: 2, setting: "Show", viewId: "speed", staged: true },
+  );
+  const persistedHidden = clearProjectViewPersonalEmptySections(
+    projectWith({
+      unsaved: view("unsaved", "Hidden"),
+      applied: applied as never,
+    }).project_view as never,
+    "speed",
+  );
+
+  const firstSuccess = settleEmptySectionMutation(
+    second.state,
+    1,
+    true,
+    persistedHidden,
+  );
+  const secondFailure = settleEmptySectionMutation(
+    firstSuccess.state!,
+    2,
+    false,
+    firstSuccess.projectView,
+  );
+
+  assert.equal(firstSuccess.state?.baseline, "Hidden");
+  assert.equal(
+    getActiveEmptySectionSettingFromProjectView(secondFailure.projectView),
+    "Hidden",
+  );
+});
+
 test("the legacy command fallback keeps its optimistic personal save", () => {
   const saveHookSource = fs.readFileSync(
     path.join(root, "src/hooks/Homepage/Views/useKanbanViews.ts"),

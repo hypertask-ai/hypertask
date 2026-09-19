@@ -296,7 +296,8 @@ const useKanbanViews = (project: IProject | null) => {
       project.project_view?.user_project_views[0]?.appliedView ??
       project.project_view?.default_view
     const targetViewId = targetView?.id
-    const mutationKey = `${project.id}:${targetViewId ?? "unsaved"}`
+    const mutationMode = emptyColumnsSaveViewEnabled ? "staged" : "personal"
+    const mutationKey = `${project.id}:${targetViewId ?? "unsaved"}:${mutationMode}`
     const { allData, projectToUpdateIndex } = getProjectIdxAndAllData(project.id)
     const cachedProject = allData?.updatedProjects[projectToUpdateIndex]
     const projectView = cachedProject?.project_view ?? project.project_view
@@ -304,7 +305,12 @@ const useKanbanViews = (project: IProject | null) => {
       const optimistic = beginEmptySectionMutation(
         emptySectionMutations.get(mutationKey),
         projectView,
-        { id: mutationId, setting: emptySection, viewId: targetViewId },
+        {
+          id: mutationId,
+          setting: emptySection,
+          viewId: targetViewId,
+          staged: emptyColumnsSaveViewEnabled,
+        },
       )
       emptySectionMutations.set(mutationKey, optimistic.state)
       updateProjectView(projectToUpdateIndex, optimistic.projectView)

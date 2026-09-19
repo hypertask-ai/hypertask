@@ -502,18 +502,21 @@ export type TPendingEmptySectionMutation = {
   id: number
   setting: TBoardEmptySections
   viewId?: string
+  staged?: boolean
 }
 
 export type TEmptySectionMutationState = {
   baseline: TBoardEmptySections
   viewId?: string
+  staged?: boolean
   pending: TPendingEmptySectionMutation[]
 }
 
 const emptySectionMutationSetting = (
   projectView: IProjectView,
   viewId?: string,
-) => viewId
+  staged?: boolean,
+) => viewId && !staged
   ? getEmptySectionSettingForView(projectView, viewId)
   : getActiveEmptySectionSettingFromProjectView(projectView)
 
@@ -522,13 +525,21 @@ export const beginEmptySectionMutation = (
   projectView: IProjectView,
   mutation: TPendingEmptySectionMutation,
 ): { state: TEmptySectionMutationState; projectView: IProjectView } => {
-  if (state && state.viewId !== mutation.viewId) {
+  if (
+    state &&
+    (state.viewId !== mutation.viewId || state.staged !== mutation.staged)
+  ) {
     throw new Error("Empty-section mutation state belongs to another view")
   }
   return {
     state: {
-      baseline: state?.baseline ?? emptySectionMutationSetting(projectView, mutation.viewId),
+      baseline: state?.baseline ?? emptySectionMutationSetting(
+        projectView,
+        mutation.viewId,
+        mutation.staged,
+      ),
       viewId: mutation.viewId,
+      staged: mutation.staged,
       pending: [...(state?.pending ?? []), mutation],
     },
     projectView: patchProjectViewEmptySections(
@@ -547,13 +558,22 @@ export const settleEmptySectionMutation = (
 ): { state?: TEmptySectionMutationState; projectView: IProjectView } => {
   const pending = state.pending.filter((mutation) => mutation.id !== mutationId)
   const baseline = succeeded
-    ? emptySectionMutationSetting(authoritativeView, state.viewId)
+    ? emptySectionMutationSetting(
+        authoritativeView,
+        state.viewId,
+        state.staged,
+      )
     : state.baseline
   const latest = pending[pending.length - 1]
 
   if (latest) {
     return {
-      state: { baseline, viewId: state.viewId, pending },
+      state: {
+        baseline,
+        viewId: state.viewId,
+        staged: state.staged,
+        pending,
+      },
       projectView: patchProjectViewEmptySections(
         authoritativeView,
         latest.setting,
