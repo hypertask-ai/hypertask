@@ -6,25 +6,85 @@ export interface VelocityRange {
   days: number;
   label: string;
   periodLabel: string;
+  start?: string;
+  end?: string;
 }
 
 export const VELOCITY_RANGES: readonly VelocityRange[] = [
-  { key: "1d", days: 1, label: "Today", periodLabel: "today" },
-  { key: "7d", days: 7, label: "7 days", periodLabel: "the last 7 days" },
-  { key: "14d", days: 14, label: "14 days", periodLabel: "the last 14 days" },
-  { key: "30d", days: 30, label: "30 days", periodLabel: "the last 30 days" },
-  { key: "3m", days: 90, label: "3 months", periodLabel: "the last 3 months" },
-  { key: "6m", days: 180, label: "6 months", periodLabel: "the last 6 months" },
-  { key: "12m", days: 365, label: "12 months", periodLabel: "the last 12 months" },
+  { key: "today", days: 1, label: "Today", periodLabel: "today" },
+  {
+    key: "yesterday",
+    days: 1,
+    label: "Yesterday",
+    periodLabel: "yesterday",
+  },
+  { key: "7d", days: 7, label: "Last 7 days", periodLabel: "the last 7 days" },
+  {
+    key: "custom",
+    days: 7,
+    label: "Custom range",
+    periodLabel: "the selected dates",
+  },
 ];
 
-export const DEFAULT_VELOCITY_RANGE_KEY = "30d";
+export const DEFAULT_VELOCITY_RANGE_KEY = "7d";
+const DAY_IN_MS = 86_400_000;
+const WEEK_IN_MS = 7 * DAY_IN_MS;
+const DATE_KEY = /^\d{4}-\d{2}-\d{2}$/;
+
+function utcDayBoundary(value: string, end = false): Date | null {
+  if (!DATE_KEY.test(value)) return null;
+  const date = new Date(`${value}T${end ? "23:59:59.999" : "00:00:00.000"}Z`);
+  return Number.isNaN(date.getTime()) || date.toISOString().slice(0, 10) !== value
+    ? null
+    : date;
+}
 
 export function resolveVelocityRange(
-  key: string | null | undefined
+  key: string | null | undefined,
+  from?: string | null,
+  to?: string | null,
+  now = new Date()
 ): VelocityRange {
+  if (key === "yesterday") {
+    const start = new Date(
+      Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() - 1)
+    );
+    const end = new Date(start.getTime() + DAY_IN_MS - 1);
+    return {
+      ...VELOCITY_RANGES.find((range) => range.key === "yesterday")!,
+      start: start.toISOString(),
+      end: end.toISOString(),
+    };
+  }
+
+  if (key === "custom" && from && to) {
+    const start = utcDayBoundary(from);
+    const requestedEnd = utcDayBoundary(to, true);
+    if (start && requestedEnd && start <= requestedEnd && start <= now) {
+      const end = new Date(Math.min(requestedEnd.getTime(), now.getTime()));
+      const days = Math.min(
+        365,
+        Math.floor((end.getTime() - start.getTime()) / DAY_IN_MS) + 1
+      );
+      const cappedEnd = new Date(
+        Math.min(end.getTime(), start.getTime() + days * DAY_IN_MS - 1)
+      );
+      return {
+        key: "custom",
+        days,
+        label: "Custom range",
+        periodLabel: "the selected dates",
+        start: start.toISOString(),
+        end: cappedEnd.toISOString(),
+      };
+    }
+  }
+
   return (
-    VELOCITY_RANGES.find((range) => range.key === key) ??
+    VELOCITY_RANGES.find(
+      (range) => range.key === key && range.key !== "custom"
+    ) ??
     VELOCITY_RANGES.find(
       (range) => range.key === DEFAULT_VELOCITY_RANGE_KEY
     )!
@@ -76,7 +136,7 @@ export interface VelocityReport {
     priorMedianLeadTimeDays: number | null;
     completedInRange: number;
     priorCompletedInRange: number;
-    completedPerDay: number | null;
+    completedPerWeek: number | null;
     oldestOpenDays: number | null;
   };
   now: {
@@ -95,10 +155,16 @@ export interface VelocityReport {
     comments: number;
     lastActiveAt: string | null;
   }[];
+  workedOn: {
+    id: number;
+    ticketNumber: string;
+    title: string;
+    href: string;
+    activities: string[];
+    lastActivityAt: string;
+    mergedPullRequests: { title: string; url: string }[];
+  }[];
 }
-
-const DAY_IN_MS = 86_400_000;
-const WEEK_IN_MS = 7 * DAY_IN_MS;
 
 const toDate = (
   value: Date | string | null | undefined
@@ -125,63 +191,70 @@ export function velocityWindow(
   granularity: VelocityGranularity;
   bucketStarts: Date[];
   windowStart: Date;
+  windowEnd: Date;
   priorStart: Date;
 } {
+  const explicitStart = toDate(range.start);
+  const explicitEnd = toDate(range.end);
+  const windowEnd =
+    explicitEnd && explicitEnd < now ? explicitEnd : new Date(now.getTime());
   let granularity: VelocityGranularity;
   let bucketStarts: Date[];
 
   if (range.days === 1) {
     granularity = "hour";
-    bucketStarts = Array.from({ length: now.getUTCHours() + 1 }, (_, index) =>
+    const dayStart =
+      explicitStart ??
       new Date(
         Date.UTC(
-          now.getUTCFullYear(),
-          now.getUTCMonth(),
-          now.getUTCDate(),
-          index
+          windowEnd.getUTCFullYear(),
+          windowEnd.getUTCMonth(),
+          windowEnd.getUTCDate()
         )
-      )
+      );
+    const bucketCount = Math.max(
+      1,
+      Math.floor((windowEnd.getTime() - dayStart.getTime()) / 3_600_000) + 1
+    );
+    bucketStarts = Array.from(
+      { length: bucketCount },
+      (_, index) => new Date(dayStart.getTime() + index * 3_600_000)
     );
   } else if (range.days <= 30) {
     granularity = "day";
-    bucketStarts = Array.from({ length: range.days }, (_, index) =>
+    const firstDay =
+      explicitStart ??
       new Date(
         Date.UTC(
-          now.getUTCFullYear(),
-          now.getUTCMonth(),
-          now.getUTCDate() - (range.days - 1 - index)
+          windowEnd.getUTCFullYear(),
+          windowEnd.getUTCMonth(),
+          windowEnd.getUTCDate() - (range.days - 1)
         )
-      )
-    );
-  } else if (range.days <= 180) {
-    granularity = "week";
-    const bucketCount = Math.ceil(range.days / 7);
-    const currentWeekStart = startOfWeekUTC(now);
-    bucketStarts = Array.from({ length: bucketCount }, (_, index) =>
-      new Date(
-        currentWeekStart.getTime() -
-          (bucketCount - 1 - index) * WEEK_IN_MS
-      )
+      );
+    bucketStarts = Array.from(
+      { length: range.days },
+      (_, index) => new Date(firstDay.getTime() + index * DAY_IN_MS)
     );
   } else {
-    granularity = "month";
-    bucketStarts = Array.from({ length: 12 }, (_, index) =>
+    granularity = "week";
+    const bucketCount = Math.ceil(range.days / 7);
+    const firstWeek =
+      explicitStart ??
       new Date(
-        Date.UTC(
-          now.getUTCFullYear(),
-          now.getUTCMonth() - (11 - index),
-          1
-        )
-      )
+        startOfWeekUTC(windowEnd).getTime() -
+          (bucketCount - 1) * WEEK_IN_MS
+      );
+    bucketStarts = Array.from(
+      { length: bucketCount },
+      (_, index) => new Date(firstWeek.getTime() + index * WEEK_IN_MS)
     );
   }
 
-  const windowStart = bucketStarts[0];
-  const priorStart = new Date(
-    windowStart.getTime() - (now.getTime() - windowStart.getTime())
-  );
+  const windowStart = explicitStart ?? bucketStarts[0];
+  const windowDuration = windowEnd.getTime() - windowStart.getTime() + 1;
+  const priorStart = new Date(windowStart.getTime() - windowDuration);
 
-  return { granularity, bucketStarts, windowStart, priorStart };
+  return { granularity, bucketStarts, windowStart, windowEnd, priorStart };
 }
 
 const median = (values: number[]): number | null => {
@@ -227,11 +300,13 @@ export function buildVelocityReport(
   range: VelocityRange = resolveVelocityRange(DEFAULT_VELOCITY_RANGE_KEY),
   thresholds?: StalenessThresholds,
   doneTitles?: ReadonlySet<string>,
+  workedOn: VelocityReport["workedOn"] = []
 ): VelocityReport {
-  const { granularity, bucketStarts, windowStart, priorStart } =
+  const { granularity, bucketStarts, windowStart, windowEnd, priorStart } =
     velocityWindow(now, range);
   const nowTime = now.getTime();
   const windowStartTime = windowStart.getTime();
+  const windowEndTime = windowEnd.getTime();
   const priorStartTime = priorStart.getTime();
   const buckets = bucketStarts.map((start) => ({
     start: start.toISOString(),
@@ -249,7 +324,7 @@ export function buildVelocityReport(
   const bucketIndex = (date: Date): number => {
     if (
       date.getTime() < windowStartTime ||
-      date.getTime() > nowTime
+      date.getTime() > windowEndTime
     ) {
       return -1;
     }
@@ -276,7 +351,7 @@ export function buildVelocityReport(
   let priorCompletedInRange = 0;
 
   taskDates.forEach(({ created, completed }) => {
-    if (!completed || completed.getTime() > nowTime) return;
+    if (!completed || completed.getTime() > windowEndTime) return;
 
     if (completed.getTime() >= windowStartTime) {
       completedInRange += 1;
@@ -357,7 +432,7 @@ export function buildVelocityReport(
     if (
       completed &&
       completed.getTime() >= windowStartTime &&
-      completed.getTime() <= nowTime
+      completed.getTime() <= windowEndTime
     ) {
       new Set(task.assigneeUserIds).forEach((userId) => {
         const activity = memberActivity.get(userId);
@@ -371,7 +446,7 @@ export function buildVelocityReport(
     if (
       !created ||
       created.getTime() < windowStartTime ||
-      created.getTime() > nowTime
+      created.getTime() > windowEndTime
     ) {
       return;
     }
@@ -389,7 +464,7 @@ export function buildVelocityReport(
     }),
     { created: 0, completed: 0, net: 0 }
   );
-  const windowDays = (nowTime - windowStartTime) / DAY_IN_MS;
+  const windowDays = range.days;
 
   return {
     generatedAt: now.toISOString(),
@@ -402,8 +477,8 @@ export function buildVelocityReport(
       priorMedianLeadTimeDays: median(priorLeadTimes),
       completedInRange,
       priorCompletedInRange,
-      completedPerDay:
-        windowDays < 1 ? null : completedInRange / windowDays,
+      completedPerWeek:
+        windowDays < 1 ? null : (completedInRange / windowDays) * 7,
       oldestOpenDays,
     },
     now: {
@@ -427,16 +502,20 @@ export function buildVelocityReport(
           b.comments - a.comments ||
           a.userId - b.userId
       ),
+    workedOn,
   };
 }
 
 export function velocityVerdict(report: VelocityReport): string {
   const current = report.speed.medianLeadTimeDays;
   const prior = report.speed.priorMedianLeadTimeDays;
-  const previousPeriod =
-    report.range.periodLabel === "today"
-      ? "the period before today"
-      : report.range.periodLabel.replace(/^the last /, "the previous ");
+  let previousPeriod = report.range.periodLabel.replace(
+    /^the last /,
+    "the previous "
+  );
+  if (report.range.key === "today") previousPeriod = "the period before today";
+  if (report.range.key === "yesterday") previousPeriod = "the day before";
+  if (report.range.key === "custom") previousPeriod = "the previous period";
   const pace =
     current === null || prior === null
       ? "Not enough finished work to compare periods"

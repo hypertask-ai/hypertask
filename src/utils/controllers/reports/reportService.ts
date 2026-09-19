@@ -302,17 +302,22 @@ export function getReportUrl(projectId: number, slug: string): string {
   return `/report/project-${projectId}/${slug}`;
 }
 
-export async function listAllReportsForUser(userId: number) {
+export async function listAllReportsForUser(
+  userId: number,
+  currentProjectId: number | null = null
+) {
   const [reports, projects] = await Promise.all([
     prisma.report.findMany({
       where: { project: getProjectWhere(userId) },
       include: reportInclude,
       orderBy: { updatedAt: "desc" },
     }),
-    prisma.project.findMany({
-      where: getProjectWhere(userId),
-      select: { id: true, title: true, name: true },
-    }),
+    currentProjectId
+      ? prisma.project.findMany({
+          where: { id: currentProjectId, ...getProjectWhere(userId) },
+          select: { id: true, title: true, name: true },
+        })
+      : Promise.resolve([]),
   ]);
 
   return {
@@ -331,8 +336,9 @@ export async function listAllReportsForUser(userId: number) {
       .map((project) => ({
         projectId: project.id,
         boardName: project.title ?? project.name,
-        title: "Velocity" as const,
-        description: "Throughput, lead time, and who is active" as const,
+        title: "Board analytics" as const,
+        description:
+          "Tickets finished per week, time to finish, and who is active" as const,
         href: `/report/project-${project.id}/velocity`,
       }))
       .sort((a, b) => a.boardName.localeCompare(b.boardName)),

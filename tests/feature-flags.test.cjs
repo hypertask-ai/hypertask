@@ -471,6 +471,11 @@ test("declared flags remain listed with ticket details and can be changed", asyn
         updatedAt: null,
       },
       {
+        key: "htpr-6585-board-reports",
+        mode: "OWNER_AND_QA",
+        updatedAt: null,
+      },
+      {
         key: "htpr-6588-empty-columns-save-view",
         mode: "OWNER_AND_QA",
         updatedAt: null,

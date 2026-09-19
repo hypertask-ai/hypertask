@@ -56,6 +56,7 @@ import {
 } from "@/lib/inboxClusters";
 import {
   HTPR_6514_COMMENT_LONG_PRESS_FLAG,
+  HTPR_6585_BOARD_REPORTS_FLAG,
   INBOX_ARCHIVE_CLUSTER_FLAG,
   MY_TASKS_TABLE_COLUMNS_FLAG,
   MY_TASKS_VIEWS_FLAG,
@@ -105,12 +106,13 @@ const Commands = (props: Props) => {
   const myTasksViewsEnabled = useFlag(MY_TASKS_VIEWS_FLAG);
   const myTasksTableColumnsEnabled = useFlag(MY_TASKS_TABLE_COLUMNS_FLAG);
   const commentLongPressEnabled = useFlag(HTPR_6514_COMMENT_LONG_PRESS_FLAG);
+  const reportsEnabled = useFlag(HTPR_6585_BOARD_REPORTS_FLAG);
   const pinCommentActions = !!contextOptions?.commentOptions;
   const currentProject = useRecoilValue(currentProjectAtom);
   const { data: projects = [] } = useGetAllProjectsMinimal([
     "projectsAllMinimal",
   ]);
-  const allCommands_ = useMemo(() => {
+  let allCommands_ = useMemo(() => {
     // eslint-disable-next-line react-hooks/purity -- frecency scores are intentionally computed against the render-time clock; memo deps control recompute
     const now = Date.now();
     const layoutCommandName =
@@ -309,6 +311,22 @@ const Commands = (props: Props) => {
     projects,
     showByokApiKeys,
   ])
+  const commandsWithoutReports = useMemo(() => {
+    const reportCommandModes = new Set([
+      CommandMode.GotoReports,
+      CommandMode.GotoBoardVelocityReport,
+      CommandMode.GenerateStatusUpdate,
+    ]);
+    return allCommands_.map((group) => ({
+      ...group,
+      commandLists: group.commandLists.filter(
+        (command) => !reportCommandModes.has(command.commandMode)
+      ),
+    }));
+  }, [allCommands_]);
+  if (!reportsEnabled) {
+    allCommands_ = commandsWithoutReports;
+  }
 
   const emptyQueryCommands = useMemo(() => {
     // Archiving is destructive and the first group is default-highlighted, so an
