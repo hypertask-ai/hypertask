@@ -439,9 +439,11 @@ const TaskEstimateActivity = ({
 
 // ======================= Label Activity Element
 const TaskLabelActivity = ({ activity }: { activity: ITaskLabelActivity }) => {
+  const attributionEnabled = useFlag(HTPR_6516_AGENT_ATTRIBUTION_FLAG);
+  const fromAgent = attributionEnabled ? activity.data.fromAgent : null;
   const fromObj = {
-    displayName: activity.data.fromAgent?.displayName ?? activity.data.fromUser?.displayName ?? "",
-    photoURL: activity.data.fromAgent ? activity.data.fromAgent.photoURL ?? "" : activity.data.fromUser?.photoURL ?? "",
+    displayName: fromAgent?.displayName ?? activity.data.fromUser?.displayName ?? "",
+    photoURL: fromAgent ? fromAgent.photoURL ?? "" : activity.data.fromUser?.photoURL ?? "",
   };
 
   if (!activity?.data.toLabel.label?.value) return <></>;

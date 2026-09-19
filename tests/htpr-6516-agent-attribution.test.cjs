@@ -292,6 +292,28 @@ test("cookie label and waiting-on writes stamp fromAgent from the session", () =
   );
 });
 
+test("label activity attribution stays behind the rollout flag", () => {
+  const activityUi = read(
+    "src/components/PageComponents/TaskDetail/CommentAndDescription/CommentContainer/CommentTaskActivity.tsx",
+  );
+  const labelRenderer = activityUi.match(
+    /const TaskLabelActivity[\s\S]*?\/\/ ======================= TASK ARCHIVED ELEMENT/,
+  )?.[0];
+  assert.ok(labelRenderer);
+  assert.match(
+    labelRenderer,
+    /useFlag\(HTPR_6516_AGENT_ATTRIBUTION_FLAG\)/,
+  );
+  assert.match(
+    labelRenderer,
+    /const fromAgent = attributionEnabled \? activity\.data\.fromAgent : null/,
+  );
+  assert.match(
+    labelRenderer,
+    /fromAgent\?\.displayName \?\? activity\.data\.fromUser\?\.displayName/,
+  );
+});
+
 test("MCP label writes pass the acting agent into the activity", () => {
   const services = read("src/lib/mcp/tasks/services.ts");
   assert.match(services, /fromAgent\?: ActingAgent \| null/);

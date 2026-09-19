@@ -379,15 +379,14 @@ async function main() {
   assert.match(agentRoute, /warning: result\.warning/);
   assert.match(
     taskDetailLoad,
-    /agentId: attributedAgent \? task\.agentId : null,[\s\S]*agent: attributedAgent/,
+    /agentId: publicAttributedAgent \? task\.agentId : null,[\s\S]*agent: publicAttributedAgent/,
   );
-  assert.doesNotMatch(taskDetailLoad, /hiddenCommentAgent\(/);
-  assert.equal(taskDetailLoad.match(/\$\{hiddenCommentAgent\}/g)?.length, 3);
+  assert.equal(taskDetailLoad.match(/\$\{hiddenCommentAgent\(/g)?.length, 3);
   assert.match(
     taskDetailLoad,
     /agent\.id IS NULL AND c\."agentDisplayName" IS NOT NULL/,
   );
-  assert.doesNotMatch(
+  assert.match(
     taskDetailLoad,
     /agent\.visibility = 'TEAM'::"AgentVisibility"/,
   );
