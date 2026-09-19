@@ -1,4 +1,6 @@
 import prisma from "@/lib/prisma";
+import { isFeatureEnabled } from "@/lib/flags";
+import { HTPR_6585_BOARD_REPORTS_FLAG } from "@/lib/flags/keys";
 import {
   buildVelocityReport,
   resolveVelocityRange,
@@ -30,6 +32,9 @@ export async function GET(request: NextRequest) {
   if (!Number.isInteger(userId) || userId <= 0) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
+  if (!(await isFeatureEnabled(HTPR_6585_BOARD_REPORTS_FLAG, userId))) {
+    return NextResponse.json({ error: "Not found" }, { status: 404 });
+  }
 
   const projectId = Number(request.nextUrl.searchParams.get("projectId"));
   if (!Number.isInteger(projectId) || projectId <= 0) {
@@ -38,8 +43,12 @@ export async function GET(request: NextRequest) {
       { status: 400 }
     );
   }
+  const now = new Date();
   const range = resolveVelocityRange(
-    request.nextUrl.searchParams.get("range")
+    request.nextUrl.searchParams.get("range"),
+    request.nextUrl.searchParams.get("from"),
+    request.nextUrl.searchParams.get("to"),
+    now
   );
 
   try {
@@ -76,11 +85,10 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    const now = new Date();
-    const { priorStart, windowStart } = velocityWindow(now, range);
+    const { priorStart, windowStart, windowEnd } = velocityWindow(now, range);
 
     // Scans every non-deleted open board task; fine on demand, but use groupBy on a hot path.
-    const [tasks, comments] = await Promise.all([
+    const [tasks, comments, workedOnTasks] = await Promise.all([
       prisma.task.findMany({
         where: {
           projectId,
@@ -108,13 +116,70 @@ export async function GET(request: NextRequest) {
       prisma.comment.groupBy({
         by: ["creatorId"],
         where: {
-          // Bounded at both ends: a comment written between capturing `now` and
-          // this query would push _max past `now` and void the whole group.
-          createdAt: { gte: windowStart, lte: now },
+          // Keep every activity source inside the same selected window.
+          createdAt: { gte: windowStart, lte: windowEnd },
           task: { projectId },
         },
         _count: { _all: true },
         _max: { createdAt: true },
+      }),
+      prisma.task.findMany({
+        where: {
+          projectId,
+          deletedAt: null,
+          status: { not: "Deleted" },
+          OR: [
+            { updatedAt: { gte: windowStart, lte: windowEnd } },
+            {
+              comments: {
+                some: {
+                  createdAt: { gte: windowStart, lte: windowEnd },
+                  OR: [{ creatorId: { not: null } }, { agentId: { not: null } }],
+                },
+              },
+            },
+            {
+              sectionEvents: {
+                some: { timestamp: { gte: windowStart, lte: windowEnd } },
+              },
+            },
+            {
+              pullRequests: {
+                some: {
+                  lifecycle: "merged",
+                  sourceUpdatedAt: { gte: windowStart, lte: windowEnd },
+                },
+              },
+            },
+          ],
+        },
+        select: {
+          id: true,
+          projectId: true,
+          uniqueIndex: true,
+          ticketNumber: true,
+          title: true,
+          createdAt: true,
+          updatedAt: true,
+          comments: {
+            where: {
+              createdAt: { gte: windowStart, lte: windowEnd },
+              OR: [{ creatorId: { not: null } }, { agentId: { not: null } }],
+            },
+            select: { createdAt: true },
+          },
+          sectionEvents: {
+            where: { timestamp: { gte: windowStart, lte: windowEnd } },
+            select: { timestamp: true },
+          },
+          pullRequests: {
+            where: {
+              lifecycle: "merged",
+              sourceUpdatedAt: { gte: windowStart, lte: windowEnd },
+            },
+            select: { title: true, url: true, sourceUpdatedAt: true },
+          },
+        },
       }),
     ]);
 
@@ -140,6 +205,44 @@ export async function GET(request: NextRequest) {
         ]
       )
     );
+    const inWindow = (date: Date | null) =>
+      date !== null && date >= windowStart && date <= windowEnd;
+    const workedOn = workedOnTasks
+      .flatMap((task) => {
+        const wasUpdated =
+          task.updatedAt > task.createdAt && inWindow(task.updatedAt);
+        const activities = [
+          ...(wasUpdated ? ["Updated"] : []),
+          ...(task.comments.length ? ["Commented"] : []),
+          ...(task.sectionEvents.length ? ["Moved"] : []),
+          ...(task.pullRequests.length ? ["Merged PR"] : []),
+        ];
+        const activityDates = [
+          ...(wasUpdated ? [task.updatedAt] : []),
+          ...task.comments.map((comment) => comment.createdAt),
+          ...task.sectionEvents.map((event) => event.timestamp),
+          ...task.pullRequests.flatMap((pullRequest) =>
+            pullRequest.sourceUpdatedAt ? [pullRequest.sourceUpdatedAt] : []
+          ),
+        ];
+        if (activityDates.length === 0) return [];
+
+        return [{
+          id: task.id,
+          ticketNumber: task.ticketNumber ?? String(task.uniqueIndex),
+          title: task.title,
+          href: `/detail/project-${task.projectId}/${task.uniqueIndex}`,
+          activities,
+          lastActivityAt: new Date(
+            Math.max(...activityDates.map((date) => date.getTime()))
+          ).toISOString(),
+          mergedPullRequests: task.pullRequests.map((pullRequest) => ({
+            title: pullRequest.title,
+            url: pullRequest.url,
+          })),
+        }];
+      })
+      .sort((a, b) => b.lastActivityAt.localeCompare(a.lastActivityAt));
 
     return NextResponse.json(
       buildVelocityReport(
@@ -160,7 +263,8 @@ export async function GET(request: NextRequest) {
           warnDays: project.staleWarnDays,
           hotDays: project.staleHotDays,
         },
-        doneColumnTitles(project.section, isDoneByName)
+        doneColumnTitles(project.section, isDoneByName),
+        workedOn
       )
     );
   } catch (error) {

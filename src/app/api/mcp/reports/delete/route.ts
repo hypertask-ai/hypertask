@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 
+import { isFeatureEnabled } from '@/lib/flags'
+import { HTPR_6585_BOARD_REPORTS_FLAG } from '@/lib/flags/keys'
 import { buildFieldError } from '@/lib/mcp/fieldError'
 import { checkMcpRateLimit, validateMcpAuth } from '@/lib/mcp/auth'
 import {
@@ -22,6 +24,9 @@ export async function POST(request: NextRequest) {
     const ctx = await validateMcpAuth(request)
     if (!ctx) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+    if (!(await isFeatureEnabled(HTPR_6585_BOARD_REPORTS_FLAG, ctx.user.id))) {
+      return NextResponse.json({ error: 'Not found' }, { status: 404 })
     }
 
     const rateLimited = await checkMcpRateLimit(request)

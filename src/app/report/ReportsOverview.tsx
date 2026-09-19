@@ -32,8 +32,8 @@ type ReportRow = {
 type BuiltinRow = {
   projectId: number;
   boardName: string;
-  title: "Velocity";
-  description: "Throughput, lead time, and who is active";
+  title: "Board analytics";
+  description: "Tickets finished per week, time to finish, and who is active";
   href: string;
 };
 
@@ -83,7 +83,7 @@ const ReportsOverview = ({
     <header>
       <h1 className="text-display font-semibold text-white-black">Reports</h1>
       <p className="mt-2 text-dense text-text-light-gray">
-        Saved reports and board velocity in one place.
+        Live board analytics plus reports you chose to save.
       </p>
     </header>
 
@@ -121,27 +121,33 @@ const ReportsOverview = ({
 
     <section>
       <h2 className="mb-3 text-subheading font-semibold text-white-black">
-        Velocity
+        Current board
       </h2>
-      <div className="flex flex-col gap-2">
-        {builtins.map((report) => (
-          <Link
-            key={report.projectId}
-            className="rounded-[4px] bg-hoverCardBackground px-5 py-4 hover:bg-cardBackground"
-            href={report.href}
-          >
-            <p className="text-emphasis font-semibold text-white-black">
-              {report.title}
-            </p>
-            <p className="mt-1 text-meta text-text-light-gray">
-              {report.description}
-            </p>
-            <p className="mt-2 text-micro text-text-light-gray">
-              {report.boardName}
-            </p>
-          </Link>
-        ))}
-      </div>
+      {builtins.length === 0 ? (
+        <div className="rounded-[4px] bg-hoverCardBackground p-5 text-dense text-text-light-gray">
+          Open a board first to see its live analytics here.
+        </div>
+      ) : (
+        <div className="flex flex-col gap-2">
+          {builtins.map((report) => (
+            <Link
+              key={report.projectId}
+              className="rounded-[4px] bg-hoverCardBackground px-5 py-4 hover:bg-cardBackground"
+              href={report.href}
+            >
+              <p className="text-emphasis font-semibold text-white-black">
+                {report.title}
+              </p>
+              <p className="mt-1 text-meta text-text-light-gray">
+                {report.description}
+              </p>
+              <p className="mt-2 text-micro text-text-light-gray">
+                {report.boardName}
+              </p>
+            </Link>
+          ))}
+        </div>
+      )}
     </section>
   </ReportShell>
 );

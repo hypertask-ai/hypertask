@@ -3,6 +3,7 @@
 import { useQuery } from "@tanstack/react-query";
 import axios from "axios";
 import dynamic from "next/dynamic";
+import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useContext } from "react";
 
@@ -98,15 +99,24 @@ const formatLastActive = (value: string | null) =>
       })
     : "No activity";
 
-const previousPeriod = (report: VelocityReportData) =>
-  report.range.periodLabel === "today"
-    ? "the period before today"
-    : report.range.periodLabel.replace(/^the last /, "the previous ");
+const previousPeriod = (report: VelocityReportData) => {
+  if (report.range.key === "today") return "the period before today";
+  if (report.range.key === "yesterday") return "the day before";
+  if (report.range.key === "custom") return "the previous period";
+  return report.range.periodLabel.replace(/^the last /, "the previous ");
+};
 
-const inPeriod = (report: VelocityReportData) =>
-  report.range.periodLabel === "today"
-    ? "Today"
-    : `In ${report.range.periodLabel}`;
+const inPeriod = (report: VelocityReportData) => {
+  if (report.range.key === "today") return "Today";
+  if (report.range.key === "yesterday") return "Yesterday";
+  return `In ${report.range.periodLabel}`;
+};
+
+const periodPhrase = (report: VelocityReportData) => {
+  if (report.range.key === "today") return "today";
+  if (report.range.key === "yesterday") return "yesterday";
+  return `in ${report.range.periodLabel}`;
+};
 
 const finishTimeComparison = (report: VelocityReportData) => {
   const current = report.speed.medianLeadTimeDays;
@@ -138,6 +148,7 @@ const finishedComparison = (report: VelocityReportData) => {
 };
 
 const isEmptyReport = (report: VelocityReportData) =>
+  report.workedOn.length === 0 &&
   report.now.openTotal === 0 &&
   report.buckets.every(
     (bucket) => bucket.created === 0 && bucket.completed === 0
@@ -233,9 +244,7 @@ const CreatedFinishedChart = ({ report }: { report: VelocityReportData }) => {
         </div>
         <p className="mt-4 text-dense text-white-black">
           {report.totals.created} created · {report.totals.completed} finished{" "}
-          {report.range.periodLabel === "today"
-            ? "today"
-            : `in ${report.range.periodLabel}`}
+          {periodPhrase(report)}
         </p>
       </div>
     </section>
@@ -265,33 +274,26 @@ const Speed = ({ report }: { report: VelocityReportData }) => {
           </p>
           <p className="mt-1 text-meta text-text-light-gray">
             {report.speed.medianLeadTimeDays === null
-              ? `No tickets were finished ${
-                  report.range.periodLabel === "today"
-                    ? "today"
-                    : `in ${report.range.periodLabel}`
-                }.`
-              : `Half of the tickets finished ${
-                  report.range.periodLabel === "today"
-                    ? "today"
-                    : `in ${report.range.periodLabel}`
-                } took less than this, half took more.`}
+              ? `No tickets were finished ${periodPhrase(report)}.`
+              : `Half of the tickets finished ${periodPhrase(
+                  report
+                )} took less than this, half took more.`}
           </p>
           <p className="mt-1 text-meta text-text-light-gray">
             {finishTimeComparison(report)}
           </p>
         </div>
         <div className="min-w-0 rounded-[4px] bg-hoverCardBackground p-4 shadow-md">
-          <p className="text-dense text-text-light-gray">Tickets finished</p>
+          <p className="text-dense text-text-light-gray">
+            Tickets finished per week
+          </p>
           <p className="mt-2 text-heading font-semibold text-white-black">
-            {report.speed.completedInRange}
+            {report.speed.completedPerWeek === null
+              ? "—"
+              : formatNumber(report.speed.completedPerWeek)}
           </p>
           <p className="mt-1 text-meta text-text-light-gray">
-            {inPeriod(report)}
-            {report.speed.completedPerDay === null
-              ? ""
-              : ` · about ${formatNumber(
-                  report.speed.completedPerDay
-                )} a day`}
+            {inPeriod(report)}: {report.speed.completedInRange} finished in total
           </p>
           <p className="mt-1 text-meta text-text-light-gray">
             {finishedComparison(report)}
@@ -367,7 +369,9 @@ const OpenTickets = ({ report }: { report: VelocityReportData }) => {
 const People = ({ report }: { report: VelocityReportData }) => (
   <section className="min-w-0">
     <div className="mb-3 flex items-baseline justify-between gap-3">
-      <h2 className="text-subheading font-semibold text-white-black">People</h2>
+      <h2 className="text-subheading font-semibold text-white-black">
+        Who is active
+      </h2>
       <span className="text-dense text-text-light-gray">
         {inPeriod(report)}
       </span>
@@ -408,6 +412,59 @@ const People = ({ report }: { report: VelocityReportData }) => (
   </section>
 );
 
+const WorkedOn = ({ report }: { report: VelocityReportData }) => (
+  <section className="min-w-0">
+    <div className="mb-3">
+      <h2 className="text-subheading font-semibold text-white-black">
+        Tickets worked on
+      </h2>
+      <p className="mt-1 text-dense text-text-light-gray">
+        Updated, commented, moved, or linked to a pull request merged in this
+        period.
+      </p>
+    </div>
+    {report.workedOn.length === 0 ? (
+      <div className="rounded-[4px] bg-hoverCardBackground p-4 text-dense text-text-light-gray shadow-md">
+        No tickets were worked on in this period.
+      </div>
+    ) : (
+      <div className="flex flex-col gap-px overflow-hidden rounded-[4px] bg-pageBackground shadow-md">
+        {report.workedOn.map((task) => (
+          <div
+            key={task.id}
+            className="min-w-0 bg-hoverCardBackground px-4 py-3"
+          >
+            <Link
+              className="font-medium text-white-black hover:underline"
+              href={task.href}
+            >
+              {task.ticketNumber} {task.title}
+            </Link>
+            <p className="mt-1 text-meta text-text-light-gray">
+              {task.activities.join(" · ")} · {formatLastActive(task.lastActivityAt)}
+            </p>
+            {task.mergedPullRequests.length > 0 && (
+              <div className="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-meta">
+                {task.mergedPullRequests.map((pullRequest) => (
+                  <a
+                    key={pullRequest.url}
+                    className="text-hypertasks-header-blue hover:underline"
+                    href={pullRequest.url}
+                    rel="noreferrer"
+                    target="_blank"
+                  >
+                    {pullRequest.title}
+                  </a>
+                ))}
+              </div>
+            )}
+          </div>
+        ))}
+      </div>
+    )}
+  </section>
+);
+
 const VelocityReport = ({
   boardName,
   currentUser,
@@ -423,18 +480,57 @@ const VelocityReport = ({
   const pathname = usePathname();
   const router = useRouter();
   const searchParams = useSearchParams();
-  const range = resolveVelocityRange(searchParams?.get("range"));
+  const from = searchParams?.get("from");
+  const to = searchParams?.get("to");
+  const maxDate = new Date().toISOString().slice(0, 10);
+  const range = resolveVelocityRange(searchParams?.get("range"), from, to);
+  const reportParams = new URLSearchParams({
+    projectId: String(projectId),
+    range: range.key,
+  });
+  if (range.key === "custom" && from && to) {
+    reportParams.set("from", from);
+    reportParams.set("to", to);
+  }
   const { data, isError, isLoading } = useQuery<VelocityReportData>({
-    queryKey: ["velocityReport", projectId, range.key],
+    queryKey: ["velocityReport", projectId, range.key, from, to],
     queryFn: async () => {
       const response = await axios.get<VelocityReportData>(
-        `/api/reports/velocity?projectId=${projectId}&range=${range.key}`
+        `/api/reports/velocity?${reportParams.toString()}`
       );
       return response.data;
     },
-    refetchOnWindowFocus: false,
-    staleTime: 5 * 60 * 1000,
+    refetchOnMount: "always",
+    refetchOnWindowFocus: true,
+    staleTime: 0,
   });
+
+  const replaceSearchParams = (
+    updates: Record<string, string | null>
+  ) => {
+    const params = new URLSearchParams(searchParams?.toString());
+    Object.entries(updates).forEach(([key, value]) => {
+      if (value === null) params.delete(key);
+      else params.set(key, value);
+    });
+    router.replace(`${pathname}?${params.toString()}`, { scroll: false });
+  };
+
+  const selectRange = (key: string) => {
+    if (key !== "custom") {
+      replaceSearchParams({ range: key, from: null, to: null });
+      return;
+    }
+
+    const end = new Date();
+    const start = new Date(end);
+    start.setUTCDate(start.getUTCDate() - 6);
+    replaceSearchParams({
+      range: "custom",
+      from: start.toISOString().slice(0, 10),
+      to: end.toISOString().slice(0, 10),
+    });
+  };
 
   const content = (
     // pt-24 on desktop clears the fixed BackButton (top 40, 40px tall); on
@@ -444,7 +540,7 @@ const VelocityReport = ({
         <header>
           <div className="flex flex-wrap items-center justify-between gap-3">
             <h1 className="text-display font-semibold text-white-black">
-              Velocity
+              Board analytics
             </h1>
             <div className="flex flex-wrap items-center justify-end gap-1">
               {VELOCITY_RANGES.map((rangeOption) => (
@@ -456,15 +552,7 @@ const VelocityReport = ({
                       ? "bg-hoverCardBackground text-white-black"
                       : "text-light-gray hover:bg-hoverCardBackground hover:text-white-black"
                   }`}
-                  onClick={() => {
-                    const params = new URLSearchParams(
-                      searchParams?.toString()
-                    );
-                    params.set("range", rangeOption.key);
-                    router.replace(`${pathname}?${params.toString()}`, {
-                      scroll: false,
-                    });
-                  }}
+                  onClick={() => selectRange(rangeOption.key)}
                   type="button"
                 >
                   {rangeOption.label}
@@ -472,7 +560,48 @@ const VelocityReport = ({
               ))}
             </div>
           </div>
-          <p className="mt-1 text-emphasis text-white-black">{boardName}</p>
+          {range.key === "custom" && from && to && (
+            <div className="mt-3 flex flex-wrap items-end gap-3">
+              <label className="flex min-w-[150px] flex-col gap-1 text-meta text-text-light-gray">
+                From
+                <input
+                  className="h-9 rounded-[4px] border border-border bg-containerBackground px-3 text-dense text-white-black outline-none dark:[&::-webkit-calendar-picker-indicator]:invert"
+                  max={to < maxDate ? to : maxDate}
+                  onChange={(event) => {
+                    const nextFrom = event.target.value;
+                    if (!nextFrom) return;
+                    replaceSearchParams({
+                      from: nextFrom,
+                      ...(nextFrom > to ? { to: nextFrom } : {}),
+                    });
+                  }}
+                  onClick={(event) => event.currentTarget.showPicker?.()}
+                  type="date"
+                  value={from}
+                />
+              </label>
+              <label className="flex min-w-[150px] flex-col gap-1 text-meta text-text-light-gray">
+                To
+                <input
+                  className="h-9 rounded-[4px] border border-border bg-containerBackground px-3 text-dense text-white-black outline-none dark:[&::-webkit-calendar-picker-indicator]:invert"
+                  max={maxDate}
+                  min={from}
+                  onChange={(event) => {
+                    const nextTo = event.target.value;
+                    if (!nextTo) return;
+                    replaceSearchParams({
+                      to: nextTo,
+                      ...(nextTo < from ? { from: nextTo } : {}),
+                    });
+                  }}
+                  onClick={(event) => event.currentTarget.showPicker?.()}
+                  type="date"
+                  value={to}
+                />
+              </label>
+            </div>
+          )}
+          <p className="mt-3 text-emphasis text-white-black">{boardName}</p>
           {data && !isEmptyReport(data) && (
             <p className="mt-2 text-dense text-text-light-gray">
               {velocityVerdict(data)}
@@ -488,7 +617,7 @@ const VelocityReport = ({
 
         {isError && (
           <div className="rounded-[4px] bg-hoverCardBackground p-8 text-center text-dense text-text-light-gray shadow-md">
-            Unable to load the velocity report.
+            Unable to load the board analytics.
           </div>
         )}
 
@@ -500,6 +629,7 @@ const VelocityReport = ({
 
         {data && !isEmptyReport(data) && (
           <>
+            <WorkedOn report={data} />
             <Speed report={data} />
             <People report={data} />
             <CreatedFinishedChart report={data} />

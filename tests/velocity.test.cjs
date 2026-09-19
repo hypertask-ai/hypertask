@@ -32,15 +32,38 @@ const task = (overrides = {}) => ({
   ...overrides,
 });
 
-test("range keys resolve from one table and invalid values use 30 days", () => {
-  const defaultRange = VELOCITY_RANGES.find(({ key }) => key === "30d");
+test("range keys resolve from one table and invalid values use 7 days", () => {
+  const defaultRange = VELOCITY_RANGES.find(({ key }) => key === "7d");
 
-  for (const invalid of [null, "", "nonsense", "8"]) {
+  for (const invalid of [null, "", "nonsense", "8", "custom"]) {
     assert.strictEqual(resolveVelocityRange(invalid), defaultRange);
   }
-  for (const expected of VELOCITY_RANGES) {
+  for (const expected of VELOCITY_RANGES.filter(
+    ({ key }) => !["yesterday", "custom"].includes(key)
+  )) {
     assert.strictEqual(resolveVelocityRange(expected.key), expected);
   }
+});
+
+test("yesterday and custom ranges use bounded UTC dates", () => {
+  const now = new Date("2026-07-27T09:40:00.000Z");
+  const yesterday = resolveVelocityRange("yesterday", null, null, now);
+  const custom = resolveVelocityRange(
+    "custom",
+    "2026-07-20",
+    "2026-08-03",
+    now
+  );
+
+  assert.equal(yesterday.start, "2026-07-26T00:00:00.000Z");
+  assert.equal(yesterday.end, "2026-07-26T23:59:59.999Z");
+  assert.equal(custom.start, "2026-07-20T00:00:00.000Z");
+  assert.equal(custom.end, now.toISOString());
+  assert.equal(custom.days, 8);
+  assert.strictEqual(
+    resolveVelocityRange("custom", "2026-07-28", "2026-07-29", now),
+    VELOCITY_RANGES.find(({ key }) => key === "7d")
+  );
 });
 
 // A later edit to finished work must not rewrite history. The Done move is the
@@ -123,10 +146,16 @@ test("a custom finished column reports completions only when its done set is pas
 
 test("each range uses its required UTC bucket granularity", () => {
   const now = new Date("2026-07-27T09:40:00.000Z");
-  const today = velocityWindow(now, range("1d"));
+  const today = velocityWindow(now, range("today"));
+  const yesterday = velocityWindow(
+    now,
+    resolveVelocityRange("yesterday", null, null, now)
+  );
   const sevenDays = velocityWindow(now, range("7d"));
-  const threeMonths = velocityWindow(now, range("3m"));
-  const twelveMonths = velocityWindow(now, range("12m"));
+  const custom = velocityWindow(
+    now,
+    resolveVelocityRange("custom", "2026-05-01", "2026-07-27", now)
+  );
 
   assert.equal(today.granularity, "hour");
   assert.equal(today.bucketStarts.length, now.getUTCHours() + 1);
@@ -136,6 +165,14 @@ test("each range uses its required UTC bucket granularity", () => {
     "2026-07-27T09:00:00.000Z"
   );
   assert.strictEqual(today.windowStart, today.bucketStarts[0]);
+
+  assert.equal(yesterday.granularity, "hour");
+  assert.equal(yesterday.bucketStarts.length, 24);
+  assert.equal(
+    yesterday.bucketStarts.at(-1).toISOString(),
+    "2026-07-26T23:00:00.000Z"
+  );
+  assert.equal(yesterday.windowEnd.toISOString(), "2026-07-26T23:59:59.999Z");
 
   assert.equal(sevenDays.granularity, "day");
   assert.equal(sevenDays.bucketStarts.length, 7);
@@ -152,27 +189,9 @@ test("each range uses its required UTC bucket granularity", () => {
     ]
   );
 
-  assert.equal(threeMonths.granularity, "week");
-  assert.equal(threeMonths.bucketStarts.length, 13);
-  assert.equal(
-    threeMonths.bucketStarts[0].toISOString(),
-    "2026-05-04T00:00:00.000Z"
-  );
-  assert.ok(threeMonths.bucketStarts.every((date) => date.getUTCDay() === 1));
-
-  assert.equal(twelveMonths.granularity, "month");
-  assert.equal(twelveMonths.bucketStarts.length, 12);
-  assert.equal(
-    twelveMonths.bucketStarts[0].toISOString(),
-    "2025-08-01T00:00:00.000Z"
-  );
-  assert.equal(
-    twelveMonths.bucketStarts.at(-1).toISOString(),
-    "2026-07-01T00:00:00.000Z"
-  );
-  assert.ok(
-    twelveMonths.bucketStarts.every((date) => date.getUTCDate() === 1)
-  );
+  assert.equal(custom.granularity, "week");
+  assert.equal(custom.bucketStarts.length, 13);
+  assert.equal(custom.bucketStarts[0].toISOString(), "2026-05-01T00:00:00.000Z");
 });
 
 // Median finish time should resist one slow outlier and correctly average the
@@ -191,8 +210,8 @@ test("median finish time handles even and odd completion counts", () => {
 
   const even = buildVelocityReport(
     [
-      completedWithFinishTime(1, "2026-03-05T00:00:00.000Z", 2),
-      completedWithFinishTime(2, "2026-03-06T00:00:00.000Z", 4),
+      completedWithFinishTime(1, "2026-03-15T00:00:00.000Z", 2),
+      completedWithFinishTime(2, "2026-03-16T00:00:00.000Z", 4),
     ],
     [],
     [],
@@ -200,9 +219,9 @@ test("median finish time handles even and odd completion counts", () => {
   );
   const odd = buildVelocityReport(
     [
-      completedWithFinishTime(1, "2026-03-05T00:00:00.000Z", 1),
-      completedWithFinishTime(2, "2026-03-06T00:00:00.000Z", 3),
-      completedWithFinishTime(3, "2026-03-07T00:00:00.000Z", 8),
+      completedWithFinishTime(1, "2026-03-15T00:00:00.000Z", 1),
+      completedWithFinishTime(2, "2026-03-16T00:00:00.000Z", 3),
+      completedWithFinishTime(3, "2026-03-17T00:00:00.000Z", 8),
     ],
     [],
     [],
@@ -218,7 +237,10 @@ test("median finish time handles even and odd completion counts", () => {
 test("the prior window has the same length, does not overlap, and counts a finish nine days ago", () => {
   const now = new Date("2026-03-18T12:00:00.000Z");
   const selectedRange = range("7d");
-  const { windowStart, priorStart } = velocityWindow(now, selectedRange);
+  const { windowStart, windowEnd, priorStart } = velocityWindow(
+    now,
+    selectedRange
+  );
   const completed = new Date(now.getTime() - 9 * DAY_IN_MS);
   const report = buildVelocityReport(
     [
@@ -236,7 +258,7 @@ test("the prior window has the same length, does not overlap, and counts a finis
 
   assert.equal(
     windowStart.getTime() - priorStart.getTime(),
-    now.getTime() - windowStart.getTime()
+    windowEnd.getTime() - windowStart.getTime() + 1
   );
   assert.ok(priorStart < windowStart);
   assert.equal(report.speed.completedInRange, 0);
@@ -245,7 +267,7 @@ test("the prior window has the same length, does not overlap, and counts a finis
   assert.equal(report.speed.priorMedianLeadTimeDays, 3);
 });
 
-test("a finish 40 days ago appears in 3 months but not 7 days", () => {
+test("a finish 40 days ago appears in a custom range but not 7 days", () => {
   const now = new Date("2026-03-18T12:00:00.000Z");
   const completed = new Date(now.getTime() - 40 * DAY_IN_MS);
   const comments = [{
@@ -263,12 +285,12 @@ test("a finish 40 days ago appears in 3 months but not 7 days", () => {
     assigneeUserIds: [1],
   });
 
-  const threeMonths = buildVelocityReport(
+  const custom = buildVelocityReport(
     [finished],
     comments,
     members,
     now,
-    range("3m")
+    resolveVelocityRange("custom", "2026-01-01", "2026-03-18", now)
   );
   const sevenDays = buildVelocityReport(
     [finished],
@@ -278,12 +300,47 @@ test("a finish 40 days ago appears in 3 months but not 7 days", () => {
     range("7d")
   );
 
-  assert.equal(threeMonths.speed.medianLeadTimeDays, 3);
-  assert.equal(threeMonths.people[0].completed, 1);
-  assert.equal(threeMonths.people[0].comments, 1);
+  assert.equal(custom.speed.medianLeadTimeDays, 3);
+  assert.equal(custom.people[0].completed, 1);
+  assert.equal(custom.people[0].comments, 1);
   assert.equal(sevenDays.speed.medianLeadTimeDays, null);
   assert.equal(sevenDays.people[0].completed, 0);
   assert.equal(sevenDays.people[0].comments, 0);
+});
+
+test("weekly completion rate normalizes the selected range and keeps worked tickets", () => {
+  const now = new Date("2026-03-18T12:00:00.000Z");
+  const workedOn = [{
+    id: 9,
+    ticketNumber: "HTPR-9",
+    title: "Linked ticket",
+    href: "/detail/project-15/9",
+    activities: ["Commented", "Merged PR"],
+    lastActivityAt: "2026-03-18T10:00:00.000Z",
+    mergedPullRequests: [{ title: "Ship it", url: "https://github.com/acme/app/pull/9" }],
+  }];
+  const completedTasks = Array.from({ length: 4 }, (_, index) =>
+    task({
+      id: index + 1,
+      section: "Done",
+      sectionChangedAt: `2026-03-${String(12 + index).padStart(2, "0")}T00:00:00.000Z`,
+    })
+  );
+
+  const report = buildVelocityReport(
+    completedTasks,
+    [],
+    [],
+    now,
+    range("7d"),
+    undefined,
+    undefined,
+    workedOn
+  );
+
+  assert.equal(report.speed.completedInRange, 4);
+  assert.equal(report.speed.completedPerWeek, 4);
+  assert.strictEqual(report.workedOn, workedOn);
 });
 
 test("totals sum the whole selected window instead of the last bucket", () => {
@@ -324,16 +381,16 @@ test("people includes idle members with zeroed activity", () => {
       task({
         id: 1,
         createdAt: "2026-03-01T00:00:00.000Z",
-        updatedAt: "2026-03-10T00:00:00.000Z",
+        updatedAt: "2026-03-16T00:00:00.000Z",
         section: "Done",
-        sectionChangedAt: "2026-03-09T00:00:00.000Z",
+        sectionChangedAt: "2026-03-15T00:00:00.000Z",
         assigneeUserIds: [1],
       }),
     ],
     [{
       userId: 1,
       comments: 1,
-      lastCommentAt: "2026-03-11T00:00:00.000Z",
+      lastCommentAt: "2026-03-16T00:00:00.000Z",
     }],
     [
       { userId: 1, displayName: "Active Ada", email: "ada@example.com" },
@@ -347,7 +404,7 @@ test("people includes idle members with zeroed activity", () => {
     displayName: "Active Ada",
     completed: 1,
     comments: 1,
-    lastActiveAt: "2026-03-11T00:00:00.000Z",
+    lastActiveAt: "2026-03-16T00:00:00.000Z",
   });
   assert.deepEqual(report.people[1], {
     userId: 2,
@@ -423,7 +480,7 @@ test("velocity verdict explains finish-time direction and backlog change", () =>
   report.totals.net = -1;
   assert.equal(
     velocityVerdict(report),
-    "Finishing work faster than the previous 30 days · backlog shrinking"
+    "Finishing work faster than the previous 7 days · backlog shrinking"
   );
 
   report.speed.medianLeadTimeDays = 5;
@@ -431,7 +488,7 @@ test("velocity verdict explains finish-time direction and backlog change", () =>
   report.totals.net = 2;
   assert.equal(
     velocityVerdict(report),
-    "Finishing work slower than the previous 30 days · backlog growing"
+    "Finishing work slower than the previous 7 days · backlog growing"
   );
 
   report.speed.medianLeadTimeDays = 4;

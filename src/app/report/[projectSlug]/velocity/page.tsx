@@ -18,7 +18,7 @@ export async function generateMetadata({
   const { projectSlug } = await params;
   const projectId = parseProjectSlug(projectSlug);
   if (!Number.isInteger(projectId) || projectId <= 0) {
-    return { title: "Velocity · Hypertask" };
+    return { title: "Board analytics · Hypertask" };
   }
 
   const project = await prisma.project.findUnique({
@@ -27,7 +27,7 @@ export async function generateMetadata({
   });
 
   return {
-    title: `Velocity · ${project?.title ?? project?.name ?? "Hypertask"}`,
+    title: `Board analytics · ${project?.title ?? project?.name ?? "Hypertask"}`,
   };
 }
 

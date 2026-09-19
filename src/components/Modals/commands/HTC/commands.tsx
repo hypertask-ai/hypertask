@@ -56,6 +56,7 @@ import {
 } from "@/lib/inboxClusters";
 import {
   HTPR_6514_COMMENT_LONG_PRESS_FLAG,
+  HTPR_6585_BOARD_REPORTS_FLAG,
   INBOX_ARCHIVE_CLUSTER_FLAG,
   MY_TASKS_TABLE_COLUMNS_FLAG,
   MY_TASKS_VIEWS_FLAG,
@@ -105,6 +106,7 @@ const Commands = (props: Props) => {
   const myTasksViewsEnabled = useFlag(MY_TASKS_VIEWS_FLAG);
   const myTasksTableColumnsEnabled = useFlag(MY_TASKS_TABLE_COLUMNS_FLAG);
   const commentLongPressEnabled = useFlag(HTPR_6514_COMMENT_LONG_PRESS_FLAG);
+  const reportsEnabled = useFlag(HTPR_6585_BOARD_REPORTS_FLAG);
   const pinCommentActions = !!contextOptions?.commentOptions;
   const currentProject = useRecoilValue(currentProjectAtom);
   const { data: projects = [] } = useGetAllProjectsMinimal([
@@ -169,6 +171,12 @@ const Commands = (props: Props) => {
               copyCurrentUrlEnabled) &&
             (command.commandMode !== CommandMode.ToggleBoardTimeTracking ||
               !!currentProject) &&
+            (reportsEnabled ||
+              ![
+                CommandMode.GotoReports,
+                CommandMode.GotoBoardVelocityReport,
+                CommandMode.GenerateStatusUpdate,
+              ].includes(command.commandMode)) &&
             (command.commandMode !== CommandMode.ConfigureTableColumns ||
               boardLayout === "table" ||
               (onMyTasks && myTasksViewsEnabled && myTasksTableColumnsEnabled)) &&
@@ -307,6 +315,7 @@ const Commands = (props: Props) => {
     myTasksViewsEnabled,
     myTasksTableColumnsEnabled,
     projects,
+    reportsEnabled,
     showByokApiKeys,
   ])
 
