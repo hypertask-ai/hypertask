@@ -229,6 +229,15 @@ test("a failed automatic Show save is not retried until the board state changes"
     }),
     { attemptedKey: null, shouldSave: false },
   );
+  assert.equal(
+    planEmptySectionsAutoShow({
+      attemptedKey: failedSaveRender.attemptedKey,
+      boardHasTasks: false,
+      cause: "empty_sections_hidden",
+      currentKey: "15:planning",
+    }).shouldSave,
+    true,
+  );
 });
 
 test("a personal setting overrides shared and legacy unsaved values", () => {
