@@ -126,10 +126,31 @@ function isBotChallenge(response: import('@playwright/test').Response | null): b
 }
 
 for (const view of VIEWS) {
-  test(`${view.name} loads`, async ({ page }) => {
+  test(`${view.name} loads`, async ({ page }, testInfo) => {
     const viewPath = typeof view.path === 'function' ? view.path() : view.path
     const pageErrors: Error[] = []
+    const hydrationDiagnostics: Promise<unknown>[] = []
     page.on('pageerror', (err) => pageErrors.push(err))
+    page.on('console', (message) => {
+      if (message.type() !== 'error' || !/418|hydrat/i.test(message.text())) return
+
+      hydrationDiagnostics.push(Promise.all(message.args().map(async (handle) =>
+        handle.evaluate((value) => {
+          if (value instanceof Error) {
+            return { name: value.name, message: value.message, stack: value.stack }
+          }
+          try {
+            return typeof value === 'string' ? value : JSON.stringify(value)
+          } catch {
+            return String(value)
+          }
+        }).catch(() => '<unserializable>')
+      )).then((args) => ({
+        text: message.text(),
+        location: message.location(),
+        args,
+      })))
+    })
 
     let response
     try {
@@ -197,6 +218,16 @@ for (const view of VIEWS) {
       expect(bodyText, `${viewPath} rendered an error page`).not.toMatch(marker)
     }
 
+    if (pageErrors.length > 0) {
+      const consoleErrors = await Promise.all(hydrationDiagnostics)
+      await testInfo.attach('browser-errors', {
+        body: Buffer.from(JSON.stringify({
+          pageErrors: pageErrors.map(({ message, stack }) => ({ message, stack })),
+          consoleErrors,
+        }, null, 2)),
+        contentType: 'application/json',
+      })
+    }
     expect(pageErrors, `${viewPath} threw a page error: ${pageErrors[0]?.message}`).toHaveLength(0)
   })
 }
