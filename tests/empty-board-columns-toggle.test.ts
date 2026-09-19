@@ -12,7 +12,7 @@ import {
 } from "../src/utils/helperFunctions/Views/ViewsHelperFunctions";
 import {
   getFilteredEmptySections,
-  planEmptySectionsAutoShow,
+  shouldHoldEmptySectionsAutoShowAttempt,
 } from "../src/utils/helperFunctions/Views/EmptySectionsHelperFunction";
 import {
   createBoardReadModelSnapshot,
@@ -195,48 +195,30 @@ test("a filter that hides every task does not reveal empty columns", () => {
   );
 });
 
-test("a failed automatic Show save is not retried until the board state changes", () => {
-  const firstAttempt = planEmptySectionsAutoShow({
-    attemptedKey: null,
+test("an optimistic Show render keeps the automatic save attempt latched", () => {
+  const attempt = {
+    attemptedBoardId: 15,
+    attemptedViewId: "speed",
     boardHasTasks: false,
-    cause: "empty_sections_hidden",
-    currentKey: "15:speed",
-  });
-  const optimisticRender = planEmptySectionsAutoShow({
-    attemptedKey: firstAttempt.attemptedKey,
-    boardHasTasks: false,
-    cause: "actually_empty",
-    currentKey: "15:speed",
-  });
-  const failedSaveRender = planEmptySectionsAutoShow({
-    attemptedKey: optimisticRender.attemptedKey,
-    boardHasTasks: false,
-    cause: "empty_sections_hidden",
-    currentKey: "15:speed",
-  });
+    cause: "actually_empty" as const,
+    currentBoardId: 15,
+    currentViewId: "speed",
+  };
 
-  assert.equal(firstAttempt.shouldSave, true);
-  assert.equal(optimisticRender.shouldSave, false);
-  assert.equal(failedSaveRender.shouldSave, false);
-  assert.equal(failedSaveRender.attemptedKey, "15:speed");
-
-  assert.deepEqual(
-    planEmptySectionsAutoShow({
-      attemptedKey: failedSaveRender.attemptedKey,
+  assert.equal(shouldHoldEmptySectionsAutoShowAttempt(attempt), true);
+  assert.equal(
+    shouldHoldEmptySectionsAutoShowAttempt({
+      ...attempt,
       boardHasTasks: true,
-      cause: "actually_empty",
-      currentKey: "15:speed",
     }),
-    { attemptedKey: null, shouldSave: false },
+    false,
   );
   assert.equal(
-    planEmptySectionsAutoShow({
-      attemptedKey: failedSaveRender.attemptedKey,
-      boardHasTasks: false,
-      cause: "empty_sections_hidden",
-      currentKey: "15:planning",
-    }).shouldSave,
-    true,
+    shouldHoldEmptySectionsAutoShowAttempt({
+      ...attempt,
+      currentViewId: "planning",
+    }),
+    false,
   );
 });
 

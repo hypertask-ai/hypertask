@@ -5,25 +5,25 @@ import { getActiveEmptySectionSettingFromProject } from "./ViewsHelperFunctions"
 
 export const defaultEmptySections: TBoardEmptySections = "Show";
 
-export const planEmptySectionsAutoShow = ({
-  attemptedKey,
+export const shouldHoldEmptySectionsAutoShowAttempt = ({
+  attemptedBoardId,
+  attemptedViewId,
   boardHasTasks,
   cause,
-  currentKey,
+  currentBoardId,
+  currentViewId,
 }: {
-  attemptedKey: string | null;
+  attemptedBoardId: number | null;
+  attemptedViewId: string | null;
   boardHasTasks: boolean;
   cause: EmptyStateCause | null;
-  currentKey: string;
-}) => {
-  if (boardHasTasks) {
-    return { attemptedKey: null, shouldSave: false };
-  }
-  if (cause !== "empty_sections_hidden" || attemptedKey === currentKey) {
-    return { attemptedKey, shouldSave: false };
-  }
-  return { attemptedKey: currentKey, shouldSave: true };
-};
+  currentBoardId: number;
+  currentViewId: string;
+}) =>
+  !boardHasTasks &&
+  cause !== "empty_sections_hidden" &&
+  attemptedBoardId === currentBoardId &&
+  attemptedViewId === currentViewId;
 
 export const getFilteredEmptySections = (
   sections: ISection[],

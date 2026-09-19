@@ -40,7 +40,7 @@ import { TBoardSortingViewMode } from "@/models/Views/model";
 import { useDeviceContext } from "@/lib/contexts/deviceContext";
 import BoardEmptyState from "./BoardEmptyState";
 import { detectEmptyBoardState } from "@/utils/helperFunctions/Views/BoardEmptyStateHelper";
-import { planEmptySectionsAutoShow } from "@/utils/helperFunctions/Views/EmptySectionsHelperFunction";
+import { shouldHoldEmptySectionsAutoShowAttempt } from "@/utils/helperFunctions/Views/EmptySectionsHelperFunction";
 import { getAppliedSearchedTasks } from "@/utils/helperFunctions/Views/SearchFilterHelperFunction";
 import { boardSearchAtom } from "@/store";
 import { useGetArchivedTasksOnBoard } from "@/hooks/Homepage/useGetArchivedTasksOnBoard";
@@ -221,7 +221,8 @@ const HomePage = ({
   const { currentSetting } = useSubTask()
   const queryClient = useQueryClient();
   const { setBoardColumnsViewAPI, saveEmptySectionsAPI } = useKanbanViews(_currentProject);
-  const autoShowingEmptySections = useRef<string | null>(null);
+  const autoShowingEmptySections = useRef<number | null>(null);
+  const autoShowingEmptySectionsView = useRef<string | null>(null);
   useBoardRealtime(_currentProject?.id, {
     accountId: currentUser.id,
   });
@@ -858,18 +859,30 @@ const HomePage = ({
     _currentProject.project_view?.user_project_views[0]?.appliedView?.id ??
     _currentProject.project_view?.default_view?.id ??
     "unsaved";
-  const autoShowEmptySectionsKey = `${_currentProject.id}:${emptySectionsViewId}`;
 
   useEffect(() => {
-    const plan = planEmptySectionsAutoShow({
-      attemptedKey: autoShowingEmptySections.current,
+    if (autoShowingEmptySectionsView.current !== emptySectionsViewId) {
+      autoShowingEmptySections.current = null;
+      autoShowingEmptySectionsView.current = emptySectionsViewId;
+    }
+    if (shouldHoldEmptySectionsAutoShowAttempt({
+      attemptedBoardId: autoShowingEmptySections.current,
+      attemptedViewId: autoShowingEmptySectionsView.current,
       boardHasTasks,
       cause: emptyStateDetection?.cause ?? null,
-      currentKey: autoShowEmptySectionsKey,
-    });
-    autoShowingEmptySections.current = plan.attemptedKey;
-    if (plan.shouldSave) void saveEmptySectionsAPI(_currentProject, "Show");
-  }, [autoShowEmptySectionsKey, boardHasTasks, emptyStateDetection?.cause, _currentProject]);
+      currentBoardId: _currentProject.id,
+      currentViewId: emptySectionsViewId,
+    })) return;
+
+    if (emptyStateDetection?.cause !== "empty_sections_hidden") {
+      autoShowingEmptySections.current = null;
+      return;
+    }
+    if (autoShowingEmptySections.current === _currentProject.id) return;
+
+    autoShowingEmptySections.current = _currentProject.id;
+    void saveEmptySectionsAPI(_currentProject, "Show");
+  }, [emptyStateDetection?.cause, _currentProject]);
 
   const renderSections = (archivedTasks?: ITask[]) =>
     displaySections && displaySections.map((sec, index) => (
