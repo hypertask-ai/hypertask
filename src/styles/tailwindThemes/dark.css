@@ -1,6 +1,7 @@
 /* Dark Theme Background Colors */
 .dark {
   --primary: 221.2 83.2% 53.3%;
+  --color-unsaved-view: #e28c28;
 
   --bg-pageBackground: #0e0e0e;
   --bg-taskDetailPage: #0e0e0e;

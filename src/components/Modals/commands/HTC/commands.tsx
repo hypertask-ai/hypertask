@@ -56,6 +56,7 @@ import {
 } from "@/lib/inboxClusters";
 import {
   HTPR_6514_COMMENT_LONG_PRESS_FLAG,
+  HTPR_6572_MY_TASKS_BOARD_TOOLBAR_FLAG,
   HTPR_6585_BOARD_REPORTS_FLAG,
   INBOX_ARCHIVE_CLUSTER_FLAG,
   MY_TASKS_TABLE_COLUMNS_FLAG,
@@ -105,6 +106,7 @@ const Commands = (props: Props) => {
   const inboxClusterEnabled = useFlag(INBOX_ARCHIVE_CLUSTER_FLAG);
   const myTasksViewsEnabled = useFlag(MY_TASKS_VIEWS_FLAG);
   const myTasksTableColumnsEnabled = useFlag(MY_TASKS_TABLE_COLUMNS_FLAG);
+  const myTasksBoardToolbarEnabled = useFlag(HTPR_6572_MY_TASKS_BOARD_TOOLBAR_FLAG);
   const commentLongPressEnabled = useFlag(HTPR_6514_COMMENT_LONG_PRESS_FLAG);
   const reportsEnabled = useFlag(HTPR_6585_BOARD_REPORTS_FLAG);
   const pinCommentActions = !!contextOptions?.commentOptions;
@@ -182,6 +184,13 @@ const Commands = (props: Props) => {
               onCalendar)
         )
         .map((command) => {
+          if (
+            myTasksBoardToolbarEnabled &&
+            onMyTasks &&
+            command.commandMode === CommandMode.SortKanbanBoard
+          ) {
+            return { ...command, name: "Sort My Tasks" };
+          }
           if (command.commandMode === CommandMode.ToggleBoardLayout) {
             return { ...command, name: layoutCommandName };
           }
@@ -308,6 +317,7 @@ const Commands = (props: Props) => {
     onMyTasks,
     myTasksViewsEnabled,
     myTasksTableColumnsEnabled,
+    myTasksBoardToolbarEnabled,
     projects,
     showByokApiKeys,
   ])

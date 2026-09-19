@@ -6,7 +6,12 @@ import {
   TFilter,
   TFilterCommandComponents,
 } from "@/models/Filters/model";
-import { ModalContainerCustom } from "@/components/Common/CommonModalComponents";
+import {
+  ModalContainerCustom,
+  ModalHeaderComp,
+  ModalListContainer,
+  ModalRowElementContainer,
+} from "@/components/Common/CommonModalComponents";
 import styles from "@/styles/linksModal.module.scss";
 import useFilters from "@/hooks/Homepage/Filters/useFilters";
 import SetPriorityModal from "../../TaskPriority";
@@ -30,6 +35,8 @@ import type {
   CalendarUserSummary,
 } from "@/lib/calendarSync/contract";
 import { useMyTasksFilterController } from "@/lib/myTasksFilterContext";
+import { MY_TASKS_SCOPE_VALUES, type MyTasksScope } from "@/lib/myTasksScopes";
+import { Check } from "lucide-react";
 
 interface Props {
   toggle: () => void;
@@ -463,6 +470,7 @@ const AllFilterHTC: React.FC<Props> = ({
         view={view}
       />
     ),
+    [FilterCommandMode.Involvement]: <MyTasksInvolvementFilter />,
   };
 
   const boardCloseHandler = () => {
@@ -502,6 +510,50 @@ const AllFilterHTC: React.FC<Props> = ({
     >
       {commandComponents[commandMode]}
     </ModalContainerCustom>
+  );
+};
+
+const INVOLVEMENT_LABELS: Record<MyTasksScope, string> = {
+  assigned: "Assigned to me",
+  created: "Created by me",
+  mentioned: "Mentioned",
+  watching: "Watching",
+};
+
+const MyTasksInvolvementFilter = () => {
+  const controller = useMyTasksFilterController();
+  if (!controller?.involvementEnabled) return null;
+
+  const toggleScope = (scope: MyTasksScope) => {
+    const next = controller.scopes.includes(scope)
+      ? controller.scopes.filter((value) => value !== scope)
+      : [...controller.scopes, scope];
+    controller.setScopes(next);
+  };
+
+  return (
+    <>
+      <ModalHeaderComp header="Involvement" />
+      <div className="rounded-b-[4px] p-0">
+        <ModalListContainer id="my-tasks-involvement-list" className="max-h-[364px]">
+          {MY_TASKS_SCOPE_VALUES.map((scope, index) => {
+            const selected = controller.scopes.includes(scope);
+            return (
+              <ModalRowElementContainer
+                key={scope}
+                id={`my-tasks-involvement-${scope}`}
+                index={index}
+                onClick={() => toggleScope(scope)}
+                isSelected={false}
+              >
+                <span>{INVOLVEMENT_LABELS[scope]}</span>
+                {selected ? <Check size={16} strokeWidth={1.75} /> : null}
+              </ModalRowElementContainer>
+            );
+          })}
+        </ModalListContainer>
+      </div>
+    </>
   );
 };
 
