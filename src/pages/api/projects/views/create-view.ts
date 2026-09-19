@@ -1,5 +1,9 @@
 import { NextApiHandler, NextApiRequest, NextApiResponse } from "next";
 
+import {
+  HTPR_6588_EMPTY_COLUMNS_SAVE_VIEW_FLAG,
+  isFeatureEnabled,
+} from "@/lib/flags";
 import prisma from "@/lib/prisma";
 import { broadcastBoardChange } from "@/lib/realtime/server";
 import { ISection } from "@/models/model";
@@ -137,6 +141,7 @@ const handler: NextApiHandler = async (
             board_columns_view: view_settings.board_columns_view,
             board_subtask_setting: view_settings.board_subtask_setting,
             board_empty_sections: view_settings.board_empty_sections,
+            board_empty_sections_staged: false,
             board_staleness: view_settings.board_staleness ?? null,
             board_show_archived: view_settings.board_show_archived ?? null,
             table_sort_column: sanitizedTableSort.column,
@@ -163,6 +168,7 @@ const handler: NextApiHandler = async (
                 board_columns_view: view_settings.board_columns_view,
                 board_subtask_setting: view_settings.board_subtask_setting,
                 board_empty_sections: view_settings.board_empty_sections,
+                board_empty_sections_staged: false,
                 board_staleness: view_settings.board_staleness ?? null,
                 // Preserve a saved "show archived" choice when the caller omits the field.
                 ...(view_settings.board_show_archived === undefined
@@ -195,6 +201,17 @@ const handler: NextApiHandler = async (
           },
         },
       });
+      if (
+        await isFeatureEnabled(
+          HTPR_6588_EMPTY_COLUMNS_SAVE_VIEW_FLAG,
+          userId,
+        )
+      ) {
+        await prisma.view_Last_Used.updateMany({
+          where: { userId, viewId: view.id },
+          data: { board_empty_sections: null },
+        });
+      }
 
       console.log("🚀 ~ consthandler:NextApiHandler= ~ view:", view);
       // ========== add it against the user_project_view

@@ -354,6 +354,7 @@ export interface IView {
   board_columns_view?: object;
   board_subtask_setting?: SubtaskSetting;
   board_empty_sections?: EmptySections;
+  board_empty_sections_staged?: boolean;
   board_staleness?: boolean | null;
   board_show_archived?: boolean | null;
   table_sort_column?: string | null;
@@ -383,6 +384,7 @@ export interface IProjectView {
   default_view_order?: string[] | null;
   default_view_id?: string;
   default_view?: IView;
+  board_empty_sections_staging_enabled?: boolean;
 }
 
 export interface IUserProjectView {

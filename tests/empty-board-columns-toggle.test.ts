@@ -5,7 +5,9 @@ import path from "node:path";
 import {
   beginEmptySectionMutation,
   getActiveEmptySectionSettingFromProject,
+  getActiveEmptySectionSettingFromProjectView,
   getEmptySectionSettingForView,
+  maskPersonalEmptySectionsForUnsavedView,
   patchProjectViewEmptySections,
   pinProjectToUrlView,
   settleEmptySectionMutation,
@@ -18,12 +20,18 @@ import {
   createBoardReadModelSnapshot,
   materializeBoardReadModelSnapshot,
 } from "../src/lib/boardSync/contract";
+import { persistDisabledStagedEmptySections } from "../src/utils/controllers/projects/views/viewsHelperAPIfunctions";
 
 const root = path.resolve(__dirname, "..");
 
-const view = (id: string, setting: "Show" | "Hidden") => ({
+const view = (
+  id: string,
+  setting: "Show" | "Hidden",
+  staged = false,
+) => ({
   id,
   board_empty_sections: setting,
+  board_empty_sections_staged: staged,
 });
 
 const projectWith = ({
@@ -38,6 +46,8 @@ const projectWith = ({
   id: 15,
   project_view: {
     id: "project-view",
+    board_empty_sections_staging_enabled:
+      unsaved?.board_empty_sections_staged === true,
     default_view: defaultView,
     allViews: [defaultView, applied].filter(Boolean),
     user_project_views: [{ unsavedView: unsaved, appliedView: applied }],
@@ -237,6 +247,13 @@ test("a personal setting overrides shared and legacy unsaved values", () => {
     "Hidden",
   );
   assert.equal(
+    getActiveEmptySectionSettingFromProjectView(
+      maskPersonalEmptySectionsForUnsavedView(project.project_view as never, true),
+    ),
+    "Hidden",
+    "ordinary unsaved edits must keep the personal preference",
+  );
+  assert.equal(
     getEmptySectionSettingForView(project.project_view as never, "speed"),
     "Hidden",
   );
@@ -249,6 +266,243 @@ test("a personal setting overrides shared and legacy unsaved values", () => {
     getActiveEmptySectionSettingFromProject(legacyProject as never),
     "Hidden",
   );
+});
+
+test("a staged unsaved choice outranks but does not erase the personal setting", () => {
+  const applied = {
+    ...view("speed", "Show"),
+    ViewLastUsed: [{ board_empty_sections: "Hidden" }],
+  };
+  const project = projectWith({
+    unsaved: view("unsaved", "Show", true),
+    applied: applied as never,
+  });
+
+  const masked = maskPersonalEmptySectionsForUnsavedView(
+    project.project_view as never,
+    true,
+  );
+
+  assert.equal(
+    getActiveEmptySectionSettingFromProjectView(masked),
+    "Show",
+  );
+  const disabled = maskPersonalEmptySectionsForUnsavedView(
+    project.project_view as never,
+    false,
+  );
+  assert.equal(
+    getActiveEmptySectionSettingFromProjectView(disabled),
+    "Hidden",
+  );
+  assert.equal(
+    disabled.user_project_views[0].unsavedView,
+    undefined,
+    "disabling the flag removes a staged-only unsaved view",
+  );
+  assert.equal(
+    getActiveEmptySectionSettingFromProject(project as never),
+    "Show",
+  );
+
+  const resetProject = projectWith({ applied: applied as never });
+  assert.equal(
+    getActiveEmptySectionSettingFromProject(resetProject as never),
+    "Hidden",
+  );
+  assert.equal(
+    getActiveEmptySectionSettingFromProjectView(
+      maskPersonalEmptySectionsForUnsavedView(
+        resetProject.project_view as never,
+        true,
+      ),
+    ),
+    "Hidden",
+    "removing the unsaved view must reveal the retained personal setting",
+  );
+  assert.equal(applied.ViewLastUsed[0].board_empty_sections, "Hidden");
+});
+
+test("disabling staging preserves unrelated unsaved edits", () => {
+  const applied = {
+    ...view("speed", "Show"),
+    board_sorting_order: "Descending",
+    ViewLastUsed: [{ board_empty_sections: "Hidden" }],
+  };
+  const project = projectWith({
+    unsaved: {
+      ...view("unsaved", "Show", true),
+      board_sorting_order: "Ascending",
+    } as never,
+    applied: applied as never,
+  });
+
+  const disabled = maskPersonalEmptySectionsForUnsavedView(
+    project.project_view as never,
+    false,
+  );
+
+  assert.equal(
+    disabled.user_project_views[0].unsavedView?.board_empty_sections,
+    "Hidden",
+  );
+  assert.equal(
+    disabled.user_project_views[0].unsavedView?.board_empty_sections_staged,
+    false,
+  );
+  assert.equal(
+    disabled.user_project_views[0].unsavedView?.board_sorting_order,
+    "Ascending",
+  );
+});
+
+test("flag-off cleanup preserves an unsaved view modified after the stale read", async () => {
+  const applied = {
+    ...view("speed", "Show"),
+    board_sorting_order: "Descending",
+    ViewLastUsed: [{ board_empty_sections: "Hidden" }],
+  };
+  const staleProject = projectWith({
+    unsaved: view("unsaved", "Show", true),
+    applied: applied as never,
+  }).project_view;
+  const currentState = {
+    default_view: null,
+    user_project_views: [{
+      userId: 42,
+      project_view_id: "project-view",
+      appliedViewId: "speed",
+      unsavedViewId: "unsaved",
+      view_order: null,
+      appliedView: applied,
+      unsavedView: {
+        ...view("unsaved", "Show", true),
+        board_sorting_order: "Ascending",
+      },
+    }],
+  };
+  const calls = { locks: 0, detached: 0, deleted: 0, updated: [] as unknown[] };
+  const tx = {
+    $queryRaw: async () => {
+      calls.locks += 1;
+      return calls.locks === 1 ? [{ unsavedViewId: "unsaved" }] : [{ id: "unsaved" }];
+    },
+    project_View: { findUnique: async () => currentState },
+    user_Project_View: {
+      updateMany: async () => {
+        calls.detached += 1;
+        return { count: 1 };
+      },
+    },
+    view: {
+      deleteMany: async () => {
+        calls.deleted += 1;
+        return { count: 1 };
+      },
+      updateMany: async (args: unknown) => {
+        calls.updated.push(args);
+        return { count: 1 };
+      },
+    },
+  };
+  const database = {
+    $transaction: async (operation: (client: typeof tx) => Promise<unknown>) => operation(tx),
+  };
+
+  const normalized = await persistDisabledStagedEmptySections(
+    staleProject as never,
+    42,
+    database as never,
+  );
+
+  assert.equal(calls.locks, 2);
+  assert.equal(calls.detached, 0);
+  assert.equal(calls.deleted, 0);
+  assert.equal(calls.updated.length, 1);
+  assert.deepEqual(
+    (calls.updated[0] as { data: unknown }).data,
+    {
+      board_empty_sections: "Hidden",
+      board_empty_sections_staged: false,
+    },
+  );
+  assert.equal(
+    normalized.user_project_views[0].unsavedView?.board_sorting_order,
+    "Ascending",
+  );
+  assert.equal(
+    normalized.user_project_views[0].unsavedView?.board_empty_sections,
+    "Hidden",
+  );
+  assert.equal(
+    normalized.user_project_views[0].unsavedView?.board_empty_sections_staged,
+    false,
+  );
+});
+
+test("flag-off cleanup detaches a currently staged-only unsaved view", async () => {
+  const applied = {
+    ...view("speed", "Show"),
+    ViewLastUsed: [{ board_empty_sections: "Hidden" }],
+  };
+  const staleProject = projectWith({
+    unsaved: {
+      ...view("unsaved", "Show", true),
+      board_sorting_order: "Ascending",
+    } as never,
+    applied: applied as never,
+  }).project_view;
+  const currentState = {
+    default_view: null,
+    user_project_views: [{
+      userId: 42,
+      project_view_id: "project-view",
+      appliedViewId: "speed",
+      unsavedViewId: "unsaved",
+      view_order: null,
+      appliedView: applied,
+      unsavedView: view("unsaved", "Show", true),
+    }],
+  };
+  const calls = { locks: 0, detached: 0, deleted: 0, updated: 0 };
+  const tx = {
+    $queryRaw: async () => {
+      calls.locks += 1;
+      return calls.locks === 1 ? [{ unsavedViewId: "unsaved" }] : [{ id: "unsaved" }];
+    },
+    project_View: { findUnique: async () => currentState },
+    user_Project_View: {
+      updateMany: async () => {
+        calls.detached += 1;
+        return { count: 1 };
+      },
+    },
+    view: {
+      deleteMany: async () => {
+        calls.deleted += 1;
+        return { count: 1 };
+      },
+      updateMany: async () => {
+        calls.updated += 1;
+        return { count: 1 };
+      },
+    },
+  };
+  const database = {
+    $transaction: async (operation: (client: typeof tx) => Promise<unknown>) => operation(tx),
+  };
+
+  const normalized = await persistDisabledStagedEmptySections(
+    staleProject as never,
+    42,
+    database as never,
+  );
+
+  assert.equal(calls.locks, 2);
+  assert.equal(calls.detached, 1);
+  assert.equal(calls.deleted, 1);
+  assert.equal(calls.updated, 0);
+  assert.equal(normalized.user_project_views[0].unsavedView, undefined);
 });
 
 test("a URL-pinned view keeps its personal setting through snapshot restore", () => {
@@ -396,7 +650,78 @@ test("a successful earlier toggle becomes the rollback baseline", () => {
   );
 });
 
-test("the command toggles both directions through the optimistic shared save", () => {
+test("a staged optimistic toggle patches the existing unsaved view", () => {
+  const applied = {
+    ...view("speed", "Show"),
+    ViewLastUsed: [{ board_empty_sections: "Show" }],
+  };
+  const project = projectWith({
+    unsaved: view("unsaved", "Hidden", true),
+    applied: applied as never,
+  });
+
+  const mutation = beginEmptySectionMutation(
+    undefined,
+    project.project_view as never,
+    { id: 1, setting: "Show", viewId: "speed", staged: true },
+  );
+
+  assert.equal(
+    getActiveEmptySectionSettingFromProjectView(mutation.projectView),
+    "Show",
+  );
+  assert.equal(
+    mutation.projectView.user_project_views[0].unsavedView?.board_empty_sections,
+    "Show",
+  );
+  assert.equal(
+    mutation.projectView.user_project_views[0].unsavedView?.board_empty_sections_staged,
+    true,
+  );
+});
+
+test("a failed rapid staged toggle returns to the last successful choice", () => {
+  const applied = {
+    ...view("speed", "Show"),
+    ViewLastUsed: [{ board_empty_sections: "Show" }],
+  };
+  const project = projectWith({ applied: applied as never });
+  const first = beginEmptySectionMutation(
+    undefined,
+    project.project_view as never,
+    { id: 1, setting: "Hidden", viewId: "speed", staged: true },
+  );
+  const second = beginEmptySectionMutation(
+    first.state,
+    first.projectView,
+    { id: 2, setting: "Show", viewId: "speed", staged: true },
+  );
+  const persistedHidden = projectWith({
+    unsaved: view("unsaved", "Hidden", true),
+    applied: applied as never,
+  }).project_view as never;
+
+  const firstSuccess = settleEmptySectionMutation(
+    second.state,
+    1,
+    true,
+    persistedHidden,
+  );
+  const secondFailure = settleEmptySectionMutation(
+    firstSuccess.state!,
+    2,
+    false,
+    firstSuccess.projectView,
+  );
+
+  assert.equal(firstSuccess.state?.baseline, "Hidden");
+  assert.equal(
+    getActiveEmptySectionSettingFromProjectView(secondFailure.projectView),
+    "Hidden",
+  );
+});
+
+test("the legacy command fallback keeps its optimistic personal save", () => {
   const saveHookSource = fs.readFileSync(
     path.join(root, "src/hooks/Homepage/Views/useKanbanViews.ts"),
     "utf8",
@@ -416,10 +741,11 @@ test("the command toggles both directions through the optimistic shared save", (
   assert.match(toggleSource, /current === "Hidden" \? "Show" : "Hidden"/);
   assert.match(saveSource, /beginEmptySectionMutation/);
   assert.match(saveSource, /settleEmptySectionMutation/);
+  const legacySource = saveSource.slice(saveSource.indexOf("const mutationId"));
   assert.ok(
-    saveSource.indexOf("beginEmptySectionMutation") <
-      saveSource.indexOf("apiHandler("),
-    "the active board must update before the network request starts",
+    legacySource.indexOf("beginEmptySectionMutation") <
+      legacySource.indexOf("enqueueBoardViewMutation("),
+    "the legacy active board must update before its network request starts",
   );
 });
 
@@ -436,7 +762,7 @@ test("the canonical URL view reaches the durable unsaved-view branch", () => {
   assert.match(source.slice(durableWrite), /board_empty_sections/);
 });
 
-test("the command saves against the URL-pinned view instead of the raw cache view", () => {
+test("the flagged command stages empty-column changes in the save-view routine", () => {
   const source = fs.readFileSync(
     path.join(root, "src/hooks/Homepage/Views/useKanbanViews.ts"),
     "utf8",
@@ -445,8 +771,82 @@ test("the command saves against the URL-pinned view instead of the raw cache vie
   const nextFunction = source.indexOf("const saveStalenessToViewAPI", saveStart);
   const saveSource = source.slice(saveStart, nextFunction);
 
-  assert.match(saveSource, /project\.project_view\?\.user_project_views\[0\]\?\.appliedView/);
-  assert.match(saveSource, /viewId: targetViewId/);
+  assert.match(source, /useFlag\(HTPR_6588_EMPTY_COLUMNS_SAVE_VIEW_FLAG\)/);
+  assert.match(saveSource, /if \(emptyColumnsSaveViewEnabled/);
+  assert.match(saveSource, /buildUnsavedBody\(queuedProject, \{\s*board_empty_sections: emptySection/);
+  assert.match(saveSource, /updateMode: STAGED_EMPTY_SECTIONS_UPDATE_MODE/);
   assert.match(saveSource, /updateMode: PERSONAL_EMPTY_SECTIONS_UPDATE_MODE/);
-  assert.doesNotMatch(saveSource, /baseViewId/);
+  assert.ok(
+    saveSource.indexOf("beginEmptySectionMutation") <
+      saveSource.indexOf("updateMode: STAGED_EMPTY_SECTIONS_UPDATE_MODE"),
+    "the staged path must update optimistically before its queued request",
+  );
+  assert.ok(
+    saveSource.indexOf("if (emptyColumnsSaveViewEnabled)") <
+      saveSource.indexOf("updateMode: PERSONAL_EMPTY_SECTIONS_UPDATE_MODE"),
+    "the flagged save-view path must run before the legacy personal auto-save",
+  );
+
+  const unsavedRoute = fs.readFileSync(
+    path.join(root, "src/pages/api/projects/views/unsaved-view.ts"),
+    "utf8",
+  );
+  assert.match(unsavedRoute, /isFeatureEnabled\(\s*HTPR_6588_EMPTY_COLUMNS_SAVE_VIEW_FLAG/);
+  assert.match(unsavedRoute, /req\.body\.updateMode === STAGED_EMPTY_SECTIONS_UPDATE_MODE/);
+  assert.match(unsavedRoute, /return res\.status\(409\)/);
+  assert.match(unsavedRoute, /board_empty_sections_staged: stagesEmptySections/);
+  assert.match(unsavedRoute, /\? \{ board_empty_sections_staged: true \}/);
+  assert.match(
+    unsavedRoute,
+    /personalEmptySections \?\? comparisonView\.board_empty_sections/,
+  );
+  assert.doesNotMatch(unsavedRoute, /view_Last_Used\.updateMany/);
+  assert.doesNotMatch(unsavedRoute, /clearProjectViewPersonalEmptySections/);
+
+  const projectViewReader = fs.readFileSync(
+    path.join(root, "src/utils/controllers/projects/views/viewsHelperAPIfunctions.ts"),
+    "utf8",
+  );
+  assert.match(projectViewReader, /isFeatureEnabled\(\s*HTPR_6588_EMPTY_COLUMNS_SAVE_VIEW_FLAG/);
+  assert.match(projectViewReader, /maskPersonalEmptySectionsForUnsavedView/);
+  assert.match(projectViewReader, /persistDisabledStagedEmptySections/);
+  assert.match(projectViewReader, /data: \{ unsavedViewId: null \}/);
+  assert.match(projectViewReader, /board_empty_sections_staged: false/);
+
+  const boardReader = fs.readFileSync(
+    path.join(root, "src/utils/controllers/projects/getBoardTasks.ts"),
+    "utf8",
+  );
+  assert.match(boardReader, /HTPR_6588_EMPTY_COLUMNS_SAVE_VIEW_FLAG/);
+  assert.match(boardReader, /maskPersonalEmptySectionsForUnsavedView/);
+
+  const schema = fs.readFileSync(
+    path.join(root, "src/prisma/schema.prisma"),
+    "utf8",
+  );
+  const migration = fs.readFileSync(
+    path.join(
+      root,
+      "src/prisma/migrations/20260919100000_stage_empty_sections_in_unsaved_view/migration.sql",
+    ),
+    "utf8",
+  );
+  assert.match(schema, /board_empty_sections_staged Boolean\s+@default\(false\)/);
+  assert.match(migration, /ADD COLUMN "board_empty_sections_staged" BOOLEAN NOT NULL DEFAULT false/);
+
+  const updateRoute = fs.readFileSync(
+    path.join(root, "src/pages/api/projects/views/update-view.ts"),
+    "utf8",
+  );
+  assert.match(updateRoute, /isFeatureEnabled\(\s*HTPR_6588_EMPTY_COLUMNS_SAVE_VIEW_FLAG/);
+  assert.match(updateRoute, /board_empty_sections_staged: false/);
+  assert.match(updateRoute, /data: \{ board_empty_sections: null \}/);
+
+  const createRoute = fs.readFileSync(
+    path.join(root, "src/pages/api/projects/views/create-view.ts"),
+    "utf8",
+  );
+  assert.match(createRoute, /isFeatureEnabled\(\s*HTPR_6588_EMPTY_COLUMNS_SAVE_VIEW_FLAG/);
+  assert.match(createRoute, /board_empty_sections_staged: false/);
+  assert.match(createRoute, /data: \{ board_empty_sections: null \}/);
 });

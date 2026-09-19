@@ -1,5 +1,115 @@
+import {
+  HTPR_6588_EMPTY_COLUMNS_SAVE_VIEW_FLAG,
+  isFeatureEnabled,
+} from "@/lib/flags";
 import prisma from "@/lib/prisma";
+import type { IProjectView } from "@/models/model";
+import { Prisma } from "@prisma/client";
 import { sanitizeProjectViewBoardFilters } from "@/utils/helperFunctions/Views/BoardFilterSanitizer";
+import {
+  maskPersonalEmptySectionsForUnsavedView,
+  normalizeDisabledStagedEmptySections,
+} from "@/utils/helperFunctions/Views/ViewsHelperFunctions";
+
+export const persistDisabledStagedEmptySections = async (
+  projectView: IProjectView,
+  currentUserId: number,
+  database: Pick<typeof prisma, "$transaction"> = prisma,
+): Promise<IProjectView> => database.$transaction(async (tx) => {
+  const [lockedUserProjectView] = await tx.$queryRaw<
+    Array<{ unsavedViewId: string | null }>
+  >(
+    Prisma.sql`SELECT "unsavedViewId" FROM "User_Project_View" WHERE "userId" = ${currentUserId} AND "project_view_id" = ${projectView.id} FOR UPDATE`,
+  );
+
+  if (lockedUserProjectView?.unsavedViewId) {
+    await tx.$queryRaw<Array<{ id: string }>>(
+      Prisma.sql`SELECT "id" FROM "View" WHERE "id" = ${lockedUserProjectView.unsavedViewId} AND "userId" = ${currentUserId} AND "project_view_id" = ${projectView.id} FOR UPDATE`,
+    );
+  }
+
+  const currentState = await tx.project_View.findUnique({
+    where: { id: projectView.id },
+    select: {
+      default_view: {
+        include: {
+          ViewLastUsed: {
+            where: { userId: currentUserId },
+            select: { board_empty_sections: true },
+            take: 1,
+          },
+        },
+      },
+      user_project_views: {
+        where: { userId: currentUserId },
+        select: {
+          appliedView: {
+            include: {
+              ViewLastUsed: {
+                where: { userId: currentUserId },
+                select: { board_empty_sections: true },
+                take: 1,
+              },
+            },
+          },
+          unsavedView: true,
+          userId: true,
+          appliedViewId: true,
+          unsavedViewId: true,
+          project_view_id: true,
+          view_order: true,
+        },
+        take: 1,
+      },
+    },
+  });
+  const lockedProjectView = sanitizeProjectViewBoardFilters({
+    ...projectView,
+    board_empty_sections_staging_enabled: false,
+    default_view: currentState?.default_view,
+    user_project_views: currentState?.user_project_views ?? [],
+  }) as unknown as IProjectView;
+  const normalization = normalizeDisabledStagedEmptySections(lockedProjectView);
+  if (!normalization.unsavedViewId || !normalization.restoredSetting) {
+    return normalization.projectView;
+  }
+
+  if (normalization.stagedOnly) {
+    const detached = await tx.user_Project_View.updateMany({
+      where: {
+        userId: currentUserId,
+        project_view_id: projectView.id,
+        unsavedViewId: normalization.unsavedViewId,
+      },
+      data: { unsavedViewId: null },
+    });
+    if (detached.count === 1) {
+      await tx.view.deleteMany({
+        where: {
+          id: normalization.unsavedViewId,
+          userId: currentUserId,
+          project_view_id: projectView.id,
+          board_empty_sections_staged: true,
+        },
+      });
+    }
+    return normalization.projectView;
+  }
+
+  await tx.view.updateMany({
+    where: {
+      id: normalization.unsavedViewId,
+      userId: currentUserId,
+      project_view_id: projectView.id,
+      board_empty_sections_staged: true,
+    },
+    data: {
+      board_empty_sections: normalization.restoredSetting,
+      board_empty_sections_staged: false,
+    },
+  });
+  return normalization.projectView;
+});
 
 const getProjectView = async (projectId: number, currentUserId: number) => {
   const project_view_updated = await prisma.project_View.findUnique({
@@ -70,7 +180,19 @@ const getProjectView = async (projectId: number, currentUserId: number) => {
       },
     },
   });
-  return sanitizeProjectViewBoardFilters(project_view_updated);
+  const sanitizedProjectView = sanitizeProjectViewBoardFilters(project_view_updated);
+  if (!sanitizedProjectView?.user_project_views[0]?.unsavedView) {
+    return sanitizedProjectView;
+  }
+  const emptyColumnsSaveViewEnabled = await isFeatureEnabled(
+    HTPR_6588_EMPTY_COLUMNS_SAVE_VIEW_FLAG,
+    currentUserId,
+  );
+  const typedProjectView = sanitizedProjectView as unknown as IProjectView;
+  const normalizedProjectView = emptyColumnsSaveViewEnabled
+    ? maskPersonalEmptySectionsForUnsavedView(typedProjectView, true)
+    : await persistDisabledStagedEmptySections(typedProjectView, currentUserId);
+  return normalizedProjectView as unknown as typeof sanitizedProjectView;
 };
 
 export const getUniqueSlug = async (

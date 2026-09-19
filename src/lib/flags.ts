@@ -79,6 +79,7 @@ import {
   HTPR_6556_MOBILE_DESCRIPTION_FIRST_FLAG,
   HTPR_6561_DESCRIPTION_STRUCTURE_FLAG,
   HTPR_6542_TEAM_SCOPED_MANAGEMENT_KEYS_FLAG,
+  HTPR_6588_EMPTY_COLUMNS_SAVE_VIEW_FLAG,
 } from "@/lib/flags/keys";
 
 // Re-exported so server code keeps importing keys from here. Client components must
@@ -102,6 +103,12 @@ const FEATURE_FLAG_QA_USER = {
 const RETIRED_FEATURE_FLAG_KEYS = new Set(["hyfa-43-factory-owner-preview"]);
 
 const FEATURE_FLAG_DEFINITIONS = [
+  {
+    key: HTPR_6588_EMPTY_COLUMNS_SAVE_VIEW_FLAG,
+    shippedOn: "2026-09-19",
+    description:
+      "Stages empty-column visibility as an unsaved view change so users can save or reset it with the existing view controls.",
+  },
   {
     key: HTPR_6470_PROJECT_DELETE_FLAG,
     shippedOn: "2026-09-18",

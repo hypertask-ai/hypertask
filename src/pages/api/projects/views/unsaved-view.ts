@@ -1,5 +1,13 @@
 // route = "/api/projects/views/unsaved-view"
+import {
+  HTPR_6588_EMPTY_COLUMNS_SAVE_VIEW_FLAG,
+  isFeatureEnabled,
+} from "@/lib/flags";
 import prisma from "@/lib/prisma";
+import {
+  isBoardEmptySectionSetting,
+  STAGED_EMPTY_SECTIONS_UPDATE_MODE,
+} from "@/models/Views/model";
 import getProjectView from "@/utils/controllers/projects/views/viewsHelperAPIfunctions";
 import { isDeepEqual } from "@/utils/helperFunctions/helperFunctions";
 import { sanitizeBoardFilters } from "@/utils/helperFunctions/Views/BoardFilterSanitizer";
@@ -148,6 +156,42 @@ const handler: NextApiHandler = async (
       ) {
         return res.status(403).json({ message: "View is not accessible" });
       }
+      const hasValidEmptySections =
+        isBoardEmptySectionSetting(board_empty_sections);
+      const requestsStagedEmptySections =
+        req.body.updateMode === STAGED_EMPTY_SECTIONS_UPDATE_MODE;
+      const emptyColumnsSaveViewEnabled =
+        hasValidEmptySections &&
+        await isFeatureEnabled(
+          HTPR_6588_EMPTY_COLUMNS_SAVE_VIEW_FLAG,
+          currentUser.id,
+        );
+      if (requestsStagedEmptySections && !emptyColumnsSaveViewEnabled) {
+        return res.status(409).json({ message: "Staged empty columns are disabled" });
+      }
+      const stagesEmptySections =
+        requestsStagedEmptySections && emptyColumnsSaveViewEnabled;
+      const personalEmptySectionsViewId =
+        baseView?.id ??
+        user_project_view?.appliedView?.id ??
+        projectView.default_view?.id;
+      const hasStagedEmptySections =
+        user_project_view?.unsavedView?.board_empty_sections_staged === true;
+      const preservesStagedEmptySections =
+        emptyColumnsSaveViewEnabled && hasStagedEmptySections;
+      const personalEmptySections =
+        (stagesEmptySections || preservesStagedEmptySections) &&
+        personalEmptySectionsViewId
+        ? (await prisma.view_Last_Used.findUnique({
+            where: {
+              user_view_last_used: {
+                userId: currentUser.id,
+                viewId: personalEmptySectionsViewId,
+              },
+            },
+            select: { board_empty_sections: true },
+          }))?.board_empty_sections
+        : undefined;
 
       // Older clients do not send board_layout. Preserve the tab/base layout
       // in that case; only an explicit null means "inherit browser".
@@ -208,7 +252,8 @@ const handler: NextApiHandler = async (
               board_sorting_order: baseView.board_sorting_order,
               board_sorting_stack: baseView.board_sorting_stack ?? [],
               board_subtask_setting: baseView.board_subtask_setting,
-              board_empty_sections: baseView.board_empty_sections,
+              board_empty_sections:
+                personalEmptySections ?? baseView.board_empty_sections,
               board_staleness: baseView.board_staleness,
               board_show_archived: baseView.board_show_archived,
               table_sort_column: baseView.table_sort_column,
@@ -223,15 +268,20 @@ const handler: NextApiHandler = async (
         if (!projectViewResponse) {
           return res.status(404).json({ message: "Project view not found" });
         }
-        return res.status(200).json(
-          applyTransientTabSettings(
-            projectViewResponse,
-            currentUser.id,
-            baseViewId == null ? null : baseView,
-            settingsFromReqBody,
-            !isDeepEqual(settingsFromReqBody, comparisonSettings),
-          )
+        const transientProjectView = applyTransientTabSettings(
+          projectViewResponse,
+          currentUser.id,
+          baseViewId == null ? null : baseView,
+          {
+            ...settingsFromReqBody,
+            board_empty_sections_staged: stagesEmptySections,
+          },
+          !isDeepEqual(settingsFromReqBody, comparisonSettings),
         );
+        return res.status(200).json({
+          ...transientProjectView,
+          board_empty_sections_staging_enabled: emptyColumnsSaveViewEnabled,
+        });
       }
 
       const resolvedAppliedViewId =
@@ -253,6 +303,7 @@ const handler: NextApiHandler = async (
             board_subtask_setting,
             board_filters: sanitizedBoardFilters,
             board_empty_sections,
+            board_empty_sections_staged: stagesEmptySections,
             board_staleness: board_staleness ?? null,
             board_show_archived: resolvedShowArchived,
             table_sort_column: sanitizedTableSort.column,
@@ -358,7 +409,8 @@ const handler: NextApiHandler = async (
               board_sorting_stack:
                 comparisonView.board_sorting_stack ?? [],
               board_subtask_setting: comparisonView.board_subtask_setting,
-              board_empty_sections: comparisonView.board_empty_sections,
+              board_empty_sections:
+                personalEmptySections ?? comparisonView.board_empty_sections,
               board_staleness: comparisonView.board_staleness,
               board_show_archived: comparisonView.board_show_archived,
               table_sort_column: comparisonView.table_sort_column,
@@ -400,6 +452,11 @@ const handler: NextApiHandler = async (
                 board_sorting_order,
                 board_sorting_stack: board_sorting_stack ?? [],
                 board_empty_sections,
+                ...(stagesEmptySections
+                  ? { board_empty_sections_staged: true }
+                  : hasStagedEmptySections && !emptyColumnsSaveViewEnabled
+                    ? { board_empty_sections_staged: false }
+                    : {}),
                 board_staleness: board_staleness ?? null,
                 board_show_archived: resolvedShowArchived,
                 table_sort_column: sanitizedTableSort.column,

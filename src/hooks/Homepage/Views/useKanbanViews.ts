@@ -1,4 +1,6 @@
 import UpdateKanban from "@/hooks/MultiPages/useUpdateTaskInBoards";
+import { useFlag } from "@/hooks/useFlag";
+import { HTPR_6588_EMPTY_COLUMNS_SAVE_VIEW_FLAG } from "@/lib/flags/keys";
 import {
   deleteRenameViewAPIRoute,
   resetToDefaultAPIRoute,
@@ -16,6 +18,7 @@ import {
 import {
   isBoardEmptySectionSetting,
   PERSONAL_EMPTY_SECTIONS_UPDATE_MODE,
+  STAGED_EMPTY_SECTIONS_UPDATE_MODE,
   TBoardEmptySections,
   TBoardSortingLevel,
   TBoardSortingViewMode,
@@ -68,6 +71,7 @@ let emptySectionMutationId = 0
 const emptySectionMutations = new Map<string, TEmptySectionMutationState>()
 
 const useKanbanViews = (project: IProject | null) => {
+  const emptyColumnsSaveViewEnabled = useFlag(HTPR_6588_EMPTY_COLUMNS_SAVE_VIEW_FLAG);
   const hasUserSelectedView =
     project?.project_view?.user_project_views[0]?.appliedView;
   const { getProjectIdxAndAllData, updateProjectView } =
@@ -288,19 +292,26 @@ const useKanbanViews = (project: IProject | null) => {
     emptySection: TBoardEmptySections
   ) => {
     const mutationId = ++emptySectionMutationId
-    const targetView =
-      project.project_view?.user_project_views[0]?.appliedView ??
-      project.project_view?.default_view
-    const targetViewId = targetView?.id
-    const mutationKey = `${project.id}:${targetViewId ?? "unsaved"}`
     const { allData, projectToUpdateIndex } = getProjectIdxAndAllData(project.id)
     const cachedProject = allData?.updatedProjects[projectToUpdateIndex]
-    const projectView = cachedProject?.project_view ?? project.project_view
+    const currentProject = cachedProject ?? project
+    const targetView =
+      currentProject.project_view?.user_project_views[0]?.appliedView ??
+      currentProject.project_view?.default_view
+    const targetViewId = targetView?.id
+    const mutationMode = emptyColumnsSaveViewEnabled ? "staged" : "personal"
+    const mutationKey = `${project.id}:${targetViewId ?? "unsaved"}:${mutationMode}`
+    const projectView = currentProject.project_view
     if (projectView && projectToUpdateIndex !== -1) {
       const optimistic = beginEmptySectionMutation(
         emptySectionMutations.get(mutationKey),
         projectView,
-        { id: mutationId, setting: emptySection, viewId: targetViewId },
+        {
+          id: mutationId,
+          setting: emptySection,
+          viewId: targetViewId,
+          staged: emptyColumnsSaveViewEnabled,
+        },
       )
       emptySectionMutations.set(mutationKey, optimistic.state)
       updateProjectView(projectToUpdateIndex, optimistic.projectView)
@@ -336,10 +347,13 @@ const useKanbanViews = (project: IProject | null) => {
       if (!succeeded) toast.error("Empty column visibility could not be saved")
     }
 
-    if (!targetViewId) {
+    if (emptyColumnsSaveViewEnabled || !targetViewId) {
       return apiHandler(
         (queuedProject) => buildUnsavedBody(queuedProject, {
           board_empty_sections: emptySection,
+          ...(emptyColumnsSaveViewEnabled
+            ? { updateMode: STAGED_EMPTY_SECTIONS_UPDATE_MODE }
+            : {}),
         }),
         project,
         settleMutation,

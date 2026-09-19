@@ -143,6 +143,11 @@ test("declared flags remain listed with ticket details and can be changed", asyn
         mode: "OWNER_AND_QA",
         updatedAt: null,
       },
+      {
+        key: "htpr-4638-ai-directory-metadata",
+        mode: "OWNER_AND_QA",
+        updatedAt: null,
+      },
       { key: "htpr-4857-add-to-slack", mode: "OWNER_AND_QA", updatedAt: null },
       { key: "htpr-5898-page-mentions", mode: "OWNER_AND_QA", updatedAt: null },
       { key: "htpr-5906-shortcut-nudges", mode: "OWNER_AND_QA", updatedAt: null },
@@ -462,6 +467,11 @@ test("declared flags remain listed with ticket details and can be changed", asyn
       },
       {
         key: "htpr-6561-preserve-ai-edited-description-structure",
+        mode: "OWNER_AND_QA",
+        updatedAt: null,
+      },
+      {
+        key: "htpr-6588-empty-columns-save-view",
         mode: "OWNER_AND_QA",
         updatedAt: null,
       },
