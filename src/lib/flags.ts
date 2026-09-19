@@ -80,6 +80,7 @@ import {
   HTPR_6561_DESCRIPTION_STRUCTURE_FLAG,
   HTPR_6542_TEAM_SCOPED_MANAGEMENT_KEYS_FLAG,
   HTPR_6585_BOARD_REPORTS_FLAG,
+  HTPR_6587_PROJECT_UPDATE_FLAG,
   HTPR_6588_EMPTY_COLUMNS_SAVE_VIEW_FLAG,
 } from "@/lib/flags/keys";
 
@@ -104,6 +105,12 @@ const FEATURE_FLAG_QA_USER = {
 const RETIRED_FEATURE_FLAG_KEYS = new Set(["hyfa-43-factory-owner-preview"]);
 
 const FEATURE_FLAG_DEFINITIONS = [
+  {
+    key: HTPR_6587_PROJECT_UPDATE_FLAG,
+    shippedOn: "2026-09-19",
+    description:
+      "Lets board owners and members rename an accessible board through the Hypertask CLI.",
+  },
   {
     key: HTPR_6585_BOARD_REPORTS_FLAG,
     shippedOn: "2026-09-19",

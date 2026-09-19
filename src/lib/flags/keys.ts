@@ -105,6 +105,8 @@ export const HTPR_6588_EMPTY_COLUMNS_SAVE_VIEW_FLAG =
   "htpr-6588-empty-columns-save-view";
 export const HTPR_6585_BOARD_REPORTS_FLAG =
   "htpr-6585-board-reports";
+export const HTPR_6587_PROJECT_UPDATE_FLAG =
+  "htpr-6587-project-update";
 /** Sent on chat.message when HTPR-6407 is on so agent replies lead with the next action. */
 export const AGENT_CHAT_ADHD_REPLY_GUIDANCE =
   "Lead with the next action. Keep replies short. Number steps. End with one concrete next action when something remains open.";
