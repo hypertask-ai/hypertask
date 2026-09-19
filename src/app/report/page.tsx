@@ -4,12 +4,10 @@ import { redirect } from "next/navigation";
 
 import { requireServerCookieUser } from "@/lib/auth/serverUser";
 import { resolveBoardRouteTitleRequest } from "@/lib/boardRouteTitle";
-// eslint-disable-next-line @typescript-eslint/no-restricted-imports -- This server page enforces both report gates before loading report data.
+// eslint-disable-next-line @typescript-eslint/no-restricted-imports -- This server page enforces the report gate before loading report data.
 import { isFeatureEnabled } from "@/lib/flags";
-import {
-  HTPR_6585_BOARD_REPORTS_FLAG,
-  NATIVE_REPORTS_ENABLED,
-} from "@/lib/flags/keys";
+import { HTPR_6585_BOARD_REPORTS_FLAG } from "@/lib/flags/keys";
+import { NATIVE_REPORTS_ENABLED } from "@/lib/flags/keys";
 import type { IUser } from "@/models/model";
 import { listAllReportsForUser } from "@/utils/controllers/reports/reportService";
 import ReportsOverview from "./ReportsOverview";
@@ -29,22 +27,18 @@ export default async function Page() {
     {},
     cookieStore.get("previousBoard")?.value
   );
-  const [data, nativeReportsEnabled] = await Promise.all([
-    listAllReportsForUser(user.id, projectId ? Number(projectId) : null),
-    isFeatureEnabled(NATIVE_REPORTS_ENABLED, user.id),
-  ]);
-
-  return nativeReportsEnabled ? (
-    <ReportsOverview
-      currentUser={user}
-      nativeReportsEnabled
-      {...data}
-    />
-  ) : (
-    <ReportsOverview
-      currentUser={user}
-      nativeReportsEnabled={false}
-      {...data}
-    />
+  const data = await listAllReportsForUser(
+    user.id,
+    projectId ? Number(projectId) : null
   );
+  const nativeReportsEnabled = await isFeatureEnabled(
+    NATIVE_REPORTS_ENABLED,
+    user.id
+  );
+
+  if (nativeReportsEnabled) {
+    return <ReportsOverview currentUser={user} nativeReportsEnabled {...data} />;
+  }
+
+  return <ReportsOverview currentUser={user} {...data} />;
 }
