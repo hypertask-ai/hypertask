@@ -211,6 +211,42 @@ test("mobile AI result merges into one direct-create snapshot", () => {
   );
 });
 
+test("mobile AI result replaces the submitted draft but preserves later edits", () => {
+  const submittedDescription = "<p>Draft to improve</p>";
+  const generatedResult = {
+    title: "Generated title",
+    description: "<p>Generated description</p>",
+  };
+  const current = {
+    title: "Keep my title",
+    description: submittedDescription,
+    assignees: [],
+    attachments: [],
+  };
+
+  const mergedSubmittedDraft = mergeMobileCreateTaskWriterResult(
+    current,
+    generatedResult,
+    undefined,
+    undefined,
+    submittedDescription,
+  );
+  assert.equal(mergedSubmittedDraft.description, generatedResult.description);
+
+  const editedWhileWaiting = {
+    ...current,
+    description: "<p>Keep my later edit</p>",
+  };
+  const mergedLaterEdit = mergeMobileCreateTaskWriterResult(
+    editedWhileWaiting,
+    generatedResult,
+    undefined,
+    undefined,
+    submittedDescription,
+  );
+  assert.equal(mergedLaterEdit.description, editedWhileWaiting.description);
+});
+
 test("mobile AI result preserves edits made in the classic form", () => {
   const current = {
     title: "Keep my title",
@@ -257,8 +293,10 @@ test("board create entry points follow the AI-first flag", async () => {
       Object.getOwnPropertyDescriptor(global, name),
     ]),
   );
+  const previousScrollIntoView = testDom.window.HTMLElement.prototype.scrollIntoView;
   let aiFirstTaskWriterEnabled = false;
   let quickEntryEnabled = false;
+  const activeItemWrites = [];
   const moduleMocks = new Map([
     [path.join(root, "src/hooks/useFlag.tsx"), {
       useFlag: (key) => {
@@ -269,7 +307,7 @@ test("board create entry points follow the AI-first flag", async () => {
     }],
     [path.join(root, "src/lib/state.tsx"), {
       useRecoilState: (atom) => React.useState(atom.default),
-      useSetRecoilState: () => () => {},
+      useSetRecoilState: () => (value) => activeItemWrites.push(value),
     }],
     [path.join(root, "src/store/index.ts"), {
       activeItemAtom: { default: null },
@@ -315,6 +353,7 @@ test("board create entry points follow the AI-first flag", async () => {
     global.document = testDom.window.document;
     global.navigator = testDom.window.navigator;
     global.HTMLElement = testDom.window.HTMLElement;
+    global.HTMLElement.prototype.scrollIntoView = () => {};
     global.MouseEvent = testDom.window.MouseEvent;
     global.KeyboardEvent = testDom.window.KeyboardEvent;
     global.IS_REACT_ACT_ENVIRONMENT = true;
@@ -341,11 +380,23 @@ test("board create entry points follow the AI-first flag", async () => {
         "src/components/PageComponents/Kanban/KanbanSectionComponents/NewTaskButton.tsx",
       ),
     ).default;
+    const NewTask = hookJiti(
+      path.join(root, "src/components/Common/newTask.tsx"),
+    ).default;
     const { MobileViewContext } = hookJiti(
       path.join(root, "src/lib/contexts/mobileContext.tsx"),
     );
     const Harness = () => {
-      const { createTaskAt, position, showAddItem } = useSections({
+      const {
+        createTaskAt,
+        invokeCreateItem,
+        newTaskDraftTitle,
+        onCancelCreate,
+        position,
+        setNewTaskDraftTitle,
+        showAddItem,
+        topInputRef,
+      } = useSections({
         items: [],
         active: true,
         index: 0,
@@ -359,11 +410,19 @@ test("board create entry points follow the AI-first flag", async () => {
           "data-quick-entry-open": showAddItem ? "true" : "false",
           "data-quick-entry-position": position ?? "",
         },
-        React.createElement(NewTaskButton, {
-          buttonPosition: "top",
-          createTaskAt,
-          sectionPayload,
-        }),
+        showAddItem
+          ? React.createElement(NewTask, {
+              title: newTaskDraftTitle,
+              onTitleChange: setNewTaskDraftTitle,
+              inputRef: topInputRef,
+              invokeCreateItem,
+              onCancelCreate,
+            })
+          : React.createElement(NewTaskButton, {
+              buttonPosition: "top",
+              createTaskAt,
+              sectionPayload,
+            }),
       );
     };
     const container = document.getElementById("root");
@@ -404,6 +463,17 @@ test("board create entry points follow the AI-first flag", async () => {
       Object.defineProperty(shortcut, "keyCode", { value: keyCode });
       await React.act(async () => document.dispatchEvent(shortcut));
     };
+    const cancelQuickEntry = async () => {
+      const input = container.querySelector("input");
+      assert.ok(input);
+      const escape = new KeyboardEvent("keydown", {
+        key: "Escape",
+        code: "Escape",
+        bubbles: true,
+      });
+      Object.defineProperty(escape, "keyCode", { value: 27 });
+      await React.act(async () => input.dispatchEvent(escape));
+    };
 
     await renderHarness(true);
     await clickColumnPlus();
@@ -438,10 +508,14 @@ test("board create entry points follow the AI-first flag", async () => {
     assert.equal(createCalls.length, modalCallsBeforeQuickEntry);
     assert.equal(container.firstElementChild.dataset.quickEntryOpen, "true");
     assert.equal(container.firstElementChild.dataset.quickEntryPosition, "top");
+    await cancelQuickEntry();
+    assert.equal(container.firstElementChild.dataset.quickEntryOpen, "false");
+    assert.ok(container.querySelector(".create-new-task-button"));
 
     await dispatchShortcut({ key: "c", code: "KeyC", keyCode: 67 });
     await dispatchShortcut({ key: "c", code: "KeyC", keyCode: 67, altKey: true });
     assert.equal(container.firstElementChild.dataset.quickEntryPosition, "top");
+    await cancelQuickEntry();
     await dispatchShortcut({
       key: "C",
       code: "KeyC",
@@ -450,7 +524,10 @@ test("board create entry points follow the AI-first flag", async () => {
       shiftKey: true,
     });
     assert.equal(container.firstElementChild.dataset.quickEntryPosition, "bottom");
+    await cancelQuickEntry();
     await dispatchShortcut({ key: "C", code: "KeyC", keyCode: 67, shiftKey: true });
+    assert.ok(activeItemWrites.length >= 3);
+    assert.equal(activeItemWrites.every((value) => value === null), true);
 
     assert.deepEqual(createCalls.slice(modalCallsBeforeQuickEntry), [
       { payload: sectionPayload, defaultEditFocus: undefined },
@@ -464,6 +541,11 @@ test("board create entry points follow the AI-first flag", async () => {
     for (const [filename, previous] of previousModules) {
       if (previous === undefined) delete require.cache[filename];
       else require.cache[filename] = previous;
+    }
+    if (previousScrollIntoView === undefined) {
+      delete testDom.window.HTMLElement.prototype.scrollIntoView;
+    } else {
+      testDom.window.HTMLElement.prototype.scrollIntoView = previousScrollIntoView;
     }
     testDom.window.close();
     for (const [name, descriptor] of previousGlobals) {

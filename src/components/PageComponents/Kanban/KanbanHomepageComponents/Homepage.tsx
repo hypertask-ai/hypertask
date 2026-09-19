@@ -222,7 +222,6 @@ const HomePage = ({
   const { setBoardColumnsViewAPI } = useKanbanViews(_currentProject);
   useBoardRealtime(_currentProject?.id, {
     accountId: currentUser.id,
-    enabled: secondaryStartupEnabled,
   });
   const [loading, setLoading] = useState<boolean>(false)
   const [renderAllTasks, setRenderAllTasks] = useState(false);
