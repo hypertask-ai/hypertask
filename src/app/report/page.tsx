@@ -34,16 +34,10 @@ export default async function Page() {
     isFeatureEnabled(NATIVE_REPORTS_ENABLED, user.id),
   ]);
 
-  return nativeReportsEnabled ? (
+  return (
     <ReportsOverview
       currentUser={user}
-      nativeReportsEnabled
-      {...data}
-    />
-  ) : (
-    <ReportsOverview
-      currentUser={user}
-      nativeReportsEnabled={false}
+      nativeReportsEnabled={nativeReportsEnabled}
       {...data}
     />
   );
