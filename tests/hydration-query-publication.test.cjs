@@ -51,7 +51,7 @@ function tree(client, request, onRequest, onPublished) {
   );
 }
 
-test("hydration-sensitive production queries and flags use the component gate", () => {
+test("hydration-sensitive production queries and flags use the document gate", () => {
   const inbox = read("src/hooks/Inbox/useGetNotifications.ts");
   const boards = read("src/hooks/Homepage/useGetBoards.ts");
   const flags = read("src/hooks/useFlag.tsx");
@@ -66,22 +66,31 @@ test("hydration-sensitive production queries and flags use the component gate", 
   assert.match(flags, /return hydrated && flags\[key\] === true/);
 });
 
-test("an early result is not published until its component hydrates", { timeout: 5_000 }, async () => {
+test("a shared query waits until streamed consumers can hydrate", { timeout: 5_000 }, async () => {
   const earlyResult = Promise.resolve("early-result");
   let requests = 0;
   const onRequest = () => {
     requests += 1;
   };
-  const serverMarkup = renderToString(
-    tree(new QueryClient(), earlyResult, onRequest, () => {}),
+  const serverClient = new QueryClient();
+  const shellMarkup = renderToString(
+    tree(serverClient, earlyResult, onRequest, () => {}),
+  );
+  const routeMarkup = renderToString(
+    tree(serverClient, earlyResult, onRequest, () => {}),
   );
 
-  assert.match(serverMarkup, /server-placeholder/);
+  assert.match(shellMarkup, /server-placeholder/);
+  assert.match(routeMarkup, /server-placeholder/);
   assert.equal(requests, 0);
-  await earlyResult;
 
-  const dom = new JSDOM(`<div id="root">${serverMarkup}</div>`, {
-    url: "https://app.hypertask.ai/inbox",
+  const dom = new JSDOM(
+    `<div id="shell">${shellMarkup}</div><div id="route">${routeMarkup}</div>`,
+    { url: "https://app.hypertask.ai/inbox", pretendToBeVisual: true },
+  );
+  Object.defineProperty(dom.window.document, "readyState", {
+    configurable: true,
+    value: "loading",
   });
   const testGlobals = {
     window: dom.window,
@@ -105,30 +114,52 @@ test("an early result is not published until its component hydrates", { timeout:
   }
 
   const recoverableErrors = [];
-  const container = dom.window.document.getElementById("root");
+  const shell = dom.window.document.getElementById("shell");
+  const route = dom.window.document.getElementById("route");
+  const client = new QueryClient();
   let resolvePublished;
   const published = new Promise((resolve) => {
     resolvePublished = resolve;
   });
   const onPublished = () => resolvePublished();
-  let hydratedRoot;
+  const hydratedRoots = [];
   try {
     await React.act(async () => {
-      hydratedRoot = hydrateRoot(
-        container,
-        tree(new QueryClient(), earlyResult, onRequest, onPublished),
-        { onRecoverableError: (error) => recoverableErrors.push(error) },
+      hydratedRoots.push(
+        hydrateRoot(
+          shell,
+          tree(client, earlyResult, onRequest, onPublished),
+          { onRecoverableError: (error) => recoverableErrors.push(error) },
+        ),
       );
     });
+    assert.equal(requests, 0);
+    assert.equal(route.textContent, "server-placeholder");
+
+    await React.act(async () => {
+      hydratedRoots.push(
+        hydrateRoot(
+          route,
+          tree(client, earlyResult, onRequest, onPublished),
+          { onRecoverableError: (error) => recoverableErrors.push(error) },
+        ),
+      );
+    });
+    Object.defineProperty(dom.window.document, "readyState", {
+      configurable: true,
+      value: "complete",
+    });
+    dom.window.dispatchEvent(new dom.window.Event("load"));
     await React.act(() => published);
 
     assert.equal(recoverableErrors.length, 0);
     assert.equal(requests, 1);
-    assert.equal(container.textContent, "early-result");
+    assert.equal(shell.textContent, "early-result");
+    assert.equal(route.textContent, "early-result");
   } finally {
-    if (hydratedRoot) {
-      await React.act(async () => hydratedRoot.unmount());
-    }
+    await React.act(async () => {
+      for (const hydratedRoot of hydratedRoots) hydratedRoot.unmount();
+    });
     dom.window.close();
     for (const [key, descriptor] of previousGlobals) {
       if (descriptor) Object.defineProperty(global, key, descriptor);
