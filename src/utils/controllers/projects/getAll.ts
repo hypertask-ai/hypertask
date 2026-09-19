@@ -78,7 +78,7 @@ const getAll = async (
         const sanitizedProject = sanitizeProjectBoardFilters(project);
         if (
           !("project_view" in sanitizedProject) ||
-          !sanitizedProject.project_view?.user_project_views[0]?.unsavedView
+          !sanitizedProject.project_view
         ) {
           return sanitizedProject;
         }
