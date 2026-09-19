@@ -112,7 +112,7 @@ const Commands = (props: Props) => {
   const { data: projects = [] } = useGetAllProjectsMinimal([
     "projectsAllMinimal",
   ]);
-  const allCommands_ = useMemo(() => {
+  let allCommands_ = useMemo(() => {
     // eslint-disable-next-line react-hooks/purity -- frecency scores are intentionally computed against the render-time clock; memo deps control recompute
     const now = Date.now();
     const layoutCommandName =
@@ -171,12 +171,6 @@ const Commands = (props: Props) => {
               copyCurrentUrlEnabled) &&
             (command.commandMode !== CommandMode.ToggleBoardTimeTracking ||
               !!currentProject) &&
-            (reportsEnabled ||
-              ![
-                CommandMode.GotoReports,
-                CommandMode.GotoBoardVelocityReport,
-                CommandMode.GenerateStatusUpdate,
-              ].includes(command.commandMode)) &&
             (command.commandMode !== CommandMode.ConfigureTableColumns ||
               boardLayout === "table" ||
               (onMyTasks && myTasksViewsEnabled && myTasksTableColumnsEnabled)) &&
@@ -315,9 +309,24 @@ const Commands = (props: Props) => {
     myTasksViewsEnabled,
     myTasksTableColumnsEnabled,
     projects,
-    reportsEnabled,
     showByokApiKeys,
   ])
+  const commandsWithoutReports = useMemo(() => {
+    const reportCommandModes = new Set([
+      CommandMode.GotoReports,
+      CommandMode.GotoBoardVelocityReport,
+      CommandMode.GenerateStatusUpdate,
+    ]);
+    return allCommands_.map((group) => ({
+      ...group,
+      commandLists: group.commandLists.filter(
+        (command) => !reportCommandModes.has(command.commandMode)
+      ),
+    }));
+  }, [allCommands_]);
+  if (!reportsEnabled) {
+    allCommands_ = commandsWithoutReports;
+  }
 
   const emptyQueryCommands = useMemo(() => {
     // Archiving is destructive and the first group is default-highlighted, so an

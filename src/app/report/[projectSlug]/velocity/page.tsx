@@ -2,6 +2,9 @@ import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 
 import { requireServerCookieUser } from "@/lib/auth/serverUser";
+// eslint-disable-next-line @typescript-eslint/no-restricted-imports -- This server page enforces the report gate before loading board data.
+import { isFeatureEnabled } from "@/lib/flags";
+import { HTPR_6585_BOARD_REPORTS_FLAG } from "@/lib/flags/keys";
 import prisma from "@/lib/prisma";
 import type { IUser } from "@/models/model";
 import { getProjectWhere } from "@/utils/controllers/projects/getAllIncludes";
@@ -33,6 +36,10 @@ export async function generateMetadata({
 
 export default async function Page({ params }: PageProps) {
   const user: IUser = await requireServerCookieUser();
+  if (!(await isFeatureEnabled(HTPR_6585_BOARD_REPORTS_FLAG, user.id))) {
+    redirect("/unauthorized");
+  }
+
   const { projectSlug } = await params;
   const projectId = parseProjectSlug(projectSlug);
 
