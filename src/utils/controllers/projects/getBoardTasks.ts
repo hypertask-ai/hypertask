@@ -55,12 +55,13 @@ const getBoardTasks = async (
       return { status: 403, json: { message: "No access to this board" } };
     }
 
-    const [attributionEnabled, emptyColumnsSaveViewEnabled] = await Promise.all([
-      isFeatureEnabled(HTPR_6516_AGENT_ATTRIBUTION_FLAG, userId),
-      project.project_view?.user_project_views[0]?.unsavedView
-        ? isFeatureEnabled(HTPR_6588_EMPTY_COLUMNS_SAVE_VIEW_FLAG, userId)
-        : false,
-    ]);
+    const attributionEnabled = await isFeatureEnabled(
+      HTPR_6516_AGENT_ATTRIBUTION_FLAG,
+      userId,
+    );
+    const emptyColumnsSaveViewEnabled =
+      !!project.project_view?.user_project_views[0]?.unsavedView &&
+      await isFeatureEnabled(HTPR_6588_EMPTY_COLUMNS_SAVE_VIEW_FLAG, userId);
     const tasks = await prisma.task.findMany({
       where: { projectId, ...getTaskWhere() },
       omit: taskBoardOmit,
