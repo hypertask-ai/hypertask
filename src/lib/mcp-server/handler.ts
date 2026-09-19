@@ -10,10 +10,15 @@ import {
 import { MCP_ATTACHMENT_MAX_REQUEST_BYTES } from '@/lib/mcp/attachments/constants'
 import { extractBearerToken, validateMcpAuth } from '@/lib/mcp/auth'
 import { hasAnyManagementPermission } from '@/lib/mcp/managementPermissions'
-import { HTPR_6532_STATELESS_MCP_FLAG, isFeatureEnabled } from '@/lib/flags'
-import { HTPR_6531_DEFERRED_MCP_TOOLS_FLAG } from '@/lib/flags'
-import { HTPR_6530_MCP_LIST_QUERY_FLAG } from '@/lib/flags'
+import {
+  HTPR_4638_AI_DIRECTORY_METADATA_FLAG,
+  HTPR_6530_MCP_LIST_QUERY_FLAG,
+  HTPR_6531_DEFERRED_MCP_TOOLS_FLAG,
+  HTPR_6532_STATELESS_MCP_FLAG,
+  isFeatureEnabled,
+} from '@/lib/flags'
 import { resolvePortableTools } from './listQueryContract'
+import { directoryProfileFromUrl, toolsForDirectoryProfile } from './tool-annotations'
 import { NextRequest } from 'next/server'
 import { handleMcpHttp, usesStatelessMcpTransport } from './mcp-http'
 import {
@@ -71,8 +76,9 @@ function bindMcpTools(tools: readonly PortableTool[]) {
   )
 }
 
-const handler = bindMcpTools(MCP_TOOLS as PortableTool[])
-const listQueryHandler = bindMcpTools(resolvePortableTools(MCP_TOOLS as PortableTool[], true))
+const portableTools = MCP_TOOLS as PortableTool[]
+const handler = bindMcpTools(portableTools)
+const listQueryHandler = bindMcpTools(resolvePortableTools(portableTools, true))
 
 async function verifyToken(_request: Request, bearerToken?: string): Promise<AuthInfo | undefined> {
   if (!bearerToken) return undefined
@@ -137,7 +143,6 @@ async function boundMcpRequest(request: Request): Promise<Request> {
   } as RequestInit & { duplex: 'half' })
 }
 
-const portableTools = MCP_TOOLS as PortableTool[]
 function optionsPortableTools() {
   return portableTools
 }
@@ -173,32 +178,44 @@ export async function mcpHandler(request: Request): Promise<Response> {
   const listQueryEnabled =
     Number.isFinite(userId) &&
     (await isFeatureEnabled(HTPR_6530_MCP_LIST_QUERY_FLAG, userId).catch(() => false))
-  const portableTools = resolvePortableTools(MCP_TOOLS as PortableTool[], listQueryEnabled)
+  const requestTools = resolvePortableTools(portableTools, listQueryEnabled)
   const stateless =
     Number.isFinite(userId) &&
     (await isFeatureEnabled(HTPR_6532_STATELESS_MCP_FLAG, userId).catch(() => false))
   const deferred =
     Number.isFinite(userId) &&
     (await isFeatureEnabled(HTPR_6531_DEFERRED_MCP_TOOLS_FLAG, userId).catch(() => false))
+  const directoryProfile = directoryProfileFromUrl(working.url)
+  const directoryProfileEnabled =
+    directoryProfile !== undefined &&
+    Number.isFinite(userId) &&
+    (await isFeatureEnabled(HTPR_4638_AI_DIRECTORY_METADATA_FLAG, userId).catch(() => false))
+  if (directoryProfile && directoryProfileEnabled) {
+    // Directory scanners need the complete schemas, independent of per-user catalog experiments.
+    return handleMcpHttp(working, {
+      authenticate: async () => authInfo,
+      tools: toolsForDirectoryProfile(requestTools, directoryProfile),
+    })
+  }
 
   // Stateless POST/GET/DELETE stay behind htpr-6532-stateless-mcp (Owner+QA).
   // OPTIONS has no session. Everyone else keeps the existing session handler.
   if (usesStatelessMcpTransport(working.method, stateless)) {
     return handleMcpHttp(working, {
       authenticate: async () => authInfo,
-      tools: portableTools,
+      tools: requestTools,
       deferredEnabled: async () => deferred,
     })
   }
 
   if (stateless) {
     if (deferred) {
-      return handleStatelessMcpRequest(working, authInfo, portableTools, { deferred: true })
+      return handleStatelessMcpRequest(working, authInfo, requestTools, { deferred: true })
     }
-    return handleStatelessMcpRequest(working, authInfo, portableTools)
+    return handleStatelessMcpRequest(working, authInfo, requestTools)
   }
   if (deferred) {
-    return handleStatelessMcpRequest(working, authInfo, portableTools, { deferred: true })
+    return handleStatelessMcpRequest(working, authInfo, requestTools, { deferred: true })
   }
 
   return listQueryEnabled
