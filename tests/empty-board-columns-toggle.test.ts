@@ -4,7 +4,9 @@ import fs from "node:fs";
 import path from "node:path";
 import {
   beginEmptySectionMutation,
+  clearProjectViewPersonalEmptySections,
   getActiveEmptySectionSettingFromProject,
+  getActiveEmptySectionSettingFromProjectView,
   getEmptySectionSettingForView,
   patchProjectViewEmptySections,
   pinProjectToUrlView,
@@ -251,6 +253,31 @@ test("a personal setting overrides shared and legacy unsaved values", () => {
   );
 });
 
+test("a transient staged choice masks the personal setting without mutating it", () => {
+  const applied = {
+    ...view("speed", "Show"),
+    ViewLastUsed: [{ board_empty_sections: "Hidden" }],
+  };
+  const project = projectWith({
+    unsaved: view("unsaved", "Show"),
+    applied: applied as never,
+  });
+
+  const masked = clearProjectViewPersonalEmptySections(
+    project.project_view as never,
+    "speed",
+  );
+
+  assert.equal(
+    getActiveEmptySectionSettingFromProjectView(masked),
+    "Show",
+  );
+  assert.equal(
+    getActiveEmptySectionSettingFromProject(project as never),
+    "Hidden",
+  );
+});
+
 test("a URL-pinned view keeps its personal setting through snapshot restore", () => {
   const canonical = { ...view("canonical", "Show"), slug: "canonical" };
   const speed = { ...view("speed", "Show"), slug: "speed-2" };
@@ -447,9 +474,15 @@ test("the flagged command stages empty-column changes in the save-view routine",
   const saveSource = source.slice(saveStart, nextFunction);
 
   assert.match(source, /useFlag\(HTPR_6588_EMPTY_COLUMNS_SAVE_VIEW_FLAG\)/);
-  assert.match(saveSource, /if \(emptyColumnsSaveViewEnabled\)/);
+  assert.match(saveSource, /if \(emptyColumnsSaveViewEnabled/);
   assert.match(saveSource, /buildUnsavedBody\(queuedProject, \{\s*board_empty_sections: emptySection/);
+  assert.match(saveSource, /updateMode: STAGED_EMPTY_SECTIONS_UPDATE_MODE/);
   assert.match(saveSource, /updateMode: PERSONAL_EMPTY_SECTIONS_UPDATE_MODE/);
+  assert.ok(
+    saveSource.indexOf("beginEmptySectionMutation") <
+      saveSource.indexOf("updateMode: STAGED_EMPTY_SECTIONS_UPDATE_MODE"),
+    "the staged path must update optimistically before its queued request",
+  );
   assert.ok(
     saveSource.indexOf("if (emptyColumnsSaveViewEnabled)") <
       saveSource.indexOf("updateMode: PERSONAL_EMPTY_SECTIONS_UPDATE_MODE"),
@@ -461,6 +494,8 @@ test("the flagged command stages empty-column changes in the save-view routine",
     "utf8",
   );
   assert.match(unsavedRoute, /isFeatureEnabled\(\s*HTPR_6588_EMPTY_COLUMNS_SAVE_VIEW_FLAG/);
+  assert.match(unsavedRoute, /req\.body\.updateMode === STAGED_EMPTY_SECTIONS_UPDATE_MODE/);
+  assert.match(unsavedRoute, /clearProjectViewPersonalEmptySections/);
   assert.match(unsavedRoute, /const clearPersonalEmptySectionsOverride/);
   assert.match(unsavedRoute, /data: \{ board_empty_sections: null \}/);
 

@@ -4,7 +4,10 @@ import {
   isFeatureEnabled,
 } from "@/lib/flags";
 import prisma from "@/lib/prisma";
-import { isBoardEmptySectionSetting } from "@/models/Views/model";
+import {
+  isBoardEmptySectionSetting,
+  STAGED_EMPTY_SECTIONS_UPDATE_MODE,
+} from "@/models/Views/model";
 import getProjectView from "@/utils/controllers/projects/views/viewsHelperAPIfunctions";
 import { isDeepEqual } from "@/utils/helperFunctions/helperFunctions";
 import { sanitizeBoardFilters } from "@/utils/helperFunctions/Views/BoardFilterSanitizer";
@@ -17,6 +20,7 @@ import {
   shouldUseTransientTabSettings,
 } from "@/utils/helperFunctions/Views/TransientTabView";
 import {
+  clearProjectViewPersonalEmptySections,
   defaultBoardSortingOrder,
   defaultBoardSortingSettings,
   getSavedBoardLayoutFromActiveView,
@@ -153,22 +157,19 @@ const handler: NextApiHandler = async (
       ) {
         return res.status(403).json({ message: "View is not accessible" });
       }
-      const emptyColumnsSaveViewEnabled = await isFeatureEnabled(
-        HTPR_6588_EMPTY_COLUMNS_SAVE_VIEW_FLAG,
-        currentUser.id,
-      );
       const personalEmptySectionsViewId =
         baseView?.id ??
         user_project_view?.appliedView?.id ??
         projectView.default_view?.id;
+      const stagesEmptySections =
+        req.body.updateMode === STAGED_EMPTY_SECTIONS_UPDATE_MODE &&
+        isBoardEmptySectionSetting(board_empty_sections) &&
+        await isFeatureEnabled(
+          HTPR_6588_EMPTY_COLUMNS_SAVE_VIEW_FLAG,
+          currentUser.id,
+        );
       const clearPersonalEmptySectionsOverride = async () => {
-        if (
-          !emptyColumnsSaveViewEnabled ||
-          !personalEmptySectionsViewId ||
-          !isBoardEmptySectionSetting(board_empty_sections)
-        ) {
-          return;
-        }
+        if (!stagesEmptySections || !personalEmptySectionsViewId) return;
         await prisma.view_Last_Used.updateMany({
           where: {
             userId: currentUser.id,
@@ -245,7 +246,6 @@ const handler: NextApiHandler = async (
               board_layout: sanitizeBoardLayout(baseView.board_layout),
             }
           : superDefault;
-        await clearPersonalEmptySectionsOverride();
         const projectViewResponse = await getProjectView(
           projectId,
           currentUser.id
@@ -253,9 +253,16 @@ const handler: NextApiHandler = async (
         if (!projectViewResponse) {
           return res.status(404).json({ message: "Project view not found" });
         }
+        const transientProjectView =
+          stagesEmptySections && personalEmptySectionsViewId
+            ? clearProjectViewPersonalEmptySections(
+                projectViewResponse,
+                personalEmptySectionsViewId,
+              )
+            : projectViewResponse;
         return res.status(200).json(
           applyTransientTabSettings(
-            projectViewResponse,
+            transientProjectView,
             currentUser.id,
             baseViewId == null ? null : baseView,
             settingsFromReqBody,

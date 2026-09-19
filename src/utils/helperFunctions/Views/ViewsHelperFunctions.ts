@@ -418,7 +418,7 @@ export const getActiveEmptySectionSettingFromProject = (project?:IProject|null):
 const patchPersonalEmptySectionSetting = (
   view: IView | undefined,
   viewId: string,
-  setting: TBoardEmptySections,
+  setting: TBoardEmptySections | null,
 ): IView | undefined => {
   if (!view || view.id !== viewId) return view
   const existing = view.ViewLastUsed?.[0]
@@ -431,31 +431,42 @@ const patchPersonalEmptySectionSetting = (
   } as IView
 }
 
+const patchProjectViewPersonalEmptySections = (
+  projectView: IProjectView,
+  viewId: string,
+  setting: TBoardEmptySections | null,
+): IProjectView => ({
+  ...projectView,
+  allViews: projectView.allViews?.map((view) =>
+    patchPersonalEmptySectionSetting(view, viewId, setting)!
+  ),
+  default_view: patchPersonalEmptySectionSetting(
+    projectView.default_view,
+    viewId,
+    setting,
+  ),
+  user_project_views: projectView.user_project_views.map((row) => ({
+    ...row,
+    appliedView: patchPersonalEmptySectionSetting(
+      row.appliedView,
+      viewId,
+      setting,
+    ),
+  })),
+})
+
+export const clearProjectViewPersonalEmptySections = (
+  projectView: IProjectView,
+  viewId: string,
+): IProjectView => patchProjectViewPersonalEmptySections(projectView, viewId, null)
+
 export const patchProjectViewEmptySections = (
   projectView: IProjectView,
   setting: TBoardEmptySections,
   viewId?: string,
 ): IProjectView => {
   if (viewId) {
-    return {
-      ...projectView,
-      allViews: projectView.allViews?.map((view) =>
-        patchPersonalEmptySectionSetting(view, viewId, setting)!
-      ),
-      default_view: patchPersonalEmptySectionSetting(
-        projectView.default_view,
-        viewId,
-        setting,
-      ),
-      user_project_views: projectView.user_project_views.map((row) => ({
-        ...row,
-        appliedView: patchPersonalEmptySectionSetting(
-          row.appliedView,
-          viewId,
-          setting,
-        ),
-      })),
-    }
+    return patchProjectViewPersonalEmptySections(projectView, viewId, setting)
   }
 
   const activeRow = projectView.user_project_views[0]

@@ -18,6 +18,7 @@ import {
 import {
   isBoardEmptySectionSetting,
   PERSONAL_EMPTY_SECTIONS_UPDATE_MODE,
+  STAGED_EMPTY_SECTIONS_UPDATE_MODE,
   TBoardEmptySections,
   TBoardSortingLevel,
   TBoardSortingViewMode,
@@ -290,18 +291,6 @@ const useKanbanViews = (project: IProject | null) => {
     project: IProject,
     emptySection: TBoardEmptySections
   ) => {
-    if (emptyColumnsSaveViewEnabled) {
-      return apiHandler(
-        (queuedProject) => buildUnsavedBody(queuedProject, {
-          board_empty_sections: emptySection,
-        }),
-        project,
-        (succeeded) => {
-          if (!succeeded) toast.error("Empty column visibility could not be saved")
-        },
-      )
-    }
-
     const mutationId = ++emptySectionMutationId
     const targetView =
       project.project_view?.user_project_views[0]?.appliedView ??
@@ -351,10 +340,13 @@ const useKanbanViews = (project: IProject | null) => {
       if (!succeeded) toast.error("Empty column visibility could not be saved")
     }
 
-    if (!targetViewId) {
+    if (emptyColumnsSaveViewEnabled || !targetViewId) {
       return apiHandler(
         (queuedProject) => buildUnsavedBody(queuedProject, {
           board_empty_sections: emptySection,
+          ...(emptyColumnsSaveViewEnabled
+            ? { updateMode: STAGED_EMPTY_SECTIONS_UPDATE_MODE }
+            : {}),
         }),
         project,
         settleMutation,
