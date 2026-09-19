@@ -388,6 +388,96 @@ test("an event missed during initial connection is recovered after subscription"
   cleanup?.();
 });
 
+test("an unavailable board subscription starts an immediate reconciliation fallback", async () => {
+  let cleanup;
+  let boardReconciles = 0;
+  const listeners = new Map();
+  const originalDocument = global.document;
+  const originalWindow = global.window;
+  const originalNavigator = global.navigator;
+  global.document = {
+    visibilityState: "visible",
+    addEventListener(event, callback) {
+      listeners.set(`document:${event}`, callback);
+    },
+    removeEventListener(event) {
+      listeners.delete(`document:${event}`);
+    },
+  };
+  global.window = {
+    addEventListener(event, callback) {
+      listeners.set(`window:${event}`, callback);
+    },
+    removeEventListener(event) {
+      listeners.delete(`window:${event}`);
+    },
+  };
+  Object.defineProperty(global, "navigator", {
+    configurable: true,
+    value: { onLine: true },
+  });
+
+  try {
+    const hook = loadTypeScriptModule(
+      path.join(root, "src/hooks/realtime/useBoardRealtime.ts"),
+      {
+        react: {
+          useEffect(effect) {
+            cleanup = effect();
+          },
+          useRef(initialValue) {
+            return { current: initialValue };
+          },
+        },
+        "@tanstack/react-query": {
+          useQueryClient: () => ({ refetchQueries: async () => {} }),
+        },
+        "@/lib/realtime/client": {
+          connectRealtimeClient: async () => null,
+          releaseRealtimeClientIfIdle() {},
+        },
+        "@/lib/projectPlanning": {
+          projectPlanningQueryKey: (projectId) => ["planning", projectId],
+        },
+        "@/lib/realtime/shared": {
+          BOARD_EVENT: "board:changed",
+          boardChannel: (projectId) => `private-board-${projectId}`,
+        },
+        "@/lib/boardSync/reconcileActiveBoardQuery": {
+          reconcileActiveBoardQuery: async () => {
+            boardReconciles += 1;
+          },
+          reconcileActiveBoardTasks: async () => {},
+        },
+        "@/lib/realtime/latencyCanary": {
+          runRealtimeReconciliation: ({ reconcile }) => reconcile(),
+        },
+        "@/hooks/useFlag": { useFlag: () => false },
+        "@/lib/flags/keys": { SCOPED_BOARD_REFETCH_FLAG: "scoped" },
+        "@/lib/realtime/boardRealtimeEventHandler": {
+          createBoardRealtimeEventHandler: (refetch) => () => refetch("event"),
+        },
+      },
+    );
+
+    hook.useBoardRealtime(PROJECT_ID, { accountId: USER_ID });
+    await settle();
+
+    assert.equal(boardReconciles, 1);
+    assert.equal(listeners.has("document:visibilitychange"), true);
+    assert.equal(listeners.has("window:online"), true);
+    cleanup?.();
+    assert.equal(listeners.size, 0);
+  } finally {
+    global.document = originalDocument;
+    global.window = originalWindow;
+    Object.defineProperty(global, "navigator", {
+      configurable: true,
+      value: originalNavigator,
+    });
+  }
+});
+
 test("the visible board subscribes before deferred startup work is released", () => {
   const source = fs.readFileSync(
     path.join(
