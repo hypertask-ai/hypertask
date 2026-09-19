@@ -3,9 +3,7 @@
 
 Usage: strix-file-tickets.py <strix_run_dir>
 
-Dedupes against tickets already filed by an earlier run by matching the
-finding title. Posts through the Hetzner hop: the Contabo IP is
-Cloudflare-403'd on api.hypertask.ai (HTPR-4784).
+Dedupes against earlier runs by finding title. Uses the approved Product Bot CLI.
 """
 from concurrent.futures import ThreadPoolExecutor
 import html
@@ -22,7 +20,6 @@ BUGS_SECTION = 4389
 STATE = os.path.expanduser(
     os.environ.get("STRIX_FILED_STATE", "~/.cache/strix-filed-titles.json")
 )
-API = "https://api.hypertask.ai/api/mcp/tasks/create"
 CONFIRM_API_BASE = os.environ.get(
     "STRIX_CONFIRM_API_BASE", os.environ.get("LLM_API_BASE", "http://127.0.0.1:48100/v1")
 ).rstrip("/")
@@ -49,27 +46,21 @@ Current source evidence:
 """
 
 
-def token():
-    configured = os.environ.get("HYPERTASKS_JWT_TOKEN")
-    if configured:
-        return configured
-    with open(os.path.expanduser("~/.hypertask/config.json"), encoding="utf-8") as config:
-        return json.load(config)["token"]
-
-
 def post_ticket(payload):
-    """POST a task via the Hetzner hop. Returns True on HTTP 200."""
-    body = json.dumps(payload)
-    remote = (
-        f"cat > /tmp/strix-task.json <<'JSONEOF'\n{body}\nJSONEOF\n"
-        f"curl -sS -o /dev/null -w '%{{http_code}}' -X POST "
-        f"-H 'Authorization: Bearer {token()}' -H 'Content-Type: application/json' "
-        f"--data @/tmp/strix-task.json '{API}'"
-    )
+    """Use Product Bot's approved CLI wrapper; never load a personal token."""
     result = subprocess.run(
-        ["ssh", "vps", "bash", "-s"], input=remote, capture_output=True, text=True
+        ["htbot", "task", "create", "--raw", "--project", str(PROJECT),
+         "--section", str(BUGS_SECTION), "--title", payload["title"],
+         "--description", payload["description"], "--priority", payload["priority"], "--json"],
+        capture_output=True, text=True, timeout=120,
     )
-    return result.stdout.strip().endswith("200")
+    if result.returncode:
+        return False
+    try:
+        response = json.loads(result.stdout)
+        return response.get("success") is True
+    except (ValueError, AttributeError):
+        return False
 
 
 def norm(text):
@@ -202,6 +193,7 @@ def main(run):
             filed = set(json.load(state_file))
 
     new = 0
+    failures = 0
     for finding in vulns:
         title = finding.get("title") or finding.get("id")
         key = norm(title)
@@ -217,6 +209,7 @@ def main(run):
             votes, agreed = confirmed_twice(finding)
         except Exception as error:
             print(f"skip (confirmation failed): {title}: {error}")
+            failures += 1
             continue
         verdicts = "/".join(vote["verdict"] for vote in votes)
         if not agreed:
@@ -226,6 +219,7 @@ def main(run):
 
         ok = post_ticket(
             {
+                "priority": "urgent" if severity in ("high", "critical") else "high",
                 "project_id": PROJECT,
                 "sectionId": BUGS_SECTION,
                 "title": f"Security ({severity}): {title}"[:80],
@@ -234,15 +228,25 @@ def main(run):
         )
         if not ok:
             print("FAILED to file:", title)
+            failures += 1
             continue
         print("filed:", title)
         filed.add(key)
         new += 1
+        save_state(filed)
 
-    os.makedirs(os.path.dirname(STATE), exist_ok=True)
-    with open(STATE, "w", encoding="utf-8") as state_file:
-        json.dump(sorted(filed), state_file)
+    save_state(filed)
     print(f"{new} new ticket(s) filed, {len(vulns)} finding(s) in run")
+    if failures:
+        raise SystemExit(f"{failures} finding(s) could not be confirmed or filed; retry required")
+
+
+def save_state(filed):
+    path = Path(STATE)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temporary = path.with_suffix('.tmp')
+    temporary.write_text(json.dumps(sorted(filed)))
+    temporary.replace(path)
 
 
 if __name__ == "__main__":
