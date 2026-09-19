@@ -18,7 +18,7 @@ const UI_EXCLUDE = [
   /(^|\/)fixtures?\//,
   /\.(?:test|spec|stories|fixture)\.[jt]sx?$/,
 ];
-const INLINE_MENU = /(?:aria-haspopup\s*=\s*(?:["']menu["']|\{\s*["']menu["']\s*\})|role\s*=\s*(?:["']menu(?:item)?["']|\{\s*["']menu(?:item)?["']\s*\})|<(?:DropdownMenu|Menu)(?:[A-Z][A-Za-z]*|\s|>))/m;
+const INLINE_MENU = /(?:aria-haspopup\s*=\s*(?:["']menu["']|\{\s*["']menu["']\s*\})|role\s*=\s*(?:["']menu(?:item)?["']|\{\s*["']menu(?:item)?["']\s*\})|<(?:DropdownMenu|Menu)(?:\.|[A-Z][A-Za-z]*|\s|>))/m;
 
 function git(args) {
   return execFileSync("git", args, {
@@ -126,6 +126,30 @@ function parseSource(source, sourcePath) {
   );
 }
 
+function checkedSource(source, sourcePath) {
+  const options = {
+    allowJs: true,
+    checkJs: false,
+    jsx: typescript.JsxEmit.Preserve,
+    noLib: true,
+    noResolve: true,
+    target: typescript.ScriptTarget.Latest,
+  };
+  const parsed = parseSource(source, sourcePath);
+  const defaultHost = typescript.createCompilerHost(options, true);
+  const host = {
+    ...defaultHost,
+    fileExists: (fileName) => fileName === sourcePath,
+    getSourceFile: (fileName) => fileName === sourcePath ? parsed : undefined,
+    readFile: (fileName) => fileName === sourcePath ? source : undefined,
+  };
+  const program = typescript.createProgram({ rootNames: [sourcePath], options, host });
+  return {
+    checker: program.getTypeChecker(),
+    sourceFile: program.getSourceFile(sourcePath) ?? parsed,
+  };
+}
+
 function addedLineNumbers(baseSha, headSha, path) {
   const diff = git(["diff", "--unified=0", "--no-renames", `${baseSha}...${headSha}`, "--", path]);
   const lines = new Set();
@@ -167,7 +191,7 @@ function touchesAddedLine(node, sourceFile, addedLines) {
 }
 
 function controlsInFile(baseSha, headSha, sourcePath) {
-  const sourceFile = parseSource(sourceAt(headSha, sourcePath), sourcePath);
+  const { checker, sourceFile } = checkedSource(sourceAt(headSha, sourcePath), sourcePath);
   const addedLines = addedLineNumbers(baseSha, headSha, sourcePath);
   const definitions = new Map();
   const controls = new Map();
@@ -183,10 +207,12 @@ function controlsInFile(baseSha, headSha, sourcePath) {
     }
 
     if ((typescript.isFunctionDeclaration(statement) || typescript.isClassDeclaration(statement)) &&
-        statement.name && containsJsx(statement)) {
-      definitions.set(statement.name.text, statement);
+        containsJsx(statement)) {
+      if (statement.name) definitions.set(statement.name.text, statement);
       if (hasModifier(statement, typescript.SyntaxKind.ExportKeyword)) {
-        controls.set(statement.name.text, statement);
+        const control = statement.name?.text ??
+          (hasModifier(statement, typescript.SyntaxKind.DefaultKeyword) ? "default" : null);
+        if (control) controls.set(control, statement);
       }
       continue;
     }
@@ -216,7 +242,9 @@ function controlsInFile(baseSha, headSha, sourcePath) {
     if (definition) controls.set(exported, definition);
   }
 
-  return new Map([...controls].filter(([, node]) => touchesAddedLine(node, sourceFile, addedLines)));
+  return new Map([...controls]
+    .filter(([, node]) => touchesAddedLine(node, sourceFile, addedLines))
+    .map(([name, node]) => [name, { checker, node }]));
 }
 
 function moduleMatches(sourcePath, specifier, componentPath) {
@@ -227,13 +255,13 @@ function moduleMatches(sourcePath, specifier, componentPath) {
   return imported === component || `${imported}/index` === component;
 }
 
-function bindingNames(name) {
-  if (typescript.isIdentifier(name)) return [name.text];
-  const names = [];
+function bindingIdentifiers(name) {
+  if (typescript.isIdentifier(name)) return [name];
+  const identifiers = [];
   for (const element of name.elements) {
-    if (!typescript.isOmittedExpression(element)) names.push(...bindingNames(element.name));
+    if (!typescript.isOmittedExpression(element)) identifiers.push(...bindingIdentifiers(element.name));
   }
-  return names;
+  return identifiers;
 }
 
 function importedBindings(sourceFile, sourcePath, componentPath) {
@@ -242,12 +270,12 @@ function importedBindings(sourceFile, sourcePath, componentPath) {
     if (typescript.isImportDeclaration(statement) && statement.importClause &&
         !statement.importClause.isTypeOnly && typescript.isStringLiteralLike(statement.moduleSpecifier) &&
         moduleMatches(sourcePath, statement.moduleSpecifier.text, componentPath)) {
-      if (statement.importClause.name) bindings.push(statement.importClause.name.text);
+      if (statement.importClause.name) bindings.push(statement.importClause.name);
       const named = statement.importClause.namedBindings;
-      if (named && typescript.isNamespaceImport(named)) bindings.push(named.name.text);
+      if (named && typescript.isNamespaceImport(named)) bindings.push(named.name);
       if (named && typescript.isNamedImports(named)) {
         for (const element of named.elements) {
-          if (!element.isTypeOnly) bindings.push(element.name.text);
+          if (!element.isTypeOnly) bindings.push(element.name);
         }
       }
     }
@@ -259,16 +287,18 @@ function importedBindings(sourceFile, sourcePath, componentPath) {
           !typescript.isIdentifier(call.expression) || call.expression.text !== "require" ||
           !typescript.isStringLiteralLike(call.arguments[0]) ||
           !moduleMatches(sourcePath, call.arguments[0].text, componentPath)) continue;
-      bindings.push(...bindingNames(declaration.name));
+      bindings.push(...bindingIdentifiers(declaration.name));
     }
   }
   return bindings;
 }
 
-function bindingUsedByControl(controlNode, binding) {
+function bindingUsedByControl(controlNode, binding, checker) {
+  const importedSymbol = checker.getSymbolAtLocation(binding);
+  if (!importedSymbol) return false;
   let used = false;
   const visit = (node) => {
-    if (typescript.isIdentifier(node) && node.text === binding) {
+    if (typescript.isIdentifier(node) && checker.getSymbolAtLocation(node) === importedSymbol) {
       let parent = node.parent;
       let typeOnly = false;
       while (parent && parent !== controlNode) {
@@ -286,10 +316,10 @@ function bindingUsedByControl(controlNode, binding) {
   return used;
 }
 
-function controlUsesComponent(sourcePath, componentPath, controlNode) {
-  const sourceFile = controlNode.getSourceFile();
+function controlUsesComponent(sourcePath, componentPath, control) {
+  const sourceFile = control.node.getSourceFile();
   return importedBindings(sourceFile, sourcePath, componentPath)
-    .some((binding) => bindingUsedByControl(controlNode, binding));
+    .some((binding) => bindingUsedByControl(control.node, binding, control.checker));
 }
 
 function controlKey(source, control) {

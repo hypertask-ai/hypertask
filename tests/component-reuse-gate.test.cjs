@@ -88,6 +88,23 @@ test("inline menu markup without the section is rejected", async (t) => {
   assert.equal((await evaluate("", base, head, dir)).pass, false);
 });
 
+test("namespace-style inline menus require reuse declarations", async (t) => {
+  const { dir, git } = makeRepo(t);
+  const source = "src/app/example/page.tsx";
+  writeFile(dir, source, "export const Page = () => <button>Open</button>;\n");
+  const base = commit(git, "base");
+  writeFile(
+    dir,
+    source,
+    'import * as DropdownMenu from "@/components/PageComponents/Kanban/HeaderComponents/HeaderIconWrapper";\nexport const Page = () => <DropdownMenu.Root />;\n',
+  );
+  const head = commit(git, "namespace menu");
+
+  const result = await evaluate("", base, head, dir);
+  assert.equal(result.pass, false);
+  assert.match(result.message, /Page/);
+});
+
 test("a declaration mapping the changed file to an imported base component passes", async (t) => {
   const { dir, git } = makeRepo(t);
   const base = commit(git, "base");
@@ -179,6 +196,50 @@ test("an imported component must be used by every control that claims it", async
   assert.equal(result.pass, false);
   assert.match(result.message, /TwoControls\.tsx:SecondControl/);
   assert.match(result.message, /must be used by its named control/);
+});
+
+test("shadowed parameters, locals, and property keys do not certify an unused import", async (t) => {
+  for (const [label, control] of [
+    ["parameter", "export const Control = (HeaderIconWrapper) => <button />;"],
+    ["local", "export const Control = () => { const HeaderIconWrapper = () => null; return <button />; };"],
+    ["property", "export const Control = () => { const value = { HeaderIconWrapper: true }; return <button>{String(value.HeaderIconWrapper)}</button>; };"],
+  ]) {
+    const { dir, git } = makeRepo(t);
+    const base = commit(git, "base");
+    const source = `src/components/Shadowed-${label}.tsx`;
+    writeFile(
+      dir,
+      source,
+      `import HeaderIconWrapper from "@/components/PageComponents/Kanban/HeaderComponents/HeaderIconWrapper";\n${control}\n`,
+    );
+    const head = commit(git, `shadowed ${label}`);
+    const body = `## Components reused\n\n${declaration("Control", source)}`;
+
+    const result = await evaluate(body, base, head, dir);
+    assert.equal(result.pass, false, label);
+    assert.match(result.message, /must be used by its named control/, label);
+  }
+});
+
+test("anonymous default function and class controls can satisfy the gate", async (t) => {
+  for (const [label, control] of [
+    ["function", "export default function () { return <HeaderIconWrapper />; }"],
+    ["class", "export default class { render() { return <HeaderIconWrapper />; } }"],
+  ]) {
+    const { dir, git } = makeRepo(t);
+    const base = commit(git, "base");
+    const source = `src/components/Anonymous-${label}.tsx`;
+    writeFile(
+      dir,
+      source,
+      `import HeaderIconWrapper from "@/components/PageComponents/Kanban/HeaderComponents/HeaderIconWrapper";\n${control}\n`,
+    );
+    const head = commit(git, `anonymous ${label}`);
+    const body = `## Components reused\n\n${declaration("default", source)}`;
+
+    const result = await evaluate(body, base, head, dir);
+    assert.equal(result.pass, true, `${label}: ${result.message}`);
+  }
 });
 
 test("a specific no-reuse justification supports a genuinely new control", async (t) => {
