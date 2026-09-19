@@ -519,15 +519,38 @@ test("board create entry points follow the AI-first flag", async () => {
     assert.equal(container.firstElementChild.dataset.quickEntryOpen, "false");
     assert.ok(container.querySelector(".create-new-task-button"));
 
+    await dispatchShortcut({ key: "c", code: "KeyC", keyCode: 67 });
+    await dispatchShortcut({ key: "c", code: "KeyC", keyCode: 67, altKey: true });
+    assert.equal(container.firstElementChild.dataset.quickEntryPosition, "top");
+    await cancelQuickEntry();
+    await dispatchShortcut({
+      key: "C",
+      code: "KeyC",
+      keyCode: 67,
+      altKey: true,
+      shiftKey: true,
+    });
+    assert.equal(container.firstElementChild.dataset.quickEntryPosition, "bottom");
+    await cancelQuickEntry();
+    await dispatchShortcut({ key: "C", code: "KeyC", keyCode: 67, shiftKey: true });
+    assert.ok(activeItemWrites.length >= 3);
+    assert.equal(activeItemWrites.every((value) => value === null), true);
+
+    assert.deepEqual(createCalls.slice(modalCallsBeforeQuickEntry), [
+      { payload: sectionPayload, defaultEditFocus: undefined },
+      {
+        payload: { sectionId: 9190, sectionTitle: "Backlog", position: "bottom" },
+        defaultEditFocus: undefined,
+      },
+    ]);
+
     quickEntryItems = [
       { id: 1001, projectId: 15, uniqueIndex: 1001 },
       { id: 1002, projectId: 15, uniqueIndex: 1002 },
     ];
     await renderHarness(false);
 
-    await dispatchShortcut({ key: "c", code: "KeyC", keyCode: 67 });
     await dispatchShortcut({ key: "c", code: "KeyC", keyCode: 67, altKey: true });
-    assert.equal(container.firstElementChild.dataset.quickEntryPosition, "top");
     await cancelQuickEntry();
     assert.equal(activeItemWrites.at(-1), 1001);
     assert.equal(document.activeElement?.id, "task-1001");
@@ -538,19 +561,9 @@ test("board create entry points follow the AI-first flag", async () => {
       altKey: true,
       shiftKey: true,
     });
-    assert.equal(container.firstElementChild.dataset.quickEntryPosition, "bottom");
     await cancelQuickEntry();
     assert.equal(activeItemWrites.at(-1), 1002);
     assert.equal(document.activeElement?.id, "task-1002");
-    await dispatchShortcut({ key: "C", code: "KeyC", keyCode: 67, shiftKey: true });
-
-    assert.deepEqual(createCalls.slice(modalCallsBeforeQuickEntry), [
-      { payload: sectionPayload, defaultEditFocus: undefined },
-      {
-        payload: { sectionId: 9190, sectionTitle: "Backlog", position: "bottom" },
-        defaultEditFocus: undefined,
-      },
-    ]);
   } finally {
     if (reactRoot) await React.act(async () => reactRoot.unmount());
     for (const [filename, previous] of previousModules) {
