@@ -63,6 +63,7 @@ import {
   HTPR_6516_AGENT_ATTRIBUTION_FLAG,
   HTPR_6512_SEED_TEAM_AGENT_FLAG,
   HTPR_6533_MCP_CLIENT_EVAL_FLAG,
+  HTPR_4638_AI_DIRECTORY_METADATA_FLAG,
   HTPR_6532_STATELESS_MCP_FLAG,
   HTPR_6530_MCP_LIST_QUERY_FLAG,
   HTPR_6531_DEFERRED_MCP_TOOLS_FLAG,
@@ -166,6 +167,12 @@ const FEATURE_FLAG_DEFINITIONS = [
     shippedOn: "2026-09-16",
     description:
       "Shows a QA-only email and password sign-in page so an outside test robot can open the real app behind login. The page and route exist only when the server has the QA login secrets.",
+  },
+  {
+    key: HTPR_4638_AI_DIRECTORY_METADATA_FLAG,
+    shippedOn: "2026-09-19",
+    description:
+      "Adds vendor-specific MCP catalogs with the metadata needed for Claude and ChatGPT directory review.",
   },
   {
     key: HTPR_6533_MCP_CLIENT_EVAL_FLAG,
