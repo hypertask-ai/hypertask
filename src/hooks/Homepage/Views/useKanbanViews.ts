@@ -46,6 +46,7 @@ import {
   enqueueBoardViewMutation,
   patchProjectViewBoardLayout,
   patchProjectViewEmptySections,
+  preservePendingBoardFilters,
   replaceProjectSurface,
   savedBoardLayoutFromExplicitSurface,
   savedBoardLayoutToClient,
@@ -125,6 +126,10 @@ const useKanbanViews = (project: IProject | null) => {
       allData?.updatedProjects[projectToUpdateIndex]
     );
     if (!projectToUpdate) return;
+    const updatedProjectView = preservePendingBoardFilters(
+      response.data,
+      pendingFilterMutations.get(project.id)?.filters,
+    );
     if (
       updateType.call === "switch" ||
       updateType.call === "reset" ||
@@ -137,13 +142,13 @@ const useKanbanViews = (project: IProject | null) => {
         if (updateType.view?.id === appliedViewId) {
           updateCookieAndURL(project.id, updateType.view?.slug);
         }
-        return updateProjectView(projectToUpdateIndex, response.data);
+        return updateProjectView(projectToUpdateIndex, updatedProjectView);
       }
       if (updateType.call === "reset" && activeView?.type === "Unsaved") {
         const appliedView =
           project.project_view?.user_project_views[0].appliedView;
         if (appliedView) updateCookieAndURL(project.id, appliedView.slug);
-        return updateProjectView(projectToUpdateIndex, response.data);
+        return updateProjectView(projectToUpdateIndex, updatedProjectView);
       }
       updateCookieAndURL(
         project.id,
@@ -152,7 +157,7 @@ const useKanbanViews = (project: IProject | null) => {
           : updateType.view?.slug
       );
     }
-    updateProjectView(projectToUpdateIndex, response.data);
+    updateProjectView(projectToUpdateIndex, updatedProjectView);
   };
 
   const apiAndCacheHandler = async (

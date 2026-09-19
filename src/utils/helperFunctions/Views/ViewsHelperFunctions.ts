@@ -378,6 +378,13 @@ export const stageBoardFiltersInProjectView = (
     }
 }
 
+export const preservePendingBoardFilters = (
+    projectView: IProjectView,
+    pendingFilters?: IFilterSettings,
+): IProjectView => pendingFilters
+    ? stageBoardFiltersInProjectView(projectView, pendingFilters)
+    : projectView
+
 export const getActiveSubtaskSettingFromProject = (project?:IProject|null):TBoardSubtaskSetting=>{
   const view = project?.project_view?.user_project_views[0]
   if (!project || !view) return DEFAULT_SUBTASK_SETTING

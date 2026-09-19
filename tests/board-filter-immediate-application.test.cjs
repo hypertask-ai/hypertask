@@ -9,7 +9,9 @@ const jiti = require("jiti")(__filename, {
 });
 
 const {
+  enqueueBoardViewMutation,
   getActiveFiltersFromProject,
+  preservePendingBoardFilters,
   stageBoardFiltersInProjectView,
 } = jiti(
   path.join(root, "src/utils/helperFunctions/Views/ViewsHelperFunctions.ts"),
@@ -113,5 +115,48 @@ test("staging filters preserves the rest of an existing unsaved view", () => {
   assert.deepEqual(
     staged.user_project_views[0].unsavedView.board_filters,
     todayFilter,
+  );
+});
+
+test("an earlier queued view response preserves the pending filter", async () => {
+  const project = buildProject();
+  let cachedProjectView = project.project_view;
+  let pendingFilters;
+  let releaseEarlierMutation;
+  let filtersAfterEarlierResponse;
+  const earlierMutationGate = new Promise((resolve) => {
+    releaseEarlierMutation = resolve;
+  });
+
+  const earlierMutation = enqueueBoardViewMutation(6595, async () => {
+    await earlierMutationGate;
+    cachedProjectView = preservePendingBoardFilters(
+      buildProject().project_view,
+      pendingFilters,
+    );
+    filtersAfterEarlierResponse = getActiveFiltersFromProject({
+      ...project,
+      project_view: cachedProjectView,
+    });
+  });
+
+  await Promise.resolve();
+  pendingFilters = todayFilter;
+  cachedProjectView = stageBoardFiltersInProjectView(
+    cachedProjectView,
+    pendingFilters,
+  );
+  const filterMutation = enqueueBoardViewMutation(6595, async () => {});
+
+  releaseEarlierMutation();
+  await Promise.all([earlierMutation, filterMutation]);
+
+  assert.deepEqual(filtersAfterEarlierResponse, todayFilter);
+  assert.deepEqual(
+    getFilteredSections(project.sections, {
+      ...project,
+      project_view: cachedProjectView,
+    })[0].items.map((task) => task.id),
+    [101],
   );
 });
