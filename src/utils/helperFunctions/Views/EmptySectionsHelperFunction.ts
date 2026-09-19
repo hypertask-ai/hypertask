@@ -9,6 +9,15 @@ export const getFilteredEmptySections = (
   project: IProject
 ) => {
   const currentSetting = getActiveEmptySectionSettingFromProject(project);
+  const boardSections = project.sections?.length ? project.sections : sections;
+  const boardHasTasks = boardSections.some(
+    (section) => (section.items?.length ?? 0) > 0
+  );
+
+  if (currentSetting === "Hidden" && !boardHasTasks) {
+    return sections.filter((section) => section.visibility);
+  }
+
   return applyEmptySectionSetting(sections, currentSetting);
 };
 

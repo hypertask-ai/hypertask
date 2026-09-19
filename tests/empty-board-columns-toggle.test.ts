@@ -155,6 +155,43 @@ test("a saved Hidden view still removes empty columns after snapshot restore", (
   );
 });
 
+test("the empty columns become visible when the last task leaves a Hidden board", () => {
+  const sections = [
+    { sectionId: 1, visibility: true, items: [] },
+    { sectionId: 2, visibility: true, items: [] },
+  ];
+  const project = {
+    ...projectWith({ applied: view("speed", "Hidden") }),
+    sections,
+    tasks: [],
+  };
+
+  assert.deepEqual(
+    getFilteredEmptySections(sections as never, project as never),
+    sections,
+  );
+});
+
+test("a filter that hides every task does not reveal empty columns", () => {
+  const filteredSections = [
+    { sectionId: 1, visibility: true, items: [] },
+    { sectionId: 2, visibility: true, items: [] },
+  ];
+  const project = {
+    ...projectWith({ applied: view("speed", "Hidden") }),
+    sections: [
+      { ...filteredSections[0], items: [{ id: 20 }] },
+      filteredSections[1],
+    ],
+    tasks: [{ id: 20 }],
+  };
+
+  assert.deepEqual(
+    getFilteredEmptySections(filteredSections as never, project as never),
+    [],
+  );
+});
+
 test("a personal setting overrides shared and legacy unsaved values", () => {
   const applied = {
     ...view("speed", "Show"),
