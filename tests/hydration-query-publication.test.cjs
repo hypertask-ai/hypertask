@@ -28,7 +28,9 @@ const read = (relativePath) =>
 function QueryView({ request, onRequest, onPublished }) {
   const hydrated = useHydrated();
   const query = useQuery({
-    queryKey: ["hydration-publication"],
+    queryKey: hydrated
+      ? ["hydration-publication"]
+      : ["hydration-publication", "hydrating"],
     queryFn: () => {
       onRequest();
       return request;
@@ -36,6 +38,7 @@ function QueryView({ request, onRequest, onPublished }) {
     enabled: hydrated,
     initialData: "server-placeholder",
     initialDataUpdatedAt: 0,
+    staleTime: 30_000,
   });
   React.useEffect(() => {
     if (query.data === "early-result") onPublished();
@@ -51,22 +54,24 @@ function tree(client, request, onRequest, onPublished) {
   );
 }
 
-test("hydration-sensitive production queries and flags use the document gate", () => {
+test("hydration-sensitive queries isolate their pre-hydration cache keys", () => {
   const inbox = read("src/hooks/Inbox/useGetNotifications.ts");
   const boards = read("src/hooks/Homepage/useGetBoards.ts");
   const flags = read("src/hooks/useFlag.tsx");
 
   assert.match(
     inbox,
-    /export const useGetNotifications[\s\S]*?const query = useQuery\(\{\s*queryKey,\s*enabled: hydrated,/,
+    /export const useGetNotifications[\s\S]*?queryKey: observerQueryKey,\s*enabled: hydrated/,
   );
+  assert.match(inbox, /queryKey: hydrated[\s\S]*?"hydrating"/);
   assert.match(inbox, /enabled: hydrated && \(options\?\.enabled \?\? true\)/);
+  assert.match(boards, /queryKey: hydrated[\s\S]*?PROJECTS_ALL_HYDRATING_QUERY_KEY/);
   assert.match(boards, /enabled: hydrated && \(options\?\.enabled \?\? true\)/);
   assert.match(flags, /const flags = useContext\(FeatureFlagsContext\)/);
   assert.match(flags, /return hydrated && flags\[key\] === true/);
 });
 
-test("a shared query waits until streamed consumers can hydrate", { timeout: 5_000 }, async () => {
+test("a shared query isolates late streamed consumers during hydration", { timeout: 5_000 }, async () => {
   const earlyResult = Promise.resolve("early-result");
   let requests = 0;
   const onRequest = () => {
@@ -86,12 +91,8 @@ test("a shared query waits until streamed consumers can hydrate", { timeout: 5_0
 
   const dom = new JSDOM(
     `<div id="shell">${shellMarkup}</div><div id="route">${routeMarkup}</div>`,
-    { url: "https://app.hypertask.ai/inbox", pretendToBeVisual: true },
+    { url: "https://app.hypertask.ai/inbox" },
   );
-  Object.defineProperty(dom.window.document, "readyState", {
-    configurable: true,
-    value: "loading",
-  });
   const testGlobals = {
     window: dom.window,
     document: dom.window.document,
@@ -133,7 +134,9 @@ test("a shared query waits until streamed consumers can hydrate", { timeout: 5_0
         ),
       );
     });
-    assert.equal(requests, 0);
+    await React.act(() => published);
+    assert.equal(requests, 1);
+    assert.equal(shell.textContent, "early-result");
     assert.equal(route.textContent, "server-placeholder");
 
     await React.act(async () => {
@@ -145,12 +148,6 @@ test("a shared query waits until streamed consumers can hydrate", { timeout: 5_0
         ),
       );
     });
-    Object.defineProperty(dom.window.document, "readyState", {
-      configurable: true,
-      value: "complete",
-    });
-    dom.window.dispatchEvent(new dom.window.Event("load"));
-    await React.act(() => published);
 
     assert.equal(recoverableErrors.length, 0);
     assert.equal(requests, 1);
