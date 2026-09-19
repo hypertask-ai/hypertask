@@ -2,8 +2,8 @@ import type { McpAgentSummary } from '@/lib/mcp/agents';
 import type { TaskStaleness } from '@/lib/staleness';
 
 export interface McpTaskAssignee {
-    id: number;
-    email: string;
+    id?: number;
+    email?: string;
     displayName?: string;
     agent?: McpAgentSummary;
     agentAssigner?: McpAgentSummary;
@@ -74,8 +74,8 @@ export interface TaskDetail {
     permanentlyDeleteAt: string | null;
     staleness: TaskStaleness;
     createdBy?: {
-        id: number;
-        email: string;
+        id?: number;
+        email?: string;
         displayName?: string;
         /** Creating managed agent when Task.agentId is set and visible */
         agent?: McpAgentSummary;

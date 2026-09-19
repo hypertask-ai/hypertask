@@ -40,6 +40,7 @@ import { TBoardSortingViewMode } from "@/models/Views/model";
 import { useDeviceContext } from "@/lib/contexts/deviceContext";
 import BoardEmptyState from "./BoardEmptyState";
 import { detectEmptyBoardState } from "@/utils/helperFunctions/Views/BoardEmptyStateHelper";
+import { planEmptySectionsAutoShow } from "@/utils/helperFunctions/Views/EmptySectionsHelperFunction";
 import { getAppliedSearchedTasks } from "@/utils/helperFunctions/Views/SearchFilterHelperFunction";
 import { boardSearchAtom } from "@/store";
 import { useGetArchivedTasksOnBoard } from "@/hooks/Homepage/useGetArchivedTasksOnBoard";
@@ -860,15 +861,14 @@ const HomePage = ({
   const autoShowEmptySectionsKey = `${_currentProject.id}:${emptySectionsViewId}`;
 
   useEffect(() => {
-    if (boardHasTasks) {
-      autoShowingEmptySections.current = null;
-      return;
-    }
-    if (emptyStateDetection?.cause !== "empty_sections_hidden") return;
-    if (autoShowingEmptySections.current === autoShowEmptySectionsKey) return;
-
-    autoShowingEmptySections.current = autoShowEmptySectionsKey;
-    void saveEmptySectionsAPI(_currentProject, "Show");
+    const plan = planEmptySectionsAutoShow({
+      attemptedKey: autoShowingEmptySections.current,
+      boardHasTasks,
+      cause: emptyStateDetection?.cause ?? null,
+      currentKey: autoShowEmptySectionsKey,
+    });
+    autoShowingEmptySections.current = plan.attemptedKey;
+    if (plan.shouldSave) void saveEmptySectionsAPI(_currentProject, "Show");
   }, [autoShowEmptySectionsKey, boardHasTasks, emptyStateDetection?.cause, _currentProject]);
 
   const renderSections = (archivedTasks?: ITask[]) =>

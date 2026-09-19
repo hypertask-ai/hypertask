@@ -10,7 +10,10 @@ import {
   pinProjectToUrlView,
   settleEmptySectionMutation,
 } from "../src/utils/helperFunctions/Views/ViewsHelperFunctions";
-import { getFilteredEmptySections } from "../src/utils/helperFunctions/Views/EmptySectionsHelperFunction";
+import {
+  getFilteredEmptySections,
+  planEmptySectionsAutoShow,
+} from "../src/utils/helperFunctions/Views/EmptySectionsHelperFunction";
 import {
   createBoardReadModelSnapshot,
   materializeBoardReadModelSnapshot,
@@ -189,6 +192,42 @@ test("a filter that hides every task does not reveal empty columns", () => {
   assert.deepEqual(
     getFilteredEmptySections(filteredSections as never, project as never),
     [],
+  );
+});
+
+test("a failed automatic Show save is not retried until the board state changes", () => {
+  const firstAttempt = planEmptySectionsAutoShow({
+    attemptedKey: null,
+    boardHasTasks: false,
+    cause: "empty_sections_hidden",
+    currentKey: "15:speed",
+  });
+  const optimisticRender = planEmptySectionsAutoShow({
+    attemptedKey: firstAttempt.attemptedKey,
+    boardHasTasks: false,
+    cause: "actually_empty",
+    currentKey: "15:speed",
+  });
+  const failedSaveRender = planEmptySectionsAutoShow({
+    attemptedKey: optimisticRender.attemptedKey,
+    boardHasTasks: false,
+    cause: "empty_sections_hidden",
+    currentKey: "15:speed",
+  });
+
+  assert.equal(firstAttempt.shouldSave, true);
+  assert.equal(optimisticRender.shouldSave, false);
+  assert.equal(failedSaveRender.shouldSave, false);
+  assert.equal(failedSaveRender.attemptedKey, "15:speed");
+
+  assert.deepEqual(
+    planEmptySectionsAutoShow({
+      attemptedKey: failedSaveRender.attemptedKey,
+      boardHasTasks: true,
+      cause: "actually_empty",
+      currentKey: "15:speed",
+    }),
+    { attemptedKey: null, shouldSave: false },
   );
 });
 

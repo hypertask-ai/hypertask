@@ -67,6 +67,8 @@ An agent association on a ticket is only a marker. The session acts as an agent 
 
 Comments, assignments, section moves, label changes, and edits made with that token store the agent id and the agent name at write time. Task get, task list, comment list, and the activity history then show that agent (name and id), not the owner. After the agent is deleted the stored name still shows when `htpr-6516-agent-attribution` is on; without the flag a retired bot still reads as "Private agent". Existing rows are left as they were.
 
+With the flag on, every board member who can open the ticket sees the acting agent name even when that agent is Private in the directory; PRIVATE still hides it from pickers, the agent list, and chat. `hypertask comment list <ticket> --include-activity` includes the action history.
+
 The Zig CLI accepts the same managed-agent bearer token as MCP. **`hypertask`** is the native binary and **`hypertask`** is a symlink to it. Use the token per process:
 
 ```bash

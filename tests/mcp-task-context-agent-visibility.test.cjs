@@ -70,6 +70,8 @@ function loadRoute(comments) {
     },
     "@/lib/mcp/agents": {
       mcpVisibleAgentSelect: (userId, projectId) => ({ viewerId: userId, projectId }),
+      mapAttributedMcpAgent: (agent) =>
+        agent ? { id: agent.id, displayName: agent.displayName } : undefined,
       mapVisibleMcpAgent: (agent, userId, projectId) =>
         agent &&
         (agent.userId === userId ||
@@ -99,6 +101,9 @@ function loadRoute(comments) {
       getProjectWhere: () => ({}),
     },
   };
+  if (comments.attributionEnabled) {
+    stubs["@/lib/flags"].isFeatureEnabled = async () => true;
+  }
   const loaded = new Module(routePath);
   loaded.filename = routePath;
   loaded.require = (request) => stubs[request] ?? require(request);
@@ -170,4 +175,29 @@ test("task context redacts deleted, private, and unshared team agent names", asy
     viewerId: 6,
     projectId: 15,
   });
+});
+
+test("flagged task context names an attributed private agent", async () => {
+  const comments = [
+    comment({
+      agentDisplayName: "Private helper",
+      agent: {
+        id: "private-agent",
+        displayName: "Private helper",
+        userId: 9,
+        visibility: "PRIVATE",
+        members: [],
+      },
+    }),
+  ];
+  comments.attributionEnabled = true;
+
+  const response = await loadRoute(comments).GET({
+    nextUrl: {
+      searchParams: new URLSearchParams({ task_id: "42", project_id: "15" }),
+    },
+  });
+
+  assert.equal(response.status, 200);
+  assert.equal(response.body.comments[0].author, "Private helper");
 });

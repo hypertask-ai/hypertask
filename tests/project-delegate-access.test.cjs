@@ -100,8 +100,8 @@ function project(overrides = {}) {
   };
 }
 
-test("an agent keeps the connecting human's owned boards in scope", () => {
-  const ownedBoard = project({
+test("an agent token cannot access a board through its owner's account scope", () => {
+  const ownerOnlyBoard = project({
     ownerId: USER_ID,
     owner: {
       id: USER_ID,
@@ -109,10 +109,16 @@ test("an agent keeps the connecting human's owned boards in scope", () => {
     },
   });
 
-  assert.equal(
-    projectMatches(ownedBoard, getProjectWhere(USER_ID, AGENT_ID)),
-    true,
-  );
+  for (const accessWhere of [
+    getProjectWhere,
+    projectContentAccessWhere,
+    taskWriteAccessWhere,
+  ]) {
+    assert.equal(
+      projectMatches(ownerOnlyBoard, accessWhere(USER_ID, AGENT_ID)),
+      false,
+    );
+  }
 });
 
 test("an agent's own active board membership adds scope", () => {
@@ -294,7 +300,7 @@ test("task writes allow owners, human members, and owned active agents", () => {
   }
 });
 
-test("task content keeps the connecting human's board scope for an active agent", () => {
+test("task content excludes the connecting human's unassigned boards", () => {
   const activeAgent = {
     id: AGENT_ID,
     userId: USER_ID,
@@ -316,14 +322,14 @@ test("task content keeps the connecting human's board scope for an active agent"
 
   assert.equal(
     projectMatches(ownedBoard, projectContentAccessWhere(USER_ID, AGENT_ID)),
-    true,
+    false,
   );
   assert.equal(
     projectMatches(
       humanMemberBoard,
       projectContentAccessWhere(USER_ID, AGENT_ID),
     ),
-    true,
+    false,
   );
 });
 

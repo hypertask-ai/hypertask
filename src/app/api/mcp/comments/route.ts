@@ -4,6 +4,7 @@ import { validateMcpAuth, checkMcpRateLimit, mcpUnauthorizedResponse } from '@/l
 import type { McpAgentSummary } from '@/lib/mcp/agents'
 import {
   getMcpSessionAgentSummary,
+  mapAttributedMcpAgent,
   mapVisibleMcpAgent,
   mcpVisibleAgentSelect,
 } from '@/lib/mcp/agents'
@@ -166,7 +167,8 @@ function mapCommentToResponse(
   comment: any,
   userId: number,
   projectId: number,
-  includeActivity = false
+  includeActivity = false,
+  attributionEnabled = false
 ): CommentItem {
   const agent = mapVisibleMcpAgent(comment.agent, userId, projectId)
   const agentVisible = !comment.agent ? !comment.agentDisplayName : Boolean(agent)
@@ -200,7 +202,7 @@ function mapCommentToResponse(
 
   if (!includeActivity) return mappedComment
 
-  return withActivityMetadata(mappedComment, comment.activity)
+  return withActivityMetadata(mappedComment, comment.activity, attributionEnabled)
 }
 
 function applyDurableCommentAttribution<T extends object>(
@@ -210,12 +212,24 @@ function applyDurableCommentAttribution<T extends object>(
   projectId: number,
   attributionEnabled: boolean
 ): T {
+  if (!attributionEnabled)
   return overlayDurableAgentDisplayName(mapped, {
     hasAgentRow: Boolean(comment.agent),
     visibleAgent: mapVisibleMcpAgent(comment.agent, userId, projectId),
     storedDisplayName: comment.agentDisplayName,
     attributionEnabled,
   })
+
+  const agent = mapAttributedMcpAgent(comment.agent)
+  return overlayDurableAgentDisplayName(
+    { ...mapped, ...(agent ? { agent } : {}) },
+    {
+      hasAgentRow: Boolean(comment.agent),
+      visibleAgent: agent,
+      storedDisplayName: comment.agentDisplayName,
+      attributionEnabled,
+    }
+  )
 }
 
 /**
@@ -363,7 +377,13 @@ export async function GET(request: NextRequest) {
 
     // Transform to response format
     const commentList: CommentItem[] = comments.map((comment) =>
-      mapCommentToResponse(comment, user.id, task.projectId, includeActivity)
+      mapCommentToResponse(
+        comment,
+        user.id,
+        task.projectId,
+        includeActivity,
+        attributionEnabled
+      )
     ).map((mapped, index) =>
       applyDurableCommentAttribution(
         mapped,
