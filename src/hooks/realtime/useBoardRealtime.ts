@@ -50,6 +50,7 @@ export function useBoardRealtime(
     let fallbackActive = false;
     let fallbackTimer: ReturnType<typeof setInterval> | null = null;
     let fallbackWarningLogged = false;
+    let connectionAttemptInFlight = false;
 
     const runScopedReconcile = async (userId: number): Promise<void> => {
       scopedDirty = true;
@@ -142,8 +143,11 @@ export function useBoardRealtime(
       window.addEventListener("online", onOnline);
     }
 
-    const connectAndSubscribe = () =>
+    const connectAndSubscribe = () => {
+      if (cancelled || connectionAttemptInFlight || unsubscribe) return;
+      connectionAttemptInFlight = true;
     void (async () => {
+      try {
       const client = await connectRealtimeClient();
       if (!client) startFallback("unavailable");
       if (!client) return;
@@ -179,9 +183,24 @@ export function useBoardRealtime(
         teardown?.();
         startFallback("failed");
       };
+      const onConnectionStateChange = ({ current }: { current?: string }) => {
+        if (cancelled) return;
+        if (
+          current !== "unavailable" &&
+          current !== "failed" &&
+          current !== "disconnected"
+        ) {
+          return;
+        }
+        const teardown = unsubscribe;
+        unsubscribe = undefined;
+        teardown?.();
+        startFallback(current);
+      };
       channel.bind(BOARD_EVENT, onBoardEvent);
       channel.bind("pusher:subscription_succeeded", onSubscriptionSucceeded);
       channel.bind("pusher:subscription_error", onSubscriptionError);
+      client.connection.bind("state_change", onConnectionStateChange);
       if (channel.subscribed) onSubscriptionSucceeded();
       // Reconnect safety-net: pull once after a dropped connection recovers.
       // The initial connection is covered by the subscription catch-up above.
@@ -201,11 +220,19 @@ export function useBoardRealtime(
           onSubscriptionSucceeded,
         );
         channel.unbind("pusher:subscription_error", onSubscriptionError);
+        client.connection.unbind("state_change", onConnectionStateChange);
         client.connection.unbind("connected", onConnected);
         client.unsubscribe(channelName);
         releaseRealtimeClientIfIdle(client);
       };
+      onConnectionStateChange({ current: client.connection.state });
+      } catch {
+        startFallback("unavailable");
+      } finally {
+        connectionAttemptInFlight = false;
+      }
     })();
+    };
     connectAndSubscribe();
 
     return () => {
