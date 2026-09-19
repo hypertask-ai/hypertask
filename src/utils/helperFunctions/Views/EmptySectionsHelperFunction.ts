@@ -1,8 +1,29 @@
 import { IProject, ISection } from "@/models/model";
 import { TBoardEmptySections } from "@/models/Views/model";
+import type { EmptyStateCause } from "./BoardEmptyStateHelper";
 import { getActiveEmptySectionSettingFromProject } from "./ViewsHelperFunctions";
 
 export const defaultEmptySections: TBoardEmptySections = "Show";
+
+export const shouldHoldEmptySectionsAutoShowAttempt = ({
+  attemptedBoardId,
+  attemptedViewId,
+  boardHasTasks,
+  cause,
+  currentBoardId,
+  currentViewId,
+}: {
+  attemptedBoardId: number | null;
+  attemptedViewId: string | null;
+  boardHasTasks: boolean;
+  cause: EmptyStateCause | null;
+  currentBoardId: number;
+  currentViewId: string;
+}) =>
+  !boardHasTasks &&
+  cause !== "empty_sections_hidden" &&
+  attemptedBoardId === currentBoardId &&
+  attemptedViewId === currentViewId;
 
 export const getFilteredEmptySections = (
   sections: ISection[],

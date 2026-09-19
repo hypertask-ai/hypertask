@@ -10,7 +10,10 @@ import {
   pinProjectToUrlView,
   settleEmptySectionMutation,
 } from "../src/utils/helperFunctions/Views/ViewsHelperFunctions";
-import { getFilteredEmptySections } from "../src/utils/helperFunctions/Views/EmptySectionsHelperFunction";
+import {
+  getFilteredEmptySections,
+  shouldHoldEmptySectionsAutoShowAttempt,
+} from "../src/utils/helperFunctions/Views/EmptySectionsHelperFunction";
 import {
   createBoardReadModelSnapshot,
   materializeBoardReadModelSnapshot,
@@ -189,6 +192,33 @@ test("a filter that hides every task does not reveal empty columns", () => {
   assert.deepEqual(
     getFilteredEmptySections(filteredSections as never, project as never),
     [],
+  );
+});
+
+test("an optimistic Show render keeps the automatic save attempt latched", () => {
+  const attempt = {
+    attemptedBoardId: 15,
+    attemptedViewId: "speed",
+    boardHasTasks: false,
+    cause: "actually_empty" as const,
+    currentBoardId: 15,
+    currentViewId: "speed",
+  };
+
+  assert.equal(shouldHoldEmptySectionsAutoShowAttempt(attempt), true);
+  assert.equal(
+    shouldHoldEmptySectionsAutoShowAttempt({
+      ...attempt,
+      boardHasTasks: true,
+    }),
+    false,
+  );
+  assert.equal(
+    shouldHoldEmptySectionsAutoShowAttempt({
+      ...attempt,
+      currentViewId: "planning",
+    }),
+    false,
   );
 });
 

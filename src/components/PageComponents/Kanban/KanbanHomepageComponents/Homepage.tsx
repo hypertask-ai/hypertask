@@ -40,6 +40,7 @@ import { TBoardSortingViewMode } from "@/models/Views/model";
 import { useDeviceContext } from "@/lib/contexts/deviceContext";
 import BoardEmptyState from "./BoardEmptyState";
 import { detectEmptyBoardState } from "@/utils/helperFunctions/Views/BoardEmptyStateHelper";
+import { shouldHoldEmptySectionsAutoShowAttempt } from "@/utils/helperFunctions/Views/EmptySectionsHelperFunction";
 import { getAppliedSearchedTasks } from "@/utils/helperFunctions/Views/SearchFilterHelperFunction";
 import { boardSearchAtom } from "@/store";
 import { useGetArchivedTasksOnBoard } from "@/hooks/Homepage/useGetArchivedTasksOnBoard";
@@ -221,6 +222,7 @@ const HomePage = ({
   const queryClient = useQueryClient();
   const { setBoardColumnsViewAPI, saveEmptySectionsAPI } = useKanbanViews(_currentProject);
   const autoShowingEmptySections = useRef<number | null>(null);
+  const autoShowingEmptySectionsView = useRef<string | null>(null);
   useBoardRealtime(_currentProject?.id, {
     accountId: currentUser.id,
   });
@@ -850,8 +852,28 @@ const HomePage = ({
   const emptyStateDetection = tasksHydrated
     ? detectEmptyBoardState(_sections, filteredSections, _currentProject)
     : null;
+  const boardHasTasks = _sections.some(
+    (section) => (section.items?.length ?? 0) > 0
+  );
+  const emptySectionsViewId =
+    _currentProject.project_view?.user_project_views[0]?.appliedView?.id ??
+    _currentProject.project_view?.default_view?.id ??
+    "unsaved";
 
   useEffect(() => {
+    if (autoShowingEmptySectionsView.current !== emptySectionsViewId) {
+      autoShowingEmptySections.current = null;
+      autoShowingEmptySectionsView.current = emptySectionsViewId;
+    }
+    if (shouldHoldEmptySectionsAutoShowAttempt({
+      attemptedBoardId: autoShowingEmptySections.current,
+      attemptedViewId: autoShowingEmptySectionsView.current,
+      boardHasTasks,
+      cause: emptyStateDetection?.cause ?? null,
+      currentBoardId: _currentProject.id,
+      currentViewId: emptySectionsViewId,
+    })) return;
+
     if (emptyStateDetection?.cause !== "empty_sections_hidden") {
       autoShowingEmptySections.current = null;
       return;
