@@ -1,11 +1,17 @@
 
+import {
+  HTPR_6588_EMPTY_COLUMNS_SAVE_VIEW_FLAG,
+  isFeatureEnabled,
+} from "@/lib/flags";
 import prisma from "@/lib/prisma";
+import type { IProjectView } from "@/models/model";
 import {
   getProjectIncludeWithoutTasks,
   getProjectWhere,
   projectBootstrapSelect,
 } from "./getAllIncludes";
 import { sanitizeProjectBoardFilters } from "@/utils/helperFunctions/Views/BoardFilterSanitizer";
+import { maskPersonalEmptySectionsForUnsavedView } from "@/utils/helperFunctions/Views/ViewsHelperFunctions";
 
 const getAll = async (
   user_id: any,
@@ -62,9 +68,28 @@ const getAll = async (
       };
     }
 
+    const emptyColumnsSaveViewEnabled =
+      !hasActiveProject &&
+      await isFeatureEnabled(HTPR_6588_EMPTY_COLUMNS_SAVE_VIEW_FLAG, userId);
+
     return {
       status: 200,
-      json: projects.map((project) => sanitizeProjectBoardFilters(project)),
+      json: projects.map((project) => {
+        const sanitizedProject = sanitizeProjectBoardFilters(project);
+        if (
+          !emptyColumnsSaveViewEnabled ||
+          !("project_view" in sanitizedProject) ||
+          !sanitizedProject.project_view
+        ) {
+          return sanitizedProject;
+        }
+        return {
+          ...sanitizedProject,
+          project_view: maskPersonalEmptySectionsForUnsavedView(
+            sanitizedProject.project_view as unknown as IProjectView,
+          ) as unknown as typeof sanitizedProject.project_view,
+        };
+      }),
     };
   } catch (error) {
     console.log(error);

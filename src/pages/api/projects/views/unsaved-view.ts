@@ -5,10 +5,6 @@ import {
 } from "@/lib/flags";
 import prisma from "@/lib/prisma";
 import type { IProjectView } from "@/models/model";
-import {
-  isBoardEmptySectionSetting,
-  STAGED_EMPTY_SECTIONS_UPDATE_MODE,
-} from "@/models/Views/model";
 import getProjectView from "@/utils/controllers/projects/views/viewsHelperAPIfunctions";
 import { isDeepEqual } from "@/utils/helperFunctions/helperFunctions";
 import { sanitizeBoardFilters } from "@/utils/helperFunctions/Views/BoardFilterSanitizer";
@@ -21,7 +17,7 @@ import {
   shouldUseTransientTabSettings,
 } from "@/utils/helperFunctions/Views/TransientTabView";
 import {
-  clearProjectViewPersonalEmptySections,
+  maskPersonalEmptySectionsForUnsavedView,
   defaultBoardSortingOrder,
   defaultBoardSortingSettings,
   getSavedBoardLayoutFromActiveView,
@@ -158,30 +154,6 @@ const handler: NextApiHandler = async (
       ) {
         return res.status(403).json({ message: "View is not accessible" });
       }
-      const hasValidEmptySections =
-        isBoardEmptySectionSetting(board_empty_sections);
-      const stagesEmptySections =
-        req.body.updateMode === STAGED_EMPTY_SECTIONS_UPDATE_MODE &&
-        hasValidEmptySections &&
-        await isFeatureEnabled(
-          HTPR_6588_EMPTY_COLUMNS_SAVE_VIEW_FLAG,
-          currentUser.id,
-        );
-      const personalEmptySectionsViewId =
-        baseView?.id ??
-        user_project_view?.appliedView?.id ??
-        projectView.default_view?.id;
-      const clearPersonalEmptySectionsOverride = async () => {
-        if (!stagesEmptySections || !personalEmptySectionsViewId) return;
-        await prisma.view_Last_Used.updateMany({
-          where: {
-            userId: currentUser.id,
-            viewId: personalEmptySectionsViewId,
-          },
-          data: { board_empty_sections: null },
-        });
-      };
-
       // Older clients do not send board_layout. Preserve the tab/base layout
       // in that case; only an explicit null means "inherit browser".
       const inheritedBoardLayout = hasBaseViewId
@@ -256,27 +228,23 @@ const handler: NextApiHandler = async (
         if (!projectViewResponse) {
           return res.status(404).json({ message: "Project view not found" });
         }
-        const masksPersonalEmptySections =
-          hasValidEmptySections &&
-          (stagesEmptySections || await isFeatureEnabled(
-            HTPR_6588_EMPTY_COLUMNS_SAVE_VIEW_FLAG,
-            currentUser.id,
-          ));
-        const transientProjectView =
-          masksPersonalEmptySections && personalEmptySectionsViewId
-            ? clearProjectViewPersonalEmptySections(
-                projectViewResponse as unknown as IProjectView,
-                personalEmptySectionsViewId,
-              ) as unknown as typeof projectViewResponse
-            : projectViewResponse;
+        const transientProjectView = applyTransientTabSettings(
+          projectViewResponse,
+          currentUser.id,
+          baseViewId == null ? null : baseView,
+          settingsFromReqBody,
+          !isDeepEqual(settingsFromReqBody, comparisonSettings),
+        );
+        const emptyColumnsSaveViewEnabled = await isFeatureEnabled(
+          HTPR_6588_EMPTY_COLUMNS_SAVE_VIEW_FLAG,
+          currentUser.id,
+        );
         return res.status(200).json(
-          applyTransientTabSettings(
-            transientProjectView,
-            currentUser.id,
-            baseViewId == null ? null : baseView,
-            settingsFromReqBody,
-            !isDeepEqual(settingsFromReqBody, comparisonSettings),
-          )
+          emptyColumnsSaveViewEnabled
+            ? maskPersonalEmptySectionsForUnsavedView(
+                transientProjectView as unknown as IProjectView,
+              )
+            : transientProjectView
         );
       }
 
@@ -501,9 +469,6 @@ const handler: NextApiHandler = async (
         }
       }
 
-      if (stagesEmptySections) {
-        await clearPersonalEmptySectionsOverride();
-      }
       const project_view_updated = await getProjectView(
         projectId,
         currentUser.id

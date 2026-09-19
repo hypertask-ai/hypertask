@@ -13,8 +13,14 @@ import {
   attachOpenBlockingTasks,
   type TaskWithBlockingRelations,
 } from "@/utils/controllers/tasks/attachOpenBlockingTasks";
-import { HTPR_6516_AGENT_ATTRIBUTION_FLAG, isFeatureEnabled } from "@/lib/flags";
+import {
+  HTPR_6516_AGENT_ATTRIBUTION_FLAG,
+  HTPR_6588_EMPTY_COLUMNS_SAVE_VIEW_FLAG,
+  isFeatureEnabled,
+} from "@/lib/flags";
 import { sanitizeAgentAssigneeOwner } from "@/lib/assignees";
+import type { IProjectView } from "@/models/model";
+import { maskPersonalEmptySectionsForUnsavedView } from "@/utils/helperFunctions/Views/ViewsHelperFunctions";
 
 /**
  * Tasks/views for one board in the BoardTasksPayload client contract. The
@@ -49,10 +55,12 @@ const getBoardTasks = async (
       return { status: 403, json: { message: "No access to this board" } };
     }
 
-    const attributionEnabled = await isFeatureEnabled(
-      HTPR_6516_AGENT_ATTRIBUTION_FLAG,
-      userId,
-    );
+    const [attributionEnabled, emptyColumnsSaveViewEnabled] = await Promise.all([
+      isFeatureEnabled(HTPR_6516_AGENT_ATTRIBUTION_FLAG, userId),
+      project.project_view?.user_project_views[0]?.unsavedView
+        ? isFeatureEnabled(HTPR_6588_EMPTY_COLUMNS_SAVE_VIEW_FLAG, userId)
+        : false,
+    ]);
     const tasks = await prisma.task.findMany({
       where: { projectId, ...getTaskWhere() },
       omit: taskBoardOmit,
@@ -80,6 +88,11 @@ const getBoardTasks = async (
       : tasksWithWaitingOnUsers;
 
     const sanitizedProject = sanitizeProjectBoardFilters(project);
+    if (emptyColumnsSaveViewEnabled && sanitizedProject.project_view) {
+      sanitizedProject.project_view = maskPersonalEmptySectionsForUnsavedView(
+        sanitizedProject.project_view as unknown as IProjectView,
+      ) as unknown as typeof sanitizedProject.project_view;
+    }
     const { allViews = [], ...projectView } =
       sanitizedProject.project_view ?? {};
     const projectPayload = sanitizedProject.project_view

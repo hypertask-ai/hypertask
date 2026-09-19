@@ -460,6 +460,16 @@ export const clearProjectViewPersonalEmptySections = (
   viewId: string,
 ): IProjectView => patchProjectViewPersonalEmptySections(projectView, viewId, null)
 
+export const maskPersonalEmptySectionsForUnsavedView = (
+  projectView: IProjectView,
+): IProjectView => {
+  const row = projectView.user_project_views[0]
+  const baseView = row?.appliedView ?? projectView.default_view
+  return row?.unsavedView && baseView
+    ? clearProjectViewPersonalEmptySections(projectView, baseView.id)
+    : projectView
+}
+
 export const patchProjectViewEmptySections = (
   projectView: IProjectView,
   setting: TBoardEmptySections,

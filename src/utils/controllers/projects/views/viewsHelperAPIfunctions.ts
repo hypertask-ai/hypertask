@@ -1,5 +1,11 @@
+import {
+  HTPR_6588_EMPTY_COLUMNS_SAVE_VIEW_FLAG,
+  isFeatureEnabled,
+} from "@/lib/flags";
 import prisma from "@/lib/prisma";
+import type { IProjectView } from "@/models/model";
 import { sanitizeProjectViewBoardFilters } from "@/utils/helperFunctions/Views/BoardFilterSanitizer";
+import { maskPersonalEmptySectionsForUnsavedView } from "@/utils/helperFunctions/Views/ViewsHelperFunctions";
 
 const getProjectView = async (projectId: number, currentUserId: number) => {
   const project_view_updated = await prisma.project_View.findUnique({
@@ -70,7 +76,19 @@ const getProjectView = async (projectId: number, currentUserId: number) => {
       },
     },
   });
-  return sanitizeProjectViewBoardFilters(project_view_updated);
+  const sanitizedProjectView = sanitizeProjectViewBoardFilters(project_view_updated);
+  if (
+    !sanitizedProjectView?.user_project_views[0]?.unsavedView ||
+    !await isFeatureEnabled(
+      HTPR_6588_EMPTY_COLUMNS_SAVE_VIEW_FLAG,
+      currentUserId,
+    )
+  ) {
+    return sanitizedProjectView;
+  }
+  return maskPersonalEmptySectionsForUnsavedView(
+    sanitizedProjectView as unknown as IProjectView,
+  ) as unknown as typeof sanitizedProjectView;
 };
 
 export const getUniqueSlug = async (

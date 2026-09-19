@@ -8,6 +8,7 @@ import {
   getActiveEmptySectionSettingFromProject,
   getActiveEmptySectionSettingFromProjectView,
   getEmptySectionSettingForView,
+  maskPersonalEmptySectionsForUnsavedView,
   patchProjectViewEmptySections,
   pinProjectToUrlView,
   settleEmptySectionMutation,
@@ -263,9 +264,8 @@ test("a transient staged choice masks the personal setting without mutating it",
     applied: applied as never,
   });
 
-  const masked = clearProjectViewPersonalEmptySections(
+  const masked = maskPersonalEmptySectionsForUnsavedView(
     project.project_view as never,
-    "speed",
   );
 
   assert.equal(
@@ -275,6 +275,15 @@ test("a transient staged choice masks the personal setting without mutating it",
   assert.equal(
     getActiveEmptySectionSettingFromProject(project as never),
     "Hidden",
+  );
+
+  const resetProject = projectWith({ applied: applied as never });
+  assert.equal(
+    getActiveEmptySectionSettingFromProjectView(
+      maskPersonalEmptySectionsForUnsavedView(resetProject.project_view as never),
+    ),
+    "Hidden",
+    "removing the unsaved view must reveal the retained personal setting",
   );
 });
 
@@ -538,19 +547,22 @@ test("the flagged command stages empty-column changes in the save-view routine",
     "utf8",
   );
   assert.match(unsavedRoute, /isFeatureEnabled\(\s*HTPR_6588_EMPTY_COLUMNS_SAVE_VIEW_FLAG/);
-  assert.match(unsavedRoute, /req\.body\.updateMode === STAGED_EMPTY_SECTIONS_UPDATE_MODE/);
-  assert.match(unsavedRoute, /clearProjectViewPersonalEmptySections/);
-  assert.match(unsavedRoute, /const clearPersonalEmptySectionsOverride/);
-  assert.match(unsavedRoute, /data: \{ board_empty_sections: null \}/);
-  const transientStart = unsavedRoute.indexOf("if (\n        shouldUseTransientTabSettings(");
-  const durableStart = unsavedRoute.indexOf("const resolvedAppliedViewId", transientStart);
-  const transientSource = unsavedRoute.slice(transientStart, durableStart);
-  assert.doesNotMatch(transientSource, /clearPersonalEmptySectionsOverride\(\)/);
-  assert.match(transientSource, /clearProjectViewPersonalEmptySections/);
-  assert.match(
-    unsavedRoute.slice(durableStart),
-    /if \(stagesEmptySections\) {\s*await clearPersonalEmptySectionsOverride\(\)/,
+  assert.match(unsavedRoute, /maskPersonalEmptySectionsForUnsavedView/);
+  assert.doesNotMatch(unsavedRoute, /view_Last_Used\.updateMany/);
+
+  const projectViewReader = fs.readFileSync(
+    path.join(root, "src/utils/controllers/projects/views/viewsHelperAPIfunctions.ts"),
+    "utf8",
   );
+  assert.match(projectViewReader, /isFeatureEnabled\(\s*HTPR_6588_EMPTY_COLUMNS_SAVE_VIEW_FLAG/);
+  assert.match(projectViewReader, /maskPersonalEmptySectionsForUnsavedView/);
+
+  const boardReader = fs.readFileSync(
+    path.join(root, "src/utils/controllers/projects/getBoardTasks.ts"),
+    "utf8",
+  );
+  assert.match(boardReader, /HTPR_6588_EMPTY_COLUMNS_SAVE_VIEW_FLAG/);
+  assert.match(boardReader, /maskPersonalEmptySectionsForUnsavedView/);
 
   const updateRoute = fs.readFileSync(
     path.join(root, "src/pages/api/projects/views/update-view.ts"),
