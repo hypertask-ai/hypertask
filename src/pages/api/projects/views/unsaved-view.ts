@@ -1,5 +1,10 @@
 // route = "/api/projects/views/unsaved-view"
+import {
+  HTPR_6588_EMPTY_COLUMNS_SAVE_VIEW_FLAG,
+  isFeatureEnabled,
+} from "@/lib/flags";
 import prisma from "@/lib/prisma";
+import { isBoardEmptySectionSetting } from "@/models/Views/model";
 import getProjectView from "@/utils/controllers/projects/views/viewsHelperAPIfunctions";
 import { isDeepEqual } from "@/utils/helperFunctions/helperFunctions";
 import { sanitizeBoardFilters } from "@/utils/helperFunctions/Views/BoardFilterSanitizer";
@@ -148,6 +153,30 @@ const handler: NextApiHandler = async (
       ) {
         return res.status(403).json({ message: "View is not accessible" });
       }
+      const emptyColumnsSaveViewEnabled = await isFeatureEnabled(
+        HTPR_6588_EMPTY_COLUMNS_SAVE_VIEW_FLAG,
+        currentUser.id,
+      );
+      const personalEmptySectionsViewId =
+        baseView?.id ??
+        user_project_view?.appliedView?.id ??
+        projectView.default_view?.id;
+      const clearPersonalEmptySectionsOverride = async () => {
+        if (
+          !emptyColumnsSaveViewEnabled ||
+          !personalEmptySectionsViewId ||
+          !isBoardEmptySectionSetting(board_empty_sections)
+        ) {
+          return;
+        }
+        await prisma.view_Last_Used.updateMany({
+          where: {
+            userId: currentUser.id,
+            viewId: personalEmptySectionsViewId,
+          },
+          data: { board_empty_sections: null },
+        });
+      };
 
       // Older clients do not send board_layout. Preserve the tab/base layout
       // in that case; only an explicit null means "inherit browser".
@@ -216,6 +245,7 @@ const handler: NextApiHandler = async (
               board_layout: sanitizeBoardLayout(baseView.board_layout),
             }
           : superDefault;
+        await clearPersonalEmptySectionsOverride();
         const projectViewResponse = await getProjectView(
           projectId,
           currentUser.id
@@ -455,6 +485,7 @@ const handler: NextApiHandler = async (
         }
       }
 
+      await clearPersonalEmptySectionsOverride();
       const project_view_updated = await getProjectView(
         projectId,
         currentUser.id

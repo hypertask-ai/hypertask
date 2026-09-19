@@ -449,17 +449,20 @@ test("the flagged command stages empty-column changes in the save-view routine",
   assert.match(source, /useFlag\(HTPR_6588_EMPTY_COLUMNS_SAVE_VIEW_FLAG\)/);
   assert.match(saveSource, /if \(emptyColumnsSaveViewEnabled\)/);
   assert.match(saveSource, /buildUnsavedBody\(queuedProject, \{\s*board_empty_sections: emptySection/);
-  const flaggedSource = saveSource.slice(0, saveSource.indexOf("const mutationId"));
-  assert.match(
-    flaggedSource,
-    /patchProjectViewEmptySections\(projectView, emptySection, targetViewId\)/,
-  );
   assert.match(saveSource, /updateMode: PERSONAL_EMPTY_SECTIONS_UPDATE_MODE/);
   assert.ok(
     saveSource.indexOf("if (emptyColumnsSaveViewEnabled)") <
       saveSource.indexOf("updateMode: PERSONAL_EMPTY_SECTIONS_UPDATE_MODE"),
     "the flagged save-view path must run before the legacy personal auto-save",
   );
+
+  const unsavedRoute = fs.readFileSync(
+    path.join(root, "src/pages/api/projects/views/unsaved-view.ts"),
+    "utf8",
+  );
+  assert.match(unsavedRoute, /isFeatureEnabled\(\s*HTPR_6588_EMPTY_COLUMNS_SAVE_VIEW_FLAG/);
+  assert.match(unsavedRoute, /const clearPersonalEmptySectionsOverride/);
+  assert.match(unsavedRoute, /data: \{ board_empty_sections: null \}/);
 
   const updateRoute = fs.readFileSync(
     path.join(root, "src/pages/api/projects/views/update-view.ts"),

@@ -291,28 +291,13 @@ const useKanbanViews = (project: IProject | null) => {
     emptySection: TBoardEmptySections
   ) => {
     if (emptyColumnsSaveViewEnabled) {
-      const targetViewId =
-        project.project_view?.user_project_views[0]?.appliedView?.id ??
-        project.project_view?.default_view?.id
       return apiHandler(
         (queuedProject) => buildUnsavedBody(queuedProject, {
           board_empty_sections: emptySection,
         }),
         project,
         (succeeded) => {
-          if (!succeeded) {
-            toast.error("Empty column visibility could not be saved")
-            return
-          }
-          if (!targetViewId) return
-          const { allData, projectToUpdateIndex } = getProjectIdxAndAllData(project.id)
-          const projectView = allData?.updatedProjects[projectToUpdateIndex]?.project_view
-          if (projectView && projectToUpdateIndex !== -1) {
-            updateProjectView(
-              projectToUpdateIndex,
-              patchProjectViewEmptySections(projectView, emptySection, targetViewId),
-            )
-          }
+          if (!succeeded) toast.error("Empty column visibility could not be saved")
         },
       )
     }
