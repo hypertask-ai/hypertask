@@ -1,10 +1,15 @@
 import type { Metadata } from "next";
+import { cookies } from "next/headers";
+import { redirect } from "next/navigation";
 
 import { requireServerCookieUser } from "@/lib/auth/serverUser";
-// This page is server-rendered, so the server-only flag check cannot enter a browser bundle.
-// eslint-disable-next-line @typescript-eslint/no-restricted-imports
+import { resolveBoardRouteTitleRequest } from "@/lib/boardRouteTitle";
+// eslint-disable-next-line @typescript-eslint/no-restricted-imports -- This server page enforces both report gates before loading report data.
 import { isFeatureEnabled } from "@/lib/flags";
-import { NATIVE_REPORTS_ENABLED } from "@/lib/flags/keys";
+import {
+  HTPR_6585_BOARD_REPORTS_FLAG,
+  NATIVE_REPORTS_ENABLED,
+} from "@/lib/flags/keys";
 import type { IUser } from "@/models/model";
 import { listAllReportsForUser } from "@/utils/controllers/reports/reportService";
 import ReportsOverview from "./ReportsOverview";
@@ -15,21 +20,24 @@ export const metadata: Metadata = {
 
 export default async function Page() {
   const user: IUser = await requireServerCookieUser();
+  if (!(await isFeatureEnabled(HTPR_6585_BOARD_REPORTS_FLAG, user.id))) {
+    redirect("/unauthorized");
+  }
+
+  const cookieStore = await cookies();
+  const { projectId } = resolveBoardRouteTitleRequest(
+    {},
+    cookieStore.get("previousBoard")?.value
+  );
   const [data, nativeReportsEnabled] = await Promise.all([
-    listAllReportsForUser(user.id),
+    listAllReportsForUser(user.id, projectId ? Number(projectId) : null),
     isFeatureEnabled(NATIVE_REPORTS_ENABLED, user.id),
   ]);
 
-  return nativeReportsEnabled ? (
+  return (
     <ReportsOverview
       currentUser={user}
-      nativeReportsEnabled
-      {...data}
-    />
-  ) : (
-    <ReportsOverview
-      currentUser={user}
-      nativeReportsEnabled={false}
+      nativeReportsEnabled={nativeReportsEnabled}
       {...data}
     />
   );

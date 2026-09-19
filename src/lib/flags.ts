@@ -80,6 +80,7 @@ import {
   HTPR_6556_MOBILE_DESCRIPTION_FIRST_FLAG,
   HTPR_6561_DESCRIPTION_STRUCTURE_FLAG,
   HTPR_6542_TEAM_SCOPED_MANAGEMENT_KEYS_FLAG,
+  HTPR_6585_BOARD_REPORTS_FLAG,
   HTPR_6588_EMPTY_COLUMNS_SAVE_VIEW_FLAG,
 } from "@/lib/flags/keys";
 
@@ -109,6 +110,12 @@ const FEATURE_FLAG_DEFINITIONS = [
     shippedOn: "2026-09-19",
     description:
       "Shows a live board report with current task counts by section and assignee.",
+  },
+  {
+    key: HTPR_6585_BOARD_REPORTS_FLAG,
+    shippedOn: "2026-09-19",
+    description:
+      "Shows one live analytics dashboard for the last opened board, with date ranges, worked-on tickets, finish time, weekly completions, and active people.",
   },
   {
     key: HTPR_6588_EMPTY_COLUMNS_SAVE_VIEW_FLAG,

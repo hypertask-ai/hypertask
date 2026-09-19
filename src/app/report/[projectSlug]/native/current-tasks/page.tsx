@@ -6,7 +6,10 @@ import { requireServerCookieUser } from "@/lib/auth/serverUser";
 // This page is server-rendered, so the server-only flag check cannot enter a browser bundle.
 // eslint-disable-next-line @typescript-eslint/no-restricted-imports
 import { isFeatureEnabled } from "@/lib/flags";
-import { NATIVE_REPORTS_ENABLED } from "@/lib/flags/keys";
+import {
+  HTPR_6585_BOARD_REPORTS_FLAG,
+  NATIVE_REPORTS_ENABLED,
+} from "@/lib/flags/keys";
 import type { CurrentTaskCount } from "@/lib/nativeReports/currentTasks";
 import type { IUser } from "@/models/model";
 import { getCurrentTaskReport } from "@/utils/controllers/reports/reportService";
@@ -76,7 +79,11 @@ const CountBreakdown = ({
 
 export default async function Page({ params }: PageProps) {
   const user: IUser = await requireServerCookieUser();
-  if (!(await isFeatureEnabled(NATIVE_REPORTS_ENABLED, user.id))) {
+  const [boardReportsEnabled, nativeReportsEnabled] = await Promise.all([
+    isFeatureEnabled(HTPR_6585_BOARD_REPORTS_FLAG, user.id),
+    isFeatureEnabled(NATIVE_REPORTS_ENABLED, user.id),
+  ]);
+  if (!boardReportsEnabled || !nativeReportsEnabled) {
     notFound();
   }
 
