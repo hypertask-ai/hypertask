@@ -517,7 +517,7 @@ jobs:
     # a confirmed failure promoted the previous deployment, so there is no
     # live build of this SHA left to explore.
     outputs:
-      ran: ${{ steps.smoke.outcome != 'skipped' && steps.smoke.outcome != 'cancelled' && steps.smoke.outcome != '' }}
+      ran: ${{ steps.smoke_status.outputs.ran }}
       ok: ${{ steps.smoke.outcome == 'success' }}
       rolledback: ${{ steps.decide.outputs.rolledback == 'true' }}
     steps:
@@ -583,6 +583,18 @@ jobs:
           QA_LOGIN_EMAIL: ${{ secrets.QA_LOGIN_EMAIL }}
           QA_LOGIN_PASSWORD: ${{ secrets.QA_LOGIN_PASSWORD }}
         run: npx playwright test -c playwright.config.smoke.ts
+
+      - name: Record whether the browser reached the view checks
+        id: smoke_status
+        if: always()
+        run: |
+          ran=false
+          if [ "${{ steps.smoke.outcome }}" != "skipped" ] && \
+             [ -f e2e/smoke/.state/preflight.json ] && \
+             [ "$(jq -r '.ok' e2e/smoke/.state/preflight.json 2>/dev/null)" = "true" ]; then
+            ran=true
+          fi
+          echo "ran=$ran" >> "$GITHUB_OUTPUT"
 
       # Playwright traces are disabled because they include authenticated
       # network traffic. Only screenshots from the isolated smoke account are

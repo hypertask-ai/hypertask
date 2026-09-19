@@ -118,6 +118,8 @@ test("production workflow supplies the dedicated QA login instead of skipping", 
   assert.match(smokeJob, /QA_LOGIN_PASSWORD: \$\{\{ secrets\.QA_LOGIN_PASSWORD \}\}/);
   assert.doesNotMatch(smokeJob, /SMOKE_SESSION_STATE/);
   assert.doesNotMatch(smokeJob, /Not provisioned yet/);
+  assert.match(smokeJob, /ran: \$\{\{ steps\.smoke_status\.outputs\.ran \}\}/);
+  assert.match(smokeJob, /jq -r '\.ok' e2e\/smoke\/\.state\/preflight\.json/);
 });
 
 test("production smoke logs in and resolves the seeded board and task", async () => {
