@@ -86,6 +86,7 @@ export async function GET(request: NextRequest) {
     }
 
     const { priorStart, windowStart, windowEnd } = velocityWindow(now, range);
+    const selectedWindow = { gte: windowStart, lte: windowEnd };
 
     // Scans every non-deleted open board task; fine on demand, but use groupBy on a hot path.
     const [tasks, comments, workedOnTasks] = await Promise.all([
@@ -116,8 +117,7 @@ export async function GET(request: NextRequest) {
       prisma.comment.groupBy({
         by: ["creatorId"],
         where: {
-          // Keep every activity source inside the same selected window.
-          createdAt: { gte: windowStart, lte: windowEnd },
+          createdAt: selectedWindow,
           task: { projectId },
         },
         _count: { _all: true },
@@ -129,25 +129,25 @@ export async function GET(request: NextRequest) {
           deletedAt: null,
           status: { not: "Deleted" },
           OR: [
-            { updatedAt: { gte: windowStart, lte: windowEnd } },
+            { updatedAt: selectedWindow },
             {
               comments: {
                 some: {
-                  createdAt: { gte: windowStart, lte: windowEnd },
+                  createdAt: selectedWindow,
                   OR: [{ creatorId: { not: null } }, { agentId: { not: null } }],
                 },
               },
             },
             {
               sectionEvents: {
-                some: { timestamp: { gte: windowStart, lte: windowEnd } },
+                some: { timestamp: selectedWindow },
               },
             },
             {
               pullRequests: {
                 some: {
                   lifecycle: "merged",
-                  sourceUpdatedAt: { gte: windowStart, lte: windowEnd },
+                  sourceUpdatedAt: selectedWindow,
                 },
               },
             },
@@ -163,19 +163,19 @@ export async function GET(request: NextRequest) {
           updatedAt: true,
           comments: {
             where: {
-              createdAt: { gte: windowStart, lte: windowEnd },
+              createdAt: selectedWindow,
               OR: [{ creatorId: { not: null } }, { agentId: { not: null } }],
             },
             select: { createdAt: true },
           },
           sectionEvents: {
-            where: { timestamp: { gte: windowStart, lte: windowEnd } },
+            where: { timestamp: selectedWindow },
             select: { timestamp: true },
           },
           pullRequests: {
             where: {
               lifecycle: "merged",
-              sourceUpdatedAt: { gte: windowStart, lte: windowEnd },
+              sourceUpdatedAt: selectedWindow,
             },
             select: { title: true, url: true, sourceUpdatedAt: true },
           },
