@@ -211,6 +211,42 @@ test("mobile AI result merges into one direct-create snapshot", () => {
   );
 });
 
+test("mobile AI result replaces the submitted draft but preserves later edits", () => {
+  const submittedDescription = "<p>Draft to improve</p>";
+  const generatedResult = {
+    title: "Generated title",
+    description: "<p>Generated description</p>",
+  };
+  const current = {
+    title: "Keep my title",
+    description: submittedDescription,
+    assignees: [],
+    attachments: [],
+  };
+
+  const mergedSubmittedDraft = mergeMobileCreateTaskWriterResult(
+    current,
+    generatedResult,
+    undefined,
+    undefined,
+    submittedDescription,
+  );
+  assert.equal(mergedSubmittedDraft.description, generatedResult.description);
+
+  const editedWhileWaiting = {
+    ...current,
+    description: "<p>Keep my later edit</p>",
+  };
+  const mergedLaterEdit = mergeMobileCreateTaskWriterResult(
+    editedWhileWaiting,
+    generatedResult,
+    undefined,
+    undefined,
+    submittedDescription,
+  );
+  assert.equal(mergedLaterEdit.description, editedWhileWaiting.description);
+});
+
 test("mobile AI result preserves edits made in the classic form", () => {
   const current = {
     title: "Keep my title",

@@ -58,7 +58,8 @@ test("each mobile flow exposes one raw Save action and no overflow menu", () => 
   assert.doesNotMatch(mobileBar, /Save and close/);
   assert.doesNotMatch(mobileBar, /Save and create new task/);
   assert.equal((mobileBar.match(/label="Save"/g) || []).length, 2);
-  assert.equal((mobileBar.match(/label="Save with task writer"/g) || []).length, 1);
+  assert.equal((mobileBar.match(/"Save with task writer"/g) || []).length, 1);
+  assert.match(mobileBar, /isAiTaskWriterOpen \? "Saving\.\.\."/);
   assert.match(mobileBar, /!descriptionFirst && hasText/);
   assert.match(mobileBar, /descriptionFirst && hasText/);
   assert.match(mobileBar, /Attach files/);

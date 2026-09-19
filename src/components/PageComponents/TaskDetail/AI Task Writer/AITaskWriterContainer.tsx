@@ -77,6 +77,8 @@ const AITaskWriterContainer: React.FC<
   returnTitleAndDescription,
   applyCreateTaskResult,
   mobileCreateTask,
+  createTaskInBackground = false,
+  onCreateTaskError,
   projectLabels,
   projectSections,
   projectAssignees,
@@ -170,6 +172,7 @@ const AITaskWriterContainer: React.FC<
       !autoTrigger && Boolean(initialPrompt) && !userPrompt;
     if (
       !isMobile ||
+      createTaskInBackground ||
       isLoading ||
       currentDisplayResponse ||
       isWaitingForSeededPrompt ||
@@ -196,6 +199,7 @@ const AITaskWriterContainer: React.FC<
     return () => window.cancelAnimationFrame(focusFrame);
   }, [
     autoTrigger,
+    createTaskInBackground,
     currentDisplayResponse,
     initialPrompt,
     isLoading,
@@ -447,6 +451,7 @@ const AITaskWriterContainer: React.FC<
       // Mobile create has no result sheet. Consume the response only after the
       // task was created or a stale-board result was safely discarded.
       if (handled) clearHistory();
+      else onCreateTaskError?.();
     });
   }, [
     applyCreateTaskResult,
@@ -456,11 +461,18 @@ const AITaskWriterContainer: React.FC<
     hasError,
     isLoading,
     isMobileCreateFlow,
+    onCreateTaskError,
     projectAssignees,
     projectId,
     projectLabels,
     projectSections,
   ]);
+
+  useEffect(() => {
+    if (createTaskInBackground && hasError && !isLoading) {
+      onCreateTaskError?.();
+    }
+  }, [createTaskInBackground, hasError, isLoading, onCreateTaskError]);
 
   // Event Handlers
   const handleInputKeydown = useCallback(
@@ -837,8 +849,8 @@ const AITaskWriterContainer: React.FC<
     return () => window.removeEventListener("keydown", onKey);
   }, [isMobile, isRecording, showConfirmationModal, handleEscape]);
 
-  // Don't render if still initializing
-  if (isInitializing) {
+  // The direct-save flow keeps the task form visible while these effects run.
+  if (isInitializing || createTaskInBackground) {
     return null;
   }
 
