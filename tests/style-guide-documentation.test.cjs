@@ -42,6 +42,7 @@ test("the style guide carries every required visual contract section", () => {
     "## Icons",
     "## Button hierarchy",
     "## Reference implementation: mobile comment field",
+    "## Canonical component compositions",
     "## Pull request review contract",
   ]) {
     assert.ok(guideLines.includes(heading), `missing ${heading}`);
@@ -144,6 +145,26 @@ test("the reference composer still implements the documented geometry", () => {
   const mobileTargetClasses = new Set(mobileTarget[1].split(/\s+/));
   assert.ok(mobileTargetClasses.has("min-h-[44px]"));
   assert.ok(mobileTargetClasses.has("min-w-[44px]"));
+});
+
+test("the component reuse contract names real canonical components", () => {
+  const page = read(".claude/skills/canonical-components.md");
+  const componentTable = page.slice(0, page.indexOf("## How to use the list"));
+  const paths = [...componentTable.matchAll(/`(src\/components\/[^`]+\.[cm]?[jt]sx?)`/g)].map((match) => match[1]);
+  const template = read(".github/pull_request_template.md");
+
+  assert.match(guide, /Every PR that touches the UI must name the existing component it reuses for each new control\./);
+  assert.match(template, /^## Components reused$/m);
+  assert.match(template, /`ExportedControl` in `src\/path\/to\/control\.tsx` -> `src\/components\/reused\.tsx`/);
+  assert.match(template, /No existing component fits: `specific justification`/);
+  assert.match(guide, /must exist on the pull request's base branch/);
+  assert.match(guide, /an exported control has no unique mapping/);
+  assert.ok(paths.length >= 6);
+  for (const componentPath of paths) {
+    assert.ok(fs.existsSync(path.join(root, componentPath)), `missing canonical component: ${componentPath}`);
+    assert.ok(guide.includes(`\`${componentPath}\``), `style guide missing ${componentPath}`);
+  }
+  assert.equal(read(".claude/skills/reuse-existing-ui/reference/style-guide.md"), guide);
 });
 
 test("the long-form design reference points to the canonical guide", () => {
