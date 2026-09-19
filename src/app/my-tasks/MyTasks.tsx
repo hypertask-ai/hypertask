@@ -145,28 +145,35 @@ const readError = async (response: Response, fallback: string): Promise<string> 
   return typeof body?.error === "string" ? body.error : fallback;
 };
 
-const MY_TASKS_BOARD_SORT_MODES = [
+const MY_TASKS_BOARD_SORT_MODES: TBoardSortingLevel["mode"][] = [
   "UpdatedAt",
   "Priority",
   "DueDate",
   "Title",
   "CreatedAt",
   "Manual",
-] as const;
+];
+const MY_TASKS_TO_BOARD_SORT = {
+  dueDate: "DueDate",
+  priority: "Priority",
+  createdAt: "CreatedAt",
+  updatedAt: "UpdatedAt",
+  title: "Title",
+} as const;
+const BOARD_TO_MY_TASKS_SORT = {
+  DueDate: "dueDate",
+  Priority: "priority",
+  CreatedAt: "createdAt",
+  UpdatedAt: "updatedAt",
+  Title: "title",
+} as const;
 
 const toBoardSort = (
   sort: MyTasksViewConfig["sort"],
 ): TBoardSortingLevel | null => {
-  const modes = {
-    dueDate: "DueDate",
-    priority: "Priority",
-    createdAt: "CreatedAt",
-    updatedAt: "UpdatedAt",
-    title: "Title",
-  } as const;
   if (sort.field === "board") return null;
   return {
-    mode: modes[sort.field],
+    mode: MY_TASKS_TO_BOARD_SORT[sort.field],
     order: sort.direction === "asc" ? "Ascending" : "Descending",
   };
 };
@@ -174,18 +181,11 @@ const toBoardSort = (
 const fromBoardSort = (
   sort: TBoardSortingLevel | null,
 ): MyTasksViewConfig["sort"] => {
-  const fields = {
-    DueDate: "dueDate",
-    Priority: "priority",
-    CreatedAt: "createdAt",
-    UpdatedAt: "updatedAt",
-    Title: "title",
-  } as const;
-  if (!sort || sort.mode === "Manual" || !(sort.mode in fields)) {
+  if (!sort || sort.mode === "Manual" || !(sort.mode in BOARD_TO_MY_TASKS_SORT)) {
     return DEFAULT_MY_TASKS_VIEW_CONFIG.sort;
   }
   return {
-    field: fields[sort.mode as keyof typeof fields],
+    field: BOARD_TO_MY_TASKS_SORT[sort.mode as keyof typeof BOARD_TO_MY_TASKS_SORT],
     direction: sort.order === "Ascending" ? "asc" : "desc",
   };
 };
@@ -1621,7 +1621,7 @@ const boardTabCounts = useMemo(() => {
           sort={toBoardSort(viewConfig.sort)}
           onSortChange={(sort) => updateViewSort(fromBoardSort(sort))}
           maxLevels={1}
-          availableModes={[...MY_TASKS_BOARD_SORT_MODES]}
+          availableModes={MY_TASKS_BOARD_SORT_MODES}
         />
       ) : null}
       {filterParityEnabled && kanbanFiltersOpen && (
