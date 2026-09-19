@@ -3,12 +3,13 @@ import { notFound, redirect } from "next/navigation";
 
 import { ReportShell } from "@/app/report/ReportsOverview";
 import { requireServerCookieUser } from "@/lib/auth/serverUser";
+// This page is server-rendered, so the server-only flag check cannot enter a browser bundle.
+// eslint-disable-next-line @typescript-eslint/no-restricted-imports
+import { isFeatureEnabled } from "@/lib/flags";
+import { NATIVE_REPORTS_ENABLED } from "@/lib/flags/keys";
 import type { CurrentTaskCount } from "@/lib/nativeReports/currentTasks";
 import type { IUser } from "@/models/model";
-import {
-  getCurrentTaskReport,
-  nativeReportsEnabledForUser,
-} from "@/utils/controllers/reports/reportService";
+import { getCurrentTaskReport } from "@/utils/controllers/reports/reportService";
 import { parseProjectSlug } from "@/utils/controllers/taskDetail/load";
 
 export const dynamic = "force-dynamic";
@@ -75,7 +76,7 @@ const CountBreakdown = ({
 
 export default async function Page({ params }: PageProps) {
   const user: IUser = await requireServerCookieUser();
-  if (!(await nativeReportsEnabledForUser(user.id))) {
+  if (!(await isFeatureEnabled(NATIVE_REPORTS_ENABLED, user.id))) {
     notFound();
   }
 

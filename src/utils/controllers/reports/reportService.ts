@@ -1,6 +1,5 @@
 import { Prisma } from "@prisma/client";
 
-import { isFeatureEnabled, NATIVE_REPORTS_ENABLED } from "@/lib/flags";
 import { buildCurrentTaskReport } from "@/lib/nativeReports/currentTasks";
 import prisma from "@/lib/prisma";
 import { extractCanvasText } from "@/utils/controllers/pages/htmlCanvas";
@@ -302,10 +301,6 @@ export async function deleteReport({
 
 export function getReportUrl(projectId: number, slug: string): string {
   return `/report/project-${projectId}/${slug}`;
-}
-
-export function nativeReportsEnabledForUser(userId: number) {
-  return isFeatureEnabled(NATIVE_REPORTS_ENABLED, userId);
 }
 
 export async function getCurrentTaskReport({

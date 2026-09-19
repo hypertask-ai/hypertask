@@ -4,14 +4,14 @@ import { redirect } from "next/navigation";
 
 import { requireServerCookieUser } from "@/lib/auth/serverUser";
 import { resolveBoardRouteTitleRequest } from "@/lib/boardRouteTitle";
-// eslint-disable-next-line @typescript-eslint/no-restricted-imports -- This server page enforces the report gate before loading report data.
+// eslint-disable-next-line @typescript-eslint/no-restricted-imports -- This server page enforces report gates before loading report data.
 import { isFeatureEnabled } from "@/lib/flags";
-import { HTPR_6585_BOARD_REPORTS_FLAG } from "@/lib/flags/keys";
-import type { IUser } from "@/models/model";
 import {
-  listAllReportsForUser,
-  nativeReportsEnabledForUser,
-} from "@/utils/controllers/reports/reportService";
+  HTPR_6585_BOARD_REPORTS_FLAG,
+  NATIVE_REPORTS_ENABLED,
+} from "@/lib/flags/keys";
+import type { IUser } from "@/models/model";
+import { listAllReportsForUser } from "@/utils/controllers/reports/reportService";
 import ReportsOverview from "./ReportsOverview";
 
 export const metadata: Metadata = {
@@ -31,7 +31,7 @@ export default async function Page() {
   );
   const [data, nativeReportsEnabled] = await Promise.all([
     listAllReportsForUser(user.id, projectId ? Number(projectId) : null),
-    nativeReportsEnabledForUser(user.id),
+    isFeatureEnabled(NATIVE_REPORTS_ENABLED, user.id),
   ]);
 
   return (
