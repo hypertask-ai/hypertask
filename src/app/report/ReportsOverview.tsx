@@ -100,7 +100,7 @@ const ReportsOverview = ({
           {builtins.map((report) => (
             <Link
               key={`current-tasks-${report.projectId}`}
-              className="rounded-[5px] bg-hoverCardBackground px-5 py-4 hover:bg-cardBackground"
+              className="rounded-[5px] bg-hoverCardBackground px-4 py-4 hover:bg-cardBackground"
               href={`/report/project-${report.projectId}/native/current-tasks`}
             >
               <p className="text-emphasis font-semibold text-white-black">
