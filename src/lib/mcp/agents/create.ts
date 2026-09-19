@@ -207,28 +207,6 @@ export async function createAgentForUser(
     }
   }
 
-  // Revoked identities are excluded so owners can deliberately reuse their display names.
-  const existingAgent = await prisma.agent.findFirst({
-    where: {
-      userId: user.id,
-      displayName,
-      revokedAt: null,
-      ...(teamId ? agentWithinTeamWhere(teamId) : {}),
-    },
-    select: { id: true },
-  })
-  if (existingAgent) {
-    return NextResponse.json(
-      {
-        success: false,
-        error: teamId
-          ? `An agent named "${displayName}" already exists in this team.`
-          : `An agent named "${displayName}" already exists (id ${existingAgent.id}). Its token is shown only at creation. Rotate it with POST /api/mcp/admin/agents/${existingAgent.id}/token or the MCP rotate-token endpoint; rotating invalidates the old token.`,
-      },
-      { status: 409 }
-    )
-  }
-
   const projects = []
   for (const projectId of projectIds) {
     const project = await getAccessibleAgentBoard(projectId, user.id)
@@ -270,6 +248,29 @@ export async function createAgentForUser(
       'invalid_field',
       'project_ids',
       'Agents can only belong to boards in one team'
+    )
+  }
+
+  const duplicateTeamId = teamId ?? (callerAgentId ? targetTeamId : null)
+  // Revoked identities are excluded so owners can deliberately reuse their display names.
+  const existingAgent = await prisma.agent.findFirst({
+    where: {
+      userId: user.id,
+      displayName,
+      revokedAt: null,
+      ...(duplicateTeamId ? agentWithinTeamWhere(duplicateTeamId) : {}),
+    },
+    select: { id: true },
+  })
+  if (existingAgent) {
+    return NextResponse.json(
+      {
+        success: false,
+        error: duplicateTeamId
+          ? `An agent named "${displayName}" already exists in this team.`
+          : `An agent named "${displayName}" already exists (id ${existingAgent.id}). Its token is shown only at creation. Rotate it with POST /api/mcp/admin/agents/${existingAgent.id}/token or the MCP rotate-token endpoint; rotating invalidates the old token.`,
+      },
+      { status: 409 }
     )
   }
 

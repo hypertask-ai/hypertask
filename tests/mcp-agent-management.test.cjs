@@ -481,7 +481,7 @@ test('creating a duplicate live agent name returns 409 with recovery details', (
   const guardStart = source.indexOf('const existingAgent =')
   const guard = source.slice(
     guardStart,
-    source.indexOf('\n\n  const projects =', guardStart)
+    source.indexOf('\n\n  const result =', guardStart)
   )
 
   assert.match(

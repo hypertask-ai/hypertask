@@ -30,6 +30,7 @@ function loadCreateModule({
   hasManagementWritePermission = () => true,
   managementAgentTokenScope = () => undefined,
   agentWithinTeamWhere = () => ({}),
+  getAgentTeamId = () => null,
   getAccessibleAgentBoard = async () => null,
   isAgentOnBoard = async () => false,
   requireRole = async () => null,
@@ -79,7 +80,7 @@ function loadCreateModule({
     if (request === "@/utils/controllers/agents/teamScope") {
       return {
         canAttachAgentToTeam: () => true,
-        getAgentTeamId: () => null,
+        getAgentTeamId,
       };
     }
     if (request === "@/utils/controllers/agents/ensureDefaultTeamAgent") {
@@ -200,12 +201,11 @@ test("a team-scoped key cannot create an agent on another team's board", async (
 
   assert.equal(res.status, 403);
   assert.match((await res.json()).error, /only in its own team/i);
-  assert.deepEqual(duplicateWhere, {
-    userId: 6,
-    displayName: "Build Agent",
-    revokedAt: null,
-    onlyTeam: "team-a",
-  });
+  assert.equal(
+    duplicateWhere,
+    undefined,
+    "cross-team requests fail before checking names",
+  );
 });
 
 test("a team-scoped agent stores its grant for derived OAuth credentials", async () => {
@@ -331,10 +331,14 @@ test("an authorized browser session (no management key) can create an agent and 
 
 test("the CLI management route lets a write agent provision a board-bound read agent", async () => {
   let createdData;
+  let duplicateWhere;
   let memberData;
   const prisma = {
     agent: {
-      findFirst: async () => null,
+      findFirst: async ({ where }) => {
+        duplicateWhere = where;
+        return where.onlyTeam === "team-a" ? null : { id: "other-team-agent" };
+      },
       create: async ({ data }) => {
         createdData = data;
         return { id: "ci-reader", displayName: data.displayName, photoURL: null };
@@ -363,6 +367,8 @@ test("the CLI management route lets a write agent provision a board-bound read a
       requiredRole = role;
       return null;
     },
+    agentWithinTeamWhere: (teamId) => ({ onlyTeam: teamId }),
+    getAgentTeamId: () => "team-a",
     getAccessibleAgentBoard: async () => ({ id: 15, teamId: "team-a" }),
     isAgentOnBoard: async (projectId, agentId) =>
       projectId === 15 && agentId === caller.agentId,
@@ -379,6 +385,7 @@ test("the CLI management route lets a write agent provision a board-bound read a
 
   assert.equal(res.status, 201);
   assert.equal(requiredRole, "write");
+  assert.equal(duplicateWhere.onlyTeam, "team-a");
   assert.deepEqual(createdData.permissions, { role: "read" });
   assert.deepEqual(memberData, [
     { projectId: 15, userId: 6, agentId: "ci-reader" },
