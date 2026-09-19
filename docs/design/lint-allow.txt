@@ -1,0 +1,29 @@
+# design-lint allowlist
+#
+# One entry per line: `path-or-prefix` silences every rule, `path-or-prefix::rule-id`
+# silences one. Blank lines and `#` comments are ignored. The path is matched as a
+# prefix, so a directory silences everything under it.
+#
+# An entry needs a reason and the ticket that approved the exception. An allowlist
+# entry is an owner-approved design exception, not a way past a red check. The gate
+# reads this file from the production base commit, so a pull request cannot pass
+# itself by adding a line here.
+#
+# rule ids: raw-hex-colour, raw-colour-function, banned-radius, gradient,
+#           white-border, arbitrary-text-size, arbitrary-spacing,
+#           inline-style-colour-or-spacing, foreign-icon-set, foreign-ui-kit
+
+# Charts map data series to colours that have no semantic UI role. The review
+# contract in openwiki/style-guide.md already excludes them from style findings.
+src/components/Analytics::raw-hex-colour
+src/components/Analytics::raw-colour-function
+src/components/analytics::raw-hex-colour
+src/components/analytics::raw-colour-function
+
+# Email templates are rendered by mail clients, which do not load the app's
+# stylesheet, so they need literal colours and pixel spacing.
+src/templates
+
+# Loading spinners animate geometry the 4px scale cannot express.
+src/components/LoadingSpinners::arbitrary-spacing
+src/components/LoadingSpinners::raw-colour-function

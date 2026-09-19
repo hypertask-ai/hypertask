@@ -10,6 +10,12 @@ Hypertask is minimal and keyboard-first. Controls use compact geometry, quiet hi
 
 The core themes are AMOLED, Graphite, and Porcelain. Dia deliberately changes typography and card geometry. The legacy `dark.css` and `light.css` themes are compatibility sources, not references for new UI.
 
+This guide stays canonical. `docs/design/STYLE-GUIDE.md` is the checkable
+subset the design gate enforces, `docs/design/tokens.json` is the token
+manifest, and `scripts/design-lint.mjs` is the deterministic half of that gate.
+When the gate files and this guide disagree, this guide wins and the gate files
+are wrong.
+
 Sources:
 
 - `tailwind.config.ts`
@@ -137,6 +143,29 @@ Relevant markup lives in `NewCommentComponent.tsx`; action ordering lives in `At
 ## Pull request review contract
 
 For changed user-facing UI, review the changed lines against this guide.
+
+`design-gate` already runs `scripts/design-lint.mjs` on the changed lines and
+catches the mechanical violations: raw hex and `rgb()` colours, `rounded-lg`
+and larger, gradients, white focus rings, arbitrary `text-[Npx]`, arbitrary
+padding off the 4px scale, inline `style` carrying colour or spacing, foreign
+icon sets, and foreign UI kits. Do not spend a finding on those; the lint has
+them.
+
+Review the judgement half the lint cannot see:
+
+- **Component reuse.** A hand-rolled modal, confirm dialog, chip, avatar,
+  tooltip or list row where `docs/design/STYLE-GUIDE.md` names a canonical
+  component for that job.
+- **Action hierarchy.** More than one primary action in a control group, a
+  primary that is not last in the action order, or a secondary action styled to
+  compete with it.
+- **New visible chrome.** A new on-canvas button, pill, badge or banner on a
+  task, board, feed or detail surface, where the affordance belongs in a
+  keyboard shortcut plus the Ctrl+K palette plus the `?` cheatsheet.
+- **Screen fit.** UI that does not look like it belongs next to the reference
+  screens listed in `docs/design/STYLE-GUIDE.md`.
+- **Scoping.** Dia's 10px and 12px geometry leaking out of `.dia`, or a theme
+  value used in a component instead of its semantic utility.
 
 A style finding gates only when the diff itself proves that the pull request introduced or materially extended a violation. Cite the changed file and line, name the violated rule, and point to the conforming token or nearby reference pattern. Report that concrete violation as `major` so `claude-review` blocks it.
 
