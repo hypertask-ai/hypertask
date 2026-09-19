@@ -208,19 +208,25 @@ const TaskWaitingOnActivity = ({
   activity,
 }: {
   activity: ITaskWaitingOnActivity;
-}) => (
+}) => {
+  const fromObj = {
+    displayName: activity.data.fromAgent?.displayName ?? activity.data.fromUser?.displayName ?? "",
+    photoURL: activity.data.fromAgent ? activity.data.fromAgent.photoURL ?? "" : activity.data.fromUser?.photoURL ?? "",
+  };
+  return (
   <>
     <BoldElement>
       <CreatedByLocal
-        name={activity.data.fromUser.displayName ?? ""}
-        pfp={activity.data.fromUser.photoURL ?? ""}
+        name={fromObj.displayName}
+        pfp={fromObj.photoURL}
       />
     </BoldElement>{" "}
     {activity.data.waitingOnDisplayName
       ? `marked this blocked by ${activity.data.waitingOnDisplayName}`
       : "cleared blocked by"}
   </>
-);
+  );
+};
 
 const TaskPullRequestActivity = ({
   activity,

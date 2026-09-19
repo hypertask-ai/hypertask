@@ -25,7 +25,7 @@ const {
 const { mapTaskAssignee } = jiti(
   path.join(root, "src/lib/mcp/tasks/mappers.ts"),
 );
-const { assigneePublicName, splitAssignees } = jiti(
+const { assigneePublicName, commentActorName, splitAssignees } = jiti(
   path.join(root, "src/lib/assignees.ts"),
 );
 
@@ -159,6 +159,50 @@ test("inbox and shared cards read the agent name from the assignee row", () => {
   const { humanAssignees, agentAssignees } = splitAssignees([row]);
   assert.equal(humanAssignees.length, 0);
   assert.equal(agentAssignees[0].displayName, "Dev 2");
+});
+
+test("saved and inbox comment rows prefer the agent name over the owner", () => {
+  assert.equal(
+    commentActorName({
+      creator: { displayName: "Valentin Yeo" },
+      agent: { id: "2499a30e-3cb9-40ed-9ae3-0a6b76891437", displayName: "Dev 1" },
+      agentDisplayName: "Dev 1",
+    }),
+    "Dev 1",
+  );
+  assert.equal(
+    commentActorName({ creator: { displayName: "Valentin Yeo" } }),
+    "Valentin Yeo",
+  );
+  const saved = read(
+    "src/components/PageComponents/Starred/SavedContentRow.tsx",
+  );
+  const inbox = read("src/components/notifications/comment.tsx");
+  assert.match(saved, /commentActorName\(comment\)/);
+  assert.match(inbox, /commentActorName\(notification\.comment\)/);
+});
+
+test("cookie label and waiting-on writes stamp fromAgent from the session", () => {
+  for (const relativePath of [
+    "src/pages/api/labels/assignLabel.ts",
+    "src/pages/api/labels/createLabel.ts",
+    "src/pages/api/tasks/waiting-on.ts",
+  ]) {
+    const source = read(relativePath);
+    assert.match(
+      source,
+      /resolveActingAgentFromCookies/,
+      `${relativePath} must read the session agent`,
+    );
+    assert.match(source, /fromAgent/, `${relativePath} must persist fromAgent`);
+  }
+  const waitingOnUi = read(
+    "src/components/PageComponents/TaskDetail/CommentAndDescription/CommentContainer/CommentTaskActivity.tsx",
+  );
+  assert.match(
+    waitingOnUi,
+    /TaskWaitingOnActivity[\s\S]*fromAgent\?\.displayName/,
+  );
 });
 
 test("MCP label writes pass the acting agent into the activity", () => {

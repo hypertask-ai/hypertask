@@ -19,6 +19,16 @@ export const assigneePublicName = (assignee: AssigneeRow) =>
   assignee.displayName ??
   "";
 
+export const commentActorName = (comment?: {
+  agent?: { displayName?: string | null } | null;
+  agentDisplayName?: string | null;
+  creator?: { displayName?: string | null } | null;
+} | null) =>
+  comment?.agent?.displayName ??
+  comment?.agentDisplayName ??
+  comment?.creator?.displayName ??
+  "";
+
 export const isAgentOption = (
   assignee: IUser | IAgent,
 ): assignee is IAgent => typeof assignee.id === "string";

@@ -3,6 +3,7 @@ import { useDeviceContext } from "@/lib/contexts/deviceContext";
 import { IComment, ITask } from "@/models/model";
 import formatDateDifference from "@/utils/generateTime";
 import { convertToPlain } from "@/utils/helperFunctions/helperFunctions";
+import { commentActorName } from "@/lib/assignees";
 import { Circle, Star, Check, Pin } from "lucide-react";
 
 
@@ -54,7 +55,7 @@ export const SavedContentRow = ({
     >
       {starType === "Comment" && comment ? (
         <CreatorName
-          name={comment.creator?.displayName}
+          name={commentActorName(comment)}
           count={task._count?.comments ?? 0}
           updatedAt={updatedAt}
         />
