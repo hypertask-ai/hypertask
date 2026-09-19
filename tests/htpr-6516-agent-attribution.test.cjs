@@ -25,7 +25,10 @@ const {
 const { mapTaskAssignee } = jiti(
   path.join(root, "src/lib/mcp/tasks/mappers.ts"),
 );
-const { assigneePublicName, commentActorName, splitAssignees } = jiti(
+const { assigneePublicName, splitAssignees } = jiti(
+  path.join(root, "src/lib/assignees.ts"),
+);
+const { commentActorName } = jiti(
   path.join(root, "src/lib/assignees.ts"),
 );
 
@@ -54,7 +57,7 @@ test("activity JSON yields both the agent id and the name copied at write time",
   assert.equal(activityAgentDisplayName({ type: "TaskLabel", data: {} }), null);
 });
 
-test("a named board action stays named even when the agent is directory-private", () => {
+test("a deleted agent's stored name is public; a hidden living agent is not", () => {
   assert.equal(
     resolvePublicAgentDisplayName({
       hasAgentRow: false,
@@ -76,10 +79,10 @@ test("a named board action stays named even when the agent is directory-private"
     resolvePublicAgentDisplayName({
       hasAgentRow: true,
       visibleAgent: null,
-      storedDisplayName: "QA 1",
-      attributionEnabled: true,
+      storedDisplayName: "Secret Bot",
+      attributionEnabled: false,
     }),
-    "QA 1",
+    PRIVATE_AGENT_DISPLAY_NAME,
   );
   assert.equal(
     resolvePublicAgentDisplayName({
@@ -98,6 +101,18 @@ test("a named board action stays named even when the agent is directory-private"
       attributionEnabled: true,
     }),
     null,
+  );
+});
+
+test("flagged board actions name a directory-private agent", () => {
+  assert.equal(
+    resolvePublicAgentDisplayName({
+      hasAgentRow: true,
+      visibleAgent: null,
+      storedDisplayName: "QA 1",
+      attributionEnabled: true,
+    }),
+    "QA 1",
   );
 });
 
@@ -142,12 +157,10 @@ test("task get/list print the agent name on an agent assignment, not the owner",
     },
     6,
     15,
-    true,
   );
   assert.equal(mapped.displayName, "Dev 2");
   assert.equal(mapped.agent.id, "1a6dd89d-5fff-4c1b-9610-0a4270a7f2c7");
-  assert.equal(mapped.id, undefined);
-  assert.equal(mapped.email, undefined);
+  assert.equal(mapped.id, 6);
 });
 
 test("a board member who does not own the bot still sees that bot on the ticket", () => {

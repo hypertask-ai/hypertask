@@ -28,39 +28,37 @@ export function mapTaskAssignee(a: {
     agent?: Parameters<typeof mapVisibleMcpAgent>[0];
     agentAssigner?: Parameters<typeof mapVisibleMcpAgent>[0];
 }, userId: number, projectId: number, attributionEnabled = false): McpTaskAssignee | undefined {
-    if (!attributionEnabled) {
-        const agent = mapVisibleMcpAgent(a.agent, userId, projectId);
-        if (a.agent && !agent) return undefined;
-
-        const mapped: McpTaskAssignee = {
+    const agent = mapVisibleMcpAgent(a.agent, userId, projectId);
+    if (attributionEnabled) {
+        const attributedAgent = mapAttributedMcpAgent(a.agent);
+        const attributedAssigner = mapAttributedMcpAgent(a.agentAssigner);
+        if (attributedAgent) {
+            return {
+                displayName: attributedAgent.displayName,
+                agent: attributedAgent,
+                ...(attributedAssigner ? { agentAssigner: attributedAssigner } : {}),
+            };
+        }
+        return {
             id: a.user.id,
             email: a.user.email,
-            // An agent assignment stores the owner's user row. Print the agent
-            // name, or task get and the CLI still show the owner.
-            displayName: agent?.displayName || a.user.displayName || undefined,
-        };
-        const agentAssigner = mapVisibleMcpAgent(a.agentAssigner, userId, projectId);
-        if (agent) mapped.agent = agent;
-        if (agentAssigner) mapped.agentAssigner = agentAssigner;
-        return mapped;
-    }
-
-    const agent = mapAttributedMcpAgent(a.agent);
-    const agentAssigner = mapAttributedMcpAgent(a.agentAssigner);
-    if (agent) {
-        return {
-            displayName: agent.displayName,
-            agent,
-            ...(agentAssigner ? { agentAssigner } : {}),
+            displayName: a.user.displayName || undefined,
+            ...(attributedAssigner ? { agentAssigner: attributedAssigner } : {}),
         };
     }
+    if (a.agent && !agent) return undefined;
 
-    return {
+    const mapped: McpTaskAssignee = {
         id: a.user.id,
         email: a.user.email,
-        displayName: a.user.displayName || undefined,
-        ...(agentAssigner ? { agentAssigner } : {}),
+        // An agent assignment stores the owner's user row. Print the agent
+        // name, or task get and the CLI still show the owner.
+        displayName: agent?.displayName || a.user.displayName || undefined,
     };
+    const agentAssigner = mapVisibleMcpAgent(a.agentAssigner, userId, projectId);
+    if (agent) mapped.agent = agent;
+    if (agentAssigner) mapped.agentAssigner = agentAssigner;
+    return mapped;
 }
 
 /** Nest the creating agent under createdBy the same way assignees nest agent. */
@@ -72,26 +70,20 @@ export function mapTaskCreatedBy(
     attributionEnabled = false,
 ): NonNullable<TaskDetail['createdBy']> | undefined {
     if (!user) return undefined;
-    if (!attributionEnabled) {
-        const createdBy: NonNullable<TaskDetail['createdBy']> = {
-            id: user.id,
-            email: user.email,
-            displayName: user.displayName || undefined,
-        };
-        const visibleAgent = mapVisibleMcpAgent(agent, userId, projectId);
-        if (visibleAgent) createdBy.agent = visibleAgent;
-        return createdBy;
-    }
-
-    const attributedAgent = mapAttributedMcpAgent(agent);
-    if (attributedAgent) {
-        return { displayName: attributedAgent.displayName, agent: attributedAgent };
-    }
-    return {
+    const createdBy: NonNullable<TaskDetail['createdBy']> = {
         id: user.id,
         email: user.email,
         displayName: user.displayName || undefined,
     };
+    const visibleAgent = mapVisibleMcpAgent(agent, userId, projectId);
+    if (attributionEnabled) {
+        const attributedAgent = mapAttributedMcpAgent(agent);
+        return attributedAgent
+            ? { displayName: attributedAgent.displayName, agent: attributedAgent }
+            : createdBy;
+    }
+    if (visibleAgent) createdBy.agent = visibleAgent;
+    return createdBy;
 }
 
 export const mcpTaskLabelSelect = {
@@ -369,14 +361,17 @@ export function mapTaskToMcpGetResponse(
             warnDays: task.project?.staleWarnDays,
             hotDays: task.project?.staleHotDays,
         }),
-        createdBy: mapTaskCreatedBy(
+        createdBy: mapTaskCreatedBy(task.user, task.agent, userId, task.projectId),
+    };
+    if (attributionEnabled) {
+        mapped.createdBy = mapTaskCreatedBy(
             task.user,
             task.agent,
             userId,
             task.projectId,
-            attributionEnabled,
-        ),
-    };
+            true,
+        );
+    }
 
     const agent = attributionEnabled
         ? mapAttributedMcpAgent(task.agent)
@@ -398,7 +393,7 @@ export function mapTaskToDetail(
         ? mapAttributedMcpAgent(task.agent)
         : mapVisibleMcpAgent(task.agent, userId, task.projectId);
 
-    return {
+    const mapped: TaskDetail = {
         id: task.id,
         ticketNumber: task.ticketNumber || undefined,
         title: task.title,
@@ -473,13 +468,17 @@ export function mapTaskToDetail(
             warnDays: task.project?.staleWarnDays,
             hotDays: task.project?.staleHotDays,
         }),
-        createdBy: mapTaskCreatedBy(
+        createdBy: mapTaskCreatedBy(task.user, task.agent, userId, task.projectId),
+        ...(taskAgent ? { agent: taskAgent } : {}),
+    };
+    if (attributionEnabled) {
+        mapped.createdBy = mapTaskCreatedBy(
             task.user,
             task.agent,
             userId,
             task.projectId,
-            attributionEnabled,
-        ),
-        ...(taskAgent ? { agent: taskAgent } : {}),
-    };
+            true,
+        );
+    }
+    return mapped;
 }

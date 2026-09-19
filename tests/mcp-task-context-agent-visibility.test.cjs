@@ -95,12 +95,15 @@ function loadRoute(comments) {
     },
     "@/lib/flags": {
       HTPR_6516_AGENT_ATTRIBUTION_FLAG: "htpr-6516-agent-attribution",
-      isFeatureEnabled: async () => Boolean(comments.attributionEnabled),
+      isFeatureEnabled: async () => false,
     },
     "@/utils/controllers/projects/getAllIncludes": {
       getProjectWhere: () => ({}),
     },
   };
+  if (comments.attributionEnabled) {
+    stubs["@/lib/flags"].isFeatureEnabled = async () => true;
+  }
   const loaded = new Module(routePath);
   loaded.filename = routePath;
   loaded.require = (request) => stubs[request] ?? require(request);

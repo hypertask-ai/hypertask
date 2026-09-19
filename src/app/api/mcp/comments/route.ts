@@ -211,14 +211,13 @@ function applyDurableCommentAttribution<T extends object>(
   projectId: number,
   attributionEnabled: boolean
 ): T {
-  if (!attributionEnabled) {
-    return overlayDurableAgentDisplayName(mapped, {
-      hasAgentRow: Boolean(comment.agent),
-      visibleAgent: mapVisibleMcpAgent(comment.agent, userId, projectId),
-      storedDisplayName: comment.agentDisplayName,
-      attributionEnabled,
-    })
-  }
+  if (!attributionEnabled)
+  return overlayDurableAgentDisplayName(mapped, {
+    hasAgentRow: Boolean(comment.agent),
+    visibleAgent: mapVisibleMcpAgent(comment.agent, userId, projectId),
+    storedDisplayName: comment.agentDisplayName,
+    attributionEnabled,
+  })
 
   const agent = mapAttributedMcpAgent(comment.agent)
   return overlayDurableAgentDisplayName(
