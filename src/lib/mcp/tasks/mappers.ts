@@ -1,7 +1,6 @@
 import {
     mapAttributedMcpAgent,
     mapVisibleMcpAgent,
-    mcpAgentSelect,
     mcpVisibleAgentSelect,
 } from '@/lib/mcp/agents';
 import { accessibleAgentWhere } from '@/lib/agents/visibility';
@@ -115,7 +114,6 @@ export function taskDetailInclude(userId: number, attributionEnabled = false) {
     estimate: true,
     agent: {
         select: mcpVisibleAgentSelect(userId),
-        ...(attributionEnabled ? { select: mcpAgentSelect } : {}),
     },
     assignees: {
         where: {
@@ -135,12 +133,6 @@ export function taskDetailInclude(userId: number, attributionEnabled = false) {
             },
             agent: { select: mcpVisibleAgentSelect(userId) },
             agentAssigner: { select: mcpVisibleAgentSelect(userId) },
-            ...(attributionEnabled
-                ? {
-                      agent: { select: mcpAgentSelect },
-                      agentAssigner: { select: mcpAgentSelect },
-                  }
-                : {}),
         }
     },
     followers: {

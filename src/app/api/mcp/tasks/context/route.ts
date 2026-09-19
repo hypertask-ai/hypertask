@@ -136,11 +136,6 @@ export async function GET(request: NextRequest) {
     const commentLimit = summary
       ? SUMMARY_COMMENT_LIMIT
       : FULL_COMMENT_LIMIT;
-    const attributionEnabled = await isFeatureEnabled(
-      HTPR_6516_AGENT_ATTRIBUTION_FLAG,
-      ctx.user.id
-    );
-
     const [task, commentCount, recentComments, prComments, relations] =
       await Promise.all([
         prisma.task.findFirst({
@@ -150,7 +145,7 @@ export async function GET(request: NextRequest) {
             status: { not: 'Deleted' },
           },
           include: {
-            ...taskMcpGetInclude(ctx.user.id, attributionEnabled),
+            ...taskMcpGetInclude(ctx.user.id, true),
             pullRequests: {
               orderBy: { createdAt: 'asc' },
               select: {
@@ -235,6 +230,10 @@ export async function GET(request: NextRequest) {
       );
     }
 
+    const attributionEnabled = await isFeatureEnabled(
+      HTPR_6516_AGENT_ATTRIBUTION_FLAG,
+      ctx.user.id
+    );
     const mappedTask = mapTaskToMcpGetResponse(
       task,
       ctx.user.id,
