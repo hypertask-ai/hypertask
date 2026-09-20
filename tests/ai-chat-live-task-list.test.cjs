@@ -28,6 +28,7 @@ test("board-wide task questions require the live task list", () => {
   assert.equal(isLiveTaskListRequest("List all tasks across all boards"), true);
   assert.equal(isLiveTaskListRequest("List the tasks on my current board"), true);
   assert.equal(isLiveTaskListRequest("Show my team's tasks"), true);
+  assert.equal(isLiveTaskListRequest("Could we show all tasks on this board?"), true);
 });
 
 test("other task intents keep their specialized tools", () => {
@@ -58,6 +59,10 @@ test("AI chat enforces live listing and rejects RAG for board-wide task question
   assert.match(
     route,
     /if \(isLiveTaskListRequest\(body\.message\)\) \{[\s\S]*?semantic search cannot prove that a board is empty/,
+  );
+  assert.doesNotMatch(
+    route,
+    /Call hypertask_list_tasks with the project_id from default_context/,
   );
 });
 

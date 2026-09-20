@@ -9614,7 +9614,7 @@ function buildTools(
           return {
             success: false,
             error:
-              "This question requires the live board state. Call hypertask_list_tasks with the project_id from default_context; semantic search cannot prove that a board is empty.",
+              "This question requires live task state. Call hypertask_list_tasks with the scope the user requested; semantic search cannot prove that a board is empty.",
           };
         }
         return sanitizeForJson(
