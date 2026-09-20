@@ -20,6 +20,7 @@ import {
   createAgentWebhookTestDelivery,
   replayAgentWebhookDelivery,
 } from "./outbox";
+import { deleteAgentWebhookSubscription } from "./delivery";
 
 const AGENT_WEBHOOK_TRANSACTION_TIMEOUT_MS = 10_000;
 
@@ -362,7 +363,7 @@ export async function manageAgentWebhook(input: {
   }
 
   if (input.action === "delete") {
-    await prisma.agentWebhookSubscription.delete({ where: { id: subscription.id } });
+    await deleteAgentWebhookSubscription(subscription.id);
     return { success: true, scope: "agent" as const, deleted: subscription.id };
   }
 

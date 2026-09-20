@@ -11,6 +11,7 @@ let activeWebhook;
 let pendingRows;
 let replies;
 let rawQueries;
+let unacknowledgedWebhookMessageIds;
 
 function stubModule(relativePath, exports) {
   const filename = path.join(root, relativePath);
@@ -54,7 +55,12 @@ const tx = {
     rawQueries.push(sql);
     if (/FROM "Agent"/.test(sql)) return [{ id: "agent-polling" }];
     if (/WITH pending AS/.test(sql)) {
-      const claimed = pendingRows.filter((row) => !row.isDelivered).slice(0, 50);
+      const claimed = pendingRows
+        .filter(
+          (row) =>
+            !row.isDelivered || unacknowledgedWebhookMessageIds.includes(row.id),
+        )
+        .slice(0, 50);
       claimed.forEach((row) => {
         row.isDelivered = true;
       });
@@ -190,6 +196,7 @@ test.beforeEach(() => {
   ];
   replies = [];
   rawQueries = [];
+  unacknowledgedWebhookMessageIds = [];
 });
 
 test("pending returns the daemon payload and marks each message delivered", async () => {
@@ -288,14 +295,37 @@ test("a replied turn returns the stored reply without creating another", async (
   assert.equal(replies.length, 1);
 });
 
-test("an active webhook agent remains on the webhook path", async () => {
+test("an acknowledged active webhook message remains off the polling path", async () => {
   activeWebhook = true;
+  pendingRows[0].isDelivered = true;
 
   const { body } = await fetchPending();
 
   assert.deepEqual(body, { success: true, messages: [] });
-  assert.equal(pendingRows[0].isDelivered, false);
-  assert.equal(rawQueries.some((sql) => /WITH pending AS/.test(sql)), false);
+  assert.equal(pendingRows[0].isDelivered, true);
+  assert.equal(rawQueries.some((sql) => /WITH pending AS/.test(sql)), true);
+});
+
+test("a failed webhook message is available while the webhook remains active", async () => {
+  activeWebhook = true;
+
+  const { body } = await fetchPending();
+
+  assert.equal(body.messages.length, 1);
+  assert.equal(body.messages[0].id, "message-1");
+});
+
+test("a webhook message without acknowledgement for 60 seconds is available", async () => {
+  activeWebhook = true;
+  pendingRows[0].isDelivered = true;
+  unacknowledgedWebhookMessageIds = ["message-1"];
+
+  const { body } = await fetchPending();
+
+  assert.equal(body.messages.length, 1);
+  assert.equal(body.messages[0].id, "message-1");
+  assert.match(rawQueries.join("\n"), /INTERVAL '60 seconds'/);
+  assert.match(rawQueries.join("\n"), /SET "status" = 'cancelled'/);
 });
 
 test("pending rejects a user token", async () => {

@@ -14,6 +14,7 @@ import {
   manageAgentWebhook,
   type AgentWebhookManagementAction,
 } from '@/lib/agentWebhooks/management'
+import { deleteAgentWebhookSubscription } from '@/lib/agentWebhooks/delivery'
 
 const MAX_SUBS_PER_PROJECT = 20
 
@@ -364,7 +365,7 @@ export async function DELETE(request: NextRequest) {
           { status: 404 }
         )
       }
-      await prisma.agentWebhookSubscription.delete({ where: { id } })
+      await deleteAgentWebhookSubscription(id)
       return NextResponse.json({ success: true, deleted: id })
     }
 
