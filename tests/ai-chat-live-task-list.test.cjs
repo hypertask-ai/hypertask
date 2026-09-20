@@ -48,6 +48,10 @@ test("other task intents keep their specialized tools", () => {
   assert.equal(isLiveTaskListRequest("Show my highest priority tasks"), false);
   assert.equal(isLiveTaskListRequest("How many tasks am I assigned?"), false);
   assert.equal(isLiveTaskListRequest("Which tasks am I responsible for?"), false);
+  assert.equal(
+    isLiveTaskListRequest("What tasks does my team have me assigned to?"),
+    false,
+  );
   assert.equal(isLiveTaskListRequest("What tasks can I create?"), false);
   assert.equal(isLiveTaskListRequest("How many tasks can I create?"), false);
   assert.equal(isLiveTaskListRequest("Show me how to create tasks"), false);
@@ -116,6 +120,20 @@ test("live task listing defaults to the visible board without overriding explici
       defaultProjectId: 42,
     }),
     undefined,
+  );
+  assert.equal(
+    resolveLiveTaskListProjectId({
+      message: "List tasks for each board member",
+      defaultProjectId: 42,
+    }),
+    42,
+  );
+  assert.equal(
+    resolveLiveTaskListProjectId({
+      message: "List tasks for each project member",
+      defaultProjectId: 42,
+    }),
+    42,
   );
   assert.equal(
     resolveLiveTaskListProjectId({
