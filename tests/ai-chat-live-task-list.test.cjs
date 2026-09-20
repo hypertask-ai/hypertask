@@ -27,6 +27,7 @@ test("board-wide task questions require the live task list", () => {
   assert.equal(isLiveTaskListRequest("Which tasks are high priority?"), true);
   assert.equal(isLiveTaskListRequest("List all tasks across all boards"), true);
   assert.equal(isLiveTaskListRequest("List the tasks on my current board"), true);
+  assert.equal(isLiveTaskListRequest("Show my team's tasks"), true);
 });
 
 test("other task intents keep their specialized tools", () => {
@@ -86,6 +87,13 @@ test("live task listing defaults to the visible board without overriding explici
   assert.equal(
     resolveLiveTaskListProjectId({
       message: "List tasks across every project",
+      defaultProjectId: 42,
+    }),
+    undefined,
+  );
+  assert.equal(
+    resolveLiveTaskListProjectId({
+      message: "List tasks across my boards",
       defaultProjectId: 42,
     }),
     undefined,
