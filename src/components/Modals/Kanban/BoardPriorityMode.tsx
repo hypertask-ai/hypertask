@@ -257,6 +257,11 @@ const BoardPriorityMode = <TMode extends string = SortingMode,>(props: Props<TMo
 
     }, [keyword, levels])
 
+    let sortPlaceholder = "How do you want to sort?"
+    if (levels.length > 0) {
+        sortPlaceholder = maxLevels === 1 ? "Choose a different sort…" : "Add another sort…"
+    }
+
     return (
         <ModalContainerCustom
             fade={false}
@@ -324,7 +329,7 @@ const BoardPriorityMode = <TMode extends string = SortingMode,>(props: Props<TMo
                                 <ModalInput
                                     onChange={onKeyChange}
                                     value={keyword}
-                                    placeholder={levels.length > 0 ? "Add another sort…" : "How do you want to sort?"}
+                                    placeholder={sortPlaceholder}
                                 />
                             </div>
                             <ModalListContainer
@@ -332,7 +337,7 @@ const BoardPriorityMode = <TMode extends string = SortingMode,>(props: Props<TMo
                                 className="max-h-[364px]"
                             >
                                 {
-                                    levels.length === maxLevels && (
+                                    maxLevels !== 1 && levels.length === maxLevels && (
                                         <li className="px-[18px] py-2 text-meta font-normal text-text-light-gray">
                                             Remove a level to add another.
                                         </li>

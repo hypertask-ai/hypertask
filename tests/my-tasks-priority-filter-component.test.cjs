@@ -224,6 +224,14 @@ test("single-level sort modal offers replacement modes", () => {
     dom.window.document.querySelectorAll('#users-list [id^="priority_mode:"]').length > 0,
     "the single-level sort modal must offer replacement modes",
   );
+  assert.equal(
+    dom.window.document.querySelector("input")?.getAttribute("placeholder"),
+    "Choose a different sort…",
+  );
+  assert.ok(
+    !dom.window.document.body.textContent.includes("Remove a level to add another."),
+    "replacement mode must not show multi-level capacity guidance",
+  );
 
   act(() => { reactRoot.unmount(); });
   delete global.window;
