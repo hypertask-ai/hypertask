@@ -1,5 +1,6 @@
 "use client";
 
+import { SaveViewActions } from "@/components/PageComponents/Kanban/HeaderComponents/SaveViewHeaderKanban";
 import useClickOutside from "@/hooks/MultiPages/useClickOutside";
 import { useFlag } from "@/hooks/useFlag";
 import { MOBILE_TARGET } from "@/lib/configs/general.config";
@@ -234,26 +235,12 @@ const MyTasksViewTabs = ({
       </div>
 
       {dirty && (
-        <div className="flex shrink-0 items-center gap-1 text-meta">
-          <button
-            type="button"
-            disabled={busy}
-            onClick={onReset}
-            className="rounded-[4px] px-2 py-1 text-text-light-gray hover:bg-hover-active hover:text-white-black disabled:opacity-50"
-          >
-            Reset
-          </button>
-          {activeView && (
-            <button
-              type="button"
-              disabled={busy}
-              onClick={onSave}
-              className="rounded-[4px] bg-shadcn-primary px-2 py-1 font-medium text-primary-foreground hover:opacity-80 disabled:opacity-50"
-            >
-              Save
-            </button>
-          )}
-        </div>
+        <SaveViewActions
+          disabled={busy}
+          isDirty={dirty}
+          onReset={onReset}
+          onSave={activeView ? onSave : undefined}
+        />
       )}
 
       <button
