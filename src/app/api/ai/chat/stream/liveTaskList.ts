@@ -9,8 +9,10 @@ const BOARD_SCOPED_QUESTION_INTENT =
   /\b(?:what|which)\b[^?.!]*\b(?:tasks|tickets|cards)\b[^?.!]*\b(?:this|the|current|that)\s+(?:board|project)\b/i;
 const EXISTENCE_INTENT =
   /\b(?:are there|is there|do we have|does (?:this|the|current|that) (?:board|project) have)\b|\b(?:tasks?|tickets?|cards?)\s+exist\b/i;
+const PERSONAL_POSSESSIVE_INTENT =
+  /\bmy\s+(?![^?.!]*\b(?:boards?|projects?)\b[^?.!]*\b(?:tasks|tickets|cards|work|workload|assignments|responsibilities)\b)[^?.!]*\b(?:tasks|tickets|cards|work|workload|assignments|responsibilities)\b/i;
 const PERSONAL_WORK_INTENT =
-  /\b(?:my\s+(?:(?:open|closed|overdue|due|assigned|active|current|completed|incomplete|unfinished|blocked|high|medium|low|urgent|priority)\s+)*(?:tasks|tickets|cards|work|workload|assignments|responsibilities)|mine|do i have|i have|am i (?:working|assigned|responsible)|i(?:'m| am) (?:working|assigned|responsible)|assigned to me|for me)\b/i;
+  /\b(?:mine|do i have|i have|am i (?:working|assigned|responsible)|i(?:'m| am) (?:working|assigned|responsible)|assigned to me|for me)\b/i;
 const PRODUCT_HELP_INTENT =
   /\b(?:how to|how (?:do|can|could|should) (?:i|we)|(?:can|could|should|may) (?:i|we))\b[^?.!]*\b(?:create|add|make|edit|update|delete|archive|move|assign|list|show)\b/i;
 const GLOBAL_TASK_SCOPE =
@@ -26,6 +28,7 @@ export function isLiveTaskListRequest(message: string) {
       SET_QUESTION_INTENT.test(message) ||
       BOARD_SCOPED_QUESTION_INTENT.test(message) ||
       EXISTENCE_INTENT.test(message)) &&
+    !PERSONAL_POSSESSIVE_INTENT.test(message) &&
     !PERSONAL_WORK_INTENT.test(message) &&
     !PRODUCT_HELP_INTENT.test(message) &&
     !SEMANTIC_SEARCH_INTENT.test(message)
