@@ -124,15 +124,17 @@ const BoardPriorityMode = <TMode extends string = SortingMode,>(props: Props<TMo
                 await persistLevels([], true)
                 return
             }
-            if (levels.length === maxLevels || levels.some((level) => level.mode === sorting_mode)) return
+            if (maxLevels !== 1 && (levels.length === maxLevels || levels.some((level) => level.mode === sorting_mode))) return
             const sorting_order: SortingOrder = ascendingSortingModes.has(sorting_mode)
                 ? "Ascending"
                 : "Descending"
-            // Stay open after adding a level: stacking is the point, and closing would force a
-            // reopen for every tie-breaker. Manual (above) is terminal, so it still closes.
+            // Multi-level boards stay open for tie-breakers. Single-level pickers replace the
+            // current sort and close, while Manual (above) remains terminal.
             setKeyword('')
             await persistLevels(
-                [...levels, { mode: sorting_mode, order: sorting_order }],
+                maxLevels === 1
+                    ? [{ mode: sorting_mode, order: sorting_order }]
+                    : [...levels, { mode: sorting_mode, order: sorting_order }],
                 maxLevels === 1
             )
         } catch (error) {
@@ -245,8 +247,8 @@ const BoardPriorityMode = <TMode extends string = SortingMode,>(props: Props<TMo
     useEffect(() => {
         // console.log("🚀 ~ useEffect ~ filteredPriorities_:")
         const filteredPriorities_ = priorityModes.filter((priority) =>
-            (priority === "Manual" || !levels.some((level) => level.mode === priority)) &&
-            (levels.length < maxLevels || priority === "Manual") &&
+            (priority === "Manual" || maxLevels === 1 || !levels.some((level) => level.mode === priority)) &&
+            (levels.length < maxLevels || maxLevels === 1 || priority === "Manual") &&
             (keyword.length === 0 || labelForMode(priority).toLowerCase().indexOf(keyword.toLowerCase()) > -1)
         )
         setFilteredPriorities(filteredPriorities_)
