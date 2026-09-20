@@ -23,6 +23,7 @@ function loadController(prisma, calls) {
     "@/lib/prisma": { __esModule: true, default: prisma },
     "@/lib/flags": {
       HTPR_6516_AGENT_ATTRIBUTION_FLAG: "htpr-6516-agent-attribution",
+      HTPR_6588_EMPTY_COLUMNS_SAVE_VIEW_FLAG: "htpr-6588-empty-columns-save-view",
       isFeatureEnabled: async () => false,
     },
     "@/lib/assignees": { sanitizeAgentAssigneeOwner: (assignee) => assignee },
@@ -64,6 +65,12 @@ function loadController(prisma, calls) {
         return tasks.map((task) => ({ ...task, blockingTasks: [] }));
       },
     },
+    "@/utils/controllers/projects/views/viewsHelperAPIfunctions": {
+      persistDisabledStagedEmptySections: async (project) => project,
+    },
+    "@/utils/helperFunctions/Views/ViewsHelperFunctions": {
+      maskPersonalEmptySectionsForUnsavedView: (project) => project,
+    },
   };
   const mod = { exports: {} };
   new Function("module", "exports", "require", javascript)(
@@ -82,6 +89,7 @@ test("board payload checks access before querying task content", async () => {
       id: "project-view-15",
       default_view: { id: "default-view" },
       allViews: ["my-view"],
+      user_project_views: [],
     },
   };
   const prisma = {
@@ -131,6 +139,7 @@ test("board payload checks access before querying task content", async () => {
         project_view: {
           id: "project-view-15",
           default_view: { id: "default-view" },
+          user_project_views: [],
         },
         sanitized: true,
       },
