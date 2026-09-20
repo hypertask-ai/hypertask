@@ -1,12 +1,12 @@
 const TASK_TERM = /\b(?:tasks?|tickets?|cards?)\b/i;
 const DIRECT_LIST_INTENT =
-  /(?:\b(?:list|enumerate|give(?:\s+(?:me|us))?)\b[^?.!]*\b(?:tasks?|tickets?|cards?)\b|\bcount\b[^?.!]*\b(?:tasks|tickets|cards)\b)/i;
+  /(?:\b(?:list|enumerate|give\s+(?:me|us))\b[^?.!]*\b(?:tasks|tickets|cards|(?:every|each)\s+(?:task|ticket|card))\b|\bcount\b[^?.!]*\b(?:tasks|tickets|cards)\b)/i;
 const PLURAL_LIST_INTENT =
   /\b(?:show(?:\s+me)?(?:\s+all)?|all|any|how many)\b[^?.!]*\b(?:tasks|tickets|cards)\b/i;
 const SET_QUESTION_INTENT =
-  /\b(?:what|which)\b[^?.!]*\b(?:tasks?|tickets?|cards?)\b(?=[^?.!]*\b(?:are|were|remain|exist|(?:does|do)\s+(?:(?:my|our|the)\s+teams?|we)\s+have)\b)/i;
+  /\b(?:what|which)\b[^?.!]*\b(?:tasks|tickets|cards)\b(?=[^?.!]*\b(?:are|were|remain|exist|(?:does|do)\s+(?:(?:my|our|the)\s+teams?|we)\s+have)\b)/i;
 const BOARD_SCOPED_QUESTION_INTENT =
-  /\b(?:what|which)\b[^?.!]*\b(?:tasks?|tickets?|cards?)\b[^?.!]*\b(?:this|the|current|that)\s+(?:board|project)\b/i;
+  /\b(?:what|which)\b[^?.!]*\b(?:tasks|tickets|cards)\b[^?.!]*\b(?:this|the|current|that)\s+(?:board|project)\b/i;
 const EXISTENCE_INTENT =
   /\b(?:are there|is there|do we have|does (?:this|the|current|that) (?:board|project) have)\b|\b(?:tasks?|tickets?|cards?)\s+exist\b/i;
 const PERSONAL_POSSESSIVE_INTENT =

@@ -41,6 +41,8 @@ test("other task intents keep their specialized tools", () => {
   assert.equal(isLiveTaskListRequest("What is this task's status?"), false);
   assert.equal(isLiveTaskListRequest("Count comments on this task"), false);
   assert.equal(isLiveTaskListRequest("How many comments are on this task?"), false);
+  assert.equal(isLiveTaskListRequest("Give this task to Bob"), false);
+  assert.equal(isLiveTaskListRequest("List the comments on this task"), false);
   assert.equal(isLiveTaskListRequest("How many tasks do I have?"), false);
   assert.equal(isLiveTaskListRequest("Show my highest priority tasks"), false);
   assert.equal(isLiveTaskListRequest("How many tasks am I assigned?"), false);
