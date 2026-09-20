@@ -58,6 +58,8 @@ stubModule(require.resolve("next/navigation"), {
   }),
   useSearchParams: () => new URLSearchParams(),
 });
+const ModalPart = ({ children }) => React.createElement("div", null, children);
+stubModule(require.resolve("reactstrap"), { ModalBody: ModalPart });
 stubSourceModule("src/components/PageComponents/Kanban/TableView/TableView.tsx", {
   default: (props) => {
     tableViewProps.push(props);
@@ -68,8 +70,15 @@ stubSourceModule("src/components/PageComponents/Kanban/TableView/TableView.tsx",
 stubSourceModule("src/components/PageComponents/Kanban/TableView/TableColumnsPicker.tsx", {
   default: () => null,
 });
-stubSourceModule("src/components/Modals/Kanban/BoardPriorityMode.tsx", {
-  default: () => null,
+stubSourceModule("src/hooks/Homepage/Views/useKanbanViews.ts", {
+  default: () => ({ setBoardSortingViewAndReturn: async () => {} }),
+});
+stubSourceModule("src/components/Common/CommonModalComponents/index.tsx", {
+  ModalContainerCustom: ({ children, id }) => React.createElement("div", { id }, children),
+  ModalHeaderComp: ({ children, header }) => React.createElement("div", null, header, children),
+  ModalInput: ({ autofocus: _autofocus, ...props }) => React.createElement("input", props),
+  ModalListContainer: ({ children, ...props }) => React.createElement("ul", props, children),
+  ModalRowElementContainer: ({ children, isSelected: _isSelected, ...props }) => React.createElement("li", props, children),
 });
 stubSourceModule("src/app/my-tasks/MyTasksViewControls.tsx", {
   default: (props) => {
@@ -121,6 +130,9 @@ stubSourceModule("src/components/Common/TaskRowComponents/TaskListRow.tsx", {
 stubSourceModule("src/styles/search.module.scss", {
   links_modal: "",
 });
+stubSourceModule("src/styles/linksModal.module.scss", {
+  links_modal: "",
+});
 stubSourceModule("src/utils/undoActions/helperFuncs.ts", {
   cn: (...args) => args.filter(Boolean).join(" "),
 });
@@ -131,6 +143,9 @@ global.React = React;
 
 const MyTasksModule = jiti(path.join(root, "src/app/my-tasks/MyTasks.tsx"));
 const MyTasks = MyTasksModule.default;
+const BoardPriorityMode = jiti(
+  path.join(root, "src/components/Modals/Kanban/BoardPriorityMode.tsx"),
+).default;
 const { fromBoardSort, MY_TASKS_BOARD_SORT_MODES, toBoardSort } = MyTasksModule;
 const { DEFAULT_MY_TASKS_VIEW_CONFIG } = jiti(path.join(root, "src/models/MyTasksView.ts"));
 const { PriorityConstants } = jiti(path.join(root, "src/lib/constants/constants.ts"));
@@ -184,6 +199,36 @@ test("board sorting remains selectable through the board sort modal adapter", ()
     field: "board",
     direction: "desc",
   });
+});
+
+test("single-level sort modal offers replacement modes", () => {
+  const dom = new JSDOM("<!doctype html><html><body><div id='root'></div></body></html>", { url: "https://app.hypertask.ai/my-tasks" });
+  global.window = dom.window;
+  global.document = dom.window.document;
+  global.IS_REACT_ACT_ENVIRONMENT = true;
+  dom.window.HTMLElement.prototype.scrollIntoView = () => {};
+  const reactRoot = createRoot(dom.window.document.getElementById("root"));
+
+  act(() => {
+    reactRoot.render(React.createElement(BoardPriorityMode, {
+      closeHandler: () => {},
+      sort: { mode: "UpdatedAt", order: "Descending" },
+      onSortChange: async () => {},
+      maxLevels: 1,
+      availableModes: MY_TASKS_BOARD_SORT_MODES,
+      modeLabel: (mode) => mode,
+    }));
+  });
+
+  assert.ok(
+    dom.window.document.querySelectorAll('#users-list [id^="priority_mode:"]').length > 0,
+    "the single-level sort modal must offer replacement modes",
+  );
+
+  act(() => { reactRoot.unmount(); });
+  delete global.window;
+  delete global.document;
+  delete global.IS_REACT_ACT_ENVIRONMENT;
 });
 
 test("flag off: no filter control and no filtering", () => {
