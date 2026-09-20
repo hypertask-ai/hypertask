@@ -28,7 +28,7 @@ This skill covers the flag-exempt fixes: a crash, a 500, wrong or lost data, res
 9. **Run `update-docs`** if a user-visible behaviour changed.
 10. **Run `simplify-before-pr`.** The change works and the tests pass — now simplify the diff before anyone reviews it.
 11. **Run `design-compliance`.** The diff is final. Now prove the UI matches the style guide and that `node scripts/design-lint.mjs` is clean, before `design-gate` says so on the PR.
-12. **Open the PR:**
+12. **Open the PR:** Before opening one, search GitHub for the ticket ID across open, closed, and merged PRs. Continue an existing open PR, or stop at post-merge verification when one already merged. Never create a second PR for the same ticket.
    ```
    .claude/skills/fix-bug/scripts/open-pr.sh <PREFIX-NNN> BUGFIX "<short title>" \
      --body-file <path> [--lane <lane>]
