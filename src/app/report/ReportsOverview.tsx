@@ -74,10 +74,12 @@ const ReportsOverview = ({
   currentUser,
   reports,
   builtins,
+  nativeReportsEnabled,
 }: {
   currentUser: IUser;
   reports: ReportRow[];
   builtins: BuiltinRow[];
+  nativeReportsEnabled: boolean;
 }) => (
   <ReportShell currentUser={currentUser}>
     <header>
@@ -146,6 +148,24 @@ const ReportsOverview = ({
               </p>
             </Link>
           ))}
+          {nativeReportsEnabled &&
+            builtins.map((report) => (
+              <Link
+                key={`current-tasks-${report.projectId}`}
+                className="rounded-[5px] bg-cardBackground px-4 py-4 hover:bg-hoverCardBackground"
+                href={`/report/project-${report.projectId}/native/current-tasks`}
+              >
+                <p className="text-emphasis font-semibold text-white-black">
+                  Current tasks
+                </p>
+                <p className="mt-1 text-meta text-text-light-gray">
+                  Live task counts by section and assignee
+                </p>
+                <p className="mt-2 text-micro text-text-light-gray">
+                  {report.boardName}
+                </p>
+              </Link>
+            ))}
         </div>
       )}
     </section>

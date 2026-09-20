@@ -1,5 +1,6 @@
 import { Prisma } from "@prisma/client";
 
+import { buildCurrentTaskReport } from "@/lib/nativeReports/currentTasks";
 import prisma from "@/lib/prisma";
 import { extractCanvasText } from "@/utils/controllers/pages/htmlCanvas";
 import { getProjectWhere } from "@/utils/controllers/projects/getAllIncludes";
@@ -300,6 +301,114 @@ export async function deleteReport({
 
 export function getReportUrl(projectId: number, slug: string): string {
   return `/report/project-${projectId}/${slug}`;
+}
+
+export async function getCurrentTaskReport({
+  userId,
+  projectId,
+}: {
+  userId: number;
+  projectId: number;
+}) {
+  return prisma.$transaction(
+    async (tx) => {
+      const project = await tx.project.findFirst({
+        where: { id: projectId, ...getProjectWhere(userId) },
+        select: {
+          title: true,
+          name: true,
+          section: {
+            where: { deleted: false },
+            orderBy: { ranking: "asc" },
+            select: { id: true, section_title: true, ranking: true },
+          },
+        },
+      });
+      if (!project) return null;
+
+      const currentTaskWhere = {
+        projectId,
+        status: "Normal" as const,
+        deletedAt: null,
+      };
+      const [total, sectionCounts, assigneeCounts, unassignedCount] =
+        await Promise.all([
+          tx.task.count({ where: currentTaskWhere }),
+          tx.task.groupBy({
+            by: ["sectionId", "section"],
+            where: currentTaskWhere,
+            _count: { _all: true },
+          }),
+          tx.assignees.groupBy({
+            by: ["userId", "agentId"],
+            where: { task: currentTaskWhere },
+            _count: { _all: true },
+          }),
+          tx.task.count({
+            where: { ...currentTaskWhere, assignees: { none: {} } },
+          }),
+        ]);
+
+      const userIds = [...new Set(assigneeCounts.map(({ userId }) => userId))];
+      const agentIds = [
+        ...new Set(
+          assigneeCounts.flatMap(({ agentId }) =>
+            agentId === null ? [] : [agentId]
+          )
+        ),
+      ];
+      const [users, agents] = await Promise.all([
+        tx.user.findMany({
+          where: { id: { in: userIds } },
+          select: { id: true, displayName: true, email: true },
+        }),
+        tx.agent.findMany({
+          where: { id: { in: agentIds } },
+          select: { id: true, displayName: true },
+        }),
+      ]);
+      const userNames = new Map(
+        users.map((user) => [
+          user.id,
+          user.displayName?.trim() || user.email,
+        ])
+      );
+      const agentNames = new Map(
+        agents.map((agent) => [agent.id, agent.displayName])
+      );
+
+      return {
+        boardName: project.title ?? project.name,
+        ...buildCurrentTaskReport({
+          total,
+          sections: project.section.map((section) => ({
+            id: section.id,
+            title: section.section_title,
+            ranking: section.ranking,
+          })),
+          sectionCounts: sectionCounts.map((row) => ({
+            sectionId: row.sectionId,
+            section: row.section,
+            count: row._count._all,
+          })),
+          assigneeCounts: assigneeCounts.map((row) => ({
+            key:
+              row.agentId === null
+                ? `user:${row.userId}`
+                : `agent:${row.agentId}`,
+            label:
+              (row.agentId === null
+                ? userNames.get(row.userId)
+                : agentNames.get(row.agentId)) ?? "Unknown assignee",
+            count: row._count._all,
+          })),
+          unassignedCount,
+          generatedAt: new Date(),
+        }),
+      };
+    },
+    { isolationLevel: Prisma.TransactionIsolationLevel.RepeatableRead }
+  );
 }
 
 export async function listAllReportsForUser(
