@@ -28,6 +28,9 @@ test("board-wide task questions require the live task list", () => {
   assert.equal(isLiveTaskListRequest("List all tasks across all boards"), true);
   assert.equal(isLiveTaskListRequest("List the tasks on my current board"), true);
   assert.equal(isLiveTaskListRequest("Show my team's tasks"), true);
+  assert.equal(isLiveTaskListRequest("What tasks does my team have?"), true);
+  assert.equal(isLiveTaskListRequest("Give me the tasks on the current board"), true);
+  assert.equal(isLiveTaskListRequest("List every task across every board"), true);
   assert.equal(isLiveTaskListRequest("Could we show all tasks on this board?"), true);
 });
 
@@ -37,10 +40,18 @@ test("other task intents keep their specialized tools", () => {
   assert.equal(isLiveTaskListRequest("What's happening with the auth bug?"), false);
   assert.equal(isLiveTaskListRequest("What is this task's status?"), false);
   assert.equal(isLiveTaskListRequest("Count comments on this task"), false);
+  assert.equal(isLiveTaskListRequest("How many comments are on this task?"), false);
+  assert.equal(isLiveTaskListRequest("Give this task to Bob"), false);
+  assert.equal(isLiveTaskListRequest("Give me permission to edit tasks"), false);
+  assert.equal(isLiveTaskListRequest("List the comments on this task"), false);
   assert.equal(isLiveTaskListRequest("How many tasks do I have?"), false);
   assert.equal(isLiveTaskListRequest("Show my highest priority tasks"), false);
   assert.equal(isLiveTaskListRequest("How many tasks am I assigned?"), false);
   assert.equal(isLiveTaskListRequest("Which tasks am I responsible for?"), false);
+  assert.equal(
+    isLiveTaskListRequest("What tasks does my team have me assigned to?"),
+    false,
+  );
   assert.equal(isLiveTaskListRequest("What tasks can I create?"), false);
   assert.equal(isLiveTaskListRequest("How many tasks can I create?"), false);
   assert.equal(isLiveTaskListRequest("Show me how to create tasks"), false);
@@ -95,6 +106,34 @@ test("live task listing defaults to the visible board without overriding explici
       defaultProjectId: 42,
     }),
     undefined,
+  );
+  assert.equal(
+    resolveLiveTaskListProjectId({
+      message: "List every task across every board",
+      defaultProjectId: 42,
+    }),
+    undefined,
+  );
+  assert.equal(
+    resolveLiveTaskListProjectId({
+      message: "List each task across each board",
+      defaultProjectId: 42,
+    }),
+    undefined,
+  );
+  assert.equal(
+    resolveLiveTaskListProjectId({
+      message: "List tasks for each board member",
+      defaultProjectId: 42,
+    }),
+    42,
+  );
+  assert.equal(
+    resolveLiveTaskListProjectId({
+      message: "List tasks for each project member",
+      defaultProjectId: 42,
+    }),
+    42,
   );
   assert.equal(
     resolveLiveTaskListProjectId({

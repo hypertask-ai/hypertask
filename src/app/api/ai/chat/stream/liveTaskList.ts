@@ -1,10 +1,10 @@
 const TASK_TERM = /\b(?:tasks?|tickets?|cards?)\b/i;
 const DIRECT_LIST_INTENT =
-  /\b(?:list|enumerate|count)\b[^?.!]*\b(?:tasks|tickets|cards)\b/i;
+  /(?:\b(?:list|enumerate)\b[^?.!]*\b(?:tasks|tickets|cards|(?:every|each)\s+(?:task|ticket|card))\b|\bgive\s+(?:me|us)\s+(?:(?:a\s+)?list\s+of\s+|all\s+|the\s+)?(?:tasks|tickets|cards|(?:every|each)\s+(?:task|ticket|card))\b|\bcount\b[^?.!]*\b(?:tasks|tickets|cards)\b)/i;
 const PLURAL_LIST_INTENT =
   /\b(?:show(?:\s+me)?(?:\s+all)?|all|any|how many)\b[^?.!]*\b(?:tasks|tickets|cards)\b/i;
 const SET_QUESTION_INTENT =
-  /\b(?:what|which)\b[^?.!]*\b(?:tasks|tickets|cards)\b(?=[^?.!]*\b(?:are|were|remain|exist)\b)/i;
+  /\b(?:what|which)\b[^?.!]*\b(?:tasks|tickets|cards)\b(?=[^?.!]*\b(?:are|were|remain|exist|(?:does|do)\s+(?:(?:my|our|the)\s+teams?|we)\s+have)\b)/i;
 const BOARD_SCOPED_QUESTION_INTENT =
   /\b(?:what|which)\b[^?.!]*\b(?:tasks|tickets|cards)\b[^?.!]*\b(?:this|the|current|that)\s+(?:board|project)\b/i;
 const EXISTENCE_INTENT =
@@ -12,11 +12,11 @@ const EXISTENCE_INTENT =
 const PERSONAL_POSSESSIVE_INTENT =
   /\bmy\s+(?![^?.!]*\b(?:boards?|projects?|teams?)\b[^?.!]*\b(?:tasks|tickets|cards|work|workload|assignments|responsibilities)\b)[^?.!]*\b(?:tasks|tickets|cards|work|workload|assignments|responsibilities)\b/i;
 const PERSONAL_WORK_INTENT =
-  /\b(?:mine|do i have|i have|am i (?:working|assigned|responsible)|i(?:'m| am) (?:working|assigned|responsible)|assigned to me|for me)\b/i;
+  /\b(?:mine|do i have|i have|am i (?:working|assigned|responsible)|i(?:'m| am) (?:working|assigned|responsible)|(?:has|have) me (?:working|assigned|responsible)|assigned to me|for me)\b/i;
 const PRODUCT_HELP_INTENT =
   /\b(?:how to|how (?:do|can|could|should) (?:i|we))\b[^?.!]*\b(?:create|add|make|edit|update|delete|archive|move|assign|list|show)\b|\b(?:can|could|should|may) (?:i|we)\b[^?.!]*\b(?:create|add|make|edit|update|delete|archive|move|assign)\b/i;
 const GLOBAL_TASK_SCOPE =
-  /\b(?:all\s+(?:boards|projects)|every\s+(?:boards?|projects?)|(?:across|from)\s+(?:(?:(?:all|my|our)\s+)?(?:boards|projects)|every\s+(?:boards?|projects?)))\b/i;
+  /\b(?:all\s+(?:boards|projects)(?!\s+members?\b)|(?:every|each)\s+(?:boards?|projects?)(?!\s+members?\b)|(?:across|from)\s+(?:(?:(?:all|my|our)\s+)?(?:boards|projects)(?!\s+members?\b)|(?:every|each)\s+(?:boards?|projects?)(?!\s+members?\b)))\b/i;
 const SEMANTIC_SEARCH_INTENT =
   /\b(?:find|search|matching|mention|mentioning|mentions|about|related to)\b/i;
 
