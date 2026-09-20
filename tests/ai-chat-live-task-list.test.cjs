@@ -22,13 +22,22 @@ test("board-wide task questions require the live task list", () => {
   assert.equal(isLiveTaskListRequest("Show all high priority cards"), true);
   assert.equal(isLiveTaskListRequest("Are there tasks on this board?"), true);
   assert.equal(isLiveTaskListRequest("Do tasks exist on this board?"), true);
+  assert.equal(isLiveTaskListRequest("Is there a task on this board?"), true);
+  assert.equal(isLiveTaskListRequest("What tasks are on this board?"), true);
+  assert.equal(isLiveTaskListRequest("Which tasks are high priority?"), true);
 });
 
 test("other task intents keep their specialized tools", () => {
   assert.equal(isLiveTaskListRequest("Find tasks mentioning payment gateway"), false);
   assert.equal(isLiveTaskListRequest("What's happening with the auth bug?"), false);
   assert.equal(isLiveTaskListRequest("What is this task's status?"), false);
+  assert.equal(isLiveTaskListRequest("Count comments on this task"), false);
   assert.equal(isLiveTaskListRequest("How many tasks do I have?"), false);
+  assert.equal(isLiveTaskListRequest("How many tasks am I assigned?"), false);
+  assert.equal(isLiveTaskListRequest("Which tasks am I responsible for?"), false);
+  assert.equal(isLiveTaskListRequest("What tasks can I create?"), false);
+  assert.equal(isLiveTaskListRequest("How many tasks can I create?"), false);
+  assert.equal(isLiveTaskListRequest("Show me how to create tasks"), false);
 });
 
 test("AI chat enforces live listing and rejects RAG for board-wide task questions", () => {
@@ -66,6 +75,20 @@ test("live task listing defaults to the visible board without overriding explici
   assert.equal(
     resolveLiveTaskListProjectId({
       message: "Find tasks mentioning payment gateway",
+      defaultProjectId: 42,
+    }),
+    undefined,
+  );
+  assert.equal(
+    resolveLiveTaskListProjectId({
+      message: "How many tasks am I assigned?",
+      defaultProjectId: 42,
+    }),
+    undefined,
+  );
+  assert.equal(
+    resolveLiveTaskListProjectId({
+      message: "What tasks can I create?",
       defaultProjectId: 42,
     }),
     undefined,
