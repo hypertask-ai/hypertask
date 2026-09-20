@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { validateMcpAuth, checkMcpRateLimit } from "@/lib/mcp/auth";
-import { applyView } from "@/lib/mcp/views/services";
+import { applyView } from "@/utils/controllers/views";
 
 /**
  * POST /api/mcp/view/[viewId]/apply -- switch the caller's active view on a board.

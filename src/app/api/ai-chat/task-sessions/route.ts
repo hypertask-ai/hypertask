@@ -1,3 +1,4 @@
+import { chatStore } from "@/utils/controllers/chat";
 import prisma from "@/lib/prisma";
 import { isValidUser } from "@/utils/edgeHelpers";
 import { cookies } from "next/headers";
@@ -33,7 +34,7 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    const sessions = await prisma.chatSession.findMany({
+    const sessions = await chatStore().sessions.findMany({
       where: {
         userId: user.id,
         taskId: parsedTaskId.data,

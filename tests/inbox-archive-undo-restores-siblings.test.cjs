@@ -86,6 +86,7 @@ async function loadMarkAsDone({ row }) {
     "src/lib/auth/getSessionUser.ts",
     "src/lib/realtime/server.ts",
     "src/lib/prisma.ts",
+    "src/utils/controllers/notifications/index.ts",
   ]);
   stubModule("src/lib/auth/getSessionUser.ts", {
     getSessionUser: async () => ({ userId: 6 }),
@@ -120,6 +121,7 @@ async function loadArchiveBulk() {
     "src/lib/auth/getSessionUser.ts",
     "src/lib/realtime/server.ts",
     "src/lib/prisma.ts",
+    "src/utils/controllers/notifications/index.ts",
   ]);
   stubModule("src/lib/auth/getSessionUser.ts", {
     getSessionUser: async () => ({ userId: 6 }),

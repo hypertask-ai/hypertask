@@ -1,3 +1,4 @@
+import { chatStore } from "@/utils/controllers/chat";
 import { NextRequest, NextResponse } from "next/server";
 import { checkMcpRateLimit, validateMcpAuth } from "@/lib/mcp/auth";
 import prisma from "@/lib/prisma";
@@ -91,16 +92,16 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    let session = await prisma.chatSession.findFirst({
+    let session = await chatStore().sessions.findFirst({
       where: { userId: agent.userId, agentId: agent.id },
       select: { id: true },
     });
     if (!session) {
-      await prisma.chatSession.createMany({
+      await chatStore().sessions.createMany({
         data: [{ userId: agent.userId, agentId: agent.id }],
         skipDuplicates: true,
       });
-      session = await prisma.chatSession.findFirst({
+      session = await chatStore().sessions.findFirst({
         where: { userId: agent.userId, agentId: agent.id },
         select: { id: true },
       });
@@ -113,7 +114,7 @@ export async function POST(request: NextRequest) {
     }
 
     const messageId = `${ACTIVITY_ID_PREFIX}${tokenAgentId}-${clientMessageId}`;
-    const inserted = await prisma.chatMessage.createMany({
+    const inserted = await chatStore().messages.createMany({
       data: [
         {
           id: messageId,
@@ -128,7 +129,7 @@ export async function POST(request: NextRequest) {
     });
 
     if (inserted.count === 0) {
-      const existing = await prisma.chatMessage.findUnique({
+      const existing = await chatStore().messages.findUnique({
         where: { id: messageId },
         select: { sessionId: true },
       });
@@ -142,7 +143,7 @@ export async function POST(request: NextRequest) {
       // but the session refresh or broadcast may never have happened.
     }
 
-    await prisma.chatSession.update({
+    await chatStore().sessions.update({
       where: { id: session.id },
       data: { updatedAt: new Date() },
     });

@@ -8,6 +8,8 @@ let loadId = 0;
 const stubbedPaths = [
   "src/pages/api/projects/views/smart-split.ts",
   "src/lib/prisma.ts",
+  "src/utils/controllers/labels/index.ts",
+  "src/utils/controllers/views/index.ts",
   "src/lib/ai/labelClassifier.ts",
   "src/lib/auth/getSessionUser.ts",
   "src/lib/realtime/server.ts",

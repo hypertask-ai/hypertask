@@ -13,6 +13,7 @@ import {
   GUEST_DEFAULT_GATEWAY_MODEL,
 } from "@/lib/demo/guestModels";
 import prisma from "@/lib/prisma";
+import { buildChatHistoryMessages } from "@/utils/controllers/chat";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -156,12 +157,7 @@ export async function POST(request: NextRequest) {
   }
 
   const body = parsed.data;
-  const history: ModelMessage[] = body.chat_history
-    .filter((message) => message.content.trim())
-    .map((message) => ({
-      role: message.role === "human" ? "user" : "assistant",
-      content: message.content,
-    }));
+  const history: ModelMessage[] = buildChatHistoryMessages(body.chat_history);
   const boardData = {
     board: body.board_context ?? null,
     selectedContext: body.context_list.map(({ name, type }) => ({ name, type })),

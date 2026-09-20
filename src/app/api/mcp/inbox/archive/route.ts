@@ -1,3 +1,4 @@
+import { notificationStore } from "@/utils/controllers/notifications";
 import { NextRequest, NextResponse } from 'next/server'
 import { validateMcpAuth, createUnauthorizedResponse, checkMcpRateLimit } from '@/lib/mcp/auth'
 import prisma from '@/lib/prisma'
@@ -83,7 +84,7 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const notifications = await prisma.notification.findMany({
+    const notifications = await notificationStore().findMany({
       where: {
         id: { in: notificationIds },
         userId: user.id,
@@ -113,7 +114,7 @@ export async function POST(request: NextRequest) {
         for (const candidateTaskId of candidateTaskIds) {
           await tx.$executeRaw`SELECT pg_advisory_xact_lock(${REMINDER_LOCK_CLASS}::int, ${candidateTaskId}::int)`
         }
-        const lockedNotifications = await tx.notification.findMany({
+        const lockedNotifications = await notificationStore(tx).findMany({
           where: { id: { in: notificationIds }, userId: user.id, status: 'Normal' },
           select: { id: true, taskId: true, projectId: true },
         })
@@ -169,7 +170,7 @@ export async function POST(request: NextRequest) {
             })
           }
         }
-        await tx.notification.updateMany({
+        await notificationStore(tx).updateMany({
           where: { userId: user.id, taskId: { in: tasks.map((item) => item.taskId!) }, status: 'Normal' },
           data: { status: 'Archive', archivedAt: new Date() },
         })
@@ -202,7 +203,7 @@ export async function POST(request: NextRequest) {
     .filter((taskId) => taskId !== null)
     .map((taskId) => taskId as number)
 
-    await prisma.notification.updateMany({
+    await notificationStore().updateMany({
       where:{
         id:{notIn:notificationIds},
         taskId:{in:taskIds},
@@ -214,7 +215,7 @@ export async function POST(request: NextRequest) {
       }
     })
 
-    const result = await prisma.notification.updateMany({
+    const result = await notificationStore().updateMany({
       where: {
         id: { in: notificationIds },
         userId: user.id,

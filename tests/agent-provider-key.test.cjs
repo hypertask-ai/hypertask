@@ -260,8 +260,8 @@ test("the agent page reads and writes the key through the owner-only route", () 
 
 test("the agents list exposes only a masked key, and only to the owner", () => {
   const fs = require("node:fs");
-  const listRoute = fs.readFileSync(
-    path.join(root, "src/app/api/agents/route.ts"),
+  const listController = fs.readFileSync(
+    path.join(root, "src/utils/controllers/agents/index.ts"),
     "utf8",
   );
 
@@ -285,13 +285,13 @@ test("the agents list exposes only a masked key, and only to the owner", () => {
   );
   assert.match(detail, /k\.enabled !== false/);
 
-  assert.match(listRoute, /byokApiKeys,\s*\.\.\.a\s*\}/);
+  assert.match(listController, /byokApiKeys,\s*\.\.\.agent\s*\}/);
   assert.match(
-    listRoute,
-    /providerKey:\s*\n?\s*a\.userId === currentUserId \? maskAgentProviderKey\(byokApiKeys\) : null/,
+    listController,
+    /providerKey:\s*\n?\s*agent\.userId === currentUserId \? maskAgentProviderKey\(byokApiKeys\) : null/,
   );
-  assert.match(listRoute, /maskAgentProviderKey\(byokApiKeys\)/);
-  assert.doesNotMatch(listRoute, /ciphertext: row\.ciphertext,/);
+  assert.match(listController, /maskAgentProviderKey\(byokApiKeys\)/);
+  assert.doesNotMatch(listController, /ciphertext: row\.ciphertext,/);
 });
 
 test("a team in GDPR safe mode blocks a restricted agent key", async () => {

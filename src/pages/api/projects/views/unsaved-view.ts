@@ -8,7 +8,7 @@ import {
   isBoardEmptySectionSetting,
   STAGED_EMPTY_SECTIONS_UPDATE_MODE,
 } from "@/models/Views/model";
-import getProjectView from "@/utils/controllers/projects/views/viewsHelperAPIfunctions";
+import getProjectView from "@/utils/controllers/views";
 import { isDeepEqual } from "@/utils/helperFunctions/helperFunctions";
 import { sanitizeBoardFilters } from "@/utils/helperFunctions/Views/BoardFilterSanitizer";
 import { defaultEmptySections } from "@/utils/helperFunctions/Views/EmptySectionsHelperFunction";
@@ -32,7 +32,7 @@ import { NextApiHandler, NextApiRequest, NextApiResponse } from "next";
 import {
   MissingBoardFilterLabelError,
   withBoardFilterWriteLock,
-} from "@/utils/controllers/projects/views/boardFilterWriteLock";
+} from "@/utils/controllers/views";
 
 // ============= simple stuff here
 // 1. user selects the default view.

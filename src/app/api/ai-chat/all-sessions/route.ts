@@ -1,3 +1,4 @@
+import { chatStore } from "@/utils/controllers/chat";
 import prisma from "@/lib/prisma";
 import { isValidUser } from "@/utils/edgeHelpers";
 import { cookies } from "next/headers";
@@ -18,7 +19,7 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const sessions = await prisma.chatSession.findMany({
+    const sessions = await chatStore().sessions.findMany({
       where: {
         userId: user.id,
         // External agents (self-hosted runtimes) are only chatted with from
@@ -46,7 +47,7 @@ export async function GET(request: NextRequest) {
 
     if (sessions.length === 0) {
       console.warn("No sessions found, creating new session");
-      const session = await prisma.chatSession.create({
+      const session = await chatStore().sessions.create({
         data: {
           userId: user.id,
         },

@@ -2,7 +2,7 @@
 
 import type { NextApiRequest, NextApiResponse } from 'next'
 
-import { generateSummariesByTeamIdHandler } from './queues/AiSummary/generateSummaryAfterUpsertionQueue';
+import { generateSummariesByTeamIdHandler } from '@/pages/api/queues/AiSummary/generateSummaryAfterUpsertionQueue';
 
 
 

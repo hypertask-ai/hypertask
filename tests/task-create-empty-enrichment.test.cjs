@@ -135,6 +135,9 @@ function loadCreateRoute() {
       waitUntil: (promise) => background.push(promise),
     },
     "@/lib/prisma": { __esModule: true, default: prisma },
+    "@/utils/controllers/labels": {
+      labelStore: () => ({ findMany: async () => [] }),
+    },
     "@/utils/generateRank": { __esModule: true, default: () => "rank" },
     "@/utils/controllers/tasks/getNextUniqueTaskIndex": {
       getNextUniqueTaskIndex: async () => 41,

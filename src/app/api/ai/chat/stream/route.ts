@@ -1,3 +1,6 @@
+import { agentStore } from "@/utils/controllers/agents";
+import { labelStore } from "@/utils/controllers/labels";
+import { chatStore } from "@/utils/controllers/chat";
 import { NextRequest, NextResponse } from "next/server";
 import { randomUUID } from "node:crypto";
 import { waitUntil } from "@vercel/functions";
@@ -1699,7 +1702,7 @@ async function loadActingAgent(
 } | null> {
   if (!sessionId) return null;
 
-  const session = await prisma.chatSession.findFirst({
+  const session = await chatStore().sessions.findFirst({
     where: { id: sessionId, userId },
     select: { agentId: true },
   });
@@ -3069,7 +3072,7 @@ function buildTools(
               },
               orderBy: { title: "asc" },
             }),
-            prisma.agent.findMany({
+            agentStore().findMany({
               where: { userId: user.id },
               select: { id: true, displayName: true },
             }),
@@ -6472,7 +6475,7 @@ function buildTools(
           return { success: false, error: access.error.message };
         }
 
-        const labels = await prisma.label.findMany({
+        const labels = await labelStore().findMany({
           where: { projectId: input.project_id },
           select: { id: true, value: true },
           orderBy: { value: "asc" },
@@ -6508,7 +6511,7 @@ function buildTools(
           return { success: false, error: "name must not be empty" };
         }
 
-        const existing = await prisma.label.findFirst({
+        const existing = await labelStore().findFirst({
           where: {
             projectId: input.project_id,
             value: trimmedName,
@@ -6521,7 +6524,7 @@ function buildTools(
           };
         }
 
-        const label = await prisma.label.create({
+        const label = await labelStore().create({
           data: {
             value: trimmedName,
             projectId: input.project_id,
@@ -9931,7 +9934,7 @@ export async function POST(request: NextRequest) {
   const contextProjectId = body.default_context?.project_id;
   if (body.session_id && typeof contextProjectId === "number") {
     try {
-      await prisma.chatSession.updateMany({
+      await chatStore().sessions.updateMany({
         where: {
           id: body.session_id,
           userId: dbUser.id,
@@ -9953,7 +9956,7 @@ export async function POST(request: NextRequest) {
   });
   if (body.session_id && contextTaskId !== null) {
     try {
-      await prisma.chatSession.updateMany({
+      await chatStore().sessions.updateMany({
         where: {
           id: body.session_id,
           userId: dbUser.id,
@@ -9986,7 +9989,7 @@ export async function POST(request: NextRequest) {
   // External agents are chatted with from Agent Chat, not this native stream.
   // Checked before any provider or model work so the turn never starts.
   if (body.session_id) {
-    const chatAgent = await prisma.chatSession.findFirst({
+    const chatAgent = await chatStore().sessions.findFirst({
       where: { id: body.session_id, userId: dbUser.id },
       select: { agent: { select: { runtimeType: true } } },
     });
@@ -10727,7 +10730,7 @@ export async function POST(request: NextRequest) {
           // This durable phase flip happens immediately before the model can
           // execute tools. Recovery can retry an unstarted reservation, but
           // never treats a started turn as safe to replay after Redis loss.
-          const started = await prisma.chatMessage.updateMany({
+          const started = await chatStore().messages.updateMany({
             where: {
               id: body.user_message_id,
               sessionId: body.session_id,
@@ -11038,7 +11041,7 @@ export async function POST(request: NextRequest) {
             send("title", { content: generatedTitle });
             if (body.session_id) {
               try {
-                await prisma.chatSession.updateMany({
+                await chatStore().sessions.updateMany({
                   where: { id: body.session_id, userId: dbUser.id },
                   data: { title: generatedTitle },
                 });

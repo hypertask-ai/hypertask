@@ -39,7 +39,7 @@ test("version viewing checks task access and returns actor details", () => {
   assert.match(versionsRoute, /take: MAX_DESCRIPTION_VERSIONS \+ 1/);
   assert.match(versionsRoute, /hasMore/);
   assert.match(versionsRoute, /actor: \{/);
-  assert.match(versionsRoute, /prisma.agent.findMany/);
+  assert.match(versionsRoute, /agentStore\(\)\.findMany/);
 });
 
 test("restoration is task-scoped and uses the normal description update path", () => {

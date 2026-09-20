@@ -1,3 +1,4 @@
+import { chatStore } from "@/utils/controllers/chat";
 import prisma from "@/lib/prisma";
 import { getSessionUser } from "@/lib/auth/getSessionUser";
 import {
@@ -140,8 +141,8 @@ export async function POST(
         !subscription?.active &&
         hasFreshAgentChatHeartbeat(agent.heartbeatAt);
 
-      await tx.chatSession.update({ where: { id: session.id }, data: { updatedAt: new Date() } });
-      const message = await tx.chatMessage.create({
+      await chatStore(tx).sessions.update({ where: { id: session.id }, data: { updatedAt: new Date() } });
+      const message = await chatStore(tx).messages.create({
         data: {
           sessionId: session.id,
           content: text,
@@ -154,7 +155,7 @@ export async function POST(
       // commit. Anything else lets sent text reappear in the composer. The
       // read marker moves after the row exists, so the sender's own message is
       // never newer than the marker that is meant to cover it.
-      await tx.chatSessionParticipant.updateMany({
+      await chatStore(tx).participants.updateMany({
         where: { sessionId: session.id, userId },
         data: { draft: null, lastReadAt: message.createdAt },
       });
@@ -186,7 +187,7 @@ export async function POST(
       });
 
       if (deliveryIds.length === 0 && pollingChatEnabled) {
-        await tx.chatMessage.update({
+        await chatStore(tx).messages.update({
           where: { id: message.id },
           data: { isDelivered: false },
         });
@@ -198,7 +199,7 @@ export async function POST(
       // answer below a notice that already told the reader it was parked.
       const notice =
         deliveryIds.length === 0 && !pollingChatEnabled && parkedReplyEnabled
-          ? await tx.chatMessage.create({
+          ? await chatStore(tx).messages.create({
               data: {
                 sessionId: session.id,
                 content: AGENT_CHAT_PARKED_MESSAGE,

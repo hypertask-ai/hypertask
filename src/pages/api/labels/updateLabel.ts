@@ -1,3 +1,4 @@
+import { labelStore } from "@/utils/controllers/labels";
 // Next.js API route support: https://nextjs.org/docs/api-routes/introduction
 
 import type { NextApiRequest, NextApiResponse } from "next";
@@ -31,7 +32,7 @@ const isManagedSmartSplitLabel = async (
   projectId: number
 ) => {
   const [labels, views] = await Promise.all([
-    client.label.findMany({
+    labelStore(client).findMany({
       where: { projectId, ai_prompt: { not: null } },
       select: { id: true, value: true, ai_prompt: true, projectId: true },
     }),
@@ -73,7 +74,7 @@ export default async function handler(
 
       // Smart labels run an LLM classification pass on every task in the
       // project (cost), so require project membership before setting one.
-      const existingLabel = await prisma.label.findUnique({
+      const existingLabel = await labelStore().findUnique({
         where: { id: labelId },
         select: { projectId: true, ai_prompt: true },
       });
@@ -111,7 +112,7 @@ export default async function handler(
       };
       const { updatedLabel, previousAiPrompt } = existingLabelProjectId == null
         ? {
-            updatedLabel: await prisma.label.update({
+            updatedLabel: await labelStore().update({
               where: { id: labelId },
               data: updateData,
             }),
@@ -119,7 +120,7 @@ export default async function handler(
           }
         : await prisma.$transaction(async (tx) => {
             await acquireBoardFilterWriteLock(tx, existingLabelProjectId);
-            const lockedLabel = await tx.label.findUnique({
+            const lockedLabel = await labelStore(tx).findUnique({
               where: { id: labelId },
               select: { projectId: true, ai_prompt: true },
             });
@@ -130,7 +131,7 @@ export default async function handler(
               throw new LabelMutationError("Manage this smart split from Manage views", 409);
             }
             return {
-              updatedLabel: await tx.label.update({
+              updatedLabel: await labelStore(tx).update({
                 where: { id: labelId },
                 data: updateData,
               }),
@@ -156,7 +157,7 @@ export default async function handler(
           .status(400)
           .json({ message: "Missing required Information" });
 
-      const existingLabel = await prisma.label.findUnique({
+      const existingLabel = await labelStore().findUnique({
         where: { id: labelId as string },
         select: { projectId: true },
       });
@@ -167,7 +168,7 @@ export default async function handler(
         const actualProjectId = existingLabel.projectId;
         if (actualProjectId != null) {
           await acquireBoardFilterWriteLock(tx, actualProjectId);
-          const lockedLabel = await tx.label.findUnique({
+          const lockedLabel = await labelStore(tx).findUnique({
             where: { id: labelId as string },
             select: { id: true },
           });
@@ -201,7 +202,7 @@ export default async function handler(
           where: { labelId: labelId as string },
         });
         console.log("🚀 ~ deleteTaskLabels:", deleteTaskLabels);
-        return tx.label.delete({ where: { id: labelId as string } });
+        return labelStore(tx).delete({ where: { id: labelId as string } });
       });
 
       console.log("🚀 ~ deleted:", deleted);

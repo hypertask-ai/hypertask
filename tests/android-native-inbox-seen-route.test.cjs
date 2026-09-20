@@ -8,12 +8,16 @@ const routePath = path.join(
   'src/app/api/mcp/inbox/seen/route.ts'
 )
 const route = fs.readFileSync(routePath, 'utf8')
+const controller = fs.readFileSync(
+  path.join(process.cwd(), 'src/utils/controllers/notifications/index.ts'),
+  'utf8',
+)
 
 test('native inbox seen route authenticates before parsing or writing', () => {
   const rateLimitAt = route.indexOf('checkMcpRateLimit(request)')
   const authAt = route.indexOf('validateMcpAuth(request)')
   const parseAt = route.indexOf('request.json()')
-  const updateAt = route.indexOf('prisma.notification.updateMany')
+  const updateAt = route.indexOf('const result = await markInboxNotificationsSeen(')
 
   assert.ok(rateLimitAt >= 0)
   assert.ok(authAt > rateLimitAt)
@@ -22,9 +26,9 @@ test('native inbox seen route authenticates before parsing or writing', () => {
 })
 
 test('native inbox seen route is idempotent and account scoped', () => {
-  assert.match(route, /userId:\s*ctx\.user\.id/)
-  assert.match(route, /seen:\s*false/)
-  assert.match(route, /data:\s*\{\s*seen:\s*true\s*\}/)
+  assert.match(route, /markInboxNotificationsSeen\(\s*ctx\.user\.id/)
+  assert.match(controller, /userId, seen: false/)
+  assert.match(controller, /data: \{ seen: true \}/)
   assert.match(route, /MAX_NOTIFICATION_IDS\s*=\s*100/)
   assert.match(route, /broadcastInboxChange\(ctx\.user\.id/)
   assert.doesNotMatch(route, /prisma\.(?:\$queryRaw|\$executeRaw)/)

@@ -1,3 +1,4 @@
+import { notificationStore } from "@/utils/controllers/notifications";
 import { NextApiHandler, NextApiRequest, NextApiResponse } from "next";
 import prisma from "@/lib/prisma";
 import { Status } from "@prisma/client";
@@ -29,7 +30,7 @@ const handler: NextApiHandler = async (req: NextApiRequest, res: NextApiResponse
                 return res.status(400).json({ message: "No valid notification entries found" });
             }
 
-            const otherUsersNotification = await prisma.notification.findFirst({
+            const otherUsersNotification = await notificationStore().findFirst({
                 where: {
                     id: { in: validEntries.map(({ notificationId }) => notificationId) },
                     userId: { not: session.userId },
@@ -47,7 +48,7 @@ const handler: NextApiHandler = async (req: NextApiRequest, res: NextApiResponse
                     // this archive action hid.
                     const archivedAt = new Date();
                     const ops = [
-                        tx.notification.updateMany({
+                        notificationStore(tx).updateMany({
                             where: {
                                 id: notificationId,
                                 userId: session.userId,
@@ -66,7 +67,7 @@ const handler: NextApiHandler = async (req: NextApiRequest, res: NextApiResponse
                     // Deleted, so undo stays lossless (HTPR-5640).
                     if (taskId && archiveStatus !== "Normal") {
                         ops.push(
-                            tx.notification.updateMany({
+                            notificationStore(tx).updateMany({
                                 where: {
                                     taskId,
                                     userId: session.userId,
