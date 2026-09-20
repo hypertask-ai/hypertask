@@ -67,11 +67,31 @@ export const SaveView = ({
   if (variant === "shell") {
     return (
       <>
-        <SaveViewShellActions
-          isDirty={isDirty}
-          onSave={toggleSaveViewsModal}
-          onReset={() => resetView("ResetCurrent")}
-        />
+        <div
+          aria-hidden={!isDirty}
+          className={`flex h-8 shrink-0 items-center gap-2 overflow-hidden whitespace-nowrap text-content font-medium transition-all duration-150 ${
+            isDirty
+              ? "max-w-[144px] translate-x-0 opacity-100"
+              : "pointer-events-none max-w-0 translate-x-2 opacity-0"
+          }`}
+        >
+          <button
+            type="button"
+            tabIndex={isDirty ? 0 : -1}
+            onClick={toggleSaveViewsModal}
+            className="h-8 rounded-full bg-hover-active px-2 text-[#E28C28] transition-colors hover:text-white-black"
+          >
+            Save view
+          </button>
+          <button
+            type="button"
+            tabIndex={isDirty ? 0 : -1}
+            onClick={() => resetView("ResetCurrent")}
+            className="h-8 rounded-full bg-hover-active px-2 text-text-light-gray transition-colors hover:text-white-black"
+          >
+            Reset
+          </button>
+        </div>
         {showSaveModal && (
           <SaveViewModal toggle={toggleSaveViewsModal} project={project} />
         )}

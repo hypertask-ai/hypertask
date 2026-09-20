@@ -127,7 +127,7 @@ global.React = React;
 
 const MyTasksModule = jiti(path.join(root, "src/app/my-tasks/MyTasks.tsx"));
 const MyTasks = MyTasksModule.default;
-const { fromBoardSort, toBoardSort } = MyTasksModule;
+const { fromBoardSort, MY_TASKS_BOARD_SORT_MODES, toBoardSort } = MyTasksModule;
 const { PriorityConstants } = jiti(path.join(root, "src/lib/constants/constants.ts"));
 
 const sections = [
@@ -169,6 +169,8 @@ const click = (element, dom) =>
   });
 
 test("board sorting remains selectable through the board sort modal adapter", () => {
+  assert.ok(MY_TASKS_BOARD_SORT_MODES.includes("Board"));
+  assert.ok(!MY_TASKS_BOARD_SORT_MODES.includes("Manual"));
   assert.deepEqual(toBoardSort({ field: "board", direction: "asc" }), {
     mode: "Board",
     order: "Ascending",

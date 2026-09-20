@@ -151,14 +151,13 @@ const readError = async (response: Response, fallback: string): Promise<string> 
 };
 
 const MY_TASKS_BOARD_SORT_MODE = "Board";
-const MY_TASKS_BOARD_SORT_MODES = [
+export const MY_TASKS_BOARD_SORT_MODES = [
   "UpdatedAt",
   "Priority",
   "DueDate",
   "Title",
   "CreatedAt",
   MY_TASKS_BOARD_SORT_MODE,
-  "Manual",
 ];
 const MY_TASKS_TO_BOARD_SORT = {
   board: MY_TASKS_BOARD_SORT_MODE,

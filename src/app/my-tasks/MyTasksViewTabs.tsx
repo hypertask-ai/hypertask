@@ -3,11 +3,12 @@
 import useClickOutside from "@/hooks/MultiPages/useClickOutside";
 import { useFlag } from "@/hooks/useFlag";
 import { MOBILE_TARGET } from "@/lib/configs/general.config";
+import { MobileViewContext } from "@/lib/contexts/mobileContext";
 import { MY_TASKS_VIEWS_FLAG } from "@/lib/flags/keys";
 import { MY_TASKS_OVERDUE_BADGES_FLAG } from "@/lib/flags/keys";
 import type { MyTasksSavedView } from "@/models/MyTasksView";
 import { House, MoreHorizontal, Plus, Settings2 } from "lucide-react";
-import { useRef, useState } from "react";
+import { useContext, useRef, useState } from "react";
 
 interface Props {
   views: MyTasksSavedView[];
@@ -42,12 +43,14 @@ const MyTasksViewTabs = ({
   overdueByViewId = {},
   boardToolbar = false,
 }: Props) => {
+  const isMbl = useContext(MobileViewContext);
   const myTasksViewsEnabled = useFlag(MY_TASKS_VIEWS_FLAG);
   const overdueBadgesEnabled = useFlag(MY_TASKS_OVERDUE_BADGES_FLAG);
   const [actionsOpen, setActionsOpen] = useState(false);
   const actionsRef = useRef<HTMLDivElement>(null);
   useClickOutside(actionsRef, () => setActionsOpen(false));
   const activeView = views.find((view) => view.id === activeViewId);
+  const mobileMenuRow = isMbl && boardToolbar ? "min-h-11 " : "";
   const overdueBadge = (count: number) =>
     overdueBadgesEnabled && count > 0 ? (
       <span
@@ -83,7 +86,7 @@ const MyTasksViewTabs = ({
       <button
         type="button"
         onClick={rename}
-        className="w-full px-3 py-2 text-left text-white-black hover:bg-hover-active"
+        className={`${mobileMenuRow}w-full px-3 py-2 text-left text-white-black hover:bg-hover-active`}
       >
         Rename
       </button>
@@ -94,7 +97,7 @@ const MyTasksViewTabs = ({
             onSetDefault(activeView.id);
             setActionsOpen(false);
           }}
-          className="w-full px-3 py-2 text-left text-white-black hover:bg-hover-active"
+          className={`${mobileMenuRow}w-full px-3 py-2 text-left text-white-black hover:bg-hover-active`}
         >
           Set as default
         </button>
@@ -102,7 +105,7 @@ const MyTasksViewTabs = ({
       <button
         type="button"
         onClick={remove}
-        className="w-full px-3 py-2 text-left text-destructive hover:bg-hover-active"
+        className={`${mobileMenuRow}w-full px-3 py-2 text-left text-destructive hover:bg-hover-active`}
       >
         Delete
       </button>
@@ -135,12 +138,25 @@ const MyTasksViewTabs = ({
               aria-label="Manage views"
               aria-expanded={actionsOpen}
               onClick={() => setActionsOpen((open) => !open)}
-              className={`${MOBILE_TARGET} group relative h-8 items-center justify-center text-text-light-gray hover:text-white-black @md:min-h-0 @md:min-w-0`}
+              className={`${isMbl ? MOBILE_TARGET : "h-8 w-8"} group relative items-center justify-center text-text-light-gray hover:text-white-black`}
             >
               <Settings2 size={14} strokeWidth={1.75} />
             </button>
             {actionsOpen && (
               <div className="absolute left-0 top-full z-40 mt-1 min-w-[180px] rounded-[5px] bg-modalBackground py-1 text-content shadow-md">
+                {isMbl && dirty ? (
+                  <button
+                    type="button"
+                    disabled={busy}
+                    onClick={() => {
+                      onReset();
+                      setActionsOpen(false);
+                    }}
+                    className="min-h-11 w-full px-3 py-2 text-left text-white-black hover:bg-hover-active disabled:opacity-50"
+                  >
+                    Reset changes
+                  </button>
+                ) : null}
                 <button
                   type="button"
                   disabled={busy}
@@ -148,11 +164,24 @@ const MyTasksViewTabs = ({
                     saveAs();
                     setActionsOpen(false);
                   }}
-                  className="w-full px-3 py-2 text-left text-white-black hover:bg-hover-active disabled:opacity-50"
+                  className={`${isMbl ? "min-h-11" : ""} w-full px-3 py-2 text-left text-white-black hover:bg-hover-active disabled:opacity-50`}
                 >
                   Save as new view
                 </button>
                 {activeViewActions}
+                {isMbl && dirty && activeView ? (
+                  <button
+                    type="button"
+                    disabled={busy}
+                    onClick={() => {
+                      onSave();
+                      setActionsOpen(false);
+                    }}
+                    className="min-h-11 w-full px-3 py-2 text-left font-medium text-shadcn-primary hover:bg-hover-active disabled:opacity-50"
+                  >
+                    Save view
+                  </button>
+                ) : null}
               </div>
             )}
           </div>
@@ -283,7 +312,7 @@ const BoardViewButton = ({
         : "text-text-light-gray opacity-90 hover:opacity-100"
     }`}
   >
-    {isDefault ? <House size={13} strokeWidth={1.75} className="shrink-0" /> : null}
+    {isDefault ? <House size={14} strokeWidth={1.75} className="shrink-0" /> : null}
     <span className="max-w-[min(18rem,calc(100vw-8rem))] truncate">{label}</span>
     {count > 0 ? (
       <span className="text-micro font-semibold text-destructive">{count}</span>

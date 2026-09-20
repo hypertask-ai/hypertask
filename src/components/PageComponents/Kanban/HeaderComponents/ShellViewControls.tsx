@@ -104,6 +104,7 @@ export const ViewControlButton = ({
   keyCombination = [],
   label,
   mobileTarget = false,
+  semanticActive = false,
   onClick,
   tooltipLeft,
 }: {
@@ -112,6 +113,7 @@ export const ViewControlButton = ({
   keyCombination?: (string | null)[]
   label: string
   mobileTarget?: boolean
+  semanticActive?: boolean
   onClick: () => void
   tooltipLeft: number
 }) => (
@@ -119,7 +121,7 @@ export const ViewControlButton = ({
     type="button"
     aria-label={label}
     onClick={onClick}
-    className={`group relative flex size-8 items-center justify-center transition-colors ${mobileTarget ? MOBILE_TARGET : ""} ${active ? "text-[#6FB6FF] hover:text-[#A3D0FF]" : "text-text-light-gray hover:text-white-black"}`}
+    className={`group relative flex size-8 items-center justify-center transition-colors ${mobileTarget ? MOBILE_TARGET : ""} ${active ? semanticActive ? "text-shadcn-primary hover:text-white-black" : "text-[#6FB6FF] hover:text-[#A3D0FF]" : "text-text-light-gray hover:text-white-black"}`}
   >
     {children}
     <Tooltip
