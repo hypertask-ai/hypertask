@@ -25,10 +25,12 @@ test("board-wide task questions require the live task list", () => {
   assert.equal(isLiveTaskListRequest("Is there a task on this board?"), true);
   assert.equal(isLiveTaskListRequest("What tasks are on this board?"), true);
   assert.equal(isLiveTaskListRequest("Which tasks are high priority?"), true);
+  assert.equal(isLiveTaskListRequest("List all tasks across all boards"), true);
 });
 
 test("other task intents keep their specialized tools", () => {
   assert.equal(isLiveTaskListRequest("Find tasks mentioning payment gateway"), false);
+  assert.equal(isLiveTaskListRequest("How many tasks mention payment gateway?"), false);
   assert.equal(isLiveTaskListRequest("What's happening with the auth bug?"), false);
   assert.equal(isLiveTaskListRequest("What is this task's status?"), false);
   assert.equal(isLiveTaskListRequest("Count comments on this task"), false);
@@ -71,6 +73,13 @@ test("live task listing defaults to the visible board without overriding explici
       defaultProjectId: 42,
     }),
     73,
+  );
+  assert.equal(
+    resolveLiveTaskListProjectId({
+      message: "List all tasks across all boards",
+      defaultProjectId: 42,
+    }),
+    undefined,
   );
   assert.equal(
     resolveLiveTaskListProjectId({

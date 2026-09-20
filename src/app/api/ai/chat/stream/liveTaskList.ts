@@ -13,8 +13,10 @@ const PERSONAL_WORK_INTENT =
   /\b(?:my|mine|do i have|i have|am i (?:working|assigned|responsible)|i(?:'m| am) (?:working|assigned|responsible)|assigned to me|for me)\b/i;
 const PRODUCT_HELP_INTENT =
   /\b(?:how to|how (?:do|can|could|should) (?:i|we)|(?:can|could|should|may) (?:i|we))\b[^?.!]*\b(?:create|add|make|edit|update|delete|archive|move|assign|list|show)\b/i;
+const GLOBAL_TASK_SCOPE =
+  /\b(?:(?:across|from)\s+(?:(?:all|every)\s+)?|(?:all|every)\s+)(?:boards?|projects?)\b/i;
 const SEMANTIC_SEARCH_INTENT =
-  /\b(?:find|search|matching|mentioning|mentions|about|related to)\b/i;
+  /\b(?:find|search|matching|mention|mentioning|mentions|about|related to)\b/i;
 
 export function isLiveTaskListRequest(message: string) {
   return (
@@ -44,6 +46,8 @@ export function resolveLiveTaskListProjectId({
   return (
     projectId ??
     boardId ??
-    (isLiveTaskListRequest(message) ? defaultProjectId : undefined)
+    (isLiveTaskListRequest(message) && !GLOBAL_TASK_SCOPE.test(message)
+      ? defaultProjectId
+      : undefined)
   );
 }
