@@ -76,6 +76,10 @@ import {
 } from "@/app/api/ai/_lib/chatTeamContext";
 import { getProjectWhere } from "@/utils/controllers/projects/getAllIncludes";
 import {
+  isLiveTaskListRequest,
+  resolveLiveTaskListProjectId,
+} from "./liveTaskList";
+import {
   getProjectMembers,
 } from "@/utils/controllers/projects/getProjectMembers";
 import {
@@ -462,10 +466,14 @@ const AGENT_SYSTEM_PROMPT = `
                       and return context around them without needing get_tasks
                     - Comments are part of the broader task context — RAG indexes both tasks and
                       comments together and will return relevant comment content automatically
+                    - Never use RAG to list, enumerate, count, or check whether tasks exist. Its
+                      search index can lag behind the live board, so zero matches never means zero tasks.
                     **Use list_tasks when:**
+                    - The user asks to list, enumerate, count, or check whether tasks exist. This is
+                      the live source of truth for the board, including tasks created moments ago.
                     - The query contains explicit structured filters
                       (e.g. priority, assignee, section, status, labels, due dates)
-                    - Examples: "all high priority tasks", "tasks assigned to me", "tasks due this week"
+                    - Examples: "list the tasks on this board", "all high priority tasks", "tasks assigned to me", "tasks due this week"
                     **Use search_tasks when:**
                     - The query contains a keyword, phrase, or partial task name to match against
                     - Examples: "find tasks mentioning payment gateway", "search for login issue tasks"
@@ -1544,6 +1552,11 @@ function createUserPrompt(
                   displayName: authedUser.displayName,
                 })}
                 document_context: ${createDocumentContext(body)}
+                ${
+                  isLiveTaskListRequest(body.message)
+                    ? "MANDATORY: This request needs the live board state. Call hypertask_list_tasks and do not use rag_retrieval."
+                    : ""
+                }
 
                 IMPORTANT: Analyze the history and provide a complete, context-aware HTML body response.
                 IMPORTANT: Follow the tool selection hierarchy strictly.
@@ -4169,7 +4182,12 @@ function buildTools(
           projectId: { in: accessibleProjectIds },
           status: input.status,
         };
-        const targetProjectId = input.project_id ?? input.board_id;
+        const targetProjectId = resolveLiveTaskListProjectId({
+          message: body.message,
+          projectId: input.project_id,
+          boardId: input.board_id,
+          defaultProjectId: body.default_context?.project_id,
+        });
         if (targetProjectId) {
           if (!accessibleProjectIds.includes(targetProjectId)) {
             return { success: false, error: "Project not found or access denied" };
@@ -9584,7 +9602,7 @@ function buildTools(
 
     rag_retrieval: tool({
       description:
-        "Retrieve semantically relevant Hypertask task/comment context from Turbopuffer hybrid search. Use for conversational, ambiguous, or semantic task/comment questions.",
+        "Retrieve semantically relevant Hypertask task/comment context from Turbopuffer hybrid search. Use for conversational, ambiguous, or semantic task/comment questions. Never use it to list, count, or check whether tasks exist because the search index is not live.",
       inputSchema: z.object({
         query: z.string().min(1).max(500),
         metadata_filters: z.record(z.string(), z.unknown()).optional(),
@@ -9592,6 +9610,13 @@ function buildTools(
       }),
       execute: async (input) => {
         sendStatus("rag_retrieval");
+        if (isLiveTaskListRequest(body.message)) {
+          return {
+            success: false,
+            error:
+              "This question requires the live board state. Call hypertask_list_tasks with the project_id from default_context; semantic search cannot prove that a board is empty.",
+          };
+        }
         return sanitizeForJson(
           await retrieveBoardKnowledge(
             {
