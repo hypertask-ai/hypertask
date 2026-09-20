@@ -21,6 +21,8 @@ export enum FilterCommandMode{
     RunningTimer,
     NotStale,
     BlockedByPerson,
-    StaleOnBoard
+    StaleOnBoard,
+    Involvement,
+    MyTasksScope
 
   }

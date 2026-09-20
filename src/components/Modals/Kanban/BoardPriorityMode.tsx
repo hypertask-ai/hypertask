@@ -11,14 +11,21 @@ import { ModalBody } from "reactstrap";
 import { useRecoilState } from "@/lib/state";
 import { sortingModeLabel, TBoardSortingLevel } from "@/models/Views/model";
 
-type Props = {
-    closeHandler: (refresh?: boolean) => void;
-    sort?: TBoardSortingLevel | null;
-    onSortChange?: (sort: TBoardSortingLevel | null) => void | Promise<void>;
-    maxLevels?: number;
+export type ControlledSortingLevel<TMode extends string = string> = {
+    mode: TMode;
+    order: SortingOrder;
 }
 
-const ascendingSortingModes = new Set<SortingMode>([
+type Props<TMode extends string> = {
+    closeHandler: (refresh?: boolean) => void;
+    sort?: ControlledSortingLevel<TMode> | null;
+    onSortChange?: (sort: ControlledSortingLevel<TMode> | null) => void | Promise<void>;
+    maxLevels?: number;
+    availableModes?: TMode[];
+    modeLabel?: (mode: TMode) => string;
+}
+
+const ascendingSortingModes = new Set<string>([
     "DueDate",
     "CreatedAt",
     "Assignee",
@@ -26,11 +33,12 @@ const ascendingSortingModes = new Set<SortingMode>([
     "TicketNumber",
 ])
 
-const BoardPriorityMode = (props: Props) => {
+const BoardPriorityMode = <TMode extends string = SortingMode,>(props: Props<TMode>) => {
     const [_currentProject, __] = useRecoilState(currentProjectAtom)
     const { setBoardSortingViewAndReturn } = useKanbanViews(_currentProject)
     const { closeHandler, onSortChange, sort, maxLevels = MAX_SORT_LEVELS } = props
     const isControlled = onSortChange !== undefined
+    const labelForMode = props.modeLabel ?? ((mode: TMode) => sortingModeLabel(mode as SortingMode))
 
     // ---------------- refs
     const currentHoveredDiv = useRef<number | null>(null);
@@ -48,16 +56,16 @@ const BoardPriorityMode = (props: Props) => {
     const [keyword, setKeyword] = useState('');
     const [loading, setLoading] = useState<boolean>(false);
     const [modal, _] = useState<boolean>(true);
-    const [levels, setLevels] = useState<TBoardSortingLevel[]>(
+    const [levels, setLevels] = useState<ControlledSortingLevel<TMode>[]>(
         isControlled
             ? sort ? [sort] : []
             : activeSortingView === "Manual"
             ? []
-            : [{ mode: activeSortingView, order: activeSortingOrder }, ...getActiveSortingStackFromProject(_currentProject)]
+            : [{ mode: activeSortingView as TMode, order: activeSortingOrder }, ...getActiveSortingStackFromProject(_currentProject) as ControlledSortingLevel<TMode>[]]
     );
-    const [selectedPriority, setSelectedPriority] = useState<SortingMode>();
-    const priorityModes: SortingMode[] = ["UpdatedAt", "Priority", "DueDate", "Size", "Assignee", "Title", "TicketNumber", "TimeInColumn", "TimeOnBoard", "TimeWithoutComment", "CreatedAt", "SectionChangedAt", "LastCommentAt", "Manual"]
-    const [filteredPriorities, setFilteredPriorities] = useState<SortingMode[]>(priorityModes);
+    const [selectedPriority, setSelectedPriority] = useState<TMode>();
+    const priorityModes: TMode[] = props.availableModes ?? ["UpdatedAt", "Priority", "DueDate", "Size", "Assignee", "Title", "TicketNumber", "TimeInColumn", "TimeOnBoard", "TimeWithoutComment", "CreatedAt", "SectionChangedAt", "LastCommentAt", "Manual"] as TMode[]
+    const [filteredPriorities, setFilteredPriorities] = useState<TMode[]>(priorityModes);
 
     const onKeyChange = (e: ChangeEvent<HTMLInputElement>) => {
 
@@ -69,7 +77,7 @@ const BoardPriorityMode = (props: Props) => {
 
     }
 
-    const persistLevels = async (nextLevels: TBoardSortingLevel[], closeAfter = false) => {
+    const persistLevels = async (nextLevels: ControlledSortingLevel<TMode>[], closeAfter = false) => {
         setLevels(nextLevels)
         if (isControlled) {
             await onSortChange?.(nextLevels[0] ?? null)
@@ -83,9 +91,9 @@ const BoardPriorityMode = (props: Props) => {
             .then(() =>
                 setBoardSortingViewAndReturn(
                     _currentProject,
-                    primary?.mode ?? "Manual",
+                    (primary?.mode ?? "Manual") as SortingMode,
                     primary?.order ?? activeSortingOrder,
-                    stack
+                    stack as TBoardSortingLevel[]
                 )
             )
         await writeQueue.current
@@ -110,7 +118,7 @@ const BoardPriorityMode = (props: Props) => {
     }
 
     // ==================== set priority api handler
-    const setPriorirty = async (sorting_mode: SortingMode) => {
+    const setPriorirty = async (sorting_mode: TMode) => {
         try {
             if (sorting_mode === "Manual") {
                 await persistLevels([], true)
@@ -239,7 +247,7 @@ const BoardPriorityMode = (props: Props) => {
         const filteredPriorities_ = priorityModes.filter((priority) =>
             (priority === "Manual" || !levels.some((level) => level.mode === priority)) &&
             (levels.length < maxLevels || priority === "Manual") &&
-            (keyword.length === 0 || sortingModeLabel(priority).toLowerCase().indexOf(keyword.toLowerCase()) > -1)
+            (keyword.length === 0 || labelForMode(priority).toLowerCase().indexOf(keyword.toLowerCase()) > -1)
         )
         setFilteredPriorities(filteredPriorities_)
         setSelectedPriority(filteredPriorities_[0])
@@ -283,7 +291,7 @@ const BoardPriorityMode = (props: Props) => {
                                             >
                                                 <div className="flex flex-grow items-center space-x-4">
                                                     <span className="text-micro text-[#C2CFA5]">{index + 1}</span>
-                                                    <p className="font-medium">{sortingModeLabel(level.mode)}</p>
+                                                    <p className="font-medium">{labelForMode(level.mode)}</p>
                                                 </div>
                                                 <div className="flex items-center gap-3">
                                                     <ToggleSortingOrder
@@ -292,7 +300,7 @@ const BoardPriorityMode = (props: Props) => {
                                                     />
                                                     <button
                                                         type="button"
-                                                        aria-label={`Remove ${sortingModeLabel(level.mode)} sort`}
+                                                        aria-label={`Remove ${labelForMode(level.mode)} sort`}
                                                         onClick={(event) => {
                                                             event.stopPropagation()
                                                             removeLevel(index)
@@ -342,7 +350,7 @@ const BoardPriorityMode = (props: Props) => {
                                                 <div className="flex-grow flex space-x-4 items-center">
 
                                                 <p className="font-medium">
-                                                  {sortingModeLabel(priority)}
+                                                  {labelForMode(priority)}
                                                 </p>
                                                 </div>
                                                 {
