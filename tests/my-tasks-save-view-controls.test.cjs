@@ -41,10 +41,10 @@ stubSourceModule(
       return React.createElement(
         "div",
         { "data-canonical-save-view-actions": "" },
+        React.createElement("button", { onClick: props.onReset }, "Reset"),
         props.onSave
           ? React.createElement("button", { onClick: props.onSave }, "Save view")
           : null,
-        React.createElement("button", { onClick: props.onReset }, "Reset"),
       );
     },
   },
@@ -105,9 +105,9 @@ test("My Tasks delegates dirty-view actions to the canonical Kanban control", ()
   assert.equal(canonicalControlProps[0].isDirty, true);
   assert.equal(canonicalControlProps[0].disabled, false);
 
-  const [saveButton, resetButton] = actions.querySelectorAll("button");
-  act(() => saveButton.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true })));
+  const [resetButton, saveButton] = actions.querySelectorAll("button");
   act(() => resetButton.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true })));
+  act(() => saveButton.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true })));
   assert.equal(saves, 1);
   assert.equal(resets, 1);
 

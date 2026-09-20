@@ -28,26 +28,26 @@ export const SaveViewActions = ({
         : "pointer-events-none max-w-0 translate-x-2 opacity-0"
     }`}
   >
+    <button
+      type="button"
+      disabled={disabled}
+      tabIndex={isDirty ? 0 : -1}
+      onClick={onReset}
+      className="h-8 rounded-[4px] px-2 text-text-light-gray transition-colors hover:bg-hover-active hover:text-white-black disabled:opacity-50"
+    >
+      Reset
+    </button>
     {onSave && (
       <button
         type="button"
         disabled={disabled}
         tabIndex={isDirty ? 0 : -1}
         onClick={onSave}
-        className="h-8 rounded-full bg-hover-active px-2 text-[#E28C28] transition-colors hover:text-white-black disabled:opacity-50"
+        className="h-8 rounded-[4px] bg-shadcn-primary px-2 text-primary-foreground transition-opacity hover:opacity-80 disabled:opacity-50"
       >
         Save view
       </button>
     )}
-    <button
-      type="button"
-      disabled={disabled}
-      tabIndex={isDirty ? 0 : -1}
-      onClick={onReset}
-      className="h-8 rounded-full bg-hover-active px-2 text-text-light-gray transition-colors hover:text-white-black disabled:opacity-50"
-    >
-      Reset
-    </button>
   </div>
 )
 
