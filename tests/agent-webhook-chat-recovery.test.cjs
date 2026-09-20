@@ -39,19 +39,13 @@ const delivery = {
 
 const transaction = {
   $executeRaw: async () => {
-    messages.find((message) => message.id === "message-pending").isDelivered = false;
+    messages.find(
+      (message) => message.id === "message-pending",
+    ).isDelivered = false;
     return 1;
   },
   agentWebhookDelivery: {
     update: async ({ data }) => Object.assign(delivery, data),
-    findMany: async () => [
-      {
-        payload: {
-          event: "chat.message",
-          chat: { messageId: "message-pending" },
-        },
-      },
-    ],
   },
   agentWebhookSubscription: {
     update: async () => ({}),
@@ -75,7 +69,6 @@ const prisma = {
     updateMany: async () => ({ count: 1 }),
     findUnique: async () => delivery,
     update: transaction.agentWebhookDelivery.update,
-    findMany: transaction.agentWebhookDelivery.findMany,
   },
   agentWebhookSubscription: transaction.agentWebhookSubscription,
   chatMessage: transaction.chatMessage,
