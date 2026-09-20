@@ -11,10 +11,12 @@ import HeaderDivider from "./HeaderDivider";
 
 export const SaveViewShellActions = ({
   isDirty,
+  busy = false,
   onSave,
   onReset,
 }: {
   isDirty: boolean;
+  busy?: boolean;
   onSave: () => void;
   onReset: () => void;
 }) => (
@@ -28,19 +30,21 @@ export const SaveViewShellActions = ({
   >
     <button
       type="button"
+      disabled={busy}
       tabIndex={isDirty ? 0 : -1}
-      onClick={onSave}
-      className="h-8 rounded-full bg-hover-active px-2 text-unsaved-view transition-colors hover:text-white-black"
+      onClick={onReset}
+      className="h-8 rounded-[4px] px-2 text-text-light-gray transition-colors hover:bg-hover-active hover:text-white-black disabled:opacity-50"
     >
-      Save view
+      Reset
     </button>
     <button
       type="button"
+      disabled={busy}
       tabIndex={isDirty ? 0 : -1}
-      onClick={onReset}
-      className="h-8 rounded-full bg-hover-active px-2 text-text-light-gray transition-colors hover:text-white-black"
+      onClick={onSave}
+      className="h-8 rounded-[4px] bg-shadcn-primary px-2 text-primary-foreground transition-opacity hover:opacity-80 disabled:opacity-50"
     >
-      Reset
+      Save view
     </button>
   </div>
 )

@@ -78,7 +78,10 @@ import {
 } from "@/models/MyTasksView";
 import { returnIfModalOrInputActive } from "@/utils/helperFunctions/helperFunctions";
 import { ISection, IUser } from "@/models/model";
-import type { TBoardSortingLevel, TBoardSortingViewMode } from "@/models/Views/model";
+import {
+  sortingModeLabel,
+  type TBoardSortingViewMode,
+} from "@/models/Views/model";
 import { CommandMode } from "@/models/enums";
 import { appShellRailAtom,
   myTasksTableColumnsPickerRequestAtom, showCommandsAtom } from "@/store";
@@ -105,7 +108,9 @@ import TableColumnsPicker from "@/components/PageComponents/Kanban/TableView/Tab
 import MyTasksQuickAdd from "./MyTasksQuickAdd";
 import MyTasksViewControls from "./MyTasksViewControls";
 import MyTasksViewTabs from "./MyTasksViewTabs";
-import BoardPriorityMode from "@/components/Modals/Kanban/BoardPriorityMode";
+import BoardPriorityMode, {
+  type ControlledSortingLevel,
+} from "@/components/Modals/Kanban/BoardPriorityMode";
 import type { SerializableFilterSettings } from "@/lib/filterSettingsMutations";
 import {
   addFilterValue,
@@ -145,15 +150,18 @@ const readError = async (response: Response, fallback: string): Promise<string> 
   return typeof body?.error === "string" ? body.error : fallback;
 };
 
-const MY_TASKS_BOARD_SORT_MODES: TBoardSortingLevel["mode"][] = [
+const MY_TASKS_BOARD_SORT_MODE = "Board";
+const MY_TASKS_BOARD_SORT_MODES = [
   "UpdatedAt",
   "Priority",
   "DueDate",
   "Title",
   "CreatedAt",
+  MY_TASKS_BOARD_SORT_MODE,
   "Manual",
 ];
 const MY_TASKS_TO_BOARD_SORT = {
+  board: MY_TASKS_BOARD_SORT_MODE,
   dueDate: "DueDate",
   priority: "Priority",
   createdAt: "CreatedAt",
@@ -161,6 +169,7 @@ const MY_TASKS_TO_BOARD_SORT = {
   title: "Title",
 } as const;
 const BOARD_TO_MY_TASKS_SORT = {
+  Board: "board",
   DueDate: "dueDate",
   Priority: "priority",
   CreatedAt: "createdAt",
@@ -168,18 +177,15 @@ const BOARD_TO_MY_TASKS_SORT = {
   Title: "title",
 } as const;
 
-const toBoardSort = (
+export const toBoardSort = (
   sort: MyTasksViewConfig["sort"],
-): TBoardSortingLevel | null => {
-  if (sort.field === "board") return null;
-  return {
-    mode: MY_TASKS_TO_BOARD_SORT[sort.field],
-    order: sort.direction === "asc" ? "Ascending" : "Descending",
-  };
-};
+): ControlledSortingLevel => ({
+  mode: MY_TASKS_TO_BOARD_SORT[sort.field],
+  order: sort.direction === "asc" ? "Ascending" : "Descending",
+});
 
-const fromBoardSort = (
-  sort: TBoardSortingLevel | null,
+export const fromBoardSort = (
+  sort: ControlledSortingLevel | null,
 ): MyTasksViewConfig["sort"] => {
   if (!sort || sort.mode === "Manual" || !(sort.mode in BOARD_TO_MY_TASKS_SORT)) {
     return DEFAULT_MY_TASKS_VIEW_CONFIG.sort;
@@ -265,7 +271,9 @@ const MyTasks = ({
 
   const filterEnabled = useFlag(MY_TASKS_PRIORITY_FILTER_FLAG);
   const myTasksBulkSelectionEnabled = useFlag(MY_TASKS_BULK_SELECTION_FLAG);
-  const boardToolbarEnabled = useFlag(HTPR_6572_MY_TASKS_BOARD_TOOLBAR_FLAG);
+  const boardToolbarFlagEnabled = useFlag(HTPR_6572_MY_TASKS_BOARD_TOOLBAR_FLAG);
+  const boardToolbarEnabled =
+    boardToolbarFlagEnabled && viewsFeatureEnabled && filterParityEnabled;
   const [sortModalOpen, setSortModalOpen] = useState(false);
   const [runningOnly, setRunningOnly] = useState(false);
   const displayedSplit = boardToolbarEnabled ? 0 : activeSplit;
@@ -277,6 +285,7 @@ const MyTasks = ({
   const [filterOpen, setFilterOpen] = useState(false);
   const filterRef = useRef<HTMLDivElement>(null);
   const saveRequestToken = useRef(0);
+  const saveInFlight = useRef(false);
   const observedViewParam = useRef<string | null | undefined>(undefined);
   const scopesFetchToken = useRef(0);
   const lastFetchedScopesKey = useRef<string | null>(null);
@@ -1033,7 +1042,8 @@ const MyTasks = ({
   );
 
   const saveView = async () => {
-    if (!activeView) return;
+    if (!activeView || saveInFlight.current) return;
+    saveInFlight.current = true;
     const requestToken = ++saveRequestToken.current;
     setViewBusy(true);
     try {
@@ -1048,6 +1058,7 @@ const MyTasks = ({
         toast.error(error instanceof Error ? error.message : "Unable to save view");
       }
     } finally {
+      saveInFlight.current = false;
       setViewBusy(false);
     }
   };
@@ -1201,12 +1212,12 @@ const boardTabCounts = useMemo(() => {
     }
     const now = new Date();
     const options = {
-      applyFilterSettings: filterParityEnabled,
+      applyFilterSettings: displayFilterSettingsEnabled,
       runtimeContext,
     };
     const activeCount = overdueCountForMyTasksView(
       sections,
-      viewConfig,
+      displayViewConfig,
       now,
       options,
     );
@@ -1218,7 +1229,8 @@ const boardTabCounts = useMemo(() => {
   }, [
     activeViewId,
     dateFilterVersion,
-    filterParityEnabled,
+    displayFilterSettingsEnabled,
+    displayViewConfig,
     overdueBadgesEnabled,
     remoteOverdueCounts,
     runtimeContext,
@@ -1305,6 +1317,7 @@ const boardTabCounts = useMemo(() => {
             snoozeEnabled={myTasksSnoozeEnabled}
             boardToolbar
             dirty={dirty}
+            busy={viewBusy}
             runningOnly={runningOnly}
             runningTimerCount={runningTimerEntries?.length ?? 0}
             onSaveView={saveFromToolbar}
@@ -1572,6 +1585,7 @@ const boardTabCounts = useMemo(() => {
   const onClearAllFilters = useCallback(() => {
     updateViewConfig((current) => ({
       ...current,
+      boardIds: null,
       filters: {
         ...current.filters,
         priorityIds: [],
@@ -1581,6 +1595,9 @@ const boardTabCounts = useMemo(() => {
         dueDate: null,
         createdRange: null,
         updatedRange: null,
+        sectionIds: [],
+        showDone: false,
+        showSnoozed: false,
       },
       filterSettings: emptyFilterSettings(),
     }));
@@ -1622,6 +1639,11 @@ const boardTabCounts = useMemo(() => {
           onSortChange={(sort) => updateViewSort(fromBoardSort(sort))}
           maxLevels={1}
           availableModes={MY_TASKS_BOARD_SORT_MODES}
+          modeLabel={(mode) =>
+            mode === MY_TASKS_BOARD_SORT_MODE
+              ? "Board"
+              : sortingModeLabel(mode as TBoardSortingViewMode)
+          }
         />
       ) : null}
       {filterParityEnabled && kanbanFiltersOpen && (
@@ -1638,6 +1660,11 @@ const boardTabCounts = useMemo(() => {
           onScopesChange={(scopes) =>
             updateViewConfig((current) => ({ ...current, scopes }))
           }
+          boards={boards}
+          config={viewConfig}
+          onConfigChange={updateViewConfig}
+          snoozeEnabled={myTasksSnoozeEnabled}
+          showScopeFilters={boardToolbarEnabled}
           onClose={() => setKanbanFiltersOpen(false)}
         />
       )}

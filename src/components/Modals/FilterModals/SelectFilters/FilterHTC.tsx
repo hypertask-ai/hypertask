@@ -471,6 +471,7 @@ const AllFilterHTC: React.FC<Props> = ({
       />
     ),
     [FilterCommandMode.Involvement]: <MyTasksInvolvementFilter />,
+    [FilterCommandMode.MyTasksScope]: myTasksFilters?.scopePanel ?? null,
   };
 
   const boardCloseHandler = () => {

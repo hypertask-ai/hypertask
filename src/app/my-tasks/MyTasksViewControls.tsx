@@ -44,6 +44,7 @@ interface Props {
   snoozeEnabled?: boolean;
   boardToolbar?: boolean;
   dirty?: boolean;
+  busy?: boolean;
   runningOnly?: boolean;
   runningTimerCount?: number;
   onSaveView?: () => void;
@@ -124,6 +125,7 @@ const MyTasksViewControls = ({
   snoozeEnabled: snoozeEnabledProp = false,
   boardToolbar = false,
   dirty = false,
+  busy = false,
   runningOnly = false,
   runningTimerCount = 0,
   onSaveView,
@@ -348,6 +350,7 @@ const MyTasksViewControls = ({
         {onSaveView && onResetView ? (
           <SaveViewShellActions
             isDirty={dirty}
+            busy={busy}
             onSave={onSaveView}
             onReset={onResetView}
           />
@@ -357,6 +360,7 @@ const MyTasksViewControls = ({
           tooltipLeft={-88}
           active={activeFilterCount > 0}
           keyCombination={["SHIFT", "F"]}
+          mobileTarget
           onClick={() => onOpenKanbanFilters?.()}
         >
           <Funnel size={18} strokeWidth={1.75} />
@@ -366,6 +370,7 @@ const MyTasksViewControls = ({
           tooltipLeft={-84}
           active={hasActiveSort}
           keyCombination={["SHIFT", "S"]}
+          mobileTarget
           onClick={() => onOpenSort?.()}
         >
           <ArrowUpDown size={18} strokeWidth={1.75} />
@@ -374,6 +379,7 @@ const MyTasksViewControls = ({
           label="Show only tasks with a running timer"
           tooltipLeft={-190}
           active={runningOnly}
+          mobileTarget
           onClick={() => onToggleRunningOnly?.()}
         >
           <Timer size={18} strokeWidth={1.75} />
@@ -386,6 +392,7 @@ const MyTasksViewControls = ({
         <ViewControlButton
           label="My Tasks menu"
           tooltipLeft={-88}
+          mobileTarget
           onClick={() => onOpenMenu?.()}
         >
           <MoreHorizontal size={18} strokeWidth={1.75} />

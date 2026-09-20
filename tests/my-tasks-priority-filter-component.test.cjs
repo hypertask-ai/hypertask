@@ -125,7 +125,9 @@ stubSourceModule("src/utils/undoActions/helperFuncs.ts", {
 // explicit React import need one in scope.
 global.React = React;
 
-const MyTasks = jiti(path.join(root, "src/app/my-tasks/MyTasks.tsx")).default;
+const MyTasksModule = jiti(path.join(root, "src/app/my-tasks/MyTasks.tsx"));
+const MyTasks = MyTasksModule.default;
+const { fromBoardSort, toBoardSort } = MyTasksModule;
 const { PriorityConstants } = jiti(path.join(root, "src/lib/constants/constants.ts"));
 
 const sections = [
@@ -165,6 +167,17 @@ const click = (element, dom) =>
   act(() => {
     element.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }));
   });
+
+test("board sorting remains selectable through the board sort modal adapter", () => {
+  assert.deepEqual(toBoardSort({ field: "board", direction: "asc" }), {
+    mode: "Board",
+    order: "Ascending",
+  });
+  assert.deepEqual(fromBoardSort({ mode: "Board", order: "Descending" }), {
+    field: "board",
+    direction: "desc",
+  });
+});
 
 test("flag off: no filter control and no filtering", () => {
   const dom = new JSDOM("<!doctype html><html><body><div id='root'></div></body></html>", { url: "https://app.hypertask.ai/" });
@@ -255,6 +268,7 @@ test("board toolbar flag removes duplicate My Tasks rows and quick add", () => {
   global.document = dom.window.document;
   global.IS_REACT_ACT_ENVIRONMENT = true;
   flagValues["htpr-6422-my-tasks-views"] = true;
+  flagValues["htpr-6447-my-tasks-filter-parity"] = true;
   flagValues["htpr-6460-my-tasks-quick-add"] = true;
   flagValues["htpr-6572-my-tasks-board-toolbar"] = true;
   quickAddRenders = 0;
@@ -277,6 +291,43 @@ test("board toolbar flag removes duplicate My Tasks rows and quick add", () => {
   assert.equal(dom.window.document.querySelectorAll('[data-testid="my-tasks-split-tab"]').length, 0, "the duplicate board tab row is removed");
   assert.equal(viewControlProps.at(-1)?.boardToolbar, true);
   assert.equal(viewTabsProps.at(-1)?.boardToolbar, true);
+
+  act(() => { reactRoot.unmount(); });
+  delete flagValues["htpr-6422-my-tasks-views"];
+  delete flagValues["htpr-6447-my-tasks-filter-parity"];
+  delete flagValues["htpr-6460-my-tasks-quick-add"];
+  delete flagValues["htpr-6572-my-tasks-board-toolbar"];
+  delete global.window;
+  delete global.document;
+  delete global.IS_REACT_ACT_ENVIRONMENT;
+});
+
+test("board toolbar stays off until saved views and filter parity are both available", () => {
+  const dom = new JSDOM("<!doctype html><html><body><div id='root'></div></body></html>", { url: "https://app.hypertask.ai/my-tasks" });
+  global.window = dom.window;
+  global.document = dom.window.document;
+  global.IS_REACT_ACT_ENVIRONMENT = true;
+  flagValues["htpr-6422-my-tasks-views"] = true;
+  flagValues["htpr-6460-my-tasks-quick-add"] = true;
+  flagValues["htpr-6572-my-tasks-board-toolbar"] = true;
+  quickAddRenders = 0;
+  viewControlProps.length = 0;
+
+  const rootEl = dom.window.document.getElementById("root");
+  const reactRoot = createRoot(rootEl);
+  act(() => {
+    reactRoot.render(React.createElement(MyTasks, {
+      sections,
+      tabs: ["All", "Board A", "Board B"],
+      currentUser: { id: 6 },
+      viewsEnabled: true,
+      initialViews: [],
+    }));
+  });
+
+  assert.equal(quickAddRenders, 1, "the existing quick-add row remains available");
+  assert.ok(viewControlProps.every((props) => !props.boardToolbar));
+  assert.ok(dom.window.document.querySelector('[data-testid="my-tasks-split-tab"]'));
 
   act(() => { reactRoot.unmount(); });
   delete flagValues["htpr-6422-my-tasks-views"];

@@ -1,6 +1,7 @@
 'use client'
 
 import Tooltip from "@/components/Common/Tooltip"
+import { MOBILE_TARGET } from "@/lib/configs/general.config"
 import { MobileViewContext } from "@/lib/contexts/mobileContext"
 import { useRecoilState, useSetRecoilState } from "@/lib/state"
 import { CommandMode } from "@/models/enums"
@@ -102,6 +103,7 @@ export const ViewControlButton = ({
   children,
   keyCombination = [],
   label,
+  mobileTarget = false,
   onClick,
   tooltipLeft,
 }: {
@@ -109,6 +111,7 @@ export const ViewControlButton = ({
   children: React.ReactNode
   keyCombination?: (string | null)[]
   label: string
+  mobileTarget?: boolean
   onClick: () => void
   tooltipLeft: number
 }) => (
@@ -116,7 +119,7 @@ export const ViewControlButton = ({
     type="button"
     aria-label={label}
     onClick={onClick}
-    className={`group relative flex size-8 items-center justify-center transition-colors ${active ? "text-[#6FB6FF] hover:text-[#A3D0FF]" : "text-text-light-gray hover:text-white-black"}`}
+    className={`group relative flex size-8 items-center justify-center transition-colors ${mobileTarget ? MOBILE_TARGET : ""} ${active ? "text-[#6FB6FF] hover:text-[#A3D0FF]" : "text-text-light-gray hover:text-white-black"}`}
   >
     {children}
     <Tooltip

@@ -58,19 +58,26 @@ export const useFilterView = (view: "Kanban" | "Calendar" | "MyTasks") => {
   );
 
   const myTasksFilterList = useMemo(
-    () =>
-      myTasksFilters?.involvementEnabled
-        ? [
-            ...filterCommandLists,
-            {
-              key: "involvement",
-              name: "Involvement",
-              type: FilterCommandMode.Involvement,
-              commandMode: FilterCommandMode.Involvement,
-            },
-          ]
-        : filterCommandLists,
-    [myTasksFilters?.involvementEnabled],
+    () => [
+      ...filterCommandLists,
+      ...(myTasksFilters?.scopePanel
+        ? [{
+            key: "myTasksScope",
+            name: "Boards, columns, and status",
+            type: FilterCommandMode.MyTasksScope,
+            commandMode: FilterCommandMode.MyTasksScope,
+          }]
+        : []),
+      ...(myTasksFilters?.involvementEnabled
+        ? [{
+            key: "involvement",
+            name: "Involvement",
+            type: FilterCommandMode.Involvement,
+            commandMode: FilterCommandMode.Involvement,
+          }]
+        : []),
+    ],
+    [myTasksFilters?.involvementEnabled, myTasksFilters?.scopePanel],
   );
   let sourceList = filterCommandLists;
   if (view === "Calendar") sourceList = calendarFilterList;
@@ -79,6 +86,9 @@ export const useFilterView = (view: "Kanban" | "Calendar" | "MyTasks") => {
     view === "MyTasks" &&
       myTasksFilters?.involvementEnabled &&
       !(myTasksFilters.scopes.length === 1 && myTasksFilters.scopes[0] === "assigned"),
+  );
+  const hasScopeFilter = Boolean(
+    view === "MyTasks" && myTasksFilters?.scopeFilterCount,
   );
 
   const reOrder = useCallback(
@@ -100,7 +110,7 @@ export const useFilterView = (view: "Kanban" | "Calendar" | "MyTasks") => {
         }
         return calendarFilterList;
       }
-      if (activeFilters.length === 0 && !hasInvolvementFilter) {
+      if (activeFilters.length === 0 && !hasInvolvementFilter && !hasScopeFilter) {
         return sourceList.filter(
           (x) =>
             x.type !== FilterCommandMode.ClearAll &&
@@ -132,6 +142,7 @@ export const useFilterView = (view: "Kanban" | "Calendar" | "MyTasks") => {
       sourceList,
       calendarTaskFilters,
       hasInvolvementFilter,
+      hasScopeFilter,
     ]
   );
 

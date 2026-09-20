@@ -135,7 +135,7 @@ const MyTasksViewTabs = ({
               aria-label="Manage views"
               aria-expanded={actionsOpen}
               onClick={() => setActionsOpen((open) => !open)}
-              className="group relative flex size-8 items-center justify-center text-text-light-gray hover:text-white-black"
+              className={`${MOBILE_TARGET} group relative h-8 items-center justify-center text-text-light-gray hover:text-white-black @md:min-h-0 @md:min-w-0`}
             >
               <Settings2 size={14} strokeWidth={1.75} />
             </button>
@@ -275,6 +275,7 @@ const BoardViewButton = ({
   <button
     type="button"
     title={label}
+    aria-label={count > 0 ? `${label}, ${count} overdue` : label}
     onClick={onClick}
     className={`relative flex h-8 max-w-full min-w-0 items-center gap-1 whitespace-nowrap pr-4 text-content transition-opacity ${
       active

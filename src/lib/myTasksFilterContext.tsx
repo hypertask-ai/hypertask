@@ -34,6 +34,8 @@ type MyTasksFilterContextValue = {
   labels: CalendarLabelSummary[];
   scopes: MyTasksScope[];
   involvementEnabled: boolean;
+  scopePanel?: ReactNode;
+  scopeFilterCount: number;
   setScopes: (scopes: MyTasksScope[]) => void;
   addFilter: (type: TFilter, value: { id?: unknown }) => void;
   overrideFilter: (type: TFilter, value: unknown) => void;
@@ -60,6 +62,8 @@ type ProviderProps = {
   labels: CalendarLabelSummary[];
   scopes: MyTasksScope[];
   involvementEnabled: boolean;
+  scopePanel?: ReactNode;
+  scopeFilterCount?: number;
   onScopesChange: (scopes: MyTasksScope[]) => void;
   children: ReactNode;
 };
@@ -72,6 +76,8 @@ export function MyTasksFilterProvider({
   labels,
   scopes,
   involvementEnabled,
+  scopePanel,
+  scopeFilterCount = 0,
   onScopesChange,
   children,
 }: ProviderProps) {
@@ -90,6 +96,8 @@ export function MyTasksFilterProvider({
       labels,
       scopes: normalizeMyTasksScopes(scopes),
       involvementEnabled,
+      scopePanel,
+      scopeFilterCount,
       setScopes: (nextScopes) => onScopesChange(normalizeMyTasksScopes(nextScopes)),
       addFilter: (type, value) => update(addFilterValue(resolved, type, value)),
       overrideFilter: (type, value) =>
@@ -110,6 +118,8 @@ export function MyTasksFilterProvider({
       labels,
       scopes,
       involvementEnabled,
+      scopePanel,
+      scopeFilterCount,
       onScopesChange,
       update,
       onClearAll,

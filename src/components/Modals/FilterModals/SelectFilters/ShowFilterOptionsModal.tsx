@@ -143,6 +143,10 @@ const FilterCommandRowEl: React.FC<IFilterCommandRowEl & { view: "Kanban" | "Cal
     !(myTasksFilters.scopes.length === 1 && myTasksFilters.scopes[0] === "assigned")
       ? myTasksFilters.scopes.length
       : 0;
+  const scopeFilterCount =
+    el.commandMode === FilterCommandMode.MyTasksScope
+      ? (myTasksFilters?.scopeFilterCount ?? 0)
+      : 0;
 
   return (
     <>
@@ -150,6 +154,9 @@ const FilterCommandRowEl: React.FC<IFilterCommandRowEl & { view: "Kanban" | "Cal
 
       {involvementCount > 0 ? (
         <span className="text-micro font-medium">{involvementCount} active</span>
+      ) : null}
+      {scopeFilterCount > 0 ? (
+        <span className="text-micro font-medium">{scopeFilterCount} active</span>
       ) : null}
       {currentlyActive && (view === "Kanban" || view === "MyTasks") && (
         <RenderActiveFilters elKey={el.key} currentlyActive={currentlyActive} />

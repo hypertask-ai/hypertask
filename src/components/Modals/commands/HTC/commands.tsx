@@ -59,6 +59,7 @@ import {
   HTPR_6572_MY_TASKS_BOARD_TOOLBAR_FLAG,
   HTPR_6585_BOARD_REPORTS_FLAG,
   INBOX_ARCHIVE_CLUSTER_FLAG,
+  MY_TASKS_FILTER_PARITY_FLAG,
   MY_TASKS_TABLE_COLUMNS_FLAG,
   MY_TASKS_VIEWS_FLAG,
 } from "@/lib/flags/keys";
@@ -105,8 +106,12 @@ const Commands = (props: Props) => {
   const copyCurrentUrlEnabled = useFlag("htpr-6112-copy-current-url");
   const inboxClusterEnabled = useFlag(INBOX_ARCHIVE_CLUSTER_FLAG);
   const myTasksViewsEnabled = useFlag(MY_TASKS_VIEWS_FLAG);
+  const myTasksFilterParityEnabled = useFlag(MY_TASKS_FILTER_PARITY_FLAG);
   const myTasksTableColumnsEnabled = useFlag(MY_TASKS_TABLE_COLUMNS_FLAG);
-  const myTasksBoardToolbarEnabled = useFlag(HTPR_6572_MY_TASKS_BOARD_TOOLBAR_FLAG);
+  const myTasksBoardToolbarEnabled =
+    useFlag(HTPR_6572_MY_TASKS_BOARD_TOOLBAR_FLAG) &&
+    myTasksViewsEnabled &&
+    myTasksFilterParityEnabled;
   const commentLongPressEnabled = useFlag(HTPR_6514_COMMENT_LONG_PRESS_FLAG);
   const reportsEnabled = useFlag(HTPR_6585_BOARD_REPORTS_FLAG);
   const pinCommentActions = !!contextOptions?.commentOptions;
