@@ -43,6 +43,7 @@ class RunnerTests(unittest.TestCase):
             'systemctl': '#!/bin/sh\ntest -n "$XDG_RUNTIME_DIR"\n',
             'curl': '#!/bin/sh\nexit 0\n',
             'htbot': '#!/bin/sh\necho \'{"success":true}\'\n',
+            'rg': '#!/bin/sh\nexit 1\n',
             'docker': '#!/bin/sh\nif [ "$1 $2" = "network rm" ] && [ "$MODE" = cleanup_fail ]; then exit 1; fi\n',
             'strix': '''#!/usr/bin/python3
 import json,os,pathlib,sys
@@ -122,8 +123,10 @@ class ReportTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temp:
             root=Path(temp);(root/'src').mkdir()
             (root/'src/helper.ts').write_text('export function decide(count, limit) { return count > limit }\n')
-            (root/'src/caller.ts').write_text('const count = await redis.incr(key)\nconst decision = decide(count, limit)\n')
-            with patch.object(reporter,'APP',root):
+            caller=root/'src/caller.ts'
+            caller.write_text('const count = await redis.incr(key)\nconst decision = decide(count, limit)\n')
+            search=subprocess.CompletedProcess([],0,f'{caller}\n','')
+            with patch.object(reporter,'APP',root),patch.object(reporter.subprocess,'run',return_value=search):
                 source=reporter.source_evidence({'code_locations':[{'file':'src/helper.ts','start_line':1,'end_line':1}]})
                 self.assertIn('Caller/test context: src/caller.ts',source)
                 self.assertIn('redis.incr(key)',source)
