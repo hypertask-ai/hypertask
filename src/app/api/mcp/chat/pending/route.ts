@@ -53,13 +53,6 @@ export async function GET(request: NextRequest) {
       `;
       if (agents.length !== 1) return { found: false, messages: [] };
 
-      // Existing webhook agents stay entirely on the webhook path.
-      const subscription = await tx.agentWebhookSubscription.findUnique({
-        where: { agentId: agentId },
-        select: { active: true },
-      });
-      if (subscription?.active) return { found: true, messages: [] };
-
       // This endpoint is the daemon's dequeue acknowledgement: returning a row
       // and setting isDelivered are one atomic operation. The protocol is
       // intentionally at-most-once; it has no separate acknowledgement call.
@@ -78,6 +71,16 @@ export async function GET(request: NextRequest) {
           WHERE session."agentId" = ${agentId}
             AND message."role" = 'human'::"ChatRole"
             AND message."isDelivered" = false
+            AND NOT EXISTS (
+              SELECT 1
+              FROM "AgentWebhookDelivery" delivery
+              JOIN "AgentWebhookSubscription" subscription
+                ON subscription."id" = delivery."subscriptionId"
+              WHERE subscription."agentId" = ${agentId}
+                AND delivery."event" = 'chat.message'
+                AND delivery."status" IN ('pending', 'processing')
+                AND delivery."payload" #>> '{chat,messageId}' = message."id"
+            )
             AND NOT EXISTS (
               SELECT 1
               FROM "ChatMessage" reply

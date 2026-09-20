@@ -147,7 +147,7 @@ export async function POST(
           sessionId: session.id,
           content: text,
           role: "human",
-          isDelivered: true,
+          isDelivered: false,
           authorUserId: userId,
         },
       });
@@ -185,13 +185,6 @@ export async function POST(
         },
         ...(agentBrief ? { agentBrief } : {}),
       });
-
-      if (deliveryIds.length === 0 && pollingChatEnabled) {
-        await chatStore(tx).messages.update({
-          where: { id: message.id },
-          data: { isDelivered: false },
-        });
-      }
 
       // Without a webhook or a recently polling runtime, nothing will ever
       // answer this message. Replying to the turn makes it terminal, like the

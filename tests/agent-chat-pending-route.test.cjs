@@ -288,14 +288,16 @@ test("a replied turn returns the stored reply without creating another", async (
   assert.equal(replies.length, 1);
 });
 
-test("an active webhook agent remains on the webhook path", async () => {
+test("a failed webhook message is pollable while the webhook remains configured", async () => {
   activeWebhook = true;
 
   const { body } = await fetchPending();
 
-  assert.deepEqual(body, { success: true, messages: [] });
-  assert.equal(pendingRows[0].isDelivered, false);
-  assert.equal(rawQueries.some((sql) => /WITH pending AS/.test(sql)), false);
+  assert.equal(body.messages.length, 1);
+  assert.equal(body.messages[0].id, "message-1");
+  assert.equal(pendingRows[0].isDelivered, true);
+  assert.match(rawQueries.join("\n"), /AgentWebhookDelivery/);
+  assert.match(rawQueries.join("\n"), /'pending', 'processing'/);
 });
 
 test("pending rejects a user token", async () => {

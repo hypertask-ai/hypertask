@@ -61,6 +61,16 @@ export function serializeAgentWebhookSubscription(sub: {
   };
 }
 
+function chatMessageIdFromWebhookPayload(payload: Prisma.JsonValue): string | null {
+  if (typeof payload !== "object" || payload === null || Array.isArray(payload)) {
+    return null;
+  }
+  const chat = payload.chat;
+  if (typeof chat !== "object" || chat === null || Array.isArray(chat)) return null;
+  const messageId = chat.messageId;
+  return typeof messageId === "string" && messageId ? messageId : null;
+}
+
 export function serializeAgentWebhookDelivery(delivery: {
   id: string;
   event: string;
@@ -362,7 +372,31 @@ export async function manageAgentWebhook(input: {
   }
 
   if (input.action === "delete") {
-    await prisma.agentWebhookSubscription.delete({ where: { id: subscription.id } });
+    await prisma.$transaction(async (tx) => {
+      const chatDeliveries = await tx.agentWebhookDelivery.findMany({
+        where: {
+          subscriptionId: subscription.id,
+          event: "chat.message",
+          status: { not: "delivered" },
+        },
+        select: { payload: true },
+      });
+      const messageIds = [
+        ...new Set(
+          chatDeliveries.flatMap(({ payload }) => {
+            const messageId = chatMessageIdFromWebhookPayload(payload);
+            return messageId ? [messageId] : [];
+          }),
+        ),
+      ];
+      if (messageIds.length > 0) {
+        await tx.chatMessage.updateMany({
+          where: { id: { in: messageIds }, role: "human" },
+          data: { isDelivered: false },
+        });
+      }
+      await tx.agentWebhookSubscription.delete({ where: { id: subscription.id } });
+    });
     return { success: true, scope: "agent" as const, deleted: subscription.id };
   }
 

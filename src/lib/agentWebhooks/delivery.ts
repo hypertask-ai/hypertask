@@ -18,6 +18,49 @@ export type AgentWebhookAttemptResult =
   | { status: "delivered"; statusCode: number }
   | { status: "retrying" | "failed"; statusCode: number | null; error: string | null };
 
+function chatMessageIdFromDelivery(delivery: {
+  event: string;
+  payload: unknown;
+}): string | null {
+  if (
+    delivery.event !== "chat.message" ||
+    typeof delivery.payload !== "object" ||
+    delivery.payload === null ||
+    Array.isArray(delivery.payload)
+  ) {
+    return null;
+  }
+  const chat = (delivery.payload as { chat?: unknown }).chat;
+  if (typeof chat !== "object" || chat === null || Array.isArray(chat)) return null;
+  const messageId = (chat as { messageId?: unknown }).messageId;
+  return typeof messageId === "string" && messageId ? messageId : null;
+}
+
+async function cancelAgentWebhookDelivery(delivery: {
+  id: string;
+  event: string;
+  payload: unknown;
+}): Promise<void> {
+  const messageId = chatMessageIdFromDelivery(delivery);
+  if (!messageId) {
+    await prisma.agentWebhookDelivery.update({
+      where: { id: delivery.id },
+      data: { status: "cancelled", processingAt: null },
+    });
+    return;
+  }
+  await prisma.$transaction(async (tx) => {
+    await tx.agentWebhookDelivery.update({
+      where: { id: delivery.id },
+      data: { status: "cancelled", processingAt: null },
+    });
+    await tx.chatMessage.updateMany({
+      where: { id: messageId, role: "human" },
+      data: { isDelivered: false },
+    });
+  });
+}
+
 export async function deliverAgentWebhook(
   deliveryId: string,
 ): Promise<AgentWebhookAttemptResult> {
@@ -48,10 +91,7 @@ export async function deliverAgentWebhook(
     !delivery.subscription.active ||
     delivery.subscription.agent.revokedAt != null
   ) {
-    await prisma.agentWebhookDelivery.update({
-      where: { id: delivery.id },
-      data: { status: "cancelled", processingAt: null },
-    });
+    await cancelAgentWebhookDelivery(delivery);
     return { status: "skipped" };
   }
 
@@ -69,10 +109,7 @@ export async function deliverAgentWebhook(
       delivery.subscription.agent.userId,
     ))
   ) {
-    await prisma.agentWebhookDelivery.update({
-      where: { id: delivery.id },
-      data: { status: "cancelled", processingAt: null },
-    });
+    await cancelAgentWebhookDelivery(delivery);
     return { status: "skipped" };
   }
 
@@ -87,8 +124,9 @@ export async function deliverAgentWebhook(
 
   if (result.ok) {
     const deliveredAt = new Date();
-    await prisma.$transaction([
-      prisma.agentWebhookDelivery.update({
+    const messageId = chatMessageIdFromDelivery(delivery);
+    await prisma.$transaction(async (tx) => {
+      await tx.agentWebhookDelivery.update({
         where: { id: delivery.id },
         data: {
           status: "delivered",
@@ -99,36 +137,50 @@ export async function deliverAgentWebhook(
           error: null,
           deliveredAt,
         },
-      }),
-      prisma.agentWebhookSubscription.update({
+      });
+      await tx.agentWebhookSubscription.update({
         where: { id: delivery.subscriptionId },
         data: { lastDeliveryAt: deliveredAt, lastDeliveryOk: true },
-      }),
-    ]);
+      });
+      if (messageId) {
+        await tx.chatMessage.updateMany({
+          where: { id: messageId, role: "human" },
+          data: { isDelivered: true },
+        });
+      }
+    });
     return { status: "delivered", statusCode: result.statusCode! };
   }
 
   const nextDelay = agentWebhookRetryDelaySeconds(attemptCount);
-  const failedPermanently = nextDelay == null;
+  const messageId = chatMessageIdFromDelivery(delivery);
+  const failedPermanently = messageId !== null || nextDelay == null;
   const nextAttemptAt = new Date(Date.now() + (nextDelay ?? 0) * 1000);
-  await prisma.$transaction([
-    prisma.agentWebhookDelivery.update({
+  const attemptedAt = new Date();
+  await prisma.$transaction(async (tx) => {
+    await tx.agentWebhookDelivery.update({
       where: { id: delivery.id },
       data: {
         status: failedPermanently ? "failed" : "retrying",
         attemptCount,
         processingAt: null,
-        lastAttemptAt: new Date(),
+        lastAttemptAt: attemptedAt,
         nextAttemptAt,
         statusCode: result.statusCode,
         error: result.error,
       },
-    }),
-    prisma.agentWebhookSubscription.update({
+    });
+    await tx.agentWebhookSubscription.update({
       where: { id: delivery.subscriptionId },
-      data: { lastDeliveryAt: new Date(), lastDeliveryOk: false },
-    }),
-  ]);
+      data: { lastDeliveryAt: attemptedAt, lastDeliveryOk: false },
+    });
+    if (messageId) {
+      await tx.chatMessage.updateMany({
+        where: { id: messageId, role: "human" },
+        data: { isDelivered: false },
+      });
+    }
+  });
 
   if (!failedPermanently) {
     await queueAgentWebhookDelivery(
