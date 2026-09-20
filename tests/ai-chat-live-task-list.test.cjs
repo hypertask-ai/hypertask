@@ -20,11 +20,15 @@ test("board-wide task questions require the live task list", () => {
   assert.equal(isLiveTaskListRequest("List the tasks on this board"), true);
   assert.equal(isLiveTaskListRequest("How many tickets are on the current board?"), true);
   assert.equal(isLiveTaskListRequest("Show all high priority cards"), true);
+  assert.equal(isLiveTaskListRequest("Are there tasks on this board?"), true);
+  assert.equal(isLiveTaskListRequest("Do tasks exist on this board?"), true);
 });
 
-test("semantic task searches still use search or RAG", () => {
+test("other task intents keep their specialized tools", () => {
   assert.equal(isLiveTaskListRequest("Find tasks mentioning payment gateway"), false);
   assert.equal(isLiveTaskListRequest("What's happening with the auth bug?"), false);
+  assert.equal(isLiveTaskListRequest("What is this task's status?"), false);
+  assert.equal(isLiveTaskListRequest("How many tasks do I have?"), false);
 });
 
 test("AI chat enforces live listing and rejects RAG for board-wide task questions", () => {

@@ -466,14 +466,14 @@ const AGENT_SYSTEM_PROMPT = `
                       and return context around them without needing get_tasks
                     - Comments are part of the broader task context — RAG indexes both tasks and
                       comments together and will return relevant comment content automatically
-                    - Never use RAG to list, enumerate, count, or check whether tasks exist. Its
-                      search index can lag behind the live board, so zero matches never means zero tasks.
+                    - Never use RAG to list, enumerate, count, or check whether tasks exist on a board.
+                      Its search index can lag behind the live board, so zero matches never means zero tasks.
                     **Use list_tasks when:**
-                    - The user asks to list, enumerate, count, or check whether tasks exist. This is
-                      the live source of truth for the board, including tasks created moments ago.
+                    - The user asks to list, enumerate, count, or check whether tasks exist on a board.
+                      This is the live source of truth, including tasks created moments ago.
                     - The query contains explicit structured filters
                       (e.g. priority, assignee, section, status, labels, due dates)
-                    - Examples: "list the tasks on this board", "all high priority tasks", "tasks assigned to me", "tasks due this week"
+                    - Examples: "list the tasks on this board", "all high priority tasks", "tasks due this week"
                     **Use search_tasks when:**
                     - The query contains a keyword, phrase, or partial task name to match against
                     - Examples: "find tasks mentioning payment gateway", "search for login issue tasks"
