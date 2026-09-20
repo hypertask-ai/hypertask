@@ -74,53 +74,24 @@ const ReportsOverview = ({
   currentUser,
   reports,
   builtins,
-  nativeReportsEnabled = false,
+  nativeReportsEnabled,
 }: {
   currentUser: IUser;
   reports: ReportRow[];
   builtins: BuiltinRow[];
-  nativeReportsEnabled?: boolean;
+  nativeReportsEnabled: boolean;
 }) => (
   <ReportShell currentUser={currentUser}>
     <header>
       <h1 className="text-display font-semibold text-white-black">Reports</h1>
       <p className="mt-2 text-dense text-text-light-gray">
-        {nativeReportsEnabled
-          ? "Saved reports, live board reports, and velocity in one place."
-          : "Saved reports and board velocity in one place."}
+        Live board analytics plus reports you chose to save.
       </p>
     </header>
 
-    {nativeReportsEnabled && builtins.length > 0 && (
-      <section>
-        <h2 className="mb-3 text-subheading font-semibold text-white-black">
-          Native reports
-        </h2>
-        <div className="flex flex-col gap-2">
-          {builtins.map((report) => (
-            <Link
-              key={`current-tasks-${report.projectId}`}
-              className="rounded-[5px] bg-hoverCardBackground px-4 py-4 hover:bg-cardBackground"
-              href={`/report/project-${report.projectId}/native/current-tasks`}
-            >
-              <p className="text-emphasis font-semibold text-white-black">
-                Current tasks
-              </p>
-              <p className="mt-1 text-meta text-text-light-gray">
-                Live task counts by section and assignee
-              </p>
-              <p className="mt-2 text-micro text-text-light-gray">
-                {report.boardName}
-              </p>
-            </Link>
-          ))}
-        </div>
-      </section>
-    )}
-
     <section>
       <h2 className="mb-3 text-subheading font-semibold text-white-black">
-        {nativeReportsEnabled ? "Generated reports" : "Reports"}
+        Reports
       </h2>
       {reports.length === 0 ? (
         <div className="rounded-[4px] bg-hoverCardBackground p-5 text-dense text-text-light-gray">
@@ -177,6 +148,24 @@ const ReportsOverview = ({
               </p>
             </Link>
           ))}
+          {nativeReportsEnabled &&
+            builtins.map((report) => (
+              <Link
+                key={`current-tasks-${report.projectId}`}
+                className="rounded-[5px] bg-cardBackground px-4 py-4 hover:bg-hoverCardBackground"
+                href={`/report/project-${report.projectId}/native/current-tasks`}
+              >
+                <p className="text-emphasis font-semibold text-white-black">
+                  Current tasks
+                </p>
+                <p className="mt-1 text-meta text-text-light-gray">
+                  Live task counts by section and assignee
+                </p>
+                <p className="mt-2 text-micro text-text-light-gray">
+                  {report.boardName}
+                </p>
+              </Link>
+            ))}
         </div>
       )}
     </section>
