@@ -34,6 +34,7 @@ let backCalls = 0;
 let quickAddRenders = 0;
 const viewControlProps = [];
 const viewTabsProps = [];
+const filterModalProps = [];
 
 stubSourceModule("src/hooks/useFlag.tsx", {
   useFlag: (key) => flagValues[key] ?? false,
@@ -89,7 +90,10 @@ stubSourceModule("src/components/Buttons/BackButton.tsx", {
   default: () => null,
 });
 stubSourceModule("src/app/my-tasks/MyTasksKanbanFilterModal.tsx", {
-  default: () => null,
+  default: (props) => {
+    filterModalProps.push(props);
+    return React.createElement("div", { "data-testid": "my-tasks-filter-modal" });
+  },
 });
 // HTPR-6458: realtime client is not available under jsdom/jiti component tests.
 stubSourceModule("src/hooks/realtime/useMyTasksRealtime.ts", {
@@ -128,6 +132,7 @@ global.React = React;
 const MyTasksModule = jiti(path.join(root, "src/app/my-tasks/MyTasks.tsx"));
 const MyTasks = MyTasksModule.default;
 const { fromBoardSort, MY_TASKS_BOARD_SORT_MODES, toBoardSort } = MyTasksModule;
+const { DEFAULT_MY_TASKS_VIEW_CONFIG } = jiti(path.join(root, "src/models/MyTasksView.ts"));
 const { PriorityConstants } = jiti(path.join(root, "src/lib/constants/constants.ts"));
 
 const sections = [
@@ -335,6 +340,57 @@ test("board toolbar stays off until saved views and filter parity are both avail
   delete flagValues["htpr-6422-my-tasks-views"];
   delete flagValues["htpr-6460-my-tasks-quick-add"];
   delete flagValues["htpr-6572-my-tasks-board-toolbar"];
+  delete global.window;
+  delete global.document;
+  delete global.IS_REACT_ACT_ENVIRONMENT;
+});
+
+test("flag-off Clear All preserves scope settings", () => {
+  const dom = new JSDOM("<!doctype html><html><body><div id='root'></div></body></html>", { url: "https://app.hypertask.ai/my-tasks?view=1" });
+  global.window = dom.window;
+  global.document = dom.window.document;
+  global.IS_REACT_ACT_ENVIRONMENT = true;
+  flagValues["htpr-6422-my-tasks-views"] = true;
+  flagValues["htpr-6447-my-tasks-filter-parity"] = true;
+  viewControlProps.length = 0;
+  filterModalProps.length = 0;
+
+  const config = {
+    ...DEFAULT_MY_TASKS_VIEW_CONFIG,
+    boardIds: [10],
+    filters: {
+      ...DEFAULT_MY_TASKS_VIEW_CONFIG.filters,
+      sectionIds: [100],
+      showDone: true,
+      showSnoozed: true,
+    },
+  };
+  const rootEl = dom.window.document.getElementById("root");
+  const reactRoot = createRoot(rootEl);
+  act(() => {
+    reactRoot.render(React.createElement(MyTasks, {
+      sections,
+      tabs: ["All", "Board A", "Board B"],
+      currentUser: { id: 6 },
+      viewsEnabled: true,
+      initialViewId: 1,
+      initialViews: [{ id: 1, name: "Scoped", position: 0, isDefault: false, config }],
+    }));
+  });
+
+  act(() => viewControlProps.at(-1).onOpenKanbanFilters());
+  assert.ok(filterModalProps.length > 0, "filter modal opens on the existing toolbar");
+  act(() => filterModalProps.at(-1).onClearAll());
+
+  const cleared = viewControlProps.at(-1).config;
+  assert.deepEqual(cleared.boardIds, [10]);
+  assert.deepEqual(cleared.filters.sectionIds, [100]);
+  assert.equal(cleared.filters.showDone, true);
+  assert.equal(cleared.filters.showSnoozed, true);
+
+  act(() => { reactRoot.unmount(); });
+  delete flagValues["htpr-6422-my-tasks-views"];
+  delete flagValues["htpr-6447-my-tasks-filter-parity"];
   delete global.window;
   delete global.document;
   delete global.IS_REACT_ACT_ENVIRONMENT;

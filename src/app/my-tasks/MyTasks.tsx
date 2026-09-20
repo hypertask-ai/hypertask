@@ -1584,7 +1584,7 @@ const boardTabCounts = useMemo(() => {
   const onClearAllFilters = useCallback(() => {
     updateViewConfig((current) => ({
       ...current,
-      boardIds: null,
+      ...(boardToolbarEnabled ? { boardIds: null } : {}),
       filters: {
         ...current.filters,
         priorityIds: [],
@@ -1594,13 +1594,13 @@ const boardTabCounts = useMemo(() => {
         dueDate: null,
         createdRange: null,
         updatedRange: null,
-        sectionIds: [],
-        showDone: false,
-        showSnoozed: false,
+        ...(boardToolbarEnabled
+          ? { sectionIds: [], showDone: false, showSnoozed: false }
+          : {}),
       },
       filterSettings: emptyFilterSettings(),
     }));
-  }, [updateViewConfig]);
+  }, [boardToolbarEnabled, updateViewConfig]);
 
   const onClearNotStarred = useCallback(() => {
     updateViewConfig((current) => ({

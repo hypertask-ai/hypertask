@@ -177,7 +177,7 @@ const MyTasksViewTabs = ({
                       onSave();
                       setActionsOpen(false);
                     }}
-                    className="min-h-11 w-full px-3 py-2 text-left font-medium text-shadcn-primary hover:bg-hover-active disabled:opacity-50"
+                    className="min-h-11 w-full rounded-[4px] bg-shadcn-primary px-3 py-2 text-left font-medium text-primary-foreground hover:opacity-80 disabled:opacity-50"
                   >
                     Save view
                   </button>
