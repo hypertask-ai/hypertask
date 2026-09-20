@@ -232,8 +232,11 @@ const HypertasksCommands = ({ callbackHandler, contextOptions }: IHTCProps) => {
   const myTasksSnoozeEnabled = useFlag(MY_TASKS_SNOOZE_FLAG); // HTPR-6461: Remind Me also hides My Tasks
   const myTasksBulkSelectionEnabled = useFlag(MY_TASKS_BULK_SELECTION_FLAG);
   const myTasksFilterParityEnabled = useFlag(MY_TASKS_FILTER_PARITY_FLAG);
+  const myTasksBoardToolbarFlagEnabled = useFlag(
+    HTPR_6572_MY_TASKS_BOARD_TOOLBAR_FLAG,
+  );
   const myTasksBoardToolbarEnabled =
-    useFlag(HTPR_6572_MY_TASKS_BOARD_TOOLBAR_FLAG) &&
+    myTasksBoardToolbarFlagEnabled &&
     myTasksViewsEnabled &&
     myTasksFilterParityEnabled;
   const activeSectionId = useRecoilValue(activeSectionIdAtom);
@@ -2262,7 +2265,12 @@ const HypertasksCommands = ({ callbackHandler, contextOptions }: IHTCProps) => {
           )}
 
           {commandMode === CommandMode.ShowFilterHTC &&
-            !(onMyTasks && myTasksBoardToolbarEnabled) && (
+            !(
+              onMyTasks &&
+              myTasksBoardToolbarFlagEnabled &&
+              myTasksViewsEnabled &&
+              myTasksFilterParityEnabled
+            ) && (
               <AllFilterHTC toggle={boardCloseHandler} view="Kanban" />
             )}
 

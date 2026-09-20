@@ -1287,7 +1287,7 @@ const boardTabCounts = useMemo(() => {
       suppressHydrationWarning
       className={`py-9 h-screen min-h-0 overflow-hidden bg-containerBackground flex-col rounded-[4px] my-0 ${myTasksShortcutsWidthEnabled ? "w-full" : "global-view-width"} flex linksModal ${styles.links_modal}`}
     >
-      {boardToolbarEnabled ? (
+      {boardToolbarFlagEnabled && viewsFeatureEnabled && filterParityEnabled ? (
         <div className="pills-row mb-4 flex w-full min-w-0 items-start gap-3 px-4 @md:!px-20">
           {viewsEnabled && myTasksViewsEnabled ? (
             <MyTasksViewTabs

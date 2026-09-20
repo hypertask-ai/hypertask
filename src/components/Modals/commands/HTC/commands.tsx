@@ -108,8 +108,11 @@ const Commands = (props: Props) => {
   const myTasksViewsEnabled = useFlag(MY_TASKS_VIEWS_FLAG);
   const myTasksFilterParityEnabled = useFlag(MY_TASKS_FILTER_PARITY_FLAG);
   const myTasksTableColumnsEnabled = useFlag(MY_TASKS_TABLE_COLUMNS_FLAG);
+  const myTasksBoardToolbarFlagEnabled = useFlag(
+    HTPR_6572_MY_TASKS_BOARD_TOOLBAR_FLAG,
+  );
   const myTasksBoardToolbarEnabled =
-    useFlag(HTPR_6572_MY_TASKS_BOARD_TOOLBAR_FLAG) &&
+    myTasksBoardToolbarFlagEnabled &&
     myTasksViewsEnabled &&
     myTasksFilterParityEnabled;
   const commentLongPressEnabled = useFlag(HTPR_6514_COMMENT_LONG_PRESS_FLAG);
@@ -190,7 +193,9 @@ const Commands = (props: Props) => {
         )
         .map((command) => {
           if (
-            myTasksBoardToolbarEnabled &&
+            myTasksBoardToolbarFlagEnabled &&
+            myTasksViewsEnabled &&
+            myTasksFilterParityEnabled &&
             onMyTasks &&
             command.commandMode === CommandMode.SortKanbanBoard
           ) {
