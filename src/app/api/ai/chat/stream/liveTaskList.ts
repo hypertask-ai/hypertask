@@ -1,6 +1,6 @@
 const TASK_TERM = /\b(?:tasks?|tickets?|cards?)\b/i;
 const DIRECT_LIST_INTENT =
-  /(?:\b(?:list|enumerate|give\s+(?:me|us))\b[^?.!]*\b(?:tasks|tickets|cards|(?:every|each)\s+(?:task|ticket|card))\b|\bcount\b[^?.!]*\b(?:tasks|tickets|cards)\b)/i;
+  /(?:\b(?:list|enumerate)\b[^?.!]*\b(?:tasks|tickets|cards|(?:every|each)\s+(?:task|ticket|card))\b|\bgive\s+(?:me|us)\s+(?:(?:a\s+)?list\s+of\s+|all\s+|the\s+)?(?:tasks|tickets|cards|(?:every|each)\s+(?:task|ticket|card))\b|\bcount\b[^?.!]*\b(?:tasks|tickets|cards)\b)/i;
 const PLURAL_LIST_INTENT =
   /\b(?:show(?:\s+me)?(?:\s+all)?|all|any|how many)\b[^?.!]*\b(?:tasks|tickets|cards)\b/i;
 const SET_QUESTION_INTENT =
@@ -16,7 +16,7 @@ const PERSONAL_WORK_INTENT =
 const PRODUCT_HELP_INTENT =
   /\b(?:how to|how (?:do|can|could|should) (?:i|we))\b[^?.!]*\b(?:create|add|make|edit|update|delete|archive|move|assign|list|show)\b|\b(?:can|could|should|may) (?:i|we)\b[^?.!]*\b(?:create|add|make|edit|update|delete|archive|move|assign)\b/i;
 const GLOBAL_TASK_SCOPE =
-  /\b(?:all\s+(?:boards|projects)|every\s+(?:boards?|projects?)|(?:across|from)\s+(?:(?:(?:all|my|our)\s+)?(?:boards|projects)|every\s+(?:boards?|projects?)))\b/i;
+  /\b(?:all\s+(?:boards|projects)|(?:every|each)\s+(?:boards?|projects?)|(?:across|from)\s+(?:(?:(?:all|my|our)\s+)?(?:boards|projects)|(?:every|each)\s+(?:boards?|projects?)))\b/i;
 const SEMANTIC_SEARCH_INTENT =
   /\b(?:find|search|matching|mention|mentioning|mentions|about|related to)\b/i;
 

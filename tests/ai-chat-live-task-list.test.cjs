@@ -42,6 +42,7 @@ test("other task intents keep their specialized tools", () => {
   assert.equal(isLiveTaskListRequest("Count comments on this task"), false);
   assert.equal(isLiveTaskListRequest("How many comments are on this task?"), false);
   assert.equal(isLiveTaskListRequest("Give this task to Bob"), false);
+  assert.equal(isLiveTaskListRequest("Give me permission to edit tasks"), false);
   assert.equal(isLiveTaskListRequest("List the comments on this task"), false);
   assert.equal(isLiveTaskListRequest("How many tasks do I have?"), false);
   assert.equal(isLiveTaskListRequest("Show my highest priority tasks"), false);
@@ -105,6 +106,13 @@ test("live task listing defaults to the visible board without overriding explici
   assert.equal(
     resolveLiveTaskListProjectId({
       message: "List every task across every board",
+      defaultProjectId: 42,
+    }),
+    undefined,
+  );
+  assert.equal(
+    resolveLiveTaskListProjectId({
+      message: "List each task across each board",
       defaultProjectId: 42,
     }),
     undefined,
