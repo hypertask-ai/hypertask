@@ -44,6 +44,9 @@ async function runFiler(t, verdicts, options = {}) {
   const bot = join(bin, 'htbot')
   await writeFile(bot, '#!/usr/bin/python3\nimport json,os,sys\nopen(os.environ["CLI_CAPTURE"],"w").write(json.dumps(sys.argv[1:]))\nprint(json.dumps(dict(success=True)))\n')
   await chmod(bot, 0o755)
+  const ripgrep = join(bin, 'rg')
+  await writeFile(ripgrep, '#!/bin/sh\nprintf \'%s\\n\' "$STRIX_APP/src/example.ts"\n')
+  await chmod(ripgrep, 0o755)
 
   const replies = [...verdicts]
   const server = createServer((req, res) => {
