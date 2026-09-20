@@ -1,3 +1,4 @@
+import { agentStore } from "@/utils/controllers/agents";
 import { NextRequest, NextResponse } from 'next/server'
 import { checkMcpRateLimit, validateMcpAuth } from '@/lib/mcp/auth'
 import prisma from '@/lib/prisma'
@@ -96,7 +97,7 @@ export async function GET(request: NextRequest) {
     // Attach display names for the agents that appeared.
     const agentIds = [...perAgent.keys()]
     const agents = agentIds.length
-      ? await prisma.agent.findMany({
+      ? await agentStore().findMany({
           where: { id: { in: agentIds } },
           select: { id: true, displayName: true },
         })

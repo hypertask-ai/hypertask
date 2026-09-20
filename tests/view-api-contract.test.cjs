@@ -22,7 +22,7 @@ test("view routes reject string booleans instead of coercing them", () => {
 
 test("view reads and mutations return one subtask setting field name", () => {
   const detailRoute = read("src/app/api/mcp/view/[viewId]/route.ts");
-  const service = read("src/lib/mcp/views/services.ts");
+  const service = read("src/utils/controllers/views/index.ts");
 
   assert.match(detailRoute, /board_subtask_setting: v\.board_subtask_setting/);
   assert.equal(

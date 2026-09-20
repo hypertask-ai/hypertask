@@ -1,3 +1,4 @@
+import { notificationStore } from "@/utils/controllers/notifications";
 // Next.js API route support: https://nextjs.org/docs/api-routes/introduction
 
 import type { NextApiRequest, NextApiResponse } from 'next'
@@ -32,7 +33,7 @@ export default  async function handler(
 
     // Scope the write to the caller's own notification; unknown id or someone
     // else's returns 0 rows -> 404, never touches another user's data.
-    const { count } = await prisma.notification.updateMany({
+    const { count } = await notificationStore().updateMany({
         where:{ id:notificationId, userId:user.id },
         data:{
             status:"Normal",
@@ -42,12 +43,12 @@ export default  async function handler(
     if (count === 0){
         return res.status(404).json({message:"Notification not found"})
     }
-    const updatedNotification = await prisma.notification.findUniqueOrThrow({
+    const updatedNotification = await notificationStore().findUniqueOrThrow({
         where:{id:notificationId}
     })
 
     // ============== DELETE all OTHER notifications of that type. so no duplicate types
-    await prisma.notification.updateMany({
+    await notificationStore().updateMany({
         where:{
             id:{not:updatedNotification.id},
             type:updatedNotification.type,

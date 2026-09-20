@@ -1,3 +1,4 @@
+import { chatStore } from "@/utils/controllers/chat";
 import { NextRequest, NextResponse } from 'next/server'
 import { checkMcpRateLimit, validateMcpAuth } from '@/lib/mcp/auth'
 import prisma from '@/lib/prisma'
@@ -71,7 +72,7 @@ export async function GET(
 
     // Last 50, oldest first: page desc from the tail, then flip.
     const messages = (
-      await prisma.chatMessage.findMany({
+      await chatStore().messages.findMany({
         where: {
           sessionId: session.id,
           NOT: { role: 'assistant', isDelivered: false, content: { in: [...AGENT_CHAT_SYSTEM_MESSAGES] } },
@@ -200,7 +201,7 @@ export async function POST(
     }) => ({ id, role, content, createdAt,
       proposal: serializeChatTicketProposal(ticketProposal) })
 
-    const target = await prisma.chatMessage.findFirst({
+    const target = await chatStore().messages.findFirst({
       where: { id: replyToMessageId, sessionId: session.id, role: 'human' },
       select: { id: true },
     })
@@ -210,7 +211,7 @@ export async function POST(
         { status: 400 }
       )
     }
-    const existing = await prisma.chatMessage.findUnique({
+    const existing = await chatStore().messages.findUnique({
       where: { replyToMessageId },
       include: { ticketProposal: { select: chatTicketProposalSelect } },
     })
@@ -302,9 +303,9 @@ export async function POST(
         // This update is first on purpose: it takes the ChatSession row lock, so
         // a reply cannot race a timeout, cancellation, or another reply. Session
         // access above already proves this token belongs to the addressed agent.
-        await tx.chatSession.update({ where: { id: session.id }, data: { updatedAt: new Date() } })
-        if (await tx.chatMessage.findUnique({ where: { replyToMessageId } })) throw Object.assign(new Error('Concurrent reply'), { code: 'P2002' })
-        const created = await tx.chatMessage.create({
+        await chatStore(tx).sessions.update({ where: { id: session.id }, data: { updatedAt: new Date() } })
+        if (await chatStore(tx).messages.findUnique({ where: { replyToMessageId } })) throw Object.assign(new Error('Concurrent reply'), { code: 'P2002' })
+        const created = await chatStore(tx).messages.create({
           data: {
             sessionId: session.id,
             content: text,
@@ -327,7 +328,7 @@ export async function POST(
     } catch (error: any) {
       // Lost a race against a concurrent reply with the same idempotency key.
       if (error?.code !== 'P2002') throw error
-      const existing = await prisma.chatMessage.findUnique({
+      const existing = await chatStore().messages.findUnique({
         where: { replyToMessageId },
         include: { ticketProposal: { select: chatTicketProposalSelect } },
       })

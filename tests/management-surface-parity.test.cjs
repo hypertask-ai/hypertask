@@ -126,7 +126,7 @@ test("admin routes expose agents, tokens, rotation, and connection inventory", (
     /validateManagementOrSessionAuth\(request, ['"]write['"]\)/,
   );
   assert.match(
-    read("src/lib/mcp/agents/list.ts"),
+    read("src/utils/controllers/agents/index.ts"),
     /validateManagementOrSessionAuth\(request, ['"]read['"]\)/,
   );
   assert.match(

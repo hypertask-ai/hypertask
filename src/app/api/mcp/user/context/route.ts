@@ -1,3 +1,4 @@
+import { agentStore } from "@/utils/controllers/agents";
 import { NextRequest, NextResponse } from 'next/server'
 import { validateMcpAuth, createUnauthorizedResponse, checkMcpRateLimit } from '@/lib/mcp/auth'
 import { getProjectListingWhere } from '@/utils/controllers/projects/getAllIncludes'
@@ -167,7 +168,7 @@ export async function GET(request: NextRequest) {
       orderBy: { title: 'asc' }
     })
 
-    const agentsByUser = await prisma.agent.findMany({
+    const agentsByUser = await agentStore().findMany({
       where: { userId: user.id },
       select: { id: true, displayName: true }
     })

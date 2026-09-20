@@ -1,3 +1,4 @@
+import { labelStore } from "@/utils/controllers/labels";
 // Next.js API route support: https://nextjs.org/docs/api-routes/introduction
 
 import type { NextApiRequest, NextApiResponse } from "next";
@@ -14,7 +15,7 @@ export default async function handler(
 
   // ================== find all labels associated with that projectId
 
-  const labels = await prisma.label.findMany({
+  const labels = await labelStore().findMany({
     where: {
       projectId: parseInt(projectId as string),
     },

@@ -2,7 +2,7 @@ import { SESSION_COOKIE, verifySession } from "@/lib/auth/session";
 import {
   resetUserViewOrder,
   ViewOrderError,
-} from "@/utils/controllers/projects/views/viewOrder";
+} from "@/utils/controllers/views";
 import type { NextApiHandler } from "next";
 
 const handler: NextApiHandler = async (req, res) => {

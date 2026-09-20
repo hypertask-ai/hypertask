@@ -1,3 +1,4 @@
+import { notificationStore } from "@/utils/controllers/notifications";
 // Next.js API route support: https://nextjs.org/docs/api-routes/introduction
 
 import type { NextApiRequest, NextApiResponse } from 'next'
@@ -81,7 +82,7 @@ const getArchivedInboxMeta = async (
   // One row per (type, taskId) so counts match the list's distinct de-dup.
   // ponytail: scans projectId-only rows for this user's archived notifications;
   // fine at personal-archive scale, swap to a raw GROUP BY if it ever grows huge.
-  const rows = await prisma.notification.findMany({
+  const rows = await notificationStore().findMany({
     where: getArchivedInboxWhere(userId, projectId, boardScope),
     distinct: ["type", "taskId"],
     select: {
@@ -145,7 +146,7 @@ export default  async function handler(
       return res.status(200).json(meta);
     }
 
-    const notificationsToReturn = await prisma.notification.findMany({
+    const notificationsToReturn = await notificationStore().findMany({
       take: ARCHIVED_INBOX_PAGE_SIZE,
       ...(parsedCursor ? { cursor: { id: parsedCursor }, skip: 1 } : {}),
       distinct: ["type", "taskId"],

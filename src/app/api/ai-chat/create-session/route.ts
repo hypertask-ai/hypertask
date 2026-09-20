@@ -1,3 +1,4 @@
+import { chatStore } from "@/utils/controllers/chat";
 import prisma from "@/lib/prisma";
 import { getSessionUser } from "@/lib/auth/getSessionUser";
 import { NextRequest, NextResponse } from "next/server";
@@ -83,7 +84,7 @@ export async function POST(request: NextRequest) {
       if (!mayOpen) {
         return NextResponse.json({ error: "Agent not found" }, { status: 404 });
       }
-      const session = await prisma.chatSession.upsert({
+      const session = await chatStore().sessions.upsert({
         where: { userId_agentId: { userId: agent.userId, agentId: agent.id } },
         update: {},
         create: {
@@ -98,7 +99,7 @@ export async function POST(request: NextRequest) {
       // rewritten: the stored team is the conversation's scope, and letting it
       // follow the agent would hand an old team's transcript to a new one.
       if (session.teamId === null && teamId !== null) {
-        await prisma.chatSession.updateMany({
+        await chatStore().sessions.updateMany({
           where: { id: session.id, teamId: null },
           data: { teamId },
         });
@@ -122,7 +123,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const session = await prisma.chatSession.create({
+    const session = await chatStore().sessions.create({
       data: {
         userId: userId,
         taskId: parsed.data.taskId,

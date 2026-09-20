@@ -1,3 +1,8 @@
+import {
+  createProjectLabel,
+  findProjectLabelByName,
+  labelStore,
+} from "@/utils/controllers/labels";
 // Next.js API route support: https://nextjs.org/docs/api-routes/introduction
 
 import type { NextApiRequest, NextApiResponse } from 'next'
@@ -62,26 +67,13 @@ export default  async function handler(
 
 
     // check if same projectid and value exists
-    const check = await prisma.label.findFirst({
-        where:{
-            AND:[
-                {projectId:projectId},
-                {value:value}
-            ]
-        }
-    })
+    const check = await findProjectLabelByName(projectId, value)
     if (check) return res.status(400).json({message:"Duplicate found"})
     
     // ---------- create label
 
     if (CreateLabelAndReturn){
-        const createdLabel= await prisma.label.create({
-            data:{
-                value:value,
-                projectId:projectId,
-                ai_prompt: aiPrompt,
-            }
-        })
+        const createdLabel = await createProjectLabel(projectId, value, aiPrompt)
         if (aiPrompt) scheduleBackfillAiLabel(createdLabel.id)
         void broadcastBoardChange(projectId, { originUserId: userObj.id })
         return res.status(200).json(createdLabel)
@@ -113,7 +105,7 @@ export default  async function handler(
           where: { taskId },
           select: { label: { select: { id: true, value: true } } },
         });
-        const createdLabel = await tx.label.create({
+        const createdLabel = await labelStore(tx).create({
           data: {
             value: value,
             projectId: projectId,

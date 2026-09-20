@@ -117,7 +117,7 @@ test("mention and assignment outbox rows share their domain transactions", () =>
   );
   assert.match(
     createLabel,
-    /prisma\.\$transaction\(async \(tx\) =>[\s\S]*?tx\.label\.create[\s\S]*?persistAgentTaskUpdatedWebhook\(tx,/,
+    /prisma\.\$transaction\(async \(tx\) =>[\s\S]*?labelStore\(tx\)\.create[\s\S]*?persistAgentTaskUpdatedWebhook\(tx,/,
   );
   assert.match(
     labelClassifier,

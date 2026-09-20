@@ -1,3 +1,4 @@
+import { chatStore } from "@/utils/controllers/chat";
 import type { Prisma } from "@prisma/client";
 import prisma from "@/lib/prisma";
 import { getSessionUser } from "@/lib/auth/getSessionUser";
@@ -53,7 +54,7 @@ function unreadSince(
   since: Date,
   exclude?: Prisma.ChatMessageWhereInput,
 ) {
-  return prisma.chatMessage.count({
+  return chatStore().messages.count({
     where: {
       sessionId,
       createdAt: { gt: since },
@@ -101,7 +102,7 @@ export async function GET(
         : MAX_HISTORY_PAGE;
     const before = url.searchParams.get("before");
     if (before) {
-      const cursor = await prisma.chatMessage.findFirst({
+      const cursor = await chatStore().messages.findFirst({
         where: { id: before, sessionId: session.id },
         select: { id: true },
       });
@@ -145,7 +146,7 @@ export async function GET(
     // alone ties for messages stored in the same millisecond, so id breaks the
     // tie and a page boundary lands in the same place on every request.
     const [pageRows, activity] = await Promise.all([
-      prisma.chatMessage.findMany({
+      chatStore().messages.findMany({
         where: { sessionId: session.id },
         orderBy: [{ createdAt: "desc" }, { id: "desc" }],
         take: limit + 1,
@@ -197,7 +198,7 @@ export async function GET(
         : null,
       before || !access.sharedConversationEnabled
         ? null
-        : prisma.chatSessionParticipant.findMany({
+        : chatStore().participants.findMany({
             where: { sessionId: session.id },
             orderBy: { joinedAt: "asc" },
             select: {

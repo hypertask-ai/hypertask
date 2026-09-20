@@ -42,6 +42,7 @@ function loadRoute({ agentId = "agent-1", records } = {}) {
     "src/lib/mcp/agents.ts",
     "src/utils/controllers/notifications/getAll.ts",
     "src/utils/controllers/notifications/getStructuredInboxForAgent.ts",
+    "src/utils/controllers/notifications/index.ts",
     "src/lib/prisma.ts",
     "src/utils/controllers/projects/getAllIncludes.ts",
     "src/lib/configs/general.config.ts",

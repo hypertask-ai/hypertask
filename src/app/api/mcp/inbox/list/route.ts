@@ -1,3 +1,4 @@
+import { notificationStore } from "@/utils/controllers/notifications";
 import { NextRequest, NextResponse } from 'next/server'
 import { validateMcpAuth, createUnauthorizedResponse, checkMcpRateLimit } from '@/lib/mcp/auth'
 import { getMcpSessionAgentSummary } from '@/lib/mcp/agents'
@@ -61,7 +62,7 @@ export async function GET(request: NextRequest) {
                 )
             }
 
-            const agentInvocations = await prisma.notification.findMany({
+            const agentInvocations = await notificationStore().findMany({
                 where: {
                     agentId: ctx.agentId,
                     projectId,

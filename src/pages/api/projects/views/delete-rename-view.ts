@@ -1,13 +1,13 @@
 // route = "/api/projects/views/delete-rename-view"
 import prisma from "@/lib/prisma";
 import { broadcastBoardChange } from "@/lib/realtime/server";
-import getProjectView, { getUniqueSlug } from "@/utils/controllers/projects/views/viewsHelperAPIfunctions";
+import getProjectView, { getUniqueSlug } from "@/utils/controllers/views";
 import { sanitizeViewBoardFilters } from "@/utils/helperFunctions/Views/BoardFilterSanitizer";
 import {
     acquireBoardFilterWriteLock,
     assertViewIsNotManagedSmartSplit,
     ManagedSmartSplitMutationError,
-} from "@/utils/controllers/projects/views/boardFilterWriteLock";
+} from "@/utils/controllers/views";
 import { NextApiHandler, NextApiRequest, NextApiResponse } from "next";
 
 // ============= simple stuff here

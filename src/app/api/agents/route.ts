@@ -1,15 +1,12 @@
+import { listTeamAgents } from "@/utils/controllers/agents";
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
-import { maskAgentProviderKey } from "@/lib/agents/maskAgentProviderKey";
 import {
   agentTokenCredentialFields,
   createMcpToken,
 } from "@/lib/mcp/auth";
 import { getAccessibleAgentBoard } from "@/utils/controllers/agents/boardMembers";
-import { getAgentTeamId } from "@/utils/controllers/agents/teamScope";
 import { hasTeamMembershipAccess } from "@/utils/controllers/teams/hasTeamMembershipAccess";
-import type { AgentScopes } from "@/lib/mcp/agents/scopes";
-import { boardAgentVisibilityWhere } from "@/lib/agents/visibility";
 import { getSessionUser } from "@/lib/auth/getSessionUser";
 import { isFeatureEnabled, HTPR_6512_SEED_TEAM_AGENT_FLAG } from "@/lib/flags";
 import {
@@ -51,133 +48,8 @@ export async function GET(request: NextRequest) {
     await ensureDefaultTeamAgent(currentUserId, teamId, prisma);
   }
 
-  const agents = await prisma.agent.findMany({
-    where: {
-      members: { some: { project: { teamId } } },
-      ...boardAgentVisibilityWhere(currentUserId),
-    },
-    orderBy: { createdAt: "desc" },
-    select: {
-      id: true,
-      displayName: true,
-      visibility: true,
-      photoURL: true,
-      createdAt: true,
-      revokedAt: true,
-      userId: true,
-      mcpTokenJti: true,
-      mcpTokenExpiresAt: true,
-      permissions: true,
-      runtimeType: true,
-      prompt: true,
-      modelOptionId: true,
-      heartbeatAt: true,
-      // Which provider account this agent spends on (HTPR-5389). Only the
-      // masked tail ever leaves this route, and only to the agent's owner.
-      byokApiKeys: {
-        where: { enabled: true },
-        orderBy: { provider: "asc" },
-        select: { provider: true, ciphertext: true },
-      },
-      members: {
-        orderBy: { id: "asc" },
-        select: {
-          project: {
-            select: { id: true, name: true, teamId: true, title: true },
-          },
-        },
-      },
-    },
-  });
-
-  const scopedAgents = agents.filter(
-    (agent) =>
-      getAgentTeamId(
-        agent.members.map(({ project: memberProject }) => memberProject.teamId),
-      ) === teamId,
-  );
-
-  //Attaching the agents with the mcp client they are connected to
-  const agentIds = scopedAgents.map((a) => a.id);
-  const lastPostedByAgentId = new Map<string, string>();
-  const lastOAuthByAgentId = new Map<
-    string,
-    { clientId: string; clientName: string | null; lastAuthorizedAt: string }
-  >();
-
-  if (agentIds.length > 0) {
-    const lastPosts = await prisma.comment.groupBy({
-      by: ["agentId"],
-      where: { agentId: { in: agentIds } },
-      _max: { createdAt: true },
-    });
-
-    for (const row of lastPosts) {
-      if (!row.agentId || !row._max.createdAt) continue;
-      lastPostedByAgentId.set(row.agentId, row._max.createdAt.toISOString());
-    }
-
-    const usedCodes = await prisma.oAuthAuthorizationCode.findMany({
-      where: {
-        user_id: currentUserId,
-        used: true,
-        agent_id: { in: agentIds },
-      },
-      include: {
-        client: { select: { client_id: true, client_name: true } },
-      },
-      orderBy: { createdAt: "desc" },
-    });
-
-    for (const row of usedCodes) {
-      if (!row.agent_id || lastOAuthByAgentId.has(row.agent_id)) continue;
-      lastOAuthByAgentId.set(row.agent_id, {
-        clientId: row.client.client_id,
-        clientName: row.client.client_name,
-        lastAuthorizedAt: row.createdAt.toISOString(),
-      });
-    }
-  }
-
-  const agentsWithOAuth = scopedAgents.map(
-    ({ members, permissions, mcpTokenJti, mcpTokenExpiresAt, byokApiKeys, ...a }) => ({
-      ...a,
-      providerKey:
-        a.userId === currentUserId ? maskAgentProviderKey(byokApiKeys) : null,
-      postsToImportant:
-        (permissions as AgentScopes | null)?.postsToImportant !== false,
-      createdAt: a.createdAt.toISOString(),
-      revokedAt: a.revokedAt ? a.revokedAt.toISOString() : null,
-      hasMcpToken: a.userId === currentUserId ? Boolean(mcpTokenJti) : false,
-      mcpTokenExpiresAt:
-        a.userId === currentUserId
-          ? (mcpTokenExpiresAt?.toISOString() ?? null)
-          : null,
-      prompt: a.userId === currentUserId ? (a.prompt ?? null) : null,
-      heartbeatAt: a.heartbeatAt ? a.heartbeatAt.toISOString() : null,
-      lastPostedAt: lastPostedByAgentId.get(a.id) ?? null,
-      lastOAuthMcpClient: lastOAuthByAgentId.get(a.id) ?? null,
-      // `name` is the slug ("project-15"); `title` is what the board is called
-      // everywhere in the UI. Same `title ?? name` fallback the rest of the app uses.
-      boards: Array.from(
-        new Map(
-          members
-            .filter(
-              ({ project: memberProject }) => memberProject.teamId === teamId,
-            )
-            .map(({ project: memberProject }) => [
-              memberProject.id,
-              {
-                id: memberProject.id,
-                name: memberProject.title ?? memberProject.name,
-              },
-            ]),
-        ).values(),
-      ),
-    }),
-  );
-
-  return NextResponse.json({ success: true, agents: agentsWithOAuth });
+  const agents = await listTeamAgents(currentUserId, teamId);
+  return NextResponse.json({ success: true, agents });
 }
 
 /**

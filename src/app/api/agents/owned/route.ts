@@ -1,3 +1,4 @@
+import { agentStore } from "@/utils/controllers/agents";
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 import { getProjectWhere } from "@/utils/controllers/projects/getAllIncludes";
@@ -82,7 +83,7 @@ export async function GET(request: NextRequest) {
   if (await isFeatureEnabled(HTPR_6512_SEED_TEAM_AGENT_FLAG, userId)) {
     await ensureDefaultAgentsOnAccessibleTeams(userId, prisma);
   }
-  const agents = await prisma.agent.findMany({
+  const agents = await agentStore().findMany({
     where: { userId },
     orderBy: { createdAt: "desc" },
     take: MAX_AGENTS,

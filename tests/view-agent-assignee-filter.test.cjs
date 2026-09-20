@@ -12,7 +12,7 @@ const stubbedModulePaths = [
   "src/lib/prisma.ts",
   "src/lib/realtime/server.ts",
   "src/lib/mcp/tasks/services.ts",
-  "src/lib/mcp/views/services.ts",
+  "src/utils/controllers/views/index.ts",
   "src/utils/controllers/projects/views/viewsHelperAPIfunctions.ts",
   "src/utils/controllers/projects/views/boardFilterWriteLock.ts",
 ];
@@ -110,7 +110,7 @@ function loadCreateView({ agents = [], users = [] } = {}) {
     },
   );
   const { createView } = jiti(
-    path.join(root, "src/lib/mcp/views/services.ts"),
+    path.join(root, "src/utils/controllers/views/index.ts"),
   );
 
   return { createView, viewCreateCalls, agentFindManyCalls };

@@ -10,7 +10,7 @@ const stubbedModulePaths = [
   "src/lib/prisma.ts",
   "src/lib/realtime/server.ts",
   "src/lib/mcp/tasks/services.ts",
-  "src/lib/mcp/views/services.ts",
+  "src/utils/controllers/views/index.ts",
   "src/utils/controllers/projects/views/viewsHelperAPIfunctions.ts",
   "src/utils/controllers/projects/views/boardFilterWriteLock.ts",
 ];
@@ -96,7 +96,7 @@ function loadUpdateView(storedBoardFilters) {
     },
   );
   const { updateView } = jiti(
-    path.join(root, "src/lib/mcp/views/services.ts"),
+    path.join(root, "src/utils/controllers/views/index.ts"),
   );
 
   return { updateView, updateCalls };
@@ -120,7 +120,7 @@ const assigneesEntry = {
 
 test("view services broadcast board changes after create, update, apply, and delete", () => {
   const source = fs.readFileSync(
-    path.join(root, "src/lib/mcp/views/services.ts"),
+    path.join(root, "src/utils/controllers/views/index.ts"),
     "utf8",
   );
   const functionSource = (name, nextName) =>

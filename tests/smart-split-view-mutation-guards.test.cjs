@@ -242,7 +242,7 @@ test("MCP update and delete reject smart splits before any write", async () => {
     view: { findUnique: async () => view },
     $transaction: async (operation) => operation(tx),
   };
-  const services = load("src/lib/mcp/views/services.ts", {
+  const services = load("src/utils/controllers/views/index.ts", {
     "src/lib/prisma.ts": { default: prisma },
     "src/lib/mcp/tasks/services.ts": {
       matchLabelIds: () => ({ ids: [], unresolved: [] }),

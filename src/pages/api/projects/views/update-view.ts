@@ -9,7 +9,7 @@ import {
   isBoardEmptySectionSetting,
   PERSONAL_EMPTY_SECTIONS_UPDATE_MODE,
 } from "@/models/Views/model";
-import getProjectView from "@/utils/controllers/projects/views/viewsHelperAPIfunctions";
+import getProjectView from "@/utils/controllers/views";
 import { sanitizeBoardFilters } from "@/utils/helperFunctions/Views/BoardFilterSanitizer";
 import { sanitizeBoardLayout, sanitizeTableSort } from "@/utils/helperFunctions/Views/ViewsHelperFunctions";
 import {
@@ -17,7 +17,7 @@ import {
   ManagedSmartSplitMutationError,
   MissingBoardFilterLabelError,
   withBoardFilterWriteLock,
-} from "@/utils/controllers/projects/views/boardFilterWriteLock";
+} from "@/utils/controllers/views";
 import { Prisma } from "@prisma/client";
 import { NextApiHandler, NextApiRequest, NextApiResponse } from "next";
 

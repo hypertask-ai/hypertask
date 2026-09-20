@@ -1,3 +1,4 @@
+import { labelStore } from "@/utils/controllers/labels";
 import { getSessionUser } from "@/lib/auth/getSessionUser";
 import prisma from "@/lib/prisma";
 import { IUser } from "@/models/model";
@@ -236,7 +237,7 @@ export async function POST(request: NextRequest) {
           },
         },
       }),
-      prisma.label.findFirst({
+      labelStore().findFirst({
         where: { projectId: FEEDBACK_PROJECT_ID, value: FEEDBACK_LABEL_VALUE },
         select: { id: true },
       }),
@@ -249,7 +250,7 @@ export async function POST(request: NextRequest) {
     const labelId =
       label?.id ??
       (
-        await prisma.label.create({
+        await labelStore().create({
           data: { value: FEEDBACK_LABEL_VALUE, projectId: FEEDBACK_PROJECT_ID },
           select: { id: true },
         })

@@ -1,3 +1,4 @@
+import { chatStore } from "@/utils/controllers/chat";
 import prisma from "@/lib/prisma";
 import {
   getHypertasksObjectSize,
@@ -69,7 +70,7 @@ export async function POST(request: NextRequest) {
       ? messageData.attachments
       : [];
 
-    const session = await prisma.chatSession.findFirst({
+    const session = await chatStore().sessions.findFirst({
       where: {
         id: sessionId,
         userId: user.id,
@@ -143,13 +144,13 @@ export async function POST(request: NextRequest) {
         : messageData.content;
 
     const [_, message] = await prisma.$transaction([
-      prisma.chatSession.update({
+      chatStore().sessions.update({
         where: { id: sessionId },
         data: {
           updatedAt: new Date(),
         },
       }),
-      prisma.chatMessage.create({
+      chatStore().messages.create({
         data: {
           sessionId,
           content,

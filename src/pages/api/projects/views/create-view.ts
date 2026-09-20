@@ -8,7 +8,7 @@ import prisma from "@/lib/prisma";
 import { broadcastBoardChange } from "@/lib/realtime/server";
 import { ISection } from "@/models/model";
 import { TCreate_view_body } from "@/models/Views/model";
-import getProjectView, { getUniqueSlug } from "@/utils/controllers/projects/views/viewsHelperAPIfunctions";
+import getProjectView, { getUniqueSlug } from "@/utils/controllers/views";
 import { sanitizeBoardFilters } from "@/utils/helperFunctions/Views/BoardFilterSanitizer";
 import { getBoardLayoutRequestUpdate, sanitizeBoardLayout, sanitizeTableSort } from "@/utils/helperFunctions/Views/ViewsHelperFunctions";
 import {
@@ -16,7 +16,7 @@ import {
   ManagedSmartSplitMutationError,
   MissingBoardFilterLabelError,
   withBoardFilterWriteLock,
-} from "@/utils/controllers/projects/views/boardFilterWriteLock";
+} from "@/utils/controllers/views";
 
 const handler: NextApiHandler = async (
   req: NextApiRequest,
