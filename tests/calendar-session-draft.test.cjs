@@ -80,7 +80,7 @@ test("rejects and removes malformed Calendar session state", () => {
   const fs = require("node:fs");
   const path = require("node:path");
   const hookSource = fs.readFileSync(
-    path.resolve(__dirname, "../src/hooks/Calendar/useCalendarController.ts"),
+    path.resolve(__dirname, "../src/lib/calendar/useCalendarController.ts"),
     "utf8",
   );
 

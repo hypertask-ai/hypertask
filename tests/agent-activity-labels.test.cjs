@@ -10,7 +10,7 @@ const source = fs.readFileSync(
 const detailSource = ["AgentConfigForm.tsx", "AgentRunHistory.tsx"]
   .map((file) =>
     fs.readFileSync(
-      path.resolve(__dirname, "../src/app/agents/[agentId]", file),
+      path.resolve(__dirname, "../src/lib/agents/detail", file),
       "utf8",
     ),
   )

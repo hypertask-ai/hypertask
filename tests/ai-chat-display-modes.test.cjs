@@ -39,7 +39,7 @@ test("full-screen chat returns to the remembered desktop mode", () => {
 
 test("automatic board and task opening do not overwrite the saved mode", () => {
   const board = source("src/app/[...boardURL]/LandingPage.tsx");
-  const task = source("src/app/detail/[...slug]/TaskDetailController.tsx");
+  const task = source("src/lib/taskDetail/TaskDetailController.tsx");
   const boardAutoOpen = board.match(
     /\/\/ Pinning always opens chat[\s\S]*?useEffect\(\(\) => \{[\s\S]*?\n\}\, \[/
   );

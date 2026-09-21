@@ -1,3 +1,3 @@
 "use client";
 
-export { default } from "./TaskDetailController";
+export { default } from "@/lib/taskDetail/TaskDetailController";

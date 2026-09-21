@@ -4,8 +4,8 @@ import AppShellRail from "@/components/PageComponents/Kanban/HeaderComponents/Ap
 import { cn } from "@/utils/undoActions/helperFuncs";
 import { ArrowLeft, ChevronLeft, ChevronRight, Info, Plus, X } from "lucide-react";
 import { TypingIndicator } from "@/components/AI_CHAT/TypingIndicator";
-import AgentSelect, { AgentOption } from "../AgentSelect";
-import AgentDetail from "../[agentId]/AgentDetail";
+import AgentSelect, { AgentOption } from "@/app/agents/AgentSelect";
+import AgentDetail from "@/app/agents/[agentId]/AgentDetail";
 import AgentAvatar from "@/components/Agents/AgentAvatar";
 import { MOBILE_TARGET } from "@/lib/configs/general.config";
 import { getAgentChatMobileBottomInset } from "@/lib/mobileCommentViewport";

@@ -23,7 +23,7 @@ const saveContent = fs.readFileSync(
 );
 const tutorialHook = ["tutorialSteps.ts", "useLearnTutorialEngine.ts"]
   .map((file) =>
-    fs.readFileSync(path.join(root, "src/hooks/General", file), "utf8"),
+    fs.readFileSync(path.join(root, "src/lib/tutorials", file), "utf8"),
   )
   .join("\n");
 const dueDateModal = fs.readFileSync(

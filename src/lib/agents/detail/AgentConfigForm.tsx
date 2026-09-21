@@ -6,8 +6,8 @@ import { aiModelOptions } from "@/lib/aiModelOptions";
 import toast from "react-hot-toast";
 import { canPinModelOption } from "@/lib/nativeAgent/modelPin";
 import { cn } from "@/utils/undoActions/helperFuncs";
-import AgentSelect, { AgentOption } from "../AgentSelect";
-import WorkingSpinner from "../WorkingSpinner";
+import AgentSelect, { AgentOption } from "@/app/agents/AgentSelect";
+import WorkingSpinner from "@/app/agents/WorkingSpinner";
 import AgentAvatar from "@/components/Agents/AgentAvatar";
 import ConfirmDialog from "@/components/Modals/Common Modals/ConfirmDialog";
 

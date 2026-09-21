@@ -298,7 +298,7 @@ test("the persistent read view is inert but keeps its existing interactions", ()
   const figmaNode = source(
     "src/components/RTE/Extensions/FigmaTiptap/index.ts",
   );
-  const taskDetail = source("src/app/detail/[...slug]/TaskDetailController.tsx");
+  const taskDetail = source("src/lib/taskDetail/TaskDetailController.tsx");
   const figmaPaths = source("src/lib/figma/paths.ts");
 
   assert.match(

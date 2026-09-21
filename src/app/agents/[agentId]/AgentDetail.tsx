@@ -1,3 +1,3 @@
 "use client";
 
-export { default } from "./AgentDetailController";
+export { default } from "@/lib/agents/detail/AgentDetailController";

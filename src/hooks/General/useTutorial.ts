@@ -1,1 +1,1 @@
-export { useTutorial } from "./useLegacyTutorialEngine";
+export { useTutorial } from "@/lib/tutorials/useLegacyTutorialEngine";

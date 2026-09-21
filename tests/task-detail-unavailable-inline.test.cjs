@@ -19,7 +19,7 @@ function stubLocal(relativePath, exports) {
 
 const Unavailable = () => null;
 
-stubLocal("src/app/detail/[...slug]/TaskDetailController.tsx", { default: () => null });
+stubLocal("src/lib/taskDetail/TaskDetailController.tsx", { default: () => null });
 stubLocal("src/app/unauthorized/page.tsx", { default: Unavailable });
 stubLocal("src/utils/controllers/taskDetail/load.ts", {
   fetchCommentsForSlug: async () => [],

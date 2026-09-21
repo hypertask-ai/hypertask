@@ -110,7 +110,7 @@ test("legacy migration clears only the preference snapshot it read", () => {
 });
 
 test("new view creation reports a failed applied-pointer write", () => {
-  const hook = read("src/hooks/Calendar/useCalendarController.ts");
+  const hook = read("src/lib/calendar/useCalendarController.ts");
   assert.match(
     hook,
     /const applied = await persistCalendarViews\([\s\S]*?return applied;/

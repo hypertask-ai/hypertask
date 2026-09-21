@@ -7,7 +7,7 @@ import { wrapTablesInMessageHtml, interceptMessageLinkClick } from "@/utils/help
 import formatDateDifference from "@/utils/generateTime";
 import { chatRosterStatus, isWorking, statusOf, type TChatRosterStatus } from "@/lib/agents/registerView";
 import { tokenizeMessageLinks, type TProjectIdForPrefix } from "@/lib/agents/messageLinks";
-import type { TAgent } from "../AgentsRegister";
+import type { TAgent } from "@/app/agents/AgentsRegister";
 import AgentAvatar from "@/components/Agents/AgentAvatar";
 import { useFlag } from "@/hooks/useFlag";
 import { CONFIRMED_PROPOSAL_HEADING_FLAG } from "@/lib/flags/keys";

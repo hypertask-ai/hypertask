@@ -1,3 +1,3 @@
 "use client";
 
-export { default } from "./useAgentLifecycle";
+export { default } from "@/lib/agents/chat/useAgentLifecycle";

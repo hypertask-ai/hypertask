@@ -12,7 +12,7 @@ const test = require("node:test");
 
 test("HTPR-6047: task-detail readiness effect flips the non-essential gate", () => {
   const src = fs.readFileSync(
-    path.join(__dirname, "..", "src/app/detail/[...slug]/TaskDetailController.tsx"),
+    path.join(__dirname, "..", "src/lib/taskDetail/TaskDetailController.tsx"),
     "utf8",
   );
   assert.ok(
@@ -60,7 +60,7 @@ test("HTPR-6047: deferrable hooks accept an enabled input that defaults true", (
 
 test("HTPR-6047: the non-essential gate fails open on a short timer, independent of the 30s readiness measurement", () => {
   const src = fs.readFileSync(
-    path.join(__dirname, "..", "src/app/detail/[...slug]/TaskDetailController.tsx"),
+    path.join(__dirname, "..", "src/lib/taskDetail/TaskDetailController.tsx"),
     "utf8",
   );
   // A share view, a task with no description editor, a permission-limited

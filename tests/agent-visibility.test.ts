@@ -341,8 +341,8 @@ async function main() {
     assignRoute,
   ] = await Promise.all([
     Promise.all([
-      readFile("src/app/agents/[agentId]/AgentDetailController.tsx", "utf8"),
-      readFile("src/app/agents/[agentId]/AgentConfigForm.tsx", "utf8"),
+      readFile("src/lib/agents/detail/AgentDetailController.tsx", "utf8"),
+      readFile("src/lib/agents/detail/AgentConfigForm.tsx", "utf8"),
     ]).then((parts) => parts.join("\n")),
     readFile("src/app/api/agents/[agentId]/provider-key/route.ts", "utf8"),
     readFile("src/app/api/agents/[agentId]/route.ts", "utf8"),

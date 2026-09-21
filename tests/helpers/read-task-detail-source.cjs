@@ -11,7 +11,7 @@ function readTaskDetailSource() {
     "TaskDetailPanelParts.tsx",
   ]
     .map((file) =>
-      fs.readFileSync(path.join(root, "src/app/detail/[...slug]", file), "utf8"),
+      fs.readFileSync(path.join(root, "src/lib/taskDetail", file), "utf8"),
     )
     .join("\n");
 }

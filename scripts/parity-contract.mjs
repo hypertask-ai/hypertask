@@ -158,7 +158,7 @@ function loadTypescript() {
 }
 
 function aiChatInventory() {
-  const file = path.join(root, "src/app/api/ai/chat/stream/buildTools.ts");
+  const file = path.join(root, "src/app/api/ai/chat/stream/route.ts");
   const source = fs.readFileSync(file, "utf8");
   const typescript = loadTypescript();
   return collectAiChatToolNames(typescript, source, file);

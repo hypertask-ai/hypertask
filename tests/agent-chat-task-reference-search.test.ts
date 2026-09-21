@@ -66,7 +66,7 @@ assert.match(
 
 const source = ["useAgentLifecycle.tsx", "useAgentChatView.tsx"]
   .map((file) =>
-    fs.readFileSync(path.join(root, "src/app/agents/chat", file), "utf8"),
+    fs.readFileSync(path.join(root, "src/lib/agents/chat", file), "utf8"),
   )
   .join("\n");
 const searchEffect = source.slice(

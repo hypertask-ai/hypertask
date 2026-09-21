@@ -1,1 +1,1 @@
-export * from "./useCalendarController";
+export * from "@/lib/calendar/useCalendarController";

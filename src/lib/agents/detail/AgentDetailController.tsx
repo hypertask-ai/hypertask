@@ -14,7 +14,7 @@ import toast from "react-hot-toast";
 import { isWorking } from "@/lib/agents/registerView";
 import { connectRealtimeClient, releaseRealtimeClientIfIdle } from "@/lib/realtime/client";
 import { BOARD_EVENT, boardChannel } from "@/lib/realtime/shared";
-import type { TAgent } from "../AgentsRegister";
+import type { TAgent } from "@/app/agents/AgentsRegister";
 import type { AgentRuntimeHealth, AgentRuntimeQueueItem, AgentRuntimeSnapshot } from "@/lib/agents/runtimeState";
 import type { TAgentBoardAccess } from "@/lib/agents/boardAccess";
 import { applySequencedError, applySequencedResponse, invalidateSequencedResponse } from "@/lib/agents/responseSequence";

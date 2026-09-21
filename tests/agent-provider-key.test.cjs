@@ -10,7 +10,7 @@ function readAgentDetailSource() {
   const fs = require("node:fs");
   return ["AgentDetailController.tsx", "AgentConfigForm.tsx"]
     .map((file) =>
-      fs.readFileSync(path.join(root, "src/app/agents/[agentId]", file), "utf8"),
+      fs.readFileSync(path.join(root, "src/lib/agents/detail", file), "utf8"),
     )
     .join("\n");
 }

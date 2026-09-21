@@ -9,13 +9,13 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { useRecoilState, useResetRecoilState } from "@/lib/state";
 import { ICommandList } from "@/components/Modals/commands/HTC/HTCTypes";
-import { useScene } from "./useScenes";
+import { useScene } from "@/hooks/General/useScenes";
 import { updateUserSettingTutorial } from "@/lib/serverActions";
 import nookies, { parseCookies } from "nookies";
 import axios from "axios";
 import { getSharedTaskRoute } from "@/lib/constants/APIRouteConstants";
 import { IUser } from "@/models/model";
-import useFunnelCookies from "../MultiPages/useFunnelCookies";
+import useFunnelCookies from "@/hooks/MultiPages/useFunnelCookies";
 import { slimUserForCookie } from "@/lib/auth/slimUserCookie";
 type TSceneHandler = {
     [key in string]: (e: KeyboardEvent) => void;

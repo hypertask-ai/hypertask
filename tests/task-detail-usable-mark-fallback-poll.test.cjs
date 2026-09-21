@@ -11,7 +11,7 @@ const test = require("node:test");
 // pending check, so the mark - and the app_task_detail_readiness event -
 // still fires instead of hitting the 30s usable_state_timeout.
 const source = fs.readFileSync(
-  path.join(__dirname, "../src/app/detail/[...slug]/TaskDetailController.tsx"),
+  path.join(__dirname, "../src/lib/taskDetail/TaskDetailController.tsx"),
   "utf8",
 );
 

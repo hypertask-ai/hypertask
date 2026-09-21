@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 import { execFileSync } from "node:child_process";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 
 const MAX_LINES = 1500;
 const SOURCE_FILE = /\.[cm]?[jt]sx?$/;
@@ -21,7 +21,7 @@ function resolveBaseRef() {
     "HEAD^",
   ].filter(Boolean);
 
-  return candidates.find((candidate) => {
+  const base = candidates.find((candidate) => {
     try {
       git(["rev-parse", "--verify", candidate]);
       return true;
@@ -29,24 +29,35 @@ function resolveBaseRef() {
       return false;
     }
   });
+  if (!base) {
+    throw new Error(`Could not resolve a source-size base ref from: ${candidates.join(", ")}`);
+  }
+  return base;
 }
 
 function addedSourceFiles() {
   const base = resolveBaseRef();
-  const committed = base
-    ? git(["diff", "--name-only", "--diff-filter=A", `${base}...HEAD`])
-    : "";
-
+  const committed = git([
+    "diff",
+    "--name-only",
+    "--diff-filter=A",
+    `${base}...HEAD`,
+  ]);
+  const staged = git(["diff", "--cached", "--name-only", "--diff-filter=A"]);
   const untracked = git(["ls-files", "--others", "--exclude-standard"]);
-  return [...new Set(`${committed}\n${untracked}`.split("\n"))]
+  return [...new Set(`${committed}\n${staged}\n${untracked}`.split("\n"))]
     .filter(Boolean)
-    .filter((file) => SOURCE_FILE.test(file));
+    .filter((file) => SOURCE_FILE.test(file) && existsSync(file));
 }
 
 const files = process.argv.slice(2).length > 0 ? process.argv.slice(2) : addedSourceFiles();
 const oversized = files.flatMap((file) => {
   if (STATIC_DATA_FILE.test(file)) return [];
-  const lines = readFileSync(file, "utf8").split(/\r?\n/).length;
+  const source = readFileSync(file, "utf8");
+  const newlineCount = source.match(/\n/g)?.length ?? 0;
+  const lines = source.length === 0
+    ? 0
+    : newlineCount + (source.endsWith("\n") ? 0 : 1);
   return lines > MAX_LINES ? [{ file, lines }] : [];
 });
 

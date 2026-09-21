@@ -1,5 +1,5 @@
 import { AGENT_SYSTEM_PROMPT, MAX_TOOL_STEPS, ModelSelection, ProviderId, SSE_HEADERS, createSseErrorResponse, createUserContent, defaultModelSelection, generateConversationTitle, loadActingAgent, reportEmptyCompletion, reportHandledChatError, requestErrorMessage, resolveModelSelection, selectModel, selectionFromModelOption, sseFrame, userFacingErrorDetails, userFacingErrorMessage, withHigherEffort, writeToolNames } from "./chatStreamSupport";
-import { AuthedUser, ChatRequest, SendSse, ToolExecution, buildTools, chatRequestSchema, errorMessage } from "./buildTools";
+import { AuthedUser, ChatRequest, SendSse, ToolExecution, chatRequestSchema, errorMessage } from "./buildTools";
 import { chatStore } from "@/utils/controllers/chat";
 import { NextRequest, NextResponse } from "next/server";
 import { randomUUID } from "node:crypto";
@@ -39,7 +39,9 @@ import { buildEmptyCompletionSummary, hasVisibleCompletion } from "./bulkTools";
 
 const maxDuration = 300;
 
-export async function POST(request: NextRequest) {
+type BuildTools = typeof import("./route").buildTools;
+
+export async function handlePost(request: NextRequest, buildTools: BuildTools) {
   // The platform time budget starts here, so the graceful deadline below must
   // count from here too, not from when the stream body starts.
   const turnStartedAtMs = Date.now();

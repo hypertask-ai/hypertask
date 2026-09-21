@@ -1,4 +1,4 @@
-import type { TAgent } from "../AgentsRegister";
+import type { TAgent } from "@/app/agents/AgentsRegister";
 import type { AgentRuntimeHealth } from "@/lib/agents/runtimeState";
 
 export const PROMPT_MAX = 8000;

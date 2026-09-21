@@ -25,17 +25,21 @@ function decodePath(value) {
   if (value.startsWith('"')) value = JSON.parse(value);
   return value.startsWith("a/") ? value.slice(2) : value;
 }
-function removedLines(diff) {
+function changedLines(diff) {
   const removed = [];
+  const addedToNewFiles = [];
   let file = null;
   let oldLine = null;
+  let addedFile = false;
 
   for (const line of diff.split("\n")) {
     if (line.startsWith("diff --git ")) {
       file = null;
       oldLine = null;
+      addedFile = false;
     } else if (line.startsWith("--- ")) {
       file = decodePath(line.slice(4));
+      addedFile = file === null;
     } else if (line.startsWith("@@ ")) {
       const match = line.match(/^@@ -(\d+)(?:,\d+)? \+\d+(?:,\d+)? @@/);
       oldLine = match ? Number(match[1]) : null;
@@ -44,11 +48,24 @@ function removedLines(diff) {
         removed.push({ file, line: oldLine, text: line.slice(1) });
       }
       oldLine += 1;
+    } else if (addedFile && line.startsWith("+") && !line.startsWith("+++")) {
+      addedToNewFiles.push(line.slice(1));
     } else if (oldLine !== null && line.startsWith(" ")) {
       oldLine += 1;
     }
   }
-  return removed;
+  return { removed, addedToNewFiles };
+}
+
+function excludeExtractedLines(removed, added) {
+  const available = new Map();
+  for (const text of added) available.set(text, (available.get(text) || 0) + 1);
+  return removed.filter((line) => {
+    const count = available.get(line.text) || 0;
+    if (count === 0) return true;
+    available.set(line.text, count - 1);
+    return false;
+  });
 }
 function rangesFor(lines) {
   const ranges = [];
@@ -95,9 +112,10 @@ function main() {
   const mergeBase = git(["merge-base", baseRef, "HEAD"]).trim();
   const diff = git(["-c", "core.quotePath=false", "diff", mergeBase, "HEAD",
     "--unified=0", "--no-color", "--no-ext-diff", "--"]);
-  const removed = removedLines(diff);
+  const changed = changedLines(diff);
+  const removed = excludeExtractedLines(changed.removed, changed.addedToNewFiles);
   if (!removed.length) {
-    console.log("Revert Guard passed: this PR removes no lines.");
+    console.log("Revert Guard passed: this PR removes no lines that were not extracted to new files.");
     return;
   }
 

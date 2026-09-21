@@ -1,1 +1,1 @@
-export { useLearnTutorial } from "./useLearnTutorialEngine";
+export { useLearnTutorial } from "@/lib/tutorials/useLearnTutorialEngine";
