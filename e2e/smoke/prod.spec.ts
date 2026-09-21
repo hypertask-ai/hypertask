@@ -161,7 +161,7 @@ for (const view of VIEWS) {
         return (result >>> 0).toString(36)
       }
       const snapshot = (): SnapshotRow[] => {
-        const root = document.querySelector('[data-ai-workspace]') ?? document.body
+        const root = document.body
         if (!root) return []
 
         const rows: SnapshotRow[] = []
