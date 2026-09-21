@@ -124,8 +124,8 @@ test("a successful chat webhook acknowledges the message", async () => {
 test("deleting a webhook releases only outstanding chat messages before deliveries cascade", async () => {
   const messageUpdates = [];
   const deleted = [];
-  const deliveryQueries = [];
   const rawQueries = [];
+  const operations = [];
   const subscription = {
     id: "subscription-1",
     agentId: "agent-a",
@@ -133,26 +133,29 @@ test("deleting a webhook releases only outstanding chat messages before deliveri
   };
   const tx = {
     $queryRaw: async (...args) => {
-      rawQueries.push(Array.isArray(args[0]) ? args[0].join("?") : String(args[0]));
-      return [{ id: "agent-a" }];
-    },
-    agentWebhookDelivery: {
-      findMany: async (args) => {
-        deliveryQueries.push(args);
+      const sql = Array.isArray(args[0]) ? args[0].join("?") : String(args[0]);
+      rawQueries.push(sql);
+      if (/UPDATE "AgentWebhookDelivery"/.test(sql)) {
+        operations.push("cancel deliveries");
         return [
           { payload: { chat: { messageId: "message-1" } } },
           { payload: { chat: { messageId: "message-2" } } },
         ];
-      },
+      }
+      return [{ id: "agent-a" }];
     },
     chatMessage: {
       updateMany: async (args) => {
+        operations.push("release messages");
         messageUpdates.push(args);
         return { count: 2 };
       },
     },
     agentWebhookSubscription: {
-      delete: async ({ where }) => deleted.push(where),
+      delete: async ({ where }) => {
+        operations.push("delete subscription");
+        deleted.push(where);
+      },
     },
   };
   const prisma = {
@@ -192,9 +195,12 @@ test("deleting a webhook releases only outstanding chat messages before deliveri
   assert.equal(result.deleted, subscription.id);
   assert.match(rawQueries.join("\n"), /FROM "Agent"/);
   assert.match(rawQueries.join("\n"), /FOR UPDATE/);
-  assert.deepEqual(deliveryQueries[0].where.status, {
-    in: ["pending", "processing", "retrying", "failed"],
-  });
+  assert.match(rawQueries.join("\n"), /"status" IN \('pending', 'processing', 'retrying', 'failed'\)/);
+  assert.deepEqual(operations, [
+    "cancel deliveries",
+    "delete subscription",
+    "release messages",
+  ]);
   assert.deepEqual(messageUpdates, [
     {
       where: { id: { in: ["message-1", "message-2"] }, role: "human" },

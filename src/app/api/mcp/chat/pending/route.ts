@@ -91,12 +91,12 @@ export async function GET(request: NextRequest) {
           LIMIT ${PENDING_MESSAGE_LIMIT}
         ), cancelled_deliveries AS (
           UPDATE "AgentWebhookDelivery" delivery
-          SET "status" = 'cancelled', "processingAt" = NULL
+          SET "status" = 'cancelled', "processingAt" = NULL, "updatedAt" = NOW()
           FROM "AgentWebhookSubscription" subscription, candidates
           WHERE subscription."id" = delivery."subscriptionId"
             AND subscription."agentId" = ${agentId}
             AND delivery."event" = 'chat.message'
-            AND delivery."status" = 'retrying'
+            AND delivery."status" IN ('retrying', 'failed')
             AND delivery."payload" #>> '{chat,messageId}' = candidates."id"
           RETURNING delivery."id"
         ), pending AS (
@@ -109,7 +109,7 @@ export async function GET(request: NextRequest) {
               ON subscription."id" = delivery."subscriptionId"
             WHERE subscription."agentId" = ${agentId}
               AND delivery."event" = 'chat.message'
-              AND delivery."status" = 'retrying'
+              AND delivery."status" IN ('retrying', 'failed')
               AND delivery."payload" #>> '{chat,messageId}' = candidates."id"
               AND NOT EXISTS (
                 SELECT 1

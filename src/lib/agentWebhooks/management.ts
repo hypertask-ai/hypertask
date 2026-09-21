@@ -373,14 +373,14 @@ export async function manageAgentWebhook(input: {
           AND "revokedAt" IS NULL
         FOR UPDATE
       `;
-      const chatDeliveries = await tx.agentWebhookDelivery.findMany({
-        where: {
-          subscriptionId: subscription.id,
-          event: "chat.message",
-          status: { in: ["pending", "processing", "retrying", "failed"] },
-        },
-        select: { payload: true },
-      });
+      const chatDeliveries = await tx.$queryRaw<Array<{ payload: Prisma.JsonValue }>>`
+        UPDATE "AgentWebhookDelivery"
+        SET "status" = 'cancelled', "processingAt" = NULL, "updatedAt" = NOW()
+        WHERE "subscriptionId" = ${subscription.id}
+          AND "event" = 'chat.message'
+          AND "status" IN ('pending', 'processing', 'retrying', 'failed')
+        RETURNING "payload"
+      `;
       const messageIds = [
         ...new Set(
           chatDeliveries.flatMap(({ payload }) => {
@@ -389,13 +389,13 @@ export async function manageAgentWebhook(input: {
           }),
         ),
       ];
+      await tx.agentWebhookSubscription.delete({ where: { id: subscription.id } });
       if (messageIds.length > 0) {
         await tx.chatMessage.updateMany({
           where: { id: { in: messageIds }, role: "human" },
           data: { isDelivered: false },
         });
       }
-      await tx.agentWebhookSubscription.delete({ where: { id: subscription.id } });
     });
     return { success: true, scope: "agent" as const, deleted: subscription.id };
   }
