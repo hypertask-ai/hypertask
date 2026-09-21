@@ -46,7 +46,7 @@ required_checks:
   # An administrator applied these checks through GitHub's ruleset API on
   # 2026-09-08. ci-tests verifies this live ruleset before every build.
   contexts: [app-smoke, ci-tests, claude-review, feature-flag-gate, pr-title, revert-guard, next-public-secrets, secret-scan]
-  automerge_also_requires: [app-smoke, ci-tests, feature-flag-gate]
+  automerge_also_requires: [app-smoke, browser-smoke, ci-tests, feature-flag-gate]
   # ci-tests normally reports after the full-ci label arrives (see
   # review_first_gate); automerge treats a missing result as not green.
 

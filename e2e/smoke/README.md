@@ -1,7 +1,10 @@
 # Production smoke QA (HTPR-6199)
 
 Runs in the `smoke` job of `.github/workflows/prod-health.yml` after every
-production push. The run is read-only: it opens views and never submits a form.
+production push and in the required `browser-smoke` job of
+`.github/workflows/ci-tests.yml` against a local candidate build. The run is
+read-only: it opens views and never submits a form. CI sets `BASE_URL` to the
+loopback server; production keeps using `SMOKE_BASE_URL`.
 
 ## Account and secrets
 
@@ -28,4 +31,6 @@ component that renders it. This stops a blank or generic app shell from passing.
 If a selector goes stale after a UI change, update that view's `selector` field.
 
 The inbox marker is `display:none` by design, so its check asserts presence
-instead of visibility. Every other view's element must be visible.
+instead of visibility. Every other view's element must be visible. Each view
+also fails if its main frame performs another full navigation during the first
+30 seconds after load.

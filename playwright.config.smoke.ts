@@ -1,11 +1,11 @@
 import { defineConfig, devices } from '@playwright/test'
 
-const baseURL = process.env.SMOKE_BASE_URL
-if (!baseURL) throw new Error('SMOKE_BASE_URL is required for production smoke QA')
+const baseURL = process.env.BASE_URL || process.env.SMOKE_BASE_URL
+if (!baseURL) throw new Error('BASE_URL or SMOKE_BASE_URL is required for smoke QA')
 
-// HTPR-6199 — post-release smoke QA against production. Runs from
-// .github/workflows/prod-health.yml after every deploy, using a dedicated
-// smoke-only account's session (see e2e/smoke/README.md).
+// Logged-in smoke QA against production after deploys and against
+// local candidate builds before merge, using a dedicated smoke-only account's
+// session (see e2e/smoke/README.md).
 export default defineConfig({
   testDir: './e2e/smoke',
   fullyParallel: true,
@@ -15,7 +15,7 @@ export default defineConfig({
   retries: 1,
   workers: 4,
   reporter: [['list']],
-  timeout: 20_000,
+  timeout: 60_000,
   use: {
     baseURL,
     storageState: 'e2e/smoke/.state/smoke-state.json',

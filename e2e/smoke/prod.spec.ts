@@ -2,6 +2,8 @@ import { test, expect } from '@playwright/test'
 import { readFileSync, writeFileSync } from 'node:fs'
 import path from 'node:path'
 
+import { NAVIGATION_WATCH_MS, reloadCount } from './navigation-counter'
+
 const PREFLIGHT_FILE = path.join(__dirname, '.state', 'preflight.json')
 const APPLICATION_FAILURE_FILE = path.join(__dirname, '.state', 'application-failure.json')
 const FIXTURE_FILE = path.join(__dirname, '.state', 'fixture.json')
@@ -148,7 +150,11 @@ for (const view of VIEWS) {
   test(`${view.name} loads`, async ({ page }) => {
     const viewPath = typeof view.path === 'function' ? view.path() : view.path
     const pageErrors: Error[] = []
+    let mainFrameNavigations = 0
     page.on('pageerror', (err) => pageErrors.push(err))
+    page.on('framenavigated', (frame) => {
+      if (frame === page.mainFrame()) mainFrameNavigations += 1
+    })
     await page.addInitScript(() => {
       const mutations: string[] = []
       const summarizeNode = (node: Node) => {
@@ -193,6 +199,8 @@ for (const view of VIEWS) {
       }
       throw err
     }
+
+    const navigationWindowEndsAt = Date.now() + NAVIGATION_WATCH_MS
 
     if (isBotChallenge(response)) {
       abortUnrunnable(`Vercel bot-challenged the runner IP on ${viewPath}`)
@@ -252,6 +260,9 @@ for (const view of VIEWS) {
     const bodyText = (await page.locator('body').innerText()).trim()
     expect(bodyText, `${viewPath} rendered an error page`).not.toMatch(ERROR_PAGE_PREFIX)
 
+    await page.waitForTimeout(Math.max(0, navigationWindowEndsAt - Date.now()))
+    const reloads = reloadCount(mainFrameNavigations)
+    expect(reloads, `${view.name} reloaded ${reloads} times`).toBe(0)
     expect(pageErrors, `${viewPath} threw a page error: ${pageErrors[0]?.message}`).toHaveLength(0)
   })
 }
