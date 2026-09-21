@@ -120,13 +120,14 @@ export default function Provider({
   // auto-reload budget. Without this a tab that recovered twice would show the
   // error page on the next unrelated root crash instead of re-hydrating.
   useEffect(() => {
-    window.sessionStorage.removeItem("ht-root-reload");
-
     // Provider mount alone is not proof that every descendant/lazy chunk is
-    // healthy. Preserve the capped attempt budget until the recovered tree has
+    // healthy. Preserve BOTH capped attempt budgets until the recovered tree has
     // stayed mounted; an error-boundary unmount cancels this reset and prevents
-    // a persistent missing chunk from creating an infinite navigation loop.
+    // a persistent missing chunk, or a hydration mismatch that throws after
+    // mount, from refilling its own reload budget into an infinite loop
+    // (2026-09-21 incident: every logged-in page reloaded forever).
     const stableTimer = window.setTimeout(() => {
+      window.sessionStorage.removeItem("ht-root-reload");
       window.sessionStorage.removeItem(CHUNK_RELOAD_STORAGE_KEY);
 
       const cleanUrl = stripChunkRecoveryParam(window.location.href);
