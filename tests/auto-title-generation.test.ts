@@ -19,10 +19,10 @@ const fakeTimers = () => {
     setTimer(callback: () => void) {
       const id = nextId++;
       callbacks.set(id, callback);
-      return id as unknown as ReturnType<typeof setTimeout>;
+      return id;
     },
-    clearTimer(timer: ReturnType<typeof setTimeout>) {
-      callbacks.delete(timer as unknown as number);
+    clearTimer(timer: number | ReturnType<typeof setTimeout>) {
+      callbacks.delete(Number(timer));
     },
     runNext() {
       const entry = callbacks.entries().next().value as
