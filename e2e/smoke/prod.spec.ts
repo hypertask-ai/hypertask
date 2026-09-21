@@ -151,6 +151,61 @@ for (const view of VIEWS) {
     page.on('pageerror', (err) => pageErrors.push(err))
     await page.addInitScript(() => {
       const mutations: string[] = []
+      type SnapshotRow = { path: string; signature: string }
+      const hash = (value: string) => {
+        let result = 2166136261
+        for (let index = 0; index < value.length; index += 1) {
+          result ^= value.charCodeAt(index)
+          result = Math.imul(result, 16777619)
+        }
+        return (result >>> 0).toString(36)
+      }
+      const snapshot = (): SnapshotRow[] => {
+        const root = document.querySelector('[data-ai-workspace]') ?? document.body
+        if (!root) return []
+
+        const rows: SnapshotRow[] = []
+        const visit = (node: Node, nodePath: string) => {
+          if (node instanceof Element) {
+            const tag = node.tagName.toLowerCase()
+            if (['script', 'style', 'template', 'link', 'meta'].includes(tag)) return
+            const attributes = Array.from(node.attributes)
+              .filter(({ name }) => name === 'id' || name === 'class' || name === 'style' || name === 'role' || name.startsWith('aria-') || name.startsWith('data-'))
+              .map(({ name, value }) => `${name}:${value.length}:${hash(value)}`)
+              .sort()
+              .join(',')
+            rows.push({ path: nodePath, signature: `<${tag}>${attributes}` })
+          } else if (node.nodeType === Node.TEXT_NODE) {
+            const text = node.textContent?.replace(/\s+/g, ' ').trim() ?? ''
+            if (text) rows.push({ path: nodePath, signature: `#text:${text.length}:${hash(text)}` })
+            return
+          } else {
+            return
+          }
+
+          let childIndex = 0
+          node.childNodes.forEach((child) => {
+            if (child.nodeType === Node.COMMENT_NODE) return
+            visit(child, `${nodePath}.${childIndex}`)
+            childIndex += 1
+          })
+        }
+        visit(root, '0')
+        return rows
+      }
+      const diffSnapshots = (before: SnapshotRow[], after: SnapshotRow[]) => {
+        const beforeByPath = new Map(before.map((row) => [row.path, row.signature]))
+        const afterByPath = new Map(after.map((row) => [row.path, row.signature]))
+        return Array.from(new Set([...beforeByPath.keys(), ...afterByPath.keys()]))
+          .filter((nodePath) => beforeByPath.get(nodePath) !== afterByPath.get(nodePath))
+          .slice(0, 80)
+          .map((nodePath) => ({
+            path: nodePath,
+            before: beforeByPath.get(nodePath) ?? null,
+            after: afterByPath.get(nodePath) ?? null,
+          }))
+      }
+      let lastSnapshot: SnapshotRow[] = []
       const summarizeNode = (node: Node) => {
         if (!(node instanceof Element)) return node.nodeName.toLowerCase()
         const id = node.id ? `#${node.id}` : ''
@@ -167,18 +222,22 @@ for (const view of VIEWS) {
       const observer = new MutationObserver((records) => {
         mutations.push(...records.map(summarizeRecord))
         if (mutations.length > 100) mutations.splice(0, mutations.length - 100)
+        lastSnapshot = snapshot()
       })
       observer.observe(document, { childList: true, subtree: true })
       window.addEventListener('error', (event) => {
         if (!/(?:Minified React error #418|Hydration failed)/i.test(event.message)) return
         const error = event.error as Error & { cause?: unknown; componentStack?: string; digest?: string }
         const pending = observer.takeRecords().map(summarizeRecord)
+        const afterSnapshot = snapshot()
         ;(window as typeof window & { __htHydrationDiagnostic?: unknown }).__htHydrationDiagnostic = {
           message: event.message,
           stack: error?.stack,
           componentStack: error?.componentStack,
           digest: error?.digest,
           cause: error?.cause instanceof Error ? `${error.cause.message}\n${error.cause.stack ?? ''}` : String(error?.cause ?? ''),
+          snapshotSizes: { before: lastSnapshot.length, after: afterSnapshot.length },
+          snapshotDiff: diffSnapshots(lastSnapshot, afterSnapshot),
           mutations: [...mutations, ...pending].slice(-100),
         }
       }, true)
