@@ -28,6 +28,7 @@ concurrency:
   cancel-in-progress: false
 
 permissions:
+  actions: read
   contents: write
   pull-requests: write
   checks: read
@@ -63,6 +64,7 @@ jobs:
           DISP_PR: ${{ github.event.inputs.pr }}
           RUN_BRANCH: ${{ github.event.workflow_run.head_branch }}
           RUN_REPO: ${{ github.event.workflow_run.head_repository.full_name }}
+          MERGE_FREEZE: ${{ vars.MERGE_FREEZE }}
         run: |
           set -uo pipefail
 
@@ -82,6 +84,8 @@ jobs:
           VERIFY_HEADS_JSON="$AUTOMERGE_TMP/verify-heads.json"
           GATE_REASON="$AUTOMERGE_TMP/feature-flag-gate.txt"
           GATE_DECISION="$AUTOMERGE_TMP/feature-flag-decision.txt"
+          PRODUCTION_GATE_REASON="$AUTOMERGE_TMP/production-gate.txt"
+          FROZEN_COMMENTS="$AUTOMERGE_TMP/frozen-comments.json"
           SPEED_STATUS_JSON="$AUTOMERGE_TMP/speed-status.json"
           infra_failures=0
           merge_failures=0
@@ -118,7 +122,7 @@ jobs:
           # middleware, CI itself, dependency manifests (supply chain), and
           # build/env config. Deliberately conservative and broad: over-parking
           # is a manual merge, a wrong auto-merge is production.
-          RISK_RE='(^|/)middleware\.[tj]sx?$|(^|/)proxy\.[tj]sx?$|(^|/)auth/|/auth\.[tj]sx?$|auth(service|provider|context|guard|middleware|helper|check|z|n)|better-auth|oauth|firebase|(^|/)login/|login\.[tj]sx?$|session(manager|store|service|provider|context|helper)|stripe|billing|invoice|checkout|subscription|paywall|(^|/)pricing/|pricing\.[tj]sx?$|credential|(^|/)\.github/|(^|/)scripts/check-speed-pr-evidence\.mjs$|(^|/)config/app-project-performance-baseline\.json$|(^|/)package(-lock)?\.json$|(^|/)npm-shrinkwrap\.json$|(^|/)pnpm-lock|(^|/)yarn\.lock$|(^|/)\.npmrc$|(^|/)next\.config\.|(^|/)vercel\.json$|(^|/)\.env'
+          RISK_RE='^src/app/layout\.tsx$|^src/app/global-error\.tsx$|^src/utils/Providers\.tsx$|^src/middleware\.ts$|(^|/)middleware\.[tj]sx?$|(^|/)proxy\.[tj]sx?$|(^|/)auth/|/auth\.[tj]sx?$|auth(service|provider|context|guard|middleware|helper|check|z|n)|better-auth|oauth|firebase|(^|/)login/|login\.[tj]sx?$|session(manager|store|service|provider|context|helper)|stripe|billing|invoice|checkout|subscription|paywall|(^|/)pricing/|pricing\.[tj]sx?$|credential|(^|/)\.github/|(^|/)scripts/check-speed-pr-evidence\.mjs$|(^|/)config/app-project-performance-baseline\.json$|(^|/)package(-lock)?\.json$|(^|/)npm-shrinkwrap\.json$|(^|/)pnpm-lock|(^|/)yarn\.lock$|(^|/)\.npmrc$|(^|/)next\.config\.|(^|/)vercel\.json$|(^|/)\.env'
 
           # Labels that stop an auto-merge outright.
           HOLD_LABELS="hold do-not-merge valentin-review wip probation"
@@ -151,6 +155,34 @@ jobs:
             [ -z "${PRS:-}" ] && { echo "No open production PR for branch $RUN_BRANCH."; exit 0; }
           fi
           [ -z "${PRS:-}" ] && { echo "No open PRs to production."; exit 0; }
+
+          if ! node .github/scripts/production-gate.mjs >"$PRODUCTION_GATE_REASON"; then
+            echo "::error::Cannot evaluate production health; refusing to merge."
+            exit 1
+          fi
+          if [ -s "$PRODUCTION_GATE_REASON" ]; then
+            production_gate_reason=$(cat "$PRODUCTION_GATE_REASON")
+            echo "production red or frozen: $production_gate_reason"
+            frozen_body="<!-- automerge-frozen -->
+          Auto-merge is paused because $production_gate_reason."
+            frozen_comment_failures=0
+            for PR in $PRS; do
+              frozen_comments() { gh api --paginate --slurp "repos/$REPO/issues/$PR/comments?per_page=100" >"$FROZEN_COMMENTS"; }
+              if ! retry frozen_comments 2>/dev/null; then
+                frozen_comment_failures=$((frozen_comment_failures+1))
+                continue
+              fi
+              if jq -e --arg marker '<!-- automerge-frozen -->' \
+                'flatten | map(.body? // "") | any(contains($marker))' "$FROZEN_COMMENTS" >/dev/null; then
+                continue
+              fi
+              if ! gh api -X POST "repos/$REPO/issues/$PR/comments" -f body="$frozen_body" >/dev/null 2>&1; then
+                frozen_comment_failures=$((frozen_comment_failures+1))
+              fi
+            done
+            [ "$frozen_comment_failures" -eq 0 ] || exit 1
+            exit 0
+          fi
 
           has_hold() {  # $1 = newline list of lowercased labels ; returns 0 if a hold label present
             local labels="$1" L
