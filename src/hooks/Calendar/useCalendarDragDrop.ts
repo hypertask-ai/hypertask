@@ -21,7 +21,7 @@ export function dispatchCalendarCommand(event: KeyboardEvent, getContext: () => 
       shiftFocusHorizontally("right");
     }
 
-    //I do feel like calling a function to check if it matches the shortcut is a little weird/overkill here. 
+    //I do feel like calling a function to check if it matches the shortcut is a little weird/overkill here.
     if (matchesShortcut(event, ks.universal_movement.left))
       shiftFocusHorizontally("left");
     else if (matchesShortcut(event, ks.universal_movement.right))
@@ -192,5 +192,5 @@ export function dispatchCalendarCommand(event: KeyboardEvent, getContext: () => 
       if (canGoBackInApp) router.back();
       return;
     }
-  
+
 }

@@ -82,5 +82,5 @@ export async function updateCalendarDueDate(task: ITask, dueDate: Date | undefin
             console.error("updateDueDateHandler error:", error);
             toast.error(calendarConfig.toast_messages.error.update);
         }
-    
+
 }

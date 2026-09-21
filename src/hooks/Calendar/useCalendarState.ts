@@ -91,5 +91,5 @@ export function shiftCalendarFocus(direction: "up" | "down", getContext: () => C
         catch (error) {
             console.log("🚀 ~ shiftFocusVertically ~ error:", error);
         }
-    
+
 }

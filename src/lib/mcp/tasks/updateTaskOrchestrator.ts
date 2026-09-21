@@ -266,7 +266,7 @@ export async function executeTaskUpdate({
         }
         assigneeUserIds = parsed.ids;
     }
-    
+
     // Validate that at least one field to update is provided
     const hasLabels = requestBody.labels !== undefined && Array.isArray(requestBody.labels);
     const hasLabelMutation =
@@ -718,9 +718,9 @@ export async function executeTaskUpdate({
     }
 
     // Prepare base URL and cookie for API calls
-    const baseUrl = process.env.NEXT_PUBLIC_BASEURL 
+    const baseUrl = process.env.NEXT_PUBLIC_BASEURL
         || (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'http://localhost:3000');
-    
+
     const userCookie = JSON.stringify(slimUserForCookie({
         id: userObj.id,
         email: userObj.email,
@@ -741,7 +741,7 @@ export async function executeTaskUpdate({
     const priorityConstant = priorityIndex !== undefined
         ? PriorityConstants.find(x => x.priority_index === priorityIndex)
         : null
-    
+
     const estimateConstant = requestBody.estimate !== undefined
         ? EstimateConstants.find(x => x.estimate_index === requestBody.estimate)
         : null
@@ -944,7 +944,7 @@ export async function executeTaskUpdate({
                         agentId: ctx.agentId || undefined
                     })
                 })
-                
+
                 if (!priorityResponse.ok) {
                     console.warn(`[MCP Update Task] Failed to update priority for task ${task.id}`)
                     if (strictSideEffectFailures) {
@@ -970,7 +970,7 @@ export async function executeTaskUpdate({
                         agentId: ctx.agentId || undefined
                     })
                 })
-                
+
                 if (!estimateResponse.ok) {
                     console.warn(`[MCP Update Task] Failed to update estimate for task ${task.id}`)
                     if (strictSideEffectFailures) {
@@ -1185,7 +1185,7 @@ export async function executeTaskUpdate({
     const updatedTaskIds = updateResults
         .filter(result => result.success)
         .map(result => result.taskId)
-    
+
     const failedTasks = updateResults.filter(result => !result.success)
     if (failedTasks.length > 0) {
         console.warn(`[MCP Update Task] ${failedTasks.length} task(s) failed to update:`, failedTasks)
@@ -1235,12 +1235,12 @@ export async function executeTaskUpdate({
     const mappedTasks = updatedTasks.map((task) =>
         mapTaskToDetail(task, user.id, attributionEnabled)
     )
-    
+
     let message = `${updatedTasks.length} task(s) updated successfully`
     if (failedTasks.length > 0) {
         message += ` (${failedTasks.length} task(s) failed)`
     }
-    
+
     const sessionAgent = await getMcpSessionAgentSummary(ctx.agentId, user.id);
 
     const mcpResponse: UpdateTaskResponse = {

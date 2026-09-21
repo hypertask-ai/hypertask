@@ -11,19 +11,31 @@ function git(args) {
   return execFileSync("git", args, { encoding: "utf8" }).trim();
 }
 
-function addedSourceFiles() {
-  const explicitBase = process.env.SOURCE_SIZE_BASE_REF;
-  const githubBase = process.env.GITHUB_BASE_REF
-    ? `origin/${process.env.GITHUB_BASE_REF}`
-    : null;
-  const base = explicitBase || githubBase || "HEAD^";
-  let committed = "";
+function resolveBaseRef() {
+  const configured = process.env.SOURCE_SIZE_BASE_REF;
+  const candidates = [
+    configured,
+    process.env.GITHUB_BASE_REF && `origin/${process.env.GITHUB_BASE_REF}`,
+    "hypertask-ai/production",
+    "origin/production",
+    "HEAD^",
+  ].filter(Boolean);
 
-  try {
-    committed = git(["diff", "--name-only", "--diff-filter=A", `${base}...HEAD`]);
-  } catch {
-    committed = git(["diff", "--name-only", "--diff-filter=A", "HEAD^"]);
-  }
+  return candidates.find((candidate) => {
+    try {
+      git(["rev-parse", "--verify", candidate]);
+      return true;
+    } catch {
+      return false;
+    }
+  });
+}
+
+function addedSourceFiles() {
+  const base = resolveBaseRef();
+  const committed = base
+    ? git(["diff", "--name-only", "--diff-filter=A", `${base}...HEAD`])
+    : "";
 
   const untracked = git(["ls-files", "--others", "--exclude-standard"]);
   return [...new Set(`${committed}\n${untracked}`.split("\n"))]

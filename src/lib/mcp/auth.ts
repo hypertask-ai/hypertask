@@ -123,19 +123,19 @@ export const MCP_AGENT_TOKEN_REFRESH_MESSAGE =
 /**
  * Unified authentication for MCP routes
  * Supports both JWT tokens and API keys
- * 
+ *
  * JWT Tokens (Recommended):
  * - Stateless, no database lookup needed (faster)
  * - Contains user info in token
  * - Can be longer-lived (30 days) for MCP use case
  * - Already have infrastructure set up
- * 
+ *
  * API Keys (Alternative):
  * - Database-backed, can track usage
  * - Can be scoped to permissions
  * - Can have multiple keys per user
  * - Better for service-to-service communication
- * 
+ *
  * @param request NextRequest object
  * @returns User + optional agentId, or null if invalid
  */
@@ -513,7 +513,7 @@ async function validateJwtToken(token: string): Promise<McpAuthContext | null> {
           : decoded.iat
             ? new Date(decoded.iat * 1000)
             : null
-      
+
       if (tokenIssuedAt && tokenIssuedAt < user.mcpTokensRevokedAt) {
         console.log('[MCP Auth] Token was issued before user revoked all tokens:', {
           tokenIssuedAt: tokenIssuedAt.toISOString(),

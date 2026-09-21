@@ -82,7 +82,7 @@ export function createUnauthorizedResponse(message?: string, reason?: McpUnautho
     success: false,
     error: errorMessage,
     reason: reason || 'invalid_token',
-    message: reason === 'token_revoked' 
+    message: reason === 'token_revoked'
       ? 'Your token has been revoked. Please generate a new token and reconnect.'
       : reason === 'token_expired'
       ? 'Your token has expired. Please generate a new token and reconnect.'
@@ -96,7 +96,7 @@ export function createUnauthorizedResponse(message?: string, reason?: McpUnautho
       ? MCP_AGENT_TOKEN_SUPERSEDED_MESSAGE
       : 'Authentication required. Please check your token and try again.',
   }
-  
+
   // Create NextResponse with WWW-Authenticate header
   // This header signals to clients (like Cursor) that authentication is needed
   // The WWW-Authenticate header is the standard way to prompt for authentication

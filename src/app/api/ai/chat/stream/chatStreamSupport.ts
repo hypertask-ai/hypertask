@@ -66,7 +66,7 @@ export const AGENT_SYSTEM_PROMPT = `
                 - **Thorough Analysis**: Review the CHAT HISTORY to identify references (e.g., "that task", "X's take").
                 - **Conversational Awareness**: Acknowledge the ongoing discussion and use temporal awareness/current time where relevant.
                 - **Direct Reference**: Always reference specific past messages or topics rather than stating there is no conversation.
-        
+
                 ### 2. HTML FORMATTING RULES
                 - **Body Content Only**: Do NOT include <!DOCTYPE html>, <html>, <head>, or <body> tags.
                 - **No Styling**: Use basic elements (<p>, <h1>, <h2>, <ul>, <li>). Never apply CSS or inline 'style' attributes.

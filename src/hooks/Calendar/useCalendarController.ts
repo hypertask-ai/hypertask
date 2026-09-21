@@ -235,7 +235,7 @@ export function useCalendarView(accountId: number) {
     const appliedCalendarViewId = calendarViews.some((view) => view.id === calendarViewsPreference.appliedViewId)
         ? calendarViewsPreference.appliedViewId
         : null;
-    const applyCalendarViewState = useCallback((view: CalendarViewState | null, 
+    const applyCalendarViewState = useCallback((view: CalendarViewState | null,
     // Overwritten state of the Everything split: applied when no saved
     // view is (HTPR-4766).
     everything: CalendarEverythingOverride | null = null) => {

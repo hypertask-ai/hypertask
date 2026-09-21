@@ -580,5 +580,5 @@ export function dispatchTaskDetailCommand(e: KeyboardEvent, getContext: () => Co
         );
       return;
     }
-  
+
 }
