@@ -35,6 +35,31 @@ function commit(dir, message) {
   return execFileSync("git", ["rev-parse", "HEAD"], { cwd: dir, encoding: "utf8" }).trim();
 }
 
+function makeTestRepo(t) {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "revert-guard-test-edit-"));
+  t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+  execFileSync("git", ["init", "-q"], { cwd: dir });
+  execFileSync("git", ["config", "user.email", "test@example.com"], { cwd: dir });
+  execFileSync("git", ["config", "user.name", "Test"], { cwd: dir });
+  fs.mkdirSync(path.join(dir, "tests"));
+  fs.writeFileSync(
+    path.join(dir, "tests/contract.test.cjs"),
+    [
+      'const first = read("src/app/first.ts");',
+      'const second = read("src/app/second.ts");',
+      'const third = read("src/app/third.ts");',
+      "assert.match(first, /first/);",
+      "assert.match(second, /second/);",
+      "assert.match(third, /third/);",
+    ].join("\n") + "\n",
+  );
+  execFileSync("git", ["add", "."], { cwd: dir });
+  execFileSync("git", ["commit", "-q", "-m", "recent test"], { cwd: dir });
+  const base = execFileSync("git", ["rev-parse", "HEAD"], { cwd: dir, encoding: "utf8" }).trim();
+  execFileSync("git", ["update-ref", "refs/remotes/origin/production", base], { cwd: dir });
+  return dir;
+}
+
 function run(dir, head) {
   return spawnSync(process.execPath, [script], {
     cwd: dir,
@@ -68,4 +93,24 @@ test("still rejects recent lines that are actually deleted", (t) => {
   assert.equal(result.status, 1);
   assert.match(result.stderr, /Revert Guard failed/);
   assert.match(result.stderr, /src\/original\.ts/);
+});
+
+test("allows test wiring paths to follow an extraction", (t) => {
+  const dir = makeTestRepo(t);
+  const file = path.join(dir, "tests/contract.test.cjs");
+  fs.writeFileSync(file, fs.readFileSync(file, "utf8").replaceAll("src/app/", "src/lib/"));
+  const head = commit(dir, "follow extracted modules");
+
+  const result = run(dir, head);
+  assert.equal(result.status, 0, result.stderr);
+});
+
+test("still rejects deleted test assertions", (t) => {
+  const dir = makeTestRepo(t);
+  fs.writeFileSync(path.join(dir, "tests/contract.test.cjs"), "const replacement = true;\n");
+  const head = commit(dir, "delete assertions");
+
+  const result = run(dir, head);
+  assert.equal(result.status, 1);
+  assert.match(result.stderr, /tests\/contract\.test\.cjs/);
 });

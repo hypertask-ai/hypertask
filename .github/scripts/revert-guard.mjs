@@ -23,23 +23,24 @@ function decodePath(value) {
   if (value.endsWith("\t")) value = value.slice(0, -1);
   if (value === "/dev/null") return null;
   if (value.startsWith('"')) value = JSON.parse(value);
-  return value.startsWith("a/") ? value.slice(2) : value;
+  return /^[ab]\//.test(value) ? value.slice(2) : value;
 }
 function changedLines(diff) {
   const removed = [];
-  const addedToNewFiles = [];
+  const added = [];
   let file = null;
+  let newFile = null;
   let oldLine = null;
-  let addedFile = false;
 
   for (const line of diff.split("\n")) {
     if (line.startsWith("diff --git ")) {
       file = null;
+      newFile = null;
       oldLine = null;
-      addedFile = false;
     } else if (line.startsWith("--- ")) {
       file = decodePath(line.slice(4));
-      addedFile = file === null;
+    } else if (line.startsWith("+++ ")) {
+      newFile = decodePath(line.slice(4));
     } else if (line.startsWith("@@ ")) {
       const match = line.match(/^@@ -(\d+)(?:,\d+)? \+\d+(?:,\d+)? @@/);
       oldLine = match ? Number(match[1]) : null;
@@ -48,22 +49,91 @@ function changedLines(diff) {
         removed.push({ file, line: oldLine, text: line.slice(1) });
       }
       oldLine += 1;
-    } else if (addedFile && line.startsWith("+") && !line.startsWith("+++")) {
-      addedToNewFiles.push(line.slice(1));
+    } else if (newFile && line.startsWith("+") && !line.startsWith("+++")) {
+      added.push({ file: newFile, text: line.slice(1) });
     } else if (oldLine !== null && line.startsWith(" ")) {
       oldLine += 1;
     }
   }
-  return { removed, addedToNewFiles };
+  return { removed, added };
+}
+
+function normalizedCodeLine(text) {
+  return text.replace(/\s+/g, "");
 }
 
 function excludeExtractedLines(removed, added) {
   const available = new Map();
-  for (const text of added) available.set(text, (available.get(text) || 0) + 1);
+  for (const { text } of added) {
+    const normalized = normalizedCodeLine(text);
+    available.set(normalized, (available.get(normalized) || 0) + 1);
+  }
+
+  const stats = new Map();
+  const unmatched = removed.filter((line) => {
+    const stat = stats.get(line.file) || { total: 0, moved: 0 };
+    if (isNonTrivial(line.text)) stat.total += 1;
+    const normalized = normalizedCodeLine(line.text);
+    const count = available.get(normalized) || 0;
+    if (count === 0) {
+      stats.set(line.file, stat);
+      return true;
+    }
+    if (isNonTrivial(line.text)) stat.moved += 1;
+    stats.set(line.file, stat);
+    available.set(normalized, count - 1);
+    return false;
+  });
+
+  const extractedFiles = new Set(
+    [...stats]
+      .filter(([, stat]) => stat.total >= 20 && stat.moved / stat.total >= 0.7)
+      .map(([file]) => file),
+  );
+  return unmatched.filter((line) => !extractedFiles.has(line.file));
+}
+
+function lineSimilarity(left, right) {
+  const a = normalizedCodeLine(left);
+  const b = normalizedCodeLine(right);
+  if (a.length < 8 || b.length < 8) return 0;
+  let previous = Array.from({ length: b.length + 1 }, (_, index) => index);
+  for (let row = 1; row <= a.length; row += 1) {
+    const current = [row];
+    for (let column = 1; column <= b.length; column += 1) {
+      current[column] = Math.min(
+        current[column - 1] + 1,
+        previous[column] + 1,
+        previous[column - 1] + (a[row - 1] === b[column - 1] ? 0 : 1),
+      );
+    }
+    previous = current;
+  }
+  return 1 - previous[b.length] / Math.max(a.length, b.length);
+}
+
+function excludeEditedTestLines(removed, added) {
+  const additionsByFile = new Map();
+  for (const line of added) {
+    const rows = additionsByFile.get(line.file) || [];
+    rows.push(line.text);
+    additionsByFile.set(line.file, rows);
+  }
+
   return removed.filter((line) => {
-    const count = available.get(line.text) || 0;
-    if (count === 0) return true;
-    available.set(line.text, count - 1);
+    if (!/(^|\/)(?:tests?|e2e)\//.test(line.file)) return true;
+    const candidates = additionsByFile.get(line.file) || [];
+    let bestIndex = -1;
+    let bestSimilarity = 0;
+    for (let index = 0; index < candidates.length; index += 1) {
+      const similarity = lineSimilarity(line.text, candidates[index]);
+      if (similarity > bestSimilarity) {
+        bestSimilarity = similarity;
+        bestIndex = index;
+      }
+    }
+    if (bestSimilarity < 0.35) return true;
+    candidates.splice(bestIndex, 1);
     return false;
   });
 }
@@ -108,12 +178,14 @@ function main() {
     throw new Error(`checkout is ${actualHead}, expected PR head ${expectedHead}`);
   }
 
-  const baseRef = `origin/${process.env.GITHUB_BASE_REF || "staging"}`;
+  const baseRef = process.env.REVERT_GUARD_BASE_REF ||
+    `origin/${process.env.GITHUB_BASE_REF || "staging"}`;
   const mergeBase = git(["merge-base", baseRef, "HEAD"]).trim();
   const diff = git(["-c", "core.quotePath=false", "diff", mergeBase, "HEAD",
     "--unified=0", "--no-color", "--no-ext-diff", "--"]);
   const changed = changedLines(diff);
-  const removed = excludeExtractedLines(changed.removed, changed.addedToNewFiles);
+  const extracted = excludeExtractedLines(changed.removed, changed.added);
+  const removed = excludeEditedTestLines(extracted, changed.added);
   if (!removed.length) {
     console.log("Revert Guard passed: this PR removes no lines that were not extracted to new files.");
     return;
