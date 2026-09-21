@@ -31,6 +31,8 @@ export function rosterDotClass(agent: TAgent): string {
   return statusOf(agent) === "running" ? "bg-green-500" : "bg-gray-400";
 }
 
+// HTPR-6287: per-agent roster status replaces the flat green/gray dot. Amber
+// is the shared-allowance stop, the only state the owner can act on from here.
 export const rosterStatusDotClass: Record<TChatRosterStatus["kind"], string> = {
   active: "bg-green-500",
   "out-of-tokens": "bg-amber-500",

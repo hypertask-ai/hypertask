@@ -77,8 +77,6 @@ const AgentChatClient = (props: IProp) => {
   const mobileLayoutEnabled = useFlag(HTPR_6407_MOBILE_AGENT_CHAT_LAYOUT_FLAG);
   const mobileFullscreenFlag = useFlag(HTPR_6476_MOBILE_AGENT_CHAT_FULLSCREEN_FLAG);
   const activityRowsEnabled = useFlag("htpr-6094-agent-activity-rows");
-  // HTPR-6287: per-agent roster status replaces the flat green/gray dot. Amber
-  // is the shared-allowance stop, the only state the owner can act on from here.
   const rosterStatusEnabled = useFlag("htpr-6287-agent-chat-roster-status");
   // Idle durations and the idle-to-inactive flip have to move while the chat
   // sits open, so the roster re-renders on a clock; no refetch involved.
