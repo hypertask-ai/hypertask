@@ -12,6 +12,8 @@ export async function logAiUsage(row: {
   inputTokens?: number;
   outputTokens?: number;
   totalTokens?: number;
+  cacheReadInputTokens?: number;
+  cacheWriteInputTokens?: number;
 }): Promise<void> {
   try {
     await prisma.aiUsage.create({ data: row });
