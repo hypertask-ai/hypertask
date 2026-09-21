@@ -1,9 +1,10 @@
 "use client";
 
-import { useCallback, type ReactNode } from "react";
+import { useCallback, useState, type ReactNode } from "react";
 import {
   Provider as JotaiProvider,
   atom as jotaiAtom,
+  createStore,
   useAtom,
   useAtomValue,
   useSetAtom,
@@ -265,8 +266,24 @@ export const useResetRecoilState = <T,>(recoilAtom: ResettableAtom<T>) => {
   return useCallback(() => setAtom(RESET), [setAtom]);
 };
 
-export const StateRoot = ({ children }: { children: ReactNode }) => (
-  <JotaiProvider>{children}</JotaiProvider>
-);
+type InitialAtomValue = readonly [WritableAtom<any, any[], any>, any];
+
+export const StateRoot = ({
+  children,
+  initialValues = [],
+}: {
+  children: ReactNode;
+  initialValues?: readonly InitialAtomValue[];
+}) => {
+  const [store] = useState(() => {
+    const initialStore = createStore();
+    initialValues.forEach(([initialAtom, initialValue]) => {
+      initialStore.set(initialAtom, initialValue);
+    });
+    return initialStore;
+  });
+
+  return <JotaiProvider store={store}>{children}</JotaiProvider>;
+};
 
 export const RecoilRoot = StateRoot;
