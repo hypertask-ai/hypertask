@@ -4,6 +4,7 @@ const fs = require("node:fs");
 const path = require("node:path");
 const ts = require("typescript");
 
+const { readChatStreamSource } = require("./helpers/read-chat-stream-source.cjs");
 const root = path.resolve(__dirname, "..");
 const jiti = require("jiti")(__filename, {
   interopDefault: true,
@@ -114,7 +115,7 @@ test("JSON minute routes reject values that only coerce to numbers", () => {
     /parseTimeMinutes\(resolved\.body\?\.minutes\)/
   );
   assert.match(
-    read("src/app/api/ai/chat/stream/route.ts"),
+    readChatStreamSource(),
     /minutes: z\.number\(\)\.int\(\)\.min\(1\)\.max\(1440\)/
   );
   assert.equal(parseTimeMinutes(1), 1);

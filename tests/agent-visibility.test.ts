@@ -340,7 +340,10 @@ async function main() {
     chatAccessModule,
     assignRoute,
   ] = await Promise.all([
-    readFile("src/app/agents/[agentId]/AgentDetail.tsx", "utf8"),
+    Promise.all([
+      readFile("src/lib/agents/detail/AgentDetailController.tsx", "utf8"),
+      readFile("src/lib/agents/detail/AgentConfigForm.tsx", "utf8"),
+    ]).then((parts) => parts.join("\n")),
     readFile("src/app/api/agents/[agentId]/provider-key/route.ts", "utf8"),
     readFile("src/app/api/agents/[agentId]/route.ts", "utf8"),
     readFile("src/app/api/agents/[agentId]/activity/route.ts", "utf8"),

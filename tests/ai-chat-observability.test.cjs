@@ -4,6 +4,7 @@ const path = require("node:path");
 const test = require("node:test");
 const { createJiti } = require("jiti");
 
+const { readChatStreamSource } = require("./helpers/read-chat-stream-source.cjs");
 const root = path.resolve(__dirname, "..");
 delete process.env.POSTHOG_SERVER_PROJECT_TOKEN;
 delete process.env.POSTHOG_SERVER_HOST;
@@ -30,10 +31,7 @@ const baseTurn = {
 };
 
 test("the stream records routed and terminal turn outcomes", () => {
-  const stream = fs.readFileSync(
-    path.join(root, "src/app/api/ai/chat/stream/route.ts"),
-    "utf8",
-  );
+  const stream = readChatStreamSource();
   assert.match(
     stream,
     /observedAgentId = routedAgent\.id;[\s\S]*?recordTurnOutcome\(\s*fleet\.success \? "ok" : "failed"/,

@@ -2,8 +2,18 @@ const test = require("node:test");
 const assert = require("node:assert/strict");
 const path = require("node:path");
 
+const { readChatStreamSource } = require("./helpers/read-chat-stream-source.cjs");
 const root = path.resolve(__dirname, "..");
 let jitiEntryId = 0;
+
+function readAgentDetailSource() {
+  const fs = require("node:fs");
+  return ["AgentDetailController.tsx", "AgentConfigForm.tsx"]
+    .map((file) =>
+      fs.readFileSync(path.join(root, "src/lib/agents/detail", file), "utf8"),
+    )
+    .join("\n");
+}
 
 const stubbedModulePaths = [
   "src/app/api/ai/_lib/byokKeys.ts",
@@ -231,10 +241,7 @@ test("the agent page reads and writes the key through the owner-only route", () 
     path.join(root, "src/app/api/agents/[agentId]/provider-key/route.ts"),
     "utf8",
   );
-  const detail = fs.readFileSync(
-    path.join(root, "src/app/agents/[agentId]/AgentDetail.tsx"),
-    "utf8",
-  );
+  const detail = readAgentDetailSource();
 
   // Every handler resolves the agent through the owner's own agent list.
   assert.equal(route.match(/requireOwnedAgent\(/g).length, 4);
@@ -279,10 +286,7 @@ test("the agents list exposes only a masked key, and only to the owner", () => {
   );
   assert.match(shared, /if \(row\.enabled === false\) continue;/);
   assert.match(shared, /maskByokSecret\(decryptByokSecret\(ciphertext\)\)/);
-  const detail = fs.readFileSync(
-    path.join(root, "src/app/agents/[agentId]/AgentDetail.tsx"),
-    "utf8",
-  );
+  const detail = readAgentDetailSource();
   assert.match(detail, /k\.enabled !== false/);
 
   assert.match(listController, /byokApiKeys,\s*\.\.\.agent\s*\}/);
@@ -347,10 +351,7 @@ test("agent identity reaches every AI key lookup, not just task writing", () => 
     path.join(root, "src/app/api/ai/_lib/editorAi.ts"),
     "utf8",
   );
-  const stream = fs.readFileSync(
-    path.join(root, "src/app/api/ai/chat/stream/route.ts"),
-    "utf8",
-  );
+  const stream = readChatStreamSource();
 
   // Tiptap turns run as the agent too, so they must not silently bill the team.
   const tiptap = editor.indexOf("export async function selectTiptapModel(");

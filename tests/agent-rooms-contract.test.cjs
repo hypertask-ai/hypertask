@@ -3,6 +3,7 @@ const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const path = require("node:path");
 
+const { readAgentChatSource } = require("./helpers/read-agent-chat-source.cjs");
 const root = path.resolve(__dirname, "..");
 const read = (relativePath) =>
   fs.readFileSync(path.join(root, relativePath), "utf8");
@@ -47,7 +48,7 @@ test("room runtime APIs expose poll, transcript reply, and handled acknowledgeme
 
 test("the flagged room screen reuses the existing composer and shows safeguards", () => {
   const page = read("src/app/agents/chat/page.tsx");
-  const directChat = read("src/app/agents/chat/AgentChatClient.tsx");
+  const directChat = readAgentChatSource();
   const room = read("src/app/agents/chat/AgentRoomClient.tsx");
   assert.match(page, /isFeatureEnabled/);
   assert.match(page, /HTPR_6557_AGENT_ROOMS_FLAG/);

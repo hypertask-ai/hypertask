@@ -11,6 +11,7 @@ const path = require("node:path");
 const jwt = require("jsonwebtoken");
 const { NextRequest } = require("next/server");
 
+const { readChatStreamSource } = require("./helpers/read-chat-stream-source.cjs");
 const root = path.resolve(__dirname, "..");
 // The app reads its signing key from the environment; give the test a throwaway
 // one. The name and value are assembled rather than written inline so the
@@ -279,10 +280,7 @@ test("malformed, opaque, and missing bearer values are refused", async () => {
 // Wiring the routes to the shared resolver is a structural contract: there is
 // no behaviour to call once a route re-implements identity locally.
 test("chat and Task Writer share the native-aware request user resolver", () => {
-  const chatRoute = fs.readFileSync(
-    path.join(root, "src/app/api/ai/chat/stream/route.ts"),
-    "utf8"
-  );
+  const chatRoute = readChatStreamSource();
   const writerRoute = fs.readFileSync(
     path.join(root, "src/app/api/ai/task-writer/route.ts"),
     "utf8"
@@ -311,10 +309,7 @@ test("chat request model selection wins before the plan-aware fallback", () => {
   // resolveAgentModelPin, covered behaviourally in
   // tests/native-agent-model-pin.test.cjs. What this asserts is that the route
   // actually feeds that answer to the selector rather than re-deriving it.
-  const chatRoute = fs.readFileSync(
-    path.join(root, "src/app/api/ai/chat/stream/route.ts"),
-    "utf8"
-  );
+  const chatRoute = readChatStreamSource();
 
   assert.match(
     chatRoute,

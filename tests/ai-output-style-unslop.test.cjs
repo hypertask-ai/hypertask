@@ -3,6 +3,7 @@ const fs = require("node:fs");
 const path = require("node:path");
 const test = require("node:test");
 
+const { readChatStreamSource } = require("./helpers/read-chat-stream-source.cjs");
 const root = path.resolve(__dirname, "..");
 
 // HTPR-5587: every AI surface shares HOUSE_OUTPUT_STYLE, so the anti-slop
@@ -28,10 +29,7 @@ test("shared house style bans AI tells", () => {
 });
 
 test("chat prompt adds action-first shaping on top", () => {
-  const src = fs.readFileSync(
-    path.join(root, "src/app/api/ai/chat/stream/route.ts"),
-    "utf8",
-  );
+  const src = readChatStreamSource();
   const prompt = src.split("AGENT_SYSTEM_PROMPT = `")[1].split("`;")[0];
   assert.match(prompt, /\$\{HOUSE_OUTPUT_STYLE\}/);
   assert.match(prompt, /numbered steps in execution order/);

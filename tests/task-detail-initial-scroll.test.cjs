@@ -1,6 +1,7 @@
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const test = require("node:test");
+const { readTaskDetailSource } = require("./helpers/read-task-detail-source.cjs");
 const path = require("node:path");
 const { createJiti } = require("jiti");
 
@@ -112,10 +113,7 @@ test("listener cleanup stops later gestures from changing the guard", () => {
 });
 
 test("task detail wires the guard to task lifecycle and every delayed mobile scroll", () => {
-  const source = fs.readFileSync(
-    path.join(root, "src/app/detail/[...slug]/TaskDetailComp.tsx"),
-    "utf8"
-  );
+  const source = readTaskDetailSource();
   const bottomPositioning = sourceBetween(
     source,
     "// Reliably land at the very bottom of the thread on mobile.",
@@ -139,7 +137,7 @@ test("task detail wires the guard to task lifecycle and every delayed mobile scr
   const unreadPositioning = sourceBetween(
     source,
     "// Where a freshly-opened task lands.",
-    "  useEffect(() => {\n    if (embedded) return;"
+    "    useEffect(() => {\n        if (embedded)\n            return;"
   );
   const unreadDependencyStart = unreadPositioning?.lastIndexOf("}, [") ?? -1;
 
@@ -202,10 +200,7 @@ test("the task detail virtualizer leaves row-resize scroll compensation to the b
 });
 
 test("task detail isolates HypertasksCommands in Suspense so Share cannot remount the page (HTPR-6277)", () => {
-  const source = fs.readFileSync(
-    path.join(root, "src/app/detail/[...slug]/TaskDetailComp.tsx"),
-    "utf8"
-  );
+  const source = readTaskDetailSource();
   const commandsMount = sourceBetween(
     source,
     "{!embedded && showCommands.show && (",

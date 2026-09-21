@@ -7,6 +7,7 @@ const path = require("node:path");
 const { spawn, spawnSync } = require("node:child_process");
 const Redis = require("ioredis");
 
+const { readChatStreamSource } = require("./helpers/read-chat-stream-source.cjs");
 const root = path.resolve(__dirname, "..");
 const jiti = require("jiti")(path.join(root, "tests/error-pipeline.test.cjs"), {
   interopDefault: true,
@@ -222,10 +223,7 @@ test("invalid threshold Redis results fail closed", async () => {
 });
 
 test("empty-completion reporting uses a stable key and explicit retry failure state", () => {
-  const route = fs.readFileSync(
-    path.join(root, "src/app/api/ai/chat/stream/route.ts"),
-    "utf8",
-  );
+  const route = readChatStreamSource();
   assert.match(route, /fingerprintKey: "ai-chat-empty-completion"/);
   assert.match(route, /let emptyCompletionRetryFailed = false/);
   assert.match(route, /emptyCompletionRetryFailed = true/);

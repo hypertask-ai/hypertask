@@ -3,6 +3,7 @@ const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const path = require("node:path");
 
+const { readChatStreamSource } = require("./helpers/read-chat-stream-source.cjs");
 const root = path.resolve(__dirname, "..");
 const read = (relativePath) =>
   fs.readFileSync(path.join(root, relativePath), "utf8");
@@ -19,7 +20,7 @@ const managementTools = [
 test("management operations are registered in MCP and AI Chat", () => {
   const metadata = read("src/lib/mcp-server/config/tool-metadata.ts");
   const registry = read("src/lib/mcp-server/tools/index.ts");
-  const aiChat = read("src/app/api/ai/chat/stream/route.ts");
+  const aiChat = readChatStreamSource();
 
   for (const name of managementTools) {
     assert.match(metadata, new RegExp(`buildToolName\\(["']${name}["']\\)`));
@@ -59,7 +60,9 @@ test("agent archive and delete are registered in MCP and blocked for native agen
 
 test("management-only keys can authenticate the MCP transport without gaining data scope", () => {
   const handler = read("src/lib/mcp-server/handler.ts");
-  const auth = read("src/lib/mcp/auth.ts");
+  const auth = ["auth.ts", "mcpAuthErrors.ts", "verifyJwt.ts", "session.ts"]
+    .map((file) => read(`src/lib/mcp/${file}`))
+    .join("\n");
 
   assert.match(handler, /const ctx = await validateMcpAuth\(request,/);
   assert.match(handler, /if \(ctx\.management\)/);
@@ -140,7 +143,7 @@ test("admin routes expose agents, tokens, rotation, and connection inventory", (
 });
 
 test("credential writes require cross-message confirmation in AI Chat", () => {
-  const aiChat = read("src/app/api/ai/chat/stream/route.ts");
+  const aiChat = readChatStreamSource();
   assert.match(aiChat, /requireAccountManagementConfirmation/);
   for (const operation of [
     "create-agent",

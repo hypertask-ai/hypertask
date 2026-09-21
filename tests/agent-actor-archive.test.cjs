@@ -708,7 +708,7 @@ test("humans may clean up previously Done QA fixtures and agents may archive act
 
 test("MCP updateTask signs the internal session with ctx.agentId", () => {
   const source = fs.readFileSync(
-    path.join(root, "src/lib/mcp/tasks/updateTask.ts"),
+    path.join(root, "src/lib/mcp/tasks/updateTaskOrchestrator.ts"),
     "utf8",
   );
   assert.match(

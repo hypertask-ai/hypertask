@@ -383,7 +383,8 @@ test("no server file writes or reads a plaintext agent token column", () => {
   const allowed = new Set([
     "src/models/model.ts",
     "src/app/agents/AgentsRegister.tsx",
-    "src/app/agents/[agentId]/AgentDetail.tsx",
+    "src/lib/agents/detail/AgentDetailController.tsx",
+    "src/lib/agents/detail/AgentConfigForm.tsx",
     "src/app/api/users/developer-access/route.ts",
     "src/components/Modals/Settings/DeveloperAccessSection.tsx",
   ]);

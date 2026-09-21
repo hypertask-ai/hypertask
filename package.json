@@ -13,6 +13,7 @@
     "test": "node scripts/run-tests.mjs",
     "test:file": "node scripts/run-tests.mjs",
     "coverage:report": "c8 report && node scripts/coverage-summary.mjs",
+    "check:source-size": "node scripts/check-source-size.mjs",
     "performance:budget": "node scripts/check-app-performance-budget.mjs",
     "performance:pr-gate": "node scripts/check-speed-pr-evidence.mjs",
     "performance:field": "node scripts/report-app-project-vitals.mjs",

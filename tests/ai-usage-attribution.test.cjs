@@ -3,6 +3,7 @@ const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const path = require("node:path");
 
+const { readChatStreamSource } = require("./helpers/read-chat-stream-source.cjs");
 const root = path.resolve(__dirname, "..");
 const read = (relative) => fs.readFileSync(path.join(root, relative), "utf8");
 
@@ -31,7 +32,7 @@ test("ticket-scoped AI entry points pass their task attribution", () => {
     ["src/app/api/ai/hyper-mentioned/route.ts", /taskId: usageTaskId/],
     ["src/app/api/ai/_lib/commentSummaries.ts", /taskId: comment\.task\.id/],
     ["src/lib/ai/labelClassifier.ts", /taskId: task\.id/],
-    ["src/app/api/ai/chat/stream/route.ts", /taskId: contextTaskId/],
+    ["src/app/api/ai/chat/stream/post.ts", /taskId: contextTaskId/],
   ];
 
   for (const [file, pattern] of expected) {
@@ -86,7 +87,7 @@ test("caller-supplied task attribution is project- and access-scoped", () => {
   const taskWriter = read("src/app/api/ai/_lib/taskWriterRun.ts");
   const mcpImprove = read("src/app/api/mcp/ai/improve/route.ts");
   const editor = read("src/app/api/ai/tiptap-forwardslash/route.ts");
-  const chat = read("src/app/api/ai/chat/stream/route.ts");
+  const chat = readChatStreamSource();
   const settings = read("src/app/api/settings/ai-usage/route.ts");
 
   assert.match(context, /projectId: Number\(args\.projectId\)/);

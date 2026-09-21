@@ -6,6 +6,7 @@ const test = require("node:test");
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const path = require("node:path");
+const { readChatStreamSource } = require("./helpers/read-chat-stream-source.cjs");
 
 const ROUTE = path.resolve(
   __dirname,
@@ -20,7 +21,7 @@ function toolBody(source, toolName) {
 }
 
 test("hypertask_page_history is registered with the MCP actions and warnings", () => {
-  const source = fs.readFileSync(ROUTE, "utf8");
+  const source = readChatStreamSource();
   const body = toolBody(source, "hypertask_page_history");
 
   assert.match(
@@ -53,7 +54,7 @@ test("hypertask_page_history is registered with the MCP actions and warnings", (
 });
 
 test("hypertask_page_history is registered as a write tool", () => {
-  const source = fs.readFileSync(ROUTE, "utf8");
+  const source = readChatStreamSource();
   const writeToolNamesStart = source.indexOf("const writeToolNames = new Set([");
   const writeToolNamesEnd = source.indexOf("]);", writeToolNamesStart);
   const writeToolNames = source.slice(writeToolNamesStart, writeToolNamesEnd);
@@ -66,7 +67,7 @@ test("hypertask_page_history is registered as a write tool", () => {
 });
 
 test("page restore and archive enforce project access before mutation", () => {
-  const source = fs.readFileSync(ROUTE, "utf8");
+  const source = readChatStreamSource();
   const body = toolBody(source, "hypertask_page_history");
   const pageLookupAt = body.indexOf("const existingPage = await getPage(identifier)");
   const accessAt = body.indexOf("const access = await validateProjectAccess(");
@@ -86,7 +87,7 @@ test("page restore and archive enforce project access before mutation", () => {
 });
 
 test("listing page versions does not mutate page state", () => {
-  const source = fs.readFileSync(ROUTE, "utf8");
+  const source = readChatStreamSource();
   const body = toolBody(source, "hypertask_page_history");
   const listStart = body.indexOf('if (input.action === "versions")');
   const restoreStart = body.indexOf('if (input.action === "restore")');

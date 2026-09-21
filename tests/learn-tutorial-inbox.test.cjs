@@ -53,7 +53,7 @@ test("the learn endpoint seeds two scoped practice notifications", () => {
 });
 
 test("tutorial inbox bootstrap retries and discards stale candidates", () => {
-  const tutorialHook = readSource("src/hooks/General/useLearnTutorial.ts");
+  const tutorialHook = readSource("src/lib/tutorials/useLearnTutorialEngine.ts");
 
   assert.match(tutorialHook, /inboxBootstrapAttempt >= 2/);
   assert.match(tutorialHook, /500 \* 2 \*\* inboxBootstrapAttempt/);
@@ -107,7 +107,7 @@ test("archive completion is published only after persistence succeeds", () => {
     /if \(!persisted\)[\s\S]*refetchQueries[\s\S]*LEARN_TUTORIAL_INBOX_ARCHIVE_FAILED_EVENT/,
   );
   assert.match(
-    readSource("src/hooks/General/useLearnTutorial.ts"),
+    readSource("src/lib/tutorials/useLearnTutorialEngine.ts"),
     /markAsDone\?id=\$\{target\.notificationId\}[\s\S]*source: "detail"/,
   );
   assert.match(archiveRoute, /returnedFromReminders: false/);
@@ -123,7 +123,7 @@ test("Act 4 blocks pointer and unrelated keyboard archive paths", () => {
   const overlay = readSource(
     "src/components/PageComponents/LearnTutorial/TutorialOverlay.tsx",
   );
-  const tutorialHook = readSource("src/hooks/General/useLearnTutorial.ts");
+  const tutorialHook = readSource("src/lib/tutorials/useLearnTutorialEngine.ts");
 
   assert.match(
     overlay,
@@ -158,7 +158,7 @@ test("Act 5 advances only after real column persistence succeeds", () => {
   const moveToColumn = readSource(
     "src/components/Modals/commands/moveToColumn.tsx",
   );
-  const tutorialHook = readSource("src/hooks/General/useLearnTutorial.ts");
+  const tutorialHook = readSource("src/lib/tutorials/useLearnTutorialEngine.ts");
 
   assert.match(
     commands,
@@ -189,7 +189,7 @@ test("Act 5 verifies every real modal and returns from the finale", () => {
   const overlay = readSource(
     "src/components/PageComponents/LearnTutorial/TutorialOverlay.tsx",
   );
-  const tutorialHook = readSource("src/hooks/General/useLearnTutorial.ts");
+  const tutorialHook = readSource("src/lib/tutorials/useLearnTutorialEngine.ts");
 
   assert.match(overlay, /locksActFivePointerInput/);
   assert.match(tutorialHook, /getElementById\("boardManager"\)/);

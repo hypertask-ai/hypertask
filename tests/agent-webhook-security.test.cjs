@@ -19,7 +19,7 @@ test("agent webhook owner routes require a verified session and same-origin muta
 });
 
 test("mention and assignment outbox rows share their domain transactions", () => {
-  const comments = read("src/utils/controllers/comments/createCommentService.ts");
+  const comments = read("src/utils/controllers/comments/commentCreation.ts");
   const assignments = read("src/utils/controllers/assignees/assign.ts");
   const updates = read("src/utils/controllers/tasks/single.ts");
   const creates = read("src/utils/controllers/tasks/createTaskCore.ts");

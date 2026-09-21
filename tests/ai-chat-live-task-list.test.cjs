@@ -3,6 +3,7 @@ const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const path = require("node:path");
 
+const { readChatStreamSource } = require("./helpers/read-chat-stream-source.cjs");
 const root = path.resolve(__dirname, "..");
 const jiti = require("jiti")(__filename, {
   alias: { "@": path.join(root, "src") },
@@ -58,10 +59,7 @@ test("other task intents keep their specialized tools", () => {
 });
 
 test("AI chat enforces live listing and rejects RAG for board-wide task questions", () => {
-  const route = fs.readFileSync(
-    path.join(root, "src/app/api/ai/chat/stream/route.ts"),
-    "utf8",
-  );
+  const route = readChatStreamSource();
 
   assert.match(
     route,

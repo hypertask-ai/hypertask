@@ -1,80 +1,21 @@
-import { NextRequest, NextResponse } from 'next/server'
-import prisma from '@/lib/prisma'
-import jwt from 'jsonwebtoken'
-import { randomUUID, createHash } from 'crypto'
-import createLog from '@/utils/controllers/logs/createLog'
-import { LogType, Prisma, Status } from '@prisma/client'
-import { getRedis } from '@/lib/redis'
-import { decideMcpRateLimit, MCP_RATE_LIMIT_WINDOW_SECONDS } from '@/lib/mcp/rateLimitDecision'
-import { hashApiKey } from '@/lib/apiKeys'
-import { auth } from '@/lib/auth/betterAuth'
-import { getSessionUser } from '@/lib/auth/getSessionUser'
-import {
-  isOAuthAccessTokenPayload,
-  JWT_LEGACY_OAUTH_AUDIENCE,
-  JWT_OAUTH_AUDIENCE,
-  JWT_OAUTH_ISSUER,
-  oauthClientIdFromPayload,
-  OAUTH_CLIENT_ID_CLAIM,
-  oauthLegacyRevocationJti,
-} from '@/lib/mcp/oauthTokenContract'
-import {
-  hasAnyManagementPermission,
-  hasDataPermission,
-  hasManagementReadPermission,
-  hasManagementWritePermission,
-  hasUsageReadPermission,
-  parseManagementPermissions,
-} from '@/lib/mcp/managementPermissions'
-import { logMcpCliUsage } from '@/lib/mcp/clientTelemetry'
-import {
-  HTPR_6542_TEAM_SCOPED_MANAGEMENT_KEYS_FLAG,
-  isFeatureEnabled,
-} from '@/lib/flags'
-import {
-  ACCOUNT_MANAGEMENT_KEY_PREFIX,
-  agentWithinTeamWhere,
-  getManagementKeyTeam,
-  TEAM_MANAGEMENT_KEY_PREFIX,
-} from '@/lib/mcp/managementKeyTeamScope'
-
-const JWT_SECRET = process.env.JWT_SECRET as string
-const JWT_ISSUER = process.env.JWT_ISSUER || 'hypertask'
-export const JWT_MCP_AUDIENCE = 'mcp-api'
-export const JWT_LEGACY_MCP_AUDIENCE = 'hypertasks-mcp'
-const AGENT_TOKEN_GENERATION_CLAIM = 'agentTokenGeneration'
-const AGENT_TEAM_ID_CLAIM = 'agentTeamId'
-const AGENT_TEAM_ACCESS_BINDING_CLAIM = 'agentTeamAccessBinding'
-const MCP_TOKEN_ISSUED_AT_MS_CLAIM = 'mcpIssuedAtMs'
-export const MANAGEMENT_KEY_PREFIX = ACCOUNT_MANAGEMENT_KEY_PREFIX
-export const isManagementKeyToken = (token: string) =>
-  token.startsWith(MANAGEMENT_KEY_PREFIX) ||
-  token.startsWith(TEAM_MANAGEMENT_KEY_PREFIX)
-export function extractBearerToken(authHeader: string | null): string | null {
-  return authHeader?.match(/^Bearer\s+(.+)$/i)?.[1] ?? null
-}
-const scopedTokenRevocationJti = (userId: number, jti: string) =>
-  `user:${userId}:${jti}`
-
-export function legacyTokenRevocationJti(token: string): string {
-  const digest = createHash('sha256')
-    .update('hypertask:mcp:legacy-token-revocation\0')
-    .update(token)
-    .digest('hex')
-  return `legacy:${digest}`
-}
-
-function tokenRevocationJtis(
-  userId: number,
-  token: string,
-  decoded: jwt.JwtPayload
-): string[] {
-  const jti = decoded.jti || decoded.jwtid
-  if (typeof jti === 'string' && jti.length > 0) {
-    return [jti, scopedTokenRevocationJti(userId, jti)]
-  }
-  return [legacyTokenRevocationJti(token)]
-}
+import { AGENT_TEAM_ACCESS_BINDING_CLAIM, AGENT_TEAM_ID_CLAIM, AgentTokenTeamScope } from "./session";
+import { MCP_TOKEN_ISSUED_AT_MS_CLAIM, McpAuthContext, extractBearerToken, isManagementKeyToken, tokenRevocationJtis, validateManagementApiKey } from "./mcpAuthErrors";
+import { AGENT_TOKEN_GENERATION_CLAIM, JWT_MCP_AUDIENCE, presentedAgentTokenGeneration, storedAgentTokenGeneration, verifyMcpJwtToken } from "./verifyJwt";
+import { NextRequest, NextResponse } from 'next/server';
+import prisma from '@/lib/prisma';
+import jwt from 'jsonwebtoken';
+import { createHash } from 'crypto';
+import createLog from '@/utils/controllers/logs/createLog';
+import { LogType, Status } from '@prisma/client';
+import { getRedis } from '@/lib/redis';
+import { decideMcpRateLimit, MCP_RATE_LIMIT_WINDOW_SECONDS } from '@/lib/mcp/rateLimitDecision';
+import { hashApiKey } from '@/lib/apiKeys';
+import { getSessionUser } from '@/lib/auth/getSessionUser';
+import { isOAuthAccessTokenPayload, JWT_OAUTH_AUDIENCE, oauthClientIdFromPayload, oauthLegacyRevocationJti } from '@/lib/mcp/oauthTokenContract';
+import { hasAnyManagementPermission, hasDataPermission, hasManagementReadPermission, hasManagementWritePermission, hasUsageReadPermission } from '@/lib/mcp/managementPermissions';
+import { logMcpCliUsage } from '@/lib/mcp/clientTelemetry';
+import { HTPR_6542_TEAM_SCOPED_MANAGEMENT_KEYS_FLAG, isFeatureEnabled } from '@/lib/flags';
+import { agentWithinTeamWhere, getManagementKeyTeam } from '@/lib/mcp/managementKeyTeamScope';
 
 // ponytail: in-memory per-process throttle, resets on deploy/restart — fine for a
 // UX nice-to-have status pill; upgrade to Redis if cross-instance accuracy matters.
@@ -144,25 +85,6 @@ export async function checkMcpRateLimit(request: NextRequest): Promise<NextRespo
   }
 }
 
-/** MCP session: human principal + optional agent actor (null = user acts as themselves). */
-export type McpAuthContext = {
-  user: { id: number; email: string; displayName?: string | null }
-  agentId: string | null
-  /** Runtime generation observed while the managed agent token was verified. */
-  agentRuntimeGeneration?: number | null
-  management?: {
-    keyId: string
-    permissions: Record<string, string[]>
-    teamId?: string
-    teamAccessBinding?: string
-  }
-}
-
-export type AgentTokenTeamScope = {
-  teamId: string
-  accessBinding: string
-}
-
 export function managementAgentTokenScope(
   management: McpAuthContext['management']
 ): AgentTokenTeamScope | undefined {
@@ -195,81 +117,25 @@ export function resolveMcpRateLimit(ctx: McpAuthContext | null, token: string): 
   const isAgentTier = ctx !== null && (ctx.agentId !== null || token.startsWith('htk_'))
   return isAgentTier ? MCP_AGENT_RATE_LIMIT_PER_MINUTE : MCP_RATE_LIMIT_PER_MINUTE
 }
-
-/**
- * Creates a standardized 401 Unauthorized response for MCP routes
- * Includes WWW-Authenticate header to trigger Cursor's CONNECT button
- * 
- * @param message Optional error message
- * @param reason Optional reason code (e.g., 'token_revoked', 'token_expired', 'invalid_token')
- */
-export type McpUnauthorizedReason =
-  | 'token_revoked'
-  | 'token_expired'
-  | 'invalid_token'
-  | 'missing_token'
-  | 'insufficient_scope'
-  | 'legacy_token'
-  | 'agent_revoked'
-  | 'agent_token_superseded'
-
-export const MCP_LEGACY_TOKEN_MESSAGE =
-  'This token predates refresh support and cannot be refreshed. Run `hypertask login` to replace it.'
-export const MCP_AGENT_REVOKED_MESSAGE =
-  'This agent has been revoked. Ask the board owner to create a new agent identity.'
-export const MCP_AGENT_TOKEN_SUPERSEDED_MESSAGE =
-  "This agent's token was replaced by a newer one. Use the current token, or rotate it with POST /api/mcp/agents/rotate-token using the owner's token."
 export const MCP_AGENT_TOKEN_REFRESH_MESSAGE =
   "Agent tokens do not expire and cannot be refreshed. To replace this token, call POST /api/mcp/agents/rotate-token with the owner's token. Rotating immediately invalidates the current token."
-
-export function createUnauthorizedResponse(message?: string, reason?: McpUnauthorizedReason) {
-  const errorMessage = message || 'Unauthorized. Invalid or missing authentication token.'
-  const response = {
-    success: false,
-    error: errorMessage,
-    reason: reason || 'invalid_token',
-    message: reason === 'token_revoked' 
-      ? 'Your token has been revoked. Please generate a new token and reconnect.'
-      : reason === 'token_expired'
-      ? 'Your token has expired. Please generate a new token and reconnect.'
-      : reason === 'insufficient_scope'
-      ? 'This management key does not grant access to MCP data endpoints.'
-      : reason === 'legacy_token'
-      ? MCP_LEGACY_TOKEN_MESSAGE
-      : reason === 'agent_revoked'
-      ? MCP_AGENT_REVOKED_MESSAGE
-      : reason === 'agent_token_superseded'
-      ? MCP_AGENT_TOKEN_SUPERSEDED_MESSAGE
-      : 'Authentication required. Please check your token and try again.',
-  }
-  
-  // Create NextResponse with WWW-Authenticate header
-  // This header signals to clients (like Cursor) that authentication is needed
-  // The WWW-Authenticate header is the standard way to prompt for authentication
-  return NextResponse.json(response, {
-    status: 401,
-    headers: {
-      'WWW-Authenticate': 'Bearer realm="hypertask-mcp", error="invalid_token"',
-    },
-  })
-}
 
 /**
  * Unified authentication for MCP routes
  * Supports both JWT tokens and API keys
- * 
+ *
  * JWT Tokens (Recommended):
  * - Stateless, no database lookup needed (faster)
  * - Contains user info in token
  * - Can be longer-lived (30 days) for MCP use case
  * - Already have infrastructure set up
- * 
+ *
  * API Keys (Alternative):
  * - Database-backed, can track usage
  * - Can be scoped to permissions
  * - Can have multiple keys per user
  * - Better for service-to-service communication
- * 
+ *
  * @param request NextRequest object
  * @returns User + optional agentId, or null if invalid
  */
@@ -503,182 +369,6 @@ export async function validateManagementOrSessionAuth(
   }
 }
 
-async function validateManagementApiKey(token: string): Promise<McpAuthContext | null> {
-  try {
-    const result = await auth.api.verifyApiKey({
-      body: {
-        key: token,
-      },
-    })
-
-    if (!result.valid || !result.key) return null
-
-    const userId = Number(result.key.referenceId)
-    if (!Number.isInteger(userId) || userId <= 0) return null
-
-    const user = await prisma.user.findUnique({
-      where: { id: userId },
-      select: {
-        id: true,
-        email: true,
-        displayName: true,
-      },
-    })
-    if (!user) return null
-
-    const keyPrefix = result.key.prefix
-    if (
-      keyPrefix !== ACCOUNT_MANAGEMENT_KEY_PREFIX &&
-      keyPrefix !== TEAM_MANAGEMENT_KEY_PREFIX
-    ) {
-      return null
-    }
-
-    let teamId: string | undefined
-    let teamAccessBinding: string | undefined
-    if (keyPrefix === TEAM_MANAGEMENT_KEY_PREFIX) {
-      if (
-        !(await isFeatureEnabled(
-          HTPR_6542_TEAM_SCOPED_MANAGEMENT_KEYS_FLAG,
-          user.id
-        ))
-      ) {
-        return null
-      }
-
-      const keyId = Number(result.key.id)
-      if (!Number.isSafeInteger(keyId) || keyId <= 0) return null
-      const keyRow = await prisma.betterAuthApiKey.findFirst({
-        where: {
-          id: keyId,
-          userId: user.id,
-          prefix: TEAM_MANAGEMENT_KEY_PREFIX,
-          enabled: true,
-        },
-        select: { teamId: true, teamAccessBinding: true },
-      })
-      if (!keyRow?.teamId || !keyRow.teamAccessBinding) return null
-
-      const team = await getManagementKeyTeam(user.id, keyRow.teamId)
-      if (!team || team.accessBinding !== keyRow.teamAccessBinding) {
-        await prisma.betterAuthApiKey.updateMany({
-          where: { id: keyId, userId: user.id, enabled: true },
-          data: { enabled: false },
-        })
-        return null
-      }
-      teamId = team.id
-      teamAccessBinding = team.accessBinding
-    }
-
-    return {
-      user: {
-        id: user.id,
-        email: user.email,
-        displayName: user.displayName ?? undefined,
-      },
-      agentId: null,
-      management: {
-        keyId: String(result.key.id),
-        permissions: parseManagementPermissions(result.key.permissions),
-        ...(teamId ? { teamId, teamAccessBinding } : {}),
-      },
-    }
-  } catch (error) {
-    console.error('[MCP Auth] Failed to verify management API key:', error)
-    return null
-  }
-}
-
-export function verifyMcpJwtToken(token: string): jwt.JwtPayload | null {
-  if (!JWT_SECRET) {
-    console.log('[MCP Auth] JWT_SECRET not configured')
-    return null // JWT not configured
-  }
-
-  // First decode without verification to inspect token structure
-  let decodedWithoutVerify: jwt.JwtPayload | null = null
-  try {
-    decodedWithoutVerify = jwt.decode(token, { complete: false }) as jwt.JwtPayload
-    if (decodedWithoutVerify) {
-      console.log('[MCP Auth] Token decoded (unverified):', {
-        userId: decodedWithoutVerify.userId,
-        sub: decodedWithoutVerify.sub,
-        iss: decodedWithoutVerify.iss,
-        aud: decodedWithoutVerify.aud,
-        exp: decodedWithoutVerify.exp ? new Date(decodedWithoutVerify.exp * 1000).toISOString() : null,
-        iat: decodedWithoutVerify.iat ? new Date(decodedWithoutVerify.iat * 1000).toISOString() : null
-      })
-    }
-  } catch (err) {
-    console.log('[MCP Auth] Failed to decode token:', err)
-    return null
-  }
-
-  if (!decodedWithoutVerify) {
-    console.log('[MCP Auth] Token decode returned null')
-    return null
-  }
-
-  try {
-    // Verify JWT token - try multiple audience/issuer combinations for compatibility
-    let decoded: jwt.JwtPayload
-
-    // Try current format first (mcp-api audience)
-    try {
-      decoded = jwt.verify(token, JWT_SECRET, {
-        issuer: JWT_ISSUER,
-        audience: JWT_MCP_AUDIENCE,
-      }) as jwt.JwtPayload
-      console.log('[MCP Auth] JWT verified with current format (mcp-api)')
-    } catch (err: any) {
-      console.log('[MCP Auth] Current format failed:', err?.message)
-      // Try legacy format (hypertasks-mcp audience, hypertasks issuer)
-      try {
-        decoded = jwt.verify(token, JWT_SECRET, {
-          issuer: 'hypertasks', // Legacy issuer
-          audience: JWT_LEGACY_MCP_AUDIENCE,
-        }) as jwt.JwtPayload
-        console.log('[MCP Auth] JWT verified with legacy format (hypertasks-mcp)')
-      } catch (err2: any) {
-        console.log('[MCP Auth] Legacy format failed:', err2?.message)
-        try {
-          decoded = jwt.verify(token, JWT_SECRET, {
-            issuer: JWT_OAUTH_ISSUER,
-            audience: [JWT_OAUTH_AUDIENCE, JWT_LEGACY_OAUTH_AUDIENCE],
-          }) as jwt.JwtPayload
-          console.log('[MCP Auth] JWT verified as OAuth access token')
-        } catch (errOAuth: any) {
-          console.log('[MCP Auth] OAuth format failed:', errOAuth?.message)
-          // Only tokens minted before MCP audiences were introduced may use the
-          // compatibility path. A present audience belongs to another token contract.
-          if (decodedWithoutVerify.aud !== undefined) {
-            console.log('[MCP Auth] Token has an unsupported audience:', decodedWithoutVerify.aud)
-            return null
-          }
-          try {
-            decoded = jwt.verify(token, JWT_SECRET, {
-              issuer: ['hypertasks', JWT_ISSUER, JWT_OAUTH_ISSUER],
-            }) as jwt.JwtPayload
-            console.log('[MCP Auth] Legacy audience-less JWT verified')
-          } catch (err3: any) {
-            console.log('[MCP Auth] All verification attempts failed')
-            console.log('[MCP Auth] Signature error details:', err3?.message)
-            console.log('[MCP Auth] JWT_SECRET exists:', !!JWT_SECRET, 'Length:', JWT_SECRET?.length)
-            console.log('[MCP Auth] Token issuer:', decodedWithoutVerify?.iss, 'Expected:', ['hypertasks', JWT_ISSUER])
-            console.log('[MCP Auth] Token audience:', decodedWithoutVerify?.aud, 'Expected:', [JWT_LEGACY_MCP_AUDIENCE, JWT_MCP_AUDIENCE])
-            return null
-          }
-        }
-      }
-    }
-
-    return decoded
-  } catch {
-    return null
-  }
-}
-
 /**
  * Digest stored in place of an agent's bearer token.
  *
@@ -725,39 +415,6 @@ export function agentTokenMatchesStored(
 ): boolean {
   if (!token || !agent?.mcpTokenHash) return false
   return hashAgentToken(token) === agent.mcpTokenHash
-}
-
-/**
- * The revocation generation an agent's stored credential represents.
- *
- * This used to re-verify a plaintext JWT read back out of the database. The
- * generation is now stored directly, and the guarantee that replaced it is
- * ownership at the query: every caller looks the agent up by id AND userId, so
- * a generation belonging to another owner's agent is never read in the first
- * place.
- */
-export function storedAgentTokenGeneration(
-  agent: { mcpTokenJti: string | null } | null | undefined
-): string | null {
-  const generation = agent?.mcpTokenJti
-  return typeof generation === 'string' && generation.length > 0
-    ? generation
-    : null
-}
-
-/** Current managed-token generation represented by a verified agent JWT. */
-export function presentedAgentTokenGeneration(decoded: jwt.JwtPayload): string | null {
-  const privateGeneration = decoded[AGENT_TOKEN_GENERATION_CLAIM]
-  if (typeof privateGeneration === 'string' && privateGeneration.length > 0) {
-    return privateGeneration
-  }
-
-  // Direct managed tokens predate the private OAuth claim; their own jti is
-  // also their generation identifier.
-  const directGeneration = decoded.jti ?? decoded.jwtid
-  return typeof directGeneration === 'string' && directGeneration.length > 0
-    ? directGeneration
-    : null
 }
 
 /**
@@ -856,7 +513,7 @@ async function validateJwtToken(token: string): Promise<McpAuthContext | null> {
           : decoded.iat
             ? new Date(decoded.iat * 1000)
             : null
-      
+
       if (tokenIssuedAt && tokenIssuedAt < user.mcpTokensRevokedAt) {
         console.log('[MCP Auth] Token was issued before user revoked all tokens:', {
           tokenIssuedAt: tokenIssuedAt.toISOString(),
@@ -983,372 +640,6 @@ async function validateJwtToken(token: string): Promise<McpAuthContext | null> {
     return null
   }
 }
-
-
-
-/**
- * Creates a JWT token for MCP API access
- *
- * @param userId User ID
- * @param email User email
- * @param expiresIn Expiration time (default: 30 days). Ignored when agentId is set (no JWT exp).
- * @param agentId Optional agent UUID; when set, token has no expiry (revoked via Agent.mcpToken / jti).
- * @returns JWT token string
- */
-export function createMcpToken(
-  userId: number,
-  email: string,
-  expiresIn: string | number = '30d',
-  agentId?: string,
-  agentTeamScope?: AgentTokenTeamScope
-): string {
-  if (!JWT_SECRET) {
-    throw new Error('JWT_SECRET not configured')
-  }
-
-  const jti = randomUUID()
-  const issuedAt = Date.now()
-
-  const payload: Record<string, unknown> = {
-    sub: email,
-    userId,
-    jti,
-    iat: Math.floor(issuedAt / 1000),
-    [MCP_TOKEN_ISSUED_AT_MS_CLAIM]: issuedAt,
-  }
-  if (agentId) payload.agentId = agentId
-  if (agentTeamScope) {
-    if (!agentId) {
-      throw new Error('A team-bound token requires an agent id')
-    }
-    if (!agentTeamScope.teamId || !agentTeamScope.accessBinding) {
-      throw new Error('A team-bound token requires a complete team scope')
-    }
-    payload[AGENT_TEAM_ID_CLAIM] = agentTeamScope.teamId
-    payload[AGENT_TEAM_ACCESS_BINDING_CLAIM] = agentTeamScope.accessBinding
-  }
-
-  // If agentId is specified, generate a token *without* expiry (no expiresIn)
-  const signOptions: jwt.SignOptions = {
-    issuer: JWT_ISSUER,
-    audience: JWT_MCP_AUDIENCE,
-    ...(agentId ? {} : { expiresIn: expiresIn as any }),
-  }
-
-  return jwt.sign(payload as jwt.JwtPayload, JWT_SECRET, signOptions)
-}
-
-/**
- * Creates a JWT token for OAuth 2.1 access (MCP client authentication)
- *
- * @param firebaseUid Firebase user UID (used as 'sub')
- * @param userId Database user ID
- * @param email User email
- * @param clientId OAuth client registration bound to this credential
- * @param expiresIn Expiration in seconds (default: 90 days). Ignored when agentId is set (no JWT exp).
- * @param agentId Optional agent UUID; when set, token has no expiry.
- * @param agentTokenJti Current agent credential generation.
- * @param agentTeamScope Optional team grant carried by a team-bound agent.
- * @returns JWT token string
- */
-const MCP_OAUTH_TOKEN_EXPIRY = 90 * 24 * 60 * 60; // 90 days
-
-export function createOAuthToken(
-  firebaseUid: string,
-  userId: number,
-  email: string,
-  clientId: string,
-  expiresIn: number = MCP_OAUTH_TOKEN_EXPIRY,
-  agentId?: string | null,
-  agentTokenJti?: string | null,
-  agentTeamScope?: AgentTokenTeamScope
-): string {
-  if (!JWT_SECRET) {
-    throw new Error('JWT_SECRET not configured')
-  }
-  if (!clientId || clientId.length > 64) {
-    throw new Error('OAuth tokens require a valid client id')
-  }
-
-  const oauthIssuer = JWT_OAUTH_ISSUER
-  const oauthAudience = JWT_OAUTH_AUDIENCE
-
-  // Don't include 'iss' and 'aud' in payload - jwt.sign() will add them via options
-  const issuedAt = Date.now()
-  const payload: Record<string, unknown> = {
-    sub: firebaseUid,
-    userId: userId,
-    email: email,
-    [OAUTH_CLIENT_ID_CLAIM]: clientId,
-    jti: randomUUID(),
-    iat: Math.floor(issuedAt / 1000),
-    [MCP_TOKEN_ISSUED_AT_MS_CLAIM]: issuedAt,
-  }
-  if (agentId) {
-    if (!agentTokenJti) {
-      throw new Error('Agent OAuth tokens require the current agent token jti')
-    }
-    payload.agentId = agentId
-    // Every OAuth credential keeps a unique jti. A separate private claim ties
-    // it to the managed agent's revocable generation.
-    payload[AGENT_TOKEN_GENERATION_CLAIM] = agentTokenJti
-  }
-  if (agentTeamScope) {
-    if (!agentId) {
-      throw new Error('A team-bound OAuth token requires an agent id')
-    }
-    if (!agentTeamScope.teamId || !agentTeamScope.accessBinding) {
-      throw new Error('A team-bound OAuth token requires a complete team scope')
-    }
-    payload[AGENT_TEAM_ID_CLAIM] = agentTeamScope.teamId
-    payload[AGENT_TEAM_ACCESS_BINDING_CLAIM] = agentTeamScope.accessBinding
-  }
-
-  return jwt.sign(payload as jwt.JwtPayload, JWT_SECRET, {
-    issuer: oauthIssuer,
-    audience: oauthAudience,
-    ...(agentId ? {} : { expiresIn }),
-  } as jwt.SignOptions)
-}
-
-/**
- * Revokes a specific token by its jti
- * 
- * @param jti JWT ID of the token to revoke
- * @param userId User ID (for validation)
- * @param expiresAt Token expiration time (for cleanup)
- */
-export async function revokeTokenByJti(jti: string, userId: number, expiresAt: Date): Promise<void> {
-  try {
-    await prisma.revokedToken.upsert({
-      where: { jti },
-      create: {
-        jti,
-        user_id: userId,
-        revoked_at: new Date(),
-        expires_at: expiresAt,
-      },
-      update: {
-        revoked_at: new Date(), // Update if already exists
-      },
-    })
-  } catch (error) {
-    console.error('[MCP Auth] Error revoking token:', error)
-    throw error
-  }
-}
-
-export async function claimTokenRotation(
-  jti: string,
-  userId: number,
-  expiresAt: Date
-): Promise<boolean> {
-  try {
-    await prisma.revokedToken.create({
-      data: {
-        jti,
-        user_id: userId,
-        revoked_at: new Date(),
-        expires_at: expiresAt,
-      },
-    })
-    return true
-  } catch (error) {
-    if (
-      error instanceof Prisma.PrismaClientKnownRequestError &&
-      error.code === 'P2002'
-    ) {
-      return false
-    }
-    throw error
-  }
-}
-
-/**
- * Revokes a user-owned token identifier supplied through an administrative
- * surface. Namespacing prevents a caller who learns another account's jti
- * from reserving or revoking that account's token globally.
- */
-export async function revokeOwnedTokenByJti(
-  jti: string,
-  userId: number,
-  expiresAt: Date
-): Promise<void> {
-  return revokeTokenByJti(
-    scopedTokenRevocationJti(userId, jti),
-    userId,
-    expiresAt
-  )
-}
-
-export type McpAuthFailureLookup = {
-  user: {
-    findUnique: (args: unknown) => Promise<{ id: number; mcpTokensRevokedAt: Date | null } | null>
-    findFirst: (args: unknown) => Promise<{ id: number; mcpTokensRevokedAt: Date | null } | null>
-  }
-  oAuthClient: {
-    findUnique: (args: unknown) => Promise<{ client_id: string } | null>
-  }
-  revokedToken: {
-    findFirst: (args: unknown) => Promise<{ jti: string } | null>
-  }
-  agent: {
-    findFirst: (
-      args: unknown
-    ) => Promise<{ id: string; mcpTokenJti: string | null; revokedAt: Date | null } | null>
-  }
-  /** Management-key verification, injectable because it is not a table read. */
-  verifyManagementKey?: (token: string) => Promise<McpAuthContext | null>
-}
-
-/**
- * Names why a request that already failed authentication was rejected.
- *
- * `validateMcpAuth` collapses every rejection to `null`, so the MCP routes
- * answered a revoked token with the same "Invalid or missing authentication
- * token" as a typo. A CLI session whose saved token had been revoked could not
- * tell a dead session from a bad request, and the recovery step differs
- * (HTPR-4814). The clients already parse this `reason`; the server just never
- * sent a useful one.
- *
- * Runs only on the failure path, so the extra lookup never touches a served
- * request. It classifies; it never grants, so it cannot widen access.
- */
-export async function classifyMcpAuthFailure(
-  request: NextRequest,
-  db: McpAuthFailureLookup = prisma as unknown as McpAuthFailureLookup
-): Promise<McpUnauthorizedReason> {
-  const token = extractBearerToken(request.headers.get('Authorization'))
-  if (!token) return 'missing_token'
-
-  // A data key is opaque: there is nothing to decode, and naming why a hash
-  // missed would answer "does this key exist".
-  if (token.startsWith('htk_')) return 'invalid_token'
-
-  // A management key that verifies but carries no data permission is a
-  // different recovery step: widen the key's scope rather than replace it.
-  // Saying so tells the holder of a working key nothing it does not know.
-  if (isManagementKeyToken(token)) {
-    const verifyManagementKey = db.verifyManagementKey ?? validateManagementApiKey
-    const managementCtx = await verifyManagementKey(token)
-    if (!managementCtx) return 'invalid_token'
-    return hasDataPermission(managementCtx.management?.permissions ?? {})
-      ? 'invalid_token'
-      : 'insufficient_scope'
-  }
-
-  // Revocation state is disclosed only after signature verification, the same
-  // rule the token refresh route follows, so a forged token cannot probe
-  // whether some jti has been revoked.
-  const verified = verifyMcpJwtToken(token)
-  if (!verified) {
-    // Verification also fails on expiry. `exp` is inside the token the caller
-    // already holds, so naming expiry discloses nothing new, and it is the one
-    // rejection the caller can fix without help.
-    const decoded = jwt.decode(token) as jwt.JwtPayload | null
-    const expiresAtMs = typeof decoded?.exp === 'number' ? decoded.exp * 1000 : null
-    return expiresAtMs !== null && expiresAtMs <= Date.now()
-      ? 'token_expired'
-      : 'invalid_token'
-  }
-
-  try {
-    const userId = typeof verified.userId === 'number' ? verified.userId : null
-    const email = typeof verified.sub === 'string' ? verified.sub.toLowerCase() : null
-    const select = { id: true, mcpTokensRevokedAt: true }
-    let user: { id: number; mcpTokensRevokedAt: Date | null } | null = null
-    if (userId) {
-      user = await db.user.findUnique({ where: { id: userId }, select })
-    } else if (email) {
-      user = await db.user.findFirst({ where: { email }, select })
-    }
-    if (!user) return 'invalid_token'
-
-    const isOAuthAccessToken = isOAuthAccessTokenPayload(verified)
-    const oauthClientId = isOAuthAccessToken
-      ? oauthClientIdFromPayload(verified)
-      : undefined
-    if (oauthClientId === null) return 'invalid_token'
-
-    const revocationJtis = tokenRevocationJtis(user.id, token, verified)
-    if (isOAuthAccessToken && oauthClientId === undefined) {
-      revocationJtis.push(oauthLegacyRevocationJti(user.id))
-    }
-    const revoked = await db.revokedToken.findFirst({
-      where: {
-        user_id: user.id,
-        jti: { in: revocationJtis },
-      },
-      select: { jti: true },
-    })
-    if (revoked) return 'token_revoked'
-
-    if (oauthClientId !== undefined) {
-      const client = await db.oAuthClient.findUnique({
-        where: { client_id: oauthClientId },
-        select: { client_id: true },
-      })
-      if (!client) return 'token_revoked'
-    }
-
-    // "Revoke every token" is recorded on the user, not per token, so a token
-    // minted before that moment is revoked even with no row of its own.
-    if (user.mcpTokensRevokedAt) {
-      // Older tokens carry only a second-resolution `iat`; newer ones also
-      // carry the millisecond claim, which is the more precise of the two.
-      const issuedAtMs = verified[MCP_TOKEN_ISSUED_AT_MS_CLAIM]
-      let issuedAt: Date | null = null
-      if (typeof issuedAtMs === 'number' && Number.isFinite(issuedAtMs)) {
-        issuedAt = new Date(issuedAtMs)
-      } else if (verified.iat) {
-        issuedAt = new Date(verified.iat * 1000)
-      }
-      if (issuedAt && issuedAt < user.mcpTokensRevokedAt) return 'token_revoked'
-    }
-
-    // A managed agent's token never expires; it dies when the agent is revoked
-    // or when a newer token supersedes it. Those need different recoveries
-    // (get a new agent, versus reconnect with the current token), so neither
-    // may come back as a bad request.
-    const agentId = verified.agentId
-    if (typeof agentId === 'string' && agentId.length > 0) {
-      const agent = await db.agent.findFirst({
-        where: { id: agentId, userId: user.id },
-        select: { id: true, mcpTokenJti: true, revokedAt: true },
-      })
-      // An agent belonging to somebody else must not be distinguishable from
-      // one that does not exist.
-      if (!agent) return 'invalid_token'
-      if (agent.revokedAt || !agent.mcpTokenJti) return 'agent_revoked'
-
-      const storedGeneration = storedAgentTokenGeneration(agent)
-      if (
-        !storedGeneration ||
-        presentedAgentTokenGeneration(verified) !== storedGeneration
-      ) {
-        return 'agent_token_superseded'
-      }
-    }
-
-    return 'invalid_token'
-  } catch (error) {
-    console.error('[MCP Auth] Failed to classify rejection:', error)
-    return 'invalid_token'
-  }
-}
-
-/**
- * The 401 an MCP route should return once `validateMcpAuth` has said no.
- *
- * Keeps the `error` string every existing client already matches on and adds
- * the accurate `reason`, so nothing that reads the old field changes.
- */
-export async function mcpUnauthorizedResponse(
-  request: NextRequest,
-  db?: McpAuthFailureLookup
-) {
-  return createUnauthorizedResponse(
-    undefined,
-    await classifyMcpAuthFailure(request, db)
-  )
-}
+export * from "./mcpAuthErrors";
+export * from "./session";
+export * from "./verifyJwt";

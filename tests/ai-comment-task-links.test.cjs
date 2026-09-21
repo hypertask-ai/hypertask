@@ -2,12 +2,13 @@ const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const path = require("node:path");
 const test = require("node:test");
+const { readChatStreamSource } = require("./helpers/read-chat-stream-source.cjs");
 
 const routePath = path.join(
   process.cwd(),
   "src/app/api/ai/chat/stream/route.ts"
 );
-const source = fs.readFileSync(routePath, "utf8");
+const source = readChatStreamSource();
 
 function sourceBetween(startMarker, endMarker) {
   const start = source.indexOf(startMarker);
@@ -29,7 +30,7 @@ test("AI chat validates resolved task links before writing comments", () => {
   assert.match(rule, /validate.*before/i);
   assert.match(rule, /task detail, Inbox, and every other/i);
 
-  const prompt = sourceBetween("const AGENT_SYSTEM_PROMPT", "const statusSchema");
+  const prompt = sourceBetween("const AGENT_SYSTEM_PROMPT", "const writeToolNames");
   assert.match(prompt, /COMMENT_TASK_LINK_RULE/);
   assert.doesNotMatch(
     prompt,

@@ -117,7 +117,7 @@ test("HyperAI verifies the session and runs a cancellable multi-step tool loop",
   assert.match(route, /await isUneditedHyperAiComment\(/);
   assert.match(route, /sourceMessageImmutable,/);
   const createComment = read(
-    "src/utils/controllers/comments/createCommentService.ts",
+    "src/utils/controllers/comments/commentCreation.ts",
   );
   assert.match(createComment, /await recordHyperAiCommentOrigin\(/);
   assert.match(createComment, /agentId: agentId \?\? null/);

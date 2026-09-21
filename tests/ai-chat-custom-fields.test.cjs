@@ -7,6 +7,7 @@ const test = require("node:test");
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const path = require("node:path");
+const { readChatStreamSource } = require("./helpers/read-chat-stream-source.cjs");
 
 const ROUTE = path.resolve(
   __dirname,
@@ -21,7 +22,7 @@ function toolBody(source, toolName) {
 }
 
 test("hypertask_list_custom_fields scopes to boards the user can access", () => {
-  const source = fs.readFileSync(ROUTE, "utf8");
+  const source = readChatStreamSource();
   const body = toolBody(source, "hypertask_list_custom_fields");
 
   // Same owner-OR-member predicate as every sibling project-scoped tool
@@ -39,7 +40,7 @@ test("hypertask_list_custom_fields scopes to boards the user can access", () => 
 });
 
 test("hypertask_set_custom_field_value resolves task refs and reuses the shared controllers", () => {
-  const source = fs.readFileSync(ROUTE, "utf8");
+  const source = readChatStreamSource();
   const body = toolBody(source, "hypertask_set_custom_field_value");
 
   // Task ref resolution (task_id/ticket_number/unique_index+project_id) goes
@@ -73,7 +74,7 @@ test("hypertask_set_custom_field_value resolves task refs and reuses the shared 
 });
 
 test("hypertask_set_custom_field_value is registered as a write tool", () => {
-  const source = fs.readFileSync(ROUTE, "utf8");
+  const source = readChatStreamSource();
   const writeToolNamesStart = source.indexOf("const writeToolNames = new Set([");
   const writeToolNamesEnd = source.indexOf("]);", writeToolNamesStart);
   const writeToolNames = source.slice(writeToolNamesStart, writeToolNamesEnd);

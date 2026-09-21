@@ -11,7 +11,7 @@ const test = require("node:test");
 // pending check, so the mark - and the app_task_detail_readiness event -
 // still fires instead of hitting the 30s usable_state_timeout.
 const source = fs.readFileSync(
-  path.join(__dirname, "../src/app/detail/[...slug]/TaskDetailComp.tsx"),
+  path.join(__dirname, "../src/lib/taskDetail/TaskDetailController.tsx"),
   "utf8",
 );
 
@@ -26,10 +26,10 @@ test("cleanup always clears the fallback poll", () => {
   );
   assert.ok(readinessEffectMatch, "readiness effect body not found");
   const cleanupMatch = readinessEffectMatch[0].match(
-    /const cleanup = \(\) => \{[\s\S]*?\n {4}\};/,
+    /const cleanup = \(\) => \{[\s\S]*?\n\s*\};/,
   );
   assert.ok(cleanupMatch, "cleanup() body not found");
-  assert.match(cleanupMatch[0], /if \(poll\) clearInterval\(poll\);/);
+  assert.match(cleanupMatch[0], /if \(poll\)\s*clearInterval\(poll\);/);
 });
 
 test("the poll is armed before the effect returns cleanup", () => {

@@ -1,0 +1,1143 @@
+import { CreateCommentParams, createNotificationForComment, resolveCommentRecipientUserIds, sendCommentEmails } from "./commentNotificationFanout";
+import prisma from "@/lib/prisma";
+import idsToSendNotificationsTo from "@/utils/controllers/notifications/IdsToSendNotificationsTo";
+import { broadcastBoardChange, broadcastInboxChange, broadcastTaskComment } from "@/lib/realtime/server";
+import scheduleTaskSummaryGeneration from "@/pages/api/queues/FAST/generateSummary";
+import { updateTaskSingle } from "@/utils/controllers/tasks/single";
+import { upsertCommentToTurbopuffer } from "@/utils/controllers/turbopuffer/turbopufferHelper";
+import { getMentionedUserIdsFromCommentText, getMentionedAgentIdsFromCommentText, processMentionsFromCommentText } from "@/utils/controllers/comments/processMentions";
+import { extractTaskReferencesFromCommentText } from "@/utils/controllers/comments/extractTaskReferences";
+import { addRelatedTasks } from "@/utils/controllers/tasks/addRelatedTasks";
+import { sendDataOnlyFcm } from "@/utils/controllers/FCM";
+import scheduleCommentSummaryGeneration from "@/pages/api/queues/FAST/generateCommentSummary";
+import { taskWriteAccessWhere } from "@/utils/controllers/projects/getAllIncludes";
+import { recordHyperAiCommentOrigin } from "@/lib/ai/hyperAiConfirmation";
+import { persistAgentRunTriggerWebhooks, persistAgentTaskRunPromptWebhooks, persistAgentWebhookEvent, persistAgentWebhookEvents, publishAgentWebhookDeliveries } from "@/lib/agentWebhooks/outbox";
+import { persistBoardWebhookEvents, publishBoardWebhookDeliveries } from "@/lib/mcp/webhooks/outbox";
+import type { WebhookDelivery } from "@/lib/mcp/webhooks/events";
+import { generalConfig } from "@/lib/configs/general.config";
+import { normalizeBlockHtml } from "@/lib/mcp/normalizeBlockHtml";
+import { isFeatureEnabled } from "@/lib/flags";
+import { HTPR_6561_DESCRIPTION_STRUCTURE_FLAG } from "@/lib/flags/keys";
+import { normalizeRichTextStructure } from "@/utils/helperFunctions/normalizeRichTextStructure";
+import { buildAgentInvocationSelector, claimPendingAgentInvocation, DirectReplyAlreadyHandledError } from "@/utils/controllers/comments/agentInvocationCorrelation";
+import { claimInboundEmailProcessing, completeInboundEmailProcessing, findInboundEmailReceipt, recordInboundEmailComment, releaseInboundEmailProcessing, requireInboundEmailComment } from "@/utils/controllers/comments/inboundEmailReceipt";
+import { persistAgentRunActivity, persistAgentRunSelection } from "@/lib/agentRuns/persistence";
+import { AgentRunActivityInProgressError, serializeAgentRun } from "@/lib/agentRuns/model";
+
+export const INBOUND_PROCESSING_LEASE_MS = 5 * 60_000;
+
+export const AGENT_RUN_COMMENT_NOTIFICATION_LEASE_MS = 5 * 60_000;
+
+export async function processTaskReferencesFromCommentText(
+  text: string,
+  currentTaskId: number,
+  userId: number,
+): Promise<void> {
+  const refs = extractTaskReferencesFromCommentText(text);
+  if (refs.length === 0) return;
+
+  const result = await addRelatedTasks(
+    {
+      relatedTasks: refs,
+      currentTaskId,
+    },
+    userId,
+  );
+
+  if (result.status !== 200) {
+    console.warn(
+      "[createCommentService] addRelatedTasks returned status:",
+      result.status,
+    );
+  }
+}
+
+export async function loadAgentRunReplayComment(
+  comments: Pick<typeof prisma.comment, "findFirst">,
+  input: {
+    commentId: number;
+    activityId: string;
+    taskId: number;
+    creatorId: number;
+    agentId?: string | null;
+    agentWebhookDeliveryIds: string[];
+    boardWebhookDeliveryIds: string[];
+  },
+) {
+  const comment = await comments.findFirst({
+    where: {
+      id: input.commentId,
+      taskId: input.taskId,
+      creatorId: input.creatorId,
+      agentId: input.agentId ?? null,
+      OR: [
+        { agentRunResponseActivity: { is: { id: input.activityId } } },
+        { agentRunSelectionActivity: { is: { id: input.activityId } } },
+      ],
+    },
+  });
+  if (!comment) throw new Error("Run activity comment not found");
+  return {
+    comment,
+    webhookDeliveryIds: input.agentWebhookDeliveryIds,
+    boardWebhookDeliveryIds: input.boardWebhookDeliveryIds,
+    resolvedDirectReplyUserId: null,
+    inboundCompleted: false,
+    inboundProcessingStartedAt: null,
+  };
+}
+
+export async function createCommentService(params: CreateCommentParams) {
+  const {
+    text: inputText,
+    creatorId,
+    taskId,
+    ownerId,
+    currentUser,
+    agentId,
+    directReplyUserId,
+    directReplySourceCommentId,
+    directReplyInvocationId,
+    accessUserId,
+    processTaskReferences = true,
+    trustedCaller = false,
+    inboundEmailId,
+    agentRunActivity,
+    agentRunSelection,
+    agentRunReplayComment,
+    extraBoardWebhookEvents = [],
+  } = params;
+  if (agentRunActivity && agentRunSelection) {
+    throw new Error("A comment cannot create and select an agent activity together");
+  }
+  if (agentRunReplayComment && (agentRunActivity || agentRunSelection)) {
+    throw new Error("A run comment replay cannot persist an activity");
+  }
+  if (
+    agentRunActivity &&
+    (agentRunActivity.context.taskId !== taskId ||
+      agentRunActivity.agentId !== agentId)
+  ) {
+    throw new Error("Agent activity does not match this task comment");
+  }
+  if (
+    agentRunSelection &&
+    (agentRunSelection.context.taskId !== taskId ||
+      agentRunSelection.selectedById !== Number(creatorId))
+  ) {
+    throw new Error("Agent selection does not match this task comment");
+  }
+  const normalizePlainText = await isFeatureEnabled(
+    HTPR_6561_DESCRIPTION_STRUCTURE_FLAG,
+    accessUserId ?? currentUser.id
+  );
+  const text = normalizePlainText
+    ? normalizeBlockHtml(inputText)
+    : normalizeRichTextStructure(inputText);
+
+  const task = await prisma.task.findFirst({
+    where: {
+      id: taskId,
+      ...(trustedCaller
+        ? {}
+        : {
+            project: taskWriteAccessWhere(
+              accessUserId ?? currentUser.id,
+              agentId,
+            ),
+          }),
+    },
+    include: {
+      project: {
+        include: {
+          team: true,
+          owner: { include: { devices: true } },
+        },
+      },
+    },
+  });
+
+  if (!task) {
+    throw new Error("Task not found or access denied");
+  }
+
+  const existingInboundReceipt = inboundEmailId
+    ? await findInboundEmailReceipt(prisma, inboundEmailId, taskId)
+    : null;
+  if (existingInboundReceipt) {
+    const existingComment = requireInboundEmailComment(existingInboundReceipt);
+    if (existingInboundReceipt.completedAt) return existingComment;
+  }
+
+  // HTPR-4084: idempotency guard. Several clients can fire the same create twice a
+  // second or two apart (task-detail composer virtualizer remount, network retry,
+  // Enter double-fire), landing two identical rows. PR #1396's client-side guard only
+  // covered one path. This is the single service every path routes through, so dedupe
+  // here and no client can double-post. On a hit, return the first comment: the second
+  // call succeeds with no new row and no duplicate notifications/FCM/summary.
+  // ponytail: read-check window, not a DB unique index. Catches the observed sequential
+  // double-fire (~1.7s apart); a truly simultaneous race could still slip two rows past
+  // it. Upgrade path if that ever shows up: a @@unique on (taskId, creatorId, text hash).
+  const DEDUP_WINDOW_MS = 10_000;
+  // Explicit agent answers use the source invocation as their idempotency key.
+  // Text dedupe would collapse two distinct requests both answered with "Done".
+  const invocationSelector = buildAgentInvocationSelector({
+    sourceCommentId: directReplySourceCommentId,
+    invocationId: directReplyInvocationId,
+  });
+  const hasInvocationCorrelation = invocationSelector !== null;
+  const handledInvocation =
+    agentId && invocationSelector
+      ? await prisma.notification.findFirst({
+          where: {
+            taskId,
+            agentId,
+            type: "Mentioned",
+            ...invocationSelector,
+            agentReplyCommentId: { not: null },
+          },
+          select: { agentReplyCommentId: true },
+        })
+      : null;
+  if (handledInvocation?.agentReplyCommentId != null) {
+    return prisma.comment.findUniqueOrThrow({
+      where: { id: handledInvocation.agentReplyCommentId },
+    });
+  }
+  const duplicate =
+    !hasInvocationCorrelation &&
+    !inboundEmailId &&
+    !agentRunActivity &&
+    !agentRunSelection &&
+    !agentRunReplayComment
+      ? await prisma.comment.findFirst({
+          where: {
+            taskId,
+            creatorId,
+            agentId: agentId ?? null,
+            text,
+            createdAt: { gte: new Date(Date.now() - DEDUP_WINDOW_MS) },
+          },
+          orderBy: { createdAt: "desc" },
+        })
+      : null;
+  if (duplicate) {
+    return duplicate;
+  }
+
+  // A replay must resume the original comment's unfinished work without
+  // updating the task a second time.
+  if (
+    !existingInboundReceipt &&
+    !agentRunActivity &&
+    !agentRunSelection &&
+    !agentRunReplayComment
+  ) {
+    // Access was established above before the duplicate lookup or any write.
+    await updateTaskSingle(
+      { id: task.id, updatedAt: new Date() },
+      currentUser as any,
+      agentId,
+      { trustedCaller: true },
+    );
+  }
+
+  const creatorIdNum = Number(creatorId);
+  const hyperAiId = parseInt(
+    process.env.NEXT_PUBLIC_HYPERAI_ID || String(generalConfig.hyperAiId),
+    10,
+  );
+
+  const mentionedAgentIds = getMentionedAgentIdsFromCommentText(text);
+  let transactionResult;
+  try {
+    transactionResult = await prisma.$transaction(async (tx) => {
+      if (agentRunReplayComment) {
+        return loadAgentRunReplayComment(tx.comment, {
+          commentId: agentRunReplayComment.id,
+          activityId: agentRunReplayComment.activityId,
+          taskId,
+          creatorId,
+          agentId,
+          agentWebhookDeliveryIds:
+            agentRunReplayComment.agentWebhookDeliveryIds,
+          boardWebhookDeliveryIds:
+            agentRunReplayComment.boardWebhookDeliveryIds,
+        });
+      }
+      const lockedTask = await tx.$queryRaw<Array<{ id: number }>>`
+        SELECT "id"
+        FROM "Task"
+        WHERE "id" = ${taskId}
+        FOR UPDATE
+      `;
+      if (lockedTask.length === 0) {
+        throw new Error("Task not found or access denied");
+      }
+      const currentTask = await tx.task.findFirst({
+        where: {
+          id: taskId,
+          ...(trustedCaller
+            ? {}
+            : {
+                project: taskWriteAccessWhere(
+                  accessUserId ?? currentUser.id,
+                  agentId,
+                ),
+              }),
+        },
+        select: {
+          id: true,
+          ticketNumber: true,
+          projectId: true,
+          title: true,
+          updatedByUserIds: true,
+        },
+      });
+      if (!currentTask) {
+        throw new Error("Task not found or access denied");
+      }
+      if (inboundEmailId) {
+        const receipt = await findInboundEmailReceipt(
+          tx,
+          inboundEmailId,
+          taskId,
+        );
+        if (receipt) {
+          const receiptComment = requireInboundEmailComment(receipt);
+          if (receipt.completedAt) {
+            return {
+              comment: receiptComment,
+              webhookDeliveryIds: [],
+              boardWebhookDeliveryIds: [],
+              resolvedDirectReplyUserId: null,
+              inboundCompleted: true,
+              inboundProcessingStartedAt: null,
+            };
+          }
+          const processingStartedAt = new Date();
+          await claimInboundEmailProcessing(
+            tx,
+            inboundEmailId,
+            receiptComment.id,
+            processingStartedAt,
+            new Date(
+              processingStartedAt.getTime() - INBOUND_PROCESSING_LEASE_MS,
+            ),
+          );
+          return {
+            comment: receiptComment,
+            webhookDeliveryIds: [],
+            boardWebhookDeliveryIds: [],
+            resolvedDirectReplyUserId: null,
+            inboundCompleted: false,
+            inboundProcessingStartedAt: processingStartedAt,
+          };
+        }
+      }
+      if (agentRunActivity) {
+        await persistAgentRunActivity(tx, agentRunActivity);
+      }
+      const selectedRun = agentRunSelection
+        ? await persistAgentRunSelection(tx, agentRunSelection)
+        : null;
+      const actingAgentName = agentId
+        ? (
+            await tx.agent.findUnique({
+              where: { id: agentId },
+              select: { displayName: true },
+            })
+          )?.displayName ?? null
+        : null;
+      const comment = await tx.comment.create({
+        data: {
+          text,
+          creatorId,
+          taskId,
+          agentId,
+          ...(actingAgentName ? { agentDisplayName: actingAgentName } : {}),
+        },
+      });
+      let inboundProcessingStartedAt: Date | null = null;
+      if (inboundEmailId) {
+        inboundProcessingStartedAt = new Date();
+        await recordInboundEmailComment(
+          tx,
+          inboundEmailId,
+          taskId,
+          comment.id,
+          inboundProcessingStartedAt,
+        );
+      }
+      if (inboundEmailId || agentRunActivity || agentRunSelection) {
+        await tx.task.update({
+          where: { id: taskId },
+          data: {
+            totalComments: { increment: 1 },
+            lastCommentAt: new Date(),
+            ...(agentRunActivity || agentRunSelection
+              ? { updatedAt: new Date() }
+              : {}),
+            ...(creatorIdNum !== hyperAiId &&
+            !currentTask.updatedByUserIds.includes(creatorIdNum)
+              ? { updatedByUserIds: { push: creatorIdNum } }
+              : {}),
+          },
+        });
+      }
+      const resolvedDirectReplyUserId =
+        directReplyUserId ??
+        (agentId
+          ? await claimPendingAgentInvocation({
+              notifications: tx.notification,
+              taskId,
+              agentId,
+              replyCommentId: comment.id,
+              hyperAiId,
+              sourceCommentId: directReplySourceCommentId,
+              invocationId: directReplyInvocationId,
+            })
+          : null);
+      if (resolvedDirectReplyUserId != null) {
+        // A direct answer wakes a snoozed task and persists its Important row in
+        // the same transaction as the reply/claim. A failed write rolls all three
+        // back, so retries cannot lose the notification behind comment dedupe.
+        const awakenedReminders = await tx.reminder.updateMany({
+          where: {
+            userId: resolvedDirectReplyUserId,
+            taskId,
+            projectId: currentTask.projectId,
+            status: "Normal",
+          },
+          data: { status: "Archive", updatedAt: new Date() },
+        });
+        await tx.notification.create({
+          data: {
+            type: "Mentioned",
+            directReply: true,
+            commentId: comment.id,
+            userId: resolvedDirectReplyUserId,
+            taskId,
+            projectId: currentTask.projectId,
+            fromUserId: creatorId,
+            returnedFromReminders: awakenedReminders.count > 0,
+            ...(agentId ? { fromAgentId: agentId } : {}),
+          },
+        });
+      }
+      let actorDisplayName = currentUser.displayName?.trim() || "";
+      if (agentId) {
+        const actorAgent = await tx.agent.findUnique({
+          where: { id: agentId },
+          select: { displayName: true },
+        });
+        actorDisplayName = actorAgent?.displayName?.trim() || actorDisplayName;
+      } else if (!actorDisplayName) {
+        const actorUser = await tx.user.findUnique({
+          where: { id: creatorId },
+          select: { displayName: true },
+        });
+        actorDisplayName = actorUser?.displayName?.trim() || "Hypertask user";
+      }
+
+      const webhookDeliveryIds: Array<string | null> = [];
+      // Board-wide subscribers get comment.created in the same transaction, so
+      // a comment that commits always has its outbox row (HTPR-4530).
+      // Use only this locked, current task snapshot for webhook scope. The
+      // pre-transaction task read may belong to the task's previous board.
+      const commentCreatedEvent: WebhookDelivery = {
+        event: "comment.created",
+        data: {
+          task: {
+            id: taskId,
+            ticketNumber: currentTask.ticketNumber,
+            projectId: currentTask.projectId,
+            title: currentTask.title,
+          },
+          comment: {
+            id: comment.id,
+            text: comment.text,
+            createdAt: comment.createdAt.toISOString(),
+          },
+          actor: { userId: creatorIdNum, agentId: agentId ?? null },
+        },
+      };
+      const boardEvents: WebhookDelivery[] = [
+        commentCreatedEvent,
+        ...extraBoardWebhookEvents,
+      ];
+      if (mentionedAgentIds.length > 0) {
+        boardEvents.push({
+          event: "comment.mention",
+          data: {
+            ...commentCreatedEvent.data,
+            mentions: { agentIds: [...new Set(mentionedAgentIds)] },
+          },
+        });
+      }
+      const boardWebhookDeliveryIds = await persistBoardWebhookEvents(
+        tx,
+        currentTask.projectId,
+        boardEvents,
+      );
+      const assignedAgentIds = (
+        await tx.assignees.findMany({
+          where: { taskId, agentId: { not: null } },
+          select: { agentId: true },
+        })
+      )
+        .map(({ agentId: assignedAgentId }) => assignedAgentId)
+        .filter((assignedAgentId): assignedAgentId is string =>
+          Boolean(assignedAgentId),
+        );
+      // Target assigned agents directly. This is not a board broadcast, so an
+      // assigned agent receives one comment.created delivery per comment.
+      webhookDeliveryIds.push(
+        ...(await persistAgentWebhookEvents(tx, {
+          event: "comment.created",
+          agentIds: assignedAgentIds,
+          projectId: currentTask.projectId,
+          taskId,
+          ticketNumber: currentTask.ticketNumber,
+          taskTitle: currentTask.title,
+          commentId: comment.id,
+          commentHtml: comment.text,
+          actor: {
+            userId: creatorId,
+            agentId: agentId ?? null,
+            displayName: actorDisplayName || "Hypertask user",
+          },
+          broadcast: false,
+        })),
+      );
+      const agentWebhookActor = {
+        userId: creatorId,
+        agentId: agentId ?? null,
+        displayName: actorDisplayName || "Hypertask user",
+      };
+      // Only human comments continue active runs. Agent-authored replies must
+      // not wake the same agent and create a webhook feedback loop.
+      if (!agentId) {
+        webhookDeliveryIds.push(
+          ...(await persistAgentTaskRunPromptWebhooks(tx, {
+            projectId: currentTask.projectId,
+            taskId,
+            ticketNumber: currentTask.ticketNumber,
+            taskTitle: currentTask.title,
+            commentId: comment.id,
+            commentHtml: text,
+            actor: agentWebhookActor,
+            excludeAgentIds: [
+              ...mentionedAgentIds,
+              ...(agentRunSelection ? [agentRunSelection.agentId] : []),
+            ],
+          })),
+        );
+      }
+      if (agentRunSelection && selectedRun) {
+        const selectionDeliveryId = await persistAgentWebhookEvent(tx, {
+          event: "run.prompted",
+          agentId: agentRunSelection.agentId,
+          projectId: currentTask.projectId,
+          taskId,
+          ticketNumber: currentTask.ticketNumber,
+          taskTitle: currentTask.title,
+          commentId: comment.id,
+          commentHtml: text,
+          actor: agentWebhookActor,
+          runId: selectedRun.id,
+          run: serializeAgentRun(selectedRun),
+          prompt: text,
+          signal: "select",
+          selection: {
+            activityId: agentRunSelection.activityId,
+            value: agentRunSelection.option.value,
+            label: agentRunSelection.option.label,
+          },
+        });
+        if (selectionDeliveryId) webhookDeliveryIds.push(selectionDeliveryId);
+      }
+      for (const mentionedAgentId of mentionedAgentIds) {
+        if (
+          mentionedAgentId === agentId ||
+          mentionedAgentId === agentRunSelection?.agentId
+        ) {
+          continue;
+        }
+        webhookDeliveryIds.push(
+          ...(await persistAgentRunTriggerWebhooks(tx, {
+            event: "comment.mention",
+            agentId: mentionedAgentId,
+            projectId: currentTask.projectId,
+            taskId,
+            ticketNumber: currentTask.ticketNumber,
+            taskTitle: currentTask.title,
+            commentId: comment.id,
+            commentHtml: text,
+            actor: agentWebhookActor,
+          })),
+        );
+      }
+      const commentActivityId =
+        agentRunActivity?.id ?? agentRunSelection?.activityId;
+      if (commentActivityId) {
+        await tx.agentRunActivity.update({
+          where: { id: commentActivityId },
+          data: {
+            ...(agentRunActivity
+              ? { responseCommentId: comment.id }
+              : { selectionCommentId: comment.id }),
+            commentAgentWebhookDeliveryIds: webhookDeliveryIds.filter(
+              (id): id is string => Boolean(id),
+            ),
+            commentBoardWebhookDeliveryIds: boardWebhookDeliveryIds,
+          },
+        });
+      }
+      return {
+        comment,
+        webhookDeliveryIds,
+        boardWebhookDeliveryIds,
+        resolvedDirectReplyUserId,
+        inboundCompleted: false,
+        inboundProcessingStartedAt,
+      };
+    });
+  } catch (error) {
+    if (error instanceof DirectReplyAlreadyHandledError) {
+      return prisma.comment.findUniqueOrThrow({
+        where: { id: error.commentId },
+      });
+    }
+    throw error;
+  }
+  const {
+    comment,
+    webhookDeliveryIds,
+    boardWebhookDeliveryIds,
+    resolvedDirectReplyUserId,
+    inboundCompleted,
+    inboundProcessingStartedAt,
+  } = transactionResult;
+  if (inboundCompleted) return comment;
+  const committedText = comment.text;
+  const isAgentRunComment = Boolean(
+    agentRunActivity || agentRunSelection || agentRunReplayComment,
+  );
+  if (agentRunReplayComment?.notificationsCompletedAt) {
+    await publishAgentWebhookDeliveries(webhookDeliveryIds);
+    await publishBoardWebhookDeliveries(boardWebhookDeliveryIds);
+    return comment;
+  }
+  let agentRunCommentNotificationClaim: {
+    activityId: string;
+    processingAt: Date;
+  } | null = null;
+  let agentRunCommentNotificationState: {
+    commentNotificationDeliveryKeys: string[];
+    commentMentionsAttemptedAt: Date | null;
+    commentFcmAttemptedAt: Date | null;
+    commentEmailsAttemptedAt: Date | null;
+  } | null = null;
+  try {
+    if (isAgentRunComment) {
+      const activityId =
+        agentRunActivity?.id ??
+        agentRunSelection?.activityId ??
+        agentRunReplayComment?.activityId;
+      if (!activityId) {
+        throw new Error("Run activity comment is missing its activity");
+      }
+      const processingAt = new Date();
+      const staleBefore = new Date(
+        processingAt.getTime() - AGENT_RUN_COMMENT_NOTIFICATION_LEASE_MS,
+      );
+      const claimed = await prisma.agentRunActivity.updateMany({
+        where: {
+          id: activityId,
+          commentNotificationsCompletedAt: null,
+          OR: [
+            { commentNotificationsProcessingAt: null },
+            { commentNotificationsProcessingAt: { lte: staleBefore } },
+          ],
+        },
+        data: { commentNotificationsProcessingAt: processingAt },
+      });
+      if (claimed.count === 0) {
+        const state = await prisma.agentRunActivity.findUnique({
+          where: { id: activityId },
+          select: { commentNotificationsCompletedAt: true },
+        });
+        if (state?.commentNotificationsCompletedAt) return comment;
+        if (state) {
+          throw new AgentRunActivityInProgressError(
+            "Run activity comment notifications are still processing",
+          );
+        }
+        throw new Error("Run activity comment was not found");
+      }
+      agentRunCommentNotificationClaim = { activityId, processingAt };
+      agentRunCommentNotificationState =
+        await prisma.agentRunActivity.findUniqueOrThrow({
+          where: { id: activityId },
+          select: {
+            commentNotificationDeliveryKeys: true,
+            commentMentionsAttemptedAt: true,
+            commentFcmAttemptedAt: true,
+            commentEmailsAttemptedAt: true,
+          },
+        });
+    }
+
+    const notificationDeliveryKeys = new Set(
+      agentRunCommentNotificationState?.commentNotificationDeliveryKeys ?? [],
+    );
+    const checkpointNotificationDelivery = async (key: string) => {
+      if (notificationDeliveryKeys.has(key)) return;
+      if (!agentRunCommentNotificationClaim) {
+        throw new Error("Run activity notification claim is missing");
+      }
+      const checkpointed = await prisma.agentRunActivity.updateMany({
+        where: {
+          id: agentRunCommentNotificationClaim.activityId,
+          commentNotificationsProcessingAt:
+            agentRunCommentNotificationClaim.processingAt,
+        },
+        data: { commentNotificationDeliveryKeys: { push: key } },
+      });
+      if (checkpointed.count === 0) {
+        throw new Error("Run activity notification delivery claim was lost");
+      }
+      notificationDeliveryKeys.add(key);
+    };
+    const renewNotificationClaim = async () => {
+      if (!agentRunCommentNotificationClaim) {
+        throw new Error("Run activity notification claim is missing");
+      }
+      const renewedAt = new Date(
+        Math.max(
+          Date.now(),
+          agentRunCommentNotificationClaim.processingAt.getTime() + 1,
+        ),
+      );
+      const renewed = await prisma.agentRunActivity.updateMany({
+        where: {
+          id: agentRunCommentNotificationClaim.activityId,
+          commentNotificationsCompletedAt: null,
+          commentNotificationsProcessingAt:
+            agentRunCommentNotificationClaim.processingAt,
+        },
+        data: { commentNotificationsProcessingAt: renewedAt },
+      });
+      if (renewed.count === 0) {
+        throw new Error("Run activity notification claim was lost");
+      }
+      agentRunCommentNotificationClaim.processingAt = renewedAt;
+    };
+
+    if (resolvedDirectReplyUserId != null) {
+      void broadcastInboxChange(resolvedDirectReplyUserId, {
+        originUserId: creatorId,
+      });
+    }
+    // Approval comments must be immutable creation events. This receipt lets
+    // HyperAI reject a comment that was edited into an approval phrase later.
+    await recordHyperAiCommentOrigin({
+      commentId: comment.id,
+      userId: creatorIdNum,
+      taskId,
+      agentId: agentId ?? null,
+      text: comment.text,
+      createdAt: comment.createdAt,
+    }).catch((error) =>
+      console.warn(
+        "[createCommentService] HyperAI comment receipt failed:",
+        error,
+      ),
+    );
+
+    const clearsWaitingOn = !agentId && task.waitingOnUserId === creatorIdNum;
+
+    await scheduleCommentSummaryGeneration({ commentId: comment.id }).catch(
+      (err) =>
+        console.warn(
+          "[createCommentService] comment summary schedule failed:",
+          err,
+        ),
+    );
+
+    // Keep totalComments in sync — avoids a COUNT join on every board load.
+    // creatorId is always set in this service (unlike activity comments).
+    if (
+      !inboundEmailId &&
+      !agentRunActivity &&
+      !agentRunSelection &&
+      !agentRunReplayComment
+    ) {
+      await prisma.task.update({
+        where: { id: taskId },
+        data: {
+          totalComments: { increment: 1 },
+          lastCommentAt: new Date(),
+          ...(creatorIdNum !== hyperAiId &&
+          !task.updatedByUserIds?.includes(creatorIdNum)
+            ? { updatedByUserIds: { push: creatorIdNum } }
+            : {}),
+        },
+      });
+    }
+    if (clearsWaitingOn) {
+      const cleared = await prisma.task.updateMany({
+        where: { id: taskId, waitingOnUserId: creatorIdNum },
+        data: {
+          waitingOnUserId: null,
+          waitingOnSetById: null,
+          waitingOnSetAt: null,
+        },
+      });
+      if (cleared.count > 0) {
+        void broadcastInboxChange(creatorIdNum, { originUserId: creatorIdNum });
+        void broadcastBoardChange(task.projectId, {
+          originUserId: creatorIdNum,
+        });
+      }
+    }
+
+    const searchUpsert = upsertCommentToTurbopuffer(comment.id);
+    if (inboundEmailId) {
+      await searchUpsert;
+    } else {
+      void searchUpsert.catch((error) =>
+        console.warn(
+          "[createCommentService] search upsert failed:",
+          error,
+        ),
+      );
+    }
+    const taskSummary = scheduleTaskSummaryGeneration({
+      taskId,
+      agentId: agentId ?? null,
+    });
+    if (inboundEmailId) {
+      await taskSummary;
+    } else {
+      void taskSummary.catch((error) =>
+        console.warn(
+          "[createCommentService] task summary schedule failed:",
+          error,
+        ),
+      );
+    }
+
+    const recipientUserIds = await resolveCommentRecipientUserIds(
+      task,
+      creatorId,
+      ownerId,
+      agentId ?? null,
+    );
+    if (resolvedDirectReplyUserId != null) {
+      recipientUserIds.push(resolvedDirectReplyUserId);
+    }
+    const mentionedUserIds = new Set(
+      getMentionedUserIdsFromCommentText(committedText),
+    );
+    const runMentionProcessing = () =>
+      processMentionsFromCommentText({
+        text: committedText,
+        commentId: comment.id,
+        taskId,
+        projectId: task.projectId,
+        mentionedBy: creatorIdNum,
+        fromAgentId: agentId ?? null,
+        failOnError: isAgentRunComment,
+        skipUserIds:
+          resolvedDirectReplyUserId === null
+            ? []
+            : [resolvedDirectReplyUserId],
+        ...(isAgentRunComment
+          ? {
+              deliveryProgress: {
+                has: (stage: string, recipient: number | string) =>
+                  notificationDeliveryKeys.has(`mention:${stage}:${recipient}`),
+                beforeDelivery: renewNotificationClaim,
+                mark: (stage: string, recipient: number | string) =>
+                  checkpointNotificationDelivery(
+                    `mention:${stage}:${recipient}`,
+                  ),
+              },
+            }
+          : {}),
+      });
+    let mentionProcessing: Promise<void> = Promise.resolve();
+    if (isAgentRunComment) {
+      if (
+        !agentRunCommentNotificationClaim ||
+        !agentRunCommentNotificationState
+      ) {
+        throw new Error("Run activity notification claim is missing");
+      }
+      if (!agentRunCommentNotificationState.commentMentionsAttemptedAt) {
+        const claim = agentRunCommentNotificationClaim;
+        mentionProcessing = runMentionProcessing().then(async () => {
+          const checkpointed = await prisma.agentRunActivity.updateMany({
+            where: {
+              id: claim.activityId,
+              commentNotificationsProcessingAt: claim.processingAt,
+              commentMentionsAttemptedAt: null,
+            },
+            data: { commentMentionsAttemptedAt: new Date() },
+          });
+          if (checkpointed.count === 0) {
+            throw new Error("Run activity mention notification claim was lost");
+          }
+        });
+      }
+    } else {
+      mentionProcessing = runMentionProcessing().catch((err) =>
+        console.warn("[createCommentService] processMentions failed:", err),
+      );
+    }
+
+    const notificationWork = [
+      // Run-generated comments are not composer submissions, so they must not
+      // consume the user's draft.
+      isAgentRunComment
+        ? Promise.resolve()
+        : prisma.drafts.deleteMany({
+            where: {
+              type: "Comment",
+              taskId,
+              userId: creatorId,
+              updatedAt: { lte: comment.createdAt },
+            },
+          }),
+      createNotificationForComment(
+        task,
+        comment,
+        creatorId,
+        recipientUserIds,
+        agentId ?? null,
+        resolvedDirectReplyUserId,
+        Boolean(inboundEmailId || agentRunReplayComment),
+      ),
+      mentionProcessing,
+      processTaskReferences
+        ? processTaskReferencesFromCommentText(
+            committedText,
+            taskId,
+            currentUser.id,
+          ).catch((err) =>
+            console.warn(
+              "[createCommentService] processTaskReferences failed:",
+              err,
+            ),
+          )
+        : Promise.resolve(),
+      prisma.user.findFirst({
+        where: { id: creatorId },
+      }),
+      idsToSendNotificationsTo(taskId, creatorId, task.userId, task.projectId),
+    ] as const;
+    const [, , , , commentCreator, userIds] = await Promise.all(
+      notificationWork,
+    ).catch(async (error) => {
+      await Promise.allSettled(notificationWork);
+      throw error;
+    });
+
+    // Publish only after mention notifications exist. Agent replies can then
+    // claim the persisted invocation identified by reply_to_comment_id.
+    if (isAgentRunComment) await renewNotificationClaim();
+    await publishAgentWebhookDeliveries(webhookDeliveryIds);
+    if (isAgentRunComment) await renewNotificationClaim();
+    await publishBoardWebhookDeliveries(boardWebhookDeliveryIds);
+    if (isAgentRunComment) {
+      if (
+        !agentRunCommentNotificationClaim ||
+        !agentRunCommentNotificationState
+      ) {
+        throw new Error("Run activity notification claim is missing");
+      }
+      // ponytail: per-target checkpoints follow successful handoff, so a process
+      // exit between handoff and checkpoint can still duplicate that target.
+      // Exactly-once needs provider-idempotent outboxes.
+      if (!agentRunCommentNotificationState.commentFcmAttemptedAt) {
+        const devices = await prisma.subscribedDevices.findMany({
+          where: { userId: { in: userIds } },
+        });
+        await sendDataOnlyFcm(
+          devices,
+          commentCreator!,
+          task.title,
+          task.uniqueIndex,
+          task.projectId,
+          creatorId,
+          comment,
+          {
+            failOnError: true,
+            deliveredDeviceIds: new Set(
+              [...notificationDeliveryKeys]
+                .filter((key) => key.startsWith("fcm:"))
+                .map((key) => key.slice("fcm:".length)),
+            ),
+            beforeDelivery: renewNotificationClaim,
+            markDelivered: (firebaseId) =>
+              checkpointNotificationDelivery(`fcm:${firebaseId}`),
+          },
+        );
+        const checkpointed = await prisma.agentRunActivity.updateMany({
+          where: {
+            id: agentRunCommentNotificationClaim.activityId,
+            commentNotificationsProcessingAt:
+              agentRunCommentNotificationClaim.processingAt,
+            commentFcmAttemptedAt: null,
+          },
+          data: { commentFcmAttemptedAt: new Date() },
+        });
+        if (checkpointed.count === 0) {
+          throw new Error("Run activity FCM notification claim was lost");
+        }
+      }
+      if (!agentRunCommentNotificationState.commentEmailsAttemptedAt) {
+        await sendCommentEmails({
+          task,
+          text: committedText,
+          creatorId,
+          currentUser,
+          recipientUserIds,
+          mentionedUserIds,
+          fromAgentId: agentId ?? null,
+          deliveredUserIds: new Set(
+            [...notificationDeliveryKeys]
+              .filter((key) => key.startsWith("email:"))
+              .map((key) => Number(key.slice("email:".length))),
+          ),
+          beforeDelivery: renewNotificationClaim,
+          markDelivered: (userId) =>
+            checkpointNotificationDelivery(`email:${userId}`),
+        });
+        const checkpointed = await prisma.agentRunActivity.updateMany({
+          where: {
+            id: agentRunCommentNotificationClaim.activityId,
+            commentNotificationsProcessingAt:
+              agentRunCommentNotificationClaim.processingAt,
+            commentEmailsAttemptedAt: null,
+          },
+          data: { commentEmailsAttemptedAt: new Date() },
+        });
+        if (checkpointed.count === 0) {
+          throw new Error("Run activity email notification claim was lost");
+        }
+      }
+      // Keep the realtime handoff inside the lease so an interrupted request
+      // can retry it, while completed duplicate requests remain side-effect free.
+      await renewNotificationClaim();
+      await broadcastTaskComment(taskId, {
+        originUserId: accessUserId ?? currentUser.id,
+      });
+      const completed = await prisma.agentRunActivity.updateMany({
+        where: {
+          id: agentRunCommentNotificationClaim.activityId,
+          commentNotificationsCompletedAt: null,
+          commentNotificationsProcessingAt:
+            agentRunCommentNotificationClaim.processingAt,
+        },
+        data: {
+          commentNotificationsCompletedAt: new Date(),
+          commentNotificationsProcessingAt: null,
+        },
+      });
+      if (completed.count === 0) {
+        throw new Error("Run activity notification claim was lost");
+      }
+      agentRunCommentNotificationClaim = null;
+    } else {
+      const devices = await prisma.subscribedDevices.findMany({
+        where: { userId: { in: userIds } },
+      });
+      const fcmDelivery = sendDataOnlyFcm(
+        devices,
+        commentCreator!,
+        task.title,
+        task.uniqueIndex,
+        task.projectId,
+        creatorId,
+        comment,
+      );
+      if (inboundEmailId) {
+        await fcmDelivery;
+        await sendCommentEmails({
+          task,
+          text: committedText,
+          creatorId,
+          currentUser,
+          recipientUserIds,
+          mentionedUserIds,
+          fromAgentId: agentId ?? null,
+        }).catch((err) =>
+          console.warn("[createCommentService] sendCommentEmails failed:", err),
+        );
+        if (!inboundProcessingStartedAt) {
+          throw new Error("Inbound email processing lease is missing");
+        }
+        await completeInboundEmailProcessing(
+          prisma,
+          inboundEmailId,
+          comment.id,
+          inboundProcessingStartedAt,
+        );
+      } else {
+        void fcmDelivery.catch((error) =>
+          console.warn("[createCommentService] FCM delivery failed:", error),
+        );
+        await sendCommentEmails({
+          task,
+          text: committedText,
+          creatorId,
+          currentUser,
+          recipientUserIds,
+          mentionedUserIds,
+          fromAgentId: agentId ?? null,
+        }).catch((err) =>
+          console.warn("[createCommentService] sendCommentEmails failed:", err),
+        );
+      }
+    }
+
+    return comment;
+  } catch (error) {
+    if (agentRunCommentNotificationClaim) {
+      const claim = agentRunCommentNotificationClaim;
+      await prisma.agentRunActivity
+        .updateMany({
+          where: {
+            id: claim.activityId,
+            commentNotificationsCompletedAt: null,
+            commentNotificationsProcessingAt: claim.processingAt,
+          },
+          data: { commentNotificationsProcessingAt: null },
+        })
+        .catch((releaseError) =>
+          console.error(
+            "[createCommentService] run notification claim release failed:",
+            releaseError,
+          ),
+        );
+    }
+    if (inboundEmailId && inboundProcessingStartedAt) {
+      await releaseInboundEmailProcessing(
+        prisma,
+        inboundEmailId,
+        comment.id,
+        inboundProcessingStartedAt,
+      ).catch((releaseError) =>
+        console.error(
+          "[createCommentService] inbound receipt release failed:",
+          releaseError,
+        ),
+      );
+    }
+    throw error;
+  }
+}

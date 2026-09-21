@@ -1,12 +1,10 @@
+const { readAgentChatSource } = require("./helpers/read-agent-chat-source.cjs");
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const path = require("node:path");
 
-const source = fs.readFileSync(
-  path.join(__dirname, "../src/app/agents/chat/AgentChatClient.tsx"),
-  "utf8",
-);
+const source = readAgentChatSource();
 
 test("polling chat replaces working with a generic notice after three minutes", () => {
   assert.match(source, /AWAITING_POLL_MAX_MS = 3 \* 60 \* 1000/);

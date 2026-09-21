@@ -4,6 +4,7 @@ const fs = require("node:fs");
 const path = require("node:path");
 const ts = require("typescript");
 
+const { readChatStreamSource } = require("./helpers/read-chat-stream-source.cjs");
 const root = path.resolve(__dirname, "..");
 const jiti = require("jiti")(path.join(root, "tests/ai-bulk-confirmation-entry.cjs"), {
   interopDefault: true,
@@ -276,10 +277,7 @@ test("Redis errors fail closed", async () => {
 });
 
 test("every chat route bulk gate uses the shared confirmation helper", () => {
-  const routeSource = fs.readFileSync(
-    path.join(root, "src/app/api/ai/chat/stream/route.ts"),
-    "utf8"
-  );
+  const routeSource = readChatStreamSource();
 
   assert.doesNotMatch(
     routeSource,

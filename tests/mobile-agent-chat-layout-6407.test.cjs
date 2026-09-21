@@ -4,11 +4,9 @@ const fs = require("node:fs");
 const path = require("node:path");
 const test = require("node:test");
 
+const { readAgentChatSource } = require("./helpers/read-agent-chat-source.cjs");
 const root = path.resolve(__dirname, "..");
-const chat = fs.readFileSync(
-  path.join(root, "src/app/agents/chat/AgentChatClient.tsx"),
-  "utf8",
-);
+const chat = readAgentChatSource();
 const audio = fs.readFileSync(
   path.join(root, "src/components/RTE/Components/AudioButton.tsx"),
   "utf8",

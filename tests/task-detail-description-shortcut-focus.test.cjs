@@ -2,12 +2,10 @@ const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const path = require("node:path");
 const test = require("node:test");
+const { readTaskDetailSource } = require("./helpers/read-task-detail-source.cjs");
 
 const root = path.resolve(__dirname, "..");
-const taskDetail = fs.readFileSync(
-  path.join(root, "src/app/detail/[...slug]/TaskDetailComp.tsx"),
-  "utf8",
-);
+const taskDetail = readTaskDetailSource();
 const tiptap = fs.readFileSync(
   path.join(root, "src/components/RTE/TipTapTaskDetail.tsx"),
   "utf8",
@@ -23,10 +21,11 @@ const saveContent = fs.readFileSync(
   ),
   "utf8",
 );
-const tutorialHook = fs.readFileSync(
-  path.join(root, "src/hooks/General/useLearnTutorial.ts"),
-  "utf8",
-);
+const tutorialHook = ["tutorialSteps.ts", "useLearnTutorialEngine.ts"]
+  .map((file) =>
+    fs.readFileSync(path.join(root, "src/lib/tutorials", file), "utf8"),
+  )
+  .join("\n");
 const dueDateModal = fs.readFileSync(
   path.join(root, "src/components/Modals/DueDate/index.tsx"),
   "utf8",
@@ -320,7 +319,7 @@ test("Act 3 accepts only the tutorial task in its rendered destination", () => {
   );
   assert.match(
     tutorialHook,
-    /document\.activeElement !== task\) task\.focus\(\);\s*timer = setTimeout\(focusTutorialTask, 100\)/,
+    /document\.activeElement !== task\)\s*task\.focus\(\);\s*timer = setTimeout\(focusTutorialTask, 100\)/,
   );
   assert.match(tutorialHook, /arrowright: "l"/);
   assert.match(tutorialHook, /current === releasedHint/);
