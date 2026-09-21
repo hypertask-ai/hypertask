@@ -274,4 +274,4 @@ async function GETHandler(
   }
 }
 
-export const GET = withAuth(GETHandler, { authenticateInHandler: true });
+export const GET = withAuth(GETHandler);

@@ -35,4 +35,4 @@ async function checkoutsSessionHandler(
   }
 }
 
-export default withAuth(checkoutsSessionHandler, { authenticateInHandler: true });
+export default withAuth(checkoutsSessionHandler);

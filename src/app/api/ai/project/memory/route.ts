@@ -125,7 +125,7 @@ async function withUser(handler: (userId: number) => Promise<NextResponse>) {
   }
 }
 
-export const GET = withAuth(GETHandler, { authenticateInHandler: true });
-export const PATCH = withAuth(PATCHHandler, { authenticateInHandler: true });
-export const POST = withAuth(POSTHandler, { authenticateInHandler: true });
-export const DELETE = withAuth(DELETEHandler, { authenticateInHandler: true });
+export const GET = withAuth(GETHandler);
+export const PATCH = withAuth(PATCHHandler);
+export const POST = withAuth(POSTHandler);
+export const DELETE = withAuth(DELETEHandler);

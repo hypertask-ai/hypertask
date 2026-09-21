@@ -22,4 +22,4 @@ async function GETHandler(request: NextRequest) {
   return NextResponse.json({ success: true, ...summary });
 }
 
-export const GET = withAuth(GETHandler, { authenticateInHandler: true });
+export const GET = withAuth(GETHandler);

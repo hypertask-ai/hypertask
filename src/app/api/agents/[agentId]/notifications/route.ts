@@ -37,4 +37,4 @@ async function GETHandler(request: NextRequest, props: { params: Promise<{ agent
   });
 }
 
-export const GET = withAuth(GETHandler, { authenticateInHandler: true });
+export const GET = withAuth(GETHandler);

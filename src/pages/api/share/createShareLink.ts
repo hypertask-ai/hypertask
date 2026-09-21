@@ -143,4 +143,4 @@ export const generateShareLink = (shareId: string) => {
   return `${baseURL}/share?id=${shareId}`;
 };
 
-export default withAuth(handler, { authenticateInHandler: true });
+export default withAuth(handler);

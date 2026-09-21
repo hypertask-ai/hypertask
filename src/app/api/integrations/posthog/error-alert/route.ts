@@ -1,4 +1,4 @@
-import { env as appEnv } from "#env";
+import { env as appEnv, type AppEnvKey } from "#env";
 import { logger as htLogger } from "#logger";
 import { withoutAuth } from "#with-auth";
 import { NextRequest, NextResponse } from "next/server";
@@ -23,7 +23,7 @@ export const dynamic = "force-dynamic";
 
 const MAX_BODY_BYTES = 32 * 1024;
 
-function requiredEnv(name: string) {
+function requiredEnv(name: AppEnvKey) {
   const value = appEnv[name]?.trim();
   if (!value) throw new Error(`${name} is not configured`);
   return value;

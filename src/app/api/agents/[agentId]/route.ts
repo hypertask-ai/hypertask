@@ -772,6 +772,6 @@ async function DELETEHandler(
   });
 }
 
-export const GET = withAuth(GETHandler, { authenticateInHandler: true });
-export const PATCH = withAuth(PATCHHandler, { authenticateInHandler: true });
-export const DELETE = withAuth(DELETEHandler, { authenticateInHandler: true });
+export const GET = withAuth(GETHandler);
+export const PATCH = withAuth(PATCHHandler);
+export const DELETE = withAuth(DELETEHandler);

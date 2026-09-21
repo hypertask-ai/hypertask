@@ -114,4 +114,4 @@ async function PATCHHandler(
   }
 }
 
-export const PATCH = withAuth(PATCHHandler, { authenticateInHandler: true });
+export const PATCH = withAuth(PATCHHandler);

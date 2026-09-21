@@ -117,4 +117,4 @@ async function POSTHandler(request: NextRequest, { params }: RouteContext) {
   }
 }
 
-export const POST = withAuth(POSTHandler, { authenticateInHandler: true });
+export const POST = withAuth(POSTHandler);

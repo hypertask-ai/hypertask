@@ -90,5 +90,5 @@ async function DELETEHandler(request: NextRequest, props: { params: Promise<{ ag
   return NextResponse.json({ success: true });
 }
 
-export const POST = withAuth(POSTHandler, { authenticateInHandler: true });
-export const DELETE = withAuth(DELETEHandler, { authenticateInHandler: true });
+export const POST = withAuth(POSTHandler);
+export const DELETE = withAuth(DELETEHandler);

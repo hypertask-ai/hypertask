@@ -54,4 +54,4 @@ const handler: NextApiHandler = async (req: NextApiRequest, res: NextApiResponse
     return res.status(405).json({ message: "Method Not Allowed" });
 }
 
-export default withAuth(handler, { authenticateInHandler: true })
+export default withAuth(handler)

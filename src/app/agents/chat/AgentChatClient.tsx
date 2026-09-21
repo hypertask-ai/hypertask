@@ -1,6 +1,7 @@
-import { logger as htLogger } from "#logger";
 /* eslint-disable @next/next/no-img-element */
 "use client";
+
+import { logger as htLogger } from "#logger";
 
 import { AGENT_CHAT_EVENT } from "@/lib/realtime/shared";
 import {

@@ -355,4 +355,4 @@ function getMimeTypeFromExtension(extension: string): string {
   return mimeTypes[extension] || "application/octet-stream";
 }
 
-export default withAuth(handler, { authenticateInHandler: true });
+export default withAuth(handler);

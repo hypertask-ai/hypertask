@@ -113,5 +113,5 @@ function parseUpdateFields(input: z.infer<typeof updateSchema>, currentSlug: str
   return data;
 }
 
-export const PATCH = withAuth(PATCHHandler, { authenticateInHandler: true });
-export const DELETE = withAuth(DELETEHandler, { authenticateInHandler: true });
+export const PATCH = withAuth(PATCHHandler);
+export const DELETE = withAuth(DELETEHandler);

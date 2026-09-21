@@ -11152,4 +11152,4 @@ async function POSTHandler(request: NextRequest) {
   return new Response(stream, { headers: SSE_HEADERS });
 }
 
-export const POST = withAuth(POSTHandler, { authenticateInHandler: true });
+export const POST = withAuth(POSTHandler);

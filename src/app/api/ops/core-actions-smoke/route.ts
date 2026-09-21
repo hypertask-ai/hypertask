@@ -218,4 +218,4 @@ async function POSTHandler(request: NextRequest) {
   return NextResponse.json({ success: result.ok, result });
 }
 
-export const POST = withAuth(POSTHandler, { authenticateInHandler: true });
+export const POST = withAuth(POSTHandler);

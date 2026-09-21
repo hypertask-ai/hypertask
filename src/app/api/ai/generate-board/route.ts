@@ -416,4 +416,4 @@ class BoardGenerationRequestError extends Error {
   }
 }
 
-export const POST = withAuth(POSTHandler, { authenticateInHandler: true });
+export const POST = withAuth(POSTHandler);

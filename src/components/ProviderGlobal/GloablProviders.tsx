@@ -1,7 +1,8 @@
-import { env as appEnv } from "#env";
-import { logger as htLogger } from "#logger";
 /* eslint-disable react-hooks/exhaustive-deps */
 "use client";
+
+import { env as appEnv } from "#env";
+import { logger as htLogger } from "#logger";
 import {
   lazy,
   ReactNode,

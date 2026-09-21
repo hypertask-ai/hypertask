@@ -47,4 +47,4 @@ async function POSTHandler() {
   return response;
 }
 
-export const POST = withAuth(POSTHandler, { authenticateInHandler: true });
+export const POST = withAuth(POSTHandler);

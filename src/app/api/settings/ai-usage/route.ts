@@ -478,4 +478,4 @@ async function GETHandler(request: Request) {
   }
 }
 
-export const GET = withAuth(GETHandler, { authenticateInHandler: true });
+export const GET = withAuth(GETHandler);

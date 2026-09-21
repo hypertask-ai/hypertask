@@ -1,4 +1,4 @@
-import { env as appEnv } from "#env";
+import { env as appEnv, type AppEnvKey } from "#env";
 import { Client } from "@upstash/qstash";
 import { verifySignature } from "@upstash/qstash/nextjs";
 import type { NextApiHandler } from "next";
@@ -38,7 +38,7 @@ export function qstashCallbackBase(): string {
   return base;
 }
 
-function requireNonEmptyEnv(name: string): string {
+function requireNonEmptyEnv(name: AppEnvKey): string {
   const value = appEnv[name]?.trim();
   if (!value) {
     throw new Error(`Missing ${name}; QStash jobs must fail fast instead of being silently dropped.`);
@@ -49,7 +49,7 @@ function requireNonEmptyEnv(name: string): string {
   return value;
 }
 
-function requireHttpUrlEnv(name: string): string {
+function requireHttpUrlEnv(name: AppEnvKey): string {
   const value = requireNonEmptyEnv(name);
   let parsed: URL;
   try {

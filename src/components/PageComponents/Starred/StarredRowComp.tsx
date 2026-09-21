@@ -1,8 +1,9 @@
-import { logger as htLogger } from "#logger";
 /* eslint-disable react/jsx-key */
 /* eslint-disable react-hooks/exhaustive-deps */
 /* eslint-disable @next/next/no-img-element */
 "use client";
+
+import { logger as htLogger } from "#logger";
 import { useRouter } from "next/navigation";
 import React, { useEffect, useRef, useState } from "react";
 import { useRecoilState } from "@/lib/state";

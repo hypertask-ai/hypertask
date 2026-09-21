@@ -86,4 +86,4 @@ async function getUsersInBatches(batchSize: number, jsonBody: any) {
 
   return { announcement, user_announcements };
 }
-export default withAuth(handler, { authenticateInHandler: true });
+export default withAuth(handler);

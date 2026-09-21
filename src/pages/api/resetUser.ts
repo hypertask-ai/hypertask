@@ -60,4 +60,4 @@ const validateTransfer = async (userToResetId: number, newOwnerId: number) => {
 
 export { validateTransfer };
 
-export default withAuth(handler, { authenticateInHandler: true });
+export default withAuth(handler);

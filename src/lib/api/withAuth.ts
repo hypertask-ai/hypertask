@@ -23,10 +23,8 @@ function requestHeaders(source: RequestWithHeaders): Headers {
 export async function getAuthSession(
   source: RequestWithHeaders,
 ): Promise<SessionUser | null> {
-  if (!(source instanceof Headers)) {
-    const cached = authenticatedRequests.get(source);
-    if (cached) return cached;
-  }
+  const cached = authenticatedRequests.get(source);
+  if (cached) return cached;
   return getSessionUser(requestHeaders(source));
 }
 
@@ -34,17 +32,11 @@ function isPagesRequest(value: RequestWithHeaders): value is NextApiRequest {
   return !(value instanceof Headers) && !(value.headers instanceof Headers);
 }
 
-export function withAuth<THandler extends RouteHandler>(
-  handler: THandler,
-  options: { authenticateInHandler?: boolean } = {},
-): THandler {
-  // Existing routes keep their authorization and test seams while the proxy
-  // supplies the shared missing-session gate. New routes use the wrapper check.
-  if (options.authenticateInHandler) return handler;
-
+export function withAuth<THandler extends RouteHandler>(handler: THandler): THandler {
   const authenticated = async (...args: Parameters<THandler>) => {
     const request = args[0] as RequestWithHeaders;
-    const session = await getSessionUser(requestHeaders(request));
+    const headers = requestHeaders(request);
+    const session = await getSessionUser(headers);
     if (!session) {
       if (isPagesRequest(request)) {
         return apiError(401, "Unauthorized", args[1] as NextApiResponse);
@@ -53,6 +45,10 @@ export function withAuth<THandler extends RouteHandler>(
     }
 
     authenticatedRequests.set(request, session);
+    authenticatedRequests.set(headers, session);
+    if (!(request instanceof Headers) && typeof request.headers === "object") {
+      authenticatedRequests.set(request.headers, session);
+    }
     return handler(...args);
   };
 

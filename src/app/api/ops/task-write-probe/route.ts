@@ -12,4 +12,4 @@ export const GET = withAuth(createTaskWriteProbeHandler({
   checkRateLimit: checkMcpRateLimit,
   validateAuth: validateMcpAuth,
   runProbe: runTaskWriteProbe,
-}), { authenticateInHandler: true })
+}))

@@ -174,5 +174,5 @@ async function PATCHHandler(
   }
 }
 
-export const DELETE = withAuth(DELETEHandler, { authenticateInHandler: true });
-export const PATCH = withAuth(PATCHHandler, { authenticateInHandler: true });
+export const DELETE = withAuth(DELETEHandler);
+export const PATCH = withAuth(PATCHHandler);

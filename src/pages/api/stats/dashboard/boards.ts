@@ -20,7 +20,7 @@ const handler: NextApiHandler = async (req: NextApiRequest, res: NextApiResponse
 
   // }
 }
-export default withAuth(handler, { authenticateInHandler: true })
+export default withAuth(handler)
 
 
 async function getProjectCounts(lastXdays: number = 14, lastXweeks: number = 4, lastXmonths: number = 12) {

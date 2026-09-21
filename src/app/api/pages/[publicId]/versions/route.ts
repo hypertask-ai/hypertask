@@ -50,4 +50,4 @@ async function GETHandler(_request: NextRequest, { params }: RouteContext) {
   }
 }
 
-export const GET = withAuth(GETHandler, { authenticateInHandler: true });
+export const GET = withAuth(GETHandler);

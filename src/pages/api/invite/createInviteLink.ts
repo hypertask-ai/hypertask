@@ -350,4 +350,4 @@ const invitedAndExistingEmails = async ({
     emailsToInvite,
   };
 };
-export default withAuth(handler, { authenticateInHandler: true });
+export default withAuth(handler);

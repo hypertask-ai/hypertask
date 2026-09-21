@@ -227,4 +227,4 @@ async function POSTHandler(request: Request) {
   return runTest();
 }
 
-export const POST = withAuth(POSTHandler, { authenticateInHandler: true });
+export const POST = withAuth(POSTHandler);

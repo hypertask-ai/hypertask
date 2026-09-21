@@ -103,5 +103,5 @@ async function PATCHHandler(request: NextRequest) {
   }
 }
 
-export const GET = withAuth(GETHandler, { authenticateInHandler: true });
-export const PATCH = withAuth(PATCHHandler, { authenticateInHandler: true });
+export const GET = withAuth(GETHandler);
+export const PATCH = withAuth(PATCHHandler);

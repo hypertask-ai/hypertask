@@ -1,4 +1,4 @@
-import { env as appEnv } from "#env";
+import { env as appEnv, type AppEnvKey } from "#env";
 import { logger as htLogger } from "#logger";
 import prisma from "@/lib/prisma";
 import { getRedis } from "@/lib/redis";
@@ -32,7 +32,7 @@ const DEDUPE_SECONDS = 7 * 24 * 60 * 60;
 const HOUR_SECONDS = 60 * 60;
 const ERROR_LABEL = "auto-error";
 
-function positiveEnvInt(name: string, fallback: number) {
+function positiveEnvInt(name: AppEnvKey, fallback: number) {
   const value = Number(appEnv[name]);
   return Number.isInteger(value) && value > 0 ? value : fallback;
 }

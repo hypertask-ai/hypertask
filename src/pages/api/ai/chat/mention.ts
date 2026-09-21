@@ -278,4 +278,4 @@ function getQueryWords(cleanedQuery: string) {
   return cleanedQuery.split(/\s+/).filter((word) => word.length > 0);
 }
 
-export default withAuth(handler, { authenticateInHandler: true });
+export default withAuth(handler);

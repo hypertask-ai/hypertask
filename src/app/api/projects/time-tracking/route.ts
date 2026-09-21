@@ -53,4 +53,4 @@ async function POSTHandler(request: NextRequest) {
   return NextResponse.json(projectTimeTrackingResponse(data));
 }
 
-export const POST = withAuth(POSTHandler, { authenticateInHandler: true });
+export const POST = withAuth(POSTHandler);

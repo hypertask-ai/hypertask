@@ -26,4 +26,4 @@ export const POST = withAuth(createColumnViewVisibilityHandler({
   afterChange: (projectId, userId) => {
     void broadcastBoardChange(projectId, { originUserId: userId });
   },
-}), { authenticateInHandler: true });
+}));

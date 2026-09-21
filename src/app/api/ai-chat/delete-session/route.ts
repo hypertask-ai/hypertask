@@ -131,4 +131,4 @@ async function DELETEHandler(req: NextRequest) {
   }
 }
 
-export const DELETE = withAuth(DELETEHandler, { authenticateInHandler: true });
+export const DELETE = withAuth(DELETEHandler);

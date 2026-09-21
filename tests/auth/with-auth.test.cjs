@@ -31,7 +31,7 @@ test("App Router withAuth rejects before calling the handler", async () => {
 test("App Router withAuth exposes the verified session to the handler", async () => {
   const token = signSession({ id: 42, email: "agent@example.test" });
   const handler = withAuth(async (request) => {
-    const session = await getAuthSession(request);
+    const session = await getAuthSession(request.headers);
     return Response.json({ userId: session?.userId });
   });
 

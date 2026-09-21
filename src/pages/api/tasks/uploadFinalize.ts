@@ -276,4 +276,4 @@ async function resolveBetterAuthSession(
   return session ? { id: session.userId } : null;
 }
 
-export default withAuth(handler, { authenticateInHandler: true });
+export default withAuth(handler);

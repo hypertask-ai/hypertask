@@ -81,5 +81,5 @@ async function POSTHandler(request: NextRequest) {
   return NextResponse.json({ muted });
 }
 
-export const GET = withAuth(GETHandler, { authenticateInHandler: true });
-export const POST = withAuth(POSTHandler, { authenticateInHandler: true });
+export const GET = withAuth(GETHandler);
+export const POST = withAuth(POSTHandler);

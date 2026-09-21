@@ -39,4 +39,4 @@ const handler: NextApiHandler = async (req, res) => {
   return res.status(200).json(team);
 };
 
-export default withAuth(handler, { authenticateInHandler: true });
+export default withAuth(handler);

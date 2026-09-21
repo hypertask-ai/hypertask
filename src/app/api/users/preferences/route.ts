@@ -502,7 +502,7 @@ async function POSTHandler(request: NextRequest) {
   }
 }
 
-export const PATCH = withAuth(POSTHandler, { authenticateInHandler: true });
+export const PATCH = withAuth(POSTHandler);
 
-export const GET = withAuth(GETHandler, { authenticateInHandler: true });
-export const POST = withAuth(POSTHandler, { authenticateInHandler: true });
+export const GET = withAuth(GETHandler);
+export const POST = withAuth(POSTHandler);

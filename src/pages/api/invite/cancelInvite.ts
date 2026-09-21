@@ -74,4 +74,4 @@ export const cancelInvite = async (inviteId:string, email:string, projectId:numb
 
 }
 
-export default withAuth(handler, { authenticateInHandler: true });
+export default withAuth(handler);

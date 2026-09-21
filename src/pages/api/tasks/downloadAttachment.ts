@@ -109,4 +109,4 @@ const getKey = (url: string) => {
   return key;
 };
 
-export default withAuth(handler, { authenticateInHandler: true });
+export default withAuth(handler);

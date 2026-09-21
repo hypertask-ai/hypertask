@@ -24,4 +24,4 @@ const handler: NextApiHandler = async (req, res) => {
   }
 };
 
-export default withAuth(handler, { authenticateInHandler: true });
+export default withAuth(handler);

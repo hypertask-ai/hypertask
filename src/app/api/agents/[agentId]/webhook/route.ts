@@ -168,7 +168,7 @@ async function POSTHandler(
   }
 }
 
-export const GET = withAuth(GETHandler, { authenticateInHandler: true });
-export const PUT = withAuth(PUTHandler, { authenticateInHandler: true });
-export const DELETE = withAuth(DELETEHandler, { authenticateInHandler: true });
-export const POST = withAuth(POSTHandler, { authenticateInHandler: true });
+export const GET = withAuth(GETHandler);
+export const PUT = withAuth(PUTHandler);
+export const DELETE = withAuth(DELETEHandler);
+export const POST = withAuth(POSTHandler);

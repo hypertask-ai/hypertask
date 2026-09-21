@@ -1,4 +1,4 @@
-import { env as appEnv } from "#env";
+import { env as appEnv, type AppEnvKey } from "#env";
 export interface McpServerConfig {
   apiUrl: string
   requestTimeout: number
@@ -13,7 +13,7 @@ export interface McpServerConfig {
   }
 }
 
-function envNumber(key: string, fallback: number): number {
+function envNumber(key: AppEnvKey, fallback: number): number {
   const value = Number(appEnv[key])
   return Number.isFinite(value) && value > 0 ? value : fallback
 }

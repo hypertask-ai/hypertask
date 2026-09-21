@@ -1,7 +1,8 @@
-import { logger as htLogger } from "#logger";
 /* eslint-disable react-hooks/exhaustive-deps */
 /* eslint-disable @next/next/no-img-element */
 "use client";
+
+import { logger as htLogger } from "#logger";
 import {
   FC,
   ReactNode,

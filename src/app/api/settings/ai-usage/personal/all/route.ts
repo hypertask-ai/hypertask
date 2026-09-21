@@ -109,4 +109,4 @@ async function GETHandler() {
   } satisfies PersonalAiUsageAllResponse);
 }
 
-export const GET = withAuth(GETHandler, { authenticateInHandler: true });
+export const GET = withAuth(GETHandler);

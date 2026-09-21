@@ -132,6 +132,6 @@ async function DELETEHandler(request: NextRequest) {
   return NextResponse.json({ success: true });
 }
 
-export const GET = withAuth(GETHandler, { authenticateInHandler: true });
-export const POST = withAuth(POSTHandler, { authenticateInHandler: true });
-export const DELETE = withAuth(DELETEHandler, { authenticateInHandler: true });
+export const GET = withAuth(GETHandler);
+export const POST = withAuth(POSTHandler);
+export const DELETE = withAuth(DELETEHandler);

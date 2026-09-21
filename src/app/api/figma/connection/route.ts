@@ -28,4 +28,4 @@ async function GETHandler(request: NextRequest) {
   }
 }
 
-export const GET = withAuth(GETHandler, { authenticateInHandler: true });
+export const GET = withAuth(GETHandler);

@@ -19,7 +19,7 @@ const handler: NextApiHandler = async (req: NextApiRequest, res: NextApiResponse
 
   
 }
-export default withAuth(handler, { authenticateInHandler: true })
+export default withAuth(handler)
 async function getTaskCounts(lastXdays: number = 7, lastXweeks: number = 4, lastXmonths: number = 12) {
   // Monthly aggregation
   const monthlyCounts: ITaskMonthly[] = await prisma.$queryRaw`

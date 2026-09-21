@@ -71,4 +71,4 @@ export default withAuth(createLinkPullRequestHandler({
   verifySession,
   linkTaskPullRequest,
   broadcastTaskChange,
-}), { authenticateInHandler: true });
+}));

@@ -26,4 +26,4 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
   }
 }
 
-export default withAuth(handler, { authenticateInHandler: true });
+export default withAuth(handler);

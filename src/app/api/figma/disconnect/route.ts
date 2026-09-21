@@ -39,4 +39,4 @@ async function DELETEHandler(request: NextRequest) {
   }
 }
 
-export const DELETE = withAuth(DELETEHandler, { authenticateInHandler: true });
+export const DELETE = withAuth(DELETEHandler);

@@ -95,3 +95,28 @@ test("the shared API boundary rate limits repeated callers", () => {
   }
   assert.equal(enforceApiBoundary(request())?.status, 429);
 });
+
+test("route authentication cannot bypass withAuth", () => {
+  for (const file of routeFiles) {
+    const source = fs.readFileSync(file, "utf8");
+    assert.doesNotMatch(source, /getSessionUser\s*\(/, file);
+    assert.doesNotMatch(source, /authenticateInHandler/, file);
+  }
+});
+
+test("environment and console access stay centralized", () => {
+  const sourceFiles = walk(
+    path.join(root, "src"),
+    (file) => /\.[cm]?[jt]sx?$/.test(file),
+  );
+
+  for (const file of sourceFiles) {
+    const source = fs.readFileSync(file, "utf8");
+    if (file !== path.join(root, "src/lib/env.ts")) {
+      assert.doesNotMatch(source, /process\.env/, file);
+    }
+    if (file !== path.join(root, "src/lib/logger.ts")) {
+      assert.doesNotMatch(source, /console\.(?:log|info|warn|error|debug|trace)\s*\(/, file);
+    }
+  }
+});

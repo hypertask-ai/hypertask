@@ -118,5 +118,5 @@ function parseCreateInput(input: z.infer<typeof createSchema>) {
   };
 }
 
-export const GET = withAuth(GETHandler, { authenticateInHandler: true });
-export const POST = withAuth(POSTHandler, { authenticateInHandler: true });
+export const GET = withAuth(GETHandler);
+export const POST = withAuth(POSTHandler);

@@ -210,5 +210,5 @@ async function POSTHandler(request: Request) {
   }
 }
 
-export const GET = withAuth(GETHandler, { authenticateInHandler: true });
-export const POST = withAuth(POSTHandler, { authenticateInHandler: true });
+export const GET = withAuth(GETHandler);
+export const POST = withAuth(POSTHandler);

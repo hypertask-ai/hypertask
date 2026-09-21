@@ -54,4 +54,4 @@ async function GETHandler(request: NextRequest) {
   return NextResponse.json({ success: true, agents });
 }
 
-export const GET = withAuth(GETHandler, { authenticateInHandler: true });
+export const GET = withAuth(GETHandler);

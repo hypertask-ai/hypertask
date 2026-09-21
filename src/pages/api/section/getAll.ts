@@ -30,4 +30,4 @@ if (req.method==="POST"){
 }
 
 // Run the main function
-export default withAuth(handler, { authenticateInHandler: true });
+export default withAuth(handler);

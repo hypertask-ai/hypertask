@@ -38,4 +38,4 @@ const handler: NextApiHandler = async (
   }
 };
 
-export default withAuth(handler, { authenticateInHandler: true });
+export default withAuth(handler);

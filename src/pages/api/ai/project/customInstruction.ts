@@ -127,4 +127,4 @@ async function handler(
     }
 }
 
-export default withAuth(handler, { authenticateInHandler: true });
+export default withAuth(handler);
