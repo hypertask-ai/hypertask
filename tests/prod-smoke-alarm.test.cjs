@@ -15,6 +15,10 @@ function response(status, body) {
   };
 }
 
+function isTelegramUrl(value) {
+  return new URL(value).origin === "https://api.telegram.org";
+}
+
 function config(overrides = {}) {
   return {
     appUrl: "https://app.hypertask.ai",
@@ -51,7 +55,7 @@ function alarmFetch({ existing = false } = {}) {
     if (url.endsWith("/api/mcp/tasks/create")) {
       return response(200, { task: { id: 78 } });
     }
-    if (url.includes("api.telegram.org")) return response(200, { ok: true });
+    if (isTelegramUrl(url)) return response(200, { ok: true });
     if (url.endsWith("/actions/variables/PROD_SMOKE_STREAK")) return response(204);
     throw new Error(`Unexpected fetch: ${url}`);
   };
@@ -111,7 +115,7 @@ test("second red files one HTML incident, alerts Telegram, and persists two", as
   assert.match(body.description, /^<p><strong>Production smoke failed/);
   assert.match(body.description, /Desktop › inbox loads/);
   assert.match(body.description, new RegExp("a{40}"));
-  assert.equal(calls.filter((call) => call.url.includes("api.telegram.org")).length, 1);
+  assert.equal(calls.filter((call) => isTelegramUrl(call.url)).length, 1);
   const update = calls.find((call) => call.url.endsWith("/actions/variables/PROD_SMOKE_STREAK"));
   assert.deepEqual(JSON.parse(update.options.body), { name: "PROD_SMOKE_STREAK", value: "2" });
 });
@@ -123,7 +127,7 @@ test("an existing open incident suppresses duplicate creation", async () => {
 
   assert.equal(calls.some((call) => call.url.endsWith("/api/mcp/projects?limit=100")), false);
   assert.equal(calls.some((call) => call.url.endsWith("/api/mcp/tasks/create")), false);
-  assert.equal(calls.filter((call) => call.url.includes("api.telegram.org")).length, 1);
+  assert.equal(calls.filter((call) => isTelegramUrl(call.url)).length, 1);
 });
 
 test("later red runs stay silent while still updating the count", async () => {
@@ -132,7 +136,7 @@ test("later red runs stay silent while still updating the count", async () => {
   const result = await handleSmokeResult(config({ previousStreak: "2" }), fetchImpl);
 
   assert.deepEqual(result, { previousStreak: 2, streak: 3, action: "none" });
-  assert.equal(calls.some((call) => call.url.includes("api.telegram.org")), false);
+  assert.equal(calls.some((call) => isTelegramUrl(call.url)), false);
   assert.equal(calls.some((call) => call.url.includes("/api/mcp/")), false);
   const update = calls.find((call) => call.url.endsWith("/actions/variables/PROD_SMOKE_STREAK"));
   assert.equal(JSON.parse(update.options.body).value, "3");
@@ -147,7 +151,7 @@ test("first green after an alarm sends one recovery and resets the variable", as
   );
 
   assert.equal(result.action, "recovery");
-  const telegram = calls.find((call) => call.url.includes("api.telegram.org"));
+  const telegram = calls.find((call) => isTelegramUrl(call.url));
   assert.match(telegram.options.body.get("text"), /returned to green after 3/);
   const update = calls.find((call) => call.url.endsWith("/actions/variables/PROD_SMOKE_STREAK"));
   assert.equal(JSON.parse(update.options.body).value, "0");
