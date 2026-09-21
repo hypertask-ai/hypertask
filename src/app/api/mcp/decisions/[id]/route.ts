@@ -1,3 +1,5 @@
+import { logger as htLogger } from "#logger";
+import { withoutAuth } from "#with-auth";
 import type { DecisionRequest } from '@prisma/client'
 import { DecisionRequestStatus } from '@prisma/client'
 import { NextRequest, NextResponse } from 'next/server'
@@ -103,7 +105,7 @@ async function loadAccessibleDecisionRequest(
   return { decisionRequest, ctx }
 }
 
-export async function GET(
+async function GETHandler(
   request: NextRequest,
   props: { params: Promise<{ id: string }> }
 ) {
@@ -117,7 +119,7 @@ export async function GET(
       decision_request: mapDecisionRequest(loaded.decisionRequest),
     })
   } catch (error) {
-    console.error('[MCP Decision Request GET by ID] Error:', error)
+    htLogger.error('[MCP Decision Request GET by ID] Error:', error)
     return NextResponse.json(
       { success: false, error: 'Internal server error' },
       { status: 500 }
@@ -125,7 +127,7 @@ export async function GET(
   }
 }
 
-export async function PATCH(
+async function PATCHHandler(
   request: NextRequest,
   props: { params: Promise<{ id: string }> }
 ) {
@@ -268,10 +270,13 @@ export async function PATCH(
       decision_request: mapDecisionRequest(cancelledDecisionRequest),
     })
   } catch (error) {
-    console.error('[MCP Decision Request PATCH] Error:', error)
+    htLogger.error('[MCP Decision Request PATCH] Error:', error)
     return NextResponse.json(
       { success: false, error: 'Internal server error' },
       { status: 500 }
     )
   }
 }
+
+export const GET = withoutAuth(GETHandler);
+export const PATCH = withoutAuth(PATCHHandler);

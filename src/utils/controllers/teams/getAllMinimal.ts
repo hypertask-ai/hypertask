@@ -1,3 +1,4 @@
+import { logger as htLogger } from "#logger";
 
 
 import { ITeam } from "@/models/model";
@@ -29,7 +30,7 @@ const getAllTeamsMinimal = async (userId:number) => {
                 },
                
             })
-            console.log("🚀 ~ getAllTeamsMinimal ~ owned_teams:", owned_teams)
+            htLogger.info("🚀 ~ getAllTeamsMinimal ~ owned_teams:", owned_teams)
             const participating_teams = await prisma.member_Team.findMany({
                 
                 where: {
@@ -39,7 +40,7 @@ const getAllTeamsMinimal = async (userId:number) => {
                     team:true
                 }
             })
-            console.log("🚀 ~ getAllTeamsMinimal ~ participating_teams:", participating_teams)
+            htLogger.info("🚀 ~ getAllTeamsMinimal ~ participating_teams:", participating_teams)
 
             // const projectIds = member_project.map((item) => item.projectId)
 
@@ -61,7 +62,7 @@ const getAllTeamsMinimal = async (userId:number) => {
                 json:[...owned_teams, ...participating_teams.map(x=>x.team)]
             })
         } catch (error) {
-            console.log(error);
+            htLogger.info(error);
             return ({
                 status:400,
                 json:[]

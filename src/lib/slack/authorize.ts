@@ -1,3 +1,4 @@
+import { env as appEnv } from "#env";
 // Shared Slack OAuth authorize-URL builder. The Settings flow (/api/slack/install,
 // signed state) and the public /add-to-slack page (Marketplace entry, no state)
 // must agree on client id, scopes, and redirect URI so the Marketplace listing
@@ -21,7 +22,7 @@ export const SLACK_REDIRECT_PATH = "/api/slack/oauth_redirect";
 
 // Returns null when SLACK_CLIENT_ID is not configured; callers decide how to degrade.
 export function buildSlackAuthorizeUrl(origin: string): URL | null {
-  const clientId = process.env.SLACK_CLIENT_ID?.trim();
+  const clientId = appEnv.SLACK_CLIENT_ID?.trim();
   if (!clientId) return null;
   const url = new URL("https://slack.com/oauth/v2/authorize");
   url.searchParams.set("client_id", clientId);

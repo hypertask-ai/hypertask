@@ -1,3 +1,4 @@
+import { env as appEnv } from "#env";
 import prisma from "@/lib/prisma";
 import { resolveSeatQuantity } from "@/lib/resolveSeatQuantity";
 import {
@@ -52,7 +53,7 @@ const normalCheckoutPriceIds = new Set(
 
 // The legacy trial surface uses one explicitly configured live monthly price.
 const trialCheckoutPriceIds = new Set(
-  [process.env.NEXT_PUBLIC_STRIPE_MONTHLY_PRICE_ID].filter(
+  [appEnv.NEXT_PUBLIC_STRIPE_MONTHLY_PRICE_ID].filter(
     validConfiguredPriceId,
   ),
 );
@@ -69,7 +70,7 @@ function checkoutMode(value: unknown): CheckoutMode | null {
 
 function configuredAppOrigin(): string | null {
   const configuredBaseUrl =
-    process.env.NEXT_PUBLIC_BASEURL || process.env.NEXT_PUBLIC_APP_URL;
+    appEnv.NEXT_PUBLIC_BASEURL || appEnv.NEXT_PUBLIC_APP_URL;
   if (!configuredBaseUrl) return null;
 
   try {

@@ -23,7 +23,6 @@ const useCreateTask = () => {
     const getTask=async (taskId:number|null)=>{
         if(!taskId) return
         const fetchedTask = await axios.get("/api/tasks/single?id="+taskId);
-        console.log("🚀 ~ duplicateTask ~ fetchedTask:", fetchedTask.data)
         return fetchedTask.data
     }
 

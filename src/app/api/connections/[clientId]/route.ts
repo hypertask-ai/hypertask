@@ -1,6 +1,7 @@
+import { logger as htLogger } from "#logger";
+import { getAuthSession, withAuth } from "#with-auth";
 import { NextRequest, NextResponse } from "next/server";
 
-import { getSessionUser } from "@/lib/auth/getSessionUser";
 import { oauthLegacyRevocationJti } from "@/lib/mcp/oauthTokenContract";
 import prisma from "@/lib/prisma";
 
@@ -38,12 +39,12 @@ function notFoundResponse() {
   );
 }
 
-export async function DELETE(
+async function DELETEHandler(
   request: NextRequest,
   props: { params: Promise<{ clientId: string }> },
 ) {
   try {
-    const session = await getSessionUser(request.headers);
+    const session = await getAuthSession(request.headers);
     if (!session) {
       return NextResponse.json(
         { success: false, error: "Unauthorized" },
@@ -152,10 +153,12 @@ export async function DELETE(
     );
   } catch (error) {
     if (error instanceof ClientNotOwnedError) return notFoundResponse();
-    console.error("Error removing OAuth client:", error);
+    htLogger.error("Error removing OAuth client:", error);
     return NextResponse.json(
       { success: false, error: "Internal server error" },
       { status: 500 },
     );
   }
 }
+
+export const DELETE = withAuth(DELETEHandler);

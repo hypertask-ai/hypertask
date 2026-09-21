@@ -89,7 +89,6 @@ const useTaskDetailGlobalStates = (
 
   // const{setStickyElementHeight} =useSetStickyHeight()
   const [editMode, setEditMode] = useState<ITaskDetailEditMode>(null);
-  // console.log("🚀 ~ useTaskDetailGlobalStates ~ editMode:", editMode)
   const initialCommentsPayload = useMemo(() => JSON.parse(_comments), [_comments]);
   const [comments, setComments] = useState<IComment[]>(
     initialCommentsPayload.comments ?? []
@@ -114,7 +113,6 @@ const useTaskDetailGlobalStates = (
     }));
   }, []);
   const [stacked, setStacked] = useState<StackedType>(_initialStacked ?? {});
-  // console.log("🚀 ~ useTaskDetailGlobalStates ~ stacked:", stacked)
 
   const [tasksPlayList, setTasksPlaylist] = useRecoilState(tasksPlayListAtom);
   const [__, setInboxTaskIndexAtom] = useRecoilState(InboxTaskIndexAtom);
@@ -430,7 +428,6 @@ const useTaskDetailGlobalStates = (
       setArchivedTaskIndexAtom(setTo);
     }
     updateActiveItemAndItemInView(currentTask?.id ?? null);
-    // console.log("🚀 ~ onGoback ~ window.history:", window.history)
 
     // Plain Back returns to the previous tab-history entry, which is often a
     // DIFFERENT board (reached via a notification, search result, @mention or a
@@ -458,7 +455,6 @@ const useTaskDetailGlobalStates = (
 
     if (window.history.length > 2 && !backLandsOnDifferentBoard()) {
       updateActiveItemAndItemInView(currentTask?.id ?? null);
-      console.log("Navigating back");
       navigate("Back");
     } else {
       navigate("Push", `/project?id=${currentTask?.projectId}`); // Redirect to the home page
@@ -535,7 +531,6 @@ const useTaskDetailGlobalStates = (
       updateStackedComments(currentIndex, true);
     }
 
-    // console.log("stacked comments after",stacked , stacked[currentIndex],currentIndex)
 
     if (!stacked[currentIndex]) {
       replyComment(currentIndex);
@@ -557,7 +552,6 @@ const useTaskDetailGlobalStates = (
       content = comments[currentIndex].text;
       creator = comments[currentIndex].creator;
     }
-    console.log("🚀 ~ replyComment ~ content:", content);
 
     InsertContentInCommentInput(content, creator!);
   };

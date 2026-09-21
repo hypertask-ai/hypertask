@@ -20,7 +20,7 @@ test("HTPR-5954: prisma.ts configures a 5-minute idle timeout and keepAlive on t
 
   assert.match(
     adapterConstruction,
-    /connectionString:\s*process\.env\.DATABASE_URL/,
+    /connectionString:\s*appEnv\.DATABASE_URL/,
     "must still connect using DATABASE_URL",
   );
   assert.match(

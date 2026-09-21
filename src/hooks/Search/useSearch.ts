@@ -162,7 +162,6 @@ export function useSearch(
         }
       } catch (error) {
         if (!searchRequestGate.isLatest(requestId)) return;
-        console.error("🤔 ~ handleSearchOnMount ~ error:", error);
         handleStatesOnResponse(searchConfig.responseMessages.error);
       }
     }
@@ -373,7 +372,6 @@ export function useSearch(
       }
     } catch (error) {
       if (!searchRequestGate.isLatest(requestId)) return;
-      console.error("🤔 ~ executeSearch ~ error:", error);
       toast.error(searchConfig.responseMessages.error);
       handleStatesOnResponse(searchConfig.responseMessages.error);
     }

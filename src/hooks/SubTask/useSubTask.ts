@@ -40,7 +40,6 @@ const useSubTask = () => {
     try {
       updateCache(setting);
     } catch (error) {
-      console.log("🚀 ~ updateSubTaskSetting ~ error:", error);
     }
   };
 

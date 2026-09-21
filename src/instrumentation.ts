@@ -1,8 +1,10 @@
+import { env as appEnv } from "#env";
+import { logger as htLogger } from "#logger";
 import type { Instrumentation } from "next";
 import { isExpectedClientAbortedRscPayload } from "./lib/errors/requestErrorFilter";
 
 export async function register() {
-  if (process.env.NEXT_RUNTIME === "edge") return;
+  if (appEnv.NEXT_RUNTIME === "edge") return;
   if (!shouldAutoEnsureSweepSchedule()) return;
 
   const { ensureSweepSchedule } = await import("./lib/qstashSweepSchedule");
@@ -15,7 +17,7 @@ export const onRequestError: Instrumentation.onRequestError = async (
   context,
 ) => {
   if (
-    process.env.NEXT_RUNTIME === "edge" ||
+    appEnv.NEXT_RUNTIME === "edge" ||
     request.path.startsWith("/api/errors") ||
     request.path.startsWith("/api/tasks/createGlobally")
   ) {
@@ -47,13 +49,13 @@ export const onRequestError: Instrumentation.onRequestError = async (
       },
     });
   } catch (reportingError) {
-    console.error("[instrumentation] error reporting failed", reportingError);
+    htLogger.error("[instrumentation] error reporting failed", reportingError);
   }
 };
 
 function shouldAutoEnsureSweepSchedule() {
-  if (process.env.QSTASH_AUTO_REGISTER_SWEEP === "false") return false;
-  if (process.env.QSTASH_AUTO_REGISTER_SWEEP === "true") return true;
-  if (process.env.VERCEL_ENV === "preview") return false;
-  return process.env.NODE_ENV === "production";
+  if (appEnv.QSTASH_AUTO_REGISTER_SWEEP === "false") return false;
+  if (appEnv.QSTASH_AUTO_REGISTER_SWEEP === "true") return true;
+  if (appEnv.VERCEL_ENV === "preview") return false;
+  return appEnv.NODE_ENV === "production";
 }

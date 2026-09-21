@@ -1,12 +1,14 @@
+import { env as appEnv } from "#env";
+import { withoutAuth } from "#with-auth";
 import { NextResponse } from "next/server";
 import {
   SESSION_COOKIE,
   clearBetterAuthSessionCookies,
 } from "@/lib/auth/session";
 
-export async function POST() {
+async function POSTHandler() {
   const response = NextResponse.json({ ok: true });
-  const secure = process.env.NODE_ENV === "production";
+  const secure = appEnv.NODE_ENV === "production";
 
   response.cookies.set(SESSION_COOKIE, "", {
     httpOnly: true,
@@ -26,3 +28,5 @@ export async function POST() {
 
   return response;
 }
+
+export const POST = withoutAuth(POSTHandler);

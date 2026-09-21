@@ -1,3 +1,5 @@
+import { logger as htLogger } from "#logger";
+import { withAuth } from "#with-auth";
 import { NextRequest, NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { isValidUser } from "@/utils/edgeHelpers";
@@ -15,7 +17,7 @@ import {
  * Body: { fieldId, taskId, value }
  * Empty/null value deletes the row.
  */
-export async function POST(request: NextRequest) {
+async function POSTHandler(request: NextRequest) {
   try {
     const cookieStore = await cookies();
     const userCookie = cookieStore.get("nookies_user");
@@ -76,7 +78,9 @@ export async function POST(request: NextRequest) {
     if (error instanceof CustomFieldValidationError) {
       return NextResponse.json({ error: error.message }, { status: 400 });
     }
-    console.error("POST /api/customFields/value error:", error);
+    htLogger.error("POST /api/customFields/value error:", error);
     return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
 }
+
+export const POST = withAuth(POSTHandler);

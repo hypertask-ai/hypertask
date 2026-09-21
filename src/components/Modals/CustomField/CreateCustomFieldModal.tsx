@@ -93,7 +93,6 @@ const CreateCustomFieldModal = ({ closeHandler }: Props) => {
       });
       closeHandler();
     } catch (err: any) {
-      console.error("CreateCustomField error:", err);
       setError(err?.response?.data?.error || "Couldn't create the field. Try again.");
     } finally {
       setSubmitting(false);

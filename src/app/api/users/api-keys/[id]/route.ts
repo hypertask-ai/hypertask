@@ -1,3 +1,5 @@
+import { logger as htLogger } from "#logger";
+import { withAuth } from "#with-auth";
 import { NextRequest, NextResponse } from 'next/server'
 import prisma from '@/lib/prisma'
 import { resolveApiKeyExpiry } from '@/lib/apiKeys'
@@ -5,7 +7,7 @@ import { apiKeySelect, getApiKeyOwnerFromCookies } from '@/lib/apiKeyAccess'
 
 export const runtime = 'nodejs'
 
-export async function DELETE(
+async function DELETEHandler(
   _request: NextRequest,
   props: { params: Promise<{ id: string }> }
 ) {
@@ -56,7 +58,7 @@ export async function DELETE(
       apiKey: revokedApiKey,
     })
   } catch (error) {
-    console.error('Error revoking API key:', error)
+    htLogger.error('Error revoking API key:', error)
     return NextResponse.json(
       { success: false, error: 'Internal server error' },
       { status: 500 }
@@ -72,7 +74,7 @@ export async function DELETE(
  * to that many days from now. Use this to expire a key on a schedule; use
  * DELETE to kill it immediately.
  */
-export async function PATCH(
+async function PATCHHandler(
   request: NextRequest,
   props: { params: Promise<{ id: string }> }
 ) {
@@ -164,10 +166,13 @@ export async function PATCH(
 
     return NextResponse.json({ success: true, apiKey: updated })
   } catch (error) {
-    console.error('Error updating API key:', error)
+    htLogger.error('Error updating API key:', error)
     return NextResponse.json(
       { success: false, error: 'Internal server error' },
       { status: 500 }
     )
   }
 }
+
+export const DELETE = withAuth(DELETEHandler);
+export const PATCH = withAuth(PATCHHandler);

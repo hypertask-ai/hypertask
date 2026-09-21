@@ -66,7 +66,7 @@ test("global task creation refuses a foreign project before its transaction", ()
 
 test("task recovery refuses a foreign task before cancelling or writing", () => {
   const source = read("src/pages/api/tasks/recoverTask.ts");
-  assert.ok(source.includes("getSessionUser("));
+  assert.ok(source.includes("getAuthSession("));
   assert.ok(!source.includes("JSON.parse(req.cookies.nookies_user"));
   assert.ok(source.includes("project: taskWriteAccessWhere(session.userId, actingAgentId)"));
   assert.match(source, /id: actingAgentId,[\s\S]*userId: session\.userId,[\s\S]*revokedAt: null/);
@@ -84,7 +84,7 @@ test("rank reset refuses the whole batch when any task is foreign", () => {
 
 test("the delete scheduler refuses a foreign task before mutating it", () => {
   const source = read("src/pages/api/queues/tasks/taskDeleteReminder.ts");
-  assert.ok(source.includes("getSessionUser("));
+  assert.ok(source.includes("getAuthSession("));
   assert.ok(!source.includes("JSON.parse(req.cookies.nookies_user"));
   assert.ok(source.includes("project: taskWriteAccessWhere(session.userId, actingAgentId)"));
   assert.match(source, /id: actingAgentId,[\s\S]*userId: session\.userId,[\s\S]*revokedAt: null/);
@@ -142,7 +142,7 @@ test("the legacy comment route cannot impersonate HyperAI or another user", () =
 
 test("the userless hard-delete worker stays signature-gated instead", () => {
   const worker = read("src/pages/api/queues/taskDeleteQueue.ts");
-  assert.ok(worker.includes("export default withQstashSignature(handler)"));
+  assert.ok(worker.includes("export default withoutAuth(withQstashSignature(handler))"));
   assert.ok(worker.includes("claimAndInvokeTaskDelete(taskId)"));
   assert.ok(worker.includes("This callback has no request user"));
   assert.ok(!worker.includes("taskWriteAccessWhere"));

@@ -1,3 +1,4 @@
+import { logger as htLogger } from "#logger";
 import { AsyncLocalStorage } from 'node:async_hooks'
 
 import { MIN_LEASE_TTL_SECONDS, clampLeaseTtlSeconds } from './lease'
@@ -102,7 +103,7 @@ export async function withAdoptedAgentMutationLease<T>(
       } catch (error) {
         // The write is already committed. A failed hand-back must not turn that
         // success into an error; lease expiry is the backstop.
-        console.error('[agentMutationLeaseAdoption] release failed', error)
+        htLogger.error('[agentMutationLeaseAdoption] release failed', error)
       }
     }
   })

@@ -923,12 +923,10 @@ export function useAiChat() {
       if (!response.ok || result?.success !== true) {
         throw new Error(result?.error || "The active reply could not be stopped");
       }
-      console.log("🔥 Cancel response:", result);
 
       // Reset streaming state
       clearStreamingState();
     } catch (error) {
-      console.error("🔥 Error cancelling stream:", error);
       toast.error("Couldn’t stop the reply. Try Stop again.");
     }
   };
@@ -1023,7 +1021,6 @@ export function useAiChat() {
     try {
       window.location.assign(await generateGuestBoard(purpose));
     } catch (error) {
-      console.error("Error generating guest board:", error);
       setIsTyping(false);
       addMessageToSessionQuery(
         session.id,
@@ -1322,7 +1319,6 @@ export function useAiChat() {
               // Check if it's an SSE event line
               if (trimmedLine.startsWith("event:")) {
                 currentEventType = trimmedLine.slice(6).trim();
-                console.log("🔥 Event type set to:", currentEventType);
                 continue;
               }
 
@@ -1330,26 +1326,17 @@ export function useAiChat() {
               if (trimmedLine.startsWith("data:")) {
                 const jsonData = trimmedLine.slice(5).trim();
                 if (!jsonData) {
-                  console.log("🔥 Empty data line, skipping");
                   continue;
                 }
 
-                console.log(
-                  "🔥 Processing data with event type:",
-                  currentEventType,
-                  "Data:",
-                  jsonData
-                );
                 const parsed = JSON.parse(jsonData);
 
                 // Handle the message based on the event type instead of parsed.type
                 switch (currentEventType) {
                   case "status":
-                    console.log(`🔥 Received status: ${parsed.content}`);
                     setAgentStatus(parsed.content);
                     break;
                   case "thinking":
-                    console.log(`🔥 Received thinking: ${parsed.content}`);
                     break;
                   case "agent":
                     // HTPR-6284: the reply about to stream comes from this
@@ -1367,7 +1354,6 @@ export function useAiChat() {
                   case "content":
                     setAgentStatus(undefined);
                     aiContent += parsed.content;
-                    // console.log(`🔥 aiContent after: "${aiContent}"`);
 
                     const initialAssistantMessage: IChatMessage = {
                       id: assistantMessageId,
@@ -1403,7 +1389,6 @@ export function useAiChat() {
                     const rawError =
                       typeof parsed.content === "string" ? parsed.content : "";
                     const errorText = parseAiStreamErrorContent(rawError);
-                    console.log("🔥 Received error event:", rawError);
                     const errorAssistantMessage: IChatMessage = {
                       id: assistantMessageId,
                       content: errorText,
@@ -1424,7 +1409,6 @@ export function useAiChat() {
                   case "done":
                     setAgentStatus(undefined);
                     sawDone = true;
-                    console.log("🔥 Stream complete:", parsed);
                     // HTPR-6095: chat-driven inbox changes (archive/unarchive)
                     // only reach this tab via the Pusher broadcast, which
                     // competes with token-by-token render work while the reply
@@ -1435,7 +1419,7 @@ export function useAiChat() {
                     void queryClient
                       .refetchQueries({ queryKey: INBOX_QUERY_KEY, type: "active" })
                       .catch((error) =>
-                        console.warn("[AI chat] inbox refresh failed", error)
+                        undefined
                       );
                     if (parsed.status === "error") {
                       if (!streamErrorHandled) {
@@ -1490,10 +1474,7 @@ export function useAiChat() {
                       if (streamTaskId != null) {
                         void refreshTaskComments(queryClient, streamTaskId).catch(
                           (error) =>
-                            console.warn(
-                              "[AI chat] task comments refresh failed",
-                              error
-                            )
+                            undefined
                         );
                       }
                     }
@@ -1501,22 +1482,10 @@ export function useAiChat() {
                     break;
                   default:
                     setAgentStatus(undefined);
-                    console.warn(
-                      "🔥 Unknown event type:",
-                      currentEventType,
-                      "Data:",
-                      parsed
-                    );
                 }
               }
             } catch (error) {
               setAgentStatus(undefined);
-              console.error(
-                "🔥 Error processing stream line:",
-                error,
-                "Line:",
-                trimmedLine
-              );
             }
           }
         }
@@ -1548,7 +1517,6 @@ export function useAiChat() {
       }
     } catch (error) {
       setAgentStatus(undefined);
-      console.error("Error generating AI response:", error);
       // HTPR-6278: a refused request carries the server's real message in its
       // body; only a genuine transport failure keeps the connection wording.
       const errorMessage: IChatMessage = {
@@ -1579,7 +1547,6 @@ export function useAiChat() {
         streamingAssistantMessageRef.current = null;
         streamingRequestRef.current = null;
         setCurrentStreamingSession(null); // Clear streaming session
-        console.log("Message has been completed");
       }
     } finally {
       sendInFlightRef.current = false;
@@ -1755,7 +1722,6 @@ export function useAiChat() {
         toast.success(`Response copied to clipboard`);
       }
     } catch (err) {
-      console.log("🚀 ~ MessageItem ~ err:", err);
       toast.error("Unable to copy response");
     }
   }

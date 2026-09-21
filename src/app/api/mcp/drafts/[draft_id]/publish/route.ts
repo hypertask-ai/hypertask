@@ -1,3 +1,6 @@
+import { env as appEnv } from "#env";
+import { logger as htLogger } from "#logger";
+import { withoutAuth } from "#with-auth";
 import { NextRequest, NextResponse } from 'next/server'
 import { validateMcpAuth, checkMcpRateLimit } from '@/lib/mcp/auth'
 import prisma from '@/lib/prisma'
@@ -32,7 +35,7 @@ async function findDraftWithAccess(draftId: number, userId: number) {
   })
 }
 
-export async function POST(request: NextRequest, props: { params: Promise<{ draft_id: string }> }) {
+async function POSTHandler(request: NextRequest, props: { params: Promise<{ draft_id: string }> }) {
   const params = await props.params;
   try {
     const rateLimited = await checkMcpRateLimit(request);
@@ -138,8 +141,8 @@ export async function POST(request: NextRequest, props: { params: Promise<{ draf
         return NextResponse.json({ success: false, error: 'User not found' }, { status: 404 })
       }
 
-      const baseUrl = process.env.NEXT_PUBLIC_BASEURL
-        || (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'http://localhost:3000')
+      const baseUrl = appEnv.NEXT_PUBLIC_BASEURL
+        || (appEnv.VERCEL_URL ? `https://${appEnv.VERCEL_URL}` : 'http://localhost:3000')
 
       const userCookie = JSON.stringify(slimUserForCookie({
         id: userObj.id,
@@ -192,10 +195,12 @@ export async function POST(request: NextRequest, props: { params: Promise<{ draf
       { status: 400 }
     )
   } catch (error) {
-    console.error('[MCP POST Publish Draft] Error:', error)
+    htLogger.error('[MCP POST Publish Draft] Error:', error)
     return NextResponse.json(
       { success: false, error: 'Internal server error' },
       { status: 500 }
     )
   }
 }
+
+export const POST = withoutAuth(POSTHandler);

@@ -1,3 +1,4 @@
+import { logger as htLogger } from "#logger";
 import prisma from "@/lib/prisma";
 import {
   getBoardTaskInclude,
@@ -115,7 +116,7 @@ const getBoardTasks = async (
       },
     };
   } catch (error) {
-    console.log("getBoardTasks error:", error);
+    htLogger.info("getBoardTasks error:", error);
     return { status: 400, json: { message: JSON.stringify(error) } };
   }
 };

@@ -1,3 +1,4 @@
+import { logger as htLogger } from "#logger";
 import { ITask, ISection, ILabel, IUser, IProject } from "@/models/model";
 import { IFilterSettings, TFilter, TCondition, IFilter, TMatchFilters, IValuePropUpdatedAt, IGetBoardAppliedViewReturnBody, IFilterRuntimeContext } from "@/models/Filters/model";
 import { getFromLocalStorage, setInLocalStorage } from "@/utils/helperFunctions/helperFunctions";
@@ -101,32 +102,32 @@ export function matchDynamicDateRange(taskDate: Date, dynamicRange: string): boo
   const todayStart = startOfDay(today);
   const todayEnd = endOfDay(today);
 
-  console.log("[matchDynamicDateRange] dynamicRange:", dynamicRange, "taskDate:", taskDate);
+  htLogger.info("[matchDynamicDateRange] dynamicRange:", dynamicRange, "taskDate:", taskDate);
 
   switch (dynamicRange) {
     case "TODAY":
       const isToday = isSameDay(taskDate, today);
-      console.log("[matchDynamicDateRange] TODAY:", isToday);
+      htLogger.info("[matchDynamicDateRange] TODAY:", isToday);
       return isToday;
 
     case "YESTERDAY":
       const yesterday = subDays(today, 1);
       const isYesterday = isSameDay(taskDate, yesterday);
-      console.log("[matchDynamicDateRange] YESTERDAY:", isYesterday);
+      htLogger.info("[matchDynamicDateRange] YESTERDAY:", isYesterday);
       return isYesterday;
 
     case "LAST_7_DAYS":
       // Rolling 7-day window (past 7 days including today)
       const sevenDaysAgo = startOfDay(subDays(today, 6));
       const inLast7Days = taskDate >= sevenDaysAgo && taskDate <= todayEnd;
-      console.log("[matchDynamicDateRange] LAST_7_DAYS:", inLast7Days, "sevenDaysAgo:", sevenDaysAgo, "todayEnd:", todayEnd);
+      htLogger.info("[matchDynamicDateRange] LAST_7_DAYS:", inLast7Days, "sevenDaysAgo:", sevenDaysAgo, "todayEnd:", todayEnd);
       return inLast7Days;
 
     case "LAST_30_DAYS":
       // Rolling 30-day window (past 30 days including today)
       const thirtyDaysAgo = startOfDay(subDays(today, 29));
       const inLast30Days = taskDate >= thirtyDaysAgo && taskDate <= todayEnd;
-      console.log("[matchDynamicDateRange] LAST_30_DAYS:", inLast30Days, "thirtyDaysAgo:", thirtyDaysAgo, "todayEnd:", todayEnd);
+      htLogger.info("[matchDynamicDateRange] LAST_30_DAYS:", inLast30Days, "thirtyDaysAgo:", thirtyDaysAgo, "todayEnd:", todayEnd);
       return inLast30Days;
 
     case "OVERDUE":
@@ -140,7 +141,7 @@ export function matchDynamicDateRange(taskDate: Date, dynamicRange: string): boo
       const weekStart = startOfWeek(today, { weekStartsOn: 1 }); // Monday
       const weekEnd = endOfWeek(today, { weekStartsOn: 1 }); // Sunday
       const inThisWeek = taskDate >= weekStart && taskDate <= weekEnd;
-      console.log("[matchDynamicDateRange] THIS_WEEK:", inThisWeek, "weekStart:", weekStart, "weekEnd:", weekEnd);
+      htLogger.info("[matchDynamicDateRange] THIS_WEEK:", inThisWeek, "weekStart:", weekStart, "weekEnd:", weekEnd);
       return inThisWeek;
 
     case "THIS_MONTH":
@@ -148,15 +149,15 @@ export function matchDynamicDateRange(taskDate: Date, dynamicRange: string): boo
       const monthStart = startOfMonth(today);
       const monthEnd = endOfMonth(today);
       const inThisMonth = taskDate >= monthStart && taskDate <= monthEnd;
-      console.log("[matchDynamicDateRange] THIS_MONTH:", inThisMonth, "monthStart:", monthStart, "monthEnd:", monthEnd);
+      htLogger.info("[matchDynamicDateRange] THIS_MONTH:", inThisMonth, "monthStart:", monthStart, "monthEnd:", monthEnd);
       return inThisMonth;
 
     case "ANY":
-      console.log("[matchDynamicDateRange] ANY: true");
+      htLogger.info("[matchDynamicDateRange] ANY: true");
       return true; // For "ANY" condition
 
     default:
-      console.log("[matchDynamicDateRange] DEFAULT: false");
+      htLogger.info("[matchDynamicDateRange] DEFAULT: false");
       return false;
   }
 }
@@ -450,62 +451,62 @@ export function applyFilters(
 
  
   if (filters.length === 0) {
-    // console.log("[applyFilters] No filters provided, returning original sections.");
+    // debug.log("[applyFilters] No filters provided, returning original sections.");
     return sections;
   }
 
   // Iterate over each section
   return sections.map((section, sectionIdx) => {
-    // // console.log(`[applyFilters] Processing section ${sectionIdx}:`, section);
+    // // debug.log(`[applyFilters] Processing section ${sectionIdx}:`, section);
 
     // Apply the filters to the items within the section
     const filteredItems = (section.items ?? []).filter((item, itemIdx) => {
-      // // console.log(`[applyFilters]   Checking item ${itemIdx}:`, item);
+      // // debug.log(`[applyFilters]   Checking item ${itemIdx}:`, item);
 
       // Apply the overall type to all filters
       if (overallType === "ALL") {
         const result = filters.every((filter, filterIdx) => {
-          // console.log(`[applyFilters]     [ALL] Filter ${filterIdx}:`, filter);
+          // debug.log(`[applyFilters]     [ALL] Filter ${filterIdx}:`, filter);
 
           // Check if condition is missing and apply default based on type
           if (!filter.condition) {
             const defaultCondition = defaultConditions[filter.type];
             const res = defaultCondition?.(item, filter.searchPayload, project, filter.match, runtimeContext) ?? false;
-            // console.log(`[applyFilters]       Using default condition for type '${filter.type}':`, res);
+            // debug.log(`[applyFilters]       Using default condition for type '${filter.type}':`, res);
             return res;
           }
           // If condition is not missing, use the provided condition
           const res = filter.condition(item, filter.searchPayload, project, filter.match, runtimeContext);
-          // console.log(`[applyFilters]       Using custom condition:`, res);
+          // debug.log(`[applyFilters]       Using custom condition:`, res);
           return res;
         });
-        // console.log(`[applyFilters]   [ALL] Final result for item:`, result);
+        // debug.log(`[applyFilters]   [ALL] Final result for item:`, result);
         return result;
       } else {
         // overallType === 'OR'
         const result = filters.some((filter, filterIdx) => {
-          // console.log(`[applyFilters]     [OR] Filter ${filterIdx}:`, filter);
+          // debug.log(`[applyFilters]     [OR] Filter ${filterIdx}:`, filter);
 
           // Check if condition is missing and apply default based on type
           if (!filter.condition) {
             const defaultCondition = defaultConditions[filter.type];
-            // console.log("[applyFilters]  defaultCondition:", defaultCondition)
+            // debug.log("[applyFilters]  defaultCondition:", defaultCondition)
             const res = defaultCondition?.(item, filter.searchPayload, project, filter.match, runtimeContext);
-            // console.log("[applyFilters]  ~ item:", item)
-            // console.log(`[applyFilters]       Using default condition for type '${filter.type}':`, res);
+            // debug.log("[applyFilters]  ~ item:", item)
+            // debug.log(`[applyFilters]       Using default condition for type '${filter.type}':`, res);
             return res;
           }
           // If condition is not missing, use the provided condition
           const res = filter.condition(item, filter.searchPayload, project, filter.match, runtimeContext);
-          // console.log(`[applyFilters]       Using custom condition:`, res);
+          // debug.log(`[applyFilters]       Using custom condition:`, res);
           return res;
         });
-        // console.log(`[applyFilters]   [OR] Final result for item:`, result);
+        // debug.log(`[applyFilters]   [OR] Final result for item:`, result);
         return result;
       }
     });
 
-    // console.log(`[applyFilters] Filtered items for section ${sectionIdx}:`, filteredItems);
+    // debug.log(`[applyFilters] Filtered items for section ${sectionIdx}:`, filteredItems);
 
     // Return the modified section
     return { ...section, items: filteredItems };

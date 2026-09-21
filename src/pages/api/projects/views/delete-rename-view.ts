@@ -1,3 +1,5 @@
+import { logger as htLogger } from "#logger";
+import { withAuth } from "#with-auth";
 // route = "/api/projects/views/delete-rename-view"
 import prisma from "@/lib/prisma";
 import { broadcastBoardChange } from "@/lib/realtime/server";
@@ -47,7 +49,7 @@ const handler: NextApiHandler = async (req: NextApiRequest, res: NextApiResponse
             broadcastBoardChange(viewProjectId, { originUserId: currentUser.id })
             return res.status(200).json({view: newSlug === null ? undefined : sanitizeViewBoardFilters(updatedView), project_view_updated: project_view_updated});
         } catch (error) {
-            console.log("🚀 ~ consthandler:NextApiHandler= ~ error:", error)
+            htLogger.info("🚀 ~ consthandler:NextApiHandler= ~ error:", error)
             if (error instanceof ManagedSmartSplitMutationError) {
                 return res.status(error.status).json({ message: error.message })
             }
@@ -57,7 +59,7 @@ const handler: NextApiHandler = async (req: NextApiRequest, res: NextApiResponse
     else if (req.method === "DELETE") {
         try {
             const { viewId } = req.query
-            console.log("🤔 ~ handler ~ viewId:", viewId)
+            htLogger.info("🤔 ~ handler ~ viewId:", viewId)
             const viewToDelete = await prisma.view.findUnique({
                 where: { id: viewId as string },
                 select: {
@@ -81,12 +83,12 @@ const handler: NextApiHandler = async (req: NextApiRequest, res: NextApiResponse
                 })
                 const unsavedViewId = user_Project_View?.unsavedViewId
                 if (unsavedViewId && viewId === user_Project_View?.appliedViewId) {
-                    console.log("🤔 ~ handler ~ unsavedViewId:", unsavedViewId)
+                    htLogger.info("🤔 ~ handler ~ unsavedViewId:", unsavedViewId)
                     await tx.view_Last_Used.deleteMany({where:{viewId: unsavedViewId as string}})
                     await tx.view.delete({ where: { id: unsavedViewId } })
                 }
                 const deleteViewLastUsed = await tx.view_Last_Used.deleteMany({where:{viewId: viewId as string}})
-                console.log("🤔 ~ handler ~ deleteViewLastUsed:", deleteViewLastUsed)
+                htLogger.info("🤔 ~ handler ~ deleteViewLastUsed:", deleteViewLastUsed)
                 await tx.view.delete({where:{id:viewId as string}})
             })
             const promise2 = await getProjectView(projectId_, currentUser.id)
@@ -94,7 +96,7 @@ const handler: NextApiHandler = async (req: NextApiRequest, res: NextApiResponse
 
             return res.status(200).json(promise2)
         } catch (error) {
-            console.log("🚀 ~ consthandler:NextApiHandler= ~ error:", error)
+            htLogger.info("🚀 ~ consthandler:NextApiHandler= ~ error:", error)
             if (error instanceof ManagedSmartSplitMutationError) {
                 return res.status(error.status).json({ message: error.message })
             }
@@ -105,4 +107,4 @@ const handler: NextApiHandler = async (req: NextApiRequest, res: NextApiResponse
 };
 
 
-export default handler
+export default withAuth(handler)

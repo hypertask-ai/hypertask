@@ -232,7 +232,6 @@ const useKanbanViews = (project: IProject | null) => {
         await apiAndCacheHandler(unsavedViewAPIRoute, { ...requestBody, baseViewId }, { call: "unsaved" });
       } catch (error) {
         await onSettled?.(false)
-        console.log("🚀 ~ apiHandler ~ error:", error);
         return;
       }
       await onSettled?.(true)
@@ -419,7 +418,6 @@ const useKanbanViews = (project: IProject | null) => {
           isBoardEmptySectionSetting(savedSetting) ? savedSetting : emptySection,
         )
       } catch (error) {
-        console.log("🚀 ~ saveEmptySectionsAPI ~ error:", error)
         settleMutation(false)
       }
     })
@@ -578,7 +576,6 @@ const useKanbanViews = (project: IProject | null) => {
       title,
     });
     if (response.status !== 200) return;
-    console.log("🚀 ~ useKanbanViews ~ response:", response);
     const updatedView = response.data.view;
     response.data = { ...response.data.project_view_updated };
     cacheUpdateHandler(response, { call: "rename", view: updatedView });
@@ -608,7 +605,6 @@ const useKanbanViews = (project: IProject | null) => {
   };
   const saveAsDefaultHandler = async (body: TCreate_view_body) => {
     const response = await axios.post("/api/projects/views/create-view", body);
-    console.log("🚀 ~ saveAsDefaultHandler ~ response:", response);
     const view: string | undefined = response.data.view;
     // Patch the saved/default view before changing the URL. Otherwise the
     // surface initializer can resolve the new slug against stale cache once,
@@ -629,7 +625,6 @@ const useKanbanViews = (project: IProject | null) => {
     sectionToUpdateId: number | undefined,
     updatedSection: ISection
   ) => {
-    console.log("🚀 ~ renameColumnAPI ~ called", currentUserId);
     const response = await axios.post(`/api/section/rename`, {
       userId: currentUserId,
       sectionId: sectionToUpdateId,

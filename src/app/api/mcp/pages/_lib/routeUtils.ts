@@ -1,3 +1,4 @@
+import { env as appEnv } from "#env";
 import type { McpAuthContext } from '@/lib/mcp/auth'
 import { buildFieldError } from '@/lib/mcp/fieldError'
 import { validateProjectAccess } from '@/lib/mcp/tasks/services'
@@ -125,5 +126,5 @@ export async function canAccessProject(
 }
 
 export function getPageUrl(publicId: string): string {
-  return `${process.env.NEXT_PUBLIC_BASEURL}/page/${publicId}`
+  return `${appEnv.NEXT_PUBLIC_BASEURL}/page/${publicId}`
 }

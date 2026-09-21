@@ -1,3 +1,5 @@
+import { logger as htLogger } from "#logger";
+import { getAuthSession, withAuth } from "#with-auth";
 import type { NextApiRequest, NextApiResponse } from 'next'
 import { cancelTaskDeleteJob } from '../queues/taskDeleteQueue'
 import prisma from '@/lib/prisma'
@@ -8,9 +10,8 @@ import {
 import { upsertTaskToTurbopuffer } from '@/utils/controllers/turbopuffer/turbopufferHelper'
 import { taskWriteAccessWhere } from '@/utils/controllers/projects/getAllIncludes'
 import { AgentMutationLeaseConflictError } from '@/lib/mcp/tasks/agentMutationFence'
-import { getSessionUser } from '@/lib/auth/getSessionUser'
 
-export default  async function handler(
+async function handler(
   req: NextApiRequest,
   res: NextApiResponse
 ) {
@@ -18,7 +19,7 @@ export default  async function handler(
   try {
     if (req.method==="POST"){
         const {taskId, agentId} = req.body
-        const session = await getSessionUser(
+        const session = await getAuthSession(
           new Headers(req.headers as Record<string, string>)
         )
         if (!session) return res.status(401).json({message:"Unauthorized"})
@@ -69,7 +70,7 @@ export default  async function handler(
         try {
           await cancelTaskDeleteJob(Number(taskId))
         } catch (cancelError) {
-          console.warn("recoverTask: restored; delete-job cancellation will no-op", cancelError)
+          htLogger.warn("recoverTask: restored; delete-job cancellation will no-op", cancelError)
         }
         upsertTaskToTurbopuffer(updatedTask.id)
 
@@ -83,7 +84,9 @@ export default  async function handler(
       if (error instanceof TaskHardDeleteInProgressError) {
         return res.status(409).json({ message: error.message })
       }
-      console.log(error)
+      htLogger.info(error)
       return res.status(500).json(error)
   }
 }
+
+export default withAuth(handler);

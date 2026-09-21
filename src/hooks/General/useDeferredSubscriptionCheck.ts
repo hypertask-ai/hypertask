@@ -15,17 +15,13 @@ export const useDeferredSubscriptionCheck = ({
   
   const checkSubscription = useCallback(async (teamId: number) => {
     try {
-      console.log('🔄 Starting deferred subscription check for team:', teamId);
       
       const response = await axios.post('/api/subscription/check', { teamId });
       
       if (response.data.success) {
-        console.log('✅ Subscription check completed:', response.data.subscriptionStatus);
       } else {
-        console.error('❌ Subscription check failed:', response.data.error);
       }
     } catch (error) {
-      console.error('❌ Subscription check request failed:', error);
     }
   }, []);
 

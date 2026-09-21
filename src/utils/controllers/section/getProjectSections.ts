@@ -1,3 +1,4 @@
+import { logger as htLogger } from "#logger";
 import prisma from "@/lib/prisma";
 import { ISection } from "@/models/model";
 import { getViewFromProject } from "@/utils/helperFunctions/Views/ViewsHelperFunctions";
@@ -60,7 +61,7 @@ const sectionGetProjectSections = async (
       }),
     };
   } catch (error) {
-    console.error("Error:", error);
+    htLogger.error("Error:", error);
     // A 200 here made a server-side crash indistinguishable from "this board
     // has no columns": the client coerces a non-array body to [] and the move
     // dialog rendered empty with nothing in the console (HTPR-6259).

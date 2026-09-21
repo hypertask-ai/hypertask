@@ -1,9 +1,11 @@
+import { logger as htLogger } from "#logger";
+import { withAuth } from "#with-auth";
 import { NextApiRequest, NextApiResponse } from "next";
 import { GUEST_FORBIDDEN_MESSAGE, isGuestRequest } from "@/lib/demo/guestGuard";
 import { SESSION_COOKIE, verifySession } from "@/lib/auth/session";
 import { createAuthorizedCheckoutSession } from "@/utils/controllers/stripe/createAuthorizedCheckoutSession";
 
-export default async function checkoutsSessionHandler(
+async function checkoutsSessionHandler(
   req: NextApiRequest,
   res: NextApiResponse
 ) {
@@ -28,7 +30,9 @@ export default async function checkoutsSessionHandler(
     const result = await createAuthorizedCheckoutSession(session.id, req.body);
     return res.status(result.status).json(result.body);
   } catch (e) {
-    console.error(e, `Stripe Checkout error`);
+    htLogger.error(e, `Stripe Checkout error`);
     return res.status(500).json({ message: "Could not create checkout session" });
   }
 }
+
+export default withAuth(checkoutsSessionHandler);

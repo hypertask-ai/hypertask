@@ -1,3 +1,5 @@
+import { logger as htLogger } from "#logger";
+import { withAuth } from "#with-auth";
 import { NextApiHandler, NextApiRequest, NextApiResponse } from "next";
 import prisma from "@/lib/prisma";
 import NextCors from "nextjs-cors";
@@ -7,7 +9,7 @@ const handler: NextApiHandler = async (
   req: NextApiRequest,
   res: NextApiResponse
 ) => {
-  console.log(req.method);
+  htLogger.info(req.method);
   try {
     await NextCors(req, res, {
       // Options
@@ -26,12 +28,12 @@ const handler: NextApiHandler = async (
     if (!(await requireAnnouncementAdmin(req, res))) return;
 
     const { jsonBody } = req.body;
-    console.log("🤔 ~ handler ~ jsonBody:", jsonBody);
+    htLogger.info("🤔 ~ handler ~ jsonBody:", jsonBody);
 
     const result = await getUsersInBatches(40, jsonBody);
     return res.status(200).json({ message: "Success", result });
   } catch (error) {
-    console.log(error);
+    htLogger.info(error);
     res.status(500).json({ message: "Internal server error", error });
   }
 };
@@ -47,7 +49,7 @@ async function getUsersInBatches(batchSize: number, jsonBody: any) {
       isWelcome: jsonBody.newUserMark ?? false,
     },
   });
-  console.log("🚀 ~ getUsersInBatches ~ announcement:", announcement);
+  htLogger.info("🚀 ~ getUsersInBatches ~ announcement:", announcement);
 
   if (announcement.isWelcome) {
     users = [1, 4, 6, 46, 193];
@@ -84,4 +86,4 @@ async function getUsersInBatches(batchSize: number, jsonBody: any) {
 
   return { announcement, user_announcements };
 }
-export default handler;
+export default withAuth(handler);

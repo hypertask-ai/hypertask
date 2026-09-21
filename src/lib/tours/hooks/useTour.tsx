@@ -1,5 +1,6 @@
 'use client';
 
+import { logger as htLogger } from "#logger";
 import { useState, useEffect, useCallback } from 'react';
 import { usePathname } from 'next/navigation';
 import dynamic from 'next/dynamic';
@@ -64,14 +65,14 @@ export function useTour({ tourId = TOUR_IDS.TASK_WRITER, currentUser }: UseTourP
         if (step.target === 'body') return true;
         const element = document.querySelector(step.target as string);
         if (!element) {
-          console.warn(`Element not found for tour step: ${step.target}`);
+          htLogger.warn(`Element not found for tour step: ${step.target}`);
         }
         return !!element;
       });
 
       setSteps(validSteps);
       setStepIndex(0);
-      console.log(`✅ Loaded ${validSteps.length} tour steps for route: ${route}`);
+      htLogger.info(`✅ Loaded ${validSteps.length} tour steps for route: ${route}`);
     } else {
       setSteps([]);
     }
@@ -94,7 +95,7 @@ export function useTour({ tourId = TOUR_IDS.TASK_WRITER, currentUser }: UseTourP
         if (step.target === 'body') return true;
         const element = document.querySelector(step.target as string);
         if (!element) {
-          console.warn(`Element not found for tour step: ${step.target}`);
+          htLogger.warn(`Element not found for tour step: ${step.target}`);
         }
         return !!element;
       });
@@ -102,7 +103,7 @@ export function useTour({ tourId = TOUR_IDS.TASK_WRITER, currentUser }: UseTourP
       setSteps(validSteps);
       setStepIndex(0);
 
-      console.log(`✅ Loaded ${validSteps.length} tour steps for component: ${componentId}`);
+      htLogger.info(`✅ Loaded ${validSteps.length} tour steps for component: ${componentId}`);
 
       // Start the tour for this component if steps were added
       if (validSteps.length > 0) {
@@ -110,7 +111,7 @@ export function useTour({ tourId = TOUR_IDS.TASK_WRITER, currentUser }: UseTourP
           setRun(true);
         }, 100);
       } else {
-        console.warn(`No valid steps to show for component: ${componentId}`);
+        htLogger.warn(`No valid steps to show for component: ${componentId}`);
       }
     }
   }, []);
@@ -138,7 +139,7 @@ export function useTour({ tourId = TOUR_IDS.TASK_WRITER, currentUser }: UseTourP
       tourKey = tourSteps[route] ? route : 'project';
     }
     
-    console.log("🚀 ~ startTour ~ tourKey:", tourKey, "tourIdOverride:", tourIdOverride, "tourId prop:", tourId, "currentTourId:", currentTourId);
+    htLogger.info("🚀 ~ startTour ~ tourKey:", tourKey, "tourIdOverride:", tourIdOverride, "tourId prop:", tourId, "currentTourId:", currentTourId);
     
     if (tourSteps[tourKey]) {
       setCurrentTourId(tourKey as TourId);
@@ -153,7 +154,7 @@ export function useTour({ tourId = TOUR_IDS.TASK_WRITER, currentUser }: UseTourP
         setRun(true);
       }, 150);
     } else {
-      console.warn(`No tour found for route: ${route} or tourId: ${currentTourId}`);
+      htLogger.warn(`No tour found for route: ${route} or tourId: ${currentTourId}`);
     }
   }, [pathname, loadStepsForRoute, tourStatus, currentTourId, tourId]);
 
@@ -172,7 +173,7 @@ export function useTour({ tourId = TOUR_IDS.TASK_WRITER, currentUser }: UseTourP
   }, [run]);
 
   const continueTourInModal = useCallback((): void => {
-    console.log('🎯 Continuing tour in create task modal');
+    htLogger.info('🎯 Continuing tour in create task modal');
     setRun(false);
     setTourContext('component');
     
@@ -184,10 +185,10 @@ export function useTour({ tourId = TOUR_IDS.TASK_WRITER, currentUser }: UseTourP
 
   const handleJoyrideCallback = useCallback((data: CallBackProps) => {
     const { status, type, index, action } = data;
-    console.log("🚀 ~ useTour ~ status:", status)
+    htLogger.info("🚀 ~ useTour ~ status:", status)
 
     const finishedStatuses: string[] = [STATUS.FINISHED, STATUS.SKIPPED];
-    console.log("🚀 ~ useTour ~ finishedStatuses:", finishedStatuses)
+    htLogger.info("🚀 ~ useTour ~ finishedStatuses:", finishedStatuses)
 
     if (finishedStatuses.includes(status)) {
       setRun(false);
@@ -196,10 +197,10 @@ export function useTour({ tourId = TOUR_IDS.TASK_WRITER, currentUser }: UseTourP
       
       // Mark tour as completed or skipped in database
       if (status === STATUS.FINISHED) {
-        console.log('✅ Tour completed:', currentTourId);
+        htLogger.info('✅ Tour completed:', currentTourId);
         tourStatus.markComplete();
       } else if (status === STATUS.SKIPPED) {
-        console.log('⏭️ Tour skipped:', currentTourId);
+        htLogger.info('⏭️ Tour skipped:', currentTourId);
         tourStatus.markSkipped();
       }
     } else if (type === EVENTS.STEP_AFTER || type === EVENTS.TARGET_NOT_FOUND) {
@@ -209,13 +210,13 @@ export function useTour({ tourId = TOUR_IDS.TASK_WRITER, currentUser }: UseTourP
       if (currentTourId === 'task-writer' && tourContext === 'route') {
         // Step 1 -> Step 2: Wait for modal to open (handled by interaction listeners)
         if (index === 0 && action !== ACTIONS.PREV) {
-          console.log('⏸️ Task Writer Tour: Waiting for create task modal to open');
+          htLogger.info('⏸️ Task Writer Tour: Waiting for create task modal to open');
           setRun(false);
           return;
         }
         // Step 2 -> Step 3: Wait for CTRL+J (handled by interaction listeners)
         if (index === 1 && action !== ACTIONS.PREV) {
-          console.log('⏸️ Task Writer Tour: Waiting for CTRL+J to open AI writer');
+          htLogger.info('⏸️ Task Writer Tour: Waiting for CTRL+J to open AI writer');
           setRun(false);
           return;
         }
@@ -225,7 +226,7 @@ export function useTour({ tourId = TOUR_IDS.TASK_WRITER, currentUser }: UseTourP
       // The tour will pause here and resume when modal opens via continueTourInModal
       if (tourContext === 'route' && index === steps.length - 1 && action !== ACTIONS.PREV) {
         // User clicked the create button, pause tour
-        console.log('⏸️ Pausing tour - waiting for modal to open');
+        htLogger.info('⏸️ Pausing tour - waiting for modal to open');
         setRun(false);
         return;
       }

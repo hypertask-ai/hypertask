@@ -1,3 +1,4 @@
+import { env as appEnv } from "#env";
 import type { NextApiRequest } from 'next'
 
 type RequestWithHeaders = Request | NextApiRequest
@@ -40,7 +41,7 @@ function normalizeProto(value: string | undefined): 'http' | 'https' {
 }
 
 function fallbackBaseUrl(): string {
-  return process.env.NEXT_PUBLIC_SITE_URL || DEFAULT_SITE_URL
+  return appEnv.NEXT_PUBLIC_SITE_URL || DEFAULT_SITE_URL
 }
 
 export function isAllowedAuthHost(host: string): boolean {

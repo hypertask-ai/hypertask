@@ -59,7 +59,6 @@ const MoveTaskGlobal = (props: IProps) => {
             handleFormSubmit(values);
         },
     });
-    console.log("🚀 ~ handleFormSubmit ~ body.formik.values:", formik.values)
 
     // -------------------- ON MODAL LOAD, for focus
     const onOpenHandler = async () => {
@@ -75,9 +74,7 @@ const MoveTaskGlobal = (props: IProps) => {
         // Your complex form submission logic goes here
         try {
             // Example: Simulating an asynchronous operation
-            console.log('Submitting...', values);
             setRedirectingToTask(true)
-            //   console.log("🚀 ~ file: index.tsx:58 ~ handleFormSubmit ~ formik.values:", formik.values)
             const body = {
                 sectionId: formik.values.sectionId,
                 projectId: formik.values.projectId,
@@ -85,10 +82,8 @@ const MoveTaskGlobal = (props: IProps) => {
                 currentProjectId: inViewObject.taskProjectId
             }
             const response = await axios.post(moveTaskToDifferentBoardAPI, body)
-            console.log("🚀 ~ file: index.tsx:60 ~ handleFormSubmit ~ response:", response)
 
             if (response.status === 200) {
-                console.log('Submission successful!');
                 if (pathname?.startsWith('/detail')) {
                     router.replace(`/detail/project-${formik.values.projectId}/${response.data.uniqueIndex}`)
                 } else {
@@ -96,7 +91,6 @@ const MoveTaskGlobal = (props: IProps) => {
                 }
             }
         } catch (error) {
-            console.error('Submission failed:', error);
         } finally {
             // setRedirectingToTask(false)
             props.closeHTC()
@@ -203,7 +197,6 @@ const FilterableMenuScreen: React.FC<FilterableMenuScreenProps & IScreens> = ({ 
             if (value === 0 && filteredData) {
                 setKeyword("")
                 const indexof = data.findIndex(item => item.id === filteredData[selectedIndex].id)
-                console.log("🚀 ~ file: index.tsx:204 ~ handleKeyDown ~ indexof:", indexof)
                 if (indexof > -1) submitForCallback(indexof)
                 // screenCallback(value,next, indexof)
             }

@@ -21,7 +21,6 @@ const TiptapEditor = () => {
 
   const addImage = (data: DataTransfer) => {
     const { files } = data;
-    console.log(files);
 
     if (files && files.length > 0) {
       for (const file of Array.from(files)) {
@@ -29,7 +28,6 @@ const TiptapEditor = () => {
 
         if (mime === "image") {
           const url = URL.createObjectURL(file);
-          console.log("IMAGE URL  " + url);
           editor?.chain().focus().setMedia({"media-type":"img", src: url }).run();
         }
       }

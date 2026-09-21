@@ -27,7 +27,10 @@ const stub = (relativePath, exports) => {
 };
 
 const loadCommentsRoute = ({ getSessionUser, commentsGetByTask }) => {
-  stub("src/lib/auth/getSessionUser.ts", { getSessionUser });
+  stub("src/lib/api/withAuth.ts", {
+    getAuthSession: getSessionUser,
+    withAuth: (handler) => handler,
+  });
   stub("src/utils/controllers/comments/getByTask.ts", {
     __esModule: true,
     default: commentsGetByTask,

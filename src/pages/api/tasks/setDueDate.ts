@@ -1,3 +1,5 @@
+import { logger as htLogger } from "#logger";
+import { withAuth } from "#with-auth";
 import { NextApiHandler } from "next";
 import prisma from "@/lib/prisma";
 import createTaskDueDateActivity from "@/utils/controllers/activities/createTaskDueDateActivity";
@@ -84,11 +86,11 @@ const handler: NextApiHandler = async (req, res) => {
 
     return res.status(200).json(task);
   } catch (error) {
-    console.error(error);
+    htLogger.error(error);
     return res
       .status(500)
       .json({ message: "Internal server error", error: String(error) });
   }
 };
 
-export default handler;
+export default withAuth(handler);

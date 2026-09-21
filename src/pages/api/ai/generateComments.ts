@@ -1,3 +1,5 @@
+import { logger as htLogger } from "#logger";
+import { withAuth } from "#with-auth";
 // Next.js API route support: https://nextjs.org/docs/api-routes/introduction
 import type { NextApiRequest, NextApiResponse } from 'next'
 import prisma from "@/lib/prisma";
@@ -9,7 +11,7 @@ import { buildTaskPayloadForAI } from '@/utils/controllers/ai/task/buildTaskPayl
 
 
 
-export default async function handler(
+async function handler(
   req: NextApiRequest,
   res: NextApiResponse
 ) {
@@ -23,11 +25,11 @@ export default async function handler(
       return res.status(404).json({ message: "Task not found" });
     }
     const { task, response } = result;
-    // console.log("🚀 ~ task:", task)
-    // console.log("🚀 ~ response:", response)
+    // debug.log("🚀 ~ task:", task)
+    // debug.log("🚀 ~ response:", response)
     return res.status(200).json({ task, comments: response })
   } catch (error) {
-    console.log(error)
+    htLogger.info(error)
     return res.status(500).json(error)
   }
 }
@@ -389,3 +391,5 @@ export const getTaskPayloadForFAST = async (taskId: number) => {
   const body = buildTaskPayloadForAI(taskFromDB)
   return body
 }
+
+export default withAuth(handler);

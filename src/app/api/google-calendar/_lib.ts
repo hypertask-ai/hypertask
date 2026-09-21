@@ -1,6 +1,7 @@
+import { logger as htLogger } from "#logger";
 import { NextRequest, NextResponse } from "next/server";
 
-import { getSessionUser } from "@/lib/auth/getSessionUser";
+import { getAuthSession } from "#with-auth";
 import { getRequestBaseUrl } from "@/lib/auth/requestBaseUrl";
 import { googleCalendarEnabledFor } from "@/lib/googleCalendar/connection";
 import {
@@ -18,12 +19,12 @@ export async function getGoogleCalendarPrincipal(
   request: NextRequest,
 ): Promise<GoogleCalendarPrincipal> {
   try {
-    const session = await getSessionUser(request.headers);
+    const session = await getAuthSession(request.headers);
     return session
       ? { status: "allowed", userId: session.userId }
       : { status: "unauthorized" };
   } catch (error) {
-    console.error("Google Calendar session lookup failed", error);
+    htLogger.error("Google Calendar session lookup failed", error);
     return { status: "error" };
   }
 }
@@ -36,7 +37,7 @@ export async function getGoogleCalendarConnectPrincipal(request: NextRequest) {
       ? principal
       : ({ status: "disabled" } as const);
   } catch (error) {
-    console.error("Google Calendar feature lookup failed", error);
+    htLogger.error("Google Calendar feature lookup failed", error);
     return { status: "error" } as const;
   }
 }

@@ -1,3 +1,5 @@
+import { env as appEnv } from "#env";
+import { logger as htLogger } from "#logger";
 // Assert-based demo because this repository has no Vitest setup.
 // Run after installing dependencies: npx tsx src/app/api/mcp/tasks/related/related.test.ts
 import assert from 'node:assert/strict'
@@ -25,9 +27,9 @@ async function json(response: Response) {
 }
 
 async function demo() {
-  process.env.DATABASE_URL =
+  appEnv.DATABASE_URL =
     'postgresql://unused:unused@localhost:5432/unused'
-  process.env.SESSION_SECRET = 'related-test-session-secret'
+  appEnv.SESSION_SECRET = 'related-test-session-secret'
 
   const [
     { default: prisma },
@@ -170,5 +172,5 @@ async function demo() {
 }
 
 void demo().then(() => {
-  console.log('related.test.ts: all assertions passed')
+  htLogger.info('related.test.ts: all assertions passed')
 })

@@ -1,3 +1,4 @@
+import { env as appEnv } from "#env";
 const RESEND_REQUEST_TIMEOUT_MS = 5000;
 
 interface SendEmailOptions {
@@ -24,7 +25,7 @@ export async function sendEmail({
     const response = await fetch("https://api.resend.com/emails", {
       method: "POST",
       headers: {
-        Authorization: `Bearer ${process.env.RESEND_API_KEY}`,
+        Authorization: `Bearer ${appEnv.RESEND_API_KEY}`,
         "Content-Type": "application/json",
       },
       body: JSON.stringify({

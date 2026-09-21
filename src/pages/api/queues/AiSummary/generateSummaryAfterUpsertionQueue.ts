@@ -1,3 +1,5 @@
+import { logger as htLogger } from "#logger";
+import { withoutAuth } from "#with-auth";
 import type { NextApiRequest, NextApiResponse } from "next";
 import { withQstashSignature } from "@/lib/qstash";
 import prisma from "@/lib/prisma"
@@ -13,7 +15,7 @@ interface ITaskLocal{
 async function handler(req: NextApiRequest, res: NextApiResponse) {
   try {
     const job = req.body as { teamId: string };
-    console.log("🚀 ~ executing job:", job)
+    htLogger.info("🚀 ~ executing job:", job)
 
     if (await generateSummariesByTeamIdHandler(job.teamId) === "Success") {
       return res.status(200).json({ ok: true });
@@ -21,7 +23,7 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
       throw "Error"
     }
   } catch (error) {
-    console.log("🚀 ~ error:", error)
+    htLogger.info("🚀 ~ error:", error)
     if (error instanceof SummaryRetryableError) {
       return res.status(503).json({ ok: false, retry: true });
     }
@@ -30,7 +32,7 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
   }
 }
 
-export default withQstashSignature(handler);
+export default withoutAuth(withQstashSignature(handler));
 
 export const config = {
   api: {
@@ -53,21 +55,21 @@ export const generateSummariesByTeamIdHandler = async(teamId:string)=>{
             },
             orderBy:{updatedAt:"desc"}
         })
-        console.log(allTasks.length)
+        htLogger.info(allTasks.length)
         const batchSize = 40;
 
         for (let i = 0; i < allTasks.length; i += batchSize) {
             const tasksBatch = allTasks.slice(i, i + batchSize);
             await generateBatchSummaries(tasksBatch);
             if (i + batchSize < allTasks.length) {
-                console.log(`Waiting for 100ms before processing the next batch...`);
+                htLogger.info(`Waiting for 100ms before processing the next batch...`);
                 await new Promise(resolve => setTimeout(resolve, 100)); // 10 seconds interval
             }
-            console.log("tasks completed: ", i)
+            htLogger.info("tasks completed: ", i)
         }
         return "Success"
     } catch (error) {
-        console.log("🚀 ~ upsertTasksByTeamIdHandler ~ error:", error)
+        htLogger.info("🚀 ~ upsertTasksByTeamIdHandler ~ error:", error)
         if (error instanceof SummaryRetryableError) throw error;
         return "Error"
     }
@@ -75,19 +77,19 @@ export const generateSummariesByTeamIdHandler = async(teamId:string)=>{
 
 
 async function generateBatchSummaries(tasksBatch:ITaskLocal[]) {
-    console.log("🚀 ~ processBatch ~ tasksBatch:", tasksBatch)
+    htLogger.info("🚀 ~ processBatch ~ tasksBatch:", tasksBatch)
     try {
         for (const x of tasksBatch){
             const result = await generateAndStoreTaskSummary(x.id);
             if (!result) {
-                console.log("generateAndStoreTaskSummary returned empty");
+                htLogger.info("generateAndStoreTaskSummary returned empty");
                 continue;
             }
         }
 
-        console.log("Batch operation completed.");
+        htLogger.info("Batch operation completed.");
     } catch (error) {
-        console.error("Error processing batch:", error);
+        htLogger.error("Error processing batch:", error);
         if (error instanceof SummaryRetryableError) throw error;
     }
 }

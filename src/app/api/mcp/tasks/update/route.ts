@@ -1,3 +1,5 @@
+import { logger as htLogger } from "#logger";
+import { withoutAuth } from "#with-auth";
 import { NextRequest, NextResponse } from 'next/server'
 import { checkMcpRateLimit, validateMcpAuth } from '@/lib/mcp/auth'
 import { buildFieldError } from '@/lib/mcp/fieldError'
@@ -17,14 +19,14 @@ import {
 
 export type { UpdateTaskResponse } from '@/lib/mcp/tasks/updateTask'
 
-export async function POST(request: NextRequest) {
-  console.log('[MCP Update Task] Request received')
+async function POSTHandler(request: NextRequest) {
+  htLogger.info('[MCP Update Task] Request received')
 
   const rateLimited = await checkMcpRateLimit(request)
   if (rateLimited) return rateLimited
   const ctx = await validateMcpAuth(request)
   if (!ctx) {
-    console.log('[MCP Update Task] Authentication failed')
+    htLogger.info('[MCP Update Task] Authentication failed')
     return NextResponse.json(
       {
         success: false,
@@ -33,12 +35,12 @@ export async function POST(request: NextRequest) {
       { status: 401 }
     )
   }
-  console.log('[MCP Update Task] User authenticated:', ctx.user.id)
+  htLogger.info('[MCP Update Task] User authenticated:', ctx.user.id)
 
   const parsedBody = await readJsonBody<UpdateTaskBody>(request)
   if (!parsedBody.ok) return parsedBody.response
   const requestBody = parsedBody.body
-  console.log('🚀 ~ POST ~ requestBody:', requestBody)
+  htLogger.info('🚀 ~ POST ~ requestBody:', requestBody)
 
   if (
     requestBody.dry_run !== undefined &&
@@ -110,3 +112,5 @@ export async function POST(request: NextRequest) {
     throw error
   }
 }
+
+export const POST = withoutAuth(POSTHandler);

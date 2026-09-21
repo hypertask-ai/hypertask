@@ -1,3 +1,5 @@
+import { logger as htLogger } from "#logger";
+import { withoutAuth } from "#with-auth";
 import { notificationStore } from "@/utils/controllers/notifications";
 import { NextRequest, NextResponse } from 'next/server'
 import { validateMcpAuth, createUnauthorizedResponse, checkMcpRateLimit } from '@/lib/mcp/auth'
@@ -30,7 +32,7 @@ function positiveInteger(value: string | null): number | null {
  *   agentInbox: { structuredData, notifications }
  * }
  */
-export async function GET(request: NextRequest) {
+async function GETHandler(request: NextRequest) {
     let userObj: {id: number, email: string} | null = null
     try {
         const rateLimited = await checkMcpRateLimit(request)
@@ -118,7 +120,7 @@ export async function GET(request: NextRequest) {
                         { status: 404 }
                     )
                 }
-                console.error('[MCP] inbox/list', {
+                htLogger.error('[MCP] inbox/list', {
                     user: { id: user.id, email: user.email },
                     agentId: ctx.agentId,
                     note: 'getStructuredInboxForAgent failed',
@@ -131,7 +133,7 @@ export async function GET(request: NextRequest) {
 
             const { status, json } = userInboxResult
             if (status !== 200 || !json || !('structuredData' in json)) {
-                console.error('[MCP] inbox/list', {
+                htLogger.error('[MCP] inbox/list', {
                     user: { id: user.id, email: user.email },
                     agentId: ctx.agentId,
                     status,
@@ -158,7 +160,7 @@ export async function GET(request: NextRequest) {
         const { status, json } = await notificationGetAll(user.id.toString())
 
         if (status !== 200 || !json || !('structuredData' in json)) {
-            console.error('[MCP] inbox/list', {
+            htLogger.error('[MCP] inbox/list', {
                 user: { id: user.id, email: user.email },
                 status,
                 hasJson: !!json,
@@ -181,7 +183,7 @@ export async function GET(request: NextRequest) {
             showImportantSplit: 'showImportantSplit' in json ? json.showImportantSplit : false,
         })
     } catch (error) {
-        console.error('[MCP] inbox/list', {
+        htLogger.error('[MCP] inbox/list', {
             user: userObj,
             error,
             message: error instanceof Error ? error.message : String(error),
@@ -195,3 +197,5 @@ export async function GET(request: NextRequest) {
         )
     }
 }
+
+export const GET = withoutAuth(GETHandler);

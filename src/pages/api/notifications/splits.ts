@@ -1,6 +1,7 @@
+import { logger as htLogger } from "#logger";
+import { getAuthSession, withAuth } from "#with-auth";
 import type { NextApiRequest, NextApiResponse } from "next";
 import prisma from "@/lib/prisma";
-import { getSessionUser } from "@/lib/auth/getSessionUser";
 import {
   getSplitsNoImportant,
   isInboxSplitKey,
@@ -12,7 +13,7 @@ const handler = async (req: NextApiRequest, res: NextApiResponse) => {
   }
 
   try {
-    const session = await getSessionUser(
+    const session = await getAuthSession(
       new Headers(req.headers as Record<string, string>)
     );
     if (!session) return res.status(401).json({ message: "Unauthorized" });
@@ -59,9 +60,9 @@ const handler = async (req: NextApiRequest, res: NextApiResponse) => {
       splitsNoImportant: uniqueSplits,
     });
   } catch (error) {
-    console.error("Error updating inbox split settings", error);
+    htLogger.error("Error updating inbox split settings", error);
     return res.status(500).json({ message: "Internal server error" });
   }
 };
 
-export default handler;
+export default withAuth(handler);

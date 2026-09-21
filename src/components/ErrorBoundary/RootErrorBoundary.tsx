@@ -26,7 +26,6 @@ class RootErrorBoundaryClass extends Component<Props, State> {
   }
 
   componentDidCatch(error: Error, errorInfo: ErrorInfo) {
-    console.error('RootErrorBoundary caught an error:', error, errorInfo)
     reportClientError({
       source: 'RootErrorBoundary',
       message: error.message,
@@ -61,7 +60,6 @@ const ErrorFallbackContent: React.FC<{ error?: Error }> = ({ error }) => {
         window.location.href = '/login'
       }
     } catch (err) {
-      console.error('Error during hard reset:', err)
       // Fallback: force reload anyway
       if (typeof window !== 'undefined') {
         window.location.reload()

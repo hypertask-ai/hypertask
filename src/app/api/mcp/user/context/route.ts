@@ -1,3 +1,5 @@
+import { logger as htLogger } from "#logger";
+import { withoutAuth } from "#with-auth";
 import { agentStore } from "@/utils/controllers/agents";
 import { NextRequest, NextResponse } from 'next/server'
 import { validateMcpAuth, createUnauthorizedResponse, checkMcpRateLimit } from '@/lib/mcp/auth'
@@ -51,7 +53,7 @@ export interface UserContextResponse {
  * - Stored in ApiKey model
  * - Database-backed, can track usage
  */
-export async function GET(request: NextRequest) {
+async function GETHandler(request: NextRequest) {
   let userObj: {id: number, email: string} | null = null
   try {
     // Validate JWT token or API key and get user
@@ -216,7 +218,7 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json(response)
   } catch (error) {
-    console.error('[MCP] user/context', {
+    htLogger.error('[MCP] user/context', {
       user: userObj,
       error,
       message: error instanceof Error ? error.message : String(error),
@@ -230,3 +232,5 @@ export async function GET(request: NextRequest) {
     )
   }
 }
+
+export const GET = withoutAuth(GETHandler);

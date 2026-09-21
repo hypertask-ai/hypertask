@@ -1,3 +1,5 @@
+import { logger as htLogger } from "#logger";
+import { withoutAuth } from "#with-auth";
 import { NextRequest } from 'next/server';
 import { validateMcpAuth, checkMcpRateLimit } from '@/lib/mcp/auth';
 import { requireRole } from '@/lib/mcp/agents/scopes';
@@ -131,12 +133,12 @@ async function notifyReaction(
   const outcomes = await Promise.allSettled(sideEffects);
   outcomes.forEach((outcome) => {
     if (outcome.status === 'rejected') {
-      console.error('[comment-reaction] notification side effect failed', outcome.reason);
+      htLogger.error('[comment-reaction] notification side effect failed', outcome.reason);
     }
   });
 }
 
-export const POST = createCommentReactionHandler({
+export const POST = withoutAuth(createCommentReactionHandler({
   checkRateLimit: checkMcpRateLimit,
   validateAuth: validateMcpAuth,
   authorizeWrite: async (ctx) => ctx.agentId ? requireRole(ctx, 'write') : null,
@@ -171,4 +173,4 @@ export const POST = createCommentReactionHandler({
   },
   setReaction,
   afterChange: notifyReaction,
-});
+}));

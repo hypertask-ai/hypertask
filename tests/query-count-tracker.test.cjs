@@ -12,15 +12,16 @@ const {
   trackPrismaQuery,
   N1_QUERY_WARNING_THRESHOLD,
 } = jiti(path.join(root, "src/lib/queryCountTracker.ts"));
+const { logger: htLogger } = jiti(path.join(root, "src/lib/logger.ts"));
 
 async function withCapturedWarnings(fn) {
   const warnings = [];
-  const original = console.warn;
-  console.warn = (...args) => warnings.push(args.join(" "));
+  const original = htLogger.warn;
+  htLogger.warn = (...args) => warnings.push(args.join(" "));
   try {
     await fn();
   } finally {
-    console.warn = original;
+    htLogger.warn = original;
   }
   return warnings;
 }

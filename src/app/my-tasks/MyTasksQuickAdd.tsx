@@ -85,7 +85,6 @@ const MyTasksQuickAdd = ({
         try {
           await onPersistDefaultBoard(viewId, project.id);
         } catch (error) {
-          console.error(error);
           toast.error("Task created, but the default board was not saved");
         }
       }
@@ -139,7 +138,6 @@ const MyTasksQuickAdd = ({
       try {
         return await createOnBoard(project, trimmed, activeViewId);
       } catch (error) {
-        console.error(error);
         const message =
           error instanceof Error ? error.message : "Could not create the task";
         const needsNewBoard =
@@ -178,7 +176,6 @@ const MyTasksQuickAdd = ({
       await createOnBoard(project, pendingTitle, pendingViewId);
       setTitle("");
     } catch (error) {
-      console.error(error);
       toast.error(
         error instanceof Error ? error.message : "Could not create the task",
       );

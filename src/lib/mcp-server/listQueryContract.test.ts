@@ -1,3 +1,4 @@
+import { logger as htLogger } from "#logger";
 // Run: npx tsx src/lib/mcp-server/listQueryContract.test.ts
 import assert from 'node:assert/strict'
 import { buildToolName } from './config/mcp-standards'
@@ -34,4 +35,4 @@ function demo() {
 }
 
 demo()
-console.log('listQueryContract tests passed')
+htLogger.info('listQueryContract tests passed')

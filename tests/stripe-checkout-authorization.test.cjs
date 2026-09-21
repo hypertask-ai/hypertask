@@ -2,8 +2,16 @@ const test = require("node:test");
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const path = require("node:path");
+const { passThroughAuth } = require("./helpers/pass-through-auth.cjs");
 
 const root = path.resolve(__dirname, "..");
+const authModule = path.join(root, "src/lib/api/withAuth.ts");
+require.cache[authModule] = {
+  id: authModule,
+  filename: authModule,
+  loaded: true,
+  exports: passThroughAuth(),
+};
 
 process.env.DATABASE_URL = "postgresql://unused:unused@localhost:5432/unused";
 process.env.SESSION_SECRET = "checkout-test-session-secret";

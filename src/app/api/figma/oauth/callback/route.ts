@@ -1,3 +1,5 @@
+import { logger as htLogger } from "#logger";
+import { withoutAuth } from "#with-auth";
 import { NextRequest, NextResponse } from "next/server";
 
 import {
@@ -37,7 +39,7 @@ function fail(request: NextRequest, error: string): NextResponse {
   return finish(request, destination.toString());
 }
 
-export async function GET(request: NextRequest) {
+async function GETHandler(request: NextRequest) {
   const config = getFigmaOAuthConfig();
   if (!config) return fail(request, "not_configured");
 
@@ -89,10 +91,12 @@ export async function GET(request: NextRequest) {
     if (!connection) throw new Error("Figma connection was superseded");
     return finish(request, attempt.returnTo, true);
   } catch (error) {
-    console.error(
+    htLogger.error(
       "Figma OAuth callback failed",
       error instanceof Error ? error.message : "unknown error",
     );
     return fail(request, "connection_failed");
   }
 }
+
+export const GET = withoutAuth(GETHandler);

@@ -117,14 +117,12 @@ interface ISingleFile {
           if (active) setProgressBar(progress);
         });
         if (!active) return;
-        console.log("🚀 ~ uploadFile ~ result:", source);
         const extractedFile = {
           name: file.name,
           size: file.size,
           type: file.type,
         };
         const itemToReturn = { id, file: { ...extractedFile, source } };
-        console.log("🚀 ~ uploadFile ~ itemToReturn:", itemToReturn);
         latestHandlersRef.current.callback?.(itemToReturn);
       };
 

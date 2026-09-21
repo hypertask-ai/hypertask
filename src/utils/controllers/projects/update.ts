@@ -1,3 +1,4 @@
+import { logger as htLogger } from "#logger";
 import { PrismaClient, SortingMode } from "@prisma/client";
 
 import prisma from "@/lib/prisma";
@@ -6,7 +7,7 @@ import { IUser } from "@/models/model";
 
 
 const updateProject= async (projectId:number, title:string,sorting_mode:SortingMode, uniqueIdentifier:string|null, currentUser: IUser) => {
-        // console.log("🚀 ~ updateProject ~ uniqueIdentifier:", uniqueIdentifier)
+        // debug.log("🚀 ~ updateProject ~ uniqueIdentifier:", uniqueIdentifier)
         try {
             if (!projectId || !title) {
                 return ({
@@ -38,7 +39,7 @@ const updateProject= async (projectId:number, title:string,sorting_mode:SortingM
             // =================== RUNNING LOOP FOR EACH TASK
             if (trimmedIdentifier){
                 for (const task of project.tasks){
-                    // console.log("🚀 ~ task:", task)
+                    // debug.log("🚀 ~ task:", task)
                     await updateTaskSingle({id: task.id, ticketNumber:trimmedIdentifier.toUpperCase()+"-"+task.uniqueIndex}, currentUser)
 
                 }
@@ -48,7 +49,7 @@ const updateProject= async (projectId:number, title:string,sorting_mode:SortingM
                 json:project
             })
         } catch (error) {
-            console.log(error);
+            htLogger.info(error);
             return ({
                 status:400,
                 json:{ message: JSON.stringify(error) }

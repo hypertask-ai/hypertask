@@ -1,3 +1,6 @@
+import { env as appEnv } from "#env";
+import { logger as htLogger } from "#logger";
+import { withoutAuth } from "#with-auth";
 import { NextRequest, NextResponse } from 'next/server'
 import { cookies } from 'next/headers';
 import { agentTokenCredentialFields, createMcpToken, revokeTokenByJti, validateMcpAuth, checkMcpRateLimit } from '@/lib/mcp/auth'
@@ -33,7 +36,7 @@ async function getCurrentUserFromCookies() {
 
     return user
   } catch (error) {
-    console.error('Error parsing user cookie:', error)
+    htLogger.error('Error parsing user cookie:', error)
     return null
   }
 }
@@ -42,7 +45,7 @@ async function getCurrentUserFromCookies() {
  * GET /api/mcp/token
  * Returns existing token info (masked) if token exists in cookies
  */
-export async function GET(request: NextRequest) {
+async function GETHandler(request: NextRequest) {
   try {
     const user = await getCurrentUserFromCookies()
     
@@ -99,7 +102,7 @@ export async function GET(request: NextRequest) {
       message: 'Token can be generated'
     })
   } catch (error) {
-    console.error('Error checking MCP token:', error)
+    htLogger.error('Error checking MCP token:', error)
     return NextResponse.json(
       { success: false, error: 'Internal server error' },
       { status: 500 }
@@ -111,7 +114,7 @@ export async function GET(request: NextRequest) {
  * POST /api/mcp/token
  * Generates a new MCP token for the user
  */
-export async function POST(request: NextRequest) {
+async function POSTHandler(request: NextRequest) {
   try {
     const user = await getCurrentUserFromCookies()
     
@@ -145,7 +148,7 @@ export async function POST(request: NextRequest) {
           await revokeTokenByJti(decoded.jti, user.id, new Date(decoded.exp * 1000))
         }
       } catch (error) {
-        console.error('Error revoking previous token:', error)
+        htLogger.error('Error revoking previous token:', error)
         // Continue with token generation even if revocation fails
       }
     }
@@ -176,7 +179,7 @@ export async function POST(request: NextRequest) {
     const maxAge = 30 * 24 * 60 * 60 // 30 days in seconds
     response.cookies.set('mcp_token', token, {
       httpOnly: false, // Allow client-side access for display
-      secure: process.env.NODE_ENV === 'production',
+      secure: appEnv.NODE_ENV === 'production',
       sameSite: 'lax',
       maxAge: maxAge,
       path: '/'
@@ -184,7 +187,7 @@ export async function POST(request: NextRequest) {
 
     return response
   } catch (error) {
-    console.error('Error generating MCP token:', error)
+    htLogger.error('Error generating MCP token:', error)
     return NextResponse.json(
       { success: false, error: 'Failed to generate token' },
       { status: 500 }
@@ -196,7 +199,7 @@ export async function POST(request: NextRequest) {
  * DELETE /api/mcp/token
  * Revokes the bearer token presented by CLI/MCP clients
  */
-export async function DELETE(request: NextRequest) {
+async function DELETEHandler(request: NextRequest) {
   try {
     const rateLimited = await checkMcpRateLimit(request)
     if (rateLimited) return rateLimited
@@ -261,7 +264,7 @@ export async function DELETE(request: NextRequest) {
 
     response.cookies.set('mcp_token', '', {
       httpOnly: false,
-      secure: process.env.NODE_ENV === 'production',
+      secure: appEnv.NODE_ENV === 'production',
       sameSite: 'lax',
       maxAge: 0,
       path: '/'
@@ -269,10 +272,14 @@ export async function DELETE(request: NextRequest) {
 
     return response
   } catch (error) {
-    console.error('Error revoking MCP token:', error)
+    htLogger.error('Error revoking MCP token:', error)
     return NextResponse.json(
       { success: false, error: 'Failed to revoke token' },
       { status: 500 }
     )
   }
 }
+
+export const GET = withoutAuth(GETHandler);
+export const POST = withoutAuth(POSTHandler);
+export const DELETE = withoutAuth(DELETEHandler);

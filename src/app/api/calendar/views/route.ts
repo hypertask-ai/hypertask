@@ -1,7 +1,8 @@
+import { logger as htLogger } from "#logger";
+import { getAuthSession, withAuth } from "#with-auth";
 import { NextRequest, NextResponse } from "next/server";
 import { Prisma } from "@prisma/client";
 import prisma from "@/lib/prisma";
-import { getSessionUser } from "@/lib/auth/getSessionUser";
 import {
   isCalendarViewCreateInput,
   isCalendarViewsPreference,
@@ -16,9 +17,9 @@ import {
 
 export const runtime = "nodejs";
 
-export async function GET(request: NextRequest) {
+async function GETHandler(request: NextRequest) {
   try {
-    const session = await getSessionUser(request.headers);
+    const session = await getAuthSession(request.headers);
     if (!session) {
       return NextResponse.json(
         { success: false, error: "Unauthorized" },
@@ -106,7 +107,7 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json({ success: true, views });
   } catch (error) {
-    console.error("Error listing calendar views:", error);
+    htLogger.error("Error listing calendar views:", error);
     return NextResponse.json(
       { success: false, error: "Internal server error" },
       { status: 500 },
@@ -114,9 +115,9 @@ export async function GET(request: NextRequest) {
   }
 }
 
-export async function POST(request: NextRequest) {
+async function POSTHandler(request: NextRequest) {
   try {
-    const session = await getSessionUser(request.headers);
+    const session = await getAuthSession(request.headers);
     if (!session) {
       return NextResponse.json(
         { success: false, error: "Unauthorized" },
@@ -184,10 +185,13 @@ export async function POST(request: NextRequest) {
       { status: 201 },
     );
   } catch (error) {
-    console.error("Error creating calendar view:", error);
+    htLogger.error("Error creating calendar view:", error);
     return NextResponse.json(
       { success: false, error: "Internal server error" },
       { status: 500 },
     );
   }
 }
+
+export const GET = withAuth(GETHandler);
+export const POST = withAuth(POSTHandler);

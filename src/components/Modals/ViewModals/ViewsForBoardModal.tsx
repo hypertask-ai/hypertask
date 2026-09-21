@@ -42,7 +42,6 @@ const ViewsForBoard: React.FC<IViewsForBoard> = ({ toggle, project }) => {
     const [filteredOptions, setFilteredOptions] = useState(projectViews)
 
     const handleChange = (e: any) => {
-        console.log("🚀 ~ projectViews:", projectViews)
 
         setKeyword(e.target.value)
         const filteredOptions = keyword.length > 0 ? projectViews?.filter((view) =>
@@ -50,7 +49,6 @@ const ViewsForBoard: React.FC<IViewsForBoard> = ({ toggle, project }) => {
                 ? view.title?.toLowerCase().includes(e.target.value.toLowerCase())
                 : true
         ) : projectViews
-        console.log("🚀 ~ handleChange ~ filteredOptions:", filteredOptions)
         setFilteredOptions(filteredOptions)
         setSelectedIndex(0)
         document.getElementById(`label-htc-option-${0}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' })

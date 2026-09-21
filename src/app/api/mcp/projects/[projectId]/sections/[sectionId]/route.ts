@@ -1,3 +1,5 @@
+import { logger as htLogger } from "#logger";
+import { withoutAuth } from "#with-auth";
 import { NextRequest, NextResponse } from 'next/server'
 import { validateMcpAuth, checkMcpRateLimit } from '@/lib/mcp/auth'
 import prisma from '@/lib/prisma'
@@ -28,7 +30,7 @@ export interface SectionListItem {
  * - auto_assign: number | string | null (optional) - User ID, agent ID, or null to clear.
  * - At least one must be provided
  */
-export async function PATCH(
+async function PATCHHandler(
   request: NextRequest,
   props: { params: Promise<{ projectId: string; sectionId: string }> }
 ) {
@@ -213,7 +215,7 @@ export async function PATCH(
       { status: 200 }
     )
   } catch (error) {
-    console.error('Error updating section:', error)
+    htLogger.error('Error updating section:', error)
     return NextResponse.json(
       {
         success: false,
@@ -230,7 +232,7 @@ export async function PATCH(
  *
  * Delete a section. Tasks in the section are moved to the first section.
  */
-export async function DELETE(
+async function DELETEHandler(
   request: NextRequest,
   props: { params: Promise<{ projectId: string; sectionId: string }> }
 ) {
@@ -297,7 +299,7 @@ export async function DELETE(
       { status: 200 }
     )
   } catch (error) {
-    console.error('Error deleting section:', error)
+    htLogger.error('Error deleting section:', error)
     return NextResponse.json(
       {
         success: false,
@@ -308,3 +310,6 @@ export async function DELETE(
     )
   }
 }
+
+export const PATCH = withoutAuth(PATCHHandler);
+export const DELETE = withoutAuth(DELETEHandler);

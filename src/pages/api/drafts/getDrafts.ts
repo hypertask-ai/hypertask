@@ -1,3 +1,5 @@
+import { logger as htLogger } from "#logger";
+import { withAuth } from "#with-auth";
 // Next.js API route support: https://nextjs.org/docs/api-routes/introduction
 
 import type { NextApiRequest, NextApiResponse } from 'next'
@@ -5,7 +7,7 @@ import getDraftsController from '@/utils/controllers/drafts/getDraftsController'
 
 
 
-export default  async function handler(
+async function handler(
   req: NextApiRequest,
   res: NextApiResponse
 ) {
@@ -17,11 +19,13 @@ export default  async function handler(
     if (!taskId || !userId) return res.status(400).json({message:"Missing TaskId"})
 
     const drafts = await getDraftsController(taskId, userId)    
-    // console.log("🚀 ~ drafts:", drafts)
+    // debug.log("🚀 ~ drafts:", drafts)
     return res.status(200).json(drafts)
     
   } catch (error) {
-      console.log(error)
+      htLogger.info(error)
       return res.status(500).json(error)
   }
 }
+
+export default withAuth(handler);

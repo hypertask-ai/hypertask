@@ -1,3 +1,4 @@
+import { logger as htLogger } from "#logger";
 import { generateText, type UserContent } from "ai";
 import { parse } from "node-html-parser";
 
@@ -114,7 +115,7 @@ export async function uploadCustomInstructionFiles(args: {
         rows,
       });
     } catch (error) {
-      console.error("[customInstructions] upload failed for URL:", url, error);
+      htLogger.error("[customInstructions] upload failed for URL:", url, error);
     }
   }
 

@@ -1,3 +1,4 @@
+import { env as appEnv } from "#env";
 import prisma from "@/lib/prisma";
 import { decryptByokSecret } from "@/lib/crypto/byokCipher";
 import { getProjectWhere } from "@/utils/controllers/projects/getAllIncludes";
@@ -177,7 +178,7 @@ async function resolveLookupPlan(lookup?: ByokLookupContext) {
 function getSharedIncludedAllowanceGatewayKey(plan: string | undefined) {
   if (plan !== "Free" && plan !== "BYOK") return undefined;
 
-  const sharedGatewayKey = process.env.AI_GATEWAY_API_KEY?.trim();
+  const sharedGatewayKey = appEnv.AI_GATEWAY_API_KEY?.trim();
   return isVercelAiGatewayKey(sharedGatewayKey)
     ? sharedGatewayKey
     : undefined;

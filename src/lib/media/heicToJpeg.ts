@@ -1,3 +1,4 @@
+import { logger as htLogger } from "#logger";
 /**
  * HEIC/HEIF to JPEG conversion, in the browser, before the bytes are uploaded.
  *
@@ -202,7 +203,7 @@ export async function convertHeicToJpeg(
       lastModified: file.lastModified,
     });
   } catch (error) {
-    console.warn("[heic] conversion failed, keeping only the original", error);
+    htLogger.warn("[heic] conversion failed, keeping only the original", error);
     return null;
   }
 }

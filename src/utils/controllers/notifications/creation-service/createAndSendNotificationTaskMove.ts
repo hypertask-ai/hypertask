@@ -1,3 +1,4 @@
+import { env as appEnv } from "#env";
 import { NotificationType, Prisma } from "@prisma/client";
 import idsToSendNotificationsTo from "../IdsToSendNotificationsTo";
 import prisma from "@/lib/prisma";
@@ -103,7 +104,7 @@ async function notifyUsers(
           senderName: notificationCreated?.fromUser?.displayName ?? "",
           newSectionTitle: task?.section ?? "",
           taskLink:
-            process.env.NEXT_PUBLIC_BASEURL +
+            appEnv.NEXT_PUBLIC_BASEURL +
             "/" +
             `detail/project-${task?.projectId}/${task?.uniqueIndex}`,
           emailTo: notificationCreated?.user?.email ?? "",

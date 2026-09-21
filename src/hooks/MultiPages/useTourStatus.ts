@@ -70,7 +70,6 @@ export function useTourStatus({ tourId }: UseTourStatusParams) {
   const updateTourStatus = async (payload: Omit<TourUpdatePayload, 'userId' | 'tourId'>) => {
     if (!currentUser?.id) {
       const errorMsg = 'No user ID available';
-      console.error(errorMsg);
       setError(errorMsg);
       return false;
     }
@@ -108,7 +107,6 @@ export function useTourStatus({ tourId }: UseTourStatusParams) {
       return data;
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Failed to update tour status';
-      console.error('Tour update error:', errorMessage);
       setError(errorMessage);
       return false;
     } finally {
@@ -178,7 +176,6 @@ export function useTourStatus({ tourId }: UseTourStatusParams) {
   const markComplete = async () => {
     const result = await updateTourStatus({ completed: true });
     if (result) {
-      console.log(`✅ Tour marked as completed: ${tourId}`);
     }
     return result;
   };
@@ -189,7 +186,6 @@ export function useTourStatus({ tourId }: UseTourStatusParams) {
   const markSkipped = async () => {
     const result = await updateTourStatus({ skipped: true });
     if (result) {
-      console.log(`⏭️ Tour marked as skipped: ${tourId}`);
     }
     return result;
   };
@@ -201,7 +197,6 @@ export function useTourStatus({ tourId }: UseTourStatusParams) {
   const markTourStarted = async () => {
     const result = await updateTourStatus({ started: true });
     if (result) {
-      console.log(`👀 Tour started: ${tourId}`);
     }
     return result;
   };
@@ -216,7 +211,6 @@ export function useTourStatus({ tourId }: UseTourStatusParams) {
       skipped: false 
     });
     if (result) {
-      console.log(`🔄 Tour reset: ${tourId}`);
     }
     return result;
   };

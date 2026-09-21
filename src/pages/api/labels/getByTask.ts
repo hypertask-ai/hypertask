@@ -1,3 +1,4 @@
+import { withAuth } from "#with-auth";
 // Next.js API route support: https://nextjs.org/docs/api-routes/introduction
 
 import type { NextApiRequest, NextApiResponse } from 'next'
@@ -5,7 +6,7 @@ import prisma from "@/lib/prisma";
 
 
 
-export default  async function handler(
+async function handler(
   req: NextApiRequest,
   res: NextApiResponse
 ) {
@@ -23,3 +24,5 @@ export default  async function handler(
     return res.status(200).json(taskLabels)
 
 }
+
+export default withAuth(handler);

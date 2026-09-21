@@ -99,7 +99,6 @@ const  AITaskWriterInputArea: React.FC<AITaskWriterInputAreaProps> = ({
     
     if (supportedFiles.length !== fileArray.length) {
       // Show warning for unsupported files
-      console.warn("Some files were skipped. Only images, PDF, and DOCX files are supported.");
     }
 
     // Call the context handler with supported files only
@@ -206,7 +205,6 @@ const  AITaskWriterInputArea: React.FC<AITaskWriterInputAreaProps> = ({
   // Handle uploaded attachments callback
   const handleUploadedAttachments = useCallback(async (uploadedAttachments: any[]) => {
     // Update existing attachments with their S3 URLs
-    console.log("Uploaded attachments:", uploadedAttachments);
     
     uploadedAttachments.forEach(attachment => {
       // Extract the S3 URL from the uploaded attachment
@@ -214,14 +212,12 @@ const  AITaskWriterInputArea: React.FC<AITaskWriterInputAreaProps> = ({
       const fileName = attachment.file?.name;
       
       if (fileName && s3Url) {
-        console.log("🚀 ~ Updating attachment with S3 URL:", fileName, s3Url);
         updateAttachmentWithS3Url(fileName, s3Url);
       }
     });
   }, [updateAttachmentWithS3Url]);
 
   const handleRemove = useCallback((name: string) => {
-    console.log("🚀 ~ handleRemove ~ name:", name);
     removeFile(name);
     removeAttachment(name);
   }, [removeFile, removeAttachment]);

@@ -30,13 +30,13 @@ test("Google is configured as a sign-up-capable social provider", () => {
 
   assert.match(
     googleBlock[1],
-    /clientId:\s*process\.env\.GOOGLE_ID\s+as\s+string/,
-    "Google clientId must come from process.env.GOOGLE_ID"
+    /clientId:\s*appEnv\.GOOGLE_ID\s+as\s+string/,
+    "Google clientId must come from the typed environment"
   );
   assert.match(
     googleBlock[1],
-    /clientSecret:\s*process\.env\.GOOGLE_SECRET\s+as\s+string/,
-    "Google clientSecret must come from process.env.GOOGLE_SECRET"
+    /clientSecret:\s*appEnv\.GOOGLE_SECRET\s+as\s+string/,
+    "Google clientSecret must come from the typed environment"
   );
   assert.doesNotMatch(
     googleBlock[1],

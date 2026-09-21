@@ -1,3 +1,4 @@
+import { env as appEnv } from "#env";
 import Turbopuffer from "@turbopuffer/turbopuffer";
 import { searchConfig } from "./configs/search.config";
 
@@ -21,14 +22,14 @@ export const turbopufferNamespaces = {
 };
 
 const clientOptions = {
-  apiKey: process.env.TURBOPUFFER_API_KEY || "missing",
+  apiKey: appEnv.TURBOPUFFER_API_KEY || "missing",
 };
 
-if (process.env.TURBOPUFFER_BASE_URL) {
-  clientOptions.baseURL = process.env.TURBOPUFFER_BASE_URL;
+if (appEnv.TURBOPUFFER_BASE_URL) {
+  clientOptions.baseURL = appEnv.TURBOPUFFER_BASE_URL;
   clientOptions.region = null;
 } else {
-  clientOptions.region = process.env.TURBOPUFFER_REGION || "aws-eu-west-1";
+  clientOptions.region = appEnv.TURBOPUFFER_REGION || "aws-eu-west-1";
 }
 
 const turbopuffer = new Turbopuffer(clientOptions);

@@ -1,5 +1,5 @@
+import { getAuthSession, withAuth } from "#with-auth";
 import { labelStore } from "@/utils/controllers/labels";
-import { getSessionUser } from "@/lib/auth/getSessionUser";
 import prisma from "@/lib/prisma";
 import { getProjectWhere } from "@/utils/controllers/projects/getAllIncludes";
 import { createTaskCore } from "@/utils/controllers/tasks/createTaskCore";
@@ -9,8 +9,8 @@ import { NextRequest, NextResponse } from "next/server";
 
 // HTPR-4886: instantiate a template as a fresh task in the board's first
 // non-done column. Returns the new task's location so the client can open it.
-export async function POST(request: NextRequest) {
-  const session = await getSessionUser(request.headers);
+async function POSTHandler(request: NextRequest) {
+  const session = await getAuthSession(request.headers);
   if (!session) {
     return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
   }
@@ -73,3 +73,5 @@ export async function POST(request: NextRequest) {
     },
   });
 }
+
+export const POST = withAuth(POSTHandler);

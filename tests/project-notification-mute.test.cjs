@@ -42,12 +42,13 @@ function loadRoute({
   const calls = { deleted: [], upserted: [] };
   resetModules([
     "src/app/api/notifications/project-mute/route.ts",
-    "src/lib/auth/getSessionUser.ts",
+    "src/lib/api/withAuth.ts",
     "src/utils/controllers/projects/getAllIncludes.ts",
     "src/lib/prisma.ts",
   ]);
-  stubModule("src/lib/auth/getSessionUser.ts", {
-    getSessionUser: async () => session,
+  stubModule("src/lib/api/withAuth.ts", {
+    getAuthSession: async () => session,
+    withAuth: (handler) => handler,
   });
   stubModule("src/utils/controllers/projects/getAllIncludes.ts", {
     projectContentAccessWhere: (userId) => ({ ownerId: userId }),

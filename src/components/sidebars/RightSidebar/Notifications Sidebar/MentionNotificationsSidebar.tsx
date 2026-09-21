@@ -36,7 +36,6 @@ const MentionNotificationSidebar = () => {
           notificationPreference: value,
         }));
       } catch (error) {
-        console.error("Failed to update notification preference:", error);
         // Revert on error
         setNotificationLevel(currentUser?.notificationPreference || "direct");
       } finally {

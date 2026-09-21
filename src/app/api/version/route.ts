@@ -1,3 +1,5 @@
+import { env as appEnv } from "#env";
+import { withoutAuth } from "#with-auth";
 import { NextResponse } from "next/server";
 
 // Returns this deployment's build id. An open tab polls it to detect when a
@@ -6,9 +8,11 @@ import { NextResponse } from "next/server";
 // inlined into the client bundle via next.config's NEXT_PUBLIC_BUILD_ID.
 export const dynamic = "force-dynamic";
 
-export async function GET() {
+async function GETHandler() {
   return NextResponse.json(
-    { buildId: process.env.NEXT_PUBLIC_BUILD_ID ?? "dev" },
+    { buildId: appEnv.NEXT_PUBLIC_BUILD_ID ?? "dev" },
     { headers: { "Cache-Control": "no-store" } }
   );
 }
+
+export const GET = withoutAuth(GETHandler);

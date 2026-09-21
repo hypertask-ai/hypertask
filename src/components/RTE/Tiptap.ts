@@ -246,22 +246,18 @@ const useTiptap = ({
           // You could implement your own progress tracking here
           try {
             const strings = await uploadFilesViaApi([file]);
-            console.log("🚀 ~ uploadFn: ~ strings:", strings);
             return strings[0];
           } catch (error) {
-            console.error("Upload failed:", error);
             throw error;
           }
         },
         onUploadStart: () => {
           // Notify the application that an upload has started
           // You could set a global loading state here
-          console.log("Upload started");
           document.body.classList.add("editor-uploading");
         },
         onUploadEnd: () => {
           // Notify the application that an upload has ended
-          console.log("Upload ended");
           document.body.classList.remove("editor-uploading");
         },
       }),
@@ -282,7 +278,6 @@ const useTiptap = ({
   useEffect(() => {
     if (!lazyEmojiList) {
       void ensureEmojiData().catch((error) => {
-        console.warn("[emoji] eager emoji dataset load failed", error);
       });
     }
   }, [lazyEmojiList]);
@@ -305,21 +300,17 @@ const useTiptap = ({
     },
     // editorProps: {
     //     handlePaste(view, event) {
-    //         console.log("🚀 ~ file: TipTap.tsx:187 ~ handlePaste ~ event:", event)
-    //         // console.log("🚀 ~ file: TipTap.tsx:181 ~ handlePaste ~ event:", event.clipboardData)
     //         let hasFiles = false;
     //         let reader = new FileReader();
 
     //         reader.onload = function (event) {
     //             let imageUrl = event?.target?.result;
-    //             console.log("🚀 ~ handlePaste ~ view.state.schema?.nodes?.image:", view.state.schema?.nodes)
     //             const node = view.state.schema?.nodes?.image.create({ src: imageUrl });
     //             const transaction = view.state.tr.replaceSelectionWith(node);
     //             view.dispatch(transaction);
     //         };
 
     //         if (event?.clipboardData?.files) {
-    //             console.log("🚀 ~ file: TipTap.tsx:194 ~ handlePaste ~ event?.clipboardData?.files:", event?.clipboardData?.files)
 
     //             Array.from(event?.clipboardData?.files)
     //                 .filter(item => item.type.startsWith("image"))

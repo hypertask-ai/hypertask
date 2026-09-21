@@ -1,3 +1,4 @@
+import { env as appEnv } from "#env";
 import { createHash } from "node:crypto";
 
 import { getEmailCodeClientIp } from "@/lib/auth/emailCodeRateLimit";
@@ -34,7 +35,7 @@ const hashRateLimitValue = (value: string) =>
 export function getQaLoginClientIp(request: Request): string | null {
   return (
     getEmailCodeClientIp(request) ??
-    (process.env.NODE_ENV === "production" ? null : "127.0.0.1")
+    (appEnv.NODE_ENV === "production" ? null : "127.0.0.1")
   );
 }
 
@@ -100,7 +101,7 @@ export async function claimQaLoginAttempt(
     )) as [unknown, unknown];
     return decideQaLoginAttempt(Number(results?.[0]), Number(results?.[1]));
   } catch (error) {
-    if (process.env.NODE_ENV === "production") throw error;
+    if (appEnv.NODE_ENV === "production") throw error;
     return decideQaLoginAttempt(
       claimMemoryCount(emailKey),
       claimMemoryCount(ipKey),

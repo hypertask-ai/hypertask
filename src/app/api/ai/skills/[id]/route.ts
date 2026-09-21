@@ -1,3 +1,4 @@
+import { withAuth } from "#with-auth";
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 
@@ -31,7 +32,7 @@ const updateSchema = z.object({
 
 type RouteContext = { params: Promise<{ id: string }> };
 
-export async function PATCH(request: NextRequest, context: RouteContext) {
+async function PATCHHandler(request: NextRequest, context: RouteContext) {
   const user = await getCurrentUserFromCookies();
   if (!user?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
@@ -61,7 +62,7 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
   }
 }
 
-export async function DELETE(request: NextRequest, context: RouteContext) {
+async function DELETEHandler(request: NextRequest, context: RouteContext) {
   const user = await getCurrentUserFromCookies();
   if (!user?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
@@ -111,3 +112,6 @@ function parseUpdateFields(input: z.infer<typeof updateSchema>, currentSlug: str
   if (input.argumentHint !== undefined) data.argumentHint = input.argumentHint?.trim() || null;
   return data;
 }
+
+export const PATCH = withAuth(PATCHHandler);
+export const DELETE = withAuth(DELETEHandler);

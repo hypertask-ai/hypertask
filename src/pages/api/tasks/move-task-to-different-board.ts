@@ -1,3 +1,5 @@
+import { logger as htLogger } from "#logger";
+import { withAuth } from "#with-auth";
 // /api/tasks/move-task-to-different-board
 import { NextApiHandler, NextApiRequest, NextApiResponse } from "next";
 import { moveTaskToDifferentBoard } from "@/utils/controllers/tasks/moveToDifferentBoard";
@@ -43,9 +45,9 @@ const handler: NextApiHandler = async (
 
     return res.status(200).json(result.task);
   } catch (error) {
-    console.error("Error moving task:", error);
+    htLogger.error("Error moving task:", error);
     return res.status(500).json({ message: "Internal server error" });
   }
 };
 
-export default handler;
+export default withAuth(handler);

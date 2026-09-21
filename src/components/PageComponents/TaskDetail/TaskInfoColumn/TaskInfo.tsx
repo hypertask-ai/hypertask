@@ -959,7 +959,6 @@ function CustomFieldRow({
         value: val,
       });
     } catch (err) {
-      console.error("CustomField upsert error:", err);
       setSavedValue(savedValue); // rollback
       toast.error(`Unable to save ${field.name}`);
     }

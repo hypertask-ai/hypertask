@@ -1,3 +1,4 @@
+import { logger as htLogger } from "#logger";
 import prisma from "@/lib/prisma";
 
 const getProjectById = async (projectId: number, userId: number) => {
@@ -32,7 +33,7 @@ const getProjectById = async (projectId: number, userId: number) => {
         })
         return project
     } catch (error) {
-        console.log("🚀 ~ getProjectById ~ error:", error)
+        htLogger.info("🚀 ~ getProjectById ~ error:", error)
         return null;
     }
 

@@ -1,3 +1,5 @@
+import { logger as htLogger } from "#logger";
+import { withAuth } from "#with-auth";
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 
@@ -12,7 +14,7 @@ const cancelSchema = z.object({
   stream_id: z.string().uuid(),
 });
 
-export async function POST(request: NextRequest) {
+async function POSTHandler(request: NextRequest) {
   const user = await getAiRequestUser(request);
   if (!user?.id) return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
 
@@ -48,10 +50,12 @@ export async function POST(request: NextRequest) {
     }
     return NextResponse.json({ success: true, status: "cancelling" });
   } catch (error) {
-    console.error("[ai/chat/cancel] cancellation unavailable", error);
+    htLogger.error("[ai/chat/cancel] cancellation unavailable", error);
     return NextResponse.json(
       { success: false, error: "Cancellation is temporarily unavailable" },
       { status: 503 },
     );
   }
 }
+
+export const POST = withAuth(POSTHandler);

@@ -1,5 +1,6 @@
 const assert = require("node:assert/strict");
 const path = require("node:path");
+const { passThroughAuth } = require("./helpers/pass-through-auth.cjs");
 const test = require("node:test");
 const { createJiti } = require("jiti");
 
@@ -16,6 +17,7 @@ function stubModule(relativePath, exports) {
   };
 }
 
+stubModule("src/lib/api/withAuth.ts", passThroughAuth());
 stubModule("src/lib/flags.ts", {
   FEATURE_FLAG_OWNER_USER_ID: 6,
   POSTHOG_ERROR_ALERT_FLAG: "htpr-6238-posthog-error-alert",

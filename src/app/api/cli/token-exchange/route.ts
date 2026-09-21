@@ -1,3 +1,5 @@
+import { logger as htLogger } from "#logger";
+import { withAuth } from "#with-auth";
 import { NextRequest, NextResponse } from 'next/server';
 import { getRedis } from '@/lib/redis';
 import { createMcpToken } from '@/lib/mcp/auth';
@@ -40,7 +42,7 @@ async function isTokenExchangeRateLimited(clientIp: string): Promise<boolean> {
   return n > RATE_MAX_PER_WINDOW;
 }
 
-export async function POST(request: NextRequest) {
+async function POSTHandler(request: NextRequest) {
   try {
     if (await isTokenExchangeRateLimited(getClientIp(request))) {
       return NextResponse.json(
@@ -91,10 +93,12 @@ export async function POST(request: NextRequest) {
     // 5. Return it to the CLI
     return NextResponse.json({ token });
   } catch (error) {
-    console.error('Error exchanging CLI token:', error);
+    htLogger.error('Error exchanging CLI token:', error);
     return NextResponse.json(
       { error: 'Internal server error' },
       { status: 500 }
     );
   }
 }
+
+export const POST = withAuth(POSTHandler);

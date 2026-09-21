@@ -240,7 +240,6 @@ const useAITaskWriter = (
           requestKind: requestKindOverride,
           userRetrievalTexts: options?.userRetrievalTexts ?? [],
         }
-        console.log("🚀 ~ sendAIRequest ~ payload keys:", Object.keys(payload));
         const response = await fetch(taskWriterRoute, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -274,7 +273,6 @@ const useAITaskWriter = (
           abortController.signal.aborted ||
           requestGenerationRef.current !== requestGeneration
         ) return;
-        console.error("AI Request Error:", error);
         setHasError(true);
         setAIResponse(
           error instanceof Error && error.message

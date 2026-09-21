@@ -1,3 +1,4 @@
+import { logger as htLogger } from "#logger";
 import prisma from "@/lib/prisma";
 import taskMentionSearch from "./taskMentionSearch";
 
@@ -183,7 +184,7 @@ const tasksSearchAll = async (projectIds: number[], searchQuery__: string) => {
       json: combinedResults,
     };
   } catch (error) {
-    console.log(error);
+    htLogger.info(error);
     return {
       status: 500,
       json: [],

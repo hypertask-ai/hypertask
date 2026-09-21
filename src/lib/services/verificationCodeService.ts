@@ -1,3 +1,4 @@
+import { logger as htLogger } from "#logger";
 import prisma from '@/lib/prisma'
 import { randomInt } from 'node:crypto'
 
@@ -59,9 +60,9 @@ export class VerificationCodeService {
       // Update rate limiting after successful storage
       lastRequestTime.set(normalizedEmail, now)
       
-      console.log(`🔐 Stored verification code for ${normalizedEmail}, expires at ${expiresAt.toISOString()}`)
+      htLogger.info(`🔐 Stored verification code for ${normalizedEmail}, expires at ${expiresAt.toISOString()}`)
     } catch (error) {
-      console.error('❌ Failed to store verification code:', error)
+      htLogger.error('❌ Failed to store verification code:', error)
       
       // Specific error handling
       if (error instanceof Error) {
@@ -104,7 +105,7 @@ export class VerificationCodeService {
 
       return result.count === 1 ? normalizedEmail : null
     } catch (error) {
-      console.error('❌ Failed to verify code:', error)
+      htLogger.error('❌ Failed to verify code:', error)
       return null
     }
   }
@@ -127,10 +128,10 @@ export class VerificationCodeService {
       })
       
       if (result.count > 0) {
-        console.log(`🧹 Cleaned up ${result.count} expired verification codes (older than 24h)`)
+        htLogger.info(`🧹 Cleaned up ${result.count} expired verification codes (older than 24h)`)
       }
     } catch (error) {
-      console.error('❌ Failed to cleanup expired codes:', error)
+      htLogger.error('❌ Failed to cleanup expired codes:', error)
     }
   }
 
@@ -174,7 +175,7 @@ export class VerificationCodeService {
         rateLimitActive: lastRequestTime.size
       }
     } catch (error) {
-      console.error('❌ Failed to get verification code stats:', error)
+      htLogger.error('❌ Failed to get verification code stats:', error)
       return { total: 0, active: 0, expired: 0, used: 0, recentRequests: 0, rateLimitActive: 0 }
     }
   }
@@ -210,6 +211,6 @@ export class VerificationCodeService {
       }
     }
     
-    console.log(`🧹 Rate limit cleanup: ${lastRequestTime.size} active entries remaining`)
+    htLogger.info(`🧹 Rate limit cleanup: ${lastRequestTime.size} active entries remaining`)
   }
 }

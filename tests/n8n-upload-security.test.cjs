@@ -1,10 +1,18 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const path = require("node:path");
+const { passThroughAuth } = require("./helpers/pass-through-auth.cjs");
 
 process.env.SESSION_SECRET ||= "n8n-upload-test-secret";
 
 const root = path.resolve(__dirname, "..");
+const authModule = path.join(root, "src/lib/api/withAuth.ts");
+require.cache[authModule] = {
+  id: authModule,
+  filename: authModule,
+  loaded: true,
+  exports: passThroughAuth(),
+};
 const jiti = require("jiti")(__filename, {
   interopDefault: true,
   alias: { "@": path.join(root, "src") },

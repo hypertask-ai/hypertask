@@ -1,3 +1,5 @@
+import { logger as htLogger } from "#logger";
+import { withoutAuth } from "#with-auth";
 import { NextRequest, NextResponse } from "next/server";
 import { generateText } from "ai";
 import { z } from "zod";
@@ -27,7 +29,7 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
 
-export async function POST(request: NextRequest) {
+async function POSTHandler(request: NextRequest) {
   const rateLimited = await checkMcpRateLimit(request);
   if (rateLimited) return rateLimited;
   const ctx = await validateMcpAuth(request);
@@ -119,10 +121,12 @@ export async function POST(request: NextRequest) {
   } catch (error) {
     // Log the real error server-side, but never echo raw exception text back
     // to the caller - same as the cookie route (tiptap-forwardslash/route.ts).
-    console.error("[mcp/ai/improve] error", errorMessage(error));
+    htLogger.error("[mcp/ai/improve] error", errorMessage(error));
     return NextResponse.json(
       { success: false, error: "An internal error occurred. Please try again later." },
       { status: 500 }
     );
   }
 }
+
+export const POST = withoutAuth(POSTHandler);

@@ -1,3 +1,4 @@
+import { logger as htLogger } from "#logger";
 import prisma from "@/lib/prisma";
 
 export const markTaskRead = async (taskId: number, userId: number) => {
@@ -28,7 +29,7 @@ export const markTaskRead = async (taskId: number, userId: number) => {
 
     return { status: 200, json: readState };
   } catch (error) {
-    console.log(error);
+    htLogger.info(error);
     return { status: 500, json: { message: "Internal server error" } };
   }
 };

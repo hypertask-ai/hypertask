@@ -1,3 +1,4 @@
+import { env as appEnv } from "#env";
 import { createGateway, generateObject } from "ai";
 import { z } from "zod";
 
@@ -83,7 +84,7 @@ function ensureMinimumDueDates(board: DemoBoard): DemoBoard {
 }
 
 export async function generateDemoBoard(purpose: string): Promise<DemoBoard> {
-  const apiKey = process.env.DEMO_AI_GATEWAY_API_KEY?.trim();
+  const apiKey = appEnv.DEMO_AI_GATEWAY_API_KEY?.trim();
   if (!apiKey) {
     // ponytail: fail closed. No shared-key fallback, so anonymous cost can only
     // ever land on the dedicated demo key.

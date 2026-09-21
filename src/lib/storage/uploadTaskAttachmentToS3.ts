@@ -1,3 +1,4 @@
+import { logger as htLogger } from "#logger";
 import {
   getHypertasksS3Client,
   getHypertasksStoragePublicUrl,
@@ -156,7 +157,7 @@ export function parseHypertasksAttachmentKeyFromUrl(
   try {
     const key = parseHypertasksStorageKeyFromUrl(fileSource);
     if (!key) {
-      console.warn(
+      htLogger.warn(
         "[parseHypertasksAttachmentKeyFromUrl] Skipping unexpected URL:",
         fileSource
       );
@@ -167,7 +168,7 @@ export function parseHypertasksAttachmentKeyFromUrl(
     }
     return key;
   } catch (error: any) {
-    console.log("🚀 ~ parseHypertasksAttachmentKeyFromUrl ~ error:", error);
+    htLogger.info("🚀 ~ parseHypertasksAttachmentKeyFromUrl ~ error:", error);
     return null;
   }
 }
@@ -253,7 +254,7 @@ export async function getHypertasksObjectSize(key: string): Promise<number | nul
       .promise();
     return head.ContentLength ?? null;
   } catch (error) {
-    console.error("[getHypertasksObjectSize] headObject failed:", key, error);
+    htLogger.error("[getHypertasksObjectSize] headObject failed:", key, error);
     return null;
   }
 }
@@ -295,7 +296,7 @@ export async function getHypertasksObjectState(
       return "missing";
     }
     if (!signal?.aborted) {
-      console.error("[getHypertasksObjectState] headObject failed:", key, error);
+      htLogger.error("[getHypertasksObjectState] headObject failed:", key, error);
     }
     return "unknown";
   } finally {
@@ -332,7 +333,7 @@ export async function deleteTaskAttachmentObjectByKey(
         .promise();
       return true;
     } catch (error) {
-      console.error(
+      htLogger.error(
         "[deleteTaskAttachmentFromS3] deleteObject failed:",
         { key, attempt, maxAttempts },
         error

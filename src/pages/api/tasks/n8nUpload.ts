@@ -1,3 +1,5 @@
+import { logger as htLogger } from "#logger";
+import { withAuth } from "#with-auth";
 import { SESSION_COOKIE, verifySession } from "@/lib/auth/session";
 import {
   MCP_ATTACHMENT_MAX_BATCH_BYTES,
@@ -108,17 +110,17 @@ async function readMultipartBody(req: NextApiRequest): Promise<Buffer> {
 async function resolveBetterAuthSession(
   req: NextApiRequest
 ): Promise<{ id: number } | null> {
-  const { getSessionUser } = await import("@/lib/auth/getSessionUser");
+  const { getAuthSession } = await import("#with-auth");
   const headers = new Headers();
   for (const [name, value] of Object.entries(req.headers)) {
     if (typeof value === "string") headers.set(name, value);
     else if (Array.isArray(value)) headers.set(name, value.join("; "));
   }
-  const session = await getSessionUser(headers);
+  const session = await getAuthSession(headers);
   return session ? { id: session.userId } : null;
 }
 
-export default async function handler(
+async function handler(
   req: NextApiRequest,
   res: NextApiResponse
 ) {
@@ -136,7 +138,7 @@ export default async function handler(
   // the one route that 401s for an otherwise logged-in user: attachments failed
   // in comments and descriptions while text-only comments still posted.
   //
-  // getSessionUser is imported lazily so the legacy path stays free of the
+  // getAuthSession is imported lazily so the legacy path stays free of the
   // Better Auth and Prisma module graph.
   const session =
     verifySession(req.cookies[SESSION_COOKIE]) ??
@@ -202,7 +204,7 @@ export default async function handler(
     if (error instanceof UploadRequestError) {
       return res.status(error.status).json({ error: error.message });
     }
-    console.error("[n8nUpload] Upload failed", error);
+    htLogger.error("[n8nUpload] Upload failed", error);
     return res.status(500).json({ error: "Error uploading files" });
   }
 }
@@ -352,3 +354,5 @@ function getMimeTypeFromExtension(extension: string): string {
 
   return mimeTypes[extension] || "application/octet-stream";
 }
+
+export default withAuth(handler);

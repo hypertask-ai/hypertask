@@ -1,7 +1,9 @@
+import { logger as htLogger } from "#logger";
+import { withAuth } from "#with-auth";
 import { NextRequest, NextResponse } from 'next/server';
 import { hasSubscription } from '@/lib/subscription';
 
-export async function POST(request: NextRequest) {
+async function POSTHandler(request: NextRequest) {
   try {
     const { teamId } = await request.json();
     
@@ -17,10 +19,12 @@ export async function POST(request: NextRequest) {
       subscriptionStatus 
     });
   } catch (error) {
-    console.error('❌ Subscription check failed:', error);
+    htLogger.error('❌ Subscription check failed:', error);
     return NextResponse.json({ 
       success: false, 
       error: 'Subscription check failed' 
     }, { status: 500 });
   }
-} 
+}
+
+export const POST = withAuth(POSTHandler);

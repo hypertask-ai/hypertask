@@ -56,7 +56,6 @@ import { useCallback } from "react";
             return successMessage;
           },
           error: (error) => {
-            console.log("🚀 ~ removeParentTask ~ error:", error);
             onError&&onError()
             return errorMessage;
           },

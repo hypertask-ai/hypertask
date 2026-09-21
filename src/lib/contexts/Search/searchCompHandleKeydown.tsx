@@ -1,4 +1,5 @@
 "use client"
+import { logger as htLogger } from "#logger";
 import { ITask } from '@/models/model';
 import { showCommandsAtom, tasksPlayListAtom, SearchTaskIndexAtom } from '@/store';
 // import { taskBaseUri } from '@/utils';
@@ -27,7 +28,7 @@ const HandleKeyboardFunctions  = (list:any[]) => {
     const handleKeyDown = (event:KeyboardEvent)=>{
       var cmdControl = isApple&&event.metaKey || !isApple&&event.ctrlKey;
 
-      console.log("🚀 ~ handleKeyDown ~ event:", event)
+      htLogger.info("🚀 ~ handleKeyDown ~ event:", event)
       const classNamesToReturnFrom = ["modal-open","ProseMirror ProseMirror-focused",undefined]
       if (
         isInputFocused||
@@ -161,7 +162,7 @@ const HandleKeyboardFunctions  = (list:any[]) => {
  
 
     useEffect(()=>{
-      console.log("🚀 ~ HandleKeyboardFunctions ~ list:", list)
+      htLogger.info("🚀 ~ HandleKeyboardFunctions ~ list:", list)
       setSelectedIndex(0)
     },[list])
 

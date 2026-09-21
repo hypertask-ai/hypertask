@@ -163,7 +163,6 @@ const ManageViews: React.FC<Props> = ({ toggle }) => {
             )))
             return true
         } catch (error) {
-            console.log("🚀 ~ renameSelectedView ~ error:", error)
             toast.error("Error renaming view");
             return false
         } finally {
@@ -190,7 +189,6 @@ const ManageViews: React.FC<Props> = ({ toggle }) => {
             setDisplayedViews((views) => views.filter((item) => item.id !== view.id))
             return true
         } catch (error) {
-            console.log("🚀 ~ deleteSelectedView ~ error:", error)
             toast.error("Error deleting view");
             return false
         } finally {

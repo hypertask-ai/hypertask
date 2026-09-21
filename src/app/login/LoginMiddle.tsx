@@ -187,19 +187,8 @@ export const LoginMiddle = ({ serifClassName }: LoginMiddleProps) => {
     const urlParams = new URLSearchParams(window.location.search);
     const token = urlParams.get("token");
 
-    console.log(
-      "🔍 LoginMiddle useLayoutEffect - token:",
-      token ? "found" : "not found",
-    );
-    console.log(
-      "🔍 LoginMiddle useLayoutEffect - full URL:",
-      window.location.href,
-    );
 
     if (token || urlParams.get("authError") === "account_not_found") {
-      console.log(
-        "🔗 JWT email token detected in LoginMiddle, showing email form",
-      );
       setShowEmailForm(true);
     }
   }, []);

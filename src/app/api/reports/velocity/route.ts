@@ -1,4 +1,5 @@
-import { getSessionUser } from "@/lib/auth/getSessionUser";
+import { logger as htLogger } from "#logger";
+import { getAuthSession, withAuth } from "#with-auth";
 import prisma from "@/lib/prisma";
 import { isFeatureEnabled } from "@/lib/flags";
 import { HTPR_6585_BOARD_REPORTS_FLAG } from "@/lib/flags/keys";
@@ -15,8 +16,8 @@ import { NextRequest, NextResponse } from "next/server";
 const WORKED_ON_TASK_LIMIT = 100;
 const MERGED_PULL_REQUEST_LIMIT = 5;
 
-export async function GET(request: NextRequest) {
-  const userId = (await getSessionUser(request.headers))?.userId;
+async function GETHandler(request: NextRequest) {
+  const userId = (await getAuthSession(request.headers))?.userId;
   if (!userId) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
@@ -304,10 +305,12 @@ export async function GET(request: NextRequest) {
       )
     );
   } catch (error) {
-    console.error("[reports/velocity] Unable to build report:", error);
+    htLogger.error("[reports/velocity] Unable to build report:", error);
     return NextResponse.json(
       { error: "Unable to load velocity report" },
       { status: 500 }
     );
   }
 }
+
+export const GET = withAuth(GETHandler);

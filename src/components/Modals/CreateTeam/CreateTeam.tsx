@@ -24,7 +24,6 @@ const CreateTeam = (props: Props) => {
     const handleKeyDown = (e: KeyboardEvent) => {
 
         // if (e.key === 'Enter' && filteredTeams.length > 0) {
-        //     console.log("i had submitted bro this is dangerous")
         //     // createBoard(title, selectedTeam.id, selectedTeam.googleAccountId)
         // }
         if (e.key === "Tab") {

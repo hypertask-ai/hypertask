@@ -1,3 +1,4 @@
+import { withAuth } from "#with-auth";
 // Import PrismaClient from the generated Prisma client
 import addIntoTaskDesc from '@/utils/controllers/urls/addIntoTaskDesc';
 import { NextApiHandler, NextApiRequest, NextApiResponse } from 'next';
@@ -19,7 +20,7 @@ const handler: NextApiHandler = async (req: NextApiRequest, res: NextApiResponse
 // if (req.method==="POST"){
 
 //   const { urlsToAdd, taskId}:{urlsToAdd:IUrl[], commentId:number, taskId:number} = req.body;
-//   // console.log(commentId)
+//   // debug.log(commentId)
 //   if (urlsToAdd.length==0 &&!taskId ) {
 //       return res.status(400).json({ message: "Missing Required Data" });
 //   }
@@ -32,7 +33,7 @@ const handler: NextApiHandler = async (req: NextApiRequest, res: NextApiResponse
 //         });
 //     return res.status(200).json(urlRecords)       
 //   } catch (error) {
-//     console.error('Error:', error);
+//     debug.error('Error:', error);
 //     return res.status(300)
 //   } finally {
 //     // Disconnect the PrismaClient to release the database connection
@@ -43,7 +44,7 @@ const handler: NextApiHandler = async (req: NextApiRequest, res: NextApiResponse
 // else if (req.method==="PUT"){
 //   try {
 //     const { urlsToAdd, taskId } = req.body;
-//     // console.log("🚀 ~ file: addIntoTask.ts:82 ~ consthandler:NextApiHandler= ~ urlsToAdd:", urlsToAdd)
+//     // debug.log("🚀 ~ file: addIntoTask.ts:82 ~ consthandler:NextApiHandler= ~ urlsToAdd:", urlsToAdd)
 
 //     if (!taskId){
 //       return res.status(300).json({message:" NO TASKID"})
@@ -56,11 +57,11 @@ const handler: NextApiHandler = async (req: NextApiRequest, res: NextApiResponse
 //         commentId:null
 //       },
 //     });
-//     // console.log(existingUrls)
+//     // debug.log(existingUrls)
 
 //     // // Iterate through existingUrls and update or delete as needed
 //     for (const existingUrl of existingUrls) {
-//       // console.log(existingUrl)
+//       // debug.log(existingUrl)
 
 //       const matchedUrlData = urlsToAdd.find(
 //         (urlData:IUrl) =>
@@ -99,7 +100,7 @@ const handler: NextApiHandler = async (req: NextApiRequest, res: NextApiResponse
 //         TaskId: taskId,
 //       }));
 
-//     // console.log(newUrlsToAdd)
+//     // debug.log(newUrlsToAdd)
 //     if (newUrlsToAdd.length > 0) {
 //       await prisma.url.createMany({
 //         data: newUrlsToAdd,
@@ -108,7 +109,7 @@ const handler: NextApiHandler = async (req: NextApiRequest, res: NextApiResponse
 
 //     return res.status(200).json({ success: true });
 //   } catch (error) {
-//     console.error('Error:', error);
+//     debug.error('Error:', error);
 //     return res.status(500).json({ success: false, error: 'An error occurred.' });
 //   }
 
@@ -117,4 +118,4 @@ const handler: NextApiHandler = async (req: NextApiRequest, res: NextApiResponse
 }
 
 // Run the main function
-export default handler;
+export default withAuth(handler);

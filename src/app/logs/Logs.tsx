@@ -107,7 +107,6 @@ const convertToDateMonthYear = (inputString:string)=>{
 
 const getHoursAndMinutes = (inputString:string)=>{
     const dateObject: Date = new Date(inputString);
-    console.log("🚀 ~ file: Logs.tsx:110 ~ getHoursAndMinutes ~ inputString:", inputString)
     const options: Intl.DateTimeFormatOptions = {
         hour: 'numeric',
         minute: 'numeric',

@@ -1,10 +1,12 @@
+import { logger as htLogger } from "#logger";
+import { withoutAuth } from "#with-auth";
 import { NextRequest, NextResponse } from 'next/server';
 import { checkMcpRateLimit, validateMcpAuth } from '@/lib/mcp/auth';
 import prisma from '@/lib/prisma';
 import { findTaskByIdentifier } from '@/lib/mcp/tasks/resolveTask';
 import { isValidLeaseToken, isValidTaskId } from '@/lib/mcp/tasks/lease';
 
-export async function POST(request: NextRequest) {
+async function POSTHandler(request: NextRequest) {
   const rateLimited = await checkMcpRateLimit(request);
   if (rateLimited) return rateLimited;
   const ctx = await validateMcpAuth(request);
@@ -94,10 +96,12 @@ export async function POST(request: NextRequest) {
       { status: 200 }
     );
   } catch (error) {
-    console.error('[MCP Task Lease Release] Error:', error);
+    htLogger.error('[MCP Task Lease Release] Error:', error);
     return NextResponse.json(
       { success: false, error: 'Failed to release task lease' },
       { status: 500 }
     );
   }
 }
+
+export const POST = withoutAuth(POSTHandler);

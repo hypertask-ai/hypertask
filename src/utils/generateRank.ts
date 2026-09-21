@@ -53,14 +53,14 @@ function generateRank(prevRank: string | undefined, nextRank: string | undefined
         const nextNumericPart = parseFloat(nextRank.replace(/[a-zA-Z]/g, ""));
         
         // let newNumericPart = (prevNumericPart + nextNumericPart) / 2;
-        // console.log("🚀 ~ file: generateRank.ts:21 ~ generateRank ~ newNumericPart:", newNumericPart)
+        // debug.log("🚀 ~ file: generateRank.ts:21 ~ generateRank ~ newNumericPart:", newNumericPart)
 
         let newNumericPart=generateRandomNumberBetween(prevNumericPart,nextNumericPart)
     
         // Ensure the new numeric part falls between the two ranks and is different from both
         // while (newNumericPart == prevNumericPart || newNumericPart == nextNumericPart) {
         //     newNumericPart += 0.05; 
-        //     console.log("🚀 ~ file: generateRank.ts:26 ~ generateRank ~ newNumericPart:", newNumericPart)
+        //     debug.log("🚀 ~ file: generateRank.ts:26 ~ generateRank ~ newNumericPart:", newNumericPart)
         // }
         const formattedNewNumericPart = newNumericPart.toFixed(uptoDecimals).padStart(padStartValue, '0');
         let newRank = prevRank.replace(/[0-9.]+$/,formattedNewNumericPart);

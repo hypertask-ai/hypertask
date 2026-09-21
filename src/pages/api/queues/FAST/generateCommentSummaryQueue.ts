@@ -1,3 +1,5 @@
+import { logger as htLogger } from "#logger";
+import { withoutAuth } from "#with-auth";
 import type { NextApiRequest, NextApiResponse } from "next";
 import { withQstashSignature } from "@/lib/qstash";
 import { generateAndStoreCommentSummary } from "@/app/api/ai/_lib/commentSummaries";
@@ -6,16 +8,16 @@ import type { IReq } from "./generateCommentSummary";
 async function handler(req: NextApiRequest, res: NextApiResponse) {
   try {
     const job = req.body as IReq;
-    console.log("🤔 ~ executing job:", job);
+    htLogger.info("🤔 ~ executing job:", job);
 
     const result = await generateAndStoreCommentSummary(job.commentId);
     if (!result) {
-      console.log("generateAndStoreCommentSummary returned empty");
+      htLogger.info("generateAndStoreCommentSummary returned empty");
       return res.status(200).json({ skipped: true });
     }
     return res.status(200).json({ ok: true });
   } catch (error) {
-    console.log(
+    htLogger.info(
       "🤔 api/queues/FAST/generateCommentSummaryQueue ~ error:",
       error
     );
@@ -24,7 +26,7 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
   }
 }
 
-export default withQstashSignature(handler);
+export default withoutAuth(withQstashSignature(handler));
 
 export const config = {
   api: {

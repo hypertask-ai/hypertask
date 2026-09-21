@@ -1,3 +1,6 @@
+import { env as appEnv } from "#env";
+import { logger as htLogger } from "#logger";
+import { getAuthSession, withAuth } from "#with-auth";
 
 import prisma from "@/lib/prisma";
 import checkReminderAndCreateNotification from "@/utils/controllers/notifications/creation-service/check-reminder_create-notification";
@@ -7,7 +10,6 @@ import { sendDataNewCommentFCM } from "@/utils/controllers/FCM";
 import { broadcastTaskComment } from "@/lib/realtime/server";
 import { mentionPlainPreview } from "@/utils/controllers/notifications/mentionText";
 import { omitCommentSeen } from "@/utils/controllers/comments/readReceipts";
-import { getSessionUser } from "@/lib/auth/getSessionUser";
 
 const handler: NextApiHandler = async (req: NextApiRequest, res: NextApiResponse) => {
 
@@ -17,7 +19,7 @@ const handler: NextApiHandler = async (req: NextApiRequest, res: NextApiResponse
         }
 
         // HTPR-4667: derive the mention actor from the signed session.
-        const session = await getSessionUser(
+        const session = await getAuthSession(
             new Headers(req.headers as Record<string, string>)
         );
         if (!session) {
@@ -167,7 +169,7 @@ const handler: NextApiHandler = async (req: NextApiRequest, res: NextApiResponse
                             }),
                             body: notificationBody,
                             title: notificationTitle,
-                            click_action: `${process.env.NEXT_PUBLIC_BASEURL}/${link}`,
+                            click_action: `${appEnv.NEXT_PUBLIC_BASEURL}/${link}`,
                         };
                         
                         // Send push notification using reusable function
@@ -184,11 +186,11 @@ const handler: NextApiHandler = async (req: NextApiRequest, res: NextApiResponse
                             customPreferenceCheck: preferenceMap,
                         });
                         
-                        console.log("🚀 ~ Mention push notification sent to user", userId);
+                        htLogger.info("🚀 ~ Mention push notification sent to user", userId);
                     }
                 }
             } catch (error) {
-                console.log("🚀 ~ Error in mention push notification flow:", error);
+                htLogger.info("🚀 ~ Error in mention push notification flow:", error);
                 // Don't fail the request if push notification fails
             }
         }
@@ -200,9 +202,9 @@ const handler: NextApiHandler = async (req: NextApiRequest, res: NextApiResponse
         })
 
     } catch (error) {
-        console.log("🚀 ~ consthandler:NextApiHandler= ~ error:", error)
+        htLogger.info("🚀 ~ consthandler:NextApiHandler= ~ error:", error)
         return res.status(500).json(error)
     }
 }
 
-export default handler
+export default withAuth(handler)

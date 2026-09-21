@@ -1,3 +1,5 @@
+import { logger as htLogger } from "#logger";
+import { withoutAuth } from "#with-auth";
 import { notificationStore } from "@/utils/controllers/notifications";
 import { NextRequest, NextResponse } from 'next/server'
 import { validateMcpAuth, createUnauthorizedResponse, checkMcpRateLimit } from '@/lib/mcp/auth'
@@ -31,7 +33,7 @@ interface InboxArchiveResponse {
   archived_count: number
 }
 
-export async function POST(request: NextRequest) {
+async function POSTHandler(request: NextRequest) {
   try {
     const rateLimited = await checkMcpRateLimit(request)
     if (rateLimited) return rateLimited
@@ -238,7 +240,7 @@ export async function POST(request: NextRequest) {
     if (error instanceof ReminderSelectionConflict) {
       return NextResponse.json({ success: false, error: error.message }, { status: 409 })
     }
-    console.error('Error archiving inbox notifications:', error)
+    htLogger.error('Error archiving inbox notifications:', error)
     return NextResponse.json(
       {
         success: false,
@@ -248,3 +250,5 @@ export async function POST(request: NextRequest) {
     )
   }
 }
+
+export const POST = withoutAuth(POSTHandler);

@@ -1,3 +1,4 @@
+import { logger as htLogger } from "#logger";
 import {  CreateLogInput } from "@/models/model";
 import { LogType, PrismaClient, Status } from "@prisma/client";
 
@@ -7,7 +8,7 @@ import prisma from "@/lib/prisma";
 const createLog = async (data: CreateLogInput): Promise<any> => {
     try {
 
-        console.log("🚀 ~ file: createLog.ts:12 ~ createLog ~ data.log:", data.log)
+        htLogger.info("🚀 ~ file: createLog.ts:12 ~ createLog ~ data.log:", data.log)
             const allLogs =await prisma.logs.create({
                 data:{
                     log:data.log,
@@ -24,7 +25,7 @@ const createLog = async (data: CreateLogInput): Promise<any> => {
             })
             // res.status(200).json(comments);
         } catch (error) {
-            console.log(error);
+            htLogger.info(error);
             return ({
                 status:500,
                 json:[],

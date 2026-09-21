@@ -1,3 +1,4 @@
+import { logger as htLogger } from "#logger";
 /**
  * `PATCH /api/mcp/agents/[agentId]`: rename an owned agent, switch it back on,
  * file it away in the register, or change who can see it (PRIVATE/TEAM).
@@ -130,7 +131,7 @@ export async function handleArchiveAgentRequest(
       agent: describe(archived.agent),
     })
   } catch (error) {
-    console.error('[MCP Archive Agent] Error:', error)
+    htLogger.error('[MCP Archive Agent] Error:', error)
     return NextResponse.json(
       { success: false, error: 'Internal server error' },
       { status: 500 }
@@ -224,7 +225,7 @@ export async function handlePatchAgentRequest(
     try {
       visibilityEnabled = await isFeatureEnabled(AGENT_VISIBILITY_FLAG, ctx.user.id)
     } catch (error) {
-      console.error('[MCP Update Agent Visibility] feature flag check failed', error)
+      htLogger.error('[MCP Update Agent Visibility] feature flag check failed', error)
     }
     if (!visibilityEnabled) {
       return notFound()
@@ -269,7 +270,7 @@ export async function handlePatchAgentRequest(
           { status: error.status }
         )
       }
-      console.error('[MCP Update Agent Boards] Error:', error)
+      htLogger.error('[MCP Update Agent Boards] Error:', error)
       return NextResponse.json(
         { success: false, error: 'Internal server error' },
         { status: 500 }

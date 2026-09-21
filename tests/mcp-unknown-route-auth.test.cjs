@@ -17,6 +17,7 @@ function loadRoute(authContext) {
   }).outputText
   const calls = { auth: 0, unauthorized: 0 }
   const stubs = {
+    '#with-auth': { withoutAuth: (handler) => handler },
     'next/server': {
       NextResponse: {
         json: (body, init = {}) => ({

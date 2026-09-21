@@ -43,7 +43,6 @@ export function ensureEmojiData(): Promise<void> {
           try {
             listener();
           } catch (error) {
-            console.error("[emoji] data install listener failed", error);
           }
         }
       })

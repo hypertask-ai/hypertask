@@ -163,7 +163,6 @@ function CliAuthContent() {
           /* ignore */
         }
       }
-      console.error('Failed to generate CLI auth code', err);
       toast.error('Failed to connect to CLI. Please try again.');
       setError('Failed to generate authentication code.');
       setStep('error');

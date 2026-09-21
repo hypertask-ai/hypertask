@@ -1,3 +1,4 @@
+import { withAuth } from "#with-auth";
 import type { NextApiHandler } from "next";
 import { SESSION_COOKIE, verifySession } from "@/lib/auth/session";
 import prisma from "@/lib/prisma";
@@ -41,4 +42,4 @@ const handler: NextApiHandler = async (req, res) => {
   return res.status(200).json({ message: "success" });
 };
 
-export default handler;
+export default withAuth(handler);

@@ -1,3 +1,5 @@
+import { logger as htLogger } from "#logger";
+import { withoutAuth } from "#with-auth";
 import type { NextApiRequest, NextApiResponse } from "next";
 import { subDays } from "date-fns";
 import prisma from "@/lib/prisma";
@@ -96,7 +98,7 @@ async function sweepReminders(): Promise<number> {
       const result = await invokeDueReminder(reminder as unknown as IReminder);
       if (result === "invoked") invoked += 1;
     } catch (error) {
-      console.log("🚀 ~ sweepReminders ~ row error:", error);
+      htLogger.info("🚀 ~ sweepReminders ~ row error:", error);
     }
   }
 
@@ -136,7 +138,7 @@ async function sweepDueDates(): Promise<number> {
     } catch (error) {
       // Rows are already claimed (dueDateNotifiedAt set); isolate a bad one so it
       // doesn't drop the rest of the batch.
-      console.log("🚀 ~ sweepDueDates ~ row error:", error);
+      htLogger.info("🚀 ~ sweepDueDates ~ row error:", error);
     }
   }
 
@@ -168,7 +170,7 @@ async function sweepTaskDeletes(): Promise<number> {
     try {
       await claimAndInvokeTaskDelete(task.id);
     } catch (error) {
-      console.log("🚀 ~ sweepTaskDeletes ~ row error:", error);
+      htLogger.info("🚀 ~ sweepTaskDeletes ~ row error:", error);
     }
   }
 
@@ -205,7 +207,7 @@ async function sweepChatExpiries(): Promise<number> {
     try {
       await recreateSessionIfEmpty(userId);
     } catch (error) {
-      console.log("🚀 ~ sweepChatExpiries ~ recreate error:", error);
+      htLogger.info("🚀 ~ sweepChatExpiries ~ recreate error:", error);
     }
   }
 
@@ -230,7 +232,7 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
         "NX",
       )) === "OK";
   } catch (error) {
-    console.log(
+    htLogger.info(
       "🚀 ~ sweep ~ redis lease unavailable, proceeding lockless:",
       error,
     );
@@ -260,67 +262,67 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
     try {
       summary.reminders = await sweepReminders();
     } catch (error) {
-      console.log("🚀 ~ sweep ~ reminders error:", error);
+      htLogger.info("🚀 ~ sweep ~ reminders error:", error);
     }
 
     try {
       summary.dueDates = await sweepDueDates();
     } catch (error) {
-      console.log("🚀 ~ sweep ~ dueDates error:", error);
+      htLogger.info("🚀 ~ sweep ~ dueDates error:", error);
     }
 
     try {
       summary.deletes = await sweepTaskDeletes();
     } catch (error) {
-      console.log("🚀 ~ sweep ~ deletes error:", error);
+      htLogger.info("🚀 ~ sweep ~ deletes error:", error);
     }
 
     try {
       summary.chatExpiries = await sweepChatExpiries();
     } catch (error) {
-      console.log("🚀 ~ sweep ~ chatExpiries error:", error);
+      htLogger.info("🚀 ~ sweep ~ chatExpiries error:", error);
     }
 
     try {
       summary.autoArchives = await sweepAutoArchives();
     } catch (error) {
-      console.log("🚀 ~ sweep ~ autoArchives error:", error);
+      htLogger.info("🚀 ~ sweep ~ autoArchives error:", error);
     }
 
     try {
       summary.staleNudges = await sweepStaleNudges();
     } catch (error) {
-      console.log("🚀 ~ sweep ~ staleNudges error:", error);
+      htLogger.info("🚀 ~ sweep ~ staleNudges error:", error);
     }
 
     try {
       summary.cycleRollovers = await sweepCycleRollovers();
     } catch (error) {
-      console.log("🚀 ~ sweep ~ cycleRollovers error:", error);
+      htLogger.info("🚀 ~ sweep ~ cycleRollovers error:", error);
     }
 
     try {
       summary.agentWebhooks = await sweepAgentWebhookDeliveries();
     } catch (error) {
-      console.log("🚀 ~ sweep ~ agentWebhooks error:", error);
+      htLogger.info("🚀 ~ sweep ~ agentWebhooks error:", error);
     }
 
     try {
       await sweepExpiredAgentChatTurns();
     } catch (error) {
-      console.log("🚀 ~ sweep ~ agentChatTurns error:", error);
+      htLogger.info("🚀 ~ sweep ~ agentChatTurns error:", error);
     }
 
     try {
       summary.agentTaskCreated = await sweepPendingAgentTaskCreatedWebhooks();
     } catch (error) {
-      console.log("🚀 ~ sweep ~ agentTaskCreated error:", error);
+      htLogger.info("🚀 ~ sweep ~ agentTaskCreated error:", error);
     }
 
     try {
       summary.boardWebhooks = await sweepBoardWebhookDeliveries();
     } catch (error) {
-      console.log("🚀 ~ sweep ~ boardWebhooks error:", error);
+      htLogger.info("🚀 ~ sweep ~ boardWebhooks error:", error);
     }
 
     try {
@@ -329,7 +331,7 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
           leaseStartedAt + (SWEEP_LEASE_TTL_SECONDS - 10) * 1000,
       });
     } catch (error) {
-      console.log("🚀 ~ sweep ~ googleCalendars error:", error);
+      htLogger.info("🚀 ~ sweep ~ googleCalendars error:", error);
     }
 
     return res.status(200).json(summary);
@@ -342,7 +344,7 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
   }
 }
 
-export default withQstashSignature(handler);
+export default withoutAuth(withQstashSignature(handler));
 
 export const config = {
   api: {

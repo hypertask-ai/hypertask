@@ -1,3 +1,4 @@
+import { logger as htLogger } from "#logger";
 import {
   createContext,
   type ReactNode,
@@ -173,7 +174,7 @@ export const KanbanBulkSelectionProvider = ({
           try {
             await operation(task);
           } catch (error) {
-            console.error("Kanban bulk action failed", task.id, error);
+            htLogger.error("Kanban bulk action failed", task.id, error);
             failures.push(task);
           }
         }

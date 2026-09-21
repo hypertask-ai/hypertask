@@ -1,3 +1,5 @@
+import { logger as htLogger } from "#logger";
+import { withAuth } from "#with-auth";
 import { SESSION_COOKIE, verifySession } from "@/lib/auth/session";
 import { isHeicPreviewUrl } from "@/lib/media/heicPreview";
 import {
@@ -65,7 +67,7 @@ export function parseKeys(
   });
 }
 
-export default async function handler(
+async function handler(
   req: NextApiRequest,
   res: NextApiResponse
 ) {
@@ -91,7 +93,7 @@ export default async function handler(
         session.id,
       );
     } catch (error) {
-      console.error("[uploadFinalize] Could not evaluate upload feature flag", error);
+      htLogger.error("[uploadFinalize] Could not evaluate upload feature flag", error);
       return res.status(500).json({ error: "Could not link attachment" });
     }
     if (!enabled) {
@@ -110,14 +112,14 @@ export default async function handler(
       try {
         await broadcastTaskChange(taskId, { originUserId: session.id });
       } catch (error) {
-        console.warn("[uploadFinalize] task realtime delivery failed", error);
+        htLogger.warn("[uploadFinalize] task realtime delivery failed", error);
       }
       return res.status(200).json({ success: true, attachment });
     } catch (error) {
       if (error instanceof TaskAttachmentLinkError) {
         return res.status(error.status).json({ error: error.message });
       }
-      console.error("[uploadFinalize] Could not link attachment", error);
+      htLogger.error("[uploadFinalize] Could not link attachment", error);
       return res.status(500).json({ error: "Could not link attachment" });
     }
   }
@@ -141,7 +143,7 @@ export default async function handler(
       if (error instanceof TaskAttachmentLinkError) {
         return res.status(error.status).json({ error: error.message });
       }
-      console.error("[uploadFinalize] Could not discard attachment", error);
+      htLogger.error("[uploadFinalize] Could not discard attachment", error);
       return res.status(500).json({ error: "Could not discard attachment" });
     }
   }
@@ -264,12 +266,14 @@ export default async function handler(
 async function resolveBetterAuthSession(
   req: NextApiRequest
 ): Promise<{ id: number } | null> {
-  const { getSessionUser } = await import("@/lib/auth/getSessionUser");
+  const { getAuthSession } = await import("#with-auth");
   const headers = new Headers();
   for (const [name, value] of Object.entries(req.headers)) {
     if (typeof value === "string") headers.set(name, value);
     else if (Array.isArray(value)) headers.set(name, value.join("; "));
   }
-  const session = await getSessionUser(headers);
+  const session = await getAuthSession(headers);
   return session ? { id: session.userId } : null;
 }
+
+export default withAuth(handler);

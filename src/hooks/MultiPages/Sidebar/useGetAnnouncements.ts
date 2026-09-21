@@ -42,6 +42,5 @@ const getUserAnnouncements = async(userId:number|undefined):Promise<IAnnouncemen
         const response = await axios.get(`/api/users/announcements/getUserAnnouncements?userId=${userId}`)
         return response.data
     } catch (error) {
-        console.log("🚀 ~ getUserAnnouncements ~ error:", error)
     }
 }

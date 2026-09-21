@@ -1,3 +1,5 @@
+import { logger as htLogger } from "#logger";
+import { withAuth } from "#with-auth";
 import { SESSION_COOKIE, verifySession } from "@/lib/auth/session";
 import {
   parseViewOrder,
@@ -31,9 +33,9 @@ const handler: NextApiHandler = async (req, res) => {
     if (error instanceof ViewOrderError) {
       return res.status(error.status).json({ message: error.message });
     }
-    console.error("update view order failed", error);
+    htLogger.error("update view order failed", error);
     return res.status(500).json({ message: "Unable to update view order" });
   }
 };
 
-export default handler;
+export default withAuth(handler);

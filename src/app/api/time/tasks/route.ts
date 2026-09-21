@@ -1,9 +1,10 @@
+import { withAuth } from "#with-auth";
 import prisma from "@/lib/prisma";
 import { getProjectWhere } from "@/utils/controllers/projects/getAllIncludes";
 import { NextRequest, NextResponse } from "next/server";
 import { getTimeRequestUser, parseTaskId } from "../_lib";
 
-export async function GET(request: NextRequest) {
+async function GETHandler(request: NextRequest) {
   const auth = await getTimeRequestUser(request);
   if (auth.response) return auth.response;
 
@@ -48,3 +49,5 @@ export async function GET(request: NextRequest) {
 
   return NextResponse.json({ success: true, tasks });
 }
+
+export const GET = withAuth(GETHandler);

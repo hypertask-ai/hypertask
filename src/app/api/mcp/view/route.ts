@@ -1,3 +1,5 @@
+import { logger as htLogger } from "#logger";
+import { withoutAuth } from "#with-auth";
 import { NextRequest, NextResponse } from 'next/server'
 import { validateMcpAuth, checkMcpRateLimit } from '@/lib/mcp/auth'
 import prisma from '@/lib/prisma'
@@ -92,7 +94,7 @@ export interface CreateViewResponse {
  *
  * Authentication: Bearer token (JWT or API key) in Authorization header
  */
-export async function GET(request: NextRequest) {
+async function GETHandler(request: NextRequest) {
   try {
     const rateLimited = await checkMcpRateLimit(request)
     if (rateLimited) return rateLimited
@@ -244,7 +246,7 @@ export async function GET(request: NextRequest) {
       offset,
     } satisfies ListViewsResponse)
   } catch (error) {
-    console.error('Error listing views:', error)
+    htLogger.error('Error listing views:', error)
     return NextResponse.json(
       { success: false, error: 'Internal server error' },
       { status: 500 }
@@ -261,7 +263,7 @@ export async function GET(request: NextRequest) {
  *
  * Was a stub that returned `{ success: true }` and created nothing (HTPR-4218).
  */
-export async function POST(request: NextRequest) {
+async function POSTHandler(request: NextRequest) {
   try {
     const rateLimited = await checkMcpRateLimit(request)
     if (rateLimited) return rateLimited
@@ -337,7 +339,7 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({ success: true, view })
   } catch (error) {
-    console.error('Error creating view:', error)
+    htLogger.error('Error creating view:', error)
     return NextResponse.json(
       { success: false, error: error instanceof Error ? error.message : 'Internal server error' },
       { status: 400 }
@@ -405,3 +407,6 @@ function toViewItem(
 
   return item
 }
+
+export const GET = withoutAuth(GETHandler);
+export const POST = withoutAuth(POSTHandler);

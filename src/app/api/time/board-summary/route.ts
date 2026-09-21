@@ -1,8 +1,9 @@
+import { withAuth } from "#with-auth";
 import { boardTimeSummary } from "@/lib/timeTracking";
 import { NextRequest, NextResponse } from "next/server";
 import { getTimeRequestUser, parseTaskId } from "../_lib";
 
-export async function GET(request: NextRequest) {
+async function GETHandler(request: NextRequest) {
   const auth = await getTimeRequestUser(request);
   if (auth.response) return auth.response;
 
@@ -37,3 +38,5 @@ export async function GET(request: NextRequest) {
     })),
   });
 }
+
+export const GET = withAuth(GETHandler);

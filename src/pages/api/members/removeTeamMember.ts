@@ -1,3 +1,4 @@
+import { withAuth } from "#with-auth";
 import { leaveTeam } from "@/utils/controllers/teams/leave";
 import { NextApiHandler, NextApiRequest, NextApiResponse } from "next";
 import { SESSION_COOKIE, verifySession } from "@/lib/auth/session";
@@ -30,4 +31,4 @@ const handler: NextApiHandler = async (
   }
 };
 
-export default handler;
+export default withAuth(handler);

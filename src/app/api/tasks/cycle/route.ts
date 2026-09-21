@@ -1,6 +1,7 @@
+import { logger as htLogger } from "#logger";
+import { getAuthSession, withAuth } from "#with-auth";
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
-import { getSessionUser } from "@/lib/auth/getSessionUser";
 import { getProjectCycleOverview } from "@/lib/cycleService";
 import { broadcastBoardChange, broadcastTaskChange } from "@/lib/realtime/server";
 import { taskWriteAccessWhere } from "@/utils/controllers/projects/getAllIncludes";
@@ -38,16 +39,16 @@ const accessibleTask = (taskId: number, userId: number) =>
   });
 
 const serverError = (operation: "load" | "update", error: unknown) => {
-  console.error(`[task-cycle] ${operation} failed`, error);
+  htLogger.error(`[task-cycle] ${operation} failed`, error);
   return NextResponse.json(
     { error: operation === "load" ? "Unable to load cycles" : "Unable to update cycle" },
     { status: 500 },
   );
 };
 
-export async function GET(request: NextRequest) {
+async function GETHandler(request: NextRequest) {
   try {
-    const session = await getSessionUser(request.headers);
+    const session = await getAuthSession(request.headers);
     if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
     const taskId = queryId(request.nextUrl.searchParams.get("taskId"));
@@ -95,9 +96,9 @@ export async function GET(request: NextRequest) {
   }
 }
 
-export async function POST(request: NextRequest) {
+async function POSTHandler(request: NextRequest) {
   try {
-    const session = await getSessionUser(request.headers);
+    const session = await getAuthSession(request.headers);
     if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
     const body = await request.json().catch(() => null);
@@ -150,7 +151,7 @@ export async function POST(request: NextRequest) {
     ]);
     for (const broadcast of broadcasts) {
       if (broadcast.status === "rejected") {
-        console.error("[task-cycle] realtime broadcast failed", broadcast.reason);
+        htLogger.error("[task-cycle] realtime broadcast failed", broadcast.reason);
       }
     }
     return NextResponse.json({ cycle, cycleId });
@@ -158,3 +159,6 @@ export async function POST(request: NextRequest) {
     return serverError("update", error);
   }
 }
+
+export const GET = withAuth(GETHandler);
+export const POST = withAuth(POSTHandler);

@@ -431,10 +431,6 @@ export const useGetAllBoards = (
                 ),
               )
               .catch((error) => {
-                console.error(
-                  "Failed to publish project-authorized local board",
-                  error,
-                );
               });
             return payload;
           })

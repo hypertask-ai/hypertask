@@ -1,3 +1,4 @@
+import { env as appEnv } from "#env";
 import type { Metadata } from "next";
 
 import { requireServerCookieUser } from "@/lib/auth/serverUser";
@@ -39,7 +40,7 @@ export default async function SlackLinkPage(props: {
 
   const confirmation = verifySlackLinkConfirmation(
     searchParams.confirmation,
-    process.env.SLACK_CLIENT_SECRET,
+    appEnv.SLACK_CLIENT_SECRET,
   );
   if (confirmation) {
     const canConfirm =
@@ -75,7 +76,7 @@ export default async function SlackLinkPage(props: {
 
   const state = verifySlackLinkState(
     searchParams.state,
-    process.env.SLACK_CLIENT_SECRET,
+    appEnv.SLACK_CLIENT_SECRET,
   );
   const install = state
     ? await prisma.slackInstall.findUnique({

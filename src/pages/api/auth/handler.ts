@@ -1,6 +1,7 @@
+import { withoutAuth } from "#with-auth";
 import { NextApiRequest, NextApiResponse } from 'next';
 
-export default async function handler(req: NextApiRequest, res: NextApiResponse) {
+async function handler(req: NextApiRequest, res: NextApiResponse) {
   const { code, state } = req.query;
 
   if (!code) {
@@ -10,3 +11,5 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   // Handle the callback
   return res.redirect('/');
 }
+
+export default withoutAuth(handler);

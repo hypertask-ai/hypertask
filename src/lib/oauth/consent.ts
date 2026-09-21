@@ -1,3 +1,4 @@
+import { env as appEnv } from "#env";
 import { createHmac, timingSafeEqual } from 'crypto'
 
 /**
@@ -29,7 +30,7 @@ export type ConsentRequest = {
 }
 
 function getSecret(): string {
-  const secret = process.env.SESSION_SECRET || process.env.JWT_SECRET
+  const secret = appEnv.SESSION_SECRET || appEnv.JWT_SECRET
   if (!secret) {
     throw new Error('Missing SESSION_SECRET or JWT_SECRET env var')
   }

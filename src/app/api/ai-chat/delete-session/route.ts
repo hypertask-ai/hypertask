@@ -1,3 +1,5 @@
+import { logger as htLogger } from "#logger";
+import { withAuth } from "#with-auth";
 import { chatStore } from "@/utils/controllers/chat";
 import prisma from "@/lib/prisma";
 import { deleteTaskAttachmentFromS3 } from "@/lib/storage/uploadTaskAttachmentToS3";
@@ -35,7 +37,7 @@ async function removeChatAttachmentsForSessions(sessionIds: string[]) {
 }
 
 // Template for handling DELETE request to remove a chat session
-export async function DELETE(req: NextRequest) {
+async function DELETEHandler(req: NextRequest) {
   try {
     const cookieStore = await cookies();
     const userCookie = cookieStore.get("nookies_user");
@@ -78,7 +80,7 @@ export async function DELETE(req: NextRequest) {
         },
       });
 
-      console.log("🚀 ~ DELETE ~ Number of sessions deleted:", deleted.count);
+      htLogger.info("🚀 ~ DELETE ~ Number of sessions deleted:", deleted.count);
       await chatStore().sessions.create({
         data: {
           userId: user.id,
@@ -100,7 +102,7 @@ export async function DELETE(req: NextRequest) {
         },
       });
 
-      console.log("🚀 ~ DELETE ~ Number of sessions remaining:", numSessions);
+      htLogger.info("🚀 ~ DELETE ~ Number of sessions remaining:", numSessions);
 
       if (numSessions === 0) {
         await chatStore().sessions.create({
@@ -121,10 +123,12 @@ export async function DELETE(req: NextRequest) {
       { status: 200 }
     );
   } catch (error: any) {
-    console.log("🚀 ~ DELETE ~ error while deleting session:", error);
+    htLogger.info("🚀 ~ DELETE ~ error while deleting session:", error);
     return NextResponse.json(
       { error: error.message || "Failed to delete session" },
       { status: 500 }
     );
   }
 }
+
+export const DELETE = withAuth(DELETEHandler);

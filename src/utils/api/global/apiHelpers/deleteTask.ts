@@ -1,3 +1,4 @@
+import { logger as htLogger } from "#logger";
 import axios from "axios";
 
 export const deleteTaskAPI = async (taskId: number) => {
@@ -11,7 +12,7 @@ export const deleteTaskAPI = async (taskId: number) => {
     return taskDelete.data;
   } catch (error) {
     // Handle the error or return a default value
-    console.log("🚀 ~ deleteTaskAPI ~ error:", error);
+    htLogger.info("🚀 ~ deleteTaskAPI ~ error:", error);
     throw error;
   }
 };

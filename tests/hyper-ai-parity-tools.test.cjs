@@ -98,7 +98,7 @@ test("HyperAI verifies the session and runs a cancellable multi-step tool loop",
     "src/hooks/Task Detail/CommentAndDescriptionHooks/useSaveContent.ts",
   );
 
-  assert.match(route, /getSessionUser\(request\.headers\)/);
+  assert.match(route, /getAuthSession\(request\.headers\)/);
   assert.match(route, /verifyCookieIdentity\(/);
   assert.match(route, /request\.cookies\.get\(SESSION_COOKIE\)/);
   assert.match(route, /cookieIdentity\.status === "verified"/);

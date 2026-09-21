@@ -51,7 +51,6 @@ export const ResizableMedia = Node.create<MediaOptions>({
       HTMLAttributes: {},
       uploadFn: async (file: File) => {
         // Default implementation returns empty string
-        console.warn("No upload function provided to ResizableMedia extension");
         return "";
       },
       allowBase64: false,
@@ -171,11 +170,6 @@ export const ResizableMedia = Node.create<MediaOptions>({
       ];
     }
 
-    if (!mediaType)
-      console.error(
-        "TiptapMediaExtension-renderHTML method: Media Type not set, going default with image",
-      );
-
     return [
       "img",
       mergeAttributes(this.options.HTMLAttributes, HTMLAttributes, {
@@ -208,11 +202,6 @@ export const ResizableMedia = Node.create<MediaOptions>({
               },
             });
           }
-
-          if (!mediaType)
-            console.error(
-              "TiptapMediaExtension-setMedia: Media Type not set, going default with image",
-            );
 
           return commands.insertContent({
             type: this.name,

@@ -106,12 +106,10 @@ const KeyboardShortcuts = () => {
 
       if (!isClickInside) {
         // The click was outside the container, perform your action here
-        console.log("Clicked outside the container");
         // Optionally, hide the container
         setShowShortcuts(false);
       }
     } catch (error) {
-      console.log("🚀 ~ document.addEventListener ~ error:", error);
     }
   }
 

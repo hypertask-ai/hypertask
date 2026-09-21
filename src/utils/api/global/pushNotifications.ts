@@ -1,3 +1,4 @@
+import { logger as htLogger } from "#logger";
 import { FCMDeviceInfo } from "@/models/model"
 import axios from "axios"
 
@@ -12,12 +13,12 @@ export const fetchPushNotificationStatus = async (firebaseId:string|undefined|nu
             return returnObj;
         } catch (error) {
             // Handle the error or return a default value
-            console.error("Error fetching push notification status:", error);
+            htLogger.error("Error fetching push notification status:", error);
             throw error; // You can also return a default value or handle the error in a different way
         }
     } else {
         // Return a default value or reject the promise
-        console.error("Invalid firebaseId:", firebaseId);
+        htLogger.error("Invalid firebaseId:", firebaseId);
         throw new Error("Invalid firebaseId");
     }
 }
@@ -31,10 +32,10 @@ export const changePushNotificationStatus = async (firebaseId:string, newStatus:
             firebaseId:firebaseId,
             newStatus:newStatus
         }
-        console.log("🚀 ~ file: pushNotifications.ts:39 ~ changePushNotificationStatus ~ body:", body)
+        htLogger.info("🚀 ~ file: pushNotifications.ts:39 ~ changePushNotificationStatus ~ body:", body)
         const response = await axios.post(`/api/notifications/changePushNotificationStatus`, body)
 
-        console.log("🚀 ~ file: pushNotifications.ts:41 ~ changePushNotificationStatus ~ response:", response)
+        htLogger.info("🚀 ~ file: pushNotifications.ts:41 ~ changePushNotificationStatus ~ response:", response)
     } catch (error) {
     }
 }

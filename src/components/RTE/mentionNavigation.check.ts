@@ -51,4 +51,3 @@ assert.strictEqual(
   "ArrowUp from an uninitialized selection starts at the last row",
 );
 
-console.log("mentionNavigation: all checks passed");

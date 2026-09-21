@@ -1,3 +1,5 @@
+import { logger as htLogger } from "#logger";
+import { withAuth } from "#with-auth";
 import { Prisma } from "@prisma/client";
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
@@ -20,7 +22,7 @@ const databaseId = (value: string): number | null => {
 const hasOwn = (value: object, key: string) =>
   Object.prototype.hasOwnProperty.call(value, key);
 
-export async function PATCH(
+async function PATCHHandler(
   request: NextRequest,
   { params }: { params: Promise<{ viewId: string }> },
 ) {
@@ -121,12 +123,12 @@ export async function PATCH(
         { status: 409 },
       );
     }
-    console.error("[my-tasks-views] update failed", error);
+    htLogger.error("[my-tasks-views] update failed", error);
     return NextResponse.json({ error: "Unable to update view" }, { status: 500 });
   }
 }
 
-export async function DELETE(
+async function DELETEHandler(
   request: NextRequest,
   { params }: { params: Promise<{ viewId: string }> },
 ) {
@@ -146,7 +148,10 @@ export async function DELETE(
     }
     return new NextResponse(null, { status: 204 });
   } catch (error) {
-    console.error("[my-tasks-views] delete failed", error);
+    htLogger.error("[my-tasks-views] delete failed", error);
     return NextResponse.json({ error: "Unable to delete view" }, { status: 500 });
   }
 }
+
+export const PATCH = withAuth(PATCHHandler);
+export const DELETE = withAuth(DELETEHandler);

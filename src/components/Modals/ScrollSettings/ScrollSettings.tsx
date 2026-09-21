@@ -68,13 +68,10 @@ const ScrollSettings: React.FC<IScrollSettings> = ({ toggle }) => {
         }
       );
       if (response.status == 200) {
-        console.log("success");
         refetchSetting();
       } else {
-        console.log("error occured");
       }
     } catch (error) {
-      console.log(error);
     }
   };
 

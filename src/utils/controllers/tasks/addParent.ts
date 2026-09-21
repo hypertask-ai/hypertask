@@ -1,3 +1,4 @@
+import { logger as htLogger } from "#logger";
 import prisma from "@/lib/prisma";
 
 const AddParentTask = async (orphanId: number, parentId: number) => {
@@ -9,7 +10,7 @@ const AddParentTask = async (orphanId: number, parentId: number) => {
       parentTaskId: parentId,
     },
   });
-  console.log("🚀 ~ AddParentTask ~ updated:", updated);
+  htLogger.info("🚀 ~ AddParentTask ~ updated:", updated);
 
   return {
     status: 200,

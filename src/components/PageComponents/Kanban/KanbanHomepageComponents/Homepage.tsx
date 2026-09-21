@@ -363,11 +363,9 @@ const HomePage = ({
         });
         setBoardColumnsViewAPI(_currentProject, updatedColumns);
       } catch (persistError) {
-        console.log("🚀 ~ handleColumnDragEnd ~ persist failed:", persistError);
         toast.error("Column order could not be saved");
       }
     } catch (error) {
-      console.log("🚀 ~ handleColumnDragEnd ~ error:", error);
     }
   }, [
     _currentProject,
@@ -421,7 +419,6 @@ const HomePage = ({
       getProjectIdxAndAllData,
       updateTaskInCache,
     } = latestRef.current;
-    console.log("🚀 ~ updateParentTask: called with", parentTask, status);
     const { allData, projectToUpdateIndex } = getProjectIdxAndAllData(
       _currentProject?.id
     );
@@ -504,7 +501,6 @@ const HomePage = ({
       return
     }
     if(!taskInfo || !tasksToDelete) return
-    console.log("🚀 ~ deleteTaskHandler ~ tasksToDelete:", tasksToDelete)
     setLoading(true)
     try {
       await deleteItem(taskInfo?.section, taskInfo?.id, taskInfo?.parentTask, tasksToDelete)
@@ -523,7 +519,6 @@ const HomePage = ({
     parentTask?: ITask,
     tasksToDelete?: number[],
   ) => {
-    console.log("🚀 ~ tasksToDelete:", tasksToDelete)
     // ========> RUN THE DELETE API
     // ========> DISPLAY AN UNDO BUTTON, UPON CLICKING IT, FIRST BRING IT BACK TO THE UI THEN RUN THE undoAction that will also run an api
     const sectionIndex = _sections.findIndex(
@@ -543,8 +538,6 @@ const HomePage = ({
     // await queryClient.prefetchQuery([["priority",itemId]])
 
     const priority_data: IPriority | undefined = queryClient.getQueryData(["priority", itemId])
-    // console.log("🚀 ~ updatePriority ~ priority_data:", priority_data)
-    // console.log("🚀 ~ updatedSection ~ sectionId:", sectionId)
     const taskToReturn = { priority: priority_data }
     toast("Priority updated to " + priority_data?.Priority_Value)
     updateTaskInCache(taskToReturn, itemId, _currentProject.id, sectionId, _currentProject)
@@ -650,7 +643,6 @@ const HomePage = ({
 
     const updatedSection = sections.map((section) => {
       if (section.sectionId === sectionId) {
-        // console.log("🚀 ~ updatedSection ~ section.id:", section.id)
         const updatedItems = section.items.map((task) => {
           if (task.id === itemId) {
 
@@ -663,7 +655,6 @@ const HomePage = ({
               },
             };
             task.notifications && undoInboxArchive(task.notifications[0])
-            // console.log("🚀 ~ updatedItems ~ taskreturn:", taskreturn)
             return taskreturn;
           }
           return task;
@@ -674,7 +665,6 @@ const HomePage = ({
       }
       return section;
     });
-    // console.log("🚀 ~ updatedSection ~ updatedSection:", updatedSection)
     // setSections(updatedSection)
 
     toast("Notifications archived")

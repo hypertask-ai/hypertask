@@ -1,8 +1,9 @@
+import { logger as htLogger } from "#logger";
+import { getAuthSession, withAuth } from "#with-auth";
 import { NextApiHandler, NextApiRequest, NextApiResponse } from "next";
 
 import notificationGetAll from "@/utils/controllers/notifications/getAll";
 
-import { getSessionUser } from "@/lib/auth/getSessionUser";
 
 
 const handler: NextApiHandler = async (req: NextApiRequest, res: NextApiResponse) => {
@@ -10,7 +11,7 @@ const handler: NextApiHandler = async (req: NextApiRequest, res: NextApiResponse
     if (req.method === "GET") {
         try {
             // HTPR-4772: ignore the query userId and use the signed session.
-            const session = await getSessionUser(
+            const session = await getAuthSession(
                 new Headers(req.headers as Record<string, string>)
             );
             if (!session) return res.status(401).json({ message: "Unauthorized" });
@@ -23,7 +24,7 @@ const handler: NextApiHandler = async (req: NextApiRequest, res: NextApiResponse
             );
             res.status(response.status).json(response.json);
         } catch (error) {
-            console.log(error);
+            htLogger.info(error);
             res.status(500).json({ message: "Internal server error" });
         }
     } else {
@@ -31,4 +32,4 @@ const handler: NextApiHandler = async (req: NextApiRequest, res: NextApiResponse
     }
 };
 
-export default handler;
+export default withAuth(handler);

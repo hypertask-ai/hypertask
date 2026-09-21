@@ -43,7 +43,6 @@ export function useMcpToken() {
         if (data.expiresAt) setExpiresAt(data.expiresAt)
       }
     } catch (error) {
-      console.error("Error checking token:", error)
     } finally {
       setIsLoading(false)
     }
@@ -68,7 +67,6 @@ export function useMcpToken() {
         if (!silent) toast.error(data.error || "Failed to generate token")
       }
     } catch (error) {
-      console.error("Error generating token:", error)
       if (!silent) toast.error("Failed to generate token")
     } finally {
       setIsGenerating(false)

@@ -1,11 +1,13 @@
-import { getSessionUser } from '@/lib/auth/getSessionUser';
+import { env as appEnv } from "#env";
+import { logger as htLogger } from "#logger";
+import { getAuthSession, withAuth } from "#with-auth";
 import { isSubscriptionActive } from '@/lib/constants/constants';
 import prisma from '@/lib/prisma';
 import { NextRequest, NextResponse } from 'next/server';
 
 // Support callers: the same server-only password the /reset tool gate checks.
 function isAdminCaller(request: NextRequest): boolean {
-    const adminPassword = process.env.ADMIN_USER_RESET_PW;
+    const adminPassword = appEnv.ADMIN_USER_RESET_PW;
 
     return Boolean(adminPassword) && request.headers.get('x-admin-password') === adminPassword;
 }
@@ -70,8 +72,8 @@ async function resetUserTrialPeriod(
         }
     }
     
-    console.log("🚀 ~ resetUserTrialPeriod ~ userTeams:", userTeams.length);
-    console.log("🚀 ~ resetUserTrialPeriod ~ activeSubscriptions:", activeSubscriptions.length);
+    htLogger.info("🚀 ~ resetUserTrialPeriod ~ userTeams:", userTeams.length);
+    htLogger.info("🚀 ~ resetUserTrialPeriod ~ activeSubscriptions:", activeSubscriptions.length);
 
     // Prevent reset if user has active subscriptions (unless forced)
     if (activeSubscriptions.length > 0 && !force) {
@@ -127,7 +129,7 @@ async function resetUserTrialPeriod(
  * - userId: number (required) - The user ID to reset trial for
  * - force?: boolean (optional) - If true, resets even if user has active subscriptions. Default: false
  */
-export async function POST(request: NextRequest) {
+async function POSTHandler(request: NextRequest) {
     try {
         let body;
         try {
@@ -151,7 +153,7 @@ export async function POST(request: NextRequest) {
 
         // Auth: admins may reset anyone, everyone else only themselves (HTPR-4802).
         if (!isAdminCaller(request)) {
-            const session = await getSessionUser(request.headers);
+            const session = await getAuthSession(request.headers);
 
             if (!session) {
                 return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -187,7 +189,7 @@ export async function POST(request: NextRequest) {
             },
         });
     } catch (error: any) {
-        console.error('❌ Error resetting trial period:', error);
+        htLogger.error('❌ Error resetting trial period:', error);
         return NextResponse.json(
             {
                 success: false,
@@ -197,3 +199,5 @@ export async function POST(request: NextRequest) {
         );
     }
 }
+
+export const POST = withAuth(POSTHandler);

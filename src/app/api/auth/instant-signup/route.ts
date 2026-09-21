@@ -1,3 +1,6 @@
+import { env as appEnv } from "#env";
+import { logger as htLogger } from "#logger";
+import { withoutAuth } from "#with-auth";
 import { NextRequest, NextResponse } from 'next/server'
 import updateUsers from '@/utils/controllers/users/update_or_create_user'
 import jwt from 'jsonwebtoken'
@@ -9,16 +12,16 @@ import { companyRoleOptions, companySizeOptions } from '@/lib/constants/constant
 import { sendEmail } from '@/lib/email/sendEmail'
 
 // Separate audience for verification tokens
-const JWT_VERIFICATION_AUDIENCE = process.env.JWT_VERIFICATION_AUDIENCE || 'email-verification'
+const JWT_VERIFICATION_AUDIENCE = appEnv.JWT_VERIFICATION_AUDIENCE || 'email-verification'
 
-const JWT_ISSUER = process.env.JWT_ISSUER || 'hypertask'
-const JWT_AUDIENCE = process.env.JWT_AUDIENCE || 'email-link'
+const JWT_ISSUER = appEnv.JWT_ISSUER || 'hypertask'
+const JWT_AUDIENCE = appEnv.JWT_AUDIENCE || 'email-link'
 
-const RESEND_API_KEY = process.env.RESEND_API_KEY
-const EMAIL_FROM = process.env.EMAIL_FROM || 'noreply@hypertask.ai'
+const RESEND_API_KEY = appEnv.RESEND_API_KEY
+const EMAIL_FROM = appEnv.EMAIL_FROM || 'noreply@hypertask.ai'
 
 function getJwtSecret() {
-  const jwtSecret = process.env.JWT_SECRET
+  const jwtSecret = appEnv.JWT_SECRET
   if (!jwtSecret) {
     throw new Error('Missing JWT_SECRET env var')
   }
@@ -45,7 +48,7 @@ function createVerificationToken(email: string) {
 
 async function sendVerificationEmail(to: string, link: string) {
   if (!RESEND_API_KEY) {
-    console.log('🔗 Verification link (no Resend configured):', link)
+    htLogger.info('🔗 Verification link (no Resend configured):', link)
     return
   }
 
@@ -93,7 +96,7 @@ async function sendVerificationEmail(to: string, link: string) {
         `,
   })
 
-  console.log('✅ Verification email sent via Resend')
+  htLogger.info('✅ Verification email sent via Resend')
 }
 
 function buildVerificationLinkWithUTM(baseUrl: string, token: string, utmData: Record<string, string | undefined>): string {
@@ -109,7 +112,7 @@ function buildVerificationLinkWithUTM(baseUrl: string, token: string, utmData: R
   return url.toString()
 }
 
-export async function POST(request: NextRequest) {
+async function POSTHandler(request: NextRequest) {
   try {
     const { email, utmData } = await request.json()
 
@@ -121,7 +124,7 @@ export async function POST(request: NextRequest) {
     }
 
     const normalizedEmail = email.trim().toLowerCase()
-    console.log('📧 Instant signup for:', normalizedEmail)
+    htLogger.info('📧 Instant signup for:', normalizedEmail)
 
     // Check rate limiting
     const rateLimitCheck = VerificationCodeService.isRateLimited(normalizedEmail)
@@ -153,13 +156,13 @@ export async function POST(request: NextRequest) {
         await sendVerificationEmail(
           normalizedEmail,
           buildVerificationLinkWithUTM(
-            `${process.env.NEXT_PUBLIC_BASEURL ?? 'https://app.hypertask.ai'}/verify-email`,
+            `${appEnv.NEXT_PUBLIC_BASEURL ?? 'https://app.hypertask.ai'}/verify-email`,
             createVerificationToken(normalizedEmail),
             (utmData && typeof utmData === 'object' ? utmData : {}) as Record<string, string | undefined>
           )
         )
       } catch (emailError) {
-        console.error('⚠️ Failed to send verification email:', emailError)
+        htLogger.error('⚠️ Failed to send verification email:', emailError)
       }
       // Deliberately the same body as the new-account path: telling an
       // unauthenticated caller which addresses already exist is free account
@@ -187,7 +190,7 @@ export async function POST(request: NextRequest) {
     )
 
     if (userUpdateResult.status !== 200) {
-      console.error('❌ User creation failed:', userUpdateResult)
+      htLogger.error('❌ User creation failed:', userUpdateResult)
       return NextResponse.json(
         { 
           success: false, 
@@ -214,7 +217,7 @@ export async function POST(request: NextRequest) {
     // This creates team, project, and sets up all prerequisites
     if (userUpdateResult.res.isNewUser) {
       try {
-        console.log('🚀 Completing onboarding step 1 for instant signup user')
+        htLogger.info('🚀 Completing onboarding step 1 for instant signup user')
         const onboardingResult = await CompleteOnboardingFirstStep(
           userData as any,
           'MyTeam', // Default team title
@@ -222,29 +225,29 @@ export async function POST(request: NextRequest) {
           companySizeOptions[0], // Default: "Just me"
           companyRoleOptions[0] // Default: "Founder or leadership team"
         )
-        console.log('✅ Onboarding step 1 completed:', onboardingResult)
+        htLogger.info('✅ Onboarding step 1 completed:', onboardingResult)
       } catch (onboardingError) {
-        console.error('⚠️ Failed to complete onboarding step 1:', onboardingError)
+        htLogger.error('⚠️ Failed to complete onboarding step 1:', onboardingError)
         // Don't fail the request - user can still use the app
         // The onboarding can be completed later if needed
       }
     }
 
     const utmParams = utmData && typeof utmData === 'object' ? utmData : {}
-    console.log('📊 UTM Data for instant signup:', utmParams)
+    htLogger.info('📊 UTM Data for instant signup:', utmParams)
 
     // Generate verification token (separate from login token)
     const verificationToken = createVerificationToken(normalizedEmail)
 
     // Build verification link with UTM parameters - point to dedicated verification page
-    const baseVerificationUrl = `${process.env.NEXT_PUBLIC_BASEURL ?? 'https://app.hypertask.ai'}/verify-email`
+    const baseVerificationUrl = `${appEnv.NEXT_PUBLIC_BASEURL ?? 'https://app.hypertask.ai'}/verify-email`
     const verificationLink = buildVerificationLinkWithUTM(baseVerificationUrl, verificationToken, utmParams as Record<string, string | undefined>)
 
     // Send verification email (only link, no code)
     try {
       await sendVerificationEmail(normalizedEmail, verificationLink)
     } catch (emailError) {
-      console.error('⚠️ Failed to send verification email:', emailError)
+      htLogger.error('⚠️ Failed to send verification email:', emailError)
       // Don't fail the request if email fails - user can still verify later
     }
 
@@ -267,19 +270,21 @@ export async function POST(request: NextRequest) {
       message: 'Account created successfully! Please check your email to verify your account.',
     })
 
-    console.log('✅ Instant signup completed successfully')
+    htLogger.info('✅ Instant signup completed successfully')
     return response
 
   } catch (error) {
-    console.error('❌ Instant signup error:', error)
+    htLogger.error('❌ Instant signup error:', error)
     return NextResponse.json(
       { 
         success: false, 
         error: 'Internal server error',
         code: 'INTERNAL_ERROR',
-        message: process.env.NODE_ENV === 'development' ? (error as Error).message : 'Something went wrong'
+        message: appEnv.NODE_ENV === 'development' ? (error as Error).message : 'Something went wrong'
       },
       { status: 500 }
     )
   }
 }
+
+export const POST = withoutAuth(POSTHandler);

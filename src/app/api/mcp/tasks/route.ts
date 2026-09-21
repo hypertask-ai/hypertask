@@ -1,3 +1,5 @@
+import { logger as htLogger } from "#logger";
+import { withoutAuth } from "#with-auth";
 import { NextRequest, NextResponse } from 'next/server'
 import { validateMcpAuth, checkMcpRateLimit, mcpUnauthorizedResponse } from '@/lib/mcp/auth'
 import { getProjectWhere } from '@/utils/controllers/projects/getAllIncludes'
@@ -162,7 +164,7 @@ function parseNonNegativeIntegerParam(searchParams: URLSearchParams, name: strin
  * Also supports getting a single task by ticket_number:
  * GET /api/mcp/tasks?ticket_number=DEV-1&project_id=1
  */
-export async function GET(request: NextRequest) {
+async function GETHandler(request: NextRequest) {
   let userObj: {id: number, email: string} | null = null
   try {
     // Validate authentication
@@ -181,7 +183,7 @@ export async function GET(request: NextRequest) {
     // Parse query parameters
     const searchParams = request.nextUrl.searchParams
     const query = Object.fromEntries(searchParams)
-    console.log('[MCP] tasks', {
+    htLogger.info('[MCP] tasks', {
       user: { id: user.id, email: user.email },
       query,
     })
@@ -233,7 +235,7 @@ export async function GET(request: NextRequest) {
     if (methodCount === 0) {
       // Continue with list tasks logic (no single task lookup)
     } else if (methodCount > 1) {
-      console.warn('[MCP] tasks', {
+      htLogger.warn('[MCP] tasks', {
         reason: 'multiple_identification_methods',
         user: { id: user.id, email: user.email },
         query,
@@ -246,7 +248,7 @@ export async function GET(request: NextRequest) {
         { status: 400 }
       )
     } else if (uniqueIndex && !projectIdForLookup) {
-      console.warn('[MCP] tasks', {
+      htLogger.warn('[MCP] tasks', {
         reason: 'project_id_required_with_unique_index',
         user: { id: user.id, email: user.email },
         query,
@@ -313,7 +315,7 @@ export async function GET(request: NextRequest) {
         })
 
         if (tasks.length === 0) {
-          console.warn('[MCP] tasks', {
+          htLogger.warn('[MCP] tasks', {
             reason: 'task_not_found_or_access_denied',
             user: { id: user.id, email: user.email },
             query,
@@ -452,7 +454,7 @@ export async function GET(request: NextRequest) {
       if (accessibleProjectIds.includes(targetId!)) {
         where.projectId = targetId
       } else {
-        console.warn('[MCP] tasks', {
+        htLogger.warn('[MCP] tasks', {
           reason: 'project_not_found_or_access_denied',
           user: { id: user.id, email: user.email },
           query,
@@ -823,7 +825,7 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json(response)
   } catch (error) {
-    console.error('[MCP] tasks', {
+    htLogger.error('[MCP] tasks', {
       user: userObj,
       error,
       message: error instanceof Error ? error.message : String(error),
@@ -837,3 +839,5 @@ export async function GET(request: NextRequest) {
     )
   }
 }
+
+export const GET = withoutAuth(GETHandler);

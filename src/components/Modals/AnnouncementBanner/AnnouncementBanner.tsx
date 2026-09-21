@@ -49,7 +49,7 @@ const AnnouncementBanner: React.FC<IProps> = ({
         userId,
         announcementIds: [announcement.announcementId],
       })
-      .catch((error) => console.error("Failed to dismiss announcement", error));
+      .catch((error) => undefined);
   };
 
   const poster = youtubeThumbnailUrl(mediaURL);

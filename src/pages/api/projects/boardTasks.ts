@@ -1,3 +1,4 @@
+import { withAuth } from "#with-auth";
 import { NextApiHandler, NextApiRequest, NextApiResponse } from "next";
 
 import getBoardTasks from "@/utils/controllers/projects/getBoardTasks";
@@ -22,4 +23,4 @@ const handler: NextApiHandler = async (req: NextApiRequest, res: NextApiResponse
   }
 };
 
-export default handler;
+export default withAuth(handler);

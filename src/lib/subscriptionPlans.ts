@@ -1,3 +1,4 @@
+import { env as appEnv } from "#env";
 export interface ISubscriptionPlan {
   id: "Free" | "AI" | "Pro" | "BYOK";
   name: string;
@@ -19,19 +20,19 @@ export interface ISubscriptionPlan {
 
 }
 //old price ids
-const prevMonthly1 = String(process.env.NEXT_PUBLIC_STRIPE_MONTHLY_PRICE_ID_01)
-const prevYearly1 = String(process.env.NEXT_PUBLIC_STRIPE_YEARLY_PRICE_ID_01)
+const prevMonthly1 = String(appEnv.NEXT_PUBLIC_STRIPE_MONTHLY_PRICE_ID_01)
+const prevYearly1 = String(appEnv.NEXT_PUBLIC_STRIPE_YEARLY_PRICE_ID_01)
 
-const prevMonthly2 = String(process.env.NEXT_PUBLIC_STRIPE_MONTHLY_PRICE_ID_02)
-const prevYearly2 = String(process.env.NEXT_PUBLIC_STRIPE_YEARLY_PRICE_ID_02)
+const prevMonthly2 = String(appEnv.NEXT_PUBLIC_STRIPE_MONTHLY_PRICE_ID_02)
+const prevYearly2 = String(appEnv.NEXT_PUBLIC_STRIPE_YEARLY_PRICE_ID_02)
 
-// export const monthlyPriceId = String(process.env.NEXT_PUBLIC_STRIPE_MONTHLY_PRICE_ID)
-// export const yearlyPriceId = String(process.env.NEXT_PUBLIC_STRIPE_YEARLY_PRICE_ID)
+// export const monthlyPriceId = String(appEnv.NEXT_PUBLIC_STRIPE_MONTHLY_PRICE_ID)
+// export const yearlyPriceId = String(appEnv.NEXT_PUBLIC_STRIPE_YEARLY_PRICE_ID)
 
-const monthly_byok_price_id = String(process.env.NEXT_PUBLIC_STRIPE_MONTHLY_PRICE_ID_BYOK)
-const yearly_byok_price_id = String(process.env.NEXT_PUBLIC_STRIPE_YEARLY_PRICE_ID_BYOK)
-export const monthly_pro_price_id = String(process.env.NEXT_PUBLIC_STRIPE_MONTHLY_PRICE_ID_PRO)
-export const yearly_pro_price_id = String(process.env.NEXT_PUBLIC_STRIPE_YEARLY_PRICE_ID_PRO)
+const monthly_byok_price_id = String(appEnv.NEXT_PUBLIC_STRIPE_MONTHLY_PRICE_ID_BYOK)
+const yearly_byok_price_id = String(appEnv.NEXT_PUBLIC_STRIPE_YEARLY_PRICE_ID_BYOK)
+export const monthly_pro_price_id = String(appEnv.NEXT_PUBLIC_STRIPE_MONTHLY_PRICE_ID_PRO)
+export const yearly_pro_price_id = String(appEnv.NEXT_PUBLIC_STRIPE_YEARLY_PRICE_ID_PRO)
 
 export const allMonthlyPrices = [prevMonthly1, prevMonthly2, monthly_byok_price_id, monthly_pro_price_id]
 export const allYearlyPrices = [prevYearly1, prevYearly2, yearly_byok_price_id, yearly_pro_price_id]
@@ -184,7 +185,7 @@ export const storeSubscriptionPlans: ISubscriptionPlan[] = [
         title: "Monthly",
         price: "$0",
         description: "/ 14 days",
-        // stripePriceId: process.env.NEXT_PUBLIC_STRIPE_MONTHLY_PRICE_ID ?? "",
+        // stripePriceId: appEnv.NEXT_PUBLIC_STRIPE_MONTHLY_PRICE_ID ?? "",
 
       }
     ],

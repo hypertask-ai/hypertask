@@ -1,3 +1,4 @@
+import { logger as htLogger } from "#logger";
 // Import PrismaClient from the generated Prisma client
 import { PrismaClient, Section, Prisma } from '@prisma/client';
 import { NextApiHandler, NextApiRequest, NextApiResponse } from 'next';
@@ -20,7 +21,7 @@ const sectionGetAll = async (userId:number) => {
   try {
     // Get all sections
     const sections = await prisma.section.findMany();
-    // console.log('Field Names:', Prisma.SectionScalarFieldEnum);
+    // debug.log('Field Names:', Prisma.SectionScalarFieldEnum);
     return({
       status:200,
       json:sections
@@ -29,7 +30,7 @@ const sectionGetAll = async (userId:number) => {
     // Get field names of the "Section" model
     
   } catch (error) {
-    console.error('Error:', error);
+    htLogger.error('Error:', error);
     return({
       status:500,
       json:{ message: "Something Went Wrong" }

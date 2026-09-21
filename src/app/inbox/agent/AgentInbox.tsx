@@ -307,7 +307,6 @@ const AgentInbox = ({
         });
       }
     } catch (error) {
-      console.log("🚀 ~ newCommentsHandler ~ error:", error);
     }
   };
 

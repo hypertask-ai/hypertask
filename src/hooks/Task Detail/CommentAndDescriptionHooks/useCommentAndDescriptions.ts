@@ -252,7 +252,6 @@ const useDescriptionAndCommentsStates = () => {
         body,
         keepalive: true,
       }).catch((error) => {
-        console.log("🤔 ~ markTaskReadOnLeave ~ error:", error);
       });
     },
     [currentTask?.id, currentUser?.id, isShareView]
@@ -307,7 +306,6 @@ const useDescriptionAndCommentsStates = () => {
         commentIds
       );
     } catch (error) {
-      console.log("🤔 ~ updateSeen ~ error:", error);
     }
   }, [
     commentsListFromQuery,
@@ -328,11 +326,9 @@ const useDescriptionAndCommentsStates = () => {
           hash,
           newCommentIdsRef.current
         );
-        // console.log("stack initialMap at end of unseen is", initialMap);
         setStacked(initialMap);
       }
     } catch (error) {
-      // console.log("🚀 ~ file: [...slug].tsx:921 ~ updateSeen ~ error:", error)
     }
   };
 
@@ -465,12 +461,10 @@ const useDescriptionAndCommentsStates = () => {
   const isApple = useDeviceContext();
   // =================================================================================================
   const handleKeyDown = (e: any) => {
-    // console.log("🚀 ~ handleKeyDown ~ document.activeElement?.id:", document.activeElement?.id)
     const currentIndex = parseInt(document.activeElement?.id.split("-")[1]!);
     const isInsideTipTap = Boolean(
       document.activeElement?.closest(".ProseMirror")
     );
-    // console.log("🚀 ~ handleKeyDown ~ isInsideTipTap:", isInsideTipTap)
     const isInputFocused = [
       "input",
       "textarea",
@@ -562,7 +556,6 @@ const useDescriptionAndCommentsStates = () => {
       document.activeElement?.id === "comment" &&
       !e.ctrlKey
     ) {
-      // console.log("🚀 ~ handleKeyDown ~ e.key:", e.key)
       e.preventDefault();
       const foundIndex = findCommentIndexAgainstActivity();
       if (foundIndex === -1) return false;
@@ -644,7 +637,6 @@ const useDescriptionAndCommentsStates = () => {
 
   // --------------- keypresses for all [tab] [arrow] movements
   const ArrowTabKeyHandler = (e: any) => {
-    // console.log("🚀 ~ ArrowTabKeyHandler ~ e:", e)
     e.preventDefault();
     try {
       setEditMode(null);
@@ -662,7 +654,6 @@ const useDescriptionAndCommentsStates = () => {
       )
         InCommentsKeyHandler(e);
     } catch (error) {
-      console.log({ error });
     }
   };
 
@@ -693,7 +684,6 @@ const useDescriptionAndCommentsStates = () => {
         if (comments.length >= 1) {
           const a = comments.length - 1;
           scrollVirtualize("comment", a);
-          // console.log(` --> ${comments.length}`)
         } else {
           focusOn(descriptionContainerId, false);
           scrollVirtualize("description");
@@ -781,7 +771,6 @@ const useDescriptionAndCommentsStates = () => {
       enterDescriptionCreateMode();
     // ==-------------------== reply to comment
     else if (document.activeElement?.id?.indexOf("comment-") === 0) {
-      // console.log("enter pressesss five",document.activeElement?.id)
       const currentIndex: any = parseInt(
         document?.activeElement?.id?.split("-")[1]
       );
@@ -816,7 +805,6 @@ const useDescriptionAndCommentsStates = () => {
         String(comment_?.taskId) === String(currentTask?.id) &&
         comment_.creatorId !== currentUser?.id
       ) {
-        // console.log(payload.data)
         toast("Comment Added By " + comment_.creator?.displayName);
 
         setComments([...comments, { ...comment_ }]);
@@ -864,10 +852,6 @@ const useDescriptionAndCommentsStates = () => {
 
         const messaging = getMessaging(app);
         unsubscribe = onMessage(messaging, (payload) => {
-          console.log(
-            "🚀 ~ file: TaskDetailComp.tsx:1458 ~ unsubscribe ~ payload:",
-            payload
-          );
           // =========================== on new comment
 
           updateOnMessageReceive(payload?.data?.type || "None", payload.data);
@@ -915,7 +899,6 @@ const useDescriptionAndCommentsStates = () => {
       description === "<p></p>" ||
       (description as string) === emptyDescription
     ) {
-      // console.log("enter pressesss two",document.activeElement?.id)
 
       setTimeout(() => {
         setEditMode("description");
@@ -923,7 +906,6 @@ const useDescriptionAndCommentsStates = () => {
         focusOn("description", false);
         scrollVirtualize("edit-description");
         setTimeout(() => {
-          console.log("🚀 ~ setTimeout ~ openAttachment:", openAttachment);
           if (openAttachment)
             document
               .getElementById("read-edit-description-attachmentUpload")

@@ -1,3 +1,5 @@
+import { logger as htLogger } from "#logger";
+import { withoutAuth } from "#with-auth";
 import { CustomFieldType } from "@prisma/client";
 import { NextRequest, NextResponse } from "next/server";
 
@@ -77,7 +79,7 @@ async function authenticate(request: NextRequest) {
 }
 
 /** GET /api/mcp/custom-fields?project_id=123 */
-export async function GET(request: NextRequest) {
+async function GETHandler(request: NextRequest) {
   try {
     const auth = await authenticate(request);
     if (!auth.ctx) return auth.response!;
@@ -107,7 +109,7 @@ export async function GET(request: NextRequest) {
     const customFields = await getCustomFieldsForProject(projectId);
     return NextResponse.json({ success: true, projectId, customFields });
   } catch (error) {
-    console.error("[MCP Custom Fields] List error:", error);
+    htLogger.error("[MCP Custom Fields] List error:", error);
     return NextResponse.json(
       { success: false, error: "Internal server error" },
       { status: 500 }
@@ -116,7 +118,7 @@ export async function GET(request: NextRequest) {
 }
 
 /** POST /api/mcp/custom-fields */
-export async function POST(request: NextRequest) {
+async function POSTHandler(request: NextRequest) {
   try {
     const auth = await authenticate(request);
     if (!auth.ctx) return auth.response!;
@@ -207,10 +209,13 @@ export async function POST(request: NextRequest) {
     if (error instanceof CustomFieldValidationError) {
       return validationError(error.message, error.field, "invalid_value");
     }
-    console.error("[MCP Custom Fields] Create error:", error);
+    htLogger.error("[MCP Custom Fields] Create error:", error);
     return NextResponse.json(
       { success: false, error: "Internal server error" },
       { status: 500 }
     );
   }
 }
+
+export const GET = withoutAuth(GETHandler);
+export const POST = withoutAuth(POSTHandler);

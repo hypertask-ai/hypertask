@@ -48,7 +48,7 @@ test('Every Inbox reminder writer shares the advisory lock and deduplication pro
 })
 
 test('Inbox reminder writes bind userId to the session and check task access', () => {
-  assert.match(writer, /getSessionUser/)
+  assert.match(writer, /getAuthSession/)
   assert.match(writer, /userCanAccessTask\(userId, Number\(taskId\)\)/)
   assert.match(writer, /Number\(bodyUserId\) !== session\.userId/)
   assert.match(writer, /const userId = session\.userId/)

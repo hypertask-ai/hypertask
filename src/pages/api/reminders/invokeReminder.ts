@@ -1,3 +1,5 @@
+import { logger as htLogger } from "#logger";
+import { withAuth } from "#with-auth";
 // id:`notifications-for-task-${taskId}`
 
 
@@ -6,7 +8,7 @@ import invokeReminder from '@/utils/controllers/reminders/invokeReminder';
 
 
 
-export default  async function handler(
+async function handler(
   req: NextApiRequest,
   res: NextApiResponse
 ) {
@@ -14,7 +16,7 @@ export default  async function handler(
   try {
     
     const {reminder} = req.body
-    console.log("🚀 ~ userId:", reminder)
+    htLogger.info("🚀 ~ userId:", reminder)
 
     if (!reminder) return res.status(400).json({message:"Missing required information"})
     
@@ -22,10 +24,12 @@ export default  async function handler(
     
 
     
-    console.log("🚀 ~ reminders:", reminder)
+    htLogger.info("🚀 ~ reminders:", reminder)
     return res.status(200).json(reminder)
   } catch (error) {
-      console.log(error)
+      htLogger.info(error)
       return res.status(500).json(error)
   }
 }
+
+export default withAuth(handler);

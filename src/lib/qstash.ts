@@ -1,3 +1,4 @@
+import { env as appEnv, type AppEnvKey } from "#env";
 import { Client } from "@upstash/qstash";
 import { verifySignature } from "@upstash/qstash/nextjs";
 import type { NextApiHandler } from "next";
@@ -8,9 +9,9 @@ let qstashClient: Client | undefined;
 /** Public base URL QStash calls back into (this app). */
 export function qstashCallbackBase(): string {
   const b =
-    process.env.QSTASH_CALLBACK_BASE_URL ||
-    process.env.NEXT_PUBLIC_BASEURL ||
-    process.env.NEXT_PUBLIC_APP_URL ||
+    appEnv.QSTASH_CALLBACK_BASE_URL ||
+    appEnv.NEXT_PUBLIC_BASEURL ||
+    appEnv.NEXT_PUBLIC_APP_URL ||
     "";
   const base = b.trim().replace(/\/+$/, "");
   if (!base) {
@@ -37,8 +38,8 @@ export function qstashCallbackBase(): string {
   return base;
 }
 
-function requireNonEmptyEnv(name: string): string {
-  const value = process.env[name]?.trim();
+function requireNonEmptyEnv(name: AppEnvKey): string {
+  const value = appEnv[name]?.trim();
   if (!value) {
     throw new Error(`Missing ${name}; QStash jobs must fail fast instead of being silently dropped.`);
   }
@@ -48,7 +49,7 @@ function requireNonEmptyEnv(name: string): string {
   return value;
 }
 
-function requireHttpUrlEnv(name: string): string {
+function requireHttpUrlEnv(name: AppEnvKey): string {
   const value = requireNonEmptyEnv(name);
   let parsed: URL;
   try {
@@ -78,8 +79,8 @@ export function getQstashClient() {
   assertQstashRuntimeEnv();
   if (!qstashClient) {
     qstashClient = new Client({
-      token: process.env.QSTASH_TOKEN!.trim(),
-      baseUrl: process.env.QSTASH_URL!.trim(),
+      token: appEnv.QSTASH_TOKEN!.trim(),
+      baseUrl: appEnv.QSTASH_URL!.trim(),
     });
   }
   return qstashClient;
@@ -91,8 +92,8 @@ export function withQstashSignature(handler: NextApiHandler): NextApiHandler {
     assertQstashRuntimeEnv();
     if (!signedHandler) {
       signedHandler = verifySignature(handler, {
-        currentSigningKey: process.env.QSTASH_CURRENT_SIGNING_KEY!.trim(),
-        nextSigningKey: process.env.QSTASH_NEXT_SIGNING_KEY!.trim(),
+        currentSigningKey: appEnv.QSTASH_CURRENT_SIGNING_KEY!.trim(),
+        nextSigningKey: appEnv.QSTASH_NEXT_SIGNING_KEY!.trim(),
       });
     }
     return signedHandler(req, res);

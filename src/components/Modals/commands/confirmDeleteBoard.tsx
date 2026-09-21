@@ -46,7 +46,6 @@ const ConfirmDeleteBoard = (props: Props) => {
             onClose(response, targetProject)
         }
         catch (error) {
-            console.error(error)
             setLoading(false)
         }
     }, [canDelete, currentProject?.id, loading, onClose, pathname, queryClient, router, targetProject])

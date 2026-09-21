@@ -1,3 +1,4 @@
+import { withoutAuth } from "#with-auth";
 import { NextRequest, NextResponse } from 'next/server'
 import {
   checkMcpRateLimit,
@@ -20,10 +21,10 @@ async function notFound(request: NextRequest) {
   return NextResponse.json({ error: 'not found' }, { status: 404 })
 }
 
-export const GET = notFound
-export const POST = notFound
-export const PUT = notFound
-export const PATCH = notFound
-export const DELETE = notFound
-export const HEAD = notFound
-export const OPTIONS = notFound
+export const GET = withoutAuth(notFound)
+export const POST = withoutAuth(notFound)
+export const PUT = withoutAuth(notFound)
+export const PATCH = withoutAuth(notFound)
+export const DELETE = withoutAuth(notFound)
+export const HEAD = withoutAuth(notFound)
+export const OPTIONS = withoutAuth(notFound)

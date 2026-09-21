@@ -1,3 +1,5 @@
+import { logger as htLogger } from "#logger";
+import { withoutAuth } from "#with-auth";
 import { NextRequest, NextResponse } from "next/server";
 import { validateMcpAuth, checkMcpRateLimit } from "@/lib/mcp/auth";
 import { applyView } from "@/utils/controllers/views";
@@ -6,7 +8,7 @@ import { applyView } from "@/utils/controllers/views";
  * POST /api/mcp/view/[viewId]/apply -- switch the caller's active view on a board.
  * Passing the board's default view id returns them to the default (all tasks) view.
  */
-export async function POST(request: NextRequest, props: { params: Promise<{ viewId: string }> }) {
+async function POSTHandler(request: NextRequest, props: { params: Promise<{ viewId: string }> }) {
   try {
     const rateLimited = await checkMcpRateLimit(request);
     if (rateLimited) return rateLimited;
@@ -22,10 +24,12 @@ export async function POST(request: NextRequest, props: { params: Promise<{ view
     const result = await applyView({ viewId, userId: ctx.user.id, agentId: ctx.agentId });
     return NextResponse.json({ success: true, ...result });
   } catch (error) {
-    console.error("Error switching view:", error);
+    htLogger.error("Error switching view:", error);
     return NextResponse.json(
       { success: false, error: error instanceof Error ? error.message : "Internal server error" },
       { status: 400 },
     );
   }
 }
+
+export const POST = withoutAuth(POSTHandler);

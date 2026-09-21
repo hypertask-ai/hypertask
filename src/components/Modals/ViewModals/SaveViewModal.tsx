@@ -150,7 +150,6 @@ const SaveViewModal: React.FC<TProps> = ({ toggle, project }) => {
                 return toggle()
             } 
         } catch (error) {
-            console.log("🚀 ~ enterHandler ~ error:", error)
             toast.error(
                 axios.isAxiosError(error) &&
                 typeof error.response?.data?.message === "string"

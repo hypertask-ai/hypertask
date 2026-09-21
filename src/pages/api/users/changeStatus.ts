@@ -1,3 +1,5 @@
+import { logger as htLogger } from "#logger";
+import { withAuth } from "#with-auth";
 import { NextApiHandler, NextApiRequest, NextApiResponse } from "next";
 
 import changeNotificationStatus from "@/utils/controllers/notifications/changeNotificationStatus";
@@ -9,11 +11,11 @@ const handler: NextApiHandler = async (req: NextApiRequest, res: NextApiResponse
         try {
             const { notification } = req.body;
            
-            console.log("========================================",userid?.id , notification)
+            htLogger.info("========================================",userid?.id , notification)
             const response = await changeNotificationStatus(userid?.id , notification)
             return res.status(200).json(response)
         } catch (error) {
-            console.log(error);
+            htLogger.info(error);
             return res.status(400).json({ message: JSON.stringify(error) });
         }
     } else {
@@ -21,4 +23,4 @@ const handler: NextApiHandler = async (req: NextApiRequest, res: NextApiResponse
     }
 };
 
-export default handler;
+export default withAuth(handler);

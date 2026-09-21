@@ -18,10 +18,8 @@ export default async function Page(
         title:searchParams.teamTitle,
         id:searchParams.id
     }
-    console.log("🚀 ~ teamToInviteTo:", teamToInviteTo)
     const user = await requireServerCookieUser();
     const isUserNew = await checkIfUserIsNew(user.id)
-    console.log("🚀 ~ Page ~ isUserNew:", isUserNew)
 
     return (
         <OnboardingPageComponent isUserNew={isUserNew} teamToInviteTo={teamToInviteTo}/>

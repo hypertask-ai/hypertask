@@ -1,3 +1,4 @@
+import { logger as htLogger } from "#logger";
 import prisma from "@/lib/prisma";
 import { subDays } from "date-fns";
 
@@ -11,7 +12,7 @@ export async function invokeChatSessionExpiry(job: ChatSessionExpiryJobPayload) 
   const { sessionId } = job;
   const expiryThreshold = subDays(new Date(), CHAT_SESSION_EXPIRY_DAYS);
 
-  console.log(`[invokeChatSessionExpiry] Invoked for sessionId: ${sessionId}, expiryThreshold: ${expiryThreshold.toISOString()}`);
+  htLogger.info(`[invokeChatSessionExpiry] Invoked for sessionId: ${sessionId}, expiryThreshold: ${expiryThreshold.toISOString()}`);
 
   const session = await prisma.chatSession.findUnique({
     where: {
@@ -25,7 +26,7 @@ export async function invokeChatSessionExpiry(job: ChatSessionExpiryJobPayload) 
   });
 
   if (!session) {
-    console.log(`[invokeChatSessionExpiry] No session found for id: ${sessionId}`);
+    htLogger.info(`[invokeChatSessionExpiry] No session found for id: ${sessionId}`);
     return "skipped";
   }
 
@@ -37,10 +38,10 @@ export async function invokeChatSessionExpiry(job: ChatSessionExpiryJobPayload) 
     },
   });
 
-  console.log(`[invokeChatSessionExpiry] Attempted to delete session id: ${session.id} (user: ${session.userId}) if updated before ${expiryThreshold.toISOString()}. Deleted count: ${deleted.count}`);
+  htLogger.info(`[invokeChatSessionExpiry] Attempted to delete session id: ${session.id} (user: ${session.userId}) if updated before ${expiryThreshold.toISOString()}. Deleted count: ${deleted.count}`);
 
   if (deleted.count === 0) {
-    console.log(`[invokeChatSessionExpiry] No sessions deleted for id: ${session.id}. Session may not be old enough or already deleted.`);
+    htLogger.info(`[invokeChatSessionExpiry] No sessions deleted for id: ${session.id}. Session may not be old enough or already deleted.`);
     return "skipped";
   }
 
@@ -59,15 +60,15 @@ export async function recreateSessionIfEmpty(userId: number) {
     where: { userId },
   });
 
-  console.log(`[recreateSessionIfEmpty] Remaining sessions for user ${userId}: ${remainingSessions}`);
+  htLogger.info(`[recreateSessionIfEmpty] Remaining sessions for user ${userId}: ${remainingSessions}`);
 
   if (remainingSessions === 0) {
-    console.log(`[recreateSessionIfEmpty] No remaining sessions for user ${userId}. Creating a new empty session...`);
+    htLogger.info(`[recreateSessionIfEmpty] No remaining sessions for user ${userId}. Creating a new empty session...`);
     await prisma.chatSession.create({
       data: {
         userId,
       },
     });
-    console.log(`[recreateSessionIfEmpty] New empty chat session created for user ${userId}`);
+    htLogger.info(`[recreateSessionIfEmpty] New empty chat session created for user ${userId}`);
   }
 }

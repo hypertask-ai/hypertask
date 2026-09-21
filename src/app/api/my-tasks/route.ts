@@ -1,5 +1,6 @@
+import { logger as htLogger } from "#logger";
+import { getAuthSession, withAuth } from "#with-auth";
 import { NextRequest, NextResponse } from "next/server";
-import { getSessionUser } from "@/lib/auth/getSessionUser";
 import { isFeatureEnabled } from "@/lib/flags";
 import {
   MY_TASKS_LIVE_UPDATES_FLAG,
@@ -28,9 +29,9 @@ const parseScopesParam = (raw: string | null): MyTasksScope[] => {
   );
 };
 
-export async function GET(request: NextRequest) {
+async function GETHandler(request: NextRequest) {
   try {
-    const userId = (await getSessionUser(request.headers))?.userId;
+    const userId = (await getAuthSession(request.headers))?.userId;
     if (!userId) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
@@ -68,7 +69,9 @@ export async function GET(request: NextRequest) {
       },
     });
   } catch (error) {
-    console.error("[my-tasks] list failed", error);
+    htLogger.error("[my-tasks] list failed", error);
     return NextResponse.json({ error: "Unable to load My Tasks" }, { status: 500 });
   }
 }
+
+export const GET = withAuth(GETHandler);

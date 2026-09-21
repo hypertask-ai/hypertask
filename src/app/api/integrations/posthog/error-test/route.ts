@@ -1,3 +1,5 @@
+import { env as appEnv } from "#env";
+import { withoutAuth } from "#with-auth";
 import { timingSafeEqual } from "node:crypto";
 import { NextRequest, NextResponse } from "next/server";
 
@@ -12,7 +14,7 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 function authorized(request: NextRequest) {
-  const expected = process.env.POSTHOG_ERROR_TEST_TOKEN;
+  const expected = appEnv.POSTHOG_ERROR_TEST_TOKEN;
   const supplied = request.headers.get("x-error-test-token");
   if (!expected || !supplied) return false;
   const expectedBytes = Buffer.from(expected);
@@ -34,8 +36,8 @@ function authorized(request: NextRequest) {
 // cookie-authenticated session. Any gate failing makes the route a 404/401.
 const TRIGGERABLE_ENVIRONMENTS = new Set(["preview", "production"]);
 
-export async function POST(request: NextRequest) {
-  if (!TRIGGERABLE_ENVIRONMENTS.has(process.env.VERCEL_ENV || "")) {
+async function POSTHandler(request: NextRequest) {
+  if (!TRIGGERABLE_ENVIRONMENTS.has(appEnv.VERCEL_ENV || "")) {
     return NextResponse.json({ error: "Not found" }, { status: 404 });
   }
   if (
@@ -57,3 +59,5 @@ export async function POST(request: NextRequest) {
   // title, so it is the evidence a human reads. Keep it environment-neutral.
   throw new Error("HTPR-6238 deliberate error tracking verification");
 }
+
+export const POST = withoutAuth(POSTHandler);

@@ -1,3 +1,5 @@
+import { logger as htLogger } from "#logger";
+import { withAuth } from "#with-auth";
 import { cookies } from 'next/headers'
 import { NextRequest, NextResponse } from 'next/server'
 
@@ -8,7 +10,7 @@ import { getProjectWhere } from '@/utils/controllers/projects/getAllIncludes'
 
 type RouteContext = { params: Promise<{ publicId: string }> }
 
-export async function GET(_request: NextRequest, { params }: RouteContext) {
+async function GETHandler(_request: NextRequest, { params }: RouteContext) {
   try {
     const userCookie = (await cookies()).get('nookies_user')
     if (!userCookie?.value) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
@@ -43,7 +45,9 @@ export async function GET(_request: NextRequest, { params }: RouteContext) {
 
     return NextResponse.json({ versions })
   } catch (error) {
-    console.error('[List Page Versions] Error:', error)
+    htLogger.error('[List Page Versions] Error:', error)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
 }
+
+export const GET = withAuth(GETHandler);

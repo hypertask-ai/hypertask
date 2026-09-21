@@ -11,7 +11,6 @@ const TrialPage = () => {
 
   // useEffect(() => {
   //   if (currentUser && !canAccessTrialPage(currentUser)) {
-  //     console.log('🔄 User not eligible for trial upgrade page, redirecting away from trial page')
   //     router.replace('/')
   //   }
   // }, [currentUser, router])

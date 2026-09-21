@@ -1,3 +1,5 @@
+import { logger as htLogger } from "#logger";
+import { withAuth } from "#with-auth";
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 
@@ -16,7 +18,7 @@ const uploadRequestSchema = z.object({
   URLs: z.array(z.string().url()).default([]),
 });
 
-export async function POST(request: NextRequest) {
+async function POSTHandler(request: NextRequest) {
   const cookieUser = await getCurrentUserFromCookies();
   if (!cookieUser?.id) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -32,10 +34,12 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json(result, { status: 200 });
   } catch (error) {
-    console.error("[ai/custom-instructions/upload] error:", error);
+    htLogger.error("[ai/custom-instructions/upload] error:", error);
     return NextResponse.json(
       { error: errorMessage(error) },
       { status: 400 }
     );
   }
 }
+
+export const POST = withAuth(POSTHandler);

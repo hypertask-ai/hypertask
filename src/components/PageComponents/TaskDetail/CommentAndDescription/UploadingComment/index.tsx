@@ -49,7 +49,6 @@ const UploadingCommentContainer:React.FC<IProps> = ({id,content, attachments,tot
   const {processHtml,createComment, uploadAttachmentsComments } = useSaveContent();
   const UploadFlow =async()=>{
     const content_:any = await processHtml(content, setInlineImagesUploadedTotal)
-    console.log("🚀 ~ UploadFlow ~ content_:", content_)
     setProcessedResult(content_)
     setTotalChecks(prev => ({ ...prev, content: true }));
   }
@@ -61,7 +60,6 @@ const UploadingCommentContainer:React.FC<IProps> = ({id,content, attachments,tot
 const callbackAttachments = async(attachmentsReturned:any[]) => {
 
   // get all the urls back
-  console.log("🚀 ~ callbackAttachments ~ attachmentsReturned:", attachmentsReturned)
     // this is confirmation that attachments are uploaded.
     // setTotalChecks(prev=>prev+1)
     setUploadedAttachments(attachmentsReturned)

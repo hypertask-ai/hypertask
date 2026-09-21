@@ -1,3 +1,5 @@
+import { logger as htLogger } from "#logger";
+import { withAuth } from "#with-auth";
 import { NextApiRequest, NextApiResponse } from "next";
 import { sendAssignEmail } from "@/utils/controllers/notifications/sendAssignEmail";
 
@@ -10,7 +12,7 @@ const handler = async (req: NextApiRequest, res: NextApiResponse) => {
 
       return res.status(200).json({ message: "success" });
     } catch (error) {
-      console.log("🤔 ~ handler ~ error:", error);
+      htLogger.info("🤔 ~ handler ~ error:", error);
       res.status(500).json({ message: "an error occured" });
     }
   } else {
@@ -18,4 +20,4 @@ const handler = async (req: NextApiRequest, res: NextApiResponse) => {
   }
 };
 
-export default handler;
+export default withAuth(handler);

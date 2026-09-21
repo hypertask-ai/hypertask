@@ -1,3 +1,4 @@
+import { env as appEnv } from "#env";
 import { useGetAllFollowers } from "@/hooks/Task Detail/useGetFollowers";
 import { ITask } from "@/models/model";
 import { currentUserAtom } from "@/store";
@@ -12,7 +13,7 @@ const useFollowers = (task: ITask) => {
     task.id,
   );
   const queryClient = useQueryClient();
-  const path = `${process.env.NEXT_PUBLIC_BASEURL}/detail/project-${task.projectId}/${task.uniqueIndex}`;
+  const path = `${appEnv.NEXT_PUBLIC_BASEURL}/detail/project-${task.projectId}/${task.uniqueIndex}`;
 
   const PostFollower = async (userId: number, taskId: number) => {
     const check = followers?.some(
@@ -41,7 +42,6 @@ const useFollowers = (task: ITask) => {
         });
       }
     } catch (error) {
-      console.log("🚀 ~ PostFollower ~ error:", error);
     }
   };
 
@@ -68,7 +68,6 @@ const useFollowers = (task: ITask) => {
         taskId: task?.id,
       });
     } catch (error) {
-      console.log("error creating mention notification", error);
     }
   };
 
@@ -83,7 +82,6 @@ const useFollowers = (task: ITask) => {
         mentionById: currentUser.id,
       });
     } catch (error) {
-      console.log("🚀 ~ handleAgentMention ~ error:", error);
     }
   }
 
@@ -98,7 +96,6 @@ const useFollowers = (task: ITask) => {
     try {
       axios.post("/api/notifications/sendEmailToFollower", { ...body });
     } catch (error) {
-      console.log("🚀 ~ sendEmailToFollower ~ error:", error);
     }
   }
 

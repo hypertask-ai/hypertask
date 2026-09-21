@@ -1,3 +1,5 @@
+import { logger as htLogger } from "#logger";
+import { withoutAuth } from "#with-auth";
 import { NextRequest, NextResponse } from 'next/server'
 import { validateMcpAuth, checkMcpRateLimit } from '@/lib/mcp/auth'
 import { getProjectListingWhere } from '@/utils/controllers/projects/getAllIncludes'
@@ -62,7 +64,7 @@ export interface ListProjectsResponse {
  * 
  * Authentication: Bearer token (JWT or API key) in Authorization header
  */
-export async function GET(request: NextRequest) {
+async function GETHandler(request: NextRequest) {
   try {
     // Validate authentication
     const rateLimited = await checkMcpRateLimit(request)
@@ -250,7 +252,7 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json(response)
   } catch (error) {
-    console.error('Error listing projects:', error)
+    htLogger.error('Error listing projects:', error)
     return NextResponse.json(
       {
         success: false,
@@ -260,3 +262,5 @@ export async function GET(request: NextRequest) {
     )
   }
 }
+
+export const GET = withoutAuth(GETHandler);

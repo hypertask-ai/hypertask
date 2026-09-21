@@ -1,3 +1,4 @@
+import { logger as htLogger } from "#logger";
 import type { NextRequest } from 'next/server'
 import { NextResponse } from 'next/server'
 import type { McpAuthContext } from '@/lib/mcp/auth'
@@ -131,7 +132,7 @@ export async function handleRelatedTasksGet(
 
     return NextResponse.json({ success: true, related })
   } catch (error) {
-    console.error('[MCP Related Tasks] GET failed:', error)
+    htLogger.error('[MCP Related Tasks] GET failed:', error)
     return errorResponse('Internal server error', 500)
   }
 }
@@ -188,7 +189,7 @@ export async function handleRelatedTasksPost(
       related: rows.slice(0, limit).map(mapRelatedTask),
     })
   } catch (error) {
-    console.error('[MCP Related Tasks] POST failed:', error)
+    htLogger.error('[MCP Related Tasks] POST failed:', error)
     return errorResponse('Internal server error', 500)
   }
 }

@@ -1,3 +1,4 @@
+import { env as appEnv } from "#env";
 import { dictationConfig } from "@/lib/configs/dictation.config";
 import { MAX_DICTATION_AUDIO_BYTES } from "@/lib/dictationLimits";
 
@@ -49,7 +50,7 @@ export async function transcribeWithDeepgram(
   }
 
   const apiKey =
-    process.env.DEEPGRAM_API_KEY || dictationConfig.api.deepgram.apiKey;
+    appEnv.DEEPGRAM_API_KEY || dictationConfig.api.deepgram.apiKey;
   if (!apiKey) {
     throw new Error("Deepgram API key not configured");
   }

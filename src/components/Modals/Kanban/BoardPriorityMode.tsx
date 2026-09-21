@@ -138,7 +138,6 @@ const BoardPriorityMode = <TMode extends string = SortingMode,>(props: Props<TMo
                 maxLevels === 1
             )
         } catch (error) {
-            console.log("🚀 ~ setPriorirty ~ error:", error)
 
         }
     }
@@ -148,7 +147,6 @@ const BoardPriorityMode = <TMode extends string = SortingMode,>(props: Props<TMo
         const index = filteredPriorities.findIndex(item => item === selectedPriority)
 
         // if (e.key === 'Enter' && filteredPriorities.length > 0) {
-        //     console.log("i had submitted bro this is dangerous")
         //     // createBoard(title, selectedPriority.id, selectedPriority.googleAccountId)
         // }
         if (e.key === "Tab") {
@@ -245,7 +243,6 @@ const BoardPriorityMode = <TMode extends string = SortingMode,>(props: Props<TMo
     }, [document.activeElement, keyword, selectedPriority, filteredPriorities, levels]);
 
     useEffect(() => {
-        // console.log("🚀 ~ useEffect ~ filteredPriorities_:")
         const filteredPriorities_ = priorityModes.filter((priority) =>
             (priority === "Manual" || maxLevels === 1 || !levels.some((level) => level.mode === priority)) &&
             (levels.length < maxLevels || maxLevels === 1 || priority === "Manual") &&

@@ -1,3 +1,5 @@
+import { logger as htLogger } from "#logger";
+import { withAuth } from "#with-auth";
 // Next.js API route support: https://nextjs.org/docs/api-routes/introduction
 // "/api/activity/addLastActiveAt"
 import type { NextApiRequest, NextApiResponse } from 'next'
@@ -24,7 +26,7 @@ async function updateActivity({ userId, teamId }: { userId?: number; teamId?: st
 }
 
 
-export default async function handler(req: NextApiRequest, res: NextApiResponse) {
+async function handler(req: NextApiRequest, res: NextApiResponse) {
     try {
         const { userId, teamId } = req.body;
 
@@ -35,7 +37,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         const response = await updateActivity({ userId, teamId });
         res.status(200).json(response);
     } catch (error) {
-        console.error(error);
+        htLogger.error(error);
         res.status(500).json({ message: "Internal Server Error", error: error });
     }
 }
+
+export default withAuth(handler);

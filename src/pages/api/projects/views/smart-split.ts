@@ -1,10 +1,11 @@
+import { logger as htLogger } from "#logger";
+import { getAuthSession, withAuth } from "#with-auth";
 import { labelStore } from "@/utils/controllers/labels";
 import type { NextApiRequest, NextApiResponse } from "next";
 import { Prisma } from "@prisma/client";
 import { randomUUID } from "node:crypto";
 
 import { scheduleBackfillAiLabel } from "@/lib/ai/labelClassifier";
-import { getSessionUser } from "@/lib/auth/getSessionUser";
 import prisma from "@/lib/prisma";
 import { broadcastBoardChange } from "@/lib/realtime/server";
 import {
@@ -448,8 +449,8 @@ const deleteSmartSplit = async (
     await labelStore(tx).delete({ where: { id: label.id } });
   });
 
-export default async function handler(req: NextApiRequest, res: NextApiResponse) {
-  const session = await getSessionUser(
+async function handler(req: NextApiRequest, res: NextApiResponse) {
+  const session = await getAuthSession(
     new Headers(req.headers as Record<string, string>)
   );
   if (!session) {
@@ -499,7 +500,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     if (error instanceof SmartSplitError) {
       return res.status(error.status).json({ message: error.message });
     }
-    console.error("smart split mutation failed", error);
+    htLogger.error("smart split mutation failed", error);
     return res.status(500).json({ message: "Could not save the smart split" });
   }
 }
+
+export default withAuth(handler);

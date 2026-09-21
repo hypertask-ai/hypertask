@@ -1,3 +1,5 @@
+import { logger as htLogger } from "#logger";
+import { withoutAuth } from "#with-auth";
 import { NextRequest, NextResponse } from 'next/server'
 import type { Prisma } from '@prisma/client'
 import { checkMcpRateLimit, validateMcpAuth } from '@/lib/mcp/auth'
@@ -21,7 +23,7 @@ function parseProjectId(raw: string): number | null {
  * GET /api/mcp/projects/:projectId/playbook
  * Returns the board's playbook (working rules + definition-of-done), or null.
  */
-export async function GET(
+async function GETHandler(
   request: NextRequest,
   props: { params: Promise<{ projectId: string }> }
 ) {
@@ -54,7 +56,7 @@ export async function GET(
       playbook: project.playbook ?? null,
     })
   } catch (error) {
-    console.error('[MCP Board Playbook] GET Error:', error)
+    htLogger.error('[MCP Board Playbook] GET Error:', error)
     return NextResponse.json({ success: false, error: 'Internal server error' }, { status: 500 })
   }
 }
@@ -64,7 +66,7 @@ export async function GET(
  * Sets the board's playbook. Any board member/owner (agent included) may set it.
  * Body: { definition_of_done?: string[], working_rules?: string, notes?: string }.
  */
-export async function PUT(
+async function PUTHandler(
   request: NextRequest,
   props: { params: Promise<{ projectId: string }> }
 ) {
@@ -110,7 +112,10 @@ export async function PUT(
 
     return NextResponse.json({ success: true, projectId, playbook: parsed.value })
   } catch (error) {
-    console.error('[MCP Board Playbook] PUT Error:', error)
+    htLogger.error('[MCP Board Playbook] PUT Error:', error)
     return NextResponse.json({ success: false, error: 'Internal server error' }, { status: 500 })
   }
 }
+
+export const GET = withoutAuth(GETHandler);
+export const PUT = withoutAuth(PUTHandler);

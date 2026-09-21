@@ -1,3 +1,5 @@
+import { logger as htLogger } from "#logger";
+import { withAuth } from "#with-auth";
 // Next.js API route support: https://nextjs.org/docs/api-routes/introduction
 
 import type { NextApiRequest, NextApiResponse } from 'next'
@@ -6,7 +8,7 @@ import getTrashByProjectId from '@/utils/controllers/trash/getByProjectId';
 
 
 
-export default  async function handler(
+async function handler(
   req: NextApiRequest,
   res: NextApiResponse
 ) {
@@ -18,10 +20,12 @@ export default  async function handler(
     if (!projectId || !user) return res.status(400).json({message:"Missing Required information"})
 
     const response = await getTrashByProjectId({projectId:parseInt(projectId as string), userId:user.id})
-    console.log("🚀 ~ response:", response)
+    htLogger.info("🚀 ~ response:", response)
     return res.status(200).json(response)
   } catch (error) {
-      console.log(error)
+      htLogger.info(error)
       return res.status(500).json(error)
   }
 }
+
+export default withAuth(handler);

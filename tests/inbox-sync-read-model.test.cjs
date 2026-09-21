@@ -1247,7 +1247,7 @@ test("the Inbox integration hydrates, reconciles, persists confirmed data, measu
   assert.match(revisionSource, /BroadcastChannel/);
   assert.match(revisionSource, /revisionChannel\?\.postMessage/);
   assert.match(revisionSource, /observeInboxReadModelRevision/);
-  assert.match(accessRoute, /getSessionUser/);
+  assert.match(accessRoute, /getAuthSession/);
   assert.match(accessRoute, /getInboxAccessibleProjectIds\(session\.userId\)/);
   assert.match(accessRoute, /accountId: session\.userId/);
   assert.match(accessRoute, /Cache-Control/);

@@ -1,3 +1,4 @@
+import { logger as htLogger } from "#logger";
 import { consumeEarlyAppShellBootstrapSlice } from "@/lib/appShellBootstrap/client";
 import axios from "axios"
 
@@ -14,7 +15,7 @@ export const getAllProjectsMinimal = async (mode?:"ExtraMinimal") => {
             return AllProjectsMinimal.data;
         } catch (error) {
             // Handle the error or return a default value
-            console.error("Error getting Assignees and Members:", error);
+            htLogger.error("Error getting Assignees and Members:", error);
             throw error; // You can also return a default value or handle the error in a different way
         }
   
@@ -28,7 +29,7 @@ export const getAllTeamMembers = async (teamId:string) => {
         return allTeamMembers.data;
     } catch (error) {
         // Handle the error or return a default value
-        console.error("Error getting Assignees and Members:", error);
+        htLogger.error("Error getting Assignees and Members:", error);
         throw error; // You can also return a default value or handle the error in a different way
     }
 

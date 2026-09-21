@@ -1,3 +1,5 @@
+import { logger as htLogger } from "#logger";
+import { withAuth } from "#with-auth";
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 
@@ -16,7 +18,7 @@ const deleteRequestSchema = z.object({
   fileIdToRemove: z.coerce.number().int().positive().optional(),
 });
 
-export async function DELETE(request: NextRequest) {
+async function DELETEHandler(request: NextRequest) {
   const cookieUser = await getCurrentUserFromCookies();
   if (!cookieUser?.id) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -34,10 +36,12 @@ export async function DELETE(request: NextRequest) {
 
     return NextResponse.json(result, { status: 200 });
   } catch (error) {
-    console.error("[ai/custom-instructions/delete-file-by-source] error:", error);
+    htLogger.error("[ai/custom-instructions/delete-file-by-source] error:", error);
     return NextResponse.json(
       { error: errorMessage(error) },
       { status: 400 }
     );
   }
 }
+
+export const DELETE = withAuth(DELETEHandler);

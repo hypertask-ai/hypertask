@@ -1,3 +1,4 @@
+import { env as appEnv } from "#env";
 import crypto from "crypto";
 
 // HTPR-4164: Gmail and Yahoo's 2024 bulk-sender rules want a one-click
@@ -16,7 +17,7 @@ import crypto from "crypto";
 const SEPARATOR = ".";
 
 function secret(): string {
-  const value = process.env.SESSION_SECRET || process.env.JWT_SECRET;
+  const value = appEnv.SESSION_SECRET || appEnv.JWT_SECRET;
   if (!value) throw new Error("SESSION_SECRET or JWT_SECRET is required to sign unsubscribe links");
   return value;
 }
@@ -67,7 +68,7 @@ export function verifyUnsubscribeToken(
 }
 
 export function unsubscribeUrl(userId: number, email: string): string {
-  const base = process.env.NEXT_PUBLIC_BASEURL ?? "https://app.hypertask.ai";
+  const base = appEnv.NEXT_PUBLIC_BASEURL ?? "https://app.hypertask.ai";
   return `${base}/api/notifications/unsubscribe?token=${encodeURIComponent(
     createUnsubscribeToken(userId, email)
   )}`;

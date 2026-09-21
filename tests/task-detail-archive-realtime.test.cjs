@@ -51,12 +51,13 @@ function loadArchiveHandler() {
         },
       },
     },
-    "@/lib/auth/getSessionUser": {
-      getSessionUser: async () => ({
+    "#with-auth": {
+      getAuthSession: async () => ({
         userId: MEMBER_USER_ID,
         source: "legacy",
         needsBridge: true,
       }),
+      withAuth: (handler) => handler,
     },
     "@/lib/auth/session": {
       SESSION_COOKIE: "ht_session",

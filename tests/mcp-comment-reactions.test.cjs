@@ -168,6 +168,10 @@ function loadCommentsRoute({
   }
   const routeModule = { exports: {} }
   const modules = {
+    '#logger': {
+      logger: { error() {}, warn() {}, info() {}, debug() {} },
+    },
+    '#with-auth': { withoutAuth: (handler) => handler },
     'next/server': { NextResponse: { json: (body, init = {}) => ({ body, status: init.status ?? 200 }) } },
     '@prisma/client': { Prisma: { DbNull: Symbol('DbNull') } },
     '@/lib/mcp/auth': {

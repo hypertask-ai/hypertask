@@ -56,6 +56,9 @@ function loadCreateFollowerService() {
     },
   };
   const modules = {
+    "#logger": {
+      logger: { error() {}, warn() {}, info() {}, debug() {} },
+    },
     "@/utils/controllers/FCM": { sendDataNewCommentFCM: async () => {} },
     "@/lib/prisma": { __esModule: true, default: prisma },
     "@/utils/controllers/notifications/creation-service/check-reminder_create-notification": {

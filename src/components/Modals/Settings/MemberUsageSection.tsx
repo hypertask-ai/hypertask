@@ -39,7 +39,6 @@ const MemberUsageSection = () => {
         if (!cancelled) setData(response.data);
       })
       .catch((requestError) => {
-        console.error("Could not load member AI usage:", requestError);
         if (!cancelled) {
           setData(null);
           setError(

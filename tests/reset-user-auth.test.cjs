@@ -1,6 +1,7 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const path = require("node:path");
+const { passThroughAuth } = require("./helpers/pass-through-auth.cjs");
 
 const root = path.resolve(__dirname, "..");
 let entryId = 0;
@@ -35,6 +36,7 @@ function response() {
 function loadRoute() {
   transfers.length = 0;
 
+  stubModule("src/lib/api/withAuth.ts", passThroughAuth());
   stubModule("src/lib/prisma.ts", {
     default: {
       user: { findUnique: async () => null },

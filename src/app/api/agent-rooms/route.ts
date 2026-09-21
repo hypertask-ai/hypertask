@@ -1,6 +1,6 @@
+import { getAuthSession, withAuth } from "#with-auth";
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
-import { getSessionUser } from "@/lib/auth/getSessionUser";
 import { HTPR_6557_AGENT_ROOMS_FLAG, isFeatureEnabled } from "@/lib/flags";
 import { getProjectWhere } from "@/utils/controllers/projects/getAllIncludes";
 import { AGENT_ROOM_DAILY_TURN_BUDGET } from "@/lib/agents/roomPolicy";
@@ -8,7 +8,7 @@ import { AGENT_ROOM_DAILY_TURN_BUDGET } from "@/lib/agents/roomPolicy";
 export const runtime = "nodejs";
 
 async function roomUser(request: NextRequest) {
-  const userId = (await getSessionUser(request.headers))?.userId;
+  const userId = (await getAuthSession(request.headers))?.userId;
   if (
     !userId ||
     !(await isFeatureEnabled(HTPR_6557_AGENT_ROOMS_FLAG, userId))
@@ -18,7 +18,7 @@ async function roomUser(request: NextRequest) {
   return userId;
 }
 
-export async function GET(request: NextRequest) {
+async function GETHandler(request: NextRequest) {
   const userId = await roomUser(request);
   if (!userId) {
     return NextResponse.json({ success: false, error: "Not found" }, { status: 404 });
@@ -57,7 +57,7 @@ export async function GET(request: NextRequest) {
   });
 }
 
-export async function POST(request: NextRequest) {
+async function POSTHandler(request: NextRequest) {
   const userId = await roomUser(request);
   if (!userId) {
     return NextResponse.json({ success: false, error: "Not found" }, { status: 404 });
@@ -88,3 +88,6 @@ export async function POST(request: NextRequest) {
   });
   return NextResponse.json({ success: true, room });
 }
+
+export const GET = withAuth(GETHandler);
+export const POST = withAuth(POSTHandler);

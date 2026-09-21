@@ -1,3 +1,4 @@
+import { logger as htLogger } from "#logger";
 import prisma from "@/lib/prisma";
 import invokeReminder from "@/utils/controllers/reminders/invokeReminder";
 import { getUserPreferenceFromUserId } from "../get-userSettings-preference";
@@ -40,14 +41,14 @@ const checkReminderAndCreateNotification = async (
     return notification;
   }
 
-  console.log("🚀 ~ checkReminderAndCreateNotification: payload:", payload);
+  htLogger.info("🚀 ~ checkReminderAndCreateNotification: payload:", payload);
 
     // Always check user preference first, regardless of reminder status
     // const notificationType = payload.type || "Comment";
     // const shouldCreate = await getUserPreferenceFromUserId(userId, notificationType);
     
     // if (!shouldCreate) {
-    //   console.log(
+    //   debug.log(
     //     "🚀 ~ checkReminderAndCreateNotification: Notification blocked by user preference"
     //   );
     //   return undefined;
@@ -75,7 +76,7 @@ const checkReminderAndCreateNotification = async (
         });
 
     if (reminderFound) {
-      console.log(
+      htLogger.info(
         "🚀 ~ checkReminderAndCreateNotification: reminder was found"
       );
       if (reminderFound.invokeCondition === "DurationComplete") {
@@ -85,7 +86,7 @@ const checkReminderAndCreateNotification = async (
             status: "Archive",
           },
         });
-        console.log(
+        htLogger.info(
           "🚀 ~ checkReminderAndCreateNotification: DurationCompleted",
           notification
         );
@@ -113,14 +114,14 @@ const checkReminderAndCreateNotification = async (
         await (database === prisma
           ? invokeReminder(reminderFound)
           : invokeReminder(reminderFound, database));
-        console.log(
+        htLogger.info(
           "🚀 ~ checkReminderAndCreateNotification: NewNotification",
           notification
         );
         return notification;
       }
     } else {
-      console.log(
+      htLogger.info(
         "🚀 ~ checkReminderAndCreateNotification: reminder was not found"
       );
       const notification = await database.notification.create({

@@ -140,7 +140,7 @@ export function buildCoverageBaseline(rawSummary, { root = process.cwd() } = {})
 
   return {
     schemaVersion: 1,
-    reportOnly: true,
+    reportOnly: false,
     generatedAt: new Date().toISOString(),
     domains,
     largestCriticalGaps,
@@ -174,7 +174,7 @@ export function renderCoverageMarkdown(baseline) {
 
   return `# Automated test coverage baseline
 
-**This report is diagnostic, not a merge threshold.** It measures production code exercised by the automated suite and makes zero-coverage files visible.
+**CI enforces the repository-wide minimums in .c8rc.json.** This report breaks that coverage down by critical domain and makes zero-coverage files visible.
 
 | Critical domain | Files measured | Lines | Branches | Functions |
 | --- | ---: | ---: | ---: | ---: |
@@ -184,7 +184,7 @@ ${rows}
 
 ${gaps}
 
-Percentages should become enforcement thresholds only after several stable runs and targeted behavioral-test improvements.
+The global floor prevents coverage from dropping below the measured production baseline. Use these domain gaps to decide where behavioral tests should improve next.
 `;
 }
 

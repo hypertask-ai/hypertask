@@ -1,3 +1,4 @@
+import { logger as htLogger } from "#logger";
 // Import PrismaClient from the generated Prisma client
 import { IUrl } from '@/models/model';
 
@@ -10,8 +11,8 @@ import { urlRowData } from "@/lib/attachments/urlRowData";
 
 // Example usage
 const addIntoTask = async (urlsToAdd:IUrl[],commentId:number,method:string|undefined) => {
-  console.log("🚀 ~ file: addIntoTask.ts:12 ~ constaddIntoTask:NextApiHandler= ~ commentId:", commentId)
-  console.log("🚀 ~ file: addIntoTask.ts:12 ~ constaddIntoTask:NextApiHandler= ~ urlsToAdd:", urlsToAdd)
+  htLogger.info("🚀 ~ file: addIntoTask.ts:12 ~ constaddIntoTask:NextApiHandler= ~ commentId:", commentId)
+  htLogger.info("🚀 ~ file: addIntoTask.ts:12 ~ constaddIntoTask:NextApiHandler= ~ urlsToAdd:", urlsToAdd)
 
   if (method === "POST") {
     try {
@@ -41,7 +42,7 @@ const addIntoTask = async (urlsToAdd:IUrl[],commentId:number,method:string|undef
             }
           });
           response.push(attachment_)
-          console.log("attachment_", attachment_);
+          htLogger.info("attachment_", attachment_);
         
         }
 
@@ -56,14 +57,14 @@ const addIntoTask = async (urlsToAdd:IUrl[],commentId:number,method:string|undef
           });
           response.push(urlRecords)
 
-          console.log("🚀 ~ file: addIntoTask.ts:47 ~ urlsToAdd ~ urlRecords:", urlRecords)
+          htLogger.info("🚀 ~ file: addIntoTask.ts:47 ~ urlsToAdd ~ urlRecords:", urlRecords)
       }
       return({
         status:200,
         json:response
       })
     } catch (error) {
-      console.error('Error:', error);
+      htLogger.error('Error:', error);
       return({
         status:300,
         json:{message:"No Response"}
@@ -127,7 +128,7 @@ const addIntoTask = async (urlsToAdd:IUrl[],commentId:number,method:string|undef
         json:{success:true}
       })
     } catch (error) {
-      console.error('Error:', error);
+      htLogger.error('Error:', error);
       return({
         status:500,
         json:{ success: false, error: 'An error occurred.' }

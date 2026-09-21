@@ -372,7 +372,6 @@ const useHTCTaskAndComments = ({
         boardCloseHandler();
       })
       .catch((error) => {
-        console.error("Error fetching task:", error);
       });
   };
 

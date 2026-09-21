@@ -49,11 +49,12 @@ function loadRoute(sessionUser = null, { flagEnabled = true } = {}) {
   const uploaded = [];
   const seenHeaders = [];
   const stubs = {
-    "@/lib/auth/getSessionUser": {
-      getSessionUser: async (headers) => {
+    "#with-auth": {
+      getAuthSession: async (headers) => {
         seenHeaders.push(headers);
         return sessionUser;
       },
+      withAuth: (handler) => handler,
     },
     "@/lib/flags": {
       isFeatureEnabled: async () => flagEnabled,

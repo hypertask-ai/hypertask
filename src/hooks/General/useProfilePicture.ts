@@ -73,7 +73,6 @@ export const useProfilePicture = (_currentUser: IUser | null) => {
         const updatedUser = await updateProfileAPI(newUrl);
         if (updatedUser) updateUserStateAndCookie(updatedUser);
       })().catch((error) => {
-        console.log("🚀 ~ error:", error)
         throw error; // Re-throw so toast handles the UI
       }),
       {
@@ -124,7 +123,6 @@ export const useProfilePicture = (_currentUser: IUser | null) => {
           setDisplayName(newDisplayName);
         }
       })().catch((error) => {
-        console.log("🚀 ~ error:", error);
         throw error;
       }),
       {

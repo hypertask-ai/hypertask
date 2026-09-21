@@ -1,3 +1,4 @@
+import { logger as htLogger } from "#logger";
 // Assert-based demo because this repository has no Vitest setup.
 // Run: npx tsx src/lib/mcp-server/validations/decision-request.validation.test.ts
 import assert from 'node:assert/strict'
@@ -87,7 +88,7 @@ function demo() {
   const cancelled = validateAndSanitizeDecisionRequestCrudInput({ action: 'cancel', decision_request_id: 5 })
   assert.equal(cancelled.decision_request_id, 5)
 
-  console.log('decision-request.validation.test.ts: all assertions passed')
+  htLogger.info('decision-request.validation.test.ts: all assertions passed')
 }
 
 demo()

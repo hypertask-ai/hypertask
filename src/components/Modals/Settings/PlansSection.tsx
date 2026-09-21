@@ -84,7 +84,7 @@ const PlansSection = () => {
       .then(() => {
         if (!cancelled) refetchTeam();
       })
-      .catch((error) => console.error("ensure-customer failed", error));
+      .catch((error) => undefined);
     return () => {
       cancelled = true;
     };
@@ -130,7 +130,6 @@ const PlansSection = () => {
       );
       router.push(response.data.url);
     } catch (error) {
-      console.error(error);
       toast.error("Could not open checkout");
       setCheckoutPlanId(null);
     }
@@ -149,7 +148,6 @@ const PlansSection = () => {
       router.refresh();
       toast.success("Successfully switched to Free Plan");
     } catch (error) {
-      console.error(error);
       toast.error("Could not switch to Free Plan");
     } finally {
       setSwitchingToFree(false);

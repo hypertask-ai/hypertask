@@ -113,7 +113,6 @@ export function useBulkActions<T extends BulkActionItem>({
         clearSelection()
       }
     } catch (error) {
-      console.error(`Bulk action ${actionKey} failed:`, error)
       throw error
     } finally {
       setIsProcessing(false)

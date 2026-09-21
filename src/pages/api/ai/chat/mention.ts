@@ -1,10 +1,11 @@
+import { logger as htLogger } from "#logger";
+import { getAuthSession, withAuth } from "#with-auth";
 import { NextApiHandler, NextApiRequest, NextApiResponse } from "next";
 import { httpStatusConfig } from "@/lib/configs/http-status.config";
 import prisma from "@/lib/prisma";
 import type { AgentMentionItem } from "@/models/model";
 import { getBoardAgentMembers } from "@/utils/controllers/agents/boardMembers";
 import { turbopufferFetchMentionTasks } from "@/utils/controllers/search/document";
-import { getSessionUser } from "@/lib/auth/getSessionUser";
 import { selectMentionAgents } from "@/utils/helperFunctions/mentionSearch";
 
 const handler: NextApiHandler = async (
@@ -16,7 +17,7 @@ const handler: NextApiHandler = async (
       const query = req.query;
       const { param, projectId } = query;
       const userId = (
-        await getSessionUser(new Headers(req.headers as Record<string, string>))
+        await getAuthSession(new Headers(req.headers as Record<string, string>))
       )?.userId;
       if (!userId) return res.status(401).json({ message: "Unauthorized" });
       if (!param)
@@ -85,7 +86,7 @@ const handler: NextApiHandler = async (
       }));
 
       if (proccessedParam == "all") {
-        console.log("🤔 ~ taskSearchByParam ~ FETCHING ALL");
+        htLogger.info("🤔 ~ taskSearchByParam ~ FETCHING ALL");
 
         const projects = await prisma.project.findMany({
           take: 5,
@@ -223,7 +224,7 @@ const handler: NextApiHandler = async (
         ]);
       }
     } catch (error) {
-      console.log("🤔 ~ TaskSearchByParams ERROR:", error);
+      htLogger.info("🤔 ~ TaskSearchByParams ERROR:", error);
       return res
         .status(500)
         .json({ message: httpStatusConfig.statusCodes[500].userMessage });
@@ -264,7 +265,7 @@ const fetchidlist = async (id: number) => {
     }
     return [];
   } catch (error) {
-    console.log("r🤔 ~ fetchidlist ~ error:", error);
+    htLogger.info("r🤔 ~ fetchidlist ~ error:", error);
     return [];
   }
 };
@@ -277,4 +278,4 @@ function getQueryWords(cleanedQuery: string) {
   return cleanedQuery.split(/\s+/).filter((word) => word.length > 0);
 }
 
-export default handler;
+export default withAuth(handler);

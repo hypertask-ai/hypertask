@@ -1,3 +1,4 @@
+import { withoutAuth } from "#with-auth";
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 import { checkMcpRateLimit, validateMcpAuth } from "@/lib/mcp/auth";
@@ -6,7 +7,7 @@ import { markAgentRoomMessageHandled } from "@/lib/agents/roomService";
 
 export const runtime = "nodejs";
 
-export async function POST(
+async function POSTHandler(
   request: NextRequest,
   { params }: { params: Promise<{ messageId: string }> },
 ) {
@@ -44,3 +45,5 @@ export async function POST(
   await markAgentRoomMessageHandled({ messageId, agentId: ctx.agentId });
   return NextResponse.json({ success: true });
 }
+
+export const POST = withoutAuth(POSTHandler);

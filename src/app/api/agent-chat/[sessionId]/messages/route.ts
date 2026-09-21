@@ -1,6 +1,7 @@
+import { logger as htLogger } from "#logger";
+import { getAuthSession, withAuth } from "#with-auth";
 import { chatStore } from "@/utils/controllers/chat";
 import prisma from "@/lib/prisma";
-import { getSessionUser } from "@/lib/auth/getSessionUser";
 import {
   persistAgentRunTriggerWebhooks,
   publishAgentWebhookDeliveries,
@@ -33,12 +34,12 @@ const MAX_MESSAGE_LENGTH = 8000;
 // Store the human turn and, for an EXTERNAL agent, drop a chat.message
 // webhook into the outbox in the same transaction so the agent runtime can
 // run its turn and reply through the MCP endpoint.
-export async function POST(
+async function POSTHandler(
   request: NextRequest,
   { params }: { params: Promise<{ sessionId: string }> }
 ) {
   try {
-    const userId = (await getSessionUser(request.headers))?.userId;
+    const userId = (await getAuthSession(request.headers))?.userId;
     if (!userId) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
@@ -99,7 +100,7 @@ export async function POST(
         agentBrief = await buildAgentChatBrief({ userId, agentId });
       }
     } catch (error) {
-      console.error("Failed to enrich Agent Chat with work context", error);
+      htLogger.error("Failed to enrich Agent Chat with work context", error);
     }
 
     const adhdReplyEnabled = await isFeatureEnabled(
@@ -240,7 +241,7 @@ export async function POST(
         : null,
     });
   } catch (error: any) {
-    console.error("🚀 ~ POST ~ Error adding agent chat message", error);
+    htLogger.error("🚀 ~ POST ~ Error adding agent chat message", error);
 
     return NextResponse.json(
       {
@@ -251,3 +252,5 @@ export async function POST(
     );
   }
 }
+
+export const POST = withAuth(POSTHandler);

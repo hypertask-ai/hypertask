@@ -65,4 +65,3 @@ const scheduledDismissAt = (s: Store, t: Toast, now: number): number | null => {
   );
 }
 
-console.log("useMobileToastAutoDismiss: all checks passed");

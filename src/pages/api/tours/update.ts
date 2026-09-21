@@ -1,3 +1,5 @@
+import { logger as htLogger } from "#logger";
+import { withAuth } from "#with-auth";
 import type { NextApiRequest, NextApiResponse } from 'next';
 import { getCurrentUserFromCookies } from '@/utils/getCurrentUser';
 import prisma from '@/lib/prisma';
@@ -9,7 +11,7 @@ import { SESSION_COOKIE, verifySession } from '@/lib/auth/session';
  * POST /api/tours/update
  * Body: { tourId: string, completed?: boolean, skipped?: boolean }
  */
-export default async function handler(
+async function handler(
   req: NextApiRequest,
   res: NextApiResponse
 ) {
@@ -64,14 +66,16 @@ export default async function handler(
       data: { productTours: updatedTours },
     });
 
-    console.log(`✅ Tour status updated: ${tourId}`, { completed, skipped });
+    htLogger.info(`✅ Tour status updated: ${tourId}`, { completed, skipped });
 
     return res.status(200).json({ success: true, tours: updatedTours });
   } catch (error) {
-    console.error('Error updating tour status:', error);
+    htLogger.error('Error updating tour status:', error);
     return res.status(500).json({ 
       message: 'Internal server error',
       error: error instanceof Error ? error.message : 'Unknown error'
     });
   }
 }
+
+export default withAuth(handler);

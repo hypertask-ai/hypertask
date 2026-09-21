@@ -1,3 +1,5 @@
+import { logger as htLogger } from "#logger";
+import { withAuth } from "#with-auth";
 import { NextApiHandler, NextApiRequest, NextApiResponse } from "next";
 
 import { SESSION_COOKIE, verifySession } from "@/lib/auth/session";
@@ -38,9 +40,9 @@ const handler: NextApiHandler = async (
 
     return res.status(update.status).json(update.res);
   } catch (error) {
-    console.log(error);
+    htLogger.info(error);
     res.status(500).json({ message: "Internal server error" });
   }
 };
 
-export default handler;
+export default withAuth(handler);

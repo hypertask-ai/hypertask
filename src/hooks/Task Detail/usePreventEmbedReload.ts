@@ -34,7 +34,6 @@ export const usePreventFigmaReload = () => {
 
   const runIFrameCheck = () => {
     const iframes = Array.from(document.getElementsByTagName("iframe"));
-    console.debug("Polling iframes... found: ", iframes.length);
 
     if (iframes && iframes.length > 0) {
       (iframes as EnrichedHTMLIFrameElement[]).forEach((iframe) => {

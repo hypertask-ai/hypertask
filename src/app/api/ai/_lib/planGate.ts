@@ -1,3 +1,4 @@
+import { env as appEnv } from "#env";
 import prisma from "@/lib/prisma";
 import { planKindFromStripePriceId } from "@/lib/planFromStripePriceId";
 import { isInternalCompTeam } from "@/lib/internalCompTeams";
@@ -108,7 +109,7 @@ export async function assertModelAllowedForPlan(
   ) {
     return;
   }
-  const sharedKey = process.env.AI_GATEWAY_API_KEY?.trim();
+  const sharedKey = appEnv.AI_GATEWAY_API_KEY?.trim();
   const resolvedCredential =
     typeof credential === "string" ? credential.trim() : credential;
   // Customer BYOK and platform-managed dedicated keys are already authorized
@@ -151,7 +152,7 @@ export async function assertImageModelAllowedForPlan(
   credential?: unknown,
 ) {
   if (!model.premium) return;
-  const sharedKey = process.env.AI_GATEWAY_API_KEY?.trim();
+  const sharedKey = appEnv.AI_GATEWAY_API_KEY?.trim();
   const resolvedCredential =
     typeof credential === "string" ? credential.trim() : credential;
   if (

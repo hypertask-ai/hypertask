@@ -15,7 +15,6 @@ const useFilters = ()=>{
 
     // ========== just set the filter in local storage, apply them on the projectId provided and update the cache
     const applyFilterAndSetCache = async(project:IProject,filterForThisProject:IFilterSettings, columnsOverride?: ISection[]) => {
-      console.log("🚀 ~ applyFilterAndSetCache ~ filterForThisProject:", filterForThisProject)
    
       
       // Returned, not fire-and-forget: the match-mode toggle chains on this promise to keep two
@@ -28,7 +27,6 @@ const useFilters = ()=>{
       const filterForThisProject = getActiveFiltersFromProject(_currentProject);
       
       const conditionToRun = defaultConditions[type];
-      // console.log("🚀 ~ addFilter ~ conditionToRun:", conditionToRun);
       if (!conditionToRun) throw new Error("No condition");
       const existingLabelFilterIndex = filterForThisProject.addedFilters.findIndex(filter => filter.type === type);
       if (existingLabelFilterIndex !== -1) {
@@ -59,7 +57,6 @@ const useFilters = ()=>{
       const filterForThisProject = getActiveFiltersFromProject(_currentProject);
       
       const conditionToRun = defaultConditions[type];
-      // console.log("🚀 ~ addFilter ~ conditionToRun:", conditionToRun);
       if (!conditionToRun) throw new Error("No condition");
       
       const existingLabelFilterIndex = filterForThisProject.addedFilters.findIndex(filter => filter.type === type);
@@ -99,7 +96,6 @@ const useFilters = ()=>{
       const filterForThisProject = getActiveFiltersFromProject(_currentProject);
       
       const conditionToRun = defaultConditions[type];
-      // console.log("🚀 ~ addFilter ~ conditionToRun:", conditionToRun);
       if (!conditionToRun) throw new Error("No condition");
 
       const existingLabelFilterIndex = filterForThisProject.addedFilters.findIndex(filter => filter.type === type);

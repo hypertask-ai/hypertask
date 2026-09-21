@@ -434,7 +434,6 @@ export const useSyncedCalendarReadModel = ({
             performance.now() - startedAt,
           ),
         }, accountId);
-        console.error("Calendar reconciliation failed:", error);
         return false;
       }
     },
@@ -535,7 +534,6 @@ export const useSyncedCalendarReadModel = ({
         .catch((error) => {
           if (!controller.signal.aborted) {
             readinessLocalOutcome.current = "error";
-            console.error("Calendar cache access check failed:", error);
           }
         });
     }

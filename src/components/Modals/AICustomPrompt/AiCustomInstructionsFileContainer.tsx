@@ -94,7 +94,6 @@ const AiCustomInstructionsFileContainer: FC<IProps> = ({ RAGFiles = [] }) => {
           return `Successfully Deleted the file!`;
         },
         error: (error) => {
-          console.log("🚀 ~ toast.promise ~ error:", error);
 
           // Remove file ID from the deleting set on error
           setDeletingFileIds(prev => {
@@ -115,7 +114,6 @@ const AiCustomInstructionsFileContainer: FC<IProps> = ({ RAGFiles = [] }) => {
       });
 
       setLoading(false);
-      console.log("🚀 ~ updateAICustomInstruction ~ error:", error);
     }
   }
 

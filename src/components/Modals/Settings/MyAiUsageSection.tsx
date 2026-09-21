@@ -43,7 +43,6 @@ const MyAiUsageSection = () => {
           });
         }
       } catch (requestError) {
-        console.error("Could not load personal AI usage:", requestError);
         if (!cancelled) {
           setData(null);
           setError("AI usage is currently unavailable.");

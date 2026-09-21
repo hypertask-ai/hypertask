@@ -1,3 +1,4 @@
+import { env as appEnv } from "#env";
 import axios, {
     AxiosError,
     AxiosInstance,
@@ -71,7 +72,7 @@ import axios, {
     private instance: AxiosInstance;
   
     private defaultOptions: AxiosRequestConfig = {
-      baseURL: process.env.NEXT_PUBLIC_API_BASE_URL || '/api',
+      baseURL: appEnv.NEXT_PUBLIC_API_BASE_URL || '/api',
       timeout: 30000,
       headers: {
         'Content-Type': 'application/json',

@@ -1,3 +1,5 @@
+import { logger as htLogger } from "#logger";
+import { withAuth } from "#with-auth";
 import { NextRequest, NextResponse } from "next/server";
 import { generateText } from "ai";
 
@@ -20,7 +22,7 @@ import { tiptapForwardSlashRequestSchema } from "./requestSchema";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-export async function POST(request: NextRequest) {
+async function POSTHandler(request: NextRequest) {
   const cookieUser = await getCurrentUserFromCookies();
   if (!cookieUser?.id) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -107,10 +109,12 @@ export async function POST(request: NextRequest) {
       { status: 200 }
     );
   } catch (error) {
-    console.error("[ai/tiptap-forwardslash] error", errorMessage(error));
+    htLogger.error("[ai/tiptap-forwardslash] error", errorMessage(error));
     return NextResponse.json(
       { error: "An internal error occurred. Please try again later." },
       { status: 500 }
     );
   }
 }
+
+export const POST = withAuth(POSTHandler);

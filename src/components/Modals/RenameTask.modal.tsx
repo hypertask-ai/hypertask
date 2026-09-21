@@ -34,7 +34,6 @@ const RenameTaskModal = (props: Props) => {
       updateTask(newTask);
       closeCallback(title);
     } catch (error) {
-      console.error(error);
     }
   };
 

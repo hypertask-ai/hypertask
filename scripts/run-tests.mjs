@@ -80,12 +80,16 @@ if (cjsTests.length > 0) {
   const isolated = cjsTests.filter((file) => isolatedCjsTests.has(file));
   const shared = cjsTests.filter((file) => !isolatedCjsTests.has(file));
   for (const file of isolated) {
-    run(process.execPath, ["--test", file], `Isolated Node test: ${file}`);
+    run(process.execPath, ["--import", "tsx", "--test", file], `Isolated Node test: ${file}`);
   }
   if (shared.length > 0) {
     // Cap at 4 workers: the default (one per core) put 18+ node processes on
     // the shared box whenever CI and an agent ran the suite (owner, 2026-08-25).
-    run(process.execPath, ["--test", "--test-concurrency=4", ...shared], "Node test suite");
+    run(
+      process.execPath,
+      ["--import", "tsx", "--test", "--test-concurrency=4", ...shared],
+      "Node test suite",
+    );
   }
 }
 

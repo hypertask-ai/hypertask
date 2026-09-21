@@ -28,7 +28,6 @@ const AIAttachmentsPreview: React.FC<AITaskWriterAttachmentsProps> = ({
   className,
   isInHistory = false,
 }) => {
-  console.log("🚀 ~ AITaskWriterAttachments ~ attachments:", attachments.flatMap(x=>x.preview))
   const [isCarouselOpen, setIsCarouselOpen] = useState(false);
   const [currentCarouselIndex, setCurrentCarouselIndex] = useState(0);
 

@@ -1,3 +1,5 @@
+import { logger as htLogger } from "#logger";
+import { getAuthSession, withAuth } from "#with-auth";
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 import { encryptByokSecret, decryptByokSecret } from "@/lib/crypto/byokCipher";
@@ -5,7 +7,6 @@ import { maskByokSecret } from "@/lib/crypto/maskByokSecret";
 import { isByokProviderKey, type TByokProviderKey } from "@/lib/aiProviders";
 import { resolveOwnedAgent } from "@/lib/agents/ownedSlugs";
 import { verifyCookieIdentity } from "@/lib/auth/cookieIdentity";
-import { getSessionUser } from "@/lib/auth/getSessionUser";
 import { SESSION_COOKIE } from "@/lib/auth/session";
 import {
   deleteOwnedAgentProviderKey,
@@ -36,7 +37,7 @@ async function authenticatedUserId(request: NextRequest) {
       request.cookies.get("nookies_user")?.value,
       request.cookies.get(SESSION_COOKIE)?.value,
     ),
-    getSessionUser(request.headers),
+    getAuthSession(request.headers),
   ]);
   if (identity.status === "verified") return identity.id;
   if (identity.status === "forged") return null;
@@ -60,7 +61,7 @@ async function requireOwnedAgent(request: NextRequest, ref: string) {
   return { agentId: agent.id, userId };
 }
 
-export async function GET(
+async function GETHandler(
   request: NextRequest,
   props: { params: Promise<{ agentId: string }> },
 ) {
@@ -86,7 +87,7 @@ export async function GET(
       try {
         maskedKey = maskByokSecret(decryptByokSecret(ciphertext));
       } catch (error) {
-        console.error(
+        htLogger.error(
           `[agent provider-key] decrypt failed for provider=${row.provider}`,
           error,
         );
@@ -103,7 +104,7 @@ export async function GET(
   return NextResponse.json({ success: true, keys });
 }
 
-export async function PUT(
+async function PUTHandler(
   request: NextRequest,
   props: { params: Promise<{ agentId: string }> },
 ) {
@@ -167,7 +168,7 @@ export async function PUT(
   });
 }
 
-export async function DELETE(
+async function DELETEHandler(
   request: NextRequest,
   props: { params: Promise<{ agentId: string }> },
 ) {
@@ -207,3 +208,7 @@ export async function DELETE(
     visibilityChanged: result.visibilityChanged,
   });
 }
+
+export const GET = withAuth(GETHandler);
+export const PUT = withAuth(PUTHandler);
+export const DELETE = withAuth(DELETEHandler);

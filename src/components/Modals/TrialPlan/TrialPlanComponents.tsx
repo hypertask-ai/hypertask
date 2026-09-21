@@ -1,3 +1,4 @@
+import { env as appEnv } from "#env";
 import { IconsGlobal } from "@/components/Common/IconsGlobal";
 import { getTeamById } from "@/lib/serverActions";
 import { storeSubscriptionPlans } from "@/lib/subscriptionPlans";
@@ -62,9 +63,9 @@ export const TrialsButton = ({teamId}:{teamId:string}) => {
                 stripe_customer_id: teamInfo.stripe_customer_id,
                 teamId: teamInfo.teamId,
                 mode:"Trial",
-                priceId: process.env.NEXT_PUBLIC_STRIPE_MONTHLY_PRICE_ID!,
-                returnUrl: `${process.env.NEXT_PUBLIC_BASEURL}/trial-page-confirmation`,
-                cancelUrl: process.env.NEXT_PUBLIC_BASEURL
+                priceId: appEnv.NEXT_PUBLIC_STRIPE_MONTHLY_PRICE_ID!,
+                returnUrl: `${appEnv.NEXT_PUBLIC_BASEURL}/trial-page-confirmation`,
+                cancelUrl: appEnv.NEXT_PUBLIC_BASEURL
 
             };
             const url = await axios.post(CHECKOUT_SESSION_API_ENDPOINT, body);
@@ -91,7 +92,6 @@ export const TrialsButton = ({teamId}:{teamId:string}) => {
                     })
                 }
             } catch (error) {
-                if (!cancelled) console.log("🚀 ~ fetchTeamInfo ~ error:", error)
             }
             finally{
                 if (!cancelled) setFetching(false)

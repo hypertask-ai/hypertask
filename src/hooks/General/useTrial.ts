@@ -1,3 +1,4 @@
+import { env as appEnv } from "#env";
 import { CHECKOUT_SESSION_API_ENDPOINT } from "@/lib/constants/APIRouteConstants";
 import { createCheckoutParam } from "@/lib/constants/constants";
 import { ISubscriptionPlan } from "@/lib/subscriptionPlans";
@@ -42,7 +43,7 @@ const useTrial = ({ teamInfo, manageLink, plan, hasSubscription }: IProps) => {
     if (isExactCurrent) {
       router.push(manageLink);
     } else {
-      const baseURL = String(process.env.NEXT_PUBLIC_BASEURL);
+      const baseURL = String(appEnv.NEXT_PUBLIC_BASEURL);
       var currProj: IProject | undefined;
 
       if (currentProject) currProj = currentProject;
@@ -57,7 +58,6 @@ const useTrial = ({ teamInfo, manageLink, plan, hasSubscription }: IProps) => {
         success,
         cancel,
       );
-      console.log("🚀 ~ createCheckout ~ body:", body);
       const url = await axios.post(CHECKOUT_SESSION_API_ENDPOINT, body);
       router.push(url.data.url);
     }

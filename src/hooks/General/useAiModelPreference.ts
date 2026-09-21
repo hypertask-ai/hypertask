@@ -138,7 +138,6 @@ export function useAiModelPreference(
           }
         })
         .catch((error) => {
-          console.log("useAiModelPreference update error:", error);
         });
     },
     [currentTeamId, queryClient, surface, userPreferences],

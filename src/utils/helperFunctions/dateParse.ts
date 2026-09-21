@@ -163,7 +163,7 @@ const getTodayOptions = (options_:{past:boolean, future:boolean}) =>{
 
 const getOptions = (value: string): string[] => {
   // Split input into words
-  // console.log("🚀 ~ getOptions ~ value:", value)
+  // debug.log("🚀 ~ getOptions ~ value:", value)
   if (value.length===0) return []
   var words = value.split(/\s+/);
   
@@ -184,7 +184,7 @@ const getOptions = (value: string): string[] => {
   if (numericValue >= 10) options.unshift("minutes")
 
   if (words.length===1) words.push("")
-  // console.log("🚀 ~ getOptions ~ words:", words)
+  // debug.log("🚀 ~ getOptions ~ words:", words)
   if (words.length>2) {
       return []
 

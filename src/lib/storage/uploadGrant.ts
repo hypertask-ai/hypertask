@@ -1,3 +1,4 @@
+import { env as appEnv } from "#env";
 import { createHmac, timingSafeEqual } from "node:crypto";
 
 /**
@@ -39,7 +40,7 @@ type SignedTaskAttachmentLinkReceipt = TaskAttachmentLinkReceipt & {
 };
 
 function secret(): string {
-  const value = process.env.SESSION_SECRET || process.env.JWT_SECRET;
+  const value = appEnv.SESSION_SECRET || appEnv.JWT_SECRET;
   if (!value) {
     throw new Error("Missing SESSION_SECRET or JWT_SECRET env var");
   }

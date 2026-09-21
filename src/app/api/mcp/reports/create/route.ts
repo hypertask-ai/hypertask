@@ -1,3 +1,5 @@
+import { logger as htLogger } from "#logger";
+import { withoutAuth } from "#with-auth";
 import { NextRequest, NextResponse } from 'next/server'
 
 import { isFeatureEnabled } from '@/lib/flags'
@@ -28,7 +30,7 @@ type CreateReportBody = {
   body_html?: unknown
 }
 
-export async function POST(request: NextRequest) {
+async function POSTHandler(request: NextRequest) {
   try {
     const ctx = await validateMcpAuth(request)
     if (!ctx) {
@@ -192,7 +194,9 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    console.error('[MCP Create Report] Error:', error)
+    htLogger.error('[MCP Create Report] Error:', error)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
 }
+
+export const POST = withoutAuth(POSTHandler);

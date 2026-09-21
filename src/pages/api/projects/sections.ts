@@ -1,3 +1,5 @@
+import { logger as htLogger } from "#logger";
+import { withAuth } from "#with-auth";
 import { NextApiHandler, NextApiRequest, NextApiResponse } from "next";
 
 import sections from "@/utils/controllers/projects/sections";
@@ -8,7 +10,7 @@ import prisma from "@/lib/prisma";
 const handler: NextApiHandler = async (req: NextApiRequest, res: NextApiResponse) => {
     if (req.method === "PUT") {
         try {
-            // console.log(req.body);
+            // debug.log(req.body);
             const { section, projectId } = req.body;
             const response = await sections(section, projectId)
             return res.status(response.status).json(response.json);
@@ -23,7 +25,7 @@ const handler: NextApiHandler = async (req: NextApiRequest, res: NextApiResponse
             // })
             // res.status(200).json(project);
         } catch (error) {
-            console.log(error);
+            htLogger.info(error);
 
             res.status(500).json({ message: "Internal server error" });
         }
@@ -33,4 +35,4 @@ const handler: NextApiHandler = async (req: NextApiRequest, res: NextApiResponse
     }
 };
 
-export default handler;
+export default withAuth(handler);

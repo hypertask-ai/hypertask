@@ -1,3 +1,5 @@
+import { logger as htLogger } from "#logger";
+import { withAuth } from "#with-auth";
 import { NextApiHandler, NextApiRequest, NextApiResponse } from "next";
 import AddParentTask from "@/utils/controllers/tasks/addParent";
 import { updateTaskSingle } from "@/utils/controllers/tasks/single";
@@ -24,7 +26,7 @@ const handler: NextApiHandler = async (
 
       return res.status(response.status).json(response.json);
     } catch (error) {
-      console.log("🚀 ~ error:", error);
+      htLogger.info("🚀 ~ error:", error);
       return res.status(200).json([]);
     }
   } else {
@@ -32,4 +34,4 @@ const handler: NextApiHandler = async (
   }
 };
 
-export default handler;
+export default withAuth(handler);

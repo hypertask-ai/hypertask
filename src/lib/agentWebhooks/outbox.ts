@@ -1,3 +1,4 @@
+import { logger as htLogger } from "#logger";
 import crypto from "crypto";
 import type { AgentRun, Prisma } from "@prisma/client";
 import prisma from "@/lib/prisma";
@@ -99,7 +100,7 @@ export async function publishAgentWebhookDeliveries(
   await Promise.all(
     deliveryIds.filter((id): id is string => Boolean(id)).map((deliveryId) =>
       queueAgentWebhookDelivery(deliveryId).catch((error) => {
-        console.warn(
+        htLogger.warn(
           "[agent-webhook] queue publish failed; sweep will retry",
           error,
         );
@@ -130,7 +131,7 @@ export async function replayAgentWebhookDelivery(input: {
     },
   });
   await queueAgentWebhookDelivery(deliveryId).catch((error) => {
-    console.warn("[agent-webhook] replay queue publish failed; sweep will retry", error);
+    htLogger.warn("[agent-webhook] replay queue publish failed; sweep will retry", error);
   });
   return deliveryId;
 }
@@ -159,7 +160,7 @@ export async function createAgentWebhookTestDelivery(input: {
     },
   });
   await queueAgentWebhookDelivery(deliveryId).catch((error) => {
-    console.warn("[agent-webhook] test queue publish failed; sweep will retry", error);
+    htLogger.warn("[agent-webhook] test queue publish failed; sweep will retry", error);
   });
   return deliveryId;
 }
@@ -272,7 +273,7 @@ async function filterTaskLabelsForProject(
     return label ? [{ id: label.id, value: label.value }] : [];
   });
   if (filteredLabels.length !== labels.length) {
-    console.warn("[agent-webhook] omitted labels outside the task board scope", {
+    htLogger.warn("[agent-webhook] omitted labels outside the task board scope", {
       projectId,
       omittedCount: labels.length - filteredLabels.length,
       reason: "deleted-or-cross-project",

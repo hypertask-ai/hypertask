@@ -1,5 +1,6 @@
+import { logger as htLogger } from "#logger";
+import { getAuthSession, withAuth } from "#with-auth";
 import { NextRequest, NextResponse } from "next/server";
-import { getSessionUser } from "@/lib/auth/getSessionUser";
 import {
   AgentWebhookInputError,
   manageAgentWebhook,
@@ -7,7 +8,7 @@ import {
 } from "@/lib/agentWebhooks/management";
 
 async function currentUserId(request: NextRequest): Promise<number | null> {
-  const session = await getSessionUser(request.headers);
+  const session = await getAuthSession(request.headers);
   return session?.userId ?? null;
 }
 
@@ -36,14 +37,14 @@ function inputError(error: unknown) {
       { status: 400 },
     );
   }
-  console.error("[agent-webhook] management error", error);
+  htLogger.error("[agent-webhook] management error", error);
   return NextResponse.json(
     { success: false, error: "Internal server error" },
     { status: 500 },
   );
 }
 
-export async function GET(
+async function GETHandler(
   request: NextRequest,
   props: { params: Promise<{ agentId: string }> },
 ) {
@@ -64,7 +65,7 @@ export async function GET(
   }
 }
 
-export async function PUT(
+async function PUTHandler(
   request: NextRequest,
   props: { params: Promise<{ agentId: string }> },
 ) {
@@ -98,7 +99,7 @@ export async function PUT(
   }
 }
 
-export async function DELETE(
+async function DELETEHandler(
   request: NextRequest,
   props: { params: Promise<{ agentId: string }> },
 ) {
@@ -125,7 +126,7 @@ export async function DELETE(
   }
 }
 
-export async function POST(
+async function POSTHandler(
   request: NextRequest,
   props: { params: Promise<{ agentId: string }> },
 ) {
@@ -166,3 +167,8 @@ export async function POST(
     return inputError(error);
   }
 }
+
+export const GET = withAuth(GETHandler);
+export const PUT = withAuth(PUTHandler);
+export const DELETE = withAuth(DELETEHandler);
+export const POST = withAuth(POSTHandler);

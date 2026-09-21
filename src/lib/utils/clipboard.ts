@@ -1,3 +1,4 @@
+import { logger as htLogger } from "#logger";
 // Plain-text clipboard writes can be unavailable or blocked in mobile and in-app
 // browsers, so use the legacy browser path before reporting failure.
 export const writeTextToClipboard = async (text: string): Promise<boolean> => {
@@ -8,7 +9,7 @@ export const writeTextToClipboard = async (text: string): Promise<boolean> => {
       return true;
     }
   } catch (err) {
-    console.error("clipboard.writeText failed, falling back:", err);
+    htLogger.error("clipboard.writeText failed, falling back:", err);
   }
 
   try {
@@ -28,7 +29,7 @@ export const writeTextToClipboard = async (text: string): Promise<boolean> => {
       if (textarea.parentNode) textarea.parentNode.removeChild(textarea);
     }
   } catch (err) {
-    console.error("execCommand copy fallback failed:", err);
+    htLogger.error("execCommand copy fallback failed:", err);
     return false;
   }
 };

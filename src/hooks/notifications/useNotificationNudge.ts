@@ -60,7 +60,6 @@ export function useNotificationNudge() {
         setPushUnavailable(true);
       }
     } catch (error) {
-      console.log("useNotificationNudge enablePush error:", error);
       setPushUnavailable(true);
     } finally {
       setPending(null);
@@ -95,7 +94,6 @@ export function useNotificationNudge() {
         setCurrentUser(nextUser);
       }
     } catch (error) {
-      console.log("useNotificationNudge enableEmail error:", error);
     } finally {
       setPending(null);
     }

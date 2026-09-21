@@ -41,7 +41,6 @@ export const usePriorityModal = (
         });
         closeHandler(true);
       } catch (error) {
-        console.log("🚀 ~ setPriorirty ~ error:", error);
       }
     };
 

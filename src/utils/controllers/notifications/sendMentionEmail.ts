@@ -1,3 +1,4 @@
+import { logger as htLogger } from "#logger";
 import prisma from "@/lib/prisma";
 import { sendEmailNotification } from "./sendNotification";
 import { shouldNotify } from "./shouldNotify";
@@ -40,7 +41,7 @@ export async function sendMentionEmail(
     }
     return true;
   } catch (error) {
-    console.log("🚀 ~ sendMentionEmail ~ error:", error);
+    htLogger.info("🚀 ~ sendMentionEmail ~ error:", error);
     return false;
   }
 }

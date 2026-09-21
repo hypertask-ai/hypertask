@@ -1,17 +1,18 @@
+import { logger as htLogger } from "#logger";
+import { getAuthSession, withAuth } from "#with-auth";
 import { NextRequest, NextResponse } from "next/server";
-import { getSessionUser } from "@/lib/auth/getSessionUser";
 import { loadUserAgentRoom } from "@/lib/agents/roomAccess";
 import { AgentRoomError, listAgentRoom } from "@/lib/agents/roomService";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-export async function GET(
+async function GETHandler(
   request: NextRequest,
   { params }: { params: Promise<{ roomId: string }> },
 ) {
   try {
-    const userId = (await getSessionUser(request.headers))?.userId;
+    const userId = (await getAuthSession(request.headers))?.userId;
     if (!userId) {
       return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
     }
@@ -24,7 +25,7 @@ export async function GET(
     }
     return NextResponse.json({ success: true, ...(await listAgentRoom(roomId)) });
   } catch (error) {
-    console.error("[agent-room] load failed", error);
+    htLogger.error("[agent-room] load failed", error);
     const status = error instanceof AgentRoomError ? error.status : 500;
     return NextResponse.json(
       {
@@ -35,3 +36,5 @@ export async function GET(
     );
   }
 }
+
+export const GET = withAuth(GETHandler);

@@ -1,3 +1,4 @@
+import { logger as htLogger } from "#logger";
 import prisma from "@/lib/prisma";
 import { publicAgentSelect } from "@/lib/agents/publicAgent";
 import { boardAgentVisibilityWhere } from "@/lib/agents/visibility";
@@ -25,7 +26,7 @@ const assigneesGetAll = async (
       json: assignees,
     };
   } catch (error) {
-    console.log("🚀 ~ assigneesGetAll ~ error:", error);
+    htLogger.info("🚀 ~ assigneesGetAll ~ error:", error);
     return {
       status: 500,
       json: { error: error },

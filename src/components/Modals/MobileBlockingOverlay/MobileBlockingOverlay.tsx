@@ -39,7 +39,6 @@ export const MobileBlockingOverlay: React.FC<MobileBlockingOverlayProps> = ({
         toast.success("Desktop login link sent! Check your email.");
       }
     } catch (error) {
-      console.error("Error sending desktop link:", error);
       toast.error("Failed to send email. Please try again.");
     } finally {
       setIsLoading(false);

@@ -14,7 +14,6 @@ export default async function Page(props: { params: Promise<{ projectId: string 
     }
 
     const projects = await getTrashByProjectId({projectId, userId:user.id})
-    console.log("🚀 ~ Page ~ projects:", projects)
     if (!projects ){
         return redirect("/login")
     }

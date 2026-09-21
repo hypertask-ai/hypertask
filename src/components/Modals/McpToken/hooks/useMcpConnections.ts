@@ -20,7 +20,6 @@ export function useMcpConnections() {
         setConnections(data.connections)
       }
     } catch (error) {
-      console.error("Error fetching connections:", error)
     } finally {
       setIsLoadingConnections(false)
     }
@@ -52,7 +51,6 @@ export function useMcpConnections() {
         toast.error(data.error || "Failed to revoke connection")
       }
     } catch (error) {
-      console.error("Error revoking connection:", error)
       toast.error("Failed to revoke connection")
     } finally {
       setRevokingClientId(null)
@@ -78,7 +76,6 @@ export function useMcpConnections() {
       toast.success("Client removed")
       return true
     } catch (error) {
-      console.error("Error removing OAuth client:", error)
       toast.error("Failed to remove client")
       return false
     } finally {
@@ -109,7 +106,6 @@ export function useMcpConnections() {
         toast.error(data.error || "Failed to revoke connections")
       }
     } catch (error) {
-      console.error("Error revoking all connections:", error)
       toast.error("Failed to revoke connections")
     } finally {
       setIsRevokingAll(false)

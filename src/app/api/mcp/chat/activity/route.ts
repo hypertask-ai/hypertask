@@ -1,3 +1,5 @@
+import { logger as htLogger } from "#logger";
+import { withoutAuth } from "#with-auth";
 import { chatStore } from "@/utils/controllers/chat";
 import { NextRequest, NextResponse } from "next/server";
 import { checkMcpRateLimit, validateMcpAuth } from "@/lib/mcp/auth";
@@ -32,7 +34,7 @@ function requireAgentToken(ctxAgentId: string | null): NextResponse | null {
  * idempotency key: the caller stamps it per cycle, so a retried POST returns
  * the already stored entry instead of creating a second one.
  */
-export async function POST(request: NextRequest) {
+async function POSTHandler(request: NextRequest) {
   try {
     const rateLimited = await checkMcpRateLimit(request);
     if (rateLimited) return rateLimited;
@@ -151,10 +153,12 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({ success: true, duplicate: inserted.count === 0 });
   } catch (error: unknown) {
-    console.error("[mcp chat] POST activity failed:", error);
+    htLogger.error("[mcp chat] POST activity failed:", error);
     return NextResponse.json(
       { success: false, error: "Failed to add chat activity" },
       { status: 500 }
     );
   }
 }
+
+export const POST = withoutAuth(POSTHandler);

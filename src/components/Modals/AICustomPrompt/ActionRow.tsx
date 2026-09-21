@@ -27,7 +27,6 @@ const ActionRow = () => {
                 projectId: _currentProject?.id,
                 customInstruction: value,
             })
-            console.log("🚀 ~ confirmHandler ~ res:", res)
             if (res.status === 200) {
                 setCurrentProject((prev) => ({ ...prev!, ai_custom_instructions: [res.data] }))
                 toast.success("Custom instructions updated")
@@ -35,7 +34,6 @@ const ActionRow = () => {
                 updateProject(projectToUpdateIndex, allData, { ai_custom_instructions: res.data })
             }
         } catch (error) {
-            console.log("🚀 ~ confirmHandler ~ error:", error)
             toast.error("Unable to update custom instructions")
 
         } finally {

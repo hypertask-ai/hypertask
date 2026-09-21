@@ -39,13 +39,9 @@ const ImageGallery = (props: IProps) => {
   const { files, mode, callbackAttachments, onUploadFailed, onUploadPendingChange, allowDelete, handleRemove, shouldUpload, variant = "default", backgroundTaskUploads = false } = props
   const [isModalOpen, setModalOpen] = useState(false);
   const [files_, setFiles] = useState<any[]>(files ?? [[]]);
-  // console.log("🚀 ~ ImageGallery ~ files_:", files_)
-  // console.log("🚀 ~ ImageGallery ~ files:", files)
   const [selectedFile, setSelectedFile] = useState<null | any>(null);
   const [canSave,setUploadingStateCreateTaskModal ] = useRecoilState(uploadingStateCreateTaskModalAtom)
-  // console.log("🚀 ~ ImageGallery ~ canSave:", canSave)
   const [uploadedFiles, setUploadedFiles] = useState<any[]>([]);
-  // console.log("🚀 ~ ImageGallery ~ uploadedFiles:", uploadedFiles)
   
 
   const toggleModal = () => setModalOpen(prev=>!prev);
@@ -73,7 +69,6 @@ const ImageGallery = (props: IProps) => {
   
   const sendBack = useCallback(
     (attachmentReturned:any) => {
-      console.log("ran")
       if (uploadedFiles.length===files_.length) return
       // here we will send back ALL THE STRINGS
       setUploadedFiles((prev)=>[...prev, attachmentReturned])
@@ -84,7 +79,6 @@ const ImageGallery = (props: IProps) => {
   useEffect(() => {
     if (mode!=="Creating task") return
     if (uploadedFiles.length !== files_.length){
-      console.log("Checking status: Upload in progress")
       setUploadingStateCreateTaskModal({
         uploaded:uploadedFiles.length,
         attached:files_.length,
@@ -92,7 +86,6 @@ const ImageGallery = (props: IProps) => {
       })
     }
     else{
-      console.log("Checking status: Ready to save")    
       setUploadingStateCreateTaskModal({
         uploaded:uploadedFiles.length,
         attached:files_.length,
@@ -115,7 +108,6 @@ const ImageGallery = (props: IProps) => {
     <>
       <div className={`flex flex-wrap gap-2 p-0 m-0 ${variant === "chat" ? "w-full min-w-0" : ""}`}>
         {files_.map(({ file,id }, index) => {
-          console.log("🚀 ~ ImageGallery ~ file:", file)
           if (!file) return <></>
           return (
             <SingleFileInputPreview

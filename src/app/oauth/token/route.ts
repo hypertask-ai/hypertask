@@ -1,3 +1,5 @@
+import { withoutAuth } from "#with-auth";
+import { logger as htLogger } from "#logger";
 import { NextRequest, NextResponse } from 'next/server'
 import { createHash, randomBytes, randomUUID } from 'crypto'
 import jwt from 'jsonwebtoken'
@@ -292,7 +294,7 @@ async function exchangeRefreshToken(formData: FormData) {
  * - client_id: Must match the client_id used in authorization
  * - code_verifier: PKCE code verifier (used to verify code_challenge)
  */
-export async function POST(request: NextRequest) {
+async function POSTHandler(request: NextRequest) {
   try {
     // Parse form-urlencoded body
     const formData = await request.formData()
@@ -608,7 +610,7 @@ export async function POST(request: NextRequest) {
         )
       }
 
-      console.error('Error marking authorization code as used:', error)
+      htLogger.error('Error marking authorization code as used:', error)
       return NextResponse.json(
         { error: 'server_error', error_description: 'Failed to process authorization code' },
         { status: 500 }
@@ -621,10 +623,12 @@ export async function POST(request: NextRequest) {
       session.refreshToken,
     )
   } catch (error) {
-    console.error('Error in OAuth token endpoint:', error)
+    htLogger.error('Error in OAuth token endpoint:', error)
     return NextResponse.json(
       { error: 'server_error', error_description: 'Internal server error' },
       { status: 500 }
     )
   }
 }
+
+export const POST = withoutAuth(POSTHandler);

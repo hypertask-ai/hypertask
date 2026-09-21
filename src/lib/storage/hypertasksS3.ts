@@ -1,3 +1,4 @@
+import { env as appEnv } from "#env";
 import { S3Client } from "@aws-sdk/client-s3";
 import S3 from "aws-sdk/clients/s3";
 
@@ -17,11 +18,11 @@ function firstConfiguredBaseUrl(
 
 function isR2Configured(): boolean {
   return Boolean(
-    process.env.R2_ENDPOINT &&
-      process.env.R2_UPLOAD_KEY &&
-      process.env.R2_UPLOAD_SECRET &&
-      process.env.R2_UPLOAD_BUCKET &&
-      process.env.R2_PUBLIC_BASE_URL
+    appEnv.R2_ENDPOINT &&
+      appEnv.R2_UPLOAD_KEY &&
+      appEnv.R2_UPLOAD_SECRET &&
+      appEnv.R2_UPLOAD_BUCKET &&
+      appEnv.R2_PUBLIC_BASE_URL
   );
 }
 
@@ -30,20 +31,20 @@ export const HYPERTASKS_S3_REGION = HYPERTASKS_STORAGE_IS_R2
   ? "auto"
   : DEFAULT_S3_REGION;
 export const HYPERTASKS_S3_BUCKET = HYPERTASKS_STORAGE_IS_R2
-  ? process.env.R2_UPLOAD_BUCKET!
+  ? appEnv.R2_UPLOAD_BUCKET!
   : DEFAULT_S3_BUCKET;
 
 const DEFAULT_S3_PUBLIC_BASE_URL = `https://${DEFAULT_S3_BUCKET}.s3.${DEFAULT_S3_REGION}.amazonaws.com`;
 
 export const HYPERTASKS_STORAGE_PUBLIC_BASE_URL =
   HYPERTASKS_STORAGE_IS_R2
-    ? trimTrailingSlash(process.env.R2_PUBLIC_BASE_URL!)
+    ? trimTrailingSlash(appEnv.R2_PUBLIC_BASE_URL!)
     : firstConfiguredBaseUrl([
-        process.env.S3_PUBLIC_BASE_URL,
-        process.env.S3_CLOUDFRONT_BUCKET_BASE_URL,
-        process.env.NEXT_PUBLIC_S3_CLOUDFRONT_BUCKET_BASE_URL,
-        process.env.S3_BUCKET_BASE_URL,
-        process.env.NEXT_PUBLIC_S3_BUCKET_BASE_URL,
+        appEnv.S3_PUBLIC_BASE_URL,
+        appEnv.S3_CLOUDFRONT_BUCKET_BASE_URL,
+        appEnv.NEXT_PUBLIC_S3_CLOUDFRONT_BUCKET_BASE_URL,
+        appEnv.S3_BUCKET_BASE_URL,
+        appEnv.NEXT_PUBLIC_S3_BUCKET_BASE_URL,
         DEFAULT_S3_PUBLIC_BASE_URL,
       ])!;
 
@@ -65,11 +66,11 @@ export function getHypertasksS3Client(): S3 {
   if (!client) {
     if (HYPERTASKS_STORAGE_IS_R2) {
       const config: S3.ClientConfiguration & { forcePathStyle: boolean } = {
-        endpoint: process.env.R2_ENDPOINT!,
+        endpoint: appEnv.R2_ENDPOINT!,
         region: HYPERTASKS_S3_REGION,
         credentials: {
-          accessKeyId: process.env.R2_UPLOAD_KEY!,
-          secretAccessKey: process.env.R2_UPLOAD_SECRET!,
+          accessKeyId: appEnv.R2_UPLOAD_KEY!,
+          secretAccessKey: appEnv.R2_UPLOAD_SECRET!,
         },
         forcePathStyle: true,
         s3ForcePathStyle: true,
@@ -77,7 +78,7 @@ export function getHypertasksS3Client(): S3 {
       };
       client = new S3(config);
     } else {
-      const { S3_UPLOAD_KEY, S3_UPLOAD_SECRET } = process.env;
+      const { S3_UPLOAD_KEY, S3_UPLOAD_SECRET } = appEnv;
       client = new S3({
         region: HYPERTASKS_S3_REGION,
         ...(S3_UPLOAD_KEY && S3_UPLOAD_SECRET
@@ -106,21 +107,21 @@ export function getHypertasksPresignClient(): S3Client {
   if (!presignClient) {
     presignClient = HYPERTASKS_STORAGE_IS_R2
       ? new S3Client({
-          endpoint: process.env.R2_ENDPOINT!,
+          endpoint: appEnv.R2_ENDPOINT!,
           region: HYPERTASKS_S3_REGION,
           credentials: {
-            accessKeyId: process.env.R2_UPLOAD_KEY!,
-            secretAccessKey: process.env.R2_UPLOAD_SECRET!,
+            accessKeyId: appEnv.R2_UPLOAD_KEY!,
+            secretAccessKey: appEnv.R2_UPLOAD_SECRET!,
           },
           forcePathStyle: true,
         })
       : new S3Client({
           region: HYPERTASKS_S3_REGION,
-          ...(process.env.S3_UPLOAD_KEY && process.env.S3_UPLOAD_SECRET
+          ...(appEnv.S3_UPLOAD_KEY && appEnv.S3_UPLOAD_SECRET
             ? {
                 credentials: {
-                  accessKeyId: process.env.S3_UPLOAD_KEY,
-                  secretAccessKey: process.env.S3_UPLOAD_SECRET,
+                  accessKeyId: appEnv.S3_UPLOAD_KEY,
+                  secretAccessKey: appEnv.S3_UPLOAD_SECRET,
                 },
               }
             : {}),
@@ -155,12 +156,12 @@ export function parseHypertasksStorageKeyFromUrl(
     const url = new URL(fileSource);
     const configuredBases = [
       HYPERTASKS_STORAGE_PUBLIC_BASE_URL,
-      process.env.R2_PUBLIC_BASE_URL,
-      process.env.S3_PUBLIC_BASE_URL,
-      process.env.S3_CLOUDFRONT_BUCKET_BASE_URL,
-      process.env.NEXT_PUBLIC_S3_CLOUDFRONT_BUCKET_BASE_URL,
-      process.env.S3_BUCKET_BASE_URL,
-      process.env.NEXT_PUBLIC_S3_BUCKET_BASE_URL,
+      appEnv.R2_PUBLIC_BASE_URL,
+      appEnv.S3_PUBLIC_BASE_URL,
+      appEnv.S3_CLOUDFRONT_BUCKET_BASE_URL,
+      appEnv.NEXT_PUBLIC_S3_CLOUDFRONT_BUCKET_BASE_URL,
+      appEnv.S3_BUCKET_BASE_URL,
+      appEnv.NEXT_PUBLIC_S3_BUCKET_BASE_URL,
       DEFAULT_S3_PUBLIC_BASE_URL,
     ].filter((base): base is string => Boolean(base));
 

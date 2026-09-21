@@ -1,17 +1,17 @@
+import { getAuthSession, withAuth } from "#with-auth";
 import { NextRequest, NextResponse } from "next/server";
-import { getSessionUser } from "@/lib/auth/getSessionUser";
 import { loadUserAgentRoom } from "@/lib/agents/roomAccess";
 import { stopAgentRoomTurn } from "@/lib/agents/roomService";
 
 export const runtime = "nodejs";
 
-export async function POST(
+async function POSTHandler(
   request: NextRequest,
   {
     params,
   }: { params: Promise<{ roomId: string; messageId: string }> },
 ) {
-  const userId = (await getSessionUser(request.headers))?.userId;
+  const userId = (await getAuthSession(request.headers))?.userId;
   if (!userId) {
     return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
   }
@@ -30,3 +30,5 @@ export async function POST(
         { status: 404 },
       );
 }
+
+export const POST = withAuth(POSTHandler);

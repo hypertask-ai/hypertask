@@ -1,3 +1,5 @@
+import { env as appEnv } from "#env";
+import { logger as htLogger } from "#logger";
 import crypto from "crypto";
 
 /**
@@ -14,14 +16,14 @@ export async function sendMetaCAPIEvent(
   clientInfo: any,
   event_name: "Lead" | "Sale"
 ) {
-  const isDev = process.env.NEXT_PUBLIC_BASEURL === "http://localhost:3000";
+  const isDev = appEnv.NEXT_PUBLIC_BASEURL === "http://localhost:3000";
   if (isDev) return;
   const API_VERSION = "v23.0";
-  const PIXEL_ID = process.env.META_PIXEL_ID;
-  const ACCESS_TOKEN = process.env.META_CAPI_ACCESS_TOKEN;
+  const PIXEL_ID = appEnv.META_PIXEL_ID;
+  const ACCESS_TOKEN = appEnv.META_CAPI_ACCESS_TOKEN;
 
   if (!PIXEL_ID || !ACCESS_TOKEN) {
-    console.error("Meta CAPI environment variables not set.");
+    htLogger.error("Meta CAPI environment variables not set.");
     return;
   }
 
@@ -50,7 +52,7 @@ export async function sendMetaCAPIEvent(
       },
     },
   ];
-  console.log("🤔 ~ sendMetaCAPIEvent ~ eventsData:", eventsData);
+  htLogger.info("🤔 ~ sendMetaCAPIEvent ~ eventsData:", eventsData);
 
   const options = {
     method: "POST",
@@ -66,10 +68,10 @@ export async function sendMetaCAPIEvent(
     .then((response) => response.json())
     .then((response) => {
       if (response.events_received) {
-        console.log("Meta CAPI event sent successfully:", response);
+        htLogger.info("Meta CAPI event sent successfully:", response);
       } else {
-        console.error("Failed to send Meta CAPI event:", response);
+        htLogger.error("Failed to send Meta CAPI event:", response);
       }
     })
-    .catch((err) => console.error("Error sending Meta CAPI event:", err));
+    .catch((err) => htLogger.error("Error sending Meta CAPI event:", err));
 }

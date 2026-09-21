@@ -204,7 +204,6 @@ const NotificationPromoteBanner = () => {
         }));
       }
     } catch (error) {
-      console.log("NotificationPromoteBanner enablePush error:", error);
     } finally {
       setPendingAction(null);
     }
@@ -238,7 +237,6 @@ const NotificationPromoteBanner = () => {
         setCurrentUser(nextUser);
       }
     } catch (error) {
-      console.log("NotificationPromoteBanner enableEmail error:", error);
     } finally {
       setPendingAction(null);
     }

@@ -1,3 +1,5 @@
+import { logger as htLogger } from "#logger";
+import { withAuth } from "#with-auth";
 import { NextApiHandler, NextApiRequest, NextApiResponse } from "next";
 import tasksGetArchivedTasks, {
     tasksGetArchivedTasksMeta,
@@ -56,7 +58,7 @@ const handler: NextApiHandler = async (req: NextApiRequest, res: NextApiResponse
            
             return res.status(response.status).json(response.json);
         } catch (error) {
-            console.log(error);
+            htLogger.info(error);
             res.status(200).json([]);
         }
     } else {
@@ -64,4 +66,4 @@ const handler: NextApiHandler = async (req: NextApiRequest, res: NextApiResponse
     }
 };
 
-export default handler;
+export default withAuth(handler);

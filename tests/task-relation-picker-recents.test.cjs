@@ -1,6 +1,7 @@
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const path = require("node:path");
+const { passThroughAuth } = require("./helpers/pass-through-auth.cjs");
 const test = require("node:test");
 const ts = require("typescript");
 
@@ -29,7 +30,9 @@ function loadTypeScript(relativePath, stubs) {
     fileName: filename,
   }).outputText;
   const loadedModule = { exports: {} };
-  const localRequire = (request) => stubs[request] ?? require(request);
+  const localRequire = (request) =>
+    stubs[request] ??
+    (request === "#with-auth" ? passThroughAuth() : require(request));
 
   new Function("module", "exports", "require", javascript)(
     loadedModule,

@@ -1,3 +1,4 @@
+import { env as appEnv } from "#env";
 import type { NextRequest } from "next/server";
 import prisma from "@/lib/prisma";
 import { hasValidCronAuthorization } from "@/lib/cronAuthorization";
@@ -26,7 +27,7 @@ export async function getCronServiceRequestUser(
   if (
     !hasValidCronAuthorization(
       request.headers.get("Authorization"),
-      process.env.CRON_SECRET
+      appEnv.CRON_SECRET
     )
   ) {
     return null;

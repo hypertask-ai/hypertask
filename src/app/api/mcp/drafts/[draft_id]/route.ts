@@ -1,3 +1,5 @@
+import { logger as htLogger } from "#logger";
+import { withoutAuth } from "#with-auth";
 import { NextRequest, NextResponse } from 'next/server'
 import { validateMcpAuth, checkMcpRateLimit } from '@/lib/mcp/auth'
 import prisma from '@/lib/prisma'
@@ -63,7 +65,7 @@ function mapDraftToResponse(draft: any): DraftResponse {
   }
 }
 
-export async function PATCH(request: NextRequest, props: { params: Promise<{ draft_id: string }> }) {
+async function PATCHHandler(request: NextRequest, props: { params: Promise<{ draft_id: string }> }) {
   const params = await props.params;
   try {
     const rateLimited = await checkMcpRateLimit(request);
@@ -157,7 +159,7 @@ export async function PATCH(request: NextRequest, props: { params: Promise<{ dra
 
     return NextResponse.json(response)
   } catch (error) {
-    console.error('[MCP PATCH Draft] Error:', error)
+    htLogger.error('[MCP PATCH Draft] Error:', error)
     return NextResponse.json(
       { success: false, error: 'Internal server error' },
       { status: 500 }
@@ -165,7 +167,7 @@ export async function PATCH(request: NextRequest, props: { params: Promise<{ dra
   }
 }
 
-export async function DELETE(request: NextRequest, props: { params: Promise<{ draft_id: string }> }) {
+async function DELETEHandler(request: NextRequest, props: { params: Promise<{ draft_id: string }> }) {
   const params = await props.params;
   try {
     const rateLimited = await checkMcpRateLimit(request);
@@ -229,10 +231,13 @@ export async function DELETE(request: NextRequest, props: { params: Promise<{ dr
 
     return NextResponse.json(response)
   } catch (error) {
-    console.error('[MCP DELETE Draft] Error:', error)
+    htLogger.error('[MCP DELETE Draft] Error:', error)
     return NextResponse.json(
       { success: false, error: 'Internal server error' },
       { status: 500 }
     )
   }
 }
+
+export const PATCH = withoutAuth(PATCHHandler);
+export const DELETE = withoutAuth(DELETEHandler);

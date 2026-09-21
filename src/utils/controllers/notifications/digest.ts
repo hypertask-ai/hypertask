@@ -1,3 +1,5 @@
+import { env as appEnv } from "#env";
+import { logger as htLogger } from "#logger";
 import { getRedis } from "@/lib/redis";
 import { publishJob } from "@/lib/qstash";
 
@@ -9,7 +11,7 @@ export const NOTIFICATION_DIGEST_QUEUE_PATH =
  * inside this window produces no email at all.
  */
 export function digestWindowSeconds(): number {
-  const raw = Number(process.env.NOTIFICATION_DIGEST_DELAY_SECONDS);
+  const raw = Number(appEnv.NOTIFICATION_DIGEST_DELAY_SECONDS);
   return Number.isFinite(raw) && raw > 0 ? Math.floor(raw) : 300;
 }
 
@@ -170,7 +172,7 @@ export async function enqueueDigest(
 
     return true;
   } catch (error) {
-    console.log("🤔 ~ enqueueDigest ~ falling back to immediate send:", error);
+    htLogger.info("🤔 ~ enqueueDigest ~ falling back to immediate send:", error);
     // Drop the claim so the next event can open a fresh window instead of
     // waiting out the TTL against a job that was never published.
     try {

@@ -423,16 +423,17 @@ async function main() {
     /mapVisibleMcpAgent\([\s\S]*?row\.agentAssigner,[\s\S]*?ctx\.user\.id,[\s\S]*?task\.projectId/,
   );
   assert.match(assignRoute, /if \(row\.agent && !agent\) return \[\]/);
-  for (const ownerSurface of [
+  for (const ownerRoute of [
     agentRoute,
     activityRoute,
     notificationsRoute,
     tokenRoute,
-    inboxPage,
   ]) {
-    assert.match(ownerSurface, /getSessionUser\(/);
-    assert.doesNotMatch(ownerSurface, /JSON\.parse\(userCookie\.value\)/);
+    assert.match(ownerRoute, /getAuthSession\(/);
+    assert.doesNotMatch(ownerRoute, /JSON\.parse\(userCookie\.value\)/);
   }
+  assert.match(inboxPage, /getSessionUser\(/);
+  assert.doesNotMatch(inboxPage, /JSON\.parse\(userCookie\.value\)/);
   assert.equal(inboxPage.match(/!Number\.isInteger\(userObj\.id\)/g)?.length, 2);
   assert.equal(inboxPage.match(/typeof userId !== "number"/g)?.length, 2);
   assert.doesNotMatch(

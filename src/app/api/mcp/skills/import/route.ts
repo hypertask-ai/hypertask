@@ -1,3 +1,4 @@
+import { withoutAuth } from "#with-auth";
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 
@@ -27,7 +28,7 @@ const importSchema = z.object({
   slugs: z.array(z.string()).optional(),
 });
 
-export async function POST(request: NextRequest) {
+async function POSTHandler(request: NextRequest) {
   const rateLimited = await checkMcpRateLimit(request);
   if (rateLimited) return rateLimited;
   const ctx = await validateMcpAuth(request);
@@ -75,3 +76,5 @@ export async function POST(request: NextRequest) {
     return skillErrorResponse(error);
   }
 }
+
+export const POST = withoutAuth(POSTHandler);

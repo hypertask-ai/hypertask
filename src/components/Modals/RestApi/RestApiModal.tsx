@@ -125,7 +125,6 @@ const RestApiModal: React.FC<IProps> = ({
         toast.error(data.error || "Failed to load API keys")
       }
     } catch (error) {
-      console.error("Error loading API keys:", error)
       toast.error("Failed to load API keys")
     } finally {
       setIsLoading(false)
@@ -161,7 +160,6 @@ const RestApiModal: React.FC<IProps> = ({
         toast.error(data.error || "Failed to create API key")
       }
     } catch (error) {
-      console.error("Error creating API key:", error)
       toast.error("Failed to create API key")
     } finally {
       setIsCreating(false)
@@ -192,7 +190,6 @@ const RestApiModal: React.FC<IProps> = ({
         toast.error(data.error || "Failed to revoke API key")
       }
     } catch (error) {
-      console.error("Error revoking API key:", error)
       toast.error("Failed to revoke API key")
     } finally {
       setRevokingKeyId(null)

@@ -1,3 +1,5 @@
+import { logger as htLogger } from "#logger";
+import { withAuth } from "#with-auth";
 import { NextApiRequest, NextApiResponse } from "next";
 import { sendMentionEmail } from "@/utils/controllers/notifications/sendMentionEmail";
 
@@ -34,7 +36,7 @@ const handler = async (req: NextApiRequest, res: NextApiResponse) => {
         }
       }
     } catch (error) {
-      console.log("🤔 ~ handler ~ error:", error);
+      htLogger.info("🤔 ~ handler ~ error:", error);
       res.status(500).json({ message: "an error occured" });
     }
   } else {
@@ -42,4 +44,4 @@ const handler = async (req: NextApiRequest, res: NextApiResponse) => {
   }
 };
 
-export default handler;
+export default withAuth(handler);

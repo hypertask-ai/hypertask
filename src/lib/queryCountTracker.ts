@@ -1,3 +1,4 @@
+import { logger as htLogger } from "#logger";
 import { AsyncLocalStorage } from "node:async_hooks"
 
 // HTPR-4706: warn when a single call chain issues more Prisma queries than a
@@ -25,7 +26,7 @@ export function trackPrismaQuery(model: string | undefined): void {
   }
   state.count += 1
   if (state.count === N1_QUERY_WARNING_THRESHOLD + 1) {
-    console.warn(
+    htLogger.warn(
       `[n+1-detector] ${state.count}+ Prisma queries in one request chain (model=${model ?? "?"}) from ${state.origin}`,
     )
   }

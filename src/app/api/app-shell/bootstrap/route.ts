@@ -1,3 +1,4 @@
+import { withAuth } from "#with-auth";
 import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { getAppShellBootstrap } from "@/lib/appShellBootstrap/server";
@@ -10,7 +11,7 @@ const NO_STORE_HEADERS = {
   Pragma: "no-cache",
 };
 
-export async function POST() {
+async function POSTHandler() {
   const cookieStore = await cookies();
   const session = verifySession(cookieStore.get(SESSION_COOKIE)?.value);
   if (!session) {
@@ -30,3 +31,5 @@ export async function POST() {
     );
   }
 }
+
+export const POST = withAuth(POSTHandler);

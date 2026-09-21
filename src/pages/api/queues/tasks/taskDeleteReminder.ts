@@ -1,3 +1,5 @@
+import { logger as htLogger } from "#logger";
+import { getAuthSession, withoutAuth } from "#with-auth";
 // pages/api/setupReminder.js
 // id:`notifications-for-task-${taskId}`
 
@@ -20,7 +22,6 @@ import {
   assertAgentMayLeaveDoneForTasks,
 } from "@/lib/mcp/tasks/agentDoneLifecycle";
 import { Prisma } from "@prisma/client";
-import { getSessionUser } from "@/lib/auth/getSessionUser";
 import { SESSION_COOKIE, verifySession } from "@/lib/auth/session";
 import { resolveActingAgent } from "@/lib/auth/resolveActingAgent";
 
@@ -32,12 +33,12 @@ export class TaskHardDeleteInProgressError extends Error {
 }
 
 
-export default async function handler(
+async function handler(
   req: NextApiRequest,
   res: NextApiResponse
 ) {
   const { taskId, agentId } = req.body;
-  const session = await getSessionUser(
+  const session = await getAuthSession(
     new Headers(req.headers as Record<string, string>)
   );
   if (!session) return res.status(401).json({ message: "Unauthorized" });
@@ -110,7 +111,7 @@ export default async function handler(
     if (error instanceof AgentDoneLifecycleDeniedError) {
       return res.status(error.status).json({ message: error.message, code: error.code })
     }
-    console.log("🚀 ~ error:", error)
+    htLogger.info("🚀 ~ error:", error)
 
     return res.status(500).json(error)
   }
@@ -252,3 +253,5 @@ async function updateTaskTreeStatus(
     })
   }, { timeout: 30_000 })
 }
+
+export default withoutAuth(handler);

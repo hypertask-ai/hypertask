@@ -1,3 +1,4 @@
+import { logger as htLogger } from "#logger";
 import "server-only";
 
 import prisma from "@/lib/prisma";
@@ -65,7 +66,7 @@ export const getProjectForValidation = cache(async (
       },
     };
   } catch (error) {
-    console.error("❌ getProjectForValidation failed:", error);
+    htLogger.error("❌ getProjectForValidation failed:", error);
     return { success: false as const, project: null };
   }
 });

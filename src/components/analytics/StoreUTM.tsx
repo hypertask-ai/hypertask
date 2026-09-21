@@ -32,7 +32,6 @@ const UTMCookieHandler = () => {
             utmParams.ip = ip;
           }
         } catch (error) {
-          console.warn("Failed to fetch IP address:", error);
         }
       }
 
@@ -44,14 +43,12 @@ const UTMCookieHandler = () => {
 
       // Store data if we have UTM parameters, IP, or targetUrl to store
       if (Object.keys(utmParams).length > 0) {
-        console.log("🔍 UTM data to store:", utmParams);
 
         // Store UTM parameters in cookies (merges with existing data)
         storeUTMInCookies(utmParams);
 
         // Verify storage by reading back
         const storedData = getUTMDataFromCookies();
-        console.log("📦 UTM data stored in cookies:", storedData);
         
         // Check for missing parameters
         const missingParams: string[] = [];
@@ -62,7 +59,6 @@ const UTMCookieHandler = () => {
         });
         
         if (missingParams.length > 0) {
-          console.warn("⚠️ Some UTM parameters were not stored:", missingParams);
         }
       }
     };

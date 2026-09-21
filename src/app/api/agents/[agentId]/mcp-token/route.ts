@@ -1,11 +1,11 @@
+import { getAuthSession, withAuth } from "#with-auth";
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 import { agentTokenCredentialFields, createMcpToken } from "@/lib/mcp/auth";
-import { getSessionUser } from "@/lib/auth/getSessionUser";
 
-export async function POST(request: NextRequest, props: { params: Promise<{ agentId: string }> }) {
+async function POSTHandler(request: NextRequest, props: { params: Promise<{ agentId: string }> }) {
   const params = await props.params;
-  const userId = (await getSessionUser(request.headers))?.userId;
+  const userId = (await getAuthSession(request.headers))?.userId;
   if (!userId) {
     return NextResponse.json(
       { success: false, error: "Unauthorized" },
@@ -56,9 +56,9 @@ export async function POST(request: NextRequest, props: { params: Promise<{ agen
   return NextResponse.json({ success: true, token });
 }
 
-export async function DELETE(request: NextRequest, props: { params: Promise<{ agentId: string }> }) {
+async function DELETEHandler(request: NextRequest, props: { params: Promise<{ agentId: string }> }) {
   const params = await props.params;
-  const userId = (await getSessionUser(request.headers))?.userId;
+  const userId = (await getAuthSession(request.headers))?.userId;
   if (!userId) {
     return NextResponse.json(
       { success: false, error: "Unauthorized" },
@@ -89,3 +89,6 @@ export async function DELETE(request: NextRequest, props: { params: Promise<{ ag
 
   return NextResponse.json({ success: true });
 }
+
+export const POST = withAuth(POSTHandler);
+export const DELETE = withAuth(DELETEHandler);

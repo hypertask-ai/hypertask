@@ -1,3 +1,4 @@
+import { logger as htLogger } from "#logger";
 import { sendDataNewCommentFCM } from "../FCM";
 import { IAssignees, IFCMReqBody, ITask, IUser } from "@/models/model";
 import prisma from "@/lib/prisma";
@@ -365,7 +366,7 @@ const assigneesAssign = async (
     if (error instanceof AgentMutationLeaseConflictError) {
       return { status: 409, json: { message: error.message } };
     }
-    console.error("🚀 ~ assigneesAssign ~ error:", error);
+    htLogger.error("🚀 ~ assigneesAssign ~ error:", error);
     return { status: 500, json: { message: "Internal server error" } };
   }
 };
@@ -1262,7 +1263,7 @@ export const clearHumanAssignees = async (
           skipNotificationCleanup: true,
         });
       } catch (sideEffectError) {
-        console.warn(
+        htLogger.warn(
           `Failed to finish assignee clear side effects for task ${taskId} and user ${assign.userId}:`,
           sideEffectError
         );
@@ -1277,7 +1278,7 @@ export const clearHumanAssignees = async (
     if (error instanceof AgentMutationLeaseConflictError) {
       return { status: 409, json: { message: error.message } };
     }
-    console.error("clearHumanAssignees error:", error);
+    htLogger.error("clearHumanAssignees error:", error);
     return { status: 500, json: { message: "Internal server error" } };
   }
 };

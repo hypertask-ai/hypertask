@@ -72,7 +72,6 @@ const ImproveButton = ({ editor }: IProps) => {
           );
           return true;
         })().catch((error) => {
-          console.log("🚀 ~ error:", error);
           throw error;
         }),
         {
@@ -96,7 +95,6 @@ const ImproveButton = ({ editor }: IProps) => {
         }
       );
     } catch (error) {
-      console.log("🚀 ~ command: ~ error:", error);
       return false;
     } finally {
       isImproving.current = false;

@@ -1,3 +1,6 @@
+import { env as appEnv } from "#env";
+import { logger as htLogger } from "#logger";
+import { withAuth } from "#with-auth";
 import { agentStore } from "@/utils/controllers/agents";
 import { labelStore } from "@/utils/controllers/labels";
 import { chatStore } from "@/utils/controllers/chat";
@@ -841,7 +844,7 @@ function createSseErrorResponse(message: string, status?: number) {
 function errorMessage(error: unknown) {
   // Prisma/driver errors carry schema and query detail, so those stay internal.
   if (error instanceof Error && error.name.startsWith("Prisma")) {
-    console.error("[ai/chat/stream] internal error", error);
+    htLogger.error("[ai/chat/stream] internal error", error);
     return "Sorry, an error occurred while processing your request.";
   }
   // Tool loops and the error ticket need the provider's real text. The SDK
@@ -895,7 +898,7 @@ function includedAllowanceError(error: unknown) {
 
 // Tool errors need verbatim detail for the model, but streamed errors are user-visible.
 function userFacingErrorMessage(error: unknown, stage: string) {
-  console.error(`[ai/chat/stream] ${stage} user-facing error`, error);
+  htLogger.error(`[ai/chat/stream] ${stage} user-facing error`, error);
   const allowanceError = includedAllowanceError(error);
   if (allowanceError) return allowanceError.message;
   return "Sorry, something went wrong while generating a response. Please try again.";
@@ -921,7 +924,7 @@ function requestErrorMessage(
   error: unknown,
   stage: "body" | "validation",
 ) {
-  console.error(`[ai/chat/stream] request-${stage} user-facing error`, error);
+  htLogger.error(`[ai/chat/stream] request-${stage} user-facing error`, error);
   if (stage === "body") {
     return "Invalid request: the request body could not be read.";
   }
@@ -1041,7 +1044,7 @@ function trackToolSetExecutions(
           } catch (error) {
             // A write may already be committed. Fence cleanup must never turn
             // that success into a retryable tool failure; Redis TTL is backup.
-            console.error("[ai/chat/stream] tool fence cleanup failed", error);
+            htLogger.error("[ai/chat/stream] tool fence cleanup failed", error);
           }
         }
       }
@@ -3010,7 +3013,7 @@ function buildTools(
             },
           });
         } catch (error) {
-          console.error("[AI chat ask agent]", error);
+          htLogger.error("[AI chat ask agent]", error);
           return { success: false, error: "The agent request failed." };
         }
       },
@@ -7633,7 +7636,7 @@ function buildTools(
               url: created.fileSource,
             });
           } catch (error) {
-            console.error("[AI chat attachments]", error);
+            htLogger.error("[AI chat attachments]", error);
             failures.push({
               ...failureContext,
               error: "Failed to store attachment",
@@ -7817,7 +7820,7 @@ function buildTools(
         }
 
         const hyperAiId = parseInt(
-          process.env.NEXT_PUBLIC_HYPERAI_ID || "332",
+          appEnv.NEXT_PUBLIC_HYPERAI_ID || "332",
           10
         );
         const canDelete =
@@ -9636,7 +9639,7 @@ function buildTools(
 
     web_search: tool({
       description:
-        process.env.TAVILY_API_KEY
+        appEnv.TAVILY_API_KEY
           ? "Search the web for current information using Tavily."
           : "Unavailable: TAVILY_API_KEY is not configured on the server.",
       inputSchema: z.object({
@@ -9646,7 +9649,7 @@ function buildTools(
       }),
       execute: async (input) => {
         sendStatus("web_search");
-        const apiKey = process.env.TAVILY_API_KEY;
+        const apiKey = appEnv.TAVILY_API_KEY;
         if (!apiKey) {
           return {
             success: false,
@@ -9781,12 +9784,12 @@ async function generateConversationTitle(
     return cleaned || fallback;
   } catch (error) {
     if (abortSignal?.aborted) throw error;
-    console.error("[ai/chat/stream] title generation failed", error);
+    htLogger.error("[ai/chat/stream] title generation failed", error);
     return fallback;
   }
 }
 
-export async function POST(request: NextRequest) {
+async function POSTHandler(request: NextRequest) {
   // The platform time budget starts here, so the graceful deadline below must
   // count from here too, not from when the stream body starts.
   const turnStartedAtMs = Date.now();
@@ -9887,7 +9890,7 @@ export async function POST(request: NextRequest) {
       }
       userMessagePersisted = true;
     } catch (error) {
-      console.error(
+      htLogger.error(
         "[ai/chat/stream] native user-message persistence failed; local history remains authoritative",
         error,
       );
@@ -9943,7 +9946,7 @@ export async function POST(request: NextRequest) {
         data: { projectId: contextProjectId },
       });
     } catch (error) {
-      console.error("[ai/chat/stream] session projectId stamp failed:", error);
+      htLogger.error("[ai/chat/stream] session projectId stamp failed:", error);
     }
   }
 
@@ -9965,7 +9968,7 @@ export async function POST(request: NextRequest) {
         data: { taskId: contextTaskId },
       });
     } catch (error) {
-      console.error("[ai/chat/stream] session taskId stamp failed:", error);
+      htLogger.error("[ai/chat/stream] session taskId stamp failed:", error);
     }
   }
 
@@ -10069,7 +10072,7 @@ export async function POST(request: NextRequest) {
         body.byokProviderFlags,
         keyLookupContext,
       );
-      const sharedKey = process.env.AI_GATEWAY_API_KEY?.trim();
+      const sharedKey = appEnv.AI_GATEWAY_API_KEY?.trim();
       hasEligibleByokCredential =
         (typeof credential === "string" &&
           credential.trim().length > 0 &&
@@ -10345,7 +10348,7 @@ export async function POST(request: NextRequest) {
         );
         outcomes.forEach((outcome, index) => {
           if (outcome.status === "rejected") {
-            console.error(
+            htLogger.error(
               `[ai/chat/stream] deadline cleanup (${steps[index][0]}) failed`,
               outcome.reason,
             );
@@ -10371,7 +10374,7 @@ export async function POST(request: NextRequest) {
           controller.enqueue(encoder.encode(sseFrame(event, data)));
         } catch (error) {
           clientConnected = false;
-          console.info(
+          htLogger.info(
             "[ai/chat/stream] client disconnected; completing in background",
             error,
           );
@@ -10423,7 +10426,7 @@ export async function POST(request: NextRequest) {
           outputTokens: turnUsage?.outputTokens,
           error,
         }).catch((observationError) => {
-          console.warn(
+          htLogger.warn(
             "[ai/chat/stream] turn observation failed",
             observationError,
           );
@@ -10431,7 +10434,7 @@ export async function POST(request: NextRequest) {
         try {
           waitUntil(observation);
         } catch (observationError) {
-          console.warn(
+          htLogger.warn(
             "[ai/chat/stream] turn observation could not outlive the request",
             observationError,
           );
@@ -10600,7 +10603,7 @@ export async function POST(request: NextRequest) {
                   authorAgentId: fleet.success ? routedAgent.id : null,
                 });
               } catch (error) {
-                console.error(
+                htLogger.error(
                   "[ai/chat/stream] assistant persistence failed; client will retry",
                   error,
                 );
@@ -10625,7 +10628,7 @@ export async function POST(request: NextRequest) {
                       );
                     }
                   } catch (error) {
-                    console.error(
+                    htLogger.error(
                       "[ai/chat/stream] completion fence will expire automatically",
                       error,
                     );
@@ -10897,7 +10900,7 @@ export async function POST(request: NextRequest) {
             } catch (retryError) {
               emptyCompletionError = retryError;
               emptyCompletionRetryFailed = true;
-              console.error(
+              htLogger.error(
                 "[ai/chat/stream] empty-completion retry failed",
                 retryError
               );
@@ -10972,7 +10975,7 @@ export async function POST(request: NextRequest) {
               linkify: linkifyTicketRefs,
             });
           } catch (error) {
-            console.error(
+            htLogger.error(
               "[ai/chat/stream] assistant persistence failed; client will retry",
               error,
             );
@@ -11000,7 +11003,7 @@ export async function POST(request: NextRequest) {
               } catch (error) {
                 // Persistence already has its own durable outcome. Redis
                 // cleanup must never turn that outcome into a retryable write.
-                console.error(
+                htLogger.error(
                   "[ai/chat/stream] completion fence will expire automatically",
                   error,
                 );
@@ -11046,7 +11049,7 @@ export async function POST(request: NextRequest) {
                   data: { title: generatedTitle },
                 });
               } catch (error) {
-                console.error(
+                htLogger.error(
                   "[ai/chat/stream] title persistence failed after reply persistence",
                   error,
                 );
@@ -11077,7 +11080,7 @@ export async function POST(request: NextRequest) {
           }
           return;
         }
-        console.error("[ai/chat/stream] stream error", error);
+        htLogger.error("[ai/chat/stream] stream error", error);
         await reportHandledChatError(error, "stream-handler", {
           model: selected.resolvedModelId,
           provider: selected.usageProvider,
@@ -11116,3 +11119,5 @@ export async function POST(request: NextRequest) {
 
   return new Response(stream, { headers: SSE_HEADERS });
 }
+
+export const POST = withAuth(POSTHandler);

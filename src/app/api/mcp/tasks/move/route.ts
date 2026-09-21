@@ -1,3 +1,5 @@
+import { logger as htLogger } from "#logger";
+import { withoutAuth } from "#with-auth";
 import { NextRequest, NextResponse } from "next/server";
 import { validateMcpAuth, checkMcpRateLimit, mcpUnauthorizedResponse } from "@/lib/mcp/auth";
 import { getMcpSessionAgentSummary } from "@/lib/mcp/agents";
@@ -96,7 +98,7 @@ async function findTaskByIdentifier(
   return null;
 }
 
-export async function POST(request: NextRequest) {
+async function POSTHandler(request: NextRequest) {
   try {
     const rateLimited = await checkMcpRateLimit(request);
     if (rateLimited) return rateLimited;
@@ -314,7 +316,7 @@ export async function POST(request: NextRequest) {
       { status: 200 }
     );
   } catch (err) {
-    console.error("[MCP Move Task] Error:", err);
+    htLogger.error("[MCP Move Task] Error:", err);
     return NextResponse.json(
       {
         success: false,
@@ -324,3 +326,5 @@ export async function POST(request: NextRequest) {
     );
   }
 }
+
+export const POST = withoutAuth(POSTHandler);

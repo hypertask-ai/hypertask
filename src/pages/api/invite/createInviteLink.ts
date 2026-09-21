@@ -1,3 +1,6 @@
+import { env as appEnv } from "#env";
+import { logger as htLogger } from "#logger";
+import { withAuth } from "#with-auth";
 import { NextApiHandler, NextApiRequest, NextApiResponse } from "next";
 import { LogType, Status } from "@prisma/client";
 import { CreateLogInput, IMember, IViewType } from "@/models/model";
@@ -73,12 +76,12 @@ export const addMemberController = async (
     // SEND INVITE TO EACH EMAIL
     // there are some recalculations, optimize later, works for now, short on time.
     for (const email of emailsToInvite) {
-      console.log("Running invite procedure for the following email: ", email);
+      htLogger.info("Running invite procedure for the following email: ", email);
       if (currentProject?.owner.email === email) return {status: 201, json: "Cannot add owner email"};
 
       // check if that member is in the TEAM, if he is, just add him straight away, do not send invite.
       const isInTeamAlready = teamMemberEmails.includes(email);
-      console.log(
+      htLogger.info(
         "Is user already in the team? " + `${isInTeamAlready ? "Yes" : "No"}`,
       );
 
@@ -91,7 +94,7 @@ export const addMemberController = async (
       json: emailsToInvite,
     };
   } catch (error) {
-    console.log("🚀 ~ addMemberController ~ error:", error)
+    htLogger.info("🚀 ~ addMemberController ~ error:", error)
     prisma.invite.deleteMany({
       where: { projectId },
     });
@@ -107,7 +110,7 @@ async function sendInviteToNonMember(
   projectId: number,
   email: string,
 ) {
-  console.log("User isn't in the team, sending invite to join team");
+  htLogger.info("User isn't in the team, sending invite to join team");
   const invite = await prisma.invite.create({
     data: {
       userId,
@@ -167,7 +170,7 @@ export const generateInviteLink = (
   projectName: string,
   viewSlug: string | undefined,
 ) => {
-  const baseURL = String(process.env.NEXT_PUBLIC_BASEURL);
+  const baseURL = String(appEnv.NEXT_PUBLIC_BASEURL);
   return `${baseURL}/invite?key=${inviteId}&project=${projectName}&projectId=${projectId}${viewSlug ? `&view=${viewSlug}` : ""}`;
 };
 
@@ -189,7 +192,7 @@ export const createNotification = async (
   const invitedUser = await prisma.user.findFirst({
     where: { email: email },
   });
-  console.log("🚀 ~ createNotification ~ invitedUser:", invitedUser);
+  htLogger.info("🚀 ~ createNotification ~ invitedUser:", invitedUser);
   if (!invitedUser) return false;
 
   // ============= create first notification
@@ -202,7 +205,7 @@ export const createNotification = async (
       taskId: null,
     },
   });
-  console.log("🚀 ~ createNotification ~ notification:", notification);
+  htLogger.info("🚀 ~ createNotification ~ notification:", notification);
 
   // ============ create notification_invite
   const userIdBy = await createUserNotificationInvite(fromUserId);
@@ -217,7 +220,7 @@ export const createNotification = async (
       notificationId: notification.id,
     },
   });
-  console.log(
+  htLogger.info(
     "🚀 ~ createNotification ~ notification_invite:",
     notification_invite,
   );
@@ -241,7 +244,7 @@ const createUserNotificationInvite = async (userId: number) => {
         userId,
       },
     });
-  console.log(
+  htLogger.info(
     "🚀 ~ createUserNotificationInvite ~ user_notification_invites:",
     user_notification_invites,
   );
@@ -263,7 +266,7 @@ const sendInviteToAlreadyExistingMember = async (
         user: true,
       },
     });
-    console.log("Member created: ", member);
+    htLogger.info("Member created: ", member);
   }
 };
 
@@ -324,7 +327,7 @@ const invitedAndExistingEmails = async ({
       emails: true,
     },
   });
-  console.log(
+  htLogger.info(
     "🚀 ~ file: createInviteLink.ts:42 ~ consthandler:NextApiHandler= ~ invitesForCurrentProj:",
     invitesForCurrentProj,
   );
@@ -335,16 +338,16 @@ const invitedAndExistingEmails = async ({
     (email: string) => !alreadyInvitedEmails.includes(email),
   );
 
-  console.log("======>  Emails to invite: ", emailsToInvite);
+  htLogger.info("======>  Emails to invite: ", emailsToInvite);
   const emailExists = currentProject?.members.some((member: IMember) =>
     emails.includes(member?.user.email!),
   );
   const teamMemberEmails = await checkTeamMemberEmails(currentProject.teamId!);
-  console.log("---- Current Team has the following emails: ", teamMemberEmails);
+  htLogger.info("---- Current Team has the following emails: ", teamMemberEmails);
   return {
     teamMemberEmails,
     emailExists,
     emailsToInvite,
   };
 };
-export default handler;
+export default withAuth(handler);

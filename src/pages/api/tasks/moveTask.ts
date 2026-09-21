@@ -1,3 +1,5 @@
+import { logger as htLogger } from "#logger";
+import { withAuth } from "#with-auth";
 import { NextApiHandler } from "next";
 import generateRank from "@/utils/generateRank";
 import prisma from "@/lib/prisma";
@@ -95,9 +97,9 @@ const handler: NextApiHandler = async (req, res) => {
       }),
     });
   } catch (error) {
-    console.error(error);
+    htLogger.error(error);
     return res.status(500).json({ message: "Internal server error" });
   }
 };
 
-export default handler;
+export default withAuth(handler);

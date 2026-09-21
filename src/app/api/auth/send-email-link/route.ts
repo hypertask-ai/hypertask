@@ -1,3 +1,6 @@
+import { env as appEnv } from "#env";
+import { logger as htLogger } from "#logger";
+import { withoutAuth } from "#with-auth";
 import { NextRequest, NextResponse } from 'next/server'
 import jwt from 'jsonwebtoken'
 import crypto from 'crypto'
@@ -7,15 +10,15 @@ import { getRequestBaseUrl } from '@/lib/auth/requestBaseUrl'
 import { sendEmail } from '@/lib/email/sendEmail'
 
 // --------- Config & Helpers ---------
-const JWT_ISSUER = process.env.JWT_ISSUER || 'hypertask'
-const JWT_AUDIENCE = process.env.JWT_AUDIENCE || 'email-link'
+const JWT_ISSUER = appEnv.JWT_ISSUER || 'hypertask'
+const JWT_AUDIENCE = appEnv.JWT_AUDIENCE || 'email-link'
 
 // Resend configuration
-const RESEND_API_KEY = process.env.RESEND_API_KEY
-const EMAIL_FROM = process.env.EMAIL_FROM || 'noreply@hypertask.ai'
+const RESEND_API_KEY = appEnv.RESEND_API_KEY
+const EMAIL_FROM = appEnv.EMAIL_FROM || 'noreply@hypertask.ai'
 
 function getJwtSecret() {
-  const jwtSecret = process.env.JWT_SECRET
+  const jwtSecret = appEnv.JWT_SECRET
   if (!jwtSecret) {
     throw new Error('Missing JWT_SECRET env var')
   }
@@ -27,11 +30,11 @@ async function sendEmailWithLink(to: string, link: string, code: string) {
     try {
       await sendEmailWithResend(to, link, code)
     } catch (error) {
-      console.error('❌ Resend failed:', error)
+      htLogger.error('❌ Resend failed:', error)
       throw error
     }
   } else {
-    console.log('🔗 Sign-in email skipped because Resend is not configured')
+    htLogger.info('🔗 Sign-in email skipped because Resend is not configured')
   }
 }
 
@@ -100,7 +103,7 @@ async function sendEmailWithResend(to: string, link: string, code: string) {
         `,
   })
 
-  console.log('✅ Email sent via Resend with both link and code')
+  htLogger.info('✅ Email sent via Resend with both link and code')
 }
 
 function createEmailLoginToken(email: string) {
@@ -155,7 +158,7 @@ function buildSignInLinkWithUTM(
 }
 
 // --------- Route Handler ---------
-export async function POST(request: NextRequest) {
+async function POSTHandler(request: NextRequest) {
   try {
     const { email, utmData, inviteData, returnTo: rawReturnTo } = await request.json()
 
@@ -167,7 +170,7 @@ export async function POST(request: NextRequest) {
     }
 
     const normalizedEmail = email.trim().toLowerCase()
-    console.log('📧 Generating email link and code for:', normalizedEmail)
+    htLogger.info('📧 Generating email link and code for:', normalizedEmail)
 
     // Check rate limiting first
     const rateLimitCheck = VerificationCodeService.isRateLimited(normalizedEmail)
@@ -187,7 +190,7 @@ export async function POST(request: NextRequest) {
     
     // Use UTM data from request body (or empty object if not provided)
     const utmParams = utmData && typeof utmData === 'object' ? utmData : {}
-    console.log('📊 UTM Data from request body:', utmParams)
+    htLogger.info('📊 UTM Data from request body:', utmParams)
     
     const safeReturnTo = parseSafeReturnTo(
       typeof rawReturnTo === 'string' ? rawReturnTo : null
@@ -213,7 +216,7 @@ export async function POST(request: NextRequest) {
       message: 'Sign-in email sent with both link and code!',
     })
   } catch (error) {
-    console.error('❌ Error generating email link:', error)
+    htLogger.error('❌ Error generating email link:', error)
     
     // Handle specific error types
     if (error instanceof Error) {
@@ -250,3 +253,5 @@ export async function POST(request: NextRequest) {
     )
   }
 }
+
+export const POST = withoutAuth(POSTHandler);

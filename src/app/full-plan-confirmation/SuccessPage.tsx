@@ -43,8 +43,6 @@ const Success = ({
   };
 
   const checkSubscription = () => {
-    console.log("🤔 ~ checkSubscription ~ subscription:", subscription)
-    console.log("🤔 ~ checkSubscription ~ currentUser:", currentUser)
     if (subscription && currentUser) {
       var startDate = new Date(subscription.start_date);
       var currentDate = new Date();

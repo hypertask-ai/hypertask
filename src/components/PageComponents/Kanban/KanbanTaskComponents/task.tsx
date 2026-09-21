@@ -594,7 +594,6 @@ const TaskContent = ({
     if (e.ctrlKey) {
       if (e.keyCode === KeyCodes.TAB) {
         e.preventDefault();
-        console.log("ctrl+tab"); // chromium fullscreen (think PWA)
       }
     }
 
@@ -654,11 +653,9 @@ const TaskContent = ({
         (!rowShortcutsEnabled && e.keyCode === KeyCodes.ENTER)) &&
       !showCommands.show
     ) {
-      console.time("EnterPressOnTask");
       if (!task.uniqueIndex) return;
       setTasksPlayList(tasksPlayList);
       navigateToTask(task.projectId, task.uniqueIndex);
-      console.timeEnd("EnterPressOnTask");
     }
 
     // cmd/ctrl + [m]

@@ -40,7 +40,6 @@ const NewTaskFromComment: React.FC<IProps> = ({
         id: attachment.id,
       });
     }
-    console.log("🚀 ~ processAttachmentsForNewTask ~ temp:", temp);
     return temp;
   };
 

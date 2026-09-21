@@ -9,7 +9,7 @@ const read = (file) => fs.readFileSync(path.join(root, file), "utf8");
 test("agent webhook owner routes require a verified session and same-origin mutations", () => {
   const route = read("src/app/api/agents/[agentId]/webhook/route.ts");
 
-  assert.match(route, /getSessionUser\(request\.headers\)/);
+  assert.match(route, /getAuthSession\(request\.headers\)/);
   assert.doesNotMatch(route, /nookies_user|JSON\.parse/);
   assert.match(route, /new URL\(origin\)\.host === host/);
   assert.equal(

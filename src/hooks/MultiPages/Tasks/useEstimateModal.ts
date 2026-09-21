@@ -39,7 +39,6 @@ export const useEstimateModal = (
 
         closeHandler(true);
       } catch (error) {
-        console.log("🚀 ~ setEstimate ~ error:", error);
       }
     };
 

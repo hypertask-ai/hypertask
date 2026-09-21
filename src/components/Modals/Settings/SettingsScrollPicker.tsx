@@ -33,7 +33,6 @@ const SettingsScrollPicker = () => {
         setting: type,
       });
     } catch (error) {
-      console.error("Could not update scroll setting:", error);
       queryClient.setQueryData([globalConstants.ScrollSettingKey], previous);
     }
   };

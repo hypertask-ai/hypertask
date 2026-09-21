@@ -1,3 +1,6 @@
+import { env as appEnv } from "#env";
+import { logger as htLogger } from "#logger";
+import { withoutAuth } from "#with-auth";
 import { labelStore } from "@/utils/controllers/labels";
 import { NextRequest, NextResponse } from "next/server";
 
@@ -51,9 +54,9 @@ function removalDescription(key: string, releasedAt: Date) {
  * deliberately not used: a cron has no user, and at the default mode it would answer true for the
  * owner id and arm the board writes before anyone opted in.
  */
-export async function GET(request: NextRequest) {
+async function GETHandler(request: NextRequest) {
   if (
-    !hasValidCronAuthorization(request.headers.get("authorization"), process.env.CRON_SECRET)
+    !hasValidCronAuthorization(request.headers.get("authorization"), appEnv.CRON_SECRET)
   ) {
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   }
@@ -95,7 +98,7 @@ export async function GET(request: NextRequest) {
     );
   } catch (error) {
     if (!result) throw error;
-    console.error("[feature-flags] sweep lock transaction failed after the sweep ran", error);
+    htLogger.error("[feature-flags] sweep lock transaction failed after the sweep ran", error);
   }
   return result ?? NextResponse.json({ skipped: "sweep did not run", filed: 0 });
 }
@@ -199,14 +202,14 @@ async function sweep() {
         data: { removalTaskId: taskId },
       });
       if (recorded.count === 0) {
-        console.warn(`[feature-flags] ${flag.key} was re-released while its removal ticket was filed`);
+        htLogger.warn(`[feature-flags] ${flag.key} was re-released while its removal ticket was filed`);
         // The ticket is already open (freshly created, or reused from a crashed run) before the
         // invalidation was visible; archive it either way so Keep (or a mode change) still means
         // zero open removal tickets, matching the acceptance bar.
         await prisma.task
           .update({ where: { id: taskId }, data: { status: "Archive" } })
           .catch((error) =>
-            console.error(`[feature-flags] failed to archive stale removal ticket for ${flag.key}`, error),
+            htLogger.error(`[feature-flags] failed to archive stale removal ticket for ${flag.key}`, error),
           );
         continue;
       }
@@ -220,9 +223,11 @@ async function sweep() {
         })
         .catch(() => {});
       failed.push(flag.key);
-      console.error(`[feature-flags] removal ticket failed for ${flag.key}`, error);
+      htLogger.error(`[feature-flags] removal ticket failed for ${flag.key}`, error);
     }
   }
 
   return NextResponse.json({ filed: filed.length, keys: filed, failed });
 }
+
+export const GET = withoutAuth(GETHandler);

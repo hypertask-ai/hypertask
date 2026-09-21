@@ -1,3 +1,5 @@
+import { logger as htLogger } from "#logger";
+import { getAuthSession, withoutAuth } from "#with-auth";
 // pages/api/setupReminder.js
 // id:`notifications-for-task-${taskId}`
 
@@ -12,7 +14,6 @@ import { subMinutes } from "date-fns"
 
 import type { NextApiRequest, NextApiResponse } from 'next'
 import prisma from "@/lib/prisma";
-import { getSessionUser } from "@/lib/auth/getSessionUser";
 import checkReminderAndCreateNotification from "@/utils/controllers/notifications/creation-service/check-reminder_create-notification";
 import { nextReminderRevision } from "@/utils/controllers/reminders/revision";
 import { userCanAccessTask } from "@/utils/controllers/tasks/assertTaskAccess";
@@ -21,12 +22,12 @@ import { isFeatureEnabled, MY_TASKS_SNOOZE_FLAG } from "@/lib/flags";
 
 const REMINDER_LOCK_CLASS = 1_446_420_610
 
-export default  async function handler(
+async function handler(
   req: NextApiRequest,
   res: NextApiResponse
 ) {
-  console.log("🚀 ~ inboxReminder", req.body)
-  const session = await getSessionUser(
+  htLogger.info("🚀 ~ inboxReminder", req.body)
+  const session = await getAuthSession(
     new Headers(req.headers as Record<string, string>)
   );
   if (!session) return res.status(401).json({ message: "Unauthorized" });
@@ -123,3 +124,5 @@ export default  async function handler(
   }
  
 };
+
+export default withoutAuth(handler);

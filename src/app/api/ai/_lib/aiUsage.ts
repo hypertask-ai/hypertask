@@ -1,3 +1,4 @@
+import { logger as htLogger } from "#logger";
 import prisma from "@/lib/prisma";
 
 export async function logAiUsage(row: {
@@ -16,6 +17,6 @@ export async function logAiUsage(row: {
   try {
     await prisma.aiUsage.create({ data: row });
   } catch (error) {
-    console.error("[aiUsage] failed to log AI usage", error);
+    htLogger.error("[aiUsage] failed to log AI usage", error);
   }
 }

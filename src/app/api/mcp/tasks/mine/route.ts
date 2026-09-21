@@ -1,3 +1,5 @@
+import { logger as htLogger } from "#logger";
+import { withoutAuth } from "#with-auth";
 import { NextRequest, NextResponse } from 'next/server'
 import { checkMcpRateLimit, validateMcpAuth } from '@/lib/mcp/auth'
 import {
@@ -19,7 +21,7 @@ function parsePositiveInteger(raw: string | null): number | null {
  * per board, with exact totals. Same set and same shape the AI chat's
  * hypertask_my_tasks tool returns, so the CLI, MCP and the chat agree.
  */
-export async function GET(request: NextRequest) {
+async function GETHandler(request: NextRequest) {
   try {
     const rateLimited = await checkMcpRateLimit(request)
     if (rateLimited) return rateLimited
@@ -78,7 +80,7 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json(result, { status: 200 })
   } catch (error) {
-    console.error('Error listing my tasks:', error)
+    htLogger.error('Error listing my tasks:', error)
     return NextResponse.json(
       {
         success: false,
@@ -89,3 +91,5 @@ export async function GET(request: NextRequest) {
     )
   }
 }
+
+export const GET = withoutAuth(GETHandler);

@@ -1,3 +1,5 @@
+import { logger as htLogger } from "#logger";
+import { withoutAuth } from "#with-auth";
 import { notificationStore } from "@/utils/controllers/notifications";
 import { agentStore } from "@/utils/controllers/agents";
 import { NextRequest, NextResponse } from 'next/server'
@@ -41,7 +43,7 @@ const SPLIT_BY_TYPE: Record<string, string> = {
 
 type ActorKind = 'human' | 'agent' | 'self'
 
-export async function GET(request: NextRequest) {
+async function GETHandler(request: NextRequest) {
     try {
         const rateLimited = await checkMcpRateLimit(request)
         if (rateLimited) return rateLimited
@@ -341,10 +343,12 @@ export async function GET(request: NextRequest) {
                 .sort((left, right) => right.total - left.total),
         })
     } catch (error) {
-        console.error('[MCP] inbox/composition', error)
+        htLogger.error('[MCP] inbox/composition', error)
         return NextResponse.json(
             { success: false, error: 'Failed to load inbox composition' },
             { status: 500 }
         )
     }
 }
+
+export const GET = withoutAuth(GETHandler);

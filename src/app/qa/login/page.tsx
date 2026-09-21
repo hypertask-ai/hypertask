@@ -28,7 +28,6 @@ export default async function QaLoginPage() {
   }
 
   if (shouldShowMobileTabBar("/qa/login")) {
-    console.error("[qa-login] expected /qa/login to hide the mobile shell");
   }
 
   return (

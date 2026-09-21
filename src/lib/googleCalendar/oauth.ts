@@ -1,3 +1,5 @@
+import { env as appEnv } from "#env";
+import { logger as htLogger } from "#logger";
 import {
   createHash,
   createHmac,
@@ -59,14 +61,14 @@ export class GoogleOAuthRequestError extends Error {
 }
 
 export function getGoogleCalendarOAuthConfig(): GoogleCalendarOAuthConfig | null {
-  const clientId = process.env.GOOGLE_ID?.trim();
-  const clientSecret = process.env.GOOGLE_SECRET?.trim();
+  const clientId = appEnv.GOOGLE_ID?.trim();
+  const clientSecret = appEnv.GOOGLE_SECRET?.trim();
   if (clientId && clientSecret) return { clientId, clientSecret };
   const missing = [
     clientId ? null : "GOOGLE_ID",
     clientSecret ? null : "GOOGLE_SECRET",
   ].filter(Boolean);
-  console.error(
+  htLogger.error(
     "Google Calendar OAuth is not configured",
     `missing ${missing.join(" and ")}`,
   );

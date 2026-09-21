@@ -24,11 +24,9 @@ export const createMentionData = (mentionProjectId) => ({
         if (result && result.data) {
           return result.data;
         } else {
-          console.log("🤔 ~ @Mention: No results found");
           return [];
         }
       } catch (error) {
-        console.error("Error fetching tasks:", error);
         return [];
       }
     };

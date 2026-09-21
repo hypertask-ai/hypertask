@@ -58,7 +58,6 @@ export const useAIResponseHandler = (defaultMode: string, flaskUrl: string) => {
         setAIResponse(prev => prev + decoder.decode(value, { stream: true }));
       }
     } catch (error) {
-      console.error("AI Response Error:", error);
     } finally {
       setLoading(false);
     }

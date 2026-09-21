@@ -101,11 +101,9 @@ const TaskTitle = () => {
           if (response.status != 200) rollbackTitle();
         })
         .catch((error) => {
-          console.error(error);
           rollbackTitle();
         });
     } catch (error) {
-      console.error(error);
       rollbackTitle();
     }
   };

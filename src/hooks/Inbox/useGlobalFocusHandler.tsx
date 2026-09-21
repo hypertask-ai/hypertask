@@ -193,15 +193,10 @@ const useGlobalFocusHandler = (queryKey?: readonly unknown[]) => {
       currentSplitOverride ??
       _notifications?.structuredData?.data[globalFocus.currSplit];
     const selectedNotification = currentSplit?.[globalFocus.currIdx];
-    console.log(
-      "🚀 ~ moveIdxDown ~ selectedNotification:",
-      selectedNotification,
-    );
     if (!currentSplit) return;
     if (selectedNotification) {
       // const index = _notifications.findIndex((notification)=>notification.id===_notifications[inboxTaskIndex].id)
       // const indexToGoTo=index + 1
-      // console.log("🚀 ~ file: index.tsx:103 ~ handleKeyDown ~ index:", index)
       if (globalFocus.currIdx === currentSplit.length - 1) {
         // inboxTaskIndex&&setSelectedInbox(__notifications[inboxTaskIndex])
         // document.getElementById(`inbox-${_notifications[0].id}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' })
@@ -231,7 +226,6 @@ const useGlobalFocusHandler = (queryKey?: readonly unknown[]) => {
     undoHandler: any,
     cmdControl: TRemoveFromInboxMode,
   ) => {
-    console.time("StartingProcess");
     const _notifications: INotificationsFromTQ | undefined =
       queryClient.getQueryData(resolvedQueryKey);
     const cachePayload = _notifications?.notifications
@@ -267,7 +261,6 @@ const useGlobalFocusHandler = (queryKey?: readonly unknown[]) => {
     const currentSplitName =
       _notifications.structuredData.tabs[globalFocus.currSplit].project;
     const newState = cachePayload.notifications;
-    console.timeEnd("StartingProcess");
 
     //Update split moved within removeElementFromState
     updateActiveSplitView(
@@ -375,7 +368,6 @@ const useGlobalFocusHandler = (queryKey?: readonly unknown[]) => {
   const bulkRemoveElementsFromState = (
     notificationsToRemove: INotification[],
   ) => {
-    console.time("BulkRemoveProcess");
 
     const _notifications: INotificationsFromTQ | undefined =
       queryClient.getQueryData(resolvedQueryKey);
@@ -401,7 +393,6 @@ const useGlobalFocusHandler = (queryKey?: readonly unknown[]) => {
     );
 
     router.refresh();
-    console.timeEnd("BulkRemoveProcess");
 
     return newState;
   };
@@ -493,11 +484,6 @@ const useGlobalFocusHandler = (queryKey?: readonly unknown[]) => {
     newNotifications: INotificationsFromTQ | undefined,
     elementsExist: boolean,
   ) => {
-    console.log(
-      "🤔 ~ updateActiveSplitView ~ currentSplitName:",
-      currentSplitName,
-    );
-    console.log("🤔 ~ updateActiveSplitView ~ prevTabLength:", prevTabLength);
     if (
       newNotifications &&
       elementsExist &&
@@ -523,7 +509,6 @@ const useGlobalFocusHandler = (queryKey?: readonly unknown[]) => {
               });
             }
           } catch (error) {
-            console.log("🤔 ~ updateActiveSplitView ~ error:", error);
           }
         }
         const currentSplit =
@@ -563,10 +548,6 @@ const useGlobalFocusHandler = (queryKey?: readonly unknown[]) => {
               }
             }
 
-            console.log(
-              "🤔 ~ updateActiveSplitView ~ nextSplitWithData:",
-              nextSplitWithData,
-            );
             if (nextSplitWithData !== -1) {
               navigateTabs(nextSplitWithData, newNotifications);
             } else {
@@ -590,7 +571,6 @@ const useGlobalFocusHandler = (queryKey?: readonly unknown[]) => {
           }
         }
       } catch (error) {
-        console.log("🤔 ~ updateActiveSplitView ~ error:", error);
       }
     }
   };

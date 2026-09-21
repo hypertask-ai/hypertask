@@ -1,3 +1,5 @@
+import { logger as htLogger } from "#logger";
+import { withAuth } from "#with-auth";
 import { NextResponse } from "next/server";
 import { getServerCookieUser } from "@/lib/auth/serverUser";
 import prisma from "@/lib/prisma";
@@ -10,7 +12,7 @@ export const runtime = "nodejs";
 // Settings team switcher (most active team on top). Read straight from the
 // AiUsage metering table via a single grouped query — cheap and indexed on
 // [teamId, createdAt]. Scoped to the teams the caller can actually see.
-export async function GET() {
+async function GETHandler() {
   const user = await getServerCookieUser();
 
   if (!user) {
@@ -60,7 +62,9 @@ export async function GET() {
     return NextResponse.json({ usage });
   } catch (error) {
     // Metering is best-effort; a failure here must never break the switcher.
-    console.error("Error loading team usage:", error);
+    htLogger.error("Error loading team usage:", error);
     return NextResponse.json({ usage: {} });
   }
 }
+
+export const GET = withAuth(GETHandler);

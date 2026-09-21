@@ -93,7 +93,6 @@ export const useGifPlayback = (
           if (updateId === updateIdRef.current && previous) {
             queryClient.setQueryData(USER_PREFERENCES_QUERY_KEY, previous);
           }
-          console.log("useGifPlayback update error:", error);
         });
     },
     [queryClient],

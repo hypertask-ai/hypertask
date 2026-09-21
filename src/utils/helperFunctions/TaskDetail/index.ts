@@ -1,3 +1,4 @@
+import { env as appEnv } from "#env";
 import { IComment, IUser } from "@/models/model";
 import { escapeHtml } from "@/utils/htmlEscape";
 import { REPLY_QUOTE_DATA_ATTRIBUTE } from "@/lib/richText/replyQuote";
@@ -96,7 +97,7 @@ export function wrapBlockQuote(
   quoter: IUser,
   aiMention = false
 ) {
-  const hyperAiId = Number(process.env.NEXT_PUBLIC_HYPERAI_ID) || 332;
+  const hyperAiId = Number(appEnv.NEXT_PUBLIC_HYPERAI_ID) || 332;
   const isAi = aiMention;
   const dataId = isAi ? quoter.id : quoter.displayName;
   const escapedDataId = escapeHtml(String(dataId ?? ""));

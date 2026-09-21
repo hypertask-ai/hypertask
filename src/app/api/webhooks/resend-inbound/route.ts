@@ -1,3 +1,5 @@
+import { env as appEnv } from "#env";
+import { withoutAuth } from "#with-auth";
 import prisma from "@/lib/prisma";
 import { verifySvixPayload } from "@/lib/svixWebhook";
 import { retrieveResendReceivedEmail } from "@/lib/email/inboundReply";
@@ -11,7 +13,7 @@ import { broadcastTaskComment } from "@/lib/realtime/server";
 import { taskWriteAccessWhere } from "@/utils/controllers/projects/getAllIncludes";
 
 function webhookSecret(): string {
-  const value = process.env.RESEND_WEBHOOK_SECRET;
+  const value = appEnv.RESEND_WEBHOOK_SECRET;
   if (!value) throw new Error("RESEND_WEBHOOK_SECRET is not configured");
   return value;
 }
@@ -55,4 +57,4 @@ const productionDependencies: InboundDependencies = {
     broadcastTaskComment(taskId, { originUserId: userId }),
 };
 
-export const POST = createResendInboundHandler(productionDependencies);
+export const POST = withoutAuth(createResendInboundHandler(productionDependencies));

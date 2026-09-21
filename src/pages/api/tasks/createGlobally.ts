@@ -1,3 +1,5 @@
+import { logger as htLogger } from "#logger";
+import { getAuthSession, withAuth } from "#with-auth";
 import { labelStore } from "@/utils/controllers/labels";
 import { NextApiHandler, NextApiRequest, NextApiResponse } from "next";
 import { Prisma } from "@prisma/client";
@@ -15,7 +17,6 @@ import { createTaskWithBoardWebhookOutbox } from "@/lib/mcp/webhooks/taskEvents"
 import { publishBoardWebhookDeliveries } from "@/lib/mcp/webhooks/outbox";
 import { persistAgentTaskCreatedPending } from "@/lib/agentWebhooks/outbox";
 import { assignmentActivityUserSelect } from "@/utils/controllers/activities/createAssignedActivity";
-import { getSessionUser } from "@/lib/auth/getSessionUser";
 import { resolveActingAgent } from "@/lib/auth/resolveActingAgent";
 import { SESSION_COOKIE, verifySession } from "@/lib/auth/session";
 import { taskWriteAccessWhere } from "@/utils/controllers/projects/getAllIncludes";
@@ -62,7 +63,7 @@ const handler: NextApiHandler = async (
       if (!Number.isInteger(project_id) || project_id <= 0) {
         return res.status(400).json({ message: "Invalid project id" });
       }
-      const session = await getSessionUser(
+      const session = await getAuthSession(
         new Headers(req.headers as Record<string, string>)
       );
       if (!session) return res.status(401).json({ message: "Unauthorized" });
@@ -103,7 +104,7 @@ const handler: NextApiHandler = async (
       if (!section) {
         return res.status(404).json({ message: "No active section found" });
       }
-      console.log("🚀 ~ consthandler:NextApiHandler= ~ section:", section);
+      htLogger.info("🚀 ~ consthandler:NextApiHandler= ~ section:", section);
       const task = await prisma.task.findFirst({
         where: {
           sectionId: section.id,
@@ -114,27 +115,27 @@ const handler: NextApiHandler = async (
           ranking: position === "top" ? "asc" : "desc",
         },
       });
-      console.log("🚀 ~ consthandler:NextApiHandler= ~ task:", task);
+      htLogger.info("🚀 ~ consthandler:NextApiHandler= ~ task:", task);
 
       if (position === "bottom") {
         ranking = generateRank(task ? task.ranking : undefined, undefined);
       } else {
         ranking = generateRank(undefined, task ? task.ranking : undefined);
       }
-      console.log("🚀 ~ consthandler:NextApiHandler= ~ ranking:", ranking);
+      htLogger.info("🚀 ~ consthandler:NextApiHandler= ~ ranking:", ranking);
       const body = {
         section: section.section_title,
         ranking,
         sectionId: section.id,
       };
-      console.log("🚀 ~ consthandler:NextApiHandler= ~ body:", body);
+      htLogger.info("🚀 ~ consthandler:NextApiHandler= ~ body:", body);
       res.setHeader(
         "Server-Timing",
         `total;dur=${(performance.now() - requestStartedAt).toFixed(1)}`,
       );
       res.status(200).json(body);
     } catch (error) {
-      console.log("🚀 ~ consthandler:NextApiHandler= ~ error:", error);
+      htLogger.info("🚀 ~ consthandler:NextApiHandler= ~ error:", error);
       res.status(500).json({ message: "Could not load task defaults" });
     }
   }
@@ -163,11 +164,11 @@ const handler: NextApiHandler = async (
       createTaskFromComment,
       agentId: requestedAgentId, //Determines if task is created by an agent. If task created by an agent then everything in here is created by an agent
     } = req.body;
-    console.log("🤔 ~ creating task ~ req.body:", req.body);
+    htLogger.info("🤔 ~ creating task ~ req.body:", req.body);
 
     // let priorityLocal: Promise<any> = Promise.resolve(null); // Initialize to a resolved promise
     // let estimateLocal: Promise<any> = Promise.resolve(null); // Initialize to a resolved promise
-    const session = await getSessionUser(
+    const session = await getAuthSession(
       new Headers(req.headers as Record<string, string>)
     );
     if (!session) {
@@ -603,11 +604,11 @@ const handler: NextApiHandler = async (
       );
     }
 
-    console.log(
+    htLogger.info(
       "🚀 ~ consthandler:NextApiHandler= ~ tagsCreated:",
       tagsCreated
     );
-    console.log(
+    htLogger.info(
       "🚀 ~ consthandler:NextApiHandler= ~ description:",
       description
     );
@@ -693,7 +694,7 @@ function schedulePostCreateWork({
       );
     })
     .catch((error) => {
-      console.error("[task-create-global] agent task.created recovery failed", {
+      htLogger.error("[task-create-global] agent task.created recovery failed", {
         taskId: task.id,
         error,
       });
@@ -708,7 +709,7 @@ function schedulePostCreateWork({
     if (autoAssigned === "pending") {
       // The creation transaction wrote the marker. Leave it untouched so the
       // minute sweep at /api/queues/sweep can retry this handoff.
-      console.warn(
+      htLogger.warn(
         "[task-create-global] task.created handoff remains pending for the recovery sweep",
         { taskId: task.id },
       );
@@ -722,7 +723,7 @@ function schedulePostCreateWork({
       actor: { userId: originUserId, agentId: agentId ?? null },
     });
   }).catch((error) => {
-    console.error("[task-create-global] agent task.created webhook failed", {
+    htLogger.error("[task-create-global] agent task.created webhook failed", {
       taskId: task.id,
       error,
     });
@@ -789,7 +790,7 @@ function schedulePostCreateWork({
       (result): result is PromiseRejectedResult => result.status === "rejected",
     );
     if (failures.length > 0) {
-      console.error(
+      htLogger.error(
         "[task-create] post-response work failed",
         failures.map(({ reason }) => reason),
       );
@@ -1063,8 +1064,8 @@ async function createNewTaskFromComment(
       ),
     ]);
   } catch (error) {
-    console.log("🤔 ~ createNewTaskFromComment ~ error:", error);
+    htLogger.info("🤔 ~ createNewTaskFromComment ~ error:", error);
   }
 }
 
-export default handler;
+export default withAuth(handler);

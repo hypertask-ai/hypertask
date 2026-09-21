@@ -1,3 +1,4 @@
+import { logger as htLogger } from "#logger";
 import { randomUUID } from "node:crypto";
 
 import { getRedis } from "@/lib/redis";
@@ -122,7 +123,7 @@ export async function acquireAiChatStreamLease(
     }
     return { redis, key, token };
   } catch (error) {
-    console.error("[ai/chat/stream] concurrency guard unavailable", error);
+    htLogger.error("[ai/chat/stream] concurrency guard unavailable", error);
     return "unavailable";
   }
 }
@@ -139,7 +140,7 @@ export async function releaseAiChatStreamLease(lease: AiChatStreamLease) {
       lease.token,
     );
   } catch (error) {
-    console.error(
+    htLogger.error(
       `[ai/chat/stream] lease ${lease.key} will expire automatically`,
       error,
     );
@@ -299,7 +300,7 @@ export function watchAiChatCancellation(
       );
       if (stopped === "1") onCancel();
     } catch (error) {
-      console.error("[ai/chat/stream] cancellation check failed", error);
+      htLogger.error("[ai/chat/stream] cancellation check failed", error);
     } finally {
       checking = false;
     }
@@ -433,10 +434,10 @@ export function keepAiChatCompletionFenceAlive(
       COMPLETION_LEASE_TTL_SECONDS,
     ).then((renewed) => {
       if (Number(renewed) !== 1) {
-        console.error("[ai/chat/stream] completion fence lease was lost");
+        htLogger.error("[ai/chat/stream] completion fence lease was lost");
       }
     }).catch((error) => {
-      console.error("[ai/chat/stream] completion fence renewal failed", error);
+      htLogger.error("[ai/chat/stream] completion fence renewal failed", error);
     }).finally(() => {
       pending = null;
     });

@@ -1,3 +1,5 @@
+import { logger as htLogger } from "#logger";
+import { withoutAuth } from "#with-auth";
 import { claimAndInvokeTaskDelete } from "@/utils/controllers/tasks/invokeTaskDelete"
 import type { NextApiRequest, NextApiResponse } from "next";
 import { cancelJobById, scheduleJobById, withQstashSignature } from "@/lib/qstash";
@@ -25,7 +27,7 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
     // This callback has no request user: its QStash signature authenticates the
     // job, and the claim only accepts a due task scheduled by the gated delete path.
     const job = req.body as string;
-    console.log("🚀 ~ job:", job)
+    htLogger.info("🚀 ~ job:", job)
     // job = 'task-id-119'
     // ================== job execution time *-*, you finally recieve the notification
 
@@ -41,13 +43,13 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
       return res.status(200).json({ ok: true, result });
 
     } catch (error) {
-       console.log("🚀 ~ error:", error)
+       htLogger.info("🚀 ~ error:", error)
        return res.status(500).json({ ok: false });
       
     }
 }
 
-export default withQstashSignature(handler);
+export default withoutAuth(withQstashSignature(handler));
 
 export const config = {
   api: {

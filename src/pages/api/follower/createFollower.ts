@@ -1,3 +1,4 @@
+import { withAuth } from "#with-auth";
 import { NextApiHandler, NextApiRequest, NextApiResponse } from "next";
 import { SESSION_COOKIE, verifySession } from "@/lib/auth/session";
 import { createFollowerService } from "@/utils/controllers/followers/createFollowerService";
@@ -29,4 +30,4 @@ const handler: NextApiHandler = async (
   }
 };
 
-export default handler;
+export default withAuth(handler);

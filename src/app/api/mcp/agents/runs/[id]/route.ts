@@ -1,3 +1,5 @@
+import { logger as htLogger } from "#logger";
+import { withoutAuth } from "#with-auth";
 import { NextRequest, NextResponse } from "next/server";
 import {
   agentRunsEnabledFor,
@@ -15,7 +17,7 @@ const noStore = (body: Record<string, unknown>, status = 200) =>
     headers: { "Cache-Control": "private, no-store" },
   });
 
-export async function GET(
+async function GETHandler(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> },
 ) {
@@ -39,7 +41,9 @@ export async function GET(
     if (!run) return noStore({ success: false, error: "Run not found" }, 404);
     return noStore({ success: true, run });
   } catch (error) {
-    console.error("[agent-run] read failed", error);
+    htLogger.error("[agent-run] read failed", error);
     return noStore({ success: false, error: "Failed to read agent run" }, 500);
   }
 }
+
+export const GET = withoutAuth(GETHandler);

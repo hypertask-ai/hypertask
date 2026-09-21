@@ -1,3 +1,4 @@
+import { logger as htLogger } from "#logger";
 import { searchTasks } from "@/utils/controllers/turbopuffer/turbopufferHelper";
 
 export async function turbopufferGetSuggestions(
@@ -53,6 +54,6 @@ export async function turbopufferGetSuggestions(
     ],
   };
 
-  console.log("turbopufferGetSuggestions results:", results);
+  htLogger.info("turbopufferGetSuggestions results:", results);
   return results;
 }

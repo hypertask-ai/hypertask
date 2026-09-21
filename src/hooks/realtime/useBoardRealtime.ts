@@ -126,9 +126,6 @@ export function useBoardRealtime(
       if (cancelled || fallbackActive) return;
       fallbackActive = true;
       if (!fallbackWarningLogged) {
-        console.warn(
-          `[realtime] board subscription ${reason}; enabling reconciliation`,
-        );
         fallbackWarningLogged = true;
       }
       runFallbackCycle();

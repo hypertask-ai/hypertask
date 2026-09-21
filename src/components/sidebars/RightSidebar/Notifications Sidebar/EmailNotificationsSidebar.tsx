@@ -42,7 +42,6 @@ const EmailNotificationSidebar = ({
         updateUserStateAndCookie(response.data.res);
       }
     } catch (error) {
-      console.log("🤔 ~ changeNotificationStatus ~ error:", error);
     }
   };
 

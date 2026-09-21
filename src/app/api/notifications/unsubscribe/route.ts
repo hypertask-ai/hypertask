@@ -1,3 +1,4 @@
+import { withoutAuth } from "#with-auth";
 import { NextRequest, NextResponse } from "next/server";
 
 import prisma from "@/lib/prisma";
@@ -68,7 +69,7 @@ function page(message: string, ok: boolean): string {
 </main>`;
 }
 
-export async function GET(request: NextRequest) {
+async function GETHandler(request: NextRequest) {
   const result = await unsubscribe(request);
   return new NextResponse(page(result.message, result.ok), {
     status: result.ok ? 200 : 400,
@@ -76,7 +77,7 @@ export async function GET(request: NextRequest) {
   });
 }
 
-export async function POST(request: NextRequest) {
+async function POSTHandler(request: NextRequest) {
   // One-click: providers want a 2xx and ignore the body.
   const result = await unsubscribe(request);
   return NextResponse.json(
@@ -84,3 +85,6 @@ export async function POST(request: NextRequest) {
     { status: result.ok ? 200 : 400, headers: { "Cache-Control": "no-store" } }
   );
 }
+
+export const GET = withoutAuth(GETHandler);
+export const POST = withoutAuth(POSTHandler);

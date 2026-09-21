@@ -1,3 +1,5 @@
+import { logger as htLogger } from "#logger";
+import { withAuth } from "#with-auth";
 import { SESSION_COOKIE, verifySession } from "@/lib/auth/session";
 import {
   DIRECT_UPLOAD_MAX_FILES,
@@ -67,13 +69,13 @@ class UploadUrlRequestError extends Error {
 async function resolveBetterAuthSession(
   req: NextApiRequest
 ): Promise<{ id: number } | null> {
-  const { getSessionUser } = await import("@/lib/auth/getSessionUser");
+  const { getAuthSession } = await import("#with-auth");
   const headers = new Headers();
   for (const [name, value] of Object.entries(req.headers)) {
     if (typeof value === "string") headers.set(name, value);
     else if (Array.isArray(value)) headers.set(name, value.join("; "));
   }
-  const session = await getSessionUser(headers);
+  const session = await getAuthSession(headers);
   return session ? { id: session.userId } : null;
 }
 
@@ -205,7 +207,7 @@ export async function signUpload(
   );
 }
 
-export default async function handler(
+async function handler(
   req: NextApiRequest,
   res: NextApiResponse
 ) {
@@ -299,7 +301,9 @@ export default async function handler(
     if (error instanceof UploadUrlRequestError) {
       return res.status(error.status).json({ error: error.message });
     }
-    console.error("[uploadUrl] Could not sign upload", error);
+    htLogger.error("[uploadUrl] Could not sign upload", error);
     return res.status(500).json({ error: "Could not prepare the upload" });
   }
 }
+
+export default withAuth(handler);

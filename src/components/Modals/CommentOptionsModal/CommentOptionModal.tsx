@@ -1,3 +1,4 @@
+import { env as appEnv } from "#env";
 import {
   ModalContainerCustom,
   ModalHeaderComp,
@@ -112,7 +113,7 @@ const CommentOptionsModal = ({
   }
 
   const copyCommentHandler = () => {
-    const currentURL = `${process.env.NEXT_PUBLIC_BASEURL}/detail/project-${currentTask?.projectId}/${currentTask?.uniqueIndex}`;
+    const currentURL = `${appEnv.NEXT_PUBLIC_BASEURL}/detail/project-${currentTask?.projectId}/${currentTask?.uniqueIndex}`;
     navigator.clipboard.writeText(currentURL + `#comment-${commentIndex}`);
     toast("Link to this comment copied to clipboard!");
   };
@@ -131,7 +132,6 @@ const CommentOptionsModal = ({
         id: attachment.id,
       });
     }
-    console.log("🚀 ~ processAttachmentsForNewTask ~ temp:", temp);
     return temp;
   };
 

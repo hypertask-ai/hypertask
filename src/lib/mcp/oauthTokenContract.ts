@@ -1,3 +1,4 @@
+import { env as appEnv } from "#env";
 import jwt from 'jsonwebtoken'
 
 /**
@@ -9,10 +10,10 @@ import jwt from 'jsonwebtoken'
  * this deployment issued itself.
  */
 export const JWT_OAUTH_ISSUER =
-  process.env.JWT_ISSUER || 'https://app.hypertask.ai'
+  appEnv.JWT_ISSUER || 'https://app.hypertask.ai'
 export const JWT_LEGACY_OAUTH_AUDIENCE = 'http://localhost:3001'
 export const JWT_OAUTH_AUDIENCE =
-  process.env.JWT_OAUTH_AUDIENCE || JWT_LEGACY_OAUTH_AUDIENCE
+  appEnv.JWT_OAUTH_AUDIENCE || JWT_LEGACY_OAUTH_AUDIENCE
 export const OAUTH_CLIENT_ID_CLAIM = 'client_id'
 
 export const oauthLegacyRevocationJti = (userId: number) =>

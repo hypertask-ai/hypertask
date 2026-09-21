@@ -1,13 +1,16 @@
+import { env as appEnv } from "#env";
+import { logger as htLogger } from "#logger";
+import { withAuth } from "#with-auth";
 import { NextRequest, NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
 
-export async function GET(request: NextRequest) {
+async function GETHandler(request: NextRequest) {
     try {
         // HTPR-4808: /reset admin tool only. This enumerates the whole user
         // table with no team or board scoping, so accepting any signed-in
         // session would let a fresh trial account read every user on the
         // platform. Same gate as resetUser and reset-trial.
-        const adminPassword = process.env.ADMIN_USER_RESET_PW;
+        const adminPassword = appEnv.ADMIN_USER_RESET_PW;
         if (
             !adminPassword ||
             request.headers.get('x-admin-password') !== adminPassword
@@ -77,7 +80,7 @@ export async function GET(request: NextRequest) {
             count: filteredUsers.length,
         });
     } catch (error: any) {
-        console.error('❌ Error searching users:', error);
+        htLogger.error('❌ Error searching users:', error);
         return NextResponse.json(
             {
                 success: false,
@@ -87,3 +90,5 @@ export async function GET(request: NextRequest) {
         );
     }
 }
+
+export const GET = withAuth(GETHandler);

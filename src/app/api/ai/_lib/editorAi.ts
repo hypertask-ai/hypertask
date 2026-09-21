@@ -1,3 +1,5 @@
+import { env as appEnv } from "#env";
+import { logger as htLogger } from "#logger";
 import { cookies } from "next/headers";
 import {
   I_HAVE_ADHD_SKILL,
@@ -216,7 +218,7 @@ export async function getCurrentUserFromCookies(): Promise<CookieUser | null> {
     if (!userCookie?.value) return null;
     return JSON.parse(userCookie.value) as CookieUser;
   } catch (error) {
-    console.log("getCurrentUserFromCookies error:", error);
+    htLogger.info("getCurrentUserFromCookies error:", error);
     return null;
   }
 }
@@ -1025,7 +1027,7 @@ export async function selectTaskWriterModel(args: {
       args.byokProviderFlags,
       keyLookup,
     );
-    const sharedKey = process.env.AI_GATEWAY_API_KEY?.trim();
+    const sharedKey = appEnv.AI_GATEWAY_API_KEY?.trim();
     hasEligibleByokCredential =
       (typeof credential === "string" &&
         credential.trim().length > 0 &&

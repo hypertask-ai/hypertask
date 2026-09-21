@@ -1,3 +1,6 @@
+import { env as appEnv } from "#env";
+import { logger as htLogger } from "#logger";
+import { withoutAuth } from "#with-auth";
 import { agentStore } from "@/utils/controllers/agents";
 import { NextRequest, NextResponse } from "next/server";
 import { Prisma } from "@prisma/client";
@@ -62,8 +65,8 @@ const HEARTBEAT_PROMPT =
  */
 function heartbeatSelfCallBase(): string {
   const base = (
-    process.env.NEXT_PUBLIC_APP_URL ||
-    process.env.NEXT_PUBLIC_BASEURL ||
+    appEnv.NEXT_PUBLIC_APP_URL ||
+    appEnv.NEXT_PUBLIC_BASEURL ||
     ""
   )
     .trim()
@@ -422,11 +425,11 @@ const recoverPriorExecution = async (
   }
 };
 
-export async function GET(request: NextRequest) {
+async function GETHandler(request: NextRequest) {
   if (
     !hasValidCronAuthorization(
       request.headers.get("authorization"),
-      process.env.CRON_SECRET,
+      appEnv.CRON_SECRET,
     )
   ) {
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });
@@ -436,7 +439,7 @@ export async function GET(request: NextRequest) {
   try {
     callbackBase = heartbeatSelfCallBase();
   } catch (error) {
-    console.error("native agent heartbeat: missing callback base", error);
+    htLogger.error("native agent heartbeat: missing callback base", error);
     return NextResponse.json(
       { error: "missing callback base url" },
       { status: 500 },
@@ -586,7 +589,7 @@ export async function GET(request: NextRequest) {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
-            Authorization: `Bearer ${process.env.CRON_SECRET}`,
+            Authorization: `Bearer ${appEnv.CRON_SECRET}`,
             "x-hypertask-heartbeat-agent-id": agent.id,
             "x-hypertask-heartbeat-claimed-at": claimedAt.toISOString(),
             "x-hypertask-heartbeat-execution-id": execution.executionId,
@@ -667,7 +670,7 @@ export async function GET(request: NextRequest) {
       // after it, the durable ChatMessage marker drives recovery. Never rewind
       // from this generic catch, because a write tool may already have run.
       failures.push(`${agent.id}: ${errorText(error)}`);
-      console.error(`native agent heartbeat failed for ${agent.id}`, error);
+      htLogger.error(`native agent heartbeat failed for ${agent.id}`, error);
     }
   }
 
@@ -677,3 +680,5 @@ export async function GET(request: NextRequest) {
     { status: allFailed ? 500 : 200 },
   );
 }
+
+export const GET = withoutAuth(GETHandler);

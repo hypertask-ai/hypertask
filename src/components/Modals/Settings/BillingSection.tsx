@@ -125,7 +125,6 @@ const BillingSection = () => {
         );
         if (!cancelled) setBillingData(response.data);
       } catch (error) {
-        console.error(error);
         if (!cancelled) {
           setBillingData(null);
           setBillingError("Billing details unavailable");
@@ -156,7 +155,6 @@ const BillingSection = () => {
       setIsEditingBillingEmail(false);
       toast.success("Invoicing email updated");
     } catch (error) {
-      console.error(error);
       const message = axios.isAxiosError<{ message?: string }>(error)
         ? error.response?.data?.message
         : null;
@@ -184,7 +182,6 @@ const BillingSection = () => {
       );
       window.location.assign(response.data.url);
     } catch (error) {
-      console.error(error);
       const message = axios.isAxiosError<{ message?: string }>(error)
         ? error.response?.data?.message
         : null;
@@ -207,7 +204,6 @@ const BillingSection = () => {
       router.refresh();
       if (response.status === 200) toast("Successfully switched to Free Plan");
     } catch (error) {
-      console.error(error);
       toast.error("Could not cancel subscription");
     } finally {
       setConfirmingCancel(false);

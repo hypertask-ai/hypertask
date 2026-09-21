@@ -1,8 +1,10 @@
+import { logger as htLogger } from "#logger";
+import { withAuth } from "#with-auth";
 import prisma from "@/lib/prisma";
 import { SESSION_COOKIE, verifySession } from "@/lib/auth/session";
 import type { NextApiRequest, NextApiResponse } from "next";
 
-export default async function handler(
+async function handler(
   req: NextApiRequest,
   res: NextApiResponse,
 ) {
@@ -33,7 +35,9 @@ export default async function handler(
 
     return res.status(200).json({ success: true });
   } catch (error) {
-    console.error("[Archive draft] Error:", error);
+    htLogger.error("[Archive draft] Error:", error);
     return res.status(500).json({ error: "Could not archive draft" });
   }
 }
+
+export default withAuth(handler);

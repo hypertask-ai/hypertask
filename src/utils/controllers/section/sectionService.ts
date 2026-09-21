@@ -1,3 +1,4 @@
+import { logger as htLogger } from "#logger";
 /**
  * Centralized Section CRUD service.
  * Both Pages API and MCP endpoints should use this service.
@@ -87,7 +88,7 @@ export async function createSection(input: CreateSectionInput): Promise<CreateSe
       }
     }
   } catch (error) {
-    console.error('Error creating section:', error)
+    htLogger.error('Error creating section:', error)
     return { status: 500, json: error }
   }
 }
@@ -237,7 +238,7 @@ export async function updateSection(input: UpdateSectionInput): Promise<UpdateSe
       }
     }
   } catch (error) {
-    console.error('Error updating section:', error)
+    htLogger.error('Error updating section:', error)
     return { status: 500, json: { message: 'Section not found' } }
   }
 }
