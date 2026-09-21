@@ -185,7 +185,8 @@ export async function POST(
         },
         ...(agentBrief ? { agentBrief } : {}),
       });
-      if (deliveryIds.length > 0 || pollingChatEnabled) {
+
+      if (deliveryIds.length === 0 && pollingChatEnabled) {
         await chatStore(tx).messages.update({
           where: { id: message.id },
           data: { isDelivered: false },

@@ -265,16 +265,6 @@ export type AgentWebhookPayload = AgentWebhookEventInput & {
   occurredAt: string;
 };
 
-export function agentWebhookChatMessageId(payload: unknown): string | null {
-  if (typeof payload !== "object" || payload === null || Array.isArray(payload)) {
-    return null;
-  }
-  const chat = (payload as { chat?: unknown }).chat;
-  if (typeof chat !== "object" || chat === null || Array.isArray(chat)) return null;
-  const messageId = (chat as { messageId?: unknown }).messageId;
-  return typeof messageId === "string" && messageId ? messageId : null;
-}
-
 export function availableAgentWebhookEvents(
   agentRunsEnabled: boolean,
 ): AgentWebhookEventType[] {
