@@ -251,12 +251,20 @@ test("task list and search payloads do not include description bodies", () => {
   assert.doesNotMatch(searchMapper, /description\s*:/);
 });
 
-test("single-task descriptions are plain text", () => {
+test("HTML text conversion does not double-decode entities", () => {
+  assert.equal(
+    compactChatHistory([
+      { role: "human", content: "&amp;lt;script&amp;gt;" },
+    ]).recent[0].content,
+    "&lt;script&gt;",
+  );
   assert.equal(
     mapTaskDescriptionText({
-      description_: { content: "<p>Hello <strong>world</strong> &amp; team</p>" },
+      description_: {
+        content: "<p>Hello <strong>world</strong> &amp; team &amp;lt;tag&amp;gt;</p>",
+      },
     }),
-    "Hello world & team",
+    "Hello world & team &lt;tag&gt;",
   );
 });
 
