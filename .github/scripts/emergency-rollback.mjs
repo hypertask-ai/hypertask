@@ -1,37 +1,30 @@
-// Instant Vercel rollback for the staging auto-revert job (HTPR-5557): when
-// git can't undo a failing commit (dirty revert or a refused push), this
-// requests an instant promote of the last good production deployment instead
-// of leaving production on a red build until a human fixes the git state.
-//
-// Design: request, verify once, and alert. After a successful promote request,
-// this re-reads the production target once to confirm that the candidate is
-// live, while still telling a human to verify production themselves. These
-// API calls are not a transaction, so the pre- and post-promote checks narrow
-// the race windows without closing them.
-//
-// Control flow is linear early-returns, one disqualifying condition per
-// return. An in-flight deployment is the one exception: wait briefly for it,
-// then promote anyway if it is stuck so it cannot block an emergency rollback.
+// Emergency production rollback: freeze merging, restore production's git tree
+// to the failing commit's parent, and optionally promote a previously healthy
+// Vercel deployment while the revert deployment builds.
 //
 // Usage: node .github/scripts/emergency-rollback.mjs <failing-sha>
-//        (reads VERCEL_TOKEN from env)
+//        (reads VERCEL_TOKEN, GITHUB_TOKEN, and GITHUB_REPOSITORY from env)
 // Prints one JSON object on stdout: {action: "requested"|"skip"|"failed", ...}
 
 const PROJECT_SLUG = "hypertasks-prod";
-const API = "https://api.vercel.com";
+const VERCEL_API = "https://api.vercel.com";
+const GITHUB_API = "https://api.github.com";
 const IN_FLIGHT_STATES = new Set(["BUILDING", "QUEUED", "INITIALIZING"]);
 const MAX_IN_FLIGHT_POLLS = 5;
 const IN_FLIGHT_POLL_INTERVAL_MS = 30_000;
 const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
-async function getJson(fetchImpl, url, token) {
+async function requestJson(fetchImpl, url, token, options = {}) {
   try {
-    const res = await fetchImpl(url, { headers: { Authorization: `Bearer ${token}` } });
+    const headers = { ...options.headers };
+    if (token) headers.Authorization = `Bearer ${token}`;
+    const res = await fetchImpl(url, { ...options, headers });
     if (!res.ok || res.status < 200 || res.status >= 300) {
       return { ok: false, status: res.status, reason: "non-2xx response" };
     }
+    if (res.status === 204) return { ok: true, data: undefined, status: res.status };
     try {
-      return { ok: true, data: await res.json() };
+      return { ok: true, data: await res.json(), status: res.status };
     } catch (err) {
       return { ok: false, status: res.status, reason: err.message };
     }
@@ -40,8 +33,197 @@ async function getJson(fetchImpl, url, token) {
   }
 }
 
+function githubOptions(method = "GET", body) {
+  return {
+    method,
+    headers: {
+      Accept: "application/vnd.github+json",
+      "X-GitHub-Api-Version": "2022-11-28",
+      ...(body ? { "Content-Type": "application/json" } : {}),
+    },
+    ...(body ? { body: JSON.stringify(body) } : {}),
+  };
+}
+
+export async function setMergeFreeze(repository, runUrl, githubToken, fetchImpl = fetch) {
+  if (!repository || !runUrl || !githubToken) return false;
+  const variableUrl = `${GITHUB_API}/repos/${repository}/actions/variables/MERGE_FREEZE`;
+  const updated = await requestJson(
+    fetchImpl,
+    variableUrl,
+    githubToken,
+    githubOptions("PATCH", { name: "MERGE_FREEZE", value: runUrl }),
+  );
+  if (updated.ok) return true;
+  if (updated.status !== 404) return false;
+
+  const created = await requestJson(
+    fetchImpl,
+    `${GITHUB_API}/repos/${repository}/actions/variables`,
+    githubToken,
+    githubOptions("POST", { name: "MERGE_FREEZE", value: runUrl }),
+  );
+  return created.ok;
+}
+
+async function compareProduction(fetchImpl, repository, githubToken, failingSha, headSha) {
+  const commits = [];
+  let page = 1;
+  let status;
+  let totalCommits;
+  do {
+    const result = await requestJson(
+      fetchImpl,
+      `${GITHUB_API}/repos/${repository}/compare/${failingSha}...${headSha}?per_page=100&page=${page}`,
+      githubToken,
+      githubOptions(),
+    );
+    if (!result.ok) return result;
+    status ??= result.data?.status;
+    totalCommits ??= result.data?.total_commits ?? 0;
+    const pageCommits = result.data?.commits ?? [];
+    commits.push(...pageCommits);
+    if (pageCommits.length === 0) break;
+    page += 1;
+  } while (commits.length < totalCommits);
+  return { ok: true, status, commits };
+}
+
+export async function createProductionRevert(
+  failingSha,
+  repository,
+  githubToken,
+  fetchImpl = fetch,
+) {
+  if (!/^[0-9a-f]{40}$/i.test(failingSha)) {
+    return { action: "failed", reason: "failing SHA must be a full 40-character commit SHA" };
+  }
+  if (!repository || !githubToken) {
+    return { action: "failed", reason: "GitHub repository or rollback token is not configured" };
+  }
+
+  const commitUrl = `${GITHUB_API}/repos/${repository}/git/commits`;
+  const failingCommit = await requestJson(
+    fetchImpl,
+    `${commitUrl}/${failingSha}`,
+    githubToken,
+    githubOptions(),
+  );
+  const parentSha = failingCommit.data?.parents?.[0]?.sha;
+  if (!failingCommit.ok || !parentSha) {
+    return {
+      action: "failed",
+      reason: `could not resolve the failing commit's parent: HTTP ${failingCommit.status}`,
+    };
+  }
+  const parentCommit = await requestJson(
+    fetchImpl,
+    `${commitUrl}/${parentSha}`,
+    githubToken,
+    githubOptions(),
+  );
+  const restoreTree = parentCommit.data?.tree?.sha;
+  if (!parentCommit.ok || !restoreTree) {
+    return {
+      action: "failed",
+      reason: `could not resolve the pre-failure tree: HTTP ${parentCommit.status}`,
+    };
+  }
+
+  const message = `Revert ${failingSha.slice(0, 7)}: production smoke failed (auto-rollback)`;
+  for (let attempt = 1; attempt <= 2; attempt += 1) {
+    const ref = await requestJson(
+      fetchImpl,
+      `${GITHUB_API}/repos/${repository}/git/ref/heads/production`,
+      githubToken,
+      githubOptions(),
+    );
+    const headSha = ref.data?.object?.sha;
+    if (!ref.ok || !headSha) {
+      return { action: "failed", reason: `could not resolve production HEAD: HTTP ${ref.status}` };
+    }
+
+    const comparison = await compareProduction(
+      fetchImpl,
+      repository,
+      githubToken,
+      failingSha,
+      headSha,
+    );
+    if (!comparison.ok) {
+      return { action: "failed", reason: `could not compare production to the failing SHA: HTTP ${comparison.status}` };
+    }
+    const existing = comparison.commits.find(
+      (commit) => commit?.commit?.message?.split("\n", 1)[0] === message,
+    );
+    if (existing) {
+      return {
+        action: "already_reverted",
+        sha: existing.sha,
+        revertedFrom: failingSha,
+        revertedThrough: existing.sha,
+      };
+    }
+    if (comparison.status !== "ahead" && comparison.status !== "identical") {
+      return {
+        action: "failed",
+        reason: `failing commit is not an ancestor of production HEAD (${comparison.status || "unknown"})`,
+      };
+    }
+
+    const created = await requestJson(
+      fetchImpl,
+      commitUrl,
+      githubToken,
+      githubOptions("POST", {
+        message,
+        tree: restoreTree,
+        parents: [headSha],
+      }),
+    );
+    const revertSha = created.data?.sha;
+    if (!created.ok || !revertSha) {
+      return { action: "failed", reason: `could not create the production revert commit: HTTP ${created.status}` };
+    }
+
+    const updated = await requestJson(
+      fetchImpl,
+      `${GITHUB_API}/repos/${repository}/git/refs/heads/production`,
+      githubToken,
+      githubOptions("PATCH", { sha: revertSha, force: false }),
+    );
+    if (updated.ok) {
+      return {
+        action: "created",
+        sha: revertSha,
+        revertedFrom: failingSha,
+        revertedThrough: headSha,
+      };
+    }
+    if (attempt === 2 || (updated.status !== 409 && updated.status !== 422)) {
+      return { action: "failed", reason: `could not advance production to the revert: HTTP ${updated.status}` };
+    }
+  }
+  return { action: "failed", reason: "production kept moving while the revert was created" };
+}
+
+async function hasGreenProdHealthRun(fetchImpl, repository, githubToken, sha) {
+  if (!repository) return false;
+  const result = await requestJson(
+    fetchImpl,
+    `${GITHUB_API}/repos/${repository}/actions/workflows/prod-health.yml/runs?head_sha=${sha}&event=push&per_page=10`,
+    githubToken,
+    githubOptions(),
+  );
+  if (!result.ok) return false;
+  const latest = (result.data?.workflow_runs ?? [])
+    .filter((run) => run.status === "completed")
+    .sort((a, b) => String(b.updated_at).localeCompare(String(a.updated_at)))[0];
+  return latest?.conclusion === "success";
+}
+
 async function recheckLiveProduction(fetchImpl, token, liveId, failingSha) {
-  const recheckResult = await getJson(fetchImpl, `${API}/v9/projects/${PROJECT_SLUG}`, token);
+  const recheckResult = await requestJson(fetchImpl, `${VERCEL_API}/v9/projects/${PROJECT_SLUG}`, token);
   if (!recheckResult.ok) {
     return { action: "failed", reason: `production recheck failed: HTTP ${recheckResult.status}` };
   }
@@ -57,11 +239,14 @@ async function recheckLiveProduction(fetchImpl, token, liveId, failingSha) {
   return null;
 }
 
-export async function emergencyRollback(failingSha, token, fetchImpl = fetch, delayImpl = delay) {
-  // v9/projects returns both the project id and targets.production (the
-  // deployment Vercel is actually serving live) in one call — the newest
-  // entry from a deployments list is only a guess at "live".
-  const projectResult = await getJson(fetchImpl, `${API}/v9/projects/${PROJECT_SLUG}`, token);
+export async function promotePreviousDeployment(
+  failingSha,
+  token,
+  fetchImpl = fetch,
+  delayImpl = delay,
+  { repository = process.env.GITHUB_REPOSITORY || "", githubToken = "" } = {},
+) {
+  const projectResult = await requestJson(fetchImpl, `${VERCEL_API}/v9/projects/${PROJECT_SLUG}`, token);
   if (!projectResult.ok) {
     return { action: "failed", reason: `could not resolve the Vercel project: HTTP ${projectResult.status}` };
   }
@@ -79,39 +264,28 @@ export async function emergencyRollback(failingSha, token, fetchImpl = fetch, de
     return { action: "skip", reason: `production already moved on to a different commit (${liveSha || "unknown"}), no promotion attempted` };
   }
 
-  // Re-read live production before the final deployment-list guard. These
-  // reads and the POST are separate calls, not a transaction, so the checks
-  // narrow (never close) the window where something else changed what's live.
   const recheckFailure = await recheckLiveProduction(fetchImpl, token, liveId, failingSha);
   if (recheckFailure) return recheckFailure;
 
-  // Use the all-state production list to select the previous READY deployment.
-  // If another deployment is in flight, give it a bounded chance to finish.
-  const deploymentsUrl = `${API}/v6/deployments?projectId=${projectId}&target=production&limit=10`;
-  let deploysResult = await getJson(
-    fetchImpl,
-    deploymentsUrl,
-    token,
-  );
+  const deploymentsUrl = `${VERCEL_API}/v6/deployments?projectId=${projectId}&target=production&limit=10`;
+  let deploysResult = await requestJson(fetchImpl, deploymentsUrl, token);
   if (!deploysResult.ok) {
     return { action: "failed", reason: `deployment list failed: HTTP ${deploysResult.status}` };
   }
   let deployments = deploysResult.data?.deployments ?? [];
-  let inFlight = deployments.find((d) => d?.uid && IN_FLIGHT_STATES.has(d?.state));
+  let inFlight = deployments.find((deployment) => deployment?.uid && IN_FLIGHT_STATES.has(deployment?.state));
   let polls = 0;
   while (inFlight && polls < MAX_IN_FLIGHT_POLLS) {
     await delayImpl(IN_FLIGHT_POLL_INTERVAL_MS);
     polls += 1;
-    deploysResult = await getJson(fetchImpl, deploymentsUrl, token);
+    deploysResult = await requestJson(fetchImpl, deploymentsUrl, token);
     if (!deploysResult.ok) {
       return { action: "failed", reason: `deployment list failed: HTTP ${deploysResult.status}` };
     }
     deployments = deploysResult.data?.deployments ?? [];
-    inFlight = deployments.find((d) => d?.uid && IN_FLIGHT_STATES.has(d?.state));
+    inFlight = deployments.find((deployment) => deployment?.uid && IN_FLIGHT_STATES.has(deployment?.state));
   }
 
-  // Waiting widens the race window, so repeat both live-production guards
-  // before selecting a candidate or issuing the promotion request.
   if (polls > 0) {
     const afterWaitFailure = await recheckLiveProduction(fetchImpl, token, liveId, failingSha);
     if (afterWaitFailure) return afterWaitFailure;
@@ -120,38 +294,39 @@ export async function emergencyRollback(failingSha, token, fetchImpl = fetch, de
     ? `promotion proceeded despite an in-flight production deployment (${inFlight.uid} ${inFlight.state})`
     : undefined;
 
-  // Belt and braces: a candidate must differ from the live deployment by
-  // BOTH id and sha, so a second deploy of the same failing commit can never
-  // be picked as "the previous good one".
-  const candidate = deployments
+  const candidates = deployments
     .filter(
-      (d) =>
-        d?.uid &&
-        d.state === "READY" &&
-        d.uid !== liveId &&
-        d?.meta?.githubCommitSha &&
-        d.meta.githubCommitSha !== failingSha &&
-        (d.created ?? 0) < liveCreated,
+      (deployment) =>
+        deployment?.uid &&
+        deployment.state === "READY" &&
+        deployment.uid !== liveId &&
+        deployment?.meta?.githubCommitSha &&
+        deployment.meta.githubCommitSha !== failingSha &&
+        (deployment.created ?? 0) < liveCreated,
     )
-    .sort((a, b) => b.created - a.created)[0];
-
+    .sort((a, b) => b.created - a.created);
+  let candidate;
+  for (const deployment of candidates) {
+    if (await hasGreenProdHealthRun(fetchImpl, repository, githubToken, deployment.meta.githubCommitSha)) {
+      candidate = deployment;
+      break;
+    }
+  }
   if (!candidate) {
-    return { action: "skip", reason: "no qualifying older READY deployment found to promote" };
+    return { action: "skip", reason: "no older READY deployment with a green prod-health run found to promote" };
   }
 
-  // From here on, the live deployment is provably still `liveId` at the
-  // failing commit this rollback was invoked for.
   const deploymentId = candidate.uid;
   const inspectorUrl = candidate.inspectorUrl || "https://vercel.com/dashboard";
   try {
-    const res = await fetchImpl(`${API}/v10/projects/${projectId}/promote/${deploymentId}`, {
+    const res = await fetchImpl(`${VERCEL_API}/v10/projects/${projectId}/promote/${deploymentId}`, {
       method: "POST",
       headers: { Authorization: `Bearer ${token}` },
     });
     if (!res.ok || res.status < 200 || res.status >= 300) {
       return { action: "failed", reason: `promote request returned HTTP ${res.status}`, httpStatus: res.status };
     }
-    const verificationResult = await getJson(fetchImpl, `${API}/v9/projects/${PROJECT_SLUG}`, token);
+    const verificationResult = await requestJson(fetchImpl, `${VERCEL_API}/v9/projects/${PROJECT_SLUG}`, token);
     if (!verificationResult.ok) {
       return { action: "failed", reason: `post-promote verification failed: HTTP ${verificationResult.status}` };
     }
@@ -171,13 +346,91 @@ export async function emergencyRollback(failingSha, token, fetchImpl = fetch, de
   }
 }
 
+export async function emergencyRollback(
+  failingSha,
+  token,
+  fetchImpl = fetch,
+  delayImpl = delay,
+  {
+    durable = false,
+    repository = process.env.GITHUB_REPOSITORY || "",
+    githubToken = process.env.GITHUB_TOKEN || "",
+    runUrl = process.env.GITHUB_RUN_URL || "",
+  } = {},
+) {
+  if (!durable) {
+    const promotion = await promotePreviousDeployment(
+      failingSha,
+      token,
+      fetchImpl,
+      delayImpl,
+      { repository, githubToken },
+    );
+    return { ...promotion, revert: { action: "not_requested" }, freeze: false };
+  }
+
+  const freeze = await setMergeFreeze(repository, runUrl, githubToken, fetchImpl);
+  const revert = await createProductionRevert(failingSha, repository, githubToken, fetchImpl);
+  if (revert.action === "already_reverted") {
+    return {
+      action: "skip",
+      reason: `a revert of ${failingSha} already exists on production`,
+      revert,
+      freeze,
+    };
+  }
+
+  const promotion = await promotePreviousDeployment(
+    failingSha,
+    token,
+    fetchImpl,
+    delayImpl,
+    { repository, githubToken },
+  );
+  if (revert.action !== "created") {
+    return {
+      ...promotion,
+      action: "failed",
+      reason: `${revert.reason}; Vercel promotion ${promotion.action}: ${promotion.reason || promotion.deploymentId || "no details"}`,
+      revert,
+      freeze,
+    };
+  }
+  if (promotion.action === "requested") {
+    return { ...promotion, revert, freeze };
+  }
+  return {
+    action: "requested",
+    reason: `production revert created; Vercel promotion ${promotion.action}: ${promotion.reason || "no details"}`,
+    revert,
+    freeze,
+  };
+}
+
 async function main() {
   const failingSha = process.argv[2];
   if (!failingSha) {
     console.error("Usage: emergency-rollback.mjs <failing-sha>");
     process.exit(1);
   }
-  const result = await emergencyRollback(failingSha, process.env.VERCEL_TOKEN || "");
+  const repository = process.env.GITHUB_REPOSITORY || "";
+  const runUrl = process.env.GITHUB_RUN_URL || (
+    repository && process.env.GITHUB_RUN_ID
+      ? `${process.env.GITHUB_SERVER_URL || "https://github.com"}/${repository}/actions/runs/${process.env.GITHUB_RUN_ID}`
+      : ""
+  );
+  const result = await emergencyRollback(
+    failingSha,
+    process.env.VERCEL_TOKEN || "",
+    fetch,
+    delay,
+    {
+      durable: true,
+      repository,
+      githubToken: process.env.GITHUB_TOKEN || "",
+      runUrl,
+    },
+  );
   console.log(JSON.stringify(result));
 }
 
