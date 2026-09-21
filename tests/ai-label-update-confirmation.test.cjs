@@ -5,6 +5,7 @@ const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const path = require("node:path");
 
+const { readChatStreamSource } = require("./helpers/read-chat-stream-source.cjs");
 const root = path.resolve(__dirname, "..");
 const jiti = require("jiti")(path.join(root, "tests/ai-bulk-tools-entry.cjs"), {
   interopDefault: true,
@@ -108,10 +109,7 @@ test("a null due date still counts as a non-label change", () => {
 });
 
 test("the chat route decides the update gate through the shared helper", () => {
-  const routeSource = fs.readFileSync(
-    path.join(root, "src/app/api/ai/chat/stream/route.ts"),
-    "utf8"
-  );
+  const routeSource = readChatStreamSource();
 
   assert.match(routeSource, /updateTasksNeedConfirmation\(\{/);
   assert.doesNotMatch(

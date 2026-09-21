@@ -25,9 +25,9 @@ function sourceConstant(relativePath, constantName) {
   return match[1];
 }
 
-const ISSUER = sourceConstant("src/lib/mcp/auth.ts", "const JWT_ISSUER");
-const MCP_AUDIENCE = sourceConstant("src/lib/mcp/auth.ts", "JWT_MCP_AUDIENCE");
-const LEGACY_MCP_AUDIENCE = sourceConstant("src/lib/mcp/auth.ts", "JWT_LEGACY_MCP_AUDIENCE");
+const ISSUER = sourceConstant("src/lib/mcp/verifyJwt.ts", "const JWT_ISSUER");
+const MCP_AUDIENCE = sourceConstant("src/lib/mcp/verifyJwt.ts", "JWT_MCP_AUDIENCE");
+const LEGACY_MCP_AUDIENCE = sourceConstant("src/lib/mcp/verifyJwt.ts", "JWT_LEGACY_MCP_AUDIENCE");
 const CALENDAR_AUDIENCE = sourceConstant("src/app/api/calendar/feed/route.ts", "const CALENDAR_AUDIENCE");
 const VERIFICATION_AUDIENCE = sourceConstant(
   "src/app/api/auth/instant-signup/route.ts",

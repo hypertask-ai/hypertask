@@ -39,13 +39,14 @@ const UPDATE_FIELDS = [
 
 function loadDropEmptyPadding() {
   const source = fs.readFileSync(
-    path.join(__dirname, "../src/app/api/ai/chat/stream/route.ts"),
-    "utf8"
+    path.join(__dirname, "../src/app/api/ai/chat/stream/toolSupport.ts"),
+    "utf8",
   );
-  const start = source.indexOf("function dropEmptyPadding");
+  const start = source.indexOf("export function dropEmptyPadding");
   assert.notEqual(start, -1, "dropEmptyPadding must exist in the chat route");
-  const end = source.indexOf("/** Wraps a tool's execute", start);
-  const js = ts.transpileModule(source.slice(start, end), {
+  const end = source.indexOf("export function withToolErrors", start);
+  const implementation = source.slice(start, end).replace(/^export /gm, "");
+  const js = ts.transpileModule(implementation, {
     compilerOptions: { target: ts.ScriptTarget.ES2020 },
   }).outputText;
   return new Function(`${js}; return dropEmptyPadding;`)();

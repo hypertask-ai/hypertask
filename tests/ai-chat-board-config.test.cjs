@@ -6,6 +6,7 @@ const test = require("node:test");
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const path = require("node:path");
+const { readChatStreamSource } = require("./helpers/read-chat-stream-source.cjs");
 
 const ROUTE = path.resolve(
   __dirname,
@@ -24,7 +25,7 @@ function toolBody(source, toolName) {
 }
 
 test("hypertask_board_config uses direct data access without minting an MCP token", () => {
-  const source = fs.readFileSync(ROUTE, "utf8");
+  const source = readChatStreamSource();
   const body = toolBody(source, "hypertask_board_config");
 
   assert.match(
@@ -52,7 +53,7 @@ test("hypertask_board_config uses direct data access without minting an MCP toke
 });
 
 test("hypertask_board_config schema requires an explicit project_id", () => {
-  const source = fs.readFileSync(ROUTE, "utf8");
+  const source = readChatStreamSource();
   const body = toolBody(source, "hypertask_board_config");
 
   assert.match(body, /inputSchema: z\s*\.object\(\{/);
@@ -77,7 +78,7 @@ test("hypertask_board_config schema requires an explicit project_id", () => {
 });
 
 test("hypertask_board_config checks access before every direct write", () => {
-  const source = fs.readFileSync(ROUTE, "utf8");
+  const source = readChatStreamSource();
   const body = toolBody(source, "hypertask_board_config");
   const accessSource = fs.readFileSync(ACCESS_SERVICE, "utf8");
 
@@ -112,7 +113,7 @@ test("hypertask_board_config checks access before every direct write", () => {
 });
 
 test("hypertask_board_config mirrors MCP storage and response shapes", () => {
-  const source = fs.readFileSync(ROUTE, "utf8");
+  const source = readChatStreamSource();
   const body = toolBody(source, "hypertask_board_config");
 
   assert.match(body, /select: \{ id: true, playbook: true \}/);

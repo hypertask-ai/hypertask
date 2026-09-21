@@ -5,6 +5,7 @@ const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const path = require("node:path");
 
+const { readChatStreamSource } = require("./helpers/read-chat-stream-source.cjs");
 const root = path.resolve(__dirname, "..");
 const read = (relativePath) =>
   fs.readFileSync(path.join(root, relativePath), "utf8");
@@ -124,7 +125,7 @@ test("pause and resume are registered for MCP and AI chat", () => {
   const metadata = read("src/lib/mcp-server/config/tool-metadata.ts");
   const service = read("src/lib/mcp-server/lib/services/time.service.ts");
   const validation = read("src/lib/mcp-server/validations/time.validation.ts");
-  const aiChat = read("src/app/api/ai/chat/stream/route.ts");
+  const aiChat = readChatStreamSource();
 
   assert.match(tools, /pauseTimerTool/);
   assert.match(tools, /resumeTimerTool/);

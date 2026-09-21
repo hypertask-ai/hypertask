@@ -356,7 +356,7 @@ test("accepted Settings surface exposes six filters and read-only agent controls
 
 test("new mention and unassignment events are persisted at their domain transactions", () => {
   const assignments = read("src/utils/controllers/assignees/assign.ts");
-  const comments = read("src/utils/controllers/comments/createCommentService.ts");
+  const comments = read("src/utils/controllers/comments/commentCreation.ts");
 
   assert.equal(
     (assignments.match(/const unassignedEvent: WebhookDelivery = \{\s*event: "task\.unassigned"/g) ?? []).length,

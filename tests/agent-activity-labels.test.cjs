@@ -7,10 +7,14 @@ const source = fs.readFileSync(
   path.resolve(__dirname, "../src/app/api/agents/[agentId]/activity/route.ts"),
   "utf8",
 );
-const detailSource = fs.readFileSync(
-  path.resolve(__dirname, "../src/app/agents/[agentId]/AgentDetail.tsx"),
-  "utf8",
-);
+const detailSource = ["AgentConfigForm.tsx", "AgentRunHistory.tsx"]
+  .map((file) =>
+    fs.readFileSync(
+      path.resolve(__dirname, "../src/app/agents/[agentId]", file),
+      "utf8",
+    ),
+  )
+  .join("\n");
 
 // Activity rows are read by board owners, not by agent authors, so the label
 // has to name the event in product language. "Ran a turn" (HTPR-5473) is

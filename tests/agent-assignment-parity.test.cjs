@@ -3,6 +3,7 @@ const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const path = require("node:path");
 
+const { readChatStreamSource } = require("./helpers/read-chat-stream-source.cjs");
 const root = path.resolve(__dirname, "..");
 const jiti = require("jiti")(path.join(root, "tests/agent-assignment-parity-entry.cjs"), {
   interopDefault: true,
@@ -94,10 +95,7 @@ test("AI assignee resolver reports agents outside the task board clearly", () =>
 });
 
 test("AI assignment rechecks resolved agent membership on the task board", () => {
-  const source = fs.readFileSync(
-    path.join(root, "src/app/api/ai/chat/stream/route.ts"),
-    "utf8"
-  );
+  const source = readChatStreamSource();
   assert.match(source, /isAgentOnBoard\(task\.projectId, agentId\)/);
   assert.match(source, /\{ agent_id: agentId \}/);
 });

@@ -3,6 +3,7 @@ const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const path = require("node:path");
 
+const { readChatStreamSource } = require("./helpers/read-chat-stream-source.cjs");
 const root = path.resolve(__dirname, "..");
 const jiti = require("jiti")(
   path.join(root, "tests/mcp-rag-retrieval-entry.cjs"),
@@ -41,10 +42,7 @@ test("rag_retrieval is registered in MCP_TOOLS", () => {
 });
 
 test("chat and MCP import the shared board-knowledge retrieval", () => {
-  const chatSource = fs.readFileSync(
-    path.join(root, "src/app/api/ai/chat/stream/route.ts"),
-    "utf8",
-  );
+  const chatSource = readChatStreamSource();
   const serviceSource = fs.readFileSync(
     path.join(
       root,

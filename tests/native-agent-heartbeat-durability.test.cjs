@@ -4,6 +4,7 @@ const path = require("node:path");
 const test = require("node:test");
 const jitiModule = require("jiti");
 
+const { readChatStreamSource } = require("./helpers/read-chat-stream-source.cjs");
 const root = path.resolve(__dirname, "..");
 const read = (relativePath) =>
   fs.readFileSync(path.join(root, relativePath), "utf8");
@@ -415,7 +416,7 @@ test("the allowance notice is keyed to the month that actually rejected", () => 
 
 test("the allowance error carries the period it was rejected against", () => {
   const allowance = read("src/app/api/ai/_lib/sharedAllowance.ts");
-  const stream = read("src/app/api/ai/chat/stream/route.ts");
+  const stream = readChatStreamSource();
 
   // Without this the cron has nothing authoritative to deduplicate on.
   assert.match(allowance, /new SharedAiAllowanceExceededError\(month\.key\)/);
@@ -435,7 +436,7 @@ test("the allowance error carries the period it was rejected against", () => {
 });
 
 test("agent chat turns bill the team under the agent's own name", () => {
-  const stream = read("src/app/api/ai/chat/stream/route.ts");
+  const stream = readChatStreamSource();
   // The three spending paths of one chat turn are the main answer, its
   // empty-completion retry, and the thread-title call. Each must name the
   // acting agent, or the team is charged for work nobody can trace back.
@@ -450,12 +451,12 @@ test("agent chat turns bill the team under the agent's own name", () => {
   );
   // The title call receives its attribution through usageContext, so the type
   // has to carry the field or the value is silently dropped.
-  assert.match(read("src/app/api/ai/chat/stream/route.ts"), /agentId\?: string \| null;/);
+  assert.match(readChatStreamSource(), /agentId\?: string \| null;/);
 });
 
 test("heartbeat integration keeps timeout recovery, outbox delivery, and click routing safe", () => {
   const heartbeat = read("src/app/api/cron/native-agent-heartbeat/route.ts");
-  const stream = read("src/app/api/ai/chat/stream/route.ts");
+  const stream = readChatStreamSource();
   const auth = read("src/app/api/ai/_lib/cronServiceAuth.ts");
   const agentInbox = read(
     "src/utils/controllers/notifications/getStructuredInboxForAgent.ts",

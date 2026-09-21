@@ -4,6 +4,7 @@ const path = require("node:path");
 const test = require("node:test");
 const { createJiti } = require("jiti");
 
+const { readChatStreamSource } = require("./helpers/read-chat-stream-source.cjs");
 const root = path.resolve(__dirname, "..");
 const jiti = createJiti(__filename, {
   alias: { "@": path.join(root, "src") },
@@ -413,10 +414,7 @@ test("the stream guard rejects concurrent and excessive starts", async () => {
 });
 
 test("the stream and client use rollout-safe background persistence", () => {
-  const route = fs.readFileSync(
-    path.join(root, "src/app/api/ai/chat/stream/route.ts"),
-    "utf8",
-  );
+  const route = readChatStreamSource();
   const client = fs.readFileSync(
     path.join(root, "src/hooks/MultiPages/AIChat/useAiChat.ts"),
     "utf8",

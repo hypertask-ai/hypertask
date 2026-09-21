@@ -11,7 +11,7 @@ const SURFACES = [
   "src/components/PageComponents/Starred/StarredRowComp.tsx",
   "src/app/all-tasks/AllTasks.tsx",
   "src/app/scheduled/index.tsx",
-  "src/app/detail/[...slug]/TaskDetailComp.tsx",
+  "src/app/detail/[...slug]/taskDetailCommands.ts",
   "src/components/PageComponents/Kanban/KanbanTaskComponents/task.tsx",
   "src/components/PageComponents/Kanban/TableView/TableView.tsx",
 ];

@@ -3,6 +3,7 @@ const fs = require("node:fs");
 const path = require("node:path");
 const test = require("node:test");
 
+const { readAgentChatSource } = require("./helpers/read-agent-chat-source.cjs");
 const root = path.resolve(__dirname, "..");
 const jiti = require("jiti")(
   path.join(root, "tests/mobile-comment-viewport-jiti-entry.cjs"),
@@ -18,10 +19,7 @@ const {
   parseCssPixelLength,
 } = jiti(path.join(root, "src/lib/mobileCommentViewport.ts"));
 
-const chat = fs.readFileSync(
-  path.join(root, "src/app/agents/chat/AgentChatClient.tsx"),
-  "utf8",
-);
+const chat = readAgentChatSource();
 
 const QA_VIEWPORT_HEIGHT = 844;
 const QA_TAB_BAR_TOP = 779;

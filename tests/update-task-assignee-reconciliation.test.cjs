@@ -7,7 +7,7 @@ const source = fs.readFileSync(
   path.join(
     __dirname,
     "..",
-    "src/lib/mcp/tasks/updateTask.ts",
+    "src/lib/mcp/tasks/updateTaskOrchestrator.ts",
   ),
   "utf8",
 );

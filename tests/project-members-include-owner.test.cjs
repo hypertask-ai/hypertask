@@ -13,7 +13,7 @@ const path = require("node:path");
 
 const LIST_MEMBERS_CALL_SITES = [
   path.resolve(__dirname, "../src/app/api/mcp/projects/[projectId]/members/route.ts"),
-  path.resolve(__dirname, "../src/app/api/ai/chat/stream/route.ts"),
+  path.resolve(__dirname, "../src/lib/ai/tools/chat/hypertask_list_project_members.ts"),
 ];
 
 test("list-members endpoints call getProjectMembers without excluding the caller", () => {

@@ -4,9 +4,10 @@ const fs = require("node:fs");
 const path = require("node:path");
 const ts = require("typescript");
 
+const { readChatStreamSource } = require("./helpers/read-chat-stream-source.cjs");
 const root = path.resolve(__dirname, "..");
 const read = (file) => fs.readFileSync(path.join(root, file), "utf8");
-const route = read("src/app/api/ai/chat/stream/route.ts");
+const route = readChatStreamSource();
 
 function loadProfileNormalizer() {
   const source = read("src/utils/controllers/users/updateOwnProfile.ts");

@@ -3,12 +3,10 @@ const fs = require("node:fs");
 const path = require("node:path");
 const test = require("node:test");
 
+const { readAgentChatSource } = require("./helpers/read-agent-chat-source.cjs");
 const root = path.resolve(__dirname, "..");
 
-const chat = fs.readFileSync(
-  path.join(root, "src/app/agents/chat/AgentChatClient.tsx"),
-  "utf8",
-);
+const chat = readAgentChatSource();
 const keys = fs.readFileSync(path.join(root, "src/lib/flags/keys.ts"), "utf8");
 const flags = fs.readFileSync(path.join(root, "src/lib/flags.ts"), "utf8");
 const store = fs.readFileSync(path.join(root, "src/store/index.ts"), "utf8");

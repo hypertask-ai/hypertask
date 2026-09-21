@@ -138,7 +138,7 @@ test("createActivity and createCommentService stamp agentDisplayName on insert",
   const activity = read("src/utils/controllers/activities/createActivity.ts");
   assert.match(activity, /agentDisplayName: activityAgentDisplayName/);
   const comment = read(
-    "src/utils/controllers/comments/createCommentService.ts",
+    "src/utils/controllers/comments/commentCreation.ts",
   );
   assert.match(comment, /agentDisplayName: actingAgentName/);
 });
@@ -149,7 +149,7 @@ test("read paths gate durable attribution behind htpr-6516-agent-attribution", (
     "src/app/api/mcp/comments/[comment_id]/route.ts",
     "src/app/api/mcp/tasks/context/route.ts",
     "src/app/api/mcp/tasks/route.ts",
-    "src/app/api/ai/chat/stream/route.ts",
+    "src/lib/ai/tools/chat/hypertask_task_context.ts",
     "src/utils/controllers/taskDetail/load.ts",
   ]) {
     const source = read(relativePath);
@@ -342,7 +342,7 @@ test("MCP label writes pass the acting agent into the activity", () => {
   const services = read("src/lib/mcp/tasks/services.ts");
   assert.match(services, /fromAgent\?: ActingAgent \| null/);
   assert.equal(services.match(/fromAgent,/g)?.length >= 4, true);
-  const update = read("src/lib/mcp/tasks/updateTask.ts");
+  const update = read("src/lib/mcp/tasks/updateTaskOrchestrator.ts");
   assert.match(update, /fromAgent: actingAgent|actingAgent\n\s*\)/);
   assert.match(update, /select: actingAgentSelect/);
 });

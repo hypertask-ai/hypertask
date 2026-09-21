@@ -93,7 +93,7 @@ test("the delete scheduler refuses a foreign task before mutating it", () => {
 });
 
 test("comment creation refuses a foreign task before dedupe or writes", () => {
-  const service = read("src/utils/controllers/comments/createCommentService.ts");
+  const service = read("src/utils/controllers/comments/commentCreation.ts");
   assert.match(service, /taskWriteAccessWhere\(\s*accessUserId \?\? currentUser\.id,\s*agentId/);
   assertBefore(service, "const task = await prisma.task.findFirst", "const handledInvocation =", "comment access must be checked before idempotency checks can return data");
   assertBefore(service, "const task = await prisma.task.findFirst", "const duplicate =", "comment access must be checked before text dedupe can return data");

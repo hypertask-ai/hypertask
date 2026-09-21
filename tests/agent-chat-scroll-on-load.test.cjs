@@ -1,3 +1,4 @@
+const { readAgentChatSource } = require("./helpers/read-agent-chat-source.cjs");
 // HTPR-6099: after a page reload, the agent chat kept requiring a manual
 // scroll to reach the newest message. Root cause: the auto-follow effect
 // gated every scroll behind "the user hasn't scrolled away" -- but on a
@@ -110,10 +111,7 @@ test("queued ids are ignored while the queued strip isn't rendered", () => {
   );
 });
 
-const source = fs.readFileSync(
-  path.join(__dirname, "..", "src/app/agents/chat/AgentChatClient.tsx"),
-  "utf8",
-);
+const source = readAgentChatSource();
 
 test("the auto-follow effect also watches the queued/typing revision", () => {
   const start = source.indexOf("shouldAutoScrollToBottom({");

@@ -5,6 +5,7 @@ const test = require("node:test");
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const path = require("node:path");
+const { readChatStreamSource } = require("./helpers/read-chat-stream-source.cjs");
 
 const ROUTE = path.resolve(
   __dirname,
@@ -19,7 +20,7 @@ function toolBody(source, toolName) {
 }
 
 test("hypertask_project_admin is registered with explicit board administration warnings", () => {
-  const source = fs.readFileSync(ROUTE, "utf8");
+  const source = readChatStreamSource();
   const body = toolBody(source, "hypertask_project_admin");
 
   assert.match(
@@ -58,7 +59,7 @@ test("hypertask_project_admin is registered with explicit board administration w
 });
 
 test("hypertask_project_admin is registered as a write tool", () => {
-  const source = fs.readFileSync(ROUTE, "utf8");
+  const source = readChatStreamSource();
   const writeToolNamesStart = source.indexOf("const writeToolNames = new Set([");
   const writeToolNamesEnd = source.indexOf("]);", writeToolNamesStart);
   const writeToolNames = source.slice(writeToolNamesStart, writeToolNamesEnd);
@@ -71,7 +72,7 @@ test("hypertask_project_admin is registered as a write tool", () => {
 });
 
 test("hypertask_project_admin archive and restore are owner-only", () => {
-  const source = fs.readFileSync(ROUTE, "utf8");
+  const source = readChatStreamSource();
   const body = toolBody(source, "hypertask_project_admin");
   const archiveStart = body.indexOf('if (input.action === "archive")');
   const inviteAccessStart = body.indexOf(
@@ -91,7 +92,7 @@ test("hypertask_project_admin archive and restore are owner-only", () => {
 });
 
 test("hypertask_project_admin previews archive and restore without mutating", () => {
-  const source = fs.readFileSync(ROUTE, "utf8");
+  const source = readChatStreamSource();
   const body = toolBody(source, "hypertask_project_admin");
   const archiveStart = body.indexOf('if (input.action === "archive")');
   const inviteAccessStart = body.indexOf(
@@ -122,7 +123,7 @@ test("hypertask_project_admin previews archive and restore without mutating", ()
 });
 
 test("hypertask_project_admin confirmation names the exact board", () => {
-  const source = fs.readFileSync(ROUTE, "utf8");
+  const source = readChatStreamSource();
   const body = toolBody(source, "hypertask_project_admin");
 
   assert.match(body, /const boardTitle = project\.title \|\| project\.name/);
@@ -137,7 +138,7 @@ test("hypertask_project_admin confirmation names the exact board", () => {
 });
 
 test("hypertask_project_admin rejects a mismatched title, names both titles, and does not mutate", () => {
-  const source = fs.readFileSync(ROUTE, "utf8");
+  const source = readChatStreamSource();
   const body = toolBody(source, "hypertask_project_admin");
   const inviteAccessStart = body.indexOf(
     "const access = await validateProjectAccess(input.project_id, user.id)",
@@ -164,7 +165,7 @@ test("hypertask_project_admin rejects a mismatched title, names both titles, and
 });
 
 test("hypertask_project_admin archive with the exact trimmed title proceeds", () => {
-  const source = fs.readFileSync(ROUTE, "utf8");
+  const source = readChatStreamSource();
   const body = toolBody(source, "hypertask_project_admin");
   const inviteAccessStart = body.indexOf(
     "const access = await validateProjectAccess(input.project_id, user.id)",
@@ -181,7 +182,7 @@ test("hypertask_project_admin archive with the exact trimmed title proceeds", ()
 });
 
 test("hypertask_project_admin checks the title even when confirmed is true", () => {
-  const source = fs.readFileSync(ROUTE, "utf8");
+  const source = readChatStreamSource();
   const body = toolBody(source, "hypertask_project_admin");
   const inviteAccessStart = body.indexOf(
     "const access = await validateProjectAccess(input.project_id, user.id)",
@@ -203,7 +204,7 @@ test("hypertask_project_admin checks the title even when confirmed is true", () 
 });
 
 test("hypertask_project_admin keeps the archive update path after the gate and invite stays ungated", () => {
-  const source = fs.readFileSync(ROUTE, "utf8");
+  const source = readChatStreamSource();
   const body = toolBody(source, "hypertask_project_admin");
   const inviteAccessStart = body.indexOf(
     "const access = await validateProjectAccess(input.project_id, user.id)",
@@ -227,7 +228,7 @@ test("hypertask_project_admin keeps the archive update path after the gate and i
 });
 
 test("hypertask_project_admin dispatches user IDs and agent UUIDs differently", () => {
-  const source = fs.readFileSync(ROUTE, "utf8");
+  const source = readChatStreamSource();
   const body = toolBody(source, "hypertask_project_admin");
   const accessAt = body.indexOf(
     "validateProjectAccess(input.project_id, user.id)",

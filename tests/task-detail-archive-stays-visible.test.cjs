@@ -24,7 +24,7 @@ test("notification archive advances only from the inbox flow", () => {
 
 test("the task-detail E shortcut uses the inbox-flow navigation decision", () => {
   const taskDetail = fs.readFileSync(
-    path.join(root, "src/app/detail/[...slug]/TaskDetailComp.tsx"),
+    path.join(root, "src/app/detail/[...slug]/taskDetailCommands.ts"),
     "utf8",
   );
   const shortcutStart = taskDetail.indexOf("// press [e]");

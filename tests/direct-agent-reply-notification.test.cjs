@@ -15,7 +15,7 @@ const { directReplyStateForNotification } = jiti(
   ),
 );
 const serviceSource = fs.readFileSync(
-  path.join(root, "src/utils/controllers/comments/createCommentService.ts"),
+  path.join(root, "src/utils/controllers/comments/commentCreation.ts"),
   "utf8"
 );
 const hyperAiSource = fs.readFileSync(

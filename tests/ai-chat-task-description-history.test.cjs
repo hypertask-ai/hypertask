@@ -6,6 +6,7 @@ const test = require("node:test");
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const path = require("node:path");
+const { readChatStreamSource } = require("./helpers/read-chat-stream-source.cjs");
 
 const ROUTE = path.resolve(
   __dirname,
@@ -20,7 +21,7 @@ function toolBody(source, toolName) {
 }
 
 test("hypertask_task_description_history is registered in AI chat", () => {
-  const source = fs.readFileSync(ROUTE, "utf8");
+  const source = readChatStreamSource();
   const body = toolBody(source, "hypertask_task_description_history");
 
   assert.match(body, /action: z\.enum\(\["versions", "restore"\]\)/);
@@ -32,7 +33,7 @@ test("hypertask_task_description_history is registered in AI chat", () => {
 });
 
 test("hypertask_task_description_history is registered as a write tool", () => {
-  const source = fs.readFileSync(ROUTE, "utf8");
+  const source = readChatStreamSource();
   const writeToolNamesStart = source.indexOf("const writeToolNames = new Set([");
   const writeToolNamesEnd = source.indexOf("]);", writeToolNamesStart);
   const writeToolNames = source.slice(writeToolNamesStart, writeToolNamesEnd);
@@ -45,7 +46,7 @@ test("hypertask_task_description_history is registered as a write tool", () => {
 });
 
 test("task description restore checks project access before writing", () => {
-  const source = fs.readFileSync(ROUTE, "utf8");
+  const source = readChatStreamSource();
   const body = toolBody(source, "hypertask_task_description_history");
   const accessAt = body.indexOf(
     "validateProjectAccess(task.projectId, user.id)",

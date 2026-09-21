@@ -1210,7 +1210,13 @@ function loadAtomicCommentService(
     stub(relativePath, exports);
   }
   const servicePath = "src/utils/controllers/comments/createCommentService.ts";
-  delete require.cache[path.join(root, servicePath)];
+  for (const relativePath of [
+    servicePath,
+    "src/utils/controllers/comments/commentCreation.ts",
+    "src/utils/controllers/comments/commentNotificationFanout.ts",
+  ]) {
+    delete require.cache[path.join(root, relativePath)];
+  }
   return load(servicePath).createCommentService;
 }
 

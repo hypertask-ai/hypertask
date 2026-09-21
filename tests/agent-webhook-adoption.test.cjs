@@ -7,6 +7,7 @@ const { JSDOM } = require("jsdom");
 const jitiModule = require("jiti");
 const { z } = require("zod");
 
+const { readChatStreamSource } = require("./helpers/read-chat-stream-source.cjs");
 const root = path.resolve(__dirname, "..");
 const read = (file) => fs.readFileSync(path.join(root, file), "utf8");
 const jiti = jitiModule.createJiti
@@ -40,7 +41,7 @@ test("MCP, AI Chat, and HyperAI expose the agent webhook contract safely", () =>
   const registry = read("src/lib/mcp-server/tools/index.ts");
   const metadata = read("src/lib/mcp-server/config/tool-metadata.ts");
   const validation = read("src/lib/mcp-server/validations/webhook.validation.ts");
-  const aiChat = read("src/app/api/ai/chat/stream/route.ts");
+  const aiChat = readChatStreamSource();
   const hyperAi = read("src/app/api/ai/_lib/hyperAiTools.ts");
 
   assert.match(registry, /agentWebhookTool/);

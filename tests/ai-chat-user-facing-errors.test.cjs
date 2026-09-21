@@ -4,10 +4,16 @@ const fs = require("node:fs");
 const path = require("node:path");
 const ts = require("typescript");
 const z = require("zod");
+const { readChatStreamSource } = require("./helpers/read-chat-stream-source.cjs");
 
-const routeSource = fs.readFileSync(
-  path.join(__dirname, "../src/app/api/ai/chat/stream/route.ts"),
-  "utf8"
+const routeSource = readChatStreamSource();
+const toolSupportSource = fs.readFileSync(
+  path.join(__dirname, "../src/app/api/ai/chat/stream/toolSupport.ts"),
+  "utf8",
+);
+const chatStreamSupportSource = fs.readFileSync(
+  path.join(__dirname, "../src/app/api/ai/chat/stream/chatStreamSupport.ts"),
+  "utf8",
 );
 
 function loadToErrorMessage() {
@@ -20,12 +26,29 @@ function loadToErrorMessage() {
 }
 
 function loadErrorFormatters(logs = []) {
-  const start = routeSource.indexOf("function errorMessage");
-  assert.notEqual(start, -1, "errorMessage must exist in the chat route");
-  const end = routeSource.indexOf("async function reportHandledChatError", start);
-  assert.notEqual(end, -1, "reportHandledChatError must follow the formatters");
+  const errorStart = toolSupportSource.indexOf("export function errorMessage");
+  const errorEnd = toolSupportSource.indexOf(
+    "export function trackToolSetExecutions",
+    errorStart,
+  );
+  const formatterStart = chatStreamSupportSource.indexOf(
+    "export function includedAllowanceError",
+  );
+  const formatterEnd = chatStreamSupportSource.indexOf(
+    "export async function reportHandledChatError",
+    formatterStart,
+  );
+  assert.ok(errorStart >= 0 && errorEnd > errorStart, "errorMessage must exist");
+  assert.ok(
+    formatterStart >= 0 && formatterEnd > formatterStart,
+    "user-facing formatters must exist",
+  );
 
-  const javascript = ts.transpileModule(routeSource.slice(start, end), {
+  const formatterSource = `${toolSupportSource.slice(errorStart, errorEnd)}\n${chatStreamSupportSource.slice(formatterStart, formatterEnd)}`.replace(
+    /^export /gm,
+    "",
+  );
+  const javascript = ts.transpileModule(formatterSource, {
     compilerOptions: { target: ts.ScriptTarget.ES2020 },
   }).outputText;
   const logger = { error: (...args) => logs.push(args) };
@@ -43,7 +66,10 @@ function loadChatRequestSchema() {
   const end = routeSource.indexOf("type ChatRequest", start);
   assert.notEqual(end, -1, "ChatRequest must follow the request schema");
 
-  const javascript = ts.transpileModule(routeSource.slice(start, end), {
+  const schemaSource = routeSource
+    .slice(start, end)
+    .replace(/^export /gm, "");
+  const javascript = ts.transpileModule(schemaSource, {
     compilerOptions: { target: ts.ScriptTarget.ES2020 },
   }).outputText;
   return new Function("z", `${javascript}; return chatRequestSchema;`)(z);

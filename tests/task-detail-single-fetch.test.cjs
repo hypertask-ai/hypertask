@@ -17,7 +17,7 @@ const { markTaskSeen } = jiti(
 
 test("HTPR-6047: TaskDetailComp does not hold its own comments query", () => {
   const src = fs.readFileSync(
-    path.join(__dirname, "..", "src/app/detail/[...slug]/TaskDetailComp.tsx"),
+    path.join(__dirname, "..", "src/app/detail/[...slug]/TaskDetailController.tsx"),
     "utf8",
   );
   // DescriptionAndCommentsProvider's useCommentAndDescriptions is the one

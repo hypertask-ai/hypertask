@@ -64,10 +64,11 @@ assert.match(
   "a task search failure must reject the client request instead of looking empty",
 );
 
-const source = fs.readFileSync(
-  path.join(root, "src/app/agents/chat/AgentChatClient.tsx"),
-  "utf8",
-);
+const source = ["useAgentLifecycle.tsx", "useAgentChatView.tsx"]
+  .map((file) =>
+    fs.readFileSync(path.join(root, "src/app/agents/chat", file), "utf8"),
+  )
+  .join("\n");
 const searchEffect = source.slice(
   source.indexOf("// Same endpoint and request shape"),
   source.indexOf("const pickMention"),
