@@ -6,7 +6,6 @@ import { MobileViewContext } from "@/lib/contexts/mobileContext";
 import { QueryClient } from "@tanstack/react-query";
 import { PersistQueryClientProvider } from "@tanstack/react-query-persist-client";
 import { StateRoot } from "@/lib/state";
-import { currentUserAtom } from "@/store";
 import { AuthProvider } from "@/hooks/General/useAuth";
 import GlobalProvider from "@/components/ProviderGlobal/GloablProviders";
 import MobileViewProvider from "@/lib/contexts/mobileContext";
@@ -25,7 +24,6 @@ import {
   CHUNK_RELOAD_STORAGE_KEY,
   stripChunkRecoveryParam,
 } from "@/utils/helperFunctions/chunkLoadRecovery";
-import type { IUser } from "@/models/model";
 
 // Never persist the inbox: a restored snapshot can predate an archive, and while it is
 // still within staleTime react-query serves it without refetching, so an archived
@@ -95,13 +93,11 @@ export default function Provider({
   initialIsMobile,
   initialIsApple,
   authenticatedUserId,
-  initialCurrentUser,
 }: {
   children: ReactNode;
   initialIsMobile: boolean;
   initialIsApple: boolean;
   authenticatedUserId: number | null;
-  initialCurrentUser: IUser | null;
 }) {
   const pathname = usePathname();
   const publicShare = isPublicSharePath(pathname);
@@ -162,7 +158,7 @@ export default function Provider({
           {/* MobileViewProvider wraps UndoProvider: the undo pipeline reads
               the viewport to anchor the toast left on mobile (HTPR-5564). */}
           <MobileViewProvider initialIsMobile={initialIsMobile}>
-            <StateRoot initialValues={[[currentUserAtom, initialCurrentUser]]}>
+            <StateRoot>
               <UndoProvider>
                 <MobileBlockingProvider>
                   <AuthProvider authenticatedUserId={authenticatedUserId}>

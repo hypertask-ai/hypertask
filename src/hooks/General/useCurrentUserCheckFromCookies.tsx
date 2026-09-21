@@ -9,7 +9,6 @@ const useCurrentUser = (authenticatedUserId?: number | null) => {
   const [currentUser, setCurrentUser] = useState<any>(null);
   const [_, setRecoilCurrentUser] = useRecoilState(currentUserAtom);
   const recoilUser = useRecoilValue(currentUserAtom);
-  const initialRecoilUserRef = useRef(recoilUser);
   const lastSyncedRef = useRef<any>(null);
   
   // Read from cookies on mount
@@ -25,9 +24,7 @@ const useCurrentUser = (authenticatedUserId?: number | null) => {
         (authenticatedUserId == null || user.id === authenticatedUserId)
       ) {
         setCurrentUser(user);
-        if (initialRecoilUserRef.current?.id !== user.id) {
-          setRecoilCurrentUser(user);
-        }
+        setRecoilCurrentUser(user);
         lastSyncedRef.current = user;
       } else if (authenticatedUserId != null) {
         setCurrentUser(null);

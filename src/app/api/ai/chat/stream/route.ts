@@ -13,7 +13,6 @@ import {
   type FilePart,
   type LanguageModel,
   type ModelMessage,
-  type SystemModelMessage,
   type ToolSet,
   type UserContent,
 } from "ai";
@@ -69,19 +68,6 @@ import {
 } from "@/lib/telemetry/aiChatObservability";
 import { searchHelpDocs } from "@/lib/help-docs/searchHelpDocs";
 import { retrieveBoardKnowledge } from "@/lib/rag/retrieveBoardKnowledge";
-import {
-  CHAT_MAX_OUTPUT_TOKENS,
-  MAX_CONTEXT_LIST_CHARS,
-  chatMaxOutputTokens,
-  MAX_DEFAULT_CONTEXT_CHARS,
-  MAX_DOCUMENT_CONTEXT_CHARS,
-  MAX_HISTORY_SUMMARY_CHARS,
-  compactChatHistory,
-  stringifyPromptValue,
-  subsetToolsForTurn,
-  truncatePromptText,
-  withAnthropicToolCacheBreakpoint,
-} from "@/lib/ai/chatTokenBudget";
 import { logAiUsage } from "@/app/api/ai/_lib/aiUsage";
 import {
   loadCurrentTaskContext,
@@ -666,7 +652,6 @@ const chatRequestSchema = z.object({
     )
     .nullable()
     .optional(),
-  chat_history_summary: z.string().max(3_000).optional(),
   images64: z.array(attachmentSchema).nullable().optional(),
   pdfs64: z.array(attachmentSchema).nullable().optional(),
   docx64: z.array(attachmentSchema).nullable().optional(),
@@ -1286,8 +1271,7 @@ function selectModel(
   modelId: string | null | undefined,
   byokCredential: AiModelCredential | undefined,
   modelOption?: TAiModelOption,
-  tags?: AiGatewayTags,
-  maxOutputTokens = CHAT_MAX_OUTPUT_TOKENS,
+  tags?: AiGatewayTags
 ): {
   model: LanguageModel;
   settings: { temperature?: number; maxOutputTokens?: number };
@@ -1313,10 +1297,7 @@ function selectModel(
         model: aiModel,
         resolvedModelId: model,
         usageProvider,
-        settings: {
-          ...(claudeAcceptsTemperature(model) ? { temperature: 0.2 } : {}),
-          maxOutputTokens,
-        },
+        settings: claudeAcceptsTemperature(model) ? { temperature: 0.2 } : {},
         providerOptions: providerOptionsForAiModel(
           aiModel,
           "chat",
@@ -1337,7 +1318,6 @@ function selectModel(
         usageProvider,
         settings: {
           temperature: model.toLowerCase().startsWith("gpt-5") ? 1 : 0.2,
-          maxOutputTokens,
         },
         providerOptions: providerOptionsForAiModel(
           aiModel,
@@ -1354,7 +1334,7 @@ function selectModel(
         model: aiModel,
         resolvedModelId: model,
         usageProvider,
-        settings: { temperature: 0.2, maxOutputTokens },
+        settings: { temperature: 0.2, maxOutputTokens: 16000 },
         providerOptions: providerOptionsForAiModel(aiModel, "chat", tags),
       };
     }
@@ -1370,7 +1350,7 @@ function selectModel(
         model: aiModel,
         resolvedModelId: model,
         usageProvider,
-        settings: { temperature: 0.2, maxOutputTokens },
+        settings: { temperature: 0.2, maxOutputTokens: 16000 },
         providerOptions: providerOptionsForAiModel(
           aiModel,
           "chat",
@@ -1387,7 +1367,7 @@ function selectModel(
         model: resolveAiModel(provider, "custom", byokCredential),
         resolvedModelId: byokCredential.modelId,
         usageProvider,
-        settings: { temperature: 0.2, maxOutputTokens },
+        settings: { temperature: 0.2, maxOutputTokens: 16000 },
       };
     }
   }
@@ -1452,41 +1432,31 @@ function formatTemporalContext(timezone = "UTC") {
   );
 }
 
-function formatChatHistory(
-  chatHistory: ChatRequest["chat_history"],
-  suppliedSummary: string | undefined,
-) {
-  const compacted = compactChatHistory(chatHistory);
-  const summary = truncatePromptText(
-    [suppliedSummary, compacted.summary].filter(Boolean).join("\n"),
-    MAX_HISTORY_SUMMARY_CHARS,
-  );
-  if (!compacted.recent.length && !summary) return "No previous conversation.";
+function formatChatHistory(chatHistory: ChatRequest["chat_history"]) {
+  if (!chatHistory?.length) return "No previous conversation.";
+  const messages = chatHistory
+    .slice(-15)
+    .map((message, index) => ({
+      index,
+      role: message.role?.toLowerCase() === "assistant" ? "assistant" : "human",
+      content: message.content || "",
+    }))
+    .filter((message) => message.content.trim().length > 0);
 
-  const immediate = compacted.recent.slice(-3);
-  const recent = compacted.recent.slice(0, -3);
-  const parts = [
-    "=== CURRENT TIME CONTEXT ===",
-    `[Current Time: ${new Date().toISOString()}]`,
-    "",
-  ];
+  if (messages.length === 0) return "No readable conversation history.";
 
-  if (summary) {
-    parts.push("=== SUMMARY OF EARLIER CONVERSATION ===", summary, "");
-  }
-  if (recent.length) {
-    parts.push("=== RECENT CONVERSATION HISTORY ===");
-    for (const message of recent) {
-      const roleLabel = message.role === "assistant" ? "YOU SAID" : "USER SAID";
-      parts.push(`${roleLabel}: ${message.content}`);
-    }
-    parts.push("");
-  }
+  const immediate = messages.slice(-3);
+  const recent = messages.slice(Math.max(0, messages.length - 10), -3);
+  const earlier = messages.slice(0, Math.max(0, messages.length - 10));
+  const parts: string[] = [];
+
+  parts.push("=== CURRENT TIME CONTEXT ===");
+  parts.push(`[Current Time: ${new Date().toISOString()}]`);
+  parts.push("");
+
   if (immediate.length) {
-    parts.push(
-      "=== IMMEDIATE CONVERSATIONAL CONTEXT ===",
-      "(This is the most important context for your response)",
-    );
+    parts.push("=== IMMEDIATE CONVERSATIONAL CONTEXT ===");
+    parts.push("(This is the most important context for your response)");
     immediate.forEach((message, index) => {
       const roleLabel =
         message.role === "assistant"
@@ -1495,6 +1465,24 @@ function formatChatHistory(
             ? "USER IS NOW ASKING"
             : "USER ASKED";
       parts.push(`${roleLabel}: ${message.content}`);
+    });
+    parts.push("");
+  }
+
+  if (recent.length) {
+    parts.push("=== RECENT CONVERSATION HISTORY ===");
+    recent.forEach((message) => {
+      const roleLabel = message.role === "assistant" ? "YOU SAID" : "USER SAID";
+      parts.push(`${roleLabel}: ${message.content}`);
+    });
+    parts.push("");
+  }
+
+  if (earlier.length) {
+    parts.push("=== EARLIER CONVERSATION ===");
+    earlier.slice(-6).forEach((message) => {
+      const roleLabel = message.role === "assistant" ? "YOU" : "USER";
+      parts.push(`[${roleLabel}]: ${message.content}`);
     });
   }
 
@@ -1521,6 +1509,14 @@ function withHigherEffort(
   return next;
 }
 
+function stringifyForPrompt(value: unknown) {
+  try {
+    return JSON.stringify(value ?? {}, null, 2);
+  } catch {
+    return String(value ?? "");
+  }
+}
+
 function createDocumentContext(body: ChatRequest) {
   const files = [
     ...(body.images64 ?? []),
@@ -1528,16 +1524,13 @@ function createDocumentContext(body: ChatRequest) {
     ...(body.docx64 ?? []),
   ];
   if (files.length === 0) return "";
-  return truncatePromptText(
-    files
-      .map((file) => {
-        const type = file.mimeType || "unknown";
-        const name = file.fileName || "unnamed attachment";
-        return `- ${name} (${type})`;
-      })
-      .join("\n"),
-    MAX_DOCUMENT_CONTEXT_CHARS,
-  );
+  return files
+    .map((file) => {
+      const type = file.mimeType || "unknown";
+      const name = file.fileName || "unnamed attachment";
+      return `- ${name} (${type})`;
+    })
+    .join("\n");
 }
 
 function createUserPrompt(
@@ -1553,14 +1546,14 @@ function createUserPrompt(
                     : ""
                 }
                 User query: ${body.message}
-                CHAT HISTORY: ${formatChatHistory(body.chat_history, body.chat_history_summary)}
-                context_list: ${stringifyPromptValue(body.context_list, MAX_CONTEXT_LIST_CHARS)}
-                default_context: ${stringifyPromptValue(body.default_context, MAX_DEFAULT_CONTEXT_CHARS)}
-                user_context: ${stringifyPromptValue({
+                CHAT HISTORY: ${formatChatHistory(body.chat_history)}
+                context_list: ${stringifyForPrompt(body.context_list)}
+                default_context: ${stringifyForPrompt(body.default_context)}
+                user_context: ${stringifyForPrompt({
                   id: authedUser.id,
                   email: authedUser.email,
                   displayName: authedUser.displayName,
-                }, MAX_DEFAULT_CONTEXT_CHARS)}
+                })}
                 document_context: ${createDocumentContext(body)}
                 ${
                   isLiveTaskListRequest(body.message)
@@ -1923,6 +1916,8 @@ function mapTaskSearchItem(task: any, userId: number) {
     // the path from `id` (global DB id, not the ticket number).
     url: `/detail/project-${task.projectId}/${task.uniqueIndex}`,
     title: task.title,
+    // Descriptions carry inline base64 images for the same reason comments do.
+    description: stripInlineDataUris(task.description),
     boardId: task.projectId,
     boardTitle: task.project.title || "",
     projectId: task.projectId,
@@ -4297,6 +4292,7 @@ function buildTools(
               uniqueIndex: true,
               title: true,
               section: true,
+              description_: true,
               sectionId: true,
               parentTaskId: true,
               projectId: true,
@@ -4352,6 +4348,7 @@ function buildTools(
               // Use this verbatim for links; never build the path from `id`.
               url: `/detail/project-${task.projectId}/${task.uniqueIndex}`,
               title: task.title,
+              description: mapTaskDescriptionContent(task),
               section: task.section,
               sectionId: task.sectionId || undefined,
               boardId: task.projectId,
@@ -4611,6 +4608,7 @@ function buildTools(
               ticketNumber: true,
               uniqueIndex: true,
               title: true,
+              description: true,
               section: true,
               projectId: true,
               project: { select: { id: true, title: true } },
@@ -4688,10 +4686,7 @@ function buildTools(
                 projectId: input.project_id,
                 status: { not: "Deleted" },
               },
-              include: {
-                ...taskMcpGetInclude(user.id),
-                description_: true,
-              },
+              include: taskMcpGetInclude(user.id),
             }),
             prisma.comment.count({ where: commentWhere }),
             prisma.comment.findMany({
@@ -4798,7 +4793,7 @@ function buildTools(
           };
         });
         const linkedPRs = extractPrLinks(
-          mapTaskDescriptionContent(task),
+          mappedTask.description,
           ...prComments.flatMap((comment) => [comment.text, comment.commentText])
         );
 
@@ -10183,8 +10178,7 @@ export async function POST(request: NextRequest) {
       selection.model,
       byokApiKey,
       selection.modelOption,
-      gatewayTags,
-      chatMaxOutputTokens(body.message),
+      gatewayTags
     );
     selected = {
       ...resolvedModel,
@@ -10672,18 +10666,13 @@ export async function POST(request: NextRequest) {
             `agent, not the human you're talking to.` +
             (actingAgent.prompt ? ` Follow these instructions:\n${actingAgent.prompt}` : "")
           : null;
-        const instructions: SystemModelMessage[] = [
-          {
-            role: "system",
-            content: AGENT_SYSTEM_PROMPT,
-            providerOptions: {
-              anthropic: { cacheControl: { type: "ephemeral" } },
-            },
-          },
-          ...[skillResolution.systemPromptAddition, agentPromptAddition]
-            .filter((content): content is string => Boolean(content))
-            .map((content) => ({ role: "system" as const, content })),
-        ];
+        const instructions = [
+          AGENT_SYSTEM_PROMPT,
+          skillResolution.systemPromptAddition,
+          agentPromptAddition,
+        ]
+          .filter(Boolean)
+          .join("\n\n");
         // Always load the ticket the user is viewing so the chat can answer
         // about "this ticket" without depending on the model choosing to search.
         const currentTaskContext = await loadCurrentTaskContext(
@@ -10699,7 +10688,7 @@ export async function POST(request: NextRequest) {
           },
         ];
         const toolExecutions: ToolExecution[] = [];
-        const allTools = buildTools(
+        const tools = buildTools(
           dbUser,
           resolvedBody,
           send,
@@ -10732,21 +10721,6 @@ export async function POST(request: NextRequest) {
             }
           },
           heartbeatTurn?.metadata
-        );
-        const tools = withAnthropicToolCacheBreakpoint(
-          subsetToolsForTurn(allTools, {
-            message: resolvedBody.message,
-            recentHistory: resolvedBody.chat_history ?? undefined,
-            hasAgentMention:
-              extractMentionedAgentIds(resolvedBody.context_list).length > 0,
-            hasTaskContext: Boolean(resolvedBody.default_context?.task_id),
-            hasAttachments: Boolean(
-              resolvedBody.attachments?.length ||
-              resolvedBody.images64?.length ||
-              resolvedBody.pdfs64?.length ||
-              resolvedBody.docx64?.length,
-            ),
-          }) as ToolSet,
         );
         if (
           heartbeatExecutionId &&
@@ -10800,8 +10774,6 @@ export async function POST(request: NextRequest) {
               inputTokens: usage.inputTokens ?? 0,
               outputTokens: usage.outputTokens ?? 0,
               totalTokens: usage.totalTokens ?? 0,
-              cacheReadInputTokens: usage.inputTokenDetails.cacheReadTokens ?? 0,
-              cacheWriteInputTokens: usage.inputTokenDetails.cacheWriteTokens ?? 0,
             });
           },
           onError: async ({ error }) => {
@@ -10915,10 +10887,6 @@ export async function POST(request: NextRequest) {
                 inputTokens: retry.usage.inputTokens ?? 0,
                 outputTokens: retry.usage.outputTokens ?? 0,
                 totalTokens: retry.usage.totalTokens ?? 0,
-                cacheReadInputTokens:
-                  retry.usage.inputTokenDetails.cacheReadTokens ?? 0,
-                cacheWriteInputTokens:
-                  retry.usage.inputTokenDetails.cacheWriteTokens ?? 0,
               });
               const retryText = retry.text?.trim() ?? "";
               if (retryText) {

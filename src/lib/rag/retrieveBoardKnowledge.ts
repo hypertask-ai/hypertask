@@ -1,9 +1,4 @@
 import prisma from "@/lib/prisma";
-import {
-  MAX_RAG_DOCUMENT_CHARS,
-  excerptAroundQuery,
-  truncatePromptText,
-} from "@/lib/ai/chatTokenBudget";
 import { getProjectWhere } from "@/utils/controllers/projects/getAllIncludes";
 import {
   searchComments,
@@ -107,26 +102,6 @@ function stringFilterValue(
 ) {
   const raw = metadataFilterValue(filters, keys);
   return typeof raw === "string" && raw.trim() ? raw.trim() : undefined;
-}
-
-function ragDocumentContent(
-  metadata: Array<[label: string, value: string | number | undefined]>,
-  bodyLabel: string,
-  body: string,
-  query: string,
-): string {
-  const metadataText = metadata
-    .filter((entry): entry is [string, string | number] => entry[1] !== undefined)
-    .map(([label, value]) => `${label}: ${String(value).slice(0, 120)}`)
-    .join("\n");
-  if (!body) return truncatePromptText(metadataText, MAX_RAG_DOCUMENT_CHARS);
-
-  const bodyPrefix = `${metadataText}\n${bodyLabel}: `;
-  const bodyBudget = MAX_RAG_DOCUMENT_CHARS - bodyPrefix.length;
-  if (bodyBudget <= 0) {
-    return truncatePromptText(metadataText, MAX_RAG_DOCUMENT_CHARS);
-  }
-  return bodyPrefix + excerptAroundQuery(body, query, bodyBudget);
 }
 
 function applyMetadataFilters<
@@ -240,17 +215,15 @@ export async function retrieveBoardKnowledge(
       projectId: row.projectId,
       ticketNumber: row.ticketNumber,
       title: row.title,
-      content: ragDocumentContent(
-        [
-          ["Task", row.title],
-          ["Ticket", row.ticketNumber || undefined],
-          ["Project", row.projectTitle],
-          ["Status", row.status],
-        ],
-        "Description",
-        row.descriptionText || "",
-        input.query,
-      ),
+      content: [
+        `Task: ${row.title}`,
+        row.ticketNumber ? `Ticket: ${row.ticketNumber}` : "",
+        row.descriptionText ? `Description: ${row.descriptionText}` : "",
+        `Project: ${row.projectTitle}`,
+        `Status: ${row.status}`,
+      ]
+        .filter(Boolean)
+        .join("\n"),
       updatedAt: row.updatedAt,
       uniqueIndex: row.uniqueIndex,
     })),
@@ -261,17 +234,15 @@ export async function retrieveBoardKnowledge(
       projectId: row.projectId,
       ticketNumber: row.taskTicketNumber,
       title: row.taskTitle,
-      content: ragDocumentContent(
-        [
-          ["Comment on", row.taskTitle],
-          ["Ticket", row.taskTicketNumber || undefined],
-          ["Project", row.taskProjectTitle],
-          ["Task status", row.taskStatus],
-        ],
-        "Comment",
-        row.commentText,
-        input.query,
-      ),
+      content: [
+        `Comment on: ${row.taskTitle}`,
+        row.taskTicketNumber ? `Ticket: ${row.taskTicketNumber}` : "",
+        `Comment: ${row.commentText}`,
+        `Project: ${row.taskProjectTitle}`,
+        `Task status: ${row.taskStatus}`,
+      ]
+        .filter(Boolean)
+        .join("\n"),
       createdAt: row.createdAt,
       uniqueIndex: row.taskUniqueIndex,
     })),

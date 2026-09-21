@@ -59,7 +59,6 @@ import { useCurrentBoardBilling } from "@/hooks/General/useCurrentBoardBilling";
 import { useFlag } from "@/hooks/useFlag";
 import { HTPR_6278_CHAT_TURN_FAILURE_FLAG } from "@/lib/flags/keys";
 import { extractStreamRefusalMessage } from "@/lib/aiChat/streamRefusal";
-import { compactChatHistory } from "@/lib/ai/chatTokenBudget";
 import { shouldBlockAiDueToByokProvider } from "@/lib/byokSelectedProviderGate";
 import { useAiModelPreference } from "@/hooks/General/useAiModelPreference";
 import { isGuestCookieUser } from "@/lib/demo/isGuestClient";
@@ -1158,12 +1157,10 @@ export function useAiChat() {
       attachments: messageAttachments,
     };
 
-    const chatHistory = compactChatHistory(
-      session.messages.map((message) => ({
-        content: message.content,
-        role: message.role,
-      })),
-    );
+    const chatHistory = session.messages.map((message) => ({
+      content: message.content,
+      role: message.role,
+    }));
 
     addMessageToSessionQuery(
       session.id,
@@ -1217,8 +1214,7 @@ export function useAiChat() {
         email: currentUser?.email,
         displayName: currentUser?.displayName,
       },
-      chat_history: chatHistory.recent,
-      chat_history_summary: chatHistory.summary || undefined,
+      chat_history: chatHistory,
       attachments: processedAttachments,
       images64,
       pdfs64,

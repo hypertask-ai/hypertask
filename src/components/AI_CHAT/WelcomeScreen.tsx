@@ -12,7 +12,6 @@ import { GuestBoardSpotlight } from "./GuestBoardSpotlight"
 import formatDateDifference from "@/utils/generateTime"
 import { Sparkles } from "lucide-react"
 import { taskSummaryActionFor } from "./taskSummaryAction"
-import { useHydrated } from "@/hooks/General/useHydrated"
 
 type TaskSessionSummary = {
   id: string;
@@ -80,7 +79,6 @@ export const WelcomeScreen = () => {
   const { handleSendMessage, isDetailPage, selectSession, editor } =
     useAiChatContext();
   const pathname = usePathname();
-  const hydrated = useHydrated();
   // HTPR-4303: guests live on the real board, not /demo — key off identity.
   const isDemo = (pathname?.startsWith("/demo") ?? false) || isGuestCookieUser();
   const isFullScreenChat = pathname?.startsWith("/chat") ?? false;
@@ -137,8 +135,6 @@ export const WelcomeScreen = () => {
     refetchOnWindowFocus: false,
   });
   const suggestions = useMemo(() => {
-    if (!hydrated) return SUGGESTED_QUERIES_POOL.slice(0, QUERIES_TO_SHOW);
-
     // ponytail: demo prompts stay fixed so anonymous visitors immediately see
     // the four read-only project-management jobs this v1 chat can do.
     if (isDemo) return DEMO_QUERIES;
@@ -214,7 +210,6 @@ export const WelcomeScreen = () => {
 
     return shuffleAndTake(pool, QUERIES_TO_SHOW);
   }, [
-    hydrated,
     isDemo,
     ticketRef,
     isFullScreenChat,

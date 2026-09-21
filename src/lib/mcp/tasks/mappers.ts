@@ -1,4 +1,3 @@
-import { HTMLElement, Node, parse } from 'node-html-parser';
 import {
     mapAttributedMcpAgent,
     mapVisibleMcpAgent,
@@ -21,47 +20,6 @@ export function mapTaskDescriptionContent(task: {
     description?: string;
 }): string {
     return task.description_?.content || task.description || '';
-}
-
-function safeDescriptionUrl(value: string | undefined): string | undefined {
-    const url = value?.trim();
-    return url && (/^https?:\/\//i.test(url) || url.startsWith('/'))
-        ? url
-        : undefined;
-}
-
-function descriptionNodeText(node: Node): string {
-    if (node.nodeType === 3) return node.text;
-    if (!(node instanceof HTMLElement)) return '';
-
-    const tagName = String(node.rawTagName ?? '').toLowerCase();
-    if (tagName === 'script' || tagName === 'style') return '';
-    if (tagName === 'br') return ' ';
-    if (tagName === 'img') {
-        const source = safeDescriptionUrl(node.getAttribute('src'));
-        return source ? `[image: ${source}]` : '';
-    }
-
-    const content = node.childNodes.map(descriptionNodeText).join(' ').trim();
-    if (tagName !== 'a') return content;
-    const href = safeDescriptionUrl(node.getAttribute('href'));
-    if (!href || content === href) return content || href || '';
-    return `${content} (${href})`;
-}
-
-export function mapTaskDescriptionText(task: {
-    description_?: { content?: string } | null;
-    description?: string;
-}): string {
-    const root = parse(mapTaskDescriptionContent(task), {
-        comment: false,
-        lowerCaseTagName: true,
-    });
-    return root.childNodes
-        .map(descriptionNodeText)
-        .join(' ')
-        .replace(/\s+/g, ' ')
-        .trim();
 }
 
 export function mapTaskAssignee(a: {
@@ -307,7 +265,7 @@ export function mapTaskToMcpGetResponse(
         title: task.title,
         section: task.section,
         sectionId: task.sectionId || undefined,
-        description: mapTaskDescriptionText(task),
+        description: mapTaskDescriptionContent(task),
         boardId: task.projectId,
         boardTitle: task.project.title || '',
         parent_id: task.parentTaskId || undefined,
@@ -422,7 +380,7 @@ export function mapTaskToDetail(
     userId: number,
     attributionEnabled = false,
 ): TaskDetail {
-    const descriptionContent = mapTaskDescriptionText(task);
+    const descriptionContent = mapTaskDescriptionContent(task);
     const taskAgent = attributionEnabled
         ? mapAttributedMcpAgent(task.agent)
         : mapVisibleMcpAgent(task.agent, userId, task.projectId);

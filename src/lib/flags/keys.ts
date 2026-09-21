@@ -77,8 +77,6 @@ export const HTPR_6514_COMMENT_LONG_PRESS_FLAG =
 export const HTPR_6516_AGENT_ATTRIBUTION_FLAG =
   "htpr-6516-agent-attribution";
 export const HTPR_6512_SEED_TEAM_AGENT_FLAG = "htpr-6512-seed-team-agent";
-export const HTPR_6502_AGENT_TEMPLATE_INTAKE_FLAG =
-  "htpr-6502-agent-template-intake";
 export const HTPR_6533_MCP_CLIENT_EVAL_FLAG = "htpr-6533-mcp-client-eval";
 export const HTPR_4638_AI_DIRECTORY_METADATA_FLAG =
   "htpr-4638-ai-directory-metadata";
