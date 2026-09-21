@@ -61,7 +61,7 @@ async function demo() {
 
     assert.equal(unauthorizedResponse.statusCode, 401)
     assert.deepEqual(unauthorizedResponse.jsonBody, {
-      message: 'Unauthorized',
+      error: 'Unauthorized',
     })
     assert.equal(findManyCalls, 0, 'unauthenticated requests do not query Prisma')
 

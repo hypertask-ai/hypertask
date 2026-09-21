@@ -142,7 +142,7 @@ async function demo() {
     )
     assert.equal(unauthorizedGet.statusCode, 401)
     assert.deepEqual(unauthorizedGet.jsonBody, {
-      message: 'Unauthorized',
+      error: 'Unauthorized',
     })
 
     const unauthorizedPost = await callHandler(
@@ -154,7 +154,7 @@ async function demo() {
     )
     assert.equal(unauthorizedPost.statusCode, 401)
     assert.deepEqual(unauthorizedPost.jsonBody, {
-      message: 'Unauthorized',
+      error: 'Unauthorized',
     })
 
     const token = signSession({ id: 6 })
