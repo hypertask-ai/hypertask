@@ -177,8 +177,10 @@ export function parseHypertasksStorageKeyFromUrl(
     }
 
     if (
-      url.hostname.endsWith("amazonaws.com") ||
-      url.hostname.endsWith("cloudfront.net")
+      url.hostname === "amazonaws.com" ||
+      url.hostname.endsWith(".amazonaws.com") ||
+      url.hostname === "cloudfront.net" ||
+      url.hostname.endsWith(".cloudfront.net")
     ) {
       return url.pathname.replace(/^\/+/, "") || null;
     }

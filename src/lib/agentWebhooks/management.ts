@@ -187,8 +187,8 @@ export async function upsertAgentWebhook(input: {
   // configure calls from generating two secrets and returning the losing one.
   // Explicit rotations are serialized in the same order they commit.
   const transactionLockId = crypto
-    .createHash("sha256")
-    .update(`agent-webhook:${input.agentId}`)
+    .createHmac("sha256", input.agentId)
+    .update("agent-webhook")
     .digest()
     .readBigInt64BE(0);
   const { subscription, rotateSecret, secret } = await prisma.$transaction(

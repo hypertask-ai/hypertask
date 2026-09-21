@@ -11,6 +11,14 @@ import { ModalContainerCustom, ModalHintBar, ModalInput, ModalListContainer, Mod
 import useHandleMouseGlobal from "@/hooks/General/useHandleMouse";
 import { descriptionContainerId } from "@/lib/constants/TaskDetail";
 const AttachmentCarousel = dynamic(() => import("@/components/Common/AttachmentsView/AttachmentsCarousel"), { ssr: false })
+const isHypertaskFileUrl = (value: string) => {
+  try {
+    return new URL(value).origin === "https://files.hypertask.app";
+  } catch {
+    return false;
+  }
+};
+
 interface IProps {
   display: boolean;
   onClose: any; // Change 'any' to the specific function type if possible
@@ -113,7 +121,7 @@ const LinksModal = ({ display, onClose, currentTaskId, commentId, subTasks, pare
       }
 
       const filteredGalleryAttachment = res
-        .filter(item => /\.(pdf|png|webp|jpg|jpeg|txt|code|mp4|docx|mov|xlsx|pptx|webm|)$/i.test(item.urlString) && item.urlString.startsWith("https://files.hypertask.app"))
+        .filter(item => /\.(pdf|png|webp|jpg|jpeg|txt|code|mp4|docx|mov|xlsx|pptx|webm|)$/i.test(item.urlString) && isHypertaskFileUrl(item.urlString))
         .map(({ urlString, title }) => {
           const extension = urlString.toLowerCase().match(/\.\w+$/) || ['']; // Extract file extension
           return {
@@ -146,7 +154,7 @@ const LinksModal = ({ display, onClose, currentTaskId, commentId, subTasks, pare
 
   // ---------------------- LINK CLICK HANDLER ------------------
   const handleLinkClick = (link: IUrl) => {
-    if (link.urlString.startsWith("https://files.hypertask.app")) {
+    if (isHypertaskFileUrl(link.urlString)) {
       const index = galleryAttachments.findIndex((attachment: { fileSource: string; }) => attachment.fileSource === link.urlString)
       setCurrentIndex(index)
       toggleModal()

@@ -99,8 +99,16 @@ export const useProfilePicture = (_currentUser: IUser | null) => {
    * @return {*}
    */
   const removeProfilePicture = async () => {
-    if (currentUser?.photoURL?.startsWith("https://lh3.googleusercontent.com"))
-      return;
+    try {
+      if (currentUser?.photoURL) {
+        const photoUrl = new URL(currentUser.photoURL);
+        if (photoUrl.protocol === "https:" && photoUrl.hostname === "lh3.googleusercontent.com") {
+          return;
+        }
+      }
+    } catch {
+      // Invalid stored URLs are treated as custom profile pictures and removed.
+    }
     const updatedUser = await updateProfileAPI();
     if (updatedUser) {
       updateUserStateAndCookie(updatedUser);

@@ -7,19 +7,13 @@ import { NextRequest, NextResponse } from 'next/server'
 import prisma from '@/lib/prisma'
 import { isValidUser } from '@/utils/edgeHelpers'
 import { getProjectWhere } from '@/utils/controllers/projects/getAllIncludes'
+import { htmlToPlainText } from '@/utils/helperFunctions/htmlToPlainText'
 
 type RouteContext = { params: Promise<{ taskId: string }> }
 const MAX_DESCRIPTION_VERSIONS = 100
 
 function stripHtml(html: string): string {
-  return html
-    .replace(/<[^>]+>/g, ' ')
-    .replace(/&nbsp;/g, ' ')
-    .replace(/&amp;/g, '&')
-    .replace(/&lt;/g, '<')
-    .replace(/&gt;/g, '>')
-    .replace(/\s+/g, ' ')
-    .trim()
+  return htmlToPlainText(html).replace(/\s+/g, ' ').trim()
 }
 
 function parseTaskId(value: string): number | null {

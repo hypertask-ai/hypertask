@@ -85,11 +85,12 @@ export const HypertaskPasteRule = Extension.create({
             }
 
             // Step 1: Immediately insert a placeholder link with the formatted text if available, otherwise use the original URL
-            const placeholderText =
-              event.clipboardData
-                ?.getData("text/html")
-                ?.replace(/<[^>]*>/g, "")
-                .trim() || match.fullUrl;
+            const clipboardHtml = event.clipboardData?.getData("text/html");
+            const placeholderText = clipboardHtml
+              ? new DOMParser()
+                  .parseFromString(clipboardHtml, "text/html")
+                  .body.textContent?.trim() || match.fullUrl
+              : match.fullUrl;
             const mark = linkMark.create({
               href: match.fullUrl,
               target: "_blank",

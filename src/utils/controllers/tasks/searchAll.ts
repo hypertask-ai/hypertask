@@ -131,7 +131,7 @@ const tasksSearchAll = async (projectIds: number[], searchQuery__: string) => {
             {
               ticketNumber: {
                 contains: searchQuery
-                  .replace(/([A-Za-z]+)(\d+)/, "$1-$2")
+                  .replace(/^([A-Za-z]+)(\d+)$/, "$1-$2")
                   .toLowerCase(),
                 mode: "insensitive",
               },

@@ -23,6 +23,7 @@ import { loadSlackThreadSource } from "@/lib/slack/threadSummary";
 import { resolveSlackActor } from "@/lib/slack/userLink";
 import { resolveSystemModel } from "@/lib/systemModelLadder";
 import { escapeHtml } from "@/utils/helperFunctions/escapeHtml";
+import { htmlToPlainText } from "@/utils/helperFunctions/htmlToPlainText";
 import { getProjectWhere } from "@/utils/controllers/projects/getAllIncludes";
 
 const taskDraftSchema = z.object({
@@ -251,7 +252,7 @@ async function writeSlackTaskDraft(input: {
   return {
     description,
     title:
-      result.object.title.replace(/<[^>]*>/g, "").trim() ||
+      htmlToPlainText(result.object.title).trim() ||
       result.object.ask.slice(0, 140).trim(),
   };
 }

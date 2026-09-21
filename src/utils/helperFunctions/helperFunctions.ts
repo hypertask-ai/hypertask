@@ -1539,7 +1539,7 @@ export const processImagesForHyperMention = async (htmlText: string, attachments
     // Process inline images
     for (const img of imgTags) {
       const url = img.src;
-      if (url.startsWith("https://files.hypertask.app")) {
+      if (new URL(url).origin === "https://files.hypertask.app") {
         // Same CORS trap as the task writer: only the URL travels on, so read the MIME
         // type off the file name rather than fetching the file (HTPR-4735).
         const mimeType = getFileTypeFromUrl(url, IMAGE_FALLBACK_MIME);

@@ -31,8 +31,10 @@ const isGifImage = (image: HTMLImageElement) => {
     if (!source) return false;
 
     const url = new URL(source, window.location.href);
+    const hostname = url.hostname.toLowerCase();
     return (
-      url.hostname.toLowerCase().endsWith("giphy.com") ||
+      hostname === "giphy.com" ||
+      hostname.endsWith(".giphy.com") ||
       url.pathname.toLowerCase().endsWith(".gif")
     );
   } catch {

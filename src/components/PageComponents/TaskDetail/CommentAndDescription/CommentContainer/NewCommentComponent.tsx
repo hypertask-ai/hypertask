@@ -37,7 +37,10 @@ import {
 } from "@/lib/mobileCommentViewport";
 import { shouldShowMobileDock } from "@/components/Global/mobileShellVisibility";
 import { usePathname } from "next/navigation";
-import { getTaskDraftContent } from "@/components/RTE/draftSync";
+import {
+  getTaskDraftContent,
+  normalizeEditorHtml,
+} from "@/components/RTE/draftSync";
 import { AudioButton } from "@/components/RTE/Components/AudioButton";
 import { useFlag } from "@/hooks/useFlag";
 import { HTPR_6555_IDLE_COMMENT_MIC_FLAG } from "@/lib/flags/keys";
@@ -97,10 +100,7 @@ const NewCommentComponent = (
         _parsedTask?.id,
         "Comment",
       );
-      // auto-saved drafts are often "<p></p>": strip tags so visually-empty drafts don't mount the editor (media tags count as content)
-      const hasDraftContent =
-        /<(img|video|iframe)/i.test(defaultCommentContent) ||
-        defaultCommentContent.replace(/<[^>]*>/g, "").trim().length > 0;
+      const hasDraftContent = normalizeEditorHtml(defaultCommentContent).length > 0;
       const shouldMountCommentEditor =
         // not currentId === "comment": defaultCommentFocus sets that on task open (keyboard-nav selection, not typing intent)
         currentId === "comment-input" ||

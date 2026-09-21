@@ -10,6 +10,7 @@ import {
   type TicketSearchQuery,
 } from "@/utils/controllers/search/rankHits";
 import { buildCustomInstructionSearchFilters } from "@/app/api/ai/_lib/boardMemoryContract";
+import { htmlToPlainText } from "@/utils/helperFunctions/htmlToPlainText";
 
 type SearchStatus = "Normal" | "Archive" | "Deleted";
 
@@ -1454,6 +1455,5 @@ function dateValue(value: string) {
 }
 
 export function convertToPlain(htmlString: string = "") {
-  const regex = /<[^>]*>/g;
-  return htmlString.replace(regex, "");
+  return htmlToPlainText(htmlString);
 }

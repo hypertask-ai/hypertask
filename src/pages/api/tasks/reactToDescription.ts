@@ -5,6 +5,7 @@ import { IComment } from "@/models/model";
 import { sendDataNewCommentFCM } from "@/utils/controllers/FCM";
 import checkReminderAndCreateNotification from "@/utils/controllers/notifications/creation-service/check-reminder_create-notification";
 import { getReactionsByDescriptionId } from "@/utils/controllers/tasks/getTask";
+import { htmlToPlainText } from "@/utils/helperFunctions/htmlToPlainText";
 import { NextApiHandler, NextApiRequest, NextApiResponse } from "next";
 
 
@@ -145,7 +146,7 @@ const sendNotification = async(reaction:any,afterAppDomain:string,userId:number)
             const body = {
                 type:"newComment",
                 notificationTitle:`${reaction.user.displayName} reacted ${reaction.emoji} on description`,
-                notificationBody:`${reaction.description.content.replace(/<[^>]+>/g, '')}`,
+                notificationBody:htmlToPlainText(reaction.description.content),
                 devices, 
                 payload:"",
                 taskTitle:reaction.task.title, 

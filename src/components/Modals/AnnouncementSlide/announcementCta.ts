@@ -8,14 +8,15 @@ export const handleAnnouncementCtaClick = (
   router: AnnouncementRouter,
   onInternalNavigation?: () => void
 ) => {
-  const baseUrl =
-    appEnv.NEXT_PUBLIC_BASEURL || "https://app.hypertask.ai";
+  const baseUrl = new URL(
+    appEnv.NEXT_PUBLIC_BASEURL || "https://app.hypertask.ai",
+  );
+  const targetUrl = new URL(url, baseUrl);
 
-  if (url.includes(baseUrl)) {
-    const path = url.replace(baseUrl, "");
+  if (targetUrl.origin === baseUrl.origin) {
     onInternalNavigation?.();
-    router.push(path);
+    router.push(`${targetUrl.pathname}${targetUrl.search}${targetUrl.hash}`);
   } else {
-    window.open(url, "_blank");
+    window.open(targetUrl.href, "_blank");
   }
 };

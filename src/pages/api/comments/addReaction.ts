@@ -6,6 +6,7 @@ import { sendDataNewCommentFCM } from "@/utils/controllers/FCM";
 import checkReminderAndCreateNotification from "@/utils/controllers/notifications/creation-service/check-reminder_create-notification";
 import { broadcastTaskComment } from "@/lib/realtime/server";
 import { omitCommentSeen } from "@/utils/controllers/comments/readReceipts";
+import { htmlToPlainText } from "@/utils/helperFunctions/htmlToPlainText";
 import { NextApiHandler, NextApiRequest, NextApiResponse } from "next";
 
 // HTPR-5522: every failure here used to answer with the same bare 500, so a
@@ -176,7 +177,7 @@ const sendNotification = async(reaction:any,afterAppDomain:string,userId:number)
        const body = {
         type:"newComment",
         notificationTitle:`${reaction.user.displayName} reacted ${reaction.emoji} on your comment`,
-        notificationBody:`${(reaction.comment.text ?? "").replace(/<[^>]+>/g, '')}`,
+        notificationBody:htmlToPlainText(reaction.comment.text ?? ""),
         devices,
         payload:"",
         taskTitle:reaction.comment.taskTitle,

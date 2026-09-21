@@ -1,4 +1,4 @@
-import { createHash } from "node:crypto";
+import { createHash, createHmac } from "node:crypto";
 
 import { getRedis } from "@/lib/redis";
 
@@ -171,7 +171,9 @@ export async function requireHyperAiCommentConfirmation({
   previewsIssuedThisRequest,
   getRedisClient = getRedis,
 }: HyperAiConfirmationInput): Promise<"preview" | "proceed"> {
-  const operationHash = createHash("sha256").update(operationKey).digest("hex");
+  const operationHash = createHmac("sha256", sessionId)
+    .update(operationKey)
+    .digest("hex");
   const tokenKey = `hyperai_confirm:${userId}:${sessionId}:${operationHash}`;
   const sessionProposalKey = `hyperai_confirm_active:${userId}:${sessionId}`;
   const previewValue = JSON.stringify({

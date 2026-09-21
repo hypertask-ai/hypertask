@@ -48,6 +48,9 @@ import { getAiModelPreferenceIds } from "@/lib/aiModelPreferences";
 import { LEARN_TUTORIAL_COMMENT_SAVED_EVENT } from "@/lib/tutorial/learnTutorialState";
 import { uploadSingleFileViaApi } from "@/lib/storage/uploadViaApi";
 
+const hostnameMatches = (hostname: string, domain: string) =>
+  hostname === domain || hostname.endsWith(`.${domain}`);
+
 export default function useSaveContent() {
   const {
     focusOn,
@@ -341,21 +344,21 @@ export default function useSaveContent() {
               try {
                 const urlObj = new URL(url);
 
-                if (urlObj.hostname.includes("figma.com")) {
+                if (hostnameMatches(urlObj.hostname, "figma.com")) {
                   const embedTitle = urlObj.searchParams.get("embed_title");
                   title = embedTitle
                     ? `Figma Embed: ${decodeURIComponent(embedTitle)
                         .replace(/\s+/g, " ")
                         .trim()}`
                     : "Figma Design";
-                } else if (urlObj.hostname.includes("loom.com")) {
+                } else if (hostnameMatches(urlObj.hostname, "loom.com")) {
                   const videoId = url
                     .split("/")
                     .filter(Boolean)
                     .pop()
                     ?.split("?")[0];
                   title = `Loom Recording: ${videoId}`;
-                } else if (urlObj.hostname.includes("youtube.com")) {
+                } else if (hostnameMatches(urlObj.hostname, "youtube.com")) {
                   const videoId =
                     urlObj.searchParams.get("si")?.split("-")[0] ||
                     url.split("/").pop();

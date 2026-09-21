@@ -1,4 +1,4 @@
-import { createHash } from "node:crypto";
+import { createHmac } from "node:crypto";
 
 import { tool, type ToolSet } from "ai";
 import { z } from "zod";
@@ -175,8 +175,8 @@ export function createHyperAiTools({
   const sessionId = `hyperai:${projectId}:${taskId}`;
   const previewsIssuedThisRequest = new Set<string>();
   const token = createMcpToken(user.id, user.email, "15m");
-  const clientFingerprint = createHash("sha256")
-    .update(`hyperai:${user.id}`)
+  const clientFingerprint = createHmac("sha256", String(user.id))
+    .update("hyperai-client")
     .digest("hex");
 
   return Object.fromEntries(
@@ -272,8 +272,8 @@ export function createHyperAiTools({
               }
             }
 
-            const requestId = createHash("sha256")
-              .update(`${sessionId}:${operationKey}`)
+            const requestId = createHmac("sha256", sessionId)
+              .update(operationKey)
               .digest("hex");
             try {
               return parseMcpToolResult(

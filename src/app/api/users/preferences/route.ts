@@ -27,6 +27,7 @@ import { isDictationLanguage } from "@/lib/dictationProvider";
 import { isAllTasksDateRange } from "@/lib/configs/allTasks.config";
 import type { ISnippet } from "@/lib/snippets";
 import type { Prisma } from "@prisma/client";
+import { parse } from "node-html-parser";
 import {
   applyCalendarViewsOperation,
   DEFAULT_CALENDAR_VIEWS,
@@ -323,9 +324,10 @@ async function POSTHandler(request: NextRequest) {
         }
 
         const sanitizedContent = sanitizeRichHtml(content);
+        const sanitizedRoot = parse(sanitizedContent);
         const hasContent =
-          sanitizedContent.replace(/<[^>]*>/g, "").trim().length > 0 ||
-          /<(img|hr)\b/i.test(sanitizedContent);
+          sanitizedRoot.structuredText.trim().length > 0 ||
+          sanitizedRoot.querySelector("img, hr") !== null;
         totalContentLength += sanitizedContent.length;
 
         if (!hasContent || totalContentLength > 2_000_000) {

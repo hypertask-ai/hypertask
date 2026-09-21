@@ -13,7 +13,7 @@ import { usePathname } from "next/navigation";
 const createDemoSession = (user: IUser): IChatSession => {
   const now = new Date();
   return {
-    id: `demo-chat-${now.getTime()}-${Math.random().toString(36).slice(2, 8)}`,
+    id: `demo-chat-${now.getTime()}-${crypto.randomUUID()}`,
     createdAt: now,
     updatedAt: now,
     userId: user.id,
