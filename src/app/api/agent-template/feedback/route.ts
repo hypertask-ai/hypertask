@@ -1,9 +1,11 @@
 import { createHash } from "node:crypto";
+import { isIP } from "node:net";
+import { ipAddress } from "@vercel/functions";
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 
+import { getSessionUser } from "@/lib/auth/getSessionUser";
 import {
-  FEATURE_FLAG_OWNER_USER_ID,
   HTPR_6502_AGENT_TEMPLATE_INTAKE_FLAG,
   isFeatureEnabled,
 } from "@/lib/flags";
@@ -31,11 +33,30 @@ const intakeSchema = z
   .strict();
 
 function clientIp(request: NextRequest) {
-  return (
-    request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ||
-    request.headers.get("x-real-ip")?.trim() ||
-    "unknown"
-  );
+  const value = ipAddress(request)?.trim();
+  if (!value || !isIP(value)) {
+    throw new Error("Trusted client IP is unavailable");
+  }
+  return value;
+}
+
+async function readBodyWithLimit(request: NextRequest) {
+  if (!request.body) return "";
+
+  const reader = request.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let totalBytes = 0;
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    totalBytes += value.byteLength;
+    if (totalBytes > MAX_REQUEST_BYTES) {
+      await reader.cancel().catch(() => undefined);
+      return null;
+    }
+    chunks.push(value);
+  }
+  return Buffer.concat(chunks, totalBytes).toString("utf8");
 }
 
 async function checkRateLimit(request: NextRequest) {
@@ -81,17 +102,18 @@ export async function POST(request: NextRequest) {
   }
 
   try {
+    const session = await getSessionUser(request.headers);
     if (
       !(await isFeatureEnabled(
         HTPR_6502_AGENT_TEMPLATE_INTAKE_FLAG,
-        FEATURE_FLAG_OWNER_USER_ID,
+        session?.userId ?? -1,
       ))
     ) {
       return jsonError("Not found", 404);
     }
 
-    const rawBody = await request.text();
-    if (Buffer.byteLength(rawBody, "utf8") > MAX_REQUEST_BYTES) {
+    const rawBody = await readBodyWithLimit(request);
+    if (rawBody === null) {
       return jsonError("Payload too large", 413);
     }
 

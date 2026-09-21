@@ -387,6 +387,11 @@ test("declared flags remain listed with ticket details and can be changed", asyn
         updatedAt: null,
       },
       {
+        key: "htpr-6502-agent-template-intake",
+        mode: "OWNER_AND_QA",
+        updatedAt: null,
+      },
+      {
         key: "htpr-6512-seed-team-agent",
         mode: "OWNER_AND_QA",
         updatedAt: null,

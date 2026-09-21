@@ -11,7 +11,8 @@ function stubModule(relativePath, exports) {
 }
 
 const state = {
-  featureEnabled: true,
+  featureMode: "EVERYONE",
+  sessionUserId: null,
   redisFailure: false,
   counts: new Map(),
   projectQueries: [],
@@ -19,10 +20,17 @@ const state = {
   createTaskCalls: [],
 };
 
+stubModule("src/lib/auth/getSessionUser.ts", {
+  getSessionUser: async () =>
+    state.sessionUserId === null ? null : { userId: state.sessionUserId },
+});
+
 stubModule("src/lib/flags.ts", {
-  FEATURE_FLAG_OWNER_USER_ID: 6,
   HTPR_6502_AGENT_TEMPLATE_INTAKE_FLAG: "htpr-6502-agent-template-intake",
-  isFeatureEnabled: async () => state.featureEnabled,
+  isFeatureEnabled: async (_key, userId) =>
+    state.featureMode === "EVERYONE" ||
+    (state.featureMode === "OWNER_AND_QA" && [6, 985].includes(userId)) ||
+    (state.featureMode === "OWNER_ONLY" && userId === 6),
 });
 
 stubModule("src/lib/redis.ts", {
@@ -93,7 +101,7 @@ function request(body, ip = "203.0.113.10", headers = {}) {
       body: typeof body === "string" ? body : JSON.stringify(body),
       headers: {
         "content-type": "application/json",
-        "x-forwarded-for": ip,
+        "x-real-ip": ip,
         ...headers,
       },
     },
@@ -110,7 +118,8 @@ function validBody(overrides = {}) {
 }
 
 test.beforeEach(() => {
-  state.featureEnabled = true;
+  state.featureMode = "EVERYONE";
+  state.sessionUserId = null;
   state.redisFailure = false;
   state.counts.clear();
   state.projectQueries.length = 0;
@@ -212,9 +221,16 @@ test("title, HTML body, label list, and total request size are capped", async (t
     assert.equal(response.status, 400);
   });
 
-  await t.test("request bytes", async () => {
+  await t.test("declared request bytes", async () => {
     const response = await POST(
       request(validBody(), "203.0.113.14", { "content-length": "32769" }),
+    );
+    assert.equal(response.status, 413);
+  });
+
+  await t.test("streamed request bytes", async () => {
+    const response = await POST(
+      request(JSON.stringify({ padding: "x".repeat(32 * 1024) }), "203.0.113.15"),
     );
     assert.equal(response.status, 413);
   });
@@ -222,13 +238,23 @@ test("title, HTML body, label list, and total request size are capped", async (t
   assert.equal(state.createTaskCalls.length, 0);
 });
 
-test("the route is hidden when its server feature flag is off", async () => {
-  state.featureEnabled = false;
-  const response = await POST(request(validBody()));
+test("anonymous access stays hidden until the feature flag reaches Everyone", async () => {
+  for (const mode of ["OFF", "OWNER_ONLY", "OWNER_AND_QA"]) {
+    state.featureMode = mode;
+    const response = await POST(request(validBody(), `203.0.113.${20 + state.counts.size}`));
+    assert.equal(response.status, 404);
+  }
 
-  assert.equal(response.status, 404);
-  assert.equal(state.projectQueries.length, 0);
-  assert.equal(state.createTaskCalls.length, 0);
+  state.featureMode = "OWNER_AND_QA";
+  state.sessionUserId = 6;
+  const ownerResponse = await POST(request(validBody(), "203.0.113.30"));
+  assert.equal(ownerResponse.status, 201);
+
+  state.sessionUserId = null;
+  state.featureMode = "EVERYONE";
+  const publicResponse = await POST(request(validBody(), "203.0.113.31"));
+  assert.equal(publicResponse.status, 201);
+  assert.equal(state.createTaskCalls.length, 2);
 });
 
 test("each IP can create five tickets per hour", async () => {
@@ -250,13 +276,23 @@ test("each IP can create five tickets per hour", async () => {
   );
 });
 
-test("a rate-limit storage failure fails closed before any board write", async () => {
-  state.redisFailure = true;
+test("rate limiting fails closed before any board write", async (t) => {
   const originalError = console.error;
   console.error = () => {};
   try {
-    const response = await POST(request(validBody()));
-    assert.equal(response.status, 503);
+    await t.test("when Redis is unavailable", async () => {
+      state.redisFailure = true;
+      const response = await POST(request(validBody()));
+      assert.equal(response.status, 503);
+      state.redisFailure = false;
+    });
+
+    await t.test("when Vercel does not provide a trusted IP", async () => {
+      const response = await POST(
+        request(validBody(), "", { "x-forwarded-for": "198.51.100.99" }),
+      );
+      assert.equal(response.status, 503);
+    });
   } finally {
     console.error = originalError;
   }
