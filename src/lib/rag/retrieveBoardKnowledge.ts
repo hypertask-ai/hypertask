@@ -1,4 +1,8 @@
 import prisma from "@/lib/prisma";
+import {
+  MAX_RAG_DOCUMENT_CHARS,
+  truncatePromptText,
+} from "@/lib/ai/chatTokenBudget";
 import { getProjectWhere } from "@/utils/controllers/projects/getAllIncludes";
 import {
   searchComments,
@@ -215,15 +219,18 @@ export async function retrieveBoardKnowledge(
       projectId: row.projectId,
       ticketNumber: row.ticketNumber,
       title: row.title,
-      content: [
-        `Task: ${row.title}`,
-        row.ticketNumber ? `Ticket: ${row.ticketNumber}` : "",
-        row.descriptionText ? `Description: ${row.descriptionText}` : "",
-        `Project: ${row.projectTitle}`,
-        `Status: ${row.status}`,
-      ]
-        .filter(Boolean)
-        .join("\n"),
+      content: truncatePromptText(
+        [
+          `Task: ${row.title}`,
+          row.ticketNumber ? `Ticket: ${row.ticketNumber}` : "",
+          row.descriptionText ? `Description: ${row.descriptionText}` : "",
+          `Project: ${row.projectTitle}`,
+          `Status: ${row.status}`,
+        ]
+          .filter(Boolean)
+          .join("\n"),
+        MAX_RAG_DOCUMENT_CHARS,
+      ),
       updatedAt: row.updatedAt,
       uniqueIndex: row.uniqueIndex,
     })),
@@ -234,15 +241,18 @@ export async function retrieveBoardKnowledge(
       projectId: row.projectId,
       ticketNumber: row.taskTicketNumber,
       title: row.taskTitle,
-      content: [
-        `Comment on: ${row.taskTitle}`,
-        row.taskTicketNumber ? `Ticket: ${row.taskTicketNumber}` : "",
-        `Comment: ${row.commentText}`,
-        `Project: ${row.taskProjectTitle}`,
-        `Task status: ${row.taskStatus}`,
-      ]
-        .filter(Boolean)
-        .join("\n"),
+      content: truncatePromptText(
+        [
+          `Comment on: ${row.taskTitle}`,
+          row.taskTicketNumber ? `Ticket: ${row.taskTicketNumber}` : "",
+          `Comment: ${row.commentText}`,
+          `Project: ${row.taskProjectTitle}`,
+          `Task status: ${row.taskStatus}`,
+        ]
+          .filter(Boolean)
+          .join("\n"),
+        MAX_RAG_DOCUMENT_CHARS,
+      ),
       createdAt: row.createdAt,
       uniqueIndex: row.taskUniqueIndex,
     })),

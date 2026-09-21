@@ -22,6 +22,22 @@ export function mapTaskDescriptionContent(task: {
     return task.description_?.content || task.description || '';
 }
 
+export function mapTaskDescriptionText(task: {
+    description_?: { content?: string } | null;
+    description?: string;
+}): string {
+    return mapTaskDescriptionContent(task)
+        .replace(/<[^>]+>/g, ' ')
+        .replace(/&nbsp;/gi, ' ')
+        .replace(/&amp;/gi, '&')
+        .replace(/&lt;/gi, '<')
+        .replace(/&gt;/gi, '>')
+        .replace(/&quot;/gi, '"')
+        .replace(/&#39;/gi, "'")
+        .replace(/\s+/g, ' ')
+        .trim();
+}
+
 export function mapTaskAssignee(a: {
     user: { id: number; email: string; displayName: string | null };
     agent?: Parameters<typeof mapVisibleMcpAgent>[0];
@@ -265,7 +281,7 @@ export function mapTaskToMcpGetResponse(
         title: task.title,
         section: task.section,
         sectionId: task.sectionId || undefined,
-        description: mapTaskDescriptionContent(task),
+        description: mapTaskDescriptionText(task),
         boardId: task.projectId,
         boardTitle: task.project.title || '',
         parent_id: task.parentTaskId || undefined,
@@ -380,7 +396,7 @@ export function mapTaskToDetail(
     userId: number,
     attributionEnabled = false,
 ): TaskDetail {
-    const descriptionContent = mapTaskDescriptionContent(task);
+    const descriptionContent = mapTaskDescriptionText(task);
     const taskAgent = attributionEnabled
         ? mapAttributedMcpAgent(task.agent)
         : mapVisibleMcpAgent(task.agent, userId, task.projectId);
