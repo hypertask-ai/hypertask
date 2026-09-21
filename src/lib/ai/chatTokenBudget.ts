@@ -42,8 +42,10 @@ export function stringifyPromptValue(value: unknown, maxChars: number): string {
 export function chatMaxOutputTokens(message: string): number {
   const text = message.toLowerCase();
   const longFormRequest =
-    /\b(long[- ]form|detailed|comprehensive|in[- ]depth|full)\s+(answer|analysis|report|document|draft|proposal|article|plan|guide|copy|description)\b/.test(text) ||
-    /\b(write|draft|compose|generate|create|update|rewrite|expand)\b[\s\S]{0,60}\b(report|document|page|proposal|brief|article|plan|guide|copy|description)\b/.test(text);
+    /\b\d[\d,]*\s*(words?|tokens?|characters?|pages?)\b/.test(text) ||
+    /\b(write|draft|compose|generate|rewrite|expand)\b/.test(text) ||
+    /\b(long[- ]form|detailed|comprehensive|in[- ]depth|full)\s+(answer|analysis|report|document|draft|proposal|article|plan|guide|copy|description|email|message|release notes?)\b/.test(text) ||
+    /\b(create|update)\b[\s\S]{0,60}\b(report|document|page|proposal|brief|article|plan|guide|copy|description|email|message|release notes?)\b/.test(text);
   return longFormRequest
     ? CHAT_LONG_FORM_MAX_OUTPUT_TOKENS
     : CHAT_MAX_OUTPUT_TOKENS;
@@ -264,7 +266,7 @@ function taskToolNames(text: string, hasAttachments: boolean): string[] {
       "hypertask_section",
     );
   }
-  if (/\b(update|edit|change|rename|archive|restore|priority|due date|estimate)\b/.test(text)) {
+  if (/\b(update|edit|change|rename|archive|restore|delete|remove|complete|close|finish|reopen|priority|due date|estimate)\b/.test(text)) {
     add("hypertask_update_task");
   }
   if (/\b(decision|approval)\b/.test(text)) add("hypertask_decision_request");
@@ -278,7 +280,11 @@ function taskToolNames(text: string, hasAttachments: boolean): string[] {
 
 function requiredOperationToolNames(
   text: string,
-  args: { hasAgentMention?: boolean; hasAttachments?: boolean },
+  args: {
+    hasAgentMention?: boolean;
+    hasAttachments?: boolean;
+    hasTaskContext?: boolean;
+  },
 ): string[] {
   const names: string[] = [];
   const add = (...values: string[]) => names.push(...values);
@@ -299,7 +305,11 @@ function requiredOperationToolNames(
   if (/\b(move|transfer)\b/.test(text)) {
     add("hypertask_update_task", "hypertask_move_task_between_boards", "hypertask_section");
   }
-  if (/\b(update|edit|change|rename|archive|restore|priority|due date|estimate)\b[\s\S]{0,40}\b(task|ticket|card)\b/.test(text)) {
+  const taskMutation = /\b(update|edit|change|rename|archive|restore|delete|remove|complete|close|finish|reopen|priority|due date|estimate)\b/;
+  if (
+    (args.hasTaskContext && taskMutation.test(text)) ||
+    new RegExp(`${taskMutation.source}[\\s\\S]{0,40}\\b(task|ticket|card)\\b`).test(text)
+  ) {
     add("hypertask_update_task");
   }
   if (/\b(delete|remove)\b[\s\S]{0,30}\b(comment|reply)\b/.test(text)) {

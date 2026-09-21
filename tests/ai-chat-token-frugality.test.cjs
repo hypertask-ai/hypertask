@@ -179,6 +179,14 @@ test("write, confirmation, and mention turns retain the required tools", () => {
   });
   assert.ok(taskContext.hypertask_update_task);
 
+  for (const message of ["Delete this task", "Complete this", "Close this ticket"]) {
+    const mutation = subsetToolsForTurn(allTools, {
+      message,
+      hasTaskContext: true,
+    });
+    assert.ok(mutation.hypertask_update_task, message);
+  }
+
   const related = subsetToolsForTurn(allTools, {
     message: "Show the related tasks and task tree",
   });
@@ -229,12 +237,21 @@ test("context and RAG values are capped with an explicit marker", () => {
 
 test("long-form requests retain enough output budget", () => {
   assert.equal(chatMaxOutputTokens("List my open tasks"), CHAT_MAX_OUTPUT_TOKENS);
+  assert.equal(chatMaxOutputTokens("Create a task"), CHAT_MAX_OUTPUT_TOKENS);
   assert.equal(
     chatMaxOutputTokens("Write a comprehensive project report"),
     CHAT_LONG_FORM_MAX_OUTPUT_TOKENS,
   );
   assert.equal(
     chatMaxOutputTokens("Give me a full report"),
+    CHAT_LONG_FORM_MAX_OUTPUT_TOKENS,
+  );
+  assert.equal(
+    chatMaxOutputTokens("Write a 2,000-word email"),
+    CHAT_LONG_FORM_MAX_OUTPUT_TOKENS,
+  );
+  assert.equal(
+    chatMaxOutputTokens("Write detailed release notes"),
     CHAT_LONG_FORM_MAX_OUTPUT_TOKENS,
   );
 });
