@@ -2,7 +2,8 @@ name: Prod Health Check + Auto-Rollback
 
 # After every push to production (= production deploy), wait for the Vercel
 # deployment to finish, health-check the live app, and if the app is broken
-# promote the previous READY deployment (instant rollback) + notify Telegram.
+# freeze merging, revert production, optionally promote a proven-good deployment,
+# and notify Telegram.
 on:
   push:
     branches: [production]
@@ -508,14 +509,15 @@ jobs:
     needs: health
     if: ${{ !cancelled() && ((github.event_name == 'push' && needs.health.outputs.live == 'true' && needs.health.result == 'success') || github.event_name == 'workflow_dispatch') }}
     permissions:
-      contents: read
+      actions: write
+      contents: write
       statuses: write
     runs-on: ubuntu-latest
     timeout-minutes: 15
     # The GLM QA job (HTPR-6239) reads these: `ran` says the browser checks
     # actually executed (not skipped for a missing session), `rolledback` says
-    # a confirmed failure promoted the previous deployment, so there is no
-    # live build of this SHA left to explore.
+    # a confirmed failure created or found the durable production revert, so
+    # this SHA is leaving production and should not get more exploratory QA.
     outputs:
       ran: ${{ steps.smoke_status.outputs.ran }}
       ok: ${{ steps.smoke.outcome == 'success' }}
@@ -615,8 +617,11 @@ jobs:
           TG_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TG_CHAT: ${{ secrets.TELEGRAM_CHAT_ID }}
           SHA: ${{ github.sha }}
-          GITHUB_TOKEN: ${{ github.token }}
+          # AUTOMERGE_TOKEN can bypass the production ruleset; github.token is
+          # retained as a fallback for repositories where direct writes are allowed.
+          GITHUB_TOKEN: ${{ secrets.AUTOMERGE_TOKEN || github.token }}
           GITHUB_REPOSITORY: ${{ github.repository }}
+          GITHUB_RUN_URL: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
           set -uo pipefail
           notify() {
@@ -646,14 +651,16 @@ jobs:
           fi
 
           echo "Smoke QA confirmed a real failure on $SHA. Rolling back."
+          # This sets MERGE_FREEZE to this run URL before reverting production.
+          # After the incident, a human clears it with: gh variable delete MERGE_FREEZE
           RESULT=$(node .github/scripts/emergency-rollback.mjs "$SHA")
           echo "$RESULT"
           ACTION=$(echo "$RESULT" | jq -r '.action // "failed"')
 
           case "$ACTION" in
             requested)
-              # The previous deployment was promoted: there is no live build of
-              # this SHA left for GLM QA to explore (HTPR-6239).
+              # A durable revert was created (and a proven-good deployment may
+              # also have been promoted), so this SHA is leaving production.
               echo "rolledback=true" >> "$GITHUB_OUTPUT"
               if [ -n "${GITHUB_TOKEN:-}" ] && [ -n "${GITHUB_REPOSITORY:-}" ]; then
                 curl -sS -o /dev/null -X POST \
@@ -662,12 +669,11 @@ jobs:
                   "https://api.github.com/repos/${GITHUB_REPOSITORY}/statuses/${SHA}" \
                   -d '{"state":"failure","context":"prod-health-gate","description":"Rolled back after failed smoke"}' || true
               fi
-              notify "🔴 hypertasks: $SHA passed the curl health check but FAILED Playwright smoke QA (a real view broke for a logged-in user). Auto-rolled back. Investigate: https://github.com/${{ github.repository }}/commit/$SHA"
+              notify "🔴 hypertasks: $SHA passed the curl health check but FAILED Playwright smoke QA (a real view broke for a logged-in user). Created a production revert and froze merging. Investigate: https://github.com/${{ github.repository }}/commit/$SHA"
               ;;
             skip)
-              # Production moved on before the rollback landed, so this SHA is
-              # not live either; suppress GLM QA the same way. Still mark the
-              # gate failed so drift never promotes this SHA later.
+              # Another run already reverted this SHA. Suppress GLM QA and keep
+              # the failed gate so drift never promotes this SHA later.
               echo "rolledback=true" >> "$GITHUB_OUTPUT"
               if [ -n "${GITHUB_TOKEN:-}" ] && [ -n "${GITHUB_REPOSITORY:-}" ]; then
                 curl -sS -o /dev/null -X POST \
@@ -676,7 +682,7 @@ jobs:
                   "https://api.github.com/repos/${GITHUB_REPOSITORY}/statuses/${SHA}" \
                   -d '{"state":"failure","context":"prod-health-gate","description":"Rolled back after failed smoke"}' || true
               fi
-              notify "⚠️ hypertasks: smoke QA failed for $SHA but production already moved on ($(echo "$RESULT" | jq -r '.reason // "unknown"')); not rolling back. Verify manually."
+              notify "⚠️ hypertasks: smoke QA failed for $SHA, but it was already reverted ($(echo "$RESULT" | jq -r '.reason // "unknown"')). Merging remains frozen; verify production."
               ;;
             *)
               # Rollback FAILED: the broken build is still live and the incident
@@ -689,10 +695,9 @@ jobs:
   # ── GLM exploratory QA (HTPR-6239): a 5-minute human-style pass on the live app ──
   # Runs whenever a production push is actually live and nothing rolled back,
   # independent of the smoke suite (HTPR-5781). The dispatcher tells the brief
-  # honestly when smoke could not run. A smoke-confirmed break that promoted
-  # the previous deployment
-  # (rolledback) still suppresses the brief: there is no live build of this
-  # SHA left to explore. Exploratory, never a gate: a dispatch failure alerts
+  # honestly when smoke could not run. A smoke-confirmed break with a durable
+  # revert (rolledback) suppresses the brief: that SHA is leaving production.
+  # Exploratory, never a gate: a dispatch failure alerts
   # on Telegram and never blocks, fails, or rolls back the deploy itself.
   glm-qa:
     needs: [health, smoke]
@@ -1076,7 +1081,8 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 8
     permissions:
-      contents: read
+      actions: write
+      contents: write
       statuses: write
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
@@ -1099,8 +1105,9 @@ jobs:
         env:
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
           CORE_SMOKE_RESULT_FILE: ${{ runner.temp }}/core-smoke-result.json
-          GITHUB_TOKEN: ${{ github.token }}
+          GITHUB_TOKEN: ${{ secrets.AUTOMERGE_TOKEN || github.token }}
           GITHUB_REPOSITORY: ${{ github.repository }}
+          GITHUB_RUN_URL: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
           SHOULD_ROLLBACK=$(node .github/scripts/core-actions-smoke.mjs rollback-decision)
           if [ "$SHOULD_ROLLBACK" != "true" ]; then
