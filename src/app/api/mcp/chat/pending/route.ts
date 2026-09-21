@@ -57,7 +57,7 @@ export async function GET(request: NextRequest) {
       // and setting isDelivered are one atomic operation. The protocol is
       // intentionally at-most-once; it has no separate acknowledgement call.
       const messages = await tx.$queryRaw<PendingChatMessage[]>`
-        WITH pending AS (
+        WITH candidates AS (
           SELECT
             message."id",
             message."sessionId",
@@ -89,6 +89,34 @@ export async function GET(request: NextRequest) {
           ORDER BY message."createdAt" ASC, message."id" ASC
           FOR UPDATE OF message SKIP LOCKED
           LIMIT ${PENDING_MESSAGE_LIMIT}
+        ), cancelled_deliveries AS (
+          UPDATE "AgentWebhookDelivery" delivery
+          SET "status" = 'cancelled', "processingAt" = NULL
+          FROM "AgentWebhookSubscription" subscription, candidates
+          WHERE subscription."id" = delivery."subscriptionId"
+            AND subscription."agentId" = ${agentId}
+            AND delivery."event" = 'chat.message'
+            AND delivery."status" = 'retrying'
+            AND delivery."payload" #>> '{chat,messageId}' = candidates."id"
+          RETURNING delivery."id"
+        ), pending AS (
+          SELECT candidates.*
+          FROM candidates
+          WHERE NOT EXISTS (
+            SELECT 1
+            FROM "AgentWebhookDelivery" delivery
+            JOIN "AgentWebhookSubscription" subscription
+              ON subscription."id" = delivery."subscriptionId"
+            WHERE subscription."agentId" = ${agentId}
+              AND delivery."event" = 'chat.message'
+              AND delivery."status" = 'retrying'
+              AND delivery."payload" #>> '{chat,messageId}' = candidates."id"
+              AND NOT EXISTS (
+                SELECT 1
+                FROM cancelled_deliveries cancelled
+                WHERE cancelled."id" = delivery."id"
+              )
+          )
         ), delivered AS (
           UPDATE "ChatMessage" message
           SET "isDelivered" = true

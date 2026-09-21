@@ -12,6 +12,7 @@ import { getProjectWhere } from "@/utils/controllers/projects/getAllIncludes";
 import {
   AGENT_RUN_WEBHOOK_EVENTS,
   AGENT_WEBHOOK_DELIVERY_CONTRACT,
+  agentWebhookChatMessageId,
   availableAgentWebhookEventDefinitions,
   availableAgentWebhookEvents,
   parseAgentWebhookEvents,
@@ -59,16 +60,6 @@ export function serializeAgentWebhookSubscription(sub: {
     lastDeliveryAt: sub.lastDeliveryAt?.toISOString() ?? null,
     lastDeliveryOk: sub.lastDeliveryOk,
   };
-}
-
-function chatMessageIdFromWebhookPayload(payload: Prisma.JsonValue): string | null {
-  if (typeof payload !== "object" || payload === null || Array.isArray(payload)) {
-    return null;
-  }
-  const chat = payload.chat;
-  if (typeof chat !== "object" || chat === null || Array.isArray(chat)) return null;
-  const messageId = chat.messageId;
-  return typeof messageId === "string" && messageId ? messageId : null;
 }
 
 export function serializeAgentWebhookDelivery(delivery: {
@@ -373,18 +364,27 @@ export async function manageAgentWebhook(input: {
 
   if (input.action === "delete") {
     await prisma.$transaction(async (tx) => {
+      // Send and poll use this row as the serialization point, so deletion
+      // cannot miss a message committed against the subscription it removes.
+      await tx.$queryRaw`
+        SELECT "id"
+        FROM "Agent"
+        WHERE "id" = ${input.agentId}
+          AND "revokedAt" IS NULL
+        FOR UPDATE
+      `;
       const chatDeliveries = await tx.agentWebhookDelivery.findMany({
         where: {
           subscriptionId: subscription.id,
           event: "chat.message",
-          status: { not: "delivered" },
+          status: { in: ["pending", "processing", "retrying", "failed"] },
         },
         select: { payload: true },
       });
       const messageIds = [
         ...new Set(
           chatDeliveries.flatMap(({ payload }) => {
-            const messageId = chatMessageIdFromWebhookPayload(payload);
+            const messageId = agentWebhookChatMessageId(payload);
             return messageId ? [messageId] : [];
           }),
         ),

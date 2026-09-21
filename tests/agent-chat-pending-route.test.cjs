@@ -8,6 +8,7 @@ process.env.NEXT_PUBLIC_BASEURL = "https://app.hypertask.ai";
 const root = path.resolve(__dirname, "..");
 let authContext;
 let activeWebhook;
+let webhookDeliveryStatus;
 let pendingRows;
 let replies;
 let rawQueries;
@@ -53,7 +54,13 @@ const tx = {
     const sql = sqlText(args);
     rawQueries.push(sql);
     if (/FROM "Agent"/.test(sql)) return [{ id: "agent-polling" }];
-    if (/WITH pending AS/.test(sql)) {
+    if (/WITH candidates AS/.test(sql)) {
+      if (["pending", "processing"].includes(webhookDeliveryStatus)) return [];
+      if (webhookDeliveryStatus === "retrying") {
+        assert.match(sql, /UPDATE "AgentWebhookDelivery" delivery/);
+        assert.match(sql, /delivery\."status" = 'retrying'/);
+        webhookDeliveryStatus = "cancelled";
+      }
       const claimed = pendingRows.filter((row) => !row.isDelivered).slice(0, 50);
       claimed.forEach((row) => {
         row.isDelivered = true;
@@ -179,6 +186,7 @@ test.beforeEach(() => {
     user: { id: 6, displayName: "Valentin" },
   };
   activeWebhook = false;
+  webhookDeliveryStatus = null;
   pendingRows = [
     {
       id: "message-1",
@@ -288,16 +296,31 @@ test("a replied turn returns the stored reply without creating another", async (
   assert.equal(replies.length, 1);
 });
 
-test("a failed webhook message is pollable while the webhook remains configured", async () => {
+test("polling atomically cancels a retrying webhook before claiming its message", async () => {
   activeWebhook = true;
+  webhookDeliveryStatus = "retrying";
 
   const { body } = await fetchPending();
 
   assert.equal(body.messages.length, 1);
   assert.equal(body.messages[0].id, "message-1");
   assert.equal(pendingRows[0].isDelivered, true);
+  assert.equal(webhookDeliveryStatus, "cancelled");
   assert.match(rawQueries.join("\n"), /AgentWebhookDelivery/);
   assert.match(rawQueries.join("\n"), /'pending', 'processing'/);
+});
+
+test("polling leaves pending and processing webhook messages alone", async () => {
+  for (const status of ["pending", "processing"]) {
+    webhookDeliveryStatus = status;
+    pendingRows[0].isDelivered = false;
+
+    const { body } = await fetchPending();
+
+    assert.deepEqual(body.messages, []);
+    assert.equal(pendingRows[0].isDelivered, false);
+    assert.equal(webhookDeliveryStatus, status);
+  }
 });
 
 test("pending rejects a user token", async () => {

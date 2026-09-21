@@ -153,6 +153,7 @@ test("a message nobody is listening for is answered in the thread", async () => 
   const notices = writes.filter(({ data }) => data.role === "assistant");
   assert.equal(notices.length, 1, "exactly one parked line per unanswered message");
   assert.equal(writes.length, 2, "written inside the same transaction as the human message");
+  assert.equal(writes.find(({ data }) => data.role === "human").data.isDelivered, true);
   const [notice] = notices;
   assert.equal(notice.data.role, "assistant");
   assert.equal(notice.data.isDelivered, false);
@@ -178,8 +179,13 @@ test("a webhook message stays unacknowledged until delivery succeeds", async () 
   assert.equal(body.delivered, true);
   assert.equal(body.notice, null);
   assert.equal(writes.length, 1, "only the human message is written");
-  assert.equal(writes[0].data.isDelivered, false);
-  assert.equal(updates.length, 0);
+  assert.equal(writes[0].data.isDelivered, true);
+  assert.deepEqual(updates, [
+    {
+      where: { id: "chatMessage-1" },
+      data: { isDelivered: false },
+    },
+  ]);
 });
 
 test("a fresh polling runtime queues an undelivered message without a parked notice", async () => {
@@ -189,12 +195,17 @@ test("a fresh polling runtime queues an undelivered message without a parked not
   assert.equal(body.delivered, true);
   assert.equal(body.notice, null);
   assert.equal(writes.length, 1, "only the human message is written");
-  assert.equal(writes[0].data.isDelivered, false);
-  assert.deepEqual(updates, []);
+  assert.equal(writes[0].data.isDelivered, true);
+  assert.deepEqual(updates, [
+    {
+      where: { id: "chatMessage-1" },
+      data: { isDelivered: false },
+    },
+  ]);
 });
 
 test("with the flag off the thread keeps today's behaviour", async () => {
-  const { route, writes } = loadMessageRoute({
+  const { route, writes, updates } = loadMessageRoute({
     flag: model.AGENT_CHAT_PARKED_REPLY_FLAG,
     flagEnabled: false,
     deliveryIds: [],
@@ -204,6 +215,8 @@ test("with the flag off the thread keeps today's behaviour", async () => {
   assert.equal(body.delivered, false);
   assert.equal(body.notice, null);
   assert.equal(writes.length, 1);
+  assert.equal(writes[0].data.isDelivered, true);
+  assert.deepEqual(updates, []);
 });
 
 test("the parked line reads as a system notice", () => {

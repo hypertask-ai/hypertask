@@ -77,7 +77,7 @@ function chatDelivery() {
   };
 }
 
-test("a failed chat webhook releases the message to polling without another webhook attempt", async () => {
+test("a failed chat webhook stays retryable while releasing the message to polling", async () => {
   const delivery = chatDelivery();
   const { deliverAgentWebhook, messageUpdates, queued } = loadDelivery({
     delivery,
@@ -91,15 +91,16 @@ test("a failed chat webhook releases the message to polling without another webh
 
   const result = await deliverAgentWebhook(delivery.id);
 
-  assert.equal(result.status, "failed");
-  assert.equal(delivery.status, "failed");
+  assert.equal(result.status, "retrying");
+  assert.equal(delivery.status, "retrying");
   assert.deepEqual(messageUpdates, [
     {
       where: { id: "message-1", role: "human" },
       data: { isDelivered: false },
     },
   ]);
-  assert.deepEqual(queued, []);
+  assert.equal(queued.length, 1);
+  assert.equal(queued[0][0], delivery.id);
 });
 
 test("a successful chat webhook acknowledges the message", async () => {
@@ -120,20 +121,29 @@ test("a successful chat webhook acknowledges the message", async () => {
   ]);
 });
 
-test("deleting a webhook releases every outstanding chat message before deliveries cascade", async () => {
+test("deleting a webhook releases only outstanding chat messages before deliveries cascade", async () => {
   const messageUpdates = [];
   const deleted = [];
+  const deliveryQueries = [];
+  const rawQueries = [];
   const subscription = {
     id: "subscription-1",
     agentId: "agent-a",
     deliveries: [],
   };
   const tx = {
+    $queryRaw: async (...args) => {
+      rawQueries.push(Array.isArray(args[0]) ? args[0].join("?") : String(args[0]));
+      return [{ id: "agent-a" }];
+    },
     agentWebhookDelivery: {
-      findMany: async () => [
-        { payload: { chat: { messageId: "message-1" } } },
-        { payload: { chat: { messageId: "message-2" } } },
-      ],
+      findMany: async (args) => {
+        deliveryQueries.push(args);
+        return [
+          { payload: { chat: { messageId: "message-1" } } },
+          { payload: { chat: { messageId: "message-2" } } },
+        ];
+      },
     },
     chatMessage: {
       updateMany: async (args) => {
@@ -180,6 +190,11 @@ test("deleting a webhook releases every outstanding chat message before deliveri
   });
 
   assert.equal(result.deleted, subscription.id);
+  assert.match(rawQueries.join("\n"), /FROM "Agent"/);
+  assert.match(rawQueries.join("\n"), /FOR UPDATE/);
+  assert.deepEqual(deliveryQueries[0].where.status, {
+    in: ["pending", "processing", "retrying", "failed"],
+  });
   assert.deepEqual(messageUpdates, [
     {
       where: { id: { in: ["message-1", "message-2"] }, role: "human" },

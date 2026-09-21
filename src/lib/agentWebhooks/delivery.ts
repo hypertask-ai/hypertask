@@ -2,6 +2,7 @@ import prisma from "@/lib/prisma";
 import { isFeatureEnabled } from "@/lib/flags";
 import { AGENT_RUN_FEATURE_FLAG } from "@/lib/agentRuns/model";
 import { postSignedWebhook } from "@/lib/mcp/webhooks/delivery";
+import { agentWebhookChatMessageId } from "./events";
 import { queueAgentWebhookDelivery } from "./queue";
 
 export const AGENT_WEBHOOK_MAX_ATTEMPTS = 4;
@@ -22,18 +23,9 @@ function chatMessageIdFromDelivery(delivery: {
   event: string;
   payload: unknown;
 }): string | null {
-  if (
-    delivery.event !== "chat.message" ||
-    typeof delivery.payload !== "object" ||
-    delivery.payload === null ||
-    Array.isArray(delivery.payload)
-  ) {
-    return null;
-  }
-  const chat = (delivery.payload as { chat?: unknown }).chat;
-  if (typeof chat !== "object" || chat === null || Array.isArray(chat)) return null;
-  const messageId = (chat as { messageId?: unknown }).messageId;
-  return typeof messageId === "string" && messageId ? messageId : null;
+  return delivery.event === "chat.message"
+    ? agentWebhookChatMessageId(delivery.payload)
+    : null;
 }
 
 async function cancelAgentWebhookDelivery(delivery: {
@@ -154,7 +146,7 @@ export async function deliverAgentWebhook(
 
   const nextDelay = agentWebhookRetryDelaySeconds(attemptCount);
   const messageId = chatMessageIdFromDelivery(delivery);
-  const failedPermanently = messageId !== null || nextDelay == null;
+  const failedPermanently = nextDelay == null;
   const nextAttemptAt = new Date(Date.now() + (nextDelay ?? 0) * 1000);
   const attemptedAt = new Date();
   await prisma.$transaction(async (tx) => {
