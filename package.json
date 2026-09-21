@@ -125,7 +125,7 @@
     "posthog-node": "^5.52.1",
     "pusher": "^5.3.4",
     "pusher-js": "^8.5.0",
-    "raw-body": "^2.5.2",
+    "raw-body": "^4.0.0",
     "react": "^19.3.0",
     "react-circular-progressbar": "^2.1.0",
     "react-day-picker": "^10.0.1",
