@@ -1,3 +1,4 @@
+import { logger as htLogger } from "#logger";
 import React, {
   ChangeEvent,
   useContext,
@@ -218,6 +219,8 @@ const AttachmentsUpload = (props: IProps) => {
     }>,
     error?: unknown,
   ) => {
+    if (error) htLogger.error("Could not add attachment", error);
+
     const rejectedIds = new Set(
       uploadedAttachments
         .filter(({ id, file }) => {
@@ -541,6 +544,7 @@ const AttachmentsUpload = (props: IProps) => {
                     toast.error("Could not save. Your changes are still here.");
                   }
                 } catch (error) {
+                  htLogger.error("Could not save editor content", error);
                   toast.error("Could not save. Your changes are still here.");
                 }
               }}

@@ -1,4 +1,5 @@
 'use client'
+import { logger as htLogger } from "#logger";
 import nookies from "nookies"
 import {  IFavorites, IProject, IProjectsAll, ISection, IUser } from "@/models/model";
 
@@ -1553,6 +1554,7 @@ const ensureBoardLoaded = async (index:number):Promise<IProject|null> => {
     queryClient.setQueryData(BOARD_TASKS_KEY(target.id, _currentUser.id), boardPayload) // keep side cache warm
     return hydrateBoardWithPayload(deepCopy(target), boardPayload)
   } catch (e) {
+    htLogger.error("Failed to load board data on switch", e)
     return null
   }
 }
