@@ -63,6 +63,7 @@ import {
   HTPR_6514_COMMENT_LONG_PRESS_FLAG,
   HTPR_6516_AGENT_ATTRIBUTION_FLAG,
   HTPR_6512_SEED_TEAM_AGENT_FLAG,
+  HTPR_6502_AGENT_TEMPLATE_INTAKE_FLAG,
   HTPR_6533_MCP_CLIENT_EVAL_FLAG,
   HTPR_4638_AI_DIRECTORY_METADATA_FLAG,
   HTPR_6532_STATELESS_MCP_FLAG,
@@ -107,6 +108,12 @@ const FEATURE_FLAG_QA_USER = {
 const RETIRED_FEATURE_FLAG_KEYS = new Set(["hyfa-43-factory-owner-preview"]);
 
 const FEATURE_FLAG_DEFINITIONS = [
+  {
+    key: HTPR_6502_AGENT_TEMPLATE_INTAKE_FLAG,
+    shippedOn: "2026-09-21",
+    description:
+      "Lets agents without a Hypertask identity file corrections in the Agent Template board's Backlog through a public, rate-limited endpoint.",
+  },
   {
     key: HTPR_6572_MY_TASKS_BOARD_TOOLBAR_FLAG,
     shippedOn: "2026-09-19",

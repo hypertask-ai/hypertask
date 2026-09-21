@@ -27,6 +27,7 @@ export interface CreateTaskCoreOptions {
     startDate?: Date;
     recurrence?: string | null;
     labelIds?: string[];
+    agentId?: string;
     createDrafts?: boolean;
     updateTeamActivity?: boolean;
 }
@@ -56,6 +57,7 @@ export async function createTaskCore(options: CreateTaskCoreOptions): Promise<Cr
         startDate,
         recurrence,
         labelIds,
+        agentId,
         createDrafts = true,
         updateTeamActivity = true
     } = options;
@@ -94,6 +96,7 @@ export async function createTaskCore(options: CreateTaskCoreOptions): Promise<Cr
         dueDate,
         startDate,
         recurrence: recurrence ?? null,
+        agentId: agentId ?? null,
         dueDateNotifiedAt: null,
         updatedAt: currentDate,
         createdAt: currentDate
@@ -117,7 +120,8 @@ export async function createTaskCore(options: CreateTaskCoreOptions): Promise<Cr
                     Priority_Value: priorityConstant.Priority_Value,
                     sectionId,
                     projectId,
-                    addedByUserId: userId
+                    addedByUserId: userId,
+                    addedByAgentId: agentId
                 }
             };
         }
@@ -134,6 +138,7 @@ export async function createTaskCore(options: CreateTaskCoreOptions): Promise<Cr
                     estimate_full_value: estimateConstant.estimate_full_value,
                     projectId,
                     addedByUserId: userId,
+                    addedByAgentId: agentId,
                     sectionId
                 }
             };
@@ -142,7 +147,7 @@ export async function createTaskCore(options: CreateTaskCoreOptions): Promise<Cr
 
     // Create task. The board webhook rows are written in the same transaction so
     // the task and its task.created event can never exist without each other.
-    const taskCreatedActor = { userId, agentId: null };
+    const taskCreatedActor = { userId, agentId: agentId ?? null };
     const createdTask = await createTaskWithBoardWebhookOutbox(prisma, taskCreatedActor, async (tx) => {
         const created = await tx.task.create({
             data: taskData,
@@ -196,6 +201,7 @@ export async function createTaskCore(options: CreateTaskCoreOptions): Promise<Cr
         taskId: newTask.id,
         creatorId: userId,
         content: description,
+        agentId,
         actingUserId: userId
     });
 
@@ -241,7 +247,8 @@ export async function createTaskCore(options: CreateTaskCoreOptions): Promise<Cr
         taskId: newTask.id,
         projectId,
         sectionId,
-        currentUserId: userId
+        currentUserId: userId,
+        agentAssignerId: agentId
     });
     if (autoAssigned === 'pending') {
         console.warn('[task-create-core] auto-assignment did not complete; retrying the pending task.created handoff', {
@@ -253,6 +260,7 @@ export async function createTaskCore(options: CreateTaskCoreOptions): Promise<Cr
             );
             const recoveryResult = await recoverPendingAgentTaskCreatedWebhook(newTask.id, {
                 userId,
+                agentId,
             });
             if (recoveryResult === 'recovered') {
                 // The recovery helper emitted task.created after its final
@@ -289,7 +297,7 @@ export async function createTaskCore(options: CreateTaskCoreOptions): Promise<Cr
             await markAgentTaskCreatedReady(newTask.id);
             await emitAgentTaskCreatedWebhook({
                 taskId: newTask.id,
-                actor: { userId },
+                actor: { userId, agentId },
             });
         } catch (error) {
             // The creation transaction left a pending marker; the minute sweep
