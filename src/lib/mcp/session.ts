@@ -60,6 +60,19 @@ export function createMcpToken(
 
 export const MCP_OAUTH_TOKEN_EXPIRY = 90 * 24 * 60 * 60;
 
+/**
+ * Creates a JWT token for OAuth 2.1 access (MCP client authentication)
+ *
+ * @param firebaseUid Firebase user UID (used as 'sub')
+ * @param userId Database user ID
+ * @param email User email
+ * @param clientId OAuth client registration bound to this credential
+ * @param expiresIn Expiration in seconds (default: 90 days). Ignored when agentId is set (no JWT exp).
+ * @param agentId Optional agent UUID; when set, token has no expiry.
+ * @param agentTokenJti Current agent credential generation.
+ * @param agentTeamScope Optional team grant carried by a team-bound agent.
+ * @returns JWT token string
+ */
 export function createOAuthToken(
   firebaseUid: string,
   userId: number,

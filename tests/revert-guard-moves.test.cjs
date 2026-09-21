@@ -14,14 +14,14 @@ const originalLines = [
   "}",
 ].join("\n") + "\n";
 
-function makeRepo(t) {
+function makeRepo(t, source = originalLines) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "revert-guard-move-"));
   t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
   execFileSync("git", ["init", "-q"], { cwd: dir });
   execFileSync("git", ["config", "user.email", "test@example.com"], { cwd: dir });
   execFileSync("git", ["config", "user.name", "Test"], { cwd: dir });
   fs.mkdirSync(path.join(dir, "src"));
-  fs.writeFileSync(path.join(dir, "src/original.ts"), originalLines);
+  fs.writeFileSync(path.join(dir, "src/original.ts"), source);
   execFileSync("git", ["add", "."], { cwd: dir });
   execFileSync("git", ["commit", "-q", "-m", "recent behavior"], { cwd: dir });
   const base = execFileSync("git", ["rev-parse", "HEAD"], { cwd: dir, encoding: "utf8" }).trim();
@@ -92,6 +92,21 @@ test("still rejects recent lines that are actually deleted", (t) => {
   const result = run(dir, head);
   assert.equal(result.status, 1);
   assert.match(result.stderr, /Revert Guard failed/);
+  assert.match(result.stderr, /src\/original\.ts/);
+});
+
+test("does not hide unmatched deletions in a mostly extracted file", (t) => {
+  const lines = Array.from(
+    { length: 20 },
+    (_, index) => `export const value${index} = ${index};`,
+  );
+  const dir = makeRepo(t, `${lines.join("\n")}\n`);
+  fs.writeFileSync(path.join(dir, "src/original.ts"), 'export * from "./extracted";\n');
+  fs.writeFileSync(path.join(dir, "src/extracted.ts"), `${lines.slice(0, 14).join("\n")}\n`);
+  const head = commit(dir, "partially extract implementation");
+
+  const result = run(dir, head);
+  assert.equal(result.status, 1);
   assert.match(result.stderr, /src\/original\.ts/);
 });
 

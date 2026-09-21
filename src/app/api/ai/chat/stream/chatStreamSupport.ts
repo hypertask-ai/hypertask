@@ -328,6 +328,13 @@ export function userFacingErrorMessage(error: unknown, stage: string) {
   return "Sorry, something went wrong while generating a response. Please try again.";
 }
 
+/**
+ * Extra fields for a streamed error event. The allowance period travels with
+ * the stop so a background caller can deduplicate against the period that
+ * actually rejected, instead of re-deriving one from its own clock and keying
+ * the wrong month at a rollover. The charged team travels with it so the
+ * caller can attribute the stop to exactly the team whose allowance is spent.
+ */
 export function userFacingErrorDetails(error: unknown, teamId: string | null) {
   const periodKey = includedAllowanceError(error)?.periodKey;
   if (!periodKey) return {};

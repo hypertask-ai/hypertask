@@ -579,6 +579,8 @@ const createAgentModal = showCreateAgent ? (
     </ModalContainerCustom>
   ) : null;
 
+// 6407 keeps chrome-aware height for the whole mobile Agent Chat page.
+// 6476 only needs it while an agent thread is open (roster keeps normal shell).
 let mobileAgentChatHeight: string | undefined;
 
 const mobileChromeAwareHeight = Boolean(
