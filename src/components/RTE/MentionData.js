@@ -1,4 +1,3 @@
-import { logger as htLogger } from "#logger";
 /* eslint-disable import/no-anonymous-default-export */
 import { ReactRenderer } from "@tiptap/react";
 import tippy from "tippy.js";
@@ -25,11 +24,9 @@ export const createMentionData = (mentionProjectId) => ({
         if (result && result.data) {
           return result.data;
         } else {
-          htLogger.info("🤔 ~ @Mention: No results found");
           return [];
         }
       } catch (error) {
-        htLogger.error("Error fetching tasks:", error);
         return [];
       }
     };

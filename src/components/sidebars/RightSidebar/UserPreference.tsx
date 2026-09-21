@@ -1,4 +1,3 @@
-import { logger as htLogger } from "#logger";
 import axios from "axios";
 import toast from "react-hot-toast";
 import { ComponentType, useEffect, useRef, useState } from "react";
@@ -212,7 +211,6 @@ const UserPreferenceSidebar = ({
       });
       return response.status === 200 && Boolean(response.data.settings);
     } catch (error) {
-      htLogger.info("🚀 ~ saveAutoDescriptionPreference ~ error:", error);
       return false;
     }
   };
@@ -229,7 +227,6 @@ const UserPreferenceSidebar = ({
         }));
       }
     } catch (error) {
-      htLogger.info("🚀 ~ updateUserPreferences ~ error:", error);
     }
   };
 

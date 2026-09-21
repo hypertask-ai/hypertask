@@ -1,5 +1,4 @@
 import { env as appEnv } from "#env";
-import { logger as htLogger } from "#logger";
 import { useGetAllFollowers } from "@/hooks/Task Detail/useGetFollowers";
 import { ITask } from "@/models/model";
 import { currentUserAtom } from "@/store";
@@ -43,7 +42,6 @@ const useFollowers = (task: ITask) => {
         });
       }
     } catch (error) {
-      htLogger.info("🚀 ~ PostFollower ~ error:", error);
     }
   };
 
@@ -70,7 +68,6 @@ const useFollowers = (task: ITask) => {
         taskId: task?.id,
       });
     } catch (error) {
-      htLogger.info("error creating mention notification", error);
     }
   };
 
@@ -85,7 +82,6 @@ const useFollowers = (task: ITask) => {
         mentionById: currentUser.id,
       });
     } catch (error) {
-      htLogger.info("🚀 ~ handleAgentMention ~ error:", error);
     }
   }
 
@@ -100,7 +96,6 @@ const useFollowers = (task: ITask) => {
     try {
       axios.post("/api/notifications/sendEmailToFollower", { ...body });
     } catch (error) {
-      htLogger.info("🚀 ~ sendEmailToFollower ~ error:", error);
     }
   }
 

@@ -1,4 +1,3 @@
-import { logger as htLogger } from "#logger";
 import TaskDetail from "./TaskDetailComp";
 import {
   fetchCommentsForSlug,
@@ -30,7 +29,6 @@ export async function generateMetadata(props: any): Promise<Metadata> {
   // read route params
   if (!parseDetailSlug(params.slug)) return { title: "Hypertask" }
   params.slug[0], params.slug[1]
-  htLogger.info("🚀 ~ params.slug[1]:", params.slug[1])
   // fetch data
   const task = await prisma.task.findFirst({
     where: {
@@ -71,7 +69,6 @@ export default async function Page(
     redirect(Number.isInteger(projectId) ? `/project?id=${projectId}` : "/");
   }
 
-  htLogger.info(params)
   // const _user = getCookie("user")
   const userObj = await requireServerCookieUser();
   var initialMap: any = {};
@@ -86,7 +83,6 @@ export default async function Page(
   let stack = false;
   let scrollSetting = "Bottom" as ScrollSetting;
 
-  htLogger.time(`🤔 ~ TDP Fetch for ${params.slug[0]}/${params.slug[1]}`)
   const slug = detailSlug;
 
   const [taskResult, commentsJson, userPreferences] = await Promise.all([
@@ -103,7 +99,6 @@ export default async function Page(
   [lastReadAt, agentRunActivities] = await Promise.all([
     getTaskReadStateLastReadAt(task.id, userObj.id),
     listTaskAgentRunActivities(userObj.id, task.id).catch((error) => {
-      htLogger.error("[agent-run] task activity load failed", error);
       return [];
     }),
   ]);
@@ -133,7 +128,6 @@ export default async function Page(
       ),
     };
 
-    htLogger.timeEnd(`🤔 ~ TDP Fetch for ${params.slug[0]}/${params.slug[1]}`)
   }
 
   // Call the function to fetch sections for all projects and update them

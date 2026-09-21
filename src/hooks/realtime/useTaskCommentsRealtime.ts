@@ -1,4 +1,3 @@
-import { logger as htLogger } from "#logger";
 import { useEffect, useRef } from "react";
 import type { Dispatch, SetStateAction } from "react";
 import { useQueryClient } from "@tanstack/react-query";
@@ -147,7 +146,6 @@ export function useTaskCommentsRealtime(
             }
           }
         } catch (error) {
-          htLogger.warn("[realtime] task detail refetch failed", error);
         }
       }
       try {
@@ -202,9 +200,6 @@ export function useTaskCommentsRealtime(
       if (fallbackActive) return;
       fallbackActive = true;
       if (!fallbackWarningLogged) {
-        htLogger.warn(
-          `[realtime] task comment subscription ${reason}; enabling reconciliation`
-        );
         fallbackWarningLogged = true;
       }
       runFallbackCycle();

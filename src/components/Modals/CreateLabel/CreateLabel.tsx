@@ -1,4 +1,3 @@
-import { logger as htLogger } from "#logger";
 import { useGetAllProjectLabels } from "@/hooks/MultiPages/useGetAllProjectLabels";
 import { ICurrentInViewObject, inViewObjectAtom } from "@/store";
 import { ChangeEvent, useCallback, useEffect, useRef, useState, useMemo } from "react";
@@ -243,7 +242,6 @@ const CreateLabel: React.FC<Props> = ({
         // setOptimisticLabels([]);
         // refetch(); // Background sync, won't affect current UI
       } catch (error) {
-        htLogger.error("Error toggling label assignment:", error);
         // On error, revert the optimistic update
         revertOptimisticUpdate();
       } finally {
@@ -290,7 +288,6 @@ const CreateLabel: React.FC<Props> = ({
         }
       }
     } catch (error) {
-      htLogger.error("Error creating label:", error);
     } finally {
       setIsLoading(false);
     }

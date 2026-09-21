@@ -1,4 +1,3 @@
-import { logger as htLogger } from "#logger";
 import React, {
   ChangeEvent,
   useContext,
@@ -346,7 +345,6 @@ function LeftSidebar({ toggleLeftSidebar }: { toggleLeftSidebar: () => void }) {
         // Check if the group has a 'projects' property
         if (group.projects) {
           // Filter projects based on the search term in the 'title' property
-          htLogger.info("🚀 ~ filteredData ~ filteredProjects:", group.projects);
           const filteredProjects = group.projects.filter(
             (project: { title: string }) =>
               project.title?.toLowerCase().includes(searchTerm?.toLowerCase())

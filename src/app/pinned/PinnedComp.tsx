@@ -61,7 +61,6 @@ const Pinned = (props: IProp) => {
     // press k
     if (e.keyCode === 75 && cmdControl) {
       e.preventDefault();
-      // debug.log("1: change commands mode");
       toggleShowCommands();
     }
 

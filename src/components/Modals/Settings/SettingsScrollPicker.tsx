@@ -1,6 +1,5 @@
 "use client";
 
-import { logger as htLogger } from "#logger";
 import axios from "axios";
 import { useQueryClient } from "@tanstack/react-query";
 import { Check } from "lucide-react";
@@ -34,7 +33,6 @@ const SettingsScrollPicker = () => {
         setting: type,
       });
     } catch (error) {
-      htLogger.error("Could not update scroll setting:", error);
       queryClient.setQueryData([globalConstants.ScrollSettingKey], previous);
     }
   };

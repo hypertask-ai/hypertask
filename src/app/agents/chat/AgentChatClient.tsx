@@ -1,8 +1,6 @@
 /* eslint-disable @next/next/no-img-element */
 "use client";
 
-import { logger as htLogger } from "#logger";
-
 import { AGENT_CHAT_EVENT } from "@/lib/realtime/shared";
 import {
   AGENT_CHAT_COMMAND_EVENT,
@@ -1287,7 +1285,6 @@ const AgentChatClient = (props: IProp) => {
     const remaining = sinceAt + maxWait - Date.now();
     const markTimedOut = () => {
       if (!pollingChatEnabled) return;
-      htLogger.error("[agent-chat] no reply after three minutes");
       setReplyTimedOut(true);
     };
     if (remaining <= 0) {

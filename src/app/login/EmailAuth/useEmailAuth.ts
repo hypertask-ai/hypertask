@@ -1,5 +1,4 @@
 import { env as appEnv } from "#env";
-import { logger as htLogger } from "#logger";
 import { useState, useEffect, useRef } from 'react'
 import { useAuth } from '@/hooks/General/useAuth'
 import authConfig from '@/lib/configs/auth.config'
@@ -103,40 +102,31 @@ export function useEmailAuth(initialEmail = '') {
   // Check if this page was loaded from a JWT email token or has AB test variant
   useEffect(() => {
     if (typeof window === 'undefined') return
-
+    
     const urlParams = new URLSearchParams(window.location.search)
     const token = urlParams.get('token')
-
-    htLogger.info('🔍 useEmailAuth useEffect - checking for token:', token ? 'found' : 'not found')
-
+    
+    
     if (!token) return
-
+    
     // Check both module-level flag and sessionStorage to prevent multiple calls
     const sessionProcessed = sessionStorage.getItem(PROCESSED_TOKEN_KEY) === token
     if (globalTokenProcessed || sessionProcessed) {
-      htLogger.info('⚠️ Token already processed (module or session), skipping', {
-        globalTokenProcessed,
-        sessionProcessed,
-        storedToken: sessionStorage.getItem(PROCESSED_TOKEN_KEY),
-        currentToken: token.substring(0, 20) + '...'
-      })
       return
     }
-
-    htLogger.info('🔗 JWT email token detected in URL - starting processing')
+    
     // Mark as processed in both places before async call
     globalTokenProcessed = true
     sessionStorage.setItem(PROCESSED_TOKEN_KEY, token)
-
+    
     const abTestParam = (authConfig as any).abTest?.urlParam || 'variant'
     const variant = urlParams.get(abTestParam)
-
+    
     // Store AB test variant if present
     if (variant) {
-      htLogger.info('🧪 AB Test Variant detected:', variant)
       setAbTestVariant(variant)
     }
-
+    
     setIsProcessingToken(true)
     setStep('signing-in')
     completeSignInWithJWT(token, variant)
@@ -182,7 +172,6 @@ export function useEmailAuth(initialEmail = '') {
 
         setStep('link-sent')
       } catch (error) {
-        htLogger.error('❌ Failed to recover Better Auth magic-link signup:', error)
         setErrors({ general: 'We couldn\'t find an account for that email and creating one failed. Please try again.' })
         setStep('form')
       }
@@ -194,13 +183,13 @@ export function useEmailAuth(initialEmail = '') {
 
   const validateEmail = () => {
     const newErrors: {[key: string]: string} = {}
-
+    
     if (!email) {
       newErrors.email = 'Email is required'
     } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
       newErrors.email = 'Please enter a valid email address'
     }
-
+    
     setErrors(newErrors)
     return Object.keys(newErrors).length === 0
   }
@@ -208,41 +197,30 @@ export function useEmailAuth(initialEmail = '') {
   const completeSignInWithJWT = async (token: string, variant: string | null) => {
     try {
       // Don't check isProcessingToken here since we already set it in useEffect
-      htLogger.info('🔍 Starting JWT token verification...')
-      htLogger.info('🔍 Token (first 50 chars):', token.substring(0, 50) + '...')
-      htLogger.info('🔍 Verifying JWT token')
-      htLogger.info('🧪 AB Test Variant:', variant)
-      htLogger.info('🔍 API endpoint:', authConfig.emailLink.verifyTokenApi)
-
+      
       // Call our API to verify the JWT and get the post-auth user data
       const response = await fetch(authConfig.emailLink.verifyTokenApi, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({
+        body: JSON.stringify({ 
           token,
           abTestVariant: variant, // Pass AB test variant
           shouldSkipInteractive: authConfig.onboarding.shouldSkipInteractive // Pass skip interactive flag
         }),
       })
 
-      htLogger.info('🔍 API response status:', response.status)
       const data = await response.json()
-      htLogger.info('🔍 API response data:', data)
 
       if (!response.ok || !data.success) {
-        htLogger.error('❌ API error:', data)
         throw new Error(data.error || 'Token verification failed')
       }
 
-      htLogger.info('✅ JWT verified, completing sign-in')
-      htLogger.info('👤 isNewUser from API:', data.isNewUser)
-      htLogger.info('👤 User data from API:', data.user)
 
       // Complete sign-in using the pre-processed data and cookies from the API
       await loginWithEmail({
-        shouldSkipInteractive: authConfig.onboarding.shouldSkipInteractive,
+        shouldSkipInteractive: authConfig.onboarding.shouldSkipInteractive, 
         skipOnboarding: authConfig.onboarding.skipOnboarding,
         userData: data.user,
         prevBoard: data.prevBoard,
@@ -250,23 +228,16 @@ export function useEmailAuth(initialEmail = '') {
         skipDatabaseUpdate: true
       })
 
-      htLogger.info('✅ Login completed successfully')
 
     } catch (error: any) {
-      htLogger.error('❌ Error with JWT sign-in:', error)
-      htLogger.error('❌ Error details:', {
-        message: error.message,
-        stack: error.stack,
-        name: error.name
-      })
       setIsProcessingToken(false) // Reset on error so user can retry
-
+      
       // Clear the processed flag on error so user can retry
       globalTokenProcessed = false
       if (typeof window !== 'undefined') {
         sessionStorage.removeItem(PROCESSED_TOKEN_KEY)
       }
-
+      
       if (error.message.includes('expired')) {
         setErrors({ general: 'This sign-in link has expired. Please request a new one.' })
       } else if (error.message.includes('invalid')) {
@@ -274,24 +245,23 @@ export function useEmailAuth(initialEmail = '') {
       } else {
         setErrors({ general: `Sign-in failed: ${error.message || 'Please try again.'}` })
       }
-
+      
       setStep('form')
     }
   }
 
   const handleVerificationCode = async (e: React.FormEvent) => {
     e.preventDefault()
-
+    
     if (!verificationCode) {
       setErrors({ code: 'Verification code is required' })
       return
     }
-
+    
     setIsLoading(true)
     setErrors({})
-
+    
     try {
-      htLogger.info('🧪 AB Test Variant:', abTestVariant)
 
       if (isBetterAuthEnabled) {
         const { error } = await authClient.signIn.emailOtp({
@@ -344,8 +314,7 @@ export function useEmailAuth(initialEmail = '') {
       }
 
     } catch (error: any) {
-      htLogger.error('❌ Error with code sign-in:', error)
-
+      
       if (error.message.includes('expired')) {
         setErrors({ code: 'This verification code has expired. Please request a new one.' })
       } else if (error.message.includes('invalid') || error.message.includes('Invalid code format')) {
@@ -362,14 +331,13 @@ export function useEmailAuth(initialEmail = '') {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-
+    
     if (!validateEmail()) return
-
+    
     setIsLoading(true)
     setErrors({})
-
+    
     try {
-      htLogger.info('📧 Sending custom sign-in link to:', email)
       if (isBetterAuthEnabled) {
         sessionStorage.setItem('ht_pending_ba_email', email)
         const { error } = await authClient.signIn.magicLink({
@@ -414,19 +382,16 @@ export function useEmailAuth(initialEmail = '') {
           throw new Error(data.error || 'Failed to send sign-in link')
         }
 
-        htLogger.info('✅ Sign-in link sent successfully')
 
         // In development, show the link for easy testing
         if (appEnv.NODE_ENV === 'development' && data.devLink) {
-          htLogger.info('🔗 Dev link:', data.devLink)
         }
       }
-
+      
       setStep('link-sent')
-
+      
     } catch (error: any) {
-      htLogger.error('❌ Error sending sign-in link:', error)
-
+      
       if (error.message.includes('invalid-email')) {
         setErrors({ email: 'Please enter a valid email address.' })
       } else if (error.message.includes('too-many-requests') || error.message.includes('Please wait')) {
@@ -446,10 +411,10 @@ export function useEmailAuth(initialEmail = '') {
       setErrors({ email: 'Please enter your email address' })
       return
     }
-
+    
     setIsLoading(true)
     setErrors({})
-
+    
     try {
       if (isBetterAuthEnabled) {
         sessionStorage.setItem('ht_pending_ba_email', email)
@@ -494,10 +459,8 @@ export function useEmailAuth(initialEmail = '') {
         }
       }
 
-      htLogger.info('✅ Sign-in link resent')
       alert('New sign-in link sent! Check your inbox.')
     } catch (error: any) {
-      htLogger.error('❌ Failed to resend link:', error)
       setErrors({ general: error.message || 'Failed to resend link. Please try again.' })
     } finally {
       setIsLoading(false)

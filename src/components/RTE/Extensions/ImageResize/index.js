@@ -1,4 +1,3 @@
-import { logger as htLogger } from "#logger";
 import Image from '@tiptap/extension-image';
 
 const ImageResize = Image.extend({
@@ -86,7 +85,6 @@ const ImageResize = Image.extend({
                     $container.removeAttribute('style');
                     if ($container.childElementCount > 2) {
                         for (let i = 0; i < 4; i++) {
-                            htLogger.info("🚀 ~ document.addEventListener ~ $container.lastChild:", $container.lastChild)
                             $container.removeChild($container.lastChild);
                         }
                     }

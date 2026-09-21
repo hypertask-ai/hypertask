@@ -1,5 +1,4 @@
 'use client'
-import { logger as htLogger } from "#logger";
 import { useLayoutEffect } from 'react'
 import useCurrentUserCheckFromCookies from '@/hooks/General/useCurrentUserCheckFromCookies'
 import { useRouter } from 'next/navigation'
@@ -13,7 +12,6 @@ const Page = () => {
     // If anyone reaches this route, something went wrong with middleware
     // Log them out as a security measure
     if (currentUser) {
-      htLogger.error('🚨 User reached root route - this should not happen. Logging out user.')
       
       // Clear all authentication cookies
       destroyCookie(null, 'nookies_user')

@@ -1,6 +1,5 @@
 "use client";
 
-import { logger as htLogger } from "#logger";
 import axios from "axios";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import toast from "react-hot-toast";
@@ -165,7 +164,6 @@ const MembersSection = () => {
         setIsRenaming(false);
       }
     } catch (error) {
-      htLogger.error(error);
       toast.error("Could not rename team");
     } finally {
       setIsSavingName(false);
@@ -199,7 +197,6 @@ const MembersSection = () => {
         toast.success("Member removed");
       }
     } catch (error) {
-      htLogger.error(error);
       toast.error("Could not remove member");
     } finally {
       setRemovingMemberId(null);
@@ -218,7 +215,6 @@ const MembersSection = () => {
       );
       await refetchProjectMemberRoles();
     } catch (error) {
-      htLogger.error(error);
       toast.error("Could not change member role");
     } finally {
       setChangingRoleUserId(null);

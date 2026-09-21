@@ -1,6 +1,5 @@
 "use client"
 
-import { logger as htLogger } from "#logger";
 import { useState, useEffect } from "react"
 import toast from "react-hot-toast"
 import type { Connection } from "../types"
@@ -21,7 +20,6 @@ export function useMcpConnections() {
         setConnections(data.connections)
       }
     } catch (error) {
-      htLogger.error("Error fetching connections:", error)
     } finally {
       setIsLoadingConnections(false)
     }
@@ -53,7 +51,6 @@ export function useMcpConnections() {
         toast.error(data.error || "Failed to revoke connection")
       }
     } catch (error) {
-      htLogger.error("Error revoking connection:", error)
       toast.error("Failed to revoke connection")
     } finally {
       setRevokingClientId(null)
@@ -79,7 +76,6 @@ export function useMcpConnections() {
       toast.success("Client removed")
       return true
     } catch (error) {
-      htLogger.error("Error removing OAuth client:", error)
       toast.error("Failed to remove client")
       return false
     } finally {
@@ -110,7 +106,6 @@ export function useMcpConnections() {
         toast.error(data.error || "Failed to revoke connections")
       }
     } catch (error) {
-      htLogger.error("Error revoking all connections:", error)
       toast.error("Failed to revoke connections")
     } finally {
       setIsRevokingAll(false)

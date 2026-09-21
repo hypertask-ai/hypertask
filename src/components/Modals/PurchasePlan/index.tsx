@@ -1,5 +1,4 @@
 import { env as appEnv } from "#env";
-import { logger as htLogger } from "#logger";
 import { ModalContainerCustom } from "@/components/Common/CommonModalComponents";
 import "@/styles/AttachmentView.scss";
 import React, { useEffect, useRef, useState } from "react";
@@ -178,7 +177,6 @@ const PurchasePlanModal: React.FC<ITrialModal> = ({
 
       return { kind: "member", ownerName };
     } catch (error) {
-      htLogger.error("Could not resolve the paywall team:", error);
       return { kind: "error" };
     }
   };
@@ -226,7 +224,6 @@ const PurchasePlanModal: React.FC<ITrialModal> = ({
         setCurrTeam(response.data);
         return await ensureBillingCustomer(response.data);
       } catch (error) {
-        htLogger.error("Could not create a team from the paywall:", error);
         toast.error("Could not create your team. Please try again.");
         return null;
       } finally {
@@ -260,7 +257,6 @@ const PurchasePlanModal: React.FC<ITrialModal> = ({
 
       return await provisionTeam();
     } catch (error) {
-      htLogger.error("Could not prepare checkout:", error);
       toast.error("Could not prepare checkout. Please try again.");
       return null;
     }
@@ -361,7 +357,6 @@ const NewTrialBody = ({
       router.push(url.data.url);
       callback();
     } catch (error) {
-      htLogger.error("Could not open checkout:", error);
       toast.error("Could not open checkout. Please try again.");
     } finally {
       setOpeningCheckout(false);

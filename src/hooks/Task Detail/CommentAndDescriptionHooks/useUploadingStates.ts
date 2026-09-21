@@ -1,4 +1,3 @@
-import { logger as htLogger } from "#logger";
 import  { useState,useEffect } from 'react'
 import { IUploadingDescription } from '@/models/model';
 import useQueryState from '@/hooks/MultiPages/useQueryState';
@@ -18,7 +17,6 @@ const useCommentAndDescriptionUploadingStates = () => {
 
     if (uploadingComments.length > 0 || uploadingDescription ) {
       event.preventDefault();
-      htLogger.info(event.defaultPrevented)
     }
   };
 

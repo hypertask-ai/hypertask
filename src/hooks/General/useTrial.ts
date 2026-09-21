@@ -1,5 +1,4 @@
 import { env as appEnv } from "#env";
-import { logger as htLogger } from "#logger";
 import { CHECKOUT_SESSION_API_ENDPOINT } from "@/lib/constants/APIRouteConstants";
 import { createCheckoutParam } from "@/lib/constants/constants";
 import { ISubscriptionPlan } from "@/lib/subscriptionPlans";
@@ -59,7 +58,6 @@ const useTrial = ({ teamInfo, manageLink, plan, hasSubscription }: IProps) => {
         success,
         cancel,
       );
-      htLogger.info("🚀 ~ createCheckout ~ body:", body);
       const url = await axios.post(CHECKOUT_SESSION_API_ENDPOINT, body);
       router.push(url.data.url);
     }

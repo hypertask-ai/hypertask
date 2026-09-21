@@ -1,4 +1,3 @@
-import { logger as htLogger } from "#logger";
 import { useCurrentBoardBilling } from "@/hooks/General/useCurrentBoardBilling";
 import { shouldBlockAiDueToByokProvider } from "@/lib/byokSelectedProviderGate";
 import { TAiModal, TAiMode } from "@/models/AI_Task_writer_model";
@@ -241,7 +240,6 @@ const useAITaskWriter = (
           requestKind: requestKindOverride,
           userRetrievalTexts: options?.userRetrievalTexts ?? [],
         }
-        htLogger.info("🚀 ~ sendAIRequest ~ payload keys:", Object.keys(payload));
         const response = await fetch(taskWriterRoute, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -275,7 +273,6 @@ const useAITaskWriter = (
           abortController.signal.aborted ||
           requestGenerationRef.current !== requestGeneration
         ) return;
-        htLogger.error("AI Request Error:", error);
         setHasError(true);
         setAIResponse(
           error instanceof Error && error.message

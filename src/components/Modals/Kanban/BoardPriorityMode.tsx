@@ -1,4 +1,3 @@
-import { logger as htLogger } from "#logger";
 import { ModalContainerCustom, ModalHeaderComp, ModalInput, ModalListContainer, ModalRowElementContainer } from "@/components/Common/CommonModalComponents";
 import useKanbanViews from "@/hooks/Homepage/Views/useKanbanViews";
 
@@ -139,7 +138,6 @@ const BoardPriorityMode = <TMode extends string = SortingMode,>(props: Props<TMo
                 maxLevels === 1
             )
         } catch (error) {
-            htLogger.info("🚀 ~ setPriorirty ~ error:", error)
 
         }
     }
@@ -149,7 +147,6 @@ const BoardPriorityMode = <TMode extends string = SortingMode,>(props: Props<TMo
         const index = filteredPriorities.findIndex(item => item === selectedPriority)
 
         // if (e.key === 'Enter' && filteredPriorities.length > 0) {
-        //     debug.log("i had submitted bro this is dangerous")
         //     // createBoard(title, selectedPriority.id, selectedPriority.googleAccountId)
         // }
         if (e.key === "Tab") {
@@ -246,7 +243,6 @@ const BoardPriorityMode = <TMode extends string = SortingMode,>(props: Props<TMo
     }, [document.activeElement, keyword, selectedPriority, filteredPriorities, levels]);
 
     useEffect(() => {
-        // debug.log("🚀 ~ useEffect ~ filteredPriorities_:")
         const filteredPriorities_ = priorityModes.filter((priority) =>
             (priority === "Manual" || maxLevels === 1 || !levels.some((level) => level.mode === priority)) &&
             (levels.length < maxLevels || maxLevels === 1 || priority === "Manual") &&

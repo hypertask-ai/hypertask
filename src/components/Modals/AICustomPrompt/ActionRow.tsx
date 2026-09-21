@@ -1,4 +1,3 @@
-import { logger as htLogger } from "#logger";
 
 import UpdateKanban from '@/hooks/MultiPages/useUpdateTaskInBoards';
 import axios from 'axios';
@@ -28,7 +27,6 @@ const ActionRow = () => {
                 projectId: _currentProject?.id,
                 customInstruction: value,
             })
-            htLogger.info("🚀 ~ confirmHandler ~ res:", res)
             if (res.status === 200) {
                 setCurrentProject((prev) => ({ ...prev!, ai_custom_instructions: [res.data] }))
                 toast.success("Custom instructions updated")
@@ -36,7 +34,6 @@ const ActionRow = () => {
                 updateProject(projectToUpdateIndex, allData, { ai_custom_instructions: res.data })
             }
         } catch (error) {
-            htLogger.info("🚀 ~ confirmHandler ~ error:", error)
             toast.error("Unable to update custom instructions")
 
         } finally {

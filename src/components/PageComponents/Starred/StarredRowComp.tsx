@@ -2,8 +2,6 @@
 /* eslint-disable react-hooks/exhaustive-deps */
 /* eslint-disable @next/next/no-img-element */
 "use client";
-
-import { logger as htLogger } from "#logger";
 import { useRouter } from "next/navigation";
 import React, { useEffect, useRef, useState } from "react";
 import { useRecoilState } from "@/lib/state";
@@ -499,7 +497,6 @@ const StarredRow = ({
       );
       toast(task.status === "Archive" ? "Unarchived task" : "Archived task");
     } catch (error) {
-      htLogger.info("🚀 ~ markAsUnarchive ~ error:", error);
     }
   };
 

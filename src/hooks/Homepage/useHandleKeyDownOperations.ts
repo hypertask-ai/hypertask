@@ -1,4 +1,3 @@
-import { logger as htLogger } from "#logger";
 /* eslint-disable react-hooks/exhaustive-deps */
 // /* eslint-disable react-hooks/exhaustive-deps */
 import { ISection, ITask } from '@/models/model'
@@ -128,7 +127,6 @@ const useHandleKeyDownOperations= (props:IHandleKeyDownOperations) => {
       return;
     }
 
-    // debug.log("🚀 ~ file: Homepage.tsx:178 ~ handleKeyDown ~ document.activeElement?.id:", document.activeElement?.id)
     const sectionsContainer = document.getElementById("sectionsContainer");
     if (!sectionsContainer) return;
     const sectionEls = sectionsContainer.children;
@@ -165,9 +163,7 @@ const useHandleKeyDownOperations= (props:IHandleKeyDownOperations) => {
 
     // [Z] FOR UNDO
     if (e.keyCode === 90&&undoData.length>0){
-      // debug.log("🚀 ~ handleKeyDown ~ e.keyCode:", e.keyCode)
       const firstUndoData = undoData[undoData.length - 1];
-      // debug.log("🚀 ~ handleKeyDown ~ firstUndoData:", firstUndoData)
       undoHandler(firstUndoData, firstUndoData.id);
 
   }
@@ -322,7 +318,6 @@ const useHandleKeyDownOperations= (props:IHandleKeyDownOperations) => {
 
     // =========== useEffect for either on fresh reload or when there is new data from TanStack
     useEffect(() => { 
-        // debug.log("🚀 ~ useEffect ~ initialSections:", initialSections)
         // addLastActivityAt(_currentProject?.teamId!, undefined)
 
         if (filteredSections) {
@@ -331,7 +326,6 @@ const useHandleKeyDownOperations= (props:IHandleKeyDownOperations) => {
           setSections(initialSections);
           setSectionsToDisplay(filteredSections)
         }
-        // debug.log("🚀 ~ useEffect ~ _currentProject:", _currentProject)
         setFirstTask(_currentProject?.firstTask)
       }, [filteredSections, initialSections, _currentProject]);
   
@@ -363,7 +357,6 @@ const useHandleKeyDownOperations= (props:IHandleKeyDownOperations) => {
         useEffect(() => {
             if (showBoardManager || showCommands.show || showSaveModal || returnIfModalOrInputActive() || showSearchTasks )return
             // if (_activeItem===firstTask?.id)return
-            // debug.log("🚀 ~ useEffect ~ elementToFocus:")
         
             
             const activeItem = getActiveItem();
@@ -375,7 +368,6 @@ const useHandleKeyDownOperations= (props:IHandleKeyDownOperations) => {
               parent&&setActiveSection(parseInt(parent))
               
             } 
-            // debug.log('focus goes to ==>', firstTask.uniqueIndex)
             else if (firstTask && _currentProject && !showSearchTasks) {
         
               const elementToFocus = document.getElementById(`task-${firstTask.id}`);
@@ -405,14 +397,11 @@ const useHandleKeyDownOperations= (props:IHandleKeyDownOperations) => {
 
   // ===================== dragend handler
   const onDragEndHandler = (result: DropResult) => {
-    htLogger.time("onDragEndHandler"); // Start the timer
     const {source, destination, draggableId } = result;
-    htLogger.info("🚀 ~ onDragEndHandler ~ result:", result)
     if (!destination?.droppableId || !_currentProject) return;
   
     const itemId = parseInt(draggableId.split("-")[1]);
     const sectionIndex = parseInt(source.droppableId); // section index where the item was dragged from
-    htLogger.info("🚀 ~ original Sections ~ sections:", sections)
     // return;
     // DropResult indices refer to the RENDERED lists: sectionsToDisplay is what
     // maps to the Droppables/Draggables (Homepage.tsx). The filteredSections
@@ -427,9 +416,7 @@ const useHandleKeyDownOperations= (props:IHandleKeyDownOperations) => {
     const sectionId = displaySource.sectionId;
 
     const filter = displaySource.items.filter(i => i.id === itemId);
-    htLogger.info("🚀 ~ item from original ~ filter:", filter)
     if (!filter || filter.length === 0) {
-      htLogger.warn("🚀 ~ onDragEndHandler ~ dragged card not in rendered source column, aborting move:", draggableId);
       return;
     }
     if(sorting_mode_current === "UpdatedAt" && sectionIndex === destinationSectionIdx) return toast("Cannot move tasks while kanban is in Last Updated mode")
@@ -437,7 +424,6 @@ const useHandleKeyDownOperations= (props:IHandleKeyDownOperations) => {
     const itemIndex = destination.index;
 
     const item = filter[0];
-    htLogger.info("🚀 ~ item picked up: ~ item:", item)
 
     let ranking: string | undefined = '';
     let newSecId: number = displayDestination.sectionId!;
@@ -520,8 +506,6 @@ const useHandleKeyDownOperations= (props:IHandleKeyDownOperations) => {
 
       return sec;
     });
-    htLogger.info("🚀 ~ onDragEndHandler ~ newSections:", newSections)
-    htLogger.timeEnd("onDragEndHandler"); // Stop the timer and log the elapsed time
     const activeBuiltinViewId = activeBuiltinViews[_currentProject.id]
     const runningTimers = queryClient.getQueryData<Array<{ taskId: number }>>([
       "time",

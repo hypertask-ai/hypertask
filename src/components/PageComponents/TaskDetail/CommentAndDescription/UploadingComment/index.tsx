@@ -1,4 +1,3 @@
-import { logger as htLogger } from "#logger";
 import ImageGallery from '@/components/Common/AttachmentsUpload/ImageGalleryView';
 import useSaveContent from '@/hooks/Task Detail/CommentAndDescriptionHooks/useSaveContent';
 import styles from '@/styles/tiptap.module.scss'
@@ -50,7 +49,6 @@ const UploadingCommentContainer:React.FC<IProps> = ({id,content, attachments,tot
   const {processHtml,createComment, uploadAttachmentsComments } = useSaveContent();
   const UploadFlow =async()=>{
     const content_:any = await processHtml(content, setInlineImagesUploadedTotal)
-    htLogger.info("🚀 ~ UploadFlow ~ content_:", content_)
     setProcessedResult(content_)
     setTotalChecks(prev => ({ ...prev, content: true }));
   }
@@ -62,7 +60,6 @@ const UploadingCommentContainer:React.FC<IProps> = ({id,content, attachments,tot
 const callbackAttachments = async(attachmentsReturned:any[]) => {
 
   // get all the urls back
-  htLogger.info("🚀 ~ callbackAttachments ~ attachmentsReturned:", attachmentsReturned)
     // this is confirmation that attachments are uploaded.
     // setTotalChecks(prev=>prev+1)
     setUploadedAttachments(attachmentsReturned)

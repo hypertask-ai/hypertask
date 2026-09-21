@@ -1,6 +1,6 @@
+'use client'
 import { env as appEnv } from "#env";
-import { logger as htLogger } from "#logger";
-'use client' // Error components must be Client Components
+ // Error components must be Client Components
 
 import { useEffect } from 'react'
 import { useSignout } from '@/hooks/MultiPages/HTC/useSignout'
@@ -16,18 +16,9 @@ export default function Error({
 
   useEffect(() => {
     // Log the error to an error reporting service
-    htLogger.error('Root page error:', error)
     
     // Log additional error details
     if (typeof window !== 'undefined') {
-      htLogger.error('Error details:', {
-        message: error.message,
-        stack: error.stack,
-        digest: error.digest,
-        url: window.location.href,
-        userAgent: navigator.userAgent,
-        timestamp: new Date().toISOString()
-      })
     }
   }, [error])
 
@@ -36,7 +27,6 @@ export default function Error({
       await handleHardReset()
       // The handleHardReset already redirects to /login
     } catch (err) {
-      htLogger.error('Error during hard reset:', err)
       // Fallback: force reload to login page
       if (typeof window !== 'undefined') {
         window.location.href = '/login'
@@ -48,7 +38,6 @@ export default function Error({
     try {
       reset()
     } catch (err) {
-      htLogger.error('Error during reset:', err)
       // Fallback: reload the page
       if (typeof window !== 'undefined') {
         window.location.reload()

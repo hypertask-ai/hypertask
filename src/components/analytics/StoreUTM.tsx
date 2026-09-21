@@ -1,6 +1,5 @@
 "use client";
 
-import { logger as htLogger } from "#logger";
 import { useEffect } from "react";
 import { 
   extractUTMFromURL, 
@@ -33,7 +32,6 @@ const UTMCookieHandler = () => {
             utmParams.ip = ip;
           }
         } catch (error) {
-          htLogger.warn("Failed to fetch IP address:", error);
         }
       }
 
@@ -45,14 +43,12 @@ const UTMCookieHandler = () => {
 
       // Store data if we have UTM parameters, IP, or targetUrl to store
       if (Object.keys(utmParams).length > 0) {
-        htLogger.info("🔍 UTM data to store:", utmParams);
 
         // Store UTM parameters in cookies (merges with existing data)
         storeUTMInCookies(utmParams);
 
         // Verify storage by reading back
         const storedData = getUTMDataFromCookies();
-        htLogger.info("📦 UTM data stored in cookies:", storedData);
         
         // Check for missing parameters
         const missingParams: string[] = [];
@@ -63,7 +59,6 @@ const UTMCookieHandler = () => {
         });
         
         if (missingParams.length > 0) {
-          htLogger.warn("⚠️ Some UTM parameters were not stored:", missingParams);
         }
       }
     };

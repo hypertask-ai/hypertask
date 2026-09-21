@@ -1,6 +1,5 @@
 "use client";
 
-import { logger as htLogger } from "#logger";
 import axios from "axios";
 import nookies from "nookies";
 import { useState } from "react";
@@ -61,7 +60,6 @@ export function useNotificationNudge() {
         setPushUnavailable(true);
       }
     } catch (error) {
-      htLogger.info("useNotificationNudge enablePush error:", error);
       setPushUnavailable(true);
     } finally {
       setPending(null);
@@ -96,7 +94,6 @@ export function useNotificationNudge() {
         setCurrentUser(nextUser);
       }
     } catch (error) {
-      htLogger.info("useNotificationNudge enableEmail error:", error);
     } finally {
       setPending(null);
     }

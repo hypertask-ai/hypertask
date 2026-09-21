@@ -1,4 +1,3 @@
-import { logger as htLogger } from "#logger";
 import TiptapBubbleMenu from "@/components/RTE/Components/TiptapBubbleMenu";
 import { AITaskWriterWithProvider as AITaskWriterContainer } from "@/components/PageComponents/TaskDetail/AI Task Writer/AITaskWriterContainer";
 import TipTapMainContainer from "./InteractiveTiptapContainer";
@@ -21,7 +20,6 @@ export const InteractiveTiptap = ({ type, editor }: IProps) => {
   ) => {
     // Get the current height of the popover
     const popoverHeight = popover.offsetHeight;
-    htLogger.info("Size ===> new min height", popoverHeight + 30);
     // Set the min-height of the target div to be popover height + 30px
     targetDiv.style.minHeight = `${popoverHeight + 30}px`;
   };
@@ -34,7 +32,6 @@ export const InteractiveTiptap = ({ type, editor }: IProps) => {
       "main-tiptap-interactive"
     ) as HTMLElement | null;
     const resizeObserver = new ResizeObserver(() => {
-      htLogger.info("Size ==> is changing");
       if (!popover) return;
 
       if (targetDiv) {

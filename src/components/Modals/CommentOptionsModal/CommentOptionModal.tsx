@@ -1,5 +1,4 @@
 import { env as appEnv } from "#env";
-import { logger as htLogger } from "#logger";
 import {
   ModalContainerCustom,
   ModalHeaderComp,
@@ -133,7 +132,6 @@ const CommentOptionsModal = ({
         id: attachment.id,
       });
     }
-    htLogger.info("🚀 ~ processAttachmentsForNewTask ~ temp:", temp);
     return temp;
   };
 

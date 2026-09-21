@@ -1,5 +1,4 @@
 import { env as appEnv } from "#env";
-import { logger as htLogger } from "#logger";
 import toast from "react-hot-toast";
 import { writeTextToClipboard } from "@/lib/utils/clipboard";
 
@@ -28,7 +27,6 @@ const writeRichToClipboard = async (
       return "rich";
     }
   } catch (err) {
-    htLogger.error("clipboard.write (rich) failed, falling back to text:", err);
   }
 
   const ok = await writeTextToClipboard(text);

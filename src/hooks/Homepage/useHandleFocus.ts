@@ -1,4 +1,3 @@
-import { logger as htLogger } from "#logger";
 import { activeSectionAtom, currentProjectAtom, activeItemAtom } from '@/store';
 import { useRecoilState, useSetRecoilState } from '@/lib/state';
 import { useStore } from 'jotai';
@@ -18,11 +17,8 @@ const useHandleFocus = (filteredSections: ISection[]) => {
   const refocus = (itmId: number) => document.getElementById('task-' + itmId)?.focus();
 
   const moveFocusToSection = (index: number, itemIndex?: number) => {
-    htLogger.info("🚀 ~ moveFocusToSection ~ index:", index)
-    // debug.log("🚀 ~ moveFocusToSection ~ index:", index)
     if (!_currentProject) return
     const sectionEls = document.getElementById("sectionsContainer")!.children;
-    // debug.log("🚀 ~ moveFocusToSection ~ sectionEls:", sectionEls)
     if (index >= 0 && index < sectionEls.length) {
       // @ts-ignore
       sectionEls[index].focus();
@@ -31,10 +27,7 @@ const useHandleFocus = (filteredSections: ISection[]) => {
       var ItemId = null;
       // sectionEls[index].scrollIntoView({ behavior: 'smooth', block: 'start' });
       const sectionLength = filteredSections[index].items.length
-      // debug.log("🚀 ~ moveFocusToSection ~ sectionLength:", sectionLength)
-      // debug.log("🚀 ~ moveFocusToSection ~ sectionLength<itemIndex!+1:", sectionLength<itemIndex!+1)
       if (sectionLength > 0) {
-        // debug.log("🚀 ~ file: index.tsx:239 ~ moveFocusToSection ~ itemIndex:", itemIndex)
 
         if (sectionLength < itemIndex! + 1) {
           const item = filteredSections[index].items[sectionLength - 1]
@@ -54,7 +47,6 @@ const useHandleFocus = (filteredSections: ISection[]) => {
           ItemId = item.id
         }
       } else {
-        // debug.log("scroll into view")
         document.getElementById("header")?.scrollIntoView({ block: 'start', behavior: "smooth" })
         updateActiveItemAndItemInView(null, _currentProject.id, getActiveSection())
 
@@ -63,13 +55,11 @@ const useHandleFocus = (filteredSections: ISection[]) => {
     else {
       updateActiveItemAndItemInView(null, _currentProject.id, getActiveSection())
     }
-    htLogger.info("🚀 ~ moveFocusToSection ~ ItemId:", ItemId)
 
     if (ItemId) {
       refocus(ItemId)
 
       const element = document.getElementById(`task-${ItemId}`)
-      // debug.log("🚀 ~ moveFocusToSection ~ element:", element)
       element && scrollToCenterIfNear(element, 10)
       // document.getElementById('task-' + ItemId)?.scrollIntoView({  block: 'center' ,inline: "center", behavior:"smooth" as ScrollBehavior});
 
@@ -84,30 +74,22 @@ const useHandleFocus = (filteredSections: ISection[]) => {
   const moveFocusToRight = () => {
 
     const sectionEls = document.getElementById("sectionsContainer")!.children;
-    // debug.log("ALL SECTION",sectionEls);
 
     const activeElement = document.activeElement;
-    // debug.log("Active Element - Prev.State",activeElement);
 
     const parentNode = activeElement?.parentNode;
     const activeElementIndex = Array.from(sectionEls).indexOf(activeElement!);
-    // debug.log("Section Index -1 for 0th", activeElementIndex);
 
     const activeElementInSection = Array.from(parentNode?.children!).indexOf(activeElement!);
-    // debug.log("Active Section Index-1", activeElementInSection);
-    // debug.log(_activeItem)
     const activeItem = getActiveItem();
     if (activeElementIndex === -1 || activeElementIndex === sectionEls.length - 1) {
       if (activeItem && activeElementIndex === -1) {
-        // debug.log("Task_ID of ActiveElem", _activeItem);
         const filter = filteredSections.filter(s => {
-          // debug.log("Total Columns", _sections);
           const _filter = s.items.filter(i => i.id === activeItem);
           return _filter && _filter.length > 0
         })
         if (filter && filter.length > 0) {
           const _index = filteredSections.indexOf(filter[0])
-          // debug.log("🚀 ~ file: Homepage.tsx:637 ~ moveFocusToRight ~ _index:", _index)
           if (_index === sectionEls.length - 1) {
             // moveFocusToSection(0)
           }
@@ -201,7 +183,6 @@ const useHandleFocus = (filteredSections: ISection[]) => {
         // tasksList[0].focus();
       } else {
         const activeElement_ = document.getElementById(tasksList[index + 1].id)
-        htLogger.info("🚀 ~ ArrowDownHandler ~ activeElement_:", activeElement_)
         activeElement_ && scrollToCenterIfNearBottom(activeElement_, 15)
         activeElement_?.focus()
         // document.getElementById(tasksList[index + 1].id)?.scrollIntoView({  block: 'center',inline:"end",behavior:"instant"})

@@ -1,6 +1,5 @@
 "use client"
 
-import { logger as htLogger } from "#logger";
 import { useState, useEffect, useMemo } from "react"
 import { LoaderCircle, RefreshCw, User } from "lucide-react"
 import axiosClient from "@/utils/axiosClient"
@@ -45,7 +44,6 @@ export default function ResetTrialTab({ searchTerm, onSearchChange, adminPasswor
             })
             return res.data.users || []
         } catch (error) {
-            htLogger.error("Error searching users:", error)
             return []
         }
     }

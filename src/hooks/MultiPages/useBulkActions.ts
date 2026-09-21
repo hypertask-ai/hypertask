@@ -1,4 +1,3 @@
-import { logger as htLogger } from "#logger";
 // hooks/useBulkActions.ts
 import { useState, useCallback, useEffect, useRef, ReactNode } from 'react'
 import { useDeviceContext } from '@/lib/contexts/deviceContext'
@@ -114,7 +113,6 @@ export function useBulkActions<T extends BulkActionItem>({
         clearSelection()
       }
     } catch (error) {
-      htLogger.error(`Bulk action ${actionKey} failed:`, error)
       throw error
     } finally {
       setIsProcessing(false)

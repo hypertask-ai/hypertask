@@ -1,4 +1,3 @@
-import { logger as htLogger } from "#logger";
 import { Metadata } from "next";
 import { requireServerCookieUser } from "@/lib/auth/serverUser";
 import {
@@ -34,7 +33,6 @@ export default async function Page(
 
   const User = await requireServerCookieUser();
   const userFromDB = await getUserById(User.id)
-  htLogger.info("🚀 ~ userFromDB:", userFromDB)
   //this is causing a major issue
   // if (userFromDB?.status===200 && userFromDB.res.UserSetting?.trialStatus){
   //   let previousBoardString = cookieStore.get('previousBoard');
@@ -43,7 +41,6 @@ export default async function Page(
   //     const previousBoard = previousBoardString.value.split('-')
   //     redirectUrl = `/project?id=${previousBoard[1]}`
   //   }
-  //     debug.log("🚀 ~ redirectUrl:", redirectUrl)
   //   redirect(redirectUrl)
   // } 
   var team: any;
@@ -57,7 +54,6 @@ export default async function Page(
     //if (!searchParams.session_id || !searchParams.success) redirect("/");
 
     team = await findTeam(User);
-    htLogger.info("🚀 ~ team:", team);
   }
 
   // HTPR-4358: createCustomerIfNull now throws on failure. This page stays
@@ -66,20 +62,16 @@ export default async function Page(
   try {
     await createCustomerIfNull(User.email!, searchParams.teamId ?? team.id);
   } catch (error) {
-    htLogger.error("trial-plan-confirmation: customer provisioning failed", error);
   }
 
-  htLogger.info("🚀 ~ session_id:", searchParams.session_id);
   const customerId = await checkTrialSuccess(searchParams.session_id as string);
 
   // check which subscriptions does that user have
   const hasSub = await hasSubscription(searchParams.teamId ?? team.id);
-  htLogger.info("🚀 ~ hasSub:", hasSub);
 
   const manageLink = await generateCustomerPortalLink(
     "" + (searchParams.stripe_customer_id ?? team.stripe_customer_id)
   );
-  htLogger.info("🚀 ~ manageLink:", manageLink);
 
   const teamInfo = {
     teamTitle: searchParams.teamTitle ?? team.title,

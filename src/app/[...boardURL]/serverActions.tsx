@@ -1,7 +1,6 @@
 "use server"
 
 
-import { logger as htLogger } from "#logger";
 import prisma from "@/lib/prisma";
 
 
@@ -68,7 +67,6 @@ export const getTaskServer = async(taskId:number)=>{
   const copied = await prisma.task.findFirst({
     where:{id:taskId}
     })
-    htLogger.info("🚀 Copied Task to clipboard: ", copied)
     
   return copied
 }
@@ -77,7 +75,6 @@ export const getAllSubTasks = async (taskId: number) => {
   let allTasks: number[] = [];
 
   const getTask = async (taskId: number) => {
-    htLogger.info("getting all Sub-Tasks (including Parent)");
     try {
       const task = await prisma.task.findUnique({
         where: { id: taskId },
@@ -98,19 +95,14 @@ export const getAllSubTasks = async (taskId: number) => {
         }
       }
     } catch (error) {
-      htLogger.info("🚀 ~ getAllSubTasks ~ error:", error);
     }
   };
 
   try {
-    htLogger.time("sub-task prefetching on delete");
     await getTask(taskId);
-    htLogger.timeEnd("sub-task prefetching on delete");
-    htLogger.info("🚀 ~ getAllSubTasks ~ tasks:", allTasks)
 
     return allTasks;
   } catch (error) {
-    htLogger.info("🚀 ~ getAllSubTasks ~ error:", error)
   }
 };
 
@@ -125,7 +117,6 @@ export const getNewView = async(viewSlug: string | undefined, projectViewId: str
     })
     return sanitizeViewBoardFilters(view)
   }catch(error){
-    htLogger.info("🚀 ~ getNewView ~ error:", error)
     return undefined
   }
 }
@@ -142,7 +133,6 @@ export const switchToNewView = async (
       create: { projectId },
       update: {},
     });
-    htLogger.info("🚀 ~ project_View:", project_View)
 
     const updatedUserProjectView = await prisma.user_Project_View.upsert({
       create: {
@@ -202,7 +192,6 @@ export const switchToNewView = async (
 
     return 1;
   } catch (error) {
-    htLogger.info("🚀 ~ switchToNewView ~ error:", error);
     return undefined;
   }
 };
@@ -240,7 +229,6 @@ export const resetToDefaultCurrent = async (projectId: number, mode: "ResetToDef
       
       return project_view_updated
   } catch (error) {
-      htLogger.info("🚀 ~ consthandler:NextApiHandler= ~ error:", error)
       return undefined
   }
 }

@@ -1,4 +1,3 @@
-import { logger as htLogger } from "#logger";
 import { useContextCreateTaskModal } from '@/lib/contexts/Multipages/CreateTaskGloballyContexts/useContextCreateTaskModal'
 import { ReactNode, useEffect, useContext, useCallback, useRef, useState } from 'react'
 import DescriptionCreateTaskModal from './DescriptionCreateTaskModal'
@@ -139,7 +138,6 @@ const CreateTaskModalBody: React.FC<IProps> = ({ }) => {
         ].includes((document.activeElement as HTMLElement)?.tagName?.toLowerCase());
         const tipTapClassName: string = "tiptap ProseMirror ProseMirror-focused";
         // if (editMode!=="assignees") return "allowTab"
-        htLogger.info("returning")
         return document.activeElement?.className === tipTapClassName || isInputFocused || showConfirmationModal
     }
     // ============================= [ENTER] handler
@@ -159,14 +157,9 @@ const CreateTaskModalBody: React.FC<IProps> = ({ }) => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
     const handleKeyDown = (e: KeyboardEvent) => {
         // e.stopPropagation()
-        // debug.log("🚀 ~ handleKeyDown ~ e:", e)
         var cmdControl = isApple && e.metaKey || !isApple && e.ctrlKey;
         if (uploadInProgress) return toast("Upload in progress! Please wait")
-        // debug.log("document active el: ", document.activeElement)
         // const mode = editMode && ["title", "Description", "Description-ai"].includes(editMode) ? "Editing" : currentFocusedElement ? "Navigating" : "Modal"
-        // debug.log("🚀 ~ handleKeyDown ~ mode:", mode)
-        // debug.log("🚀 ~ handleKeyDown ~ currentFocusedElement:", currentFocusedElement)
-        // debug.log("🚀 ~ handleKeyDown ~ editMode:", editMode)
 
 
         // ============== keydown operations for when mode is "EDITING"
@@ -232,13 +225,11 @@ const CreateTaskModalBody: React.FC<IProps> = ({ }) => {
             setCurrentFocusedElement("Description")
         }
 
-        htLogger.info("made it till here")
 
         // press [cmd/ctrl][j]
         if (e.keyCode === KeyCodes.J && cmdControl) {
             e.preventDefault()
             endTour()
-            htLogger.info("🚀 ~ handleKeyDown ~ endTour is not working");
             setEditMode("Description-ai")
             setCurrentFocusedElement("Description")
             return true

@@ -1,4 +1,3 @@
-import { logger as htLogger } from "#logger";
 import { IAttachment } from "@/models/model";
 import {
   isBrowserRenderableImage,
@@ -50,7 +49,6 @@ const AttachmentCarousel: React.FC<AttachmentCarouselProps> = ({
       const data = await response.json();
 
       if (!response.ok) {
-        htLogger.error("Error fetching download URL");
         return;
       }
       // Create an anchor tag with the download URL
@@ -59,7 +57,6 @@ const AttachmentCarousel: React.FC<AttachmentCarouselProps> = ({
       anchor.download = fileName;
       anchor.click();
     } catch (error) {
-      htLogger.error("Error downloading file:", error);
     }
   };
 

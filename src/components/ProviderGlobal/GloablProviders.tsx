@@ -1,8 +1,7 @@
 /* eslint-disable react-hooks/exhaustive-deps */
 "use client";
-
 import { env as appEnv } from "#env";
-import { logger as htLogger } from "#logger";
+
 import {
   lazy,
   ReactNode,
@@ -725,7 +724,6 @@ export default function GlobalProvider({
       document.removeEventListener("keydown", handleGlobalGShortcut, true);
   }, []);
   const handleKeyPress = async (e: KeyboardEvent) => {
-    // debug.log("🚀 ~ handleKeyPress ~ e GLOBAL PROVIDER:", e.keyCode)
     if (showTrialModal || showEmailVerificationModal) return;
     var cmdControl = (isApple && e.metaKey) || (!isApple && e.ctrlKey);
 
@@ -1225,7 +1223,7 @@ export default function GlobalProvider({
         announcementIds: [announcementId],
       })
       .catch((error) =>
-        htLogger.error("Failed to mark announcement read", error),
+        undefined,
       );
   };
 

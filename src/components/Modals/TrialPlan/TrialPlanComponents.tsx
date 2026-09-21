@@ -1,5 +1,4 @@
 import { env as appEnv } from "#env";
-import { logger as htLogger } from "#logger";
 import { IconsGlobal } from "@/components/Common/IconsGlobal";
 import { getTeamById } from "@/lib/serverActions";
 import { storeSubscriptionPlans } from "@/lib/subscriptionPlans";
@@ -93,7 +92,6 @@ export const TrialsButton = ({teamId}:{teamId:string}) => {
                     })
                 }
             } catch (error) {
-                if (!cancelled) htLogger.info("🚀 ~ fetchTeamInfo ~ error:", error)
             }
             finally{
                 if (!cancelled) setFetching(false)

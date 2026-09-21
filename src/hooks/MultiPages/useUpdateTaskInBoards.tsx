@@ -1,4 +1,3 @@
-import { logger as htLogger } from "#logger";
 
 import { useRef } from "react";
 import { IAiCustomInstructions, IProject, IProjectsAll, IProjectView, ISection, ITask } from "@/models/model";
@@ -244,7 +243,6 @@ const UpdateKanban = () => {
         tasks: reconcileTasks(previousProject.tasks, tasks),
       };
     }
-    htLogger.info("🚀 ~ UpdateKanban ~ ai_custom_instructions:", ai_custom_instructions)
 
     if (ai_custom_instructions) {
       projectToUpdate = {
@@ -311,19 +309,17 @@ const UpdateKanban = () => {
     item?.id == null || list.findIndex((other) => other?.id === item.id) === index;
 
   const mutationHandler = (projectIndex: number, sections: ISection[], allData: any, tasks?: ITask[]) => {
-    htLogger.time("cacheUpdate-start");
     const dedupedSections = sections?.map((section) => ({
       ...section,
       items: section.items?.filter(keepFirstById) ?? section.items,
     }));
     updateProject(projectIndex, allData, { sections: dedupedSections, tasks: tasks?.filter(keepFirstById) });
-    htLogger.timeEnd("cacheUpdate-start");
   };
 
   //TODO update this function so that it universally has a single source (if that makes sense somewhat)
   const updateCache = async (newSections: ISection[]) => {
     const { allData, projectToUpdateIndex } = await getProjectIdxAndAllData(_currentProject?.id)
-    if (!allData || !allData.updatedProjects || projectToUpdateIndex === undefined || projectToUpdateIndex === -1) return htLogger.info("returned from guard");
+    if (!allData || !allData.updatedProjects || projectToUpdateIndex === undefined || projectToUpdateIndex === -1) return undefined;
     mutationHandler(projectToUpdateIndex, newSections, allData)
   }
   // ======================== update active item and inViewObejct. We really need to update this. Or better yet we use the new one.
@@ -356,10 +352,7 @@ const UpdateKanban = () => {
 
       const updatedSections = projectToUpdate?.sections?.map((section: ISection) => {
         if (section.sectionId === sectionId) {
-          //   debug.log("🚀 ~ updatedSection ~ section.sectionId:", section.sectionId)
-          //   debug.log("🚀 ~ updatedSection ~ section.id:", section.id)
           const updatedItems = section.items.map((task) => {
-            // debug.log("🚀 ~ updatedItems ~ task.uniqueIndex:", task.uniqueIndex)
 
             if (task.id === taskId) {
               const taskreturn = {
@@ -428,7 +421,6 @@ const UpdateKanban = () => {
     tasksToDelete?: number[],
     options: RemoveFromListOptions = {},
   ) {
-    htLogger.info("🚀 ~ UpdateKanban ~ tasksToDelete:", tasksToDelete)
     if (!sectionId) return;
     let itemIndex: number;
     let hasSubtasks=false;
@@ -514,9 +506,7 @@ const UpdateKanban = () => {
     };
   
     const handleClose = async() => {
-      htLogger.info("Closing the process");
       if (hasSubtasks) {
-        htLogger.info("---------- Refetching projects all -----------");
         await queryClient.refetchQueries({ queryKey: ["projectsAll"] });
       }
     };
@@ -527,16 +517,13 @@ const UpdateKanban = () => {
       await updateSections();
   
       // Then call handleStatus with updated values
-      htLogger.time("refetchProject")
       await handleStatus();
-      htLogger.timeEnd("refetchProject")
 
       // Server cascades subtask deletion; refetch (guarded by hasSubtasks) is the
       // only reconciliation for parent-with-subtasks deletes from the detail modal.
       await handleClose();
 
     } catch (error) {
-      htLogger.error("Error updating sections or handling status:", error);
       await queryClient.refetchQueries({ queryKey: ["projectsAll"] });
       throw error;
     } 
@@ -604,8 +591,6 @@ const UpdateKanban = () => {
 
     }
     const { task: taskToMove, sectionIndex } = data
-    htLogger.info("🚀 ~ UpdateKanban ~ sectionIndex:", sectionIndex)
-    // debug.log("🚀 ~ UpdateKanban ~ taskToMove:", taskToMove)
     const destinationSecIdx = sectionsToUpdate.findIndex(
       (section) => section.sectionId === destinationSectionId
     );

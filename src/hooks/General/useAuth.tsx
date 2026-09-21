@@ -1,5 +1,4 @@
 import { env as appEnv } from "#env";
-import { logger as htLogger } from "#logger";
 /**
  * @fileoverview Authentication module that manages user authentication,
  * handles user data persistence, and manages redirections based on user state.
@@ -221,10 +220,8 @@ export const AuthProvider = ({
         const variant = urlParams.get(authConfig.abTest.urlParam);
         if (variant) {
           abTestVariant = variant;
-          htLogger.info("🧪 AB Test Variant detected (email login):", variant);
         }
       } catch (e) {
-        htLogger.error("Error parsing URL params:", e);
       }
       // Invalidate projects cache to ensure fresh data (especially for instant signup users)
       queryClient.invalidateQueries({ queryKey: ["projectsAll"] });
@@ -407,7 +404,6 @@ export const AuthProvider = ({
             };
           }
         } catch (error) {
-          htLogger.error("Error joining project from share URL:", error);
         }
       }
   
@@ -422,7 +418,6 @@ export const AuthProvider = ({
       );
       // Check if this is a new mobile user - if so, show the blocking overlay
       if (isNewUser && isMbl) {
-        htLogger.info('🚫 Mobile signup detected - showing desktop redirect overlay');
         showMobileOverlay(user.email ?? '');
         // Still calculate the URL for when they dismiss the overlay
         const url = getRedirectUrl(
@@ -481,7 +476,6 @@ export const AuthProvider = ({
       router.push(url);
     } catch (error) {
       setIsAuthenticating(false);
-      htLogger.error("Error in post-authentication handling:", error);
       
     }
     finally{
@@ -637,7 +631,6 @@ export const AuthProvider = ({
     });
 
     if (response.status === 101) {
-      htLogger.info("user was already a part of this project");
     }
     return response;
   };
@@ -704,13 +697,6 @@ const getRedirectUrl = (
   isNewUser?: boolean
 ): string => {
   const { onboardingTourStatus, isVerified } = user?.UserSetting || {};
-  htLogger.info(
-    "🤔 ~ getRedirectUrl ~ onboardingTourStatus:",
-    onboardingTourStatus
-  );
-  htLogger.info("🧪 ~ getRedirectUrl ~ abTestVariant:", abTestVariant);
-  htLogger.info("👤 ~ getRedirectUrl ~ isNewUser:", isNewUser);
-  htLogger.info("✅ ~ getRedirectUrl ~ isVerified:", isVerified);
 
   // Shared task URL generation helper
   const getSharedTaskUrl = () =>
@@ -725,7 +711,6 @@ const getRedirectUrl = (
   // // For instant signup users (isVerified: false), skip onboarding and go straight to app
   // // They will see the verification modal instead
   // if (isVerified === false) {
-  //   debug.log("🔐 Instant signup user - skipping onboarding, going to app");
   //   return sharedTask ? getSharedTaskUrl() : getProjectUrl();
   // }
 

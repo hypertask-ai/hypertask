@@ -1,6 +1,5 @@
 "use client";
 
-import { logger as htLogger } from "#logger";
 import axios from "axios";
 import { useEffect, useState } from "react";
 import AiUsageBar, { type PersonalAiUsageData } from "./AiUsageBar";
@@ -44,7 +43,6 @@ const MyAiUsageSection = () => {
           });
         }
       } catch (requestError) {
-        htLogger.error("Could not load personal AI usage:", requestError);
         if (!cancelled) {
           setData(null);
           setError("AI usage is currently unavailable.");

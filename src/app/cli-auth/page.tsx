@@ -1,6 +1,5 @@
 'use client';
 
-import { logger as htLogger } from "#logger";
 import { Suspense, useState, useCallback, useRef } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import Image from 'next/image';
@@ -164,7 +163,6 @@ function CliAuthContent() {
           /* ignore */
         }
       }
-      htLogger.error('Failed to generate CLI auth code', err);
       toast.error('Failed to connect to CLI. Please try again.');
       setError('Failed to generate authentication code.');
       setStep('error');

@@ -1,4 +1,3 @@
-import { logger as htLogger } from "#logger";
 import useCurrentUser from '@/hooks/General/useCurrentUserCheckFromCookies'
 import { IProject } from '@/models/model'
 import { currentProjectAtom } from '@/store'
@@ -24,7 +23,6 @@ const useCreateTask = () => {
     const getTask=async (taskId:number|null)=>{
         if(!taskId) return
         const fetchedTask = await axios.get("/api/tasks/single?id="+taskId);
-        htLogger.info("🚀 ~ duplicateTask ~ fetchedTask:", fetchedTask.data)
         return fetchedTask.data
     }
 

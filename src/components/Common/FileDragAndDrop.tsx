@@ -1,4 +1,3 @@
-import { logger as htLogger } from "#logger";
 import type React from "react";
 import { useState, useEffect, useCallback, useRef } from "react";
 import styles from "@/styles/FileDragAndDrop.module.scss";
@@ -54,7 +53,6 @@ const FileDragOverlay: React.FC<FileDragOverlayProps> = ({
     setIsDragging(false);
     dragCounter.current = 0;
     if (e.dataTransfer?.files && e.dataTransfer.files.length > 0) {
-      htLogger.info("File(s) dropped", e.dataTransfer.files);
       dropCallbackRef.current(e.dataTransfer.files);
     }
   }, []);

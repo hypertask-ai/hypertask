@@ -60,16 +60,13 @@ const CommandsList = forwardRef<SuggestionListRef, SuggestionListProps>(
       };
     }, [skillsEnabled, currentProject?.id]);
     // const itemsFinal = props.items.map(item => {
-    //     // debug.log("🚀 ~ itemsFinal ~ currentProject?.team.subscriptionPlan:", currentProject?.team)
     //     if (item.type && item.type === "AI") {
     //       const itemtoReturn = currentProject?.team.activeSubscriptionPlanId ? item : false;
-    //       // debug.log("🚀 ~ itemsFinal ~ itemtoReturn:", itemtoReturn)
     //       return itemtoReturn;
     //     }
     //     return item;
     //   }).filter(Boolean);
   
-    // debug.log("🚀 ~ itemsFinal ~ itemsFinal:", itemsFinal)
     const [filteredItems, setFilteredItems] = useState(props.items)
     const selectItem = (index: number) => {
       if (index >= filteredItems.length) {

@@ -1,5 +1,4 @@
 import { env as appEnv } from "#env";
-import { logger as htLogger } from "#logger";
 /* eslint-disable react-hooks/exhaustive-deps */
 import {
   processHtmlForTaskId,
@@ -714,7 +713,6 @@ const useCreateTaskModalGlobalStates = () => {
         mentionById: currentUser.id,
       });
     } catch (error) {
-      htLogger.info("🚀 ~ handleAgentMention ~ error:", error);
     }
   }
 
@@ -722,9 +720,7 @@ const useCreateTaskModalGlobalStates = () => {
     const path = `${appEnv.NEXT_PUBLIC_BASEURL}/detail/project-${task.projectId}/${task.uniqueIndex}`;
 
     const taskOwnerId = parseInt(task.userId as string);
-    htLogger.info("already exist not", taskOwnerId === userId);
     if (taskOwnerId === userId) {
-      htLogger.info("you are owner");
     } else {
       try {
         await axios
@@ -744,14 +740,11 @@ const useCreateTaskModalGlobalStates = () => {
                   taskId: task?.id,
                 });
               } catch (error) {
-                htLogger.info("error sending mail");
               }
             } else if (response.status === 201) {
-              htLogger.info("You are Already in Assignees");
             }
           });
       } catch (error) {
-        htLogger.info(error);
       }
     }
   };
@@ -800,7 +793,6 @@ const useCreateTaskModalGlobalStates = () => {
       }
     } catch (error) {
       if (!axios.isCancel(error)) {
-        htLogger.error("Could not load create-task section defaults", error);
       }
     } finally {
       if (sectionDefaultsRequestRef.current === controller) {

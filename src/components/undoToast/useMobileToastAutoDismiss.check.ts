@@ -1,4 +1,3 @@
-import { logger as htLogger } from "#logger";
 // Runnable check for the PERT-92 mobile forever-toast fix.
 // Run: node --experimental-strip-types src/components/undoToast/useMobileToastAutoDismiss.check.ts
 //
@@ -66,4 +65,3 @@ const scheduledDismissAt = (s: Store, t: Toast, now: number): number | null => {
   );
 }
 
-htLogger.info("useMobileToastAutoDismiss: all checks passed");

@@ -1,4 +1,3 @@
-import { logger as htLogger } from "#logger";
 'use client' // global-error must be a Client Component and render its own <html>/<body>
 
 import { useEffect } from 'react'
@@ -23,7 +22,6 @@ export default function GlobalError({
   reset: () => void
 }) {
   useEffect(() => {
-    htLogger.error('Global error (root crash):', error, { digest: error?.digest })
 
     const report = () =>
       reportClientError({

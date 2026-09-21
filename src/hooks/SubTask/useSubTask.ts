@@ -1,4 +1,3 @@
-import { logger as htLogger } from "#logger";
 import { useMemo } from "react";
 import { currentProjectAtom, currentUserAtom } from "@/store";
 import { useRecoilState } from "@/lib/state";
@@ -41,7 +40,6 @@ const useSubTask = () => {
     try {
       updateCache(setting);
     } catch (error) {
-      htLogger.info("🚀 ~ updateSubTaskSetting ~ error:", error);
     }
   };
 

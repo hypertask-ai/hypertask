@@ -1,5 +1,4 @@
 import { env as appEnv } from "#env";
-import { logger as htLogger } from "#logger";
 import { DisplayDate } from "@/components/Modals/RemindMe/RemindMeComponent";
 import useTiptap from "@/components/RTE/Tiptap";
 import {
@@ -157,7 +156,6 @@ export const useTutorial = () => {
     // doesn't wrongly redirect back into the onboarding sequence.
     nookies.destroy(null, "onboarding_return", { path: "/" });
 
-    htLogger.info("Exit tutorial was called2");
     router.push(exitURL);
   }, [
     isLoggedIn,
@@ -1124,7 +1122,6 @@ export const useTutorial = () => {
         // if (e.key === "Enter") {
         //   e.preventDefault();
         //   const val=(document.getElementById('htc') as HTMLInputElement)?.value
-        //   debug.log("🚀 ~ useTutorial ~ val:", val)
         //   if (val?.toLowerCase() === "add column") {
         //     setSceneState((prevState) => ({
         //       ...prevState,
@@ -1596,7 +1593,6 @@ export const useTutorial = () => {
 
       return "/";
     } catch (error) {
-      htLogger.error("Error fetching shared task:", error);
       return "/";
     }
   }, [params]);
@@ -1686,7 +1682,6 @@ export const useTutorial = () => {
           });
 
         } catch (error) {
-          htLogger.error('❌ Failed to update tutorial status:', error);
         }
       }
       exitTutorial();

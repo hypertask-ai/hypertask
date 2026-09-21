@@ -1,4 +1,3 @@
-import { logger as htLogger } from "#logger";
 import { useTaskContext } from "@/lib/contexts/TaskDetail/TaskProvider";
 import { useEffect, useRef, useState } from "react";
 import { updateTask } from "@/utils/api/Task Detail";
@@ -102,11 +101,9 @@ const TaskTitle = () => {
           if (response.status != 200) rollbackTitle();
         })
         .catch((error) => {
-          htLogger.error(error);
           rollbackTitle();
         });
     } catch (error) {
-      htLogger.error(error);
       rollbackTitle();
     }
   };

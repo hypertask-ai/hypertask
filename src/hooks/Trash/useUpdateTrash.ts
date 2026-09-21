@@ -1,4 +1,3 @@
-import { logger as htLogger } from "#logger";
 import globalConstants from '@/lib/constants'
 import { IProject } from '@/models/model'
 import { useQueryClient } from '@tanstack/react-query'
@@ -16,7 +15,6 @@ const useUpdateTrash = () => {
   const queryClient = useQueryClient()
 
   const removeFromTrash = async ({ projectId, taskId, mode }: IRemoveFromTrash) => {
-    htLogger.info("🚀 ~ removeFromTrash ~ taskId:", taskId);
     const queryKey = [globalConstants.TrashKeyPrefix, projectId];
     let allData: IProject | undefined = await queryClient.getQueryData(queryKey);
     if (!allData) return false; // Return false if no data is found

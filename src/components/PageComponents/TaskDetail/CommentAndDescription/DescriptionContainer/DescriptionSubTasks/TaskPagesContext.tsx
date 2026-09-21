@@ -1,6 +1,5 @@
 "use client";
 
-import { logger as htLogger } from "#logger";
 import { useRouter } from "next/navigation";
 import {
   createContext,
@@ -93,7 +92,6 @@ export const TaskPagesProvider = ({ children }: PropsWithChildren) => {
         });
       } catch (error) {
         if (error instanceof DOMException && error.name === "AbortError") return;
-        htLogger.error("[Task pages] Error:", error);
         setPagesState({ taskId, pages: [], loading: false });
       }
     };
@@ -154,7 +152,6 @@ export const TaskPagesProvider = ({ children }: PropsWithChildren) => {
         router.push(plainPageHref);
       }
     } catch (error) {
-      htLogger.error("[Create task page] Error:", error);
     } finally {
       isCreatingRef.current = false;
     }

@@ -1,4 +1,3 @@
-import { logger as htLogger } from "#logger";
 import { useState } from "react";
 import { X, FileText } from "lucide-react";
 
@@ -29,7 +28,6 @@ const AITaskWriterAttachments: React.FC<AITaskWriterAttachmentsProps> = ({
   className,
   isInHistory = false,
 }) => {
-  htLogger.info("🚀 ~ AITaskWriterAttachments ~ attachments:", attachments.flatMap(x=>x.preview))
   const [isCarouselOpen, setIsCarouselOpen] = useState(false);
   const [currentCarouselIndex, setCurrentCarouselIndex] = useState(0);
 

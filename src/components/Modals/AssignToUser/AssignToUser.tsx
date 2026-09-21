@@ -1,4 +1,3 @@
-import { logger as htLogger } from "#logger";
 import { useEffect, useRef, useState } from "react";
 import { Bot, Check } from "lucide-react";
  // Import a robot icon for agents
@@ -129,7 +128,6 @@ const AssignModal = ({
         await onBulkAssign(user);
         onClose();
       } catch (error) {
-        htLogger.error("Bulk assignment failed", error);
       }
       return;
     }
@@ -160,7 +158,6 @@ const AssignModal = ({
         // it would flicker them back out.
         if (request === lastRequest.current) onClose(updatedAssignees, true);
       } catch (error) {
-        htLogger.error("🚀 ~ onAssignUser ~ error:", error);
         // Same guard as the success branch. A newer toggle has either already
         // applied the server's rows, which are authoritative and need no
         // rollback, or is still in flight and will. Undoing this toggle on top

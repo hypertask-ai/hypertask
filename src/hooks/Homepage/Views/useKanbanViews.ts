@@ -1,4 +1,3 @@
-import { logger as htLogger } from "#logger";
 import UpdateKanban from "@/hooks/MultiPages/useUpdateTaskInBoards";
 import { useFlag } from "@/hooks/useFlag";
 import { HTPR_6588_EMPTY_COLUMNS_SAVE_VIEW_FLAG } from "@/lib/flags/keys";
@@ -233,7 +232,6 @@ const useKanbanViews = (project: IProject | null) => {
         await apiAndCacheHandler(unsavedViewAPIRoute, { ...requestBody, baseViewId }, { call: "unsaved" });
       } catch (error) {
         await onSettled?.(false)
-        htLogger.info("🚀 ~ apiHandler ~ error:", error);
         return;
       }
       await onSettled?.(true)
@@ -420,7 +418,6 @@ const useKanbanViews = (project: IProject | null) => {
           isBoardEmptySectionSetting(savedSetting) ? savedSetting : emptySection,
         )
       } catch (error) {
-        htLogger.info("🚀 ~ saveEmptySectionsAPI ~ error:", error)
         settleMutation(false)
       }
     })
@@ -579,7 +576,6 @@ const useKanbanViews = (project: IProject | null) => {
       title,
     });
     if (response.status !== 200) return;
-    htLogger.info("🚀 ~ useKanbanViews ~ response:", response);
     const updatedView = response.data.view;
     response.data = { ...response.data.project_view_updated };
     cacheUpdateHandler(response, { call: "rename", view: updatedView });
@@ -609,7 +605,6 @@ const useKanbanViews = (project: IProject | null) => {
   };
   const saveAsDefaultHandler = async (body: TCreate_view_body) => {
     const response = await axios.post("/api/projects/views/create-view", body);
-    htLogger.info("🚀 ~ saveAsDefaultHandler ~ response:", response);
     const view: string | undefined = response.data.view;
     // Patch the saved/default view before changing the URL. Otherwise the
     // surface initializer can resolve the new slug against stale cache once,
@@ -630,7 +625,6 @@ const useKanbanViews = (project: IProject | null) => {
     sectionToUpdateId: number | undefined,
     updatedSection: ISection
   ) => {
-    htLogger.info("🚀 ~ renameColumnAPI ~ called", currentUserId);
     const response = await axios.post(`/api/section/rename`, {
       userId: currentUserId,
       sectionId: sectionToUpdateId,

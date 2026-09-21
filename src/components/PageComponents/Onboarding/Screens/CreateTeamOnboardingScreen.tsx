@@ -1,4 +1,3 @@
-import { logger as htLogger } from "#logger";
 import useCurrentUser from '@/hooks/General/useCurrentUserCheckFromCookies'
 import { IProject } from '@/models/model'
 import axios from 'axios'
@@ -41,7 +40,6 @@ const CreateTeamOnboardingScreen = () => {
                 companySize
             }
             const response = await axios.post("/api/users/completeOnboardingStep1",body)
-            htLogger.info("🚀 ~ customValidationCheck ~ response:", response)
             if (response.status===200) {
                 const createdTeam = response.data.response?.Team
                 if (!createdTeam?.id) {
@@ -70,7 +68,6 @@ const CreateTeamOnboardingScreen = () => {
                 }
             }
         } catch (error) {
-            htLogger.info("🚀 ~ customValidationCheck ~ error:", error)
             toast.error("Could not create your team. Please try again.")
         } finally {
             setLoading(false)

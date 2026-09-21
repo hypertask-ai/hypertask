@@ -1,7 +1,7 @@
 "use client";
-
 import { env as appEnv } from "#env";
-import { logger as htLogger } from "#logger";
+
+
 import { useCallback, useEffect, useLayoutEffect, useRef } from "react";
 import { usePathname } from "next/navigation";
 import type { PostHogInterface } from "posthog-js/dist/module.slim";
@@ -326,7 +326,6 @@ export default function PostHogAnalytics({
     if (identity.isGuest) posthog.startSessionRecording();
     appliedIdentityRef.current = identity;
     void installAuthenticatedProjectWebVitals().catch((error) => {
-      htLogger.error("[posthog] web vitals initialization failed", error);
     });
   }, [
     authenticatedIsGuest,
@@ -472,10 +471,8 @@ export default function PostHogAnalytics({
         );
         analyticsInitializationReadyRef.current = true;
         await installAuthenticatedProjectWebVitals().catch((error) => {
-          htLogger.error("[posthog] web vitals initialization failed", error);
         });
       } catch (error) {
-        htLogger.error("[posthog] initialization failed", error);
       }
     };
 

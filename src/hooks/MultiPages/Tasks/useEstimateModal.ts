@@ -1,4 +1,3 @@
-import { logger as htLogger } from "#logger";
 import { useGetEstimateForTask } from "@/hooks/MultiPages/useGetEstimateForTask";
 import globalConstants from "@/lib/constants";
 import { IEstimateConstants } from "@/lib/constants/constants";
@@ -40,7 +39,6 @@ export const useEstimateModal = (
 
         closeHandler(true);
       } catch (error) {
-        htLogger.info("🚀 ~ setEstimate ~ error:", error);
       }
     };
 

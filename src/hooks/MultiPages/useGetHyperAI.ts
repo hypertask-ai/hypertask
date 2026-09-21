@@ -1,4 +1,3 @@
-import { logger as htLogger } from "#logger";
 import { getHyperRoute } from "@/lib/constants/APIRouteConstants";
 import { useQuery } from "@tanstack/react-query";
 import axios from "axios";
@@ -24,7 +23,6 @@ export const getHyperObject = async () => {
     const hyper = await axios.get(getHyperRoute);
     return hyper.data;
   } catch (error) {
-    htLogger.info("🤔 ~ getHyperObject ~ error:", error);
     throw error;
   }
 };

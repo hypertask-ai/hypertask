@@ -1,4 +1,3 @@
-import { logger as htLogger } from "#logger";
 import TrashComp from "@/components/PageComponents/Trash/TrashComp";
 import { requireServerCookieUser } from "@/lib/auth/serverUser";
 import getTrashByProjectId from "@/utils/controllers/trash/getByProjectId";
@@ -15,7 +14,6 @@ export default async function Page(props: { params: Promise<{ projectId: string 
     }
 
     const projects = await getTrashByProjectId({projectId, userId:user.id})
-    htLogger.info("🚀 ~ Page ~ projects:", projects)
     if (!projects ){
         return redirect("/login")
     }

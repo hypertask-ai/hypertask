@@ -1,5 +1,4 @@
 import { env as appEnv } from "#env";
-import { logger as htLogger } from "#logger";
 import { useCallback, useEffect, useState } from 'react';
 import { addDevice } from '@/utils/api/users';
 import { fetchPushNotificationStatus } from '@/utils/api/global/pushNotifications';
@@ -47,7 +46,6 @@ const useFcmToken = () => {
           
           // Retrieve the notification permission status
           const result = await window.Notification.requestPermission();
-          htLogger.error("🚀 ~  useFcmToken ~ retrieveToken ~ result:", result)
           setNotificationPermissionStatus(result);
 
           // Check if permission is granted before retrieving the token
@@ -67,16 +65,12 @@ const useFcmToken = () => {
               return currentToken
               
             } else {
-              htLogger.error(
-                'No registration token available. Request permission to generate one.'
-              );
             }
           }
           // if not, reset the queryClient, and reset SetData as well
           else resetData(result)
         }
       } catch (error) {
-        htLogger.error('An error occurred while retrieving token:', error);
       }
     };
 
@@ -92,7 +86,6 @@ const useFcmToken = () => {
         await addDevice(fcmToken)
         getPushStatus(fcmToken)
       } catch(error){
-        htLogger.info("🤔 ~ setTokenAndGetPushStatus ~ error:", error)
       }
       
 

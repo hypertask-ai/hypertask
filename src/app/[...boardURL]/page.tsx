@@ -1,4 +1,3 @@
-import { logger as htLogger } from "#logger";
 import { IUser } from "@/models/model";
 import { cookies } from "next/headers";
 import LandingPage from "./LandingPage";
@@ -76,7 +75,6 @@ export default async function Page(
   try {
     userObj = JSON.parse(userObjString.value);
   } catch (error) {
-    htLogger.info("🪵 ~ Page ~ error:", error);
     redirect("/login");
   }
 
@@ -85,7 +83,6 @@ export default async function Page(
 
   // Resolve valid slug BEFORE rendering - no redirects!
   if (!slugs || slugs === "undefined" || slugs === "null" || slugs === "") {
-    htLogger.info("❌ Invalid or missing project ID in URL, resolving valid slug...");
     
     // Try to use previousBoard cookie as fallback
     if (previousBoardString?.value) {
@@ -97,14 +94,12 @@ export default async function Page(
           slugs = projectIdNumber;
         }
       } catch (error) {
-        htLogger.info("🪵 ~ Error parsing previousBoard cookie:", error);
       }
     }
     
     // Last fallback: get first project
     if (!slugs || slugs === "undefined" || slugs === "null" || slugs === "") {
       const response: any = await getFirst(userObj.id);
-      htLogger.info("🚀 ~ getFirst ~ response:", response);
       if (response?.json?.id) {
         // Deliberately NO redirect here, despite the URL still lacking ?id=.
         // getFirst() is awaited, so by this point the response has usually begun
@@ -132,7 +127,6 @@ export default async function Page(
   }
 
   // Now we always have a valid slug - start timing and continue
-  htLogger.time("board");
 
   // Ultra-fast validation - only check if user has access to this project
   const titleRequest = resolveBoardRouteTitleRequest(
@@ -153,7 +147,6 @@ export default async function Page(
   }
 
   // View handling and full project loading is now deferred to client-side
-  htLogger.timeEnd("board");
 
   // Always render with valid slug - no redirects means no hook issues!
   const accountId = Number(userObj.id);

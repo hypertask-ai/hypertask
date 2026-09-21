@@ -1,4 +1,3 @@
-import { logger as htLogger } from "#logger";
 /* eslint-disable react-hooks/exhaustive-deps */
 /* eslint-disable @next/next/no-img-element */
 "use client"
@@ -34,9 +33,7 @@ const ReminderPageComponent = ({
             
             const cookies = parseCookies()
             _currentUser = JSON.parse(cookies.nookies_user)
-            htLogger.info("🚀 ~ file: archived.tsx:40 ~ _currentUser:", _currentUser)
         } catch (error) {
-            htLogger.info("🚀 ~ file: archived.tsx:45 ~ error:", error)
             
         }
     }
@@ -88,7 +85,6 @@ const ReminderPageComponent = ({
           // press k
           if (e.keyCode === 75 && cmdControl) {
             e.preventDefault();
-            // debug.log("1: change commands mode");
             toggleShowCommands();
         }
         
@@ -116,9 +112,6 @@ const ReminderPageComponent = ({
 
         if (e.key === "j" || e.key === "ArrowDown") {
             if (_selectedReminder) {
-                htLogger.info("🚀 ~ handleKeyDown ~ _selectedReminder:", _selectedReminder)
-                htLogger.info("🚀 ~ handleKeyDown ~ _reminders:", _reminders)
-                htLogger.info("🚀 ~ handleKeyDown ~ index:", index)
                 if (index === -1 || index === (_reminders.length - 1)) {
                     // setSelectedReminder(_reminders[0])
                     // document.getElementById(`task-${_reminders[0].id}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' })
@@ -157,7 +150,6 @@ const ReminderPageComponent = ({
         }
 
         if (e.key === "Enter") {
-            // debug.log()
             openTask(_selectedReminder)
         }
            // cmd/ctrl + m
@@ -219,19 +211,16 @@ const ReminderPageComponent = ({
         try {
             await axios.post("/api/reminders/invokeReminder",{reminder:reminder})
             const newData =_reminders.filter((r,idx)=>idx!==index)
-            htLogger.info("🚀 ~ newData ~ newData:", newData)
             queryClient.setQueryData(["reminders"],newData)
             toast("Please check your inbox!")
 
         } catch (error) {
-            htLogger.info(error)
         }
 
     }
 
     const handleMouseEnter = (index: number) => {
         currentHoveredDiv.current = index;
-        // debug.log(index);
         // Set focus on the div when the mouse hovers over it
         // taskRef?.current[index]?.focus();
         // setSelectedReminder(_reminders[currentHoveredDiv.current])
@@ -321,7 +310,6 @@ const ReminderPageComponent = ({
                         {
                             _reminders?.map((reminder, i) => (
                                 <div id={`reminder-${reminder.id}`} 
-                                // onFocus={() => debug.log('Focused on div:', task)}
                                     onMouseEnter={() => handleMouseEnter(i)}
                                     onMouseLeave={handleMouseLeave}
                                     ref={taskRef}

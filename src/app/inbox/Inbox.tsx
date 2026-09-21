@@ -1,8 +1,6 @@
 /* eslint-disable react-hooks/exhaustive-deps */
 /* eslint-disable @next/next/no-img-element */
 "use client";
-
-import { logger as htLogger } from "#logger";
 import {
   FC,
   ReactNode,
@@ -664,7 +662,6 @@ const Inbox = ({
         });
       }
     } catch (error) {
-      htLogger.info("🚀 ~ newCommentsHandler ~ error:", error);
     }
   };
 

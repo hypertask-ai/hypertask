@@ -1,4 +1,3 @@
-import { logger as htLogger } from "#logger";
 import { ISection, ITask } from '@/models/model';
 import { deepCopy, isSameDay, returnSortedItems, scrollToCenterIfNearBottom, scrollToCenterIfNearTop } from '@/utils/helperFunctions/helperFunctions';
 import globalAPIHandlers from '@/utils/api/global';
@@ -43,10 +42,8 @@ const useMoveTasks = (props: IUseMoveTasks) => {
     direction: "Left" | "Right"
 
   ) => {
-    htLogger.time("Moving item horizontally: ")
     const updatedAt = new Date()
     const currSectionIdx = sections.findIndex((sec) => sec.sectionId === sectionId);
-    htLogger.info("🚀 ~ useMoveTasks ~ sections:", sections)
     const currSection = sections[currSectionIdx]
     const currFilteredSection = filteredSections[currSectionIdx]
     
@@ -119,7 +116,6 @@ const useMoveTasks = (props: IUseMoveTasks) => {
         }
         let itemsToSort = returnSortedItems(newSections[index].items,_currentProject! )
         
-        // debug.log("🚀 ~ newSections.forEach ~ itemsToSort:", itemsToSort)
         newSections[index].items = itemsToSort
       }
 
@@ -129,9 +125,7 @@ const useMoveTasks = (props: IUseMoveTasks) => {
     _currentProject && updateActiveItemAndItemInView(itemId, _currentProject.id, getActiveSection());
     setActiveSection(targetSectionIdx)
     
-    htLogger.timeEnd("Moving item horizontally: ")
     const updatedTasks = newSections.flatMap((x)=>x.items)
-    htLogger.info("🚀 ~ useMoveTasks ~ updatedTasks:", updatedTasks)
     updateCache(newSections,updatedTasks)
 
 
@@ -240,7 +234,6 @@ const useMoveTasks = (props: IUseMoveTasks) => {
     sectionId: number,
     itemId: number
   ) => {
-    htLogger.time("Moving item vertically downwards: ")
     if(sorting_mode_current === "UpdatedAt") return toast("Cannot move tasks while kanban is in Last Updated mode")
 
     const sectionsMap:any = new Map(sections.map(section => [section.sectionId, section]));
@@ -295,7 +288,6 @@ const useMoveTasks = (props: IUseMoveTasks) => {
     });
 
     _currentProject && updateActiveItemAndItemInView(itemId, _currentProject.id, getActiveSection());
-    htLogger.timeEnd("Moving item vertically downwards: ")
     const updatedTasks = newSections.flatMap((x)=>x.items)
     updateCache(newSections, updatedTasks)
     const activeElement_=document.getElementById(`task-${belowItem.id}`)

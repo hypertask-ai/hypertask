@@ -1,4 +1,3 @@
-import { logger as htLogger } from "#logger";
 import { IUser } from "@/models/model";
 import getInvite from "@/utils/controllers/invite/getInvite";
 import { cookies } from "next/headers";
@@ -65,7 +64,6 @@ export default async function InvitePage(
         throw error;
       }
       // Only log actual errors, not redirects
-      htLogger.error("Error redeeming invite:", error);
       // Fall through to show invite component
     }
   }

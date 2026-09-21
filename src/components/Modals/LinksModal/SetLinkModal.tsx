@@ -1,4 +1,3 @@
-import { logger as htLogger } from "#logger";
 import {
   ModalContainerCustom,
   ModalHeaderComp,
@@ -81,7 +80,6 @@ const SetLinkModal: React.FC<ISetLinkModal> = ({
         if (defaultTasks.length === 0) setDefaultTasks(mappedTasks);
       }
     } catch (error) {
-      htLogger.info("🚀 ~ fetchTasksHandler ~ error:", error);
     }
   };
 

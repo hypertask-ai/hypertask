@@ -1,6 +1,5 @@
 "use client";
 
-import { logger as htLogger } from "#logger";
 import axios from "axios";
 import { useEffect, useMemo, useState } from "react";
 import toast from "react-hot-toast";
@@ -85,7 +84,7 @@ const PlansSection = () => {
       .then(() => {
         if (!cancelled) refetchTeam();
       })
-      .catch((error) => htLogger.error("ensure-customer failed", error));
+      .catch((error) => undefined);
     return () => {
       cancelled = true;
     };
@@ -131,7 +130,6 @@ const PlansSection = () => {
       );
       router.push(response.data.url);
     } catch (error) {
-      htLogger.error(error);
       toast.error("Could not open checkout");
       setCheckoutPlanId(null);
     }
@@ -150,7 +148,6 @@ const PlansSection = () => {
       router.refresh();
       toast.success("Successfully switched to Free Plan");
     } catch (error) {
-      htLogger.error(error);
       toast.error("Could not switch to Free Plan");
     } finally {
       setSwitchingToFree(false);

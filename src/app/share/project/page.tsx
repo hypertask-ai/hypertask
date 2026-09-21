@@ -1,4 +1,3 @@
-import { logger as htLogger } from "#logger";
 import { IProject } from "@/models/model";
 import { Metadata } from "next";
 import { redirect } from "next/navigation";
@@ -17,9 +16,6 @@ export default async function Page(props: { searchParams: Promise<any> }) {
   const searchParams = await props.searchParams;
   let slugs = searchParams?.id;
   if (!slugs || slugs === "undefined" || slugs === "null" || slugs === "") {
-    htLogger.info(
-      "❌ Invalid or missing share ID in URL, resolving valid slug..."
-    );
      redirect("/unauthorized");
   }
   const response = await getProject(slugs);

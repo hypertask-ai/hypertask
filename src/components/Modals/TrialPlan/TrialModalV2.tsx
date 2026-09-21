@@ -1,5 +1,4 @@
 import { env as appEnv } from "#env";
-import { logger as htLogger } from "#logger";
 import { ModalContainerCustom } from "@/components/Common/CommonModalComponents";
 import "@/styles/AttachmentView.scss";
 import { Carousel, CarouselItem, ModalHeader } from "reactstrap";
@@ -58,15 +57,9 @@ const TrialModal: React.FC<ITrialModal> = ({ currentUser, callback }) => {
     const response = await axios.get(
       `/api/teams/getByUserId?userId=${currentUser?.id}`
     );
-    htLogger.info(
-      "🚀 ~ findTeam ~ currentProject?.teamId:",
-      currentProject?.teamId
-    );
     if (response.status === 200) {
-      htLogger.info("🚀 ~ findTeam ~ response:", response);
       setCurrTeam(response.data);
     } else {
-      htLogger.info("🚀 ~ findTeam ~ response:", response);
     }
   };
 

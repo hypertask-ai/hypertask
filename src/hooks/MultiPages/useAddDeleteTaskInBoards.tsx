@@ -1,4 +1,3 @@
-import { logger as htLogger } from "#logger";
 
 import { currentProjectAtom, activeSectionAtom, currentUserAtom } from "@/store";
 import { useQueryClient } from "@tanstack/react-query";
@@ -108,32 +107,25 @@ const useAddDeleteTaskInBoards = () => {
   
 
   const createItem = async (props: CreateItemParams): Promise<boolean> => {
-    htLogger.info("🚀 ~ createItem ~ props:", props)
     const { sectionId, section, item, position, createAnother, projectId } = props
-    htLogger.info("🚀 ~ createItem ~ _currentProject:", _currentProject)
 
     if (!_currentProject || _currentProject.id !== projectId || !currentUser?.id) return false;
     try {
     const { allData, projectToUpdateIndex } = await getProjectIdxAndAllData(_currentProject?.id)
-      htLogger.info("🚀 ~ createItem ~ projectToUpdateIndex:", projectToUpdateIndex)
-      htLogger.info("🚀 ~ createItem ~ allData:", allData)
 
     // if (!allData || !projectToUpdateIndex) return;
     if (!allData || !allData.updatedProjects || projectToUpdateIndex === undefined || projectToUpdateIndex === -1) return false;
 
     const sections = allData?.updatedProjects[projectToUpdateIndex]?.sections
-    htLogger.info("🚀 ~ createItem ~ sections:", sections)
 
 
     const sectionIndex = _currentProject.sections.findIndex((sec) => sec.sectionId === sectionId);
-    htLogger.info("🚀 ~ createItem ~ sectionIndex:", sectionIndex)
 
     const ranking = generateRanking(
       position === "top" ? undefined : sections[sectionIndex]?.items[sections[sectionIndex]?.items.length - 1]?.ranking,
       position === "top" ? sections[sectionIndex]?.items[0]?.ranking : undefined
     );
 
-    htLogger.info("🚀 ~ createItem ~ ranking:", ranking)
       const result = await createNewTaskGloballyAPIHandler({
         userId: currentUser.id,
         projectId,
@@ -159,19 +151,16 @@ const useAddDeleteTaskInBoards = () => {
       const updatedSections = sections.map((sec, index) =>
         index === sectionIndex ? { ...targetSection, items: updatedItems } : sec
       );
-      htLogger.info("🚀 ~ createItem ~ updatedSections:", updatedSections);
 
       mutationHandler(projectToUpdateIndex, updatedSections, allData);
 
       if (!createAnother) updateActiveItemAndItemInView(task.id, _currentProject.id, getActiveSection());
       else updateActiveItemAndItemInView(null, _currentProject.id, getActiveSection());
       } catch (error) {
-        htLogger.info("🚀 ~ createItem ~ local update error:", error);
         void queryClient.invalidateQueries({ queryKey: ["projectsAll"] });
       }
       return true;
     } catch (error) {
-      htLogger.info("🚀 ~ createItem ~ error:", error);
       return false;
     }
   };

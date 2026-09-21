@@ -1,4 +1,3 @@
-import { logger as htLogger } from "#logger";
 import {
   ModalContainerCustom,
   ModalHeaderComp,
@@ -35,7 +34,6 @@ const RenameTaskModal = (props: Props) => {
       updateTask(newTask);
       closeCallback(title);
     } catch (error) {
-      htLogger.error(error);
     }
   };
 

@@ -1,5 +1,4 @@
 "use client"
-import { logger as htLogger } from "#logger";
 import { currentUserAtom } from "@/store";
 import { isValidUser } from "@/utils/edgeHelpers";
 import { parseCookies } from "nookies";
@@ -33,7 +32,6 @@ const useCurrentUser = (authenticatedUserId?: number | null) => {
         lastSyncedRef.current = null;
       }
     } catch (error) {
-      htLogger.error('Error parsing nookies_user cookie:', error);
       
       // Only clear storage/cookies if in browser
       if (typeof window !== 'undefined') {

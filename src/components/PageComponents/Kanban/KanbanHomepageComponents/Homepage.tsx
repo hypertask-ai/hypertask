@@ -1,4 +1,3 @@
-import { logger as htLogger } from "#logger";
 /* eslint-disable react-hooks/exhaustive-deps */
 import React, { useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { useRecoilValue } from "@/lib/state";
@@ -364,11 +363,9 @@ const HomePage = ({
         });
         setBoardColumnsViewAPI(_currentProject, updatedColumns);
       } catch (persistError) {
-        htLogger.info("🚀 ~ handleColumnDragEnd ~ persist failed:", persistError);
         toast.error("Column order could not be saved");
       }
     } catch (error) {
-      htLogger.info("🚀 ~ handleColumnDragEnd ~ error:", error);
     }
   }, [
     _currentProject,
@@ -422,7 +419,6 @@ const HomePage = ({
       getProjectIdxAndAllData,
       updateTaskInCache,
     } = latestRef.current;
-    htLogger.info("🚀 ~ updateParentTask: called with", parentTask, status);
     const { allData, projectToUpdateIndex } = getProjectIdxAndAllData(
       _currentProject?.id
     );
@@ -505,7 +501,6 @@ const HomePage = ({
       return
     }
     if(!taskInfo || !tasksToDelete) return
-    htLogger.info("🚀 ~ deleteTaskHandler ~ tasksToDelete:", tasksToDelete)
     setLoading(true)
     try {
       await deleteItem(taskInfo?.section, taskInfo?.id, taskInfo?.parentTask, tasksToDelete)
@@ -524,7 +519,6 @@ const HomePage = ({
     parentTask?: ITask,
     tasksToDelete?: number[],
   ) => {
-    htLogger.info("🚀 ~ tasksToDelete:", tasksToDelete)
     // ========> RUN THE DELETE API
     // ========> DISPLAY AN UNDO BUTTON, UPON CLICKING IT, FIRST BRING IT BACK TO THE UI THEN RUN THE undoAction that will also run an api
     const sectionIndex = _sections.findIndex(
@@ -544,8 +538,6 @@ const HomePage = ({
     // await queryClient.prefetchQuery([["priority",itemId]])
 
     const priority_data: IPriority | undefined = queryClient.getQueryData(["priority", itemId])
-    // debug.log("🚀 ~ updatePriority ~ priority_data:", priority_data)
-    // debug.log("🚀 ~ updatedSection ~ sectionId:", sectionId)
     const taskToReturn = { priority: priority_data }
     toast("Priority updated to " + priority_data?.Priority_Value)
     updateTaskInCache(taskToReturn, itemId, _currentProject.id, sectionId, _currentProject)
@@ -651,7 +643,6 @@ const HomePage = ({
 
     const updatedSection = sections.map((section) => {
       if (section.sectionId === sectionId) {
-        // debug.log("🚀 ~ updatedSection ~ section.id:", section.id)
         const updatedItems = section.items.map((task) => {
           if (task.id === itemId) {
 
@@ -664,7 +655,6 @@ const HomePage = ({
               },
             };
             task.notifications && undoInboxArchive(task.notifications[0])
-            // debug.log("🚀 ~ updatedItems ~ taskreturn:", taskreturn)
             return taskreturn;
           }
           return task;
@@ -675,7 +665,6 @@ const HomePage = ({
       }
       return section;
     });
-    // debug.log("🚀 ~ updatedSection ~ updatedSection:", updatedSection)
     // setSections(updatedSection)
 
     toast("Notifications archived")

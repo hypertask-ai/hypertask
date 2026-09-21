@@ -1,6 +1,5 @@
 "use client"
 
-import { logger as htLogger } from "#logger";
 import { useCallback, useRef, useState } from "react"
 
 import { Upload } from "lucide-react";
@@ -79,8 +78,6 @@ export function FileUploader({ onUpload, existingFiles }: FileUploaderProps) {
               type: file.type,
               AI_Custom_Instructions_id: instructionId,
             });
-            htLogger.info("🚀 ~ returnnewPromise<IAttachment> ~ uploadedFileFromRAG:", uploadedFileFromRAG)
-            htLogger.info("🚀 ~ returnnewPromise<IAttachment> ~ source:", source)
 
             if (uploadedFileFromRAG && isIAttachment(uploadedFileFromRAG.data) && uploadedFileFromRAG.status === 200) {
               resolve(uploadedFileFromRAG.data);
@@ -88,7 +85,6 @@ export function FileUploader({ onUpload, existingFiles }: FileUploaderProps) {
               throw new Error("Upload failed");
             }
           } catch (error) {
-            htLogger.error(`Error uploading file ${file.name}:`, error);
             resolve({
               id: -1,
               fileName: file.name,
@@ -104,8 +100,6 @@ export function FileUploader({ onUpload, existingFiles }: FileUploaderProps) {
       Promise.all(uploadPromises).then(async (uploadedFiles) => {
         try {
           const source = uploadedFiles.map(x=>(x.fileSource))
-          htLogger.info("🚀 ~ Promise.all ~ uploadedFiles:", uploadedFiles)
-          htLogger.info("🚀 ~ Promise.all ~ source:", source)
           const payload = {
             URLs:source,
             teamId:_currentProject?.teamId,
@@ -116,9 +110,7 @@ export function FileUploader({ onUpload, existingFiles }: FileUploaderProps) {
             onUpload(uploadedFiles);
             toast.success("Files uploaded successfully");
           } 
-          htLogger.info("🚀 ~ apiHit ~ response:", response.data)
         } catch (error) {
-          htLogger.error("🚀 ~ apiHit ~ error:", error)
           toast.error("Error uploading files");
         } finally {
           setLoading(false);

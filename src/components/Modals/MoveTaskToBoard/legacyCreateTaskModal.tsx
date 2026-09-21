@@ -1,4 +1,3 @@
-import { logger as htLogger } from "#logger";
 import { ModalContainerCustom, ModalHeaderComp, ModalInput } from '@/components/Common/CommonModalComponents';
 import { useGetAllProjectsMinimal } from '@/hooks/MultiPages/useGetAllProjectsMinimal';
 import { inViewObjectAtom } from '@/store';
@@ -70,26 +69,21 @@ const MoveTaskGlobal = (props:IProps) => {
         // Your complex form submission logic goes here
         try {
           // Example: Simulating an asynchronous operation
-            htLogger.info('Submitting...', values);
             setRedirectingToTask(true)
-            //   debug.log("🚀 ~ file: index.tsx:58 ~ handleFormSubmit ~ formik.values:", formik.values)
             const body ={
                 title:formik.values.taskTitle,
                 sectionId:formik.values.sectionId,
                 projectId:formik.values.projectId
             }
             const response = await axios.post("/api/tasks/create",body)
-            htLogger.info("🚀 ~ file: index.tsx:60 ~ handleFormSubmit ~ response:", response)
             
             if (response.status===200){
                 router.refresh()
-                htLogger.info('Submission successful!');
                 router.push(`/detail/project-${formik.values.projectId}/${response.data.uniqueIndex}`)
                 props.closeHTC()
             }
         } catch (error) {
             props.closeHTC()
-          htLogger.error('Submission failed:', error);
         }
       };
 
@@ -200,7 +194,6 @@ interface FilterableMenuScreenProps {
             if (value===0 && filteredData){
                 setKeyword("")
                 const indexof = data.findIndex(item=>item.id===filteredData[selectedIndex].id)
-                htLogger.info("🚀 ~ file: index.tsx:204 ~ handleKeyDown ~ indexof:", indexof)
                 if (indexof>-1) submitForCallback(indexof)
                 // screenCallback(value,next, indexof)
             }

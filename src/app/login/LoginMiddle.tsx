@@ -1,6 +1,5 @@
 "use client";
 
-import { logger as htLogger } from "#logger";
 import { cn } from "@/utils/undoActions/helperFuncs";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
@@ -188,19 +187,8 @@ export const LoginMiddle = ({ serifClassName }: LoginMiddleProps) => {
     const urlParams = new URLSearchParams(window.location.search);
     const token = urlParams.get("token");
 
-    htLogger.info(
-      "🔍 LoginMiddle useLayoutEffect - token:",
-      token ? "found" : "not found",
-    );
-    htLogger.info(
-      "🔍 LoginMiddle useLayoutEffect - full URL:",
-      window.location.href,
-    );
 
     if (token || urlParams.get("authError") === "account_not_found") {
-      htLogger.info(
-        "🔗 JWT email token detected in LoginMiddle, showing email form",
-      );
       setShowEmailForm(true);
     }
   }, []);

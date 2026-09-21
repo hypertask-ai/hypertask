@@ -1,4 +1,3 @@
-import { logger as htLogger } from "#logger";
 import ConfirmDialog from "@/components/Modals/Common Modals/ConfirmDialog";
 import { useRecoilState } from "@/lib/state";
 import { IProject } from "@/models/model";
@@ -47,11 +46,9 @@ const ConfirmArchiveBoard = (props: Props) => {
                     queryClient.refetchQueries({queryKey:["getAllFavorites"]}),
                 ])
             } catch (refreshError) {
-                htLogger.error("Board archive succeeded but cache refresh failed", refreshError)
             }
         }
         catch (error) {
-            htLogger.error(error)
             setLoading(false)
         }
     }, [currentProject?.id, loading, onClose, queryClient, router, targetProject])

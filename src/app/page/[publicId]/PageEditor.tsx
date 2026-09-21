@@ -1,6 +1,5 @@
 "use client";
 
-import { logger as htLogger } from "#logger";
 import { EditorContent } from "@tiptap/react";
 import { ChevronLeft, Trash2 } from "lucide-react";
 import dynamic from "next/dynamic";
@@ -161,7 +160,6 @@ const PageEditor = ({ _page, _user }: PageEditorProps) => {
       await patchPage({ title: nextTitle });
       finishSave("title", generation, "success");
     } catch (error) {
-      htLogger.error("[Page title save] Error:", error);
       toast.error("Could not save the page title");
       finishSave("title", generation, "error");
     }
@@ -183,7 +181,6 @@ const PageEditor = ({ _page, _user }: PageEditorProps) => {
 
       finishSave("content", generation, "success");
     } catch (error) {
-      htLogger.error("[Page content save] Error:", error);
       toast.error("Could not save the page");
       finishSave("content", generation, "error");
     }
@@ -290,7 +287,6 @@ const PageEditor = ({ _page, _user }: PageEditorProps) => {
       toast.success("Page deleted");
       router.push(taskHref);
     } catch (error) {
-      htLogger.error("[Delete page] Error:", error);
       toast.error(
         error instanceof Error ? error.message : "Unable to delete page"
       );

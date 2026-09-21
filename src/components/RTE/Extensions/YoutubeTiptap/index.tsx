@@ -1,4 +1,3 @@
-import { logger as htLogger } from "#logger";
 import { mergeAttributes, Node } from "@tiptap/core";
 import { Plugin, PluginKey } from "@tiptap/pm/state";
 import { ReactNodeViewRenderer } from "@tiptap/react";
@@ -155,7 +154,6 @@ export const Youtube = Node.create<YoutubeOptions>({
               const text = event.clipboardData?.getData("text/plain");
               if (text && YOUTUBE_REGEX_GLOBAL.test(text)) {
                 const embedSrc = getEmbedUrlFromYoutubeUrl({ url: text });
-                htLogger.info("🚀 ~ addProseMirrorPlugins ~ embedSrc:", embedSrc);
 
                 this.editor.commands.setYoutubeVideo({ src: text });
                 event.preventDefault(); // Prevent default paste behavior
@@ -180,7 +178,6 @@ export const Youtube = Node.create<YoutubeOptions>({
               const text = event.dataTransfer?.getData("text/plain");
               if (text && YOUTUBE_REGEX_GLOBAL.test(text)) {
                 const embedSrc = getEmbedUrlFromYoutubeUrl({ url: text });
-                htLogger.info("🚀 ~ addProseMirrorPlugins ~ embedSrc:", embedSrc);
                 const coordinates = view.posAtCoords({
                   left: event.clientX,
                   top: event.clientY,

@@ -1,5 +1,4 @@
 import { env as appEnv } from "#env";
-import { logger as htLogger } from "#logger";
 import { useMcpToken } from "@/components/Modals/McpToken";
 import { mcpAuthorizationHeaders } from "@/lib/mcp/bearerAuth";
 import { useCurrentBoardBilling } from "@/hooks/General/useCurrentBoardBilling";
@@ -72,7 +71,6 @@ export function useHyperMention() {
     if (!triggerHyper) return;
     const taskId = taskIds[0];
     if (!(taskId !== undefined && taskId > 0)) {
-      htLogger.warn("[HyperAI] Missing task context for mention request");
       toast.error("HyperAI could not reply: missing task context");
       return;
     }
@@ -132,7 +130,6 @@ export function useHyperMention() {
         await showHyperAiResponseError(response);
       }
     } catch (error) {
-      htLogger.warn("[HyperAI] Mention request failed", error);
       toast.error(DEFAULT_HYPERAI_ERROR);
     }
   }
@@ -144,7 +141,6 @@ export function useHyperMention() {
     const { text, projectId, taskId, modelKey, previousText } = mentionProps;
     if (!triggerHyperMention(mode, text, previousText)) return;
     if (!(taskId > 0)) {
-      htLogger.warn("[HyperAI] Missing task context for image request");
       toast.error("HyperAI could not reply: missing task context");
       return;
     }
@@ -162,7 +158,6 @@ export function useHyperMention() {
         await showHyperAiResponseError(response);
       }
     } catch (error) {
-      htLogger.warn("[HyperAI] Image request failed", error);
       toast.error(DEFAULT_HYPERAI_ERROR);
     }
   }

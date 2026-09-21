@@ -1,4 +1,3 @@
-import { logger as htLogger } from "#logger";
 import {
   ModalContainerCustom,
   ModalHeaderComp,
@@ -94,7 +93,6 @@ const CreateCustomFieldModal = ({ closeHandler }: Props) => {
       });
       closeHandler();
     } catch (err: any) {
-      htLogger.error("CreateCustomField error:", err);
       setError(err?.response?.data?.error || "Couldn't create the field. Try again.");
     } finally {
       setSubmitting(false);

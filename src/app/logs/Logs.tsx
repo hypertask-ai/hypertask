@@ -1,6 +1,5 @@
 "use client"
 
-import { logger as htLogger } from "#logger";
 import { ILog } from "@/models/model";
 import formatDateDifference from "@/utils/generateTime";
 import Link from "next/link";
@@ -108,7 +107,6 @@ const convertToDateMonthYear = (inputString:string)=>{
 
 const getHoursAndMinutes = (inputString:string)=>{
     const dateObject: Date = new Date(inputString);
-    htLogger.info("🚀 ~ file: Logs.tsx:110 ~ getHoursAndMinutes ~ inputString:", inputString)
     const options: Intl.DateTimeFormatOptions = {
         hour: 'numeric',
         minute: 'numeric',

@@ -1,4 +1,3 @@
-import { logger as htLogger } from "#logger";
 import React, { useEffect, useState } from "react";
 import { NodeViewWrapper } from "@tiptap/react";
 import type { NodeViewProps } from "@tiptap/react";
@@ -14,14 +13,12 @@ export const LoomNodeView = ({
   // Process the URL once when the component mounts or when src changes
   useEffect(() => {
     if (node.attrs.src) {
-      htLogger.info("🚀 ~ useEffect ~ src:", node.attrs.src);
       // Use the same function that renderHTML uses
       const processedUrl = getEmbedUrlFromloomUrl({
         url: node.attrs.src,
         allowFullscreen: true,
         startAt: node.attrs.start || 0,
       });
-      htLogger.info("🚀 ~ useEffect ~ processedUrl:", processedUrl);
 
       setEmbedUrl(processedUrl ?? "");
     }

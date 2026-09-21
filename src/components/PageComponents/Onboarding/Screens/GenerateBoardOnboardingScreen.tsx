@@ -1,6 +1,5 @@
 "use client";
 
-import { logger as htLogger } from "#logger";
 import axios from "axios";
 import { useRouter, useSearchParams } from "next/navigation";
 import React, { useState } from "react";
@@ -71,7 +70,6 @@ export const GenerateBoardOnboardingScreen: React.FC<
 
       storeProjectAndContinue(response.data);
     } catch (error) {
-      htLogger.info("GenerateBoardOnboardingScreen buildBoard error:", error);
       toast.error("Could not create your board. Please try again.");
     } finally {
       setLoadingAction(null);

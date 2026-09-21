@@ -1,4 +1,3 @@
-import { logger as htLogger } from "#logger";
 
 import ImageGallery from '@/components/Common/AttachmentsUpload/ImageGalleryView';
 import useSaveContent from '@/hooks/Task Detail/CommentAndDescriptionHooks/useSaveContent';
@@ -25,17 +24,14 @@ interface IProps {
 
 
 const UploadingDescription: React.FC<IProps> = ({ id, content, attachments, totalAttachments }) => {
-  htLogger.info("🚀 ~ UploadingDescription ~ attachments:", attachments)
   const hasRun = useRef(false);
   const hasCompleted = useRef(false);
   const { uploadingDescription, setUploadingDescription } = useDescriptionAndCommentsContext();
 
   const [inlineImagesUploadedTotal, setInlineImagesUploadedTotal] = useState<number>(0);
-  htLogger.info("🚀 ~ inlineImagesUploadedTotal:", inlineImagesUploadedTotal)
   const [processedResult, setProcessedResult] = useState<modifiedHtml | null>(null);
   const [uploadedAttachments, setUploadedAttachments] = useState<UploadFileItem[]>([])
   const [progressPercentage, setProgressPercentage] = useState<number>(0);
-  htLogger.info("🚀 ~ uploadedAttachments:", uploadedAttachments)
 
   const [totalChecks, setTotalChecks] = useState({
     content: false,
@@ -53,7 +49,6 @@ const UploadingDescription: React.FC<IProps> = ({ id, content, attachments, tota
       setProcessedResult(content_)
       setTotalChecks(prev => ({ ...prev, content: true }));
     } catch (error) {
-      htLogger.error("Could not process description content", error);
       setUploadingDescription(undefined);
       toast.error("Could not save description. Your changes are still here.");
       complete(false);
@@ -65,7 +60,6 @@ const UploadingDescription: React.FC<IProps> = ({ id, content, attachments, tota
   const callbackAttachments = async (attachmentsReturned: UploadFileItem[]) => {
 
     // get all the urls back
-    htLogger.info("🚀 ~ callbackAttachments ~ attachmentsReturned:", attachmentsReturned)
     // this is confirmation that attachments are uploaded.
     // setTotalChecks(prev=>prev+1)
     setUploadedAttachments(attachmentsReturned)
@@ -82,7 +76,6 @@ const UploadingDescription: React.FC<IProps> = ({ id, content, attachments, tota
       );
       complete(saved);
     } catch (error) {
-      htLogger.error("Could not finish description upload", error);
       setUploadingDescription(undefined);
       toast.error("Could not save description. Your changes are still here.");
       complete(false);

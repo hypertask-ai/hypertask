@@ -1,4 +1,3 @@
-import { logger as htLogger } from "#logger";
 import React, {
   Suspense,
   useContext,
@@ -960,7 +959,6 @@ function CustomFieldRow({
         value: val,
       });
     } catch (err) {
-      htLogger.error("CustomField upsert error:", err);
       setSavedValue(savedValue); // rollback
       toast.error(`Unable to save ${field.name}`);
     }

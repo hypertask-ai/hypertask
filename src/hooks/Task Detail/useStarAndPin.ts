@@ -1,4 +1,3 @@
-import { logger as htLogger } from "#logger";
 import {
   getAllStarsAndPinsRoute,
   toggleStarPin,
@@ -48,7 +47,6 @@ export const useStarAndPin = () => {
       commentId,
       type,
     });
-    htLogger.info("🚀 ~ useStarAndPin ~ response:", response);
     return response;
   };
 
@@ -57,7 +55,6 @@ export const useStarAndPin = () => {
       const response = await axios.post(getAllStarsAndPinsRoute);
       if (response.status) return response.data;
     } catch (error: any) {
-      htLogger.info("🚀 ~ getAllStarred ~ error:", error);
     }
   };
 
@@ -68,7 +65,6 @@ export const useStarAndPin = () => {
       });
       if (response.status) return response.data;
     } catch (error: any) {
-      htLogger.info("🚀 ~ getAllStarred ~ error:", error);
     }
   };
 

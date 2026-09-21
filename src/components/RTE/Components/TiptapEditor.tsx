@@ -1,4 +1,3 @@
-import { logger as htLogger } from "#logger";
 import { useTiptapGlobalContext } from "@/lib/contexts/TaskDetail/TiptapProvider";
 import React, { useContext } from "react";
 import styles from "@/styles/tiptap.module.scss";
@@ -22,7 +21,6 @@ const TiptapEditor = () => {
 
   const addImage = (data: DataTransfer) => {
     const { files } = data;
-    htLogger.info(files);
 
     if (files && files.length > 0) {
       for (const file of Array.from(files)) {
@@ -30,7 +28,6 @@ const TiptapEditor = () => {
 
         if (mime === "image") {
           const url = URL.createObjectURL(file);
-          htLogger.info("IMAGE URL  " + url);
           editor?.chain().focus().setMedia({"media-type":"img", src: url }).run();
         }
       }

@@ -1,4 +1,3 @@
-import { logger as htLogger } from "#logger";
 import type { Editor } from "@tiptap/react";
 import React from "react";
 import toast from "react-hot-toast";
@@ -41,7 +40,6 @@ const runFlaskCommand = async (
       }
       return true;
     })().catch((error) => {
-      htLogger.info("🚀 ~ error:", error);
       throw error;
     }),
     {

@@ -1,4 +1,3 @@
-import { logger as htLogger } from "#logger";
 import Tooltip from '@/components/Common/Tooltip'
 import { ClickableSpan, LocalRightSideInfo, TaskInfoRow, TaskInfoValue } from '@/components/PageComponents/TaskDetail/MainPageComponents'
 import { MobileViewContext } from '@/lib/contexts/mobileContext'
@@ -214,7 +213,6 @@ const TaskInfoColumnGloballyCreate = ({
         toggleShowSizeModal()
     }
     const labelsHandler = (param?: ILabel) => {
-        htLogger.info("🚀 ~ labelsHandler ~ param:", param);
         toggleShowTagsModal();
 
         if (!param) return; // Early return if param is undefined

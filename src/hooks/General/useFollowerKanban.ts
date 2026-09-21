@@ -1,5 +1,4 @@
 import { env as appEnv } from "#env";
-import { logger as htLogger } from "#logger";
 import { IProject, ITask, IUser } from "@/models/model";
 import { useQueryClient } from "@tanstack/react-query";
 import axios from "axios";
@@ -32,11 +31,8 @@ const useFollowerKanban = () => {
           item?.userId === currentUser.id && item.taskId === task?.id
       );
       if (check) {
-        htLogger.info("already exist");
       } else {
-        htLogger.info("already exist not", task?.userId === currentUser.id);
         if (task?.userId === currentUser.id) {
-          htLogger.info("you are owner");
         } else {
           if (!task) return;
           try {
@@ -69,14 +65,11 @@ const useFollowerKanban = () => {
                       taskId: task?.id,
                     });
                   } catch (error) {
-                    htLogger.info("error sending mail");
                   }
                 } else if (response.status === 201) {
-                  htLogger.info("You are Already in Assignees");
                 }
               });
           } catch (error) {
-            htLogger.info(error);
           }
         }
       }
@@ -105,7 +98,6 @@ const useFollowerKanban = () => {
             }
           });
       } catch (error) {
-        htLogger.info(error);
       }
     }
   };

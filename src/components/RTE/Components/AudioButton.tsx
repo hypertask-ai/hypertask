@@ -1,4 +1,3 @@
-import { logger as htLogger } from "#logger";
 import React, { useContext, useEffect, useRef, useState } from "react";
 import Tooltip from "@/components/Common/Tooltip";
 import { Check, ChevronDown, Loader2, Mic, X } from "lucide-react";
@@ -376,7 +375,6 @@ export const AudioButton = ({
       if (!dictationCoordinator) toggleRecording(true);
       ensureLoop();
     } catch (error) {
-      htLogger.error("dictation: could not start recording", error);
       toast.error("Microphone unavailable - check mic permissions");
       resetToIdle();
     }
@@ -510,7 +508,6 @@ export const AudioButton = ({
         }
       }
     } catch (error) {
-      htLogger.error("dictation: audio processing failed", error);
       toast.error(
         error instanceof Error ? error.message : "Dictation failed. Try again.",
       );
@@ -597,7 +594,6 @@ export const AudioButton = ({
         setSelectedDeviceId(inputs[0].deviceId);
       }
     } catch (error) {
-      htLogger.error("dictation: could not list microphones", error);
     }
   };
 
@@ -609,7 +605,6 @@ export const AudioButton = ({
       await listDevices();
       ensureLoop();
     } catch (error) {
-      htLogger.error("dictation: microphone unavailable", error);
     }
   };
 
@@ -631,7 +626,6 @@ export const AudioButton = ({
       await ensureStream(deviceId);
       await listDevices();
     } catch (error) {
-      htLogger.error("dictation: could not switch microphone", error);
     }
   };
 

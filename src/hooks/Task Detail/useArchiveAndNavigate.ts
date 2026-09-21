@@ -1,4 +1,3 @@
-import { logger as htLogger } from "#logger";
 import { useTaskContext } from '@/lib/contexts/TaskDetail/TaskProvider';
 import  {useContext, useCallback} from 'react'
 import UpdateKanban from '../MultiPages/useUpdateTaskInBoards';
@@ -61,7 +60,6 @@ const navigateToNextTask = (archiveNotification?:boolean,shouldNavigate?:boolean
   if (archiveNotification && currentTask){
 
     if (!currentTask._count?.notifications){
-      htLogger.info("🚀 ~ navigateToNextTask ~ currentTask:", currentTask)
       if (force==="forceNavigate") moveIdxDown()
       else{
         setNotificationCountNull()
@@ -219,7 +217,6 @@ const navigateToPreviousTask = useCallback((isUndoClicked:boolean, isUndo:boolea
   };
     // undoHandler function
     const undoHandler =useCallback(async (data: any, toastId: string) => {
-      // debug.log('🚀 ~ undoHandler ~ data:', data);
       // first, you need to bring the item back to its place.
       // then, you need to run the API call so there is no render blocking.
       navigateToPreviousTask(true, true)
