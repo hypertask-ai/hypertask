@@ -177,10 +177,6 @@ test("update-view returns 409 before mutating a smart split", async () => {
   };
   const route = load("src/pages/api/projects/views/update-view.ts", {
     "src/lib/prisma.ts": { default: prisma },
-    "src/lib/flags.ts": {
-      HTPR_6588_EMPTY_COLUMNS_SAVE_VIEW_FLAG: "htpr-6588-empty-columns-save-view",
-      isFeatureEnabled: async () => false,
-    },
     "src/lib/realtime/server.ts": { broadcastBoardChange: () => undefined },
     "src/utils/controllers/projects/views/viewsHelperAPIfunctions.ts": {
       default: async () => ({}),
@@ -242,7 +238,7 @@ test("MCP update and delete reject smart splits before any write", async () => {
     view: { findUnique: async () => view },
     $transaction: async (operation) => operation(tx),
   };
-  const services = load("src/utils/controllers/views/index.ts", {
+  const services = load("src/lib/mcp/views/services.ts", {
     "src/lib/prisma.ts": { default: prisma },
     "src/lib/mcp/tasks/services.ts": {
       matchLabelIds: () => ({ ids: [], unresolved: [] }),

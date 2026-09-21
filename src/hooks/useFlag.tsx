@@ -16,7 +16,6 @@ import {
   FEATURE_FLAGS_EVENT,
   featureFlagsChannel,
 } from "@/lib/realtime/shared";
-import { useHydrated } from "@/hooks/General/useHydrated";
 
 const FeatureFlagsContext = createContext<Record<string, boolean>>({});
 const FLAGS_ROUTE = "/api/flags";
@@ -114,7 +113,5 @@ export function FeatureFlagProvider({
 }
 
 export function useFlag(key: string): boolean {
-  const hydrated = useHydrated();
-  const flags = useContext(FeatureFlagsContext);
-  return hydrated && flags[key] === true;
+  return useContext(FeatureFlagsContext)[key] === true;
 }

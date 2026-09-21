@@ -1,4 +1,3 @@
-import { agentStore } from "@/utils/controllers/agents";
 import { NextRequest, NextResponse } from "next/server";
 import { Prisma } from "@prisma/client";
 import prisma from "@/lib/prisma";
@@ -443,7 +442,7 @@ export async function GET(request: NextRequest) {
     );
   }
 
-  const agents: AgentCandidate[] = await agentStore().findMany({
+  const agents: AgentCandidate[] = await prisma.agent.findMany({
     where: { runtimeType: "NATIVE", revokedAt: null },
     select: { id: true, userId: true, displayName: true, heartbeatAt: true },
     orderBy: [{ heartbeatAt: { sort: "asc", nulls: "first" } }],

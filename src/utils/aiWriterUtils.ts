@@ -40,15 +40,10 @@ export function mergeMobileCreateTaskWriterResult(
   result: IExtractedTaskProperties,
   attachments: ITaskWriterAttachment[] | undefined,
   openingSectionId: number | undefined,
-  submittedDescription?: string,
 ): IForm {
   const canReplaceSection =
     current.status?.sectionId === undefined ||
     current.status.sectionId === openingSectionId;
-  const canReplaceDescription =
-    submittedDescription !== undefined &&
-    current.description === submittedDescription &&
-    hasDescriptionContent(result.description);
   const mappedAttachments = attachments?.map((attachment, index) => ({
     id: index,
     file: {
@@ -62,10 +57,9 @@ export function mergeMobileCreateTaskWriterResult(
   return {
     ...current,
     title: current.title.trim() ? current.title : result.title?.trim() ?? "",
-    description:
-      canReplaceDescription || !hasDescriptionContent(current.description)
-        ? result.description
-        : current.description,
+    description: hasDescriptionContent(current.description)
+      ? current.description
+      : result.description,
     priority: current.priority ?? result.priority,
     estimate: current.estimate ?? result.estimate,
     tags: current.tags?.length ? current.tags : result.tags,

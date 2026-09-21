@@ -1,4 +1,3 @@
-import { labelStore } from "@/utils/controllers/labels";
 import type { NextApiRequest, NextApiResponse } from "next";
 import { Prisma } from "@prisma/client";
 import { randomUUID } from "node:crypto";
@@ -15,7 +14,7 @@ import {
 } from "@/lib/smartSplits";
 import { taskWriteAccessWhere } from "@/utils/controllers/projects/getAllIncludes";
 import { sanitizeBoardFilters } from "@/utils/helperFunctions/Views/BoardFilterSanitizer";
-import { acquireBoardFilterWriteLock } from "@/utils/controllers/views";
+import { acquireBoardFilterWriteLock } from "@/utils/controllers/projects/views/boardFilterWriteLock";
 
 const MAX_AI_PROMPT_LENGTH = 1000;
 const SERIALIZABLE_TRANSACTION_ATTEMPTS = 3;
@@ -116,7 +115,7 @@ const requireUniqueNames = async (
       },
       select: { id: true },
     }),
-    labelStore(tx).findFirst({
+    tx.label.findFirst({
       where: {
         projectId,
         value: { equals: name, mode: "insensitive" },
@@ -137,7 +136,7 @@ const requireSmartLabelForView = async (
 ) => {
   const references = getLabelReferences(view.board_filters);
   const labels = references.length
-    ? await labelStore(tx).findMany({
+    ? await tx.label.findMany({
         where: { id: { in: references }, projectId, ai_prompt: { not: null } },
         select: { id: true, value: true, ai_prompt: true, projectId: true },
       })
@@ -272,7 +271,7 @@ const createSmartSplit = async (
     }
     await requireUniqueNames(tx, projectId, name);
 
-    const label = await labelStore(tx).create({
+    const label = await tx.label.create({
       data: { id: splitId, projectId, value: name, ai_prompt: prompt },
       select: { id: true, value: true, ai_prompt: true, projectId: true },
     });
@@ -337,7 +336,7 @@ const editSmartSplit = async (
         labelId: label.id,
       });
     }
-    await labelStore(tx).update({
+    await tx.label.update({
       where: { id: label.id },
       data: { value: name, ai_prompt: prompt },
     });
@@ -445,7 +444,7 @@ const deleteSmartSplit = async (
     await tx.view_Last_Used.deleteMany({ where: { viewId: view.id } });
     await tx.view.delete({ where: { id: view.id } });
     await tx.taskLabel.deleteMany({ where: { labelId: label.id } });
-    await labelStore(tx).delete({ where: { id: label.id } });
+    await tx.label.delete({ where: { id: label.id } });
   });
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {

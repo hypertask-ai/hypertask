@@ -3,7 +3,6 @@
 import useClickOutside from "@/hooks/MultiPages/useClickOutside";
 import { useFlag } from "@/hooks/useFlag";
 import { MOBILE_TARGET } from "@/lib/configs/general.config";
-import { MobileViewContext } from "@/lib/contexts/mobileContext";
 import { EstimateConstants, PriorityConstants } from "@/lib/constants/constants";
 import {
   MY_TASKS_FILTER_PARITY_FLAG,
@@ -28,10 +27,8 @@ import {
   type MyTasksGroupBy,
   type MyTasksViewConfig,
 } from "@/models/MyTasksView";
-import { ArrowUpDown, Columns3, Funnel, Layers, LayoutGrid, MoreHorizontal, SlidersHorizontal, Timer, UserRound } from "lucide-react";
-import { useContext, useMemo, useRef, useState } from "react";
-import { SaveViewShellActions } from "@/components/PageComponents/Kanban/HeaderComponents/SaveViewHeaderKanban";
-import { ViewControlButton } from "@/components/PageComponents/Kanban/HeaderComponents/ShellViewControls";
+import { ArrowUpDown, Columns3, Layers, LayoutGrid, SlidersHorizontal, UserRound } from "lucide-react";
+import { useMemo, useRef, useState } from "react";
 
 interface Props {
   boards: MyTasksBoardMetadata[];
@@ -43,16 +40,6 @@ interface Props {
   onOpenTableColumns?: () => void;
   scopesEnabled?: boolean;
   snoozeEnabled?: boolean;
-  boardToolbar?: boolean;
-  dirty?: boolean;
-  busy?: boolean;
-  runningOnly?: boolean;
-  runningTimerCount?: number;
-  onSaveView?: () => void;
-  onResetView?: () => void;
-  onOpenSort?: () => void;
-  onToggleRunningOnly?: () => void;
-  onOpenMenu?: () => void;
 }
 
 const INVOLVEMENT_OPTIONS: Array<{ value: MyTasksScope; label: string }> = [
@@ -124,18 +111,7 @@ const MyTasksViewControls = ({
   onOpenTableColumns,
   scopesEnabled = false,
   snoozeEnabled: snoozeEnabledProp = false,
-  boardToolbar = false,
-  dirty = false,
-  busy = false,
-  runningOnly = false,
-  runningTimerCount = 0,
-  onSaveView,
-  onResetView,
-  onOpenSort,
-  onToggleRunningOnly,
-  onOpenMenu,
 }: Props) => {
-  const isMbl = useContext(MobileViewContext);
   const myTasksViewsEnabled = useFlag(MY_TASKS_VIEWS_FLAG);
   const filterParityEnabled = useFlag(MY_TASKS_FILTER_PARITY_FLAG);
   const myTasksTableColumnsFlag = useFlag(MY_TASKS_TABLE_COLUMNS_FLAG);
@@ -340,73 +316,6 @@ const MyTasksViewControls = ({
       </div>
     </div>
   );
-
-  if (boardToolbar) {
-    const activeFilterCount = kanbanFilterCount + scopeCount + involvementCount;
-    const hasActiveSort =
-      config.sort.field !== DEFAULT_MY_TASKS_VIEW_CONFIG.sort.field ||
-      config.sort.direction !== DEFAULT_MY_TASKS_VIEW_CONFIG.sort.direction;
-
-    return (
-      <div className="ml-auto flex shrink-0 items-center gap-2">
-        {/* Mobile save/reset live in Manage views, and sort stays in My Tasks menu. */}
-        {!isMbl && onSaveView && onResetView ? (
-          <SaveViewShellActions
-            isDirty={dirty}
-            busy={busy}
-            onSave={onSaveView}
-            onReset={onResetView}
-          />
-        ) : null}
-        <ViewControlButton
-          label="Filter My Tasks"
-          tooltipLeft={-88}
-          active={activeFilterCount > 0}
-          keyCombination={["SHIFT", "F"]}
-          mobileTarget={isMbl}
-          semanticActive
-          onClick={() => onOpenKanbanFilters?.()}
-        >
-          <Funnel size={18} strokeWidth={1.75} />
-        </ViewControlButton>
-        {!isMbl ? (
-          <ViewControlButton
-            label="Sort My Tasks"
-            tooltipLeft={-84}
-            active={hasActiveSort}
-            keyCombination={["SHIFT", "S"]}
-            semanticActive
-            onClick={() => onOpenSort?.()}
-          >
-            <ArrowUpDown size={18} strokeWidth={1.75} />
-          </ViewControlButton>
-        ) : null}
-        <ViewControlButton
-          label="Show only tasks with a running timer"
-          tooltipLeft={-190}
-          active={runningOnly}
-          mobileTarget={isMbl}
-          semanticActive
-          onClick={() => onToggleRunningOnly?.()}
-        >
-          <Timer size={18} strokeWidth={1.75} />
-          {runningTimerCount > 0 ? (
-            <span className="absolute -right-1 -top-1 min-w-[14px] rounded-full bg-shadcn-primary px-1 text-center text-micro font-semibold leading-[14px] text-primary-foreground">
-              {runningTimerCount}
-            </span>
-          ) : null}
-        </ViewControlButton>
-        <ViewControlButton
-          label="My Tasks menu"
-          tooltipLeft={-88}
-          mobileTarget={isMbl}
-          onClick={() => onOpenMenu?.()}
-        >
-          <MoreHorizontal size={18} strokeWidth={1.75} />
-        </ViewControlButton>
-      </div>
-    );
-  }
 
   if (!myTasksViewsEnabled && !timeGroupOn) return null;
 

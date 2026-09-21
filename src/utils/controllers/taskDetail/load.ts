@@ -17,8 +17,6 @@ import {
   type AgentVisibility,
 } from "@/lib/agents/visibility";
 import { visibleUserInboxWhere } from "@/utils/controllers/notifications/visibleInboxScope";
-import { sanitizeAgentAssigneeOwner } from "@/lib/assignees";
-import { gateActivityAgentAttribution } from "@/lib/agents/activityAttribution";
 
 type Db = Pick<PrismaClient, "$queryRaw">;
 
@@ -68,10 +66,7 @@ const hasAccessibleAgentProject = (
 const hiddenCommentAgent = (
   userId: number,
   projectId: Prisma.Sql,
-  attributionEnabled = false,
-) => attributionEnabled
-  ? Prisma.sql`(agent.id IS NULL AND c."agentDisplayName" IS NOT NULL)`
-  : Prisma.sql`
+) => Prisma.sql`
   (agent.id IS NULL AND c."agentDisplayName" IS NOT NULL)
   OR (
     agent.id IS NOT NULL
@@ -178,11 +173,7 @@ export function taskWhere(
 }
 
 /** Task detail SSR — fields used by TaskDetailComp + hooks (see taskDetail benchmark parity). */
-export function taskDetailInclude(
-  userId: number,
-  projectId: number,
-  attributionEnabled = false,
-) {
+export function taskDetailInclude(userId: number, projectId: number) {
   return {
     user: { select: userSelect },
     description_: {
@@ -220,16 +211,12 @@ export function taskDetailInclude(
       },
     },
     assignees: {
-      ...(attributionEnabled
-        ? {}
-        : {
-            where: {
-              OR: [
-                { agentId: null },
-                { agent: boardAgentVisibilityWhere(userId) },
-              ],
-            },
-          }),
+      where: {
+        OR: [
+          { agentId: null },
+          { agent: boardAgentVisibilityWhere(userId) },
+        ],
+      },
       include: {
         user: { select: userSelect },
         agent: { select: { id: true, displayName: true, photoURL: true } },
@@ -417,49 +404,26 @@ export async function fetchTaskDetail(
   const slug = parseDetailSlug([projectSlug, String(uniqueIndex)]);
   if (!slug) return null;
 
-  const attributionEnabled = await isFeatureEnabled(
-    HTPR_6516_AGENT_ATTRIBUTION_FLAG,
-    userId,
-  );
   const task = await prisma.task.findFirst({
     where: taskWhere(slug, userId),
-    include: taskDetailInclude(userId, slug.projectId, attributionEnabled),
+    include: taskDetailInclude(userId, slug.projectId),
   });
 
   if (!task) return null;
 
   const reactions = await fetchDescriptionReactions(task.description_?.id ?? "");
-  const visibleAgent = projectVisibleTaskAgent(
-    task.agent,
-    userId,
-    task.projectId,
-  );
-  const attributedAgent = attributionEnabled && task.agent
-    ? {
-        id: task.agent.id,
-        displayName: task.agent.displayName,
-        photoURL: task.agent.photoURL,
-      }
-    : visibleAgent;
+  const visibleAgent = projectVisibleTaskAgent(task.agent, userId, task.projectId);
   return {
     ...task,
-    assignees: attributionEnabled
-      ? task.assignees.map(sanitizeAgentAssigneeOwner)
-      : task.assignees,
-    agentId: attributedAgent ? task.agentId : null,
-    agent: attributedAgent,
+    agentId: visibleAgent ? task.agentId : null,
+    agent: visibleAgent,
     description_: task.description_
       ? { ...task.description_, reactions }
       : task.description_,
   };
 }
 
-function commentsQuery(
-  db: Db,
-  taskId: number,
-  userId: number,
-  attributionEnabled: boolean,
-) {
+function commentsQuery(db: Db, taskId: number, userId: number) {
   return db.$queryRaw<IComment[]>`
     WITH base_comments AS (
       SELECT c.id, c.text, c.summary, c."taskId", c."creatorId", c."createdAt",
@@ -477,11 +441,7 @@ function commentsQuery(
       LEFT JOIN "User" creator ON c."creatorId" = creator."id"
       LEFT JOIN "Agent" agent ON c."agentId" = agent."id"
       LEFT JOIN LATERAL (
-        SELECT (${hiddenCommentAgent(
-          userId,
-          Prisma.sql`comment_task."projectId"`,
-          attributionEnabled,
-        )}) AS hidden
+        SELECT (${hiddenCommentAgent(userId, Prisma.sql`comment_task."projectId"`)}) AS hidden
       ) agent_visibility ON TRUE
       LEFT JOIN "User" activity_from_user ON activity_from_user.id =
         CASE WHEN c.activity->>'type' = 'TaskAssigned'
@@ -555,11 +515,7 @@ function applyDurableAgentAttribution(comments: IComment[], attributionEnabled: 
         ? stored
         : comment.agentDisplayName;
     const { hasLiveAgentRow: _hasLive, storedAgentDisplayName: _stored, ...rest } = row;
-    return {
-      ...rest,
-      agentDisplayName,
-      activity: gateActivityAgentAttribution(comment.activity, attributionEnabled),
-    } as IComment;
+    return { ...rest, agentDisplayName } as IComment;
   });
 }
 
@@ -572,7 +528,7 @@ export async function fetchCommentsForTask(
     HTPR_6516_AGENT_ATTRIBUTION_FLAG,
     userId,
   );
-  const comments = await commentsQuery(db, taskId, userId, attributionEnabled);
+  const comments = await commentsQuery(db, taskId, userId);
   return sanitizeAgentCredentials(
     applyDurableAgentAttribution(comments, attributionEnabled),
   ) as IComment[];
@@ -629,11 +585,7 @@ export async function fetchCommentsForSlug(slug: TaskDetailSlug, userId: number)
       LEFT JOIN "User" creator ON c."creatorId" = creator."id"
       LEFT JOIN "Agent" agent ON c."agentId" = agent."id"
       LEFT JOIN LATERAL (
-        SELECT (${hiddenCommentAgent(
-          userId,
-          Prisma.sql`ti."projectId"`,
-          attributionEnabled,
-        )}) AS hidden
+        SELECT (${hiddenCommentAgent(userId, Prisma.sql`ti."projectId"`)}) AS hidden
       ) agent_visibility ON TRUE
       LEFT JOIN "User" activity_from_user ON activity_from_user.id =
         CASE WHEN c.activity->>'type' = 'TaskAssigned'

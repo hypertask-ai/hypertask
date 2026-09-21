@@ -22,8 +22,6 @@ import CreatedBy from "../Common/CreatedBy";
 import DueDateLabel from "@/components/Labels/DueDateLabel";
 import { activityAgentId } from "@/lib/agents/activityAttribution";
 import { pullRequestBadgeByState } from "@/components/PageComponents/TaskDetail/pullRequestBadge";
-import { useFlag } from "@/hooks/useFlag";
-import { HTPR_6516_AGENT_ATTRIBUTION_FLAG } from "@/lib/flags/keys";
 
 const CommentTaskActivity = () => {
   const { comment } = useCommentsContext();
@@ -210,27 +208,19 @@ const TaskWaitingOnActivity = ({
   activity,
 }: {
   activity: ITaskWaitingOnActivity;
-}) => {
-  const attributionEnabled = useFlag(HTPR_6516_AGENT_ATTRIBUTION_FLAG);
-  const fromAgent = attributionEnabled ? activity.data.fromAgent : null;
-  const fromObj = {
-    displayName: fromAgent?.displayName ?? activity.data.fromUser?.displayName ?? "",
-    photoURL: fromAgent ? fromAgent.photoURL ?? "" : activity.data.fromUser?.photoURL ?? "",
-  };
-  return (
+}) => (
   <>
     <BoldElement>
       <CreatedByLocal
-        name={fromObj.displayName}
-        pfp={fromObj.photoURL}
+        name={activity.data.fromUser.displayName ?? ""}
+        pfp={activity.data.fromUser.photoURL ?? ""}
       />
     </BoldElement>{" "}
     {activity.data.waitingOnDisplayName
       ? `marked this blocked by ${activity.data.waitingOnDisplayName}`
       : "cleared blocked by"}
   </>
-  );
-};
+);
 
 const TaskPullRequestActivity = ({
   activity,
@@ -439,11 +429,9 @@ const TaskEstimateActivity = ({
 
 // ======================= Label Activity Element
 const TaskLabelActivity = ({ activity }: { activity: ITaskLabelActivity }) => {
-  const attributionEnabled = useFlag(HTPR_6516_AGENT_ATTRIBUTION_FLAG);
-  const fromAgent = attributionEnabled ? activity.data.fromAgent : null;
   const fromObj = {
-    displayName: fromAgent?.displayName ?? activity.data.fromUser?.displayName ?? "",
-    photoURL: fromAgent ? fromAgent.photoURL ?? "" : activity.data.fromUser?.photoURL ?? "",
+    displayName: activity.data.fromAgent?.displayName ?? activity.data.fromUser?.displayName ?? "",
+    photoURL: activity.data.fromAgent ? activity.data.fromAgent.photoURL ?? "" : activity.data.fromUser?.photoURL ?? "",
   };
 
   if (!activity?.data.toLabel.label?.value) return <></>;

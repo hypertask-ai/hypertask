@@ -58,9 +58,6 @@ jobs:
           current_json="$gate_tmp/current.json"
           heads_json="$gate_tmp/heads.json"
           fresh_heads_json="$gate_tmp/fresh-heads.json"
-          body_file="$gate_tmp/body.md"
-          current_body_file="$gate_tmp/current-body.md"
-          reuse_reason_file="$gate_tmp/reuse-reason.txt"
           reason_file="$gate_tmp/reason.txt"
           error_file="$gate_tmp/error.txt"
           pending_payload="$gate_tmp/pending-status.json"
@@ -114,7 +111,6 @@ jobs:
           base_sha=$(jq -r '.base.sha' "$pr_json")
           api_head_sha=$(jq -r '.head.sha' "$pr_json")
           head_repo=$(jq -r '.head.repo.full_name' "$pr_json")
-          jq -r '.body // ""' "$pr_json" >"$body_file"
           export FEATURE_FLAG_PR_LABELS
           FEATURE_FLAG_PR_LABELS=$(jq -c '[.labels[]?.name // empty]' "$pr_json")
           result=2
@@ -164,15 +160,10 @@ jobs:
           elif ! git cat-file -e "$base_sha^{commit}" || ! git cat-file -e "$head_sha^{commit}"; then
             echo "The pull request commits are unavailable." >"$error_file"
             result=2
-          elif node .github/scripts/component-reuse-gate.mjs "$body_file" "$base_sha" "$head_sha" >"$reuse_reason_file" 2>"$error_file"; then
-            if node .github/scripts/feature-flag-gate.mjs "$title" "$base_sha" "$head_sha" >"$reason_file" 2>"$error_file"; then
-              result=0
-            else
-              result=$?
-            fi
+          elif node .github/scripts/feature-flag-gate.mjs "$title" "$base_sha" "$head_sha" >"$reason_file" 2>"$error_file"; then
+            result=0
           else
             result=$?
-            cp "$reuse_reason_file" "$reason_file"
           fi
 
           fi
@@ -183,13 +174,11 @@ jobs:
               echo "::error::Cannot replace the pending feature-flag-gate status."
             exit 2
           fi
-          jq -r '.body // ""' "$current_json" >"$current_body_file"
           if [ "$(jq -r '.state' "$current_json")" != "open" ] ||
              [ "$(jq -r '.base.ref' "$current_json")" != "production" ] ||
              [ "$(jq -r '.title' "$current_json")" != "$title" ] ||
              [ "$(jq -r '.base.sha' "$current_json")" != "$base_sha" ] ||
              [ "$(jq -r '.head.sha' "$current_json")" != "$head_sha" ] ||
-             ! cmp -s "$body_file" "$current_body_file" ||
              ! jq -e --argjson labels "$FEATURE_FLAG_PR_LABELS" '([.labels[]?.name // empty] | sort) == ($labels | sort)' "$current_json" >/dev/null; then
             echo "Pull request #$PR_NUMBER changed during evaluation; its queued event will evaluate the new state."
             publish_error_status "feature-flag-gate is waiting for the updated pull request" ||
@@ -368,10 +357,6 @@ jobs:
             base_sha=$(jq -r '.base.sha' <<<"$pull")
             head_sha=$(jq -r '.head.sha' <<<"$pull")
             head_repo=$(jq -r '.head.repo.full_name' <<<"$pull")
-            body_file="$gate_tmp/body-$number.md"
-            current_body_file="$gate_tmp/current-body-$number.md"
-            reuse_reason_file="$gate_tmp/reuse-reason-$number.txt"
-            jq -r '.body // ""' <<<"$pull" >"$body_file"
             export FEATURE_FLAG_PR_LABELS
             FEATURE_FLAG_PR_LABELS=$(jq -c '[.labels[]?.name // empty]' <<<"$pull")
             head_pr_count=$(jq -er --arg sha "$head_sha" '[flatten[] | select(.head.sha == $sha)] | length' "$pages")
@@ -394,15 +379,10 @@ jobs:
             elif ! git cat-file -e "$base_sha^{commit}" || ! git cat-file -e "$head_sha^{commit}"; then
               echo "The pull request commits are unavailable." >"$error_file"
               result=2
-            elif node .github/scripts/component-reuse-gate.mjs "$body_file" "$base_sha" "$head_sha" >"$reuse_reason_file" 2>"$error_file"; then
-              if node .github/scripts/feature-flag-gate.mjs "$title" "$base_sha" "$head_sha" >"$reason_file" 2>"$error_file"; then
-                result=0
-              else
-                result=$?
-              fi
+            elif node .github/scripts/feature-flag-gate.mjs "$title" "$base_sha" "$head_sha" >"$reason_file" 2>"$error_file"; then
+              result=0
             else
               result=$?
-              cp "$reuse_reason_file" "$reason_file"
             fi
 
             current=$(gh api "repos/$REPO/pulls/$number") || {
@@ -412,13 +392,11 @@ jobs:
               failures=$((failures + 1))
               continue
             }
-            jq -r '.body // ""' <<<"$current" >"$current_body_file"
             if [ "$(jq -r '.state' <<<"$current")" != "open" ] ||
                [ "$(jq -r '.base.ref' <<<"$current")" != "production" ] ||
                [ "$(jq -r '.title' <<<"$current")" != "$title" ] ||
                [ "$(jq -r '.base.sha' <<<"$current")" != "$base_sha" ] ||
                [ "$(jq -r '.head.sha' <<<"$current")" != "$head_sha" ] ||
-               ! cmp -s "$body_file" "$current_body_file" ||
                ! jq -e --argjson labels "$FEATURE_FLAG_PR_LABELS" '([.labels[]?.name // empty] | sort) == ($labels | sort)' <<<"$current" >/dev/null; then
               echo "Pull request #$number changed during reconciliation; its queued event will evaluate the new state."
               publish_reconciliation_error "$head_sha" "$payload" "feature-flag-gate is waiting for the updated pull request" ||

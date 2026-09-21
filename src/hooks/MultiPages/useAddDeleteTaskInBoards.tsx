@@ -5,11 +5,10 @@ import { useRecoilValue } from "@/lib/state";
 import { useStore } from "jotai";
 import generateRanking from '@/utils/generateRank'
 
+import axios from 'axios';
 import UpdateKanban from './useUpdateTaskInBoards';
-import createNewTaskGloballyAPIHandler from "@/utils/api/global/apiHelpers/createTaskGloballycontroller";
 import { returnSortedItems } from "@/utils/helperFunctions/helperFunctions";
 import { ITask } from "@/models/model";
-import globalConstants from "@/lib/constants";
 
 
 interface CreateItemParams {
@@ -111,7 +110,7 @@ const useAddDeleteTaskInBoards = () => {
     const { sectionId, section, item, position, createAnother, projectId } = props
     console.log("🚀 ~ createItem ~ _currentProject:", _currentProject)
 
-    if (!_currentProject || _currentProject.id !== projectId || !currentUser?.id) return false;
+    if (!_currentProject || _currentProject.id !== projectId) return false;
     try {
     const { allData, projectToUpdateIndex } = await getProjectIdxAndAllData(_currentProject?.id)
       console.log("🚀 ~ createItem ~ projectToUpdateIndex:", projectToUpdateIndex)
@@ -133,23 +132,20 @@ const useAddDeleteTaskInBoards = () => {
     );
 
     console.log("🚀 ~ createItem ~ ranking:", ranking)
-      const result = await createNewTaskGloballyAPIHandler({
-        userId: currentUser.id,
-        projectId,
-        projectIdentifier: _currentProject.uniqueIdentifier ?? "TASK",
-        title: item.title,
-        ranking,
+      const res = await axios.post("/api/tasks/create", {
+        ...item,
         sectionId,
-        section_title: section,
-        priority:
-          _currentProject.sorting_mode === "Priority" && position === "top"
-            ? globalConstants.PriorityConstants[1]
-            : undefined,
-        tags: item.tags,
+        section,
         assignees: [],
+        userId: currentUser?.id,
+        projectId,
+        ranking,
+      index: _currentProject?.sorting_mode === "Priority" && position === "top" ? 0 : sections[sectionIndex]?.items.length,
       });
-      const task = result?.resposne?.newTask;
-      if (!task || result?.error) return false;
+
+      if (res.status !== 200) return false;
+
+      const task = res.data;
       try {
       const targetSection = sections[sectionIndex];
 

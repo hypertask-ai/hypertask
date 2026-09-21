@@ -17,7 +17,6 @@ import { getProjectWhere } from '@/utils/controllers/projects/getAllIncludes'
 import type { IUser } from '@/models/model'
 import getMemberAndOwner from '@/utils/controllers/getMemberAndOwnerForBoard'
 import { requireRole } from '@/lib/mcp/agents/scopes'
-import { HTPR_6516_AGENT_ATTRIBUTION_FLAG, isFeatureEnabled } from '@/lib/flags'
 
 const MAX_BATCH_ITEMS = 100
 
@@ -157,22 +156,18 @@ async function handleBatchGet(
     )
   }
 
-  const attributionEnabled = await isFeatureEnabled(
-    HTPR_6516_AGENT_ATTRIBUTION_FLAG,
-    ctx.user.id,
-  )
   const tasks = await prisma.task.findMany({
     where: {
       id: { in: taskIds },
       project: getProjectWhere(ctx.user.id, ctx.agentId),
     },
-    include: taskMcpGetInclude(ctx.user.id, attributionEnabled),
+    include: taskMcpGetInclude(ctx.user.id),
   })
 
   const tasksById = new Map(
     tasks.map((task) => [
       task.id,
-      mapTaskToMcpGetResponse(task, ctx.user.id, attributionEnabled),
+      mapTaskToMcpGetResponse(task, ctx.user.id),
     ])
   )
 

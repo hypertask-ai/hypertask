@@ -214,7 +214,7 @@ import {
   type TaskTemplatePickerState,
 } from "@/lib/taskTemplatePrefill";
 import { useFlag } from "@/hooks/useFlag";
-import { HTPR_6427_ROW_SHORTCUTS_FLAG, HTPR_6572_MY_TASKS_BOARD_TOOLBAR_FLAG, MY_TASKS_BULK_SELECTION_FLAG, MY_TASKS_FILTER_PARITY_FLAG, MY_TASKS_SNOOZE_FLAG, MY_TASKS_TABLE_COLUMNS_FLAG, MY_TASKS_VIEWS_FLAG } from "@/lib/flags/keys";
+import { HTPR_6427_ROW_SHORTCUTS_FLAG, MY_TASKS_BULK_SELECTION_FLAG, MY_TASKS_SNOOZE_FLAG, MY_TASKS_TABLE_COLUMNS_FLAG, MY_TASKS_VIEWS_FLAG } from "@/lib/flags/keys";
 import { useTaskProjectFallback } from "@/lib/keyboard/taskProjectFallback";
 import { writeTextToClipboard } from "@/lib/utils/clipboard";
 
@@ -231,14 +231,6 @@ const HypertasksCommands = ({ callbackHandler, contextOptions }: IHTCProps) => {
   const myTasksTableColumnsEnabled = useFlag(MY_TASKS_TABLE_COLUMNS_FLAG);
   const myTasksSnoozeEnabled = useFlag(MY_TASKS_SNOOZE_FLAG); // HTPR-6461: Remind Me also hides My Tasks
   const myTasksBulkSelectionEnabled = useFlag(MY_TASKS_BULK_SELECTION_FLAG);
-  const myTasksFilterParityEnabled = useFlag(MY_TASKS_FILTER_PARITY_FLAG);
-  const myTasksBoardToolbarFlagEnabled = useFlag(
-    HTPR_6572_MY_TASKS_BOARD_TOOLBAR_FLAG,
-  );
-  const myTasksBoardToolbarEnabled =
-    myTasksBoardToolbarFlagEnabled &&
-    myTasksViewsEnabled &&
-    myTasksFilterParityEnabled;
   const activeSectionId = useRecoilValue(activeSectionIdAtom);
   const {
     updateTaskInCache,
@@ -476,17 +468,6 @@ const HypertasksCommands = ({ callbackHandler, contextOptions }: IHTCProps) => {
     }
     boardCloseHandler();
   }, [commandMode, myTasksSnoozeEnabled, showCommands.mode]);
-
-  useEffect(() => {
-    if (!myTasksBoardToolbarEnabled || !onMyTasks || !showCommands.show) return;
-    if (commandMode === CommandMode.ShowFilterHTC) {
-      window.dispatchEvent(new CustomEvent("my-tasks-open-filters"));
-      boardCloseHandler();
-    } else if (commandMode === CommandMode.SortKanbanBoard) {
-      window.dispatchEvent(new CustomEvent("my-tasks-open-sort"));
-      boardCloseHandler();
-    }
-  }, [commandMode, myTasksBoardToolbarEnabled, onMyTasks, showCommands.show]);
 
   useEffect(() => {
     if (!hasBulkSelection || bulkActionProjectId) return;
@@ -2264,15 +2245,9 @@ const HypertasksCommands = ({ callbackHandler, contextOptions }: IHTCProps) => {
             <ConfirmDeleteBoard onClose={boardCloseHandler} />
           )}
 
-          {commandMode === CommandMode.ShowFilterHTC &&
-            !(
-              onMyTasks &&
-              myTasksBoardToolbarFlagEnabled &&
-              myTasksViewsEnabled &&
-              myTasksFilterParityEnabled
-            ) && (
-              <AllFilterHTC toggle={boardCloseHandler} view="Kanban" />
-            )}
+          {commandMode === CommandMode.ShowFilterHTC && (
+            <AllFilterHTC toggle={boardCloseHandler} view="Kanban" />
+          )}
 
           {commandMode === CommandMode.DeleteMessage && (
             <DeleteMessage callback={DeleteMessageHandler} />
@@ -2510,10 +2485,9 @@ const HypertasksCommands = ({ callbackHandler, contextOptions }: IHTCProps) => {
               optionalProjectId={callbackProjectId}
             />
           )}
-          {commandMode === CommandMode.SortKanbanBoard &&
-            !(onMyTasks && myTasksBoardToolbarEnabled) && (
-              <BoardPriorityMode closeHandler={toggleBoardSortingHandler} />
-            )}
+          {commandMode === CommandMode.SortKanbanBoard && (
+            <BoardPriorityMode closeHandler={toggleBoardSortingHandler} />
+          )}
           {commandMode === CommandMode.ManageLabels && (
             <ManageLabels
               onClose={boardCloseHandler}

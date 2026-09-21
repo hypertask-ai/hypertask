@@ -1,6 +1,4 @@
 import UpdateKanban from "@/hooks/MultiPages/useUpdateTaskInBoards";
-import { useFlag } from "@/hooks/useFlag";
-import { HTPR_6588_EMPTY_COLUMNS_SAVE_VIEW_FLAG } from "@/lib/flags/keys";
 import {
   deleteRenameViewAPIRoute,
   resetToDefaultAPIRoute,
@@ -18,7 +16,6 @@ import {
 import {
   isBoardEmptySectionSetting,
   PERSONAL_EMPTY_SECTIONS_UPDATE_MODE,
-  STAGED_EMPTY_SECTIONS_UPDATE_MODE,
   TBoardEmptySections,
   TBoardSortingLevel,
   TBoardSortingViewMode,
@@ -46,12 +43,10 @@ import {
   enqueueBoardViewMutation,
   patchProjectViewBoardLayout,
   patchProjectViewEmptySections,
-  preservePendingBoardFilters,
   replaceProjectSurface,
   savedBoardLayoutFromExplicitSurface,
   savedBoardLayoutToClient,
   settleEmptySectionMutation,
-  stageBoardFiltersInProjectView,
   type TEmptySectionMutationState,
   TTableSort,
 } from "@/utils/helperFunctions/Views/ViewsHelperFunctions";
@@ -69,17 +64,13 @@ import {
 import { useRouter } from "next/navigation";
 
 let emptySectionMutationId = 0
-let filterMutationId = 0
 // Keep rapid toggles layered so one request settling cannot remove a newer choice.
 const emptySectionMutations = new Map<string, TEmptySectionMutationState>()
-// A slower response must not replace a newer filter already shown on the board.
-const pendingFilterMutations = new Map<number, { id: number; filters: IFilterSettings }>()
 
 const useKanbanViews = (project: IProject | null) => {
-  const emptyColumnsSaveViewEnabled = useFlag(HTPR_6588_EMPTY_COLUMNS_SAVE_VIEW_FLAG);
   const hasUserSelectedView =
     project?.project_view?.user_project_views[0]?.appliedView;
-  const { getProjectIdxAndAllData, updateProject, updateProjectView } =
+  const { getProjectIdxAndAllData, updateProjectView } =
     UpdateKanban();
   const queryClient = useQueryClient();
   const router = useRouter();
@@ -126,10 +117,6 @@ const useKanbanViews = (project: IProject | null) => {
       allData?.updatedProjects[projectToUpdateIndex]
     );
     if (!projectToUpdate) return;
-    const updatedProjectView = preservePendingBoardFilters(
-      response.data,
-      pendingFilterMutations.get(project.id)?.filters,
-    );
     if (
       updateType.call === "switch" ||
       updateType.call === "reset" ||
@@ -142,13 +129,13 @@ const useKanbanViews = (project: IProject | null) => {
         if (updateType.view?.id === appliedViewId) {
           updateCookieAndURL(project.id, updateType.view?.slug);
         }
-        return updateProjectView(projectToUpdateIndex, updatedProjectView);
+        return updateProjectView(projectToUpdateIndex, response.data);
       }
       if (updateType.call === "reset" && activeView?.type === "Unsaved") {
         const appliedView =
           project.project_view?.user_project_views[0].appliedView;
         if (appliedView) updateCookieAndURL(project.id, appliedView.slug);
-        return updateProjectView(projectToUpdateIndex, updatedProjectView);
+        return updateProjectView(projectToUpdateIndex, response.data);
       }
       updateCookieAndURL(
         project.id,
@@ -157,7 +144,7 @@ const useKanbanViews = (project: IProject | null) => {
           : updateType.view?.slug
       );
     }
-    updateProjectView(projectToUpdateIndex, updatedProjectView);
+    updateProjectView(projectToUpdateIndex, response.data);
   };
 
   const apiAndCacheHandler = async (
@@ -214,7 +201,7 @@ const useKanbanViews = (project: IProject | null) => {
       | TBodyAPIUnsaved
       | ((queuedProject: IProject) => TBodyAPIUnsaved),
     baseProject: IProject,
-    onSettled?: (succeeded: boolean) => void | Promise<void>,
+    onSettled?: (succeeded: boolean) => void,
   ): Promise<void> =>
     enqueueBoardViewMutation(baseProject.id, async () => {
       try {
@@ -231,11 +218,11 @@ const useKanbanViews = (project: IProject | null) => {
           : queuedProject.project_view?.user_project_views[0]?.appliedView?.id ?? null
         await apiAndCacheHandler(unsavedViewAPIRoute, { ...requestBody, baseViewId }, { call: "unsaved" });
       } catch (error) {
-        await onSettled?.(false)
+        onSettled?.(false)
         console.log("🚀 ~ apiHandler ~ error:", error);
         return;
       }
-      await onSettled?.(true)
+      onSettled?.(true)
     });
 
   const buildUnsavedBody = (
@@ -284,79 +271,36 @@ const useKanbanViews = (project: IProject | null) => {
     project,
   );
 
-  const stageFilterInCache = (
-    projectId: number,
-    filters: IFilterSettings,
-  ) => {
-    const { allData, projectToUpdateIndex } = getProjectIdxAndAllData(projectId);
-    const cachedProject = allData?.updatedProjects[projectToUpdateIndex];
-    if (!allData || !cachedProject?.project_view || projectToUpdateIndex < 0) return;
-
-    updateProject(projectToUpdateIndex, allData, {
-      updatedProjectView: stageBoardFiltersInProjectView(
-        cachedProject.project_view,
-        filters,
-      ),
-    });
-  };
-
   const saveFilterAPI = async (
     project: IProject,
     filterForThisProject: IFilterSettings,
     columnsOverride?: ISection[]
-  ) => {
-    const mutationId = ++filterMutationId;
-    const filters = deepCopy(filterForThisProject);
-    pendingFilterMutations.set(project.id, { id: mutationId, filters });
-    stageFilterInCache(project.id, filters);
-
-    return apiHandler(
-      (queuedProject) => buildUnsavedBody(queuedProject, {
-        ...(columnsOverride ? { board_columns_view: columnsOverride } : {}),
-        board_filters: filters,
-      }),
-      project,
-      async (succeeded) => {
-        const pending = pendingFilterMutations.get(project.id);
-        if (pending?.id !== mutationId) {
-          if (pending) stageFilterInCache(project.id, pending.filters);
-          return;
-        }
-
-        pendingFilterMutations.delete(project.id);
-        if (!succeeded) {
-          toast.error("Filters could not be applied");
-          await queryClient.refetchQueries({ queryKey: ["projectsAll"], exact: true });
-        }
-      },
-    );
-  };
+  ) => apiHandler(
+    (queuedProject) => buildUnsavedBody(queuedProject, {
+      ...(columnsOverride ? { board_columns_view: columnsOverride } : {}),
+      board_filters: filterForThisProject,
+    }),
+    project,
+  );
 
   const saveEmptySectionsAPI = async (
     project: IProject,
     emptySection: TBoardEmptySections
   ) => {
     const mutationId = ++emptySectionMutationId
+    const targetView =
+      project.project_view?.user_project_views[0]?.appliedView ??
+      project.project_view?.default_view
+    const targetViewId = targetView?.id
+    const mutationKey = `${project.id}:${targetViewId ?? "unsaved"}`
     const { allData, projectToUpdateIndex } = getProjectIdxAndAllData(project.id)
     const cachedProject = allData?.updatedProjects[projectToUpdateIndex]
-    const currentProject = cachedProject ?? project
-    const targetView =
-      currentProject.project_view?.user_project_views[0]?.appliedView ??
-      currentProject.project_view?.default_view
-    const targetViewId = targetView?.id
-    const mutationMode = emptyColumnsSaveViewEnabled ? "staged" : "personal"
-    const mutationKey = `${project.id}:${targetViewId ?? "unsaved"}:${mutationMode}`
-    const projectView = currentProject.project_view
+    const projectView = cachedProject?.project_view ?? project.project_view
     if (projectView && projectToUpdateIndex !== -1) {
       const optimistic = beginEmptySectionMutation(
         emptySectionMutations.get(mutationKey),
         projectView,
-        {
-          id: mutationId,
-          setting: emptySection,
-          viewId: targetViewId,
-          staged: emptyColumnsSaveViewEnabled,
-        },
+        { id: mutationId, setting: emptySection, viewId: targetViewId },
       )
       emptySectionMutations.set(mutationKey, optimistic.state)
       updateProjectView(projectToUpdateIndex, optimistic.projectView)
@@ -392,13 +336,10 @@ const useKanbanViews = (project: IProject | null) => {
       if (!succeeded) toast.error("Empty column visibility could not be saved")
     }
 
-    if (emptyColumnsSaveViewEnabled || !targetViewId) {
+    if (!targetViewId) {
       return apiHandler(
         (queuedProject) => buildUnsavedBody(queuedProject, {
           board_empty_sections: emptySection,
-          ...(emptyColumnsSaveViewEnabled
-            ? { updateMode: STAGED_EMPTY_SECTIONS_UPDATE_MODE }
-            : {}),
         }),
         project,
         settleMutation,

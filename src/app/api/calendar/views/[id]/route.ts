@@ -8,7 +8,7 @@ import {
   canAccessEveryCalendarProject,
   getAccessibleCalendarProjectIds,
   serializeCalendarView,
-} from "@/utils/controllers/views";
+} from "../_lib";
 
 export const runtime = "nodejs";
 

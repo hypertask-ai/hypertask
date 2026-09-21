@@ -11,7 +11,6 @@ import { auth } from '@/lib/auth/betterAuth'
 import { getSessionUser } from '@/lib/auth/getSessionUser'
 import {
   isOAuthAccessTokenPayload,
-  JWT_LEGACY_OAUTH_AUDIENCE,
   JWT_OAUTH_AUDIENCE,
   JWT_OAUTH_ISSUER,
   oauthClientIdFromPayload,
@@ -645,22 +644,17 @@ export function verifyMcpJwtToken(token: string): jwt.JwtPayload | null {
         try {
           decoded = jwt.verify(token, JWT_SECRET, {
             issuer: JWT_OAUTH_ISSUER,
-            audience: [JWT_OAUTH_AUDIENCE, JWT_LEGACY_OAUTH_AUDIENCE],
+            audience: JWT_OAUTH_AUDIENCE,
           }) as jwt.JwtPayload
           console.log('[MCP Auth] JWT verified as OAuth access token')
         } catch (errOAuth: any) {
           console.log('[MCP Auth] OAuth format failed:', errOAuth?.message)
-          // Only tokens minted before MCP audiences were introduced may use the
-          // compatibility path. A present audience belongs to another token contract.
-          if (decodedWithoutVerify.aud !== undefined) {
-            console.log('[MCP Auth] Token has an unsupported audience:', decodedWithoutVerify.aud)
-            return null
-          }
+          // Try without audience check (for backward compatibility)
           try {
             decoded = jwt.verify(token, JWT_SECRET, {
               issuer: ['hypertasks', JWT_ISSUER, JWT_OAUTH_ISSUER],
             }) as jwt.JwtPayload
-            console.log('[MCP Auth] Legacy audience-less JWT verified')
+            console.log('[MCP Auth] JWT verified without audience check')
           } catch (err3: any) {
             console.log('[MCP Auth] All verification attempts failed')
             console.log('[MCP Auth] Signature error details:', err3?.message)

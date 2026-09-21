@@ -87,10 +87,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { useGetPriorityForTask } from "@/hooks/MultiPages/useGetPriorityForTask";
 import { useGetEstimateForTask } from "@/hooks/MultiPages/useGetEstimateForTask";
 import TaskEstimateModal from "@/components/Modals/TaskEstimate/TaskEstimate";
-import {
-  setTaskLabelsQueryData,
-  useGetAllTaskLabels,
-} from "@/hooks/MultiPages/useGetAllTaskLabels";
+import { useGetAllTaskLabels } from "@/hooks/MultiPages/useGetAllTaskLabels";
 import CreateLabel from "@/components/Modals/CreateLabel/CreateLabel";
 import { MobileViewContext } from "@/lib/contexts/mobileContext";
 import { useUndoContext } from "@/hooks/General/useUndo";
@@ -1239,8 +1236,8 @@ const TaskDetail: React.FC<TaskDetailProps> = ({
       updateActiveItemAndItemInView(currentTask.id);
     if (shouldCloseOnUpdate) setShowCreateLabelModal((prev) => !prev);
     if (refresh && taskLabels) {
-      setTaskLabelsQueryData(queryClient, _parsedTask.id, taskLabels);
-
+      queryClient.prefetchQuery({ queryKey: [taskDetailConfig.queryKeys.taskLabels, _parsedTask.id] });
+      
       const taskToReturn = { taskLabels: taskLabels };
       updateTaskInCache(
         taskToReturn,

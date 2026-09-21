@@ -585,14 +585,10 @@ const ManageColumns = ({ toggleModal }: { toggleModal: (add: boolean) => void })
   };
 
   const closeBtn = editMode && (
-    <button
-      type="button"
-      aria-label="Back to board columns"
-      className="border-0 bg-transparent p-0 text-white-black transition hover:text-heading focus-visible:outline focus-visible:outline-2 focus-visible:outline-container-outline"
+    <ArrowLeft size={18} strokeWidth={1.75}
+      className="close cursor-pointer hover:text-heading transition-all "
       onClick={goBack}
-    >
-      <ArrowLeft size={18} strokeWidth={1.75} />
-    </button>
+    />
   );
 
   const handleChangeSetting = (e: any) => {
@@ -668,7 +664,6 @@ const ManageColumns = ({ toggleModal }: { toggleModal: (add: boolean) => void })
       toggle={() => toggleModal(false)}
       show={true}
       isOpen={true}
-      trapFocus={true}
       id="inviteMemberModal"
       className="paletteModalSizing text-white-black bg-modalBackground rounded-[5px] p-0 assignUserModal absolute right-0 left-0 mx-auto max-h-[400px] sm:min-w-[560px] sm:top-[24%]"
     >
@@ -687,14 +682,10 @@ const ManageColumns = ({ toggleModal }: { toggleModal: (add: boolean) => void })
                 onChange={handleChangeSetting}
               />
 
-              <button
-                type="button"
-                aria-label="Add board column"
-                className="border-0 bg-transparent p-0 text-white-black focus-visible:outline focus-visible:outline-2 focus-visible:outline-container-outline"
+              <Plus size={16} strokeWidth={1.75}
                 onClick={() => toggleModal(true)}
-              >
-                <Plus size={16} strokeWidth={1.75} />
-              </button>
+                className="cursor-pointer text-white-black"
+              />
             </div>
           )}
         </div>
@@ -720,6 +711,7 @@ const ManageColumns = ({ toggleModal }: { toggleModal: (add: boolean) => void })
                             <div
                               ref={provided.innerRef}
                               {...provided.draggableProps}
+                              {...provided.dragHandleProps}
                               className="mx-1.5 flex h-[36px] items-center justify-between rounded-sm px-3 text-dense"
                               key={_index}
                             >
@@ -737,32 +729,17 @@ const ManageColumns = ({ toggleModal }: { toggleModal: (add: boolean) => void })
                                 </span>
                               </div>
                               <div className="flex shrink-0 gap-4 items-center">
-                                <button
-                                  type="button"
-                                  {...provided.dragHandleProps}
-                                  aria-label={`Reorder ${section.section_title}`}
-                                  className="cursor-move border-0 bg-transparent p-0 text-white-black no-drag-style focus-visible:outline focus-visible:outline-2 focus-visible:outline-container-outline"
-                                >
+                                <div className="cursor-move no-drag-style">
                                   <Menu size={16} strokeWidth={1.75} />
-                                </button>
-                                <button
-                                  type="button"
-                                  aria-label={`Edit ${section.section_title}`}
-                                  className="border-0 bg-transparent p-0 text-white-black transition hover:text-subheading focus-visible:outline focus-visible:outline-2 focus-visible:outline-container-outline"
+                                </div>
+                                <Settings size={16} strokeWidth={1.75}
+                                  className="cursor-pointer hover:text-subheading transition-all "
                                   onClick={() => openEditView(section)}
-                                >
-                                  <Settings size={16} strokeWidth={1.75} />
-                                </button>
-                                <button
-                                  type="button"
-                                  role="checkbox"
-                                  aria-checked={section.visibility}
-                                  aria-label={`${
-                                    section.visibility ? "Hide" : "Show"
-                                  } ${section.section_title}`}
-                                  className={`border-0 bg-transparent p-0 text-white-black focus-visible:outline focus-visible:outline-2 focus-visible:outline-container-outline ${
-                                    updating ? "cursor-wait" : "cursor-pointer"
-                                  } hover:text-subheading`}
+                                />
+                                <div
+                                  className={`${
+                                    updating ? "cursor-wait" : "cursor-pointer "
+                                  }hover:text-subheading`}
                                   onClick={() =>
                                     handleSectionUpdateVis(section)
                                   }
@@ -772,7 +749,7 @@ const ManageColumns = ({ toggleModal }: { toggleModal: (add: boolean) => void })
                                   ) : (
                                     <Square size={16} strokeWidth={1.75} className="transition-all" />
                                   )}
-                                </button>
+                                </div>
                               </div>
                             </div>
                           )}

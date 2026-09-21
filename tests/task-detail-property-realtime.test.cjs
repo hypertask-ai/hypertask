@@ -160,14 +160,7 @@ test("assignLabel broadcasts task:changed to open detail views", async () => {
   const stubs = {
     "@/lib/prisma": {
       __esModule: true,
-      default: {
-        agent: { findFirst: async () => null },
-        $transaction: async (fn) => fn(tx),
-      },
-    },
-    "@/lib/agents/activityAttribution": { actingAgentSelect: {} },
-    "@/lib/auth/resolveActingAgent": {
-      resolveActingAgentFromCookies: () => ({ ok: true, agentId: null }),
+      default: { $transaction: async (fn) => fn(tx) },
     },
     "@/utils/controllers/activities/createLabelActivity": {
       __esModule: true,

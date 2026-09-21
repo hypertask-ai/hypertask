@@ -1,6 +1,6 @@
 // route = "/api/projects/views/switch-view"
 import prisma from "@/lib/prisma";
-import getProjectView from "@/utils/controllers/views";
+import getProjectView from "@/utils/controllers/projects/views/viewsHelperAPIfunctions";
 import { NextApiHandler, NextApiRequest, NextApiResponse } from "next";
 
 

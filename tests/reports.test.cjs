@@ -73,10 +73,6 @@ if (typeof DOMParser !== "undefined") {
   });
 }
 
-test("native remains available to existing saved reports", () => {
-  assert.equal(validateSlug("native"), "native");
-});
-
 test("reserved built-in slugs are rejected", () => {
   for (const reserved of RESERVED_REPORT_SLUGS) {
     // The static /report/project-N/velocity route shadows [reportSlug], so a

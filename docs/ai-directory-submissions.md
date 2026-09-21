@@ -1,137 +1,94 @@
-# AI directory submissions
+# AI directory submissions (HTPR-4638)
 
-Operational runbook for [the Hypertask directory listing ticket](https://app.hypertask.ai/detail/project-15/4638).
-A listing is complete only when the vendor portal shows it as approved and the
-public directory can find Hypertask. A pull request or submitted draft is not
-acceptance.
+Prepared submission package for listing Hypertask in the **Anthropic connector
+directory** (Claude) and the **ChatGPT apps/connectors directory** (OpenAI).
+The repository work for this ticket is preparation only: both submissions are
+submitted by an organisation owner through the vendor portals, because only the
+owner can accept the vendor policy terms.
 
-## Release gate
+## Verified production prerequisites
 
-The vendor-specific MCP catalogs are behind
-`htpr-4638-ai-directory-metadata`, which defaults to Owner and QA. The OpenAI
-catalog adds a title plus explicit read-only, destructive, and open-world hints
-to every existing tool. The Anthropic catalog exposes only single-purpose tools
-with neutral descriptions and marks each as read-only or destructive. Turn the
-flag on for Everyone before either portal scans production. Only the product
-owner changes release mode at `https://app.hypertask.ai/admin/flags`.
+Every endpoint a directory reviewer will probe was verified live on
+2026-09-08 (`curl` status in parentheses):
 
-The OpenAI domain challenge endpoint is disabled unless
-`OPENAI_APPS_CHALLENGE_TOKEN` contains the exact token issued by the submission
-portal. It returns 404 when unset. Set the production value, redeploy, complete
-domain verification, then remove the value after verification succeeds.
-
-## Live production prerequisites
-
-These public endpoints were checked on 2026-09-19:
-
-| What | URL | Expected result |
+| What | URL | Status |
 | --- | --- | --- |
-| MCP server | `https://mcp.hypertask.ai/mcp` | 401 without a token |
-| Protected-resource metadata | `https://mcp.hypertask.ai/.well-known/oauth-protected-resource` | 200 |
-| Authorization-server metadata | `https://app.hypertask.ai/.well-known/oauth-authorization-server` | 200 |
-| OAuth endpoints | `https://app.hypertask.ai/oauth/{authorize,token,register,revoke}` | Public machine endpoints |
-| Connect page | `https://app.hypertask.ai/connect` | Login, then MCP settings |
-| Logo | `https://app.hypertask.ai/logo.png` | 200 |
-| Large icon | `https://app.hypertask.ai/icon-512x512.png` | 200 |
-| MCP documentation | `https://docs.hypertask.ai/mcp/overview/` | 200 |
-| Privacy policy | `https://hypertask.ai/privacy/` | 200 |
-| Terms | `https://hypertask.ai/terms/` | 200 |
-| Support | `help@hypertask.ai` | Monitored inbox |
+| MCP server (Streamable HTTP) | `https://mcp.hypertask.ai/mcp` | live (401 without token; stateless no-session path is Owner + QA only until flag release) |
+| MCP server (SSE fallback) | `https://mcp.hypertask.ai/sse` | live |
+| Protected-resource metadata | `https://mcp.hypertask.ai/.well-known/oauth-protected-resource` | live (200) |
+| Same metadata, app host | `https://app.hypertask.ai/.well-known/oauth-protected-resource` | live (200) |
+| Authorization-server metadata | `https://app.hypertask.ai/.well-known/oauth-authorization-server` | live (200) |
+| OAuth endpoints | `https://app.hypertask.ai/oauth/{authorize,token,register,revoke}` | live (register = 400 on empty body, endpoint up) |
+| Consumer connect page | `https://app.hypertask.ai/connect` → `https://app.hypertask.ai/settings/mcp` | live (307) |
+| Logo (stable, square) | `https://app.hypertask.ai/logo.png` | live (200) |
+| Large icon | `https://app.hypertask.ai/icon-512x512.png` | live (200) |
+| Docs | `https://docs.hypertask.ai/mcp/overview/` | live (200) |
+| Privacy policy | `https://hypertask.ai/privacy/` | live (200) |
+| Terms | `https://hypertask.ai/terms/` | live (200) |
+| Support | `help@hypertask.ai` | — |
 
-OAuth 2.1 uses dynamic client registration, PKCE S256, and no client secret.
-The production MCP endpoint supports Streamable HTTP.
+OAuth 2.1 with dynamic client registration (PKCE, S256, no client secret) is
+already verified end to end from real consumer Claude and ChatGPT accounts
+(HTPR-4636). No code change is required for the listings.
 
 ## Shared listing content
 
 - **Name:** Hypertask
-- **Tagline:** Turn plans into shared boards for people and AI.
-- **Description:** Hypertask gives people and AI agents one place to plan work,
-  manage tasks, discuss decisions, and track delivery. Connect once with OAuth
-  so Claude or ChatGPT can work on the boards the signed-in user can access.
-- **Categories:** Productivity, Project management
-- **Website:** `https://hypertask.ai/`
-- **Anthropic MCP server:** `https://mcp.hypertask.ai/mcp?directory=anthropic`
-- **OpenAI MCP server:** `https://mcp.hypertask.ai/mcp?directory=openai`
-- **Documentation:** `https://docs.hypertask.ai/mcp/overview/`
+- **One-line description:** AI-powered project boards where humans and AI agents work side by side.
+- **Long description:** Connect Hypertask and Claude or ChatGPT can read and
+  write your boards, tasks, comments, and task pages on your behalf. Sign in
+  once with your Hypertask account — no API keys.
+- **Category:** Productivity / Project management
+- **MCP server URL:** `https://mcp.hypertask.ai/mcp`
 - **Privacy policy:** `https://hypertask.ai/privacy/`
 - **Terms:** `https://hypertask.ai/terms/`
-- **Support:** `help@hypertask.ai`
-- **Icon:** `https://app.hypertask.ai/icon-512x512.png`
+- **Support:** `help@hypertask.ai`, `https://docs.hypertask.ai/`
+- **Icon:** `https://app.hypertask.ai/icon-512x512.png` (512×512 PNG)
 
-## Anthropic submission
+## Anthropic connector directory
 
-Official requirements:
-`https://claude.com/docs/connectors/building/submission`.
+Submission is a portal form on Anthropic's side and requires an organisation
+owner to accept Anthropic's policy terms. Field mapping:
 
-Portal:
-`https://claude.ai/admin-settings/directory/submissions/new`.
+1. **Server URL** — `https://mcp.hypertask.ai/mcp` (Anthropic's client performs
+   RFC 9728 discovery against this host; the metadata above answers it).
+2. **Auth** — OAuth 2.1, dynamic client registration, PKCE S256.
+3. **Name / description / icon / category** — see shared listing content.
+4. **Privacy policy URL** — `https://hypertask.ai/privacy/`.
+5. **Support contact** — `help@hypertask.ai`.
 
-1. Use a Team or Enterprise organization with Directory management access.
-2. Submit a remote MCP server with the universal URL
-   `https://mcp.hypertask.ai/mcp?directory=anthropic` and Streamable HTTP
-   transport.
-3. Confirm OAuth with dynamic client registration and PKCE.
-4. Run the portal tool sync. Resolve every missing-title or missing-annotation
-   warning before continuing.
-5. Enter the shared listing content, use cases, data handling answers, and a
-   populated reviewer account with no MFA or email verification step.
-6. Accept the Software Directory terms and all seven compliance statements,
-   then submit.
-7. Record the portal submission ID and status below. After approval, verify a
-   consumer can search for Hypertask and install it from Claude's directory.
+## ChatGPT apps / connectors directory
 
-Anthropic requires every tool to have a title and the applicable
-`readOnlyHint` or `destructiveHint`. The portal groups tools by those values and
-blocks submission when metadata is missing.
+OpenAI's flow is: build MCP server → authenticate users (OAuth) → connect and
+test your plugin → submit and publish, reviewed against their MCP server review
+requirements. Field mapping:
 
-## OpenAI submission
+1. **MCP server URL** — `https://mcp.hypertask.ai/mcp`.
+2. **Authentication** — OAuth, authorization server `https://app.hypertask.ai`.
+3. **Publisher identity + domain verification** — verify `app.hypertask.ai`
+   (and `mcp.hypertask.ai`) in the OpenAI portal; this is owner-click only.
+4. **Listing content** — see shared listing content.
+5. **Review/test credentials** — provide a free Hypertask test account with a
+   small sandbox board (create one at submission time; do not ship a production
+   account).
+6. **Test cases** — the reviewer test plan below.
 
-Official requirements:
-`https://developers.openai.com/plugins/deploy/submission`.
+## Reviewer test plan (both directories)
 
-Portal:
-`https://platform.openai.com/plugins`.
+1. Connect with OAuth from a fresh consumer account; sign in lands on the
+   Hypertask consent screen and returns to the assistant connected.
+2. `list_tasks` on the sandbox board returns its tasks.
+3. `create_task` adds a task; the board shows it in the Hypertask UI.
+4. `add_comment` posts a comment; the comment is visible on the ticket.
+5. Disconnect/revoke in Hypertask settings (`/settings/mcp`) invalidates the
+   session; subsequent tool calls fail.
 
-1. Use an OpenAI organization with a verified Hypertask business identity and
-   Apps Management write access.
-2. Create a plugin with **With MCP**, choose a universal URL, and enter
-   `https://mcp.hypertask.ai/mcp?directory=openai`.
-3. If the portal requests domain verification, copy its token into
-   `OPENAI_APPS_CHALLENGE_TOKEN`, deploy, and let the portal read
-   `https://mcp.hypertask.ai/.well-known/openai-apps-challenge`.
-4. Configure OAuth and provide a populated reviewer account with no MFA or
-   email verification step.
-5. Select **Scan Tools**. Confirm every tool has a title plus explicit
-   `readOnlyHint`, `destructiveHint`, and `openWorldHint` values.
-6. Add the listing content, starter prompts, five positive tests, three negative
-   tests, supported countries, policy attestations, and release notes.
-7. Submit for review and record the portal submission ID and status below.
-   After approval, select **Publish**, then verify public discovery in ChatGPT.
+## Owner submission checklist (~2 minutes each)
 
-## OpenAI reviewer tests
-
-Positive tests:
-
-1. Connect with OAuth and list the review account's boards.
-2. List tasks on the populated sandbox board.
-3. Search for a known sandbox task and open its details.
-4. Create a task in the sandbox board and confirm it appears in Hypertask.
-5. Add a comment to that task and confirm it appears in Hypertask.
-
-Negative tests:
-
-1. Request a board outside the review account. Expect access denied and no data.
-2. Try to create a task without a board or title. Expect a validation error and
-   no task.
-3. Revoke the OAuth connection, then call a read and a write tool. Expect an
-   authentication error and no write.
-
-## Acceptance evidence
-
-Do not mark a row approved from an email alone. Add the public listing URL and
-confirm search and one-click installation from a fresh consumer account.
-
-| Directory | Submission ID | Portal status | Public listing | Consumer install check |
-| --- | --- | --- | --- | --- |
-| Anthropic | Not submitted | Not submitted | None | Not run |
-| OpenAI | Not submitted | Not submitted | None | Not run |
+1. Open the Anthropic directory submission portal, paste the values from
+   "Anthropic connector directory" above, accept the policy terms, submit.
+2. Open the OpenAI app submission portal, verify both `app.hypertask.ai` and
+   `mcp.hypertask.ai` domains when prompted, paste the values from
+   "ChatGPT apps" above, attach the sandbox test account, submit.
+3. Note both submission confirmation emails in this ticket so review status can
+   be tracked.

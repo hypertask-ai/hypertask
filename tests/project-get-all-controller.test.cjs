@@ -21,10 +21,6 @@ function loadController(prisma, calls) {
 
   const stubs = {
     "@/lib/prisma": { __esModule: true, default: prisma },
-    "@/lib/flags": {
-      HTPR_6588_EMPTY_COLUMNS_SAVE_VIEW_FLAG: "htpr-6588-empty-columns-save-view",
-      isFeatureEnabled: async () => false,
-    },
     "./getAllIncludes": {
       getProjectIncludeWithoutTasks: (options) => {
         calls.push(["full-project-include", options]);
@@ -38,12 +34,6 @@ function loadController(prisma, calls) {
         ...project,
         sanitized: true,
       }),
-    },
-    "@/utils/controllers/projects/views/viewsHelperAPIfunctions": {
-      persistDisabledStagedEmptySections: async (project) => project,
-    },
-    "@/utils/helperFunctions/Views/ViewsHelperFunctions": {
-      maskPersonalEmptySectionsForUnsavedView: (project) => project,
     },
   };
   const mod = { exports: {} };

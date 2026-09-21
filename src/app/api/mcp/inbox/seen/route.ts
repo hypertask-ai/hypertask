@@ -1,6 +1,6 @@
-import { markInboxNotificationsSeen } from "@/utils/controllers/notifications";
 import { NextRequest, NextResponse } from 'next/server'
 import { checkMcpRateLimit, createUnauthorizedResponse, validateMcpAuth } from '@/lib/mcp/auth'
+import prisma from '@/lib/prisma'
 import { broadcastInboxChange } from '@/lib/realtime/server'
 
 const MAX_NOTIFICATION_IDS = 100
@@ -68,10 +68,14 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const result = await markInboxNotificationsSeen(
-      ctx.user.id,
-      notificationIds,
-    )
+    const result = await prisma.notification.updateMany({
+      where: {
+        id: { in: notificationIds },
+        userId: ctx.user.id,
+        seen: false,
+      },
+      data: { seen: true },
+    })
 
     if (result.count > 0) {
       void broadcastInboxChange(ctx.user.id, { originUserId: ctx.user.id })

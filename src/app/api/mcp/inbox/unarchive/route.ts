@@ -1,6 +1,6 @@
-import { unarchiveInboxNotifications } from "@/utils/controllers/notifications";
 import { NextRequest, NextResponse } from 'next/server'
 import { validateMcpAuth, createUnauthorizedResponse, checkMcpRateLimit } from '@/lib/mcp/auth'
+import prisma from '@/lib/prisma'
 import { broadcastInboxChange } from '@/lib/realtime/server'
 
 interface InboxUnarchiveResponse {
@@ -49,7 +49,17 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const result = await unarchiveInboxNotifications(user.id, notificationIds)
+    const result = await prisma.notification.updateMany({
+      where: {
+        id: { in: notificationIds },
+        userId: user.id,
+        status: 'Archive',
+      },
+      data: {
+        status: 'Normal',
+        archivedAt: null,
+      },
+    })
 
     const response: InboxUnarchiveResponse = {
       success: true,

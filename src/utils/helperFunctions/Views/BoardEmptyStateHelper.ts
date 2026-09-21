@@ -112,11 +112,12 @@ export function detectEmptyBoardState(
   }
   
   // 4. Empty sections hidden + all sections are empty
-  // A filter that hides existing tasks was already handled above.
+  // Only check if no filters are active (filters already handled above)
   if (
     emptySectionsHidden &&
     allSectionsEmpty &&
-    visibleColumns.length > 0
+    visibleColumns.length > 0 &&
+    !hasActiveFilters
   ) {
     return {
       cause: "empty_sections_hidden",
@@ -124,7 +125,7 @@ export function detectEmptyBoardState(
       hasVisibleColumns: true,
       hasTasks: false,
       hasFilteredTasks: false,
-      hasActiveFilters,
+      hasActiveFilters: false,
       emptySectionsHidden: true,
     };
   }

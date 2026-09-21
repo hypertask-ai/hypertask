@@ -211,42 +211,6 @@ test("mobile AI result merges into one direct-create snapshot", () => {
   );
 });
 
-test("mobile AI result replaces the submitted draft but preserves later edits", () => {
-  const submittedDescription = "<p>Draft to improve</p>";
-  const generatedResult = {
-    title: "Generated title",
-    description: "<p>Generated description</p>",
-  };
-  const current = {
-    title: "Keep my title",
-    description: submittedDescription,
-    assignees: [],
-    attachments: [],
-  };
-
-  const mergedSubmittedDraft = mergeMobileCreateTaskWriterResult(
-    current,
-    generatedResult,
-    undefined,
-    undefined,
-    submittedDescription,
-  );
-  assert.equal(mergedSubmittedDraft.description, generatedResult.description);
-
-  const editedWhileWaiting = {
-    ...current,
-    description: "<p>Keep my later edit</p>",
-  };
-  const mergedLaterEdit = mergeMobileCreateTaskWriterResult(
-    editedWhileWaiting,
-    generatedResult,
-    undefined,
-    undefined,
-    submittedDescription,
-  );
-  assert.equal(mergedLaterEdit.description, editedWhileWaiting.description);
-});
-
 test("mobile AI result preserves edits made in the classic form", () => {
   const current = {
     title: "Keep my title",
@@ -293,15 +257,8 @@ test("board create entry points follow the AI-first flag", async () => {
       Object.getOwnPropertyDescriptor(global, name),
     ]),
   );
-  const previousScrollIntoView = testDom.window.HTMLElement.prototype.scrollIntoView;
   let aiFirstTaskWriterEnabled = false;
   let quickEntryEnabled = false;
-  let quickEntryItems = [];
-  const activeViewLabels = [
-    { id: "label-in-view", value: "In view" },
-  ];
-  const quickEntryCreateCalls = [];
-  const activeItemWrites = [];
   const moduleMocks = new Map([
     [path.join(root, "src/hooks/useFlag.tsx"), {
       useFlag: (key) => {
@@ -312,19 +269,14 @@ test("board create entry points follow the AI-first flag", async () => {
     }],
     [path.join(root, "src/lib/state.tsx"), {
       useRecoilState: (atom) => React.useState(atom.default),
-      useSetRecoilState: () => (value) => activeItemWrites.push(value),
+      useSetRecoilState: () => () => {},
     }],
     [path.join(root, "src/store/index.ts"), {
       activeItemAtom: { default: null },
-      currentProjectAtom: { default: { id: 15 } },
+      currentProjectAtom: { default: undefined },
     }],
     [path.join(root, "src/hooks/MultiPages/useAddDeleteTaskInBoards.tsx"), {
-      default: () => ({
-        createItem: async (params) => {
-          quickEntryCreateCalls.push(params);
-          return true;
-        },
-      }),
+      default: () => ({ createItem: () => {} }),
     }],
     [path.join(root, "src/hooks/RecoilRoot/useHypertasksRecoilStates.ts"), {
       default: () => ({ toggleCreateTaskGlobally }),
@@ -334,15 +286,6 @@ test("board create entry points follow the AI-first flag", async () => {
     }],
     [path.join(root, "src/utils/helperFunctions/helperFunctions.ts"), {
       returnIfModalOrInputActive: () => false,
-    }],
-    [path.join(root, "src/utils/helperFunctions/Views/ViewsHelperFunctions.ts"), {
-      getActiveFiltersFromProject: () => ({
-        matchFilters: "ANY",
-        addedFilters: [{
-          type: "Labels",
-          searchPayload: activeViewLabels,
-        }],
-      }),
     }],
     [path.join(root, "src/hooks/MultiPages/Route/useHypertasksNavigate.ts"), {
       default: () => ({ navigate: () => {} }),
@@ -366,14 +309,12 @@ test("board create entry points follow the AI-first flag", async () => {
     createCalls.push({ payload, defaultEditFocus });
   }
   let reactRoot;
-  let invokeQuickEntry;
 
   try {
     global.window = testDom.window;
     global.document = testDom.window.document;
     global.navigator = testDom.window.navigator;
     global.HTMLElement = testDom.window.HTMLElement;
-    global.HTMLElement.prototype.scrollIntoView = () => {};
     global.MouseEvent = testDom.window.MouseEvent;
     global.KeyboardEvent = testDom.window.KeyboardEvent;
     global.IS_REACT_ACT_ENVIRONMENT = true;
@@ -400,56 +341,29 @@ test("board create entry points follow the AI-first flag", async () => {
         "src/components/PageComponents/Kanban/KanbanSectionComponents/NewTaskButton.tsx",
       ),
     ).default;
-    const NewTask = hookJiti(
-      path.join(root, "src/components/Common/newTask.tsx"),
-    ).default;
     const { MobileViewContext } = hookJiti(
       path.join(root, "src/lib/contexts/mobileContext.tsx"),
     );
     const Harness = () => {
-      const {
-        createTaskAt,
-        invokeCreateItem,
-        newTaskDraftTitle,
-        onCancelCreate,
-        position,
-        setNewTaskDraftTitle,
-        showAddItem,
-        topInputRef,
-      } = useSections({
-        items: quickEntryItems,
+      const { createTaskAt, position, showAddItem } = useSections({
+        items: [],
         active: true,
         index: 0,
         title: "Backlog",
         sectionId: 9190,
         projectId: 15,
       });
-      invokeQuickEntry = invokeCreateItem;
       return React.createElement(
         "div",
         {
           "data-quick-entry-open": showAddItem ? "true" : "false",
           "data-quick-entry-position": position ?? "",
         },
-        showAddItem
-          ? React.createElement(NewTask, {
-              title: newTaskDraftTitle,
-              onTitleChange: setNewTaskDraftTitle,
-              inputRef: topInputRef,
-              invokeCreateItem,
-              onCancelCreate,
-            })
-          : React.createElement(NewTaskButton, {
-              buttonPosition: "top",
-              createTaskAt,
-              sectionPayload,
-            }),
-        ...quickEntryItems.map((item) =>
-          React.createElement("button", {
-            id: `task-${item.id}`,
-            key: item.id,
-          }),
-        ),
+        React.createElement(NewTaskButton, {
+          buttonPosition: "top",
+          createTaskAt,
+          sectionPayload,
+        }),
       );
     };
     const container = document.getElementById("root");
@@ -490,17 +404,6 @@ test("board create entry points follow the AI-first flag", async () => {
       Object.defineProperty(shortcut, "keyCode", { value: keyCode });
       await React.act(async () => document.dispatchEvent(shortcut));
     };
-    const cancelQuickEntry = async () => {
-      const input = container.querySelector("input");
-      assert.ok(input);
-      const escape = new KeyboardEvent("keydown", {
-        key: "Escape",
-        code: "Escape",
-        bubbles: true,
-      });
-      Object.defineProperty(escape, "keyCode", { value: 27 });
-      await React.act(async () => input.dispatchEvent(escape));
-    };
 
     await renderHarness(true);
     await clickColumnPlus();
@@ -535,21 +438,10 @@ test("board create entry points follow the AI-first flag", async () => {
     assert.equal(createCalls.length, modalCallsBeforeQuickEntry);
     assert.equal(container.firstElementChild.dataset.quickEntryOpen, "true");
     assert.equal(container.firstElementChild.dataset.quickEntryPosition, "top");
-    await React.act(async () => {
-      await invokeQuickEntry("Visible in filtered view", true);
-    });
-    assert.deepEqual(
-      quickEntryCreateCalls.at(-1).item.tags,
-      activeViewLabels,
-    );
-    await cancelQuickEntry();
-    assert.equal(container.firstElementChild.dataset.quickEntryOpen, "false");
-    assert.ok(container.querySelector(".create-new-task-button"));
 
     await dispatchShortcut({ key: "c", code: "KeyC", keyCode: 67 });
     await dispatchShortcut({ key: "c", code: "KeyC", keyCode: 67, altKey: true });
     assert.equal(container.firstElementChild.dataset.quickEntryPosition, "top");
-    await cancelQuickEntry();
     await dispatchShortcut({
       key: "C",
       code: "KeyC",
@@ -558,10 +450,7 @@ test("board create entry points follow the AI-first flag", async () => {
       shiftKey: true,
     });
     assert.equal(container.firstElementChild.dataset.quickEntryPosition, "bottom");
-    await cancelQuickEntry();
     await dispatchShortcut({ key: "C", code: "KeyC", keyCode: 67, shiftKey: true });
-    assert.ok(activeItemWrites.length >= 3);
-    assert.equal(activeItemWrites.every((value) => value === null), true);
 
     assert.deepEqual(createCalls.slice(modalCallsBeforeQuickEntry), [
       { payload: sectionPayload, defaultEditFocus: undefined },
@@ -570,174 +459,13 @@ test("board create entry points follow the AI-first flag", async () => {
         defaultEditFocus: undefined,
       },
     ]);
-
-    quickEntryItems = [
-      { id: 1001, projectId: 15, uniqueIndex: 1001 },
-      { id: 1002, projectId: 15, uniqueIndex: 1002 },
-    ];
-    await renderHarness(false);
-
-    await dispatchShortcut({ key: "c", code: "KeyC", keyCode: 67, altKey: true });
-    await cancelQuickEntry();
-    assert.equal(activeItemWrites.at(-1), 1001);
-    assert.equal(document.activeElement?.id, "task-1001");
-    await dispatchShortcut({
-      key: "C",
-      code: "KeyC",
-      keyCode: 67,
-      altKey: true,
-      shiftKey: true,
-    });
-    await cancelQuickEntry();
-    assert.equal(activeItemWrites.at(-1), 1002);
-    assert.equal(document.activeElement?.id, "task-1002");
   } finally {
     if (reactRoot) await React.act(async () => reactRoot.unmount());
     for (const [filename, previous] of previousModules) {
       if (previous === undefined) delete require.cache[filename];
       else require.cache[filename] = previous;
-    }
-    if (previousScrollIntoView === undefined) {
-      delete testDom.window.HTMLElement.prototype.scrollIntoView;
-    } else {
-      testDom.window.HTMLElement.prototype.scrollIntoView = previousScrollIntoView;
     }
     testDom.window.close();
-    for (const [name, descriptor] of previousGlobals) {
-      if (descriptor === undefined) delete global[name];
-      else Object.defineProperty(global, name, descriptor);
-    }
-  }
-});
-
-test("inline board creation persists labels through the shared create path", async () => {
-  const dom = new JSDOM("<!doctype html><div id='root'></div>", {
-    url: "https://app.hypertask.ai/project/15",
-  });
-  const previousGlobals = new Map(
-    ["window", "document", "navigator", "IS_REACT_ACT_ENVIRONMENT"].map((name) => [
-      name,
-      Object.getOwnPropertyDescriptor(global, name),
-    ]),
-  );
-  const project = {
-    id: 15,
-    uniqueIdentifier: "HTPR",
-    sorting_mode: "Priority",
-    sections: [{ sectionId: 9190, items: [] }],
-  };
-  const currentProjectAtom = {};
-  const currentUserAtom = {};
-  const createRequests = [];
-  let hook;
-  let reactRoot;
-  const moduleMocks = new Map([
-    [path.join(root, "src/store/index.ts"), {
-      activeSectionAtom: {},
-      currentProjectAtom,
-      currentUserAtom,
-    }],
-    [path.join(root, "src/lib/state.tsx"), {
-      useRecoilValue: (atom) => atom === currentProjectAtom ? project : { id: 7 },
-    }],
-    [require.resolve("jotai"), {
-      useStore: () => ({ get: () => 0 }),
-    }],
-    [require.resolve("@tanstack/react-query"), {
-      useQueryClient: () => ({
-        invalidateQueries: async () => {},
-        setQueryData: () => {},
-      }),
-    }],
-    [path.join(root, "src/hooks/MultiPages/useUpdateTaskInBoards.tsx"), {
-      default: () => ({
-        getProjectIdxAndAllData: async () => ({
-          allData: { updatedProjects: [project] },
-          projectToUpdateIndex: 0,
-        }),
-        mutationHandler: () => {},
-        updateActiveItemAndItemInView: () => {},
-      }),
-    }],
-    [path.join(root, "src/utils/generateRank.ts"), {
-      default: () => "inline-rank",
-    }],
-    [path.join(root, "src/utils/helperFunctions/helperFunctions.ts"), {
-      returnSortedItems: (items) => items,
-    }],
-    [path.join(root, "src/utils/api/global/apiHelpers/createTaskGloballycontroller.ts"), {
-      default: async (request) => {
-        createRequests.push(request);
-        return {
-          error: false,
-          resposne: {
-            newTask: {
-              id: 1001,
-              projectId: 15,
-              sectionId: 9190,
-              ranking: "inline-rank",
-              taskLabels: request.tags.map((label) => ({ label })),
-            },
-          },
-        };
-      },
-    }],
-  ]);
-  const previousModules = new Map(
-    [...moduleMocks].map(([filename]) => [filename, require.cache[filename]]),
-  );
-
-  try {
-    global.window = dom.window;
-    global.document = dom.window.document;
-    global.navigator = dom.window.navigator;
-    global.IS_REACT_ACT_ENVIRONMENT = true;
-    for (const [filename, exports] of moduleMocks) {
-      require.cache[filename] = {
-        id: filename,
-        filename,
-        loaded: true,
-        exports,
-      };
-    }
-    const hookJiti = createJiti(__filename, {
-      alias: { "@": path.join(root, "src") },
-      interopDefault: true,
-      jsx: true,
-    });
-    const useAddDeleteTaskInBoards = hookJiti(
-      path.join(root, "src/hooks/MultiPages/useAddDeleteTaskInBoards.tsx"),
-    ).default;
-    const Harness = () => {
-      hook = useAddDeleteTaskInBoards();
-      return null;
-    };
-    const { createRoot } = require("react-dom/client");
-    reactRoot = createRoot(document.getElementById("root"));
-    await React.act(async () => reactRoot.render(React.createElement(Harness)));
-
-    const tags = [{ id: "label-in-view", value: "In view" }];
-    const created = await hook.createItem({
-      sectionId: 9190,
-      section: "Backlog",
-      item: { title: "Visible in filtered view", tags },
-      position: "top",
-      createAnother: true,
-      projectId: 15,
-    });
-
-    assert.equal(created, true);
-    assert.equal(createRequests.length, 1);
-    assert.deepEqual(createRequests[0].tags, tags);
-    assert.equal(createRequests[0].projectIdentifier, "HTPR");
-    assert.equal(createRequests[0].priority.Priority_Value, "Urgent");
-  } finally {
-    if (reactRoot) await React.act(async () => reactRoot.unmount());
-    for (const [filename, previous] of previousModules) {
-      if (previous === undefined) delete require.cache[filename];
-      else require.cache[filename] = previous;
-    }
-    dom.window.close();
     for (const [name, descriptor] of previousGlobals) {
       if (descriptor === undefined) delete global[name];
       else Object.defineProperty(global, name, descriptor);

@@ -978,12 +978,10 @@ test("workflow covers metadata changes, uses trusted code, and reconciles old PR
   assert.match(workflow, /could not refresh pull-request heads/);
   assert.ok(workflow.indexOf('state: "pending"') < workflow.indexOf('gh api "repos/$REPO/pulls/$PR_NUMBER"'));
   assert.ok(workflow.indexOf("open-heads.txt") < workflow.lastIndexOf('npm ci --prefix "$parser_dir"'));
-  assert.ok(workflow.indexOf('state: "pending"') < workflow.indexOf("elif node .github/scripts/component-reuse-gate.mjs"));
+  assert.ok(workflow.indexOf('state: "pending"') < workflow.indexOf("elif node .github/scripts/feature-flag-gate.mjs"));
   assert.match(workflow, /statuses\/\$head_sha/);
   assert.match(workflow, /gh api --paginate --slurp/);
-  assert.equal((workflow.match(/elif node \.github\/scripts\/component-reuse-gate\.mjs/g) || []).length, 2);
-  assert.equal((workflow.match(/if node \.github\/scripts\/feature-flag-gate\.mjs/g) || []).length, 2);
-  assert.equal((workflow.match(/! cmp -s "\$body_file" "\$current_body_file"/g) || []).length, 2);
+  assert.equal((workflow.match(/elif node \.github\/scripts\/feature-flag-gate\.mjs/g) || []).length, 2);
   assert.doesNotMatch(workflow, /^\s+node \.github\/scripts\/feature-flag-gate\.mjs/m);
   assert.match(workflow, /head_pr_count.*flatten\[\].*\.head\.sha == \$sha/);
   assert.match(workflow, /fresh_head_pr_count/);

@@ -1,4 +1,3 @@
-import { notificationStore } from "@/utils/controllers/notifications";
 import { NextApiHandler, NextApiRequest, NextApiResponse } from "next";
 import { NotificationType, PrismaClient } from "@prisma/client";
 
@@ -12,7 +11,7 @@ const handler: NextApiHandler = async (req: NextApiRequest, res: NextApiResponse
             if (!notificationId &&!taskId && !seen) {
                 return res.status(400).json({ message: "Notification id and type are required" });
             }
-            // const notification = await notificationStore().findUnique({
+            // const notification = await prisma.notification.findUnique({
             //     where: {
             //         id: parseInt((id as string))
             //     }
@@ -20,7 +19,7 @@ const handler: NextApiHandler = async (req: NextApiRequest, res: NextApiResponse
             // if (!notification) {
             //     return res.status(400).json({ message: "Notification is not found" });
             // }
-            // const newNotification = await notificationStore().update({
+            // const newNotification = await prisma.notification.update({
             //     where: {
             //         id: parseInt((id as string))
             //     },
@@ -34,7 +33,7 @@ const handler: NextApiHandler = async (req: NextApiRequest, res: NextApiResponse
             // if user wants to mark unread by taskid.
             if (taskId){
                 // get latest notification from that tsak
-                const notification_ = await notificationStore().findFirst({
+                const notification_ = await prisma.notification.findFirst({
                     where:{
                         taskId:parseInt(taskId as string),
                         status:"Normal"
@@ -43,7 +42,7 @@ const handler: NextApiHandler = async (req: NextApiRequest, res: NextApiResponse
                         createdAt:"desc"
                     }
                 })
-                const updatedNotification = await notificationStore().update({
+                const updatedNotification = await prisma.notification.update({
                             where:{
                                 id:notification_?.id,
                                 
@@ -58,7 +57,7 @@ const handler: NextApiHandler = async (req: NextApiRequest, res: NextApiResponse
             }
             // if by notification id
             else{
-                const updatedNotification = await notificationStore().update({
+                const updatedNotification = await prisma.notification.update({
                  where:{
                      id:parseInt(notificationId as string),
                  },

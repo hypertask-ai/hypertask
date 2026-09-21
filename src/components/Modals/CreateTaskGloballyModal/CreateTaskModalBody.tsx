@@ -324,7 +324,7 @@ const CreateTaskModalBody: React.FC<IProps> = ({ }) => {
                 {descriptionFirstMobile && (
                     <div
                         data-mobile-description-first-header
-                        className="sticky top-0 z-50 flex w-full flex-col gap-2 border-b border-light-black-border-1 bg-taskDetal-container px-4 pb-3 pt-[calc(max(env(safe-area-inset-top),28px)+0.75rem)]"
+                        className="sticky top-0 z-50 flex w-full flex-col gap-2 border-b border-light-black-border-1 bg-taskDetal-container px-4 pb-3 pt-3"
                     >
                         <div className="flex items-center gap-2">
                             <button

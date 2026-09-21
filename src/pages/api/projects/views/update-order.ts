@@ -3,7 +3,7 @@ import {
   parseViewOrder,
   saveUserViewOrder,
   ViewOrderError,
-} from "@/utils/controllers/views";
+} from "@/utils/controllers/projects/views/viewOrder";
 import type { NextApiHandler } from "next";
 
 const handler: NextApiHandler = async (req, res) => {

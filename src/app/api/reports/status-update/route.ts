@@ -1,7 +1,5 @@
 import prisma from "@/lib/prisma";
 import { getSessionUser } from "@/lib/auth/getSessionUser";
-import { isFeatureEnabled } from "@/lib/flags";
-import { HTPR_6585_BOARD_REPORTS_FLAG } from "@/lib/flags/keys";
 import { getProjectWhere } from "@/utils/controllers/projects/getAllIncludes";
 import {
   buildVelocityReport,
@@ -78,11 +76,6 @@ export async function POST(request: NextRequest) {
   if (!session) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
-  if (
-    !(await isFeatureEnabled(HTPR_6585_BOARD_REPORTS_FLAG, session.userId))
-  ) {
-    return NextResponse.json({ error: "Not found" }, { status: 404 });
-  }
 
   const body = await request.json().catch(() => null);
   const projectId = Number(body?.projectId);
@@ -128,14 +121,9 @@ export async function POST(request: NextRequest) {
     );
   }
 
+  const range = resolveVelocityRange(body?.range ?? "7d");
   const now = new Date();
-  const range = resolveVelocityRange(
-    body?.range ?? "7d",
-    body?.from,
-    body?.to,
-    now
-  );
-  const { priorStart, windowStart, windowEnd } = velocityWindow(now, range);
+  const { priorStart, windowStart } = velocityWindow(now, range);
 
   const [tasks, comments, recentlyMoved] = await Promise.all([
     prisma.task.findMany({
@@ -162,10 +150,7 @@ export async function POST(request: NextRequest) {
     }),
     prisma.comment.groupBy({
       by: ["creatorId"],
-      where: {
-        createdAt: { gte: windowStart, lte: windowEnd },
-        task: { projectId },
-      },
+      where: { createdAt: { gte: windowStart, lte: now }, task: { projectId } },
       _count: { _all: true },
       _max: { createdAt: true },
     }),
@@ -174,7 +159,7 @@ export async function POST(request: NextRequest) {
         projectId,
         deletedAt: null,
         status: { not: "Deleted" },
-        sectionChangedAt: { gte: windowStart, lte: windowEnd },
+        sectionChangedAt: { gte: windowStart },
       },
       select: { ticketNumber: true, title: true, section: true, status: true },
       orderBy: { sectionChangedAt: "desc" },

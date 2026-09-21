@@ -1,7 +1,6 @@
 import crypto from 'node:crypto'
 import { z } from 'zod'
 import type { AuthInfo } from '@modelcontextprotocol/sdk/server/auth/types.js'
-import type { ToolAnnotations } from '@modelcontextprotocol/sdk/types.js'
 import { listToolsDeferred, parseStructuredContent, toolsForConnect } from './deferred-tools'
 import { listMetaTools } from './deferred-tools'
 
@@ -23,7 +22,6 @@ const RESOURCE_METADATA_PATH = '/.well-known/oauth-protected-resource'
 export type PortableTool = {
   name: string
   description: string
-  annotations?: ToolAnnotations
   parameters: z.ZodObject<z.ZodRawShape>
   execute: (
     args: unknown,
@@ -223,7 +221,6 @@ async function dispatchMethod(
           name: tool.name,
           description: tool.description,
           inputSchema: jsonSchemaFor(tool.parameters),
-          ...(tool.annotations ? { annotations: tool.annotations } : {}),
         })),
       })
     case 'tools/call': {

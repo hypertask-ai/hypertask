@@ -1,7 +1,5 @@
 import type { NextApiHandler } from "next";
 import prisma from "@/lib/prisma";
-import { actingAgentSelect } from "@/lib/agents/activityAttribution";
-import { resolveActingAgentFromCookies } from "@/lib/auth/resolveActingAgent";
 import { broadcastBoardChange, broadcastInboxChange } from "@/lib/realtime/server";
 import { validateProjectMemberIds } from "@/lib/mcp/tasks/services";
 import { getProjectWhere } from "@/utils/controllers/projects/getAllIncludes";
@@ -23,16 +21,6 @@ const handler: NextApiHandler = async (req, res) => {
     if (!Number.isInteger(currentUser?.id)) {
       return res.status(401).json({ message: "Unauthorized" });
     }
-    const actingAgent = resolveActingAgentFromCookies(req.cookies, req.body?.agentId);
-    if (!actingAgent.ok) {
-      return res.status(actingAgent.status).json({ message: actingAgent.message });
-    }
-    const fromAgent = actingAgent.agentId
-      ? await prisma.agent.findFirst({
-          where: { id: actingAgent.agentId, revokedAt: null },
-          select: actingAgentSelect,
-        })
-      : null;
 
     const task = await prisma.task.findFirst({
       where: {
@@ -93,7 +81,6 @@ const handler: NextApiHandler = async (req, res) => {
         data: {
           fromUserId: currentUser.id,
           fromUser: currentUser,
-          fromAgent,
           waitingOnDisplayName: waitingOnUser?.displayName ?? null,
         },
       },

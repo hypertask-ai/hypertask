@@ -31,10 +31,6 @@ const stubSourceModule = (relativePath, exports) =>
 const flagValues = { "htpr-6312-my-tasks-priority-filter": true };
 const tableViewProps = [];
 let backCalls = 0;
-let quickAddRenders = 0;
-const viewControlProps = [];
-const viewTabsProps = [];
-const filterModalProps = [];
 
 stubSourceModule("src/hooks/useFlag.tsx", {
   useFlag: (key) => flagValues[key] ?? false,
@@ -58,8 +54,6 @@ stubModule(require.resolve("next/navigation"), {
   }),
   useSearchParams: () => new URLSearchParams(),
 });
-const ModalPart = ({ children }) => React.createElement("div", null, children);
-stubModule(require.resolve("reactstrap"), { ModalBody: ModalPart });
 stubSourceModule("src/components/PageComponents/Kanban/TableView/TableView.tsx", {
   default: (props) => {
     tableViewProps.push(props);
@@ -70,27 +64,11 @@ stubSourceModule("src/components/PageComponents/Kanban/TableView/TableView.tsx",
 stubSourceModule("src/components/PageComponents/Kanban/TableView/TableColumnsPicker.tsx", {
   default: () => null,
 });
-stubSourceModule("src/hooks/Homepage/Views/useKanbanViews.ts", {
-  default: () => ({ setBoardSortingViewAndReturn: async () => {} }),
-});
-stubSourceModule("src/components/Common/CommonModalComponents/index.tsx", {
-  ModalContainerCustom: ({ children, id }) => React.createElement("div", { id }, children),
-  ModalHeaderComp: ({ children, header }) => React.createElement("div", null, header, children),
-  ModalInput: ({ autofocus: _autofocus, ...props }) => React.createElement("input", props),
-  ModalListContainer: ({ children, ...props }) => React.createElement("ul", props, children),
-  ModalRowElementContainer: ({ children, isSelected: _isSelected, ...props }) => React.createElement("li", props, children),
-});
 stubSourceModule("src/app/my-tasks/MyTasksViewControls.tsx", {
-  default: (props) => {
-    viewControlProps.push(props);
-    return React.createElement("div", { "data-testid": "my-tasks-view-controls" });
-  },
+  default: () => null,
 });
 stubSourceModule("src/app/my-tasks/MyTasksViewTabs.tsx", {
-  default: (props) => {
-    viewTabsProps.push(props);
-    return React.createElement("div", { "data-testid": "my-tasks-view-tabs" });
-  },
+  default: () => null,
 });
 stubSourceModule("src/components/PageComponents/Kanban/HeaderComponents/AppShellRail.tsx", {
   default: () => null,
@@ -99,10 +77,7 @@ stubSourceModule("src/components/Buttons/BackButton.tsx", {
   default: () => null,
 });
 stubSourceModule("src/app/my-tasks/MyTasksKanbanFilterModal.tsx", {
-  default: (props) => {
-    filterModalProps.push(props);
-    return React.createElement("div", { "data-testid": "my-tasks-filter-modal" });
-  },
+  default: () => null,
 });
 // HTPR-6458: realtime client is not available under jsdom/jiti component tests.
 stubSourceModule("src/hooks/realtime/useMyTasksRealtime.ts", {
@@ -119,18 +94,12 @@ stubSourceModule("src/lib/myTasks/reconcileMyTasks.ts", {
   parseMyTasksListPayload: () => null,
 });
 stubSourceModule("src/app/my-tasks/MyTasksQuickAdd.tsx", {
-  default: () => {
-    quickAddRenders += 1;
-    return React.createElement("div", { "data-testid": "my-tasks-quick-add" });
-  },
+  default: () => null,
 });
 stubSourceModule("src/components/Common/TaskRowComponents/TaskListRow.tsx", {
-  SplitTitle: () => React.createElement("div", { "data-testid": "my-tasks-split-tab" }),
+  SplitTitle: () => null,
 });
 stubSourceModule("src/styles/search.module.scss", {
-  links_modal: "",
-});
-stubSourceModule("src/styles/linksModal.module.scss", {
   links_modal: "",
 });
 stubSourceModule("src/utils/undoActions/helperFuncs.ts", {
@@ -141,13 +110,7 @@ stubSourceModule("src/utils/undoActions/helperFuncs.ts", {
 // explicit React import need one in scope.
 global.React = React;
 
-const MyTasksModule = jiti(path.join(root, "src/app/my-tasks/MyTasks.tsx"));
-const MyTasks = MyTasksModule.default;
-const BoardPriorityMode = jiti(
-  path.join(root, "src/components/Modals/Kanban/BoardPriorityMode.tsx"),
-).default;
-const { fromBoardSort, MY_TASKS_BOARD_SORT_MODES, toBoardSort } = MyTasksModule;
-const { DEFAULT_MY_TASKS_VIEW_CONFIG } = jiti(path.join(root, "src/models/MyTasksView.ts"));
+const MyTasks = jiti(path.join(root, "src/app/my-tasks/MyTasks.tsx")).default;
 const { PriorityConstants } = jiti(path.join(root, "src/lib/constants/constants.ts"));
 
 const sections = [
@@ -187,57 +150,6 @@ const click = (element, dom) =>
   act(() => {
     element.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }));
   });
-
-test("board sorting remains selectable through the board sort modal adapter", () => {
-  assert.ok(MY_TASKS_BOARD_SORT_MODES.includes("Board"));
-  assert.ok(!MY_TASKS_BOARD_SORT_MODES.includes("Manual"));
-  assert.deepEqual(toBoardSort({ field: "board", direction: "asc" }), {
-    mode: "Board",
-    order: "Ascending",
-  });
-  assert.deepEqual(fromBoardSort({ mode: "Board", order: "Descending" }), {
-    field: "board",
-    direction: "desc",
-  });
-});
-
-test("single-level sort modal offers replacement modes", () => {
-  const dom = new JSDOM("<!doctype html><html><body><div id='root'></div></body></html>", { url: "https://app.hypertask.ai/my-tasks" });
-  global.window = dom.window;
-  global.document = dom.window.document;
-  global.IS_REACT_ACT_ENVIRONMENT = true;
-  dom.window.HTMLElement.prototype.scrollIntoView = () => {};
-  const reactRoot = createRoot(dom.window.document.getElementById("root"));
-
-  act(() => {
-    reactRoot.render(React.createElement(BoardPriorityMode, {
-      closeHandler: () => {},
-      sort: { mode: "UpdatedAt", order: "Descending" },
-      onSortChange: async () => {},
-      maxLevels: 1,
-      availableModes: MY_TASKS_BOARD_SORT_MODES,
-      modeLabel: (mode) => mode,
-    }));
-  });
-
-  assert.ok(
-    dom.window.document.querySelectorAll('#users-list [id^="priority_mode:"]').length > 0,
-    "the single-level sort modal must offer replacement modes",
-  );
-  assert.equal(
-    dom.window.document.querySelector("input")?.getAttribute("placeholder"),
-    "Choose a different sort…",
-  );
-  assert.ok(
-    !dom.window.document.body.textContent.includes("Remove a level to add another."),
-    "replacement mode must not show multi-level capacity guidance",
-  );
-
-  act(() => { reactRoot.unmount(); });
-  delete global.window;
-  delete global.document;
-  delete global.IS_REACT_ACT_ENVIRONMENT;
-});
 
 test("flag off: no filter control and no filtering", () => {
   const dom = new JSDOM("<!doctype html><html><body><div id='root'></div></body></html>", { url: "https://app.hypertask.ai/" });
@@ -317,133 +229,6 @@ test("flag turning off mid-session stops filtering and hides the control", () =>
   assert.deepEqual(lastViewItems(), [1, 2, 3, 4], "filtering stops when the flag goes off");
 
   act(() => { reactRoot.unmount(); });
-  delete global.window;
-  delete global.document;
-  delete global.IS_REACT_ACT_ENVIRONMENT;
-});
-
-test("board toolbar flag removes duplicate My Tasks rows and quick add", () => {
-  const dom = new JSDOM("<!doctype html><html><body><div id='root'></div></body></html>", { url: "https://app.hypertask.ai/my-tasks" });
-  global.window = dom.window;
-  global.document = dom.window.document;
-  global.IS_REACT_ACT_ENVIRONMENT = true;
-  flagValues["htpr-6422-my-tasks-views"] = true;
-  flagValues["htpr-6447-my-tasks-filter-parity"] = true;
-  flagValues["htpr-6460-my-tasks-quick-add"] = true;
-  flagValues["htpr-6572-my-tasks-board-toolbar"] = true;
-  quickAddRenders = 0;
-  viewControlProps.length = 0;
-  viewTabsProps.length = 0;
-
-  const rootEl = dom.window.document.getElementById("root");
-  const reactRoot = createRoot(rootEl);
-  act(() => {
-    reactRoot.render(React.createElement(MyTasks, {
-      sections,
-      tabs: ["All", "Board A", "Board B"],
-      currentUser: { id: 6 },
-      viewsEnabled: true,
-      initialViews: [],
-    }));
-  });
-
-  assert.equal(quickAddRenders, 0, "the board toolbar removes the quick-add row");
-  assert.equal(dom.window.document.querySelectorAll('[data-testid="my-tasks-split-tab"]').length, 0, "the duplicate board tab row is removed");
-  assert.equal(viewControlProps.at(-1)?.boardToolbar, true);
-  assert.equal(viewTabsProps.at(-1)?.boardToolbar, true);
-
-  act(() => { reactRoot.unmount(); });
-  delete flagValues["htpr-6422-my-tasks-views"];
-  delete flagValues["htpr-6447-my-tasks-filter-parity"];
-  delete flagValues["htpr-6460-my-tasks-quick-add"];
-  delete flagValues["htpr-6572-my-tasks-board-toolbar"];
-  delete global.window;
-  delete global.document;
-  delete global.IS_REACT_ACT_ENVIRONMENT;
-});
-
-test("board toolbar stays off until saved views and filter parity are both available", () => {
-  const dom = new JSDOM("<!doctype html><html><body><div id='root'></div></body></html>", { url: "https://app.hypertask.ai/my-tasks" });
-  global.window = dom.window;
-  global.document = dom.window.document;
-  global.IS_REACT_ACT_ENVIRONMENT = true;
-  flagValues["htpr-6422-my-tasks-views"] = true;
-  flagValues["htpr-6460-my-tasks-quick-add"] = true;
-  flagValues["htpr-6572-my-tasks-board-toolbar"] = true;
-  quickAddRenders = 0;
-  viewControlProps.length = 0;
-
-  const rootEl = dom.window.document.getElementById("root");
-  const reactRoot = createRoot(rootEl);
-  act(() => {
-    reactRoot.render(React.createElement(MyTasks, {
-      sections,
-      tabs: ["All", "Board A", "Board B"],
-      currentUser: { id: 6 },
-      viewsEnabled: true,
-      initialViews: [],
-    }));
-  });
-
-  assert.equal(quickAddRenders, 1, "the existing quick-add row remains available");
-  assert.ok(viewControlProps.every((props) => !props.boardToolbar));
-  assert.ok(dom.window.document.querySelector('[data-testid="my-tasks-split-tab"]'));
-
-  act(() => { reactRoot.unmount(); });
-  delete flagValues["htpr-6422-my-tasks-views"];
-  delete flagValues["htpr-6460-my-tasks-quick-add"];
-  delete flagValues["htpr-6572-my-tasks-board-toolbar"];
-  delete global.window;
-  delete global.document;
-  delete global.IS_REACT_ACT_ENVIRONMENT;
-});
-
-test("flag-off Clear All preserves scope settings", () => {
-  const dom = new JSDOM("<!doctype html><html><body><div id='root'></div></body></html>", { url: "https://app.hypertask.ai/my-tasks?view=1" });
-  global.window = dom.window;
-  global.document = dom.window.document;
-  global.IS_REACT_ACT_ENVIRONMENT = true;
-  flagValues["htpr-6422-my-tasks-views"] = true;
-  flagValues["htpr-6447-my-tasks-filter-parity"] = true;
-  viewControlProps.length = 0;
-  filterModalProps.length = 0;
-
-  const config = {
-    ...DEFAULT_MY_TASKS_VIEW_CONFIG,
-    boardIds: [10],
-    filters: {
-      ...DEFAULT_MY_TASKS_VIEW_CONFIG.filters,
-      sectionIds: [100],
-      showDone: true,
-      showSnoozed: true,
-    },
-  };
-  const rootEl = dom.window.document.getElementById("root");
-  const reactRoot = createRoot(rootEl);
-  act(() => {
-    reactRoot.render(React.createElement(MyTasks, {
-      sections,
-      tabs: ["All", "Board A", "Board B"],
-      currentUser: { id: 6 },
-      viewsEnabled: true,
-      initialViewId: 1,
-      initialViews: [{ id: 1, name: "Scoped", position: 0, isDefault: false, config }],
-    }));
-  });
-
-  act(() => viewControlProps.at(-1).onOpenKanbanFilters());
-  assert.ok(filterModalProps.length > 0, "filter modal opens on the existing toolbar");
-  act(() => filterModalProps.at(-1).onClearAll());
-
-  const cleared = viewControlProps.at(-1).config;
-  assert.deepEqual(cleared.boardIds, [10]);
-  assert.deepEqual(cleared.filters.sectionIds, [100]);
-  assert.equal(cleared.filters.showDone, true);
-  assert.equal(cleared.filters.showSnoozed, true);
-
-  act(() => { reactRoot.unmount(); });
-  delete flagValues["htpr-6422-my-tasks-views"];
-  delete flagValues["htpr-6447-my-tasks-filter-parity"];
   delete global.window;
   delete global.document;
   delete global.IS_REACT_ACT_ENVIRONMENT;

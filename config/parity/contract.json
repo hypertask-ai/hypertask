@@ -246,7 +246,7 @@
       "id": "boards.manage",
       "title": "Create, archive, invite to, and configure boards",
       "matches": {
-        "api": ["^(POST|PATCH) /api/mcp/projects$", "^(POST|PATCH) /api/mcp/projects/archive$", "^PATCH /api/mcp/projects/\\[projectId\\]$", "^(GET|PUT|DELETE) /api/mcp/projects/\\[projectId\\]/instructions$", "^POST /api/mcp/projects/\\[projectId\\]/members$", "^POST /api/mcp/teams/\\[teamId\\]/boards$", "^PUT /api/mcp/projects/\\[projectId\\]/playbook$"],
+        "api": ["^(POST|PATCH) /api/mcp/projects$", "^(POST|PATCH) /api/mcp/projects/archive$", "^(GET|PUT|DELETE) /api/mcp/projects/\\[projectId\\]/instructions$", "^POST /api/mcp/projects/\\[projectId\\]/members$", "^POST /api/mcp/teams/\\[teamId\\]/boards$", "^PUT /api/mcp/projects/\\[projectId\\]/playbook$"],
         "mcp": ["^hypertask_(create_board|project_admin|board_config)$"],
         "cli": ["^project (create-board|archive|invite|instructions)( |$)"],
         "ai_chat": ["^hypertask_(create_board|project_admin|board_config)$"],

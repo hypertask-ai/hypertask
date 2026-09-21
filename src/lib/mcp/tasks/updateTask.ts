@@ -25,10 +25,7 @@ import {
     isAcceptedRichTextInput,
 } from "@/utils/helperFunctions/markdownToHtml";
 import { isFeatureEnabled } from "@/lib/flags";
-import {
-    HTPR_6516_AGENT_ATTRIBUTION_FLAG,
-    HTPR_6561_DESCRIPTION_STRUCTURE_FLAG,
-} from "@/lib/flags/keys";
+import { HTPR_6561_DESCRIPTION_STRUCTURE_FLAG } from "@/lib/flags/keys";
 import { buildFieldError } from "@/lib/mcp/fieldError";
 import { requireRole } from "@/lib/mcp/agents/scopes";
 import { assertAgentAssignmentChangeAllowed } from "@/lib/mcp/tasks/agentMutationFence";
@@ -1231,13 +1228,9 @@ export async function executeTaskUpdate({
     }
 
     // Fetch complete tasks with all relations for MCP response format
-    const attributionEnabled = await isFeatureEnabled(
-        HTPR_6516_AGENT_ATTRIBUTION_FLAG,
-        user.id,
-    )
     const updatedTasks = await prisma.task.findMany({
         where: { id: { in: updatedTaskIds } },
-        include: taskDetailInclude(user.id, attributionEnabled)
+        include: taskDetailInclude(user.id)
     })
 
     if (updatedTasks.length === 0) {
@@ -1254,9 +1247,7 @@ export async function executeTaskUpdate({
     // serverless request can finish before external CLI/MCP changes are emitted.
     await broadcastTaskUpdates(updatedTasks, user.id)
 
-    const mappedTasks = updatedTasks.map((task) =>
-        mapTaskToDetail(task, user.id, attributionEnabled)
-    )
+    const mappedTasks = updatedTasks.map((task) => mapTaskToDetail(task, user.id))
     
     let message = `${updatedTasks.length} task(s) updated successfully`
     if (failedTasks.length > 0) {

@@ -22,21 +22,12 @@ import {
 } from "@/lib/filterSettingsMutations";
 import type { IFilterSettings, TFilter, TMatchFilters } from "@/models/Filters/model";
 import type { CalendarLabelSummary, CalendarUserSummary } from "@/lib/calendarSync/contract";
-import {
-  normalizeMyTasksScopes,
-  type MyTasksScope,
-} from "@/lib/myTasksScopes";
 
 type MyTasksFilterContextValue = {
   settings: SerializableFilterSettings;
   activeFilters: IFilterSettings;
   members: CalendarUserSummary[];
   labels: CalendarLabelSummary[];
-  scopes: MyTasksScope[];
-  involvementEnabled: boolean;
-  scopePanel?: ReactNode;
-  scopeFilterCount: number;
-  setScopes: (scopes: MyTasksScope[]) => void;
   addFilter: (type: TFilter, value: { id?: unknown }) => void;
   overrideFilter: (type: TFilter, value: unknown) => void;
   removeFilter: (type: TFilter) => void;
@@ -60,11 +51,6 @@ type ProviderProps = {
   onClearAll?: () => void;
   members: CalendarUserSummary[];
   labels: CalendarLabelSummary[];
-  scopes: MyTasksScope[];
-  involvementEnabled: boolean;
-  scopePanel?: ReactNode;
-  scopeFilterCount?: number;
-  onScopesChange: (scopes: MyTasksScope[]) => void;
   children: ReactNode;
 };
 
@@ -74,11 +60,6 @@ export function MyTasksFilterProvider({
   onClearAll,
   members,
   labels,
-  scopes,
-  involvementEnabled,
-  scopePanel,
-  scopeFilterCount = 0,
-  onScopesChange,
   children,
 }: ProviderProps) {
   const resolved = settings ?? emptyFilterSettings();
@@ -94,11 +75,6 @@ export function MyTasksFilterProvider({
       activeFilters: toIFilterSettings(resolved),
       members,
       labels,
-      scopes: normalizeMyTasksScopes(scopes),
-      involvementEnabled,
-      scopePanel,
-      scopeFilterCount,
-      setScopes: (nextScopes) => onScopesChange(normalizeMyTasksScopes(nextScopes)),
       addFilter: (type, value) => update(addFilterValue(resolved, type, value)),
       overrideFilter: (type, value) =>
         update(overrideFilterValue(resolved, type, value)),
@@ -106,24 +82,12 @@ export function MyTasksFilterProvider({
       resetFilters: () => {
         if (onClearAll) onClearAll();
         else update(resetFilterSettings());
-        if (involvementEnabled) onScopesChange(["assigned"]);
       },
       toggleFilterMatchOptions: () => update(toggleMatchFilters(resolved)),
       toggleFilterValueMatch: (type, next) =>
         update(toggleFilterValueMatchMode(resolved, type, next)),
     }),
-    [
-      resolved,
-      members,
-      labels,
-      scopes,
-      involvementEnabled,
-      scopePanel,
-      scopeFilterCount,
-      onScopesChange,
-      update,
-      onClearAll,
-    ],
+    [resolved, members, labels, update, onClearAll],
   );
 
   return (

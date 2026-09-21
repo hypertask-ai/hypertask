@@ -9,7 +9,6 @@ export type TBoardSubtaskSetting = SubtaskSetting
 export const DEFAULT_SUBTASK_SETTING: TBoardSubtaskSetting = "Flattened_Card"
 export type TBoardEmptySections = EmptySections
 export const PERSONAL_EMPTY_SECTIONS_UPDATE_MODE = "personal-empty-sections" as const
-export const STAGED_EMPTY_SECTIONS_UPDATE_MODE = "staged-empty-sections" as const
 export const BOARD_EMPTY_SECTION_SETTINGS = Object.values(EmptySections) as EmptySections[]
 export const isBoardEmptySectionSetting = (value: unknown): value is EmptySections =>
     BOARD_EMPTY_SECTION_SETTINGS.includes(value as EmptySections)
@@ -109,5 +108,4 @@ export type TBodyAPIUnsaved = {
     table_sort_column?: string | null;
     table_sort_direction?: string | null;
     board_layout?: TSavedBoardLayout | null;
-    updateMode?: typeof STAGED_EMPTY_SECTIONS_UPDATE_MODE;
 }

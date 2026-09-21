@@ -1,4 +1,3 @@
-import { chatStore } from "@/utils/controllers/chat";
 import prisma from "@/lib/prisma";
 import { getSessionUser } from "@/lib/auth/getSessionUser";
 import { NextRequest, NextResponse } from "next/server";
@@ -73,7 +72,7 @@ export async function PATCH(
     await ensureChatParticipant(access.session.id, userId);
     const where = { sessionId_userId: { sessionId: access.session.id, userId } };
     if (hasDraft) {
-      await chatStore().participants.update({
+      await prisma.chatSessionParticipant.update({
         where,
         data: { draft: nextDraft },
         select: { id: true },
@@ -85,7 +84,7 @@ export async function PATCH(
       // the order they were stamped in, and the older one would otherwise drag
       // the marker back and resurrect messages this person has read.
       const now = new Date();
-      await chatStore().participants.updateMany({
+      await prisma.chatSessionParticipant.updateMany({
         where: {
           sessionId: access.session.id,
           userId,
@@ -94,7 +93,7 @@ export async function PATCH(
         data: { lastReadAt: now },
       });
     }
-    const participant = await chatStore().participants.findUnique({
+    const participant = await prisma.chatSessionParticipant.findUnique({
       where,
       select: { draft: true, lastReadAt: true },
     });

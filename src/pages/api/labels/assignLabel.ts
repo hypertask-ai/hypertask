@@ -2,8 +2,6 @@
 
 import type { NextApiRequest, NextApiResponse } from 'next'
 import prisma from "@/lib/prisma";
-import { actingAgentSelect } from '@/lib/agents/activityAttribution';
-import { resolveActingAgentFromCookies } from '@/lib/auth/resolveActingAgent';
 import createLabelActivity from '@/utils/controllers/activities/createLabelActivity';
 import { broadcastBoardChange, broadcastTaskChange } from '@/lib/realtime/server';
 import {
@@ -34,16 +32,6 @@ export default  async function handler(
     const {taskId,  labelId} = req.body;
     if (!taskId || !labelId ) return res.status(400).json({message:"Missing Required Information"})
     const userObj = JSON.parse(req.cookies.nookies_user!)
-    const actingAgent = resolveActingAgentFromCookies(req.cookies, req.body?.agentId)
-    if (!actingAgent.ok) {
-      return res.status(actingAgent.status).json({ message: actingAgent.message })
-    }
-    const fromAgent = actingAgent.agentId
-      ? await prisma.agent.findFirst({
-          where: { id: actingAgent.agentId, revokedAt: null },
-          select: actingAgentSelect,
-        })
-      : null
     const { projectId, taskLabels, agentWebhookDeliveryIds } =
       await prisma.$transaction(async (tx) => {
       const lockedTasks = await tx.$queryRaw<Array<{ projectId: number }>>`
@@ -101,7 +89,6 @@ export default  async function handler(
             toTaskLabel: labelAssigned as any,
             taskId,
             status: "Assigned",
-            fromAgent,
             transaction: tx,
           });
         } else {
@@ -111,7 +98,6 @@ export default  async function handler(
             toTaskLabel: labelToCheck as any,
             taskId,
             status: "Removed",
-            fromAgent,
             transaction: tx,
           });
         }

@@ -1,8 +1,3 @@
-import {
-  createProjectLabel,
-  findProjectLabelByName,
-  listProjectLabelOptions,
-} from "@/utils/controllers/labels";
 import { NextRequest, NextResponse } from 'next/server'
 import { validateMcpAuth, createUnauthorizedResponse, checkMcpRateLimit } from '@/lib/mcp/auth'
 import prisma from '@/lib/prisma'
@@ -53,7 +48,11 @@ export async function GET(request: NextRequest, props: { params: Promise<{ proje
       )
     }
 
-    const labels = await listProjectLabelOptions(projectId)
+    const labels = await prisma.label.findMany({
+      where: { projectId },
+      select: { id: true, value: true },
+      orderBy: { value: 'asc' },
+    })
     const mapped = labels.map((label) => ({ id: label.id, name: label.value || '' }))
     const listQueryEnabled = await isFeatureEnabled(HTPR_6530_MCP_LIST_QUERY_FLAG, user.id)
     const parsedListQuery = readEnabledListQuery(
@@ -170,7 +169,12 @@ export async function POST(request: NextRequest, props: { params: Promise<{ proj
       )
     }
 
-    const existing = await findProjectLabelByName(projectId, trimmedName)
+    const existing = await prisma.label.findFirst({
+      where: {
+        projectId,
+        value: trimmedName,
+      },
+    })
 
     if (existing) {
       return NextResponse.json(
@@ -183,7 +187,12 @@ export async function POST(request: NextRequest, props: { params: Promise<{ proj
       )
     }
 
-    const label = await createProjectLabel(projectId, trimmedName)
+    const label = await prisma.label.create({
+      data: {
+        value: trimmedName,
+        projectId,
+      },
+    })
 
     void broadcastBoardChange(projectId, { originUserId: user.id })
 

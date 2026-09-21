@@ -1,4 +1,3 @@
-import { chatStore } from "@/utils/controllers/chat";
 import prisma from "@/lib/prisma";
 import { isValidUser } from "@/utils/edgeHelpers";
 import { cookies } from "next/headers";
@@ -24,7 +23,7 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
     const { sessionId, title } = body;
 
-    const existingSession = await chatStore().sessions.findFirst({
+    const existingSession = await prisma.chatSession.findFirst({
       where: {
         id: sessionId,
         userId: user.id,
@@ -41,7 +40,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const session = await chatStore().sessions.update({
+    const session = await prisma.chatSession.update({
       where: { id: sessionId },
       data: {
         title,

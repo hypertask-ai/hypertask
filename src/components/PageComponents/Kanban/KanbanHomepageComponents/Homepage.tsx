@@ -1,5 +1,5 @@
 /* eslint-disable react-hooks/exhaustive-deps */
-import React, { useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
+import React, { useCallback, useContext, useMemo, useRef, useState } from "react";
 import { useRecoilValue } from "@/lib/state";
 import { useStore } from "jotai";
 import Section, { LARGE_BOARD_PROGRESSIVE_RENDER_THRESHOLD } from "../KanbanSectionComponents/section";
@@ -40,7 +40,6 @@ import { TBoardSortingViewMode } from "@/models/Views/model";
 import { useDeviceContext } from "@/lib/contexts/deviceContext";
 import BoardEmptyState from "./BoardEmptyState";
 import { detectEmptyBoardState } from "@/utils/helperFunctions/Views/BoardEmptyStateHelper";
-import { shouldHoldEmptySectionsAutoShowAttempt } from "@/utils/helperFunctions/Views/EmptySectionsHelperFunction";
 import { getAppliedSearchedTasks } from "@/utils/helperFunctions/Views/SearchFilterHelperFunction";
 import { boardSearchAtom } from "@/store";
 import { useGetArchivedTasksOnBoard } from "@/hooks/Homepage/useGetArchivedTasksOnBoard";
@@ -220,9 +219,7 @@ const HomePage = ({
   const { archiveNotificationGetter } = useGlobalFocusHandler()
   const { currentSetting } = useSubTask()
   const queryClient = useQueryClient();
-  const { setBoardColumnsViewAPI, saveEmptySectionsAPI } = useKanbanViews(_currentProject);
-  const autoShowingEmptySections = useRef<number | null>(null);
-  const autoShowingEmptySectionsView = useRef<string | null>(null);
+  const { setBoardColumnsViewAPI } = useKanbanViews(_currentProject);
   useBoardRealtime(_currentProject?.id, {
     accountId: currentUser.id,
   });
@@ -849,40 +846,9 @@ const HomePage = ({
   const tasksHydrated = Array.isArray(_currentProject?.tasks)
   const isEmptyBoard = tasksHydrated && sectionsToDisplay.length === 0
 
-  const emptyStateDetection = tasksHydrated
+  const emptyStateDetection = isEmptyBoard
     ? detectEmptyBoardState(_sections, filteredSections, _currentProject)
     : null;
-  const boardHasTasks = _sections.some(
-    (section) => (section.items?.length ?? 0) > 0
-  );
-  const emptySectionsViewId =
-    _currentProject.project_view?.user_project_views[0]?.appliedView?.id ??
-    _currentProject.project_view?.default_view?.id ??
-    "unsaved";
-
-  useEffect(() => {
-    if (autoShowingEmptySectionsView.current !== emptySectionsViewId) {
-      autoShowingEmptySections.current = null;
-      autoShowingEmptySectionsView.current = emptySectionsViewId;
-    }
-    if (shouldHoldEmptySectionsAutoShowAttempt({
-      attemptedBoardId: autoShowingEmptySections.current,
-      attemptedViewId: autoShowingEmptySectionsView.current,
-      boardHasTasks,
-      cause: emptyStateDetection?.cause ?? null,
-      currentBoardId: _currentProject.id,
-      currentViewId: emptySectionsViewId,
-    })) return;
-
-    if (emptyStateDetection?.cause !== "empty_sections_hidden") {
-      autoShowingEmptySections.current = null;
-      return;
-    }
-    if (autoShowingEmptySections.current === _currentProject.id) return;
-
-    autoShowingEmptySections.current = _currentProject.id;
-    void saveEmptySectionsAPI(_currentProject, "Show");
-  }, [emptyStateDetection?.cause, _currentProject]);
 
   const renderSections = (archivedTasks?: ITask[]) =>
     displaySections && displaySections.map((sec, index) => (

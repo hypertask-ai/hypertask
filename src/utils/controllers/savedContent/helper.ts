@@ -1,17 +1,4 @@
 import prisma from "@/lib/prisma";
-
-export const savedCommentInclude = (attributionEnabled: boolean) => ({
-  ...(attributionEnabled
-    ? {}
-    : { omit: { agentId: true, agentDisplayName: true } }),
-  include: {
-    creator: true,
-    ...(attributionEnabled
-      ? { agent: { select: { id: true, displayName: true, photoURL: true } } }
-      : {}),
-  },
-});
-
 export const includeSavedContentComment = (
   userId: number,
   comment: boolean = true

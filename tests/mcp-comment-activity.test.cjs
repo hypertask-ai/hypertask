@@ -65,21 +65,25 @@ test('include_activity=true drops the DbNull filter and passes through the MCP c
   )
 })
 
-test('comment agent identities keep the acting bot on the ticket', () => {
+test('comment agent identities are filtered for the task board', () => {
   assert.match(routeSource, /select: mcpVisibleAgentSelect\(userId, projectId\)/)
-  assert.match(routeSource, /mapAttributedMcpAgent\(comment\.agent\)/)
+  assert.match(
+    routeSource,
+    /mapVisibleMcpAgent\(comment\.agent, userId, projectId\)/
+  )
+  assert.match(routeSource, /!comment\.agent \? !comment\.agentDisplayName/)
   assert.match(routeSource, /isFeatureEnabled\(\s*HTPR_6516_AGENT_ATTRIBUTION_FLAG/)
   assert.match(routeSource, /overlayDurableAgentDisplayName\(/)
   assert.match(
     routeSource,
-    /mapCommentToResponse\( comment, user\.id, task\.projectId, includeActivity, attributionEnabled \)/
+    /mapCommentToResponse\(comment, user\.id, task\.projectId, includeActivity\)/
   )
 })
 
 test('activity serialization preserves TaskLabel status and label payload', () => {
   assert.match(
     routeSource,
-    /if \(!includeActivity\) return mappedComment return withActivityMetadata\(mappedComment, comment\.activity, attributionEnabled\)/
+    /if \(!includeActivity\) return mappedComment return withActivityMetadata\(mappedComment, comment\.activity\)/
   )
 
   const activity = {
@@ -87,7 +91,6 @@ test('activity serialization preserves TaskLabel status and label payload', () =
     status: 'Removed',
     data: {
       fromUser: { id: 6, displayName: 'Valentin' },
-      fromAgent: { id: 'agent-1', displayName: 'Dev 1' },
       toLabel: { label: { id: 75, value: 'Recovery' } },
     },
   }
@@ -101,11 +104,6 @@ test('activity serialization preserves TaskLabel status and label payload', () =
   assert.equal(serialized.activity.status, 'Removed')
   assert.equal(serialized.activity.data.toLabel.label.value, 'Recovery')
   assert.equal(serialized.activity.data.fromUser.displayName, 'Valentin')
-  assert.equal(serialized.activity.data.fromAgent, undefined)
-  assert.equal(
-    withActivityMetadata({ id: 5107 }, activity, true).activity.data.fromAgent.displayName,
-    'Dev 1'
-  )
 
   const comment = withActivityMetadata({ id: 5108, text: '<p>Done</p>' }, null)
   assert.equal(comment.type, 'comment')

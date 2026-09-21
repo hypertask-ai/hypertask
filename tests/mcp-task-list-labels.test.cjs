@@ -24,8 +24,6 @@ function loadMappers() {
 
   const stubs = {
     "@/lib/mcp/agents": {
-      mapAttributedMcpAgent: (agent) =>
-        agent ? { id: agent.id, displayName: agent.displayName } : undefined,
       mapVisibleMcpAgent: (agent, userId, projectId) =>
         agent &&
         (agent.userId === userId ||
@@ -33,7 +31,6 @@ function loadMappers() {
             agent.members.some((member) => member.projectId === projectId)))
           ? { id: agent.id, displayName: agent.displayName }
           : undefined,
-      mcpAgentSelect: { id: true, displayName: true, photoURL: true },
       mcpVisibleAgentSelect: () => ({}),
     },
     "@/lib/agents/visibility": {
@@ -87,7 +84,7 @@ test("task list counts only assignees visible to the task board", () => {
   assert.match(routeSource, /assigneeCount:\s*assignees\.length/);
   assert.match(
     routeSource,
-    /mapTaskAssignee\([\s\S]*?assignee,[\s\S]*?user\.id,[\s\S]*?task\.projectId,[\s\S]*?attributionEnabled/,
+    /mapTaskAssignee\(assignee, user\.id, task\.projectId\)/,
   );
 });
 
@@ -127,7 +124,7 @@ test("list and detail labels share the exact id/name mapping", () => {
   assert.deepEqual(Object.keys(listLabels[0]).sort(), ["id", "name"]);
 });
 
-test("task responses name the bot already on the ticket, even when it is private", () => {
+test("task responses redact agents that are not visible to the viewer", () => {
   const { mapTaskToMcpGetResponse, taskDetailInclude } = loadMappers();
   const agent = {
     id: "private-agent",
@@ -160,14 +157,38 @@ test("task responses name the bot already on the ticket, even when it is private
     updatedAt: new Date("2026-08-07T00:00:00.000Z"),
   };
 
-  const teammate = mapTaskToMcpGetResponse(task, 6, true);
-  assert.equal(teammate.agent.id, agent.id);
-  assert.equal(teammate.assignees[0].displayName, "Private helper");
-  assert.equal(teammate.assignees[0].agentAssigner.id, agent.id);
-  assert.equal(teammate.assignees[0].id, undefined);
-  assert.equal(teammate.assignees[0].email, undefined);
-  assert.equal(taskDetailInclude(6, true).assignees.where, undefined);
-  assert.ok(taskDetailInclude(6, false).assignees.where);
+  const hidden = mapTaskToMcpGetResponse(task, 6);
+  assert.equal(hidden.agent, undefined);
+  assert.deepEqual(hidden.assignees, []);
+
+  const owner = mapTaskToMcpGetResponse(task, 9);
+  assert.equal(owner.agent.id, agent.id);
+  assert.equal(owner.assignees[0].agentAssigner.id, agent.id);
+
+  assert.equal(
+    mapTaskToMcpGetResponse(
+      { ...task, agent: { ...agent, visibility: "TEAM", members: [] } },
+      6,
+    ).agent,
+    undefined,
+  );
+  assert.equal(
+    mapTaskToMcpGetResponse(
+      { ...task, agent: { ...agent, visibility: "TEAM", members: [{ projectId: 15 }] } },
+      6,
+    ).agent.id,
+    agent.id,
+  );
+  assert.equal(
+    mapTaskToMcpGetResponse(
+      { ...task, agent: { ...agent, visibility: "TEAM", members: [{ projectId: 99 }] } },
+      6,
+    ).agent,
+    undefined,
+  );
+  assert.deepEqual(taskDetailInclude(6).assignees.where, {
+    OR: [{ agentId: null }, { agent: { userId: 6 } }],
+  });
 });
 
 test("task responses expose the permanent-delete deadline", () => {

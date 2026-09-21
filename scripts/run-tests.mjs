@@ -66,10 +66,7 @@ const isolatedCjsTests = new Set([
   "tests/management-key-route-wiring.test.cjs",
   "tests/mcp-usage-auth.test.cjs",
   "tests/mcp-usage-route.test.cjs",
-  "tests/mobile-ai-first-create-task.test.cjs",
   "tests/oauth-authorize-session-identity.test.cjs",
-  "tests/strix-file-tickets.test.cjs",
-  "tests/strix-weekly.test.cjs",
 ]);
 
 console.log(

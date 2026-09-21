@@ -1,15 +1,11 @@
 // route = "/api/projects/views/update-view"
 import prisma from "@/lib/prisma";
-import {
-  HTPR_6588_EMPTY_COLUMNS_SAVE_VIEW_FLAG,
-  isFeatureEnabled,
-} from "@/lib/flags";
 import { broadcastBoardChange } from "@/lib/realtime/server";
 import {
   isBoardEmptySectionSetting,
   PERSONAL_EMPTY_SECTIONS_UPDATE_MODE,
 } from "@/models/Views/model";
-import getProjectView from "@/utils/controllers/views";
+import getProjectView from "@/utils/controllers/projects/views/viewsHelperAPIfunctions";
 import { sanitizeBoardFilters } from "@/utils/helperFunctions/Views/BoardFilterSanitizer";
 import { sanitizeBoardLayout, sanitizeTableSort } from "@/utils/helperFunctions/Views/ViewsHelperFunctions";
 import {
@@ -17,7 +13,7 @@ import {
   ManagedSmartSplitMutationError,
   MissingBoardFilterLabelError,
   withBoardFilterWriteLock,
-} from "@/utils/controllers/views";
+} from "@/utils/controllers/projects/views/boardFilterWriteLock";
 import { Prisma } from "@prisma/client";
 import { NextApiHandler, NextApiRequest, NextApiResponse } from "next";
 
@@ -134,10 +130,6 @@ const handler: NextApiHandler = async (
         broadcastBoardChange(projectId, { originUserId: currentUser.id });
         return res.status(200).json({ viewId, board_layout: boardLayout });
       }
-      const emptyColumnsSaveViewEnabled = await isFeatureEnabled(
-        HTPR_6588_EMPTY_COLUMNS_SAVE_VIEW_FLAG,
-        currentUser.id,
-      );
       const projectView = await prisma.project_View.upsert({
         create: {
           // ... data to create a User_Project_View
@@ -180,7 +172,6 @@ const handler: NextApiHandler = async (
                 : { board_sorting_stack: view_settings.board_sorting_stack ?? [] }),
               board_subtask_setting: view_settings.board_subtask_setting,
               board_empty_sections: view_settings.board_empty_sections,
-              board_empty_sections_staged: false,
               board_staleness: view_settings.board_staleness ?? null,
               // Same reason as the sorting stack: a filter-only save omits this field, and
               // defaulting to null would wipe a view's saved "show archived" choice.
@@ -214,12 +205,6 @@ const handler: NextApiHandler = async (
           },
         },
       });
-      if (emptyColumnsSaveViewEnabled) {
-        await prisma.view_Last_Used.updateMany({
-          where: { userId: currentUser.id, viewId },
-          data: { board_empty_sections: null },
-        });
-      }
 
       const updatedUserProjectView = await prisma.user_Project_View.upsert({
         create: {

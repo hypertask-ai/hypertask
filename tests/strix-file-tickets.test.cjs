@@ -14,7 +14,7 @@ async function runFiler(t, verdicts, options = {}) {
   const run = join(root, 'run')
   const app = join(root, 'app')
   const bin = join(root, 'bin')
-  const capture = join(root, 'cli-args')
+  const capture = join(root, 'ssh-input')
   const requests = []
   t.after(() => rm(root, { force: true, recursive: true }))
   await mkdir(run)
@@ -41,12 +41,9 @@ async function runFiler(t, verdicts, options = {}) {
       },
     ]),
   )
-  const bot = join(bin, 'htbot')
-  await writeFile(bot, '#!/usr/bin/python3\nimport json,os,sys\nopen(os.environ["CLI_CAPTURE"],"w").write(json.dumps(sys.argv[1:]))\nprint(json.dumps(dict(success=True)))\n')
-  await chmod(bot, 0o755)
-  const ripgrep = join(bin, 'rg')
-  await writeFile(ripgrep, '#!/bin/sh\nprintf \'%s\\n\' "$STRIX_APP/src/example.ts"\n')
-  await chmod(ripgrep, 0o755)
+  const ssh = join(bin, 'ssh')
+  await writeFile(ssh, '#!/bin/bash\ncat > "$SSH_CAPTURE"\nprintf 200\n')
+  await chmod(ssh, 0o755)
 
   const replies = [...verdicts]
   const server = createServer((req, res) => {
@@ -71,17 +68,15 @@ async function runFiler(t, verdicts, options = {}) {
     env: {
       ...process.env,
       HOME: root,
+      HYPERTASKS_JWT_TOKEN: 'test-token',
       PATH: `${bin}:/usr/bin:/bin`,
-      CLI_CAPTURE: capture,
+      SSH_CAPTURE: capture,
       STRIX_APP: app,
       STRIX_CONFIRM_API_BASE: `http://127.0.0.1:${port}/v1`,
       STRIX_CONFIRM_API_KEY: 'test-key',
       STRIX_CONFIRM_MODEL: 'test-model',
       STRIX_FILED_STATE: join(root, 'filed.json'),
     },
-  }).catch((error) => {
-    if (!options.expectFailure) throw error
-    return { stdout: error.stdout, stderr: error.stderr, code: error.code }
   })
   return { ...result, capture, requests }
 }
@@ -98,16 +93,14 @@ test('Strix filer creates a ticket only after two confirmations', async (t) => {
     assert.match(request.messages[0].content, /Do not trust the finding's conclusion/)
   }
 
-  const args = JSON.parse(await readFile(result.capture, 'utf8'))
-  const value = (flag) => args[args.indexOf(flag) + 1]
-  assert.equal(value('--section'), '4389')
-  assert.equal(value('--priority'), 'urgent')
-  assert.equal(args.includes('--assignee'), false)
-  assert.equal(args.includes('--token'), false)
-  assert.ok(value('--title').length <= 80)
-  assert.match(value('--description'), /<strong>What went wrong<\/strong>/)
-  assert.match(value('--description'), /<strong>What changes<\/strong>/)
-  assert.match(value('--description'), /<strong>Done when<\/strong>/)
+  const remote = await readFile(result.capture, 'utf8')
+  const payload = JSON.parse(remote.match(/JSONEOF'\n(\{.*\})\nJSONEOF/s)[1])
+  assert.equal(payload.sectionId, 4389)
+  assert.equal(payload.assignee, undefined)
+  assert.ok(payload.title.length <= 80)
+  assert.match(payload.description, /<strong>What went wrong<\/strong>/)
+  assert.match(payload.description, /<strong>What changes<\/strong>/)
+  assert.match(payload.description, /<strong>Done when<\/strong>/)
 })
 
 test('Strix filer rejects a finding when either confirmation disagrees', async (t) => {
@@ -120,11 +113,9 @@ test('Strix filer rejects a finding when either confirmation disagrees', async (
 
 test('Strix filer rejects findings without readable current source', async (t) => {
   const result = await runFiler(t, ['confirmed', 'confirmed'], {
-    expectFailure: true,
     codeLocations: [{ file: 'src/missing.ts', snippet: 'scanner-provided evidence' }],
   })
 
-  assert.notEqual(result.code, 0)
   assert.match(result.stdout, /skip \(confirmation failed\):/)
   assert.match(result.stdout, /no readable current-source evidence/)
   assert.equal(result.requests.length, 0)

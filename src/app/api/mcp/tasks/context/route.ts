@@ -14,11 +14,7 @@ import {
   taskMcpGetInclude,
 } from '@/lib/mcp/tasks/mappers';
 import { findTaskByIdentifier } from '@/lib/mcp/tasks/resolveTask';
-import {
-  mapAttributedMcpAgent,
-  mapVisibleMcpAgent,
-  mcpVisibleAgentSelect,
-} from '@/lib/mcp/agents';
+import { mapVisibleMcpAgent, mcpVisibleAgentSelect } from '@/lib/mcp/agents';
 import { resolvePublicAgentDisplayName } from '@/lib/agents/publicAgent';
 import { HTPR_6516_AGENT_ATTRIBUTION_FLAG, isFeatureEnabled } from '@/lib/flags';
 import { getProjectWhere } from '@/utils/controllers/projects/getAllIncludes';
@@ -136,6 +132,7 @@ export async function GET(request: NextRequest) {
     const commentLimit = summary
       ? SUMMARY_COMMENT_LIMIT
       : FULL_COMMENT_LIMIT;
+
     const [task, commentCount, recentComments, prComments, relations] =
       await Promise.all([
         prisma.task.findFirst({
@@ -145,7 +142,7 @@ export async function GET(request: NextRequest) {
             status: { not: 'Deleted' },
           },
           include: {
-            ...taskMcpGetInclude(ctx.user.id, true),
+            ...taskMcpGetInclude(ctx.user.id),
             pullRequests: {
               orderBy: { createdAt: 'asc' },
               select: {
@@ -230,19 +227,13 @@ export async function GET(request: NextRequest) {
       );
     }
 
+    const mappedTask = mapTaskToMcpGetResponse(task, ctx.user.id);
     const attributionEnabled = await isFeatureEnabled(
       HTPR_6516_AGENT_ATTRIBUTION_FLAG,
       ctx.user.id
     );
-    const mappedTask = mapTaskToMcpGetResponse(
-      task,
-      ctx.user.id,
-      attributionEnabled,
-    );
     const comments = recentComments.reverse().map((comment) => {
-      const agent = attributionEnabled
-        ? mapAttributedMcpAgent(comment.agent)
-        : mapVisibleMcpAgent(comment.agent, ctx.user.id, projectId);
+      const agent = mapVisibleMcpAgent(comment.agent, ctx.user.id, projectId);
       const hasAgentAttribution = Boolean(comment.agent || comment.agentDisplayName);
       const agentDisplayName = resolvePublicAgentDisplayName({
         hasAgentRow: Boolean(comment.agent),

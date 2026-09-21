@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { validateMcpAuth, checkMcpRateLimit } from "@/lib/mcp/auth";
-import { deleteView, updateView } from "@/utils/controllers/views";
+import { deleteView, updateView } from "@/lib/mcp/views/services";
 import prisma from "@/lib/prisma";
 import {
   SortingMode,

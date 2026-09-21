@@ -49,7 +49,6 @@ export const AGENT_VISIBILITY_FLAG = "htpr-6268-agent-visibility";
 export const HTPR_4228_ADMIN_ONLY_TIME_REPORTS_FLAG =
   "htpr-4228-admin-only-time-reports";
 export const HTPR_4857_ADD_TO_SLACK_FLAG = "htpr-4857-add-to-slack";
-export const NATIVE_REPORTS_ENABLED = "htpr-5815-native-reports";
 export const MY_TASKS_CROSS_BOARD_PRIORITY_SORT_FLAG =
   "htpr-6215-my-tasks-cross-board-priority-sort";
 export const HTPR_6407_MOBILE_AGENT_CHAT_LAYOUT_FLAG =
@@ -78,8 +77,6 @@ export const HTPR_6516_AGENT_ATTRIBUTION_FLAG =
   "htpr-6516-agent-attribution";
 export const HTPR_6512_SEED_TEAM_AGENT_FLAG = "htpr-6512-seed-team-agent";
 export const HTPR_6533_MCP_CLIENT_EVAL_FLAG = "htpr-6533-mcp-client-eval";
-export const HTPR_4638_AI_DIRECTORY_METADATA_FLAG =
-  "htpr-4638-ai-directory-metadata";
 export const HTPR_6532_STATELESS_MCP_FLAG = "htpr-6532-stateless-mcp";
 export const HTPR_6530_MCP_LIST_QUERY_FLAG = "htpr-6530-mcp-list-query";
 export const HTPR_6531_DEFERRED_MCP_TOOLS_FLAG = "htpr-6531-deferred-mcp-tools";
@@ -102,14 +99,6 @@ export const HTPR_6561_DESCRIPTION_STRUCTURE_FLAG =
   "htpr-6561-preserve-ai-edited-description-structure";
 export const HTPR_6542_TEAM_SCOPED_MANAGEMENT_KEYS_FLAG =
   "htpr-6542-team-scoped-management-keys";
-export const HTPR_6588_EMPTY_COLUMNS_SAVE_VIEW_FLAG =
-  "htpr-6588-empty-columns-save-view";
-export const HTPR_6585_BOARD_REPORTS_FLAG =
-  "htpr-6585-board-reports";
-export const HTPR_6572_MY_TASKS_BOARD_TOOLBAR_FLAG =
-  "htpr-6572-my-tasks-board-toolbar";
-export const HTPR_6587_PROJECT_UPDATE_FLAG =
-  "htpr-6587-project-update";
 /** Sent on chat.message when HTPR-6407 is on so agent replies lead with the next action. */
 export const AGENT_CHAT_ADHD_REPLY_GUIDANCE =
   "Lead with the next action. Keep replies short. Number steps. End with one concrete next action when something remains open.";

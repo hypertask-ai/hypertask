@@ -1,14 +1,7 @@
-import {
-  createProjectLabel,
-  findProjectLabelByName,
-  labelStore,
-} from "@/utils/controllers/labels";
 // Next.js API route support: https://nextjs.org/docs/api-routes/introduction
 
 import type { NextApiRequest, NextApiResponse } from 'next'
 import prisma from "@/lib/prisma";
-import { actingAgentSelect } from '@/lib/agents/activityAttribution';
-import { resolveActingAgentFromCookies } from '@/lib/auth/resolveActingAgent';
 import createLabelActivity from '@/utils/controllers/activities/createLabelActivity';
 import { broadcastBoardChange } from '@/lib/realtime/server';
 import { scheduleBackfillAiLabel } from '@/lib/ai/labelClassifier';
@@ -43,16 +36,6 @@ export default  async function handler(
       if (aiPrompt) return res.status(403).json({ message: "Forbidden" });
       throw error;
     }
-    const actingAgent = resolveActingAgentFromCookies(req.cookies, req.body?.agentId);
-    if (!actingAgent.ok) {
-      return res.status(actingAgent.status).json({ message: actingAgent.message });
-    }
-    const fromAgent = actingAgent.agentId
-      ? await prisma.agent.findFirst({
-          where: { id: actingAgent.agentId, revokedAt: null },
-          select: actingAgentSelect,
-        })
-      : null;
     // Smart labels run an LLM classification pass on every task in the
     // project (cost), so require project membership before setting one.
     if (aiPrompt) {
@@ -67,13 +50,26 @@ export default  async function handler(
 
 
     // check if same projectid and value exists
-    const check = await findProjectLabelByName(projectId, value)
+    const check = await prisma.label.findFirst({
+        where:{
+            AND:[
+                {projectId:projectId},
+                {value:value}
+            ]
+        }
+    })
     if (check) return res.status(400).json({message:"Duplicate found"})
     
     // ---------- create label
 
     if (CreateLabelAndReturn){
-        const createdLabel = await createProjectLabel(projectId, value, aiPrompt)
+        const createdLabel= await prisma.label.create({
+            data:{
+                value:value,
+                projectId:projectId,
+                ai_prompt: aiPrompt,
+            }
+        })
         if (aiPrompt) scheduleBackfillAiLabel(createdLabel.id)
         void broadcastBoardChange(projectId, { originUserId: userObj.id })
         return res.status(200).json(createdLabel)
@@ -105,7 +101,7 @@ export default  async function handler(
           where: { taskId },
           select: { label: { select: { id: true, value: true } } },
         });
-        const createdLabel = await labelStore(tx).create({
+        const createdLabel = await tx.label.create({
           data: {
             value: value,
             projectId: projectId,
@@ -138,7 +134,6 @@ export default  async function handler(
           toTaskLabel: labelToCheck as any,
           taskId,
           status: "Created",
-          fromAgent,
           transaction: tx,
         });
         const agentWebhookDeliveryIds = await persistAgentTaskUpdatedWebhook(tx, {

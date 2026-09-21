@@ -19,7 +19,6 @@ import { INBOX_ARCHIVE_CLUSTER_FLAG } from "@/lib/flags/keys";
 import { useFlag } from "@/hooks/useFlag";
 import { decodeAgentMessage } from "@/lib/nativeAgent/agentMessageEnvelope";
 import type { ArchiveShortcutSource } from "@/lib/notifications/archiveShortcutNudge";
-import { useHydrated } from "@/hooks/General/useHydrated";
 
 interface Props {
     markAsDone: (notification: INotification, index: number, mode: TRemoveFromInboxMode) => Promise<boolean | void>,
@@ -191,7 +190,6 @@ function extractMentionSnippet(html: string, userId: string): string | null {
 
 export const NotificationContent = () => {
     const { notification, isIbxSlctd } = useNotificationContext();
-    const hydrated = useHydrated();
     const flipMentionHierarchy = notification.type === "Mentioned" && Boolean(notification.commentId) && Boolean(notification.task);
     const dueDate = notification.task?.dueDate ? new Date(notification.task.dueDate) : null;
     const formattedDueDate = dueDate
@@ -215,10 +213,9 @@ export const NotificationContent = () => {
                 style={{
                     fontSize: 13 }}
             >
-                {notification.type === "Comment"
-                    ? hydrated
-                        ? renderCommentPreview(notification.comment?.text ?? "")
-                        : ""
+                {typeof window !== "undefined" &&
+                    notification.type === "Comment"
+                    ? renderCommentPreview(notification.comment?.text ?? "")
                     : notification.type === "Assigned"
                         ? "Assigned to you"
                         : notification.type === "TaskArchived"

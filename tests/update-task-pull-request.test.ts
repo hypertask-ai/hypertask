@@ -80,7 +80,6 @@ async function main() {
   const prismaMock = prisma as any
   const originalTaskFindMany = prismaMock.task.findMany
   const originalUserFindUnique = prismaMock.user.findUnique
-  const originalFeatureFlagFindUnique = prismaMock.featureFlag.findUnique
   const request = new NextRequest(
     'http://localhost/api/mcp/tasks/update',
     { method: 'POST' }
@@ -144,7 +143,6 @@ async function main() {
       displayName: 'Valentin',
       photoURL: null,
     })
-    prismaMock.featureFlag.findUnique = async () => ({ mode: 'OFF' })
 
     const dryRun = await executeTaskUpdate({
       request,
@@ -198,7 +196,6 @@ async function main() {
   } finally {
     prismaMock.task.findMany = originalTaskFindMany
     prismaMock.user.findUnique = originalUserFindUnique
-    prismaMock.featureFlag.findUnique = originalFeatureFlagFindUnique
   }
 }
 

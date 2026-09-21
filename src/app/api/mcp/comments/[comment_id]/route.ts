@@ -1,11 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { validateMcpAuth, checkMcpRateLimit } from '@/lib/mcp/auth'
 import type { McpAgentSummary } from '@/lib/mcp/agents'
-import {
-  mapAttributedMcpAgent,
-  mapVisibleMcpAgent,
-  mcpVisibleAgentSelect,
-} from '@/lib/mcp/agents'
+import { mapVisibleMcpAgent, mcpVisibleAgentSelect } from '@/lib/mcp/agents'
 import { resolvePublicAgentDisplayName } from '@/lib/agents/publicAgent'
 import {
   HTPR_6516_AGENT_ATTRIBUTION_FLAG,
@@ -327,19 +323,17 @@ export async function PATCH(request: NextRequest, props: { params: Promise<{ com
         },
       },
     })
+    const agent = mapVisibleMcpAgent(
+      commentWithAgent?.agent,
+      user.id,
+      comment.task.projectId
+    )
+    const hasAgentAttribution = Boolean(
+      commentWithAgent?.agent || commentWithAgent?.agentDisplayName
+    )
     const attributionEnabled = await isFeatureEnabled(
       HTPR_6516_AGENT_ATTRIBUTION_FLAG,
       user.id
-    )
-    const agent = attributionEnabled
-      ? mapAttributedMcpAgent(commentWithAgent?.agent)
-      : mapVisibleMcpAgent(
-          commentWithAgent?.agent,
-          user.id,
-          comment.task.projectId
-        )
-    const hasAgentAttribution = Boolean(
-      commentWithAgent?.agent || commentWithAgent?.agentDisplayName
     )
 
     const response: UpdateCommentResponse = {

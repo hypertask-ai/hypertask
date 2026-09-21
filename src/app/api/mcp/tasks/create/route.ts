@@ -12,10 +12,7 @@ import { buildFieldError } from '@/lib/mcp/fieldError';
 import { requireRole } from '@/lib/mcp/agents/scopes';
 import { readJsonBody } from '@/lib/mcp/readJsonBody';
 import { isFeatureEnabled } from '@/lib/flags';
-import {
-    HTPR_6516_AGENT_ATTRIBUTION_FLAG,
-    HTPR_6561_DESCRIPTION_STRUCTURE_FLAG,
-} from '@/lib/flags/keys';
+import { HTPR_6561_DESCRIPTION_STRUCTURE_FLAG } from '@/lib/flags/keys';
 import { isAcceptedRichTextInput } from '@/utils/helperFunctions/markdownToHtml';
 
 export interface CreateTaskResponse {
@@ -227,10 +224,6 @@ export async function POST(request: NextRequest) {
             );
         }
 
-        const attributionEnabled = await isFeatureEnabled(
-            HTPR_6516_AGENT_ATTRIBUTION_FLAG,
-            user.id,
-        );
         const response = await withIdempotency(
             'create_task',
             user.id,
@@ -260,7 +253,7 @@ export async function POST(request: NextRequest) {
 
                 return {
                     success: true,
-                    task: mapTaskToDetail(task, user.id, attributionEnabled),
+                    task: mapTaskToDetail(task, user.id),
                     message: 'Task created successfully',
                     ...(sessionAgent ? { agent: sessionAgent } : {}),
                 };

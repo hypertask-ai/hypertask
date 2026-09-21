@@ -8,7 +8,7 @@ import {
   TBoardSortingViewOrder,
   TBoardSubtaskSetting,
 } from "@/models/Views/model";
-import { deepCopy, getFromLocalStorage, isDeepEqual } from "@/utils/helperFunctions/helperFunctions";
+import { deepCopy, getFromLocalStorage } from "@/utils/helperFunctions/helperFunctions";
 import axios from "axios";
 import { defaultFilterSettings, getFilteredSections } from "./FilterHelperFunctions";
 import sortByStringParam from "@/utils/sortByParam";
@@ -352,39 +352,6 @@ export const getActiveFiltersFromProject = (project?:IProject|null):IFilterSetti
     return deepCopy(unsaved??applied??defaultView??defaultFilterSettings)
 }
 
-export const stageBoardFiltersInProjectView = (
-    projectView: IProjectView,
-    filters: IFilterSettings,
-): IProjectView => {
-    const row = projectView.user_project_views[0]
-    const activeView = row?.unsavedView ?? row?.appliedView ?? projectView.default_view
-    if (!row || !activeView) return projectView
-
-    const unsavedView = {
-        ...activeView,
-        board_filters: deepCopy(filters),
-    }
-
-    return {
-        ...projectView,
-        user_project_views: [
-            {
-                ...row,
-                unsavedView,
-                unsavedViewId: unsavedView.id,
-            },
-            ...projectView.user_project_views.slice(1),
-        ],
-    }
-}
-
-export const preservePendingBoardFilters = (
-    projectView: IProjectView,
-    pendingFilters?: IFilterSettings,
-): IProjectView => pendingFilters
-    ? stageBoardFiltersInProjectView(projectView, pendingFilters)
-    : projectView
-
 export const getActiveSubtaskSettingFromProject = (project?:IProject|null):TBoardSubtaskSetting=>{
   const view = project?.project_view?.user_project_views[0]
   if (!project || !view) return DEFAULT_SUBTASK_SETTING
@@ -437,17 +404,12 @@ export const getActiveEmptySectionSettingFromProjectView = (
         .map(personalEmptySectionSetting)
         .find((setting) => setting !== undefined)
     : undefined
+  // Saved-view preferences intentionally outrank stale legacy unsaved values; callers only
+  // persist to an unsaved view when the board has no applied or default saved view.
   const unsaved = row?.unsavedView?.board_empty_sections
   const applied = row?.appliedView?.board_empty_sections
   const defaultView = projectView?.default_view?.board_empty_sections
-  // Only an explicit staged toggle outranks the old personal preference. Ordinary
-  // unsaved view changes keep the legacy precedence until the feature is used.
-  return deepCopy(
-    projectView?.board_empty_sections_staging_enabled &&
-    row?.unsavedView?.board_empty_sections_staged
-      ? unsaved ?? personal ?? applied ?? defaultView ?? "Show"
-      : personal ?? unsaved ?? applied ?? defaultView ?? "Show"
-  )
+  return deepCopy(personal ?? unsaved ?? applied ?? defaultView ?? "Show")
 }
 
 export const getActiveEmptySectionSettingFromProject = (project?:IProject|null):TBoardEmptySections=>
@@ -456,7 +418,7 @@ export const getActiveEmptySectionSettingFromProject = (project?:IProject|null):
 const patchPersonalEmptySectionSetting = (
   view: IView | undefined,
   viewId: string,
-  setting: TBoardEmptySections | null,
+  setting: TBoardEmptySections,
 ): IView | undefined => {
   if (!view || view.id !== viewId) return view
   const existing = view.ViewLastUsed?.[0]
@@ -469,159 +431,34 @@ const patchPersonalEmptySectionSetting = (
   } as IView
 }
 
-const patchProjectViewPersonalEmptySections = (
-  projectView: IProjectView,
-  viewId: string,
-  setting: TBoardEmptySections | null,
-): IProjectView => ({
-  ...projectView,
-  allViews: projectView.allViews?.map((view) =>
-    patchPersonalEmptySectionSetting(view, viewId, setting)!
-  ),
-  default_view: patchPersonalEmptySectionSetting(
-    projectView.default_view,
-    viewId,
-    setting,
-  ),
-  user_project_views: projectView.user_project_views.map((row) => ({
-    ...row,
-    appliedView: patchPersonalEmptySectionSetting(
-      row.appliedView,
-      viewId,
-      setting,
-    ),
-  })),
-})
-
-export const clearProjectViewPersonalEmptySections = (
-  projectView: IProjectView,
-  viewId: string,
-): IProjectView => patchProjectViewPersonalEmptySections(projectView, viewId, null)
-
-const comparableViewSettings = (
-  view: IView,
-  boardEmptySections = view.board_empty_sections,
-) => ({
-  board_columns_view: view.board_columns_view,
-  board_filters: view.board_filters,
-  board_sorting_mode: view.board_sorting_mode,
-  board_sorting_order: view.board_sorting_order,
-  board_sorting_stack: view.board_sorting_stack ?? [],
-  board_subtask_setting: view.board_subtask_setting,
-  board_empty_sections: boardEmptySections,
-  board_staleness: view.board_staleness ?? null,
-  board_show_archived: view.board_show_archived ?? null,
-  table_sort_column: view.table_sort_column ?? null,
-  table_sort_direction: view.table_sort_direction ?? null,
-  board_layout: view.board_layout ?? null,
-})
-
-export type TDisabledStagedEmptySectionsNormalization = {
-  projectView: IProjectView
-  unsavedViewId?: string
-  stagedOnly: boolean
-  restoredSetting?: TBoardEmptySections
-}
-
-export const normalizeDisabledStagedEmptySections = (
-  projectView: IProjectView,
-): TDisabledStagedEmptySectionsNormalization => {
-  const row = projectView.user_project_views[0]
-  const unsavedView = row?.unsavedView
-  const baseView = row?.appliedView ?? projectView.default_view
-  if (!unsavedView?.board_empty_sections_staged || !baseView) {
-    return { projectView, stagedOnly: false }
-  }
-
-  const restoredSetting =
-    personalEmptySectionSetting(baseView) ??
-    baseView.board_empty_sections ??
-    "Show"
-  const normalizedUnsaved = {
-    ...unsavedView,
-    board_empty_sections: restoredSetting,
-    board_empty_sections_staged: false,
-  }
-  const stagedOnly = isDeepEqual(
-    comparableViewSettings(normalizedUnsaved),
-    comparableViewSettings(baseView, restoredSetting),
-  )
-  const unsavedViewId = unsavedView.id
-
-  return {
-    unsavedViewId,
-    stagedOnly,
-    restoredSetting,
-    projectView: {
-      ...projectView,
-      board_empty_sections_staging_enabled: false,
-      allViews: projectView.allViews
-        ?.filter((view) => !stagedOnly || view.id !== unsavedViewId)
-        .map((view) =>
-          !stagedOnly && view.id === unsavedViewId
-            ? normalizedUnsaved
-            : view
-        ),
-      user_project_views: projectView.user_project_views.map((entry, index) =>
-        index === 0
-          ? {
-              ...entry,
-              unsavedViewId: stagedOnly ? undefined : unsavedViewId,
-              unsavedView: stagedOnly ? undefined : normalizedUnsaved,
-            }
-          : entry
-      ),
-    },
-  }
-}
-
-export const maskPersonalEmptySectionsForUnsavedView = (
-  projectView: IProjectView,
-  stagingEnabled: boolean,
-): IProjectView => {
-  const withFlag = {
-    ...projectView,
-    board_empty_sections_staging_enabled: stagingEnabled,
-  }
-  const row = withFlag.user_project_views[0]
-  if (!row?.unsavedView?.board_empty_sections_staged) return withFlag
-  if (!stagingEnabled) {
-    return normalizeDisabledStagedEmptySections(withFlag).projectView
-  }
-  const baseView = row.appliedView ?? withFlag.default_view
-  return baseView
-    ? clearProjectViewPersonalEmptySections(withFlag, baseView.id)
-    : withFlag
-}
-
 export const patchProjectViewEmptySections = (
   projectView: IProjectView,
   setting: TBoardEmptySections,
   viewId?: string,
-  staged = false,
 ): IProjectView => {
-  const activeRow = projectView.user_project_views[0]
-  if (staged && activeRow?.unsavedView) {
+  if (viewId) {
     return {
       ...projectView,
-      user_project_views: projectView.user_project_views.map((row, index) =>
-        index === 0
-          ? {
-              ...row,
-              unsavedView: {
-                ...row.unsavedView!,
-                board_empty_sections: setting,
-                board_empty_sections_staged: true,
-              },
-            }
-          : row
+      allViews: projectView.allViews?.map((view) =>
+        patchPersonalEmptySectionSetting(view, viewId, setting)!
       ),
+      default_view: patchPersonalEmptySectionSetting(
+        projectView.default_view,
+        viewId,
+        setting,
+      ),
+      user_project_views: projectView.user_project_views.map((row) => ({
+        ...row,
+        appliedView: patchPersonalEmptySectionSetting(
+          row.appliedView,
+          viewId,
+          setting,
+        ),
+      })),
     }
   }
-  if (viewId) {
-    return patchProjectViewPersonalEmptySections(projectView, viewId, setting)
-  }
 
+  const activeRow = projectView.user_project_views[0]
   if (activeRow?.unsavedView) {
     return {
       ...projectView,
@@ -654,21 +491,18 @@ export type TPendingEmptySectionMutation = {
   id: number
   setting: TBoardEmptySections
   viewId?: string
-  staged?: boolean
 }
 
 export type TEmptySectionMutationState = {
   baseline: TBoardEmptySections
   viewId?: string
-  staged?: boolean
   pending: TPendingEmptySectionMutation[]
 }
 
 const emptySectionMutationSetting = (
   projectView: IProjectView,
   viewId?: string,
-  staged?: boolean,
-) => viewId && !staged
+) => viewId
   ? getEmptySectionSettingForView(projectView, viewId)
   : getActiveEmptySectionSettingFromProjectView(projectView)
 
@@ -677,28 +511,19 @@ export const beginEmptySectionMutation = (
   projectView: IProjectView,
   mutation: TPendingEmptySectionMutation,
 ): { state: TEmptySectionMutationState; projectView: IProjectView } => {
-  if (
-    state &&
-    (state.viewId !== mutation.viewId || state.staged !== mutation.staged)
-  ) {
+  if (state && state.viewId !== mutation.viewId) {
     throw new Error("Empty-section mutation state belongs to another view")
   }
   return {
     state: {
-      baseline: state?.baseline ?? emptySectionMutationSetting(
-        projectView,
-        mutation.viewId,
-        mutation.staged,
-      ),
+      baseline: state?.baseline ?? emptySectionMutationSetting(projectView, mutation.viewId),
       viewId: mutation.viewId,
-      staged: mutation.staged,
       pending: [...(state?.pending ?? []), mutation],
     },
     projectView: patchProjectViewEmptySections(
       projectView,
       mutation.setting,
       mutation.viewId,
-      mutation.staged,
     ),
   }
 }
@@ -711,27 +536,17 @@ export const settleEmptySectionMutation = (
 ): { state?: TEmptySectionMutationState; projectView: IProjectView } => {
   const pending = state.pending.filter((mutation) => mutation.id !== mutationId)
   const baseline = succeeded
-    ? emptySectionMutationSetting(
-        authoritativeView,
-        state.viewId,
-        state.staged,
-      )
+    ? emptySectionMutationSetting(authoritativeView, state.viewId)
     : state.baseline
   const latest = pending[pending.length - 1]
 
   if (latest) {
     return {
-      state: {
-        baseline,
-        viewId: state.viewId,
-        staged: state.staged,
-        pending,
-      },
+      state: { baseline, viewId: state.viewId, pending },
       projectView: patchProjectViewEmptySections(
         authoritativeView,
         latest.setting,
         state.viewId,
-        state.staged,
       ),
     }
   }
@@ -743,7 +558,6 @@ export const settleEmptySectionMutation = (
           authoritativeView,
           baseline,
           state.viewId,
-          state.staged,
         ),
   }
 }

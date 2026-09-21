@@ -1,5 +1,4 @@
 import {
-    mapAttributedMcpAgent,
     mapVisibleMcpAgent,
     mcpVisibleAgentSelect,
 } from '@/lib/mcp/agents';
@@ -26,25 +25,8 @@ export function mapTaskAssignee(a: {
     user: { id: number; email: string; displayName: string | null };
     agent?: Parameters<typeof mapVisibleMcpAgent>[0];
     agentAssigner?: Parameters<typeof mapVisibleMcpAgent>[0];
-}, userId: number, projectId: number, attributionEnabled = false): McpTaskAssignee | undefined {
+}, userId: number, projectId: number): McpTaskAssignee | undefined {
     const agent = mapVisibleMcpAgent(a.agent, userId, projectId);
-    if (attributionEnabled) {
-        const attributedAgent = mapAttributedMcpAgent(a.agent);
-        const attributedAssigner = mapAttributedMcpAgent(a.agentAssigner);
-        if (attributedAgent) {
-            return {
-                displayName: attributedAgent.displayName,
-                agent: attributedAgent,
-                ...(attributedAssigner ? { agentAssigner: attributedAssigner } : {}),
-            };
-        }
-        return {
-            id: a.user.id,
-            email: a.user.email,
-            displayName: a.user.displayName || undefined,
-            ...(attributedAssigner ? { agentAssigner: attributedAssigner } : {}),
-        };
-    }
     if (a.agent && !agent) return undefined;
 
     const mapped: McpTaskAssignee = {
@@ -66,7 +48,6 @@ export function mapTaskCreatedBy(
     agent: Parameters<typeof mapVisibleMcpAgent>[0],
     userId: number,
     projectId: number,
-    attributionEnabled = false,
 ): NonNullable<TaskDetail['createdBy']> | undefined {
     if (!user) return undefined;
     const createdBy: NonNullable<TaskDetail['createdBy']> = {
@@ -75,12 +56,6 @@ export function mapTaskCreatedBy(
         displayName: user.displayName || undefined,
     };
     const visibleAgent = mapVisibleMcpAgent(agent, userId, projectId);
-    if (attributionEnabled) {
-        const attributedAgent = mapAttributedMcpAgent(agent);
-        return attributedAgent
-            ? { displayName: attributedAgent.displayName, agent: attributedAgent }
-            : createdBy;
-    }
     if (visibleAgent) createdBy.agent = visibleAgent;
     return createdBy;
 }
@@ -99,7 +74,7 @@ export function mapMcpTaskLabel(taskLabel: {
     };
 }
 
-export function taskDetailInclude(userId: number, attributionEnabled = false) {
+export function taskDetailInclude(userId: number) {
     return {
     project: {
         select: {
@@ -122,7 +97,6 @@ export function taskDetailInclude(userId: number, attributionEnabled = false) {
                 { agent: accessibleAgentWhere(userId) },
             ],
         },
-        ...(attributionEnabled ? { where: undefined } : {}),
         include: {
             user: {
                 select: {
@@ -193,9 +167,9 @@ export function taskDetailInclude(userId: number, attributionEnabled = false) {
 }
 
 /** GET /api/mcp/tasks single-task lookup (includes hierarchy fields). */
-export function taskMcpGetInclude(userId: number, attributionEnabled = false) {
+export function taskMcpGetInclude(userId: number) {
     return {
-    ...taskDetailInclude(userId, attributionEnabled),
+    ...taskDetailInclude(userId),
     attachments: {
         select: {
             id: true,
@@ -234,11 +208,7 @@ export function taskMcpGetInclude(userId: number, attributionEnabled = false) {
     };
 }
 
-export function mapTaskToMcpGetResponse(
-    task: any,
-    userId: number,
-    attributionEnabled = false,
-) {
+export function mapTaskToMcpGetResponse(task: any, userId: number) {
     const subTasks = Array.isArray(task.subTasks)
         ? task.subTasks.map(
               (st: {
@@ -300,7 +270,7 @@ export function mapTaskToMcpGetResponse(
         verifyCommand: task.verifyCommand || undefined,
         assignees: (task.assignees ?? [])
             .map((assignee: any) =>
-                mapTaskAssignee(assignee, userId, task.projectId, attributionEnabled)
+                mapTaskAssignee(assignee, userId, task.projectId)
             )
             .filter((assignee: McpTaskAssignee | undefined): assignee is McpTaskAssignee =>
                 Boolean(assignee)
@@ -355,37 +325,19 @@ export function mapTaskToMcpGetResponse(
         }),
         createdBy: mapTaskCreatedBy(task.user, task.agent, userId, task.projectId),
     };
-    if (attributionEnabled) {
-        mapped.createdBy = mapTaskCreatedBy(
-            task.user,
-            task.agent,
-            userId,
-            task.projectId,
-            true,
-        );
-    }
 
-    const agent = attributionEnabled
-        ? mapAttributedMcpAgent(task.agent)
-        : mapVisibleMcpAgent(task.agent, userId, task.projectId);
+    const agent = mapVisibleMcpAgent(task.agent, userId, task.projectId);
     // Count the already-filtered, visibility-checked assignee list so the
     // number always matches what the response actually lists (HTPR-6279).
-    // With attribution enabled, the mapper includes agent-only rows instead.
     const withAssigneeCount = { ...mapped, assigneeCount: mapped.assignees.length };
     return agent ? { ...withAssigneeCount, agent } : withAssigneeCount;
 }
 
-export function mapTaskToDetail(
-    task: any,
-    userId: number,
-    attributionEnabled = false,
-): TaskDetail {
+export function mapTaskToDetail(task: any, userId: number): TaskDetail {
     const descriptionContent = mapTaskDescriptionContent(task);
-    const taskAgent = attributionEnabled
-        ? mapAttributedMcpAgent(task.agent)
-        : mapVisibleMcpAgent(task.agent, userId, task.projectId);
+    const taskAgent = mapVisibleMcpAgent(task.agent, userId, task.projectId);
 
-    const mapped: TaskDetail = {
+    return {
         id: task.id,
         ticketNumber: task.ticketNumber || undefined,
         title: task.title,
@@ -414,7 +366,7 @@ export function mapTaskToDetail(
         verifyCommand: task.verifyCommand || undefined,
         assignees: task.assignees
             ?.map((assignee: any) =>
-                mapTaskAssignee(assignee, userId, task.projectId, attributionEnabled)
+                mapTaskAssignee(assignee, userId, task.projectId)
             )
             .filter((assignee: McpTaskAssignee | undefined): assignee is McpTaskAssignee =>
                 Boolean(assignee)
@@ -463,14 +415,4 @@ export function mapTaskToDetail(
         createdBy: mapTaskCreatedBy(task.user, task.agent, userId, task.projectId),
         ...(taskAgent ? { agent: taskAgent } : {}),
     };
-    if (attributionEnabled) {
-        mapped.createdBy = mapTaskCreatedBy(
-            task.user,
-            task.agent,
-            userId,
-            task.projectId,
-            true,
-        );
-    }
-    return mapped;
 }

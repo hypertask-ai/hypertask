@@ -41,14 +41,11 @@ test("attachment thumbnails use comment surface tokens in every theme", () => {
   }
 });
 
-test("attachment thumbnails inherit the comment card border", () => {
-  const tileRule = attachmentStyles.match(
-    /\.attachment-tile\.bg-comment-description\s*\{(?<declarations>[\s\S]*?)> \.bg-comment-description/,
+test("attachment thumbnails opt out of nested comment card chrome", () => {
+  assert.match(
+    attachmentStyles,
+    /\.attachment-tile\.bg-comment-description\s*\{[\s\S]*?border:\s*1px solid var\(--color-border-comment-description\) !important;[\s\S]*?border-radius:\s*5px !important;[\s\S]*?box-shadow:\s*none !important;/,
   );
-  assert.ok(tileRule, "missing attachment tile rule");
-  assert.doesNotMatch(tileRule.groups.declarations, /\bborder\s*:/);
-  assert.match(tileRule.groups.declarations, /border-radius:\s*5px !important;/);
-  assert.match(tileRule.groups.declarations, /box-shadow:\s*none !important;/);
   assert.match(
     attachmentStyles,
     /> \.bg-comment-description\s*\{[\s\S]*?border:\s*0 !important;[\s\S]*?border-radius:\s*4px !important;[\s\S]*?box-shadow:\s*none !important;/,

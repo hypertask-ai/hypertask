@@ -478,10 +478,9 @@ test('creating a duplicate live agent name returns 409 with recovery details', (
     path.join(root, 'src/lib/mcp/agents/create.ts'),
     'utf8'
   )
-  const guardStart = source.indexOf('const existingAgent =')
   const guard = source.slice(
-    guardStart,
-    source.indexOf('\n\n  const result =', guardStart)
+    source.indexOf('const existingAgent ='),
+    source.indexOf('if (\n    body.role')
   )
 
   assert.match(

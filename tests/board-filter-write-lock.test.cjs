@@ -96,7 +96,7 @@ test("a filter write locks the board and validates labels before persisting", as
 
 test("native view creation uses the validating board-filter write helper", () => {
   const source = require("node:fs").readFileSync(
-    require("node:path").join(root, "src/utils/controllers/views/index.ts"),
+    require("node:path").join(root, "src/lib/mcp/views/services.ts"),
     "utf8",
   );
   const createView = source.slice(source.indexOf("export async function createView"), source.indexOf("export type UpdateViewInput"));
@@ -173,7 +173,7 @@ test("every concurrent existing-board filter writer participates in the lock pro
     2,
   );
   assert.equal(
-    (source("src/utils/controllers/views/index.ts").match(/withBoardFilterWriteLock\(/g) ?? []).length,
+    (source("src/lib/mcp/views/services.ts").match(/withBoardFilterWriteLock\(/g) ?? []).length,
     1,
   );
   assert.equal(
@@ -185,7 +185,7 @@ test("every concurrent existing-board filter writer participates in the lock pro
     1,
   );
   assert.equal(
-    (source("src/utils/controllers/views/index.ts").match(/assertViewIsNotManagedSmartSplit\(/g) ?? []).length,
+    (source("src/lib/mcp/views/services.ts").match(/assertViewIsNotManagedSmartSplit\(/g) ?? []).length,
     2,
   );
   assert.equal(

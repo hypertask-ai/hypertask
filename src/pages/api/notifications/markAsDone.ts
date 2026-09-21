@@ -1,4 +1,3 @@
-import { notificationStore } from "@/utils/controllers/notifications";
 import { NextApiHandler, NextApiRequest, NextApiResponse } from "next";
 
 import prisma from "@/lib/prisma";
@@ -42,7 +41,7 @@ const handler: NextApiHandler = async (req: NextApiRequest, res: NextApiResponse
              if (parsedTaskId === null) {
                 return res.status(400).json({ message: "taskId is required when no notification id is provided" });
              }
-             const updatedCount= await notificationStore().updateMany({
+             const updatedCount= await prisma.notification.updateMany({
                 where:{
                   taskId:parsedTaskId,
                   userId,
@@ -61,7 +60,7 @@ const handler: NextApiHandler = async (req: NextApiRequest, res: NextApiResponse
 
           // ----------------------------------------------------------------------------------------------------------------------------------
             // ================== archiving from [INBOX PAGE]
-            const notification_ = await notificationStore().findUnique({
+            const notification_ = await prisma.notification.findUnique({
               where:{
                 id:parseInt(id as string),
 
@@ -84,7 +83,7 @@ const handler: NextApiHandler = async (req: NextApiRequest, res: NextApiResponse
             if (tutorial === "1") {
               const tutorialNotification =
                 notification_.projectId !== null && notification_.taskId !== null
-                  ? await notificationStore().findFirst({
+                  ? await prisma.notification.findFirst({
                       where: {
                         fromAgentId: null,
                         fromUserId: userId,
@@ -116,7 +115,7 @@ const handler: NextApiHandler = async (req: NextApiRequest, res: NextApiResponse
               ) {
                 return res.status(409).json({ message: "Tutorial notification is not active" });
               }
-              const updatedNotification = await notificationStore().update({
+              const updatedNotification = await prisma.notification.update({
                 where: { id: notification_.id },
                 data: { status: "Archive", archivedAt: timeNow },
               });
@@ -131,7 +130,7 @@ const handler: NextApiHandler = async (req: NextApiRequest, res: NextApiResponse
             // =================== archive all of that task and that userid. 
             if (notification_?.status==="Normal"){
               if (notification_.type==="Invited"){
-                const updatedNotification = await notificationStore().update({where:{id:notification_.id}, data:{status:"Archive",archivedAt:timeNow}})
+                const updatedNotification = await prisma.notification.update({where:{id:notification_.id}, data:{status:"Archive",archivedAt:timeNow}})
                 void broadcastInboxChange(updatedNotification.userId, { originUserId: updatedNotification.userId }, excludeSocketId);
                 return res.status(200).json(updatedNotification);
 
@@ -144,7 +143,7 @@ const handler: NextApiHandler = async (req: NextApiRequest, res: NextApiResponse
               // Deleted. The undo path restores every notification sharing that timestamp, so
               // Ctrl+Z brings back what the archive removed; a hard delete made undo lossy.
               if (parsedTaskId !== null) {
-                await notificationStore().updateMany({
+                await prisma.notification.updateMany({
                   where:{
                     id:{not:notification_.id},
                     taskId:parsedTaskId,
@@ -157,7 +156,7 @@ const handler: NextApiHandler = async (req: NextApiRequest, res: NextApiResponse
                   }
                 })
               }
-              const updatedNotifiction = await notificationStore().update({where:{id:notification_.id},data:{status:"Archive", archivedAt:timeNow}})
+              const updatedNotifiction = await prisma.notification.update({where:{id:notification_.id},data:{status:"Archive", archivedAt:timeNow}})
               void broadcastInboxChange(notification_.userId, { originUserId: notification_.userId }, excludeSocketId);
               return res.status(200).json(updatedNotifiction);
 
@@ -166,7 +165,7 @@ const handler: NextApiHandler = async (req: NextApiRequest, res: NextApiResponse
 
             // =================== unarchive only single.
             else if (notification_?.status==="Archive"){
-              const onlySingleNotificationUpdate = await notificationStore().update({
+              const onlySingleNotificationUpdate = await prisma.notification.update({
                 where:{
                   id:notification_?.id
                 },
@@ -183,7 +182,7 @@ const handler: NextApiHandler = async (req: NextApiRequest, res: NextApiResponse
                 notification_.archivedAt !== null &&
                 notification_.archivedAt !== undefined
               ) {
-                await notificationStore().updateMany({
+                await prisma.notification.updateMany({
                   where:{
                     id:{not:notification_.id},
                     taskId:parsedTaskId,

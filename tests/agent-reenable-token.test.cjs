@@ -38,10 +38,10 @@ test("re-enabling an agent rotates its credential and reveals it once", () => {
     /Authorization: `Bearer \$\{reenabledCredential\.token\}`/,
   );
 
-  const listController = read("src/utils/controllers/agents/index.ts");
-  assert.match(listController, /hasMcpToken:[\s\S]*?Boolean\(mcpTokenJti\)/);
+  const listRoute = read("src/app/api/agents/route.ts");
+  assert.match(listRoute, /hasMcpToken:[\s\S]*?Boolean\(mcpTokenJti\)/);
   // HTPR-4671: no plaintext credential exists to leak into the list response.
-  assert.doesNotMatch(listController, /\bmcpToken\b\s*:/);
+  assert.doesNotMatch(listRoute, /\bmcpToken\b\s*:/);
 });
 
 test("disabling still revokes the token", () => {

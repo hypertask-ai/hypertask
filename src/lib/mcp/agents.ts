@@ -60,11 +60,6 @@ export function mapVisibleMcpAgent(
     : undefined;
 }
 
-/** Public identity of an agent that already acted on a ticket the viewer can see. */
-export function mapAttributedMcpAgent(agent: AgentRow): McpAgentSummary | undefined {
-  return mapMcpAgent(agent);
-}
-
 export async function getMcpSessionAgentSummary(
   agentId: string | null,
   userId: number

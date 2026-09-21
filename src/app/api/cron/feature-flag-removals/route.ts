@@ -1,4 +1,3 @@
-import { labelStore } from "@/utils/controllers/labels";
 import { NextRequest, NextResponse } from "next/server";
 
 import prisma from "@/lib/prisma";
@@ -138,7 +137,7 @@ async function sweep() {
   if (!project?.uniqueIdentifier || !section) {
     return NextResponse.json({ error: "removal destination is not configured" }, { status: 500 });
   }
-  const label = await labelStore().findFirst({
+  const label = await prisma.label.findFirst({
     where: { projectId: REMOVAL_PROJECT_ID, value: REMOVAL_LABEL_VALUE },
     select: { id: true },
   });

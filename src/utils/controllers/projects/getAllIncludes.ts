@@ -8,24 +8,43 @@ export type GetAllIncludesOptions = {
   userId: number;
   userDbId: number;
   currentUserId?: number;
-  attributionEnabled?: boolean;
 };
 
 const humanProjectAccessBranches = (
   userId: number,
   agentId?: string | null,
 ): Prisma.ProjectWhereInput[] => {
-  if (agentId) return [];
+  if (!agentId) {
+    return [
+      { ownerId: userId },
+      { members: { some: { userId, agentId: null } } },
+    ];
+  }
 
+  const activeAgent = { id: agentId, userId, revokedAt: null };
   return [
-    { ownerId: userId },
-    { members: { some: { userId, agentId: null } } },
+    {
+      owner: {
+        id: userId,
+        agents: { some: activeAgent },
+      },
+    },
+    {
+      members: {
+        some: {
+          userId,
+          agentId: null,
+          user: { agents: { some: activeAgent } },
+        },
+      },
+    },
   ];
 };
 
 // Authorization for reading task content from a specific board. Unlike
-// getProjectWhere this intentionally permits legacy teamless boards. Agent
-// callers remain limited to boards where that exact active agent is a member.
+// getProjectWhere this intentionally permits legacy teamless boards. A
+// delegate keeps its connecting human's owner/member scope and may additionally
+// access boards where that owned, active agent is a member.
 export const projectContentAccessWhere = (
   userId: number,
   agentId?: string | null
@@ -87,8 +106,11 @@ export const getProjectWhere = (
   ],
 });
 
-// Board discovery for an agent exposes only boards where that exact active
-// agent was explicitly added. Human callers keep their owner/member scope.
+// Board discovery is deliberately narrower than delegate authorization. An
+// agent may act as its connecting human on routes that target a known board,
+// but board pickers and bootstrap payloads must expose only boards where that
+// agent was explicitly added. Otherwise a single-board token enumerates every
+// board its owner can access (HTPR-5208).
 export const getProjectListingWhere = (
   userId: number,
   agentId?: string | null
@@ -144,21 +166,16 @@ export const getTaskNotificationsInclude = (
 export const getTaskIncludeLayers = ({
   userId,
   userDbId,
-  attributionEnabled = false,
 }: GetAllIncludesOptions): Record<string, Prisma.TaskInclude> => {
   const count = { _count: getTaskCountSelect(userId) };
   const assignees = {
     assignees: {
-      ...(attributionEnabled
-        ? {}
-        : {
-            where: {
-              OR: [
-                { agentId: null },
-                { agent: boardAgentVisibilityWhere(userId) },
-              ],
-            },
-          }),
+      where: {
+        OR: [
+          { agentId: null },
+          { agent: boardAgentVisibilityWhere(userId) },
+        ],
+      },
       include: {
         user: {
           select: {
@@ -277,16 +294,12 @@ export const getBoardTaskInclude = (
     layers.count,
     {
       assignees: {
-        ...(options.attributionEnabled
-          ? {}
-          : {
-              where: {
-                OR: [
-                  { agentId: null },
-                  { agent: boardAgentVisibilityWhere(options.userId) },
-                ],
-              },
-            }),
+        where: {
+          OR: [
+            { agentId: null },
+            { agent: boardAgentVisibilityWhere(options.userId) },
+          ],
+        },
         select: {
           id: true,
           userId: true,

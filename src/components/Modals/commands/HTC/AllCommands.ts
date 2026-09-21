@@ -625,7 +625,7 @@ const getBoardCommands = (commandOptions: IAllCommands): CommandGroup => ({
           },
           {
             key: "boardVelocityReport",
-            name: "Board analytics report",
+            name: "Board velocity report",
             commandMode: CommandMode.GotoBoardVelocityReport,
             keywords:
               "velocity report metrics analytics throughput speed stats who is active idle stale lead time",

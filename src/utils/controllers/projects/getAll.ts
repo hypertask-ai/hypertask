@@ -1,18 +1,11 @@
 
-import {
-  HTPR_6588_EMPTY_COLUMNS_SAVE_VIEW_FLAG,
-  isFeatureEnabled,
-} from "@/lib/flags";
 import prisma from "@/lib/prisma";
-import type { IProjectView } from "@/models/model";
 import {
   getProjectIncludeWithoutTasks,
   getProjectWhere,
   projectBootstrapSelect,
 } from "./getAllIncludes";
-import { persistDisabledStagedEmptySections } from "@/utils/controllers/projects/views/viewsHelperAPIfunctions";
 import { sanitizeProjectBoardFilters } from "@/utils/helperFunctions/Views/BoardFilterSanitizer";
-import { maskPersonalEmptySectionsForUnsavedView } from "@/utils/helperFunctions/Views/ViewsHelperFunctions";
 
 const getAll = async (
   user_id: any,
@@ -69,33 +62,9 @@ const getAll = async (
       };
     }
 
-    const emptyColumnsSaveViewEnabled =
-      !hasActiveProject &&
-      await isFeatureEnabled(HTPR_6588_EMPTY_COLUMNS_SAVE_VIEW_FLAG, userId);
-
     return {
       status: 200,
-      json: await Promise.all(projects.map(async (project) => {
-        const sanitizedProject = sanitizeProjectBoardFilters(project);
-        if (
-          !("project_view" in sanitizedProject) ||
-          !sanitizedProject.project_view
-        ) {
-          return sanitizedProject;
-        }
-        const projectView = sanitizedProject.project_view as unknown as IProjectView;
-        if (!projectView.user_project_views[0]?.unsavedView) {
-          return sanitizedProject;
-        }
-        return {
-          ...sanitizedProject,
-          project_view: (
-            emptyColumnsSaveViewEnabled
-              ? maskPersonalEmptySectionsForUnsavedView(projectView, true)
-              : await persistDisabledStagedEmptySections(projectView, userId)
-          ) as unknown as typeof sanitizedProject.project_view,
-        };
-      })),
+      json: projects.map((project) => sanitizeProjectBoardFilters(project)),
     };
   } catch (error) {
     console.log(error);

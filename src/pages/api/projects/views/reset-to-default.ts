@@ -1,7 +1,7 @@
 import { getSessionUser } from "@/lib/auth/getSessionUser";
 import prisma from "@/lib/prisma";
 import { broadcastBoardChange } from "@/lib/realtime/server";
-import getProjectView from "@/utils/controllers/views";
+import getProjectView from "@/utils/controllers/projects/views/viewsHelperAPIfunctions";
 import { Prisma } from "@prisma/client";
 import type { NextApiHandler } from "next";
 

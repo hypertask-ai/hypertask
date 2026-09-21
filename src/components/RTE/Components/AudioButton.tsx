@@ -723,11 +723,6 @@ export const AudioButton = ({
                   disabled && "cursor-not-allowed opacity-50",
                   className,
                 )}
-                onPointerDown={(event) => {
-                  if (!isMobileNewTask) return;
-                  event.preventDefault();
-                  editor?.commands.focus();
-                }}
                 onClick={onMicActivate}
                 onMouseEnter={() => setHover(true)}
                 onMouseLeave={() => setHover(false)}
@@ -888,9 +883,6 @@ export const AudioButton = ({
           </div>
           <button
             type="button"
-            onPointerDown={(event) => {
-              if (isMobileNewTask) event.preventDefault();
-            }}
             onClick={closeHandler}
             aria-label="Cancel"
             className={cn(
@@ -902,9 +894,6 @@ export const AudioButton = ({
           </button>
           <button
             type="button"
-            onPointerDown={(event) => {
-              if (isMobileNewTask) event.preventDefault();
-            }}
             onClick={() => stopRecording(true)}
             aria-label="Send"
             className={cn(

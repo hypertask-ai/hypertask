@@ -7,7 +7,6 @@ import { useContext } from "react";
 import { useRecoilState } from "@/lib/state";
 import CreatedBy from "../Common/CreatedBy";
 import { useTaskContext } from "@/lib/contexts/TaskDetail/TaskProvider";
-import { commentActorName } from "@/lib/assignees";
 import styles from "@/styles/tiptap.module.scss";
 import type { PersonHovercardSubject } from "@/models/personHovercard";
 
@@ -21,7 +20,11 @@ const CommentCreatedBy = () => {
   const { newCommentIds, currentTask } = useTaskContext();
   const [currentUser, _setCurrentUser] = useRecoilState(currentUserAtom);
 
-  const displayName = commentActorName(comment);
+  const displayName =
+    comment.agent?.displayName ??
+    comment.agentDisplayName ??
+    comment.creator?.displayName ??
+    "";
   const photoURL = comment.agent?.photoURL ??
     (comment.agentDisplayName ? "" : comment.creator?.photoURL ?? "");
   const isNewComment = newCommentIds.includes(Number(comment.id));

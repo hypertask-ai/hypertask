@@ -1,4 +1,3 @@
-import { labelStore } from "@/utils/controllers/labels";
 import { NextApiHandler, NextApiRequest, NextApiResponse } from "next";
 import { Prisma } from "@prisma/client";
 import generateRank from "@/utils/generateRank";
@@ -241,7 +240,7 @@ const handler: NextApiHandler = async (
       }
       const uniqueTagIds = [...new Set(rawTagIds as string[])];
       tagIds = uniqueTagIds;
-      const projectLabels = await labelStore().findMany({
+      const projectLabels = await prisma.label.findMany({
         where: { id: { in: uniqueTagIds }, projectId },
         select: { id: true },
       });

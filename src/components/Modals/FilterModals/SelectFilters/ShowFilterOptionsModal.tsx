@@ -20,8 +20,6 @@ import { currentUserAtom } from "@/store";
 import { KeyCodes } from "@/lib/constants/keyboard-handler";
 import { formatDateDisplay } from "@/utils/helperFunctions/Views/FilterHelperFunctions";
 import { useFilterView } from "@/hooks/MultiPages/Filters/useFilterView";
-import { useMyTasksFilterController } from "@/lib/myTasksFilterContext";
-import { FilterCommandMode } from "@/models/Filters/enums";
 
 const ShowFilterOptions: React.FC<IFilterModalProps> = ({
   handleAction,
@@ -133,31 +131,14 @@ const FilterCommandRowEl: React.FC<IFilterCommandRowEl & { view: "Kanban" | "Cal
   activeFilters,
   view,
 }) => {
-  const myTasksFilters = useMyTasksFilterController();
   const currentlyActive = activeFilters.addedFilters.find(
     (filter) => filter.type === el.type
   );
-  const involvementCount =
-    el.commandMode === FilterCommandMode.Involvement &&
-    myTasksFilters?.involvementEnabled &&
-    !(myTasksFilters.scopes.length === 1 && myTasksFilters.scopes[0] === "assigned")
-      ? myTasksFilters.scopes.length
-      : 0;
-  const scopeFilterCount =
-    el.commandMode === FilterCommandMode.MyTasksScope
-      ? (myTasksFilters?.scopeFilterCount ?? 0)
-      : 0;
 
   return (
     <>
       <span>{el.name}</span>
 
-      {involvementCount > 0 ? (
-        <span className="text-micro font-medium">{involvementCount} active</span>
-      ) : null}
-      {scopeFilterCount > 0 ? (
-        <span className="text-micro font-medium">{scopeFilterCount} active</span>
-      ) : null}
       {currentlyActive && (view === "Kanban" || view === "MyTasks") && (
         <RenderActiveFilters elKey={el.key} currentlyActive={currentlyActive} />
       )}

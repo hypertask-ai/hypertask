@@ -103,7 +103,7 @@ test("every fallback and the database default use the combined mode", () => {
     "utf8",
   );
   const mcpViewService = fs.readFileSync(
-    path.join(root, "src/utils/controllers/views/index.ts"),
+    path.join(root, "src/lib/mcp/views/services.ts"),
     "utf8",
   );
 

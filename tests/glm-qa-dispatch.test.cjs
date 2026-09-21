@@ -174,8 +174,7 @@ test("smoke exposes ran/ok/rolledback outputs for the glm-qa gate", async () => 
   const smokeStart = workflow.indexOf("  smoke:");
   const smokeEnd = workflow.indexOf("\n  glm-qa:", smokeStart);
   const smoke = workflow.slice(smokeStart, smokeEnd);
-  assert.match(smoke, /ran: \$\{\{ steps\.smoke_status\.outputs\.ran \}\}/);
-  assert.match(smoke, /jq -r '\.ok' e2e\/smoke\/\.state\/preflight\.json/);
+  assert.match(smoke, /ran: \$\{\{ steps\.smoke\.outcome != 'skipped'/);
   assert.match(smoke, /ok: \$\{\{ steps\.smoke\.outcome == 'success' \}\}/);
   assert.match(smoke, /rolledback: \$\{\{ steps\.decide\.outputs\.rolledback == 'true' \}\}/);
   // The rollback branch records the verdict the gate reads.

@@ -1,4 +1,3 @@
-import { chatStore } from "@/utils/controllers/chat";
 import prisma from "@/lib/prisma";
 import { isValidUser } from "@/utils/edgeHelpers";
 import { cookies } from "next/headers";
@@ -28,7 +27,7 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    const session = await chatStore().sessions.findUnique({
+    const session = await prisma.chatSession.findUnique({
       where: {
         userId: user.id,
         id: sessionId,
@@ -49,7 +48,7 @@ export async function GET(request: NextRequest) {
 
     if (!session) {
       console.warn("Session not found, creating new session");
-      const session = await chatStore().sessions.create({
+      const session = await prisma.chatSession.create({
         data: {
           userId: user.id,
         },

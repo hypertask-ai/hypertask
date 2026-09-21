@@ -33,8 +33,6 @@ export const PRIVATE_AGENT_DISPLAY_NAME = "Private agent";
  * the owner's name. Callers must pass attributionEnabled from
  * isFeatureEnabled(HTPR_6516_AGENT_ATTRIBUTION_FLAG, userId). When the flag is
  * off, a stored name with no live row stays "Private agent".
- * With attribution enabled, a named board action keeps its acting-agent name;
- * PRIVATE visibility still controls directory and picker discovery.
  */
 export function resolvePublicAgentDisplayName(opts: {
   hasAgentRow: boolean;
@@ -42,11 +40,6 @@ export function resolvePublicAgentDisplayName(opts: {
   storedDisplayName?: string | null;
   attributionEnabled?: boolean;
 }): string | null {
-  if (opts.attributionEnabled) {
-    const attributedName = opts.storedDisplayName?.trim();
-    if (attributedName) return attributedName;
-    return opts.visibleAgent?.displayName?.trim() || null;
-  }
   if (opts.hasAgentRow && !opts.visibleAgent) return PRIVATE_AGENT_DISPLAY_NAME;
   if (!opts.attributionEnabled && !opts.hasAgentRow && opts.storedDisplayName) {
     return PRIVATE_AGENT_DISPLAY_NAME;

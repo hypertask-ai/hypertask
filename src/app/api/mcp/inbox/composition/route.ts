@@ -1,5 +1,3 @@
-import { notificationStore } from "@/utils/controllers/notifications";
-import { agentStore } from "@/utils/controllers/agents";
 import { NextRequest, NextResponse } from 'next/server'
 import prisma from '@/lib/prisma'
 import { validateMcpAuth, createUnauthorizedResponse, checkMcpRateLimit } from '@/lib/mcp/auth'
@@ -90,7 +88,7 @@ export async function GET(request: NextRequest) {
             }
         }
 
-        const rows = await notificationStore().groupBy({
+        const rows = await prisma.notification.groupBy({
             by: ['userId', 'type', 'fromAgentId', 'fromUserId', 'taskId'],
             where: {
                 projectId,
@@ -292,7 +290,7 @@ export async function GET(request: NextRequest) {
             })
         }
 
-        const agents = await agentStore().findMany({
+        const agents = await prisma.agent.findMany({
             where: { id: { in: Array.from(importantAgentIds) } },
             select: { id: true, displayName: true },
         })

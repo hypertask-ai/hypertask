@@ -1,4 +1,3 @@
-import { chatStore } from "@/utils/controllers/chat";
 import prisma from "@/lib/prisma";
 import { deleteTaskAttachmentFromS3 } from "@/lib/storage/uploadTaskAttachmentToS3";
 import { isValidUser } from "@/utils/edgeHelpers";
@@ -61,7 +60,7 @@ export async function DELETE(req: NextRequest) {
     }
 
     if (toDelete === "ALL") {
-      const sessions = await chatStore().sessions.findMany({
+      const sessions = await prisma.chatSession.findMany({
         where: {
           userId: user.id,
         },
@@ -72,14 +71,14 @@ export async function DELETE(req: NextRequest) {
 
       await removeChatAttachmentsForSessions(sessions.map((s) => s.id));
 
-      const deleted = await chatStore().sessions.deleteMany({
+      const deleted = await prisma.chatSession.deleteMany({
         where: {
           userId: user.id,
         },
       });
 
       console.log("🚀 ~ DELETE ~ Number of sessions deleted:", deleted.count);
-      await chatStore().sessions.create({
+      await prisma.chatSession.create({
         data: {
           userId: user.id,
         },
@@ -87,14 +86,14 @@ export async function DELETE(req: NextRequest) {
     } else {
       await removeChatAttachmentsForSessions([toDelete]);
 
-      await chatStore().sessions.delete({
+      await prisma.chatSession.delete({
         where: {
           id: toDelete,
           userId: user.id,
         },
       });
 
-      const numSessions = await chatStore().sessions.count({
+      const numSessions = await prisma.chatSession.count({
         where: {
           userId: user.id,
         },
@@ -103,7 +102,7 @@ export async function DELETE(req: NextRequest) {
       console.log("🚀 ~ DELETE ~ Number of sessions remaining:", numSessions);
 
       if (numSessions === 0) {
-        await chatStore().sessions.create({
+        await prisma.chatSession.create({
           data: {
             userId: user.id,
           },

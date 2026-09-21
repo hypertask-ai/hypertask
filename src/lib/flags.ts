@@ -38,7 +38,6 @@ import {
   MY_TASKS_PRIORITY_FILTER_FLAG,
   HTPR_4228_ADMIN_ONLY_TIME_REPORTS_FLAG,
   HTPR_4857_ADD_TO_SLACK_FLAG,
-  NATIVE_REPORTS_ENABLED,
   HTPR_6283_AGENT_CHAT_LIVE_SORT_FLAG,
   HTPR_6284_AGENT_MENTION_ROUTING_FLAG,
   HTPR_6320_AI_OBSERVABILITY_FLAG,
@@ -64,7 +63,6 @@ import {
   HTPR_6516_AGENT_ATTRIBUTION_FLAG,
   HTPR_6512_SEED_TEAM_AGENT_FLAG,
   HTPR_6533_MCP_CLIENT_EVAL_FLAG,
-  HTPR_4638_AI_DIRECTORY_METADATA_FLAG,
   HTPR_6532_STATELESS_MCP_FLAG,
   HTPR_6530_MCP_LIST_QUERY_FLAG,
   HTPR_6531_DEFERRED_MCP_TOOLS_FLAG,
@@ -80,10 +78,6 @@ import {
   HTPR_6556_MOBILE_DESCRIPTION_FIRST_FLAG,
   HTPR_6561_DESCRIPTION_STRUCTURE_FLAG,
   HTPR_6542_TEAM_SCOPED_MANAGEMENT_KEYS_FLAG,
-  HTPR_6585_BOARD_REPORTS_FLAG,
-  HTPR_6587_PROJECT_UPDATE_FLAG,
-  HTPR_6588_EMPTY_COLUMNS_SAVE_VIEW_FLAG,
-  HTPR_6572_MY_TASKS_BOARD_TOOLBAR_FLAG,
 } from "@/lib/flags/keys";
 
 // Re-exported so server code keeps importing keys from here. Client components must
@@ -107,36 +101,6 @@ const FEATURE_FLAG_QA_USER = {
 const RETIRED_FEATURE_FLAG_KEYS = new Set(["hyfa-43-factory-owner-preview"]);
 
 const FEATURE_FLAG_DEFINITIONS = [
-  {
-    key: HTPR_6572_MY_TASKS_BOARD_TOOLBAR_FLAG,
-    shippedOn: "2026-09-19",
-    description:
-      "Replaces the custom My Tasks controls with the board's view, filter, sort, timer, and save controls.",
-  },
-  {
-    key: HTPR_6587_PROJECT_UPDATE_FLAG,
-    shippedOn: "2026-09-19",
-    description:
-      "Lets board owners and members rename an accessible board through the Hypertask CLI.",
-  },
-  {
-    key: HTPR_6585_BOARD_REPORTS_FLAG,
-    shippedOn: "2026-09-19",
-    description:
-      "Shows one live analytics dashboard for the last opened board, with date ranges, worked-on tickets, finish time, weekly completions, and active people.",
-  },
-  {
-    key: NATIVE_REPORTS_ENABLED,
-    shippedOn: "2026-09-19",
-    description:
-      "Shows a live board report with current task counts by section and assignee.",
-  },
-  {
-    key: HTPR_6588_EMPTY_COLUMNS_SAVE_VIEW_FLAG,
-    shippedOn: "2026-09-19",
-    description:
-      "Stages empty-column visibility as an unsaved view change so users can save or reset it with the existing view controls.",
-  },
   {
     key: HTPR_6470_PROJECT_DELETE_FLAG,
     shippedOn: "2026-09-18",
@@ -202,12 +166,6 @@ const FEATURE_FLAG_DEFINITIONS = [
     shippedOn: "2026-09-16",
     description:
       "Shows a QA-only email and password sign-in page so an outside test robot can open the real app behind login. The page and route exist only when the server has the QA login secrets.",
-  },
-  {
-    key: HTPR_4638_AI_DIRECTORY_METADATA_FLAG,
-    shippedOn: "2026-09-19",
-    description:
-      "Adds vendor-specific MCP catalogs with the metadata needed for Claude and ChatGPT directory review.",
   },
   {
     key: HTPR_6533_MCP_CLIENT_EVAL_FLAG,

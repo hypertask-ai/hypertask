@@ -222,30 +222,14 @@ const ParentPersonHovercard = ({
   subject?: PersonHovercardSubject | null;
 }) => {
   const markerRef = useRef<HTMLSpanElement>(null);
-  const openTimerRef = useRef<number | null>(null);
   const closeTimerRef = useRef<number | null>(null);
   const [anchor, setAnchor] = useState<HTMLElement | null>(null);
   const [open, setOpen] = useState(false);
-  const cancelOpen = () => {
-    if (openTimerRef.current !== null) window.clearTimeout(openTimerRef.current);
-    openTimerRef.current = null;
-  };
   const cancelClose = () => {
     if (closeTimerRef.current !== null) window.clearTimeout(closeTimerRef.current);
     closeTimerRef.current = null;
   };
-  const show = () => {
-    cancelOpen();
-    cancelClose();
-    setOpen(true);
-  };
-  const scheduleOpen = () => {
-    cancelOpen();
-    cancelClose();
-    openTimerRef.current = window.setTimeout(show, 300);
-  };
   const scheduleClose = () => {
-    cancelOpen();
     cancelClose();
     closeTimerRef.current = window.setTimeout(() => setOpen(false), 90);
   };
@@ -257,22 +241,23 @@ const ParentPersonHovercard = ({
     parent.tabIndex = parent.tabIndex >= 0 ? parent.tabIndex : 0;
     parent.setAttribute("aria-haspopup", "dialog");
 
+    const show = () => {
+      cancelClose();
+      setOpen(true);
+    };
     const dismissOnEscape = (event: KeyboardEvent) => {
       if (event.key === "Escape") setOpen(false);
     };
 
-    parent.addEventListener("pointerenter", scheduleOpen);
+    parent.addEventListener("pointerenter", show);
     parent.addEventListener("pointerleave", scheduleClose);
-    parent.addEventListener("pointercancel", scheduleClose);
     parent.addEventListener("focusin", show);
     parent.addEventListener("focusout", scheduleClose);
     parent.addEventListener("keydown", dismissOnEscape);
     return () => {
-      cancelOpen();
       cancelClose();
-      parent.removeEventListener("pointerenter", scheduleOpen);
+      parent.removeEventListener("pointerenter", show);
       parent.removeEventListener("pointerleave", scheduleClose);
-      parent.removeEventListener("pointercancel", scheduleClose);
       parent.removeEventListener("focusin", show);
       parent.removeEventListener("focusout", scheduleClose);
       parent.removeEventListener("keydown", dismissOnEscape);

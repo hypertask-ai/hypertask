@@ -1,4 +1,3 @@
-import { labelStore } from "@/utils/controllers/labels";
 import { getSessionUser } from "@/lib/auth/getSessionUser";
 import prisma from "@/lib/prisma";
 import { getProjectWhere } from "@/utils/controllers/projects/getAllIncludes";
@@ -56,7 +55,7 @@ export async function GET(request: NextRequest) {
   ]);
   const labelIds = [...new Set(templates.flatMap((template) => template.labelIds))];
   const labels = labelIds.length
-    ? await labelStore().findMany({
+    ? await prisma.label.findMany({
         where: { id: { in: labelIds }, projectId },
         select: { id: true, value: true, projectId: true },
       })

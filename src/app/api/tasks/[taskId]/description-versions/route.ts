@@ -1,4 +1,3 @@
-import { agentStore } from "@/utils/controllers/agents";
 import { cookies } from 'next/headers'
 import { NextRequest, NextResponse } from 'next/server'
 
@@ -76,7 +75,7 @@ export async function GET(_request: NextRequest, { params }: RouteContext) {
       version.agentId ? [version.agentId] : []
     ))]
     const agents = agentIds.length > 0
-      ? await agentStore().findMany({
+      ? await prisma.agent.findMany({
           where: { id: { in: agentIds } },
           select: { id: true, displayName: true },
         })

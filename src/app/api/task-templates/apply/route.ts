@@ -1,4 +1,3 @@
-import { labelStore } from "@/utils/controllers/labels";
 import { getSessionUser } from "@/lib/auth/getSessionUser";
 import prisma from "@/lib/prisma";
 import { getProjectWhere } from "@/utils/controllers/projects/getAllIncludes";
@@ -41,7 +40,7 @@ export async function POST(request: NextRequest) {
   // Labels can be deleted after a template is saved; keep only live ones.
   const liveLabels =
     template.labelIds.length > 0
-      ? await labelStore().findMany({
+      ? await prisma.label.findMany({
           where: { id: { in: template.labelIds }, projectId: template.projectId },
           select: { id: true },
         })

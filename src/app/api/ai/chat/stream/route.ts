@@ -1,6 +1,3 @@
-import { agentStore } from "@/utils/controllers/agents";
-import { labelStore } from "@/utils/controllers/labels";
-import { chatStore } from "@/utils/controllers/chat";
 import { NextRequest, NextResponse } from "next/server";
 import { randomUUID } from "node:crypto";
 import { waitUntil } from "@vercel/functions";
@@ -79,10 +76,6 @@ import {
 } from "@/app/api/ai/_lib/chatTeamContext";
 import { getProjectWhere } from "@/utils/controllers/projects/getAllIncludes";
 import {
-  isLiveTaskListRequest,
-  resolveLiveTaskListProjectId,
-} from "./liveTaskList";
-import {
   getProjectMembers,
 } from "@/utils/controllers/projects/getProjectMembers";
 import {
@@ -97,7 +90,6 @@ import notificationGetAll, {
 import { getStructuredInboxForAgent } from "@/utils/controllers/notifications/getStructuredInboxForAgent";
 import { turbopufferSearchTaskIds } from "@/utils/controllers/search/document";
 import {
-  mapAttributedMcpAgent,
   mapVisibleMcpAgent,
   mcpVisibleAgentSelect,
 } from "@/lib/mcp/agents";
@@ -469,14 +461,10 @@ const AGENT_SYSTEM_PROMPT = `
                       and return context around them without needing get_tasks
                     - Comments are part of the broader task context — RAG indexes both tasks and
                       comments together and will return relevant comment content automatically
-                    - Never use RAG to list, enumerate, count, or check whether tasks exist on a board.
-                      Its search index can lag behind the live board, so zero matches never means zero tasks.
                     **Use list_tasks when:**
-                    - The user asks to list, enumerate, count, or check whether tasks exist on a board.
-                      This is the live source of truth, including tasks created moments ago.
                     - The query contains explicit structured filters
                       (e.g. priority, assignee, section, status, labels, due dates)
-                    - Examples: "list the tasks on this board", "all high priority tasks", "tasks due this week"
+                    - Examples: "all high priority tasks", "tasks assigned to me", "tasks due this week"
                     **Use search_tasks when:**
                     - The query contains a keyword, phrase, or partial task name to match against
                     - Examples: "find tasks mentioning payment gateway", "search for login issue tasks"
@@ -1555,11 +1543,6 @@ function createUserPrompt(
                   displayName: authedUser.displayName,
                 })}
                 document_context: ${createDocumentContext(body)}
-                ${
-                  isLiveTaskListRequest(body.message)
-                    ? "MANDATORY: This request needs the live board state. Call hypertask_list_tasks and do not use rag_retrieval."
-                    : ""
-                }
 
                 IMPORTANT: Analyze the history and provide a complete, context-aware HTML body response.
                 IMPORTANT: Follow the tool selection hierarchy strictly.
@@ -1702,7 +1685,7 @@ async function loadActingAgent(
 } | null> {
   if (!sessionId) return null;
 
-  const session = await chatStore().sessions.findFirst({
+  const session = await prisma.chatSession.findFirst({
     where: { id: sessionId, userId },
     select: { agentId: true },
   });
@@ -1985,24 +1968,12 @@ function applyDurableCommentAttribution<T extends object>(
   projectId: number,
   attributionEnabled: boolean
 ): T {
-  if (!attributionEnabled)
   return overlayDurableAgentDisplayName(mapped, {
     hasAgentRow: Boolean(comment.agent),
     visibleAgent: mapVisibleMcpAgent(comment.agent, userId, projectId),
     storedDisplayName: comment.agentDisplayName,
     attributionEnabled,
   });
-
-  const agent = mapAttributedMcpAgent(comment.agent);
-  return overlayDurableAgentDisplayName(
-    { ...mapped, ...(agent ? { agent } : {}) },
-    {
-      hasAgentRow: Boolean(comment.agent),
-      visibleAgent: agent,
-      storedDisplayName: comment.agentDisplayName,
-      attributionEnabled,
-    },
-  );
 }
 
 function mapDraftToResponse(draft: any) {
@@ -3072,7 +3043,7 @@ function buildTools(
               },
               orderBy: { title: "asc" },
             }),
-            agentStore().findMany({
+            prisma.agent.findMany({
               where: { userId: user.id },
               select: { id: true, displayName: true },
             }),
@@ -4185,12 +4156,7 @@ function buildTools(
           projectId: { in: accessibleProjectIds },
           status: input.status,
         };
-        const targetProjectId = resolveLiveTaskListProjectId({
-          message: body.message,
-          projectId: input.project_id,
-          boardId: input.board_id,
-          defaultProjectId: body.default_context?.project_id,
-        });
+        const targetProjectId = input.project_id ?? input.board_id;
         if (targetProjectId) {
           if (!accessibleProjectIds.includes(targetProjectId)) {
             return { success: false, error: "Project not found or access denied" };
@@ -6475,7 +6441,7 @@ function buildTools(
           return { success: false, error: access.error.message };
         }
 
-        const labels = await labelStore().findMany({
+        const labels = await prisma.label.findMany({
           where: { projectId: input.project_id },
           select: { id: true, value: true },
           orderBy: { value: "asc" },
@@ -6511,7 +6477,7 @@ function buildTools(
           return { success: false, error: "name must not be empty" };
         }
 
-        const existing = await labelStore().findFirst({
+        const existing = await prisma.label.findFirst({
           where: {
             projectId: input.project_id,
             value: trimmedName,
@@ -6524,7 +6490,7 @@ function buildTools(
           };
         }
 
-        const label = await labelStore().create({
+        const label = await prisma.label.create({
           data: {
             value: trimmedName,
             projectId: input.project_id,
@@ -9605,7 +9571,7 @@ function buildTools(
 
     rag_retrieval: tool({
       description:
-        "Retrieve semantically relevant Hypertask task/comment context from Turbopuffer hybrid search. Use for conversational, ambiguous, or semantic task/comment questions. Never use it to list, count, or check whether tasks exist because the search index is not live.",
+        "Retrieve semantically relevant Hypertask task/comment context from Turbopuffer hybrid search. Use for conversational, ambiguous, or semantic task/comment questions.",
       inputSchema: z.object({
         query: z.string().min(1).max(500),
         metadata_filters: z.record(z.string(), z.unknown()).optional(),
@@ -9613,13 +9579,6 @@ function buildTools(
       }),
       execute: async (input) => {
         sendStatus("rag_retrieval");
-        if (isLiveTaskListRequest(body.message)) {
-          return {
-            success: false,
-            error:
-              "This question requires live task state. Call hypertask_list_tasks with the scope the user requested; semantic search cannot prove that a board is empty.",
-          };
-        }
         return sanitizeForJson(
           await retrieveBoardKnowledge(
             {
@@ -9934,7 +9893,7 @@ export async function POST(request: NextRequest) {
   const contextProjectId = body.default_context?.project_id;
   if (body.session_id && typeof contextProjectId === "number") {
     try {
-      await chatStore().sessions.updateMany({
+      await prisma.chatSession.updateMany({
         where: {
           id: body.session_id,
           userId: dbUser.id,
@@ -9956,7 +9915,7 @@ export async function POST(request: NextRequest) {
   });
   if (body.session_id && contextTaskId !== null) {
     try {
-      await chatStore().sessions.updateMany({
+      await prisma.chatSession.updateMany({
         where: {
           id: body.session_id,
           userId: dbUser.id,
@@ -9989,7 +9948,7 @@ export async function POST(request: NextRequest) {
   // External agents are chatted with from Agent Chat, not this native stream.
   // Checked before any provider or model work so the turn never starts.
   if (body.session_id) {
-    const chatAgent = await chatStore().sessions.findFirst({
+    const chatAgent = await prisma.chatSession.findFirst({
       where: { id: body.session_id, userId: dbUser.id },
       select: { agent: { select: { runtimeType: true } } },
     });
@@ -10730,7 +10689,7 @@ export async function POST(request: NextRequest) {
           // This durable phase flip happens immediately before the model can
           // execute tools. Recovery can retry an unstarted reservation, but
           // never treats a started turn as safe to replay after Redis loss.
-          const started = await chatStore().messages.updateMany({
+          const started = await prisma.chatMessage.updateMany({
             where: {
               id: body.user_message_id,
               sessionId: body.session_id,
@@ -11041,7 +11000,7 @@ export async function POST(request: NextRequest) {
             send("title", { content: generatedTitle });
             if (body.session_id) {
               try {
-                await chatStore().sessions.updateMany({
+                await prisma.chatSession.updateMany({
                   where: { id: body.session_id, userId: dbUser.id },
                   data: { title: generatedTitle },
                 });

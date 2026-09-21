@@ -13,9 +13,7 @@ import { hasAnyManagementPermission } from '@/lib/mcp/managementPermissions'
 import { HTPR_6532_STATELESS_MCP_FLAG, isFeatureEnabled } from '@/lib/flags'
 import { HTPR_6531_DEFERRED_MCP_TOOLS_FLAG } from '@/lib/flags'
 import { HTPR_6530_MCP_LIST_QUERY_FLAG } from '@/lib/flags'
-import { HTPR_4638_AI_DIRECTORY_METADATA_FLAG } from '@/lib/flags'
 import { resolvePortableTools } from './listQueryContract'
-import { directoryProfileFromUrl, toolsForDirectoryProfile } from './tool-annotations'
 import { NextRequest } from 'next/server'
 import { handleMcpHttp, usesStatelessMcpTransport } from './mcp-http'
 import {
@@ -182,18 +180,6 @@ export async function mcpHandler(request: Request): Promise<Response> {
   const deferred =
     Number.isFinite(userId) &&
     (await isFeatureEnabled(HTPR_6531_DEFERRED_MCP_TOOLS_FLAG, userId).catch(() => false))
-  const directoryProfile = directoryProfileFromUrl(working.url)
-  const directoryProfileEnabled =
-    directoryProfile !== undefined &&
-    Number.isFinite(userId) &&
-    (await isFeatureEnabled(HTPR_4638_AI_DIRECTORY_METADATA_FLAG, userId).catch(() => false))
-  if (directoryProfile && directoryProfileEnabled) {
-    // Directory scanners need the complete schemas, independent of per-user catalog experiments.
-    return handleMcpHttp(working, {
-      authenticate: async () => authInfo,
-      tools: toolsForDirectoryProfile(portableTools, directoryProfile),
-    })
-  }
 
   // Stateless POST/GET/DELETE stay behind htpr-6532-stateless-mcp (Owner+QA).
   // OPTIONS has no session. Everyone else keeps the existing session handler.

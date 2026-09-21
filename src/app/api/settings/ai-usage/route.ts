@@ -1,4 +1,3 @@
-import { agentStore } from "@/utils/controllers/agents";
 import { NextResponse } from "next/server";
 import { getTeamGatewayFunding } from "@/app/api/ai/_lib/byokKeys";
 import { getServerCookieUser } from "@/lib/auth/serverUser";
@@ -194,7 +193,7 @@ const loadAiUsageBreakdown = async (
         },
         select: { id: true, ticketNumber: true, title: true },
       }),
-      agentStore().findMany({
+      prisma.agent.findMany({
         where: {
           id: { in: agentIds },
           members: {

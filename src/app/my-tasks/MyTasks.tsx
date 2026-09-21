@@ -20,7 +20,6 @@ import {
   MY_TASKS_OVERDUE_BADGES_FLAG,
   MY_TASKS_VIEWS_FLAG,
   MY_TASKS_BULK_SELECTION_FLAG,
-  HTPR_6572_MY_TASKS_BOARD_TOOLBAR_FLAG,
 } from "@/lib/flags/keys";
 import {
   buildMyTasksListUrl,
@@ -78,11 +77,7 @@ import {
 } from "@/models/MyTasksView";
 import { returnIfModalOrInputActive } from "@/utils/helperFunctions/helperFunctions";
 import { ISection, IUser } from "@/models/model";
-import {
-  sortingModeLabel,
-  type TBoardSortingViewMode,
-} from "@/models/Views/model";
-import { CommandMode } from "@/models/enums";
+import type { TBoardSortingViewMode } from "@/models/Views/model";
 import { appShellRailAtom,
   myTasksTableColumnsPickerRequestAtom, showCommandsAtom } from "@/store";
 import styles from "@/styles/search.module.scss";
@@ -108,12 +103,8 @@ import TableColumnsPicker from "@/components/PageComponents/Kanban/TableView/Tab
 import MyTasksQuickAdd from "./MyTasksQuickAdd";
 import MyTasksViewControls from "./MyTasksViewControls";
 import MyTasksViewTabs from "./MyTasksViewTabs";
-import BoardPriorityMode, {
-  type ControlledSortingLevel,
-} from "@/components/Modals/Kanban/BoardPriorityMode";
 import type { SerializableFilterSettings } from "@/lib/filterSettingsMutations";
 import {
-  addFilterValue,
   emptyFilterSettings,
   migrateFlatFiltersToFilterSettings,
 } from "@/lib/filterSettingsMutations";
@@ -150,51 +141,6 @@ const readError = async (response: Response, fallback: string): Promise<string> 
   return typeof body?.error === "string" ? body.error : fallback;
 };
 
-const MY_TASKS_BOARD_SORT_MODE = "Board";
-export const MY_TASKS_BOARD_SORT_MODES = [
-  "UpdatedAt",
-  "Priority",
-  "DueDate",
-  "Title",
-  "CreatedAt",
-  MY_TASKS_BOARD_SORT_MODE,
-];
-const MY_TASKS_TO_BOARD_SORT = {
-  board: MY_TASKS_BOARD_SORT_MODE,
-  dueDate: "DueDate",
-  priority: "Priority",
-  createdAt: "CreatedAt",
-  updatedAt: "UpdatedAt",
-  title: "Title",
-} as const;
-const BOARD_TO_MY_TASKS_SORT = {
-  Board: "board",
-  DueDate: "dueDate",
-  Priority: "priority",
-  CreatedAt: "createdAt",
-  UpdatedAt: "updatedAt",
-  Title: "title",
-} as const;
-
-export const toBoardSort = (
-  sort: MyTasksViewConfig["sort"],
-): ControlledSortingLevel => ({
-  mode: MY_TASKS_TO_BOARD_SORT[sort.field],
-  order: sort.direction === "asc" ? "Ascending" : "Descending",
-});
-
-export const fromBoardSort = (
-  sort: ControlledSortingLevel | null,
-): MyTasksViewConfig["sort"] => {
-  if (!sort || sort.mode === "Manual" || !(sort.mode in BOARD_TO_MY_TASKS_SORT)) {
-    return DEFAULT_MY_TASKS_VIEW_CONFIG.sort;
-  }
-  return {
-    field: BOARD_TO_MY_TASKS_SORT[sort.mode as keyof typeof BOARD_TO_MY_TASKS_SORT],
-    direction: sort.order === "Ascending" ? "asc" : "desc",
-  };
-};
-
 const MyTasks = ({
   sections: initialSections,
   tabs: initialTabs,
@@ -210,7 +156,7 @@ const MyTasks = ({
 }: IProps) => {
   const isMbl = useContext(MobileViewContext);
   const appShellRailOn = useRecoilValue(appShellRailAtom) && !isMbl;
-  const [showCommands, setShowCommands] = useRecoilState(showCommandsAtom);
+  const showCommands = useRecoilValue(showCommandsAtom);
   const router = useRouter();
   const searchParams = useSearchParams();
   const myTasksShortcutsWidthEnabled = useFlag(MY_TASKS_SHORTCUTS_WIDTH_FLAG);
@@ -270,12 +216,6 @@ const MyTasks = ({
 
   const filterEnabled = useFlag(MY_TASKS_PRIORITY_FILTER_FLAG);
   const myTasksBulkSelectionEnabled = useFlag(MY_TASKS_BULK_SELECTION_FLAG);
-  const boardToolbarFlagEnabled = useFlag(HTPR_6572_MY_TASKS_BOARD_TOOLBAR_FLAG);
-  const boardToolbarEnabled =
-    boardToolbarFlagEnabled && viewsFeatureEnabled && filterParityEnabled;
-  const [sortModalOpen, setSortModalOpen] = useState(false);
-  const [runningOnly, setRunningOnly] = useState(false);
-  const displayedSplit = boardToolbarEnabled ? 0 : activeSplit;
   // My Tasks spans every board, so unlike board filters (which persist to a
   // saved view) this selection lives in state only and resets on reload.
   const [prioritySelection, setPrioritySelection] = useState<
@@ -284,7 +224,6 @@ const MyTasks = ({
   const [filterOpen, setFilterOpen] = useState(false);
   const filterRef = useRef<HTMLDivElement>(null);
   const saveRequestToken = useRef(0);
-  const saveInFlight = useRef(false);
   const observedViewParam = useRef<string | null | undefined>(undefined);
   const scopesFetchToken = useRef(0);
   const lastFetchedScopesKey = useRef<string | null>(null);
@@ -584,18 +523,6 @@ const MyTasks = ({
     activeView?.config ?? DEFAULT_MY_TASKS_VIEW_CONFIG,
   );
   const dirty = JSON.stringify(viewConfig) !== JSON.stringify(baselineConfig);
-  const displayViewConfig = useMemo(() => {
-    if (!runningOnly) return viewConfig;
-    return {
-      ...viewConfig,
-      filterSettings: addFilterValue(
-        viewConfig.filterSettings ?? emptyFilterSettings(),
-        "RunningTimer",
-        { id: 0 },
-      ),
-    };
-  }, [runningOnly, viewConfig]);
-  const displayFilterSettingsEnabled = filterParityEnabled || boardToolbarEnabled;
 
   // One gate for both control and behavior: if the flag flips off while a
   // selection exists, filtering stops too instead of hiding the control.
@@ -643,14 +570,13 @@ const MyTasks = ({
           (section.projectId !== undefined && selectedBoards.has(section.projectId)),
       )
       .flatMap((section) => section.items as MyTasksTask[]);
-    return applyMyTasksView(flat, displayViewConfig, now, {
-      applyFilterSettings: displayFilterSettingsEnabled,
+    return applyMyTasksView(flat, viewConfig, now, {
+      applyFilterSettings: filterParityEnabled,
       runtimeContext,
     });
   }, [
     dateFilterVersion,
-    displayFilterSettingsEnabled,
-    displayViewConfig,
+    filterParityEnabled,
     groupBy,
     priorityFilteredSections,
     runtimeContext,
@@ -663,9 +589,9 @@ const MyTasks = ({
     const now = new Date();
     if (groupBy === "time") {
       const selectedBoardId =
-        displayedSplit === 0
+        activeSplit === 0
           ? null
-          : availableBoards[displayedSplit - 1]?.id ?? null;
+          : availableBoards[activeSplit - 1]?.id ?? null;
       const scopedTasks =
         selectedBoardId === null
           ? allTasksForBoardTabs
@@ -687,22 +613,21 @@ const MyTasks = ({
       ...section,
       items: applyMyTasksView(
         section.items as MyTasksTask[],
-        displayViewConfig,
+        viewConfig,
         now,
         {
-          applyFilterSettings: displayFilterSettingsEnabled,
+          applyFilterSettings: filterParityEnabled,
           runtimeContext,
         },
       ),
     }));
     return sortMyTasksViewSections(next, viewConfig, now);
   }, [
-    displayedSplit,
+    activeSplit,
     allTasksForBoardTabs,
     availableBoards,
     dateFilterVersion,
-    displayFilterSettingsEnabled,
-    displayViewConfig,
+    filterParityEnabled,
     groupBy,
     runtimeContext,
     sections,
@@ -737,10 +662,10 @@ const MyTasks = ({
   }, [allTasksForBoardTabs.length, filteredSections, groupBy]);
   const visibleSections = useMemo(() => {
     if (groupBy === "time") return filteredSections;
-    if (displayedSplit === 0) return filteredSections;
-    const active = filteredSections[displayedSplit - 1];
+    if (activeSplit === 0) return filteredSections;
+    const active = filteredSections[activeSplit - 1];
     return active ? [active] : [];
-  }, [displayedSplit, filteredSections, groupBy]);
+  }, [activeSplit, filteredSections, groupBy]);
 
   const replaceBoardParam = useCallback(
     (boardId: number | null) => {
@@ -895,7 +820,6 @@ const MyTasks = ({
         return;
       }
       if (
-        boardToolbarEnabled ||
         event.key !== "Tab" ||
         activeTabs.length === 0 ||
         returnIfModalOrInputActive()
@@ -912,7 +836,7 @@ const MyTasks = ({
 
     document.addEventListener("keydown", handleKeyDown);
     return () => document.removeEventListener("keydown", handleKeyDown);
-  }, [activeSplit, activeTabs.length, boardToolbarEnabled, filterOpen, router, showCommands.show, updateSplit]);
+  }, [activeSplit, activeTabs.length, filterOpen, router, showCommands.show, updateSplit]);
 
   const selectView = (viewId: number | null) => {
     const view = views.find((candidate) => candidate.id === viewId);
@@ -1041,8 +965,7 @@ const MyTasks = ({
   );
 
   const saveView = async () => {
-    if (!activeView || saveInFlight.current) return;
-    saveInFlight.current = true;
+    if (!activeView) return;
     const requestToken = ++saveRequestToken.current;
     setViewBusy(true);
     try {
@@ -1057,7 +980,6 @@ const MyTasks = ({
         toast.error(error instanceof Error ? error.message : "Unable to save view");
       }
     } finally {
-      saveInFlight.current = false;
       setViewBusy(false);
     }
   };
@@ -1119,42 +1041,8 @@ const MyTasks = ({
       updateViewConfig((current) => ({ ...current, sort })),
     [updateViewConfig],
   );
-  const toggleRunningOnly = useCallback(() => {
-    setRunningOnly((current) => !current);
-  }, []);
-  const openFilters = useCallback(() => {
-    updateViewConfig((current) =>
-      migrateFlatFiltersToFilterSettings(
-        current,
-        new Map(
-          boards.flatMap((board) =>
-            board.labels.map((label) => [label.id, label.name] as const),
-          ),
-        ),
-      ),
-    );
-    setKanbanFiltersOpen(true);
-  }, [boards, updateViewConfig]);
-  useEffect(() => {
-    if (!boardToolbarEnabled) return;
-    const openMyTasksFilters = () => openFilters();
-    const openMyTasksSort = () => setSortModalOpen(true);
-    window.addEventListener("my-tasks-open-filters", openMyTasksFilters);
-    window.addEventListener("my-tasks-open-sort", openMyTasksSort);
-    return () => {
-      window.removeEventListener("my-tasks-open-filters", openMyTasksFilters);
-      window.removeEventListener("my-tasks-open-sort", openMyTasksSort);
-    };
-  }, [boardToolbarEnabled, openFilters]);
-  const saveFromToolbar = useCallback(() => {
-    if (activeView) {
-      void saveView();
-      return;
-    }
-    const name = window.prompt("Name this view")?.trim();
-    if (name) void createView(name);
-  }, [activeView, createView, saveView]);
 
+  
   const openTableColumnsPicker = useCallback(() => {
     if (!tableColumnsFeatureEnabled) return;
     setColumnsPickerOpen(true);
@@ -1211,12 +1099,12 @@ const boardTabCounts = useMemo(() => {
     }
     const now = new Date();
     const options = {
-      applyFilterSettings: displayFilterSettingsEnabled,
+      applyFilterSettings: filterParityEnabled,
       runtimeContext,
     };
     const activeCount = overdueCountForMyTasksView(
       sections,
-      displayViewConfig,
+      viewConfig,
       now,
       options,
     );
@@ -1228,8 +1116,7 @@ const boardTabCounts = useMemo(() => {
   }, [
     activeViewId,
     dateFilterVersion,
-    displayFilterSettingsEnabled,
-    displayViewConfig,
+    filterParityEnabled,
     overdueBadgesEnabled,
     remoteOverdueCounts,
     runtimeContext,
@@ -1286,54 +1173,7 @@ const boardTabCounts = useMemo(() => {
       suppressHydrationWarning
       className={`py-9 h-screen min-h-0 overflow-hidden bg-containerBackground flex-col rounded-[4px] my-0 ${myTasksShortcutsWidthEnabled ? "w-full" : "global-view-width"} flex linksModal ${styles.links_modal}`}
     >
-      {boardToolbarFlagEnabled && viewsFeatureEnabled && filterParityEnabled ? (
-        <div className="pills-row mb-4 flex w-full min-w-0 items-start gap-3 px-4 @md:!px-20">
-          {viewsEnabled && myTasksViewsEnabled ? (
-            <MyTasksViewTabs
-              views={views}
-              activeViewId={activeViewId}
-              dirty={dirty}
-              busy={viewBusy}
-              onSelect={selectView}
-              onSave={() => void saveView()}
-              onReset={resetView}
-              onSaveAs={(name) => void createView(name)}
-              onRename={(viewId, name) => void renameView(viewId, name)}
-              onDelete={(viewId) => void deleteView(viewId)}
-              onSetDefault={(viewId) => void setDefaultView(viewId)}
-              overdueAll={viewOverdueCounts.all}
-              overdueByViewId={viewOverdueCounts.byViewId}
-              boardToolbar
-            />
-          ) : (
-            <div className="min-w-0 flex-1" />
-          )}
-          <MyTasksViewControls
-            boards={boards}
-            config={viewConfig}
-            onChange={updateViewConfig}
-            scopesEnabled={scopesEnabled}
-            snoozeEnabled={myTasksSnoozeEnabled}
-            boardToolbar
-            dirty={dirty}
-            busy={viewBusy}
-            runningOnly={runningOnly}
-            runningTimerCount={runningTimerEntries?.length ?? 0}
-            onSaveView={saveFromToolbar}
-            onResetView={resetView}
-            onOpenKanbanFilters={() =>
-              setShowCommands({ show: true, mode: CommandMode.ShowFilterHTC })
-            }
-            onOpenSort={() =>
-              setShowCommands({ show: true, mode: CommandMode.SortKanbanBoard })
-            }
-            onToggleRunningOnly={toggleRunningOnly}
-            onOpenMenu={() =>
-              setShowCommands({ show: true, mode: CommandMode.Command })
-            }
-          />
-        </div>
-      ) : viewsEnabled && myTasksViewsEnabled ? (
+      {viewsEnabled && myTasksViewsEnabled && (
         <div className="mb-4 px-[16px] @md:!px-[78px]">
           <MyTasksViewTabs
             views={views}
@@ -1351,7 +1191,7 @@ const boardTabCounts = useMemo(() => {
             overdueByViewId={viewOverdueCounts.byViewId}
           />
         </div>
-      ) : null}
+      )}
 
       <div className="flex gap-2 px-[16px] @md:!px-[88px]">
         <span className="flex items-baseline gap-2 font-bold text-subheading text-white-black">
@@ -1366,8 +1206,7 @@ const boardTabCounts = useMemo(() => {
             <span className="hidden" data-htpr-6455-my-tasks-time-group aria-hidden />
           ) : null}
         </span>
-        {!boardToolbarEnabled &&
-          ((viewsEnabled && myTasksViewsEnabled) || myTasksTimeGroupEnabled) && (
+        {((viewsEnabled && myTasksViewsEnabled) || myTasksTimeGroupEnabled) && (
           <MyTasksViewControls
             boards={boards}
             config={viewConfig}
@@ -1392,7 +1231,7 @@ const boardTabCounts = useMemo(() => {
             }}
           />
         )}
-        {!boardToolbarEnabled && myTasksSnoozeEnabled && !viewsFeatureEnabled ? (
+        {myTasksSnoozeEnabled && !viewsFeatureEnabled ? (
           <label className="ml-auto flex items-center gap-2 self-center text-content text-text-light-gray">
             <input
               type="checkbox"
@@ -1410,7 +1249,7 @@ const boardTabCounts = useMemo(() => {
             Show snoozed
           </label>
         ) : null}
-        {!boardToolbarEnabled && filterEnabled && (
+        {filterEnabled && (
           !viewsFeatureEnabled ? (
           <div ref={filterRef} className="relative ml-auto self-center">
             <button
@@ -1460,14 +1299,12 @@ const boardTabCounts = useMemo(() => {
         )}
       </div>
 
-      {!boardToolbarEnabled && (
       <div className="hidden @md:block w-full overflow-x-auto scrollbar-none no-scrollbar @md:px-[78px] @lg:px-[73px] mt-4">
         <div className="flex flex-wrap grow">{splitTitles}</div>
       </div>
-      )}
 
       <div className="mt-3 flex-1 min-h-0 w-full">
-        {myTasksQuickAddEnabled && !boardToolbarEnabled ? (
+        {myTasksQuickAddEnabled ? (
           <MyTasksQuickAdd
             currentUser={currentUser}
             activeViewId={activeViewId}
@@ -1480,7 +1317,7 @@ const boardTabCounts = useMemo(() => {
         ) : null}
         <MyTasksBulkSelectionProvider
           enabled={myTasksBulkSelectionEnabled}
-          resetSelectionKey={`${activeViewId ?? "all"}:${displayedSplit}:${prioritySelection
+          resetSelectionKey={`${activeViewId ?? "all"}:${activeSplit}:${prioritySelection
             .map((priority) => priority.priority_index)
             .join(",")}`}
           onAfterMutation={() => reconcileRunner.request()}
@@ -1505,11 +1342,9 @@ const boardTabCounts = useMemo(() => {
         </MyTasksBulkSelectionProvider>
       </div>
 
-      {!boardToolbarEnabled ? (
-        <div className="flex inbox_footer @md:hidden no-scrollbar scrollbar-none @md:gap-8 w-100 bg-hoverCardBackground h-20 @md:h-8 inbox_title">
-          {splitTitles}
-        </div>
-      ) : null}
+      <div className="flex inbox_footer @md:hidden no-scrollbar scrollbar-none @md:gap-8 w-100 bg-hoverCardBackground h-20 @md:h-8 inbox_title">
+        {splitTitles}
+      </div>
       {myTasksTableColumnsEnabled && tableColumnsFeatureEnabled && columnsPickerOpen ? (
         <TableColumnsPicker
           closeHandler={() => setColumnsPickerOpen(false)}
@@ -1584,7 +1419,6 @@ const boardTabCounts = useMemo(() => {
   const onClearAllFilters = useCallback(() => {
     updateViewConfig((current) => ({
       ...current,
-      ...(boardToolbarEnabled ? { boardIds: null } : {}),
       filters: {
         ...current.filters,
         priorityIds: [],
@@ -1594,13 +1428,10 @@ const boardTabCounts = useMemo(() => {
         dueDate: null,
         createdRange: null,
         updatedRange: null,
-        ...(boardToolbarEnabled
-          ? { sectionIds: [], showDone: false, showSnoozed: false }
-          : {}),
       },
       filterSettings: emptyFilterSettings(),
     }));
-  }, [boardToolbarEnabled, updateViewConfig]);
+  }, [updateViewConfig]);
 
   const onClearNotStarred = useCallback(() => {
     updateViewConfig((current) => ({
@@ -1631,20 +1462,6 @@ const boardTabCounts = useMemo(() => {
         content
       )}
       <BackButton left={appShellRailOn ? 56 : undefined} />
-      {boardToolbarEnabled && sortModalOpen ? (
-        <BoardPriorityMode
-          closeHandler={() => setSortModalOpen(false)}
-          sort={toBoardSort(viewConfig.sort)}
-          onSortChange={(sort) => updateViewSort(fromBoardSort(sort))}
-          maxLevels={1}
-          availableModes={MY_TASKS_BOARD_SORT_MODES}
-          modeLabel={(mode) =>
-            mode === MY_TASKS_BOARD_SORT_MODE
-              ? "Board"
-              : sortingModeLabel(mode as TBoardSortingViewMode)
-          }
-        />
-      ) : null}
       {filterParityEnabled && kanbanFiltersOpen && (
         <MyTasksKanbanFilterModal
           settings={viewConfig.filterSettings}
@@ -1654,16 +1471,6 @@ const boardTabCounts = useMemo(() => {
           onClearNotStarred={onClearNotStarred}
           members={myTasksFilterMembers}
           labels={myTasksFilterLabels}
-          scopes={effectiveMyTasksScopes(viewConfig.scopes, scopesFeatureEnabled)}
-          involvementEnabled={boardToolbarEnabled && scopesFeatureEnabled}
-          onScopesChange={(scopes) =>
-            updateViewConfig((current) => ({ ...current, scopes }))
-          }
-          boards={boards}
-          config={viewConfig}
-          onConfigChange={updateViewConfig}
-          snoozeEnabled={myTasksSnoozeEnabled}
-          showScopeFilters={boardToolbarEnabled}
           onClose={() => setKanbanFiltersOpen(false)}
         />
       )}
