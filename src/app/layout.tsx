@@ -20,6 +20,7 @@ import {
 } from "@/lib/themePreferences";
 import { buildThemeBootScript } from "@/lib/themeBootScript";
 import { buildEarlyAppShellBootstrapScript } from "@/lib/appShellBootstrap/client";
+import { isValidUser } from "@/utils/edgeHelpers";
 
 export async function generateViewport() {
   const device = await isMobileDevice(); // execute the function
@@ -60,6 +61,13 @@ export default async function RootLayout(
   );
   const analyticsIsGuest =
     analyticsSession?.email?.endsWith("@demo.hypertask.ai") ?? false;
+  const legacyUser = isValidUser(
+    cookieStore.get(authConfig.cookies.user)?.value,
+  ).user;
+  const initialCurrentUser =
+    analyticsSession && Number(legacyUser?.id) === analyticsSession.id
+      ? legacyUser
+      : null;
 
   const theme = cookieStore.get(authConfig.cookies.theme) ?? {
     value: authConfig.cookies.defaultTheme,
@@ -164,6 +172,7 @@ export default async function RootLayout(
           initialIsMobile={device.isMobile}
           initialIsApple={device.isApple}
           authenticatedUserId={analyticsSession?.id ?? null}
+          initialCurrentUser={initialCurrentUser}
         >
           {children}
         </Provider>
