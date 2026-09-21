@@ -12,6 +12,7 @@ import { getProjectWhere } from "@/utils/controllers/projects/getAllIncludes";
 import {
   AGENT_RUN_WEBHOOK_EVENTS,
   AGENT_WEBHOOK_DELIVERY_CONTRACT,
+  agentWebhookChatMessageId,
   availableAgentWebhookEventDefinitions,
   availableAgentWebhookEvents,
   parseAgentWebhookEvents,
@@ -362,7 +363,40 @@ export async function manageAgentWebhook(input: {
   }
 
   if (input.action === "delete") {
-    await prisma.agentWebhookSubscription.delete({ where: { id: subscription.id } });
+    await prisma.$transaction(async (tx) => {
+      // Send and poll use this row as the serialization point, so deletion
+      // cannot miss a message committed against the subscription it removes.
+      await tx.$queryRaw`
+        SELECT "id"
+        FROM "Agent"
+        WHERE "id" = ${input.agentId}
+          AND "revokedAt" IS NULL
+        FOR UPDATE
+      `;
+      const chatDeliveries = await tx.$queryRaw<Array<{ payload: Prisma.JsonValue }>>`
+        UPDATE "AgentWebhookDelivery"
+        SET "status" = 'cancelled', "processingAt" = NULL, "updatedAt" = NOW()
+        WHERE "subscriptionId" = ${subscription.id}
+          AND "event" = 'chat.message'
+          AND "status" IN ('pending', 'processing', 'retrying', 'failed')
+        RETURNING "payload"
+      `;
+      const messageIds = [
+        ...new Set(
+          chatDeliveries.flatMap(({ payload }) => {
+            const messageId = agentWebhookChatMessageId(payload);
+            return messageId ? [messageId] : [];
+          }),
+        ),
+      ];
+      await tx.agentWebhookSubscription.delete({ where: { id: subscription.id } });
+      if (messageIds.length > 0) {
+        await tx.chatMessage.updateMany({
+          where: { id: { in: messageIds }, role: "human" },
+          data: { isDelivered: false },
+        });
+      }
+    });
     return { success: true, scope: "agent" as const, deleted: subscription.id };
   }
 

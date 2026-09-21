@@ -53,18 +53,11 @@ export async function GET(request: NextRequest) {
       `;
       if (agents.length !== 1) return { found: false, messages: [] };
 
-      // Existing webhook agents stay entirely on the webhook path.
-      const subscription = await tx.agentWebhookSubscription.findUnique({
-        where: { agentId: agentId },
-        select: { active: true },
-      });
-      if (subscription?.active) return { found: true, messages: [] };
-
       // This endpoint is the daemon's dequeue acknowledgement: returning a row
       // and setting isDelivered are one atomic operation. The protocol is
       // intentionally at-most-once; it has no separate acknowledgement call.
       const messages = await tx.$queryRaw<PendingChatMessage[]>`
-        WITH pending AS (
+        WITH candidates AS (
           SELECT
             message."id",
             message."sessionId",
@@ -80,12 +73,50 @@ export async function GET(request: NextRequest) {
             AND message."isDelivered" = false
             AND NOT EXISTS (
               SELECT 1
+              FROM "AgentWebhookDelivery" delivery
+              JOIN "AgentWebhookSubscription" subscription
+                ON subscription."id" = delivery."subscriptionId"
+              WHERE subscription."agentId" = ${agentId}
+                AND delivery."event" = 'chat.message'
+                AND delivery."status" IN ('pending', 'processing')
+                AND delivery."payload" #>> '{chat,messageId}' = message."id"
+            )
+            AND NOT EXISTS (
+              SELECT 1
               FROM "ChatMessage" reply
               WHERE reply."replyToMessageId" = message."id"
             )
           ORDER BY message."createdAt" ASC, message."id" ASC
           FOR UPDATE OF message SKIP LOCKED
           LIMIT ${PENDING_MESSAGE_LIMIT}
+        ), cancelled_deliveries AS (
+          UPDATE "AgentWebhookDelivery" delivery
+          SET "status" = 'cancelled', "processingAt" = NULL, "updatedAt" = NOW()
+          FROM "AgentWebhookSubscription" subscription, candidates
+          WHERE subscription."id" = delivery."subscriptionId"
+            AND subscription."agentId" = ${agentId}
+            AND delivery."event" = 'chat.message'
+            AND delivery."status" IN ('retrying', 'failed')
+            AND delivery."payload" #>> '{chat,messageId}' = candidates."id"
+          RETURNING delivery."id"
+        ), pending AS (
+          SELECT candidates.*
+          FROM candidates
+          WHERE NOT EXISTS (
+            SELECT 1
+            FROM "AgentWebhookDelivery" delivery
+            JOIN "AgentWebhookSubscription" subscription
+              ON subscription."id" = delivery."subscriptionId"
+            WHERE subscription."agentId" = ${agentId}
+              AND delivery."event" = 'chat.message'
+              AND delivery."status" IN ('retrying', 'failed')
+              AND delivery."payload" #>> '{chat,messageId}' = candidates."id"
+              AND NOT EXISTS (
+                SELECT 1
+                FROM cancelled_deliveries cancelled
+                WHERE cancelled."id" = delivery."id"
+              )
+          )
         ), delivered AS (
           UPDATE "ChatMessage" message
           SET "isDelivered" = true
