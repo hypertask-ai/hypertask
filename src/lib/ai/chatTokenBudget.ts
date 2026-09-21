@@ -6,6 +6,7 @@ export const MAX_HISTORY_SUMMARY_CHARS = 3_000;
 export const MAX_RECENT_HISTORY_MESSAGES = 10;
 export const MAX_HISTORY_MESSAGE_CHARS = 2_000;
 export const CHAT_MAX_OUTPUT_TOKENS = 1_200;
+export const CHAT_LONG_FORM_MAX_OUTPUT_TOKENS = 8_000;
 
 const TRUNCATION_MARKER = "\n[truncated]";
 const SUMMARY_TRUNCATION_MARKER = "[earlier turns truncated]\n";
@@ -36,6 +37,41 @@ export function stringifyPromptValue(value: unknown, maxChars: number): string {
     serialized = String(value ?? "");
   }
   return truncatePromptText(serialized, maxChars);
+}
+
+export function chatMaxOutputTokens(message: string): number {
+  const text = message.toLowerCase();
+  const longFormRequest =
+    /\b(long[- ]form|detailed|comprehensive|in[- ]depth|full)\s+(answer|analysis|report|document|draft|proposal|article|plan|guide|copy|description)\b/.test(text) ||
+    /\b(write|draft|compose|generate|create|update|rewrite|expand)\b[\s\S]{0,60}\b(report|document|page|proposal|brief|article|plan|guide|copy|description)\b/.test(text);
+  return longFormRequest
+    ? CHAT_LONG_FORM_MAX_OUTPUT_TOKENS
+    : CHAT_MAX_OUTPUT_TOKENS;
+}
+
+export function excerptAroundQuery(
+  value: string,
+  query: string,
+  maxChars: number,
+): string {
+  if (value.length <= maxChars) return value;
+  const normalized = value.toLowerCase();
+  const candidates = [
+    query.trim().toLowerCase(),
+    ...(query.toLowerCase().match(/[\p{L}\p{N}]{3,}/gu) ?? [])
+      .sort((left, right) => right.length - left.length),
+  ].filter(Boolean);
+  const matchIndex = candidates.reduce((found, candidate) => {
+    if (found >= 0) return found;
+    return normalized.indexOf(candidate);
+  }, -1);
+  if (matchIndex < 0 || maxChars <= 2) return truncatePromptText(value, maxChars);
+
+  const prefix = matchIndex > 0 ? "…" : "";
+  const start = Math.max(0, matchIndex - Math.floor((maxChars - 2) * 0.4));
+  const end = Math.min(value.length, start + maxChars - prefix.length - 1);
+  const suffix = end < value.length ? "…" : "";
+  return `${prefix}${value.slice(start, end)}${suffix}`.slice(0, maxChars);
 }
 
 function plainHistoryText(value: string): string {
@@ -237,7 +273,76 @@ function taskToolNames(text: string, hasAttachments: boolean): string[] {
     add("hypertask_attach_files");
   }
 
-  return [...new Set(names)].slice(0, 10);
+  return [...new Set(names)];
+}
+
+function requiredOperationToolNames(
+  text: string,
+  args: { hasAgentMention?: boolean; hasAttachments?: boolean },
+): string[] {
+  const names: string[] = [];
+  const add = (...values: string[]) => names.push(...values);
+
+  if (args.hasAgentMention) add("hypertask_ask_agent");
+  if (args.hasAttachments) add("hypertask_attach_files");
+  if (/\b(create|add)\s+(?:a\s+)?(?:task|ticket|card)\b|\bnew\s+(?:task|ticket|card)\b/.test(text)) {
+    add("hypertask_create_task", "hypertask_section");
+  }
+  if (/\bunassign\b/.test(text)) {
+    add("hypertask_unassign_user", "hypertask_list_project_members");
+  } else if (/\bassign\b/.test(text)) {
+    add("hypertask_assign_user", "hypertask_list_project_members");
+  }
+  if (/\b(labels?|tags?)\b/.test(text)) {
+    add("hypertask_update_task", "hypertask_list_labels");
+  }
+  if (/\b(move|transfer)\b/.test(text)) {
+    add("hypertask_update_task", "hypertask_move_task_between_boards", "hypertask_section");
+  }
+  if (/\b(update|edit|change|rename|archive|restore|priority|due date|estimate)\b[\s\S]{0,40}\b(task|ticket|card)\b/.test(text)) {
+    add("hypertask_update_task");
+  }
+  if (/\b(delete|remove)\b[\s\S]{0,30}\b(comment|reply)\b/.test(text)) {
+    add("hypertask_delete_comment");
+  } else if (/\b(update|edit|change)\b[\s\S]{0,30}\b(comment|reply)\b/.test(text)) {
+    add("hypertask_update_comment");
+  } else if (/\b(comment|reply|mention)\b/.test(text)) {
+    add("hypertask_add_comment");
+  }
+
+  const reserveCrud = (
+    noun: RegExp,
+    tools: { create: string; update: string; remove?: string },
+  ) => {
+    if (new RegExp(`\\b(create|add|new|write|draft)\\b[\\s\\S]{0,30}${noun.source}`).test(text)) {
+      add(tools.create);
+    }
+    if (new RegExp(`\\b(update|edit|change|rewrite)\\b[\\s\\S]{0,30}${noun.source}`).test(text)) {
+      add(tools.update);
+    }
+    if (
+      tools.remove &&
+      new RegExp(`\\b(delete|remove)\\b[\\s\\S]{0,30}${noun.source}`).test(text)
+    ) {
+      add(tools.remove);
+    }
+  };
+  reserveCrud(/\b(?:page|document)\b/, {
+    create: "hypertask_create_page",
+    update: "hypertask_update_page",
+  });
+  reserveCrud(/\b(?:report|dashboard)\b/, {
+    create: "hypertask_create_report",
+    update: "hypertask_update_report",
+    remove: "hypertask_delete_report",
+  });
+  reserveCrud(/\bskill\b/, {
+    create: "hypertask_create_skill",
+    update: "hypertask_update_skill",
+    remove: "hypertask_delete_skill",
+  });
+
+  return [...new Set(names)];
 }
 
 function selectRequestedToolNames(args: {
@@ -252,34 +357,37 @@ function selectRequestedToolNames(args: {
     .map((message) => message.content ?? "")
     .join(" ");
   const text = `${history} ${args.message}`.toLowerCase();
-  let names: readonly string[];
+  const groups: Array<readonly string[]> = [];
 
-  if (/\b(report|dashboard)\b/.test(text)) names = TOOL_GROUPS.report;
-  else if (/\b(page|document)\b/.test(text)) names = TOOL_GROUPS.page;
-  else if (/\b(saved view|board view|view tab|switch view)\b/.test(text)) names = TOOL_GROUPS.view;
-  else if (/\b(skill|\/skill)\b/.test(text)) names = TOOL_GROUPS.skill;
-  else if (/\b(timer|time tracking|log time|timesheet)\b/.test(text)) names = TOOL_GROUPS.time;
-  else if (/\b(inbox|notification)\b/.test(text)) names = TOOL_GROUPS.inbox;
-  else if (/\b(comment|reply|mention)\b/.test(text)) names = TOOL_GROUPS.comment;
-  else if (/\b(profile|display name|profile photo)\b/.test(text)) {
-    names = ["hypertask_get_user_context", "hypertask_update_profile"];
-  } else if (/\b(agent|webhook|mcp token|connection)\b/.test(text)) {
-    names = TOOL_GROUPS.agent;
-  } else if (/\b(task tree|subtasks?|parents?|related|duplicate|blocked? by|links? tasks?|next tasks?|task description history|description versions?)\b/.test(text)) {
-    names = TOOL_GROUPS.taskContext;
-  } else if (
+  if (/\b(report|dashboard)\b/.test(text)) groups.push(TOOL_GROUPS.report);
+  if (/\b(page|document)\b/.test(text)) groups.push(TOOL_GROUPS.page);
+  if (/\b(saved view|board view|view tab|switch view)\b/.test(text)) groups.push(TOOL_GROUPS.view);
+  if (/\b(skill|\/skill)\b/.test(text)) groups.push(TOOL_GROUPS.skill);
+  if (/\b(timer|time tracking|log time|timesheet)\b/.test(text)) groups.push(TOOL_GROUPS.time);
+  if (/\b(inbox|notification)\b/.test(text)) groups.push(TOOL_GROUPS.inbox);
+  if (/\b(comment|reply|mention)\b/.test(text)) groups.push(TOOL_GROUPS.comment);
+  if (/\b(profile|display name|profile photo)\b/.test(text)) {
+    groups.push(["hypertask_get_user_context", "hypertask_update_profile"]);
+  }
+  if (/\b(agent|webhook|mcp token|connection)\b/.test(text)) groups.push(TOOL_GROUPS.agent);
+  if (/\b(task tree|subtasks?|parents?|related|duplicate|blocked? by|links? tasks?|next tasks?|task description history|description versions?)\b/.test(text)) {
+    groups.push(TOOL_GROUPS.taskContext);
+  }
+  if (
     args.hasTaskContext ||
     /\b(tasks?|tickets?|cards?|assignees?|assign|unassign|priorities|due dates?|labels?|tags?|archive|restore)\b/.test(text)
   ) {
-    names = taskToolNames(text, Boolean(args.hasAttachments));
-  } else if (/\b(board|project|section|column|custom field)\b/.test(text)) {
-    names = TOOL_GROUPS.board;
-  } else names = DEFAULT_TOOLS;
+    groups.push(taskToolNames(text, Boolean(args.hasAttachments)));
+  }
+  if (/\b(board|project|section|column|custom field)\b/.test(text)) groups.push(TOOL_GROUPS.board);
+  if (groups.length === 0) groups.push(DEFAULT_TOOLS);
 
-  const selected = [...names];
-  if (args.hasAgentMention) selected.unshift("hypertask_ask_agent");
-  if (args.hasAttachments) selected.unshift("hypertask_attach_files");
-  return [...new Set(selected)].slice(0, 10);
+  return [
+    ...new Set([
+      ...requiredOperationToolNames(text, args),
+      ...groups.flat(),
+    ]),
+  ].slice(0, 10);
 }
 
 export function subsetToolsForTurn<T extends Record<string, ToolDefinition>>(

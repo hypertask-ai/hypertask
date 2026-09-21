@@ -72,6 +72,7 @@ import { retrieveBoardKnowledge } from "@/lib/rag/retrieveBoardKnowledge";
 import {
   CHAT_MAX_OUTPUT_TOKENS,
   MAX_CONTEXT_LIST_CHARS,
+  chatMaxOutputTokens,
   MAX_DEFAULT_CONTEXT_CHARS,
   MAX_DOCUMENT_CONTEXT_CHARS,
   MAX_HISTORY_SUMMARY_CHARS,
@@ -1285,7 +1286,8 @@ function selectModel(
   modelId: string | null | undefined,
   byokCredential: AiModelCredential | undefined,
   modelOption?: TAiModelOption,
-  tags?: AiGatewayTags
+  tags?: AiGatewayTags,
+  maxOutputTokens = CHAT_MAX_OUTPUT_TOKENS,
 ): {
   model: LanguageModel;
   settings: { temperature?: number; maxOutputTokens?: number };
@@ -1313,7 +1315,7 @@ function selectModel(
         usageProvider,
         settings: {
           ...(claudeAcceptsTemperature(model) ? { temperature: 0.2 } : {}),
-          maxOutputTokens: CHAT_MAX_OUTPUT_TOKENS,
+          maxOutputTokens,
         },
         providerOptions: providerOptionsForAiModel(
           aiModel,
@@ -1335,7 +1337,7 @@ function selectModel(
         usageProvider,
         settings: {
           temperature: model.toLowerCase().startsWith("gpt-5") ? 1 : 0.2,
-          maxOutputTokens: CHAT_MAX_OUTPUT_TOKENS,
+          maxOutputTokens,
         },
         providerOptions: providerOptionsForAiModel(
           aiModel,
@@ -1352,7 +1354,7 @@ function selectModel(
         model: aiModel,
         resolvedModelId: model,
         usageProvider,
-        settings: { temperature: 0.2, maxOutputTokens: CHAT_MAX_OUTPUT_TOKENS },
+        settings: { temperature: 0.2, maxOutputTokens },
         providerOptions: providerOptionsForAiModel(aiModel, "chat", tags),
       };
     }
@@ -1368,7 +1370,7 @@ function selectModel(
         model: aiModel,
         resolvedModelId: model,
         usageProvider,
-        settings: { temperature: 0.2, maxOutputTokens: CHAT_MAX_OUTPUT_TOKENS },
+        settings: { temperature: 0.2, maxOutputTokens },
         providerOptions: providerOptionsForAiModel(
           aiModel,
           "chat",
@@ -1385,7 +1387,7 @@ function selectModel(
         model: resolveAiModel(provider, "custom", byokCredential),
         resolvedModelId: byokCredential.modelId,
         usageProvider,
-        settings: { temperature: 0.2, maxOutputTokens: CHAT_MAX_OUTPUT_TOKENS },
+        settings: { temperature: 0.2, maxOutputTokens },
       };
     }
   }
@@ -4686,7 +4688,10 @@ function buildTools(
                 projectId: input.project_id,
                 status: { not: "Deleted" },
               },
-              include: taskMcpGetInclude(user.id),
+              include: {
+                ...taskMcpGetInclude(user.id),
+                description_: true,
+              },
             }),
             prisma.comment.count({ where: commentWhere }),
             prisma.comment.findMany({
@@ -10178,7 +10183,8 @@ export async function POST(request: NextRequest) {
       selection.model,
       byokApiKey,
       selection.modelOption,
-      gatewayTags
+      gatewayTags,
+      chatMaxOutputTokens(body.message),
     );
     selected = {
       ...resolvedModel,

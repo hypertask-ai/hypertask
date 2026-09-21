@@ -12,6 +12,7 @@ import type { McpTaskAssignee } from '@/lib/mcp/tasks/types'
 import {
   mapMcpTaskLabel,
   mapTaskAssignee,
+  mapTaskDescriptionContent,
   mapTaskToMcpGetResponse,
   mcpTaskLabelSelect,
   taskMcpGetInclude,
@@ -47,6 +48,7 @@ export interface TaskListItem {
   id: number
   ticketNumber?: string
   title: string
+  description: string
   section: string
   sectionId?: number
   boardId: number
@@ -620,6 +622,7 @@ export async function GET(request: NextRequest) {
         ticketNumber: true,
         uniqueIndex: true,
         title: true,
+        description_: true,
         section: true,
         sectionId: true,
         parentTaskId: true,
@@ -747,6 +750,7 @@ export async function GET(request: NextRequest) {
         ticketNumber: task.ticketNumber || undefined,
         uniqueIndex: task.uniqueIndex,
         title: task.title,
+        description: mapTaskDescriptionContent(task),
         section: task.section,
         sectionId: task.sectionId || undefined,
         boardId: task.projectId,

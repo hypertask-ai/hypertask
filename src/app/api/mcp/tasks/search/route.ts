@@ -26,6 +26,7 @@ export interface TaskSearchItem {
   ticketNumber?: string
   uniqueIndex?: number
   title: string
+  description: string
   boardId: number
   boardTitle: string
   projectId: number
@@ -328,6 +329,7 @@ export async function GET(request: NextRequest) {
         ticketNumber: true,
         uniqueIndex: true,
         title: true,
+        description: true,
         section: true,
         projectId: true,
         project: {
@@ -372,6 +374,7 @@ export async function GET(request: NextRequest) {
         id: task.id,
         ticketNumber: task.ticketNumber || undefined,
         title: task.title,
+        description: task.description,
         boardId: task.projectId,
         boardTitle: task.project.title || '',
         projectId: task.projectId,

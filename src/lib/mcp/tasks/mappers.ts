@@ -1,3 +1,4 @@
+import { HTMLElement, Node, parse } from 'node-html-parser';
 import {
     mapAttributedMcpAgent,
     mapVisibleMcpAgent,
@@ -22,18 +23,43 @@ export function mapTaskDescriptionContent(task: {
     return task.description_?.content || task.description || '';
 }
 
+function safeDescriptionUrl(value: string | undefined): string | undefined {
+    const url = value?.trim();
+    return url && (/^https?:\/\//i.test(url) || url.startsWith('/'))
+        ? url
+        : undefined;
+}
+
+function descriptionNodeText(node: Node): string {
+    if (node.nodeType === 3) return node.text;
+    if (!(node instanceof HTMLElement)) return '';
+
+    const tagName = String(node.rawTagName ?? '').toLowerCase();
+    if (tagName === 'script' || tagName === 'style') return '';
+    if (tagName === 'br') return ' ';
+    if (tagName === 'img') {
+        const source = safeDescriptionUrl(node.getAttribute('src'));
+        return source ? `[image: ${source}]` : '';
+    }
+
+    const content = node.childNodes.map(descriptionNodeText).join(' ').trim();
+    if (tagName !== 'a') return content;
+    const href = safeDescriptionUrl(node.getAttribute('href'));
+    if (!href || content === href) return content || href || '';
+    return `${content} (${href})`;
+}
+
 export function mapTaskDescriptionText(task: {
     description_?: { content?: string } | null;
     description?: string;
 }): string {
-    return mapTaskDescriptionContent(task)
-        .replace(/<[^>]+>/g, ' ')
-        .replace(/&nbsp;/gi, ' ')
-        .replace(/&lt;/gi, '<')
-        .replace(/&gt;/gi, '>')
-        .replace(/&quot;/gi, '"')
-        .replace(/&#39;/gi, "'")
-        .replace(/&amp;/gi, '&')
+    const root = parse(mapTaskDescriptionContent(task), {
+        comment: false,
+        lowerCaseTagName: true,
+    });
+    return root.childNodes
+        .map(descriptionNodeText)
+        .join(' ')
         .replace(/\s+/g, ' ')
         .trim();
 }

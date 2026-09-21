@@ -10,9 +10,13 @@ const jiti = require("jiti")(__filename, {
   interopDefault: true,
 });
 const {
+  CHAT_LONG_FORM_MAX_OUTPUT_TOKENS,
+  CHAT_MAX_OUTPUT_TOKENS,
   MAX_CONTEXT_LIST_CHARS,
   MAX_RAG_DOCUMENT_CHARS,
+  chatMaxOutputTokens,
   compactChatHistory,
+  excerptAroundQuery,
   stringifyPromptValue,
   subsetToolsForTurn,
   truncatePromptText,
@@ -148,6 +152,13 @@ test("write, confirmation, and mention turns retain the required tools", () => {
   assert.ok(taskWrite.hypertask_list_project_members);
   assert.ok(Object.keys(taskWrite).length <= 10);
 
+  const multiIntent = subsetToolsForTurn(allTools, {
+    message: "Create a task and add a comment to it",
+  });
+  assert.ok(multiIntent.hypertask_create_task);
+  assert.ok(multiIntent.hypertask_add_comment);
+  assert.ok(Object.keys(multiIntent).length <= 10);
+
   const confirmation = subsetToolsForTurn(allTools, {
     message: "Yes, do it",
     recentHistory: [
@@ -216,6 +227,28 @@ test("context and RAG values are capped with an explicit marker", () => {
   assert.match(rag, /\[truncated\]$/);
 });
 
+test("long-form requests retain enough output budget", () => {
+  assert.equal(chatMaxOutputTokens("List my open tasks"), CHAT_MAX_OUTPUT_TOKENS);
+  assert.equal(
+    chatMaxOutputTokens("Write a comprehensive project report"),
+    CHAT_LONG_FORM_MAX_OUTPUT_TOKENS,
+  );
+  assert.equal(
+    chatMaxOutputTokens("Give me a full report"),
+    CHAT_LONG_FORM_MAX_OUTPUT_TOKENS,
+  );
+});
+
+test("RAG excerpts retain a match near the end of long content", () => {
+  const excerpt = excerptAroundQuery(
+    `${"prefix ".repeat(200)}matched passage ${"suffix ".repeat(200)}`,
+    "matched passage",
+    MAX_RAG_DOCUMENT_CHARS,
+  );
+  assert.ok(excerpt.length <= MAX_RAG_DOCUMENT_CHARS);
+  assert.match(excerpt, /matched passage/);
+});
+
 test("chat route wires caching, selected tools, capped context, and cache usage", () => {
   const route = fs.readFileSync(
     path.join(root, "src/app/api/ai/chat/stream/route.ts"),
@@ -229,7 +262,7 @@ test("chat route wires caching, selected tools, capped context, and cache usage"
   assert.match(route, /chat_history_summary/);
 });
 
-test("task list and search payloads do not include description bodies", () => {
+test("public MCP list and search payloads preserve descriptions", () => {
   const listRoute = fs.readFileSync(
     path.join(root, "src/app/api/mcp/tasks/route.ts"),
     "utf8",
@@ -238,7 +271,7 @@ test("task list and search payloads do not include description bodies", () => {
     listRoute.indexOf("const taskList: TaskListItem[]"),
     listRoute.indexOf("const presentedTasks"),
   );
-  assert.doesNotMatch(listMapper, /description\s*:/);
+  assert.match(listMapper, /description:\s*mapTaskDescriptionContent\(task\)/);
 
   const searchRoute = fs.readFileSync(
     path.join(root, "src/app/api/mcp/tasks/search/route.ts"),
@@ -248,7 +281,19 @@ test("task list and search payloads do not include description bodies", () => {
     searchRoute.indexOf("const taskList: TaskSearchItem[]"),
     searchRoute.indexOf("const response: SearchTasksResponse"),
   );
-  assert.doesNotMatch(searchMapper, /description\s*:/);
+  assert.match(searchMapper, /description:\s*task\.description/);
+});
+
+test("task context selects descriptions for linked PR extraction", () => {
+  const route = fs.readFileSync(
+    path.join(root, "src/app/api/ai/chat/stream/route.ts"),
+    "utf8",
+  );
+  assert.match(
+    route,
+    /\.\.\.taskMcpGetInclude\(user\.id\),\s*description_:\s*true,/s,
+  );
+  assert.match(route, /extractPrLinks\(\s*mapTaskDescriptionContent\(task\)/s);
 });
 
 test("HTML text conversion does not double-decode entities", () => {
@@ -265,6 +310,15 @@ test("HTML text conversion does not double-decode entities", () => {
       },
     }),
     "Hello world & team &lt;tag&gt;",
+  );
+  assert.equal(
+    mapTaskDescriptionText({
+      description:
+        '<p><a href="https://example.test/pr/7">PR #7</a>' +
+        '<img src="https://example.test/screenshot.png">' +
+        '<img src="data:image/png;base64,AAAA"></p>',
+    }),
+    "PR #7 (https://example.test/pr/7) [image: https://example.test/screenshot.png]",
   );
 });
 
