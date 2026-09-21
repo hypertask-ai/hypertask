@@ -348,6 +348,140 @@ jobs:
           if-no-files-found: warn
           retention-days: 30
 
+  browser-smoke:
+    name: browser-smoke
+    if: github.event_name == 'push' || (github.event.pull_request.draft == false && (!endsWith(github.event.pull_request.user.login, '[bot]') || github.event.pull_request.user.login == 'dependabot[bot]') && contains(github.event.pull_request.labels.*.name, 'full-ci'))
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          fetch-depth: 1
+          persist-credentials: false
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 20
+
+      - name: Resolve dependency cache version
+        id: browser-dependency-cache-version
+        run: |
+          echo "node-abi=$(node -p 'process.versions.modules')" >> "$GITHUB_OUTPUT"
+          echo "npm-major=$(npm --version | cut -d. -f1)" >> "$GITHUB_OUTPUT"
+
+      - name: Restore node_modules cache
+        id: browser-restore-node-modules
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: node_modules
+          key: node-modules-${{ runner.os }}-${{ runner.arch }}-abi${{ steps.browser-dependency-cache-version.outputs.node-abi }}-npm${{ steps.browser-dependency-cache-version.outputs.npm-major }}-${{ hashFiles('package-lock.json', 'package.json', '.npmrc') }}
+
+      - name: Install dependencies
+        if: steps.browser-restore-node-modules.outputs.cache-hit != 'true'
+        run: npm ci --prefer-offline --no-audit --no-fund
+
+      - name: Pull and validate the preview environment
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          QA_LOGIN_EMAIL: ${{ secrets.QA_LOGIN_EMAIL }}
+          QA_LOGIN_PASSWORD: ${{ secrets.QA_LOGIN_PASSWORD }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          [ -n "${VERCEL_TOKEN:-}" ] || { echo "::error::browser-smoke cannot run because VERCEL_TOKEN is not configured."; exit 1; }
+          [ -n "${QA_LOGIN_EMAIL:-}" ] || { echo "::error::browser-smoke cannot run because QA_LOGIN_EMAIL is not configured."; exit 1; }
+          [ -n "${QA_LOGIN_PASSWORD:-}" ] || { echo "::error::browser-smoke cannot run because QA_LOGIN_PASSWORD is not configured."; exit 1; }
+
+          mkdir -p .vercel
+          printf '%s\n' '{"orgId":"team_yureFlJZ6ibwebaOOkKc5whs","projectId":"prj_oEok2iMNFPzj6AWe1KQBaIAcPaAf"}' > .vercel/project.json
+          npx --yes vercel@59.23.2 pull --yes --environment=preview --token "$VERCEL_TOKEN"
+          [ -s .vercel/.env.preview.local ] || { echo "::error::Vercel did not provide the preview environment for browser-smoke."; exit 1; }
+          node --env-file=.vercel/.env.preview.local -e '
+            if (!process.env.DATABASE_URL) {
+              console.error("::error::browser-smoke cannot run because the preview DATABASE_URL is missing.")
+              process.exit(1)
+            }
+          '
+
+      - name: Build the local app
+        env:
+          CI_QA_LOGIN_EMAIL: ${{ secrets.QA_LOGIN_EMAIL }}
+          CI_QA_LOGIN_PASSWORD: ${{ secrets.QA_LOGIN_PASSWORD }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          export QA_LOGIN_EMAIL="$CI_QA_LOGIN_EMAIL"
+          export QA_LOGIN_PASSWORD="$CI_QA_LOGIN_PASSWORD"
+          export NEXT_PUBLIC_API_BASE_URL=/api
+          export NEXT_PUBLIC_APP_URL=http://127.0.0.1:3101
+          export NEXT_PUBLIC_BASEURL=http://127.0.0.1:3101
+          export NEXT_PUBLIC_SITE_URL=http://127.0.0.1:3101
+          export QSTASH_CALLBACK_BASE_URL=http://127.0.0.1:3101
+          export QSTASH_AUTO_REGISTER_SWEEP=false
+          export NEXT_TELEMETRY_DISABLED=1
+          export CORE_APP_SMOKE=true
+          export NEXT_FONT_GOOGLE_MOCKED_RESPONSES="$GITHUB_WORKSPACE/scripts/next-font-smoke-mock.cjs"
+          export NODE_OPTIONS=--max-old-space-size=8192
+          node --env-file=.vercel/.env.preview.local node_modules/prisma/build/index.js generate
+          timeout --signal=KILL 10m node --env-file=.vercel/.env.preview.local node_modules/next/dist/bin/next build --webpack
+
+      - name: Restore Playwright browser cache
+        id: browser-pw-cache
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-chromium-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
+
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+
+      - name: Save Playwright browser cache
+        if: github.event_name == 'push' && steps.browser-pw-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-chromium-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
+
+      - name: Run the logged-in browser smoke
+        env:
+          CI_QA_LOGIN_EMAIL: ${{ secrets.QA_LOGIN_EMAIL }}
+          CI_QA_LOGIN_PASSWORD: ${{ secrets.QA_LOGIN_PASSWORD }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          export QA_LOGIN_EMAIL="$CI_QA_LOGIN_EMAIL"
+          export QA_LOGIN_PASSWORD="$CI_QA_LOGIN_PASSWORD"
+          export NEXT_PUBLIC_API_BASE_URL=/api
+          export NEXT_PUBLIC_APP_URL=http://127.0.0.1:3101
+          export NEXT_PUBLIC_BASEURL=http://127.0.0.1:3101
+          export NEXT_PUBLIC_SITE_URL=http://127.0.0.1:3101
+          export QSTASH_CALLBACK_BASE_URL=http://127.0.0.1:3101
+          export QSTASH_AUTO_REGISTER_SWEEP=false
+          export NEXT_TELEMETRY_DISABLED=1
+
+          node --env-file=.vercel/.env.preview.local node_modules/next/dist/bin/next start -H 127.0.0.1 -p 3101 >"$RUNNER_TEMP/browser-smoke-app.log" 2>&1 &
+          app_pid=$!
+          cleanup() {
+            kill "$app_pid" 2>/dev/null || true
+            wait "$app_pid" 2>/dev/null || true
+          }
+          trap cleanup EXIT
+
+          ready=false
+          for attempt in $(seq 1 60); do
+            kill -0 "$app_pid" 2>/dev/null || { echo "::error::The local Next.js server exited before browser-smoke could run."; exit 1; }
+            if curl --fail --silent --show-error --max-time 5 http://127.0.0.1:3101/api/version >/dev/null; then
+              ready=true
+              break
+            fi
+            sleep 1
+          done
+          [ "$ready" = true ] || { echo "::error::The local Next.js server was not ready within 60 seconds."; exit 1; }
+
+          BASE_URL=http://127.0.0.1:3101 node --env-file=.vercel/.env.preview.local node_modules/@playwright/test/cli.js test -c playwright.config.smoke.ts e2e/smoke/prod.spec.ts
+
   production-test-warning:
     name: production-test-warning
     # Unit tests report code correctness, not whether the live deployment is

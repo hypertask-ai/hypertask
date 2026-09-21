@@ -317,7 +317,7 @@ test("auto-merge waits for app smoke and runs when it completes", async () => {
     workflow,
     /REQUIRED="app-smoke ci-tests claude-review next-public-secrets revert-guard pr-title"/,
   );
-  assert.match(workflow, /REQUIRED="\$REQUIRED feature-flag-gate"/);
+  assert.match(workflow, /REQUIRED="\$REQUIRED feature-flag-gate browser-smoke"/);
   assert.match(ciWorkflow, /name: Verify live required-check settings/);
   assert.match(ciWorkflow, /default_branch.*gh api "repos\/\$REPO"/);
   assert.match(ciWorkflow, /name == "production-required-checks"/);
@@ -347,6 +347,7 @@ test("CI policy keeps the protected smoke producer live and required", async () 
   assert.deepEqual(policy.required_checks.contexts, required);
   assert.deepEqual(policy.required_checks.automerge_also_requires, [
     "app-smoke",
+    "browser-smoke",
     "ci-tests",
     "feature-flag-gate",
   ]);

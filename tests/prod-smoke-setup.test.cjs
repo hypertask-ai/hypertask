@@ -3,6 +3,7 @@ const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const path = require("node:path");
 const ts = require("typescript");
+const yaml = require("js-yaml");
 
 const root = path.resolve(__dirname, "..");
 const stateDirectory = path.join(root, "e2e/smoke/.state");
@@ -39,6 +40,23 @@ function loadGlobalSetup(chromium) {
     path.dirname(filename),
   );
   return module_.exports.default;
+}
+
+function loadNavigationCounter() {
+  const filename = path.join(root, "e2e/smoke/navigation-counter.ts");
+  const javascript = ts.transpileModule(fs.readFileSync(filename, "utf8"), {
+    compilerOptions: {
+      module: ts.ModuleKind.CommonJS,
+      target: ts.ScriptTarget.ES2020,
+    },
+  }).outputText;
+  const module_ = { exports: {} };
+  new Function("require", "module", "exports", javascript)(
+    require,
+    module_,
+    module_.exports,
+  );
+  return module_.exports;
 }
 
 function config() {
@@ -120,6 +138,39 @@ test("production workflow supplies the dedicated QA login instead of skipping", 
   assert.doesNotMatch(smokeJob, /Not provisioned yet/);
   assert.match(smokeJob, /ran: \$\{\{ steps\.smoke_status\.outputs\.ran \}\}/);
   assert.match(smokeJob, /jq -r '\.ok' e2e\/smoke\/\.state\/preflight\.json/);
+});
+
+test("PR browser smoke uses the full-CI gate and fails closed without login or database access", () => {
+  const workflow = yaml.load(
+    fs.readFileSync(path.join(root, ".github/workflows/ci-tests.yml"), "utf8"),
+  );
+  const ciJob = workflow.jobs["ci-tests"];
+  const browserJob = workflow.jobs["browser-smoke"];
+  const browserSteps = browserJob.steps.map((step) => step.run ?? "").join("\n");
+  const configSource = fs.readFileSync(
+    path.join(root, "playwright.config.smoke.ts"),
+    "utf8",
+  );
+
+  assert.equal(browserJob.name, "browser-smoke");
+  assert.equal(browserJob.if, ciJob.if);
+  assert.deepEqual(browserJob["runs-on"], ciJob["runs-on"]);
+  assert.match(browserSteps, /preview DATABASE_URL is missing/);
+  assert.match(browserSteps, /QA_LOGIN_EMAIL is not configured/);
+  assert.match(browserSteps, /QA_LOGIN_PASSWORD is not configured/);
+  assert.match(browserSteps, /next build --webpack/);
+  assert.match(browserSteps, /BASE_URL=http:\/\/127\.0\.0\.1:3101/);
+  assert.match(configSource, /process\.env\.BASE_URL \|\| process\.env\.SMOKE_BASE_URL/);
+});
+
+test("navigation counter treats every main-frame navigation after load as a reload", () => {
+  const { NAVIGATION_WATCH_MS, reloadCount } = loadNavigationCounter();
+
+  assert.equal(NAVIGATION_WATCH_MS, 30_000);
+  assert.equal(reloadCount(0), 0);
+  assert.equal(reloadCount(1), 0);
+  assert.equal(reloadCount(2), 1);
+  assert.equal(reloadCount(5), 4);
 });
 
 test("production smoke logs in and resolves the seeded board and task", async () => {
