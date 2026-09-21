@@ -1,3 +1,4 @@
+import { logger as htLogger } from "#logger";
 import { generateObject } from "ai";
 import { z } from "zod";
 
@@ -187,7 +188,7 @@ export async function createSlackTaskFromThread(
       `Created ${buildTaskLink(task.projectId, task.uniqueIndex)}`,
     );
   } catch (error) {
-    console.error("Slack task creation failed", error);
+    htLogger.error("Slack task creation failed", error);
     await postSlackThreadReply(
       botToken,
       event.channelId,

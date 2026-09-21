@@ -1,3 +1,4 @@
+import { logger as htLogger } from "#logger";
 /* eslint-disable react-hooks/exhaustive-deps */
 /* eslint-disable @next/next/no-img-element */
 "use client";
@@ -662,7 +663,7 @@ const Inbox = ({
         });
       }
     } catch (error) {
-      console.log("🚀 ~ newCommentsHandler ~ error:", error);
+      htLogger.info("🚀 ~ newCommentsHandler ~ error:", error);
     }
   };
 

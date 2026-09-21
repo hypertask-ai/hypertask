@@ -1,3 +1,6 @@
+import { env as appEnv } from "#env";
+import { logger as htLogger } from "#logger";
+import { withAuth } from "#with-auth";
 // Import PrismaClient from the generated Prisma client
 import prisma from '@/lib/prisma';
 import { NextApiHandler, NextApiRequest, NextApiResponse } from 'next';
@@ -5,24 +8,24 @@ import { NextApiHandler, NextApiRequest, NextApiResponse } from 'next';
 const handler: NextApiHandler = async (req: NextApiRequest, res: NextApiResponse) => {
     if (req.method==="GET"){
         const { password } = req.query;
-        if (!password || password !==process.env.ANALYTICS_PASSWORD) return res.status(404).json({ message: "Missing Required Data pr incorrect password" });
+        if (!password || password !==appEnv.ANALYTICS_PASSWORD) return res.status(404).json({ message: "Missing Required Data pr incorrect password" });
         try {
-         
+
             // getTaskCounts().then(result => {
-            //     console.log('Monthly Counts:', result.monthlyCounts);
-            //     console.log('Weekly Counts:', result.weeklyCounts);
-            //     console.log('Daily Counts:', result.dailyCounts);
-            //     console.log("total count", result.totalTasksOverall) 
+            //     debug.log('Monthly Counts:', result.monthlyCounts);
+            //     debug.log('Weekly Counts:', result.weeklyCounts);
+            //     debug.log('Daily Counts:', result.dailyCounts);
+            //     debug.log("total count", result.totalTasksOverall)
             //   }).catch(error => {
-            //     console.error(error);
+            //     debug.error(error);
             //   })
         } catch (error) {
-            console.log('Error creating section:', error);
+            htLogger.info('Error creating section:', error);
             throw error;
-        } 
+        }
 
     }
 }
 
 
-export default handler
+export default withAuth(handler, { authenticateInHandler: true })

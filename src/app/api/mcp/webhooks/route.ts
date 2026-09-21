@@ -1,3 +1,5 @@
+import { logger as htLogger } from "#logger";
+import { withoutAuth } from "#with-auth";
 import { NextRequest, NextResponse } from 'next/server'
 import crypto from 'crypto'
 import { checkMcpRateLimit, validateMcpAuth } from '@/lib/mcp/auth'
@@ -64,7 +66,7 @@ function serialize(sub: {
  * GET /api/mcp/webhooks?project_id=
  * List a board's outbound webhook subscriptions. Secrets are masked.
  */
-export async function GET(request: NextRequest) {
+async function GETHandler(request: NextRequest) {
   try {
     const rateLimited = await checkMcpRateLimit(request)
     if (rateLimited) return rateLimited
@@ -133,7 +135,7 @@ export async function GET(request: NextRequest) {
       subscriptions: subs.map(serialize),
     })
   } catch (error) {
-    console.error('[MCP Webhooks] GET error:', error)
+    htLogger.error('[MCP Webhooks] GET error:', error)
     return NextResponse.json({ success: false, error: 'Internal server error' }, { status: 500 })
   }
 }
@@ -144,7 +146,7 @@ export async function GET(request: NextRequest) {
  * Body: { project_id, url, events? }. `events` omitted/empty = all events.
  * Returns the generated `secret` ONCE (used to verify the HMAC signature).
  */
-export async function POST(request: NextRequest) {
+async function POSTHandler(request: NextRequest) {
   try {
     const rateLimited = await checkMcpRateLimit(request)
     if (rateLimited) return rateLimited
@@ -298,7 +300,7 @@ export async function POST(request: NextRequest) {
       { status: 201 }
     )
   } catch (error) {
-    console.error('[MCP Webhooks] POST error:', error)
+    htLogger.error('[MCP Webhooks] POST error:', error)
     return NextResponse.json({ success: false, error: 'Internal server error' }, { status: 500 })
   }
 }
@@ -307,7 +309,7 @@ export async function POST(request: NextRequest) {
  * DELETE /api/mcp/webhooks?id=
  * Remove a subscription the caller can access (scoped by board access).
  */
-export async function DELETE(request: NextRequest) {
+async function DELETEHandler(request: NextRequest) {
   try {
     const rateLimited = await checkMcpRateLimit(request)
     if (rateLimited) return rateLimited
@@ -381,7 +383,11 @@ export async function DELETE(request: NextRequest) {
 
     return NextResponse.json({ success: true, deleted: id })
   } catch (error) {
-    console.error('[MCP Webhooks] DELETE error:', error)
+    htLogger.error('[MCP Webhooks] DELETE error:', error)
     return NextResponse.json({ success: false, error: 'Internal server error' }, { status: 500 })
   }
 }
+
+export const GET = withoutAuth(GETHandler);
+export const POST = withoutAuth(POSTHandler);
+export const DELETE = withoutAuth(DELETEHandler);

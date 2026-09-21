@@ -1,3 +1,4 @@
+import { logger as htLogger } from "#logger";
 import prisma from "@/lib/prisma";
 import { addExistingUserToProject } from "./addExistingUserToProject";
 
@@ -89,7 +90,7 @@ const membersShare = async (userId: number, shareId: string) => {
       json: { message: "Did not find sharelink", allowShare: false },
     };
   } catch (error) {
-    console.log(error);
+    htLogger.info(error);
     return { status: 500, json: { message: JSON.stringify(error) } };
   }
 };
@@ -102,7 +103,7 @@ const addToTeam = async (projectId: number, userId: number) => {
     if (!result.ok && result.status === 404) return false;
     return true;
   } catch (error: any) {
-    console.log("🚀 ~ addToTeam ~ error:", error);
+    htLogger.info("🚀 ~ addToTeam ~ error:", error);
     return false;
   }
 };

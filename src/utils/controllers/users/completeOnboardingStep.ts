@@ -1,3 +1,4 @@
+import { logger as htLogger } from "#logger";
 import { CreateLogInput, IUser } from "@/models/model";
 import { getSequentialLetters } from "@/utils/helperFunctions/helperFunctions";
 import { LogType, Status } from "@prisma/client";
@@ -39,7 +40,7 @@ export const CompleteOnboardingFirstStep = async (
 ) => {
   try {
     // finding the google account we created during signup
-    console.log(
+    htLogger.info(
       "-------- finding the google account we created during signup ----------"
     );
     let googleAccount = await prisma.googleAccount.findFirst({
@@ -47,7 +48,7 @@ export const CompleteOnboardingFirstStep = async (
         userId: exist_user.id,
       },
     });
-    console.log("🚀 Found googleAccount:", googleAccount);
+    htLogger.info("🚀 Found googleAccount:", googleAccount);
     if (!googleAccount) {
       // HTPR-4852: email-link/code signups have no googleAccount yet. Create it
       // and continue, so first-ever signups still get their team/board (the old
@@ -58,7 +59,7 @@ export const CompleteOnboardingFirstStep = async (
           stripe_customer_id: exist_user.stripe_customer_id || "",
         },
       });
-      console.log("🚀 Created new googleAccount:", googleAccount);
+      htLogger.info("🚀 Created new googleAccount:", googleAccount);
     }
     const customer = await createCustomerIfNull(
       googleAccount.stripe_customer_id,
@@ -66,14 +67,14 @@ export const CompleteOnboardingFirstStep = async (
       googleAccount.id
     );
 
-    console.log(
+    htLogger.info(
       "============= google Account and stripe customer account ========= ",
       customer
     );
-    console.log("++++++++++++++++++++++++");
+    htLogger.info("++++++++++++++++++++++++");
     // =================== CREATE TEAM against the google account
 
-    console.log("-------- Creating a team ----------");
+    htLogger.info("-------- Creating a team ----------");
 
     const Team = await prisma.team.create({
       data: {
@@ -88,7 +89,7 @@ export const CompleteOnboardingFirstStep = async (
       },
     });
     let Project = null;
-    console.log(" Team Created ========> ", Team);
+    htLogger.info(" Team Created ========> ", Team);
     await prisma.team_Activity.create({
       data: {
         lastActiviyAt: new Date(),
@@ -114,7 +115,7 @@ export const CompleteOnboardingFirstStep = async (
         googleAccount,
       });
     } else {
-      console.log("============== skipping initial board creation ============");
+      htLogger.info("============== skipping initial board creation ============");
     }
 
     //Commented this out.
@@ -131,7 +132,7 @@ export const CompleteOnboardingFirstStep = async (
 
     //   if (announcements && announcements.length > 0) {
     //     for (const ann of announcements) {
-    //       console.log(
+    //       debug.log(
     //         "🤔 ~ CompleteOnboardingFirstStep ~ announcements:",
     //         ann,
     //         exist_user.id
@@ -146,12 +147,12 @@ export const CompleteOnboardingFirstStep = async (
     //     }
     //   }
     // } catch (error) {
-    //   console.log("🤔 ~ CompleteOnboardingFirstStep ~ error:", error);
+    //   debug.log("🤔 ~ CompleteOnboardingFirstStep ~ error:", error);
     // }
 
     return { Project, Team };
   } catch (error) {
-    console.error("🚀 ~ CompleteOnboardingFirstStep ~ error:", error);
+    htLogger.error("🚀 ~ CompleteOnboardingFirstStep ~ error:", error);
     throw error;
   }
 };
@@ -279,7 +280,7 @@ export const createOnboardingSampleBoardProject = async ({
         },
       });
     } catch (error) {
-      console.error(
+      htLogger.error(
         `Error creating onboarding starter section "${sectionDef.section_title}" (skipping):`,
         error
       );
@@ -303,7 +304,7 @@ export const createOnboardingSampleBoardProject = async ({
           updateTeamActivity: false,
         });
       } catch (error) {
-        console.error(
+        htLogger.error(
           `Error creating onboarding starter task "${task.title}" (skipping):`,
           error
         );
@@ -342,7 +343,7 @@ export const createOnboardingSampleBoardProject = async ({
         );
       }
     } catch (error) {
-      console.error(
+      htLogger.error(
         `Error creating onboarding task "${CONNECT_AI_TASK.title}" (skipping):`,
         error
       );

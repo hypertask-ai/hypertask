@@ -1,3 +1,4 @@
+import { logger as htLogger } from "#logger";
 import axios from "axios";
 import { useState, useEffect } from "react";
 import { ToggleSwitch } from "../Single section items";
@@ -36,7 +37,7 @@ const MentionNotificationSidebar = () => {
           notificationPreference: value,
         }));
       } catch (error) {
-        console.error("Failed to update notification preference:", error);
+        htLogger.error("Failed to update notification preference:", error);
         // Revert on error
         setNotificationLevel(currentUser?.notificationPreference || "direct");
       } finally {

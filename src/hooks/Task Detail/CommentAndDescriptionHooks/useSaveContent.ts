@@ -1,3 +1,5 @@
+import { env as appEnv } from "#env";
+import { logger as htLogger } from "#logger";
 import { useTaskContext } from "@/lib/contexts/TaskDetail/TaskProvider";
 import { measuredSizeNumber, measuredSizeString } from "@/lib/attachments/measuredSize";
 import {
@@ -74,7 +76,7 @@ export default function useSaveContent() {
   const [currentProject] = useRecoilState(currentProjectAtom);
   const queryClient = useQueryClient();
   const _mbl = useContext(MobileViewContext);
-  const hyperAiId = process.env.NEXT_PUBLIC_HYPERAI_ID || "332";
+  const hyperAiId = appEnv.NEXT_PUBLIC_HYPERAI_ID || "332";
   const { resetDescriptionQuery } = useProjectQuery();
   const { addRelations } = useTaskRelations();
   const { postHyperMention, postImageGeneration } = useHyperMention();
@@ -158,7 +160,7 @@ export default function useSaveContent() {
               addUrlIfUnique(url, aElement.innerHTML);
             }
           } catch (error) {
-            console.error("Error processing project span:", error);
+            htLogger.error("Error processing project span:", error);
           }
         });
 
@@ -188,7 +190,7 @@ export default function useSaveContent() {
               relatedTasks.push({ uniqueIndex: index, projectId });
             }
           } catch (error) {
-            console.error("Error processing task span:", error);
+            htLogger.error("Error processing task span:", error);
           }
         });
 
@@ -257,7 +259,7 @@ export default function useSaveContent() {
               PostFollowerBody.push(mentionBody);
             }
           } catch (error) {
-            console.error("Error processing user mention:", error);
+            htLogger.error("Error processing user mention:", error);
           }
         });
 
@@ -274,7 +276,7 @@ export default function useSaveContent() {
             seenAgentIds.add(agentId);
             agentMentions.push(agentId);
           } catch (error) {
-            console.log("🚀 ~ processHtml ~ error processing agent mentions:", error);
+            htLogger.info("🚀 ~ processHtml ~ error processing agent mentions:", error);
           }
         });
 
@@ -293,7 +295,7 @@ export default function useSaveContent() {
               reader.readAsDataURL(blob);
             });
           } catch (error) {
-            console.error("Error converting blob to base64:", error);
+            htLogger.error("Error converting blob to base64:", error);
             throw error;
           }
         };
@@ -327,7 +329,7 @@ export default function useSaveContent() {
                 addUrlIfUnique(src, src.substring(src.lastIndexOf("/") + 1));
               }
             } catch (error) {
-              console.error("Error processing image:", error);
+              htLogger.error("Error processing image:", error);
             } finally {
               callback?.((prev) => prev + 1);
             }
@@ -367,12 +369,12 @@ export default function useSaveContent() {
                   title = `YouTube Video: ${videoId}`;
                 }
               } catch (urlError) {
-                console.error("Error parsing embed URL:", urlError);
+                htLogger.error("Error parsing embed URL:", urlError);
               }
 
               addUrlIfUnique(url, title);
             } catch (error) {
-              console.error("Error processing embed:", error);
+              htLogger.error("Error processing embed:", error);
             }
           });
         };
@@ -389,7 +391,7 @@ export default function useSaveContent() {
                   addUrlIfUnique(url, title);
                 }
               } catch (error) {
-                console.error("Error processing anchor:", error);
+                htLogger.error("Error processing anchor:", error);
               }
             });
 
@@ -412,11 +414,11 @@ export default function useSaveContent() {
             resolve(returnHtml);
           })
           .catch((error) => {
-            console.error("Error in convertImages:", error);
+            htLogger.error("Error in convertImages:", error);
             reject(error);
           });
       } catch (error) {
-        console.error("Error in processHtml:", error);
+        htLogger.error("Error in processHtml:", error);
         reject(error);
       }
     });
@@ -439,7 +441,7 @@ export default function useSaveContent() {
       }
       else throw "Failed";
     } catch (error) {
-      console.log("🚀 ~ updateDescriptionfromAI ~ error:", error);
+      htLogger.info("🚀 ~ updateDescriptionfromAI ~ error:", error);
       return { error, message: "failed" };
     } finally {
       focusOn(descriptionContainerId, false);
@@ -479,7 +481,7 @@ export default function useSaveContent() {
           taskId: currentTask?.id,
         };
         const response = await updateTask(newTask, payload, "SaveDescription");
-        // console.log(data);
+        // debug.log(data);
 
         //remove duplicates
         const uniquePostFollowerBody = result.PostFollowerBody.filter(
@@ -587,17 +589,17 @@ export default function useSaveContent() {
           toast.error("Could not save description. Your changes are still here.");
         }
       } catch (error) {
-        console.log("🚀 ~ handleSubmit ~ error:", error)
+        htLogger.info("🚀 ~ handleSubmit ~ error:", error)
         toast.error("Could not save description. Your changes are still here.");
       }
     } else {
       toast.error("Could not prepare description. Your changes are still here.");
     }
     } catch (error) {
-      console.log("🚀 ~ handleSubmit ~ error:", error)
+      htLogger.info("🚀 ~ handleSubmit ~ error:", error)
       toast.error("Could not save description. Your changes are still here.");
     } finally {
-      console.log(
+      htLogger.info(
         " ============= Description upload finished ================="
       );
       setUploadingDescription(undefined);
@@ -626,7 +628,7 @@ export default function useSaveContent() {
           scrollVirtualize("comment", parseInt(currentIndex));
         }
         const result = await processHtml(content);
-        // console.log("🚀 ~ file: TaskDetailComp.tsx:1616 ~ updateCommentHandler ~ result:", result)
+        // debug.log("🚀 ~ file: TaskDetailComp.tsx:1616 ~ updateCommentHandler ~ result:", result)
         const comment = comments.find((comment) => comment.id === id);
         if (!comment) {
           toast.error("This comment no longer exists. Refresh the task and try again.");
@@ -743,11 +745,11 @@ export default function useSaveContent() {
           setEditMode(null);
           return true;
         } else {
-          console.error("Error updating comment:", data.error); // You might want to handle the error in a better way
+          htLogger.error("Error updating comment:", data.error); // You might want to handle the error in a better way
           toast.error("Could not update comment. Your changes are still here.");
         }
       } catch (error) {
-        console.error(error);
+        htLogger.error(error);
         toast.error("Could not update comment. Your changes are still here.");
       }
     }
@@ -801,7 +803,7 @@ export default function useSaveContent() {
     ) {
       focusOn("comment", true, "auto", "center", true);
 
-      console.log("🚀 ~ useSaveContent ~ result:", result);
+      htLogger.info("🚀 ~ useSaveContent ~ result:", result);
       let data: any;
       try {
         ({ data } = await axios.post("/api/comments/create", {
@@ -1102,7 +1104,7 @@ export default function useSaveContent() {
     );
     const totalAttachments = imgTags.length + attachments.length;
 
-    // console.log("🚀 ~ useSaveContent ~ attachments:", attachments)
+    // debug.log("🚀 ~ useSaveContent ~ attachments:", attachments)
     if (mode === "create-comment") {
       // =========== first get the documents and upload them from inside that component thingy.
       // Initialize navigation parameters

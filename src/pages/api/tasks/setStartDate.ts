@@ -1,3 +1,5 @@
+import { logger as htLogger } from "#logger";
+import { withAuth } from "#with-auth";
 import { NextApiHandler } from "next";
 import { updateTaskSingle } from "@/utils/controllers/tasks/single";
 import { broadcastBoardChange, broadcastTaskChange } from "@/lib/realtime/server";
@@ -42,11 +44,11 @@ const handler: NextApiHandler = async (req, res) => {
 
     return res.status(status).json(task);
   } catch (error) {
-    console.error(error);
+    htLogger.error(error);
     return res
       .status(500)
       .json({ message: "Internal server error", error: String(error) });
   }
 };
 
-export default handler;
+export default withAuth(handler, { authenticateInHandler: true });

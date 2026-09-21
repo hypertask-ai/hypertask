@@ -1,3 +1,5 @@
+import { logger as htLogger } from "#logger";
+import { withAuth } from "#with-auth";
 import { generateText } from "ai";
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
@@ -61,7 +63,7 @@ type TaskComment = {
   text: string;
 };
 
-export async function POST(request: NextRequest) {
+async function POSTHandler(request: NextRequest) {
   const viewer = await getCurrentUserFromCookies();
   if (!viewer?.id) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -271,7 +273,9 @@ ${formattedComments}`,
 
     return NextResponse.json({ questions });
   } catch (error) {
-    console.error("[ai/task-questions] failed:", error);
+    htLogger.error("[ai/task-questions] failed:", error);
     return NextResponse.json({ questions: [] });
   }
 }
+
+export const POST = withAuth(POSTHandler, { authenticateInHandler: true });

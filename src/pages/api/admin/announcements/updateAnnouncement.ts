@@ -1,3 +1,5 @@
+import { logger as htLogger } from "#logger";
+import { withAuth } from "#with-auth";
 import { NextApiHandler, NextApiRequest, NextApiResponse } from "next";
 import prisma from "@/lib/prisma";
 import NextCors from "nextjs-cors";
@@ -8,7 +10,7 @@ const handler: NextApiHandler = async (
   req: NextApiRequest,
   res: NextApiResponse
 ) => {
-  console.log(req.method);
+  htLogger.info(req.method);
   try {
     await NextCors(req, res, {
       // Options
@@ -25,7 +27,7 @@ const handler: NextApiHandler = async (
     if (!(await requireAnnouncementAdmin(req, res))) return;
     if (req.method === "POST") {
       const { jsonBody, announcementId } = req.body;
-      console.log("🚀 ~ announcementId:", announcementId)
+      htLogger.info("🚀 ~ announcementId:", announcementId)
 
       const updatedAnnouncement = await prisma.announcments.update({
         where: {
@@ -60,20 +62,20 @@ const handler: NextApiHandler = async (
       const deleteAnnouncements = await prisma.announcments.deleteMany({
         where: { id: id },
       });
-      console.log(
+      htLogger.info(
         "🚀 ~ consthandler:NextApiHandler= ~ deleteCommand:",
         deleteCommand
       );
-      console.log(
+      htLogger.info(
         "🚀 ~ consthandler:NextApiHandler= ~ deleteAnnouncements:",
         deleteAnnouncements
       );
       return res.status(200).end();
     }
   } catch (error) {
-    console.log(error);
+    htLogger.info(error);
     res.status(500).json({ message: "Internal server error", error });
   }
 };
 
-export default handler;
+export default withAuth(handler, { authenticateInHandler: true });

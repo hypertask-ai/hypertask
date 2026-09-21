@@ -1,3 +1,6 @@
+import { env as appEnv } from "#env";
+import { logger as htLogger } from "#logger";
+import { withoutAuth } from "#with-auth";
 import { createGateway, streamText, type ModelMessage } from "ai";
 import { NextRequest } from "next/server";
 import { z } from "zod";
@@ -141,8 +144,8 @@ function fallbackTitle(message: string) {
     .replace(/[.!?;:,]+$/g, "");
 }
 
-export async function POST(request: NextRequest) {
-  const apiKey = process.env.DEMO_AI_GATEWAY_API_KEY?.trim();
+async function POSTHandler(request: NextRequest) {
+  const apiKey = appEnv.DEMO_AI_GATEWAY_API_KEY?.trim();
   if (!apiKey) {
     // ponytail: fail closed. Anonymous chat spend must never fall back to a
     // shared team or platform key.
@@ -275,7 +278,7 @@ export async function POST(request: NextRequest) {
         }
         finish("complete");
       } catch (error) {
-        console.error("demo chat generation failed", error);
+        htLogger.error("demo chat generation failed", error);
         fail(error);
       }
     },
@@ -283,3 +286,5 @@ export async function POST(request: NextRequest) {
 
   return new Response(stream, { headers: SSE_HEADERS });
 }
+
+export const POST = withoutAuth(POSTHandler);

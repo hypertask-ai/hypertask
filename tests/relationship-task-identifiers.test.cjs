@@ -20,9 +20,9 @@ function readSource(relativePath) {
 }
 
 function methodSource(source, method, nextMethod) {
-  const start = source.indexOf(`export async function ${method}`);
+  const start = source.indexOf(`async function ${method}Handler`);
   const end = nextMethod
-    ? source.indexOf(`export async function ${nextMethod}`, start)
+    ? source.indexOf(`async function ${nextMethod}Handler`, start)
     : source.length;
   return source.slice(start, end);
 }

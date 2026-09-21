@@ -1,3 +1,4 @@
+import { logger as htLogger } from "#logger";
 // Run: npx tsx src/components/RTE/mentionNavigation.check.ts
 import assert from "node:assert";
 import {
@@ -51,4 +52,4 @@ assert.strictEqual(
   "ArrowUp from an uninitialized selection starts at the last row",
 );
 
-console.log("mentionNavigation: all checks passed");
+htLogger.info("mentionNavigation: all checks passed");

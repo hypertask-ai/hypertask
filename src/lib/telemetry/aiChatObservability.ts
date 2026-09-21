@@ -1,3 +1,5 @@
+import { env as appEnv } from "#env";
+import { logger as htLogger } from "#logger";
 /**
  * HTPR-6320: PostHog AI observability for the in-app AI Chat.
  *
@@ -24,7 +26,7 @@ const CAPTURE_TIMEOUT_MS = 1500;
 let client: PostHog | undefined;
 
 function deploymentEnvironment() {
-  return process.env.VERCEL_ENV || process.env.NODE_ENV || "unknown";
+  return appEnv.VERCEL_ENV || appEnv.NODE_ENV || "unknown";
 }
 
 // ponytail: this mirrors the error-tracking module's client instead of sharing
@@ -32,11 +34,11 @@ function deploymentEnvironment() {
 // second flushAt-1 client costs nothing. Fold them together once that guard
 // has expired.
 export function postHogIngestionHost() {
-  return process.env.POSTHOG_SERVER_HOST || "https://eu.i.posthog.com";
+  return appEnv.POSTHOG_SERVER_HOST || "https://eu.i.posthog.com";
 }
 
 function postHogClient() {
-  const token = process.env.POSTHOG_SERVER_PROJECT_TOKEN?.trim();
+  const token = appEnv.POSTHOG_SERVER_PROJECT_TOKEN?.trim();
   if (!token) return undefined;
   if (!client) {
     client = new PostHog(token, {
@@ -147,7 +149,7 @@ async function captureAiChatTurn(
       properties: redactAiCaptureProperties(capture.properties),
     });
   } catch (error) {
-    console.warn("[ai/chat/observability] generation capture failed", error);
+    htLogger.warn("[ai/chat/observability] generation capture failed", error);
   }
 }
 

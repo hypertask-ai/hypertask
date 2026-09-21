@@ -1,3 +1,4 @@
+import { logger as htLogger } from "#logger";
 import type { Prisma, PrismaClient } from '@prisma/client'
 
 import { agentWithinTeamWhere } from '@/lib/mcp/managementKeyTeamScope'
@@ -425,7 +426,7 @@ export async function deleteOwnedAgent(
     } catch (error) {
       // The database is authoritative after deletion. A stale Redis snapshot is
       // inaccessible and expires; do not report a failed delete after commit.
-      console.warn('[Agent runtime] Snapshot invalidation failed:', error)
+      htLogger.warn('[Agent runtime] Snapshot invalidation failed:', error)
     }
   }
 

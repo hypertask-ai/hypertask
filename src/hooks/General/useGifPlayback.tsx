@@ -1,3 +1,4 @@
+import { logger as htLogger } from "#logger";
 import axios from "axios";
 import { Pause, Play } from "lucide-react";
 import {
@@ -93,7 +94,7 @@ export const useGifPlayback = (
           if (updateId === updateIdRef.current && previous) {
             queryClient.setQueryData(USER_PREFERENCES_QUERY_KEY, previous);
           }
-          console.log("useGifPlayback update error:", error);
+          htLogger.info("useGifPlayback update error:", error);
         });
     },
     [queryClient],

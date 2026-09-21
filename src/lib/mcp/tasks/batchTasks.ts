@@ -1,3 +1,4 @@
+import { logger as htLogger } from "#logger";
 import { NextRequest, NextResponse } from 'next/server'
 import type { McpAuthContext } from '@/lib/mcp/auth'
 import { buildFieldError } from '@/lib/mcp/fieldError'
@@ -282,7 +283,7 @@ async function handleBatchUpdateItem(
           : 'Task update failed',
     } as BatchUpdateError
   } catch (error) {
-    console.error(`[MCP Batch Tasks] Failed to update task ${taskId}:`, error)
+    htLogger.error(`[MCP Batch Tasks] Failed to update task ${taskId}:`, error)
     return {
       task_id: taskId,
       success: false,

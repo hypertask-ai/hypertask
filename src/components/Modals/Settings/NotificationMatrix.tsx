@@ -1,5 +1,6 @@
 "use client";
 
+import { logger as htLogger } from "#logger";
 import axios from "axios";
 import { useEffect, useState } from "react";
 import SettingsToggle from "./SettingsToggle";
@@ -94,7 +95,7 @@ const NotificationMatrix = () => {
           setMatrix(seedNotificationMatrix(response.data));
         }
       } catch (error) {
-        console.error("Failed to load notification settings:", error);
+        htLogger.error("Failed to load notification settings:", error);
       } finally {
         if (isActive) {
           setIsLoading(false);
@@ -131,7 +132,7 @@ const NotificationMatrix = () => {
       await axios.post("/api/notifications/matrix", { matrix: nextMatrix });
     } catch (error) {
       setMatrix(previousMatrix);
-      console.error("Failed to update notification settings:", error);
+      htLogger.error("Failed to update notification settings:", error);
     } finally {
       setIsSaving(false);
     }

@@ -1,3 +1,4 @@
+import { logger as htLogger } from "#logger";
 import prisma from "@/lib/prisma";
 import { getRedis } from "@/lib/redis";
 
@@ -82,7 +83,7 @@ export async function fetchUserPreferenceController(userId: number) {
 
     return { status: 200, res };
   } catch (error) {
-    console.log("🚀 ~ fetchUserPreferenceController ~ error:", error);
+    htLogger.info("🚀 ~ fetchUserPreferenceController ~ error:", error);
     return {
       status: 500,
       res: {
@@ -117,7 +118,7 @@ export async function invalidateUserPreferenceCache(userId: number) {
       INVALIDATED
     );
   } catch (err) {
-    console.warn(
+    htLogger.warn(
       "[invalidateUserPreferenceCache] Cache invalidation failed:",
       err,
     );

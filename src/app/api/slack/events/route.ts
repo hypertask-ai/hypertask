@@ -1,3 +1,6 @@
+import { env as appEnv } from "#env";
+import { logger as htLogger } from "#logger";
+import { withoutAuth } from "#with-auth";
 import { NextRequest, NextResponse } from "next/server";
 import type { Prisma } from "@prisma/client";
 import { waitUntil } from "@vercel/functions";
@@ -34,14 +37,14 @@ type SlackEventEnvelope = {
   type?: string;
 };
 
-export async function POST(request: NextRequest) {
+async function POSTHandler(request: NextRequest) {
   const rawBody = await request.text();
   if (
     !verifySlackSignature(
       rawBody,
       request.headers.get("x-slack-signature"),
       request.headers.get("x-slack-request-timestamp"),
-      process.env.SLACK_SIGNING_SECRET,
+      appEnv.SLACK_SIGNING_SECRET,
     )
   ) {
     return NextResponse.json({ error: "Invalid signature" }, { status: 401 });
@@ -69,7 +72,7 @@ export async function POST(request: NextRequest) {
     payload.event?.type === "tokens_revoked"
   ) {
     const result = await deleteSlackInstallForRevocation(prisma, payload);
-    console.info(
+    htLogger.info(
       "Slack revocation handled",
       payload.team_id,
       payload.event.type,
@@ -105,7 +108,7 @@ export async function POST(request: NextRequest) {
             threadTs: event.thread_ts ?? event.ts,
           }),
         )
-        .catch((error) => console.error("Slack create-task event failed", error)),
+        .catch((error) => htLogger.error("Slack create-task event failed", error)),
     );
     return NextResponse.json({ ok: true });
   }
@@ -128,7 +131,7 @@ export async function POST(request: NextRequest) {
             threadTs: event.thread_ts ?? event.ts,
           }),
         )
-        .catch((error) => console.error("Slack chat event failed", error)),
+        .catch((error) => htLogger.error("Slack chat event failed", error)),
     );
     return NextResponse.json({ ok: true });
   }
@@ -148,7 +151,7 @@ export async function POST(request: NextRequest) {
             threadTs: thread!.thread_ts!,
           }),
         )
-        .catch((error) => console.error("Slack assistant welcome failed", error)),
+        .catch((error) => htLogger.error("Slack assistant welcome failed", error)),
     );
     return NextResponse.json({ ok: true });
   }
@@ -228,3 +231,5 @@ export async function POST(request: NextRequest) {
 
   return NextResponse.json({ ok: true });
 }
+
+export const POST = withoutAuth(POSTHandler);

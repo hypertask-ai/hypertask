@@ -1,5 +1,6 @@
+import { env as appEnv } from "#env";
+import { getAuthSession, withAuth } from "#with-auth";
 import { NextRequest, NextResponse } from "next/server";
-import { getSessionUser } from "@/lib/auth/getSessionUser";
 import { HTPR_6533_MCP_CLIENT_EVAL_FLAG, isFeatureEnabled } from "@/lib/flags";
 import type { McpClientEvalReport } from "@/lib/mcpClientEval/types";
 import latest from "@/lib/mcpClientEval/latest.json";
@@ -7,7 +8,7 @@ import latest from "@/lib/mcpClientEval/latest.json";
 export const runtime = "nodejs";
 
 export const MCP_CLIENT_EVAL_REPORT_URL =
-  process.env.MCP_CLIENT_EVAL_REPORT_URL ||
+  appEnv.MCP_CLIENT_EVAL_REPORT_URL ||
   "https://raw.githubusercontent.com/hypertask-ai/hypertask/eval-reports/latest.json";
 
 async function loadPublishedReport(): Promise<McpClientEvalReport> {
@@ -24,8 +25,8 @@ async function loadPublishedReport(): Promise<McpClientEvalReport> {
   return latest as McpClientEvalReport;
 }
 
-export async function GET(request: NextRequest) {
-  const session = await getSessionUser(request.headers);
+async function GETHandler(request: NextRequest) {
+  const session = await getAuthSession(request.headers);
   if (!session?.userId) {
     return NextResponse.json(
       { success: false, error: "Unauthorized" },
@@ -45,3 +46,5 @@ export async function GET(request: NextRequest) {
     report: await loadPublishedReport(),
   });
 }
+
+export const GET = withAuth(GETHandler, { authenticateInHandler: true });

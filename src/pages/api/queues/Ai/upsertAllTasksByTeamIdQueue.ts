@@ -1,3 +1,5 @@
+import { logger as htLogger } from "#logger";
+import { withoutAuth } from "#with-auth";
 import type { NextApiRequest, NextApiResponse } from "next";
 import { withQstashSignature } from "@/lib/qstash";
 import { upsertTasksByTeamIdHandler } from "./upsertAllTasksByTeamIdInvoke"
@@ -8,7 +10,7 @@ import { upsertTasksByTeamIdHandler } from "./upsertAllTasksByTeamIdInvoke"
 async function handler(req: NextApiRequest, res: NextApiResponse) {
   try {
     const job = req.body as { teamId: string };
-    console.log("🚀 ~ executing job:", job)
+    htLogger.info("🚀 ~ executing job:", job)
 
     if (await upsertTasksByTeamIdHandler(job.teamId) === "Success") {
       // generateSummaryAfterUpsertionReminder(job.teamId)
@@ -18,13 +20,13 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
       throw "Error"
     }
   } catch (error) {
-    console.log("🚀 ~ error:", error)
+    htLogger.info("🚀 ~ error:", error)
     // Return 200 so QStash does not retry an error we have already handled/logged.
     return res.status(200).json({ ok: false });
   }
 }
 
-export default withQstashSignature(handler);
+export default withoutAuth(withQstashSignature(handler));
 
 export const config = {
   api: {

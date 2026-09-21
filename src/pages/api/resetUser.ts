@@ -1,3 +1,5 @@
+import { env as appEnv } from "#env";
+import { withAuth } from "#with-auth";
 import prisma from '@/lib/prisma'
 import { resetUserAccount } from '@/utils/controllers/users/resetUserAccount';
 import type { NextApiRequest, NextApiResponse } from 'next'
@@ -6,13 +8,13 @@ import type { NextApiRequest, NextApiResponse } from 'next'
  * API endpoint to reset a user by transferring their projects and teams to a new owner,
  * removing them from memberships, and cleaning up related data.
  */
-export default async function handler(req: NextApiRequest, res: NextApiResponse) {
+async function handler(req: NextApiRequest, res: NextApiResponse) {
     if (req.method !== 'POST') {
         return res.status(405).json({ message: "Method not allowed" });
     }
 
     // HTPR-4808: this destructive transfer is restricted to the /reset admin tool.
-    const adminPassword = process.env.ADMIN_USER_RESET_PW;
+    const adminPassword = appEnv.ADMIN_USER_RESET_PW;
     if (!adminPassword || req.headers['x-admin-password'] !== adminPassword) {
         return res.status(401).json({ message: "Unauthorized" });
     }
@@ -57,3 +59,5 @@ const validateTransfer = async (userToResetId: number, newOwnerId: number) => {
 };
 
 export { validateTransfer };
+
+export default withAuth(handler, { authenticateInHandler: true });

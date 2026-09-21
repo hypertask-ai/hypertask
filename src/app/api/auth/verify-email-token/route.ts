@@ -1,3 +1,6 @@
+import { env as appEnv } from "#env";
+import { logger as htLogger } from "#logger";
+import { withoutAuth } from "#with-auth";
 import { NextRequest, NextResponse } from 'next/server'
 import jwt from 'jsonwebtoken'
 import crypto from 'crypto'
@@ -14,19 +17,19 @@ import { adoptGuestBoards } from '@/utils/controllers/demo/adoptGuestBoards'
 import { slimUserForCookie } from '@/lib/auth/slimUserCookie'
 import { seedResponseThemeCookie } from '@/lib/auth/themeCookie'
 
-const JWT_ISSUER = process.env.JWT_ISSUER || 'hypertask'
-const JWT_AUDIENCE = process.env.JWT_AUDIENCE || 'email-link'
-const JWT_VERIFICATION_AUDIENCE = process.env.JWT_VERIFICATION_AUDIENCE || 'email-verification'
+const JWT_ISSUER = appEnv.JWT_ISSUER || 'hypertask'
+const JWT_AUDIENCE = appEnv.JWT_AUDIENCE || 'email-link'
+const JWT_VERIFICATION_AUDIENCE = appEnv.JWT_VERIFICATION_AUDIENCE || 'email-verification'
 
 function getJwtSecret() {
-  const jwtSecret = process.env.JWT_SECRET
+  const jwtSecret = appEnv.JWT_SECRET
   if (!jwtSecret) {
     throw new Error('Missing JWT_SECRET env var')
   }
   return jwtSecret
 }
 
-export async function POST(request: NextRequest) {
+async function POSTHandler(request: NextRequest) {
   try {
     const { token, abTestVariant, shouldSkipInteractive } = await request.json()
 
@@ -42,8 +45,8 @@ export async function POST(request: NextRequest) {
       ? shouldSkipInteractive 
       : authConfig.onboarding.shouldSkipInteractive
 
-    console.log('🧪 AB Test Variant (email link):', abTestVariant)
-    console.log('⏭️  Should Skip Interactive (email link):', skipInteractive)
+    htLogger.info('🧪 AB Test Variant (email link):', abTestVariant)
+    htLogger.info('⏭️  Should Skip Interactive (email link):', skipInteractive)
 
     let email: string
     let isVerificationToken = false // Track if this is a verification token (from email) vs login token (from instant signup)
@@ -57,7 +60,7 @@ export async function POST(request: NextRequest) {
           audience: JWT_VERIFICATION_AUDIENCE,
         }) as jwt.JwtPayload
         isVerificationToken = true // This is a verification token from email
-        console.log('✅ Verified as email verification token')
+        htLogger.info('✅ Verified as email verification token')
       } catch {
         // Fall back to email-link audience (for login tokens from instant signup)
         decoded = jwt.verify(token, jwtSecret, {
@@ -65,7 +68,7 @@ export async function POST(request: NextRequest) {
           audience: JWT_AUDIENCE,
         }) as jwt.JwtPayload
         isVerificationToken = false // This is a login token, don't change verification status
-        console.log('✅ Verified as login token (from instant signup)')
+        htLogger.info('✅ Verified as login token (from instant signup)')
       }
 
       if (!decoded?.sub || typeof decoded.sub !== 'string') {
@@ -76,7 +79,7 @@ export async function POST(request: NextRequest) {
       }
       email = decoded.sub.toLowerCase()
     } catch (err) {
-      console.error('🔒 JWT verification failed:', err)
+      htLogger.error('🔒 JWT verification failed:', err)
       return NextResponse.json(
         { success: false, error: 'Invalid or expired token' },
         { status: 400 }
@@ -112,7 +115,7 @@ export async function POST(request: NextRequest) {
     )
 
     if (userUpdateResult.status !== 200) {
-      console.error('❌ User update failed:', userUpdateResult)
+      htLogger.error('❌ User update failed:', userUpdateResult)
       return NextResponse.json(
         { 
           success: false, 
@@ -125,7 +128,7 @@ export async function POST(request: NextRequest) {
 
     let userData = userUpdateResult.res.user
     if (!userData) {
-      console.error('❌ User data not found in response')
+      htLogger.error('❌ User data not found in response')
       return NextResponse.json(
         { 
           success: false, 
@@ -139,7 +142,7 @@ export async function POST(request: NextRequest) {
     // Only set isVerified to true if this is a verification token (from email link)
     // If it's a login token (from instant signup), keep the existing verification status
     if (isVerificationToken && userData.UserSetting) {
-      console.log('📧 Email verification token - setting isVerified to true')
+      htLogger.info('📧 Email verification token - setting isVerified to true')
       await prisma.userSetting.update({
         where: { id: userData.UserSetting.id },
         data: { isVerified: true },
@@ -156,7 +159,7 @@ export async function POST(request: NextRequest) {
       try {
         await autoJoinByEmailDomain(userData.id, userData.email)
       } catch (error) {
-        console.error('Auto-join by email domain failed (non-fatal):', error)
+        htLogger.error('Auto-join by email domain failed (non-fatal):', error)
       }
       // Refetch user to get updated isVerified status
       const updatedUser = await prisma.user.findUnique({
@@ -167,10 +170,10 @@ export async function POST(request: NextRequest) {
         userData = updatedUser as any
       }
     } else {
-      console.log('🔐 Login token - preserving existing verification status')
+      htLogger.info('🔐 Login token - preserving existing verification status')
     }
 
-    console.log('✅ User updated successfully (email link):', {
+    htLogger.info('✅ User updated successfully (email link):', {
       id: userData!.id,
       email: userData!.email,
       displayName: userData!.displayName,
@@ -183,7 +186,7 @@ export async function POST(request: NextRequest) {
     // board instead of the empty state, matching instant-signup's behavior.
     if (userUpdateResult.res.isNewUser && authConfig.onboarding.skipOnboarding) {
       try {
-        console.log('🚀 Completing onboarding step 1 for new email-link user')
+        htLogger.info('🚀 Completing onboarding step 1 for new email-link user')
         const onboardingResult = await CompleteOnboardingFirstStep(
           userData as any,
           'MyTeam', // Default team title
@@ -191,9 +194,9 @@ export async function POST(request: NextRequest) {
           companySizeOptions[0], // Default: "Just me"
           companyRoleOptions[0] // Default: "Founder or leadership team"
         )
-        console.log('✅ Onboarding step 1 completed:', onboardingResult)
+        htLogger.info('✅ Onboarding step 1 completed:', onboardingResult)
       } catch (onboardingError) {
-        console.error('⚠️ Failed to complete onboarding step 1:', onboardingError)
+        htLogger.error('⚠️ Failed to complete onboarding step 1:', onboardingError)
         // Don't fail the request - user can still use the app
         // The onboarding can be completed later if needed
       }
@@ -206,7 +209,7 @@ export async function POST(request: NextRequest) {
 
     // Get user's projects (EXACTLY like verify-code route)
     const prevBoard = await getProjects(userData!.id, getRequestBaseUrl(request))
-    console.log('📋 User projects fetched (email link):', prevBoard)
+    htLogger.info('📋 User projects fetched (email link):', prevBoard)
 
     // Create response with redirect URL following useAuth.tsx logic
     const response = NextResponse.json({
@@ -224,7 +227,7 @@ export async function POST(request: NextRequest) {
       // Set nookies_user cookie (main auth cookie)
       response.cookies.set('nookies_user', JSON.stringify(slimUserForCookie(userData)), {
         httpOnly: false,
-        secure: process.env.NODE_ENV === 'production',
+        secure: appEnv.NODE_ENV === 'production',
         sameSite: 'lax',
         maxAge: 600 * 60 * 24 * 7, // 1 week
         path: '/'
@@ -242,32 +245,32 @@ export async function POST(request: NextRequest) {
       if (prevBoard?.id) {
         response.cookies.set('previousBoard', `project-${prevBoard.id}|&|`, {
           httpOnly: false,
-          secure: process.env.NODE_ENV === 'production',
+          secure: appEnv.NODE_ENV === 'production',
           sameSite: 'lax',
           maxAge: 600 * 60 * 24 * 7, // 1 week
           path: '/'
         })
-        console.log('✅ Previous board cookie set (email link):', `project-${prevBoard.id}`)
+        htLogger.info('✅ Previous board cookie set (email link):', `project-${prevBoard.id}`)
       }
 
       // Track the source for analytics
       response.cookies.set('signup_source', 'email_link', {
         httpOnly: false,
-        secure: process.env.NODE_ENV === 'production',
+        secure: appEnv.NODE_ENV === 'production',
         sameSite: 'lax',
         maxAge: 60 * 60 * 24 * 7, // 7 days
         path: '/'
       })
 
-      console.log('✅ Authentication cookies set successfully (email link)')
+      htLogger.info('✅ Authentication cookies set successfully (email link)')
     } catch (cookieError) {
-      console.error('⚠️  Cookie setting failed (email link):', cookieError)
+      htLogger.error('⚠️  Cookie setting failed (email link):', cookieError)
     }
 
     return response
 
   } catch (error) {
-    console.error('❌ Error verifying email token:', error)
+    htLogger.error('❌ Error verifying email token:', error)
     return NextResponse.json(
       { success: false, error: 'Failed to verify token' },
       { status: 500 }
@@ -289,7 +292,7 @@ async function getProjects(userId: number, baseUrl: string): Promise<IProject | 
       return data[0]
     }
   } catch (error) {
-    console.error('❌ Error fetching projects:', error)
+    htLogger.error('❌ Error fetching projects:', error)
   }
   
   return undefined
@@ -305,10 +308,10 @@ function getRedirectUrl(
   isNewUser?: boolean
 ): string {
   const { onboardingTourStatus, isVerified } = user?.UserSetting || {}
-  console.log('🔄 getRedirectUrl (email link) - onboardingTourStatus:', onboardingTourStatus)
-  console.log('🧪 getRedirectUrl (email link) - abTestVariant:', abTestVariant)
-  console.log('👤 getRedirectUrl (email link) - isNewUser:', isNewUser)
-  console.log('✅ getRedirectUrl (email link) - isVerified:', isVerified)
+  htLogger.info('🔄 getRedirectUrl (email link) - onboardingTourStatus:', onboardingTourStatus)
+  htLogger.info('🧪 getRedirectUrl (email link) - abTestVariant:', abTestVariant)
+  htLogger.info('👤 getRedirectUrl (email link) - isNewUser:', isNewUser)
+  htLogger.info('✅ getRedirectUrl (email link) - isVerified:', isVerified)
 
   // Shared task URL generation helper
   const getSharedTaskUrl = () =>
@@ -330,3 +333,5 @@ function getRedirectUrl(
     prevBoard?.team?.title || 'MyTeam'
   }&id=${prevBoard?.team?.id || ''}${sharedTask ? `&shareId=${sharedTask.id}` : ""}`
 }
+
+export const POST = withoutAuth(POSTHandler);

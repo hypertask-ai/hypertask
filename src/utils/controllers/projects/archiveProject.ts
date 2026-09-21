@@ -1,3 +1,4 @@
+import { logger as htLogger } from "#logger";
 // Assuming you have already initialized Prisma and have access to the PrismaClient instance.
 
 import prisma from "@/lib/prisma";
@@ -34,7 +35,7 @@ const archiveProject = async(projectId:number, userId:number) =>{
     //   we can move on with the code
 
     // ==================================== FIRST ARCHIVE ALL THE NOTIFICATIONS. 
-    console.log ("--------------------------- Arhciving all the notifications ---------------------")
+    htLogger.info ("--------------------------- Arhciving all the notifications ---------------------")
     await prisma.notification.updateMany({
         where:{
             projectId:projectId
@@ -43,10 +44,10 @@ const archiveProject = async(projectId:number, userId:number) =>{
             status:"Archive"
         }
     })
-    console.log ("================= notifications Archived. =================")
+    htLogger.info ("================= notifications Archived. =================")
 
 
-    console.log ("--------------------------- Arhciving THE ACTUAL PROJECT ---------------------")
+    htLogger.info ("--------------------------- Arhciving THE ACTUAL PROJECT ---------------------")
 
     if (project.status==="Normal"){
 
@@ -64,7 +65,7 @@ const archiveProject = async(projectId:number, userId:number) =>{
         }
       })
       const firstProject = await getFirst(userId)
-      console.log("🚀 ~ file: archiveProject.ts:55 ~ archiveProject ~ updated_project:", updated_project)
+      htLogger.info("🚀 ~ file: archiveProject.ts:55 ~ archiveProject ~ updated_project:", updated_project)
       return ({
         status:200,
         json:{message:"Success", firstProject: firstProject.json}
@@ -80,7 +81,7 @@ const archiveProject = async(projectId:number, userId:number) =>{
             status:"Normal"
         }
     })
-    console.log("🚀 ~ file: archiveProject.ts:55 ~ archiveProject ~ updated_project:", updated_project)
+    htLogger.info("🚀 ~ file: archiveProject.ts:55 ~ archiveProject ~ updated_project:", updated_project)
   
     }
 
@@ -91,7 +92,7 @@ const archiveProject = async(projectId:number, userId:number) =>{
       })
 
     } catch (error) {
-      console.error(error);
+      htLogger.error(error);
       return ({
         status:500,
         json:{ error: 'Failed to add new section' }

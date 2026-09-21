@@ -1,3 +1,5 @@
+import { env as appEnv } from "#env";
+import { withAuth } from "#with-auth";
 import prisma from '@/lib/prisma';
 import type { NextApiRequest, NextApiResponse } from 'next';
 
@@ -30,7 +32,7 @@ import type { NextApiRequest, NextApiResponse } from 'next';
  *   ]
  * }
  */
-export default async function handler(
+async function handler(
     req: NextApiRequest,
     res: NextApiResponse
 ) {
@@ -42,7 +44,7 @@ export default async function handler(
     // (stripe_customer_id, uid, accountId...) for any email handed to it, so
     // accepting any signed-in session would hand every account to a fresh trial
     // signup. Same gate as resetUser and reset-trial.
-    const adminPassword = process.env.ADMIN_USER_RESET_PW;
+    const adminPassword = appEnv.ADMIN_USER_RESET_PW;
     if (!adminPassword || req.headers['x-admin-password'] !== adminPassword) {
         return res.status(401).json({ error: 'Unauthorized' });
     }
@@ -66,3 +68,5 @@ export default async function handler(
         res.status(500).json({ error: 'Internal server error' });
     }
 }
+
+export default withAuth(handler, { authenticateInHandler: true });

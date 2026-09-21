@@ -1,3 +1,4 @@
+import { logger as htLogger } from "#logger";
 import { useState } from 'react';
 import axios from 'axios';
 
@@ -36,7 +37,7 @@ export const useResendVerificationEmail = (): UseResendVerificationEmailReturn =
         setErrorMessage(response.data.error || 'Failed to resend email');
       }
     } catch (error: any) {
-      console.error('Resend error:', error);
+      htLogger.error('Resend error:', error);
       setErrorMessage(
         error.response?.data?.error || 'Failed to resend verification email. Please try again.'
       );

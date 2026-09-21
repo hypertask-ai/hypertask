@@ -1,3 +1,5 @@
+import { env as appEnv } from "#env";
+import { logger as htLogger } from "#logger";
 import axios from "axios";
 import fcmConfig from "@/utils/api/fcmConfig";
 import { FCMDeviceInfo } from "@/models/model";
@@ -221,13 +223,13 @@ export const sendDataOnlyFcm = async (
 ) => {
   const deliveryErrors: unknown[] = [];
   const deliveredDeviceIds = new Set(deliveryOptions?.deliveredDeviceIds);
-  const link = `${process.env.NEXT_PUBLIC_BASEURL}/detail/project-${projectId}/${uniqueIndex}?commentId=comment-${comment.id}`;
+  const link = `${appEnv.NEXT_PUBLIC_BASEURL}/detail/project-${projectId}/${uniqueIndex}?commentId=comment-${comment.id}`;
 
   const userPreferenceMap = await filterDevicesByPreferences({
     devices,
     creatorId,
     commentId: comment.id,
-    isHyperAI: creatorId === parseInt(process.env.NEXT_PUBLIC_HYPERAI_ID || "332"),
+    isHyperAI: creatorId === parseInt(appEnv.NEXT_PUBLIC_HYPERAI_ID || "332"),
     type: "Comment",
   });
 
@@ -238,7 +240,7 @@ export const sendDataOnlyFcm = async (
   // to shorten beyond the comment itself: the rest is a title, a body and a link.
   const payloadBytes = Buffer.byteLength(commentPayload, "utf8");
   if (payloadBytes > FCM_DATA_LIMIT_BYTES) {
-    console.error(
+    htLogger.error(
       `🚀 ~ sendDataOnlyFcm ~ data payload still ${payloadBytes}B after truncation, FCM will reject it (comment ${comment?.id})`
     );
   }
@@ -248,7 +250,7 @@ export const sendDataOnlyFcm = async (
     const shouldSend = userPreferenceMap.get(device.userId);
 
     if (!shouldSend) {
-      console.log(`🚀 ~ sendDataOnlyFcm ~ Push notification blocked for user ${device.userId} (mentioned or preference)`);
+      htLogger.info(`🚀 ~ sendDataOnlyFcm ~ Push notification blocked for user ${device.userId} (mentioned or preference)`);
       continue;
     }
 
@@ -276,12 +278,12 @@ export const sendDataOnlyFcm = async (
     let deliveryResolved = false;
     try {
       const response = await sendFirebaseMessage(body);
-      console.log("🚀 ~ sendDataOnlyFcm ~ response:", response);
+      htLogger.info("🚀 ~ sendDataOnlyFcm ~ response:", response);
       deliveryResolved = true;
     } catch (error) {
       // Loud: a swallowed rejection here is a push nobody ever receives, and
       // the caller goes on to log success (HTPR-4668).
-      console.error("🚀 ~ sendDataOnlyFcm ~ send failed:", error);
+      htLogger.error("🚀 ~ sendDataOnlyFcm ~ send failed:", error);
       await removeDeadDeviceToken(error, device.firebaseId);
       if (
         firebaseMessagingErrorCode(error) ===
@@ -313,15 +315,15 @@ const removeDeadDeviceToken = async (error: unknown, firebaseId: string) => {
   }
   try {
     await prisma.subscribedDevices.deleteMany({ where: { firebaseId } });
-    console.log("🚀 ~ removed dead device token", firebaseId.slice(0, 12));
+    htLogger.info("🚀 ~ removed dead device token", firebaseId.slice(0, 12));
   } catch (cleanupError) {
-    console.log("🚀 ~ dead token cleanup failed:", cleanupError);
+    htLogger.info("🚀 ~ dead token cleanup failed:", cleanupError);
   }
 };
 
 // ================== GET ARCHIVED PROJECTS
 export const sendDataNewCommentFCM = async(props:newCommentFCM) => {
-    const link = process.env.NEXT_PUBLIC_BASEURL + '/' + props.afterAppDomain
+    const link = appEnv.NEXT_PUBLIC_BASEURL + '/' + props.afterAppDomain
     
     const creatorId = props.creatorId;
     const commentId = props.commentId;
@@ -351,15 +353,15 @@ export const sendDataNewCommentFCM = async(props:newCommentFCM) => {
                 // On a settings-query failure, fall back to the device-level
                 // gate (userPreferenceMap stays null) rather than throwing an
                 // unhandled rejection into the fire-and-forget callers.
-                console.log("🚀 ~ sendDataNewCommentFCM ~ preference filter error:", error);
+                htLogger.info("🚀 ~ sendDataNewCommentFCM ~ preference filter error:", error);
                 userPreferenceMap = null;
             }
         }
     }
     
-    // console.log("🚀 ~ file: index.ts:21 ~ sendDataNewCommentFCM ~ props:", props)
+    // debug.log("🚀 ~ file: index.ts:21 ~ sendDataNewCommentFCM ~ props:", props)
     for (const device of props.devices){
-        console.log("🚀 ~ sendDataNewCommentFCM ~ device:", device.firebaseId)
+        htLogger.info("🚀 ~ sendDataNewCommentFCM ~ device:", device.firebaseId)
         
         // Check device-level notification setting
         if (!device.sendNotifications) {
@@ -370,7 +372,7 @@ export const sendDataNewCommentFCM = async(props:newCommentFCM) => {
         if (userPreferenceMap !== null && !props.skipPreferenceFilter) {
             const shouldSend = userPreferenceMap.get(device.userId);
             if (!shouldSend) {
-                console.log(`🚀 ~ sendDataNewCommentFCM ~ Push notification blocked for user ${device.userId} (mentioned or preference)`);
+                htLogger.info(`🚀 ~ sendDataNewCommentFCM ~ Push notification blocked for user ${device.userId} (mentioned or preference)`);
                 continue;
             }
         }
@@ -394,15 +396,15 @@ export const sendDataNewCommentFCM = async(props:newCommentFCM) => {
         
         try {
             const response = await sendFirebaseMessage(payload);
-            console.log("🚀 ~ sendDataNewCommentFCM ~ response:", response)
+            htLogger.info("🚀 ~ sendDataNewCommentFCM ~ response:", response)
             
         } catch (error) {
-            console.log("🚀 ~ sendDataNewCommentFCM ~ error:", error)
+            htLogger.info("🚀 ~ sendDataNewCommentFCM ~ error:", error)
             await removeDeadDeviceToken(error, device.firebaseId);
         }
-        // console.log("🚀 ~ file: index.ts:20 ~ sendDataNewCommentFCM ~ body:", body)
+        // debug.log("🚀 ~ file: index.ts:20 ~ sendDataNewCommentFCM ~ body:", body)
     //    const response = await axios.post("https://fcm.googleapis.com/fcm/send", body, fcmConfig)
-    //    console.log("🚀 ~ sendDataNewCommentFCM ~ response:", response.status)
+    //    debug.log("🚀 ~ sendDataNewCommentFCM ~ response:", response.status)
     }
 }
 

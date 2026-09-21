@@ -1,4 +1,5 @@
 "use client";
+import { logger as htLogger } from "#logger";
 import React, {
   createContext,
   useCallback,
@@ -40,7 +41,7 @@ const UndoProvider: React.FC<{ children: React.ReactNode }> = ({
 }) => {
   const isMobile = useContext(MobileViewContext);
   const [data, setData] = useState<any>(null);
-  // console.log("🚀 ~ data:", data)
+  // debug.log("🚀 ~ data:", data)
   const [undoData, setRenderedUndoData] = useState<any[]>([]);
   // Keyboard events can arrive before React commits the state update that
   // follows an archive. The ref is authoritative; state is its render snapshot.
@@ -48,7 +49,7 @@ const UndoProvider: React.FC<{ children: React.ReactNode }> = ({
   const consumedUndoIds = useRef(new Set<string>());
   const inFlightUndoIds = useRef(new Set<string>());
   const expiryTimers = useRef(new Map<string, ReturnType<typeof setTimeout>>());
-  // console.log("🚀 ~ undoData:", undoData)
+  // debug.log("🚀 ~ undoData:", undoData)
 
   const commitUndoData = useCallback((update: (items: any[]) => any[]) => {
     const nextItems = update(undoDataRef.current);
@@ -128,7 +129,7 @@ const UndoProvider: React.FC<{ children: React.ReactNode }> = ({
           }, undoWindowMs);
           expiryTimers.current.set(undoId, consumedCleanupTimer);
         } catch (error) {
-          console.error("Undo action failed", error);
+          htLogger.error("Undo action failed", error);
           toast.error("Undo failed. Please try again.");
           if (isUndoWindowExpired(pendingUndoData, Date.now())) {
             pendingUndoData = {
@@ -159,7 +160,7 @@ const UndoProvider: React.FC<{ children: React.ReactNode }> = ({
         undoHandler: handleUndo,
         expiresAt: Date.now() + undoWindowMs,
       };
-      // console.log("🚀 ~ performActionAndStoreUndoData ~ toasterId:", toasterId)
+      // debug.log("🚀 ~ performActionAndStoreUndoData ~ toasterId:", toasterId)
       setData(pendingUndoData);
       commitUndoData((prevUndoData) => [...prevUndoData, pendingUndoData]);
       scheduleExpiry(undoId, pendingUndoData.expiresAt);

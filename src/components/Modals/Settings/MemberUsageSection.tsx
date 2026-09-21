@@ -1,5 +1,6 @@
 "use client";
 
+import { logger as htLogger } from "#logger";
 import axios from "axios";
 import { useEffect, useState } from "react";
 import AiUsageBar, {
@@ -39,7 +40,7 @@ const MemberUsageSection = () => {
         if (!cancelled) setData(response.data);
       })
       .catch((requestError) => {
-        console.error("Could not load member AI usage:", requestError);
+        htLogger.error("Could not load member AI usage:", requestError);
         if (!cancelled) {
           setData(null);
           setError(

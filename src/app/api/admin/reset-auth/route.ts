@@ -1,6 +1,8 @@
+import { env as appEnv } from "#env";
+import { withAuth } from "#with-auth";
 import { NextRequest, NextResponse } from 'next/server';
 
-export async function POST(request: NextRequest) {
+async function POSTHandler(request: NextRequest) {
     let body: { password?: unknown };
 
     try {
@@ -9,7 +11,7 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ ok: false }, { status: 401 });
     }
 
-    const adminPassword = process.env.ADMIN_USER_RESET_PW;
+    const adminPassword = appEnv.ADMIN_USER_RESET_PW;
 
     if (!adminPassword || typeof body.password !== 'string' || body.password !== adminPassword) {
         return NextResponse.json({ ok: false }, { status: 401 });
@@ -17,3 +19,5 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({ ok: true });
 }
+
+export const POST = withAuth(POSTHandler, { authenticateInHandler: true });

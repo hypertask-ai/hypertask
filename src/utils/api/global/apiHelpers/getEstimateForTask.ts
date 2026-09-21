@@ -1,3 +1,4 @@
+import { logger as htLogger } from "#logger";
 import axios from "axios"
 import { getTaskDetailMeta, hasSessionCookie } from "./getTaskDetailMeta";
 
@@ -14,7 +15,7 @@ export const getEstimateForTask = async (taskId:number|null):Promise<any | undef
             const meta = await getTaskDetailMeta(taskId)
             return meta.estimate;
         } catch (error) {
-            console.error("Error getting task estimate:", error);
+            htLogger.error("Error getting task estimate:", error);
             throw error;
         }
 }

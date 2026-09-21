@@ -1,3 +1,5 @@
+import { logger as htLogger } from "#logger";
+import { withAuth } from "#with-auth";
 import { notificationStore } from "@/utils/controllers/notifications";
 import { NextApiHandler, NextApiRequest, NextApiResponse } from "next";
 import { NotificationType, PrismaClient } from "@prisma/client";
@@ -71,7 +73,7 @@ const handler: NextApiHandler = async (req: NextApiRequest, res: NextApiResponse
                  return res.status(200).json(updatedNotification);
             }
         } catch (error) {
-            console.log(error);
+            htLogger.info(error);
             
             return res.status(500).json({ message: "Internal server error" });
         }
@@ -81,4 +83,4 @@ const handler: NextApiHandler = async (req: NextApiRequest, res: NextApiResponse
     }
 };
 
-export default handler;
+export default withAuth(handler, { authenticateInHandler: true });

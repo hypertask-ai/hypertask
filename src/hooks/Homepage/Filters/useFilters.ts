@@ -1,3 +1,4 @@
+import { logger as htLogger } from "#logger";
 import { TFilter, IFilterSettings, TMatchFilters  } from "@/models/Filters/model"
 import { defaultFilterSettings, defaultConditions } from "@/utils/helperFunctions/Views/FilterHelperFunctions"
 import { useRecoilState } from "@/lib/state";
@@ -15,7 +16,7 @@ const useFilters = ()=>{
 
     // ========== just set the filter in local storage, apply them on the projectId provided and update the cache
     const applyFilterAndSetCache = async(project:IProject,filterForThisProject:IFilterSettings, columnsOverride?: ISection[]) => {
-      console.log("🚀 ~ applyFilterAndSetCache ~ filterForThisProject:", filterForThisProject)
+      htLogger.info("🚀 ~ applyFilterAndSetCache ~ filterForThisProject:", filterForThisProject)
    
       
       // Returned, not fire-and-forget: the match-mode toggle chains on this promise to keep two
@@ -28,7 +29,7 @@ const useFilters = ()=>{
       const filterForThisProject = getActiveFiltersFromProject(_currentProject);
       
       const conditionToRun = defaultConditions[type];
-      // console.log("🚀 ~ addFilter ~ conditionToRun:", conditionToRun);
+      // debug.log("🚀 ~ addFilter ~ conditionToRun:", conditionToRun);
       if (!conditionToRun) throw new Error("No condition");
       const existingLabelFilterIndex = filterForThisProject.addedFilters.findIndex(filter => filter.type === type);
       if (existingLabelFilterIndex !== -1) {
@@ -59,7 +60,7 @@ const useFilters = ()=>{
       const filterForThisProject = getActiveFiltersFromProject(_currentProject);
       
       const conditionToRun = defaultConditions[type];
-      // console.log("🚀 ~ addFilter ~ conditionToRun:", conditionToRun);
+      // debug.log("🚀 ~ addFilter ~ conditionToRun:", conditionToRun);
       if (!conditionToRun) throw new Error("No condition");
       
       const existingLabelFilterIndex = filterForThisProject.addedFilters.findIndex(filter => filter.type === type);
@@ -99,7 +100,7 @@ const useFilters = ()=>{
       const filterForThisProject = getActiveFiltersFromProject(_currentProject);
       
       const conditionToRun = defaultConditions[type];
-      // console.log("🚀 ~ addFilter ~ conditionToRun:", conditionToRun);
+      // debug.log("🚀 ~ addFilter ~ conditionToRun:", conditionToRun);
       if (!conditionToRun) throw new Error("No condition");
 
       const existingLabelFilterIndex = filterForThisProject.addedFilters.findIndex(filter => filter.type === type);

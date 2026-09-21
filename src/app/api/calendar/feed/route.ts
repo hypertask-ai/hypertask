@@ -1,3 +1,5 @@
+import { env as appEnv } from "#env";
+import { withoutAuth } from "#with-auth";
 import { NextRequest, NextResponse } from "next/server";
 import jwt from "jsonwebtoken";
 import prisma from "@/lib/prisma";
@@ -6,8 +8,8 @@ import { buildCalendar, IcsTask } from "@/lib/calendar/ics";
 
 export const dynamic = "force-dynamic";
 
-const JWT_SECRET = process.env.JWT_SECRET as string;
-const JWT_ISSUER = process.env.JWT_ISSUER || "hypertask";
+const JWT_SECRET = appEnv.JWT_SECRET as string;
+const JWT_ISSUER = appEnv.JWT_ISSUER || "hypertask";
 const CALENDAR_AUDIENCE = "calendar-feed";
 
 const PAST_WINDOW_MS = 90 * 24 * 60 * 60 * 1000;
@@ -19,7 +21,7 @@ const FUTURE_WINDOW_MS = 400 * 24 * 60 * 60 * 1000;
  * Auth is the signed `token` query param (audience calendar-feed) so calendar
  * apps that can't send headers (Google Calendar "From URL") can subscribe.
  */
-export async function GET(request: NextRequest) {
+async function GETHandler(request: NextRequest) {
   const token = request.nextUrl.searchParams.get("token");
   if (!token) {
     return new NextResponse("Missing token", { status: 401 });
@@ -85,3 +87,5 @@ export async function GET(request: NextRequest) {
     },
   });
 }
+
+export const GET = withoutAuth(GETHandler);

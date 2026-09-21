@@ -1,3 +1,5 @@
+import { logger as htLogger } from "#logger";
+import { withAuth } from "#with-auth";
 import { NextResponse } from "next/server";
 import { getTeamGatewayFunding } from "@/app/api/ai/_lib/byokKeys";
 import { getServerCookieUser } from "@/lib/auth/serverUser";
@@ -20,7 +22,7 @@ type PersonalAiUsageAllResponse = {
   }>;
 };
 
-export async function GET() {
+async function GETHandler() {
   const user = await getServerCookieUser();
   if (!user) {
     return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
@@ -74,7 +76,7 @@ export async function GET() {
       try {
         funding = await getTeamGatewayFunding({ trustedTeamId: team.id });
       } catch (error) {
-        console.error(
+        htLogger.error(
           `Error resolving AI Gateway key for team ${team.id}:`,
           error,
         );
@@ -106,3 +108,5 @@ export async function GET() {
     teams: teamUsage,
   } satisfies PersonalAiUsageAllResponse);
 }
+
+export const GET = withAuth(GETHandler, { authenticateInHandler: true });

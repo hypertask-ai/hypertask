@@ -1,3 +1,4 @@
+import { logger as htLogger } from "#logger";
 import prisma from '@/lib/prisma'
 import { postSignedWebhook } from './delivery'
 import {
@@ -156,7 +157,7 @@ export async function deliverBoardWebhook(
       delivery.id,
       Math.floor(nextAttemptAt.getTime() / 1000)
     ).catch((error) => {
-      console.warn(
+      htLogger.warn(
         '[board-webhook] retry queue publish failed; sweep will retry',
         error
       )

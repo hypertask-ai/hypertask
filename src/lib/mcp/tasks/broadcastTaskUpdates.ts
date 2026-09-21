@@ -1,3 +1,4 @@
+import { logger as htLogger } from "#logger";
 import {
   broadcastBoardChange,
   broadcastTaskChange,
@@ -31,7 +32,7 @@ export async function broadcastTaskUpdates(
 
   for (const result of results) {
     if (result.status === "rejected") {
-      console.warn("[MCP Update Task] Realtime delivery failed:", result.reason);
+      htLogger.warn("[MCP Update Task] Realtime delivery failed:", result.reason);
     }
   }
 }

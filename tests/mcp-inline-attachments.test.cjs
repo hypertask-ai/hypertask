@@ -444,7 +444,7 @@ test("the attachment endpoint requires write scope for managed agents", () => {
     path.join(root, "src/app/api/mcp/comments/route.ts"),
     "utf8"
   );
-  const commentPost = commentsRoute.slice(commentsRoute.indexOf("export async function POST"));
+  const commentPost = commentsRoute.slice(commentsRoute.indexOf("async function POSTHandler"));
   assert.match(commentPost, /requireRole\(ctx, ['"]write['"]\)/);
 });
 

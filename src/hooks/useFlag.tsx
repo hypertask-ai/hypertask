@@ -1,5 +1,6 @@
 "use client";
 
+import { logger as htLogger } from "#logger";
 import {
   createContext,
   useContext,
@@ -97,7 +98,7 @@ export function FeatureFlagProvider({
       unsubscribe?.();
       unsubscribe = undefined;
       if (!cancelled) setRealtimeConnected(false);
-      console.warn("[feature-flags] realtime setup failed", error);
+      htLogger.warn("[feature-flags] realtime setup failed", error);
     });
 
     return () => {

@@ -1,3 +1,5 @@
+import { env as appEnv } from "#env";
+import { logger as htLogger } from "#logger";
 import { useCallback, useEffect, useState } from 'react';
 import { addDevice } from '@/utils/api/users';
 import { fetchPushNotificationStatus } from '@/utils/api/global/pushNotifications';
@@ -45,14 +47,14 @@ const useFcmToken = () => {
           
           // Retrieve the notification permission status
           const result = await window.Notification.requestPermission();
-          console.error("🚀 ~  useFcmToken ~ retrieveToken ~ result:", result)
+          htLogger.error("🚀 ~  useFcmToken ~ retrieveToken ~ result:", result)
           setNotificationPermissionStatus(result);
 
           // Check if permission is granted before retrieving the token
           if (result === 'granted') {
             const currentToken = await getToken(messaging, {
               vapidKey:
-                process.env.NEXT_PUBLIC_VAPID_KEY,
+                appEnv.NEXT_PUBLIC_VAPID_KEY,
             });
             
             // permission is granted and the token has been retrieved, 
@@ -65,7 +67,7 @@ const useFcmToken = () => {
               return currentToken
               
             } else {
-              console.error(
+              htLogger.error(
                 'No registration token available. Request permission to generate one.'
               );
             }
@@ -74,7 +76,7 @@ const useFcmToken = () => {
           else resetData(result)
         }
       } catch (error) {
-        console.error('An error occurred while retrieving token:', error);
+        htLogger.error('An error occurred while retrieving token:', error);
       }
     };
 
@@ -90,7 +92,7 @@ const useFcmToken = () => {
         await addDevice(fcmToken)
         getPushStatus(fcmToken)
       } catch(error){
-        console.log("🤔 ~ setTokenAndGetPushStatus ~ error:", error)
+        htLogger.info("🤔 ~ setTokenAndGetPushStatus ~ error:", error)
       }
       
 

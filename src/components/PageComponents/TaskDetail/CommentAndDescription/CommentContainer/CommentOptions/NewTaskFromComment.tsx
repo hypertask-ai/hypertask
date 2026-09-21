@@ -1,3 +1,4 @@
+import { logger as htLogger } from "#logger";
 import React from "react";
 import { useMemo } from "react";
 import { cn } from "@/utils/undoActions/helperFuncs";
@@ -40,7 +41,7 @@ const NewTaskFromComment: React.FC<IProps> = ({
         id: attachment.id,
       });
     }
-    console.log("🚀 ~ processAttachmentsForNewTask ~ temp:", temp);
+    htLogger.info("🚀 ~ processAttachmentsForNewTask ~ temp:", temp);
     return temp;
   };
 

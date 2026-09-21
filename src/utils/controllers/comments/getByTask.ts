@@ -1,3 +1,4 @@
+import { logger as htLogger } from "#logger";
 import { listTaskAgentRunActivities } from "@/lib/agentRuns/service";
 import { fetchCommentsForTask } from "@/utils/controllers/taskDetail/load";
 import { getTaskReadStateLastReadAt } from "@/utils/controllers/tasks/markRead";
@@ -13,7 +14,7 @@ const commentsGetByTask = async (
       fetchCommentsForTask(parsedTaskId, userId),
       getTaskReadStateLastReadAt(parsedTaskId, userId),
       listTaskAgentRunActivities(userId, parsedTaskId).catch((error) => {
-        console.error("[agent-run] task activity load failed", error);
+        htLogger.error("[agent-run] task activity load failed", error);
         return [];
       }),
     ]);
@@ -23,7 +24,7 @@ const commentsGetByTask = async (
       json: { comments: filteredComments, lastReadAt, agentRunActivities },
     };
   } catch (error) {
-    console.log(error);
+    htLogger.info(error);
     return { status: 500, json: [] };
   }
 };

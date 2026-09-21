@@ -1,11 +1,13 @@
+import { env as appEnv } from "#env";
+import { logger as htLogger } from "#logger";
 /**
  * Manual check: agent-bound MCP/OAuth JWTs have no exp; user tokens do.
  * Run: npx tsx src/scripts/verify-agent-jwt.ts
  */
 import jwt from "jsonwebtoken";
 
-process.env.JWT_SECRET = process.env.JWT_SECRET || "x".repeat(32);
-process.env.JWT_ISSUER = process.env.JWT_ISSUER || "hypertask";
+appEnv.JWT_SECRET = appEnv.JWT_SECRET || "x".repeat(32);
+appEnv.JWT_ISSUER = appEnv.JWT_ISSUER || "hypertask";
 
 import { createMcpToken, createOAuthToken } from "../lib/mcp/auth";
 
@@ -65,4 +67,4 @@ if (oauthUserDecoded.exp === undefined) {
   throw new Error("createOAuthToken without agent should set exp");
 }
 
-console.log("verify-agent-jwt: OK");
+htLogger.info("verify-agent-jwt: OK");

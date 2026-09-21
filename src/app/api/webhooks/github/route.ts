@@ -1,3 +1,6 @@
+import { env as appEnv } from "#env";
+import { logger as htLogger } from "#logger";
+import { withoutAuth } from "#with-auth";
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 import { generalConfig } from "@/lib/configs/general.config";
@@ -115,7 +118,7 @@ async function moveTaskForPullRequest(
     },
   });
   if (!section) {
-    console.warn(
+    htLogger.warn(
       `[GitHub webhook] Board ${task.projectId} has no ${targetSectionName} section; task ${task.id} was not moved.`,
     );
     return false;
@@ -178,7 +181,7 @@ async function moveTaskForPullRequest(
   if (moveResult.status === 409) {
     // The PR link is already durable. The active writer owns the task's next
     // section; failing here only produces manual redeliveries and duplicate comments.
-    console.warn(
+    htLogger.warn(
       `[GitHub webhook] Task ${task.id} has an active write; its automatic move to ${targetSectionName} was skipped.`,
     );
     return false;
@@ -250,7 +253,7 @@ async function reconcileMergedPullRequestAssignees(
 
   const qaAgentId = qaSection.autoAssignAgentId;
   if (!qaAgentId) {
-    console.warn(
+    htLogger.warn(
       `[GitHub webhook] QA section ${qaSection.section_title} has no agent auto-assignee; task ${task.id} assignments were not changed.`,
     );
     return false;
@@ -271,7 +274,7 @@ async function reconcileMergedPullRequestAssignees(
     { ...mutationOptions, intent: "assign" },
   );
   if (qaAssignment.status === 409) {
-    console.warn(
+    htLogger.warn(
       `[GitHub webhook] Task ${task.id} has an active write; its QA assignment cleanup was skipped.`,
     );
     return false;
@@ -298,7 +301,7 @@ async function reconcileMergedPullRequestAssignees(
       { ...mutationOptions, intent: "unassign" },
     );
     if (removal.status === 409) {
-      console.warn(
+      htLogger.warn(
         `[GitHub webhook] Task ${task.id} changed during QA assignment cleanup; remaining agent assignments were preserved.`,
       );
       return changed;
@@ -334,7 +337,7 @@ async function broadcastPullRequestChanges(
   ]);
   for (const result of results) {
     if (result.status === "rejected") {
-      console.warn("[GitHub webhook] Realtime delivery failed", result.reason);
+      htLogger.warn("[GitHub webhook] Realtime delivery failed", result.reason);
     }
   }
 }
@@ -346,13 +349,13 @@ function escapeHtml(value: string): string {
     .replaceAll(">", "&gt;");
 }
 
-export async function POST(request: NextRequest) {
+async function POSTHandler(request: NextRequest) {
   try {
     const rawBody = await request.text();
     const signatureIsValid = verifyGithubSignature(
       rawBody,
       request.headers.get("x-hub-signature-256"),
-      process.env.GITHUB_WEBHOOK_SECRET,
+      appEnv.GITHUB_WEBHOOK_SECRET,
     );
 
     if (!signatureIsValid) {
@@ -547,7 +550,7 @@ export async function POST(request: NextRequest) {
       select: { uniqueIdentifier: true },
     });
     if (!board?.uniqueIdentifier) {
-      console.error(
+      htLogger.error(
         `[GitHub webhook] Board ${boardId} has no ticket identifier; event was ignored.`,
       );
       return NextResponse.json({
@@ -749,7 +752,7 @@ export async function POST(request: NextRequest) {
       });
 
       if (!section) {
-        console.warn(
+        htLogger.warn(
           `[GitHub webhook] Board ${task.projectId} has no ${targetSectionName} section; task ${task.id} was not moved.`,
         );
       } else if (section.id !== task.sectionId) {
@@ -816,7 +819,7 @@ export async function POST(request: NextRequest) {
         if (moveResult.status === 409) {
           // The linked PR remains authoritative while the active writer chooses
           // the task's next section. A failed delivery invites duplicate comments.
-          console.warn(
+          htLogger.warn(
             `[GitHub webhook] Task ${task.id} has an active write; its automatic move to ${targetSectionName} was skipped.`,
           );
         } else if (moveResult.status !== 200) {
@@ -834,7 +837,7 @@ export async function POST(request: NextRequest) {
             originUserId: generalConfig.hyperAiId,
           });
         } catch (error) {
-          console.warn(
+          htLogger.warn(
             `[GitHub webhook] Task ${task.id} moved, but a follow-up side effect failed.`,
             error,
           );
@@ -857,7 +860,7 @@ export async function POST(request: NextRequest) {
           originUserId: generalConfig.hyperAiId,
         });
       } catch (error) {
-        console.warn(
+        htLogger.warn(
           `[GitHub webhook] Task ${task.id} assignments changed, but realtime delivery failed.`,
           error,
         );
@@ -873,7 +876,7 @@ export async function POST(request: NextRequest) {
           originUserId: generalConfig.hyperAiId,
         });
       } catch (error) {
-        console.warn(
+        htLogger.warn(
           `[GitHub webhook] Task ${task.id} assignments changed, but realtime delivery failed.`,
           error,
         );
@@ -891,10 +894,12 @@ export async function POST(request: NextRequest) {
       { status: 200 },
     );
   } catch (error) {
-    console.error("[GitHub webhook] Unexpected error:", error);
+    htLogger.error("[GitHub webhook] Unexpected error:", error);
     return NextResponse.json(
       { success: false, error: "Internal server error" },
       { status: 500 },
     );
   }
 }
+
+export const POST = withoutAuth(POSTHandler);

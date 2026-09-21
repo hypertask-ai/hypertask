@@ -1,3 +1,5 @@
+import { logger as htLogger } from "#logger";
+import { withAuth } from "#with-auth";
 import { NextRequest, NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import prisma from "@/lib/prisma";
@@ -46,12 +48,12 @@ async function getCurrentUserFromCookies() {
     if (!userCookie?.value) return null;
     return JSON.parse(userCookie.value) as { id?: number };
   } catch (error: any) {
-    console.log("🚀 ~ getCurrentUserFromCookies ~ error:", error);
+    htLogger.info("🚀 ~ getCurrentUserFromCookies ~ error:", error);
     return null;
   }
 }
 
-export async function GET(request: NextRequest) {
+async function GETHandler(request: NextRequest) {
   try {
     const user = await getCurrentUserFromCookies();
     if (!user?.id) {
@@ -70,7 +72,7 @@ export async function GET(request: NextRequest) {
       { status: response.status },
     );
   } catch (error) {
-    console.log("🚀 ~ GET [users/preferences] ~ error:", error);
+    htLogger.info("🚀 ~ GET [users/preferences] ~ error:", error);
     return NextResponse.json(
       {
         success: false,
@@ -98,7 +100,7 @@ export async function GET(request: NextRequest) {
   }
 }
 
-export async function POST(request: NextRequest) {
+async function POSTHandler(request: NextRequest) {
   try {
     const user = await getCurrentUserFromCookies();
     if (!user?.id) {
@@ -492,7 +494,7 @@ export async function POST(request: NextRequest) {
         { status: 400 },
       );
     }
-    console.log("🚀 ~ POST [users/preferences] ~ error:", error);
+    htLogger.info("🚀 ~ POST [users/preferences] ~ error:", error);
     return NextResponse.json(
       { success: false, error: "Internal server error" },
       { status: 500 },
@@ -500,4 +502,7 @@ export async function POST(request: NextRequest) {
   }
 }
 
-export const PATCH = POST;
+export const PATCH = withAuth(POSTHandler, { authenticateInHandler: true });
+
+export const GET = withAuth(GETHandler, { authenticateInHandler: true });
+export const POST = withAuth(POSTHandler, { authenticateInHandler: true });

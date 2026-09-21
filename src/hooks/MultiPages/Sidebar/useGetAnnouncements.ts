@@ -1,3 +1,4 @@
+import { logger as htLogger } from "#logger";
 
 import { IAnnouncement } from "@/models/Announcements/model";
 import { useQuery } from "@tanstack/react-query";
@@ -42,6 +43,6 @@ const getUserAnnouncements = async(userId:number|undefined):Promise<IAnnouncemen
         const response = await axios.get(`/api/users/announcements/getUserAnnouncements?userId=${userId}`)
         return response.data
     } catch (error) {
-        console.log("🚀 ~ getUserAnnouncements ~ error:", error)
+        htLogger.info("🚀 ~ getUserAnnouncements ~ error:", error)
     }
 }

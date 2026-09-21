@@ -1,5 +1,6 @@
 "use client";
 
+import { env as appEnv } from "#env";
 import { uploadFilesViaApi } from "@/lib/storage/uploadViaApi";
 import { EditorContent } from "@tiptap/react";
 import {
@@ -60,7 +61,7 @@ export const useFeedbackDraft = ({
         ),
         pageTitle: document.title.slice(0, 300),
         userAgent: navigator.userAgent.slice(0, 300),
-        appVersion: process.env.NEXT_PUBLIC_BUILD_ID?.slice(0, 300),
+        appVersion: appEnv.NEXT_PUBLIC_BUILD_ID?.slice(0, 300),
         screenshotUrl,
       });
       toast.success("Feedback sent. Thank you!");

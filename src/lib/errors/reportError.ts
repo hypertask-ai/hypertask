@@ -1,3 +1,5 @@
+import { env as appEnv } from "#env";
+import { logger as htLogger } from "#logger";
 import prisma from "@/lib/prisma";
 import { getRedis } from "@/lib/redis";
 import { createTask, validateProjectAccess } from "@/lib/mcp/tasks/services";
@@ -31,7 +33,7 @@ const HOUR_SECONDS = 60 * 60;
 const ERROR_LABEL = "auto-error";
 
 function positiveEnvInt(name: string, fallback: number) {
-  const value = Number(process.env[name]);
+  const value = Number(appEnv[name]);
   return Number.isInteger(value) && value > 0 ? value : fallback;
 }
 
@@ -66,7 +68,7 @@ function ticketDescription(report: ErrorReport, firstSeen: string) {
 }
 
 async function getBoardTarget(projectId: number, userId: number) {
-  const configuredSectionTitle = process.env.ERROR_BOARD_SECTION_TITLE?.trim();
+  const configuredSectionTitle = appEnv.ERROR_BOARD_SECTION_TITLE?.trim();
 
   const projectResult = await validateProjectAccess(projectId, userId);
   if (projectResult.error) throw new Error(projectResult.error.message);
@@ -107,18 +109,18 @@ async function getBoardTarget(projectId: number, userId: number) {
 }
 
 function trace(step: string, extra?: Record<string, unknown>) {
-  console.log("[error-reporter]", step, extra ? JSON.stringify(extra) : "");
+  htLogger.info("[error-reporter]", step, extra ? JSON.stringify(extra) : "");
 }
 
 async function reportErrorTicket(report: ErrorReport) {
   try {
     if (
-      process.env.NODE_ENV !== "production" ||
-      process.env.VERCEL_ENV === "preview"
+      appEnv.NODE_ENV !== "production" ||
+      appEnv.VERCEL_ENV === "preview"
     ) {
       trace("skip-env", {
-        nodeEnv: process.env.NODE_ENV,
-        vercelEnv: process.env.VERCEL_ENV,
+        nodeEnv: appEnv.NODE_ENV,
+        vercelEnv: appEnv.VERCEL_ENV,
       });
       return;
     }
@@ -210,7 +212,7 @@ async function reportErrorTicket(report: ErrorReport) {
     });
     trace("created", { title: ticketTitle(report.message) });
   } catch (error) {
-    console.error("[error-reporter] failed", error);
+    htLogger.error("[error-reporter] failed", error);
   }
 }
 

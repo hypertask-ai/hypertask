@@ -1,3 +1,5 @@
+import { logger as htLogger } from "#logger";
+import { withoutAuth } from "#with-auth";
 import { NextRequest, NextResponse } from "next/server";
 import {
   agentRunActivitiesEnabledFor,
@@ -51,7 +53,7 @@ async function authorize(request: NextRequest) {
   return { principal };
 }
 
-export async function GET(
+async function GETHandler(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> },
 ) {
@@ -70,12 +72,12 @@ export async function GET(
     }
     return noStore({ success: true, activities });
   } catch (error) {
-    console.error("[agent-run] activity list failed", error);
+    htLogger.error("[agent-run] activity list failed", error);
     return noStore({ success: false, error: "Failed to list run activities" }, 500);
   }
 }
 
-export async function POST(
+async function POSTHandler(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> },
 ) {
@@ -132,7 +134,10 @@ export async function POST(
     if (error instanceof Error && error.message.startsWith("Idempotency-Key")) {
       return noStore({ success: false, error: error.message }, 400);
     }
-    console.error("[agent-run] activity create failed", error);
+    htLogger.error("[agent-run] activity create failed", error);
     return noStore({ success: false, error: "Failed to create run activity" }, 500);
   }
 }
+
+export const GET = withoutAuth(GETHandler);
+export const POST = withoutAuth(POSTHandler);

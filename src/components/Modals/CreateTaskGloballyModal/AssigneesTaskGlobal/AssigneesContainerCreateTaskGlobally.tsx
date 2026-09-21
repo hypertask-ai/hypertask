@@ -1,3 +1,4 @@
+import { logger as htLogger } from "#logger";
 import Tooltip from "@/components/Common/Tooltip";
 import {
   AssigneeCard,
@@ -26,7 +27,7 @@ const AssigneesContainerCreateTaskGlobally: React.FC<IProps> = ({
   const callbackHandler = (user?: IUser) => {
     toggleModal();
     if (!user) return;
-    console.log("🚀 ~ callbackHandler ~ user:", user);
+    htLogger.info("🚀 ~ callbackHandler ~ user:", user);
     const olderAssignees = formValues.assignees;
 
     // Check if the user already exists in the list
@@ -44,7 +45,7 @@ const AssigneesContainerCreateTaskGlobally: React.FC<IProps> = ({
       newerAssignees = [...olderAssignees, user];
     }
 
-    console.log("🚀 ~ callbackHandler ~ newerAssignees:", newerAssignees);
+    htLogger.info("🚀 ~ callbackHandler ~ newerAssignees:", newerAssignees);
     handleChange("assignees", newerAssignees);
   };
 

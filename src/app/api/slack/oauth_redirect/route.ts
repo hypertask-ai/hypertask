@@ -1,3 +1,6 @@
+import { env as appEnv } from "#env";
+import { logger as htLogger } from "#logger";
+import { withoutAuth } from "#with-auth";
 import { NextRequest, NextResponse } from "next/server";
 
 import prisma from "@/lib/prisma";
@@ -21,9 +24,9 @@ type SlackOAuthResponse = {
   team?: { id?: string; name?: string };
 };
 
-export async function GET(request: NextRequest) {
-  const clientId = process.env.SLACK_CLIENT_ID?.trim();
-  const clientSecret = process.env.SLACK_CLIENT_SECRET?.trim();
+async function GETHandler(request: NextRequest) {
+  const clientId = appEnv.SLACK_CLIENT_ID?.trim();
+  const clientSecret = appEnv.SLACK_CLIENT_SECRET?.trim();
   if (!clientId || !clientSecret) {
     return redirectWithError(request, "not_configured");
   }
@@ -98,7 +101,7 @@ export async function GET(request: NextRequest) {
       !botUserId ||
       !botToken
     ) {
-      console.error("Slack OAuth response was incomplete", result.error);
+      htLogger.error("Slack OAuth response was incomplete", result.error);
       return redirectWithError(request, result.error ?? "slack_failed");
     }
 
@@ -147,7 +150,7 @@ export async function GET(request: NextRequest) {
     destination.searchParams.set("slack_success", "connected");
     return NextResponse.redirect(destination);
   } catch (error) {
-    console.error("Slack OAuth callback failed", error);
+    htLogger.error("Slack OAuth callback failed", error);
     return redirectWithError(request, "server_error");
   }
 }
@@ -157,3 +160,5 @@ function redirectWithError(request: NextRequest, error: string) {
   destination.searchParams.set("slack_error", error);
   return NextResponse.redirect(destination);
 }
+
+export const GET = withoutAuth(GETHandler);

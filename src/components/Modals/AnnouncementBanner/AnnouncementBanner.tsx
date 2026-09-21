@@ -1,3 +1,4 @@
+import { logger as htLogger } from "#logger";
 import { useRef } from "react";
 import { useRouter } from "next/navigation";
 import { X } from "lucide-react";
@@ -49,7 +50,7 @@ const AnnouncementBanner: React.FC<IProps> = ({
         userId,
         announcementIds: [announcement.announcementId],
       })
-      .catch((error) => console.error("Failed to dismiss announcement", error));
+      .catch((error) => htLogger.error("Failed to dismiss announcement", error));
   };
 
   const poster = youtubeThumbnailUrl(mediaURL);

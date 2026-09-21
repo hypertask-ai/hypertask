@@ -1,3 +1,4 @@
+import { withAuth } from "#with-auth";
 import { NextRequest, NextResponse } from "next/server";
 
 import {
@@ -25,7 +26,7 @@ function settingsError(request: NextRequest, error: string): URL {
   return destination;
 }
 
-export async function GET(request: NextRequest) {
+async function GETHandler(request: NextRequest) {
   const principal = await getFigmaRequestUser(request);
   if (principal.status === "unauthorized") {
     return noStore({ error: "Unauthorized" }, 401);
@@ -61,3 +62,5 @@ export async function GET(request: NextRequest) {
   setFigmaOAuthAttemptCookie(response, request, attempt.cookieValue);
   return response;
 }
+
+export const GET = withAuth(GETHandler, { authenticateInHandler: true });

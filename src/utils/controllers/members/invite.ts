@@ -1,3 +1,4 @@
+import { logger as htLogger } from "#logger";
 import { LogType, PrismaClient, Status } from "@prisma/client";
 import { CreateLogInput } from "@/models/model";
 import createLog from "../logs/createLog";
@@ -63,7 +64,7 @@ const membersInvite = async (userId:number, projectId:number, inviteKey?:string)
             if (member) return({status:101, json:[]})
 
 
-            console.log("🚀 ~ membersInvite ~ inviteKey:", inviteKey)
+            htLogger.info("🚀 ~ membersInvite ~ inviteKey:", inviteKey)
             if (inviteKey){
                 const fetchedInvite = await prisma.invite.findFirst({
                     where:{
@@ -81,11 +82,11 @@ const membersInvite = async (userId:number, projectId:number, inviteKey?:string)
                     },
 
                 })
-                console.log("🚀 ~ file: invite.ts:62 ~ membersInvite ~ fetchedInvite:", fetchedInvite)
+                htLogger.info("🚀 ~ file: invite.ts:62 ~ membersInvite ~ fetchedInvite:", fetchedInvite)
                 
                 // invitation link expired
                 if (!fetchedInvite||fetchedInvite?.expired===true){
-                    console.log("🚀 invite might be expired")
+                    htLogger.info("🚀 invite might be expired")
                     return({status:101, json:[]})
 
                 }
@@ -107,15 +108,15 @@ const membersInvite = async (userId:number, projectId:number, inviteKey?:string)
                         googleAccount:true
                     }
                 })
-                console.log("🚀 ~ membersInvite ~ ownsTheTeam:", ownsTheTeam)
-                console.log("🚀 ~ file: invite.ts:100 ~ membersInvite ~ member_teamCheck:", member_teamCheck)
+                htLogger.info("🚀 ~ membersInvite ~ ownsTheTeam:", ownsTheTeam)
+                htLogger.info("🚀 ~ file: invite.ts:100 ~ membersInvite ~ member_teamCheck:", member_teamCheck)
                 var PaymentResponse: "Awaiting" | "FREE" | "OK"  = "Awaiting";
                 
                 // ===================== CREATE TEAM MEMBER
                 // ================================ if member_teamCheck is null, it means we need to add this new member and also that we have to charge the owner. 
                 // ============ also check if the invited user is owner. then don't 
                 if (project.teamId && project.team?.stripe_customer_id && !member_teamCheck && ownsTheTeam?.googleAccount.userId!==userId){
-                    console.log("🚀 ~ membersInvite ~ project.team.subscriptionPlan:", project.team.subscriptionPlan)
+                    htLogger.info("🚀 ~ membersInvite ~ project.team.subscriptionPlan:", project.team.subscriptionPlan)
                     const teamId = project.teamId;
                     const team = project.team;
                     // Seat billing runs once, after the member is added, so it can price against
@@ -145,7 +146,7 @@ const membersInvite = async (userId:number, projectId:number, inviteKey?:string)
                           }
                           createLog(createLogBody)
                           
-                        console.log("creating a team member")
+                        htLogger.info("creating a team member")
                         
                         // update total_seats of the team
                        assertHeld();
@@ -167,7 +168,7 @@ const membersInvite = async (userId:number, projectId:number, inviteKey?:string)
                           }
                           createLog(createLogBody2)
 
-                       console.log("🚀 ~ file: invite.ts:144 ~ membersInvite ~ updatedTeam:", updatedTeam)
+                       htLogger.info("🚀 ~ file: invite.ts:144 ~ membersInvite ~ updatedTeam:", updatedTeam)
 
                         
     
@@ -213,7 +214,7 @@ const membersInvite = async (userId:number, projectId:number, inviteKey?:string)
                             ]
                         }
                     })
-                    console.log("🚀 ~ membersInvite ~ owner:", owner)
+                    htLogger.info("🚀 ~ membersInvite ~ owner:", owner)
                     if (!alreadyMember && owner.length===0){
                         assertHeld();
                         await prisma.invite.update({
@@ -278,7 +279,7 @@ const membersInvite = async (userId:number, projectId:number, inviteKey?:string)
                                 trialStatus = true;
                             }
                             
-                            console.log("🚀 ~ file: invite.ts:191 ~ membersInvite ~ member:", member)
+                            htLogger.info("🚀 ~ file: invite.ts:191 ~ membersInvite ~ member:", member)
                             let createLogBody:CreateLogInput = {
                                 log:`${member?.user.displayName} accepted an invitation for "${fetchedInvite.project.title}"`,
                                 type:LogType.Invite,
@@ -302,7 +303,7 @@ const membersInvite = async (userId:number, projectId:number, inviteKey?:string)
 
             // res.status(200).json(member);
         } catch (error) {
-            console.log(error);
+            htLogger.info(error);
             return({status:500, json:{message:JSON.stringify(error)}})
 
             // return res.status(400).json({ message: JSON.stringify(error) });

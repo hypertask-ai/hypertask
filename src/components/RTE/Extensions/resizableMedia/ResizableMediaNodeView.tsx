@@ -1,3 +1,4 @@
+import { logger as htLogger } from "#logger";
 /* eslint-disable react-hooks/exhaustive-deps */
 /* eslint-disable jsx-a11y/no-static-element-interactions */
 /* eslint-disable jsx-a11y/media-has-caption */
@@ -205,7 +206,7 @@ export const ResizableMediaNodeView = ({
             node.attrs.width !== width.toString() ||
             node.attrs.height !== height.toString()
           ) {
-            console.log("Updating video dimensions:", { width, height });
+            htLogger.info("Updating video dimensions:", { width, height });
             updateAttributes({
               width: width.toString(),
               height: height.toString(),
@@ -243,7 +244,7 @@ export const ResizableMediaNodeView = ({
             currentWidth === 0 ||
             currentHeight === 0
           ) {
-            console.log("Updating image dimensions:", {
+            htLogger.info("Updating image dimensions:", {
               from: { width: currentWidth, height: currentHeight },
               to: { width, height },
             });
@@ -317,7 +318,7 @@ export const ResizableMediaNodeView = ({
     diff: number,
   ) => {
     if (!resizableImgRef.current) {
-      console.error("Media ref is undefined|null", {
+      htLogger.error("Media ref is undefined|null", {
         resizableImg: resizableImgRef.current,
       });
       return;

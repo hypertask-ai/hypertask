@@ -1,3 +1,5 @@
+import { logger as htLogger } from "#logger";
+import { withoutAuth } from "#with-auth";
 import type { DecisionRequest } from '@prisma/client'
 import { DecisionRequestStatus } from '@prisma/client'
 import { NextRequest, NextResponse } from 'next/server'
@@ -62,7 +64,7 @@ function parseStatus(value: string | null): DecisionRequestStatus | null | undef
   return null
 }
 
-export async function POST(request: NextRequest) {
+async function POSTHandler(request: NextRequest) {
   try {
     const rateLimited = await checkMcpRateLimit(request)
     if (rateLimited) return rateLimited
@@ -207,7 +209,7 @@ export async function POST(request: NextRequest) {
       { status: 201 }
     )
   } catch (error) {
-    console.error('[MCP Decision Request POST] Error:', error)
+    htLogger.error('[MCP Decision Request POST] Error:', error)
     return NextResponse.json(
       { success: false, error: 'Internal server error' },
       { status: 500 }
@@ -215,7 +217,7 @@ export async function POST(request: NextRequest) {
   }
 }
 
-export async function GET(request: NextRequest) {
+async function GETHandler(request: NextRequest) {
   try {
     const rateLimited = await checkMcpRateLimit(request)
     if (rateLimited) return rateLimited
@@ -292,10 +294,13 @@ export async function GET(request: NextRequest) {
       decision_requests: decisionRequests.map(mapDecisionRequest),
     })
   } catch (error) {
-    console.error('[MCP Decision Request GET] Error:', error)
+    htLogger.error('[MCP Decision Request GET] Error:', error)
     return NextResponse.json(
       { success: false, error: 'Internal server error' },
       { status: 500 }
     )
   }
 }
+
+export const POST = withoutAuth(POSTHandler);
+export const GET = withoutAuth(GETHandler);

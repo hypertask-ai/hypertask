@@ -1,3 +1,5 @@
+import { logger as htLogger } from "#logger";
+import { withAuth } from "#with-auth";
 import { NextRequest, NextResponse } from "next/server";
 import { generateText } from "ai";
 import { z } from "zod";
@@ -184,7 +186,7 @@ INSTRUCTIONS
   return sanitizeReplyHtml(rawHtml);
 }
 
-export async function POST(request: NextRequest) {
+async function POSTHandler(request: NextRequest) {
   const cookieUser = await getCurrentUserFromCookies();
   if (!cookieUser?.id) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -218,10 +220,12 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({ html: safeHtml });
   } catch (error) {
-    console.error("[ai/suggest-reply] request failed", error);
+    htLogger.error("[ai/suggest-reply] request failed", error);
     return NextResponse.json(
       { error: `Failed to generate suggestion: ${errorMessage(error)}` },
       { status: 500 }
     );
   }
 }
+
+export const POST = withAuth(POSTHandler, { authenticateInHandler: true });

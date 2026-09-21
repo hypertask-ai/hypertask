@@ -1,3 +1,5 @@
+import { env as appEnv } from "#env";
+import { logger as htLogger } from "#logger";
 /* eslint-disable react-hooks/exhaustive-deps */
 import {
   processHtmlForTaskId,
@@ -712,17 +714,17 @@ const useCreateTaskModalGlobalStates = () => {
         mentionById: currentUser.id,
       });
     } catch (error) {
-      console.log("🚀 ~ handleAgentMention ~ error:", error);
+      htLogger.info("🚀 ~ handleAgentMention ~ error:", error);
     }
   }
 
   const PostFollower = async (userId: number, task: ITask) => {
-    const path = `${process.env.NEXT_PUBLIC_BASEURL}/detail/project-${task.projectId}/${task.uniqueIndex}`;
+    const path = `${appEnv.NEXT_PUBLIC_BASEURL}/detail/project-${task.projectId}/${task.uniqueIndex}`;
 
     const taskOwnerId = parseInt(task.userId as string);
-    console.log("already exist not", taskOwnerId === userId);
+    htLogger.info("already exist not", taskOwnerId === userId);
     if (taskOwnerId === userId) {
-      console.log("you are owner");
+      htLogger.info("you are owner");
     } else {
       try {
         await axios
@@ -742,14 +744,14 @@ const useCreateTaskModalGlobalStates = () => {
                   taskId: task?.id,
                 });
               } catch (error) {
-                console.log("error sending mail");
+                htLogger.info("error sending mail");
               }
             } else if (response.status === 201) {
-              console.log("You are Already in Assignees");
+              htLogger.info("You are Already in Assignees");
             }
           });
       } catch (error) {
-        console.log(error);
+        htLogger.info(error);
       }
     }
   };
@@ -798,7 +800,7 @@ const useCreateTaskModalGlobalStates = () => {
       }
     } catch (error) {
       if (!axios.isCancel(error)) {
-        console.error("Could not load create-task section defaults", error);
+        htLogger.error("Could not load create-task section defaults", error);
       }
     } finally {
       if (sectionDefaultsRequestRef.current === controller) {

@@ -1,3 +1,4 @@
+import { logger as htLogger } from "#logger";
 import { searchConfig } from "@/lib/configs/search.config";
 import {
   rankAndGroupHits,
@@ -75,7 +76,7 @@ export async function turbopufferFetchMentionTasks(
         status: row.status,
       }));
   } catch (error) {
-    console.log("turbopufferFetchMentionTasks error:", error);
+    htLogger.info("turbopufferFetchMentionTasks error:", error);
     return [];
   }
 }
@@ -109,7 +110,7 @@ export async function turbopufferSearchTaskIds(
 
     return rows.map((row) => parseInt(row.id, 10)).filter(Number.isInteger);
   } catch (error) {
-    console.error("turbopufferSearchTaskIds error:", error);
+    htLogger.error("turbopufferSearchTaskIds error:", error);
     return [];
   }
 }
@@ -372,7 +373,7 @@ export async function turbopufferGetDocuments(
       status: 200,
     };
   } catch (error) {
-    console.error("turbopufferGetDocuments error:", error);
+    htLogger.error("turbopufferGetDocuments error:", error);
     return emptySearchResponse(500, contextProjectId);
   }
 }

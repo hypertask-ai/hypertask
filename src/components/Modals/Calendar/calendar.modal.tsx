@@ -1,3 +1,4 @@
+import { logger as htLogger } from "#logger";
 import {
   ModalContainerCustom,
   ModalHeaderComp,
@@ -132,7 +133,7 @@ const CalendarDueDateModal: React.FC<IProps> = ({
         if (defaultTasks.length === 0) setDefaultTasks(result);
       }
     } catch (error) {
-      console.log("🚀 ~ onOpenHandler ~ error:", error);
+      htLogger.info("🚀 ~ onOpenHandler ~ error:", error);
     }
   }, [keyword]);
 

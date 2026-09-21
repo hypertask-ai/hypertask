@@ -1,3 +1,5 @@
+import { env as appEnv } from "#env";
+import { logger as htLogger } from "#logger";
 import { IProject, ITask, IUser } from "@/models/model";
 import { useQueryClient } from "@tanstack/react-query";
 import axios from "axios";
@@ -22,7 +24,7 @@ const useFollowerKanban = () => {
     if (!task) return;
     const followers: any = queryClient.getQueryData(["followersFor:", task.id]);
     const baseURL =
-      String(process.env.NEXT_PUBLIC_BASEURL) ?? "https://app.hypertask.ai";
+      String(appEnv.NEXT_PUBLIC_BASEURL) ?? "https://app.hypertask.ai";
     const path = `${baseURL}/detail/project-${task.projectId}/${task.uniqueIndex}`;
     if (currentUser.id) {
       const check = followers?.some(
@@ -30,11 +32,11 @@ const useFollowerKanban = () => {
           item?.userId === currentUser.id && item.taskId === task?.id
       );
       if (check) {
-        console.log("already exist");
+        htLogger.info("already exist");
       } else {
-        console.log("already exist not", task?.userId === currentUser.id);
+        htLogger.info("already exist not", task?.userId === currentUser.id);
         if (task?.userId === currentUser.id) {
-          console.log("you are owner");
+          htLogger.info("you are owner");
         } else {
           if (!task) return;
           try {
@@ -67,14 +69,14 @@ const useFollowerKanban = () => {
                       taskId: task?.id,
                     });
                   } catch (error) {
-                    console.log("error sending mail");
+                    htLogger.info("error sending mail");
                   }
                 } else if (response.status === 201) {
-                  console.log("You are Already in Assignees");
+                  htLogger.info("You are Already in Assignees");
                 }
               });
           } catch (error) {
-            console.log(error);
+            htLogger.info(error);
           }
         }
       }
@@ -103,7 +105,7 @@ const useFollowerKanban = () => {
             }
           });
       } catch (error) {
-        console.log(error);
+        htLogger.info(error);
       }
     }
   };

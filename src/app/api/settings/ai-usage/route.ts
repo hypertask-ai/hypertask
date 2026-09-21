@@ -1,3 +1,5 @@
+import { logger as htLogger } from "#logger";
+import { withAuth } from "#with-auth";
 import { agentStore } from "@/utils/controllers/agents";
 import { NextResponse } from "next/server";
 import { getTeamGatewayFunding } from "@/app/api/ai/_lib/byokKeys";
@@ -281,12 +283,12 @@ const loadAiUsageBreakdown = async (
       ),
     };
   } catch (error) {
-    console.error("Error loading AiUsage breakdown:", error);
+    htLogger.error("Error loading AiUsage breakdown:", error);
     return null;
   }
 };
 
-export async function GET(request: Request) {
+async function GETHandler(request: Request) {
   const user = await getServerCookieUser();
   if (!user) {
     return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
@@ -468,10 +470,12 @@ export async function GET(request: Request) {
         : null,
     } satisfies AiUsageResponse);
   } catch (error) {
-    console.error("Error loading per-team AI Gateway report:", error);
+    htLogger.error("Error loading per-team AI Gateway report:", error);
     return NextResponse.json(
       { message: "Could not load AI Gateway usage" },
       { status: 502 },
     );
   }
 }
+
+export const GET = withAuth(GETHandler, { authenticateInHandler: true });

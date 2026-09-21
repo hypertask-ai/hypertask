@@ -1,3 +1,5 @@
+import { logger as htLogger } from "#logger";
+import { withoutAuth } from "#with-auth";
 import { agentStore } from "@/utils/controllers/agents";
 import { NextRequest, NextResponse } from 'next/server'
 import { checkMcpRateLimit, validateMcpAuth } from '@/lib/mcp/auth'
@@ -25,7 +27,7 @@ function validationError(message: string, field?: string) {
  * cost attribution that isn't recorded yet (tracked as follow-ups), so they are
  * intentionally not reported here rather than faked.
  */
-export async function GET(request: NextRequest) {
+async function GETHandler(request: NextRequest) {
   try {
     const rateLimited = await checkMcpRateLimit(request)
     if (rateLimited) return rateLimited
@@ -115,7 +117,9 @@ export async function GET(request: NextRequest) {
       fleet,
     })
   } catch (error) {
-    console.error('[MCP Agent Analytics] Error:', error)
+    htLogger.error('[MCP Agent Analytics] Error:', error)
     return NextResponse.json({ success: false, error: 'Internal server error' }, { status: 500 })
   }
 }
+
+export const GET = withoutAuth(GETHandler);

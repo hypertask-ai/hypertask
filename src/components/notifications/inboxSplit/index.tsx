@@ -1,5 +1,6 @@
 "use client";
 
+import { logger as htLogger } from "#logger";
 import type { INotification, TRemoveFromInboxMode } from "@/models/model";
 import { useRouter } from "next/navigation";
 import {
@@ -578,7 +579,7 @@ const InboxSplit = ({
       handler: (selectedNotifications) => {
         // Set reminders for all selected notifications
         // Implementation depends on your reminder API
-        console.log("Setting reminders for:", selectedNotifications);
+        htLogger.info("Setting reminders for:", selectedNotifications);
       },
     },
   ];
@@ -861,7 +862,7 @@ const InboxSplit = ({
           );
           succeeded = result !== false;
         } catch (error) {
-          console.error("Inbox archive failed", error);
+          htLogger.error("Inbox archive failed", error);
           toast.error("Could not archive this notification");
         }
         if (source === "mouse" && typeof accountId === "number") {

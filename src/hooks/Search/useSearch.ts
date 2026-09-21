@@ -1,3 +1,4 @@
+import { logger as htLogger } from "#logger";
 import { searchConfig } from "@/lib/configs/search.config";
 import { useDeviceContext } from "@/lib/contexts/deviceContext";
 import { useQueryClient } from "@tanstack/react-query";
@@ -162,7 +163,7 @@ export function useSearch(
         }
       } catch (error) {
         if (!searchRequestGate.isLatest(requestId)) return;
-        console.error("🤔 ~ handleSearchOnMount ~ error:", error);
+        htLogger.error("🤔 ~ handleSearchOnMount ~ error:", error);
         handleStatesOnResponse(searchConfig.responseMessages.error);
       }
     }
@@ -373,7 +374,7 @@ export function useSearch(
       }
     } catch (error) {
       if (!searchRequestGate.isLatest(requestId)) return;
-      console.error("🤔 ~ executeSearch ~ error:", error);
+      htLogger.error("🤔 ~ executeSearch ~ error:", error);
       toast.error(searchConfig.responseMessages.error);
       handleStatesOnResponse(searchConfig.responseMessages.error);
     }

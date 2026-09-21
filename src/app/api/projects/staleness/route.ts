@@ -1,10 +1,10 @@
-import { getSessionUser } from "@/lib/auth/getSessionUser";
+import { getAuthSession, withAuth } from "#with-auth";
 import prisma from "@/lib/prisma";
 import { getProjectWhere } from "@/utils/controllers/projects/getAllIncludes";
 import { NextRequest, NextResponse } from "next/server";
 
-export async function POST(request: NextRequest) {
-  const session = await getSessionUser(request.headers);
+async function POSTHandler(request: NextRequest) {
+  const session = await getAuthSession(request.headers);
   if (!session) {
     return NextResponse.json(
       { success: false, error: "Unauthorized" },
@@ -100,3 +100,5 @@ export async function POST(request: NextRequest) {
     });
   });
 }
+
+export const POST = withAuth(POSTHandler, { authenticateInHandler: true });

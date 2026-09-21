@@ -1,3 +1,4 @@
+import { env as appEnv } from "#env";
 
 // import { PrismaClient } from "@prisma/client";
 
@@ -41,7 +42,7 @@ const prismaClientSingleton = () => {
   // only. Keeping the client-side connection open longer removes that
   // re-handshake on the common case where the next request lands within 5min.
   const adapter = new PrismaPg({
-    connectionString: process.env.DATABASE_URL as string,
+    connectionString: appEnv.DATABASE_URL as string,
     idleTimeoutMillis: 5 * 60_000,
     keepAlive: true,
   })
@@ -92,6 +93,6 @@ declare global {
 
 const prisma = globalThis.prismaGlobal ?? prismaClientSingleton()
 
-if (process.env.NODE_ENV !== 'production') globalThis.prismaGlobal = prisma
+if (appEnv.NODE_ENV !== 'production') globalThis.prismaGlobal = prisma
 
 export default prisma

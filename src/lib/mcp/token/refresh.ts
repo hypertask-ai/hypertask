@@ -1,3 +1,4 @@
+import { logger as htLogger } from "#logger";
 import { NextRequest, NextResponse } from 'next/server'
 import jwt from 'jsonwebtoken'
 import { LogType, Status } from '@prisma/client'
@@ -160,7 +161,7 @@ export async function handleMcpTokenRefresh(
       LoggedById: user.id,
     })
   } catch (error) {
-    console.error('Failed to record MCP token refresh audit log:', error)
+    htLogger.error('Failed to record MCP token refresh audit log:', error)
   }
 
   return NextResponse.json({

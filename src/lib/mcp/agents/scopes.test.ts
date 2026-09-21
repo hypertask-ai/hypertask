@@ -1,3 +1,5 @@
+import { env as appEnv } from "#env";
+import { logger as htLogger } from "#logger";
 // Assert-based demo because this repository has no Vitest setup.
 // Run after installing dependencies: npx tsx src/lib/mcp/agents/scopes.test.ts
 import assert from 'node:assert/strict'
@@ -8,12 +10,12 @@ async function json(response: Response) {
 }
 
 async function demo() {
-  process.env.DATABASE_URL =
+  appEnv.DATABASE_URL =
     'postgresql://unused:unused@localhost:5432/unused'
-  process.env.JWT_SECRET =
+  appEnv.JWT_SECRET =
     'agent-scopes-test-jwt-secret-at-least-32-characters'
-  process.env.JWT_ISSUER = 'agent-scopes-test'
-  process.env.SESSION_SECRET =
+  appEnv.JWT_ISSUER = 'agent-scopes-test'
+  appEnv.SESSION_SECRET =
     'agent-scopes-session-secret-at-least-32-characters'
 
   const [
@@ -293,10 +295,10 @@ async function demo() {
     else delete globalWithRedis.redis
   }
 
-  console.log('scopes.test.ts: all assertions passed')
+  htLogger.info('scopes.test.ts: all assertions passed')
 }
 
 demo().catch((error) => {
-  console.error(error)
+  htLogger.error(error)
   process.exitCode = 1
 })

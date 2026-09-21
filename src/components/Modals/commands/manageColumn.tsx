@@ -1,3 +1,4 @@
+import { logger as htLogger } from "#logger";
 import { IMember, IProject, IProjectsAll, ISection, IUser } from "@/models/model";
 import type { IAgent } from "@/models/model";
 import { currentProjectAtom, currentUserAtom, showCommandsAtom } from "@/store";
@@ -198,11 +199,11 @@ const ManageColumns = ({ toggleModal }: { toggleModal: (add: boolean) => void })
         await synchronizeBoardSectionOrder(reorderedSections);
         await updateCache(reorderedSections, true);
       } catch (persistError) {
-        console.log("🚀 ~ onDragEndHandler ~ persist failed:", persistError);
+        htLogger.info("🚀 ~ onDragEndHandler ~ persist failed:", persistError);
         toast.error("Column order could not be saved");
       }
     } catch (error) {
-      console.log("🚀 ~ onDragEndHandler ~ error:", error);
+      htLogger.info("🚀 ~ onDragEndHandler ~ error:", error);
     }
   };
 
@@ -214,7 +215,7 @@ const ManageColumns = ({ toggleModal }: { toggleModal: (add: boolean) => void })
         saveEmptySectionsAPI(currentProject, setting);
       }
     } catch (error) {
-      console.log("🚀 ~ handleEmptySections ~ error:", error);
+      htLogger.info("🚀 ~ handleEmptySections ~ error:", error);
     } finally {
       setUpdating(false);
     }
@@ -316,7 +317,7 @@ const ManageColumns = ({ toggleModal }: { toggleModal: (add: boolean) => void })
         void queryClient.invalidateQueries({ queryKey: ["projectsAllMinimal"] });
       }
     } catch (error) {
-      console.log("🚀 ~ handleSectionUpdateVis ~ error:", error);
+      htLogger.info("🚀 ~ handleSectionUpdateVis ~ error:", error);
     } finally {
       setUpdating(false);
     }

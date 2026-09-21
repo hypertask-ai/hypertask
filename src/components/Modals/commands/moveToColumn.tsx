@@ -1,3 +1,4 @@
+import { logger as htLogger } from "#logger";
 import { IComment, IProjectsAll, ISection, ITask } from "@/models/model";
 import { useEffect, useRef, useState, useCallback } from "react";
 import { ModalBody } from "reactstrap";
@@ -83,7 +84,7 @@ const MoveToColumn: React.FC<Props> = ({ mode = "Others", moveTaskToColumnHandle
     setColumns(sectionsForProjectTQ);
     setFilteredColumns(sectionsForProjectTQ);
     if (taskIdentity) {
-      console.log("🚀 ~ useEffect ~ sectionId:", taskIdentity.sectionId);
+      htLogger.info("🚀 ~ useEffect ~ sectionId:", taskIdentity.sectionId);
       requestAnimationFrame(() => {
         const columnIndex = sectionsForProjectTQ.findIndex(
           (section: ISection, index: number) =>
@@ -258,7 +259,7 @@ const MoveToColumn: React.FC<Props> = ({ mode = "Others", moveTaskToColumnHandle
       }
 
       if (!taskIdentity) return;
-      console.log(
+      htLogger.info(
         "🚀 ~ handleLinkClick ~ sectionToMoveID & fromSectionID",
         section.id,
         taskIdentity.sectionId
@@ -287,7 +288,7 @@ const MoveToColumn: React.FC<Props> = ({ mode = "Others", moveTaskToColumnHandle
   //  ============================= KEYBOARD NAVIGATION HANDLER =============================
 
   const handleKeyDown = (event: any) => {
-    // console.log('im working at least')
+    // debug.log('im working at least')
     const selectedUrl = filteredColumns[selectedIndex]
     // ------------------------------ DOWN MOVEMENT ------------------------------
     if (!selectedUrl) return 

@@ -1,3 +1,4 @@
+import { logger as htLogger } from "#logger";
 import axios from "axios";
 import { ComponentType, useState } from "react";
 import { ToggleSwitch, ToggleSwitchProps } from "../Single section items";
@@ -42,7 +43,7 @@ const EmailNotificationSidebar = ({
         updateUserStateAndCookie(response.data.res);
       }
     } catch (error) {
-      console.log("🤔 ~ changeNotificationStatus ~ error:", error);
+      htLogger.info("🤔 ~ changeNotificationStatus ~ error:", error);
     }
   };
 

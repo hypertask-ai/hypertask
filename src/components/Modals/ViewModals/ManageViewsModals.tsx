@@ -1,3 +1,4 @@
+import { logger as htLogger } from "#logger";
 import { ILabel, IView } from "@/models/model";
 import { appShellRailAtom, currentProjectAtom, currentUserAtom, hiddenViewTabIdsAtom, showEmptyViewTabsAtom } from "@/store";
 import { ChangeEvent, useContext, useEffect, useMemo, useRef, useState } from "react";
@@ -163,7 +164,7 @@ const ManageViews: React.FC<Props> = ({ toggle }) => {
             )))
             return true
         } catch (error) {
-            console.log("🚀 ~ renameSelectedView ~ error:", error)
+            htLogger.info("🚀 ~ renameSelectedView ~ error:", error)
             toast.error("Error renaming view");
             return false
         } finally {
@@ -190,7 +191,7 @@ const ManageViews: React.FC<Props> = ({ toggle }) => {
             setDisplayedViews((views) => views.filter((item) => item.id !== view.id))
             return true
         } catch (error) {
-            console.log("🚀 ~ deleteSelectedView ~ error:", error)
+            htLogger.info("🚀 ~ deleteSelectedView ~ error:", error)
             toast.error("Error deleting view");
             return false
         } finally {

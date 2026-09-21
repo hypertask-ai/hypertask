@@ -1,4 +1,5 @@
 "use client";
+import { logger as htLogger } from "#logger";
 /* eslint-disable @next/next/no-img-element */
 import { useEffect } from "react";
 import { useRecoilState } from "@/lib/state";
@@ -43,8 +44,8 @@ const Success = ({
   };
 
   const checkSubscription = () => {
-    console.log("🤔 ~ checkSubscription ~ subscription:", subscription)
-    console.log("🤔 ~ checkSubscription ~ currentUser:", currentUser)
+    htLogger.info("🤔 ~ checkSubscription ~ subscription:", subscription)
+    htLogger.info("🤔 ~ checkSubscription ~ currentUser:", currentUser)
     if (subscription && currentUser) {
       var startDate = new Date(subscription.start_date);
       var currentDate = new Date();

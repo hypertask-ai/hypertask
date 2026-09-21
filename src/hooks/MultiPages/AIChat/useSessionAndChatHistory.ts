@@ -1,3 +1,4 @@
+import { logger as htLogger } from "#logger";
 import { currentUserAtom } from "@/store";
 import type { ApiResponse } from "@/utils/axiosClient";
 import {
@@ -79,7 +80,7 @@ export const useSessionAndChatHistory = (
     shouldCommit: () => boolean = () => true
   ) => {
     if (!hasRequiredData || !currentUser?.uid) {
-      console.warn("Cannot start new session: missing user data");
+      htLogger.warn("Cannot start new session: missing user data");
       return;
     }
 
@@ -99,7 +100,7 @@ export const useSessionAndChatHistory = (
       const body = res.data;
 
       if (!body?.success || !body.session?.id) {
-        console.warn("Invalid create session response from API");
+        htLogger.warn("Invalid create session response from API");
         return;
       }
 
@@ -135,14 +136,14 @@ export const useSessionAndChatHistory = (
       setMounted(true);
       return newSession;
     } catch (error) {
-      console.log("🚀 ~ useSessionAndChatHistory ~ error:", error);
+      htLogger.info("🚀 ~ useSessionAndChatHistory ~ error:", error);
     }
   }, [hasRequiredData, currentUser?.uid, isDemo, queryClient, taskId]);
 
   const selectSession = useCallback(
     (sessionId: string) => {
       if (!hasRequiredData || !currentUser?.uid) {
-        console.warn("Cannot select session: missing user data");
+        htLogger.warn("Cannot select session: missing user data");
         return;
       }
 
@@ -183,7 +184,7 @@ export const useSessionAndChatHistory = (
         setActiveSession(sessionId);
         setMounted(true);
       } catch (error) {
-        console.error("Error selecting session:", error);
+        htLogger.error("Error selecting session:", error);
       }
     },
     [hasRequiredData, currentUser?.uid, isDemo, queryClient]
@@ -198,7 +199,7 @@ export const useSessionAndChatHistory = (
       projectId?: number
     ) => {
       if (!hasRequiredData || !currentUser?.uid) {
-        console.warn("Cannot add message to session: missing user data");
+        htLogger.warn("Cannot add message to session: missing user data");
         return;
       }
 
@@ -292,11 +293,11 @@ export const useSessionAndChatHistory = (
               );
             })
             .catch((error) => {
-              console.error("Error persisting chat message:", error);
+              htLogger.error("Error persisting chat message:", error);
             });
         }
       } catch (error) {
-        console.error("Error adding message to session:", error);
+        htLogger.error("Error adding message to session:", error);
       }
     },
     [hasRequiredData, currentUser?.uid, isDemo, queryClient]
@@ -321,7 +322,7 @@ export const useSessionAndChatHistory = (
   const updateSessionTitle = useCallback(
     async (sessionId: string, title: string) => {
       if (!hasRequiredData || !currentUser?.uid) {
-        console.warn("Cannot update session title: missing user data");
+        htLogger.warn("Cannot update session title: missing user data");
         return;
       }
 
@@ -375,7 +376,7 @@ export const useSessionAndChatHistory = (
           });
         }
       } catch (error) {
-        console.error("Error updating session title:", error);
+        htLogger.error("Error updating session title:", error);
         await queryClient.invalidateQueries({
           queryKey: ["chat-sessions", currentUser.uid],
         });
@@ -387,7 +388,7 @@ export const useSessionAndChatHistory = (
   const deleteSession = useCallback(
     async (sessionId: string) => {
       if (!hasRequiredData || !currentUser?.uid) {
-        console.warn("Cannot delete session: missing user data");
+        htLogger.warn("Cannot delete session: missing user data");
         return;
       }
 
@@ -442,7 +443,7 @@ export const useSessionAndChatHistory = (
           setActiveSession(nextSessions[0]?.id ?? null);
         }
       } catch (error) {
-        console.error("Error deleting chat session:", error);
+        htLogger.error("Error deleting chat session:", error);
         await queryClient.invalidateQueries({ queryKey });
       }
     },
@@ -516,7 +517,7 @@ export const useSessionAndChatHistory = (
           startingSessionForTaskRef.current = null;
         }
       } catch (error) {
-        console.error("Error initializing session:", error);
+        htLogger.error("Error initializing session:", error);
       }
     };
 

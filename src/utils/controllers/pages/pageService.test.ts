@@ -1,9 +1,11 @@
+import { env as appEnv } from "#env";
+import { logger as htLogger } from "#logger";
 // Assert-based demo because this repository has no Vitest setup.
 // Run after installing dependencies: npx tsx src/utils/controllers/pages/pageService.test.ts
 import assert from 'node:assert/strict'
 
 async function demo() {
-  process.env.DATABASE_URL = 'postgresql://unused:unused@localhost:5432/unused'
+  appEnv.DATABASE_URL = 'postgresql://unused:unused@localhost:5432/unused'
 
   const [{ default: prisma }, pageService] = await Promise.all([
     import('@/lib/prisma'),
@@ -157,5 +159,5 @@ async function demo() {
 }
 
 void demo().then(() => {
-  console.log('pageService.test.ts: all assertions passed')
+  htLogger.info('pageService.test.ts: all assertions passed')
 })

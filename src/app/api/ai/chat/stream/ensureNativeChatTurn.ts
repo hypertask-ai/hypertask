@@ -1,3 +1,4 @@
+import { logger as htLogger } from "#logger";
 import type { PrismaClient } from "@prisma/client";
 
 type NativeChatPersistenceDb = Pick<PrismaClient, "chatMessage" | "chatSession">;
@@ -113,7 +114,7 @@ export async function ensureNativeChatTurn({
   } catch (error) {
     // The message is already durable. Metadata freshness must not cause a retry
     // that could regenerate or duplicate the user's AI turn.
-    console.error(
+    htLogger.error(
       "[ai/chat/stream] native session metadata update failed after persistence",
       error,
     );

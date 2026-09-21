@@ -1,5 +1,6 @@
 "use client";
 
+import { logger as htLogger } from "#logger";
 import type { CSSProperties } from "react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import axios from "axios";
@@ -229,7 +230,7 @@ const ApiKeysSectionContent = () => {
     fetchKeys()
       .catch((error) => {
         if (!cancelled) {
-          console.error(error);
+          htLogger.error(error);
           toast.error("Could not load API keys");
         }
       })
@@ -346,7 +347,7 @@ const ApiKeysSectionContent = () => {
       await fetchKeys();
       invalidateTeamQueries();
     } catch (error) {
-      console.error(error);
+      htLogger.error(error);
       const message = axios.isAxiosError(error)
         ? error.response?.data?.message
         : null;
@@ -383,7 +384,7 @@ const ApiKeysSectionContent = () => {
       invalidateTeamQueries();
       toast.success("API key removed");
     } catch (error) {
-      console.error(error);
+      htLogger.error(error);
       const message = axios.isAxiosError(error)
         ? error.response?.data?.message
         : null;

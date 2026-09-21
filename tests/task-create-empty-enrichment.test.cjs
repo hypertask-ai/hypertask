@@ -165,8 +165,9 @@ function loadCreateRoute() {
     "@/utils/controllers/activities/createAssignedActivity": {
       assignmentActivityUserSelect: {},
     },
-    "@/lib/auth/getSessionUser": {
-      getSessionUser: async () => ({ userId: 6 }),
+    "#with-auth": {
+      getAuthSession: async () => ({ userId: 6 }),
+      withAuth: (handler) => handler,
     },
     "@/lib/auth/session": {
       SESSION_COOKIE: "ht_session",
@@ -268,8 +269,9 @@ function loadNotificationRoute() {
         __esModule: true,
         default: async () => ({ status: 200, json: [] }),
       },
-      "@/lib/auth/getSessionUser": {
-        getSessionUser: async () => ({ userId: 6 }),
+      "#with-auth": {
+        getAuthSession: async () => ({ userId: 6 }),
+        withAuth: (handler) => handler,
       },
     },
   ).default;

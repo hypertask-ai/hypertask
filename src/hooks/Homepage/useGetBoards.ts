@@ -1,3 +1,4 @@
+import { logger as htLogger } from "#logger";
 
 import { IProject, IProjectsAll, IUser } from "@/models/model";
 import {
@@ -431,7 +432,7 @@ export const useGetAllBoards = (
                 ),
               )
               .catch((error) => {
-                console.error(
+                htLogger.error(
                   "Failed to publish project-authorized local board",
                   error,
                 );

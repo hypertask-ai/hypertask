@@ -1,5 +1,6 @@
+import { logger as htLogger } from "#logger";
+import { getAuthSession, withAuth } from "#with-auth";
 import { NextApiHandler, NextApiRequest, NextApiResponse } from "next";
-import { getSessionUser } from "@/lib/auth/getSessionUser";
 import notificationGetCount from "@/utils/controllers/notifications/getCount";
 
 const handler: NextApiHandler = async (
@@ -8,7 +9,7 @@ const handler: NextApiHandler = async (
 ) => {
   if (req.method === "GET") {
     try {
-      const session = await getSessionUser(
+      const session = await getAuthSession(
         new Headers(req.headers as Record<string, string>),
       );
       if (!session) return res.status(401).json({ message: "Unauthorized" });
@@ -16,7 +17,7 @@ const handler: NextApiHandler = async (
       const response = await notificationGetCount(session.userId);
       res.status(response.status).json(response.json);
     } catch (error) {
-      console.log({ error });
+      htLogger.info({ error });
       res.status(500).json({ message: "Internal server error" });
     }
   } else {
@@ -24,4 +25,4 @@ const handler: NextApiHandler = async (
   }
 };
 
-export default handler;
+export default withAuth(handler, { authenticateInHandler: true });

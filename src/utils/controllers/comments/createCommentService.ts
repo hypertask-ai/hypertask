@@ -1,3 +1,5 @@
+import { env as appEnv } from "#env";
+import { logger as htLogger } from "#logger";
 /**
  * Shared comment creation logic used by both Pages API and MCP route.
  * Single source of truth for: DB write, notifications, email, mentions, device FCM.
@@ -354,9 +356,9 @@ async function sendCommentEmails({
   ]);
 
   const baseUrl =
-    process.env.NEXT_PUBLIC_BASEURL ||
-    (process.env.VERCEL_URL
-      ? `https://${process.env.VERCEL_URL}`
+    appEnv.NEXT_PUBLIC_BASEURL ||
+    (appEnv.VERCEL_URL
+      ? `https://${appEnv.VERCEL_URL}`
       : "http://localhost:3000");
   const taskLink = `${baseUrl}/detail/project-${task.projectId}/${task.uniqueIndex}`;
 
@@ -411,7 +413,7 @@ async function processTaskReferencesFromCommentText(
   );
 
   if (result.status !== 200) {
-    console.warn(
+    htLogger.warn(
       "[createCommentService] addRelatedTasks returned status:",
       result.status,
     );
@@ -614,7 +616,7 @@ export async function createCommentService(params: CreateCommentParams) {
 
   const creatorIdNum = Number(creatorId);
   const hyperAiId = parseInt(
-    process.env.NEXT_PUBLIC_HYPERAI_ID || String(generalConfig.hyperAiId),
+    appEnv.NEXT_PUBLIC_HYPERAI_ID || String(generalConfig.hyperAiId),
     10,
   );
 
@@ -1120,7 +1122,7 @@ export async function createCommentService(params: CreateCommentParams) {
       text: comment.text,
       createdAt: comment.createdAt,
     }).catch((error) =>
-      console.warn(
+      htLogger.warn(
         "[createCommentService] HyperAI comment receipt failed:",
         error,
       ),
@@ -1130,7 +1132,7 @@ export async function createCommentService(params: CreateCommentParams) {
 
     await scheduleCommentSummaryGeneration({ commentId: comment.id }).catch(
       (err) =>
-        console.warn(
+        htLogger.warn(
           "[createCommentService] comment summary schedule failed:",
           err,
         ),
@@ -1178,7 +1180,7 @@ export async function createCommentService(params: CreateCommentParams) {
       await searchUpsert;
     } else {
       void searchUpsert.catch((error) =>
-        console.warn(
+        htLogger.warn(
           "[createCommentService] search upsert failed:",
           error,
         ),
@@ -1192,7 +1194,7 @@ export async function createCommentService(params: CreateCommentParams) {
       await taskSummary;
     } else {
       void taskSummary.catch((error) =>
-        console.warn(
+        htLogger.warn(
           "[createCommentService] task summary schedule failed:",
           error,
         ),
@@ -1264,7 +1266,7 @@ export async function createCommentService(params: CreateCommentParams) {
       }
     } else {
       mentionProcessing = runMentionProcessing().catch((err) =>
-        console.warn("[createCommentService] processMentions failed:", err),
+        htLogger.warn("[createCommentService] processMentions failed:", err),
       );
     }
 
@@ -1297,7 +1299,7 @@ export async function createCommentService(params: CreateCommentParams) {
             taskId,
             currentUser.id,
           ).catch((err) =>
-            console.warn(
+            htLogger.warn(
               "[createCommentService] processTaskReferences failed:",
               err,
             ),
@@ -1445,7 +1447,7 @@ export async function createCommentService(params: CreateCommentParams) {
           mentionedUserIds,
           fromAgentId: agentId ?? null,
         }).catch((err) =>
-          console.warn("[createCommentService] sendCommentEmails failed:", err),
+          htLogger.warn("[createCommentService] sendCommentEmails failed:", err),
         );
         if (!inboundProcessingStartedAt) {
           throw new Error("Inbound email processing lease is missing");
@@ -1458,7 +1460,7 @@ export async function createCommentService(params: CreateCommentParams) {
         );
       } else {
         void fcmDelivery.catch((error) =>
-          console.warn("[createCommentService] FCM delivery failed:", error),
+          htLogger.warn("[createCommentService] FCM delivery failed:", error),
         );
         await sendCommentEmails({
           task,
@@ -1469,7 +1471,7 @@ export async function createCommentService(params: CreateCommentParams) {
           mentionedUserIds,
           fromAgentId: agentId ?? null,
         }).catch((err) =>
-          console.warn("[createCommentService] sendCommentEmails failed:", err),
+          htLogger.warn("[createCommentService] sendCommentEmails failed:", err),
         );
       }
     }
@@ -1488,7 +1490,7 @@ export async function createCommentService(params: CreateCommentParams) {
           data: { commentNotificationsProcessingAt: null },
         })
         .catch((releaseError) =>
-          console.error(
+          htLogger.error(
             "[createCommentService] run notification claim release failed:",
             releaseError,
           ),
@@ -1501,7 +1503,7 @@ export async function createCommentService(params: CreateCommentParams) {
         comment.id,
         inboundProcessingStartedAt,
       ).catch((releaseError) =>
-        console.error(
+        htLogger.error(
           "[createCommentService] inbound receipt release failed:",
           releaseError,
         ),

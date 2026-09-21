@@ -1,3 +1,4 @@
+import { env as appEnv } from "#env";
 import {
   FEATURE_FLAG_OWNER_USER_ID,
   HTPR_4638_AI_DIRECTORY_METADATA_FLAG,
@@ -11,7 +12,7 @@ export async function GET(): Promise<Response> {
     HTPR_4638_AI_DIRECTORY_METADATA_FLAG,
     FEATURE_FLAG_OWNER_USER_ID
   ).catch(() => false)
-  const token = process.env.OPENAI_APPS_CHALLENGE_TOKEN
+  const token = appEnv.OPENAI_APPS_CHALLENGE_TOKEN
   if (!enabled || !token) return new Response('Not found', { status: 404 })
 
   return new Response(token, {

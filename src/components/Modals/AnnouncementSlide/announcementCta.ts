@@ -1,3 +1,4 @@
+import { env as appEnv } from "#env";
 interface AnnouncementRouter {
   push: (href: string) => void;
 }
@@ -8,7 +9,7 @@ export const handleAnnouncementCtaClick = (
   onInternalNavigation?: () => void
 ) => {
   const baseUrl =
-    process.env.NEXT_PUBLIC_BASEURL || "https://app.hypertask.ai";
+    appEnv.NEXT_PUBLIC_BASEURL || "https://app.hypertask.ai";
 
   if (url.includes(baseUrl)) {
     const path = url.replace(baseUrl, "");

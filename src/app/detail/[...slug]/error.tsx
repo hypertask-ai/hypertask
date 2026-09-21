@@ -1,3 +1,4 @@
+import { logger as htLogger } from "#logger";
 'use client' // Error components must be Client Components
  
 import { useRouter } from 'next/navigation'
@@ -13,7 +14,7 @@ export default function Error({
   const router=useRouter()
   useEffect(() => {
     // Log the error to an error reporting service
-    console.error(error)
+    htLogger.error(error)
   }, [error])
  
   return (

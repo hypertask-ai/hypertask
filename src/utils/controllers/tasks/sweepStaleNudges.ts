@@ -1,3 +1,4 @@
+import { logger as htLogger } from "#logger";
 import prisma from "@/lib/prisma";
 import { broadcastInboxChange } from "@/lib/realtime/server";
 import { generalConfig } from "@/lib/configs/general.config";
@@ -78,7 +79,7 @@ export async function sweepStaleNudges(): Promise<number> {
         });
       }
     } catch (error) {
-      console.log("🚀 ~ sweepStaleNudges ~ row error:", error);
+      htLogger.info("🚀 ~ sweepStaleNudges ~ row error:", error);
     }
   }
 

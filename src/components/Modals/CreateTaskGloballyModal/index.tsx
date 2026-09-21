@@ -12,7 +12,7 @@ interface IProps {
     closeCallback: () => void
 }
 const CreateTaskGlobally: React.FC<IProps> = ({ shouldShow, closeCallback }) => {
-    // console.log("🚀 ~ shouldShow:", shouldShow)
+    // debug.log("🚀 ~ shouldShow:", shouldShow)
 
     const [_currentProject, _] = useRecoilState(currentProjectAtom)
     if (!shouldShow) return (<></>)

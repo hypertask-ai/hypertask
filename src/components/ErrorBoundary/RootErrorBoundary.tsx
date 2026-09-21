@@ -1,5 +1,6 @@
 'use client'
 
+import { logger as htLogger } from "#logger";
 import React, { Component, ErrorInfo, ReactNode } from 'react'
 import { useSignout } from '@/hooks/MultiPages/HTC/useSignout'
 import { reportClientError } from '@/lib/telemetry/reportClientError'
@@ -26,7 +27,7 @@ class RootErrorBoundaryClass extends Component<Props, State> {
   }
 
   componentDidCatch(error: Error, errorInfo: ErrorInfo) {
-    console.error('RootErrorBoundary caught an error:', error, errorInfo)
+    htLogger.error('RootErrorBoundary caught an error:', error, errorInfo)
     reportClientError({
       source: 'RootErrorBoundary',
       message: error.message,
@@ -61,7 +62,7 @@ const ErrorFallbackContent: React.FC<{ error?: Error }> = ({ error }) => {
         window.location.href = '/login'
       }
     } catch (err) {
-      console.error('Error during hard reset:', err)
+      htLogger.error('Error during hard reset:', err)
       // Fallback: force reload anyway
       if (typeof window !== 'undefined') {
         window.location.reload()

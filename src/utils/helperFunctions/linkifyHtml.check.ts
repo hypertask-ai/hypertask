@@ -1,3 +1,4 @@
+import { logger as htLogger } from "#logger";
 // Runnable check for the HTPR-3779 comment URL linkifier.
 // Run: node --experimental-strip-types src/utils/helperFunctions/linkifyHtml.check.ts
 import assert from "node:assert";
@@ -36,4 +37,4 @@ assert.strictEqual(
   "multiple urls",
 );
 
-console.log("linkifyHtml: all checks passed");
+htLogger.info("linkifyHtml: all checks passed");

@@ -1,3 +1,4 @@
+import { logger as htLogger } from "#logger";
 // Runnable check for HTPR-3953 ticket-ref linkification (pure text-transform part).
 // Run: node --experimental-strip-types src/utils/controllers/comments/ticketRefLinker.check.ts
 import assert from "node:assert";
@@ -72,4 +73,4 @@ assert.strictEqual(
   "non-detail anchor unchanged"
 );
 
-console.log("ticketRefLinker: all checks passed");
+htLogger.info("ticketRefLinker: all checks passed");

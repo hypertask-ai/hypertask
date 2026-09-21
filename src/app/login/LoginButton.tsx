@@ -1,4 +1,5 @@
 "use client";
+import { env as appEnv } from "#env";
 import { useAuth } from "@/hooks/General/useAuth";
 import useFunnelCookies from "@/hooks/MultiPages/useFunnelCookies";
 import { useSearchParams } from "next/navigation";
@@ -43,7 +44,7 @@ const LoginButton = ({
     // Skip onboarding for OAuth flows
     const skipOnboarding = hasOAuthParams || authConfig.onboarding.skipOnboarding;
 
-    if (process.env.NEXT_PUBLIC_BETTER_AUTH_ENABLED === "1") {
+    if (appEnv.NEXT_PUBLIC_BETTER_AUTH_ENABLED === "1") {
       void authClient.signIn.social({
         provider: "google",
         callbackURL: authConfig.redirect.afterLogin,

@@ -1,3 +1,4 @@
+import { logger as htLogger } from "#logger";
 import { KeyCodes } from "@/lib/constants/keyboard-handler";
 import { Extension } from "@tiptap/core";
 import { Plugin, PluginKey } from "@tiptap/pm/state";
@@ -39,7 +40,7 @@ const getTaskData = async (match: HypertaskUrlMatch): Promise<string> => {
 
     return match.fullUrl;
   } catch (error) {
-    console.log("🤔 ~ fetchHypertaskTitle ~ error:", error);
+    htLogger.info("🤔 ~ fetchHypertaskTitle ~ error:", error);
     return match.fullUrl;
   }
 };
@@ -147,7 +148,7 @@ export const HypertaskPasteRule = Extension.create({
                 }
               })
               .catch((error) => {
-                console.log("🤔 ~ addProseMirrorPlugins ~ error:", error);
+                htLogger.info("🤔 ~ addProseMirrorPlugins ~ error:", error);
                 // On error, replace placeholder with the original URL
                 const currentState = view.state;
                 let foundPos = null;

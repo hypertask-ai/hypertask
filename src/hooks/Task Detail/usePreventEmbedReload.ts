@@ -1,5 +1,6 @@
 "use client";
 
+import { logger as htLogger } from "#logger";
 type State = {
   added: boolean;
   interval: false | ReturnType<typeof setInterval>;
@@ -34,7 +35,7 @@ export const usePreventFigmaReload = () => {
 
   const runIFrameCheck = () => {
     const iframes = Array.from(document.getElementsByTagName("iframe"));
-    console.debug("Polling iframes... found: ", iframes.length);
+    htLogger.debug("Polling iframes... found: ", iframes.length);
 
     if (iframes && iframes.length > 0) {
       (iframes as EnrichedHTMLIFrameElement[]).forEach((iframe) => {

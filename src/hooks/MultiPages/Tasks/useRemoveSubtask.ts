@@ -1,3 +1,4 @@
+import { logger as htLogger } from "#logger";
 import { removeParentTaskRoute } from "@/lib/constants/APIRouteConstants";
 import axios from "axios";
 import toast from "react-hot-toast";
@@ -56,7 +57,7 @@ import { useCallback } from "react";
             return successMessage;
           },
           error: (error) => {
-            console.log("🚀 ~ removeParentTask ~ error:", error);
+            htLogger.info("🚀 ~ removeParentTask ~ error:", error);
             onError&&onError()
             return errorMessage;
           },

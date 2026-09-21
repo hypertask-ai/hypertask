@@ -1,3 +1,4 @@
+import { logger as htLogger } from "#logger";
 
 
 import prisma from "@/lib/prisma";
@@ -35,7 +36,7 @@ const membersGetAll = async (projectId:string|string[], user: { id: number },tea
             const boardAgents = boardAgentMembers
                 .filter((m) => m.agent != null)
                 .map((m) => m.agent!)
-            console.log("🚀 ~ membersGetAll ~ members:", members)
+            htLogger.info("🚀 ~ membersGetAll ~ members:", members)
             let team_members:any[]=[];
             const invites = await prisma.invite.findMany({
                 where:{
@@ -59,10 +60,10 @@ const membersGetAll = async (projectId:string|string[], user: { id: number },tea
                 const project = await prisma.project.findUnique({where:{
                     id: parseInt(projectId as string),
                 }})
-                console.log("🚀 ~ membersGetAll ~ project:", project)
+                htLogger.info("🚀 ~ membersGetAll ~ project:", project)
                 // ========= fetch owner of the team too 
                 const teamOwner = await prisma.user.findUnique({where:{id:team?.googleAccount.userId}})
-                console.log("🚀 ~ membersGetAll ~ teamOwner:", teamOwner)
+                htLogger.info("🚀 ~ membersGetAll ~ teamOwner:", teamOwner)
                 
                 
                 team_members = await prisma.member_Team.findMany({
@@ -95,20 +96,20 @@ const membersGetAll = async (projectId:string|string[], user: { id: number },tea
                         user:true,
                     },
                 })
-                console.log("🚀 ~ membersGetAll ~ team_members:", team_members)
+                htLogger.info("🚀 ~ membersGetAll ~ team_members:", team_members)
 
                 // =========== requester is not the owner himself. 
                 // =========== team
-                console.log("🚀 ~ membersGetAll ~ project?.ownerId!==teamOwner.id:", project?.ownerId)
+                htLogger.info("🚀 ~ membersGetAll ~ project?.ownerId!==teamOwner.id:", project?.ownerId)
                 if (teamOwner&&teamOwner?.id !== user.id && !members.map(m=>m.userId).includes(teamOwner?.id) && project?.ownerId!==teamOwner.id ) {
                     team_members.push({ id: -1, user: teamOwner });
-                    console.log("🚀 ~ membersGetAll ~ team_members:", team_members)
+                    htLogger.info("🚀 ~ membersGetAll ~ team_members:", team_members)
                    }
 
             }
 
           
-            // console.log("🚀 ~ file: getAll.ts:22 ~ membersGetAll ~ invites:", invites)
+            // debug.log("🚀 ~ file: getAll.ts:22 ~ membersGetAll ~ invites:", invites)
 
             // Extract unique email addresses from invites
 // Extract unique email addresses from all invites
@@ -121,7 +122,7 @@ const allEmails: string[] = invites.reduce<string[]>((emails, invite) => {
     });
     return emails;
   }, []);
-  console.log("🚀 ~ file: getAll.ts:42 ~ membersGetAll ~ allEmails:", allEmails)
+  htLogger.info("🚀 ~ file: getAll.ts:42 ~ membersGetAll ~ allEmails:", allEmails)
   
   // Filter out emails that match members by email
   const finalUniqueEmails = allEmails.filter((email) => {
@@ -131,7 +132,7 @@ const allEmails: string[] = invites.reduce<string[]>((emails, invite) => {
     return !isEmailInMembers;
   });
     
-    console.log("🚀 ~ file: getAll.ts:34 ~ membersGetAll ~ uniqueEmails:", finalUniqueEmails)
+    htLogger.info("🚀 ~ file: getAll.ts:34 ~ membersGetAll ~ uniqueEmails:", finalUniqueEmails)
 
             return({
                 status:200,
@@ -144,7 +145,7 @@ const allEmails: string[] = invites.reduce<string[]>((emails, invite) => {
             })
             // return res.status(200).json(members);
         } catch (error) {
-            console.log(error);
+            htLogger.info(error);
             return({
                 status:500,
                 error:error

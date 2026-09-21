@@ -1,3 +1,4 @@
+import { logger as htLogger } from "#logger";
 import { useCallback, useEffect, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import axios from "axios";
@@ -138,7 +139,7 @@ export function useAiModelPreference(
           }
         })
         .catch((error) => {
-          console.log("useAiModelPreference update error:", error);
+          htLogger.info("useAiModelPreference update error:", error);
         });
     },
     [currentTeamId, queryClient, surface, userPreferences],

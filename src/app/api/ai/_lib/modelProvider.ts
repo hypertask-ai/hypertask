@@ -1,3 +1,4 @@
+import { env as appEnv } from "#env";
 import { createAnthropic } from "@ai-sdk/anthropic";
 import { createOpenAI } from "@ai-sdk/openai";
 import { createOpenRouter } from "@openrouter/ai-sdk-provider";
@@ -74,11 +75,11 @@ export type GatewayTaggedProviderOptions = AiProviderOptions & {
 };
 
 function aiGatewayEnabledValue() {
-  return process.env.AI_GATEWAY_ENABLED?.trim().toLowerCase();
+  return appEnv.AI_GATEWAY_ENABLED?.trim().toLowerCase();
 }
 
 function defaultGatewayApiKey() {
-  return process.env.AI_GATEWAY_API_KEY?.trim() || undefined;
+  return appEnv.AI_GATEWAY_API_KEY?.trim() || undefined;
 }
 
 export type GatewayFundingSource = "customer" | "managed" | "shared";

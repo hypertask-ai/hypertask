@@ -13,10 +13,10 @@
 //   try {
 //     // lets add USER activity first. 
 
-//     console.log("============ GETTING ALL USERS ===========")
+//     debug.log("============ GETTING ALL USERS ===========")
 //     const allUsers = await prisma.user.findMany()
 //     var usersDone = 0;
-//     console.log("----- Starting Script on Users -------")
+//     debug.log("----- Starting Script on Users -------")
 //     for (const user of allUsers){
 //         const updated = await prisma.user_Activity.update({
 //             where:{
@@ -26,7 +26,7 @@
 //                 lastActiveAt:null
 //             }
 //         })
-//         console.log("🚀 ~ updated:", updated)
+//         debug.log("🚀 ~ updated:", updated)
 //         // //  get total teams created for a user.
 //         // const teamsCreated = await prisma.team.count({
 //         //         where:{
@@ -45,17 +45,17 @@
 //         //     }
 //         // })
 //         usersDone++;
-//         console.log("============== completed users: ", usersDone)
+//         debug.log("============== completed users: ", usersDone)
 
 
 //     } 
-//     console.log("=========== OPERATION COMPLETED ON USERS ===========")
-//     console.log("============ GETTING ALL Teams ===========")
+//     debug.log("=========== OPERATION COMPLETED ON USERS ===========")
+//     debug.log("============ GETTING ALL Teams ===========")
 
 //     // NOW ADD TEAM ACTIVITY.
 //     const allTeams = await prisma.team.findMany()
 //     var teamsDone = 0;
-//     console.log("----- Starting Script on Teams -------")
+//     debug.log("----- Starting Script on Teams -------")
 
 //     for (const team of allTeams){
 //         // const totalTasksCount = await prisma.task.count({where:{project:{teamId:team.id}}})
@@ -72,9 +72,9 @@
 //                 lastActiviyAt:null
 //             }
 //         })
-//         console.log("🚀 ~ updated:", updated)
+//         debug.log("🚀 ~ updated:", updated)
 //         teamsDone++;
-//         console.log("============== completed teams: ", teamsDone)
+//         debug.log("============== completed teams: ", teamsDone)
 
 //     }
 
@@ -90,7 +90,7 @@
 //         }
 //     })
 //   } catch (error) {
-//       console.log(error)
+//       debug.log(error)
 //       return res.status(500).json(error)
 //   }
 // }

@@ -1,3 +1,4 @@
+import { logger as htLogger } from "#logger";
 import { IPriority } from "@/models/model";
 import axios from "axios"
 import { getTaskDetailMeta, hasSessionCookie } from "./getTaskDetailMeta";
@@ -15,7 +16,7 @@ export const getPriorityForTask = async (taskId:number|null):Promise<IPriority |
             const meta = await getTaskDetailMeta(taskId)
             return meta.priority as IPriority;
         } catch (error) {
-            console.error("Error getting task priority:", error);
+            htLogger.error("Error getting task priority:", error);
             throw error;
         }
 }

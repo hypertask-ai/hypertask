@@ -1,3 +1,5 @@
+import { env as appEnv } from "#env";
+import { logger as htLogger } from "#logger";
 import { ModalContainerCustom } from "@/components/Common/CommonModalComponents";
 import "@/styles/AttachmentView.scss";
 import React, { useEffect, useRef, useState } from "react";
@@ -176,7 +178,7 @@ const PurchasePlanModal: React.FC<ITrialModal> = ({
 
       return { kind: "member", ownerName };
     } catch (error) {
-      console.error("Could not resolve the paywall team:", error);
+      htLogger.error("Could not resolve the paywall team:", error);
       return { kind: "error" };
     }
   };
@@ -224,7 +226,7 @@ const PurchasePlanModal: React.FC<ITrialModal> = ({
         setCurrTeam(response.data);
         return await ensureBillingCustomer(response.data);
       } catch (error) {
-        console.error("Could not create a team from the paywall:", error);
+        htLogger.error("Could not create a team from the paywall:", error);
         toast.error("Could not create your team. Please try again.");
         return null;
       } finally {
@@ -258,7 +260,7 @@ const PurchasePlanModal: React.FC<ITrialModal> = ({
 
       return await provisionTeam();
     } catch (error) {
-      console.error("Could not prepare checkout:", error);
+      htLogger.error("Could not prepare checkout:", error);
       toast.error("Could not prepare checkout. Please try again.");
       return null;
     }
@@ -337,7 +339,7 @@ const NewTrialBody = ({
       const team = await getCheckoutTeam();
       if (!team?.id || !team.stripe_customer_id) return;
 
-      const baseURL = String(process.env.NEXT_PUBLIC_BASEURL);
+      const baseURL = String(appEnv.NEXT_PUBLIC_BASEURL);
       const returnUrl = `${baseURL}/full-plan-confirmation?success=1&session_id={CHECKOUT_SESSION_ID}`;
       const pricingParams = teamToPricingParams(team);
       const cancel = buildPricingCheckoutCancelUrl(pricingParams);
@@ -359,7 +361,7 @@ const NewTrialBody = ({
       router.push(url.data.url);
       callback();
     } catch (error) {
-      console.error("Could not open checkout:", error);
+      htLogger.error("Could not open checkout:", error);
       toast.error("Could not open checkout. Please try again.");
     } finally {
       setOpeningCheckout(false);

@@ -1,3 +1,4 @@
+import { logger as htLogger } from "#logger";
 
 import { stripe } from "@/lib/subscription";
 
@@ -92,7 +93,7 @@ const membersRemove = async (userId:number, projectId:number, actingUserId:numbe
             //         }
             //     }
             //   })  
-            //   console.log("🚀 ~ file: removeMember.ts:61 ~ membersRemove ~ projectsWhereStillMember:", projectsWhereStillMember)
+            //   debug.log("🚀 ~ file: removeMember.ts:61 ~ membersRemove ~ projectsWhereStillMember:", projectsWhereStillMember)
             //   if (projectsWhereStillMember.length===0){
 
             //       const deletedTeamMember=  await prisma.member_Team.deleteMany({
@@ -118,7 +119,7 @@ const membersRemove = async (userId:number, projectId:number, actingUserId:numbe
             //                 quantity:updatedTeam.totalSeats
             //             }
             //           );
-            //       console.log("🚀 ~ file: removeMember.ts:60 ~ membersRemove ~ deletedTeamMember:", deletedTeamMember)
+            //       debug.log("🚀 ~ file: removeMember.ts:60 ~ membersRemove ~ deletedTeamMember:", deletedTeamMember)
             //   }
             // }
             // let member = await prisma.member.findFirst({
@@ -143,7 +144,7 @@ const membersRemove = async (userId:number, projectId:number, actingUserId:numbe
 
             // res.status(200).json(member);
         } catch (error) {
-            console.log(error);
+            htLogger.info(error);
             return({status:400, json:{message:JSON.stringify(error)}})
 
             // return res.status(400).json({ message: JSON.stringify(error) });

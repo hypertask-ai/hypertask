@@ -126,6 +126,8 @@ ci_tests:
     push_production:
       scope: full
       coverage: true
+      coverage_thresholds: {lines: 24, statements: 24, functions: 50, branches: 70}
+      coverage_failure_action: fail_ci
       test_failure_action: warn_only
       previous_run_comparison: informational_only
       rollback_authority: current_production_health_probe

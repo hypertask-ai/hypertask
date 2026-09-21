@@ -1,3 +1,5 @@
+import { env as appEnv } from "#env";
+import { logger as htLogger } from "#logger";
 // Assert-based regression test for the exact managed-agent archive endpoint.
 import assert from 'node:assert/strict'
 import { NextRequest } from 'next/server'
@@ -7,12 +9,12 @@ async function json(response: Response) {
 }
 
 async function demo() {
-  process.env.DATABASE_URL =
+  appEnv.DATABASE_URL =
     'postgresql://unused:unused@localhost:5432/unused'
-  process.env.JWT_SECRET =
+  appEnv.JWT_SECRET =
     'archive-agent-test-jwt-secret-at-least-32-characters'
-  process.env.JWT_ISSUER = 'archive-agent-test'
-  process.env.SESSION_SECRET =
+  appEnv.JWT_ISSUER = 'archive-agent-test'
+  appEnv.SESSION_SECRET =
     'archive-agent-session-secret-at-least-32-characters'
 
   const [
@@ -128,8 +130,8 @@ async function demo() {
     prismaMock.agent.update = async () => {
       throw new Error('database unavailable')
     }
-    const originalError = console.error
-    console.error = () => {}
+    const originalError = htLogger.error
+    htLogger.error = () => {}
     let failed: Response
     try {
       failed = await POST(
@@ -137,7 +139,7 @@ async function demo() {
         { params: Promise.resolve({ agentId: 'owned-agent' }) }
       )
     } finally {
-      console.error = originalError
+      htLogger.error = originalError
     }
     const failedBody = await json(failed)
     assert.equal(failed.status, 500)
@@ -161,10 +163,10 @@ async function demo() {
     else delete globalWithRedis.redis
   }
 
-  console.log('archive.test.ts: all assertions passed')
+  htLogger.info('archive.test.ts: all assertions passed')
 }
 
 demo().catch((error) => {
-  console.error(error)
+  htLogger.error(error)
   process.exitCode = 1
 })

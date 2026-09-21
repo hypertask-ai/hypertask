@@ -1,3 +1,4 @@
+import { logger as htLogger } from "#logger";
 /**
  * Service to move a task (and its subtasks) from one board/project to another.
  * Used by Pages API /api/tasks/move-task-to-different-board and MCP API POST /mcp/tasks/move.
@@ -217,7 +218,7 @@ async function updateDueDateQueue(task: any, oldProjectId: number) {
       }
     }
   } catch (e) {
-    console.log("[moveToDifferentBoard] updateDueDateQueue error:", e);
+    htLogger.info("[moveToDifferentBoard] updateDueDateQueue error:", e);
   }
 }
 
@@ -495,7 +496,7 @@ export async function moveTaskToDifferentBoard(
     if (autoAssigned !== "ready") {
       // Board moves do not create the task.created handoff marker. Keep the
       // move successful and let the next explicit assignment attempt retry.
-      console.warn(
+      htLogger.warn(
         "[task-move-board] column auto-assignment remains pending after the move",
         { taskId: movedTaskId },
       );

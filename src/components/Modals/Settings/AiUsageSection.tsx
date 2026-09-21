@@ -1,5 +1,6 @@
 "use client";
 
+import { logger as htLogger } from "#logger";
 import axios from "axios";
 import { useEffect, useState } from "react";
 import SettingsCard from "./SettingsCard";
@@ -69,7 +70,7 @@ const AiUsageSection = () => {
           setData(response.data);
         }
       } catch (requestError) {
-        console.error(requestError);
+        htLogger.error(requestError);
         if (!cancelled) {
           setData(null);
           setError(

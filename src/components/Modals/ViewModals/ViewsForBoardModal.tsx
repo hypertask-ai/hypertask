@@ -1,3 +1,4 @@
+import { logger as htLogger } from "#logger";
 import { ModalContainerCustom, ModalHeaderComp, ModalInput, ModalListContainer, ModalRowElementContainer } from '@/components/Common/CommonModalComponents'
 import useKanbanViews from '@/hooks/Homepage/Views/useKanbanViews';
 import useHandleKeydownBasic from '@/hooks/General/useHandleKeydownBasic';
@@ -42,7 +43,7 @@ const ViewsForBoard: React.FC<IViewsForBoard> = ({ toggle, project }) => {
     const [filteredOptions, setFilteredOptions] = useState(projectViews)
 
     const handleChange = (e: any) => {
-        console.log("🚀 ~ projectViews:", projectViews)
+        htLogger.info("🚀 ~ projectViews:", projectViews)
 
         setKeyword(e.target.value)
         const filteredOptions = keyword.length > 0 ? projectViews?.filter((view) =>
@@ -50,7 +51,7 @@ const ViewsForBoard: React.FC<IViewsForBoard> = ({ toggle, project }) => {
                 ? view.title?.toLowerCase().includes(e.target.value.toLowerCase())
                 : true
         ) : projectViews
-        console.log("🚀 ~ handleChange ~ filteredOptions:", filteredOptions)
+        htLogger.info("🚀 ~ handleChange ~ filteredOptions:", filteredOptions)
         setFilteredOptions(filteredOptions)
         setSelectedIndex(0)
         document.getElementById(`label-htc-option-${0}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' })

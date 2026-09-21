@@ -81,7 +81,7 @@ The `staging` CI run collects native V8 coverage while it runs the authoritative
 - `critical-domains.json` for automation;
 - a rendered CI job summary and `critical-domains.md`, grouped into auth/access, task writes, billing, agents/AI writes, realtime/notifications, and release controls.
 
-The baseline is deliberately **report-only**. A low percentage does not block a merge yet, and source-text guard tests cannot inflate the result because only executed production code is counted. Generated code, migrations, fixtures, and tests are excluded.
+CI enforces the conservative repository-wide floors in `.c8rc.json`: 24% lines and statements, 50% functions, and 70% branches. The thresholds sit below the measured production baseline so normal variance does not fail a healthy run, while a material coverage drop fails CI. Source-text guard tests cannot inflate the result because only executed production code is counted. Generated code, migrations, fixtures, and tests are excluded.
 
 Run the same report locally after collecting coverage:
 
@@ -90,7 +90,7 @@ NODE_V8_COVERAGE=coverage/raw npm test
 npm run coverage:report
 ```
 
-Use the largest critical gaps to choose behavioral-test work. Add percentage thresholds only after multiple stable runs establish that the measurement itself is reliable.
+Use the largest critical gaps to choose behavioral-test work. Raise the percentage floors only after multiple stable runs establish a higher reliable baseline.
 
 ## Pull-request contract
 

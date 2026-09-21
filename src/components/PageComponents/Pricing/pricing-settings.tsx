@@ -1,3 +1,4 @@
+import { logger as htLogger } from "#logger";
   // ==================== SETTINGS SCREEN
 import { useState } from "react";
 import { useRouter } from "next/navigation";
@@ -45,12 +46,12 @@ import Stripe from "stripe";
           const response = await axios.post("/api/teams/changeTeamName",{
             updatedTitle:title, teamId:team.id
           })
-          console.log("🚀 ~ file: Pricing.tsx:758 ~ confirmNameChange ~ response:", response)
+          htLogger.info("🚀 ~ file: Pricing.tsx:758 ~ confirmNameChange ~ response:", response)
           refetch()
           setChangeTeamNameModalShow(false)
         } catch (error) {
 
-          console.log(error)
+          htLogger.info(error)
         }
     }
 
@@ -73,7 +74,7 @@ import Stripe from "stripe";
 
 
       } catch (error) {
-        console.log("🚀 ~ file: Pricing.tsx:305 ~ confirmCancel ~ error:", error)
+        htLogger.info("🚀 ~ file: Pricing.tsx:305 ~ confirmCancel ~ error:", error)
         
       }
       // 

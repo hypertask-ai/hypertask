@@ -1,3 +1,5 @@
+import { logger as htLogger } from "#logger";
+import { withoutAuth } from "#with-auth";
 import { NextRequest, NextResponse } from 'next/server'
 import { checkMcpRateLimit, validateMcpAuth } from '@/lib/mcp/auth'
 import prisma from '@/lib/prisma'
@@ -10,7 +12,7 @@ import { deliverWebhook } from '@/lib/mcp/webhooks/delivery'
  * receiver answered 2xx. Access-scoped by board. Awaits delivery (unlike the
  * fire-and-forget event emit) so the caller gets an immediate result.
  */
-export async function POST(
+async function POSTHandler(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
@@ -51,7 +53,9 @@ export async function POST(
 
     return NextResponse.json({ success: true, delivered })
   } catch (error) {
-    console.error('[MCP Webhooks] test error:', error)
+    htLogger.error('[MCP Webhooks] test error:', error)
     return NextResponse.json({ success: false, error: 'Internal server error' }, { status: 500 })
   }
 }
+
+export const POST = withoutAuth(POSTHandler);

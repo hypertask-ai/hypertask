@@ -1,3 +1,4 @@
+import { logger as htLogger } from "#logger";
 import { ITask } from "@/models/model";
 
 // Due date grouping utility functions
@@ -116,7 +117,7 @@ const getDueDateGroup = (task: ITask): string => {
     });
   
     // Debug: log group counts
-    console.log("Group counts:", {
+    htLogger.info("Group counts:", {
       Overdue: groups.Overdue.length,
       Today: groups.Today.length,
       Tomorrow: groups.Tomorrow.length,

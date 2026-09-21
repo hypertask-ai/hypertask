@@ -1,3 +1,5 @@
+import { env as appEnv } from "#env";
+import { logger as htLogger } from "#logger";
 import {
   createCipheriv,
   createDecipheriv,
@@ -5,8 +7,8 @@ import {
   randomBytes,
 } from "crypto";
 
-if (typeof window === "undefined" && !process.env.BYOK_CIPHER_SECRET) {
-  console.error(
+if (typeof window === "undefined" && !appEnv.BYOK_CIPHER_SECRET) {
+  htLogger.error(
     "[SecretCipher] BYOK_CIPHER_SECRET is not set. " +
     "Secret encryption and decryption will fail at runtime. " +
     "Generate one with: openssl rand -hex 32"
@@ -48,7 +50,7 @@ function asU8(view: ArrayBufferView): Uint8Array {
 }
 
 function getKey(): Uint8Array {
-  const secret = process.env.BYOK_CIPHER_SECRET;
+  const secret = appEnv.BYOK_CIPHER_SECRET;
   if (!secret || secret.length < 16) {
     throw new Error("BYOK_CIPHER_SECRET must be set (min 16 characters)");
   }

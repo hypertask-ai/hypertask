@@ -1,3 +1,4 @@
+import { logger as htLogger } from "#logger";
 import prisma from "@/lib/prisma";
 
 const getAllTeamsSidebarOptimized = async (userId: number) => {
@@ -119,7 +120,7 @@ const getAllTeamsSidebarOptimized = async (userId: number) => {
         };
 
     } catch (error) {
-        console.error("❌ getAllTeamsSidebarOptimized error:", error);
+        htLogger.error("❌ getAllTeamsSidebarOptimized error:", error);
         return {
             status: 400,
             json: []

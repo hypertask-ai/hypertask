@@ -1,3 +1,5 @@
+import { logger as htLogger } from "#logger";
+import { withoutAuth } from "#with-auth";
 import type { NextApiRequest, NextApiResponse } from "next";
 import { cancelJobById, scheduleJobById } from "@/lib/qstash";
 import { withQstashSignature } from "@/lib/qstash";
@@ -50,7 +52,7 @@ export async function cancelLegacyInboxReminderJobIfSafe(userId: number, taskId:
 
 async function handler(req: NextApiRequest, res: NextApiResponse) {
     const job = req.body as any;
-    console.log("🚀 ~ job:", job)
+    htLogger.info("🚀 ~ job:", job)
     // ================== job execution time *-*, you finally recieve the notification
 
     try {
@@ -58,13 +60,13 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
       return res.status(200).json({ ok: true, result });
 
     } catch (error) {
-       console.log("🚀 ~ error:", error)
+       htLogger.info("🚀 ~ error:", error)
        return res.status(500).json({ ok: false });
       
     }
 }
 
-export default withQstashSignature(handler);
+export default withoutAuth(withQstashSignature(handler));
 
 export const config = {
   api: {

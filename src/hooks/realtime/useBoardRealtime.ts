@@ -1,3 +1,4 @@
+import { logger as htLogger } from "#logger";
 import { useEffect, useRef } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import {
@@ -126,7 +127,7 @@ export function useBoardRealtime(
       if (cancelled || fallbackActive) return;
       fallbackActive = true;
       if (!fallbackWarningLogged) {
-        console.warn(
+        htLogger.warn(
           `[realtime] board subscription ${reason}; enabling reconciliation`,
         );
         fallbackWarningLogged = true;

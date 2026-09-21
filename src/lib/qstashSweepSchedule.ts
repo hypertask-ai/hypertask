@@ -1,19 +1,20 @@
+import { env as appEnv } from "#env";
 import { getQstashClient, qstashCallbackBase } from "@/lib/qstash";
 
 export const SWEEP_QUEUE_PATH = "/api/queues/sweep";
 export const SWEEP_SCHEDULE_CRON = "* * * * *";
 export const SWEEP_SCHEDULE_ID =
-  process.env.QSTASH_SWEEP_SCHEDULE_ID?.trim() || "hypertask-sweep-v1";
+  appEnv.QSTASH_SWEEP_SCHEDULE_ID?.trim() || "hypertask-sweep-v1";
 
 export function shouldAutoEnsureSweepSchedule() {
-  if (process.env.QSTASH_AUTO_REGISTER_SWEEP === "false") return false;
-  if (process.env.QSTASH_AUTO_REGISTER_SWEEP === "true") return true;
+  if (appEnv.QSTASH_AUTO_REGISTER_SWEEP === "false") return false;
+  if (appEnv.QSTASH_AUTO_REGISTER_SWEEP === "true") return true;
 
   // Preview deployments share production data. Do not let a preview URL replace
   // the live schedule destination unless explicitly requested.
-  if (process.env.VERCEL_ENV === "preview") return false;
+  if (appEnv.VERCEL_ENV === "preview") return false;
 
-  return process.env.NODE_ENV === "production";
+  return appEnv.NODE_ENV === "production";
 }
 
 export async function ensureSweepSchedule() {

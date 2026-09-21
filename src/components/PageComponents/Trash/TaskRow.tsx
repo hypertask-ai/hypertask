@@ -1,3 +1,4 @@
+import { logger as htLogger } from "#logger";
 
 import { ITask } from '@/models/model';
 import React from 'react'
@@ -35,7 +36,7 @@ const TaskRow = (
           handleMouseLeave={handleMouseLeave}
           divType="trash"
           taskRef={taskRef}
-          openTask={() => console.log("s")}
+          openTask={() => htLogger.info("s")}
           className={`flex cursor-pointer sm:space-x-8 h-[70] py-2 justify-start sm:border-l-4 border-transparent px-3 sm:px-4 rounded-md ${
                         selected ? "sm:bg-active-elementBg border-l-white-black" : "transparent"
                     } w-full flex-col md:flex-row`}

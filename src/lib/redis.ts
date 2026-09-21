@@ -1,7 +1,8 @@
+import { env as appEnv } from "#env";
 type RedisClient = InstanceType<(typeof import("ioredis"))["default"]>;
 
 function getRedisUrl() {
-  const redisUrl = process.env.REDIS_URL?.trim();
+  const redisUrl = appEnv.REDIS_URL?.trim();
   if (!redisUrl) {
     throw new Error(
       "Missing REDIS_URL; QStash job scheduling requires Redis for message-id tracking and locks."
@@ -32,7 +33,7 @@ export async function getRedis(): Promise<RedisClient> {
 
   if (!globalForRedis.redisPromise) {
     globalForRedis.redisPromise = (async () => {
-      if (process.env.NEXT_RUNTIME === "edge") {
+      if (appEnv.NEXT_RUNTIME === "edge") {
         throw new Error("Redis TCP client is unavailable in the Edge runtime.");
       }
 

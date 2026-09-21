@@ -1,3 +1,4 @@
+import { logger as htLogger } from "#logger";
 import {
   fetchUserPreference,
   USER_PREFERENCES_QUERY_KEY,
@@ -24,7 +25,7 @@ export const getDraftsHelper= async(taskId:number, userId:number )=>{
     if (response.status===200)  return response.data
     
   } catch (error) {
-    console.log("🚀 ~ updateDraft ~ error:", error)
+    htLogger.info("🚀 ~ updateDraft ~ error:", error)
     
   }
 }
@@ -50,7 +51,7 @@ export const updateDraftHelper = async (projectId:number, taskId: number, userId
       content:content,
       projectId
     };
-    // console.log("🚀 ~ updateDraftHelper ~ requestBody:", requestBody)
+    // debug.log("🚀 ~ updateDraftHelper ~ requestBody:", requestBody)
 
     // Cancel the previous request if it exists
     if (cancelTokenSource) {
@@ -64,15 +65,15 @@ export const updateDraftHelper = async (projectId:number, taskId: number, userId
       cancelToken: cancelTokenSource.token,
     });
 
-    // console.log("🚀 ~ updateDraft ~ response:", response);
+    // debug.log("🚀 ~ updateDraft ~ response:", response);
     if (response.status === 200) return response;
  } catch (error) {
     if (axios.isCancel(error)) {
-      console.log('Request canceled', error.message);
+      htLogger.info('Request canceled', error.message);
       // Don't throw - cancellation is expected behavior
       return;
     } else {
-      console.log("🚀 ~ updateDraft ~ error:", error);
+      htLogger.info("🚀 ~ updateDraft ~ error:", error);
       throw error; // Re-throw non-cancellation errors
     }
  }
@@ -125,17 +126,17 @@ export const getScrollSetting = async () => {
       "/api/users/scrollSettings/getScrollSetting"
     );
     if (response.status == 200) {
-      console.log(
+      htLogger.info(
         "🚀 ~ getScrollSetting",
         response?.data?.res[0]?.scrollSetting
       );
       return { setting: response?.data?.res[0]?.scrollSetting };
     } else {
-      console.log("error occured");
+      htLogger.info("error occured");
       return { stack: undefined };
     }
   } catch (error) {
-    console.log(error);
+    htLogger.info(error);
   }
 };
 
@@ -194,7 +195,7 @@ export const getAllFollowers = async(taskId:number) => {
 // ========================== UPDATE COMMENTS
 export const updateComment = async(updatedComment:commentBody,resultUrls:any[], commentId?:string) => {
 
-  console.log("🚀 ~ file: index.ts:48 ~ updateComment ~ resultUrls:", resultUrls)
+  htLogger.info("🚀 ~ file: index.ts:48 ~ updateComment ~ resultUrls:", resultUrls)
   const response = await axios.put("/api/comments/updateComment", updatedComment )
   await axios.put("/api/urls/addIntoTask", { urlsToAdd: resultUrls, commentId: commentId })
 
@@ -251,7 +252,7 @@ export async function setDueDateApiHandler(
     });
     return (result.data);
   } catch (error) {
-  console.log("🚀 ~ error:", error)
+  htLogger.info("🚀 ~ error:", error)
   }
 }
 
@@ -267,7 +268,7 @@ export async function setStartDateApiHandler(
     });
     return result.data;
   } catch (error) {
-    console.log("🚀 ~ setStartDateApiHandler ~ error:", error);
+    htLogger.info("🚀 ~ setStartDateApiHandler ~ error:", error);
   }
 }
 
@@ -283,7 +284,7 @@ export async function setRecurrenceApiHandler(
     });
     return result.data;
   } catch (error) {
-    console.log("🚀 ~ setRecurrenceApiHandler ~ error:", error);
+    htLogger.info("🚀 ~ setRecurrenceApiHandler ~ error:", error);
   }
 }
 
@@ -305,7 +306,7 @@ export const assignToMultipleApiHandler = async({assignerId, taskId, userIds, cu
     });
     if (response.status===200) return response.data
   } catch (error) {
-    console.log("🚀 ~ assignToMultipleApiHandler ~ error:", error)
+    htLogger.info("🚀 ~ assignToMultipleApiHandler ~ error:", error)
     
   }
 }

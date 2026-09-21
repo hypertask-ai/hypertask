@@ -1,3 +1,4 @@
+import { withAuth } from "#with-auth";
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 
@@ -22,7 +23,7 @@ const importSchema = z.object({
   slugs: z.array(z.string()).optional(),
 });
 
-export async function POST(request: NextRequest) {
+async function POSTHandler(request: NextRequest) {
   const user = await getCurrentUserFromCookies();
   if (!user?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   const userId = user.id;
@@ -74,3 +75,5 @@ export async function POST(request: NextRequest) {
     return skillErrorResponse(error);
   }
 }
+
+export const POST = withAuth(POSTHandler, { authenticateInHandler: true });

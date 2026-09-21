@@ -1,5 +1,6 @@
 "use client"
 
+import { logger as htLogger } from "#logger";
 import { useGetAllTeamsMinimal } from "@/hooks/MultiPages/useGetAllTeamsMinimal";
 import { ITeam } from "@/models/model";
 import { currentUserAtom } from "@/store";
@@ -50,7 +51,7 @@ interface IProps {
       };
 
     const toggleDropdown=(index:number|null) => {
-        console.log("🚀 ~ file: index.tsx:64 ~ toggleDropdown ~ index:", index)
+        htLogger.info("🚀 ~ file: index.tsx:64 ~ toggleDropdown ~ index:", index)
         if (index===selectedIndex){
             setSelectedIndex(null)
             setDropdownOpen((prev)=>!prev)
@@ -82,7 +83,7 @@ interface IProps {
                     index:index,
                     projectId:projectId
                 }
-                console.log("🚀 ~ file: index.tsx:95 ~ setFavorites ~ body:", body)
+                htLogger.info("🚀 ~ file: index.tsx:95 ~ setFavorites ~ body:", body)
                 if (existingIndex !== -1) {
                   // ============== If the item already exists, update it
                   // -------------- POST API
@@ -107,12 +108,12 @@ interface IProps {
     );  
 
     const handleClickOutside = (event: any) => {
-        console.log("🚀 ~ file: index.tsx:77 ~ handleClickOutside ~ event.target:", event.target)
+        htLogger.info("🚀 ~ file: index.tsx:77 ~ handleClickOutside ~ event.target:", event.target)
     
         if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
             // Clicked outside the dropdown, close it
             const isInsideDropdown = event.target.closest('.dropdown');    
-            console.log("🚀 ~ file: index.tsx:122 ~ handleClickOutside ~ isInsideDropdown:", isInsideDropdown)
+            htLogger.info("🚀 ~ file: index.tsx:122 ~ handleClickOutside ~ isInsideDropdown:", isInsideDropdown)
             if (!isInsideDropdown) {
                 setSelectedIndex(null);
                 setDropdownOpen(false);

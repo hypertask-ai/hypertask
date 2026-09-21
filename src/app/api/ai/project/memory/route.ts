@@ -1,3 +1,5 @@
+import { logger as htLogger } from "#logger";
+import { withAuth } from "#with-auth";
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 
@@ -43,7 +45,7 @@ const learnSchema = z.discriminatedUnion("type", [
   }),
 ]);
 
-export async function GET(request: NextRequest) {
+async function GETHandler(request: NextRequest) {
   return withUser(async (userId) => {
     const projectId = projectIdSchema.parse(
       request.nextUrl.searchParams.get("projectId"),
@@ -52,14 +54,14 @@ export async function GET(request: NextRequest) {
   });
 }
 
-export async function PATCH(request: NextRequest) {
+async function PATCHHandler(request: NextRequest) {
   return withUser(async (userId) => {
     const input = toggleSchema.parse(await request.json());
     return NextResponse.json(await setBoardMemoryEnabled({ ...input, userId }));
   });
 }
 
-export async function POST(request: NextRequest) {
+async function POSTHandler(request: NextRequest) {
   return withUser(async (userId) => {
     const input = learnSchema.parse(await request.json());
     const { projectId, ...signal } = input;
@@ -69,7 +71,7 @@ export async function POST(request: NextRequest) {
   });
 }
 
-export async function DELETE(request: NextRequest) {
+async function DELETEHandler(request: NextRequest) {
   return withUser(async (userId) => {
     const projectId = projectIdSchema.parse(
       request.nextUrl.searchParams.get("projectId"),
@@ -118,7 +120,12 @@ async function withUser(handler: (userId: number) => Promise<NextResponse>) {
         { status: 404 },
       );
     }
-    console.error("Board memory request failed", error);
+    htLogger.error("Board memory request failed", error);
     return NextResponse.json({ error: "Request failed" }, { status: 500 });
   }
 }
+
+export const GET = withAuth(GETHandler, { authenticateInHandler: true });
+export const PATCH = withAuth(PATCHHandler, { authenticateInHandler: true });
+export const POST = withAuth(POSTHandler, { authenticateInHandler: true });
+export const DELETE = withAuth(DELETEHandler, { authenticateInHandler: true });

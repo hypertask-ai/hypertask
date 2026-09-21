@@ -1,4 +1,4 @@
-import { getSessionUser } from "@/lib/auth/getSessionUser";
+import { getAuthSession, withAuth } from "#with-auth";
 import prisma from "@/lib/prisma";
 import {
   cleanPlanningText,
@@ -83,8 +83,8 @@ const unauthorized = () =>
 const invalid = (error: string) =>
   NextResponse.json({ success: false, error }, { status: 400 });
 
-export async function GET(request: NextRequest) {
-  const session = await getSessionUser(request.headers);
+async function GETHandler(request: NextRequest) {
+  const session = await getAuthSession(request.headers);
   if (!session) return unauthorized();
 
   const projectId = projectIdFrom(request.nextUrl.searchParams.get("projectId"));
@@ -101,8 +101,8 @@ export async function GET(request: NextRequest) {
   return NextResponse.json({ success: true, planning });
 }
 
-export async function POST(request: NextRequest) {
-  const session = await getSessionUser(request.headers);
+async function POSTHandler(request: NextRequest) {
+  const session = await getAuthSession(request.headers);
   if (!session) return unauthorized();
 
   const body = await request.json().catch(() => null);
@@ -194,3 +194,6 @@ export async function POST(request: NextRequest) {
   const planning = await planningResponse(projectId, session.userId);
   return NextResponse.json({ success: true, planning });
 }
+
+export const GET = withAuth(GETHandler, { authenticateInHandler: true });
+export const POST = withAuth(POSTHandler, { authenticateInHandler: true });

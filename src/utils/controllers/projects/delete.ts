@@ -1,3 +1,4 @@
+import { logger as htLogger } from "#logger";
 // Assuming you have already initialized Prisma and have access to the PrismaClient instance.
 import { stripe } from '@/lib/subscription';
 
@@ -28,7 +29,7 @@ const deleteProject = async(currProjectID:number, userId:number) =>{
           json:{message:"Only Board owner or admin can delete this board."}
         })
       // Find the project by ID and update the sections array
-      console.log("============================= DELETING PROJECT ==================")
+      htLogger.info("============================= DELETING PROJECT ==================")
       const updatedProject = await prisma.project.update({
         where: { id: currProjectID },
         data: {
@@ -42,14 +43,14 @@ const deleteProject = async(currProjectID:number, userId:number) =>{
           projectId: currProjectID,
         }
       })
-      console.log("🚀 ~ file: delete.ts:28 ~ addSection ~ updatedProject:", updatedProject)
+      htLogger.info("🚀 ~ file: delete.ts:28 ~ addSection ~ updatedProject:", updatedProject)
 
 
     // ====================================================================
     // =========================== DELETE ALL TASKS
     // ====================================================================
 
-    console.log("============================= DELETING ALL TASKS ==================")
+    htLogger.info("============================= DELETING ALL TASKS ==================")
       const deleted_tasks = await prisma.task.updateMany({
         where:{
             projectId:currProjectID
@@ -58,13 +59,13 @@ const deleteProject = async(currProjectID:number, userId:number) =>{
             status:"Deleted"
         }
       })
-      console.log("🚀 ~ file: delete.ts:32 ~ addSection ~ deleted_tasks:", deleted_tasks)
+      htLogger.info("🚀 ~ file: delete.ts:32 ~ addSection ~ deleted_tasks:", deleted_tasks)
 
     // ====================================================================
     // =========================== DELETE ALL NOTIFICATIONS
     // ====================================================================
 
-    console.log("============================= DELETING ALL NOTIFICATIONS ==================")
+    htLogger.info("============================= DELETING ALL NOTIFICATIONS ==================")
       const deleted_notis = await prisma.notification.updateMany({
         where:{
             projectId:currProjectID
@@ -73,24 +74,24 @@ const deleteProject = async(currProjectID:number, userId:number) =>{
             status:"Deleted"
         }
      })
-     console.log("🚀 ~ file: delete.ts:43 ~ addSection ~ deleted_notis:", deleted_notis)
+     htLogger.info("🚀 ~ file: delete.ts:43 ~ addSection ~ deleted_notis:", deleted_notis)
      
     // ====================================================================
     // =========================== DELETE ALL MEMBERS AND OFCOURSE HANDLE TOTAL SEATS FOR THE RESPECTIVE TEAM. 
     // ====================================================================
-    console.log("============================= FIND ALL MEMBERS OF THAT PROJECT ==================")
+    htLogger.info("============================= FIND ALL MEMBERS OF THAT PROJECT ==================")
 
     const allMembers = await prisma.member.findMany({
         where:{
             projectId:project.id
         }
     })
-    console.log("count of all members : ", allMembers.length)
-    console.log("============================= DELETING ALL MEMBERS ==================")
+    htLogger.info("count of all members : ", allMembers.length)
+    htLogger.info("============================= DELETING ALL MEMBERS ==================")
 
     for (const member of allMembers){
 
-        console.log(" ----------  member: ", member.id)
+        htLogger.info(" ----------  member: ", member.id)
         // ========================== MEMBER DELETE
         const deleted_members = await prisma.member.deleteMany({
            where:{
@@ -98,7 +99,7 @@ const deleteProject = async(currProjectID:number, userId:number) =>{
                projectId:currProjectID
            },
         })
-        console.log("🚀 ~ file: delete.ts:84 ~ addSection ~ deleted_members:", deleted_members)
+        htLogger.info("🚀 ~ file: delete.ts:84 ~ addSection ~ deleted_members:", deleted_members)
    
        // =========================== FIND ALL PROJECTS OF THAT SPECIFIC TEAM IM STILL A MEMBER OF
         const projectsWhereStillMember = await prisma.member.findMany({
@@ -109,7 +110,7 @@ const deleteProject = async(currProjectID:number, userId:number) =>{
                }
            }
          })  
-         console.log("teams that user is still a part of: ", projectsWhereStillMember)
+         htLogger.info("teams that user is still a part of: ", projectsWhereStillMember)
         //  if (projectsWhereStillMember.length===0){
    
         //      const deletedTeamMember=  await prisma.member_Team.deleteMany({
@@ -139,7 +140,7 @@ const deleteProject = async(currProjectID:number, userId:number) =>{
         //                quantity:updated_team.totalSeats
         //            }
         //          );
-        //        console.log("------------ updated TeamId: ", updated_team)
+        //        debug.log("------------ updated TeamId: ", updated_team)
         //  }
     }
 
@@ -151,7 +152,7 @@ const deleteProject = async(currProjectID:number, userId:number) =>{
         json:{message:"Success", firstProject: firstProject.json}
       })
     } catch (error) {
-      console.error(error);
+      htLogger.error(error);
       return ({
         status:500,
         json:{ error: 'Failed to add new section' }

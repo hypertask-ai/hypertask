@@ -1,3 +1,4 @@
+import { logger as htLogger } from "#logger";
 // Assuming you have already initialized Prisma and have access to the PrismaClient instance.
 
 import prisma from "@/lib/prisma";
@@ -25,7 +26,7 @@ const getFavorites = async(userId:number) =>{
         json:all_projects
       })
     } catch (error) {
-      console.error(error);
+      htLogger.error(error);
       return ({
         status:500,
         json:{ error: 'Failed to add new section' }

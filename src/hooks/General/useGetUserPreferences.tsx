@@ -1,3 +1,4 @@
+import { logger as htLogger } from "#logger";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import axios from "axios";
 import type { TAiModelPreferences } from "@/lib/aiModelPreferences";
@@ -108,11 +109,11 @@ export const fetchUserPreference = async (
     if (response.status == 200) {
       return response.data.settings as IUserPreferences;
     } else {
-      console.error("🚀 ~ fetchUserPreference ~ error:", response.data.error);
+      htLogger.error("🚀 ~ fetchUserPreference ~ error:", response.data.error);
       return response.data.settings as IUserPreferences;
     }
   } catch (error) {
-    console.log("🚀 ~ fetchUserPreference ~ error:", error);
+    htLogger.info("🚀 ~ fetchUserPreference ~ error:", error);
     if (!useDefaultOnError) throw error;
     return DEFAULT_USER_PREFERENCES;
   }

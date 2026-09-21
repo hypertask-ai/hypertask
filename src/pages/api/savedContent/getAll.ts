@@ -1,3 +1,5 @@
+import { logger as htLogger } from "#logger";
+import { withAuth } from "#with-auth";
 import { NextApiHandler, NextApiRequest, NextApiResponse } from "next";
 import { IUser } from "@/models/model";
 import { getAllStarred } from "@/utils/controllers/savedContent/getAllStarred";
@@ -20,9 +22,9 @@ const handler: NextApiHandler = async (
     else response = await getAllStarred(user.id);
     res.status(response.status).json(response.json);
   } catch (error) {
-    console.log("🚀 ~ error:", error);
+    htLogger.info("🚀 ~ error:", error);
     return res.status(400).json({ message: JSON.stringify(error) });
   }
 };
 
-export default handler;
+export default withAuth(handler, { authenticateInHandler: true });

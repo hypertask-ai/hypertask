@@ -1,3 +1,4 @@
+import { logger as htLogger } from "#logger";
 import { sendEmail } from "@/lib/email/sendEmail";
 import {
   renderNotificationEmail,
@@ -59,10 +60,10 @@ export const sendEmailNotification = async (
       // notification email already routes through.
       headers: unsubscribeHeaders(body.userId, body.recipient),
     });
-    console.log(`🚀 ~ emailResponse ~ ${type}:`, emailResponse);
+    htLogger.info(`🚀 ~ emailResponse ~ ${type}:`, emailResponse);
     return true;
   } catch (error) {
-    console.log("🤔 ~ sendNotification ~ error:", error);
+    htLogger.info("🤔 ~ sendNotification ~ error:", error);
     return false;
   }
 };

@@ -1,5 +1,6 @@
 "use client";
 
+import { logger as htLogger } from "#logger";
 import axios from "axios";
 import { Bell, X } from "lucide-react";
 import nookies from "nookies";
@@ -204,7 +205,7 @@ const NotificationPromoteBanner = () => {
         }));
       }
     } catch (error) {
-      console.log("NotificationPromoteBanner enablePush error:", error);
+      htLogger.info("NotificationPromoteBanner enablePush error:", error);
     } finally {
       setPendingAction(null);
     }
@@ -238,7 +239,7 @@ const NotificationPromoteBanner = () => {
         setCurrentUser(nextUser);
       }
     } catch (error) {
-      console.log("NotificationPromoteBanner enableEmail error:", error);
+      htLogger.info("NotificationPromoteBanner enableEmail error:", error);
     } finally {
       setPendingAction(null);
     }

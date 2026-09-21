@@ -1,3 +1,4 @@
+import { logger as htLogger } from "#logger";
 import prisma from '@/lib/prisma';
 import React from 'react'
 
@@ -8,7 +9,7 @@ interface ItaskMentionSearch{
 }
 const taskMentionSearch = async(props:ItaskMentionSearch) => {
     const {projectIds, take, searchQuery} = props
-    console.log("🚀 ~ taskMentionSearch ~ props:", props)
+    htLogger.info("🚀 ~ taskMentionSearch ~ props:", props)
     const searchedTasks = await prisma.task.findMany({
         take: take,
         where: {
@@ -74,7 +75,7 @@ const taskMentionSearch = async(props:ItaskMentionSearch) => {
             }
 
       });
-      console.log("🚀 ~ taskMentionSearch ~ searchedTasks:", searchedTasks.map(t=>t.title))
+      htLogger.info("🚀 ~ taskMentionSearch ~ searchedTasks:", searchedTasks.map(t=>t.title))
       return searchedTasks??[]
       
 }

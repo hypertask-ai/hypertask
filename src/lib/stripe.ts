@@ -1,8 +1,9 @@
+import { env as appEnv } from "#env";
 import { CreateCheckoutParams } from "@/models/model";
 import Stripe from "stripe";
 
 export function getStripeInstance() {
-  const key = process.env.STRIPE_SECRET_KEY ?? "";
+  const key = appEnv.STRIPE_SECRET_KEY ?? "";
 
   return new Stripe(key, {
     // Deliberately pinned; account/webhook payload shapes depend on it.
@@ -43,11 +44,11 @@ export async function createStripeCheckout(
   requestOptions?: Stripe.RequestOptions,
 ) {
   const customer = params.stripe_customer_id || undefined;
-  // console.log("🚀 ~ file: stripe.ts:20 ~ createStripeCheckout ~ customer:", customer)
+  // debug.log("🚀 ~ file: stripe.ts:20 ~ createStripeCheckout ~ customer:", customer)
   const mode: Stripe.Checkout.SessionCreateParams.Mode = "subscription";
 
   const stripe = await getStripeInstance();
-  // console.log("🚀 ~ file: stripe.ts:24 ~ createStripeCheckout ~ stripe:", stripe)
+  // debug.log("🚀 ~ file: stripe.ts:24 ~ createStripeCheckout ~ stripe:", stripe)
 
   const lineItem: Stripe.Checkout.SessionCreateParams.LineItem = {
     quantity: params.quantity,

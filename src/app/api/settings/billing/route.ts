@@ -1,3 +1,5 @@
+import { logger as htLogger } from "#logger";
+import { withAuth } from "#with-auth";
 import { NextResponse } from "next/server";
 import Stripe from "stripe";
 import { getServerCookieUser } from "@/lib/auth/serverUser";
@@ -30,7 +32,7 @@ const getStripeCustomerEmail = (customer: StripeCustomerResponse) => {
 // /api/stripe/billing-portal, left owner-only).
 const hasBillingAccess = hasTeamOwnerOrProjectAdminAccess;
 
-export async function GET(request: Request) {
+async function GETHandler(request: Request) {
   const user = await getServerCookieUser();
 
   if (!user) {
@@ -121,7 +123,7 @@ export async function GET(request: Request) {
         : null,
     });
   } catch (error) {
-    console.error("Error loading settings billing data:", error);
+    htLogger.error("Error loading settings billing data:", error);
     return NextResponse.json(
       { message: "Could not load billing details" },
       { status: 500 }
@@ -132,7 +134,7 @@ export async function GET(request: Request) {
 // Updates the Stripe customer's email — a plain accounting/invoicing address,
 // not tied to any board member or Hypertask user. Stripe sends invoices and
 // receipts to this address.
-export async function POST(request: Request) {
+async function POSTHandler(request: Request) {
   const user = await getServerCookieUser();
 
   if (!user) {
@@ -200,10 +202,13 @@ export async function POST(request: Request) {
     });
     return NextResponse.json({ billingEmail });
   } catch (error) {
-    console.error("Error updating billing email:", error);
+    htLogger.error("Error updating billing email:", error);
     return NextResponse.json(
       { message: "Could not update billing email" },
       { status: 500 }
     );
   }
 }
+
+export const GET = withAuth(GETHandler, { authenticateInHandler: true });
+export const POST = withAuth(POSTHandler, { authenticateInHandler: true });

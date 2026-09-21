@@ -1,3 +1,4 @@
+import { logger as htLogger } from "#logger";
 /* eslint-disable react-hooks/exhaustive-deps */
 import { useCallback, useContext, useEffect, useLayoutEffect, useRef, useMemo, useState } from "react";
 
@@ -444,7 +445,7 @@ const useSections = ({
   useEffect(() => {
     setTimeout(() => {
       if (hasDuplicateRankings(items) && items.length > 0) {
-        console.log("There are duplicate rankings in the tasks.");
+        htLogger.info("There are duplicate rankings in the tasks.");
         handleReset();
       } 
     }, 0);

@@ -1,3 +1,5 @@
+import { logger as htLogger } from "#logger";
+import { withoutAuth } from "#with-auth";
 import { NextRequest, NextResponse } from 'next/server';
 import { validateMcpAuth, checkMcpRateLimit } from '@/lib/mcp/auth';
 import prisma from '@/lib/prisma';
@@ -27,7 +29,7 @@ export const maxDuration = 700;
 
 // Native clients receive bytes only after both task access and attachment
 // ownership are checked; the durable storage URL never crosses this API boundary.
-export const GET = createAttachmentDownloadHandler({
+export const GET = withoutAuth(createAttachmentDownloadHandler({
   checkRateLimit: checkMcpRateLimit,
   validateAuth: validateMcpAuth,
   authorizeRead: async (ctx) => ctx.agentId ? requireRole(ctx, 'read') : null,
@@ -51,9 +53,9 @@ export const GET = createAttachmentDownloadHandler({
       data: { fileSize: String(size) },
     });
   },
-});
+}));
 
-export async function POST(request: NextRequest) {
+async function POSTHandler(request: NextRequest) {
   const rateLimited = await checkMcpRateLimit(request);
   if (rateLimited) return rateLimited;
   const ctx = await validateMcpAuth(request);
@@ -176,7 +178,7 @@ export async function POST(request: NextRequest) {
       })),
     });
   } catch (e) {
-    console.error('[MCP attachments]', e);
+    htLogger.error('[MCP attachments]', e);
     const status = e instanceof AttachmentBatchError ? e.status : 500;
     const partialAttachments =
       e instanceof AttachmentBatchError ? e.attachments : [];
@@ -218,3 +220,5 @@ export async function POST(request: NextRequest) {
     );
   }
 }
+
+export const POST = withoutAuth(POSTHandler);

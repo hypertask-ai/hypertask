@@ -1,3 +1,5 @@
+import { logger as htLogger } from "#logger";
+import { withAuth } from "#with-auth";
 import { NextApiHandler, NextApiRequest, NextApiResponse } from "next";
 import { createCommentService } from "@/utils/controllers/comments/createCommentService";
 import { broadcastTaskComment } from "@/lib/realtime/server";
@@ -14,7 +16,7 @@ const handler: NextApiHandler = async (
         try {
           currentUser = JSON.parse(req.cookies.nookies_user);
         } catch (parseError) {
-          console.error("Error parsing nookies_user cookie:", parseError);
+          htLogger.error("Error parsing nookies_user cookie:", parseError);
           currentUser = undefined;
         }
       }
@@ -42,7 +44,7 @@ const handler: NextApiHandler = async (
 
       return res.json(comment);
     } catch (error) {
-      console.log("🤔 ~ ERROR IN COMMENT CREATION:", error);
+      htLogger.info("🤔 ~ ERROR IN COMMENT CREATION:", error);
       if (error instanceof Error && error.message === "Task not found or access denied") {
         return res.status(404).json({ message: error.message });
       }
@@ -53,4 +55,4 @@ const handler: NextApiHandler = async (
   }
 };
 
-export default handler;
+export default withAuth(handler, { authenticateInHandler: true });

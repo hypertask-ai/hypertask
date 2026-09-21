@@ -1,3 +1,4 @@
+import { logger as htLogger } from "#logger";
 import { cert, getApp, initializeApp, type App } from 'firebase-admin/app'
 import { getAuth as getFirebaseAuth } from 'firebase-admin/auth'
 import { getFirebaseServiceAccount } from '@/lib/firebaseServiceAccount'
@@ -17,7 +18,7 @@ export function getFirebaseAdmin(): App {
 
   const serviceAccount = getFirebaseServiceAccount()
 
-  console.log(`🔥 Initializing Firebase Admin for project: ${serviceAccount.project_id}`)
+  htLogger.info(`🔥 Initializing Firebase Admin for project: ${serviceAccount.project_id}`)
 
   try {
     firebaseAdminApp = initializeApp({
@@ -37,7 +38,7 @@ export function getFirebaseAdmin(): App {
     }
   }
 
-  console.log(`✅ Firebase Admin initialized successfully for project: ${firebaseAdminApp.options.projectId}`)
+  htLogger.info(`✅ Firebase Admin initialized successfully for project: ${firebaseAdminApp.options.projectId}`)
   return firebaseAdminApp
 }
 

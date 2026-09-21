@@ -1,3 +1,5 @@
+import { logger as htLogger } from "#logger";
+import { withAuth } from "#with-auth";
 // Import PrismaClient from the generated Prisma client
 import sectionGetByTask from '@/utils/controllers/section/getByTask';
 
@@ -15,7 +17,7 @@ if (req.method==="POST"){
 
     const { taskIds, agentId } = req.body;
     const currentUser = JSON.parse(req.cookies.nookies_user!);
-    console.log("🚀 ~ file: resetRanks.ts:14 ~ consthandler:NextApiHandler= ~ taskIds:", taskIds)
+    htLogger.info("🚀 ~ file: resetRanks.ts:14 ~ consthandler:NextApiHandler= ~ taskIds:", taskIds)
     if (!taskIds) {
       return res.status(400).json({ message: "Missing TaskId" });
   }
@@ -64,7 +66,7 @@ if (req.method==="POST"){
     // Get field names of the "Section" model
     
   } catch (error) {
-    console.error('Error:', error);
+    htLogger.error('Error:', error);
     return res.status(500).json({message:"SOMETHING WENT WRONG"});
 
   } 
@@ -72,4 +74,4 @@ if (req.method==="POST"){
 }
 
 // Run the main function
-export default handler;
+export default withAuth(handler, { authenticateInHandler: true });

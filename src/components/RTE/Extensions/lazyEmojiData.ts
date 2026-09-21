@@ -1,3 +1,4 @@
+import { logger as htLogger } from "#logger";
 // HTPR-6059: the @tiptap/extension-emoji package embeds its emoji dataset in
 // the same module as the Emoji node, and the node's default options reference
 // the data, so any static import keeps the full dataset in the editor chunk
@@ -43,7 +44,7 @@ export function ensureEmojiData(): Promise<void> {
           try {
             listener();
           } catch (error) {
-            console.error("[emoji] data install listener failed", error);
+            htLogger.error("[emoji] data install listener failed", error);
           }
         }
       })

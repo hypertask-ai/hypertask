@@ -1,3 +1,4 @@
+import { withoutAuth } from "#with-auth";
 import { updateEntry } from "@/lib/timeTracking";
 import { NextRequest, NextResponse } from "next/server";
 import { authenticateMcpTime, readEntryId } from "../_lib";
@@ -9,7 +10,7 @@ import { authenticateMcpTime, readEntryId } from "../_lib";
  * Addresses a TimeEntry by id rather than a task, since a task can hold many
  * entries and the caller already has the id from /time/report.
  */
-export async function POST(request: NextRequest) {
+async function POSTHandler(request: NextRequest) {
   const { ctx, body, response } = await authenticateMcpTime(request);
   if (response) return response;
 
@@ -63,3 +64,5 @@ export async function POST(request: NextRequest) {
     throw error;
   }
 }
+
+export const POST = withoutAuth(POSTHandler);

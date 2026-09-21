@@ -1,3 +1,5 @@
+import { logger as htLogger } from "#logger";
+import { withoutAuth } from "#with-auth";
 import { NextRequest, NextResponse } from 'next/server'
 import { checkMcpRateLimit, validateMcpAuth } from '@/lib/mcp/auth'
 import prisma from '@/lib/prisma'
@@ -38,7 +40,7 @@ const SESSION_SELECT = {
  * repeated call from the same session upserts one row (a heartbeat).
  * Body: { task_id | ticket_number, project_id?, session_id, resume_command?, status? }.
  */
-export async function POST(request: NextRequest) {
+async function POSTHandler(request: NextRequest) {
   try {
     const rateLimited = await checkMcpRateLimit(request)
     if (rateLimited) return rateLimited
@@ -195,7 +197,7 @@ export async function POST(request: NextRequest) {
       throw err
     }
   } catch (error) {
-    console.error('[MCP Task Session] POST Error:', error)
+    htLogger.error('[MCP Task Session] POST Error:', error)
     return NextResponse.json({ success: false, error: 'Internal server error' }, { status: 500 })
   }
 }
@@ -204,7 +206,7 @@ export async function POST(request: NextRequest) {
  * GET /api/mcp/tasks/session?task_id|ticket_number&project_id
  * List the work-sessions attached to a task, most-recently-seen first.
  */
-export async function GET(request: NextRequest) {
+async function GETHandler(request: NextRequest) {
   try {
     const rateLimited = await checkMcpRateLimit(request)
     if (rateLimited) return rateLimited
@@ -239,7 +241,10 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json({ success: true, taskId: task.id, sessions })
   } catch (error) {
-    console.error('[MCP Task Session] GET Error:', error)
+    htLogger.error('[MCP Task Session] GET Error:', error)
     return NextResponse.json({ success: false, error: 'Internal server error' }, { status: 500 })
   }
 }
+
+export const POST = withoutAuth(POSTHandler);
+export const GET = withoutAuth(GETHandler);

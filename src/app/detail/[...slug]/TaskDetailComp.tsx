@@ -1,3 +1,5 @@
+import { env as appEnv } from "#env";
+import { logger as htLogger } from "#logger";
 /* eslint-disable react-hooks/exhaustive-deps */
 /* eslint-disable react/jsx-key */
 /* eslint-disable react/no-danger-with-children */
@@ -371,7 +373,7 @@ const TaskDetail: React.FC<TaskDetailProps> = ({
   const taskTimer = useTaskTime(_parsedTask.id);
   // const {data:draftsFromTQ , isLoading} =useGetDrafts(_parsedTask.id, currentUser.id)
 
-  // console.log("🚀 ~ _currentTask:", currentTask)
+  // debug.log("🚀 ~ _currentTask:", currentTask)
 
   const [showEmojiPickerAtComment, setShowEmojiPickerAtCount] = useState<{
     commentId: number;
@@ -615,7 +617,7 @@ const TaskDetail: React.FC<TaskDetailProps> = ({
       e.key === taskDetailConfig.keyboard.escape &&
       !activeModals.includes(document.activeElement?.id!)
     ) {
-      console.log("going back");
+      htLogger.info("going back");
       // return onGoback();
       document.getElementById(taskDetailConfig.elementIds.taskDetailPageBackButton)?.click();
     } else {
@@ -727,7 +729,7 @@ const TaskDetail: React.FC<TaskDetailProps> = ({
     if (e.ctrlKey) {
       if (e.keyCode === KeyCodes.TAB) {
         e.preventDefault();
-        console.log("ctrl+tab"); // chromium fullscreen (think PWA)
+        htLogger.info("ctrl+tab"); // chromium fullscreen (think PWA)
       }
     }
 
@@ -1144,7 +1146,7 @@ const TaskDetail: React.FC<TaskDetailProps> = ({
 
       setMovingItem(false);
     } catch (error) {
-      console.error("🚀 ~ moveTaskToNextColumn ~ error:", error);
+      htLogger.error("🚀 ~ moveTaskToNextColumn ~ error:", error);
     }
   }
 
@@ -1162,7 +1164,7 @@ const TaskDetail: React.FC<TaskDetailProps> = ({
   // handler for when user presses escape during title edit mode, if in "CREATE TASK" mode, then do router.back
   // apparently, this doesn't even run, the actual place it runs is in taskTitle file
   const titleEscapeHandler = () => {
-    console.log("🚀 ~ titleEscapeHandler ~ currentTask:", currentTask);
+    htLogger.info("🚀 ~ titleEscapeHandler ~ currentTask:", currentTask);
     if (currentTask?.id === -1) return navigate("Back");
     setEditMode(null);
     focusOn("title");
@@ -1205,7 +1207,7 @@ const TaskDetail: React.FC<TaskDetailProps> = ({
   const CTRL_ENTERHandler = (e: any) => {
     // edit title
     if (document.activeElement?.id === taskDetailConfig.elementIds.title) {
-      // console.log("enter pressesss one",document.activeElement?.id)
+      // debug.log("enter pressesss one",document.activeElement?.id)
 
       setTimeout(() => {
         setEditMode(taskDetailConfig.editModes.title);
@@ -1215,7 +1217,7 @@ const TaskDetail: React.FC<TaskDetailProps> = ({
 
   // undoHandler function
   const undoHandler = async (data: any, toastId: string) => {
-    // console.log('🚀 ~ undoHandler ~ data:', data);
+    // debug.log('🚀 ~ undoHandler ~ data:', data);
     // first, you need to bring the item back to its place.
     // then, you need to run the API call so there is no render blocking.
     await undoAction("UNDO_INBOX_ARCHIVE", data);
@@ -1232,7 +1234,7 @@ const TaskDetail: React.FC<TaskDetailProps> = ({
     refresh?: boolean,
     shouldCloseOnUpdate = true
   ) => {
-    console.log("current label modal value: ", showCreateLabelModal);
+    htLogger.info("current label modal value: ", showCreateLabelModal);
 
     // Same stale-pointer guard as togglePriorityModal (HTPR-3731).
     if (!showCreateLabelModal && currentTask)
@@ -1539,7 +1541,7 @@ const TaskDetail: React.FC<TaskDetailProps> = ({
     (type: ViewVisibility) => {
       const commentIndex = getCurrentCommentIndex();
       if (commentIndex == null) return;
-      console.log(
+      htLogger.info(
         "🚀 ~ handleStarCommentFromHTC ~ commentIndex:",
         comments[commentIndex]
       );
@@ -1595,13 +1597,13 @@ const TaskDetail: React.FC<TaskDetailProps> = ({
         id: attachment.id,
       });
     }
-    console.log("🚀 ~ processAttachmentsForNewTask ~ temp:", temp);
+    htLogger.info("🚀 ~ processAttachmentsForNewTask ~ temp:", temp);
     return temp;
   };
 
   //callback for copying comment url from htc
   const copyCommentURLFromHTC = () => {
-    const currentURL = `${process.env.NEXT_PUBLIC_BASEURL}${taskDetailConfig.urls.taskDetailPattern}${currentTask?.projectId}/${currentTask?.uniqueIndex}`;
+    const currentURL = `${appEnv.NEXT_PUBLIC_BASEURL}${taskDetailConfig.urls.taskDetailPattern}${currentTask?.projectId}/${currentTask?.uniqueIndex}`;
     navigator.clipboard.writeText(currentURL + `${taskDetailConfig.urls.commentHashPrefix}${currentId.replace("comment-", "")}`); // Copy it to the clipboard
     toast(taskDetailConfig.toastMessages.commentLinkCopied);
   };
@@ -1666,7 +1668,7 @@ const TaskDetail: React.FC<TaskDetailProps> = ({
           toast(taskDetailConfig.toastMessages.commentContentCopied);
         }
       } catch (error) {
-        console.error("Failed to copy comment content:", error);
+        htLogger.error("Failed to copy comment content:", error);
         toast.error(taskDetailConfig.toastMessages.errorCopyCommentContent);
       }
     }
@@ -1754,7 +1756,7 @@ const TaskDetail: React.FC<TaskDetailProps> = ({
           currentProject
         );
       } catch (error) {
-        console.error("🚀 ~ toggleModal ~ updateTaskInCache:", error);
+        htLogger.error("🚀 ~ toggleModal ~ updateTaskInCache:", error);
       }
     }
     // keepOpen lets the assign menu refresh the task without closing, so
@@ -1840,14 +1842,14 @@ const TaskDetail: React.FC<TaskDetailProps> = ({
     if (!currentTask || !state) return;
     try {
       const response = await globalAPIHandlers.deleteTaskAPI(currentTask.id);
-      console.log("🚀 ~ deleteTask ~ response:", response);
+      htLogger.info("🚀 ~ deleteTask ~ response:", response);
       // @ts-ignore
       setCurrentTask((old) => ({ ...old, status: taskDetailConfig.taskStatus.deleted }));
       await queryClient.refetchQueries({ queryKey: [taskDetailConfig.queryKeys.projectsAll] });
       toast(taskDetailConfig.toastMessages.taskDeleted);
       onGoback();
     } catch (error: any) {
-      console.log("🚀 ~ deleteTask ~ error:", error);
+      htLogger.info("🚀 ~ deleteTask ~ error:", error);
       toast.error(taskDetailConfig.toastMessages.errorDeletingTask);
     } finally {
       toggleDeleteModal();
@@ -1888,7 +1890,7 @@ const TaskDetail: React.FC<TaskDetailProps> = ({
             }
           });
       } catch (error) {
-        console.log(error);
+        htLogger.info(error);
       }
     }
   };
@@ -1914,13 +1916,13 @@ const TaskDetail: React.FC<TaskDetailProps> = ({
   // --------------- update priorirty
   useEffect(() => {
     setPriority_(priorityForTaskTQ);
-    console.log("🚀 ~ TaskDetail ~ priorityForTaskTQ:", priorityForTaskTQ);
+    htLogger.info("🚀 ~ TaskDetail ~ priorityForTaskTQ:", priorityForTaskTQ);
   }, [priorityForTaskTQ]);
 
   // --------------- update estimate
   useEffect(() => {
     setEstimate_(estimateForTaskTQ);
-    console.log("🚀 ~ TaskDetail ~ estimateForTaskTQ:", estimateForTaskTQ);
+    htLogger.info("🚀 ~ TaskDetail ~ estimateForTaskTQ:", estimateForTaskTQ);
   }, [estimateForTaskTQ]);
 
   // Keep the @mention project scope in sync with the ticket being viewed.
@@ -2335,8 +2337,8 @@ const TaskDetail: React.FC<TaskDetailProps> = ({
   }, [showAiChatInterface]);
 
   useEffect(() => {
-    console.log("🚀 ~ parsed task priority:", _parsedTask.priority);
-    console.log("🚀 ~ parsed task estimate:", _parsedTask.estimate);
+    htLogger.info("🚀 ~ parsed task priority:", _parsedTask.priority);
+    htLogger.info("🚀 ~ parsed task estimate:", _parsedTask.estimate);
   }, []);
 
   focusManager.setEventListener(onWindowFocus);

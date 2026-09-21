@@ -1,5 +1,7 @@
 "use client";
 
+import { env as appEnv } from "#env";
+import { logger as htLogger } from "#logger";
 import { useCallback, useEffect, useLayoutEffect, useRef } from "react";
 import { usePathname } from "next/navigation";
 import type { PostHogInterface } from "posthog-js/dist/module.slim";
@@ -324,7 +326,7 @@ export default function PostHogAnalytics({
     if (identity.isGuest) posthog.startSessionRecording();
     appliedIdentityRef.current = identity;
     void installAuthenticatedProjectWebVitals().catch((error) => {
-      console.error("[posthog] web vitals initialization failed", error);
+      htLogger.error("[posthog] web vitals initialization failed", error);
     });
   }, [
     authenticatedIsGuest,
@@ -333,7 +335,7 @@ export default function PostHogAnalytics({
   ]);
 
   useEffect(() => {
-    const key = process.env.NEXT_PUBLIC_POSTHOG_KEY;
+    const key = appEnv.NEXT_PUBLIC_POSTHOG_KEY;
     if (!key) return;
     const initialPageview = initialPageviewRef.current ?? {
       href: window.location.href,
@@ -386,7 +388,7 @@ export default function PostHogAnalytics({
         const identity = latestIdentityRef.current;
         posthog.init(key, {
           api_host:
-            process.env.NEXT_PUBLIC_POSTHOG_HOST || "https://eu.i.posthog.com",
+            appEnv.NEXT_PUBLIC_POSTHOG_HOST || "https://eu.i.posthog.com",
           // api_host is our own proxy domain, which posthog-js cannot map back to a
           // region, so it would send toolbar/survey links to the US app without this.
           ui_host: "https://eu.posthog.com",
@@ -470,10 +472,10 @@ export default function PostHogAnalytics({
         );
         analyticsInitializationReadyRef.current = true;
         await installAuthenticatedProjectWebVitals().catch((error) => {
-          console.error("[posthog] web vitals initialization failed", error);
+          htLogger.error("[posthog] web vitals initialization failed", error);
         });
       } catch (error) {
-        console.error("[posthog] initialization failed", error);
+        htLogger.error("[posthog] initialization failed", error);
       }
     };
 

@@ -1,3 +1,5 @@
+import { env as appEnv } from "#env";
+import { logger as htLogger } from "#logger";
 /**
  * @fileoverview Authentication module that manages user authentication,
  * handles user data persistence, and manages redirections based on user state.
@@ -126,8 +128,8 @@ export const AuthProvider = ({
   const hasReverseBridgedLegacySession = useRef(false);
   const authenticatedAccountId = authenticatedUserId ?? currentUserCookie?.id;
   const isDevelopmentEnv =
-    (typeof process !== "undefined" && process.env.development === "true") ||
-    process.env.NODE_ENV !== "production";
+    (typeof process !== "undefined" && appEnv.development === "true") ||
+    appEnv.NODE_ENV !== "production";
 
   /**
    * Query to fetch user data when user cookie is available
@@ -219,10 +221,10 @@ export const AuthProvider = ({
         const variant = urlParams.get(authConfig.abTest.urlParam);
         if (variant) {
           abTestVariant = variant;
-          console.log("🧪 AB Test Variant detected (email login):", variant);
+          htLogger.info("🧪 AB Test Variant detected (email login):", variant);
         }
       } catch (e) {
-        console.error("Error parsing URL params:", e);
+        htLogger.error("Error parsing URL params:", e);
       }
       // Invalidate projects cache to ensure fresh data (especially for instant signup users)
       queryClient.invalidateQueries({ queryKey: ["projectsAll"] });
@@ -252,7 +254,7 @@ export const AuthProvider = ({
   useEffect(() => {
     if (
       typeof window === 'undefined' ||
-      process.env.NEXT_PUBLIC_BETTER_AUTH_ENABLED !== '1' ||
+      appEnv.NEXT_PUBLIC_BETTER_AUTH_ENABLED !== '1' ||
       !authenticatedAccountId ||
       hasBridgedBetterAuthSession.current
     ) {
@@ -277,7 +279,7 @@ export const AuthProvider = ({
   useEffect(() => {
     if (
       typeof window === 'undefined' ||
-      process.env.NEXT_PUBLIC_BETTER_AUTH_ENABLED !== '1' ||
+      appEnv.NEXT_PUBLIC_BETTER_AUTH_ENABLED !== '1' ||
       hasReverseBridgedLegacySession.current
     ) {
       return;
@@ -405,7 +407,7 @@ export const AuthProvider = ({
             };
           }
         } catch (error) {
-          console.error("Error joining project from share URL:", error);
+          htLogger.error("Error joining project from share URL:", error);
         }
       }
   
@@ -420,7 +422,7 @@ export const AuthProvider = ({
       );
       // Check if this is a new mobile user - if so, show the blocking overlay
       if (isNewUser && isMbl) {
-        console.log('🚫 Mobile signup detected - showing desktop redirect overlay');
+        htLogger.info('🚫 Mobile signup detected - showing desktop redirect overlay');
         showMobileOverlay(user.email ?? '');
         // Still calculate the URL for when they dismiss the overlay
         const url = getRedirectUrl(
@@ -479,7 +481,7 @@ export const AuthProvider = ({
       router.push(url);
     } catch (error) {
       setIsAuthenticating(false);
-      console.error("Error in post-authentication handling:", error);
+      htLogger.error("Error in post-authentication handling:", error);
       
     }
     finally{
@@ -635,7 +637,7 @@ export const AuthProvider = ({
     });
 
     if (response.status === 101) {
-      console.log("user was already a part of this project");
+      htLogger.info("user was already a part of this project");
     }
     return response;
   };
@@ -702,13 +704,13 @@ const getRedirectUrl = (
   isNewUser?: boolean
 ): string => {
   const { onboardingTourStatus, isVerified } = user?.UserSetting || {};
-  console.log(
+  htLogger.info(
     "🤔 ~ getRedirectUrl ~ onboardingTourStatus:",
     onboardingTourStatus
   );
-  console.log("🧪 ~ getRedirectUrl ~ abTestVariant:", abTestVariant);
-  console.log("👤 ~ getRedirectUrl ~ isNewUser:", isNewUser);
-  console.log("✅ ~ getRedirectUrl ~ isVerified:", isVerified);
+  htLogger.info("🧪 ~ getRedirectUrl ~ abTestVariant:", abTestVariant);
+  htLogger.info("👤 ~ getRedirectUrl ~ isNewUser:", isNewUser);
+  htLogger.info("✅ ~ getRedirectUrl ~ isVerified:", isVerified);
 
   // Shared task URL generation helper
   const getSharedTaskUrl = () =>
@@ -723,7 +725,7 @@ const getRedirectUrl = (
   // // For instant signup users (isVerified: false), skip onboarding and go straight to app
   // // They will see the verification modal instead
   // if (isVerified === false) {
-  //   console.log("🔐 Instant signup user - skipping onboarding, going to app");
+  //   debug.log("🔐 Instant signup user - skipping onboarding, going to app");
   //   return sharedTask ? getSharedTaskUrl() : getProjectUrl();
   // }
 

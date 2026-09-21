@@ -1,5 +1,5 @@
+import { getAuthSession, withAuth } from "#with-auth";
 import type { NextApiRequest, NextApiResponse } from "next";
-import { getSessionUser } from "@/lib/auth/getSessionUser";
 import getProjectsLastActivity from "@/utils/controllers/projects/lastActivity";
 
 const handler = async (req: NextApiRequest, res: NextApiResponse) => {
@@ -9,7 +9,7 @@ const handler = async (req: NextApiRequest, res: NextApiResponse) => {
   // Identity comes from the verified session, never from a client-readable
   // cookie: this returns which boards an account can see and when each last
   // moved, so a spoofable id would leak that across accounts.
-  const session = await getSessionUser(
+  const session = await getAuthSession(
     new Headers(req.headers as Record<string, string>),
   );
   if (!session) return res.status(401).json({ message: "Unauthorized" });
@@ -18,4 +18,4 @@ const handler = async (req: NextApiRequest, res: NextApiResponse) => {
   return res.status(response.status).json(response.json);
 };
 
-export default handler;
+export default withAuth(handler, { authenticateInHandler: true });

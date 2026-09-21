@@ -1,3 +1,4 @@
+import { logger as htLogger } from "#logger";
 import prisma from "@/lib/prisma";
 
 const deleteDrafts = async (
@@ -13,13 +14,13 @@ const deleteDrafts = async (
         userId: userId,
       },
     });
-    console.log("🚀 ~ draftsToDelete:", draftsToDelete);
+    htLogger.info("🚀 ~ draftsToDelete:", draftsToDelete);
 
     return {
       status: 200,
     };
   } catch (error) {
-    console.log("🚀 ~ deleteProject ~ error:", error);
+    htLogger.info("🚀 ~ deleteProject ~ error:", error);
     return {
       status: 500,
       json: { error: "Failed to add new section" },

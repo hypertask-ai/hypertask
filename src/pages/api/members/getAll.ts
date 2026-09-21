@@ -1,6 +1,7 @@
+import { logger as htLogger } from "#logger";
+import { getAuthSession, withAuth } from "#with-auth";
 import { NextApiHandler, NextApiRequest, NextApiResponse } from "next";
 import membersGetAll from "@/utils/controllers/members/getAll";
-import { getSessionUser } from "@/lib/auth/getSessionUser";
 import prisma from "@/lib/prisma";
 import { getProjectWhere } from "@/utils/controllers/projects/getAllIncludes";
 
@@ -19,7 +20,7 @@ const handler: NextApiHandler = async (
       return res.status(200).json([]);
     }
     const userId = (
-      await getSessionUser(new Headers(req.headers as Record<string, string>))
+      await getAuthSession(new Headers(req.headers as Record<string, string>))
     )?.userId;
     if (!userId) return res.status(401).json({ message: "Unauthorized" });
 
@@ -41,9 +42,9 @@ const handler: NextApiHandler = async (
     );
     return res.status(response.status).json(response.json);
   } catch (error) {
-    console.error("GET /api/members/getAll failed", error);
+    htLogger.error("GET /api/members/getAll failed", error);
     return res.status(500).json({ message: "Internal server error" });
   }
 };
 
-export default handler;
+export default withAuth(handler, { authenticateInHandler: true });

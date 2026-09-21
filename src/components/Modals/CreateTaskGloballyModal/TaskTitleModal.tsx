@@ -1,3 +1,4 @@
+import { logger as htLogger } from "#logger";
 import { MobileViewContext } from '@/lib/contexts/mobileContext';
 import React, { useCallback, useContext, useEffect, useRef, useState } from 'react'
 import useSetStickyHeight from '@/hooks/Task Detail/useSetStickyHeight';
@@ -38,7 +39,7 @@ const TaskTitleModal = ({ mobileCompact = false }: { mobileCompact?: boolean }) 
             // document.getElementById("title-input")?.blur()
             }
         if (e.key === "Escape") {
-            console.log("🚀 ~ TaskTitleModal ~ e:", e.key)
+            htLogger.info("🚀 ~ TaskTitleModal ~ e:", e.key)
             setEditMode(null);
             setTimeout(() => {
                 document.getElementById(DIV_ID_CONSTANTS.titleInputModal)?.blur()
@@ -49,7 +50,7 @@ const TaskTitleModal = ({ mobileCompact = false }: { mobileCompact?: boolean }) 
         if (e.keyCode === 74 && cmdControl) {
             e.preventDefault()
             endTour()
-            console.log("🚀 ~ TaskTitleModal ~ endTour is not working");
+            htLogger.info("🚀 ~ TaskTitleModal ~ endTour is not working");
             setEditMode("Description-ai")
             setCurrentFocusedElement("Description")
             return true

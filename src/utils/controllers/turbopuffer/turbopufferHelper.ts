@@ -1,3 +1,5 @@
+import { env as appEnv } from "#env";
+import { logger as htLogger } from "#logger";
 import { Prisma } from "@prisma/client";
 import { createHash } from "crypto";
 
@@ -402,7 +404,7 @@ export function buildCustomInstructionFileRows(args: {
 export async function embedTexts(texts: string[]): Promise<number[][]> {
   if (texts.length === 0) return [];
 
-  const apiKey = process.env.TURBOPUFFER_EMBEDDINGS_API_KEY;
+  const apiKey = appEnv.TURBOPUFFER_EMBEDDINGS_API_KEY;
   if (!apiKey) {
     throw new Error("TURBOPUFFER_EMBEDDINGS_API_KEY is not set");
   }
@@ -516,7 +518,7 @@ export async function upsertTaskToTurbopuffer(taskId: number) {
     if (!task) return;
     return upsertTaskRowsToTurbopuffer([buildTurbopufferTaskRow(task)]);
   } catch (error) {
-    console.log("turbopuffer upsertTaskToTurbopuffer error:", error);
+    htLogger.info("turbopuffer upsertTaskToTurbopuffer error:", error);
   }
 }
 
@@ -535,7 +537,7 @@ export async function upsertTaskRowsToTurbopuffer(
   // If embeddings are unavailable, skip rather than crash — the row can be
   // reindexed later. Backfill logs surface any gap.
   if (!hasVectors) {
-    console.error(
+    htLogger.error(
       `turbopuffer task upsert skipped: embeddings unavailable for ${rows.length} row(s)`
     );
     return;
@@ -555,10 +557,10 @@ export async function deleteTaskInTurbopuffer(taskId: number) {
       turbopufferNamespaces.task.name,
       [taskId]
     );
-    console.log("turbopuffer deleteTaskInTurbopuffer result:", result);
+    htLogger.info("turbopuffer deleteTaskInTurbopuffer result:", result);
     return result;
   } catch (error) {
-    console.log("turbopuffer deleteTaskInTurbopuffer error:", error);
+    htLogger.info("turbopuffer deleteTaskInTurbopuffer error:", error);
   }
 }
 
@@ -578,7 +580,7 @@ export async function upsertCommentToTurbopuffer(commentId: number) {
 
     return upsertCommentRowsToTurbopuffer([row]);
   } catch (error) {
-    console.log("turbopuffer upsertCommentToTurbopuffer error:", error);
+    htLogger.info("turbopuffer upsertCommentToTurbopuffer error:", error);
   }
 }
 
@@ -597,7 +599,7 @@ export async function upsertCommentRowsToTurbopuffer(
   // If embeddings are unavailable, skip rather than crash — the row can be
   // reindexed later. Backfill logs surface any gap.
   if (!hasVectors) {
-    console.error(
+    htLogger.error(
       `turbopuffer comment upsert skipped: embeddings unavailable for ${rows.length} row(s)`
     );
     return;
@@ -624,7 +626,7 @@ export async function upsertPageToTurbopuffer(pageId: number) {
     if (!page) return;
     return upsertPageRowsToTurbopuffer([buildTurbopufferPageRow(page)]);
   } catch (error) {
-    console.log("turbopuffer upsertPageToTurbopuffer error:", error);
+    htLogger.info("turbopuffer upsertPageToTurbopuffer error:", error);
   }
 }
 
@@ -640,7 +642,7 @@ export async function upsertPageRowsToTurbopuffer(
   );
 
   if (!hasVectors) {
-    console.error(
+    htLogger.error(
       `turbopuffer page upsert skipped: embeddings unavailable for ${rows.length} row(s)`
     );
     return;
@@ -669,7 +671,7 @@ export async function upsertAllCommentsToTurbopuffer(taskId: number) {
     if (commentRows.length === 0) return;
     return upsertCommentRowsToTurbopuffer(commentRows);
   } catch (error) {
-    console.log("turbopuffer upsertAllCommentsToTurbopuffer error:", error);
+    htLogger.info("turbopuffer upsertAllCommentsToTurbopuffer error:", error);
   }
 }
 
@@ -692,10 +694,10 @@ export async function deleteManyCommentsInTurbopuffer(taskId: number) {
       turbopufferNamespaces.comment.name,
       commentIds
     );
-    console.log("turbopuffer deleteManyCommentsInTurbopuffer result:", result);
+    htLogger.info("turbopuffer deleteManyCommentsInTurbopuffer result:", result);
     return result;
   } catch (error) {
-    console.error("turbopuffer deleteManyCommentsInTurbopuffer error:", error);
+    htLogger.error("turbopuffer deleteManyCommentsInTurbopuffer error:", error);
   }
 }
 
@@ -705,10 +707,10 @@ export async function deleteCommentInTurbopuffer(commentId: number) {
       turbopufferNamespaces.comment.name,
       [commentId]
     );
-    console.log("turbopuffer deleteCommentInTurbopuffer result:", result);
+    htLogger.info("turbopuffer deleteCommentInTurbopuffer result:", result);
     return result;
   } catch (error) {
-    console.log("turbopuffer deleteCommentInTurbopuffer error:", error);
+    htLogger.info("turbopuffer deleteCommentInTurbopuffer error:", error);
   }
 }
 
@@ -718,10 +720,10 @@ export async function deletePageFromTurbopuffer(pageId: number) {
       turbopufferNamespaces.page.name,
       [pageId]
     );
-    console.log("turbopuffer deletePageFromTurbopuffer result:", result);
+    htLogger.info("turbopuffer deletePageFromTurbopuffer result:", result);
     return result;
   } catch (error) {
-    console.log("turbopuffer deletePageFromTurbopuffer error:", error);
+    htLogger.info("turbopuffer deletePageFromTurbopuffer error:", error);
   }
 }
 
@@ -752,7 +754,7 @@ export async function upsertCustomInstructionFileRowsToTurbopuffer(
   );
 
   if (!hasVectors) {
-    console.error(
+    htLogger.error(
       `turbopuffer custom instruction file upsert skipped: embeddings unavailable for ${rows.length} row(s)`
     );
     return;
@@ -848,7 +850,7 @@ export async function searchTasks({
       );
       return pinExactTaskRows(exactRows, searchRows, topK);
     } catch (error) {
-      console.error(
+      htLogger.error(
         "turbopuffer searchTasks hybrid error, falling back to BM25:",
         error
       );
@@ -862,7 +864,7 @@ export async function searchTasks({
     ]);
     return pinExactTaskRows(exactRows, searchRows, topK);
   } catch (error) {
-    console.error("turbopuffer searchTasks error:", error);
+    htLogger.error("turbopuffer searchTasks error:", error);
     return [];
   }
 }
@@ -916,7 +918,7 @@ export async function searchComments({
         limit
       );
     } catch (error) {
-      console.error(
+      htLogger.error(
         "turbopuffer searchComments hybrid error, falling back to BM25:",
         error
       );
@@ -926,7 +928,7 @@ export async function searchComments({
   try {
     return await searchCommentRowsWithBm25(query, topK, filters, limit);
   } catch (error) {
-    console.error("turbopuffer searchComments error:", error);
+    htLogger.error("turbopuffer searchComments error:", error);
     return [];
   }
 }
@@ -982,7 +984,7 @@ export async function searchCustomInstructionFiles({
         normalizeCustomInstructionFileRow
       );
     } catch (error) {
-      console.error(
+      htLogger.error(
         "turbopuffer searchCustomInstructionFiles hybrid error, falling back to BM25:",
         error
       );
@@ -1003,7 +1005,7 @@ export async function searchCustomInstructionFiles({
       (response.rows ?? []) as unknown as TurbopufferCustomInstructionFileRow[]
     ).map(normalizeCustomInstructionFileRow);
   } catch (error) {
-    console.error("turbopuffer searchCustomInstructionFiles error:", error);
+    htLogger.error("turbopuffer searchCustomInstructionFiles error:", error);
     return [];
   }
 }
@@ -1035,7 +1037,7 @@ export async function listCustomInstructionFileRows(args: {
       (response.rows ?? []) as unknown as TurbopufferCustomInstructionFileRow[]
     ).map(normalizeCustomInstructionFileRow);
   } catch (error) {
-    console.error("turbopuffer listCustomInstructionFileRows error:", error);
+    htLogger.error("turbopuffer listCustomInstructionFileRows error:", error);
     throw error;
   }
 }
@@ -1149,7 +1151,7 @@ async function embedRowsForWrite<T extends { searchText: string }>(
       hasVectors: true,
     };
   } catch (error) {
-    console.error(
+    htLogger.error(
       `${context} embedding error, upserting without vectors:`,
       error
     );
@@ -1164,7 +1166,7 @@ async function embedQueryForSearch(
   try {
     return await embedText(query);
   } catch (error) {
-    console.error(`${context} embedding error, using BM25 only:`, error);
+    htLogger.error(`${context} embedding error, using BM25 only:`, error);
     return null;
   }
 }
@@ -1227,7 +1229,7 @@ async function searchExactTaskRowsByTicket(
       );
     });
   } catch (error) {
-    console.error("turbopuffer searchTasks exact lookup error:", error);
+    htLogger.error("turbopuffer searchTasks exact lookup error:", error);
     return [];
   }
 }

@@ -1,5 +1,6 @@
 "use client";
 
+import { env as appEnv } from "#env";
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { CircleCheck, Sparkles } from "lucide-react";
 
@@ -100,7 +101,7 @@ const TOOL_METHODS: Partial<Record<ToolChoice, ConnectMethod[]>> = {
 };
 
 const REST_BASE_URL =
-  process.env.NEXT_PUBLIC_BASEURL || "https://app.hypertask.ai";
+  appEnv.NEXT_PUBLIC_BASEURL || "https://app.hypertask.ai";
 
 interface ConnectionStatusProps {
   label: string;

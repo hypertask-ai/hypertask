@@ -1,3 +1,4 @@
+import { withAuth } from "#with-auth";
 import { NextResponse } from "next/server";
 import { getTeamGatewayFunding } from "@/app/api/ai/_lib/byokKeys";
 import { getServerCookieUser } from "@/lib/auth/serverUser";
@@ -15,7 +16,7 @@ const displayNameForUser = (user: {
   id: number;
 }) => user.displayName?.trim() || user.email || `User ${user.id}`;
 
-export async function GET(request: Request) {
+async function GETHandler(request: Request) {
   const user = await getServerCookieUser();
   if (!user) {
     return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
@@ -84,3 +85,5 @@ export async function GET(request: Request) {
     fundingSource: funding?.source ?? null,
   });
 }
+
+export const GET = withAuth(GETHandler, { authenticateInHandler: true });

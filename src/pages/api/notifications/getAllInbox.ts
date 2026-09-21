@@ -1,3 +1,5 @@
+import { logger as htLogger } from "#logger";
+import { withAuth } from "#with-auth";
 import { notificationStore } from "@/utils/controllers/notifications";
 // Next.js API route support: https://nextjs.org/docs/api-routes/introduction
 
@@ -124,7 +126,7 @@ const getArchivedInboxMeta = async (
   };
 };
 
-export default  async function handler(
+async function handler(
   req: NextApiRequest,
   res: NextApiResponse
 ) {
@@ -162,7 +164,9 @@ export default  async function handler(
 
     return res.status(200).json(notificationsToReturn)
   } catch (error) {
-      console.log(error)
+      htLogger.info(error)
       return res.status(500).json(error)
   }
 }
+
+export default withAuth(handler, { authenticateInHandler: true });

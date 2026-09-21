@@ -1,3 +1,5 @@
+import { logger as htLogger } from "#logger";
+import { withoutAuth } from "#with-auth";
 import { createHash } from "node:crypto";
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
@@ -58,7 +60,7 @@ async function isRateLimited(request: NextRequest) {
   return ipCount > PER_IP_RATE_LIMIT || globalCount > GLOBAL_RATE_LIMIT;
 }
 
-export async function POST(request: NextRequest) {
+async function POSTHandler(request: NextRequest) {
   try {
     const contentLength = Number(request.headers.get("content-length") || 0);
     if (contentLength > MAX_BODY_BYTES) {
@@ -94,8 +96,10 @@ export async function POST(request: NextRequest) {
       source: parsed.data.source === "handled" ? "handled" : "client",
     });
   } catch (error) {
-    console.error("[api/errors] failed", error);
+    htLogger.error("[api/errors] failed", error);
   }
 
   return new NextResponse(null, { status: 204 });
 }
+
+export const POST = withoutAuth(POSTHandler);

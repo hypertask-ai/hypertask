@@ -1,3 +1,5 @@
+import { logger as htLogger } from "#logger";
+import { withoutAuth } from "#with-auth";
 import { NextRequest, NextResponse } from 'next/server'
 
 import { buildFieldError } from '@/lib/mcp/fieldError'
@@ -36,7 +38,7 @@ type CreatePageBody = {
 
 const CONTENT_TYPES = ['markdown', 'html', 'html_canvas'] as const
 
-export async function POST(request: NextRequest) {
+async function POSTHandler(request: NextRequest) {
   try {
     const ctx = await validateMcpAuth(request)
     if (!ctx) {
@@ -263,7 +265,9 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    console.error('[MCP Create Page] Error:', error)
+    htLogger.error('[MCP Create Page] Error:', error)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
 }
+
+export const POST = withoutAuth(POSTHandler);

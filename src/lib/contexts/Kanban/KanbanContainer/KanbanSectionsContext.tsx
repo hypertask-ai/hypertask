@@ -1,3 +1,4 @@
+import { logger as htLogger } from "#logger";
 
 
 // use this as a template for creating contexts. the usage is as .
@@ -30,7 +31,7 @@ interface KanbanSectionsProps {
 
 export const KanbanSectionsProvider: React.FC<KanbanSectionsProps> = ({ children,sections,filteredSections }) => {
   const [unfilteredSections, setUnfilteredSections] = useState<ISection[]>(sections);
-  console.log("🚀 ~ unfilteredSections:", unfilteredSections)
+  htLogger.info("🚀 ~ unfilteredSections:", unfilteredSections)
   
   // Combine state and setState into an object
   const modalState: ISectionsState = {

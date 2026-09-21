@@ -1,3 +1,4 @@
+import { logger as htLogger } from "#logger";
 // import { performTaskDelete, performTaskUpdate, performTaskCreate } from '../utils/api';
 
 import { toggleStarPin } from "@/lib/constants/APIRouteConstants"
@@ -27,7 +28,7 @@ export function undoTaskCreate(data: any) {
 
 
 export async function UndoInboxArchive(data:any){
-  console.log("🚀 ~ UndoInboxArchive ~ data:", data)
+  htLogger.info("🚀 ~ UndoInboxArchive ~ data:", data)
   if (data.isInboxZeroOperation) {
     return fetch('/api/notifications/inbox-zero/undo', {
       method: 'POST',

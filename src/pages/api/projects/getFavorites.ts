@@ -1,3 +1,4 @@
+import { withAuth } from "#with-auth";
 import { NextApiHandler, NextApiRequest, NextApiResponse } from "next";
 import getAllMinimal from "@/utils/controllers/projects/getAllMinimal";
 
@@ -17,4 +18,4 @@ const handler: NextApiHandler = async (req: NextApiRequest, res: NextApiResponse
     }
 };
 
-export default handler;
+export default withAuth(handler, { authenticateInHandler: true });

@@ -1,3 +1,5 @@
+import { logger as htLogger } from "#logger";
+import { withoutAuth } from "#with-auth";
 import { NextRequest, NextResponse } from 'next/server'
 
 import prisma from '@/lib/prisma'
@@ -9,7 +11,7 @@ import { htmlToMarkdown } from '@/utils/controllers/pages/htmlToMarkdown'
 
 // GET /api/mcp/tasks/description-versions?task_id=123
 // History of a task's description. Newest version first. Content as markdown.
-export async function GET(request: NextRequest) {
+async function GETHandler(request: NextRequest) {
   try {
     const ctx = await validateMcpAuth(request)
     if (!ctx) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
@@ -78,7 +80,9 @@ export async function GET(request: NextRequest) {
       })),
     })
   } catch (error) {
-    console.error('[MCP Task Description Versions] Error:', error)
+    htLogger.error('[MCP Task Description Versions] Error:', error)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
 }
+
+export const GET = withoutAuth(GETHandler);

@@ -1,3 +1,5 @@
+import { logger as htLogger } from "#logger";
+import { withAuth } from "#with-auth";
 import { NextApiHandler, NextApiRequest, NextApiResponse } from "next";
 
 import { normalizeDomain } from "@/lib/auth/emailDomain";
@@ -59,9 +61,9 @@ const handler: NextApiHandler = async (
 
     return res.status(200).json({ message: "success" });
   } catch (error) {
-    console.log(error);
+    htLogger.info(error);
     return res.status(400).json({ message: "error" });
   }
 };
 
-export default handler;
+export default withAuth(handler, { authenticateInHandler: true });

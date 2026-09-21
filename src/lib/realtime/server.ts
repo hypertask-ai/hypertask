@@ -1,3 +1,5 @@
+import { env as appEnv } from "#env";
+import { logger as htLogger } from "#logger";
 import Pusher from "pusher";
 import { waitUntil } from "@vercel/functions";
 import {
@@ -36,13 +38,13 @@ export {
 // Speaks the Pusher protocol, so this works against hosted Pusher, Ably, or a
 // self-hosted/local Soketi server by swapping env vars only.
 
-const APP_ID = process.env.PUSHER_APP_ID;
-const KEY = process.env.PUSHER_KEY;
-const SECRET = process.env.PUSHER_SECRET;
-const HOST = process.env.PUSHER_HOST; // set for Soketi / self-host
-const PORT = process.env.PUSHER_PORT;
-const USE_TLS = process.env.PUSHER_USE_TLS === "true";
-const CLUSTER = process.env.PUSHER_CLUSTER || "mt1";
+const APP_ID = appEnv.PUSHER_APP_ID;
+const KEY = appEnv.PUSHER_KEY;
+const SECRET = appEnv.PUSHER_SECRET;
+const HOST = appEnv.PUSHER_HOST; // set for Soketi / self-host
+const PORT = appEnv.PUSHER_PORT;
+const USE_TLS = appEnv.PUSHER_USE_TLS === "true";
+const CLUSTER = appEnv.PUSHER_CLUSTER || "mt1";
 
 export function isRealtimeConfigured(): boolean {
   return Boolean(APP_ID && KEY && SECRET);
@@ -86,7 +88,7 @@ export async function broadcast(
       excludeSocketId ? { socket_id: excludeSocketId } : undefined
     )
     .then(() => undefined)
-    .catch((e) => console.warn("[realtime] broadcast failed", channel, event, e));
+    .catch((e) => htLogger.warn("[realtime] broadcast failed", channel, event, e));
   // Callers fire-and-forget (`void broadcast(...)`) so mutations never block on
   // the Pusher HTTP call. But on Vercel the function freezes the instant the
   // response is sent, so that detached promise is usually dropped and the event

@@ -1,3 +1,6 @@
+import { env as appEnv } from "#env";
+import { logger as htLogger } from "#logger";
+import { withoutAuth } from "#with-auth";
 import { NextRequest, NextResponse } from "next/server";
 
 import {
@@ -12,11 +15,11 @@ export const maxDuration = 300;
 // HTPR-4303: hourly Vercel cron (vercel.json) that hard-deletes anonymous
 // demo guests idle for 24h+, cascading their boards/teams. Worst case for an
 // unauthorized caller is an early run of the same cleanup, but gate anyway.
-export async function GET(request: NextRequest) {
+async function GETHandler(request: NextRequest) {
   if (
     !hasValidCronAuthorization(
       request.headers.get("authorization"),
-      process.env.CRON_SECRET,
+      appEnv.CRON_SECRET,
     )
   ) {
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });
@@ -33,9 +36,11 @@ export async function GET(request: NextRequest) {
     } catch (error) {
       // One bad guest must not abort the batch; the next run retries it.
       failures.push(guestId);
-      console.error(`guest cleanup failed for user ${guestId}`, error);
+      htLogger.error(`guest cleanup failed for user ${guestId}`, error);
     }
   }
 
   return NextResponse.json({ deleted, failed: failures });
 }
+
+export const GET = withoutAuth(GETHandler);

@@ -12,14 +12,14 @@ export const isMobileDevice = async () => {
 
   const headersList = await headers();
   const userAgent = headersList.get("user-agent") || ""; // Fallback to empty string if header is not available
-  // console.log("🚀 ~ isMobileDevice ~ userAgent:", userAgent);
+  // debug.log("🚀 ~ isMobileDevice ~ userAgent:", userAgent);
 
   const uaParser = new UAParser(userAgent);
-  // console.log("🚀 ~ isMobileDevice ~ uaParser:", uaParser);
+  // debug.log("🚀 ~ isMobileDevice ~ uaParser:", uaParser);
   const OS = uaParser.getOS();
   const device = uaParser.getDevice() || {}; // Fallback to empty object if no device information is available
-  // console.log("🚀 ~ isMobileDevice ~ OS:", OS);
-  // console.log("🚀 ~ isMobileDevice ~ device:", device);
+  // debug.log("🚀 ~ isMobileDevice ~ OS:", OS);
+  // debug.log("🚀 ~ isMobileDevice ~ device:", device);
 
   const { type = null, vendor = null } = device; // Use destructuring with default values
 

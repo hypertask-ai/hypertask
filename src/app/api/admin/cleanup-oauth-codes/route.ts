@@ -1,3 +1,6 @@
+import { env as appEnv } from "#env";
+import { logger as htLogger } from "#logger";
+import { withAuth } from "#with-auth";
 import { NextRequest, NextResponse } from 'next/server'
 import { cleanupAllOAuthCodes } from '@/lib/oauth/cleanup'
 
@@ -9,15 +12,15 @@ import { cleanupAllOAuthCodes } from '@/lib/oauth/cleanup'
  * 
  * Security: protected by the server-only ADMIN_SECRET bearer token
  */
-export async function POST(request: NextRequest) {
+async function POSTHandler(request: NextRequest) {
   try {
-    const adminSecret = process.env.ADMIN_SECRET
+    const adminSecret = appEnv.ADMIN_SECRET
     const authHeader = request.headers.get('Authorization')
     if (!adminSecret || authHeader !== `Bearer ${adminSecret}`) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    console.log('🧹 Starting OAuth authorization code cleanup via API...')
+    htLogger.info('🧹 Starting OAuth authorization code cleanup via API...')
     
     const result = await cleanupAllOAuthCodes()
     
@@ -28,7 +31,7 @@ export async function POST(request: NextRequest) {
       timestamp: new Date().toISOString()
     })
   } catch (error) {
-    console.error('❌ OAuth cleanup failed:', error)
+    htLogger.error('❌ OAuth cleanup failed:', error)
     return NextResponse.json(
       { 
         success: false, 
@@ -39,3 +42,5 @@ export async function POST(request: NextRequest) {
     )
   }
 }
+
+export const POST = withAuth(POSTHandler, { authenticateInHandler: true });

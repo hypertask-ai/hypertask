@@ -1,8 +1,9 @@
+import { env as appEnv } from "#env";
 export const AUTO_DESCRIPTION_SUGGESTION_DELAY_MS = 5_000;
 
 export function isNewTaskAutoDescriptionEnabled() {
   // HTPR-6157 ships dark: only an explicit 1 may enable either request path.
-  return process.env.NEXT_PUBLIC_NEW_TASK_AUTO_DESCRIPTION === "1";
+  return appEnv.NEXT_PUBLIC_NEW_TASK_AUTO_DESCRIPTION === "1";
 }
 
 export function buildTaskWriterPrompt(

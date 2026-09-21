@@ -1,3 +1,4 @@
+import { logger as htLogger } from "#logger";
 import { getRedis } from "../redis";
 
 export const RUNTIME_SNAPSHOT_TTL_SECONDS = 7 * 24 * 60 * 60;
@@ -236,7 +237,7 @@ export async function readAgentRuntimeSnapshot(
     }
     return value.snapshot;
   } catch (error) {
-    console.warn("[Agent runtime] Snapshot read failed:", error);
+    htLogger.warn("[Agent runtime] Snapshot read failed:", error);
     return null;
   }
 }

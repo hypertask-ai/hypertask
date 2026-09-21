@@ -1,3 +1,4 @@
+import { logger as htLogger } from "#logger";
 import { NextRequest, NextResponse } from 'next/server'
 import { cookies } from 'next/headers'
 import { SESSION_COOKIE, verifySession } from '@/lib/auth/session'
@@ -158,7 +159,7 @@ async function issueCodeAndRedirect(
       },
     })
   } catch (error) {
-    console.error('Error storing authorization code:', error)
+    htLogger.error('Error storing authorization code:', error)
     return invalid('Failed to store authorization code', 'server_error', 500)
   }
 
@@ -267,7 +268,7 @@ export async function GET(request: NextRequest) {
       307
     )
   } catch (error) {
-    console.error('Error in OAuth authorize endpoint:', error)
+    htLogger.error('Error in OAuth authorize endpoint:', error)
     return invalid('Internal server error', 'server_error', 500)
   }
 }
@@ -340,7 +341,7 @@ export async function POST(request: NextRequest) {
       303
     )
   } catch (error) {
-    console.error('Error in OAuth authorize endpoint:', error)
+    htLogger.error('Error in OAuth authorize endpoint:', error)
     return invalid('Internal server error', 'server_error', 500)
   }
 }

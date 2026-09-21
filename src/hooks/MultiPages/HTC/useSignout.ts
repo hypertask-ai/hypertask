@@ -1,3 +1,4 @@
+import { logger as htLogger } from "#logger";
 import toast from "react-hot-toast";
 import { useResetRecoilState } from "@/lib/state";
 import useFcmToken from "@/hooks/General/useFcmToken";
@@ -19,7 +20,7 @@ export const useSignout = (_appHandler?: any) => {
         );
         localReadModelsCleared = await clearAllLocalReadModels();
       } catch (error) {
-        console.error("Could not delete local app data during sign out:", error);
+        htLogger.error("Could not delete local app data during sign out:", error);
       }
 
       if (!localReadModelsCleared) {
@@ -59,7 +60,7 @@ export const useSignout = (_appHandler?: any) => {
     try {
       resetAIChatInterface();
     } catch (error) {
-      console.error("Could not reset AI chat state during sign out:", error);
+      htLogger.error("Could not reset AI chat state during sign out:", error);
     }
 
     if (typeof window !== "undefined") {
@@ -76,20 +77,20 @@ export const useSignout = (_appHandler?: any) => {
           }
         });
       } catch (error) {
-        console.error("Could not clear browser state during sign out:", error);
+        htLogger.error("Could not clear browser state during sign out:", error);
       }
     }
 
     try {
       _appHandler?.();
     } catch (error) {
-      console.error("Could not reset app state during sign out:", error);
+      htLogger.error("Could not reset app state during sign out:", error);
     }
 
     try {
       await axios.post("/api/auth/force-signout");
     } catch (error) {
-      console.error("Could not clear httpOnly cookies during sign out:", error);
+      htLogger.error("Could not clear httpOnly cookies during sign out:", error);
     }
 
     if (typeof window !== "undefined") {

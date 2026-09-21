@@ -1,3 +1,4 @@
+import { logger as htLogger } from "#logger";
 /* eslint-disable jsx-a11y/alt-text */
 /* eslint-disable @next/next/no-img-element */
 import { settledPreviewFor } from "@/lib/media/heicToJpeg";
@@ -39,14 +40,14 @@ const ImageGallery = (props: IProps) => {
   const { files, mode, callbackAttachments, onUploadFailed, onUploadPendingChange, allowDelete, handleRemove, shouldUpload, variant = "default", backgroundTaskUploads = false } = props
   const [isModalOpen, setModalOpen] = useState(false);
   const [files_, setFiles] = useState<any[]>(files ?? [[]]);
-  // console.log("🚀 ~ ImageGallery ~ files_:", files_)
-  // console.log("🚀 ~ ImageGallery ~ files:", files)
+  // debug.log("🚀 ~ ImageGallery ~ files_:", files_)
+  // debug.log("🚀 ~ ImageGallery ~ files:", files)
   const [selectedFile, setSelectedFile] = useState<null | any>(null);
   const [canSave,setUploadingStateCreateTaskModal ] = useRecoilState(uploadingStateCreateTaskModalAtom)
-  // console.log("🚀 ~ ImageGallery ~ canSave:", canSave)
+  // debug.log("🚀 ~ ImageGallery ~ canSave:", canSave)
   const [uploadedFiles, setUploadedFiles] = useState<any[]>([]);
-  // console.log("🚀 ~ ImageGallery ~ uploadedFiles:", uploadedFiles)
-  
+  // debug.log("🚀 ~ ImageGallery ~ uploadedFiles:", uploadedFiles)
+
 
   const toggleModal = () => setModalOpen(prev=>!prev);
 
@@ -57,7 +58,7 @@ const ImageGallery = (props: IProps) => {
 
   useEffect(() => {
     setFiles(files);
-    
+
   }, [files]);
 
   useEffect(() => {
@@ -70,10 +71,10 @@ const ImageGallery = (props: IProps) => {
     return () => onUploadPendingChange(false);
   }, [files_, onUploadPendingChange, shouldUpload, uploadedFiles]);
 
-  
+
   const sendBack = useCallback(
     (attachmentReturned:any) => {
-      console.log("ran")
+      htLogger.info("ran")
       if (uploadedFiles.length===files_.length) return
       // here we will send back ALL THE STRINGS
       setUploadedFiles((prev)=>[...prev, attachmentReturned])
@@ -84,7 +85,7 @@ const ImageGallery = (props: IProps) => {
   useEffect(() => {
     if (mode!=="Creating task") return
     if (uploadedFiles.length !== files_.length){
-      console.log("Checking status: Upload in progress")
+      htLogger.info("Checking status: Upload in progress")
       setUploadingStateCreateTaskModal({
         uploaded:uploadedFiles.length,
         attached:files_.length,
@@ -92,30 +93,30 @@ const ImageGallery = (props: IProps) => {
       })
     }
     else{
-      console.log("Checking status: Ready to save")    
+      htLogger.info("Checking status: Ready to save")
       setUploadingStateCreateTaskModal({
         uploaded:uploadedFiles.length,
         attached:files_.length,
         canUpload:true
       })
-    } 
+    }
   }, [files_.length, uploadedFiles.length])
-  
+
   const removeHandler = createRemoveHandler({ mode, setUploadedFiles, handleRemove })
 
   useEffect(() => {
-    
+
     if (uploadedFiles.length===files_.length || files_.length===0){
         callbackAttachments&&callbackAttachments(uploadedFiles)
-    } 
-    
+    }
+
   }, [uploadedFiles.length, files_.length])
-  
+
   return (
     <>
       <div className={`flex flex-wrap gap-2 p-0 m-0 ${variant === "chat" ? "w-full min-w-0" : ""}`}>
         {files_.map(({ file,id }, index) => {
-          console.log("🚀 ~ ImageGallery ~ file:", file)
+          htLogger.info("🚀 ~ ImageGallery ~ file:", file)
           if (!file) return <></>
           return (
             <SingleFileInputPreview
@@ -211,7 +212,7 @@ const ImageGallery = (props: IProps) => {
                   src={
                     selectedFile.source
                       ? selectedFile.source
-                
+
                       : URL.createObjectURL(selectedFile)
                   }
                 />

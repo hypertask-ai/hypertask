@@ -1,3 +1,4 @@
+import { logger as htLogger } from "#logger";
 import { mergeAttributes, Node } from "@tiptap/core";
 import { Plugin, PluginKey } from "@tiptap/pm/state";
 import { ReactNodeViewRenderer } from "@tiptap/react";
@@ -95,7 +96,7 @@ export const Loom = Node.create<loomOptions>({
   },
 
   // parseHTML() {
-  //   console.log("🚀 ~ loomEmbed parseHTML called");
+  //   debug.log("🚀 ~ loomEmbed parseHTML called");
   //   return [
   //     {
   //       tag: 'iframe[src*="loom.com"]',
@@ -190,7 +191,7 @@ export const Loom = Node.create<loomOptions>({
               const text = event.clipboardData?.getData("text/plain");
               if (text && loom_REGEX.test(text)) {
                 const embedSrc = getEmbedUrlFromloomUrl({ url: text });
-                console.log("🚀 ~ addProseMirrorPlugins ~ embedSrc:", embedSrc);
+                htLogger.info("🚀 ~ addProseMirrorPlugins ~ embedSrc:", embedSrc);
 
                 this.editor.commands.setloomVideo({ src: text });
                 event.preventDefault(); // Prevent default paste behavior
@@ -215,7 +216,7 @@ export const Loom = Node.create<loomOptions>({
               const text = event.dataTransfer?.getData("text/plain");
               if (text && loom_REGEX.test(text)) {
                 const embedSrc = getEmbedUrlFromloomUrl({ url: text });
-                console.log("🚀 ~ addProseMirrorPlugins ~ embedSrc:", embedSrc);
+                htLogger.info("🚀 ~ addProseMirrorPlugins ~ embedSrc:", embedSrc);
                 const coordinates = view.posAtCoords({
                   left: event.clientX,
                   top: event.clientY,

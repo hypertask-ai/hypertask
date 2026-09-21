@@ -1,3 +1,4 @@
+import { logger as htLogger } from "#logger";
 import { randomUUID } from 'crypto'
 import type { Prisma } from '@prisma/client'
 import prisma from '@/lib/prisma'
@@ -153,7 +154,7 @@ async function resolveProbeTask(
     })
     return existing ?? { status: 'misconfigured', message: fixtureMissing(userId) }
   } catch (err) {
-    console.error('[task-write-probe] fixture lookup failed', err)
+    htLogger.error('[task-write-probe] fixture lookup failed', err)
     return { status: 'broken', message: 'probe fixture lookup failed' }
   }
 }
@@ -342,7 +343,7 @@ export async function runTaskWriteProbe(
       } catch (verifyErr) {
         // Details stay in the server log: this endpoint answers any authenticated
         // caller, and Prisma messages carry table, constraint, and SQL diagnostics.
-        console.error('[task-write-probe] post-rollback verification failed', verifyErr)
+        htLogger.error('[task-write-probe] post-rollback verification failed', verifyErr)
         return { status: 'inconclusive', reason: 'post-rollback verification query failed' }
       }
       if (leftover) {
@@ -368,7 +369,7 @@ export async function runTaskWriteProbe(
     }
     // Same reasoning as the verification read: the operator gets the details from
     // the server log, the caller gets a fixed string.
-    console.error('[task-write-probe] task-write path failed', err)
+    htLogger.error('[task-write-probe] task-write path failed', err)
     return { status: 'broken', error: 'task-write probe failed' }
   }
 

@@ -1,3 +1,4 @@
+import { logger as htLogger } from "#logger";
 import { ModalInput } from "@/components/Common/CommonModalComponents";
 import ConfirmDialog from "@/components/Modals/Common Modals/ConfirmDialog";
 import { useRecoilState } from "@/lib/state";
@@ -46,7 +47,7 @@ const ConfirmDeleteBoard = (props: Props) => {
             onClose(response, targetProject)
         }
         catch (error) {
-            console.error(error)
+            htLogger.error(error)
             setLoading(false)
         }
     }, [canDelete, currentProject?.id, loading, onClose, pathname, queryClient, router, targetProject])

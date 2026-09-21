@@ -1,5 +1,6 @@
 "use client";
 
+import { logger as htLogger } from "#logger";
 import type { ChangeEvent } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import axios from "axios";
@@ -150,7 +151,7 @@ const AiDefaultModelsSection = () => {
         }
       })
       .catch((error) => {
-        console.log("imageGeneration preference update error:", error);
+        htLogger.info("imageGeneration preference update error:", error);
       });
   };
 

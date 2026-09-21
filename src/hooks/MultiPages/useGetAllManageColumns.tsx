@@ -1,3 +1,4 @@
+import { logger as htLogger } from "#logger";
 
 import globalConstants from "@/lib/constants";
 import { IProject } from "@/models/model";
@@ -16,7 +17,7 @@ export const useGetAllManageColumns = (userId:number,project?:IProject|null|unde
         queryKey:[globalConstants.GetAllManageColumnsPrefixKey, project?.id, userId], 
         // queryFn:() => globalAPIHandlers.getAllManageColumnsAPI(projectId, userId),
         queryFn:()=>{
-            console.log("🚀 ~ useGetAllManageColumns ~ currentProject:", currentProject)
+            htLogger.info("🚀 ~ useGetAllManageColumns ~ currentProject:", currentProject)
             if (currentProject) return getActiveColumnsViewFromProject(currentProject)
             else return []
         },

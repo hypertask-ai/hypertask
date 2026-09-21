@@ -1,3 +1,5 @@
+import { logger as htLogger } from "#logger";
+import { withAuth } from "#with-auth";
 // Import PrismaClient from the generated Prisma client
 import sectionGetByTask from '@/utils/controllers/section/getByTask';
 import { NextApiHandler, NextApiRequest, NextApiResponse } from 'next';
@@ -29,10 +31,10 @@ if (req.method==="POST"){
     // Get field names of the "Section" model
     
   } catch (error) {
-    console.error('Error:', error);
+    htLogger.error('Error:', error);
   } 
 }
 }
 
 // Run the main function
-export default handler;
+export default withAuth(handler, { authenticateInHandler: true });

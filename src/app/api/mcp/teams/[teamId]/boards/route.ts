@@ -1,3 +1,5 @@
+import { logger as htLogger } from "#logger";
+import { withoutAuth } from "#with-auth";
 import { NextRequest, NextResponse } from 'next/server'
 import { validateMcpAuth, checkMcpRateLimit } from '@/lib/mcp/auth'
 import prisma from '@/lib/prisma'
@@ -33,7 +35,7 @@ const boardRouteDependencies: BoardRouteDependencies = {
  * successful response for 24h (Redis); no duplicate board. A same-key retry while the original
  * request is still in flight returns 409 and tells the caller to retry shortly.
  */
-export async function POST(
+async function POSTHandler(
   request: NextRequest,
   props: { params: Promise<{ teamId: string }> },
   dependencies: BoardRouteDependencies = boardRouteDependencies
@@ -254,7 +256,7 @@ export async function POST(
       { status: 200 }
     )
   } catch (error) {
-    console.error('[MCP Create Board] Error:', error)
+    htLogger.error('[MCP Create Board] Error:', error)
     return NextResponse.json(
       {
         success: false,
@@ -267,3 +269,5 @@ export async function POST(
     )
   }
 }
+
+export const POST = withoutAuth(POSTHandler);

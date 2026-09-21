@@ -1,3 +1,4 @@
+import { logger as htLogger } from "#logger";
 import prisma from "@/lib/prisma";
 import { updateTaskSingle } from "@/utils/controllers/tasks/single";
 import createArchiveActivity from "@/utils/controllers/activities/createArchiveActivity";
@@ -103,7 +104,7 @@ export async function sweepAutoArchives(): Promise<number> {
       archived += 1;
     } catch (error) {
       // Isolate a bad row so it does not drop the rest of the batch.
-      console.log("🚀 ~ sweepAutoArchives ~ row error:", error);
+      htLogger.info("🚀 ~ sweepAutoArchives ~ row error:", error);
     }
   }
 

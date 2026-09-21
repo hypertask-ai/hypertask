@@ -1,3 +1,5 @@
+import { logger as htLogger } from "#logger";
+import { withAuth } from "#with-auth";
 // Next.js API route support: https://nextjs.org/docs/api-routes/introduction
 
 import type { NextApiRequest, NextApiResponse } from 'next'
@@ -5,7 +7,7 @@ import prisma from "@/lib/prisma";
 
 
 
-export default  async function handler(
+async function handler(
   req: NextApiRequest,
   res: NextApiResponse
 ) {
@@ -13,7 +15,7 @@ export default  async function handler(
   try {
     
     const {userId} = req.query
-    console.log("🚀 ~ userId:", userId)
+    htLogger.info("🚀 ~ userId:", userId)
     const reminders = await prisma.reminder.findMany({
         where:{
             userId:parseInt(userId as string),
@@ -33,10 +35,12 @@ export default  async function handler(
         },
         distinct:["taskId"]
     })
-    console.log("🚀 ~ reminders:", reminders)
+    htLogger.info("🚀 ~ reminders:", reminders)
     return res.status(200).json(reminders)
   } catch (error) {
-      console.log(error)
+      htLogger.info(error)
       return res.status(500).json(error)
   }
 }
+
+export default withAuth(handler, { authenticateInHandler: true });

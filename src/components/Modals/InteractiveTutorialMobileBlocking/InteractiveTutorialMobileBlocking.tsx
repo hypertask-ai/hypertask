@@ -1,5 +1,6 @@
 "use client";
 
+import { logger as htLogger } from "#logger";
 import React, { useState } from "react";
 import { cn } from "@/utils/undoActions/helperFuncs";
 import Image from "next/image";
@@ -45,7 +46,7 @@ export const InteractiveTutorialMobileBlocking: React.FC<InteractiveTutorialMobi
         toast.success("Desktop login link sent! Check your email.");
       }
     } catch (error) {
-      console.error("Error sending desktop link:", error);
+      htLogger.error("Error sending desktop link:", error);
       toast.error("Failed to send email. Please try again.");
     } finally {
       setIsLoading(false);

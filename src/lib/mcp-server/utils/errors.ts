@@ -1,3 +1,4 @@
+import { env as appEnv } from "#env";
 /**
  * Custom error classes that map to JSON-RPC 2.0 error codes
  * Following MCP best practices for error handling
@@ -58,7 +59,7 @@ export class AuthenticationError extends McpError {
 
     // Include OAuth metadata if requested (default: true for backend 401s)
     if (options?.includeOAuthMetadata !== false) {
-      const resourceUrl = process.env.MCP_RESOURCE_URL || 'https://mcp.hypertask.ai';
+      const resourceUrl = appEnv.MCP_RESOURCE_URL || 'https://mcp.hypertask.ai';
       data.oauth = {
         resourceMetadataUrl: options?.resourceMetadataUrl || `${resourceUrl}/.well-known/oauth-protected-resource`,
         hint: 'Token expired or invalid. Please reconnect to re-authenticate.',

@@ -1,3 +1,5 @@
+import { logger as htLogger } from "#logger";
+import { withAuth } from "#with-auth";
 import { NextApiHandler, NextApiRequest, NextApiResponse } from "next";
 import prisma from "@/lib/prisma";
 
@@ -42,9 +44,9 @@ const handler: NextApiHandler = async (
 
     return res.status(200).json({ updateUser });
   } catch (error) {
-    console.log("🚀 ~ error:", error);
+    htLogger.info("🚀 ~ error:", error);
     return res.status(400).json({ message: JSON.stringify(error) });
   }
 };
 
-export default handler;
+export default withAuth(handler, { authenticateInHandler: true });

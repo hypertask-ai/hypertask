@@ -1,3 +1,4 @@
+import { logger as htLogger } from "#logger";
 import { Metadata } from "next";
 import { requireServerCookieUser } from "@/lib/auth/serverUser";
 import {
@@ -33,7 +34,7 @@ export default async function Page(
 
   const User = await requireServerCookieUser();
   const userFromDB = await getUserById(User.id)
-  console.log("🚀 ~ userFromDB:", userFromDB)
+  htLogger.info("🚀 ~ userFromDB:", userFromDB)
   //this is causing a major issue
   // if (userFromDB?.status===200 && userFromDB.res.UserSetting?.trialStatus){
   //   let previousBoardString = cookieStore.get('previousBoard');
@@ -42,7 +43,7 @@ export default async function Page(
   //     const previousBoard = previousBoardString.value.split('-')
   //     redirectUrl = `/project?id=${previousBoard[1]}`
   //   }
-  //     console.log("🚀 ~ redirectUrl:", redirectUrl)
+  //     debug.log("🚀 ~ redirectUrl:", redirectUrl)
   //   redirect(redirectUrl)
   // } 
   var team: any;
@@ -56,7 +57,7 @@ export default async function Page(
     //if (!searchParams.session_id || !searchParams.success) redirect("/");
 
     team = await findTeam(User);
-    console.log("🚀 ~ team:", team);
+    htLogger.info("🚀 ~ team:", team);
   }
 
   // HTPR-4358: createCustomerIfNull now throws on failure. This page stays
@@ -65,20 +66,20 @@ export default async function Page(
   try {
     await createCustomerIfNull(User.email!, searchParams.teamId ?? team.id);
   } catch (error) {
-    console.error("trial-plan-confirmation: customer provisioning failed", error);
+    htLogger.error("trial-plan-confirmation: customer provisioning failed", error);
   }
 
-  console.log("🚀 ~ session_id:", searchParams.session_id);
+  htLogger.info("🚀 ~ session_id:", searchParams.session_id);
   const customerId = await checkTrialSuccess(searchParams.session_id as string);
 
   // check which subscriptions does that user have
   const hasSub = await hasSubscription(searchParams.teamId ?? team.id);
-  console.log("🚀 ~ hasSub:", hasSub);
+  htLogger.info("🚀 ~ hasSub:", hasSub);
 
   const manageLink = await generateCustomerPortalLink(
     "" + (searchParams.stripe_customer_id ?? team.stripe_customer_id)
   );
-  console.log("🚀 ~ manageLink:", manageLink);
+  htLogger.info("🚀 ~ manageLink:", manageLink);
 
   const teamInfo = {
     teamTitle: searchParams.teamTitle ?? team.title,

@@ -1,3 +1,5 @@
+import { logger as htLogger } from "#logger";
+import { withAuth } from "#with-auth";
 import { markTaskRead } from "@/utils/controllers/tasks/markRead";
 import { NextApiHandler, NextApiRequest, NextApiResponse } from "next";
 
@@ -34,7 +36,7 @@ const handler: NextApiHandler = async (
       const response = await markTaskRead(parsedTaskId, user.id);
       return res.status(response.status).json(response.json);
     } catch (error) {
-      console.log(error);
+      htLogger.info(error);
       return res.status(500).json({ message: "Internal server error" });
     }
   } else {
@@ -42,4 +44,4 @@ const handler: NextApiHandler = async (
   }
 };
 
-export default handler;
+export default withAuth(handler, { authenticateInHandler: true });

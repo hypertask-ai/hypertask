@@ -1,3 +1,5 @@
+import { logger as htLogger } from "#logger";
+import { withAuth } from "#with-auth";
 import { NextRequest, NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { isValidUser } from "@/utils/edgeHelpers";
@@ -7,7 +9,7 @@ import prisma from "@/lib/prisma";
  * GET /api/connections/list
  * Returns all OAuth clients that have been authorized by the current user
  */
-export async function GET(request: NextRequest) {
+async function GETHandler(request: NextRequest) {
   try {
     const cookieStore = await cookies();
     const userCookie = cookieStore.get("nookies_user");
@@ -77,10 +79,12 @@ export async function GET(request: NextRequest) {
       connections,
     });
   } catch (error) {
-    console.error("Error listing connections:", error);
+    htLogger.error("Error listing connections:", error);
     return NextResponse.json(
       { success: false, error: "Internal server error" },
       { status: 500 }
     );
   }
 }
+
+export const GET = withAuth(GETHandler, { authenticateInHandler: true });

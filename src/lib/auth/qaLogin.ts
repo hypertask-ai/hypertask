@@ -1,3 +1,4 @@
+import { env as appEnv } from "#env";
 import { scrypt, timingSafeEqual } from "node:crypto";
 import { promisify } from "node:util";
 
@@ -19,8 +20,8 @@ export function normalizeQaLoginEmail(email: string): string {
 }
 
 export function getQaLoginConfig(): QaLoginConfig | null {
-  const email = normalizeQaLoginEmail(process.env.QA_LOGIN_EMAIL ?? "");
-  const password = process.env.QA_LOGIN_PASSWORD ?? "";
+  const email = normalizeQaLoginEmail(appEnv.QA_LOGIN_EMAIL ?? "");
+  const password = appEnv.QA_LOGIN_PASSWORD ?? "";
   if (
     !email ||
     Buffer.byteLength(password, "utf8") < QA_LOGIN_PASSWORD_MIN_BYTES

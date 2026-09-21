@@ -1,3 +1,4 @@
+import { logger as htLogger } from "#logger";
 // Tiptap.tsx
 import {
   Dispatch,
@@ -280,7 +281,7 @@ const Tiptap = ({
   );
   // Debug: Log initial attachments format
   // Commented this out. Too many console logs when I am typing
-  // console.log("🚀 ~ Initial newCommentAttachments format:", newCommentAttachments);
+  // debug.log("🚀 ~ Initial newCommentAttachments format:", newCommentAttachments);
 
   // IDs for elements
   const divIds = {
@@ -466,7 +467,7 @@ const Tiptap = ({
     if (mode === "read-edit-description") cancelPendingDraftUpdates();
     editor?.commands.blur();
 
-    console.log("🚀 ~ Saving", mode, "with", newCommentAttachments.length, "attachments");
+    htLogger.info("🚀 ~ Saving", mode, "with", newCommentAttachments.length, "attachments");
     const currentAttachmentFiles = newCommentAttachments.map((attachment) =>
       "file" in attachment ? attachment.file : attachment,
     );
@@ -523,7 +524,7 @@ const Tiptap = ({
       }
       return true;
     } catch (error) {
-      console.error("Could not save editor content", error);
+      htLogger.error("Could not save editor content", error);
       toast.error("Could not save. Your changes are still here.");
       return false;
     } finally {
@@ -773,7 +774,7 @@ const Tiptap = ({
 
   const resetDropFiles = () => setFilesDropped([]);
   const handleFileDrop = async (droppedFiles: FileList) => {
-    console.log("🚀 ~ handleFileDrop ~ droppedFiles:", droppedFiles);
+    htLogger.info("🚀 ~ handleFileDrop ~ droppedFiles:", droppedFiles);
     if (droppedFiles?.length > 0) setFilesDropped([...droppedFiles]);
   };
 
@@ -826,7 +827,7 @@ const Tiptap = ({
 
   const calculatePopoverPosition = (targetDiv: HTMLElement, popover: HTMLElement) => {
     const popoverHeight = popover.offsetHeight;
-    console.log("Size ===> new min height", popoverHeight + 30);
+    htLogger.info("Size ===> new min height", popoverHeight + 30);
     targetDiv.style.minHeight = `${popoverHeight + 30}px`;
   };
 
@@ -841,7 +842,7 @@ const Tiptap = ({
         }
       }
     } catch (error) {
-      console.log("🚀 ~ updateTaskTitle ~ error:", error);
+      htLogger.info("🚀 ~ updateTaskTitle ~ error:", error);
     } finally {
       updateDrafts(description);
     }
@@ -857,7 +858,7 @@ const Tiptap = ({
 
   function setLinkHandlerCallback(task?: any, keyword?: string) {
     setShowSetLinkModal(false);
-    console.log("🚀 ~ setLinkHandlerCallback ~ task:", task, keyword);
+    htLogger.info("🚀 ~ setLinkHandlerCallback ~ task:", task, keyword);
     
     let urlToSet: string = "";
     
@@ -932,7 +933,7 @@ const Tiptap = ({
         )
       : mappedAttachments;
     
-    console.log("🚀 ~ AI attachments mapped for TipTap:", mappedAttachments);
+    htLogger.info("🚀 ~ AI attachments mapped for TipTap:", mappedAttachments);
     setNewCommentAttachments(attachmentsToSave);
     setTrigger(prev => !prev);
     setShouldShowAITaskWriter(false);
@@ -1255,7 +1256,7 @@ const Tiptap = ({
       const targetDiv = document.getElementById(divIds.wrapperId);
 
       const resizeObserver = new ResizeObserver(() => {
-        console.log("Size ==> is changing");
+        htLogger.info("Size ==> is changing");
         if (popover && targetDiv) {
           calculatePopoverPosition(targetDiv, popover);
         }

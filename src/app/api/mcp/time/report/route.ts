@@ -1,3 +1,4 @@
+import { withoutAuth } from "#with-auth";
 import { validateMcpAuth, checkMcpRateLimit } from "@/lib/mcp/auth";
 import { findTaskByStringIdentifier } from "@/lib/mcp/tasks/resolveTask";
 import { listReport } from "@/lib/timeTracking";
@@ -15,7 +16,7 @@ function parseDate(value: string | null) {
   return Number.isNaN(parsed.getTime()) ? undefined : parsed;
 }
 
-export async function GET(request: NextRequest) {
+async function GETHandler(request: NextRequest) {
   const rateLimited = await checkMcpRateLimit(request);
   if (rateLimited) return rateLimited;
   const ctx = await validateMcpAuth(request);
@@ -68,3 +69,5 @@ export async function GET(request: NextRequest) {
     })),
   });
 }
+
+export const GET = withoutAuth(GETHandler);

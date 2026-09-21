@@ -1,3 +1,4 @@
+import { logger as htLogger } from "#logger";
 // Runnable check for the PERT-5 next-logical-focus math.
 // Run: node --experimental-strip-types src/utils/helperFunctions/focusAfterRemoval.check.ts
 import assert from "node:assert";
@@ -55,4 +56,4 @@ assert.strictEqual(
   "last task on board -> null",
 );
 
-console.log("focusAfterRemoval: all checks passed");
+htLogger.info("focusAfterRemoval: all checks passed");

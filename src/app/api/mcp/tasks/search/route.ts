@@ -1,3 +1,5 @@
+import { logger as htLogger } from "#logger";
+import { withoutAuth } from "#with-auth";
 import { NextRequest, NextResponse } from 'next/server'
 import { validateMcpAuth, checkMcpRateLimit } from '@/lib/mcp/auth'
 import { getProjectWhere } from '@/utils/controllers/projects/getAllIncludes'
@@ -57,7 +59,7 @@ export interface SearchTasksResponse {
  * when available for full-text ranking, with Prisma fallback.
  * Results are limited to boards/projects the user has access to.
  */
-export async function GET(request: NextRequest) {
+async function GETHandler(request: NextRequest) {
   try {
     // Validate authentication
     const rateLimited = await checkMcpRateLimit(request)
@@ -401,7 +403,7 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json(response)
   } catch (error) {
-    console.error('Error searching tasks:', error)
+    htLogger.error('Error searching tasks:', error)
     return NextResponse.json(
       {
         success: false,
@@ -411,3 +413,5 @@ export async function GET(request: NextRequest) {
     )
   }
 }
+
+export const GET = withoutAuth(GETHandler);

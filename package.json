@@ -1,6 +1,14 @@
 {
   "name": "hypertask",
   "version": "0.3.0",
+  "imports": {
+    "#env": "./src/lib/env.ts",
+    "#logger": "./src/lib/logger.ts",
+    "#with-auth": "./src/lib/api/withAuth.ts",
+    "#api-response": "./src/lib/api/response.ts",
+    "#session": "./src/lib/auth/session.ts",
+    "#session-user": "./src/lib/auth/getSessionUser.ts"
+  },
   "private": true,
   "scripts": {
     "dev": "concurrently 'next dev' 'npm run stripe:listen'",

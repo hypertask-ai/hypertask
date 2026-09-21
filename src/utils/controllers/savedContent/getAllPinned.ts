@@ -1,3 +1,4 @@
+import { logger as htLogger } from "#logger";
 import prisma from "@/lib/prisma";
 import { HTPR_6516_AGENT_ATTRIBUTION_FLAG, isFeatureEnabled } from "@/lib/flags";
 import {
@@ -54,7 +55,7 @@ export const getAllPinned = async (userId: number) => {
       json: { personalPins, teamPins },
     };
   } catch (error) {
-    console.log("🚀 ~ getAllPinned ~ error:", error);
+    htLogger.info("🚀 ~ getAllPinned ~ error:", error);
     return {
       status: 500,
       json: {},

@@ -1,7 +1,8 @@
+import { env as appEnv } from "#env";
 import { NextResponse } from 'next/server'
 
-const OAUTH_ISSUER = process.env.JWT_ISSUER || 'https://app.hypertask.ai'
-const BASE_URL = process.env.NEXT_PUBLIC_BASEURL || OAUTH_ISSUER
+const OAUTH_ISSUER = appEnv.JWT_ISSUER || 'https://app.hypertask.ai'
+const BASE_URL = appEnv.NEXT_PUBLIC_BASEURL || OAUTH_ISSUER
 
 /**
  * GET /.well-known/oauth-authorization-server

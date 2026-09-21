@@ -1,3 +1,4 @@
+import { logger as htLogger } from "#logger";
 import OnboardingPageComponent from "@/components/PageComponents/Onboarding/OnboardingPageComponent"
 import { requireServerCookieUser } from "@/lib/auth/serverUser";
 import { checkIfUserIsNew } from "@/lib/serverActions";
@@ -18,10 +19,10 @@ export default async function Page(
         title:searchParams.teamTitle,
         id:searchParams.id
     }
-    console.log("🚀 ~ teamToInviteTo:", teamToInviteTo)
+    htLogger.info("🚀 ~ teamToInviteTo:", teamToInviteTo)
     const user = await requireServerCookieUser();
     const isUserNew = await checkIfUserIsNew(user.id)
-    console.log("🚀 ~ Page ~ isUserNew:", isUserNew)
+    htLogger.info("🚀 ~ Page ~ isUserNew:", isUserNew)
 
     return (
         <OnboardingPageComponent isUserNew={isUserNew} teamToInviteTo={teamToInviteTo}/>

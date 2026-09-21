@@ -1,3 +1,4 @@
+import { logger as htLogger } from "#logger";
 import { useEffect, useCallback } from 'react';
 import axios from 'axios';
 
@@ -15,17 +16,17 @@ export const useDeferredSubscriptionCheck = ({
   
   const checkSubscription = useCallback(async (teamId: number) => {
     try {
-      console.log('🔄 Starting deferred subscription check for team:', teamId);
+      htLogger.info('🔄 Starting deferred subscription check for team:', teamId);
       
       const response = await axios.post('/api/subscription/check', { teamId });
       
       if (response.data.success) {
-        console.log('✅ Subscription check completed:', response.data.subscriptionStatus);
+        htLogger.info('✅ Subscription check completed:', response.data.subscriptionStatus);
       } else {
-        console.error('❌ Subscription check failed:', response.data.error);
+        htLogger.error('❌ Subscription check failed:', response.data.error);
       }
     } catch (error) {
-      console.error('❌ Subscription check request failed:', error);
+      htLogger.error('❌ Subscription check request failed:', error);
     }
   }, []);
 

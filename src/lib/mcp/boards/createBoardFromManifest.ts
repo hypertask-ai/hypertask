@@ -1,3 +1,4 @@
+import { logger as htLogger } from "#logger";
 import { LogType, Status } from '@prisma/client'
 import prisma from '@/lib/prisma'
 import generateRank from '@/utils/generateRank'
@@ -260,7 +261,7 @@ export async function createBoardFromManifest(
       }
       createLog(createLogBody)
     } catch (sideEffectErr) {
-      console.error('[MCP Create Board] log after success:', sideEffectErr)
+      htLogger.error('[MCP Create Board] log after success:', sideEffectErr)
     }
 
     return result

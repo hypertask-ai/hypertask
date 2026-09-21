@@ -1,6 +1,7 @@
+import { logger as htLogger } from "#logger";
+import { getAuthSession, withAuth } from "#with-auth";
 import { chatStore } from "@/utils/controllers/chat";
 import prisma from "@/lib/prisma";
-import { getSessionUser } from "@/lib/auth/getSessionUser";
 import { NextRequest, NextResponse } from "next/server";
 import {
   ensureChatParticipant,
@@ -16,12 +17,12 @@ const MAX_DRAFT_LENGTH = 8000;
 // The caller's own private state in a shared thread: what they have typed but
 // not sent, and how far they have read. Never anyone else's -- the row is
 // keyed on the authenticated user, so a session id alone cannot reach it.
-export async function PATCH(
+async function PATCHHandler(
   request: NextRequest,
   { params }: { params: Promise<{ sessionId: string }> }
 ) {
   try {
-    const userId = (await getSessionUser(request.headers))?.userId;
+    const userId = (await getAuthSession(request.headers))?.userId;
     if (!userId) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
@@ -101,7 +102,7 @@ export async function PATCH(
 
     return NextResponse.json({ success: true, participant });
   } catch (error: any) {
-    console.error("🚀 ~ PATCH ~ Error updating agent chat participant", error);
+    htLogger.error("🚀 ~ PATCH ~ Error updating agent chat participant", error);
 
     return NextResponse.json(
       {
@@ -112,3 +113,5 @@ export async function PATCH(
     );
   }
 }
+
+export const PATCH = withAuth(PATCHHandler, { authenticateInHandler: true });

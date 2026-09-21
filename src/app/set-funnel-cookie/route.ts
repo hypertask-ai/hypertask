@@ -1,3 +1,4 @@
+import { env as appEnv } from "#env";
 // app/set-funnel-cookie/route.ts
 import { NextRequest, NextResponse } from 'next/server';
 
@@ -17,7 +18,7 @@ export async function GET(request: NextRequest) {
     path: '/',
     sameSite: 'lax',
     httpOnly: false,
-    secure: process.env.NODE_ENV === 'production'
+    secure: appEnv.NODE_ENV === 'production'
   });
   
   return response;

@@ -1,3 +1,4 @@
+import { logger as htLogger } from "#logger";
 import { Fragment, Slice } from "prosemirror-model";
 import { Plugin, PluginKey } from "prosemirror-state";
 import { v4 as uuidv4 } from "uuid"; // You'll need to install this package
@@ -264,7 +265,7 @@ async function handleFileUpload(original:any, view:any, schema:any, options:any,
       view.dispatch(tr);
     }
   } catch (error) {
-    console.error('Upload error:', error);
+    htLogger.error('Upload error:', error);
     
     // Handle upload failure by marking the node with an error
     const { tr } = view.state;

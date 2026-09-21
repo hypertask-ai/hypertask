@@ -1,3 +1,4 @@
+import { logger as htLogger } from "#logger";
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 
@@ -28,7 +29,7 @@ export default async function QaLoginPage() {
   }
 
   if (shouldShowMobileTabBar("/qa/login")) {
-    console.error("[qa-login] expected /qa/login to hide the mobile shell");
+    htLogger.error("[qa-login] expected /qa/login to hide the mobile shell");
   }
 
   return (

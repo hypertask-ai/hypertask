@@ -1,3 +1,4 @@
+import { logger as htLogger } from "#logger";
 import { buildStyles, CircularProgressbar } from 'react-circular-progressbar';
 import 'react-circular-progressbar/dist/styles.css';
 
@@ -117,14 +118,14 @@ interface ISingleFile {
           if (active) setProgressBar(progress);
         });
         if (!active) return;
-        console.log("🚀 ~ uploadFile ~ result:", source);
+        htLogger.info("🚀 ~ uploadFile ~ result:", source);
         const extractedFile = {
           name: file.name,
           size: file.size,
           type: file.type,
         };
         const itemToReturn = { id, file: { ...extractedFile, source } };
-        console.log("🚀 ~ uploadFile ~ itemToReturn:", itemToReturn);
+        htLogger.info("🚀 ~ uploadFile ~ itemToReturn:", itemToReturn);
         latestHandlersRef.current.callback?.(itemToReturn);
       };
 

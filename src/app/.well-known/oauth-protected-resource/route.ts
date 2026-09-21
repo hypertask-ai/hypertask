@@ -1,9 +1,10 @@
+import { env as appEnv } from "#env";
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
 }
 
 const MCP_RESOURCE_URL =
-  process.env.NEXT_PUBLIC_MCP_SERVER_URL || 'https://mcp.hypertask.ai/mcp'
+  appEnv.NEXT_PUBLIC_MCP_SERVER_URL || 'https://mcp.hypertask.ai/mcp'
 
 export function GET(): Response {
   return Response.json(

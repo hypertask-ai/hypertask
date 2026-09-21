@@ -1,3 +1,4 @@
+import { logger as htLogger } from "#logger";
 import { NextRequest, NextResponse } from 'next/server';
 
 type DownloadTask = { id: number };
@@ -137,7 +138,7 @@ export function createAttachmentDownloadHandler<TContext>(
           await dependencies.recordMeasuredSize(attachmentId, fetched.buffer.length);
         } catch (error) {
           // Serving the bytes matters more than repairing the stored size.
-          console.error('[MCP attachment size repair]', error);
+          htLogger.error('[MCP attachment size repair]', error);
         }
       }
 
@@ -154,7 +155,7 @@ export function createAttachmentDownloadHandler<TContext>(
         },
       });
     } catch (error) {
-      console.error('[MCP attachment download]', error);
+      htLogger.error('[MCP attachment download]', error);
       return NextResponse.json(
         {
           success: false,

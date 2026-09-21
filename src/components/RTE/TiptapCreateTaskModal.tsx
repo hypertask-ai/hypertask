@@ -1,3 +1,4 @@
+import { logger as htLogger } from "#logger";
 import React, {
   useCallback,
   useContext,
@@ -295,7 +296,7 @@ const TiptapCreateTaskModal = () => {
 
   const addImage = (data: DataTransfer) => {
     const { files } = data;
-    console.log(files);
+    htLogger.info(files);
 
     if (files && files.length > 0) {
       for (const file of Array.from(files)) {
@@ -303,7 +304,7 @@ const TiptapCreateTaskModal = () => {
 
         if (mime === "image") {
           const url = URL.createObjectURL(file);
-          console.log("IMAGE URL  " + url);
+          htLogger.info("IMAGE URL  " + url);
           editor
             ?.chain()
             .focus()
@@ -324,8 +325,8 @@ const TiptapCreateTaskModal = () => {
     addImage(e.dataTransfer);
   };
   const handleFocus = (forceFocus?: boolean) => {
-    // console.log("focusing now")
-    // console.log("🚀 ~ handleFocus ~ editor?.isFocused:", editor?.isFocused)
+    // debug.log("focusing now")
+    // debug.log("🚀 ~ handleFocus ~ editor?.isFocused:", editor?.isFocused)
     if (editor?.isFocused || (shouldShowAiTaskWriter && !forceFocus))
       return false;
     editor?.commands.focus("end");
@@ -344,12 +345,12 @@ const TiptapCreateTaskModal = () => {
   };
   // ==================== get attachments from the componetn =============
   const getAttachments = async (files: File[]) => {
-    // console.log("🚀 ~ file: TipTap.tsx:376 ~ getAttachments ~ files:", files)
+    // debug.log("🚀 ~ file: TipTap.tsx:376 ~ getAttachments ~ files:", files)
     setNewCommentAttachments(files);
   };
 
   const handleFileDrop = async (droppedFiles: FileList) => {
-    console.log("🚀 ~ handleFileDrop ~ droppedFiles:", droppedFiles);
+    htLogger.info("🚀 ~ handleFileDrop ~ droppedFiles:", droppedFiles);
     if (droppedFiles && droppedFiles.length > 0)
       setFilesDropped([...droppedFiles]);
   };
@@ -368,9 +369,9 @@ const TiptapCreateTaskModal = () => {
   // whenever attachments are ALL uploaded, this function runs.
   // it runs as the FINAL call, not on each upload
   const callbackAttachments = async (attachmentsReturned: { id: number; file: { name: string; size: number; type: string; source: string } }[]) => {
-    console.log("🚀 ~ callbackAttachments ~ attachmentsReturned:", attachmentsReturned)
+    htLogger.info("🚀 ~ callbackAttachments ~ attachmentsReturned:", attachmentsReturned)
     // get all the urls back
-    // console.log("🚀 ~ callbackAttachments ~ attachmentsReturned:", attachmentsReturned)
+    // debug.log("🚀 ~ callbackAttachments ~ attachmentsReturned:", attachmentsReturned)
     // this is confirmation that attachments are uploaded.
     // setTotalChecks(prev=>prev+1)
     handleChange("attachments", attachmentsReturned);
@@ -566,7 +567,7 @@ const TiptapCreateTaskModal = () => {
     param?: TSendBackButtonParam,
     formValuesOverride?: IForm,
   ) => {
-    console.log("🚀 ~ CtrlEnterHandler ~ canSave:", canSave);
+    htLogger.info("🚀 ~ CtrlEnterHandler ~ canSave:", canSave);
     if (isRecording) return;
     // Without a save mode none of the branches below run, so bail out before
     // starting title generation or flipping the upload flag.
@@ -637,7 +638,7 @@ const TiptapCreateTaskModal = () => {
           titleAtSave = generatedTitle;
         }
       } catch (error) {
-        console.log("Could not generate a title", error);
+        htLogger.info("Could not generate a title", error);
         setUploadInProgress(false);
         releaseSubmission();
         if (saveEpochRef.current !== epochAtSave) return;
@@ -693,7 +694,7 @@ const TiptapCreateTaskModal = () => {
         }
       } catch (error) {
         completeTaskCreatePerformanceTrace("error", traceScope);
-        console.log("🚀 ~ CreateTaskAndDescription ~ error:", error);
+        htLogger.info("🚀 ~ CreateTaskAndDescription ~ error:", error);
         setUploadInProgress(false);
         releaseSubmission();
         toast.error("Error when creating");
@@ -727,7 +728,7 @@ const TiptapCreateTaskModal = () => {
         },
         error: (error) => {
           completeTaskCreatePerformanceTrace("error", traceScope);
-          console.log("🚀 ~ toast.promise ~ error:", error);
+          htLogger.info("🚀 ~ toast.promise ~ error:", error);
           setUploadInProgress(false);
           releaseSubmission();
           return "error when creating";
@@ -756,7 +757,7 @@ const TiptapCreateTaskModal = () => {
         },
         error: (error) => {
           completeTaskCreatePerformanceTrace("error", traceScope);
-          console.log("🚀 ~ toast.promise ~ error:", error);
+          htLogger.info("🚀 ~ toast.promise ~ error:", error);
           setUploadInProgress(false);
           releaseSubmission();
           return "error when creating";
@@ -958,7 +959,7 @@ const TiptapCreateTaskModal = () => {
     // // [ctrl] + [j]
     if (cmdControl && e.keyCode === KeyCodes.J) {
       e.preventDefault();
-      console.log("🚀 ~ handleKeyDown ~ endTour");
+      htLogger.info("🚀 ~ handleKeyDown ~ endTour");
       endTour()
       document
         .getElementById(id)
@@ -1043,7 +1044,7 @@ const TiptapCreateTaskModal = () => {
     if (editMode === "Description" && !shouldShowAiTaskWriter) {
       handleFocus();
       if (_currentProject?.id === 2) {
-        console.log("🚀 ~ useEffect ~ hereiam");
+        htLogger.info("🚀 ~ useEffect ~ hereiam");
 
         editor?.setEditable(true);
         editor?.view.dispatch(editor?.view.state.tr);
@@ -1076,13 +1077,13 @@ const TiptapCreateTaskModal = () => {
     ) => {
       // Get the current height of the popover
       const popoverHeight = popover.offsetHeight;
-      console.log("Size ===> new min height", popoverHeight + 30);
+      htLogger.info("Size ===> new min height", popoverHeight + 30);
       // Set the min-height of the target div to be popover height + 30px
       targetDiv.style.minHeight = `${popoverHeight + 30}px`;
     };
 
     const resizeObserver = new ResizeObserver(() => {
-      console.log("Size ==> is changing");
+      htLogger.info("Size ==> is changing");
       if (!popover) return;
 
       if (targetDiv) {

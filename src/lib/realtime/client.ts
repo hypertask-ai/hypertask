@@ -1,12 +1,13 @@
+import { env as appEnv } from "#env";
 // Browser side of real-time board sync (HTPR-3626). Holds the single persistent
 // connection to the pub/sub edge. The async connect path returns null when not
 // configured so the app runs normally without realtime.
 
-const KEY = process.env.NEXT_PUBLIC_PUSHER_KEY;
-const HOST = process.env.NEXT_PUBLIC_PUSHER_HOST; // set for Soketi / self-host
-const PORT = process.env.NEXT_PUBLIC_PUSHER_PORT;
-const FORCE_TLS = process.env.NEXT_PUBLIC_PUSHER_USE_TLS === "true";
-const CLUSTER = process.env.NEXT_PUBLIC_PUSHER_CLUSTER || "mt1";
+const KEY = appEnv.NEXT_PUBLIC_PUSHER_KEY;
+const HOST = appEnv.NEXT_PUBLIC_PUSHER_HOST; // set for Soketi / self-host
+const PORT = appEnv.NEXT_PUBLIC_PUSHER_PORT;
+const FORCE_TLS = appEnv.NEXT_PUBLIC_PUSHER_USE_TLS === "true";
+const CLUSTER = appEnv.NEXT_PUBLIC_PUSHER_CLUSTER || "mt1";
 
 type RealtimeClient = import("pusher-js").default;
 type RealtimeVisibilityClient = Pick<RealtimeClient, "connect" | "disconnect"> & {

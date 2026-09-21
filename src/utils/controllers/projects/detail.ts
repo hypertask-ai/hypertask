@@ -1,3 +1,4 @@
+import { logger as htLogger } from "#logger";
 import { NextApiHandler, NextApiRequest, NextApiResponse } from "next";
 
 
@@ -60,7 +61,7 @@ const projectDetail = async (projectId:number) => {
                 json:project
             })
         } catch (error) {
-            console.log(error);
+            htLogger.info(error);
             return({
                 status:400,
                 json:{ message: JSON.stringify(error) }

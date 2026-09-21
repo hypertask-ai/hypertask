@@ -1,3 +1,4 @@
+import { withoutAuth } from "#with-auth";
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 
@@ -37,7 +38,7 @@ const updateSchema = z.object({
 
 type RouteContext = { params: Promise<{ skill_id: string }> };
 
-export async function GET(request: NextRequest, context: RouteContext) {
+async function GETHandler(request: NextRequest, context: RouteContext) {
   const auth = await authenticate(request);
   if (auth instanceof NextResponse) return auth;
 
@@ -49,7 +50,7 @@ export async function GET(request: NextRequest, context: RouteContext) {
   }
 }
 
-export async function PATCH(request: NextRequest, context: RouteContext) {
+async function PATCHHandler(request: NextRequest, context: RouteContext) {
   const auth = await authenticate(request);
   if (auth instanceof NextResponse) return auth;
 
@@ -73,7 +74,7 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
   }
 }
 
-export async function DELETE(request: NextRequest, context: RouteContext) {
+async function DELETEHandler(request: NextRequest, context: RouteContext) {
   const auth = await authenticate(request);
   if (auth instanceof NextResponse) return auth;
 
@@ -127,3 +128,7 @@ function parseUpdateFields(input: z.infer<typeof updateSchema>, currentSlug: str
   if (input.argument_hint !== undefined) data.argumentHint = input.argument_hint?.trim() || null;
   return data;
 }
+
+export const GET = withoutAuth(GETHandler);
+export const PATCH = withoutAuth(PATCHHandler);
+export const DELETE = withoutAuth(DELETEHandler);

@@ -1,3 +1,4 @@
+import { logger as htLogger } from "#logger";
 import prisma from "@/lib/prisma"
 import { generateInviteLink, setViewSlug } from "@/pages/api/invite/createInviteLink"
 import { getProjectViewInclude } from "@/utils/controllers/projects/getAll"
@@ -26,7 +27,7 @@ export const getInviteFromProjectId = async(projectId:number, userId: number)=>{
         },
         include:{project:{select:{name:true}}},
     })
-    console.log("🚀 ~ invite:", invite)
+    htLogger.info("🚀 ~ invite:", invite)
     
 
     // ======================== let's check for the active view if any

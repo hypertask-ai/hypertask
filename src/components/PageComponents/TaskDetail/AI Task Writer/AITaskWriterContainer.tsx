@@ -1,3 +1,4 @@
+import { logger as htLogger } from "#logger";
 import React, {
   useCallback,
   useContext,
@@ -266,7 +267,7 @@ const AITaskWriterContainer: React.FC<
 
     // Don't send if attachments are still uploading
     if (isUploadingAttachments) {
-      console.log("Cannot send while attachments are uploading...", { uploadProgress });
+      htLogger.info("Cannot send while attachments are uploading...", { uploadProgress });
       return;
     }
 
@@ -280,7 +281,7 @@ const AITaskWriterContainer: React.FC<
           "Thinking...",
         );
       } catch (error) {
-        console.error("AI task writer request failed:", error);
+        htLogger.error("AI task writer request failed:", error);
         toast.error("Could not send the request. Try again.");
       } finally {
         mobileCreateRequestPendingRef.current = false;
@@ -302,7 +303,7 @@ const AITaskWriterContainer: React.FC<
 
   const regenerateDescriptionSuggestion = useCallback(() => {
     if (isUploadingAttachments) {
-      console.log("Cannot send while attachments are uploading...", { uploadProgress });
+      htLogger.info("Cannot send while attachments are uploading...", { uploadProgress });
       return;
     }
     sendInitialPrompt("Drafting a description from your title...");

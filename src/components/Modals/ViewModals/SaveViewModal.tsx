@@ -1,3 +1,4 @@
+import { logger as htLogger } from "#logger";
 import { ModalContainerCustom, ModalHeaderComp, ModalInput, ModalListContainer, ModalRowElementContainer } from "@/components/Common/CommonModalComponents";
 import useHandleMouseGlobal from "@/hooks/General/useHandleMouse";
 import { useEffect, useState } from "react";
@@ -150,7 +151,7 @@ const SaveViewModal: React.FC<TProps> = ({ toggle, project }) => {
                 return toggle()
             } 
         } catch (error) {
-            console.log("🚀 ~ enterHandler ~ error:", error)
+            htLogger.info("🚀 ~ enterHandler ~ error:", error)
             toast.error(
                 axios.isAxiosError(error) &&
                 typeof error.response?.data?.message === "string"

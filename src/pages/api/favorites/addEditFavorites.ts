@@ -1,3 +1,5 @@
+import { logger as htLogger } from "#logger";
+import { withAuth } from "#with-auth";
 
 import { NextApiHandler, NextApiRequest, NextApiResponse } from "next";
 
@@ -20,7 +22,7 @@ const handler: NextApiHandler = async (req: NextApiRequest, res: NextApiResponse
                     projectId:projectId                     
                 }
             })
-            console.log("🚀 ~ file: addEditFavorites.ts:27 ~ consthandler:NextApiHandler= ~ deleted:", deleted)
+            htLogger.info("🚀 ~ file: addEditFavorites.ts:27 ~ consthandler:NextApiHandler= ~ deleted:", deleted)
             
             const newFavorite = await prisma.favorites.create({
                 data:{
@@ -31,7 +33,7 @@ const handler: NextApiHandler = async (req: NextApiRequest, res: NextApiResponse
             })
             return res.status(200).json(newFavorite)
         } catch (error) {
-            console.log(error);
+            htLogger.info(error);
             return res.status(500).json({ message: JSON.stringify(error) });
         }
     }
@@ -60,7 +62,7 @@ const handler: NextApiHandler = async (req: NextApiRequest, res: NextApiResponse
                   
                 }
             })
-            console.log("🚀 ~ file: addEditFavorites.ts:53 ~ consthandler:NextApiHandler= ~ deletedFavorites:", deletedFavorites)
+            htLogger.info("🚀 ~ file: addEditFavorites.ts:53 ~ consthandler:NextApiHandler= ~ deletedFavorites:", deletedFavorites)
 
             // =============== update favorite. 
             const updatedFavorite = await prisma.favorites.updateMany({
@@ -77,7 +79,7 @@ const handler: NextApiHandler = async (req: NextApiRequest, res: NextApiResponse
             return res.status(200).json(updatedFavorite)
 
         } catch (error) {
-            console.log(error);
+            htLogger.info(error);
             return res.status(400).json({ message: JSON.stringify(error) });
         }
     } 
@@ -87,4 +89,4 @@ const handler: NextApiHandler = async (req: NextApiRequest, res: NextApiResponse
     }
 };
 
-export default handler;
+export default withAuth(handler, { authenticateInHandler: true });

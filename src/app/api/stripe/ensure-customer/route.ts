@@ -1,3 +1,5 @@
+import { logger as htLogger } from "#logger";
+import { withAuth } from "#with-auth";
 import { NextResponse } from "next/server";
 import { createCustomerIfNull } from "@/lib/subscription";
 import { getServerCookieUser } from "@/lib/auth/serverUser";
@@ -15,7 +17,7 @@ export const runtime = "nodejs";
  * onboarding path sets one), so without this the Plans section has no billing
  * account to check out against and upgrading is impossible for those teams.
  */
-export async function POST(request: Request) {
+async function POSTHandler(request: Request) {
   const user = await getServerCookieUser();
   if (!user?.id || !user.email) {
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });
@@ -66,7 +68,7 @@ export async function POST(request: Request) {
   try {
     stripeCustomerId = await createCustomerIfNull(user.email, teamId);
   } catch (error) {
-    console.error("ensure-customer: provisioning failed", { teamId, error });
+    htLogger.error("ensure-customer: provisioning failed", { teamId, error });
     return NextResponse.json(
       { error: "billing account could not be created" },
       { status: 500 }
@@ -74,7 +76,7 @@ export async function POST(request: Request) {
   }
 
   if (!stripeCustomerId) {
-    console.error("ensure-customer: provisioning returned no customer", { teamId });
+    htLogger.error("ensure-customer: provisioning returned no customer", { teamId });
     return NextResponse.json(
       { error: "billing account could not be created" },
       { status: 500 }
@@ -83,3 +85,5 @@ export async function POST(request: Request) {
 
   return NextResponse.json({ stripe_customer_id: stripeCustomerId });
 }
+
+export const POST = withAuth(POSTHandler, { authenticateInHandler: true });

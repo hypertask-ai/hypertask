@@ -44,16 +44,16 @@ test("coverage baseline groups critical domains and ranks uncovered lines", asyn
     baseline.largestCriticalGaps[0].file,
     "src/app/api/tasks/create/route.ts",
   );
-  assert.equal(baseline.reportOnly, true);
+  assert.equal(baseline.reportOnly, false);
 });
 
-test("coverage markdown explicitly says the baseline is not a merge threshold", async () => {
+test("coverage markdown names the active CI threshold", async () => {
   const { buildCoverageBaseline, renderCoverageMarkdown } = await import(
     "../scripts/coverage-summary.mjs"
   );
   const markdown = renderCoverageMarkdown(buildCoverageBaseline({}, { root: "/repo" }));
 
-  assert.match(markdown, /diagnostic, not a merge threshold/i);
+  assert.match(markdown, /CI enforces the repository-wide minimums/i);
   assert.match(markdown, /Auth \/ access/);
   assert.match(markdown, /Largest critical gaps/);
 });

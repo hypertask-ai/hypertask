@@ -1,3 +1,4 @@
+import { logger as htLogger } from "#logger";
 import { Prisma } from "@prisma/client";
 import prisma from "@/lib/prisma";
 import type { ArchiveBoardScope } from "@/store";
@@ -83,7 +84,7 @@ const tasksGetArchivedTasks = async (
 
             // res.status(200).json(tasks);
         } catch (error) {
-            console.log(error);
+            htLogger.info(error);
             return ({
                 status:300,
                 json:{message:"No Response", error:error}
@@ -141,7 +142,7 @@ export const tasksGetArchivedTasksMeta = async (
       },
     };
   } catch (error) {
-    console.log(error);
+    htLogger.info(error);
     return {
       status: 300,
       json: { message: "No Response", error },

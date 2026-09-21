@@ -1,9 +1,10 @@
+import { withoutAuth } from "#with-auth";
 import { logMinutes, TimeTrackingDisabledError } from "@/lib/timeTracking";
 import { parseTimeMinutes } from "@/lib/timeManualEntry";
 import { NextRequest, NextResponse } from "next/server";
 import { resolveMcpTimeTask } from "../_lib";
 
-export async function POST(request: NextRequest) {
+async function POSTHandler(request: NextRequest) {
   const resolved = await resolveMcpTimeTask(request);
   if (resolved.response) return resolved.response;
 
@@ -33,3 +34,5 @@ export async function POST(request: NextRequest) {
     throw error;
   }
 }
+
+export const POST = withoutAuth(POSTHandler);

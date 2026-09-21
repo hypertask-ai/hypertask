@@ -1,4 +1,4 @@
-import { getSessionUser } from "@/lib/auth/getSessionUser";
+import { getAuthSession, withAuth } from "#with-auth";
 import prisma from "@/lib/prisma";
 import { getProjectWhere } from "@/utils/controllers/projects/getAllIncludes";
 import { NextRequest, NextResponse } from "next/server";
@@ -7,8 +7,8 @@ import { NextRequest, NextResponse } from "next/server";
 // Not exported: Next.js route files only allow method/config exports.
 const AUTO_ARCHIVE_DEFAULT_DAYS = 180;
 
-export async function POST(request: NextRequest) {
-  const session = await getSessionUser(request.headers);
+async function POSTHandler(request: NextRequest) {
+  const session = await getAuthSession(request.headers);
   if (!session) {
     return NextResponse.json(
       { success: false, error: "Unauthorized" },
@@ -64,3 +64,5 @@ export async function POST(request: NextRequest) {
     autoArchiveAfterDays,
   });
 }
+
+export const POST = withAuth(POSTHandler, { authenticateInHandler: true });

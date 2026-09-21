@@ -1,3 +1,5 @@
+import { logger as htLogger } from "#logger";
+import { withAuth } from "#with-auth";
 import { labelStore } from "@/utils/controllers/labels";
 // Next.js API route support: https://nextjs.org/docs/api-routes/introduction
 
@@ -49,7 +51,7 @@ const isManagedSmartSplitLabel = async (
 
 // "/api/labels/updateLabel"
 
-export default async function handler(
+async function handler(
   req: NextApiRequest,
   res: NextApiResponse
 ) {
@@ -201,16 +203,16 @@ export default async function handler(
         const deleteTaskLabels = await tx.taskLabel.deleteMany({
           where: { labelId: labelId as string },
         });
-        console.log("🚀 ~ deleteTaskLabels:", deleteTaskLabels);
+        htLogger.info("🚀 ~ deleteTaskLabels:", deleteTaskLabels);
         return labelStore(tx).delete({ where: { id: labelId as string } });
       });
 
-      console.log("🚀 ~ deleted:", deleted);
+      htLogger.info("🚀 ~ deleted:", deleted);
       void broadcastBoardChange(deleted.projectId);
       return res.status(200).json(deleted);
     }
   } catch (error) {
-    console.log(error);
+    htLogger.info(error);
     if (error instanceof LabelMutationError) {
       return res.status(error.status).json({ message: error.message });
     }
@@ -240,7 +242,7 @@ const filterAndRemoveTags = async (
             );
             if (newPayload.length === filter.searchPayload.length) return filter;
             removedReference = true;
-            console.log("🚀 ~ newAddedFilters ~ newPayload:", newPayload);
+            htLogger.info("🚀 ~ newAddedFilters ~ newPayload:", newPayload);
             if (newPayload.length === 0) {
               return undefined;
             } else return { ...filter, searchPayload: newPayload };
@@ -264,3 +266,5 @@ const filterAndRemoveTags = async (
     }
   }
 };
+
+export default withAuth(handler, { authenticateInHandler: true });

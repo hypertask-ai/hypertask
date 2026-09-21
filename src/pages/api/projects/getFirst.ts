@@ -1,3 +1,5 @@
+import { logger as htLogger } from "#logger";
+import { withAuth } from "#with-auth";
 import { SESSION_COOKIE, verifySession } from "@/lib/auth/session";
 import getFirst from "@/utils/controllers/projects/getFirst";
 import { NextApiHandler, NextApiRequest, NextApiResponse } from "next";
@@ -14,7 +16,7 @@ const handler: NextApiHandler = async (req: NextApiRequest, res: NextApiResponse
             return res.status(response.status).json(response.json)
 
         } catch (error) {
-            console.log(error);
+            htLogger.info(error);
             return res.status(400).json({ message: JSON.stringify(error) });
         }
     } else {
@@ -22,4 +24,4 @@ const handler: NextApiHandler = async (req: NextApiRequest, res: NextApiResponse
     }
 };
 
-export default handler;
+export default withAuth(handler, { authenticateInHandler: true });

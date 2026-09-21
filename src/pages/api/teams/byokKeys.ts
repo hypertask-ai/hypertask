@@ -1,3 +1,5 @@
+import { logger as htLogger } from "#logger";
+import { withAuth } from "#with-auth";
 import type { NextApiHandler, NextApiRequest, NextApiResponse } from "next";
 import prisma from "@/lib/prisma";
 import { decryptByokSecret, encryptByokSecret } from "@/lib/crypto/byokCipher";
@@ -151,7 +153,7 @@ const handler: NextApiHandler = async (
             maskedKey = maskByokSecret(decrypted);
           }
         } catch (e) {
-          console.error(
+          htLogger.error(
             `[byokKeys] decrypt failed for provider=${provider}`,
             e,
           );
@@ -225,7 +227,7 @@ const handler: NextApiHandler = async (
         );
         return res.status(200).json({ ok: true });
       } catch (e) {
-        console.error(e);
+        htLogger.error(e);
         return res.status(500).json({ message: "Delete failed" });
       }
     }
@@ -316,7 +318,7 @@ const handler: NextApiHandler = async (
         ) {
           return res.status(400).json({ message });
         }
-        console.error("[byokKeys] custom endpoint save failed");
+        htLogger.error("[byokKeys] custom endpoint save failed");
         return res.status(500).json({ message: "Save failed" });
       }
     }
@@ -367,7 +369,7 @@ const handler: NextApiHandler = async (
             .status(500)
             .json({ message: "Server encryption not configured" });
         }
-        console.error(`[byokKeys] save failed for provider=${provider}`);
+        htLogger.error(`[byokKeys] save failed for provider=${provider}`);
         return res.status(500).json({ message: "Save failed" });
       }
     }
@@ -412,7 +414,7 @@ const handler: NextApiHandler = async (
         if (e instanceof GdprSafeModeByokError) {
           return res.status(400).json({ message: e.message });
         }
-        console.error(e);
+        htLogger.error(e);
         return res.status(500).json({ message: "Save failed" });
       }
     }
@@ -426,4 +428,4 @@ const handler: NextApiHandler = async (
   return res.status(405).json({ message: "Method not allowed" });
 };
 
-export default handler;
+export default withAuth(handler, { authenticateInHandler: true });

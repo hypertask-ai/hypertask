@@ -1,8 +1,9 @@
+import { withoutAuth } from "#with-auth";
 import { validateMcpAuth, checkMcpRateLimit } from "@/lib/mcp/auth";
 import { elapsedSeconds, listRunning } from "@/lib/timeTracking";
 import { NextRequest, NextResponse } from "next/server";
 
-export async function GET(request: NextRequest) {
+async function GETHandler(request: NextRequest) {
   const rateLimited = await checkMcpRateLimit(request);
   if (rateLimited) return rateLimited;
   const ctx = await validateMcpAuth(request);
@@ -31,3 +32,5 @@ export async function GET(request: NextRequest) {
 
   return NextResponse.json({ success: true, timers });
 }
+
+export const GET = withoutAuth(GETHandler);

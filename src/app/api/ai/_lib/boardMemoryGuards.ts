@@ -1,3 +1,4 @@
+import { logger as htLogger } from "#logger";
 import { createHash, randomUUID } from "node:crypto";
 
 import { getRedis } from "@/lib/redis";
@@ -156,7 +157,7 @@ export async function completeBoardMemorySignalClaim(
       BOARD_MEMORY_SIGNAL_DEDUPE_SECONDS,
     );
   } catch (error) {
-    console.error("Board memory signal completion failed", error);
+    htLogger.error("Board memory signal completion failed", error);
   }
 }
 
@@ -178,7 +179,7 @@ export async function releaseBoardMemorySignalClaim(
       token,
     );
   } catch (error) {
-    console.error("Board memory signal claim release failed", error);
+    htLogger.error("Board memory signal claim release failed", error);
   }
 }
 
@@ -260,7 +261,7 @@ export async function withBoardMemoryLock<T>(
     try {
       await redis.eval(RELEASE_BOARD_MEMORY_LOCK_SCRIPT, 1, key, token);
     } catch (error) {
-      console.error("Board memory lock release failed", error);
+      htLogger.error("Board memory lock release failed", error);
     }
   }
 }

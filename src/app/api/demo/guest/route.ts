@@ -1,7 +1,9 @@
+import { env as appEnv } from "#env";
+import { logger as htLogger } from "#logger";
+import { getAuthSession, withoutAuth } from "#with-auth";
 import { NextRequest, NextResponse } from "next/server";
 
 import { auth } from "@/lib/auth/betterAuth";
-import { getSessionUser } from "@/lib/auth/getSessionUser";
 import { slimUserForCookie } from "@/lib/auth/slimUserCookie";
 import {
   SESSION_COOKIE,
@@ -95,7 +97,7 @@ async function appendBetterAuthCookies(
   legacyToken: string,
   response: NextResponse,
 ): Promise<boolean> {
-  if (process.env.BETTER_AUTH_ENABLED !== "1") return true;
+  if (appEnv.BETTER_AUTH_ENABLED !== "1") return true;
 
   try {
     const bridged = await auth.handler(
@@ -106,7 +108,7 @@ async function appendBetterAuthCookies(
       }),
     );
     if (!bridged.ok) {
-      console.error(
+      htLogger.error(
         "guest Better Auth bridge failed",
         bridged.status,
         await bridged.text().catch(() => ""),
@@ -121,7 +123,7 @@ async function appendBetterAuthCookies(
     }
     return true;
   } catch (error) {
-    console.error("guest Better Auth bridge errored", error);
+    htLogger.error("guest Better Auth bridge errored", error);
     return false;
   }
 }
@@ -138,7 +140,7 @@ function setGuestCookies(
   );
   response.cookies.set("nookies_user", JSON.stringify(slimUserForCookie(user)), {
     httpOnly: false,
-    secure: process.env.NODE_ENV === "production",
+    secure: appEnv.NODE_ENV === "production",
     sameSite: "lax",
     maxAge: GUEST_SESSION_TTL_SECONDS,
     path: "/",
@@ -146,7 +148,7 @@ function setGuestCookies(
   // Onboarding runs on AMOLED: true black is the look the demo sells.
   response.cookies.set("theme", "amoled", {
     httpOnly: false,
-    secure: process.env.NODE_ENV === "production",
+    secure: appEnv.NODE_ENV === "production",
     sameSite: "lax",
     maxAge: GUEST_SESSION_TTL_SECONDS,
     path: "/",
@@ -232,11 +234,11 @@ async function existingGuestResponse(
   return response;
 }
 
-export async function POST(request: NextRequest) {
+async function POSTHandler(request: NextRequest) {
   // A real account must never be provisioned a guest: setGuestCookies would
-  // overwrite their session and silently sign them out. getSessionUser, not the
+  // overwrite their session and silently sign them out. getAuthSession, not the
   // legacy cookie alone, because a Better Auth session outlives ht_session.
-  const sessionUser = await getSessionUser(request.headers);
+  const sessionUser = await getAuthSession(request.headers);
   if (sessionUser) {
     const user = await prisma.user.findUnique({
       where: { id: sessionUser.userId },
@@ -274,7 +276,7 @@ export async function POST(request: NextRequest) {
   }
   if (purpose.length > 200) purpose = purpose.slice(0, 200);
 
-  if (purpose && !process.env.DEMO_AI_GATEWAY_API_KEY?.trim()) {
+  if (purpose && !appEnv.DEMO_AI_GATEWAY_API_KEY?.trim()) {
     return NextResponse.json(
       { error: "demo generation unavailable" },
       { status: 503 },
@@ -306,7 +308,7 @@ export async function POST(request: NextRequest) {
           { status: 503 },
         );
       }
-      console.error("guest demo regeneration failed", error);
+      htLogger.error("guest demo regeneration failed", error);
       return NextResponse.json(
         { error: "guest board regeneration failed" },
         { status: 500 },
@@ -357,10 +359,12 @@ export async function POST(request: NextRequest) {
         { status: 503 },
       );
     }
-    console.error("guest demo provisioning failed", error);
+    htLogger.error("guest demo provisioning failed", error);
     return NextResponse.json(
       { error: "guest provisioning failed" },
       { status: 500 },
     );
   }
 }
+
+export const POST = withoutAuth(POSTHandler);

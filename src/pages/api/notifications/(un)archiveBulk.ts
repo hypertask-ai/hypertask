@@ -1,15 +1,16 @@
+import { logger as htLogger } from "#logger";
+import { getAuthSession, withAuth } from "#with-auth";
 import { notificationStore } from "@/utils/controllers/notifications";
 import { NextApiHandler, NextApiRequest, NextApiResponse } from "next";
 import prisma from "@/lib/prisma";
 import { Status } from "@prisma/client";
 import { broadcastInboxChange, socketIdFromHeader } from "@/lib/realtime/server";
-import { getSessionUser } from "@/lib/auth/getSessionUser";
 
 const handler: NextApiHandler = async (req: NextApiRequest, res: NextApiResponse) => {
     if (req.method === "POST") {
         try {
             // HTPR-4772: bulk notification writes belong to the signed user only.
-            const session = await getSessionUser(
+            const session = await getAuthSession(
                 new Headers(req.headers as Record<string, string>)
             );
             if (!session) return res.status(401).json({ message: "Unauthorized" });
@@ -107,7 +108,7 @@ const handler: NextApiHandler = async (req: NextApiRequest, res: NextApiResponse
             });
 
         } catch (error) {
-            console.error(error);
+            htLogger.error(error);
             return res.status(500).json({ message: "Internal server error" });
         }
     } else {
@@ -115,4 +116,4 @@ const handler: NextApiHandler = async (req: NextApiRequest, res: NextApiResponse
     }
 };
 
-export default handler;
+export default withAuth(handler, { authenticateInHandler: true });

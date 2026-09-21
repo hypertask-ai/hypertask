@@ -1,7 +1,8 @@
+import { logger as htLogger } from "#logger";
 import { sendEmail } from "@/lib/email/sendEmail";
 
 const sendInviteEmail = async (emails, link, projectName, by) => {
-  console.log(
+  htLogger.info(
     "🤔 ~ sendInviteEmail ~ emails, link, projectName, by:",
     emails,
     link,
@@ -51,14 +52,14 @@ const sendInviteEmail = async (emails, link, projectName, by) => {
                 </html>
              `,
     });
-    console.log("🤔 ~ sendInviteEmail ~ res:", res);
+    htLogger.info("🤔 ~ sendInviteEmail ~ res:", res);
 
     return {
       status: 200,
       message: "success",
     };
   } catch (error) {
-    console.log("🤔 ~ sendInviteEmail ~ error:", error);
+    htLogger.info("🤔 ~ sendInviteEmail ~ error:", error);
 
     return {
       status: 500,

@@ -1,3 +1,5 @@
+import { logger as htLogger } from "#logger";
+import { withoutAuth } from "#with-auth";
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 import { checkMcpRateLimit, validateMcpAuth } from "@/lib/mcp/auth";
@@ -8,7 +10,7 @@ export const dynamic = "force-dynamic";
 
 const PENDING_ROOM_MESSAGE_LIMIT = 50;
 
-export async function GET(request: NextRequest) {
+async function GETHandler(request: NextRequest) {
   try {
     const rateLimited = await checkMcpRateLimit(request);
     if (rateLimited) return rateLimited;
@@ -82,10 +84,12 @@ export async function GET(request: NextRequest) {
       })),
     });
   } catch (error) {
-    console.error("[mcp agent-room] pending failed", error);
+    htLogger.error("[mcp agent-room] pending failed", error);
     return NextResponse.json(
       { success: false, error: "Failed to load pending room messages" },
       { status: 500 },
     );
   }
 }
+
+export const GET = withoutAuth(GETHandler);

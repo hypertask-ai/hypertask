@@ -1,3 +1,5 @@
+import { logger as htLogger } from "#logger";
+import { withoutAuth } from "#with-auth";
 import { NextRequest, NextResponse } from "next/server";
 import {
   agentRunsEnabledFor,
@@ -21,7 +23,7 @@ const noStore = (body: Record<string, unknown>, status = 200) =>
     headers: { "Cache-Control": "private, no-store" },
   });
 
-export async function POST(
+async function POSTHandler(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> },
 ) {
@@ -69,7 +71,9 @@ export async function POST(
     if (error instanceof AgentRunInputError) {
       return noStore({ success: false, error: error.message }, 400);
     }
-    console.error("[agent-run] stop failed", error);
+    htLogger.error("[agent-run] stop failed", error);
     return noStore({ success: false, error: "Failed to stop agent run" }, 500);
   }
 }
+
+export const POST = withoutAuth(POSTHandler);

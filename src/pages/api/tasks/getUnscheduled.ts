@@ -1,3 +1,5 @@
+import { logger as htLogger } from "#logger";
+import { withAuth } from "#with-auth";
 import { NextApiHandler, NextApiRequest, NextApiResponse } from "next";
 import prisma from "@/lib/prisma";
 
@@ -88,7 +90,7 @@ const handler: NextApiHandler = async (
 
       return res.status(200).json(tasks);
     } catch (error) {
-      console.log("🚀 ~ error:", error);
+      htLogger.info("🚀 ~ error:", error);
       return res.status(200).json([]);
     }
   } else {
@@ -96,7 +98,7 @@ const handler: NextApiHandler = async (
   }
 };
 
-export default handler;
+export default withAuth(handler, { authenticateInHandler: true });
 
 const fetchidlist = async (id: number) => {
   try {
@@ -127,7 +129,7 @@ const fetchidlist = async (id: number) => {
     }
     return [];
   } catch (error) {
-    console.log("🤔 ~ fetchidlist ~ error:", error);
+    htLogger.info("🤔 ~ fetchidlist ~ error:", error);
     return [];
   }
 };

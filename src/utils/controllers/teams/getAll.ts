@@ -1,3 +1,4 @@
+import { logger as htLogger } from "#logger";
 
 
 import { ITeam } from "@/models/model";
@@ -138,7 +139,7 @@ const getAllTeams = async (userId:number) => {
                 json:[...owned_teams, ...participating_teams]
             })
         } catch (error) {
-            console.log(error);
+            htLogger.info(error);
             return ({
                 status:400,
                 json:[]

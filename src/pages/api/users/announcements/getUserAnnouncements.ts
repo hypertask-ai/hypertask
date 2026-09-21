@@ -1,3 +1,5 @@
+import { logger as htLogger } from "#logger";
+import { withAuth } from "#with-auth";
 import { NextApiHandler, NextApiRequest, NextApiResponse } from "next";
 // import getAllUsers from "@/utils/controllers/users/getAll";
 
@@ -23,7 +25,7 @@ const handler: NextApiHandler = async (req: NextApiRequest, res: NextApiResponse
             if (!announcements) return res.status(404).json(null)
             return res.status(200).json(announcements)
         } catch (error) {
-            console.log(error);
+            htLogger.info(error);
             return res.status(500).json(null)
         }
     } 
@@ -46,4 +48,4 @@ const handler: NextApiHandler = async (req: NextApiRequest, res: NextApiResponse
     
 };
 
-export default handler;
+export default withAuth(handler, { authenticateInHandler: true });

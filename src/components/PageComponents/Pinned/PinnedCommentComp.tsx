@@ -1,3 +1,4 @@
+import { logger as htLogger } from "#logger";
 /* eslint-disable react/jsx-key */
 /* eslint-disable react-hooks/exhaustive-deps */
 /* eslint-disable @next/next/no-img-element */
@@ -336,7 +337,7 @@ const PinnedCommentsContainer = ({
       );
       toast(task.status === "Archive" ? "Unarchived task" : "Archived task");
     } catch (error) {
-      console.log("🚀 ~ markAsUnarchive ~ error:", error);
+      htLogger.info("🚀 ~ markAsUnarchive ~ error:", error);
     }
   };
 

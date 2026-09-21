@@ -1,3 +1,5 @@
+import { logger as htLogger } from "#logger";
+import { withAuth } from "#with-auth";
 // Import PrismaClient from the generated Prisma client
 import prisma from '@/lib/prisma';
 import { NextApiHandler, NextApiRequest, NextApiResponse } from 'next';
@@ -53,11 +55,11 @@ const handler: NextApiHandler = async (req: NextApiRequest, res: NextApiResponse
           `;
           
           
-            console.log("🚀 ~ consthandler:NextApiHandler= ~ result:", result)
+            htLogger.info("🚀 ~ consthandler:NextApiHandler= ~ result:", result)
             return res.status(200).send(json(result))
 
         } catch (error) {
-            console.log('Error creating section:', error);
+            htLogger.info('Error creating section:', error);
             throw error;
         } 
 
@@ -65,4 +67,4 @@ const handler: NextApiHandler = async (req: NextApiRequest, res: NextApiResponse
 }
 
 
-export default handler
+export default withAuth(handler, { authenticateInHandler: true })

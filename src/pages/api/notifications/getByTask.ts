@@ -1,6 +1,7 @@
+import { logger as htLogger } from "#logger";
+import { getAuthSession, withAuth } from "#with-auth";
 import { NextApiHandler, NextApiRequest, NextApiResponse } from "next";
 
-import { getSessionUser } from "@/lib/auth/getSessionUser";
 import notificationGetByTask from "@/utils/controllers/notifications/getByTask";
 
 // HTPR-4465: this route used to take `userId` from the request body and pass it
@@ -22,7 +23,7 @@ const handler: NextApiHandler = async (
   }
 
   try {
-    const session = await getSessionUser(
+    const session = await getAuthSession(
       new Headers(req.headers as Record<string, string>),
     );
     if (!session) return res.status(401).json({ message: "Unauthorized" });
@@ -35,9 +36,9 @@ const handler: NextApiHandler = async (
     const response = await notificationGetByTask(session.userId, taskId);
     return res.status(response.status).json(response.json);
   } catch (error) {
-    console.log(error);
+    htLogger.info(error);
     return res.status(500).json({ message: "Internal server error" });
   }
 };
 
-export default handler;
+export default withAuth(handler, { authenticateInHandler: true });

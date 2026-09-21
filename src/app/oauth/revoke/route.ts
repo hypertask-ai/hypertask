@@ -1,3 +1,4 @@
+import { logger as htLogger } from "#logger";
 import { createHash } from 'crypto'
 import { NextRequest, NextResponse } from 'next/server'
 import prisma from '@/lib/prisma'
@@ -85,7 +86,7 @@ export async function POST(request: NextRequest) {
     }
     return noStoreResponse()
   } catch (error) {
-    console.error('Error in OAuth revocation endpoint:', error)
+    htLogger.error('Error in OAuth revocation endpoint:', error)
     return NextResponse.json(
       { error: 'server_error', error_description: 'Internal server error' },
       { status: 500 },

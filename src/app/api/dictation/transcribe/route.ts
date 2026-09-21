@@ -1,3 +1,5 @@
+import { logger as htLogger } from "#logger";
+import { getAuthSession, withAuth } from "#with-auth";
 import { NextRequest, NextResponse } from "next/server";
 import { getProjectTeamProviderContext } from "@/app/api/ai/_lib/providerGate";
 import { isAiFeatureEnabled } from "@/lib/systemModelLadder";
@@ -5,7 +7,6 @@ import {
   resolveDictationLanguage,
   resolveDictationProvider,
 } from "@/lib/dictationProvider";
-import { getSessionUser } from "@/lib/auth/getSessionUser";
 import { isGuestUserId } from "@/lib/demo/guestGuard";
 import { fetchUserPreferenceController } from "@/utils/controllers/users/fetch_preferences";
 import {
@@ -34,9 +35,9 @@ import {
  * - Rejects files < 5KB (likely empty/silent)
  * - Filters transcriptions < 3 characters (likely noise)
  */
-export async function POST(request: NextRequest) {
+async function POSTHandler(request: NextRequest) {
   try {
-    const session = await getSessionUser(request.headers);
+    const session = await getAuthSession(request.headers);
     if (!session) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
@@ -106,7 +107,7 @@ export async function POST(request: NextRequest) {
       tags,
     });
     const duration = Date.now() - startTime;
-    console.log(
+    htLogger.info(
       `[Dictation:${provider}] Request took ${duration}ms (${(
         duration / 1000
       ).toFixed(2)}s) - Audio size: ${audioFile.size} bytes`,
@@ -122,10 +123,12 @@ export async function POST(request: NextRequest) {
     if (error instanceof DictationAudioTooLargeError) {
       return NextResponse.json({ error: error.message }, { status: 413 });
     }
-    console.error("Transcription error:", error);
+    htLogger.error("Transcription error:", error);
     return NextResponse.json(
       { error: error instanceof Error ? error.message : "Transcription failed" },
       { status: 500 },
     );
   }
 }
+
+export const POST = withAuth(POSTHandler, { authenticateInHandler: true });

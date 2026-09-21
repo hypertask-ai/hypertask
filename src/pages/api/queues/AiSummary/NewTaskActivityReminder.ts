@@ -1,3 +1,4 @@
+import { withoutAuth } from "#with-auth";
 // pages/api/setupReminder.js
 // id:`notifications-for-task-${taskId}`
 import { scheduleJobById } from "@/lib/qstash";
@@ -22,7 +23,7 @@ function buildJobId (taskId:number){
     return "ai-summary-for-taskId:"+taskId
 }
 
-export default  async function NewTaskActivityReminder(
+async function NewTaskActivityReminder(
   req: IReq,
 ) {
 
@@ -50,3 +51,5 @@ export default  async function NewTaskActivityReminder(
     return res
 
 }
+
+export default withoutAuth(NewTaskActivityReminder);

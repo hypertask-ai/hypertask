@@ -1,3 +1,4 @@
+import { logger as htLogger } from "#logger";
 // hooks/General/useAIResponseHandler.ts
 import { currentProjectAtom } from '@/store';
 import { useState, useCallback } from 'react';
@@ -58,7 +59,7 @@ export const useAIResponseHandler = (defaultMode: string, flaskUrl: string) => {
         setAIResponse(prev => prev + decoder.decode(value, { stream: true }));
       }
     } catch (error) {
-      console.error("AI Response Error:", error);
+      htLogger.error("AI Response Error:", error);
     } finally {
       setLoading(false);
     }

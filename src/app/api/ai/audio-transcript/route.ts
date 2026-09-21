@@ -1,3 +1,5 @@
+import { logger as htLogger } from "#logger";
+import { getAuthSession, withAuth } from "#with-auth";
 import { NextRequest, NextResponse } from "next/server";
 import { generateText } from "ai";
 import { z } from "zod";
@@ -14,7 +16,6 @@ import { isAiFeatureEnabled } from "@/lib/systemModelLadder";
 import {
   normalizeDictationTranscriptForSse,
 } from "@/lib/dictationSse";
-import { getSessionUser } from "@/lib/auth/getSessionUser";
 import { isGuestUserId } from "@/lib/demo/guestGuard";
 import {
   resolveDictationLanguage,
@@ -95,8 +96,8 @@ async function improveTranscript(
   return normalizeTiptapOutput(transcript, text);
 }
 
-export async function POST(request: NextRequest) {
-  const session = await getSessionUser(request.headers);
+async function POSTHandler(request: NextRequest) {
+  const session = await getAuthSession(request.headers);
   if (!session) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
@@ -190,10 +191,12 @@ export async function POST(request: NextRequest) {
     if (error instanceof DictationAudioTooLargeError) {
       return NextResponse.json({ error: error.message }, { status: 413 });
     }
-    console.error("[ai/audio-transcript] error", error);
+    htLogger.error("[ai/audio-transcript] error", error);
     if (body.improve) {
       return NextResponse.json({ error: String(errorMessage(error)) }, { status: 500 });
     }
     return NextResponse.json({ error: String(errorMessage(error)) }, { status: 500 });
   }
 }
+
+export const POST = withAuth(POSTHandler, { authenticateInHandler: true });

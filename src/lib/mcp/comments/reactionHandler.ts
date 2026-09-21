@@ -1,3 +1,4 @@
+import { logger as htLogger } from "#logger";
 import { NextRequest, NextResponse } from 'next/server';
 
 export type CommentReactionTarget = {
@@ -72,7 +73,7 @@ export function createCommentReactionHandler<TContext>(
     try {
       featureEnabled = await dependencies.featureEnabled(context);
     } catch (error) {
-      console.error('[comment-reaction] feature flag check failed', error);
+      htLogger.error('[comment-reaction] feature flag check failed', error);
     }
     if (!featureEnabled) {
       return NextResponse.json(
@@ -124,7 +125,7 @@ export function createCommentReactionHandler<TContext>(
     } catch (error) {
       // The reaction is already committed. A notification or realtime outage
       // must not turn a successful, idempotent mutation into a client retry.
-      console.error('[comment-reaction] post-commit side effect failed', error);
+      htLogger.error('[comment-reaction] post-commit side effect failed', error);
     }
     return NextResponse.json({ success: true, active, ...result });
   };

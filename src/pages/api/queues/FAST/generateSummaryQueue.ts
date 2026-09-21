@@ -1,3 +1,5 @@
+import { logger as htLogger } from "#logger";
+import { withoutAuth } from "#with-auth";
 import type { NextApiRequest, NextApiResponse } from "next";
 import { withQstashSignature } from "@/lib/qstash";
 import {
@@ -9,18 +11,18 @@ import type { IReq } from "./generateSummary";
 async function handler(req: NextApiRequest, res: NextApiResponse) {
   try {
     const job = req.body as IReq;
-    console.log("🤔 ~ executing job:", job);
+    htLogger.info("🤔 ~ executing job:", job);
 
     const result = await generateAndStoreTaskSummary(job.taskId, {
       agentId: job.agentId,
     });
     if (!result) {
-      console.log("generateAndStoreTaskSummary returned empty");
+      htLogger.info("generateAndStoreTaskSummary returned empty");
       return res.status(200).json({ skipped: true });
     }
     return res.status(200).json({ ok: true });
   } catch (error) {
-    console.log("🤔 api/queues/FAST/generateSummaryQueue ~ error:", error);
+    htLogger.info("🤔 api/queues/FAST/generateSummaryQueue ~ error:", error);
     if (error instanceof SummaryRetryableError) {
       return res.status(503).json({ ok: false, retry: true });
     }
@@ -29,7 +31,7 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
   }
 }
 
-export default withQstashSignature(handler);
+export default withoutAuth(withQstashSignature(handler));
 
 export const config = {
   api: {

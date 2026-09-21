@@ -1,3 +1,4 @@
+import { logger as htLogger } from "#logger";
 import prisma from "@/lib/prisma";
 import {
   assertAgentAssignmentChangeAllowed,
@@ -214,7 +215,7 @@ const invokeTaskDelete = async (taskId: number, claim: HardDeleteClaim) => {
 };
 
 const deleteTASK = async (taskId: number, claim: HardDeleteClaim) => {
-  console.log("------------ deleting task ==");
+  htLogger.info("------------ deleting task ==");
   try {
     const task = await prisma.task.deleteMany({
       where: {
@@ -227,107 +228,107 @@ const deleteTASK = async (taskId: number, claim: HardDeleteClaim) => {
     if (task.count !== 1) return "error";
 
     deleteTaskInTurbopuffer(taskId);
-    // console.log("🚀 ~ task: deleted: ", task)
+    // debug.log("🚀 ~ task: deleted: ", task)
 
     return "success";
   } catch (error) {
-    console.log("🚀 ~ deleteReactions ~ error:", error);
+    htLogger.info("🚀 ~ deleteReactions ~ error:", error);
     return "error";
   }
 };
 
 const deleteTaskSummary = async (taskId: number) => {
-  console.log("------------ deleting Task_Summary ==");
+  htLogger.info("------------ deleting Task_Summary ==");
   try {
     const summary = await prisma.task_Summary.deleteMany({
       where: { taskId },
     });
-    console.log("🚀 ~ Task_Summary deleted: ", summary);
+    htLogger.info("🚀 ~ Task_Summary deleted: ", summary);
 
     return "success";
   } catch (error) {
-    console.log("🚀 ~ deleteTaskSummary ~ error:", error);
+    htLogger.info("🚀 ~ deleteTaskSummary ~ error:", error);
     return "error";
   }
 };
 
 const deleteTaskReadState = async (taskId: number) => {
-  console.log("------------ deleting TaskReadState ==");
+  htLogger.info("------------ deleting TaskReadState ==");
   try {
     const readState = await prisma.taskReadState.deleteMany({
       where: { taskId },
     });
-    console.log("🚀 ~ TaskReadState deleted: ", readState);
+    htLogger.info("🚀 ~ TaskReadState deleted: ", readState);
 
     return "success";
   } catch (error) {
-    console.log("🚀 ~ deleteTaskReadState ~ error:", error);
+    htLogger.info("🚀 ~ deleteTaskReadState ~ error:", error);
     return "error";
   }
 };
 
 const deleteSavedContent = async (taskId: number) => {
-  console.log("------------ deleting SavedContent ==");
+  htLogger.info("------------ deleting SavedContent ==");
   try {
     const savedContent = await prisma.savedContent.deleteMany({
       where: { taskId },
     });
-    console.log("🚀 ~ SavedContent deleted: ", savedContent);
+    htLogger.info("🚀 ~ SavedContent deleted: ", savedContent);
 
     return "success";
   } catch (error) {
-    console.log("🚀 ~ deleteSavedContent ~ error:", error);
+    htLogger.info("🚀 ~ deleteSavedContent ~ error:", error);
     return "error";
   }
 };
 
 const deleteTaskMute = async (taskId: number) => {
-  console.log("------------ deleting TaskMute ==");
+  htLogger.info("------------ deleting TaskMute ==");
   try {
     const taskMute = await prisma.taskMute.deleteMany({
       where: { taskId },
     });
-    console.log("🚀 ~ TaskMute deleted: ", taskMute);
+    htLogger.info("🚀 ~ TaskMute deleted: ", taskMute);
 
     return "success";
   } catch (error) {
-    console.log("🚀 ~ deleteTaskMute ~ error:", error);
+    htLogger.info("🚀 ~ deleteTaskMute ~ error:", error);
     return "error";
   }
 };
 
 const deleteCustomFieldValues = async (taskId: number) => {
-  console.log("------------ deleting CustomFieldValue ==");
+  htLogger.info("------------ deleting CustomFieldValue ==");
   try {
     const customFieldValues = await prisma.customFieldValue.deleteMany({
       where: { taskId },
     });
-    console.log("🚀 ~ CustomFieldValue deleted: ", customFieldValues);
+    htLogger.info("🚀 ~ CustomFieldValue deleted: ", customFieldValues);
 
     return "success";
   } catch (error) {
-    console.log("🚀 ~ deleteCustomFieldValues ~ error:", error);
+    htLogger.info("🚀 ~ deleteCustomFieldValues ~ error:", error);
     return "error";
   }
 };
 
 const deleteReadStatus = async (taskId: number) => {
-  console.log("------------ deleting ReadStatus ==");
+  htLogger.info("------------ deleting ReadStatus ==");
   try {
     const readStatus = await prisma.readStatus.deleteMany({
       where: { taskId },
     });
-    console.log("🚀 ~ ReadStatus deleted: ", readStatus);
+    htLogger.info("🚀 ~ ReadStatus deleted: ", readStatus);
 
     return "success";
   } catch (error) {
-    console.log("🚀 ~ deleteReadStatus ~ error:", error);
+    htLogger.info("🚀 ~ deleteReadStatus ~ error:", error);
     return "error";
   }
 };
 
 const deleteRelations = async (taskId: number) => {
-  console.log("------------ deleting taskRelations ==");
+  htLogger.info("------------ deleting taskRelations ==");
   try {
     const taskRelations = await prisma.taskRelations.deleteMany({
       where: {
@@ -341,203 +342,203 @@ const deleteRelations = async (taskId: number) => {
         ],
       },
     });
-    console.log("🚀 ~ taskRelations: deleted: ", taskRelations);
+    htLogger.info("🚀 ~ taskRelations: deleted: ", taskRelations);
 
     return "success";
   } catch (error) {
-    console.log("🚀 ~ deleteRelations ~ error:", error);
+    htLogger.info("🚀 ~ deleteRelations ~ error:", error);
     return "error";
   }
 };
 
 const deleteShareTask = async (taskId: number) => {
-  console.log("------------ deleting taskSharing ==");
+  htLogger.info("------------ deleting taskSharing ==");
   try {
     const taskSharing = await prisma.taskSharing.deleteMany({
       where: {
         taskId,
       },
     });
-    console.log("🚀 ~ taskSharing: deleted: ", taskSharing);
+    htLogger.info("🚀 ~ taskSharing: deleted: ", taskSharing);
 
     return "success";
   } catch (error) {
-    console.log("🚀 ~ deleteShareTask ~ error:", error);
+    htLogger.info("🚀 ~ deleteShareTask ~ error:", error);
     return "error";
   }
 };
 
 const deleteDescription = async (taskId: number) => {
-  console.log("------------ deleting description ==");
+  htLogger.info("------------ deleting description ==");
   try {
     const description = await prisma.description.deleteMany({
       where: {
         taskId,
       },
     });
-    console.log("🚀 ~ reactions: deleted: ", description);
+    htLogger.info("🚀 ~ reactions: deleted: ", description);
 
     return "success";
   } catch (error) {
-    console.log("🚀 ~ deleteReactions ~ error:", error);
+    htLogger.info("🚀 ~ deleteReactions ~ error:", error);
     return "error";
   }
 };
 
 const deleteReactions = async (taskId: number) => {
-  console.log("------------ deleting reactions ==");
+  htLogger.info("------------ deleting reactions ==");
   try {
     const reactions = await prisma.reaction.deleteMany({
       where: { taskId },
     });
-    console.log("🚀 ~ reactions: deleted: ", reactions);
+    htLogger.info("🚀 ~ reactions: deleted: ", reactions);
 
     return "success";
   } catch (error) {
-    console.log("🚀 ~ deleteReactions ~ error:", error);
+    htLogger.info("🚀 ~ deleteReactions ~ error:", error);
     return "error";
   }
 };
 
 const deleteAttachments = async (taskId: number) => {
-  console.log("------------ deleting attachments ==");
+  htLogger.info("------------ deleting attachments ==");
   try {
     const attachments = await prisma.attachment.deleteMany({
       where: { taskId },
     });
-    console.log("🚀 ~ attachments deleted: ", attachments);
+    htLogger.info("🚀 ~ attachments deleted: ", attachments);
 
     return "success";
   } catch (error) {
-    console.log("🚀 ~ deleteReactions ~ error:", error);
+    htLogger.info("🚀 ~ deleteReactions ~ error:", error);
     return "error";
   }
 };
 
 const deleteComments = async (taskId: number) => {
-  console.log("------------ deleting Comments ==");
+  htLogger.info("------------ deleting Comments ==");
   try {
     await deleteManyCommentsInTurbopuffer(taskId);
     const Comments = await prisma.comment.deleteMany({
       where: { taskId },
     });
 
-    console.log("🚀 ~ Comments deleted: ", Comments);
+    htLogger.info("🚀 ~ Comments deleted: ", Comments);
 
     return "success";
   } catch (error) {
-    console.log("🚀 ~ deleteReactions ~ error:", error);
+    htLogger.info("🚀 ~ deleteReactions ~ error:", error);
     return "error";
   }
 };
 
 const taskLabels = async (taskId: number) => {
-  console.log("------------ deleting taskLabels ==");
+  htLogger.info("------------ deleting taskLabels ==");
   try {
     const taskLabels = await prisma.taskLabel.deleteMany({
       where: { taskId },
     });
-    console.log("🚀 ~ taskLabels deleted: ", taskLabels);
+    htLogger.info("🚀 ~ taskLabels deleted: ", taskLabels);
 
     return "success";
   } catch (error) {
-    console.log("🚀 ~ deleteReactions ~ error:", error);
+    htLogger.info("🚀 ~ deleteReactions ~ error:", error);
     return "error";
   }
 };
 
 const deletePriority = async (taskId: number) => {
-  console.log("------------ deleting Priority ==");
+  htLogger.info("------------ deleting Priority ==");
   try {
     const Priority = await prisma.priority.deleteMany({
       where: { taskId },
     });
-    console.log("🚀 ~ Priority deleted: ", Priority);
+    htLogger.info("🚀 ~ Priority deleted: ", Priority);
 
     return "success";
   } catch (error) {
-    console.log("🚀 ~ deleteReactions ~ error:", error);
+    htLogger.info("🚀 ~ deleteReactions ~ error:", error);
     return "error";
   }
 };
 
 const deleteEstimate = async (taskId: number) => {
-  console.log("------------ deleting Estimate ==");
+  htLogger.info("------------ deleting Estimate ==");
   try {
     const Estimate = await prisma.estimate.deleteMany({
       where: { taskId },
     });
-    console.log("🚀 ~ Estimate deleted: ", Estimate);
+    htLogger.info("🚀 ~ Estimate deleted: ", Estimate);
 
     return "success";
   } catch (error) {
-    console.log("🚀 ~ deleteReactions ~ error:", error);
+    htLogger.info("🚀 ~ deleteReactions ~ error:", error);
     return "error";
   }
 };
 
 const deleteReminders = async (taskId: number) => {
-  console.log("------------ deleting Reminders ==");
+  htLogger.info("------------ deleting Reminders ==");
   try {
     const Reminders = await prisma.reminder.deleteMany({
       where: { taskId },
     });
-    console.log("🚀 ~ Reminders deleted: ", Reminders);
+    htLogger.info("🚀 ~ Reminders deleted: ", Reminders);
 
     return "success";
   } catch (error) {
-    console.log("🚀 ~ deleteReactions ~ error:", error);
+    htLogger.info("🚀 ~ deleteReactions ~ error:", error);
     return "error";
   }
 };
 
 const deleteDrafts = async (taskId: number) => {
-  console.log("------------ deleting drafts ==");
+  htLogger.info("------------ deleting drafts ==");
   try {
     const drafts = await prisma.drafts.deleteMany({
       where: { taskId },
     });
-    console.log("🚀 ~ drafts deleted: ", drafts);
+    htLogger.info("🚀 ~ drafts deleted: ", drafts);
 
     return "success";
   } catch (error) {
-    console.log("🚀 ~ deleteReactions ~ error:", error);
+    htLogger.info("🚀 ~ deleteReactions ~ error:", error);
     return "error";
   }
 };
 
 const deleteAssignees = async (taskId: number) => {
-  console.log("------------ deleting Assignees ==");
+  htLogger.info("------------ deleting Assignees ==");
   try {
     const Assignees = await prisma.assignees.deleteMany({
       where: { taskId },
     });
-    console.log("🚀 ~ Assignees deleted: ", Assignees);
+    htLogger.info("🚀 ~ Assignees deleted: ", Assignees);
 
     return "success";
   } catch (error) {
-    console.log("🚀 ~ deleteReactions ~ error:", error);
+    htLogger.info("🚀 ~ deleteReactions ~ error:", error);
     return "error";
   }
 };
 
 const deleteFollowers = async (taskId: number) => {
-  console.log("------------ deleting Followers ==");
+  htLogger.info("------------ deleting Followers ==");
   try {
     const Followers = await prisma.follower.deleteMany({
       where: { taskId },
     });
-    console.log("🚀 ~ Followers deleted: ", Followers);
+    htLogger.info("🚀 ~ Followers deleted: ", Followers);
 
     return "success";
   } catch (error) {
-    console.log("🚀 ~ deleteReactions ~ error:", error);
+    htLogger.info("🚀 ~ deleteReactions ~ error:", error);
     return "error";
   }
 };
 
 const deleteNotifications = async (taskId: number) => {
-  console.log("------------ deleting Notifications ==");
+  htLogger.info("------------ deleting Notifications ==");
   try {
     // Collect the owners first: deleteMany does not return rows, and the open
     // inboxes need telling or the deleted task's row sits there until a reload
@@ -550,7 +551,7 @@ const deleteNotifications = async (taskId: number) => {
     const Notifications = await prisma.notification.deleteMany({
       where: { taskId },
     });
-    console.log("🚀 ~ Notifications deleted: ", Notifications);
+    htLogger.info("🚀 ~ Notifications deleted: ", Notifications);
     void broadcastInboxForTask(
       taskId,
       owners.map((owner) => owner.userId),
@@ -558,13 +559,13 @@ const deleteNotifications = async (taskId: number) => {
 
     return "success";
   } catch (error) {
-    console.log("🚀 ~ deleteReactions ~ error:", error);
+    htLogger.info("🚀 ~ deleteReactions ~ error:", error);
     return "error";
   }
 };
 
 const deleteSubTasks = async (taskId: number, claim: HardDeleteClaim) => {
-  console.log("------------ deleting Subtasks ==");
+  htLogger.info("------------ deleting Subtasks ==");
   try {
     const task = await prisma.task.findUnique({
       where: { id: taskId },
@@ -576,7 +577,7 @@ const deleteSubTasks = async (taskId: number, claim: HardDeleteClaim) => {
         },
       },
     });
-    console.log("🚀 ~ deleteSubTasks ~ task:", task);
+    htLogger.info("🚀 ~ deleteSubTasks ~ task:", task);
     if (task?.subTasks && task.subTasks.length > 0) {
       for (const subTask of task.subTasks) {
         if (!claim.taskIds.includes(subTask.id)) return "error";
@@ -586,7 +587,7 @@ const deleteSubTasks = async (taskId: number, claim: HardDeleteClaim) => {
     }
     return "success";
   } catch (error) {
-    console.log("🚀 ~ deleteSubtasks ~ error:", error);
+    htLogger.info("🚀 ~ deleteSubtasks ~ error:", error);
     return "error";
   }
 };

@@ -1,3 +1,4 @@
+import { logger as htLogger } from "#logger";
 import { NextRequest, NextResponse } from 'next/server'
 import { randomUUID } from 'crypto'
 import prisma from '@/lib/prisma'
@@ -112,7 +113,7 @@ export async function POST(request: NextRequest) {
         }
       })
     } catch (error) {
-      console.error('Error storing OAuth client:', error)
+      htLogger.error('Error storing OAuth client:', error)
       return NextResponse.json(
         { error: 'server_error', error_description: 'Failed to register client' },
         { status: 500 }
@@ -133,7 +134,7 @@ export async function POST(request: NextRequest) {
       }
     })
   } catch (error) {
-    console.error('Error in OAuth register endpoint:', error)
+    htLogger.error('Error in OAuth register endpoint:', error)
     
     // Handle JSON parsing errors
     if (error instanceof SyntaxError) {

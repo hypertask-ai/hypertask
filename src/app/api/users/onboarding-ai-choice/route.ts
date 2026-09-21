@@ -1,3 +1,5 @@
+import { logger as htLogger } from "#logger";
+import { withAuth } from "#with-auth";
 import { NextRequest, NextResponse } from "next/server";
 import { LogType, Status } from "@prisma/client";
 
@@ -15,7 +17,7 @@ const ALLOWED_TOOLS = new Set([
   "builtin",
 ]);
 
-export async function POST(request: NextRequest) {
+async function POSTHandler(request: NextRequest) {
   try {
     const user = await getCurrentUserFromCookies();
     if (typeof user?.id !== "number") {
@@ -47,10 +49,12 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({ success: true });
   } catch (error) {
-    console.error("POST [users/onboarding-ai-choice] failed:", error);
+    htLogger.error("POST [users/onboarding-ai-choice] failed:", error);
     return NextResponse.json(
       { error: "Internal server error" },
       { status: 500 },
     );
   }
 }
+
+export const POST = withAuth(POSTHandler, { authenticateInHandler: true });

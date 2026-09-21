@@ -78,7 +78,10 @@ function loadHandler(session) {
 
   const stubs = {
     "@/lib/prisma": { __esModule: true, default: db },
-    "@/lib/auth/getSessionUser": { getSessionUser: async () => session },
+    "#with-auth": {
+      getAuthSession: async () => session,
+      withAuth: (handler) => handler,
+    },
   };
 
   const originalLoad = Module._load;

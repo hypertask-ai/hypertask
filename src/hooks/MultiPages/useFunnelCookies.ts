@@ -1,3 +1,4 @@
+import { env as appEnv } from "#env";
 import { currentUserAtom } from '@/store';
 import { parseCookies } from 'nookies';
 import { useRecoilState } from '@/lib/state';
@@ -16,7 +17,7 @@ const useFunnelCookies = () => {
         nookies.set(null, 'funnel_tutorial_completed', 'true', {
                 maxAge: 60 * 60 * 24 * 30, // 30 days
                 path: '/',
-                secure: process.env.NODE_ENV === 'production',
+                secure: appEnv.NODE_ENV === 'production',
                 sameSite: 'lax'
               });
     }

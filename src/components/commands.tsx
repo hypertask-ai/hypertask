@@ -1,3 +1,4 @@
+import { logger as htLogger } from "#logger";
 import { useContext, useEffect, useState } from "react";
 
 import { useRecoilState, useRecoilValue } from "@/lib/state";
@@ -1826,7 +1827,7 @@ const HypertasksCommands = ({ callbackHandler, contextOptions }: IHTCProps) => {
         ranking,
       });
     } catch (error) {
-      console.log("🤔 ~ createColumn ~ error:", error);
+      htLogger.info("🤔 ~ createColumn ~ error:", error);
       toast.error("Error creating column");
       boardCloseHandler();
       return;
@@ -1873,7 +1874,7 @@ const HypertasksCommands = ({ callbackHandler, contextOptions }: IHTCProps) => {
             : undefined
         );
       } catch (error: any) {
-        console.log("🤔 ~ createColumn ~ error:", error);
+        htLogger.info("🤔 ~ createColumn ~ error:", error);
       }
     } else toast.error("Error creating column");
     boardCloseHandler();
@@ -1930,7 +1931,7 @@ const HypertasksCommands = ({ callbackHandler, contextOptions }: IHTCProps) => {
 
   // ---------------------------- TASK MOVE TO DIFFERENT COLUMN HANDLER
   const closeCallback = async () => {
-    // console.log(task)
+    // debug.log(task)
     //inboxRefetchHandler();
     router.refresh();
     boardCloseHandler();
@@ -2027,8 +2028,8 @@ const HypertasksCommands = ({ callbackHandler, contextOptions }: IHTCProps) => {
       inViewObject.taskId,
     ]);
     const taskToReturn = { estimate: estimateData };
-    // console.log("🚀 ~ toggleEstimateModal ~ estimateData:", estimateData)
-    // console.log("🚀 ~ toggleEstimateModal ~ taskToReturn:", taskToReturn)
+    // debug.log("🚀 ~ toggleEstimateModal ~ estimateData:", estimateData)
+    // debug.log("🚀 ~ toggleEstimateModal ~ taskToReturn:", taskToReturn)
     updateTaskInCache(
       taskToReturn,
       inViewObject.taskId,

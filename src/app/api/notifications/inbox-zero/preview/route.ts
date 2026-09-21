@@ -1,6 +1,6 @@
+import { getAuthSession, withAuth } from "#with-auth";
 import { NextResponse } from "next/server";
 
-import { getSessionUser } from "@/lib/auth/getSessionUser";
 import {
   evaluateInboxZero,
   loadActiveInboxZeroNotifications,
@@ -11,8 +11,8 @@ import {
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
-export async function POST(request: Request) {
-  const session = await getSessionUser(request.headers);
+async function POSTHandler(request: Request) {
+  const session = await getAuthSession(request.headers);
   if (!session) {
     return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
   }
@@ -41,3 +41,5 @@ export async function POST(request: Request) {
 
   return NextResponse.json(preview);
 }
+
+export const POST = withAuth(POSTHandler, { authenticateInHandler: true });

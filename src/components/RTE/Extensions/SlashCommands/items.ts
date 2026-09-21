@@ -1,3 +1,4 @@
+import { logger as htLogger } from "#logger";
 import type { Editor } from "@tiptap/react";
 import {
   Bold,
@@ -100,7 +101,7 @@ const runFlaskSlash = async (
         }
         return true;
       })().catch((error) => {
-        console.log("🚀 ~ error:", error);
+        htLogger.info("🚀 ~ error:", error);
         throw error;
       }),
       {
@@ -123,7 +124,7 @@ const runFlaskSlash = async (
       }
     );
   } catch (error) {
-    console.log("🚀 ~ command: ~ error:", error);
+    htLogger.info("🚀 ~ command: ~ error:", error);
     return false;
   }
 };
@@ -169,7 +170,7 @@ const getSuggestionItems = (query: { query: string; editor: any }) => {
               }
               return true;
             })().catch((error) => {
-              console.log("🚀 ~ error:", error);
+              htLogger.info("🚀 ~ error:", error);
               throw error;
             }),
             {
@@ -200,7 +201,7 @@ const getSuggestionItems = (query: { query: string; editor: any }) => {
             }
           );
         } catch (error) {
-          console.log("🚀 ~ command: ~ error:", error);
+          htLogger.info("🚀 ~ command: ~ error:", error);
           return false;
         }
       },
@@ -242,7 +243,7 @@ const getSuggestionItems = (query: { query: string; editor: any }) => {
               }
               return true;
             })().catch((error) => {
-              console.log("🚀 ~ error:", error);
+              htLogger.info("🚀 ~ error:", error);
               throw error;
             }),
             {
@@ -270,7 +271,7 @@ const getSuggestionItems = (query: { query: string; editor: any }) => {
             }
           );
         } catch (error) {
-          console.log("🚀 ~ command: ~ error:", error);
+          htLogger.info("🚀 ~ command: ~ error:", error);
           return false;
         }
       },

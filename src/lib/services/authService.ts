@@ -1,3 +1,5 @@
+import { env as appEnv } from "#env";
+import { logger as htLogger } from "#logger";
 import update_or_create_user from '@/utils/controllers/users/update_or_create_user'
 import { IProject, ITaskShare } from '@/models/model'
 import nookies from 'nookies'
@@ -42,11 +44,11 @@ export class AuthService {
     shouldSkipInteractive: boolean = false,
     currentBrowserUrl?: string,
     source: 'google' | 'email_link' | 'email_code' = 'google',
-    requestBaseUrl: string = (typeof window !== 'undefined' ? window.location.origin : (process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000'))
+    requestBaseUrl: string = (typeof window !== 'undefined' ? window.location.origin : (appEnv.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000'))
   ): Promise<AuthResult> {
     
     try {
-      console.log(`🔐 Starting authentication flow for ${firebaseUser.email} (source: ${source})`)
+      htLogger.info(`🔐 Starting authentication flow for ${firebaseUser.email} (source: ${source})`)
 
       // 1. Update user in database (same logic as useAuth.tsx)
       const userUpdateResult = await update_or_create_user(
@@ -60,7 +62,7 @@ export class AuthService {
       )
 
       if (userUpdateResult.status !== 200) {
-        console.error('❌ User update failed:', userUpdateResult)
+        htLogger.error('❌ User update failed:', userUpdateResult)
         return {
           success: false,
           error: 'Failed to update user data'
@@ -69,14 +71,14 @@ export class AuthService {
 
       const userData = userUpdateResult.res.user
       if (!userData) {
-        console.error('❌ User data not found in response')
+        htLogger.error('❌ User data not found in response')
         return {
           success: false,
           error: 'User data not found'
         }
       }
       
-      console.log(`✅ User updated successfully (${source}):`, {
+      htLogger.info(`✅ User updated successfully (${source}):`, {
         id: userData.id,
         email: userData.email,
         displayName: userData.displayName,
@@ -87,11 +89,11 @@ export class AuthService {
 
       // 2. Get user's projects (same logic as useAuth.tsx)
       const prevBoard = await this.getProjects(userData.id, requestBaseUrl)
-      console.log(`📋 User projects fetched (${source}):`, prevBoard)
+      htLogger.info(`📋 User projects fetched (${source}):`, prevBoard)
 
       // 3. Calculate redirect URL (same logic as useAuth.tsx)
       const redirectUrl = this.getRedirectUrl(userData, prevBoard, false)
-      console.log(`🔄 Redirect URL calculated (${source}):`, redirectUrl)
+      htLogger.info(`🔄 Redirect URL calculated (${source}):`, redirectUrl)
 
       return {
         success: true,
@@ -100,7 +102,7 @@ export class AuthService {
       }
 
     } catch (error) {
-      console.error(`❌ Authentication failed (${source}):`, error)
+      htLogger.error(`❌ Authentication failed (${source}):`, error)
       return {
         success: false,
         error: 'Authentication failed'
@@ -145,7 +147,7 @@ export class AuthService {
       path: '/',
     })
 
-    console.log('✅ Client authentication cookies set successfully')
+    htLogger.info('✅ Client authentication cookies set successfully')
   }
 
   /**
@@ -153,7 +155,7 @@ export class AuthService {
    */
   private static async getProjects(
     userId: number,
-    baseUrl: string = (typeof window !== 'undefined' ? window.location.origin : (process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000'))
+    baseUrl: string = (typeof window !== 'undefined' ? window.location.origin : (appEnv.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000'))
   ): Promise<IProject | undefined> {
     try {
       const response = await fetch(`${baseUrl}/api/projects/getAll`, {
@@ -167,7 +169,7 @@ export class AuthService {
         return data[0]
       }
     } catch (error) {
-      console.error('❌ Error fetching projects:', error)
+      htLogger.error('❌ Error fetching projects:', error)
     }
     
     return undefined
@@ -184,7 +186,7 @@ export class AuthService {
     sharedTask?: ITaskShare
   ): string {
     const { onboardingTourStatus } = user?.UserSetting || {}
-    console.log('🔄 getRedirectUrl - onboardingTourStatus:', onboardingTourStatus)
+    htLogger.info('🔄 getRedirectUrl - onboardingTourStatus:', onboardingTourStatus)
 
     // Shared task URL generation helper
     const getSharedTaskUrl = () =>

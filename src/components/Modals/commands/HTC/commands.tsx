@@ -373,7 +373,7 @@ const Commands = (props: Props) => {
   const lastgClick = useRef<number | null>(null);
 
   const [modal, setModal] = useState<boolean>(isOpen);
-  // console.log("🚀 ~ Commands ~ modal:", modal)
+  // debug.log("🚀 ~ Commands ~ modal:", modal)
   const [first, setfirst] = useState(false);
 
   const setInputRef = useCallback(

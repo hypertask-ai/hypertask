@@ -1,3 +1,5 @@
+import { logger as htLogger } from "#logger";
+import { withAuth } from "#with-auth";
 import { updateTaskSingle } from "@/utils/controllers/tasks/single";
 import { broadcastBoardChange } from "@/lib/realtime/server";
 import { NextApiHandler, NextApiRequest, NextApiResponse } from "next";
@@ -23,7 +25,7 @@ const handler: NextApiHandler = async (
 
       return res.status(response.status).json(response.json);
     } catch (error) {
-      console.log("🚀 ~ error:", error);
+      htLogger.info("🚀 ~ error:", error);
       return res.status(200).json([]);
     }
   } else {
@@ -31,4 +33,4 @@ const handler: NextApiHandler = async (
   }
 };
 
-export default handler;
+export default withAuth(handler, { authenticateInHandler: true });

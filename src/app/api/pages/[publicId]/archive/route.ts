@@ -1,3 +1,5 @@
+import { logger as htLogger } from "#logger";
+import { withAuth } from "#with-auth";
 import { cookies } from 'next/headers'
 import { NextRequest, NextResponse } from 'next/server'
 
@@ -8,7 +10,7 @@ import { getProjectWhere } from '@/utils/controllers/projects/getAllIncludes'
 
 type RouteContext = { params: Promise<{ publicId: string }> }
 
-export async function POST(_request: NextRequest, { params }: RouteContext) {
+async function POSTHandler(_request: NextRequest, { params }: RouteContext) {
   try {
     const userCookie = (await cookies()).get('nookies_user')
     if (!userCookie?.value) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
@@ -39,7 +41,9 @@ export async function POST(_request: NextRequest, { params }: RouteContext) {
       return NextResponse.json({ error: 'Page not found' }, { status: 404 })
     }
 
-    console.error('[Archive Page] Error:', error)
+    htLogger.error('[Archive Page] Error:', error)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
 }
+
+export const POST = withAuth(POSTHandler, { authenticateInHandler: true });

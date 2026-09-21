@@ -74,7 +74,7 @@ test("Better Auth user creation supplies uid and runs verified provisioning", ()
 
 test("passkey sign-in stays production-bound and bridges into the legacy session", () => {
   assert.match(betterAuthSrc, /import \{ passkey \} from '@better-auth\/passkey'/);
-  assert.match(betterAuthSrc, /origin: process\.env\.BETTER_AUTH_URL \?\? 'https:\/\/app\.hypertask\.ai'/);
+  assert.match(betterAuthSrc, /origin: appEnv\.BETTER_AUTH_URL \?\? 'https:\/\/app\.hypertask\.ai'/);
   assert.match(betterAuthSrc, /schema: \{ passkey: \{ modelName: 'Passkey' \} \}/);
   assert.match(betterAuthClientSrc, /passkeyClient\(\)/);
   assert.match(

@@ -1,3 +1,4 @@
+import { logger as htLogger } from "#logger";
 import { useStarAndPin } from "@/hooks/Task Detail/useStarAndPin";
 import useCopyURL from "@/hooks/General/useCopyURL";
 import { ICurrentInViewObject } from "@/store";
@@ -372,7 +373,7 @@ const useHTCTaskAndComments = ({
         boardCloseHandler();
       })
       .catch((error) => {
-        console.error("Error fetching task:", error);
+        htLogger.error("Error fetching task:", error);
       });
   };
 

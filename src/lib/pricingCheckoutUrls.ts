@@ -1,7 +1,8 @@
+import { env as appEnv } from "#env";
 import type { IPricingSearchParams } from "@/models/model";
 
 function baseUrl(): string {
-  return String(process.env.NEXT_PUBLIC_BASEURL);
+  return String(appEnv.NEXT_PUBLIC_BASEURL);
 }
 
 /** Success return URL for /pricing after Stripe checkout (Normal mode). */

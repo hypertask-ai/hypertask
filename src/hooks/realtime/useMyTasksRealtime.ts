@@ -1,3 +1,4 @@
+import { logger as htLogger } from "#logger";
 import { useEffect, useRef } from "react";
 import {
   connectRealtimeClient,
@@ -145,7 +146,7 @@ export function useMyTasksRealtime(
           releaseRealtimeClientIfIdle(client);
         };
       } catch (error) {
-        console.error("[my-tasks] realtime subscribe failed", error);
+        htLogger.error("[my-tasks] realtime subscribe failed", error);
         startFallback();
       }
     })();

@@ -1,3 +1,4 @@
+import { logger as htLogger } from "#logger";
 import {
   activeItemAtom,
   inViewObjectAtom,
@@ -594,7 +595,7 @@ const TaskContent = ({
     if (e.ctrlKey) {
       if (e.keyCode === KeyCodes.TAB) {
         e.preventDefault();
-        console.log("ctrl+tab"); // chromium fullscreen (think PWA)
+        htLogger.info("ctrl+tab"); // chromium fullscreen (think PWA)
       }
     }
 
@@ -654,11 +655,11 @@ const TaskContent = ({
         (!rowShortcutsEnabled && e.keyCode === KeyCodes.ENTER)) &&
       !showCommands.show
     ) {
-      console.time("EnterPressOnTask");
+      htLogger.time("EnterPressOnTask");
       if (!task.uniqueIndex) return;
       setTasksPlayList(tasksPlayList);
       navigateToTask(task.projectId, task.uniqueIndex);
-      console.timeEnd("EnterPressOnTask");
+      htLogger.timeEnd("EnterPressOnTask");
     }
 
     // cmd/ctrl + [m]

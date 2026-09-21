@@ -1,3 +1,5 @@
+import { logger as htLogger } from "#logger";
+import { withAuth } from "#with-auth";
 import prisma from "@/lib/prisma";
 import { ITaskMonthly, ITaskDaily, ITaskWeekly } from "@/models/dashboardStatsModel";
 
@@ -6,18 +8,18 @@ const handler: NextApiHandler = async (req: NextApiRequest, res: NextApiResponse
     try {
       const { lastXdays, lastXmonths, lastXweeks } = req.body;
       const response = await getTaskCounts(lastXdays, lastXweeks, lastXmonths)
-      console.log("🚀 ~ consthandler:NextApiHandler= ~ response:", response)
+      htLogger.info("🚀 ~ consthandler:NextApiHandler= ~ response:", response)
 
       return res.status(200).json({ response })
 
     } catch (error) {
-      console.log("🚀 ~ consthandler:NextApiHandler= ~ error:", error)
+      htLogger.info("🚀 ~ consthandler:NextApiHandler= ~ error:", error)
       return res.status(500)
     }
 
   
 }
-export default handler
+export default withAuth(handler, { authenticateInHandler: true })
 async function getTaskCounts(lastXdays: number = 7, lastXweeks: number = 4, lastXmonths: number = 12) {
   // Monthly aggregation
   const monthlyCounts: ITaskMonthly[] = await prisma.$queryRaw`
@@ -54,7 +56,7 @@ async function getTaskCounts(lastXdays: number = 7, lastXweeks: number = 4, last
       ORDER BY 
         year, week;
     `;
-  console.log("🚀 ~ getTaskCounts ~ weeklyCounts:", weeklyCounts)
+  htLogger.info("🚀 ~ getTaskCounts ~ weeklyCounts:", weeklyCounts)
 
   const dailyCounts: ITaskDaily[] = await prisma.$queryRaw`
           SELECT 

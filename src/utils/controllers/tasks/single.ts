@@ -1,3 +1,4 @@
+import { logger as htLogger } from "#logger";
 import prisma from "@/lib/prisma";
 import { ITaskUpdateDescriptionActivity } from "@/models/ActivityModels.ts";
 import { IUser } from "@/models/model";
@@ -121,7 +122,7 @@ export async function updateTaskSingle(
       },
       include: { description_: { select: { content: true } } },
     });
-    console.log("🤔 ~ updateTaskSingle ~ oldTask:", oldTask);
+    htLogger.info("🤔 ~ updateTaskSingle ~ oldTask:", oldTask);
 
     if (!oldTask) {
       return {
@@ -562,7 +563,7 @@ export async function updateTaskSingle(
             moveActivity,
             options.taskMovedActivity.sendNotification,
           ).catch((error) => {
-            console.warn(
+            htLogger.warn(
               "[task-move] Notification failed after the task update committed.",
               error,
             );
@@ -589,7 +590,7 @@ export async function updateTaskSingle(
           agentId ?? null,
         );
       } catch (notificationError) {
-        console.log(
+        htLogger.info(
           "🤔 ~ updateTaskSingle ~ description notification error:",
           notificationError,
         );
@@ -605,7 +606,7 @@ export async function updateTaskSingle(
         agentAssignerId: agentId,
       });
       if (autoAssigned !== "ready") {
-        console.warn(
+        htLogger.warn(
           "[task-update] column auto-assignment remains pending after the task move",
           { taskId: task.id },
         );
@@ -627,7 +628,7 @@ export async function updateTaskSingle(
           await spawnNextRecurrence(task.id, taskBeforeWrite.dueDate);
         }
       } catch (error) {
-        console.log("🤔 ~ updateTaskSingle ~ recurrence spawn error:", error);
+        htLogger.info("🤔 ~ updateTaskSingle ~ recurrence spawn error:", error);
       }
     }
 
@@ -696,7 +697,7 @@ export async function updateTaskSingle(
         },
       };
     }
-    console.log("🤔 ~ updateTaskSingle ~ error:", error);
+    htLogger.info("🤔 ~ updateTaskSingle ~ error:", error);
     return {
       status: 500,
       // Never hand the caller the raw error object: `new Error(obj)` in the
@@ -747,7 +748,7 @@ export async function getTaskSingle(taskId: number) {
       json: task,
     };
   } catch (error) {
-    console.log("🤔 ~ getTask ~ error:", error);
+    htLogger.info("🤔 ~ getTask ~ error:", error);
     return {
       status: 500,
       json: { message: "Failed to load task" },
@@ -766,7 +767,7 @@ export async function deleteTaskSingle(taskId: number, actingUserId: number) {
           : { message: "Task is being restored or permanently deleted" },
     };
   } catch (error) {
-    console.log("🤔 ~ deleteTaskSingle ~ error:", error);
+    htLogger.info("🤔 ~ deleteTaskSingle ~ error:", error);
     return {
       status: 500,
       // HTPR-5478: `{ message: error }` serialises to `{"message":{}}`, which

@@ -1,3 +1,5 @@
+import { logger as htLogger } from "#logger";
+import { withoutAuth } from "#with-auth";
 import { NextRequest, NextResponse } from "next/server";
 import { generateText } from "ai";
 import { z } from "zod";
@@ -47,7 +49,7 @@ const requestSchema = z
 // as it does for the in-app writer. A request-level override would silently
 // diverge from what the same user gets in the UI.
 
-export async function POST(request: NextRequest) {
+async function POSTHandler(request: NextRequest) {
   const rateLimited = await checkMcpRateLimit(request);
   if (rateLimited) return rateLimited;
   const ctx = await validateMcpAuth(request);
@@ -144,10 +146,12 @@ export async function POST(request: NextRequest) {
         { status: 403 }
       );
     }
-    console.error("[mcp/ai/task-writer] error", error);
+    htLogger.error("[mcp/ai/task-writer] error", error);
     return NextResponse.json(
       { success: false, error: errorMessage(error) },
       { status: 500 }
     );
   }
 }
+
+export const POST = withoutAuth(POSTHandler);

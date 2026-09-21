@@ -14,6 +14,7 @@ const {
   identifyMcpCli,
   logMcpCliUsage,
 } = jiti(path.join(root, 'src/lib/mcp/clientTelemetry.ts'))
+const { logger: htLogger } = jiti(path.join(root, 'src/lib/logger.ts'))
 
 const context = {
   user: { id: 6, email: 'owner@example.test' },
@@ -49,16 +50,11 @@ test('only exact versioned Hypertask CLI user agents are identified', () => {
   }
 })
 
-test('CLI usage logs a stable fingerprint and authenticated principal without the bearer token', () => {
+test('CLI usage logs a stable fingerprint and authenticated principal without the bearer token', (t) => {
   const token = 'test-bearer-token-that-must-not-be-logged'
   const calls = []
-  const originalInfo = console.info
-  console.info = (...args) => calls.push(args)
-  try {
-    logMcpCliUsage(request('hypertask-cli/1.13.29'), token, context)
-  } finally {
-    console.info = originalInfo
-  }
+  t.mock.method(htLogger, 'info', (...args) => calls.push(args))
+  logMcpCliUsage(request('hypertask-cli/1.13.29'), token, context)
 
   assert.equal(calls.length, 1)
   assert.equal(calls[0][0], '[MCP CLI Usage]')
@@ -75,14 +71,9 @@ test('CLI usage logs a stable fingerprint and authenticated principal without th
   assert.doesNotMatch(JSON.stringify(calls), new RegExp(token))
 })
 
-test('unknown clients do not create CLI usage logs', () => {
+test('unknown clients do not create CLI usage logs', (t) => {
   const calls = []
-  const originalInfo = console.info
-  console.info = (...args) => calls.push(args)
-  try {
-    logMcpCliUsage(request('Mozilla/5.0'), 'test-token', context)
-  } finally {
-    console.info = originalInfo
-  }
+  t.mock.method(htLogger, 'info', (...args) => calls.push(args))
+  logMcpCliUsage(request('Mozilla/5.0'), 'test-token', context)
   assert.deepEqual(calls, [])
 })

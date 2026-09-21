@@ -1,3 +1,5 @@
+import { logger as htLogger } from "#logger";
+import { withoutAuth } from "#with-auth";
 import { NextRequest, NextResponse } from "next/server";
 import { validateMcpAuth, checkMcpRateLimit } from "@/lib/mcp/auth";
 import { deleteView, updateView } from "@/utils/controllers/views";
@@ -38,7 +40,7 @@ export interface GetViewResponse {
  *
  * Authentication: Bearer token (JWT or API key) in Authorization header
  */
-export async function GET(request: NextRequest, props: { params: Promise<{ viewId: string }> }) {
+async function GETHandler(request: NextRequest, props: { params: Promise<{ viewId: string }> }) {
   const params = await props.params;
   try {
     const rateLimited = await checkMcpRateLimit(request);
@@ -135,7 +137,7 @@ export async function GET(request: NextRequest, props: { params: Promise<{ viewI
       view: normalizedView,
     } satisfies GetViewResponse);
   } catch (error) {
-    console.error("Error getting views:", error);
+    htLogger.error("Error getting views:", error);
     return NextResponse.json(
       { success: false, error: "Internal server error" },
       { status: 500 },
@@ -203,7 +205,7 @@ function toViewItem(
  * sorting_mode, sorting_order, sorting_stack, subtask_setting,
  * board_empty_sections, set_as_default.
  */
-export async function PATCH(request: NextRequest, props: { params: Promise<{ viewId: string }> }) {
+async function PATCHHandler(request: NextRequest, props: { params: Promise<{ viewId: string }> }) {
   try {
     const rateLimited = await checkMcpRateLimit(request)
     if (rateLimited) return rateLimited
@@ -284,7 +286,7 @@ export async function PATCH(request: NextRequest, props: { params: Promise<{ vie
     })
     return NextResponse.json({ success: true, view: updated })
   } catch (error) {
-    console.error('Error updating view:', error)
+    htLogger.error('Error updating view:', error)
     return NextResponse.json(
       { success: false, error: error instanceof Error ? error.message : 'Internal server error' },
       { status: 400 }
@@ -295,7 +297,7 @@ export async function PATCH(request: NextRequest, props: { params: Promise<{ vie
 /**
  * DELETE /api/mcp/view/[viewId] -- delete a saved board view.
  */
-export async function DELETE(request: NextRequest, props: { params: Promise<{ viewId: string }> }) {
+async function DELETEHandler(request: NextRequest, props: { params: Promise<{ viewId: string }> }) {
   try {
     const rateLimited = await checkMcpRateLimit(request)
     if (rateLimited) return rateLimited
@@ -311,10 +313,14 @@ export async function DELETE(request: NextRequest, props: { params: Promise<{ vi
     const deleted = await deleteView(viewId, ctx.user.id, ctx.agentId)
     return NextResponse.json({ success: true, view: deleted })
   } catch (error) {
-    console.error('Error deleting view:', error)
+    htLogger.error('Error deleting view:', error)
     return NextResponse.json(
       { success: false, error: error instanceof Error ? error.message : 'Internal server error' },
       { status: 400 }
     )
   }
 }
+
+export const GET = withoutAuth(GETHandler);
+export const PATCH = withoutAuth(PATCHHandler);
+export const DELETE = withoutAuth(DELETEHandler);

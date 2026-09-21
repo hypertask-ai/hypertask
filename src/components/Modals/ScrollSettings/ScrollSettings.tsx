@@ -1,3 +1,4 @@
+import { logger as htLogger } from "#logger";
 import {
   ModalContainerCustom,
   ModalHeaderComp,
@@ -68,13 +69,13 @@ const ScrollSettings: React.FC<IScrollSettings> = ({ toggle }) => {
         }
       );
       if (response.status == 200) {
-        console.log("success");
+        htLogger.info("success");
         refetchSetting();
       } else {
-        console.log("error occured");
+        htLogger.info("error occured");
       }
     } catch (error) {
-      console.log(error);
+      htLogger.info(error);
     }
   };
 

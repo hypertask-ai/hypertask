@@ -1,3 +1,4 @@
+import { logger as htLogger } from "#logger";
 import prisma from "@/lib/prisma";
 import { IUser } from "@/models/model";
 import assigneesAssign from "./assign";
@@ -120,7 +121,7 @@ async function runAutoAssignForSection({
     );
 
     if (response.status !== 200) {
-      console.warn(
+      htLogger.warn(
         `[autoAssignForSection] Failed to assign ${autoAssignAgentId ? `agent ${autoAssignAgentId}` : `user ${autoAssignUserId}`} to task ${taskId}:`,
         response.json
       );
@@ -140,7 +141,7 @@ async function runAutoAssignForSection({
     if (needsDurableHandoff && assignmentOutcome === "stale-task") return "pending";
     return "ready";
   } catch (error) {
-    console.warn(
+    htLogger.warn(
       `[autoAssignForSection] Failed for task ${taskId} and section ${sectionId}:`,
       error
     );

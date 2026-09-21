@@ -1,3 +1,4 @@
+import { logger as htLogger } from "#logger";
 // Assert-based demo because this repository has no Vitest setup.
 // Run after installing dependencies: npx tsx src/lib/mcp/__tests__/rateLimitTier.test.ts
 import assert from 'node:assert/strict'
@@ -98,4 +99,4 @@ function demo() {
 }
 
 demo()
-console.log('rateLimitTier.test.ts: all assertions passed')
+htLogger.info('rateLimitTier.test.ts: all assertions passed')

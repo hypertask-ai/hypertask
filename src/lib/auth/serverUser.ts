@@ -1,3 +1,4 @@
+import { logger as htLogger } from "#logger";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 
@@ -15,7 +16,7 @@ function parseUserCookie(value: string): IUser | null {
 
     return { ...parsed, id } as IUser;
   } catch (error) {
-    console.log("Failed to parse server user cookie:", error);
+    htLogger.info("Failed to parse server user cookie:", error);
     return null;
   }
 }

@@ -1,3 +1,4 @@
+import { env as appEnv } from "#env";
 import { emitProductPerformanceEvent } from "@/lib/analytics/productPerformance";
 
 export const REALTIME_RECEIPT_TO_REQUEST_BUDGET_MS = 50;
@@ -193,7 +194,7 @@ const emitRecord = (record: RealtimeLatencyRecord, accountId: number) =>
         network_ms: record.networkMs,
         long_task_ms: record.longTaskMs,
         realtime_project_id: record.projectId,
-        production_commit: process.env.NEXT_PUBLIC_BUILD_ID || "unknown",
+        production_commit: appEnv.NEXT_PUBLIC_BUILD_ID || "unknown",
       },
     },
     accountId,

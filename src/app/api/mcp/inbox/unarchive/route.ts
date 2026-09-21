@@ -1,3 +1,5 @@
+import { logger as htLogger } from "#logger";
+import { withoutAuth } from "#with-auth";
 import { unarchiveInboxNotifications } from "@/utils/controllers/notifications";
 import { NextRequest, NextResponse } from 'next/server'
 import { validateMcpAuth, createUnauthorizedResponse, checkMcpRateLimit } from '@/lib/mcp/auth'
@@ -8,7 +10,7 @@ interface InboxUnarchiveResponse {
   unarchived_count: number
 }
 
-export async function POST(request: NextRequest) {
+async function POSTHandler(request: NextRequest) {
   try {
     const rateLimited = await checkMcpRateLimit(request)
     if (rateLimited) return rateLimited
@@ -60,7 +62,7 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json(response)
   } catch (error) {
-    console.error('Error unarchiving inbox notifications:', error)
+    htLogger.error('Error unarchiving inbox notifications:', error)
     return NextResponse.json(
       {
         success: false,
@@ -70,3 +72,5 @@ export async function POST(request: NextRequest) {
     )
   }
 }
+
+export const POST = withoutAuth(POSTHandler);

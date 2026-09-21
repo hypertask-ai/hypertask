@@ -1,5 +1,5 @@
+import { getAuthSession, withAuth } from "#with-auth";
 import { labelStore } from "@/utils/controllers/labels";
-import { getSessionUser } from "@/lib/auth/getSessionUser";
 import prisma from "@/lib/prisma";
 import { getProjectWhere } from "@/utils/controllers/projects/getAllIncludes";
 import {
@@ -21,8 +21,8 @@ async function accessibleProject(userId: number, projectId: number) {
   });
 }
 
-export async function GET(request: NextRequest) {
-  const session = await getSessionUser(request.headers);
+async function GETHandler(request: NextRequest) {
+  const session = await getAuthSession(request.headers);
   if (!session) {
     return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
   }
@@ -73,8 +73,8 @@ export async function GET(request: NextRequest) {
   });
 }
 
-export async function POST(request: NextRequest) {
-  const session = await getSessionUser(request.headers);
+async function POSTHandler(request: NextRequest) {
+  const session = await getAuthSession(request.headers);
   if (!session) {
     return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
   }
@@ -113,8 +113,8 @@ export async function POST(request: NextRequest) {
   return NextResponse.json({ success: true, template: { id: template.id, name: template.name } });
 }
 
-export async function DELETE(request: NextRequest) {
-  const session = await getSessionUser(request.headers);
+async function DELETEHandler(request: NextRequest) {
+  const session = await getAuthSession(request.headers);
   if (!session) {
     return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
   }
@@ -131,3 +131,7 @@ export async function DELETE(request: NextRequest) {
   }
   return NextResponse.json({ success: true });
 }
+
+export const GET = withAuth(GETHandler, { authenticateInHandler: true });
+export const POST = withAuth(POSTHandler, { authenticateInHandler: true });
+export const DELETE = withAuth(DELETEHandler, { authenticateInHandler: true });

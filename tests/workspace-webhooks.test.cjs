@@ -21,7 +21,7 @@ function stubModule(relativePath, exports) {
 function loadSettingsRoute(session) {
   const modulePaths = [
     "src/app/api/settings/webhooks/route.ts",
-    "src/lib/auth/getSessionUser.ts",
+    "src/lib/api/withAuth.ts",
     "src/lib/mcp/webhooks/workspaceManagement.ts",
   ];
   for (const relativePath of modulePaths) {
@@ -36,8 +36,9 @@ function loadSettingsRoute(session) {
       this.field = field;
     }
   }
-  stubModule("src/lib/auth/getSessionUser.ts", {
-    getSessionUser: async () => session,
+  stubModule("src/lib/api/withAuth.ts", {
+    getAuthSession: async () => session,
+    withAuth: (handler) => handler,
   });
   const operation = (name) => async () => {
     calls.push(name);
@@ -167,15 +168,15 @@ test("workspace webhook scope is exclusive and delivery attempts are durable", (
 test("settings mutations require session and same-origin checks", () => {
   const route = read("src/app/api/settings/webhooks/route.ts");
 
-  assert.match(route, /getSessionUser\(request\.headers\)/);
+  assert.match(route, /getAuthSession\(request\.headers\)/);
   assert.match(route, /if \(!origin \|\| !host \|\| !protocol\) return false/);
   assert.match(
     route,
     /new URL\(origin\)\.origin === new URL\(`\$\{protocol\}:\/\/\$\{host\}`\)\.origin/,
   );
   for (const method of ["POST", "PATCH", "DELETE"]) {
-    const start = route.indexOf(`export async function ${method}`);
-    const end = route.indexOf("\nexport async function ", start + 1);
+    const start = route.indexOf(`async function ${method}Handler`);
+    const end = route.indexOf("\nasync function ", start + 1);
     const body = route.slice(start, end < 0 ? route.length : end);
     assert.match(body, /authorizeMutation\(request\)/, `${method} must enforce origin and login`);
   }

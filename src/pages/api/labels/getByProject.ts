@@ -1,10 +1,11 @@
+import { withAuth } from "#with-auth";
 import { labelStore } from "@/utils/controllers/labels";
 // Next.js API route support: https://nextjs.org/docs/api-routes/introduction
 
 import type { NextApiRequest, NextApiResponse } from "next";
 import prisma from "@/lib/prisma";
 
-export default async function handler(
+async function handler(
   req: NextApiRequest,
   res: NextApiResponse
 ) {
@@ -62,3 +63,5 @@ export default async function handler(
     },
   })));
 }
+
+export default withAuth(handler, { authenticateInHandler: true });

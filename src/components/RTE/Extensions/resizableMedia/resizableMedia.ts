@@ -1,3 +1,4 @@
+import { logger as htLogger } from "#logger";
 import { mergeAttributes, Node, nodeInputRule } from "@tiptap/core";
 import { ReactNodeViewRenderer } from "@tiptap/react";
 
@@ -51,7 +52,7 @@ export const ResizableMedia = Node.create<MediaOptions>({
       HTMLAttributes: {},
       uploadFn: async (file: File) => {
         // Default implementation returns empty string
-        console.warn("No upload function provided to ResizableMedia extension");
+        htLogger.warn("No upload function provided to ResizableMedia extension");
         return "";
       },
       allowBase64: false,
@@ -172,7 +173,7 @@ export const ResizableMedia = Node.create<MediaOptions>({
     }
 
     if (!mediaType)
-      console.error(
+      htLogger.error(
         "TiptapMediaExtension-renderHTML method: Media Type not set, going default with image",
       );
 
@@ -210,7 +211,7 @@ export const ResizableMedia = Node.create<MediaOptions>({
           }
 
           if (!mediaType)
-            console.error(
+            htLogger.error(
               "TiptapMediaExtension-setMedia: Media Type not set, going default with image",
             );
 

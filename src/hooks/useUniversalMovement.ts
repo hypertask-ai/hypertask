@@ -1,3 +1,4 @@
+import { logger as htLogger } from "#logger";
 import { ISection, ITask } from "@/models/model";
 import { activeItemAtom, activeSectionAtom, currentProjectAtom } from "@/store";
 import { useStore } from "jotai";
@@ -96,7 +97,7 @@ export function useUniversalMovement(props: TProps) {
           : undefined;
       ranking = generateRanking(prevRank, undefined);
     } else if (forceNavigate && direction === "Right") {
-      console.log(
+      htLogger.info(
         "🚀 ~ moveTaskHorizontally ~ itemToMoveIndex jere:",
         itemToMoveIndex,
       );
@@ -163,7 +164,7 @@ export function useUniversalMovement(props: TProps) {
     currentProject && updateActiveItemAndItemInView(newItem);
     setActiveSection(targetSectionIdx);
 
-    console.timeEnd("Moving item horizontally: ");
+    htLogger.timeEnd("Moving item horizontally: ");
     const updatedTasks = newSections.flatMap((x) => x.items);
     updateSectionsInProject(newSections, updatedTasks);
 
@@ -319,7 +320,7 @@ export function useUniversalMovement(props: TProps) {
     itemIndex?: number,
     forceNavigate?: "Left" | "Right",
   ) {
-    console.log("🚀 ~ moveFocusToSection ~ itemIndex:", itemIndex);
+    htLogger.info("🚀 ~ moveFocusToSection ~ itemIndex:", itemIndex);
     if (!currentProject) return;
     const sectionEls = document.getElementById("sectionsContainer")!.children;
     let ItemId: number | null = null;

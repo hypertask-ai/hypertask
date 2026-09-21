@@ -1,3 +1,4 @@
+import { logger as htLogger } from "#logger";
 import { ReactRenderer } from '@tiptap/react'
 import tippy from 'tippy.js'
 import { EmojiList } from './EmojiList'
@@ -12,9 +13,9 @@ export default {
   items: async ({ editor, query }) => {
     // The plugin renders an empty loading state while this settles; a failed
     // chunk load clears the flight inside ensureEmojiData, so the next
-    // keystroke retries. Log it so the failure is visible in the console.
+    // keystroke retries. Log it so the failure is visible in the debug.
     await ensureEmojiData().catch((error) => {
-      console.warn("[emoji] emoji dataset failed to load", error);
+      htLogger.warn("[emoji] emoji dataset failed to load", error);
     });
     return editor.storage.emoji.emojis
       .filter(({ shortcodes, tags }) => {

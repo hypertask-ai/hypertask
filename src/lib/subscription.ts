@@ -1,3 +1,5 @@
+import { env as appEnv } from "#env";
+import { logger as htLogger } from "#logger";
 import Stripe from "stripe";
 import prisma from "@/lib/prisma";
 import { IUser } from "@/models/model";
@@ -9,7 +11,7 @@ import {
 import { allMonthlyPrices, allYearlyPrices } from "./subscriptionPlans";
 import { planKindFromStripePriceId } from "./planFromStripePriceId";
 
-export const stripe = new Stripe(String(process.env.STRIPE_SECRET_KEY), {
+export const stripe = new Stripe(String(appEnv.STRIPE_SECRET_KEY), {
   // Deliberately pinned; account/webhook payload shapes depend on it.
   apiVersion: "2023-08-16" as typeof Stripe.API_VERSION,
   maxNetworkRetries: 10, // Retry a request twice before giving up
@@ -41,7 +43,7 @@ export async function getUpcomingInvoice(
       "GET",
       `/v1/invoices/upcoming?customer=${encodeURIComponent(customerId)}`
     )) as Stripe.Response<UpcomingInvoice>;
-    console.log("🚀 ~ getUpcomingInvoice ~ upcomingInvoice:", upcomingInvoice);
+    htLogger.info("🚀 ~ getUpcomingInvoice ~ upcomingInvoice:", upcomingInvoice);
     return upcomingInvoice;
   } catch (error) {
     return null;
@@ -96,7 +98,7 @@ export async function getInvoices(
 
     return invoicesWithCardDetails;
   } catch (error) {
-    console.error("Error retrieving invoices:", error);
+    htLogger.error("Error retrieving invoices:", error);
     throw error;
   }
 }
@@ -109,19 +111,19 @@ export async function getInvoices(
 //       });
 //       if (invoices.data[0].payment_intent){
 //           const paymentIntent = await stripe.paymentIntents.retrieve(invoices.data[0].payment_intent as string);
-//           console.log("🚀 ~ file: subscription.ts:22 ~ getInvoices ~ paymentIntent:", paymentIntent)
+//           debug.log("🚀 ~ file: subscription.ts:22 ~ getInvoices ~ paymentIntent:", paymentIntent)
 //           if (paymentIntent.payment_method) {
 //             // Retrieve the payment method details
 //             const paymentMethod = await stripe.customers.retrievePaymentMethod(
 //                 'cus_PHFSdkieUkWw5t',
 //                 paymentIntent.payment_method as string
 //               );
-//             console.log("🚀 ~ file: subscription.ts:29 ~ getInvoices ~ paymentMethod:", paymentMethod)
+//             debug.log("🚀 ~ file: subscription.ts:29 ~ getInvoices ~ paymentMethod:", paymentMethod)
 //             // const paymentMethod = await stripe.paymentMethods.retrieve(paymentIntent.payment_method as string);
 
 //             // Access the card details (you might want to handle this securely on your server)
 //             const cardDetails = paymentMethod.card;
-//             console.log("🚀 ~ file: subscription.ts:29 ~ getInvoices ~ cardDetails:", cardDetails)
+//             debug.log("🚀 ~ file: subscription.ts:29 ~ getInvoices ~ cardDetails:", cardDetails)
 
 //             // You can access card details such as card brand, last 4 digits, expiration date, etc.
 //             // return `Card ending in ${cardDetails?.last4}, expiring ${cardDetails?.exp_month}/${cardDetails?.exp_year}`;
@@ -135,7 +137,7 @@ export async function hasSubscription(teamId: any) {
   const team = await prisma.team.findFirst({
     where: { id: teamId ?? undefined },
   });
-  // console.log("🚀 ~ file: subscription.ts:16 ~ hasSubscription ~ team:", team)
+  // debug.log("🚀 ~ file: subscription.ts:16 ~ hasSubscription ~ team:", team)
 
   // cus_P2coaGr750mSSE
   const PaidTeam = await prisma.team.findFirst({
@@ -180,7 +182,7 @@ export async function hasSubscription(teamId: any) {
       ? planKindFromStripePriceId(activeLine.price.id)
       : { storePlanId: "Free" as const, billingInterval: null };
 
-  console.log("🚀 ~ hasSubscription ~ subscription:", filteredSubscriptions)
+  htLogger.info("🚀 ~ hasSubscription ~ subscription:", filteredSubscriptions)
 
 
 
@@ -201,16 +203,16 @@ export async function generateCustomerPortalLink(customerId: string) {
   try {
     const portalSession = await stripe.billingPortal.sessions.create({
       customer: customerId,
-      return_url: process.env.STRIPE_BILLING_PORTAL_LINK,
+      return_url: appEnv.STRIPE_BILLING_PORTAL_LINK,
     });
-    console.log(
+    htLogger.info(
       "🚀 ~ file: subscription.ts:54 ~ generateCustomerPortalLink ~ portalSession:",
       portalSession
     );
 
     return portalSession.url;
   } catch (error) {
-    console.log(error);
+    htLogger.info(error);
     return undefined;
   }
 }
@@ -218,17 +220,17 @@ export async function generateCustomerPortalLink(customerId: string) {
 export async function checkSubscriptionPlan(sessionId: string) {
   try {
     const session = await stripe.checkout.sessions.retrieve(sessionId);
-    console.log("🚀 ~ checkSubscriptionPlan ~ session:", session.subscription);
+    htLogger.info("🚀 ~ checkSubscriptionPlan ~ session:", session.subscription);
     if (session.subscription && typeof session.subscription === 'string') {
       const subscription = await stripe.subscriptions.retrieve(
         session.subscription
       );
-      console.log("🚀 ~ checkSubscriptionPlan ~ subscription:", session);
+      htLogger.info("🚀 ~ checkSubscriptionPlan ~ subscription:", session);
       return subscription;
     }
     return undefined
   } catch (error: any) {
-    console.log("🚀 ~ checkSubscriptionPlan ~ error:", error);
+    htLogger.info("🚀 ~ checkSubscriptionPlan ~ error:", error);
     return undefined;
   }
 }
@@ -236,15 +238,15 @@ export async function checkSubscriptionPlan(sessionId: string) {
 export async function checkTrialSuccess(sessionId: string) {
   try {
     const session = await stripe.checkout.sessions.retrieve(sessionId);
-    console.log("🚀 ~ checkTrialSuccess ~ session:", session);
+    htLogger.info("🚀 ~ checkTrialSuccess ~ session:", session);
     const customer = (await stripe.customers.retrieve(
       session?.customer as string
     )) as Stripe.Customer;
 
-    console.log("🚀 ~ checkTrialSuccess ~ customer:", customer);
+    htLogger.info("🚀 ~ checkTrialSuccess ~ customer:", customer);
     return customer.id;
   } catch (error: any) {
-    console.log("🚀 ~ checkTrialSuccess ~ error:", error);
+    htLogger.info("🚀 ~ checkTrialSuccess ~ error:", error);
     return "";
   }
 }
@@ -265,12 +267,12 @@ export async function findTeam(user: IUser) {
           team_activity: true,
         },
       });
-      console.log("🚀 ~ findTeam ~ team:", team);
+      htLogger.info("🚀 ~ findTeam ~ team:", team);
       return team;
     }
     return undefined;
   } catch (error: any) {
-    console.log("🚀 ~ findTeam ~ error:", error);
+    htLogger.info("🚀 ~ findTeam ~ error:", error);
     return undefined;
   }
 }
@@ -334,7 +336,7 @@ export async function createInvoiceAndPay(
   currentPlanStatus: string | undefined,
   remainingTime?: number
 ) {
-  const productId = String(process.env.NEXT_PUBLIC_STRIPE_PRODUCT_ID);
+  const productId = String(appEnv.NEXT_PUBLIC_STRIPE_PRODUCT_ID);
 
   //create an invoice if the current plan status is active or paid.
   //update subcription plan if the current plan status is active or paid.
@@ -345,13 +347,13 @@ export async function createInvoiceAndPay(
       collection_method: "charge_automatically",
       description: `Billed for ${interval}ly subscription`,
     });
-    console.log("🚀 ~ createInvoiceAndPay ~ invoice:", invoice);
+    htLogger.info("🚀 ~ createInvoiceAndPay ~ invoice:", invoice);
 
     const amountToCharge =
       interval === "month"
         ? defaultStripeAmountMonth
         : remainingTime && remainingTime * defaultStripeAmountYear;
-    console.log("🚀 ~ createInvoiceAndPay ~ amountToCharge:", amountToCharge);
+    htLogger.info("🚀 ~ createInvoiceAndPay ~ amountToCharge:", amountToCharge);
 
     // ============== Create an Invoice Item with the Price, and Customer you want to charge
     await stripe.invoiceItems.create({
@@ -368,7 +370,7 @@ export async function createInvoiceAndPay(
     const paymentMethods = await stripe.customers.listPaymentMethods(
       customerId
     );
-    console.log(
+    htLogger.info(
       "🚀 ~ file: subscription.ts:178 ~ createInvoiceAndPay ~ paymentMethods:",
       paymentMethods
     );
@@ -380,7 +382,7 @@ export async function createInvoiceAndPay(
     const payment = await stripe.invoices.pay(invoice.id, {
       payment_method: paymentMethods.data[0].id,
     });
-    console.log("🚀 ~ createInvoiceAndPay ~ payment:", payment);
+    htLogger.info("🚀 ~ createInvoiceAndPay ~ payment:", payment);
     if (payment.status === "paid") {
       return "SEATED";
     }
@@ -393,7 +395,7 @@ export async function createInvoiceAndPay(
 }
 
 const updateTeamInDBToExpired = async (stripeId: string, teamId: string) => {
-  console.log("============> resetting to expired. ");
+  htLogger.info("============> resetting to expired. ");
   await prisma.subscriptionPlan.updateMany({
     where: {
       teamId: teamId,

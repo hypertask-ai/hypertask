@@ -1,3 +1,6 @@
+import { env as appEnv } from "#env";
+import { logger as htLogger } from "#logger";
+import { withoutAuth } from "#with-auth";
 import { NextRequest, NextResponse } from "next/server";
 import { createHmac } from "node:crypto";
 import { Webhook } from "svix";
@@ -21,7 +24,7 @@ export const dynamic = "force-dynamic";
 const MAX_BODY_BYTES = 32 * 1024;
 
 function requiredEnv(name: string) {
-  const value = process.env[name]?.trim();
+  const value = appEnv[name]?.trim();
   if (!value) throw new Error(`${name} is not configured`);
   return value;
 }
@@ -46,7 +49,7 @@ function workflowRef() {
   // misrouted webhook (or a preview deployment processing it) execute
   // whatever workflow file lives on an untrusted branch, with production
   // secrets. A fixed, operator-controlled ref removes that dependency.
-  const ref = process.env.POSTHOG_ROLLBACK_GITHUB_REF || "production";
+  const ref = appEnv.POSTHOG_ROLLBACK_GITHUB_REF || "production";
   if (!/^[A-Za-z0-9._/-]{1,200}$/.test(ref)) {
     throw new Error("POSTHOG_ROLLBACK_GITHUB_REF is invalid");
   }
@@ -71,7 +74,7 @@ function dispatchConfiguration() {
     throw new Error("POSTHOG_SERVER_PROJECT_ID is invalid");
   }
   const uiHost = new URL(
-    process.env.POSTHOG_UI_HOST || "https://eu.posthog.com",
+    appEnv.POSTHOG_UI_HOST || "https://eu.posthog.com",
   );
   if (
     uiHost.protocol !== "https:" ||
@@ -82,7 +85,7 @@ function dispatchConfiguration() {
   const repositoryOwner = requiredEnv("VERCEL_GIT_REPO_OWNER");
   const repositoryName = requiredEnv("VERCEL_GIT_REPO_SLUG");
   const workflow =
-    process.env.POSTHOG_ROLLBACK_GITHUB_WORKFLOW || "prod-health.yml";
+    appEnv.POSTHOG_ROLLBACK_GITHUB_WORKFLOW || "prod-health.yml";
   if (
     !/^[A-Za-z0-9_.-]{1,100}$/.test(repositoryOwner) ||
     !/^[A-Za-z0-9_.-]{1,100}$/.test(repositoryName) ||
@@ -124,7 +127,7 @@ async function dispatchWorkflow(
   }
 }
 
-export async function POST(request: NextRequest) {
+async function POSTHandler(request: NextRequest) {
   if (
     !(await isFeatureEnabled(
       POSTHOG_ERROR_ALERT_FLAG,
@@ -163,7 +166,7 @@ export async function POST(request: NextRequest) {
     rawBody = Buffer.concat(chunks).toString("utf8");
     verified = verifyWebhook(rawBody, request);
   } catch (error) {
-    console.warn("[posthog-error-alert] rejected webhook", error);
+    htLogger.warn("[posthog-error-alert] rejected webhook", error);
     return NextResponse.json({ error: "Invalid webhook" }, { status: 401 });
   }
 
@@ -224,12 +227,12 @@ export async function POST(request: NextRequest) {
     try {
       await releasePostHogAlertClaim(redis, alert, claim);
     } catch (releaseError) {
-      console.error(
+      htLogger.error(
         "[posthog-error-alert] claim release failed",
         releaseError,
       );
     }
-    console.error("[posthog-error-alert] dispatch failed", error);
+    htLogger.error("[posthog-error-alert] dispatch failed", error);
     return NextResponse.json({ error: "Dispatch failed" }, { status: 503 });
   }
 
@@ -238,8 +241,10 @@ export async function POST(request: NextRequest) {
   } catch (error) {
     // GitHub accepted the workflow. Returning 503 here would invite PostHog
     // to send the same rollback dispatch again.
-    console.error("[posthog-error-alert] claim commit failed", error);
+    htLogger.error("[posthog-error-alert] claim commit failed", error);
   }
 
   return new NextResponse(null, { status: 204 });
 }
+
+export const POST = withoutAuth(POSTHandler);

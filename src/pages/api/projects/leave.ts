@@ -1,9 +1,11 @@
+import { logger as htLogger } from "#logger";
+import { withAuth } from "#with-auth";
 // Define the API route
 
 import leaveProject from '@/utils/controllers/projects/leave';
 import { NextApiRequest, NextApiResponse } from 'next';
 
-export default async function handler(req: NextApiRequest, res: NextApiResponse) {
+async function handler(req: NextApiRequest, res: NextApiResponse) {
   // Check if the request is a POST request
   if (req.method === 'POST') {
     // Get the project ID and new section title from the request body
@@ -17,10 +19,12 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
 
     } catch (error) {
-      console.error(error);
+      htLogger.error(error);
       return res.status(500).json({ error: 'Failed to add new section' });
     }
   } else {
     return res.status(405).json({ error: 'Method not allowed' });
   }
 }
+
+export default withAuth(handler, { authenticateInHandler: true });

@@ -1,3 +1,5 @@
+import { logger as htLogger } from "#logger";
+import { withoutAuth } from "#with-auth";
 import type { NextApiRequest, NextApiResponse } from "next";
 import { scheduleJobById, withQstashSignature } from "@/lib/qstash";
 import { invokeChatSessionExpiry } from "@/utils/controllers/ai-chat/invokeChatSessionExpiry";
@@ -32,12 +34,12 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
     const result = await invokeChatSessionExpiry(job);
     return res.status(200).json({ ok: true, result });
   } catch (error) {
-    console.log("🚀 ~ chatSessionExpiryQueue ~ error:", error);
+    htLogger.info("🚀 ~ chatSessionExpiryQueue ~ error:", error);
     return res.status(500).json({ ok: false });
   }
 }
 
-export default withQstashSignature(handler);
+export default withoutAuth(withQstashSignature(handler));
 
 export const config = {
   api: {

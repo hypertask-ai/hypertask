@@ -1,3 +1,4 @@
+import { logger as htLogger } from "#logger";
 import type { Editor } from "@tiptap/react";
 import React, { useContext, useRef, useState } from "react";
 import toast from "react-hot-toast";
@@ -72,7 +73,7 @@ const ImproveButton = ({ editor }: IProps) => {
           );
           return true;
         })().catch((error) => {
-          console.log("🚀 ~ error:", error);
+          htLogger.info("🚀 ~ error:", error);
           throw error;
         }),
         {
@@ -96,7 +97,7 @@ const ImproveButton = ({ editor }: IProps) => {
         }
       );
     } catch (error) {
-      console.log("🚀 ~ command: ~ error:", error);
+      htLogger.info("🚀 ~ command: ~ error:", error);
       return false;
     } finally {
       isImproving.current = false;

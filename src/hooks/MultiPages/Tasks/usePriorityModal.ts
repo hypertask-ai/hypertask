@@ -1,3 +1,4 @@
+import { logger as htLogger } from "#logger";
 import { useGetPriorityForTask } from "@/hooks/MultiPages/useGetPriorityForTask";
 import globalConstants from "@/lib/constants";
 import { IPrioritiesConstants } from "@/lib/constants/constants";
@@ -41,7 +42,7 @@ export const usePriorityModal = (
         });
         closeHandler(true);
       } catch (error) {
-        console.log("🚀 ~ setPriorirty ~ error:", error);
+        htLogger.info("🚀 ~ setPriorirty ~ error:", error);
       }
     };
 

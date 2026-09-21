@@ -1,3 +1,4 @@
+import { logger as htLogger } from "#logger";
 import { useState, useEffect, useCallback } from 'react'
 import { useRecoilState } from '@/lib/state'
 import { currentUserAtom } from '@/store'
@@ -90,7 +91,7 @@ export const useEmailVerificationStatus = (
           setErrorMessage(response.data.error || 'Verification failed')
         }
       } catch (error: any) {
-        console.error('Verification error:', error)
+        htLogger.error('Verification error:', error)
         setStatus('error')
         setErrorMessage(
           error.response?.data?.error || 'Failed to verify email. Please try again.'
@@ -118,7 +119,7 @@ export const useEmailVerificationStatus = (
           onVerified?.()
         }
       } catch (error) {
-        console.error('Error checking verification status:', error)
+        htLogger.error('Error checking verification status:', error)
       }
     }
 

@@ -1,3 +1,4 @@
+import { logger as htLogger } from "#logger";
 import { NextRequest, NextResponse } from 'next/server'
 import { createHash, randomBytes, randomUUID } from 'crypto'
 import jwt from 'jsonwebtoken'
@@ -608,7 +609,7 @@ export async function POST(request: NextRequest) {
         )
       }
 
-      console.error('Error marking authorization code as used:', error)
+      htLogger.error('Error marking authorization code as used:', error)
       return NextResponse.json(
         { error: 'server_error', error_description: 'Failed to process authorization code' },
         { status: 500 }
@@ -621,7 +622,7 @@ export async function POST(request: NextRequest) {
       session.refreshToken,
     )
   } catch (error) {
-    console.error('Error in OAuth token endpoint:', error)
+    htLogger.error('Error in OAuth token endpoint:', error)
     return NextResponse.json(
       { error: 'server_error', error_description: 'Internal server error' },
       { status: 500 }

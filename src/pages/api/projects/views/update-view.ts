@@ -1,3 +1,5 @@
+import { logger as htLogger } from "#logger";
+import { withAuth } from "#with-auth";
 // route = "/api/projects/views/update-view"
 import prisma from "@/lib/prisma";
 import {
@@ -243,7 +245,7 @@ const handler: NextApiHandler = async (
             id: updatedUserProjectView.unsavedViewId,
           },
         });
-      console.log(
+      htLogger.info(
         "🚀 ~ consthandler:NextApiHandler= ~ updatedView:",
         updatedView
       );
@@ -252,7 +254,7 @@ const handler: NextApiHandler = async (
         viewProjectId,
         currentUser.id
       );
-      console.log(
+      htLogger.info(
         "🚀 ~ consthandler:NextApiHandler= ~ project_view_updated:",
         project_view_updated
       );
@@ -260,7 +262,7 @@ const handler: NextApiHandler = async (
 
       return res.status(200).json(project_view_updated);
     } catch (error) {
-      console.log("🚀 ~ consthandler:NextApiHandler= ~ error:", error);
+      htLogger.info("🚀 ~ consthandler:NextApiHandler= ~ error:", error);
       if (
         error instanceof MissingBoardFilterLabelError ||
         error instanceof ManagedSmartSplitMutationError
@@ -273,4 +275,4 @@ const handler: NextApiHandler = async (
   return res.status(405).json({ message: "Method not allowed" });
 };
 
-export default handler;
+export default withAuth(handler, { authenticateInHandler: true });

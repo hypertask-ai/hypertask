@@ -1,3 +1,4 @@
+import { logger as htLogger } from "#logger";
 import axios from "axios"
 import { getTaskDetailMeta, hasSessionCookie } from "./getTaskDetailMeta";
 
@@ -15,7 +16,7 @@ export const getAllTaskLabels = async (taskId:number|null):Promise<any | undefin
             const meta = await getTaskDetailMeta(taskId)
             return meta.labels ?? [];
         } catch (error) {
-            console.error("Error getting task labels:", error);
+            htLogger.error("Error getting task labels:", error);
             throw error;
         }
 }

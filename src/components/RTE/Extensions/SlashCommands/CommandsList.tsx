@@ -60,16 +60,16 @@ const CommandsList = forwardRef<SuggestionListRef, SuggestionListProps>(
       };
     }, [skillsEnabled, currentProject?.id]);
     // const itemsFinal = props.items.map(item => {
-    //     // console.log("🚀 ~ itemsFinal ~ currentProject?.team.subscriptionPlan:", currentProject?.team)
+    //     // debug.log("🚀 ~ itemsFinal ~ currentProject?.team.subscriptionPlan:", currentProject?.team)
     //     if (item.type && item.type === "AI") {
     //       const itemtoReturn = currentProject?.team.activeSubscriptionPlanId ? item : false;
-    //       // console.log("🚀 ~ itemsFinal ~ itemtoReturn:", itemtoReturn)
+    //       // debug.log("🚀 ~ itemsFinal ~ itemtoReturn:", itemtoReturn)
     //       return itemtoReturn;
     //     }
     //     return item;
     //   }).filter(Boolean);
   
-    // console.log("🚀 ~ itemsFinal ~ itemsFinal:", itemsFinal)
+    // debug.log("🚀 ~ itemsFinal ~ itemsFinal:", itemsFinal)
     const [filteredItems, setFilteredItems] = useState(props.items)
     const selectItem = (index: number) => {
       if (index >= filteredItems.length) {

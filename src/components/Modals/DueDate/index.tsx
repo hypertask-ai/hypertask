@@ -1,3 +1,4 @@
+import { logger as htLogger } from "#logger";
 /* eslint-disable react-hooks/exhaustive-deps */
 import { Calendar } from "@/components/Common/Calendar"
 import { ModalContainerCustom, ModalHeaderComp, ModalInput, ModalListContainer, ModalRowElementContainer } from "@/components/Common/CommonModalComponents"
@@ -72,7 +73,7 @@ const DueDateModal:React.FC<Props> = ({closeHandler, dueDate, mode}) => {
       else closeHandler(payload)
     } 
     else if (selectedScreen === "Sugar") {
-    console.log("🚀 ~ closebackHandler ~ payload:", payload)
+    htLogger.info("🚀 ~ closebackHandler ~ payload:", payload)
       if (!payload.data&& payload.display==="Reset")closeHandler(null,true)
       // meaning we want to switch screens  
       else if (!payload.date) {
@@ -278,11 +279,11 @@ const useCustomSugar = (closebackHandler: (payload: any) => void, isActive:Date|
     setSelectedIndex(0)
 
     const final: any = inputChange(input, { past: false, future:true })
-    console.log("🚀 ~ handleInputChange ~ final:", final)
+    htLogger.info("🚀 ~ handleInputChange ~ final:", final)
     final.push(customDateRangeOption)
     const setToThis = (input.length === 0) ? defaultOptions : final// not my proudest
-    console.log("🚀 ~ handleInputChange ~ defaultOptions:", defaultOptions)
-    console.log("🚀 ~ handleInputChange ~ setToThis:", setToThis)
+    htLogger.info("🚀 ~ handleInputChange ~ defaultOptions:", defaultOptions)
+    htLogger.info("🚀 ~ handleInputChange ~ setToThis:", setToThis)
     setFilteredOptions(setToThis);
   };
 

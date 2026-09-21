@@ -1,3 +1,5 @@
+import { logger as htLogger } from "#logger";
+import { withAuth } from "#with-auth";
 import prisma from "@/lib/prisma";
 import { IComment } from "@/models/model";
 import { sendDataNewCommentFCM } from "@/utils/controllers/FCM";
@@ -139,7 +141,7 @@ const handler: NextApiHandler = async (req: NextApiRequest, res: NextApiResponse
 
             }
         } catch (error) {
-            console.error("POST /api/comments/addReaction failed", error);
+            htLogger.error("POST /api/comments/addReaction failed", error);
             res.status(500).json({ message: "Internal server error" });
         }
     } else {
@@ -153,7 +155,7 @@ const notifySafely = async(reaction:any,afterAppDomain:string,userId:number)=>{
     try {
         await sendNotification(reaction, afterAppDomain, userId)
     } catch (error) {
-        console.error("addReaction: reaction notification failed", error)
+        htLogger.error("addReaction: reaction notification failed", error)
     }
 }
 
@@ -201,4 +203,4 @@ const sendNotification = async(reaction:any,afterAppDomain:string,userId:number)
         }
 }
 
-export default handler;
+export default withAuth(handler, { authenticateInHandler: true });

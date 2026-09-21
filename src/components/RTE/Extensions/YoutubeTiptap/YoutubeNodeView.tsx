@@ -1,3 +1,4 @@
+import { logger as htLogger } from "#logger";
 import React, { useEffect, useState } from "react";
 import { NodeViewWrapper } from "@tiptap/react";
 import type { NodeViewProps } from "@tiptap/react";
@@ -9,7 +10,7 @@ export const YoutubeNodeView = ({ node }: NodeViewProps) => {
   // Process the URL once when the component mounts or when src changes
   useEffect(() => {
     if (node.attrs.src) {
-      console.log("🚀 ~ useEffect ~ src:", node.attrs.src);
+      htLogger.info("🚀 ~ useEffect ~ src:", node.attrs.src);
       // Use the same function that renderHTML uses
       const processedUrl = getEmbedUrlFromYoutubeUrl({
         url: node.attrs.src,
