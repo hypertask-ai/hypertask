@@ -62,9 +62,7 @@ const  TaskSummary:React.FC<Props> = ({taskSummary:markdown})=> {
           @sm:left-[-5.125rem] @sm:right-[-4rem]
           @xl:left-[-5.125rem] @xl:right-[-4rem]
           `}>
-          <div className="max-w-[65%]">
-            <Markdown>{markdown}</Markdown>
-          </div>
+          <Markdown className={`max-w-[65%]`}>{markdown}</Markdown>
         </div>
       )}
     </div>

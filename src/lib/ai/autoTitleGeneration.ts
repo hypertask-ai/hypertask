@@ -1,6 +1,6 @@
 export const AUTO_TITLE_GENERATION_DELAY_MS = 5_000;
 
-type TimerHandle = number | ReturnType<typeof setTimeout>;
+type TimerHandle = ReturnType<typeof setTimeout>;
 
 type AutoTitleGenerationRun = {
   generate: (signal: AbortSignal) => Promise<string>;
