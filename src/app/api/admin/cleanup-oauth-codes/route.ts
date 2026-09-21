@@ -1,6 +1,6 @@
 import { env as appEnv } from "#env";
 import { logger as htLogger } from "#logger";
-import { withAuth } from "#with-auth";
+import { withoutAuth } from "#with-auth";
 import { NextRequest, NextResponse } from 'next/server'
 import { cleanupAllOAuthCodes } from '@/lib/oauth/cleanup'
 
@@ -43,4 +43,4 @@ async function POSTHandler(request: NextRequest) {
   }
 }
 
-export const POST = withAuth(POSTHandler);
+export const POST = withoutAuth(POSTHandler);

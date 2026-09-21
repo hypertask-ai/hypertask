@@ -160,7 +160,7 @@ const envSchema = z.object({
 export type AppEnv = z.infer<typeof envSchema>;
 export type AppEnvKey = keyof AppEnv;
 
-export const env: AppEnv = envSchema.parse({
+const parsedEnv: AppEnv = envSchema.parse({
   ADMIN_SECRET: process.env.ADMIN_SECRET,
   ADMIN_USER_RESET_PW: process.env.ADMIN_USER_RESET_PW,
   AGENT_FLEET_ASK_SECRET: process.env.AGENT_FLEET_ASK_SECRET,
@@ -315,4 +315,24 @@ export const env: AppEnv = envSchema.parse({
   VERCEL_URL: process.env.VERCEL_URL,
   WEBHOOK_SECRET_STRIPE: process.env.WEBHOOK_SECRET_STRIPE,
   development: process.env.development,
+});
+
+export const env: AppEnv = new Proxy(parsedEnv, {
+  get(target, property, receiver) {
+    if (
+      typeof window === "undefined" &&
+      typeof property === "string" &&
+      Object.prototype.hasOwnProperty.call(target, property)
+    ) {
+      return process.env[property];
+    }
+    return Reflect.get(target, property, receiver);
+  },
+  set(target, property, value, receiver) {
+    if (typeof window === "undefined" && typeof property === "string") {
+      if (value === undefined) delete process.env[property];
+      else process.env[property] = value;
+    }
+    return Reflect.set(target, property, value, receiver);
+  },
 });

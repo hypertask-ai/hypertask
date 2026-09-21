@@ -1,6 +1,7 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const path = require("node:path");
+const { passThroughAuth } = require("./helpers/pass-through-auth.cjs");
 
 const root = path.resolve(__dirname, "..");
 let loadId = 0;
@@ -24,6 +25,7 @@ const stubModule = (relativePath, exports) => {
 
 const load = (relativePath, stubs) => {
   delete require.cache[path.join(root, relativePath)];
+  stubModule("src/lib/api/withAuth.ts", passThroughAuth());
   for (const [stubPath, exports] of Object.entries(stubs)) {
     delete require.cache[path.join(root, stubPath)];
     stubModule(stubPath, exports);

@@ -47,13 +47,19 @@ function routePath(file) {
   return `/${segments.join("/")}`;
 }
 
+const appRouteFiles = walk(
+  path.join(root, "src/app"),
+  (file) => file.endsWith(`${path.sep}route.ts`),
+);
+const pagesRouteFiles = walk(
+  path.join(root, "src/pages/api"),
+  (file) => file.endsWith(".ts") || file.endsWith(".tsx"),
+);
 const routeFiles = [
-  ...walk(path.join(root, "src/app/api"), (file) => file.endsWith(`${path.sep}route.ts`)),
-  ...walk(
-    path.join(root, "src/pages/api"),
-    (file) => file.endsWith(".ts") || file.endsWith(".tsx"),
-  ),
+  ...appRouteFiles.filter((file) => file.startsWith(path.join(root, "src/app/api"))),
+  ...pagesRouteFiles,
 ];
+const allRouteFiles = [...appRouteFiles, ...pagesRouteFiles];
 
 test("every protected API route rejects a request with no session", () => {
   resetApiRateLimitsForTests();
@@ -83,6 +89,20 @@ test("public API routes pass the shared session gate", () => {
   }
 });
 
+test("custom bearer-auth routes bypass only the shared session gate", () => {
+  const pathname = "/api/admin/cleanup-oauth-codes";
+  const request = new NextRequest(`https://example.test${pathname}`);
+  const source = fs.readFileSync(
+    path.join(root, "src/app/api/admin/cleanup-oauth-codes/route.ts"),
+    "utf8",
+  );
+
+  assert.equal(isPublicApiPath(pathname), true);
+  assert.equal(enforceApiBoundary(request), null);
+  assert.match(source, /withoutAuth\(POSTHandler\)/);
+  assert.match(source, /appEnv\.ADMIN_SECRET/);
+});
+
 test("the shared API boundary rate limits repeated callers", () => {
   resetApiRateLimitsForTests();
   const request = () =>
@@ -97,7 +117,7 @@ test("the shared API boundary rate limits repeated callers", () => {
 });
 
 test("route authentication cannot bypass withAuth", () => {
-  for (const file of routeFiles) {
+  for (const file of allRouteFiles) {
     const source = fs.readFileSync(file, "utf8");
     assert.doesNotMatch(source, /getSessionUser\s*\(/, file);
     assert.doesNotMatch(source, /authenticateInHandler/, file);

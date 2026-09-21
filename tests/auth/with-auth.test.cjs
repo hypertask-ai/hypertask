@@ -62,7 +62,7 @@ test("Pages Router withAuth rejects before calling the handler", async () => {
     called = true;
   });
 
-  await handler({ headers: {} }, response);
+  await handler({}, response);
   assert.equal(status, 401);
   assert.deepEqual(body, { error: "Unauthorized" });
   assert.equal(called, false);

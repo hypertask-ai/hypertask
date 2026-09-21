@@ -4,16 +4,17 @@ import { getSessionUser, type SessionUser } from "#session-user";
 import { apiError } from "#api-response";
 
 type RequestWithHeaders = Request | NextApiRequest | Headers;
+type RequestLike = RequestWithHeaders | null | undefined;
 type RouteHandler = (...args: any[]) => any;
 
 const authenticatedRequests = new WeakMap<object, SessionUser>();
 
-function requestHeaders(source: RequestWithHeaders): Headers {
+function requestHeaders(source: RequestLike): Headers {
   if (source instanceof Headers) return source;
-  if (source.headers instanceof Headers) return source.headers;
+  if (source?.headers instanceof Headers) return source.headers;
 
   const headers = new Headers();
-  for (const [name, value] of Object.entries(source.headers)) {
+  for (const [name, value] of Object.entries(source?.headers ?? {})) {
     if (typeof value === "string") headers.set(name, value);
     else if (Array.isArray(value)) headers.set(name, value.join(", "));
   }
@@ -28,13 +29,13 @@ export async function getAuthSession(
   return getSessionUser(requestHeaders(source));
 }
 
-function isPagesRequest(value: RequestWithHeaders): value is NextApiRequest {
-  return !(value instanceof Headers) && !(value.headers instanceof Headers);
+function isPagesRequest(value: RequestLike): value is NextApiRequest {
+  return !(value instanceof Headers) && !(value?.headers instanceof Headers);
 }
 
 export function withAuth<THandler extends RouteHandler>(handler: THandler): THandler {
   const authenticated = async (...args: Parameters<THandler>) => {
-    const request = args[0] as RequestWithHeaders;
+    const request = args[0] as RequestLike;
     const headers = requestHeaders(request);
     const session = await getSessionUser(headers);
     if (!session) {
@@ -44,11 +45,13 @@ export function withAuth<THandler extends RouteHandler>(handler: THandler): THan
       return apiError(401, "Unauthorized");
     }
 
-    authenticatedRequests.set(request, session);
-    authenticatedRequests.set(headers, session);
-    if (!(request instanceof Headers) && typeof request.headers === "object") {
-      authenticatedRequests.set(request.headers, session);
+    if (request && typeof request === "object") {
+      authenticatedRequests.set(request, session);
+      if (!(request instanceof Headers) && request.headers && typeof request.headers === "object") {
+        authenticatedRequests.set(request.headers, session);
+      }
     }
+    authenticatedRequests.set(headers, session);
     return handler(...args);
   };
 

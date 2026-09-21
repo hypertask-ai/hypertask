@@ -2,6 +2,7 @@ const test = require("node:test");
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const path = require("node:path");
+const { passThroughAuth } = require("./helpers/pass-through-auth.cjs");
 const ts = require("typescript");
 
 const root = path.resolve(__dirname, "..");
@@ -22,7 +23,9 @@ function execute(javascript, stubs) {
   new Function("module", "exports", "require", javascript)(
     mod,
     mod.exports,
-    (request) => stubs[request] ?? require(request),
+    (request) =>
+      stubs[request] ??
+      (request === "#with-auth" ? passThroughAuth() : require(request)),
   );
   return mod.exports;
 }

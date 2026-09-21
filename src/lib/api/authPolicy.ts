@@ -10,6 +10,7 @@ const publicApiPrefixes = [
 ] as const;
 
 const publicApiPaths = new Set([
+  "/api/admin/cleanup-oauth-codes",
   "/api/auth",
   "/api/calendar/feed",
   "/api/client-error",

@@ -22,7 +22,7 @@ const requireRouteWrapper = {
   },
   create(context) {
     const filename = context.filename.replaceAll("\\", "/");
-    const isAppRoute = /\/src\/app\/api\/.+\/route\.[jt]sx?$/.test(filename);
+    const isAppRoute = /\/src\/app\/.+\/route\.[jt]sx?$/.test(filename);
     const isPagesRoute = /\/src\/pages\/api\/.+\.[jt]sx?$/.test(filename);
     if (!isAppRoute && !isPagesRoute) return {};
 
@@ -70,7 +70,7 @@ export const apiConventionsPlugin = {
 };
 
 export const apiConventionsLintConfig = {
-  files: ["src/app/api/**/route.{ts,tsx}", "src/pages/api/**/*.{ts,tsx}"],
+  files: ["src/app/**/route.{ts,tsx}", "src/pages/api/**/*.{ts,tsx}"],
   plugins: { "hypertask-api": apiConventionsPlugin },
   rules: { "hypertask-api/require-route-wrapper": "error" },
 };

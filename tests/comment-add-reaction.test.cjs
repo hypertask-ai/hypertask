@@ -4,6 +4,7 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const path = require("node:path");
+const { passThroughAuth } = require("./helpers/pass-through-auth.cjs");
 
 const root = path.resolve(__dirname, "..");
 let jitiEntryId = 0;
@@ -57,6 +58,7 @@ function loadHandler({
     "src/utils/controllers/notifications/creation-service/check-reminder_create-notification.ts",
   ]);
 
+  stubModule("src/lib/api/withAuth.ts", passThroughAuth());
   stubModule("src/lib/prisma.ts", {
     default: {
       comment: { findFirst: async () => comment },

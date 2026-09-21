@@ -1,3 +1,4 @@
+import { withoutAuth } from "#with-auth";
 import { logger as htLogger } from "#logger";
 import { NextRequest, NextResponse } from 'next/server'
 import { randomUUID } from 'crypto'
@@ -23,7 +24,7 @@ import { isValidRedirectUri } from '@/lib/oauth/redirect-uri'
  * - grant_types: Supported grant types
  * - token_endpoint_auth_method: Authentication method
  */
-export async function POST(request: NextRequest) {
+async function POSTHandler(request: NextRequest) {
   try {
     const body = await request.json()
 
@@ -150,3 +151,5 @@ export async function POST(request: NextRequest) {
     )
   }
 }
+
+export const POST = withoutAuth(POSTHandler);

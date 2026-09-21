@@ -1,6 +1,7 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const path = require("node:path");
+const { passThroughAuth } = require("./helpers/pass-through-auth.cjs");
 
 const root = path.resolve(__dirname, "..");
 
@@ -31,6 +32,7 @@ function responseRecorder() {
 process.env.SESSION_SECRET = "get-first-project-test-secret";
 
 const controllerCalls = [];
+stubModule("src/lib/api/withAuth.ts", passThroughAuth());
 stubModule("src/utils/controllers/projects/getFirst.ts", {
   default: async (userId) => {
     controllerCalls.push(userId);

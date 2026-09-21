@@ -1,3 +1,4 @@
+import { withoutAuth } from "#with-auth";
 import { env as appEnv } from "#env";
 import {
   FEATURE_FLAG_OWNER_USER_ID,
@@ -7,7 +8,7 @@ import {
 
 export const dynamic = 'force-dynamic'
 
-export async function GET(): Promise<Response> {
+async function GETHandler(): Promise<Response> {
   const enabled = await isFeatureEnabled(
     HTPR_4638_AI_DIRECTORY_METADATA_FLAG,
     FEATURE_FLAG_OWNER_USER_ID
@@ -22,3 +23,5 @@ export async function GET(): Promise<Response> {
     },
   })
 }
+
+export const GET = withoutAuth(GETHandler);

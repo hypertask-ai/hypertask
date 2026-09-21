@@ -1,3 +1,4 @@
+import { withoutAuth } from "#with-auth";
 import { logger as htLogger } from "#logger";
 import { createHash } from 'crypto'
 import { NextRequest, NextResponse } from 'next/server'
@@ -17,7 +18,7 @@ function noStoreResponse() {
 }
 
 /** Refresh-token revocation for public native clients. Unknown tokens are a no-op. */
-export async function POST(request: NextRequest) {
+async function POSTHandler(request: NextRequest) {
   try {
     const formData = await request.formData()
     const token = formData.get('token')
@@ -93,3 +94,5 @@ export async function POST(request: NextRequest) {
     )
   }
 }
+
+export const POST = withoutAuth(POSTHandler);

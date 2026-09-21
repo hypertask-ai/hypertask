@@ -1,6 +1,7 @@
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const path = require("node:path");
+const { passThroughAuth } = require("./helpers/pass-through-auth.cjs");
 const test = require("node:test");
 const ts = require("typescript");
 
@@ -19,6 +20,7 @@ function loadRoute(verifySession) {
   const controllerCalls = [];
   const loadedModule = { exports: {} };
   const stubs = {
+    "#with-auth": passThroughAuth(),
     "@/lib/auth/session": {
       SESSION_COOKIE: "ht_session",
       verifySession,
