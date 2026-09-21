@@ -1,5 +1,3 @@
-import { logger as htLogger } from "#logger";
-import { withAuth } from "#with-auth";
 // route = "/api/projects/views/unsaved-view"
 import {
   HTPR_6588_EMPTY_COLUMNS_SAVE_VIEW_FLAG,
@@ -125,7 +123,7 @@ const handler: NextApiHandler = async (
           default_view: true,
         },
       });
-      htLogger.info(
+      console.log(
         "🚀 ~ consthandler:NextApiHandler= ~ projectView:",
         projectView
       );
@@ -142,7 +140,7 @@ const handler: NextApiHandler = async (
           unsavedView: true,
         },
       });
-      htLogger.info("🚀 ~ 55: ~ user_project_view:", user_project_view);
+      console.log("🚀 ~ 55: ~ user_project_view:", user_project_view);
 
       const baseView = hasBaseViewId
         ? baseViewId == null
@@ -339,7 +337,7 @@ const handler: NextApiHandler = async (
 
       // ================ if NEW USER_PROJECT_VIEW,
       if (!user_project_view) {
-        htLogger.info(
+        console.log(
           "------------------------ need to create anew user_project_view ------------ "
         );
         const user_project_view = await createUserProjectView(
@@ -353,11 +351,11 @@ const handler: NextApiHandler = async (
             user_project_view.project_view_id,
             user_project_view.id
           );
-        htLogger.info(
+        console.log(
           "🚀 ~ consthandler:NextApiHandler= ~ updated_user_project_view:",
           updated_user_project_view
         );
-        htLogger.info(
+        console.log(
           "🚀 ~ consthandler:NextApiHandler= ~ unsavedViewCreated:",
           unsavedViewCreated
         );
@@ -365,10 +363,10 @@ const handler: NextApiHandler = async (
       // if the user_project_view already exists, we need to check if
       // it already has unsaved changes.
       else {
-        htLogger.info(
+        console.log(
           "------------------------ user_project_view already exists,------------ "
         );
-        htLogger.info("🚀 ~  user_project_view:", user_project_view);
+        console.log("🚀 ~  user_project_view:", user_project_view);
         // ============== if there are NO unsaved changes, means we need to ADD it, for sure.
         // also if the settings are same as the actual default then don't bother please
         if (!user_project_view.unsavedView) {
@@ -377,11 +375,11 @@ const handler: NextApiHandler = async (
               user_project_view.project_view_id,
               user_project_view.id
             );
-          htLogger.info(
+          console.log(
             "🚀 ~ consthandler:NextApiHandler= ~ updated_user_project_view:",
             updated_user_project_view
           );
-          htLogger.info(
+          console.log(
             "🚀 ~ consthandler:NextApiHandler= ~ unsavedViewCreated:",
             unsavedViewCreated
           );
@@ -400,7 +398,7 @@ const handler: NextApiHandler = async (
 
           // New clients compare against their URL-pinned base. Old clients retain the stored applied/default chain.
           if (comparisonView) {
-            htLogger.info("============== checking for equality in appliedView");
+            console.log("============== checking for equality in appliedView");
             const settingsFromDB = {
               board_columns_view: comparisonView.board_columns_view,
               board_filters: sanitizeBoardFilters(
@@ -425,7 +423,7 @@ const handler: NextApiHandler = async (
               shouldDeleteUnsaved = true;
             // if equality found, toggle the boolean to true
           } else {
-            htLogger.info(
+            console.log(
               "there is no default view, so lets compare with defaults. \n"
             );
 
@@ -437,7 +435,7 @@ const handler: NextApiHandler = async (
 
           //===================== if by then, no equality has been found, we're safe to update the unsaved view.
           if (!shouldDeleteUnsaved && user_project_view.unsavedView) {
-            htLogger.info(
+            console.log(
               "============== no equality found, updating the previous unsaved"
             );
             const unsavedViewId = user_project_view.unsavedView.id;
@@ -467,7 +465,7 @@ const handler: NextApiHandler = async (
               },
             }));
 
-            htLogger.info(
+            console.log(
               "🚀 ~ consthandler:NextApiHandler= ~ updatedView:",
               updatedView
             );
@@ -489,7 +487,7 @@ const handler: NextApiHandler = async (
           }
           // ==================== equality found.
           else if (shouldDeleteUnsaved && user_project_view.unsavedViewId) {
-            htLogger.info(
+            console.log(
               "*==================* found equality. lets delete the view: ",
               user_project_view.unsavedViewId
             );
@@ -505,12 +503,12 @@ const handler: NextApiHandler = async (
             const deletedView = await prisma.view.delete({
               where: { id: user_project_view.unsavedViewId },
             });
-            htLogger.info(
+            console.log(
               "🚀 ~ consthandler:NextApiHandler= ~ deletedView:",
               deletedView
             );
           }
-          htLogger.info("-============ equality variable ", shouldDeleteUnsaved);
+          console.log("-============ equality variable ", shouldDeleteUnsaved);
         }
       }
 
@@ -520,7 +518,7 @@ const handler: NextApiHandler = async (
       );
       return res.status(200).json(project_view_updated);
     } catch (error) {
-      htLogger.info("🚀 ~ consthandler:NextApiHandler= ~ error:", error);
+      console.log("🚀 ~ consthandler:NextApiHandler= ~ error:", error);
       if (error instanceof MissingBoardFilterLabelError) {
         return res.status(error.status).json({ message: error.message });
       }
@@ -529,7 +527,7 @@ const handler: NextApiHandler = async (
   }
 };
 
-export default withAuth(handler);
+export default handler;
 
 const createUserProjectView = async (
   userId: number,

@@ -1,5 +1,3 @@
-import { logger as htLogger } from "#logger";
-import { withoutAuth } from "#with-auth";
 import { NextRequest, NextResponse } from 'next/server'
 
 import { isFeatureEnabled } from '@/lib/flags'
@@ -21,7 +19,7 @@ type DeleteReportBody = {
   slug?: unknown
 }
 
-async function POSTHandler(request: NextRequest) {
+export async function POST(request: NextRequest) {
   try {
     const ctx = await validateMcpAuth(request)
     if (!ctx) {
@@ -105,9 +103,7 @@ async function POSTHandler(request: NextRequest) {
       )
     }
 
-    htLogger.error('[MCP Delete Report] Error:', error)
+    console.error('[MCP Delete Report] Error:', error)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
 }
-
-export const POST = withoutAuth(POSTHandler);

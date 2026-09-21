@@ -138,6 +138,7 @@ const CreateTaskModalBody: React.FC<IProps> = ({ }) => {
         ].includes((document.activeElement as HTMLElement)?.tagName?.toLowerCase());
         const tipTapClassName: string = "tiptap ProseMirror ProseMirror-focused";
         // if (editMode!=="assignees") return "allowTab"
+        console.log("returning")
         return document.activeElement?.className === tipTapClassName || isInputFocused || showConfirmationModal
     }
     // ============================= [ENTER] handler
@@ -157,9 +158,14 @@ const CreateTaskModalBody: React.FC<IProps> = ({ }) => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
     const handleKeyDown = (e: KeyboardEvent) => {
         // e.stopPropagation()
+        // console.log("🚀 ~ handleKeyDown ~ e:", e)
         var cmdControl = isApple && e.metaKey || !isApple && e.ctrlKey;
         if (uploadInProgress) return toast("Upload in progress! Please wait")
+        // console.log("document active el: ", document.activeElement)
         // const mode = editMode && ["title", "Description", "Description-ai"].includes(editMode) ? "Editing" : currentFocusedElement ? "Navigating" : "Modal"
+        // console.log("🚀 ~ handleKeyDown ~ mode:", mode)
+        // console.log("🚀 ~ handleKeyDown ~ currentFocusedElement:", currentFocusedElement)
+        // console.log("🚀 ~ handleKeyDown ~ editMode:", editMode)
 
 
         // ============== keydown operations for when mode is "EDITING"
@@ -225,11 +231,13 @@ const CreateTaskModalBody: React.FC<IProps> = ({ }) => {
             setCurrentFocusedElement("Description")
         }
 
+        console.log("made it till here")
 
         // press [cmd/ctrl][j]
         if (e.keyCode === KeyCodes.J && cmdControl) {
             e.preventDefault()
             endTour()
+            console.log("🚀 ~ handleKeyDown ~ endTour is not working");
             setEditMode("Description-ai")
             setCurrentFocusedElement("Description")
             return true

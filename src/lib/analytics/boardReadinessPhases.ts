@@ -1,4 +1,3 @@
-import { env as appEnv } from "#env";
 import { AUTHENTICATED_APP_HOSTNAME } from "@/lib/analytics/appPerformanceScope";
 import { emitProductPerformanceEvent } from "@/lib/analytics/productPerformance";
 
@@ -203,7 +202,7 @@ export const buildBoardReadinessProperties = (
         ? ("mobile" as const)
         : ("desktop" as const),
     local_database_pilot: completion.localDatabasePilot,
-    production_commit: appEnv.NEXT_PUBLIC_BUILD_ID || "unknown",
+    production_commit: process.env.NEXT_PUBLIC_BUILD_ID || "unknown",
     trace_complete:
       missingPhases.length === 0 && invalidPhaseOrder.length === 0,
     missing_phases: missingPhases.join(","),

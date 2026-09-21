@@ -1,4 +1,3 @@
-import { env as appEnv } from "#env";
 import type {
   PersistedClient,
   Persister,
@@ -747,7 +746,7 @@ const createReadyQueryPersister = (
     requestedMode,
     storedMode,
     indexedDbEnabled:
-      appEnv.NEXT_PUBLIC_QUERY_CACHE_INDEXED_DB !== "false",
+      process.env.NEXT_PUBLIC_QUERY_CACHE_INDEXED_DB !== "false",
   });
   if (mode === "off") return noOpPersister;
   if (mode === "indexeddb" && typeof indexedDB !== "undefined") {

@@ -1,4 +1,3 @@
-import { env as appEnv } from "#env";
 import {
   decodedMappings,
   originalPositionFor,
@@ -49,12 +48,12 @@ function normalizeSourcePath(source: string) {
 
 function allowedOrigins() {
   const configured = [
-    appEnv.NEXT_PUBLIC_APP_URL,
-    appEnv.SOURCE_MAP_ORIGIN,
-    appEnv.VERCEL_PROJECT_PRODUCTION_URL
-      ? `https://${appEnv.VERCEL_PROJECT_PRODUCTION_URL}`
+    process.env.NEXT_PUBLIC_APP_URL,
+    process.env.SOURCE_MAP_ORIGIN,
+    process.env.VERCEL_PROJECT_PRODUCTION_URL
+      ? `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}`
       : undefined,
-    appEnv.VERCEL_URL ? `https://${appEnv.VERCEL_URL}` : undefined,
+    process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : undefined,
     "https://app.hypertask.ai",
     "https://app.hypertasks.ai",
   ];
@@ -85,16 +84,16 @@ function isAllowedScript(scriptUrl: string, origins: Set<string>) {
 }
 
 function sourceMapHeaders(mapUrl: string) {
-  const secret = appEnv.SOURCE_MAP_BYPASS_SECRET;
+  const secret = process.env.SOURCE_MAP_BYPASS_SECRET;
   if (!secret) return undefined;
   const origins = new Set([
     "https://app.hypertask.ai",
     "https://app.hypertasks.ai",
-    appEnv.SOURCE_MAP_BYPASS_ORIGIN,
-    appEnv.VERCEL_PROJECT_PRODUCTION_URL
-      ? `https://${appEnv.VERCEL_PROJECT_PRODUCTION_URL}`
+    process.env.SOURCE_MAP_BYPASS_ORIGIN,
+    process.env.VERCEL_PROJECT_PRODUCTION_URL
+      ? `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}`
       : undefined,
-    appEnv.VERCEL_URL ? `https://${appEnv.VERCEL_URL}` : undefined,
+    process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : undefined,
   ]);
   if (!origins.has(new URL(mapUrl).origin)) return undefined;
   return { "x-vercel-protection-bypass": secret };

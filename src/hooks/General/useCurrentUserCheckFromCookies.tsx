@@ -32,6 +32,7 @@ const useCurrentUser = (authenticatedUserId?: number | null) => {
         lastSyncedRef.current = null;
       }
     } catch (error) {
+      console.error('Error parsing nookies_user cookie:', error);
       
       // Only clear storage/cookies if in browser
       if (typeof window !== 'undefined') {

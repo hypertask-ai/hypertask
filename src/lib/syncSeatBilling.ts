@@ -1,4 +1,3 @@
-import { logger as htLogger } from "#logger";
 import { randomUUID } from "node:crypto";
 import type { Prisma } from "@prisma/client";
 
@@ -402,7 +401,7 @@ async function syncSeatBilling(
     // paying team's subscription is ever deleted by hand this is the only trace,
     // so it stays in the logs.
     if (error instanceof OrphanedSubscriptionItemError) {
-      htLogger.warn("[seat-billing] orphaned subscription, skipping", {
+      console.warn("[seat-billing] orphaned subscription, skipping", {
         teamId,
         reason: error.message,
       });

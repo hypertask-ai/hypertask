@@ -96,6 +96,10 @@ export function useUniversalMovement(props: TProps) {
           : undefined;
       ranking = generateRanking(prevRank, undefined);
     } else if (forceNavigate && direction === "Right") {
+      console.log(
+        "🚀 ~ moveTaskHorizontally ~ itemToMoveIndex jere:",
+        itemToMoveIndex,
+      );
       const nextRank =
         targetSectionItems.length > 0
           ? targetSectionItems[itemToMoveIndex]?.ranking
@@ -159,6 +163,7 @@ export function useUniversalMovement(props: TProps) {
     currentProject && updateActiveItemAndItemInView(newItem);
     setActiveSection(targetSectionIdx);
 
+    console.timeEnd("Moving item horizontally: ");
     const updatedTasks = newSections.flatMap((x) => x.items);
     updateSectionsInProject(newSections, updatedTasks);
 
@@ -314,6 +319,7 @@ export function useUniversalMovement(props: TProps) {
     itemIndex?: number,
     forceNavigate?: "Left" | "Right",
   ) {
+    console.log("🚀 ~ moveFocusToSection ~ itemIndex:", itemIndex);
     if (!currentProject) return;
     const sectionEls = document.getElementById("sectionsContainer")!.children;
     let ItemId: number | null = null;

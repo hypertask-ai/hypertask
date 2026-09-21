@@ -1,5 +1,3 @@
-import { env as appEnv } from "#env";
-import { logger as htLogger } from "#logger";
 import { betterAuth } from 'better-auth'
 import { prismaAdapter } from 'better-auth/adapters/prisma'
 import { emailOTP, magicLink, multiSession } from 'better-auth/plugins'
@@ -16,7 +14,7 @@ import { MANAGEMENT_KEY_PERMISSIONS } from '@/lib/mcp/managementPermissions'
 import prisma from '@/lib/prisma'
 import { provisionNewUser } from '@/utils/controllers/users/provisionNewUser'
 
-const EMAIL_FROM = appEnv.EMAIL_FROM || 'noreply@hypertask.ai'
+const EMAIL_FROM = process.env.EMAIL_FROM || 'noreply@hypertask.ai'
 
 const managementApiKeyPlugin = apiKey({
   defaultPrefix: 'htmk_',
@@ -53,8 +51,8 @@ Object.assign(managementApiKeyPlugin.schema.apikey.fields.referenceId, {
 })
 
 async function sendMagicLinkEmail(email: string, url: string) {
-  if (!appEnv.RESEND_API_KEY) {
-    htLogger.info('auth email skipped: no RESEND_API_KEY configured')
+  if (!process.env.RESEND_API_KEY) {
+    console.log('auth email skipped: no RESEND_API_KEY configured')
     return
   }
 
@@ -95,8 +93,8 @@ async function sendMagicLinkEmail(email: string, url: string) {
 }
 
 async function sendOTPEmail(email: string, otp: string) {
-  if (!appEnv.RESEND_API_KEY) {
-    htLogger.info('auth email skipped: no RESEND_API_KEY configured')
+  if (!process.env.RESEND_API_KEY) {
+    console.log('auth email skipped: no RESEND_API_KEY configured')
     return
   }
 
@@ -136,8 +134,8 @@ export const auth = betterAuth({
   database: prismaAdapter(prisma, {
     provider: 'postgresql',
   }),
-  secret: appEnv.BETTER_AUTH_SECRET,
-  baseURL: appEnv.BETTER_AUTH_URL ?? 'https://app.hypertask.ai',
+  secret: process.env.BETTER_AUTH_SECRET,
+  baseURL: process.env.BETTER_AUTH_URL ?? 'https://app.hypertask.ai',
   // Vercel preview deployments serve from *.vercel.app while BETTER_AUTH_URL
   // stays app.hypertask.ai, so the origin check 403s every POST there. Trust
   // the deployment's own host on previews only; production stays strict.
@@ -147,12 +145,12 @@ export const auth = betterAuth({
   // session. app.hypertask.ai/staging listed explicitly so the array never
   // narrows the origins production already trusts.
   trustedOrigins:
-    appEnv.VERCEL_ENV === 'preview' && appEnv.VERCEL_URL
+    process.env.VERCEL_ENV === 'preview' && process.env.VERCEL_URL
       ? [
           'https://demo.hypertask.ai',
-          `https://${appEnv.VERCEL_URL}`,
-          ...(appEnv.VERCEL_BRANCH_URL
-            ? [`https://${appEnv.VERCEL_BRANCH_URL}`]
+          `https://${process.env.VERCEL_URL}`,
+          ...(process.env.VERCEL_BRANCH_URL
+            ? [`https://${process.env.VERCEL_BRANCH_URL}`]
             : []),
         ]
       : [
@@ -165,8 +163,8 @@ export const auth = betterAuth({
   },
   socialProviders: {
     google: {
-      clientId: appEnv.GOOGLE_ID as string,
-      clientSecret: appEnv.GOOGLE_SECRET as string,
+      clientId: process.env.GOOGLE_ID as string,
+      clientSecret: process.env.GOOGLE_SECRET as string,
     },
   },
   user: {
@@ -241,7 +239,7 @@ export const auth = betterAuth({
               createGoogleAccount: context?.path === '/callback/google',
             })
           } catch (error) {
-            htLogger.error('CRITICAL: Better Auth user provisioning failed', {
+            console.error('CRITICAL: Better Auth user provisioning failed', {
               userId: user.id,
               email: user.email,
               error,
@@ -262,7 +260,7 @@ export const auth = betterAuth({
       ipAddressHeaders: ['x-forwarded-for', 'x-real-ip'],
     },
   },
-  // HTPR-4146: apiKey defaults to appEnv.BETTER_AUTH_API_KEY.
+  // HTPR-4146: apiKey defaults to process.env.BETTER_AUTH_API_KEY.
   plugins: [
     dash(),
     managementApiKeyPlugin,
@@ -272,7 +270,7 @@ export const auth = betterAuth({
     passkey({
       rpName: 'Hypertask',
       // rpID defaults to baseURL host (app.hypertask.ai); origin pinned for defense.
-      origin: appEnv.BETTER_AUTH_URL ?? 'https://app.hypertask.ai',
+      origin: process.env.BETTER_AUTH_URL ?? 'https://app.hypertask.ai',
       schema: { passkey: { modelName: 'Passkey' } },
     }),
     magicLink({

@@ -1,4 +1,3 @@
-import { logger as htLogger } from "#logger";
 import prisma from "@/lib/prisma";
 import { mutateAndSyncSeatBilling } from "@/lib/syncSeatBilling";
 import getFirst from "../projects/getFirst";
@@ -11,7 +10,7 @@ export async function leaveTeam(
   requestingUserId: number,
 ) {
   try {
-    htLogger.info("🤔 ~ Starting team exit operations.");
+    console.log("🤔 ~ Starting team exit operations.");
 
     // Keep authorization and every related database mutation atomic, then retain
     // the team lease until Stripe reflects the committed membership count.
@@ -64,7 +63,7 @@ export async function leaveTeam(
               userId,
             },
           });
-          htLogger.info("🤔 ~ Team exit status: REMOVED FROM ASSIGNEES.");
+          console.log("🤔 ~ Team exit status: REMOVED FROM ASSIGNEES.");
 
           assertHeld();
           await tx.follower.deleteMany({
@@ -73,7 +72,7 @@ export async function leaveTeam(
               task: { project: { teamId } },
             },
           });
-          htLogger.info("🤔 ~ Team exit status: REMOVED AS FOLLOWERS.");
+          console.log("🤔 ~ Team exit status: REMOVED AS FOLLOWERS.");
 
           assertHeld();
           await tx.member.deleteMany({
@@ -82,9 +81,9 @@ export async function leaveTeam(
               project: { teamId },
             },
           });
-          htLogger.info("🤔 ~ Team exit status: REMOVED FROM PROJECTS.");
+          console.log("🤔 ~ Team exit status: REMOVED FROM PROJECTS.");
 
-          htLogger.info("🤔 ~ Team exit status: REMOVED FROM TEAM.");
+          console.log("🤔 ~ Team exit status: REMOVED FROM TEAM.");
 
           assertHeld();
           const updatedTeam = await tx.team.updateMany({
@@ -122,7 +121,7 @@ export async function leaveTeam(
       };
     }
 
-    htLogger.info("🤔 ~ Team exit status: TEAM SEATS DECREMENTED.");
+    console.log("🤔 ~ Team exit status: TEAM SEATS DECREMENTED.");
 
     const firstProject = await getFirst(userId);
     return {
@@ -130,7 +129,7 @@ export async function leaveTeam(
       json: { message: "Success", firstProject },
     };
   } catch (error) {
-    htLogger.info("🤔 ~ leaveTeam ~ error:", error);
+    console.log("🤔 ~ leaveTeam ~ error:", error);
     return {
       status: 400,
       json: { message: JSON.stringify(error) },

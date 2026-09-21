@@ -1,5 +1,3 @@
-import { env as appEnv } from "#env";
-import { logger as htLogger } from "#logger";
 // reorder them whenever it works for now
 import { INotification, IProject, ISection, ITask, preSelectParamPricing, QueryParams } from "@/models/model";
 import { getPricingSettingsPath } from "@/lib/pricingSettingsPaths";
@@ -185,8 +183,8 @@ export function sortByTicketNumberOrder(order: SortingOrder) {
 
 export function sortByDueDateOrder(order: SortingOrder) {
   return function sortByDueDate(a: any, b: any) {
-    // debug.log("🚀 ~ sortByDueDate ~ b:", b);
-    // debug.log("🚀 ~ sortByDueDate ~ a:", a);
+    // console.log("🚀 ~ sortByDueDate ~ b:", b);
+    // console.log("🚀 ~ sortByDueDate ~ a:", a);
 
     // Items without a dueDate should always be placed last
     const hasDueDateA = !!a.dueDate;
@@ -313,10 +311,10 @@ export const getCurrentProject = (_currentProject:IProject) => {
         // const sectionsReturned = syncChangesForColumns(_currentProject)?.filter(x=>x.visibility)??[] //upsertBoardColumnsViewAndReturn(_currentProject)?.filter(x=>x.visibility)??[]
         const sectionsReturned = getActiveColumnsViewFromProject(_currentProject)?.filter(x=>x.visibility)??[] //upsertBoardColumnsViewAndReturn(_currentProject)?.filter(x=>x.visibility)??[]
 
-        // debug.log("🚀 ~ getCurrentProject ~ sectionsReturned:", sectionsReturned)
+        // console.log("🚀 ~ getCurrentProject ~ sectionsReturned:", sectionsReturned)
         for (var i = 0; i < sectionsReturned.length; i++) {
           const section = sectionsReturned[i];
-          // debug.log("🚀 ~ file: Homepage.tsx:125 ~ getCurrentProject ~ section:", section)
+          // console.log("🚀 ~ file: Homepage.tsx:125 ~ getCurrentProject ~ section:", section)
           var filterItems:ITask[];
           if (_currentProject.tasks!==undefined && _currentProject.tasks!==null ) {
             filterItems = _currentProject?.tasks.filter((item: ITask) => item.sectionId === section.id)
@@ -330,7 +328,7 @@ export const getCurrentProject = (_currentProject:IProject) => {
             _sections.push({ section_title: section.section_title,sectionId:section.id, visibility:section.visibility?section.visibility:true, items: itemsToSort, id: section.id })
           }
         }
-        // debug.log("🚀 ~ getCurrentProject ~ _sections:", _sections)
+        // console.log("🚀 ~ getCurrentProject ~ _sections:", _sections)
         return {_sections: _sections, firstTask:focusontask}
       }
       return []
@@ -431,14 +429,14 @@ export function scrollToCenterIfNearBottom(activeElement:HTMLElement, thresholdP
 
   // Calculate the dynamic threshold based on a percentage of the viewport height
   const threshold = (window.innerHeight * thresholdPercentage) / 100;
-  // debug.log("🚀 ~ scrollToCenterIfNearBottom ~ threshold:", threshold)
-  // debug.log("🚀 ~ scrollToCenterIfNearBottom ~ distanceToBottom:", distanceToBottom)
-  // debug.log("🚀 ~ scrollToCenterIfNearBottom ~ distanceToBottom < threshold:", distanceToBottom < threshold)
+  // console.log("🚀 ~ scrollToCenterIfNearBottom ~ threshold:", threshold)
+  // console.log("🚀 ~ scrollToCenterIfNearBottom ~ distanceToBottom:", distanceToBottom)
+  // console.log("🚀 ~ scrollToCenterIfNearBottom ~ distanceToBottom < threshold:", distanceToBottom < threshold)
   // Check if the element is close to the bottom
   if (distanceToBottom < threshold) {
     // Calculate the desired scroll position to center the element
     // const scrollPosition = elementRect.top - window.innerHeight / 2 + elementRect.height / 2;
-    // debug.log("🚀 ~ file: helperFunctions.ts:136 ~ scrollToCenterIfNearBottom ~ scrollPosition:", scrollPosition)
+    // console.log("🚀 ~ file: helperFunctions.ts:136 ~ scrollToCenterIfNearBottom ~ scrollPosition:", scrollPosition)
 
     // Scroll to the desired position
     activeElement.scrollIntoView({behavior:"smooth",block:"center" })
@@ -482,7 +480,7 @@ export function scrollToCenterIfNear(activeElement: HTMLElement, thresholdPercen
   // Check if the element is close to either edge
   if (distanceToLeft < threshold || distanceToRight < threshold) {
     // Scroll to the desired position
-    htLogger.info("scrolling to center")
+    console.log("scrolling to center")
     activeElement.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'center' });
   }
 }
@@ -501,7 +499,7 @@ export function calculateRemainingTime (subscribedAt:Date){
     subscribedAt, currentDate)
   );
   //indexing for months in getMonthDifference is 0 [January]...and so on
-  htLogger.info("🚀 ~ calculateRemainingTime ~ 12-months:", 11-months)
+  console.log("🚀 ~ calculateRemainingTime ~ 12-months:", 11-months)
   // const returnPriceId:string = yearlyPriceIds[13-months]
   return 11-months
 }
@@ -539,7 +537,7 @@ export const processFiles = async (files: FileList, startingId: number) => {
         if (isImage(file)) {
           if (file.size / (1024 ** 2) > 2) {
             const resizedImage = await imageResizer(file);
-            htLogger.info("🚀 ~ Array.from ~ resizedImage:", resizedImage)
+            console.log("🚀 ~ Array.from ~ resizedImage:", resizedImage)
             return { id: startingId + index, file: resizedImage as File };
 
           }
@@ -604,7 +602,7 @@ export const cropToCircle = (file: File): Promise<Blob> => {
 };
 
 export const convertFileToBase64 = (file: any) => {
-    htLogger.info("🚀 ~ convertFileToBase64 ~ file:", file)
+    console.log("🚀 ~ convertFileToBase64 ~ file:", file)
     return new Promise((resolve, reject) => {
       const reader = new FileReader();
       reader.onload = () => resolve(reader.result); // Returns the Base64 string
@@ -1418,7 +1416,7 @@ export const constructPricingPageUrl = (_currentProject:IProject, preSelect:preS
 }
 
 export const constructTrialPageURL = (_currentProject:IProject)=>{
-  const baseURL = String(appEnv.NEXT_PUBLIC_BASEURL)
+  const baseURL = String(process.env.NEXT_PUBLIC_BASEURL)
   return `${baseURL}/trial-plan-confirmation?teamId=${_currentProject?.teamId}&totalSeats=${_currentProject?.team.totalSeats}&googleAccountId=${_currentProject?.team.googleAccountId}&stripe_customer_id=${_currentProject?.team.stripe_customer_id}&teamTitle=${_currentProject?.team.title}`
 }
 

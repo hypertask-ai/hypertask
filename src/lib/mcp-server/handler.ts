@@ -1,4 +1,3 @@
-import { env as appEnv } from "#env";
 import type { AuthInfo } from '@modelcontextprotocol/sdk/server/auth/types.js'
 import { createMcpHandler, withMcpAuth } from 'mcp-handler'
 import jwt from 'jsonwebtoken'
@@ -67,7 +66,7 @@ function bindMcpTools(tools: readonly PortableTool[]) {
     },
     {
       basePath: '',
-      redisUrl: appEnv.REDIS_URL,
+      redisUrl: process.env.REDIS_URL,
       maxDuration: 800,
       verboseLogs: false,
     }

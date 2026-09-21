@@ -1,4 +1,3 @@
-import { getAuthSession, withAuth } from "#with-auth";
 import { agentStore } from "@/utils/controllers/agents";
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
@@ -7,6 +6,7 @@ import type { AgentScopes } from "@/lib/mcp/agents/scopes";
 import { workingOnByAgent } from "@/lib/agents/working";
 import { ownedAgentSlugs } from "@/lib/agents/ownedSlugs";
 import { maskAgentProviderKey } from "@/lib/agents/maskAgentProviderKey";
+import { getSessionUser } from "@/lib/auth/getSessionUser";
 import {
   aiAllowancePeriod,
   parseAllowanceTeamStamp,
@@ -72,8 +72,8 @@ async function lastChatMessageAtByAgent(userId: number): Promise<Map<string, Dat
  * out of the several a user belongs to. Ownership scoping here also matches
  * `/api/agents/[agentId]`, so a card and its detail page never disagree.
  */
-async function GETHandler(request: NextRequest) {
-  const userId = (await getAuthSession(request.headers))?.userId;
+export async function GET(request: NextRequest) {
+  const userId = (await getSessionUser(request.headers))?.userId;
   if (!userId) {
     return NextResponse.json(
       { success: false, error: "Unauthorized" },
@@ -251,5 +251,3 @@ async function GETHandler(request: NextRequest) {
     })),
   });
 }
-
-export const GET = withAuth(GETHandler);

@@ -1,4 +1,3 @@
-import { logger as htLogger } from "#logger";
 import { getRedis } from "@/lib/redis";
 
 export const SLACK_ACTION_RATE_LIMIT = 20;
@@ -31,7 +30,7 @@ export async function claimSlackActionCapacity(
     const count = Number(results?.[0]?.[1]);
     return !isSlackActionRateLimited(count);
   } catch (error) {
-    htLogger.error("Slack rate-limit check failed", error);
+    console.error("Slack rate-limit check failed", error);
     return false;
   }
 }

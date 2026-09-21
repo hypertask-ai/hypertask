@@ -1,5 +1,3 @@
-import { logger as htLogger } from "#logger";
-import { withoutAuth } from "#with-auth";
 import { NextRequest, NextResponse } from 'next/server'
 import { getTeamGatewayFunding } from '@/app/api/ai/_lib/byokKeys'
 import {
@@ -95,7 +93,7 @@ async function getTeamUsage(ctx: McpAuthContext, request: NextRequest) {
         take: 2,
       })
     } catch (error) {
-      htLogger.error('[MCP AI Usage] Owned-team lookup unavailable:', error)
+      console.error('[MCP AI Usage] Owned-team lookup unavailable:', error)
       return NextResponse.json(
         { success: false, error: 'Could not load AI usage' },
         { status: 502 },
@@ -165,7 +163,7 @@ async function getTeamUsage(ctx: McpAuthContext, request: NextRequest) {
       totalTokens: snapshot.totals._sum.totalTokens ?? 0,
     }
   } catch (error) {
-    htLogger.error('[MCP AI Usage] Team usage snapshot unavailable:', error)
+    console.error('[MCP AI Usage] Team usage snapshot unavailable:', error)
     return NextResponse.json(
       { success: false, error: 'Could not load AI usage' },
       { status: 502 },
@@ -233,7 +231,7 @@ async function getTeamUsage(ctx: McpAuthContext, request: NextRequest) {
 
     return response
   } catch (error) {
-    htLogger.error('[MCP AI Usage] Failed to load AI spend:', error)
+    console.error('[MCP AI Usage] Failed to load AI spend:', error)
     return NextResponse.json(
       { success: false, error: 'Could not load AI usage' },
       { status: 502 },
@@ -249,7 +247,7 @@ async function getTeamUsage(ctx: McpAuthContext, request: NextRequest) {
  * counts and model spend. It never receives plan, billing, payment, or member
  * data.
  */
-async function GETHandler(request: NextRequest) {
+export async function GET(request: NextRequest) {
   try {
     const rateLimited = await checkMcpRateLimit(request)
     if (rateLimited) return rateLimited
@@ -352,9 +350,7 @@ async function GETHandler(request: NextRequest) {
       groups,
     })
   } catch (error) {
-    htLogger.error('[MCP AI Usage] Error:', error)
+    console.error('[MCP AI Usage] Error:', error)
     return NextResponse.json({ success: false, error: 'Internal server error' }, { status: 500 })
   }
 }
-
-export const GET = withoutAuth(GETHandler);

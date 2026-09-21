@@ -1,5 +1,3 @@
-import { logger as htLogger } from "#logger";
-import { withoutAuth } from "#with-auth";
 import type { Prisma } from '@prisma/client'
 import { NextRequest, NextResponse } from 'next/server'
 import { checkMcpRateLimit, validateMcpAuth } from '@/lib/mcp/auth'
@@ -53,7 +51,7 @@ type ClaimableTaskWhereInput = Prisma.TaskWhereInput & {
  *
  * Returns the highest-priority unleased tasks in one accessible project.
  */
-async function GETHandler(request: NextRequest) {
+export async function GET(request: NextRequest) {
   try {
     const rateLimited = await checkMcpRateLimit(request)
     if (rateLimited) return rateLimited
@@ -287,7 +285,7 @@ async function GETHandler(request: NextRequest) {
       total: rankedTasks.length,
     })
   } catch (error) {
-    htLogger.error('[MCP] tasks/next', { error })
+    console.error('[MCP] tasks/next', { error })
     return NextResponse.json(
       {
         success: false,
@@ -297,5 +295,3 @@ async function GETHandler(request: NextRequest) {
     )
   }
 }
-
-export const GET = withoutAuth(GETHandler);

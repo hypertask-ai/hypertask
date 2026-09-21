@@ -1,5 +1,3 @@
-import { logger as htLogger } from "#logger";
-import { withAuth } from "#with-auth";
 import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { isValidUser } from "@/utils/edgeHelpers";
@@ -11,7 +9,7 @@ export const dynamic = "force-dynamic";
 
 const noStoreHeaders = { "Cache-Control": "private, no-store" };
 
-async function GETHandler() {
+export async function GET() {
   const cookieStore = await cookies();
   const { isValid, user } = isValidUser(
     cookieStore.get("nookies_user")?.value,
@@ -35,12 +33,10 @@ async function GETHandler() {
       { status: 200, headers: noStoreHeaders },
     );
   } catch (error) {
-    htLogger.error("Calendar access check failed:", error);
+    console.error("Calendar access check failed:", error);
     return NextResponse.json(
       { success: false, error: "Unable to verify Calendar access" },
       { status: 500, headers: noStoreHeaders },
     );
   }
 }
-
-export const GET = withAuth(GETHandler);

@@ -1,4 +1,3 @@
-import { env as appEnv } from "#env";
 import { DisplayDate } from "@/components/Modals/RemindMe/RemindMeComponent";
 import useTiptap from "@/components/RTE/Tiptap";
 import {
@@ -122,7 +121,7 @@ export const useTutorial = () => {
       nookies.set(null, "funnel_tutorial_completed", "true", {
         maxAge: 60 * 60 * 24 * 30, // 30 days
         path: "/",
-        secure: appEnv.NODE_ENV === "production",
+        secure: process.env.NODE_ENV === "production",
         sameSite: "lax",
       });
 
@@ -156,6 +155,7 @@ export const useTutorial = () => {
     // doesn't wrongly redirect back into the onboarding sequence.
     nookies.destroy(null, "onboarding_return", { path: "/" });
 
+    console.log("Exit tutorial was called2");
     router.push(exitURL);
   }, [
     isLoggedIn,
@@ -1122,6 +1122,7 @@ export const useTutorial = () => {
         // if (e.key === "Enter") {
         //   e.preventDefault();
         //   const val=(document.getElementById('htc') as HTMLInputElement)?.value
+        //   console.log("🚀 ~ useTutorial ~ val:", val)
         //   if (val?.toLowerCase() === "add column") {
         //     setSceneState((prevState) => ({
         //       ...prevState,
@@ -1593,6 +1594,7 @@ export const useTutorial = () => {
 
       return "/";
     } catch (error) {
+      console.error("Error fetching shared task:", error);
       return "/";
     }
   }, [params]);
@@ -1682,6 +1684,7 @@ export const useTutorial = () => {
           });
 
         } catch (error) {
+          console.error('❌ Failed to update tutorial status:', error);
         }
       }
       exitTutorial();

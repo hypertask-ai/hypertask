@@ -1,5 +1,3 @@
-import { logger as htLogger } from "#logger";
-import { withAuth } from "#with-auth";
 import { NextApiHandler, NextApiRequest, NextApiResponse } from "next";
 import { updateCommentService } from "@/utils/controllers/comments/updateCommentService";
 import { broadcastTaskComment } from "@/lib/realtime/server";
@@ -68,12 +66,12 @@ const handler: NextApiHandler = async (
 
       void broadcastTaskComment(toUpdate.taskId, { originUserId: userObj.id }).catch(
         (broadcastError) =>
-          htLogger.warn("Comment update broadcast failed", broadcastError),
+          console.warn("Comment update broadcast failed", broadcastError),
       );
 
       return res.status(200).json(toUpdate);
     } catch (error) {
-      htLogger.error("Error:", error);
+      console.error("Error:", error);
       res.status(500).json({ message: "Internal server error" });
     }
   } else {
@@ -81,4 +79,4 @@ const handler: NextApiHandler = async (
   }
 };
 
-export default withAuth(handler);
+export default handler;

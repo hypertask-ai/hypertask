@@ -1,4 +1,3 @@
-import { withAuth } from "#with-auth";
 import { NextResponse } from "next/server";
 import { getServerCookieUser } from "@/lib/auth/serverUser";
 import prisma from "@/lib/prisma";
@@ -7,7 +6,7 @@ import { generateCustomerPortalLink } from "@/lib/subscription";
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
-async function POSTHandler(request: Request) {
+export async function POST(request: Request) {
   const user = await getServerCookieUser();
   if (!user) {
     return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
@@ -62,5 +61,3 @@ async function POSTHandler(request: Request) {
 
   return NextResponse.json({ url });
 }
-
-export const POST = withAuth(POSTHandler);

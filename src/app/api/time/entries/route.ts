@@ -1,4 +1,3 @@
-import { withAuth } from "#with-auth";
 import {
   createManualEntry,
   deleteEntry,
@@ -38,7 +37,7 @@ const serializeEntry = <T extends {
   seconds: elapsedSeconds(entry.startedAt, entry.endedAt, entry.pausedAt),
 });
 
-async function GETHandler(request: NextRequest) {
+export async function GET(request: NextRequest) {
   const auth = await getTimeRequestUser(request);
   if (auth.response) return auth.response;
 
@@ -60,7 +59,7 @@ async function GETHandler(request: NextRequest) {
   });
 }
 
-async function POSTHandler(request: NextRequest) {
+export async function POST(request: NextRequest) {
   const auth = await getTimeRequestUser(request);
   if (auth.response) return auth.response;
 
@@ -134,7 +133,7 @@ async function POSTHandler(request: NextRequest) {
   }
 }
 
-async function PATCHHandler(request: NextRequest) {
+export async function PATCH(request: NextRequest) {
   const auth = await getTimeRequestUser(request);
   if (auth.response) return auth.response;
 
@@ -190,7 +189,7 @@ async function PATCHHandler(request: NextRequest) {
   }
 }
 
-async function DELETEHandler(request: NextRequest) {
+export async function DELETE(request: NextRequest) {
   const auth = await getTimeRequestUser(request);
   if (auth.response) return auth.response;
 
@@ -207,8 +206,3 @@ async function DELETEHandler(request: NextRequest) {
   if (!deleted) return notFoundResponse();
   return NextResponse.json({ success: true });
 }
-
-export const GET = withAuth(GETHandler);
-export const POST = withAuth(POSTHandler);
-export const PATCH = withAuth(PATCHHandler);
-export const DELETE = withAuth(DELETEHandler);

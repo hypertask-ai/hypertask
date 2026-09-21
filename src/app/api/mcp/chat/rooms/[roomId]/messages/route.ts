@@ -1,5 +1,3 @@
-import { logger as htLogger } from "#logger";
-import { withoutAuth } from "#with-auth";
 import { NextRequest, NextResponse } from "next/server";
 import { checkMcpRateLimit, validateMcpAuth } from "@/lib/mcp/auth";
 import { loadAgentTokenRoom } from "@/lib/agents/roomAccess";
@@ -52,7 +50,7 @@ async function roomAgent(
   return { response: null, agentId: ctx.agentId };
 }
 
-async function GETHandler(
+export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ roomId: string }> },
 ) {
@@ -62,7 +60,7 @@ async function GETHandler(
   try {
     return NextResponse.json({ success: true, ...(await listAgentRoom(roomId)) });
   } catch (error) {
-    htLogger.error("[mcp agent-room] transcript failed", error);
+    console.error("[mcp agent-room] transcript failed", error);
     return NextResponse.json(
       { success: false, error: "Failed to load room transcript" },
       { status: 500 },
@@ -70,7 +68,7 @@ async function GETHandler(
   }
 }
 
-async function POSTHandler(
+export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ roomId: string }> },
 ) {
@@ -92,7 +90,7 @@ async function POSTHandler(
     });
     return NextResponse.json({ success: true, ...result });
   } catch (error) {
-    htLogger.error("[mcp agent-room] reply failed", error);
+    console.error("[mcp agent-room] reply failed", error);
     const status = error instanceof AgentRoomError ? error.status : 500;
     return NextResponse.json(
       {
@@ -103,6 +101,3 @@ async function POSTHandler(
     );
   }
 }
-
-export const GET = withoutAuth(GETHandler);
-export const POST = withoutAuth(POSTHandler);

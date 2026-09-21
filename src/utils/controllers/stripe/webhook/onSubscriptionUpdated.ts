@@ -1,4 +1,3 @@
-import { logger as htLogger } from "#logger";
 import type { Prisma, SubscriptionPlanStatus } from "@prisma/client";
 
 import { completePendingStripeCancellation } from "@/lib/pendingStripeSubscriptionCancellation";
@@ -57,7 +56,7 @@ export const applySubscriptionUpdatedWithTeamLockHeld = async (
     // `customer.subscription.created` owns creation. Requiring its stored
     // Hypertask plan also prevents unrelated subscriptions on the customer
     // from consuming trial eligibility or recreating access.
-    htLogger.warn(
+    console.warn(
       `Ignoring update for unknown Stripe subscription ${subscription.id}`,
     );
     return;

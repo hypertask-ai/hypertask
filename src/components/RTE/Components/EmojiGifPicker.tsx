@@ -1,4 +1,3 @@
-import { env as appEnv } from "#env";
 import { LazyEmojiPickerRaw, preloadEmojiResources } from "@/utils/emojiLoader";
 import type { Editor } from "@tiptap/react";
 import { Search } from "lucide-react";
@@ -145,7 +144,7 @@ const EmojiGifPicker = ({
   useEffect(() => {
     if (activeTab !== "gifs") return;
 
-    const apiKey = appEnv.NEXT_PUBLIC_GIPHY_API_KEY;
+    const apiKey = process.env.NEXT_PUBLIC_GIPHY_API_KEY;
     if (!apiKey) {
       setGifs([]);
       setError("GIF search is unavailable.");

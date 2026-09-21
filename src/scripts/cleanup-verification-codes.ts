@@ -1,5 +1,4 @@
 #!/usr/bin/env tsx
-import { logger as htLogger } from "#logger";
 
 import { VerificationCodeService } from '@/lib/services/verificationCodeService'
 
@@ -9,7 +8,7 @@ import { VerificationCodeService } from '@/lib/services/verificationCodeService'
  */
 async function cleanupExpiredCodes() {
   try {
-    htLogger.info('🧹 Starting comprehensive cleanup...')
+    console.log('🧹 Starting comprehensive cleanup...')
     
     // Clean up expired verification codes
     await VerificationCodeService.cleanupExpiredCodes()
@@ -19,23 +18,23 @@ async function cleanupExpiredCodes() {
     
     // Get and display stats
     const stats = await VerificationCodeService.getStats()
-    htLogger.info('📊 Verification code stats:', {
+    console.log('📊 Verification code stats:', {
       ...stats,
       timestamp: new Date().toISOString()
     })
     
     // Health check alerts
     if (stats.active > 100) {
-      htLogger.warn('⚠️  High number of active codes detected:', stats.active)
+      console.warn('⚠️  High number of active codes detected:', stats.active)
     }
     
     if (stats.recentRequests > 1000) {
-      htLogger.warn('⚠️  High request volume in last hour:', stats.recentRequests)
+      console.warn('⚠️  High request volume in last hour:', stats.recentRequests)
     }
     
-    htLogger.info('✅ Cleanup completed successfully')
+    console.log('✅ Cleanup completed successfully')
   } catch (error) {
-    htLogger.error('❌ Cleanup failed:', error)
+    console.error('❌ Cleanup failed:', error)
     process.exit(1)
   } finally {
     process.exit(0)

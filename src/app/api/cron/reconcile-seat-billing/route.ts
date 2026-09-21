@@ -1,5 +1,3 @@
-import { env as appEnv } from "#env";
-import { withoutAuth } from "#with-auth";
 import { NextRequest, NextResponse } from "next/server";
 
 import { isSubscriptionActive } from "@/lib/constants/constants";
@@ -17,11 +15,11 @@ export const maxDuration = 300;
 const TEAM_BATCH = 100;
 const CONCURRENCY = 4;
 
-async function GETHandler(request: NextRequest) {
+export async function GET(request: NextRequest) {
   if (
     !hasValidCronAuthorization(
       request.headers.get("authorization"),
-      appEnv.CRON_SECRET,
+      process.env.CRON_SECRET,
     )
   ) {
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });
@@ -103,5 +101,3 @@ async function GETHandler(request: NextRequest) {
 
   return NextResponse.json(summary, { status: summary.failed ? 207 : 200 });
 }
-
-export const GET = withoutAuth(GETHandler);

@@ -1,4 +1,3 @@
-import { withoutAuth } from "#with-auth";
 import { deleteEntry } from "@/lib/timeTracking";
 import { NextRequest, NextResponse } from "next/server";
 import { authenticateMcpTime, readEntryId } from "../_lib";
@@ -8,7 +7,7 @@ import { authenticateMcpTime, readEntryId } from "../_lib";
  * the CLI or MCP. Unlike update, this also covers a still-running timer, since
  * a timer started by mistake is the common case.
  */
-async function POSTHandler(request: NextRequest) {
+export async function POST(request: NextRequest) {
   const { ctx, body, response } = await authenticateMcpTime(request);
   if (response) return response;
 
@@ -28,5 +27,3 @@ async function POSTHandler(request: NextRequest) {
 
   return NextResponse.json({ success: true, deleted: entry.entryId });
 }
-
-export const POST = withoutAuth(POSTHandler);

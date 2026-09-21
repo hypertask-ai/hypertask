@@ -13,12 +13,14 @@ export const LoomNodeView = ({
   // Process the URL once when the component mounts or when src changes
   useEffect(() => {
     if (node.attrs.src) {
+      console.log("🚀 ~ useEffect ~ src:", node.attrs.src);
       // Use the same function that renderHTML uses
       const processedUrl = getEmbedUrlFromloomUrl({
         url: node.attrs.src,
         allowFullscreen: true,
         startAt: node.attrs.start || 0,
       });
+      console.log("🚀 ~ useEffect ~ processedUrl:", processedUrl);
 
       setEmbedUrl(processedUrl ?? "");
     }

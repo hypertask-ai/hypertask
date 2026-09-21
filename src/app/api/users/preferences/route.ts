@@ -1,5 +1,3 @@
-import { logger as htLogger } from "#logger";
-import { withAuth } from "#with-auth";
 import { NextRequest, NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import prisma from "@/lib/prisma";
@@ -48,12 +46,12 @@ async function getCurrentUserFromCookies() {
     if (!userCookie?.value) return null;
     return JSON.parse(userCookie.value) as { id?: number };
   } catch (error: any) {
-    htLogger.info("🚀 ~ getCurrentUserFromCookies ~ error:", error);
+    console.log("🚀 ~ getCurrentUserFromCookies ~ error:", error);
     return null;
   }
 }
 
-async function GETHandler(request: NextRequest) {
+export async function GET(request: NextRequest) {
   try {
     const user = await getCurrentUserFromCookies();
     if (!user?.id) {
@@ -72,7 +70,7 @@ async function GETHandler(request: NextRequest) {
       { status: response.status },
     );
   } catch (error) {
-    htLogger.info("🚀 ~ GET [users/preferences] ~ error:", error);
+    console.log("🚀 ~ GET [users/preferences] ~ error:", error);
     return NextResponse.json(
       {
         success: false,
@@ -100,7 +98,7 @@ async function GETHandler(request: NextRequest) {
   }
 }
 
-async function POSTHandler(request: NextRequest) {
+export async function POST(request: NextRequest) {
   try {
     const user = await getCurrentUserFromCookies();
     if (!user?.id) {
@@ -494,7 +492,7 @@ async function POSTHandler(request: NextRequest) {
         { status: 400 },
       );
     }
-    htLogger.info("🚀 ~ POST [users/preferences] ~ error:", error);
+    console.log("🚀 ~ POST [users/preferences] ~ error:", error);
     return NextResponse.json(
       { success: false, error: "Internal server error" },
       { status: 500 },
@@ -502,7 +500,4 @@ async function POSTHandler(request: NextRequest) {
   }
 }
 
-export const PATCH = withAuth(POSTHandler);
-
-export const GET = withAuth(GETHandler);
-export const POST = withAuth(POSTHandler);
+export const PATCH = POST;

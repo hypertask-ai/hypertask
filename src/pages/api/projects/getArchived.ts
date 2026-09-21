@@ -1,4 +1,3 @@
-import { withAuth } from "#with-auth";
 import getArchived from "@/utils/controllers/projects/getArchived";
 import { NextApiHandler, NextApiRequest, NextApiResponse } from "next";
 
@@ -18,4 +17,4 @@ const handler: NextApiHandler = async (req: NextApiRequest, res: NextApiResponse
     }
 };
 
-export default withAuth(handler);
+export default handler;

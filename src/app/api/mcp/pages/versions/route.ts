@@ -1,5 +1,3 @@
-import { logger as htLogger } from "#logger";
-import { withoutAuth } from "#with-auth";
 import { NextRequest, NextResponse } from 'next/server'
 
 import { checkMcpRateLimit, validateMcpAuth } from '@/lib/mcp/auth'
@@ -13,7 +11,7 @@ import {
   resolvePageIdentifierAlias,
 } from '../_lib/routeUtils'
 
-async function GETHandler(request: NextRequest) {
+export async function GET(request: NextRequest) {
   try {
     const ctx = await validateMcpAuth(request)
     if (!ctx) {
@@ -56,9 +54,7 @@ async function GETHandler(request: NextRequest) {
 
     return NextResponse.json({ versions })
   } catch (error) {
-    htLogger.error('[MCP List Page Versions] Error:', error)
+    console.error('[MCP List Page Versions] Error:', error)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
 }
-
-export const GET = withoutAuth(GETHandler);

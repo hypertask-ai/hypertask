@@ -1,9 +1,7 @@
-import { logger as htLogger } from "#logger";
-import { withAuth } from "#with-auth";
 import { NextRequest, NextResponse } from 'next/server'
 import prisma from '@/lib/prisma'
 
-async function GETHandler(request: NextRequest) {
+export async function GET(request: NextRequest) {
   try {
     const searchParams = request.nextUrl.searchParams
     const userId = searchParams.get('userId')
@@ -19,7 +17,7 @@ async function GETHandler(request: NextRequest) {
       where: { id: parseInt(userId) },
       include: { UserSetting: true },
     })
-    htLogger.info('user', user)
+    console.log('user', user)
     if (!user) {
       return NextResponse.json(
         { success: false, error: 'User not found' },
@@ -35,7 +33,7 @@ async function GETHandler(request: NextRequest) {
       userId: user.id,
     })
   } catch (error) {
-    htLogger.error('❌ Error checking verification status:', error)
+    console.error('❌ Error checking verification status:', error)
     return NextResponse.json(
       { 
         success: false, 
@@ -47,4 +45,3 @@ async function GETHandler(request: NextRequest) {
   }
 }
 
-export const GET = withAuth(GETHandler);

@@ -1,17 +1,13 @@
-import { withoutAuth } from "#with-auth";
 export const dynamic = "force-dynamic";
 
 function notFound() {
   return new Response(null, { status: 404 });
 }
 
-async function GETHandler() {
+export async function GET() {
   return notFound();
 }
 
-async function POSTHandler() {
+export async function POST() {
   return notFound();
 }
-
-export const GET = withoutAuth(GETHandler);
-export const POST = withoutAuth(POSTHandler);

@@ -1,5 +1,3 @@
-import { logger as htLogger } from "#logger";
-import { withAuth } from "#with-auth";
 import type { NextApiHandler } from "next";
 import {
   linkTaskPullRequest,
@@ -49,7 +47,7 @@ export function createLinkPullRequestHandler({
       try {
         await broadcastChange(taskId, { originUserId: userId });
       } catch (error) {
-        htLogger.warn("/api/tasks/linkPullRequest realtime delivery failed", error);
+        console.warn("/api/tasks/linkPullRequest realtime delivery failed", error);
       }
       return response.status(result.created ? 201 : 200).json(result);
     } catch (error) {
@@ -61,14 +59,14 @@ export function createLinkPullRequestHandler({
       if (error instanceof AgentMutationLeaseConflictError) {
         return response.status(409).json({ message: error.message });
       }
-      htLogger.error("/api/tasks/linkPullRequest", error);
+      console.error("/api/tasks/linkPullRequest", error);
       return response.status(500).json({ message: "Internal server error" });
     }
   };
 }
 
-export default withAuth(createLinkPullRequestHandler({
+export default createLinkPullRequestHandler({
   verifySession,
   linkTaskPullRequest,
   broadcastTaskChange,
-}));
+});

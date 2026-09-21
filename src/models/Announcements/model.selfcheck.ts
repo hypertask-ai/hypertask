@@ -1,4 +1,3 @@
-import { logger as htLogger } from "#logger";
 import assert from "node:assert/strict";
 import {
   getExplicitLevel,
@@ -32,4 +31,4 @@ assert.equal(resolveLevel({}), "note");
 assert.equal(getExplicitLevel({ slides: [{} as never] }), undefined);
 assert.equal(getExplicitLevel({ level: "nonsense" as never }), undefined);
 
-htLogger.info("announcement level self-check ok");
+console.log("announcement level self-check ok");

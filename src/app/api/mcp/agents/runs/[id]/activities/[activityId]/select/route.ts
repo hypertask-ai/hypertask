@@ -1,5 +1,3 @@
-import { logger as htLogger } from "#logger";
-import { withoutAuth } from "#with-auth";
 import { NextRequest, NextResponse } from "next/server";
 import {
   agentRunActivitiesEnabledFor,
@@ -34,7 +32,7 @@ const noStore = (
     },
   });
 
-async function POSTHandler(
+export async function POST(
   request: NextRequest,
   {
     params,
@@ -98,9 +96,7 @@ async function POSTHandler(
     ) {
       return noStore({ success: false, error: error.message }, 409);
     }
-    htLogger.error("[agent-run] activity selection failed", error);
+    console.error("[agent-run] activity selection failed", error);
     return noStore({ success: false, error: "Failed to select run activity" }, 500);
   }
 }
-
-export const POST = withoutAuth(POSTHandler);

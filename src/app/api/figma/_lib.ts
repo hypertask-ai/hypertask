@@ -1,7 +1,7 @@
 import { randomBytes } from "node:crypto";
 import { NextRequest, NextResponse } from "next/server";
 
-import { getAuthSession } from "#with-auth";
+import { getSessionUser } from "@/lib/auth/getSessionUser";
 import { getRequestBaseUrl } from "@/lib/auth/requestBaseUrl";
 import { figmaConnectEnabledFor } from "@/lib/figma/connection";
 import {
@@ -27,7 +27,7 @@ export async function getFigmaAuthenticatedUser(
   request: NextRequest,
 ): Promise<FigmaAuthenticatedUser> {
   try {
-    const session = await getAuthSession(request.headers);
+    const session = await getSessionUser(request.headers);
     return session
       ? { status: "allowed", userId: session.userId }
       : { status: "unauthorized" };

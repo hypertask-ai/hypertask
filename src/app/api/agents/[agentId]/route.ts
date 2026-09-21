@@ -1,5 +1,3 @@
-import { logger as htLogger } from "#logger";
-import { getAuthSession, withAuth } from "#with-auth";
 import { NextRequest, NextResponse } from "next/server";
 import type { Prisma } from "@prisma/client";
 import prisma from "@/lib/prisma";
@@ -29,6 +27,7 @@ import {
   type AgentManagementDatabase,
 } from "@/lib/mcp/agents/ownedAgents";
 import { buildAgentBoardAccess } from "@/lib/agents/boardAccess";
+import { getSessionUser } from "@/lib/auth/getSessionUser";
 import {
   isVisibilityOnlyBody,
   setOwnedAgentVisibility,
@@ -44,11 +43,11 @@ async function resolveAgent(userId: number, ref: string) {
 }
 
 async function getCurrentUser(request: NextRequest) {
-  const session = await getAuthSession(request.headers);
+  const session = await getSessionUser(request.headers);
   return session ? { id: session.userId } : null;
 }
 
-async function GETHandler(
+export async function GET(
   request: NextRequest,
   props: { params: Promise<{ agentId: string }> },
 ) {
@@ -363,7 +362,7 @@ async function GETHandler(
   });
 }
 
-async function PATCHHandler(
+export async function PATCH(
   request: NextRequest,
   props: { params: Promise<{ agentId: string }> },
 ) {
@@ -463,7 +462,7 @@ async function PATCHHandler(
       try {
         await clearAgentRuntimeSnapshot(existing.id);
       } catch (error) {
-        htLogger.warn("[Agent runtime] Snapshot invalidation failed:", error);
+        console.warn("[Agent runtime] Snapshot invalidation failed:", error);
       }
     };
     if (isReEnabling) await clearRuntimeBestEffort();
@@ -732,7 +731,7 @@ async function PATCHHandler(
  * different things: board memberships and task assignments go with it, and its
  * comments stay (they are history, not the agent).
  */
-async function DELETEHandler(
+export async function DELETE(
   request: NextRequest,
   props: { params: Promise<{ agentId: string }> },
 ) {
@@ -771,7 +770,3 @@ async function DELETEHandler(
     },
   });
 }
-
-export const GET = withAuth(GETHandler);
-export const PATCH = withAuth(PATCHHandler);
-export const DELETE = withAuth(DELETEHandler);

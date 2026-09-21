@@ -4,6 +4,7 @@ import UploadingDescription from '.'
 
 const UploadingDescriptionContainer = () => {
     const {uploadingDescription}= useDescriptionAndCommentsContext()
+    console.log("🚀 ~ UploadingDescriptionContainer ~ uploadingDescription:", uploadingDescription)
 
   return (
     uploadingDescription ?

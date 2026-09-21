@@ -1,4 +1,3 @@
-import { withAuth } from "#with-auth";
 import { NextApiHandler, NextApiRequest, NextApiResponse } from "next";
 import getAllTeamsMinimal from "@/utils/controllers/teams/getAllMinimal";
 import { SESSION_COOKIE, verifySession } from "@/lib/auth/session";
@@ -19,4 +18,4 @@ const handler: NextApiHandler = async (req: NextApiRequest, res: NextApiResponse
     }
 };
 
-export default withAuth(handler);
+export default handler;

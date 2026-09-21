@@ -1,4 +1,3 @@
-import { logger as htLogger } from "#logger";
 import axios from "axios"
 import { realtimeEchoHeaders } from "@/lib/realtime/client"
 
@@ -15,7 +14,7 @@ export const archiveTaskNotification = async (taskId:number,currentUserId:number
             return response;
         } catch (error) {
             // Handle the error or return a default value
-            htLogger.error("Error getting Assignees and Members:", error);
+            console.error("Error getting Assignees and Members:", error);
             throw error; // You can also return a default value or handle the error in a different way
         }
   

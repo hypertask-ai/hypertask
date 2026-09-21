@@ -1,5 +1,3 @@
-import { logger as htLogger } from "#logger";
-import { withAuth } from "#with-auth";
 import { NextRequest, NextResponse } from 'next/server';
 import { cookies } from 'next/headers';
 import { isValidUser } from '@/utils/edgeHelpers';
@@ -8,7 +6,7 @@ import { getRedis } from '@/lib/redis';
 
 export const runtime = 'nodejs';
 
-async function POSTHandler(request: NextRequest) {
+export async function POST(request: NextRequest) {
   try {
     const cookieStore = await cookies();
     const userCookie = cookieStore.get('nookies_user');
@@ -38,12 +36,10 @@ async function POSTHandler(request: NextRequest) {
     
     return NextResponse.json({ code });
   } catch (error) {
-    htLogger.error('Error generating CLI code:', error);
+    console.error('Error generating CLI code:', error);
     return NextResponse.json(
       { error: 'Internal server error' },
       { status: 500 }
     );
   }
 }
-
-export const POST = withAuth(POSTHandler);

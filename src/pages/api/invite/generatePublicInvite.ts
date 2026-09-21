@@ -1,5 +1,3 @@
-import { logger as htLogger } from "#logger";
-import { getAuthSession, withAuth } from "#with-auth";
 // Next.js API route support: https://nextjs.org/docs/api-routes/introduction
 
 import type { NextApiRequest, NextApiResponse } from 'next'
@@ -8,18 +6,19 @@ import { generateInviteLink, setViewSlug } from './createInviteLink';
 import { getInviteFromProjectId } from '@/utils/api/invite/generatePublicInviteController';
 import { getProjectViewInclude } from '@/utils/controllers/projects/getAll';
 import { getViewFromProject } from '@/utils/helperFunctions/Views/ViewsHelperFunctions';
+import { getSessionUser } from '@/lib/auth/getSessionUser';
 import getMemberAndOwner from '@/utils/controllers/getMemberAndOwnerForBoard';
 
 
 
-async function handler(
+export default  async function handler(
   req: NextApiRequest,
   res: NextApiResponse
 ) {
  
   try {
     if (req.method==="GET"){
-        const session = await getAuthSession(new Headers(req.headers as Record<string, string>))
+        const session = await getSessionUser(new Headers(req.headers as Record<string, string>))
         if (!session) return res.status(401).json({message:"Unauthorized"})
 
         const {projectId:projectIdFromParam} = req.query
@@ -38,7 +37,7 @@ async function handler(
         else return res.status(200).json(response)
     }
     else if (req.method==="POST"){
-        const session = await getAuthSession(new Headers(req.headers as Record<string, string>))
+        const session = await getSessionUser(new Headers(req.headers as Record<string, string>))
         if (!session) return res.status(401).json({message:"Unauthorized"})
 
         const {projectId} = req.body
@@ -90,9 +89,7 @@ async function handler(
 
     return res.status(200).json({})
   } catch (error) {
-      htLogger.info(error)
+      console.log(error)
       return res.status(500).json(error)
   }
 }
-
-export default withAuth(handler);

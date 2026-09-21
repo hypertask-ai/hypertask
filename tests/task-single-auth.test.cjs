@@ -41,9 +41,8 @@ function loadHandler(session = null, { taskBroadcastGate } = {}) {
   const updated = [];
   const broadcasts = [];
   const stubs = {
-    "#with-auth": {
-      getAuthSession: async () => session,
-      withAuth: (handler) => handler,
+    "@/lib/auth/getSessionUser": {
+      getSessionUser: async () => session,
     },
     "@/models/model": {},
     "@/utils/controllers/projects/getAllIncludes": {

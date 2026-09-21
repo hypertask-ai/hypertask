@@ -1,7 +1,7 @@
-import { getAuthSession, withAuth } from "#with-auth";
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 import { getProjectWhere } from "@/utils/controllers/projects/getAllIncludes";
+import { getSessionUser } from "@/lib/auth/getSessionUser";
 
 export const runtime = "nodejs";
 
@@ -46,13 +46,13 @@ const taskSelect = {
   select: { id: true, uniqueIndex: true, title: true, projectId: true },
 } as const;
 
-async function GETHandler(
+export async function GET(
   request: NextRequest,
   props: { params: Promise<{ agentId: string }> },
 ) {
   const params = await props.params;
 
-  const userId = (await getAuthSession(request.headers))?.userId;
+  const userId = (await getSessionUser(request.headers))?.userId;
   if (!userId) {
     return NextResponse.json(
       { success: false, error: "Unauthorized" },
@@ -197,5 +197,3 @@ async function GETHandler(
 
   return NextResponse.json({ success: true, items });
 }
-
-export const GET = withAuth(GETHandler);

@@ -1,13 +1,11 @@
-import { withoutAuth } from "#with-auth";
-import { env as appEnv } from "#env";
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
 }
 
 const MCP_RESOURCE_URL =
-  appEnv.NEXT_PUBLIC_MCP_SERVER_URL || 'https://mcp.hypertask.ai/mcp'
+  process.env.NEXT_PUBLIC_MCP_SERVER_URL || 'https://mcp.hypertask.ai/mcp'
 
-function GETHandler(): Response {
+export function GET(): Response {
   return Response.json(
     {
       resource: MCP_RESOURCE_URL,
@@ -19,7 +17,7 @@ function GETHandler(): Response {
   )
 }
 
-function OPTIONSHandler(): Response {
+export function OPTIONS(): Response {
   return new Response(null, {
     status: 204,
     headers: {
@@ -29,6 +27,3 @@ function OPTIONSHandler(): Response {
     },
   })
 }
-
-export const GET = withoutAuth(GETHandler);
-export const OPTIONS = withoutAuth(OPTIONSHandler);

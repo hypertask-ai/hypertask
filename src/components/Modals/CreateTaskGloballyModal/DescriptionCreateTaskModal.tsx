@@ -27,6 +27,7 @@ const DescriptionCreateTaskModal = () => {
         setCurrentFocusedElement("Description")
     }
     // const AISaveHandler = (aiContent: string) => {
+    //     console.log("🚀 ~ AISaveHandler ~ aiContent:", aiContent)
     //     handleChange("description", aiContent)
     //     EscapeHandler()
 

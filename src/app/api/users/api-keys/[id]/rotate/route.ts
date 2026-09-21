@@ -1,5 +1,3 @@
-import { logger as htLogger } from "#logger";
-import { withAuth } from "#with-auth";
 import { NextRequest, NextResponse } from 'next/server'
 import prisma from '@/lib/prisma'
 import { generateApiKey, resolveApiKeyExpiry } from '@/lib/apiKeys'
@@ -19,7 +17,7 @@ export const runtime = 'nodejs'
  * exists. Pass `expiresInDays` to set the replacement's lifetime; omit it to
  * carry over the remaining lifetime of the key being rotated.
  */
-async function POSTHandler(
+export async function POST(
   request: NextRequest,
   props: { params: Promise<{ id: string }> }
 ) {
@@ -117,12 +115,10 @@ async function POSTHandler(
       },
     })
   } catch (error) {
-    htLogger.error('Error rotating API key:', error)
+    console.error('Error rotating API key:', error)
     return NextResponse.json(
       { success: false, error: 'Internal server error' },
       { status: 500 }
     )
   }
 }
-
-export const POST = withAuth(POSTHandler);

@@ -1,5 +1,3 @@
-import { logger as htLogger } from "#logger";
-import { getAuthSession, withAuth } from "#with-auth";
 import { NextApiHandler } from "next";
 import prisma from "@/lib/prisma";
 import sendNotificationForTask from "@/utils/controllers/notifications/creation-service/createAndSendNotificationTaskMove";
@@ -12,6 +10,7 @@ import {
   broadcastBoardChange,
   broadcastTaskChange,
 } from "@/lib/realtime/server";
+import { getSessionUser } from "@/lib/auth/getSessionUser";
 import { SESSION_COOKIE, verifySession } from "@/lib/auth/session";
 import { resolveActingAgent } from "@/lib/auth/resolveActingAgent";
 
@@ -24,7 +23,7 @@ const handler: NextApiHandler = async (req, res) => {
     const { taskId, status, agentId } = req.body;
     // Pages API auth is route-local: require a verified session (Better Auth or
     // signed ht_session). Do not fall back to unsigned nookies_user.id.
-    const session = await getAuthSession(
+    const session = await getSessionUser(
       new Headers(req.headers as Record<string, string>),
     );
     if (!session) {
@@ -137,11 +136,11 @@ const handler: NextApiHandler = async (req, res) => {
 
     return res.status(200).json(updatedTask);
   } catch (error) {
-    htLogger.error(error);
+    console.error(error);
     return res
       .status(500)
       .json({ message: "Internal server error", error: String(error) });
   }
 };
 
-export default withAuth(handler);
+export default handler;

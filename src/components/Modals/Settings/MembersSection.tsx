@@ -164,6 +164,7 @@ const MembersSection = () => {
         setIsRenaming(false);
       }
     } catch (error) {
+      console.error(error);
       toast.error("Could not rename team");
     } finally {
       setIsSavingName(false);
@@ -197,6 +198,7 @@ const MembersSection = () => {
         toast.success("Member removed");
       }
     } catch (error) {
+      console.error(error);
       toast.error("Could not remove member");
     } finally {
       setRemovingMemberId(null);
@@ -215,6 +217,7 @@ const MembersSection = () => {
       );
       await refetchProjectMemberRoles();
     } catch (error) {
+      console.error(error);
       toast.error("Could not change member role");
     } finally {
       setChangingRoleUserId(null);

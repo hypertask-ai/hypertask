@@ -1,5 +1,3 @@
-import { logger as htLogger } from "#logger";
-import { withAuth } from "#with-auth";
 import type { NextApiRequest, NextApiResponse } from "next";
 import prisma from "@/lib/prisma";
 
@@ -57,9 +55,9 @@ const handler = async (req: NextApiRequest, res: NextApiResponse) => {
 
     return res.status(200).json({ muted });
   } catch (error) {
-    htLogger.error("Error updating task mute preference", error);
+    console.error("Error updating task mute preference", error);
     return res.status(500).json({ message: "Internal server error" });
   }
 };
 
-export default withAuth(handler);
+export default handler;

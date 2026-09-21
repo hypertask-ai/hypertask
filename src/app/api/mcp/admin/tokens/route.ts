@@ -1,5 +1,3 @@
-import { logger as htLogger } from "#logger";
-import { withoutAuth } from "#with-auth";
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 
@@ -33,7 +31,7 @@ const revokeTokenSchema = z
     message: "Provide exactly one of token or revoke_all=true",
   });
 
-async function POSTHandler(request: NextRequest) {
+export async function POST(request: NextRequest) {
   const rateLimited = await checkMcpRateLimit(request);
   if (rateLimited) return rateLimited;
 
@@ -62,7 +60,7 @@ async function POSTHandler(request: NextRequest) {
         { status: 400 },
       );
     }
-    htLogger.error("[Admin Tokens] Failed to mint token:", error);
+    console.error("[Admin Tokens] Failed to mint token:", error);
     return NextResponse.json(
       { success: false, error: "Failed to mint token" },
       { status: 500 },
@@ -70,7 +68,7 @@ async function POSTHandler(request: NextRequest) {
   }
 }
 
-async function DELETEHandler(request: NextRequest) {
+export async function DELETE(request: NextRequest) {
   const rateLimited = await checkMcpRateLimit(request);
   if (rateLimited) return rateLimited;
 
@@ -104,13 +102,10 @@ async function DELETEHandler(request: NextRequest) {
         { status: 400 },
       );
     }
-    htLogger.error("[Admin Tokens] Failed to revoke token:", error);
+    console.error("[Admin Tokens] Failed to revoke token:", error);
     return NextResponse.json(
       { success: false, error: "Failed to revoke token" },
       { status: 500 },
     );
   }
 }
-
-export const POST = withoutAuth(POSTHandler);
-export const DELETE = withoutAuth(DELETEHandler);

@@ -1,5 +1,3 @@
-import { logger as htLogger } from "#logger";
-import { withoutAuth } from "#with-auth";
 import { NextRequest, NextResponse } from 'next/server'
 import { checkMcpRateLimit, validateMcpAuth } from '@/lib/mcp/auth'
 import prisma from '@/lib/prisma'
@@ -30,7 +28,7 @@ const MAX_SUMMARY = 5000
  * reason and a summary of what was already tried, so nothing fails silently.
  * Body: { task_id | ticket_number, project_id?, reason, attempts_summary? }.
  */
-async function POSTHandler(request: NextRequest) {
+export async function POST(request: NextRequest) {
   try {
     const rateLimited = await checkMcpRateLimit(request)
     if (rateLimited) return rateLimited
@@ -148,9 +146,7 @@ async function POSTHandler(request: NextRequest) {
       { status: 201 }
     )
   } catch (error) {
-    htLogger.error('[MCP Task Escalate] Error:', error)
+    console.error('[MCP Task Escalate] Error:', error)
     return NextResponse.json({ success: false, error: 'Internal server error' }, { status: 500 })
   }
 }
-
-export const POST = withoutAuth(POSTHandler);

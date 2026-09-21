@@ -1,5 +1,3 @@
-import { env as appEnv } from "#env";
-import { logger as htLogger } from "#logger";
 // Assert-based demo because this repository has no Vitest setup.
 // Run after installing dependencies: npx tsx src/lib/mcp/tasks/contractFields.test.ts
 import assert from 'node:assert/strict'
@@ -117,9 +115,9 @@ async function demo() {
     assert.equal(longVerifyCommand.field, 'verify_command')
   }
 
-  appEnv.DATABASE_URL =
+  process.env.DATABASE_URL =
     'postgresql://unused:unused@localhost:5432/unused'
-  appEnv.SESSION_SECRET = 'contract-fields-test-session-secret'
+  process.env.SESSION_SECRET = 'contract-fields-test-session-secret'
 
   const [
     { default: prisma },
@@ -236,5 +234,5 @@ async function demo() {
 }
 
 void demo().then(() => {
-  htLogger.info('contractFields.test.ts: all assertions passed')
+  console.log('contractFields.test.ts: all assertions passed')
 })

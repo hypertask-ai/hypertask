@@ -23,6 +23,7 @@ export const getHyperObject = async () => {
     const hyper = await axios.get(getHyperRoute);
     return hyper.data;
   } catch (error) {
+    console.log("🤔 ~ getHyperObject ~ error:", error);
     throw error;
   }
 };

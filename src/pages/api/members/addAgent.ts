@@ -1,5 +1,3 @@
-import { logger as htLogger } from "#logger";
-import { withAuth } from "#with-auth";
 import { NextApiHandler, NextApiRequest, NextApiResponse } from "next";
 import { addAgentToBoard } from "@/utils/controllers/agents/boardMembers";
 import { GUEST_FORBIDDEN_MESSAGE, isGuestRequest } from "@/lib/demo/guestGuard";
@@ -39,9 +37,9 @@ const handler: NextApiHandler = async (
       agent: result.member.agent,
     });
   } catch (error) {
-    htLogger.error("[addAgent] Error:", error);
+    console.error("[addAgent] Error:", error);
     return res.status(500).json({ message: "Internal server error" });
   }
 };
 
-export default withAuth(handler);
+export default handler;

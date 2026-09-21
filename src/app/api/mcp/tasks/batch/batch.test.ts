@@ -1,5 +1,3 @@
-import { env as appEnv } from "#env";
-import { logger as htLogger } from "#logger";
 // Assert-based demo because this repository has no Vitest setup.
 // Run after installing dependencies: npx tsx src/app/api/mcp/tasks/batch/batch.test.ts
 import assert from 'node:assert/strict'
@@ -49,9 +47,9 @@ async function json(response: Response) {
 }
 
 async function demo() {
-  appEnv.DATABASE_URL =
+  process.env.DATABASE_URL =
     'postgresql://unused:unused@localhost:5432/unused'
-  appEnv.SESSION_SECRET = 'batch-test-session-secret'
+  process.env.SESSION_SECRET = 'batch-test-session-secret'
 
   const [{ default: prisma }, { handleBatchBody }] = await Promise.all([
     import('@/lib/prisma'),
@@ -520,5 +518,5 @@ async function demo() {
 }
 
 void demo().then(() => {
-  htLogger.info('batch.test.ts: all assertions passed')
+  console.log('batch.test.ts: all assertions passed')
 })

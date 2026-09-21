@@ -1,5 +1,3 @@
-import { logger as htLogger } from "#logger";
-import { withoutAuth } from "#with-auth";
 import { NextRequest, NextResponse } from 'next/server'
 
 import { checkMcpRateLimit, validateMcpAuth } from '@/lib/mcp/auth'
@@ -19,7 +17,7 @@ function parseQueryId(value: string | null): number | null {
   return Number.isSafeInteger(id) && id > 0 ? id : null
 }
 
-async function GETHandler(request: NextRequest) {
+export async function GET(request: NextRequest) {
   try {
     const ctx = await validateMcpAuth(request)
     if (!ctx) {
@@ -183,9 +181,7 @@ async function GETHandler(request: NextRequest) {
       )
     }
 
-    htLogger.error('[MCP List Pages] Error:', error)
+    console.error('[MCP List Pages] Error:', error)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
 }
-
-export const GET = withoutAuth(GETHandler);

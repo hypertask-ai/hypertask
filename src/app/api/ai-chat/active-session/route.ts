@@ -1,12 +1,10 @@
-import { logger as htLogger } from "#logger";
-import { withAuth } from "#with-auth";
 import { chatStore } from "@/utils/controllers/chat";
 import prisma from "@/lib/prisma";
 import { isValidUser } from "@/utils/edgeHelpers";
 import { cookies } from "next/headers";
 import { NextRequest, NextResponse } from "next/server";
 
-async function GETHandler(request: NextRequest) {
+export async function GET(request: NextRequest) {
   try {
     const cookieStore = await cookies();
     const userCookie = cookieStore.get("nookies_user");
@@ -50,7 +48,7 @@ async function GETHandler(request: NextRequest) {
     });
 
     if (!session) {
-      htLogger.warn("Session not found, creating new session");
+      console.warn("Session not found, creating new session");
       const session = await chatStore().sessions.create({
         data: {
           userId: user.id,
@@ -74,7 +72,7 @@ async function GETHandler(request: NextRequest) {
 
     return NextResponse.json({ success: true, session });
   } catch (error) {
-    htLogger.error("🚀 ~ GET ~ Error getting active chat session:", error);
+    console.error("🚀 ~ GET ~ Error getting active chat session:", error);
     return NextResponse.json(
       {
         success: false,
@@ -84,5 +82,3 @@ async function GETHandler(request: NextRequest) {
     );
   }
 }
-
-export const GET = withAuth(GETHandler);

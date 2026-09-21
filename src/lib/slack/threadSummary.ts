@@ -1,4 +1,3 @@
-import { logger as htLogger } from "#logger";
 import { generateObject } from "ai";
 import { z } from "zod";
 
@@ -260,7 +259,7 @@ function resolveSlackUserName(
         userId,
     )
     .catch((error) => {
-      htLogger.warn(`Slack users.info failed for ${userId}`, error);
+      console.warn(`Slack users.info failed for ${userId}`, error);
       return userId;
     });
   context.userNameCache.set(cacheKey, pending);

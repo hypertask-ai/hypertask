@@ -1,5 +1,3 @@
-import { logger as htLogger } from "#logger";
-import { withoutAuth } from "#with-auth";
 import { NextRequest, NextResponse } from 'next/server'
 import { validateMcpAuth, checkMcpRateLimit } from '@/lib/mcp/auth'
 import { getProjectWhere } from '@/utils/controllers/projects/getAllIncludes'
@@ -47,7 +45,7 @@ export interface CreateSectionSuccessResponse {
  *
  * Authentication: Bearer token (JWT or API key) in Authorization header
  */
-async function POSTHandler(request: NextRequest, props: { params: Promise<{ projectId: string }> }) {
+export async function POST(request: NextRequest, props: { params: Promise<{ projectId: string }> }) {
   const params = await props.params;
   try {
     const rateLimited = await checkMcpRateLimit(request)
@@ -186,7 +184,7 @@ async function POSTHandler(request: NextRequest, props: { params: Promise<{ proj
       { status: 200 }
     )
   } catch (error) {
-    htLogger.error('Error creating section:', error)
+    console.error('Error creating section:', error)
     return NextResponse.json(
       {
         success: false,
@@ -208,7 +206,7 @@ async function POSTHandler(request: NextRequest, props: { params: Promise<{ proj
  * 
  * Authentication: Bearer token (JWT or API key) in Authorization header
  */
-async function GETHandler(request: NextRequest, props: { params: Promise<{ projectId: string }> }) {
+export async function GET(request: NextRequest, props: { params: Promise<{ projectId: string }> }) {
   const params = await props.params;
   try {
     // Validate authentication
@@ -339,7 +337,7 @@ async function GETHandler(request: NextRequest, props: { params: Promise<{ proje
 
     return NextResponse.json(response)
   } catch (error) {
-    htLogger.error('Error listing sections:', error)
+    console.error('Error listing sections:', error)
     return NextResponse.json(
       {
         success: false,
@@ -349,6 +347,3 @@ async function GETHandler(request: NextRequest, props: { params: Promise<{ proje
     )
   }
 }
-
-export const POST = withoutAuth(POSTHandler);
-export const GET = withoutAuth(GETHandler);

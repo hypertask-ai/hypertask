@@ -1,4 +1,3 @@
-import { withoutAuth } from "#with-auth";
 import { NextRequest, NextResponse } from 'next/server'
 import { checkMcpRateLimit, validateMcpAuth } from '@/lib/mcp/auth'
 import { buildFieldError } from '@/lib/mcp/fieldError'
@@ -7,7 +6,7 @@ import {
   type BatchBody,
 } from '@/lib/mcp/tasks/batchTasks'
 
-async function POSTHandler(request: NextRequest) {
+export async function POST(request: NextRequest) {
   const rateLimited = await checkMcpRateLimit(request)
   if (rateLimited) return rateLimited
   const ctx = await validateMcpAuth(request)
@@ -37,5 +36,3 @@ async function POSTHandler(request: NextRequest) {
 
   return handleBatchBody(request, ctx, body)
 }
-
-export const POST = withoutAuth(POSTHandler);

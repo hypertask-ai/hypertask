@@ -1,6 +1,3 @@
-import { env as appEnv } from "#env";
-import { logger as htLogger } from "#logger";
-import { withoutAuth } from "#with-auth";
 import { NextRequest, NextResponse } from "next/server";
 
 import { isFeatureEnabled } from "@/lib/flags";
@@ -28,7 +25,7 @@ import {
 } from "@/lib/auth/qaLoginRateLimit";
 
 function logQaLogin(outcome: string) {
-  htLogger.info("[qa-login]", { outcome });
+  console.info("[qa-login]", { outcome });
 }
 
 function invalidCredentials() {
@@ -38,7 +35,7 @@ function invalidCredentials() {
   );
 }
 
-async function POSTHandler(request: NextRequest) {
+export async function POST(request: NextRequest) {
   if (!isQaLoginConfigured()) {
     return new NextResponse(null, { status: 404 });
   }
@@ -160,7 +157,7 @@ async function POSTHandler(request: NextRequest) {
     JSON.stringify(slimUserForCookie(userData)),
     {
       httpOnly: false,
-      secure: appEnv.NODE_ENV === "production",
+      secure: process.env.NODE_ENV === "production",
       sameSite: "lax",
       maxAge: SESSION_TTL_SECONDS,
       path: "/",
@@ -180,7 +177,7 @@ async function POSTHandler(request: NextRequest) {
   if (ownedBoard) {
     response.cookies.set("previousBoard", `project-${ownedBoard.id}|&|`, {
       httpOnly: false,
-      secure: appEnv.NODE_ENV === "production",
+      secure: process.env.NODE_ENV === "production",
       sameSite: "lax",
       maxAge: SESSION_TTL_SECONDS,
       path: "/",
@@ -190,5 +187,3 @@ async function POSTHandler(request: NextRequest) {
   logQaLogin("success");
   return response;
 }
-
-export const POST = withoutAuth(POSTHandler);

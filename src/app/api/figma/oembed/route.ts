@@ -1,4 +1,3 @@
-import { withAuth } from "#with-auth";
 import { NextRequest, NextResponse } from "next/server";
 import { getFigmaRequestUser } from "@/app/api/figma/_lib";
 import { getFigmaAccessToken } from "@/lib/figma/connection";
@@ -231,7 +230,7 @@ function previewResponse(body: unknown, cacheControl = CACHE_CONTROL) {
   });
 }
 
-async function GETHandler(request: NextRequest) {
+export async function GET(request: NextRequest) {
   const principal = await getFigmaRequestUser(request);
   if (principal.status === "unauthorized") {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -298,5 +297,3 @@ async function GETHandler(request: NextRequest) {
     degraded || !fallback ? NO_STORE_CACHE_CONTROL : CACHE_CONTROL,
   );
 }
-
-export const GET = withAuth(GETHandler);

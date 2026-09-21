@@ -1,8 +1,7 @@
-import { logger as htLogger } from "#logger";
-import { getAuthSession, withAuth } from "#with-auth";
 import { NextApiHandler, NextApiRequest, NextApiResponse } from "next";
 
 import assigneesGetAll from "@/utils/controllers/assignees/getAll";
+import { getSessionUser } from "@/lib/auth/getSessionUser";
 import prisma from "@/lib/prisma";
 import { getProjectWhere } from "@/utils/controllers/projects/getAllIncludes";
 
@@ -19,7 +18,7 @@ const handler: NextApiHandler = async (
     if (!Number.isInteger(taskId) || taskId < 1) {
       return res.status(400).json({ message: "Missing Task Id" });
     }
-    const session = await getAuthSession(
+    const session = await getSessionUser(
       new Headers(req.headers as Record<string, string>),
     );
     if (!session) return res.status(401).json({ message: "Unauthorized" });
@@ -37,9 +36,9 @@ const handler: NextApiHandler = async (
     const response = await assigneesGetAll(String(taskId), session.userId);
     return res.status(response.status).json(response.json);
   } catch (error) {
-    htLogger.error("GET /api/assignees/getAll failed", error);
+    console.error("GET /api/assignees/getAll failed", error);
     return res.status(500).json({ message: "Internal server error" });
   }
 };
 
-export default withAuth(handler);
+export default handler;

@@ -1,5 +1,3 @@
-import { logger as htLogger } from "#logger";
-import { withoutAuth } from "#with-auth";
 import { NextRequest, NextResponse } from 'next/server'
 import { checkMcpRateLimit, validateMcpAuth } from '@/lib/mcp/auth'
 import { columnRoleFor } from '@/lib/mcp/boards/columnRole'
@@ -11,7 +9,7 @@ import { getProjectWhere } from '@/utils/controllers/projects/getAllIncludes'
  *
  * Returns the authenticated user's read-only view of a board's column structure.
  */
-async function GETHandler(
+export async function GET(
   request: NextRequest,
   props: { params: Promise<{ projectId: string }> }
 ) {
@@ -94,7 +92,7 @@ async function GETHandler(
       transitions: 'any',
     })
   } catch (error) {
-    htLogger.error('Error getting board manifest:', error)
+    console.error('Error getting board manifest:', error)
     return NextResponse.json(
       {
         success: false,
@@ -104,5 +102,3 @@ async function GETHandler(
     )
   }
 }
-
-export const GET = withoutAuth(GETHandler);

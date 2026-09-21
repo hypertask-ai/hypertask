@@ -1,5 +1,3 @@
-import { logger as htLogger } from "#logger";
-import { withAuth } from "#with-auth";
 import { NextApiHandler, NextApiRequest, NextApiResponse } from 'next';
 import prisma from '@/lib/prisma';
 import { IUser } from '@/models/model';
@@ -47,11 +45,11 @@ const handler: NextApiHandler = async (req: NextApiRequest, res: NextApiResponse
                 project_view: project_view_updated,
             });
         } catch (error) {
-            htLogger.info('Error creating section:', error);
+            console.log('Error creating section:', error);
             return res.status(500).json({ message: "Internal Server Error" });
         }
     }
     return res.status(405).json({ message: "Method Not Allowed" });
 }
 
-export default withAuth(handler)
+export default handler

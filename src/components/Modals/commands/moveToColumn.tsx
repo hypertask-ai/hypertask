@@ -83,6 +83,7 @@ const MoveToColumn: React.FC<Props> = ({ mode = "Others", moveTaskToColumnHandle
     setColumns(sectionsForProjectTQ);
     setFilteredColumns(sectionsForProjectTQ);
     if (taskIdentity) {
+      console.log("🚀 ~ useEffect ~ sectionId:", taskIdentity.sectionId);
       requestAnimationFrame(() => {
         const columnIndex = sectionsForProjectTQ.findIndex(
           (section: ISection, index: number) =>
@@ -257,6 +258,11 @@ const MoveToColumn: React.FC<Props> = ({ mode = "Others", moveTaskToColumnHandle
       }
 
       if (!taskIdentity) return;
+      console.log(
+        "🚀 ~ handleLinkClick ~ sectionToMoveID & fromSectionID",
+        section.id,
+        taskIdentity.sectionId
+      );
       const projects = queryClient.getQueryData<IProjectsAll>(["projectsAll"]);
       const destinationSection = projects?.updatedProjects
         .find((project) => project.id === taskIdentity.projectId)
@@ -281,6 +287,7 @@ const MoveToColumn: React.FC<Props> = ({ mode = "Others", moveTaskToColumnHandle
   //  ============================= KEYBOARD NAVIGATION HANDLER =============================
 
   const handleKeyDown = (event: any) => {
+    // console.log('im working at least')
     const selectedUrl = filteredColumns[selectedIndex]
     // ------------------------------ DOWN MOVEMENT ------------------------------
     if (!selectedUrl) return 

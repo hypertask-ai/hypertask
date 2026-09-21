@@ -1,5 +1,3 @@
-import { logger as htLogger } from "#logger";
-import { withoutAuth } from "#with-auth";
 import { NextRequest, NextResponse } from 'next/server'
 
 import { checkMcpRateLimit, validateMcpAuth } from '@/lib/mcp/auth'
@@ -19,7 +17,7 @@ type ArchivePageBody = {
   page_id?: unknown
 }
 
-async function POSTHandler(request: NextRequest) {
+export async function POST(request: NextRequest) {
   let identifierField: 'id' | 'page_id' = 'id'
 
   try {
@@ -84,9 +82,7 @@ async function POSTHandler(request: NextRequest) {
       )
     }
 
-    htLogger.error('[MCP Archive Page] Error:', error)
+    console.error('[MCP Archive Page] Error:', error)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
 }
-
-export const POST = withoutAuth(POSTHandler);

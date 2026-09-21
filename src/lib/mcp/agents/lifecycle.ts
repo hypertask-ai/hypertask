@@ -1,4 +1,3 @@
-import { logger as htLogger } from "#logger";
 /**
  * Shared agent lifecycle behaviour: rename, launch (switch a disabled agent
  * back on), and archive/unarchive.
@@ -138,7 +137,7 @@ export async function launchOwnedAgent(
   try {
     await deps.clearRuntime(existing.id)
   } catch (error) {
-    htLogger.warn('[Agent runtime] Snapshot invalidation failed:', error)
+    console.warn('[Agent runtime] Snapshot invalidation failed:', error)
     return { status: 'runtime_invalidation_failed' }
   }
 

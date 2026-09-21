@@ -1,5 +1,3 @@
-import { logger as htLogger } from "#logger";
-import { withAuth } from "#with-auth";
 import { NextRequest } from "next/server";
 
 import {
@@ -28,7 +26,7 @@ async function principal(request: NextRequest) {
   return { userId: result.userId };
 }
 
-async function GETHandler(request: NextRequest) {
+export async function GET(request: NextRequest) {
   const auth = await principal(request);
   if ("response" in auth) return auth.response;
   try {
@@ -39,12 +37,12 @@ async function GETHandler(request: NextRequest) {
       connection: await getGoogleCalendarConnection(auth.userId),
     });
   } catch (error) {
-    htLogger.error("Google Calendar connection read failed", error);
+    console.error("Google Calendar connection read failed", error);
     return noStore({ error: "Google Calendar is unavailable" }, 503);
   }
 }
 
-async function PATCHHandler(request: NextRequest) {
+export async function PATCH(request: NextRequest) {
   const auth = await principal(request);
   if ("response" in auth) return auth.response;
   if (!trustedMutationOrigin(request))
@@ -70,12 +68,12 @@ async function PATCHHandler(request: NextRequest) {
       ? noStore({ success: true })
       : noStore({ error: "Google Calendar is not connected" }, 404);
   } catch (error) {
-    htLogger.error("Google Calendar setting update failed", error);
+    console.error("Google Calendar setting update failed", error);
     return noStore({ error: "Could not update Google Calendar" }, 503);
   }
 }
 
-async function DELETEHandler(request: NextRequest) {
+export async function DELETE(request: NextRequest) {
   const auth = await principal(request);
   if ("response" in auth) return auth.response;
   if (!trustedMutationOrigin(request))
@@ -84,11 +82,7 @@ async function DELETEHandler(request: NextRequest) {
     await requestGoogleCalendarDisconnect(auth.userId);
     return noStore({ success: true });
   } catch (error) {
-    htLogger.error("Google Calendar disconnect failed", error);
+    console.error("Google Calendar disconnect failed", error);
     return noStore({ error: "Could not disconnect Google Calendar" }, 503);
   }
 }
-
-export const GET = withAuth(GETHandler);
-export const PATCH = withAuth(PATCHHandler);
-export const DELETE = withAuth(DELETEHandler);

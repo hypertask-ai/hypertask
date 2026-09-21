@@ -45,10 +45,12 @@ import Stripe from "stripe";
           const response = await axios.post("/api/teams/changeTeamName",{
             updatedTitle:title, teamId:team.id
           })
+          console.log("🚀 ~ file: Pricing.tsx:758 ~ confirmNameChange ~ response:", response)
           refetch()
           setChangeTeamNameModalShow(false)
         } catch (error) {
 
+          console.log(error)
         }
     }
 
@@ -71,6 +73,7 @@ import Stripe from "stripe";
 
 
       } catch (error) {
+        console.log("🚀 ~ file: Pricing.tsx:305 ~ confirmCancel ~ error:", error)
         
       }
       // 

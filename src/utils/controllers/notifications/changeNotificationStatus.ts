@@ -1,4 +1,3 @@
-import { logger as htLogger } from "#logger";
 import { Prisma, PrismaClient } from "@prisma/client";
 
 import prisma from "@/lib/prisma";
@@ -27,17 +26,17 @@ const changeNotificationStatus = async (userId:number, notification:boolean) => 
 
     // ----------------- script to change notification status ---------------
     // const allUsers = await prisma.user.findMany();
-    // debug.log("alluser",allUsers);
+    // console.log("alluser",allUsers);
     // // Step 2: Loop through all users and create a userSetting for each one
     // for (const user of allUsers) {
-    //     debug.log("alluser",user);
+    //     console.log("alluser",user);
     //   const createdUserSetting = await prisma.userSetting.create({
     //     data: {
     //       userId: user.id,
     //       notification:false
     //     },
     //   });
-    //  debug.log("createdUserSetting",createdUserSetting)
+    //  console.log("createdUserSetting",createdUserSetting)
     //   await prisma.user.update({
     //     where: { id: user.id },
     //     data: {
@@ -51,7 +50,7 @@ const changeNotificationStatus = async (userId:number, notification:boolean) => 
       };
     }
    catch (error) {
-    htLogger.info(error);
+    console.log(error);
     return {
       status: 400,
       json: { message: JSON.stringify(error) },

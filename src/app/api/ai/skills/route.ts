@@ -1,4 +1,3 @@
-import { withAuth } from "#with-auth";
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 
@@ -33,7 +32,7 @@ const createSchema = z.object({
   enabled: z.boolean().optional().default(true),
 });
 
-async function GETHandler(request: NextRequest) {
+export async function GET(request: NextRequest) {
   const user = await getCurrentUserFromCookies();
   if (!user?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
@@ -64,7 +63,7 @@ async function GETHandler(request: NextRequest) {
   }
 }
 
-async function POSTHandler(request: NextRequest) {
+export async function POST(request: NextRequest) {
   const user = await getCurrentUserFromCookies();
   if (!user?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
@@ -117,6 +116,3 @@ function parseCreateInput(input: z.infer<typeof createSchema>) {
     argumentHint: input.argumentHint?.trim() || null,
   };
 }
-
-export const GET = withAuth(GETHandler);
-export const POST = withAuth(POSTHandler);

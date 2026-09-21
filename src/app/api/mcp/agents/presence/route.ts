@@ -1,5 +1,3 @@
-import { logger as htLogger } from "#logger";
-import { withoutAuth } from "#with-auth";
 import { NextRequest, NextResponse } from 'next/server'
 import { checkMcpRateLimit, validateMcpAuth } from '@/lib/mcp/auth'
 import {
@@ -18,7 +16,7 @@ function unauthorized() {
   )
 }
 
-async function GETHandler(request: NextRequest) {
+export async function GET(request: NextRequest) {
   try {
     const rateLimited = await checkMcpRateLimit(request)
     if (rateLimited) return rateLimited
@@ -111,12 +109,10 @@ async function GETHandler(request: NextRequest) {
       )
     }
 
-    htLogger.error('[MCP Agent Presence] GET Error:', error)
+    console.error('[MCP Agent Presence] GET Error:', error)
     return NextResponse.json(
       { success: false, error: 'Internal server error' },
       { status: 500 }
     )
   }
 }
-
-export const GET = withoutAuth(GETHandler);

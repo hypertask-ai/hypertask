@@ -1,5 +1,3 @@
-import { logger as htLogger } from "#logger";
-import { withAuth } from "#with-auth";
 import prisma from "@/lib/prisma";
 import { IComment } from "@/models/model";
 import { sendDataNewCommentFCM } from "@/utils/controllers/FCM";
@@ -20,7 +18,7 @@ const handler: NextApiHandler = async (req: NextApiRequest, res: NextApiResponse
                     userId:userId,
                 },
             })
-            htLogger.info("🚀 ~ consthandler:NextApiHandler= ~ findReaction:", findReaction)
+            console.log("🚀 ~ consthandler:NextApiHandler= ~ findReaction:", findReaction)
             if (findReaction.length===0 ){
                 const reaction = await prisma.reaction.create({
                     data:{
@@ -107,7 +105,7 @@ const handler: NextApiHandler = async (req: NextApiRequest, res: NextApiResponse
                 return res.status(200).json(reactionsToReturn);
             }
         } catch (error) {
-            htLogger.info(error);
+            console.log(error);
             res.status(500).json({ message: "Internal server error" });
         }
     } else {
@@ -154,8 +152,8 @@ const sendNotification = async(reaction:any,afterAppDomain:string,userId:number)
             sendDataNewCommentFCM(body)
         }
      
-        // debug.log("🚀 ~ sendNotification ~ notification:", notification)
+        // console.log("🚀 ~ sendNotification ~ notification:", notification)
 
 }
 
-export default withAuth(handler);
+export default handler;

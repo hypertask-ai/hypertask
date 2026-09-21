@@ -205,6 +205,7 @@ export const ResizableMediaNodeView = ({
             node.attrs.width !== width.toString() ||
             node.attrs.height !== height.toString()
           ) {
+            console.log("Updating video dimensions:", { width, height });
             updateAttributes({
               width: width.toString(),
               height: height.toString(),
@@ -242,6 +243,10 @@ export const ResizableMediaNodeView = ({
             currentWidth === 0 ||
             currentHeight === 0
           ) {
+            console.log("Updating image dimensions:", {
+              from: { width: currentWidth, height: currentHeight },
+              to: { width, height },
+            });
             updateAttributes({
               width: width.toString(),
               height: height.toString(),
@@ -312,6 +317,9 @@ export const ResizableMediaNodeView = ({
     diff: number,
   ) => {
     if (!resizableImgRef.current) {
+      console.error("Media ref is undefined|null", {
+        resizableImg: resizableImgRef.current,
+      });
       return;
     }
 

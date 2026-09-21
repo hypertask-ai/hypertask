@@ -1,5 +1,3 @@
-import { logger as htLogger } from "#logger";
-import { withoutAuth } from "#with-auth";
 import { NextRequest, NextResponse } from "next/server";
 import { checkMcpRateLimit, validateMcpAuth } from "@/lib/mcp/auth";
 import prisma from "@/lib/prisma";
@@ -17,7 +15,7 @@ type PendingChatMessage = {
 };
 
 /** GET /api/mcp/chat/pending */
-async function GETHandler(request: NextRequest) {
+export async function GET(request: NextRequest) {
   try {
     const rateLimited = await checkMcpRateLimit(request);
     if (rateLimited) return rateLimited;
@@ -142,12 +140,10 @@ async function GETHandler(request: NextRequest) {
     }
     return NextResponse.json({ success: true, messages: result.messages });
   } catch (error) {
-    htLogger.error("[mcp chat] GET pending failed:", error);
+    console.error("[mcp chat] GET pending failed:", error);
     return NextResponse.json(
       { success: false, error: "Failed to load pending chat messages" },
       { status: 500 },
     );
   }
 }
-
-export const GET = withoutAuth(GETHandler);

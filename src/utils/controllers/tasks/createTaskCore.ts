@@ -1,4 +1,3 @@
-import { logger as htLogger } from "#logger";
 import prisma from '@/lib/prisma';
 import { getUniqueTaskCount } from './create';
 import generateRank from '@/utils/generateRank';
@@ -245,7 +244,7 @@ export async function createTaskCore(options: CreateTaskCoreOptions): Promise<Cr
         currentUserId: userId
     });
     if (autoAssigned === 'pending') {
-        htLogger.warn('[task-create-core] auto-assignment did not complete; retrying the pending task.created handoff', {
+        console.warn('[task-create-core] auto-assignment did not complete; retrying the pending task.created handoff', {
             taskId: newTask.id,
         });
         try {
@@ -260,14 +259,14 @@ export async function createTaskCore(options: CreateTaskCoreOptions): Promise<Cr
                 // assignment and task-state checks.
             } else if (recoveryResult === 'pending') {
                 // The recovery helper already requeued the marker.
-                htLogger.warn('[task-create-core] task.created handoff remains pending for the recovery sweep', {
+                console.warn('[task-create-core] task.created handoff remains pending for the recovery sweep', {
                     taskId: newTask.id,
                 });
             }
         } catch (error) {
             // Keep the creation marker pending. Emitting here could publish
             // task.created without the final assignees.
-            htLogger.error('[task-create-core] pending task.created recovery failed', {
+            console.error('[task-create-core] pending task.created recovery failed', {
                 taskId: newTask.id,
                 error,
             });
@@ -276,7 +275,7 @@ export async function createTaskCore(options: CreateTaskCoreOptions): Promise<Cr
             );
             await ensurePendingAgentTaskCreatedWebhook(newTask.id).catch(
                 (fallbackError) => {
-                    htLogger.error('[task-create-core] could not requeue pending task.created handoff', {
+                    console.error('[task-create-core] could not requeue pending task.created handoff', {
                         taskId: newTask.id,
                         error: fallbackError,
                     });
@@ -295,7 +294,7 @@ export async function createTaskCore(options: CreateTaskCoreOptions): Promise<Cr
         } catch (error) {
             // The creation transaction left a pending marker; the minute sweep
             // retries this handoff if the request path stops here.
-            htLogger.error('[task-create-core] agent task.created webhook failed', {
+            console.error('[task-create-core] agent task.created webhook failed', {
                 taskId: newTask.id,
                 error,
             });
@@ -304,7 +303,7 @@ export async function createTaskCore(options: CreateTaskCoreOptions): Promise<Cr
             );
             await ensurePendingAgentTaskCreatedWebhook(newTask.id).catch(
                 (fallbackError) => {
-                    htLogger.error('[task-create-core] could not requeue failed task.created handoff', {
+                    console.error('[task-create-core] could not requeue failed task.created handoff', {
                         taskId: newTask.id,
                         error: fallbackError,
                     });

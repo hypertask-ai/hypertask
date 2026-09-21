@@ -1,19 +1,16 @@
-import { env as appEnv } from "#env";
-import { logger as htLogger } from "#logger";
-import { withoutAuth } from "#with-auth";
 import { NextRequest, NextResponse } from 'next/server'
 import { getRequestBaseUrl } from '@/lib/auth/requestBaseUrl'
 import { sendEmail } from '@/lib/email/sendEmail'
 
 // Resend configuration
-const RESEND_API_KEY = appEnv.RESEND_API_KEY
-const EMAIL_FROM = appEnv.EMAIL_FROM || 'notifications@hypertask.ai'
+const RESEND_API_KEY = process.env.RESEND_API_KEY
+const EMAIL_FROM = process.env.EMAIL_FROM || 'notifications@hypertask.ai'
 
 /**
  * API route to send desktop login instructions to mobile users
  * POST /api/auth/send-desktop-link
  */
-async function POSTHandler(request: NextRequest) {
+export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
     const { email } = body
@@ -33,7 +30,7 @@ async function POSTHandler(request: NextRequest) {
       { status: 200 }
     )
   } catch (error) {
-    htLogger.error('Error sending desktop link:', error)
+    console.error('Error sending desktop link:', error)
     return NextResponse.json(
       { success: false, error: 'Failed to send email' },
       { status: 500 }
@@ -45,8 +42,8 @@ async function sendDesktopLoginEmail(to: string, baseUrl: string) {
   const loginUrl = `${baseUrl}/login`
 
   if (!RESEND_API_KEY) {
-    htLogger.info('🔗 Desktop login instructions (no Resend configured) for:', to)
-    htLogger.info('Login URL:', loginUrl)
+    console.log('🔗 Desktop login instructions (no Resend configured) for:', to)
+    console.log('Login URL:', loginUrl)
     return
   }
 
@@ -145,11 +142,9 @@ async function sendDesktopLoginEmail(to: string, baseUrl: string) {
       `,
     })
 
-    htLogger.info('✅ Desktop login email sent to:', to)
+    console.log('✅ Desktop login email sent to:', to)
   } catch (error) {
-    htLogger.error('❌ Failed to send desktop login email:', error)
+    console.error('❌ Failed to send desktop login email:', error)
     throw error
   }
 }
-
-export const POST = withoutAuth(POSTHandler);

@@ -1,4 +1,3 @@
-import { env as appEnv } from "#env";
 import dns from 'node:dns/promises';
 import net, { type LookupFunction } from 'node:net';
 import { Agent } from 'undici';
@@ -11,7 +10,7 @@ import {
 } from './constants';
 
 function parseHostAllowlist(): Set<string> {
-  const raw = appEnv.MCP_ATTACHMENT_FETCH_HOST_ALLOWLIST?.trim();
+  const raw = process.env.MCP_ATTACHMENT_FETCH_HOST_ALLOWLIST?.trim();
   if (!raw) return new Set();
   return new Set(
     raw

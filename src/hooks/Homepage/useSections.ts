@@ -444,6 +444,7 @@ const useSections = ({
   useEffect(() => {
     setTimeout(() => {
       if (hasDuplicateRankings(items) && items.length > 0) {
+        console.log("There are duplicate rankings in the tasks.");
         handleReset();
       } 
     }, 0);

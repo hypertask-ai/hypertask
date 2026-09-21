@@ -1,5 +1,3 @@
-import { logger as htLogger } from "#logger";
-import { withoutAuth } from "#with-auth";
 import { NextRequest, NextResponse } from 'next/server';
 import { checkMcpRateLimit, validateMcpAuth } from '@/lib/mcp/auth';
 import prisma from '@/lib/prisma';
@@ -19,7 +17,7 @@ type LeaseRow = {
   heartbeatAt: Date;
 };
 
-async function POSTHandler(request: NextRequest) {
+export async function POST(request: NextRequest) {
   const rateLimited = await checkMcpRateLimit(request);
   if (rateLimited) return rateLimited;
   const ctx = await validateMcpAuth(request);
@@ -131,12 +129,10 @@ async function POSTHandler(request: NextRequest) {
       { status: 200 }
     );
   } catch (error) {
-    htLogger.error('[MCP Task Lease Heartbeat] Error:', error);
+    console.error('[MCP Task Lease Heartbeat] Error:', error);
     return NextResponse.json(
       { success: false, error: 'Failed to heartbeat task lease' },
       { status: 500 }
     );
   }
 }
-
-export const POST = withoutAuth(POSTHandler);

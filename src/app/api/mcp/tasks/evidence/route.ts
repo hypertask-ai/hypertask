@@ -1,5 +1,3 @@
-import { logger as htLogger } from "#logger";
-import { withoutAuth } from "#with-auth";
 import { NextRequest, NextResponse } from 'next/server'
 import { checkMcpRateLimit, validateMcpAuth } from '@/lib/mcp/auth'
 import prisma from '@/lib/prisma'
@@ -28,7 +26,7 @@ const ticketFor = (v: unknown): string | null =>
  * Attach typed proof-of-work (test run, screenshot, deploy link, diff) to a task.
  * Body: { task_id | ticket_number, project_id?, type?, title?, url?, summary? }.
  */
-async function POSTHandler(request: NextRequest) {
+export async function POST(request: NextRequest) {
   try {
     const rateLimited = await checkMcpRateLimit(request)
     if (rateLimited) return rateLimited
@@ -85,7 +83,7 @@ async function POSTHandler(request: NextRequest) {
 
     return NextResponse.json({ success: true, evidence }, { status: 201 })
   } catch (error) {
-    htLogger.error('[MCP Task Evidence] POST Error:', error)
+    console.error('[MCP Task Evidence] POST Error:', error)
     return NextResponse.json({ success: false, error: 'Internal server error' }, { status: 500 })
   }
 }
@@ -94,7 +92,7 @@ async function POSTHandler(request: NextRequest) {
  * GET /api/mcp/tasks/evidence?task_id|ticket_number&project_id
  * List the evidence attached to a task, newest first.
  */
-async function GETHandler(request: NextRequest) {
+export async function GET(request: NextRequest) {
   try {
     const rateLimited = await checkMcpRateLimit(request)
     if (rateLimited) return rateLimited
@@ -131,10 +129,7 @@ async function GETHandler(request: NextRequest) {
 
     return NextResponse.json({ success: true, taskId: task.id, evidence })
   } catch (error) {
-    htLogger.error('[MCP Task Evidence] GET Error:', error)
+    console.error('[MCP Task Evidence] GET Error:', error)
     return NextResponse.json({ success: false, error: 'Internal server error' }, { status: 500 })
   }
 }
-
-export const POST = withoutAuth(POSTHandler);
-export const GET = withoutAuth(GETHandler);

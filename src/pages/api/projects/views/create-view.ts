@@ -1,5 +1,3 @@
-import { logger as htLogger } from "#logger";
-import { withAuth } from "#with-auth";
 import { NextApiHandler, NextApiRequest, NextApiResponse } from "next";
 
 import {
@@ -76,7 +74,7 @@ const handler: NextApiHandler = async (
             : { OR: [{ visibility: "Public" as const }, { userId }] }),
         },
       });
-      htLogger.info(
+      console.log(
         "🚀 ~ consthandler:NextApiHandler= ~ viewPromise:",
         viewPromise
       );
@@ -100,7 +98,7 @@ const handler: NextApiHandler = async (
         project_view_promise,
         viewPromise,
       ]);
-      htLogger.info("🚀 ~ consthandler:NextApiHandler= ~ view:", view);
+      console.log("🚀 ~ consthandler:NextApiHandler= ~ view:", view);
 
       // HTPR-3836: views inherit column order from the board's default view,
       // not from whichever view happened to be on screen when saving.
@@ -215,7 +213,7 @@ const handler: NextApiHandler = async (
         });
       }
 
-      htLogger.info("🚀 ~ consthandler:NextApiHandler= ~ view:", view);
+      console.log("🚀 ~ consthandler:NextApiHandler= ~ view:", view);
       // ========== add it against the user_project_view
       const user_Project_View = await prisma.user_Project_View.upsert({
         create: {
@@ -245,7 +243,7 @@ const handler: NextApiHandler = async (
           where: { id: user_Project_View.unsavedViewId },
         });
 
-      htLogger.info(
+      console.log(
         "🚀 ~ consthandler:NextApiHandler= ~ user_Project_View:",
         user_Project_View
       );
@@ -272,7 +270,7 @@ const handler: NextApiHandler = async (
         })
       }
 
-      htLogger.info(
+      console.log(
         "🚀 ~ consthandler:NextApiHandler= ~ updatedProjectView:",
         updatedProjectView
       );
@@ -284,7 +282,7 @@ const handler: NextApiHandler = async (
         project_view_updated,
       });
     } catch (error) {
-      htLogger.info(error);
+      console.log(error);
       if (
         error instanceof MissingBoardFilterLabelError ||
         error instanceof ManagedSmartSplitMutationError
@@ -298,4 +296,4 @@ const handler: NextApiHandler = async (
   }
 };
 
-export default withAuth(handler);
+export default handler;

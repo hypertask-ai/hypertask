@@ -1,4 +1,3 @@
-import { env as appEnv } from "#env";
 import { ModalContainerCustom } from "@/components/Common/CommonModalComponents";
 import "@/styles/AttachmentView.scss";
 import { Carousel, CarouselItem, ModalHeader } from "reactstrap";
@@ -57,9 +56,15 @@ const TrialModal: React.FC<ITrialModal> = ({ currentUser, callback }) => {
     const response = await axios.get(
       `/api/teams/getByUserId?userId=${currentUser?.id}`
     );
+    console.log(
+      "🚀 ~ findTeam ~ currentProject?.teamId:",
+      currentProject?.teamId
+    );
     if (response.status === 200) {
+      console.log("🚀 ~ findTeam ~ response:", response);
       setCurrTeam(response.data);
     } else {
+      console.log("🚀 ~ findTeam ~ response:", response);
     }
   };
 
@@ -134,7 +139,7 @@ const TrialBody = ({
 
   const createCheckout = async () => {
     if (!team?.id) return;
-    const baseURL = String(appEnv.NEXT_PUBLIC_BASEURL);
+    const baseURL = String(process.env.NEXT_PUBLIC_BASEURL);
     const success = `${baseURL}/trial-plan-confirmation?success=1&session_id={CHECKOUT_SESSION_ID}`;
     const cancel = team.stripe_customer_id
       ? buildPricingCheckoutCancelUrl(teamToPricingParams(team))

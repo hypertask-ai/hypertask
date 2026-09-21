@@ -44,8 +44,7 @@ function loadGetSessionUser(getSession) {
     if (request === "@/lib/auth/betterAuth") {
       return { auth: { api: { getSession } } };
     }
-    if (request === "@/lib/auth/session" || request === "#session") return realSessionModule;
-    if (request === "#env") return require("#env");
+    if (request === "@/lib/auth/session") return realSessionModule;
     throw new Error(`Unexpected import in getSessionUser.ts: ${request}`);
   };
   new Function("module", "exports", "require", javascript)(

@@ -1,4 +1,3 @@
-import { logger as htLogger } from "#logger";
 import { IUser } from "@/models/model";
 import { fetchTaskDetail } from "@/utils/controllers/taskDetail/load";
 
@@ -8,7 +7,7 @@ const tasksGetTask = async (project: string, uniqueIndex: any, user: IUser) => {
     if (!task) throw "Task not found";
     return { status: 200, json: task };
   } catch (error) {
-    htLogger.info({ error });
+    console.log({ error });
     return { status: 500, json: null };
   }
 };

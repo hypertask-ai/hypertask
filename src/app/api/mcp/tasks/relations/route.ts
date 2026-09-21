@@ -1,5 +1,3 @@
-import { logger as htLogger } from "#logger";
-import { withoutAuth } from "#with-auth";
 import type { Prisma } from '@prisma/client'
 import { NextRequest, NextResponse } from 'next/server'
 import { checkMcpRateLimit, validateMcpAuth } from '@/lib/mcp/auth'
@@ -43,7 +41,7 @@ const idFor = (v: unknown): number | null => parsePositiveInteger(v)
 const ticketFor = (v: unknown): string | null =>
   typeof v === 'string' && v.trim() !== '' ? v.trim() : null
 
-async function POSTHandler(request: NextRequest) {
+export async function POST(request: NextRequest) {
   const rateLimited = await checkMcpRateLimit(request)
   if (rateLimited) return rateLimited
 
@@ -194,7 +192,7 @@ async function POSTHandler(request: NextRequest) {
 
     return NextResponse.json({ success: true, relation })
   } catch (error) {
-    htLogger.error('[MCP Task Relations] POST Error:', error)
+    console.error('[MCP Task Relations] POST Error:', error)
     return NextResponse.json(
       { success: false, error: 'Failed to create task relation' },
       { status: 500 }
@@ -202,7 +200,7 @@ async function POSTHandler(request: NextRequest) {
   }
 }
 
-async function GETHandler(request: NextRequest) {
+export async function GET(request: NextRequest) {
   const rateLimited = await checkMcpRateLimit(request)
   if (rateLimited) return rateLimited
 
@@ -295,7 +293,7 @@ async function GETHandler(request: NextRequest) {
       }),
     })
   } catch (error) {
-    htLogger.error('[MCP Task Relations] GET Error:', error)
+    console.error('[MCP Task Relations] GET Error:', error)
     return NextResponse.json(
       { success: false, error: 'Failed to list task relations' },
       { status: 500 }
@@ -305,7 +303,7 @@ async function GETHandler(request: NextRequest) {
 
 // Remove a relation between two tasks, so a mistakenly-declared dependency can be
 // cleared (not just retyped). Idempotent: deleting a non-existent relation is 200.
-async function DELETEHandler(request: NextRequest) {
+export async function DELETE(request: NextRequest) {
   const rateLimited = await checkMcpRateLimit(request)
   if (rateLimited) return rateLimited
 
@@ -411,14 +409,10 @@ async function DELETEHandler(request: NextRequest) {
     })
     return NextResponse.json({ success: true, deleted: result.count })
   } catch (error) {
-    htLogger.error('[MCP Task Relations] DELETE Error:', error)
+    console.error('[MCP Task Relations] DELETE Error:', error)
     return NextResponse.json(
       { success: false, error: 'Failed to delete task relation' },
       { status: 500 }
     )
   }
 }
-
-export const POST = withoutAuth(POSTHandler);
-export const GET = withoutAuth(GETHandler);
-export const DELETE = withoutAuth(DELETEHandler);

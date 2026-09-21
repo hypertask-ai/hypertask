@@ -1,5 +1,3 @@
-import { logger as htLogger } from "#logger";
-import { withoutAuth } from "#with-auth";
 import { NextRequest, NextResponse } from "next/server";
 
 import {
@@ -12,7 +10,7 @@ import { listOwnedConnections } from "@/lib/mcp/connections";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-async function GETHandler(request: NextRequest) {
+export async function GET(request: NextRequest) {
   const rateLimited = await checkMcpRateLimit(request);
   if (rateLimited) return rateLimited;
 
@@ -34,12 +32,10 @@ async function GETHandler(request: NextRequest) {
       connections: await listOwnedConnections(ctx.user.id),
     });
   } catch (error) {
-    htLogger.error("[Admin Connections] Failed to list connections:", error);
+    console.error("[Admin Connections] Failed to list connections:", error);
     return NextResponse.json(
       { success: false, error: "Failed to list connections" },
       { status: 500 },
     );
   }
 }
-
-export const GET = withoutAuth(GETHandler);

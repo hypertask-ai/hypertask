@@ -153,14 +153,6 @@ function createHarness({
   const hook = loadTypeScriptModule(
     path.join(root, "src/hooks/realtime/useTaskCommentsRealtime.ts"),
     {
-      "#logger": {
-        logger: {
-          error() {},
-          warn: (...args) => warnings.push(args),
-          info() {},
-          debug() {},
-        },
-      },
       react: {
         useEffect(effect) {
           cleanup = effect();

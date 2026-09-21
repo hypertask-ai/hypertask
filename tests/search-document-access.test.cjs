@@ -1,14 +1,14 @@
 const assert = require("node:assert/strict");
 const path = require("node:path");
-const { passThroughAuth } = require("./helpers/pass-through-auth.cjs");
 const test = require("node:test");
 
 const root = path.resolve(__dirname, "..");
 let setup;
-const getAuthSession = async () => setup.session;
 const stubs = new Map([
-  ["src/lib/api/withAuth.ts", passThroughAuth(getAuthSession)],
-  ["src/lib/auth/getSessionUser.ts", { getSessionUser: getAuthSession }],
+  [
+    "src/lib/auth/getSessionUser.ts",
+    { getSessionUser: async () => setup.session },
+  ],
   [
     "src/lib/prisma.ts",
     {

@@ -1,5 +1,3 @@
-import { logger as htLogger } from "#logger";
-import { withAuth } from "#with-auth";
 import { NextApiHandler, NextApiRequest, NextApiResponse } from "next";
 import { verifyCookieIdentity } from "@/lib/auth/cookieIdentity";
 import tasksSearchAll from "@/utils/controllers/tasks/searchAll";
@@ -40,7 +38,7 @@ const handler: NextApiHandler = async (
 
       return res.status(response.status).json(response.json);
     } catch (error) {
-      htLogger.info(error);
+      console.log(error);
       return res.status(200).json([]);
     }
   } else {
@@ -48,4 +46,4 @@ const handler: NextApiHandler = async (
   }
 };
 
-export default withAuth(handler);
+export default handler;

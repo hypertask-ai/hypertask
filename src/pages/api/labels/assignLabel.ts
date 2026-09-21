@@ -1,5 +1,3 @@
-import { logger as htLogger } from "#logger";
-import { withAuth } from "#with-auth";
 // Next.js API route support: https://nextjs.org/docs/api-routes/introduction
 
 import type { NextApiRequest, NextApiResponse } from 'next'
@@ -25,7 +23,7 @@ class LabelAssignmentError extends Error {
 
 
 
-async function handler(
+export default  async function handler(
   req: NextApiRequest,
   res: NextApiResponse
 ) {
@@ -143,7 +141,7 @@ async function handler(
     try {
       await publishAgentWebhookDeliveries(agentWebhookDeliveryIds);
     } catch (error) {
-      htLogger.warn("[assign-label] agent task.updated webhook publish failed; outbox sweep will retry", {
+      console.warn("[assign-label] agent task.updated webhook publish failed; outbox sweep will retry", {
         taskId,
         error,
       });
@@ -155,12 +153,10 @@ async function handler(
     return res.status(200).json(taskLabels)
 
   } catch (error) {
-      htLogger.info(error)
+      console.log(error)
       if (error instanceof LabelAssignmentError) {
         return res.status(error.statusCode).json({ message: error.message });
       }
       return res.status(500).json({ message: "Internal server error" })
   }
 }
-
-export default withAuth(handler);

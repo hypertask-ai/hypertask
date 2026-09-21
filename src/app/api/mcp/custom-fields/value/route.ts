@@ -1,5 +1,3 @@
-import { logger as htLogger } from "#logger";
-import { withoutAuth } from "#with-auth";
 import { CustomFieldType } from "@prisma/client";
 import { NextRequest, NextResponse } from "next/server";
 
@@ -26,7 +24,7 @@ function isPositiveInteger(value: unknown): value is number {
 }
 
 /** POST /api/mcp/custom-fields/value */
-async function POSTHandler(request: NextRequest) {
+export async function POST(request: NextRequest) {
   try {
     const rateLimited = await checkMcpRateLimit(request);
     if (rateLimited) return rateLimited;
@@ -189,12 +187,10 @@ async function POSTHandler(request: NextRequest) {
     if (error instanceof CustomFieldValidationError) {
       return validationError(error.message, error.field, "invalid_value");
     }
-    htLogger.error("[MCP Custom Fields] Set value error:", error);
+    console.error("[MCP Custom Fields] Set value error:", error);
     return NextResponse.json(
       { success: false, error: "Internal server error" },
       { status: 500 }
     );
   }
 }
-
-export const POST = withoutAuth(POSTHandler);

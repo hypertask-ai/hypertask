@@ -1,4 +1,3 @@
-import { env as appEnv } from "#env";
 /**
  * @fileoverview
  * Hypertask Auth Config
@@ -48,7 +47,7 @@ const authConfig = {
     verifyTokenApi: "/api/auth/verify-email-token",
     codeLength: 6,
     resendCooldownSeconds: 30,
-    devShowLink: appEnv.NODE_ENV === "development",
+    devShowLink: process.env.NODE_ENV === "development",
     linkExpiryMinutes: 15,
     troubleshootingUrl: "https://help.hypertask.ai/help/troubleshooting-email-login-magic-link",
   },
@@ -99,7 +98,7 @@ const authConfig = {
     defaultTheme: DEFAULT_THEME_PREFERENCE,
     options: {
       path: "/",
-      secure: () => appEnv.NODE_ENV === "production",
+      secure: () => process.env.NODE_ENV === "production",
       sameSite: "strict" as const,
     },
   },

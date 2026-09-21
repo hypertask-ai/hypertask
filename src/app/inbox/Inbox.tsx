@@ -662,6 +662,7 @@ const Inbox = ({
         });
       }
     } catch (error) {
+      console.log("🚀 ~ newCommentsHandler ~ error:", error);
     }
   };
 

@@ -1,5 +1,3 @@
-import { withoutAuth } from "#with-auth";
-import { env as appEnv } from "#env";
 import {
   FEATURE_FLAG_OWNER_USER_ID,
   HTPR_4638_AI_DIRECTORY_METADATA_FLAG,
@@ -8,12 +6,12 @@ import {
 
 export const dynamic = 'force-dynamic'
 
-async function GETHandler(): Promise<Response> {
+export async function GET(): Promise<Response> {
   const enabled = await isFeatureEnabled(
     HTPR_4638_AI_DIRECTORY_METADATA_FLAG,
     FEATURE_FLAG_OWNER_USER_ID
   ).catch(() => false)
-  const token = appEnv.OPENAI_APPS_CHALLENGE_TOKEN
+  const token = process.env.OPENAI_APPS_CHALLENGE_TOKEN
   if (!enabled || !token) return new Response('Not found', { status: 404 })
 
   return new Response(token, {
@@ -23,5 +21,3 @@ async function GETHandler(): Promise<Response> {
     },
   })
 }
-
-export const GET = withoutAuth(GETHandler);

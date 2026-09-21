@@ -1,5 +1,3 @@
-import { logger as htLogger } from "#logger";
-import { withAuth } from "#with-auth";
 import { NextApiHandler, NextApiRequest, NextApiResponse } from "next";
 
 
@@ -11,7 +9,7 @@ const handler: NextApiHandler = async (req: NextApiRequest, res: NextApiResponse
         try {
             const { firebaseId, newStatus } = req.body;
             if (!firebaseId ) return res.status(304).json({message:"Missing Required Data"})
-            htLogger.info("🚀 ~ file: changePushNotificationStatus.ts:11 ~ consthandler:NextApiHandler= ~ firebaseId:", firebaseId)
+            console.log("🚀 ~ file: changePushNotificationStatus.ts:11 ~ consthandler:NextApiHandler= ~ firebaseId:", firebaseId)
             
             const deviceStatus = await prisma.subscribedDevices.updateMany({
                 where:{
@@ -21,11 +19,11 @@ const handler: NextApiHandler = async (req: NextApiRequest, res: NextApiResponse
                     sendNotifications:newStatus 
                 }
             })
-            // debug.log("🚀 ~ file: changePushNotificationStatus.ts:20 ~ consthandler:NextApiHandler= ~ deviceStatus:", deviceStatus)
+            // console.log("🚀 ~ file: changePushNotificationStatus.ts:20 ~ consthandler:NextApiHandler= ~ deviceStatus:", deviceStatus)
 
             return res.status(200).json({message:"success"});
         } catch (error) {
-            htLogger.info({error})
+            console.log({error})
             res.status(500).json({ message: "Internal server error" });
         }
     } else {
@@ -33,4 +31,4 @@ const handler: NextApiHandler = async (req: NextApiRequest, res: NextApiResponse
     }
 };
 
-export default withAuth(handler);
+export default handler;

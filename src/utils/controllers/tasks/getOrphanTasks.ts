@@ -1,4 +1,3 @@
-import { logger as htLogger } from "#logger";
 import prisma from "@/lib/prisma";
 
 const SearchForOrphanTasks = async (
@@ -65,7 +64,7 @@ const SearchForOrphanTasks = async (
         },
       });
 
-  htLogger.info("🚀 ~ SearchForOrphanTasks ~ orphans:", orphans);
+  console.log("🚀 ~ SearchForOrphanTasks ~ orphans:", orphans);
 
   return {
     status: 200,

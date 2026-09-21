@@ -1,4 +1,3 @@
-import { withoutAuth } from "#with-auth";
 // pages/api/setupReminder.js
 // id:`notifications-for-task-${taskId}`
 import { scheduleJobById } from "@/lib/qstash";
@@ -9,7 +8,7 @@ function buildJobId(teamId: string) {
   return "initiate-ai-for-teamId: " + teamId;
 }
 
-async function upsertAllTasksByTeamIdReminder(
+export default  async function upsertAllTasksByTeamIdReminder(
   req:{body:{teamId:string}}
 ) {
     const {teamId} = req.body
@@ -25,5 +24,3 @@ async function upsertAllTasksByTeamIdReminder(
     return res
 
 }
-
-export default withoutAuth(upsertAllTasksByTeamIdReminder);

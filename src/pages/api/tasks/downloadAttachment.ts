@@ -1,5 +1,3 @@
-import { logger as htLogger } from "#logger";
-import { withAuth } from "#with-auth";
 import { NextApiRequest, NextApiResponse } from "next";
 import prisma from "@/lib/prisma";
 
@@ -9,7 +7,7 @@ import {
   parseHypertasksStorageKeyFromUrl,
 } from "@/lib/storage/hypertasksS3";
 
-async function handler(
+export default async function handler(
   req: NextApiRequest,
   res: NextApiResponse
 ) {
@@ -95,7 +93,7 @@ async function handler(
 
       res.status(200).json({ downloadUrl });
     } catch (err) {
-      htLogger.error("Error fetching file from S3:", err);
+      console.error("Error fetching file from S3:", err);
       res.status(500).send("Error fetching file");
     }
   }
@@ -108,5 +106,3 @@ const getKey = (url: string) => {
   }
   return key;
 };
-
-export default withAuth(handler);

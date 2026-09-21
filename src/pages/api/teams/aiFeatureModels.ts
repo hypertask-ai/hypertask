@@ -1,4 +1,3 @@
-import { withAuth } from "#with-auth";
 import type { NextApiHandler, NextApiRequest, NextApiResponse } from "next";
 import {
   AI_FEATURES,
@@ -263,4 +262,4 @@ const handler: NextApiHandler = async (
   return res.status(405).json({ message: "Method not allowed" });
 };
 
-export default withAuth(handler);
+export default handler;

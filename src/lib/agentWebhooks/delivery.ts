@@ -1,4 +1,3 @@
-import { logger as htLogger } from "#logger";
 import prisma from "@/lib/prisma";
 import { isFeatureEnabled } from "@/lib/flags";
 import { AGENT_RUN_FEATURE_FLAG } from "@/lib/agentRuns/model";
@@ -180,7 +179,7 @@ export async function deliverAgentWebhook(
       delivery.id,
       Math.floor(nextAttemptAt.getTime() / 1000),
     ).catch((error) => {
-      htLogger.warn("[agent-webhook] retry queue publish failed; sweep will retry", error);
+      console.warn("[agent-webhook] retry queue publish failed; sweep will retry", error);
     });
   }
 

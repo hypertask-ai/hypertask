@@ -57,7 +57,7 @@ test("board analytics exposes the required live ranges and worked-ticket links",
   assert.match(ui, /<Link[\s\S]*task\.href/);
   assert.match(ui, /task\.mergedPullRequests\.map/);
 
-  assert.match(route, /getAuthSession\(request\.headers\)/);
+  assert.match(route, /getSessionUser\(request\.headers\)/);
   assert.doesNotMatch(route, /nookies_user/);
   assert.match(route, /prisma\.comment\.groupBy\(\{[\s\S]*by: \["taskId"\]/);
   assert.match(route, /prisma\.taskSectionEvent\.groupBy\(\{/);

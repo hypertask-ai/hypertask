@@ -1,5 +1,3 @@
-import { logger as htLogger } from "#logger";
-import { withAuth } from "#with-auth";
 import {
   createProjectLabel,
   findProjectLabelByName,
@@ -22,7 +20,7 @@ import {
 
 const MAX_AI_PROMPT_LENGTH = 1000;
 
-async function handler(
+export default  async function handler(
   req: NextApiRequest,
   res: NextApiResponse
 ) {
@@ -164,7 +162,7 @@ async function handler(
     try {
       await publishAgentWebhookDeliveries(agentWebhookDeliveryIds);
     } catch (error) {
-      htLogger.warn("[create-label] agent task.updated webhook publish failed; outbox sweep will retry", {
+      console.warn("[create-label] agent task.updated webhook publish failed; outbox sweep will retry", {
         taskId,
         error,
       });
@@ -173,7 +171,7 @@ async function handler(
     void broadcastBoardChange(projectId, { originUserId: userObj.id })
     return res.status(200).json(taskLabels)
   } catch (error) {
-      htLogger.info(error)
+      console.log(error)
       if (error instanceof Error && error.message === "Task not found") {
         return res.status(404).json({ message: error.message });
       }
@@ -183,5 +181,3 @@ async function handler(
       return res.status(500).json({ message: "Internal server error" })
   }
 }
-
-export default withAuth(handler);

@@ -1,6 +1,5 @@
-import { logger as htLogger } from "#logger";
-import { getAuthSession, withAuth } from "#with-auth";
 import { httpStatusConfig } from "@/lib/configs/http-status.config";
+import { getSessionUser } from "@/lib/auth/getSessionUser";
 import { HTPR_6372_SEARCH_RANKING_FLAG, isFeatureEnabled } from "@/lib/flags";
 import prisma from "@/lib/prisma";
 import { turbopufferGetDocuments } from "@/utils/controllers/search/document";
@@ -31,7 +30,7 @@ const handler: NextApiHandler = async (
         return res.status(400).json("Missing Required Data");
       }
 
-      const session = await getAuthSession(
+      const session = await getSessionUser(
         new Headers(req.headers as Record<string, string>),
       );
       if (!session) {
@@ -67,7 +66,7 @@ const handler: NextApiHandler = async (
       );
       return res.status(results.status).json(results);
     } catch (error) {
-      htLogger.info("🤔 ~ handler ~ error:", error);
+      console.log("🤔 ~ handler ~ error:", error);
       return res
         .status(500)
         .json(httpStatusConfig.statusCodes[500].userMessage);
@@ -77,4 +76,4 @@ const handler: NextApiHandler = async (
   }
 };
 
-export default withAuth(handler);
+export default handler;

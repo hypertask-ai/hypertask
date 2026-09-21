@@ -1,6 +1,5 @@
-import { logger as htLogger } from "#logger";
-import { getAuthSession, withAuth } from "#with-auth";
 import { labelStore } from "@/utils/controllers/labels";
+import { getSessionUser } from "@/lib/auth/getSessionUser";
 import prisma from "@/lib/prisma";
 import { IUser } from "@/models/model";
 import { broadcastInboxChange } from "@/lib/realtime/server";
@@ -140,8 +139,8 @@ function feedbackDescription(
   return `${body}<p><strong>From:</strong> ${escapeHtml(displayName)} (${escapeHtml(user.email)}) — userId ${user.id}</p>${contextBlock}${screenshot}`;
 }
 
-async function POSTHandler(request: NextRequest) {
-  const session = await getAuthSession(request.headers);
+export async function POST(request: NextRequest) {
+  const session = await getSessionUser(request.headers);
   if (!session) {
     return NextResponse.json(
       { success: false, error: "Unauthorized" },
@@ -334,7 +333,7 @@ async function POSTHandler(request: NextRequest) {
     );
     deliveries.forEach((delivery, index) => {
       if (delivery.status === "rejected") {
-        htLogger.error(
+        console.error(
           `Feedback inbox delivery failed for user ${recipientIds[index]}`,
           delivery.reason
         );
@@ -343,12 +342,10 @@ async function POSTHandler(request: NextRequest) {
 
     return NextResponse.json({ success: true });
   } catch (error) {
-    htLogger.error("Failed to create feedback task", error);
+    console.error("Failed to create feedback task", error);
     return NextResponse.json(
       { success: false, error: "Unable to send feedback" },
       { status: 500 }
     );
   }
 }
-
-export const POST = withAuth(POSTHandler);

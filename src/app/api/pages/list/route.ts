@@ -1,5 +1,3 @@
-import { logger as htLogger } from "#logger";
-import { withAuth } from "#with-auth";
 import { cookies } from 'next/headers'
 import { NextRequest, NextResponse } from 'next/server'
 
@@ -15,7 +13,7 @@ function parseTaskId(value: string | null): number | null {
   return Number.isSafeInteger(taskId) && taskId > 0 ? taskId : null
 }
 
-async function GETHandler(request: NextRequest) {
+export async function GET(request: NextRequest) {
   try {
     const userCookie = (await cookies()).get('nookies_user')
     if (!userCookie?.value) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
@@ -50,9 +48,7 @@ async function GETHandler(request: NextRequest) {
 
     return NextResponse.json({ pages })
   } catch (error) {
-    htLogger.error('[List Pages] Error:', error)
+    console.error('[List Pages] Error:', error)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
 }
-
-export const GET = withAuth(GETHandler);

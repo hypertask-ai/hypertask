@@ -1,5 +1,3 @@
-import { logger as htLogger } from "#logger";
-import { withoutAuth } from "#with-auth";
 import { NextRequest, NextResponse } from "next/server";
 
 import {
@@ -36,7 +34,7 @@ function fail(request: NextRequest, error: string): NextResponse {
   return finish(request, destination.toString());
 }
 
-async function GETHandler(request: NextRequest) {
+export async function GET(request: NextRequest) {
   const config = getGoogleCalendarOAuthConfig();
   if (!config) return fail(request, "not_configured");
   const attempt = verifyGoogleCalendarOAuthAttempt(
@@ -86,7 +84,7 @@ async function GETHandler(request: NextRequest) {
         authorization.refreshToken ?? authorization.accessToken,
       ).catch(() => {});
     }
-    htLogger.error(
+    console.error(
       "Google Calendar OAuth callback failed",
       error instanceof Error ? error.message : "unknown error",
     );
@@ -98,5 +96,3 @@ async function GETHandler(request: NextRequest) {
     );
   }
 }
-
-export const GET = withoutAuth(GETHandler);

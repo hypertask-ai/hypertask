@@ -1,5 +1,3 @@
-import { logger as htLogger } from "#logger";
-import { withoutAuth } from "#with-auth";
 import { NextRequest, NextResponse } from 'next/server';
 import { getRedis } from '@/lib/redis';
 import { checkMcpRateLimit } from '@/lib/mcp/auth';
@@ -33,7 +31,7 @@ async function isTokenRefreshRateLimited(clientIp: string): Promise<boolean> {
   return n > RATE_MAX_PER_WINDOW;
 }
 
-async function POSTHandler(request: NextRequest) {
+export async function POST(request: NextRequest) {
   try {
     if (await isTokenRefreshRateLimited(getClientIp(request))) {
       return NextResponse.json(
@@ -47,12 +45,10 @@ async function POSTHandler(request: NextRequest) {
 
     return await handleMcpTokenRefresh(request);
   } catch (error) {
-    htLogger.error('Error refreshing MCP token:', error);
+    console.error('Error refreshing MCP token:', error);
     return NextResponse.json(
       { success: false, error: 'Internal server error' },
       { status: 500 }
     );
   }
 }
-
-export const POST = withoutAuth(POSTHandler);

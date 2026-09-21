@@ -101,12 +101,6 @@ function loadRoute({ tasks, sectionsByProject }) {
   }
   const routeModule = { exports: {} }
   const mockRequire = (request) => {
-    if (request === '#logger') {
-      return { logger: { error() {}, warn() {}, info() {}, debug() {} } }
-    }
-    if (request === '#with-auth') {
-      return { withoutAuth: (handler) => handler }
-    }
     if (request === 'next/server') {
       return {
         NextResponse: {

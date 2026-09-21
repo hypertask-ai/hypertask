@@ -1,9 +1,8 @@
-import { withAuth } from "#with-auth";
 import { pauseTimer, TimeTrackingDisabledError } from "@/lib/timeTracking";
 import { NextRequest, NextResponse } from "next/server";
 import { getTimeRequestUser, parseTaskId, validateTimeTaskAccess } from "../_lib";
 
-async function POSTHandler(request: NextRequest) {
+export async function POST(request: NextRequest) {
   const auth = await getTimeRequestUser(request);
   if (auth.response) return auth.response;
 
@@ -32,5 +31,3 @@ async function POSTHandler(request: NextRequest) {
     throw error;
   }
 }
-
-export const POST = withAuth(POSTHandler);

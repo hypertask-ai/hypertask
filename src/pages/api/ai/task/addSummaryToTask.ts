@@ -1,5 +1,3 @@
-import { logger as htLogger } from "#logger";
-import { withAuth } from "#with-auth";
 // Next.js API route support: https://nextjs.org/docs/api-routes/introduction
 
 import type { NextApiRequest, NextApiResponse } from 'next'
@@ -7,7 +5,7 @@ import prisma from "@/lib/prisma";
 
 
 
-async function handler(
+export default  async function handler(
   req: NextApiRequest,
   res: NextApiResponse
 ) {
@@ -15,7 +13,7 @@ async function handler(
   try {
     
     const {taskId, summaryMarkDown} = req.body;
-    htLogger.info("Recieved summary from flask: ",summaryMarkDown )
+    console.log("Recieved summary from flask: ",summaryMarkDown )
     if (!taskId || !summaryMarkDown ) return res.status(400).json({message:"Missing required info"})
     
     if (req.method==="POST"){
@@ -47,15 +45,13 @@ async function handler(
             include: { task: true }
         });
     }
-    htLogger.info("summary generated for task: ", summaryMarkDown)
+    console.log("summary generated for task: ", summaryMarkDown)
         return res.status(200).json({message:`Ai summary for task:${task_Summary.task.title} added successfully`})
     }
     else return res.status(405).json({message:"Only POST method allowed"})
         
   } catch (error) {
-      htLogger.info(error)
+      console.log(error)
       return res.status(500).json(error)
   }
 }
-
-export default withAuth(handler);

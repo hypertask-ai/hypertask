@@ -70,6 +70,7 @@ export const GenerateBoardOnboardingScreen: React.FC<
 
       storeProjectAndContinue(response.data);
     } catch (error) {
+      console.log("GenerateBoardOnboardingScreen buildBoard error:", error);
       toast.error("Could not create your board. Please try again.");
     } finally {
       setLoadingAction(null);

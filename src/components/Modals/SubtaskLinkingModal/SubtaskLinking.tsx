@@ -64,6 +64,7 @@ const SubtaskLinkingModal: React.FC<ISubtaskLinking> = ({
             return `Sub-task has been added`;
           },
           error: (error) => {
+            console.log("🚀 ~ toast.promise ~ error:", error);
             closeHandler();
             return "Error adding sub-task";
           },
@@ -109,10 +110,12 @@ const SubtaskLinkingModal: React.FC<ISubtaskLinking> = ({
 
       if (response.ok) {
         const result: any = await response.json();
+        console.log("🚀 ~ onOpenHandler ~ result:", result.json);
         setFilteredOptions(result.json);
         if (defaultTasks.length === 0) setDefaultTasks(result.json);
       }
     } catch (error) {
+      console.log("🚀 ~ onOpenHandler ~ error:", error);
     }
   }, [id, projectId, keyword]);
 

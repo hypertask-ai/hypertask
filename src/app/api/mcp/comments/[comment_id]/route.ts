@@ -1,6 +1,3 @@
-import { env as appEnv } from "#env";
-import { logger as htLogger } from "#logger";
-import { withoutAuth } from "#with-auth";
 import { NextRequest, NextResponse } from 'next/server'
 import { validateMcpAuth, checkMcpRateLimit } from '@/lib/mcp/auth'
 import type { McpAgentSummary } from '@/lib/mcp/agents'
@@ -60,7 +57,7 @@ export interface UpdateCommentResponse {
  *
  * Updates a comment. User must be the comment creator.
  */
-async function PATCHHandler(request: NextRequest, props: { params: Promise<{ comment_id: string }> }) {
+export async function PATCH(request: NextRequest, props: { params: Promise<{ comment_id: string }> }) {
   const params = await props.params;
   try {
     const rateLimited = await checkMcpRateLimit(request)
@@ -373,7 +370,7 @@ async function PATCHHandler(request: NextRequest, props: { params: Promise<{ com
 
     return NextResponse.json(response)
   } catch (error) {
-    htLogger.error('[MCP PATCH Comment] Error:', error)
+    console.error('[MCP PATCH Comment] Error:', error)
     return NextResponse.json(
       {
         success: false,
@@ -390,7 +387,7 @@ async function PATCHHandler(request: NextRequest, props: { params: Promise<{ com
  *
  * Deletes a comment. User must have access to the task's project.
  */
-async function DELETEHandler(request: NextRequest, props: { params: Promise<{ comment_id: string }> }) {
+export async function DELETE(request: NextRequest, props: { params: Promise<{ comment_id: string }> }) {
   const params = await props.params;
   try {
     const rateLimited = await checkMcpRateLimit(request)
@@ -466,7 +463,7 @@ async function DELETEHandler(request: NextRequest, props: { params: Promise<{ co
 
     // Only the creator (or HyperAI) can delete
     const hyperAiId = parseInt(
-      appEnv.NEXT_PUBLIC_HYPERAI_ID || '332',
+      process.env.NEXT_PUBLIC_HYPERAI_ID || '332',
       10
     )
     const canDelete =
@@ -485,7 +482,7 @@ async function DELETEHandler(request: NextRequest, props: { params: Promise<{ co
 
     // Only the creator (or HyperAI) can delete
     // const hyperAiId = parseInt(
-    //   appEnv.NEXT_PUBLIC_HYPERAI_ID || '332',
+    //   process.env.NEXT_PUBLIC_HYPERAI_ID || '332',
     //   10
     // )
     // const canDelete =
@@ -517,7 +514,7 @@ async function DELETEHandler(request: NextRequest, props: { params: Promise<{ co
       { status: 200 }
     )
   } catch (error) {
-    htLogger.error('[MCP DELETE Comment] Error:', error)
+    console.error('[MCP DELETE Comment] Error:', error)
     return NextResponse.json(
       {
         success: false,
@@ -528,6 +525,3 @@ async function DELETEHandler(request: NextRequest, props: { params: Promise<{ co
     )
   }
 }
-
-export const PATCH = withoutAuth(PATCHHandler);
-export const DELETE = withoutAuth(DELETEHandler);

@@ -114,6 +114,7 @@ const RemindMeComponent = (props: Props) => {
         // the reminder silently no-op, leaving the task in the inbox). HTPR bug.
         const projectId = action.projectId ?? inViewObject.taskProjectId;
         if (!action.taskId || !projectId) {
+          console.error("Invalid bulk reminder action (missing task or project):", action);
           return;
         }
         const body = {
@@ -130,6 +131,7 @@ const RemindMeComponent = (props: Props) => {
 
       try {
         await Promise.all(bulkPromises);
+        console.log("🚀 ~ createBulkReminders ~ reminderOption, reminderDate", reminderType, reminderDate)
         
         setLastUsedReminder({ date: reminderDate!, display: "last used" })
         
@@ -139,6 +141,7 @@ const RemindMeComponent = (props: Props) => {
         
         closeHandler(true)
       } catch (error) {
+        console.error("Error creating bulk reminders:", error);
         toast.error("Failed to create some reminders. Please try again.");
       }
     } else {
@@ -153,12 +156,14 @@ const RemindMeComponent = (props: Props) => {
         remindTask: remindTask
       }
       
+      console.log("🚀 ~ createReminder ~ reminderOption, reminderDate", reminderType, reminderDate)
       setLastUsedReminder({ date: reminderDate!, display: "last used" })
       try {
         await archiveNotificationGetter(body, "Remind", null)
         toast("Task will reappear in " + returnCopy + formatDateDifference(reminderDate!, true))
         closeHandler(true)
       } catch (error) {
+        console.error("Error creating reminder:", error);
         toast.error("Failed to create the reminder. Please try again.");
       }
     }

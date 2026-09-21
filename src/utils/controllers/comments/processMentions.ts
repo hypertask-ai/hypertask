@@ -1,5 +1,3 @@
-import { env as appEnv } from "#env";
-import { logger as htLogger } from "#logger";
 /**
  * Processes mentions from comment text - creates notifications and adds users as followers.
  * Used by both UI (via comments create API) and MCP comments API.
@@ -42,14 +40,14 @@ export async function resolveTextMentions(
     }));
     return injectMentionSpans(text, resolvable);
   } catch (err) {
-    htLogger.warn("[resolveTextMentions] failed, leaving text as-is:", err);
+    console.warn("[resolveTextMentions] failed, leaving text as-is:", err);
     return text;
   }
 }
 
 const getBaseUrl = () =>
-  appEnv.NEXT_PUBLIC_BASEURL ||
-  (appEnv.VERCEL_URL ? `https://${appEnv.VERCEL_URL}` : "http://localhost:3000");
+  process.env.NEXT_PUBLIC_BASEURL ||
+  (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : "http://localhost:3000");
 
 type MentionDeliveryStage =
   | "follower:user"
@@ -143,7 +141,7 @@ export async function processMentionsFromCommentText(params: ProcessMentionsPara
     failOnError = false,
     deliveryProgress,
   } = params;
-  const hyperAiId = parseInt(appEnv.NEXT_PUBLIC_HYPERAI_ID || "332", 10);
+  const hyperAiId = parseInt(process.env.NEXT_PUBLIC_HYPERAI_ID || "332", 10);
 
   // Strip quoted (<blockquote>) content before extracting mentions: a mention
   // inside a quoted reply must not re-notify the user or re-trigger the agent
@@ -188,7 +186,7 @@ export async function processMentionsFromCommentText(params: ProcessMentionsPara
         });
 
         if (result.status !== 200 && result.status !== 201) {
-          htLogger.warn(
+          console.warn(
             "[processMentions] createFollower failed for user",
             userId,
             result.body,
@@ -198,7 +196,7 @@ export async function processMentionsFromCommentText(params: ProcessMentionsPara
           delivered = true;
         }
       } catch (err) {
-        htLogger.warn("[processMentions] createFollower failed for user", userId, err);
+        console.warn("[processMentions] createFollower failed for user", userId, err);
         errors.push(err);
       }
       if (delivered) await deliveryProgress?.mark("follower:user", userId);
@@ -224,7 +222,7 @@ export async function processMentionsFromCommentText(params: ProcessMentionsPara
           errors.push(new Error(`Mention email failed for user ${userId}`));
         }
       } catch (err) {
-        htLogger.warn("[processMentions] mention email failed for user", userId, err);
+        console.warn("[processMentions] mention email failed for user", userId, err);
         errors.push(err);
       }
       if (delivered) await deliveryProgress?.mark("email:user", userId);
@@ -250,7 +248,7 @@ export async function processMentionsFromCommentText(params: ProcessMentionsPara
         );
         delivered = true;
       } catch (err) {
-        htLogger.warn("[processMentions] createMention failed for user", userId, err);
+        console.warn("[processMentions] createMention failed for user", userId, err);
         errors.push(err);
       }
       if (delivered) await deliveryProgress?.mark("notification:user", userId);
@@ -271,7 +269,7 @@ export async function processMentionsFromCommentText(params: ProcessMentionsPara
       });
 
       if (result.status !== 200 && result.status !== 201) {
-        htLogger.warn(
+        console.warn(
           "[processMentions] createFollower failed for agent",
           agentIdStr,
           result.body,
@@ -281,7 +279,7 @@ export async function processMentionsFromCommentText(params: ProcessMentionsPara
         delivered = true;
       }
     } catch (err) {
-      htLogger.warn("[processMentions] createFollower failed for agent", agentIdStr, err);
+      console.warn("[processMentions] createFollower failed for agent", agentIdStr, err);
       errors.push(err);
     }
     if (delivered) await deliveryProgress?.mark("follower:agent", agentIdStr);

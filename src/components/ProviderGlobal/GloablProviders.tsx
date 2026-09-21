@@ -1,7 +1,5 @@
 /* eslint-disable react-hooks/exhaustive-deps */
 "use client";
-import { env as appEnv } from "#env";
-
 import {
   lazy,
   ReactNode,
@@ -159,7 +157,7 @@ const Announcements = dynamic(() => import("../sidebars/Announcements"), {
   ssr: false,
 });
 const ReactQueryDevtools =
-  appEnv.NODE_ENV === "development"
+  process.env.NODE_ENV === "development"
     ? dynamic<{ initialIsOpen?: boolean }>(
         () =>
           import("@tanstack/react-query-devtools").then(
@@ -724,6 +722,7 @@ export default function GlobalProvider({
       document.removeEventListener("keydown", handleGlobalGShortcut, true);
   }, []);
   const handleKeyPress = async (e: KeyboardEvent) => {
+    // console.log("🚀 ~ handleKeyPress ~ e GLOBAL PROVIDER:", e.keyCode)
     if (showTrialModal || showEmailVerificationModal) return;
     var cmdControl = (isApple && e.metaKey) || (!isApple && e.ctrlKey);
 
@@ -1223,7 +1222,7 @@ export default function GlobalProvider({
         announcementIds: [announcementId],
       })
       .catch((error) =>
-        undefined,
+        console.error("Failed to mark announcement read", error),
       );
   };
 

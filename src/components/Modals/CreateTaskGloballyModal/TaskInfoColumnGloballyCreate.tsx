@@ -213,6 +213,7 @@ const TaskInfoColumnGloballyCreate = ({
         toggleShowSizeModal()
     }
     const labelsHandler = (param?: ILabel) => {
+        console.log("🚀 ~ labelsHandler ~ param:", param);
         toggleShowTagsModal();
 
         if (!param) return; // Early return if param is undefined

@@ -51,6 +51,7 @@ const NewCommentComponent = (
     ) => {
   
       const {parsedTask:parsed_task, currentTask, setCurrentId, currentId, allowPerks,  forceOpenEdit,setLoading , editMode, draftsFromTQ} = useTaskContext();
+      // console.log("🚀 ~ editMode:", editMode)
       const _parsedTask = useMemo(()=>JSON.parse(parsed_task),[parsed_task])
       const { replyQuote} = useDescriptionAndCommentsContext()
       const tiptapContainerRef = useRef<HTMLDivElement | null>(null)

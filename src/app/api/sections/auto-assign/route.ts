@@ -1,4 +1,4 @@
-import { getAuthSession, withAuth } from "#with-auth";
+import { getSessionUser } from "@/lib/auth/getSessionUser";
 import prisma from "@/lib/prisma";
 import { validateProjectMemberIds } from "@/lib/mcp/tasks/services";
 import { isAgentOnBoard } from "@/utils/controllers/agents/boardMembers";
@@ -6,8 +6,8 @@ import { boardAgentVisibilityWhere } from "@/lib/agents/visibility";
 import { getProjectWhere } from "@/utils/controllers/projects/getAllIncludes";
 import { NextRequest, NextResponse } from "next/server";
 
-async function POSTHandler(request: NextRequest) {
-  const session = await getAuthSession(request.headers);
+export async function POST(request: NextRequest) {
+  const session = await getSessionUser(request.headers);
   if (!session) {
     return NextResponse.json(
       { success: false, error: "Unauthorized" },
@@ -108,5 +108,3 @@ async function POSTHandler(request: NextRequest) {
     autoAssignAgentId,
   });
 }
-
-export const POST = withAuth(POSTHandler);

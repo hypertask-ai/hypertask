@@ -1,4 +1,3 @@
-import { logger as htLogger } from "#logger";
 import {  getFilteredSections,  } from "@/utils/helperFunctions/Views/FilterHelperFunctions";
 import { IProject, ISection, ITask, IUser, IView } from "@/models/model";
 import { getCurrentProject } from "@/utils/helperFunctions/helperFunctions";
@@ -283,7 +282,7 @@ export const getAllProjects = async(
     const boardPayloadPromise = (Number.isFinite(targetId)
       ? (options?.boardPayloadPromise ??
           fetchBoardTasks(targetId, user.id, options?.signal)).catch((error) => {
-          htLogger.error("Failed to load active board data", error)
+          console.error("Failed to load active board data", error)
           return null
         })
       : Promise.resolve(null)
@@ -329,7 +328,7 @@ export const getAllProjects = async(
         ? authorizationDecision.localBoardPublication
         : Promise.resolve(authorizationDecision === true)
     ).catch((error) => {
-      htLogger.error("Failed to publish authorized local board", error)
+      console.error("Failed to publish authorized local board", error)
       return false
     })
     const index = projects.findIndex((project) => project.id.toString() === targetId.toString());
@@ -396,7 +395,7 @@ export const getAllNotifications = async (userId:number)=>{
     //     data.push(x.notifications)
 
     // }));
-        // debug.log("🚀 ~ getAllNotifications ~  {data:response.data,tabs:tabs }:",  {data:response.data,tabs:tabs })
+        // console.log("🚀 ~ getAllNotifications ~  {data:response.data,tabs:tabs }:",  {data:response.data,tabs:tabs })
  
     return expandInboxApiResponse(response.data)
 }

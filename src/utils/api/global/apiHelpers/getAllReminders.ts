@@ -1,4 +1,3 @@
-import { logger as htLogger } from "#logger";
 // import { IPriority } from "@/models/model";
 import axios from "axios"
 
@@ -12,7 +11,7 @@ export const getAllReminders = async (userId:number|null):Promise<any | undefine
             return getMembersOwners.data ;
         } catch (error) {
             // Handle the error or return a default value
-            htLogger.error("Error getting Assignees and Members:", error);
+            console.error("Error getting Assignees and Members:", error);
             throw error; // You can also return a default value or handle the error in a different way
         }
   

@@ -1,4 +1,3 @@
-import { logger as htLogger } from "#logger";
 import { HTPR_6473_GET_AGENT_FLAG, isFeatureEnabled } from '@/lib/flags'
 import {
   checkMcpRateLimit,
@@ -52,7 +51,7 @@ export async function handleGetAgentRequest(
   try {
     featureEnabled = await isFeatureEnabled(HTPR_6473_GET_AGENT_FLAG, ctx.user.id)
   } catch (error) {
-    htLogger.error('[get-agent] feature flag check failed', error)
+    console.error('[get-agent] feature flag check failed', error)
   }
   if (!featureEnabled) {
     return NextResponse.json(

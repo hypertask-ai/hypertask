@@ -1,4 +1,3 @@
-import { logger as htLogger } from "#logger";
 // Runnable check for HTPR-3783 server-side @mention resolution.
 // Run: node --experimental-strip-types src/utils/controllers/comments/resolveMentions.check.ts
 import assert from "node:assert";
@@ -85,4 +84,4 @@ assert.strictEqual(
   "name without @ is unchanged",
 );
 
-htLogger.info("resolveMentions.check.ts: all assertions passed");
+console.log("resolveMentions.check.ts: all assertions passed");

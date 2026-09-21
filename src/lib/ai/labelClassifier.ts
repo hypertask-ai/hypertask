@@ -1,4 +1,3 @@
-import { logger as htLogger } from "#logger";
 import { waitUntil } from "@vercel/functions";
 import { generateText } from "ai";
 
@@ -50,7 +49,7 @@ export async function classifyTaskAgainstLabels(
   if (definitions.length === 0) return [];
 
   if (!tags?.teamId) {
-    htLogger.error("[labelClassifier] Skipping inference: task has no owning team");
+    console.error("[labelClassifier] Skipping inference: task has no owning team");
     return null;
   }
 
@@ -58,14 +57,14 @@ export async function classifyTaskAgainstLabels(
   try {
     gatewayApiKey = await getTeamGatewayApiKey({ trustedTeamId: tags.teamId });
   } catch (error) {
-    htLogger.error(
+    console.error(
       `[labelClassifier] Skipping inference: team gateway key lookup failed for ${tags.teamId}`,
       error,
     );
     return null;
   }
   if (!gatewayApiKey) {
-    htLogger.error(
+    console.error(
       `[labelClassifier] Skipping inference: no dedicated gateway key for team ${tags.teamId}`,
     );
     return null;
@@ -104,7 +103,7 @@ export async function classifyTaskAgainstLabels(
     definitions,
   );
   if (matchingLabelIds === null) {
-    htLogger.error(
+    console.error(
       "[labelClassifier] Skipping result: model returned unparsable label output",
     );
   }
@@ -254,7 +253,7 @@ async function applyAiLabelVerdict({
     } catch (error) {
       // The outbox rows committed with the label mutation. The queue helper
       // and the scheduled agent-webhook sweep retry publication failures.
-      htLogger.warn("[labelClassifier] agent task.updated queue publish failed; outbox sweep will retry", error);
+      console.warn("[labelClassifier] agent task.updated queue publish failed; outbox sweep will retry", error);
     }
     void broadcastBoardChange(projectId, { originUserId: actor.id });
   }
@@ -311,11 +310,11 @@ async function classifyTaskWithDefinitions({
 // until classification finishes (same reason as broadcastBoardChange, HTPR-3999);
 // a bare floating promise dies when the response returns.
 export function scheduleClassifyTaskAiLabels(taskId: number, projectId: number) {
-  waitUntil(classifyTaskAiLabels(taskId, projectId).catch(htLogger.error));
+  waitUntil(classifyTaskAiLabels(taskId, projectId).catch(console.error));
 }
 
 export function scheduleBackfillAiLabel(labelId: string) {
-  waitUntil(backfillAiLabel(labelId).catch(htLogger.error));
+  waitUntil(backfillAiLabel(labelId).catch(console.error));
 }
 
 export async function classifyTaskAiLabels(taskId: number, projectId: number) {
@@ -392,7 +391,7 @@ export async function backfillAiLabel(labelId: string) {
           snapshotAt: task.updatedAt,
         });
       } catch (error) {
-        htLogger.error(`Smart label backfill failed for task ${task.id}`, error);
+        console.error(`Smart label backfill failed for task ${task.id}`, error);
       }
     }
   };

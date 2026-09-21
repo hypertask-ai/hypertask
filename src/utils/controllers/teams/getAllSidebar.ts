@@ -1,12 +1,11 @@
-import { logger as htLogger } from "#logger";
 import prisma from "@/lib/prisma";
 
 const getAllTeamsSidebar = async (userId: number) => {
     try {
-        htLogger.info("getAllTeamsSidebar called with userId:", userId);
+        console.log("getAllTeamsSidebar called with userId:", userId);
 
         if (!userId) {
-            htLogger.info("No userId provided");
+            console.log("No userId provided");
             return ({
                 status: 304,
                 json: []
@@ -18,10 +17,10 @@ const getAllTeamsSidebar = async (userId: number) => {
                 userId: parseInt(userId.toString())
             }
         })
-        htLogger.info("Owner found:", owner);
+        console.log("Owner found:", owner);
 
         if (!owner) {
-            htLogger.info("No owner found for userId:", userId);
+            console.log("No owner found for userId:", userId);
             return ({
                 status: 400,
                 json: []
@@ -60,7 +59,7 @@ const getAllTeamsSidebar = async (userId: number) => {
                 googleAccount: true
             }
         })
-        htLogger.info("Owned teams:", owned_teams);
+        console.log("Owned teams:", owned_teams);
 
         // ========================== Get projects where user is a member
         const member_projects = await prisma.member.findMany({
@@ -72,11 +71,11 @@ const getAllTeamsSidebar = async (userId: number) => {
                 userId: parseInt(userId.toString())
             }
         })
-        htLogger.info("Member projects:", member_projects);
+        console.log("Member projects:", member_projects);
 
         // Extract project IDs where user is a member
         const memberProjectIds = member_projects.map((item) => item.projectId);
-        htLogger.info("Member project IDs:", memberProjectIds);
+        console.log("Member project IDs:", memberProjectIds);
 
         // ========================== Get teams where user participates (but doesn't own)
         const participating_teams = await prisma.team.findMany({
@@ -128,19 +127,19 @@ const getAllTeamsSidebar = async (userId: number) => {
                 googleAccount: true
             }
         })
-        htLogger.info("Participating teams:", participating_teams);
+        console.log("Participating teams:", participating_teams);
 
         // ========================== Combine and filter results
         const json = [...owned_teams, ...participating_teams];
         const filteredJson = json.filter(team => team.projects.length > 0);
-        htLogger.info("Filtered teams (with projects):", filteredJson);
+        console.log("Filtered teams (with projects):", filteredJson);
 
         return ({
             status: 200,
             json: filteredJson
         })
     } catch (error) {
-        htLogger.info("Error in getAllTeamsSidebar:", error);
+        console.log("Error in getAllTeamsSidebar:", error);
         return ({
             status: 400,
             json: []

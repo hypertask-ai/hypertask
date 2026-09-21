@@ -1,4 +1,3 @@
-import { logger as htLogger } from "#logger";
 // Runnable check for HTPR-3953: AI-linkified anchors must not create task relations.
 // Run: node --experimental-strip-types src/utils/controllers/comments/extractTaskReferences.check.ts
 import assert from "node:assert";
@@ -33,4 +32,4 @@ assert.deepStrictEqual(
   "AI-linkified anchor skipped, human-authored link in the same text still extracted"
 );
 
-htLogger.info("extractTaskReferences: all checks passed");
+console.log("extractTaskReferences: all checks passed");

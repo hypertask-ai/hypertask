@@ -1,5 +1,3 @@
-import { logger as htLogger } from "#logger";
-import { withoutAuth } from "#with-auth";
 import { NextRequest, NextResponse } from 'next/server'
 
 import { isFeatureEnabled } from '@/lib/flags'
@@ -25,7 +23,7 @@ type UpdateReportBody = {
   body_html?: unknown
 }
 
-async function POSTHandler(request: NextRequest) {
+export async function POST(request: NextRequest) {
   try {
     const ctx = await validateMcpAuth(request)
     if (!ctx) {
@@ -146,9 +144,7 @@ async function POSTHandler(request: NextRequest) {
       )
     }
 
-    htLogger.error('[MCP Update Report] Error:', error)
+    console.error('[MCP Update Report] Error:', error)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
 }
-
-export const POST = withoutAuth(POSTHandler);

@@ -1,6 +1,3 @@
-import { env as appEnv } from "#env";
-import { logger as htLogger } from "#logger";
-import { withoutAuth } from "#with-auth";
 import { NextRequest, NextResponse } from "next/server";
 
 import { createCommentService } from "@/utils/controllers/comments/createCommentService";
@@ -18,11 +15,11 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 export const maxDuration = 300;
 
-async function GETHandler(request: NextRequest) {
+export async function GET(request: NextRequest) {
   if (
     !hasValidCronAuthorization(
       request.headers.get("authorization"),
-      appEnv.CRON_SECRET,
+      process.env.CRON_SECRET,
     )
   ) {
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });
@@ -107,7 +104,7 @@ async function GETHandler(request: NextRequest) {
       summarized += 1;
     } catch (error) {
       failures.push(thread.id);
-      htLogger.error(`Slack thread summary failed for ${thread.id}`, error);
+      console.error(`Slack thread summary failed for ${thread.id}`, error);
     }
   }
 
@@ -124,5 +121,3 @@ async function markThreadSummarized(id: string, lastMessageTs: string) {
     data: { lastSummarizedTs: lastMessageTs },
   });
 }
-
-export const GET = withoutAuth(GETHandler);

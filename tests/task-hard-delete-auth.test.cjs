@@ -49,9 +49,8 @@ function loadRoute({ session = null, task = null, deleteOutcome = "success" } = 
   const calls = { taskLookups: [], deletes: [], broadcasts: [] };
   const loadedModule = { exports: {} };
   const stubs = {
-    "#with-auth": {
-      getAuthSession: async () => session,
-      withAuth: (handler) => handler,
+    "@/lib/auth/getSessionUser": {
+      getSessionUser: async () => session,
     },
     "@/lib/prisma": {
       __esModule: true,

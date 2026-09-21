@@ -1,4 +1,3 @@
-import { env as appEnv } from "#env";
 // HTPR-4146: reverse of bridgePlugin.ts — mints legacy ht_session/nookies_user cookies after a native Better Auth login, so the 140+ files that still read those cookies directly keep working.
 import type { GenericEndpointContext } from '@better-auth/core'
 import type { BetterAuthPlugin } from 'better-auth'
@@ -38,7 +37,7 @@ async function setLegacyCookiesForUser(ctx: LegacyCookieCtx, userId: number) {
 
   ctx.setCookie('nookies_user', JSON.stringify(slimUserForCookie(userData)), {
     httpOnly: false,
-    secure: appEnv.NODE_ENV === 'production',
+    secure: process.env.NODE_ENV === 'production',
     sameSite: 'lax',
     maxAge: 2592000, // 30 days, matches the Better Auth session lifetime
     path: '/',
@@ -60,7 +59,7 @@ async function setLegacyCookiesForUser(ctx: LegacyCookieCtx, userId: number) {
   }
   ctx.setCookie('signup_source', 'better_auth', {
     httpOnly: false,
-    secure: appEnv.NODE_ENV === 'production',
+    secure: process.env.NODE_ENV === 'production',
     sameSite: 'lax',
     maxAge: 604800,
     path: '/',
@@ -105,7 +104,7 @@ async function setLegacyCookiesForUser(ctx: LegacyCookieCtx, userId: number) {
     if (board) {
       ctx.setCookie('previousBoard', `project-${board.id}|&|`, {
         httpOnly: false,
-        secure: appEnv.NODE_ENV === 'production',
+        secure: process.env.NODE_ENV === 'production',
         sameSite: 'lax',
         maxAge: 604800,
         path: '/',

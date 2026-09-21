@@ -1,5 +1,3 @@
-import { logger as htLogger } from "#logger";
-import { withAuth } from "#with-auth";
 // Opening a task detail used to fire priority, estimate, labels and followers
 // as four separate requests. Each one is a distinct serverless route, so each
 // one could pay its own cold start, and a cold start here costs far more than
@@ -17,7 +15,7 @@ import type { NextApiRequest, NextApiResponse } from "next";
 import prisma from "@/lib/prisma";
 import { getProjectWhere } from "@/utils/controllers/projects/getAllIncludes";
 
-async function handler(
+export default async function handler(
   req: NextApiRequest,
   res: NextApiResponse
 ) {
@@ -109,9 +107,7 @@ async function handler(
 
     return res.status(200).json({ priority, estimate, labels, followers });
   } catch (error) {
-    htLogger.info(error);
+    console.log(error);
     return res.status(400).json({ message: JSON.stringify(error) });
   }
 }
-
-export default withAuth(handler);

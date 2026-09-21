@@ -1,5 +1,3 @@
-import { logger as htLogger } from "#logger";
-import { withAuth } from "#with-auth";
 import { NextApiHandler, NextApiRequest, NextApiResponse } from "next";
 import prisma from "@/lib/prisma";
 import { requireAnnouncementAdmin } from "@/lib/admin/requireAnnouncementAdmin";
@@ -20,9 +18,9 @@ const handler: NextApiHandler = async (
     });
     return res.status(200).json(announcements);
   } catch (error) {
-    htLogger.info("🚀 ~ consthandler:NextApiHandler= ~ error:", error);
+    console.log("🚀 ~ consthandler:NextApiHandler= ~ error:", error);
     return res.status(500).json({ error: "Internal server error" });
   }
 };
 
-export default withAuth(handler);
+export default handler;

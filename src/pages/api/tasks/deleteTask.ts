@@ -1,12 +1,11 @@
-import { logger as htLogger } from "#logger";
-import { getAuthSession, withAuth } from "#with-auth";
 import { permanentlyDeleteTask } from "@/utils/controllers/tasks/invokeTaskDelete";
 import type { NextApiRequest, NextApiResponse } from "next";
 import prisma from "@/lib/prisma";
 import { broadcastBoardChange } from "@/lib/realtime/server";
+import { getSessionUser } from "@/lib/auth/getSessionUser";
 import { taskWriteAccessWhere } from "@/utils/controllers/projects/getAllIncludes";
 
-async function handler(
+export default async function handler(
   req: NextApiRequest,
   res: NextApiResponse,
 ) {
@@ -18,7 +17,7 @@ async function handler(
         return res
           .status(400)
           .json({ message: "Missing required information" });
-      const session = await getAuthSession(
+      const session = await getSessionUser(
         new Headers(req.headers as Record<string, string>),
       );
       if (!session) return res.status(401).json({ message: "Unauthorized" });
@@ -50,9 +49,7 @@ async function handler(
     }
     return res.status(405).json({ message: "Method not allowed" });
   } catch (error) {
-    htLogger.info(error);
+    console.log(error);
     return res.status(500).json(error);
   }
 }
-
-export default withAuth(handler);

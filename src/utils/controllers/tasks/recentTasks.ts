@@ -1,4 +1,3 @@
-import { logger as htLogger } from "#logger";
 import { Prisma } from "@prisma/client";
 import prisma from "@/lib/prisma";
 import { publicAgentSelect } from "@/lib/agents/publicAgent";
@@ -227,7 +226,7 @@ const getRecentTasks = async (
     );
     return { All: tasksByProject, tabs };
   } catch (error) {
-    htLogger.info("🚀 ~ getRecentTasks ~ error:", error);
+    console.log("🚀 ~ getRecentTasks ~ error:", error);
     return emptyResult();
   }
 };

@@ -1,4 +1,3 @@
-import { logger as htLogger } from "#logger";
 // Import PrismaClient from the generated Prisma client
 
 
@@ -73,9 +72,9 @@ const fetchUrls = async (taskId:string | string[], commentId?:string) => {
             }
    
             // return res.status(200).json(comments);
-            // debug.log(comments);
+            // console.log(comments);
         } catch (error) {
-            htLogger.info(error);
+            console.log(error);
             return ({
                 status:500,
                 json:{ message: "Internal server error", error:error }

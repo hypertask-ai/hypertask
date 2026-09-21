@@ -1,5 +1,3 @@
-import { logger as htLogger } from "#logger";
-import { withAuth } from "#with-auth";
 import { NextApiHandler, NextApiRequest, NextApiResponse } from "next"
 import create from "@/utils/controllers/tasks/create";
 import generateRank from "@/utils/generateRank";
@@ -95,7 +93,7 @@ const handler: NextApiHandler = async (req: NextApiRequest, res: NextApiResponse
     }
 }
 
-export default withAuth(handler);
+export default handler;
 
 
 
@@ -119,7 +117,7 @@ export const createFullScreenTaskAndReturn = async(projectId:number, userId:numb
                 ranking:"asc"
             }
         })
-        htLogger.info("🚀 ~ createFullScreenTaskAndReturn ~ section:", section)
+        console.log("🚀 ~ createFullScreenTaskAndReturn ~ section:", section)
         if (!section) throw "No section"
 
         const task = await prisma.task.findFirst({
@@ -133,7 +131,7 @@ export const createFullScreenTaskAndReturn = async(projectId:number, userId:numb
             
         })
         const ranking = generateRank(undefined, task?task.ranking:undefined)
-        htLogger.info("🚀 ~ createFullScreenTaskAndReturn ~ task:", task)
+        console.log("🚀 ~ createFullScreenTaskAndReturn ~ task:", task)
         const response = await create({
             title,
             description:"",
@@ -159,7 +157,7 @@ export const createFullScreenTaskAndReturn = async(projectId:number, userId:numb
         return {message:"Created a new task", newTask:{...newTask, description_}, error:false}
         
     } catch (error) {
-        htLogger.info("🚀 ~ createFullScreenTaskAndReturn ~ error:", error)
+        console.log("🚀 ~ createFullScreenTaskAndReturn ~ error:", error)
         return {message:"The project must have at least one section before creating a task", error:true}
     }
 

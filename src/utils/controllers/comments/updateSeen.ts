@@ -16,15 +16,15 @@ const commentsGetByTask= async (user:IUser,commentIds:string[] ) => {
         //         }
         //     })
             
-        //     // debug.log("🚀 ~ file: getByTask.ts:26 ~ commentsGetByTask ~ comments:", comments)
+        //     // console.log("🚀 ~ file: getByTask.ts:26 ~ commentsGetByTask ~ comments:", comments)
         //     return({
         //             status:200,
         //             json:comments
         //         })
         //     // res.status(200).json(comments);
-        //     // debug.log(comments);
+        //     // console.log(comments);
         // } catch (error) {
-        //     debug.log(error);
+        //     console.log(error);
         //     return({
         //             status:500,
         //             json:{ message: "Internal server error" }

@@ -1,5 +1,3 @@
-import { env as appEnv } from "#env";
-import { logger as htLogger } from "#logger";
 import prisma from "@/lib/prisma";
 import {
   aiImageModelDefinitions,
@@ -19,7 +17,7 @@ const taskSearchByParam = async (
   projectId: number
 ) => {
   try {
-    const hyperAiId = parseInt(appEnv.NEXT_PUBLIC_HYPERAI_ID || "332");
+    const hyperAiId = parseInt(process.env.NEXT_PUBLIC_HYPERAI_ID || "332");
     // HTPR-4478: this route fires on every @-mention keystroke. projectIds
     // (needs only userid), owner_members (only projectId) and hyperAI (a
     // constant id) are mutually independent, so fetch them concurrently
@@ -109,7 +107,7 @@ const taskSearchByParam = async (
     }));
 
     if (param == "all") {
-      htLogger.info("🤔 ~ taskSearchByParam ~ FETCHING ALL");
+      console.log("🤔 ~ taskSearchByParam ~ FETCHING ALL");
 
       // HTPR-4478: projects, recent tasks and board agents are independent
       // reads; run them concurrently instead of three sequential round trips.
@@ -283,7 +281,7 @@ const taskSearchByParam = async (
       };
     }
   } catch (error) {
-    htLogger.info("🤔 ~ taskSearchByParam ~ error:", error);
+    console.log("🤔 ~ taskSearchByParam ~ error:", error);
     return {
       status: 500,
       json: [],
@@ -352,7 +350,7 @@ const fetchMentionPages = async (
     // Degrade to "no Pages group" rather than losing the whole @ menu, but make
     // the reason loud: a silent empty group is indistinguishable from a board
     // that genuinely has no pages.
-    htLogger.error("🤔 ~ fetchMentionPages ~ error:", error);
+    console.error("🤔 ~ fetchMentionPages ~ error:", error);
     return [];
   }
 };
@@ -386,7 +384,7 @@ const fetchidlist = async (id: number) => {
     }
     return [];
   } catch (error) {
-    htLogger.info("r🤔 ~ fetchidlist ~ error:", error);
+    console.log("r🤔 ~ fetchidlist ~ error:", error);
     return [];
   }
 };

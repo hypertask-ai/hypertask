@@ -1,5 +1,4 @@
-import { logger as htLogger } from "#logger";
-import { getAuthSession, withAuth } from "#with-auth";
+import { getSessionUser } from "@/lib/auth/getSessionUser";
 import prisma from "@/lib/prisma";
 import { broadcastBoardChange } from "@/lib/realtime/server";
 import getProjectView from "@/utils/controllers/views";
@@ -118,7 +117,7 @@ const handler: NextApiHandler = async (req, res) => {
     return res.status(405).json({ message: "Method not allowed" });
   }
 
-  const session = await getAuthSession(
+  const session = await getSessionUser(
     new Headers(req.headers as Record<string, string>),
   );
   if (!session) {
@@ -145,9 +144,9 @@ const handler: NextApiHandler = async (req, res) => {
     if (error instanceof ViewResetAccessError) {
       return res.status(403).json({ message: "Board access required" });
     }
-    htLogger.error("reset active view failed", error);
+    console.error("reset active view failed", error);
     return res.status(500).json({ message: "Unable to reset the active view" });
   }
 };
 
-export default withAuth(handler);
+export default handler;

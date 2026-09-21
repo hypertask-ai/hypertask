@@ -1,6 +1,3 @@
-import { env as appEnv } from "#env";
-import { logger as htLogger } from "#logger";
-import { withoutAuth } from "#with-auth";
 import { createHash } from "node:crypto";
 import { NextRequest, NextResponse } from "next/server";
 import { waitUntil } from "@vercel/functions";
@@ -14,14 +11,14 @@ export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 export const maxDuration = 300;
 
-async function POSTHandler(request: NextRequest) {
+export async function POST(request: NextRequest) {
   const rawBody = await request.text();
   if (
     !verifySlackSignature(
       rawBody,
       request.headers.get("x-slack-signature"),
       request.headers.get("x-slack-request-timestamp"),
-      appEnv.SLACK_SIGNING_SECRET,
+      process.env.SLACK_SIGNING_SECRET,
     )
   ) {
     return new NextResponse("Invalid signature", { status: 401 });
@@ -57,10 +54,8 @@ async function POSTHandler(request: NextRequest) {
             )
           : undefined,
       )
-      .catch((error) => htLogger.error("Slack slash command failed", error)),
+      .catch((error) => console.error("Slack slash command failed", error)),
   );
 
   return new NextResponse(null, { status: 200 });
 }
-
-export const POST = withoutAuth(POSTHandler);

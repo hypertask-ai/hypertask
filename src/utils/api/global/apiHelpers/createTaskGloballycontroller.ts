@@ -1,4 +1,3 @@
-import { logger as htLogger } from "#logger";
 import globalConstants from "@/lib/constants";
 import {
   IEstimateConstants,
@@ -81,7 +80,7 @@ const createNewTaskGloballyAPIHandler = async (
       )
       .map(([key]) => key);
     if (omittedFields.length > 0) {
-      htLogger.warn(
+      console.warn(
         "Task creation omitted non-serializable fields:",
         omittedFields
       );
@@ -120,7 +119,7 @@ const createNewTaskGloballyAPIHandler = async (
         : undefined,
       traceScope,
     });
-    htLogger.info("🚀 ~ createNewTaskGloballyAPIHandler ~ error:", error);
+    console.log("🚀 ~ createNewTaskGloballyAPIHandler ~ error:", error);
     return { error: true, ErrorMessage: error };
   }
 };

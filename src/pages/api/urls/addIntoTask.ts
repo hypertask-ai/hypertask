@@ -1,5 +1,3 @@
-import { logger as htLogger } from "#logger";
-import { withAuth } from "#with-auth";
 // Import PrismaClient from the generated Prisma client
 import { IUrl } from '@/models/model';
 import addIntoTask from '@/utils/controllers/urls/addIntoTask';
@@ -17,11 +15,11 @@ const handler: NextApiHandler = async (req: NextApiRequest, res: NextApiResponse
   } 
   
   catch (error) {
-    htLogger.info(error)
+    console.log(error)
     return res.status(500).json({message:"Something went wrong", error:error})
   }
 
 }
 
 // Run the main function
-export default withAuth(handler);
+export default handler;

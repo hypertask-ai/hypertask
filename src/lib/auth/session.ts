@@ -1,4 +1,3 @@
-import { env as appEnv } from "#env";
 import { createHmac, timingSafeEqual } from 'crypto'
 
 export const SESSION_COOKIE = 'ht_session'
@@ -19,7 +18,7 @@ type SignedSessionPayload = SessionPayload & {
 }
 
 function getSessionSecret(): string {
-  const secret = appEnv.SESSION_SECRET || appEnv.JWT_SECRET
+  const secret = process.env.SESSION_SECRET || process.env.JWT_SECRET
   if (!secret) {
     throw new Error('Missing SESSION_SECRET or JWT_SECRET env var')
   }
@@ -123,7 +122,7 @@ export function verifySession(token: string | undefined): SessionPayload | null 
 export function sessionCookieOptions(maxAgeSeconds: number) {
   return {
     httpOnly: true,
-    secure: appEnv.NODE_ENV === 'production',
+    secure: process.env.NODE_ENV === 'production',
     sameSite: 'lax' as const,
     path: '/',
     maxAge: maxAgeSeconds,
@@ -140,7 +139,7 @@ export function clearBetterAuthSessionCookies(response: {
   for (const name of ['__Secure-better-auth.session_token', 'better-auth.session_token']) {
     response.cookies.set(name, '', {
       httpOnly: true,
-      secure: name.startsWith('__Secure-') || appEnv.NODE_ENV === 'production',
+      secure: name.startsWith('__Secure-') || process.env.NODE_ENV === 'production',
       sameSite: 'lax',
       path: '/',
       maxAge: 0,

@@ -1,4 +1,3 @@
-import { logger as htLogger } from "#logger";
 import { IFCMReqBody } from "@/models/model";
 import { sendDataNewCommentFCM } from "@/utils/controllers/FCM";
 import prisma from "@/lib/prisma";
@@ -177,7 +176,7 @@ export async function createFollowerService(params: {
 
     return { status: 200, body: newFollower };
   } catch (error) {
-    htLogger.info(
+    console.log(
       "🚀 ~ handler ~ error in /api/follower/createFollower:",
       error,
     );

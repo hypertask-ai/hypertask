@@ -1,4 +1,3 @@
-import { logger as htLogger } from "#logger";
 import { consumeEarlyAppShellBootstrapSlice } from "@/lib/appShellBootstrap/client";
 import { selectFavorites } from "@/utils/api/global/apiHelpers/favoritesResponse";
 import axios from "axios"
@@ -15,7 +14,7 @@ export const getAllFavorites = async (userSettingId:string|null) => {
             return selectFavorites(favoritesAll.data);
         } catch (error) {
             // Handle the error or return a default value
-            htLogger.error("Error getting Assignees and Members:", error);
+            console.error("Error getting Assignees and Members:", error);
             throw error; // You can also return a default value or handle the error in a different way
         }
 

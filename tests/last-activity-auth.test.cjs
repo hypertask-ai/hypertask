@@ -12,7 +12,7 @@ const source = fs.readFileSync(
 // moved. nookies_user is readable and writable by the client, so deriving the
 // id from it would hand any caller another account's board list.
 test("the board-activity endpoint takes identity from the verified session", () => {
-  assert.match(source, /getAuthSession/);
+  assert.match(source, /getSessionUser/);
   assert.doesNotMatch(source, /nookies_user/);
 });
 

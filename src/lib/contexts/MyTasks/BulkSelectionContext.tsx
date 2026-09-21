@@ -1,6 +1,5 @@
 "use client";
 
-import { logger as htLogger } from "#logger";
 import {
   createContext,
   type ReactNode,
@@ -283,7 +282,7 @@ const MyTasksBulkSelectionProviderInner = ({
       results.forEach((result, index) => {
         const taskId = snapshotIds[index]!;
         if (result.status === "rejected") {
-          htLogger.error("My Tasks bulk archive failed", taskId, result.reason);
+          console.error("My Tasks bulk archive failed", taskId, result.reason);
           failures.push(taskId);
           onExcludedTaskIdsChange((previous) => {
             const next = new Set(previous);
@@ -371,7 +370,7 @@ const MyTasksBulkSelectionProviderInner = ({
         results.forEach((result, index) => {
           if (result.status === "rejected") {
             const task = snapshot[index]!;
-            htLogger.error(
+            console.error(
               "My Tasks bulk action failed",
               task.id,
               result.reason,

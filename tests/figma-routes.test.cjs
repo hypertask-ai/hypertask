@@ -1,7 +1,6 @@
 const assert = require("node:assert/strict");
 const { createHash } = require("node:crypto");
 const path = require("node:path");
-const { passThroughAuth } = require("./helpers/pass-through-auth.cjs");
 const test = require("node:test");
 const { NextRequest } = require("next/server");
 const { createJiti } = require("jiti");
@@ -26,12 +25,12 @@ function stub(file, exports) {
   const filename = path.join(root, file);
   require.cache[filename] = { id: filename, filename, loaded: true, exports };
 }
-const getAuthSession = async () => {
-  if (sessionError) throw sessionError;
-  return sessionUserId ? { userId: sessionUserId, source: "legacy" } : null;
-};
-stub("src/lib/api/withAuth.ts", passThroughAuth(getAuthSession));
-stub("src/lib/auth/getSessionUser.ts", { getSessionUser: getAuthSession });
+stub("src/lib/auth/getSessionUser.ts", {
+  getSessionUser: async () => {
+    if (sessionError) throw sessionError;
+    return sessionUserId ? { userId: sessionUserId, source: "legacy" } : null;
+  },
+});
 stub("src/lib/figma/connection.ts", {
   figmaConnectEnabledFor: async (userId) => {
     eligibilityUserIds.push(userId);

@@ -1,5 +1,3 @@
-import { logger as htLogger } from "#logger";
-import { withAuth } from "#with-auth";
 import { cookies } from 'next/headers'
 import { NextRequest, NextResponse } from 'next/server'
 
@@ -31,7 +29,7 @@ function isRequestBody(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === 'object' && !Array.isArray(value)
 }
 
-async function POSTHandler(request: NextRequest) {
+export async function POST(request: NextRequest) {
   try {
     const userCookie = (await cookies()).get('nookies_user')
     if (!userCookie?.value) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
@@ -116,9 +114,7 @@ async function POSTHandler(request: NextRequest) {
       return NextResponse.json({ error: 'Not found' }, { status: 404 })
     }
 
-    htLogger.error('[Create Page] Error:', error)
+    console.error('[Create Page] Error:', error)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
 }
-
-export const POST = withAuth(POSTHandler);

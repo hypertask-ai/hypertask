@@ -1,5 +1,3 @@
-import { env as appEnv } from "#env";
-import { logger as htLogger } from "#logger";
 import prisma from "@/lib/prisma";
 import { executeSlackAction, type SlackAction } from "@/lib/slack/actions";
 import { runAsLinkedSlackUser } from "@/lib/slack/authorization";
@@ -81,7 +79,7 @@ export async function handleSlackCommand(
       true,
     );
   } catch (error) {
-    htLogger.error(`Slack command failed [${parsed.subcommand}]`, error);
+    console.error(`Slack command failed [${parsed.subcommand}]`, error);
     await postSlackResponseUrl(
       payload.responseUrl,
       errorBlock(
@@ -116,7 +114,7 @@ async function handleConnect(
     where: { slackTeamId: payload.slackTeamId },
     select: { id: true },
   });
-  const secret = appEnv.SLACK_CLIENT_SECRET?.trim();
+  const secret = process.env.SLACK_CLIENT_SECRET?.trim();
   if (!install || !secret) {
     await postSlackResponseUrl(
       payload.responseUrl,
@@ -162,7 +160,7 @@ async function handleConnectConfirmation(
   payload: SlackCommandPayload,
   rawConfirmation: string,
 ): Promise<void> {
-  const secret = appEnv.SLACK_CLIENT_SECRET?.trim();
+  const secret = process.env.SLACK_CLIENT_SECRET?.trim();
   const verified = verifySlackLinkConfirmation(rawConfirmation, secret);
   if (!verified) {
     await postSlackResponseUrl(

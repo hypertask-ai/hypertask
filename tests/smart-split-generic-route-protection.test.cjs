@@ -1,7 +1,6 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const path = require("node:path");
-const { passThroughAuth } = require("./helpers/pass-through-auth.cjs");
 
 const root = path.resolve(__dirname, "..");
 let loadId = 0;
@@ -58,7 +57,6 @@ const loadRoute = (relativePath, stubs) => {
     root,
     "src/utils/controllers/projects/views/boardFilterWriteLock.ts",
   )];
-  stubModule("src/lib/api/withAuth.ts", passThroughAuth());
   for (const [stubPath, exports] of Object.entries(stubs)) {
     stubModule(stubPath, exports);
   }

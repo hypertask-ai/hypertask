@@ -1,5 +1,3 @@
-import { logger as htLogger } from "#logger";
-import { withoutAuth } from "#with-auth";
 import { validateMcpAuth, checkMcpRateLimit } from '@/lib/mcp/auth';
 import type { McpAgentSummary } from '@/lib/mcp/agents';
 import { getMcpSessionAgentSummary } from '@/lib/mcp/agents';
@@ -29,7 +27,7 @@ export interface CreateTaskResponse {
     message?: string;
 }
 
-async function POSTHandler(request: NextRequest) {
+export async function POST(request: NextRequest) {
     const correlationId = request.headers.get('X-Correlation-ID');
 
     try {
@@ -277,7 +275,7 @@ async function POSTHandler(request: NextRequest) {
                 { status: 409 }
             );
         }
-        htLogger.error('[MCP Create Task] Error:', error);
+        console.error('[MCP Create Task] Error:', error);
 
         return NextResponse.json(
             {
@@ -290,5 +288,3 @@ async function POSTHandler(request: NextRequest) {
         );
     }
 }
-
-export const POST = withoutAuth(POSTHandler);

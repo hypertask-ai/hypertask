@@ -1,5 +1,3 @@
-import { logger as htLogger } from "#logger";
-import { withoutAuth } from "#with-auth";
 import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 
@@ -44,7 +42,7 @@ const deleteKeySchema = z.object({
   keyId: z.string().trim().regex(/^\d+$/),
 })
 
-async function GETHandler(request: NextRequest) {
+export async function GET(request: NextRequest) {
   const rateLimited = await checkMcpRateLimit(request)
   if (rateLimited) return rateLimited
 
@@ -102,7 +100,7 @@ async function GETHandler(request: NextRequest) {
       teams,
     })
   } catch (error) {
-    htLogger.error('[Management Keys] Failed to list keys:', error)
+    console.error('[Management Keys] Failed to list keys:', error)
     return NextResponse.json(
       { success: false, error: 'Failed to list management keys' },
       { status: 500 }
@@ -110,7 +108,7 @@ async function GETHandler(request: NextRequest) {
   }
 }
 
-async function POSTHandler(request: NextRequest) {
+export async function POST(request: NextRequest) {
   const rateLimited = await checkMcpRateLimit(request)
   if (rateLimited) return rateLimited
 
@@ -251,7 +249,7 @@ async function POSTHandler(request: NextRequest) {
             },
           })
         } catch (disableError) {
-          htLogger.error(
+          console.error(
             '[Management Keys] Failed to disable an unlinked team key:',
             disableError
           )
@@ -294,7 +292,7 @@ async function POSTHandler(request: NextRequest) {
       )
     }
 
-    htLogger.error('[Management Keys] Failed to create key:', error)
+    console.error('[Management Keys] Failed to create key:', error)
     return NextResponse.json(
       { success: false, error: 'Failed to create management key' },
       { status: 500 }
@@ -302,7 +300,7 @@ async function POSTHandler(request: NextRequest) {
   }
 }
 
-async function DELETEHandler(request: NextRequest) {
+export async function DELETE(request: NextRequest) {
   const rateLimited = await checkMcpRateLimit(request)
   if (rateLimited) return rateLimited
 
@@ -346,14 +344,10 @@ async function DELETEHandler(request: NextRequest) {
       )
     }
 
-    htLogger.error('[Management Keys] Failed to disable key:', error)
+    console.error('[Management Keys] Failed to disable key:', error)
     return NextResponse.json(
       { success: false, error: 'Failed to disable management key' },
       { status: 500 }
     )
   }
 }
-
-export const GET = withoutAuth(GETHandler);
-export const POST = withoutAuth(POSTHandler);
-export const DELETE = withoutAuth(DELETEHandler);

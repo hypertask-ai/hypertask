@@ -1,4 +1,3 @@
-import { withoutAuth } from "#with-auth";
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 
@@ -38,7 +37,7 @@ const createSchema = z.object({
   enabled: z.boolean().optional().default(true),
 });
 
-async function GETHandler(request: NextRequest) {
+export async function GET(request: NextRequest) {
   const rateLimited = await checkMcpRateLimit(request);
   if (rateLimited) return rateLimited;
   const ctx = await validateMcpAuth(request);
@@ -68,7 +67,7 @@ async function GETHandler(request: NextRequest) {
   }
 }
 
-async function POSTHandler(request: NextRequest) {
+export async function POST(request: NextRequest) {
   const rateLimited = await checkMcpRateLimit(request);
   if (rateLimited) return rateLimited;
   const ctx = await validateMcpAuth(request);
@@ -114,6 +113,3 @@ function parseCreateInput(input: z.infer<typeof createSchema>) {
     argumentHint: input.argument_hint?.trim() || null,
   };
 }
-
-export const GET = withoutAuth(GETHandler);
-export const POST = withoutAuth(POSTHandler);

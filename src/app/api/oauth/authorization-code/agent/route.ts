@@ -1,5 +1,3 @@
-import { logger as htLogger } from "#logger";
-import { withoutAuth } from "#with-auth";
 import { NextRequest, NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import prisma from "@/lib/prisma";
@@ -11,13 +9,13 @@ async function getCurrentUserFromCookies() {
     if (!userCookie?.value) return null;
     return JSON.parse(userCookie.value) as { id?: number };
   } catch (error: any) {
-    htLogger.info("🚀 ~ getCurrentUserFromCookies ~ error:", error);
+    console.log("🚀 ~ getCurrentUserFromCookies ~ error:", error);
     return null;
   }
 }
 
 // For binding or clearing the agent_id on a pending OAuth authorization code (right before token exchange)
-async function POSTHandler(request: NextRequest) {
+export async function POST(request: NextRequest) {
   try {
     const user = await getCurrentUserFromCookies();
     if (!user?.id) {
@@ -96,12 +94,10 @@ async function POSTHandler(request: NextRequest) {
 
     return NextResponse.json({ success: true, agentId: agentIdToSet });
   } catch (error) {
-    htLogger.error("Error binding/clearing agent_id on auth code:", error);
+    console.error("Error binding/clearing agent_id on auth code:", error);
     return NextResponse.json(
       { success: false, error: "Internal server error" },
       { status: 500 }
     );
   }
 }
-
-export const POST = withoutAuth(POSTHandler);

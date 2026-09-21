@@ -1,5 +1,4 @@
 #!/usr/bin/env tsx
-import { logger as htLogger } from "#logger";
 
 /**
  * HTPR-3836 one-off repair: re-sort every view's board_columns_view to match
@@ -52,7 +51,7 @@ async function main() {
     if (before === after) continue;
 
     changed++;
-    htLogger.info(
+    console.log(
       `project ${view.project_view.projectId} view "${view.title}" (${view.id}): [${before}] -> [${after}]`
     );
     if (apply) {
@@ -65,7 +64,7 @@ async function main() {
     }
   }
 
-  htLogger.info(
+  console.log(
     `${changed} of ${views.length} views ${
       apply ? "repaired" : "need repair (dry run, re-run with --apply to write)"
     }`
@@ -74,7 +73,7 @@ async function main() {
 
 main()
   .catch((error) => {
-    htLogger.error(error);
+    console.error(error);
     process.exitCode = 1;
   })
   .finally(() => prisma.$disconnect());

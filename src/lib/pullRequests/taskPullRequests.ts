@@ -1,4 +1,3 @@
-import { env as appEnv } from "#env";
 import { Prisma } from "@prisma/client";
 import prisma from "@/lib/prisma";
 import { sanitizeAgentCredentials } from "@/lib/agents/publicAgent";
@@ -89,7 +88,7 @@ export function toPublicTaskPullRequest(
 }
 
 function githubHeaders(): HeadersInit {
-  const token = appEnv.GITHUB_TOKEN;
+  const token = process.env.GITHUB_TOKEN;
   return {
     Accept: "application/vnd.github+json",
     "User-Agent": "Hypertask-Pull-Request-Linker",

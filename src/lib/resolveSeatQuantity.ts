@@ -1,4 +1,3 @@
-import { logger as htLogger } from "#logger";
 import prisma from "@/lib/prisma";
 import { computeSeatQuantity } from "@/lib/seatQuantity";
 
@@ -67,7 +66,7 @@ export async function resolveSeatQuantity(
       memberEmails: [ownerEmail, ...team.members.map((m) => m.user.email)],
     });
   } catch (e) {
-    htLogger.error(
+    console.error(
       e,
       "resolveSeatQuantity failed, falling back to fallback quantity",
     );

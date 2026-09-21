@@ -1,4 +1,3 @@
-import { logger as htLogger } from "#logger";
 // Run: npx tsx src/lib/mcp/listQuery.test.ts
 import assert from 'node:assert/strict'
 import {
@@ -196,4 +195,4 @@ function demo() {
 }
 
 demo()
-htLogger.info('listQuery tests passed')
+console.log('listQuery tests passed')

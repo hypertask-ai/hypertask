@@ -1,5 +1,4 @@
 'use client'
-import { logger as htLogger } from "#logger";
 import nookies from "nookies"
 import {  IFavorites, IProject, IProjectsAll, ISection, IUser } from "@/models/model";
 
@@ -960,6 +959,7 @@ useEffect(() => {
   if (shouldReplaceUrl) {
     const search = params.toString();
     const newUrl = `/project${search ? `?${search}` : ""}`;
+    console.log('🔄 Updating URL:', { from: pathname + (searchParams.toString() ? `?${searchParams.toString()}` : ''), to: newUrl, slugs });
     if (shallowBoardSwitchEnabled && pathname === "/project") {
       window.history.replaceState(
         getNextRouterAwareHistoryState(window.history.state),
@@ -980,6 +980,7 @@ useEffect(() => {
   if (!dataFetching && data?.updatedProjects && projectIndex === -1 && slugs) {
     if (retryCountRef.current < MAX_RETRIES) {
       retryCountRef.current += 1
+      console.log(`⚠️ Project not found in list, retrying fetch... (attempt ${retryCountRef.current}/${MAX_RETRIES})`, { slugs, projectCount: data.updatedProjects.length })
       // Retry after a short delay to allow database to sync
       const retryTimer = setTimeout(() => {
         refetchProjects()
@@ -987,6 +988,7 @@ useEffect(() => {
       return () => clearTimeout(retryTimer)
     } else {
       // Max retries reached - project likely doesn't exist or user doesn't have access
+      console.error(`❌ Project not found after ${MAX_RETRIES} retries. Redirecting to homepage.`, { slugs })
       // Reset retry counter for next navigation
       retryCountRef.current = 0
       setProjectLookupFailed(true)
@@ -1035,6 +1037,7 @@ useEffect(() => {
       delete hydrationRetryAttemptsRef.current[proj.id]
       setHydrationFailedProjectId((failedId) => failedId === proj.id ? null : failedId)
     } catch (e) {
+      console.error("Failed to hydrate active board data", e)
       const failedAttempts = (hydrationRetryAttemptsRef.current[proj.id] ?? 0) + 1
       hydrationRetryAttemptsRef.current[proj.id] = failedAttempts
       if (failedAttempts <= 2) {
@@ -1070,6 +1073,7 @@ const activeSortingMode: TBoardSortingViewMode = useMemo(()=>{
 
 // Update previousBoard cookie whenever user lands on a project
 useEffect(() => {
+  console.log("🪵 ~ Project data fetched", !!data)
   if (data?.updatedProjects && data.updatedProjects[projectIndex] && slugs) {
     const currentProject = data.updatedProjects[projectIndex];
     const activeView = getViewFromProject(currentProject);
@@ -1089,6 +1093,7 @@ useEffect(() => {
       path: "/",
     });
     
+    console.log('✅ Updated previousBoard cookie:', cookieValue);
   }
 }, [data?.updatedProjects, projectIndex, slugs, currentView]);
 
@@ -1424,6 +1429,7 @@ useGetAllTeamsMinimal(_currentUser?.id ?? null, undefined, {
 })
 useViewCyclingShortcuts(_currentProject)
 
+// console.log("🚀 ~ file: [...boardURL].tsx:46 ~ currentProject:", projectSections) 
 
 
 
@@ -1554,7 +1560,7 @@ const ensureBoardLoaded = async (index:number):Promise<IProject|null> => {
     queryClient.setQueryData(BOARD_TASKS_KEY(target.id, _currentUser.id), boardPayload) // keep side cache warm
     return hydrateBoardWithPayload(deepCopy(target), boardPayload)
   } catch (e) {
-    htLogger.error("Failed to load board data on switch", e)
+    console.error("Failed to load board data on switch", e)
     return null
   }
 }

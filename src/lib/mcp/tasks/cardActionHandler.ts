@@ -1,4 +1,3 @@
-import { logger as htLogger } from "#logger";
 import { NextRequest, NextResponse } from 'next/server'
 import { checkMcpRateLimit, validateMcpAuth } from '@/lib/mcp/auth'
 import prisma from '@/lib/prisma'
@@ -160,7 +159,7 @@ export function createTaskCardActionHandler(
         { headers: { 'Cache-Control': 'private, no-store' } },
       )
     } catch (error) {
-      htLogger.error('[MCP Task Card Action]', error)
+      console.error('[MCP Task Card Action]', error)
       return NextResponse.json(
         { success: false, error: 'Failed to update task card action' },
         { status: 500 },

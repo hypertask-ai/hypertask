@@ -150,6 +150,7 @@ const AiDefaultModelsSection = () => {
         }
       })
       .catch((error) => {
+        console.log("imageGeneration preference update error:", error);
       });
   };
 

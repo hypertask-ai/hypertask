@@ -42,8 +42,10 @@ const useMoveTasks = (props: IUseMoveTasks) => {
     direction: "Left" | "Right"
 
   ) => {
+    console.time("Moving item horizontally: ")
     const updatedAt = new Date()
     const currSectionIdx = sections.findIndex((sec) => sec.sectionId === sectionId);
+    console.log("🚀 ~ useMoveTasks ~ sections:", sections)
     const currSection = sections[currSectionIdx]
     const currFilteredSection = filteredSections[currSectionIdx]
     
@@ -116,6 +118,7 @@ const useMoveTasks = (props: IUseMoveTasks) => {
         }
         let itemsToSort = returnSortedItems(newSections[index].items,_currentProject! )
         
+        // console.log("🚀 ~ newSections.forEach ~ itemsToSort:", itemsToSort)
         newSections[index].items = itemsToSort
       }
 
@@ -125,7 +128,9 @@ const useMoveTasks = (props: IUseMoveTasks) => {
     _currentProject && updateActiveItemAndItemInView(itemId, _currentProject.id, getActiveSection());
     setActiveSection(targetSectionIdx)
     
+    console.timeEnd("Moving item horizontally: ")
     const updatedTasks = newSections.flatMap((x)=>x.items)
+    console.log("🚀 ~ useMoveTasks ~ updatedTasks:", updatedTasks)
     updateCache(newSections,updatedTasks)
 
 
@@ -234,6 +239,7 @@ const useMoveTasks = (props: IUseMoveTasks) => {
     sectionId: number,
     itemId: number
   ) => {
+    console.time("Moving item vertically downwards: ")
     if(sorting_mode_current === "UpdatedAt") return toast("Cannot move tasks while kanban is in Last Updated mode")
 
     const sectionsMap:any = new Map(sections.map(section => [section.sectionId, section]));
@@ -288,6 +294,7 @@ const useMoveTasks = (props: IUseMoveTasks) => {
     });
 
     _currentProject && updateActiveItemAndItemInView(itemId, _currentProject.id, getActiveSection());
+    console.timeEnd("Moving item vertically downwards: ")
     const updatedTasks = newSections.flatMap((x)=>x.items)
     updateCache(newSections, updatedTasks)
     const activeElement_=document.getElementById(`task-${belowItem.id}`)

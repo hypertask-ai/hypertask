@@ -62,8 +62,8 @@ export const AI_PROVIDERS: TAiProviderInfo[] = [
     chinaHosted: false,
     requestDestination: "Anthropic",
     byokKey: "claude",
-    keyUrl: "https://debug.anthropic.com/settings/keys",
-    keyUrlLabel: "debug.anthropic.com/settings/keys",
+    keyUrl: "https://console.anthropic.com/settings/keys",
+    keyUrlLabel: "console.anthropic.com/settings/keys",
     keyPlaceholder: "Enter your Anthropic API key",
   },
   {
@@ -126,8 +126,8 @@ export const AI_PROVIDERS: TAiProviderInfo[] = [
     requestDestination: "Alibaba (China-hosted)",
     gdprNote: CHINA_HOSTED_GDPR_NOTE,
     byokKey: "alibaba",
-    keyUrl: "https://dashscope.debug.aliyun.com/apiKey",
-    keyUrlLabel: "dashscope.debug.aliyun.com",
+    keyUrl: "https://dashscope.console.aliyun.com/apiKey",
+    keyUrlLabel: "dashscope.console.aliyun.com",
     keyPlaceholder: "Enter your DashScope API key",
     openAiCompatibleBaseUrl:
       "https://dashscope.aliyuncs.com/compatible-mode/v1",

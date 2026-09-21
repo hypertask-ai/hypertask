@@ -1,6 +1,3 @@
-import { env as appEnv } from "#env";
-import { logger as htLogger } from "#logger";
-import { withoutAuth } from "#with-auth";
 import type { NextApiRequest, NextApiResponse } from "next";
 import prisma from "@/lib/prisma";
 import { withQstashSignature } from "@/lib/qstash";
@@ -30,9 +27,9 @@ import { createNotificationReplyAddress } from "@/lib/email/inboundReply";
 
 function baseUrl(): string {
   return (
-    appEnv.NEXT_PUBLIC_BASEURL ||
-    (appEnv.VERCEL_URL
-      ? `https://${appEnv.VERCEL_URL}`
+    process.env.NEXT_PUBLIC_BASEURL ||
+    (process.env.VERCEL_URL
+      ? `https://${process.env.VERCEL_URL}`
       : "http://localhost:3000")
   );
 }
@@ -197,7 +194,7 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
 
     return res.status(200).json({ ok: true, sent: true, events: events.length });
   } catch (error) {
-    htLogger.info("🤔 ~ notificationDigestQueue ~ error:", error);
+    console.log("🤔 ~ notificationDigestQueue ~ error:", error);
     // 500 so QStash retries. Nothing has been sent on this path: sendEmail is
     // the last statement that can throw, and it throws only on a non-OK
     // response. The watermark makes a retry that follows a delivered-but-
@@ -218,7 +215,7 @@ async function sendFallback(userId: number, taskId: number): Promise<boolean> {
   const body = fallback.body as unknown as INotificationBody;
   if (!body?.recipient) return false;
 
-  htLogger.info(
+  console.log(
     "🤔 ~ notificationDigestQueue ~ no notification row, sending the original email instead:",
     { userId, taskId, type: fallback.type }
   );
@@ -246,7 +243,7 @@ async function sendFallback(userId: number, taskId: number): Promise<boolean> {
   return true;
 }
 
-export default withoutAuth(withQstashSignature(handler));
+export default withQstashSignature(handler);
 
 export const config = {
   api: {

@@ -1,5 +1,3 @@
-import { logger as htLogger } from "#logger";
-import { withAuth } from "#with-auth";
 import { NextRequest, NextResponse } from 'next/server'
 import { cookies } from 'next/headers'
 import jwt from 'jsonwebtoken'
@@ -31,7 +29,7 @@ export const dynamic = 'force-dynamic'
  * bearer token, so it is reported as a client of that token rather than as a
  * separate secret.
  */
-async function GETHandler(_request: NextRequest) {
+export async function GET(_request: NextRequest) {
   try {
     const user = await getApiKeyOwnerFromCookies()
     if (!user?.id) {
@@ -150,12 +148,10 @@ async function GETHandler(_request: NextRequest) {
       connectedClients: Array.from(clientMap.values()),
     })
   } catch (error) {
-    htLogger.error('Error loading developer access:', error)
+    console.error('Error loading developer access:', error)
     return NextResponse.json(
       { success: false, error: 'Internal server error' },
       { status: 500 }
     )
   }
 }
-
-export const GET = withAuth(GETHandler);

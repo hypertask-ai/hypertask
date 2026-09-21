@@ -1,4 +1,3 @@
-import { logger as htLogger } from "#logger";
 import type { PrismaClient } from "@prisma/client";
 
 type ChatPersistenceDb = Pick<PrismaClient, "chatMessage" | "chatSession">;
@@ -52,7 +51,7 @@ export async function persistAssistantMessage({
   try {
     storedContent = await linkify(content, userId);
   } catch (error) {
-    htLogger.error(
+    console.error(
       "[ai/chat/stream] assistant linkification failed, saving unlinked",
       error,
     );
@@ -97,7 +96,7 @@ export async function persistAssistantMessage({
   } catch (error) {
     // The reply is already durable. Returning false here would make a connected
     // client retry through add-message and create a duplicate assistant reply.
-    htLogger.error(
+    console.error(
       "[ai/chat/stream] session metadata update failed after reply persistence",
       error,
     );

@@ -1,5 +1,3 @@
-import { logger as htLogger } from "#logger";
-import { withAuth } from "#with-auth";
 import { cookies } from 'next/headers'
 import { NextRequest, NextResponse } from 'next/server'
 
@@ -21,7 +19,7 @@ function isRequestBody(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === 'object' && !Array.isArray(value)
 }
 
-async function POSTHandler(request: NextRequest, { params }: RouteContext) {
+export async function POST(request: NextRequest, { params }: RouteContext) {
   try {
     const userCookie = (await cookies()).get('nookies_user')
     if (!userCookie?.value) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
@@ -85,9 +83,7 @@ async function POSTHandler(request: NextRequest, { params }: RouteContext) {
       throw error
     }
   } catch (error) {
-    htLogger.error('[Restore Page Version] Error:', error)
+    console.error('[Restore Page Version] Error:', error)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
 }
-
-export const POST = withAuth(POSTHandler);

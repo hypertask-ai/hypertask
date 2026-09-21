@@ -11,7 +11,7 @@ const stubbedPaths = [
   "src/utils/controllers/labels/index.ts",
   "src/utils/controllers/views/index.ts",
   "src/lib/ai/labelClassifier.ts",
-  "src/lib/api/withAuth.ts",
+  "src/lib/auth/getSessionUser.ts",
   "src/lib/realtime/server.ts",
   "src/utils/controllers/projects/getAllIncludes.ts",
   "src/utils/controllers/projects/views/boardFilterWriteLock.ts",
@@ -56,10 +56,8 @@ const loadHandler = ({
     scheduleBackfillAiLabel: (labelId) =>
       scheduleBackfillAiLabel(labelId, transactionCommitted),
   });
-  stubModule("src/lib/api/withAuth.ts", {
-    getAuthSession: async () => sessionUser,
-    withAuth: (handler) => handler,
-    withoutAuth: (handler) => handler,
+  stubModule("src/lib/auth/getSessionUser.ts", {
+    getSessionUser: async () => sessionUser,
   });
   stubModule("src/lib/realtime/server.ts", {
     broadcastBoardChange: () => undefined,

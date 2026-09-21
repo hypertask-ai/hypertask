@@ -1,4 +1,3 @@
-import { logger as htLogger } from "#logger";
 import { NextApiHandler, NextApiRequest, NextApiResponse } from "next";
 
 
@@ -17,7 +16,7 @@ const getAllUsers= async () => {
                 res:users
             })
         } catch (error) {
-            htLogger.info(error);
+            console.log(error);
             
             return ({
                 status:200,

@@ -1,4 +1,3 @@
-import { logger as htLogger } from "#logger";
 import { NextApiHandler, NextApiRequest, NextApiResponse } from "next";
 
 
@@ -17,7 +16,7 @@ const handler: NextApiHandler = async (req: NextApiRequest, res: NextApiResponse
                     id: parseInt((id as string))
                 }
             })
-            htLogger.info("🚀 ~ file: markAsDone.ts:18 ~ consthandler:NextApiHandler= ~ notification:", notification)
+            console.log("🚀 ~ file: markAsDone.ts:18 ~ consthandler:NextApiHandler= ~ notification:", notification)
             if (!notification) {
                 return res.status(400).json({ message: "Notification is not found" });
             }
@@ -32,7 +31,7 @@ const handler: NextApiHandler = async (req: NextApiRequest, res: NextApiResponse
             })
             res.status(200).json(newNotification);
         } catch (error) {
-            htLogger.info(error);
+            console.log(error);
             
             res.status(500).json({ message: "Internal server error" });
         }

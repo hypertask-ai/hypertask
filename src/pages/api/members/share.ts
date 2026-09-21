@@ -1,5 +1,3 @@
-import { logger as htLogger } from "#logger";
-import { withAuth } from "#with-auth";
 import membersShare from "@/utils/controllers/members/share";
 import { NextApiHandler, NextApiRequest, NextApiResponse } from "next";
 
@@ -19,7 +17,7 @@ const handler: NextApiHandler = async (
       const response = await membersShare(userId, shareId);
       return res.status(200).json(response.json);
     } catch (error) {
-      htLogger.info(error);
+      console.log(error);
       return res.status(400).json({ message: JSON.stringify(error) });
     }
   } else {
@@ -27,4 +25,4 @@ const handler: NextApiHandler = async (
   }
 };
 
-export default withAuth(handler);
+export default handler;

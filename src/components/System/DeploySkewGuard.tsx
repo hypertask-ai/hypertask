@@ -1,6 +1,4 @@
 "use client";
-import { env as appEnv } from "#env";
-
 
 import { useEffect, useRef } from "react";
 import { usePathname } from "next/navigation";
@@ -122,7 +120,7 @@ export default function DeploySkewGuard() {
       return;
     }
 
-    const myBuildId = appEnv.NEXT_PUBLIC_BUILD_ID;
+    const myBuildId = process.env.NEXT_PUBLIC_BUILD_ID;
     // No stable build id (local dev, or var not wired) → nothing to compare.
     if (!myBuildId || myBuildId === "dev") return;
 

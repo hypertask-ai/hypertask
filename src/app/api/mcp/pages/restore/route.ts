@@ -1,5 +1,3 @@
-import { logger as htLogger } from "#logger";
-import { withoutAuth } from "#with-auth";
 import { NextRequest, NextResponse } from 'next/server'
 
 import { checkMcpRateLimit, validateMcpAuth } from '@/lib/mcp/auth'
@@ -21,7 +19,7 @@ type RestorePageBody = {
   version_id?: unknown
 }
 
-async function POSTHandler(request: NextRequest) {
+export async function POST(request: NextRequest) {
   try {
     const ctx = await validateMcpAuth(request)
     if (!ctx) {
@@ -108,9 +106,7 @@ async function POSTHandler(request: NextRequest) {
       throw error
     }
   } catch (error) {
-    htLogger.error('[MCP Restore Page] Error:', error)
+    console.error('[MCP Restore Page] Error:', error)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
 }
-
-export const POST = withoutAuth(POSTHandler);

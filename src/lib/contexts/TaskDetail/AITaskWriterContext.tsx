@@ -1,4 +1,3 @@
-import { logger as htLogger } from "#logger";
 import React, { createContext, useContext, useState, useCallback, useRef, ReactNode, useEffect } from "react";
 import { useRecoilState, useRecoilValue } from "@/lib/state";
 import { currentProjectAtom, uploadingStateCreateTaskModalAtom, type CurrentBoardBilling } from "@/store";
@@ -416,7 +415,7 @@ export const AITaskWriterProvider: React.FC<AITaskWriterProviderProps> = ({
     );
 
     if (fileExists) {
-      htLogger.warn(`File "${file.name}" already exists`);
+      console.warn(`File "${file.name}" already exists`);
       return;
     }
 
@@ -573,7 +572,7 @@ export const AITaskWriterProvider: React.FC<AITaskWriterProviderProps> = ({
         setProcessedPDFs(pdfs);
         setProcessedDOCX(docx);
       } catch (error) {
-        htLogger.error('Error processing attachments:', error);
+        console.error('Error processing attachments:', error);
         setProcessedImages([]);
         setProcessedPDFs([]);
         setProcessedDOCX([]);
@@ -779,7 +778,7 @@ export const AITaskWriterProvider: React.FC<AITaskWriterProviderProps> = ({
             });
             persistentPreview = await base64Promise;
           } catch (error) {
-            htLogger.error('Error converting blob to base64:', error);
+            console.error('Error converting blob to base64:', error);
           }
         }
 

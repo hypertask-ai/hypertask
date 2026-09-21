@@ -1,4 +1,3 @@
-import { logger as htLogger } from "#logger";
 import { decryptByokSecret } from "@/lib/crypto/byokCipher";
 import { maskByokSecret } from "@/lib/crypto/maskByokSecret";
 
@@ -21,7 +20,7 @@ export function maskAgentProviderKey(
         maskedKey: maskByokSecret(decryptByokSecret(ciphertext)),
       };
     } catch (error) {
-      htLogger.error(
+      console.error(
         `[agents] provider key decrypt failed for provider=${row.provider}`,
         error,
       );

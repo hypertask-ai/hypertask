@@ -1,4 +1,3 @@
-import { env as appEnv } from "#env";
 import {
   ModalContainerCustom,
   ModalHeaderComp,
@@ -66,7 +65,7 @@ const ShareTaskModal: React.FC<TProps> = ({ closeHandler }) => {
   );
 
   const baseURL =
-    appEnv.NEXT_PUBLIC_BASEURL || "https://app.hypertask.ai";
+    process.env.NEXT_PUBLIC_BASEURL || "https://app.hypertask.ai";
 
   const getPrivateURL = (): string => {
     if (!currentTask?.uniqueIndex || !currentTask?.projectId) return "";

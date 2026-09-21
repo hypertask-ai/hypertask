@@ -1,5 +1,3 @@
-import { logger as htLogger } from "#logger";
-import { withoutAuth } from "#with-auth";
 import { NextRequest, NextResponse } from "next/server";
 import { validateMcpAuth, checkMcpRateLimit } from "@/lib/mcp/auth";
 import { validateProjectAccess } from "@/lib/mcp/tasks/services";
@@ -31,7 +29,7 @@ import {
  * Auth: MCP JWT (Bearer token)
  * Errors: 401 (invalid/missing JWT), 403 (no permission), 404 (project not found)
  */
-async function GETHandler(request: NextRequest, props: { params: Promise<{ projectId: string }> }) {
+export async function GET(request: NextRequest, props: { params: Promise<{ projectId: string }> }) {
   const params = await props.params;
   try {
     const rateLimited = await checkMcpRateLimit(request);
@@ -104,7 +102,7 @@ async function GETHandler(request: NextRequest, props: { params: Promise<{ proje
       { status: 200 }
     );
   } catch (err) {
-    htLogger.error("[MCP List Project Members] Error:", err);
+    console.error("[MCP List Project Members] Error:", err);
     return NextResponse.json(
       {
         success: false,
@@ -115,7 +113,7 @@ async function GETHandler(request: NextRequest, props: { params: Promise<{ proje
   }
 }
 
-async function POSTHandler(request: NextRequest, props: { params: Promise<{ projectId: string }> }) {
+export async function POST(request: NextRequest, props: { params: Promise<{ projectId: string }> }) {
   const params = await props.params;
   try {
     const rateLimited = await checkMcpRateLimit(request);
@@ -310,7 +308,7 @@ async function POSTHandler(request: NextRequest, props: { params: Promise<{ proj
       { status: 500 }
     );
   } catch (err) {
-    htLogger.error("[MCP Add Project Member] Error:", err);
+    console.error("[MCP Add Project Member] Error:", err);
     return NextResponse.json(
       {
         success: false,
@@ -320,6 +318,3 @@ async function POSTHandler(request: NextRequest, props: { params: Promise<{ proj
     );
   }
 }
-
-export const GET = withoutAuth(GETHandler);
-export const POST = withoutAuth(POSTHandler);

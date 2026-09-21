@@ -1,10 +1,9 @@
-import { env as appEnv } from "#env";
 import type { NextApiRequest, NextApiResponse } from "next";
 import { timingSafeEqual } from "crypto";
 import { getAuth } from "@/lib/firebase-admin";
 
 function hasOwnerCliCredential(authorization: string): boolean {
-  const secret = appEnv.ANNOUNCEMENTS_SECRET_KEY;
+  const secret = process.env.ANNOUNCEMENTS_SECRET_KEY;
   if (!secret) return false;
 
   const provided = Buffer.from(authorization);

@@ -39,6 +39,7 @@ const getTaskData = async (match: HypertaskUrlMatch): Promise<string> => {
 
     return match.fullUrl;
   } catch (error) {
+    console.log("🤔 ~ fetchHypertaskTitle ~ error:", error);
     return match.fullUrl;
   }
 };
@@ -146,6 +147,7 @@ export const HypertaskPasteRule = Extension.create({
                 }
               })
               .catch((error) => {
+                console.log("🤔 ~ addProseMirrorPlugins ~ error:", error);
                 // On error, replace placeholder with the original URL
                 const currentState = view.state;
                 let foundPos = null;

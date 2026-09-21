@@ -1,4 +1,3 @@
-import { logger as htLogger } from "#logger";
 /**
  * @fileoverview
  * Shared AI Task Writer / Write with AI harness.
@@ -274,19 +273,19 @@ export async function prepareTaskWriterRun(
             );
           })
           .catch((error) => {
-            htLogger.error("[ai/task-writer] related candidates failed", error);
+            console.error("[ai/task-writer] related candidates failed", error);
             return "<RELATED_TICKET_CANDIDATES>\nunavailable:search_failed Do not invent related tickets. Ask whether this might already exist on the board.\n</RELATED_TICKET_CANDIDATES>";
           })
       : Promise.resolve(""),
     boardResearchEnabled
       ? loadTaskWriterStyleExamples(body.projectId).catch((error) => {
-          htLogger.error("[ai/task-writer] style examples failed", error);
+          console.error("[ai/task-writer] style examples failed", error);
           return "";
         })
       : Promise.resolve(""),
     boardResearchEnabled
       ? loadTaskWriterBoardVocabulary(body.projectId).catch((error) => {
-          htLogger.error("[ai/task-writer] board vocabulary failed", error);
+          console.error("[ai/task-writer] board vocabulary failed", error);
           return "";
         })
       : Promise.resolve(""),

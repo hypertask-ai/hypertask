@@ -1,6 +1,5 @@
 const assert = require("node:assert/strict");
 const path = require("node:path");
-const { passThroughAuth } = require("./helpers/pass-through-auth.cjs");
 const test = require("node:test");
 
 const root = path.resolve(__dirname, "..");
@@ -33,7 +32,6 @@ function stubModule(relativePath, exports) {
 }
 
 class BoardFilterError extends Error {}
-stubModule("src/lib/api/withAuth.ts", passThroughAuth());
 stubModule("src/lib/prisma.ts", { __esModule: true, default: prisma });
 stubModule("src/lib/realtime/server.ts", { broadcastBoardChange: () => undefined });
 stubModule("src/models/Views/model.ts", {

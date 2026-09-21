@@ -1,8 +1,7 @@
-import { logger as htLogger } from "#logger";
-import { getAuthSession, withAuth } from "#with-auth";
 import { NextRequest, NextResponse } from "next/server";
 import { Prisma } from "@prisma/client";
 import prisma from "@/lib/prisma";
+import { getSessionUser } from "@/lib/auth/getSessionUser";
 import { isCalendarViewPatchInput } from "@/models/Calendar/model";
 import {
   calendarViewSelect,
@@ -13,12 +12,12 @@ import {
 
 export const runtime = "nodejs";
 
-async function PATCHHandler(
+export async function PATCH(
   request: NextRequest,
   props: { params: Promise<{ id: string }> },
 ) {
   try {
-    const session = await getAuthSession(request.headers);
+    const session = await getSessionUser(request.headers);
     if (!session) {
       return NextResponse.json(
         { success: false, error: "Unauthorized" },
@@ -112,7 +111,7 @@ async function PATCHHandler(
       view: serializeCalendarView(view),
     });
   } catch (error) {
-    htLogger.error("Error updating calendar view:", error);
+    console.error("Error updating calendar view:", error);
     return NextResponse.json(
       { success: false, error: "Internal server error" },
       { status: 500 },
@@ -120,12 +119,12 @@ async function PATCHHandler(
   }
 }
 
-async function DELETEHandler(
+export async function DELETE(
   request: NextRequest,
   props: { params: Promise<{ id: string }> },
 ) {
   try {
-    const session = await getAuthSession(request.headers);
+    const session = await getSessionUser(request.headers);
     if (!session) {
       return NextResponse.json(
         { success: false, error: "Unauthorized" },
@@ -154,13 +153,10 @@ async function DELETEHandler(
     await prisma.calendar_View.delete({ where: { id } });
     return NextResponse.json({ success: true });
   } catch (error) {
-    htLogger.error("Error deleting calendar view:", error);
+    console.error("Error deleting calendar view:", error);
     return NextResponse.json(
       { success: false, error: "Internal server error" },
       { status: 500 },
     );
   }
 }
-
-export const PATCH = withAuth(PATCHHandler);
-export const DELETE = withAuth(DELETEHandler);

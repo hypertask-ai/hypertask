@@ -1,5 +1,3 @@
-import { logger as htLogger } from "#logger";
-import { withAuth } from "#with-auth";
 import { NextRequest, NextResponse } from "next/server";
 
 import { getCurrentUserFromCookies } from "@/app/api/ai/_lib/editorAi";
@@ -9,7 +7,7 @@ export const runtime = "nodejs";
 
 const DEFAULT_LOOKBACK_MS = 15 * 60 * 1000;
 
-async function GETHandler(request: NextRequest) {
+export async function GET(request: NextRequest) {
   try {
     const user = await getCurrentUserFromCookies();
     if (typeof user?.id !== "number") {
@@ -45,12 +43,10 @@ async function GETHandler(request: NextRequest) {
       at: match ? match.createdAt.toISOString() : undefined,
     });
   } catch (error) {
-    htLogger.error("GET [users/ai-connection-status] failed:", error);
+    console.error("GET [users/ai-connection-status] failed:", error);
     return NextResponse.json(
       { error: "Internal server error" },
       { status: 500 },
     );
   }
 }
-
-export const GET = withAuth(GETHandler);

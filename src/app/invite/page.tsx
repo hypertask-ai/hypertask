@@ -64,6 +64,7 @@ export default async function InvitePage(
         throw error;
       }
       // Only log actual errors, not redirects
+      console.error("Error redeeming invite:", error);
       // Fall through to show invite component
     }
   }

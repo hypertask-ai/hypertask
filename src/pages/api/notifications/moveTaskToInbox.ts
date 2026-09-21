@@ -1,6 +1,5 @@
-import { logger as htLogger } from "#logger";
-import { getAuthSession, withAuth } from "#with-auth";
 import { NextApiHandler, NextApiRequest, NextApiResponse } from "next";
+import { getSessionUser } from "@/lib/auth/getSessionUser";
 import { ensureTaskMovedToInbox } from "@/lib/taskCardActions/inboxState";
 
 const handler: NextApiHandler = async (
@@ -10,7 +9,7 @@ const handler: NextApiHandler = async (
   if (req.method === "POST") {
     try {
       // HTPR-4772: ignore the body userId and use the signed session.
-      const session = await getAuthSession(
+      const session = await getSessionUser(
         new Headers(req.headers as Record<string, string>)
       );
       if (!session) return res.status(401).json({ message: "Unauthorized" });
@@ -33,7 +32,7 @@ const handler: NextApiHandler = async (
       );
       return res.status(200).json({ message: "Success" });
     } catch (error) {
-      htLogger.info(error);
+      console.log(error);
 
       return res.status(500).json({ message: "Internal server error" });
     }
@@ -42,4 +41,4 @@ const handler: NextApiHandler = async (
   }
 };
 
-export default withAuth(handler);
+export default handler;

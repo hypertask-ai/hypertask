@@ -198,9 +198,11 @@ const ManageColumns = ({ toggleModal }: { toggleModal: (add: boolean) => void })
         await synchronizeBoardSectionOrder(reorderedSections);
         await updateCache(reorderedSections, true);
       } catch (persistError) {
+        console.log("🚀 ~ onDragEndHandler ~ persist failed:", persistError);
         toast.error("Column order could not be saved");
       }
     } catch (error) {
+      console.log("🚀 ~ onDragEndHandler ~ error:", error);
     }
   };
 
@@ -212,6 +214,7 @@ const ManageColumns = ({ toggleModal }: { toggleModal: (add: boolean) => void })
         saveEmptySectionsAPI(currentProject, setting);
       }
     } catch (error) {
+      console.log("🚀 ~ handleEmptySections ~ error:", error);
     } finally {
       setUpdating(false);
     }
@@ -313,6 +316,7 @@ const ManageColumns = ({ toggleModal }: { toggleModal: (add: boolean) => void })
         void queryClient.invalidateQueries({ queryKey: ["projectsAllMinimal"] });
       }
     } catch (error) {
+      console.log("🚀 ~ handleSectionUpdateVis ~ error:", error);
     } finally {
       setUpdating(false);
     }

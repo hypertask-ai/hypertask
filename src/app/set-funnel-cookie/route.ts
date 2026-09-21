@@ -1,9 +1,7 @@
-import { withoutAuth } from "#with-auth";
-import { env as appEnv } from "#env";
 // app/set-funnel-cookie/route.ts
 import { NextRequest, NextResponse } from 'next/server';
 
-async function GETHandler(request: NextRequest) {
+export async function GET(request: NextRequest) {
   const searchParams = request.nextUrl.searchParams;
   const originalPath = searchParams.get('originalPath') || '/login';
   const originalSearch = searchParams.get('originalSearch') || '';
@@ -19,10 +17,8 @@ async function GETHandler(request: NextRequest) {
     path: '/',
     sameSite: 'lax',
     httpOnly: false,
-    secure: appEnv.NODE_ENV === 'production'
+    secure: process.env.NODE_ENV === 'production'
   });
   
   return response;
 }
-
-export const GET = withoutAuth(GETHandler);

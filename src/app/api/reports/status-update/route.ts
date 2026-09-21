@@ -1,6 +1,5 @@
-import { logger as htLogger } from "#logger";
-import { getAuthSession, withAuth } from "#with-auth";
 import prisma from "@/lib/prisma";
+import { getSessionUser } from "@/lib/auth/getSessionUser";
 import { isFeatureEnabled } from "@/lib/flags";
 import { HTPR_6585_BOARD_REPORTS_FLAG } from "@/lib/flags/keys";
 import { getProjectWhere } from "@/utils/controllers/projects/getAllIncludes";
@@ -74,8 +73,8 @@ ${section("Risks and blockers", update.risks)}
 </div>`;
 }
 
-async function POSTHandler(request: NextRequest) {
-  const session = await getAuthSession(request.headers);
+export async function POST(request: NextRequest) {
+  const session = await getSessionUser(request.headers);
   if (!session) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
@@ -330,12 +329,10 @@ Write the status update:
       headline: result.object.headline,
     });
   } catch (error) {
-    htLogger.info("🚀 ~ status-update ~ error:", error);
+    console.log("🚀 ~ status-update ~ error:", error);
     return NextResponse.json(
       { error: "Could not generate the status update" },
       { status: 500 }
     );
   }
 }
-
-export const POST = withAuth(POSTHandler);

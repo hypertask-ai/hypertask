@@ -1,4 +1,3 @@
-import { logger as htLogger } from "#logger";
 import prisma from "@/lib/prisma";
 import { getProjectWhere } from "@/utils/controllers/projects/getAllIncludes";
 
@@ -30,7 +29,7 @@ export const isTaskRelationType = (
  */
 export const addRelatedTasks = async (relations: any, userId: number) => {
   try {
-    htLogger.info("🚀 ~ addRelatedTasks ~ relations:", relations);
+    console.log("🚀 ~ addRelatedTasks ~ relations:", relations);
     const relatedTasks = relations.relatedTasks;
     const invalidRelationType = relatedTasks?.some(
       (related: any) =>
@@ -92,7 +91,7 @@ export const addRelatedTasks = async (relations: any, userId: number) => {
             title: true,
           },
         });
-        htLogger.info("🚀 ~ addRelatedTasks ~ taskToFind:", taskToFind);
+        console.log("🚀 ~ addRelatedTasks ~ taskToFind:", taskToFind);
 
         if (taskToFind) {
           if (
@@ -132,7 +131,7 @@ export const addRelatedTasks = async (relations: any, userId: number) => {
                 },
               },
             });
-            htLogger.info(
+            console.log(
               "🚀 ~ addRelatedTasks ~ existingRelation:",
               existingRelation
             );
@@ -184,7 +183,7 @@ export const addRelatedTasks = async (relations: any, userId: number) => {
       json: relationAdded,
     };
   } catch (error) {
-    htLogger.info("🚀 ~ addRelatedTasks ~ error:", error);
+    console.log("🚀 ~ addRelatedTasks ~ error:", error);
     return {
       status: 500,
       json: [],

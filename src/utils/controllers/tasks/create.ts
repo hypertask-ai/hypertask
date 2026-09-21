@@ -1,4 +1,3 @@
-import { logger as htLogger } from "#logger";
 import { NextApiHandler, NextApiRequest, NextApiResponse } from "next"
 import { PrismaClient } from "@prisma/client"
 import upsertTaskDescription from "../description/common-description-create";
@@ -85,7 +84,7 @@ const create = async ({title, description, section, userId, ranking, projectId,s
             //           updatedAt: new Date(), // Set updatedAt to the current date and time
             //         },
             //       });
-            //     debug.log("Updated")
+            //     console.log("Updated")
             // }
             
             const allowedProject = await prisma.project.findFirst({
@@ -104,7 +103,7 @@ const create = async ({title, description, section, userId, ranking, projectId,s
             var taskCount = await getUniqueTaskCount(projectId)
             
 
-            htLogger.info("🚀 ~ create ~ taskCount:", taskCount)
+            console.log("🚀 ~ create ~ taskCount:", taskCount)
 
 
             const sectionExists = await prisma.section.findFirst({
@@ -112,7 +111,7 @@ const create = async ({title, description, section, userId, ranking, projectId,s
                     id:sectionId
                 }
             })
-            htLogger.info("🚀 ~ create ~ sectionExists:", sectionExists)
+            console.log("🚀 ~ create ~ sectionExists:", sectionExists)
 
             if (!sectionExists) 
             return ({
@@ -147,7 +146,7 @@ const create = async ({title, description, section, userId, ranking, projectId,s
                 projectId,
                 sectionId,
                 updatedAt: currentDate,}
-            htLogger.info("🚀 ~ create ~ body:", body)
+            console.log("🚀 ~ create ~ body:", body)
             const taskCreatedActor = {
                 userId: currentUser.id,
                 agentId: agentId ?? null,
@@ -245,7 +244,7 @@ const create = async ({title, description, section, userId, ranking, projectId,s
                 agentAssignerId: agentId,
             })
             if (autoAssigned === "pending") {
-                htLogger.warn("[task-create] auto-assignment did not complete; retrying the pending task.created handoff", {
+                console.warn("[task-create] auto-assignment did not complete; retrying the pending task.created handoff", {
                     taskId: task.id,
                 });
                 try {
@@ -261,14 +260,14 @@ const create = async ({title, description, section, userId, ranking, projectId,s
                         // final assignment and task-state checks.
                     } else if (recoveryResult === "pending") {
                         // The recovery helper already requeued the marker.
-                        htLogger.warn("[task-create] task.created handoff remains pending for the recovery sweep", {
+                        console.warn("[task-create] task.created handoff remains pending for the recovery sweep", {
                             taskId: task.id,
                         });
                     }
                 } catch (error) {
                     // Keep the creation marker pending. Emitting here could
                     // publish task.created without the final assignees.
-                    htLogger.error("[task-create] pending task.created recovery failed", {
+                    console.error("[task-create] pending task.created recovery failed", {
                         taskId: task.id,
                         error,
                     });
@@ -277,7 +276,7 @@ const create = async ({title, description, section, userId, ranking, projectId,s
                     );
                     await ensurePendingAgentTaskCreatedWebhook(task.id).catch(
                         (fallbackError) => {
-                            htLogger.error("[task-create] could not requeue pending task.created handoff", {
+                            console.error("[task-create] could not requeue pending task.created handoff", {
                                 taskId: task.id,
                                 error: fallbackError,
                             });
@@ -297,7 +296,7 @@ const create = async ({title, description, section, userId, ranking, projectId,s
                 } catch (error) {
                     // The creation transaction left a pending marker; the minute
                     // sweep retries this handoff if the request path stops here.
-                    htLogger.error("[task-create] agent task.created webhook failed", {
+                    console.error("[task-create] agent task.created webhook failed", {
                         taskId: task.id,
                         error,
                     });
@@ -306,7 +305,7 @@ const create = async ({title, description, section, userId, ranking, projectId,s
                     );
                     await ensurePendingAgentTaskCreatedWebhook(task.id).catch(
                         (fallbackError) => {
-                            htLogger.error("[task-create] could not requeue failed task.created handoff", {
+                            console.error("[task-create] could not requeue failed task.created handoff", {
                                 taskId: task.id,
                                 error: fallbackError,
                             });
@@ -321,7 +320,7 @@ const create = async ({title, description, section, userId, ranking, projectId,s
             })
             // return res.json(task)
         } catch (error) {
-            htLogger.info(error)
+            console.log(error)
             return ({
                 status:500,
                 json:{message:"Something Went Wrong!"}

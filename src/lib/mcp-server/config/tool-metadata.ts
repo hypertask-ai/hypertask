@@ -1,4 +1,3 @@
-import { logger as htLogger } from "#logger";
 /**
  * Tool Metadata Configuration
  * 
@@ -512,21 +511,21 @@ export function validateToolMetadata(registeredToolNames: string[]): void {
   const invalidNames = validationResults.filter((r) => !r.valid);
 
   if (missing.length > 0) {
-    htLogger.warn(`⚠️  Tools defined in metadata but not registered: ${missing.join(', ')}`);
+    console.warn(`⚠️  Tools defined in metadata but not registered: ${missing.join(', ')}`);
   }
 
   if (extra.length > 0) {
-    htLogger.warn(`⚠️  Tools registered but not in metadata: ${extra.join(', ')}`);
+    console.warn(`⚠️  Tools registered but not in metadata: ${extra.join(', ')}`);
   }
 
   if (invalidNames.length > 0) {
-    htLogger.error(`❌ Tools with invalid naming (must start with service prefix):`);
+    console.error(`❌ Tools with invalid naming (must start with service prefix):`);
     invalidNames.forEach(({ name, error }) => {
-      htLogger.error(`   - ${name}: ${error}`);
+      console.error(`   - ${name}: ${error}`);
     });
   }
 
   if (missing.length === 0 && extra.length === 0 && invalidNames.length === 0) {
-    htLogger.info(`✓ All ${registeredTools.size} tools properly registered and follow naming standards`);
+    console.info(`✓ All ${registeredTools.size} tools properly registered and follow naming standards`);
   }
 }

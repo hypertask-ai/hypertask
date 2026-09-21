@@ -1,4 +1,3 @@
-import { getAuthSession, withAuth } from "#with-auth";
 import { listTeamAgents } from "@/utils/controllers/agents";
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
@@ -8,6 +7,7 @@ import {
 } from "@/lib/mcp/auth";
 import { getAccessibleAgentBoard } from "@/utils/controllers/agents/boardMembers";
 import { hasTeamMembershipAccess } from "@/utils/controllers/teams/hasTeamMembershipAccess";
+import { getSessionUser } from "@/lib/auth/getSessionUser";
 import { isFeatureEnabled, HTPR_6512_SEED_TEAM_AGENT_FLAG } from "@/lib/flags";
 import {
   ensureDefaultTeamAgent,
@@ -15,11 +15,11 @@ import {
 } from "@/utils/controllers/agents/ensureDefaultTeamAgent";
 
 async function getCurrentUser(request: NextRequest) {
-  const session = await getAuthSession(request.headers);
+  const session = await getSessionUser(request.headers);
   return session ? { id: session.userId } : null;
 }
 
-async function GETHandler(request: NextRequest) {
+export async function GET(request: NextRequest) {
   const user = await getCurrentUser(request);
   if (!user?.id) {
     return NextResponse.json(
@@ -56,7 +56,7 @@ async function GETHandler(request: NextRequest) {
  * POST /api/agents — create an agent
  * Body: { displayName: string, photoURL?: string, projectId: number }
  */
-async function POSTHandler(request: NextRequest) {
+export async function POST(request: NextRequest) {
   const user = await getCurrentUser(request);
   if (!user?.id) {
     return NextResponse.json(
@@ -213,6 +213,3 @@ async function POSTHandler(request: NextRequest) {
     { status: 201 },
   );
 }
-
-export const GET = withAuth(GETHandler);
-export const POST = withAuth(POSTHandler);

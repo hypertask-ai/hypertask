@@ -1,4 +1,3 @@
-import { env as appEnv } from "#env";
 export const BOARD_SYNC_PILOT_PARAM = "local_db";
 export const BOARD_SYNC_PILOT_STORAGE_KEY = "ht_board_sync_pilot";
 
@@ -32,7 +31,7 @@ export const getBoardSyncPilotEnabled = (parameter?: string | null): boolean => 
     parameter,
     storedPreference,
     environmentEnabled:
-      appEnv.NEXT_PUBLIC_SYNCED_BOARD_CACHE !== "false",
+      process.env.NEXT_PUBLIC_SYNCED_BOARD_CACHE !== "false",
   });
 };
 

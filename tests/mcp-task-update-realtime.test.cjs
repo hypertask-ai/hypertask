@@ -11,7 +11,6 @@ const jiti = createJiti(__filename, {
 const { broadcastTaskUpdates } = jiti(
   path.join(root, "src/lib/mcp/tasks/broadcastTaskUpdates.ts"),
 );
-const { logger: htLogger } = jiti(path.join(root, "src/lib/logger.ts"));
 
 test("MCP task updates wait for board and task realtime delivery attempts", async () => {
   const calls = [];
@@ -57,14 +56,14 @@ test("MCP task updates wait for board and task realtime delivery attempts", asyn
 test("realtime delivery failures do not fail a persisted MCP task update", async () => {
   const deliveryFailure = new Error("board delivery failed");
   const warnings = [];
-  const originalWarn = htLogger.warn;
+  const originalWarn = console.warn;
   let releaseTaskDelivery;
   const taskDelivery = new Promise((resolve) => {
     releaseTaskDelivery = resolve;
   });
   let settled = false;
 
-  htLogger.warn = (...args) => warnings.push(args);
+  console.warn = (...args) => warnings.push(args);
   try {
     const pending = broadcastTaskUpdates(
       [{ id: 101, projectId: 15 }],
@@ -91,6 +90,6 @@ test("realtime delivery failures do not fail a persisted MCP task update", async
       ["[MCP Update Task] Realtime delivery failed:", deliveryFailure],
     ]);
   } finally {
-    htLogger.warn = originalWarn;
+    console.warn = originalWarn;
   }
 });

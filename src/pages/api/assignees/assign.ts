@@ -1,5 +1,3 @@
-import { logger as htLogger } from "#logger";
-import { getAuthSession, withAuth } from "#with-auth";
 import { NextApiHandler, NextApiRequest, NextApiResponse } from "next";
 import assigneesAssign, {
   type AssigneeIntent,
@@ -7,6 +5,7 @@ import assigneesAssign, {
 import prisma from "@/lib/prisma";
 import { broadcastBoardChange, broadcastTaskChange } from "@/lib/realtime/server";
 import { getProjectWhere } from "@/utils/controllers/projects/getAllIncludes";
+import { getSessionUser } from "@/lib/auth/getSessionUser";
 import type { IUser } from "@/models/model";
 
 const handler: NextApiHandler = async (
@@ -34,7 +33,7 @@ const handler: NextApiHandler = async (
       return res.status(400).json({ message: "Invalid assignee intent" });
     }
 
-    const session = await getAuthSession(
+    const session = await getSessionUser(
       new Headers(req.headers as Record<string, string>)
     );
     if (!session) {
@@ -91,9 +90,9 @@ const handler: NextApiHandler = async (
       return res.status(response.status).json(response.json);
     }
   } catch (error) {
-    htLogger.error("🚀 ~ handler /api/assignees/assign ~ error:", error);
+    console.error("🚀 ~ handler /api/assignees/assign ~ error:", error);
     res.status(500).json({ message: "Internal server error" });
   }
 };
 
-export default withAuth(handler);
+export default handler;

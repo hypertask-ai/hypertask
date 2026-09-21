@@ -44,6 +44,7 @@ export default function ResetTrialTab({ searchTerm, onSearchChange, adminPasswor
             })
             return res.data.users || []
         } catch (error) {
+            console.error("Error searching users:", error)
             return []
         }
     }

@@ -1,4 +1,3 @@
-import { logger as htLogger } from "#logger";
 // Import PrismaClient from the generated Prisma client
 
 
@@ -37,7 +36,7 @@ const sectionGetByTask= async (taskId:number) => {
     // Get field names of the "Section" model
     
   } catch (error) {
-    htLogger.error('Error:', error);
+    console.error('Error:', error);
     return({
       status:200,
       json:{error:error}

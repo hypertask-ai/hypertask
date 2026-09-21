@@ -1,5 +1,3 @@
-import { logger as htLogger } from "#logger";
-import { withAuth } from "#with-auth";
 import prisma from "@/lib/prisma";
 import { json } from "@/utils/helperFunctions/helperFunctions";
 
@@ -10,7 +8,7 @@ const handler: NextApiHandler = async (req: NextApiRequest, res: NextApiResponse
     try {
         // const allowedModes=["only66loop", "onlyVazcoOrVetsak", "excludeSpecificDomains", "activeNotInSpecificDomains"]
         const { mode } = req.query; // This comes from your request query, e.g., mode=only66loop
-        htLogger.info("🚀 ~ consthandler:NextApiHandler= ~ mode:", mode)
+        console.log("🚀 ~ consthandler:NextApiHandler= ~ mode:", mode)
 
         // if (allowedModes.some(x=>(x!==mode))){
         //     return res.status(104).json({message:"Please send a valid mode."})
@@ -152,7 +150,7 @@ const handler: NextApiHandler = async (req: NextApiRequest, res: NextApiResponse
             }
         });
         
-        htLogger.info("🚀 ~ consthandler:NextApiHandler= ~ usersAll:", usersAll[0])
+        console.log("🚀 ~ consthandler:NextApiHandler= ~ usersAll:", usersAll[0])
        
 //     const usersAll = await prisma.$queryRaw`
 //     SELECT 
@@ -191,10 +189,10 @@ const handler: NextApiHandler = async (req: NextApiRequest, res: NextApiResponse
 
       return res.status(200).json(usersAll)
     } catch (error) {
-      htLogger.info("🚀 ~ consthandler:NextApiHandler= ~ error:", error)
+      console.log("🚀 ~ consthandler:NextApiHandler= ~ error:", error)
       return res.status(500)
     }
 
   
 }
-export default withAuth(handler)
+export default handler

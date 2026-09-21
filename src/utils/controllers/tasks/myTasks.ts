@@ -1,4 +1,3 @@
-import { logger as htLogger } from "#logger";
 import prisma from "@/lib/prisma";
 import getAllMinimal from "../projects/getAllMinimal";
 import { groupMyTasksByBoard } from "@/lib/myTasksGrouping";
@@ -270,7 +269,7 @@ const getMyTasks = async (
 
     return { ...grouped, boards, nearestSnoozeUntil };
   } catch (error) {
-    htLogger.info("🚀 ~ getMyTasks ~ error:", error);
+    console.log("🚀 ~ getMyTasks ~ error:", error);
     if (options.throwOnError) throw error;
     return {
       sections: [],

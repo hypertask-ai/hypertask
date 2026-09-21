@@ -1,4 +1,4 @@
-import { getAuthSession, withAuth } from "#with-auth";
+import { getSessionUser } from "@/lib/auth/getSessionUser";
 import prisma from "@/lib/prisma";
 import { COLUMN_ALL_VIEWS_FLAG, isFeatureEnabled } from "@/lib/flags";
 import { broadcastBoardChange } from "@/lib/realtime/server";
@@ -10,8 +10,8 @@ import { getProjectWhere } from "@/utils/controllers/projects/getAllIncludes";
  * Board membership is the edit right for columns here, the same check the
  * sibling auto-assign route uses; there is no read-only board role.
  */
-export const POST = withAuth(createColumnViewVisibilityHandler({
-  session: (headers) => getAuthSession(headers),
+export const POST = createColumnViewVisibilityHandler({
+  session: (headers) => getSessionUser(headers),
   featureEnabled: (userId) => isFeatureEnabled(COLUMN_ALL_VIEWS_FLAG, userId),
   findSection: (userId, sectionId) =>
     prisma.section.findFirst({
@@ -26,4 +26,4 @@ export const POST = withAuth(createColumnViewVisibilityHandler({
   afterChange: (projectId, userId) => {
     void broadcastBoardChange(projectId, { originUserId: userId });
   },
-}));
+});

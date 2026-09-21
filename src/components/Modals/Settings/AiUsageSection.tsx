@@ -69,6 +69,7 @@ const AiUsageSection = () => {
           setData(response.data);
         }
       } catch (requestError) {
+        console.error(requestError);
         if (!cancelled) {
           setData(null);
           setError(

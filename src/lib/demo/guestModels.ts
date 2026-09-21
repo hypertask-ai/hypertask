@@ -1,4 +1,3 @@
-import { env as appEnv } from "#env";
 // HTPR-4303: which AI models an anonymous demo guest may use.
 //
 // Guests run on the dedicated, fail-closed DEMO_AI_GATEWAY_API_KEY. We only ever
@@ -43,7 +42,7 @@ export function isGuestAllowedModelKey(
 // Free-AI allowance for a guest, in USD. Deliberately low: a taste, then a
 // signup wall. Tunable via env without a redeploy of the constant.
 export const GUEST_AI_BUDGET_USD =
-  Number(appEnv.DEMO_AI_BUDGET_USD) || 0.1;
+  Number(process.env.DEMO_AI_BUDGET_USD) || 0.1;
 
 // ponytail: flat blended rate for the four cheap Chinese models (~$0.40 / 1M
 // tokens). Good enough to drive a progress bar and a soft cap; the hard cost

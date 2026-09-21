@@ -99,12 +99,11 @@ function loadPusherAuth({
     "@/lib/realtime/shared": {
       featureFlagsChannel: () => "private-feature-flags",
     },
-    "#with-auth": {
-      getAuthSession: async () => {
+    "@/lib/auth/getSessionUser": {
+      getSessionUser: async () => {
         if (sessionError) throw sessionError;
         return user ? { userId: Number(user.id) } : null;
       },
-      withAuth: (handler) => handler,
     },
     "@/lib/prisma": {
       __esModule: true,
@@ -264,7 +263,7 @@ test("invalid requests cannot reach the realtime signer", async () => {
 });
 
 function loadRealtimeServer({ configured = true, triggerError = null } = {}) {
-  const calls = { constructed: [], trigger: [], waitUntil: [], warnings: [] };
+  const calls = { constructed: [], trigger: [], waitUntil: [] };
   class FakePusher {
     constructor(options) {
       calls.constructed.push(options);
@@ -302,14 +301,6 @@ function loadRealtimeServer({ configured = true, triggerError = null } = {}) {
 
   try {
     const realtime = loadTypeScript("src/lib/realtime/server.ts", {
-      "#logger": {
-        logger: {
-          error() {},
-          warn: (...args) => calls.warnings.push(args),
-          info() {},
-          debug() {},
-        },
-      },
       pusher: FakePusher,
       "@vercel/functions": {
         waitUntil: (promise) => calls.waitUntil.push(promise),
@@ -382,14 +373,21 @@ test("missing recipients and disabled realtime have no broadcast side effects", 
 test("failed realtime deliveries are absorbed after waitUntil captures them", async () => {
   const triggerError = new Error("delivery failed");
   const { calls, realtime } = loadRealtimeServer({ triggerError });
+  const warnings = [];
+  const originalWarn = console.warn;
+  console.warn = (...args) => warnings.push(args);
 
-  await assert.doesNotReject(() =>
-    realtime.broadcastInboxChange(6, { originUserId: 9 }),
-  );
-  assert.equal(calls.waitUntil.length, 1);
-  await assert.doesNotReject(calls.waitUntil[0]);
+  try {
+    await assert.doesNotReject(() =>
+      realtime.broadcastInboxChange(6, { originUserId: 9 }),
+    );
+    assert.equal(calls.waitUntil.length, 1);
+    await assert.doesNotReject(calls.waitUntil[0]);
+  } finally {
+    console.warn = originalWarn;
+  }
 
-  assert.deepEqual(calls.warnings, [
+  assert.deepEqual(warnings, [
     [
       "[realtime] broadcast failed",
       "private-user-6",

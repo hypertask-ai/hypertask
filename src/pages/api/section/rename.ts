@@ -1,5 +1,3 @@
-import { logger as htLogger } from "#logger";
-import { withAuth } from "#with-auth";
 import RenameSection from "@/utils/controllers/section/rename";
 import { NextApiHandler, NextApiRequest, NextApiResponse } from "next";
 
@@ -29,9 +27,9 @@ const handler: NextApiHandler = async (
       const response = await RenameSection(currentUser.id, sectionId, newSection);
       return res.status(response?.status).json(response?.json);
     } catch (error) {
-      htLogger.error("Error:", error);
+      console.error("Error:", error);
     }
   }
 };
 
-export default withAuth(handler);
+export default handler;

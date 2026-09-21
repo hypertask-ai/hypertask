@@ -1,5 +1,3 @@
-import { logger as htLogger } from "#logger";
-import { withoutAuth } from "#with-auth";
 import { NextRequest, NextResponse } from 'next/server'
 import { checkMcpRateLimit, validateMcpAuth } from '@/lib/mcp/auth'
 import { HTPR_6587_PROJECT_UPDATE_FLAG, isFeatureEnabled } from '@/lib/flags'
@@ -10,7 +8,7 @@ function errorResponse(error: string, status: number) {
   return NextResponse.json({ success: false, error }, { status })
 }
 
-async function PATCHHandler(
+export async function PATCH(
   request: NextRequest,
   props: { params: Promise<{ projectId: string }> },
 ) {
@@ -64,9 +62,7 @@ async function PATCHHandler(
       project: { id: projectId, title },
     })
   } catch (error) {
-    htLogger.error('[MCP Update Project] Error:', error)
+    console.error('[MCP Update Project] Error:', error)
     return errorResponse('Internal server error', 500)
   }
 }
-
-export const PATCH = withoutAuth(PATCHHandler);

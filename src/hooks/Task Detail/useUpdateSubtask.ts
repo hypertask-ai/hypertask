@@ -88,6 +88,7 @@ const useUpdateSubtask = () => {
     //       return `Parent task has been removed`;
     //     },
     //     error: (error) => {
+    //       console.log("🚀 ~ toast.promise ~ error:", error);
     //       return "Error removing parent task";
     //     },
     //   }

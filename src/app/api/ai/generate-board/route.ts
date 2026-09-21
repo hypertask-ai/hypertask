@@ -1,5 +1,3 @@
-import { logger as htLogger } from "#logger";
-import { withAuth } from "#with-auth";
 import { NextRequest, NextResponse } from "next/server";
 import { generateObject } from "ai";
 import { z } from "zod";
@@ -263,7 +261,7 @@ async function createSampleBoard({
   });
 }
 
-async function POSTHandler(request: NextRequest) {
+export async function POST(request: NextRequest) {
   const cookieUser = await getCurrentUserFromCookies();
   if (!cookieUser?.id) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -371,7 +369,7 @@ async function POSTHandler(request: NextRequest) {
       };
     } catch (error) {
       if (request.signal.aborted) throw error;
-      htLogger.error("[ai/generate-board] falling back to sample board", error);
+      console.error("[ai/generate-board] falling back to sample board", error);
       const project = await createSampleBoard({ user, team });
       return {
         projectId: project.id,
@@ -415,5 +413,3 @@ class BoardGenerationRequestError extends Error {
     this.name = "BoardGenerationRequestError";
   }
 }
-
-export const POST = withAuth(POSTHandler);

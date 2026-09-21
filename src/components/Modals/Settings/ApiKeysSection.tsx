@@ -229,6 +229,7 @@ const ApiKeysSectionContent = () => {
     fetchKeys()
       .catch((error) => {
         if (!cancelled) {
+          console.error(error);
           toast.error("Could not load API keys");
         }
       })
@@ -345,6 +346,7 @@ const ApiKeysSectionContent = () => {
       await fetchKeys();
       invalidateTeamQueries();
     } catch (error) {
+      console.error(error);
       const message = axios.isAxiosError(error)
         ? error.response?.data?.message
         : null;
@@ -381,6 +383,7 @@ const ApiKeysSectionContent = () => {
       invalidateTeamQueries();
       toast.success("API key removed");
     } catch (error) {
+      console.error(error);
       const message = axios.isAxiosError(error)
         ? error.response?.data?.message
         : null;

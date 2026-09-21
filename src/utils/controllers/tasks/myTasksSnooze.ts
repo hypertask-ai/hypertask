@@ -1,4 +1,3 @@
-import { logger as htLogger } from "#logger";
 import prisma from "@/lib/prisma";
 import type { Prisma } from "@prisma/client";
 import { parseMyTasksSnoozeUntil } from "@/lib/myTasksSnooze";
@@ -89,7 +88,7 @@ export async function setMyTasksSnooze(args: {
       snoozeUntil: parsed.snoozeUntil ? parsed.snoozeUntil.toISOString() : null,
     };
   } catch (error) {
-    htLogger.error("[myTasksSnooze] set failed", error);
+    console.error("[myTasksSnooze] set failed", error);
     return { ok: false, status: 500, error: "Unable to snooze task" };
   }
 }

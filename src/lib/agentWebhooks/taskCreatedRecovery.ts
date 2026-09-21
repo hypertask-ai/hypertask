@@ -1,4 +1,3 @@
-import { logger as htLogger } from "#logger";
 import prisma from "@/lib/prisma";
 import { autoAssignForSection } from "@/utils/controllers/assignees/autoAssignForSection";
 import {
@@ -64,7 +63,7 @@ export async function recoverPendingAgentTaskCreatedWebhook(
     if (autoAssigned === "pending") {
       // Do not emit an incomplete task.created payload. The minute sweep keeps
       // this marker pending and retries the assignment before emitting it.
-      htLogger.warn("[agent-webhook] pending task.created auto-assignment remains pending", {
+      console.warn("[agent-webhook] pending task.created auto-assignment remains pending", {
         taskId,
       });
       await ensurePendingAgentTaskCreatedWebhook(taskId);
@@ -104,7 +103,7 @@ export async function sweepPendingAgentTaskCreatedWebhooks(limit = 100): Promise
         recovered += 1;
       }
     } catch (error) {
-      htLogger.warn("[agent-webhook] pending task.created recovery failed", {
+      console.warn("[agent-webhook] pending task.created recovery failed", {
         taskId: task.id,
         error,
       });

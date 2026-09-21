@@ -16,6 +16,9 @@ export default async function Page(props: { searchParams: Promise<any> }) {
   const searchParams = await props.searchParams;
   let slugs = searchParams?.id;
   if (!slugs || slugs === "undefined" || slugs === "null" || slugs === "") {
+    console.log(
+      "❌ Invalid or missing share ID in URL, resolving valid slug..."
+    );
      redirect("/unauthorized");
   }
   const response = await getProject(slugs);

@@ -1,5 +1,3 @@
-import { logger as htLogger } from "#logger";
-import { withoutAuth } from "#with-auth";
 import { NextRequest, NextResponse } from 'next/server'
 
 import { isFeatureEnabled } from '@/lib/flags'
@@ -12,7 +10,7 @@ import {
 } from '@/utils/controllers/reports/reportService'
 import { parsePositiveInteger } from '../../pages/_lib/routeUtils'
 
-async function GETHandler(request: NextRequest) {
+export async function GET(request: NextRequest) {
   try {
     const ctx = await validateMcpAuth(request)
     if (!ctx) {
@@ -67,9 +65,7 @@ async function GETHandler(request: NextRequest) {
       })),
     })
   } catch (error) {
-    htLogger.error('[MCP List Reports] Error:', error)
+    console.error('[MCP List Reports] Error:', error)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
 }
-
-export const GET = withoutAuth(GETHandler);

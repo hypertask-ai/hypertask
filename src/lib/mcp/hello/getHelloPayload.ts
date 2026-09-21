@@ -1,4 +1,3 @@
-import { logger as htLogger } from "#logger";
 import type { Prisma } from '@prisma/client'
 import { NextRequest, NextResponse } from 'next/server'
 
@@ -177,7 +176,7 @@ export async function handleHelloRequest(request: NextRequest) {
     const payload = await getHelloPayload(ctx)
     return NextResponse.json({ success: true, ...payload })
   } catch (error) {
-    htLogger.error('[MCP Hello] Error:', error)
+    console.error('[MCP Hello] Error:', error)
     return NextResponse.json(
       { success: false, error: 'Internal server error' },
       { status: 500 }

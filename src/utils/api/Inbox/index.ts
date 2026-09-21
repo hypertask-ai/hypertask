@@ -1,4 +1,3 @@
-import { logger as htLogger } from "#logger";
 import axios from "axios"
 
 export const markNotificationSeen = async (notificationId: number | null) => {
@@ -9,7 +8,7 @@ export const markNotificationSeen = async (notificationId: number | null) => {
         )
         return response.data
     } catch (error) {
-        htLogger.info(error)
+        console.log(error)
     }
 }
 
@@ -26,6 +25,6 @@ export const markAsUnseen = async(itemId:number|null, seen?:boolean,mode?:"byTas
             return response.data
         }
     } catch (error) {
-        htLogger.info(error)
+        console.log(error)       
     }
 }

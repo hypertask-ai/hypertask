@@ -23,8 +23,7 @@ test("both routes exist and are POST, matching the other time endpoints", () => 
   // broke the pattern would need its own CLI and MCP handling for no gain.
   for (const [name, src] of [["update", update], ["delete", remove]]) {
     assert.ok(
-      /async function POSTHandler\(/.test(src) &&
-        /export const POST = withoutAuth\(POSTHandler\)/.test(src),
+      /export async function POST\(/.test(src),
       `${name} must expose POST like every other /api/mcp/time route`,
     );
   }

@@ -16,7 +16,7 @@ const SECRET = "htpr-6519-token-shape-secret-long-enough-for-hs256";
 function sourceConstant(relativePath, constantName) {
   const source = fs.readFileSync(path.join(root, relativePath), "utf8");
   const match = source.match(
-    new RegExp(`${constantName}\\s*=\\s*(?:(?:process\\.env|appEnv)\\.\\w+\\s*(?:\\|\\||\\?\\?)\\s*)?['"]([^'"]+)['"]`),
+    new RegExp(`${constantName}\\s*=\\s*(?:process\\.env\\.\\w+\\s*\\|\\|\\s*)?['"]([^'"]+)['"]`),
   );
   assert.ok(
     match,

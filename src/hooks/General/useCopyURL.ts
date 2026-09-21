@@ -1,4 +1,3 @@
-import { env as appEnv } from "#env";
 import toast from "react-hot-toast";
 import { writeTextToClipboard } from "@/lib/utils/clipboard";
 
@@ -27,6 +26,7 @@ const writeRichToClipboard = async (
       return "rich";
     }
   } catch (err) {
+    console.error("clipboard.write (rich) failed, falling back to text:", err);
   }
 
   const ok = await writeTextToClipboard(text);
@@ -35,7 +35,7 @@ const writeRichToClipboard = async (
 
 const useCopyURL = ({ plainTextOnly = false }: UseCopyURLOptions = {}) => {
   const baseURL =
-    appEnv.NEXT_PUBLIC_BASEURL || "https://app.hypertask.ai";
+    process.env.NEXT_PUBLIC_BASEURL || "https://app.hypertask.ai";
   const copyTaskURL = async (
     uniqueIndex: number | undefined,
     projectId: number | undefined

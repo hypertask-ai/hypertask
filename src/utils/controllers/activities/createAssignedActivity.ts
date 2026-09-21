@@ -1,4 +1,3 @@
-import { logger as htLogger } from "#logger";
 import createActivity from "./createActivity";
 import { ITaskAssignedActivity } from "@/models/ActivityModels.ts";
 import { Prisma } from "@prisma/client";
@@ -73,7 +72,7 @@ const createAssignedActivity = async ({
   } catch (error) {
     // Assignee create/delete already committed before activity is written.
     // Keep the mutation successful and let callers fall back when no id returns.
-    htLogger.error("createAssignedActivity failed after assignee mutation", error);
+    console.error("createAssignedActivity failed after assignee mutation", error);
     return null;
   }
 };

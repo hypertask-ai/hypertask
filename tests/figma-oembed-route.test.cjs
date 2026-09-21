@@ -1,6 +1,5 @@
 const assert = require("node:assert/strict");
 const path = require("node:path");
-const { passThroughAuth } = require("./helpers/pass-through-auth.cjs");
 const test = require("node:test");
 const { NextRequest } = require("next/server");
 const { createJiti } = require("jiti");
@@ -18,7 +17,6 @@ function stub(file, exports) {
   const filename = path.join(root, file);
   require.cache[filename] = { id: filename, filename, loaded: true, exports };
 }
-stub("src/lib/api/withAuth.ts", passThroughAuth());
 stub("src/app/api/figma/_lib.ts", {
   getFigmaRequestUser: async () => {
     if (!authenticated) return { status: "unauthorized" };

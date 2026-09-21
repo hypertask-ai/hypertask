@@ -69,21 +69,26 @@ const MoveTaskGlobal = (props:IProps) => {
         // Your complex form submission logic goes here
         try {
           // Example: Simulating an asynchronous operation
+            console.log('Submitting...', values);
             setRedirectingToTask(true)
+            //   console.log("🚀 ~ file: index.tsx:58 ~ handleFormSubmit ~ formik.values:", formik.values)
             const body ={
                 title:formik.values.taskTitle,
                 sectionId:formik.values.sectionId,
                 projectId:formik.values.projectId
             }
             const response = await axios.post("/api/tasks/create",body)
+            console.log("🚀 ~ file: index.tsx:60 ~ handleFormSubmit ~ response:", response)
             
             if (response.status===200){
                 router.refresh()
+                console.log('Submission successful!');
                 router.push(`/detail/project-${formik.values.projectId}/${response.data.uniqueIndex}`)
                 props.closeHTC()
             }
         } catch (error) {
             props.closeHTC()
+          console.error('Submission failed:', error);
         }
       };
 
@@ -194,6 +199,7 @@ interface FilterableMenuScreenProps {
             if (value===0 && filteredData){
                 setKeyword("")
                 const indexof = data.findIndex(item=>item.id===filteredData[selectedIndex].id)
+                console.log("🚀 ~ file: index.tsx:204 ~ handleKeyDown ~ indexof:", indexof)
                 if (indexof>-1) submitForCallback(indexof)
                 // screenCallback(value,next, indexof)
             }

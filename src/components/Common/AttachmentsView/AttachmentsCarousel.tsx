@@ -49,6 +49,7 @@ const AttachmentCarousel: React.FC<AttachmentCarouselProps> = ({
       const data = await response.json();
 
       if (!response.ok) {
+        console.error("Error fetching download URL");
         return;
       }
       // Create an anchor tag with the download URL
@@ -57,6 +58,7 @@ const AttachmentCarousel: React.FC<AttachmentCarouselProps> = ({
       anchor.download = fileName;
       anchor.click();
     } catch (error) {
+      console.error("Error downloading file:", error);
     }
   };
 

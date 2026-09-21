@@ -1,5 +1,3 @@
-import { env as appEnv } from "#env";
-import { withAuth } from "#with-auth";
 import { NextResponse } from "next/server";
 
 import { getServerCookieUser } from "@/lib/auth/serverUser";
@@ -14,7 +12,7 @@ export const runtime = "nodejs";
 
 // HTPR-4854: self-serve account wipe. The user can only ever delete their own
 // account, so the target id comes from the session cookie and never the body.
-async function POSTHandler() {
+export async function POST() {
   const user = await getServerCookieUser();
   if (!user) {
     return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
@@ -26,7 +24,7 @@ async function POSTHandler() {
   }
 
   const response = NextResponse.json({ success: true });
-  const secure = appEnv.NODE_ENV === "production";
+  const secure = process.env.NODE_ENV === "production";
 
   response.cookies.set(SESSION_COOKIE, "", {
     httpOnly: true,
@@ -46,5 +44,3 @@ async function POSTHandler() {
 
   return response;
 }
-
-export const POST = withAuth(POSTHandler);

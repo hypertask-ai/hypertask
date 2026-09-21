@@ -1,6 +1,5 @@
-import { logger as htLogger } from "#logger";
-import { getAuthSession, withAuth } from "#with-auth";
 import { NextRequest, NextResponse } from "next/server";
+import { getSessionUser } from "@/lib/auth/getSessionUser";
 import { isFeatureEnabled, MY_TASKS_SNOOZE_FLAG } from "@/lib/flags";
 import { setMyTasksSnooze } from "@/utils/controllers/tasks/myTasksSnooze";
 
@@ -13,9 +12,9 @@ function optionalFiniteNumber(value: unknown): number | undefined {
   return Number.isFinite(n) ? n : undefined;
 }
 
-async function POSTHandler(request: NextRequest) {
+export async function POST(request: NextRequest) {
   try {
-    const userId = (await getAuthSession(request.headers))?.userId;
+    const userId = (await getSessionUser(request.headers))?.userId;
     if (!userId) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
@@ -49,9 +48,7 @@ async function POSTHandler(request: NextRequest) {
       headers: { "Cache-Control": "private, no-store" },
     });
   } catch (error) {
-    htLogger.error("[my-tasks/snooze] failed", error);
+    console.error("[my-tasks/snooze] failed", error);
     return NextResponse.json({ error: "Unable to snooze task" }, { status: 500 });
   }
 }
-
-export const POST = withAuth(POSTHandler);

@@ -1,5 +1,3 @@
-import { logger as htLogger } from "#logger";
-import { withAuth } from "#with-auth";
 import { NextApiHandler } from "next";
 import { getHyperUser } from "@/utils/controllers/users/getHyper";
 
@@ -15,9 +13,9 @@ const handler: NextApiHandler = async (req, res) => {
     }
     return res.status(200).json(user);
   } catch (error) {
-    htLogger.info(error);
+    console.log(error);
     return res.status(400).json({ message: "Unable to find HyperAI from DB" });
   }
 };
 
-export default withAuth(handler);
+export default handler;

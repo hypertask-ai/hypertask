@@ -1,5 +1,3 @@
-import { logger as htLogger } from "#logger";
-import { withoutAuth } from "#with-auth";
 import { NextRequest, NextResponse } from 'next/server'
 import { validateMcpAuth } from '@/lib/mcp/auth'
 import { findTaskByIdentifier } from '@/lib/mcp/tasks/resolveTask'
@@ -21,7 +19,7 @@ interface MoveToInboxBody {
  * Routes a task into a specific project member's inbox by creating the same
  * TaskMovedToInbox notification the UI creates. See HTPR-4553.
  */
-async function POSTHandler(request: NextRequest) {
+export async function POST(request: NextRequest) {
   try {
     const ctx = await validateMcpAuth(request)
     if (!ctx) {
@@ -124,12 +122,10 @@ async function POSTHandler(request: NextRequest) {
       userId: user_id,
     })
   } catch (error) {
-    htLogger.error('[MCP] inbox/move', error)
+    console.error('[MCP] inbox/move', error)
     return NextResponse.json(
       { success: false, error: 'Internal server error' },
       { status: 500 }
     )
   }
 }
-
-export const POST = withoutAuth(POSTHandler);

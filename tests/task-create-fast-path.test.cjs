@@ -416,7 +416,7 @@ test("the global task route validates the claimed agent actor", () => {
   );
 
   assert.match(source, /agentId: requestedAgentId/);
-  assert.match(source, /const session = await getAuthSession/);
+  assert.match(source, /const session = await getSessionUser/);
   assert.match(source, /userId: requestedUserId/);
   assert.match(source, /const userId = session\.userId/);
   assert.match(source, /prisma\.user\.findUnique/);

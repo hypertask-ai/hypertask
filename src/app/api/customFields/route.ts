@@ -1,5 +1,3 @@
-import { logger as htLogger } from "#logger";
-import { withAuth } from "#with-auth";
 import { NextRequest, NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { isValidUser } from "@/utils/edgeHelpers";
@@ -19,7 +17,7 @@ import { CustomFieldType } from "@prisma/client";
  * GET /api/customFields?projectId=<id>
  * Lists custom fields for a board (ordered by ranking).
  */
-async function GETHandler(request: NextRequest) {
+export async function GET(request: NextRequest) {
   try {
     const cookieStore = await cookies();
     const userCookie = cookieStore.get("nookies_user");
@@ -49,7 +47,7 @@ async function GETHandler(request: NextRequest) {
     const fields = await getCustomFieldsForProject(projectId);
     return NextResponse.json(fields);
   } catch (error) {
-    htLogger.error("GET /api/customFields error:", error);
+    console.error("GET /api/customFields error:", error);
     return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
 }
@@ -59,7 +57,7 @@ async function GETHandler(request: NextRequest) {
  * Creates a custom field for a board.
  * Body: { projectId, name, type, options? }
  */
-async function POSTHandler(request: NextRequest) {
+export async function POST(request: NextRequest) {
   try {
     const cookieStore = await cookies();
     const userCookie = cookieStore.get("nookies_user");
@@ -104,7 +102,7 @@ async function POSTHandler(request: NextRequest) {
     if (error instanceof CustomFieldValidationError) {
       return NextResponse.json({ error: error.message }, { status: 400 });
     }
-    htLogger.error("POST /api/customFields error:", error);
+    console.error("POST /api/customFields error:", error);
     return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
 }
@@ -114,7 +112,7 @@ async function POSTHandler(request: NextRequest) {
  * Renames a field and/or flips its rail/table visibility.
  * Body: { fieldId, name?, showInRail?, showInTable? }
  */
-async function PATCHHandler(request: NextRequest) {
+export async function PATCH(request: NextRequest) {
   try {
     const cookieStore = await cookies();
     const userCookie = cookieStore.get("nookies_user");
@@ -159,7 +157,7 @@ async function PATCHHandler(request: NextRequest) {
     if (error instanceof CustomFieldValidationError) {
       return NextResponse.json({ error: error.message }, { status: 400 });
     }
-    htLogger.error("PATCH /api/customFields error:", error);
+    console.error("PATCH /api/customFields error:", error);
     return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
 }
@@ -168,7 +166,7 @@ async function PATCHHandler(request: NextRequest) {
  * DELETE /api/customFields?fieldId=<id>
  * Deletes a custom field and its values (cascade via schema onDelete).
  */
-async function DELETEHandler(request: NextRequest) {
+export async function DELETE(request: NextRequest) {
   try {
     const cookieStore = await cookies();
     const userCookie = cookieStore.get("nookies_user");
@@ -205,12 +203,7 @@ async function DELETEHandler(request: NextRequest) {
 
     return NextResponse.json({ success: true, deletedValues: result.deletedValues });
   } catch (error) {
-    htLogger.error("DELETE /api/customFields error:", error);
+    console.error("DELETE /api/customFields error:", error);
     return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
 }
-
-export const GET = withAuth(GETHandler);
-export const POST = withAuth(POSTHandler);
-export const PATCH = withAuth(PATCHHandler);
-export const DELETE = withAuth(DELETEHandler);

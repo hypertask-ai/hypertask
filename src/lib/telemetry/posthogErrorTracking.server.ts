@@ -1,4 +1,3 @@
-import { env as appEnv } from "#env";
 import { randomUUID } from "node:crypto";
 import { PostHog } from "posthog-node";
 
@@ -17,23 +16,23 @@ const CAPTURE_TIMEOUT_MS = 1500;
 let client: PostHog | undefined;
 
 function deploymentEnvironment() {
-  return appEnv.VERCEL_ENV || appEnv.NODE_ENV || "unknown";
+  return process.env.VERCEL_ENV || process.env.NODE_ENV || "unknown";
 }
 
 function releaseSha() {
   const value =
-    appEnv.VERCEL_GIT_COMMIT_SHA ||
-    appEnv.NEXT_PUBLIC_BUILD_ID ||
+    process.env.VERCEL_GIT_COMMIT_SHA ||
+    process.env.NEXT_PUBLIC_BUILD_ID ||
     "";
   return /^[0-9a-f]{40}$/i.test(value) ? value.toLowerCase() : undefined;
 }
 
 function postHogClient() {
-  const token = appEnv.POSTHOG_SERVER_PROJECT_TOKEN?.trim();
+  const token = process.env.POSTHOG_SERVER_PROJECT_TOKEN?.trim();
   if (!token) return undefined;
   if (!client) {
     client = new PostHog(token, {
-      host: appEnv.POSTHOG_SERVER_HOST || "https://eu.i.posthog.com",
+      host: process.env.POSTHOG_SERVER_HOST || "https://eu.i.posthog.com",
       flushAt: 1,
       flushInterval: 0,
       requestTimeout: CAPTURE_TIMEOUT_MS,
@@ -48,7 +47,7 @@ export async function capturePostHogExceptionOnServer(report: ErrorReport) {
   if (environment !== "production" && environment !== "preview") return false;
 
   const posthog = postHogClient();
-  const eventSecret = appEnv.POSTHOG_ERROR_EVENT_SECRET?.trim();
+  const eventSecret = process.env.POSTHOG_ERROR_EVENT_SECRET?.trim();
   const release = releaseSha();
   if (!posthog || !eventSecret || !release) return false;
 

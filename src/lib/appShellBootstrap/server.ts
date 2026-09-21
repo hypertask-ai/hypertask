@@ -1,4 +1,3 @@
-import { env as appEnv } from "#env";
 import getAllMinimal from "@/utils/controllers/projects/getAllMinimal";
 import getAllTeamsSidebarOptimized from "@/utils/controllers/teams/getAllSidebarOptimized";
 import getUserById from "@/utils/controllers/users/getById";
@@ -80,7 +79,7 @@ export const getAppShellBootstrap = async (
       teams,
       buildId: {
         ok: true,
-        data: appEnv.NEXT_PUBLIC_BUILD_ID ?? "dev",
+        data: process.env.NEXT_PUBLIC_BUILD_ID ?? "dev",
         fetchedAt: Date.now(),
       },
     },

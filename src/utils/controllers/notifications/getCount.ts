@@ -1,4 +1,3 @@
-import { logger as htLogger } from "#logger";
 import prisma from "@/lib/prisma";
 import { inboxConfig } from "@/lib/configs/inbox.config";
 
@@ -58,7 +57,7 @@ const notificationGetCount = async (userId: number) => {
       json: { all: notifications.length, unseen: unseenNotifications ? 1 : 0 },
     };
   } catch (error) {
-    htLogger.info("🚀 ~ notificationGetCount ~ error:", error);
+    console.log("🚀 ~ notificationGetCount ~ error:", error);
 
     return {
       status: 500,

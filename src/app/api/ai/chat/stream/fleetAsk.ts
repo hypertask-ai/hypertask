@@ -1,5 +1,3 @@
-import { env as appEnv } from "#env";
-import { logger as htLogger } from "#logger";
 /**
  * The fleet ask bridge: one place that knows AGENT_FLEET_ASK_URL's request and
  * response contract. The hypertask_ask_agent tool and the HTPR-6284 routed
@@ -28,8 +26,8 @@ export async function askFleetAgent(input: {
   };
   abortSignal?: AbortSignal;
 }): Promise<FleetAskResult> {
-  const url = appEnv.AGENT_FLEET_ASK_URL;
-  const secret = appEnv.AGENT_FLEET_ASK_SECRET;
+  const url = process.env.AGENT_FLEET_ASK_URL;
+  const secret = process.env.AGENT_FLEET_ASK_SECRET;
   if (!url || !secret) {
     return { success: false, error: "Agent bridge is not configured." };
   }
@@ -88,7 +86,7 @@ export async function askFleetAgent(input: {
     if (input.abortSignal?.aborted) {
       return { success: false, error: "aborted" };
     }
-    htLogger.error("[AI chat ask agent]", error);
+    console.error("[AI chat ask agent]", error);
     return {
       success: false,
       error:

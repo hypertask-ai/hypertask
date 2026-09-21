@@ -1,4 +1,3 @@
-import { logger as htLogger } from "#logger";
 
 import { uploadAttachmentToAICustomInstruction } from '@/lib/serverActions';
 import {
@@ -23,14 +22,14 @@ export const uploadImageToS3= async(base64:any,fileName:any)=> {
     Body: base64Data, // The file content (e.g., obtained from an HTML input element)
     
   };
-  // debug.log("params ==>",params)
+  // console.log("params ==>",params)
 
   try {
     const result = await s3.upload(params).promise();
-    htLogger.info('File uploaded successfully:', result.Location);
+    console.log('File uploaded successfully:', result.Location);
     return getHypertasksStoragePublicUrl(params.Key); // Returns the URL of the uploaded file
   } catch (error) {
-    htLogger.error('Error uploading file:', error);
+    console.error('Error uploading file:', error);
     throw error;
   }
 }
@@ -46,7 +45,7 @@ export const uploadAttachmentsToS3= async(files:File[], taskId:number):Promise<a
     const uploadResults = await Promise.all(uploadPromises);
     return uploadResults.map(x=>x.source); // Returns an array of URLs of the uploaded files
   } catch (error) {
-    htLogger.error('Error uploading files:', error);
+    console.error('Error uploading files:', error);
     throw error;
     return []
   }
@@ -86,15 +85,15 @@ export const uploadSingleAttachmentTrackProgress = async(file:File, callback?:an
     Key: `tasks/attachments/${timenow+fileName}`,
     Body: Body,
   };
-  htLogger.info("🚀 ~ uploadSingleAttachmentTrackProgress ~ params:", params)
+  console.log("🚀 ~ uploadSingleAttachmentTrackProgress ~ params:", params)
  // Wrap the AWS SDK's upload method in a Promise
  const uploadPromise = new Promise((resolve, reject) => {
   s3.upload(params, function(err: any, data: any) {
     if (err) {
-      htLogger.info('There was an error uploading your file: ', err);
+      console.log('There was an error uploading your file: ', err);
       reject(err); // Reject the promise if there's an error
     } else {
-      htLogger.info('Successfully uploaded file.', data);
+      console.log('Successfully uploaded file.', data);
       resolve(data); // Resolve the promise with the data
     }
   }).on('httpUploadProgress', async function(progress) {
@@ -102,10 +101,10 @@ export const uploadSingleAttachmentTrackProgress = async(file:File, callback?:an
     
     callback(progressPercentage)
     if (progressPercentage < 100) {
-      htLogger.info("🚀 ~ result ~ during:", progressPercentage)
+      console.log("🚀 ~ result ~ during:", progressPercentage)
     } else if (progressPercentage == 100) {
-      htLogger.info("🚀 ~ result ~ final progressPercentage:", progressPercentage)
-      htLogger.info("FILE UPLOADED")
+      console.log("🚀 ~ result ~ final progressPercentage:", progressPercentage)
+      console.log("FILE UPLOADED")
 
       
     }
@@ -115,7 +114,7 @@ export const uploadSingleAttachmentTrackProgress = async(file:File, callback?:an
   // Wait for the upload to complete, why isnt it called like uploadPromise()
   await uploadPromise;
   const publicUrl = getHypertasksStoragePublicUrl(params.Key);
-  htLogger.info("🚀 ~ uploadSingleAttachmentTrackProgress ~ result:", publicUrl)
+  console.log("🚀 ~ uploadSingleAttachmentTrackProgress ~ result:", publicUrl)
   // if the AI_Custom_Instructions_id is present that means it needs to be uploaded to the AI_CUSTON_INSTRUCTION
   // so lets call a server action here.
   if (AI_Custom_Instructions_id) {
@@ -127,7 +126,7 @@ export const uploadSingleAttachmentTrackProgress = async(file:File, callback?:an
       AI_Custom_Instructions_id
     })
     
-    // debug.log("🚀 ~ result ~ result:", result)
+    // console.log("🚀 ~ result ~ result:", result)
   }
   return {
     source:publicUrl,

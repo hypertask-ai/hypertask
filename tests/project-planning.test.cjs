@@ -81,16 +81,15 @@ function loadRoute({ admin = true, project = undefined, session = { userId: 6 } 
 
   resetModules([
     "src/app/api/projects/planning/route.ts",
-    "src/lib/api/withAuth.ts",
+    "src/lib/auth/getSessionUser.ts",
     "src/lib/cycleService.ts",
     "src/lib/prisma.ts",
     "src/lib/realtime/server.ts",
     "src/utils/controllers/projects/getAllIncludes.ts",
     "src/utils/controllers/projects/isProjectAdmin.ts",
   ]);
-  stubModule("src/lib/api/withAuth.ts", {
-    getAuthSession: async () => session,
-    withAuth: (handler) => handler,
+  stubModule("src/lib/auth/getSessionUser.ts", {
+    getSessionUser: async () => session,
   });
   stubModule("src/utils/controllers/projects/getAllIncludes.ts", {
     getProjectWhere: (userId) => ({ ownerId: userId }),

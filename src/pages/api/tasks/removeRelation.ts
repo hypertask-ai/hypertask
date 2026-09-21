@@ -1,5 +1,3 @@
-import { logger as htLogger } from "#logger";
-import { withAuth } from "#with-auth";
 import { removeRelatedTask } from "@/utils/controllers/tasks/removeRelatedTask";
 import prisma from "@/lib/prisma";
 import { broadcastBoardChange } from "@/lib/realtime/server";
@@ -35,7 +33,7 @@ const handler: NextApiHandler = async (
 
       return res.status(response.status).json(response);
     } catch (error) {
-      htLogger.info("🚀 ~ error:", error);
+      console.log("🚀 ~ error:", error);
       return res.status(200).json(undefined);
     }
   } else {
@@ -43,4 +41,4 @@ const handler: NextApiHandler = async (
   }
 };
 
-export default withAuth(handler);
+export default handler;

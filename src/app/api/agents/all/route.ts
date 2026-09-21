@@ -1,4 +1,3 @@
-import { getAuthSession, withAuth } from "#with-auth";
 import { NextRequest, NextResponse } from "next/server";
 import {
   getAccessibleAgentBoard,
@@ -6,11 +5,12 @@ import {
   getBoardAgentMembers,
 } from "@/utils/controllers/agents/boardMembers";
 import type { AgentScopes } from "@/lib/mcp/agents/scopes";
+import { getSessionUser } from "@/lib/auth/getSessionUser";
 
 
 /** Returns agents explicitly added to the board via Member.agentId. */
-async function GETHandler(request: NextRequest) {
-  const userId = (await getAuthSession(request.headers))?.userId;
+export async function GET(request: NextRequest) {
+  const userId = (await getSessionUser(request.headers))?.userId;
   if (!userId) {
     return NextResponse.json(
       { success: false, error: "Unauthorized" },
@@ -53,5 +53,3 @@ async function GETHandler(request: NextRequest) {
 
   return NextResponse.json({ success: true, agents });
 }
-
-export const GET = withAuth(GETHandler);

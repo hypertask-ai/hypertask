@@ -1,5 +1,3 @@
-import { logger as htLogger } from "#logger";
-import { withAuth } from "#with-auth";
 import { cookies } from 'next/headers'
 import { NextRequest, NextResponse } from 'next/server'
 
@@ -51,7 +49,7 @@ async function canAccessTask(taskId: number, userId: number) {
   })
 }
 
-async function GETHandler(_request: NextRequest, { params }: RouteContext) {
+export async function GET(_request: NextRequest, { params }: RouteContext) {
   try {
     const userCookie = (await cookies()).get('nookies_user')
     if (!userCookie?.value) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
@@ -78,12 +76,12 @@ async function GETHandler(_request: NextRequest, { params }: RouteContext) {
       },
     })
   } catch (error) {
-    htLogger.error('[Get Page] Error:', error)
+    console.error('[Get Page] Error:', error)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
 }
 
-async function PATCHHandler(request: NextRequest, { params }: RouteContext) {
+export async function PATCH(request: NextRequest, { params }: RouteContext) {
   try {
     const userCookie = (await cookies()).get('nookies_user')
     if (!userCookie?.value) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
@@ -211,10 +209,7 @@ async function PATCHHandler(request: NextRequest, { params }: RouteContext) {
       return NextResponse.json({ error: 'Page not found' }, { status: 404 })
     }
 
-    htLogger.error('[Update Page] Error:', error)
+    console.error('[Update Page] Error:', error)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
 }
-
-export const GET = withAuth(GETHandler);
-export const PATCH = withAuth(PATCHHandler);

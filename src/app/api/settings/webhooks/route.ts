@@ -1,6 +1,5 @@
-import { logger as htLogger } from "#logger";
-import { getAuthSession, withAuth } from "#with-auth";
 import { NextRequest, NextResponse } from 'next/server'
+import { getSessionUser } from '@/lib/auth/getSessionUser'
 import {
   WorkspaceWebhookError,
   createWorkspaceWebhook,
@@ -37,7 +36,7 @@ function trustedMutationOrigin(request: NextRequest) {
 }
 
 async function authenticatedUserId(request: NextRequest) {
-  return (await getAuthSession(request.headers))?.userId ?? null
+  return (await getSessionUser(request.headers))?.userId ?? null
 }
 
 async function bodyFrom(request: NextRequest): Promise<Body> {
@@ -73,7 +72,7 @@ function routeError(error: unknown) {
       { status: 400 },
     )
   }
-  htLogger.error('[workspace-webhooks] settings route failed', error)
+  console.error('[workspace-webhooks] settings route failed', error)
   return noStore(
     { success: false, error: 'Internal server error' },
     { status: 500 },
@@ -91,7 +90,7 @@ async function authorizeMutation(request: NextRequest) {
   return userId
 }
 
-async function GETHandler(request: NextRequest) {
+export async function GET(request: NextRequest) {
   try {
     const userId = await authenticatedUserId(request)
     if (!userId) throw new WorkspaceWebhookError('Unauthorized', 401)
@@ -108,7 +107,7 @@ async function GETHandler(request: NextRequest) {
   }
 }
 
-async function POSTHandler(request: NextRequest) {
+export async function POST(request: NextRequest) {
   try {
     const userId = await authorizeMutation(request)
     const body = await bodyFrom(request)
@@ -156,7 +155,7 @@ async function POSTHandler(request: NextRequest) {
   }
 }
 
-async function PATCHHandler(request: NextRequest) {
+export async function PATCH(request: NextRequest) {
   try {
     const userId = await authorizeMutation(request)
     const body = await bodyFrom(request)
@@ -173,7 +172,7 @@ async function PATCHHandler(request: NextRequest) {
   }
 }
 
-async function DELETEHandler(request: NextRequest) {
+export async function DELETE(request: NextRequest) {
   try {
     const userId = await authorizeMutation(request)
     const body = await bodyFrom(request)
@@ -188,8 +187,3 @@ async function DELETEHandler(request: NextRequest) {
     return routeError(error)
   }
 }
-
-export const GET = withAuth(GETHandler);
-export const POST = withAuth(POSTHandler);
-export const PATCH = withAuth(PATCHHandler);
-export const DELETE = withAuth(DELETEHandler);

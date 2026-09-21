@@ -1,5 +1,3 @@
-import { logger as htLogger } from "#logger";
-import { withAuth } from "#with-auth";
 import { NextApiHandler, NextApiRequest, NextApiResponse } from "next";
 import { deleteCommentService } from "@/utils/controllers/comments/deleteCommentService";
 import prisma from "@/lib/prisma";
@@ -34,7 +32,7 @@ const handler: NextApiHandler = async (
 
       return res.status(200).json({ message: "Comment deleted" });
     } catch (error) {
-      htLogger.error("Error:", error);
+      console.error("Error:", error);
       const message = error instanceof Error ? error.message : "Unknown error";
       if (message.includes("not found") || message.includes("cannot be deleted")) {
         return res.status(404).json({ message: "You can't delete this comment" });
@@ -46,4 +44,4 @@ const handler: NextApiHandler = async (
   }
 };
 
-export default withAuth(handler);
+export default handler;

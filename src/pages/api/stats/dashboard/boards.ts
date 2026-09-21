@@ -1,5 +1,3 @@
-import { logger as htLogger } from "#logger";
-import { withAuth } from "#with-auth";
 import prisma from "@/lib/prisma";
 import { IProjectMonthly, IProjectWeekly, IProjectDaily } from "@/models/dashboardStatsModel";
 
@@ -9,18 +7,18 @@ const handler: NextApiHandler = async (req: NextApiRequest, res: NextApiResponse
     try {
       const { lastXdays, lastXmonths, lastXweeks } = req.body;
       const response = await getProjectCounts(lastXdays, lastXweeks, lastXmonths)
-      htLogger.info("🚀 ~ consthandler:NextApiHandler= ~ response:", response)
+      console.log("🚀 ~ consthandler:NextApiHandler= ~ response:", response)
 
       return res.status(200).json({ response })
 
     } catch (error) {
-      htLogger.info("🚀 ~ consthandler:NextApiHandler= ~ error:", error)
+      console.log("🚀 ~ consthandler:NextApiHandler= ~ error:", error)
       return res.status(500)
     }
 
   // }
 }
-export default withAuth(handler)
+export default handler
 
 
 async function getProjectCounts(lastXdays: number = 14, lastXweeks: number = 4, lastXmonths: number = 12) {

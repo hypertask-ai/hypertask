@@ -1,4 +1,3 @@
-import { withoutAuth } from "#with-auth";
 import { createHash } from "node:crypto";
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
@@ -127,7 +126,7 @@ async function resolveTarget(
   };
 }
 
-async function GETHandler(request: NextRequest) {
+export async function GET(request: NextRequest) {
   const rateLimited = await checkMcpRateLimit(request);
   if (rateLimited) return rateLimited;
 
@@ -186,7 +185,7 @@ async function GETHandler(request: NextRequest) {
   });
 }
 
-async function POSTHandler(request: NextRequest) {
+export async function POST(request: NextRequest) {
   const rateLimited = await checkMcpRateLimit(request);
   if (rateLimited) return rateLimited;
 
@@ -311,6 +310,3 @@ async function POSTHandler(request: NextRequest) {
     );
   }
 }
-
-export const GET = withoutAuth(GETHandler);
-export const POST = withoutAuth(POSTHandler);

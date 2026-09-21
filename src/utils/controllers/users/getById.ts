@@ -1,4 +1,3 @@
-import { logger as htLogger } from "#logger";
 import { NextApiHandler, NextApiRequest, NextApiResponse } from "next";
 import prisma from "@/lib/prisma";
 
@@ -20,7 +19,7 @@ const getUserById= async (userId:number):Promise<any> => {
                 res:user
             })
         } catch (error) {
-            htLogger.info(error);
+            console.log(error);
             
             return ({
                 status:500,

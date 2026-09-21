@@ -1,5 +1,3 @@
-import { logger as htLogger } from "#logger";
-import { withAuth } from "#with-auth";
 import { Prisma } from "@prisma/client";
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
@@ -17,18 +15,18 @@ export const dynamic = "force-dynamic";
 
 const MY_TASKS_VIEW_CREATE_LOCK_NAMESPACE = 6_422;
 
-async function GETHandler(request: NextRequest) {
+export async function GET(request: NextRequest) {
   try {
     const auth = await authorizeMyTasksViewsRequest(request);
     if ("response" in auth) return auth.response;
     return NextResponse.json({ views: await getMyTasksViews(auth.userId) });
   } catch (error) {
-    htLogger.error("[my-tasks-views] list failed", error);
+    console.error("[my-tasks-views] list failed", error);
     return NextResponse.json({ error: "Unable to load views" }, { status: 500 });
   }
 }
 
-async function POSTHandler(request: NextRequest) {
+export async function POST(request: NextRequest) {
   try {
     const auth = await authorizeMyTasksViewsRequest(request);
     if ("response" in auth) return auth.response;
@@ -72,10 +70,7 @@ async function POSTHandler(request: NextRequest) {
     }
     return NextResponse.json({ view: serializeMyTasksView(view) }, { status: 201 });
   } catch (error) {
-    htLogger.error("[my-tasks-views] create failed", error);
+    console.error("[my-tasks-views] create failed", error);
     return NextResponse.json({ error: "Unable to create view" }, { status: 500 });
   }
 }
-
-export const GET = withAuth(GETHandler);
-export const POST = withAuth(POSTHandler);

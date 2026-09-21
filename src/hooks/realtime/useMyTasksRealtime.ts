@@ -145,6 +145,7 @@ export function useMyTasksRealtime(
           releaseRealtimeClientIfIdle(client);
         };
       } catch (error) {
+        console.error("[my-tasks] realtime subscribe failed", error);
         startFallback();
       }
     })();

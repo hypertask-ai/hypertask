@@ -1,4 +1,3 @@
-import { withAuth } from "#with-auth";
 import { NextRequest, NextResponse } from "next/server";
 
 import {
@@ -27,7 +26,7 @@ function settingsError(request: NextRequest, error: string): URL {
   return destination;
 }
 
-async function GETHandler(request: NextRequest) {
+export async function GET(request: NextRequest) {
   const principal = await getGoogleCalendarConnectPrincipal(request);
   if (principal.status === "unauthorized")
     return noStore({ error: "Unauthorized" }, 401);
@@ -77,5 +76,3 @@ async function GETHandler(request: NextRequest) {
   setOAuthAttemptCookie(response, request, attempt.cookieValue);
   return response;
 }
-
-export const GET = withAuth(GETHandler);

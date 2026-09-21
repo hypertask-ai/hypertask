@@ -1,4 +1,3 @@
-import { logger as htLogger } from "#logger";
 import { NextApiHandler, NextApiRequest, NextApiResponse } from "next";
 
 
@@ -7,7 +6,7 @@ import prisma from "@/lib/prisma";
 
 const sections = async (section:any, projectId:number ) => {
         try {
-            // debug.log(req.body);
+            // console.log(req.body);
             const project = await prisma.project.update({
                 where: {
                     id: projectId
@@ -22,7 +21,7 @@ const sections = async (section:any, projectId:number ) => {
             })
             // res.status(200).json(project);
         } catch (error) {
-            htLogger.info(error);
+            console.log(error);
             return({
                 status:500,
                 json:{ message: "Internal server error" }

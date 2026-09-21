@@ -1,5 +1,3 @@
-import { logger as htLogger } from "#logger";
-import { withoutAuth } from "#with-auth";
 import { NextRequest, NextResponse } from 'next/server'
 
 import { buildFieldError } from '@/lib/mcp/fieldError'
@@ -14,7 +12,7 @@ import {
 
 const FORMATS = ['markdown', 'html'] as const
 
-async function GETHandler(request: NextRequest) {
+export async function GET(request: NextRequest) {
   try {
     const ctx = await validateMcpAuth(request)
     if (!ctx) {
@@ -85,9 +83,7 @@ async function GETHandler(request: NextRequest) {
       },
     })
   } catch (error) {
-    htLogger.error('[MCP Get Page] Error:', error)
+    console.error('[MCP Get Page] Error:', error)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
 }
-
-export const GET = withoutAuth(GETHandler);

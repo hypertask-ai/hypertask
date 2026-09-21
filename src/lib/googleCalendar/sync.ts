@@ -1,4 +1,3 @@
-import { logger as htLogger } from "#logger";
 import { decryptSecret } from "@/lib/crypto/byokCipher";
 import { isFeatureEnabled, GOOGLE_CALENDAR_FLAG } from "@/lib/flags";
 import prisma from "@/lib/prisma";
@@ -58,7 +57,7 @@ async function revokeAndDeleteDisconnectedConnection(
   try {
     await revokeGoogleToken(decryptSecret(connection.encryptedRefreshToken));
   } catch (error) {
-    htLogger.error("Google Calendar token revocation failed", error);
+    console.error("Google Calendar token revocation failed", error);
     lease.assertOwned();
     await prisma.googleCalendarConnection.updateMany({
       where: {
@@ -388,7 +387,7 @@ async function processConnection(
         return true;
       } catch (error) {
         if (error instanceof GoogleCalendarSweepDeadlineError) throw error;
-        htLogger.error("Google Calendar sync failed", userId, error);
+        console.error("Google Calendar sync failed", userId, error);
         if (error instanceof GoogleCalendarLockLostError) throw error;
         lease.assertOwned();
         await prisma.googleCalendarConnection.updateMany({
@@ -435,7 +434,7 @@ export async function sweepGoogleCalendarConnections({
       }
     } catch (error) {
       if (error instanceof GoogleCalendarSweepDeadlineError) break;
-      htLogger.error("Google Calendar sync failed", connection.userId, error);
+      console.error("Google Calendar sync failed", connection.userId, error);
     }
   }
   return processed;

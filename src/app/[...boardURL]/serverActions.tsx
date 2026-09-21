@@ -67,6 +67,7 @@ export const getTaskServer = async(taskId:number)=>{
   const copied = await prisma.task.findFirst({
     where:{id:taskId}
     })
+    console.log("🚀 Copied Task to clipboard: ", copied)
     
   return copied
 }
@@ -75,6 +76,7 @@ export const getAllSubTasks = async (taskId: number) => {
   let allTasks: number[] = [];
 
   const getTask = async (taskId: number) => {
+    console.log("getting all Sub-Tasks (including Parent)");
     try {
       const task = await prisma.task.findUnique({
         where: { id: taskId },
@@ -95,14 +97,19 @@ export const getAllSubTasks = async (taskId: number) => {
         }
       }
     } catch (error) {
+      console.log("🚀 ~ getAllSubTasks ~ error:", error);
     }
   };
 
   try {
+    console.time("sub-task prefetching on delete");
     await getTask(taskId);
+    console.timeEnd("sub-task prefetching on delete");
+    console.log("🚀 ~ getAllSubTasks ~ tasks:", allTasks)
 
     return allTasks;
   } catch (error) {
+    console.log("🚀 ~ getAllSubTasks ~ error:", error)
   }
 };
 
@@ -117,6 +124,7 @@ export const getNewView = async(viewSlug: string | undefined, projectViewId: str
     })
     return sanitizeViewBoardFilters(view)
   }catch(error){
+    console.log("🚀 ~ getNewView ~ error:", error)
     return undefined
   }
 }
@@ -133,6 +141,7 @@ export const switchToNewView = async (
       create: { projectId },
       update: {},
     });
+    console.log("🚀 ~ project_View:", project_View)
 
     const updatedUserProjectView = await prisma.user_Project_View.upsert({
       create: {
@@ -192,6 +201,7 @@ export const switchToNewView = async (
 
     return 1;
   } catch (error) {
+    console.log("🚀 ~ switchToNewView ~ error:", error);
     return undefined;
   }
 };
@@ -229,6 +239,7 @@ export const resetToDefaultCurrent = async (projectId: number, mode: "ResetToDef
       
       return project_view_updated
   } catch (error) {
+      console.log("🚀 ~ consthandler:NextApiHandler= ~ error:", error)
       return undefined
   }
 }

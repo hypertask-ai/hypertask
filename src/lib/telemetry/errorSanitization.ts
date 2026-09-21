@@ -1,4 +1,3 @@
-import { env as appEnv } from "#env";
 const HEADER_SECRET =
   /\b(authorization|proxy-authorization|cookie|set-cookie)(\s*[:=]\s*)[^\r\n]+/gi;
 const SERIALIZED_HEADER_SECRET =
@@ -91,9 +90,9 @@ export function safeErrorUrl(value?: string) {
   if (!value) return undefined;
   try {
     const trustedOrigins = [
-      appEnv.NEXT_PUBLIC_APP_URL,
-      appEnv.VERCEL_URL ? `https://${appEnv.VERCEL_URL}` : undefined,
-      appEnv.BETTER_AUTH_URL,
+      process.env.NEXT_PUBLIC_APP_URL,
+      process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : undefined,
+      process.env.BETTER_AUTH_URL,
     ]
       .filter((origin): origin is string => Boolean(origin))
       .map((origin) => new URL(origin).origin);

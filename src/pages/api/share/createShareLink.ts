@@ -1,6 +1,3 @@
-import { env as appEnv } from "#env";
-import { logger as htLogger } from "#logger";
-import { withAuth } from "#with-auth";
 import { NextApiHandler, NextApiRequest, NextApiResponse } from "next";
 import { TaskShareType } from "@prisma/client";
 import { redactAgentIdentitiesForPublicShare } from "@/lib/agents/publicAgent";
@@ -71,7 +68,7 @@ const handler: NextApiHandler = async (
         });
       }
     } catch (error) {
-      htLogger.info("🚀 ~ error:", error);
+      console.log("🚀 ~ error:", error);
       prisma.taskSharing.deleteMany({
         where: { projectId, taskId, userId },
       });
@@ -108,7 +105,7 @@ const handler: NextApiHandler = async (
           .status(400)
           .json({ message: "Task share link does not exist" });
     } catch (error) {
-      htLogger.info("🚀 ~ error:", error);
+      console.log("🚀 ~ error:", error);
       return res.status(400).json({ message: JSON.stringify(error) });
     }
   } else if (req.method === "GET") {
@@ -130,7 +127,7 @@ const handler: NextApiHandler = async (
         });
       else return res.status(201).json({});
     } catch (error) {
-      htLogger.info("🚀 ~ error:", error);
+      console.log("🚀 ~ error:", error);
       return res.status(400).json({ message: JSON.stringify(error) });
     }
   } else {
@@ -139,8 +136,8 @@ const handler: NextApiHandler = async (
 };
 
 export const generateShareLink = (shareId: string) => {
-  const baseURL = String(appEnv.NEXT_PUBLIC_BASEURL);
+  const baseURL = String(process.env.NEXT_PUBLIC_BASEURL);
   return `${baseURL}/share?id=${shareId}`;
 };
 
-export default withAuth(handler);
+export default handler;

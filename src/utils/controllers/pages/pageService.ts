@@ -1,4 +1,3 @@
-import { logger as htLogger } from "#logger";
 import { Prisma } from '@prisma/client'
 
 import prisma from '@/lib/prisma'
@@ -106,13 +105,13 @@ function createPageSnapshot(
 
 function queuePageUpsert(pageId: number) {
   void upsertPageToTurbopuffer(pageId).catch((error) => {
-    htLogger.error('turbopuffer page indexing failed:', error)
+    console.error('turbopuffer page indexing failed:', error)
   })
 }
 
 function queuePageDelete(pageId: number) {
   void deletePageFromTurbopuffer(pageId).catch((error) => {
-    htLogger.error('turbopuffer page deletion failed:', error)
+    console.error('turbopuffer page deletion failed:', error)
   })
 }
 

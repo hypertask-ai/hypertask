@@ -1,7 +1,6 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const path = require("node:path");
-const { passThroughAuth } = require("./helpers/pass-through-auth.cjs");
 
 const root = path.resolve(__dirname, "..");
 
@@ -54,7 +53,6 @@ test("resetRanks skips a task deleted concurrently instead of 500ing (HTPR-5310)
   delete require.cache[path.join(root, "src/lib/prisma.ts")];
   delete require.cache[path.join(root, "src/lib/realtime/server.ts")];
   delete require.cache[path.join(root, "src/pages/api/section/resetRanks.ts")];
-  stubModule("src/lib/api/withAuth.ts", passThroughAuth());
   stubModule("src/lib/prisma.ts", { default: prisma });
   stubModule("src/lib/realtime/server.ts", { broadcastBoardChange: async () => {} });
   const jiti = require("jiti")(__filename, {

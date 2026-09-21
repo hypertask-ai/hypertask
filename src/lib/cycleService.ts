@@ -1,4 +1,3 @@
-import { logger as htLogger } from "#logger";
 import { Status, type Cycle, type Prisma } from "@prisma/client";
 import prisma from "@/lib/prisma";
 import { broadcastBoardChange } from "@/lib/realtime/server";
@@ -245,7 +244,7 @@ export const sweepCycleRollovers = async (
       moved += result.moved;
       if (result.rolled) touchedProjects.add(candidate.projectId);
     } catch (error) {
-      htLogger.error("[cycle-rollover] project failed", candidate.projectId, error);
+      console.error("[cycle-rollover] project failed", candidate.projectId, error);
     }
   }
   const broadcasts = await Promise.allSettled(
@@ -253,7 +252,7 @@ export const sweepCycleRollovers = async (
   );
   for (const broadcast of broadcasts) {
     if (broadcast.status === "rejected") {
-      htLogger.error("[cycle-rollover] realtime broadcast failed", broadcast.reason);
+      console.error("[cycle-rollover] realtime broadcast failed", broadcast.reason);
     }
   }
   return moved;

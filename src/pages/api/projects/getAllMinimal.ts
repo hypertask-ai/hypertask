@@ -1,4 +1,3 @@
-import { withAuth } from "#with-auth";
 import { NextApiHandler } from "next";
 import getAllMinimal from "@/utils/controllers/projects/getAllMinimal";
 import { SESSION_COOKIE, verifySession } from "@/lib/auth/session";
@@ -20,4 +19,4 @@ const handler: NextApiHandler = async (req, res) => {
   return res.status(response.status).json(response.json);
 };
 
-export default withAuth(handler);
+export default handler;

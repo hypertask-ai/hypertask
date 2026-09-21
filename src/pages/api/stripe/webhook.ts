@@ -1,6 +1,3 @@
-import { env as appEnv } from "#env";
-import { logger as htLogger } from "#logger";
-import { withoutAuth } from "#with-auth";
 import { Stripe } from "stripe";
 import getRawBody from "raw-body";
 import { NextApiRequest, NextApiResponse } from "next";
@@ -27,38 +24,38 @@ export enum StripeWebhooks {
 }
 
 function getStripeInstance() {
-  const key = appEnv.STRIPE_SECRET_KEY ?? "";
+  const key = process.env.STRIPE_SECRET_KEY ?? "";
   return new Stripe(key, {
     // Deliberately pinned; account/webhook payload shapes depend on it.
     apiVersion: "2023-08-16" as typeof Stripe.API_VERSION,
   });
 }
 
-async function checkoutsWebhooksHandler(
+export default async function checkoutsWebhooksHandler(
   req: NextApiRequest,
   res: NextApiResponse
 ) {
   const STRIPE_SIGNATURE_HEADER = "stripe-signature";
-  // debug.log("🚀 ~ file: webhook.ts:38 ~ STRIPE_SIGNATURE_HEADER:", STRIPE_SIGNATURE_HEADER)
+  // console.log("🚀 ~ file: webhook.ts:38 ~ STRIPE_SIGNATURE_HEADER:", STRIPE_SIGNATURE_HEADER)
   const signature = req.headers[STRIPE_SIGNATURE_HEADER];
-  // debug.log("🚀 ~ file: webhook.ts:40 ~ signature:", signature)
+  // console.log("🚀 ~ file: webhook.ts:40 ~ signature:", signature)
   const rawBody = await getRawBody(req);
-  // debug.log("🚀 ~ file: webhook.ts:42 ~ rawBody:", rawBody)
+  // console.log("🚀 ~ file: webhook.ts:42 ~ rawBody:", rawBody)
   const stripe = await getStripeInstance();
 
   if (signature) {
     const event = stripe.webhooks.constructEvent(
       rawBody,
       signature,
-      appEnv.WEBHOOK_SECRET_STRIPE?.toString() ?? ""
+      process.env.WEBHOOK_SECRET_STRIPE?.toString() ?? ""
     );
-    htLogger.info("🚀 ~ event:", event)
-    // debug.log("🚀 ~ file: webhook.ts:55 ~ event.type:", event.type)
+    console.log("🚀 ~ event:", event)
+    // console.log("🚀 ~ file: webhook.ts:55 ~ event.type:", event.type)
     try {
       switch (event.type) {
         case StripeWebhooks.SubscriptionCreated: {
           const subscription = await getSubscription(event);
-          htLogger.info("🚀 ~ file: webhook.ts:54 ~ subscription:", subscription )
+          console.log("🚀 ~ file: webhook.ts:54 ~ subscription:", subscription )
           await sessionOnSuccess(subscription, subscription.plan);
           // await onCheckoutCompleted(session, subscription);
           return res.status(200).json({ message: "success" });
@@ -67,7 +64,7 @@ async function checkoutsWebhooksHandler(
 
         case StripeWebhooks.Completed: {
           const session = event.data.object as Stripe.Checkout.Session;
-          htLogger.info("🚀 ~ file: webhook.ts:64 ~ session:", session)
+          console.log("🚀 ~ file: webhook.ts:64 ~ session:", session)
           const subscriptionId = await getSubscriptionIdFromSession(event);
           const subscription: any = await stripe.subscriptions.retrieve(
             subscriptionId
@@ -90,14 +87,14 @@ async function checkoutsWebhooksHandler(
           // and revoke the matching team's entitlement immediately.
           const subscription = event.data
             .object as PinnedApiVersionSubscription;
-          htLogger.info("🚀 ~ subscription:", subscription);
+          console.log("🚀 ~ subscription:", subscription);
           await onSubscriptionUpdated(subscription);
           return res.status(200).json({ message: "success" });
         }
 
         case StripeWebhooks.SubscriptionUpdated: {
           const subscription = await getSubscription(event);
-          htLogger.info("🚀 ~ subscription:", subscription);
+          console.log("🚀 ~ subscription:", subscription);
           await onSubscriptionUpdated(subscription, subscription.plan);
           return res.status(200).json({ message: "success" });
 
@@ -106,7 +103,7 @@ async function checkoutsWebhooksHandler(
 
         case StripeWebhooks.PaymentFailed: {
           const session = event.data.object as Stripe.Checkout.Session;
-          htLogger.info("🚀 ~ file: webhook.ts:87 ~ session:", session);
+          console.log("🚀 ~ file: webhook.ts:87 ~ session:", session);
 
           // TODO: handle this properly
           // onPaymentFailed(session);
@@ -118,7 +115,7 @@ async function checkoutsWebhooksHandler(
       // return respondOk(res);
     } catch (e) {
       //   return internalServerErrorException(res);
-      htLogger.info(e);
+      console.log(e);
       return res.status(500).json(e);
     }
   }
@@ -128,23 +125,21 @@ async function checkoutsWebhooksHandler(
   // here we handle each event based on {event.type}
   async function getSubscription(event: Stripe.Event) {
     const session = event.data.object as Stripe.Checkout.Session;
-    htLogger.info("🚀 ~ file: webhook.ts:57 ~ session:", session);
+    console.log("🚀 ~ file: webhook.ts:57 ~ session:", session);
     const subscriptionId = session.id as string;
-    htLogger.info("🚀 ~ getSubscription ~ subscriptionId:", subscriptionId);
+    console.log("🚀 ~ getSubscription ~ subscriptionId:", subscriptionId);
 
     const subscription: any = await stripe.subscriptions.retrieve(
       subscriptionId
     );
-    htLogger.info("🚀 ~ getSubscription ~ subscription:", subscription);
+    console.log("🚀 ~ getSubscription ~ subscription:", subscription);
     return subscription;
   }
 
   async function getSubscriptionIdFromSession(event: Stripe.Event) {
     const session = event.data.object as Stripe.Checkout.Session;
     const subscriptionId = session.subscription as string;
-    htLogger.info("🚀 ~ getSubscriptionIdFromSession ~ subscriptionId:", subscriptionId);
+    console.log("🚀 ~ getSubscriptionIdFromSession ~ subscriptionId:", subscriptionId);
     return subscriptionId;
   }
 }
-
-export default withoutAuth(checkoutsWebhooksHandler);

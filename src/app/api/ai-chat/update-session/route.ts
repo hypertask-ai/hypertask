@@ -1,5 +1,3 @@
-import { logger as htLogger } from "#logger";
-import { withAuth } from "#with-auth";
 import { chatStore } from "@/utils/controllers/chat";
 import prisma from "@/lib/prisma";
 import { isValidUser } from "@/utils/edgeHelpers";
@@ -8,7 +6,7 @@ import { NextRequest, NextResponse } from "next/server";
 
 export const runtime = "nodejs";
 
-async function POSTHandler(request: NextRequest) {
+export async function POST(request: NextRequest) {
   try {
     const cookieStore = await cookies();
     const userCookie = cookieStore.get("nookies_user");
@@ -53,7 +51,7 @@ async function POSTHandler(request: NextRequest) {
 
     return NextResponse.json({ success: true, session }, { status: 200 });
   } catch (error: any) {
-    htLogger.error("🚀 ~ POST ~ Error updating chat session", error);
+    console.error("🚀 ~ POST ~ Error updating chat session", error);
 
     return NextResponse.json(
       {
@@ -64,5 +62,3 @@ async function POSTHandler(request: NextRequest) {
     );
   }
 }
-
-export const POST = withAuth(POSTHandler);

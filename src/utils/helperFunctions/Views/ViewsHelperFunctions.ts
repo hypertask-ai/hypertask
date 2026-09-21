@@ -169,17 +169,17 @@ function syncColumnsWithProject(
 
 //     // if no unsaved changes, then just return either the userAppliedView or default view. 
 //     if (!areColumnsDifferent){
-//         debug.log(`------> No unsaved chanegs found for project:${project.title}`)
+//         console.log(`------> No unsaved chanegs found for project:${project.title}`)
 //         return columnViewInDB as any[]
 //     } 
-//     if (!isDeepEqual(columnsViewLocalStorage, project.section)) debug.log(`Found out of sync changes for project:${project.title}`)
+//     if (!isDeepEqual(columnsViewLocalStorage, project.section)) console.log(`Found out of sync changes for project:${project.title}`)
 //     const {synced} = syncColumnsWithProject(columnsViewLocalStorage, project.section??[]);
-//     debug.log("--------------> There are unsaved changes for project:"+ project.title, + ". So, we'll sync live and local")
-//     debug.log("--------------> for reference: the live version: ", project.section)
-//     debug.log("--------------> for reference: the local version: ", columnsViewLocalStorage)
+//     console.log("--------------> There are unsaved changes for project:"+ project.title, + ". So, we'll sync live and local")
+//     console.log("--------------> for reference: the live version: ", project.section)
+//     console.log("--------------> for reference: the local version: ", columnsViewLocalStorage)
 
-//     debug.log("+-+ ---------------> *Synced* version: ", synced)
-//     debug.log("+-+ ------------------------------------------------------------------------------------------------------------")
+//     console.log("+-+ ---------------> *Synced* version: ", synced)
+//     console.log("+-+ ------------------------------------------------------------------------------------------------------------")
 
 //     setBoardColumnsViewAndReturn(project.id, synced)
 //     return synced
@@ -208,9 +208,9 @@ function syncColumnsWithProject(
 // ==================== get the default and user applied column view
 // export const getBoardAndUserAppliedColumnView = (_currentProject: IProject) => {
 //     const defaultView = _currentProject.project_view?.default_view?.board_columns_view
-//     // debug.log("🚀 ~ getBoardAndUserAppliedView ~ defaultView:", defaultView)
+//     // console.log("🚀 ~ getBoardAndUserAppliedView ~ defaultView:", defaultView)
 //     const userAppliedView = _currentProject.project_view?.user_project_views[0]?.appliedView?.board_columns_view
-//     // debug.log("🚀 ~ getBoardAndUserAppliedView ~ userAppliedView:", userAppliedView)
+//     // console.log("🚀 ~ getBoardAndUserAppliedView ~ userAppliedView:", userAppliedView)
 //     return { userAppliedView, defaultView }
 
 

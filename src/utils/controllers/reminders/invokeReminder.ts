@@ -1,4 +1,3 @@
-import { logger as htLogger } from "#logger";
 import prisma from "@/lib/prisma";
 import { IReminder } from "@/models/model";
 import type { Prisma } from "@prisma/client";
@@ -26,7 +25,7 @@ const invokeReminderWithClient = async (
   client: Prisma.TransactionClient,
 ) => {
   const currentDate = new Date();
-  htLogger.info("🚀 ~ currentDate:", currentDate)
+  console.log("🚀 ~ currentDate:", currentDate)
 
   // A queued or stale caller must not resurrect an Inbox item after an
   // explicit removal archived its reminder under the same task lock.
@@ -140,7 +139,7 @@ const restoreReminderNotifications = async (
       take:1
 
     })
-  htLogger.info("🚀 ~ notifications:", notifications)
+  console.log("🚀 ~ notifications:", notifications)
 
   for (const notf of notifications){
     await client.notification.update({

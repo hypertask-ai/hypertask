@@ -1,4 +1,3 @@
-import { logger as htLogger } from "#logger";
 import prisma from '@/lib/prisma'
 import { randomInt } from 'node:crypto'
 
@@ -60,9 +59,9 @@ export class VerificationCodeService {
       // Update rate limiting after successful storage
       lastRequestTime.set(normalizedEmail, now)
       
-      htLogger.info(`🔐 Stored verification code for ${normalizedEmail}, expires at ${expiresAt.toISOString()}`)
+      console.log(`🔐 Stored verification code for ${normalizedEmail}, expires at ${expiresAt.toISOString()}`)
     } catch (error) {
-      htLogger.error('❌ Failed to store verification code:', error)
+      console.error('❌ Failed to store verification code:', error)
       
       // Specific error handling
       if (error instanceof Error) {
@@ -105,7 +104,7 @@ export class VerificationCodeService {
 
       return result.count === 1 ? normalizedEmail : null
     } catch (error) {
-      htLogger.error('❌ Failed to verify code:', error)
+      console.error('❌ Failed to verify code:', error)
       return null
     }
   }
@@ -128,10 +127,10 @@ export class VerificationCodeService {
       })
       
       if (result.count > 0) {
-        htLogger.info(`🧹 Cleaned up ${result.count} expired verification codes (older than 24h)`)
+        console.log(`🧹 Cleaned up ${result.count} expired verification codes (older than 24h)`)
       }
     } catch (error) {
-      htLogger.error('❌ Failed to cleanup expired codes:', error)
+      console.error('❌ Failed to cleanup expired codes:', error)
     }
   }
 
@@ -175,7 +174,7 @@ export class VerificationCodeService {
         rateLimitActive: lastRequestTime.size
       }
     } catch (error) {
-      htLogger.error('❌ Failed to get verification code stats:', error)
+      console.error('❌ Failed to get verification code stats:', error)
       return { total: 0, active: 0, expired: 0, used: 0, recentRequests: 0, rateLimitActive: 0 }
     }
   }
@@ -211,6 +210,6 @@ export class VerificationCodeService {
       }
     }
     
-    htLogger.info(`🧹 Rate limit cleanup: ${lastRequestTime.size} active entries remaining`)
+    console.log(`🧹 Rate limit cleanup: ${lastRequestTime.size} active entries remaining`)
   }
 }

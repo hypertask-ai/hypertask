@@ -1,4 +1,3 @@
-import { logger as htLogger } from "#logger";
 import authConfig from '@/lib/configs/auth.config';
 import { companyRoleOptions, companySizeOptions } from '@/lib/constants/constants';
 import prisma from '@/lib/prisma';
@@ -264,7 +263,7 @@ export const resetUserAccount = async (
             );
         } catch (onboardingError) {
             // The reset itself succeeded; onboarding can be completed on next login.
-            htLogger.error("Failed to recreate onboarding state after reset:", onboardingError);
+            console.error("Failed to recreate onboarding state after reset:", onboardingError);
         }
 
         return {
@@ -276,7 +275,7 @@ export const resetUserAccount = async (
         };
 
     } catch (error) {
-        htLogger.error("Error resetting user:", error);
+        console.error("Error resetting user:", error);
         return {
             status: 500,
             json: isTransfer

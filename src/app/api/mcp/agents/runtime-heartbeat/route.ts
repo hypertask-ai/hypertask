@@ -1,5 +1,3 @@
-import { logger as htLogger } from "#logger";
-import { withoutAuth } from "#with-auth";
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 import { checkMcpRateLimit, validateMcpAuth } from "@/lib/mcp/auth";
@@ -14,7 +12,7 @@ import { getProjectWhere } from "@/utils/controllers/projects/getAllIncludes";
 
 export const runtime = "nodejs";
 
-async function POSTHandler(request: NextRequest) {
+export async function POST(request: NextRequest) {
   const rateLimited = await checkMcpRateLimit(request);
   if (rateLimited) return rateLimited;
   const ctx = await validateMcpAuth(request);
@@ -62,12 +60,10 @@ async function POSTHandler(request: NextRequest) {
         { status: error.status },
       );
     }
-    htLogger.error("[Agent runtime] Heartbeat failed:", error);
+    console.error("[Agent runtime] Heartbeat failed:", error);
     return NextResponse.json(
       { success: false, error: "Failed to record runtime heartbeat" },
       { status: 500 },
     );
   }
 }
-
-export const POST = withoutAuth(POSTHandler);

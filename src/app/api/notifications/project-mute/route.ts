@@ -1,4 +1,4 @@
-import { getAuthSession, withAuth } from "#with-auth";
+import { getSessionUser } from "@/lib/auth/getSessionUser";
 import prisma from "@/lib/prisma";
 import { projectContentAccessWhere } from "@/utils/controllers/projects/getAllIncludes";
 import { NextRequest, NextResponse } from "next/server";
@@ -15,8 +15,8 @@ async function accessibleProject(userId: number, projectId: number) {
   });
 }
 
-async function GETHandler(request: NextRequest) {
-  const session = await getAuthSession(request.headers);
+export async function GET(request: NextRequest) {
+  const session = await getSessionUser(request.headers);
   if (!session) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
@@ -43,8 +43,8 @@ async function GETHandler(request: NextRequest) {
   return NextResponse.json({ muted: Boolean(mute) });
 }
 
-async function POSTHandler(request: NextRequest) {
-  const session = await getAuthSession(request.headers);
+export async function POST(request: NextRequest) {
+  const session = await getSessionUser(request.headers);
   if (!session) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
@@ -80,6 +80,3 @@ async function POSTHandler(request: NextRequest) {
 
   return NextResponse.json({ muted });
 }
-
-export const GET = withAuth(GETHandler);
-export const POST = withAuth(POSTHandler);

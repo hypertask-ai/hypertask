@@ -1,10 +1,9 @@
-import { logger as htLogger } from "#logger";
-import { getAuthSession, withAuth } from "#with-auth";
 import type { NextApiRequest, NextApiResponse } from "next";
 import { isValidUser } from "@/utils/edgeHelpers";
 import { validateProjectAccess } from "@/lib/mcp/tasks/services";
 import { getRealtimeServer } from "@/lib/realtime/server";
 import { featureFlagsChannel } from "@/lib/realtime/shared";
+import { getSessionUser } from "@/lib/auth/getSessionUser";
 import prisma from "@/lib/prisma";
 
 // Authorizes a client to subscribe to a private realtime channel.
@@ -46,7 +45,7 @@ async function userMayAccess(
   return false;
 }
 
-async function handler(
+export default async function handler(
   req: NextApiRequest,
   res: NextApiResponse
 ) {
@@ -65,7 +64,7 @@ async function handler(
     if (channel === featureFlagsChannel()) {
       const headers = new Headers();
       if (req.headers.cookie) headers.set("cookie", req.headers.cookie);
-      userId = (await getAuthSession(headers))?.userId ?? null;
+      userId = (await getSessionUser(headers))?.userId ?? null;
     } else {
       const { user, isValid } = isValidUser(req.cookies.nookies_user);
       if (isValid && user) userId = Number(user.id);
@@ -87,9 +86,7 @@ async function handler(
     const authResponse = server.authorizeChannel(socketId, channel);
     return res.status(200).json(authResponse);
   } catch (error) {
-    htLogger.error("[realtime] channel authorization failed", error);
+    console.error("[realtime] channel authorization failed", error);
     return res.status(500).json({ error: "Unable to authorize realtime channel" });
   }
 }
-
-export default withAuth(handler);

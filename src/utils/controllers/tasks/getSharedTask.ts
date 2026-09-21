@@ -1,4 +1,3 @@
-import { logger as htLogger } from "#logger";
 import prisma from "@/lib/prisma";
 import {
   PRIVATE_AGENT_DISPLAY_NAME,
@@ -112,7 +111,7 @@ export const getSharedComments = async (
       json: redactSharedComments(comments),
     };
   } catch (error) {
-    htLogger.info(error);
+    console.log(error);
     return {
       status: 500,
       json: { message: "Internal server error" },
@@ -218,14 +217,14 @@ export const checkIfBoardMember = async (userId: number, projectId: number) => {
         user: true,
       },
     });
-    htLogger.info(member);
+    console.log(member);
     if (member) {
       return 200;
     }
 
     return 201;
   } catch (error) {
-    htLogger.info("🚀 ~ error:", error);
+    console.log("🚀 ~ error:", error);
     return 400;
   }
 };

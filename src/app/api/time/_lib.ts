@@ -1,4 +1,4 @@
-import { getAuthSession } from "#with-auth";
+import { getSessionUser } from "@/lib/auth/getSessionUser";
 import prisma from "@/lib/prisma";
 import { getProjectWhere } from "@/utils/controllers/projects/getAllIncludes";
 import { NextRequest, NextResponse } from "next/server";
@@ -9,7 +9,7 @@ export function parseTaskId(value: unknown) {
 }
 
 export async function getTimeRequestUser(request: NextRequest) {
-  const session = await getAuthSession(request.headers);
+  const session = await getSessionUser(request.headers);
   if (!session) {
     return {
       userId: null,

@@ -264,6 +264,7 @@ async function handleFileUpload(original:any, view:any, schema:any, options:any,
       view.dispatch(tr);
     }
   } catch (error) {
+    console.error('Upload error:', error);
     
     // Handle upload failure by marking the node with an error
     const { tr } = view.state;

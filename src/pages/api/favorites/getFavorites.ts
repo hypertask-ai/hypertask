@@ -1,5 +1,3 @@
-import { logger as htLogger } from "#logger";
-import { withAuth } from "#with-auth";
 import { NextApiHandler } from "next";
 import { SESSION_COOKIE, verifySession } from "@/lib/auth/session";
 import { getFavoritesForUser } from "@/utils/controllers/favorites/getAll";
@@ -19,9 +17,9 @@ const handler: NextApiHandler = async (req, res) => {
   try {
     return res.status(200).json(await getFavoritesForUser(session.id));
   } catch (error) {
-    htLogger.info(error);
+    console.log(error);
     return res.status(400).json({ message: "Unable to load favorites" });
   }
 };
 
-export default withAuth(handler);
+export default handler;

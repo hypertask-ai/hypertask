@@ -1,4 +1,3 @@
-import { env as appEnv } from "#env";
 import { IAgent, IProject, IUser } from "@/models/model";
 import { currentProjectAtom, currentUserAtom } from "@/store";
 import { ChangeEvent, useEffect, useRef, useState } from "react";
@@ -323,7 +322,7 @@ const InviteMember = (props: Props) => {
     if (isGuestCookieUser()) return;
 
     const baseURL =
-      String(appEnv.NEXT_PUBLIC_BASEURL) ?? "https://app.hypertask.ai";
+      String(process.env.NEXT_PUBLIC_BASEURL) ?? "https://app.hypertask.ai";
     let key: string | null = null;
     if (inviteURL?.inviteLink) {
       try {

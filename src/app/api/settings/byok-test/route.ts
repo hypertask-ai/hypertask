@@ -1,4 +1,3 @@
-import { withAuth } from "#with-auth";
 import { NextResponse } from "next/server";
 import { randomUUID } from "node:crypto";
 import {
@@ -31,7 +30,7 @@ const TEST_LEASE_MS = TEST_TIMEOUT_MS + 5_000;
 
 class ProviderTestLeaseError extends Error {}
 
-async function POSTHandler(request: Request) {
+export async function POST(request: Request) {
   const user = await getServerCookieUser();
   if (!user) {
     return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
@@ -226,5 +225,3 @@ async function POSTHandler(request: Request) {
 
   return runTest();
 }
-
-export const POST = withAuth(POSTHandler);

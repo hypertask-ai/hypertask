@@ -22,6 +22,7 @@ export default function GlobalError({
   reset: () => void
 }) {
   useEffect(() => {
+    console.error('Global error (root crash):', error, { digest: error?.digest })
 
     const report = () =>
       reportClientError({

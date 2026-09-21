@@ -1,5 +1,3 @@
-import { logger as htLogger } from "#logger";
-import { withAuth } from "#with-auth";
 import { NextApiHandler, NextApiRequest, NextApiResponse } from "next";
 import tasksGetTask from "@/utils/controllers/tasks/getTask";
 import { httpStatusConfig } from "@/lib/configs/http-status.config";
@@ -32,7 +30,7 @@ const handler: NextApiHandler = async (
 
       return res.status(response.status).json(response.json);
     } catch (error) {
-      htLogger.info({ error });
+      console.log({ error });
       return res
         .status(500)
         .json({ message: httpStatusConfig.statusCodes[500].userMessage });
@@ -44,4 +42,4 @@ const handler: NextApiHandler = async (
   }
 };
 
-export default withAuth(handler);
+export default handler;

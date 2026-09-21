@@ -43,7 +43,7 @@ function loadRoute({ enabled = true, session = { userId: 6 }, task = undefined }
 
   for (const relativePath of [
     "src/app/api/tasks/cycle/route.ts",
-    "src/lib/api/withAuth.ts",
+    "src/lib/auth/getSessionUser.ts",
     "src/lib/cycleService.ts",
     "src/lib/prisma.ts",
     "src/lib/realtime/server.ts",
@@ -52,7 +52,7 @@ function loadRoute({ enabled = true, session = { userId: 6 }, task = undefined }
   ]) {
     delete require.cache[path.join(root, relativePath)];
   }
-  stubModule("src/lib/api/withAuth.ts", { getAuthSession: async () => session, withAuth: (handler) => handler });
+  stubModule("src/lib/auth/getSessionUser.ts", { getSessionUser: async () => session });
   stubModule("src/lib/cycleService.ts", {
     getProjectCycleOverview: async () => ({
       current: { ...cycles[0], startDate: "2026-08-17", endDate: "2026-08-31" },

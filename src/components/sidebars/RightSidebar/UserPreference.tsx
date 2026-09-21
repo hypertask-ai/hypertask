@@ -211,6 +211,7 @@ const UserPreferenceSidebar = ({
       });
       return response.status === 200 && Boolean(response.data.settings);
     } catch (error) {
+      console.log("🚀 ~ saveAutoDescriptionPreference ~ error:", error);
       return false;
     }
   };
@@ -227,6 +228,7 @@ const UserPreferenceSidebar = ({
         }));
       }
     } catch (error) {
+      console.log("🚀 ~ updateUserPreferences ~ error:", error);
     }
   };
 

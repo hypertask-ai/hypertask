@@ -1,4 +1,3 @@
-import { logger as htLogger } from "#logger";
 // Assuming you have already initialized Prisma and have access to the PrismaClient instance.
 
 import prisma from "@/lib/prisma";
@@ -28,7 +27,7 @@ const addSection = async(currProjectID:number, newSectionTitle:string) =>{
         json:updatedProject
       })
     } catch (error) {
-      htLogger.error(error);
+      console.error(error);
       return ({
         status:500,
         json:{ error: 'Failed to add new section' }

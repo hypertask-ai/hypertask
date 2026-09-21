@@ -1,5 +1,3 @@
-import { env as appEnv } from "#env";
-import { logger as htLogger } from "#logger";
 import { NextRequest, NextResponse } from 'next/server'
 import prisma from '@/lib/prisma'
 import jwt from 'jsonwebtoken'
@@ -40,8 +38,8 @@ import {
   TEAM_MANAGEMENT_KEY_PREFIX,
 } from '@/lib/mcp/managementKeyTeamScope'
 
-const JWT_SECRET = appEnv.JWT_SECRET as string
-const JWT_ISSUER = appEnv.JWT_ISSUER || 'hypertask'
+const JWT_SECRET = process.env.JWT_SECRET as string
+const JWT_ISSUER = process.env.JWT_ISSUER || 'hypertask'
 export const JWT_MCP_AUDIENCE = 'mcp-api'
 export const JWT_LEGACY_MCP_AUDIENCE = 'hypertasks-mcp'
 const AGENT_TOKEN_GENERATION_CLAIM = 'agentTokenGeneration'
@@ -83,11 +81,11 @@ function tokenRevocationJtis(
 const mcpConnectionLogThrottle = new Map<number, number>()
 
 // Default/anonymous tier — unauthenticated or invalid-token traffic (HTPR-4135). Unchanged.
-const MCP_RATE_LIMIT_PER_MINUTE = Number(appEnv.MCP_RATE_LIMIT_PER_MINUTE) || 120
+const MCP_RATE_LIMIT_PER_MINUTE = Number(process.env.MCP_RATE_LIMIT_PER_MINUTE) || 120
 // Agent tier — successfully authenticated agent JWTs (agentId claim) or valid htk_ API
 // keys get a higher published limit instead of being treated as anonymous scraping
 // traffic (HTPR-4431). Picked as 5x default; tune via env if it's wrong in practice.
-const MCP_AGENT_RATE_LIMIT_PER_MINUTE = Number(appEnv.MCP_AGENT_RATE_LIMIT_PER_MINUTE) || 600
+const MCP_AGENT_RATE_LIMIT_PER_MINUTE = Number(process.env.MCP_AGENT_RATE_LIMIT_PER_MINUTE) || 600
 
 /**
  * Determines whether the request count alone is enough to allow or block a
@@ -141,7 +139,7 @@ export async function checkMcpRateLimit(request: NextRequest): Promise<NextRespo
       { status: 429, headers: { 'Retry-After': String(decision.retryAfterSeconds) } }
     )
   } catch (err) {
-    htLogger.warn('[MCP Rate Limit] Redis check failed, failing open:', err)
+    console.warn('[MCP Rate Limit] Redis check failed, failing open:', err)
     return null
   }
 }
@@ -282,27 +280,27 @@ export async function validateMcpAuth(
   const token = extractBearerToken(request.headers.get('Authorization'))
 
   if (!token) {
-    htLogger.info('[MCP Auth] No Authorization header or invalid format')
+    console.log('[MCP Auth] No Authorization header or invalid format')
     return null
   }
 
   if (isManagementKeyToken(token)) {
     const managementCtx = await validateManagementApiKey(token)
     if (!managementCtx) {
-      htLogger.info('[MCP Auth] Management API key validation failed')
+      console.log('[MCP Auth] Management API key validation failed')
       return null
     }
     if (
       !options.deferManagementPermissionCheck &&
       !hasDataPermission(managementCtx.management?.permissions ?? {})
     ) {
-      htLogger.info('[MCP Auth] Management API key rejected:', {
+      console.log('[MCP Auth] Management API key rejected:', {
         reason: 'insufficient_scope',
       })
       return null
     }
 
-    htLogger.info('[MCP Auth] Management API key validated for user:', managementCtx.user.id)
+    console.log('[MCP Auth] Management API key validated for user:', managementCtx.user.id)
     logMcpCliUsage(request, token, managementCtx)
     return managementCtx
   }
@@ -310,23 +308,23 @@ export async function validateMcpAuth(
   if (token.startsWith('htk_')) {
     const ctx = await validateApiKey(token)
     if (ctx) {
-      htLogger.info('[MCP Auth] API key validated for user:', ctx.user.id)
+      console.log('[MCP Auth] API key validated for user:', ctx.user.id)
       logMcpCliUsage(request, token, ctx)
       return ctx
     }
 
-    htLogger.info('[MCP Auth] API key validation failed')
+    console.log('[MCP Auth] API key validation failed')
     return null
   }
 
   const ctx = await validateJwtToken(token)
   if (ctx) {
-    htLogger.info('[MCP Auth] JWT validated for user:', ctx.user.id, 'agentId:', ctx.agentId ?? '(none)')
+    console.log('[MCP Auth] JWT validated for user:', ctx.user.id, 'agentId:', ctx.agentId ?? '(none)')
     logMcpCliUsage(request, token, ctx)
     return ctx
   }
 
-  htLogger.info('[MCP Auth] JWT token validation failed')
+  console.log('[MCP Auth] JWT token validation failed')
   return null
 }
 
@@ -381,7 +379,7 @@ async function validateApiKey(token: string): Promise<McpAuthContext | null> {
       agentId: null,
     }
   } catch {
-    htLogger.info('[MCP Auth] API key lookup failed')
+    console.log('[MCP Auth] API key lookup failed')
     return null
   }
 }
@@ -399,7 +397,7 @@ export async function validateManagementAuth(
   const token = extractBearerToken(request.headers.get('Authorization'))
 
   if (!token) {
-    htLogger.info('[MCP Auth] No Authorization header or invalid format')
+    console.log('[MCP Auth] No Authorization header or invalid format')
     return null
   }
 
@@ -418,7 +416,7 @@ export async function validateManagementAuth(
       !managementCtx ||
       !hasRequiredPermission
     ) {
-      htLogger.info('[MCP Auth] Management API key lacks required management permission', {
+      console.log('[MCP Auth] Management API key lacks required management permission', {
         requiredAction: requiredAction ?? 'any',
       })
       return null
@@ -440,7 +438,7 @@ export async function validateManagementAuth(
   const aud = unverified?.aud
   const audiences = Array.isArray(aud) ? aud : aud ? [aud] : []
   if (!audiences.includes(JWT_MCP_AUDIENCE)) {
-    htLogger.info('[MCP Auth] Management endpoints require an mcp-api audience token')
+    console.log('[MCP Auth] Management endpoints require an mcp-api audience token')
     return null
   }
 
@@ -449,7 +447,7 @@ export async function validateManagementAuth(
   // Agent-bound JWTs are data credentials for bots; letting one mint or
   // revoke keys would escalate a leaked bot token to account admin.
   if (ctx.agentId) {
-    htLogger.info('[MCP Auth] Agent tokens cannot access management endpoints')
+    console.log('[MCP Auth] Agent tokens cannot access management endpoints')
     return null
   }
   logMcpCliUsage(request, token, ctx)
@@ -587,14 +585,14 @@ async function validateManagementApiKey(token: string): Promise<McpAuthContext |
       },
     }
   } catch (error) {
-    htLogger.error('[MCP Auth] Failed to verify management API key:', error)
+    console.error('[MCP Auth] Failed to verify management API key:', error)
     return null
   }
 }
 
 export function verifyMcpJwtToken(token: string): jwt.JwtPayload | null {
   if (!JWT_SECRET) {
-    htLogger.info('[MCP Auth] JWT_SECRET not configured')
+    console.log('[MCP Auth] JWT_SECRET not configured')
     return null // JWT not configured
   }
 
@@ -603,7 +601,7 @@ export function verifyMcpJwtToken(token: string): jwt.JwtPayload | null {
   try {
     decodedWithoutVerify = jwt.decode(token, { complete: false }) as jwt.JwtPayload
     if (decodedWithoutVerify) {
-      htLogger.info('[MCP Auth] Token decoded (unverified):', {
+      console.log('[MCP Auth] Token decoded (unverified):', {
         userId: decodedWithoutVerify.userId,
         sub: decodedWithoutVerify.sub,
         iss: decodedWithoutVerify.iss,
@@ -613,12 +611,12 @@ export function verifyMcpJwtToken(token: string): jwt.JwtPayload | null {
       })
     }
   } catch (err) {
-    htLogger.info('[MCP Auth] Failed to decode token:', err)
+    console.log('[MCP Auth] Failed to decode token:', err)
     return null
   }
 
   if (!decodedWithoutVerify) {
-    htLogger.info('[MCP Auth] Token decode returned null')
+    console.log('[MCP Auth] Token decode returned null')
     return null
   }
 
@@ -632,43 +630,43 @@ export function verifyMcpJwtToken(token: string): jwt.JwtPayload | null {
         issuer: JWT_ISSUER,
         audience: JWT_MCP_AUDIENCE,
       }) as jwt.JwtPayload
-      htLogger.info('[MCP Auth] JWT verified with current format (mcp-api)')
+      console.log('[MCP Auth] JWT verified with current format (mcp-api)')
     } catch (err: any) {
-      htLogger.info('[MCP Auth] Current format failed:', err?.message)
+      console.log('[MCP Auth] Current format failed:', err?.message)
       // Try legacy format (hypertasks-mcp audience, hypertasks issuer)
       try {
         decoded = jwt.verify(token, JWT_SECRET, {
           issuer: 'hypertasks', // Legacy issuer
           audience: JWT_LEGACY_MCP_AUDIENCE,
         }) as jwt.JwtPayload
-        htLogger.info('[MCP Auth] JWT verified with legacy format (hypertasks-mcp)')
+        console.log('[MCP Auth] JWT verified with legacy format (hypertasks-mcp)')
       } catch (err2: any) {
-        htLogger.info('[MCP Auth] Legacy format failed:', err2?.message)
+        console.log('[MCP Auth] Legacy format failed:', err2?.message)
         try {
           decoded = jwt.verify(token, JWT_SECRET, {
             issuer: JWT_OAUTH_ISSUER,
             audience: [JWT_OAUTH_AUDIENCE, JWT_LEGACY_OAUTH_AUDIENCE],
           }) as jwt.JwtPayload
-          htLogger.info('[MCP Auth] JWT verified as OAuth access token')
+          console.log('[MCP Auth] JWT verified as OAuth access token')
         } catch (errOAuth: any) {
-          htLogger.info('[MCP Auth] OAuth format failed:', errOAuth?.message)
+          console.log('[MCP Auth] OAuth format failed:', errOAuth?.message)
           // Only tokens minted before MCP audiences were introduced may use the
           // compatibility path. A present audience belongs to another token contract.
           if (decodedWithoutVerify.aud !== undefined) {
-            htLogger.info('[MCP Auth] Token has an unsupported audience:', decodedWithoutVerify.aud)
+            console.log('[MCP Auth] Token has an unsupported audience:', decodedWithoutVerify.aud)
             return null
           }
           try {
             decoded = jwt.verify(token, JWT_SECRET, {
               issuer: ['hypertasks', JWT_ISSUER, JWT_OAUTH_ISSUER],
             }) as jwt.JwtPayload
-            htLogger.info('[MCP Auth] Legacy audience-less JWT verified')
+            console.log('[MCP Auth] Legacy audience-less JWT verified')
           } catch (err3: any) {
-            htLogger.info('[MCP Auth] All verification attempts failed')
-            htLogger.info('[MCP Auth] Signature error details:', err3?.message)
-            htLogger.info('[MCP Auth] JWT_SECRET exists:', !!JWT_SECRET, 'Length:', JWT_SECRET?.length)
-            htLogger.info('[MCP Auth] Token issuer:', decodedWithoutVerify?.iss, 'Expected:', ['hypertasks', JWT_ISSUER])
-            htLogger.info('[MCP Auth] Token audience:', decodedWithoutVerify?.aud, 'Expected:', [JWT_LEGACY_MCP_AUDIENCE, JWT_MCP_AUDIENCE])
+            console.log('[MCP Auth] All verification attempts failed')
+            console.log('[MCP Auth] Signature error details:', err3?.message)
+            console.log('[MCP Auth] JWT_SECRET exists:', !!JWT_SECRET, 'Length:', JWT_SECRET?.length)
+            console.log('[MCP Auth] Token issuer:', decodedWithoutVerify?.iss, 'Expected:', ['hypertasks', JWT_ISSUER])
+            console.log('[MCP Auth] Token audience:', decodedWithoutVerify?.aud, 'Expected:', [JWT_LEGACY_MCP_AUDIENCE, JWT_MCP_AUDIENCE])
             return null
           }
         }
@@ -825,7 +823,7 @@ async function validateJwtToken(token: string): Promise<McpAuthContext | null> {
           select: { client_id: true },
         })
         if (!client) {
-          htLogger.info('[MCP Auth] OAuth client was removed')
+          console.log('[MCP Auth] OAuth client was removed')
           return null
         }
       }
@@ -843,7 +841,7 @@ async function validateJwtToken(token: string): Promise<McpAuthContext | null> {
     })
 
     if (revokedToken) {
-      htLogger.info('[MCP Auth] Token has been revoked')
+      console.log('[MCP Auth] Token has been revoked')
       return null
     }
 
@@ -860,7 +858,7 @@ async function validateJwtToken(token: string): Promise<McpAuthContext | null> {
             : null
       
       if (tokenIssuedAt && tokenIssuedAt < user.mcpTokensRevokedAt) {
-        htLogger.info('[MCP Auth] Token was issued before user revoked all tokens:', {
+        console.log('[MCP Auth] Token was issued before user revoked all tokens:', {
           tokenIssuedAt: tokenIssuedAt.toISOString(),
           revokedAt: user.mcpTokensRevokedAt.toISOString(),
         })
@@ -917,16 +915,16 @@ async function validateJwtToken(token: string): Promise<McpAuthContext | null> {
         },
       })
       if (!agent) {
-        htLogger.info('[MCP Auth] Invalid or revoked agent on token:', rawAgentId)
+        console.log('[MCP Auth] Invalid or revoked agent on token:', rawAgentId)
         return null
       }
       const storedGeneration = storedAgentTokenGeneration(agent)
       if (!storedGeneration) {
-        htLogger.info('[MCP Auth] No stored token for agent (revoked):', rawAgentId)
+        console.log('[MCP Auth] No stored token for agent (revoked):', rawAgentId)
         return null
       }
       if (presentedAgentTokenGeneration(decoded) !== storedGeneration) {
-        htLogger.info('[MCP Auth] Agent token generation does not match — rotated or revoked')
+        console.log('[MCP Auth] Agent token generation does not match — rotated or revoked')
         return null
       }
       // An OAuth access token carries the generation instead of the bearer
@@ -951,7 +949,7 @@ async function validateJwtToken(token: string): Promise<McpAuthContext | null> {
         !carriesOAuthGeneration &&
         (!agent.mcpTokenHash || hashAgentToken(token) !== agent.mcpTokenHash)
       ) {
-        htLogger.info('[MCP Auth] Agent token does not match the stored digest')
+        console.log('[MCP Auth] Agent token does not match the stored digest')
         return null
       }
       agentId = agent.id
@@ -968,7 +966,7 @@ async function validateJwtToken(token: string): Promise<McpAuthContext | null> {
         status: Status.Normal,
         LoggedById: user.id,
       }).catch((err) => {
-        htLogger.error('[MCP Auth] Failed to log mcp_connected:', err)
+        console.error('[MCP Auth] Failed to log mcp_connected:', err)
       })
     }
 
@@ -1135,7 +1133,7 @@ export async function revokeTokenByJti(jti: string, userId: number, expiresAt: D
       },
     })
   } catch (error) {
-    htLogger.error('[MCP Auth] Error revoking token:', error)
+    console.error('[MCP Auth] Error revoking token:', error)
     throw error
   }
 }
@@ -1334,7 +1332,7 @@ export async function classifyMcpAuthFailure(
 
     return 'invalid_token'
   } catch (error) {
-    htLogger.error('[MCP Auth] Failed to classify rejection:', error)
+    console.error('[MCP Auth] Failed to classify rejection:', error)
     return 'invalid_token'
   }
 }

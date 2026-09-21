@@ -46,6 +46,7 @@ export default function IntegrationsComponent() {
         setMessage({ type: 'error', text: 'Failed to connect Slack integration. Please try again.' });
       }
     } catch (error) {
+      console.error('Error connecting Slack:', error);
       setMessage({ type: 'error', text: 'An error occurred while connecting to Slack.' });
     }
   };

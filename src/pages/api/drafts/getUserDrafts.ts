@@ -1,9 +1,7 @@
-import { logger as htLogger } from "#logger";
-import { withAuth } from "#with-auth";
 import prisma from "@/lib/prisma";
 import type { NextApiRequest, NextApiResponse } from "next";
 
-async function handler(
+export default async function handler(
   req: NextApiRequest,
   res: NextApiResponse
 ) {
@@ -59,9 +57,7 @@ async function handler(
       .status(200)
       .json(drafts.filter((draft) => draft.task.status === "Normal"));
   } catch (error) {
-    htLogger.info(error);
+    console.log(error);
     return res.status(500).json(error);
   }
 }
-
-export default withAuth(handler);

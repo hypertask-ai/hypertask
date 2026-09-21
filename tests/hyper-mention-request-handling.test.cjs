@@ -36,7 +36,7 @@ test("HyperAI mention clients reject missing task context without a request", ()
     2,
   );
   assert.ok(
-    (hook.match(/htLogger\.warn\(/g) || []).length >= 2,
+    (hook.match(/console\.warn\(/g) || []).length >= 2,
     "both mention request paths should warn about missing task context",
   );
   assert.match(hook, /\.\.\.\(ownerId !== undefined \? \{ ownerId \} : \{\}\)/);

@@ -1,9 +1,8 @@
-import { env as appEnv } from "#env";
 /** Base URL for absolute MCP response links (matches internal fetch patterns). */
 export function mcpPublicBaseUrl(): string {
   return (
-    appEnv.NEXT_PUBLIC_BASEURL ||
-    (appEnv.VERCEL_URL ? `https://${appEnv.VERCEL_URL}` : 'http://localhost:3000')
+    process.env.NEXT_PUBLIC_BASEURL ||
+    (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'http://localhost:3000')
   )
 }
 

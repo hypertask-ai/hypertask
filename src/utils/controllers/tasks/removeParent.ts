@@ -1,4 +1,3 @@
-import { logger as htLogger } from "#logger";
 import prisma from "@/lib/prisma";
 
 const RemoveParentTask = async (childId: number) => {
@@ -10,7 +9,7 @@ const RemoveParentTask = async (childId: number) => {
       parentTaskId: null,
     },
   });
-  htLogger.info("🚀 ~ RemoveParentTask ~ updated:", updated);
+  console.log("🚀 ~ RemoveParentTask ~ updated:", updated);
 
   return {
     status: 200,

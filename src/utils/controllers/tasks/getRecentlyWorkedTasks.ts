@@ -1,4 +1,3 @@
-import { logger as htLogger } from "#logger";
 import prisma from "@/lib/prisma";
 import { getProjectWhere } from "@/utils/controllers/projects/getAllIncludes";
 
@@ -55,7 +54,7 @@ const getRecentlyWorkedTasks = async ({
 
     return { status: 200, json: tasks };
   } catch (error) {
-    htLogger.error("Unable to load recently worked tasks", error);
+    console.error("Unable to load recently worked tasks", error);
     return { status: 500, json: [] };
   }
 };

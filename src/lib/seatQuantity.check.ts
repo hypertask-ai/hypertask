@@ -1,4 +1,3 @@
-import { logger as htLogger } from "#logger";
 // Runnable check for the HTPR-3777 seat math.
 // Run: node --experimental-strip-types src/lib/seatQuantity.check.ts
 import assert from "node:assert";
@@ -60,4 +59,4 @@ assert.strictEqual(
   "null invitee emails ignored",
 );
 
-htLogger.info("seatQuantity: all checks passed");
+console.log("seatQuantity: all checks passed");

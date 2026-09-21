@@ -1,4 +1,3 @@
-import { logger as htLogger } from "#logger";
 
 import prisma from "@/lib/prisma";
 
@@ -34,7 +33,7 @@ const getTrashByProjectId = async ({ projectId, userId }: { projectId: number; u
             })
             return project
         } catch (error) {
-            htLogger.info(error);
+            console.log(error);
 
         }
 };

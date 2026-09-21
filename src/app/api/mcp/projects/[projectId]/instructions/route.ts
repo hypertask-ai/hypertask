@@ -1,4 +1,3 @@
-import { withoutAuth } from "#with-auth";
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 
@@ -35,7 +34,7 @@ function parseProjectId(raw: string): number {
   return projectId;
 }
 
-async function GETHandler(
+export async function GET(
   request: NextRequest,
   props: { params: Promise<{ projectId: string }> }
 ) {
@@ -63,7 +62,7 @@ async function GETHandler(
   }
 }
 
-async function PUTHandler(
+export async function PUT(
   request: NextRequest,
   props: { params: Promise<{ projectId: string }> }
 ) {
@@ -137,6 +136,3 @@ async function PUTHandler(
     return NextResponse.json({ success: false, error: message }, { status });
   }
 }
-
-export const GET = withoutAuth(GETHandler);
-export const PUT = withoutAuth(PUTHandler);

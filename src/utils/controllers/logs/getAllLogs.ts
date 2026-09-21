@@ -1,4 +1,3 @@
-import { logger as htLogger } from "#logger";
 
 
 import prisma from "@/lib/prisma";
@@ -14,7 +13,7 @@ const getAllLogs = async () => {
             })
             // res.status(200).json(comments);
         } catch (error) {
-            htLogger.info(error);
+            console.log(error);
             return ({
                 status:500,
                 json:[],

@@ -26,6 +26,7 @@ const AssigneesContainerCreateTaskGlobally: React.FC<IProps> = ({
   const callbackHandler = (user?: IUser) => {
     toggleModal();
     if (!user) return;
+    console.log("🚀 ~ callbackHandler ~ user:", user);
     const olderAssignees = formValues.assignees;
 
     // Check if the user already exists in the list
@@ -43,6 +44,7 @@ const AssigneesContainerCreateTaskGlobally: React.FC<IProps> = ({
       newerAssignees = [...olderAssignees, user];
     }
 
+    console.log("🚀 ~ callbackHandler ~ newerAssignees:", newerAssignees);
     handleChange("assignees", newerAssignees);
   };
 

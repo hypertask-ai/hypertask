@@ -1,5 +1,3 @@
-import { logger as htLogger } from "#logger";
-import { withAuth } from "#with-auth";
 import { chatStore } from "@/utils/controllers/chat";
 import prisma from "@/lib/prisma";
 import {
@@ -49,7 +47,7 @@ function parseDataUrlToBuffer(dataUrl: string): {
   return { mimeType, buffer };
 }
 
-async function POSTHandler(request: NextRequest) {
+export async function POST(request: NextRequest) {
   try {
     const cookieStore = await cookies();
     const userCookie = cookieStore.get("nookies_user");
@@ -140,7 +138,7 @@ async function POSTHandler(request: NextRequest) {
     const content =
       messageData.role === "assistant"
         ? await linkifyTicketRefs(messageData.content, user.id).catch((err) => {
-            htLogger.error("linkifyTicketRefs failed, saving unlinked:", err);
+            console.error("linkifyTicketRefs failed, saving unlinked:", err);
             return messageData.content;
           })
         : messageData.content;
@@ -183,7 +181,7 @@ async function POSTHandler(request: NextRequest) {
 
     return NextResponse.json({ message }, { status: 200 });
   } catch (error: any) {
-    htLogger.error("🚀 ~ POST ~ Error adding chat message", error);
+    console.error("🚀 ~ POST ~ Error adding chat message", error);
 
     return NextResponse.json(
       {
@@ -194,5 +192,3 @@ async function POSTHandler(request: NextRequest) {
     );
   }
 }
-
-export const POST = withAuth(POSTHandler);

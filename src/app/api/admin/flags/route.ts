@@ -1,5 +1,3 @@
-import { logger as htLogger } from "#logger";
-import { withAuth } from "#with-auth";
 import { NextRequest, NextResponse } from "next/server";
 import {
   FEATURE_FLAG_DETAILS_FLAG,
@@ -37,7 +35,7 @@ function trustedOrigin(request: NextRequest) {
   }
 }
 
-async function GETHandler(request: NextRequest) {
+export async function GET(request: NextRequest) {
   try {
     if (!(await isFeatureFlagOwner(request.headers))) {
       return noStore({ error: "Not found" }, 404);
@@ -48,12 +46,12 @@ async function GETHandler(request: NextRequest) {
     ]);
     return noStore({ flags, detailsEnabled });
   } catch (error) {
-    htLogger.error("[feature-flags] admin read failed", error);
+    console.error("[feature-flags] admin read failed", error);
     return noStore({ error: "Unable to load feature flags" }, 500);
   }
 }
 
-async function PATCHHandler(request: NextRequest) {
+export async function PATCH(request: NextRequest) {
   try {
     if (!(await isFeatureFlagOwner(request.headers))) {
       return noStore({ error: "Not found" }, 404);
@@ -88,7 +86,7 @@ async function PATCHHandler(request: NextRequest) {
       ? await setFeatureFlagMode(body.key, body.mode as FeatureFlagMode)
       : await setFeatureFlagKeep(body.key, body.keep as boolean);
     await broadcastFeatureFlagsChange().catch((error) =>
-      htLogger.warn("[feature-flags] realtime broadcast failed", error),
+      console.warn("[feature-flags] realtime broadcast failed", error),
     );
     return noStore({ flag });
   } catch (error) {
@@ -98,10 +96,7 @@ async function PATCHHandler(request: NextRequest) {
         400,
       );
     }
-    htLogger.error("[feature-flags] update failed", error);
+    console.error("[feature-flags] update failed", error);
     return noStore({ error: "Unable to update feature flag" }, 500);
   }
 }
-
-export const GET = withAuth(GETHandler);
-export const PATCH = withAuth(PATCHHandler);

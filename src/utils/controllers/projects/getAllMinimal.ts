@@ -1,4 +1,3 @@
-import { logger as htLogger } from "#logger";
 import { Prisma } from "@prisma/client";
 import prisma from "@/lib/prisma";
 import { teamBillingSnapshotSelect } from "@/lib/ai/teamBillingSnapshotSelect";
@@ -172,7 +171,7 @@ const getAllMinimal = async (
       json: projects.map((project) => sanitizeProjectBoardFilters(project)),
     };
   } catch (error) {
-    htLogger.info("🚀 ~ getAllMinimal ~ error:", error);
+    console.log("🚀 ~ getAllMinimal ~ error:", error);
     return { status: 400, json: [] };
   }
 };

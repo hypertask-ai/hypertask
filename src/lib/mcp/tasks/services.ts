@@ -1,5 +1,3 @@
-import { env as appEnv } from "#env";
-import { logger as htLogger } from "#logger";
 import prisma from '@/lib/prisma';
 import type { Prisma } from '@prisma/client';
 import { getProjectWhere } from '@/utils/controllers/projects/getAllIncludes';
@@ -344,7 +342,7 @@ export async function setTaskLabels(
     } catch (error) {
         // The outbox row committed with the label mutation. The queue helper
         // and the agent-webhook outbox sweeper retry publication failures.
-        htLogger.warn('[task-labels] queue publish failed; outbox sweep will retry', error);
+        console.warn('[task-labels] queue publish failed; outbox sweep will retry', error);
     }
 }
 
@@ -431,7 +429,7 @@ export async function mutateTaskLabels(
     } catch (error) {
         // The outbox row committed with the label mutation. The queue helper
         // and the agent-webhook outbox sweeper retry publication failures.
-        htLogger.warn('[task-labels] queue publish failed; outbox sweep will retry', error);
+        console.warn('[task-labels] queue publish failed; outbox sweep will retry', error);
     }
 }
 
@@ -494,10 +492,10 @@ export async function createTask(data: {
     }
 
     // Prepare priority/estimate objects in the format createGlobally expects
-    const priority = priorityIndex > 0
+    const priority = priorityIndex > 0 
         ? PriorityConstants.find(p => p.priority_index === priorityIndex)
         : undefined;
-
+    
     const estimate = estimateIndex > 0
         ? EstimateConstants.find(e => e.estimate_index === estimateIndex)
         : undefined;
@@ -522,7 +520,7 @@ export async function createTask(data: {
             // Extract file extension from URL to determine file type
             const urlPath = new URL(imageUrl).pathname;
             const extension = urlPath.split('.').pop()?.toLowerCase() || 'jpg';
-
+            
             // Map common image extensions to MIME types
             const mimeTypeMap: Record<string, string> = {
                 'jpg': 'image/jpeg',
@@ -533,10 +531,10 @@ export async function createTask(data: {
                 'svg': 'image/svg+xml',
                 'bmp': 'image/bmp'
             };
-
+            
             const fileType = mimeTypeMap[extension] || 'image/jpeg';
             const fileName = `image-${Date.now()}.${extension}`;
-
+            
             return {
                 urlString: imageUrl,
                 TaskId: 0, // Will be set after task creation
@@ -549,11 +547,11 @@ export async function createTask(data: {
 
     // Call the existing createGlobally API endpoint internally
     // Use absolute URL for internal calls
-    const baseUrl = appEnv.NEXT_PUBLIC_BASEURL
-        || (appEnv.VERCEL_URL ? `https://${appEnv.VERCEL_URL}` : 'http://localhost:3000');
-
+    const baseUrl = process.env.NEXT_PUBLIC_BASEURL 
+        || (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'http://localhost:3000');
+    
     const apiUrl = `${baseUrl}/api/tasks/createGlobally`;
-
+    
     // Create a cookie string for the user (createGlobally expects nookies_user cookie)
     // Include photoURL so activity log avatars display correctly when tasks are created via MCP
     const userCookie = JSON.stringify(slimUserForCookie({
@@ -637,7 +635,7 @@ export async function createTask(data: {
     }
 
     const result = await response.json();
-
+    
     if (result.error) {
         throw new Error(result.message || 'Failed to create task');
     }

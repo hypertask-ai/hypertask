@@ -1,5 +1,3 @@
-import { logger as htLogger } from "#logger";
-import { withAuth } from "#with-auth";
 // Import PrismaClient from the generated Prisma client
 import sectionUpdate from '@/utils/controllers/section/update';
 import { broadcastBoardChange } from '@/lib/realtime/server';
@@ -48,11 +46,11 @@ if (req.method==="POST"){
     // Get field names of the "Section" model
     
   } catch (error) {
-    htLogger.error('Error:', error);
+    console.error('Error:', error);
     return res.status(500).json({ message: "Section update failed" });
   }
 }
 }
 
 // Run the main function
-export default withAuth(handler);
+export default handler;

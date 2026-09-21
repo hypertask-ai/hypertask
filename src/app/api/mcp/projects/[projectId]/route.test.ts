@@ -1,5 +1,3 @@
-import { env as appEnv } from "#env";
-import { logger as htLogger } from "#logger";
 // Assert-based demo because this repository has no Vitest setup.
 // Run after installing dependencies: npx tsx src/app/api/mcp/projects/[projectId]/route.test.ts
 import assert from 'node:assert/strict'
@@ -10,12 +8,12 @@ async function json(response: Response) {
 }
 
 async function demo() {
-  appEnv.DATABASE_URL =
+  process.env.DATABASE_URL =
     'postgresql://unused:unused@localhost:5432/unused'
-  appEnv.JWT_SECRET =
+  process.env.JWT_SECRET =
     'project-update-test-jwt-secret-at-least-32-characters'
-  appEnv.JWT_ISSUER = 'project-update-test'
-  appEnv.SESSION_SECRET =
+  process.env.JWT_ISSUER = 'project-update-test'
+  process.env.SESSION_SECRET =
     'project-update-session-secret-at-least-32-characters'
 
   const [
@@ -121,10 +119,10 @@ async function demo() {
     else delete globalWithRedis.redis
   }
 
-  htLogger.info('route.test.ts: all assertions passed')
+  console.log('route.test.ts: all assertions passed')
 }
 
 demo().catch((error) => {
-  htLogger.error(error)
+  console.error(error)
   process.exitCode = 1
 })

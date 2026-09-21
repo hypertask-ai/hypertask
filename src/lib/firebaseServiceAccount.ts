@@ -1,4 +1,3 @@
-import { env as appEnv } from "#env";
 // Loads the Firebase Admin service-account credential from the
 // FIREBASE_SERVICE_ACCOUNT_B64 env var (base64-encoded service-account JSON).
 //
@@ -23,7 +22,7 @@ let cached: FirebaseServiceAccount | undefined;
 export function getFirebaseServiceAccount(): any {
   if (cached) return cached;
 
-  const b64 = appEnv.FIREBASE_SERVICE_ACCOUNT_B64;
+  const b64 = process.env.FIREBASE_SERVICE_ACCOUNT_B64;
   if (!b64) {
     throw new Error(
       "FIREBASE_SERVICE_ACCOUNT_B64 is not set. Provide the base64-encoded Firebase Admin service-account JSON (see HTPR-3810).",

@@ -1,5 +1,3 @@
-import { logger as htLogger } from "#logger";
-import { withAuth } from "#with-auth";
 import { notificationStore } from "@/utils/controllers/notifications";
 // Next.js API route support: https://nextjs.org/docs/api-routes/introduction
 
@@ -9,7 +7,7 @@ import { broadcastInboxChange, socketIdFromHeader } from "@/lib/realtime/server"
 
 
 
-async function handler(
+export default  async function handler(
   req: NextApiRequest,
   res: NextApiResponse
 ) {
@@ -72,9 +70,7 @@ async function handler(
 
     return res.status(200).json(updatedNotification)
   } catch (error) {
-      htLogger.info(error)
+      console.log(error)
       return res.status(500).json(error)
   }
 }
-
-export default withAuth(handler);

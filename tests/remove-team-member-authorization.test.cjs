@@ -1,7 +1,6 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const path = require("node:path");
-const { passThroughAuth } = require("./helpers/pass-through-auth.cjs");
 
 const root = path.resolve(__dirname, "..");
 let jitiEntryId = 0;
@@ -60,7 +59,6 @@ function loadRoute(
     "src/pages/api/members/removeTeamMember.ts",
     "src/utils/controllers/teams/leave.ts",
   ]);
-  stubModule("src/lib/api/withAuth.ts", passThroughAuth());
   stubModule("src/utils/controllers/teams/leave.ts", {
     leaveTeam: async (...args) => {
       calls.push(args);

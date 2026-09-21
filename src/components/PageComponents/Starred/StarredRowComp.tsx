@@ -497,6 +497,7 @@ const StarredRow = ({
       );
       toast(task.status === "Archive" ? "Unarchived task" : "Archived task");
     } catch (error) {
+      console.log("🚀 ~ markAsUnarchive ~ error:", error);
     }
   };
 

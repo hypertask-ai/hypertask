@@ -1,4 +1,3 @@
-import { logger as htLogger } from "#logger";
 import prisma from '@/lib/prisma'
 
 /**
@@ -17,10 +16,10 @@ export async function cleanupExpiredOAuthCodes(): Promise<number> {
       }
     })
 
-    htLogger.info(`[OAuth Cleanup] Deleted ${result.count} expired authorization codes`)
+    console.log(`[OAuth Cleanup] Deleted ${result.count} expired authorization codes`)
     return result.count
   } catch (error) {
-    htLogger.error('[OAuth Cleanup] Error cleaning up expired codes:', error)
+    console.error('[OAuth Cleanup] Error cleaning up expired codes:', error)
     throw error
   }
 }
@@ -45,10 +44,10 @@ export async function cleanupUsedOAuthCodes(): Promise<number> {
       }
     })
 
-    htLogger.info(`[OAuth Cleanup] Deleted ${result.count} used authorization codes`)
+    console.log(`[OAuth Cleanup] Deleted ${result.count} used authorization codes`)
     return result.count
   } catch (error) {
-    htLogger.error('[OAuth Cleanup] Error cleaning up used codes:', error)
+    console.error('[OAuth Cleanup] Error cleaning up used codes:', error)
     throw error
   }
 }

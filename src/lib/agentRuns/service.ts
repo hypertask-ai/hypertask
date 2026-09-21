@@ -1,4 +1,3 @@
-import { logger as htLogger } from "#logger";
 import crypto from "crypto";
 import {
   AgentRunActivityType,
@@ -225,12 +224,12 @@ export async function createRuntimeAgentRun(
     void broadcastTaskComment(result.taskId, {
       originUserId: principal.userId,
     }).catch((error) =>
-      htLogger.warn("[agent-run] runtime run task broadcast failed", error),
+      console.warn("[agent-run] runtime run task broadcast failed", error),
     );
     void broadcast(userChannel(principal.userId), AGENT_CHAT_EVENT, {
       agentId,
     }).catch((error) =>
-      htLogger.warn("[agent-run] runtime run agent broadcast failed", error),
+      console.warn("[agent-run] runtime run agent broadcast failed", error),
     );
   }
   return result?.run ?? null;
@@ -442,7 +441,7 @@ async function reconcileAgentChatTurn(
   });
 
   if (result?.deliveryId) await publishAgentWebhookDeliveries([result.deliveryId]);
-  if (result?.changed) void broadcast(userChannel(principal.userId), AGENT_CHAT_EVENT, { sessionId }).catch(htLogger.warn);
+  if (result?.changed) void broadcast(userChannel(principal.userId), AGENT_CHAT_EVENT, { sessionId }).catch(console.warn);
   return result;
 }
 
@@ -487,7 +486,7 @@ export async function sweepExpiredAgentChatTurns(now = new Date()) {
         session.id, false, now,
       ))?.changed) changed += 1;
     } catch (error) {
-      htLogger.warn("[agent-chat] timeout sweep failed", session.id, error);
+      console.warn("[agent-chat] timeout sweep failed", session.id, error);
     }
   }
   return changed;
@@ -606,12 +605,12 @@ async function broadcastActivityChange(
 ) {
   if (run.taskId !== null) {
     void broadcastTaskComment(run.taskId, { originUserId }).catch((error) =>
-      htLogger.warn("[agent-run] task activity broadcast failed", error),
+      console.warn("[agent-run] task activity broadcast failed", error),
     );
     void broadcast(userChannel(originUserId), AGENT_CHAT_EVENT, {
       agentId: run.agentId,
     }).catch((error) =>
-      htLogger.warn("[agent-run] Agent Chat activity broadcast failed", error),
+      console.warn("[agent-run] Agent Chat activity broadcast failed", error),
     );
   } else if (run.chatSession) {
     // A shared thread has more than one watcher, and what the agent is doing

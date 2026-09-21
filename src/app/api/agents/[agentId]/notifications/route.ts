@@ -1,10 +1,10 @@
-import { getAuthSession, withAuth } from "#with-auth";
 import { NextRequest, NextResponse } from "next/server";
 import { getStructuredInboxForAgent } from "@/utils/controllers/notifications/getStructuredInboxForAgent";
+import { getSessionUser } from "@/lib/auth/getSessionUser";
 
-async function GETHandler(request: NextRequest, props: { params: Promise<{ agentId: string }> }) {
+export async function GET(request: NextRequest, props: { params: Promise<{ agentId: string }> }) {
   const params = await props.params;
-  const userId = (await getAuthSession(request.headers))?.userId;
+  const userId = (await getSessionUser(request.headers))?.userId;
   if (!userId) {
     return NextResponse.json(
       { success: false, error: "Unauthorized" },
@@ -36,5 +36,3 @@ async function GETHandler(request: NextRequest, props: { params: Promise<{ agent
     notifications: result.notifications,
   });
 }
-
-export const GET = withAuth(GETHandler);

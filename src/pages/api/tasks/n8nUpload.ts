@@ -1,5 +1,3 @@
-import { logger as htLogger } from "#logger";
-import { withAuth } from "#with-auth";
 import { SESSION_COOKIE, verifySession } from "@/lib/auth/session";
 import {
   MCP_ATTACHMENT_MAX_BATCH_BYTES,
@@ -110,17 +108,17 @@ async function readMultipartBody(req: NextApiRequest): Promise<Buffer> {
 async function resolveBetterAuthSession(
   req: NextApiRequest
 ): Promise<{ id: number } | null> {
-  const { getAuthSession } = await import("#with-auth");
+  const { getSessionUser } = await import("@/lib/auth/getSessionUser");
   const headers = new Headers();
   for (const [name, value] of Object.entries(req.headers)) {
     if (typeof value === "string") headers.set(name, value);
     else if (Array.isArray(value)) headers.set(name, value.join("; "));
   }
-  const session = await getAuthSession(headers);
+  const session = await getSessionUser(headers);
   return session ? { id: session.userId } : null;
 }
 
-async function handler(
+export default async function handler(
   req: NextApiRequest,
   res: NextApiResponse
 ) {
@@ -138,7 +136,7 @@ async function handler(
   // the one route that 401s for an otherwise logged-in user: attachments failed
   // in comments and descriptions while text-only comments still posted.
   //
-  // getAuthSession is imported lazily so the legacy path stays free of the
+  // getSessionUser is imported lazily so the legacy path stays free of the
   // Better Auth and Prisma module graph.
   const session =
     verifySession(req.cookies[SESSION_COOKIE]) ??
@@ -204,7 +202,7 @@ async function handler(
     if (error instanceof UploadRequestError) {
       return res.status(error.status).json({ error: error.message });
     }
-    htLogger.error("[n8nUpload] Upload failed", error);
+    console.error("[n8nUpload] Upload failed", error);
     return res.status(500).json({ error: "Error uploading files" });
   }
 }
@@ -354,5 +352,3 @@ function getMimeTypeFromExtension(extension: string): string {
 
   return mimeTypes[extension] || "application/octet-stream";
 }
-
-export default withAuth(handler);

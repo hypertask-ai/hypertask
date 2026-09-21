@@ -211,25 +211,24 @@ test("management-key classification accepts account and team prefixes", () => {
 });
 
 test("successful MCP auth records a recognized CLI after credential validation", async () => {
-  const { logger } = jiti(path.join(root, "src/lib/logger.ts"));
   permissionsByToken.set("htmk_test", {
     data: ["read", "write"],
     management: ["read", "write"],
   });
   const calls = [];
-  const originalInfo = logger.info;
-  logger.info = (...args) => calls.push(args);
+  const originalInfo = console.info;
+  console.info = (...args) => calls.push(args);
   try {
     const ctx = await validateMcpAuth(request("htmk_test", "htz/0.2.0"));
     assert.equal(ctx?.user.id, 6);
   } finally {
-    logger.info = originalInfo;
+    console.info = originalInfo;
   }
 
-  const usageCalls = calls.filter(([message]) => message === "[MCP CLI Usage]");
-  assert.equal(usageCalls.length, 1);
-  assert.equal(usageCalls[0][1].client, "htz");
-  assert.equal(usageCalls[0][1].userId, 6);
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0][0], "[MCP CLI Usage]");
+  assert.equal(calls[0][1].client, "htz");
+  assert.equal(calls[0][1].userId, 6);
 });
 
 test("usage auth accepts usage-scoped and legacy data-management keys", async () => {

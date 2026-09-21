@@ -1,5 +1,3 @@
-import { logger as htLogger } from "#logger";
-import { withoutAuth } from "#with-auth";
 import { NextRequest, NextResponse } from 'next/server'
 import { Prisma } from '@prisma/client'
 import { validateMcpAuth, checkMcpRateLimit, mcpUnauthorizedResponse } from '@/lib/mcp/auth'
@@ -241,7 +239,7 @@ function applyDurableCommentAttribution<T extends object>(
  * unless include_activity=true. Activity-inclusive history matches the app endpoint's chronological order.
  * Supports pagination and sorting by creation date for the default comments-only response.
  */
-async function GETHandler(request: NextRequest) {
+export async function GET(request: NextRequest) {
   try {
     // Validate authentication
     const rateLimited = await checkMcpRateLimit(request)
@@ -412,7 +410,7 @@ async function GETHandler(request: NextRequest) {
 
     return NextResponse.json(response)
   } catch (error) {
-    htLogger.error('Error getting comments:', error)
+    console.error('Error getting comments:', error)
     return NextResponse.json(
       {
         success: false,
@@ -428,7 +426,7 @@ async function GETHandler(request: NextRequest) {
  * 
  * Adds a comment to a task.
  */
-async function POSTHandler(request: NextRequest) {
+export async function POST(request: NextRequest) {
   try {
     // Validate authentication
     const rateLimited = await checkMcpRateLimit(request)
@@ -980,7 +978,7 @@ async function POSTHandler(request: NextRequest) {
         { status: 409 }
       )
     }
-    htLogger.error('Error adding comment:', error)
+    console.error('Error adding comment:', error)
     return NextResponse.json(
       {
         success: false,
@@ -990,6 +988,3 @@ async function POSTHandler(request: NextRequest) {
     )
   }
 }
-
-export const GET = withoutAuth(GETHandler);
-export const POST = withoutAuth(POSTHandler);

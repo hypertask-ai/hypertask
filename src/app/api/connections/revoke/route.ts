@@ -1,5 +1,3 @@
-import { logger as htLogger } from "#logger";
-import { withAuth } from "#with-auth";
 import { NextRequest, NextResponse } from 'next/server'
 import { cookies } from 'next/headers'
 import { isValidUser } from '@/utils/edgeHelpers'
@@ -12,7 +10,7 @@ import jwt from 'jsonwebtoken'
  * 
  * Body: { client_id: string, agent_id?: string }
  */
-async function POSTHandler(request: NextRequest) {
+export async function POST(request: NextRequest) {
   try {
     const cookieStore = await cookies()
     const userCookie = cookieStore.get('nookies_user')
@@ -97,7 +95,7 @@ async function POSTHandler(request: NextRequest) {
           tokenRevoked = true
         }
       } catch (error) {
-        htLogger.error('Error revoking MCP token:', error)
+        console.error('Error revoking MCP token:', error)
         // Continue even if token revocation fails
       }
     }
@@ -115,12 +113,10 @@ async function POSTHandler(request: NextRequest) {
 
     return response
   } catch (error) {
-    htLogger.error('Error revoking connection:', error)
+    console.error('Error revoking connection:', error)
     return NextResponse.json(
       { success: false, error: 'Internal server error' },
       { status: 500 }
     )
   }
 }
-
-export const POST = withAuth(POSTHandler);

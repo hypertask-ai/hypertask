@@ -1,6 +1,3 @@
-import { env as appEnv } from "#env";
-import { logger as htLogger } from "#logger";
-import { getAuthSession, withAuth } from "#with-auth";
 import { NextRequest, NextResponse } from "next/server";
 import { htmlToText } from "@/app/api/ai/_lib/currentTaskContext";
 import { generateText, stepCountIs } from "ai";
@@ -36,6 +33,7 @@ import { getProjectTeamProviderContext } from "@/app/api/ai/_lib/providerGate";
 import { isAiFeatureEnabled } from "@/lib/systemModelLadder";
 import { getProjectWhere } from "@/utils/controllers/projects/getAllIncludes";
 import { taskWriteAccessWhere } from "@/utils/controllers/projects/getAllIncludes";
+import { getSessionUser } from "@/lib/auth/getSessionUser";
 import { verifyCookieIdentity } from "@/lib/auth/cookieIdentity";
 import { SESSION_COOKIE } from "@/lib/auth/session";
 import { validateMcpAuth } from "@/lib/mcp/auth";
@@ -97,10 +95,10 @@ const hyperMentionRequestSchema = z.object({
   }
 });
 
-async function POSTHandler(request: NextRequest) {
+export async function POST(request: NextRequest) {
   const [cookieUser, sessionUser, cookieIdentity] = await Promise.all([
     getCurrentUserFromCookies(),
-    getAuthSession(request.headers),
+    getSessionUser(request.headers),
     verifyCookieIdentity(
       request.cookies.get("nookies_user")?.value,
       request.cookies.get(SESSION_COOKIE)?.value,
@@ -393,7 +391,7 @@ Do not include markdown fences, greetings, or sign-offs.${
       step.toolCalls.map((call) => call.toolName),
     );
     if (executedToolNames.length > 0) {
-      htLogger.info("[ai/hyper-mentioned] tool loop complete", {
+      console.info("[ai/hyper-mentioned] tool loop complete", {
         projectId: body.projectId,
         taskId: body.taskId,
         userId: requestUser.id,
@@ -414,7 +412,7 @@ Do not include markdown fences, greetings, or sign-offs.${
       totalTokens: result.usage.totalTokens ?? 0,
     });
 
-    const botUserId = parseInt(appEnv.NEXT_PUBLIC_HYPERAI_ID || "332", 10);
+    const botUserId = parseInt(process.env.NEXT_PUBLIC_HYPERAI_ID || "332", 10);
     const botUser = await prisma.user.findUnique({ where: { id: botUserId } });
     if (!botUser) {
       throw new Error("HyperAI user not found");
@@ -429,7 +427,7 @@ Do not include markdown fences, greetings, or sign-offs.${
     const aiResponse = markAiDetailAnchors(
       await linkifyTicketRefs(sanitizedAiHtml, requestUser.id).catch(
         (err) => {
-          htLogger.error("linkifyTicketRefs failed, posting unlinked:", err);
+          console.error("linkifyTicketRefs failed, posting unlinked:", err);
           return sanitizedAiHtml;
         }
       )
@@ -461,7 +459,7 @@ Do not include markdown fences, greetings, or sign-offs.${
 
     return NextResponse.json({ success: true }, { status: 200 });
   } catch (error) {
-    htLogger.error("[ai/hyper-mentioned] error:", error);
+    console.error("[ai/hyper-mentioned] error:", error);
     return NextResponse.json(
       { error: errorMessage(error) },
       { status: 500 }
@@ -485,5 +483,3 @@ function escapeHtml(value: string) {
     .replace(/"/g, "&quot;")
     .replace(/'/g, "&#x27;");
 }
-
-export const POST = withAuth(POSTHandler);

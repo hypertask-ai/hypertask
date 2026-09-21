@@ -1,5 +1,3 @@
-import { logger as htLogger } from "#logger";
-import { withoutAuth } from "#with-auth";
 import { NextRequest, NextResponse } from 'next/server'
 
 import prisma from '@/lib/prisma'
@@ -11,7 +9,7 @@ import { getProjectWhere } from '@/utils/controllers/projects/getAllIncludes'
 const MAX_QUERY_LENGTH = 200
 const SNIPPET_LENGTH = 200
 
-async function GETHandler(request: NextRequest) {
+export async function GET(request: NextRequest) {
   try {
     const ctx = await validateMcpAuth(request)
     if (!ctx) {
@@ -60,9 +58,7 @@ async function GETHandler(request: NextRequest) {
 
     return NextResponse.json({ pages })
   } catch (error) {
-    htLogger.error('[MCP Search Pages] Error:', error)
+    console.error('[MCP Search Pages] Error:', error)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
 }
-
-export const GET = withoutAuth(GETHandler);

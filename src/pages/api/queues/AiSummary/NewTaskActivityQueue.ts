@@ -1,5 +1,3 @@
-import { logger as htLogger } from "#logger";
-import { withoutAuth } from "#with-auth";
 import type { NextApiRequest, NextApiResponse } from "next";
 import { withQstashSignature } from "@/lib/qstash";
 import {
@@ -13,11 +11,11 @@ import { getRedis } from "@/lib/redis";
 async function handler(req: NextApiRequest, res: NextApiResponse) {
   try {
     const job = req.body as IReq;
-    htLogger.info("🚀 ~ executing job:", job)
+    console.log("🚀 ~ executing job:", job)
 
     const result = await generateAndStoreTaskSummary(job.taskId);
     if (!result) {
-      htLogger.info("generateAndStoreTaskSummary returned empty");
+      console.log("generateAndStoreTaskSummary returned empty");
       return res.status(200).json({ skipped: true });
     }
 
@@ -33,13 +31,13 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
           ...job.listOfCommentsToUpsertById.map(String)
         );
       } catch (e) {
-        htLogger.info("🚀 ~ NewTaskActivityQueue ~ srem commentIds error:", e);
+        console.log("🚀 ~ NewTaskActivityQueue ~ srem commentIds error:", e);
       }
     }
 
     return res.status(200).json({ ok: true });
   } catch (error) {
-    htLogger.info("🚀 ~ error:", error)
+    console.log("🚀 ~ error:", error)
     if (error instanceof SummaryRetryableError) {
       return res.status(503).json({ ok: false, retry: true });
     }
@@ -48,7 +46,7 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
   }
 }
 
-export default withoutAuth(withQstashSignature(handler));
+export default withQstashSignature(handler);
 
 export const config = {
   api: {

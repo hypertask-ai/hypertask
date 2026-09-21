@@ -1,5 +1,3 @@
-import { logger as htLogger } from "#logger";
-import { withoutAuth } from "#with-auth";
 import { chatStore } from "@/utils/controllers/chat";
 import { NextRequest, NextResponse } from 'next/server'
 import { checkMcpRateLimit, validateMcpAuth } from '@/lib/mcp/auth'
@@ -38,7 +36,7 @@ function requireAgentToken(ctxAgentId: string | null): NextResponse | null {
  * Agent-readable transcript of one Agent Chat session. Only the session's own
  * agent (the agentId on the bearer token) may read it.
  */
-async function GETHandler(
+export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ sessionId: string }> }
 ) {
@@ -122,7 +120,7 @@ async function GETHandler(
       messages: transcript,
     })
   } catch (error: any) {
-    htLogger.error('[mcp chat] GET messages failed:', error)
+    console.error('[mcp chat] GET messages failed:', error)
     return NextResponse.json(
       { success: false, error: error?.message || 'Failed to load chat messages' },
       { status: 500 }
@@ -143,7 +141,7 @@ type PostChatMessageBody = {
  * idempotency key: a retried POST with the same value returns the already
  * stored reply instead of creating a second one.
  */
-async function POSTHandler(
+export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ sessionId: string }> }
 ) {
@@ -358,13 +356,10 @@ async function POSTHandler(
       message: serialize(message),
     })
   } catch (error: any) {
-    htLogger.error('[mcp chat] POST message failed:', error)
+    console.error('[mcp chat] POST message failed:', error)
     return NextResponse.json(
       { success: false, error: error?.message || 'Failed to add chat message' },
       { status: 500 }
     )
   }
 }
-
-export const GET = withoutAuth(GETHandler);
-export const POST = withoutAuth(POSTHandler);

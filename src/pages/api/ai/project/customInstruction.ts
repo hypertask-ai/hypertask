@@ -1,5 +1,3 @@
-import { logger as htLogger } from "#logger";
-import { withAuth } from "#with-auth";
 import type { NextApiRequest, NextApiResponse } from 'next'
 import prisma from "@/lib/prisma";
 import { validateIntegerParam } from '@/utils/helperFunctions/multiPages';
@@ -9,7 +7,7 @@ import {
 } from '@/lib/aiModelOptions';
 import { getProjectWhere } from '@/utils/controllers/projects/getAllIncludes';
 
-async function handler(
+export default async function handler(
     req: NextApiRequest,
     res: NextApiResponse
 ) {
@@ -36,7 +34,7 @@ async function handler(
 
             return res.status(200).json(customInstructions);
         } catch (error) {
-            htLogger.info(error);
+            console.log(error);
             return res.status(500).json(error);
         }
     }
@@ -121,10 +119,8 @@ async function handler(
 
             return res.status(200).json(customInstructions)
         } catch (error) {
-            htLogger.info(error)
+            console.log(error)
             return res.status(500).json(error)
         }
     }
 }
-
-export default withAuth(handler);

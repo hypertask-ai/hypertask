@@ -1,4 +1,3 @@
-import { logger as htLogger } from "#logger";
 import { generateObject, NoObjectGeneratedError } from "ai";
 import { createHash, randomUUID } from "node:crypto";
 import { z } from "zod";
@@ -110,7 +109,7 @@ export async function generateAndStoreTaskSummary(
   } catch (error) {
     if (error instanceof SummaryGenerationTimeoutError) {
       releaseLease = false;
-      htLogger.error(
+      console.error(
         `[taskSummaries] Retaining timed-out task ${taskId} lease until TTL expiry`,
       );
     }
@@ -169,7 +168,7 @@ async function generateAndStoreTaskSummaryWithLease(
   );
   if (!systemModel) return null;
   if (!task.project.teamId) {
-    htLogger.error(
+    console.error(
       `[taskSummaries] Skipping task ${taskId}: task has no owning team`,
     );
     return null;
@@ -181,14 +180,14 @@ async function generateAndStoreTaskSummaryWithLease(
       trustedTeamId: task.project.teamId,
     });
   } catch (error) {
-    htLogger.error(
+    console.error(
       `[taskSummaries] Skipping task ${taskId}: team gateway key lookup failed for ${task.project.teamId}`,
       error,
     );
     return null;
   }
   if (!gatewayApiKey) {
-    htLogger.error(
+    console.error(
       `[taskSummaries] Skipping task ${taskId}: no dedicated gateway key for team ${task.project.teamId}`,
     );
     return null;
@@ -267,7 +266,7 @@ async function generateAndStoreTaskSummaryWithLease(
     throw error;
   }
   if (!generated) {
-    htLogger.error(
+    console.error(
       `[taskSummaries] Keeping the existing summary for task ${taskId}: no valid summary could be recovered`,
     );
     return null;
@@ -315,14 +314,14 @@ async function acquireSummaryLease(
       "NX",
     );
     if (acquired !== "OK") {
-      htLogger.info(
+      console.log(
         `[taskSummaries] Skipping duplicate generation for task ${taskId}: another worker holds the lease`,
       );
       return "busy";
     }
     return { redis, key, token };
   } catch (error) {
-    htLogger.error(
+    console.error(
       `[taskSummaries] Deferring task ${taskId}: summary deduplication is unavailable`,
       error,
     );
@@ -366,7 +365,7 @@ async function releaseSummaryLease(lease: SummaryLease) {
       lease.token,
     );
   } catch (error) {
-    htLogger.error(
+    console.error(
       `[taskSummaries] Summary lease ${lease.key} will expire automatically`,
       error,
     );
@@ -507,7 +506,7 @@ Summary:`,
     const recoveredSummary = recoverSummaryText(error.text);
     if (!recoveredSummary) return null;
 
-    htLogger.error(
+    console.error(
       "[taskSummaries] Structured verdict was invalid; persisting the recovered summary with a conservative description verdict",
       error.cause,
     );

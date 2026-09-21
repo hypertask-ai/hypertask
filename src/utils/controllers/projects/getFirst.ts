@@ -1,4 +1,3 @@
-import { logger as htLogger } from "#logger";
 import { randomBytes } from "crypto";
 import prisma from "@/lib/prisma";
 import { createProjectViewAndCreateDefault } from "./create";
@@ -63,7 +62,7 @@ const getFirst = async (userId:number) => {
                 });
             }
 
-            htLogger.info("🚀 ~ getFirst ~ project:", project)
+            console.log("🚀 ~ getFirst ~ project:", project)
             if (!project) {
                 // `Project.name` is globally @unique. `project-${count + 1}` races and can
                 // collide with existing rows; mirror create.ts: provisional name, then `project-${id}`.
@@ -93,7 +92,7 @@ const getFirst = async (userId:number) => {
                 json:project
             })
         } catch (error) {
-            htLogger.info(error);
+            console.log(error);
             return({
                 status:400,
                 json:{ message: JSON.stringify(error) }

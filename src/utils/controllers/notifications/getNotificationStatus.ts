@@ -1,4 +1,3 @@
-import { logger as htLogger } from "#logger";
 import { NextApiHandler, NextApiRequest, NextApiResponse } from "next";
 
 
@@ -23,7 +22,7 @@ const getNotificationStatus = async (userid:any) => {
            
             // res.status(200).json(comments);
         } catch (error) {
-            htLogger.info(error);
+            console.log(error);
             return ({
                 status:500,
                 json:{ message: "Internal server error" }

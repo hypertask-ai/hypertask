@@ -1,5 +1,3 @@
-import { withoutAuth } from "#with-auth";
-import { logger as htLogger } from "#logger";
 import { NextRequest, NextResponse } from 'next/server'
 import { cookies } from 'next/headers'
 import { SESSION_COOKIE, verifySession } from '@/lib/auth/session'
@@ -160,7 +158,7 @@ async function issueCodeAndRedirect(
       },
     })
   } catch (error) {
-    htLogger.error('Error storing authorization code:', error)
+    console.error('Error storing authorization code:', error)
     return invalid('Failed to store authorization code', 'server_error', 500)
   }
 
@@ -211,7 +209,7 @@ async function currentSessionUser() {
   return { id: session.id, uid: dbUser.uid }
 }
 
-async function GETHandler(request: NextRequest) {
+export async function GET(request: NextRequest) {
   try {
     const searchParams = request.nextUrl.searchParams
     const validation = await validateAuthorizationRequest(readParams(searchParams))
@@ -269,7 +267,7 @@ async function GETHandler(request: NextRequest) {
       307
     )
   } catch (error) {
-    htLogger.error('Error in OAuth authorize endpoint:', error)
+    console.error('Error in OAuth authorize endpoint:', error)
     return invalid('Internal server error', 'server_error', 500)
   }
 }
@@ -279,7 +277,7 @@ async function GETHandler(request: NextRequest) {
  * the SameSite=lax session cookie, and cannot mint a consent token either, so this
  * is the only place a code gets created for a connector the user has not approved.
  */
-async function POSTHandler(request: NextRequest) {
+export async function POST(request: NextRequest) {
   try {
     const form = await request.formData()
     const validation = await validateAuthorizationRequest(readParams(form))
@@ -342,10 +340,7 @@ async function POSTHandler(request: NextRequest) {
       303
     )
   } catch (error) {
-    htLogger.error('Error in OAuth authorize endpoint:', error)
+    console.error('Error in OAuth authorize endpoint:', error)
     return invalid('Internal server error', 'server_error', 500)
   }
 }
-
-export const GET = withoutAuth(GETHandler);
-export const POST = withoutAuth(POSTHandler);

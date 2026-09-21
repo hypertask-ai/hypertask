@@ -1,5 +1,3 @@
-import { env as appEnv } from "#env";
-import { logger as htLogger } from "#logger";
 import { EstimateConstants, PriorityConstants } from "@/lib/constants/constants";
 import type { McpAuthContext } from "@/lib/mcp/auth";
 import { getProjectWhere } from "@/utils/controllers/projects/getAllIncludes";
@@ -290,7 +288,7 @@ export async function executeTaskUpdate({
         }
         assigneeUserIds = parsed.ids;
     }
-
+    
     // Validate that at least one field to update is provided
     const hasLabels = requestBody.labels !== undefined && Array.isArray(requestBody.labels);
     const hasLabelMutation =
@@ -355,7 +353,7 @@ export async function executeTaskUpdate({
         contractFieldUpdates = parsedContractFields.value;
     }
     if (!hasTextOrParentUpdate && requestBody.estimate === undefined && requestBody.priority === undefined && !requestBody.sectionId && !requestBody.status && !hasLabels && !hasLabelMutation && !hasDueDate && !hasAssigneeField && !hasContractFieldUpdate && !hasPullRequestUpdate) {
-        htLogger.info('[MCP Update Task] Validation failed: No fields to update')
+        console.log('[MCP Update Task] Validation failed: No fields to update')
         return NextResponse.json(
             {
                 ...buildFieldError(
@@ -549,7 +547,7 @@ export async function executeTaskUpdate({
     const methodCount = [!!task_id, !!ticket_number, !!unique_index].filter(Boolean).length
 
     if (methodCount === 0) {
-        htLogger.info('[MCP Update Task] Validation failed: Missing task identifier')
+        console.log('[MCP Update Task] Validation failed: Missing task identifier')
         return NextResponse.json(
             {
                 ...buildFieldError(
@@ -658,7 +656,7 @@ export async function executeTaskUpdate({
     )
 
     if (tasks.length === 0) {
-        htLogger.info('[MCP Update Task] No tasks found or access denied')
+        console.log('[MCP Update Task] No tasks found or access denied')
         outcome = 'not_found'
         if (dryRun) {
             return NextResponse.json(
@@ -688,7 +686,7 @@ export async function executeTaskUpdate({
         hasActiveTaskOnlyMutation(requestBody) &&
         tasks.some((task) => task.status === 'Archive')
     ) {
-        htLogger.info(
+        console.log(
             '[MCP Update Task] Archived tasks cannot move sections or change assignees'
         )
         outcome = 'error'
@@ -705,7 +703,7 @@ export async function executeTaskUpdate({
         hasActiveTaskOnlyMutation(requestBody) &&
         tasks.some((task) => !isActiveTaskMutationTarget(task.status))
     ) {
-        htLogger.info(
+        console.log(
             '[MCP Update Task] Deleted tasks cannot move sections or change assignees'
         )
         outcome = 'not_found'
@@ -718,7 +716,7 @@ export async function executeTaskUpdate({
         )
     }
 
-    htLogger.info('[MCP Update Task] Found tasks:', tasks.map(t => t.id))
+    console.log('[MCP Update Task] Found tasks:', tasks.map(t => t.id))
 
     // Get user object for cookie (include photoURL for activity log avatars)
     const userObj = await prisma.user.findUnique({
@@ -742,9 +740,9 @@ export async function executeTaskUpdate({
     }
 
     // Prepare base URL and cookie for API calls
-    const baseUrl = appEnv.NEXT_PUBLIC_BASEURL
-        || (appEnv.VERCEL_URL ? `https://${appEnv.VERCEL_URL}` : 'http://localhost:3000');
-
+    const baseUrl = process.env.NEXT_PUBLIC_BASEURL 
+        || (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'http://localhost:3000');
+    
     const userCookie = JSON.stringify(slimUserForCookie({
         id: userObj.id,
         email: userObj.email,
@@ -765,7 +763,7 @@ export async function executeTaskUpdate({
     const priorityConstant = priorityIndex !== undefined
         ? PriorityConstants.find(x => x.priority_index === priorityIndex)
         : null
-
+    
     const estimateConstant = requestBody.estimate !== undefined
         ? EstimateConstants.find(x => x.estimate_index === requestBody.estimate)
         : null
@@ -968,9 +966,9 @@ export async function executeTaskUpdate({
                         agentId: ctx.agentId || undefined
                     })
                 })
-
+                
                 if (!priorityResponse.ok) {
-                    htLogger.warn(`[MCP Update Task] Failed to update priority for task ${task.id}`)
+                    console.warn(`[MCP Update Task] Failed to update priority for task ${task.id}`)
                     if (strictSideEffectFailures) {
                         throw new Error(
                             `Priority update failed: ${priorityResponse.status}`
@@ -994,9 +992,9 @@ export async function executeTaskUpdate({
                         agentId: ctx.agentId || undefined
                     })
                 })
-
+                
                 if (!estimateResponse.ok) {
-                    htLogger.warn(`[MCP Update Task] Failed to update estimate for task ${task.id}`)
+                    console.warn(`[MCP Update Task] Failed to update estimate for task ${task.id}`)
                     if (strictSideEffectFailures) {
                         throw new Error(
                             `Estimate update failed: ${estimateResponse.status}`
@@ -1016,7 +1014,7 @@ export async function executeTaskUpdate({
                         actingAgent
                     );
                 } catch (labelError) {
-                    htLogger.warn(`[MCP Update Task] Failed to update labels for task ${task.id}:`, labelError);
+                    console.warn(`[MCP Update Task] Failed to update labels for task ${task.id}:`, labelError);
                     throw labelError;
                 }
             }
@@ -1036,7 +1034,7 @@ export async function executeTaskUpdate({
                         actingAgent
                     );
                 } catch (labelError) {
-                    htLogger.warn(`[MCP Update Task] Failed to mutate labels for task ${task.id}:`, labelError);
+                    console.warn(`[MCP Update Task] Failed to mutate labels for task ${task.id}:`, labelError);
                     throw labelError;
                 }
             }
@@ -1057,7 +1055,7 @@ export async function executeTaskUpdate({
                         });
                     });
                 } catch (contractFieldError) {
-                    htLogger.warn(`[MCP Update Task] Failed to update contract fields for task ${task.id}:`, contractFieldError);
+                    console.warn(`[MCP Update Task] Failed to update contract fields for task ${task.id}:`, contractFieldError);
                     throw contractFieldError;
                 }
             }
@@ -1145,7 +1143,7 @@ export async function executeTaskUpdate({
                         }
                         await assignResponse.json().catch(() => null);
                     } catch (assignErr) {
-                        htLogger.warn(
+                        console.warn(
                             `[MCP Update Task] Failed to ${intent} users for task ${task.id}:`,
                             assignErr
                         );
@@ -1160,7 +1158,7 @@ export async function executeTaskUpdate({
                         select: { userId: true },
                     });
                 } catch (assigneeReadErr) {
-                    htLogger.warn(
+                    console.warn(
                         `[MCP Update Task] Failed to read assignees for task ${task.id}:`,
                         assigneeReadErr
                     );
@@ -1191,7 +1189,7 @@ export async function executeTaskUpdate({
 
             return { success: true, taskId: task.id }
         } catch (error) {
-            htLogger.error(`[MCP Update Task] Error updating task ${task.id}:`, error)
+            console.error(`[MCP Update Task] Error updating task ${task.id}:`, error)
             const linkError = error instanceof PullRequestLinkError ? error : null
             return {
                 success: false,
@@ -1209,10 +1207,10 @@ export async function executeTaskUpdate({
     const updatedTaskIds = updateResults
         .filter(result => result.success)
         .map(result => result.taskId)
-
+    
     const failedTasks = updateResults.filter(result => !result.success)
     if (failedTasks.length > 0) {
-        htLogger.warn(`[MCP Update Task] ${failedTasks.length} task(s) failed to update:`, failedTasks)
+        console.warn(`[MCP Update Task] ${failedTasks.length} task(s) failed to update:`, failedTasks)
     }
 
     // If all tasks failed, return an error
@@ -1250,7 +1248,7 @@ export async function executeTaskUpdate({
         }
     }
 
-    htLogger.info('[MCP Update Task] Tasks updated successfully:', updatedTaskIds)
+    console.log('[MCP Update Task] Tasks updated successfully:', updatedTaskIds)
 
     // Wait for every delivery attempt before returning success. Otherwise the
     // serverless request can finish before external CLI/MCP changes are emitted.
@@ -1259,12 +1257,12 @@ export async function executeTaskUpdate({
     const mappedTasks = updatedTasks.map((task) =>
         mapTaskToDetail(task, user.id, attributionEnabled)
     )
-
+    
     let message = `${updatedTasks.length} task(s) updated successfully`
     if (failedTasks.length > 0) {
         message += ` (${failedTasks.length} task(s) failed)`
     }
-
+    
     const sessionAgent = await getMcpSessionAgentSummary(ctx.agentId, user.id);
 
     const mcpResponse: UpdateTaskResponse = {

@@ -1,8 +1,7 @@
-import { logger as htLogger } from "#logger";
-import { getAuthSession, withAuth } from "#with-auth";
 import { chatStore } from "@/utils/controllers/chat";
 import type { Prisma } from "@prisma/client";
 import prisma from "@/lib/prisma";
+import { getSessionUser } from "@/lib/auth/getSessionUser";
 import { NextRequest, NextResponse } from "next/server";
 import {
   ensureChatParticipant,
@@ -69,12 +68,12 @@ function unreadSince(
 // GET /api/agent-chat/[sessionId]
 // History for one agent chat session, oldest first. `awaiting` tells the
 // client whether the ball is with the agent (last message is the human's).
-async function GETHandler(
+export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ sessionId: string }> }
 ) {
   try {
-    const userId = (await getAuthSession(request.headers))?.userId;
+    const userId = (await getSessionUser(request.headers))?.userId;
     if (!userId) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
@@ -142,7 +141,7 @@ async function GETHandler(
     await readAgentChatTurn(
       { userId, agentId: null, displayName: "Hypertask user", source: "browser" },
       session.id,
-    ).catch((error) => htLogger.warn("[agent-chat] turn reconcile failed", session.id, error));
+    ).catch((error) => console.warn("[agent-chat] turn reconcile failed", session.id, error));
     // One page, oldest first: read desc from the tail, then flip. createdAt
     // alone ties for messages stored in the same millisecond, so id breaks the
     // tie and a page boundary lands in the same place on every request.
@@ -262,7 +261,7 @@ async function GETHandler(
       deliveryMode,
     });
   } catch (error: any) {
-    htLogger.error("🚀 ~ GET ~ Error loading agent chat session", error);
+    console.error("🚀 ~ GET ~ Error loading agent chat session", error);
 
     return NextResponse.json(
       {
@@ -273,5 +272,3 @@ async function GETHandler(
     );
   }
 }
-
-export const GET = withAuth(GETHandler);

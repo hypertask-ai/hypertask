@@ -1,5 +1,3 @@
-import { logger as htLogger } from "#logger";
-import { withAuth } from "#with-auth";
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 
@@ -45,7 +43,7 @@ const learnSchema = z.discriminatedUnion("type", [
   }),
 ]);
 
-async function GETHandler(request: NextRequest) {
+export async function GET(request: NextRequest) {
   return withUser(async (userId) => {
     const projectId = projectIdSchema.parse(
       request.nextUrl.searchParams.get("projectId"),
@@ -54,14 +52,14 @@ async function GETHandler(request: NextRequest) {
   });
 }
 
-async function PATCHHandler(request: NextRequest) {
+export async function PATCH(request: NextRequest) {
   return withUser(async (userId) => {
     const input = toggleSchema.parse(await request.json());
     return NextResponse.json(await setBoardMemoryEnabled({ ...input, userId }));
   });
 }
 
-async function POSTHandler(request: NextRequest) {
+export async function POST(request: NextRequest) {
   return withUser(async (userId) => {
     const input = learnSchema.parse(await request.json());
     const { projectId, ...signal } = input;
@@ -71,7 +69,7 @@ async function POSTHandler(request: NextRequest) {
   });
 }
 
-async function DELETEHandler(request: NextRequest) {
+export async function DELETE(request: NextRequest) {
   return withUser(async (userId) => {
     const projectId = projectIdSchema.parse(
       request.nextUrl.searchParams.get("projectId"),
@@ -120,12 +118,7 @@ async function withUser(handler: (userId: number) => Promise<NextResponse>) {
         { status: 404 },
       );
     }
-    htLogger.error("Board memory request failed", error);
+    console.error("Board memory request failed", error);
     return NextResponse.json({ error: "Request failed" }, { status: 500 });
   }
 }
-
-export const GET = withAuth(GETHandler);
-export const PATCH = withAuth(PATCHHandler);
-export const POST = withAuth(POSTHandler);
-export const DELETE = withAuth(DELETEHandler);

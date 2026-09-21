@@ -1,6 +1,5 @@
-import { logger as htLogger } from "#logger";
-import { getAuthSession, withAuth } from "#with-auth";
 import { NextRequest, NextResponse } from "next/server";
+import { getSessionUser } from "@/lib/auth/getSessionUser";
 import { featureFlagsForUser } from "@/lib/flags";
 
 export const dynamic = "force-dynamic";
@@ -12,15 +11,13 @@ function noStore(body: unknown, status = 200) {
   return response;
 }
 
-async function GETHandler(request: NextRequest) {
+export async function GET(request: NextRequest) {
   try {
-    const session = await getAuthSession(request.headers);
+    const session = await getSessionUser(request.headers);
     if (!session) return noStore({ error: "Unauthorized" }, 401);
     return noStore({ flags: await featureFlagsForUser(session.userId) });
   } catch (error) {
-    htLogger.error("[feature-flags] read failed", error);
+    console.error("[feature-flags] read failed", error);
     return noStore({ error: "Unable to load feature flags" }, 500);
   }
 }
-
-export const GET = withAuth(GETHandler);

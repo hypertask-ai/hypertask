@@ -1,5 +1,3 @@
-import { logger as htLogger } from "#logger";
-import { getAuthSession, withAuth } from "#with-auth";
 import { NextApiHandler, NextApiRequest, NextApiResponse } from "next";
 import {
   deleteTaskSingle,
@@ -13,6 +11,7 @@ import {
 import prisma from "@/lib/prisma";
 import { extractTaskReferencesFromCommentText } from "@/utils/controllers/comments/extractTaskReferences";
 import { addRelatedTasks } from "@/utils/controllers/tasks/addRelatedTasks";
+import { getSessionUser } from "@/lib/auth/getSessionUser";
 import { IUser } from "@/models/model";
 import { taskWriteAccessWhere } from "@/utils/controllers/projects/getAllIncludes";
 
@@ -67,7 +66,7 @@ const handler: NextApiHandler = async (
 
       return res.status(response.status).json(response.json);
     } catch (error) {
-      htLogger.info({ error });
+      console.log({ error });
       return res
         .status(500)
         .json({ message: "Internal server error" + JSON.stringify(error) });
@@ -80,7 +79,7 @@ const handler: NextApiHandler = async (
         return res.status(400).json({ message: "Task id is required" });
       }
       // HTPR-4810: authorize task edits with the signed session and both boards.
-      const session = await getAuthSession(
+      const session = await getSessionUser(
         new Headers(req.headers as Record<string, string>),
       );
       if (!session) {
@@ -173,7 +172,7 @@ const handler: NextApiHandler = async (
               },
             );
           } catch (error) {
-            htLogger.warn(
+            console.warn(
               "[tasks/single] task realtime broadcast failed",
               error,
             );
@@ -201,7 +200,7 @@ const handler: NextApiHandler = async (
             } catch (error) {
               // Never fail the save over a relation: the description is the
               // thing the user asked to persist.
-              htLogger.warn(
+              console.warn(
                 "[tasks/single] description relations failed:",
                 error,
               );
@@ -211,7 +210,7 @@ const handler: NextApiHandler = async (
       }
       return res.status(response.status).json(response.json);
     } catch (error) {
-      htLogger.info(error);
+      console.log(error);
       return res.status(500).json({ message: "Internal server error" });
     }
   }
@@ -219,7 +218,7 @@ const handler: NextApiHandler = async (
     try {
       const { id } = req.query;
       if (!id) return res.status(400).json({ message: "Missing ID" });
-      const session = await getAuthSession(
+      const session = await getSessionUser(
         new Headers(req.headers as Record<string, string>),
       );
       if (!session) {
@@ -242,7 +241,7 @@ const handler: NextApiHandler = async (
       );
       return res.status(response.status).json(response.json);
     } catch (error) {
-      htLogger.info(error);
+      console.log(error);
 
       return res.status(500).json({ message: "Internal server error" });
     }
@@ -251,4 +250,4 @@ const handler: NextApiHandler = async (
   }
 };
 
-export default withAuth(handler);
+export default handler;

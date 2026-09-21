@@ -1,5 +1,3 @@
-import { logger as htLogger } from "#logger";
-import { withAuth } from "#with-auth";
 import { randomUUID } from "node:crypto";
 
 import { NextRequest, NextResponse } from "next/server";
@@ -45,7 +43,7 @@ const nextTutorialColumnTitle = (titles: string[]) => {
   return candidate;
 };
 
-async function POSTHandler(request: NextRequest) {
+export async function POST(request: NextRequest) {
   if (!KEYBOARD_SHORTCUT_TUTORIAL_ENABLED) {
     return NextResponse.json(
       { error: "The keyboard shortcuts tutorial is temporarily unavailable" },
@@ -223,12 +221,10 @@ async function POSTHandler(request: NextRequest) {
       tutorialInboxTargets,
     });
   } catch (error) {
-    htLogger.error("learn board provisioning failed", error);
+    console.error("learn board provisioning failed", error);
     return NextResponse.json(
       { error: "Could not prepare your tutorial board" },
       { status: 500 },
     );
   }
 }
-
-export const POST = withAuth(POSTHandler);

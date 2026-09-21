@@ -1,5 +1,3 @@
-import { logger as htLogger } from "#logger";
-import { withoutAuth } from "#with-auth";
 import { NextRequest, NextResponse } from "next/server";
 import { validateMcpAuth, checkMcpRateLimit } from "@/lib/mcp/auth";
 import prisma from "@/lib/prisma";
@@ -201,7 +199,7 @@ async function buildTreeNode(
  * Query: exactly one of `task_id` (positive int) or `ticket_number` (non-empty string).
  * Optional `depth` (non-negative int) limits how many descendant levels are expanded below the root.
  */
-async function GETHandler(request: NextRequest) {
+export async function GET(request: NextRequest) {
   try {
     const rateLimited = await checkMcpRateLimit(request);
     if (rateLimited) return rateLimited;
@@ -268,7 +266,7 @@ async function GETHandler(request: NextRequest) {
     };
     return NextResponse.json(body);
   } catch (error) {
-    htLogger.error("Error building task tree:", error);
+    console.error("Error building task tree:", error);
     return NextResponse.json(
       {
         success: false,
@@ -278,5 +276,3 @@ async function GETHandler(request: NextRequest) {
     );
   }
 }
-
-export const GET = withoutAuth(GETHandler);

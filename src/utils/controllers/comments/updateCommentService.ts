@@ -1,4 +1,3 @@
-import { logger as htLogger } from "#logger";
 /**
  * Shared comment update logic used by both Pages API and MCP route.
  * Single source of truth for: DB update, activity, search index, summary scheduling, mentions.
@@ -139,7 +138,7 @@ export async function updateCommentService(params: UpdateCommentParams) {
   })
 
   await scheduleCommentSummaryGeneration({ commentId }).catch((err) =>
-    htLogger.warn('[updateCommentService] comment summary schedule failed:', err)
+    console.warn('[updateCommentService] comment summary schedule failed:', err)
   )
 
   // Post-update hooks (same as Pages API)

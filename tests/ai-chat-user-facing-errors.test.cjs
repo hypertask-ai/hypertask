@@ -30,7 +30,7 @@ function loadErrorFormatters(logs = []) {
   }).outputText;
   const logger = { error: (...args) => logs.push(args) };
   return new Function(
-    "htLogger",
+    "console",
     "z",
     "toErrorMessage",
     `${javascript}; return { errorMessage, userFacingErrorMessage, requestErrorMessage };`

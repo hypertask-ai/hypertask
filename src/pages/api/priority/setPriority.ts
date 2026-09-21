@@ -1,5 +1,3 @@
-import { logger as htLogger } from "#logger";
-import { withAuth } from "#with-auth";
 import prisma from "@/lib/prisma";
 import createPriorityActivity from "@/utils/controllers/activities/CreatePriorityActivity";
 import { NextApiHandler } from "next";
@@ -97,9 +95,9 @@ const handler: NextApiHandler = async (req, res) => {
 
     return res.status(400).json({ message: "Priority already exists" });
   } catch (error) {
-    htLogger.error(error);
+    console.error(error);
     return res.status(400).json({ message: JSON.stringify(error) });
   }
 };
 
-export default withAuth(handler);
+export default handler;

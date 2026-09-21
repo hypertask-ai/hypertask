@@ -1,4 +1,3 @@
-import { logger as htLogger } from "#logger";
 import { generateText } from "ai";
 
 import { logAiUsage } from "@/app/api/ai/_lib/aiUsage";
@@ -123,7 +122,7 @@ TL;DR:`,
 
     return stored.count > 0 ? summary : null;
   } catch (error) {
-    htLogger.error("[commentSummaries] failed to generate summary:", error);
+    console.error("[commentSummaries] failed to generate summary:", error);
     return null;
   }
 }

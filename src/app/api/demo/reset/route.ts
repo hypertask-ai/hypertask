@@ -1,5 +1,3 @@
-import { env as appEnv } from "#env";
-import { withoutAuth } from "#with-auth";
 import { NextRequest, NextResponse } from "next/server";
 
 import {
@@ -11,7 +9,7 @@ import { isGuestRequest } from "@/lib/demo/guestGuard";
 
 export const runtime = "nodejs";
 
-async function GETHandler(request: NextRequest) {
+export async function GET(request: NextRequest) {
   const response = NextResponse.redirect(new URL("/demo", request.url), 307);
   const isGuest = await isGuestRequest({
     cookies: {
@@ -24,7 +22,7 @@ async function GETHandler(request: NextRequest) {
   response.cookies.set(SESSION_COOKIE, "", sessionCookieOptions(0));
   response.cookies.set("nookies_user", "", {
     httpOnly: false,
-    secure: appEnv.NODE_ENV === "production",
+    secure: process.env.NODE_ENV === "production",
     sameSite: "lax",
     path: "/",
     maxAge: 0,
@@ -34,7 +32,7 @@ async function GETHandler(request: NextRequest) {
   if (request.cookies.has("signup_source")) {
     response.cookies.set("signup_source", "", {
       httpOnly: false,
-      secure: appEnv.NODE_ENV === "production",
+      secure: process.env.NODE_ENV === "production",
       sameSite: "lax",
       path: "/",
       maxAge: 0,
@@ -43,5 +41,3 @@ async function GETHandler(request: NextRequest) {
 
   return response;
 }
-
-export const GET = withoutAuth(GETHandler);

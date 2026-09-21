@@ -1,4 +1,3 @@
-import { logger as htLogger } from "#logger";
 import { LogType, Status } from "@prisma/client";
 import createLog from "../logs/createLog";
 import { CreateLogInput } from "@/models/model";
@@ -104,7 +103,7 @@ const create = async (userId: number, title: string, teamId: string, googleAccou
       json: project
     })
   } catch (error) {
-    htLogger.info(error);
+    console.log(error);
     return ({
       status: 400,
       json: { message: JSON.stringify(error) }
@@ -150,7 +149,7 @@ export async function createProjectViewAndCreateDefault(
   })
 
   if (!project_view.default_view_id){
-    htLogger.info("🚀 ~ project_view had no default view, hence adding one")
+    console.log("🚀 ~ project_view had no default view, hence adding one")
     const currentDate= new Date()
     const view = await prisma.view.create({
       data: {
@@ -190,7 +189,7 @@ export async function createProjectViewAndCreateDefault(
         default_view_id:view.id
       }
     })
-    htLogger.info("🚀 ~ created === view:", view.title)
+    console.log("🚀 ~ created === view:", view.title)
 
   }
 

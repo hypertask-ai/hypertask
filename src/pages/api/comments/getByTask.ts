@@ -1,5 +1,4 @@
-import { logger as htLogger } from "#logger";
-import { getAuthSession, withAuth } from "#with-auth";
+import { getSessionUser } from "@/lib/auth/getSessionUser";
 import commentsGetByTask from "@/utils/controllers/comments/getByTask";
 import { NextApiHandler, NextApiRequest, NextApiResponse } from "next";
 
@@ -19,7 +18,7 @@ const handler: NextApiHandler = async (
     if (!Number.isInteger(taskId) || taskId < 1) {
       return res.status(400).json({ message: "Task id is required" });
     }
-    const session = await getAuthSession(
+    const session = await getSessionUser(
       new Headers(req.headers as Record<string, string>),
     );
     if (!session) return res.status(401).json({ message: "Unauthorized" });
@@ -27,9 +26,9 @@ const handler: NextApiHandler = async (
     const response = await commentsGetByTask(session.userId, String(taskId));
     return res.status(response.status).json(response.json);
   } catch (error) {
-    htLogger.error("GET /api/comments/getByTask failed", error);
+    console.error("GET /api/comments/getByTask failed", error);
     return res.status(500).json({ message: "Internal server error" });
   }
 };
 
-export default withAuth(handler);
+export default handler;

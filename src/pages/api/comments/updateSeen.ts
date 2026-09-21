@@ -1,6 +1,5 @@
-import { logger as htLogger } from "#logger";
-import { getAuthSession, withAuth } from "#with-auth";
 import prisma from "@/lib/prisma";
+import { getSessionUser } from "@/lib/auth/getSessionUser";
 import notificationGetByTask from "@/utils/controllers/notifications/getByTask";
 import { NextApiHandler, NextApiRequest, NextApiResponse } from "next";
 
@@ -12,7 +11,7 @@ import { NextApiHandler, NextApiRequest, NextApiResponse } from "next";
 const handler: NextApiHandler = async (req: NextApiRequest, res: NextApiResponse) => {
     if (req.method === "POST") {
         try {
-            const session = await getAuthSession(
+            const session = await getSessionUser(
                 new Headers(req.headers as Record<string, string>),
             );
             if (!session) return res.status(401).json({ message: "Unauthorized" });
@@ -41,7 +40,7 @@ const handler: NextApiHandler = async (req: NextApiRequest, res: NextApiResponse
 
             return res.status(200).json({ message: "Success" });
         } catch (error) {
-            htLogger.info(error);
+            console.log(error);
             res.status(500).json({ message: "Internal server error" });
         }
     } else {
@@ -49,4 +48,4 @@ const handler: NextApiHandler = async (req: NextApiRequest, res: NextApiResponse
     }
 };
 
-export default withAuth(handler);
+export default handler;

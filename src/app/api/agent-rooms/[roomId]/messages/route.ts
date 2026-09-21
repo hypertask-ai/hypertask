@@ -1,6 +1,5 @@
-import { logger as htLogger } from "#logger";
-import { getAuthSession, withAuth } from "#with-auth";
 import { NextRequest, NextResponse } from "next/server";
+import { getSessionUser } from "@/lib/auth/getSessionUser";
 import { loadUserAgentRoom } from "@/lib/agents/roomAccess";
 import {
   AgentRoomError,
@@ -9,12 +8,12 @@ import {
 
 export const runtime = "nodejs";
 
-async function POSTHandler(
+export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ roomId: string }> },
 ) {
   try {
-    const userId = (await getAuthSession(request.headers))?.userId;
+    const userId = (await getSessionUser(request.headers))?.userId;
     if (!userId) {
       return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
     }
@@ -35,7 +34,7 @@ async function POSTHandler(
     });
     return NextResponse.json({ success: true, message });
   } catch (error) {
-    htLogger.error("[agent-room] send failed", error);
+    console.error("[agent-room] send failed", error);
     const status = error instanceof AgentRoomError ? error.status : 500;
     return NextResponse.json(
       {
@@ -46,5 +45,3 @@ async function POSTHandler(
     );
   }
 }
-
-export const POST = withAuth(POSTHandler);

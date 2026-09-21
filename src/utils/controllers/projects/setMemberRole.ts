@@ -1,4 +1,3 @@
-import { logger as htLogger } from "#logger";
 import prisma from "@/lib/prisma";
 
 type MemberRole = "Admin" | "Member";
@@ -88,7 +87,7 @@ const setMemberRole = async (
       json: updatedMember,
     });
   } catch (error) {
-    htLogger.error(error);
+    console.error(error);
     return ({
       status: 500,
       json: { error: "Failed to change member role" },

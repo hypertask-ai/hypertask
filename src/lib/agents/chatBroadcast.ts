@@ -1,4 +1,3 @@
-import { logger as htLogger } from "#logger";
 import { AGENT_CHAT_EVENT, broadcast, userChannel } from "@/lib/realtime/server";
 import { chatParticipantUserIds } from "@/lib/agents/chatAccess";
 
@@ -29,7 +28,7 @@ export async function broadcastChatSession(
   try {
     participantIds = await chatParticipantUserIds(sessionId);
   } catch (error) {
-    htLogger.warn("[agent-chat] participant fan-out lookup failed", sessionId, error);
+    console.warn("[agent-chat] participant fan-out lookup failed", sessionId, error);
   }
   // Awaited, not fired and forgotten: the freeze this function exists to
   // survive would drop a send that had been started but not finished. One
@@ -39,7 +38,7 @@ export async function broadcastChatSession(
   await Promise.all(
     [...new Set([...alsoUserIds, ...participantIds])].map((userId) =>
       broadcast(userChannel(userId), AGENT_CHAT_EVENT, { sessionId }).catch(
-        (error) => htLogger.warn("[agent-chat] fan-out failed", sessionId, error),
+        (error) => console.warn("[agent-chat] fan-out failed", sessionId, error),
       ),
     ),
   );

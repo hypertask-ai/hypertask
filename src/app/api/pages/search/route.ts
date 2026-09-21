@@ -1,5 +1,3 @@
-import { logger as htLogger } from "#logger";
-import { withAuth } from "#with-auth";
 import { cookies } from 'next/headers'
 import { NextRequest, NextResponse } from 'next/server'
 
@@ -11,7 +9,7 @@ import { getProjectWhere } from '@/utils/controllers/projects/getAllIncludes'
 const MAX_QUERY_LENGTH = 200
 const SNIPPET_LENGTH = 200
 
-async function GETHandler(request: NextRequest) {
+export async function GET(request: NextRequest) {
   try {
     const userCookie = (await cookies()).get('nookies_user')
     if (!userCookie?.value) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
@@ -53,9 +51,7 @@ async function GETHandler(request: NextRequest) {
 
     return NextResponse.json({ pages })
   } catch (error) {
-    htLogger.error('[Search Pages] Error:', error)
+    console.error('[Search Pages] Error:', error)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
 }
-
-export const GET = withAuth(GETHandler);

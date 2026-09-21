@@ -1,6 +1,5 @@
 const assert = require("node:assert/strict");
 const path = require("node:path");
-const { passThroughAuth } = require("./helpers/pass-through-auth.cjs");
 const test = require("node:test");
 const { createJiti } = require("jiti");
 const { NextRequest } = require("next/server");
@@ -22,7 +21,6 @@ function stubModule(relativePath, exports) {
   };
 }
 
-stubModule("src/lib/api/withAuth.ts", passThroughAuth());
 stubModule("src/app/api/ai/_lib/editorAi.ts", {
   getCurrentUserFromCookies: async () => {
     if (authError) throw authError;

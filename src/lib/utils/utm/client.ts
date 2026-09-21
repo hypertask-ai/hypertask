@@ -1,4 +1,3 @@
-import { logger as htLogger } from "#logger";
 /**
  * Client-side UTM utilities
  * Functions for extracting UTM parameters from URL and managing UTM cookies
@@ -31,7 +30,7 @@ export async function fetchIPAddress(): Promise<string | null> {
       return data.ip || null;
     }
   } catch (error) {
-    htLogger.warn('Failed to fetch IP address from ipify:', error);
+    console.warn('Failed to fetch IP address from ipify:', error);
     
     // Fallback to alternative service
     try {
@@ -47,7 +46,7 @@ export async function fetchIPAddress(): Promise<string | null> {
         return data.ip || null;
       }
     } catch (fallbackError) {
-      htLogger.warn('Failed to fetch IP address from fallback service:', fallbackError);
+      console.warn('Failed to fetch IP address from fallback service:', fallbackError);
     }
   }
 
@@ -110,7 +109,7 @@ export function getUTMDataFromCookies(): UTMParams | undefined {
 
       return parsedData;
     } catch (error) {
-      htLogger.warn(
+      console.warn(
         "Failed to parse utm_data cookie, falling back to individual cookies"
       );
     }
@@ -155,7 +154,7 @@ export function storeUTMInCookies(utmParams: UTMParams): void {
   // Check cookie size limit (4KB = 4096 bytes)
   const cookieSize = encodeURIComponent(jsonString).length;
   if (cookieSize > 4096) {
-    htLogger.warn(
+    console.warn(
       `⚠️ UTM cookie size (${cookieSize} bytes) exceeds 4KB limit. Some data may be truncated.`,
       mergedUTMData
     );
@@ -175,7 +174,7 @@ export function storeUTMInCookies(utmParams: UTMParams): void {
   setCookie(UTM_COOKIE_NAMES.TIMESTAMP, new Date().toISOString());
 
   // Log for debugging
-  htLogger.info("✅ UTM parameters stored:", {
+  console.log("✅ UTM parameters stored:", {
     newParams: utmParams,
     mergedData: mergedUTMData,
     cookieSize: `${cookieSize} bytes`,

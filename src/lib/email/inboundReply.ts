@@ -1,4 +1,3 @@
-import { env as appEnv } from "#env";
 import crypto from "node:crypto";
 import { parse, type Node } from "node-html-parser";
 import { escapeHtml } from "@/utils/helperFunctions/escapeHtml";
@@ -40,7 +39,7 @@ const HTML_BLOCK_TAGS = new Set([
 ]);
 
 function signingSecret(): string {
-  const value = appEnv.SESSION_SECRET || appEnv.JWT_SECRET;
+  const value = process.env.SESSION_SECRET || process.env.JWT_SECRET;
   if (!value) {
     throw new Error(
       "SESSION_SECRET or JWT_SECRET is required to sign inbound reply addresses",
@@ -51,7 +50,7 @@ function signingSecret(): string {
 
 function inboundDomain(): string {
   const value =
-    appEnv.RESEND_INBOUND_DOMAIN?.trim().toLowerCase() ||
+    process.env.RESEND_INBOUND_DOMAIN?.trim().toLowerCase() ||
     DEFAULT_INBOUND_DOMAIN;
   if (
     value.length > 253 ||
@@ -114,9 +113,9 @@ export function createNotificationReplyAddress(
   userId: number,
 ): string | undefined {
   if (
-    !appEnv.RESEND_WEBHOOK_SECRET ||
-    !appEnv.RESEND_INBOUND_DOMAIN ||
-    !(appEnv.SESSION_SECRET || appEnv.JWT_SECRET)
+    !process.env.RESEND_WEBHOOK_SECRET ||
+    !process.env.RESEND_INBOUND_DOMAIN ||
+    !(process.env.SESSION_SECRET || process.env.JWT_SECRET)
   ) {
     return undefined;
   }
@@ -309,7 +308,7 @@ export interface ResendReceivedEmail {
 export async function retrieveResendReceivedEmail(
   emailId: string,
 ): Promise<ResendReceivedEmail> {
-  const apiKey = appEnv.RESEND_API_KEY;
+  const apiKey = process.env.RESEND_API_KEY;
   if (!apiKey) throw new Error("RESEND_API_KEY is not configured");
 
   const response = await fetch(

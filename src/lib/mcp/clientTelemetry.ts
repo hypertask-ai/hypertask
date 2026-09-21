@@ -1,4 +1,3 @@
-import { logger as htLogger } from "#logger";
 import { createHash } from 'crypto'
 
 export type McpCliIdentity = {
@@ -31,7 +30,7 @@ export function logMcpCliUsage(
   const identity = identifyMcpCli(request.headers.get('User-Agent'))
   if (!identity) return
 
-  htLogger.info('[MCP CLI Usage]', {
+  console.info('[MCP CLI Usage]', {
     event: 'mcp_cli_usage',
     ...identity,
     tokenFingerprint: createHash('sha256').update(token).digest('hex'),

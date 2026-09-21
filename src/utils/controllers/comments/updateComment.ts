@@ -1,4 +1,3 @@
-import { logger as htLogger } from "#logger";
 import { NextApiHandler, NextApiRequest, NextApiResponse } from "next";
 
 import prisma from "@/lib/prisma";
@@ -7,7 +6,7 @@ import { invalidateHyperAiCommentOrigin } from "@/lib/ai/hyperAiConfirmation";
 const handler: NextApiHandler = async (req: NextApiRequest, res: NextApiResponse) => {
     if (req.method==="PUT"){
       const {updatedComment}=req.body
-      // debug.log("🚀 ~ file: updateComment.ts:7 ~ consthandler:NextApiHandler= ~ updatedComment:", updatedComment)
+      // console.log("🚀 ~ file: updateComment.ts:7 ~ consthandler:NextApiHandler= ~ updatedComment:", updatedComment)
       const { text, creatorId,taskId, commentId  } = updatedComment;
       
       if (!text || !creatorId ||!taskId ||!commentId) {
@@ -24,7 +23,7 @@ const handler: NextApiHandler = async (req: NextApiRequest, res: NextApiResponse
                 text:text
             }
         });
-        // debug.log("🚀 ~ file: updateComment.ts:24 ~ consthandler:NextApiHandler= ~ toUpdate:", toUpdate)
+        // console.log("🚀 ~ file: updateComment.ts:24 ~ consthandler:NextApiHandler= ~ toUpdate:", toUpdate)
 
         if(!toUpdate) return res.status(400).json({message:"Section Not Found"})
         // if(toUpdate.deleted===true) return res.status(204).json(toUpdate)
@@ -33,7 +32,7 @@ const handler: NextApiHandler = async (req: NextApiRequest, res: NextApiResponse
         // Get field names of the "Section" model
         
       } catch (error) {
-        htLogger.error('Error:', error);
+        console.error('Error:', error);
       }
     }
     }

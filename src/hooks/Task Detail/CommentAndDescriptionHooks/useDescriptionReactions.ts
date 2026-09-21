@@ -30,6 +30,7 @@ const useDescriptionReactions = ()=>{
         // ------------------ onEmojiClick Handler
         const emojiClickHandlerDescriptionr = async (emojiData: any) => {
       
+          // console.log("🚀 ~ emojiClickHandlerDescriptionr ~ emojiData:", emojiData)
           setShowEmojiPickerDescription(false)
           // if (!_mbl) returnFocusToComment()
           // let commentId_=commentId?commentId:comments[parseInt(currentId.split("-")[1])].id
@@ -51,6 +52,7 @@ const useDescriptionReactions = ()=>{
               }
             }; 
             
+            // console.log("🚀 ~ emojiClickHandlerDescriptionr ~ updatedTask:", updatedTask)
             setCurrentTask(updatedTask);
           }          
           focusOn(descriptionContainerId)
@@ -95,6 +97,7 @@ const useDescriptionReactions = ()=>{
             document.activeElement?.id === descriptionContainerId &&
             !cmdControl
         ) {
+            // console.log("🚀 ~ handleKeyDown ~ e.key:", e.key)
             e.preventDefault();
             setShowEmojiPickerDescription(true)
             // document.getElementById(`comment-${currentIndex}`)?.scrollIntoView({behavior:"smooth",block:"center"})

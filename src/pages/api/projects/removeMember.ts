@@ -1,5 +1,3 @@
-import { logger as htLogger } from "#logger";
-import { withAuth } from "#with-auth";
 import { NextApiHandler, NextApiRequest, NextApiResponse } from "next";
 import membersRemove from "@/utils/controllers/projects/removeMember";
 import { SESSION_COOKIE, verifySession } from "@/lib/auth/session";
@@ -16,7 +14,7 @@ const handler: NextApiHandler = async (req: NextApiRequest, res: NextApiResponse
 
         try {
             const { userId, projectId } = req.body;
-            htLogger.info("🚀 ~ file: removeMember.ts:9 ~ consthandler:NextApiHandler= ~ req.body:", req.body)
+            console.log("🚀 ~ file: removeMember.ts:9 ~ consthandler:NextApiHandler= ~ req.body:", req.body)
             if (!userId || !projectId) {
                 return res.status(400).json({ message: "Missing required information" });
             }
@@ -61,7 +59,7 @@ const handler: NextApiHandler = async (req: NextApiRequest, res: NextApiResponse
             const response = await membersRemove(userId, projectId, session.id)
             return res.status(response.status).json(response.json);
         } catch (error) {
-            htLogger.info(error);
+            console.log(error);
             return res.status(400).json({ message: JSON.stringify(error) });
         }
     } else {
@@ -69,4 +67,4 @@ const handler: NextApiHandler = async (req: NextApiRequest, res: NextApiResponse
     }
 };
 
-export default withAuth(handler);
+export default handler;

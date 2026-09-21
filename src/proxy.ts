@@ -1,4 +1,3 @@
-import { logger as htLogger } from "#logger";
 import { NextRequest, NextResponse } from 'next/server';
 import { isValidUser } from './utils/edgeHelpers';
 import { isMobileDevice } from './utils/serverActions';
@@ -6,7 +5,6 @@ import { canAccessTrialPage } from './utils/helperFunctions/helperFunctions';
 import { parseSafeReturnTo } from '@/lib/auth/safeReturnTo';
 import { verifySessionEdge } from '@/lib/auth/sessionEdge';
 import { verifyCookieIdentity } from '@/lib/auth/cookieIdentity';
-import { enforceApiBoundary } from '@/lib/api/proxyBoundary';
 import {
   hasKeyboardShortcutTutorialQuery,
   isKeyboardShortcutTutorialPath,
@@ -28,8 +26,6 @@ const CLI_LATEST_VERSION = "1.10.2"
 
 async function authMiddleware(request: NextRequest) {
   const currentPath = request.nextUrl.pathname;
-  const apiBoundaryResponse = enforceApiBoundary(request);
-  if (apiBoundaryResponse) return apiBoundaryResponse;
 
   if (currentPath === '/mcp' || currentPath === '/sse' || currentPath === '/message' || currentPath === '/mcp-health') {
     return NextResponse.next();
@@ -106,12 +102,12 @@ async function authMiddleware(request: NextRequest) {
       res.cookies.delete('ht_session');
       return res;
     }
-    htLogger.info('[Middleware] OAuth route - allowing through');
+    console.log('[Middleware] OAuth route - allowing through');
     return NextResponse.next();
   }
 
   if (currentPath.startsWith('/.well-known')) {
-    htLogger.info('[Middleware] well-known route - allowing through');
+    console.log('[Middleware] well-known route - allowing through');
     return NextResponse.next();
   }
 
@@ -128,11 +124,11 @@ async function authMiddleware(request: NextRequest) {
     response.headers.set('x-cli-latest-version', CLI_LATEST_VERSION);
     if (authHeader && authHeader.startsWith('Bearer ')) {
       // Authorization header present - let API route handle validation
-      htLogger.info('[Middleware] MCP API route with Authorization header - allowing through');
+      console.log('[Middleware] MCP API route with Authorization header - allowing through');
       return response;
     }
     // No auth header - still allow through, API route will return 401
-    htLogger.info('[Middleware] MCP API route without Authorization header - allowing through (API will handle auth)');
+    console.log('[Middleware] MCP API route without Authorization header - allowing through (API will handle auth)');
     return response;
   }
 
@@ -222,24 +218,24 @@ async function authMiddleware(request: NextRequest) {
   }
 
   // EXTENSIVE DEBUGGING
-  // debug.log('=== MIDDLEWARE DEBUG START ===');
-  // debug.log('1. Current Path:', currentPath);
-  // debug.log('2. Has Funnel Param:', hasFunnelParam);
-  // debug.log('3. Search Params:', searchParams.toString());
-  // debug.log('4. Is Valid User:', isValid);
-  // debug.log('5. User Object:', user ? 'EXISTS' : 'NULL');
-  // debug.log('6. Funnel Tutorial Completed:', funnelTutorialCompleted?.value);
-  // debug.log('7. Is Funnel User:', isFunnelUser);
-  // debug.log('8. Funnel Cookie:', request.cookies.get('funnel')?.value);
-  // debug.log('9. Referer:', referer);
-  // debug.log('10. Coming from Trial:', isComingFromTrial);
-  // debug.log('11. Coming from Root:', isComingFromRoot);
-  // debug.log('12. Coming from Project:', isComingFromProject);
-  // debug.log('=== MIDDLEWARE DEBUG END ===\n');
+  // console.log('=== MIDDLEWARE DEBUG START ===');
+  // console.log('1. Current Path:', currentPath);
+  // console.log('2. Has Funnel Param:', hasFunnelParam);
+  // console.log('3. Search Params:', searchParams.toString());
+  // console.log('4. Is Valid User:', isValid);
+  // console.log('5. User Object:', user ? 'EXISTS' : 'NULL');
+  // console.log('6. Funnel Tutorial Completed:', funnelTutorialCompleted?.value);
+  // console.log('7. Is Funnel User:', isFunnelUser);
+  // console.log('8. Funnel Cookie:', request.cookies.get('funnel')?.value);
+  // console.log('9. Referer:', referer);
+  // console.log('10. Coming from Trial:', isComingFromTrial);
+  // console.log('11. Coming from Root:', isComingFromRoot);
+  // console.log('12. Coming from Project:', isComingFromProject);
+  // console.log('=== MIDDLEWARE DEBUG END ===\n');
 
   // **CASE 1: Handle unauthenticated users**
   if (!isValid || !user) {
-    htLogger.info('❌ USER NOT AUTHENTICATED');
+    console.log('❌ USER NOT AUTHENTICATED');
 
     // Allow public routes
     if (currentPath.startsWith("/invite") ||
@@ -252,7 +248,7 @@ async function authMiddleware(request: NextRequest) {
       currentPath === '/qa/login' ||
       currentPath.startsWith('/qa/login/') ||
       currentPath.startsWith('/firebase-messaging-sw.js')) {
-      // debug.log('✅ Allowing public route:', currentPath);
+      // console.log('✅ Allowing public route:', currentPath);
       return NextResponse.next();
     }
 
@@ -266,7 +262,7 @@ async function authMiddleware(request: NextRequest) {
 
     // **FUNNEL USER FLOW (unauthenticated) - STRICT LOCK TO TUTORIAL**
     if (isFunnelUser) {
-      htLogger.info('🎯 FUNNEL USER DETECTED (unauthenticated) - STRICT LOCK TO TUTORIAL');
+      console.log('🎯 FUNNEL USER DETECTED (unauthenticated) - STRICT LOCK TO TUTORIAL');
       
       // Set funnel cookie if not already set
       if (!request.cookies.get('funnel')?.value) {
@@ -280,10 +276,10 @@ async function authMiddleware(request: NextRequest) {
       // Allow funnel users to access login after the retired tutorial flow.
       if (currentPath === login) {
         if (funnelTutorialCompleted?.value === 'true') {
-          // debug.log('✅ Funnel user completed tutorial - LOGIN ALLOWED');
+          // console.log('✅ Funnel user completed tutorial - LOGIN ALLOWED');
           // If no funnel param, redirect to login with funnel param
           if (!hasFunnelParam) {
-            // debug.log('🔄 Adding funnel param to login URL');
+            // console.log('🔄 Adding funnel param to login URL');
             const loginUrl = new URL(login, request.url);
             loginUrl.searchParams.set('funnel', 'true');
             return NextResponse.redirect(loginUrl);
@@ -293,20 +289,20 @@ async function authMiddleware(request: NextRequest) {
       }
 
       // For any other route, redirect to tutorial with funnel param
-      // debug.log('🔄 FUNNEL USER TRYING TO ACCESS:', currentPath, '- REDIRECTING TO TUTORIAL');
+      // console.log('🔄 FUNNEL USER TRYING TO ACCESS:', currentPath, '- REDIRECTING TO TUTORIAL');
       // const tutorialUrl = new URL(interactiveTutorial, request.url);
       // tutorialUrl.searchParams.set('funnel', 'true');
       // return NextResponse.redirect(tutorialUrl);
     }
 
     // **NON-FUNNEL USER FLOW (unauthenticated)**
-    // debug.log('👤 NON-FUNNEL USER (unauthenticated)');
+    // console.log('👤 NON-FUNNEL USER (unauthenticated)');
     if (currentPath === login) {
-      // debug.log('✅ Already on login page');
+      // console.log('✅ Already on login page');
       return NextResponse.next();
     }
 
-    // debug.log('🔄 Redirecting non-funnel user to login');
+    // console.log('🔄 Redirecting non-funnel user to login');
     const loginUrl = new URL(login, request.url);
     if (
       currentPath === '/cli-auth' ||
@@ -323,7 +319,7 @@ async function authMiddleware(request: NextRequest) {
   }
 
   // **CASE 2: Handle authenticated users**
-  // debug.log('✅ USER AUTHENTICATED');
+  // console.log('✅ USER AUTHENTICATED');
 
   // Prevent authenticated users from accessing login page
   // BUT allow if there's a token parameter (email magic link) or OAuth params so they can be processed
@@ -336,19 +332,19 @@ async function authMiddleware(request: NextRequest) {
     
     // If there's a token in the URL, allow access to login page so token can be processed
     if (hasToken) {
-      htLogger.info('🔗 Token detected in URL, allowing login page access for token processing');
+      console.log('🔗 Token detected in URL, allowing login page access for token processing');
       return NextResponse.next();
     }
     
     // If there are OAuth params, allow access so user can be redirected to authorize after login
     if (hasOAuthParams) {
-      htLogger.info('🔐 OAuth params detected, allowing login page access for OAuth flow');
+      console.log('🔐 OAuth params detected, allowing login page access for OAuth flow');
       return NextResponse.next();
     }
     
     // If user has completed onboarding and has previousBoard, redirect there
     if (previousBoard?.value && checkIfOnboarded(user)) {
-      htLogger.info('🔄 Authenticated user on login page, redirecting to previous board');
+      console.log('🔄 Authenticated user on login page, redirecting to previous board');
       const url = request.nextUrl.clone();
       const [projectId, view] = previousBoard.value.split('|&|');
       if (projectId) {
@@ -363,12 +359,12 @@ async function authMiddleware(request: NextRequest) {
     
     // If user has completed onboarding but no previousBoard, redirect to /project (will use first project)
     // if (checkIfOnboarded(user)) {
-      htLogger.info('🔄 Authenticated user on login page (onboarded, no previousBoard), redirecting to /project');
+      console.log('🔄 Authenticated user on login page (onboarded, no previousBoard), redirecting to /project');
       return NextResponse.redirect(new URL('/', request.url));
     // }
     
     // // Only redirect to onboarding if user has NOT completed onboarding
-    // debug.log('🔄 Authenticated user on login page (not onboarded), redirecting to onboarding');
+    // console.log('🔄 Authenticated user on login page (not onboarded), redirecting to onboarding');
     // return NextResponse.redirect(new URL(onboarding, request.url));
   }
 
@@ -376,7 +372,7 @@ async function authMiddleware(request: NextRequest) {
   if (currentPath === "/") {
     // PRIORITY 2: If user has completed onboarding and has previousBoard, redirect there
     if (previousBoard?.value && checkIfOnboarded(user)) {
-      htLogger.info('🔄 Root route access - restoring previous board');
+      console.log('🔄 Root route access - restoring previous board');
       const url = request.nextUrl.clone();
       const [projectId, view] = previousBoard.value.split('|&|');
       if (projectId) {
@@ -391,12 +387,12 @@ async function authMiddleware(request: NextRequest) {
     
     // PRIORITY 3: If user has completed onboarding but no previousBoard, redirect to /project
     if (checkIfOnboarded(user)) {
-      htLogger.info('🔄 Root route access - onboarded user with no previousBoard, redirecting to /project');
+      console.log('🔄 Root route access - onboarded user with no previousBoard, redirecting to /project');
       return NextResponse.redirect(new URL('/project', request.url));
     }
     
     // PRIORITY 4: Only redirect to onboarding if user has NOT completed onboarding
-    htLogger.info('🔄 Root route access - user not onboarded, redirecting to onboarding');
+    console.log('🔄 Root route access - user not onboarded, redirecting to onboarding');
     return NextResponse.redirect(new URL(onboarding, request.url));
   }
 
@@ -418,19 +414,19 @@ async function authMiddleware(request: NextRequest) {
       if (view && view.length > 0 && view !== "undefined") {
         url.searchParams.set("view", view);
       }
-      htLogger.info('🔄 Bare /project access - restoring last board');
+      console.log('🔄 Bare /project access - restoring last board');
       return NextResponse.redirect(url);
     }
   }
 
   // **FUNNEL USER FLOW (authenticated)**
   if (isFunnelUser) {
-    // debug.log('✅ Authenticated funnel user - allowing free roam');
+    // console.log('✅ Authenticated funnel user - allowing free roam');
     return NextResponse.next();
   }
 
   // **NON-FUNNEL USER FLOW (authenticated) - Original logic**
-  // debug.log('👤 Authenticated non-funnel user - checking onboarding');
+  // console.log('👤 Authenticated non-funnel user - checking onboarding');
 
   if (
     !checkIfOnboarded(user) &&
@@ -440,13 +436,13 @@ async function authMiddleware(request: NextRequest) {
     !currentPath.startsWith(share) &&
     !currentPath.startsWith('/cli-auth')
   ) {
-    // debug.log('🔄 User not onboarded, redirecting to onboarding');
+    // console.log('🔄 User not onboarded, redirecting to onboarding');
     return NextResponse.redirect(new URL(onboarding, request.url));
   }
 
   // Voluntary /trial: allow anyone who has not subscribed yet (Upgrade banner).
   if (currentPath === trial && !canAccessTrialPage(user)) {
-    htLogger.info('🔄 User not eligible for trial upgrade page, redirecting away from trial page');
+    console.log('🔄 User not eligible for trial upgrade page, redirecting away from trial page');
     return NextResponse.redirect(new URL('/', request.url));
   }
 
@@ -457,7 +453,7 @@ async function authMiddleware(request: NextRequest) {
   // Handle previous board restoration
   // This is now redundant since we handle it in the root route, but keeping for safety
   if (previousBoard?.value && currentPath === "/") {
-    htLogger.info('🔄 Restoring previous board');
+    console.log('🔄 Restoring previous board');
     const url = request.nextUrl.clone();
     const [projectId, view] = previousBoard.value.split('|&|');
     if (projectId) {
@@ -470,7 +466,7 @@ async function authMiddleware(request: NextRequest) {
     }
   }
 
-  // debug.log('✅ All checks passed, continuing normally');
+  // console.log('✅ All checks passed, continuing normally');
   return NextResponse.next();
 }
 

@@ -1,5 +1,3 @@
-import { logger as htLogger } from "#logger";
-import { withAuth } from "#with-auth";
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 import { checkMcpRateLimit, validateMcpAuth } from "@/lib/mcp/auth";
@@ -17,7 +15,7 @@ function error(message: string, status: number) {
 }
 
 /** Board-scoped model and feature capabilities for the native Android AI composer. */
-async function GETHandler(request: NextRequest) {
+export async function GET(request: NextRequest) {
   try {
     const rateLimited = await checkMcpRateLimit(request);
     if (rateLimited) return rateLimited;
@@ -78,9 +76,7 @@ async function GETHandler(request: NextRequest) {
       }),
     });
   } catch (cause) {
-    htLogger.error("[Android AI Composer] Error:", cause);
+    console.error("[Android AI Composer] Error:", cause);
     return error("Internal server error", 500);
   }
 }
-
-export const GET = withAuth(GETHandler);

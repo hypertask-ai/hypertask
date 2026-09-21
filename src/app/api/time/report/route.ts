@@ -1,4 +1,3 @@
-import { withAuth } from "#with-auth";
 import { administeredProjectIds, listReport } from "@/lib/timeTracking";
 import { parseTimeReportFilters } from "@/lib/timeReportFilters";
 import {
@@ -14,7 +13,7 @@ const invalidFilterResponse = (filter: string) =>
     { status: 400 }
   );
 
-async function GETHandler(request: NextRequest) {
+export async function GET(request: NextRequest) {
   const auth = await getTimeRequestUser(request);
   if (auth.response) return auth.response;
 
@@ -54,5 +53,3 @@ async function GETHandler(request: NextRequest) {
     })),
   });
 }
-
-export const GET = withAuth(GETHandler);

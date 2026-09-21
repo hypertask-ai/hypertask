@@ -1,4 +1,3 @@
-import { logger as htLogger } from "#logger";
 import prisma from "@/lib/prisma";
 import authConfig from "@/lib/configs/auth.config";
 import { generalConfig } from "@/lib/configs/general.config";
@@ -115,7 +114,7 @@ const update_or_create_user = async (
           userPicture: true,
         },
       });
-      htLogger.info(
+      console.log(
         "🚀 ~ file: update.ts:223 ~ updateUsers ~ updatedUser:",
         updatedUser
       );
@@ -136,7 +135,7 @@ const update_or_create_user = async (
       },
     };
   } catch (error) {
-    htLogger.info(error);
+    console.log(error);
     return {
       status: 500,
       res: { message: "Internal server error" },

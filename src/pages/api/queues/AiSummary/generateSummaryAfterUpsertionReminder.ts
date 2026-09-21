@@ -1,4 +1,3 @@
-import { withoutAuth } from "#with-auth";
 // pages/api/setupReminder.js
 // id:`notifications-for-task-${taskId}`
 import { scheduleJobById } from "@/lib/qstash";
@@ -9,7 +8,7 @@ function buildJobId(teamId: string) {
   return "generateBatchSummaries-ai-for-teamId: " + teamId;
 }
 
-async function generateSummaryAfterUpsertionReminder(
+export default  async function generateSummaryAfterUpsertionReminder(
   teamId: string,
 ) {
     const runAt = new Date(new Date().getTime() + 2 * 60000);
@@ -24,5 +23,3 @@ async function generateSummaryAfterUpsertionReminder(
     return res
 
 }
-
-export default withoutAuth(generateSummaryAfterUpsertionReminder);

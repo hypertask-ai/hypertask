@@ -1,6 +1,3 @@
-import { env as appEnv } from "#env";
-import { logger as htLogger } from "#logger";
-import { withoutAuth } from "#with-auth";
 import { NextRequest, NextResponse } from "next/server";
 
 import { hasValidCronAuthorization } from "@/lib/cronAuthorization";
@@ -49,11 +46,11 @@ function releaseFailureReport(signature: string): void {
   failureReports.delete(signature);
 }
 
-async function GETHandler(request: NextRequest) {
+export async function GET(request: NextRequest) {
   if (
     !hasValidCronAuthorization(
       request.headers.get("authorization"),
-      appEnv.CRON_SECRET,
+      process.env.CRON_SECRET,
     )
   ) {
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });
@@ -112,7 +109,7 @@ async function GETHandler(request: NextRequest) {
         // Release the claim: a swallowed reporting failure would otherwise mute
         // this signature for an hour and leave a broken demo unannounced.
         releaseFailureReport(signature);
-        htLogger.error("demo smoke failure went unreported", reportingError);
+        console.error("demo smoke failure went unreported", reportingError);
       }
     }
 
@@ -122,5 +119,3 @@ async function GETHandler(request: NextRequest) {
     );
   }
 }
-
-export const GET = withoutAuth(GETHandler);

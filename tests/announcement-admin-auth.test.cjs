@@ -1,7 +1,6 @@
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const path = require("node:path");
-const { passThroughAuth } = require("./helpers/pass-through-auth.cjs");
 const test = require("node:test");
 const ts = require("typescript");
 
@@ -30,9 +29,7 @@ function loadTypeScript(relativePath, stubs = {}) {
   )(
     loadedModule,
     loadedModule.exports,
-    (request) =>
-      stubs[request] ??
-      (request === "#with-auth" ? passThroughAuth() : require(request)),
+    (request) => stubs[request] ?? require(request),
     filename,
     path.dirname(filename),
   );

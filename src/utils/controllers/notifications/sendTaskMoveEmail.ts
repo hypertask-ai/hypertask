@@ -1,4 +1,3 @@
-import { logger as htLogger } from "#logger";
 
 import { NextApiRequest, NextApiResponse } from "next";
 const path = require("path");
@@ -44,7 +43,7 @@ const sendTaskMoveEmail = async(
         return "success" ;
         
     } catch (error) {
-        htLogger.info(error);
+        console.log(error);
         return "an error occured" 
     }
 

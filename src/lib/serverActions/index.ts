@@ -1,6 +1,4 @@
 "use server"
-import { env as appEnv } from "#env";
-import { logger as htLogger } from "#logger";
 import { cookies } from "next/headers"
 
 import { taskWriterRoute } from "@/lib/constants/APIRouteConstants"
@@ -24,7 +22,7 @@ export const getTeamInviteUrl = async (userId: number, teamId: string) => {
 
   const team = await prisma.team.findUnique({ where: { id: teamId } })
   if (!team) return "Error"
-  htLogger.info("🚀 ~ getTeamInviteUrl ~ team:", team)
+  console.log("🚀 ~ getTeamInviteUrl ~ team:", team)
 
   const projectFirst = await prisma.project.findFirst({
     where: {
@@ -50,10 +48,10 @@ export const getTeamInviteUrl = async (userId: number, teamId: string) => {
 
     orderBy: { createdAt: "asc" }
   })
-  htLogger.info("🚀 ~ getFIrstTeam ~ projectFirst:", projectFirst)
+  console.log("🚀 ~ getFIrstTeam ~ projectFirst:", projectFirst)
   if (!projectFirst) return "Error"
   const inviteURL = await getInviteFromProjectId(projectFirst.id, userId)
-  htLogger.info("🚀 ~ getTeamInviteUrl ~ inviteURL:", inviteURL)
+  console.log("🚀 ~ getTeamInviteUrl ~ inviteURL:", inviteURL)
   return { inviteURL: inviteURL, projectFirst }
 }
 
@@ -68,7 +66,7 @@ export const updateUserSettingOnboarding = async (userId: number, state: boolean
       onboardingTutorialStatus: true
     }
   })
-  htLogger.info("🚀 ~ updateUserSettingOnboarding ~ userSetting:", userSetting)
+  console.log("🚀 ~ updateUserSettingOnboarding ~ userSetting:", userSetting)
   return userSetting
 }
 
@@ -82,7 +80,7 @@ export const updateUserSettingTutorial = async (userId: number, state: boolean) 
       onboardingTourStatus: state
     }
   })
-  htLogger.info("🚀 ~ updateUserSettingTutorial ~ userSetting:", userSetting)
+  console.log("🚀 ~ updateUserSettingTutorial ~ userSetting:", userSetting)
   return userSetting
 }
 
@@ -95,7 +93,7 @@ export const updateUserSettingTrial = async (userId: number, state: boolean) => 
       trialStatus: state
     }
   })
-  htLogger.info("🚀 ~ updateUserSettingTutorial ~ userSetting:", userSetting)
+  console.log("🚀 ~ updateUserSettingTutorial ~ userSetting:", userSetting)
   return userSetting
 }
 
@@ -124,10 +122,10 @@ export const checkIfUserIsNew = async (userId: number) => {
 export async function taskWriterFetch(prompt: string) {
   const isNativeTaskWriter = taskWriterRoute.startsWith("/")
   const baseUrl =
-    appEnv.NEXT_PUBLIC_BASEURL ||
-    appEnv.NEXT_PUBLIC_SITE_URL ||
-    (appEnv.VERCEL_URL
-      ? `https://${appEnv.VERCEL_URL}`
+    process.env.NEXT_PUBLIC_BASEURL ||
+    process.env.NEXT_PUBLIC_SITE_URL ||
+    (process.env.VERCEL_URL
+      ? `https://${process.env.VERCEL_URL}`
       : "http://localhost:3000")
   const cookieHeader = isNativeTaskWriter ? (await cookies()).toString() : ""
 
@@ -186,7 +184,7 @@ export const uploadAttachmentToAICustomInstruction = async (props: TUploadToAICu
       text:'success',
     }
   } catch (error) {
-    htLogger.info("🚀 ~ uploadAttachmentToAICustomInstruction ~ error:", error)
+    console.log("🚀 ~ uploadAttachmentToAICustomInstruction ~ error:", error)
     return {
       status:500,
       data:error,

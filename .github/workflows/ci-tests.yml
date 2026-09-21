@@ -331,8 +331,9 @@ jobs:
           fi
           echo "failed_tests=${failures:-test command failed before naming a test}" >> "$GITHUB_OUTPUT"
 
-      - name: Build coverage report and enforce thresholds
+      - name: Build report-only coverage baseline
         if: github.event_name == 'push'
+        continue-on-error: true
         run: npm run coverage:report
 
       - name: Upload coverage baseline

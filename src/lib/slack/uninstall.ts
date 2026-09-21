@@ -1,4 +1,3 @@
-import { logger as htLogger } from "#logger";
 // HTPR-4857: Slack uninstall/revoke cleanup. Slack's Marketplace review requires
 // a real deletion story: when the app is removed from a workspace (or its bot
 // token is revoked), everything we stored for that install must go. Cascades
@@ -74,7 +73,7 @@ function botTokenRevoked(
   } catch (error) {
     // Indeterminate: do not delete, and do not pretend this was a foreign
     // token. The events route returns 500 so Slack retries.
-    htLogger.error("Slack install token could not be decrypted", error);
+    console.error("Slack install token could not be decrypted", error);
     return "undecryptable";
   }
 }

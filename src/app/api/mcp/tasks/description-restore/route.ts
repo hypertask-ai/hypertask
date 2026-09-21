@@ -1,5 +1,3 @@
-import { logger as htLogger } from "#logger";
-import { withoutAuth } from "#with-auth";
 import { NextRequest, NextResponse } from 'next/server'
 
 import prisma from '@/lib/prisma'
@@ -26,7 +24,7 @@ function positiveInt(value: unknown): number | null {
 // Restores a task's description to a historical snapshot. Restoring first
 // snapshots the current description (via upsertTaskDescription), so it is
 // itself undoable and never destroys history.
-async function POSTHandler(request: NextRequest) {
+export async function POST(request: NextRequest) {
   try {
     const ctx = await validateMcpAuth(request)
     if (!ctx) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
@@ -113,9 +111,7 @@ async function POSTHandler(request: NextRequest) {
     if (error instanceof AgentMutationLeaseConflictError) {
       return NextResponse.json({ error: error.message }, { status: 409 })
     }
-    htLogger.error('[MCP Task Description Restore] Error:', error)
+    console.error('[MCP Task Description Restore] Error:', error)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
 }
-
-export const POST = withoutAuth(POSTHandler);

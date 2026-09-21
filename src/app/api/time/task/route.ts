@@ -1,9 +1,8 @@
-import { withAuth } from "#with-auth";
 import { taskSummary } from "@/lib/timeTracking";
 import { NextRequest, NextResponse } from "next/server";
 import { getTimeRequestUser, parseTaskId, validateTimeTaskAccess } from "../_lib";
 
-async function GETHandler(request: NextRequest) {
+export async function GET(request: NextRequest) {
   const auth = await getTimeRequestUser(request);
   if (auth.response) return auth.response;
 
@@ -21,5 +20,3 @@ async function GETHandler(request: NextRequest) {
   const summary = await taskSummary(auth.userId, taskId);
   return NextResponse.json({ success: true, ...summary });
 }
-
-export const GET = withAuth(GETHandler);

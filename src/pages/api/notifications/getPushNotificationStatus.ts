@@ -1,5 +1,3 @@
-import { logger as htLogger } from "#logger";
-import { withAuth } from "#with-auth";
 import { NextApiHandler, NextApiRequest, NextApiResponse } from "next";
 import prisma from "@/lib/prisma";
 
@@ -21,7 +19,7 @@ const handler: NextApiHandler = async (req: NextApiRequest, res: NextApiResponse
 
             return res.status(200).json(deviceStatus);
         } catch (error) {
-            htLogger.info({error})
+            console.log({error})
             res.status(500).json({ message: "Internal server error" });
         }
     } else {
@@ -29,4 +27,4 @@ const handler: NextApiHandler = async (req: NextApiRequest, res: NextApiResponse
     }
 };
 
-export default withAuth(handler);
+export default handler;

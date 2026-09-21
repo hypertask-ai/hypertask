@@ -1,5 +1,3 @@
-import { logger as htLogger } from "#logger";
-import { withAuth } from "#with-auth";
 import { stripe } from "@/lib/subscription";
 import { CreateLogInput } from "@/models/model";
 import createLog from "@/utils/controllers/logs/createLog";
@@ -69,7 +67,7 @@ const handler: NextApiHandler = async (req: NextApiRequest, res: NextApiResponse
             
             return res.status(200).json(Team)
         } catch (error) {
-            htLogger.info(error);
+            console.log(error);
             return ({
                 status:400,
                 json:[]
@@ -78,4 +76,4 @@ const handler: NextApiHandler = async (req: NextApiRequest, res: NextApiResponse
 
 };
 
-export default withAuth(handler);
+export default handler;

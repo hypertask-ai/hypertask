@@ -1,5 +1,3 @@
-import { withoutAuth } from "#with-auth";
-import { logger as htLogger } from "#logger";
 import { createHash } from 'crypto'
 import { NextRequest, NextResponse } from 'next/server'
 import prisma from '@/lib/prisma'
@@ -18,7 +16,7 @@ function noStoreResponse() {
 }
 
 /** Refresh-token revocation for public native clients. Unknown tokens are a no-op. */
-async function POSTHandler(request: NextRequest) {
+export async function POST(request: NextRequest) {
   try {
     const formData = await request.formData()
     const token = formData.get('token')
@@ -87,12 +85,10 @@ async function POSTHandler(request: NextRequest) {
     }
     return noStoreResponse()
   } catch (error) {
-    htLogger.error('Error in OAuth revocation endpoint:', error)
+    console.error('Error in OAuth revocation endpoint:', error)
     return NextResponse.json(
       { error: 'server_error', error_description: 'Internal server error' },
       { status: 500 },
     )
   }
 }
-
-export const POST = withoutAuth(POSTHandler);

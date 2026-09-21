@@ -1,7 +1,6 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const path = require("node:path");
-const { passThroughAuth } = require("./helpers/pass-through-auth.cjs");
 
 const root = path.resolve(__dirname, "..");
 
@@ -44,7 +43,6 @@ test("concurrent first autosaves use the atomic draft upsert key", async () => {
 
   delete require.cache[path.join(root, "src/lib/prisma.ts")];
   delete require.cache[path.join(root, "src/pages/api/drafts/updateDraft.ts")];
-  stubModule("src/lib/api/withAuth.ts", passThroughAuth());
   stubModule("src/lib/prisma.ts", { default: prisma });
   const jiti = require("jiti")(__filename, {
     interopDefault: true,

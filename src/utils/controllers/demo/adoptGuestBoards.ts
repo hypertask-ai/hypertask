@@ -1,4 +1,3 @@
-import { logger as htLogger } from "#logger";
 import { Status } from "@prisma/client";
 
 import { verifySession } from "@/lib/auth/session";
@@ -135,7 +134,7 @@ export async function adoptGuestBoards(
 
     return projectIds.length;
   } catch (error) {
-    htLogger.error("Guest board adoption failed (non-fatal):", error);
+    console.error("Guest board adoption failed (non-fatal):", error);
     return 0;
   }
 }

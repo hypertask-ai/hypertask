@@ -1,5 +1,4 @@
 #!/usr/bin/env tsx
-import { logger as htLogger } from "#logger";
 
 import { cleanupAllOAuthCodes } from '@/lib/oauth/cleanup'
 
@@ -14,19 +13,19 @@ import { cleanupAllOAuthCodes } from '@/lib/oauth/cleanup'
  */
 async function cleanupOAuthCodes() {
   try {
-    htLogger.info('🧹 Starting OAuth authorization code cleanup...')
+    console.log('🧹 Starting OAuth authorization code cleanup...')
     
     const result = await cleanupAllOAuthCodes()
     
-    htLogger.info('📊 Cleanup results:', {
+    console.log('📊 Cleanup results:', {
       expiredCodesDeleted: result.expired,
       usedCodesDeleted: result.used,
       timestamp: new Date().toISOString()
     })
     
-    htLogger.info('✅ OAuth cleanup completed successfully')
+    console.log('✅ OAuth cleanup completed successfully')
   } catch (error) {
-    htLogger.error('❌ OAuth cleanup failed:', error)
+    console.error('❌ OAuth cleanup failed:', error)
     process.exit(1)
   } finally {
     process.exit(0)

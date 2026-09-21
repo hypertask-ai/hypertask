@@ -1,7 +1,6 @@
-import { env as appEnv } from "#env";
 import { parseCookies } from 'better-auth/cookies'
 
-import { SESSION_COOKIE, verifySession } from '#session'
+import { SESSION_COOKIE, verifySession } from '@/lib/auth/session'
 
 export type SessionUser =
   | { userId: number; source: 'better-auth' }
@@ -29,11 +28,11 @@ export async function getSessionUser(headers: Headers): Promise<SessionUser | nu
   // Auth would have agreed and reported source:'better-auth'. Confirmed via
   // repo-wide grep that nothing reads SessionUser.source or .needsBridge
   // today, so this is inert. Revisit before enabling if that ever changes.
-  if (appEnv.AUTH_LEGACY_FAST_PATH === '1' && legacySession) {
+  if (process.env.AUTH_LEGACY_FAST_PATH === '1' && legacySession) {
     return { userId: legacySession.id, source: 'legacy', needsBridge: true }
   }
 
-  if (appEnv.BETTER_AUTH_ENABLED === '1') {
+  if (process.env.BETTER_AUTH_ENABLED === '1') {
     // Lazy import: keeps Better Auth's module-scope construction (8 plugins)
     // off the cold-start path for every request the fast path above already
     // resolved. Same pattern PR #2785 used, never implicated in its revert

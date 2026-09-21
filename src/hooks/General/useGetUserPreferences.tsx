@@ -108,9 +108,11 @@ export const fetchUserPreference = async (
     if (response.status == 200) {
       return response.data.settings as IUserPreferences;
     } else {
+      console.error("🚀 ~ fetchUserPreference ~ error:", response.data.error);
       return response.data.settings as IUserPreferences;
     }
   } catch (error) {
+    console.log("🚀 ~ fetchUserPreference ~ error:", error);
     if (!useDefaultOnError) throw error;
     return DEFAULT_USER_PREFERENCES;
   }

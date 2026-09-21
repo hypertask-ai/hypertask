@@ -1,4 +1,3 @@
-import { withoutAuth } from "#with-auth";
 import { NextRequest, NextResponse } from 'next/server'
 import { checkMcpRateLimit, validateMcpAuth } from '@/lib/mcp/auth'
 import {
@@ -26,7 +25,7 @@ function parsePositiveInteger(value: unknown): number | null {
     : null
 }
 
-async function GETHandler(request: NextRequest) {
+export async function GET(request: NextRequest) {
   const rateLimited = await checkMcpRateLimit(request)
   if (rateLimited) return rateLimited
   const ctx = await validateMcpAuth(request)
@@ -102,7 +101,7 @@ async function GETHandler(request: NextRequest) {
   })
 }
 
-async function POSTHandler(request: NextRequest) {
+export async function POST(request: NextRequest) {
   const rateLimited = await checkMcpRateLimit(request)
   if (rateLimited) return rateLimited
   const ctx = await validateMcpAuth(request)
@@ -206,6 +205,3 @@ async function POSTHandler(request: NextRequest) {
 
   return handleRelatedTasksPost(request, ctx, body)
 }
-
-export const GET = withoutAuth(GETHandler);
-export const POST = withoutAuth(POSTHandler);

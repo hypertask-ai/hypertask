@@ -1,4 +1,3 @@
-import { logger as htLogger } from "#logger";
 
 import {
   HTPR_6588_EMPTY_COLUMNS_SAVE_VIEW_FLAG,
@@ -99,7 +98,7 @@ const getAll = async (
       })),
     };
   } catch (error) {
-    htLogger.info(error);
+    console.log(error);
     return {
       status: 400,
       json: { message: JSON.stringify(error) },

@@ -1,5 +1,3 @@
-import { logger as htLogger } from "#logger";
-import { withAuth } from "#with-auth";
 // Next.js API route support: https://nextjs.org/docs/api-routes/introduction
 
 import type { NextApiRequest, NextApiResponse } from 'next'
@@ -7,7 +5,7 @@ import prisma from "@/lib/prisma";
 
 
 
-async function handler(
+export default  async function handler(
   req: NextApiRequest,
   res: NextApiResponse
 ) {
@@ -34,11 +32,11 @@ async function handler(
           projectId, 
           emails:{has:email},
         }})
-        htLogger.info("🚀 ~ deletedInvite:", deletedInvite)
+        console.log("🚀 ~ deletedInvite:", deletedInvite)
 
       return res.status(200).json({message:"Success!"})
   } catch (error) {
-      htLogger.info(error)
+      console.log(error)
       return res.status(500).json(error)
   }
 }
@@ -51,27 +49,25 @@ export const cancelInvite = async (inviteId:string, email:string, projectId:numb
     },
     include:{notification:true}
   })
-  htLogger.info("🚀 ~ notification_invite:", notification_invite_)
+  console.log("🚀 ~ notification_invite:", notification_invite_)
   try {
     const deletedNotification = await prisma.notification.delete({
       where:{id:notification_invite_?.notificationId}
     })
-    htLogger.info("🚀 ~ deletedNotification:", deletedNotification)
+    console.log("🚀 ~ deletedNotification:", deletedNotification)
     const deletedNotificationInvite = await prisma.notification_Invite.deleteMany({
       where:{
         inviteId:inviteId
       },
     })
-    htLogger.info("🚀 ~ deletedNotificationInvite:", deletedNotificationInvite)
+    console.log("🚀 ~ deletedNotificationInvite:", deletedNotificationInvite)
 
 
   } catch (error) {
-    htLogger.info("🚀 ~ error:", error)
+    console.log("🚀 ~ error:", error)
     
   }
 
 
 
 }
-
-export default withAuth(handler);

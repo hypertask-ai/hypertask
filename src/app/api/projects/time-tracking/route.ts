@@ -1,4 +1,4 @@
-import { getAuthSession, withAuth } from "#with-auth";
+import { getSessionUser } from "@/lib/auth/getSessionUser";
 import prisma from "@/lib/prisma";
 import {
   projectTimeTrackingResponse,
@@ -8,8 +8,8 @@ import {
 import { getProjectWhere } from "@/utils/controllers/projects/getAllIncludes";
 import { NextRequest, NextResponse } from "next/server";
 
-async function POSTHandler(request: NextRequest) {
-  const session = await getAuthSession(request.headers);
+export async function POST(request: NextRequest) {
+  const session = await getSessionUser(request.headers);
   if (!session) {
     return NextResponse.json(
       { success: false, error: "Unauthorized" },
@@ -52,5 +52,3 @@ async function POSTHandler(request: NextRequest) {
 
   return NextResponse.json(projectTimeTrackingResponse(data));
 }
-
-export const POST = withAuth(POSTHandler);

@@ -1,5 +1,3 @@
-import { env as appEnv } from "#env";
-import { withAuth } from "#with-auth";
 import { randomUUID } from "node:crypto";
 import { NextRequest, NextResponse } from "next/server";
 import { createOpenAI } from "@ai-sdk/openai";
@@ -27,7 +25,7 @@ const PROBE_API_KEY = "htpr-6320-observability-probe";
  * same observability path the AI Chat uses. Owner-only and flag-gated so the
  * deliberate provider failure is not a public endpoint.
  */
-async function POSTHandler(request: NextRequest) {
+export async function POST(request: NextRequest) {
   const requestUser = await getAiRequestUser(request);
   if (!requestUser?.id) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -71,9 +69,7 @@ async function POSTHandler(request: NextRequest) {
     error: error ? redactErrorText(String(error), 500) : null,
     posthog: {
       host: postHogIngestionHost(),
-      project_id: appEnv.POSTHOG_SERVER_PROJECT_ID ?? null,
+      project_id: process.env.POSTHOG_SERVER_PROJECT_ID ?? null,
     },
   });
 }
-
-export const POST = withAuth(POSTHandler);

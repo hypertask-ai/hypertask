@@ -1,5 +1,3 @@
-import { logger as htLogger } from "#logger";
-import { withAuth } from "#with-auth";
 import { NextApiHandler, NextApiRequest, NextApiResponse } from "next";
 import { turbopufferGetSuggestions } from "@/utils/controllers/search/query";
 import prisma from "@/lib/prisma";
@@ -41,7 +39,7 @@ const handler: NextApiHandler = async (
       const results = await turbopufferGetSuggestions(searchQuery, projectIds);
       return res.status(200).json(results);
     } catch (error) {
-      htLogger.info("🤔 ~ handler ~ error:", error);
+      console.log("🤔 ~ handler ~ error:", error);
       return res.status(200).json([]);
     }
   } else {
@@ -49,4 +47,4 @@ const handler: NextApiHandler = async (
   }
 };
 
-export default withAuth(handler);
+export default handler;

@@ -1,5 +1,3 @@
-import { logger as htLogger } from "#logger";
-import { withAuth } from "#with-auth";
 import { NextApiHandler, NextApiRequest, NextApiResponse } from "next";
 import getScrollSetting from "@/utils/controllers/scrollSetting/getScrollSetting";
 
@@ -13,7 +11,7 @@ const handler: NextApiHandler = async (
       const response = await getScrollSetting(userid?.id);
       return res.status(200).json(response);
     } catch (error) {
-      htLogger.info(error);
+      console.log(error);
       return res.status(400).json({ message: JSON.stringify(error) });
     }
   } else {
@@ -21,4 +19,4 @@ const handler: NextApiHandler = async (
   }
 };
 
-export default withAuth(handler);
+export default handler;

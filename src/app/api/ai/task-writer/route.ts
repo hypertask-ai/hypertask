@@ -1,5 +1,3 @@
-import { logger as htLogger } from "#logger";
-import { withAuth } from "#with-auth";
 import { NextRequest, NextResponse } from "next/server";
 import { streamText } from "ai";
 
@@ -25,7 +23,7 @@ import { logAiUsage } from "@/app/api/ai/_lib/aiUsage";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-async function POSTHandler(request: NextRequest) {
+export async function POST(request: NextRequest) {
   const requestUser = await getAiRequestUser(request);
   if (!requestUser?.id) {
     return createSseErrorResponse("Unauthorized", 401);
@@ -114,7 +112,7 @@ async function POSTHandler(request: NextRequest) {
           }
           streamCompleted = true;
         } catch (error) {
-          htLogger.error("[ai/task-writer] stream error", error);
+          console.error("[ai/task-writer] stream error", error);
           enqueueError("error", errorMessage(error));
         } finally {
           if (!streamCompleted) {
@@ -137,9 +135,7 @@ async function POSTHandler(request: NextRequest) {
     ) {
       return createSseErrorResponse(error.message, 403);
     }
-    htLogger.error("[ai/task-writer] fatal error", error);
+    console.error("[ai/task-writer] fatal error", error);
     return NextResponse.json({ error: errorMessage(error) }, { status: 500 });
   }
 }
-
-export const POST = withAuth(POSTHandler);

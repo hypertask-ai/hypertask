@@ -1,4 +1,3 @@
-import { logger as htLogger } from "#logger";
 import prisma from "@/lib/prisma";
 import { ScrollSetting } from "@prisma/client";
 import { invalidateUserPreferenceCache } from "../users/fetch_preferences";
@@ -20,7 +19,7 @@ const changeScrollSetting = async (userId: number, setting: ScrollSetting) => {
       res: update,
     };
   } catch (error) {
-    htLogger.info(error);
+    console.log(error);
     return {
       status: 400,
       json: { message: JSON.stringify(error) },

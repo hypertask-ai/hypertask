@@ -1,4 +1,3 @@
-import { logger as htLogger } from "#logger";
 import { NextApiHandler, NextApiRequest, NextApiResponse } from "next";
 
 
@@ -30,7 +29,7 @@ const handler: NextApiHandler = async (req: NextApiRequest, res: NextApiResponse
             })
             res.status(200).json(comments);
         } catch (error) {
-            htLogger.info(error);
+            console.log(error);
             res.status(500).json({ message: "Internal server error" });
         }
     } else {

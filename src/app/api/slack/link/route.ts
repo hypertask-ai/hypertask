@@ -1,5 +1,3 @@
-import { env as appEnv } from "#env";
-import { withoutAuth } from "#with-auth";
 import { NextRequest, NextResponse } from "next/server";
 
 import { getServerCookieUser } from "@/lib/auth/serverUser";
@@ -15,7 +13,7 @@ import { isSlackInstallTeamMember } from "@/lib/slack/userLink";
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
-async function POSTHandler(request: NextRequest) {
+export async function POST(request: NextRequest) {
   const user = await getServerCookieUser();
   if (!user) return NextResponse.redirect(new URL("/login", request.url), 303);
 
@@ -24,7 +22,7 @@ async function POSTHandler(request: NextRequest) {
   const serializedState = typeof rawState === "string" ? rawState : null;
   const verifiedState = verifySlackLinkState(
     serializedState,
-    appEnv.SLACK_CLIENT_SECRET,
+    process.env.SLACK_CLIENT_SECRET,
   );
   if (!verifiedState) return resultRedirect(request, "invalid");
   if (!(await isSlackInstallTeamMember(verifiedState.installId, user.id))) {
@@ -32,12 +30,12 @@ async function POSTHandler(request: NextRequest) {
   }
   const state = await consumeSlackLinkState(
     serializedState,
-    appEnv.SLACK_CLIENT_SECRET,
+    process.env.SLACK_CLIENT_SECRET,
     (receiptId) => claimSlackEventOnce(prisma, receiptId),
   );
   if (!state) return resultRedirect(request, "invalid");
 
-  const secret = appEnv.SLACK_CLIENT_SECRET?.trim();
+  const secret = process.env.SLACK_CLIENT_SECRET?.trim();
   if (!secret) return resultRedirect(request, "server_error");
   const confirmation = createSlackLinkConfirmation(
     {
@@ -57,5 +55,3 @@ function resultRedirect(request: NextRequest, status: string) {
   url.searchParams.set("status", status);
   return NextResponse.redirect(url, 303);
 }
-
-export const POST = withoutAuth(POSTHandler);

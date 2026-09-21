@@ -1,5 +1,3 @@
-import { logger as htLogger } from "#logger";
-import { withAuth } from "#with-auth";
 // route = "/api/projects/views/switch-view"
 import prisma from "@/lib/prisma";
 import getProjectView from "@/utils/controllers/views";
@@ -32,7 +30,7 @@ const handler: NextApiHandler = async (req: NextApiRequest, res: NextApiResponse
             if (!view) throw new Error("View does not exist")
             const project_View = view.project_view
             const viewProjectId = project_View.projectId
-            htLogger.info("🚀 ~ consthandler:NextApiHandler= ~ project_View:", project_View)
+            console.log("🚀 ~ consthandler:NextApiHandler= ~ project_View:", project_View)
             
             const updatedUserProjectView = await prisma.user_Project_View.upsert({
                 create: {
@@ -88,17 +86,17 @@ const handler: NextApiHandler = async (req: NextApiRequest, res: NextApiResponse
                     id:updatedUserProjectView.unsavedViewId
                 }
             })
-            htLogger.info("🚀 ~ consthandler:NextApiHandler= ~ updatedUserProjectView:", updatedUserProjectView)
+            console.log("🚀 ~ consthandler:NextApiHandler= ~ updatedUserProjectView:", updatedUserProjectView)
             const project_view_updated = await getProjectView(viewProjectId, currentUser.id)
-            htLogger.info("🚀 ~ consthandler:NextApiHandler= ~ project_view_updated:", project_view_updated)
+            console.log("🚀 ~ consthandler:NextApiHandler= ~ project_view_updated:", project_view_updated)
             
             return res.status(200).json(project_view_updated)
         } catch (error) {
-            htLogger.info("🚀 ~ consthandler:NextApiHandler= ~ error:", error)
+            console.log("🚀 ~ consthandler:NextApiHandler= ~ error:", error)
             return res.status(500).json(error)
         }
     }
 };
 
 
-export default withAuth(handler)
+export default handler

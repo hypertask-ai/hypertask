@@ -1,5 +1,3 @@
-import { logger as htLogger } from "#logger";
-import { withoutAuth } from "#with-auth";
 import { markInboxNotificationsSeen } from "@/utils/controllers/notifications";
 import { NextRequest, NextResponse } from 'next/server'
 import { checkMcpRateLimit, createUnauthorizedResponse, validateMcpAuth } from '@/lib/mcp/auth'
@@ -7,7 +5,7 @@ import { broadcastInboxChange } from '@/lib/realtime/server'
 
 const MAX_NOTIFICATION_IDS = 100
 
-async function POSTHandler(request: NextRequest) {
+export async function POST(request: NextRequest) {
   try {
     const rateLimited = await checkMcpRateLimit(request)
     if (rateLimited) return rateLimited
@@ -84,12 +82,10 @@ async function POSTHandler(request: NextRequest) {
       seen_count: result.count,
     })
   } catch (error) {
-    htLogger.error('Error marking inbox notifications seen:', error)
+    console.error('Error marking inbox notifications seen:', error)
     return NextResponse.json(
       { success: false, error: 'Internal server error' },
       { status: 500 }
     )
   }
 }
-
-export const POST = withoutAuth(POSTHandler);

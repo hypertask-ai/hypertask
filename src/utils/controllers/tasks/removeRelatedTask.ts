@@ -1,4 +1,3 @@
-import { logger as htLogger } from "#logger";
 import prisma from "@/lib/prisma";
 
 export const removeRelatedTask = async (relationId: number) => {
@@ -13,7 +12,7 @@ export const removeRelatedTask = async (relationId: number) => {
       json: removed,
     };
   } catch (error) {
-    htLogger.info("🚀 ~ removeRelatedTask ~ error:", error);
+    console.log("🚀 ~ removeRelatedTask ~ error:", error);
     return {
       status: 500,
       json: undefined,

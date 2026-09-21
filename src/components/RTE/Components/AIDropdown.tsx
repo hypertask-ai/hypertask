@@ -40,6 +40,7 @@ const runFlaskCommand = async (
       }
       return true;
     })().catch((error) => {
+      console.log("🚀 ~ error:", error);
       throw error;
     }),
     {

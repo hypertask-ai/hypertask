@@ -1,6 +1,3 @@
-import { env as appEnv } from "#env";
-import { logger as htLogger } from "#logger";
-import { withoutAuth } from "#with-auth";
 import { NextApiHandler, NextApiRequest, NextApiResponse } from "next";
 import { redactAgentIdentitiesForPublicShare } from "@/lib/agents/publicAgent";
 import prisma from "@/lib/prisma";
@@ -27,7 +24,7 @@ const handler: NextApiHandler = async (
         });
       else return res.status(400).json({});
     } catch (error) {
-      htLogger.info("🚀 ~ error:", error);
+      console.log("🚀 ~ error:", error);
       return res.status(400).json({ message: JSON.stringify(error) });
     }
   } else {
@@ -36,8 +33,8 @@ const handler: NextApiHandler = async (
 };
 
 export const generateShareLink = (shareId: string) => {
-  const baseURL = String(appEnv.NEXT_PUBLIC_BASEURL);
+  const baseURL = String(process.env.NEXT_PUBLIC_BASEURL);
   return `${baseURL}/share?id=${shareId}`;
 };
 
-export default withoutAuth(handler);
+export default handler;

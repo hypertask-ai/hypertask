@@ -1,4 +1,3 @@
-import { logger as htLogger } from "#logger";
 import { generateObject } from "ai";
 import { z } from "zod";
 
@@ -121,7 +120,7 @@ export async function handleSlackChat(input: {
       );
     }
   } catch (error) {
-    htLogger.error("Slack chat failed", error);
+    console.error("Slack chat failed", error);
     const blocks = errorBlock(
       "Something went wrong processing your request.",
       "Try again or use `/ht help`.",

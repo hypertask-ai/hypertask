@@ -1,5 +1,3 @@
-import { logger as htLogger } from "#logger";
-import { withAuth } from "#with-auth";
 import { NextRequest } from "next/server";
 
 import {
@@ -13,7 +11,7 @@ import { disconnectFigmaUser } from "@/lib/figma/connection";
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
-async function DELETEHandler(request: NextRequest) {
+export async function DELETE(request: NextRequest) {
   const principal = await getFigmaRequestUser(request);
   if (principal.status === "unauthorized") {
     return noStore({ error: "Unauthorized" }, 401);
@@ -34,9 +32,7 @@ async function DELETEHandler(request: NextRequest) {
     clearFigmaConnectionVersion(response);
     return response;
   } catch (error) {
-    htLogger.error("Figma disconnect failed", error);
+    console.error("Figma disconnect failed", error);
     return noStore({ error: "Could not disconnect Figma" }, 500);
   }
 }
-
-export const DELETE = withAuth(DELETEHandler);

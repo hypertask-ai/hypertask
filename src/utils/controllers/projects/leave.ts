@@ -1,4 +1,3 @@
-import { logger as htLogger } from "#logger";
 import { NextApiHandler, NextApiRequest, NextApiResponse } from "next";
 
 import { IProject } from "@/models/model";
@@ -79,7 +78,7 @@ const leaveProject = async (projectId:number, userId:number) => {
             //         }
             //     }
             //   })  
-            //   debug.log("🚀 ~ file: removeMember.ts:61 ~ membersRemove ~ projectsWhereStillMember:", projectsWhereStillMember)
+            //   console.log("🚀 ~ file: removeMember.ts:61 ~ membersRemove ~ projectsWhereStillMember:", projectsWhereStillMember)
             //   if (projectsWhereStillMember.length===0 && project.teamId){
 
             //       const deletedTeamMember=  await prisma.member_Team.deleteMany({
@@ -116,7 +115,7 @@ const leaveProject = async (projectId:number, userId:number) => {
                 json:{message:"Success", firstProject: firstProject.json}
             })
         } catch (error) {
-            htLogger.info(error);
+            console.log(error);
             return({
                 status:400,
                 json:{ message: JSON.stringify(error) }

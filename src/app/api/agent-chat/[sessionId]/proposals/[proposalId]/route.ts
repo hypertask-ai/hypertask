@@ -1,6 +1,5 @@
-import { logger as htLogger } from "#logger";
-import { getAuthSession, withAuth } from "#with-auth";
 import prisma from "@/lib/prisma";
+import { getSessionUser } from "@/lib/auth/getSessionUser";
 import { NextRequest, NextResponse } from "next/server";
 import { loadUserAgentChatSession } from "@/lib/agents/chatAccess";
 import { AGENT_CHAT_TICKET_CONFIRM_FLAG, isFeatureEnabled } from "@/lib/flags";
@@ -30,12 +29,12 @@ const CONFIRM_LEASE_MS = 60_000;
  * creates nothing. Every right is rechecked here, live: the proposal's stored
  * board and column are ids to verify, never permission to act.
  */
-async function POSTHandler(
+export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ sessionId: string; proposalId: string }> }
 ) {
   try {
-    const userId = (await getAuthSession(request.headers))?.userId;
+    const userId = (await getSessionUser(request.headers))?.userId;
     if (!userId) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
@@ -220,7 +219,7 @@ async function POSTHandler(
       });
       task = created.task;
     } catch (error: any) {
-      htLogger.error("[agent-chat] confirm failed to create the ticket", error);
+      console.error("[agent-chat] confirm failed to create the ticket", error);
       return fail(error?.message || "Could not create the ticket", 500);
     }
 
@@ -250,7 +249,7 @@ async function POSTHandler(
       proposal: serializeChatTicketProposal(await reread()),
     });
   } catch (error: any) {
-    htLogger.error("🚀 ~ POST ~ Error confirming chat ticket proposal", error);
+    console.error("🚀 ~ POST ~ Error confirming chat ticket proposal", error);
     return NextResponse.json(
       {
         success: false,
@@ -260,5 +259,3 @@ async function POSTHandler(
     );
   }
 }
-
-export const POST = withAuth(POSTHandler);

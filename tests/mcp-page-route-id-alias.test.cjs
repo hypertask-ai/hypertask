@@ -20,9 +20,6 @@ const javascript = ts.transpileModule(routeUtilsSource, {
 
 const routeUtilsModule = { exports: {} };
 const mockRequire = (request) => {
-  if (request === "#env") {
-    return { env: { NEXT_PUBLIC_BASEURL: "https://app.hypertask.ai" } };
-  }
   if (request === "@/lib/mcp/fieldError") {
     return {
       buildFieldError: (code, field, message) => ({

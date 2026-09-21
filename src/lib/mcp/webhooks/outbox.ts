@@ -1,4 +1,3 @@
-import { logger as htLogger } from "#logger";
 import crypto from 'crypto'
 import type { Prisma } from '@prisma/client'
 import type { WebhookDelivery } from './events'
@@ -148,7 +147,7 @@ export async function publishBoardWebhookDeliveries(
   await Promise.all(
     deliveryIds.map((deliveryId) =>
       queueBoardWebhookDelivery(deliveryId).catch((error) => {
-        htLogger.warn(
+        console.warn(
           '[board-webhook] queue publish failed; sweep will retry',
           error,
         )

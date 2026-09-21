@@ -534,6 +534,7 @@ export function useCalendarView(accountId: number) {
         }
         return true;
       } catch (error) {
+        console.error("Could not save calendar view preference:", error);
         toast.error(
           axios.isAxiosError(error) &&
             typeof error.response?.data?.error === "string"
@@ -677,6 +678,7 @@ export function useCalendarView(accountId: number) {
         try {
           await queryClient.invalidateQueries({ queryKey: calendarViewsQueryKey });
         } catch (error) {
+          console.error("Could not refresh calendar views after create:", error);
         }
         const applied = await persistCalendarViews(
           { type: "setAppliedViewId", appliedViewId: createdView.id },
@@ -1376,6 +1378,7 @@ export function useCalendarView(accountId: number) {
         }
       }
     } catch (error) {
+      console.error("updateDueDateHandler error:", error);
       toast.error(calendarConfig.toast_messages.error.update);
     }
   }, [getDefaultOptions, currentTask, currentDay, getTasksForDate, setCurrentTaskWithFocus, onTaskUpdate]);
@@ -1410,6 +1413,7 @@ export function useCalendarView(accountId: number) {
         throw new Error("Failed to update due date");
       }
     } catch (error) {
+      console.log("🚀 ~ addTaskToState ~ error:", error);
       toast.error(calendarConfig.toast_messages.error.add);
     }
   }, [reconcileCalendar, updateTaskInCache, updateTaskProjection]);
@@ -1422,6 +1426,7 @@ export function useCalendarView(accountId: number) {
       if (!task) return;
       updateDueDateHandler(task, date);
     } catch (error) {
+      console.log("🚀 ~ dueDateModalCallback ~ error:", error);
     }
   }, [currentTask, tasks, updateDueDateHandler]);
 
@@ -1504,6 +1509,7 @@ export function useCalendarView(accountId: number) {
       reconcileCalendar("manual");
       toast.success(calendarConfig.toast_messages.success.update);
     } catch (error) {
+      console.log("🚀 ~ onTaskUpdate ~ error:", error);
     }
   }
 
@@ -1576,6 +1582,7 @@ export function useCalendarView(accountId: number) {
         }
       }
     } catch (error) {
+      console.log("🚀 ~ handleDateSelect ~ error:", error);
     }
   }
 
@@ -1661,6 +1668,7 @@ export function useCalendarView(accountId: number) {
       const tasks = getTasksForDate(newDate);
       setCurrentTaskWithFocus(tasks.length > 0 ? tasks[0].id : -1, newDate);
     } catch (error) {
+      console.log("🚀 ~ shiftFocusHorizontally ~ error:", error);
     }
   }, [currentDay, weeks, getTasksForDate, setCurrentTaskWithFocus, currentView, handlePrevious, handleNext]);
 
@@ -1764,6 +1772,7 @@ export function useCalendarView(accountId: number) {
         }
       }
     } catch (error) {
+      console.log("🚀 ~ shiftFocusVertically ~ error:", error);
     }
   }, [currentDay, currentTask, currentView, weeks, getTasksForDate, setCurrentTaskWithFocus]);
 
@@ -1799,6 +1808,7 @@ export function useCalendarView(accountId: number) {
       // Follow the task, as week view's focus does after a move.
       if (currentView === "day") setCurrentDate(newDueDate);
     } catch (error) {
+      console.log("🚀 ~ moveTaskHorizontally ~ error:", error);
     }
   }, [currentTask, currentDay, currentView, weeks, getTasksForDate, updateDueDateHandler]);
 
@@ -1833,6 +1843,7 @@ export function useCalendarView(accountId: number) {
 
       await updateDueDateHandler(task, newDueDate);
     } catch (error) {
+      console.log("🚀 ~ moveTaskVertically ~ error:", error);
     }
   }, [currentTask, currentView, currentDay, weeks, getTasksForDate, updateDueDateHandler]);
 
@@ -1859,6 +1870,7 @@ export function useCalendarView(accountId: number) {
       if (!newDueDate) return;
       await updateDueDateHandler(task, newDueDate);
     } catch (error) {
+      console.log("🚀 ~ onDragEnd ~ error:", error);
       toast.error(calendarConfig.toast_messages.error.update);
     }
   }

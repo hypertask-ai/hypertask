@@ -1,17 +1,16 @@
-import { logger as htLogger } from "#logger";
-import { getAuthSession, withAuth } from "#with-auth";
 import { notificationStore } from "@/utils/controllers/notifications";
 import { NextApiHandler, NextApiRequest, NextApiResponse } from "next";
 
 import prisma from "@/lib/prisma";
 import { broadcastInboxChange, socketIdFromHeader } from "@/lib/realtime/server";
+import { getSessionUser } from "@/lib/auth/getSessionUser";
 
 
 const handler: NextApiHandler = async (req: NextApiRequest, res: NextApiResponse) => {
     if (req.method === "GET") {
         try {
             // HTPR-4772: ignore the query userId and use the signed session.
-            const session = await getAuthSession(
+            const session = await getSessionUser(
                 new Headers(req.headers as Record<string, string>)
             );
             if (!session) return res.status(401).json({ message: "Unauthorized" });
@@ -69,7 +68,7 @@ const handler: NextApiHandler = async (req: NextApiRequest, res: NextApiResponse
               }
             
             })
-            htLogger.info("🚀 ~ consthandler:NextApiHandler= ~ notification_:", notification_)
+            console.log("🚀 ~ consthandler:NextApiHandler= ~ notification_:", notification_)
 
             if (notification_ && notification_.userId !== userId) {
               return res.status(403).json({ message: "Forbidden" });
@@ -209,7 +208,7 @@ const handler: NextApiHandler = async (req: NextApiRequest, res: NextApiResponse
             return res.status(200).json(notification_);
 
         } catch (error) {
-            htLogger.info(error);
+            console.log(error);
             
             return res.status(500).json({ message: "Internal server error" });
         }
@@ -219,4 +218,4 @@ const handler: NextApiHandler = async (req: NextApiRequest, res: NextApiResponse
     }
 };
 
-export default withAuth(handler);
+export default handler;

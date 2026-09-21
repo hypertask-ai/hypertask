@@ -1,4 +1,3 @@
-import { logger as htLogger } from "#logger";
 // Assert-based demo because this repository has no Vitest setup.
 // Run: npx tsx src/lib/mcp-server/validations/parity-tools.validation.test.ts
 //
@@ -278,7 +277,7 @@ function demo() {
   )
   rejects(InboxListInputSchema, { composition: true }, 'composition needs project_id')
 
-  htLogger.info('parity-tools.validation: all assertions passed')
+  console.log('parity-tools.validation: all assertions passed')
 }
 
 demo()

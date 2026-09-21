@@ -1,4 +1,3 @@
-import { logger as htLogger } from "#logger";
 import { NextApiHandler, NextApiRequest, NextApiResponse } from "next"
 import checkReminderAndCreateNotification from "../notifications/creation-service/check-reminder_create-notification";
 import prisma from "@/lib/prisma";
@@ -41,7 +40,7 @@ const handler: NextApiHandler = async (req: NextApiRequest, res: NextApiResponse
             )
 
             for (var i = 0; i < assignees.length; i++) {
-                htLogger.info(task.id)
+                console.log(task.id)
                 await checkReminderAndCreateNotification(
                     assignees[i].userId,
                     task.projectId,
@@ -74,7 +73,7 @@ const handler: NextApiHandler = async (req: NextApiRequest, res: NextApiResponse
 
             res.json(comment)
         } catch (error) {
-            htLogger.info({error})
+            console.log({error})
             res.status(500).json({ message: "Internal server error" })
         }
     } else {

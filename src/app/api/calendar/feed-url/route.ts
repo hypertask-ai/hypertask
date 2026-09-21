@@ -1,12 +1,11 @@
-import { env as appEnv } from "#env";
-import { getAuthSession, withAuth } from "#with-auth";
 import { NextRequest, NextResponse } from "next/server";
 import jwt from "jsonwebtoken";
+import { getSessionUser } from "@/lib/auth/getSessionUser";
 
 export const dynamic = "force-dynamic";
 
-const JWT_SECRET = appEnv.JWT_SECRET as string;
-const JWT_ISSUER = appEnv.JWT_ISSUER || "hypertask";
+const JWT_SECRET = process.env.JWT_SECRET as string;
+const JWT_ISSUER = process.env.JWT_ISSUER || "hypertask";
 const CALENDAR_AUDIENCE = "calendar-feed";
 
 /**
@@ -14,8 +13,8 @@ const CALENDAR_AUDIENCE = "calendar-feed";
  * Returns the logged-in user's personal, long-lived subscribe URL for the ICS
  * feed. Paste the URL into Google Calendar (Other calendars → From URL).
  */
-async function GETHandler(request: NextRequest) {
-  const session = await getAuthSession(request.headers);
+export async function GET(request: NextRequest) {
+  const session = await getSessionUser(request.headers);
   if (!session) {
     return NextResponse.json(
       { success: false, error: "Unauthorized" },
@@ -32,5 +31,3 @@ async function GETHandler(request: NextRequest) {
   const url = `${request.nextUrl.origin}/api/calendar/feed?token=${token}`;
   return NextResponse.json({ success: true, url });
 }
-
-export const GET = withAuth(GETHandler);

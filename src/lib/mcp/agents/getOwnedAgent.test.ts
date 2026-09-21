@@ -1,4 +1,3 @@
-import { logger as htLogger } from "#logger";
 // Assert-based demo because this repository has no Vitest setup.
 // Run after installing dependencies: npx tsx src/lib/mcp/agents/getOwnedAgent.test.ts
 import type { PrismaClient } from '@prisma/client'
@@ -49,10 +48,10 @@ async function demo() {
   const missing = await getOwnedAgent(database, 6, 'missing-agent')
   assert.equal(missing, null)
 
-  htLogger.info('getOwnedAgent.test.ts: all assertions passed')
+  console.log('getOwnedAgent.test.ts: all assertions passed')
 }
 
 demo().catch((error) => {
-  htLogger.error(error)
+  console.error(error)
   process.exitCode = 1
 })

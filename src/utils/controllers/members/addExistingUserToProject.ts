@@ -1,4 +1,3 @@
-import { logger as htLogger } from "#logger";
 import { LogType, Status } from "@prisma/client";
 
 import prisma from "@/lib/prisma";
@@ -95,7 +94,7 @@ export async function addExistingUserToProject(
   });
   if (existingMember) {
     await expirePendingInvites(projectId, targetUser.email).catch((error) => {
-      htLogger.error(
+      console.error(
         "[addExistingUserToProject] failed to expire pending invites:",
         error,
       );
@@ -222,7 +221,7 @@ export async function addExistingUserToProject(
             sync: joined.created,
           };
         } catch (error) {
-          htLogger.error(
+          console.error(
             "[addExistingUserToProject] transactional join failed:",
             error,
           );
@@ -250,14 +249,14 @@ export async function addExistingUserToProject(
     }
 
     await expirePendingInvites(projectId, targetUser.email).catch((error) => {
-      htLogger.error(
+      console.error(
         "[addExistingUserToProject] failed to expire pending invites:",
         error,
       );
     });
     if (value.outcome === "added") {
       await updateTrial(userId).catch((error) => {
-        htLogger.error(
+        console.error(
           "[addExistingUserToProject] failed to update trial after join:",
           error,
         );
@@ -311,14 +310,14 @@ export async function addExistingUserToProject(
   }
 
   await expirePendingInvites(projectId, targetUser.email).catch((error) => {
-    htLogger.error(
+    console.error(
       "[addExistingUserToProject] failed to expire pending invites:",
       error,
     );
   });
   if (join.outcome === "added") {
     await updateTrial(userId).catch((error) => {
-      htLogger.error(
+      console.error(
         "[addExistingUserToProject] failed to update trial after join:",
         error,
       );

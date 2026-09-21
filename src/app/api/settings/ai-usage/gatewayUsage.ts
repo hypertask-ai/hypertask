@@ -1,4 +1,3 @@
-import { logger as htLogger } from "#logger";
 import { PAID_TEAM_AI_ALLOWANCE_USD } from "@/lib/aiAllowancePolicy";
 import {
   INCLUDED_WITH_HYPERTASK_GATEWAY_TAG,
@@ -545,7 +544,7 @@ export const computePersonalTeamSharePct = async ({
       teamSpendUsd,
     );
   } catch (error) {
-    htLogger.error(`Error loading personal AI usage for team ${teamId}:`, error);
+    console.error(`Error loading personal AI usage for team ${teamId}:`, error);
     return responseForSpend([], 0);
   }
 };

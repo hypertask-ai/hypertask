@@ -1,8 +1,7 @@
-import { logger as htLogger } from "#logger";
-import { getAuthSession, withAuth } from "#with-auth";
 import { NextApiHandler, NextApiRequest, NextApiResponse } from "next";
 
 import prisma from "@/lib/prisma";
+import { getSessionUser } from "@/lib/auth/getSessionUser";
 
 const MAX_DEVICES_PER_USER = 8;
 
@@ -24,7 +23,7 @@ const handler: NextApiHandler = async (
   // Identity comes from the signed session. It used to come from nookies_user,
   // which is unsigned and client-writable, so a caller could register their own
   // browser against any user id and start receiving that person's push.
-  const session = await getAuthSession(
+  const session = await getSessionUser(
     new Headers(req.headers as Record<string, string>)
   );
   if (!session) {
@@ -63,7 +62,7 @@ const handler: NextApiHandler = async (
 
       return res.status(200).json({ data: device, message: "success" });
     } catch (error) {
-      htLogger.info("🤔 ~ addDevice ~ error:", error);
+      console.log("🤔 ~ addDevice ~ error:", error);
       return res.status(400).json({ message: JSON.stringify(error) });
     }
   }
@@ -81,7 +80,7 @@ const handler: NextApiHandler = async (
       });
       return res.status(200).json({ data: deviceDeleted, message: "success" });
     } catch (error) {
-      htLogger.info("🤔 ~ addDevice ~ error:", error);
+      console.log("🤔 ~ addDevice ~ error:", error);
       return res.status(400).json({ message: JSON.stringify(error) });
     }
   }
@@ -89,4 +88,4 @@ const handler: NextApiHandler = async (
   return res.status(405).json({ message: "Method not allowed" });
 };
 
-export default withAuth(handler);
+export default handler;

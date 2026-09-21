@@ -1,7 +1,7 @@
-import { getAuthSession, withAuth } from "#with-auth";
 import { NextResponse } from "next/server";
 import { Prisma } from "@prisma/client";
 
+import { getSessionUser } from "@/lib/auth/getSessionUser";
 import prisma from "@/lib/prisma";
 import {
   broadcastInboxChange,
@@ -58,8 +58,8 @@ const previewChanged = async (
   );
 };
 
-async function POSTHandler(request: Request) {
-  const session = await getAuthSession(request.headers);
+export async function POST(request: Request) {
+  const session = await getSessionUser(request.headers);
   if (!session) {
     return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
   }
@@ -180,5 +180,3 @@ async function POSTHandler(request: Request) {
     notificationIds,
   });
 }
-
-export const POST = withAuth(POSTHandler);

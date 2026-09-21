@@ -1,7 +1,6 @@
-import { logger as htLogger } from "#logger";
-import { getAuthSession, withAuth } from "#with-auth";
 import { chatStore } from "@/utils/controllers/chat";
 import prisma from "@/lib/prisma";
+import { getSessionUser } from "@/lib/auth/getSessionUser";
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { accessibleAgentWhere } from "@/lib/agents/visibility";
@@ -20,9 +19,9 @@ const createSessionSchema = z.object({
   agentId: z.string().uuid().optional(),
 });
 
-async function POSTHandler(request: NextRequest) {
+export async function POST(request: NextRequest) {
   try {
-    const userId = (await getAuthSession(request.headers))?.userId;
+    const userId = (await getSessionUser(request.headers))?.userId;
     if (!userId) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
@@ -140,7 +139,7 @@ async function POSTHandler(request: NextRequest) {
 
     return NextResponse.json({ success: true, session }, { status: 200 });
   } catch (error: any) {
-    htLogger.error("🚀 ~ POST ~ Error creating chat session", error);
+    console.error("🚀 ~ POST ~ Error creating chat session", error);
 
     return NextResponse.json(
       {
@@ -151,5 +150,3 @@ async function POSTHandler(request: NextRequest) {
     );
   }
 }
-
-export const POST = withAuth(POSTHandler);

@@ -16,6 +16,7 @@ export const useGetAllManageColumns = (userId:number,project?:IProject|null|unde
         queryKey:[globalConstants.GetAllManageColumnsPrefixKey, project?.id, userId], 
         // queryFn:() => globalAPIHandlers.getAllManageColumnsAPI(projectId, userId),
         queryFn:()=>{
+            console.log("🚀 ~ useGetAllManageColumns ~ currentProject:", currentProject)
             if (currentProject) return getActiveColumnsViewFromProject(currentProject)
             else return []
         },

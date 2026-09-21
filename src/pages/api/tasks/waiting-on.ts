@@ -1,5 +1,3 @@
-import { logger as htLogger } from "#logger";
-import { withAuth } from "#with-auth";
 import type { NextApiHandler } from "next";
 import prisma from "@/lib/prisma";
 import { actingAgentSelect } from "@/lib/agents/activityAttribution";
@@ -112,9 +110,9 @@ const handler: NextApiHandler = async (req, res) => {
 
     return res.status(200).json(updatedTask);
   } catch (error) {
-    htLogger.error("/api/tasks/waiting-on", error);
+    console.error("/api/tasks/waiting-on", error);
     return res.status(500).json({ message: "Internal server error" });
   }
 };
 
-export default withAuth(handler);
+export default handler;

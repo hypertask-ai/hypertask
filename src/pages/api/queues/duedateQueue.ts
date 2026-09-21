@@ -1,5 +1,3 @@
-import { logger as htLogger } from "#logger";
-import { withoutAuth } from "#with-auth";
 import type { NextApiRequest, NextApiResponse } from "next";
 import { cancelJobById, scheduleJobById } from "@/lib/qstash";
 import { withQstashSignature } from "@/lib/qstash";
@@ -29,18 +27,18 @@ export async function cancelDueDateJob(taskId: number, projectId: number) {
 
 async function handler(req: NextApiRequest, res: NextApiResponse) {
   const job = req.body as any;
-  htLogger.info("🚀 ~ job:", job);
+  console.log("🚀 ~ job:", job);
 
   try {
     const result = await invokeDueDate(job);
     return res.status(200).json({ ok: true, result });
   } catch (error) {
-    htLogger.info("🚀 ~ error:", error);
+    console.log("🚀 ~ error:", error);
     return res.status(500).json({ ok: false });
   }
 }
 
-export default withoutAuth(withQstashSignature(handler));
+export default withQstashSignature(handler);
 
 export const config = {
   api: {

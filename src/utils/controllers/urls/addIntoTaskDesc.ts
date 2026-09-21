@@ -1,4 +1,3 @@
-import { logger as htLogger } from "#logger";
 // Import PrismaClient from the generated Prisma client
 import { IUrl } from '@/models/model';
 
@@ -12,7 +11,7 @@ import { urlRowData } from '@/lib/attachments/urlRowData';
 export const addIntoTaskDesc = async (urlsToAdd:IUrl[], taskId:number, method:string|undefined) => {
 if (method==="POST"){
 
-  // debug.log(commentId)
+  // console.log(commentId)
   if (urlsToAdd.length==0 &&!taskId ) {
       return({
         status:400,
@@ -32,7 +31,7 @@ if (method==="POST"){
     })        
     // return res.status(200).json(urlRecords)       
   } catch (error) {
-    htLogger.error('Error:', error);
+    console.error('Error:', error);
     return({
       status:300,
       json:{message:"No response"}
@@ -44,7 +43,7 @@ if (method==="POST"){
 else if (method==="PUT"){
   try {
     // const { urlsToAdd, taskId } = req.body;
-    // debug.log("🚀 ~ file: addIntoTask.ts:82 ~ consthandler:NextApiHandler= ~ urlsToAdd:", urlsToAdd)
+    // console.log("🚀 ~ file: addIntoTask.ts:82 ~ consthandler:NextApiHandler= ~ urlsToAdd:", urlsToAdd)
 
     if (!taskId){
       return({
@@ -61,11 +60,11 @@ else if (method==="PUT"){
         commentId:null
       },
     });
-    // debug.log(existingUrls)
+    // console.log(existingUrls)
 
     // // Iterate through existingUrls and update or delete as needed
     for (const existingUrl of existingUrls) {
-      // debug.log(existingUrl)
+      // console.log(existingUrl)
 
       const matchedUrlData = urlsToAdd.find(
         (urlData:IUrl) =>
@@ -111,7 +110,7 @@ else if (method==="PUT"){
         TaskId: taskId,
       }));
 
-    // debug.log(newUrlsToAdd)
+    // console.log(newUrlsToAdd)
     // if (newUrlsToAdd.length > 0) {
     //   await prisma.url.createMany({
     //     data: newUrlsToAdd,
@@ -166,7 +165,7 @@ else if (method==="PUT"){
         }
 
       });
-      htLogger.info("🚀 ~ file: addIntoTaskDesc.ts:134 ~ addIntoTaskDesc ~ attachment_:", attachment_)
+      console.log("🚀 ~ file: addIntoTaskDesc.ts:134 ~ addIntoTaskDesc ~ attachment_:", attachment_)
 
     }
     }
@@ -181,7 +180,7 @@ else if (method==="PUT"){
           Attachment:newUrl.Attachment?true:false
         }
       });
-      htLogger.info("🚀 ~ file: addIntoTaskDesc.ts:145 ~ addIntoTaskDesc ~ urlRecords:", urlRecords)
+      console.log("🚀 ~ file: addIntoTaskDesc.ts:145 ~ addIntoTaskDesc ~ urlRecords:", urlRecords)
     }
 
     return({
@@ -191,7 +190,7 @@ else if (method==="PUT"){
 
     // return res.status(200).json({ success: true });
   } catch (error) {
-    htLogger.error('Error:', error);
+    console.error('Error:', error);
     return({
       status:200,
       json:{ success: false, error: 'An error occurred.' }

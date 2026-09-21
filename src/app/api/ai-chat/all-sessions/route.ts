@@ -1,18 +1,27 @@
-import { logger as htLogger } from "#logger";
-import { getAuthSession, withAuth } from "#with-auth";
 import { chatStore } from "@/utils/controllers/chat";
+import prisma from "@/lib/prisma";
+import { isValidUser } from "@/utils/edgeHelpers";
+import { cookies } from "next/headers";
 import { NextRequest, NextResponse } from "next/server";
 
-async function GETHandler(request: NextRequest) {
+export async function GET(request: NextRequest) {
   try {
-    const session = await getAuthSession(request.headers);
-    if (!session) {
+    const cookieStore = await cookies();
+    const userCookie = cookieStore.get("nookies_user");
+
+    if (!userCookie?.value) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
+    const { isValid, user } = isValidUser(userCookie.value);
+
+    if (!isValid || !user) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
     const sessions = await chatStore().sessions.findMany({
       where: {
-        userId: session.userId,
+        userId: user.id,
         // External agents (self-hosted runtimes) are only chatted with from
         // Agent Chat, which sends through /api/agent-chat, not this general
         // AI chat surface. Listing their sessions here lets a user open one
@@ -37,10 +46,10 @@ async function GETHandler(request: NextRequest) {
     });
 
     if (sessions.length === 0) {
-      htLogger.warn("No sessions found, creating new session");
-      const createdSession = await chatStore().sessions.create({
+      console.warn("No sessions found, creating new session");
+      const session = await chatStore().sessions.create({
         data: {
-          userId: session.userId,
+          userId: user.id,
         },
         include: {
           messages: {
@@ -54,12 +63,12 @@ async function GETHandler(request: NextRequest) {
           },
         },
       });
-      sessions.push(createdSession);
+      sessions.push(session);
     }
 
     return NextResponse.json({ success: true, sessions });
   } catch (error) {
-    htLogger.error("🚀 ~ GET ~ Error listing chat sessions:", error);
+    console.error("🚀 ~ GET ~ Error listing chat sessions:", error);
     return NextResponse.json(
       {
         success: false,
@@ -69,5 +78,3 @@ async function GETHandler(request: NextRequest) {
     );
   }
 }
-
-export const GET = withAuth(GETHandler);

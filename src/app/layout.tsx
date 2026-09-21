@@ -1,4 +1,3 @@
-import { env as appEnv } from "#env";
 import "@/styles/globals.scss";
 import "../../tokens.css";
 import { cookies } from "next/headers";
@@ -149,7 +148,7 @@ export default async function RootLayout(
             dangerouslySetInnerHTML={{
               __html: buildEarlyAppShellBootstrapScript({
                 accountId: analyticsSession.id,
-                betterAuthEnabled: appEnv.BETTER_AUTH_ENABLED === "1",
+                betterAuthEnabled: process.env.BETTER_AUTH_ENABLED === "1",
               }),
             }}
           />

@@ -1,5 +1,3 @@
-import { logger as htLogger } from "#logger";
-import { withAuth } from "#with-auth";
 import { SESSION_COOKIE, verifySession } from "@/lib/auth/session";
 import {
   resetUserViewOrder,
@@ -28,9 +26,9 @@ const handler: NextApiHandler = async (req, res) => {
     if (error instanceof ViewOrderError) {
       return res.status(error.status).json({ message: error.message });
     }
-    htLogger.error("reset view order failed", error);
+    console.error("reset view order failed", error);
     return res.status(500).json({ message: "Unable to reset view order" });
   }
 };
 
-export default withAuth(handler);
+export default handler;

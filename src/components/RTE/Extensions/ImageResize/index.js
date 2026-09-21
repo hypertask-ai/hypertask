@@ -85,6 +85,7 @@ const ImageResize = Image.extend({
                     $container.removeAttribute('style');
                     if ($container.childElementCount > 2) {
                         for (let i = 0; i < 4; i++) {
+                            console.log("🚀 ~ document.addEventListener ~ $container.lastChild:", $container.lastChild)
                             $container.removeChild($container.lastChild);
                         }
                     }

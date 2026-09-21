@@ -1,4 +1,3 @@
-import { logger as htLogger } from "#logger";
 import {
   buildInboundCommentHtml,
   normalizeSenderEmail,
@@ -148,7 +147,7 @@ export function createResendInboundHandler(dependencies: InboundDependencies) {
 
       return Response.json({ received: true });
     } catch (error) {
-      htLogger.error("Resend inbound email processing failed", error);
+      console.error("Resend inbound email processing failed", error);
       return Response.json({ received: false }, { status: 500 });
     }
   };

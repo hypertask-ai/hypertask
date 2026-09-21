@@ -1,5 +1,3 @@
-import { logger as htLogger } from "#logger";
-import { withoutAuth } from "#with-auth";
 import {
   createProjectLabel,
   findProjectLabelByName,
@@ -22,7 +20,7 @@ import { readEnabledListQuery, tryApplyCollectionQuery } from '@/lib/mcp/readLis
  *
  * Auth: MCP JWT (Bearer token)
  */
-async function GETHandler(request: NextRequest, props: { params: Promise<{ projectId: string }> }) {
+export async function GET(request: NextRequest, props: { params: Promise<{ projectId: string }> }) {
   const params = await props.params;
   try {
     const rateLimited = await checkMcpRateLimit(request)
@@ -97,7 +95,7 @@ async function GETHandler(request: NextRequest, props: { params: Promise<{ proje
  *
  * Auth: MCP JWT (Bearer token)
  */
-async function POSTHandler(request: NextRequest, props: { params: Promise<{ projectId: string }> }) {
+export async function POST(request: NextRequest, props: { params: Promise<{ projectId: string }> }) {
   const params = await props.params;
   try {
     const rateLimited = await checkMcpRateLimit(request)
@@ -201,7 +199,7 @@ async function POSTHandler(request: NextRequest, props: { params: Promise<{ proj
       { status: 201 }
     )
   } catch (error) {
-    htLogger.error('[MCP Create Label] Error:', error)
+    console.error('[MCP Create Label] Error:', error)
     return NextResponse.json(
       {
         success: false,
@@ -211,6 +209,3 @@ async function POSTHandler(request: NextRequest, props: { params: Promise<{ proj
     )
   }
 }
-
-export const GET = withoutAuth(GETHandler);
-export const POST = withoutAuth(POSTHandler);

@@ -34,18 +34,8 @@ function loadHandler(relativePath, stubs) {
   const file = path.join(tmpDir, "handler.js");
   fs.writeFileSync(file, javascript);
   const originalLoad = Module._load;
-  const conventionStubs = {
-    "#logger": {
-      logger: { error() {}, warn() {}, info() {}, debug() {} },
-    },
-    "#with-auth": {
-      getAuthSession: async () => ({ userId: USER_ID }),
-      withAuth: (handler) => handler,
-      withoutAuth: (handler) => handler,
-    },
-  };
   Module._load = (request, parent, isMain) =>
-    stubs[request] ?? conventionStubs[request] ?? originalLoad(request, parent, isMain);
+    stubs[request] ?? originalLoad(request, parent, isMain);
   try {
     const mod = require(file);
     return mod.default ?? mod;

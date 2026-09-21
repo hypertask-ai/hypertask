@@ -1,5 +1,3 @@
-import { logger as htLogger } from "#logger";
-import { withAuth } from "#with-auth";
 import { NextApiHandler, NextApiRequest, NextApiResponse } from "next";
 import { removeAgentFromBoard } from "@/utils/controllers/agents/boardMembers";
 
@@ -30,9 +28,9 @@ const handler: NextApiHandler = async (
 
     return res.status(200).json({ message: "Success" });
   } catch (error) {
-    htLogger.error("[removeAgent] Error:", error);
+    console.error("[removeAgent] Error:", error);
     return res.status(500).json({ message: "Internal server error" });
   }
 };
 
-export default withAuth(handler);
+export default handler;

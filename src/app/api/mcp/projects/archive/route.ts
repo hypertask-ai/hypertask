@@ -1,5 +1,3 @@
-import { logger as htLogger } from "#logger";
-import { withoutAuth } from "#with-auth";
 import { NextRequest, NextResponse } from 'next/server'
 import { validateMcpAuth, checkMcpRateLimit } from '@/lib/mcp/auth'
 import prisma from '@/lib/prisma'
@@ -15,7 +13,7 @@ import deleteProject from '@/utils/controllers/projects/delete'
  * Archive and restore remain owner-only and reversible. Delete reuses the web
  * app's owner-or-admin lifecycle path and is separately feature-gated.
  */
-async function POSTHandler(request: NextRequest) {
+export async function POST(request: NextRequest) {
   try {
     const rateLimited = await checkMcpRateLimit(request)
     if (rateLimited) return rateLimited
@@ -84,9 +82,7 @@ async function POSTHandler(request: NextRequest) {
 
     return NextResponse.json({ success: true, project: updated })
   } catch (error) {
-    htLogger.error('[MCP Archive Board] Error:', error)
+    console.error('[MCP Archive Board] Error:', error)
     return NextResponse.json({ success: false, error: 'Internal server error' }, { status: 500 })
   }
 }
-
-export const POST = withoutAuth(POSTHandler);

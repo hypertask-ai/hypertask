@@ -1,5 +1,3 @@
-import { logger as htLogger } from "#logger";
-import { withoutAuth } from "#with-auth";
 import { NextRequest, NextResponse } from 'next/server'
 import { validateMcpAuth, createUnauthorizedResponse, checkMcpRateLimit } from '@/lib/mcp/auth'
 import {
@@ -38,7 +36,7 @@ function hasField(body: ProfilePatchBody, field: keyof ProfilePatchBody) {
  * Updates the current human user's MCP-visible profile fields.
  * Authentication: Bearer token via MCP auth.
  */
-async function PATCHHandler(request: NextRequest) {
+export async function PATCH(request: NextRequest) {
   let userObj: { id: number; email: string } | null = null
 
   try {
@@ -136,7 +134,7 @@ async function PATCHHandler(request: NextRequest) {
       },
     })
   } catch (error) {
-    htLogger.error('[MCP] user/profile', {
+    console.error('[MCP] user/profile', {
       user: userObj,
       error,
       message: error instanceof Error ? error.message : String(error),
@@ -150,5 +148,3 @@ async function PATCHHandler(request: NextRequest) {
     )
   }
 }
-
-export const PATCH = withoutAuth(PATCHHandler);

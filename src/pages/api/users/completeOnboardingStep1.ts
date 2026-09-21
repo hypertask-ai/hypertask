@@ -1,5 +1,3 @@
-import { logger as htLogger } from "#logger";
-import { withAuth } from "#with-auth";
 import { NextApiHandler, NextApiRequest, NextApiResponse } from "next";
 
 
@@ -41,7 +39,7 @@ const handler: NextApiHandler = async (req: NextApiRequest, res: NextApiResponse
         if (!response) return res.status(500).json({message:"Onboarding step failed"})
         return res.status(200).json({response})
       } catch (error) {
-        htLogger.error("completeOnboardingStep1 error:", error)
+        console.error("completeOnboardingStep1 error:", error)
         return res.status(500).json({message: error instanceof Error ? error.message : String(error)})
       }
     }
@@ -52,4 +50,4 @@ const handler: NextApiHandler = async (req: NextApiRequest, res: NextApiResponse
     
 };
 
-export default withAuth(handler);
+export default handler;

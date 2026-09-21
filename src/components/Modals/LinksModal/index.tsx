@@ -111,6 +111,7 @@ const LinksModal = ({ display, onClose, currentTaskId, commentId, subTasks, pare
       }else{
         responseArray = [...res, ...addSubAndParentTasks()]
       }
+      // console.log("🚀 ~ file: index.tsx:65 ~ onOpenHandler ~ responseArray:", responseArray)
 
       const filteredGalleryAttachment = res
         .filter(item => /\.(pdf|png|webp|jpg|jpeg|txt|code|mp4|docx|mov|xlsx|pptx|webm|)$/i.test(item.urlString) && item.urlString.startsWith("https://files.hypertask.app"))
@@ -124,6 +125,7 @@ const LinksModal = ({ display, onClose, currentTaskId, commentId, subTasks, pare
             fileName: title,
           };
         });
+      console.log("🚀 ~ file: index.tsx:83 ~ onOpenHandler ~ filteredGalleryAttachment:", filteredGalleryAttachment)
       
       setGalleryAttachments(filteredGalleryAttachment)
       setLinks(responseArray)
@@ -141,6 +143,7 @@ const LinksModal = ({ display, onClose, currentTaskId, commentId, subTasks, pare
   
 
     setLoading(false)
+    // console.log("🚀 ~ file: LinksModal.tsx:35 ~ onOpenHandler ~ links:", links)
 
   }
 
@@ -180,6 +183,7 @@ const LinksModal = ({ display, onClose, currentTaskId, commentId, subTasks, pare
 
   //  ============================= KEYBOARD NAVIGATION HANDLER =============================
   const handleKeyDown = (event: KeyboardEvent) => {
+    // console.log('im working at least')
     const selectedUrl = filteredLinks[selectedIndex]
     if (!selectedUrl) return 
     // ------------------------------ DOWN MOVEMENT ------------------------------

@@ -63,9 +63,8 @@ function request(body, method = "POST") {
 function loadGetByTaskRoute(session) {
   const controllerCalls = [];
   const handler = loadTypeScript("src/pages/api/notifications/getByTask.ts", {
-    "#with-auth": {
-      getAuthSession: async () => session,
-      withAuth: (handler) => handler,
+    "@/lib/auth/getSessionUser": {
+      getSessionUser: async () => session,
     },
     "@/utils/controllers/notifications/getByTask": {
       __esModule: true,
@@ -82,9 +81,8 @@ function loadCommentSeenRoute(session) {
   const controllerCalls = [];
   const commentWrites = [];
   const handler = loadTypeScript("src/pages/api/comments/updateSeen.ts", {
-    "#with-auth": {
-      getAuthSession: async () => session,
-      withAuth: (handler) => handler,
+    "@/lib/auth/getSessionUser": {
+      getSessionUser: async () => session,
     },
     "@/utils/controllers/notifications/getByTask": {
       __esModule: true,

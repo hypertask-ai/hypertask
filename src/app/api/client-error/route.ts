@@ -1,5 +1,3 @@
-import { logger as htLogger } from "#logger";
-import { withoutAuth } from "#with-auth";
 import { NextRequest, NextResponse } from 'next/server'
 
 export const runtime = 'nodejs'
@@ -10,7 +8,7 @@ const cap = (v: unknown, n: number) =>
 // Receives client crash beacons and logs them into Vercel's runtime logs.
 // Search the Vercel dashboard (or `vercel logs`) for "[client-crash]".
 // ponytail: log-only. Add a DB table / Sentry if we need retention or alerting.
-async function POSTHandler(req: NextRequest) {
+export async function POST(req: NextRequest) {
   try {
     const body = await req.json().catch(() => ({}))
     let userId: number | undefined
@@ -20,7 +18,7 @@ async function POSTHandler(req: NextRequest) {
     } catch {
       // ignore malformed cookie
     }
-    htLogger.error(
+    console.error(
       '[client-crash]',
       JSON.stringify({
         source: cap(body?.source, 40) ?? 'unknown',
@@ -38,5 +36,3 @@ async function POSTHandler(req: NextRequest) {
   }
   return new NextResponse(null, { status: 204 })
 }
-
-export const POST = withoutAuth(POSTHandler);

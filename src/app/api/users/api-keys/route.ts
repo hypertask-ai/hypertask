@@ -1,5 +1,3 @@
-import { logger as htLogger } from "#logger";
-import { withAuth } from "#with-auth";
 import { NextRequest, NextResponse } from 'next/server'
 import prisma from '@/lib/prisma'
 import {
@@ -13,7 +11,7 @@ export const runtime = 'nodejs'
 
 const MAX_ACTIVE_API_KEYS = 10
 
-async function GETHandler(_request: NextRequest) {
+export async function GET(_request: NextRequest) {
   try {
     const user = await getApiKeyOwnerFromCookies()
     if (!user?.id) {
@@ -34,7 +32,7 @@ async function GETHandler(_request: NextRequest) {
       apiKeys,
     })
   } catch (error) {
-    htLogger.error('Error listing API keys:', error)
+    console.error('Error listing API keys:', error)
     return NextResponse.json(
       { success: false, error: 'Internal server error' },
       { status: 500 }
@@ -42,7 +40,7 @@ async function GETHandler(_request: NextRequest) {
   }
 }
 
-async function POSTHandler(request: NextRequest) {
+export async function POST(request: NextRequest) {
   try {
     const user = await getApiKeyOwnerFromCookies()
     if (!user?.id) {
@@ -114,13 +112,10 @@ async function POSTHandler(request: NextRequest) {
       },
     })
   } catch (error) {
-    htLogger.error('Error creating API key:', error)
+    console.error('Error creating API key:', error)
     return NextResponse.json(
       { success: false, error: 'Internal server error' },
       { status: 500 }
     )
   }
 }
-
-export const GET = withAuth(GETHandler);
-export const POST = withAuth(POSTHandler);

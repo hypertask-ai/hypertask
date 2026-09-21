@@ -1,4 +1,3 @@
-import { logger as htLogger } from "#logger";
 import prisma from "@/lib/prisma";
 import {
   getFullTaskInclude,
@@ -84,7 +83,7 @@ const tasksGetArchivedTasksByProject = async (
       json: await attachWaitingOnUsers(tasks),
     };
   } catch (error) {
-    htLogger.info(error);
+    console.log(error);
     return {
       status: 400,
       json: { message: JSON.stringify(error) },

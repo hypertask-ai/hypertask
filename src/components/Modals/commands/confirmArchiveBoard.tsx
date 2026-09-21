@@ -46,9 +46,11 @@ const ConfirmArchiveBoard = (props: Props) => {
                     queryClient.refetchQueries({queryKey:["getAllFavorites"]}),
                 ])
             } catch (refreshError) {
+                console.error("Board archive succeeded but cache refresh failed", refreshError)
             }
         }
         catch (error) {
+            console.error(error)
             setLoading(false)
         }
     }, [currentProject?.id, loading, onClose, queryClient, router, targetProject])

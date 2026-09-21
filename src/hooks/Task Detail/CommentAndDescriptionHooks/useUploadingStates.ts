@@ -17,6 +17,7 @@ const useCommentAndDescriptionUploadingStates = () => {
 
     if (uploadingComments.length > 0 || uploadingDescription ) {
       event.preventDefault();
+      console.log(event.defaultPrevented)
     }
   };
 

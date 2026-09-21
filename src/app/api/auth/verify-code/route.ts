@@ -1,6 +1,3 @@
-import { env as appEnv } from "#env";
-import { logger as htLogger } from "#logger";
-import { withoutAuth } from "#with-auth";
 import { NextRequest, NextResponse } from 'next/server'
 import crypto from 'crypto'
 import { VerificationCodeService } from '@/lib/services/verificationCodeService'
@@ -22,7 +19,7 @@ import {
 } from '@/lib/auth/emailCodeRateLimit'
 
 // --------- Route Handler ---------
-async function POSTHandler(request: NextRequest) {
+export async function POST(request: NextRequest) {
   try {
     const { code, email, abTestVariant } = await request.json()
 
@@ -75,7 +72,7 @@ async function POSTHandler(request: NextRequest) {
       )
     }
 
-    htLogger.info('🧪 AB Test Variant:', abTestVariant)
+    console.log('🧪 AB Test Variant:', abTestVariant)
 
     // Verify the code
     const verifiedEmail = await VerificationCodeService.verifyCode(
@@ -101,7 +98,7 @@ async function POSTHandler(request: NextRequest) {
       )
     }
 
-    htLogger.info('✅ Code verified for email:', verifiedEmail)
+    console.log('✅ Code verified for email:', verifiedEmail)
 
     const existingUser = await prisma.user.findFirst({
       where: { email: verifiedEmail },
@@ -126,7 +123,7 @@ async function POSTHandler(request: NextRequest) {
     )
 
     if (userUpdateResult.status !== 200) {
-      htLogger.error('❌ User update failed:', userUpdateResult)
+      console.error('❌ User update failed:', userUpdateResult)
       return NextResponse.json(
         { 
           success: false, 
@@ -139,7 +136,7 @@ async function POSTHandler(request: NextRequest) {
 
     let userData = userUpdateResult.res.user
     if (!userData) {
-      htLogger.error('❌ User data not found in response')
+      console.error('❌ User data not found in response')
       return NextResponse.json(
         { 
           success: false, 
@@ -168,7 +165,7 @@ async function POSTHandler(request: NextRequest) {
       try {
         await autoJoinByEmailDomain(userData.id, userData.email)
       } catch (error) {
-        htLogger.error('Auto-join by email domain failed (non-fatal):', error)
+        console.error('Auto-join by email domain failed (non-fatal):', error)
       }
       // Refetch user to get updated isVerified status
       const updatedUser = await prisma.user.findUnique({
@@ -180,7 +177,7 @@ async function POSTHandler(request: NextRequest) {
       }
     }
 
-    htLogger.info('✅ User updated successfully:', {
+    console.log('✅ User updated successfully:', {
       id: userData!.id,
       email: userData!.email,
       displayName: userData!.displayName,
@@ -192,7 +189,7 @@ async function POSTHandler(request: NextRequest) {
     // board instead of the empty state, matching instant-signup's behavior.
     if (userUpdateResult.res.isNewUser && authConfig.onboarding.skipOnboarding) {
       try {
-        htLogger.info('🚀 Completing onboarding step 1 for new email-code user')
+        console.log('🚀 Completing onboarding step 1 for new email-code user')
         const onboardingResult = await CompleteOnboardingFirstStep(
           userData as any,
           'MyTeam', // Default team title
@@ -200,9 +197,9 @@ async function POSTHandler(request: NextRequest) {
           companySizeOptions[0], // Default: "Just me"
           companyRoleOptions[0] // Default: "Founder or leadership team"
         )
-        htLogger.info('✅ Onboarding step 1 completed:', onboardingResult)
+        console.log('✅ Onboarding step 1 completed:', onboardingResult)
       } catch (onboardingError) {
-        htLogger.error('⚠️ Failed to complete onboarding step 1:', onboardingError)
+        console.error('⚠️ Failed to complete onboarding step 1:', onboardingError)
         // Don't fail the request - user can still use the app
         // The onboarding can be completed later if needed
       }
@@ -215,7 +212,7 @@ async function POSTHandler(request: NextRequest) {
 
     // Get user's projects (EXACTLY like useAuth.tsx does)
     const prevBoard = await getProjects(userData!.id, getRequestBaseUrl(request))
-    htLogger.info('📋 User projects fetched:', prevBoard)
+    console.log('📋 User projects fetched:', prevBoard)
 
     // Create response with redirect URL following useAuth.tsx logic
     const response = NextResponse.json({
@@ -233,7 +230,7 @@ async function POSTHandler(request: NextRequest) {
       // Set nookies_user cookie (main auth cookie)
       response.cookies.set('nookies_user', JSON.stringify(slimUserForCookie(userData)), {
         httpOnly: false,
-        secure: appEnv.NODE_ENV === 'production',
+        secure: process.env.NODE_ENV === 'production',
         sameSite: 'lax',
         maxAge: 600 * 60 * 24 * 7, // 1 week
         path: '/'
@@ -251,32 +248,32 @@ async function POSTHandler(request: NextRequest) {
       if (prevBoard?.id) {
         response.cookies.set('previousBoard', `project-${prevBoard.id}|&|`, {
           httpOnly: false,
-          secure: appEnv.NODE_ENV === 'production',
+          secure: process.env.NODE_ENV === 'production',
           sameSite: 'lax',
           maxAge: 600 * 60 * 24 * 7, // 1 week
           path: '/'
         })
-        htLogger.info('✅ Previous board cookie set:', `project-${prevBoard.id}`)
+        console.log('✅ Previous board cookie set:', `project-${prevBoard.id}`)
       }
 
       // Track the source for analytics
       response.cookies.set('signup_source', 'email_code', {
         httpOnly: false,
-        secure: appEnv.NODE_ENV === 'production',
+        secure: process.env.NODE_ENV === 'production',
         sameSite: 'lax',
         maxAge: 60 * 60 * 24 * 7, // 7 days
         path: '/'
       })
 
-      htLogger.info('✅ Authentication cookies set successfully')
+      console.log('✅ Authentication cookies set successfully')
     } catch (cookieError) {
-      htLogger.error('⚠️  Cookie setting failed:', cookieError)
+      console.error('⚠️  Cookie setting failed:', cookieError)
     }
 
     return response
 
   } catch (error) {
-    htLogger.error('❌ Error verifying code:', error)
+    console.error('❌ Error verifying code:', error)
     return NextResponse.json(
       { success: false, error: 'Failed to verify code' },
       { status: 500 }
@@ -301,7 +298,7 @@ async function getProjects(
       return data[0]
     }
   } catch (error) {
-    htLogger.error('❌ Error fetching projects:', error)
+    console.error('❌ Error fetching projects:', error)
   }
   
   return undefined
@@ -317,9 +314,9 @@ function getRedirectUrl(
   isNewUser?: boolean
 ): string {
   const { onboardingTutorialStatus } = user?.UserSetting || {}
-  htLogger.info('🔄 getRedirectUrl - onboardingTutorialStatus:', onboardingTutorialStatus)
-  htLogger.info('🧪 getRedirectUrl - abTestVariant:', abTestVariant)
-  htLogger.info('👤 getRedirectUrl - isNewUser:', isNewUser)
+  console.log('🔄 getRedirectUrl - onboardingTutorialStatus:', onboardingTutorialStatus)
+  console.log('🧪 getRedirectUrl - abTestVariant:', abTestVariant)
+  console.log('👤 getRedirectUrl - isNewUser:', isNewUser)
 
   // Shared task URL generation helper
   const getSharedTaskUrl = () =>
@@ -343,7 +340,7 @@ function getRedirectUrl(
 }
 
 // Debug endpoint to see stored codes (remove in production)
-async function GETHandler() {
+export async function GET() {
   const stats = await VerificationCodeService.getStats()
   
   return NextResponse.json({
@@ -351,6 +348,3 @@ async function GETHandler() {
     currentTime: new Date().toISOString()
   })
 }
-
-export const POST = withoutAuth(POSTHandler);
-export const GET = withoutAuth(GETHandler);

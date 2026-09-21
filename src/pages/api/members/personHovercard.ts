@@ -1,4 +1,3 @@
-import { withAuth } from "#with-auth";
 import type { NextApiHandler } from "next";
 import { SESSION_COOKIE, verifySession } from "@/lib/auth/session";
 import type { PersonHovercardSubject } from "@/models/personHovercard";
@@ -67,4 +66,4 @@ const handler: NextApiHandler = async (req, res) => {
   return res.status(200).json(result.profile);
 };
 
-export default withAuth(handler);
+export default handler;

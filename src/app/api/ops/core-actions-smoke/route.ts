@@ -1,5 +1,3 @@
-import { logger as htLogger } from "#logger";
-import { withAuth } from "#with-auth";
 import { NextRequest, NextResponse } from "next/server";
 
 import { checkMcpRateLimit, validateMcpAuth } from "@/lib/mcp/auth";
@@ -40,7 +38,7 @@ type ProbeBody = {
 const positiveInteger = (value: unknown): value is number =>
   Number.isSafeInteger(value) && Number(value) > 0;
 
-async function POSTHandler(request: NextRequest) {
+export async function POST(request: NextRequest) {
   if (!isProductionCoreSmokeRequest(request.url)) {
     return NextResponse.json({ success: false, error: "Not found" }, { status: 404 });
   }
@@ -200,7 +198,7 @@ async function POSTHandler(request: NextRequest) {
   } catch (error) {
     const lockUnavailable = error instanceof CoreSmokeLockUnavailableError;
     if (!lockUnavailable) {
-      htLogger.error(
+      console.error(
         "[core-actions-smoke] Run failed before returning a result:",
         error instanceof Error ? error.message : "unknown error",
       );
@@ -217,5 +215,3 @@ async function POSTHandler(request: NextRequest) {
 
   return NextResponse.json({ success: result.ok, result });
 }
-
-export const POST = withAuth(POSTHandler);

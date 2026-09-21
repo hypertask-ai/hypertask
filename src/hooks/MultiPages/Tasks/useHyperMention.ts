@@ -1,5 +1,3 @@
-import { env as appEnv } from "#env";
-import { logger as htLogger } from "#logger";
 import { useMcpToken } from "@/components/Modals/McpToken";
 import { mcpAuthorizationHeaders } from "@/lib/mcp/bearerAuth";
 import { useCurrentBoardBilling } from "@/hooks/General/useCurrentBoardBilling";
@@ -72,7 +70,7 @@ export function useHyperMention() {
     if (!triggerHyper) return;
     const taskId = taskIds[0];
     if (!(taskId !== undefined && taskId > 0)) {
-      htLogger.warn("[HyperAI] Missing task context for mention request");
+      console.warn("[HyperAI] Missing task context for mention request");
       toast.error("HyperAI could not reply: missing task context");
       return;
     }
@@ -132,7 +130,7 @@ export function useHyperMention() {
         await showHyperAiResponseError(response);
       }
     } catch (error) {
-      htLogger.warn("[HyperAI] Mention request failed", error);
+      console.warn("[HyperAI] Mention request failed", error);
       toast.error(DEFAULT_HYPERAI_ERROR);
     }
   }
@@ -144,7 +142,7 @@ export function useHyperMention() {
     const { text, projectId, taskId, modelKey, previousText } = mentionProps;
     if (!triggerHyperMention(mode, text, previousText)) return;
     if (!(taskId > 0)) {
-      htLogger.warn("[HyperAI] Missing task context for image request");
+      console.warn("[HyperAI] Missing task context for image request");
       toast.error("HyperAI could not reply: missing task context");
       return;
     }
@@ -162,7 +160,7 @@ export function useHyperMention() {
         await showHyperAiResponseError(response);
       }
     } catch (error) {
-      htLogger.warn("[HyperAI] Image request failed", error);
+      console.warn("[HyperAI] Image request failed", error);
       toast.error(DEFAULT_HYPERAI_ERROR);
     }
   }
@@ -175,7 +173,7 @@ export function useHyperMention() {
     if (mode === "Create") return true;
     if (previousText === undefined) return true;
 
-    const hyperAiId = appEnv.NEXT_PUBLIC_HYPERAI_ID || "332";
+    const hyperAiId = process.env.NEXT_PUBLIC_HYPERAI_ID || "332";
     const parser = new DOMParser();
 
     const newTextDoc = parser.parseFromString(newText, "text/html");

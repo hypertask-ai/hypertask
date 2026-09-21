@@ -1,6 +1,3 @@
-import { env as appEnv } from "#env";
-import { logger as htLogger } from "#logger";
-import { withoutAuth } from "#with-auth";
 import { NextRequest, NextResponse } from "next/server";
 
 import { getRequestBaseUrl } from "@/lib/auth/requestBaseUrl";
@@ -17,7 +14,7 @@ import { resolveSlackInstallTeamId } from "@/lib/slack/installTeam";
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
-async function GETHandler(request: NextRequest) {
+export async function GET(request: NextRequest) {
   const user = await getServerCookieUser();
   if (!user) {
     const loginUrl = new URL("/login", request.url);
@@ -42,10 +39,10 @@ async function GETHandler(request: NextRequest) {
     );
   }
 
-  const clientSecret = appEnv.SLACK_CLIENT_SECRET?.trim();
+  const clientSecret = process.env.SLACK_CLIENT_SECRET?.trim();
   const authorizeUrl = buildSlackAuthorizeUrl(getRequestBaseUrl(request));
   if (!clientSecret || !authorizeUrl) {
-    htLogger.error("Slack OAuth is not configured: SLACK_CLIENT_ID or SLACK_CLIENT_SECRET is missing");
+    console.error("Slack OAuth is not configured: SLACK_CLIENT_ID or SLACK_CLIENT_SECRET is missing");
     return NextResponse.redirect(
       settingsRedirect(request, "error", "not_configured"),
     );
@@ -68,5 +65,3 @@ function settingsRedirect(
   url.searchParams.set(`slack_${key}`, value);
   return url;
 }
-
-export const GET = withoutAuth(GETHandler);

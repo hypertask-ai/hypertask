@@ -1,4 +1,3 @@
-import { logger as htLogger } from "#logger";
 import prisma from "@/lib/prisma";
 
 // HTPR-4465: callers must pass a userId derived from the session, never one read
@@ -23,7 +22,7 @@ const notificationGetByTask = async (userId:number|string|string[], taskId:strin
             })
             // res.status(200).json(comments);
         } catch (error) {
-            htLogger.info(error);
+            console.log(error);
             return ({
                 status:500,
                 json:{ message: "Internal server error" }

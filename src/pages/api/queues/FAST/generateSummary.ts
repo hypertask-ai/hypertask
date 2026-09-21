@@ -1,4 +1,3 @@
-import { withoutAuth } from "#with-auth";
 import { scheduleJobById } from "@/lib/qstash";
 
 export interface IReq {
@@ -17,7 +16,7 @@ function buildJobId(taskId: number) {
   return "ai-summary-for-taskId:" + taskId;
 }
 
-async function scheduleTaskSummaryGeneration(req: IReq) {
+export default async function scheduleTaskSummaryGeneration(req: IReq) {
   const { taskId, agentId } = req;
   // Debounce ~5 min after the last activity; scheduleJobById cancels and replaces
   // any still-pending summary job for this task.
@@ -34,5 +33,3 @@ async function scheduleTaskSummaryGeneration(req: IReq) {
 
   return res;
 }
-
-export default withoutAuth(scheduleTaskSummaryGeneration);

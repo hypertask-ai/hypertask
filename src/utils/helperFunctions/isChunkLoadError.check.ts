@@ -1,4 +1,3 @@
-import { logger as htLogger } from "#logger";
 // Runnable check for the PERT-89 stale-bundle detector.
 // Run: node --experimental-strip-types src/utils/helperFunctions/isChunkLoadError.check.ts
 import assert from "node:assert";
@@ -47,4 +46,4 @@ assert.strictEqual(isChunkLoadError(undefined), false, "undefined");
 assert.strictEqual(isChunkLoadError("Loading chunk 1 failed"), false, "string, not error object");
 assert.strictEqual(isChunkLoadError({ message: 123 }), false, "non-string message");
 
-htLogger.info("isChunkLoadError: all checks passed");
+console.log("isChunkLoadError: all checks passed");

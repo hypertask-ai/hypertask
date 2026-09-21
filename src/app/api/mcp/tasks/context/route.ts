@@ -1,5 +1,3 @@
-import { logger as htLogger } from "#logger";
-import { withoutAuth } from "#with-auth";
 import { NextRequest, NextResponse } from 'next/server';
 import { Prisma } from '@prisma/client';
 import { checkMcpRateLimit, validateMcpAuth } from '@/lib/mcp/auth';
@@ -76,7 +74,7 @@ function parseRequiredPositiveInteger(
  *
  * Returns a read-only context pack for one accessible task.
  */
-async function GETHandler(request: NextRequest) {
+export async function GET(request: NextRequest) {
   try {
     const rateLimited = await checkMcpRateLimit(request);
     if (rateLimited) return rateLimited;
@@ -331,12 +329,10 @@ async function GETHandler(request: NextRequest) {
       truncated: commentCount > commentLimit,
     });
   } catch (error) {
-    htLogger.error('[MCP Task Context] Error:', error);
+    console.error('[MCP Task Context] Error:', error);
     return NextResponse.json(
       { success: false, error: 'Internal server error' },
       { status: 500 }
     );
   }
 }
-
-export const GET = withoutAuth(GETHandler);

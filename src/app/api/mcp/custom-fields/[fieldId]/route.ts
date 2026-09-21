@@ -1,5 +1,3 @@
-import { logger as htLogger } from "#logger";
-import { withoutAuth } from "#with-auth";
 import { NextRequest, NextResponse } from "next/server";
 
 import { checkMcpRateLimit, validateMcpAuth } from "@/lib/mcp/auth";
@@ -7,7 +5,7 @@ import { validateProjectAccess } from "@/lib/mcp/tasks/services";
 import { deleteCustomField, getCustomFieldById } from "@/utils/controllers/customFields";
 
 /** DELETE /api/mcp/custom-fields/[fieldId] */
-async function DELETEHandler(
+export async function DELETE(
   request: NextRequest,
   props: { params: Promise<{ fieldId: string }> }
 ) {
@@ -62,12 +60,10 @@ async function DELETEHandler(
       message: `Custom field "${result.field.name}" deleted`,
     });
   } catch (error) {
-    htLogger.error("[MCP Custom Fields] Delete error:", error);
+    console.error("[MCP Custom Fields] Delete error:", error);
     return NextResponse.json(
       { success: false, error: "Internal server error" },
       { status: 500 }
     );
   }
 }
-
-export const DELETE = withoutAuth(DELETEHandler);

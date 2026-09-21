@@ -1,5 +1,3 @@
-import { logger as htLogger } from "#logger";
-import { withAuth } from "#with-auth";
 // Import PrismaClient from the generated Prisma client
 import fetchUrls from '@/utils/controllers/urls/fetchUrls';
 import { NextApiHandler, NextApiRequest, NextApiResponse } from 'next';
@@ -16,9 +14,9 @@ const handler: NextApiHandler = async (req: NextApiRequest, res: NextApiResponse
             const response = await  fetchUrls(taskId,commentId as string)
          
             return res.status(response.status).json(response.json);
-            // debug.log(comments);
+            // console.log(comments);
         } catch (error) {
-            htLogger.info(error);
+            console.log(error);
             return res.status(500).json({ message: "Internal server error" });
         }
     } else {
@@ -27,6 +25,6 @@ const handler: NextApiHandler = async (req: NextApiRequest, res: NextApiResponse
 }
 
 // Run the main function
-export default withAuth(handler);
+export default handler;
 
 

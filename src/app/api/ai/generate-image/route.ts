@@ -1,6 +1,3 @@
-import { env as appEnv } from "#env";
-import { logger as htLogger } from "#logger";
-import { withAuth } from "#with-auth";
 import { NextRequest, NextResponse } from "next/server";
 import { generateImage, generateText } from "ai";
 import { z } from "zod";
@@ -46,7 +43,7 @@ const generateImageRequestSchema = z.object({
   modelKey: z.string().min(1).optional(),
 });
 
-async function POSTHandler(request: NextRequest) {
+export async function POST(request: NextRequest) {
   const cookieUser = await getCurrentUserFromCookies();
   if (!cookieUser?.id) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -66,7 +63,7 @@ async function POSTHandler(request: NextRequest) {
       }),
       prisma.user.findUnique({
         where: {
-          id: parseInt(appEnv.NEXT_PUBLIC_HYPERAI_ID || "332", 10),
+          id: parseInt(process.env.NEXT_PUBLIC_HYPERAI_ID || "332", 10),
         },
       }),
       getProjectTeamProviderContext(body.projectId, cookieUser.id),
@@ -159,7 +156,7 @@ async function POSTHandler(request: NextRequest) {
           { status: 429 },
         );
       }
-      htLogger.error("[ai/generate-image] unavailable:", error);
+      console.error("[ai/generate-image] unavailable:", error);
     }
 
     const requesterName = cookieUser.displayName || "User";
@@ -207,7 +204,7 @@ async function POSTHandler(request: NextRequest) {
       { status: 200 }
     );
   } catch (error) {
-    htLogger.error("[ai/generate-image] error:", error);
+    console.error("[ai/generate-image] error:", error);
     return NextResponse.json(
       { error: errorMessage(error) },
       { status: 500 }
@@ -273,5 +270,3 @@ function escapeHtml(value: string) {
     .replace(/"/g, "&quot;")
     .replace(/'/g, "&#x27;");
 }
-
-export const POST = withAuth(POSTHandler);

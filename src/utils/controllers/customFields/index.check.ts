@@ -1,4 +1,3 @@
-import { logger as htLogger } from "#logger";
 // Run: node --experimental-strip-types src/utils/controllers/customFields/index.check.ts
 import assert from "node:assert";
 
@@ -48,4 +47,4 @@ assert.ok(shouldDelete(""), "empty string triggers delete");
 assert.ok(!shouldDelete("0"), "zero string does NOT trigger delete");
 assert.ok(!shouldDelete("false"), "'false' string does NOT trigger delete");
 
-htLogger.info("All checks passed.");
+console.log("All checks passed.");

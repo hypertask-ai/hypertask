@@ -1,4 +1,3 @@
-import { env as appEnv } from "#env";
 const TOKEN_PART_PATTERN = /^[A-Za-z0-9_-]+$/
 
 type SessionPayload = {
@@ -48,7 +47,7 @@ export async function verifySessionEdge(
       return null
     }
 
-    const secret = appEnv.SESSION_SECRET || appEnv.JWT_SECRET
+    const secret = process.env.SESSION_SECRET || process.env.JWT_SECRET
     if (!secret) {
       return null
     }

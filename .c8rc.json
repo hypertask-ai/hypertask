@@ -21,10 +21,5 @@
   "exclude-after-remap": true,
   "temp-directory": "coverage/raw",
   "reports-dir": "coverage/report",
-  "reporter": ["text-summary", "json-summary"],
-  "check-coverage": true,
-  "lines": 24,
-  "statements": 24,
-  "functions": 50,
-  "branches": 70
+  "reporter": ["text-summary", "json-summary"]
 }

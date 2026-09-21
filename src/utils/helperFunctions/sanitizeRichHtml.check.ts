@@ -1,4 +1,3 @@
-import { logger as htLogger } from "#logger";
 // Run: NODE_PATH=/path/to/node_modules node --experimental-strip-types src/utils/helperFunctions/sanitizeRichHtml.check.ts
 import assert from "node:assert";
 // @ts-ignore -- explicit .ts extension is required by `node --experimental-strip-types`
@@ -47,4 +46,4 @@ assert.ok(!checklist.includes('data-type="other"'), "unexpected list data-type s
 assert.ok(!checklist.includes('data-checked="maybe"'), "unexpected checked state stripped");
 assert.ok(!checklist.includes("onclick"), "list item event handler stripped");
 
-htLogger.info("sanitizeRichHtml.check.ts: all assertions passed");
+console.log("sanitizeRichHtml.check.ts: all assertions passed");

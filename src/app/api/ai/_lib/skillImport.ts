@@ -1,4 +1,3 @@
-import { logger as htLogger } from "#logger";
 import {
   AGENT_CHAT_SKILLS_FLAG,
   isFeatureEnabled,
@@ -49,7 +48,7 @@ export async function importSkillsFromGitHub(
   try {
     enabled = await isFeatureEnabled(AGENT_CHAT_SKILLS_FLAG, userId);
   } catch (error) {
-    htLogger.error("[skill-import] feature flag check failed", error);
+    console.error("[skill-import] feature flag check failed", error);
   }
   if (!enabled) throw new SkillImportDisabledError();
 

@@ -1,6 +1,4 @@
 "use client";
-import { env as appEnv } from "#env";
-
 
 import { useCallback, useEffect, useLayoutEffect, useRef } from "react";
 import { usePathname } from "next/navigation";
@@ -326,6 +324,7 @@ export default function PostHogAnalytics({
     if (identity.isGuest) posthog.startSessionRecording();
     appliedIdentityRef.current = identity;
     void installAuthenticatedProjectWebVitals().catch((error) => {
+      console.error("[posthog] web vitals initialization failed", error);
     });
   }, [
     authenticatedIsGuest,
@@ -334,7 +333,7 @@ export default function PostHogAnalytics({
   ]);
 
   useEffect(() => {
-    const key = appEnv.NEXT_PUBLIC_POSTHOG_KEY;
+    const key = process.env.NEXT_PUBLIC_POSTHOG_KEY;
     if (!key) return;
     const initialPageview = initialPageviewRef.current ?? {
       href: window.location.href,
@@ -387,7 +386,7 @@ export default function PostHogAnalytics({
         const identity = latestIdentityRef.current;
         posthog.init(key, {
           api_host:
-            appEnv.NEXT_PUBLIC_POSTHOG_HOST || "https://eu.i.posthog.com",
+            process.env.NEXT_PUBLIC_POSTHOG_HOST || "https://eu.i.posthog.com",
           // api_host is our own proxy domain, which posthog-js cannot map back to a
           // region, so it would send toolbar/survey links to the US app without this.
           ui_host: "https://eu.posthog.com",
@@ -471,8 +470,10 @@ export default function PostHogAnalytics({
         );
         analyticsInitializationReadyRef.current = true;
         await installAuthenticatedProjectWebVitals().catch((error) => {
+          console.error("[posthog] web vitals initialization failed", error);
         });
       } catch (error) {
+        console.error("[posthog] initialization failed", error);
       }
     };
 

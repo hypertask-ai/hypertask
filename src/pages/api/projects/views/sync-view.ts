@@ -1,5 +1,3 @@
-import { logger as htLogger } from "#logger";
-import { withAuth } from "#with-auth";
 // route = "/api/projects/views/sync-view"
 import prisma from "@/lib/prisma";
 import { sanitizeViewBoardFilters } from "@/utils/helperFunctions/Views/BoardFilterSanitizer";
@@ -65,11 +63,11 @@ const handler: NextApiHandler = async (req: NextApiRequest, res: NextApiResponse
             }
             return res.status(200).json(sanitizeViewBoardFilters(updatedView))
         } catch (error) {
-            htLogger.info("🚀 ~ consthandler:NextApiHandler= ~ error:", error)
+            console.log("🚀 ~ consthandler:NextApiHandler= ~ error:", error)
             return res.status(500).json(error)
         }
     }
 };
 
 
-export default withAuth(handler)
+export default handler

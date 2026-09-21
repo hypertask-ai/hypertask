@@ -1,5 +1,3 @@
-import { logger as htLogger } from "#logger";
-import { withoutAuth } from "#with-auth";
 import { NextRequest, NextResponse } from 'next/server'
 
 import { buildFieldError } from '@/lib/mcp/fieldError'
@@ -35,7 +33,7 @@ const PAGE_TITLE_MAX_LENGTH = 500
 const CONTENT_TYPES = ['markdown', 'html', 'html_canvas'] as const
 const UPDATE_MODES = ['replace', 'append', 'prepend'] as const
 
-async function POSTHandler(request: NextRequest) {
+export async function POST(request: NextRequest) {
   let identifierField: 'id' | 'page_id' = 'id'
 
   try {
@@ -214,9 +212,7 @@ async function POSTHandler(request: NextRequest) {
       )
     }
 
-    htLogger.error('[MCP Update Page] Error:', error)
+    console.error('[MCP Update Page] Error:', error)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
 }
-
-export const POST = withoutAuth(POSTHandler);

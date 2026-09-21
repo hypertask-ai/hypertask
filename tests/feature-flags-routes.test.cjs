@@ -1,6 +1,5 @@
 const assert = require("node:assert/strict");
 const path = require("node:path");
-const { passThroughAuth } = require("./helpers/pass-through-auth.cjs");
 const test = require("node:test");
 const { createJiti } = require("jiti");
 
@@ -19,12 +18,7 @@ let broadcastFails = false;
 let authFails = false;
 let detailsEnabled = true;
 class FeatureFlagInputError extends Error {}
-const getAuthSession = async () => {
-  if (authFails) throw new Error("auth unavailable");
-  return userId ? { userId } : null;
-};
 
-stubModule("src/lib/api/withAuth.ts", passThroughAuth(getAuthSession));
 stubModule("src/lib/flags.ts", {
   FEATURE_FLAG_DETAILS_FLAG: "htpr-6133-feature-flag-details",
   FEATURE_FLAG_MODES: ["OWNER_ONLY", "OWNER_AND_QA", "EVERYONE", "OFF"],
@@ -70,7 +64,12 @@ stubModule("src/lib/flags.ts", {
   },
   featureFlagsForUser: async (id) => ({ example: id === 6 }),
 });
-stubModule("src/lib/auth/getSessionUser.ts", { getSessionUser: getAuthSession });
+stubModule("src/lib/auth/getSessionUser.ts", {
+  getSessionUser: async () => {
+    if (authFails) throw new Error("auth unavailable");
+    return userId ? { userId } : null;
+  },
+});
 stubModule("src/lib/realtime/server.ts", {
   broadcastFeatureFlagsChange: async () => {
     broadcasts += 1;

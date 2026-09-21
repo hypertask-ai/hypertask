@@ -53,6 +53,7 @@ const FileDragOverlay: React.FC<FileDragOverlayProps> = ({
     setIsDragging(false);
     dragCounter.current = 0;
     if (e.dataTransfer?.files && e.dataTransfer.files.length > 0) {
+      console.log("File(s) dropped", e.dataTransfer.files);
       dropCallbackRef.current(e.dataTransfer.files);
     }
   }, []);

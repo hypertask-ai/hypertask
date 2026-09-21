@@ -1,10 +1,9 @@
-import { logger as htLogger } from "#logger";
-import { getAuthSession, withAuth } from "#with-auth";
 import { NextApiHandler, NextApiRequest, NextApiResponse } from "next";
 
 import prisma from "@/lib/prisma";
 import { publicAgentSelect } from "@/lib/agents/publicAgent";
 import { boardAgentVisibilityWhere } from "@/lib/agents/visibility";
+import { getSessionUser } from "@/lib/auth/getSessionUser";
 import { getProjectWhere } from "@/utils/controllers/projects/getAllIncludes";
 
 const handler: NextApiHandler = async (
@@ -20,7 +19,7 @@ const handler: NextApiHandler = async (
     if (!Number.isInteger(projectId) || projectId < 1) {
       return res.status(400).json({ message: "Missing required information" });
     }
-    const session = await getAuthSession(
+    const session = await getSessionUser(
       new Headers(req.headers as Record<string, string>),
     );
     if (!session) return res.status(401).json({ message: "Unauthorized" });
@@ -64,9 +63,9 @@ const handler: NextApiHandler = async (
       ),
     });
   } catch (error) {
-    htLogger.error("getAllForAssignees failed", error);
+    console.error("getAllForAssignees failed", error);
     return res.status(500).json({ message: "Internal server error" });
   }
 };
 
-export default withAuth(handler);
+export default handler;

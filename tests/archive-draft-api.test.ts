@@ -34,7 +34,6 @@ const createRequest = (
   ({
     method,
     body,
-    headers: sessionCookie ? { cookie: `ht_session=${sessionCookie}` } : {},
     cookies: {
       ht_session: sessionCookie,
       nookies_user: JSON.stringify({ id: claimedUserId }),

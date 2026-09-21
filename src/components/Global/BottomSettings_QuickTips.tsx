@@ -311,6 +311,7 @@ export const QuickTips = () => {
     setShowQuickTips(false);
   }
 
+  // console.log("🚀 ~ QuickTips ~ pathname:", pathname)
   if (showCommands.show) {
     return (
       <TipsComp tips={HTCTipsConstants} toggleQuickTips={toggleQuickTips} appShellRailOn={appShellRailOn} />

@@ -1,4 +1,3 @@
-import { logger as htLogger } from "#logger";
 // Run: npx tsx normalizeImageSource.check.ts
 import assert from "node:assert";
 import {
@@ -56,4 +55,4 @@ assert.strictEqual(
   "similarly named attributes are not treated as the active image source",
 );
 
-htLogger.info("normalizeImageSource: all checks passed");
+console.log("normalizeImageSource: all checks passed");

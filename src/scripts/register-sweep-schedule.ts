@@ -1,5 +1,4 @@
 #!/usr/bin/env tsx
-import { logger as htLogger } from "#logger";
 
 import { ensureSweepSchedule } from "@/lib/qstashSweepSchedule";
 
@@ -14,13 +13,13 @@ async function registerSweepSchedule() {
   try {
     const schedule = await ensureSweepSchedule();
 
-    htLogger.info("✅ Sweep schedule ensured");
-    htLogger.info("   scheduleId:", schedule.scheduleId);
-    htLogger.info("   destination:", schedule.destination);
-    htLogger.info("   cron:", schedule.cron);
+    console.log("✅ Sweep schedule ensured");
+    console.log("   scheduleId:", schedule.scheduleId);
+    console.log("   destination:", schedule.destination);
+    console.log("   cron:", schedule.cron);
     process.exit(0);
   } catch (error) {
-    htLogger.error("❌ Failed to ensure sweep schedule:", error);
+    console.error("❌ Failed to ensure sweep schedule:", error);
     process.exit(1);
   }
 }

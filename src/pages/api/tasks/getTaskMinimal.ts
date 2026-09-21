@@ -1,5 +1,3 @@
-import { logger as htLogger } from "#logger";
-import { withAuth } from "#with-auth";
 import { NextApiHandler, NextApiRequest, NextApiResponse } from "next";
 
 import tasksGetTask from "@/utils/controllers/tasks/getTask";
@@ -18,11 +16,11 @@ const handler: NextApiHandler = async (
     const response = await prisma.task.findUnique({ where: { id } });
     return res.status(200).json(response);
   } catch (error) {
-    htLogger.info({ error });
+    console.log({ error });
     return res
       .status(500)
       .json({ message: "Internal server error" + JSON.stringify(error) });
   }
 };
 
-export default withAuth(handler);
+export default handler;

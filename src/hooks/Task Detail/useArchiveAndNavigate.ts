@@ -60,6 +60,7 @@ const navigateToNextTask = (archiveNotification?:boolean,shouldNavigate?:boolean
   if (archiveNotification && currentTask){
 
     if (!currentTask._count?.notifications){
+      console.log("🚀 ~ navigateToNextTask ~ currentTask:", currentTask)
       if (force==="forceNavigate") moveIdxDown()
       else{
         setNotificationCountNull()
@@ -217,6 +218,7 @@ const navigateToPreviousTask = useCallback((isUndoClicked:boolean, isUndo:boolea
   };
     // undoHandler function
     const undoHandler =useCallback(async (data: any, toastId: string) => {
+      // console.log('🚀 ~ undoHandler ~ data:', data);
       // first, you need to bring the item back to its place.
       // then, you need to run the API call so there is no render blocking.
       navigateToPreviousTask(true, true)

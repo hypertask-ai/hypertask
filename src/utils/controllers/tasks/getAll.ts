@@ -1,4 +1,3 @@
-import { logger as htLogger } from "#logger";
 import {  PrismaClient } from "@prisma/client";
 
 import prisma from "@/lib/prisma";
@@ -98,7 +97,7 @@ const tasksGetAll = async (projectId:number|string|string[], userId:number|strin
             })
             // return res.status(200).json(tasks);
         } catch (error) {
-            htLogger.info(error);
+            console.log(error);
             return({
                 status:200,
                 json:[]

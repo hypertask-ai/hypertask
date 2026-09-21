@@ -1,8 +1,7 @@
-import { logger as htLogger } from "#logger";
-import { getAuthSession, withAuth } from "#with-auth";
 import type { NextApiRequest, NextApiResponse } from "next";
 import type { Prisma } from "@prisma/client";
 import prisma from "@/lib/prisma";
+import { getSessionUser } from "@/lib/auth/getSessionUser";
 import {
   getShowImportantSplit,
   getSplitsNoImportant,
@@ -52,7 +51,7 @@ const handler = async (req: NextApiRequest, res: NextApiResponse) => {
   }
 
   try {
-    const session = await getAuthSession(
+    const session = await getSessionUser(
       new Headers(req.headers as Record<string, string>)
     );
     if (!session) return res.status(401).json({ message: "Unauthorized" });
@@ -103,9 +102,9 @@ const handler = async (req: NextApiRequest, res: NextApiResponse) => {
 
     return res.status(200).json({ matrix: updated.notificationMatrix });
   } catch (error) {
-    htLogger.error("Error updating notification matrix", error);
+    console.error("Error updating notification matrix", error);
     return res.status(500).json({ message: "Internal server error" });
   }
 };
 
-export default withAuth(handler);
+export default handler;

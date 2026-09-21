@@ -1,5 +1,5 @@
     const formatDateDifference = (createdAt: string|Date | null, reminder?: boolean) => {
-        // debug.log("🚀 ~ formatDateDifference ~ reminder:", reminder)
+        // console.log("🚀 ~ formatDateDifference ~ reminder:", reminder)
         if (!createdAt) return
         // const dummy = "2023-08-10T14:47:05.282Z"; // Adjust the date and time as needed
         const currentTime = new Date();
@@ -13,7 +13,7 @@
             timeDifference = (currentTime.getTime() - notificationTime.getTime()) / 1000; // Convert to seconds
 
         }
-        // debug.log("🚀 ~ formatDateDifference ~ timeDifference:", timeDifference)
+        // console.log("🚀 ~ formatDateDifference ~ timeDifference:", timeDifference)
       
         if (timeDifference < 60&& !reminder ) {
           return `Just now`;

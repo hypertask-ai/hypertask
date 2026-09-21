@@ -90,6 +90,7 @@ export const useEmailVerificationStatus = (
           setErrorMessage(response.data.error || 'Verification failed')
         }
       } catch (error: any) {
+        console.error('Verification error:', error)
         setStatus('error')
         setErrorMessage(
           error.response?.data?.error || 'Failed to verify email. Please try again.'
@@ -117,6 +118,7 @@ export const useEmailVerificationStatus = (
           onVerified?.()
         }
       } catch (error) {
+        console.error('Error checking verification status:', error)
       }
     }
 

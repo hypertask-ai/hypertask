@@ -1,4 +1,3 @@
-import { logger as htLogger } from "#logger";
 import { NextApiHandler, NextApiRequest, NextApiResponse } from "next";
 
 
@@ -23,9 +22,9 @@ const getInvite= async (inviteId:string ) => {
                     json:invitedProject
                 })
             // res.status(200).json(comments);
-            // debug.log(comments);
+            // console.log(comments);
         } catch (error) {
-            htLogger.info(error);
+            console.log(error);
 
             // res.status(500).json({ message: "Internal server error" });
         }

@@ -1,4 +1,3 @@
-import { withoutAuth } from "#with-auth";
 import { NextRequest, NextResponse } from "next/server";
 
 import { getServerCookieUser } from "@/lib/auth/serverUser";
@@ -9,7 +8,7 @@ import { hasTeamMembershipAccess } from "@/utils/controllers/teams/hasTeamMember
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
-async function GETHandler(request: NextRequest) {
+export async function GET(request: NextRequest) {
   const access = await getAuthorizedTeam(request.nextUrl.searchParams.get("teamId"));
   if (access instanceof NextResponse) return access;
 
@@ -24,7 +23,7 @@ async function GETHandler(request: NextRequest) {
   return NextResponse.json({ install });
 }
 
-async function PATCHHandler(request: NextRequest) {
+export async function PATCH(request: NextRequest) {
   let body: { defaultProjectId?: unknown; teamId?: unknown };
   try {
     body = (await request.json()) as typeof body;
@@ -73,7 +72,7 @@ async function PATCHHandler(request: NextRequest) {
   return NextResponse.json({ install });
 }
 
-async function DELETEHandler(request: NextRequest) {
+export async function DELETE(request: NextRequest) {
   let body: { teamId?: unknown };
   try {
     body = (await request.json()) as { teamId?: unknown };
@@ -102,7 +101,3 @@ async function getAuthorizedTeam(teamIdValue: unknown) {
   }
   return { teamId, userId: user.id };
 }
-
-export const GET = withoutAuth(GETHandler);
-export const PATCH = withoutAuth(PATCHHandler);
-export const DELETE = withoutAuth(DELETEHandler);

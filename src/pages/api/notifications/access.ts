@@ -1,7 +1,6 @@
-import { logger as htLogger } from "#logger";
-import { getAuthSession, withAuth } from "#with-auth";
 import type { NextApiHandler } from "next";
 
+import { getSessionUser } from "@/lib/auth/getSessionUser";
 import { getInboxAccessibleProjectIds } from "@/utils/controllers/notifications/getAccessibleProjectIds";
 
 const handler: NextApiHandler = async (req, res) => {
@@ -11,7 +10,7 @@ const handler: NextApiHandler = async (req, res) => {
   }
 
   try {
-    const session = await getAuthSession(
+    const session = await getSessionUser(
       new Headers(req.headers as Record<string, string>),
     );
     if (!session) {
@@ -23,9 +22,9 @@ const handler: NextApiHandler = async (req, res) => {
     res.setHeader("Cache-Control", "private, no-store, max-age=0");
     res.status(200).json({ accountId: session.userId, projectIds });
   } catch (error) {
-    htLogger.error("Failed to validate Inbox project access", error);
+    console.error("Failed to validate Inbox project access", error);
     res.status(500).json({ message: "Internal server error" });
   }
 };
 
-export default withAuth(handler);
+export default handler;

@@ -1,4 +1,3 @@
-import { logger as htLogger } from "#logger";
 import { NotificationType, Prisma } from "@prisma/client";
 import prisma from "@/lib/prisma";
 import { getInboxTabs } from "@/utils/helperFunctions/helperFunctions";
@@ -674,7 +673,7 @@ const notificationGetAll = async (userId: string | string[]) => {
       }
     })
   } catch (error) {
-    htLogger.info(error);
+    console.log(error);
     return ({
       status: 500,
       json: []

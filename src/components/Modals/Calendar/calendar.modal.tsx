@@ -132,6 +132,7 @@ const CalendarDueDateModal: React.FC<IProps> = ({
         if (defaultTasks.length === 0) setDefaultTasks(result);
       }
     } catch (error) {
+      console.log("🚀 ~ onOpenHandler ~ error:", error);
     }
   }, [keyword]);
 

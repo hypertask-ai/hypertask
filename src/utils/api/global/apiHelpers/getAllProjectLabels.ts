@@ -1,4 +1,3 @@
-import { logger as htLogger } from "#logger";
 // import { IPriority } from "@/models/model";
 import { ILabel } from "@/models/model";
 import axios from "axios"
@@ -10,7 +9,7 @@ export const getAllProjectLabels = async (projectId:number|null|undefined):Promi
     if (!projectId) return
         try {
             const getProjectLabels = await axios.get(`/api/labels/getByProject?projectId=${projectId}`)
-            // debug.log("🚀 ~ getAllProjectLabels ~ getProjectLabels:", getProjectLabels)
+            // console.log("🚀 ~ getAllProjectLabels ~ getProjectLabels:", getProjectLabels)
             return getProjectLabels.data
             // if (!taskId) return getProjectLabels.data ;
             // else{
@@ -34,12 +33,12 @@ export const getAllProjectLabels = async (projectId:number|null|undefined):Promi
             //     });
             //         // Add the check attribute to the appropriate item
                     
-            //     debug.log("🚀 ~ constupdatedData:any[]=getProjectLabels.data.map ~ updatedData:", updatedData)
+            //     console.log("🚀 ~ constupdatedData:any[]=getProjectLabels.data.map ~ updatedData:", updatedData)
             //     return updatedData
             // }
         } catch (error) {
             // Handle the error or return a default value
-            htLogger.error("Error getting Assignees and Members:", error);
+            console.error("Error getting Assignees and Members:", error);
             throw error; // You can also return a default value or handle the error in a different way
         }
   

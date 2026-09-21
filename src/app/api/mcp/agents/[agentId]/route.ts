@@ -1,5 +1,3 @@
-import { logger as htLogger } from "#logger";
-import { withoutAuth } from "#with-auth";
 import { NextRequest, NextResponse } from 'next/server'
 import { handleDeleteAgentRequest } from '@/lib/mcp/agents/delete'
 import { handleGetAgentRequest } from '@/lib/mcp/agents/get'
@@ -35,7 +33,7 @@ async function getAgent(
 // agents.manage, and a PR cannot change those patterns.
 export const { GET } = { GET: getAgent }
 
-async function POSTHandler(
+export async function POST(
   request: NextRequest,
   context: { params: Promise<{ agentId: string }> }
 ) {
@@ -77,12 +75,12 @@ async function POSTHandler(
     if (error instanceof AgentRunInputError) {
       return noStore({ success: false, error: error.message }, 400)
     }
-    htLogger.error('[agent-run] runtime open failed', error)
+    console.error('[agent-run] runtime open failed', error)
     return noStore({ success: false, error: 'Failed to open agent run' }, 500)
   }
 }
 
-async function DELETEHandler(
+export async function DELETE(
   request: NextRequest,
   context: { params: Promise<{ agentId: string }> }
 ) {
@@ -97,14 +95,10 @@ async function DELETEHandler(
  * reversible agent-management operations together for the CLI and MCP.
  * Board membership changes use this same owned-agent PATCH operation.
  */
-async function PATCHHandler(
+export async function PATCH(
   request: NextRequest,
   context: { params: Promise<{ agentId: string }> }
 ) {
   const { agentId } = await context.params
   return handlePatchAgentRequest(request, agentId)
 }
-
-export const POST = withoutAuth(POSTHandler);
-export const DELETE = withoutAuth(DELETEHandler);
-export const PATCH = withoutAuth(PATCHHandler);

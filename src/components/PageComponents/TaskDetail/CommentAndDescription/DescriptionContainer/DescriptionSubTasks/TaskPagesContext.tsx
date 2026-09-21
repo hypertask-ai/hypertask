@@ -92,6 +92,7 @@ export const TaskPagesProvider = ({ children }: PropsWithChildren) => {
         });
       } catch (error) {
         if (error instanceof DOMException && error.name === "AbortError") return;
+        console.error("[Task pages] Error:", error);
         setPagesState({ taskId, pages: [], loading: false });
       }
     };
@@ -152,6 +153,7 @@ export const TaskPagesProvider = ({ children }: PropsWithChildren) => {
         router.push(plainPageHref);
       }
     } catch (error) {
+      console.error("[Create task page] Error:", error);
     } finally {
       isCreatingRef.current = false;
     }

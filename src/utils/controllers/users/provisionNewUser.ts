@@ -1,4 +1,3 @@
-import { logger as htLogger } from "#logger";
 import { LogType, Status } from "@prisma/client";
 import { CreateLogInput } from "@/models/model";
 import { stripe } from "@/lib/subscription";
@@ -132,7 +131,7 @@ export const provisionNewUser = async ({
     try {
       await autoJoinByEmailDomain(userId, email);
     } catch (error) {
-      htLogger.error("Auto-join by email domain failed (non-fatal):", error);
+      console.error("Auto-join by email domain failed (non-fatal):", error);
     }
   }
 

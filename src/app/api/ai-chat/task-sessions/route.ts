@@ -1,5 +1,3 @@
-import { logger as htLogger } from "#logger";
-import { withAuth } from "#with-auth";
 import { chatStore } from "@/utils/controllers/chat";
 import prisma from "@/lib/prisma";
 import { isValidUser } from "@/utils/edgeHelpers";
@@ -11,7 +9,7 @@ export const runtime = "nodejs";
 
 const taskIdSchema = z.coerce.number().int().positive();
 
-async function GETHandler(request: NextRequest) {
+export async function GET(request: NextRequest) {
   try {
     const cookieStore = await cookies();
     const userCookie = cookieStore.get("nookies_user");
@@ -53,12 +51,10 @@ async function GETHandler(request: NextRequest) {
 
     return NextResponse.json({ success: true, sessions });
   } catch (error) {
-    htLogger.error("Error listing task chat sessions:", error);
+    console.error("Error listing task chat sessions:", error);
     return NextResponse.json(
       { success: false, error: "Internal server error" },
       { status: 500 }
     );
   }
 }
-
-export const GET = withAuth(GETHandler);
