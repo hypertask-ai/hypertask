@@ -96,8 +96,9 @@ const FEATURE_FLAG_QA_USER = {
   email: "valentin@hypertask.ai",
 } as const;
 
-// Keep the stored rows through the rollback window: older deployments still need the
-// factory flag OFF and the shallow board switch ON. Neither can be changed here.
+// Keep the OFF database row so older deployments also fail closed, while the current app hides
+// and rejects the retired flag until those deployments are outside the rollback window.
+// Keep the shallow board switch row ON for rollback deployments that still read it.
 const RETIRED_FEATURE_FLAG_KEYS = new Set(["hyfa-43-factory-owner-preview", "htpr-6072-shallow-board-switch"]);
 
 const FEATURE_FLAG_DEFINITIONS = [

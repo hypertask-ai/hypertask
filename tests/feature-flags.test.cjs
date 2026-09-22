@@ -538,15 +538,37 @@ test("legacy database flags stay visible, safe, and updateable", async () => {
   assert.equal(changed.ticketUrl, "https://app.hypertask.ai/detail/project-15/1111");
 });
 
-test("retired flags cannot be toggled or listed, including the permanent shallow switch", async () => {
-  for (const key of ["hyfa-43-factory-owner-preview", "htpr-6072-shallow-board-switch"]) {
-    listedRows = [{ key, mode: key.startsWith("hyfa-") ? "OFF" : "EVERYONE", updatedAt: new Date() }];
-    row = { mode: "EVERYONE", updatedAt: new Date() };
+test("the retired factory flag remains off for old deployments but disappears from this app", async () => {
+  listedRows = [
+    {
+      key: "hyfa-43-factory-owner-preview",
+      mode: "OFF",
+      updatedAt: new Date("2026-09-11T09:10:03.975Z"),
+    },
+  ];
+  row = { mode: "EVERYONE", updatedAt: new Date() };
 
-    assert.equal(await flags.isFeatureEnabled(key, 6), false);
-    assert.equal((await flags.listFeatureFlagModes()).some((flag) => flag.key === key), false);
-    await assert.rejects(flags.setFeatureFlagMode(key, "OFF"), /Unknown feature flag/);
-  }
+  assert.equal(await flags.isFeatureEnabled("hyfa-43-factory-owner-preview", 6), false);
+  assert.equal(
+    (await flags.listFeatureFlagModes()).some(
+      ({ key }) => key === "hyfa-43-factory-owner-preview",
+    ),
+    false,
+  );
+  await assert.rejects(
+    flags.setFeatureFlagMode("hyfa-43-factory-owner-preview", "EVERYONE"),
+    /Unknown feature flag/,
+  );
+});
+
+test("the retired shallow switch cannot be toggled or listed", async () => {
+  const key = "htpr-6072-shallow-board-switch";
+  listedRows = [{ key, mode: "EVERYONE", updatedAt: new Date() }];
+  row = { mode: "EVERYONE", updatedAt: new Date() };
+
+  assert.equal(await flags.isFeatureEnabled(key, 6), false);
+  assert.equal((await flags.listFeatureFlagModes()).some((flag) => flag.key === key), false);
+  await assert.rejects(flags.setFeatureFlagMode(key, "OFF"), /Unknown feature flag/);
 });
 
 test("ticket titles are only fetched when requested, and cover undeclared stored keys too", async () => {
