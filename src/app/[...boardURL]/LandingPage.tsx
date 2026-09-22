@@ -74,7 +74,6 @@ import {
   markBoardSwitchIntent,
   resolveBoardSwitchIntent,
 } from "@/lib/analytics/boardSwitchLatency";
-import { useFlag } from "@/hooks/useFlag";
 import { getNextRouterAwareHistoryState } from "@/lib/navigation/nextHistoryState";
 import {
   shouldReleaseSecondaryStartupForTerminalBoard,
@@ -177,9 +176,8 @@ const {
 } = useBoardStartup();
 const isMblForChat = useContext(MobileViewContext)
 const searchParams = useSearchParams()
-const shallowBoardSwitchEnabled = useFlag("htpr-6072-shallow-board-switch")
 const routedProjectId = normalizeRequestedProjectId(searchParams?.get("id"))
-const slugs = shallowBoardSwitchEnabled && routedProjectId !== null
+const slugs = routedProjectId !== null
   ? String(routedProjectId)
   : slugsProp
 const pilotParameter = searchParams?.get("local_db")
@@ -189,15 +187,6 @@ const requestedSurface = searchParams?.get('tutorial') === '1'
   : searchParams?.get('surface')
 const surfaceInitializationKey = `${slugs}:${currentView ?? 'default'}:${requestedSurface === 'board' || requestedSurface === 'table' ? requestedSurface : 'inherit'}`
 const [surfaceInitializedFor, setSurfaceInitializedFor] = useState<string | null>(null)
-// HTPR-6072: surfaceInitializedFor is set by a passive effect, so on every
-// board switch surfaceInitializationKey changes synchronously (new render)
-// while surfaceInitializedFor still lags by one render - a real
-// unmount/remount of SectionComp below, not just a visual flash. Once the
-// board has rendered for real once, a later switch no longer needs to wait
-// for that effect to catch up: boardLayout (Recoil, already reactive) will
-// update SectionComp in place once the effect resolves, same as any other
-// layout change while mounted.
-const sectionCompEverRenderedRef = useRef(false)
 const surfaceResolutionRef = useRef<{
   key: string;
   origin: "indexeddb" | "network";
@@ -804,7 +793,6 @@ const projectsForSection = useMemo(() => {
 
 const pinnedProject = projectsForSection[projectIndex]
 const boardLayoutForRender =
-  shallowBoardSwitchEnabled &&
   pinnedProject &&
   surfaceResolutionRef.current?.key !== surfaceInitializationKey
     ? resolveBoardLayoutFromSurface(
@@ -960,7 +948,7 @@ useEffect(() => {
     const search = params.toString();
     const newUrl = `/project${search ? `?${search}` : ""}`;
     console.log('🔄 Updating URL:', { from: pathname + (searchParams.toString() ? `?${searchParams.toString()}` : ''), to: newUrl, slugs });
-    if (shallowBoardSwitchEnabled && pathname === "/project") {
+    if (pathname === "/project") {
       window.history.replaceState(
         getNextRouterAwareHistoryState(window.history.state),
         "",
@@ -970,7 +958,7 @@ useEffect(() => {
       router.replace(newUrl, { scroll: false });
     }
   }
-}, [slugs, searchParams, router, pathname, currentView, setShowAiChatInterface, data?.updatedProjects, dataFetching, projectIndex, surfaceInitializedFor, surfaceInitializationKey, hydrationFailedProjectId, shallowBoardSwitchEnabled]);
+}, [slugs, searchParams, router, pathname, currentView, setShowAiChatInterface, data?.updatedProjects, dataFetching, projectIndex, surfaceInitializedFor, surfaceInitializationKey, hydrationFailedProjectId]);
 
 // Retry fetching projects if project not found (might be a race condition with instant signup)
 const retryCountRef = useRef(0)
@@ -1146,20 +1134,12 @@ useLayoutEffect(() => {
 const committedBoardRender = committedBoardRenderRef.current
 const boardRender =
   readyBoardRender ??
-  (shallowBoardSwitchEnabled &&
-    committedBoardRender?.accountId === user.id &&
+  (committedBoardRender?.accountId === user.id &&
     currentBoardAccessStatus !== "denied" &&
     !projectLookupFailed &&
     hydrationFailedProjectId !== requestedProjectId
       ? committedBoardRender
       : null)
-
-// HTPR-6072: arms sectionCompEverRenderedRef the moment the board data
-// itself is ready, one tick ahead of the render that actually picks the
-// SectionComp branch below - a useLayoutEffect, not a render-time write.
-useLayoutEffect(() => {
-  if (boardDataReady) sectionCompEverRenderedRef.current = true
-}, [boardDataReady])
 
 return (
     <Suspense fallback={<></>}>
@@ -1168,10 +1148,7 @@ return (
       Array.isArray(data.updatedProjects) &&
       data.updatedProjects.length === 0 ? (
         <NoBoardsEmptyState user={user} />
-      ) : boardRender &&
-        (shallowBoardSwitchEnabled ||
-          surfaceInitializedFor === surfaceInitializationKey ||
-          sectionCompEverRenderedRef.current) ? (
+      ) : boardRender ? (
            <SectionComp
             _allProjects={boardRender.projects}
             _projectCount={boardRender.projects.length}
@@ -1181,7 +1158,6 @@ return (
             _activeSortingMode={boardRender.activeSortingMode}
             _authenticated={authenticated && !isGuest}
             _localDatabasePilotEnabled={localDatabasePilotEnabled}
-            _shallowBoardSwitchEnabled={shallowBoardSwitchEnabled}
             _boardLayout={boardRender.boardLayout}
             _readinessSource={boardRender.readinessSource}
             _readinessProjectId={boardRender.readinessProjectId}
@@ -1222,7 +1198,6 @@ const SectionComp = ({
   _activeSortingMode,
   _authenticated,
   _localDatabasePilotEnabled,
-  _shallowBoardSwitchEnabled,
   _boardLayout,
   _readinessSource,
   _readinessProjectId,
@@ -1236,7 +1211,6 @@ const SectionComp = ({
   _activeSortingMode: TBoardSortingViewMode,
   _authenticated:boolean,
   _localDatabasePilotEnabled:boolean,
-  _shallowBoardSwitchEnabled:boolean,
   _boardLayout:"board" | "table",
   _readinessSource:"indexeddb" | "network" | "unknown",
   _readinessProjectId:number,
@@ -1339,9 +1313,6 @@ const kanbanContainerRef = useRef<HTMLDivElement>(null);
 const restoredScrollForProject = useRef<number | null>(null);
 const restoringScroll = useRef(false);
 const readinessFrameRef = useRef<number | null>(null);
-// HTPR-6072: bumped by every handleStateChangesOnBoardChange call so an
-// overlapping, slower switch can detect it's no longer the latest one.
-const boardSwitchGenerationRef = useRef(0);
 const readinessPaintFrameRef = useRef<number | null>(null);
 const readinessEntryKey = `${_currentUser.id}:${_readinessProjectId}:${_readinessRouteEntryId}`;
 const readinessCompletionRef = useRef({
@@ -1545,63 +1516,20 @@ function handleSideBar(){
   setShowBoardManager((prevState:boolean)=>!prevState);
 }
 
-// HTPR-3811: boards other than the active one load their tasks/allViews lazily on first
-// open. Fetch (or reuse the prefetched side cache) + hydrate the target board
-// LOCALLY. Must NOT write the ["projectsAll"] cache here: the outer board query
-// (useGetAllBoards) subscribes to that key, so writing it re-renders the parent
-// and resets this component's sections back to the initial board -> empty switch.
-const ensureBoardLoaded = async (index:number):Promise<IProject|null> => {
+// HTPR-6072: navigation lets the parent authorize and hydrate the target before publishing it.
+function handleStateChangesOnBoardChange (index:number){
   const target = projects[index]
-  if (!target) return null
-  if (isBoardPayloadHydrated(target)) return target // already hydrated
-  try {
-    const warm = queryClient.getQueryData(BOARD_TASKS_KEY(target.id, _currentUser.id))
-    const boardPayload = isBoardTasksPayload(warm) ? warm : await fetchBoardTasks(target.id, _currentUser.id)
-    queryClient.setQueryData(BOARD_TASKS_KEY(target.id, _currentUser.id), boardPayload) // keep side cache warm
-    return hydrateBoardWithPayload(deepCopy(target), boardPayload)
-  } catch (e) {
-    console.error("Failed to load board data on switch", e)
-    return null
-  }
-}
-
-async function handleStateChangesOnBoardChange (index:number, saveBackSections?:ISection[]){
-  if (_shallowBoardSwitchEnabled) {
-    const target = projects[index]
-    if (target) goToProjectShortcut(target.id, true)
-    return
-  }
-
-  // HTPR-6072: SectionComp stays mounted across a switch now, so an
-  // overlapping switch (a second click before the first one's fetch
-  // resolves) can no longer rely on the old instance being torn down to
-  // drop a stale result. Tag each call and bail if a newer switch has
-  // started by the time this one's fetch comes back.
-  const switchGeneration = ++boardSwitchGenerationRef.current;
-  const loaded = await ensureBoardLoaded(index);
-  if (!loaded) return;
-  if (switchGeneration !== boardSwitchGenerationRef.current) return;
-  const updatedProjects = deepCopy(projects);
-  if (saveBackSections) updatedProjects[currentIndex].sections = saveBackSections;
-  updatedProjects[index] = deepCopy(loaded);
-  const deepCopiedSections = deepCopy(loaded.sections);
-  setSections(deepCopiedSections )
-  setProjects(updatedProjects)
-  setCurrentProject(loaded)
-  setRecoilCurrentProject(loaded)
-  setCurrentIndex(index)
-  goToProjectShortcut(loaded.id, true)
+  if (target) goToProjectShortcut(target.id, true)
 }
 
 
-const handleBoardChange = (idx:number, sectionsFromCallback?:ISection[]) => {
+const handleBoardChange = (idx:number) => {
   const favoritesindex = favorites?.findIndex(favorite=>favorite.index===idx)
   if (favoritesindex<0)return ;
   const index = projects.findIndex((project: { id: number; })=>project.id===favorites[favoritesindex].projectId)
   if (index < 0) return;
   markBoardSwitchIntent({ surface: "keyboard_shortcut", projectId: favorites[favoritesindex].projectId })
-  // Save the current board's live sections back before switching, then switch.
-  return handleStateChangesOnBoardChange(index, sectionsFromCallback ?? sections)
+  return handleStateChangesOnBoardChange(index)
   }
 
 const handleBoardChangeRef = useRef(handleBoardChange);
@@ -1609,8 +1537,8 @@ handleBoardChangeRef.current = handleBoardChange;
 
 const debouncedHandleBoardChange = useMemo(
   () =>
-    debounce((idx: number, sectionsFromCallback?: ISection[]) => {
-      handleBoardChangeRef.current(idx, sectionsFromCallback);
+    debounce((idx: number) => {
+      handleBoardChangeRef.current(idx);
     }, 50),
   []
 );

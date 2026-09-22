@@ -109,6 +109,7 @@ async function sweep() {
   const cutoff = new Date(Date.now() - FEATURE_FLAG_REMOVAL_DAYS * 24 * 60 * 60 * 1000);
   const due = await prisma.featureFlag.findMany({
     where: {
+      key: { not: "htpr-6072-shallow-board-switch" },
       mode: "EVERYONE",
       keep: false,
       removalTaskId: null,

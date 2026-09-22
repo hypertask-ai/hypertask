@@ -72,11 +72,6 @@ test("on-demand board payload restores full metadata before hydration", () => {
   assert.match(landingSource, /setHydrationRetryToken/);
   assert.match(landingSource, /Couldn&apos;t load this board\./);
   assert.match(
-    landingSource,
-    /Failed to load board data on switch[\s\S]*?return null/,
-    "a failed switch must retain the current hydrated board"
-  );
-  assert.match(
     clientSource,
     /\["boardTasks", userId, projectId\]/,
     "user-scoped board metadata must not be reused across accounts"
