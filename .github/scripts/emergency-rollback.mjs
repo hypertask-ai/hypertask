@@ -78,20 +78,27 @@ async function revertProduction(failingSha, fetchImpl, repo, token) {
   const refPath = "/git/ref/heads/production";
   const head = (await github(fetchImpl, repo, token, refPath)).object.sha;
   const failing = await github(fetchImpl, repo, token, `/git/commits/${failingSha}`);
+  if (/^Revert [a-f0-9]{7,40}: production smoke failed \(auto-rollback\)/.test(failing.message ?? "")) {
+    return { status: "auto-rollback", reason: "failing SHA is itself an auto-rollback commit", dropped: [] };
+  }
   const parent = failing.parents?.[0]?.sha;
   if (!parent) throw new Error("failing commit has no parent");
 
   // Only a prior rollback of this SHA on production is an idempotent skip.
   // Walk the first-parent chain, not a compare page (which can truncate at 250).
+  const dropped = [];
   let cursor = head;
   while (cursor !== failingSha) {
     const commit = await github(fetchImpl, repo, token, `/git/commits/${cursor}`);
     if (commit.message?.startsWith(`Revert ${failingSha.slice(0, 7)}: production smoke failed (auto-rollback)`)) {
-      return { status: "already-reverted", sha: cursor };
+      return { status: "already-reverted", sha: cursor, dropped: [] };
     }
+    dropped.push({ sha: cursor, title: commit.message?.split("\n")[0] ?? "" });
     cursor = commit.parents?.[0]?.sha;
     if (!cursor) throw new Error("failing SHA is not on production's first-parent history");
   }
+  dropped.push({ sha: failingSha, title: failing.message?.split("\n")[0] ?? "" });
+  dropped.reverse();
 
   // Git trees snapshot the entire state; parenting that snapshot to the
   // current HEAD reverts X..HEAD atomically, including merges and deletions.
@@ -102,7 +109,7 @@ async function revertProduction(failingSha, fetchImpl, repo, token) {
   });
   // A non-force ref update fails closed if another merge landed in the meantime.
   await github(fetchImpl, repo, token, refPath, "PATCH", { sha: commit.sha, force: false });
-  return { status: "created", sha: commit.sha, revertedThrough: head };
+  return { status: "created", sha: commit.sha, revertedThrough: head, dropped };
 }
 
 async function passedSmoke(fetchImpl, repo, token, sha) {
@@ -111,7 +118,8 @@ async function passedSmoke(fetchImpl, repo, token, sha) {
     for (const run of runs.workflow_runs ?? []) {
       if (run.head_sha !== sha || run.status !== "completed" || run.conclusion !== "success") continue;
       const jobs = await github(fetchImpl, repo, token, `/actions/runs/${run.id}/jobs?per_page=100`);
-      if (jobs.jobs?.some((job) => job.name === "smoke" && job.conclusion === "success")) return true;
+      if (jobs.jobs?.some((job) => job.name === "smoke" && job.conclusion === "success" &&
+        job.steps?.some((step) => step.name === "Run the smoke checks" && step.conclusion === "success"))) return true;
     }
   } catch {
     // GitHub unavailable: no proof means no promotion.
@@ -123,21 +131,46 @@ export async function emergencyRollback(failingSha, token, fetchImpl = fetch, de
   const repo = options.repo ?? process.env.GITHUB_REPOSITORY;
   const githubToken = options.githubToken ?? process.env.ROLLBACK_GITHUB_TOKEN;
   const runUrl = options.runUrl ?? `${process.env.GITHUB_SERVER_URL || "https://github.com"}/${repo}/actions/runs/${process.env.GITHUB_RUN_ID}`;
+  if (process.env.GITHUB_EVENT_NAME === "workflow_dispatch") return { action: "skip", reason: "manual runs never roll back", revert: { status: "skipped" }, freeze: false };
+  if (!repo || !githubToken || !/^https?:\/\/[^/]+\/[^/]+\/[^/]+\/actions\/runs\/\d+$/.test(runUrl)) {
+    return { action: "failed", reason: "missing GitHub repository, rollback token or run URL", revert: { status: "skipped" }, freeze: false };
+  }
+  const errors = {};
   let frozen = false;
+  let revert;
+  let promotion;
   try {
-    if (process.env.GITHUB_EVENT_NAME === "workflow_dispatch") return { action: "skip", reason: "manual runs never roll back", revert: { status: "skipped" }, freeze: false };
-    if (!repo || !githubToken || !/^https?:\/\/[^/]+\/[^/]+\/[^/]+\/actions\/runs\/\d+$/.test(runUrl)) {
-      throw new Error("missing GitHub repository, rollback token or run URL");
-    }
     await freezeMerges(fetchImpl, repo, githubToken, runUrl);
     frozen = true;
-    const revert = await revertProduction(failingSha, fetchImpl, repo, githubToken);
-    if (revert.status === "already-reverted") return { action: "skip", revert, freeze: true, reason: "failing SHA already reverted" };
-    const promotion = await promoteVerifiedDeployment(failingSha, token, fetchImpl, delayImpl, repo, githubToken);
-    return { ...promotion, action: "requested", revert, freeze: true };
   } catch (err) {
-    return { action: "failed", reason: err.message, revert: { status: "failed" }, freeze: frozen };
+    errors.freeze = err.message;
+    console.error(`Freeze failed: ${err.message}`);
   }
+  try {
+    revert = await revertProduction(failingSha, fetchImpl, repo, githubToken);
+  } catch (err) {
+    errors.revert = err.message;
+    revert = { status: "failed", reason: err.message };
+    console.error(`Revert failed: ${err.message}`);
+  }
+  if (revert.status === "auto-rollback") {
+    promotion = { action: "skip", reason: "failing SHA is an auto-rollback commit" };
+  } else {
+    try {
+      promotion = await promoteVerifiedDeployment(failingSha, token, fetchImpl, delayImpl, repo, githubToken);
+      if (promotion.action === "failed") throw new Error(promotion.reason);
+    } catch (err) {
+      errors.promotion = err.message;
+      promotion = { action: "failed", reason: err.message };
+      console.error(`Promotion failed: ${err.message}`);
+    }
+  }
+  return {
+    action: Object.keys(errors).length ? "failed" : revert.status === "created" ? "requested" : "skip",
+    ...(Object.keys(errors).length ? { reason: Object.entries(errors).map(([step, reason]) => `${step}: ${reason}`).join("; ") } : {}),
+    revert, freeze: frozen, promotion, errors,
+    ...(promotion.deploymentId ? { deploymentId: promotion.deploymentId } : {}),
+  };
 }
 
 async function promoteVerifiedDeployment(failingSha, token, fetchImpl, delayImpl, repo, githubToken) {

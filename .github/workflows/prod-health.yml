@@ -659,41 +659,27 @@ jobs:
           echo "Smoke QA confirmed a real failure on $SHA. Rolling back."
           RESULT=$(node .github/scripts/emergency-rollback.mjs "$SHA")
           echo "$RESULT"
-          ACTION=$(echo "$RESULT" | jq -r '.action // "failed"')
-
-          case "$ACTION" in
-            requested)
-              # The production branch now has a revert; a verified earlier
-              # deployment may also have been promoted.
-              echo "rolledback=true" >> "$GITHUB_OUTPUT"
-              if [ -n "${GITHUB_TOKEN:-}" ] && [ -n "${GITHUB_REPOSITORY:-}" ]; then
-                curl -sS -o /dev/null -X POST \
-                  -H "Authorization: Bearer $GITHUB_TOKEN" \
-                  -H "Accept: application/vnd.github+json" \
-                  "https://api.github.com/repos/${GITHUB_REPOSITORY}/statuses/${SHA}" \
-                  -d '{"state":"failure","context":"prod-health-gate","description":"Rolled back after failed smoke"}' || true
-              fi
-              notify "🔴 hypertasks: $SHA failed Playwright smoke QA. Production reverted and merges frozen; verify deployment and clear MERGE_FREEZE manually. Investigate: https://github.com/${{ github.repository }}/commit/$SHA"
-              ;;
-            skip)
-              # A prior revert already handled this SHA. Still mark the gate
-              # failed so drift never promotes it later.
-              echo "rolledback=true" >> "$GITHUB_OUTPUT"
-              if [ -n "${GITHUB_TOKEN:-}" ] && [ -n "${GITHUB_REPOSITORY:-}" ]; then
-                curl -sS -o /dev/null -X POST \
-                  -H "Authorization: Bearer $GITHUB_TOKEN" \
-                  -H "Accept: application/vnd.github+json" \
-                  "https://api.github.com/repos/${GITHUB_REPOSITORY}/statuses/${SHA}" \
-                  -d '{"state":"failure","context":"prod-health-gate","description":"Rolled back after failed smoke"}' || true
-              fi
-              notify "⚠️ hypertasks: smoke QA failed for $SHA; it was already reverted. MERGE_FREEZE is set; verify production manually."
-              ;;
-            *)
-              # Rollback FAILED: freeze may have succeeded, but production was
-              # not reverted. GLM QA still runs (read-only evidence only).
-              notify "🔴🔴 hypertasks: smoke QA failed for $SHA and Git rollback FAILED ($(echo "$RESULT" | jq -r '.reason // "unknown"')). Verify MERGE_FREEZE and roll back production manually NOW."
-              ;;
+          REVERT_STATUS=$(echo "$RESULT" | jq -r '.revert.status // "failed"')
+          case "$REVERT_STATUS" in
+            created|already-reverted|auto-rollback) echo "rolledback=true" >> "$GITHUB_OUTPUT" ;;
           esac
+          # A confirmed failure is never a green deploy, even if freeze or revert failed.
+          if [ -n "${GITHUB_TOKEN:-}" ] && [ -n "${GITHUB_REPOSITORY:-}" ]; then
+            curl -sS -o /dev/null -X POST \
+              -H "Authorization: Bearer $GITHUB_TOKEN" \
+              -H "Accept: application/vnd.github+json" \
+              "https://api.github.com/repos/${GITHUB_REPOSITORY}/statuses/${SHA}" \
+              -d '{"state":"failure","context":"prod-health-gate","description":"Failed production smoke"}' || true
+          fi
+          DETAILS=$(echo "$RESULT" | jq -r '
+            "Freeze: " + (if .freeze then "set" else "FAILED" end) +
+            "\nRevert: " + (.revert.status // "unknown") +
+            "\nPromote: " + (.promotion.action // "skipped") + (if .promotion.reason then " (" + .promotion.reason + ")" else "" end) +
+            "\nErrors: " + (if ((.errors // {}) | length) > 0 then (.errors | to_entries | map(.key + ": " + .value) | join("; ")) else "none" end) +
+            "\nDropped commits:\n" + (if ((.revert.dropped // []) | length) > 0 then (.revert.dropped | map(.sha + " " + .title) | join("\n")) else "none" end)
+          ')
+          notify "🔴 hypertasks: smoke QA failed for $SHA. $DETAILS
+          Verify production, roll back manually if revert failed, and clear MERGE_FREEZE only after resolution. https://github.com/${{ github.repository }}/commit/$SHA"
           exit 1
 
   # ── GLM exploratory QA (HTPR-6239): a 5-minute human-style pass on the live app ──
@@ -1148,7 +1134,14 @@ jobs:
           invalidate_health_gate || true
           RESULT=$(node .github/scripts/emergency-rollback.mjs "$GITHUB_SHA")
           echo "$RESULT"
-          SUMMARY=$(echo "$RESULT" | jq -r '[.action // "failed", .reason // "no reason returned"] | map(tostring | gsub("[\\r\\n]+"; " ")) | join(": ")')
+          SUMMARY=$(echo "$RESULT" | jq -r '
+            "freeze=" + (if .freeze then "set" else "FAILED" end) +
+            "; revert=" + (.revert.status // "unknown") +
+            "; promote=" + (.promotion.action // "skipped") +
+            "; errors=" + ((.errors // {}) | to_entries | map(.key + ": " + .value) | join("; ")) +
+            "; dropped=" + ((.revert.dropped // []) | map(.sha + " " + .title) | join("; ")) |
+            gsub("[\\r\\n]+"; " ")
+          ')
           echo "CORE_SMOKE_ROLLBACK=$SUMMARY" >> "$GITHUB_ENV"
           if [ "$posted" != "yes" ]; then
             invalidate_health_gate || true
