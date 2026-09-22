@@ -154,17 +154,26 @@ jobs:
           [ -z "${PRS:-}" ] && { echo "No open PRs to production."; exit 0; }
 
           production_gate() {
-            local reason comments pr
-            if ! reason=$(node .github/scripts/production-gate.mjs); then
+            local gate kind sha reason comments pr marker
+            if ! gate=$(node .github/scripts/production-gate.mjs); then
               echo "::error::Cannot check production health; refusing to merge."
               exit 1
             fi
-            [ -z "$reason" ] && return 0
+            [ -z "$gate" ] && return 0
+            IFS='|' read -r kind sha reason <<<"$gate"
             echo "production red or frozen: $reason"
+            if [[ "$kind" != "freeze" && "$kind" != "smoke-failure" ]]; then
+              exit 0
+            fi
+            if [[ ! "$sha" =~ ^[0-9a-f]{40}$ ]]; then
+              echo "::error::Invalid production SHA; refusing to comment or merge."
+              exit 1
+            fi
+            marker="<!-- automerge-frozen:$kind:$sha -->"
             for pr in $PRS; do
               if comments=$(gh api --paginate "repos/$REPO/issues/$pr/comments?per_page=100" --jq '.[].body' 2>/dev/null) &&
-                 ! grep -Fq '<!-- automerge-frozen -->' <<<"$comments"; then
-                gh api -X POST "repos/$REPO/issues/$pr/comments" -f body="<!-- automerge-frozen --> Auto-merge paused: $reason. Merge manually once production is healthy and the freeze is lifted." >/dev/null 2>&1 || true
+                 ! grep -Eq "<!-- automerge-frozen:(freeze|smoke-failure):$sha -->" <<<"$comments"; then
+                gh api -X POST "repos/$REPO/issues/$pr/comments" -f body="$marker Auto-merge paused: $reason. A human must clear this before merging." >/dev/null 2>&1 || true
               fi
             done
             exit 0

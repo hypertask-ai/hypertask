@@ -35,7 +35,7 @@ async function runWorkflow({ failTemp = false, failList = false, failView = fals
   const gh = `#!/usr/bin/env bash
 set -u
 if [ "$1" = "api" ] && [[ " $* " == *"repos/owner/repository/issues/42/comments"* ]]; then
-  if [[ " $* " == *" -X POST "* ]]; then echo post >>"$GH_STUB_COMMENT_LOG"
+  if [[ " $* " == *" -X POST "* ]]; then printf '%s\\n' "$*" >>"$GH_STUB_COMMENT_LOG"
   else echo "\${GH_STUB_EXISTING_COMMENT:-}"; fi
   exit 0
 fi
@@ -298,13 +298,36 @@ test('a Prisma migration auto-merges like any other change', async () => {
   assert.deepEqual(scratchEntries, [])
 })
 
-test('production red or frozen stops the sweep and comments only once', async () => {
-  for (const existingFreezeComment of ['', '<!-- automerge-frozen -->']) {
-    const { result, commentPosts } = await runWorkflow({ productionReason: 'MERGE_FREEZE is set', existingFreezeComment })
+test('production gate comments only on a real freeze or concluded smoke failure, once per SHA', async () => {
+  const sha = 'b'.repeat(40)
+  const oldSha = 'c'.repeat(40)
+  for (const kind of ['freeze', 'smoke-failure']) {
+    const marker = `<!-- automerge-frozen:${kind}:${sha} -->`
+    const reason = kind === 'freeze' ? 'MERGE_FREEZE is set' : 'smoke failure (run 9)'
+    for (const [existingFreezeComment, shouldPost] of [
+      ['', true],
+      [marker, false],
+      [`<!-- automerge-frozen:${kind}:${oldSha} -->`, true],
+      [`<!-- automerge-frozen:${kind === 'freeze' ? 'smoke-failure' : 'freeze'}:${sha} -->`, false],
+      ['<!-- automerge-frozen -->', true],
+    ]) {
+      const { result, commentPosts } = await runWorkflow({ productionReason: `${kind}|${sha}|${reason}`, existingFreezeComment })
+      assert.equal(result.status, 0, result.stderr)
+      assert.equal(result.stdout.match(/production red or frozen:/g)?.length, 1)
+      assert.doesNotMatch(result.stdout, /MERGED #42/)
+      assert.equal(Boolean(commentPosts), shouldPost)
+      if (shouldPost) {
+        assert.ok(commentPosts.includes(marker))
+        assert.match(commentPosts, /A human must clear this before merging/)
+        assert.doesNotMatch(commentPosts, /Merge manually/)
+      }
+    }
+  }
+  for (const reason of ['no push prod-health run', 'run 9 is in_progress', 'run 9 is queued', 'smoke missing or unreadable']) {
+    const { result, commentPosts } = await runWorkflow({ productionReason: `pending|${sha}|${reason}` })
     assert.equal(result.status, 0, result.stderr)
-    assert.equal(result.stdout.match(/production red or frozen:/g)?.length, 1)
     assert.doesNotMatch(result.stdout, /MERGED #42/)
-    assert.equal(commentPosts, existingFreezeComment ? '' : 'post\n')
+    assert.equal(commentPosts, '')
   }
 })
 
