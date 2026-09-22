@@ -22,9 +22,20 @@ def write_json(path, value):
     temporary.replace(path)
 
 
-def plan(source, paths, max_files=12, max_bytes=60000):
+def review_priority(name):
+    if name.startswith(("docs/", "openwiki/", ".claude/")) or name.endswith(".md"):
+        return 4, name
+    if name.startswith(("src/lib/auth/", "src/lib/mcp", "src/app/oauth/", "src/app/mcp/",
+                        "src/app/api/auth/", "src/app/api/mcp/", "src/pages/api/auth/")) or name == "src/proxy.ts":
+        return 0, name
+    if name.startswith(("src/", "prisma/")) or name in ("package.json", "package-lock.json", "next.config.js"):
+        return 1, name
+    return 2, name
+
+
+def plan(source, paths, max_files=6, max_bytes=60000):
     batches, current, size = [], [], 0
-    for name in sorted(set(paths)):
+    for name in sorted(set(paths), key=review_priority):
         candidate = source / name
         if not candidate.is_file() or candidate.is_symlink():
             continue
