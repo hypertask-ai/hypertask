@@ -180,7 +180,9 @@ export function useTaskCommentsRealtime(
         document.visibilityState === "visible") &&
       (typeof navigator === "undefined" || navigator.onLine !== false);
     const reconcileWhileUnhealthy = () => {
-      if (fallbackActive && !subscriptionHealthy && canReconcile()) refetch();
+      if (fallbackActive && !subscriptionHealthy && canReconcile()) {
+        refetch(true, !preserveEditorContent);
+      }
     };
     const runFallbackCycle = () => {
       if (!fallbackActive) return;
