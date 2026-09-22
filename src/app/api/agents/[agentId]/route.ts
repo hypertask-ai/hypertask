@@ -11,7 +11,12 @@ import { getProjectWhere } from "@/utils/controllers/projects/getAllIncludes";
 import { UNPINNABLE_MODEL_OPTION_IDS } from "@/lib/nativeAgent/modelPin";
 import type { AgentScopes } from "@/lib/mcp/agents/scopes";
 import { workingOnByAgent } from "@/lib/agents/working";
-import { ownedAgentSlugs, resolveOwnedAgent } from "@/lib/agents/ownedSlugs";
+import {
+  ownedAgentNames,
+  ownedSlugsAfterRename,
+  resolveOwnedAgent,
+  resolveOwnedAgentFrom,
+} from "@/lib/agents/ownedSlugs";
 import { agentPoolScope } from "@/lib/agents/poolScope";
 import {
   classifyRuntimeHealth,
@@ -375,7 +380,10 @@ export async function PATCH(
     );
   }
 
-  const resolved = await resolveAgent(user.id, params.agentId);
+  // HTPR-6509: one owned-agent list serves both the resolve here and the
+  // slug recompute after the write.
+  const owned = await ownedAgentNames(user.id);
+  const resolved = resolveOwnedAgentFrom(owned, params.agentId);
   const existing = resolved
     ? await prisma.agent.findFirst({
         where: { id: resolved.id, userId: user.id },
@@ -711,7 +719,7 @@ export async function PATCH(
   const { permissions, ...agentFields } = agent;
   // Recomputed after the write, not taken from the pre-update resolve: a rename
   // moves the slug, and the page has to send the reader to the new URL.
-  const slugs = await ownedAgentSlugs(user.id);
+  const slugs = ownedSlugsAfterRename(owned, agent.id, agent.displayName);
   return NextResponse.json({
     success: true,
     agent: {

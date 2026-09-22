@@ -183,7 +183,17 @@ export async function getPage(args: GetPageArgs) {
   return prisma.page.findUnique({
     where,
     include: {
-      task: true,
+      // HTPR-6509: the page viewer links back to the task and MCP pages/get
+      // echoes these five fields; nothing reads the rest of the task row.
+      task: {
+        select: {
+          id: true,
+          ticketNumber: true,
+          title: true,
+          projectId: true,
+          uniqueIndex: true,
+        },
+      },
       subPages: {
         select: {
           id: true,

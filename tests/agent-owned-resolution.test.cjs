@@ -64,7 +64,13 @@ const jiti = require("jiti")(path.join(root, "tests/agent-owned-resolution.test.
   cache: false,
 });
 
-const { ownedAgentSlugs, resolveOwnedAgent } = jiti(
+const {
+  ownedAgentNames,
+  ownedAgentSlugs,
+  ownedSlugsAfterRename,
+  resolveOwnedAgent,
+  resolveOwnedAgentFrom,
+} = jiti(
   path.join(root, "src/lib/agents/ownedSlugs.ts")
 );
 
@@ -128,4 +134,71 @@ test("slugs are listed only for the owner's own agents", async () => {
     ]
   );
   assert.equal(slugs.has(agents[2].id), false);
+});
+
+// HTPR-6509: PATCH loads the owned list once and reuses it for the resolve and
+// for the slug it returns after a rename. Both must match what a fresh query
+// would have produced, or the page redirects to the wrong URL.
+test("resolving from a loaded list matches resolving by query", async () => {
+  const owned = await ownedAgentNames(owner);
+  for (const ref of [
+    agents[0].id,
+    agents[1].id,
+    agents[2].id,
+    "board-maintainer",
+    "board-maintainer-2",
+    "cost-engineer",
+    "",
+    "no-such-agent",
+  ]) {
+    assert.deepEqual(
+      resolveOwnedAgentFrom(owned, ref),
+      await resolveOwnedAgent(owner, ref),
+      `${JSON.stringify(ref)} must resolve the same way`
+    );
+  }
+});
+
+test("slugs after a rename match a reload of the renamed list", async () => {
+  const owned = await ownedAgentNames(owner);
+  const renamedId = agents[0].id;
+  const original = agents[0].displayName;
+  const newName = "QA Agent";
+  // The rename frees "board-maintainer" for the younger agent only when the
+  // renamed row is patched; a stale list would keep the old slugs.
+  const slugs = ownedSlugsAfterRename(owned, renamedId, newName);
+
+  agents[0].displayName = newName;
+  try {
+    assert.deepEqual([...slugs.entries()], [...(await ownedAgentSlugs(owner)).entries()]);
+    assert.equal(slugs.get(renamedId), "qa-agent");
+    assert.equal(slugs.get(agents[1].id), "board-maintainer");
+  } finally {
+    agents[0].displayName = original;
+  }
+});
+
+test("a rename into a taken name gets the next free slug", async () => {
+  const owned = await ownedAgentNames(owner);
+  // The younger agent takes the older one's name: it must not steal the URL.
+  const slugs = ownedSlugsAfterRename(owned, agents[1].id, "Board Maintainer");
+  assert.equal(slugs.get(agents[0].id), "board-maintainer");
+  assert.equal(slugs.get(agents[1].id), "board-maintainer-2");
+
+  const renamed = ownedSlugsAfterRename(owned, agents[1].id, "Cost Engineer");
+  assert.equal(renamed.get(agents[1].id), "cost-engineer");
+});
+
+test("agent PATCH queries the owned list once", () => {
+  const route = require("node:fs").readFileSync(
+    path.join(root, "src/app/api/agents/[agentId]/route.ts"),
+    "utf8"
+  );
+  const patch = route.slice(
+    route.indexOf("export async function PATCH"),
+    route.indexOf("export async function DELETE")
+  );
+  assert.equal(patch.match(/ownedAgentNames\(/g)?.length, 1);
+  assert.doesNotMatch(patch, /ownedAgentSlugs\(|resolveAgent\(|resolveOwnedAgent\(/);
+  assert.match(patch, /ownedSlugsAfterRename\(owned, agent\.id, agent\.displayName\)/);
 });
