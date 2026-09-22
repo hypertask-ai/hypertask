@@ -1,105 +1,98 @@
 #!/bin/bash
-# Weekly white-box Strix scan of local Hypertask source via the ChatGPT subscription.
-# Cron: Sun 03:00. Findings are filed as tickets after the scan.
-set -uo pipefail
-
-APP=${STRIX_APP:-/home/valentin/projects/hypertasks}
-LOG=${STRIX_LOG:-/home/valentin/logs/strix-weekly-$(date +%F).log}
-LOCK=${STRIX_LOCK:-/tmp/strix-weekly.lock}
-SANDBOX_IMAGE=${STRIX_IMAGE:-ghcr.io/usestrix/strix-sandbox:1.1.0}
-BUDGET=${STRIX_BUDGET:-10}
-mkdir -p "$(dirname "$LOG")"
-exec >>"$LOG" 2>&1
-echo "=== strix-weekly $(date -Is) subscription=chatgpt budget=\$$BUDGET ==="
-
-cd "$APP" || exit 1
-
-exec 9>"$LOCK"
-flock -n 9 || {
-  echo "Another weekly Strix scan is already running"
-  exit 0
-}
-
-systemctl --user start strix-chatgpt-proxy.service
-for _ in $(seq 1 30); do
-  curl -sf -o /dev/null --connect-timeout 2 --max-time 2 http://127.0.0.1:48100/health && break
-  sleep 1
-done
-curl -sf -o /dev/null --connect-timeout 2 --max-time 2 http://127.0.0.1:48100/health || {
-  echo "ChatGPT proxy did not become healthy"
-  exit 1
-}
-
-SANDBOX_NETWORK="strix-weekly-$(date +%s)-$$"
-docker network create "$SANDBOX_NETWORK" >/dev/null || exit 1
-DIFF_FILES=""
-cleanup() {
-  status=$?
-  cleanup_failed=0
+# Sunday source review. Install this directory at ~/.local/lib/strix-runner.
+set -euo pipefail
+umask 077
+export PATH="$HOME/.local/bin:/usr/local/bin:/usr/bin:/bin"
+export XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}"
+SCRIPT_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
+STATE=${STRIX_STATE:-$HOME/.local/state/strix/weekly}
+REPO=${STRIX_REPO:-https://github.com/hypertask-ai/hypertask.git}
+REF=${STRIX_REF:-production}
+BUDGET=${STRIX_BUDGET:-30}
+mkdir -p "$STATE"
+exec 9>"$STATE/runner.lock"
+flock -n 9 || { echo 'Strix is already running'; exit 0; }
+JOB=$(mktemp -d "$STATE/run-$(date -u +%Y%m%dT%H%M%SZ)-XXXXXX")
+exec > >(tee -a "$JOB/runner.log") 2>&1
+STATUS=failed
+REVISION=""
+NETWORK=""
+finish() {
+  code=$?
   trap - EXIT
-  [ -z "$DIFF_FILES" ] || rm -f "$DIFF_FILES"
-  docker ps -aq --filter "network=$SANDBOX_NETWORK" --filter "ancestor=$SANDBOX_IMAGE" \
-    | xargs -r docker rm -f || cleanup_failed=1
-  docker network rm "$SANDBOX_NETWORK" >/dev/null 2>&1 || {
-    echo "Failed to remove sandbox network $SANDBOX_NETWORK" >&2
-    cleanup_failed=1
-  }
-  if [ "$status" -eq 0 ] && [ "$cleanup_failed" -ne 0 ]; then
-    status=1
+  if [ -n "$NETWORK" ]; then
+    docker ps -aq --filter "network=$NETWORK" | xargs -r docker rm -f || code=1
+    docker network rm "$NETWORK" >/dev/null 2>&1 || code=1
   fi
-  exit "$status"
+  if [ "$code" -eq 3 ] && [ "$STATUS" = pending ]; then :
+  elif [ "$code" -ne 0 ]; then STATUS=failed; fi
+  if [ "$STATUS" = completed ]; then
+    printf '%s\n' "$REVISION" > "$STATE/last-success.tmp"
+    mv "$STATE/last-success.tmp" "$STATE/last-success"
+    rm -f "$STATE/pending-scope"
+  fi
+  python3 - "$STATE" "$JOB" "$STATUS" "$code" "$REVISION" <<'PY'
+import datetime,json,os,sys
+from pathlib import Path
+state,job,status,code,revision=sys.argv[1:]
+data=dict(status=status,exit_code=int(code),revision=revision,job=job,finished_at=datetime.datetime.now(datetime.timezone.utc).isoformat())
+for path in [Path(job)/'status.json',Path(state)/'latest.json']:
+    tmp=path.with_suffix('.tmp');tmp.write_text(json.dumps(data,indent=2)+'\n');os.replace(tmp,path)
+PY
+  echo "Strix status=$STATUS exit=$code report=$JOB"
+  exit "$code"
 }
-trap cleanup EXIT
+trap finish EXIT
 trap 'exit 130' INT
 trap 'exit 143' TERM
-
-# The unique network is both the sandbox's port namespace and its cleanup ownership marker.
-export STRIX_DOCKER_SANDBOX_NETWORK="$SANDBOX_NETWORK"
-export STRIX_IMAGE="$SANDBOX_IMAGE"
-export STRIX_LLM="openai/gpt-5.6-sol"
-export LLM_API_KEY="chatgpt-oauth"
-export LLM_API_BASE="http://127.0.0.1:48100/v1"
-export STRIX_REASONING_EFFORT="medium"
-
-DIFF_BASE_REF=${STRIX_DIFF_BASE:-production@{7 days ago}}
-DIFF_BASE=$(git rev-parse --verify "$DIFF_BASE_REF") || {
-  echo "Could not resolve weekly diff base: $DIFF_BASE_REF"
-  exit 1
-}
-DIFF_FILES=$(mktemp) || {
-  echo "Could not create changed-file list"
-  exit 1
-}
-if ! git diff --name-only --diff-filter=ACMR -z "$DIFF_BASE"...HEAD >"$DIFF_FILES"; then
-  echo "Could not list files changed since $DIFF_BASE_REF"
-  exit 1
+python3 - "$STATE" "$JOB" <<'PY_STATUS'
+import datetime,json,os,sys
+from pathlib import Path
+state,job=sys.argv[1:]
+path=Path(state)/'latest.json'
+tmp=path.with_suffix('.tmp')
+tmp.write_text(json.dumps(dict(status='running',job=job,started_at=datetime.datetime.now(datetime.timezone.utc).isoformat()),indent=2)+'\n')
+os.replace(tmp,path)
+PY_STATUS
+for command in strix docker git curl timeout python3 htbot rg; do command -v "$command" >/dev/null; done
+systemctl --user start strix-chatgpt-proxy.service
+curl --fail --silent --show-error --retry 10 --retry-connrefused --retry-delay 1 --max-time 10 http://127.0.0.1:48100/health >/dev/null
+# Fetch into our own mirror. Never scan a developer's dirty checkout or .env files.
+if [ ! -d "$STATE/source.git" ]; then git init --bare "$STATE/source.git"; fi
+git -C "$STATE/source.git" fetch --force "$REPO" "$REF:refs/heads/scan"
+if [ -f "$STATE/pending-scope" ]; then
+  read -r REVISION BASE < "$STATE/pending-scope"
+else
+  REVISION=$(git -C "$STATE/source.git" rev-parse refs/heads/scan)
+  BASE=${STRIX_DIFF_BASE:-}
+  if [ -z "$BASE" ] && [ -f "$STATE/last-success" ]; then BASE=$(cat "$STATE/last-success"); fi
+  if [ -z "$BASE" ]; then BASE=$(git -C "$STATE/source.git" rev-list -1 --before='7 days ago' "$REVISION"); fi
+  [ -n "$BASE" ] || BASE=$(git -C "$STATE/source.git" rev-list --max-parents=0 "$REVISION" | tail -1)
 fi
-mapfile -d '' -t CHANGED_FILES <"$DIFF_FILES"
-rm -f "$DIFF_FILES"
-DIFF_FILES=""
-if [ "${#CHANGED_FILES[@]}" -eq 0 ]; then
-  echo "No files changed since $DIFF_BASE_REF; nothing to scan"
-  echo "=== done $(date -Is) ==="
-  exit 0
-fi
-printf 'Scanning %d file(s) changed since %s:\n' "${#CHANGED_FILES[@]}" "$DIFF_BASE_REF"
-printf '  %s\n' "${CHANGED_FILES[@]}"
-
-if ! strix -n -m standard \
-  --scope-mode diff \
-  --diff-base "$DIFF_BASE" \
-  --target . \
-  --max-budget-usd "$BUDGET" \
-  --instruction "Authorized white-box security review of our local Next.js source only. Analyze and report findings only when they relate to files in the injected changed-file scope. Prioritize JWT and Firebase authentication, MCP bearer-token scoping, IDOR and broken authorization on API routes, secret exposure, injection, SSRF, and unsafe deserialization. Report concrete file:line findings. Do not access any live or remote application URL."; then
-  echo "Strix scan failed; no findings will be filed"
-  exit 1
-fi
-
-RUN=$(ls -dt "$APP"/strix_runs/*/ 2>/dev/null | head -1)
-if [ -z "$RUN" ]; then
-  echo "Strix produced no run directory; no findings will be filed"
-  exit 1
-fi
-echo "run dir: $RUN"
-python3 "$APP/scripts/strix-file-tickets.py" "$RUN"
-echo "=== done $(date -Is) ==="
+git -C "$STATE/source.git" merge-base --is-ancestor "$BASE" "$REVISION"
+# Keep the unfinished revision reachable even when production moves ahead.
+git -C "$STATE/source.git" update-ref refs/heads/pending "$REVISION"
+git clone --quiet --no-hardlinks --no-checkout "$STATE/source.git" "$JOB/source"
+git -C "$JOB/source" checkout --quiet --detach "$REVISION"
+git -C "$JOB/source" diff --name-only --diff-filter=ACMR "$BASE" "$REVISION" > "$JOB/changed-files.txt"
+printf 'Revision: %s\nBase: %s\n' "$REVISION" "$BASE"
+if [ ! -s "$JOB/changed-files.txt" ]; then STATUS=no_changes; exit 0; fi
+printf '%s %s\n' "$REVISION" "$BASE" > "$STATE/pending-scope.tmp"
+mv "$STATE/pending-scope.tmp" "$STATE/pending-scope"
+NETWORK="strix-weekly-$(date +%s)-$$"
+docker network create --internal "$NETWORK" >/dev/null
+export STRIX_DOCKER_SANDBOX_NETWORK="$NETWORK"
+export STRIX_IMAGE="${STRIX_IMAGE:-ghcr.io/usestrix/strix-sandbox:1.1.0}"
+export STRIX_LLM=openai/gpt-5.6-sol LLM_API_KEY=chatgpt-oauth LLM_API_BASE=http://127.0.0.1:48100/v1
+export STRIX_REASONING_EFFORT=medium STRIX_TELEMETRY=false
+export STRIX_SANDBOX_MEM_LIMIT=6g STRIX_SANDBOX_CPUS=3 STRIX_SANDBOX_PIDS_LIMIT=512
+cd "$JOB"
+scan_exit=0
+timeout --signal=TERM --kill-after=60 "${STRIX_TIMEOUT:-2700}" \
+  python3 "$SCRIPT_DIR/strix-review-batches.py" --source "$JOB/source" \
+  --files "$JOB/changed-files.txt" --state "$STATE/batches" --output "$JOB" \
+  --revision "$REVISION" --base "$BASE" --budget "$BUDGET" \
+  --batch-budget "${STRIX_BATCH_BUDGET:-6}" --max-files "${STRIX_BATCH_FILES:-6}" || scan_exit=$?
+if [ "$scan_exit" -eq 3 ]; then STATUS=pending; exit 3; fi
+if [ "$scan_exit" -ne 0 ]; then exit "$scan_exit"; fi
+STATUS=completed
