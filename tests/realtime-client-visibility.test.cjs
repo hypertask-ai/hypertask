@@ -99,35 +99,20 @@ function fakeHeadlessBrowser(search = "") {
   return result;
 }
 
-test("automated browser contexts disable realtime by default", () => {
+test("automated browser contexts always disable realtime", () => {
   const { REALTIME_DISABLED_STORAGE_KEY, realtimeDisabledForBrowser } = loadTs(
     "src/lib/realtime/client.ts",
   );
-  const { browser, values } = fakeBrowser("", true);
+  const { browser, values } = fakeBrowser("?realtime=on", true);
   assert.equal(realtimeDisabledForBrowser(browser), true);
   assert.equal(values.get(REALTIME_DISABLED_STORAGE_KEY), "1");
-});
-
-test("an explicit preference enables realtime in automated browsers", () => {
-  const { REALTIME_DISABLED_STORAGE_KEY, realtimeDisabledForBrowser } = loadTs(
-    "src/lib/realtime/client.ts",
-  );
-
-  for (const { browser, values } of [
-    fakeBrowser("?realtime=on", true),
-    fakeHeadlessBrowser("?realtime=on"),
-  ]) {
-    values.set(REALTIME_DISABLED_STORAGE_KEY, "1");
-    assert.equal(realtimeDisabledForBrowser(browser), false);
-    assert.equal(values.has(REALTIME_DISABLED_STORAGE_KEY), false);
-  }
 });
 
 test("headless agent-browser contexts disable realtime without webdriver", () => {
   const { REALTIME_DISABLED_STORAGE_KEY, realtimeDisabledForBrowser } = loadTs(
     "src/lib/realtime/client.ts",
   );
-  const { browser, values } = fakeHeadlessBrowser();
+  const { browser, values } = fakeHeadlessBrowser("?realtime=on");
 
   assert.equal(realtimeDisabledForBrowser(browser), true);
   assert.equal(values.get(REALTIME_DISABLED_STORAGE_KEY), "1");
