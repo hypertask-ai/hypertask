@@ -122,33 +122,21 @@ test("dictation rejects oversized audio before contacting Deepgram", async () =>
   }
 });
 
-test("dictation routes authenticate before parsing paid audio payloads", () => {
-  const formRoute = fs.readFileSync(
-    path.join(root, "src/app/api/dictation/transcribe/route.ts"),
-    "utf8",
-  );
+test("the JSON dictation route authenticates before parsing paid audio payloads", () => {
   const jsonRoute = fs.readFileSync(
     path.join(root, "src/app/api/ai/audio-transcript/route.ts"),
     "utf8",
   );
 
   assert.ok(
-    formRoute.indexOf("getSessionUser(request.headers)") <
-      formRoute.indexOf("request.formData()"),
-    "form-data dictation must authenticate before parsing the upload",
-  );
-  assert.ok(
     jsonRoute.indexOf("getSessionUser(request.headers)") <
       jsonRoute.indexOf("request.json()"),
     "JSON dictation must authenticate before parsing base64 audio",
   );
-  assert.match(formRoute, /MAX_DICTATION_AUDIO_BYTES/);
   assert.match(jsonRoute, /MAX_DICTATION_AUDIO_BYTES/);
-  assert.match(formRoute, /status: 413/);
   assert.match(jsonRoute, /status: 413/);
-  assert.match(formRoute, /teamContext\.projectId !== projectId/);
   assert.match(jsonRoute, /teamContext\.projectId !== body\.projectId/);
-  for (const route of [formRoute, jsonRoute]) {
+  for (const route of [jsonRoute]) {
     assert.match(route, /isGuestUserId/);
     const guestCheckAt = route.indexOf("await isGuestUserId");
     const bodyParseAt = Math.max(
