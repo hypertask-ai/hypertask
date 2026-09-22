@@ -98,8 +98,7 @@ const FEATURE_FLAG_QA_USER = {
 
 // Keep the OFF database row so older deployments also fail closed, while the current app hides
 // and rejects the retired flag until those deployments are outside the rollback window.
-// Keep the shallow board switch row ON for rollback deployments that still read it.
-const RETIRED_FEATURE_FLAG_KEYS = new Set(["hyfa-43-factory-owner-preview", "htpr-6072-shallow-board-switch"]);
+const RETIRED_FEATURE_FLAG_KEYS = new Set(["hyfa-43-factory-owner-preview"]);
 
 const FEATURE_FLAG_DEFINITIONS = [
   {
@@ -320,6 +319,11 @@ const FEATURE_FLAG_DEFINITIONS = [
     key: AGENT_CHAT_TICKET_CONFIRM_FLAG,
     shippedOn: "2026-09-05",
     description: "Requires a confirmed board ticket before Agent Chat can start side-effecting work.",
+  },
+  {
+    key: "htpr-6072-shallow-board-switch",
+    shippedOn: "2026-09-04",
+    description: "kept only so old open tabs keep reading true; remove after 2026-10-06",
   },
   {
     key: "htpr-6091-feature-flags",
