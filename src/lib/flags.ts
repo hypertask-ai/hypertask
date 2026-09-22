@@ -96,9 +96,9 @@ const FEATURE_FLAG_QA_USER = {
   email: "valentin@hypertask.ai",
 } as const;
 
-// Keep the OFF database row so older deployments also fail closed, while the current app hides
-// and rejects the retired flag until those deployments are outside the rollback window.
-const RETIRED_FEATURE_FLAG_KEYS = new Set(["hyfa-43-factory-owner-preview"]);
+// Keep the stored rows through the rollback window: older deployments still need the
+// factory flag OFF and the shallow board switch ON. Neither can be changed here.
+const RETIRED_FEATURE_FLAG_KEYS = new Set(["hyfa-43-factory-owner-preview", "htpr-6072-shallow-board-switch"]);
 
 const FEATURE_FLAG_DEFINITIONS = [
   {
@@ -319,11 +319,6 @@ const FEATURE_FLAG_DEFINITIONS = [
     key: AGENT_CHAT_TICKET_CONFIRM_FLAG,
     shippedOn: "2026-09-05",
     description: "Requires a confirmed board ticket before Agent Chat can start side-effecting work.",
-  },
-  {
-    key: "htpr-6072-shallow-board-switch",
-    shippedOn: "2026-09-04",
-    description: "Switches between cached boards without remounting the whole board screen.",
   },
   {
     key: "htpr-6091-feature-flags",
