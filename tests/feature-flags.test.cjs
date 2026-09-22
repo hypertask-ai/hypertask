@@ -167,7 +167,6 @@ test("declared flags remain listed with ticket details and can be changed", asyn
       { key: "htpr-6006-chat-confirm-ticket", mode: "OWNER_AND_QA", updatedAt: null },
       { key: "htpr-6035-agent-chat-skills", mode: "OWNER_AND_QA", updatedAt: null },
       { key: "htpr-6059-lazy-emoji-list", mode: "OWNER_AND_QA", updatedAt: null },
-      { key: "htpr-6072-shallow-board-switch", mode: "OWNER_AND_QA", updatedAt: null },
       { key: "htpr-6091-feature-flags", mode: "OWNER_AND_QA", updatedAt: null },
       { key: "htpr-6094-agent-activity-rows", mode: "OWNER_AND_QA", updatedAt: null },
       { key: "htpr-6112-copy-current-url", mode: "OWNER_AND_QA", updatedAt: null },
@@ -562,16 +561,19 @@ test("the retired factory flag remains off for old deployments but disappears fr
   );
 });
 
-test("the shallow switch stays on and visible for old open tabs", async () => {
+test("the retired shallow switch stays on in client payloads but is not editable", async () => {
   const key = "htpr-6072-shallow-board-switch";
-  listedRows = [{ key, mode: "EVERYONE", updatedAt: new Date() }];
-  row = { mode: "EVERYONE", updatedAt: new Date() };
+  listedRows = [{ key, mode: "OFF", updatedAt: new Date() }];
+  row = { mode: "OFF", updatedAt: new Date() };
 
-  assert.equal(await flags.isFeatureEnabled(key, 42), true);
+  assert.equal(flags.FEATURE_FLAG_KEYS.includes(key), false);
+  assert.equal((await flags.listFeatureFlagModes()).some((flag) => flag.key === key), false);
+  for (const userId of [6, 985, 42]) {
+    assert.equal((await flags.featureFlagsForUser(userId))[key], true);
+  }
+  await assert.rejects(flags.setFeatureFlagMode(key, "OFF"), /Unknown feature flag/);
+  listedRows = [];
   assert.equal((await flags.featureFlagsForUser(42))[key], true);
-  const listed = (await flags.listFeatureFlagModes()).find((flag) => flag.key === key);
-  assert.equal(listed.mode, "EVERYONE");
-  assert.match(listed.description, /old open tabs keep reading true; remove after 2026-10-06/);
 });
 
 test("ticket titles are only fetched when requested, and cover undeclared stored keys too", async () => {
