@@ -96,9 +96,13 @@ const FEATURE_FLAG_QA_USER = {
   email: "valentin@hypertask.ai",
 } as const;
 
-// Keep the OFF database row so older deployments also fail closed, while the current app hides
-// and rejects the retired flag until those deployments are outside the rollback window.
-const RETIRED_FEATURE_FLAG_KEYS = new Set(["hyfa-43-factory-owner-preview"]);
+// Hide and reject retired flags without changing stored rows needed by older deployments.
+const RETIRED_FEATURE_FLAG_KEYS = new Set([
+  "hyfa-43-factory-owner-preview",
+  "htpr-6072-shallow-board-switch",
+]);
+// Old tabs read this; remove after 2026-10-06.
+const RETIRED_CLIENT_FEATURE_FLAGS = { "htpr-6072-shallow-board-switch": true } as const;
 
 const FEATURE_FLAG_DEFINITIONS = [
   {
@@ -319,11 +323,6 @@ const FEATURE_FLAG_DEFINITIONS = [
     key: AGENT_CHAT_TICKET_CONFIRM_FLAG,
     shippedOn: "2026-09-05",
     description: "Requires a confirmed board ticket before Agent Chat can start side-effecting work.",
-  },
-  {
-    key: "htpr-6072-shallow-board-switch",
-    shippedOn: "2026-09-04",
-    description: "Switches between cached boards without remounting the whole board screen.",
   },
   {
     key: "htpr-6091-feature-flags",
@@ -817,12 +816,15 @@ export async function featureFlagsForUser(
   const isQa = rows.some((row) => row.mode === "OWNER_AND_QA")
     ? await isFeatureFlagQaUser(userId)
     : false;
-  return Object.fromEntries(
-    rows.map((row) => [
-      row.key,
-      featureFlagModeEnabled(row.mode, isOwner, isQa),
-    ]),
-  );
+  return {
+    ...Object.fromEntries(
+      rows.map((row) => [
+        row.key,
+        featureFlagModeEnabled(row.mode, isOwner, isQa),
+      ]),
+    ),
+    ...RETIRED_CLIENT_FEATURE_FLAGS,
+  };
 }
 
 export function validFeatureFlagKey(key: string): boolean {

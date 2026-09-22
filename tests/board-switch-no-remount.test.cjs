@@ -85,29 +85,6 @@ test("HTPR-6072: the pending delete lookup is guarded against a ref, not a closu
   );
 });
 
-test("HTPR-6072: an overlapping board switch cannot apply a stale result", () => {
-  const src = fs.readFileSync(
-    path.join(__dirname, "..", "src/app/[...boardURL]/LandingPage.tsx"),
-    "utf8",
-  );
-  const fnMatch = src.match(
-    /async function handleStateChangesOnBoardChange[\s\S]*?ensureBoardLoaded\(index\);[\s\S]{0,150}/,
-  );
-  assert.ok(fnMatch, "expected handleStateChangesOnBoardChange to still exist");
-  assert.ok(
-    /boardSwitchGenerationRef\.current\s*\+\+|\+\+boardSwitchGenerationRef\.current/.test(
-      src,
-    ),
-    "expected a generation counter bumped per switch",
-  );
-  assert.ok(
-    /switchGeneration\s*!==\s*boardSwitchGenerationRef\.current/.test(
-      fnMatch[0],
-    ),
-    "expected the post-fetch continuation to bail when a newer switch has started",
-  );
-});
-
 test("HTPR-6072: the delete-lookup guard actually blocks a stale result across an await (ref, not closure)", () => {
   // This repo has no React hook-rendering test setup, so this exercises the
   // exact race the fix depends on directly: a ref mutated mid-await must be
@@ -282,9 +259,10 @@ test("HTPR-6072: a pending shallow switch keeps the committed board mounted", ()
   );
   assert.match(
     src,
-    /const boardRender =\s*readyBoardRender \?\?\s*\(shallowBoardSwitchEnabled &&\s*committedBoardRender\?\.accountId === user\.id &&\s*currentBoardAccessStatus !== "denied" &&\s*!projectLookupFailed &&\s*hydrationFailedProjectId !== requestedProjectId\s*\? committedBoardRender\s*: null\)/,
+    /const boardRender =\s*readyBoardRender \?\?\s*\(committedBoardRender\?\.accountId === user\.id &&\s*currentBoardAccessStatus !== "denied" &&\s*!projectLookupFailed &&\s*hydrationFailedProjectId !== requestedProjectId\s*\? committedBoardRender\s*: null\)/,
     "expected a ready target to render immediately and the previous committed snapshot only while it is pending",
   );
+  assert.match(src, /\) : boardRender \? \(\s*<SectionComp/, "a background refetch must not drop the board render");
   assert.match(
     src,
     /<SectionComp\s+_allProjects=\{boardRender\.projects\}[\s\S]{0,900}_readinessRouteEntryId=\{boardRender\.readinessRouteEntryId\}/,
@@ -292,42 +270,24 @@ test("HTPR-6072: a pending shallow switch keeps the committed board mounted", ()
   );
 });
 
-test("HTPR-6072: flagged keyboard switches wait for parent authorization", () => {
+test("HTPR-6072: keyboard switches wait for parent authorization", () => {
   const src = fs.readFileSync(
     path.join(__dirname, "..", "src/app/[...boardURL]/LandingPage.tsx"),
     "utf8",
   );
   const switchHandler = src.match(
-    /async function handleStateChangesOnBoardChange[\s\S]*?\n}\n\n\nconst handleBoardChange/,
+    /function handleStateChangesOnBoardChange[\s\S]*?\n}\n\n\nconst handleBoardChange/,
   );
   assert.ok(switchHandler, "expected the board switch handler to exist");
   assert.match(
     switchHandler[0],
-    /if \(_shallowBoardSwitchEnabled\) \{\s*const target = projects\[index\]\s*if \(target\) goToProjectShortcut\(target\.id, true\)\s*return\s*\}[\s\S]*const loaded = await ensureBoardLoaded\(index\)/,
-    "expected shallow switches to navigate before loading or publishing target state locally",
-  );
-  const guardedBranch = switchHandler[0].slice(
-    switchHandler[0].indexOf("if (_shallowBoardSwitchEnabled)"),
-    switchHandler[0].indexOf("const switchGeneration"),
+    /const target = projects\[index\]\s*if \(target\) goToProjectShortcut\(target\.id, true\)/,
+    "expected navigation without publishing target state locally",
   );
   assert.doesNotMatch(
-    guardedBranch,
-    /setProjects|setCurrentProject|setSections|setRecoilCurrentProject/,
+    switchHandler[0],
+    /setProjects|setCurrentProject|setSections|setRecoilCurrentProject|ensureBoardLoaded/,
     "the target must be published only by the parent's authorized snapshot",
-  );
-});
-
-test("HTPR-6072: sectionCompEverRenderedRef arms in an effect, not during render", () => {
-  const src = fs.readFileSync(
-    path.join(__dirname, "..", "src/app/[...boardURL]/LandingPage.tsx"),
-    "utf8",
-  );
-  const armMatch = src.match(
-    /useLayoutEffect\(\(\) => \{\s*if \(boardDataReady\) sectionCompEverRenderedRef\.current = true\s*\}, \[boardDataReady\]\)/,
-  );
-  assert.ok(
-    armMatch,
-    "expected sectionCompEverRenderedRef to be armed inside a useLayoutEffect keyed on boardDataReady",
   );
 });
 
@@ -371,31 +331,30 @@ test("HTPR-6072: shallow navigation notifies Next when the current entry is alre
   );
 });
 
-test("HTPR-6072: shallow navigation is flag, route, and cache guarded", () => {
+test("HTPR-6072: shallow navigation is route and cache guarded", () => {
   const src = fs.readFileSync(
     path.join(__dirname, "..", "src/hooks/General/useProjectQuery.ts"),
     "utf8",
   );
-  assert.match(src, /useFlag\(\s*"htpr-6072-shallow-board-switch"/);
   assert.match(
     src,
-    /if \(shallowBoardSwitchEnabled && pathname === "\/project" && project\) \{\s*window\.history\.pushState\(\s*getNextRouterAwareHistoryState\(window\.history\.state\),\s*"",\s*destination,\s*\);\s*return;\s*\}[\s\S]{0,180}router\.push\(destination\)/,
-    "expected warm board switches to notify Next while non-board, cache-miss, and flag-off navigation retains router.push",
+    /if \(pathname === "\/project" && project\) \{\s*window\.history\.pushState\(\s*getNextRouterAwareHistoryState\(window\.history\.state\),\s*"",\s*destination,\s*\);\s*return;\s*\}[\s\S]{0,180}router\.push\(destination\)/,
+    "expected warm board switches to notify Next while non-board and cache-miss navigation retains router.push",
   );
 });
 
-test("HTPR-6072: the live URL selects a board only behind the flag", () => {
+test("HTPR-6072: the live URL selects the board", () => {
   const src = fs.readFileSync(
     path.join(__dirname, "..", "src/app/[...boardURL]/LandingPage.tsx"),
     "utf8",
   );
   assert.match(
     src,
-    /const routedProjectId = normalizeRequestedProjectId\(searchParams\?\.get\("id"\)\)\s*const slugs = shallowBoardSwitchEnabled && routedProjectId !== null\s*\? String\(routedProjectId\)\s*: slugsProp/,
+    /const routedProjectId = normalizeRequestedProjectId\(searchParams\?\.get\("id"\)\)\s*const slugs = routedProjectId !== null\s*\? String\(routedProjectId\)\s*: slugsProp/,
   );
   assert.match(
     src,
-    /if \(shallowBoardSwitchEnabled && pathname === "\/project"\) \{\s*window\.history\.replaceState\(\s*getNextRouterAwareHistoryState\(window\.history\.state\),\s*"",\s*newUrl,\s*\)\s*\} else \{\s*router\.replace/,
+    /if \(pathname === "\/project"\) \{\s*window\.history\.replaceState\(\s*getNextRouterAwareHistoryState\(window\.history\.state\),\s*"",\s*newUrl,\s*\)\s*\} else \{\s*router\.replace/,
     "expected canonicalization to notify Next, preserve history state, and retain the router fallback",
   );
 });
