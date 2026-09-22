@@ -4,7 +4,7 @@ import { getUserPreferenceFromUserId } from "../get-userSettings-preference";
 import { broadcastInboxChange } from "@/lib/realtime/server";
 import type { Prisma } from "@prisma/client";
 import { withTaskInboxWriteLock } from "@/lib/taskCardActions/writeLocks";
-import { isProjectMuted } from "../projectMute";
+import { filterProjectMutedUserIds, isProjectMuted } from "../projectMute";
 
 type NotificationDatabase = Prisma.TransactionClient | typeof prisma;
 type CreatedNotification = Prisma.NotificationGetPayload<{
@@ -139,6 +139,72 @@ const checkReminderAndCreateNotification = async (
       });
       return notification;
     }
+};
+
+// Batched form of checkReminderAndCreateNotification for one human-inbox event
+// fanned out to many users on the same task (HTPR-6509). Same board-mute and
+// reminder rules, but one task lock and a fixed number of queries per batch
+// instead of a transaction and three or four round trips per recipient.
+export const checkRemindersAndCreateNotifications = async (
+  userIds: number[],
+  projectId: number,
+  taskId: number,
+  payload: Omit<
+    Prisma.NotificationCreateManyInput,
+    "userId" | "agentId" | "fromUserId"
+  > & { fromUserId: number },
+): Promise<void> => {
+  if (userIds.length === 0) return;
+
+  const deliveredUserIds = await withTaskInboxWriteLock(taskId, async (tx) => {
+    const unmutedUserIds = await filterProjectMutedUserIds(
+      userIds,
+      projectId,
+      tx,
+    );
+    if (unmutedUserIds.length === 0) return [];
+
+    const reminders = await tx.reminder.findMany({
+      where: {
+        userId: { in: unmutedUserIds },
+        projectId,
+        taskId,
+        status: "Normal",
+      },
+    });
+    // The single-user path reads one reminder per user; release only that one.
+    const reminderByUserId = new Map<number, (typeof reminders)[number]>();
+    for (const reminder of reminders) {
+      if (!reminderByUserId.has(reminder.userId)) {
+        reminderByUserId.set(reminder.userId, reminder);
+      }
+    }
+    const isSnoozed = (userId: number) =>
+      reminderByUserId.get(userId)?.invokeCondition === "DurationComplete";
+
+    await tx.notification.createMany({
+      data: unmutedUserIds.map((userId) => ({
+        ...payload,
+        userId,
+        ...(isSnoozed(userId) ? { status: "Archive" as const } : {}),
+      })),
+    });
+
+    // Restoring a reminder re-reads the user's newest notification, so it runs
+    // after the insert, as the single-user path does.
+    const delivered: number[] = [];
+    for (const userId of unmutedUserIds) {
+      if (isSnoozed(userId)) continue;
+      const reminder = reminderByUserId.get(userId);
+      if (reminder) await invokeReminder(reminder, tx);
+      delivered.push(userId);
+    }
+    return delivered;
+  });
+
+  for (const userId of deliveredUserIds) {
+    void broadcastInboxChange(userId, { originUserId: payload.fromUserId });
+  }
 };
 
 export default checkReminderAndCreateNotification;

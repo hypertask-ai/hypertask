@@ -9,7 +9,7 @@ import {
   broadcastInboxChange,
   broadcastTaskComment,
 } from "@/lib/realtime/server";
-import checkReminderAndCreateNotification from "@/utils/controllers/notifications/creation-service/check-reminder_create-notification";
+import { checkRemindersAndCreateNotifications } from "@/utils/controllers/notifications/creation-service/check-reminder_create-notification";
 import {
   includeSenderInRecipients,
   shouldNotifyTaskOwnerForComment,
@@ -166,7 +166,7 @@ async function resolveCommentRecipientUserIds(
   return [...recipientUserIds];
 }
 
-async function createNotificationForComment(
+export async function createNotificationForComment(
   task: any,
   comment: any,
   creatorId: number,
@@ -175,118 +175,97 @@ async function createNotificationForComment(
   directReplyUserId?: number | null,
   dedupeByComment = false,
 ) {
-  for (const recipientUserId of recipientUserIds) {
-    // A direct reply gets one addressed Mentioned event below instead of a
-    // routine agent Comment event. Its marker bypasses project-level muting.
-    if (recipientUserId === directReplyUserId) continue;
-    if (
-      dedupeByComment &&
-      (await prisma.notification.findFirst({
-        where: {
-          type: "Comment",
-          commentId: comment.id,
-          userId: recipientUserId,
-          agentId: null,
-        },
-        select: { id: true },
-      }))
-    ) {
-      continue;
-    }
-    await checkReminderAndCreateNotification(
-      recipientUserId,
-      task.projectId,
-      task.id,
-      {
+  // A direct reply gets one addressed Mentioned event below instead of a
+  // routine agent Comment event. Its marker bypasses project-level muting.
+  let humanUserIds = recipientUserIds.filter(
+    (recipientUserId) => recipientUserId !== directReplyUserId,
+  );
+  if (dedupeByComment && humanUserIds.length > 0) {
+    const delivered = await prisma.notification.findMany({
+      where: {
         type: "Comment",
         commentId: comment.id,
-        userId: recipientUserId,
-        taskId: task.id,
-        projectId: task.projectId,
-        fromUserId: creatorId,
-        ...(fromAgentId ? { fromAgentId } : {}),
+        userId: { in: humanUserIds },
+        agentId: null,
       },
-    );
-  }
-
-  // User → Agent: notify agent assignees (agents have no reminders, create directly)
-  const agentAssignees = await prisma.assignees.findMany({
-    where: {
-      taskId: task.id,
-      agentId: { not: null },
-      agent: { revokedAt: null },
-    },
-    include: { agent: { select: { id: true, userId: true } } },
-  });
-
-  for (const a of agentAssignees) {
-    if (!a.agentId || !a.agent) continue;
-    if (
-      dedupeByComment &&
-      (await prisma.notification.findFirst({
-        where: {
-          type: "Comment",
-          commentId: comment.id,
-          agentId: a.agentId,
-        },
-        select: { id: true },
-      }))
-    ) {
-      continue;
-    }
-    await prisma.notification.create({
-      data: {
-        type: "Comment",
-        commentId: comment.id,
-        agentId: a.agentId,
-        userId: a.agent.userId,
-        taskId: task.id,
-        projectId: task.projectId,
-        fromUserId: creatorId,
-        ...(fromAgentId ? { fromAgentId } : {}),
-      },
+      select: { userId: true },
     });
-    void broadcastInboxChange(a.agent.userId, { originUserId: creatorId });
+    const deliveredUserIds = new Set(delivered.map(({ userId }) => userId));
+    humanUserIds = humanUserIds.filter((userId) => !deliveredUserIds.has(userId));
   }
-
-  // User → Agent: notify agent followers (agent-addressed, keeps the owner's user inbox clean)
-  const agentFollowers = await prisma.follower.findMany({
-    where: {
+  await checkRemindersAndCreateNotifications(
+    humanUserIds,
+    task.projectId,
+    task.id,
+    {
+      type: "Comment",
+      commentId: comment.id,
       taskId: task.id,
-      agentId: { not: null },
-      agent: { revokedAt: null },
+      projectId: task.projectId,
+      fromUserId: creatorId,
+      ...(fromAgentId ? { fromAgentId } : {}),
     },
-    include: { agent: { select: { id: true, userId: true } } },
-  });
+  );
+
+  // User → Agent: notify agent assignees and followers (agents have no
+  // reminders, create directly; follower rows keep the owner's user inbox clean)
+  const agentWhere = {
+    taskId: task.id,
+    agentId: { not: null },
+    agent: { revokedAt: null },
+  };
+  const agentInclude = { agent: { select: { id: true, userId: true } } };
+  const [agentAssignees, agentFollowers] = await Promise.all([
+    prisma.assignees.findMany({ where: agentWhere, include: agentInclude }),
+    prisma.follower.findMany({ where: agentWhere, include: agentInclude }),
+  ]);
 
   const notifiedAgentIds = new Set(agentAssignees.map((a) => a.agentId));
-  for (const f of agentFollowers) {
-    if (!f.agentId || !f.agent || notifiedAgentIds.has(f.agentId)) continue;
-    if (
-      dedupeByComment &&
-      (await prisma.notification.findFirst({
-        where: {
-          type: "Comment",
-          commentId: comment.id,
-          agentId: f.agentId,
-        },
-        select: { id: true },
-      }))
-    ) {
-      continue;
-    }
-    await prisma.notification.create({
-      data: {
+  const assigneeAgents = agentAssignees.flatMap((a) =>
+    a.agentId && a.agent ? [{ agentId: a.agentId, userId: a.agent.userId }] : [],
+  );
+  const followerAgents = agentFollowers.flatMap((f) =>
+    f.agentId && f.agent && !notifiedAgentIds.has(f.agentId)
+      ? [{ agentId: f.agentId, userId: f.agent.userId }]
+      : [],
+  );
+  let deliveredAgentIds = new Set<string | null>();
+  if (dedupeByComment && assigneeAgents.length + followerAgents.length > 0) {
+    const delivered = await prisma.notification.findMany({
+      where: {
         type: "Comment",
         commentId: comment.id,
-        agentId: f.agentId,
-        userId: f.agent.userId,
-        taskId: task.id,
-        projectId: task.projectId,
-        fromUserId: creatorId,
-        ...(fromAgentId ? { fromAgentId } : {}),
+        agentId: {
+          in: [...assigneeAgents, ...followerAgents].map((a) => a.agentId),
+        },
       },
+      select: { agentId: true },
     });
+    deliveredAgentIds = new Set(delivered.map(({ agentId }) => agentId));
+  }
+  const newAssigneeAgents = assigneeAgents.filter(
+    (a) => !deliveredAgentIds.has(a.agentId),
+  );
+  const newAgents = [
+    ...newAssigneeAgents,
+    ...followerAgents.filter((f) => !deliveredAgentIds.has(f.agentId)),
+  ];
+  if (newAgents.length === 0) return;
+
+  await prisma.notification.createMany({
+    data: newAgents.map(({ agentId, userId }) => ({
+      type: "Comment",
+      commentId: comment.id,
+      agentId,
+      userId,
+      taskId: task.id,
+      projectId: task.projectId,
+      fromUserId: creatorId,
+      ...(fromAgentId ? { fromAgentId } : {}),
+    })),
+  });
+  for (const a of newAssigneeAgents) {
+    void broadcastInboxChange(a.userId, { originUserId: creatorId });
   }
 }
 
