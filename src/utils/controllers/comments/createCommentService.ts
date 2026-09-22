@@ -243,13 +243,15 @@ export async function createNotificationForComment(
     });
     deliveredAgentIds = new Set(delivered.map(({ agentId }) => agentId));
   }
-  const newAssigneeAgents = assigneeAgents.filter(
-    (a) => !deliveredAgentIds.has(a.agentId),
-  );
-  const newAgents = [
-    ...newAssigneeAgents,
-    ...followerAgents.filter((f) => !deliveredAgentIds.has(f.agentId)),
-  ];
+  // On replay, a row queued earlier in this batch counts as delivered, as it
+  // did when each row was checked right after the previous insert.
+  const isNew = ({ agentId }: { agentId: string }) => {
+    if (deliveredAgentIds.has(agentId)) return false;
+    if (dedupeByComment) deliveredAgentIds.add(agentId);
+    return true;
+  };
+  const newAssigneeAgents = assigneeAgents.filter(isNew);
+  const newAgents = [...newAssigneeAgents, ...followerAgents.filter(isNew)];
   if (newAgents.length === 0) return;
 
   await prisma.notification.createMany({

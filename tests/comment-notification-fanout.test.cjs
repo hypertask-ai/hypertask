@@ -302,7 +302,13 @@ test("dedupe, board mute and reminder rules pick the same recipients as before",
     ],
     agentAssignees: [agent("agent-a", 40), agent("agent-b", 41)],
     // agent-a is an assignee already handled above, even though it was deduped.
-    agentFollowers: [agent("agent-a", 40), agent("agent-c", 42)],
+    // Follower rows have no unique index, so one agent can appear twice; a
+    // replay still writes a single row for it.
+    agentFollowers: [
+      agent("agent-a", 40),
+      agent("agent-c", 42),
+      agent("agent-c", 42),
+    ],
   });
   const { createNotificationForComment, broadcasts, invoked } =
     loadFanout(database);
