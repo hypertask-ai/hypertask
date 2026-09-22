@@ -87,7 +87,7 @@ jobs:
             exit 1
           }
 
-          expected=$(printf '%s\n' app-smoke ci-tests claude-review feature-flag-gate next-public-secrets pr-title revert-guard secret-scan | sort)
+          expected=$(printf '%s\n' app-smoke browser-smoke ci-tests claude-review feature-flag-gate next-public-secrets pr-title revert-guard secret-scan | sort)
           actual=$(jq -r '
             [.rules[] | select(.type == "required_status_checks") |
               .parameters.required_status_checks[].context] | sort | .[]
@@ -347,6 +347,97 @@ jobs:
             coverage/critical-domains.md
           if-no-files-found: warn
           retention-days: 30
+
+  browser-smoke:
+    name: browser-smoke
+    if: github.event_name == 'push' || (github.event.pull_request.draft == false && (!endsWith(github.event.pull_request.user.login, '[bot]') || github.event.pull_request.user.login == 'dependabot[bot]') && contains(github.event.pull_request.labels.*.name, 'full-ci'))
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 20
+          cache: npm
+      - name: Require plain-user session and read-only fixtures
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          SESSION_SECRET: ${{ secrets.SESSION_SECRET }}
+          JWT_SECRET: ${{ secrets.JWT_SECRET }}
+          SMOKE_PLAIN_SESSION_STATE: ${{ secrets.SMOKE_PLAIN_SESSION_STATE }}
+          SMOKE_PLAIN_BOARD_PATH: ${{ vars.SMOKE_PLAIN_BOARD_PATH }}
+          SMOKE_DEMO_BOARD_PATH: ${{ vars.SMOKE_DEMO_BOARD_PATH }}
+          NEXT_PUBLIC_PUSHER_KEY: ${{ vars.NEXT_PUBLIC_PUSHER_KEY }}
+          PUSHER_APP_ID: ${{ vars.PUSHER_APP_ID }}
+          PUSHER_SECRET: ${{ secrets.PUSHER_SECRET }}
+        run: |
+          for name in DATABASE_URL SMOKE_PLAIN_SESSION_STATE SMOKE_PLAIN_BOARD_PATH SMOKE_DEMO_BOARD_PATH NEXT_PUBLIC_PUSHER_KEY PUSHER_APP_ID PUSHER_SECRET; do
+            [ -n "${!name}" ] || { echo "::error::$name is required for browser-smoke"; exit 1; }
+          done
+          [ -n "$SESSION_SECRET" ] || [ -n "$JWT_SECRET" ] || { echo '::error::SESSION_SECRET or JWT_SECRET is required for browser-smoke'; exit 1; }
+      - name: Install dependencies and Chromium
+        run: |
+          npm ci --prefer-offline --no-audit --no-fund
+          npx prisma generate
+          npx playwright install --with-deps chromium
+      - name: Build the local app (no migrations)
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          SESSION_SECRET: ${{ secrets.SESSION_SECRET }}
+          JWT_SECRET: ${{ secrets.JWT_SECRET }}
+          NEXT_PUBLIC_PUSHER_KEY: ${{ vars.NEXT_PUBLIC_PUSHER_KEY }}
+          NEXT_PUBLIC_PUSHER_HOST: ${{ vars.NEXT_PUBLIC_PUSHER_HOST }}
+          NEXT_PUBLIC_PUSHER_PORT: ${{ vars.NEXT_PUBLIC_PUSHER_PORT }}
+          NEXT_PUBLIC_PUSHER_USE_TLS: ${{ vars.NEXT_PUBLIC_PUSHER_USE_TLS }}
+          NEXT_PUBLIC_PUSHER_CLUSTER: ${{ vars.NEXT_PUBLIC_PUSHER_CLUSTER }}
+        run: npx next build --webpack
+      - name: Write plain-user session for localhost
+        env:
+          SMOKE_PLAIN_SESSION_STATE: ${{ secrets.SMOKE_PLAIN_SESSION_STATE }}
+        run: |
+          mkdir -p e2e/smoke/.state
+          node - <<'NODE'
+          const fs = require('node:fs')
+          const state = JSON.parse(process.env.SMOKE_PLAIN_SESSION_STATE)
+          if (!Array.isArray(state.cookies)) throw new Error('SMOKE_PLAIN_SESSION_STATE must be Playwright storageState JSON')
+          for (const cookie of state.cookies) {
+            cookie.domain = '127.0.0.1'
+            cookie.secure = false
+          }
+          state.origins = []
+          fs.writeFileSync('e2e/smoke/.state/smoke-state.json', JSON.stringify(state), { mode: 0o600 })
+          NODE
+      - name: Serve and check logged-in pages
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          SESSION_SECRET: ${{ secrets.SESSION_SECRET }}
+          JWT_SECRET: ${{ secrets.JWT_SECRET }}
+          BASE_URL: http://127.0.0.1:3100
+          SMOKE_BOARD_PATH: ${{ vars.SMOKE_PLAIN_BOARD_PATH }}
+          SMOKE_DEMO_BOARD_PATH: ${{ vars.SMOKE_DEMO_BOARD_PATH }}
+          BROWSER_SMOKE_PR: '1'
+          PUSHER_APP_ID: ${{ vars.PUSHER_APP_ID }}
+          PUSHER_KEY: ${{ vars.NEXT_PUBLIC_PUSHER_KEY }}
+          PUSHER_SECRET: ${{ secrets.PUSHER_SECRET }}
+          PUSHER_HOST: ${{ vars.PUSHER_HOST }}
+          PUSHER_PORT: ${{ vars.PUSHER_PORT }}
+          PUSHER_USE_TLS: ${{ vars.PUSHER_USE_TLS }}
+          PUSHER_CLUSTER: ${{ vars.PUSHER_CLUSTER }}
+        run: |
+          npx next start -H 127.0.0.1 -p 3100 > "$RUNNER_TEMP/browser-smoke-server.log" 2>&1 &
+          server=$!
+          trap 'kill "$server" 2>/dev/null || true' EXIT
+          for attempt in {1..60}; do
+            if curl -fsS -o /dev/null "$BASE_URL/login"; then break; fi
+            kill -0 "$server" 2>/dev/null || { echo '::error::Local app exited before it became ready'; exit 1; }
+            sleep 2
+          done
+          curl -fsS -o /dev/null "$BASE_URL/login" || { echo '::error::Local app did not become ready'; exit 1; }
+          npx playwright test -c playwright.config.smoke.ts e2e/smoke/prod.spec.ts
 
   production-test-warning:
     name: production-test-warning

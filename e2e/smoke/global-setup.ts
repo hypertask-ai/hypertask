@@ -1,5 +1,5 @@
 import { chromium, type FullConfig } from '@playwright/test'
-import { mkdirSync, rmSync, writeFileSync } from 'node:fs'
+import { mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import path from 'node:path'
 
 // Confirms the smoke session is actually logged in BEFORE any view test runs.
@@ -34,6 +34,19 @@ export default async function globalSetup(config: FullConfig) {
   const { baseURL, storageState } = project.use
   if (typeof baseURL !== 'string' || !baseURL) fail('smoke config has no baseURL')
   if (typeof storageState !== 'string' || !storageState) fail('smoke config has no storageState file')
+  if (process.env.BROWSER_SMOKE_PR) {
+    const state = JSON.parse(readFileSync(storageState, 'utf8')) as { cookies?: Array<{ name: string; value: string }> }
+    const token = state.cookies?.find((cookie) => cookie.name === 'ht_session')?.value
+    let id: unknown
+    try {
+      id = JSON.parse(Buffer.from(token?.split('.')[0] ?? '', 'base64url').toString()).id
+    } catch {
+      fail('PR browser smoke requires a valid SMOKE_PLAIN_SESSION_STATE ht_session cookie')
+    }
+    if (typeof id !== 'number' || id === 6 || id === 985 || id <= 0) {
+      fail('PR browser smoke requires a plain user session (not owner 6 or QA 985)')
+    }
+  }
 
   const browser = await chromium.launch()
   try {

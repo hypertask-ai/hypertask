@@ -75,6 +75,12 @@ export function realtimeDisabledForBrowser(
     return true;
   }
 
+  const preference = new URLSearchParams(browser.location.search).get("realtime");
+  if (preference === "on") {
+    updateRealtimePreference(browser.sessionStorage, false);
+    return false;
+  }
+
   // agent-browser launches headless Chrome without the WebDriver automation
   // flag, so navigator.webdriver can be false even though no human is using
   // the tab. HeadlessChrome remains in its browser UA and is the stable signal
@@ -89,16 +95,9 @@ export function realtimeDisabledForBrowser(
     return true;
   }
 
-  const preference = new URLSearchParams(browser.location.search).get(
-    "realtime",
-  );
   if (preference === "off") {
     updateRealtimePreference(browser.sessionStorage, true);
     return true;
-  }
-  if (preference === "on") {
-    updateRealtimePreference(browser.sessionStorage, false);
-    return false;
   }
 
   try {

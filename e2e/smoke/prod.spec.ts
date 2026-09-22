@@ -85,6 +85,8 @@ const VIEWS: Array<{
   // buildBoardRouteTitle: "<board> • Hypertask", bare "Hypertask" = no board data.
   // .kanban-column-title — src/components/PageComponents/Kanban/KanbanSectionComponents/section.tsx
   { name: 'kanban board', path: process.env.SMOKE_BOARD_PATH, requiresFixture: true, titlePattern: /• Hypertask$/, notTitle: /^Hypertask$/, selector: '.kanban-column-title' },
+  // /demo itself provisions a guest (a write); use a pre-seeded demo board in PR CI.
+  ...(process.env.BROWSER_SMOKE_PR ? [{ name: 'demo board', path: process.env.SMOKE_DEMO_BOARD_PATH, titlePattern: /• Hypertask$/, notTitle: /^Hypertask$/, selector: '.kanban-column-title' }] : []),
   // Task detail: "<ticket> <title> - Hypertask"; a missing task renders
   // "undefined undefined - Hypertask".
   // <textarea id="title-input"> — src/components/PageComponents/TaskDetail/TopRow/TaskTitle.tsx
@@ -121,10 +123,25 @@ for (const view of VIEWS) {
 
     const pageErrors: Error[] = []
     page.on('pageerror', (err) => pageErrors.push(err))
+    let navigations = 0
+    let boardFetches = 0
+    if (process.env.BROWSER_SMOKE_PR) {
+      page.on('framenavigated', (frame) => {
+        if (frame === page.mainFrame()) navigations++
+      })
+      page.on('request', (request) => {
+        // This hydrates the active board in the projectsAll cache used by useProjectQuery.
+        if (new URL(request.url()).pathname === '/api/projects/boardTasks') boardFetches++
+      })
+    }
 
     let response
     try {
-      response = await page.goto(view.path!, { waitUntil: 'load' })
+      const url = new URL(view.path!, 'http://127.0.0.1')
+      if (process.env.BROWSER_SMOKE_PR && (view.name === 'kanban board' || view.name === 'demo board')) {
+        url.searchParams.set('realtime', 'on')
+      }
+      response = await page.goto(`${url.pathname}${url.search}${url.hash}`, { waitUntil: 'load' })
     } catch (err) {
       if (isUnrunnableError(err)) {
         markUnrunnable(`navigation infrastructure failed on ${view.path}`)
@@ -132,6 +149,7 @@ for (const view of VIEWS) {
       throw err
     }
 
+    const loadedAt = Date.now()
     if (isBotChallenge(response)) {
       abortUnrunnable(`Vercel bot-challenged the runner IP on ${view.path}`)
     }
@@ -188,6 +206,13 @@ for (const view of VIEWS) {
       expect(bodyText, `${view.path} rendered an error page`).not.toMatch(marker)
     }
 
+    if (process.env.BROWSER_SMOKE_PR) {
+      await page.waitForTimeout(Math.max(0, 30_000 - (Date.now() - loadedAt)))
+      expect(navigations, `${view.name} reloaded ${navigations} times`).toBeLessThanOrEqual(1)
+      if (view.name === 'kanban board' || view.name === 'demo board') {
+        expect(boardFetches, `${view.name} refetched board data ${boardFetches} times`).toBeLessThanOrEqual(1)
+      }
+    }
     expect(pageErrors, `${view.path} threw a page error: ${pageErrors[0]?.message}`).toHaveLength(0)
   })
 }

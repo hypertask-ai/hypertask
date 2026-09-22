@@ -19,6 +19,36 @@ Without `SMOKE_BOARD_PATH`/`SMOKE_TASK_PATH` the kanban-board and task-detail
 checks are skipped (they have nothing real to open) — the other six views
 still run. Set them once the seeded account exists.
 
+## Required PR browser check
+
+`browser-smoke` runs the same spec against a locally built app on a hosted runner,
+with `BASE_URL=http://127.0.0.1:3100` and `BROWSER_SMOKE_PR=1`. It never opens
+`/demo`: that route creates a guest and writes to the shared live database.
+A human must provision a **plain, low-privilege account** (neither owner id 6
+nor QA id 985) with access to an existing normal board and an existing demo
+board with columns. Set these repository credentials/configuration before
+requiring this check in the production ruleset:
+
+- `DATABASE_URL` (secret) — the same database used by the seeded boards.
+- `SESSION_SECRET` or `JWT_SECRET` (secret) — whichever signs production `ht_session` cookies.
+- `SMOKE_PLAIN_SESSION_STATE` (secret) — this account's Playwright `storageState`
+  JSON containing a current `ht_session` and `nookies_user`; renew when expired.
+- `SMOKE_PLAIN_BOARD_PATH` (var) — path of the account's seeded normal board
+  (passed to the spec as `SMOKE_BOARD_PATH`; distinct from the production smoke account).
+- `SMOKE_DEMO_BOARD_PATH` (var) — path of the existing demo board accessible
+  by this account (not `/demo` itself).
+- `NEXT_PUBLIC_PUSHER_KEY`, `PUSHER_APP_ID` (vars), `PUSHER_SECRET` (secret) —
+  realtime subscription credentials. If production uses a custom Pusher host,
+  also mirror its `NEXT_PUBLIC_PUSHER_HOST`, `NEXT_PUBLIC_PUSHER_PORT`,
+  `NEXT_PUBLIC_PUSHER_USE_TLS`, `PUSHER_HOST`, `PUSHER_PORT`, and
+  `PUSHER_USE_TLS` vars (and cluster vars if applicable).
+
+The job fails rather than skips when any required input is missing, the
+session belongs to the owner/QA, or the login preflight redirects. It rewrites
+cookie domains only in the runner's ignored state file for localhost; it does
+not upload that file. The production ruleset must also add the `browser-smoke`
+context before the changed `ci-tests` live-ruleset assertion will pass.
+
 ## Selectors
 
 Each view in `prod.spec.ts` asserts one route-specific DOM element (a
