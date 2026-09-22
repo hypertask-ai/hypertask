@@ -136,6 +136,17 @@ if mode=='findings':
 
 
 class ReportTests(unittest.TestCase):
+    def test_security_entry_points_precede_documentation_backlog(self):
+        planner=load('strix-review-batches')
+        with tempfile.TemporaryDirectory() as temp:
+            root=Path(temp)
+            paths=['docs/auth.md','.claude/skills/a.md','src/components/Button.tsx','src/lib/auth/session.ts']
+            for name in paths:
+                p=root/name;p.parent.mkdir(parents=True,exist_ok=True);p.write_text('source')
+            batches=planner.plan(root,paths,max_files=1)
+            self.assertEqual(batches[0],['src/lib/auth/session.ts'])
+            self.assertEqual(batches[1],['src/components/Button.tsx'])
+
     def test_narrative_findings_are_not_silently_discarded(self):
         reporter=load('strix-file-tickets')
         with tempfile.TemporaryDirectory() as temp:
