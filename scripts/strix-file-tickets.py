@@ -224,6 +224,10 @@ def ticket_description(finding, severity, run):
     reproduction = esc(
         json.dumps(finding.get("reproduction") or finding.get("proof_of_concept") or "")
     )[:2000]
+    locations = "".join(
+        f"<li><code>{esc(location.get('file'))}:{esc(location.get('start_line'))}</code></li>"
+        for location in (finding.get("code_locations") or [])[:5]
+    )
     return (
         f"<p><strong>{impact}</strong></p>"
         f"<p><strong>What went wrong</strong></p>"
@@ -236,6 +240,8 @@ def ticket_description(finding, severity, run):
         f"<p>The reproduction is blocked and the intended behavior still works.</p>"
         f"<p><strong>Technical detail</strong></p>"
         f"<p>{esc(finding.get('technical_analysis', ''))[:3000]}</p>"
+        f"<ul>{locations}</ul>"
+        f"<p>Source revision: <code>{esc(os.environ.get('STRIX_SOURCE_REVISION', 'see run report'))}</code></p>"
         f"<p><strong>Reproduction</strong></p>"
         f"<p>{reproduction}</p>"
         f"<p><strong>Where things are</strong></p>"
