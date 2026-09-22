@@ -141,21 +141,47 @@ const checkReminderAndCreateNotification = async (
     }
 };
 
+type BatchNotificationPayload = Omit<
+  Prisma.NotificationCreateManyInput,
+  "userId" | "agentId" | "fromUserId"
+> & { fromUserId: number };
+
+// Recipients per task inbox lock. Each chunk is one short transaction, so a
+// reminder-heavy batch stays inside Prisma's interactive transaction timeout
+// and other writers on the same lock (mentions, reminders) get a turn between
+// chunks instead of waiting behind the whole fan-out.
+export const NOTIFICATION_LOCK_CHUNK_SIZE = 10;
+
 // Batched form of checkReminderAndCreateNotification for one human-inbox event
 // fanned out to many users on the same task (HTPR-6509). Same board-mute and
-// reminder rules, but one task lock and a fixed number of queries per batch
+// reminder rules, but a fixed number of queries per chunk of recipients
 // instead of a transaction and three or four round trips per recipient.
 export const checkRemindersAndCreateNotifications = async (
   userIds: number[],
   projectId: number,
   taskId: number,
-  payload: Omit<
-    Prisma.NotificationCreateManyInput,
-    "userId" | "agentId" | "fromUserId"
-  > & { fromUserId: number },
+  payload: BatchNotificationPayload,
 ): Promise<void> => {
-  if (userIds.length === 0) return;
+  for (
+    let start = 0;
+    start < userIds.length;
+    start += NOTIFICATION_LOCK_CHUNK_SIZE
+  ) {
+    await createNotificationChunk(
+      userIds.slice(start, start + NOTIFICATION_LOCK_CHUNK_SIZE),
+      projectId,
+      taskId,
+      payload,
+    );
+  }
+};
 
+const createNotificationChunk = async (
+  userIds: number[],
+  projectId: number,
+  taskId: number,
+  payload: BatchNotificationPayload,
+): Promise<void> => {
   const deliveredUserIds = await withTaskInboxWriteLock(taskId, async (tx) => {
     const unmutedUserIds = await filterProjectMutedUserIds(
       userIds,
@@ -191,7 +217,9 @@ export const checkRemindersAndCreateNotifications = async (
     });
 
     // Restoring a reminder re-reads the user's newest notification, so it runs
-    // after the insert, as the single-user path does.
+    // after the insert, as the single-user path does. It stays inside the lock:
+    // the lock is what stops a concurrent reminder restore from undoing an
+    // explicit archive (writeLocks.ts).
     const delivered: number[] = [];
     for (const userId of unmutedUserIds) {
       if (isSnoozed(userId)) continue;

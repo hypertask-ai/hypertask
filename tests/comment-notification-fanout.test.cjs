@@ -35,6 +35,8 @@ function createDatabase({
   agentFollowers = [],
 } = {}) {
   const calls = [];
+  let transactionCount = 0;
+  let transactionIndex = 0;
   const notifications = existing.map((row) => ({ ...row }));
   let nextId = 1000;
   const insert = (data) => {
@@ -51,7 +53,8 @@ function createDatabase({
       : matchesId(where.agentId, row.agentId));
 
   function client(label) {
-    const record = (name) => calls.push({ name, client: label });
+    const record = (name, extra = {}) =>
+      calls.push({ name, client: label, transactionIndex, ...extra });
     return {
       label,
       $executeRaw: async () => {
@@ -108,7 +111,7 @@ function createDatabase({
           return insert(data);
         },
         createMany: async ({ data }) => {
-          record("notification.createMany");
+          record("notification.createMany", { size: data.length });
           data.forEach(insert);
           return { count: data.length };
         },
@@ -131,8 +134,14 @@ function createDatabase({
   const tx = client("tx");
   const prisma = client("prisma");
   prisma.$transaction = async (callback) => {
-    calls.push({ name: "$transaction", client: "prisma" });
-    return callback(tx);
+    transactionCount += 1;
+    transactionIndex = transactionCount;
+    calls.push({ name: "$transaction", client: "prisma", transactionIndex });
+    try {
+      return await callback(tx);
+    } finally {
+      transactionIndex = 0;
+    }
   };
   return { prisma, tx, calls, notifications };
 }
@@ -153,6 +162,13 @@ function loadFanout(database) {
       __esModule: true,
       default: async (reminder, client) => {
         invoked.push({ reminderId: reminder.id, client: client?.label });
+        database.calls.push({
+          name: "invokeReminder",
+          userId: reminder.userId,
+          transactionIndex: database.calls.findLast(
+            (call) => call.name === "$transaction",
+          )?.transactionIndex,
+        });
       },
     },
     "src/utils/controllers/notifications/IdsToSendNotificationsTo.ts": {
@@ -262,18 +278,87 @@ async function countQueries({ humanCount, dedupeByComment }) {
   return database.calls.map((call) => call.name);
 }
 
-test("fan-out query count does not grow with the number of recipients", async () => {
+test("fan-out costs a fixed number of queries per chunk of ten recipients", async () => {
   for (const dedupeByComment of [false, true]) {
     const five = await countQueries({ humanCount: 5, dedupeByComment });
     const ten = await countQueries({ humanCount: 10, dedupeByComment });
+    const twenty = await countQueries({ humanCount: 20, dedupeByComment });
     console.log(
       `[HTPR-6509] 5 humans + 2 agent assignees, dedupe=${dedupeByComment}: ${five.length} calls`,
       JSON.stringify(five),
     );
+    const transactions = (names) =>
+      names.filter((name) => name === "$transaction").length;
     assert.equal(ten.length, five.length);
-    assert.equal(five.filter((name) => name === "$transaction").length, 1);
-    assert.equal(five.filter((name) => name === "$executeRaw").length, 1);
+    assert.equal(transactions(ten), 1);
+    assert.equal(transactions(twenty), 2);
+    // A second chunk adds exactly: transaction, lock, mute read, reminder
+    // read, createMany. Nothing per recipient.
+    assert.equal(twenty.length - ten.length, 5);
   }
+});
+
+test("a 50-recipient comment with reminders holds the lock per chunk of ten", async () => {
+  const newNotificationUserIds = [11, 19, 25, 26, 40, 60];
+  const database = createDatabase({
+    reminders: [
+      ...newNotificationUserIds.map((userId) => ({
+        id: userId,
+        userId,
+        status: "Normal",
+        invokeCondition: "NewNotification",
+      })),
+      { id: 30, userId: 30, status: "Normal", invokeCondition: "DurationComplete" },
+    ],
+  });
+  const { createNotificationForComment, broadcasts, invoked } =
+    loadFanout(database);
+  const recipients = humans(50);
+
+  await createNotificationForComment(task, comment, 7, recipients, null, null, false);
+
+  const transactions = database.calls.filter((call) => call.name === "$transaction");
+  assert.equal(transactions.length, 5);
+  const writes = database.calls.filter(
+    (call) => call.name === "notification.createMany" && call.client === "tx",
+  );
+  assert.deepEqual(
+    writes.map((call) => call.size),
+    [10, 10, 10, 10, 10],
+  );
+  // Every reminder release runs inside the lock of the chunk holding its user.
+  const releases = database.calls.filter((call) => call.name === "invokeReminder");
+  assert.deepEqual(
+    releases.map(({ userId, transactionIndex }) => [userId, transactionIndex]),
+    [
+      [11, 1],
+      [19, 1],
+      [25, 2],
+      [26, 2],
+      [40, 3],
+      [60, 5],
+    ],
+  );
+  assert.ok(invoked.every(({ client }) => client === "tx"));
+  // Mute and reminder reads are per chunk, never per recipient.
+  assert.equal(
+    database.calls.filter((call) => call.name === "reminder.findMany").length,
+    5,
+  );
+
+  const created = database.notifications.filter((row) => row.id > 1000);
+  assert.deepEqual(
+    created.map((row) => row.userId),
+    recipients,
+  );
+  assert.deepEqual(
+    created.filter((row) => row.status === "Archive").map((row) => row.userId),
+    [30],
+  );
+  assert.deepEqual(
+    broadcasts.map(({ userId }) => userId),
+    recipients.filter((userId) => userId !== 30),
+  );
 });
 
 test("no human recipients means no inbox lock is taken", async () => {
