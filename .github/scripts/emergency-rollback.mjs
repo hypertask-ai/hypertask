@@ -44,6 +44,31 @@ async function recheckLiveProduction(fetchImpl, token, liveId, failingSha) {
 }
 
 const GITHUB_API = "https://api.github.com";
+const ROLLBACK_EMAIL = "hypertask-rollback@users.noreply.github.com";
+const ROLLBACK_IDENTITY = { name: "Hypertask Rollback Bot", email: ROLLBACK_EMAIL };
+
+async function rollbackOf(commit, fetchImpl, repo, token) {
+  const match = /^Revert ([a-f0-9]{7}): production smoke failed \(auto-rollback\)\n\nAuto-Rollback-Of: ([a-f0-9]{40})$/.exec(commit.message ?? "");
+  if (!match || match[1] !== match[2].slice(0, 7) || !commit.tree?.sha ||
+    commit.parents?.length !== 1 || commit.author?.email !== ROLLBACK_EMAIL ||
+    commit.committer?.email !== ROLLBACK_EMAIL) return null;
+  const original = await github(fetchImpl, repo, token, `/git/commits/${match[2]}`);
+  const parent = original.parents?.[0]?.sha;
+  if (!parent) return null;
+  const previous = await github(fetchImpl, repo, token, `/git/commits/${parent}`);
+  return previous.tree?.sha === commit.tree.sha ? match[2] : null;
+}
+
+async function priorRollback(head, failingSha, fetchImpl, repo, token) {
+  let cursor = head;
+  for (let i = 0; cursor !== failingSha && i < 100; i++) {
+    const commit = await github(fetchImpl, repo, token, `/git/commits/${cursor}`);
+    if (await rollbackOf(commit, fetchImpl, repo, token) === failingSha) return cursor;
+    cursor = commit.parents?.[0]?.sha;
+    if (!cursor) break;
+  }
+  return null;
+}
 
 async function github(fetchImpl, repo, token, path, method = "GET", body) {
   const result = await getJsonRequest(fetchImpl, `${GITHUB_API}/repos/${repo}${path}`, token, method, body);
@@ -78,7 +103,7 @@ async function revertProduction(failingSha, fetchImpl, repo, token) {
   const refPath = "/git/ref/heads/production";
   const head = (await github(fetchImpl, repo, token, refPath)).object.sha;
   const failing = await github(fetchImpl, repo, token, `/git/commits/${failingSha}`);
-  if (/^Revert [a-f0-9]{7,40}: production smoke failed \(auto-rollback\)/.test(failing.message ?? "")) {
+  if (await rollbackOf(failing, fetchImpl, repo, token)) {
     return { status: "auto-rollback", reason: "failing SHA is itself an auto-rollback commit", dropped: [] };
   }
   const parent = failing.parents?.[0]?.sha;
@@ -91,7 +116,7 @@ async function revertProduction(failingSha, fetchImpl, repo, token) {
   while (cursor !== failingSha) {
     if (dropped.length >= 100) throw new Error("failing SHA not found in production's first 100 commits");
     const commit = await github(fetchImpl, repo, token, `/git/commits/${cursor}`);
-    if (commit.message?.startsWith(`Revert ${failingSha.slice(0, 7)}: production smoke failed (auto-rollback)`)) {
+    if (await rollbackOf(commit, fetchImpl, repo, token) === failingSha) {
       return { status: "already-reverted", sha: cursor, dropped: [] };
     }
     dropped.push({ sha: cursor, title: commit.message?.split("\n")[0] ?? "" });
@@ -104,12 +129,20 @@ async function revertProduction(failingSha, fetchImpl, repo, token) {
   // Git trees snapshot the entire state; parenting that snapshot to the
   // current HEAD reverts X..HEAD atomically, including merges and deletions.
   const previous = await github(fetchImpl, repo, token, `/git/commits/${parent}`);
-  const message = `Revert ${failingSha.slice(0, 7)}: production smoke failed (auto-rollback)`;
+  const message = `Revert ${failingSha.slice(0, 7)}: production smoke failed (auto-rollback)\n\nAuto-Rollback-Of: ${failingSha}`;
   const commit = await github(fetchImpl, repo, token, "/git/commits", "POST", {
-    message, tree: previous.tree.sha, parents: [head],
+    message, tree: previous.tree.sha, parents: [head], author: ROLLBACK_IDENTITY, committer: ROLLBACK_IDENTITY,
   });
-  // A non-force ref update fails closed if another merge landed in the meantime.
-  await github(fetchImpl, repo, token, refPath, "PATCH", { sha: commit.sha, force: false });
+  // A non-force ref update fails closed unless another rollback won the race.
+  const update = await getJsonRequest(fetchImpl, `${GITHUB_API}/repos/${repo}${refPath}`, token, "PATCH", { sha: commit.sha, force: false });
+  if (!update.ok) {
+    if (update.status === 422) {
+      const current = (await github(fetchImpl, repo, token, refPath)).object.sha;
+      const existing = await priorRollback(current, failingSha, fetchImpl, repo, token);
+      if (existing) return { status: "already-reverted", sha: existing, dropped: [] };
+    }
+    throw new Error(`GitHub PATCH ${refPath}: HTTP ${update.status}`);
+  }
   return { status: "created", sha: commit.sha, revertedThrough: head, dropped };
 }
 
@@ -156,18 +189,14 @@ export async function emergencyRollback(failingSha, token, fetchImpl = fetch, de
     revert = { status: "failed", reason: err.message };
     console.error(`Revert failed: ${err.message}`);
   }
-  if (revert.status === "auto-rollback") {
-    promotion = { action: "skip", reason: "failing SHA is an auto-rollback commit" };
-  } else {
-    try {
-      if (!token) throw new Error("missing VERCEL_TOKEN");
-      promotion = await promoteVerifiedDeployment(failingSha, token, fetchImpl, delayImpl, repo || "hypertask-ai/hypertask", githubToken);
-      if (promotion.action === "failed") throw new Error(promotion.reason);
-    } catch (err) {
-      errors.promotion = err.message;
-      promotion = { action: "failed", reason: err.message };
-      console.error(`Promotion failed: ${err.message}`);
-    }
+  try {
+    if (!token) throw new Error("missing VERCEL_TOKEN");
+    promotion = await promoteVerifiedDeployment(failingSha, token, fetchImpl, delayImpl, repo || "hypertask-ai/hypertask", githubToken);
+    if (promotion.action === "failed") throw new Error(promotion.reason);
+  } catch (err) {
+    errors.promotion = err.message;
+    promotion = { action: "failed", reason: err.message };
+    console.error(`Promotion failed: ${err.message}`);
   }
   return {
     action: Object.keys(errors).length ? "failed" : revert.status === "created" ? "requested" : "skip",

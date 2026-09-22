@@ -12,6 +12,11 @@ const REVERT = "d".repeat(40);
 const OLD = "e".repeat(40);
 const gh = "https://api.github.com/repos/hypertask-ai/hypertask";
 const vercel = "https://api.vercel.com";
+const identity = { name: "Hypertask Rollback Bot", email: "hypertask-rollback@users.noreply.github.com" };
+const rollback = (sha, parent = PARENT) => ({
+  parents: [{ sha: parent }], tree: { sha: "old-tree" }, author: identity, committer: identity,
+  message: `Revert ${sha.slice(0, 7)}: production smoke failed (auto-rollback)\n\nAuto-Rollback-Of: ${sha}`,
+});
 
 async function run(overrides = {}, opts = {}) {
   const calls = [];
@@ -33,7 +38,7 @@ async function run(overrides = {}, opts = {}) {
     calls.push({ key, body: init.body && JSON.parse(init.body) });
     if (!(key in replies)) throw Error(`unexpected ${key}`);
     const value = replies[key];
-    const item = Array.isArray(value) ? value.shift() : value;
+    const item = Array.isArray(value) ? (value.length > 1 ? value.shift() : value[0]) : value;
     const status = typeof item === "number" ? item : 200;
     return { ok: status >= 200 && status < 300, status, json: async () => item };
   };
@@ -53,6 +58,9 @@ test("freezes merges, commits the pre-failure tree, and leaves Vercel alone with
   assert.equal(result.freeze, true);
   assert.deepEqual(result.revert, { status: "created", sha: REVERT, revertedThrough: X, dropped: [{ sha: X, title: "bad merge" }] });
   assert.equal(called(calls, "POST https://api.github.com/repos/hypertask-ai/hypertask/git/commits").body.tree, "old-tree");
+  assert.equal(called(calls, `POST ${gh}/git/commits`).body.author.email, identity.email);
+  assert.equal(called(calls, `POST ${gh}/git/commits`).body.committer.email, identity.email);
+  assert.match(called(calls, `POST ${gh}/git/commits`).body.message, new RegExp(`Auto-Rollback-Of: ${X}$`));
   assert.deepEqual(called(calls, "PATCH https://api.github.com/repos/hypertask-ai/hypertask/git/ref/heads/production").body, { sha: REVERT, force: false });
   assert.equal(calls.some((c) => c.key.includes("/promote/")), false);
 });
@@ -66,23 +74,41 @@ test("production moved past X: revert the entire range in one commit", async () 
 
 test("a prior revert of X skips a second revert, but still freezes merges", async () => {
   const { result, calls } = await run({
-    [`GET ${gh}/git/commits/${HEAD}`]: [{ parents: [{ sha: X }], message: `Revert ${X.slice(0, 7)}: production smoke failed (auto-rollback)` }],
+    [`GET ${gh}/git/commits/${HEAD}`]: [rollback(X, X)],
   }, { head: HEAD });
   assert.equal(result.action, "skip");
   assert.equal(result.freeze, true);
   assert.equal(calls.some((c) => c.key === `POST ${gh}/git/commits`), false);
 });
 
-test("a failing auto-rollback commit only freezes; it never reverts or promotes", async () => {
+test("a genuine failing auto-rollback skips another revert but promotes the last green deployment", async () => {
   const { result, calls } = await run({
-    [`GET ${gh}/git/commits/${X}`]: [{ parents: [{ sha: PARENT }], message: `Revert ${OLD.slice(0, 7)}: production smoke failed (auto-rollback)` }],
+    ...greenSmoke(),
+    [`GET ${gh}/git/commits/${X}`]: [rollback(OLD)],
+    [`GET ${gh}/git/commits/${OLD}`]: [{ parents: [{ sha: PARENT }] }],
   });
   assert.equal(result.action, "skip");
   assert.equal(result.freeze, true);
   assert.equal(result.revert.status, "auto-rollback");
   assert.equal(calls.some((c) => c.key === `POST ${gh}/git/commits`), false);
-  assert.equal(calls.some((c) => c.key.includes("/promote/")), false);
-  assert.equal(calls.some((c) => new URL(c.key.split(" ")[1]).hostname === "api.vercel.com"), false);
+  assert.equal(result.promotion.action, "requested");
+  assert.ok(called(calls, `POST ${vercel}/v10/projects/project/promote/old`));
+});
+
+test("forged rollback messages, trees and identities never suppress a revert", async () => {
+  for (const forged of [
+    { ...rollback(OLD), message: `Revert ${OLD.slice(0, 7)}: production smoke failed (auto-rollback)` },
+    { ...rollback(OLD), tree: { sha: "wrong-tree" } },
+    { ...rollback(OLD), author: { email: "other@example.com" } },
+    { ...rollback(OLD), committer: { email: "other@example.com" } },
+  ]) {
+    const { result, calls } = await run({
+      [`GET ${gh}/git/commits/${X}`]: [forged],
+      [`GET ${gh}/git/commits/${OLD}`]: [{ parents: [{ sha: PARENT }] }],
+    });
+    assert.equal(result.revert.status, "created");
+    assert.ok(called(calls, `POST ${gh}/git/commits`));
+  }
 });
 
 test("stops after 100 commits when failing SHA is not in production history", async () => {
@@ -102,9 +128,28 @@ test("stops after 100 commits when failing SHA is not in production history", as
 });
 
 test("a non-fast-forward ref update fails closed with freeze in place", async () => {
-  const { result } = await run({ [`PATCH ${gh}/git/ref/heads/production`]: [422] });
+  const { result } = await run({
+    [`PATCH ${gh}/git/ref/heads/production`]: [422],
+    [`GET ${gh}/git/ref/heads/production`]: [{ object: { sha: X } }, { object: { sha: X } }],
+  });
   assert.equal(result.action, "failed");
   assert.equal(result.freeze, true);
+});
+
+test("a concurrent verified rollback is reported as already reverted, not a failure", async () => {
+  const { result, calls } = await run({
+    [`PATCH ${gh}/git/ref/heads/production`]: [422],
+    [`GET ${gh}/git/ref/heads/production`]: [{ object: { sha: X } }, { object: { sha: HEAD } }],
+    [`GET ${gh}/git/commits/${HEAD}`]: [rollback(X, X)],
+    [`GET ${gh}/git/commits/${X}`]: [
+      { parents: [{ sha: PARENT }], message: "bad merge" },
+      { parents: [{ sha: PARENT }], message: "bad merge" },
+    ],
+  });
+  assert.equal(result.action, "skip");
+  assert.equal(result.revert.status, "already-reverted");
+  assert.equal(result.revert.sha, HEAD);
+  assert.ok(called(calls, `GET ${vercel}/v9/projects/hypertasks-prod`));
 });
 
 test("creates a missing MERGE_FREEZE variable", async () => {
@@ -129,6 +174,7 @@ test("freeze failure still reverts and tries to promote", async () => {
 test("revert failure still freezes and promotes a verified deployment", async () => {
   const { result, calls } = await run({
     [`PATCH ${gh}/git/ref/heads/production`]: [422],
+    [`GET ${gh}/git/ref/heads/production`]: [{ object: { sha: X } }, { object: { sha: X } }],
     ...greenSmoke(),
   });
   assert.equal(result.freeze, true);
