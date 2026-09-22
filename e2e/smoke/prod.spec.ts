@@ -123,15 +123,14 @@ for (const view of VIEWS) {
 
     const pageErrors: Error[] = []
     page.on('pageerror', (err) => pageErrors.push(err))
-    let navigations = 0
+    let loads = 0
     let boardFetches = 0
     if (process.env.BROWSER_SMOKE_PR) {
-      page.on('framenavigated', (frame) => {
-        if (frame === page.mainFrame()) navigations++
-      })
+      page.on('load', () => { loads++ })
       page.on('request', (request) => {
-        // This hydrates the active board in the projectsAll cache used by useProjectQuery.
-        if (new URL(request.url()).pathname === '/api/projects/boardTasks') boardFetches++
+        if (loads === 0) return
+        const pathname = new URL(request.url()).pathname
+        if (pathname === '/api/projects/getAll' || pathname === '/api/projects/boardTasks') boardFetches++
       })
     }
 
@@ -207,11 +206,21 @@ for (const view of VIEWS) {
     }
 
     if (process.env.BROWSER_SMOKE_PR) {
-      await page.waitForTimeout(Math.max(0, 30_000 - (Date.now() - loadedAt)))
-      expect(navigations, `${view.name} reloaded ${navigations} times`).toBeLessThanOrEqual(1)
       if (view.name === 'kanban board' || view.name === 'demo board') {
-        expect(boardFetches, `${view.name} refetched board data ${boardFetches} times`).toBeLessThanOrEqual(1)
+        const columns = page.locator('.kanban-column-title')
+        const initialColumnCount = await columns.count()
+        expect(initialColumnCount, `${view.name} has no columns`).toBeGreaterThan(0)
+        const deadline = Date.now() + 30_000
+        while (Date.now() < deadline) {
+          expect(await columns.count(), `${view.name} lost board columns`).toBeGreaterThanOrEqual(initialColumnCount)
+          expect(await columns.first().isVisible(), `${view.name} hid board columns`).toBe(true)
+          await page.waitForTimeout(Math.min(250, Math.max(0, deadline - Date.now())))
+        }
+        expect(boardFetches, `${view.name} refetched board data ${boardFetches} times after load`).toBeLessThanOrEqual(1)
+      } else {
+        await page.waitForTimeout(Math.max(0, 30_000 - (Date.now() - loadedAt)))
       }
+      expect(loads, `${view.name} loaded ${loads} times`).toBeLessThanOrEqual(1)
     }
     expect(pageErrors, `${view.path} threw a page error: ${pageErrors[0]?.message}`).toHaveLength(0)
   })

@@ -19,10 +19,12 @@ Without `SMOKE_BOARD_PATH`/`SMOKE_TASK_PATH` the kanban-board and task-detail
 checks are skipped (they have nothing real to open) — the other six views
 still run. Set them once the seeded account exists.
 
-## Required PR browser check
+## PR browser check (not required yet)
 
 `browser-smoke` runs the same spec against a locally built app on a hosted runner,
-with `BASE_URL=http://127.0.0.1:3100` and `BROWSER_SMOKE_PR=1`. It never opens
+with `BASE_URL=http://127.0.0.1:3100` and `BROWSER_SMOKE_PR=1`. It watches both
+board-data endpoints after the first load and checks the columns every 250 ms
+for 30 seconds. It never opens
 `/demo`: that route creates a guest and writes to the shared live database.
 A human must provision a **plain, low-privilege account** (neither owner id 6
 nor QA id 985) with access to an existing normal board and an existing demo
@@ -46,8 +48,10 @@ requiring this check in the production ruleset:
 The job fails rather than skips when any required input is missing, the
 session belongs to the owner/QA, or the login preflight redirects. It rewrites
 cookie domains only in the runner's ignored state file for localhost; it does
-not upload that file. The production ruleset must also add the `browser-smoke`
-context before the changed `ci-tests` live-ruleset assertion will pass.
+not upload that file. After the credentials and fixtures are available and this job is green, a
+follow-up must add `browser-smoke` to the production ruleset and the
+`ci-tests` live-ruleset assertion, `docs/ci-policy.yml`, and automerge's
+`REQUIRED` list together. None of those gates requires it yet.
 
 ## Selectors
 
