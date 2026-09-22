@@ -310,8 +310,11 @@ test('production red or frozen stops the sweep and comments only once', async ()
 
 test('server-render entry points are parked for human review', async () => {
   for (const changedFile of [
-    'src/app/layout.tsx', 'src/app/global-error.tsx', 'src/utils/Providers.tsx',
-    'src/middleware.ts', 'src/proxy.ts',
+    'src/app/layout.tsx', 'src/app/(dashboard)/layout.tsx',
+    'src/app/(dashboard)/settings/layout.tsx', 'src/app/global-error.tsx',
+    'src/utils/Providers.tsx', 'src/middleware.ts', 'src/proxy.ts',
+    'src/app/[...boardURL]/page.tsx', 'src/app/[...boardURL]/nested/route.ts',
+    'src/hooks/realtime/useBoardUpdates.ts', 'src/hooks/realtime/nested/handler.ts',
   ]) {
     const { result } = await runWorkflow({ changedFile })
     assert.equal(result.status, 0, result.stderr)
