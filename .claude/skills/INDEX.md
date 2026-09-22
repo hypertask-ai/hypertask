@@ -37,9 +37,10 @@ covers both packs' scripts.
 
 ## The flag rule
 
-A change that restores documented or obviously intended behaviour ships without
-a flag. Anything a user would experience as new goes behind a flag. When
-unsure, flag it. (Matches the top of `fix-bug/SKILL.md` word for word.)
+A bug fix (including a `[BUGFIX]` ticket/PR or a change restoring intended behaviour)
+never gets a flag and ships to everyone, even when visible. New features and
+deliberate behaviour/design changes go behind a flag. (Matches the top of
+`fix-bug/SKILL.md`.)
 
 ## Where things live now, 2026-09-15
 

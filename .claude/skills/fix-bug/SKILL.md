@@ -7,11 +7,11 @@ description: Ticket in Bugs describing wrong behaviour on app.hypertask.ai
 
 Use with `ticket-lifecycle` (board mechanics), `simplify-before-pr` and `design-compliance` (right before the PR step) and, if the change is visible on screen, `verify-on-phone` before the PR.
 
-**Flag rule (matches `INDEX.md`'s "Two rules that sit above all five" word for word):** a change that restores documented or obviously intended behaviour ships without a flag. Anything a user would experience as new goes behind a flag. When unsure, flag it.
+**Flag rule (matches `INDEX.md`):** a bug fix (including a `[BUGFIX]` ticket/PR or a change restoring intended behaviour) never gets a flag and ships to everyone, even when visible. New features and deliberate behaviour/design changes go behind a flag.
 
-**Hard rule (Valentin, 2026-09-14 night):** every change a user could notice ships behind a feature flag enabled only for Owner and QA. Only Valentin widens a flag to everyone. A PR that enables a flag for all users, removes a flag gate, or changes default-on state is not self-mergeable: park it in `Valentin Review` with one line. A bug fix that changes visible behaviour still goes behind a flag unless it restores exactly the documented behaviour; when unsure, flag it, and make the flag-off default explicit (`DEFAULT_FEATURE_FLAG_MODE = "OWNER_AND_QA"` in `src/lib/flags.ts`, or the flag's own registration if narrower).
+Only Valentin widens a feature flag to Everyone. A PR that enables a flag for all users, removes a flag gate, or changes default-on state is not self-mergeable: park it in `Valentin Review` with one line.
 
-This skill covers the flag-exempt fixes: a crash, a 500, wrong or lost data, restoring exactly the prior behaviour, performance work with identical output, a security fix, a dependency or CI change, a spelling correction. **"Flag-exempt" is not the same as "invisible".** Restoring a broken screen changes what is on it, and a spelling fix changes what a user reads. So step 7 still applies whenever the result shows up on screen: no flag, but still a phone screenshot. If the fix would add or change behaviour a user has never seen before (not a restoration), read `ship-feature-behind-flag` step 2 and decide there before you start.
+This skill covers bug fixes such as crashes, 500s, wrong or lost data, and restoring intended behaviour, as well as performance work with identical output, security fixes, dependency or CI changes, and spelling corrections. **"Flag-exempt" is not the same as "invisible".** Restoring a broken screen changes what is on it, and a spelling fix changes what a user reads. So step 7 still applies whenever the result shows up on screen: no flag, but still a phone screenshot. If the change introduces new behaviour or design rather than fixing a bug, use `ship-feature-behind-flag`.
 
 ## Steps
 
