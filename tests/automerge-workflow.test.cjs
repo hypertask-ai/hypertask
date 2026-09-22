@@ -22,7 +22,7 @@ async function workflowScript() {
     .join('\n')
 }
 
-async function runWorkflow({ failTemp = false, failList = false, failView = false, malformedView = false, failLabels = false, failMerge = false, failMergeability = false, failFeatureGate = false, featureGated = false, exemptUi = false, invalidGateDecision = false, forkHead = false, sharedHead = false, unknownMergeability = false, omitAppSmoke = false, speed = false, speedQa = true, speedQaCreator = 'owner', title, previousSpeedTitle = false, changedFile = 'src/safe.ts', comments } = {}) {
+async function runWorkflow({ failTemp = false, failList = false, failView = false, malformedView = false, failLabels = false, failMerge = false, failMergeability = false, failFeatureGate = false, featureGated = false, exemptUi = false, invalidGateDecision = false, forkHead = false, sharedHead = false, unknownMergeability = false, omitAppSmoke = false, speed = false, speedQa = true, speedQaCreator = 'owner', title, previousSpeedTitle = false, changedFile = 'src/safe.ts', comments, productionReason = '', existingFreezeComment = '' } = {}) {
   const directory = await mkdtemp(join(tmpdir(), 'automerge-workflow-'))
   const bin = join(directory, 'bin')
   const runnerTemp = join(directory, 'runner-temp')
@@ -34,6 +34,11 @@ async function runWorkflow({ failTemp = false, failList = false, failView = fals
   const commentsJson = JSON.stringify(comments ?? [{ body: `APPROVE\nreviewed-commit: ${head}` }])
   const gh = `#!/usr/bin/env bash
 set -u
+if [ "$1" = "api" ] && [[ " $* " == *"repos/owner/repository/issues/42/comments"* ]]; then
+  if [[ " $* " == *" -X POST "* ]]; then printf '%s\\n' "$*" >>"$GH_STUB_COMMENT_LOG"
+  else echo "\${GH_STUB_EXISTING_COMMENT:-}"; fi
+  exit 0
+fi
 if [ "$1 $2" = "pr list" ]; then
   if [ "\${GH_STUB_FAIL_LIST:-}" = "1" ]; then echo "simulated PR discovery failure" >&2; exit 1; fi
   echo 42
@@ -83,6 +88,10 @@ echo "unexpected gh call: $*" >&2
 exit 2
 `
   const node = `#!/usr/bin/env bash
+if [ "$1" = ".github/scripts/production-gate.mjs" ]; then
+  echo "\${GH_STUB_PRODUCTION_REASON:-}"
+  exit 0
+fi
 if [ "$1" = ".github/scripts/feature-flag-gate.mjs" ]; then
   if [ "$#" -ne 5 ] || [ "$2" != "$EXPECTED_PR_TITLE" ] || [ "$3" != "$EXPECTED_BASE_SHA" ] || [ "$4" != "$EXPECTED_HEAD_SHA" ]; then
     echo "unexpected feature flag gate arguments: $*" >&2
@@ -129,6 +138,9 @@ exec ${JSON.stringify(process.execPath)} "$@"
         RUN_BRANCH: '',
         RUN_REPO: '',
         RUNNER_TEMP: runnerTemp,
+        GH_STUB_PRODUCTION_REASON: productionReason,
+        GH_STUB_EXISTING_COMMENT: existingFreezeComment,
+        GH_STUB_COMMENT_LOG: join(directory, 'comment-posts'),
         GH_STUB_FAIL_LIST: failList ? '1' : '',
         GH_STUB_FAIL_VIEW: failView ? '1' : '',
         GH_STUB_MALFORMED_VIEW: malformedView ? '1' : '',
@@ -145,7 +157,8 @@ exec ${JSON.stringify(process.execPath)} "$@"
         EXPECTED_HEAD_SHA: head,
       },
     })
-    return { result, scratchEntries: await readdir(runnerTemp), head }
+    const commentPosts = await readFile(join(directory, 'comment-posts'), 'utf8').catch(() => '')
+    return { result, scratchEntries: await readdir(runnerTemp), head, commentPosts }
   } finally {
     await rm(directory, { recursive: true, force: true })
   }
@@ -283,6 +296,54 @@ test('a Prisma migration auto-merges like any other change', async () => {
   assert.doesNotMatch(result.stdout, /PARK: risky paths/)
   assert.match(result.stdout, /MERGED #42/)
   assert.deepEqual(scratchEntries, [])
+})
+
+test('production gate comments only on a real freeze or concluded smoke failure, once per SHA', async () => {
+  const sha = 'b'.repeat(40)
+  const oldSha = 'c'.repeat(40)
+  for (const kind of ['freeze', 'smoke-failure']) {
+    const marker = `<!-- automerge-frozen:${kind}:${sha} -->`
+    const reason = kind === 'freeze' ? 'MERGE_FREEZE is set' : 'smoke failure (run 9)'
+    for (const [existingFreezeComment, shouldPost] of [
+      ['', true],
+      [marker, false],
+      [`<!-- automerge-frozen:${kind}:${oldSha} -->`, true],
+      [`<!-- automerge-frozen:${kind === 'freeze' ? 'smoke-failure' : 'freeze'}:${sha} -->`, false],
+      ['<!-- automerge-frozen -->', true],
+    ]) {
+      const { result, commentPosts } = await runWorkflow({ productionReason: `${kind}|${sha}|${reason}`, existingFreezeComment })
+      assert.equal(result.status, 0, result.stderr)
+      assert.equal(result.stdout.match(/production red or frozen:/g)?.length, 1)
+      assert.doesNotMatch(result.stdout, /MERGED #42/)
+      assert.equal(Boolean(commentPosts), shouldPost)
+      if (shouldPost) {
+        assert.ok(commentPosts.includes(marker))
+        assert.match(commentPosts, /A human must clear this before merging/)
+        assert.doesNotMatch(commentPosts, /Merge manually/)
+      }
+    }
+  }
+  for (const reason of ['no push prod-health run', 'run 9 is in_progress', 'run 9 is queued', 'smoke missing or unreadable']) {
+    const { result, commentPosts } = await runWorkflow({ productionReason: `pending|${sha}|${reason}` })
+    assert.equal(result.status, 0, result.stderr)
+    assert.doesNotMatch(result.stdout, /MERGED #42/)
+    assert.equal(commentPosts, '')
+  }
+})
+
+test('server-render entry points are parked for human review', async () => {
+  for (const changedFile of [
+    'src/app/layout.tsx', 'src/app/(dashboard)/layout.tsx',
+    'src/app/(dashboard)/settings/layout.tsx', 'src/app/global-error.tsx',
+    'src/utils/Providers.tsx', 'src/middleware.ts', 'src/proxy.ts',
+    'src/app/[...boardURL]/page.tsx', 'src/app/[...boardURL]/nested/route.ts',
+    'src/hooks/realtime/useBoardUpdates.ts', 'src/hooks/realtime/nested/handler.ts',
+  ]) {
+    const { result } = await runWorkflow({ changedFile })
+    assert.equal(result.status, 0, result.stderr)
+    assert.match(result.stdout, /PARK: risky paths/)
+    assert.doesNotMatch(result.stdout, /MERGED #42/)
+  }
 })
 
 test('an auth change is still parked and cannot auto-merge', async () => {
