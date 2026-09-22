@@ -189,8 +189,8 @@ class ReportTests(unittest.TestCase):
         reporter=load('strix-file-tickets')
         with tempfile.TemporaryDirectory() as temp:
             root=Path(temp);(root/'src').mkdir()
-            lines=['// filler']*150
-            lines[74]='await consumeToken(jti);'
+            lines=['// filler']*2500
+            lines[1250]='await consumeToken(jti);'
             (root/'src/auth.ts').write_text('\n'.join(lines))
             with patch.object(reporter,'APP',root):
                 source=reporter.source_evidence({'code_locations':[{'file':'src/auth.ts','start_line':1,'end_line':1}]})

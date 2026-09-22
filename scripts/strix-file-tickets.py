@@ -13,6 +13,7 @@ from pathlib import Path
 import re
 import subprocess
 import sys
+import time
 from urllib import request
 
 PROJECT = 15
@@ -75,6 +76,7 @@ def esc(value):
 def source_evidence(finding):
     evidence = []
     symbols = set()
+    included = set()
     for location in (finding.get("code_locations") or [])[:5]:
         raw_path = str(location.get("file") or "").removeprefix("/workspace/")
         relative = Path(raw_path)
@@ -85,6 +87,8 @@ def source_evidence(finding):
             candidate.relative_to(APP)
         except ValueError:
             continue
+        if candidate in included:
+            continue
 
         start = max(int(location.get("start_line") or 1) - 20, 1)
         end = int(location.get("end_line") or location.get("start_line") or start) + 20
@@ -94,8 +98,9 @@ def source_evidence(finding):
             continue
         # Absence claims such as token replay need the whole redemption path,
         # not only snippets around validation and session creation.
-        if sum(len(line) + 1 for line in lines) <= 18000:
+        if sum(len(line) + 1 for line in lines) <= 64000:
             start, end = 1, len(lines)
+            included.add(candidate)
         symbols.update(re.findall(r"(?:function|fn)\s+([A-Za-z_$][\w$]*)\s*\(", "\n".join(lines[max(0, start - 60):end])))
         numbered = "\n".join(
             f"{number}: {lines[number - 1]}"
@@ -128,7 +133,7 @@ def source_evidence(finding):
                     start, end = max(0, index - 20), min(len(lines), index + 21)
                     numbered = "\n".join(f"{i + 1}: {lines[i]}" for i in range(start, end))
                     evidence.append(f"Caller/test context: {relative.as_posix()}\n{numbered}")
-        return "\n\n".join(evidence)[:30_000]
+        return "\n\n".join(evidence)[:120_000]
     return None
 
 
@@ -251,6 +256,9 @@ def ticket_description(finding, severity, run):
 
 def main(run):
     vulns = read_findings(run)
+    previous_review = Path(run) / "finding-review.json"
+    if previous_review.exists():
+        previous_review.rename(Path(run) / f"finding-review-{time.time_ns()}.json")
     reviews = []
     def save_reviews():
         (Path(run) / "finding-review.json").write_text(json.dumps(reviews, indent=2))
