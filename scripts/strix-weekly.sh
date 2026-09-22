@@ -80,7 +80,7 @@ if [ ! -s "$JOB/changed-files.txt" ]; then STATUS=no_changes; exit 0; fi
 printf '%s %s\n' "$REVISION" "$BASE" > "$STATE/pending-scope.tmp"
 mv "$STATE/pending-scope.tmp" "$STATE/pending-scope"
 NETWORK="strix-weekly-$(date +%s)-$$"
-docker network create --internal "$NETWORK" >/dev/null
+docker network create "$NETWORK" >/dev/null
 export STRIX_DOCKER_SANDBOX_NETWORK="$NETWORK"
 export STRIX_IMAGE="${STRIX_IMAGE:-ghcr.io/usestrix/strix-sandbox:1.1.0}"
 export STRIX_LLM=openai/gpt-5.6-sol LLM_API_KEY=chatgpt-oauth LLM_API_BASE=http://127.0.0.1:48100/v1
