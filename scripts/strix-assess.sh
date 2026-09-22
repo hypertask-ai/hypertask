@@ -49,7 +49,7 @@ if [ "$MODE" = assessment ]; then
   systemctl --user start strix-chatgpt-proxy.service
   curl --fail --silent --show-error --retry 10 --retry-connrefused --retry-delay 1 --max-time 10 http://127.0.0.1:48100/health >/dev/null
   NETWORK="strix-assess-$(date +%s)-$$"
-  docker network create --internal "$NETWORK" >/dev/null
+  docker network create "$NETWORK" >/dev/null
 fi
 export STRIX_DOCKER_SANDBOX_NETWORK="$NETWORK"
 export STRIX_IMAGE=ghcr.io/usestrix/strix-sandbox:1.1.0

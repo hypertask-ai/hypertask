@@ -1,6 +1,6 @@
 # Strix security checks
 
-The installed runner performs two kinds of checks. Strix reviews source in a Docker sandbox on an internal network without public network access. A separate host process tests the live website, email-link login, OAuth approval, regular API, MCP and native CLI with the dedicated QA account. Credentials never enter the Strix sandbox or its model context.
+The installed runner performs two kinds of checks. Strix reviews source in a Docker sandbox. A separate host process tests the live website, email-link login, OAuth approval, regular API, MCP and native CLI with the dedicated QA account. Credentials never enter the Strix sandbox or its model context. Source-only scope is an instruction to Strix, not a network firewall; its bridge network also supports the host-to-sandbox tool connection.
 
 ## Run an assessment
 
