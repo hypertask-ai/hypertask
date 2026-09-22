@@ -514,8 +514,8 @@ jobs:
     timeout-minutes: 15
     # The GLM QA job (HTPR-6239) reads these: `ran` says the browser checks
     # actually executed (not skipped for a missing session), `rolledback` says
-    # a confirmed failure promoted the previous deployment, so there is no
-    # live build of this SHA left to explore.
+    # a confirmed failure reverted the production branch; exploratory QA
+    # must not treat this SHA as a verified live build.
     outputs:
       ran: ${{ steps.smoke.outcome != 'skipped' && steps.smoke.outcome != 'cancelled' && steps.smoke.outcome != '' }}
       ok: ${{ steps.smoke.outcome == 'success' }}
@@ -625,6 +625,9 @@ jobs:
           SHA: ${{ github.sha }}
           GITHUB_TOKEN: ${{ github.token }}
           GITHUB_REPOSITORY: ${{ github.repository }}
+          # Rulesets reject github.token pushes. A human clears the freeze with:
+          # gh variable delete MERGE_FREEZE
+          ROLLBACK_GITHUB_TOKEN: ${{ secrets.AUTOMERGE_TOKEN }}
         run: |
           set -uo pipefail
           notify() {
@@ -660,8 +663,8 @@ jobs:
 
           case "$ACTION" in
             requested)
-              # The previous deployment was promoted: there is no live build of
-              # this SHA left for GLM QA to explore (HTPR-6239).
+              # The production branch now has a revert; a verified earlier
+              # deployment may also have been promoted.
               echo "rolledback=true" >> "$GITHUB_OUTPUT"
               if [ -n "${GITHUB_TOKEN:-}" ] && [ -n "${GITHUB_REPOSITORY:-}" ]; then
                 curl -sS -o /dev/null -X POST \
@@ -670,12 +673,11 @@ jobs:
                   "https://api.github.com/repos/${GITHUB_REPOSITORY}/statuses/${SHA}" \
                   -d '{"state":"failure","context":"prod-health-gate","description":"Rolled back after failed smoke"}' || true
               fi
-              notify "🔴 hypertasks: $SHA passed the curl health check but FAILED Playwright smoke QA (a real view broke for a logged-in user). Auto-rolled back. Investigate: https://github.com/${{ github.repository }}/commit/$SHA"
+              notify "🔴 hypertasks: $SHA failed Playwright smoke QA. Production reverted and merges frozen; verify deployment and clear MERGE_FREEZE manually. Investigate: https://github.com/${{ github.repository }}/commit/$SHA"
               ;;
             skip)
-              # Production moved on before the rollback landed, so this SHA is
-              # not live either; suppress GLM QA the same way. Still mark the
-              # gate failed so drift never promotes this SHA later.
+              # A prior revert already handled this SHA. Still mark the gate
+              # failed so drift never promotes it later.
               echo "rolledback=true" >> "$GITHUB_OUTPUT"
               if [ -n "${GITHUB_TOKEN:-}" ] && [ -n "${GITHUB_REPOSITORY:-}" ]; then
                 curl -sS -o /dev/null -X POST \
@@ -684,12 +686,12 @@ jobs:
                   "https://api.github.com/repos/${GITHUB_REPOSITORY}/statuses/${SHA}" \
                   -d '{"state":"failure","context":"prod-health-gate","description":"Rolled back after failed smoke"}' || true
               fi
-              notify "⚠️ hypertasks: smoke QA failed for $SHA but production already moved on ($(echo "$RESULT" | jq -r '.reason // "unknown"')); not rolling back. Verify manually."
+              notify "⚠️ hypertasks: smoke QA failed for $SHA; it was already reverted. MERGE_FREEZE is set; verify production manually."
               ;;
             *)
-              # Rollback FAILED: the broken build is still live and the incident
-              # lane owns it. GLM QA still runs (read-only evidence only).
-              notify "🔴🔴 hypertasks: smoke QA failed for $SHA and auto-rollback FAILED ($(echo "$RESULT" | jq -r '.reason // "unknown"')). Promote previous deployment manually in Vercel NOW."
+              # Rollback FAILED: freeze may have succeeded, but production was
+              # not reverted. GLM QA still runs (read-only evidence only).
+              notify "🔴🔴 hypertasks: smoke QA failed for $SHA and Git rollback FAILED ($(echo "$RESULT" | jq -r '.reason // "unknown"')). Verify MERGE_FREEZE and roll back production manually NOW."
               ;;
           esac
           exit 1
@@ -699,9 +701,9 @@ jobs:
   # independent of the smoke suite (HTPR-5781): smoke stays skipped while its
   # session secret is unprovisioned, and gating the brief on it kept the pass
   # permanently dead. The dispatcher tells the brief honestly when smoke did
-  # not run. A smoke-confirmed break that promoted the previous deployment
-  # (rolledback) still suppresses the brief: there is no live build of this
-  # SHA left to explore. Exploratory, never a gate: a dispatch failure alerts
+  # not run. A smoke-confirmed break that reverted production (rolledback)
+  # still suppresses the brief: the failing SHA is not a verified live build
+  # to explore. Exploratory, never a gate: a dispatch failure alerts
   # on Telegram and never blocks, fails, or rolls back the deploy itself.
   glm-qa:
     needs: [health, smoke]
@@ -1108,6 +1110,7 @@ jobs:
         env:
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
           CORE_SMOKE_RESULT_FILE: ${{ runner.temp }}/core-smoke-result.json
+          ROLLBACK_GITHUB_TOKEN: ${{ secrets.AUTOMERGE_TOKEN }}
           GITHUB_TOKEN: ${{ github.token }}
           GITHUB_REPOSITORY: ${{ github.repository }}
         run: |
