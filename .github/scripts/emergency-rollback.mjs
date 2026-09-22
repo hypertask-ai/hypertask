@@ -55,7 +55,7 @@ async function getJsonRequest(fetchImpl, url, token, method = "GET", body) {
   try {
     const res = await fetchImpl(url, {
       method,
-      headers: { Authorization: `Bearer ${token}`, Accept: "application/vnd.github+json", "Content-Type": "application/json" },
+      headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}), Accept: "application/vnd.github+json", "Content-Type": "application/json" },
       ...(body === undefined ? {} : { body: JSON.stringify(body) }),
     });
     if (!res.ok) return { ok: false, status: res.status };
@@ -89,6 +89,7 @@ async function revertProduction(failingSha, fetchImpl, repo, token) {
   const dropped = [];
   let cursor = head;
   while (cursor !== failingSha) {
+    if (dropped.length >= 100) throw new Error("failing SHA not found in production's first 100 commits");
     const commit = await github(fetchImpl, repo, token, `/git/commits/${cursor}`);
     if (commit.message?.startsWith(`Revert ${failingSha.slice(0, 7)}: production smoke failed (auto-rollback)`)) {
       return { status: "already-reverted", sha: cursor, dropped: [] };
@@ -132,14 +133,14 @@ export async function emergencyRollback(failingSha, token, fetchImpl = fetch, de
   const githubToken = options.githubToken ?? process.env.ROLLBACK_GITHUB_TOKEN;
   const runUrl = options.runUrl ?? `${process.env.GITHUB_SERVER_URL || "https://github.com"}/${repo}/actions/runs/${process.env.GITHUB_RUN_ID}`;
   if (process.env.GITHUB_EVENT_NAME === "workflow_dispatch") return { action: "skip", reason: "manual runs never roll back", revert: { status: "skipped" }, freeze: false };
-  if (!repo || !githubToken || !/^https?:\/\/[^/]+\/[^/]+\/[^/]+\/actions\/runs\/\d+$/.test(runUrl)) {
-    return { action: "failed", reason: "missing GitHub repository, rollback token or run URL", revert: { status: "skipped" }, freeze: false };
-  }
   const errors = {};
   let frozen = false;
   let revert;
   let promotion;
   try {
+    const missing = [!repo && "GITHUB_REPOSITORY", !githubToken && "ROLLBACK_GITHUB_TOKEN",
+      !/^https?:\/\/[^/]+\/[^/]+\/[^/]+\/actions\/runs\/\d+$/.test(runUrl) && "valid GitHub run URL"].filter(Boolean);
+    if (missing.length) throw new Error(`missing ${missing.join(", ")}`);
     await freezeMerges(fetchImpl, repo, githubToken, runUrl);
     frozen = true;
   } catch (err) {
@@ -147,6 +148,8 @@ export async function emergencyRollback(failingSha, token, fetchImpl = fetch, de
     console.error(`Freeze failed: ${err.message}`);
   }
   try {
+    if (!repo) throw new Error("missing GITHUB_REPOSITORY");
+    if (!githubToken) throw new Error("missing ROLLBACK_GITHUB_TOKEN");
     revert = await revertProduction(failingSha, fetchImpl, repo, githubToken);
   } catch (err) {
     errors.revert = err.message;
@@ -157,7 +160,8 @@ export async function emergencyRollback(failingSha, token, fetchImpl = fetch, de
     promotion = { action: "skip", reason: "failing SHA is an auto-rollback commit" };
   } else {
     try {
-      promotion = await promoteVerifiedDeployment(failingSha, token, fetchImpl, delayImpl, repo, githubToken);
+      if (!token) throw new Error("missing VERCEL_TOKEN");
+      promotion = await promoteVerifiedDeployment(failingSha, token, fetchImpl, delayImpl, repo || "hypertask-ai/hypertask", githubToken);
       if (promotion.action === "failed") throw new Error(promotion.reason);
     } catch (err) {
       errors.promotion = err.message;
@@ -174,8 +178,6 @@ export async function emergencyRollback(failingSha, token, fetchImpl = fetch, de
 }
 
 async function promoteVerifiedDeployment(failingSha, token, fetchImpl, delayImpl, repo, githubToken) {
-  if (!token) return { reason: "no Vercel token; revert will deploy normally" };
-
   // v9/projects returns both the project id and targets.production (the
   // deployment Vercel is actually serving live) in one call — the newest
   // entry from a deployments list is only a guess at "live".

@@ -38,9 +38,9 @@ async function run(overrides = {}, opts = {}) {
     return { ok: status >= 200 && status < 300, status, json: async () => item };
   };
   const { emergencyRollback } = await import(script);
-  const result = await emergencyRollback(X, "vercel-token", fetchImpl, async () => {}, {
-    repo: "hypertask-ai/hypertask", githubToken: "github-token",
-    runUrl: "https://github.com/hypertask-ai/hypertask/actions/runs/123",
+  const result = await emergencyRollback(X, opts.vercelToken ?? "vercel-token", fetchImpl, async () => {}, {
+    repo: opts.repo ?? "hypertask-ai/hypertask", githubToken: opts.githubToken ?? "github-token",
+    runUrl: opts.runUrl ?? "https://github.com/hypertask-ai/hypertask/actions/runs/123",
   });
   return { result, calls };
 }
@@ -82,7 +82,23 @@ test("a failing auto-rollback commit only freezes; it never reverts or promotes"
   assert.equal(result.revert.status, "auto-rollback");
   assert.equal(calls.some((c) => c.key === `POST ${gh}/git/commits`), false);
   assert.equal(calls.some((c) => c.key.includes("/promote/")), false);
-  assert.equal(calls.some((c) => c.key.includes("api.vercel.com")), false);
+  assert.equal(calls.some((c) => new URL(c.key.split(" ")[1]).hostname === "api.vercel.com"), false);
+});
+
+test("stops after 100 commits when failing SHA is not in production history", async () => {
+  const chain = {};
+  for (let i = 100; i > 0; i--) {
+    const sha = i.toString(16).padStart(40, "0");
+    chain[`GET ${gh}/git/commits/${sha}`] = [{ message: "unrelated", parents: [{ sha: (i - 1).toString(16).padStart(40, "0") }] }];
+  }
+  const { result, calls } = await run(chain, { head: (100).toString(16).padStart(40, "0") });
+  assert.equal(result.freeze, true);
+  assert.equal(result.action, "failed");
+  assert.equal(result.revert.status, "failed");
+  assert.match(result.errors.revert, /not found.*100/);
+  assert.match(result.reason, /revert:.*not found/);
+  assert.equal(calls.filter((c) => c.key.startsWith(`GET ${gh}/git/commits/`)).length, 101);
+  assert.equal(calls.some((c) => c.key === `POST ${gh}/git/commits`), false);
 });
 
 test("a non-fast-forward ref update fails closed with freeze in place", async () => {
@@ -120,6 +136,40 @@ test("revert failure still freezes and promotes a verified deployment", async ()
   assert.match(result.errors.revert, /422/);
   assert.equal(result.promotion.action, "requested");
   assert.ok(called(calls, `POST ${vercel}/v10/projects/project/promote/old`));
+});
+
+test("missing GitHub token and run URL do not prevent a verified Vercel promotion", async () => {
+  const { result, calls } = await run(greenSmoke(), { githubToken: "", runUrl: "" });
+  assert.equal(result.action, "failed");
+  assert.match(result.errors.freeze, /ROLLBACK_GITHUB_TOKEN.*run URL/);
+  assert.match(result.errors.revert, /ROLLBACK_GITHUB_TOKEN/);
+  assert.equal(result.freeze, false);
+  assert.equal(result.revert.status, "failed");
+  assert.equal(result.promotion.action, "requested");
+  assert.ok(called(calls, `POST ${vercel}/v10/projects/project/promote/old`));
+  assert.equal(called(calls, `GET ${gh}/actions/workflows/prod-health.yml/runs`).body, undefined);
+  assert.equal(calls.some((c) => c.key === `PATCH ${gh}/actions/variables/MERGE_FREEZE`), false);
+});
+
+test("missing repository skips GitHub writes but still checks the public smoke run for promotion", async () => {
+  const { result, calls } = await run(greenSmoke(), { repo: "" });
+  assert.match(result.errors.freeze, /GITHUB_REPOSITORY/);
+  assert.match(result.errors.revert, /GITHUB_REPOSITORY/);
+  assert.equal(result.promotion.action, "requested");
+  assert.equal(calls.some((c) => c.key === `POST ${gh}/git/commits`), false);
+});
+
+test("missing run URL still reverts; missing Vercel token still freezes and reverts", async () => {
+  const missingUrl = await run({}, { runUrl: "" });
+  assert.match(missingUrl.result.errors.freeze, /run URL/);
+  assert.equal(missingUrl.result.revert.status, "created");
+  assert.ok(called(missingUrl.calls, `POST ${gh}/git/commits`));
+
+  const missingVercel = await run({}, { vercelToken: "" });
+  assert.equal(missingVercel.result.freeze, true);
+  assert.equal(missingVercel.result.revert.status, "created");
+  assert.match(missingVercel.result.errors.promotion, /VERCEL_TOKEN/);
+  assert.equal(missingVercel.result.promotion.action, "failed");
 });
 
 test("promotion failure is reported independently of a successful freeze and revert", async () => {
