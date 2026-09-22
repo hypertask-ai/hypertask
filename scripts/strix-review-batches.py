@@ -97,7 +97,7 @@ def run(source, paths, state, output, revision, base, budget, batch_budget, max_
                 raise ValueError(f"Strix exited {result.returncode}")
             report = checker.validate(attempt / "strix_runs")
             entry["run"] = str(report)
-            env = {**os.environ, "STRIX_APP": str(source),
+            env = {**os.environ, "STRIX_APP": str(source), "STRIX_SOURCE_REVISION": revision,
                    "STRIX_FILED_STATE": str(state.parent / "filed-titles.json")}
             subprocess.run(["python3", str(SCRIPTS / "strix-file-tickets.py"), str(report)],
                            env=env, check=True, timeout=720)
