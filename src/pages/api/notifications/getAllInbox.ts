@@ -30,6 +30,27 @@ const parseBoardScope = (value: string | string[] | undefined): ArchiveBoardScop
     : "active";
 };
 
+// Boards the user can see archived notifications from.
+const archivedInboxProjectWhere = (
+  userId: number,
+  boardScope: ArchiveBoardScope
+): Prisma.ProjectWhereInput => ({
+  ...(boardScope === "all"
+    ? {}
+    : { status: boardScope === "active" ? "Normal" : "Archive" }),
+  OR: [
+    { ownerId: userId },
+    {
+      members: {
+        some: {
+          userId,
+          agentId: null,
+        },
+      },
+    },
+  ],
+});
+
 const getArchivedInboxWhere = (
   userId: number,
   projectId?: number | null,
@@ -40,22 +61,7 @@ const getArchivedInboxWhere = (
   status: "Archive",
   agentId: null,
   task: {
-    project: {
-      ...(boardScope === "all"
-        ? {}
-        : { status: boardScope === "active" ? "Normal" : "Archive" }),
-      OR: [
-        { ownerId: userId },
-        {
-          members: {
-            some: {
-              userId,
-              agentId: null,
-            },
-          },
-        },
-      ],
-    },
+    project: archivedInboxProjectWhere(userId, boardScope),
     ...(projectId ? { projectId } : {}),
     ...(q?.trim()
       ? {
@@ -93,7 +99,12 @@ const getArchivedInboxMeta = async (
   }
   const tasks = pairsPerTask.size
     ? await prisma.task.findMany({
-        where: { id: { in: Array.from(pairsPerTask.keys()) } },
+        // Same board access as the grouped query, so a task moved to a board
+        // the user can't see in between is neither counted nor named.
+        where: {
+          id: { in: Array.from(pairsPerTask.keys()) },
+          project: archivedInboxProjectWhere(userId, boardScope),
+        },
         select: {
           id: true,
           projectId: true,
@@ -106,9 +117,13 @@ const getArchivedInboxMeta = async (
     number,
     { projectId: number; name: string; count: number }
   >();
+  // Counted from the tasks the lookup still returns, so total matches the
+  // per-board counts even if a task moved away between the two queries.
+  let total = 0;
   for (const task of tasks) {
     const pid = task.projectId;
     const count = pairsPerTask.get(task.id) ?? 0;
+    total += count;
     const existing = byProject.get(pid);
     if (existing) {
       existing.count += count;
@@ -123,7 +138,7 @@ const getArchivedInboxMeta = async (
   }
 
   return {
-    total: pairs.length,
+    total,
     byProject: Array.from(byProject.values()).sort(
       (a, b) => b.count - a.count || a.name.localeCompare(b.name)
     ),
