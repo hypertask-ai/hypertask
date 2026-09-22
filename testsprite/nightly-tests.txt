@@ -1,0 +1,21 @@
+# TestSprite nightly web test list (HTPR-6536).
+#
+# One test id per line, with a short comment on what it covers. Read by
+# .github/workflows/testsprite-production.yml. Picked for real outcome
+# assertions (not just "the page loads") on the journeys worth the AI-testing
+# cost: login, rich-text editing, drag/move, comments/@mentions, inbox,
+# search, and board filters, plus a few more high-value CRUD checks.
+# Comments (#...) and blank lines are ignored by the workflow.
+
+3243db7a-c327-46d6-ad1f-5bd6d21e198e # Logged-in tour: board, ticket page, comments, chat
+cbf0cd4e-4f47-4ba8-814a-d0c5c52bd1ae # Editing a ticket's description saves the new text (rich-text editor)
+18746f14-fdba-4329-89c1-712b757004ff # Moving a ticket to another column updates its position (drag/move)
+18b710cc-b5a6-40a2-aea9-efdf081b7346 # Adding a comment on a ticket shows it on the ticket page
+050be794-60c8-45ca-bea7-e44bfbf51623 # Mentioning a user in a comment inserts a mention chip
+0b28dd24-4376-4f1e-846d-bdeb8daddc1c # Undoing a notification archive restores it to the inbox
+cbafdc64-3ed7-4f82-b5f8-d82b25b853d3 # Global search finds a ticket by title on the current board
+3838b2db-ac2b-4bed-adbd-2fe4dd784565 # Applying a label filter narrows the board to matching cards (filters dialog)
+263f8022-65df-4e13-9873-124b1949523a # Editing a ticket's title updates the board card
+a2e0965f-a205-4ed6-b43d-bf4db0c4d8bf # Adding a label to a ticket shows it on the ticket detail page
+413c71ce-5877-499b-a84c-91bf2fd76284 # Assigning a user to a ticket shows the assignee on the card
+3f6135c7-781e-47d9-82ce-0aa41c5dabc1 # Creating a ticket on the QA board adds it to a column
