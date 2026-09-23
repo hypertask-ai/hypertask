@@ -299,14 +299,14 @@ test("ordinary FEATURE UI still requires a flag without AI CHAT", async (t) => {
   assert.equal((await evaluate("HTPR-2 [FEATURE] add widget", base, head, dir, ["enhancement"])).pass, false);
 });
 
-test("large BUGFIX UI additions pass without a flag", async (t) => {
+test("large BUGFIX UI additions fail the cross-check", async (t) => {
   const { dir, git } = makeRepo(t);
   const base = commit(git, "base");
   writeFile(dir, "src/components/Widget.tsx", Array.from({ length: 151 }, (_, i) => `const line${i} = ${i};`).join("\n"));
   const head = commit(git, "large fix");
   const result = await evaluate("HTPR-3 [BUGFIX] fix widget", base, head, dir);
-  assert.equal(result.pass, true);
-  assert.equal(result.ownerReview, "exempt-ui");
+  assert.equal(result.pass, false);
+  assert.match(result.reason, /over the 150-line budget/);
 
   const infra = await evaluate("HTPR-3 [INFRA] update widget", base, head, dir);
   assert.equal(infra.pass, false);

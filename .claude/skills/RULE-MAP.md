@@ -94,7 +94,7 @@ A skill name in the Skill column is a name, not a path: since 2026-09-15 it reso
 | 85 | Bug fixes never get a flag and ship to everyone, even when visible; a new behavior/design is a feature | AG | fix-bug |
 | 86 | Other flag exemptions: performance work with identical output, security fixes, dependency/CI changes, spelling fixes, and AI CHAT-labeled tickets | AG | ship-feature-behind-flag |
 | 87 | A `[BUGFIX]` ticket/PR or a change restoring intended behavior does not need a flag; do not disguise a new feature as a bug fix | AG | fix-bug |
-| 88 | The mechanical `feature-flag-gate` check passes a valid `[BUGFIX]` title regardless of UI line count; `[INFRA]` retains the 150-added-UI-line limit and verified auto-reverts retain their exemption; semantic review still applies | AG | ship-feature-behind-flag |
+| 88 | The mechanical `feature-flag-gate` check passes a valid `[BUGFIX]` or `[INFRA]` title only within the 150-added-UI-line limit; verified auto-reverts retain their exemption; semantic review still applies | AG | ship-feature-behind-flag |
 | 89 | After a flag has been on Everyone for 14 days, open a follow-up ticket to remove the flag and dead branch | AG | ship-feature-behind-flag |
 | 90 | The moment a flagged feature goes live, comment on the ticket mentioning Valentin with the flag key, what it does, and the link to `/admin/flags` — otherwise he never learns it shipped | AG | ship-feature-behind-flag |
 | 91 | Every PR description and every review comment goes through `unslop` then `i-have-adhd` verbatim, and starts with a "Summary for non-engineers" (problem, what changed, what's visibly different, risks) in plain language | CM | talk-to-valentin |

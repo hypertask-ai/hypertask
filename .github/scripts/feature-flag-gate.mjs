@@ -1827,7 +1827,7 @@ export function evaluate({ title, baseSha, headSha, labels = [] }) {
       : titleExempt
         ? `[${tag}]`
         : "AI CHAT label";
-    if (uiAdded > CROSS_CHECK_LINE_BUDGET && normalizePolicyToken(tag) !== "BUGFIX") {
+    if (uiAdded > CROSS_CHECK_LINE_BUDGET) {
       return failure(
         `This pull request is tagged ${exemptionLabel} but adds ${uiAdded} lines to UI files ` +
         `(over the ${CROSS_CHECK_LINE_BUDGET}-line budget). Retitle it as [FEATURE] and add a feature flag.`,
