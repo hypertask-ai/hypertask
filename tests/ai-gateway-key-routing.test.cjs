@@ -1553,6 +1553,8 @@ test("editor models retry unavailable Luna once before output, but not after out
         stream: new ReadableStream({
           start(controller) {
             calls.push(modelId);
+            controller.enqueue({ type: "stream-start", warnings: [] });
+            controller.enqueue({ type: "response-metadata", id: modelId });
             if (modelId === "gpt-6-luna") {
               if (emitBeforeError) controller.enqueue({ type: "text-delta", id: "1", text: "partial" });
               controller.enqueue({ type: "error", error: retryError });
@@ -1587,7 +1589,9 @@ test("editor models retry unavailable Luna once before output, but not after out
     const chunks = [];
     for await (const chunk of stream) chunks.push(chunk);
     assert.deepEqual(calls, ["gpt-6-luna", "gpt-5.6-luna"]);
-    assert.deepEqual(chunks.map((chunk) => chunk.type), ["text-delta"]);
+    assert.deepEqual(chunks.map((chunk) => chunk.type), ["stream-start", "response-metadata", "text-delta"]);
+    assert.equal(chunks.filter((chunk) => chunk.type === "stream-start").length, 1);
+    assert.equal(chunks.find((chunk) => chunk.type === "response-metadata").id, "gpt-5.6-luna");
     assert.equal(streaming.modelId, "gpt-5.6-luna");
     calls.length = 0;
     emitBeforeError = true;
@@ -1597,7 +1601,7 @@ test("editor models retry unavailable Luna once before output, but not after out
       partialChunks.push(chunk);
     }
     assert.deepEqual(calls, ["gpt-6-luna"]);
-    assert.deepEqual(partialChunks.map((chunk) => chunk.type), ["text-delta", "error"]);
+    assert.deepEqual(partialChunks.map((chunk) => chunk.type), ["stream-start", "response-metadata", "text-delta", "error"]);
   } finally {
     console.warn = originalWarn;
   }

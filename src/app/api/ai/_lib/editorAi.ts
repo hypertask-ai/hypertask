@@ -1212,6 +1212,13 @@ export async function selectTaskWriterModel(args: {
           stream: new ReadableStream({
             async start(controller) {
               let reader = result.stream.getReader();
+              let preamble: Array<
+                Extract<Awaited<ReturnType<typeof reader.read>>, { done: false }>["value"]
+              > = [];
+              const flushPreamble = () => {
+                for (const chunk of preamble) controller.enqueue(chunk);
+                preamble = [];
+              };
               try {
                 while (true) {
                   let item;
@@ -1221,21 +1228,29 @@ export async function selectTaskWriterModel(args: {
                     const fallback = fallbackModel(error);
                     if (!fallback) throw error;
                     reader = (await fallback.doStream(params)).stream.getReader();
+                    preamble = [];
                     continue;
                   }
                   if (item.done) break;
+                  if (item.value.type === "stream-start" || item.value.type === "response-metadata") {
+                    preamble.push(item.value);
+                    continue;
+                  }
                   if (item.value.type === "error") {
                     const fallback = fallbackModel(item.value.error);
                     if (fallback) {
                       await reader.cancel();
                       reader = (await fallback.doStream(params)).stream.getReader();
+                      preamble = [];
                       continue;
                     }
-                  } else if (item.value.type !== "stream-start" && item.value.type !== "response-metadata") {
+                  } else {
                     hasOutput = true;
                   }
+                  flushPreamble();
                   controller.enqueue(item.value);
                 }
+                flushPreamble();
                 controller.close();
               } catch (error) {
                 controller.error(error);
