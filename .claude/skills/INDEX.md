@@ -37,10 +37,11 @@ covers both packs' scripts.
 
 ## The flag rule
 
-A bug fix (including a `[BUGFIX]` ticket/PR or a change restoring intended behaviour)
-never gets a flag and ships to everyone, even when visible. New features and
-deliberate behaviour/design changes go behind a flag. (Matches the top of
-`fix-bug/SKILL.md`.)
+A real bug fix restores behaviour that used to work or was clearly intended;
+it never gets a flag and ships to everyone, even when visible (Valentin,
+2026-09-22). A `[BUGFIX]` title is only a hint to the mechanical gate: the
+reviewer decides from the diff whether this is truly a fix. New visible
+behaviour dressed as a fix still needs a flag. (Matches `fix-bug/SKILL.md`.)
 
 ## Where things live now, 2026-09-15
 

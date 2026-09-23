@@ -7,7 +7,7 @@ description: Ticket in Bugs describing wrong behaviour on app.hypertask.ai
 
 Use with `ticket-lifecycle` (board mechanics), `simplify-before-pr` and `design-compliance` (right before the PR step) and, if the change is visible on screen, `verify-on-phone` before the PR.
 
-**Flag rule (matches `INDEX.md`):** a bug fix (including a `[BUGFIX]` ticket/PR or a change restoring intended behaviour) never gets a flag and ships to everyone, even when visible. New features and deliberate behaviour/design changes go behind a flag.
+**Flag rule (matches `INDEX.md`):** a real bug fix restores behaviour that used to work or was clearly intended; it never gets a flag and ships to everyone, even when visible (Valentin, 2026-09-22). A `[BUGFIX]` title is only a hint to the mechanical gate. The reviewer decides from the diff whether it really restores intended behaviour; new visible behaviour dressed as a fix still needs a flag.
 
 Only Valentin widens a feature flag to Everyone. A PR that enables a flag for all users, removes a flag gate, or changes default-on state is not self-mergeable: park it in `Valentin Review` with one line.
 
