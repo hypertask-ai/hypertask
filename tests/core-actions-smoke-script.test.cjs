@@ -395,7 +395,7 @@ test("the workflow schedules and serializes the production fixture", async () =>
     /name: core-actions-fixture-\$\{\{ github\.run_id \}\}/,
   );
   assert.doesNotMatch(workflow, /gh variable set CORE_SMOKE_/);
-  assert.match(workflow, /SUMMARY=.*gsub/);
+  assert.match(workflow, /SUMMARY=\$\(echo "\$RESULT" \| jq -r '[\s\S]*?\.revert\.dropped[\s\S]*?gsub\(/);
 });
 
 test("the monitor runs the probe unconditionally and stays loud when it fails", async () => {
