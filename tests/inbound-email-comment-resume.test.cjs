@@ -118,6 +118,14 @@ test("a failed inbound reply resumes its comment without repeating durable effec
     },
     follower: { findMany: async () => [] },
     notification: {
+      findMany: async ({ where }) =>
+        notifications.filter(
+          (item) =>
+            item.type === where.type &&
+            item.commentId === where.commentId &&
+            where.userId.in.includes(item.userId) &&
+            item.agentId === where.agentId,
+        ),
       findFirst: async ({ where }) =>
         notifications.find(
           (item) =>
@@ -164,8 +172,15 @@ test("a failed inbound reply resumes its comment without repeating durable effec
     "src/utils/controllers/notifications/creation-service/check-reminder_create-notification.ts":
       {
         __esModule: true,
-        default: async (_userId, _projectId, _taskId, payload) => {
-          notifications.push({ ...payload, agentId: null });
+        checkRemindersAndCreateNotifications: async (
+          userIds,
+          _projectId,
+          _taskId,
+          payload,
+        ) => {
+          for (const userId of userIds) {
+            notifications.push({ ...payload, userId, agentId: null });
+          }
         },
       },
     "src/utils/controllers/notifications/agentActionRecipients.ts": {
