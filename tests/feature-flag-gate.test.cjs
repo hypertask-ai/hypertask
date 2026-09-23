@@ -306,7 +306,19 @@ test("large BUGFIX UI additions fail the cross-check", async (t) => {
   const head = commit(git, "large fix");
   const result = await evaluate("HTPR-3 [BUGFIX] fix widget", base, head, dir);
   assert.equal(result.pass, false);
-  assert.match(result.reason, /Retitle it as \[FEATURE\]/);
+  assert.match(result.reason, /over the 150-line budget/);
+
+  const infra = await evaluate("HTPR-3 [INFRA] update widget", base, head, dir);
+  assert.equal(infra.pass, false);
+  assert.match(infra.reason, /over the 150-line budget/);
+});
+
+test("a BUGFIX tag without a valid title is not exempt", async (t) => {
+  const { dir, git } = makeRepo(t);
+  const base = commit(git, "base");
+  writeFile(dir, "src/components/Widget.tsx", "export const Widget = () => <div />;\n");
+  const head = commit(git, "widget");
+  assert.equal((await evaluate("[BUGFIX] fix widget", base, head, dir)).pass, false);
 });
 
 test("moving a large file into UI paths cannot evade the exemption budget", async (t) => {
@@ -320,7 +332,7 @@ test("moving a large file into UI paths cannot evade the exemption budget", asyn
     `\n${Array.from({ length: 151 }, (_, i) => `export const added${i} = ${i};`).join("\n")}\n`,
   );
   const head = commit(git, "move and expand UI");
-  const result = await evaluate("HTPR-3 [BUGFIX] move widget", base, head, dir);
+  const result = await evaluate("HTPR-3 [INFRA] move widget", base, head, dir);
   assert.equal(result.pass, false);
   assert.match(result.reason, /over the 150-line budget/);
 });

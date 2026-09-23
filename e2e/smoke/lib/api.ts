@@ -5,12 +5,12 @@ import type { APIRequestContext } from '@playwright/test'
 // `request` is Playwright's APIRequestContext, already carrying the
 // account's storageState cookies via playwright.config.smoke.ts.
 //
-// Every shape below was read directly from the route/controller source
-// (src/pages/api/..., src/utils/controllers/...), not guessed, but never
-// exercised against a live account in this build, since no
-// ~/.config/ht-qa/state*.json exists yet. Confirm on the first real run.
+// Every shape below was read from the route/controller source
+// (src/pages/api/..., src/utils/controllers/...) and checked against a live
+// free-tier account on the first real run (HTPR-6636).
 
-export type BootstrapTeam = { id: number; googleAccountId: number | null; projects: Array<{ id: number; title: string }> }
+// Team ids and googleAccountIds are UUID strings in the live payload, not numbers.
+export type BootstrapTeam = { id: string; googleAccountId: string | null; projects: Array<{ id: number; title: string }> }
 export type Bootstrap = {
   accountId: number
   slices: {
@@ -25,6 +25,21 @@ export async function fetchBootstrap(request: APIRequestContext): Promise<Bootst
   return res.json()
 }
 
+// Each bootstrap slice races an 800ms timeout (src/lib/appShellBootstrap/server.ts
+// SLICE_TIMEOUT_MS) and comes back { ok: false } when it loses, e.g. on a cold
+// start. The app's own client treats that as "not preloaded" and fetches the
+// data itself, so a slow slice is not "this account has no team". Retry a few
+// times and keep "timed out" and "really empty" apart in the error.
+export async function fetchBootstrapWithTeams(request: APIRequestContext): Promise<Bootstrap & { teams: BootstrapTeam[] }> {
+  for (let attempt = 1; attempt <= 4; attempt++) {
+    const bootstrap = await fetchBootstrap(request)
+    const teams = bootstrap.slices.teams
+    if (teams?.ok) return { ...bootstrap, teams: teams.data }
+    await new Promise((resolve) => setTimeout(resolve, 1_000 * attempt))
+  }
+  throw new Error('bootstrap teams slice did not load (timed out 4 times), cannot tell whether this account has a team')
+}
+
 // src/utils/controllers/projects/create.ts 400s unless ALL FOUR of these
 // are truthy, including googleAccountId, a team with no linked Google
 // account (googleAccountId: null in the bootstrap teams slice) cannot
@@ -34,7 +49,7 @@ export async function fetchBootstrap(request: APIRequestContext): Promise<Bootst
 // boards cannot create a 4th (FREE_BOARD_LIMIT = 3).
 export async function createProject(
   request: APIRequestContext,
-  { userId, teamId, title, googleAccountId }: { userId: number; teamId: number; title: string; googleAccountId: number },
+  { userId, teamId, title, googleAccountId }: { userId: number; teamId: string; title: string; googleAccountId: string },
 ): Promise<{ id: number; title: string; section: Array<{ id: number; title: string }> }> {
   const res = await request.post('/api/projects/create', {
     data: { userId, teamId, title, googleAccountId },
@@ -61,29 +76,33 @@ export type BoardTask = { id: number; title: string; status: string; updatedAt?:
 export async function fetchBoardTasks(
   request: APIRequestContext,
   projectId: number,
-): Promise<{ project: { id: number; section: Array<{ id: number; title: string }> }; tasks: BoardTask[] }> {
+): Promise<{ project: { id: number; section: Array<{ id: number; section_title: string }> }; tasks: BoardTask[] }> {
   const res = await request.post('/api/projects/boardTasks', { data: { projectId } })
   if (!res.ok()) throw new Error(`boardTasks failed: HTTP ${res.status()} ${await res.text()}`)
   return res.json()
 }
 
-// The direct-response branch in src/pages/api/tasks/create.ts needs
-// ranking + section (a section TITLE string) + sectionId, or it falls into
-// a lookup branch that can leave the request hanging with no response.
-// fullScreenTask: true is what makes the response come back wrapped as
-// { newTask }; response is normalized here regardless, since the exact
-// branch taken by an unfamiliar section/ranking combination isn't 100%
-// certain without a live run.
+// fullScreenTask: true takes the createFullScreenTaskAndReturn branch of
+// src/pages/api/tasks/create.ts: it picks the board's first visible section
+// itself, but takes the creator from body.userId. Without userId the task
+// controller throws and the route answers 500 "Something Went Wrong!".
+// The response is double-wrapped: { newTask: { message, error, newTask: task } }.
 export async function createTask(
   request: APIRequestContext,
-  { title, projectId, sectionId, sectionTitle }: { title: string; projectId: number; sectionId: number; sectionTitle: string },
+  { title, projectId, userId }: { title: string; projectId: number; userId: number },
 ): Promise<{ id: number; uniqueIndex: number }> {
-  const res = await request.post('/api/tasks/create', {
-    data: { title, projectId, sectionId, section: sectionTitle, ranking: '1', fullScreenTask: true },
-  })
+  // Two creates on the same board at the same moment can both pick the same
+  // next ticket number and one fails with 500 (a real product race, reported
+  // separately). The suite runs 4 workers on one board, so retry here to keep
+  // that race from failing unrelated journeys.
+  let res = await request.post('/api/tasks/create', { data: { title, projectId, userId, fullScreenTask: true } })
+  for (let attempt = 1; attempt <= 3 && res.status() === 500; attempt++) {
+    await new Promise((resolve) => setTimeout(resolve, 300 * attempt + Math.random() * 300))
+    res = await request.post('/api/tasks/create', { data: { title, projectId, userId, fullScreenTask: true } })
+  }
   if (!res.ok()) throw new Error(`task create failed: HTTP ${res.status()} ${await res.text()}`)
   const body = await res.json()
-  const task = body.newTask ?? body
+  const task = body.newTask?.newTask ?? body.newTask ?? body
   if (!task?.id) throw new Error(`task create returned no task id: ${JSON.stringify(body).slice(0, 300)}`)
   return task
 }
