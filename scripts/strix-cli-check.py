@@ -45,7 +45,7 @@ def main():
             )
         print(json.dumps({"exitCode": result.returncode, "redirectFollowed": bool(seen),
                           "authorizationForwarded": any(seen)}))
-        return 2 if any(seen) else 0
+        return 2 if any(seen) else 0 if seen and result.returncode == 0 else 1
     finally:
         for server in servers:
             server.shutdown()

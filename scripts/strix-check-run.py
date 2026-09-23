@@ -18,7 +18,7 @@ def validate(root):
     prose = '\n'.join(str(result.get(k, '')) for k in ('methodology', 'executive_summary', 'technical_analysis'))
     if not re.search(r'\bCOVERAGE_COMPLETE\b', prose):
         raise ValueError('scan did not attest to completing the requested scope')
-    if re.search(r'COVERAGE_INCOMPLETE|\bincomplete\b|did not complete|budget.{0,30}(exhaust|exceed|reach)', prose, re.I):
+    if re.search(r'COVERAGE_INCOMPLETE|(?:scope|coverage|review|scan)\s+(?:is|was|remains)?\s*incomplete|did not complete|budget.{0,30}(exhaust|exceed|reach)', prose, re.I):
         raise ValueError('report admits incomplete coverage or exhausted budget')
     if not (run.parent / 'penetration_test_report.md').is_file():
         raise ValueError('completed scan has no report')

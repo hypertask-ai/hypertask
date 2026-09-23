@@ -5,6 +5,27 @@ umask 077
 SCRIPT_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
 DESTINATION=${STRIX_INSTALL_DIR:-$HOME/.local/lib/strix-runner}
 install -d -m 700 "$DESTINATION" "$HOME/.local/state/strix/weekly" "$HOME/.config/strix"
+python3 - "$HOME" <<'PY'
+import json, os, pathlib, sys
+home = pathlib.Path(sys.argv[1])
+paths = [home / '.cache/strix-filed-titles.json',
+         home / '.local/state/strix/assessment/filed-titles.json',
+         home / '.local/state/strix/weekly/filed-titles.json',
+         home / '.local/state/strix/filed-titles.json']
+titles = set()
+for path in paths:
+    if path.exists():
+        value = json.loads(path.read_text())
+        if not isinstance(value, list):
+            raise ValueError(f'invalid filed-title state: {path}')
+        titles.update(value)
+destination = paths[-1]
+destination.parent.mkdir(parents=True, exist_ok=True)
+temporary = destination.with_suffix('.tmp')
+temporary.write_text(json.dumps(sorted(titles)) + '\n')
+os.chmod(temporary, 0o600)
+temporary.replace(destination)
+PY
 VERIFY_SOURCE=${STRIX_VERIFY_SOURCE:-$HOME/projects/hypertask-verify-app}
 for name in app-auth.mjs config.mjs node_modules/playwright/index.mjs node_modules/playwright-core/package.json; do
   test -f "$VERIFY_SOURCE/$name" || { echo "Missing verification dependency: $VERIFY_SOURCE/$name"; exit 1; }

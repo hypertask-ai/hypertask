@@ -26,7 +26,7 @@ Completed batches keep their validated reports and do not run again on a retry. 
 
 Strix exit code 2 means findings, not necessarily completion. Every batch must have completed metadata, a report and an explicit `COVERAGE_COMPLETE` statement. Reports admitting incomplete coverage fail validation. This checks report consistency, not whether the model truly examined every line.
 
-Medium and higher source findings require two confirmation calls with source, callers and test context before filing through Product Bot on board 15. These are separate model judgments, not independent exploit reproductions. Confirmation and filing failures keep the batch incomplete. If Strix omits the structured findings file, the reporter extracts candidates from its written report before confirmation. It retains extracted claims and both judgments alongside the report. Small referenced source files are supplied in full so omitted code cannot decide an absence claim. Live-check failures remain in the report for investigation; they are not automatically filed as new vulnerabilities.
+Medium and higher source findings require two confirmation calls with source, callers and test context before filing through Product Bot on board 15. These are separate model judgments, not independent exploit reproductions. Confirmation and filing failures keep the batch incomplete. The reporter reads both structured findings and the written report, then merges matching claims before confirmation. It retains extracted claims and both judgments alongside the report. Small referenced source files are supplied in full so omitted code cannot decide an absence claim. Live-check failures remain in the report for investigation; they are not automatically filed as new vulnerabilities.
 
 ## Results
 

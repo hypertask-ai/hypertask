@@ -50,7 +50,7 @@ mode=os.environ.get('MODE','ok')
 if mode=='crash':sys.exit(7)
 p=pathlib.Path('strix_runs/owned');p.mkdir(parents=True)
 complete=mode!='budget'
-data={'status':'completed' if complete else 'budget_exceeded','scan_results':{'scan_completed':complete,'methodology':'COVERAGE_COMPLETE','technical_analysis':'Incomplete' if mode=='incomplete' else 'Reviewed changes'}}
+data={'status':'completed' if complete else 'budget_exceeded','scan_results':{'scan_completed':complete,'methodology':'COVERAGE_COMPLETE','technical_analysis':'Coverage incomplete' if mode=='incomplete' else 'Reviewed changes'}}
 (p/'run.json').write_text(json.dumps(data));(p/'penetration_test_report.md').write_text('Report')
 (p/'vulnerabilities.json').write_text('[]')
 if mode=='findings':
@@ -59,7 +59,7 @@ if mode=='findings':
 ''',
         }.items():
             p=bin / name;p.write_text(body);p.chmod(0o755)
-        self.env = {'HOME': str(self.root), 'PATH': '/usr/bin:/bin', 'STRIX_REPO': str(self.repo), 'STRIX_DIFF_BASE': self.base}
+        self.env = {'HOME': str(self.root), 'PATH': os.environ['PATH'], 'STRIX_REPO': str(self.repo), 'STRIX_DIFF_BASE': self.base}
 
     def run_scan(self, mode='ok'):
         result=subprocess.run(['/bin/bash', str(SCRIPTS/'strix-weekly.sh')],env={**self.env,'MODE':mode},capture_output=True,text=True)
@@ -159,6 +159,26 @@ class ReportTests(unittest.TestCase):
             with patch.object(reporter,'model_text',return_value='{"findings":[{"title":"No evidence"}]}'):
                 with self.assertRaises(ValueError):reporter.read_findings(temp)
 
+    def test_narrative_and_structured_findings_are_merged(self):
+        reporter=load('strix-file-tickets')
+        with tempfile.TemporaryDirectory() as temp:
+            root=Path(temp)
+            (root/'penetration_test_report.md').write_text('Two findings')
+            first={'title':'First flaw','severity':'medium','code_locations':[{'file':'src/a.ts','start_line':1}]}
+            second={'title':'Second flaw','severity':'high','code_locations':[{'file':'src/b.ts','start_line':2}]}
+            (root/'vulnerabilities.json').write_text(json.dumps([first]))
+            with patch.object(reporter,'model_text',return_value=json.dumps({'findings':[first,second]})):
+                self.assertEqual(reporter.read_findings(temp),[first,second])
+
+    def test_completed_report_can_describe_an_incomplete_auth_check(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root=Path(temp)/'run';root.mkdir()
+            (root/'run.json').write_text(json.dumps({'status':'completed','scan_results':{
+                'scan_completed':True,'methodology':'COVERAGE_COMPLETE',
+                'technical_analysis':'The incomplete authorization check exposes account data.'}}))
+            (root/'penetration_test_report.md').write_text('Reviewed the scope')
+            self.assertEqual(load('strix-check-run').validate(temp),root)
+
     def test_batch_plan_respects_size_and_rejects_outside_source(self):
         with tempfile.TemporaryDirectory() as temp:
             root=Path(temp); source=root/'source';source.mkdir()
@@ -169,6 +189,8 @@ class ReportTests(unittest.TestCase):
             self.assertEqual(len(result),3)
             (root/'outside.py').write_text('secret')
             with self.assertRaises(ValueError):planner.plan(source,['../outside.py'])
+            (source/'link.py').symlink_to(root/'outside.py')
+            with self.assertRaises(ValueError):planner.plan(source,['link.py'])
 
     def test_completed_banner_without_scope_attestation_fails(self):
         with tempfile.TemporaryDirectory() as temp:
@@ -223,7 +245,7 @@ class ReportTests(unittest.TestCase):
         reporter=load('strix-file-tickets')
         with tempfile.TemporaryDirectory() as temp:
             (Path(temp)/'vulnerabilities.json').write_text(json.dumps([{'title':'Test','severity':'high'}]))
-            with patch.object(reporter,'STATE',str(Path(temp)/'state.json')),patch.object(reporter,'confirmed_twice',side_effect=ValueError('no evidence')):
+            with patch.object(reporter,'STATE',str(Path(temp)/'state.json')),patch.object(reporter,'read_findings',return_value=[{'title':'Test','severity':'high'}]),patch.object(reporter,'confirmed_twice',side_effect=ValueError('no evidence')):
                 with self.assertRaises(SystemExit):reporter.main(temp)
 
 

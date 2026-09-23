@@ -26,6 +26,9 @@ finish() {
   fi
   if [ "$code" -eq 3 ] && [ "$STATUS" = pending ]; then :
   elif [ "$code" -ne 0 ]; then STATUS=failed; fi
+  # Reports and receipts remain; the public source clone is reproducible from
+  # the pinned revision and must not accumulate after every Sunday run.
+  if [ -d "$JOB/source" ]; then rm -rf -- "$JOB/source" || { code=1; STATUS=failed; }; fi
   if [ "$STATUS" = completed ]; then
     printf '%s\n' "$REVISION" > "$STATE/last-success.tmp"
     mv "$STATE/last-success.tmp" "$STATE/last-success"
@@ -74,7 +77,7 @@ git -C "$STATE/source.git" merge-base --is-ancestor "$BASE" "$REVISION"
 git -C "$STATE/source.git" update-ref refs/heads/pending "$REVISION"
 git clone --quiet --no-hardlinks --no-checkout "$STATE/source.git" "$JOB/source"
 git -C "$JOB/source" checkout --quiet --detach "$REVISION"
-git -C "$JOB/source" diff --name-only --diff-filter=ACMR "$BASE" "$REVISION" > "$JOB/changed-files.txt"
+git -C "$JOB/source" diff --name-only --diff-filter=ACMRT "$BASE" "$REVISION" > "$JOB/changed-files.txt"
 printf 'Revision: %s\nBase: %s\n' "$REVISION" "$BASE"
 if [ ! -s "$JOB/changed-files.txt" ]; then STATUS=no_changes; exit 0; fi
 printf '%s %s\n' "$REVISION" "$BASE" > "$STATE/pending-scope.tmp"

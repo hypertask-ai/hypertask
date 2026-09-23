@@ -185,11 +185,12 @@ def confirm_finding(finding):
 
 def read_findings(run):
     path = Path(run) / "vulnerabilities.json"
+    structured = []
     if path.exists():
         value = json.loads(path.read_text())
-        return value if isinstance(value, list) else value["vulnerabilities"]
-    # Strix 1.3 can put findings only in finish_scan's narrative while SARIF says
-    # zero. Convert those claims into candidates; confirmation still runs twice.
+        structured = value if isinstance(value, list) else value["vulnerabilities"]
+    # Strix 1.3 can omit some findings from its structured output. Inspect the
+    # narrative even when structured findings exist, then deduplicate claims.
     report = (Path(run) / "penetration_test_report.md").read_text()
     if len(report) > 60000:
         raise ValueError("narrative report exceeds intake limit; manual review required")
@@ -211,7 +212,13 @@ def read_findings(run):
     ):
         raise ValueError("narrative finding extraction returned an invalid result")
     (Path(run) / "narrative-candidates.json").write_text(json.dumps(findings, indent=2))
-    return findings
+    merged = {}
+    for finding in structured + findings:
+        first = (finding.get("code_locations") or [{}])[0]
+        key = (norm(finding.get("title") or finding.get("id")),
+               str(first.get("file") or ""), int(first.get("start_line") or 0))
+        merged.setdefault(key, finding)
+    return list(merged.values())
 
 
 def confirmed_twice(finding):
