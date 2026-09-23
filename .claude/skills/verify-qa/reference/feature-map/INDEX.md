@@ -14,19 +14,24 @@ each ticket only needs the one or two areas it touches.
 
 | Area | File | e2e/smoke id |
 |---|---|---|
-| Login | [login.md](login.md) | `login` |
-| Boards and views | [boards-and-views.md](boards-and-views.md) | `open-board`, `switch-boards` |
-| Task detail and description | [task-detail-and-description.md](task-detail-and-description.md) | `open-task`, `edit-description` |
-| Comments and mentions | [comments-and-mentions.md](comments-and-mentions.md) | `add-comment` |
-| Drag and drop | [drag-and-drop.md](drag-and-drop.md) | `drag-card` |
-| AI chat | [ai-chat.md](ai-chat.md) | `ai-chat` |
-| Inbox | [inbox.md](inbox.md) | none yet |
-| Search and filters | [search-and-filters.md](search-and-filters.md) | none yet |
-| Demo board | [demo-board.md](demo-board.md) | `demo.spec.ts` (`@demo`, untagged) |
-| Mobile | [mobile.md](mobile.md) | any journey tagged `@mobile` |
+| Login | [login.md](login.md) | `login` (write journey) |
+| Boards and views | [boards-and-views.md](boards-and-views.md) | `open-board`, `switch-boards` (write); `view-board-list`, `view-kanban-board` (load-only, `prod.spec.ts`) |
+| Task detail and description | [task-detail-and-description.md](task-detail-and-description.md) | `open-task`, `edit-description` (write); `view-task-detail` (load-only) |
+| Comments and mentions | [comments-and-mentions.md](comments-and-mentions.md) | `add-comment` (write journey) |
+| Drag and drop | [drag-and-drop.md](drag-and-drop.md) | `drag-card` (write journey) |
+| AI chat | [ai-chat.md](ai-chat.md) | `ai-chat` (write journey) |
+| Inbox | [inbox.md](inbox.md) | `view-inbox` (load-only); no write journey for archive/undo |
+| Search and filters | [search-and-filters.md](search-and-filters.md) | `view-AI-search` (load-only, capital AI); no write journey for filters |
+| Demo board | [demo-board.md](demo-board.md) | `demo` (tag `@demo`, `demo.spec.ts`) |
+| Mobile | [mobile.md](mobile.md) | any id above tagged `@mobile` (`open-board`, `open-task`, `create-task`) |
 
-"none yet" means `e2e/smoke/journeys.spec.ts` has no write journey for that
-area. Verify by hand; don't invent a test id that doesn't exist.
+Load-only ids come from `prod.spec.ts`'s per-view smoke check (page loads,
+no error, right selector present). Real, but shallower than a write journey.
+Write-journey ids are tagged `@id:<name>`, tier-prefixed when `HT_QA_TIER` is
+set (`lib/tier.ts`'s `tieredId`); load-only ids follow the same
+`@id:view-<name>` shape from `prod.spec.ts`, case preserved from the view's
+own `name` field. "No write journey" means don't invent a test id that
+doesn't exist; verify that action by hand.
 
 ## Driving the app for verification
 

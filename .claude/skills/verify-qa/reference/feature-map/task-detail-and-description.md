@@ -15,17 +15,17 @@ specifically rather than a manual edit.
 ## What usually breaks
 
 - Open task not refreshing its description when a realtime update drops
-  (`HTPR-6281`, fixed then reverted then re-landed as `#746`, the kind of bug
+  ([HTPR-6281](https://app.hypertask.ai/detail/project-15/6281), fixed then reverted then re-landed as `#746`, the kind of bug
   that needs the reload check below, not just a live-DOM look).
-- AI-edited descriptions losing structure (`HTPR-6561`).
+- AI-edited descriptions losing structure ([HTPR-6561](https://app.hypertask.ai/detail/project-15/6561)).
 - Mobile Task Writer saving the wrong thing or locking direct save
-  (`HTPR-6564`).
+  ([HTPR-6564](https://app.hypertask.ai/detail/project-15/6564)).
 
 ## What proof to collect
 
 Screenshot the description before and after the edit, then a **reload
 check**: close and reopen the task (or full page reload) and screenshot
-again. `HTPR-6281` shipped and broke twice because the live view looked right
+again. [HTPR-6281](https://app.hypertask.ai/detail/project-15/6281) shipped and broke twice because the live view looked right
 and only the post-reload state was wrong.
 
 ## Cleanup

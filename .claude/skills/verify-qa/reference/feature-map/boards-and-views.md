@@ -16,16 +16,16 @@ cluster around what happens on that second switch, not the first load.
 
 ## What usually breaks
 
-- Board switching leaving stale state behind (`HTPR-6627`, "make shallow
+- Board switching leaving stale state behind ([HTPR-6627](https://app.hypertask.ai/detail/project-15/6627), "make shallow
   board switch permanent"), previously flagged behind a flag until proven
   stable.
-- Realtime subscriptions silently dying after a switch (`HTPR-6565` shipped
+- Realtime subscriptions silently dying after a switch ([HTPR-6565](https://app.hypertask.ai/detail/project-15/6565) shipped
   as #685, was reverted, and needs re-verifying if it lands again;
-  `HTPR-6566` for the webhook-chat half, also reverted once).
-- Filters not applying immediately (`HTPR-6595`).
-- Column save-view retries looping on an empty column (`HTPR-6588`,
-  `HTPR-6550`).
-- Focused card position resetting on board reload (`HTPR-6333`, "snap board
+  [HTPR-6566](https://app.hypertask.ai/detail/project-15/6566) for the webhook-chat half, also reverted once).
+- Filters not applying immediately ([HTPR-6595](https://app.hypertask.ai/detail/project-15/6595)).
+- Column save-view retries looping on an empty column ([HTPR-6588](https://app.hypertask.ai/detail/project-15/6588),
+  [HTPR-6550](https://app.hypertask.ai/detail/project-15/6550)).
+- Focused card position resetting on board reload ([HTPR-6333](https://app.hypertask.ai/detail/project-15/6333), "snap board
   left when focused card still fits").
 
 ## What proof to collect

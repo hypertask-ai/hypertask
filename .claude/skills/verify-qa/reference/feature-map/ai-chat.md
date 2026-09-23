@@ -16,15 +16,15 @@ picker sends a stable `modelOptionId`; see
 
 - Provider/gateway slug drift breaking a specific model entirely: Grok chat
   moved between the `xai` and `spacexai` gateway slugs three times in one
-  week (`HTPR-6349`, `HTPR-6414`, `HTPR-6415`), then Grok was pulled from
-  chat until needed (`HTPR-6349` again).
-- Token usage blowing up (`HTPR-6507`, "reduce AI chat token usage").
+  week ([HTPR-6349](https://app.hypertask.ai/detail/project-15/6349), [HTPR-6414](https://app.hypertask.ai/detail/project-15/6414), [HTPR-6415](https://app.hypertask.ai/detail/project-15/6415)), then Grok was pulled from
+  chat until needed ([HTPR-6349](https://app.hypertask.ai/detail/project-15/6349) again).
+- Token usage blowing up ([HTPR-6507](https://app.hypertask.ai/detail/project-15/6507), "reduce AI chat token usage").
 - Chat replies not attaching to the right message after a webhook round-trip
-  (`HTPR-6553`, two rounds).
-- Failed webhook chats not falling back to polling (`HTPR-6566`, reverted
+  ([HTPR-6553](https://app.hypertask.ai/detail/project-15/6553), two rounds).
+- Failed webhook chats not falling back to polling ([HTPR-6566](https://app.hypertask.ai/detail/project-15/6566), reverted
   once, watch for a recurrence).
 - Mobile Agent Chat chrome showing on the wrong path, or the wrong composer
-  rendering (`HTPR-6476`, two rounds).
+  rendering ([HTPR-6476](https://app.hypertask.ai/detail/project-15/6476), two rounds).
 
 ## What proof to collect
 

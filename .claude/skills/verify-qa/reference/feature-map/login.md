@@ -17,12 +17,12 @@ blank shell.
 
 ## What usually breaks
 
-- Better Auth version drift taking sign-in down (`HTPR-6395`, pinned to 1.6
+- Better Auth version drift taking sign-in down ([HTPR-6395](https://app.hypertask.ai/detail/project-15/6395), pinned to 1.6
   after a 1.7 table check broke it).
-- QA login attempts leaking email into logs (`HTPR-6536`, fixed to keep
+- QA login attempts leaking email into logs ([HTPR-6536](https://app.hypertask.ai/detail/project-15/6536), fixed to keep
   email out of QA login logs).
 - Hydration mismatches on first load right after auth
-  (`HTPR-6609`, `HTPR-6199`) show up as a flash of wrong content or a stuck
+  ([HTPR-6609](https://app.hypertask.ai/detail/project-15/6609), [HTPR-6199](https://app.hypertask.ai/detail/project-15/6199)) show up as a flash of wrong content or a stuck
   spinner right after redirect.
 
 ## What proof to collect

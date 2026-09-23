@@ -17,11 +17,11 @@ steps toward `[data-rbd-droppable-id]` for the target column, then
 ## What usually breaks
 
 - Column save-view retries looping on an empty column once a card leaves it
-  (`HTPR-6588`, `HTPR-6550`).
-- Board filters not re-applying immediately after a move (`HTPR-6595`).
+  ([HTPR-6588](https://app.hypertask.ai/detail/project-15/6588), [HTPR-6550](https://app.hypertask.ai/detail/project-15/6550)).
+- Board filters not re-applying immediately after a move ([HTPR-6595](https://app.hypertask.ai/detail/project-15/6595)).
 - Drag-adjacent regressions have been rare lately; the last two on-record
-  drag bugs are older (`HTPR-3564`, timeframe button dragging, and
-  `HTPR-5854`, a mobile sheet drag crash). Don't assume a drag ticket has a
+  drag bugs are older ([HTPR-3564](https://app.hypertask.ai/detail/project-15/3564), timeframe button dragging, and
+  [HTPR-5854](https://app.hypertask.ai/detail/project-15/5854), a mobile sheet drag crash). Don't assume a drag ticket has a
   matching bug pattern here; read the ticket's own repro.
 
 ## What proof to collect

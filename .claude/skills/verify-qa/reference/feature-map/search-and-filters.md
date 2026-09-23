@@ -14,11 +14,11 @@ holds.
 ## What usually breaks
 
 - Weak matches ranking above strong ones, or title phrases not outranking
-  scrambled title words (`HTPR-6372`, three rounds: `#549`, `#552`, `#553`).
+  scrambled title words ([HTPR-6372](https://app.hypertask.ai/detail/project-15/6372), three rounds: `#549`, `#552`, `#553`).
 - Archived tasks and title matches dropping out of ranked search
-  (`HTPR-6372` again, `#552`).
+  ([HTPR-6372](https://app.hypertask.ai/detail/project-15/6372) again, `#552`).
 - Board filters not applying immediately, requiring a reload to take effect
-  (`HTPR-6595`).
+  ([HTPR-6595](https://app.hypertask.ai/detail/project-15/6595)).
 
 ## What proof to collect
 

@@ -14,10 +14,10 @@ and that archiving/undo works.
 ## What usually breaks
 
 - Undo restore skipping rows that are missing by the time undo runs
-  (`HTPR-6527`, "skip missing inbox rows during undo restore").
-- Ctrl+Z not undoing an inbox archive was flagged once by the E2B fleet
-  (`HTPR-5761`) but didn't reproduce the next day; worth a manual check if a
-  ticket touches archive/undo.
+  ([HTPR-6527](https://app.hypertask.ai/detail/project-15/6527), "skip missing inbox rows during undo restore").
+- Archive undo not taking effect immediately, fixed once already
+  ([HTPR-5761](https://app.hypertask.ai/detail/project-15/5761), "make inbox archive undo immediate"); worth a regression
+  check on any ticket that touches archive/undo.
 
 ## What proof to collect
 

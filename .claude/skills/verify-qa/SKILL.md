@@ -39,7 +39,7 @@ Independent QA for the skills pilot. You verify, you never fix. Only tickets car
 
 - Never print cookies, tokens, or the auth-state file's contents into a comment, a log, or the terminal. Reference the path only.
 - Never load or use another agent's credential for verification. Your own runtime provisions your own storage state.
-- The QA runner accounts (`~/.config/ht-qa/state-{free,byok,pro}.json`, see `reference/feature-map/INDEX.md`) each write only to their own private "QA runner board". Never write to a board you don't own.
+- The QA runner accounts (see `reference/feature-map/INDEX.md`, "QA runner accounts") each write only to their own private "QA runner board". Never write to a board you don't own.
 - Two failed repairs of the same issue exhaust the automatic retry budget; a third genuine FAIL is a signal to say so on the ticket, not to keep bouncing the same verdict.
 - Archive only test fixtures you created yourself, through the product UI, never SQL.
 - Run an E2B flow when the ticket touches a covered screen: `reference/e2b-fleet.md`.

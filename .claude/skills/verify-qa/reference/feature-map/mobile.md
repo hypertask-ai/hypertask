@@ -22,11 +22,11 @@ what "normal" looks like, just don't assume they ran automatically.
 
 Mobile-only layout and interaction bugs desktop testing never catches, most
 recently: mobile Task Writer direct save locking up and new-task layout
-(`HTPR-6564`, two rounds), mobile Agent Chat chrome and composer showing on
-the wrong path (`HTPR-6476`, two rounds), mobile creator focus
-initialization order (`HTPR-6556`), mobile Agent Chat layout/mic/reply style
-(`HTPR-6407`), and the shortcut nudge not showing on mobile task pages
-(`HTPR-5906`). This area has a long tail of past mobile-only fixes; grep
+([HTPR-6564](https://app.hypertask.ai/detail/project-15/6564), two rounds), mobile Agent Chat chrome and composer showing on
+the wrong path ([HTPR-6476](https://app.hypertask.ai/detail/project-15/6476), two rounds), mobile creator focus
+initialization order ([HTPR-6556](https://app.hypertask.ai/detail/project-15/6556)), mobile Agent Chat layout/mic/reply style
+([HTPR-6407](https://app.hypertask.ai/detail/project-15/6407)), and the shortcut nudge not showing on mobile task pages
+([HTPR-5906](https://app.hypertask.ai/detail/project-15/5906)). This area has a long tail of past mobile-only fixes; grep
 `git log --oneline | grep -i 'BUGFIX.*mobile'` for the full list if a ticket
 needs older context.
 
