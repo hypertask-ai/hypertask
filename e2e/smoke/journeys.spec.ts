@@ -283,8 +283,7 @@ test(`plan shows correctly`, { tag: [idTag('plan-check')] }, async ({ page }) =>
   const expected = readExpectedPlanLabel()
   test.skip(
     !expected,
-    `HT_QA_EXPECTED_PLAN not set for tier "${readTier() ?? '(none)'}", the free/light/premium-to-plan mapping ` +
-      'is not confirmed yet, see the PR description\'s open questions',
+    `no expected plan for tier "${readTier() ?? '(none)'}" (known tiers: free, byok, pro)`,
   )
 
   await page.goto(withRealtime('/settings/billing'), { waitUntil: 'load' })
