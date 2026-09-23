@@ -97,7 +97,7 @@ try {
     redirectEvidence.redirectFollowed === true && redirectEvidence.exitCode === 0 && !redirectEvidence.authorizationForwarded, redirectEvidence);
 
   const { chromium } = await import(pathToFileURL(playwright));
-  browser = await chromium.launch({ headless: true, executablePath: process.env.STRIX_BROWSER || chromium.executablePath(), args: ['--no-sandbox'] });
+  browser = await chromium.launch({ headless: true, ...(process.env.STRIX_BROWSER ? { executablePath: process.env.STRIX_BROWSER } : {}), args: ['--no-sandbox'] });
   const anonymous = await browser.newContext(); const login = await anonymous.newPage();
   await login.goto(origin + '/login', { waitUntil: 'domcontentloaded', timeout: 45000 });
   await login.getByText(/continue with google/i).first().waitFor({ timeout: 20000 });
