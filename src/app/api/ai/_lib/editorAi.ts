@@ -722,7 +722,7 @@ function editorUsageMiddleware(args: {
   taskId?: number | null;
   agentId?: string | null;
   provider: string;
-  model: string;
+  model: () => string;
 }): LanguageModelMiddleware {
   const logUsage = async (usage: {
     inputTokens: { total?: number };
@@ -738,7 +738,7 @@ function editorUsageMiddleware(args: {
       taskId: args.taskId,
       agentId: args.agentId,
       provider: args.provider,
-      model: args.model,
+      model: args.model(),
       feature: "editor",
       inputTokens,
       outputTokens,
@@ -788,21 +788,19 @@ export async function selectTiptapModel(args?: {
     teamContext: args?.teamContext,
   });
 
-  return {
-    ...selected,
-    model: wrapLanguageModel({
-      model: selected.model as Parameters<typeof wrapLanguageModel>[0]["model"],
-      middleware: editorUsageMiddleware({
-        userId: args?.userId,
-        teamId: selected.teamId,
-        projectId: args?.projectId,
-        taskId: args?.taskId,
-        agentId: args?.agentId,
-        provider: selected.usageProvider,
-        model: selected.modelId,
-      }),
+  selected.model = wrapLanguageModel({
+    model: selected.model as Parameters<typeof wrapLanguageModel>[0]["model"],
+    middleware: editorUsageMiddleware({
+      userId: args?.userId,
+      teamId: selected.teamId,
+      projectId: args?.projectId,
+      taskId: args?.taskId,
+      agentId: args?.agentId,
+      provider: selected.usageProvider,
+      model: () => selected.modelId,
     }),
-  };
+  });
+  return selected;
 }
 
 export function selectEditorModel(

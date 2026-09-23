@@ -7,6 +7,7 @@ const root = path.resolve(__dirname, "..");
 let jitiEntryId = 0;
 
 const stubbedModulePaths = [
+  "src/app/api/ai/_lib/aiUsage.ts",
   "src/app/api/ai/_lib/byokKeys.ts",
   "src/app/api/ai/_lib/customInstructions.ts",
   "src/app/api/ai/_lib/editorAi.ts",
@@ -1525,8 +1526,10 @@ test("editor models retry unavailable Luna once before output, but not after out
   const calls = [];
   let emitBeforeError = false;
   const retryError = { name: "RetryError", lastError: { status: 404 } };
-  stubModule("src/lib/prisma.ts", { default: {} });
+  stubModule("src/lib/prisma.ts", { default: { userSetting: { findUnique: async () => null } } });
   stubModule("src/utils/controllers/turbopuffer/turbopufferHelper.ts", {});
+  const usageRows = [];
+  stubModule("src/app/api/ai/_lib/aiUsage.ts", { logAiUsage: async (row) => usageRows.push(row) });
   stubModule("src/utils/controllers/projects/getAllIncludes.ts", {});
   stubModule("src/app/api/ai/_lib/byokKeys.ts", {
     getByokOrTeamGatewayApiKeyForModelOption: async () => "vck_test",
@@ -1547,7 +1550,7 @@ test("editor models retry unavailable Luna once before output, but not after out
       doGenerate: async () => {
         calls.push(modelId);
         if (modelId === "gpt-6-luna") throw retryError;
-        return { content: [{ type: "text", text: "OK" }] };
+        return { content: [{ type: "text", text: "OK" }], usage: { inputTokens: { total: 1 }, outputTokens: { total: 2 } } };
       },
       doStream: async () => ({
         stream: new ReadableStream({
@@ -1567,7 +1570,7 @@ test("editor models retry unavailable Luna once before output, but not after out
       }),
     }),
   });
-  const { selectTaskWriterModel } = loadTs("src/app/api/ai/_lib/editorAi.ts");
+  const { selectTaskWriterModel, selectTiptapModel } = loadTs("src/app/api/ai/_lib/editorAi.ts");
   const options = {
     modelOptionId: "gpt-6-luna",
     projectId: 1,
@@ -1583,6 +1586,12 @@ test("editor models retry unavailable Luna once before output, but not after out
     assert.deepEqual(calls, ["gpt-6-luna", "gpt-5.6-luna"]);
     assert.equal(selected.modelId, "gpt-5.6-luna");
     assert.match(warnings[0], /^\[ai-model-fallback\] gpt-6-luna -> gpt-5.6-luna: 404$/);
+    calls.length = 0;
+    const editor = await selectTiptapModel(options);
+    await editor.model.doGenerate({ prompt: [] });
+    assert.deepEqual(calls, ["gpt-6-luna", "gpt-5.6-luna"]);
+    assert.equal(editor.modelId, "gpt-5.6-luna");
+    assert.equal(usageRows.at(-1).model, "gpt-5.6-luna");
     calls.length = 0;
     const streaming = await selectTaskWriterModel(options);
     const { stream } = await streaming.model.doStream({ prompt: [] });
