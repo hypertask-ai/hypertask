@@ -111,16 +111,16 @@ Before changing a feature, trace the entry point through middleware, route handl
 
 ## Feature flags for new user-facing behavior
 
-- Every new feature, screen, control, shortcut, API route, or user-visible behavior change requires one ticket-specific feature flag.
+- Every new feature, screen, control, shortcut, API route, or deliberate behavior/design change requires one ticket-specific feature flag.
 - Name the key after the ticket, for example `htpr-6091-feature-flags`; never reuse a flag for another feature.
 - New flags always default to **Owner + QA**, so Valentin and the QA account can judge the change in the real app (HTPR-6192 deleted the old Only-me default; `DEFAULT_FEATURE_FLAG_MODE` in `src/lib/flags.ts` is the source of truth). Developers never release a flag to Everyone; Valentin changes the mode at `/admin/flags`.
 - Gate protected behavior on the server. `useFlag` only hides client UI and never replaces API authorization.
-- The label on the ticket does not decide this; the effect does. If a user will see, click, type, or read anything differently after the change ships, it needs a flag, even when the ticket is called a bug. Layout, wording, flow, timing, defaults, shortcuts, embeds, and autocomplete behaviour all count.
-- Exempt only when nothing visible changes: a fix that makes a broken thing do exactly what it did before (crash, 500, wrong or lost data), performance work with identical output, security fixes, dependency or CI changes, spelling corrections, and tickets carrying the **AI CHAT 💬** label.
-- When in doubt, add the flag. Removing an unneeded flag costs one ticket; shipping a UX change without one costs a rollback.
+- A real bug fix restores behavior that used to work or was clearly intended. It never gets a flag and ships to everyone, even when the fix is visible (Valentin, 2026-09-22). A `[BUGFIX]` title alone does not make a change a bug fix; new visible behavior or design needs a flag.
+- Performance work with identical output, security fixes, dependency or CI changes, spelling corrections, and tickets carrying the **AI CHAT 💬** label also do not require a flag.
+- Swapping an existing AI model for its newer version from the same provider (same slots, same plan gating, automatic fallback to the previous version) is a dependency update and needs no flag.
 - The merge freeze for a required flag does not apply to tickets carrying the **AI CHAT 💬** label.
-- Reviewers must block feature or UI pull requests that omit the required flag.
+- Reviewers must block new-feature pull requests that omit the required flag.
 - The required `feature-flag-gate` check is a mechanical changed-UI check that supplements semantic review. API-only changes stay outside this mechanical check; reviewers still enforce the server-side flag rules above.
-- For this mechanical check only, a valid `[BUGFIX]` or `[INFRA]` title may pass without a flag when the diff adds at most 150 lines to UI files. A verified auto-revert has the same exemption. These results still require owner merge, and neither exemption waives semantic review or permits user-visible behavior to bypass the rules above.
+- For this mechanical check only, a valid `[BUGFIX]` or `[INFRA]` title may pass without a flag when the diff adds at most 150 lines to UI files. A verified auto-revert has the same exemption. The title is only a hint to the gate, not proof of a bug fix: the reviewer must decide from the diff whether it restores intended behavior. These results still require owner merge; new visible behavior dressed as a fix needs a flag.
 - After a flag has stayed on **Everyone** for 14 days, create a follow-up ticket to remove the flag and dead branch.
 - The moment a flagged feature is live on production, post a ticket comment that @mentions Valentin (`<span data-type="mention" class="mention" data-id="Valentin Yeo" data-label="name-6">Valentin Yeo</span>`) with the flag key, one line on what it does, and the link https://app.hypertask.ai/admin/flags. Without the mention he never learns the flag exists (Valentin, 2026-09-04, https://app.hypertask.ai/detail/project-15/6131).
