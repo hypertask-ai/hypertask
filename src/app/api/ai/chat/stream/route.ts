@@ -10720,97 +10720,97 @@ export async function POST(request: NextRequest) {
         let result!: ReturnType<typeof streamText>;
         for (let attempt = 0; attempt < 2; attempt++) {
           let fallbackError: unknown;
-          result = streamText({
-            model: selected.model,
-            instructions,
-            messages,
-            tools,
-            stopWhen: stepCountIs(MAX_TOOL_STEPS),
-            maxRetries: 2,
-            abortSignal: providerAbort.signal,
-            onFinish: async ({ usage, finishReason }) => {
-              turnUsage = {
-                inputTokens: usage.inputTokens ?? undefined,
-                outputTokens: usage.outputTokens ?? undefined,
-              };
-              generationFinishedWithError = finishReason === "error";
-              await logAiUsage({
-                userId: dbUser.id,
-                teamId: gatewayTags.teamId ?? null,
-                projectId: usageProjectId,
-                taskId: contextTaskId,
-                // Without this an agent's own turns land as agentId: null, so the
-                // team is billed for work nobody can trace back to the agent.
-                agentId: actingAgent?.id ?? null,
-                provider: selected.usageProvider,
-                model: selected.modelId,
-                feature: "chat",
-                inputTokens: usage.inputTokens ?? 0,
-                outputTokens: usage.outputTokens ?? 0,
-                totalTokens: usage.totalTokens ?? 0,
-              });
-            },
-            onError: async ({ error }) => {
-              if (
-                attempt === 0 &&
-                !cancelled &&
-                !providerAbort.signal.aborted &&
-                previousModelForFailedStream(
-                  selected.resolvedModelId,
-                  error,
-                  chunks.length > 0,
-                  toolExecutions.length > 0,
-                )
-              ) {
-                fallbackError = error;
-                return;
-              }
-              recordTurnOutcome(cancelled ? "cancelled" : "failed", error);
-              if (errorSent) return;
-              errorSent = true;
-              if (cancelled) {
-                if (heartbeatExecutionId) {
-                  await failHeartbeatExecution(
-                    heartbeatExecutionId,
-                    "AI reply cancelled",
-                  );
-                  heartbeatExecutionTerminal = true;
-                }
-                finish("error", { cancelled: true, content: "Stream cancelled." });
-                return;
-              }
-              if (turnDeadlineHit) {
-                await endDeadlineTurn();
-                return;
-              }
-              // This is the only path that can end the turn with no assistant
-              // message ever persisted (every other exit reaches
-              // persistAssistantMessage, even the empty-completion fallback).
-              // A tool can execute before the model errors out, so callers
-              // that infer "nothing happened" from an absent reply (the
-              // native-agent heartbeat's retry logic) need this flag to avoid
-              // re-sending the same instructions and replaying that write.
-              send("error", {
-                content: userFacingErrorMessage(error, "model-stream"),
-                toolsExecuted: toolExecutions.length > 0,
-                ...userFacingErrorDetails(error, gatewayTags.teamId ?? null),
-              });
-              finish("error");
+        result = streamText({
+          model: selected.model,
+          instructions,
+          messages,
+          tools,
+          stopWhen: stepCountIs(MAX_TOOL_STEPS),
+          maxRetries: 2,
+          abortSignal: providerAbort.signal,
+          onFinish: async ({ usage, finishReason }) => {
+            turnUsage = {
+              inputTokens: usage.inputTokens ?? undefined,
+              outputTokens: usage.outputTokens ?? undefined,
+            };
+            generationFinishedWithError = finishReason === "error";
+            await logAiUsage({
+              userId: dbUser.id,
+              teamId: gatewayTags.teamId ?? null,
+              projectId: usageProjectId,
+              taskId: contextTaskId,
+              // Without this an agent's own turns land as agentId: null, so the
+              // team is billed for work nobody can trace back to the agent.
+              agentId: actingAgent?.id ?? null,
+              provider: selected.usageProvider,
+              model: selected.modelId,
+              feature: "chat",
+              inputTokens: usage.inputTokens ?? 0,
+              outputTokens: usage.outputTokens ?? 0,
+              totalTokens: usage.totalTokens ?? 0,
+            });
+          },
+          onError: async ({ error }) => {
+            if (
+              attempt === 0 &&
+              !cancelled &&
+              !providerAbort.signal.aborted &&
+              previousModelForFailedStream(
+                selected.resolvedModelId,
+                error,
+                chunks.length > 0,
+                toolExecutions.length > 0,
+              )
+            ) {
+              fallbackError = error;
+              return;
+            }
+            recordTurnOutcome(cancelled ? "cancelled" : "failed", error);
+            if (errorSent) return;
+            errorSent = true;
+            if (cancelled) {
               if (heartbeatExecutionId) {
                 await failHeartbeatExecution(
                   heartbeatExecutionId,
-                  errorMessage(error)
+                  "AI reply cancelled",
                 );
                 heartbeatExecutionTerminal = true;
               }
-              await reportHandledChatError(error, "model-stream", {
-                model: selected.resolvedModelId,
-                provider: selected.usageProvider,
-              });
-            },
-            providerOptions: selected.providerOptions,
-            ...selected.settings,
-          });
+              finish("error", { cancelled: true, content: "Stream cancelled." });
+              return;
+            }
+            if (turnDeadlineHit) {
+              await endDeadlineTurn();
+              return;
+            }
+            // This is the only path that can end the turn with no assistant
+            // message ever persisted (every other exit reaches
+            // persistAssistantMessage, even the empty-completion fallback).
+            // A tool can execute before the model errors out, so callers
+            // that infer "nothing happened" from an absent reply (the
+            // native-agent heartbeat's retry logic) need this flag to avoid
+            // re-sending the same instructions and replaying that write.
+            send("error", {
+              content: userFacingErrorMessage(error, "model-stream"),
+              toolsExecuted: toolExecutions.length > 0,
+              ...userFacingErrorDetails(error, gatewayTags.teamId ?? null),
+            });
+            finish("error");
+            if (heartbeatExecutionId) {
+              await failHeartbeatExecution(
+                heartbeatExecutionId,
+                errorMessage(error)
+              );
+              heartbeatExecutionTerminal = true;
+            }
+            await reportHandledChatError(error, "model-stream", {
+              model: selected.resolvedModelId,
+              provider: selected.usageProvider,
+            });
+          },
+          providerOptions: selected.providerOptions,
+          ...selected.settings,
+        });
 
           try {
             for await (const chunk of result.textStream) {
