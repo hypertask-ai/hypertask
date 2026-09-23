@@ -244,7 +244,7 @@ async function authMiddleware(request: NextRequest) {
       currentPath.startsWith('/verify-email') ||
       // HTPR-4857: public Slack Marketplace install page (flag-gated in the page itself).
       currentPath === '/add-to-slack' ||
-      // HTPR-6536: QA password login for TestSprite. The page 404s without env.
+      // HTPR-6536: QA password login. The page 404s without env.
       currentPath === '/qa/login' ||
       currentPath.startsWith('/qa/login/') ||
       currentPath.startsWith('/firebase-messaging-sw.js')) {

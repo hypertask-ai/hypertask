@@ -69,29 +69,8 @@ Bugs it found, all confirmed by hand before filing:
 - **No cron yet.** Nightly scheduling waits until the harness fails only for real reasons; a daily report of 10 false reds trains everyone to ignore it.
 - **Never point the fleet at a real user's account or board.** Flows must stay on their own throwaway board.
 
-## TestSprite
+## TestSprite (retired)
 
-Status as of 2026-09-16. TestSprite provides a small production API contract suite and logged-out browser smoke suite. Tests must not use Valentin's account or mutate any board except the dedicated **TestSprite QA** board owned by QA userId 985.
+TestSprite (the production API contract suite and logged-out browser smoke suite) is retired as of 2026-09-23: the subscription is cancelled. The `testsprite-production.yml` workflow, the `testsprite/backend/` and `testsprite/frontend/` test sources, and the `TESTSPRITE_API_KEY` GitHub secret are removed. Production QA verification now runs through the app suite above, plus the existing Playwright smoke (`e2e/smoke`).
 
-| Project | ID | Tests | Dashboard |
-|---|---|---:|---|
-| `Hypertask MCP API` | `64648e88-03a4-4355-9e14-dc28f4e8cc7e` | 8 backend contracts | [TestSprite](https://www.testsprite.com/dashboard-v3/o/ed490fba-6881-5950-a238-4bc8561b3b57/projects/64648e88-03a4-4355-9e14-dc28f4e8cc7e) |
-| `Hypertask Web` | `411d64f3-c9ec-4032-a4e5-ad0e3f6f57d9` | 4 logged-out browser checks | [TestSprite](https://www.testsprite.com/dashboard-v3/o/ed490fba-6881-5950-a238-4bc8561b3b57/projects/411d64f3-c9ec-4032-a4e5-ad0e3f6f57d9) |
-
-The backend suite covers MCP identity/context, immutable QA-board validation, projects and sections, task create/read/update/move/search/archive, labels, and HTML comment create/list. The label-filter contract guards the regression tracked at https://app.hypertask.ai/detail/project-15/6475. The frontend suite covers `/login`, the logged-out `/pricing` redirect, `/developers`, and a public 404. Its project URL is deliberately `/login`: booting a browser at `/` provisions a guest demo board and violates the suite's isolation rule.
-
-A signed-in web check starts at `/qa/login`. That page and `POST /api/auth/qa-login` exist only when `QA_LOGIN_EMAIL` and `QA_LOGIN_PASSWORD` are set, the password is at least 32 bytes, and flag `htpr-6536-qa-login` is on. If the flag cannot be read, both return 404. They sign in only the QA user (userId 985). The submitted password is checked with scrypt, not SHA-256. Any other email is refused. Rotate the password env value if it leaks.
-
-Credentials are local only. Source `/home/valentin/.config/testsprite/credentials.env` for the TestSprite key. The backend project's Bearer credential is the account-scoped MCP token for QA userId 985, sourced from `/home/valentin/.config/hypertask-videos/storageState-qa.warmed.json`; rotate the project credential when that QA session token expires. Never copy either value into a test or this repository.
-
-For credential-backed frontend tests, never print `testsprite test steps` output: TestSprite expands the stored username and password into those diagnostics. Use `test run --wait --summary-file` and report only the run ID and aggregate status. If diagnostics expose a credential, rotate it in the TestSprite project, Vercel Production, the GitHub secret, and local secure storage, then deploy Production before rerunning the test.
-
-```bash
-source /home/valentin/.config/testsprite/credentials.env
-testsprite test run --all --project 64648e88-03a4-4355-9e14-dc28f4e8cc7e --wait --timeout 1200
-testsprite test run --all --project 411d64f3-c9ec-4032-a4e5-ad0e3f6f57d9 --wait --timeout 1200
-```
-
-Backend test source lives in `testsprite/backend/`; add one with `testsprite test create --type backend --name "<contract>" --code-file testsprite/backend/<file>.py --project 64648e88-03a4-4355-9e14-dc28f4e8cc7e`, using only injected `__AUTH_HEADERS__`. Bind every write to board `5592`, verify owner userId `985`, use a UUID-scoped fixture, and archive it in `finally`. Frontend plans live in `testsprite/frontend/`; lint with `testsprite test lint --plan-from-dir testsprite/frontend`, then create a new plan with `testsprite test create --plan-from testsprite/frontend/<file>.json`. A full backend run costs about 1.6 credits and a full frontend run about 2 credits.
-
-`testsprite ci init github` was assessed but not committed. Its generated workflow targets frozen `main`, uses mutable `TestSprite/testsprite-action@v1`, tests configured production rather than the pull-request build, and requires the missing repository secret `TESTSPRITE_API_KEY`; that conflicts with the pinned-action and review-first contract in `docs/ci-policy.yml`.
+The QA password login (`/qa/login`, `POST /api/auth/qa-login`, flag `htpr-6536-qa-login`) stays: it is our own code and may be reused by whatever runner replaces TestSprite (https://app.hypertask.ai/detail/project-15/6636).
