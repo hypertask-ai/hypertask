@@ -1,5 +1,5 @@
 import type { APIRequestContext } from '@playwright/test'
-import { createProject, deleteTask, fetchBoardTasks, fetchBootstrap, getProjectMembers } from './api'
+import { createProject, deleteTask, fetchBoardTasks, fetchBootstrapWithTeams, getProjectMembers } from './api'
 
 // The owner's approval (HTPR-6636) covers writes ONLY on a private board
 // named exactly this, owned by the test account, with no other members.
@@ -14,6 +14,7 @@ export const QA_TASK_PREFIX = '[qa-runner]'
 export class BoardNotOwnedSolelyError extends Error {}
 
 export type QaRunnerBoard = {
+  userId: number
   projectId: number
   boardPath: string
   sectionId: number
@@ -24,14 +25,13 @@ export type QaRunnerBoard = {
 // doesn't exist yet. Refuses (throws) if the board has any member besides
 // the account itself, the owner's approval doesn't cover a shared board.
 export async function ensureQaRunnerBoard(request: APIRequestContext): Promise<QaRunnerBoard> {
-  const bootstrap = await fetchBootstrap(request)
-  const userSlice = bootstrap.slices.user
-  if (!userSlice?.ok) throw new Error('bootstrap did not return a logged-in user, is the session valid?')
-  const userId = userSlice.data.id
+  const bootstrap = await fetchBootstrapWithTeams(request)
+  // The user slice can time out too; accountId is always present.
+  const userId = bootstrap.slices.user?.ok ? bootstrap.slices.user.data.id : bootstrap.accountId
+  if (!userId) throw new Error('bootstrap did not return a logged-in user, is the session valid?')
 
-  const teamsSlice = bootstrap.slices.teams
-  if (!teamsSlice?.ok || teamsSlice.data.length === 0) throw new Error('bootstrap returned no teams for this account')
-  const teams = teamsSlice.data
+  const teams = bootstrap.teams
+  if (teams.length === 0) throw new Error('bootstrap loaded but this account really has no team')
 
   let projectId: number | undefined
   for (const team of teams) {
@@ -69,7 +69,10 @@ export async function ensureQaRunnerBoard(request: APIRequestContext): Promise<Q
   const section = project.section?.[0]
   if (!section) throw new Error(`"${QA_RUNNER_BOARD_TITLE}" (project ${projectId}) has no sections to create tasks in`)
 
-  return { projectId, boardPath: `/detail/project-${projectId}`, sectionId: section.id, sectionTitle: section.title }
+  // /project?id=N is the board's own URL. /detail/project-N (no ticket
+  // number) is only a server redirect to it (src/app/detail/[...slug]/page.tsx),
+  // which costs a second page load and drops the ?realtime=on param.
+  return { userId, projectId, boardPath: `/project?id=${projectId}`, sectionId: section.id, sectionTitle: section.section_title }
 }
 
 // Deletes any [qa-runner] task on the board older than an hour, a

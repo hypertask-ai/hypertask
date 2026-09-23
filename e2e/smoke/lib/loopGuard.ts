@@ -8,21 +8,25 @@ import { expect } from '@playwright/test'
 //
 // - Count main-frame `load` events, not `framenavigated` (which also fires
 //   for history/hash changes that aren't a real reload).
-// - After the first load, count requests to the two board-data endpoints;
-//   more than one refetch means something is looping.
+// - After the first load, count requests to each of the two board-data
+//   endpoints; more than one refetch of either means something is looping.
+//   The live app refetches getAll and boardTasks once each right after
+//   hydration (checked on the first real run, HTPR-6636), which is one
+//   refetch, not a loop.
 // - Sample the kanban column titles every 250ms for a window to catch
 //   columns disappearing and reappearing (a symptom of a refetch loop even
 //   when the final DOM state looks fine).
 export type LoopGuard = {
   loads: number
   boardFetches: number
+  fetchesByPath: Record<string, number>
   stop: () => void
 }
 
 const BOARD_DATA_PATHS = new Set(['/api/projects/getAll', '/api/projects/boardTasks'])
 
 export function watchForLoops(page: Page): LoopGuard {
-  const guard: LoopGuard = { loads: 0, boardFetches: 0, stop: () => {} }
+  const guard: LoopGuard = { loads: 0, boardFetches: 0, fetchesByPath: {}, stop: () => {} }
 
   const onLoad = () => {
     guard.loads++
@@ -35,7 +39,9 @@ export function watchForLoops(page: Page): LoopGuard {
     } catch {
       return
     }
-    if (BOARD_DATA_PATHS.has(pathname)) guard.boardFetches++
+    if (!BOARD_DATA_PATHS.has(pathname)) return
+    guard.fetchesByPath[pathname] = (guard.fetchesByPath[pathname] ?? 0) + 1
+    guard.boardFetches = Math.max(...Object.values(guard.fetchesByPath))
   }
 
   page.on('load', onLoad)
@@ -56,6 +62,9 @@ export async function assertColumnsStayVisible(
   durationMs: number,
 ): Promise<void> {
   const columns = page.locator(columnSelector)
+  // `load` fires before the board data arrives, so wait for the first
+  // column to render before taking the baseline count.
+  await columns.first().waitFor({ state: 'visible', timeout: 15_000 }).catch(() => {})
   const initialCount = await columns.count()
   expect(initialCount, `no "${columnSelector}" columns present to watch`).toBeGreaterThan(0)
 
@@ -72,5 +81,8 @@ export async function assertColumnsStayVisible(
 
 export function assertNoLoop(guard: LoopGuard, label: string): void {
   expect(guard.loads, `${label} reloaded ${guard.loads} times (expected at most 1)`).toBeLessThanOrEqual(1)
-  expect(guard.boardFetches, `${label} refetched board data ${guard.boardFetches} times after load (expected at most 1)`).toBeLessThanOrEqual(1)
+  expect(
+    guard.boardFetches,
+    `${label} refetched board data after load ${JSON.stringify(guard.fetchesByPath)} (expected at most 1 per endpoint)`,
+  ).toBeLessThanOrEqual(1)
 }

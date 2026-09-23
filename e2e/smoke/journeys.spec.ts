@@ -2,7 +2,7 @@ import { test, expect } from '@playwright/test'
 import { withRealtime } from './lib/realtime'
 import { watchForLoops, assertColumnsStayVisible, assertNoLoop } from './lib/loopGuard'
 import { readQaRunnerBoard } from './lib/readBoard'
-import { createTask, deleteTask, fetchBootstrap } from './lib/api'
+import { createTask, deleteTask, fetchBootstrapWithTeams } from './lib/api'
 import { QA_TASK_PREFIX } from './lib/boardSetup'
 import { tieredId, readExpectedPlanLabel, readTier } from './lib/tier'
 
@@ -66,8 +66,7 @@ test(`open task`, { tag: [idTag('open-task'), '@mobile'] }, async ({ page, reque
   const created = await createTask(request, {
     title: `${QA_TASK_PREFIX} open-task journey ${Date.now()}`,
     projectId: board.projectId,
-    sectionId: board.sectionId,
-    sectionTitle: board.sectionTitle,
+    userId: board.userId,
   })
   createdTaskIds.push(created.id)
 
@@ -80,8 +79,7 @@ test(`open task`, { tag: [idTag('open-task'), '@mobile'] }, async ({ page, reque
 
 test(`switch boards`, { tag: [idTag('switch-boards')] }, async ({ page, request }) => {
   const board = requireBoard()
-  const bootstrap = await fetchBootstrap(request)
-  const teams = bootstrap.slices.teams?.ok ? bootstrap.slices.teams.data : []
+  const { teams } = await fetchBootstrapWithTeams(request)
   const other = teams.flatMap((t) => t.projects).find((p) => p.id !== board.projectId)
   test.skip(!other, 'account has no other board to switch to besides "QA runner board"')
 
@@ -89,7 +87,7 @@ test(`switch boards`, { tag: [idTag('switch-boards')] }, async ({ page, request 
   await assertColumnsStayVisible(page, '.kanban-column-title', 3_000)
 
   const guard = watchForLoops(page)
-  await page.goto(withRealtime(`/detail/project-${other!.id}`), { waitUntil: 'load' })
+  await page.goto(withRealtime(`/project?id=${other!.id}`), { waitUntil: 'load' })
   await assertColumnsStayVisible(page, '.kanban-column-title', 10_000)
   assertNoLoop(guard, 'switch boards')
   guard.stop()
@@ -112,23 +110,34 @@ test(`create task`, { tag: [idTag('create-task'), '@mobile'] }, async ({ page })
     (res) => /\/api\/tasks\/(create|createGlobally)/.test(res.url()) && res.request().method() === 'POST',
     { timeout: 15_000 },
   )
-  await page.locator('.create-new-task-button').first().click()
-
+  // A click that lands before the board finishes hydrating is dropped, so
+  // retry until the modal or the inline input shows up.
   const modalTitleInput = page.locator('#title-input-modal')
   const inlineInput = page.locator('textarea[placeholder*="task" i], input[placeholder*="task" i]').first()
+  await expect(async () => {
+    await page.locator('.create-new-task-button').first().click()
+    await expect(modalTitleInput.or(inlineInput)).toBeVisible({ timeout: 2_000 })
+  }, 'the + column button never opened a create-task form').toPass({ timeout: 15_000 })
 
-  if (await modalTitleInput.isVisible({ timeout: 3_000 }).catch(() => false)) {
+  if (await modalTitleInput.isVisible()) {
+    // In the modal, Enter in the title only moves focus to the description.
+    // Desktop saves with the "Save & close" span (AttachmentsUpload/index.tsx
+    // DescriptionOptions; the span also holds a tooltip, so match the start),
+    // mobile with a plain "Save" span.
     await modalTitleInput.fill(title)
-    await modalTitleInput.press('Enter')
+    // The desktop modal also has a plain "Save" span, so look for
+    // "Save & close" first and only fall back to "Save" when it is absent.
+    const saveAndClose = page.locator('span', { hasText: /^Save & close/ }).first()
+    const save = (await saveAndClose.isVisible()) ? saveAndClose : page.locator('span', { hasText: /^Save$/ }).first()
+    await save.click()
   } else {
-    await inlineInput.waitFor({ state: 'visible', timeout: 5_000 })
     await inlineInput.fill(title)
     await inlineInput.press('Enter')
   }
 
   const response = await createResponse
   const body = await response.json()
-  const createdId = (body.newTask ?? body)?.id
+  const createdId = (body.newTask?.newTask ?? body.newTask ?? body)?.id
   if (createdId) createdTaskIds.push(createdId)
 
   await expect(page.locator(`text=${title}`).first(), 'created task card did not appear on the board').toBeVisible({ timeout: 10_000 })
@@ -143,8 +152,7 @@ test(`edit description`, { tag: [idTag('edit-description')] }, async ({ page, re
   const created = await createTask(request, {
     title: `${QA_TASK_PREFIX} edit-description journey ${Date.now()}`,
     projectId: board.projectId,
-    sectionId: board.sectionId,
-    sectionTitle: board.sectionTitle,
+    userId: board.userId,
   })
   createdTaskIds.push(created.id)
 
@@ -153,24 +161,25 @@ test(`edit description`, { tag: [idTag('edit-description')] }, async ({ page, re
 
   const marker = `qajourney${Date.now()}`
 
-  // Read-mode description container; double-click enters edit mode
-  // (DescriptonBody.tsx / TipTapTaskDetail.tsx, mode="read-edit-description").
-  // Unverified against a live account, first real run confirms the selector.
-  const descriptionArea = page.locator('#description, [id*="description" i]').first()
-  await descriptionArea.dblclick()
-  const editor = page.locator('.ProseMirror#description, #description .ProseMirror').first()
+  // A fast double click on #description-container enters edit mode
+  // (DescriptionContainer/index.tsx handleDesktopDoubleClick); the editable
+  // ProseMirror lives in #description-input. Escape saves
+  // (useSaveContent.ts handleEscape).
+  await page.locator('#description-container').dblclick()
+  const editor = page.locator('#description-input .ProseMirror[contenteditable="true"]')
   await editor.waitFor({ state: 'visible', timeout: 5_000 })
-  await editor.fill('')
-  await editor.type(`QA journey description ${marker} `)
+  await editor.click()
+  await page.keyboard.type(`QA journey description ${marker} `)
   // Actually exercise rich text (bold), not a literal "<strong>" string.
-  await editor.type('bold-part')
-  await editor.press('Control+a')
-  await editor.press('Control+b')
-  await editor.press('End')
-  await editor.press('Escape') // commits the save (useSaveContent.ts handleEscape)
+  await page.keyboard.press('Control+b')
+  await page.keyboard.type('bold-part')
+  await page.keyboard.press('Control+b')
+  await page.keyboard.press('Escape')
 
   await page.reload()
-  const descriptionAfterReload = page.locator('#description, [id*="description" i]').first()
+  // Read mode after reload (contenteditable="false"), so this is the saved
+  // description, not an unsaved draft restored into an open editor.
+  const descriptionAfterReload = page.locator('#description-input .ProseMirror[contenteditable="false"]')
   await expect(descriptionAfterReload, 'description edit did not persist after reload').toContainText(marker, { timeout: 10_000 })
   await expect(
     descriptionAfterReload.locator('strong', { hasText: 'bold-part' }),
@@ -183,8 +192,7 @@ test(`add comment`, { tag: [idTag('add-comment')] }, async ({ page, request }) =
   const created = await createTask(request, {
     title: `${QA_TASK_PREFIX} add-comment journey ${Date.now()}`,
     projectId: board.projectId,
-    sectionId: board.sectionId,
-    sectionTitle: board.sectionTitle,
+    userId: board.userId,
   })
   createdTaskIds.push(created.id)
 
@@ -196,14 +204,29 @@ test(`add comment`, { tag: [idTag('add-comment')] }, async ({ page, request }) =
   // and no em dash (repo style).
   const commentText = `QA journey comment ${Date.now()}, no mentions here.`
   await page.locator('#comment-input').click()
-  const commentEditor = page.locator('#comment')
+  const commentEditor = page.locator('#comment-input .ProseMirror[contenteditable="true"]')
   await commentEditor.waitFor({ state: 'visible', timeout: 5_000 })
-  await commentEditor.type(commentText)
-  await commentEditor.press('Enter')
+  await commentEditor.click()
+  await page.keyboard.type(commentText)
+  // Enter only adds a new line. Ctrl+Enter is "Send" outside the inbox
+  // (AttachmentsUpload/index.tsx getKeyCombinationForSend).
+  // The comment shows optimistically; wait for the server to store it
+  // (about 1.5s on production) before reloading, or the reload aborts it.
+  const commentSaved = page.waitForResponse(
+    (res) => res.url().includes('/api/comments/create') && res.request().method() === 'POST',
+    { timeout: 15_000 },
+  )
+  await page.keyboard.press('Control+Enter')
+  expect((await commentSaved).ok(), 'comment create request failed').toBe(true)
 
-  await expect(page.locator(`text=${commentText}`), 'comment did not appear').toBeVisible({ timeout: 10_000 })
+  // The unsent text is also kept as a draft and restored into the editor on
+  // reload, so only count copies outside the comment input.
+  const postedOutsideEditor = () =>
+    page.locator(`text=${commentText}`).evaluateAll((els) => els.filter((el) => !el.closest('#comment-input')).length)
+  await expect.poll(postedOutsideEditor, { message: 'comment did not appear', timeout: 10_000 }).toBeGreaterThan(0)
   await page.reload()
-  await expect(page.locator(`text=${commentText}`), 'comment did not persist after reload').toBeVisible({ timeout: 10_000 })
+  await page.locator('#title-input').waitFor({ state: 'visible' })
+  await expect.poll(postedOutsideEditor, { message: 'comment did not persist after reload', timeout: 10_000 }).toBeGreaterThan(0)
 })
 
 test(`drag card between columns`, { tag: [idTag('drag-card')] }, async ({ page, request }) => {
@@ -211,8 +234,7 @@ test(`drag card between columns`, { tag: [idTag('drag-card')] }, async ({ page, 
   const created = await createTask(request, {
     title: `${QA_TASK_PREFIX} drag-card journey ${Date.now()}`,
     projectId: board.projectId,
-    sectionId: board.sectionId,
-    sectionTitle: board.sectionTitle,
+    userId: board.userId,
   })
   createdTaskIds.push(created.id)
 
@@ -222,18 +244,19 @@ test(`drag card between columns`, { tag: [idTag('drag-card')] }, async ({ page, 
   const columnCount = await columns.count()
   test.skip(columnCount < 2, 'board has fewer than 2 columns, nothing to drag between')
 
-  const card = page.locator(`[data-rbd-drag-handle-draggable-id="task-${created.id}"]`)
+  // The board's dnd library renders data-rfd-* attributes (not data-rbd-*).
+  // Droppables are the outer "board-columns" plus one per column, ids "0", "1", ...
+  const card = page.locator(`[data-rfd-drag-handle-draggable-id="task-${created.id}"]`)
   await card.waitFor({ state: 'visible', timeout: 10_000 })
 
-  const droppables = page.locator('[data-rbd-droppable-id]')
-  const targetColumn = droppables.nth(1)
+  const targetColumn = page.locator('[data-rfd-droppable-id="1"]')
   await targetColumn.waitFor({ state: 'visible' })
 
   // Sanity: the task was just created in section 0 (the board's first
   // section), so it must NOT already be in the target column, otherwise
   // a no-op drag would pass this test for the wrong reason.
   await expect(
-    targetColumn.locator(`[data-rbd-drag-handle-draggable-id="task-${created.id}"]`),
+    targetColumn.locator(`[data-rfd-drag-handle-draggable-id="task-${created.id}"]`),
     'test setup bug: the new card is already in the drag target column',
   ).toHaveCount(0)
 
@@ -257,7 +280,7 @@ test(`drag card between columns`, { tag: [idTag('drag-card')] }, async ({ page, 
   await page.waitForTimeout(500) // let onDragEnd's PUT /api/tasks/moveTask land
   await page.reload()
   await expect(
-    page.locator('[data-rbd-droppable-id]').nth(1).locator(`[data-rbd-drag-handle-draggable-id="task-${created.id}"]`),
+    page.locator('[data-rfd-droppable-id="1"]').locator(`[data-rfd-drag-handle-draggable-id="task-${created.id}"]`),
     'card did not stay in the target column after reload',
   ).toBeVisible({ timeout: 10_000 })
 })
@@ -267,16 +290,24 @@ test(`ai chat replies`, { tag: [idTag('ai-chat')] }, async ({ page }) => {
   await page.goto(withRealtime('/chat'), { waitUntil: 'load' })
   test.skip(page.url().includes(LOGIN_PATH), 'no chat access for this session')
 
-  const editor = page.locator('#ai-chat-tiptap-editor')
+  // #ai-chat-tiptap-editor is only the wrapper; clicking its centre can miss
+  // the ProseMirror node, and then the typed letters fire the app's global
+  // shortcuts (one of them opens the new-task page) instead of the chat.
+  const prompt = 'In one short sentence, what is Hypertask?'
+  const editor = page.locator('#ai-chat-tiptap-editor .ProseMirror')
   await editor.waitFor({ state: 'visible', timeout: 10_000 })
   await editor.click()
-  await editor.type('In one short sentence, what is Hypertask?')
-  await editor.press('Enter')
+  await expect(editor, 'chat editor did not take focus').toBeFocused()
+  await page.keyboard.type(prompt)
+  await page.keyboard.press('Enter')
 
-  const reply = page.locator('.submessage-container.delivered .content-html').last()
-  await expect(reply, 'no non-empty AI reply within the timeout').toBeVisible({ timeout: 45_000 })
-  const text = (await reply.innerText()).trim()
+  // The user's own message is also a delivered .content-html, so wait for a
+  // second one and make sure the last is not just the echo of the prompt.
+  const delivered = page.locator('.submessage-container.delivered .content-html')
+  await expect(delivered, 'no AI reply arrived within the timeout').toHaveCount(2, { timeout: 45_000 })
+  const text = (await delivered.last().innerText()).trim()
   expect(text.length, 'AI reply was empty').toBeGreaterThan(0)
+  expect(text, 'last message is the prompt, not an AI reply').not.toBe(prompt)
 })
 
 test(`plan shows correctly`, { tag: [idTag('plan-check')] }, async ({ page }) => {
