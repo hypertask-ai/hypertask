@@ -115,18 +115,18 @@ export type SelectedModel = {
 };
 
 const DEFAULT_PROVIDER: ProviderId = "openai";
-const DEFAULT_MODEL = "gpt-5.6-luna";
+const DEFAULT_MODEL = "gpt-6-luna";
 const DEFAULT_CLAUDE_MODEL = "claude-sonnet-5";
 const CLAUDE_MODELS = new Set([
   "claude-sonnet-5",
-  "claude-opus-5",
+  "claude-opus-5-5",
   "claude-haiku-4.5",
 ]);
 const OPENAI_MODELS = new Set([
   "gpt-5.5",
-  "gpt-5.6-luna",
+  "gpt-6-luna",
   "gpt-5.6-terra",
-  "gpt-5.6-sol",
+  "gpt-6-sol",
   "gpt-5.4-mini",
 ]);
 

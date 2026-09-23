@@ -26,7 +26,7 @@ test("composer filters premium models before send for free boards without BYOK",
     providersWithByok: new Set(),
   });
 
-  assert.equal(result.models.some((model) => model.id === "gpt-5.6-sol"), false);
+  assert.equal(result.models.some((model) => model.id === "gpt-6-sol"), false);
   assert.equal(result.models.some((model) => model.id === "gpt-5.4-mini"), true);
 });
 
@@ -38,7 +38,7 @@ test("composer keeps premium models gated on free boards even when a key is stor
     providersWithByok: new Set(["openai"]),
   });
 
-  assert.equal(result.models.some((model) => model.id === "gpt-5.6-sol"), false);
+  assert.equal(result.models.some((model) => model.id === "gpt-6-sol"), false);
 });
 
 test("composer keeps premium models available when that provider has BYOK", () => {
@@ -49,9 +49,9 @@ test("composer keeps premium models available when that provider has BYOK", () =
     providersWithByok: new Set(["openai"]),
   });
 
-  assert.equal(result.models.some((model) => model.id === "gpt-5.6-sol"), true);
+  assert.equal(result.models.some((model) => model.id === "gpt-6-sol"), true);
   assert.equal(
-    result.models.some((model) => model.id === "claude-opus-5-thinking"),
+    result.models.some((model) => model.id === "claude-opus-5-5-thinking"),
     false,
   );
 });

@@ -205,6 +205,15 @@ async function modelPricing(modelSlug: string): Promise<ModelPricing> {
     const pricing = models.get(slug);
     if (pricing) return pricing;
   }
+  const previousModel = modelSlug
+    .replace(/gpt-6-(luna|sol)$/, "gpt-5.6-$1")
+    .replace(/claude-opus-5-5$/, "claude-opus-5");
+  if (previousModel !== modelSlug) {
+    for (const slug of gatewayPricingLookupSlugs(previousModel)) {
+      const pricing = models.get(slug);
+      if (pricing) return pricing;
+    }
+  }
   throw new Error(`AI Gateway pricing is unavailable for ${modelSlug}`);
 }
 

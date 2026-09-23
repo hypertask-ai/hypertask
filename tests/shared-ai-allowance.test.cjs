@@ -1194,6 +1194,44 @@ test("shared allowance prefers spacexai pricing when both prefixes exist", async
   }
 });
 
+test("new model allowance uses previous pricing only when Gateway has no new price", async () => {
+  useRedis(fakeRedis());
+  const previousFetch = global.fetch;
+  global.fetch = async (url) => {
+    if (String(url).endsWith("/models")) {
+      return new Response(JSON.stringify({ data: [{
+        id: "openai/gpt-5.6-luna",
+        pricing: { input: "0.0000004", output: "0.0000016" },
+      }] }));
+    }
+    if (String(url).includes("/report?")) return new Response(JSON.stringify({ results: [] }));
+    throw new Error(`Unexpected fetch ${url}`);
+  };
+  try {
+    const { createSharedAllowanceMiddleware, resetGatewayPricingCacheForTests } =
+      loadTs("src/app/api/ai/_lib/sharedAllowance.ts");
+    resetGatewayPricingCacheForTests();
+    const middleware = createSharedAllowanceMiddleware({
+      allowanceUsd: 1,
+      gatewayApiKey: "vck_shared",
+      modelSlug: "openai/gpt-6-luna",
+    });
+    let called = false;
+    await middleware.wrapGenerate({
+      params: { prompt: [{ role: "user", content: [{ type: "text", text: "hi" }] }], providerOptions: { gateway: { tags: ["chat", "team:team-1"] } } },
+      model: {},
+      doStream: async () => { throw new Error("unused"); },
+      doGenerate: async () => {
+        called = true;
+        return { content: [], finishReason: { unified: "stop", raw: "stop" }, usage: { inputTokens: { total: 1 }, outputTokens: { total: 1 } }, warnings: [] };
+      },
+    });
+    assert.equal(called, true);
+  } finally {
+    global.fetch = previousFetch;
+  }
+});
+
 test("shared allowance fails closed when Gateway omits Grok pricing", async () => {
   const redis = fakeRedis();
   useRedis(redis);
@@ -1255,7 +1293,7 @@ test("shared allowance fails closed when Gateway omits Grok pricing", async () =
 test("price tiers two and three are premium while tier one stays included", () => {
   const { isPremiumAiModelKey } = loadTs("src/lib/aiModelOptions.ts");
   assert.equal(isPremiumAiModelKey("gpt-5.4-mini"), false);
-  assert.equal(isPremiumAiModelKey("gpt-5.6-luna"), true);
+  assert.equal(isPremiumAiModelKey("gpt-6-luna"), true);
   assert.equal(isPremiumAiModelKey("gpt-5.5"), true);
 });
 

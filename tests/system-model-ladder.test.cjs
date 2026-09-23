@@ -149,16 +149,29 @@ test("team default beats the user-facing product default", () => {
 });
 
 test("the catalog default is Luna only when billing can use it", () => {
-  assert.equal(preferredAiModelOption.id, "gpt-5.6-luna");
+  assert.equal(preferredAiModelOption.id, "gpt-6-luna");
   assert.equal(preferredAiModelOption.effort, "standard");
   assert.equal(defaultAiModelOption.id, "gpt-5.4-mini");
-  assert.equal(getDefaultAiModelOptionForPlan("Pro").id, "gpt-5.6-luna");
-  assert.equal(getDefaultAiModelOptionForPlan("AI").id, "gpt-5.6-luna");
+  assert.equal(getDefaultAiModelOptionForPlan("Pro").id, "gpt-6-luna");
+  assert.equal(getDefaultAiModelOptionForPlan("AI").id, "gpt-6-luna");
   assert.equal(getDefaultAiModelOptionForPlan("Free").id, "gpt-5.4-mini");
   assert.equal(getDefaultAiModelOptionForPlan("BYOK").id, "gpt-5.4-mini");
   assert.equal(
     getDefaultAiModelOptionForPlan("BYOK", true).id,
-    "gpt-5.6-luna",
+    "gpt-6-luna",
+  );
+});
+
+test("saved legacy personal and board choices resolve to their new variants", () => {
+  assert.equal(
+    resolveUserFacingModelOption("aiChat", {}, "gpt-5.6-luna-high").id,
+    "gpt-6-luna-high",
+  );
+  assert.equal(
+    resolveUserFacingModelOption("aiChat", {
+      featureModels: { aiChat: "claude-opus-5-thinking" },
+    }).id,
+    "claude-opus-5-5-thinking",
   );
 });
 
@@ -167,9 +180,9 @@ test("personal default beats the user-facing team default", () => {
     resolveUserFacingModelOption(
       "taskWriter",
       { featureModels: { taskWriter: "claude-sonnet-5-instant" } },
-      "gpt-5.6-luna-high",
+      "gpt-6-luna-high",
     ).id,
-    "gpt-5.6-luna-high",
+    "gpt-6-luna-high",
   );
 });
 
@@ -198,7 +211,7 @@ test("disabled providers invalidate personal and team defaults", () => {
         providers: { anthropic: false },
         featureModels: { writeWithAi: "claude-sonnet-5-instant" },
       },
-      "claude-opus-5-thinking",
+      "claude-opus-5-5-thinking",
     ).id,
     "gpt-5.4-mini",
   );
@@ -209,7 +222,7 @@ test("trusted billing context can supply Luna as the user-facing fallback", () =
     resolveUserFacingModelOption("aiChat", {}, null, {
       defaultModelOption: preferredAiModelOption,
     }).id,
-    "gpt-5.6-luna",
+    "gpt-6-luna",
   );
 });
 
@@ -316,7 +329,7 @@ test("model, toggle, and reset writes never clobber provider settings", () => {
   const withModel = updateAiFeatureModelSettings(
     original,
     "hyperAi",
-    "gpt-5.6-luna",
+    "gpt-6-luna",
   );
   const withToggle = updateAiFeatureToggleSettings(
     withModel,

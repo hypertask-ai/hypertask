@@ -277,6 +277,7 @@ import {
   type TAiModelOption,
 } from "@/lib/aiModelOptions";
 import { filterModelOptionForTeam } from "@/app/api/ai/_lib/providerGate";
+import { previousModelForFailedStream } from "./modelFallback";
 import { resolveSkillsForAiRequest } from "@/app/api/ai/_lib/chatSkillResolution";
 import { HOUSE_OUTPUT_STYLE } from "@/app/api/ai/_lib/editorAi";
 import { getAiRequestUser } from "@/app/api/ai/_lib/requestUser";
@@ -362,15 +363,21 @@ const SSE_HEADERS = {
 };
 
 const DEFAULT_PROVIDER: ProviderId = "openai";
-const DEFAULT_MODEL = "gpt-5.6-luna";
+const DEFAULT_MODEL = "gpt-6-luna";
 const DEFAULT_CLAUDE_MODEL = "claude-sonnet-5";
 const MAX_TOOL_STEPS = 32;
 const MAX_BULK_TOOL_TARGETS = 50;
-const CLAUDE_MODELS = new Set(["claude-sonnet-5", "claude-opus-5"]);
+const CLAUDE_MODELS = new Set([
+  "claude-sonnet-5",
+  "claude-opus-5-5",
+  "claude-opus-5",
+]);
 const OPENAI_MODELS = new Set([
   "gpt-5.5",
+  "gpt-6-luna",
   "gpt-5.6-luna",
   "gpt-5.6-terra",
+  "gpt-6-sol",
   "gpt-5.6-sol",
   "gpt-5.4-mini",
 ]);
@@ -9938,6 +9945,8 @@ export async function POST(request: NextRequest) {
     providerOptions?: AiProviderOptions;
   };
   let titleByokApiKey: string | undefined;
+  let streamCredential: AiModelCredential | undefined;
+  let streamModelOption: TAiModelOption | undefined;
   const gatewayTags: AiGatewayTags = {
     teamId: null,
     projectId: null,
@@ -10132,6 +10141,8 @@ export async function POST(request: NextRequest) {
             keyLookupContext,
             { resolveOpenRouterWithoutFlag: false }
           );
+    streamCredential = byokApiKey;
+    streamModelOption = selection.modelOption;
     const resolvedModel = selectModel(
       selection.provider,
       selection.model,
@@ -10705,90 +10716,138 @@ export async function POST(request: NextRequest) {
         }
         // $ai_latency measures the generation itself, not the turn setup.
         generationStartedAt = Date.now();
-        const result = streamText({
-          model: selected.model,
-          instructions,
-          messages,
-          tools,
-          stopWhen: stepCountIs(MAX_TOOL_STEPS),
-          maxRetries: 2,
-          abortSignal: providerAbort.signal,
-          onFinish: async ({ usage, finishReason }) => {
-            turnUsage = {
-              inputTokens: usage.inputTokens ?? undefined,
-              outputTokens: usage.outputTokens ?? undefined,
-            };
-            generationFinishedWithError = finishReason === "error";
-            await logAiUsage({
-              userId: dbUser.id,
-              teamId: gatewayTags.teamId ?? null,
-              projectId: usageProjectId,
-              taskId: contextTaskId,
-              // Without this an agent's own turns land as agentId: null, so the
-              // team is billed for work nobody can trace back to the agent.
-              agentId: actingAgent?.id ?? null,
-              provider: selected.usageProvider,
-              model: selected.modelId,
-              feature: "chat",
-              inputTokens: usage.inputTokens ?? 0,
-              outputTokens: usage.outputTokens ?? 0,
-              totalTokens: usage.totalTokens ?? 0,
-            });
-          },
-          onError: async ({ error }) => {
-            recordTurnOutcome(cancelled ? "cancelled" : "failed", error);
-            if (errorSent) return;
-            errorSent = true;
-            if (cancelled) {
+        const chunks: string[] = [];
+        let result!: ReturnType<typeof streamText>;
+        for (let attempt = 0; attempt < 2; attempt++) {
+          let fallbackError: unknown;
+          result = streamText({
+            model: selected.model,
+            instructions,
+            messages,
+            tools,
+            stopWhen: stepCountIs(MAX_TOOL_STEPS),
+            maxRetries: 2,
+            abortSignal: providerAbort.signal,
+            onFinish: async ({ usage, finishReason }) => {
+              turnUsage = {
+                inputTokens: usage.inputTokens ?? undefined,
+                outputTokens: usage.outputTokens ?? undefined,
+              };
+              generationFinishedWithError = finishReason === "error";
+              await logAiUsage({
+                userId: dbUser.id,
+                teamId: gatewayTags.teamId ?? null,
+                projectId: usageProjectId,
+                taskId: contextTaskId,
+                // Without this an agent's own turns land as agentId: null, so the
+                // team is billed for work nobody can trace back to the agent.
+                agentId: actingAgent?.id ?? null,
+                provider: selected.usageProvider,
+                model: selected.modelId,
+                feature: "chat",
+                inputTokens: usage.inputTokens ?? 0,
+                outputTokens: usage.outputTokens ?? 0,
+                totalTokens: usage.totalTokens ?? 0,
+              });
+            },
+            onError: async ({ error }) => {
+              if (
+                attempt === 0 &&
+                !cancelled &&
+                !providerAbort.signal.aborted &&
+                previousModelForFailedStream(
+                  selected.resolvedModelId,
+                  error,
+                  chunks.length > 0,
+                  toolExecutions.length > 0,
+                )
+              ) {
+                fallbackError = error;
+                return;
+              }
+              recordTurnOutcome(cancelled ? "cancelled" : "failed", error);
+              if (errorSent) return;
+              errorSent = true;
+              if (cancelled) {
+                if (heartbeatExecutionId) {
+                  await failHeartbeatExecution(
+                    heartbeatExecutionId,
+                    "AI reply cancelled",
+                  );
+                  heartbeatExecutionTerminal = true;
+                }
+                finish("error", { cancelled: true, content: "Stream cancelled." });
+                return;
+              }
+              if (turnDeadlineHit) {
+                await endDeadlineTurn();
+                return;
+              }
+              // This is the only path that can end the turn with no assistant
+              // message ever persisted (every other exit reaches
+              // persistAssistantMessage, even the empty-completion fallback).
+              // A tool can execute before the model errors out, so callers
+              // that infer "nothing happened" from an absent reply (the
+              // native-agent heartbeat's retry logic) need this flag to avoid
+              // re-sending the same instructions and replaying that write.
+              send("error", {
+                content: userFacingErrorMessage(error, "model-stream"),
+                toolsExecuted: toolExecutions.length > 0,
+                ...userFacingErrorDetails(error, gatewayTags.teamId ?? null),
+              });
+              finish("error");
               if (heartbeatExecutionId) {
                 await failHeartbeatExecution(
                   heartbeatExecutionId,
-                  "AI reply cancelled",
+                  errorMessage(error)
                 );
                 heartbeatExecutionTerminal = true;
               }
-              finish("error", { cancelled: true, content: "Stream cancelled." });
-              return;
-            }
-            if (turnDeadlineHit) {
-              await endDeadlineTurn();
-              return;
-            }
-            // This is the only path that can end the turn with no assistant
-            // message ever persisted (every other exit reaches
-            // persistAssistantMessage, even the empty-completion fallback).
-            // A tool can execute before the model errors out, so callers
-            // that infer "nothing happened" from an absent reply (the
-            // native-agent heartbeat's retry logic) need this flag to avoid
-            // re-sending the same instructions and replaying that write.
-            send("error", {
-              content: userFacingErrorMessage(error, "model-stream"),
-              toolsExecuted: toolExecutions.length > 0,
-              ...userFacingErrorDetails(error, gatewayTags.teamId ?? null),
-            });
-            finish("error");
-            if (heartbeatExecutionId) {
-              await failHeartbeatExecution(
-                heartbeatExecutionId,
-                errorMessage(error)
-              );
-              heartbeatExecutionTerminal = true;
-            }
-            await reportHandledChatError(error, "model-stream", {
-              model: selected.resolvedModelId,
-              provider: selected.usageProvider,
-            });
-          },
-          providerOptions: selected.providerOptions,
-          ...selected.settings,
-        });
+              await reportHandledChatError(error, "model-stream", {
+                model: selected.resolvedModelId,
+                provider: selected.usageProvider,
+              });
+            },
+            providerOptions: selected.providerOptions,
+            ...selected.settings,
+          });
 
-        const chunks: string[] = [];
-        for await (const chunk of result.textStream) {
-          if (errorSent || cancelled) break;
-          if (!chunk) continue;
-          chunks.push(chunk);
-          send("content", { content: chunk });
+          try {
+            for await (const chunk of result.textStream) {
+              if (errorSent || cancelled) break;
+              if (!chunk) continue;
+              chunks.push(chunk);
+              send("content", { content: chunk });
+            }
+          } catch (error) {
+            if (!fallbackError || attempt !== 0) throw error;
+          }
+          if (errorSent || cancelled) return;
+          const previous = attempt === 0 && fallbackError
+            ? previousModelForFailedStream(
+                selected.resolvedModelId,
+                fallbackError,
+                chunks.length > 0,
+                toolExecutions.length > 0,
+              )
+            : null;
+          if (!previous) break;
+          console.warn(
+            `[ai-model-fallback] ${selected.resolvedModelId} -> ${previous.model}: ${previous.status}`,
+          );
+          const fallback = selectModel(
+            selected.provider,
+            previous.model,
+            streamCredential,
+            streamModelOption,
+            gatewayTags,
+          );
+          selected = {
+            ...selected,
+            ...fallback,
+            modelId: fallback.resolvedModelId,
+          };
+          observedModel = selected.resolvedModelId;
         }
 
         if (errorSent || cancelled) return;

@@ -136,14 +136,14 @@ test("mobile model gauge offers the four approved choices and preserves guarded 
       "google",
     ];
     pushedRoutes.length = 0;
-    const lunaHigh = selectedOption("gpt-5.6-luna-high");
+    const lunaHigh = selectedOption("gpt-6-luna-high");
     await act(async () => reactRoot.render(renderPicker(lunaHigh)));
 
     const trigger = container.querySelector('[aria-controls="mobile-ai-chat-model-menu"]');
     assert.ok(trigger);
     assert.match(trigger.className, /h-11 w-11/);
     assert.match(trigger.className, /rounded-\[4px\]/);
-    assert.match(trigger.getAttribute("aria-label"), /5\.6 Luna · High/);
+    assert.match(trigger.getAttribute("aria-label"), /6 Luna · High/);
     Object.defineProperty(dom.window, "innerWidth", {
       configurable: true,
       value: 390,
@@ -172,7 +172,7 @@ test("mobile model gauge offers the four approved choices and preserves guarded 
 
     await act(async () => rows[1].click());
     await act(async () => new Promise((resolve) => dom.window.setTimeout(resolve, 0)));
-    assert.equal(chosen.id, "gpt-5.6-luna");
+    assert.equal(chosen.id, "gpt-6-luna");
     assert.equal(container.querySelector('[role="menu"]'), null);
     assert.strictEqual(document.activeElement, trigger);
 

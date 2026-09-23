@@ -741,7 +741,7 @@ test("task writer option ids map to provider options and legacy model strings fa
   );
 
   assert.equal(defaultAiModelOption.id, "gpt-5.4-mini");
-  assert.equal(preferredAiModelOption.id, "gpt-5.6-luna");
+  assert.equal(preferredAiModelOption.id, "gpt-6-luna");
   assert.equal(preferredAiModelOption.effort, "standard");
   assert.deepEqual(preferredAiModelOption.providerOptions?.openai, {
     reasoningEffort: "medium",
@@ -761,12 +761,12 @@ test("task writer option ids map to provider options and legacy model strings fa
 
   const luna = await selectTaskWriterModel({
     sourceSelected: "openai",
-    modelSelected: "gpt-5.6-luna",
+    modelSelected: "gpt-6-luna",
     byokProviderFlags: [],
     teamContext,
   });
   assert.equal(luna.provider, "openai");
-  assert.equal(luna.modelId, "gpt-5.6-luna");
+  assert.equal(luna.modelId, "gpt-6-luna");
   assert.deepEqual(luna.providerOptions?.openai, {
     reasoningEffort: "medium",
   });
@@ -777,7 +777,7 @@ test("task writer option ids map to provider options and legacy model strings fa
     teamContext,
   });
   assert.equal(paidDefault.provider, "openai");
-  assert.equal(paidDefault.modelId, "gpt-5.6-luna");
+  assert.equal(paidDefault.modelId, "gpt-6-luna");
   assert.deepEqual(paidDefault.providerOptions?.openai, {
     reasoningEffort: "medium",
   });
@@ -800,7 +800,7 @@ test("task writer option ids map to provider options and legacy model strings fa
   await assert.rejects(
     selectTaskWriterModel({
       sourceSelected: "openai",
-      modelSelected: "gpt-5.6-sol",
+      modelSelected: "gpt-6-sol",
       byokProviderFlags: [],
       teamContext: { teamId: "team_free", settings: {} },
     }),
@@ -847,7 +847,7 @@ test("task writer option ids map to provider options and legacy model strings fa
     teamContext,
   });
   assert.equal(legacySelection.provider, "openai");
-  assert.equal(legacySelection.modelId, "gpt-5.6-luna");
+  assert.equal(legacySelection.modelId, "gpt-6-luna");
   assert.deepEqual(legacySelection.providerOptions?.openai, {
     reasoningEffort: "medium",
   });
@@ -889,6 +889,24 @@ test("a new Free team defaults to Mini without tripping the premium plan gate", 
   assert.equal(selected.modelId, "gpt-5.4-mini");
 });
 
+test("retired model options keep their saved variant and price tier", () => {
+  const { getAiModelOptionById, getAiModelDefinition } = loadTs("src/lib/aiModelOptions.ts");
+  for (const [oldBase, newBase, suffixes] of [
+    ["gpt-5.6-luna", "gpt-6-luna", ["", "-light", "-high"]],
+    ["gpt-5.6-sol", "gpt-6-sol", ["", "-light", "-high"]],
+    ["claude-opus-5", "claude-opus-5-5", ["-instant", "-thinking"]],
+  ]) {
+    for (const suffix of suffixes) {
+      const option = getAiModelOptionById(oldBase + suffix);
+      assert.equal(option?.id, newBase + suffix);
+      assert.equal(option?.model, newBase);
+    }
+  }
+  assert.equal(getAiModelDefinition("gpt-6-luna").priceTier, 2);
+  assert.equal(getAiModelDefinition("gpt-6-sol").priceTier, 3);
+  assert.equal(getAiModelDefinition("claude-opus-5-5").priceTier, 3);
+});
+
 test("model and effort dimensions resolve every supported provider configuration", () => {
   const {
     aiModelOptions,
@@ -897,13 +915,13 @@ test("model and effort dimensions resolve every supported provider configuration
     getAiModelOptionById,
   } = loadTs("src/lib/aiModelOptions.ts");
 
-  assert.equal(getAiEffortLabel("gpt-5.6-luna", "light"), "Light");
-  assert.equal(getAiEffortLabel("gpt-5.6-luna", "standard"), "Standard");
-  assert.equal(getAiEffortLabel("gpt-5.6-luna", "high"), "High");
+  assert.equal(getAiEffortLabel("gpt-6-luna", "light"), "Light");
+  assert.equal(getAiEffortLabel("gpt-6-luna", "standard"), "Standard");
+  assert.equal(getAiEffortLabel("gpt-6-luna", "high"), "High");
   assert.equal(getAiEffortLabel("gpt-5.5", "light"), "Instant");
   assert.equal(getAiEffortLabel("gpt-5.5", "high"), "Thinking");
   assert.equal(getAiEffortLabel("claude-sonnet-5", "light"), "Instant");
-  assert.equal(getAiEffortLabel("claude-opus-5", "high"), "Thinking");
+  assert.equal(getAiEffortLabel("claude-opus-5-5", "high"), "Thinking");
 
   const openAiReasoning = (reasoningEffort) => ({
     openai: { reasoningEffort },
@@ -912,22 +930,22 @@ test("model and effort dimensions resolve every supported provider configuration
     anthropic: { thinking: { type }, effort },
   });
   const expected = [
-    ["gpt-5.6-luna", "light", openAiReasoning("low")],
-    ["gpt-5.6-luna", "standard", openAiReasoning("medium")],
-    ["gpt-5.6-luna", "high", openAiReasoning("high")],
+    ["gpt-6-luna", "light", openAiReasoning("low")],
+    ["gpt-6-luna", "standard", openAiReasoning("medium")],
+    ["gpt-6-luna", "high", openAiReasoning("high")],
     ["gpt-5.6-terra", "light", openAiReasoning("low")],
     ["gpt-5.6-terra", "standard", openAiReasoning("medium")],
     ["gpt-5.6-terra", "high", openAiReasoning("high")],
-    ["gpt-5.6-sol", "light", openAiReasoning("low")],
-    ["gpt-5.6-sol", "standard", openAiReasoning("medium")],
-    ["gpt-5.6-sol", "high", openAiReasoning("high")],
+    ["gpt-6-sol", "light", openAiReasoning("low")],
+    ["gpt-6-sol", "standard", openAiReasoning("medium")],
+    ["gpt-6-sol", "high", openAiReasoning("high")],
     ["gpt-5.5", "light", openAiReasoning("low")],
     ["gpt-5.5", "high", openAiReasoning("high")],
     ["gpt-5.4-mini", undefined, undefined],
     ["claude-sonnet-5", "light", claudeThinking("disabled", "low")],
     ["claude-sonnet-5", "high", claudeThinking("adaptive", "high")],
-    ["claude-opus-5", "light", claudeThinking("disabled", "low")],
-    ["claude-opus-5", "high", claudeThinking("adaptive", "high")],
+    ["claude-opus-5-5", "light", claudeThinking("disabled", "low")],
+    ["claude-opus-5-5", "high", claudeThinking("adaptive", "high")],
     ["deepseek-v4-flash", undefined, undefined],
     ["deepseek-v4-pro", undefined, undefined],
     ["kimi-k2.5", undefined, undefined],
@@ -950,14 +968,14 @@ test("model and effort dimensions resolve every supported provider configuration
   const legacyDimensions = {
     "gpt-5.5-instant": ["gpt-5.5", "light"],
     "gpt-5.5-thinking": ["gpt-5.5", "high"],
-    "gpt-5.6-luna": ["gpt-5.6-luna", "standard"],
+    "gpt-6-luna": ["gpt-6-luna", "standard"],
     "gpt-5.6-terra": ["gpt-5.6-terra", "standard"],
-    "gpt-5.6-sol": ["gpt-5.6-sol", "standard"],
+    "gpt-6-sol": ["gpt-6-sol", "standard"],
     "gpt-5.4-mini": ["gpt-5.4-mini", undefined],
     "claude-sonnet-5-instant": ["claude-sonnet-5", "light"],
     "claude-sonnet-5-thinking": ["claude-sonnet-5", "high"],
-    "claude-opus-5-instant": ["claude-opus-5", "light"],
-    "claude-opus-5-thinking": ["claude-opus-5", "high"],
+    "claude-opus-5-5-instant": ["claude-opus-5-5", "light"],
+    "claude-opus-5-5-thinking": ["claude-opus-5-5", "high"],
     "deepseek-v4-flash": ["deepseek-v4-flash", undefined],
     "deepseek-v4-pro": ["deepseek-v4-pro", undefined],
     "kimi-k2.5": ["kimi-k2.5", undefined],
@@ -1162,9 +1180,9 @@ test("AI model mention labels resolve to a base model option", () => {
     "src/lib/aiModelOptions.ts",
   );
 
-  const resolved = resolveAiModelMention("Opus 5");
-  assert.equal(resolved.definition.key, "claude-opus-5");
-  assert.equal(resolved.modelOption.id, "claude-opus-5-instant");
+  const resolved = resolveAiModelMention("Opus 5.5");
+  assert.equal(resolved.definition.key, "claude-opus-5-5");
+  assert.equal(resolved.modelOption.id, "claude-opus-5-5-instant");
 
   assert.equal(
     resolveAiImageModelMention("Nano Banana").gatewayModel,
@@ -1213,7 +1231,7 @@ test("disabled provider selections fall back and gateway-only models keep full s
   const { selectTaskWriterModel } = loadTs("src/app/api/ai/_lib/editorAi.ts");
   const fallback = await selectTaskWriterModel({
     sourceSelected: "openai",
-    modelOptionId: "gpt-5.6-luna",
+    modelOptionId: "gpt-6-luna",
     projectId: 4338,
     userId: 1000,
   });
@@ -1226,7 +1244,7 @@ test("disabled provider selections fall back and gateway-only models keep full s
   await assert.rejects(
     selectTaskWriterModel({
       sourceSelected: "openai",
-      modelOptionId: "gpt-5.6-luna",
+      modelOptionId: "gpt-6-luna",
       projectId: 4338,
       userId: 1000,
     }),
