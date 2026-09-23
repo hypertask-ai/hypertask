@@ -5,7 +5,6 @@ import { buildProjectSurfaceUrl, getViewFromProject } from "@/utils/helperFuncti
 import { useQueryClient } from "@tanstack/react-query";
 import { usePathname, useRouter } from "next/navigation";
 import nookies from "nookies";
-import { useFlag } from "@/hooks/useFlag";
 import { setLastBoardTeam } from "@/lib/lastBoardTeam";
 import { getNextRouterAwareHistoryState } from "@/lib/navigation/nextHistoryState";
 import {
@@ -24,9 +23,6 @@ export const useProjectQuery = () => {
   const setLastUsedBoards = useSetRecoilState(lastUsedBoardsAtom);
   const router = useRouter();
   const pathname = usePathname();
-  const shallowBoardSwitchEnabled = useFlag(
-    "htpr-6072-shallow-board-switch",
-  );
   const hyperAI: IUser | undefined = queryClient.getQueryData(["hyper-ai"]);
 
   const updateActiveItemAndItemInView = (task: ITask | null) => {
@@ -96,7 +92,7 @@ export const useProjectQuery = () => {
       return;
     }
 
-    if (shallowBoardSwitchEnabled && pathname === "/project" && project) {
+    if (pathname === "/project" && project) {
       window.history.pushState(
         getNextRouterAwareHistoryState(window.history.state),
         "",

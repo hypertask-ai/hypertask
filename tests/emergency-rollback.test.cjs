@@ -1,382 +1,284 @@
-// The auto-revert-staging job calls this when git can't undo a failing
-// commit. If it silently skips a real rollback opportunity, or fires a
-// promote against a deployment that changed out from under it, production
-// stays broken with nobody told.
 const test = require("node:test");
 const assert = require("node:assert/strict");
-const path = require("node:path");
 const { pathToFileURL } = require("node:url");
+const path = require("node:path");
+const { readFile } = require("node:fs/promises");
 
-const root = path.resolve(__dirname, "..");
-const scriptUrl = pathToFileURL(
-  path.join(root, ".github/scripts/emergency-rollback.mjs"),
-).href;
+const script = pathToFileURL(path.join(__dirname, "../.github/scripts/emergency-rollback.mjs")).href;
+const X = "a".repeat(40);
+const HEAD = "b".repeat(40);
+const PARENT = "c".repeat(40);
+const REVERT = "d".repeat(40);
+const OLD = "e".repeat(40);
+const gh = "https://api.github.com/repos/hypertask-ai/hypertask";
+const vercel = "https://api.vercel.com";
+const identity = { name: "Hypertask Rollback Bot", email: "hypertask-rollback@users.noreply.github.com" };
+const rollback = (sha, parent = PARENT) => ({
+  parents: [{ sha: parent }], tree: { sha: "old-tree" }, author: identity, committer: identity,
+  message: `Revert ${sha.slice(0, 7)}: production smoke failed (auto-rollback)\n\nAuto-Rollback-Of: ${sha}`,
+});
 
-const FAILING_SHA = "deadbeef00000000000000000000000000000000";
-const OLDER_SHA = "1111111111111111111111111111111111111111";
-const OTHER_SHA = "2222222222222222222222222222222222222222";
-
-function projectBody(liveId, liveSha, liveCreated) {
-  return {
-    id: "prj_test",
-    targets: {
-      production: { id: liveId, meta: { githubCommitSha: liveSha }, createdAt: liveCreated },
-    },
-  };
-}
-
-function deploymentsBody(entries) {
-  return { deployments: entries };
-}
-
-// Sequenced fetch stub: for a given URL prefix, each call consumes the next
-// entry in that prefix's queue (repeating the last one once exhausted), so a
-// test can make the recheck call return something different from the first
-// check.
-function makeFetch(queues) {
+async function run(overrides = {}, opts = {}) {
   const calls = [];
-  const cursors = {};
-  const fetchImpl = async (url, opts = {}) => {
-    calls.push({ url, method: opts.method || "GET" });
-    const prefix = Object.keys(queues).find((p) => url.startsWith(p));
-    if (!prefix) throw new Error(`unexpected fetch ${url}`);
-    const queue = queues[prefix];
-    const i = cursors[prefix] ?? 0;
-    const entry = queue[Math.min(i, queue.length - 1)];
-    cursors[prefix] = i + 1;
-    if (entry.throw) throw entry.throw;
-    return { ok: entry.status < 400, status: entry.status, json: async () => entry.body };
+  const replies = {
+    [`PATCH ${gh}/actions/variables/MERGE_FREEZE`]: [204],
+    [`GET ${gh}/git/ref/heads/production`]: [{ object: { sha: opts.head || X } }],
+    [`GET ${gh}/git/commits/${X}`]: [{ parents: [{ sha: PARENT }], message: "bad merge" }],
+    [`GET ${gh}/git/commits/${PARENT}`]: [{ tree: { sha: "old-tree" } }],
+    [`POST ${gh}/git/commits`]: [{ sha: REVERT }],
+    [`PATCH ${gh}/git/ref/heads/production`]: [200],
+    [`GET ${vercel}/v9/projects/hypertasks-prod`]: [{ id: "project", targets: { production: { id: "live", createdAt: 200, meta: { githubCommitSha: X } } } }],
+    [`GET ${vercel}/v6/deployments?projectId=project&target=production&limit=10`]: [{ deployments: [{ uid: "old", state: "READY", created: 100, meta: { githubCommitSha: OLD } }] }],
+    [`GET ${gh}/actions/workflows/prod-health.yml/runs?head_sha=${OLD}&event=push&per_page=20`]: [{ workflow_runs: [] }],
+    ...overrides,
   };
-  return { fetchImpl, calls };
-}
-
-async function rollback(failingSha, queues, delayImpl = async () => {}) {
-  const { emergencyRollback } = await import(scriptUrl);
-  const { fetchImpl, calls } = makeFetch(queues);
-  const result = await emergencyRollback(failingSha, "test-token", fetchImpl, delayImpl);
+  const fetchImpl = async (url, init = {}) => {
+    const method = init.method || "GET";
+    const key = `${method} ${url}`;
+    calls.push({ key, body: init.body && JSON.parse(init.body) });
+    if (!(key in replies)) throw Error(`unexpected ${key}`);
+    const value = replies[key];
+    const item = Array.isArray(value) ? (value.length > 1 ? value.shift() : value[0]) : value;
+    const status = typeof item === "number" ? item : 200;
+    return { ok: status >= 200 && status < 300, status, json: async () => item };
+  };
+  const { emergencyRollback } = await import(script);
+  const result = await emergencyRollback(X, opts.vercelToken ?? "vercel-token", fetchImpl, async () => {}, {
+    repo: opts.repo ?? "hypertask-ai/hypertask", githubToken: opts.githubToken ?? "github-token",
+    runUrl: opts.runUrl ?? "https://github.com/hypertask-ai/hypertask/actions/runs/123",
+  });
   return { result, calls };
 }
 
-test("production already moved on to a different commit -> skip", async () => {
-  const { result, calls } = await rollback(FAILING_SHA, {
-    "https://api.vercel.com/v9/projects/": [
-      { status: 200, body: projectBody("dpl_live", OTHER_SHA, 2000) },
+function called(calls, fragment) { return calls.find((c) => c.key.includes(fragment)); }
+
+test("freezes merges, commits the pre-failure tree, and leaves Vercel alone without green smoke", async () => {
+  const { result, calls } = await run();
+  assert.equal(result.action, "requested");
+  assert.equal(result.freeze, true);
+  assert.deepEqual(result.revert, { status: "created", sha: REVERT, revertedThrough: X, dropped: [{ sha: X, title: "bad merge" }] });
+  assert.equal(called(calls, "POST https://api.github.com/repos/hypertask-ai/hypertask/git/commits").body.tree, "old-tree");
+  assert.equal(called(calls, `POST ${gh}/git/commits`).body.author.email, identity.email);
+  assert.equal(called(calls, `POST ${gh}/git/commits`).body.committer.email, identity.email);
+  assert.match(called(calls, `POST ${gh}/git/commits`).body.message, new RegExp(`Auto-Rollback-Of: ${X}$`));
+  assert.deepEqual(called(calls, "PATCH https://api.github.com/repos/hypertask-ai/hypertask/git/ref/heads/production").body, { sha: REVERT, force: false });
+  assert.equal(calls.some((c) => c.key.includes("/promote/")), false);
+});
+
+test("production moved past X: revert the entire range in one commit", async () => {
+  const { result, calls } = await run({ [`GET ${gh}/git/commits/${HEAD}`]: [{ parents: [{ sha: X }], message: "next merge" }] }, { head: HEAD });
+  assert.equal(result.revert.revertedThrough, HEAD);
+  assert.deepEqual(result.revert.dropped, [{ sha: X, title: "bad merge" }, { sha: HEAD, title: "next merge" }]);
+  assert.deepEqual(called(calls, `POST ${gh}/git/commits`).body.parents, [HEAD]);
+});
+
+test("a prior revert of X skips a second revert, but still freezes merges", async () => {
+  const { result, calls } = await run({
+    [`GET ${gh}/git/commits/${HEAD}`]: [rollback(X, X)],
+  }, { head: HEAD });
+  assert.equal(result.action, "skip");
+  assert.equal(result.freeze, true);
+  assert.equal(calls.some((c) => c.key === `POST ${gh}/git/commits`), false);
+});
+
+test("a genuine failing auto-rollback skips another revert but promotes the last green deployment", async () => {
+  const { result, calls } = await run({
+    ...greenSmoke(),
+    [`GET ${gh}/git/commits/${X}`]: [rollback(OLD)],
+    [`GET ${gh}/git/commits/${OLD}`]: [{ parents: [{ sha: PARENT }] }],
+  });
+  assert.equal(result.action, "skip");
+  assert.equal(result.freeze, true);
+  assert.equal(result.revert.status, "auto-rollback");
+  assert.equal(calls.some((c) => c.key === `POST ${gh}/git/commits`), false);
+  assert.equal(result.promotion.action, "requested");
+  assert.ok(called(calls, `POST ${vercel}/v10/projects/project/promote/old`));
+});
+
+test("forged rollback messages, trees and identities never suppress a revert", async () => {
+  for (const forged of [
+    { ...rollback(OLD), message: `Revert ${OLD.slice(0, 7)}: production smoke failed (auto-rollback)` },
+    { ...rollback(OLD), tree: { sha: "wrong-tree" } },
+    { ...rollback(OLD), author: { email: "other@example.com" } },
+    { ...rollback(OLD), committer: { email: "other@example.com" } },
+  ]) {
+    const { result, calls } = await run({
+      [`GET ${gh}/git/commits/${X}`]: [forged],
+      [`GET ${gh}/git/commits/${OLD}`]: [{ parents: [{ sha: PARENT }] }],
+    });
+    assert.equal(result.revert.status, "created");
+    assert.ok(called(calls, `POST ${gh}/git/commits`));
+  }
+});
+
+test("stops after 100 commits when failing SHA is not in production history", async () => {
+  const chain = {};
+  for (let i = 100; i > 0; i--) {
+    const sha = i.toString(16).padStart(40, "0");
+    chain[`GET ${gh}/git/commits/${sha}`] = [{ message: "unrelated", parents: [{ sha: (i - 1).toString(16).padStart(40, "0") }] }];
+  }
+  const { result, calls } = await run(chain, { head: (100).toString(16).padStart(40, "0") });
+  assert.equal(result.freeze, true);
+  assert.equal(result.action, "failed");
+  assert.equal(result.revert.status, "failed");
+  assert.match(result.errors.revert, /not found.*100/);
+  assert.match(result.reason, /revert:.*not found/);
+  assert.equal(calls.filter((c) => c.key.startsWith(`GET ${gh}/git/commits/`)).length, 101);
+  assert.equal(calls.some((c) => c.key === `POST ${gh}/git/commits`), false);
+});
+
+test("a non-fast-forward ref update fails closed with freeze in place", async () => {
+  const { result } = await run({
+    [`PATCH ${gh}/git/ref/heads/production`]: [422],
+    [`GET ${gh}/git/ref/heads/production`]: [{ object: { sha: X } }, { object: { sha: X } }],
+  });
+  assert.equal(result.action, "failed");
+  assert.equal(result.freeze, true);
+});
+
+test("a concurrent verified rollback is reported as already reverted, not a failure", async () => {
+  const { result, calls } = await run({
+    [`PATCH ${gh}/git/ref/heads/production`]: [422],
+    [`GET ${gh}/git/ref/heads/production`]: [{ object: { sha: X } }, { object: { sha: HEAD } }],
+    [`GET ${gh}/git/commits/${HEAD}`]: [rollback(X, X)],
+    [`GET ${gh}/git/commits/${X}`]: [
+      { parents: [{ sha: PARENT }], message: "bad merge" },
+      { parents: [{ sha: PARENT }], message: "bad merge" },
     ],
   });
   assert.equal(result.action, "skip");
-  assert.match(result.reason, /already moved on/);
-  // Never gets far enough to list deployments or promote.
-  assert.equal(calls.length, 1);
+  assert.equal(result.revert.status, "already-reverted");
+  assert.equal(result.revert.sha, HEAD);
+  assert.ok(called(calls, `GET ${vercel}/v9/projects/hypertasks-prod`));
 });
 
-test("no qualifying older deployment -> skip", async () => {
-  const { result, calls } = await rollback(FAILING_SHA, {
-    "https://api.vercel.com/v9/projects/": [
-      { status: 200, body: projectBody("dpl_live", FAILING_SHA, 2000) },
-    ],
-    "https://api.vercel.com/v6/deployments": [
-      {
-        status: 200,
-        body: deploymentsBody([
-          // Same sha as the failing commit: disqualified even though older.
-          { uid: "dpl_dup", state: "READY", meta: { githubCommitSha: FAILING_SHA }, created: 1000 },
-          // Newer than live: disqualified regardless of sha.
-          { uid: "dpl_newer", state: "READY", meta: { githubCommitSha: OLDER_SHA }, created: 3000 },
-        ]),
-      },
-    ],
+test("creates a missing MERGE_FREEZE variable", async () => {
+  const { result, calls } = await run({
+    [`PATCH ${gh}/actions/variables/MERGE_FREEZE`]: [404],
+    [`POST ${gh}/actions/variables`]: [201],
   });
-  assert.equal(result.action, "skip");
-  assert.match(result.reason, /no qualifying/);
-  assert.equal(calls.some((c) => c.method === "POST"), false);
+  assert.equal(result.freeze, true);
+  assert.equal(called(calls, `POST ${gh}/actions/variables`).body.value, "https://github.com/hypertask-ai/hypertask/actions/runs/123");
 });
 
-test("deployment-list HTTP failure -> failed, not skip", async () => {
-  const { result, calls } = await rollback(FAILING_SHA, {
-    "https://api.vercel.com/v9/projects/": [
-      { status: 200, body: projectBody("dpl_live", FAILING_SHA, 2000) },
-    ],
-    "https://api.vercel.com/v6/deployments": [
-      { status: 503, body: {} },
-    ],
+test("freeze failure still reverts and tries to promote", async () => {
+  const { result, calls } = await run({ [`PATCH ${gh}/actions/variables/MERGE_FREEZE`]: [403] });
+  assert.equal(result.action, "failed");
+  assert.equal(result.freeze, false);
+  assert.match(result.errors.freeze, /403/);
+  assert.equal(result.revert.status, "created");
+  assert.ok(called(calls, `POST ${gh}/git/commits`));
+  assert.ok(called(calls, `GET ${vercel}/v9/projects/hypertasks-prod`));
+});
+
+test("revert failure still freezes and promotes a verified deployment", async () => {
+  const { result, calls } = await run({
+    [`PATCH ${gh}/git/ref/heads/production`]: [422],
+    [`GET ${gh}/git/ref/heads/production`]: [{ object: { sha: X } }, { object: { sha: X } }],
+    ...greenSmoke(),
+  });
+  assert.equal(result.freeze, true);
+  assert.equal(result.revert.status, "failed");
+  assert.match(result.errors.revert, /422/);
+  assert.equal(result.promotion.action, "requested");
+  assert.ok(called(calls, `POST ${vercel}/v10/projects/project/promote/old`));
+});
+
+test("missing GitHub token and run URL do not prevent a verified Vercel promotion", async () => {
+  const { result, calls } = await run(greenSmoke(), { githubToken: "", runUrl: "" });
+  assert.equal(result.action, "failed");
+  assert.match(result.errors.freeze, /ROLLBACK_GITHUB_TOKEN.*run URL/);
+  assert.match(result.errors.revert, /ROLLBACK_GITHUB_TOKEN/);
+  assert.equal(result.freeze, false);
+  assert.equal(result.revert.status, "failed");
+  assert.equal(result.promotion.action, "requested");
+  assert.ok(called(calls, `POST ${vercel}/v10/projects/project/promote/old`));
+  assert.equal(called(calls, `GET ${gh}/actions/workflows/prod-health.yml/runs`).body, undefined);
+  assert.equal(calls.some((c) => c.key === `PATCH ${gh}/actions/variables/MERGE_FREEZE`), false);
+});
+
+test("missing repository skips GitHub writes but still checks the public smoke run for promotion", async () => {
+  const { result, calls } = await run(greenSmoke(), { repo: "" });
+  assert.match(result.errors.freeze, /GITHUB_REPOSITORY/);
+  assert.match(result.errors.revert, /GITHUB_REPOSITORY/);
+  assert.equal(result.promotion.action, "requested");
+  assert.equal(calls.some((c) => c.key === `POST ${gh}/git/commits`), false);
+});
+
+test("missing run URL still reverts; missing Vercel token still freezes and reverts", async () => {
+  const missingUrl = await run({}, { runUrl: "" });
+  assert.match(missingUrl.result.errors.freeze, /run URL/);
+  assert.equal(missingUrl.result.revert.status, "created");
+  assert.ok(called(missingUrl.calls, `POST ${gh}/git/commits`));
+
+  const missingVercel = await run({}, { vercelToken: "" });
+  assert.equal(missingVercel.result.freeze, true);
+  assert.equal(missingVercel.result.revert.status, "created");
+  assert.match(missingVercel.result.errors.promotion, /VERCEL_TOKEN/);
+  assert.equal(missingVercel.result.promotion.action, "failed");
+});
+
+test("promotion failure is reported independently of a successful freeze and revert", async () => {
+  const { result } = await run({
+    ...greenSmoke(),
+    [`POST ${vercel}/v10/projects/project/promote/old`]: [503],
   });
   assert.equal(result.action, "failed");
-  assert.equal(result.reason, "deployment list failed: HTTP 503");
-  assert.equal(calls.some((c) => c.method === "POST"), false);
+  assert.equal(result.freeze, true);
+  assert.equal(result.revert.status, "created");
+  assert.match(result.errors.promotion, /503/);
 });
 
-test("live deployment changes between check and promote -> skip, no POST issued", async () => {
-  const { result, calls } = await rollback(FAILING_SHA, {
-    "https://api.vercel.com/v9/projects/": [
-      { status: 200, body: projectBody("dpl_live", FAILING_SHA, 2000) }, // initial check
-      { status: 200, body: projectBody("dpl_someone_else", FAILING_SHA, 2500) }, // recheck: moved
+function greenSmoke() {
+  return {
+    [`GET ${gh}/actions/workflows/prod-health.yml/runs?head_sha=${OLD}&event=push&per_page=20`]: [
+      { workflow_runs: [{ id: 42, head_sha: OLD, status: "completed", conclusion: "success" }] },
     ],
-    "https://api.vercel.com/v6/deployments": [
-      { status: 200, body: deploymentsBody([{ uid: "dpl_prev", state: "READY", meta: { githubCommitSha: OLDER_SHA }, created: 1000 }]) },
+    [`GET ${gh}/actions/runs/42/jobs?per_page=100`]: [
+      { jobs: [{ name: "smoke", conclusion: "success", steps: [{ name: "Run the smoke checks", conclusion: "success" }] }] },
     ],
-  });
-  assert.equal(result.action, "skip");
-  assert.match(result.reason, /moved during the check/);
-  assert.equal(
-    calls.some((c) => c.method === "POST"),
-    false,
-    "a changed live id must never reach the promote POST",
-  );
-});
-
-test("live production commit changes before promote -> skip, no POST issued", async () => {
-  const { result, calls } = await rollback(FAILING_SHA, {
-    "https://api.vercel.com/v9/projects/": [
-      { status: 200, body: projectBody("dpl_live", FAILING_SHA, 2000) },
-      { status: 200, body: projectBody("dpl_live", OTHER_SHA, 2000) },
-    ],
-    "https://api.vercel.com/v6/deployments": [
-      { status: 200, body: deploymentsBody([{ uid: "dpl_prev", state: "READY", meta: { githubCommitSha: OLDER_SHA }, created: 1000 }]) },
-    ],
-  });
-  assert.deepEqual(result, {
-    action: "skip",
-    reason: `production already moved past the failing commit ${FAILING_SHA}`,
-  });
-  assert.equal(
-    calls.some((c) => c.method === "POST"),
-    false,
-    "a changed live sha must never reach the promote POST",
-  );
-});
-
-test("production recheck HTTP failure -> failed, no POST issued", async () => {
-  const { result, calls } = await rollback(FAILING_SHA, {
-    "https://api.vercel.com/v9/projects/": [
-      { status: 200, body: projectBody("dpl_live", FAILING_SHA, 2000) },
-      { status: 502, body: {} },
-    ],
-    "https://api.vercel.com/v6/deployments": [
-      { status: 200, body: deploymentsBody([{ uid: "dpl_prev", state: "READY", meta: { githubCommitSha: OLDER_SHA }, created: 1000 }]) },
-    ],
-  });
-  assert.equal(result.action, "failed");
-  assert.equal(result.reason, "production recheck failed: HTTP 502");
-  assert.equal(calls.some((c) => c.method === "POST"), false);
-});
-
-test("in-flight production deployment becomes terminal within budget -> waits and promotes", async () => {
-  const delays = [];
-  const { result, calls } = await rollback(FAILING_SHA, {
-    "https://api.vercel.com/v9/projects/": [
-      { status: 200, body: projectBody("dpl_live", FAILING_SHA, 2000) },
-      { status: 200, body: projectBody("dpl_live", FAILING_SHA, 2000) },
-      { status: 200, body: projectBody("dpl_live", FAILING_SHA, 2000) },
-      { status: 200, body: projectBody("dpl_prev", OLDER_SHA, 1000) },
-    ],
-    "https://api.vercel.com/v6/deployments": [
-      {
-        status: 200,
-        body: deploymentsBody([
-          { uid: "dpl_building", state: "BUILDING", meta: { githubCommitSha: OTHER_SHA }, created: 3000 },
-          { uid: "dpl_prev", state: "READY", meta: { githubCommitSha: OLDER_SHA }, created: 1000 },
-        ]),
-      },
-      {
-        status: 200,
-        body: deploymentsBody([
-          { uid: "dpl_building", state: "READY", meta: { githubCommitSha: OTHER_SHA }, created: 3000 },
-          { uid: "dpl_prev", state: "READY", meta: { githubCommitSha: OLDER_SHA }, created: 1000 },
-        ]),
-      },
-    ],
-    "https://api.vercel.com/v10/projects/": [{ status: 200, body: {} }],
-  }, async (ms) => delays.push(ms));
-  assert.equal(result.action, "requested");
-  assert.equal(result.deploymentId, "dpl_prev");
-  assert.deepEqual(delays, [30_000]);
-  assert.equal(
-    calls.find((c) => c.url.startsWith("https://api.vercel.com/v6/deployments"))?.url,
-    "https://api.vercel.com/v6/deployments?projectId=prj_test&target=production&limit=10",
-  );
-  assert.equal(calls.filter((c) => c.method === "POST").length, 1);
-});
-
-test("in-flight production deployment exhausts wait budget -> still promotes", async () => {
-  const delays = [];
-  const { result, calls } = await rollback(FAILING_SHA, {
-    "https://api.vercel.com/v9/projects/": [
-      { status: 200, body: projectBody("dpl_live", FAILING_SHA, 2000) },
-      { status: 200, body: projectBody("dpl_live", FAILING_SHA, 2000) },
-      { status: 200, body: projectBody("dpl_live", FAILING_SHA, 2000) },
-      { status: 200, body: projectBody("dpl_prev", OLDER_SHA, 1000) },
-    ],
-    "https://api.vercel.com/v6/deployments": [
-      {
-        status: 200,
-        body: deploymentsBody([
-          { uid: "dpl_stuck", state: "BUILDING", meta: { githubCommitSha: OTHER_SHA }, created: 3000 },
-          { uid: "dpl_prev", state: "READY", meta: { githubCommitSha: OLDER_SHA }, created: 1000 },
-        ]),
-      },
-    ],
-    "https://api.vercel.com/v10/projects/": [{ status: 200, body: {} }],
-  }, async (ms) => delays.push(ms));
-  assert.equal(result.action, "requested");
-  assert.equal(result.deploymentId, "dpl_prev");
-  assert.match(result.reason, /proceeded despite.*dpl_stuck BUILDING/i);
-  assert.deepEqual(delays, Array(5).fill(30_000));
-  assert.equal(
-    calls.filter((c) => c.url.startsWith("https://api.vercel.com/v6/deployments")).length,
-    6,
-  );
-  assert.equal(calls.filter((c) => c.method === "POST").length, 1);
-});
-
-test("production moves to a different commit after waiting -> skip, no POST issued", async () => {
-  const delays = [];
-  const { result, calls } = await rollback(FAILING_SHA, {
-    "https://api.vercel.com/v9/projects/": [
-      { status: 200, body: projectBody("dpl_live", FAILING_SHA, 2000) },
-      { status: 200, body: projectBody("dpl_live", FAILING_SHA, 2000) },
-      { status: 200, body: projectBody("dpl_other", OTHER_SHA, 3000) },
-    ],
-    "https://api.vercel.com/v6/deployments": [
-      {
-        status: 200,
-        body: deploymentsBody([
-          { uid: "dpl_building", state: "BUILDING", meta: { githubCommitSha: OTHER_SHA }, created: 3000 },
-          { uid: "dpl_prev", state: "READY", meta: { githubCommitSha: OLDER_SHA }, created: 1000 },
-        ]),
-      },
-      {
-        status: 200,
-        body: deploymentsBody([
-          { uid: "dpl_other", state: "READY", meta: { githubCommitSha: OTHER_SHA }, created: 3000 },
-          { uid: "dpl_prev", state: "READY", meta: { githubCommitSha: OLDER_SHA }, created: 1000 },
-        ]),
-      },
-    ],
-  }, async (ms) => delays.push(ms));
-  assert.deepEqual(result, {
-    action: "skip",
-    reason: `production already moved past the failing commit ${FAILING_SHA}`,
-  });
-  assert.deepEqual(delays, [30_000]);
-  assert.equal(calls.some((c) => c.method === "POST"), false);
-});
-
-test("all production deployments terminal -> promotes as before", async () => {
-  const { result, calls } = await rollback(FAILING_SHA, {
-    "https://api.vercel.com/v9/projects/": [
-      { status: 200, body: projectBody("dpl_live", FAILING_SHA, 2000) },
-      { status: 200, body: projectBody("dpl_live", FAILING_SHA, 2000) },
-      { status: 200, body: projectBody("dpl_prev", OLDER_SHA, 1000) },
-    ],
-    "https://api.vercel.com/v6/deployments": [
-      {
-        status: 200,
-        body: deploymentsBody([
-          { uid: "dpl_canceled", state: "CANCELED", meta: { githubCommitSha: OTHER_SHA }, created: 3000 },
-          { uid: "dpl_error", state: "ERROR", meta: { githubCommitSha: OTHER_SHA }, created: 2500 },
-          { uid: "dpl_prev", state: "READY", meta: { githubCommitSha: OLDER_SHA }, created: 1000 },
-        ]),
-      },
-    ],
-    "https://api.vercel.com/v10/projects/": [{ status: 200, body: {} }],
-  });
-  assert.equal(result.action, "requested");
-  assert.equal(result.deploymentId, "dpl_prev");
-  assert.equal(calls.filter((c) => c.method === "POST").length, 1);
-});
-
-test("matching live production commit -> exactly one POST to promote the chosen deployment", async () => {
-  const { result, calls } = await rollback(FAILING_SHA, {
-    "https://api.vercel.com/v9/projects/": [
-      { status: 200, body: projectBody("dpl_live", FAILING_SHA, 2000) },
-      { status: 200, body: projectBody("dpl_live", FAILING_SHA, 2000) }, // recheck: unchanged
-      { status: 200, body: projectBody("dpl_prev", OLDER_SHA, 1000) }, // verification: promoted
-    ],
-    "https://api.vercel.com/v6/deployments": [
-      {
-        status: 200,
-        body: deploymentsBody([
-          { uid: "dpl_older", state: "READY", meta: { githubCommitSha: OLDER_SHA }, created: 500 },
-          // Newest qualifying candidate: should be picked over dpl_older.
-          { uid: "dpl_prev", state: "READY", meta: { githubCommitSha: OLDER_SHA }, created: 1000, inspectorUrl: "https://vercel.com/x/dpl_prev" },
-        ]),
-      },
-    ],
-    "https://api.vercel.com/v10/projects/": [{ status: 200, body: {} }],
-  });
-  assert.equal(result.action, "requested");
-  assert.equal(result.deploymentId, "dpl_prev");
-  assert.equal(result.httpStatus, 200);
-
-  const posts = calls.filter((c) => c.method === "POST");
-  assert.equal(posts.length, 1);
-  assert.equal(posts[0].url, "https://api.vercel.com/v10/projects/prj_test/promote/dpl_prev");
-});
-
-test("post-promote verification mismatch -> failed", async () => {
-  const { result, calls } = await rollback(FAILING_SHA, {
-    "https://api.vercel.com/v9/projects/": [
-      { status: 200, body: projectBody("dpl_live", FAILING_SHA, 2000) },
-      { status: 200, body: projectBody("dpl_live", FAILING_SHA, 2000) },
-      { status: 200, body: projectBody("dpl_someone_else", OTHER_SHA, 3000) },
-    ],
-    "https://api.vercel.com/v6/deployments": [
-      { status: 200, body: deploymentsBody([{ uid: "dpl_prev", state: "READY", meta: { githubCommitSha: OLDER_SHA }, created: 1000 }]) },
-    ],
-    "https://api.vercel.com/v10/projects/": [{ status: 200, body: {} }],
-  });
-  assert.equal(result.action, "failed");
-  assert.equal(result.reason, "promotion did not take effect, production is now dpl_someone_else");
-  assert.equal(calls.filter((c) => c.method === "POST").length, 1);
-});
-
-test("promote HTTP status controls the rollback action", async () => {
-  const baseQueues = {
-    "https://api.vercel.com/v9/projects/": [
-      { status: 200, body: projectBody("dpl_live", FAILING_SHA, 2000) },
-      { status: 200, body: projectBody("dpl_live", FAILING_SHA, 2000) },
-      { status: 200, body: projectBody("dpl_prev", OLDER_SHA, 1000) },
-    ],
-    "https://api.vercel.com/v6/deployments": [
-      { status: 200, body: deploymentsBody([{ uid: "dpl_prev", state: "READY", meta: { githubCommitSha: OLDER_SHA }, created: 1000 }]) },
+    [`POST ${vercel}/v10/projects/project/promote/old`]: [200],
+    [`GET ${vercel}/v9/projects/hypertasks-prod`]: [
+      { id: "project", targets: { production: { id: "live", createdAt: 200, meta: { githubCommitSha: X } } } },
+      { id: "project", targets: { production: { id: "live", createdAt: 200, meta: { githubCommitSha: X } } } },
+      { id: "project", targets: { production: { id: "old", createdAt: 100, meta: { githubCommitSha: OLD } } } },
     ],
   };
+}
 
-  const failed = await rollback(FAILING_SHA, {
-    ...baseQueues,
-    "https://api.vercel.com/v10/projects/": [{ status: 403, body: {} }],
-  });
-  assert.equal(failed.result.action, "failed");
-  assert.equal(failed.result.httpStatus, 403);
-  assert.match(failed.result.reason, /403/);
-
-  const requested = await rollback(FAILING_SHA, {
-    ...baseQueues,
-    "https://api.vercel.com/v10/projects/": [{ status: 202, body: {} }],
-  });
-  assert.equal(requested.result.action, "requested");
-  assert.equal(requested.result.httpStatus, 202);
+test("promotes only a deployment whose smoke test step actually succeeded", async () => {
+  for (const conclusion of ["skipped", "failure", undefined]) {
+    const additions = greenSmoke();
+    additions[`GET ${gh}/actions/runs/42/jobs?per_page=100`] = [
+      { jobs: [{ name: "smoke", conclusion: "success", steps: conclusion && [{ name: "Run the smoke checks", conclusion }] }] },
+    ];
+    const skipped = await run(additions);
+    assert.equal(skipped.calls.some((c) => c.key.includes("/promote/")), false);
+  }
+  const green = await run(greenSmoke());
+  assert.equal(green.result.deploymentId, "old");
+  assert.equal(green.result.action, "requested");
+  assert.equal(green.result.freeze, true);
 });
 
-test("network error on promote -> failed, never throws", async () => {
-  const { result } = await rollback(FAILING_SHA, {
-    "https://api.vercel.com/v9/projects/": [
-      { status: 200, body: projectBody("dpl_live", FAILING_SHA, 2000) },
-      { status: 200, body: projectBody("dpl_live", FAILING_SHA, 2000) },
-    ],
-    "https://api.vercel.com/v6/deployments": [
-      { status: 200, body: deploymentsBody([{ uid: "dpl_prev", state: "READY", meta: { githubCommitSha: OLDER_SHA }, created: 1000 }]) },
-    ],
-    "https://api.vercel.com/v10/projects/": [{ throw: new Error("network down") }],
-  });
-  assert.equal(result.action, "failed");
-  assert.match(result.reason, /never reached Vercel/);
+test("both rollback alerts include all dropped commits and each failed operation", async () => {
+  const workflow = await readFile(path.join(__dirname, "../.github/workflows/prod-health.yml"), "utf8");
+  assert.match(workflow, /Dropped commits:[\s\S]*?\.revert\.dropped/);
+  assert.match(workflow, /Errors: [\s\S]*?\.errors/);
+  assert.match(workflow, /CORE_SMOKE_ROLLBACK=\$SUMMARY/);
+  assert.match(workflow, /SUMMARY=[\s\S]*?\.revert\.dropped/);
 });
 
-test("network error on the initial project lookup -> failed, never throws", async () => {
-  const { result } = await rollback(FAILING_SHA, {
-    "https://api.vercel.com/v9/projects/": [{ throw: new Error("network down") }],
-  });
-  assert.equal(result.action, "failed");
-  assert.match(result.reason, /could not resolve/);
+test("manual dispatch never freezes or reverts", async () => {
+  const before = process.env.GITHUB_EVENT_NAME;
+  process.env.GITHUB_EVENT_NAME = "workflow_dispatch";
+  try {
+    const { result, calls } = await run();
+    assert.equal(result.action, "skip");
+    assert.equal(result.freeze, false);
+    assert.deepEqual(calls, []);
+  } finally {
+    if (before === undefined) delete process.env.GITHUB_EVENT_NAME;
+    else process.env.GITHUB_EVENT_NAME = before;
+  }
 });

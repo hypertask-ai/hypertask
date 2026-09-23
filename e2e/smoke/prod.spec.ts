@@ -1,6 +1,8 @@
 import { test, expect } from '@playwright/test'
 import { readFileSync, writeFileSync } from 'node:fs'
 import path from 'node:path'
+import { withRealtime } from './lib/realtime'
+import { tieredId } from './lib/tier'
 
 const PREFLIGHT_FILE = path.join(__dirname, '.state', 'preflight.json')
 const APPLICATION_FAILURE_FILE = path.join(__dirname, '.state', 'application-failure.json')
@@ -116,7 +118,12 @@ function isBotChallenge(response: import('@playwright/test').Response | null): b
 }
 
 for (const view of VIEWS) {
-  test(`${view.name} loads`, async ({ page }) => {
+  // HTPR-6636 phase 2: hypertask-qa-runner now runs this suite once per
+  // tier account, so the same view check needs a tier-scoped dedup id (or
+  // two tiers failing the same view would share one ticket) , see
+  // lib/process-report.mjs in the runner repo, which reads this tag.
+  const idTag = `@id:${tieredId(`view-${view.name.replace(/\s+/g, '-')}`)}`
+  test(`${view.name} loads`, { tag: [idTag] }, async ({ page }) => {
     test.skip(view.requiresFixture === true && !view.path, `no seeded fixture (${view.name} not opened)`)
 
     const pageErrors: Error[] = []
@@ -124,7 +131,7 @@ for (const view of VIEWS) {
 
     let response
     try {
-      response = await page.goto(view.path!, { waitUntil: 'load' })
+      response = await page.goto(withRealtime(view.path!), { waitUntil: 'load' })
     } catch (err) {
       if (isUnrunnableError(err)) {
         markUnrunnable(`navigation infrastructure failed on ${view.path}`)

@@ -63,6 +63,7 @@ jobs:
           DISP_PR: ${{ github.event.inputs.pr }}
           RUN_BRANCH: ${{ github.event.workflow_run.head_branch }}
           RUN_REPO: ${{ github.event.workflow_run.head_repository.full_name }}
+          MERGE_FREEZE: ${{ vars.MERGE_FREEZE }}
         run: |
           set -uo pipefail
 
@@ -118,7 +119,7 @@ jobs:
           # middleware, CI itself, dependency manifests (supply chain), and
           # build/env config. Deliberately conservative and broad: over-parking
           # is a manual merge, a wrong auto-merge is production.
-          RISK_RE='(^|/)middleware\.[tj]sx?$|(^|/)proxy\.[tj]sx?$|(^|/)auth/|/auth\.[tj]sx?$|auth(service|provider|context|guard|middleware|helper|check|z|n)|better-auth|oauth|firebase|(^|/)login/|login\.[tj]sx?$|session(manager|store|service|provider|context|helper)|stripe|billing|invoice|checkout|subscription|paywall|(^|/)pricing/|pricing\.[tj]sx?$|credential|(^|/)\.github/|(^|/)scripts/check-speed-pr-evidence\.mjs$|(^|/)config/app-project-performance-baseline\.json$|(^|/)package(-lock)?\.json$|(^|/)npm-shrinkwrap\.json$|(^|/)pnpm-lock|(^|/)yarn\.lock$|(^|/)\.npmrc$|(^|/)next\.config\.|(^|/)vercel\.json$|(^|/)\.env'
+          RISK_RE='src/app/(.*/)?layout\.tsx$|src/app/global-error\.tsx$|src/app/\[\.\.\.boardURL\]/|src/hooks/realtime/|src/utils/Providers\.tsx$|src/middleware\.ts$|src/proxy\.ts$|(^|/)middleware\.[tj]sx?$|(^|/)proxy\.[tj]sx?$|(^|/)auth/|/auth\.[tj]sx?$|auth(service|provider|context|guard|middleware|helper|check|z|n)|better-auth|oauth|firebase|(^|/)login/|login\.[tj]sx?$|session(manager|store|service|provider|context|helper)|stripe|billing|invoice|checkout|subscription|paywall|(^|/)pricing/|pricing\.[tj]sx?$|credential|(^|/)\.github/|(^|/)scripts/check-speed-pr-evidence\.mjs$|(^|/)config/app-project-performance-baseline\.json$|(^|/)package(-lock)?\.json$|(^|/)npm-shrinkwrap\.json$|(^|/)pnpm-lock|(^|/)yarn\.lock$|(^|/)\.npmrc$|(^|/)next\.config\.|(^|/)vercel\.json$|(^|/)\.env'
 
           # Labels that stop an auto-merge outright.
           HOLD_LABELS="hold do-not-merge valentin-review wip probation"
@@ -151,6 +152,33 @@ jobs:
             [ -z "${PRS:-}" ] && { echo "No open production PR for branch $RUN_BRANCH."; exit 0; }
           fi
           [ -z "${PRS:-}" ] && { echo "No open PRs to production."; exit 0; }
+
+          production_gate() {
+            local gate kind sha reason comments pr marker
+            if ! gate=$(node .github/scripts/production-gate.mjs); then
+              echo "::error::Cannot check production health; refusing to merge."
+              exit 1
+            fi
+            [ -z "$gate" ] && return 0
+            IFS='|' read -r kind sha reason <<<"$gate"
+            echo "production red or frozen: $reason"
+            if [[ "$kind" != "freeze" && "$kind" != "smoke-failure" ]]; then
+              exit 0
+            fi
+            if [[ ! "$sha" =~ ^[0-9a-f]{40}$ ]]; then
+              echo "::error::Invalid production SHA; refusing to comment or merge."
+              exit 1
+            fi
+            marker="<!-- automerge-frozen:$kind:$sha -->"
+            for pr in $PRS; do
+              if comments=$(gh api --paginate "repos/$REPO/issues/$pr/comments?per_page=100" --jq '.[].body' 2>/dev/null) &&
+                 ! grep -Eq "<!-- automerge-frozen:(freeze|smoke-failure):$sha -->" <<<"$comments"; then
+                gh api -X POST "repos/$REPO/issues/$pr/comments" -f body="$marker Auto-merge paused: $reason. A human must clear this before merging." >/dev/null 2>&1 || true
+              fi
+            done
+            exit 0
+          }
+          production_gate
 
           has_hold() {  # $1 = newline list of lowercased labels ; returns 0 if a hold label present
             local labels="$1" L
@@ -500,6 +528,7 @@ jobs:
             # --match-head-commit binds the merge to the exact SHA we inspected, so
             # a push landing mid-run can't sneak in unreviewed (merge just fails and
             # retries on the next trigger).
+            production_gate
             echo "MERGING #$PR @ ${headOid:0:9}"
             if gh pr merge "$PR" --repo "$REPO" --squash --match-head-commit "$headOid"; then
               echo "MERGED #$PR"
