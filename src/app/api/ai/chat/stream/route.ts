@@ -369,6 +369,7 @@ const MAX_TOOL_STEPS = 32;
 const MAX_BULK_TOOL_TARGETS = 50;
 const CLAUDE_MODELS = new Set([
   "claude-sonnet-5",
+  "claude-opus-5.5",
   "claude-opus-5-5",
   "claude-opus-5",
 ]);
@@ -1287,7 +1288,11 @@ function selectModel(
         requestedModel && CLAUDE_MODELS.has(requestedModel)
           ? requestedModel
           : DEFAULT_CLAUDE_MODEL;
-      const aiModel = resolveAiModel(provider, model, byokCredential);
+      const directModel = typeof byokCredential === "string" &&
+        !isVercelAiGatewayKey(byokCredential)
+        ? modelOption?.directModel ?? model
+        : model;
+      const aiModel = resolveAiModel(provider, directModel, byokCredential);
       return {
         model: aiModel,
         resolvedModelId: model,
@@ -1312,7 +1317,7 @@ function selectModel(
         resolvedModelId: model,
         usageProvider,
         settings: {
-          temperature: model.toLowerCase().startsWith("gpt-5") ? 1 : 0.2,
+          temperature: /^gpt-([5-9]|\d{2,})/.test(model.toLowerCase()) ? 1 : 0.2,
         },
         providerOptions: providerOptionsForAiModel(
           aiModel,
@@ -10839,7 +10844,7 @@ export async function POST(request: NextRequest) {
             selected.provider,
             previous.model,
             streamCredential,
-            streamModelOption,
+            streamModelOption ? { ...streamModelOption, directModel: undefined } : undefined,
             gatewayTags,
           );
           selected = {

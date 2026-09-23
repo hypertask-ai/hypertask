@@ -899,12 +899,24 @@ test("retired model options keep their saved variant and price tier", () => {
     for (const suffix of suffixes) {
       const option = getAiModelOptionById(oldBase + suffix);
       assert.equal(option?.id, newBase + suffix);
-      assert.equal(option?.model, newBase);
+      assert.equal(option?.model, newBase === "claude-opus-5-5" ? "claude-opus-5.5" : newBase);
     }
   }
   assert.equal(getAiModelDefinition("gpt-6-luna").priceTier, 2);
   assert.equal(getAiModelDefinition("gpt-6-sol").priceTier, 3);
   assert.equal(getAiModelDefinition("claude-opus-5-5").priceTier, 3);
+});
+
+test("Opus 5.5 uses the gateway dot slug and the direct Anthropic dash slug", () => {
+  const { getAiModelOptionById } = loadTs("src/lib/aiModelOptions.ts");
+  const { resolveAiModel } = loadTs("src/app/api/ai/_lib/modelProvider.ts");
+  for (const id of ["claude-opus-5-5-instant", "claude-opus-5-5-thinking"]) {
+    const option = getAiModelOptionById(id);
+    assert.equal(option.model, "claude-opus-5.5");
+    assert.equal(option.directModel, "claude-opus-5-5");
+    assert.equal(resolveAiModel("claude", option.model, "vck_gateway").modelId, "anthropic/claude-opus-5.5");
+    assert.equal(resolveAiModel("claude", option.directModel, "sk-ant-direct").modelId, "claude-opus-5-5");
+  }
 });
 
 test("model and effort dimensions resolve every supported provider configuration", () => {
@@ -1389,6 +1401,7 @@ test("task writer key lookup ignores caller teamId when project lookup resolves 
   const selected = await selectTaskWriterModel({
     sourceSelected: "openai",
     modelSelected: "gpt-5.5",
+    modelOptionId: "gpt-5.5-instant",
     byokProviderFlags: [],
     teamId: callerTeamId,
     projectId,
@@ -1504,4 +1517,88 @@ test("custom instruction upload uses the authenticated project team over caller 
   assert.equal(upsertedRows.length, 1);
   assert.equal(upsertedRows[0].teamId, projectTeamId);
   assert.notEqual(upsertedRows[0].teamId, callerTeamId);
+});
+
+test("editor models retry unavailable Luna once before output, but not after output", async () => {
+  resetModules();
+  stubPlan();
+  const calls = [];
+  let emitBeforeError = false;
+  const retryError = { name: "RetryError", lastError: { status: 404 } };
+  stubModule("src/lib/prisma.ts", { default: {} });
+  stubModule("src/utils/controllers/turbopuffer/turbopufferHelper.ts", {});
+  stubModule("src/utils/controllers/projects/getAllIncludes.ts", {});
+  stubModule("src/app/api/ai/_lib/byokKeys.ts", {
+    getByokOrTeamGatewayApiKeyForModelOption: async () => "vck_test",
+  });
+  stubModule("src/app/api/ai/_lib/providerGate.ts", {
+    filterModelOptionForTeam: (option) => option,
+  });
+  stubModule("src/app/api/ai/_lib/modelProvider.ts", {
+    aiUsageProviderForCredential: () => "gateway",
+    isCustomEndpointConfig: () => false,
+    isVercelAiGatewayKey: (key) => key?.startsWith("vck_"),
+    providerOptionsForAiModel: () => undefined,
+    resolveAiModel: (_provider, modelId) => ({
+      specificationVersion: "v4",
+      provider: "test",
+      modelId,
+      supportedUrls: {},
+      doGenerate: async () => {
+        calls.push(modelId);
+        if (modelId === "gpt-6-luna") throw retryError;
+        return { content: [{ type: "text", text: "OK" }] };
+      },
+      doStream: async () => ({
+        stream: new ReadableStream({
+          start(controller) {
+            calls.push(modelId);
+            if (modelId === "gpt-6-luna") {
+              if (emitBeforeError) controller.enqueue({ type: "text-delta", id: "1", text: "partial" });
+              controller.enqueue({ type: "error", error: retryError });
+            } else {
+              controller.enqueue({ type: "text-delta", id: "1", text: "OK" });
+            }
+            controller.close();
+          },
+        }),
+      }),
+    }),
+  });
+  const { selectTaskWriterModel } = loadTs("src/app/api/ai/_lib/editorAi.ts");
+  const options = {
+    modelOptionId: "gpt-6-luna",
+    projectId: 1,
+    userId: 1,
+    teamContext: { teamId: "test-team", settings: {} },
+  };
+  const selected = await selectTaskWriterModel(options);
+  const originalWarn = console.warn;
+  const warnings = [];
+  console.warn = (message) => warnings.push(message);
+  try {
+    assert.equal((await selected.model.doGenerate({ prompt: [] })).content[0].text, "OK");
+    assert.deepEqual(calls, ["gpt-6-luna", "gpt-5.6-luna"]);
+    assert.equal(selected.modelId, "gpt-5.6-luna");
+    assert.match(warnings[0], /^\[ai-model-fallback\] gpt-6-luna -> gpt-5.6-luna: 404$/);
+    calls.length = 0;
+    const streaming = await selectTaskWriterModel(options);
+    const { stream } = await streaming.model.doStream({ prompt: [] });
+    const chunks = [];
+    for await (const chunk of stream) chunks.push(chunk);
+    assert.deepEqual(calls, ["gpt-6-luna", "gpt-5.6-luna"]);
+    assert.deepEqual(chunks.map((chunk) => chunk.type), ["text-delta"]);
+    assert.equal(streaming.modelId, "gpt-5.6-luna");
+    calls.length = 0;
+    emitBeforeError = true;
+    const partial = await selectTaskWriterModel(options);
+    const partialChunks = [];
+    for await (const chunk of (await partial.model.doStream({ prompt: [] })).stream) {
+      partialChunks.push(chunk);
+    }
+    assert.deepEqual(calls, ["gpt-6-luna"]);
+    assert.deepEqual(partialChunks.map((chunk) => chunk.type), ["text-delta", "error"]);
+  } finally {
+    console.warn = originalWarn;
+  }
 });

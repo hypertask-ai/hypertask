@@ -12,6 +12,7 @@ import {
   aiModelDefinitions,
   aiModelOptions,
   getAiModelDefinition,
+  getAiModelOptionById,
 } from "@/lib/aiModelOptions";
 import {
   AI_FEATURES,
@@ -104,7 +105,7 @@ const modelDefinition = (model: string) =>
   );
 
 const modelLabel = (model: string) =>
-  aiModelOptions.find((option) => option.id === model)?.title ??
+  getAiModelOptionById(model)?.title ??
   aiImageModelDefinitions.find((definition) => definition.key === model)
     ?.label ??
   modelDefinition(model)?.label ??

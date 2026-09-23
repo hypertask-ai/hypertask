@@ -5,6 +5,7 @@ import {
   UNSLOP_SKILL,
 } from "@/app/api/ai/_lib/writingSkills";
 import { createAnthropic } from "@ai-sdk/anthropic";
+import type { LanguageModelV4 } from "@ai-sdk/provider";
 import { createOpenAI } from "@ai-sdk/openai";
 import {
   wrapLanguageModel,
@@ -29,6 +30,7 @@ import {
   type ByokProviderFlag,
 } from "@/app/api/ai/_lib/byokKeys";
 import { sharedAiAllowanceErrorMessage } from "@/app/api/ai/_lib/sharedAllowance";
+import { previousModelForFailedStream } from "@/app/api/ai/chat/stream/modelFallback";
 import {
   filterModelOptionForTeam,
   getProjectTeamProviderContext,
@@ -119,14 +121,18 @@ const DEFAULT_MODEL = "gpt-6-luna";
 const DEFAULT_CLAUDE_MODEL = "claude-sonnet-5";
 const CLAUDE_MODELS = new Set([
   "claude-sonnet-5",
+  "claude-opus-5.5",
   "claude-opus-5-5",
+  "claude-opus-5",
   "claude-haiku-4.5",
 ]);
 const OPENAI_MODELS = new Set([
   "gpt-5.5",
   "gpt-6-luna",
+  "gpt-5.6-luna",
   "gpt-5.6-terra",
   "gpt-6-sol",
+  "gpt-5.6-sol",
   "gpt-5.4-mini",
 ]);
 
@@ -824,7 +830,11 @@ export function selectEditorModel(
         requestedModel && CLAUDE_MODELS.has(requestedModel)
           ? requestedModel
           : DEFAULT_CLAUDE_MODEL;
-      const aiModel = resolveAiModel(provider, model, byokCredential);
+      const directModel = typeof byokCredential === "string" &&
+        !isVercelAiGatewayKey(byokCredential)
+        ? options?.modelOption?.directModel ?? model
+        : model;
+      const aiModel = resolveAiModel(provider, directModel, byokCredential);
       const directApiKey = isVercelAiGatewayKey(byokCredential)
         ? undefined
         : typeof byokCredential === "string"
@@ -941,7 +951,7 @@ export function selectEditorModel(
           options?.modelOption
         ),
         settings: {
-          temperature: model.toLowerCase().startsWith("gpt-5") ? 1 : 0.2,
+          temperature: /^gpt-([5-9]|\d{2,})/.test(model.toLowerCase()) ? 1 : 0.2,
           maxOutputTokens: 16000,
         },
         tools: options?.includeNativeWebSearch
@@ -1137,10 +1147,106 @@ export async function selectTaskWriterModel(args: {
         selection.provider === "claude" || selection.provider === "openai",
     }
   );
-  return {
+  const selected = {
     ...selectedModel,
     teamId: teamContext.teamId ?? normalizeGatewayTeamId(args.teamId),
   };
+  let hasOutput = false;
+  let fellBack = false;
+  const fallbackModel = (error: unknown) => {
+    if (fellBack) return null;
+    const previous = previousModelForFailedStream(
+      selected.modelId, error, hasOutput, false,
+    );
+    if (!previous) return null;
+    fellBack = true;
+    console.warn(
+      `[ai-model-fallback] ${selected.modelId} -> ${previous.model}: ${previous.status}`,
+    );
+    const fallback = selectEditorModel(
+      selection.provider,
+      previous.model,
+      byokApiKey,
+      {
+        feature: args.feature ?? "task-writer",
+        tags,
+        modelOption: selection.modelOption
+          ? { ...selection.modelOption, directModel: undefined }
+          : undefined,
+      },
+    );
+    selected.modelId = fallback.modelId;
+    return fallback.model as LanguageModelV4;
+  };
+  if (!previousModelForFailedStream(selected.modelId, { status: 404 }, false, false)) {
+    return selected;
+  }
+  selected.model = wrapLanguageModel({
+    model: selectedModel.model as Parameters<typeof wrapLanguageModel>[0]["model"],
+    middleware: {
+      specificationVersion: "v4",
+      wrapGenerate: async ({ doGenerate, params }) => {
+        try {
+          const result = await doGenerate();
+          hasOutput = true;
+          return result;
+        } catch (error) {
+          const fallback = fallbackModel(error);
+          if (!fallback) throw error;
+          const result = await fallback.doGenerate(params);
+          hasOutput = true;
+          return result;
+        }
+      },
+      wrapStream: async ({ doStream, params }) => {
+        let result;
+        try {
+          result = await doStream();
+        } catch (error) {
+          const fallback = fallbackModel(error);
+          if (!fallback) throw error;
+          result = await fallback.doStream(params);
+        }
+        return {
+          ...result,
+          stream: new ReadableStream({
+            async start(controller) {
+              let reader = result.stream.getReader();
+              try {
+                while (true) {
+                  let item;
+                  try {
+                    item = await reader.read();
+                  } catch (error) {
+                    const fallback = fallbackModel(error);
+                    if (!fallback) throw error;
+                    reader = (await fallback.doStream(params)).stream.getReader();
+                    continue;
+                  }
+                  if (item.done) break;
+                  if (item.value.type === "error") {
+                    const fallback = fallbackModel(item.value.error);
+                    if (fallback) {
+                      await reader.cancel();
+                      reader = (await fallback.doStream(params)).stream.getReader();
+                      continue;
+                    }
+                  } else if (item.value.type !== "stream-start" && item.value.type !== "response-metadata") {
+                    hasOutput = true;
+                  }
+                  controller.enqueue(item.value);
+                }
+                controller.close();
+              } catch (error) {
+                controller.error(error);
+              }
+            },
+          }),
+        };
+      },
+    },
+  });
+  return selected;
 }
 
 export function createTaskAndModelContext(args: {

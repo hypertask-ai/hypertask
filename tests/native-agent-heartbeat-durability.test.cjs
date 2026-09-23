@@ -492,7 +492,7 @@ test("heartbeat integration keeps timeout recovery, outbox delivery, and click r
   assert.match(stream, /heartbeatTurn\.scanWatermark/);
   assert.match(agentInbox, /createdAt:[\s\S]*gt: window\.after[\s\S]*lte: window\.through/);
   const durableStart = stream.indexOf("data: { isDelivered: true }");
-  const modelStart = stream.indexOf("const result = streamText", durableStart);
+  const modelStart = stream.indexOf("result = streamText", durableStart);
   assert.ok(durableStart >= 0 && modelStart > durableStart);
   assert.match(auth, /verifyHeartbeatExecutionReservation/);
 
