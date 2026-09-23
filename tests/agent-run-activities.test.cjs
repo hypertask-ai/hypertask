@@ -1140,7 +1140,7 @@ function loadAtomicCommentService(
       broadcastTaskComment,
     },
     "src/utils/controllers/notifications/creation-service/check-reminder_create-notification.ts":
-      { default: noop },
+      { default: noop, checkRemindersAndCreateNotifications: noop },
     "src/utils/controllers/notifications/agentActionRecipients.ts": {
       includeSenderInRecipients: () => false,
       shouldNotifyTaskOwnerForComment: () => false,
@@ -1432,7 +1432,9 @@ function atomicCommentHarness() {
     follower: { findMany: async () => [] },
     notification: {
       findFirst: async () => null,
+      findMany: async () => [],
       create: async (input) => input,
+      createMany: async ({ data }) => ({ count: data.length }),
     },
     subscribedDevices: { findMany: async () => [] },
     user: {

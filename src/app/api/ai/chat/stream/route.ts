@@ -76,6 +76,10 @@ import {
 } from "@/app/api/ai/_lib/chatTeamContext";
 import { getProjectWhere } from "@/utils/controllers/projects/getAllIncludes";
 import {
+  buildTaskTree,
+  findRootTaskIdForTree,
+} from "@/lib/aiChat/taskTree";
+import {
   getProjectMembers,
 } from "@/utils/controllers/projects/getProjectMembers";
 import {
@@ -2107,111 +2111,6 @@ function deriveChatAttachmentFilename(
   return `attachment-${index + 1}${
     CHAT_ATTACHMENT_EXTENSION_BY_MIME[normalizeMime(contentType)] || ""
   }`;
-}
-
-type TaskTreeNode = {
-  id: number;
-  task_id: number;
-  ticketNumber?: string;
-  title: string;
-  uniqueIndex?: number;
-  children?: TaskTreeNode[];
-};
-
-const MAX_TREE_ANCESTOR_HOPS = 256;
-
-async function findRootTaskIdForTree(
-  anchorTaskId: number,
-  userId: number
-): Promise<{ rootId: number } | { error: string }> {
-  const visited = new Set<number>();
-  let currentId = anchorTaskId;
-
-  for (let hop = 0; hop < MAX_TREE_ANCESTOR_HOPS; hop++) {
-    if (visited.has(currentId)) {
-      return { error: "Invalid parent chain (cycle detected)" };
-    }
-    visited.add(currentId);
-
-    const task = await prisma.task.findFirst({
-      where: {
-        id: currentId,
-        project: getProjectWhere(userId),
-      },
-      select: { id: true, parentTaskId: true },
-    });
-
-    if (!task) {
-      return { error: "Task not found or access denied" };
-    }
-
-    if (task.parentTaskId == null) {
-      return { rootId: task.id };
-    }
-
-    currentId = task.parentTaskId;
-  }
-
-  return { error: "Parent chain exceeds maximum depth" };
-}
-
-async function buildTaskTreeNode(
-  taskId: number,
-  userId: number,
-  remainingDepth: number | undefined
-): Promise<TaskTreeNode> {
-  const task = await prisma.task.findFirst({
-    where: {
-      id: taskId,
-      project: getProjectWhere(userId),
-    },
-    select: {
-      id: true,
-      ticketNumber: true,
-      title: true,
-      uniqueIndex: true,
-    },
-  });
-
-  if (!task) {
-    throw new Error("Task not found in tree build");
-  }
-
-  const node: TaskTreeNode = {
-    id: task.id,
-    task_id: task.id,
-    title: task.title,
-  };
-  if (task.ticketNumber) node.ticketNumber = task.ticketNumber;
-  if (task.uniqueIndex !== undefined && task.uniqueIndex !== null) {
-    node.uniqueIndex = task.uniqueIndex;
-  }
-
-  if (remainingDepth === 0) {
-    return node;
-  }
-
-  const childrenRows = await prisma.task.findMany({
-    where: {
-      parentTaskId: taskId,
-      status: { not: "Deleted" },
-      project: getProjectWhere(userId),
-    },
-    select: { id: true },
-    orderBy: { uniqueIndex: "asc" },
-  });
-
-  if (childrenRows.length === 0) {
-    return { ...node, children: [] };
-  }
-
-  const nextDepth =
-    remainingDepth === undefined ? undefined : remainingDepth - 1;
-  const children = await Promise.all(
-    childrenRows.map((row) => buildTaskTreeNode(row.id, userId, nextDepth))
-  );
-
-  return { ...node, children };
 }
 
 function isoDate(value: unknown) {
@@ -8444,7 +8343,7 @@ function buildTools(
           return { success: false, error: rootResult.error };
         }
 
-        const tree = await buildTaskTreeNode(
+        const tree = await buildTaskTree(
           rootResult.rootId,
           user.id,
           input.depth

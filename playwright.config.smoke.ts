@@ -28,9 +28,39 @@ export default defineConfig({
   },
   globalSetup: './e2e/smoke/global-setup.ts',
   projects: [
-    { name: 'Desktop', use: { ...devices['Desktop Chrome'] } },
+    { name: 'Desktop', testMatch: /prod\.spec\.ts/, use: { ...devices['Desktop Chrome'] } },
     // browserName pinned: the iPhone 13 device descriptor defaults to WebKit,
     // but the workflow only installs the Chromium binary (HTPR-6199 review).
-    { name: 'Mobile', use: { ...devices['iPhone 13'], browserName: 'chromium' } },
+    { name: 'Mobile', testMatch: /prod\.spec\.ts/, use: { ...devices['iPhone 13'], browserName: 'chromium' } },
+
+    // HTPR-6636 phase 2 , customer journeys, opt-in via HT_QA_JOURNEYS=1
+    // (every test here self-skips otherwise, so this is harmless in
+    // prod-health.yml, which sets neither env var and doesn't pass
+    // --project). "journeys-setup" resolves/creates "QA runner board" once
+    // and writes it to a state file the "journeys"/"mobile-journeys"
+    // projects read , a Playwright project dependency, so it always
+    // completes (or itself skips) before either project starts.
+    { name: 'journeys-setup', testMatch: /journeys\.setup\.ts/, timeout: 30_000, use: { ...devices['Desktop Chrome'] } },
+    {
+      name: 'journeys',
+      testMatch: /journeys\.spec\.ts/,
+      dependencies: ['journeys-setup'],
+      timeout: 45_000,
+      use: { ...devices['Desktop Chrome'] },
+    },
+    // Only the tests tagged @mobile (open board, open task, create task) ,
+    // see e2e/smoke/journeys.spec.ts. Same Chromium pin as "Mobile" above.
+    {
+      name: 'mobile-journeys',
+      testMatch: /journeys\.spec\.ts/,
+      dependencies: ['journeys-setup'],
+      grep: /@mobile/,
+      timeout: 45_000,
+      use: { ...devices['iPhone 14'], browserName: 'chromium' },
+    },
+
+    // Guest demo access , no account, self-skips unless HT_QA_RUN_DEMO=1
+    // (the runner sets that at most once per deploy; see e2e/smoke/demo.spec.ts).
+    { name: 'demo', testMatch: /demo\.spec\.ts/, timeout: 30_000, use: { ...devices['Desktop Chrome'] } },
   ],
 })
