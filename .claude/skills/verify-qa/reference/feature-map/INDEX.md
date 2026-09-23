@@ -49,10 +49,10 @@ yours; use it only when he needs to watch.
 ## QA runner accounts
 
 Three tiered accounts, state files at `~/.config/ht-qa/state-{free,byok,pro}.json`.
-Names may still change: `e2e/smoke/lib/tier.ts` currently uses
-`free`/`light`/`premium` as free-form tier labels and the free/light/premium
-to Free/BYOK/Pro plan mapping is unconfirmed. Keep the account names in this
-one file so renaming them is a one-line edit, not a grep-and-replace:
+`e2e/smoke/lib/tier.ts` uses `free`/`byok`/`pro` as the tier labels, confirmed
+mapped to plans `Free`/`BYOK`/`Pro`. There is no light or premium tier. Free
+is free forever and has AI chat on `gpt-5.4-mini`. Keep the account names in
+this one file so renaming them is a one-line edit, not a grep-and-replace:
 
 - `free` → `~/.config/ht-qa/state-free.json`
 - `byok` → `~/.config/ht-qa/state-byok.json`
@@ -63,10 +63,8 @@ Each account writes only to its own private **"QA runner board"**
 Never write to a board you don't own, and never use another account's state
 file.
 
-The real plan ids in `src/lib/subscriptionPlans.ts` are `Free`, `AI`, `Pro`,
-and `BYOK`; none of those exactly match `free`/`light`/`premium` either, so
-`HT_QA_EXPECTED_PLAN` needs a confirmed mapping before it can gate a
-pass/fail. Open question, not yet resolved.
+`HT_QA_EXPECTED_PLAN` gates pass/fail on the confirmed plan mapping above:
+`free` → `Free`, `byok` → `BYOK`, `pro` → `Pro`.
 
 **These tiered accounts are plain customer accounts, not `OWNER_AND_QA`
 flagged accounts.** A flag-gated ticket still needs the existing flagged
