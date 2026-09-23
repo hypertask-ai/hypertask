@@ -281,6 +281,7 @@ import {
   type TAiModelOption,
 } from "@/lib/aiModelOptions";
 import { filterModelOptionForTeam } from "@/app/api/ai/_lib/providerGate";
+import { previousModelForFailedStream } from "./modelFallback";
 import { resolveSkillsForAiRequest } from "@/app/api/ai/_lib/chatSkillResolution";
 import { HOUSE_OUTPUT_STYLE } from "@/app/api/ai/_lib/editorAi";
 import { getAiRequestUser } from "@/app/api/ai/_lib/requestUser";
@@ -366,15 +367,22 @@ const SSE_HEADERS = {
 };
 
 const DEFAULT_PROVIDER: ProviderId = "openai";
-const DEFAULT_MODEL = "gpt-5.6-luna";
+const DEFAULT_MODEL = "gpt-6-luna";
 const DEFAULT_CLAUDE_MODEL = "claude-sonnet-5";
 const MAX_TOOL_STEPS = 32;
 const MAX_BULK_TOOL_TARGETS = 50;
-const CLAUDE_MODELS = new Set(["claude-sonnet-5", "claude-opus-5"]);
+const CLAUDE_MODELS = new Set([
+  "claude-sonnet-5",
+  "claude-opus-5.5",
+  "claude-opus-5-5",
+  "claude-opus-5",
+]);
 const OPENAI_MODELS = new Set([
   "gpt-5.5",
+  "gpt-6-luna",
   "gpt-5.6-luna",
   "gpt-5.6-terra",
+  "gpt-6-sol",
   "gpt-5.6-sol",
   "gpt-5.4-mini",
 ]);
@@ -1284,7 +1292,11 @@ function selectModel(
         requestedModel && CLAUDE_MODELS.has(requestedModel)
           ? requestedModel
           : DEFAULT_CLAUDE_MODEL;
-      const aiModel = resolveAiModel(provider, model, byokCredential);
+      const directModel = typeof byokCredential === "string" &&
+        !isVercelAiGatewayKey(byokCredential)
+        ? modelOption?.directModel ?? model
+        : model;
+      const aiModel = resolveAiModel(provider, directModel, byokCredential);
       return {
         model: aiModel,
         resolvedModelId: model,
@@ -1309,7 +1321,7 @@ function selectModel(
         resolvedModelId: model,
         usageProvider,
         settings: {
-          temperature: model.toLowerCase().startsWith("gpt-5") ? 1 : 0.2,
+          temperature: /^gpt-([5-9]|\d{2,})/.test(model.toLowerCase()) ? 1 : 0.2,
         },
         providerOptions: providerOptionsForAiModel(
           aiModel,
@@ -9837,6 +9849,8 @@ export async function POST(request: NextRequest) {
     providerOptions?: AiProviderOptions;
   };
   let titleByokApiKey: string | undefined;
+  let streamCredential: AiModelCredential | undefined;
+  let streamModelOption: TAiModelOption | undefined;
   const gatewayTags: AiGatewayTags = {
     teamId: null,
     projectId: null,
@@ -10031,6 +10045,8 @@ export async function POST(request: NextRequest) {
             keyLookupContext,
             { resolveOpenRouterWithoutFlag: false }
           );
+    streamCredential = byokApiKey;
+    streamModelOption = selection.modelOption;
     const resolvedModel = selectModel(
       selection.provider,
       selection.model,
@@ -10604,7 +10620,11 @@ export async function POST(request: NextRequest) {
         }
         // $ai_latency measures the generation itself, not the turn setup.
         generationStartedAt = Date.now();
-        const result = streamText({
+        const chunks: string[] = [];
+        let result!: ReturnType<typeof streamText>;
+        for (let attempt = 0; attempt < 2; attempt++) {
+          let fallbackError: unknown;
+        result = streamText({
           model: selected.model,
           instructions,
           messages,
@@ -10635,6 +10655,20 @@ export async function POST(request: NextRequest) {
             });
           },
           onError: async ({ error }) => {
+            if (
+              attempt === 0 &&
+              !cancelled &&
+              !providerAbort.signal.aborted &&
+              previousModelForFailedStream(
+                selected.resolvedModelId,
+                error,
+                chunks.length > 0,
+                toolExecutions.length > 0,
+              )
+            ) {
+              fallbackError = error;
+              return;
+            }
             recordTurnOutcome(cancelled ? "cancelled" : "failed", error);
             if (errorSent) return;
             errorSent = true;
@@ -10682,12 +10716,42 @@ export async function POST(request: NextRequest) {
           ...selected.settings,
         });
 
-        const chunks: string[] = [];
-        for await (const chunk of result.textStream) {
-          if (errorSent || cancelled) break;
-          if (!chunk) continue;
-          chunks.push(chunk);
-          send("content", { content: chunk });
+          try {
+            for await (const chunk of result.textStream) {
+              if (errorSent || cancelled) break;
+              if (!chunk) continue;
+              chunks.push(chunk);
+              send("content", { content: chunk });
+            }
+          } catch (error) {
+            if (!fallbackError || attempt !== 0) throw error;
+          }
+          if (errorSent || cancelled) return;
+          const previous = attempt === 0 && fallbackError
+            ? previousModelForFailedStream(
+                selected.resolvedModelId,
+                fallbackError,
+                chunks.length > 0,
+                toolExecutions.length > 0,
+              )
+            : null;
+          if (!previous) break;
+          console.warn(
+            `[ai-model-fallback] ${selected.resolvedModelId} -> ${previous.model}: ${previous.status}`,
+          );
+          const fallback = selectModel(
+            selected.provider,
+            previous.model,
+            streamCredential,
+            streamModelOption ? { ...streamModelOption, directModel: undefined } : undefined,
+            gatewayTags,
+          );
+          selected = {
+            ...selected,
+            ...fallback,
+            modelId: fallback.resolvedModelId,
+          };
+          observedModel = selected.resolvedModelId;
         }
 
         if (errorSent || cancelled) return;

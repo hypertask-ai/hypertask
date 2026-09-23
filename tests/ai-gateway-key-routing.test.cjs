@@ -7,6 +7,7 @@ const root = path.resolve(__dirname, "..");
 let jitiEntryId = 0;
 
 const stubbedModulePaths = [
+  "src/app/api/ai/_lib/aiUsage.ts",
   "src/app/api/ai/_lib/byokKeys.ts",
   "src/app/api/ai/_lib/customInstructions.ts",
   "src/app/api/ai/_lib/editorAi.ts",
@@ -741,7 +742,7 @@ test("task writer option ids map to provider options and legacy model strings fa
   );
 
   assert.equal(defaultAiModelOption.id, "gpt-5.4-mini");
-  assert.equal(preferredAiModelOption.id, "gpt-5.6-luna");
+  assert.equal(preferredAiModelOption.id, "gpt-6-luna");
   assert.equal(preferredAiModelOption.effort, "standard");
   assert.deepEqual(preferredAiModelOption.providerOptions?.openai, {
     reasoningEffort: "medium",
@@ -761,12 +762,12 @@ test("task writer option ids map to provider options and legacy model strings fa
 
   const luna = await selectTaskWriterModel({
     sourceSelected: "openai",
-    modelSelected: "gpt-5.6-luna",
+    modelSelected: "gpt-6-luna",
     byokProviderFlags: [],
     teamContext,
   });
   assert.equal(luna.provider, "openai");
-  assert.equal(luna.modelId, "gpt-5.6-luna");
+  assert.equal(luna.modelId, "gpt-6-luna");
   assert.deepEqual(luna.providerOptions?.openai, {
     reasoningEffort: "medium",
   });
@@ -777,7 +778,7 @@ test("task writer option ids map to provider options and legacy model strings fa
     teamContext,
   });
   assert.equal(paidDefault.provider, "openai");
-  assert.equal(paidDefault.modelId, "gpt-5.6-luna");
+  assert.equal(paidDefault.modelId, "gpt-6-luna");
   assert.deepEqual(paidDefault.providerOptions?.openai, {
     reasoningEffort: "medium",
   });
@@ -800,7 +801,7 @@ test("task writer option ids map to provider options and legacy model strings fa
   await assert.rejects(
     selectTaskWriterModel({
       sourceSelected: "openai",
-      modelSelected: "gpt-5.6-sol",
+      modelSelected: "gpt-6-sol",
       byokProviderFlags: [],
       teamContext: { teamId: "team_free", settings: {} },
     }),
@@ -847,7 +848,7 @@ test("task writer option ids map to provider options and legacy model strings fa
     teamContext,
   });
   assert.equal(legacySelection.provider, "openai");
-  assert.equal(legacySelection.modelId, "gpt-5.6-luna");
+  assert.equal(legacySelection.modelId, "gpt-6-luna");
   assert.deepEqual(legacySelection.providerOptions?.openai, {
     reasoningEffort: "medium",
   });
@@ -889,6 +890,36 @@ test("a new Free team defaults to Mini without tripping the premium plan gate", 
   assert.equal(selected.modelId, "gpt-5.4-mini");
 });
 
+test("retired model options keep their saved variant and price tier", () => {
+  const { getAiModelOptionById, getAiModelDefinition } = loadTs("src/lib/aiModelOptions.ts");
+  for (const [oldBase, newBase, suffixes] of [
+    ["gpt-5.6-luna", "gpt-6-luna", ["", "-light", "-high"]],
+    ["gpt-5.6-sol", "gpt-6-sol", ["", "-light", "-high"]],
+    ["claude-opus-5", "claude-opus-5-5", ["-instant", "-thinking"]],
+  ]) {
+    for (const suffix of suffixes) {
+      const option = getAiModelOptionById(oldBase + suffix);
+      assert.equal(option?.id, newBase + suffix);
+      assert.equal(option?.model, newBase === "claude-opus-5-5" ? "claude-opus-5.5" : newBase);
+    }
+  }
+  assert.equal(getAiModelDefinition("gpt-6-luna").priceTier, 2);
+  assert.equal(getAiModelDefinition("gpt-6-sol").priceTier, 3);
+  assert.equal(getAiModelDefinition("claude-opus-5-5").priceTier, 3);
+});
+
+test("Opus 5.5 uses the gateway dot slug and the direct Anthropic dash slug", () => {
+  const { getAiModelOptionById } = loadTs("src/lib/aiModelOptions.ts");
+  const { resolveAiModel } = loadTs("src/app/api/ai/_lib/modelProvider.ts");
+  for (const id of ["claude-opus-5-5-instant", "claude-opus-5-5-thinking"]) {
+    const option = getAiModelOptionById(id);
+    assert.equal(option.model, "claude-opus-5.5");
+    assert.equal(option.directModel, "claude-opus-5-5");
+    assert.equal(resolveAiModel("claude", option.model, "vck_gateway").modelId, "anthropic/claude-opus-5.5");
+    assert.equal(resolveAiModel("claude", option.directModel, "sk-ant-direct").modelId, "claude-opus-5-5");
+  }
+});
+
 test("model and effort dimensions resolve every supported provider configuration", () => {
   const {
     aiModelOptions,
@@ -897,13 +928,13 @@ test("model and effort dimensions resolve every supported provider configuration
     getAiModelOptionById,
   } = loadTs("src/lib/aiModelOptions.ts");
 
-  assert.equal(getAiEffortLabel("gpt-5.6-luna", "light"), "Light");
-  assert.equal(getAiEffortLabel("gpt-5.6-luna", "standard"), "Standard");
-  assert.equal(getAiEffortLabel("gpt-5.6-luna", "high"), "High");
+  assert.equal(getAiEffortLabel("gpt-6-luna", "light"), "Light");
+  assert.equal(getAiEffortLabel("gpt-6-luna", "standard"), "Standard");
+  assert.equal(getAiEffortLabel("gpt-6-luna", "high"), "High");
   assert.equal(getAiEffortLabel("gpt-5.5", "light"), "Instant");
   assert.equal(getAiEffortLabel("gpt-5.5", "high"), "Thinking");
   assert.equal(getAiEffortLabel("claude-sonnet-5", "light"), "Instant");
-  assert.equal(getAiEffortLabel("claude-opus-5", "high"), "Thinking");
+  assert.equal(getAiEffortLabel("claude-opus-5-5", "high"), "Thinking");
 
   const openAiReasoning = (reasoningEffort) => ({
     openai: { reasoningEffort },
@@ -912,22 +943,22 @@ test("model and effort dimensions resolve every supported provider configuration
     anthropic: { thinking: { type }, effort },
   });
   const expected = [
-    ["gpt-5.6-luna", "light", openAiReasoning("low")],
-    ["gpt-5.6-luna", "standard", openAiReasoning("medium")],
-    ["gpt-5.6-luna", "high", openAiReasoning("high")],
+    ["gpt-6-luna", "light", openAiReasoning("low")],
+    ["gpt-6-luna", "standard", openAiReasoning("medium")],
+    ["gpt-6-luna", "high", openAiReasoning("high")],
     ["gpt-5.6-terra", "light", openAiReasoning("low")],
     ["gpt-5.6-terra", "standard", openAiReasoning("medium")],
     ["gpt-5.6-terra", "high", openAiReasoning("high")],
-    ["gpt-5.6-sol", "light", openAiReasoning("low")],
-    ["gpt-5.6-sol", "standard", openAiReasoning("medium")],
-    ["gpt-5.6-sol", "high", openAiReasoning("high")],
+    ["gpt-6-sol", "light", openAiReasoning("low")],
+    ["gpt-6-sol", "standard", openAiReasoning("medium")],
+    ["gpt-6-sol", "high", openAiReasoning("high")],
     ["gpt-5.5", "light", openAiReasoning("low")],
     ["gpt-5.5", "high", openAiReasoning("high")],
     ["gpt-5.4-mini", undefined, undefined],
     ["claude-sonnet-5", "light", claudeThinking("disabled", "low")],
     ["claude-sonnet-5", "high", claudeThinking("adaptive", "high")],
-    ["claude-opus-5", "light", claudeThinking("disabled", "low")],
-    ["claude-opus-5", "high", claudeThinking("adaptive", "high")],
+    ["claude-opus-5-5", "light", claudeThinking("disabled", "low")],
+    ["claude-opus-5-5", "high", claudeThinking("adaptive", "high")],
     ["deepseek-v4-flash", undefined, undefined],
     ["deepseek-v4-pro", undefined, undefined],
     ["kimi-k2.5", undefined, undefined],
@@ -950,14 +981,14 @@ test("model and effort dimensions resolve every supported provider configuration
   const legacyDimensions = {
     "gpt-5.5-instant": ["gpt-5.5", "light"],
     "gpt-5.5-thinking": ["gpt-5.5", "high"],
-    "gpt-5.6-luna": ["gpt-5.6-luna", "standard"],
+    "gpt-6-luna": ["gpt-6-luna", "standard"],
     "gpt-5.6-terra": ["gpt-5.6-terra", "standard"],
-    "gpt-5.6-sol": ["gpt-5.6-sol", "standard"],
+    "gpt-6-sol": ["gpt-6-sol", "standard"],
     "gpt-5.4-mini": ["gpt-5.4-mini", undefined],
     "claude-sonnet-5-instant": ["claude-sonnet-5", "light"],
     "claude-sonnet-5-thinking": ["claude-sonnet-5", "high"],
-    "claude-opus-5-instant": ["claude-opus-5", "light"],
-    "claude-opus-5-thinking": ["claude-opus-5", "high"],
+    "claude-opus-5-5-instant": ["claude-opus-5-5", "light"],
+    "claude-opus-5-5-thinking": ["claude-opus-5-5", "high"],
     "deepseek-v4-flash": ["deepseek-v4-flash", undefined],
     "deepseek-v4-pro": ["deepseek-v4-pro", undefined],
     "kimi-k2.5": ["kimi-k2.5", undefined],
@@ -1162,9 +1193,9 @@ test("AI model mention labels resolve to a base model option", () => {
     "src/lib/aiModelOptions.ts",
   );
 
-  const resolved = resolveAiModelMention("Opus 5");
-  assert.equal(resolved.definition.key, "claude-opus-5");
-  assert.equal(resolved.modelOption.id, "claude-opus-5-instant");
+  const resolved = resolveAiModelMention("Opus 5.5");
+  assert.equal(resolved.definition.key, "claude-opus-5-5");
+  assert.equal(resolved.modelOption.id, "claude-opus-5-5-instant");
 
   assert.equal(
     resolveAiImageModelMention("Nano Banana").gatewayModel,
@@ -1213,7 +1244,7 @@ test("disabled provider selections fall back and gateway-only models keep full s
   const { selectTaskWriterModel } = loadTs("src/app/api/ai/_lib/editorAi.ts");
   const fallback = await selectTaskWriterModel({
     sourceSelected: "openai",
-    modelOptionId: "gpt-5.6-luna",
+    modelOptionId: "gpt-6-luna",
     projectId: 4338,
     userId: 1000,
   });
@@ -1226,7 +1257,7 @@ test("disabled provider selections fall back and gateway-only models keep full s
   await assert.rejects(
     selectTaskWriterModel({
       sourceSelected: "openai",
-      modelOptionId: "gpt-5.6-luna",
+      modelOptionId: "gpt-6-luna",
       projectId: 4338,
       userId: 1000,
     }),
@@ -1371,6 +1402,7 @@ test("task writer key lookup ignores caller teamId when project lookup resolves 
   const selected = await selectTaskWriterModel({
     sourceSelected: "openai",
     modelSelected: "gpt-5.5",
+    modelOptionId: "gpt-5.5-instant",
     byokProviderFlags: [],
     teamId: callerTeamId,
     projectId,
@@ -1486,4 +1518,100 @@ test("custom instruction upload uses the authenticated project team over caller 
   assert.equal(upsertedRows.length, 1);
   assert.equal(upsertedRows[0].teamId, projectTeamId);
   assert.notEqual(upsertedRows[0].teamId, callerTeamId);
+});
+
+test("editor models retry unavailable Luna once before output, but not after output", async () => {
+  resetModules();
+  stubPlan();
+  const calls = [];
+  let emitBeforeError = false;
+  const retryError = { name: "RetryError", lastError: { status: 404 } };
+  stubModule("src/lib/prisma.ts", { default: { userSetting: { findUnique: async () => null } } });
+  stubModule("src/utils/controllers/turbopuffer/turbopufferHelper.ts", {});
+  const usageRows = [];
+  stubModule("src/app/api/ai/_lib/aiUsage.ts", { logAiUsage: async (row) => usageRows.push(row) });
+  stubModule("src/utils/controllers/projects/getAllIncludes.ts", {});
+  stubModule("src/app/api/ai/_lib/byokKeys.ts", {
+    getByokOrTeamGatewayApiKeyForModelOption: async () => "vck_test",
+  });
+  stubModule("src/app/api/ai/_lib/providerGate.ts", {
+    filterModelOptionForTeam: (option) => option,
+  });
+  stubModule("src/app/api/ai/_lib/modelProvider.ts", {
+    aiUsageProviderForCredential: () => "gateway",
+    isCustomEndpointConfig: () => false,
+    isVercelAiGatewayKey: (key) => key?.startsWith("vck_"),
+    providerOptionsForAiModel: () => undefined,
+    resolveAiModel: (_provider, modelId) => ({
+      specificationVersion: "v4",
+      provider: "test",
+      modelId,
+      supportedUrls: {},
+      doGenerate: async () => {
+        calls.push(modelId);
+        if (modelId === "gpt-6-luna") throw retryError;
+        return { content: [{ type: "text", text: "OK" }], usage: { inputTokens: { total: 1 }, outputTokens: { total: 2 } } };
+      },
+      doStream: async () => ({
+        stream: new ReadableStream({
+          start(controller) {
+            calls.push(modelId);
+            controller.enqueue({ type: "stream-start", warnings: [] });
+            controller.enqueue({ type: "response-metadata", id: modelId });
+            if (modelId === "gpt-6-luna") {
+              if (emitBeforeError) controller.enqueue({ type: "text-delta", id: "1", text: "partial" });
+              controller.enqueue({ type: "error", error: retryError });
+            } else {
+              controller.enqueue({ type: "text-delta", id: "1", text: "OK" });
+            }
+            controller.close();
+          },
+        }),
+      }),
+    }),
+  });
+  const { selectTaskWriterModel, selectTiptapModel } = loadTs("src/app/api/ai/_lib/editorAi.ts");
+  const options = {
+    modelOptionId: "gpt-6-luna",
+    projectId: 1,
+    userId: 1,
+    teamContext: { teamId: "test-team", settings: {} },
+  };
+  const selected = await selectTaskWriterModel(options);
+  const originalWarn = console.warn;
+  const warnings = [];
+  console.warn = (message) => warnings.push(message);
+  try {
+    assert.equal((await selected.model.doGenerate({ prompt: [] })).content[0].text, "OK");
+    assert.deepEqual(calls, ["gpt-6-luna", "gpt-5.6-luna"]);
+    assert.equal(selected.modelId, "gpt-5.6-luna");
+    assert.match(warnings[0], /^\[ai-model-fallback\] gpt-6-luna -> gpt-5.6-luna: 404$/);
+    calls.length = 0;
+    const editor = await selectTiptapModel(options);
+    await editor.model.doGenerate({ prompt: [] });
+    assert.deepEqual(calls, ["gpt-6-luna", "gpt-5.6-luna"]);
+    assert.equal(editor.modelId, "gpt-5.6-luna");
+    assert.equal(usageRows.at(-1).model, "gpt-5.6-luna");
+    calls.length = 0;
+    const streaming = await selectTaskWriterModel(options);
+    const { stream } = await streaming.model.doStream({ prompt: [] });
+    const chunks = [];
+    for await (const chunk of stream) chunks.push(chunk);
+    assert.deepEqual(calls, ["gpt-6-luna", "gpt-5.6-luna"]);
+    assert.deepEqual(chunks.map((chunk) => chunk.type), ["stream-start", "response-metadata", "text-delta"]);
+    assert.equal(chunks.filter((chunk) => chunk.type === "stream-start").length, 1);
+    assert.equal(chunks.find((chunk) => chunk.type === "response-metadata").id, "gpt-5.6-luna");
+    assert.equal(streaming.modelId, "gpt-5.6-luna");
+    calls.length = 0;
+    emitBeforeError = true;
+    const partial = await selectTaskWriterModel(options);
+    const partialChunks = [];
+    for await (const chunk of (await partial.model.doStream({ prompt: [] })).stream) {
+      partialChunks.push(chunk);
+    }
+    assert.deepEqual(calls, ["gpt-6-luna"]);
+    assert.deepEqual(partialChunks.map((chunk) => chunk.type), ["stream-start", "response-metadata", "text-delta", "error"]);
+  } finally {
+    console.warn = originalWarn;
+  }
 });

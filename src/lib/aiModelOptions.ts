@@ -11,13 +11,13 @@ export type TModelProvider =
 export type TAiReasoningVariant = "instant" | "thinking" | "mini";
 
 export type TAiModelKey =
-  | "gpt-5.6-luna"
+  | "gpt-6-luna"
   | "gpt-5.6-terra"
-  | "gpt-5.6-sol"
+  | "gpt-6-sol"
   | "gpt-5.5"
   | "gpt-5.4-mini"
   | "claude-sonnet-5"
-  | "claude-opus-5"
+  | "claude-opus-5-5"
   | "deepseek-v4-flash"
   | "deepseek-v4-pro"
   | "kimi-k2.5"
@@ -35,20 +35,20 @@ export type TAiEffort = "light" | "standard" | "high";
 export type TAiModelOptionId =
   | "gpt-5.5-instant"
   | "gpt-5.5-thinking"
-  | "gpt-5.6-luna"
-  | "gpt-5.6-luna-light"
-  | "gpt-5.6-luna-high"
+  | "gpt-6-luna"
+  | "gpt-6-luna-light"
+  | "gpt-6-luna-high"
   | "gpt-5.6-terra"
   | "gpt-5.6-terra-light"
   | "gpt-5.6-terra-high"
-  | "gpt-5.6-sol"
-  | "gpt-5.6-sol-light"
-  | "gpt-5.6-sol-high"
+  | "gpt-6-sol"
+  | "gpt-6-sol-light"
+  | "gpt-6-sol-high"
   | "gpt-5.4-mini"
   | "claude-sonnet-5-instant"
   | "claude-sonnet-5-thinking"
-  | "claude-opus-5-instant"
-  | "claude-opus-5-thinking"
+  | "claude-opus-5-5-instant"
+  | "claude-opus-5-5-thinking"
   | "deepseek-v4-flash"
   | "deepseek-v4-pro"
   | "kimi-k2.5"
@@ -96,7 +96,7 @@ export type TAiImageModelDefinition = {
 };
 
 export const aiModelDefinitions: TAiModelDefinition[] = [
-  { key: "gpt-5.6-luna", label: "5.6 Luna", provider: "openai", priceTier: 2 },
+  { key: "gpt-6-luna", label: "6 Luna", provider: "openai", priceTier: 2 },
   {
     key: "gpt-5.6-terra",
     label: "5.6 Terra",
@@ -104,8 +104,8 @@ export const aiModelDefinitions: TAiModelDefinition[] = [
     priceTier: 2,
   },
   {
-    key: "gpt-5.6-sol",
-    label: "5.6 Sol",
+    key: "gpt-6-sol",
+    label: "6 Sol",
     provider: "openai",
     priceTier: 3,
     premium: true,
@@ -118,8 +118,8 @@ export const aiModelDefinitions: TAiModelDefinition[] = [
     priceTier: 1,
   },
   {
-    key: "claude-opus-5",
-    label: "Opus 5",
+    key: "claude-opus-5-5",
+    label: "Opus 5.5",
     provider: "anthropic",
     priceTier: 3,
     premium: true,
@@ -251,13 +251,13 @@ export const aiModelOptions: TAiModelOption[] = [
     },
   },
   {
-    id: "gpt-5.6-luna",
+    id: "gpt-6-luna",
     source: "openai",
-    title: "GPT 5.6 Luna",
-    model: "gpt-5.6-luna",
+    title: "GPT 6 Luna",
+    model: "gpt-6-luna",
     desc: "Cheap and fast",
     reasoning: "instant",
-    modelKey: "gpt-5.6-luna",
+    modelKey: "gpt-6-luna",
     effort: "standard",
     providerOptions: {
       openai: {
@@ -266,24 +266,24 @@ export const aiModelOptions: TAiModelOption[] = [
     },
   },
   {
-    id: "gpt-5.6-luna-light",
+    id: "gpt-6-luna-light",
     source: "openai",
-    title: "GPT 5.6 Luna Light",
-    model: "gpt-5.6-luna",
+    title: "GPT 6 Luna Light",
+    model: "gpt-6-luna",
     desc: "Fastest Luna replies",
     reasoning: "instant",
-    modelKey: "gpt-5.6-luna",
+    modelKey: "gpt-6-luna",
     effort: "light",
     providerOptions: { openai: { reasoningEffort: "low" } },
   },
   {
-    id: "gpt-5.6-luna-high",
+    id: "gpt-6-luna-high",
     source: "openai",
-    title: "GPT 5.6 Luna High",
-    model: "gpt-5.6-luna",
+    title: "GPT 6 Luna High",
+    model: "gpt-6-luna",
     desc: "Deep Luna reasoning",
     reasoning: "thinking",
-    modelKey: "gpt-5.6-luna",
+    modelKey: "gpt-6-luna",
     effort: "high",
     providerOptions: { openai: { reasoningEffort: "high" } },
   },
@@ -321,35 +321,35 @@ export const aiModelOptions: TAiModelOption[] = [
     providerOptions: { openai: { reasoningEffort: "high" } },
   },
   {
-    id: "gpt-5.6-sol",
+    id: "gpt-6-sol",
     source: "openai",
-    title: "GPT 5.6 Sol",
-    model: "gpt-5.6-sol",
+    title: "GPT 6 Sol",
+    model: "gpt-6-sol",
     desc: "OpenAI flagship",
     reasoning: "thinking",
-    modelKey: "gpt-5.6-sol",
+    modelKey: "gpt-6-sol",
     effort: "standard",
     providerOptions: { openai: { reasoningEffort: "medium" } },
   },
   {
-    id: "gpt-5.6-sol-light",
+    id: "gpt-6-sol-light",
     source: "openai",
-    title: "GPT 5.6 Sol Light",
-    model: "gpt-5.6-sol",
+    title: "GPT 6 Sol Light",
+    model: "gpt-6-sol",
     desc: "Fastest Sol replies",
     reasoning: "instant",
-    modelKey: "gpt-5.6-sol",
+    modelKey: "gpt-6-sol",
     effort: "light",
     providerOptions: { openai: { reasoningEffort: "low" } },
   },
   {
-    id: "gpt-5.6-sol-high",
+    id: "gpt-6-sol-high",
     source: "openai",
-    title: "GPT 5.6 Sol High",
-    model: "gpt-5.6-sol",
+    title: "GPT 6 Sol High",
+    model: "gpt-6-sol",
     desc: "Deep Sol reasoning",
     reasoning: "thinking",
-    modelKey: "gpt-5.6-sol",
+    modelKey: "gpt-6-sol",
     effort: "high",
     providerOptions: { openai: { reasoningEffort: "high" } },
   },
@@ -363,13 +363,14 @@ export const aiModelOptions: TAiModelOption[] = [
     modelKey: "gpt-5.4-mini",
   },
   {
-    id: "claude-opus-5-instant",
+    id: "claude-opus-5-5-instant",
     source: "claude",
-    title: "Opus 5 Instant",
-    model: "claude-opus-5",
+    title: "Opus 5.5 Instant",
+    model: "claude-opus-5.5",
+    directModel: "claude-opus-5-5",
     desc: "Fast premium Claude",
     reasoning: "instant",
-    modelKey: "claude-opus-5",
+    modelKey: "claude-opus-5-5",
     effort: "light",
     providerOptions: {
       anthropic: {
@@ -379,13 +380,14 @@ export const aiModelOptions: TAiModelOption[] = [
     },
   },
   {
-    id: "claude-opus-5-thinking",
+    id: "claude-opus-5-5-thinking",
     source: "claude",
-    title: "Opus 5 Thinking",
-    model: "claude-opus-5",
+    title: "Opus 5.5 Thinking",
+    model: "claude-opus-5.5",
+    directModel: "claude-opus-5-5",
     desc: "Deep reasoning",
     reasoning: "thinking",
-    modelKey: "claude-opus-5",
+    modelKey: "claude-opus-5-5",
     effort: "high",
     providerOptions: {
       anthropic: {
@@ -531,7 +533,7 @@ export const aiModelOptions: TAiModelOption[] = [
 // tier-2 model. Keep the universal fallback included on every plan so callers
 // without trusted billing context can never select a locked model implicitly.
 export const preferredAiModelOption =
-  aiModelOptions.find((option) => option.id === "gpt-5.6-luna") ??
+  aiModelOptions.find((option) => option.id === "gpt-6-luna") ??
   aiModelOptions[0];
 
 export const defaultAiModelOption =
@@ -539,10 +541,10 @@ export const defaultAiModelOption =
   aiModelOptions[0];
 
 export const MOBILE_AI_CHAT_QUICK_MODEL_IDS = [
-  "gpt-5.6-luna-high",
-  "gpt-5.6-luna",
-  "gpt-5.6-sol-high",
-  "gpt-5.6-sol-light",
+  "gpt-6-luna-high",
+  "gpt-6-luna",
+  "gpt-6-sol-high",
+  "gpt-6-sol-light",
 ] as const satisfies readonly TAiModelOptionId[];
 
 export function getDefaultAiModelOptionForPlan(
@@ -559,10 +561,18 @@ export function getDefaultAiModelOptionForPlan(
 // Retired option ids map to their replacement so a persisted choice upgrades in
 // place instead of silently falling back to the default. HTPR-4534.
 const RETIRED_OPTION_ID_ALIASES: Record<string, TAiModelOptionId> = {
+  "gpt-5.6-luna": "gpt-6-luna",
+  "gpt-5.6-luna-light": "gpt-6-luna-light",
+  "gpt-5.6-luna-high": "gpt-6-luna-high",
+  "gpt-5.6-sol": "gpt-6-sol",
+  "gpt-5.6-sol-light": "gpt-6-sol-light",
+  "gpt-5.6-sol-high": "gpt-6-sol-high",
+  "claude-opus-5-instant": "claude-opus-5-5-instant",
+  "claude-opus-5-thinking": "claude-opus-5-5-thinking",
   "gemini-3.1-flash-lite": "gemini-3.5-flash-lite",
   "gemini-3.5-flash": "gemini-3.6-flash",
-  "claude-opus-4-8-instant": "claude-opus-5-instant",
-  "claude-opus-4-8-thinking": "claude-opus-5-thinking",
+  "claude-opus-4-8-instant": "claude-opus-5-5-instant",
+  "claude-opus-4-8-thinking": "claude-opus-5-5-thinking",
   "grok-4.1-fast-instant": "gpt-5.4-mini",
   "grok-4.1-fast-thinking": "gpt-5.4-mini",
   "grok-4.20-instant": "gpt-5.4-mini",
@@ -590,7 +600,7 @@ export function getMobileAiChatModelLabel(
   if (!catalogOption) return "Select model";
   const modelLabel = getAiModelDefinition(catalogOption.modelKey)?.label;
   let effortLabel: string | null = null;
-  if (catalogOption.id === "gpt-5.6-sol-light") {
+  if (catalogOption.id === "gpt-6-sol-light") {
     effortLabel = "Fast";
   } else if (catalogOption.effort) {
     effortLabel = getAiEffortLabel(catalogOption.modelKey, catalogOption.effort);

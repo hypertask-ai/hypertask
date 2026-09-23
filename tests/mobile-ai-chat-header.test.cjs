@@ -52,7 +52,7 @@ stubSourceModule("src/lib/configs/aiTaskWriter.config.ts", {
 });
 stubSourceModule("src/components/Global/ModelSelectorDropdown.tsx", {
   default: () => React.createElement("button", { "data-control": "model" }),
-  getMobileAiChatModelLabel: () => "5.6 Luna · High",
+  getMobileAiChatModelLabel: () => "6 Luna · High",
 });
 stubSourceModule("src/lib/state.tsx", {
   useRecoilState: () => [false, () => {}],
@@ -139,7 +139,7 @@ test("mobile new chat blocks repeated requests and recovers after rejection", as
     deleteSession: () => {},
     editor: { view: { dom: { focus: () => {} } } },
     dropDownButtonAICallback: () => {},
-    currentAiOption: { id: "gpt-5.6-luna-high" },
+    currentAiOption: { id: "gpt-6-luna-high" },
     displayAiOptions: [],
   };
   const container = document.getElementById("root");
@@ -162,7 +162,7 @@ test("mobile new chat blocks repeated requests and recovers after rejection", as
     assert.doesNotMatch(container.textContent, /First chat/);
     assert.match(
       container.querySelector("[data-ai-chat-mobile-model-label]").textContent,
-      /5\.6 Luna · High/,
+      /6 Luna · High/,
     );
     assert.equal(
       container.querySelector('[data-control="model"]'),

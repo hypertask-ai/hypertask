@@ -12,6 +12,7 @@ import {
   aiModelDefinitions,
   aiModelOptions,
   getAiModelDefinition,
+  getAiModelOptionById,
 } from "@/lib/aiModelOptions";
 import {
   AI_FEATURES,
@@ -104,7 +105,7 @@ const modelDefinition = (model: string) =>
   );
 
 const modelLabel = (model: string) =>
-  aiModelOptions.find((option) => option.id === model)?.title ??
+  getAiModelOptionById(model)?.title ??
   aiImageModelDefinitions.find((definition) => definition.key === model)
     ?.label ??
   modelDefinition(model)?.label ??
@@ -558,10 +559,11 @@ const AiFeaturesSection = () => {
               <div className="flex flex-col">
                 {section.rows.map(({ description, feature }) => {
                   const choices = choicesForFeature(feature);
+                  const rowModel = getAiModelOptionById(rows[feature].model)?.id ?? rows[feature].model;
                   const selectedModel = choices.some(
-                    (choice) => choice.value === rows[feature].model,
+                    (choice) => choice.value === rowModel,
                   )
-                    ? rows[feature].model
+                    ? rowModel
                     : null;
                   const hasModel = AI_FEATURES[feature].modelKind !== "none";
                   const userInitiated =
