@@ -32,7 +32,7 @@ covers both packs' scripts.
 | design-compliance | A ticket whose UI change works, before the PR: prove it matches the style guide and the `design-gate` check will pass (`reuse-existing-ui` runs before the code, this runs after) | .claude/skills/design-compliance/SKILL.md |
 | update-docs | Any ticket that changes what a user sees, before opening the PR. The Hypertask docs-site specifics; the rule behind it is `keep-docs-current` in the company pack | .claude/skills/update-docs/SKILL.md |
 | verify-on-phone | Any ticket touching UI, before opening the PR | .claude/skills/verify-on-phone/SKILL.md |
-| verify-qa | A ticket in QA with label skills-pilot; verify the shipped change on production before it can be Done | .claude/skills/verify-qa/SKILL.md |
+| verify-qa | A ticket in QA with label skills-pilot; verify the shipped change on production before it can be Done. Also: a Bugs ticket whose PR just opened, to capture the "before" shot only | .claude/skills/verify-qa/SKILL.md |
 | security-findings | Not a skill of its own: `fix-bug/reference/security-findings.md`, read from `fix-bug` when a change touches auth, billing, or user data | .claude/skills/fix-bug/reference/security-findings.md |
 
 ## The flag rule

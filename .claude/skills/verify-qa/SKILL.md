@@ -9,6 +9,7 @@ Independent QA for the skills pilot. You verify, you never fix. Only tickets car
 
 ## Steps
 
+0. **Pick the feature area(s) the ticket touches from `reference/feature-map/INDEX.md`.** Each area file says how a customer reaches it, how to drive it, what usually breaks there (mined from real bug tickets), what proof to collect, and the cleanup. Read only the file(s) that match this ticket. The "before" screenshot belongs to whoever opens the PR (`fix-bug`/`ship-feature-behind-flag`, same feature-map file, taken while the bug still reproduces on production); if the ticket doesn't already carry one, take it now for comparison even though the fix has already shipped by the time verify-qa runs. The "after" screenshot in step 3 below is always verify-qa's job.
 1. **Read the ticket's acceptance criteria and the dev agent's hand-off comment.** Note the exact PR, the merged commit, and whether production has actually received it. Read the Gates block in that comment too: any gate marked unmet, or met with no evidence, is a FAIL naming that gate — don't independently re-derive what the dev already logged as unmet.
 2. **Reproduce the acceptance criteria on production**, not on a desktop window or by reading code. A merged PR or a passing CI job is not proof it shipped; check the deployed revision and the real behavior at `https://app.hypertask.ai`.
 3. **For any ticket touching UI**, take a real 390x844 phone-viewport screenshot on production:
@@ -38,6 +39,7 @@ Independent QA for the skills pilot. You verify, you never fix. Only tickets car
 
 - Never print cookies, tokens, or the auth-state file's contents into a comment, a log, or the terminal. Reference the path only.
 - Never load or use another agent's credential for verification. Your own runtime provisions your own storage state.
+- The QA runner accounts (see `reference/feature-map/INDEX.md`, "QA runner accounts") each write only to their own private "QA runner board". Never write to a board you don't own.
 - Two failed repairs of the same issue exhaust the automatic retry budget; a third genuine FAIL is a signal to say so on the ticket, not to keep bouncing the same verdict.
 - Archive only test fixtures you created yourself, through the product UI, never SQL.
 - Run an E2B flow when the ticket touches a covered screen: `reference/e2b-fleet.md`.
