@@ -41,6 +41,7 @@ async function runFiler(t, verdicts, options = {}) {
       },
     ]),
   )
+  await writeFile(join(run, 'penetration_test_report.md'), 'Account lookup misses an ownership check at src/example.ts:1.\n')
   const bot = join(bin, 'htbot')
   await writeFile(bot, '#!/usr/bin/python3\nimport json,os,sys\nopen(os.environ["CLI_CAPTURE"],"w").write(json.dumps(sys.argv[1:]))\nprint(json.dumps(dict(success=True)))\n')
   await chmod(bot, 0o755)
@@ -52,10 +53,12 @@ async function runFiler(t, verdicts, options = {}) {
     req.on('data', (chunk) => { body += chunk })
     req.on('end', () => {
       requests.push(JSON.parse(body))
-      const verdict = replies.shift()
+      const prompt = requests.at(-1).messages[0].content
+      const extraction = prompt.startsWith('Extract vulnerability claims')
+      const verdict = extraction ? null : replies.shift()
       res.writeHead(200, { 'content-type': 'application/json' })
       res.end(JSON.stringify({
-        choices: [{ message: { content: JSON.stringify({ verdict, reason: `${verdict} by test` }) } }],
+        choices: [{ message: { content: JSON.stringify(extraction ? { findings: [{ title: 'Account lookup misses an ownership check', severity: 'high', code_locations: options.codeLocations ?? [{ file: 'src/example.ts', start_line: 1, end_line: 3 }] }] } : { verdict, reason: `${verdict} by test` }) } }],
       }))
     })
   })
@@ -88,8 +91,8 @@ test('Strix filer creates a ticket only after two confirmations', async (t) => {
 
   assert.match(result.stdout, /confirmed twice \(confirmed\/confirmed\)/)
   assert.match(result.stdout, /filed: Account lookup misses an ownership check/)
-  assert.equal(result.requests.length, 2)
-  for (const request of result.requests) {
+  assert.equal(result.requests.length, 3)
+  for (const request of result.requests.slice(1)) {
     assert.equal(request.model, 'test-model')
     assert.match(request.messages[0].content, /src\/example\.ts lines 1-3/)
     assert.match(request.messages[0].content, /Do not trust the finding's conclusion/)
@@ -111,7 +114,7 @@ test('Strix filer rejects a finding when either confirmation disagrees', async (
   const result = await runFiler(t, ['confirmed', 'rejected'])
 
   assert.match(result.stdout, /skip \(not confirmed twice:/)
-  assert.equal(result.requests.length, 2)
+  assert.equal(result.requests.length, 3)
   await assert.rejects(readFile(result.capture, 'utf8'), { code: 'ENOENT' })
 })
 
@@ -124,6 +127,6 @@ test('Strix filer rejects findings without readable current source', async (t) =
   assert.notEqual(result.code, 0)
   assert.match(result.stdout, /skip \(confirmation failed\):/)
   assert.match(result.stdout, /no readable current-source evidence/)
-  assert.equal(result.requests.length, 0)
+  assert.equal(result.requests.length, 1)
   await assert.rejects(readFile(result.capture, 'utf8'), { code: 'ENOENT' })
 })

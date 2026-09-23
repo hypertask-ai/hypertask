@@ -38,7 +38,7 @@ def plan(source, paths, max_files=6, max_bytes=60000):
     for name in sorted(set(paths), key=review_priority):
         candidate = source / name
         if not candidate.is_file() or candidate.is_symlink():
-            continue
+            raise ValueError(f"unsupported or missing changed path: {name}")
         candidate.resolve().relative_to(source.resolve())
         length = candidate.stat().st_size
         if current and (len(current) >= max_files or size + length > max_bytes):
@@ -109,7 +109,7 @@ def run(source, paths, state, output, revision, base, budget, batch_budget, max_
             report = checker.validate(attempt / "strix_runs")
             entry["run"] = str(report)
             env = {**os.environ, "STRIX_APP": str(source), "STRIX_SOURCE_REVISION": revision,
-                   "STRIX_FILED_STATE": str(state.parent / "filed-titles.json")}
+                   "STRIX_FILED_STATE": str(Path.home() / ".local/state/strix/filed-titles.json")}
             subprocess.run(["python3", str(SCRIPTS / "strix-file-tickets.py"), str(report)],
                            env=env, check=True, timeout=720)
             entry["status"] = "completed"

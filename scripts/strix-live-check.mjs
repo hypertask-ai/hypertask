@@ -13,7 +13,6 @@ fs.mkdirSync(output, { recursive: true, mode: 0o700 });
 const installed = path.join(os.homedir(), '.local/lib/strix-runner');
 const helper = process.env.STRIX_AUTH_HELPER || path.join(installed, 'verification-auth/app-auth.mjs');
 const playwright = process.env.STRIX_PLAYWRIGHT_MODULE || path.join(installed, 'node_modules/playwright/index.mjs');
-const executablePath = process.env.STRIX_BROWSER || path.join(os.homedir(), '.cache/ms-playwright/chromium_headless_shell-1234/chrome-headless-shell-linux64/chrome-headless-shell');
 const results = { startedAt: new Date().toISOString(), origin, completed: false, checks: [] };
 const save = () => fs.writeFileSync(path.join(output, 'live-results.json'), JSON.stringify(results, null, 2), { mode: 0o600 });
 function record(area, name, pass, evidence) {
@@ -94,10 +93,11 @@ try {
   });
   if (redirectCheck.error || ![0, 2].includes(redirectCheck.status)) throw new Error('CLI redirect probe could not run');
   const redirectEvidence = JSON.parse(redirectCheck.stdout);
-  record('cli', 'CLI does not forward credentials to a different host', !redirectEvidence.authorizationForwarded, redirectEvidence);
+  record('cli', 'CLI does not forward credentials to a different host',
+    redirectEvidence.redirectFollowed === true && redirectEvidence.exitCode === 0 && !redirectEvidence.authorizationForwarded, redirectEvidence);
 
   const { chromium } = await import(pathToFileURL(playwright));
-  browser = await chromium.launch({ headless: true, executablePath, args: ['--no-sandbox'] });
+  browser = await chromium.launch({ headless: true, executablePath: process.env.STRIX_BROWSER || chromium.executablePath(), args: ['--no-sandbox'] });
   const anonymous = await browser.newContext(); const login = await anonymous.newPage();
   await login.goto(origin + '/login', { waitUntil: 'domcontentloaded', timeout: 45000 });
   await login.getByText(/continue with google/i).first().waitFor({ timeout: 20000 });
