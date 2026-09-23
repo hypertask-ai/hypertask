@@ -1194,15 +1194,16 @@ test("shared allowance prefers spacexai pricing when both prefixes exist", async
   }
 });
 
-test("new model allowance uses previous pricing only when Gateway has no new price", async () => {
-  useRedis(fakeRedis());
+test("new model allowance uses a conservative tier rate when Gateway has no new price", async () => {
+  const redis = fakeRedis();
+  useRedis(redis);
   const previousFetch = global.fetch;
   global.fetch = async (url) => {
     if (String(url).endsWith("/models")) {
-      return new Response(JSON.stringify({ data: [{
-        id: "openai/gpt-5.6-luna",
-        pricing: { input: "0.0000004", output: "0.0000016" },
-      }] }));
+      return new Response(JSON.stringify({ data: [
+        { id: "openai/gpt-5.6-luna", pricing: { input: "0.0000004", output: "0.0000016" } },
+        { id: "openai/gpt-5.7-luna", pricing: { input: "0.000012", output: "0.00005" } },
+      ] }));
     }
     if (String(url).includes("/report?")) return new Response(JSON.stringify({ results: [] }));
     throw new Error(`Unexpected fetch ${url}`);
@@ -1212,7 +1213,7 @@ test("new model allowance uses previous pricing only when Gateway has no new pri
       loadTs("src/app/api/ai/_lib/sharedAllowance.ts");
     resetGatewayPricingCacheForTests();
     const middleware = createSharedAllowanceMiddleware({
-      allowanceUsd: 1,
+      allowanceUsd: 2,
       gatewayApiKey: "vck_shared",
       modelSlug: "openai/gpt-6-luna",
     });
@@ -1227,6 +1228,109 @@ test("new model allowance uses previous pricing only when Gateway has no new pri
       },
     });
     assert.equal(called, true);
+    const committed = [...redis.values.entries()].filter(([key]) => key.endsWith(":committed") && !key.endsWith(":system:committed"));
+    assert.equal(committed.length, 1);
+    assert.equal(Number(committed[0][1]), 62); // Most expensive Luna rate: 12 + 50 micro-USD.
+  } finally {
+    global.fetch = previousFetch;
+  }
+});
+
+test("unpriced successor tiers use explicit floors rather than cheap predecessor rates", async () => {
+  const previousFetch = global.fetch;
+  global.fetch = async (url) => {
+    if (String(url).endsWith("/models")) return new Response(JSON.stringify({ data: [
+      { id: "openai/gpt-5.6-luna", pricing: { input: "0.0000001", output: "0.0000001" } },
+      { id: "openai/gpt-5.6-sol", pricing: { input: "0.0000001", output: "0.0000001" } },
+      { id: "anthropic/claude-opus-5", pricing: { input: "0.0000001", output: "0.0000001" } },
+    ] }));
+    if (String(url).includes("/report?")) return new Response(JSON.stringify({ results: [] }));
+    throw new Error(`Unexpected fetch ${url}`);
+  };
+  try {
+    const { createSharedAllowanceMiddleware, resetGatewayPricingCacheForTests } =
+      loadTs("src/app/api/ai/_lib/sharedAllowance.ts");
+    resetGatewayPricingCacheForTests();
+    for (const [slug, expected] of [
+      ["openai/gpt-6-luna", 50],
+      ["openai/gpt-6-sol", 100],
+      ["anthropic/claude-opus-5.5", 150],
+    ]) {
+      const redis = fakeRedis();
+      useRedis(redis);
+      const middleware = createSharedAllowanceMiddleware({
+        allowanceUsd: 10, gatewayApiKey: "test", modelSlug: slug,
+      });
+      await middleware.wrapGenerate({
+        params: {
+          maxOutputTokens: 100,
+          prompt: "hi",
+          providerOptions: { gateway: { tags: ["chat", "team:floor-team"] } },
+        },
+        model: {},
+        doGenerate: async () => ({
+          usage: { inputTokens: { total: 1 }, outputTokens: { total: 1 } },
+        }),
+      });
+      const committed = [...redis.values.entries()].filter(([key]) =>
+        key.endsWith(":committed") && !key.endsWith(":system:committed"));
+      assert.equal(Number(committed[0][1]), expected, slug);
+    }
+  } finally {
+    global.fetch = previousFetch;
+  }
+});
+
+test("failed successor releases its reservation before a successful fallback settles", async () => {
+  const redis = fakeRedis();
+  useRedis(redis);
+  const previousFetch = global.fetch;
+  global.fetch = async (url) => {
+    if (String(url).endsWith("/models")) return new Response(JSON.stringify({ data: [
+      { id: "openai/gpt-5.6-luna", pricing: { input: "0.000001", output: "0.000002" } },
+    ] }));
+    if (String(url).includes("/report?")) return new Response(JSON.stringify({ results: [] }));
+    throw new Error(`Unexpected fetch ${url}`);
+  };
+  try {
+    const { createSharedAllowanceMiddleware, resetGatewayPricingCacheForTests } =
+      loadTs("src/app/api/ai/_lib/sharedAllowance.ts");
+    resetGatewayPricingCacheForTests();
+    const params = {
+      maxOutputTokens: 100,
+      prompt: [{ role: "user", content: [{ type: "text", text: "hi" }] }],
+      providerOptions: { gateway: { tags: ["chat", "team:fallback-team"] } },
+    };
+    const successor = createSharedAllowanceMiddleware({
+      allowanceUsd: 1, gatewayApiKey: "test", modelSlug: "openai/gpt-6-luna",
+    });
+    const fallback = createSharedAllowanceMiddleware({
+      allowanceUsd: 1, gatewayApiKey: "test", modelSlug: "openai/gpt-5.6-luna",
+    });
+    const failed = await successor.wrapStream({ params, model: {}, doStream: async () => ({
+      stream: new ReadableStream({ start(controller) {
+        controller.enqueue({ type: "stream-start" });
+        controller.enqueue({ type: "error", error: { status: 404 } });
+        controller.close();
+      } }),
+    }) });
+    const chunks = [];
+    for await (const chunk of failed.stream) chunks.push(chunk);
+    assert.equal(chunks.at(-1).type, "error");
+    assert.equal([...redis.reservations.values()].flatMap((entries) => [...entries.keys()]).length, 0);
+    const succeeded = await fallback.wrapStream({ params, model: {}, doStream: async () => ({
+      stream: new ReadableStream({ start(controller) {
+        controller.enqueue({ type: "finish", usage: {
+          inputTokens: { total: 3 }, outputTokens: { total: 4 },
+        } });
+        controller.close();
+      } }),
+    }) });
+    for await (const _chunk of succeeded.stream) { /* consume through settlement */ }
+    const committed = [...redis.values.entries()].filter(([key]) => key.endsWith(":committed") && !key.endsWith(":system:committed"));
+    assert.equal(committed.length, 1);
+    assert.equal(Number(committed[0][1]), 11); // 3 input + 4 output tokens, not the failed reservation.
+    assert.equal([...redis.reservations.values()].flatMap((entries) => [...entries.keys()]).length, 0);
   } finally {
     global.fetch = previousFetch;
   }

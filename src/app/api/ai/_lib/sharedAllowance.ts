@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import type { ImageModelMiddleware, LanguageModelMiddleware } from "ai";
 
 import { getRedis } from "@/lib/redis";
+import { previousModelForFailedStream } from "@/app/api/ai/chat/stream/modelFallback";
 import {
   aiAllowancePeriod,
   SHARED_AI_ALLOWANCE_EXCEEDED_MESSAGE,
@@ -205,14 +206,26 @@ async function modelPricing(modelSlug: string): Promise<ModelPricing> {
     const pricing = models.get(slug);
     if (pricing) return pricing;
   }
-  const previousModel = modelSlug
-    .replace(/gpt-6-(luna|sol)$/, "gpt-5.6-$1")
-    .replace(/claude-opus-5\.5$/, "claude-opus-5");
-  if (previousModel !== modelSlug) {
-    for (const slug of gatewayPricingLookupSlugs(previousModel)) {
-      const pricing = models.get(slug);
-      if (pricing) return pricing;
+  const tier = /^openai\/gpt-6-(luna|sol)$/.exec(modelSlug)?.[1]
+    ?? (/^anthropic\/claude-opus-5[.-]5$/.test(modelSlug) ? "opus" : null);
+  if (tier) {
+    // Until Gateway publishes successor pricing, reserve at least the most
+    // expensive catalog rate in the same tier, with a deliberately high floor
+    // (USD/token) so missing new-model rates never inherit a cheaper old rate.
+    const floor = tier === "luna"
+      ? { inputUsdPerToken: 0.00001, outputUsdPerToken: 0.00004 }
+      : tier === "sol"
+        ? { inputUsdPerToken: 0.00002, outputUsdPerToken: 0.00008 }
+        : { inputUsdPerToken: 0.00003, outputUsdPerToken: 0.00012 };
+    const sameTier = tier === "opus"
+      ? /^anthropic\/claude-opus-/
+      : new RegExp(`^openai/gpt-[\\d.]+-${tier}$`);
+    for (const [slug, price] of models) {
+      if (!sameTier.test(slug)) continue;
+      floor.inputUsdPerToken = Math.max(floor.inputUsdPerToken, price.inputUsdPerToken);
+      floor.outputUsdPerToken = Math.max(floor.outputUsdPerToken, price.outputUsdPerToken);
     }
+    return floor;
   }
   throw new Error(`AI Gateway pricing is unavailable for ${modelSlug}`);
 }
@@ -602,6 +615,19 @@ async function settleReservation(
   );
 }
 
+async function releaseUnavailableReservation(reservation: AllowanceReservation) {
+  const redis = await getRedis();
+  await redis.eval(
+    SETTLE_SCRIPT,
+    2,
+    reservation.committedKey,
+    reservation.reservationsKey,
+    reservation.id,
+    "0",
+    String(reservation.ttlSeconds),
+  );
+}
+
 async function settleAfterInference(
   reservation: AllowanceReservation,
   usage?: GatewayUsage,
@@ -666,34 +692,69 @@ export function createSharedAllowanceMiddleware(args: {
         await settleAfterInference(reservation, result.usage);
         return result;
       } catch (error) {
-        await settleAfterInference(reservation);
+        if (previousModelForFailedStream(args.modelSlug.split("/").at(-1)!, error, false, false)) {
+          await releaseUnavailableReservation(reservation);
+        } else {
+          await settleAfterInference(reservation);
+        }
         throw error;
       }
     },
     wrapStream: async ({ doStream, params }) => {
       const reservation = await beforeCall(params);
+      const releaseIfUnavailable = async (error: unknown, hasOutput: boolean) => {
+        if (previousModelForFailedStream(args.modelSlug.split("/").at(-1)!, error, hasOutput, false)) {
+          await releaseUnavailableReservation(reservation);
+        } else {
+          await settleAfterInference(reservation);
+        }
+      };
       try {
         const result = await doStream();
+        const reader = result.stream.getReader();
         let settled = false;
+        let hasOutput = false;
         return {
           ...result,
-          stream: result.stream.pipeThrough(
-            new TransformStream({
-              async transform(chunk, controller) {
+          stream: new ReadableStream({
+            async pull(controller) {
+              try {
+                const item = await reader.read();
+                if (item.done) {
+                  if (!settled) await settleAfterInference(reservation);
+                  controller.close();
+                  return;
+                }
+                const chunk = item.value;
                 if (chunk.type === "finish") {
                   settled = true;
                   await settleAfterInference(reservation, chunk.usage);
+                } else if (chunk.type === "error" && !settled) {
+                  settled = true;
+                  await releaseIfUnavailable(chunk.error, hasOutput);
+                } else if (chunk.type !== "stream-start" && chunk.type !== "response-metadata") {
+                  hasOutput = true;
                 }
                 controller.enqueue(chunk);
-              },
-              async flush() {
+              } catch (error) {
+                if (!settled) {
+                  settled = true;
+                  await releaseIfUnavailable(error, hasOutput);
+                }
+                controller.error(error);
+              }
+            },
+            async cancel(reason) {
+              try {
+                await reader.cancel(reason);
+              } finally {
                 if (!settled) await settleAfterInference(reservation);
-              },
-            }),
-          ),
+              }
+            },
+          }),
         };
       } catch (error) {
-        await settleAfterInference(reservation);
+        await releaseIfUnavailable(error, false);
         throw error;
       }
     },

@@ -1205,31 +1205,48 @@ export async function selectTaskWriterModel(args: {
           if (!fallback) throw error;
           result = await fallback.doStream(params);
         }
+        let reader = result.stream.getReader();
+        let cancelled = false;
+        let cancelReason: unknown;
+        let finished = false;
+        let preamble: Array<Extract<Awaited<ReturnType<typeof reader.read>>, { done: false }>["value"]> = [];
+        let pending: typeof preamble = [];
+        const switchReader = async (fallback: LanguageModelV4) => {
+          const next = (await fallback.doStream(params)).stream.getReader();
+          reader = next;
+          if (cancelled) await next.cancel(cancelReason);
+        };
         return {
           ...result,
           stream: new ReadableStream({
-            async start(controller) {
-              let reader = result.stream.getReader();
-              let preamble: Array<
-                Extract<Awaited<ReturnType<typeof reader.read>>, { done: false }>["value"]
-              > = [];
-              const flushPreamble = () => {
-                for (const chunk of preamble) controller.enqueue(chunk);
-                preamble = [];
-              };
+            async pull(controller) {
               try {
                 while (true) {
+                  if (pending.length) {
+                    controller.enqueue(pending.shift()!);
+                    return;
+                  }
+                  if (finished) {
+                    controller.close();
+                    return;
+                  }
                   let item;
                   try {
                     item = await reader.read();
                   } catch (error) {
                     const fallback = fallbackModel(error);
                     if (!fallback) throw error;
-                    reader = (await fallback.doStream(params)).stream.getReader();
+                    await switchReader(fallback);
                     preamble = [];
                     continue;
                   }
-                  if (item.done) break;
+                  if (cancelled) return;
+                  if (item.done) {
+                    pending = preamble;
+                    preamble = [];
+                    finished = true;
+                    continue;
+                  }
                   if (item.value.type === "stream-start" || item.value.type === "response-metadata") {
                     preamble.push(item.value);
                     continue;
@@ -1238,21 +1255,24 @@ export async function selectTaskWriterModel(args: {
                     const fallback = fallbackModel(item.value.error);
                     if (fallback) {
                       await reader.cancel();
-                      reader = (await fallback.doStream(params)).stream.getReader();
+                      await switchReader(fallback);
                       preamble = [];
                       continue;
                     }
                   } else {
                     hasOutput = true;
                   }
-                  flushPreamble();
-                  controller.enqueue(item.value);
+                  pending = [...preamble, item.value];
+                  preamble = [];
                 }
-                flushPreamble();
-                controller.close();
               } catch (error) {
-                controller.error(error);
+                if (!cancelled) controller.error(error);
               }
+            },
+            cancel(reason) {
+              cancelled = true;
+              cancelReason = reason;
+              return reader.cancel(reason);
             },
           }),
         };

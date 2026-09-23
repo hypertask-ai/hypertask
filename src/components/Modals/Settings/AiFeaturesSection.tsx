@@ -559,10 +559,11 @@ const AiFeaturesSection = () => {
               <div className="flex flex-col">
                 {section.rows.map(({ description, feature }) => {
                   const choices = choicesForFeature(feature);
+                  const rowModel = getAiModelOptionById(rows[feature].model)?.id ?? rows[feature].model;
                   const selectedModel = choices.some(
-                    (choice) => choice.value === rows[feature].model,
+                    (choice) => choice.value === rowModel,
                   )
-                    ? rows[feature].model
+                    ? rowModel
                     : null;
                   const hasModel = AI_FEATURES[feature].modelKind !== "none";
                   const userInitiated =
