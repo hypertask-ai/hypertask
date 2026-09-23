@@ -14,11 +14,12 @@ per IP per hour, and the QA runner is responsible for staying under that.
 
 ## What usually breaks
 
-- Smoke/hydration failures around initial demo load ([HTPR-6199](https://app.hypertask.ai/detail/project-15/6199), two rounds:
-  "select a runnable smoke fixture", "remove smoke hydration failures").
-- General hydration mismatches on first paint ([HTPR-6609](https://app.hypertask.ai/detail/project-15/6609), [HTPR-6585](https://app.hypertask.ai/detail/project-15/6585))
-  apply here too, since the demo board is unauthenticated and hits the same
-  first-load code path as a fresh signed-out visit.
+Few demo-specific fixes on record. General hydration mismatches on first
+paint ([HTPR-6609](https://app.hypertask.ai/detail/project-15/6609)) apply
+here too, since the demo board is unauthenticated and hits the same
+first-load code path as a fresh signed-out visit. `HTPR-6199` is the smoke
+test suite itself (see `e2e/smoke/README.md`), not a product bug; don't cite
+it as a demo-board fix.
 
 ## What proof to collect
 
