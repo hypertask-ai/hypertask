@@ -1,6 +1,7 @@
 import { chromium, type FullConfig } from '@playwright/test'
 import { mkdirSync, rmSync, writeFileSync } from 'node:fs'
 import path from 'node:path'
+import { withRealtime } from './lib/realtime'
 
 // Confirms the smoke session is actually logged in BEFORE any view test runs.
 // An expired cookie must never look like 16 failed views — it's one
@@ -28,6 +29,16 @@ export default async function globalSetup(config: FullConfig) {
   writePreflight({ ok: false, reason: 'setup did not complete' })
   rmSync(APPLICATION_FAILURE_FILE, { force: true })
 
+  // The guest-demo journey (e2e/smoke/demo.spec.ts, tag @demo) uses no
+  // account at all, it opens its own unauthenticated context. Running it
+  // alone (e.g. `--grep @demo`) would otherwise fail this login precheck
+  // against whatever storageState the config carries. The runner sets this
+  // when it invokes a demo-only run.
+  if (process.env.HT_QA_NO_ACCOUNT === '1') {
+    writePreflight({ ok: true })
+    return
+  }
+
   const project = config.projects[0]
   if (!project) fail('smoke config has no Playwright project')
 
@@ -41,7 +52,7 @@ export default async function globalSetup(config: FullConfig) {
     const page = await context.newPage()
     let response
     try {
-      response = await page.goto(INBOX_PATH, { waitUntil: 'load', timeout: 20_000 })
+      response = await page.goto(withRealtime(INBOX_PATH), { waitUntil: 'load', timeout: 20_000 })
     } catch (err) {
       fail(`login check could not load ${INBOX_PATH}: ${err instanceof Error ? err.message : String(err)}`)
     }
