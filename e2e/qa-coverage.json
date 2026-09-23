@@ -18,6 +18,20 @@
       }
     },
     {
+      "id": "pre-merge-browser",
+      "label": "Before merge: logged-in browser views",
+      "kind": "github-job",
+      "ticket": 6620,
+      "workflowFile": "ci-tests.yml",
+      "event": "pull_request",
+      "job": "browser-smoke",
+      "freshHours": 48,
+      "source": {
+        "file": ".github/workflows/ci-tests.yml",
+        "token": "  browser-smoke:"
+      }
+    },
+    {
       "id": "live-core-actions",
       "label": "Live core actions after a release",
       "kind": "github-job",
@@ -122,10 +136,11 @@
       "id": "open-board",
       "label": "Open a board",
       "detail": "A real board returns its task and column data and renders on desktop and mobile.",
-      "checkIds": ["pre-merge-app", "live-core-actions", "live-screen-loads", "nightly-browser"],
+      "checkIds": ["pre-merge-app", "pre-merge-browser", "live-core-actions", "live-screen-loads", "nightly-browser"],
       "sources": [
         { "file": "src/lib/productionSmoke/coreActions.ts", "token": "open board" },
         { "file": "e2e/smoke/prod.spec.ts", "token": "kanban board" },
+        { "file": "e2e/smoke/prod.spec.ts", "token": "demo board" },
         { "file": "e2e/midscene/flows/board-demo.mjs", "token": "board-demo" }
       ]
     },
