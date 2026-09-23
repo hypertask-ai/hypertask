@@ -117,6 +117,7 @@ Before changing a feature, trace the entry point through middleware, route handl
 - Gate protected behavior on the server. `useFlag` only hides client UI and never replaces API authorization.
 - Bug fixes never get a flag and ship to everyone: this includes a ticket/PR titled `[BUGFIX]` or any change that makes the product do what it was supposed to do, even when the fix is visible. New behavior or design is a feature, not a bug fix.
 - Performance work with identical output, security fixes, dependency or CI changes, spelling corrections, and tickets carrying the **AI CHAT 💬** label also do not require a flag.
+- Swapping an existing AI model for its newer version from the same provider (same slots, same plan gating, automatic fallback to the previous version) is a dependency update and needs no flag.
 - The merge freeze for a required flag does not apply to tickets carrying the **AI CHAT 💬** label.
 - Reviewers must block new-feature pull requests that omit the required flag.
 - The required `feature-flag-gate` check is a mechanical changed-UI check that supplements semantic review. API-only changes stay outside this mechanical check; reviewers still enforce the server-side flag rules above.
