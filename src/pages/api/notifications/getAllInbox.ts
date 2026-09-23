@@ -30,6 +30,27 @@ const parseBoardScope = (value: string | string[] | undefined): ArchiveBoardScop
     : "active";
 };
 
+// Boards the user can see archived notifications from.
+const archivedInboxProjectWhere = (
+  userId: number,
+  boardScope: ArchiveBoardScope
+): Prisma.ProjectWhereInput => ({
+  ...(boardScope === "all"
+    ? {}
+    : { status: boardScope === "active" ? "Normal" : "Archive" }),
+  OR: [
+    { ownerId: userId },
+    {
+      members: {
+        some: {
+          userId,
+          agentId: null,
+        },
+      },
+    },
+  ],
+});
+
 const getArchivedInboxWhere = (
   userId: number,
   projectId?: number | null,
@@ -40,22 +61,7 @@ const getArchivedInboxWhere = (
   status: "Archive",
   agentId: null,
   task: {
-    project: {
-      ...(boardScope === "all"
-        ? {}
-        : { status: boardScope === "active" ? "Normal" : "Archive" }),
-      OR: [
-        { ownerId: userId },
-        {
-          members: {
-            some: {
-              userId,
-              agentId: null,
-            },
-          },
-        },
-      ],
-    },
+    project: archivedInboxProjectWhere(userId, boardScope),
     ...(projectId ? { projectId } : {}),
     ...(q?.trim()
       ? {
@@ -79,44 +85,60 @@ const getArchivedInboxMeta = async (
   boardScope: ArchiveBoardScope = "active"
 ) => {
   // One row per (type, taskId) so counts match the list's distinct de-dup.
-  // ponytail: scans projectId-only rows for this user's archived notifications;
-  // fine at personal-archive scale, swap to a raw GROUP BY if it ever grows huge.
-  const rows = await prisma.notification.findMany({
+  // HTPR-6509: GROUP BY returns only the distinct pairs, then one lookup maps
+  // their tasks to boards, instead of loading every archived notification.
+  const pairs = await prisma.notification.groupBy({
+    by: ["type", "taskId"],
     where: getArchivedInboxWhere(userId, projectId, boardScope),
-    distinct: ["type", "taskId"],
-    select: {
-      projectId: true,
-      task: {
+  });
+
+  const pairsPerTask = new Map<number, number>();
+  for (const pair of pairs) {
+    if (pair.taskId == null) continue;
+    pairsPerTask.set(pair.taskId, (pairsPerTask.get(pair.taskId) ?? 0) + 1);
+  }
+  const tasks = pairsPerTask.size
+    ? await prisma.task.findMany({
+        // Same board access as the grouped query, so a task moved to a board
+        // the user can't see in between is neither counted nor named.
+        where: {
+          id: { in: Array.from(pairsPerTask.keys()) },
+          project: archivedInboxProjectWhere(userId, boardScope),
+        },
         select: {
+          id: true,
           projectId: true,
           project: { select: { id: true, name: true, title: true } },
         },
-      },
-    },
-  });
+      })
+    : [];
 
   const byProject = new Map<
     number,
     { projectId: number; name: string; count: number }
   >();
-  for (const row of rows) {
-    const pid = row.task?.projectId ?? row.projectId;
-    if (pid == null) continue;
+  // Counted from the tasks the lookup still returns, so total matches the
+  // per-board counts even if a task moved away between the two queries.
+  let total = 0;
+  for (const task of tasks) {
+    const pid = task.projectId;
+    const count = pairsPerTask.get(task.id) ?? 0;
+    total += count;
     const existing = byProject.get(pid);
     if (existing) {
-      existing.count += 1;
+      existing.count += count;
       continue;
     }
-    const project = row.task?.project;
+    const project = task.project;
     byProject.set(pid, {
       projectId: pid,
       name: project?.title ?? project?.name ?? `Project ${pid}`,
-      count: 1,
+      count,
     });
   }
 
   return {
-    total: rows.length,
+    total,
     byProject: Array.from(byProject.values()).sort(
       (a, b) => b.count - a.count || a.name.localeCompare(b.name)
     ),
