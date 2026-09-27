@@ -29,6 +29,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
           EVENT_HEAD: ${{ github.event.pull_request.head.sha }}
+          EVENT_AT: ${{ github.event.pull_request.updated_at }}
         run: |
           set -euo pipefail
           # A late run for an older head must not remove an approval given for the newer head;
@@ -40,6 +41,13 @@ jobs:
           fi
           labels=$(gh api --paginate "repos/${{ github.repository }}/issues/$PR_NUMBER/labels?per_page=100" --jq '.[].name')
           if grep -Fxq intentional-revert <<< "$labels"; then
+            # Keep an approval given after this push, reopen or retarget; the guard still checks its age.
+            labeled_at=$(gh api --paginate "repos/${{ github.repository }}/issues/$PR_NUMBER/events?per_page=100" \
+              --jq '.[] | select(.event == "labeled" and .label.name == "intentional-revert") | .created_at' | sort | tail -n 1)
+            if [ -n "$EVENT_AT" ] && [ -n "$labeled_at" ] && [[ "$labeled_at" > "$EVENT_AT" ]]; then
+              echo "Label added at $labeled_at, after this event at $EVENT_AT; keeping it."
+              exit 0
+            fi
             gh api -X DELETE "repos/${{ github.repository }}/issues/$PR_NUMBER/labels/intentional-revert"
           fi
 
