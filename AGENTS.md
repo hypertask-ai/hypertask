@@ -91,7 +91,7 @@ Follow the branch/deploy model from `CLAUDE.md` and `openwiki/deployment.md`:
 
 - Production is Vercel project `hypertasks-prod`, deployed from the `production` branch to `app.hypertask.ai`.
 - New work branches off `origin/production`; PRs target `production`, never `main`.
-- After opening a PR, enable auto-merge: `gh pr merge --auto --squash`. The repo allows auto-merge, but it is **per-PR** — opening the PR alone does not turn it on. (Low-trust producers must leave it off; see [`openwiki/low-trust-agents.md`](openwiki/low-trust-agents.md).)
+- After opening a PR, leave auto-merge off. Agents never merge and never turn on auto-merge; the repo setting `allow_auto_merge` is off (Valentin, 27 Sep 2026). Merging follows the Merge Rules Contract in `hypertask-ai/company-skills` (`agents/Hypertask Product/merge-rules/CONTRACT.md`).
 - `main` is frozen legacy and only feeds the EC2 warm-rollback box.
 - Every pushed branch gets a Vercel preview. Previews are SSO-protected and share the live production database, so they are for visual verification only, not destructive testing.
 - Branches older than 2026-07-06 should be rebased onto `origin/production` before preview work.

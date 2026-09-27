@@ -1,91 +1,48 @@
-# CLAUDE.md
+# CLAUDE.md (Hypertask app, `hypertask-ai/hypertask`)
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+Precedence: board-15 process (merging, QA, columns, who does what) lives only in the contracts at `hypertask-ai/company-skills`, folder `agents/Hypertask Product/`. This file and every skill must match them; when they differ, the contract wins and the other file gets fixed. The wiki at https://hypertask.app/wiki and `openwiki/` are technical reference only. Rules marked (enforced) are held by a hook, a check or a repo setting.
 
-## Ticket references — always full clickable URLs, never bare IDs
+## Layer 1: always true
 
-Every time you mention a Hypertask ticket anywhere (chat, comments, PR bodies, ticket bodies, status lists), output the **full clickable URL**, never a bare ID like `HTPR-3818`. Format: `https://app.hypertask.ai/detail/project-{projectId}/{numericTaskId}` (product board = project 15). A bare ID is dead text Valentin cannot click. This applies to EVERY mention, including passing references and comma-separated lists — write each one as a full URL.
+### Valentin
+1. **Valentin is a product owner.** He cannot read code, cannot merge and does not use GitHub. No step in this repo may need him to merge, review code, add a GitHub label or write in a pull request. Human steps on GitHub are done by his Claude session on his plain-language go, or automated.
+2. **The ticket is the single source of truth** (Ticket Communication Contract). Everything he should read is a plain-language comment on the ticket; logs and agent notes go to run activity. When you need his decision, post one comment that @mentions him with a yes/no product question and move the ticket to Valentin Review. Never ask him in chat or in a pull request.
+3. **Ticket references are full URLs** (`https://app.hypertask.ai/detail/project-15/<number>`), never a bare id, everywhere.
 
-## Hypertask app operations — CLI/MCP only, never direct DB
+### Board writes
+4. **Never write in Valentin's name.** Board writes go through `htbot` (Product Bot) or the agent's own identity, never his user token (the plain `hypertask` CLI on this machine is his). A comment from a Claude session Valentin is running ends with "Requested by Valentin in a Claude session" plus the date; an agent working on its own never adds it. Never assign userId 6. A ticket he assigned himself or moved by hand stays exactly as he left it.
+5. **Claim before coding:** `htbot comment add <PREFIX-NNN> --text "<p><strong>Claimed.</strong> Session working it now.</p>"`, then `htbot task move <PREFIX-NNN> --section "In Progress"`. "Claimed." plus In Progress means in flight: do not touch. Never work a ticket assigned to Abdul.
+6. **Board content only through the CLI, MCP or app APIs, never Prisma, SQL or a database client**, not even for reads. Direct database writes are only for migrations, schema work, requested data repair or local seed data. Why: https://app.hypertask.ai/detail/project-15/3891 and https://app.hypertask.ai/detail/project-15/3892.
 
-Hard rule: for Hypertask app operations (creating/editing/deleting tickets, comments, project sections, labels, users, notifications, or any user-facing board content), use the `hypertask` CLI, MCP endpoints, or existing authenticated app APIs. Never use Prisma, raw SQL, or direct database access for these — even for "read-only" lookups. Direct DB writes are reserved for explicit dev/database tasks: migrations, schema work, data repair requested as DB repair, local seed/dev data, or carefully reviewed production maintenance with explicit approval.
+### Merging and branches
+7. **Agents never merge and never turn on auto-merge.** (enforced: repo `allow_auto_merge` is off and the `hypertask-agents` App cannot merge or push to `production`.) Valentin's Claude session merges setup and infrastructure changes on its own once checks are green. App changes follow the Merge Rules and QA and Safety contracts; until the merge gate exists, only his Claude session merges.
+8. **Branch off `origin/production` of `hypertask-ai/hypertask`; the pull request targets `production`.** Merging to `production` deploys app.hypertask.ai in about 3 minutes. One ticket, one pull request; fix the open one instead of opening another. Title and type rules: developer contract, `doing-the-work.md`.
+9. **The old private repo is archived.** `valentinyeo/hypertasks`, now `hypertask-ai/hypertasks`, is read-only history with a 2023 `.env` commit: never push to it, base work on it, mirror it or make it public. Its `staging` and `main` branches are dead.
+10. **Never `git stash`** (shared across every worktree and session). Never reset, check out or revert files you did not change; check `git status --short --branch` before committing.
+11. **Clean up after shipping:** once the pull request is merged, production is health-checked and the worktree is clean, report `CLEANUP_READY` with its path and branch. Never delete your own cwd, another session's worktree, a dirty worktree or an open-PR branch.
 
-Reason: an agent once created and reverted Hypertask ticket records by writing directly through Prisma instead of the CLI — bypassing auth, permissions, activity logging, and notifications. See `https://app.hypertask.ai/detail/project-15/3891` for the incident and `https://app.hypertask.ai/detail/project-15/3892` for this prevention rule.
+### Flags and previews
+12. **Bug fix: no flag, live for everyone. New behaviour: a flag named after the ticket, default Owner + QA.** Gate protected behaviour on the server; `useFlag` only hides UI. Developers never open a flag to Everyone: Valentin decides on the ticket and his Claude session switches it. Details: QA and Safety contract, `change-types.md`, and Layer 2 below.
+13. **Previews share the live database** and are for looking only. Every pushed branch already gets one; never create another (enforced: `.claude/hooks/preview-guard.sh`; an exception needs Valentin's recorded yes on the ticket, then `touch /tmp/ht-preview-approved`, removed when done). Never mint, inject or print login credentials for Valentin's account. When an approved preview is ready, open it in zsb with your own identity or the QA account and confirm you are in the app, not on the login page.
+14. **Never poll a building preview by reloading a browser tab** (zsb drives Valentin's real Edge). Poll with `curl` or `gh pr checks`; open the browser once it is ready.
 
-Concrete commands (see `openwiki/hypertask-cli.md` for the full runbook):
+### CI and other repos
+15. **Read the CI reference before changing workflows, runners, rulesets, required checks or previews:** https://hypertask.app/wiki/deployment and `docs/ci-policy.yml`. App CI runs on GitHub-hosted runners. No VPN runner, new host or default preview gate without a recorded decision.
+16. **Any agent takes any ticket; there are no specialist agents.** File a CLI, MCP or `/api/mcp/*` bug unassigned on board 15 with the exact command, error and expected result. CLI tickets are fixed in `hypertask-ai/cli` (`~/projects/hypertask-cli-zig`, PRs to `main`, tests `zig build test` and `python3 scripts/parity_test.py`). The Node CLI is retired. `/api/mcp/*` server changes stay in this repo.
 
-```bash
-hypertask status --json
-hypertask project list --json
-hypertask section list --project 15 --json
-hypertask task create --project 15 --section Triage --title "..." --description "..." --json
-```
+## Layer 2: read X when Y
 
-URL format: `https://app.hypertask.ai/detail/project-{projectId}/{uniqueIndex}` (product board = project 15).
-
-## Explorations always carry the standard hypertask.app header
-
-Hard rule (Valentin, 2026-07-26): every page served on `hypertask.app` — including EVERY exploration/artifact under `/explorations/<id>` — must show the standard site header menu (with hamburger on mobile) so Valentin can always navigate back to the regular structure. Explorations are NOT exempt. This is enforced server-side: `src/pages/explorations/[id].ts` in `~/projects/hypertask-analytics` injects a self-contained nav fragment (marker `<!--ht-nav-->`) into every served HTML artifact. Do not strip that injection, and do not build artifacts that visually suppress or overlay the injected header. Recurring reports (not one-off explorations) should graduate to a real page in the analytics app (e.g. `/shipping`) with a navbar entry in `src/layouts/Base.astro`.
-
-## Active work is claimed as Product Bot, never as Valentin (rewritten 2026-09-15)
-
-Hard rule: the moment a session starts working a ticket (writing code, doing the fix, not just reading), it makes that visible on the board so nobody else picks it up:
-
-1. **Post a "Claimed." comment as Product Bot** (`htbot comment add <PREFIX-NNN> --text "<p><strong>Claimed.</strong> Session working it now.</p>"`) and move it to "In Progress" (`htbot task move <PREFIX-NNN> --section "In Progress"`). Board writes go through `htbot` (Product Bot identity), never through Valentin's own CLI token.
-2. **No agent or session ever writes in Valentin's name (Valentin, 2026-09-15).** No ticket, comment, assignment or move goes through his user token; board writes use an agent identity. Never assign Valentin (userId 6) to any ticket. Only Valentin assigns himself. A ticket he assigned to himself or moved by hand is a manual override: leave it exactly as it is.
-3. Add the `valentin` label only when Valentin himself is doing the work in the session; a session working on his behalf does not label.
-
-The signal is: **Claimed. comment + In Progress = in flight, do not touch.** Abdul self-assigns tickets he picks up; **we never work a ticket that is assigned to Abdul.**
-
-## Deploys and branches (repo `hypertask-ai/hypertask`, since 2026-08-29)
-
-- **Production deploys from branch `production` of `hypertask-ai/hypertask`.** Merging to `production` deploys app.hypertask.ai within ~3 minutes. There is no other prod gate.
-- **Never base work on the old `valentinyeo/hypertasks` `staging`/`main` branches.** They are legacy; the private repo stays private (its history holds a 2023 `.env` commit).
-- **Workflow for every session:** branch off `origin/production` -> push -> open PR with base `production` -> **enable auto-merge immediately** (`gh pr merge --auto --squash`). Repo `allow_auto_merge` only permits the feature; each PR still needs it flipped on or it sits green forever. Exception: low-trust producers must leave auto-merge off (see `openwiki/low-trust-agents.md`). Every pushed branch already gets a Vercel preview from the GitHub integration. Preview verification is opt-in and is never a merge gate (see 'Preview builds and login' below).
-- **Previews share the LIVE database** (preview env DATABASE_URL = production Neon). Safe to click around, not safe for destructive testing.
-- Branches created before 2026-07-06 may fail preview builds (they reference removed tracker env vars). Fix: rebase onto `origin/production`.
-- Git stash is shared across all worktrees of this repo and multiple agent sessions run concurrently: NEVER `git stash` here.
-
-## Waiting on a Vercel preview build — never poll via repeated browser navigation
-
-Hard rule: when a preview deployment is still building/queued, do NOT poll it by repeatedly `navigate`-ing (or reloading) a browser tab (zsb/agent-browser/Playwright) in a loop. Each reload re-triggers a full page load of a heavy React app on Valentin's actual machine (zsb drives his real Edge pane) and burns his RAM for no informational gain — the tab just keeps saying "Deployment is queued/building" while he watches it churn.
-
-Poll build status headlessly instead: `curl -s -o /dev/null -w "%{http_code}"` against the preview URL, or `gh pr checks <PR>` / the Vercel API, in a sleep loop. Only open the browser ONCE the deployment is actually ready (200 and not the "queued/building" placeholder page), to do the real verification click-through.
-
-Reason: an agent looped browser reloads against a still-building preview for several minutes, opening/reloading the same tab dozens of times while Valentin watched his RAM spike with nothing to show for it (2026-07-08).
-
-## CI contract — read before changing pipeline behavior
-
-The canonical CI contract is [https://hypertask.app/wiki/deployment](https://hypertask.app/wiki/deployment). The compact local policy is [docs/ci-policy.yml](docs/ci-policy.yml); [docs/ci.md](docs/ci.md) is only a pointer. App CI runs on GitHub-hosted `ubuntu-latest` runners (the repository is public, so hosted minutes are free). The only self-hosted runners on the Contabo host belong to the private reviewer and analytics repositories. Preview verification stays opt-in. Do not add a VPN runner, another host, or a default preview gate without a recorded decision.
-
-## Authentication Flow
-
-- JWT tokens with configurable secret (`JWT_SECRET`, min 32 chars)
-- Email links: 15-minute expiration, audience `email-link`
-- MCP API: 30-day expiration, audience `mcp-api`
-- Firebase handles Google OAuth
-
-
-## Manager boundaries and standing decisions (2026-08-25)
-
-- **The HT Agent Manager session NEVER writes, edits, rebases, or pushes app code** (src/, tests/, anything shipping to app.hypertask.ai) — not even to unstick a stranded PR. Stranded or red PRs: hand to Dev 1 with a ticket comment naming exactly what is red and the likely fix. The manager only fixes the pipeline, applies labels, reruns checks, and merges green PRs.
-- **Hypertask is open source as of 2026-08-29** at `hypertask-ai/hypertask` (squashed history, AGPL; the Android wrapper is `hypertask-ai/android`). The old `valentinyeo/hypertasks` repo STAYS PRIVATE — its git history contains the 2023 `.env` commit with live secrets, so it must never be flipped public or mirrored. Development and deploys run from `hypertask-ai/hypertask` `production`.
-- The agent worker runtime lives in the private repo `valentinyeo/hypertask-agent-runtime`, never in this repo.
-
-## Preview builds and login (moved from the global config, 2026-09-07)
-
-- 9h. **Never mint, inject, or print authentication credentials for Valentin's account.** Preview and QA clicks use the session's own agent identity or a dedicated QA account. Do not log in as userId 6. If Valentin needs to see a preview, give him the URL and let him sign in himself.
-- 9i. **EVERY approved preview that finishes -> open it in zsb with the session's own identity, WITHOUT being asked, then VERIFY.** Confirm the session is IN THE APP, not on /login or Sign up. Do not print a magic link or bearer token.
-- 9j. **Every pushed branch already gets a Vercel preview from the GitHub integration.** Do not create an extra preview. Never add `[preview]` to a commit message, never call the v13/deployments API, and never run `vercel deploy` with or without `--prod` (HARD RULE, 2026-07-29). Production deploys only from a merge to `production`. The automatic preview is for visual checks only and shares the live database. A repo hook (`.claude/hooks/preview-guard.sh`) blocks extra preview deploys. An owner-approved exception is a recorded yes plus `touch /tmp/ht-preview-approved`, then remove the flag when done. Rules 9h/9i cover how to open an existing preview, not how to create a new one.
-
-## Dev agents and the CLI repo (moved from the global config, 2026-09-07)
-
-- 6a2. **No agent specializations — every dev agent does every kind of ticket (HARD RULE, Valentin, 2026-08-27).** The CLI/MCP/API agent is retired and specializations are gone: all agents carry the same knowledge, so routing by speciality only stalled tickets. A bug in the `hypertask` CLI, the MCP server, or an `/api/mcp/*` route is an ordinary board-15 ticket that any dev agent picks up. File it unassigned with the exact command, the exact error, and the expected behaviour. Never assign it to a named speciality agent, and never work around it silently. CLI source lives at `~/projects/hypertask-cli-zig` (Zig `hypertask`), remote [`hypertask-ai/cli`](https://github.com/hypertask-ai/cli), PRs base `main`. Tests: `zig build test` and `python3 scripts/parity_test.py`. The Node CLI (`@hypertask/hypertask_cli`) is retired; do not extend it.
-
-## Agents owned by this repo (updated 2026-09-15)
-
-This repo (hypertasks) owns and may reference these agent slugs: `dev-cursor` (Cursor Dev), `dev-cursor-2` (Cursor Dev 2), `qa-cursor` (Cursor QA). Non-chat identities carry a `" CLI"` name suffix (Advisor Fable CLI, Ops Script CLI, GitHub Production Probe CLI) — they have no worker and no webhook, so they never show up at the chat URL below. Manager, Skills Dev, Skills QA, and the Docs agent are retired; their work now lives in the skills read from `/home/valentin/projects/hypertask-agent-skills/INDEX.md` (repo `hypertask-ai/agent-skills`), which every dev/QA identity reads before touching a ticket. Other teams' dev agent slugs are off-limits from this repo — a PreToolUse hook (`.claude/hooks/agent-scope-guard.sh`) blocks Bash commands that reference them; see that file for exactly which prefixes it checks.
-
-## New agents must be wired to chat (Valentin, 2026-09-11, provisioning updated 2026-09-15)
-
-An agent is not added until Valentin can message it at `https://app.hypertask.ai/agents/chat?agent=<slug>` and get a reply. Provision new identities through the `/create-agent` skill (`~/.claude/skills/create-agent/SKILL.md`, `scripts/create-agent.sh --board hypertask`) — it enables the worker chat lane and runs the chat test as part of provisioning, not as an afterthought. Report the quoted reply as evidence, not just that a message was sent. "This agent's runtime has not enabled chat yet" on that page means the agent is not done.
+| Read | When |
+|---|---|
+| company-skills `agents/Hypertask Product/README.md` | Which agents exist on board 15, their model and state, and which contract covers them. This is the only list of agents this repo owns. |
+| Ticket Communication Contract (`tickets/CONTRACT.md`) | Writing on a ticket: the two lanes, comment shape, how to reach Valentin |
+| QA and Safety Contract (`qa-and-safety/CONTRACT.md` and its detail files) | Opening, reviewing, merging or verifying any change to app.hypertask.ai |
+| Merge Rules Contract (`merge-rules/CONTRACT.md`) | Deciding whether a change merges on its own or goes to Valentin Review |
+| Developer contract (`developer/`) | Picking a ticket, branch and PR shape, comment filter, handing off, when stuck |
+| Supervisor contract, `supervisor/columns.md` | What each board-15 column means and who owns it |
+| company-skills skills: `ticket-lifecycle`, `hypertask-conventions`, `talk-to-valentin`, `keep-docs-current` | Every ticket, every comment, every PR text |
+| `.claude/skills/INDEX.md` in this repo | Repo how-tos: `fix-bug`, `ship-feature-behind-flag`, `verify-on-phone`, `verify-qa`, `reuse-existing-ui` |
+| AGENTS.md "Feature flags" section | Exact flag rules: naming, `DEFAULT_FEATURE_FLAG_MODE` in `src/lib/flags.ts`, `feature-flag-gate` check, 14-day cleanup |
+| AGENTS.md "Ticket comments" section and wiki `hypertask-cli` | CLI command shapes, comment HTML, managed agent tokens |
+| wiki `architecture`, `auth`, `routing-and-controllers`, `queues` and `openwiki/` | How the app is built: routes, controllers, auth (JWT, email links, Better Auth), queues, realtime |
+| `/create-agent` skill | Adding an agent identity. It is not added until it answers a message at `https://app.hypertask.ai/agents/chat?agent=<slug>`; quote the reply as evidence |
