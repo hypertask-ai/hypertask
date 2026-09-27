@@ -22,7 +22,7 @@ async function workflowScript() {
     .join('\n')
 }
 
-async function runWorkflow({ failTemp = false, failList = false, failView = false, malformedView = false, failLabels = false, failMerge = false, failMergeability = false, failFeatureGate = false, featureGated = false, exemptUi = false, invalidGateDecision = false, forkHead = false, sharedHead = false, unknownMergeability = false, omitAppSmoke = false, speed = false, speedQa = true, speedQaCreator = 'owner', title, previousSpeedTitle = false, changedFile = 'src/safe.ts', comments, productionReason = '', existingFreezeComment = '' } = {}) {
+async function runWorkflow({ failTemp = false, failList = false, failView = false, malformedView = false, failLabels = false, failMerge = false, failMergeability = false, failFeatureGate = false, featureGated = false, exemptUi = false, invalidGateDecision = false, forkHead = false, sharedHead = false, unknownMergeability = false, omitAppSmoke = false, speed = false, speedQa = true, speedQaCreator = 'owner', title, previousSpeedTitle = false, changedFile = 'src/safe.ts', comments, reviewChecks, productionReason = '', existingFreezeComment = '' } = {}) {
   const directory = await mkdtemp(join(tmpdir(), 'automerge-workflow-'))
   const bin = join(directory, 'bin')
   const runnerTemp = join(directory, 'runner-temp')
@@ -32,6 +32,7 @@ async function runWorkflow({ failTemp = false, failList = false, failView = fals
   const head = HEAD
   const prTitle = title ?? (speed ? '[SPEED] Optimize the app' : 'Safe change')
   const commentsJson = JSON.stringify(comments ?? [{ body: `APPROVE\nreviewed-commit: ${head}` }])
+  const reviewChecksJson = JSON.stringify(reviewChecks ?? [{ name: 'claude-review', conclusion: 'SUCCESS', startedAt: '2026-08-11T10:00:00Z' }]).slice(1, -1)
   const gh = `#!/usr/bin/env bash
 set -u
 if [ "$1" = "api" ] && [[ " $* " == *"repos/owner/repository/issues/42/comments"* ]]; then
@@ -57,7 +58,7 @@ if [ "$1 $2" = "pr view" ]; then
     exit 0
   fi
   cat <<'JSON'
-{"number":42,"title":${JSON.stringify(prTitle)},"isDraft":false,"isCrossRepository":false,"mergeable":"${failMergeability || unknownMergeability ? 'UNKNOWN' : 'MERGEABLE'}","baseRefName":"production","headRefOid":"${head}","headRepositoryOwner":{"login":"owner"},"labels":[],"statusCheckRollup":[${omitAppSmoke ? '' : '{"name":"app-smoke","conclusion":"SUCCESS","startedAt":"2026-08-11T10:00:00Z"},'}{"name":"ci-tests","conclusion":"SUCCESS","startedAt":"2026-08-11T10:00:00Z"},{"name":"claude-review","conclusion":"SUCCESS","startedAt":"2026-08-11T10:00:00Z"},{"name":"next-public-secrets","conclusion":"SUCCESS","startedAt":"2026-08-11T10:00:00Z"},{"name":"revert-guard","conclusion":"SUCCESS","startedAt":"2026-08-11T10:00:00Z"},{"name":"pr-title","conclusion":"SUCCESS","startedAt":"2026-08-11T10:00:00Z"},{"name":"feature-flag-gate","conclusion":"SUCCESS","startedAt":"2026-08-11T10:00:00Z"},{"name":"visual-regression","conclusion":"SUCCESS","startedAt":"2026-08-11T10:00:00Z"},{"name":"speed-evidence","conclusion":"SUCCESS","startedAt":"2026-08-11T10:00:00Z"},{"name":"speed-qa","conclusion":"SUCCESS","startedAt":"2026-08-11T10:00:00Z"},{"name":"vercel-build","conclusion":"SUCCESS","startedAt":"2026-08-11T10:00:00Z"}],"comments":${commentsJson}}
+{"number":42,"title":${JSON.stringify(prTitle)},"isDraft":false,"isCrossRepository":false,"mergeable":"${failMergeability || unknownMergeability ? 'UNKNOWN' : 'MERGEABLE'}","baseRefName":"production","headRefOid":"${head}","headRepositoryOwner":{"login":"owner"},"labels":[],"statusCheckRollup":[${omitAppSmoke ? '' : '{"name":"app-smoke","conclusion":"SUCCESS","startedAt":"2026-08-11T10:00:00Z"},'}{"name":"ci-tests","conclusion":"SUCCESS","startedAt":"2026-08-11T10:00:00Z"},${reviewChecksJson},{"name":"next-public-secrets","conclusion":"SUCCESS","startedAt":"2026-08-11T10:00:00Z"},{"name":"revert-guard","conclusion":"SUCCESS","startedAt":"2026-08-11T10:00:00Z"},{"name":"pr-title","conclusion":"SUCCESS","startedAt":"2026-08-11T10:00:00Z"},{"name":"feature-flag-gate","conclusion":"SUCCESS","startedAt":"2026-08-11T10:00:00Z"},{"name":"visual-regression","conclusion":"SUCCESS","startedAt":"2026-08-11T10:00:00Z"},{"name":"speed-evidence","conclusion":"SUCCESS","startedAt":"2026-08-11T10:00:00Z"},{"name":"speed-qa","conclusion":"SUCCESS","startedAt":"2026-08-11T10:00:00Z"},{"name":"vercel-build","conclusion":"SUCCESS","startedAt":"2026-08-11T10:00:00Z"}],"comments":${commentsJson}}
 JSON
   exit 0
 fi
@@ -224,6 +225,27 @@ test('auto-merge evaluates and merges a ready PR with isolated scratch state', a
   assert.match(result.stdout, /check pr-title = SUCCESS/)
   assert.match(result.stdout, /feature-flag-gate re-evaluation = PASS/)
   assert.deepEqual(scratchEntries, [])
+})
+
+test('auto-merge accepts either review context and ignores a failing obsolete counterpart', async () => {
+  for (const [good, bad] of [['claude-review', 'ai-review'], ['ai-review', 'claude-review']]) {
+    const { result } = await runWorkflow({ reviewChecks: [
+      { name: bad, conclusion: 'FAILURE', startedAt: '2026-08-11T10:01:00Z' },
+      { name: good, conclusion: 'SUCCESS', startedAt: '2026-08-11T10:00:00Z' },
+    ] })
+    assert.equal(result.status, 0, result.stderr)
+    assert.match(result.stdout, /check ai-review = SUCCESS/)
+    assert.match(result.stdout, /MERGED #42/)
+  }
+})
+
+test('auto-merge waits when neither review context succeeds', async () => {
+  const { result } = await runWorkflow({ reviewChecks: [
+    { name: 'claude-review', conclusion: 'FAILURE' },
+    { name: 'ai-review', conclusion: 'PENDING' },
+  ] })
+  assert.equal(result.status, 0, result.stderr)
+  assert.doesNotMatch(result.stdout, /MERGED #42/)
 })
 
 test('auto-merge re-evaluates current feature-flag metadata before merging', async () => {
