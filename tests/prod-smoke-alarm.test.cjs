@@ -117,7 +117,13 @@ test("second red files one HTML incident, alerts Telegram, and persists two", as
   assert.match(body.description, new RegExp("a{40}"));
   assert.equal(calls.filter((call) => isTelegramUrl(call.url)).length, 1);
   const update = calls.find((call) => call.url.endsWith("/actions/variables/PROD_SMOKE_STREAK"));
-  assert.deepEqual(JSON.parse(update.options.body), { name: "PROD_SMOKE_STREAK", value: "2" });
+  const pending = JSON.parse(JSON.parse(update.options.body).value);
+  assert.equal(pending.streak, 2);
+  assert.equal(pending.episode.incident, false);
+  assert.equal(pending.episode.telegram, false);
+  const writes = calls.filter((call) => call.url.endsWith("/actions/variables/PROD_SMOKE_STREAK"));
+  assert.deepEqual(JSON.parse(JSON.parse(writes.at(-1).options.body).value).episode,
+    { runUrl: config().runUrl, sha: config().sha, failingViews: config().failingViews, incident: true, telegram: true });
 });
 
 test("an existing open incident suppresses duplicate creation", async () => {
@@ -153,8 +159,8 @@ test("first green after an alarm sends one recovery and resets the variable", as
   assert.equal(result.action, "recovery");
   const telegram = calls.find((call) => isTelegramUrl(call.url));
   assert.match(telegram.options.body.get("text"), /returned to green after 3/);
-  const update = calls.find((call) => call.url.endsWith("/actions/variables/PROD_SMOKE_STREAK"));
-  assert.equal(JSON.parse(update.options.body).value, "0");
+  const updates = calls.filter((call) => call.url.endsWith("/actions/variables/PROD_SMOKE_STREAK"));
+  assert.equal(JSON.parse(updates.at(-1).options.body).value, "0");
 });
 
 test("creates the repository variable when it does not exist", async () => {
@@ -181,7 +187,11 @@ test("incident API failure cannot suppress the Telegram alarm or streak update",
     };
     await assert.rejects(handleSmokeResult(config(), failingFetch), /Hypertask (incident search|project lookup|incident creation) failed with HTTP 503/);
     assert.equal(calls.filter((call) => isTelegramUrl(call.url)).length, 1);
-    assert.equal(calls.filter((call) => call.url.endsWith("/actions/variables/PROD_SMOKE_STREAK")).length, 1);
+    const updates = calls.filter((call) => call.url.endsWith("/actions/variables/PROD_SMOKE_STREAK"));
+    const saved = JSON.parse(JSON.parse(updates.at(-1).options.body).value);
+    assert.equal(saved.streak, 2);
+    assert.equal(saved.episode.incident, false);
+    assert.equal(saved.episode.telegram, true);
   }
 });
 
@@ -192,13 +202,12 @@ test("missing MCP token cannot suppress Telegram; independent failures are repor
   assert.equal(calls.filter((call) => isTelegramUrl(call.url)).length, 1);
   const failingFetch = async (url, options) => {
     calls.push({ url, options });
-    if (isTelegramUrl(url)) return response(503);
-    if (url.endsWith("/actions/variables/PROD_SMOKE_STREAK")) return response(403);
+    if (url.endsWith("/actions/variables/PROD_SMOKE_STREAK")) return response(204);
     return response(503);
   };
   await assert.rejects(handleSmokeResult(config(), failingFetch), (error) => {
-    assert.equal(error.errors.length, 3);
-    assert.match(error.message, /Hypertask incident search.*Telegram alert.*GitHub smoke streak update/);
+    assert.equal(error.errors.length, 2);
+    assert.match(error.message, /Hypertask incident search.*Telegram alert/);
     return true;
   });
 });
@@ -208,4 +217,61 @@ test("new alarm episode creates fresh incident instead of reusing old evidence",
   const { fetchImpl, calls } = alarmFetch({ existing: true, stale: true });
   await handleSmokeResult(config(), fetchImpl);
   assert.equal(calls.filter((call) => call.url.endsWith("/api/mcp/tasks/create")).length, 1);
+});
+
+
+test("later red retries a failed incident without sending a duplicate Telegram alarm", async () => {
+  const { handleSmokeResult } = await import(scriptUrl);
+  const initial = alarmFetch();
+  const failedIncident = async (url, options) =>
+    url.includes("/api/mcp/tasks?") ? response(503) : initial.fetchImpl(url, options);
+  await assert.rejects(handleSmokeResult(config(), failedIncident), /Hypertask incident search/);
+  const saved = initial.calls.filter((call) => call.url.endsWith("/actions/variables/PROD_SMOKE_STREAK"));
+  const previousStreak = JSON.parse(saved.at(-1).options.body).value;
+  const retry = alarmFetch();
+  await handleSmokeResult(config({ previousStreak, runUrl: "https://github.com/newer-run", sha: "b".repeat(40) }), retry.fetchImpl);
+  assert.equal(retry.calls.filter((call) => isTelegramUrl(call.url)).length, 0);
+  const create = retry.calls.find((call) => call.url.endsWith("/api/mcp/tasks/create"));
+  assert.match(JSON.parse(create.options.body).description, /actions\/runs\/42/);
+  const state = JSON.parse(JSON.parse(retry.calls.filter((call) => call.url.endsWith("/actions/variables/PROD_SMOKE_STREAK")).at(-1).options.body).value);
+  assert.equal(state.streak, 3);
+  assert.equal(state.episode.incident, true);
+  assert.equal(state.episode.telegram, true);
+});
+
+test("later red retries a failed Telegram alarm without duplicating the incident", async () => {
+  const { handleSmokeResult } = await import(scriptUrl);
+  const initial = alarmFetch();
+  const failedTelegram = async (url, options) =>
+    isTelegramUrl(url) ? response(503) : initial.fetchImpl(url, options);
+  await assert.rejects(handleSmokeResult(config(), failedTelegram), /Telegram alert/);
+  const saved = initial.calls.filter((call) => call.url.endsWith("/actions/variables/PROD_SMOKE_STREAK"));
+  const retry = alarmFetch();
+  await handleSmokeResult(config({ previousStreak: JSON.parse(saved.at(-1).options.body).value }), retry.fetchImpl);
+  assert.equal(retry.calls.filter((call) => call.url.includes("/api/mcp/")).length, 0);
+  assert.equal(retry.calls.filter((call) => isTelegramUrl(call.url)).length, 1);
+  assert.equal(JSON.parse(JSON.parse(retry.calls.filter((call) => call.url.endsWith("/actions/variables/PROD_SMOKE_STREAK")).at(-1).options.body).value).episode.telegram, true);
+});
+
+test("failed reservation never sends an alarm that it cannot track", async () => {
+  const { handleSmokeResult } = await import(scriptUrl);
+  const calls = [];
+  await assert.rejects(handleSmokeResult(config(), async (url) => {
+    calls.push(url);
+    return response(403);
+  }), /GitHub smoke streak update failed with HTTP 403/);
+  assert.equal(calls.filter((url) => isTelegramUrl(url)).length, 0);
+  assert.equal(calls.filter((url) => url.includes("/api/mcp/")).length, 0);
+});
+
+test("recovery delivery failure remains pending and is retried once", async () => {
+  const { handleSmokeResult } = await import(scriptUrl);
+  const initial = alarmFetch();
+  await assert.rejects(handleSmokeResult(config({ outcome: "green", previousStreak: "2" }), async (url, options) =>
+    isTelegramUrl(url) ? response(503) : initial.fetchImpl(url, options)), /Telegram alert/);
+  const state = JSON.parse(initial.calls.filter((call) => call.url.endsWith("/actions/variables/PROD_SMOKE_STREAK")).at(-1).options.body).value;
+  const retry = alarmFetch();
+  await handleSmokeResult(config({ outcome: "green", previousStreak: state }), retry.fetchImpl);
+  assert.equal(retry.calls.filter((call) => isTelegramUrl(call.url)).length, 1);
+  assert.equal(JSON.parse(retry.calls.filter((call) => call.url.endsWith("/actions/variables/PROD_SMOKE_STREAK")).at(-1).options.body).value, "0");
 });

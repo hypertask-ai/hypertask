@@ -21,6 +21,17 @@ function parseStreak(value) {
   return Number.isSafeInteger(streak) ? streak : 0;
 }
 
+function readState(value) {
+  try {
+    const state = JSON.parse(value);
+    if (state && Number.isSafeInteger(state.streak) && state.streak >= 0 &&
+        state.episode && typeof state.episode === "object") return state;
+  } catch {
+    // Numeric variables from earlier runs remain valid.
+  }
+  return { streak: parseStreak(value), episode: null };
+}
+
 export function decideSmokeAlarm(previousValue, outcome) {
   const previousStreak = parseStreak(previousValue);
   if (outcome === "red") {
@@ -133,7 +144,7 @@ async function sendTelegram(fetchImpl, config, text) {
 async function updateStreak(fetchImpl, config, streak) {
   const base = `https://api.github.com/repos/${config.repository}/actions/variables`;
   const headers = authHeaders(config.githubToken);
-  const body = JSON.stringify({ name: VARIABLE_NAME, value: String(streak) });
+  const body = JSON.stringify({ name: VARIABLE_NAME, value: typeof streak === "number" ? String(streak) : JSON.stringify(streak) });
   let response = await fetchImpl(`${base}/${VARIABLE_NAME}`, {
     method: "PATCH",
     headers,
@@ -150,42 +161,96 @@ async function updateStreak(fetchImpl, config, streak) {
 }
 
 export async function handleSmokeResult(config, fetchImpl = fetch) {
-  const decision = decideSmokeAlarm(config.previousStreak, config.outcome);
+  const state = readState(config.previousStreak);
+  const decision = decideSmokeAlarm(state.streak, config.outcome);
   const errors = [];
-  if (decision.action === "alarm") {
-    try {
-      if (!config.mcpToken) throw new Error("HYPERTASK_MCP_TOKEN is not configured");
-      await findOrCreateIncident(fetchImpl, config);
-    } catch (error) {
-      errors.push(error);
+  const persist = async () => updateStreak(fetchImpl, config, state.episode ? state : state.streak);
+
+  if (config.outcome === "red") {
+    state.streak = decision.streak;
+    if (decision.action === "alarm") {
+      state.episode = {
+        runUrl: config.runUrl, sha: config.sha, failingViews: config.failingViews,
+        incident: false, telegram: false,
+      };
     }
-    try {
-      await sendTelegram(
-        fetchImpl,
-        config,
-        `🔴 hypertasks: production smoke is red on 2 consecutive deploys. Failing views: ${config.failingViews || "see run log"}. ${config.runUrl}`,
-      );
-    } catch (error) {
-      errors.push(error);
+    // Reserve this episode before any delivery. If this write fails, the
+    // next run still sees streak 1 and can retry red #2 without duplicating it.
+    await persist();
+    if (state.episode && (!state.episode.incident || !state.episode.telegram)) {
+      const evidence = { ...config, ...state.episode };
+      if (!state.episode.incident) {
+        try {
+          if (!config.mcpToken) throw new Error("HYPERTASK_MCP_TOKEN is not configured");
+          await findOrCreateIncident(fetchImpl, evidence);
+          state.episode.incident = true;
+          await persist();
+        } catch (error) {
+          errors.push(error);
+        }
+      }
+      if (!state.episode.telegram) {
+        try {
+          await sendTelegram(
+            fetchImpl,
+            config,
+            `🔴 hypertasks: production smoke is red on 2 consecutive deploys. Failing views: ${evidence.failingViews || "see run log"}. ${evidence.runUrl}`,
+          );
+          state.episode.telegram = true;
+          await persist();
+        } catch (error) {
+          errors.push(error);
+        }
+      }
     }
-  } else if (decision.action === "recovery") {
-    try {
-      await sendTelegram(
-        fetchImpl,
-        config,
-        `🟢 hypertasks: production smoke returned to green after ${decision.previousStreak} consecutive red deploys. ${config.runUrl}`,
-      );
-    } catch (error) {
-      errors.push(error);
+  } else {
+    state.streak = 0;
+    if (decision.action === "recovery" && !state.episode) {
+      state.episode = { incident: true, telegram: true, runUrl: config.runUrl, recovering: true, redStreak: decision.previousStreak };
+    } else if (decision.action === "recovery" && state.episode) {
+      state.episode.recovering = true;
+      state.episode.redStreak = decision.previousStreak;
     }
-  }
-  try {
-    await updateStreak(fetchImpl, config, decision.streak);
-  } catch (error) {
-    errors.push(error);
+    if (state.episode?.recovering) {
+      // Keep incomplete work across green runs as well; don't send a stale
+      // red alert after recovery, but do file its evidence for human review.
+      await persist();
+      if (!state.episode.incident) {
+        try {
+          if (!config.mcpToken) throw new Error("HYPERTASK_MCP_TOKEN is not configured");
+          await findOrCreateIncident(fetchImpl, { ...config, ...state.episode });
+          state.episode.incident = true;
+          await persist();
+        } catch (error) {
+          errors.push(error);
+        }
+      }
+      if (!state.episode.recovery) {
+        try {
+          await sendTelegram(
+            fetchImpl,
+            config,
+            `🟢 hypertasks: production smoke returned to green after ${state.episode.redStreak} consecutive red deploys. ${config.runUrl}`,
+          );
+          state.episode.recovery = true;
+          await persist();
+        } catch (error) {
+          errors.push(error);
+        }
+      }
+      if (state.episode.incident && state.episode.recovery) {
+        try {
+          await updateStreak(fetchImpl, config, 0);
+        } catch (error) {
+          errors.push(error);
+        }
+      }
+    } else {
+      await persist();
+    }
   }
   if (errors.length) throw new AggregateError(errors, errors.map((error) => error.message).join("; "));
-  return decision;
+  return state.episode?.recovering && decision.action === "none" ? { ...decision, action: "recovery" } : decision;
 }
 
 function failingViews() {
