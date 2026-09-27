@@ -5,10 +5,6 @@ on:
     branches: [production]
     types: [opened, synchronize, reopened, labeled, unlabeled]
 
-concurrency:
-  group: revert-guard-${{ github.event.pull_request.number }}
-  cancel-in-progress: true
-
 permissions:
   contents: read
   # Needed to read the PR's labels live; without it gh 403s and the
@@ -16,10 +12,37 @@ permissions:
   pull-requests: read
 
 jobs:
+  clear-revert-label:
+    if: github.event.action == 'synchronize' && github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: write
+      issues: write
+    steps:
+      - name: Require fresh approval after a push
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          set -euo pipefail
+          labels=$(gh api "repos/${{ github.repository }}/issues/$PR_NUMBER/labels" --jq '.[].name')
+          if grep -Fxq intentional-revert <<< "$labels"; then
+            gh api -X DELETE "repos/${{ github.repository }}/issues/$PR_NUMBER/labels/intentional-revert"
+          fi
+
   revert-guard:
     name: revert-guard
+    needs: clear-revert-label
+    if: ${{ !cancelled() }}
     runs-on: ubuntu-latest
+    concurrency:
+      group: revert-guard-${{ github.event.pull_request.number }}
+      cancel-in-progress: true
     steps:
+      - name: Verify label was cleared after the push
+        if: github.event.action == 'synchronize' && github.event.pull_request.head.repo.full_name == github.repository && needs.clear-revert-label.result != 'success'
+        run: exit 1
+
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           fetch-depth: 0
@@ -39,7 +62,10 @@ jobs:
           HUMAN_APPROVERS: ${{ vars.HUMAN_APPROVERS || 'valentinyeo' }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
           PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          PR_HEAD_IS_FORK: ${{ github.event.pull_request.head.repo.full_name != github.repository }}
         run: |
           PR_LABELS=$(gh api "repos/${{ github.repository }}/issues/$PR_NUMBER/labels" --jq '[.[] | {name}]') || PR_LABELS="[]"
           export PR_LABELS
-          node .github/scripts/revert-guard.mjs
+          git fetch --quiet origin "$GITHUB_BASE_REF:refs/remotes/origin/$GITHUB_BASE_REF"
+          git show "origin/$GITHUB_BASE_REF:.github/scripts/revert-guard.mjs" > "$RUNNER_TEMP/rg.mjs"
+          node "$RUNNER_TEMP/rg.mjs"

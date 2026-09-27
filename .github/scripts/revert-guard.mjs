@@ -20,12 +20,11 @@ function hasLabel(name) {
 function intentionalRevertActor() {
   const events = execFileSync("gh", ["api", "--paginate",
     `repos/${process.env.GITHUB_REPOSITORY}/issues/${process.env.PR_NUMBER}/events?per_page=100`,
-    "--jq", '.[] | select(.event == "labeled" and .label.name == "intentional-revert") | [.id, .actor.login] | @tsv',
+    "--jq", '.[] | select(.event == "labeled" and .label.name == "intentional-revert") | {id, actor: .actor.login, app: .performed_via_github_app}',
   ], { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] });
-  const latest = events.trim().split("\n").filter(Boolean)
-    .map((line) => line.split("\t"))
-    .sort((a, b) => Number(a[0]) - Number(b[0])).at(-1);
-  return latest?.[1] || "unknown (no matching labeled event)";
+  return events.trim().split("\n").filter(Boolean)
+    .map((line) => JSON.parse(line))
+    .sort((a, b) => a.id - b.id).at(-1);
 }
 function decodePath(value) {
   // git terminates the ---/+++ name with a tab when the path contains a space,
@@ -91,11 +90,12 @@ function isNonTrivial(line) {
 
 function main() {
   if (hasLabel("intentional-revert")) {
-    const actor = intentionalRevertActor();
+    const event = intentionalRevertActor();
+    const actor = event?.actor || "unknown (no matching labeled event)";
     const approvers = (process.env.HUMAN_APPROVERS ?? "valentinyeo")
       .split(",").map((login) => login.trim().toLowerCase());
-    if (!approvers.includes(actor.toLowerCase())) {
-      console.error(`Revert Guard failed: intentional-revert was added by ${actor}, not a HUMAN_APPROVERS login.`);
+    if (process.env.PR_HEAD_IS_FORK === "true" || event?.app !== null || !approvers.includes(actor.toLowerCase())) {
+      console.error(`Revert Guard failed: intentional-revert was not added directly by a HUMAN_APPROVERS login on this PR (actor: ${actor}).`);
       process.exitCode = 1;
       return;
     }

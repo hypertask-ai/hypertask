@@ -147,8 +147,8 @@ jobs:
         with:
           node-version: 20
 
-      # revert-guard.yml is the authoritative check and stays untouched. This
-      # duplicates its exact invocation so a doomed PR fails in seconds instead
+      # revert-guard.yml is the authoritative check. This duplicates its
+      # invocation so a doomed PR fails in seconds instead
       # of occupying a hosted runner for a full 20-minute build.
       # Runs the head sha through a temporary checkout, then restores the
       # original ref so the build steps below still build the merge commit.
@@ -163,15 +163,17 @@ jobs:
           HUMAN_APPROVERS: ${{ vars.HUMAN_APPROVERS || 'valentinyeo' }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
           PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          PR_HEAD_IS_FORK: ${{ github.event.pull_request.head.repo.full_name != github.repository }}
         run: |
           PR_LABELS=$(gh api "repos/${{ github.repository }}/issues/$PR_NUMBER/labels" --jq '[.[] | {name}]') || PR_LABELS="[]"
           export PR_LABELS
           ORIG_SHA=$(git rev-parse HEAD)
           git fetch --unshallow --quiet || git fetch --quiet
-          git fetch --quiet origin "$GITHUB_BASE_REF" "$PR_HEAD_SHA"
+          git fetch --quiet origin "$GITHUB_BASE_REF:refs/remotes/origin/$GITHUB_BASE_REF" "$PR_HEAD_SHA"
+          git show "origin/$GITHUB_BASE_REF:.github/scripts/revert-guard.mjs" > "$RUNNER_TEMP/rg.mjs"
           git checkout --quiet "$PR_HEAD_SHA"
           STATUS=0
-          node .github/scripts/revert-guard.mjs || STATUS=$?
+          node "$RUNNER_TEMP/rg.mjs" || STATUS=$?
           git checkout --quiet "$ORIG_SHA"
           if [ "$STATUS" -ne 0 ]; then
             echo "::error::revert-guard would fail; fix that first (or add intentional-revert), then re-run"
