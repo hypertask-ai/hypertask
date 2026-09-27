@@ -202,7 +202,7 @@ test("both label reads paginate and assemble labels across pages", () => {
 test("both workflow invocations load the base script and fresh approval follows pushes", () => {
   const guard = fs.readFileSync(path.join(root, ".github/workflows/revert-guard.yml"), "utf8");
   const ci = fs.readFileSync(path.join(root, ".github/workflows/ci-tests.yml"), "utf8");
-  assert.match(guard, /types: \[opened, synchronize, reopened, labeled, unlabeled\]/);
+  assert.match(guard, /types: \[opened, synchronize, reopened, edited, labeled, unlabeled\]/);
   for (const workflow of [guard, ci]) {
     assert.match(workflow, /HUMAN_APPROVERS: \$\{\{ vars\.HUMAN_APPROVERS \|\| 'valentinyeo' \}\}/);
     assert.match(workflow, /git fetch --quiet origin "\$GITHUB_BASE_REF:refs\/remotes\/origin\/\$GITHUB_BASE_REF"/);
