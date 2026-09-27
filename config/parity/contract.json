@@ -71,7 +71,7 @@
       "title": "Create, revoke, and rotate managed agents or keys",
       "matches": {
         "api": [
-          "^(GET|POST|DELETE|PATCH) /api/mcp/(admin/(keys|team-gateway-keys)|agents/(create|revoke|rotate-token)|agents/\\[agentId\\])$",
+          "^(GET|POST|DELETE|PATCH) /api/mcp/(admin/(keys|team-gateway-keys|team-comp)|agents/(create|revoke|rotate-token)|agents/\\[agentId\\])$",
           "^POST /api/mcp/agents/\\[agentId\\]/archive$",
           "^GET /api/mcp/admin/agents$",
           "^POST /api/mcp/admin/agents$",
