@@ -30,7 +30,7 @@ jobs:
     # PRs auto-merge, and "merged when tests are green" needs a test result to
     # exist. `dependabot-stack.yml` applies the `full-ci` label that arms this.
     # Review-first gate (owner, 2026-08-26): a PR run also needs the full-ci
-    # label, which the pr-feedback timer applies once claude-review is green.
+    # label, which the pr-feedback timer applies once GitHub AI Review is green.
     # This makes the typecheck+test gate run once per ready PR (plus once per
     # fix-up push after that) instead of on open and on every label event.
     # ci-build stays a required automerge check, so an unlabeled PR simply
@@ -47,7 +47,7 @@ jobs:
       # intentional-revert label is silently ignored.
       pull-requests: read
       # "Skip the build when the review is already red" reads commit statuses
-      # for claude-review; without this the gh call 403s and aborts the job.
+      # for GitHub AI Review; without this the gh call 403s and aborts the job.
       statuses: read
     outputs:
       test_failed: ${{ steps.test-outcome.outputs.failed }}
@@ -87,10 +87,10 @@ jobs:
             exit 1
           }
 
-          expected=$(printf '%s\n' app-smoke ci-tests claude-review feature-flag-gate next-public-secrets pr-title revert-guard secret-scan | sort)
+          expected=$(printf '%s\n' app-smoke ci-tests ai-review feature-flag-gate next-public-secrets pr-title revert-guard secret-scan | sort)
           actual=$(jq -r '
             [.rules[] | select(.type == "required_status_checks") |
-              .parameters.required_status_checks[].context] | sort | .[]
+              .parameters.required_status_checks[].context | if . == "claude-review" then "ai-review" else . end] | sort | .[]
           ' <<<"$ruleset_json")
           [ "$actual" = "$expected" ] || {
             echo "::error::Live required checks do not match docs/ci-policy.yml."
@@ -107,8 +107,12 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
         run: |
-          STATE=$(gh api "repos/${{ github.repository }}/commits/$HEAD_SHA/status?per_page=100" --jq '[.statuses[] | select(.context=="claude-review")][0].state // "none"')
-          [ "$STATE" != "failure" ] || { echo "::error::claude-review already failed for $HEAD_SHA; fix the findings and push - the new commit builds normally."; exit 1; }
+          STATE=$(gh api "repos/${{ github.repository }}/commits/$HEAD_SHA/status?per_page=100" --jq '
+            [.statuses[] | select(.context == "ai-review" or .context == "claude-review") | {context, state}]
+            | group_by(.context) | map(.[0])
+            | if any(.[]; .state == "success") then "success"
+              elif any(.[]; .state == "failure") then "failure" else "none" end')
+          [ "$STATE" != "failure" ] || { echo "::error::GitHub AI Review already failed for $HEAD_SHA; fix the findings and push - the new commit builds normally."; exit 1; }
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           fetch-depth: 1

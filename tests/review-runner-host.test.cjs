@@ -27,11 +27,13 @@ test('subscription CLIs receive trusted policy through authoritative channels', 
 
 test('root-installed poller is the only automatic review dispatcher', async () => {
   await assert.rejects(access('.github/workflows/claude-review.yml'), { code: 'ENOENT' })
+  await assert.rejects(access('.github/workflows/ai-review.yml'), { code: 'ENOENT' })
   await assert.rejects(access('.github/scripts/ai-review.mjs'), { code: 'ENOENT' })
   const installer = await readFile('.github/scripts/subscription-review/install-wrappers.sh', 'utf8')
   assert.match(installer, /-o root -g reviewdispatch -m 750 "\$source_dir\/dispatch-review"/)
   assert.match(installer, /-o root -g reviewdispatch -m 750 "\$source_dir\/dispatch-scan"/)
   assert.match(installer, /\/var\/lib\/hypertask-ai-review\/completed/)
+  assert.match(installer, /\$source_dir\/claude-review" \/usr\/local\/libexec\/hypertask-claude-subscription-review/)
   assert.doesNotMatch(installer, /\/usr\/local\/bin\/hypertask-dispatch-review/)
   const scan = await readFile('.github/scripts/subscription-review/dispatch-scan', 'utf8')
   assert.match(scan, /\/usr\/local\/libexec\/hypertask-dispatch-review/)
@@ -50,6 +52,7 @@ test('root-installed poller is the only automatic review dispatcher', async () =
   assert.match(broker, /select\(\.display_title == \$title\)/)
   assert.match(broker, /automatic_attempts.*-ge 2/)
   assert.match(broker, /commits\/\$\{actual_sha\}\/status/)
+  assert.match(broker, /\.context == \"ai-review\" or \.context == \"claude-review\"/)
   assert.match(broker, /completed_file/)
   assert.match(broker, /event=repository_dispatch/)
   assert.match(broker, /event_type:"review_pr",client_payload:/)

@@ -2,7 +2,7 @@
 
 **This generated contract enforces catalog coverage only.** It detects added, removed, or unmapped routes, tools, and CLI commands; it does not prove runtime authorization, mutation behavior, or confirmation policy. Those guarantees remain in implementation tests and review.
 
-The first landing is bootstrapped by the pre-existing, exact-head `claude-review` required check plus manual sensitive-path merge. After landing, `parity-contract-trusted` evaluates candidate source with the verifier and policy from the protected base branch; PR code cannot replace or relax the rules judging that PR.
+The first landing is bootstrapped by the pre-existing, exact-head GitHub AI Review (`ai-review`) required check plus manual sensitive-path merge. After landing, `parity-contract-trusted` evaluates candidate source with the verifier and policy from the protected base branch; PR code cannot replace or relax the rules judging that PR.
 
 Regenerate it with `node scripts/parity-contract.mjs --write --cli-capabilities <production-capabilities.json>`. Inventory: api: 166, mcp: 73, cli: 132, ai_chat: 83, hyperai: 73. A number is the count of concrete routes, tools, or leaf commands implementing the canonical job. ↪ records an intentional exclusion; 🛠 is a reviewed, temporary two-step transition and must be removed by its implementation PR. The CLI inventory is pinned to `@hypertask/hypertask_cli@1.13.29`; HyperAI keys are independently validated as the identity projection of the canonical MCP registry.
 

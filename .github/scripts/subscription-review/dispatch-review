@@ -48,7 +48,9 @@ review_state=$(curl -fsS \
   -H "Accept: application/vnd.github+json" \
   -H "X-GitHub-Api-Version: 2022-11-28" \
   "https://api.github.com/repos/valentinyeo/hypertasks/commits/${actual_sha}/status" \
-  | jq -r '[.statuses[] | select(.context == "claude-review")][0].state // "missing"')
+  | jq -r '[.statuses[] | select(.context == "ai-review" or .context == "claude-review") | {context, state}]
+      | group_by(.context) | map(.[0].state)
+      | if index("success") then "success" elif index("failure") then "failure" else "missing" end')
 if [ "$review_state" = success ] || [ "$review_state" = failure ]; then
   completed_tmp=$(mktemp "$state_root/completed/.${actual_sha}.XXXXXX")
   trap 'rm -f -- "$completed_tmp"' EXIT

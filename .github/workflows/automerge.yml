@@ -111,7 +111,7 @@ jobs:
           # A MISSING result counts as not-green below, so every name here
           # must belong to a job that reports on EVERY pull request
           # (visual-regression reports success when it skips, HTPR-5652).
-          REQUIRED="app-smoke ci-tests claude-review next-public-secrets revert-guard pr-title"
+          REQUIRED="app-smoke ci-tests ai-review next-public-secrets revert-guard pr-title"
           REQUIRED="$REQUIRED feature-flag-gate"
 
           # Any changed file matching this (case-insensitive) parks the PR for a
@@ -329,11 +329,13 @@ jobs:
               state=$(jq -r --arg n "$c" '
                 ([.statusCheckRollup[]
                   | ((.name // .context)) as $cn
-                  | select($cn == $n or ($n == "ci-tests" and $cn == "ci-build"))
+                  | select($cn == $n or ($n == "ai-review" and $cn == "claude-review") or ($n == "ci-tests" and $cn == "ci-build"))
                   | {name: $cn, state: ((.conclusion // .state) // "PENDING"), at: (.startedAt // .createdAt // "")}]) as $all
                 | (if $n == "ci-tests" and ([$all[] | select(.name == "ci-tests")] | length) > 0
                    then [$all[] | select(.name == "ci-tests")] else $all end)
-                | sort_by(.at) | last | .state // "MISSING"
+                | sort_by(.at) | group_by(.name) | map(last)
+                | if $n == "ai-review" and any(.[]; .state == "SUCCESS") then "SUCCESS"
+                  else (sort_by(.at) | last | .state // "MISSING") end
               ' <<<"$J")
               if [ "$state" != "SUCCESS" ]; then echo "check $c = $state"; ok=0
               else echo "check $c = SUCCESS"; fi
@@ -345,7 +347,7 @@ jobs:
               [.statusCheckRollup[]
                 | {name: (.name // .context), state: ((.conclusion // .state) // ""), at: (.startedAt // .createdAt // "")}]
               | sort_by(.at) | group_by(.name) | map(last)[] as $entry
-              | select((($required + " ci-build") | split(" ") | index($entry.name)) == null)
+              | select((($required + " ci-build claude-review") | split(" ") | index($entry.name)) == null)
               | select($entry.state | test("FAILURE|CANCELLED|TIMED_OUT|ERROR|STARTUP_FAILURE|ACTION_REQUIRED"))
               | $entry.name
             ' <<<"$J")

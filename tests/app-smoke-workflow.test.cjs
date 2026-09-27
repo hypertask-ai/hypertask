@@ -315,10 +315,11 @@ test("auto-merge waits for app smoke and runs when it completes", async () => {
   assert.match(workflow, /workflows: \["CI Tests", "Revert Guard"\]/);
   assert.match(
     workflow,
-    /REQUIRED="app-smoke ci-tests claude-review next-public-secrets revert-guard pr-title"/,
+    /REQUIRED="app-smoke ci-tests ai-review next-public-secrets revert-guard pr-title"/,
   );
   assert.match(workflow, /REQUIRED="\$REQUIRED feature-flag-gate"/);
   assert.match(ciWorkflow, /name: Verify live required-check settings/);
+  assert.match(ciWorkflow, /if \. == "claude-review" then "ai-review" else \. end/);
   assert.match(ciWorkflow, /default_branch.*gh api "repos\/\$REPO"/);
   assert.match(ciWorkflow, /name == "production-required-checks"/);
   assert.match(ciWorkflow, /\.target == "branch"/);
@@ -326,7 +327,7 @@ test("auto-merge waits for app smoke and runs when it completes", async () => {
   assert.match(ciWorkflow, /Live required checks do not match docs\/ci-policy\.yml/);
   assert.match(
     ciWorkflow,
-    /expected=\$\(printf '%s\\n' app-smoke ci-tests claude-review feature-flag-gate next-public-secrets pr-title revert-guard secret-scan \| sort\)/,
+    /expected=\$\(printf '%s\\n' app-smoke ci-tests ai-review feature-flag-gate next-public-secrets pr-title revert-guard secret-scan \| sort\)/,
   );
 });
 
@@ -335,7 +336,7 @@ test("CI policy keeps the protected smoke producer live and required", async () 
   const required = [
     "app-smoke",
     "ci-tests",
-    "claude-review",
+    "ai-review",
     "feature-flag-gate",
     "pr-title",
     "revert-guard",
