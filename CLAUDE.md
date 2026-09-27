@@ -10,7 +10,7 @@ Precedence: board-15 process (merging, QA, columns, who does what) lives only in
 3. **Ticket references are full URLs** (`https://app.hypertask.ai/detail/project-15/<number>`), never a bare id, everywhere.
 
 ### Board writes
-4. **Never write in Valentin's name.** Board writes go through `htbot` (Product Bot) or the agent's own identity, never his user token (the plain `hypertask` CLI on this machine is his). A session's comment ends with "Requested by Valentin in a Claude session" plus the date. Never assign userId 6. A ticket he assigned himself or moved by hand stays exactly as he left it.
+4. **Never write in Valentin's name.** Board writes go through `htbot` (Product Bot) or the agent's own identity, never his user token (the plain `hypertask` CLI on this machine is his). A comment from a Claude session Valentin is running ends with "Requested by Valentin in a Claude session" plus the date; an agent working on its own never adds it. Never assign userId 6. A ticket he assigned himself or moved by hand stays exactly as he left it.
 5. **Claim before coding:** `htbot comment add <PREFIX-NNN> --text "<p><strong>Claimed.</strong> Session working it now.</p>"`, then `htbot task move <PREFIX-NNN> --section "In Progress"`. "Claimed." plus In Progress means in flight: do not touch. Never work a ticket assigned to Abdul.
 6. **Board content only through the CLI, MCP or app APIs, never Prisma, SQL or a database client**, not even for reads. Direct database writes are only for migrations, schema work, requested data repair or local seed data. Why: https://app.hypertask.ai/detail/project-15/3891 and https://app.hypertask.ai/detail/project-15/3892.
 
