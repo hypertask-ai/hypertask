@@ -4,6 +4,7 @@ const fs = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
 const { execFileSync, spawnSync } = require("node:child_process");
+const yaml = require("js-yaml");
 
 const root = path.resolve(__dirname, "..");
 const script = path.join(root, ".github/scripts/revert-guard.mjs");
@@ -139,6 +140,29 @@ test("approval before head arrival fails, including a later timeline push", (t) 
   assert.equal(f.run(["intentional-revert"]).status, 1);
 });
 
+test("retarget away, push, and retarget back requires approval after the base edit", (t) => {
+  const f = fixture(t);
+  fs.writeFileSync(f.events, labelEvent(20, "valentinyeo"));
+  const baseEdit = { PR_EVENT_ACTION: "edited", PR_BASE_EDITED: "true", PR_EVENT_TIMESTAMP: "2026-09-27T12:00:00Z" };
+  assert.equal(f.run(["intentional-revert"], undefined, baseEdit).status, 1);
+  assert.equal(f.run(["intentional-revert"], undefined, { ...baseEdit, PR_BASE_EDITED: "false" }).status, 0);
+  fs.writeFileSync(f.events, labelEvent(21, "valentinyeo", { created_at: "2026-09-27T12:00:00Z" }));
+  assert.equal(f.run(["intentional-revert"], undefined, baseEdit).status, 1);
+  fs.writeFileSync(f.events, labelEvent(22, "valentinyeo", { created_at: "2026-09-27T12:00:01Z" }));
+  assert.equal(f.run(["intentional-revert"], undefined, baseEdit).status, 0);
+  assert.equal(f.run(["intentional-revert"], undefined, { ...baseEdit, PR_EVENT_TIMESTAMP: "" }).status, 1);
+});
+
+test("close, push, and reopen requires approval after the reopen event", (t) => {
+  const f = fixture(t);
+  fs.writeFileSync(f.events, labelEvent(20, "valentinyeo"));
+  const reopened = { PR_EVENT_ACTION: "reopened", PR_EVENT_TIMESTAMP: "2026-09-27T12:00:00Z" };
+  assert.equal(f.run(["intentional-revert"], undefined, reopened).status, 1);
+  fs.writeFileSync(f.events, labelEvent(21, "valentinyeo", { created_at: "2026-09-27T13:00:00Z" }));
+  assert.equal(f.run(["intentional-revert"], undefined, reopened).status, 0);
+  assert.equal(f.run(["intentional-revert"], undefined, { ...reopened, PR_EVENT_TIMESTAMP: "unknown" }).status, 1);
+});
+
 test("check suites created by labeling do not invalidate a fresh approval", (t) => {
   const f = fixture(t);
   const head = f.git(["rev-parse", "HEAD"]);
@@ -202,15 +226,29 @@ test("both label reads paginate and assemble labels across pages", () => {
 test("both workflow invocations load the base script and fresh approval follows pushes", () => {
   const guard = fs.readFileSync(path.join(root, ".github/workflows/revert-guard.yml"), "utf8");
   const ci = fs.readFileSync(path.join(root, ".github/workflows/ci-tests.yml"), "utf8");
-  assert.match(guard, /types: \[opened, synchronize, reopened, edited, labeled, unlabeled\]/);
+  const guardWorkflow = yaml.load(guard);
+  const ciWorkflow = yaml.load(ci);
+  for (const workflow of [guardWorkflow, ciWorkflow]) {
+    assert.ok(workflow.on.pull_request.types.includes("reopened"));
+    assert.ok(workflow.on.pull_request.types.includes("edited"));
+  }
+  const clearWhen = guardWorkflow.jobs["clear-revert-label"].if;
+  const verifyWhen = guardWorkflow.jobs["revert-guard"].steps[0].if;
+  assert.match(clearWhen, /action == 'synchronize'/);
+  assert.match(clearWhen, /action == 'reopened'/);
+  assert.match(clearWhen, /action == 'edited' && github\.event\.changes\.base != null/);
+  assert.match(clearWhen, /head\.repo\.full_name == github\.repository/);
+  assert.equal(verifyWhen, `${clearWhen} && needs.clear-revert-label.result != 'success'`);
   for (const workflow of [guard, ci]) {
     assert.match(workflow, /HUMAN_APPROVERS: \$\{\{ vars\.HUMAN_APPROVERS \|\| 'valentinyeo' \}\}/);
     assert.match(workflow, /git fetch --quiet origin "\$GITHUB_BASE_REF:refs\/remotes\/origin\/\$GITHUB_BASE_REF"/);
     assert.match(workflow, /git show "origin\/\$GITHUB_BASE_REF:\.github\/scripts\/revert-guard\.mjs" > "\$RUNNER_TEMP\/rg\.mjs"/);
     assert.match(workflow, /node "\$RUNNER_TEMP\/rg\.mjs"/);
     assert.match(workflow, /PR_HEAD_IS_FORK: \$\{\{ github\.event\.pull_request\.head\.repo\.full_name != github\.repository \}\}/);
+    assert.match(workflow, /PR_EVENT_ACTION: \$\{\{ github\.event\.action \}\}/);
+    assert.match(workflow, /PR_BASE_EDITED: \$\{\{ github\.event\.changes\.base != null \}\}/);
+    assert.match(workflow, /PR_EVENT_TIMESTAMP: \$\{\{ github\.event\.pull_request\.updated_at \}\}/);
   }
-  assert.match(guard, /clear-revert-label:\n    if: github\.event\.action == 'synchronize' && github\.event\.pull_request\.head\.repo\.full_name == github\.repository/);
   assert.match(guard, /clear-revert-label:[\s\S]*?permissions:\n      pull-requests: write\n      issues: write/);
   assert.match(guard, /gh api -X DELETE "repos\/\$\{\{ github\.repository \}\}\/issues\/\$PR_NUMBER\/labels\/intentional-revert"/);
   assert.match(guard, /needs: clear-revert-label/);

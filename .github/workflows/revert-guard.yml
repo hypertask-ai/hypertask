@@ -18,13 +18,13 @@ permissions:
 
 jobs:
   clear-revert-label:
-    if: github.event.action == 'synchronize' && github.event.pull_request.head.repo.full_name == github.repository
+    if: (github.event.action == 'synchronize' || github.event.action == 'reopened' || (github.event.action == 'edited' && github.event.changes.base != null)) && github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
     permissions:
       pull-requests: write
       issues: write
     steps:
-      - name: Require fresh approval after a push
+      - name: Require fresh approval after a push, reopen, or base change
         env:
           GH_TOKEN: ${{ github.token }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
@@ -44,8 +44,8 @@ jobs:
       group: revert-guard-${{ github.event.pull_request.number }}
       cancel-in-progress: true
     steps:
-      - name: Verify label was cleared after the push
-        if: github.event.action == 'synchronize' && github.event.pull_request.head.repo.full_name == github.repository && needs.clear-revert-label.result != 'success'
+      - name: Verify label was cleared after the push, reopen, or base change
+        if: (github.event.action == 'synchronize' || github.event.action == 'reopened' || (github.event.action == 'edited' && github.event.changes.base != null)) && github.event.pull_request.head.repo.full_name == github.repository && needs.clear-revert-label.result != 'success'
         run: exit 1
 
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
@@ -68,6 +68,9 @@ jobs:
           PR_NUMBER: ${{ github.event.pull_request.number }}
           PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
           PR_HEAD_IS_FORK: ${{ github.event.pull_request.head.repo.full_name != github.repository }}
+          PR_EVENT_ACTION: ${{ github.event.action }}
+          PR_BASE_EDITED: ${{ github.event.changes.base != null }}
+          PR_EVENT_TIMESTAMP: ${{ github.event.pull_request.updated_at }}
         run: |
           PR_LABELS=$(gh api --paginate "repos/${{ github.repository }}/issues/$PR_NUMBER/labels?per_page=100" --jq '.[] | {name}') || PR_LABELS=""
           PR_LABELS=$(printf '%s\n' "$PR_LABELS" | jq -s '.')

@@ -124,10 +124,14 @@ function main() {
     const actor = event?.actor || "unknown (no matching labeled event)";
     const approvers = (process.env.HUMAN_APPROVERS ?? "valentinyeo")
       .split(",").map((login) => login.trim().toLowerCase());
+    const needsEventApproval = process.env.PR_EVENT_ACTION === "reopened" ||
+      (process.env.PR_EVENT_ACTION === "edited" && process.env.PR_BASE_EDITED === "true");
+    const eventTime = Date.parse(process.env.PR_EVENT_TIMESTAMP);
     if (process.env.PR_HEAD_IS_FORK === "true" || event?.event !== "labeled" || event?.actor_type !== "User" ||
         event?.app !== null || !approvers.includes(actor.toLowerCase()) ||
-        !Number.isFinite(Date.parse(event.created_at)) || arrival === null || Date.parse(event.created_at) <= arrival) {
-      console.error(`Revert Guard failed: intentional-revert requires a direct HUMAN_APPROVERS label after this head and the last removal (actor: ${actor}).`);
+        !Number.isFinite(Date.parse(event.created_at)) || arrival === null || Date.parse(event.created_at) <= arrival ||
+        (needsEventApproval && (!Number.isFinite(eventTime) || Date.parse(event.created_at) <= eventTime))) {
+      console.error(`Revert Guard failed: intentional-revert requires a direct HUMAN_APPROVERS label after this head, the last removal, and any reopen or base change (actor: ${actor}).`);
       process.exitCode = 1;
       return;
     }

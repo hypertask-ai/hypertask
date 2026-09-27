@@ -12,7 +12,7 @@ name: CI Tests
 # itself a checked artifact.
 on:
   pull_request:
-    types: [opened, synchronize, reopened, ready_for_review, labeled]
+    types: [opened, synchronize, reopened, ready_for_review, edited, labeled]
   push:
     branches: [production]
 
@@ -166,6 +166,9 @@ jobs:
           PR_NUMBER: ${{ github.event.pull_request.number }}
           PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
           PR_HEAD_IS_FORK: ${{ github.event.pull_request.head.repo.full_name != github.repository }}
+          PR_EVENT_ACTION: ${{ github.event.action }}
+          PR_BASE_EDITED: ${{ github.event.changes.base != null }}
+          PR_EVENT_TIMESTAMP: ${{ github.event.pull_request.updated_at }}
         run: |
           PR_LABELS=$(gh api --paginate "repos/${{ github.repository }}/issues/$PR_NUMBER/labels?per_page=100" --jq '.[] | {name}') || PR_LABELS=""
           PR_LABELS=$(printf '%s\n' "$PR_LABELS" | jq -s '.')
