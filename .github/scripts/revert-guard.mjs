@@ -17,6 +17,39 @@ function hasLabel(name) {
     throw new Error("PR_LABELS is not valid JSON");
   }
 }
+function ghLines(endpoint, query) {
+  const output = execFileSync("gh", ["api", "--paginate", endpoint, "--jq", query],
+    { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] });
+  return output.trim().split("\n").filter(Boolean).map((line) => JSON.parse(line));
+}
+function intentionalRevertApproval(head) {
+  const repo = process.env.GITHUB_REPOSITORY;
+  const pr = process.env.PR_NUMBER;
+  const liveHead = execFileSync("gh", ["api", `repos/${repo}/pulls/${pr}`, "--jq", ".head.sha"],
+    { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] }).trim();
+  if (liveHead !== head) throw new Error("PR head changed during revert-guard check");
+
+  const events = ghLines(`repos/${repo}/issues/${pr}/events?per_page=100`,
+    '.[] | select(.label.name == "intentional-revert" and (.event == "labeled" or .event == "unlabeled")) | {id, event, created_at, actor: .actor.login, actor_type: .actor.type, app: .performed_via_github_app}');
+  if (events.some((event) => !Number.isFinite(Date.parse(event.created_at)) || !Number.isSafeInteger(event.id))) {
+    throw new Error("intentional-revert event history has no reliable ordering");
+  }
+  const latest = events.sort((a, b) => Date.parse(a.created_at) - Date.parse(b.created_at) || a.id - b.id).at(-1);
+  if (!latest || latest.event !== "labeled") return { event: latest };
+
+  const suites = ghLines(`repos/${repo}/commits/${head}/check-suites?per_page=100`,
+    '.check_suites[] | {head_sha, created_at}');
+  const timeline = ghLines(`repos/${repo}/issues/${pr}/timeline?per_page=100`,
+    '.[] | select(.event == "committed" or .event == "head_ref_force_pushed") | {event, commit_id, after, created_at}');
+  const suiteDates = suites.filter((suite) => suite.head_sha === head).map((suite) => Date.parse(suite.created_at));
+  const pushDates = timeline.filter((item) => item.commit_id === head || item.after === head)
+    .map((item) => Date.parse(item.created_at));
+  if ([...suiteDates, ...pushDates].some((date) => !Number.isFinite(date))) return { event: latest, arrival: null };
+  // Later check suites include the labeled run itself; only the first suite
+  // approximates head arrival. A later push event supersedes that estimate.
+  const arrivals = [...(suiteDates.length ? [Math.min(...suiteDates)] : []), ...pushDates];
+  return { event: latest, arrival: arrivals.length ? Math.max(...arrivals) : null };
+}
 function decodePath(value) {
   // git terminates the ---/+++ name with a tab when the path contains a space,
   // so an unstripped tab makes `git blame -- <path>` fail with "no such path".
@@ -26,6 +59,7 @@ function decodePath(value) {
   return value.startsWith("a/") ? value.slice(2) : value;
 }
 function removedLines(diff) {
+  if (/^Binary files .* differ$/m.test(diff)) throw new Error("diff contains an uninspectable binary change");
   const removed = [];
   let file = null;
   let oldLine = null;
@@ -80,21 +114,35 @@ function isNonTrivial(line) {
 }
 
 function main() {
-  if (hasLabel("intentional-revert")) {
-    console.log("Revert Guard skipped: PR has the intentional-revert label.");
-    return;
-  }
-
   const expectedHead = process.env.PR_HEAD_SHA;
   const actualHead = git(["rev-parse", "HEAD"]).trim();
   if (expectedHead && expectedHead !== actualHead) {
     throw new Error(`checkout is ${actualHead}, expected PR head ${expectedHead}`);
   }
+  if (hasLabel("intentional-revert")) {
+    const { event, arrival } = intentionalRevertApproval(actualHead);
+    const actor = event?.actor || "unknown (no matching labeled event)";
+    const approvers = (process.env.HUMAN_APPROVERS ?? "valentinyeo")
+      .split(",").map((login) => login.trim().toLowerCase());
+    const needsEventApproval = process.env.PR_EVENT_ACTION === "reopened" ||
+      (process.env.PR_EVENT_ACTION === "edited" && process.env.PR_BASE_EDITED === "true");
+    const eventTime = Date.parse(process.env.PR_EVENT_TIMESTAMP);
+    if (process.env.PR_HEAD_IS_FORK === "true" || event?.event !== "labeled" || event?.actor_type !== "User" ||
+        event?.app !== null || !approvers.includes(actor.toLowerCase()) ||
+        !Number.isFinite(Date.parse(event.created_at)) || arrival === null || Date.parse(event.created_at) <= arrival ||
+        (needsEventApproval && (!Number.isFinite(eventTime) || Date.parse(event.created_at) <= eventTime))) {
+      console.error(`Revert Guard failed: intentional-revert requires a direct HUMAN_APPROVERS label after this head, the last removal, and any reopen or base change (actor: ${actor}).`);
+      process.exitCode = 1;
+      return;
+    }
+    console.log("Revert Guard skipped: PR has a fresh intentional-revert approval.");
+    return;
+  }
 
   const baseRef = `origin/${process.env.GITHUB_BASE_REF || "staging"}`;
   const mergeBase = git(["merge-base", baseRef, "HEAD"]).trim();
-  const diff = git(["-c", "core.quotePath=false", "diff", mergeBase, "HEAD",
-    "--unified=0", "--no-color", "--no-ext-diff", "--"]);
+  const diff = git(["-c", "core.quotePath=false", "diff", "--text", "--no-ext-diff", "--no-textconv",
+    "--unified=0", "--no-color", mergeBase, "HEAD", "--"]);
   const removed = removedLines(diff);
   if (!removed.length) {
     console.log("Revert Guard passed: this PR removes no lines.");

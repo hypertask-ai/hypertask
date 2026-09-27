@@ -1,25 +1,69 @@
+# pull_request runs PR-authored workflows; safety depends on agent logins lacking
+# .github/workflows write access (Hypertask Agents App has no workflows permission)
+# and HUMAN_APPROVERS being a login held by no automation.
 name: Revert Guard
 
 on:
   pull_request:
     branches: [production]
-    types: [opened, synchronize, reopened, labeled, unlabeled]
-
-concurrency:
-  group: revert-guard-${{ github.event.pull_request.number }}
-  cancel-in-progress: true
+    types: [opened, synchronize, reopened, edited, labeled, unlabeled]
 
 permissions:
   contents: read
   # Needed to read the PR's labels live; without it gh 403s and the
   # intentional-revert override never takes effect.
   pull-requests: read
+  issues: read
+  checks: read
 
 jobs:
+  clear-revert-label:
+    if: (github.event.action == 'synchronize' || github.event.action == 'reopened' || (github.event.action == 'edited' && github.event.changes.base != null)) && github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: write
+      issues: write
+    steps:
+      - name: Require fresh approval after a push, reopen, or base change
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          EVENT_HEAD: ${{ github.event.pull_request.head.sha }}
+          EVENT_AT: ${{ github.event.pull_request.updated_at }}
+        run: |
+          set -euo pipefail
+          # A late run for an older head must not remove an approval given for the newer head;
+          # the newer head's own run clears the label.
+          live_head=$(gh api "repos/${{ github.repository }}/pulls/$PR_NUMBER" --jq .head.sha)
+          if [ "$live_head" != "$EVENT_HEAD" ]; then
+            echo "Head moved to $live_head; its own run clears the label."
+            exit 0
+          fi
+          labels=$(gh api --paginate "repos/${{ github.repository }}/issues/$PR_NUMBER/labels?per_page=100" --jq '.[].name')
+          if grep -Fxq intentional-revert <<< "$labels"; then
+            # Keep an approval given after this push, reopen or retarget; the guard still checks its age.
+            labeled_at=$(gh api --paginate "repos/${{ github.repository }}/issues/$PR_NUMBER/events?per_page=100" \
+              --jq '.[] | select(.event == "labeled" and .label.name == "intentional-revert") | .created_at' | sort | tail -n 1)
+            if [ -n "$EVENT_AT" ] && [ -n "$labeled_at" ] && [[ "$labeled_at" > "$EVENT_AT" ]]; then
+              echo "Label added at $labeled_at, after this event at $EVENT_AT; keeping it."
+              exit 0
+            fi
+            gh api -X DELETE "repos/${{ github.repository }}/issues/$PR_NUMBER/labels/intentional-revert"
+          fi
+
   revert-guard:
     name: revert-guard
+    needs: clear-revert-label
+    if: ${{ !cancelled() }}
     runs-on: ubuntu-latest
+    concurrency:
+      group: revert-guard-${{ github.event.pull_request.number }}-${{ github.event.pull_request.head.sha }}
+      cancel-in-progress: true
     steps:
+      - name: Verify label was cleared after the push, reopen, or base change
+        if: (github.event.action == 'synchronize' || github.event.action == 'reopened' || (github.event.action == 'edited' && github.event.changes.base != null)) && github.event.pull_request.head.repo.full_name == github.repository && needs.clear-revert-label.result != 'success'
+        run: exit 1
+
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           fetch-depth: 0
@@ -36,9 +80,17 @@ jobs:
           # trigger time, so intentional-revert added after the run fires (or
           # before a rerun) was invisible and cost a retrigger commit every time.
           GH_TOKEN: ${{ github.token }}
+          HUMAN_APPROVERS: ${{ vars.HUMAN_APPROVERS || 'valentinyeo' }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
           PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          PR_HEAD_IS_FORK: ${{ github.event.pull_request.head.repo.full_name != github.repository }}
+          PR_EVENT_ACTION: ${{ github.event.action }}
+          PR_BASE_EDITED: ${{ github.event.changes.base != null }}
+          PR_EVENT_TIMESTAMP: ${{ github.event.pull_request.updated_at }}
         run: |
-          PR_LABELS=$(gh api "repos/${{ github.repository }}/issues/$PR_NUMBER/labels" --jq '[.[] | {name}]') || PR_LABELS="[]"
+          PR_LABELS=$(gh api --paginate "repos/${{ github.repository }}/issues/$PR_NUMBER/labels?per_page=100" --jq '.[] | {name}') || PR_LABELS=""
+          PR_LABELS=$(printf '%s\n' "$PR_LABELS" | jq -s '.')
           export PR_LABELS
-          node .github/scripts/revert-guard.mjs
+          git fetch --quiet origin "$GITHUB_BASE_REF:refs/remotes/origin/$GITHUB_BASE_REF"
+          git show "origin/$GITHUB_BASE_REF:.github/scripts/revert-guard.mjs" > "$RUNNER_TEMP/rg.mjs"
+          node "$RUNNER_TEMP/rg.mjs"
