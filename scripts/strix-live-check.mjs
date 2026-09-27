@@ -32,12 +32,7 @@ async function reject(area, name, route, options = {}, expected400Error) {
   const response = await request(route, options);
   // Only the email-link route uses 400 for a verified invalid token; other 400s
   // can be validation or protocol failures before the auth gate.
-  let body;
-  if (response.status === 400 && expected400Error) {
-    try { body = await response.json(); } catch { /* An unrecognized response cannot prove rejection. */ }
-  }
-  record(area, name, isAuthRejection(response.status, body, expected400Error), { status: response.status });
-  await response.body?.cancel();
+  record(area, name, await isAuthRejection(response, expected400Error), { status: response.status });
 }
 const rpc = { jsonrpc: '2.0', id: 1, method: 'initialize', params: {
   protocolVersion: '2024-11-05', capabilities: {}, clientInfo: { name: 'strix-security-check', version: '1' },
