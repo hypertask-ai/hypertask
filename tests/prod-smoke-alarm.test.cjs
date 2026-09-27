@@ -36,14 +36,14 @@ function config(overrides = {}) {
   };
 }
 
-function alarmFetch({ existing = false } = {}) {
+function alarmFetch({ existing = false, stale = false, incidentStatus = 200 } = {}) {
   const calls = [];
   const fetchImpl = async (url, options = {}) => {
     calls.push({ url, options });
     if (url.includes("/api/mcp/tasks?")) {
       return response(200, {
         tasks: existing
-          ? [{ id: 77, title: "[INCIDENT] Production smoke red on consecutive deploys" }]
+          ? [{ id: 77, title: "[INCIDENT] Production smoke red on consecutive deploys", description: stale ? "Old run evidence" : `Run: ${config().runUrl}` }]
           : [],
       });
     }
@@ -53,7 +53,7 @@ function alarmFetch({ existing = false } = {}) {
       });
     }
     if (url.endsWith("/api/mcp/tasks/create")) {
-      return response(200, { task: { id: 78 } });
+      return response(incidentStatus, incidentStatus === 200 ? { task: { id: 78 } } : { error: "unavailable" });
     }
     if (isTelegramUrl(url)) return response(200, { ok: true });
     if (url.endsWith("/actions/variables/PROD_SMOKE_STREAK")) return response(204);
@@ -168,4 +168,44 @@ test("creates the repository variable when it does not exist", async () => {
   };
   await handleSmokeResult(config({ outcome: "green", previousStreak: "0" }), fetchImpl);
   assert.deepEqual(calls.map((call) => call.options.method), ["PATCH", "POST"]);
+});
+
+test("incident API failure cannot suppress the Telegram alarm or streak update", async () => {
+  const { handleSmokeResult } = await import(scriptUrl);
+  for (const failedCall of ["search", "projects", "create"]) {
+    const { fetchImpl, calls } = alarmFetch({ incidentStatus: failedCall === "create" ? 503 : 200 });
+    const failingFetch = async (url, options) => {
+      if (failedCall === "search" && url.includes("/api/mcp/tasks?")) return response(503);
+      if (failedCall === "projects" && url.endsWith("/api/mcp/projects?limit=100")) return response(503);
+      return fetchImpl(url, options);
+    };
+    await assert.rejects(handleSmokeResult(config(), failingFetch), /Hypertask (incident search|project lookup|incident creation) failed with HTTP 503/);
+    assert.equal(calls.filter((call) => isTelegramUrl(call.url)).length, 1);
+    assert.equal(calls.filter((call) => call.url.endsWith("/actions/variables/PROD_SMOKE_STREAK")).length, 1);
+  }
+});
+
+test("missing MCP token cannot suppress Telegram; independent failures are reported together", async () => {
+  const { handleSmokeResult } = await import(scriptUrl);
+  const { fetchImpl, calls } = alarmFetch();
+  await assert.rejects(handleSmokeResult(config({ mcpToken: "" }), fetchImpl), /HYPERTASK_MCP_TOKEN is not configured/);
+  assert.equal(calls.filter((call) => isTelegramUrl(call.url)).length, 1);
+  const failingFetch = async (url, options) => {
+    calls.push({ url, options });
+    if (isTelegramUrl(url)) return response(503);
+    if (url.endsWith("/actions/variables/PROD_SMOKE_STREAK")) return response(403);
+    return response(503);
+  };
+  await assert.rejects(handleSmokeResult(config(), failingFetch), (error) => {
+    assert.equal(error.errors.length, 3);
+    assert.match(error.message, /Hypertask incident search.*Telegram alert.*GitHub smoke streak update/);
+    return true;
+  });
+});
+
+test("new alarm episode creates fresh incident instead of reusing old evidence", async () => {
+  const { handleSmokeResult } = await import(scriptUrl);
+  const { fetchImpl, calls } = alarmFetch({ existing: true, stale: true });
+  await handleSmokeResult(config(), fetchImpl);
+  assert.equal(calls.filter((call) => call.url.endsWith("/api/mcp/tasks/create")).length, 1);
 });

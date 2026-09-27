@@ -74,7 +74,11 @@ async function findOrCreateIncident(fetchImpl, config) {
   if (!Array.isArray(search.tasks)) {
     throw new Error("Hypertask incident search returned no task list");
   }
-  const existing = search.tasks.find((task) => task.title === INCIDENT_TITLE);
+  // A later alarm episode needs fresh evidence even when an older incident
+  // is still in a normal (possibly already resolved) board section.
+  const existing = search.tasks.find((task) =>
+    task.title === INCIDENT_TITLE && task.description?.includes(escapeHtml(config.runUrl))
+  );
   if (existing) return { created: false, task: existing };
 
   const projects = await jsonRequest(
@@ -147,22 +151,40 @@ async function updateStreak(fetchImpl, config, streak) {
 
 export async function handleSmokeResult(config, fetchImpl = fetch) {
   const decision = decideSmokeAlarm(config.previousStreak, config.outcome);
+  const errors = [];
   if (decision.action === "alarm") {
-    if (!config.mcpToken) throw new Error("HYPERTASK_MCP_TOKEN is not configured");
-    await findOrCreateIncident(fetchImpl, config);
-    await sendTelegram(
-      fetchImpl,
-      config,
-      `🔴 hypertasks: production smoke is red on 2 consecutive deploys. Failing views: ${config.failingViews || "see run log"}. ${config.runUrl}`,
-    );
+    try {
+      if (!config.mcpToken) throw new Error("HYPERTASK_MCP_TOKEN is not configured");
+      await findOrCreateIncident(fetchImpl, config);
+    } catch (error) {
+      errors.push(error);
+    }
+    try {
+      await sendTelegram(
+        fetchImpl,
+        config,
+        `🔴 hypertasks: production smoke is red on 2 consecutive deploys. Failing views: ${config.failingViews || "see run log"}. ${config.runUrl}`,
+      );
+    } catch (error) {
+      errors.push(error);
+    }
   } else if (decision.action === "recovery") {
-    await sendTelegram(
-      fetchImpl,
-      config,
-      `🟢 hypertasks: production smoke returned to green after ${decision.previousStreak} consecutive red deploys. ${config.runUrl}`,
-    );
+    try {
+      await sendTelegram(
+        fetchImpl,
+        config,
+        `🟢 hypertasks: production smoke returned to green after ${decision.previousStreak} consecutive red deploys. ${config.runUrl}`,
+      );
+    } catch (error) {
+      errors.push(error);
+    }
   }
-  await updateStreak(fetchImpl, config, decision.streak);
+  try {
+    await updateStreak(fetchImpl, config, decision.streak);
+  } catch (error) {
+    errors.push(error);
+  }
+  if (errors.length) throw new AggregateError(errors, errors.map((error) => error.message).join("; "));
   return decision;
 }
 
