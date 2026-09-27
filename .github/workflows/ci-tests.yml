@@ -160,6 +160,7 @@ jobs:
           # trigger time, so intentional-revert added after the run fires (or
           # before a rerun) was invisible and cost a retrigger commit every time.
           GH_TOKEN: ${{ github.token }}
+          HUMAN_APPROVERS: ${{ vars.HUMAN_APPROVERS || 'valentinyeo' }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
           PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
         run: |

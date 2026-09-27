@@ -17,6 +17,16 @@ function hasLabel(name) {
     throw new Error("PR_LABELS is not valid JSON");
   }
 }
+function intentionalRevertActor() {
+  const events = execFileSync("gh", ["api", "--paginate",
+    `repos/${process.env.GITHUB_REPOSITORY}/issues/${process.env.PR_NUMBER}/events?per_page=100`,
+    "--jq", '.[] | select(.event == "labeled" and .label.name == "intentional-revert") | [.id, .actor.login] | @tsv',
+  ], { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] });
+  const latest = events.trim().split("\n").filter(Boolean)
+    .map((line) => line.split("\t"))
+    .sort((a, b) => Number(a[0]) - Number(b[0])).at(-1);
+  return latest?.[1] || "unknown (no matching labeled event)";
+}
 function decodePath(value) {
   // git terminates the ---/+++ name with a tab when the path contains a space,
   // so an unstripped tab makes `git blame -- <path>` fail with "no such path".
@@ -81,6 +91,14 @@ function isNonTrivial(line) {
 
 function main() {
   if (hasLabel("intentional-revert")) {
+    const actor = intentionalRevertActor();
+    const approvers = (process.env.HUMAN_APPROVERS ?? "valentinyeo")
+      .split(",").map((login) => login.trim().toLowerCase());
+    if (!approvers.includes(actor.toLowerCase())) {
+      console.error(`Revert Guard failed: intentional-revert was added by ${actor}, not a HUMAN_APPROVERS login.`);
+      process.exitCode = 1;
+      return;
+    }
     console.log("Revert Guard skipped: PR has the intentional-revert label.");
     return;
   }
