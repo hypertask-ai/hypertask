@@ -12,6 +12,6 @@ roles:
   intake: Triage
   in_progress: In Progress
   ai_review: AI Review
-  manager_review: HT Manager Review
+  manager_review: Supervisor Review
   human_review: Valentin Review
   done: Done

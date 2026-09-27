@@ -36,7 +36,7 @@ look like a success.
 
 Usage:
   open-pr.sh <PREFIX-NNN> <TYPE> "<short title>" --body-file <absolute path>
-             [--lane ai-review|ht-manager-review|valentin-review]
+             [--lane ai-review|supervisor-review|ht-manager-review|valentin-review]
              [--remote <name>] [--base <branch>] [--dry-run] [--help]
 
 TYPE is BUGFIX, FEATURE or INFRA. The PR title becomes "<TICKET> [<TYPE>] <title>".
@@ -49,8 +49,9 @@ sections before anything is pushed, in dry runs too.
 Lanes (see ticket-lifecycle "Route the PR to the right review lane"):
   ai-review          default. Auto-merge ON. Normal bug fix or flagged
                      feature, and additive DB migrations behind a flag.
-  ht-manager-review  auto-merge OFF. Destructive migration, CI or infra
+  supervisor-review  auto-merge OFF. Destructive migration, CI or infra
                      decision, shipped-bug verification.
+  ht-manager-review  alias for supervisor-review.
   valentin-review    auto-merge OFF. Money, auth, security, irreversible
                      data, product direction. Moves the ticket and posts
                      nothing else; never assigns userId 6 (Valentin,
@@ -113,9 +114,9 @@ esac
 
 case "$LANE" in
   ai-review)         SECTION="AI Review";         AUTOMERGE="yes" ;;
-  ht-manager-review) SECTION="HT Manager Review"; AUTOMERGE="no" ;;
+  supervisor-review|ht-manager-review) SECTION="Supervisor Review"; AUTOMERGE="no" ;;
   valentin-review)   SECTION="Valentin Review";   AUTOMERGE="no" ;;
-  *) die "--lane must be ai-review, ht-manager-review or valentin-review, got '$LANE'." "Use ai-review unless the change touches money, auth, security, irreversible data, or a destructive migration." ;;
+  *) die "--lane must be ai-review, supervisor-review, ht-manager-review or valentin-review, got '$LANE'." "Use ai-review unless the change touches money, auth, security, irreversible data, or a destructive migration." ;;
 esac
 
 [ -n "$BODY_FILE" ] || die "--body-file is missing." "Write the PR body with the write-pr-summary skill, save it to an absolute path, and pass it as --body-file /absolute/path/pr-body.md."
