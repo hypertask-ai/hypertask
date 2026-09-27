@@ -1,12 +1,12 @@
 # AI Gateway: per-team cost attribution
 
-Status: live since 2026-07-07. Last reviewed 2026-08-09.
+Status: live since 2026-07-07. Last reviewed 2026-09-27.
 
 ## Architecture
 
 All LLM traffic goes through the **Vercel AI Gateway**. Premium, legacy AI,
-and comped teams use a dedicated platform-managed team key (`vck_...`). Free
-and BYOK-plan teams use the shared included-allowance key. A customer BYOK key,
+and Pro-comped teams use a dedicated platform-managed team key (`vck_...`). Free,
+BYOK-plan and BYOK-comped teams use the shared included-allowance key. A customer BYOK key,
 when configured, takes precedence over the funded key. One exception: dictation
 speech-to-text calls Deepgram (`api.deepgram.com`) directly because the gateway exposes no audio endpoint
 (`POST /v1/audio/transcriptions` → 404, confirmed).
@@ -21,10 +21,33 @@ request **tags** — `team:<id>` and `user:<id>` are attached to every
 ```
 AI feature → resolve authenticated owning team → customer BYOK lookup →
   customer key found             → customer's key
-  Premium/AI/comped team         → managed_gateway row (dedicated vck_ key)
-  Free or BYOK-plan team         → AI_GATEWAY_API_KEY (shared allowance key)
-  Premium/AI/comped key missing  → fail closed
+  Premium/AI/Pro-comped team     → managed_gateway row (dedicated vck_ key)
+  Free/BYOK-plan/BYOK-comped     → AI_GATEWAY_API_KEY (shared allowance key)
+  Premium/AI/Pro-comp key missing → fail closed
 ```
+
+### Comps (HTPR-6653)
+
+A comp is `Team.compedUntil` (future date) plus `Team.compedPlan` (`Pro` or
+`BYOK`). A null `compedPlan` means Pro, so comps made before HTPR-6653 keep Pro.
+The comp grants its plan unless the team pays for a higher one, so a BYOK comp
+never downgrades a paying Pro team. A BYOK comp gets exactly what a paying BYOK
+team gets: shared allowance key, no managed key, no premium models without a
+customer key. Resolution lives in `src/lib/teamComp.ts` and is used by
+`storePlanIdForTeam` (server) and `deriveTeamBilling` (client).
+
+The owner sets and clears comps through `/api/mcp/admin/team-comp` (owner
+identity only, behind the `htpr-6653-admin-team-comp` flag). Team-scoped
+management keys are refused. Every change writes a `Logs` row (type `Team`) in
+the same transaction:
+
+```
+GET    /api/mcp/admin/team-comp?teamId=<uuid>   (or ?email=<member email>)
+POST   /api/mcp/admin/team-comp  {"teamId"|"email", "plan": "Pro"|"BYOK", "until": "<ISO date>"}
+DELETE /api/mcp/admin/team-comp  {"teamId"|"email"}
+```
+
+An email on more than one team returns 409 with the candidate team ids.
 
 The current plan is checked on every resolution. Stale dedicated rows cannot
 preserve Premium funding after a downgrade, and Free teams cannot keep using a
@@ -106,8 +129,8 @@ repurpose a team key for tooling:
   removed because it bypassed the guest-flow limits.
 
 Also note: "All Trials Key" is the intentional included-allowance key for Free
-and BYOK-plan teams. It is not a fallback for Premium, legacy AI, or comped
-teams. Per-team allowance enforcement is tracked in HTPR-5205; until that ships,
+and BYOK-plan (and BYOK-comped) teams. It is not a fallback for Premium,
+legacy AI, or Pro-comped teams. Per-team allowance enforcement is tracked in HTPR-5205; until that ships,
 shared-key requests are attributed by team/user tags but are not hard-capped.
 Turbopuffer embeddings do not use the gateway at all
 (direct OpenRouter, `OPENROUTER_API_KEY`) — folding them in is HTPR-4246.
@@ -120,9 +143,9 @@ Turbopuffer embeddings do not use the gateway at all
   the registry, encrypts each secret, writes `managed_gateway`, and removes the
   matching obsolete customer-visible rows while preserving any different
   customer-owned BYOK secret. It never returns plaintext keys.
-- **Missing keys:** Premium, legacy AI, and comped teams fail closed when their
-  dedicated key is absent. Free and BYOK-plan teams intentionally use the
-  shared included-allowance key.
+- **Missing keys:** Premium, legacy AI, and Pro-comped teams fail closed when
+  their dedicated key is absent. Free, BYOK-plan and BYOK-comped teams
+  intentionally use the shared included-allowance key.
 - **Verify billing isolation:** trigger any AI feature in two teams' boards,
   then Vercel → AI Gateway → Observability: each request logs the key it used.
 - **Costs:** gateway passes through list prices, no markup. Old direct spend
@@ -160,8 +183,8 @@ tagged by `team:`/`user:`.
   it had been the prod default before the 2026-07-07 trials-key swap. If a
   key seems missing, check for stale var names before asking anyone.
 - Prod env `AI_GATEWAY_API_KEY` = `GATEWAY_KEY_TRIALS` (suffix `06UTtr`)
-  since 2026-07-07. Free and BYOK-plan included usage intentionally bills
-  there; Premium, legacy AI, and comped usage must not.
+  since 2026-07-07. Free, BYOK-plan and BYOK-comped included usage
+  intentionally bills there; Premium, legacy AI, and Pro-comped usage must not.
 
 ### provider column ≠ vendor API key
 

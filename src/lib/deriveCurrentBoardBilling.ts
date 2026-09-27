@@ -1,6 +1,6 @@
 import { planKindFromStripePriceId } from "@/lib/planFromStripePriceId";
 import { isInternalCompTeam } from "@/lib/internalCompTeams";
-import { isTeamComped } from "@/lib/teamComp";
+import { teamCompPlan, applyTeamComp } from "@/lib/teamComp";
 import {
   pickEntitlingSubscriptionRow,
   subscriptionStatusGrantsAccess,
@@ -24,11 +24,15 @@ export function deriveTeamBilling(
   // A row that no longer entitles (unpaid, canceled, expired) still carries its
   // priceId, so gate on the status too (HTPR-4863).
   const entitled = subscriptionStatusGrantsAccess(row?.subscriptionStatus);
-  const { storePlanId: paidStorePlanId, billingInterval } = isTeamComped(team)
-    ? { storePlanId: "Pro" as const, billingInterval: null }
-    : entitled
-      ? planKindFromStripePriceId(stripePriceId)
-      : { storePlanId: "Free" as const, billingInterval: null };
+  const paid = entitled
+    ? planKindFromStripePriceId(stripePriceId)
+    : { storePlanId: "Free" as const, billingInterval: null };
+  // A comp grants its plan (Pro when unset) unless the team pays for more
+  // (HTPR-6653). A comp-decided plan has no billing interval.
+  const comp = teamCompPlan(team);
+  const paidStorePlanId = applyTeamComp(team, paid.storePlanId);
+  const billingInterval =
+    comp && paidStorePlanId === comp ? null : paid.billingInterval;
   // Internal/owner teams are comped to the top tier regardless of Stripe state.
   const storePlanId = isInternalCompTeam(team.id) ? "Pro" : paidStorePlanId;
   const byokProviderFlags =

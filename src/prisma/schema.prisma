@@ -108,6 +108,11 @@ enum DecisionRequestStatus {
   Cancelled
 }
 
+enum TeamCompPlan {
+  Pro
+  BYOK
+}
+
 enum LogType {
   Board
   Task
@@ -636,6 +641,8 @@ model Team {
   activeSubscriptionPlanItemId String?
   activeSubscriptionPlanId     String?
   compedUntil                  DateTime?
+  // Plan a comp grants while compedUntil is in the future. Null means Pro.
+  compedPlan                   TeamCompPlan?
   subscriptionPlan             SubscriptionPlan[]
   stripe_customer_id           String?
   createdAt                    DateTime           @default(now())

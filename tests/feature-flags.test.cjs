@@ -496,6 +496,7 @@ test("declared flags remain listed with ticket details and can be changed", asyn
       },
       { key: "htpr-6800-flag-ticket-id", mode: "OWNER_AND_QA", updatedAt: null },
       { key: "yper4-123-board-check", mode: "OWNER_AND_QA", updatedAt: null },
+      { key: "htpr-6653-admin-team-comp", mode: "OWNER_AND_QA", updatedAt: null },
     ],
   );
   listed.forEach(({ key, description, ticketUrl, shippedOn }) => {
