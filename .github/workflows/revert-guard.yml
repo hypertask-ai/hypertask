@@ -1,3 +1,6 @@
+# pull_request runs PR-authored workflows; safety depends on agent logins lacking
+# .github/workflows write access (Hypertask Agents App has no workflows permission)
+# and HUMAN_APPROVERS being a login held by no automation.
 name: Revert Guard
 
 on:
@@ -10,6 +13,8 @@ permissions:
   # Needed to read the PR's labels live; without it gh 403s and the
   # intentional-revert override never takes effect.
   pull-requests: read
+  issues: read
+  checks: read
 
 jobs:
   clear-revert-label:
@@ -25,7 +30,7 @@ jobs:
           PR_NUMBER: ${{ github.event.pull_request.number }}
         run: |
           set -euo pipefail
-          labels=$(gh api "repos/${{ github.repository }}/issues/$PR_NUMBER/labels" --jq '.[].name')
+          labels=$(gh api --paginate "repos/${{ github.repository }}/issues/$PR_NUMBER/labels?per_page=100" --jq '.[].name')
           if grep -Fxq intentional-revert <<< "$labels"; then
             gh api -X DELETE "repos/${{ github.repository }}/issues/$PR_NUMBER/labels/intentional-revert"
           fi
@@ -64,7 +69,8 @@ jobs:
           PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
           PR_HEAD_IS_FORK: ${{ github.event.pull_request.head.repo.full_name != github.repository }}
         run: |
-          PR_LABELS=$(gh api "repos/${{ github.repository }}/issues/$PR_NUMBER/labels" --jq '[.[] | {name}]') || PR_LABELS="[]"
+          PR_LABELS=$(gh api --paginate "repos/${{ github.repository }}/issues/$PR_NUMBER/labels?per_page=100" --jq '.[] | {name}') || PR_LABELS=""
+          PR_LABELS=$(printf '%s\n' "$PR_LABELS" | jq -s '.')
           export PR_LABELS
           git fetch --quiet origin "$GITHUB_BASE_REF:refs/remotes/origin/$GITHUB_BASE_REF"
           git show "origin/$GITHUB_BASE_REF:.github/scripts/revert-guard.mjs" > "$RUNNER_TEMP/rg.mjs"

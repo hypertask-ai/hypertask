@@ -46,6 +46,8 @@ jobs:
       # Without this the gh call 403s, PR_LABELS falls back to [], and an
       # intentional-revert label is silently ignored.
       pull-requests: read
+      issues: read
+      checks: read
       # "Skip the build when the review is already red" reads commit statuses
       # for GitHub AI Review; without this the gh call 403s and aborts the job.
       statuses: read
@@ -165,7 +167,8 @@ jobs:
           PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
           PR_HEAD_IS_FORK: ${{ github.event.pull_request.head.repo.full_name != github.repository }}
         run: |
-          PR_LABELS=$(gh api "repos/${{ github.repository }}/issues/$PR_NUMBER/labels" --jq '[.[] | {name}]') || PR_LABELS="[]"
+          PR_LABELS=$(gh api --paginate "repos/${{ github.repository }}/issues/$PR_NUMBER/labels?per_page=100" --jq '.[] | {name}') || PR_LABELS=""
+          PR_LABELS=$(printf '%s\n' "$PR_LABELS" | jq -s '.')
           export PR_LABELS
           ORIG_SHA=$(git rev-parse HEAD)
           git fetch --unshallow --quiet || git fetch --quiet
