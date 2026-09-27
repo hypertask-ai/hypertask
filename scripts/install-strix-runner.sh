@@ -38,7 +38,7 @@ for package in playwright playwright-core; do
 done
 for name in strix-weekly.sh strix-check-run.py strix-file-tickets.py \
   strix-review-batches.py strix-assess.sh strix-assess.py strix-assessment.json \
-  strix-live-check.mjs strix-cli-check.py strix-scheduled.sh; do
+  strix-live-check.mjs strix-auth-response.mjs strix-cli-check.py strix-scheduled.sh; do
   install -m 700 "$SCRIPT_DIR/$name" "$DESTINATION/$name"
 done
 printf 'Installed Strix runner at %s\n' "$DESTINATION"

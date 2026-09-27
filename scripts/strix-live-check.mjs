@@ -6,6 +6,7 @@ import path from 'node:path';
 import { pathToFileURL, fileURLToPath } from 'node:url';
 import { createHash, randomBytes } from 'node:crypto';
 import { spawnSync } from 'node:child_process';
+import { isAuthRejection } from './strix-auth-response.mjs';
 
 const origin = 'https://app.hypertask.ai';
 const output = path.resolve(process.argv[2] || 'strix-live-results');
@@ -27,10 +28,15 @@ async function request(route, options = {}) {
   await new Promise(resolve => setTimeout(resolve, 1100));
   return fetch(url, { ...options, redirect: 'manual', signal: AbortSignal.timeout(25000) });
 }
-async function reject(area, name, route, options = {}) {
+async function reject(area, name, route, options = {}, expected400Error) {
   const response = await request(route, options);
-  // A missing route or a server error does not prove an authentication check.
-  record(area, name, [400, 401, 403].includes(response.status), { status: response.status });
+  // Only the email-link route uses 400 for a verified invalid token; other 400s
+  // can be validation or protocol failures before the auth gate.
+  let body;
+  if (response.status === 400 && expected400Error) {
+    try { body = await response.json(); } catch { /* An unrecognized response cannot prove rejection. */ }
+  }
+  record(area, name, isAuthRejection(response.status, body, expected400Error), { status: response.status });
   await response.body?.cancel();
 }
 const rpc = { jsonrpc: '2.0', id: 1, method: 'initialize', params: {
@@ -64,7 +70,7 @@ try {
     !(allowOrigin === 'https://strix-cross-origin.invalid' && allowCredentials === 'true'),
     { status: response.status, allowOrigin, allowCredentials });
   await response.body?.cancel();
-  await reject('login', 'Invalid email-link token is rejected', '/api/auth/verify-email-token', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ token: 'invalid.security.test' }) });
+  await reject('login', 'Invalid email-link token is rejected', '/api/auth/verify-email-token', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ token: 'invalid.security.test' }) }, 'Invalid or expired token');
   const bearer = { Authorization: 'Bearer ' + session.mcpToken };
   response = await request('/api/mcp/projects?limit=1', { headers: bearer }); data = await response.json();
   record('mcp', 'Valid QA bearer can list its projects', response.status === 200 && data.success === true, { status: response.status });

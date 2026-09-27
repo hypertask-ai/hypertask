@@ -32,7 +32,7 @@ Medium and higher source findings require two confirmation calls with source, ca
 
 - `~/.local/state/strix/assessment/latest.json` points to the latest assessment and its profile statuses.
 - `~/.local/state/strix/live/latest.json` records scheduled or standalone live checks.
-- Each assessment keeps `assessment.json`, `live/live-results.json`, browser screenshots and source profile reports.
+- Each assessment keeps `assessment.json`, `live/live-results.json`, browser screenshots and source profile reports; app and CLI source snapshots are removed when the run finishes.
 - `~/.local/state/strix/weekly/latest.json` records source-job status, revision, exit code and output directory.
 - Each source job keeps `coverage.json`, exact file lists, per-batch logs and Strix reports.
 

@@ -5,6 +5,7 @@ import importlib.util
 import json
 import os
 from pathlib import Path
+import shutil
 import subprocess
 import tempfile
 import time
@@ -81,6 +82,12 @@ def main():
     except (OSError, ValueError, subprocess.SubprocessError) as error:
         manifest.update(status="failed", error=str(error))
     finally:
+        try:
+            for name in ("app", "cli"):
+                if (output / name).exists():
+                    shutil.rmtree(output / name)
+        except OSError as error:
+            manifest.update(status="failed", error=f"snapshot cleanup failed: {error}")
         save()
         print(json.dumps(manifest, indent=2))
     if manifest["status"] != "completed":

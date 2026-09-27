@@ -1,11 +1,15 @@
 #!/usr/bin/env python3
 """Exercise cron execution, failed scans, report gating and agent-only filing."""
+from concurrent.futures import ThreadPoolExecutor
 import importlib.util
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import json
 import os
 from pathlib import Path
 import subprocess
+import sys
 import tempfile
+import threading
 import unittest
 from unittest.mock import patch
 
@@ -37,6 +41,29 @@ class RunnerTests(unittest.TestCase):
         (self.repo / 'auth.py').write_text('second\n')
         git('add', '.');git('commit', '-m', 'change')
         (self.repo / '.env').write_text('UNTRACKED_SECRET=never-copy\n')
+        class ModelFixture(BaseHTTPRequestHandler):
+            def do_POST(handler):
+                length = int(handler.headers['Content-Length'])
+                prompt = json.loads(handler.rfile.read(length))['messages'][0]['content']
+                self.model_requests.append(prompt)
+                content = {'findings': []} if prompt.startswith('Extract vulnerability claims') else {'verdict': 'rejected', 'reason': 'test fixture'}
+                payload = json.dumps({'choices': [{'message': {'content': json.dumps(content)}}]}).encode()
+                handler.send_response(200)
+                handler.send_header('Content-Type', 'application/json')
+                handler.send_header('Content-Length', str(len(payload)))
+                handler.end_headers()
+                handler.wfile.write(payload)
+
+            def log_message(self, *args):
+                pass
+
+        self.model_requests = []
+        server = ThreadingHTTPServer(('127.0.0.1', 0), ModelFixture)
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        self.addCleanup(thread.join)
+        self.addCleanup(server.server_close)
+        self.addCleanup(server.shutdown)
         bin = self.root / '.local/bin'
         bin.mkdir(parents=True)
         for name, body in {
@@ -53,13 +80,15 @@ complete=mode!='budget'
 data={'status':'completed' if complete else 'budget_exceeded','scan_results':{'scan_completed':complete,'methodology':'COVERAGE_COMPLETE','technical_analysis':'Coverage incomplete' if mode=='incomplete' else 'Reviewed changes'}}
 (p/'run.json').write_text(json.dumps(data));(p/'penetration_test_report.md').write_text('Report')
 (p/'vulnerabilities.json').write_text('[]')
-if mode=='findings':
- (p/'vulnerabilities.json').write_text(json.dumps([{'title':'Informational fixture','severity':'low'}]))
+if mode in ('findings','confirm'):
+ finding={'title':'Informational fixture','severity':'low'} if mode=='findings' else {'title':'Auth weakness','severity':'high','code_locations':[{'file':'auth.py','start_line':1}]}
+ (p/'vulnerabilities.json').write_text(json.dumps([finding]))
  sys.exit(2)
 ''',
         }.items():
             p=bin / name;p.write_text(body);p.chmod(0o755)
-        self.env = {'HOME': str(self.root), 'PATH': os.environ['PATH'], 'STRIX_REPO': str(self.repo), 'STRIX_DIFF_BASE': self.base}
+        self.env = {'HOME': str(self.root), 'PATH': os.environ['PATH'], 'STRIX_REPO': str(self.repo), 'STRIX_DIFF_BASE': self.base,
+                    'STRIX_CONFIRM_API_BASE': f'http://127.0.0.1:{server.server_port}/v1', 'STRIX_CONFIRM_API_KEY': 'fixture-key'}
 
     def run_scan(self, mode='ok'):
         result=subprocess.run(['/bin/bash', str(SCRIPTS/'strix-weekly.sh')],env={**self.env,'MODE':mode},capture_output=True,text=True)
@@ -80,6 +109,14 @@ if mode=='findings':
         self.assertEqual(result.returncode,0,result.stdout+result.stderr)
         self.assertEqual(status['status'],'completed')
         self.assertTrue((state/'last-success').exists())
+        self.assertEqual(len(self.model_requests), 1)
+
+    def test_confirmation_uses_local_model_fixture(self):
+        result,status,state=self.run_scan('confirm')
+        self.assertEqual(result.returncode,0,result.stdout+result.stderr)
+        self.assertEqual(status['status'],'completed')
+        self.assertEqual(len(self.model_requests), 3)
+        self.assertEqual(sum('Auth weakness' in prompt for prompt in self.model_requests), 2)
 
     def test_no_changes_skips_scan(self):
         self.env['STRIX_DIFF_BASE']=self.git('rev-parse','HEAD')
@@ -240,6 +277,41 @@ class ReportTests(unittest.TestCase):
             self.assertNotIn('--assignee',args)
             call.return_value=subprocess.CompletedProcess([],0,'{"success":false}','')
             self.assertFalse(reporter.post_ticket({'title':'Test','description':'Test','priority':'urgent'}))
+
+    def test_assessment_removes_snapshots_but_keeps_reports(self):
+        assessment=load('strix-assess')
+        with tempfile.TemporaryDirectory() as temp:
+            def fake_snapshot(state, output, name, remote, ref):
+                source=output/name;source.mkdir()
+                for profile in json.loads((SCRIPTS/'strix-assessment.json').read_text()).values():
+                    if profile['repository']==name:
+                        for filename in profile['files']:
+                            path=source/filename;path.parent.mkdir(parents=True,exist_ok=True);path.write_text('source')
+                return source,'test-revision'
+            with patch.dict(os.environ,STRIX_ASSESSMENT_STATE=temp), \
+                 patch.object(sys,'argv',['strix-assess.py','--source-only','--profile','native-cli']), \
+                 patch.object(assessment,'snapshot',side_effect=fake_snapshot), \
+                 patch.object(assessment.batches,'run',return_value=0):
+                self.assertEqual(assessment.main(),0)
+            output=Path(json.loads((Path(temp)/'latest.json').read_text())['output'])
+            self.assertTrue((output/'assessment.json').exists())
+            self.assertFalse((output/'app').exists())
+            self.assertFalse((output/'cli').exists())
+
+    def test_concurrent_modes_file_a_finding_only_once(self):
+        reporter=load('strix-file-tickets')
+        with tempfile.TemporaryDirectory() as temp:
+            roots=[Path(temp)/name for name in ('weekly','assessment')]
+            for root in roots:root.mkdir()
+            finding={'title':'Duplicate auth flaw','severity':'high'}
+            with patch.object(reporter,'STATE',str(Path(temp)/'filed.json')), \
+                 patch.object(reporter,'read_findings',return_value=[finding]), \
+                 patch.object(reporter,'confirmed_twice',return_value=([{'verdict':'confirmed'}]*2,True)), \
+                 patch.object(reporter,'post_ticket',return_value=True) as post:
+                with ThreadPoolExecutor(max_workers=2) as pool:
+                    list(pool.map(reporter.main,map(str,roots)))
+                self.assertEqual(post.call_count,1)
+                self.assertEqual(json.loads((Path(temp)/'filed.json').read_text()),['duplicateauthflaw'])
 
     def test_confirmation_error_fails_the_job(self):
         reporter=load('strix-file-tickets')

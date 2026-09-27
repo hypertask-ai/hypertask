@@ -6,6 +6,7 @@ Usage: strix-file-tickets.py <strix_run_dir>
 Dedupes against earlier runs by finding title. Uses the approved Product Bot CLI.
 """
 from concurrent.futures import ThreadPoolExecutor
+import fcntl
 import html
 import json
 import os
@@ -262,6 +263,15 @@ def ticket_description(finding, severity, run):
 
 
 def main(run):
+    path = Path(STATE)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    # Weekly and assessment runs have different runner locks but one filing state.
+    with path.with_name(path.name + '.lock').open('a') as lock:
+        fcntl.flock(lock, fcntl.LOCK_EX)
+        file_run(run)
+
+
+def file_run(run):
     vulns = read_findings(run)
     previous_review = Path(run) / "finding-review.json"
     if previous_review.exists():
