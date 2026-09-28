@@ -1164,6 +1164,8 @@ model Task {
   // @@index([deletedAt]) // For filtering deleted tasks
   // @@index([status]) // If you filter by status frequently
   @@index([projectId, status])
+  @@index([projectId, status, userId])
+  @@index([projectId, status, createdAt])
   @@index([projectId, cycleId, status])
   @@index([projectId, status, archivedAt])
   @@index([parentTaskId, status])

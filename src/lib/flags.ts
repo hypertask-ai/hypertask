@@ -49,6 +49,7 @@ import {
   MY_TASKS_CROSS_BOARD_PRIORITY_SORT_FLAG,
   MY_TASKS_SHORTCUTS_WIDTH_FLAG,
   HTPR_6372_SEARCH_RANKING_FLAG,
+  HTPR_6369_SEARCH_OPERATORS_FLAG,
   MY_TASKS_VIEWS_FLAG,
   MY_TASKS_BULK_SELECTION_FLAG,
   MY_TASKS_FILTER_PARITY_FLAG,
@@ -549,6 +550,12 @@ const FEATURE_FLAG_DEFINITIONS = [
     shippedOn: "2026-09-14",
     description:
       "Enables global shortcuts on My Tasks, remembers the selected board in the URL, and uses the full available page width.",
+  },
+  {
+    key: HTPR_6369_SEARCH_OPERATORS_FLAG,
+    shippedOn: "2026-09-28",
+    description:
+      "Searches tasks by author, assignee, board, label, status, date and attachments using query operators, with suggestions for values.",
   },
   {
     key: HTPR_6372_SEARCH_RANKING_FLAG,

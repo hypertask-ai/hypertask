@@ -1,4 +1,6 @@
 import { searchConfig } from "@/lib/configs/search.config";
+import { HTPR_6369_SEARCH_OPERATORS_FLAG } from "@/lib/flags/keys";
+import { useFlag } from "@/hooks/useFlag";
 import { useDeviceContext } from "@/lib/contexts/deviceContext";
 import { useQueryClient } from "@tanstack/react-query";
 import axios from "axios";
@@ -79,6 +81,7 @@ export function useSearch(
   const router = useRouter();
   const queryClient = useQueryClient();
   const isApple = useDeviceContext();
+  const searchOperatorsEnabled = useFlag(HTPR_6369_SEARCH_OPERATORS_FLAG);
 
   function handleProjectsFromCache() {
     setProjects(allProjects);
@@ -121,6 +124,7 @@ export function useSearch(
       showArchived,
       _fromProject,
       projects.map((project) => project.id),
+      searchOperatorsEnabled,
     ]);
   }
 
@@ -134,7 +138,9 @@ export function useSearch(
     if (_searchTerm && _searchTerm.length >= 2) {
       const requestId = beginSearch(_searchTerm, showArchived);
       const { searchProjectIds, processedSearchTerm, archive } =
-        searchBoards(_searchTerm, showArchived);
+        searchOperatorsEnabled
+          ? { searchProjectIds: [], processedSearchTerm: _searchTerm, archive: defaultSearchArchiveStatus(showArchived) }
+          : searchBoards(_searchTerm, showArchived);
 
       try {
         const response = await axios.post(searchDocumentsRoute, {
@@ -336,7 +342,9 @@ export function useSearch(
         )
       );
       const { searchProjectIds, processedSearchTerm, archive } =
-        searchBoards(searchTerm, showArchived);
+        searchOperatorsEnabled
+          ? { searchProjectIds: [], processedSearchTerm: searchTerm, archive: defaultSearchArchiveStatus(showArchived) }
+          : searchBoards(searchTerm, showArchived);
 
       const response = await axios.post(searchDocumentsRoute, {
         projectIds:
@@ -760,7 +768,7 @@ export function useSearch(
       lastSearchKey.current = currentSearchKey("", _includeArchived);
       handleStatesOnResponse(searchConfig.responseMessages.default);
     }
-  }, [projects, _includeArchived, _searchTerm, _fromProject]);
+  }, [projects, _includeArchived, _searchTerm, _fromProject, searchOperatorsEnabled]);
 
   return {
     setSelectedIndex,

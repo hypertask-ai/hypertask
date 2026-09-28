@@ -83,7 +83,7 @@ export async function turbopufferFetchMentionTasks(
 export interface TurbopufferSearchTaskIdsOptions {
   searchQuery: string;
   projectIds: number[];
-  status: SearchStatus;
+  status?: SearchStatus;
   projectId?: number | null;
   perPage?: number;
 }
