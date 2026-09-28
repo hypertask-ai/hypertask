@@ -25,7 +25,6 @@ import type { ViewVisibility } from "@prisma/client";
 
 interface IContextProps {
   currentDate: Date;
-  today: Date;
   currentView: "month" | "week" | "day";
   currentDay: Date;
   currentTask: number;
@@ -116,13 +115,11 @@ const CalendarContext = createContext<IContextProps | undefined>(undefined);
 export const CalendarProvider = ({
   children,
   accountId,
-  initialDateKey,
 }: {
   children: ReactNode;
   accountId: number;
-  initialDateKey: string;
 }) => {
-  const contextProps = useCalendarView(accountId, initialDateKey);
+  const contextProps = useCalendarView(accountId);
   const projectIds = useMemo(
     () => contextProps.projects.map((project) => project.id),
     [contextProps.projects],

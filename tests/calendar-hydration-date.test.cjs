@@ -1,7 +1,6 @@
 const assert = require("node:assert/strict");
 const path = require("node:path");
 const test = require("node:test");
-const { startOfWeek, addDays } = require("date-fns");
 const { JSDOM } = require("jsdom");
 const React = require("react");
 const { act } = React;
@@ -11,79 +10,77 @@ const { createJiti } = require("jiti");
 
 const root = path.resolve(__dirname, "..");
 const jiti = createJiti(__filename, { interopDefault: true });
-const {
-  calendarDateFromKey,
-  calendarDateKeyFromInstant,
-  createInitialCalendarDates,
-} = jiti(path.join(root, "src/lib/calendarInitialDate.ts"));
-const { getCalendarTitle } = jiti(
+const CalendarHydrationBoundary = jiti(
   path.join(
     root,
-    "src/components/PageComponents/Calendar/calendarTitle.ts",
+    "src/components/PageComponents/Calendar/CalendarHydrationBoundary.ts",
   ),
-);
+).default;
 
 const runInstant = new Date("2026-09-27T22:50:30.556Z");
 
-const calendarSnapshot = (date) => {
-  const weekStart = startOfWeek(date, { weekStartsOn: 0 });
-
-  return {
-    desktopTitle: getCalendarTitle({
-      currentView: "week",
-      currentDate: date,
-      today: date,
-      weekStartsOn: 0,
-    }),
-    selectedDay: `${date.getFullYear()}-${date.getMonth() + 1}-${date.getDate()}`,
-    mobileDays: Array.from({ length: 7 }, (_, index) => {
-      const day = addDays(weekStart, index);
-      return `${day.getFullYear()}-${day.getMonth() + 1}-${day.getDate()}`;
-    }),
-  };
-};
-
-const initialSnapshot = (timezone, dateKey) => {
-  process.env.TZ = timezone;
-  return calendarSnapshot(calendarDateFromKey(dateKey));
-};
-
-const CalendarInitialMarkup = ({ dateKey }) => {
-  const [dates] = React.useState(() => createInitialCalendarDates(dateKey));
-  const snapshot = calendarSnapshot(dates.currentDate);
+const CalendarDateMarkup = ({ instant }) => {
+  const date = new Date(instant);
+  const selectedDay = `${date.getFullYear()}-${date.getMonth() + 1}-${date.getDate()}`;
   return React.createElement(
     "div",
     {
-      "data-selected-day": snapshot.selectedDay,
-      "data-today": `${dates.today.getFullYear()}-${dates.today.getMonth() + 1}-${dates.today.getDate()}`,
+      "data-selected-day": selectedDay,
+      "data-day-id": `day-${date.toISOString()}`,
     },
-    `${snapshot.desktopTitle}|${snapshot.mobileDays.join(",")}`,
+    selectedDay,
   );
 };
 
-test("the old instant-based initializer renders different calendar markup", () => {
-  process.env.TZ = "UTC";
-  const serverSnapshot = calendarSnapshot(new Date(runInstant));
-  process.env.TZ = "Europe/Berlin";
-  const browserSnapshot = calendarSnapshot(new Date(runInstant));
-
-  assert.notDeepEqual(serverSnapshot, browserSnapshot);
-});
-
-test("calendar initial markup keeps one logical date across server and browser timezones", () => {
-  const initialDateKey = calendarDateKeyFromInstant(runInstant);
-
-  assert.deepEqual(
-    initialSnapshot("UTC", initialDateKey),
-    initialSnapshot("Europe/Berlin", initialDateKey),
+const calendarMarkup = (timezone) => {
+  process.env.TZ = timezone;
+  return renderToString(
+    React.createElement(CalendarDateMarkup, {
+      instant: runInstant.toISOString(),
+    }),
   );
+};
+
+test("date-dependent calendar markup differs across the reported timezones", () => {
+  assert.notEqual(calendarMarkup("UTC"), calendarMarkup("Europe/Berlin"));
 });
 
-test("React hydrates calendar date state without a recoverable error", async () => {
-  const initialDateKey = calendarDateKeyFromInstant(runInstant);
+test("the calendar boundary renders the same hydration placeholder", () => {
   process.env.TZ = "UTC";
   const serverHtml = renderToString(
-    React.createElement(CalendarInitialMarkup, { dateKey: initialDateKey }),
+    React.createElement(
+      CalendarHydrationBoundary,
+      null,
+      React.createElement(CalendarDateMarkup, {
+        instant: runInstant.toISOString(),
+      }),
+    ),
+  );
+  process.env.TZ = "Europe/Berlin";
+  const browserHtml = renderToString(
+    React.createElement(
+      CalendarHydrationBoundary,
+      null,
+      React.createElement(CalendarDateMarkup, {
+        instant: runInstant.toISOString(),
+      }),
+    ),
+  );
+
+  assert.equal(serverHtml, "<div>Loading...</div>");
+  assert.equal(browserHtml, serverHtml);
+});
+
+test("React hydrates the boundary before mounting browser-local dates", async () => {
+  process.env.TZ = "UTC";
+  const serverHtml = renderToString(
+    React.createElement(
+      CalendarHydrationBoundary,
+      null,
+      React.createElement(CalendarDateMarkup, {
+        instant: runInstant.toISOString(),
+      }),
+    ),
   );
 
   process.env.TZ = "Europe/Berlin";
@@ -104,7 +101,13 @@ test("React hydrates calendar date state without a recoverable error", async () 
   const container = dom.window.document.getElementById("root");
   const rootNode = hydrateRoot(
     container,
-    React.createElement(CalendarInitialMarkup, { dateKey: initialDateKey }),
+    React.createElement(
+      CalendarHydrationBoundary,
+      null,
+      React.createElement(CalendarDateMarkup, {
+        instant: runInstant.toISOString(),
+      }),
+    ),
     { onRecoverableError: (error) => recoverableErrors.push(error) },
   );
 
@@ -112,7 +115,11 @@ test("React hydrates calendar date state without a recoverable error", async () 
   assert.deepEqual(recoverableErrors, []);
   assert.equal(
     container.firstElementChild.getAttribute("data-selected-day"),
-    "2026-9-27",
+    "2026-9-28",
+  );
+  assert.equal(
+    container.firstElementChild.getAttribute("data-day-id"),
+    "day-2026-09-27T22:50:30.556Z",
   );
 
   await act(async () => rootNode.unmount());
@@ -121,12 +128,4 @@ test("React hydrates calendar date state without a recoverable error", async () 
   global.document = previousGlobals.document;
   global.navigator = previousGlobals.navigator;
   global.IS_REACT_ACT_ENVIRONMENT = previousGlobals.actEnvironment;
-});
-
-test("the reported run crossed into the next browser-local day", () => {
-  const initialDateKey = calendarDateKeyFromInstant(runInstant);
-
-  process.env.TZ = "Europe/Berlin";
-  assert.equal(initialDateKey, "2026-09-27");
-  assert.equal(runInstant.getDate(), 28);
 });

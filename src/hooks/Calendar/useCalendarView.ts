@@ -67,7 +67,6 @@ import {
   writeCalendarSessionDraft,
 } from "@/lib/calendarSessionDraft";
 import { markTaskDetailNavigationStart } from "@/lib/analytics/taskDetailReadiness";
-import { createInitialCalendarDates } from "@/lib/calendarInitialDate";
 
 export const CALENDAR_VIEWS_QUERY_KEY = ["calendar-views"] as const;
 
@@ -142,12 +141,8 @@ const buildCalendarTaskFilterSets = (
   labels: new Set(filters.labels),
 });
 
-export function useCalendarView(accountId: number, initialDateKey: string) {
-  const initialDates = useMemo(
-    () => createInitialCalendarDates(initialDateKey),
-    [initialDateKey],
-  );
-  const [currentDate, setCurrentDate] = useState(initialDates.currentDate);
+export function useCalendarView(accountId: number) {
+  const [currentDate, setCurrentDate] = useState(new Date());
   const [currentView, setCurrentView] = useRecoilState(currentViewAtom);
   const [calendarSettings, setCalendarSettings] = useRecoilState(calendarSettingsAtom);
   const {
@@ -164,8 +159,13 @@ export function useCalendarView(accountId: number, initialDateKey: string) {
     currentView,
     weekStartsOn: calendarSettings.weekStartsOn,
   });
-  const [currentDay, setCurrentDay] = useState(initialDates.currentDay);
-  const [today, setToday] = useState(initialDates.today);
+  const [currentDay, setCurrentDay] = useState<Date>(
+    new Date(
+      currentDate.getFullYear(),
+      currentDate.getMonth(),
+      currentDate.getDate()
+    )
+  );
   const [currentTask, setCurrentTask] = useState<number>(-1);
   const viewRef = useRef<"month" | "week" | "day" | null>(null);
   const pendingDateSelectRef = useRef<Date | null>(null);
@@ -197,10 +197,11 @@ export function useCalendarView(accountId: number, initialDateKey: string) {
     // changeQueued: a re-render is coming, so the sync effect will get a
     // second run with the applied values. A valid-but-equal param queues
     // nothing, and the mount write (same values) must then go through.
-    let validDateParam = false;
+    let validParam = false;
     let changeQueued = false;
     let viewChangeQueued = false;
     if (view === "day" || view === "week" || view === "month") {
+      validParam = true;
       urlDeepLinkRef.current.view = view;
       if (view !== currentView) {
         setCurrentView(view);
@@ -222,7 +223,7 @@ export function useCalendarView(accountId: number, initialDateKey: string) {
         parsed.getMonth() === month - 1 &&
         parsed.getDate() === day
       ) {
-        validDateParam = true;
+        validParam = true;
         urlDeepLinkRef.current.date = parsed;
         if (
           parsed.getTime() !==
@@ -237,18 +238,6 @@ export function useCalendarView(accountId: number, initialDateKey: string) {
           changeQueued = true;
         }
       }
-    }
-    // The server and browser can be on different local dates at the same
-    // instant. Hydrate with the server's date, then move to browser-local
-    // today after mount so the first HTML tree stays deterministic.
-    const browserToday = startOfDay(new Date());
-    if (!isSameDate(browserToday, today)) {
-      setToday(browserToday);
-    }
-    if (!validDateParam && !isSameDate(browserToday, currentDate)) {
-      setCurrentDate(browserToday);
-      setCurrentDay(browserToday);
-      changeQueued = true;
     }
     if (changeQueued) {
       // Skip the sync effect's mount run, which still sees pre-URL
@@ -2212,7 +2201,6 @@ export function useCalendarView(accountId: number, initialDateKey: string) {
 
   const statesToReturn = {
     currentDate,
-    today,
     currentView,
     currentDay,
     currentTask,
