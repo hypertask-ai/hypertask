@@ -5,7 +5,8 @@ import type { McpAgentSummary } from '@/lib/mcp/agents'
 import { mapVisibleMcpAgent, mcpVisibleAgentSelect } from '@/lib/mcp/agents'
 import prisma from '@/lib/prisma'
 import { turbopufferSearchTaskIds } from '@/utils/controllers/search/document'
-import { HTPR_6530_MCP_LIST_QUERY_FLAG, HTPR_6369_SEARCH_OPERATORS_FLAG, isFeatureEnabled } from '@/lib/flags'
+import { HTPR_6530_MCP_LIST_QUERY_FLAG, isFeatureEnabled } from '@/lib/flags'
+import { HTPR_6369_SEARCH_OPERATORS_FLAG } from '@/lib/flags'
 import { parseSearchWithNames } from '@/lib/search/operators'
 import { rankedSearchWhere } from '@/lib/search/rankedWhere'
 import {
@@ -282,31 +283,75 @@ export async function GET(request: NextRequest) {
         listQuery?.filter.has_pr ||
         listQuery?.filter.assignee !== undefined,
     )
-    const parsedQuery = operatorsEnabled ? await parseSearchWithNames(query, accessibleProjectIds) : null
-    const parsed = parsedQuery && Object.keys(parsedQuery.filters).length ? parsedQuery : null
-    const filtered = parsed
-      ? await rankedSearchWhere(parsed, accessibleProjectIds, status, limit,
+    let operatorResult: Awaited<ReturnType<typeof legacySearch>> | null = null
+
+    if (operatorsEnabled) {
+      const parsedQuery = await parseSearchWithNames(query, accessibleProjectIds)
+      const parsed = Object.keys(parsedQuery.filters).length ? parsedQuery : null
+      if (parsed) {
+        const filtered = await rankedSearchWhere(parsed, accessibleProjectIds, status, limit,
           { ...where, ...(parsed.filters.is ? { status: undefined } : {}) }, cursorId)
-      : null
-    if (filtered) {
-      where.AND = filtered.where.AND
-      if (parsed?.filters.is) where.status = filtered.where.status
-    }
-    const turbopufferIds = filtered
-      ? filtered.rankedIds
-      : await turbopufferSearchTaskIds({
-          searchQuery: query,
-          projectIds: accessibleProjectIds,
-          status,
-          projectId: targetProjectId ?? undefined,
-          perPage: Math.min(limit * 5, 100),
+        where.AND = filtered.where.AND
+        if (parsed.filters.is) where.status = filtered.where.status
+        if (parsed.text) where.id = { in: filtered.rankedIds }
+        const total = await prisma.task.count({ where })
+        const rankedIds = filtered.rankedIds
+        const rankedCursor = cursorId ? rankedIds.indexOf(cursorId) : -1
+        if (parsed.text && cursorId && rankedCursor < 0 && !sortField) {
+          return NextResponse.json({ success: false, error: 'Validation error', message: 'cursor must be a previous nextCursor value' }, { status: 400 })
+        }
+        const primaryIds = cursorId && rankedCursor < 0 ? [] : rankedIds.slice(rankedCursor + 1, rankedCursor + 1 + limit)
+        const operatorTasks = await prisma.task.findMany({
+          where: rankedIds.length && !sortField ? { ...where, id: { in: primaryIds } } : where,
+          select: {
+            id: true,
+            ticketNumber: true,
+            uniqueIndex: true,
+            title: true,
+            description: true,
+            section: true,
+            projectId: true,
+            project: {
+              select: {
+                id: true,
+                title: true
+              }
+            },
+            dueDate: true,
+            createdAt: true,
+            updatedAt: true,
+            agent: {
+              select: mcpVisibleAgentSelect(user.id),
+            },
+          },
+          ...(!parsed.text || sortField ? { orderBy: sortField
+            ? [{ [sortField]: sortOrder }, { id: 'asc' as const }]
+            : [{ updatedAt: 'desc' as const }, { id: 'asc' as const }] } : {}),
+          ...(parsed.text && !sortField ? {} : {
+            take: limit,
+            skip: cursorId ? 1 : 0,
+            ...(cursorId ? { cursor: { id: cursorId } } : {}),
+          }),
         })
+        const orderedTasks = sortField ? operatorTasks : operatorTasks
+          .toSorted((a, b) => rankedIds.indexOf(a.id) - rankedIds.indexOf(b.id)).slice(0, limit)
+        operatorResult = { orderedTasks, total }
+      }
+    }
+    async function legacySearch(query: string) {
+    const turbopufferIds = await turbopufferSearchTaskIds({
+      searchQuery: query,
+      projectIds: accessibleProjectIds,
+      status,
+      projectId: targetProjectId ?? undefined,
+      perPage: Math.min(limit * 5, 100),
+    })
     const useTurbopufferWindow =
-      !filtered && turbopufferIds.length > 0 && !extraFilters && !sortField
+      turbopufferIds.length > 0 && !extraFilters && !sortField
 
     if (useTurbopufferWindow) {
       where.id = { in: turbopufferIds }
-    } else if (!filtered) {
+    } else {
       where.OR = [
         { title: { contains: query, mode: 'insensitive' } },
         { description: { contains: query, mode: 'insensitive' } },
@@ -314,7 +359,6 @@ export async function GET(request: NextRequest) {
       ]
     }
 
-    if (filtered && parsed?.text) where.id = { in: filtered.rankedIds }
     // Count the complete filtered candidate set before applying a cursor window.
     const total = await prisma.task.count({ where })
     if (useTurbopufferWindow && cursorId) {
@@ -338,7 +382,9 @@ export async function GET(request: NextRequest) {
         ? undefined
         : [{ updatedAt: 'desc' as const }, { id: 'asc' as const }]
 
-    const taskSelect = {
+    const tasks = await prisma.task.findMany({
+      where,
+      select: {
         id: true,
         ticketNumber: true,
         uniqueIndex: true,
@@ -358,22 +404,9 @@ export async function GET(request: NextRequest) {
         agent: {
           select: mcpVisibleAgentSelect(user.id),
         },
-    } as const
-    const rankedMatchIds = filtered && parsed?.text && !sortField ? turbopufferIds : []
-    const rankedSet = new Set(rankedMatchIds)
-    const rankedAvailable = turbopufferIds.filter((id) => rankedSet.has(id))
-    const rankedCursor = cursorId ? rankedAvailable.indexOf(cursorId) : -1
-    if (filtered && parsed?.text && cursorId && rankedCursor < 0 && !sortField) {
-      return NextResponse.json({ success: false, error: 'Validation error', message: 'cursor must be a previous nextCursor value' }, { status: 400 })
-    }
-    const primaryIds = cursorId && rankedCursor < 0 ? [] : rankedAvailable.slice(rankedCursor + 1, rankedCursor + 1 + limit)
-    const tasks = await prisma.task.findMany({
-      where: filtered && turbopufferIds.length && !sortField
-        ? { ...where, id: { in: primaryIds } }
-        : where,
-      select: taskSelect,
-      ...(orderBy && (!filtered || sortField || !parsed?.text) ? { orderBy } : {}),
-      ...(filtered && parsed?.text && !sortField || useTurbopufferWindow
+      },
+      ...(orderBy ? { orderBy } : {}),
+      ...(useTurbopufferWindow
         ? {}
         : {
             take: limit,
@@ -387,9 +420,14 @@ export async function GET(request: NextRequest) {
           .map((id) => tasks.find((task) => task.id === id))
           .filter((task): task is NonNullable<typeof task> => task != null)
           .slice(0, limit)
-      : filtered && !sortField
-        ? tasks.toSorted((a, b) => turbopufferIds.indexOf(a.id) - turbopufferIds.indexOf(b.id)).slice(0, limit)
-        : tasks
+      : tasks
+
+    return { orderedTasks, total }
+    }
+
+    const searchResult = operatorResult ?? await legacySearch(query)
+    if (searchResult instanceof NextResponse) return searchResult
+    const { orderedTasks, total } = searchResult
 
     const nextCursor =
       orderedTasks.length === limit
