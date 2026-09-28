@@ -269,6 +269,23 @@ test("both rollback alerts include all dropped commits and each failed operation
   assert.match(workflow, /SUMMARY=[\s\S]*?\.revert\.dropped/);
 });
 
+test("rollback-capable test jobs do not retain a write-capable checkout token", async () => {
+  const workflow = await readFile(path.join(__dirname, "../.github/workflows/prod-health.yml"), "utf8");
+  const smoke = workflow.slice(workflow.indexOf("\n  smoke:"), workflow.indexOf("\n  glm-qa:"));
+  const coreActions = workflow.slice(
+    workflow.indexOf("\n  core-actions:"),
+    workflow.indexOf("\n  provision-core-actions:"),
+  );
+
+  for (const job of [smoke, coreActions]) {
+    assert.match(job, /permissions:\n\s+contents: read\n\s+statuses: write/);
+    assert.doesNotMatch(job, /^\s+(?:actions|contents): write$/m);
+    assert.match(job, /persist-credentials: false/);
+  }
+  assert.match(smoke, /"Freeze: " \+ \(if \.freeze then "set" else "FAILED" end\)/);
+  assert.doesNotMatch(smoke, /froze merging/);
+});
+
 test("manual dispatch never freezes or reverts", async () => {
   const before = process.env.GITHUB_EVENT_NAME;
   process.env.GITHUB_EVENT_NAME = "workflow_dispatch";

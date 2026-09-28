@@ -320,6 +320,7 @@ test("auto-merge waits for app smoke and runs when it completes", async () => {
   assert.match(workflow, /REQUIRED="\$REQUIRED feature-flag-gate"/);
   assert.match(ciWorkflow, /name: Verify live required-check settings/);
   assert.match(ciWorkflow, /if \. == "claude-review" then "ai-review" else \. end/);
+  assert.match(ciWorkflow, /unique \| sort \| \.\[\]/);
   assert.match(ciWorkflow, /default_branch.*gh api "repos\/\$REPO"/);
   assert.match(ciWorkflow, /name == "production-required-checks"/);
   assert.match(ciWorkflow, /\.target == "branch"/);
