@@ -13,9 +13,9 @@ import { expect } from '@playwright/test'
 //   The live app refetches getAll and boardTasks once each right after
 //   hydration (checked on the first real run, HTPR-6636), which is one
 //   refetch, not a loop.
-// - Sample the kanban column titles every 250ms for a window to catch
-//   columns disappearing and reappearing (a symptom of a refetch loop even
-//   when the final DOM state looks fine).
+// - Sample the rendered board every 250ms for a window to catch it going
+//   blank. A hydrated empty board may replace its pre-hydration columns with
+//   the normal empty-state UI, which is still a valid, visible board.
 export type LoopGuard = {
   loads: number
   boardFetches: number
@@ -23,7 +23,18 @@ export type LoopGuard = {
   stop: () => void
 }
 
+export type BoardVisibilityState = {
+  columnCount: number
+  firstColumnVisible: boolean
+  hiddenEmptyStateVisible: boolean
+}
+
+export function isVisibleBoardState(state: BoardVisibilityState): boolean {
+  return state.hiddenEmptyStateVisible || (state.columnCount > 0 && state.firstColumnVisible)
+}
+
 const BOARD_DATA_PATHS = new Set(['/api/projects/getAll', '/api/projects/boardTasks'])
+const HIDDEN_EMPTY_COLUMNS_HEADING = /^All columns are empty and hidden$/
 
 export function watchForLoops(page: Page): LoopGuard {
   const guard: LoopGuard = { loads: 0, boardFetches: 0, fetchesByPath: {}, stop: () => {} }
@@ -53,28 +64,41 @@ export function watchForLoops(page: Page): LoopGuard {
   return guard
 }
 
-// Samples a selector's count/visibility every 250ms for `durationMs`,
-// failing fast the moment a board that had columns loses them. Used for
-// journeys that open a real kanban board (open-board, switch-boards).
+// Samples a board every 250ms for `durationMs`, failing fast if neither its
+// columns nor its deliberate empty-state UI is visible. Used for journeys
+// that open a real kanban board (open-board, switch-boards).
 export async function assertColumnsStayVisible(
   page: Page,
   columnSelector: string,
   durationMs: number,
 ): Promise<void> {
   const columns = page.locator(columnSelector)
-  // `load` fires before the board data arrives, so wait for the first
-  // column to render before taking the baseline count.
-  await columns.first().waitFor({ state: 'visible', timeout: 15_000 }).catch(() => {})
-  const initialCount = await columns.count()
-  expect(initialCount, `no "${columnSelector}" columns present to watch`).toBeGreaterThan(0)
+  const hiddenEmptyState = page.getByRole('heading', { name: HIDDEN_EMPTY_COLUMNS_HEADING }).first()
+  const readState = async (): Promise<BoardVisibilityState> => {
+    const columnCount = await columns.count()
+    return {
+      columnCount,
+      firstColumnVisible: columnCount > 0 && await columns.first().isVisible(),
+      hiddenEmptyStateVisible: await hiddenEmptyState.isVisible(),
+    }
+  }
+
+  // `load` fires before board data arrives. The server-rendered columns can
+  // legitimately become the empty-state UI once saved view settings hydrate.
+  await expect.poll(
+    async () => isVisibleBoardState(await readState()),
+    { message: `board rendered neither "${columnSelector}" columns nor its hidden-empty-columns state`, timeout: 15_000 },
+  ).toBe(true)
 
   const deadline = Date.now() + durationMs
   while (Date.now() < deadline) {
-    const count = await columns.count()
-    expect(count, `board lost columns (had ${initialCount}, now ${count})`).toBeGreaterThanOrEqual(initialCount)
-    if (count > 0) {
-      expect(await columns.first().isVisible(), 'board columns became hidden').toBe(true)
-    }
+    const state = await readState()
+    expect(
+      isVisibleBoardState(state),
+      state.columnCount > 0
+        ? 'board columns became hidden'
+        : 'board hid all columns without the expected hidden-empty-columns state',
+    ).toBe(true)
     await page.waitForTimeout(Math.min(250, Math.max(0, deadline - Date.now())))
   }
 }
