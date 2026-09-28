@@ -101,13 +101,10 @@ test(`create task`, { tag: [idTag('create-task'), '@mobile'] }, async ({ page })
   await page.locator('.kanban-column-title').first().waitFor({ state: 'visible' })
 
   // Phones use the fixed, accessible "Create task" action; desktop uses the
-  // "+" column control. The chosen control opens either the full create-task
-  // modal or an inline quick-entry textarea, depending on the
-  // htpr-6175-quick-entry-cards flag (src/hooks/Homepage/useSections.ts).
-  // Either way,
-  // wait for the actual create response instead of scraping a card's href,
-  // so cleanup always has the real database id (not a ticket number, and
-  // never silently skipped by a `.catch(() => null)`).
+  // "+" column control. Both open either the full create-task modal or an
+  // inline quick-entry textarea, depending on the htpr-6175-quick-entry-cards
+  // flag (src/hooks/Homepage/useSections.ts). Wait for the create response so
+  // cleanup gets the real database id, not a ticket number.
   const createResponse = page.waitForResponse(
     (res) => /\/api\/tasks\/(create|createGlobally)/.test(res.url()) && res.request().method() === 'POST',
     { timeout: 15_000 },
