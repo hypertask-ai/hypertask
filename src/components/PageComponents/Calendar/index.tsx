@@ -66,6 +66,7 @@ const CalenderView = ({ currentUser }: { currentUser: IUser }) => {
   const {
     showDueDateModal,
     currentDate,
+    today,
     handleDateSelect,
     projects,
     checkedProjects,
@@ -246,7 +247,7 @@ const CalenderView = ({ currentUser }: { currentUser: IUser }) => {
         autoFocus={false}
         mode="single"
         defaultMonth={currentDate}
-        selected={new Date()}
+        selected={today}
         onSelect={handleDateSelect}
         numberOfMonths={1}
       />

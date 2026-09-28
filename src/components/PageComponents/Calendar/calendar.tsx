@@ -40,6 +40,7 @@ export function Calendar() {
     setCurrentView,
     handleDateSelect,
     currentDate,
+    today,
     toggleFilterModal,
     taskFilters,
     calendarSort,
@@ -78,7 +79,7 @@ export function Calendar() {
   const title = getCalendarTitle({
     currentView,
     currentDate,
-    today: new Date(),
+    today,
     weekStartsOn: calendarSettings.weekStartsOn === "monday" ? 1 : 0,
   });
   const hasActiveTaskFilters =
