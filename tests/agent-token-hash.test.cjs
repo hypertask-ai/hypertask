@@ -299,10 +299,9 @@ test("a malformed OAuth client claim fails closed", async () => {
 test("another JWT_SECRET-signed flow cannot claim its way out of the digest check", async () => {
   mintAndStore();
   const generation = state.agent.mcpTokenJti;
-  // Signature verification falls back to an audience-free pass for old tokens,
-  // so an email-link or calendar-feed token reaches the agent branch. Carrying
-  // the private OAuth generation claim must not buy it the digest exemption
-  // that a real OAuth access token gets.
+  // Wrong-purpose audiences fail during verification. An audience-less legacy
+  // token still reaches the agent branch, where the private OAuth generation
+  // claim must not buy the digest exemption that a real OAuth access token gets.
   for (const audience of ["email-link", "calendar-feed", undefined]) {
     const impostor = jwt.sign(
       {
