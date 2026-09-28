@@ -7,17 +7,50 @@ const jiti = require('jiti')(__filename, {
   cache: false,
 });
 
-const { isVisibleBoardState } = jiti(
+const { assertColumnsStayVisible, isVisibleBoardState } = jiti(
   path.join(process.cwd(), 'e2e/smoke/lib/loopGuard.ts'),
 );
 
-test('accepts empty-board UI after hydrated columns are filtered out', () => {
-  const observations = [
-    { columnCount: 3, firstColumnVisible: true, hiddenEmptyStateVisible: false },
-    { columnCount: 0, firstColumnVisible: false, hiddenEmptyStateVisible: true },
-  ];
+test('waits for the board hydration marker before checking columns', async () => {
+  let hydrated = false;
+  const page = {
+    locator(selector) {
+      if (selector === '[data-board-tasks-hydrated="true"]') {
+        return {
+          count: async () => {
+            if (!hydrated) {
+              hydrated = true;
+              return 0;
+            }
+            return 1;
+          },
+        };
+      }
+      return {
+        count: async () => {
+          assert.equal(hydrated, true);
+          return 3;
+        },
+        first: () => ({ isVisible: async () => true }),
+      };
+    },
+    getByRole: () => ({
+      first: () => ({ isVisible: async () => false }),
+    }),
+  };
 
-  assert.equal(observations.every(isVisibleBoardState), true);
+  await assertColumnsStayVisible(page, '.kanban-column-title', 0);
+});
+
+test('accepts the intentional hidden-empty-columns state after hydration', () => {
+  assert.equal(
+    isVisibleBoardState({
+      columnCount: 0,
+      firstColumnVisible: false,
+      hiddenEmptyStateVisible: true,
+    }),
+    true,
+  );
 });
 
 test('rejects a board that renders neither columns nor its empty state', () => {

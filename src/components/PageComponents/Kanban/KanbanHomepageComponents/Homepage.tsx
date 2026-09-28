@@ -898,6 +898,10 @@ const HomePage = ({
       onLabelTask={labelTaskForBulk}
     >
       <>
+      <span
+        data-board-tasks-hydrated={tasksHydrated ? "true" : "false"}
+        hidden
+      />
       <DragDropContext
         enableDefaultSensors={false}
         sensors={BOARD_SENSORS}

@@ -14,8 +14,8 @@ import { expect } from '@playwright/test'
 //   hydration (checked on the first real run, HTPR-6636), which is one
 //   refetch, not a loop.
 // - Sample the rendered board every 250ms for a window to catch it going
-//   blank. A hydrated empty board may replace its pre-hydration columns with
-//   the normal empty-state UI, which is still a valid, visible board.
+//   blank after its tasks hydrate. Before hydration, project metadata can
+//   briefly render columns with no task data and then replace them.
 export type LoopGuard = {
   loads: number
   boardFetches: number
@@ -34,6 +34,7 @@ export function isVisibleBoardState(state: BoardVisibilityState): boolean {
 }
 
 const BOARD_DATA_PATHS = new Set(['/api/projects/getAll', '/api/projects/boardTasks'])
+const TASKS_HYDRATED_SELECTOR = '[data-board-tasks-hydrated="true"]'
 const HIDDEN_EMPTY_COLUMNS_HEADING = /^All columns are empty and hidden$/
 
 export function watchForLoops(page: Page): LoopGuard {
@@ -73,6 +74,7 @@ export async function assertColumnsStayVisible(
   durationMs: number,
 ): Promise<void> {
   const columns = page.locator(columnSelector)
+  const tasksHydrated = page.locator(TASKS_HYDRATED_SELECTOR)
   const hiddenEmptyState = page.getByRole('heading', { name: HIDDEN_EMPTY_COLUMNS_HEADING }).first()
   const readState = async (): Promise<BoardVisibilityState> => {
     const columnCount = await columns.count()
@@ -83,11 +85,14 @@ export async function assertColumnsStayVisible(
     }
   }
 
-  // `load` fires before board data arrives. The server-rendered columns can
-  // legitimately become the empty-state UI once saved view settings hydrate.
+  await expect.poll(
+    async () => (await tasksHydrated.count()) > 0,
+    { message: 'board tasks did not finish hydrating', timeout: 15_000 },
+  ).toBe(true)
+
   await expect.poll(
     async () => isVisibleBoardState(await readState()),
-    { message: `board rendered neither "${columnSelector}" columns nor its hidden-empty-columns state`, timeout: 15_000 },
+    { message: `hydrated board rendered neither "${columnSelector}" columns nor its hidden-empty-columns state`, timeout: 15_000 },
   ).toBe(true)
 
   const deadline = Date.now() + durationMs
