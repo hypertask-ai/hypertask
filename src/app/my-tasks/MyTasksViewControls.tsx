@@ -189,6 +189,7 @@ const MyTasksViewControls = ({
     config.filters.showDone ? true : null,
     snoozeEnabled && config.filters.showSnoozed ? true : null,
   ].filter((value) => value !== null).length;
+  const boardScopeCount = config.boardIds === null ? 0 : 1;
   const scopeOptions = useMemo(
     () => buildMyTasksBoardScopeOptions(boards, config.boardIds),
     [boards, config.boardIds],
@@ -424,11 +425,24 @@ const MyTasksViewControls = ({
                   : "text-text-light-gray hover:text-white-black"
               }`}
             >
+              <span
+                className={
+                  commandScopePickerEnabled && boardScopeCount === 0
+                    ? "contents text-text-light-gray hover:text-white-black"
+                    : "contents"
+                }
+              >
               <LayoutGrid size={16} strokeWidth={1.5} />
               <span className="hidden @md:inline">Scope</span>
+              <span className={commandScopePickerEnabled ? "hidden" : "contents"}>
               {scopeCount > 0 && (
                 <span className="text-meta font-semibold">{scopeCount}</span>
               )}
+              </span>
+              {commandScopePickerEnabled && boardScopeCount > 0 && (
+                <span className="text-meta font-semibold">{boardScopeCount}</span>
+              )}
+              </span>
             </button>
             {scopeOpen && scopePanel}
             {commandScopePickerEnabled && scopeOpen && (
