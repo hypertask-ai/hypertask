@@ -271,6 +271,26 @@ test("failed reservation cannot suppress the threshold alarm or incident", async
   assert.equal(calls.filter((call) => call.url.endsWith("/api/mcp/tasks/create")).length, 1);
 });
 
+test("failed first-red state write sends an immediate degraded-monitoring alert", async () => {
+  const { handleSmokeResult } = await import(scriptUrl);
+  const { fetchImpl, calls } = alarmFetch();
+  const failedStateWrites = async (url, options) => {
+    if (url.endsWith("/actions/variables/PROD_SMOKE_STREAK")) {
+      calls.push({ url, options });
+      return response(403);
+    }
+    return fetchImpl(url, options);
+  };
+  await assert.rejects(
+    handleSmokeResult(config({ previousStreak: "0" }), failedStateWrites),
+    /GitHub smoke streak update failed with HTTP 403/,
+  );
+  const telegram = calls.filter((call) => isTelegramUrl(call.url));
+  assert.equal(telegram.length, 1);
+  assert.match(telegram[0].options.body.get("text"), /Monitoring is degraded/);
+  assert.equal(calls.some((call) => call.url.includes("/api/mcp/")), false);
+});
+
 test("recovery delivery failure remains pending and is retried once", async () => {
   const { handleSmokeResult } = await import(scriptUrl);
   const initial = alarmFetch();

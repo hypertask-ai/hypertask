@@ -177,10 +177,23 @@ export async function handleSmokeResult(config, fetchImpl = fetch) {
     // Reserve this episode before delivery when GitHub is available. The
     // reservation is a deduplication aid, not an alert gate: a variable-write
     // outage must not suppress the threshold alarm itself.
+    let reservationFailed = false;
     try {
       await persist();
     } catch (error) {
       errors.push(error);
+      reservationFailed = true;
+    }
+    if (reservationFailed && !state.episode) {
+      try {
+        await sendTelegram(
+          fetchImpl,
+          config,
+          `🔴 hypertasks: production smoke is red and the consecutive-failure counter could not be persisted. Monitoring is degraded; inspect immediately. ${config.runUrl}`,
+        );
+      } catch (error) {
+        errors.push(error);
+      }
     }
     if (state.episode && (!state.episode.incident || !state.episode.telegram)) {
       const evidence = { ...config, ...state.episode };
