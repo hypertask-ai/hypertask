@@ -516,6 +516,8 @@ export async function provisionLearnBoard(
   return provisionGeneratedBoard(LEARN_BOARD, owner, { boardKind: "learn" });
 }
 
+// Demo guests are temporary, auto-created identities, not real account signups.
+// They intentionally do not emit the permanent-account user_signed_up event.
 export async function provisionGuest(purpose: string): Promise<ProvisionedGuest> {
   const board = await boardFor(purpose);
   const guestUuid = randomUUID();

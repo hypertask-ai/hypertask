@@ -13,6 +13,7 @@ import { getRequestBaseUrl } from '@/lib/auth/requestBaseUrl'
 import { adoptGuestBoards } from '@/utils/controllers/demo/adoptGuestBoards'
 import { slimUserForCookie } from '@/lib/auth/slimUserCookie'
 import { seedResponseThemeCookie } from '@/lib/auth/themeCookie'
+import { signupAttributionFromHeaders } from '@/lib/telemetry/signupAnalytics'
 
 const JWT_ISSUER = process.env.JWT_ISSUER || 'hypertask'
 const JWT_AUDIENCE = process.env.JWT_AUDIENCE || 'email-link'
@@ -108,7 +109,8 @@ export async function POST(request: NextRequest) {
       },
       skipInteractive, // shouldSkipInteractive from request or config
       shouldSkipOnboarding, // Preserve existing onboarding status for instant signup users
-      shouldSetVerified // Only set verified if this is a verification token
+      shouldSetVerified, // Only set verified if this is a verification token
+      signupAttributionFromHeaders(request.headers, 'email'),
     )
 
     if (userUpdateResult.status !== 200) {
