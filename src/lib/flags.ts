@@ -41,6 +41,7 @@ import {
   HTPR_6283_AGENT_CHAT_LIVE_SORT_FLAG,
   HTPR_6284_AGENT_MENTION_ROUTING_FLAG,
   HTPR_6320_AI_OBSERVABILITY_FLAG,
+  HTPR_6673_SIGNUP_ANALYTICS_FLAG,
   HTPR_6407_MOBILE_AGENT_CHAT_LAYOUT_FLAG,
   HTPR_6476_MOBILE_AGENT_CHAT_FULLSCREEN_FLAG,
   POSTHOG_ERROR_ALERT_FLAG,
@@ -105,6 +106,12 @@ const RETIRED_FEATURE_FLAG_KEYS = new Set([
 const RETIRED_CLIENT_FEATURE_FLAGS = { "htpr-6072-shallow-board-switch": true } as const;
 
 const FEATURE_FLAG_DEFINITIONS = [
+  {
+    key: HTPR_6673_SIGNUP_ANALYTICS_FLAG,
+    shippedOn: "2026-09-28",
+    description:
+      "Records one PostHog signup event when a permanent account is created. Existing logins and temporary demo guests are excluded.",
+  },
   {
     key: HTPR_6470_PROJECT_DELETE_FLAG,
     shippedOn: "2026-09-18",
