@@ -77,6 +77,7 @@ import {
   HTPR_6559_KEEP_DIRECT_TASK_OPEN_FLAG,
   HTPR_6556_MOBILE_DESCRIPTION_FIRST_FLAG,
   HTPR_6561_DESCRIPTION_STRUCTURE_FLAG,
+  HTPR_6567_COMMAND_SCOPE_PICKER_FLAG,
   HTPR_6542_TEAM_SCOPED_MANAGEMENT_KEYS_FLAG,
 } from "@/lib/flags/keys";
 
@@ -608,6 +609,12 @@ const FEATURE_FLAG_DEFINITIONS = [
     shippedOn: "2026-09-15",
     description:
       "Shows a red overdue count next to each My Tasks view tab and board split tab. Hidden when the count is zero. Counts follow the filters that are on.",
+  },
+  {
+    key: HTPR_6567_COMMAND_SCOPE_PICKER_FLAG,
+    shippedOn: "2026-09-28",
+    description:
+      "Replaces the My Tasks Scope panel with the standard searchable board picker while keeping board multi-select.",
   },
   // ponytail: `shippedOn` is the calendar day the key first reached production, written by hand
   // because git history is not readable at runtime. Backfilled with

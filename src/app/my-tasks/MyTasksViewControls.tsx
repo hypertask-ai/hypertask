@@ -6,6 +6,7 @@ import OptionPickerModal from "@/components/Modals/OptionPicker";
 import { MOBILE_TARGET } from "@/lib/configs/general.config";
 import { EstimateConstants, PriorityConstants } from "@/lib/constants/constants";
 import {
+  HTPR_6567_COMMAND_SCOPE_PICKER_FLAG,
   MY_TASKS_FILTER_PARITY_FLAG,
   MY_TASKS_SCOPES_FLAG,
   MY_TASKS_SNOOZE_FLAG,
@@ -120,6 +121,9 @@ const MyTasksViewControls = ({
   const myTasksTableColumnsFlag = useFlag(MY_TASKS_TABLE_COLUMNS_FLAG);
   const myTasksScopesFlag = useFlag(MY_TASKS_SCOPES_FLAG);
   const myTasksSnoozeFlag = useFlag(MY_TASKS_SNOOZE_FLAG);
+  const commandScopePickerEnabled = useFlag(
+    HTPR_6567_COMMAND_SCOPE_PICKER_FLAG,
+  );
   const timeGroupFlag = useFlag(MY_TASKS_TIME_GROUP_FLAG);
   const timeGroupOn = Boolean(timeGroupEnabled || timeGroupFlag);
   const snoozeEnabled = Boolean(myTasksSnoozeFlag && snoozeEnabledProp);
@@ -130,10 +134,14 @@ const MyTasksViewControls = ({
   const [sortOpen, setSortOpen] = useState(false);
   const [groupOpen, setGroupOpen] = useState(false);
   const filterRef = useRef<HTMLDivElement>(null);
+  const scopeRef = useRef<HTMLDivElement>(null);
   const involvementRef = useRef<HTMLDivElement>(null);
   const sortRef = useRef<HTMLDivElement>(null);
   const groupRef = useRef<HTMLDivElement>(null);
   useClickOutside(filterRef, () => setFilterOpen(false));
+  useClickOutside(scopeRef, () => {
+    if (!commandScopePickerEnabled) setScopeOpen(false);
+  });
   useClickOutside(involvementRef, () => setInvolvementOpen(false));
   useClickOutside(sortRef, () => setSortOpen(false));
   useClickOutside(groupRef, () => setGroupOpen(false));
@@ -178,7 +186,16 @@ const MyTasksViewControls = ({
   ].filter((value) => value !== null).length;
 
   const kanbanFilterCount = myTasksParityFilterCount(config);
-  const scopeCount = config.boardIds === null ? 0 : 1;
+  const boardScopeCount = config.boardIds === null ? 0 : 1;
+  const legacyScopeCount = [
+    config.boardIds,
+    config.filters.sectionIds.length ? config.filters.sectionIds : null,
+    config.filters.showDone ? true : null,
+    snoozeEnabled && config.filters.showSnoozed ? true : null,
+  ].filter((value) => value !== null).length;
+  const scopeCount = commandScopePickerEnabled
+    ? boardScopeCount
+    : legacyScopeCount;
   const scopeOptions = useMemo(
     () => buildMyTasksBoardScopeOptions(boards, config.boardIds),
     [boards, config.boardIds],
@@ -268,6 +285,57 @@ const MyTasksViewControls = ({
       ? "custom"
       : (config.filters.dueDate ?? "");
 
+  const scopePanel = (
+    <div className="absolute right-0 top-full z-40 mt-1 max-h-[min(72vh,620px)] w-[min(92vw,420px)] overflow-y-auto rounded-[5px] bg-modalBackground p-4 shadow-md">
+      <div className="grid gap-5">
+        <Field label="Boards">
+          <CheckRow
+            checked={config.boardIds === null}
+            label="All boards"
+            onChange={() => setBoards(null)}
+          />
+          <div className="max-h-36 overflow-y-auto">
+            {boards.map((board) => (
+              <CheckRow
+                key={board.id}
+                checked={selectedBoardIds.includes(board.id)}
+                label={board.title}
+                onChange={() => toggleBoard(board.id)}
+              />
+            ))}
+          </div>
+        </Field>
+
+        <Field label="Columns">
+          <div className="max-h-44 overflow-y-auto">
+            {selectedBoards.map((board) => (
+              <div key={board.id} className="mb-2">
+                <p className="px-1 text-micro text-text-light-gray">{board.title}</p>
+                {board.sections.map((section) => (
+                  <CheckRow
+                    key={section.id}
+                    checked={config.filters.sectionIds.includes(section.id)}
+                    label={section.title}
+                    onChange={() => toggleNumber("sectionIds", section.id)}
+                  />
+                ))}
+              </div>
+            ))}
+          </div>
+        </Field>
+
+        <Field label="Completed tasks">
+          <CheckRow
+            checked={config.filters.showDone}
+            label="Show done"
+            onChange={() => updateFilters({ showDone: !config.filters.showDone })}
+          />
+        </Field>
+        {snoozeFilterField}
+      </div>
+    </div>
+  );
+
   if (!myTasksViewsEnabled && !timeGroupOn) return null;
 
   const closeOtherMenus = () => {
@@ -346,7 +414,10 @@ const MyTasksViewControls = ({
       ) : null}
       {myTasksViewsEnabled && filterParityEnabled ? (
         <>
-          <div>
+          <div
+            ref={scopeRef}
+            className={commandScopePickerEnabled ? undefined : "relative"}
+          >
             <button
               type="button"
               aria-label="My Tasks scope"
@@ -370,16 +441,20 @@ const MyTasksViewControls = ({
               )}
             </button>
             {scopeOpen && (
-              <OptionPickerModal
-                header="Scope"
-                placeholder="Type board name"
-                options={scopeOptions}
-                onSelect={(option) => {
-                  if (option.id === null) setBoards(null);
-                  else if (typeof option.id === "number") toggleBoard(option.id);
-                }}
-                onClose={() => setScopeOpen(false)}
-              />
+              commandScopePickerEnabled ? (
+                <OptionPickerModal
+                  header="Scope"
+                  placeholder="Type board name"
+                  options={scopeOptions}
+                  onSelect={(option) => {
+                    if (option.id === null) setBoards(null);
+                    else if (typeof option.id === "number") toggleBoard(option.id);
+                  }}
+                  onClose={() => setScopeOpen(false)}
+                />
+              ) : (
+                scopePanel
+              )
             )}
           </div>
 
