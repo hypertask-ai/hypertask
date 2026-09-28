@@ -2,6 +2,10 @@ import prisma from "@/lib/prisma";
 import authConfig from "@/lib/configs/auth.config";
 import { generalConfig } from "@/lib/configs/general.config";
 import {
+  recordUserSignedUp,
+  type SignupAttribution,
+} from "@/lib/telemetry/signupAnalytics";
+import {
   provisionNewUser,
   updateUserProfilePicture,
 } from "./provisionNewUser";
@@ -12,7 +16,8 @@ const update_or_create_user = async (
   user: any,
   shouldSkipInteractive: boolean = authConfig.onboarding.shouldSkipInteractive,
   skipOnboarding: boolean = authConfig.onboarding.skipOnboarding,
-  isVerified: boolean = true
+  isVerified: boolean = true,
+  signupAttribution: SignupAttribution = { signupMethod: "email" },
 ) => {
   try {
     if (!email || !user) {
@@ -53,6 +58,12 @@ const update_or_create_user = async (
         include: {
           UserSetting: true,
         },
+      });
+
+      recordUserSignedUp({
+        isNewUser: true,
+        userId: exist_user.id,
+        ...signupAttribution,
       });
 
       exist_user = await provisionNewUser({

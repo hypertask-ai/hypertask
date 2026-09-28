@@ -17,6 +17,7 @@ import {
   claimEmailCodeAttempt,
   getEmailCodeClientIp,
 } from '@/lib/auth/emailCodeRateLimit'
+import { signupAttributionFromHeaders } from '@/lib/telemetry/signupAnalytics'
 
 // --------- Route Handler ---------
 export async function POST(request: NextRequest) {
@@ -119,7 +120,8 @@ export async function POST(request: NextRequest) {
       },
       authConfig.onboarding.shouldSkipInteractive,
       authConfig.onboarding.skipOnboarding,
-      true // isVerified: true (email verified via code)
+      true, // isVerified: true (email verified via code)
+      signupAttributionFromHeaders(request.headers, 'email'),
     )
 
     if (userUpdateResult.status !== 200) {

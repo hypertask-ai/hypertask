@@ -7,6 +7,7 @@ import { VerificationCodeService } from '@/lib/services/verificationCodeService'
 import { CompleteOnboardingFirstStep } from '@/utils/controllers/users/completeOnboardingStep'
 import { companyRoleOptions, companySizeOptions } from '@/lib/constants/constants'
 import { sendEmail } from '@/lib/email/sendEmail'
+import { signupAttributionFromHeaders } from '@/lib/telemetry/signupAnalytics'
 
 // Separate audience for verification tokens
 const JWT_VERIFICATION_AUDIENCE = process.env.JWT_VERIFICATION_AUDIENCE || 'email-verification'
@@ -183,7 +184,12 @@ export async function POST(request: NextRequest) {
       },
       true, // shouldSkipInteractive - skip interactive tutorial
       true, // skipOnboarding - skip onboarding (user will see verification modal instead)
-      false // isVerified: false for instant signup
+      false, // isVerified: false for instant signup
+      signupAttributionFromHeaders(
+        request.headers,
+        'email',
+        typeof utmData?.utm_source === 'string' ? utmData.utm_source : undefined,
+      ),
     )
 
     if (userUpdateResult.status !== 200) {

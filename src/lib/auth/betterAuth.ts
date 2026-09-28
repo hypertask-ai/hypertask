@@ -12,6 +12,10 @@ import { legacyCookiePlugin } from '@/lib/auth/legacyCookiePlugin'
 import { sendEmail } from '@/lib/email/sendEmail'
 import { MANAGEMENT_KEY_PERMISSIONS } from '@/lib/mcp/managementPermissions'
 import prisma from '@/lib/prisma'
+import {
+  recordUserSignedUp,
+  signupAttributionFromHeaders,
+} from '@/lib/telemetry/signupAnalytics'
 import { provisionNewUser } from '@/utils/controllers/users/provisionNewUser'
 
 const EMAIL_FROM = process.env.EMAIL_FROM || 'noreply@hypertask.ai'
@@ -222,6 +226,15 @@ export const auth = betterAuth({
             if (!Number.isFinite(userId)) {
               throw new Error(`Invalid Better Auth user id: ${user.id}`)
             }
+
+            recordUserSignedUp({
+              isNewUser: true,
+              userId,
+              ...signupAttributionFromHeaders(
+                context?.request?.headers,
+                context?.path === '/callback/google' ? 'google' : 'email',
+              ),
+            })
 
             await provisionNewUser({
               userId,

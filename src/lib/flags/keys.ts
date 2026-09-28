@@ -42,6 +42,8 @@ export const HTPR_6284_AGENT_MENTION_ROUTING_FLAG =
 export const HTPR_6283_AGENT_CHAT_LIVE_SORT_FLAG =
   "htpr-6283-agent-chat-live-sort";
 export const HTPR_6320_AI_OBSERVABILITY_FLAG = "htpr-6320-ai-observability";
+export const HTPR_6673_SIGNUP_ANALYTICS_FLAG =
+  "htpr-6673-capture-user-signed-up-in-posthog";
 export const POSTHOG_ERROR_ALERT_FLAG = "htpr-6238-posthog-error-alert";
 export const MY_TASKS_PRIORITY_FILTER_FLAG =
   "htpr-6312-my-tasks-priority-filter";
