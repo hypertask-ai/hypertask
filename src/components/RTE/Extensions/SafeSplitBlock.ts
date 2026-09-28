@@ -35,7 +35,7 @@ function canSplitAfterDeletingSelection({ tr, editor }: CommandProps) {
     $from.node().attrs,
   );
   const atEnd = $to.parentOffset === $to.parent.content.size;
-  let types: SplitType[] | undefined =
+  const types: SplitType[] | undefined =
     atEnd && defaultNode
       ? [{ type: defaultNode, attrs: splitAttributes }]
       : undefined;
@@ -45,30 +45,21 @@ function canSplitAfterDeletingSelection({ tr, editor }: CommandProps) {
     selection,
   }).tr.deleteSelection();
   const splitPosition = deletedTransaction.mapping.map($from.pos);
-  let canSafelySplit = canSplit(
+  const canSafelySplit = canSplit(
     deletedTransaction.doc,
     splitPosition,
     1,
     types,
   );
 
-  if (
-    !types &&
-    !canSafelySplit &&
-    canSplit(
-      deletedTransaction.doc,
-      splitPosition,
-      1,
-      defaultNode ? [{ type: defaultNode }] : undefined,
-    )
-  ) {
-    canSafelySplit = true;
-    types = defaultNode
-      ? [{ type: defaultNode, attrs: splitAttributes }]
-      : undefined;
-  }
+  if (types || canSafelySplit) return canSafelySplit;
 
-  return canSafelySplit;
+  return canSplit(
+    deletedTransaction.doc,
+    splitPosition,
+    1,
+    defaultNode ? [{ type: defaultNode }] : undefined,
+  );
 }
 
 /**
