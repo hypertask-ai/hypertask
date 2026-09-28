@@ -15,3 +15,16 @@ test('only authenticated errors prove rejection in live probes', async () => {
   assert.equal(await isAuthRejection(expected, 'Invalid or expired token'), true)
   assert.equal(expected.bodyUsed, true)
 })
+
+test('only a machine-readable CLI authentication error proves rejection', async () => {
+  const { isCliAuthRejection } = await import('../scripts/strix-auth-response.mjs')
+  const authError = JSON.stringify({
+    success: false,
+    error: 'Unauthorized. Invalid or missing authentication token.',
+  })
+  assert.equal(isCliAuthRejection({ status: 4, stdout: authError }), true)
+  assert.equal(isCliAuthRejection({ status: 1, stdout: '' }), false)
+  assert.equal(isCliAuthRejection({ status: 1, stdout: '{"success":false,"error":"server unavailable"}' }), false)
+  assert.equal(isCliAuthRejection({ status: 0, stdout: authError }), false)
+  assert.equal(isCliAuthRejection({ status: null, stdout: authError, error: new Error('timed out') }), false)
+})

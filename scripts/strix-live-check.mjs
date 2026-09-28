@@ -6,7 +6,7 @@ import path from 'node:path';
 import { pathToFileURL, fileURLToPath } from 'node:url';
 import { createHash, randomBytes } from 'node:crypto';
 import { spawnSync } from 'node:child_process';
-import { isAuthRejection } from './strix-auth-response.mjs';
+import { isAuthRejection, isCliAuthRejection } from './strix-auth-response.mjs';
 
 const origin = 'https://app.hypertask.ai';
 const output = path.resolve(process.argv[2] || 'strix-live-results');
@@ -86,7 +86,8 @@ try {
       });
       let parsed; try { parsed = JSON.parse(cli.stdout); } catch { /* Report a failed positive control. */ }
       record('cli', valid ? 'Native CLI accepts QA bearer' : 'Native CLI rejects malformed bearer',
-        !cli.error && (valid ? cli.status === 0 && parsed?.success === true : cli.status !== 0), { exitCode: cli.status });
+        valid ? !cli.error && cli.status === 0 && parsed?.success === true : isCliAuthRejection(cli),
+        { exitCode: cli.status });
     }
   } finally { fs.rmSync(cliHome, { recursive: true, force: true }); }
   const redirectCheck = spawnSync('python3', [fileURLToPath(new URL('./strix-cli-check.py', import.meta.url))], {

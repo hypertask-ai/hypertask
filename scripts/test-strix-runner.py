@@ -78,7 +78,7 @@ if mode=='crash':sys.exit(7)
 p=pathlib.Path('strix_runs/owned');p.mkdir(parents=True)
 complete=mode!='budget'
 data={'status':'completed' if complete else 'budget_exceeded','scan_results':{'scan_completed':complete,'methodology':'COVERAGE_COMPLETE','technical_analysis':'Coverage incomplete' if mode=='incomplete' else 'Reviewed changes'}}
-(p/'run.json').write_text(json.dumps(data));(p/'penetration_test_report.md').write_text('Report')
+(p/'run.json').write_text(json.dumps(data));(p/'penetration_test_report.md').write_text('Report\\n\\nCOVERAGE_COMPLETE\\n')
 (p/'vulnerabilities.json').write_text('[]')
 if mode in ('findings','confirm'):
  finding={'title':'Informational fixture','severity':'low'} if mode=='findings' else {'title':'Auth weakness','severity':'high','code_locations':[{'file':'auth.py','start_line':1}]}
@@ -213,8 +213,28 @@ class ReportTests(unittest.TestCase):
             (root/'run.json').write_text(json.dumps({'status':'completed','scan_results':{
                 'scan_completed':True,'methodology':'COVERAGE_COMPLETE',
                 'technical_analysis':'The incomplete authorization check exposes account data.'}}))
-            (root/'penetration_test_report.md').write_text('Reviewed the scope')
+            (root/'penetration_test_report.md').write_text(
+                'The incomplete authorization check exposes account data.\n\nCOVERAGE_COMPLETE\n')
             self.assertEqual(load('strix-check-run').validate(temp),root)
+
+    def test_incomplete_report_prose_cannot_advance_scope(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root=Path(temp)/'run';root.mkdir()
+            (root/'run.json').write_text(json.dumps({'status':'completed','scan_results':{
+                'scan_completed':True,'methodology':'COVERAGE_COMPLETE'}}))
+            (root/'penetration_test_report.md').write_text(
+                'Coverage is incomplete because the budget was exhausted.\n\nCOVERAGE_COMPLETE\n')
+            with self.assertRaisesRegex(ValueError,'incomplete coverage'):
+                load('strix-check-run').validate(temp)
+
+    def test_report_itself_must_attest_to_complete_coverage(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root=Path(temp)/'run';root.mkdir()
+            (root/'run.json').write_text(json.dumps({'status':'completed','scan_results':{
+                'scan_completed':True,'methodology':'COVERAGE_COMPLETE'}}))
+            (root/'penetration_test_report.md').write_text('Reviewed the requested scope.\n')
+            with self.assertRaisesRegex(ValueError,'attest'):
+                load('strix-check-run').validate(temp)
 
     def test_batch_plan_respects_size_and_rejects_outside_source(self):
         with tempfile.TemporaryDirectory() as temp:
@@ -233,6 +253,7 @@ class ReportTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temp:
             run=Path(temp)/'run';run.mkdir()
             (run/'run.json').write_text(json.dumps({'status':'completed','scan_results':{'scan_completed':True}}))
+            (run/'penetration_test_report.md').write_text('COVERAGE_COMPLETE\n')
             with self.assertRaisesRegex(ValueError,'attest'):
                 load('strix-check-run').validate(temp)
 
