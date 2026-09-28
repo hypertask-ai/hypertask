@@ -61,8 +61,12 @@ def main():
             save()
         if not args.live_only:
             snapshots = {}
-            for name, remote, ref in [("app", "https://github.com/hypertask-ai/hypertask.git", "production"),
-                                      ("cli", "https://github.com/hypertask-ai/cli.git", "main")]:
+            repositories = {
+                "app": ("https://github.com/hypertask-ai/hypertask.git", "production"),
+                "cli": ("https://github.com/hypertask-ai/cli.git", "main"),
+            }
+            for name in sorted({profile["repository"] for profile in profiles.values()}):
+                remote, ref = repositories[name]
                 snapshots[name] = snapshot(state, output, name, remote, ref)
             for name, profile in profiles.items():
                 source, revision = snapshots[profile["repository"]]

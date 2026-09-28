@@ -34,6 +34,8 @@ install -d -m 700 "$DESTINATION/verification-auth" "$DESTINATION/node_modules"
 install -m 600 "$VERIFY_SOURCE/app-auth.mjs" "$VERIFY_SOURCE/config.mjs" "$DESTINATION/verification-auth/"
 for package in playwright playwright-core; do
   # Copy dependency code, never the verification account's credentials or logs.
+  rm -rf -- "$DESTINATION/node_modules/$package"
+  install -d -m 700 "$DESTINATION/node_modules/$package"
   cp -a "$VERIFY_SOURCE/node_modules/$package/." "$DESTINATION/node_modules/$package/"
 done
 for name in strix-weekly.sh strix-check-run.py strix-file-tickets.py \

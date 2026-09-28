@@ -311,13 +311,40 @@ class ReportTests(unittest.TestCase):
                 return source,'test-revision'
             with patch.dict(os.environ,STRIX_ASSESSMENT_STATE=temp), \
                  patch.object(sys,'argv',['strix-assess.py','--source-only','--profile','native-cli']), \
-                 patch.object(assessment,'snapshot',side_effect=fake_snapshot), \
+                 patch.object(assessment,'snapshot',side_effect=fake_snapshot) as snapshot_call, \
                  patch.object(assessment.batches,'run',return_value=0):
                 self.assertEqual(assessment.main(),0)
+            snapshot_call.assert_called_once()
+            self.assertEqual(snapshot_call.call_args.args[2],'cli')
             output=Path(json.loads((Path(temp)/'latest.json').read_text())['output'])
             self.assertTrue((output/'assessment.json').exists())
             self.assertFalse((output/'app').exists())
             self.assertFalse((output/'cli').exists())
+
+    def test_installer_replaces_dependency_directories(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root=Path(temp)
+            verify=root/'verify'
+            for name, content in {
+                'app-auth.mjs':'export {}\n',
+                'config.mjs':'export {}\n',
+                'node_modules/playwright/index.mjs':'export {}\n',
+                'node_modules/playwright/current.txt':'current\n',
+                'node_modules/playwright-core/package.json':'{}\n',
+                'node_modules/playwright-core/current.txt':'current\n',
+            }.items():
+                path=verify/name;path.parent.mkdir(parents=True,exist_ok=True);path.write_text(content)
+            destination=root/'installed'
+            stale=destination/'node_modules/playwright/stale.txt'
+            stale.parent.mkdir(parents=True);stale.write_text('stale\n')
+            result=subprocess.run(
+                ['/bin/bash',str(SCRIPTS/'install-strix-runner.sh')],
+                env={**os.environ,'HOME':str(root/'home'),'STRIX_INSTALL_DIR':str(destination),
+                     'STRIX_VERIFY_SOURCE':str(verify)},
+                capture_output=True,text=True)
+            self.assertEqual(result.returncode,0,result.stdout+result.stderr)
+            self.assertFalse(stale.exists())
+            self.assertEqual((destination/'node_modules/playwright/current.txt').read_text(),'current\n')
 
     def test_concurrent_modes_file_a_finding_only_once(self):
         reporter=load('strix-file-tickets')
