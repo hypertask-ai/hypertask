@@ -659,10 +659,19 @@ jobs:
           echo "Smoke QA confirmed a real failure on $SHA. Rolling back."
           RESULT=$(node .github/scripts/emergency-rollback.mjs "$SHA")
           echo "$RESULT"
+          PROMOTION_ACTION=$(echo "$RESULT" | jq -r '.promotion.action // "failed"')
+          PROMOTION_REASON=$(echo "$RESULT" | jq -r '.promotion.reason // ""')
+          case "$PROMOTION_ACTION:$PROMOTION_REASON" in
+            requested:*|skip:production\ already\ moved*|skip:production\ moved\ during*)
+              PROMOTION_SAFE=true ;;
+            *) PROMOTION_SAFE=false ;;
+          esac
           REVERT_STATUS=$(echo "$RESULT" | jq -r '.revert.status // "failed"')
+          if [ "$PROMOTION_SAFE" = true ]; then
           case "$REVERT_STATUS" in
             created|already-reverted|auto-rollback) echo "rolledback=true" >> "$GITHUB_OUTPUT" ;;
           esac
+          fi
           # A confirmed failure is never a green deploy, even if freeze or revert failed.
           if [ -n "${GITHUB_TOKEN:-}" ] && [ -n "${GITHUB_REPOSITORY:-}" ]; then
             curl -sS -o /dev/null -X POST \
@@ -678,9 +687,24 @@ jobs:
             "\nErrors: " + (if ((.errors // {}) | length) > 0 then (.errors | to_entries | map(.key + ": " + .value) | join("; ")) else "none" end) +
             "\nDropped commits:\n" + (if ((.revert.dropped // []) | length) > 0 then (.revert.dropped | map(.sha + " " + .title) | join("\n")) else "none" end)
           ')
-          notify "🔴 hypertasks: smoke QA failed for $SHA. $DETAILS
+          # A failed or skipped promotion may leave this broken SHA live; never
+          # wait for another smoke result to warn the on-call operator.
+          if [ "$(echo "$RESULT" | jq -r '.action // "failed"')" = "failed" ] || [ "$PROMOTION_SAFE" != true ]; then
+            notify "🔴 hypertasks: smoke QA failed for $SHA. $DETAILS
           Verify production, roll back manually if revert failed, and clear MERGE_FREEZE only after resolution. https://github.com/${{ github.repository }}/commit/$SHA"
+          fi
           exit 1
+
+      - name: Update the consecutive smoke alarm
+        if: ${{ always() && github.event_name == 'push' && (steps.smoke.outcome == 'success' || steps.smoke.outcome == 'failure') }}
+        env:
+          SMOKE_OUTCOME: ${{ steps.smoke.outcome == 'success' && 'green' || 'red' }}
+          PROD_SMOKE_STREAK: ${{ vars.PROD_SMOKE_STREAK || '0' }}
+          HYPERTASK_MCP_TOKEN: ${{ secrets.HYPERTASK_MCP_TOKEN }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          GITHUB_TOKEN: ${{ secrets.AUTOMERGE_TOKEN }}
+        run: node .github/scripts/prod-smoke-alarm.mjs
 
   # ── GLM exploratory QA (HTPR-6239): a 5-minute human-style pass on the live app ──
   # Runs whenever a production push is actually live and nothing rolled back,
