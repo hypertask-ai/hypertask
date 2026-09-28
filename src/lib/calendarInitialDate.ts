@@ -22,7 +22,7 @@ export const calendarDateFromKey = (dateKey: string) => {
   return date;
 };
 
-export const initialCalendarDates = (dateKey: string) => ({
+export const createInitialCalendarDates = (dateKey: string) => ({
   currentDate: calendarDateFromKey(dateKey),
   currentDay: calendarDateFromKey(dateKey),
   today: calendarDateFromKey(dateKey),

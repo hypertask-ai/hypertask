@@ -14,7 +14,7 @@ const jiti = createJiti(__filename, { interopDefault: true });
 const {
   calendarDateFromKey,
   calendarDateKeyFromInstant,
-  initialCalendarDates,
+  createInitialCalendarDates,
 } = jiti(path.join(root, "src/lib/calendarInitialDate.ts"));
 const { getCalendarTitle } = jiti(
   path.join(
@@ -49,7 +49,7 @@ const initialSnapshot = (timezone, dateKey) => {
 };
 
 const CalendarInitialMarkup = ({ dateKey }) => {
-  const [dates] = React.useState(() => initialCalendarDates(dateKey));
+  const [dates] = React.useState(() => createInitialCalendarDates(dateKey));
   const snapshot = calendarSnapshot(dates.currentDate);
   return React.createElement(
     "div",

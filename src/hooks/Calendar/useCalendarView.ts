@@ -67,7 +67,7 @@ import {
   writeCalendarSessionDraft,
 } from "@/lib/calendarSessionDraft";
 import { markTaskDetailNavigationStart } from "@/lib/analytics/taskDetailReadiness";
-import { initialCalendarDates } from "@/lib/calendarInitialDate";
+import { createInitialCalendarDates } from "@/lib/calendarInitialDate";
 
 export const CALENDAR_VIEWS_QUERY_KEY = ["calendar-views"] as const;
 
@@ -144,7 +144,7 @@ const buildCalendarTaskFilterSets = (
 
 export function useCalendarView(accountId: number, initialDateKey: string) {
   const initialDates = useMemo(
-    () => initialCalendarDates(initialDateKey),
+    () => createInitialCalendarDates(initialDateKey),
     [initialDateKey],
   );
   const [currentDate, setCurrentDate] = useState(initialDates.currentDate);
@@ -245,12 +245,10 @@ export function useCalendarView(accountId: number, initialDateKey: string) {
     if (!isSameDate(browserToday, today)) {
       setToday(browserToday);
     }
-    if (!validDateParam) {
-      if (!isSameDate(browserToday, currentDate)) {
-        setCurrentDate(browserToday);
-        setCurrentDay(browserToday);
-        changeQueued = true;
-      }
+    if (!validDateParam && !isSameDate(browserToday, currentDate)) {
+      setCurrentDate(browserToday);
+      setCurrentDay(browserToday);
+      changeQueued = true;
     }
     if (changeQueued) {
       // Skip the sync effect's mount run, which still sees pre-URL
