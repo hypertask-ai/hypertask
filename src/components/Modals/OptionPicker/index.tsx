@@ -135,7 +135,7 @@ const OptionPickerModal: React.FC<Props> = ({
               >
                 <span>{option.label}</span>
                 <span className="flex items-center gap-2">
-                  {option.hint && <span>{option.hint}</span>}
+                {option.hint && <span>{option.hint}</span>}
                   {option.selected && <Check size={16} strokeWidth={1.5} />}
                 </span>
               </ModalRowElementContainer>

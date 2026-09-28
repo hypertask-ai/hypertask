@@ -18,7 +18,6 @@ import {
   buildMyTasksBoardScopeOptions,
   MY_TASKS_SCOPE_VALUES,
   normalizeMyTasksScopes,
-  toggleMyTasksBoardScope,
   type MyTasksScope,
 } from "@/lib/myTasksScopes";
 import { migrateFlatFiltersToFilterSettings, myTasksParityFilterCount } from "@/lib/filterSettingsMutations";
@@ -139,9 +138,7 @@ const MyTasksViewControls = ({
   const sortRef = useRef<HTMLDivElement>(null);
   const groupRef = useRef<HTMLDivElement>(null);
   useClickOutside(filterRef, () => setFilterOpen(false));
-  useClickOutside(scopeRef, () => {
-    if (!commandScopePickerEnabled) setScopeOpen(false);
-  });
+  useClickOutside(scopeRef, () => setScopeOpen(false));
   useClickOutside(involvementRef, () => setInvolvementOpen(false));
   useClickOutside(sortRef, () => setSortOpen(false));
   useClickOutside(groupRef, () => setGroupOpen(false));
@@ -186,16 +183,12 @@ const MyTasksViewControls = ({
   ].filter((value) => value !== null).length;
 
   const kanbanFilterCount = myTasksParityFilterCount(config);
-  const boardScopeCount = config.boardIds === null ? 0 : 1;
-  const legacyScopeCount = [
+  const scopeCount = [
     config.boardIds,
     config.filters.sectionIds.length ? config.filters.sectionIds : null,
     config.filters.showDone ? true : null,
     snoozeEnabled && config.filters.showSnoozed ? true : null,
   ].filter((value) => value !== null).length;
-  const scopeCount = commandScopePickerEnabled
-    ? boardScopeCount
-    : legacyScopeCount;
   const scopeOptions = useMemo(
     () => buildMyTasksBoardScopeOptions(boards, config.boardIds),
     [boards, config.boardIds],
@@ -258,13 +251,11 @@ const MyTasksViewControls = ({
   };
 
   const toggleBoard = (boardId: number) => {
-    setBoards(
-      toggleMyTasksBoardScope(
-        config.boardIds,
-        boards.map((board) => board.id),
-        boardId,
-      ),
-    );
+    const current = config.boardIds ?? boards.map((board) => board.id);
+    const next = current.includes(boardId)
+      ? current.filter((id) => id !== boardId)
+      : [...current, boardId];
+    setBoards(next.length === boards.length ? null : next);
   };
 
   const setRange = (
@@ -286,6 +277,7 @@ const MyTasksViewControls = ({
       : (config.filters.dueDate ?? "");
 
   const scopePanel = (
+    <div className={commandScopePickerEnabled ? "hidden" : "contents"}>
     <div className="absolute right-0 top-full z-40 mt-1 max-h-[min(72vh,620px)] w-[min(92vw,420px)] overflow-y-auto rounded-[5px] bg-modalBackground p-4 shadow-md">
       <div className="grid gap-5">
         <Field label="Boards">
@@ -333,6 +325,7 @@ const MyTasksViewControls = ({
         </Field>
         {snoozeFilterField}
       </div>
+    </div>
     </div>
   );
 
@@ -414,10 +407,7 @@ const MyTasksViewControls = ({
       ) : null}
       {myTasksViewsEnabled && filterParityEnabled ? (
         <>
-          <div
-            ref={scopeRef}
-            className={commandScopePickerEnabled ? undefined : "relative"}
-          >
+          <div ref={scopeRef} className="relative">
             <button
               type="button"
               aria-label="My Tasks scope"
@@ -440,21 +430,18 @@ const MyTasksViewControls = ({
                 <span className="text-meta font-semibold">{scopeCount}</span>
               )}
             </button>
-            {scopeOpen && (
-              commandScopePickerEnabled ? (
-                <OptionPickerModal
-                  header="Scope"
-                  placeholder="Type board name"
-                  options={scopeOptions}
-                  onSelect={(option) => {
-                    if (option.id === null) setBoards(null);
-                    else if (typeof option.id === "number") toggleBoard(option.id);
-                  }}
-                  onClose={() => setScopeOpen(false)}
-                />
-              ) : (
-                scopePanel
-              )
+            {scopeOpen && scopePanel}
+            {commandScopePickerEnabled && scopeOpen && (
+              <OptionPickerModal
+                header="Scope"
+                placeholder="Type board name"
+                options={scopeOptions}
+                onSelect={(option) => {
+                  if (option.id === null) setBoards(null);
+                  else if (typeof option.id === "number") toggleBoard(option.id);
+                }}
+                onClose={() => setScopeOpen(false)}
+              />
             )}
           </div>
 

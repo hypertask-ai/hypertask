@@ -45,19 +45,6 @@ export function buildMyTasksBoardScopeOptions(
   ];
 }
 
-export function toggleMyTasksBoardScope(
-  selectedBoardIds: number[] | null,
-  availableBoardIds: number[],
-  boardId: number | null,
-): number[] | null {
-  if (boardId === null) return null;
-  const selected = new Set(selectedBoardIds ?? availableBoardIds);
-  if (selected.has(boardId)) selected.delete(boardId);
-  else selected.add(boardId);
-  const next = availableBoardIds.filter((id) => selected.has(id));
-  return next.length === availableBoardIds.length ? null : next;
-}
-
 /** Allowlists and dedupes. Empty or garbage input becomes assigned-only. */
 export function normalizeMyTasksScopes(value: unknown): MyTasksScope[] {
   if (!Array.isArray(value)) return [...DEFAULT_MY_TASKS_SCOPES];
