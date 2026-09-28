@@ -8,6 +8,7 @@ import {
   useEffect,
   useRef,
 } from "react";
+import { SafeSplitBlock } from "@/components/RTE/Extensions/SafeSplitBlock";
 
 // Dedicated editor for Agent Chat. useTiptapForAI also mounts AI-chat
 // mentions and slash commands, which send to the AI chat thread, not this one.
@@ -45,6 +46,7 @@ export function ControlledComposerEditor({
         gapcursor: false,
         link: { autolink: false },
       }),
+      SafeSplitBlock,
       Placeholder.configure({
         placeholder: () => placeholderRef.current,
         emptyEditorClass: `${styles.is_editor_empty}`,

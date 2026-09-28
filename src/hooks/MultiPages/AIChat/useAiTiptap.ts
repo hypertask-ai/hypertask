@@ -17,6 +17,7 @@ import { writingAssistanceEditorProps } from "@/components/RTE/writingAssistance
 import { LocalWritingAssistance } from "@/components/RTE/writingAssistance";
 import { useFlag } from "@/hooks/useFlag";
 import { LOCAL_WRITING_ASSISTANCE_FLAG } from "@/lib/flags/keys";
+import { SafeSplitBlock } from "@/components/RTE/Extensions/SafeSplitBlock";
 
 const DisableEnter = Extension.create({
   addKeyboardShortcuts() {
@@ -104,6 +105,7 @@ const useTiptapForAI = ({
       // "/slug ", which the chat stream route resolves server-side.
       SlashCommands("ai-chat"),
       DisableEnter,
+      SafeSplitBlock,
       LocalWritingAssistance.configure({
         localCapitalizationEnabled: () => localWritingAssistanceRef.current,
       }),

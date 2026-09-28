@@ -50,6 +50,7 @@ import { ReplyBlockquote } from "./Extensions/ReplyBlockquote";
 import { useFlag } from "@/hooks/useFlag";
 import { withMentionBackspaceDeletion } from "./Extensions/DeleteMentionOnBackspace";
 import { LinkableMention } from "./Extensions/LinkableMention";
+import { SafeSplitBlock } from "./Extensions/SafeSplitBlock";
 import { writingAssistanceEditorProps } from "./writingAssistance";
 import { LocalWritingAssistance } from "./writingAssistance";
 
@@ -266,6 +267,7 @@ const useTiptap = ({
         },
       }),
       DisableEnter,
+      SafeSplitBlock,
       HypertaskPasteRule,
       LocalWritingAssistance.configure({
         localCapitalizationEnabled: () => localWritingAssistanceRef.current,
