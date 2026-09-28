@@ -143,11 +143,20 @@ test(`create task`, { tag: [idTag('create-task'), '@mobile'] }, async ({ page })
   const createdId = (body.newTask?.newTask ?? body.newTask ?? body)?.id
   if (createdId) createdTaskIds.push(createdId)
 
-  await expect(page.locator(`text=${title}`).first(), 'created task card did not appear on the board').toBeVisible({ timeout: 10_000 })
+  // Mobile "Save" opens the created task, whose title is an input value.
+  // Desktop stays on the board, where the title is card text.
+  const expectCreatedTask = async (message: string) => {
+    if (isMobileViewport) {
+      await expect(page.locator('#title-input'), message).toHaveValue(title, { timeout: 10_000 })
+      return
+    }
+    await expect(page.locator(`text=${title}`).first(), message).toBeVisible({ timeout: 10_000 })
+  }
+  await expectCreatedTask('created task did not appear after save')
 
   // Confirm persistence past this render, not just an optimistic UI update.
   await page.reload()
-  await expect(page.locator(`text=${title}`).first(), 'task did not persist after reload').toBeVisible({ timeout: 10_000 })
+  await expectCreatedTask('task did not persist after reload')
 })
 
 test(`edit description`, { tag: [idTag('edit-description')] }, async ({ page, request }) => {
