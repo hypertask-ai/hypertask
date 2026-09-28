@@ -40,7 +40,7 @@ export const MULTIPROMPT_AGENT_MARKER =
 
 type RealtimeBrowserContext = {
   __multipromptNotificationClickBridgeInstalled?: boolean;
-  location: Pick<Location, "search">;
+  location: Pick<Location, "hostname" | "search">;
   navigator: Pick<Navigator, "webdriver">;
   sessionStorage: Pick<Storage, "getItem" | "removeItem" | "setItem">;
 } & {
@@ -73,6 +73,17 @@ export function realtimeDisabledForBrowser(
   if (browser.__multipromptNotificationClickBridgeInstalled === true) {
     updateRealtimePreference(browser.sessionStorage, true);
     return true;
+  }
+
+  const localSmokePreference = new URLSearchParams(
+    browser.location.search,
+  ).get("realtime");
+  const localSmokeOrigin =
+    browser.location.hostname === "127.0.0.1" ||
+    browser.location.hostname === "localhost";
+  if (localSmokePreference === "on" && localSmokeOrigin) {
+    updateRealtimePreference(browser.sessionStorage, false);
+    return false;
   }
 
   // agent-browser launches headless Chrome without the WebDriver automation
