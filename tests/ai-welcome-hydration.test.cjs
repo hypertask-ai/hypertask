@@ -28,9 +28,6 @@ const stubModule = (filename, exports) => {
   };
 };
 
-const moduleMatches = (request, alias, suffix) =>
-  request === alias || request.replaceAll("\\", "/").endsWith(suffix);
-
 test("AI welcome suggestions hydrate before using browser board data", async () => {
   const originalLoad = Module._load;
   const originalRandom = Math.random;
@@ -119,113 +116,8 @@ test("AI welcome suggestions hydrate before using browser board data", async () 
   let dom;
 
   Module._load = (request, parent, isMain) => {
-    if (
-      moduleMatches(
-        request,
-        "@/lib/contexts/Multipages/AI_Agent/AI_Agent_Chat_Context",
-        "/lib/contexts/Multipages/AI_Agent/AI_Agent_Chat_Context.tsx",
-      )
-    ) {
-      return {
-        useAiChatContext: () => ({
-          handleSendMessage: () => {},
-          isDetailPage: false,
-          selectSession: () => {},
-          editor: null,
-        }),
-      };
-    }
     if (request === "next/navigation") {
       return { usePathname: () => "/project?id=1" };
-    }
-    if (request === "@tanstack/react-query") {
-      return {
-        useQuery: () => ({
-          data: undefined,
-          isLoading: false,
-        }),
-      };
-    }
-    if (moduleMatches(request, "@/lib/state", "/lib/state.tsx")) {
-      return {
-        useRecoilValue: (atom) => {
-          if (atom === atoms.currentProjectAtom) {
-            if (typeof global.window === "undefined") return null;
-            return {
-              id: 1,
-              title: "QA runner board",
-              sections: [
-                {
-                  id: 10,
-                  section_title: "Todo",
-                  deleted: false,
-                  items: [
-                    {
-                      id: 100,
-                      status: "Normal",
-                      assignees: [],
-                    },
-                  ],
-                },
-              ],
-            };
-          }
-          if (atom === atoms.inViewObjectAtom) return null;
-          if (atom === atoms.taskDetailNonEssentialReadyAtom) return true;
-          return null;
-        },
-      };
-    }
-    if (moduleMatches(request, "@/store", "/store/index.ts")) {
-      return atoms;
-    }
-    if (
-      moduleMatches(
-        request,
-        "@/lib/demo/isGuestClient",
-        "/lib/demo/isGuestClient.ts",
-      )
-    ) {
-      return { isGuestCookieUser: () => false };
-    }
-    if (
-      moduleMatches(
-        request,
-        "@/lib/demo/guestBoardBuild",
-        "/lib/demo/guestBoardBuild.ts",
-      )
-    ) {
-      return { isGuestBoardBuild: () => false };
-    }
-    if (
-      moduleMatches(
-        request,
-        "./GuestBoardSpotlight",
-        "/components/AI_CHAT/GuestBoardSpotlight.tsx",
-      )
-    ) {
-      return { GuestBoardSpotlight: () => null };
-    }
-    if (
-      moduleMatches(
-        request,
-        "@/utils/generateTime",
-        "/utils/generateTime.ts",
-      )
-    ) {
-      return { __esModule: true, default: () => "" };
-    }
-    if (request === "lucide-react") {
-      return { Sparkles: () => null };
-    }
-    if (
-      moduleMatches(
-        request,
-        "./taskSummaryAction",
-        "/components/AI_CHAT/taskSummaryAction.ts",
-      )
-    ) {
-      return { taskSummaryActionFor: () => null };
     }
     return originalLoad(request, parent, isMain);
   };
