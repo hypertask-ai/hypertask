@@ -101,7 +101,7 @@ test('rejects attached but hidden board columns even with an empty state', async
   });
 
   await assert.rejects(
-    assertColumnsStayVisible(page, '.kanban-column-title', 100),
+    assertColumnsStayVisible(page, '.kanban-column-title', 0),
     /board columns became hidden/,
   );
 });

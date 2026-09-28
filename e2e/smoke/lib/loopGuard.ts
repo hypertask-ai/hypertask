@@ -88,6 +88,7 @@ export async function assertColumnsStayVisible(
   await columns.first().waitFor({ state: 'visible', timeout: 15_000 }).catch(() => {})
   const initialCount = await columns.count()
   expect(initialCount, `no "${columnSelector}" columns present to watch`).toBeGreaterThan(0)
+  expect(await columns.first().isVisible(), 'board columns became hidden').toBe(true)
 
   const deadline = Date.now() + durationMs
   while (Date.now() < deadline) {
