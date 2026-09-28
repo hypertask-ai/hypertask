@@ -174,9 +174,14 @@ export async function handleSmokeResult(config, fetchImpl = fetch) {
         incident: false, telegram: false,
       };
     }
-    // Reserve this episode before any delivery. If this write fails, the
-    // next run still sees streak 1 and can retry red #2 without duplicating it.
-    await persist();
+    // Reserve this episode before delivery when GitHub is available. The
+    // reservation is a deduplication aid, not an alert gate: a variable-write
+    // outage must not suppress the threshold alarm itself.
+    try {
+      await persist();
+    } catch (error) {
+      errors.push(error);
+    }
     if (state.episode && (!state.episode.incident || !state.episode.telegram)) {
       const evidence = { ...config, ...state.episode };
       if (!state.episode.incident) {
@@ -214,7 +219,12 @@ export async function handleSmokeResult(config, fetchImpl = fetch) {
     if (state.episode?.recovering) {
       // Keep incomplete work across green runs as well; don't send a stale
       // red alert after recovery, but do file its evidence for human review.
-      await persist();
+      // Recovery delivery remains independent of the state store too.
+      try {
+        await persist();
+      } catch (error) {
+        errors.push(error);
+      }
       if (!state.episode.incident) {
         try {
           if (!config.mcpToken) throw new Error("HYPERTASK_MCP_TOKEN is not configured");
