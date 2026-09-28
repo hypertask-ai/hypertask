@@ -2,6 +2,7 @@
 
 import useClickOutside from "@/hooks/MultiPages/useClickOutside";
 import { useFlag } from "@/hooks/useFlag";
+import OptionPickerModal from "@/components/Modals/OptionPicker";
 import { MOBILE_TARGET } from "@/lib/configs/general.config";
 import { EstimateConstants, PriorityConstants } from "@/lib/constants/constants";
 import {
@@ -13,8 +14,10 @@ import {
   MY_TASKS_VIEWS_FLAG,
 } from "@/lib/flags/keys";
 import {
+  buildMyTasksBoardScopeOptions,
   MY_TASKS_SCOPE_VALUES,
   normalizeMyTasksScopes,
+  toggleMyTasksBoardScope,
   type MyTasksScope,
 } from "@/lib/myTasksScopes";
 import { migrateFlatFiltersToFilterSettings, myTasksParityFilterCount } from "@/lib/filterSettingsMutations";
@@ -127,12 +130,10 @@ const MyTasksViewControls = ({
   const [sortOpen, setSortOpen] = useState(false);
   const [groupOpen, setGroupOpen] = useState(false);
   const filterRef = useRef<HTMLDivElement>(null);
-  const scopeRef = useRef<HTMLDivElement>(null);
   const involvementRef = useRef<HTMLDivElement>(null);
   const sortRef = useRef<HTMLDivElement>(null);
   const groupRef = useRef<HTMLDivElement>(null);
   useClickOutside(filterRef, () => setFilterOpen(false));
-  useClickOutside(scopeRef, () => setScopeOpen(false));
   useClickOutside(involvementRef, () => setInvolvementOpen(false));
   useClickOutside(sortRef, () => setSortOpen(false));
   useClickOutside(groupRef, () => setGroupOpen(false));
@@ -177,12 +178,11 @@ const MyTasksViewControls = ({
   ].filter((value) => value !== null).length;
 
   const kanbanFilterCount = myTasksParityFilterCount(config);
-  const scopeCount = [
-    config.boardIds,
-    config.filters.sectionIds.length ? config.filters.sectionIds : null,
-    config.filters.showDone ? true : null,
-    snoozeEnabled && config.filters.showSnoozed ? true : null,
-  ].filter((value) => value !== null).length;
+  const scopeCount = config.boardIds === null ? 0 : 1;
+  const scopeOptions = useMemo(
+    () => buildMyTasksBoardScopeOptions(boards, config.boardIds),
+    [boards, config.boardIds],
+  );
 
   const updateFilters = (filters: Partial<MyTasksViewConfig["filters"]>) =>
     onChange({ ...config, filters: { ...config.filters, ...filters } });
@@ -241,11 +241,13 @@ const MyTasksViewControls = ({
   };
 
   const toggleBoard = (boardId: number) => {
-    const current = config.boardIds ?? boards.map((board) => board.id);
-    const next = current.includes(boardId)
-      ? current.filter((id) => id !== boardId)
-      : [...current, boardId];
-    setBoards(next.length === boards.length ? null : next);
+    setBoards(
+      toggleMyTasksBoardScope(
+        config.boardIds,
+        boards.map((board) => board.id),
+        boardId,
+      ),
+    );
   };
 
   const setRange = (
@@ -265,57 +267,6 @@ const MyTasksViewControls = ({
     typeof config.filters.dueDate === "object" && config.filters.dueDate
       ? "custom"
       : (config.filters.dueDate ?? "");
-
-  const scopePanel = (
-    <div className="absolute right-0 top-full z-40 mt-1 max-h-[min(72vh,620px)] w-[min(92vw,420px)] overflow-y-auto rounded-[5px] bg-modalBackground p-4 shadow-md">
-      <div className="grid gap-5">
-        <Field label="Boards">
-          <CheckRow
-            checked={config.boardIds === null}
-            label="All boards"
-            onChange={() => setBoards(null)}
-          />
-          <div className="max-h-36 overflow-y-auto">
-            {boards.map((board) => (
-              <CheckRow
-                key={board.id}
-                checked={selectedBoardIds.includes(board.id)}
-                label={board.title}
-                onChange={() => toggleBoard(board.id)}
-              />
-            ))}
-          </div>
-        </Field>
-
-        <Field label="Columns">
-          <div className="max-h-44 overflow-y-auto">
-            {selectedBoards.map((board) => (
-              <div key={board.id} className="mb-2">
-                <p className="px-1 text-micro text-text-light-gray">{board.title}</p>
-                {board.sections.map((section) => (
-                  <CheckRow
-                    key={section.id}
-                    checked={config.filters.sectionIds.includes(section.id)}
-                    label={section.title}
-                    onChange={() => toggleNumber("sectionIds", section.id)}
-                  />
-                ))}
-              </div>
-            ))}
-          </div>
-        </Field>
-
-        <Field label="Completed tasks">
-          <CheckRow
-            checked={config.filters.showDone}
-            label="Show done"
-            onChange={() => updateFilters({ showDone: !config.filters.showDone })}
-          />
-        </Field>
-        {snoozeFilterField}
-      </div>
-    </div>
-  );
 
   if (!myTasksViewsEnabled && !timeGroupOn) return null;
 
@@ -395,7 +346,7 @@ const MyTasksViewControls = ({
       ) : null}
       {myTasksViewsEnabled && filterParityEnabled ? (
         <>
-          <div ref={scopeRef} className="relative">
+          <div>
             <button
               type="button"
               aria-label="My Tasks scope"
@@ -418,7 +369,18 @@ const MyTasksViewControls = ({
                 <span className="text-meta font-semibold">{scopeCount}</span>
               )}
             </button>
-            {scopeOpen && scopePanel}
+            {scopeOpen && (
+              <OptionPickerModal
+                header="Scope"
+                placeholder="Type board name"
+                options={scopeOptions}
+                onSelect={(option) => {
+                  if (option.id === null) setBoards(null);
+                  else if (typeof option.id === "number") toggleBoard(option.id);
+                }}
+                onClose={() => setScopeOpen(false)}
+              />
+            )}
           </div>
 
           <button

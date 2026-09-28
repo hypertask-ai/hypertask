@@ -7,6 +7,7 @@ import {
   ModalRowElementContainer,
 } from "@/components/Common/CommonModalComponents";
 import useHandleMouseGlobal from "@/hooks/General/useHandleMouse";
+import { Check } from "lucide-react";
 import { ChangeEvent, useEffect, useMemo, useState } from "react";
 import { ModalBody } from "reactstrap";
 
@@ -18,6 +19,7 @@ export interface PickerOption {
   id: string | number | null;
   label: string;
   hint?: string;
+  selected?: boolean;
 }
 
 interface Props {
@@ -132,7 +134,10 @@ const OptionPickerModal: React.FC<Props> = ({
                 isSelected={selectedIndex === index}
               >
                 <span>{option.label}</span>
-                {option.hint && <span>{option.hint}</span>}
+                <span className="flex items-center gap-2">
+                  {option.hint && <span>{option.hint}</span>}
+                  {option.selected && <Check size={16} strokeWidth={1.75} />}
+                </span>
               </ModalRowElementContainer>
             ))
           )}

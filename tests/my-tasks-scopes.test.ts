@@ -2,10 +2,12 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
+  buildMyTasksBoardScopeOptions,
   buildMyTasksScopeOr,
   DEFAULT_MY_TASKS_SCOPES,
   effectiveMyTasksScopes,
   normalizeMyTasksScopes,
+  toggleMyTasksBoardScope,
 } from "../src/lib/myTasksScopes";
 import {
   DEFAULT_MY_TASKS_VIEW_CONFIG,
@@ -32,6 +34,42 @@ test("effectiveMyTasksScopes forces assigned when the flag is off", () => {
     DEFAULT_MY_TASKS_SCOPES,
   );
   assert.deepEqual(effectiveMyTasksScopes(["created"], true), ["created"]);
+});
+
+test("board scope options use a command-picker list with selected rows", () => {
+  const boards = [
+    { id: 11, title: "Product" },
+    { id: 22, title: "QA" },
+  ];
+
+  assert.deepEqual(buildMyTasksBoardScopeOptions(boards, [22]), [
+    { id: null, label: "All boards", selected: false },
+    { id: 11, label: "Product", selected: false },
+    { id: 22, label: "QA", selected: true },
+  ]);
+  assert.deepEqual(buildMyTasksBoardScopeOptions(boards, null), [
+    { id: null, label: "All boards", selected: true },
+    { id: 11, label: "Product", selected: true },
+    { id: 22, label: "QA", selected: true },
+  ]);
+});
+
+test("board scope picker keeps existing multi-select behavior", () => {
+  const availableBoardIds = [11, 22, 33];
+
+  assert.deepEqual(
+    toggleMyTasksBoardScope(null, availableBoardIds, 22),
+    [11, 33],
+  );
+  assert.deepEqual(
+    toggleMyTasksBoardScope([11], availableBoardIds, 22),
+    [11, 22],
+  );
+  assert.equal(
+    toggleMyTasksBoardScope([11], [11, 22], 22),
+    null,
+  );
+  assert.equal(toggleMyTasksBoardScope([11], availableBoardIds, null), null);
 });
 
 test("parseMyTasksViewConfig keeps scopes when present and defaults when missing", () => {

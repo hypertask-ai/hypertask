@@ -13,6 +13,51 @@ const SCOPE_SET = new Set<string>(MY_TASKS_SCOPE_VALUES);
 
 export const DEFAULT_MY_TASKS_SCOPES: MyTasksScope[] = ["assigned"];
 
+type MyTasksBoardScope = {
+  id: number;
+  title: string;
+};
+
+export type MyTasksBoardScopeOption = {
+  id: number | null;
+  label: string;
+  selected: boolean;
+};
+
+export function buildMyTasksBoardScopeOptions(
+  boards: MyTasksBoardScope[],
+  selectedBoardIds: number[] | null,
+): MyTasksBoardScopeOption[] {
+  const selected = new Set(
+    selectedBoardIds ?? boards.map((board) => board.id),
+  );
+  return [
+    {
+      id: null,
+      label: "All boards",
+      selected: selectedBoardIds === null,
+    },
+    ...boards.map((board) => ({
+      id: board.id,
+      label: board.title,
+      selected: selected.has(board.id),
+    })),
+  ];
+}
+
+export function toggleMyTasksBoardScope(
+  selectedBoardIds: number[] | null,
+  availableBoardIds: number[],
+  boardId: number | null,
+): number[] | null {
+  if (boardId === null) return null;
+  const selected = new Set(selectedBoardIds ?? availableBoardIds);
+  if (selected.has(boardId)) selected.delete(boardId);
+  else selected.add(boardId);
+  const next = availableBoardIds.filter((id) => selected.has(id));
+  return next.length === availableBoardIds.length ? null : next;
+}
+
 /** Allowlists and dedupes. Empty or garbage input becomes assigned-only. */
 export function normalizeMyTasksScopes(value: unknown): MyTasksScope[] {
   if (!Array.isArray(value)) return [...DEFAULT_MY_TASKS_SCOPES];
