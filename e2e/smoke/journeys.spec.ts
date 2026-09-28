@@ -140,6 +140,24 @@ test(`create task`, { tag: [idTag('create-task'), '@mobile'] }, async ({ page })
   const createdId = (body.newTask?.newTask ?? body.newTask ?? body)?.id
   if (createdId) createdTaskIds.push(createdId)
 
+  if ((page.viewportSize()?.width ?? 1280) < 768) {
+    const taskDetailTitle = page.locator('#title-input')
+    const boardCard = page.locator(`text=${title}`).first()
+    await expect.poll(
+      async () => (await taskDetailTitle.isVisible()) || (await boardCard.isVisible()),
+      { message: 'created task did not appear after save', timeout: 10_000 },
+    ).toBe(true)
+
+    // Mobile modal "Save" opens task detail, whose title is an input value.
+    // Inline quick entry stays on the board and uses the card checks below.
+    if (await taskDetailTitle.isVisible()) {
+      await expect(taskDetailTitle, 'created task did not open after save').toHaveValue(title)
+      await page.reload()
+      await expect(taskDetailTitle, 'task did not persist after reload').toHaveValue(title, { timeout: 10_000 })
+      return
+    }
+  }
+
   await expect(page.locator(`text=${title}`).first(), 'created task card did not appear on the board').toBeVisible({ timeout: 10_000 })
 
   // Confirm persistence past this render, not just an optimistic UI update.
