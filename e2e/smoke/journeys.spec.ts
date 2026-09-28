@@ -100,11 +100,12 @@ test(`create task`, { tag: [idTag('create-task'), '@mobile'] }, async ({ page })
   await page.goto(withRealtime(board.boardPath), { waitUntil: 'load' })
   await page.locator('.kanban-column-title').first().waitFor({ state: 'visible' })
 
-  // Phones use the fixed, accessible "Create task" action; desktop uses the
-  // "+" column control. Both open either the full create-task modal or an
+  // The "+" column control opens either the full create-task modal or an
   // inline quick-entry textarea, depending on the htpr-6175-quick-entry-cards
-  // flag (src/hooks/Homepage/useSections.ts). Wait for the create response so
-  // cleanup gets the real database id, not a ticket number.
+  // flag (src/hooks/Homepage/useSections.ts), handle both. Either way,
+  // wait for the actual create response instead of scraping a card's href,
+  // so cleanup always has the real database id (not a ticket number, and
+  // never silently skipped by a `.catch(() => null)`).
   const createResponse = page.waitForResponse(
     (res) => /\/api\/tasks\/(create|createGlobally)/.test(res.url()) && res.request().method() === 'POST',
     { timeout: 15_000 },
@@ -113,14 +114,10 @@ test(`create task`, { tag: [idTag('create-task'), '@mobile'] }, async ({ page })
   // retry until the modal or the inline input shows up.
   const modalTitleInput = page.locator('#title-input-modal')
   const inlineInput = page.locator('textarea[placeholder*="task" i], input[placeholder*="task" i]').first()
-  const isMobileViewport = (page.viewportSize()?.width ?? 1280) < 768
-  const createTaskButton = isMobileViewport
-    ? page.getByRole('button', { name: 'Create task', exact: true })
-    : page.locator('.create-new-task-button').first()
   await expect(async () => {
-    await createTaskButton.click()
+    await page.locator('.create-new-task-button').first().click()
     await expect(modalTitleInput.or(inlineInput)).toBeVisible({ timeout: 2_000 })
-  }, 'the create-task button never opened a create-task form').toPass({ timeout: 15_000 })
+  }, 'the + column button never opened a create-task form').toPass({ timeout: 15_000 })
 
   if (await modalTitleInput.isVisible()) {
     // In the modal, Enter in the title only moves focus to the description.
@@ -143,20 +140,19 @@ test(`create task`, { tag: [idTag('create-task'), '@mobile'] }, async ({ page })
   const createdId = (body.newTask?.newTask ?? body.newTask ?? body)?.id
   if (createdId) createdTaskIds.push(createdId)
 
-  // Mobile "Save" opens the created task, whose title is an input value.
-  // Desktop stays on the board, where the title is card text.
-  const expectCreatedTask = async (message: string) => {
-    if (isMobileViewport) {
-      await expect(page.locator('#title-input'), message).toHaveValue(title, { timeout: 10_000 })
-      return
-    }
-    await expect(page.locator(`text=${title}`).first(), message).toBeVisible({ timeout: 10_000 })
+  if ((page.viewportSize()?.width ?? 1280) < 768) {
+    // Mobile "Save" opens task detail, whose title is an input value.
+    await expect(page.locator('#title-input'), 'created task did not open after save').toHaveValue(title, { timeout: 10_000 })
+    await page.reload()
+    await expect(page.locator('#title-input'), 'task did not persist after reload').toHaveValue(title, { timeout: 10_000 })
+    return
   }
-  await expectCreatedTask('created task did not appear after save')
+
+  await expect(page.locator(`text=${title}`).first(), 'created task card did not appear on the board').toBeVisible({ timeout: 10_000 })
 
   // Confirm persistence past this render, not just an optimistic UI update.
   await page.reload()
-  await expectCreatedTask('task did not persist after reload')
+  await expect(page.locator(`text=${title}`).first(), 'task did not persist after reload').toBeVisible({ timeout: 10_000 })
 })
 
 test(`edit description`, { tag: [idTag('edit-description')] }, async ({ page, request }) => {
