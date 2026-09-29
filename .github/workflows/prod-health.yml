@@ -534,6 +534,8 @@ jobs:
         id: setup-checkout
         if: steps.provisioned.outputs.ok == 'true'
         continue-on-error: true
+        with:
+          persist-credentials: false
 
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         id: setup-node
@@ -1104,6 +1106,7 @@ jobs:
         with:
           ref: ${{ github.event_name == 'push' && github.sha || 'production' }}
           fetch-depth: 200
+          persist-credentials: false
 
       # HTPR-6258: core-actions runs as the dedicated Health Check user.
       - name: Run the logged-in core actions and restore the fixture
