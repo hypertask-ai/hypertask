@@ -97,7 +97,10 @@ test("the selected settings team survives a full page reload", () => {
     pagehideListeners.splice(0).forEach((listener) => listener());
 
     const afterReload = createStore();
-    assert.equal(afterReload.get(loadSelectedTeamAtom()), "team-b");
+    const reloadedAtom = loadSelectedTeamAtom();
+    const unsubscribe = afterReload.sub(reloadedAtom, () => {});
+    assert.equal(afterReload.get(reloadedAtom), "team-b");
+    unsubscribe();
   } finally {
     if (previousWindow === undefined) delete global.window;
     else global.window = previousWindow;

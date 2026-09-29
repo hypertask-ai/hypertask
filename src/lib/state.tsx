@@ -204,10 +204,16 @@ export const recoilPersist = () => {
 
 export function atom<T>(options: RecoilAtomOptions<T>): ResettableAtom<T> {
   const shouldPersistAtom = shouldPersist(options.effects_UNSTABLE);
-  const initialValue = shouldPersistAtom
-    ? readPersistedValue(options.key, options.default)
-    : options.default;
-  const baseAtom = jotaiAtom<T>(initialValue);
+  const baseAtom = jotaiAtom<T>(options.default);
+
+  if (shouldPersistAtom) {
+    // Server rendering cannot read localStorage. Restore the saved value only
+    // after the atom mounts so SSR and the browser's hydration pass both use
+    // the declared default.
+    baseAtom.onMount = (setValue) => {
+      setValue(readPersistedValue(options.key, options.default));
+    };
+  }
 
   const recoilShapedAtom = jotaiAtom(
     (get) => get(baseAtom),
