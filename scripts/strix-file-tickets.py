@@ -74,6 +74,33 @@ def esc(value):
     return html.escape(str(value or "").strip())
 
 
+def _files_calling_symbol(symbol, roots, extensions=(".ts", ".tsx", ".cjs", ".zig")):
+    """Files under roots whose extension matches and that contain a
+    call-like reference to symbol. A pure-Python walk (skipping
+    node_modules/.next, same as the repo's other source scanners) so caller
+    discovery does not need an external ripgrep binary that a bare CI runner
+    may not have installed.
+    """
+    pattern = re.compile(rf"\b{re.escape(symbol)}\s*\(")
+    matches = []
+    for root in roots:
+        root_path = Path(root)
+        if not root_path.is_dir():
+            continue
+        for candidate in root_path.rglob("*"):
+            if candidate.suffix not in extensions or not candidate.is_file():
+                continue
+            if "node_modules" in candidate.parts or ".next" in candidate.parts:
+                continue
+            try:
+                text = candidate.read_text(encoding="utf-8")
+            except (OSError, UnicodeDecodeError):
+                continue
+            if pattern.search(text):
+                matches.append(str(candidate))
+    return matches
+
+
 def source_evidence(finding):
     evidence = []
     symbols = set()
@@ -115,14 +142,7 @@ def source_evidence(finding):
         for symbol in sorted(symbols)[:3]:
             if not roots:
                 break
-            result = subprocess.run(
-                ["rg", "-n", "-l", "--glob", "*.ts", "--glob", "*.tsx", "--glob", "*.cjs", "--glob", "*.zig",
-                 rf"\b{re.escape(symbol)}\s*\(", *roots],
-                capture_output=True, text=True, timeout=10,
-            )
-            if result.returncode not in (0, 1):
-                raise ValueError("could not read caller context")
-            for raw in sorted(result.stdout.splitlines())[:5]:
+            for raw in sorted(_files_calling_symbol(symbol, roots))[:5]:
                 candidate = Path(raw).resolve()
                 try:
                     relative = candidate.relative_to(APP)

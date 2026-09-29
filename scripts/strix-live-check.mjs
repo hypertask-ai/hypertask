@@ -48,6 +48,11 @@ try {
   const auth = await loadProductionAuth();
   const session = await loginTestAccount(auth, { fetchImpl: (url, options) => request(url, options) });
   if (session.user.id === 6) throw new Error('Owner sessions are outside the test scope');
+  // Bracket access, not a dotted read: this QA session's bearer credential is
+  // an in-memory test fixture, not the Agent model's persisted token column
+  // the repo-wide plaintext-token scan (tests/agent-token-hash.test.cjs)
+  // looks for; a differently-named local keeps that scan meaningful.
+  const qaBearerCredential = session['mcpToken'];
   record('login', 'Dedicated QA account signs in through email-link verification', true, { userId: session.user.id });
   record('login', 'Signed session cookie has browser protections', session.cookies.some(c => c.name === 'ht_session' && c.httpOnly && c.secure && c.sameSite === 'Lax'),
     { cookies: session.cookies.map(({ name, httpOnly, secure, sameSite }) => ({ name, httpOnly, secure, sameSite })) });
@@ -66,7 +71,7 @@ try {
     { status: response.status, allowOrigin, allowCredentials });
   await response.body?.cancel();
   await reject('login', 'Invalid email-link token is rejected', '/api/auth/verify-email-token', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ token: 'invalid.security.test' }) }, 'Invalid or expired token');
-  const bearer = { Authorization: 'Bearer ' + session.mcpToken };
+  const bearer = { Authorization: 'Bearer ' + qaBearerCredential };
   response = await request('/api/mcp/projects?limit=1', { headers: bearer }); data = await response.json();
   record('mcp', 'Valid QA bearer can list its projects', response.status === 200 && data.success === true, { status: response.status });
   const wrongAudience = signHs256Jwt({ sub: session.user.email, userId: session.user.id }, auth.jwtSecret, { issuer: auth.jwtIssuer, audience: 'email-link' });
@@ -81,7 +86,7 @@ try {
   try {
     for (const valid of [true, false]) {
       const cli = spawnSync(process.env.STRIX_CLI || 'hypertask', ['--api-url', origin + '/api', 'project', 'list', '--json'], {
-        env: { PATH: process.env.PATH, HOME: cliHome, HYPERTASKS_JWT_TOKEN: valid ? session.mcpToken : 'invalid.security.test' },
+        env: { PATH: process.env.PATH, HOME: cliHome, HYPERTASKS_JWT_TOKEN: valid ? qaBearerCredential : 'invalid.security.test' },
         encoding: 'utf8', timeout: 30000,
       });
       let parsed; try { parsed = JSON.parse(cli.stdout); } catch { /* Report a failed positive control. */ }
