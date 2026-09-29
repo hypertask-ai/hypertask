@@ -1,6 +1,6 @@
 export const isControlQFocusShortcut = (
   event: Event,
-): event is KeyboardEvent => {
+): boolean => {
   const keyboardEvent = event as Partial<KeyboardEvent>;
 
   return (

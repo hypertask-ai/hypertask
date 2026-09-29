@@ -129,7 +129,7 @@ export const ChatProvider = ({ children }: { children: ReactNode }) => {
     // Tiptap consumes Control+Q before a bubbling document listener can see it.
     // Route only this established focus shortcut during capture; every other AI
     // shortcut keeps the existing bubble-phase behavior (HTPR-5204 follow-up).
-    const handleLayoutKeydownCapture = (event: Event) => {
+    const handleLayoutKeydownCapture = (event: KeyboardEvent) => {
       if (!isControlQFocusShortcut(event)) return;
 
       layoutKeydownRef.current(event);

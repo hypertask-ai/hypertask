@@ -495,7 +495,7 @@ export default function GlobalProvider({
   // Once mounted, ChatProvider owns the established two-way focus behavior.
   useEffect(() => {
     if (shouldMountChatRuntime || isFullScreenChat) return;
-    const openChatFromFocusShortcut = (event: Event) => {
+    const openChatFromFocusShortcut = (event: KeyboardEvent) => {
       if (!isControlQFocusShortcut(event)) return;
       event.preventDefault();
       event.stopPropagation();
