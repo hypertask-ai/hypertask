@@ -209,5 +209,8 @@ jobs:
             -f context=app-smoke \
             -f description="$description"
           if [ -n "$PR" ]; then
-            gh workflow run automerge.yml --repo "$REPO" --ref production -f pr="$PR"
+            # The status above is the result. Auto-merge is switched off by hand
+            # on purpose, so a refused dispatch must not turn a green run red.
+            gh workflow run automerge.yml --repo "$REPO" --ref production -f pr="$PR" ||
+              echo "::warning::Could not start automerge.yml (workflow may be disabled). The app-smoke status was already published."
           fi
