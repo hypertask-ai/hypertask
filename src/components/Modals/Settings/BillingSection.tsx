@@ -4,7 +4,6 @@ import axios from "axios";
 import { ReactNode, useEffect, useState } from "react";
 import toast from "react-hot-toast";
 import { useRouter } from "next/navigation";
-import { planKindFromStripePriceId } from "@/lib/planFromStripePriceId";
 import { convertTimestampToFormattedDate } from "@/utils/helperFunctions/helperFunctions";
 import {
   BillingActionRow,
@@ -44,7 +43,8 @@ type SettingsBillingData = {
 
 const BillingSection = () => {
   const router = useRouter();
-  const { ownerAndMembers, project, refetchTeam, team } = useSettingsTeam();
+  const { billing, ownerAndMembers, project, refetchTeam, team } =
+    useSettingsTeam();
   const [confirmCancelSubscription, setConfirmCancelSubscription] =
     useState(false);
   const [confirmingCancel, setConfirmingCancel] = useState(false);
@@ -59,11 +59,8 @@ const BillingSection = () => {
   const [billingEmailDraft, setBillingEmailDraft] = useState("");
   const [savingBillingEmail, setSavingBillingEmail] = useState(false);
 
-  const activeSubscription = team?.subscriptionPlan?.[0] ?? null;
-  const plan = planKindFromStripePriceId(activeSubscription?.priceId);
-  const planLabel = team?.activeSubscriptionPlanId ? plan.storePlanId : "Free";
-  const billingCycle =
-    activeSubscription?.interval ?? plan.billingInterval ?? "Free Plan";
+  const planLabel = billing?.storePlanId ?? "Free";
+  const billingCycle = billing?.billingInterval ?? "Free Plan";
   const usedSeats =
     (ownerAndMembers.owner ? 1 : 0) + ownerAndMembers.members.length;
   const hasPaidPlan = Boolean(team?.activeSubscriptionPlanId);
