@@ -13,7 +13,6 @@ interface MentionListProps extends HTMLAttributes<HTMLElement> {
   selectItem: (index: number) => void;
   id: string;
   loadingLabel?: string;
-  optionIdPrefix?: string;
 }
 
 export function MentionListRows({
@@ -28,7 +27,6 @@ export function MentionListRows({
   id,
   className,
   loadingLabel = "Loading mentions...",
-  optionIdPrefix = "mention-button",
 }: MentionListProps) {
   return (
     <div
@@ -43,9 +41,11 @@ export function MentionListRows({
       role="listbox"
     >
       {isLoading ? (
-        <div role="status" className="item flex items-center gap-2 p-3">
+        <div className="item flex items-center gap-2 p-3">
           <div className="animate-spin rounded-full h-4 w-4 border-2 border-gray-300 border-t-blue-600" />
-          <span>{loadingLabel}</span>
+          {loadingLabel === "Loading mentions..." ? (
+          <span>Loading mentions...</span>
+          ) : <span>{loadingLabel}</span>}
         </div>
       ) : hasItems && !noResults ? (
         items.map((item: MentionItem, index: number) => (
@@ -65,7 +65,6 @@ export function MentionListRows({
                   type="button"
                   role="option"
                   aria-selected={index === selectedIndex}
-                  id={`${optionIdPrefix}-${index}`}
                   onMouseEnter={() => setSelectedIndex(index)}
                   className={`item ${
                     index === selectedIndex
@@ -73,6 +72,7 @@ export function MentionListRows({
                       : ""
                   }`}
                   onClick={() => selectItem(index)}
+                  id={`mention-button-${index}`}
                   onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') event.stopPropagation(); }}
                 >
                   {(item?.type === "name" || item?.type === "agent") && (

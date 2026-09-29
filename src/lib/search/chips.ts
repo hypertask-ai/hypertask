@@ -1,13 +1,13 @@
-import { parseSearchQuery, type Names, type SearchToken } from './operators'
+import { parseSearchTokens, type Names, type SearchToken } from './operators'
 
 export function splitSearchChips(raw: string, editing = false, names: Names = {}) {
-  const tokens: SearchToken[] = []
-  parseSearchQuery(raw, names, tokens)
+  const tokens = parseSearchTokens(raw, names)
   const chips = editing ? tokens.filter((token) => {
     if (token.raw.includes('"')) return true
     const namesForOperator = names[token.operator as keyof Names]
     if (['from', 'assignee', 'in', 'board', 'label'].includes(token.operator)) {
       const value = token.value.replace(/^[@#]/, '').toLowerCase()
+      if (/^\d+$/.test(token.value) && namesForOperator?.includes(token.value)) return true
       if (!namesForOperator?.some((name) => name.toLowerCase() === value) ||
         namesForOperator.some((name) => name.length > value.length && name.toLowerCase().startsWith(value))) return false
       return true
@@ -33,15 +33,15 @@ export function chipQuery(chips: SearchToken[], text: string) {
   return [...chips.map((chip) => chip.raw), text].filter(Boolean).join(' ').trim()
 }
 
-export function candidateQuery(operator: string, name: string) {
+export function candidateQuery(operator: string, name: string, id?: number | string) {
+  if (id !== undefined) return `${operator}:${id}`
   const value = `${operator === 'from' || operator === 'assignee' ? '@' : operator === 'in' ? '#' : ''}${name}`
   return `${operator}:${/\s|"/.test(value) ? JSON.stringify(value) : value}`
 }
 
 export function activeSearchValue(text: string, names: Names = {}) {
   if (/\s$/.test(text)) return null
-  const tokens: SearchToken[] = []
-  parseSearchQuery(text, {}, tokens)
+  const tokens = parseSearchTokens(text)
   const last = tokens.at(-1)
   if (last && ['from', 'assignee', 'in', 'board', 'label'].includes(last.operator)) {
     const valueStart = last.start + last.raw.indexOf(':') + 1

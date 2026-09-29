@@ -2,7 +2,7 @@
 
 import { MentionListRows } from "@/components/AI_CHAT/MentionListComp";
 import { activeSearchValue, candidateQuery, chipQuery, splitSearchChips } from "@/lib/search/chips";
-import { operatorMatches, parseSearchQuery, type Names, type SearchToken } from "@/lib/search/operators";
+import { operatorMatches, parseSearchTokens, type Names, type SearchToken } from "@/lib/search/operators";
 import { searchConfig } from "@/lib/configs/search.config";
 import { Hash, UserRound, X } from "lucide-react";
 import React, { type ChangeEvent, type KeyboardEvent, type RefObject, useEffect, useRef, useState } from "react";
@@ -19,6 +19,7 @@ type Props = {
 export default function SearchChipsInput({ value, onChange, onRun, boardId, inputRef }: Props) {
   const [editing, setEditing] = useState(false);
   const [names, setNames] = useState<Names>({});
+  const [chipLabels, setChipLabels] = useState<Record<string, string>>({});
   const [candidates, setCandidates] = useState<Candidate[]>([]);
   const [selectedIndex, setSelectedIndex] = useState(0);
   const [loading, setLoading] = useState(false);
@@ -74,8 +75,7 @@ export default function SearchChipsInput({ value, onChange, onRun, boardId, inpu
 
   useEffect(() => {
     if (editing) return;
-    const tokens: SearchToken[] = [];
-    parseSearchQuery(value, {}, tokens);
+    const tokens = parseSearchTokens(value);
     const unresolved = tokens.filter((token) =>
       ['from', 'assignee', 'in', 'board', 'label'].includes(token.operator) &&
       !token.raw.includes('"') && value.slice(token.end).trim());
@@ -90,18 +90,19 @@ export default function SearchChipsInput({ value, onChange, onRun, boardId, inpu
       if (boardId) params.set('boardId', String(boardId));
       const response = await fetch(`/api/search/values?${params}`, { signal: controller.signal });
       if (!response.ok) throw new Error('Value lookup failed');
-      const result = await response.json() as { candidates: Candidate[]; resolved?: string };
-      return { operator: token.operator, names: result.resolved ? [result.resolved] : [] };
+      const result = await response.json() as { candidates: Candidate[]; resolved?: string; resolvedId?: string };
+      return { operator: token.operator, value: token.value, resolvedId: result.resolvedId, names: result.resolved ? [result.resolved] : [] };
     })).then((results) => {
       if (controller.signal.aborted) return;
       setNames((previous) => {
         const next = { ...previous };
-        for (const { operator, names } of results) {
+        for (const { operator, value, resolvedId, names } of results) {
           const key = operator as keyof Names;
-          next[key] = [...(next[key] ?? []), ...names];
+          next[key] = [...(next[key] ?? []), ...names, ...(names.length && (/^\d+$/.test(value) || resolvedId === value) ? [value] : [])];
         }
         return next;
       });
+      setChipLabels((previous) => Object.assign({}, ...results.filter(({ names }) => names.length).map(({ operator, value, names }) => ({ [`${operator}:${value}`]: names[0] })), previous));
       setHydrationStatus(null);
     }).catch(() => { if (!controller.signal.aborted) setHydrationStatus('error'); });
     return () => controller.abort();
@@ -117,7 +118,9 @@ export default function SearchChipsInput({ value, onChange, onRun, boardId, inpu
     if (!active) return;
     const before = text.slice(0, active.start).trim();
     const after = text.slice(active.end ?? text.length).trim();
-    const selected = candidateQuery(active.operator, row.name);
+    const selected = candidateQuery(active.operator, row.name, row.id);
+    setChipLabels((previous) => ({ ...previous, [`${active.operator}:${row.id}`]: row.name }));
+    setNames((previous) => ({ ...previous, [active.operator]: [...(previous[active.operator as keyof Names] ?? []), String(row.id)] }));
     const next = chipQuery(chips, [before, selected, after].filter(Boolean).join(' '));
     setEditing(false);
     setDismissed(true);
@@ -176,13 +179,13 @@ export default function SearchChipsInput({ value, onChange, onRun, boardId, inpu
             key={`${chip.start}-${index}`}
             type="button"
             onClick={(event) => { event.stopPropagation(); remove(index); }}
-            aria-label={`Remove ${chip.operator}:${chip.value} filter`}
+            aria-label={`Remove ${chip.operator}:${chipLabels[`${chip.operator}:${chip.value}`] ?? chip.value} filter`}
             className="inline-flex items-center gap-1 rounded-sm px-2 py-1 text-mention-highlight text-content"
             style={{ backgroundColor: "color-mix(in srgb, var(--color-mention-highlight) 12%, var(--bg-mention))" }}
           >
             {chip.operator === 'from' || chip.operator === 'assignee' ? <UserRound size={14} aria-hidden="true" /> : (chip.operator === 'in' || chip.operator === 'board') ? <Hash size={14} aria-hidden="true" /> : null}
-            <span>{chip.negated ? '-' : ''}{chip.operator}:{chip.value}</span>
-            <X size={12} aria-hidden="true" />
+            <span>{chip.negated ? '-' : ''}{chip.operator}:{chipLabels[`${chip.operator}:${chip.value}`] ?? chip.value}</span>
+            <X size={14} strokeWidth={1.5} aria-hidden="true" />
           </button>
         ))}
         <input
@@ -202,7 +205,7 @@ export default function SearchChipsInput({ value, onChange, onRun, boardId, inpu
           aria-autocomplete="list"
           aria-expanded={Boolean(picker)}
           aria-controls={picker ? listId : undefined}
-          aria-activedescendant={picker && candidates.length ? `search-chip-option-${selectedIndex}` : undefined}
+          aria-activedescendant={picker && candidates.length ? `mention-button-${selectedIndex}` : undefined}
         />
       </div>
       {picker && (
@@ -210,7 +213,6 @@ export default function SearchChipsInput({ value, onChange, onRun, boardId, inpu
           {error ? <div id={listId} role="alert" className="rounded bg-modalBackground p-3 text-white-black">Could not load suggestions. Keep typing to retry.</div> : (
             <MentionListRows
               id={listId}
-              optionIdPrefix="search-chip-option"
               loadingLabel="Loading suggestions..."
               isLoading={loading}
               hasItems={candidates.length > 0}

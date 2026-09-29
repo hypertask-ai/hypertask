@@ -53,6 +53,11 @@ test('URL round trip preserves chips, free text, filters and board context', () 
   assert.equal(parseSearchQuery(parsed.searchParams.get('searchTerm')!).filters.in?.[0].value, '#Product Board')
 })
 
+test('picker selection serializes entity IDs, not duplicate display names', () => {
+  assert.equal(candidateQuery('from', 'Kamil', 6), 'from:6')
+  assert.equal(candidateQuery('in', 'Product Board', 7), 'in:7')
+  assert.equal(candidateQuery('label', 'Duplicate', 'label-7'), 'label:label-7')
+})
 test('removed chips are omitted from the next search query', () => {
   const { chips, text } = splitSearchChips('from:@Kamil label:bug login')
   assert.equal(chipQuery(chips.filter((_, index) => index !== 1), text), 'from:@Kamil login')

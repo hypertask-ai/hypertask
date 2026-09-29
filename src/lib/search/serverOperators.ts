@@ -35,5 +35,9 @@ export async function parseSearchWithNames(raw: string, projectIds: number[]): P
       })).map((row) => row.displayName ?? '')]
     }
   }
-  return parseSearchQuery(raw, names)
+  const parsed = parseSearchQuery(raw, names)
+  for (const key of ['in', 'board'] as const) {
+    for (const filter of parsed.filters[key] ?? []) filter.value = filter.value.replace(/^#/, '')
+  }
+  return parsed
 }

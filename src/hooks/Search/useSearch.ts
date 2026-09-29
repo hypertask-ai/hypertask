@@ -1,5 +1,6 @@
 import { searchConfig } from "@/lib/configs/search.config";
-import { HTPR_6369_SEARCH_OPERATORS_FLAG, HTPR_6370_SEARCH_CHIPS_FLAG } from "@/lib/flags/keys";
+import { HTPR_6369_SEARCH_OPERATORS_FLAG } from "@/lib/flags/keys";
+import { HTPR_6370_SEARCH_CHIPS_FLAG } from "@/lib/flags/keys";
 import { useFlag } from "@/hooks/useFlag";
 import { useDeviceContext } from "@/lib/contexts/deviceContext";
 import { useQueryClient } from "@tanstack/react-query";
@@ -177,7 +178,8 @@ export function useSearch(
 
   function handleChange(e: any) {
     setInputValue(e.target.value);
-    setSuggestedValue(searchChipsEnabled ? "" : handleInputAutoComplete(e.target.value));
+    setSuggestedValue(handleInputAutoComplete(e.target.value));
+    if (searchChipsEnabled) setSuggestedValue("");
   }
 
   async function handleLinkClick(task: ITypedTask) {

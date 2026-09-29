@@ -1,6 +1,7 @@
 import type { NextApiHandler } from 'next'
 import { getSessionUser } from '@/lib/auth/getSessionUser'
-import { HTPR_6369_SEARCH_OPERATORS_FLAG, HTPR_6370_SEARCH_CHIPS_FLAG, isFeatureEnabled } from '@/lib/flags'
+import { HTPR_6369_SEARCH_OPERATORS_FLAG, isFeatureEnabled } from '@/lib/flags'
+import { HTPR_6370_SEARCH_CHIPS_FLAG } from '@/lib/flags'
 import prisma from '@/lib/prisma'
 import { getProjectWhere } from '@/utils/controllers/projects/getAllIncludes'
 
@@ -27,15 +28,17 @@ const handler: NextApiHandler = async (req, res) => {
   const activeBoardId = ids.includes(boardId) ? boardId : null
   let candidates: { id: string | number; name: string; preferred: boolean; recent: number }[]
   let resolved: string | undefined
+  let resolvedId: string | undefined
   const rawTail = chipsEnabled && typeof req.query.resolve === 'string' ? req.query.resolve.replace(/^[@#]/, '').trim().slice(0, 100) : ''
   const words = rawTail.split(/\s+/)
-  const variants = words.map((_, i) => words.slice(0, i + 1).join(' '))
+  const variants = words.map((_, i) => words.slice(0, i + 1).join(' ')).reverse().slice(0, 10)
   if (operator === 'in' || operator === 'board') {
     candidates = boards.map((board) => ({ id: board.id, name: board.title ?? '', preferred: board.id === activeBoardId, recent: 0 }))
-    resolved = boards.map((board) => board.title ?? '').filter((name) => variants.some((part) => part.toLowerCase() === name.toLowerCase()))
+    resolved = boards.filter((board) => variants.some((part) => part === String(board.id) || part.toLowerCase() === board.title?.toLowerCase())).map((board) => board.title ?? '')
       .sort((a, b) => b.length - a.length)[0]
   } else if (operator === 'label') {
-    const scope = { projectId: { in: chipsEnabled ? ids : activeBoardId ? [activeBoardId] : ids } }
+    const scope = { projectId: { in: activeBoardId ? [activeBoardId] : ids } }
+    if (chipsEnabled) scope.projectId.in = ids
     const prefix = await prisma.label.findMany({
       where: { ...scope, value: { startsWith: value, mode: 'insensitive' } },
       select: { id: true, value: true, projectId: true },
@@ -57,20 +60,23 @@ const handler: NextApiHandler = async (req, res) => {
       select: { id: true, value: true, projectId: true },
       orderBy: [{ value: 'asc' }, { id: 'asc' }], take: 500,
     }) : []
-    candidates = [...prefix, ...contains, ...fuzzy.filter((label) => !seen.has(label.id))]
-      .map((label) => ({ id: label.id, name: label.value ?? '', preferred: label.projectId === activeBoardId, recent: 0 }))
+    candidates = [...prefix, ...contains].map((label) => ({ id: label.id, name: label.value ?? '', preferred: label.projectId === activeBoardId, recent: 0 }))
+    candidates.push(...fuzzy.filter((label) => !seen.has(label.id)).map((label) => ({ id: label.id, name: label.value ?? '', preferred: label.projectId === activeBoardId, recent: 0 })))
     if (rawTail) {
       const exact = await prisma.label.findMany({
-        where: { ...scope, OR: variants.map((part) => ({ value: { equals: part, mode: 'insensitive' as const } })) },
-        select: { value: true }, take: variants.length,
+        where: { ...scope, OR: variants.flatMap((part) => [{ value: { equals: part, mode: 'insensitive' as const } }, { id: part }]) },
+        select: { id: true, value: true }, take: variants.length,
       })
       resolved = exact.map((label) => label.value ?? '').sort((a, b) => b.length - a.length)[0]
+      resolvedId = exact.find((label) => label.value === resolved && variants.includes(label.id))?.id
     }
   } else {
-    const scope = chipsEnabled ? ids : activeBoardId ? [activeBoardId] : ids
+    const scope = activeBoardId ? [activeBoardId] : ids
+    if (chipsEnabled) scope.push(...ids.filter((id) => !scope.includes(id)))
     const recent = new Date(Date.now() - 90 * 86400000)
     const where = { OR: [
-      ...(activeBoardId || chipsEnabled ? [{ members: { some: { projectId: activeBoardId && !chipsEnabled ? activeBoardId : { in: ids } } } }] : []),
+      ...(activeBoardId ? [{ members: { some: { projectId: activeBoardId } } }] : []),
+      ...(chipsEnabled ? [{ members: { some: { projectId: { in: ids } } } }] : []),
       { tasks: { some: { projectId: { in: scope }, ...(!activeBoardId ? { createdAt: { gte: recent } } : {}) } } },
       { assignees: { some: { task: { projectId: { in: scope } }, ...(!activeBoardId ? { assignedAt: { gte: recent } } : {}) } } },
     ] }
@@ -80,11 +86,11 @@ const handler: NextApiHandler = async (req, res) => {
       tasks: { where: { projectId: { in: ids } }, select: { createdAt: true }, orderBy: { createdAt: 'desc' as const }, take: 1 },
       assignees: { where: { task: { projectId: { in: ids } } }, select: { assignedAt: true }, orderBy: { assignedAt: 'desc' as const }, take: 1 },
     } as const
-    const nameFilter = (kind: 'startsWith' | 'contains', needle = value) => ({ OR: [
-      { displayName: { [kind]: needle, mode: 'insensitive' as const } },
+    const nameFilter = (kind: 'startsWith' | 'contains') => ({ OR: [
+      { displayName: { [kind]: value, mode: 'insensitive' as const } },
       { AND: [
         { OR: [{ displayName: null }, { displayName: '' }] },
-        { email: { [kind]: needle, mode: 'insensitive' as const } },
+        { email: { [kind]: value, mode: 'insensitive' as const } },
       ] },
     ] })
     const recentIds = chipsEnabled ? [
@@ -104,27 +110,30 @@ const handler: NextApiHandler = async (req, res) => {
     }) : []
     const seen = new Set([...prefix, ...contains].map((person) => person.id))
     const fuzzy = chipsEnabled && value.length >= 2 && seen.size < 10 ? await prisma.user.findMany({
-      where: { AND: [where, ...[...new Set(value)].map((letter) => nameFilter('contains', letter))] }, select,
+      where: { AND: [where, ...[...new Set(value)].map((letter) => ({ OR: [
+        { displayName: { contains: letter, mode: 'insensitive' as const } },
+        { AND: [{ OR: [{ displayName: null }, { displayName: '' }] }, { email: { contains: letter, mode: 'insensitive' as const } }] },
+      ] }))] }, select,
       orderBy: [{ displayName: 'asc' }, { email: 'asc' }, { id: 'asc' }], take: 500,
     }) : []
-    const people = [...recentPeople, ...prefix, ...contains, ...fuzzy]
-      .filter((person, index, all) => all.findIndex((row) => row.id === person.id) === index)
+    const people = [...prefix, ...contains]
+    if (chipsEnabled) people.unshift(...[...recentPeople, ...fuzzy].filter((person) => !people.some((row) => row.id === person.id)))
     candidates = people.map((person) => ({
       id: person.id, name: person.displayName || person.email,
       preferred: person.members.length > 0,
       recent: Math.max(person.tasks[0]?.createdAt.getTime() ?? 0, person.assignees[0]?.assignedAt.getTime() ?? 0),
     }))
     if (rawTail) {
-      for (const part of variants.reverse()) {
-        const exact = await prisma.user.findFirst({
-          where: { AND: [where, { OR: [
-            { displayName: { equals: part, mode: 'insensitive' as const } },
-            { AND: [{ OR: [{ displayName: null }, { displayName: '' }] }, { email: { equals: part, mode: 'insensitive' as const } }] },
-          ] }] },
-          select: { displayName: true, email: true },
-        })
-        if (exact) { resolved = exact.displayName || exact.email; break }
-      }
+      const exact = await prisma.user.findMany({
+        where: { AND: [where, { OR: variants.flatMap((part) => [
+          { displayName: { equals: part, mode: 'insensitive' as const } },
+          { AND: [{ OR: [{ displayName: null }, { displayName: '' }] }, { email: { equals: part, mode: 'insensitive' as const } }] },
+          ...( /^\d+$/.test(part) ? [{ id: Number(part) }] : []),
+        ]) }] },
+        select: { id: true, displayName: true, email: true }, orderBy: [{ displayName: 'desc' }, { email: 'desc' }], take: 100,
+      })
+      resolved = exact.map((person) => person.displayName || person.email)
+        .sort((a, b) => b.length - a.length)[0]
     }
   }
   const rank = (item: typeof candidates[number]) => {
@@ -140,7 +149,8 @@ const handler: NextApiHandler = async (req, res) => {
       rank(a) - rank(b) || Number(b.preferred) - Number(a.preferred) || b.recent - a.recent || a.name.localeCompare(b.name)
     )
     .slice(0, 10).map(({ id, name }) => ({ id, name }))
-  return res.status(200).json({ candidates: ranked, ...(resolved ? { resolved } : {}) })
+  if (resolved) return res.status(200).json({ candidates: ranked, resolved, ...(resolvedId ? { resolvedId } : {}) })
+  return res.status(200).json({ candidates: ranked })
 }
 
 export default handler
