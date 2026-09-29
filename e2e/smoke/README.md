@@ -28,6 +28,29 @@ Without `SMOKE_BOARD_PATH`/`SMOKE_TASK_PATH` the kanban-board and task-detail
 checks are skipped (they have nothing real to open) — the other six views
 still run. Set them once the seeded account exists.
 
+## Required PR browser check
+
+`browser-smoke` runs the same spec against a locally built app on a hosted runner,
+with `BASE_URL=http://127.0.0.1:3100` and `BROWSER_SMOKE_PR=1`. It watches both
+board-data endpoints after the first load and checks the columns every 250 ms
+for 30 seconds. It never opens
+`/demo`: that route creates a guest.
+
+Every run starts an empty PostgreSQL service and a dedicated local Soketi
+realtime service. `scripts/seed-browser-smoke.mjs` creates a plain local user,
+two boards with columns, and a fresh signed localhost session. The state file
+is runner-local with mode `0600`; it is never printed or uploaded. The job
+does not read repository secrets or production configuration, so code from a
+pull request cannot reach a production account, database, signing key, or
+realtime service through this check.
+
+The query-string realtime override works for automated browsers only on
+`localhost` and `127.0.0.1`. Production automation remains disconnected from
+hosted realtime even if it adds `?realtime=on`.
+
+`browser-smoke` is required by the production ruleset, the live-ruleset
+assertion, and automerge. A failed or missing result blocks merging.
+
 ## Selectors
 
 Each view in `prod.spec.ts` asserts one route-specific DOM element (a
@@ -38,6 +61,9 @@ verified against the current component source, not against a live session
 (the smoke account doesn't exist yet) — if a selector ever goes stale after
 a UI change, the fix is a one-line update to the `selector` field for that
 view, not a redesign of the check.
+
+The PR job creates its separate account and boards only inside the disposable
+CI database.
 
 One nuance: the inbox marker is `display:none` by design, so it asserts
 presence (`toBeAttached`) instead of visibility; every other view's element

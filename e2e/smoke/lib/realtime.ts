@@ -4,6 +4,7 @@
 // hypertask-qa-runner's scripts/patch-realtime.mjs editing the checkout
 // after every git fetch (see that repo's README, "The ?realtime=on patch").
 //
+// On remote QA hosts, this existing behavior remains:
 // Note: src/lib/realtime/client.ts currently checks navigator.webdriver
 // BEFORE this query param, so Playwright's own Chromium (which always
 // reports navigator.webdriver === true) still gets realtime disabled, this
@@ -11,6 +12,11 @@
 // and for automated ones too if that check order ever changes. None of the
 // journeys in this suite depend on live push: they reload and re-read from
 // the server instead.
+//
+// Local PR smoke is the narrow exception:
+// localhost automation can connect to its own disposable Soketi service.
+// src/lib/realtime/client.ts handles this localhost opt-in before its
+// automation guards; remote Playwright and headless contexts stay disabled.
 export function withRealtime(pathOrUrl: string): string {
   return pathOrUrl + (pathOrUrl.includes('?') ? '&' : '?') + 'realtime=on'
 }

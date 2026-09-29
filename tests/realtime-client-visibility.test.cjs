@@ -76,11 +76,11 @@ function fakeTimers() {
   };
 }
 
-function fakeBrowser(search = "", webdriver = false) {
+function fakeBrowser(search = "", webdriver = false, hostname = "app.hypertask.ai") {
   const values = new Map();
   return {
     browser: {
-      location: { search },
+      location: { hostname, search },
       navigator: { webdriver },
       sessionStorage: {
         getItem: (key) => values.get(key) ?? null,
@@ -106,6 +106,16 @@ test("automated browser contexts always disable realtime", () => {
   const { browser, values } = fakeBrowser("?realtime=on", true);
   assert.equal(realtimeDisabledForBrowser(browser), true);
   assert.equal(values.get(REALTIME_DISABLED_STORAGE_KEY), "1");
+});
+
+test("localhost browser smoke can opt an automated browser into realtime", () => {
+  const { REALTIME_DISABLED_STORAGE_KEY, realtimeDisabledForBrowser } = loadTs(
+    "src/lib/realtime/client.ts",
+  );
+  const { browser, values } = fakeBrowser("?realtime=on", true, "127.0.0.1");
+
+  assert.equal(realtimeDisabledForBrowser(browser), false);
+  assert.equal(values.has(REALTIME_DISABLED_STORAGE_KEY), false);
 });
 
 test("headless agent-browser contexts disable realtime without webdriver", () => {

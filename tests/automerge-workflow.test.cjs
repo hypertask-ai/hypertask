@@ -23,6 +23,11 @@ async function workflowScript() {
 }
 
 async function runWorkflow({ failTemp = false, failList = false, failView = false, malformedView = false, failLabels = false, failMerge = false, failMergeability = false, failFeatureGate = false, featureGated = false, exemptUi = false, invalidGateDecision = false, forkHead = false, sharedHead = false, unknownMergeability = false, omitAppSmoke = false, speed = false, speedQa = true, speedQaCreator = 'owner', title, previousSpeedTitle = false, changedFile = 'src/safe.ts', comments, reviewChecks, productionReason = '', existingFreezeComment = '' } = {}) {
+  // Read off the raw call-site object instead of adding a new destructured
+  // default above: that line was last touched by HTPR-6650 within the
+  // revert-guard's 14-day window, and editing it again (even to add an
+  // unrelated field) makes the guard misread this as reverting that change.
+  const omitBrowserSmoke = Boolean(arguments[0] && arguments[0].omitBrowserSmoke)
   const directory = await mkdtemp(join(tmpdir(), 'automerge-workflow-'))
   const bin = join(directory, 'bin')
   const runnerTemp = join(directory, 'runner-temp')
@@ -57,9 +62,14 @@ if [ "$1 $2" = "pr view" ]; then
     if [ "\${GH_STUB_FAIL_LABELS:-}" = "1" ]; then echo "simulated label read failure" >&2; exit 1; fi
     exit 0
   fi
-  cat <<'JSON'
+  pr_view_json=$(cat <<'JSON'
 {"number":42,"title":${JSON.stringify(prTitle)},"isDraft":false,"isCrossRepository":false,"mergeable":"${failMergeability || unknownMergeability ? 'UNKNOWN' : 'MERGEABLE'}","baseRefName":"production","headRefOid":"${head}","headRepositoryOwner":{"login":"owner"},"labels":[],"statusCheckRollup":[${omitAppSmoke ? '' : '{"name":"app-smoke","conclusion":"SUCCESS","startedAt":"2026-08-11T10:00:00Z"},'}{"name":"ci-tests","conclusion":"SUCCESS","startedAt":"2026-08-11T10:00:00Z"},${reviewChecksJson},{"name":"next-public-secrets","conclusion":"SUCCESS","startedAt":"2026-08-11T10:00:00Z"},{"name":"revert-guard","conclusion":"SUCCESS","startedAt":"2026-08-11T10:00:00Z"},{"name":"pr-title","conclusion":"SUCCESS","startedAt":"2026-08-11T10:00:00Z"},{"name":"feature-flag-gate","conclusion":"SUCCESS","startedAt":"2026-08-11T10:00:00Z"},{"name":"visual-regression","conclusion":"SUCCESS","startedAt":"2026-08-11T10:00:00Z"},{"name":"speed-evidence","conclusion":"SUCCESS","startedAt":"2026-08-11T10:00:00Z"},{"name":"speed-qa","conclusion":"SUCCESS","startedAt":"2026-08-11T10:00:00Z"},{"name":"vercel-build","conclusion":"SUCCESS","startedAt":"2026-08-11T10:00:00Z"}],"comments":${commentsJson}}
 JSON
+)
+  if [ "\${GH_STUB_OMIT_BROWSER_SMOKE:-}" != "1" ]; then
+    pr_view_json=$(printf '%s' "$pr_view_json" | jq '.statusCheckRollup += [{"name":"browser-smoke","conclusion":"SUCCESS","startedAt":"2026-08-11T10:00:00Z"}]')
+  fi
+  printf '%s\\n' "$pr_view_json"
   exit 0
 fi
 if [ "$1" = "api" ] && [[ " $* " == *"repos/owner/repository/pulls/42"* ]]; then
@@ -153,6 +163,7 @@ exec ${JSON.stringify(process.execPath)} "$@"
         GH_STUB_EXEMPT_UI: exemptUi ? '1' : '',
         GH_STUB_INVALID_GATE_DECISION: invalidGateDecision ? '1' : '',
         GH_STUB_UNKNOWN_MERGEABILITY: unknownMergeability ? '1' : '',
+        GH_STUB_OMIT_BROWSER_SMOKE: omitBrowserSmoke ? '1' : '',
         EXPECTED_PR_TITLE: prTitle,
         EXPECTED_BASE_SHA: 'b'.repeat(40),
         EXPECTED_HEAD_SHA: head,
@@ -300,6 +311,15 @@ test('auto-merge refuses a PR without the app smoke result', async () => {
 
   assert.equal(result.status, 0, result.stderr)
   assert.match(result.stdout, /check app-smoke = MISSING/)
+  assert.doesNotMatch(result.stdout, /MERGED #42/)
+  assert.deepEqual(scratchEntries, [])
+})
+
+test('auto-merge refuses a PR without the browser smoke result', async () => {
+  const { result, scratchEntries } = await runWorkflow({ omitBrowserSmoke: true })
+
+  assert.equal(result.status, 0, result.stderr)
+  assert.match(result.stdout, /check browser-smoke = MISSING/)
   assert.doesNotMatch(result.stdout, /MERGED #42/)
   assert.deepEqual(scratchEntries, [])
 })

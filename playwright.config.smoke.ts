@@ -1,7 +1,10 @@
 import { defineConfig, devices } from '@playwright/test'
 
-const baseURL = process.env.SMOKE_BASE_URL
-if (!baseURL) throw new Error('SMOKE_BASE_URL is required for production smoke QA')
+const baseURL = process.env.BASE_URL || process.env.SMOKE_BASE_URL
+if (!baseURL) throw new Error('BASE_URL or SMOKE_BASE_URL is required for smoke QA')
+if (process.env.BROWSER_SMOKE_PR && (!process.env.SMOKE_BOARD_PATH || !process.env.SMOKE_DEMO_BOARD_PATH)) {
+  throw new Error('SMOKE_BOARD_PATH and SMOKE_DEMO_BOARD_PATH are required for PR browser smoke')
+}
 
 // HTPR-6199 — post-release smoke QA against production. Runs from
 // .github/workflows/prod-health.yml after every deploy, using a dedicated
@@ -15,7 +18,7 @@ export default defineConfig({
   retries: 1,
   workers: 4,
   reporter: [['list']],
-  timeout: 20_000,
+  timeout: process.env.BROWSER_SMOKE_PR ? 50_000 : 20_000,
   use: {
     baseURL,
     storageState: 'e2e/smoke/.state/smoke-state.json',
