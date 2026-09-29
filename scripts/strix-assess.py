@@ -37,6 +37,11 @@ def main():
     modes = parser.add_mutually_exclusive_group()
     modes.add_argument("--live-only", action="store_true")
     modes.add_argument("--source-only", action="store_true")
+    # An assessment is a deliberate, human-invoked check: repeating one at an
+    # unchanged revision must scan again, not silently return a stale prior
+    # report as "completed". --resume opts into reusing an incomplete run's
+    # receipts (e.g. after a budget cutoff) instead of rescanning from zero.
+    parser.add_argument("--resume", action="store_true")
     args = parser.parse_args()
     profiles = json.loads((SCRIPTS / "strix-assessment.json").read_text())
     if args.profile != "all":
@@ -77,7 +82,8 @@ def main():
                     continue
                 result = batches.run(source, profile["files"], state / "batches", output / name,
                                      revision, name, float(os.environ.get("STRIX_PROFILE_BUDGET", "6")),
-                                     float(os.environ.get("STRIX_BATCH_BUDGET", "6")), 6)
+                                     float(os.environ.get("STRIX_BATCH_BUDGET", "6")), 6,
+                                     resume=args.resume)
                 manifest["profiles"][name] = {"status": "completed" if result == 0 else "incomplete",
                                               "revision": revision, "files": profile["files"]}
                 save()

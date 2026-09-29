@@ -51,7 +51,7 @@ def plan(source, paths, max_files=6, max_bytes=60000):
     return batches
 
 
-def run(source, paths, state, output, revision, base, budget, batch_budget, max_files):
+def run(source, paths, state, output, revision, base, budget, batch_budget, max_files, resume=True):
     if batch_budget <= 0 or budget < batch_budget or max_files < 1:
         raise ValueError("budget must cover one positive batch budget; max-files must be positive")
     batches = plan(source, paths, max_files)
@@ -65,7 +65,10 @@ def run(source, paths, state, output, revision, base, budget, batch_budget, max_
         receipt = checkpoint / f"{index}.json"
         entry = {"index": index, "files": files, "status": "pending"}
         manifest["batches"].append(entry)
-        if receipt.exists():
+        # resume=False (the default for a deliberate, human-invoked repeat) never
+        # trusts an existing receipt, so an unchanged revision always gets a fresh
+        # scan instead of silently returning a stale prior report as "completed".
+        if resume and receipt.exists():
             previous = json.loads(receipt.read_text())
             # A checkpoint only counts while its original report still validates.
             try:
@@ -135,9 +138,15 @@ if __name__ == "__main__":
     parser.add_argument("--budget", type=float, default=30)
     parser.add_argument("--batch-budget", type=float, default=6)
     parser.add_argument("--max-files", type=int, default=6)
+    # The scheduled weekly job always resumes an interrupted run at the same
+    # pinned revision (see strix-weekly.sh's pending-scope handling); only a
+    # caller that explicitly asks for that (like weekly) keeps the old reuse
+    # behavior on the CLI. Direct callers (strix-assess.py) default resume=False.
+    parser.add_argument("--resume", action="store_true", default=True)
+    parser.add_argument("--no-resume", dest="resume", action="store_false")
     args = parser.parse_args()
     if args.batch_budget <= 0 or args.budget < args.batch_budget or args.max_files < 1:
         parser.error("budget must cover one positive batch budget; max-files must be positive")
     raise SystemExit(run(args.source.resolve(), args.files.read_text().splitlines(), args.state.resolve(),
                          args.output.resolve(), args.revision, args.base,
-                         args.budget, args.batch_budget, args.max_files))
+                         args.budget, args.batch_budget, args.max_files, resume=args.resume))
