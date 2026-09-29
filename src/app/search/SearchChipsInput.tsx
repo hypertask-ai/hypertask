@@ -2,7 +2,7 @@
 
 import { MentionListRows } from "@/components/AI_CHAT/MentionListComp";
 import { activeSearchValue, candidateQuery, chipQuery, splitSearchChips } from "@/lib/search/chips";
-import { operatorMatches, parseSearchTokens, type Names, type SearchToken } from "@/lib/search/browserOperators";
+import { operatorMatches, parseSearchTokens, type Names, type SearchToken } from "@/lib/search/operators";
 import { searchConfig } from "@/lib/configs/search.config";
 import { Hash, UserRound, X } from "lucide-react";
 import React, { type ChangeEvent, type KeyboardEvent, type RefObject, useEffect, useRef, useState } from "react";
@@ -75,10 +75,10 @@ export default function SearchChipsInput({ value, onChange, onRun, boardId, inpu
 
   useEffect(() => {
     if (editing) return;
-    const tokens = parseSearchTokens(value);
+    const tokens = parseSearchTokens(value, names);
     const unresolved = tokens.filter((token) =>
       ['from', 'assignee', 'in', 'board', 'label'].includes(token.operator) &&
-      !token.raw.includes('"') && !names[token.operator as keyof Names]?.includes(token.value));
+      !token.raw.includes('"') && !names[token.operator as keyof Names]?.includes(token.value.replace(/^[@#]/, '')));
     if (!unresolved.length) { setHydrationStatus(null); return; }
     const controller = new AbortController();
     setHydrationStatus('loading');

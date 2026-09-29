@@ -1,4 +1,4 @@
-import { parseSearchTokens, type Names, type SearchToken } from './browserOperators'
+import { parseSearchTokens, type Names, type SearchToken } from './operators'
 
 export function splitSearchChips(raw: string, editing = false, names: Names = {}) {
   const tokens = parseSearchTokens(raw, names)

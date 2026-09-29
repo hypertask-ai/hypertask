@@ -2,11 +2,16 @@ const assert = require('node:assert/strict')
 const path = require('node:path')
 const { test } = require('node:test')
 const React = require('react')
-const { readFileSync } = require('node:fs')
-test('client chip graph does not import the Prisma-backed server parser', () => {
+const { readFileSync, existsSync } = require('node:fs')
+test('client chip graph imports only the Prisma-free parser', () => {
   const component = readFileSync(path.join(root, 'src/app/search/SearchChipsInput.tsx'), 'utf8')
   const chips = readFileSync(path.join(root, 'src/lib/search/chips.ts'), 'utf8')
-  assert.doesNotMatch(component + chips, /(?:from ['"]@\/lib\/search\/operators['"]|from ['"]\.\/operators['"])/)
+  const parser = readFileSync(path.join(root, 'src/lib/search/operators.ts'), 'utf8')
+  assert.match(component + chips, /from ['"](?:@\/lib\/search\/operators|\.\/operators)['"]/)
+  assert.doesNotMatch(parser, /(?:prisma|serverOperators)/i)
+  assert.equal(existsSync(path.join(root, 'src/lib/search/browserOperators.ts')), false, 'no second parser implementation')
+  assert.equal((parser.match(/function parseSearchQuery\(/g) ?? []).length, 1)
+  assert.equal((parser.match(/function parseSearchTokens\(/g) ?? []).length, 1)
 })
 test('remove icon uses the dense secondary icon token', () => {
   assert.match(readFileSync(path.join(root, 'src/app/search/SearchChipsInput.tsx'), 'utf8'), /<X size=\{14\} strokeWidth=\{1\.5\}/)
@@ -41,7 +46,7 @@ test('chip picker opens, selects with keyboard, runs, and removes on Backspace',
         : [{ id: 1, name: 'Kamil' }, { id: 2, name: 'Karla' }]
     if (params.get('value') === 'ka') candidates.splice(0, candidates.length, { id: 3, name: 'Ka' }, { id: 1, name: 'Kamil' })
     if (params.has('resolve')) candidates.splice(0, candidates.length, ...Array.from({ length: 10 }, (_, i) => ({ id: i, name: `Kamil ${i}` })))
-    return { ok: true, json: async () => ({ candidates, ...(params.has('resolve') ? { resolved: 'Kamil Grzegorzewicz' } : {}) }) }
+    return { ok: true, json: async () => ({ candidates, ...(params.has('resolve') ? { resolved: params.get('operator') === 'in' ? 'Product Board' : 'Kamil Grzegorzewicz' } : {}) }) }
   }
   let reactRoot
   try {
@@ -143,6 +148,23 @@ test('chip picker opens, selects with keyboard, runs, and removes on Backspace',
     assert.equal(new URL(calls.at(-1), 'https://example.test').searchParams.get('value'), 'x')
     assert.ok(document.querySelector('[aria-label="Remove from:Kamil Grzegorzewicz filter"]'), 'suggestions preserve hydrated chip names')
     assert.equal(input.value, 'login from:x')
+    for (const [operator, marked] of [['from', '@Kamil Grzegorzewicz'], ['in', '#Product Board']]) {
+      await React.act(async () => reactRoot.render(React.createElement(Harness, { key: `marked-${operator}`, initial: `${operator}:${marked}` })))
+      input = document.querySelector('#search-input')
+      await settle()
+      const resolvedBefore = calls.filter((url) => {
+        const params = new URL(url, 'https://example.test').searchParams
+        return params.get('operator') === operator && params.has('resolve')
+      }).length
+      await type(' login')
+      await press('Enter')
+      await settle()
+      const resolvedAfter = calls.filter((url) => {
+        const params = new URL(url, 'https://example.test').searchParams
+        return params.get('operator') === operator && params.has('resolve')
+      }).length
+      assert.equal(resolvedAfter, resolvedBefore, `${operator}:${marked} must not hydrate again after editing`)
+    }
   } finally {
     if (reactRoot) await React.act(async () => reactRoot.unmount())
     for (const [filename, prior] of stubs.reverse()) {

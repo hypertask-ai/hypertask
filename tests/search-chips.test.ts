@@ -1,8 +1,7 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 import { activeSearchValue, candidateQuery, chipQuery, splitSearchChips } from '../src/lib/search/chips'
-import { parseSearchQuery } from '../src/lib/search/operators'
-import { parseSearchQuery as parseBrowserSearchQuery } from '../src/lib/search/browserOperators'
+import { parseSearchQuery, parseSearchTokens, searchOperatorClauseCount } from '../src/lib/search/operators'
 import { buildSearchUrl } from '../src/lib/searchArchive'
 
 test('chips follow the server parser while unrecognised tokens stay editable', () => {
@@ -20,17 +19,16 @@ test('chips follow the server parser while unrecognised tokens stay editable', (
   assert.equal(splitSearchChips('label: "needs design" login').chips[0].value, 'needs design')
 })
 
-test('browser and server parsers agree on quoted, negated and multiword values', () => {
-  const cases = [
-    'from:6 -in:#Product Planning login',
-    'label:"needs design" -assignee:@Kamil Grzegorzewicz login',
-    'foo:bar has:attachment in:#Board',
-    '-from:ka label:bug',
-  ]
-  for (const raw of cases) {
-    const names = { from: ['Kamil Grzegorzewicz'], assignee: ['Kamil Grzegorzewicz'], in: ['Product Planning'] }
-    assert.deepEqual(parseBrowserSearchQuery(raw, names), parseSearchQuery(raw, names))
-  }
+test('shared parser tokenizes quoted, negated and multiword values', () => {
+  const raw = 'login -in:#Product Planning label:"needs design" -assignee:@Kamil Grzegorzewicz foo:bar'
+  const names = { in: ['Product Planning'], assignee: ['Kamil Grzegorzewicz'] }
+  assert.deepEqual(parseSearchTokens(raw, names).map(({ operator, value, negated }) => ({ operator, value, negated })), [
+    { operator: 'in', value: '#Product Planning', negated: true },
+    { operator: 'label', value: 'needs design', negated: false },
+    { operator: 'assignee', value: '@Kamil Grzegorzewicz', negated: true },
+  ])
+  assert.equal(parseSearchQuery(raw, names).text, 'login foo:bar')
+  assert.equal(searchOperatorClauseCount(raw), 4)
 })
 
 test('unfinished operator values stay in the editor until completed', () => {

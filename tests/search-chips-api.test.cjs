@@ -5,7 +5,7 @@ const { test } = require('node:test')
 const root = path.resolve(__dirname, '..')
 test('chip server reuses the operators name resolver instead of duplicating database lookups', () => {
   const source = readFileSync(path.join(root, 'src/lib/search/serverOperators.ts'), 'utf8')
-  assert.doesNotMatch(source, /prisma\./)
+  assert.equal((source.match(/export async function parseSearchWithNames\(/g) ?? []).length, 1)
   assert.match(source, /await parseSearchWithNames\(/)
 })
 let state
@@ -30,7 +30,7 @@ function eligible(row, where) {
 const db = {
   project: { findMany: async ({ select }) => select.title
     ? [{ title: 'Visible board' }] : state.boards.map((id) => ({ id })) },
-  label: { findMany: async () => { state.labelQueries++; return [{ value: 'bug' }] } },
+  label: { findMany: async ({ where }) => { state.labelQueries++; return [{ value: 'bug' }, { value: 'needs design' }].filter(({ value }) => value.startsWith(where.value.startsWith.toLowerCase())) } },
   user: { findMany: async () => [{ displayName: 'Kamil Grzegorzewicz' }] },
   section: { findMany: async ({ where }) => (state.sections ?? [{ projectId: 7, section_title: 'Done', isDone: true }])
     .filter((section) => where.deleted !== false || !section.deleted) },
@@ -179,6 +179,14 @@ test('unquoted board names with # resolve to the accessible board', async () => 
   const { res } = await search('in:#Visible board')
   assert.equal(res.statusCode, 200)
   assert.deepEqual(res.body.processedData.All.map((task) => task.taskId), [123])
+})
+test('chip parsing retains resolved unquoted people and labels instead of searching their trailing words', async () => {
+  for (const query of ['from:Kamil Grzegorzewicz', 'assignee:@Kamil Grzegorzewicz', 'label:needs design']) {
+    const { res, state } = await search(query, { rows: [row(123, 7, 'needs design')] })
+    assert.equal(res.statusCode, 200, query)
+    assert.deepEqual(res.body.processedData.All.map((task) => task.taskId), [123], query)
+    assert.deepEqual(state.windows, [], `${query} must not search the rest of the name as text`)
+  }
 })
 test('hash board marker is inert on the server while the chips flag is off', async () => {
   const off = await search('in:#Visible board', { chipsFlag: false })
