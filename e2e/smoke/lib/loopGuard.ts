@@ -24,6 +24,8 @@ export type LoopGuard = {
 }
 
 const BOARD_DATA_PATHS = new Set(['/api/projects/getAll', '/api/projects/boardTasks'])
+const TASKS_HYDRATED_SELECTOR = '[data-board-tasks-hydrated="true"]'
+const HIDDEN_EMPTY_COLUMNS_HEADING = /^All columns are empty and hidden$/
 
 export function watchForLoops(page: Page): LoopGuard {
   const guard: LoopGuard = { loads: 0, boardFetches: 0, fetchesByPath: {}, stop: () => {} }
@@ -62,11 +64,36 @@ export async function assertColumnsStayVisible(
   durationMs: number,
 ): Promise<void> {
   const columns = page.locator(columnSelector)
+  const tasksHydrated = page.locator(TASKS_HYDRATED_SELECTOR)
+  const hiddenEmptyState = page.getByRole('heading', { name: HIDDEN_EMPTY_COLUMNS_HEADING }).first()
+
+  await expect.poll(
+    async () => (await tasksHydrated.count()) > 0,
+    { message: 'board tasks did not finish hydrating', timeout: 15_000 },
+  ).toBe(true)
+
+  const hydratedColumnCount = await columns.count()
+  const isIntentionalEmptyBoard =
+    hydratedColumnCount === 0 && await hiddenEmptyState.isVisible()
+
+  // The empty-state heading may briefly coexist with attached columns.
+  // Treat it as valid only when there are no columns to hide.
+  if (isIntentionalEmptyBoard) {
+    const emptyStateDeadline = Date.now() + durationMs
+    while (Date.now() < emptyStateDeadline) {
+      expect(await columns.count(), 'hidden empty board unexpectedly rendered columns').toBe(0)
+      expect(await hiddenEmptyState.isVisible(), 'hidden empty board lost its empty state').toBe(true)
+      await page.waitForTimeout(Math.min(250, Math.max(0, emptyStateDeadline - Date.now())))
+    }
+    return
+  }
+
   // `load` fires before the board data arrives, so wait for the first
   // column to render before taking the baseline count.
   await columns.first().waitFor({ state: 'visible', timeout: 15_000 }).catch(() => {})
   const initialCount = await columns.count()
   expect(initialCount, `no "${columnSelector}" columns present to watch`).toBeGreaterThan(0)
+  expect(await columns.first().isVisible(), 'board columns became hidden').toBe(true)
 
   const deadline = Date.now() + durationMs
   while (Date.now() < deadline) {
