@@ -8,8 +8,7 @@ import { CHECKOUT_SESSION_API_ENDPOINT } from "@/lib/constants/APIRouteConstants
 import { createCheckoutParam } from "@/lib/constants/constants";
 import {
   STORE_PLAN_RANK,
-  StorePlanKind,
-  planKindFromStripePriceId,
+  type StorePlanKind,
 } from "@/lib/planFromStripePriceId";
 import {
   buildPricingCheckoutCancelUrl,
@@ -38,16 +37,12 @@ const PlansSection = () => {
   const router = useRouter();
   const searchParams = useSearchParams();
   const currentUser = useRecoilValue(currentUserAtom);
-  const { ownerAndMembers, refetchTeam, team } = useSettingsTeam();
+  const { billing, ownerAndMembers, refetchTeam, team } = useSettingsTeam();
   const isOwner = ownerAndMembers.owner?.id === currentUser?.id;
-  const activeSubscription = team?.subscriptionPlan?.[0] ?? null;
-  const activePlan = planKindFromStripePriceId(activeSubscription?.priceId);
-  const currentPlan: StorePlanKind = team?.activeSubscriptionPlanId
-    ? activePlan.storePlanId
-    : "Free";
+  const currentPlan: StorePlanKind = billing?.storePlanId ?? "Free";
   const [billingIntervalIndex, setBillingIntervalIndex] =
     useState<BillingIntervalIndex>(() =>
-      activePlan.billingInterval === "year" ? 1 : 0,
+      billing?.billingInterval === "year" ? 1 : 0,
     );
   const [checkoutPlanId, setCheckoutPlanId] = useState<StorePlanKind | null>(
     null,
@@ -64,8 +59,8 @@ const PlansSection = () => {
   );
 
   useEffect(() => {
-    setBillingIntervalIndex(activePlan.billingInterval === "year" ? 1 : 0);
-  }, [activePlan.billingInterval]);
+    setBillingIntervalIndex(billing?.billingInterval === "year" ? 1 : 0);
+  }, [billing?.billingInterval]);
 
   useEffect(() => {
     if (searchParams?.get("success") === "1") {
@@ -189,8 +184,8 @@ const PlansSection = () => {
           const isCurrentTier = plan.id === currentPlan;
           const isCurrentInterval =
             plan.id === "Free" ||
-            (selectedTime === 0 && activePlan.billingInterval === "month") ||
-            (selectedTime === 1 && activePlan.billingInterval === "year");
+            (selectedTime === 0 && billing?.billingInterval === "month") ||
+            (selectedTime === 1 && billing?.billingInterval === "year");
           const isExactCurrentPlan = isCurrentTier && isCurrentInterval;
           const actionLabel = getPlanActionLabel(plan.id, currentPlan);
 
