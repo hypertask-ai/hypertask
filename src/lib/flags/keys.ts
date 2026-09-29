@@ -61,6 +61,7 @@ export const SCOPED_BOARD_REFETCH_FLAG = "htpr-6166-scoped-board-refetch";
 export const MY_TASKS_SHORTCUTS_WIDTH_FLAG =
   "htpr-6421-my-tasks-shortcuts-width";
 export const HTPR_6372_SEARCH_RANKING_FLAG = "htpr-6372-search-ranking";
+export const HTPR_6369_SEARCH_OPERATORS_FLAG = "htpr-6369-search-operators";
 export const MY_TASKS_VIEWS_FLAG = "htpr-6422-my-tasks-views";
 export const MY_TASKS_BULK_SELECTION_FLAG =
   "htpr-6444-my-tasks-bulk-selection";

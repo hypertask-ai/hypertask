@@ -262,6 +262,7 @@ type SearchCommentsParams = {
   topK?: number;
   limit?: number;
   keywordOnly?: boolean;
+  groupByTask?: boolean;
 };
 
 type SearchCustomInstructionFilesParams = {
@@ -874,6 +875,7 @@ export async function searchComments({
   topK = 200,
   limit = 50,
   keywordOnly = false,
+  groupByTask = true,
 }: SearchCommentsParams): Promise<TurbopufferCommentRow[]> {
   const query = searchQuery.trim();
   const projectFilter = buildProjectFilter(projectIds);
@@ -911,10 +913,8 @@ export async function searchComments({
           rerank_by: ["RRF"],
         } as any);
 
-      return normalizeAndGroupCommentRows(
-        getMultiQueryRows<TurbopufferCommentRow>(response),
-        limit
-      );
+      const rows = getMultiQueryRows<TurbopufferCommentRow>(response);
+      return groupByTask ? normalizeAndGroupCommentRows(rows, limit) : rows.map(normalizeCommentRow);
     } catch (error) {
       console.error(
         "turbopuffer searchComments hybrid error, falling back to BM25:",
@@ -924,7 +924,7 @@ export async function searchComments({
   }
 
   try {
-    return await searchCommentRowsWithBm25(query, topK, filters, limit);
+    return await searchCommentRowsWithBm25(query, topK, filters, limit, groupByTask);
   } catch (error) {
     console.error("turbopuffer searchComments error:", error);
     return [];
@@ -1256,7 +1256,8 @@ async function searchCommentRowsWithBm25(
   query: string,
   topK: number,
   filters: unknown[] | undefined,
-  limit: number
+  limit: number,
+  groupByTask: boolean
 ): Promise<TurbopufferCommentRow[]> {
   const response = await turbopuffer
     .namespace(turbopufferNamespaces.comment.name)
@@ -1267,10 +1268,8 @@ async function searchCommentRowsWithBm25(
       include_attributes: COMMENT_INCLUDE_ATTRIBUTES,
     } as any);
 
-  return normalizeAndGroupCommentRows(
-    (response.rows ?? []) as unknown as TurbopufferCommentRow[],
-    limit
-  );
+  const rows = (response.rows ?? []) as unknown as TurbopufferCommentRow[];
+  return groupByTask ? normalizeAndGroupCommentRows(rows, limit) : rows.map(normalizeCommentRow);
 }
 
 function getMultiQueryRows<T>(response: unknown): T[] {
