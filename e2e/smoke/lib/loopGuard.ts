@@ -73,7 +73,12 @@ export async function assertColumnsStayVisible(
   ).toBe(true)
 
   const hydratedColumnCount = await columns.count()
-  if (hydratedColumnCount === 0 && await hiddenEmptyState.isVisible()) {
+  const isIntentionalEmptyBoard =
+    hydratedColumnCount === 0 && await hiddenEmptyState.isVisible()
+
+  // The empty-state heading may briefly coexist with attached columns.
+  // Treat it as valid only when there are no columns to hide.
+  if (isIntentionalEmptyBoard) {
     const emptyStateDeadline = Date.now() + durationMs
     while (Date.now() < emptyStateDeadline) {
       expect(await columns.count(), 'hidden empty board unexpectedly rendered columns').toBe(0)

@@ -106,6 +106,19 @@ test('rejects attached but hidden board columns even with an empty state', async
   );
 });
 
+test('rejects columns that attach while the empty state remains visible', async () => {
+  const page = hydratedPage({
+    columnCounts: [0, 3],
+    firstColumnVisible: false,
+    hiddenEmptyStateVisible: true,
+  });
+
+  await assert.rejects(
+    assertColumnsStayVisible(page, '.kanban-column-title', 100),
+    /hidden empty board unexpectedly rendered columns/,
+  );
+});
+
 test('rejects partial column loss after hydration', async () => {
   const page = hydratedPage({ columnCounts: [3, 3, 1] });
 
