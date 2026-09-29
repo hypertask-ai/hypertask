@@ -68,6 +68,11 @@ def run(source, paths, state, output, revision, base, budget, batch_budget, max_
         # resume=False (the default for a deliberate, human-invoked repeat) never
         # trusts an existing receipt, so an unchanged revision always gets a fresh
         # scan instead of silently returning a stale prior report as "completed".
+        # It also evicts any receipt left at this scope_key before scanning, so a
+        # non-resume attempt that fails partway never leaves a stale receipt for
+        # a later --resume to pick up and misreport as freshly completed.
+        if not resume and receipt.exists():
+            receipt.unlink()
         if resume and receipt.exists():
             previous = json.loads(receipt.read_text())
             # A checkpoint only counts while its original report still validates.
