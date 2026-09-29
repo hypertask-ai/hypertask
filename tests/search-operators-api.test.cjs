@@ -86,7 +86,7 @@ async function search(searchQuery, overrides = {}) {
 
 for (const [operator, value, fragment] of [
   ['from', '6', 'userId'], ['assignee', '@Kamil Grzegorzewicz', 'assignees'],
-  ['in', 'Visible board', 'project'], ['board', '7', 'projectId'],
+  ['in', 'Visible board', 'project'], ['in', '#Visible board', 'project'], ['board', '7', 'projectId'],
   ['label', 'needs design', 'taskLabels'], ['is', 'done', 'Done'],
   ['before', '2026-09-02', 'createdAt'], ['after', '2026-09-01', 'createdAt'],
   ['on', 'updated:2026-09-01', 'updatedAt'],
@@ -169,6 +169,11 @@ test('repeated prefixes are looked up once; oversized flagged queries are reject
   assert.equal(flagOff.state.legacyCalls, 1)
 })
 
+test('unquoted board names with # resolve to the accessible board', async () => {
+  const { res } = await search('in:#Visible board')
+  assert.equal(res.statusCode, 200)
+  assert.deepEqual(res.body.processedData.All.map((task) => task.taskId), [123])
+})
 test('in:8 never widens the accessible-board scope even with a private row in the DB', async () => {
   const { res } = await search('in:8')
   assert.equal(res.statusCode, 204)

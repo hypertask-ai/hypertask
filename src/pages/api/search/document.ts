@@ -1,7 +1,8 @@
 import { httpStatusConfig } from "@/lib/configs/http-status.config";
 import { getSessionUser } from "@/lib/auth/getSessionUser";
 import { HTPR_6372_SEARCH_RANKING_FLAG, HTPR_6369_SEARCH_OPERATORS_FLAG, isFeatureEnabled } from "@/lib/flags";
-import { MAX_SEARCH_OPERATOR_CLAUSES, parseSearchWithNames, searchOperatorClauseCount } from "@/lib/search/operators";
+import { MAX_SEARCH_OPERATOR_CLAUSES, searchOperatorClauseCount } from "@/lib/search/operators";
+import { parseSearchWithNames } from "@/lib/search/serverOperators";
 import { rankedSearchWhere } from "@/lib/search/rankedWhere";
 import prisma from "@/lib/prisma";
 import { turbopufferGetDocuments } from "@/utils/controllers/search/document";

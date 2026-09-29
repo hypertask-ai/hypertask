@@ -7,7 +7,8 @@ import prisma from '@/lib/prisma'
 import { turbopufferSearchTaskIds } from '@/utils/controllers/search/document'
 import { HTPR_6530_MCP_LIST_QUERY_FLAG, isFeatureEnabled } from '@/lib/flags'
 import { HTPR_6369_SEARCH_OPERATORS_FLAG } from '@/lib/flags'
-import { MAX_SEARCH_OPERATOR_CLAUSES, parseSearchWithNames, searchOperatorClauseCount } from '@/lib/search/operators'
+import { MAX_SEARCH_OPERATOR_CLAUSES, searchOperatorClauseCount } from '@/lib/search/operators'
+import { parseSearchWithNames } from '@/lib/search/serverOperators'
 import { rankedSearchWhere } from '@/lib/search/rankedWhere'
 import {
   hasPrWhere,

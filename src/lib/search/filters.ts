@@ -28,7 +28,11 @@ function filterWhere(operator: SearchOperator, value: string, done: Prisma.TaskW
     case 'from': return id !== null ? { userId: id } : { user: { OR: [{ displayName: exact(name) }, { email: exact(name) }] } }
     case 'assignee': return { assignees: { some: id !== null ? { userId: id } : { user: { OR: [{ displayName: exact(name) }, { email: exact(name) }] } } } }
     case 'in':
-    case 'board': return id !== null ? { projectId: id } : { project: { title: exact(name) } }
+    case 'board': {
+      const board = name.replace(/^#/, '')
+      const boardId = numeric(board)
+      return boardId !== null ? { projectId: boardId } : { project: { title: exact(board) } }
+    }
     case 'label': return { taskLabels: { some: { label: { OR: [{ id: name }, { value: exact(name) }] } } } }
     case 'is':
       switch (name.toLowerCase()) {

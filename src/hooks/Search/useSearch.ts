@@ -1,5 +1,5 @@
 import { searchConfig } from "@/lib/configs/search.config";
-import { HTPR_6369_SEARCH_OPERATORS_FLAG } from "@/lib/flags/keys";
+import { HTPR_6369_SEARCH_OPERATORS_FLAG, HTPR_6370_SEARCH_CHIPS_FLAG } from "@/lib/flags/keys";
 import { useFlag } from "@/hooks/useFlag";
 import { useDeviceContext } from "@/lib/contexts/deviceContext";
 import { useQueryClient } from "@tanstack/react-query";
@@ -82,6 +82,7 @@ export function useSearch(
   const queryClient = useQueryClient();
   const isApple = useDeviceContext();
   const searchOperatorsEnabled = useFlag(HTPR_6369_SEARCH_OPERATORS_FLAG);
+  const searchChipsEnabled = useFlag(HTPR_6370_SEARCH_CHIPS_FLAG) && searchOperatorsEnabled;
 
   function handleProjectsFromCache() {
     setProjects(allProjects);
@@ -176,7 +177,7 @@ export function useSearch(
 
   function handleChange(e: any) {
     setInputValue(e.target.value);
-    setSuggestedValue(handleInputAutoComplete(e.target.value));
+    setSuggestedValue(searchChipsEnabled ? "" : handleInputAutoComplete(e.target.value));
   }
 
   async function handleLinkClick(task: ITypedTask) {
@@ -424,6 +425,9 @@ export function useSearch(
   }
 
   function handleKeyDown(event: KeyboardEvent) {
+    if (searchChipsEnabled && document.activeElement === tasksInputRef.current &&
+      (["Enter", "Tab", "Backspace"].includes(event.key) ||
+        (["ArrowDown", "ArrowUp"].includes(event.key) && tasksInputRef.current?.getAttribute("aria-expanded") === "true"))) return;
     let cmdControl = (isApple && event.metaKey) || (!isApple && event.ctrlKey);
     if (controller[event.keyCode]) {
       controller[event.keyCode].pressed = true;
@@ -742,6 +746,7 @@ export function useSearch(
     selectedHistory,
     suggestedValue,
     includeArchived,
+    searchChipsEnabled,
   ]);
 
   // -------------------- recieving data from React-Query
@@ -788,6 +793,7 @@ export function useSearch(
     updateSearchHistory,
     showCommands,
     setInputValue,
+    searchChipsEnabled,
     liSelectedRef,
     tabs,
     activeSplit,

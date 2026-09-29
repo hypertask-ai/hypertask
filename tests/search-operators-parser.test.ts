@@ -29,6 +29,9 @@ test('unquoted values consume one token, or the longest accessible name', () => 
     text: '', filters: { label: [{ value: 'needs design', negated: false }] },
   })
   assert.equal(parseSearchQuery('label:"needs design" Fix This').text, 'Fix This')
+  assert.deepEqual(parseSearchQuery('in:#Product Planning', { in: ['Product Planning'] }), {
+    text: '', filters: { in: [{ value: '#Product Planning', negated: false }] },
+  })
 })
 
 test('quoted operator-like text remains inside the value', () => {

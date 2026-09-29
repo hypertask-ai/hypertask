@@ -300,6 +300,11 @@ test("declared flags remain listed with ticket details and can be changed", asyn
         updatedAt: null,
       },
       {
+        key: "htpr-6370-search-chips",
+        mode: "OWNER_AND_QA",
+        updatedAt: null,
+      },
+      {
         key: "htpr-6372-search-ranking",
         mode: "OWNER_AND_QA",
         updatedAt: null,

@@ -15,6 +15,7 @@ import { useRecoilValue, useSetRecoilState } from "@/lib/state";
 import { aiChatPendingPromptAtom, appShellRailAtom } from "@/store";
 import { useGlobalUIState } from "@/components/ProviderGlobal/useGlobalUIState";
 import AppShellRail from "@/components/PageComponents/Kanban/HeaderComponents/AppShellRail";
+import SearchChipsInput from "./SearchChipsInput";
 
 interface IProps {
   _searchTerm: string;
@@ -54,6 +55,7 @@ const SearchComp = ({
     updateSearchHistory,
     showCommands,
     setInputValue,
+    searchChipsEnabled,
     liSelectedRef,
     tabs,
     activeSplit,
@@ -93,7 +95,15 @@ const SearchComp = ({
       >
         {/* Below @xl the container is full-width, so clear the fixed back button (ends at x≈96) */}
         <div className={cn('w-full px-0', appShellRailOn && 'pl-[64px] @xl:pl-0')}>
-          <div className="relative w-full">
+          {searchChipsEnabled ? (
+            <SearchChipsInput
+              value={inputValue}
+              onChange={setInputValue}
+              onRun={updateSearchHistory}
+              boardId={_fromProject}
+              inputRef={tasksInputRef}
+            />
+          ) : <div className="relative w-full">
               <span
                 className={`${searchTextClassName} text-icon-hover-gray`}
                 aria-hidden="true"
@@ -124,7 +134,7 @@ const SearchComp = ({
                   }
                 }}
               />
-            </div>
+            </div>}
 
           <>
               {responseMessage !== "None" &&
