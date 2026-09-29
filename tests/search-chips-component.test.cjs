@@ -20,7 +20,7 @@ const { JSDOM } = require('jsdom')
 const { createJiti } = require('jiti')
 const root = path.resolve(__dirname, '..')
 
-test('chip picker opens, selects with keyboard, runs, and removes on Backspace', async () => {
+test('chip picker opens, selects with keyboard, runs, and removes on Backspace', async (t) => {
   const dom = new JSDOM('<div id="root"></div>', { url: 'https://example.test/search' })
   const globals = ['window', 'document', 'HTMLElement', 'IS_REACT_ACT_ENVIRONMENT', 'fetch']
   const previous = globals.map((name) => [name, Object.getOwnPropertyDescriptor(global, name)])
@@ -92,6 +92,18 @@ test('chip picker opens, selects with keyboard, runs, and removes on Backspace',
     await type('#pro')
     await settle()
     assert.ok(calls.at(-1).includes('operator=in'))
+    await t.test('picker closes on outside blur but remains open when focus enters an option', async () => {
+      await React.act(async () => input.focus())
+      await React.act(async () => document.querySelector('[role="option"]').focus())
+      assert.equal(input.getAttribute('aria-expanded'), 'true')
+      await React.act(async () => input.focus())
+      const outside = document.createElement('button')
+      document.body.append(outside)
+      await React.act(async () => outside.focus())
+      assert.equal(input.getAttribute('aria-expanded'), 'false')
+      outside.remove()
+      await React.act(async () => input.focus())
+    })
     await press('Escape')
     assert.equal(input.value, '#pro')
     assert.equal(input.getAttribute('aria-expanded'), 'false')
@@ -101,6 +113,13 @@ test('chip picker opens, selects with keyboard, runs, and removes on Backspace',
     assert.equal(runs.at(-1), 'in:7')
     assert.ok(document.querySelector('[aria-label^="Remove in:Product Board"]'))
     await type('login')
+    await t.test('Backspace with selected input text does not remove the chip', async () => {
+      input.setSelectionRange(0, input.value.length)
+      const previousRuns = runs.length
+      await press('Backspace')
+      assert.equal(runs.length, previousRuns)
+      assert.ok(document.querySelector('[aria-label^="Remove"]'))
+    })
     input.setSelectionRange(0, 0)
     await press('Backspace')
     assert.equal(runs.at(-1), 'login')

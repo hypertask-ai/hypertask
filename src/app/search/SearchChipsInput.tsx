@@ -27,6 +27,7 @@ export default function SearchChipsInput({ value, onChange, onRun, boardId, inpu
   const [hydrationStatus, setHydrationStatus] = useState<'loading' | 'error' | null>(null);
   const [dismissed, setDismissed] = useState(false);
   const lookup = useRef(0);
+  const pickerRef = useRef<HTMLDivElement>(null);
   const { chips, text } = splitSearchChips(value, editing, names);
   const active = activeSearchValue(text, names);
   const picker = dismissed ? null : active;
@@ -156,7 +157,7 @@ export default function SearchChipsInput({ value, onChange, onRun, boardId, inpu
       choose(candidates[selectedIndex] ?? candidates[0]);
       return;
     }
-    if (event.key === "Backspace" && event.currentTarget.selectionStart === 0 && chips.length) {
+    if (event.key === "Backspace" && event.currentTarget.selectionStart === 0 && event.currentTarget.selectionEnd === 0 && chips.length) {
       event.preventDefault();
       event.stopPropagation();
       remove(chips.length - 1);
@@ -200,6 +201,7 @@ export default function SearchChipsInput({ value, onChange, onRun, boardId, inpu
           value={text}
           onChange={change}
           onKeyDown={keyDown}
+          onBlur={(event) => { if (!pickerRef.current?.contains(event.relatedTarget)) setDismissed(true); }}
           role="combobox"
           aria-label="Search tasks"
           aria-autocomplete="list"
@@ -209,7 +211,7 @@ export default function SearchChipsInput({ value, onChange, onRun, boardId, inpu
         />
       </div>
       {picker && (
-        <div className="absolute left-4 top-full z-30 @md:left-9" onMouseDown={(event) => event.preventDefault()}>
+        <div ref={pickerRef} className="absolute left-4 top-full z-30 @md:left-9" onMouseDown={(event) => event.preventDefault()}>
           {error ? <div id={listId} role="alert" className="rounded bg-modalBackground p-3 text-white-black">Could not load suggestions. Keep typing to retry.</div> : (
             <MentionListRows
               id={listId}
