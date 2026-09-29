@@ -318,6 +318,7 @@ test("auto-merge waits for app smoke and runs when it completes", async () => {
     /REQUIRED="app-smoke ci-tests ai-review next-public-secrets revert-guard pr-title"/,
   );
   assert.match(workflow, /REQUIRED="\$REQUIRED feature-flag-gate"/);
+  assert.match(workflow, /REQUIRED="\$REQUIRED browser-smoke"/);
   assert.match(ciWorkflow, /name: Verify live required-check settings/);
   assert.match(ciWorkflow, /if \. == "claude-review" then "ai-review" else \. end/);
   assert.match(ciWorkflow, /unique \| sort \| \.\[\]/);
@@ -330,12 +331,17 @@ test("auto-merge waits for app smoke and runs when it completes", async () => {
     ciWorkflow,
     /expected=\$\(printf '%s\\n' app-smoke ci-tests ai-review feature-flag-gate next-public-secrets pr-title revert-guard secret-scan \| sort\)/,
   );
+  assert.match(
+    ciWorkflow,
+    /expected=\$\(printf '%s\\n' "\$expected" browser-smoke \| sort\)/,
+  );
 });
 
 test("CI policy keeps the protected smoke producer live and required", async () => {
   const policy = yaml.load(await readFile("docs/ci-policy.yml", "utf8"));
   const required = [
     "app-smoke",
+    "browser-smoke",
     "ci-tests",
     "ai-review",
     "feature-flag-gate",
@@ -349,6 +355,7 @@ test("CI policy keeps the protected smoke producer live and required", async () 
   assert.deepEqual(policy.required_checks.contexts, required);
   assert.deepEqual(policy.required_checks.automerge_also_requires, [
     "app-smoke",
+    "browser-smoke",
     "ci-tests",
     "feature-flag-gate",
   ]);

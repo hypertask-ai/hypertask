@@ -79,14 +79,17 @@ const VIEWS: Array<{
   // reaching this element fails here even with a correct title/status.
   selector: string
   // Assert presence (toBeAttached) instead of visibility for selectors that
-  // are display:none by design (the inbox's hidden marker span).
+  // are hidden by design or can be zero-height in a valid empty state.
   attachedOnly?: boolean
 }> = [
-  // <ul id="users-list"> — src/app/all-tasks/AllTasks.tsx
-  { name: 'board list', path: '/all-tasks', title: 'All tasks', selector: '#users-list' },
+  // <ul id="users-list"> — src/app/all-tasks/AllTasks.tsx. A fresh user has no
+  // matching tasks, so the rendered list is intentionally empty and zero-height.
+  { name: 'board list', path: '/all-tasks', title: 'All tasks', selector: '#users-list', attachedOnly: Boolean(process.env.BROWSER_SMOKE_PR) },
   // buildBoardRouteTitle: "<board> • Hypertask", bare "Hypertask" = no board data.
   // .kanban-column-title — src/components/PageComponents/Kanban/KanbanSectionComponents/section.tsx
   { name: 'kanban board', path: process.env.SMOKE_BOARD_PATH, requiresFixture: true, titlePattern: /• Hypertask$/, notTitle: /^Hypertask$/, selector: '.kanban-column-title' },
+  // /demo itself provisions a guest (a write); use a pre-seeded demo board in PR CI.
+  ...(process.env.BROWSER_SMOKE_PR ? [{ name: 'demo board', path: process.env.SMOKE_DEMO_BOARD_PATH, titlePattern: /• Hypertask$/, notTitle: /^Hypertask$/, selector: '.kanban-column-title' }] : []),
   // Task detail: "<ticket> <title> - Hypertask"; a missing task renders
   // "undefined undefined - Hypertask".
   // <textarea id="title-input"> — src/components/PageComponents/TaskDetail/TopRow/TaskTitle.tsx
@@ -127,7 +130,37 @@ for (const view of VIEWS) {
     test.skip(view.requiresFixture === true && !view.path, `no seeded fixture (${view.name} not opened)`)
 
     const pageErrors: Error[] = []
+    const realtimeSubscriptions = new Set<string>()
     page.on('pageerror', (err) => pageErrors.push(err))
+    if (process.env.BROWSER_SMOKE_PR) {
+      page.on('websocket', (socket) => {
+        if (new URL(socket.url()).host !== '127.0.0.1:6001') return
+        socket.on('framereceived', ({ payload }) => {
+          try {
+            const frame = JSON.parse(String(payload)) as { event?: string; channel?: string }
+            if (frame.event === 'pusher_internal:subscription_succeeded' && frame.channel) {
+              realtimeSubscriptions.add(frame.channel)
+            }
+          } catch {
+            // Ignore non-JSON protocol frames; Pusher subscription frames are JSON.
+          }
+        })
+      })
+    }
+    let loads = 0
+    const boardFetches = new Map<string, number>()
+    let lastBoardFetchAt = 0
+    if (process.env.BROWSER_SMOKE_PR) {
+      page.on('load', () => { loads++ })
+      page.on('request', (request) => {
+        if (loads === 0) return
+        const pathname = new URL(request.url()).pathname
+        if (pathname === '/api/projects/getAll' || pathname === '/api/projects/boardTasks') {
+          boardFetches.set(pathname, (boardFetches.get(pathname) ?? 0) + 1)
+          lastBoardFetchAt = Date.now()
+        }
+      })
+    }
 
     let response
     try {
@@ -139,6 +172,7 @@ for (const view of VIEWS) {
       throw err
     }
 
+    const loadedAt = Date.now()
     if (isBotChallenge(response)) {
       abortUnrunnable(`Vercel bot-challenged the runner IP on ${view.path}`)
     }
@@ -175,6 +209,17 @@ for (const view of VIEWS) {
       await expect(target, `${view.path} missing "${view.selector}"`).toBeVisible({ timeout: 15_000 })
     }
 
+    if (process.env.BROWSER_SMOKE_PR && (view.name === 'kanban board' || view.name === 'demo board')) {
+      const projectId = new URL(view.path!, 'http://127.0.0.1').searchParams.get('id')
+      expect(projectId, `${view.name} has no project id`).toBeTruthy()
+      await expect
+        .poll(
+          () => realtimeSubscriptions.has(`private-project-${projectId}`),
+          { message: `${view.name} did not subscribe to local realtime`, timeout: 15_000 },
+        )
+        .toBe(true)
+    }
+
     // An auth redirect on one view means the session broke mid-run or the
     // route is misbehaving; either way this is not a passing check.
     expect(page.url(), `${view.path} redirected to ${page.url()}`).not.toContain(LOGIN_PATH)
@@ -195,6 +240,35 @@ for (const view of VIEWS) {
       expect(bodyText, `${view.path} rendered an error page`).not.toMatch(marker)
     }
 
+    if (process.env.BROWSER_SMOKE_PR) {
+      if (view.name === 'kanban board' || view.name === 'demo board') {
+        const columns = page.locator('.kanban-column-title')
+        // The initial route data and the first confirmed realtime subscription
+        // can each trigger one legitimate catch-up fetch. Start loop detection
+        // only after that bootstrap traffic has been quiet for a full second.
+        await expect
+          .poll(
+            () => lastBoardFetchAt === 0 ? 1_000 : Date.now() - lastBoardFetchAt,
+            { message: `${view.name} bootstrap requests did not settle`, timeout: 15_000 },
+          )
+          .toBeGreaterThanOrEqual(1_000)
+        const initialColumnCount = await columns.count()
+        expect(initialColumnCount, `${view.name} has no columns`).toBeGreaterThan(0)
+        boardFetches.clear()
+        const deadline = Date.now() + 30_000
+        while (Date.now() < deadline) {
+          expect(await columns.count(), `${view.name} lost board columns`).toBeGreaterThanOrEqual(initialColumnCount)
+          expect(await columns.first().isVisible(), `${view.name} hid board columns`).toBe(true)
+          await page.waitForTimeout(Math.min(250, Math.max(0, deadline - Date.now())))
+        }
+        for (const [pathname, requests] of boardFetches) {
+          expect(requests, `${view.name} requested ${pathname} ${requests} times after load`).toBeLessThanOrEqual(1)
+        }
+      } else {
+        await page.waitForTimeout(Math.max(0, 30_000 - (Date.now() - loadedAt)))
+      }
+      expect(loads, `${view.name} loaded ${loads} times`).toBeLessThanOrEqual(1)
+    }
     expect(pageErrors, `${view.path} threw a page error: ${pageErrors[0]?.message}`).toHaveLength(0)
   })
 }

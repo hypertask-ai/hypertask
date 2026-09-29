@@ -1011,13 +1011,7 @@ const ButtonGroup = () => {
           />
         </button>
 
-        <button
-          className="relative group"
-          onClick={(e) => {
-            e.preventDefault();
-            e.stopPropagation();
-          }}
-        >
+        <div className="relative group">
           <Tooltip
             left={inboxConfig.tooltipOffsets.bulkReminder.left}
             bottom={inboxConfig.tooltipOffsets.bulkReminder.bottom}
@@ -1031,7 +1025,7 @@ const ButtonGroup = () => {
             mode="Bulk"
             shouldShowToolTip={false} // No tooltip for bulk remind
           />
-        </button>
+        </div>
       </div>
 
       {/* The full-width guest CTAs stay in the header row on the inbox. */}
