@@ -104,6 +104,27 @@ test('chip picker opens, selects with keyboard, runs, and removes on Backspace',
       outside.remove()
       await React.act(async () => input.focus())
     })
+    await t.test('refocusing a value or trigger reopens suggestions only at the active caret', async () => {
+      const outside = document.createElement('button')
+      document.body.append(outside)
+      try {
+        for (const value of ['#', '@', '#pro', '@ka', 'from:ka']) {
+          await type(value)
+          await React.act(async () => outside.focus())
+          assert.equal(input.getAttribute('aria-expanded'), 'false')
+          input.setSelectionRange(value.length, value.length)
+          await React.act(async () => input.focus())
+          assert.equal(input.getAttribute('aria-expanded'), 'true', `${value} reopens on focus`)
+        }
+        await React.act(async () => outside.focus())
+        input.setSelectionRange(0, 0)
+        await React.act(async () => input.focus())
+        assert.equal(input.getAttribute('aria-expanded'), 'false', 'caret before the operator does not reopen')
+        await type('#pro')
+      } finally {
+        outside.remove()
+      }
+    })
     await press('Escape')
     assert.equal(input.value, '#pro')
     assert.equal(input.getAttribute('aria-expanded'), 'false')

@@ -201,6 +201,10 @@ export default function SearchChipsInput({ value, onChange, onRun, boardId, inpu
           value={text}
           onChange={change}
           onKeyDown={keyDown}
+          onFocus={(event) => {
+            const caret = event.currentTarget.selectionStart;
+            if (active && caret !== null && caret <= (active.end ?? text.length) && activeSearchValue(text.slice(0, caret), names)?.start === active.start) setDismissed(false);
+          }}
           onBlur={(event) => { if (!pickerRef.current?.contains(event.relatedTarget)) setDismissed(true); }}
           role="combobox"
           aria-label="Search tasks"
