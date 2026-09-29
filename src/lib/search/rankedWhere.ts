@@ -11,25 +11,37 @@ export async function rankedSearchWhere(
   limit = 50,
   extraWhere: Prisma.TaskWhereInput = {},
   cursorId?: number | null,
+  scanAll = false,
 ) {
   const where = await searchFilterWhere(parsed, projectIds, status)
   const rankedIds: number[] = []
   const descriptionById = new Map<number, string>()
-  if (!parsed.text) return { where, rankedIds, descriptionById }
+  if (!parsed.text) return { where, rankedIds, descriptionById, partial: false }
 
+  const maxWindow = 800
+  const maxCandidates = 1600
+  const maxIterations = 4
   const seen = new Set<number>()
   let window = 100
-  while (cursorId != null
+  let iterations = 0
+  let exhausted = false
+  while (iterations < maxIterations && seen.size < maxCandidates && (scanAll || (cursorId != null
     ? rankedIds.indexOf(cursorId) < 0 || rankedIds.length - rankedIds.indexOf(cursorId) - 1 < limit
-    : rankedIds.length < limit) {
+    : rankedIds.length < limit))) {
+    iterations++
     const [tasks, comments] = await Promise.all([
       searchTasks({ searchQuery: parsed.text, projectIds, status: parsed.filters.is ? undefined : status, topK: window, keywordOnly: true }),
       searchComments({ searchQuery: parsed.text, projectIds, status: parsed.filters.is ? undefined : status, topK: window, limit: window, keywordOnly: true, groupByTask: false }),
     ])
     const candidates = [...tasks.map((row) => ({ id: Number(row.id), description: row.descriptionText })),
       ...comments.map((row) => ({ id: Number(row.taskId), description: '' }))]
+    let truncated = false
     const fresh = candidates.filter(({ id, description }) => {
       if (!Number.isInteger(id) || seen.has(id)) return false
+      if (seen.size >= maxCandidates) {
+        truncated = true
+        return false
+      }
       seen.add(id)
       if (description) descriptionById.set(id, description)
       return true
@@ -42,8 +54,11 @@ export async function rankedSearchWhere(
       const matching = new Set(matches.map((row) => row.id))
       rankedIds.push(...fresh.map(({ id }) => id).filter((id) => matching.has(id)))
     }
-    if (tasks.length < window && comments.length < window) break
-    window *= 2
+    if (tasks.length < window && comments.length < window && !truncated) {
+      exhausted = true
+      break
+    }
+    window = Math.min(window * 2, maxWindow)
   }
-  return { where, rankedIds, descriptionById }
+  return { where, rankedIds, descriptionById, partial: !exhausted }
 }

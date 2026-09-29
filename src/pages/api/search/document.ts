@@ -1,7 +1,7 @@
 import { httpStatusConfig } from "@/lib/configs/http-status.config";
 import { getSessionUser } from "@/lib/auth/getSessionUser";
 import { HTPR_6372_SEARCH_RANKING_FLAG, HTPR_6369_SEARCH_OPERATORS_FLAG, isFeatureEnabled } from "@/lib/flags";
-import { parseSearchWithNames } from "@/lib/search/operators";
+import { MAX_SEARCH_OPERATOR_CLAUSES, parseSearchWithNames, searchOperatorClauseCount } from "@/lib/search/operators";
 import { rankedSearchWhere } from "@/lib/search/rankedWhere";
 import prisma from "@/lib/prisma";
 import { turbopufferGetDocuments } from "@/utils/controllers/search/document";
@@ -43,6 +43,9 @@ const handler: NextApiHandler = async (
       }
 
       const operatorsEnabled = await isFeatureEnabled(HTPR_6369_SEARCH_OPERATORS_FLAG, session.userId);
+      if (operatorsEnabled && (normalizedSearchQuery.length > 200 || searchOperatorClauseCount(normalizedSearchQuery) > MAX_SEARCH_OPERATOR_CLAUSES)) {
+        return res.status(400).json({ message: "Search query exceeds the operator limit or 200 characters" });
+      }
       const accessibleProjects = await prisma.project.findMany({
         where: {
           id: { in: requestedProjectIds },
@@ -57,7 +60,7 @@ const handler: NextApiHandler = async (
 
       const parsed = operatorsEnabled ? await parseSearchWithNames(normalizedSearchQuery, requestedProjectIds) : null;
       if (parsed && Object.keys(parsed.filters).length) {
-        const { where, rankedIds, descriptionById } = await rankedSearchWhere(
+        const { where, rankedIds, descriptionById, partial } = await rankedSearchWhere(
           parsed, requestedProjectIds, archive === "Normal" || archive === "Archive" ? archive : null,
         );
         const select = {
@@ -96,6 +99,7 @@ const handler: NextApiHandler = async (
         }
         return res.status(ranked.length ? 200 : 204).json({
           processedData, tabs, contextProjectId: contextProjectId ?? null,
+          ...(parsed.text && partial ? { partial: true } : {}),
           status: ranked.length ? 200 : 204,
         });
       }

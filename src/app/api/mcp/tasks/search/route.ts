@@ -7,7 +7,7 @@ import prisma from '@/lib/prisma'
 import { turbopufferSearchTaskIds } from '@/utils/controllers/search/document'
 import { HTPR_6530_MCP_LIST_QUERY_FLAG, isFeatureEnabled } from '@/lib/flags'
 import { HTPR_6369_SEARCH_OPERATORS_FLAG } from '@/lib/flags'
-import { parseSearchWithNames } from '@/lib/search/operators'
+import { MAX_SEARCH_OPERATOR_CLAUSES, parseSearchWithNames, searchOperatorClauseCount } from '@/lib/search/operators'
 import { rankedSearchWhere } from '@/lib/search/rankedWhere'
 import {
   hasPrWhere,
@@ -49,6 +49,7 @@ export interface SearchTasksResponse {
   success: boolean
   tasks: TaskSearchItem[]
   total: number
+  partial?: boolean
   boardId?: number
   nextCursor?: string | null
 }
@@ -147,6 +148,10 @@ export async function GET(request: NextRequest) {
         },
         { status: 400 }
       )
+    }
+
+    if (operatorsEnabled && searchOperatorClauseCount(query) > MAX_SEARCH_OPERATOR_CLAUSES) {
+      return NextResponse.json({ success: false, error: 'Search query exceeds the operator limit' }, { status: 400 })
     }
 
     // Get user's accessible projects
@@ -284,13 +289,15 @@ export async function GET(request: NextRequest) {
         listQuery?.filter.assignee !== undefined,
     )
     let operatorResult: Awaited<ReturnType<typeof legacySearch>> | null = null
+    let operatorPartial = false
 
     if (operatorsEnabled) {
       const parsedQuery = await parseSearchWithNames(query, accessibleProjectIds)
       const parsed = Object.keys(parsedQuery.filters).length ? parsedQuery : null
       if (parsed) {
         const filtered = await rankedSearchWhere(parsed, accessibleProjectIds, status, limit,
-          { ...where, ...(parsed.filters.is ? { status: undefined } : {}) }, cursorId)
+          { ...where, ...(parsed.filters.is ? { status: undefined } : {}) }, cursorId, true)
+        operatorPartial = parsed.text ? filtered.partial : false
         where.AND = filtered.where.AND
         if (parsed.filters.is) where.status = filtered.where.status
         if (parsed.text) where.id = { in: filtered.rankedIds }
@@ -462,6 +469,7 @@ export async function GET(request: NextRequest) {
         ? projectRows(taskList as Array<Record<string, unknown>>, listQuery.fields)
         : taskList) as TaskSearchItem[],
       total,
+      ...(operatorPartial ? { partial: true } : {}),
       boardId: boardId || projectId || undefined,
       ...(listQueryEnabled ? { nextCursor: nextCursor || null } : {}),
     }

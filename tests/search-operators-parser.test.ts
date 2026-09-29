@@ -31,6 +31,15 @@ test('unquoted values consume one token, or the longest accessible name', () => 
   assert.equal(parseSearchQuery('label:"needs design" Fix This').text, 'Fix This')
 })
 
+test('quoted operator-like text remains inside the value', () => {
+  assert.deepEqual(parseSearchQuery('fix label:"needs is:open" -from:"Alice in:Other"'), {
+    text: 'fix', filters: {
+      label: [{ value: 'needs is:open', negated: false }],
+      from: [{ value: 'Alice in:Other', negated: true }],
+    },
+  })
+})
+
 test('repeated operators group values and negations', () => {
   const result = parseSearchQuery('Fix from:6 from:7 -label:stale is:open is:done')
   assert.equal(result.text, 'Fix')

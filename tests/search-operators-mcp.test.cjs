@@ -22,7 +22,7 @@ const mocks = new Map([
     isFeatureEnabled: async (key) => key === 'htpr-6369-search-operators' ? state.flag : state.listFlag,
   }],
   ['src/lib/mcp/readListQuery.ts', { readEnabledListQuery: (_, params) => ({ listQuery: state.listFlag
-    ? { query: null, cursor: params.get('cursor'), filter: {}, fields: [], sortBy: undefined, sortOrder: undefined }
+    ? { query: null, cursor: params.get('cursor'), filter: {}, fields: [], sortBy: state.sortBy, sortOrder: state.sortOrder }
     : null }) }],
   ['src/lib/mcp/agents.ts', { mcpVisibleAgentSelect: () => ({ id: true }), mapVisibleMcpAgent: () => null }],
   ['src/utils/controllers/projects/getAllIncludes.ts', { getProjectWhere: () => ({ ownerId: 6 }) }],
@@ -42,7 +42,14 @@ const mocks = new Map([
         state.queries.push({ where, orderBy, take, cursor })
         if (cursor && !orderBy) throw Error('Cursor requires orderBy')
         let rows = state.rows.filter((row) => matches(row, where))
-        if (orderBy) rows = rows.sort((a, b) => b.updatedAt - a.updatedAt || a.id - b.id)
+        if (orderBy) rows = rows.sort((a, b) => {
+          for (const order of orderBy) {
+            const [field, direction] = Object.entries(order)[0]
+            const comparison = a[field] > b[field] ? 1 : a[field] < b[field] ? -1 : 0
+            if (comparison) return direction === 'desc' ? -comparison : comparison
+          }
+          return 0
+        })
         if (cursor) rows = rows.slice(rows.findIndex((row) => row.id === cursor.id) + (skip ?? 0))
         if (take) rows = rows.slice(0, take)
         return select.id && Object.keys(select).length === 1 ? rows.map(({ id }) => ({ id })) : rows
@@ -96,6 +103,30 @@ test('MCP filtered engine includes description match beyond 200 without SQL cont
   const { body, state } = await search('zebra-quark label:bug', { taskHits })
   assert.deepEqual(state.windows, [100, 200, 400])
   assert.deepEqual(body.tasks.map((task) => task.id), [123])
+})
+
+test('MCP totals and explicit sort cover later matches, not only the first page of relevance', async () => {
+  const taskHits = Array.from({ length: 120 }, (_, i) => ({ id: String(1000 + i), descriptionText: '' }))
+  const rows = [...Array.from({ length: 10 }, (_, i) => row(1000 + i)),
+    row(1119, 7, new Date('2026-01-01'))]
+  const { body, state } = await search('zebra label:bug', { taskHits, rows, listFlag: true,
+    sortBy: 'updatedAt', sortOrder: 'asc' }, '&limit=10')
+  assert.deepEqual(state.windows, [100, 200])
+  assert.equal(body.total, 11)
+  assert.equal(body.partial, undefined)
+  assert.equal(body.tasks[0].id, 1119)
+})
+
+test('MCP capped results mark total and sorted page as partial', async () => {
+  const taskHits = Array.from({ length: 5000 }, (_, i) => ({ id: String(1000 + i), descriptionText: '' }))
+  const rows = [row(1000), row(5999)]
+  const { body, state } = await search('zebra label:bug', { taskHits, rows, listFlag: true,
+    sortBy: 'updatedAt', sortOrder: 'asc' }, '&limit=10')
+  assert.deepEqual(state.windows, [100, 200, 400, 800])
+  assert.equal(body.total, 1)
+  assert.equal(body.partial, true)
+  assert.deepEqual(body.tasks.map((task) => task.id), [1000])
+  assert.ok(state.queries.filter(({ where }) => where.id?.in).every(({ where }) => where.id.in.length <= 1600))
 })
 
 test('MCP flag off preserves current search contract', async () => {
