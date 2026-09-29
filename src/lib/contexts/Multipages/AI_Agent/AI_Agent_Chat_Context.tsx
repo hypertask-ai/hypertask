@@ -1,6 +1,7 @@
 "use client";
 import type { FileItem } from "@/components/Common/AttachmentsUpload/FileUploadHandler";
 import { useAiChat } from "@/hooks/MultiPages/AIChat/useAiChat";
+import { isControlQFocusShortcut } from "@/lib/aiChat/chatFocusShortcut";
 import { useRecoilState } from "@/lib/state";
 import { aiChatPendingPromptAtom } from "@/store";
 import { TAiModal } from "@/models/AI_Task_writer_model";
@@ -128,17 +129,8 @@ export const ChatProvider = ({ children }: { children: ReactNode }) => {
     // Tiptap consumes Control+Q before a bubbling document listener can see it.
     // Route only this established focus shortcut during capture; every other AI
     // shortcut keeps the existing bubble-phase behavior (HTPR-5204 follow-up).
-    const handleLayoutKeydownCapture = (event: KeyboardEvent) => {
-      if (
-        event.key.toLowerCase() !== "q" ||
-        !event.ctrlKey ||
-        event.metaKey ||
-        event.altKey ||
-        event.shiftKey ||
-        event.repeat
-      ) {
-        return;
-      }
+    const handleLayoutKeydownCapture = (event: Event) => {
+      if (!isControlQFocusShortcut(event)) return;
 
       layoutKeydownRef.current(event);
       if (event.defaultPrevented) event.stopPropagation();

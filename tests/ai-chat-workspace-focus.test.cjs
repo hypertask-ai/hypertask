@@ -66,7 +66,7 @@ test("the global chat shortcut has one document listener", () => {
   );
   assert.match(
     context,
-    /handleLayoutKeydownCapture[\s\S]*?event\.key\.toLowerCase\(\) !== "q"[\s\S]*?layoutKeydownRef\.current\(event\)[\s\S]*?event\.stopPropagation\(\)/
+    /handleLayoutKeydownCapture[\s\S]*?!isControlQFocusShortcut\(event\)[\s\S]*?layoutKeydownRef\.current\(event\)[\s\S]*?event\.stopPropagation\(\)/
   );
   assert.match(context, /addEventListener\("keydown", handleLayoutKeydown\)/);
 });
