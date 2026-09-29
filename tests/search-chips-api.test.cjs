@@ -3,6 +3,11 @@ const path = require('node:path')
 const { readFileSync } = require('node:fs')
 const { test } = require('node:test')
 const root = path.resolve(__dirname, '..')
+test('chip server reuses the operators name resolver instead of duplicating database lookups', () => {
+  const source = readFileSync(path.join(root, 'src/lib/search/serverOperators.ts'), 'utf8')
+  assert.doesNotMatch(source, /prisma\./)
+  assert.match(source, /await parseSearchWithNames\(/)
+})
 let state
 function eligible(row, where) {
   if (where.projectId && !(where.projectId.in ?? [where.projectId]).includes(row.projectId)) return false

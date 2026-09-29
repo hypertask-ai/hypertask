@@ -2,7 +2,7 @@
 
 import { MentionListRows } from "@/components/AI_CHAT/MentionListComp";
 import { activeSearchValue, candidateQuery, chipQuery, splitSearchChips } from "@/lib/search/chips";
-import { operatorMatches, parseSearchTokens, type Names, type SearchToken } from "@/lib/search/operators";
+import { operatorMatches, parseSearchTokens, type Names, type SearchToken } from "@/lib/search/browserOperators";
 import { searchConfig } from "@/lib/configs/search.config";
 import { Hash, UserRound, X } from "lucide-react";
 import React, { type ChangeEvent, type KeyboardEvent, type RefObject, useEffect, useRef, useState } from "react";
@@ -78,7 +78,7 @@ export default function SearchChipsInput({ value, onChange, onRun, boardId, inpu
     const tokens = parseSearchTokens(value);
     const unresolved = tokens.filter((token) =>
       ['from', 'assignee', 'in', 'board', 'label'].includes(token.operator) &&
-      !token.raw.includes('"') && value.slice(token.end).trim());
+      !token.raw.includes('"') && !names[token.operator as keyof Names]?.includes(token.value));
     if (!unresolved.length) { setHydrationStatus(null); return; }
     const controller = new AbortController();
     setHydrationStatus('loading');
@@ -118,7 +118,7 @@ export default function SearchChipsInput({ value, onChange, onRun, boardId, inpu
     if (!active) return;
     const before = text.slice(0, active.start).trim();
     const after = text.slice(active.end ?? text.length).trim();
-    const selected = candidateQuery(active.operator, row.name, row.id);
+    const selected = `${active.negated ? '-' : ''}${candidateQuery(active.operator, row.name, row.id)}`;
     setChipLabels((previous) => ({ ...previous, [`${active.operator}:${row.id}`]: row.name }));
     setNames((previous) => ({ ...previous, [active.operator]: [...(previous[active.operator as keyof Names] ?? []), String(row.id)] }));
     const next = chipQuery(chips, [before, selected, after].filter(Boolean).join(' '));

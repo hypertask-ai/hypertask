@@ -2,6 +2,7 @@ import assert from 'node:assert/strict'
 import { test } from 'node:test'
 import { activeSearchValue, candidateQuery, chipQuery, splitSearchChips } from '../src/lib/search/chips'
 import { parseSearchQuery } from '../src/lib/search/operators'
+import { parseSearchQuery as parseBrowserSearchQuery } from '../src/lib/search/browserOperators'
 import { buildSearchUrl } from '../src/lib/searchArchive'
 
 test('chips follow the server parser while unrecognised tokens stay editable', () => {
@@ -19,9 +20,25 @@ test('chips follow the server parser while unrecognised tokens stay editable', (
   assert.equal(splitSearchChips('label: "needs design" login').chips[0].value, 'needs design')
 })
 
+test('browser and server parsers agree on quoted, negated and multiword values', () => {
+  const cases = [
+    'from:6 -in:#Product Planning login',
+    'label:"needs design" -assignee:@Kamil Grzegorzewicz login',
+    'foo:bar has:attachment in:#Board',
+    '-from:ka label:bug',
+  ]
+  for (const raw of cases) {
+    const names = { from: ['Kamil Grzegorzewicz'], assignee: ['Kamil Grzegorzewicz'], in: ['Product Planning'] }
+    assert.deepEqual(parseBrowserSearchQuery(raw, names), parseSearchQuery(raw, names))
+  }
+})
+
 test('unfinished operator values stay in the editor until completed', () => {
   assert.deepEqual(splitSearchChips('login from:ka', true).chips, [])
   assert.equal(activeSearchValue('login from:ka')?.value, 'ka')
+  assert.equal(activeSearchValue('-from:ka')?.negated, true)
+  assert.equal(activeSearchValue('from:ka')?.negated, undefined)
+  assert.equal(activeSearchValue('-in:#prod')?.negated, true)
   assert.deepEqual(activeSearchValue('label:'), { operator: 'label', value: '', start: 0 })
   assert.deepEqual(activeSearchValue('@Kamil'), { operator: 'from', value: 'Kamil', start: 0 })
   assert.deepEqual(activeSearchValue('#Pro'), { operator: 'in', value: 'Pro', start: 0 })

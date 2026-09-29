@@ -1,4 +1,4 @@
-import { parseSearchTokens, type Names, type SearchToken } from './operators'
+import { parseSearchTokens, type Names, type SearchToken } from './browserOperators'
 
 export function splitSearchChips(raw: string, editing = false, names: Names = {}) {
   const tokens = parseSearchTokens(raw, names)
@@ -39,7 +39,7 @@ export function candidateQuery(operator: string, name: string, id?: number | str
   return `${operator}:${/\s|"/.test(value) ? JSON.stringify(value) : value}`
 }
 
-export function activeSearchValue(text: string, names: Names = {}) {
+export function activeSearchValue(text: string, names: Names = {}): { operator: string; value: string; start: number; end?: number; negated?: boolean } | null {
   if (/\s$/.test(text)) return null
   const tokens = parseSearchTokens(text)
   const last = tokens.at(-1)
@@ -50,7 +50,7 @@ export function activeSearchValue(text: string, names: Names = {}) {
     const knownPrefix = names[last.operator as keyof Names]?.some((name) =>
       name.toLowerCase().startsWith(tail.toLowerCase()))
     const value = knownPrefix ? tail : tail.match(/^\S+/)?.[0] ?? ''
-    return { operator: last.operator, value, start: last.start, end: valueStart + marker + value.length }
+    return { operator: last.operator, value, start: last.start, end: valueStart + marker + value.length, ...(last.negated ? { negated: true } : {}) }
   }
   const trigger = text.match(/(?:^|\s)([@#])([^\s]*)$/)
   if (trigger) return { operator: trigger[1] === '@' ? 'from' : 'in', value: trigger[2], start: text.length - trigger[0].trimStart().length }

@@ -117,7 +117,10 @@ const handler: NextApiHandler = async (req, res) => {
       orderBy: [{ displayName: 'asc' }, { email: 'asc' }, { id: 'asc' }], take: 500,
     }) : []
     const people = [...prefix, ...contains]
-    if (chipsEnabled) people.unshift(...[...recentPeople, ...fuzzy].filter((person) => !people.some((row) => row.id === person.id)))
+    if (chipsEnabled) {
+      const unique = new Map([...recentPeople, ...fuzzy, ...people].map((person) => [person.id, person]))
+      people.splice(0, people.length, ...unique.values())
+    }
     candidates = people.map((person) => ({
       id: person.id, name: person.displayName || person.email,
       preferred: person.members.length > 0,

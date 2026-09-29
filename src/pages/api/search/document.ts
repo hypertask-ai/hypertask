@@ -3,7 +3,7 @@ import { getSessionUser } from "@/lib/auth/getSessionUser";
 import { HTPR_6372_SEARCH_RANKING_FLAG, HTPR_6369_SEARCH_OPERATORS_FLAG, isFeatureEnabled } from "@/lib/flags";
 import { HTPR_6370_SEARCH_CHIPS_FLAG } from "@/lib/flags";
 import { MAX_SEARCH_OPERATOR_CLAUSES, parseSearchWithNames, searchOperatorClauseCount } from "@/lib/search/operators";
-import { parseSearchWithNames as parseSearchWithChipNames } from "@/lib/search/serverOperators";
+import { parseSearchWithChipNames } from "@/lib/search/serverOperators";
 import { rankedSearchWhere } from "@/lib/search/rankedWhere";
 import prisma from "@/lib/prisma";
 import { turbopufferGetDocuments } from "@/utils/controllers/search/document";

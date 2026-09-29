@@ -149,6 +149,12 @@ test('label hydration returns the selected ID only within visible boards', async
   assert.equal(res.body.resolved, 'Duplicate')
   assert.equal(res.body.resolvedId, 'label-7')
 })
+test('recent fuzzy people appear only once even when present in both sources', async () => {
+  const { res } = await lookup('from', 'kml', { chipsFlag: true,
+    people: [person(1, 'Kamil')], recentTasks: [{ userId: 1 }],
+  })
+  assert.deepEqual(res.body.candidates, [{ id: 1, name: 'Kamil' }])
+})
 test('person hydration uses one bounded exact-name query for a long tail', async () => {
   const { state: snapshot } = await lookup('from', 'Kamil', {
     chipsFlag: true, people: [person(1, 'Kamil')], resolve: `${'a '.repeat(49)}Kamil`,
