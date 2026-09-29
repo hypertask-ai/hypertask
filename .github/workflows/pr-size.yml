@@ -116,7 +116,12 @@ jobs:
       - uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea # v7
         with:
           script: |
-            const PREFIXES = ['HTPR', 'HYFA'];
+            // YPER4 = Hypertask Infra board (project 4060): plumbing work
+            // (agent farm, CI, deploy safety) lives there, not on board 15,
+            // so its ticket ids need the same shape rule as HTPR/HYFA
+            // (Valentin, 2026-09-27 infra-board rule; supervisor decision,
+            // 2026-09-29, on YPER4-17).
+            const PREFIXES = ['HTPR', 'HYFA', 'YPER4'];
             const TAGS = [
               'BUGFIX', 'FEATURE', 'IMPROVE', 'CLI/MCP/AI', 'SPEED', 'FEEDBACK',
               'DASH', 'QA', 'BOARD', 'COST', 'PLAN', 'INFRA',
@@ -162,12 +167,13 @@ jobs:
                 `Pull request title does not match the required shape.`,
                 ``,
                 `  got:      ${pr.title}`,
-                `  expected: (HTPR|HYFA)-<n> [TAG] <summary>`,
+                `  expected: (HTPR|HYFA|YPER4)-<n> [TAG] <summary>`,
                 ``,
                 `Valid tags: ${TAGS.join(', ')}`,
                 ``,
                 `Example: HTPR-5626 [INFRA] Move every job off GitHub-hosted runners`,
                 `         HYFA-43 [INFRA] Add Factory acceptance routes`,
+                `         YPER4-17 [INFRA] Step 4: rules enforced in code`,
                 ``,
                 `Edit the title and this check re-runs on its own.`,
               ].join('\n')

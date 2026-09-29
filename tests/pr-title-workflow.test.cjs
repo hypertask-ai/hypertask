@@ -49,8 +49,8 @@ async function runTitleCheck(title) {
   return failures;
 }
 
-test("PR title accepts HTPR and HYFA tickets with every current work tag", async () => {
-  for (const prefix of ["HTPR", "HYFA"]) {
+test("PR title accepts HTPR, HYFA and YPER4 tickets with every current work tag", async () => {
+  for (const prefix of ["HTPR", "HYFA", "YPER4"]) {
     for (const tag of TAGS) {
       assert.deepEqual(
         await runTitleCheck(`${prefix}-43 [${tag}] Keep the current title rule`),
@@ -67,10 +67,12 @@ test("PR title rejects foreign and lookalike ticket prefixes", async () => {
     "XHYFA-43 [INFRA] Leading lookalike",
     "hyfa-43 [INFRA] Lowercase lookalike",
     "HYFA-43abc [INFRA] Trailing ticket text",
+    "YPER-43 [INFRA] Short lookalike missing the digit",
+    "yper4-43 [INFRA] Lowercase infra-board lookalike",
   ]) {
     const failures = await runTitleCheck(title);
     assert.equal(failures.length, 1, `${title} should fail`);
-    assert.match(failures[0], /expected: \(HTPR\|HYFA\)-<n>/);
+    assert.match(failures[0], /expected: \(HTPR\|HYFA\|YPER4\)-<n>/);
   }
 });
 
@@ -78,6 +80,7 @@ test("PR title retains the current tag and nonempty-summary requirements", async
   for (const title of [
     "HTPR-43 [SECURITY] Unknown tag",
     "HYFA-43 [INFRA] ",
+    "YPER4-17 [SECURITY] Unknown tag",
   ]) {
     const failures = await runTitleCheck(title);
     assert.equal(failures.length, 1, `${title} should fail`);
