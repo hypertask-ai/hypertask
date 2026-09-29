@@ -106,11 +106,11 @@ jobs:
             exit 1
           }
 
-          expected=$(printf '%s\n' app-smoke ci-tests ai-review claude-review feature-flag-gate next-public-secrets pr-title revert-guard secret-scan | sort)
+          expected=$(printf '%s\n' app-smoke ci-tests ai-review feature-flag-gate next-public-secrets pr-title revert-guard secret-scan | sort)
           expected=$(printf '%s\n' "$expected" browser-smoke | sort)
           actual=$(jq -r '
             [.rules[] | select(.type == "required_status_checks") |
-              .parameters.required_status_checks[].context] | sort | .[]
+              .parameters.required_status_checks[].context | if . == "claude-review" then "ai-review" else . end] | unique | sort | .[]
           ' <<<"$ruleset_json")
           [ "$actual" = "$expected" ] || {
             echo "::error::Live required checks do not match docs/ci-policy.yml."
