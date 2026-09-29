@@ -53,7 +53,7 @@ for (const [lane, section] of [
     const result = runScript(t, lane ? ['--lane', lane] : [], { BOARD_SECTION: section });
     assert.equal(result.status, 0, result.stderr);
     assert.match(result.stdout, /PR opened\./);
-    assert.ok(result.stdout.includes(prUrl));
+    assert.ok(result.stdout.split('\n').includes(`  pr:        ${prUrl}`));
     assert.ok(result.stdout.includes(`section:   ${section} (read back from the board)`));
     assert.match(result.stdout, /automerge=no/);
     assert.equal(result.commands.length, 5);
