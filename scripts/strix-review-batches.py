@@ -8,6 +8,7 @@ import os
 from pathlib import Path
 import subprocess
 import time
+import uuid
 
 SCRIPTS = Path(__file__).resolve().parent
 spec = importlib.util.spec_from_file_location("report_check", SCRIPTS / "strix-check-run.py")
@@ -20,6 +21,47 @@ def write_json(path, value):
     temporary = path.with_suffix(".tmp")
     temporary.write_text(json.dumps(value, indent=2) + "\n")
     temporary.replace(path)
+
+
+def _run_pointer(state, scope_key):
+    return state / f"{scope_key}.run.json"
+
+
+def _start_run(state, scope_key):
+    """Begin a brand-new run: mint a fresh run id and hand back a checkpoint
+    directory namespaced under it, so a non-resume run can never see a
+    receipt written by any earlier run at this same scope_key (HTPR-6628:
+    a non-resume run that only erased receipts as it reached each batch left
+    later, unreached batches' stale receipts in place for a later --resume
+    to pick up and misreport as freshly completed). The pointer file is
+    written last so a resume never adopts a run whose directory does not
+    exist yet.
+    """
+    run_id = uuid.uuid4().hex
+    checkpoint = state / scope_key / run_id
+    checkpoint.mkdir(parents=True, exist_ok=True)
+    write_json(_run_pointer(state, scope_key), {"run_id": run_id, "scope_key": scope_key})
+    return run_id, checkpoint
+
+
+def _resume_run(state, scope_key):
+    """Continue the most recently recorded run for this exact scope key
+    (same revision, base and planned batches). A missing, unreadable or
+    mismatched pointer means there is nothing safe to resume, so this falls
+    back to starting a fresh run rather than guessing at a run id.
+    """
+    pointer = _run_pointer(state, scope_key)
+    if pointer.exists():
+        try:
+            recorded = json.loads(pointer.read_text())
+            run_id = recorded["run_id"]
+            if recorded.get("scope_key") == scope_key and run_id:
+                checkpoint = state / scope_key / run_id
+                checkpoint.mkdir(parents=True, exist_ok=True)
+                return run_id, checkpoint
+        except (ValueError, OSError, KeyError):
+            pass
+    return _start_run(state, scope_key)
 
 
 def review_priority(name):
@@ -56,7 +98,12 @@ def run(source, paths, state, output, revision, base, budget, batch_budget, max_
         raise ValueError("budget must cover one positive batch budget; max-files must be positive")
     batches = plan(source, paths, max_files)
     scope_key = hashlib.sha256(json.dumps([revision, base, batches]).encode()).hexdigest()[:24]
-    checkpoint = state / scope_key
+    # resume=False (the default for a deliberate, human-invoked repeat) always
+    # starts a brand-new, uniquely-named run directory, so it can never see a
+    # receipt written by an earlier run at this same scope_key -- not just the
+    # ones this run reaches before failing. resume=True continues the last
+    # recorded run for this exact scope_key, or starts fresh if none exists.
+    run_id, checkpoint = _start_run(state, scope_key) if not resume else _resume_run(state, scope_key)
     manifest = {"revision": revision, "base": base, "status": "running", "batches": [],
                 "scope_files": sum(len(b) for b in batches), "reserved_budget": 0}
     write_json(output / "coverage.json", manifest)
@@ -65,18 +112,13 @@ def run(source, paths, state, output, revision, base, budget, batch_budget, max_
         receipt = checkpoint / f"{index}.json"
         entry = {"index": index, "files": files, "status": "pending"}
         manifest["batches"].append(entry)
-        # resume=False (the default for a deliberate, human-invoked repeat) never
-        # trusts an existing receipt, so an unchanged revision always gets a fresh
-        # scan instead of silently returning a stale prior report as "completed".
-        # It also evicts any receipt left at this scope_key before scanning, so a
-        # non-resume attempt that fails partway never leaves a stale receipt for
-        # a later --resume to pick up and misreport as freshly completed.
-        if not resume and receipt.exists():
-            receipt.unlink()
         if resume and receipt.exists():
             previous = json.loads(receipt.read_text())
-            # A checkpoint only counts while its original report still validates.
+            # A receipt only counts while it belongs to this exact run (same
+            # run id, same scope key) and its original report still validates.
             try:
+                if previous.get("run_id") != run_id or previous.get("scope_key") != scope_key:
+                    raise ValueError("receipt belongs to a different run")
                 checker.validate(Path(previous["run"]).parent)
                 entry.update(previous)
                 continue
@@ -121,7 +163,7 @@ def run(source, paths, state, output, revision, base, budget, batch_budget, max_
             subprocess.run(["python3", str(SCRIPTS / "strix-file-tickets.py"), str(report)],
                            env=env, check=True, timeout=720)
             entry["status"] = "completed"
-            write_json(receipt, entry)
+            write_json(receipt, {**entry, "run_id": run_id, "scope_key": scope_key})
         except (ValueError, OSError, subprocess.SubprocessError) as error:
             entry.update(status="failed", error=str(error))
             failed = True

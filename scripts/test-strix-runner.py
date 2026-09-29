@@ -369,4 +369,101 @@ class ReportTests(unittest.TestCase):
                 with self.assertRaises(SystemExit):reporter.main(temp)
 
 
+class BatchRunResumeTests(unittest.TestCase):
+    """HTPR-6628: a non-resume run must never adopt a receipt left by any
+    other run at the same scope key, and a resume must only continue the
+    exact run it is a continuation of."""
+
+    def setUp(self):
+        self.temp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temp.cleanup)
+        self.root = Path(self.temp.name)
+        self.source = self.root/'source'
+        self.source.mkdir()
+        for name in ('a.py', 'b.py', 'c.py'):
+            (self.source/name).write_text('x'*10)
+        self.state = self.root/'state'
+        self.output_base = self.root/'output'
+        self.planner = load('strix-review-batches')
+
+    def _patches(self):
+        return (
+            patch.object(self.planner.subprocess, 'run', return_value=subprocess.CompletedProcess([], 0, '', '')),
+            patch.object(self.planner.checker, 'validate', side_effect=lambda p: p/'run'),
+        )
+
+    def test_fresh_run_never_adopts_receipts_left_by_an_earlier_run(self):
+        planner = self.planner
+        files = ['a.py', 'b.py', 'c.py']
+        batches = planner.plan(self.source, files, max_files=1)
+        scope_key = planner.hashlib.sha256(
+            planner.json.dumps(['rev', 'base', batches]).encode()).hexdigest()[:24]
+        # A prior, unrelated run left completed-looking receipts for the two
+        # later batches (the exact shape a non-resume run that was
+        # interrupted before it reached them used to leave behind).
+        stale = self.state/scope_key/'stale-run'
+        stale.mkdir(parents=True)
+        for index in (1, 2):
+            planner.write_json(stale/f'{index}.json', {
+                'index': index, 'files': batches[index], 'status': 'completed',
+                'run': 'STALE-OLD-REPORT', 'run_id': 'stale-run', 'scope_key': scope_key,
+            })
+        planner.write_json(planner._run_pointer(self.state, scope_key),
+                            {'run_id': 'stale-run', 'scope_key': scope_key})
+
+        output = self.output_base/'fresh'; output.mkdir(parents=True)
+        p1, p2 = self._patches()
+        with p1, p2:
+            code = planner.run(self.source, files, self.state, output, 'rev', 'base',
+                                budget=99, batch_budget=1, max_files=1, resume=False)
+        self.assertEqual(code, 0)
+        coverage = json.loads((output/'coverage.json').read_text())
+        for batch in coverage['batches']:
+            self.assertNotEqual(batch['run'], 'STALE-OLD-REPORT')
+            self.assertIn(str(output), batch['run'])
+
+    def test_resume_continues_an_interrupted_run_without_rescanning_completed_batches(self):
+        planner = self.planner
+        files = ['a.py', 'b.py', 'c.py']
+        p1, p2 = self._patches()
+        with p1, p2:
+            output1 = self.output_base/'partial'; output1.mkdir(parents=True)
+            code1 = planner.run(self.source, files, self.state, output1, 'rev', 'base',
+                                 budget=1, batch_budget=1, max_files=1, resume=True)
+            self.assertEqual(code1, 3)
+            coverage1 = json.loads((output1/'coverage.json').read_text())
+            self.assertEqual(coverage1['completed_batches'], 1)
+            first_report = coverage1['batches'][0]['run']
+
+            output2 = self.output_base/'resumed'; output2.mkdir(parents=True)
+            code2 = planner.run(self.source, files, self.state, output2, 'rev', 'base',
+                                 budget=99, batch_budget=1, max_files=1, resume=True)
+        self.assertEqual(code2, 0)
+        coverage2 = json.loads((output2/'coverage.json').read_text())
+        self.assertEqual(coverage2['completed_batches'], 3)
+        self.assertEqual(coverage2['batches'][0]['run'], first_report)
+        for batch in coverage2['batches'][1:]:
+            self.assertIn(str(output2), batch['run'])
+
+    def test_resume_with_changed_input_does_not_reuse_previous_scope_receipts(self):
+        planner = self.planner
+        files = ['a.py', 'b.py', 'c.py']
+        p1, p2 = self._patches()
+        with p1, p2:
+            output1 = self.output_base/'orig'; output1.mkdir(parents=True)
+            code1 = planner.run(self.source, files, self.state, output1, 'rev', 'base',
+                                 budget=99, batch_budget=1, max_files=1, resume=True)
+            self.assertEqual(code1, 0)
+
+            (self.source/'d.py').write_text('extra')
+            output2 = self.output_base/'changed'; output2.mkdir(parents=True)
+            code2 = planner.run(self.source, files+['d.py'], self.state, output2, 'rev', 'base',
+                                 budget=99, batch_budget=1, max_files=1, resume=True)
+        self.assertEqual(code2, 0)
+        coverage2 = json.loads((output2/'coverage.json').read_text())
+        self.assertEqual(coverage2['total_batches'], 4)
+        for batch in coverage2['batches']:
+            self.assertIn(str(output2), batch['run'])
+
+
 if __name__=='__main__':unittest.main()
