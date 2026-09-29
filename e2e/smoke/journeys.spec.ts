@@ -87,8 +87,11 @@ test(`switch boards`, { tag: [idTag('switch-boards')] }, async ({ page, request 
   await assertColumnsStayVisible(page, '.kanban-column-title', 3_000)
 
   const guard = watchForLoops(page)
-  await page.goto(withRealtime(`/project?id=${other!.id}`), { waitUntil: 'load' })
+  await page.keyboard.press('Control+B')
+  await page.locator(`#project-${other!.id}:visible`).first().click()
+  await expect(page).toHaveURL(new RegExp(`[?&]id=${other!.id}(?:&|$)`))
   await assertColumnsStayVisible(page, '.kanban-column-title', 10_000)
+  expect(guard.loads, 'switch boards performed a full page reload').toBe(0)
   assertNoLoop(guard, 'switch boards')
   guard.stop()
 })
