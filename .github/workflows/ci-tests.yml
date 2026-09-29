@@ -89,7 +89,8 @@ jobs:
             exit 1
           }
 
-          expected=$(printf '%s\n' app-smoke browser-smoke ci-tests ai-review feature-flag-gate next-public-secrets pr-title revert-guard secret-scan | sort)
+          expected=$(printf '%s\n' app-smoke ci-tests ai-review feature-flag-gate next-public-secrets pr-title revert-guard secret-scan | sort)
+          expected=$(printf '%s\n' "$expected" browser-smoke | sort)
           actual=$(jq -r '
             [.rules[] | select(.type == "required_status_checks") |
               .parameters.required_status_checks[].context | if . == "claude-review" then "ai-review" else . end] | unique | sort | .[]

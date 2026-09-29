@@ -315,9 +315,10 @@ test("auto-merge waits for app smoke and runs when it completes", async () => {
   assert.match(workflow, /workflows: \["CI Tests", "Revert Guard"\]/);
   assert.match(
     workflow,
-    /REQUIRED="app-smoke browser-smoke ci-tests ai-review next-public-secrets revert-guard pr-title"/,
+    /REQUIRED="app-smoke ci-tests ai-review next-public-secrets revert-guard pr-title"/,
   );
   assert.match(workflow, /REQUIRED="\$REQUIRED feature-flag-gate"/);
+  assert.match(workflow, /REQUIRED="\$REQUIRED browser-smoke"/);
   assert.match(ciWorkflow, /name: Verify live required-check settings/);
   assert.match(ciWorkflow, /if \. == "claude-review" then "ai-review" else \. end/);
   assert.match(ciWorkflow, /unique \| sort \| \.\[\]/);
@@ -328,7 +329,11 @@ test("auto-merge waits for app smoke and runs when it completes", async () => {
   assert.match(ciWorkflow, /Live required checks do not match docs\/ci-policy\.yml/);
   assert.match(
     ciWorkflow,
-    /expected=\$\(printf '%s\\n' app-smoke browser-smoke ci-tests ai-review feature-flag-gate next-public-secrets pr-title revert-guard secret-scan \| sort\)/,
+    /expected=\$\(printf '%s\\n' app-smoke ci-tests ai-review feature-flag-gate next-public-secrets pr-title revert-guard secret-scan \| sort\)/,
+  );
+  assert.match(
+    ciWorkflow,
+    /expected=\$\(printf '%s\\n' "\$expected" browser-smoke \| sort\)/,
   );
 });
 
