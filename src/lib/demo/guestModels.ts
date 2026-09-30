@@ -14,7 +14,7 @@ import type { TAiModelKey } from "@/lib/aiModelOptions";
 export const GUEST_MODEL_KEYS: readonly TAiModelKey[] = [
   "gemini-3.5-flash-lite", // fast default, recognizable label
   "kimi-k2.5",
-  "glm-5.2",
+  "glm-5.3-flash",
   "deepseek-v4-pro",
   "qwen3.7-plus",
 ];
@@ -27,7 +27,7 @@ export const GUEST_DEFAULT_OPTION_ID = "gemini-3.5-flash-lite";
 export const GUEST_ALLOWED_GATEWAY_MODELS: ReadonlySet<string> = new Set([
   "google/gemini-3.5-flash-lite",
   "moonshotai/kimi-k2.5",
-  "zai/glm-5.2",
+  "zai/glm-5.3-flash",
   "deepseek/deepseek-v4-pro",
   "alibaba/qwen3.7-plus",
 ]);

@@ -50,6 +50,7 @@ import {
   defaultAiModelOption,
   getDefaultAiModelOptionForPlan,
   getAiModelOptionById,
+  isLunaBlockedForPlan,
   preferredAiModelOption,
   type TAiModelOption,
 } from "@/lib/aiModelOptions";
@@ -64,6 +65,7 @@ import {
 } from "@/lib/aiModelPreferences";
 import {
   assertModelAllowedForPlan,
+  lunaFreePlanEnabled,
   storePlanIdForProject,
 } from "@/app/api/ai/_lib/planGate";
 import {
@@ -118,8 +120,10 @@ export type SelectedModel = {
 
 const DEFAULT_PROVIDER: ProviderId = "openai";
 const DEFAULT_MODEL = "gpt-6-luna";
-const DEFAULT_CLAUDE_MODEL = "claude-sonnet-5";
+const DEFAULT_CLAUDE_MODEL = "claude-sonnet-5.5";
 const CLAUDE_MODELS = new Set([
+  "claude-sonnet-5.5",
+  "claude-sonnet-5-5",
   "claude-sonnet-5",
   "claude-opus-5.5",
   "claude-opus-5-5",
@@ -127,13 +131,12 @@ const CLAUDE_MODELS = new Set([
   "claude-haiku-4.5",
 ]);
 const OPENAI_MODELS = new Set([
-  "gpt-5.5",
   "gpt-6-luna",
   "gpt-5.6-luna",
   "gpt-5.6-terra",
+  "gpt-6.1-sol",
   "gpt-6-sol",
   "gpt-5.6-sol",
-  "gpt-5.4-mini",
 ]);
 
 const CLAUDE_TEMPERATURE_UNSUPPORTED_PREFIXES = [
@@ -1040,9 +1043,11 @@ export async function selectTaskWriterModel(args: {
         credential.trim() !== sharedKey) ||
       (credential !== null && typeof credential === "object");
   }
+  const lunaFree = await lunaFreePlanEnabled(args.userId);
   const requestDefaultModelOption = getDefaultAiModelOptionForPlan(
     storePlanId,
     hasEligibleByokCredential,
+    lunaFree,
   );
   const personalModelOptionId = args.aiFeature
     ? await getPersonalModelOptionId(
@@ -1068,6 +1073,18 @@ export async function selectTaskWriterModel(args: {
   if (selection.modelOption) {
     selection = selectionFromModelOption(
       filterModelOptionForTeam(selection.modelOption, teamContext.settings)
+    );
+  }
+  if (
+    isLunaBlockedForPlan(
+      selection.modelOption,
+      storePlanId,
+      lunaFree,
+      hasEligibleByokCredential,
+    )
+  ) {
+    selection = selectionFromModelOption(
+      filterModelOptionForTeam(requestDefaultModelOption, teamContext.settings),
     );
   }
 
@@ -1126,6 +1143,7 @@ export async function selectTaskWriterModel(args: {
     selection.modelOption,
     teamContext.teamId,
     byokApiKey,
+    lunaFree,
   );
 
   const tags = gatewayTagsForLookup({

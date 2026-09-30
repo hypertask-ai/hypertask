@@ -1,3 +1,5 @@
+import { useFlag } from "@/hooks/useFlag";
+import { LUNA_FREE_PLAN_FLAG } from "@/lib/flags/keys";
 import { useCurrentBoardBilling } from "@/hooks/General/useCurrentBoardBilling";
 import { isByokProviderEnabledForSource } from "@/lib/byokSelectedProviderGate";
 import {
@@ -64,7 +66,7 @@ const effortNotes: Record<TAiEffort, string> = {
   high: "deep reasoning",
 };
 
-const AIModelDropDownButton = ({
+const AIModelDropDownList = ({
   optionCallback,
   aiSelected,
   currentOptions,
@@ -76,6 +78,7 @@ const AIModelDropDownButton = ({
   modelBilling,
   effortLabelClassName,
   mobileQuickPicker = false,
+  lunaFree,
 }: {
   aiSelected: TAiModal | undefined;
   optionCallback: (item: TAiModal) => void;
@@ -90,6 +93,8 @@ const AIModelDropDownButton = ({
   // in the narrow docked chat rail; effort stays selectable in-menu). HTPR-4548.
   effortLabelClassName?: ClassNameValue;
   mobileQuickPicker?: boolean;
+  // htpr-6722-latest-models: Luna is included on Free plans.
+  lunaFree: boolean;
 }) => {
   const [isOpen, setIsOpen] = useState(false);
   const [submenu, setSubmenu] = useState<Submenu | null>(null);
@@ -163,12 +168,15 @@ const AIModelDropDownButton = ({
       isGuest,
     ]
   );
+  // Luna is included for Free plans only; BYOK still needs its own key.
+  const lunaFreeOnPlan = lunaFree && scopedBilling?.storePlanId === "Free";
   const planDefaultOption = getDefaultAiModelOptionForPlan(
     scopedBilling?.storePlanId,
     isByokProviderEnabledForSource(
       scopedBilling?.byokProviderFlags,
       preferredAiModelOption.source,
     ),
+    lunaFree,
   );
   const requestedOption =
     getAiModelOptionById(aiSelected?.id) ?? planDefaultOption;
@@ -202,6 +210,7 @@ const AIModelDropDownButton = ({
       (option) =>
         !isPremiumAiModelDefinition(
           getAiModelDefinition(option.modelKey),
+          lunaFreeOnPlan,
         ) || isProviderEnabled(option.source),
     );
 
@@ -406,7 +415,7 @@ const AIModelDropDownButton = ({
               const isPremiumLocked =
                 !isGuest &&
                 respectTeamAvailability &&
-                isPremiumAiModelDefinition(definition) &&
+                isPremiumAiModelDefinition(definition, lunaFreeOnPlan) &&
                 (scopedBilling?.storePlanId === "Free" ||
                   (scopedBilling?.storePlanId === "BYOK" && !hasCustomerKey));
               const locked = isGuestLocked || isPremiumLocked;
@@ -589,7 +598,7 @@ const AIModelDropDownButton = ({
                       const isPremiumLocked =
                         !isGuest &&
                         respectTeamAvailability &&
-                        isPremiumAiModelDefinition(model) &&
+                        isPremiumAiModelDefinition(model, lunaFreeOnPlan) &&
                         (scopedBilling?.storePlanId === "Free" ||
                           (scopedBilling?.storePlanId === "BYOK" &&
                             !hasCustomerKey));
@@ -690,6 +699,7 @@ const AIModelDropDownButton = ({
               (isByokPlan &&
                 isPremiumAiModelDefinition(
                   getAiModelDefinition(fallbackOption.modelKey),
+                  lunaFreeOnPlan,
                 ) &&
                 !isProviderEnabled(fallbackOption.source))
             }
@@ -789,5 +799,16 @@ function SubmenuRow({
     </button>
   );
 }
+
+type AIModelDropDownButtonProps = Omit<
+  Parameters<typeof AIModelDropDownList>[0],
+  "lunaFree"
+>;
+
+const AIModelDropDownButton = (props: AIModelDropDownButtonProps) => {
+  const lunaFree = useFlag(LUNA_FREE_PLAN_FLAG);
+  if (lunaFree) return <AIModelDropDownList {...props} lunaFree />;
+  return <AIModelDropDownList {...props} lunaFree={false} />;
+};
 
 export default AIModelDropDownButton;

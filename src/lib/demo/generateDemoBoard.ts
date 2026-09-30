@@ -1,7 +1,7 @@
 import { createGateway, generateObject } from "ai";
 import { z } from "zod";
 
-const DEMO_MODEL = "openai/gpt-5.4-mini";
+const DEMO_MODEL = "openai/gpt-6-luna";
 
 const BoardSchema = z.object({
   name: z.string().min(1).max(40),

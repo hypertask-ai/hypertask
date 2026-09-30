@@ -474,6 +474,11 @@ test("declared flags remain listed with ticket details and can be changed", asyn
         mode: "OWNER_AND_QA",
         updatedAt: null,
       },
+      {
+        key: "htpr-6722-latest-models",
+        mode: "OWNER_AND_QA",
+        updatedAt: null,
+      },
     ],
   );
   listed.forEach(({ key, description, ticketUrl, shippedOn }) => {

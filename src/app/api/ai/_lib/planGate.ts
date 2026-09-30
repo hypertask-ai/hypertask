@@ -6,9 +6,11 @@ import {
   pickEntitlingSubscriptionRow,
   subscriptionStatusGrantsAccess,
 } from "@/lib/subscriptionAccess";
+import { LUNA_FREE_PLAN_FLAG } from "@/lib/flags/keys";
 import {
   getAiModelDefinition,
   isPremiumAiModelDefinition,
+  LUNA_FREE_MODEL_KEY,
   type TAiImageModelDefinition,
   type TAiModelOption,
 } from "@/lib/aiModelOptions";
@@ -96,11 +98,30 @@ export async function storePlanIdForProject(
 
 /** Throws when a Free-plan (or teamless) request asks for a premium model. Free teams without any
  * team/project context are treated as Free, not exempted. */
+/**
+ * HTPR-6722: whether GPT 6 Luna is an included model for this user's Free plan.
+ * Enforced on the server; fails closed when the flag cannot be read.
+ */
+export async function lunaFreePlanEnabled(
+  userId: number | null | undefined,
+): Promise<boolean> {
+  if (!userId) return false;
+  try {
+    // Loaded on demand: @/lib/flags reaches the auth stack, which the many
+    // callers that only need the plan checks below should not pay for.
+    const { isFeatureEnabled } = await import("@/lib/flags");
+    return await isFeatureEnabled(LUNA_FREE_PLAN_FLAG, userId);
+  } catch {
+    return false;
+  }
+}
+
 export async function assertModelAllowedForPlan(
   projectId: number | null | undefined,
   modelOption: TAiModelOption | undefined,
   teamId?: string | null,
   credential?: unknown,
+  lunaFree = false,
 ) {
   if (
     !modelOption ||
@@ -108,6 +129,9 @@ export async function assertModelAllowedForPlan(
   ) {
     return;
   }
+  // HTPR-6722: with the flag on, Luna is an included model on Free plans only.
+  const lunaIncludedOnFree =
+    lunaFree && modelOption.modelKey === LUNA_FREE_MODEL_KEY;
   const sharedKey = process.env.AI_GATEWAY_API_KEY?.trim();
   const resolvedCredential =
     typeof credential === "string" ? credential.trim() : credential;
@@ -127,6 +151,7 @@ export async function assertModelAllowedForPlan(
   // Free, so retain the plan error instead of treating it as exempt.
   if (!resolvedCredential) {
     if (!projectId && !teamId) {
+      if (lunaIncludedOnFree) return;
       throw new AiPlanAccessError(
         "This model needs a paid plan or your own API key."
       );
@@ -136,6 +161,7 @@ export async function assertModelAllowedForPlan(
 
   const storePlanId = await storePlanIdForProject(projectId, teamId);
   if (storePlanId === "Free") {
+    if (lunaIncludedOnFree) return;
     throw new AiPlanAccessError(
       "This model needs a paid plan or your own API key."
     );

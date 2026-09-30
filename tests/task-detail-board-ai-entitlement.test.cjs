@@ -85,6 +85,6 @@ test("dropping the subscription rows is what downgraded the picker to the free d
   assert.equal(billing.storePlanId, "Free");
   assert.equal(
     getDefaultAiModelOptionForPlan(billing.storePlanId, false).id,
-    "gpt-5.4-mini",
+    "gemini-3.5-flash-lite",
   );
 });

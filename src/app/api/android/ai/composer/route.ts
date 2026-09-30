@@ -7,7 +7,7 @@ import {
   resolveTeamByokApiKey,
   resolveTeamCustomEndpoint,
 } from "@/app/api/ai/_lib/byokKeys";
-import { storePlanIdForProject } from "@/app/api/ai/_lib/planGate";
+import { lunaFreePlanEnabled, storePlanIdForProject } from "@/app/api/ai/_lib/planGate";
 import { buildComposerConfig, providersRequiringByokCheck } from "./config";
 
 function error(message: string, status: number) {
@@ -73,6 +73,7 @@ export async function GET(request: NextRequest) {
         customEndpointConfigured: Boolean(customEndpoint),
         storePlanId,
         providersWithByok,
+        lunaFree: await lunaFreePlanEnabled(ctx.user.id),
       }),
     });
   } catch (cause) {

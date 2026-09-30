@@ -3,6 +3,7 @@ import {
   getAiModelDefinition,
   isPremiumAiModelDefinition,
   pickAutoAiModelOption,
+  preferredAiModelOption,
   type TAiModelOption,
 } from "@/lib/aiModelOptions";
 import { getAiProviderInfo, type TAiProviderKey } from "@/lib/aiProviders";
@@ -26,17 +27,20 @@ type ComposerConfigInput = {
   customEndpointConfigured: boolean;
   storePlanId: StorePlanKind;
   providersWithByok: ReadonlySet<string>;
+  // HTPR-6722 flag: Luna is included on Free plans.
+  lunaFree?: boolean;
 };
 
 function canUseModelForPlan(
   option: TAiModelOption,
   storePlanId: StorePlanKind,
   providersWithByok: ReadonlySet<string>,
+  lunaFree = false,
 ) {
   const definition = getAiModelDefinition(option.modelKey);
   // Custom endpoints are intentionally non-premium and were already gated by
   // isAiFeatureModelEnabled(customEndpointConfigured) before this plan check.
-  if (!isPremiumAiModelDefinition(definition)) return true;
+  if (!isPremiumAiModelDefinition(definition, lunaFree)) return true;
   if (storePlanId === "Free") return false;
   if (storePlanId !== "BYOK") return true;
   const provider = definition?.provider;
@@ -55,6 +59,8 @@ function toComposerModel(option: TAiModelOption): ComposerModel {
 
 export function buildComposerConfig(input: ComposerConfigInput) {
   const enabled = isAiFeatureEnabled("aiChat", input.settings);
+  // Luna is included for Free plans only; BYOK still needs its own key.
+  const lunaFree = Boolean(input.lunaFree) && input.storePlanId === "Free";
   const allowedOptions = enabled
     ? aiModelOptions.filter(
         (option) =>
@@ -68,6 +74,7 @@ export function buildComposerConfig(input: ComposerConfigInput) {
             option,
             input.storePlanId,
             input.providersWithByok,
+            lunaFree,
           ),
       )
     : [];
@@ -75,7 +82,13 @@ export function buildComposerConfig(input: ComposerConfigInput) {
     "aiChat",
     input.settings,
     null,
-    { customEndpointConfigured: input.customEndpointConfigured },
+    {
+      customEndpointConfigured: input.customEndpointConfigured,
+      defaultModelOption:
+        lunaFree
+          ? preferredAiModelOption
+          : undefined,
+    },
   );
   const selected =
     allowedOptions.find((option) => option.id === boardDefault?.id) ??
@@ -106,7 +119,7 @@ export function providersRequiringByokCheck() {
     new Set(
       aiModelOptions
         .map((option) => getAiModelDefinition(option.modelKey))
-        .filter(isPremiumAiModelDefinition)
+        .filter((definition) => isPremiumAiModelDefinition(definition))
         .map((definition) => definition?.provider)
         .filter(
           (provider): provider is TAiProviderKey =>

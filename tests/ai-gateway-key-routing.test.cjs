@@ -36,10 +36,11 @@ function stubModule(relativePath, exports) {
   };
 }
 
-function stubPlan(plan = "Pro") {
+function stubPlan(plan = "Pro", lunaFree = false) {
   stubModule("src/app/api/ai/_lib/planGate.ts", {
     assertImageModelAllowedForPlan: async () => {},
     assertModelAllowedForPlan: async () => {},
+    lunaFreePlanEnabled: async () => lunaFree,
     storePlanIdForProject: async () =>
       typeof plan === "function" ? plan() : plan,
   });
@@ -124,7 +125,7 @@ test("platform-managed team gateway key is used without byokProviderFlags", asyn
 
   const selected = await selectTaskWriterModel({
     sourceSelected: "openai",
-    modelSelected: "gpt-5.5",
+    modelSelected: "gpt-6.1-sol",
     byokProviderFlags: [],
     projectId,
     userId,
@@ -392,7 +393,7 @@ test("allowance-wrapped Gateway models retain team-tag routing", () => {
   const { providerOptionsForAiModel, resolveGatewayModel } = loadTs(
     "src/app/api/ai/_lib/modelProvider.ts",
   );
-  const model = resolveGatewayModel("openai/gpt-5.4-mini", sharedGatewayKey);
+  const model = resolveGatewayModel("openai/gpt-6-luna", sharedGatewayKey);
 
   assert.equal(model.provider, "gateway");
   assert.deepEqual(
@@ -417,7 +418,7 @@ test("automatic system features keep team attribution without member spend", () 
   const { providerOptionsForAiModel, resolveGatewayModel } = loadTs(
     "src/app/api/ai/_lib/modelProvider.ts",
   );
-  const model = resolveGatewayModel("openai/gpt-5.4-mini", sharedGatewayKey);
+  const model = resolveGatewayModel("openai/gpt-6-luna", sharedGatewayKey);
 
   assert.deepEqual(
     providerOptionsForAiModel(model, "summary", {
@@ -485,7 +486,7 @@ test("premium team inference fails closed when the team has no dedicated key", a
   await assert.rejects(
     selectTaskWriterModel({
       sourceSelected: "openai",
-      modelSelected: "gpt-5.5",
+      modelSelected: "gpt-6.1-sol",
       byokProviderFlags: [],
       projectId,
       userId,
@@ -741,7 +742,7 @@ test("task writer option ids map to provider options and legacy model strings fa
     "src/lib/aiModelOptions.ts",
   );
 
-  assert.equal(defaultAiModelOption.id, "gpt-5.4-mini");
+  assert.equal(defaultAiModelOption.id, "gemini-3.5-flash-lite");
   assert.equal(preferredAiModelOption.id, "gpt-6-luna");
   assert.equal(preferredAiModelOption.effort, "standard");
   assert.deepEqual(preferredAiModelOption.providerOptions?.openai, {
@@ -750,12 +751,12 @@ test("task writer option ids map to provider options and legacy model strings fa
 
   const gptThinking = await selectTaskWriterModel({
     sourceSelected: "openai",
-    modelSelected: "gpt-5.5-thinking",
+    modelSelected: "gpt-6.1-sol-high",
     byokProviderFlags: [],
     teamContext,
   });
   assert.equal(gptThinking.provider, "openai");
-  assert.equal(gptThinking.modelId, "gpt-5.5");
+  assert.equal(gptThinking.modelId, "gpt-6.1-sol");
   assert.deepEqual(gptThinking.providerOptions?.openai, {
     reasoningEffort: "high",
   });
@@ -801,7 +802,7 @@ test("task writer option ids map to provider options and legacy model strings fa
   await assert.rejects(
     selectTaskWriterModel({
       sourceSelected: "openai",
-      modelSelected: "gpt-6-sol",
+      modelSelected: "gpt-6.1-sol",
       byokProviderFlags: [],
       teamContext: { teamId: "team_free", settings: {} },
     }),
@@ -810,18 +811,18 @@ test("task writer option ids map to provider options and legacy model strings fa
 
   const paidTeamGemini = await selectTaskWriterModel({
     sourceSelected: "gateway",
-    modelSelected: "gemini-3.6-flash",
-    modelOptionId: "gemini-3.6-flash",
+    modelSelected: "gemini-3.8-flash",
+    modelOptionId: "gemini-3.8-flash",
     byokProviderFlags: [],
     teamContext: { teamId: "team_pro", settings: {} },
   });
-  assert.equal(paidTeamGemini.modelId, "google/gemini-3.6-flash");
+  assert.equal(paidTeamGemini.modelId, "google/gemini-3.8-flash");
 
   await assert.rejects(
     selectTaskWriterModel({
       sourceSelected: "gateway",
-      modelSelected: "gemini-3.6-flash",
-      modelOptionId: "gemini-3.6-flash",
+      modelSelected: "gemini-3.8-flash",
+      modelOptionId: "gemini-3.8-flash",
       byokProviderFlags: [],
     }),
     /paid plan or your own API key/,
@@ -829,12 +830,12 @@ test("task writer option ids map to provider options and legacy model strings fa
 
   const claudeInstant = await selectTaskWriterModel({
     sourceSelected: "claude",
-    modelSelected: "claude-sonnet-5-instant",
+    modelSelected: "claude-sonnet-5-5-instant",
     byokProviderFlags: [],
     teamContext,
   });
   assert.equal(claudeInstant.provider, "claude");
-  assert.equal(claudeInstant.modelId, "claude-sonnet-5");
+  assert.equal(claudeInstant.modelId, "claude-sonnet-5.5");
   assert.deepEqual(claudeInstant.providerOptions?.anthropic, {
     thinking: { type: "disabled" },
     effort: "low",
@@ -854,7 +855,7 @@ test("task writer option ids map to provider options and legacy model strings fa
   });
 });
 
-test("a new Free team defaults to Mini without tripping the premium plan gate", async () => {
+async function selectFreeTeamDefault({ lunaFreeFlag }) {
   resetModules();
   const teamId = "team_free_default";
   process.env.AI_GATEWAY_API_KEY = "vck_shared_allowance";
@@ -870,6 +871,14 @@ test("a new Free team defaults to Mini without tripping the premium plan gate", 
       teamByokApiKey: {
         findUnique: async () => null,
       },
+      userSetting: { findUnique: async () => null },
+    },
+  });
+  stubModule("src/lib/flags.ts", {
+    isFeatureEnabled: async (key, userId) => {
+      assert.equal(key, "htpr-6722-latest-models");
+      assert.equal(userId, 1000);
+      return lunaFreeFlag;
     },
   });
   stubModule("src/lib/crypto/byokCipher.ts", {
@@ -881,30 +890,73 @@ test("a new Free team defaults to Mini without tripping the premium plan gate", 
   });
 
   const { selectTaskWriterModel } = loadTs("src/app/api/ai/_lib/editorAi.ts");
-  const selected = await selectTaskWriterModel({
+  return selectTaskWriterModel({
     aiFeature: "taskWriter",
-    teamContext: { teamId, settings: {} },
+    teamContext: { teamId, settings: {}, userId: 1000 },
+    userId: 1000,
   });
+}
 
+test("a Free team defaults to the tier-1 fallback while the Luna flag is off", async () => {
+  const selected = await selectFreeTeamDefault({ lunaFreeFlag: false });
+  assert.equal(selected.modelId, "google/gemini-3.5-flash-lite");
+});
+
+test("a Free team defaults to Luna and may use it once the Luna flag is on", async () => {
+  const selected = await selectFreeTeamDefault({ lunaFreeFlag: true });
   assert.equal(selected.provider, "openai");
-  assert.equal(selected.modelId, "gpt-5.4-mini");
+  assert.equal(selected.modelId, "gpt-6-luna");
+});
+
+test("a saved GPT 5.4 Mini on a Free team drops to the default while the Luna flag is off", async () => {
+  resetModules();
+  process.env.AI_GATEWAY_API_KEY = "vck_shared_allowance";
+  stubModule("src/lib/prisma.ts", {
+    default: {
+      team: {
+        findUnique: async () => ({ activeSubscriptionPlanId: null, subscriptionPlan: [] }),
+      },
+      teamByokApiKey: { findUnique: async () => null },
+    },
+  });
+  stubModule("src/lib/flags.ts", { isFeatureEnabled: async () => false });
+  stubModule("src/lib/crypto/byokCipher.ts", { decryptByokSecret: (c) => c });
+  stubModule("src/utils/controllers/projects/getAllIncludes.ts", {
+    getProjectWhere: () => ({}),
+    taskWriteAccessWhere: () => ({}),
+  });
+  const { selectTaskWriterModel } = loadTs("src/app/api/ai/_lib/editorAi.ts");
+  const selected = await selectTaskWriterModel({
+    sourceSelected: "openai",
+    modelSelected: "gpt-5.4-mini",
+    modelOptionId: "gpt-5.4-mini",
+    teamContext: { teamId: "team_free_default", settings: {}, userId: 1000 },
+    userId: 1000,
+  });
+  assert.equal(selected.modelId, "google/gemini-3.5-flash-lite");
 });
 
 test("retired model options keep their saved variant and price tier", () => {
   const { getAiModelOptionById, getAiModelDefinition } = loadTs("src/lib/aiModelOptions.ts");
   for (const [oldBase, newBase, suffixes] of [
     ["gpt-5.6-luna", "gpt-6-luna", ["", "-light", "-high"]],
-    ["gpt-5.6-sol", "gpt-6-sol", ["", "-light", "-high"]],
+    ["gpt-5.6-sol", "gpt-6.1-sol", ["", "-light", "-high"]],
+    ["gpt-6-sol", "gpt-6.1-sol", ["", "-light", "-high"]],
     ["claude-opus-5", "claude-opus-5-5", ["-instant", "-thinking"]],
+    ["claude-sonnet-5", "claude-sonnet-5-5", ["-instant", "-thinking"]],
   ]) {
     for (const suffix of suffixes) {
       const option = getAiModelOptionById(oldBase + suffix);
       assert.equal(option?.id, newBase + suffix);
-      assert.equal(option?.model, newBase === "claude-opus-5-5" ? "claude-opus-5.5" : newBase);
+      assert.equal(option?.model, newBase.replace(/^(claude-(?:opus|sonnet)-5)-5$/, "$1.5"));
     }
   }
+  assert.equal(getAiModelOptionById("gpt-6-luna")?.id, "gpt-6-luna");
+  assert.equal(getAiModelOptionById("gpt-5.5-instant")?.id, "gpt-6.1-sol-light");
+  assert.equal(getAiModelOptionById("gpt-5.5-thinking")?.id, "gpt-6.1-sol-high");
+  assert.equal(getAiModelOptionById("kimi-k2.6")?.id, "kimi-k3");
   assert.equal(getAiModelDefinition("gpt-6-luna").priceTier, 2);
-  assert.equal(getAiModelDefinition("gpt-6-sol").priceTier, 3);
+  assert.equal(getAiModelDefinition("gpt-6.1-sol").priceTier, 3);
   assert.equal(getAiModelDefinition("claude-opus-5-5").priceTier, 3);
 });
 
@@ -931,9 +983,7 @@ test("model and effort dimensions resolve every supported provider configuration
   assert.equal(getAiEffortLabel("gpt-6-luna", "light"), "Light");
   assert.equal(getAiEffortLabel("gpt-6-luna", "standard"), "Standard");
   assert.equal(getAiEffortLabel("gpt-6-luna", "high"), "High");
-  assert.equal(getAiEffortLabel("gpt-5.5", "light"), "Instant");
-  assert.equal(getAiEffortLabel("gpt-5.5", "high"), "Thinking");
-  assert.equal(getAiEffortLabel("claude-sonnet-5", "light"), "Instant");
+  assert.equal(getAiEffortLabel("claude-sonnet-5-5", "light"), "Instant");
   assert.equal(getAiEffortLabel("claude-opus-5-5", "high"), "Thinking");
 
   const openAiReasoning = (reasoningEffort) => ({
@@ -949,25 +999,21 @@ test("model and effort dimensions resolve every supported provider configuration
     ["gpt-5.6-terra", "light", openAiReasoning("low")],
     ["gpt-5.6-terra", "standard", openAiReasoning("medium")],
     ["gpt-5.6-terra", "high", openAiReasoning("high")],
-    ["gpt-6-sol", "light", openAiReasoning("low")],
-    ["gpt-6-sol", "standard", openAiReasoning("medium")],
-    ["gpt-6-sol", "high", openAiReasoning("high")],
-    ["gpt-5.5", "light", openAiReasoning("low")],
-    ["gpt-5.5", "high", openAiReasoning("high")],
-    ["gpt-5.4-mini", undefined, undefined],
-    ["claude-sonnet-5", "light", claudeThinking("disabled", "low")],
-    ["claude-sonnet-5", "high", claudeThinking("adaptive", "high")],
+    ["gpt-6.1-sol", "light", openAiReasoning("low")],
+    ["gpt-6.1-sol", "standard", openAiReasoning("medium")],
+    ["gpt-6.1-sol", "high", openAiReasoning("high")],
+    ["claude-sonnet-5-5", "light", claudeThinking("disabled", "low")],
+    ["claude-sonnet-5-5", "high", claudeThinking("adaptive", "high")],
     ["claude-opus-5-5", "light", claudeThinking("disabled", "low")],
     ["claude-opus-5-5", "high", claudeThinking("adaptive", "high")],
-    ["deepseek-v4-flash", undefined, undefined],
+    ["deepseek-v4.1-flash", undefined, undefined],
     ["deepseek-v4-pro", undefined, undefined],
     ["kimi-k2.5", undefined, undefined],
-    ["kimi-k2.6", undefined, undefined],
     ["kimi-k3", undefined, undefined],
     ["qwen3.7-plus", undefined, undefined],
-    ["glm-5.2", undefined, undefined],
+    ["glm-5.3-flash", undefined, undefined],
     ["gemini-3.5-flash-lite", undefined, undefined],
-    ["gemini-3.6-flash", undefined, undefined],
+    ["gemini-3.8-flash", undefined, undefined],
     ["claude-haiku-4.5", undefined, undefined],
     ["custom", undefined, undefined],
   ];
@@ -979,30 +1025,36 @@ test("model and effort dimensions resolve every supported provider configuration
   }
 
   const legacyDimensions = {
-    "gpt-5.5-instant": ["gpt-5.5", "light"],
-    "gpt-5.5-thinking": ["gpt-5.5", "high"],
+    "gpt-5.5-instant": ["gpt-6.1-sol", "light"],
+    "gpt-5.5-thinking": ["gpt-6.1-sol", "high"],
     "gpt-6-luna": ["gpt-6-luna", "standard"],
     "gpt-5.6-terra": ["gpt-5.6-terra", "standard"],
-    "gpt-6-sol": ["gpt-6-sol", "standard"],
-    "gpt-5.4-mini": ["gpt-5.4-mini", undefined],
-    "claude-sonnet-5-instant": ["claude-sonnet-5", "light"],
-    "claude-sonnet-5-thinking": ["claude-sonnet-5", "high"],
+    "gpt-6-sol": ["gpt-6.1-sol", "standard"],
+    "gpt-6.1-sol": ["gpt-6.1-sol", "standard"],
+    "gpt-6-luna": ["gpt-6-luna", "standard"],
+    "claude-sonnet-5-instant": ["claude-sonnet-5-5", "light"],
+    "claude-sonnet-5-thinking": ["claude-sonnet-5-5", "high"],
+    "claude-sonnet-5-5-instant": ["claude-sonnet-5-5", "light"],
+    "claude-sonnet-5-5-thinking": ["claude-sonnet-5-5", "high"],
     "claude-opus-5-5-instant": ["claude-opus-5-5", "light"],
     "claude-opus-5-5-thinking": ["claude-opus-5-5", "high"],
-    "deepseek-v4-flash": ["deepseek-v4-flash", undefined],
+    "deepseek-v4.1-flash": ["deepseek-v4.1-flash", undefined],
+    "deepseek-v4-flash": ["deepseek-v4.1-flash", undefined],
     "deepseek-v4-pro": ["deepseek-v4-pro", undefined],
     "kimi-k2.5": ["kimi-k2.5", undefined],
-    "kimi-k2.6": ["kimi-k2.6", undefined],
+    "kimi-k2.6": ["kimi-k3", undefined],
     "kimi-k3": ["kimi-k3", undefined],
     "qwen3.7-plus": ["qwen3.7-plus", undefined],
-    "glm-5.2": ["glm-5.2", undefined],
+    "glm-5.2": ["glm-5.3-flash", undefined],
+    "glm-5.3-flash": ["glm-5.3-flash", undefined],
     "gemini-3.1-flash-lite": ["gemini-3.5-flash-lite", undefined],
-    "gemini-3.5-flash": ["gemini-3.6-flash", undefined],
-    "grok-4.1-fast-instant": ["gpt-5.4-mini", undefined],
-    "grok-4.1-fast-thinking": ["gpt-5.4-mini", undefined],
-    "grok-4.20-instant": ["gpt-5.4-mini", undefined],
-    "grok-4.20-thinking": ["gpt-5.4-mini", undefined],
-    "grok-4.5": ["gpt-5.4-mini", undefined],
+    "gemini-3.5-flash": ["gemini-3.8-flash", undefined],
+    "gemini-3.6-flash": ["gemini-3.8-flash", undefined],
+    "grok-4.1-fast-instant": ["gpt-6-luna", "standard"],
+    "grok-4.1-fast-thinking": ["gpt-6-luna", "standard"],
+    "grok-4.20-instant": ["gpt-6-luna", "standard"],
+    "grok-4.20-thinking": ["gpt-6-luna", "standard"],
+    "grok-4.5": ["gpt-6-luna", "standard"],
     "claude-haiku-4.5": ["claude-haiku-4.5", undefined],
     custom: ["custom", undefined],
   };
@@ -1024,7 +1076,7 @@ test("openai and claude require gateway or direct byok keys", () => {
   const { resolveAiModel } = loadTs("src/app/api/ai/_lib/modelProvider.ts");
 
   assert.throws(
-    () => resolveAiModel("openai", "gpt-5.4-mini"),
+    () => resolveAiModel("openai", "gpt-6-luna"),
     /dedicated team AI Gateway key or direct BYOK key/,
   );
   assert.throws(
@@ -1032,7 +1084,7 @@ test("openai and claude require gateway or direct byok keys", () => {
     /dedicated team AI Gateway key or direct BYOK key/,
   );
   assert.doesNotThrow(() =>
-    resolveAiModel("openai", "gpt-5.4-mini", "sk-customer-key"),
+    resolveAiModel("openai", "gpt-6-luna", "sk-customer-key"),
   );
   assert.doesNotThrow(() =>
     resolveAiModel("claude", "claude-sonnet-5", "sk-ant-customer-key"),
@@ -1267,12 +1319,12 @@ test("disabled provider selections fall back and gateway-only models keep full s
   settings = { providers: { deepseek: true } };
   const gatewayOnly = await selectTaskWriterModel({
     sourceSelected: "gateway",
-    modelOptionId: "deepseek-v4-flash",
+    modelOptionId: "deepseek-v4.1-flash",
     projectId: 4338,
     userId: 1000,
   });
   assert.equal(gatewayOnly.provider, "gateway");
-  assert.equal(gatewayOnly.modelId, "deepseek/deepseek-v4-flash");
+  assert.equal(gatewayOnly.modelId, "deepseek/deepseek-v4.1-flash");
   assert.equal(gatewayOnly.model.config.provider, "gateway");
 
 });
@@ -1324,7 +1376,7 @@ test("provider key routes a gateway catalog model direct before team and platfor
   const { selectTaskWriterModel } = loadTs("src/app/api/ai/_lib/editorAi.ts");
   const selected = await selectTaskWriterModel({
     sourceSelected: "gateway",
-    modelOptionId: "deepseek-v4-flash",
+    modelOptionId: "deepseek-v4.1-flash",
     projectId: 4390,
     userId: 1000,
   });
@@ -1401,8 +1453,8 @@ test("task writer key lookup ignores caller teamId when project lookup resolves 
 
   const selected = await selectTaskWriterModel({
     sourceSelected: "openai",
-    modelSelected: "gpt-5.5",
-    modelOptionId: "gpt-5.5-instant",
+    modelSelected: "gpt-5.6-terra",
+    modelOptionId: "gpt-5.6-terra",
     byokProviderFlags: [],
     teamId: callerTeamId,
     projectId,

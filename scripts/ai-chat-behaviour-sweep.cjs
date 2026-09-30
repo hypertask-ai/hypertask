@@ -43,7 +43,7 @@ async function chat(message, ctx = { project_id: PID }) {
   const res = await fetch("http://localhost:3123/api/ai/chat/stream", {
     method: "POST",
     headers: { "Content-Type": "application/json", Cookie: cookieHeader },
-    body: JSON.stringify({ message, model: "gpt-5.5", default_context: ctx }),
+    body: JSON.stringify({ message, model: "gpt-6.1-sol", default_context: ctx }),
     signal: AbortSignal.timeout(180000),
   });
   const raw = await res.text();

@@ -13,51 +13,44 @@ export type TAiReasoningVariant = "instant" | "thinking" | "mini";
 export type TAiModelKey =
   | "gpt-6-luna"
   | "gpt-5.6-terra"
-  | "gpt-6-sol"
-  | "gpt-5.5"
-  | "gpt-5.4-mini"
-  | "claude-sonnet-5"
+  | "gpt-6.1-sol"
+  | "claude-sonnet-5-5"
   | "claude-opus-5-5"
-  | "deepseek-v4-flash"
+  | "deepseek-v4.1-flash"
   | "deepseek-v4-pro"
   | "kimi-k2.5"
-  | "kimi-k2.6"
   | "kimi-k3"
   | "qwen3.7-plus"
-  | "glm-5.2"
+  | "glm-5.3-flash"
   | "gemini-3.5-flash-lite"
-  | "gemini-3.6-flash"
+  | "gemini-3.8-flash"
   | "claude-haiku-4.5"
   | "custom";
 
 export type TAiEffort = "light" | "standard" | "high";
 
 export type TAiModelOptionId =
-  | "gpt-5.5-instant"
-  | "gpt-5.5-thinking"
   | "gpt-6-luna"
   | "gpt-6-luna-light"
   | "gpt-6-luna-high"
   | "gpt-5.6-terra"
   | "gpt-5.6-terra-light"
   | "gpt-5.6-terra-high"
-  | "gpt-6-sol"
-  | "gpt-6-sol-light"
-  | "gpt-6-sol-high"
-  | "gpt-5.4-mini"
-  | "claude-sonnet-5-instant"
-  | "claude-sonnet-5-thinking"
+  | "gpt-6.1-sol"
+  | "gpt-6.1-sol-light"
+  | "gpt-6.1-sol-high"
+  | "claude-sonnet-5-5-instant"
+  | "claude-sonnet-5-5-thinking"
   | "claude-opus-5-5-instant"
   | "claude-opus-5-5-thinking"
-  | "deepseek-v4-flash"
+  | "deepseek-v4.1-flash"
   | "deepseek-v4-pro"
   | "kimi-k2.5"
-  | "kimi-k2.6"
   | "kimi-k3"
   | "qwen3.7-plus"
-  | "glm-5.2"
+  | "glm-5.3-flash"
   | "gemini-3.5-flash-lite"
-  | "gemini-3.6-flash"
+  | "gemini-3.8-flash"
   | "claude-haiku-4.5"
   | "custom";
 
@@ -104,18 +97,11 @@ export const aiModelDefinitions: TAiModelDefinition[] = [
     priceTier: 2,
   },
   {
-    key: "gpt-6-sol",
-    label: "6 Sol",
+    key: "gpt-6.1-sol",
+    label: "6.1 Sol",
     provider: "openai",
     priceTier: 3,
     premium: true,
-  },
-  { key: "gpt-5.5", label: "GPT-5.5", provider: "openai", priceTier: 3 },
-  {
-    key: "gpt-5.4-mini",
-    label: "GPT-5.4 Mini",
-    provider: "openai",
-    priceTier: 1,
   },
   {
     key: "claude-opus-5-5",
@@ -125,8 +111,8 @@ export const aiModelDefinitions: TAiModelDefinition[] = [
     premium: true,
   },
   {
-    key: "claude-sonnet-5",
-    label: "Sonnet 5",
+    key: "claude-sonnet-5-5",
+    label: "Sonnet 5.5",
     provider: "anthropic",
     priceTier: 2,
   },
@@ -137,8 +123,8 @@ export const aiModelDefinitions: TAiModelDefinition[] = [
     priceTier: 1,
   },
   {
-    key: "deepseek-v4-flash",
-    label: "DeepSeek V4 Flash",
+    key: "deepseek-v4.1-flash",
+    label: "DeepSeek V4.1 Flash",
     provider: "deepseek",
     priceTier: 1,
   },
@@ -149,7 +135,6 @@ export const aiModelDefinitions: TAiModelDefinition[] = [
     priceTier: 1,
   },
   { key: "kimi-k2.5", label: "Kimi K2.5", provider: "moonshot", priceTier: 1 },
-  { key: "kimi-k2.6", label: "Kimi K2.6", provider: "moonshot", priceTier: 2 },
   { key: "kimi-k3", label: "Kimi K3", provider: "moonshot", priceTier: 3 },
   {
     key: "qwen3.7-plus",
@@ -157,7 +142,7 @@ export const aiModelDefinitions: TAiModelDefinition[] = [
     provider: "alibaba",
     priceTier: 1,
   },
-  { key: "glm-5.2", label: "GLM-5.2", provider: "zhipu", priceTier: 2 },
+  { key: "glm-5.3-flash", label: "GLM-5.3 Flash", provider: "zhipu", priceTier: 2 },
   {
     key: "gemini-3.5-flash-lite",
     label: "Gemini 3.5 Flash Lite",
@@ -165,8 +150,8 @@ export const aiModelDefinitions: TAiModelDefinition[] = [
     priceTier: 1,
   },
   {
-    key: "gemini-3.6-flash",
-    label: "Gemini 3.6 Flash",
+    key: "gemini-3.8-flash",
+    label: "Gemini 3.8 Flash",
     provider: "google",
     priceTier: 2,
   },
@@ -206,10 +191,7 @@ export function getAiEffortLabel(
   modelKey: TAiModelKey,
   effort: TAiEffort
 ): string {
-  if (
-    modelKey === "gpt-5.5" ||
-    modelKey.startsWith("claude-")
-  ) {
+  if (modelKey.startsWith("claude-")) {
     return effort === "light" ? "Instant" : "Thinking";
   }
 
@@ -217,39 +199,6 @@ export function getAiEffortLabel(
 }
 
 export const aiModelOptions: TAiModelOption[] = [
-  {
-    id: "gpt-5.5-instant",
-    source: "openai",
-    title: "GPT 5.5 Instant",
-    model: "gpt-5.5",
-    desc: "Fastest replies",
-    reasoning: "instant",
-    modelKey: "gpt-5.5",
-    effort: "light",
-    providerOptions: {
-      // "minimal" returns empty completions through the task-writer/editor
-      // system prompts on gpt-5.5; "low" is the fastest effort that still
-      // produces output. See HTPR-3970.
-      openai: {
-        reasoningEffort: "low",
-      },
-    },
-  },
-  {
-    id: "gpt-5.5-thinking",
-    source: "openai",
-    title: "GPT 5.5 Thinking",
-    model: "gpt-5.5",
-    desc: "Full reasoning, slower",
-    reasoning: "thinking",
-    modelKey: "gpt-5.5",
-    effort: "high",
-    providerOptions: {
-      openai: {
-        reasoningEffort: "high",
-      },
-    },
-  },
   {
     id: "gpt-6-luna",
     source: "openai",
@@ -321,46 +270,37 @@ export const aiModelOptions: TAiModelOption[] = [
     providerOptions: { openai: { reasoningEffort: "high" } },
   },
   {
-    id: "gpt-6-sol",
+    id: "gpt-6.1-sol",
     source: "openai",
-    title: "GPT 6 Sol",
-    model: "gpt-6-sol",
+    title: "GPT 6.1 Sol",
+    model: "gpt-6.1-sol",
     desc: "OpenAI flagship",
     reasoning: "thinking",
-    modelKey: "gpt-6-sol",
+    modelKey: "gpt-6.1-sol",
     effort: "standard",
     providerOptions: { openai: { reasoningEffort: "medium" } },
   },
   {
-    id: "gpt-6-sol-light",
+    id: "gpt-6.1-sol-light",
     source: "openai",
-    title: "GPT 6 Sol Light",
-    model: "gpt-6-sol",
+    title: "GPT 6.1 Sol Light",
+    model: "gpt-6.1-sol",
     desc: "Fastest Sol replies",
     reasoning: "instant",
-    modelKey: "gpt-6-sol",
+    modelKey: "gpt-6.1-sol",
     effort: "light",
     providerOptions: { openai: { reasoningEffort: "low" } },
   },
   {
-    id: "gpt-6-sol-high",
+    id: "gpt-6.1-sol-high",
     source: "openai",
-    title: "GPT 6 Sol High",
-    model: "gpt-6-sol",
+    title: "GPT 6.1 Sol High",
+    model: "gpt-6.1-sol",
     desc: "Deep Sol reasoning",
     reasoning: "thinking",
-    modelKey: "gpt-6-sol",
+    modelKey: "gpt-6.1-sol",
     effort: "high",
     providerOptions: { openai: { reasoningEffort: "high" } },
-  },
-  {
-    id: "gpt-5.4-mini",
-    source: "openai",
-    title: "GPT 5.4 Mini",
-    model: "gpt-5.4-mini",
-    desc: "Lightweight and quick",
-    reasoning: "mini",
-    modelKey: "gpt-5.4-mini",
   },
   {
     id: "claude-opus-5-5-instant",
@@ -397,13 +337,14 @@ export const aiModelOptions: TAiModelOption[] = [
     },
   },
   {
-    id: "claude-sonnet-5-instant",
+    id: "claude-sonnet-5-5-instant",
     source: "claude",
-    title: "Sonnet 5 Instant",
-    model: "claude-sonnet-5",
+    title: "Sonnet 5.5 Instant",
+    model: "claude-sonnet-5.5",
+    directModel: "claude-sonnet-5-5",
     desc: "Fast Claude replies",
     reasoning: "instant",
-    modelKey: "claude-sonnet-5",
+    modelKey: "claude-sonnet-5-5",
     effort: "light",
     providerOptions: {
       anthropic: {
@@ -413,13 +354,14 @@ export const aiModelOptions: TAiModelOption[] = [
     },
   },
   {
-    id: "claude-sonnet-5-thinking",
+    id: "claude-sonnet-5-5-thinking",
     source: "claude",
-    title: "Sonnet 5 Thinking",
-    model: "claude-sonnet-5",
+    title: "Sonnet 5.5 Thinking",
+    model: "claude-sonnet-5.5",
+    directModel: "claude-sonnet-5-5",
     desc: "Adaptive reasoning",
     reasoning: "thinking",
-    modelKey: "claude-sonnet-5",
+    modelKey: "claude-sonnet-5-5",
     effort: "high",
     providerOptions: {
       anthropic: {
@@ -438,13 +380,13 @@ export const aiModelOptions: TAiModelOption[] = [
     modelKey: "claude-haiku-4.5",
   },
   {
-    id: "deepseek-v4-flash",
+    id: "deepseek-v4.1-flash",
     source: "gateway",
-    title: "DeepSeek V4 Flash",
-    model: "deepseek/deepseek-v4-flash",
+    title: "DeepSeek V4.1 Flash",
+    model: "deepseek/deepseek-v4.1-flash",
     desc: "Cheapest general model",
     reasoning: "instant",
-    modelKey: "deepseek-v4-flash",
+    modelKey: "deepseek-v4.1-flash",
   },
   {
     id: "deepseek-v4-pro",
@@ -465,15 +407,6 @@ export const aiModelOptions: TAiModelOption[] = [
     modelKey: "kimi-k2.5",
   },
   {
-    id: "kimi-k2.6",
-    source: "gateway",
-    title: "Kimi K2.6",
-    model: "moonshotai/kimi-k2.6",
-    desc: "Fast general model",
-    reasoning: "instant",
-    modelKey: "kimi-k2.6",
-  },
-  {
     id: "kimi-k3",
     source: "gateway",
     title: "Kimi K3",
@@ -492,13 +425,13 @@ export const aiModelOptions: TAiModelOption[] = [
     modelKey: "qwen3.7-plus",
   },
   {
-    id: "glm-5.2",
+    id: "glm-5.3-flash",
     source: "gateway",
-    title: "GLM-5.2",
-    model: "zai/glm-5.2",
+    title: "GLM-5.3 Flash",
+    model: "zai/glm-5.3-flash",
     desc: "Fast general model",
     reasoning: "instant",
-    modelKey: "glm-5.2",
+    modelKey: "glm-5.3-flash",
   },
   {
     id: "gemini-3.5-flash-lite",
@@ -510,13 +443,13 @@ export const aiModelOptions: TAiModelOption[] = [
     modelKey: "gemini-3.5-flash-lite",
   },
   {
-    id: "gemini-3.6-flash",
+    id: "gemini-3.8-flash",
     source: "gateway",
-    title: "Gemini 3.6 Flash",
-    model: "google/gemini-3.6-flash",
+    title: "Gemini 3.8 Flash",
+    model: "google/gemini-3.8-flash",
     desc: "Newest fast Gemini",
     reasoning: "instant",
-    modelKey: "gemini-3.6-flash",
+    modelKey: "gemini-3.8-flash",
   },
   {
     id: "custom",
@@ -529,33 +462,55 @@ export const aiModelOptions: TAiModelOption[] = [
   },
 ];
 
-// Luna Standard is the preferred product default for teams entitled to use a
-// tier-2 model. Keep the universal fallback included on every plan so callers
-// without trusted billing context can never select a locked model implicitly.
+// Luna Standard is the product default for paid plans, and for Free plans once
+// the htpr-6722-latest-models flag is on for the user (LUNA_FREE_PLAN_FLAG).
+// The universal fallback must be included on every plan, so it is the cheapest
+// tier-1 model: callers without trusted billing context can never select a
+// locked model implicitly.
 export const preferredAiModelOption =
   aiModelOptions.find((option) => option.id === "gpt-6-luna") ??
   aiModelOptions[0];
 
 export const defaultAiModelOption =
-  aiModelOptions.find((option) => option.id === "gpt-5.4-mini") ??
+  aiModelOptions.find((option) => option.id === "gemini-3.5-flash-lite") ??
   aiModelOptions[0];
 
 export const MOBILE_AI_CHAT_QUICK_MODEL_IDS = [
   "gpt-6-luna-high",
   "gpt-6-luna",
-  "gpt-6-sol-high",
-  "gpt-6-sol-light",
+  "gpt-6.1-sol-high",
+  "gpt-6.1-sol-light",
 ] as const satisfies readonly TAiModelOptionId[];
 
+export const LUNA_FREE_MODEL_KEY: TAiModelKey = "gpt-6-luna";
+
+// `lunaFree` is the per-user htpr-6722-latest-models flag: with it on, Luna
+// counts as an included (tier 1) model on Free plans and is their default.
 export function getDefaultAiModelOptionForPlan(
   storePlanId: StorePlanKind | null | undefined,
   hasEligibleByokCredential = false,
+  lunaFree = false,
 ): TAiModelOption {
   return storePlanId === "Pro" ||
     storePlanId === "AI" ||
-    (storePlanId === "BYOK" && hasEligibleByokCredential)
+    (storePlanId === "BYOK" && hasEligibleByokCredential) ||
+    (storePlanId === "Free" && lunaFree)
     ? preferredAiModelOption
     : defaultAiModelOption;
+}
+
+// A saved choice of Luna (for example a saved GPT 5.4 Mini, which aliases to
+// Luna) is not usable on Free plans while the flag is off, or on BYOK plans
+// without an eligible customer key. Those requests drop to the plan default.
+export function isLunaBlockedForPlan(
+  modelOption: TAiModelOption | undefined,
+  storePlanId: StorePlanKind | null | undefined,
+  lunaFree: boolean,
+  hasEligibleByokCredential: boolean,
+): boolean {
+  if (modelOption?.modelKey !== LUNA_FREE_MODEL_KEY) return false;
+  if (storePlanId === "Free") return !lunaFree;
+  return storePlanId === "BYOK" && !hasEligibleByokCredential;
 }
 
 // Retired option ids map to their replacement so a persisted choice upgrades in
@@ -564,20 +519,33 @@ const RETIRED_OPTION_ID_ALIASES: Record<string, TAiModelOptionId> = {
   "gpt-5.6-luna": "gpt-6-luna",
   "gpt-5.6-luna-light": "gpt-6-luna-light",
   "gpt-5.6-luna-high": "gpt-6-luna-high",
-  "gpt-5.6-sol": "gpt-6-sol",
-  "gpt-5.6-sol-light": "gpt-6-sol-light",
-  "gpt-5.6-sol-high": "gpt-6-sol-high",
+  "gpt-5.6-sol": "gpt-6.1-sol",
+  "gpt-5.6-sol-light": "gpt-6.1-sol-light",
+  "gpt-5.6-sol-high": "gpt-6.1-sol-high",
+  "gpt-6-sol": "gpt-6.1-sol",
+  "gpt-6-sol-light": "gpt-6.1-sol-light",
+  "gpt-6-sol-high": "gpt-6.1-sol-high",
+  "gpt-5.5": "gpt-6.1-sol",
+  "gpt-5.5-instant": "gpt-6.1-sol-light",
+  "gpt-5.5-thinking": "gpt-6.1-sol-high",
+  "gpt-5.4-mini": "gpt-6-luna",
   "claude-opus-5-instant": "claude-opus-5-5-instant",
   "claude-opus-5-thinking": "claude-opus-5-5-thinking",
+  "claude-sonnet-5-instant": "claude-sonnet-5-5-instant",
+  "claude-sonnet-5-thinking": "claude-sonnet-5-5-thinking",
+  "deepseek-v4-flash": "deepseek-v4.1-flash",
+  "kimi-k2.6": "kimi-k3",
+  "glm-5.2": "glm-5.3-flash",
   "gemini-3.1-flash-lite": "gemini-3.5-flash-lite",
-  "gemini-3.5-flash": "gemini-3.6-flash",
+  "gemini-3.5-flash": "gemini-3.8-flash",
+  "gemini-3.6-flash": "gemini-3.8-flash",
   "claude-opus-4-8-instant": "claude-opus-5-5-instant",
   "claude-opus-4-8-thinking": "claude-opus-5-5-thinking",
-  "grok-4.1-fast-instant": "gpt-5.4-mini",
-  "grok-4.1-fast-thinking": "gpt-5.4-mini",
-  "grok-4.20-instant": "gpt-5.4-mini",
-  "grok-4.20-thinking": "gpt-5.4-mini",
-  "grok-4.5": "gpt-5.4-mini",
+  "grok-4.1-fast-instant": "gpt-6-luna",
+  "grok-4.1-fast-thinking": "gpt-6-luna",
+  "grok-4.20-instant": "gpt-6-luna",
+  "grok-4.20-thinking": "gpt-6-luna",
+  "grok-4.5": "gpt-6-luna",
 };
 
 export function getAiModelOptionById(
@@ -600,7 +568,7 @@ export function getMobileAiChatModelLabel(
   if (!catalogOption) return "Select model";
   const modelLabel = getAiModelDefinition(catalogOption.modelKey)?.label;
   let effortLabel: string | null = null;
-  if (catalogOption.id === "gpt-6-sol-light") {
+  if (catalogOption.id === "gpt-6.1-sol-light") {
     effortLabel = "Fast";
   } else if (catalogOption.effort) {
     effortLabel = getAiEffortLabel(catalogOption.modelKey, catalogOption.effort);
@@ -610,7 +578,9 @@ export function getMobileAiChatModelLabel(
 
 export function isPremiumAiModelDefinition(
   model: TAiModelDefinition | undefined,
+  lunaFree = false,
 ): boolean {
+  if (lunaFree && model?.key === LUNA_FREE_MODEL_KEY) return false;
   return Boolean(model && ((model.priceTier ?? 1) > 1 || model.premium));
 }
 

@@ -196,9 +196,9 @@ test("mobile model gauge offers the four approved choices and preserves guarded 
     assert.equal(container.querySelector('[role="menu"]'), null);
     assert.strictEqual(document.activeElement, trigger);
 
-    const claude = selectedOption("claude-sonnet-5-thinking");
+    const claude = selectedOption("claude-sonnet-5-5-thinking");
     await act(async () => reactRoot.render(renderPicker(claude)));
-    assert.equal(getMobileAiChatModelLabel(claude), "Sonnet 5 · Thinking");
+    assert.equal(getMobileAiChatModelLabel(claude), "Sonnet 5.5 · Thinking");
     await act(async () => trigger.click());
     assert.equal(
       [...container.querySelectorAll('[role="menuitemradio"]')].filter(

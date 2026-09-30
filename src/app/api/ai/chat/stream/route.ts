@@ -277,6 +277,7 @@ import {
   defaultAiModelOption,
   getDefaultAiModelOptionForPlan,
   getAiModelOptionById,
+  isLunaBlockedForPlan,
   preferredAiModelOption,
   type TAiModelOption,
 } from "@/lib/aiModelOptions";
@@ -288,6 +289,7 @@ import { getAiRequestUser } from "@/app/api/ai/_lib/requestUser";
 import { getCronServiceRequestUser } from "@/app/api/ai/_lib/cronServiceAuth";
 import {
   assertModelAllowedForPlan,
+  lunaFreePlanEnabled,
   storePlanIdForProject,
 } from "@/app/api/ai/_lib/planGate";
 import {
@@ -368,23 +370,24 @@ const SSE_HEADERS = {
 
 const DEFAULT_PROVIDER: ProviderId = "openai";
 const DEFAULT_MODEL = "gpt-6-luna";
-const DEFAULT_CLAUDE_MODEL = "claude-sonnet-5";
+const DEFAULT_CLAUDE_MODEL = "claude-sonnet-5.5";
 const MAX_TOOL_STEPS = 32;
 const MAX_BULK_TOOL_TARGETS = 50;
 const CLAUDE_MODELS = new Set([
+  "claude-sonnet-5.5",
+  "claude-sonnet-5-5",
   "claude-sonnet-5",
   "claude-opus-5.5",
   "claude-opus-5-5",
   "claude-opus-5",
 ]);
 const OPENAI_MODELS = new Set([
-  "gpt-5.5",
   "gpt-6-luna",
   "gpt-5.6-luna",
   "gpt-5.6-terra",
+  "gpt-6.1-sol",
   "gpt-6-sol",
   "gpt-5.6-sol",
-  "gpt-5.4-mini",
 ]);
 const TOOL_TASK_ID_DESCRIPTION =
   "internal database id -- do NOT derive it from the ticket number; pass ticket_number instead if you only know e.g. ABC-123";
@@ -9624,7 +9627,7 @@ async function generateConversationTitle(
     return fallback;
   }
   try {
-    const model = resolveAiModel("openai", "gpt-5.4-mini", byokApiKey);
+    const model = resolveAiModel("openai", "gpt-6-luna", byokApiKey);
     const result = await generateText({
       model,
       instructions:
@@ -9640,7 +9643,7 @@ async function generateConversationTitle(
         ...usageContext,
         teamId: tags?.teamId ?? null,
         provider: "openai",
-        model: "gpt-5.4-mini",
+        model: "gpt-6-luna",
         feature: "chat",
         inputTokens: result.usage.inputTokens ?? 0,
         outputTokens: result.usage.outputTokens ?? 0,
@@ -9948,9 +9951,11 @@ export async function POST(request: NextRequest) {
           credential.trim() !== sharedKey) ||
         (credential !== null && typeof credential === "object");
     }
+    const lunaFree = await lunaFreePlanEnabled(dbUser.id);
     const requestDefaultModelOption = getDefaultAiModelOptionForPlan(
       storePlanId,
       hasEligibleByokCredential,
+      lunaFree,
     );
     // An agent pinned to a model runs its own turns on it, which is the point
     // of pinning: a sweeper on a cheap model, a coordinator on an expensive
@@ -9973,6 +9978,18 @@ export async function POST(request: NextRequest) {
     if (selection.modelOption) {
       selection = selectionFromModelOption(
         filterModelOptionForTeam(selection.modelOption, teamProviderSettings)
+      );
+    }
+    if (
+      isLunaBlockedForPlan(
+        selection.modelOption,
+        storePlanId,
+        lunaFree,
+        hasEligibleByokCredential,
+      )
+    ) {
+      selection = selectionFromModelOption(
+        filterModelOptionForTeam(requestDefaultModelOption, teamProviderSettings),
       );
     }
     const getSelectionApiKey = (
@@ -10034,6 +10051,7 @@ export async function POST(request: NextRequest) {
       selection.modelOption,
       gatewayTags.teamId,
       byokApiKey,
+      lunaFree,
     );
 
     titleByokApiKey =
@@ -10756,7 +10774,7 @@ export async function POST(request: NextRequest) {
 
         if (errorSent || cancelled) return;
 
-        // GPT-5.5 (especially Instant / low effort) can return an empty completion
+        // GPT-6.1 Sol (especially Instant / low effort) can return an empty completion
         // on a query it should answer. Retry once at higher effort, then fall back
         // to a clear message so the user never sees a blank reply. (HTPR-4007)
         //

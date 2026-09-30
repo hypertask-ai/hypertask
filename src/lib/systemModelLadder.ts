@@ -21,14 +21,22 @@ export type SystemModel = {
 export const SYSTEM_MODEL_LADDERS = {
   fast: [
     { provider: "google", model: "google/gemini-3.5-flash-lite" },
-    { provider: "openai", model: "openai/gpt-5.4-mini" },
+    { provider: "openai", model: "openai/gpt-6-luna" },
     { provider: "anthropic", model: "anthropic/claude-haiku-4.5" },
-    { provider: "deepseek", model: "deepseek/deepseek-v4-flash" },
+    { provider: "deepseek", model: "deepseek/deepseek-v4.1-flash" },
     { provider: "moonshot", model: "moonshotai/kimi-k2.5" },
     { provider: "alibaba", model: "alibaba/qwen3.7-plus" },
-    { provider: "zhipu", model: "zai/glm-5.2" },
+    { provider: "zhipu", model: "zai/glm-5.3-flash" },
   ],
 } as const satisfies Record<string, readonly SystemModel[]>;
+
+// Saved fast-ladder overrides that name a retired slug upgrade to its
+// successor instead of silently falling back to Auto (HTPR-6722).
+const RETIRED_SYSTEM_MODEL_SLUGS: Record<string, string> = {
+  "openai/gpt-5.4-mini": "openai/gpt-6-luna",
+  "deepseek/deepseek-v4-flash": "deepseek/deepseek-v4.1-flash",
+  "zai/glm-5.2": "zai/glm-5.3-flash",
+};
 
 export type SystemModelRole = keyof typeof SYSTEM_MODEL_LADDERS;
 
@@ -102,7 +110,9 @@ export function getAiFeatureModelOverride(
   if (!isObjectRecord(featureModels)) return null;
 
   const model = featureModels[feature];
-  return typeof model === "string" && model.trim() ? model.trim() : null;
+  if (typeof model !== "string" || !model.trim()) return null;
+  const trimmed = model.trim();
+  return RETIRED_SYSTEM_MODEL_SLUGS[trimmed] ?? trimmed;
 }
 
 export function getSystemFeatureModelOverride(

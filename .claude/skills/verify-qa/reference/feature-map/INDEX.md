@@ -51,7 +51,7 @@ yours; use it only when he needs to watch.
 Three tiered accounts, state files at `~/.config/ht-qa/state-{free,byok,pro}.json`.
 `e2e/smoke/lib/tier.ts` uses `free`/`byok`/`pro` as the tier labels, confirmed
 mapped to plans `Free`/`BYOK`/`Pro`. There is no light or premium tier. Free
-is free forever and has AI chat on `gpt-5.4-mini`. Keep the account names in
+is free forever and has AI chat on `gpt-6-luna`. Keep the account names in
 this one file so renaming them is a one-line edit, not a grep-and-replace:
 
 - `free` → `~/.config/ht-qa/state-free.json`
