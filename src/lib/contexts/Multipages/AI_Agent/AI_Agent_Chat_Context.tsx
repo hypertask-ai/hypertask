@@ -4,6 +4,7 @@ import { useAiChat } from "@/hooks/MultiPages/AIChat/useAiChat";
 import { isControlQFocusShortcut } from "@/lib/aiChat/chatFocusShortcut";
 import { useRecoilState } from "@/lib/state";
 import { aiChatPendingPromptAtom } from "@/store";
+import type { TeamBillingSnapshot } from "@/lib/deriveCurrentBoardBilling";
 import { TAiModal } from "@/models/AI_Task_writer_model";
 import { IChatMessage, IChatSession, MentionItem } from "@/models/model";
 // Type-only: a value import here would pull tiptap back into every page's
@@ -52,6 +53,8 @@ interface ChatContextType {
   chatMounted: boolean;
   setChatMounted: Dispatch<SetStateAction<boolean>>;
   currentAiOption: TAiModal;
+  modelTeamId: string | null;
+  modelBilling: TeamBillingSnapshot | null;
   displayAiOptions: TAiModal[];
   editor: Editor | null;
   editorEnabled: boolean;
