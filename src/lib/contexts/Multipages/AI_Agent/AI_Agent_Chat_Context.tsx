@@ -13,15 +13,17 @@ import type { Editor } from "@tiptap/react";
 import dynamic from "next/dynamic";
 import {
   ChangeEvent,
-  createContext,
   Dispatch,
-  ReactNode,
+  memo,
   RefObject,
   SetStateAction,
-  useContext,
   useEffect,
+  useLayoutEffect,
   useRef,
 } from "react";
+import { useAiChatContext } from "./chatContext";
+
+export { useAiChatContext };
 
 export interface Message {
   id: string;
@@ -31,7 +33,7 @@ export interface Message {
 }
 
 // Define the context type
-interface ChatContextType {
+export interface ChatContextType {
   isTyping: boolean;
   isRecording: boolean;
   queuedMessages: {
@@ -121,9 +123,14 @@ const AiChatEditorMount = dynamic(
   { ssr: false }
 );
 
-const ChatContext = createContext<ChatContextType | undefined>(undefined);
-
-export const ChatProvider = ({ children }: { children: ReactNode }) => {
+// Runs the chat hook graph and hands its value to the ChatContext provider the
+// app shell already holds. It renders beside the page rather than around it, so
+// loading it never remounts the page (HTPR-6751).
+export const ChatRuntime = memo(function ChatRuntime({
+  onValue,
+}: {
+  onValue: (value: ChatContextType | undefined) => void;
+}) {
   const contextProps = useAiChat();
   const layoutKeydownRef = useRef(contextProps.layoutKeydown);
   layoutKeydownRef.current = contextProps.layoutKeydown;
@@ -195,24 +202,12 @@ export const ChatProvider = ({ children }: { children: ReactNode }) => {
     setPendingAiChatPrompt,
   ]);
 
-  return (
-    <ChatContext.Provider
-      value={{
-        ...contextProps,
-      }}
-    >
-      {contextProps.editorEnabled && (
-        <AiChatEditorMount {...contextProps.editorMountProps} />
-      )}
-      {children}
-    </ChatContext.Provider>
-  );
-};
+  useLayoutEffect(() => {
+    onValue(contextProps);
+  });
+  useLayoutEffect(() => () => onValue(undefined), [onValue]);
 
-export const useAiChatContext = (): ChatContextType => {
-  const context = useContext(ChatContext);
-  if (context === undefined) {
-    throw new Error("useAiChatContext must be used within a ChatProvider");
-  }
-  return context;
-};
+  return contextProps.editorEnabled ? (
+    <AiChatEditorMount {...contextProps.editorMountProps} />
+  ) : null;
+});
