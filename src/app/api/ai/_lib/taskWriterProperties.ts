@@ -4,6 +4,10 @@ import {
   EstimateConstants,
   PriorityConstants,
 } from "@/lib/constants/constants";
+import {
+  isDuplicateNoteTitle,
+  repairDuplicateNote,
+} from "@/lib/ai/taskWriterDuplicateGuard";
 
 /**
  * Server-side twin of the "Accept ALL" extraction the task detail does in
@@ -75,15 +79,20 @@ const ESTIMATE_INDEXES = new Set(
   EstimateConstants.map((entry) => entry.estimate_index)
 );
 
-export function extractTaskWriterProperties(html: string): TaskWriterProperties {
-  const parsed = parse(html);
+export function extractTaskWriterProperties(
+  html: string,
+  options: { fallbackTitle?: string | null } = {}
+): TaskWriterProperties {
+  // HTPR-6721: a "Possible duplicate" note must never become the task title.
+  const parsed = parse(repairDuplicateNote(html, options.fallbackTitle));
   // A model that wraps its answer in a full document would otherwise leave the
   // <html>/<body> shell in the description and hide the property lines from the
   // leading-child scan below. The browser extractor reads document.body.
   const root = parsed.querySelector("body") ?? parsed;
 
   const titleEl = root.querySelector("#ai-generated-task-title");
-  const title = titleEl?.textContent.trim() || null;
+  const rawTitle = titleEl?.textContent.trim() || null;
+  const title = isDuplicateNoteTitle(rawTitle) ? null : rawTitle;
   titleEl?.remove();
 
   const priority = indexFromMarker(

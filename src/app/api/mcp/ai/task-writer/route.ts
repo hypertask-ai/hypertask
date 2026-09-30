@@ -15,6 +15,7 @@ import {
   taskWriterRequestSchema,
 } from "@/app/api/ai/_lib/taskWriterRun";
 import { extractTaskWriterProperties } from "@/app/api/ai/_lib/taskWriterProperties";
+import { taskTitleFromBrief } from "@/lib/ai/taskWriterDuplicateGuard";
 import { logAiUsage } from "@/app/api/ai/_lib/aiUsage";
 
 export const runtime = "nodejs";
@@ -117,7 +118,12 @@ export async function POST(request: NextRequest) {
     // Write-with-AI output is plain comment HTML and has no markers.
     const properties =
       input.mode === "task_writer"
-        ? extractTaskWriterProperties(filtered)
+        ? extractTaskWriterProperties(filtered, {
+            // HTPR-6721: if the model answers with a duplicate note, the task
+            // keeps the title the caller asked for, never "Possible duplicate".
+            fallbackTitle:
+              input.task_title.trim() || taskTitleFromBrief(input.prompt),
+          })
         : { title: null, description: filtered };
 
     return NextResponse.json({

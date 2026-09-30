@@ -23,19 +23,15 @@ export const TASK_WRITER_STYLE_EXAMPLE_LIMIT = 3;
 /** Appended only when htpr-6363-task-writer-research is on for the caller. */
 export const TASK_WRITER_BOARD_RESEARCH_RULES = `<h3>BOARD RESEARCH (flagged; outranks brevity, not source fidelity for marketing copy)</h3>
 - Before drafting, read RELATED_TICKET_CANDIDATES, STYLE_EXAMPLES, and BOARD_VOCABULARY in context.
-- Classify every candidate as one of: duplicate, builds on, blocked by, unrelated. Cite only candidates listed there. Never invent a ticket id, URL, title, or outcome.
-- If any candidate is a duplicate of the brief, stop drafting a full ticket. Output only:
-  - \`<h1 id="ai-generated-task-title">Possible duplicate</h1>\`
-  - one paragraph naming the match with its server-provided URL
-  - one sentence on what differs, or "Not provided." if unknown
-  - the usual Proposed properties paragraph last
-- Otherwise include an <h2>Related tickets</h2> section. For each non-unrelated hit, one bullet: relationship, ticket link from the candidate record, and a one-line outcome from that ticket's text. Cap at 8. If every hit is unrelated, write one bullet: "No close matches on this board."
+- Classify every candidate as one of: same work, builds on, blocked by, unrelated. Cite only candidates listed there. Never invent a ticket id, URL, title, or outcome.
+- ALWAYS write the full task the person asked for: a real title that names their request, the description, and the Proposed properties paragraph. A similar or matching candidate never replaces the draft or the title. Never title the task "Possible duplicate", "Duplicate", or anything like it, and never write "Not provided." about how it differs. Asking for a new ticket when an older one exists is normal (a new test, a rerun, a follow-up).
+- Include an <h2>Related tickets</h2> section. For each non-unrelated hit, one bullet: relationship, ticket link from the candidate record, and a one-line outcome from that ticket's text. A "same work" candidate gets one bullet like the others, starting "Related:". Cap at 8. If every hit is unrelated, write one bullet: "No close matches on this board."
 - Mirror vocabulary from BOARD_VOCABULARY and the shape of STYLE_EXAMPLES when they exist. Do not copy their marketing lines into this ticket unless the brief already contains them.
 - Structure the body with <h2> sections covering: problem, affected screen, acceptance criteria, out of scope. Use board template headings instead when a template matches.
 - Source fidelity still bans inventing marketing copy, headlines, slogans, metrics, dates, owners, tooling choices, severities, versions, and numbers that are absent from the brief and retrieved context.
 - You MAY propose acceptance criteria, related-ticket links, and out-of-scope bullets when they are grounded in the brief or retrieved board context. Label guesses with "Proposed:" so they are not presented as given facts.
 - When the brief is thin (missing affected screen, acceptance criteria, or a concrete example), do not invent those facts. End with <h2>Open questions</h2> and exactly 2 or 3 <li> questions the user can answer in the refine box. Prefer questions over filler.
-- Refinement means add board-grounded detail, related tickets, or a duplicate warning. Do not merely rephrase the latest instruction.`;
+- Refinement means add board-grounded detail or related tickets. Do not merely rephrase the latest instruction.`;
 
 function escapePlain(value: string) {
   return value

@@ -5,6 +5,7 @@ import {
   PriorityConstants,
 } from "@/lib/constants/constants";
 import { IAgent, ILabel, IUser } from "@/models/model";
+import { isDuplicateNoteTitle } from "@/lib/ai/taskWriterDuplicateGuard";
 import type {
   IForm,
   TSectionPayload,
@@ -92,7 +93,9 @@ export function extractTitleAndDescription(htmlString: string) {
   const parser = new DOMParser();
   const doc = parser.parseFromString(htmlString, "text/html");
   const h1Element = doc.getElementById("ai-generated-task-title");
-  const title = h1Element?.textContent?.trim() || null;
+  const rawTitle = h1Element?.textContent?.trim() || null;
+  // HTPR-6721: a duplicate warning is never a task title.
+  const title = isDuplicateNoteTitle(rawTitle) ? null : rawTitle;
   doc.querySelectorAll('[id^="ai-generated-task-"]').forEach((element) => {
     element.remove();
   });
@@ -203,7 +206,8 @@ export function extractTaskProperties(
   const doc = parser.parseFromString(htmlString, "text/html");
 
   const titleEl = doc.getElementById("ai-generated-task-title");
-  const title = titleEl?.textContent?.trim() || null;
+  const rawTitle = titleEl?.textContent?.trim() || null;
+  const title = isDuplicateNoteTitle(rawTitle) ? null : rawTitle;
   titleEl?.remove();
 
   const integerMarker = (id: string) => {
