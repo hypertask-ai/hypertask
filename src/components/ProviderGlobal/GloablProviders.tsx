@@ -125,6 +125,7 @@ import { MobileViewContext } from "@/lib/contexts/mobileContext";
 import useHypertasksNavigate from "@/hooks/MultiPages/Route/useHypertasksNavigate";
 import { useDeviceContext } from "@/lib/contexts/deviceContext";
 import { isFavoriteBoardShortcut } from "@/lib/constants/shortcuts";
+import { isControlQFocusShortcut } from "@/lib/aiChat/chatFocusShortcut";
 import {
   isAgentsRoute,
   isCommandCenterShortcut,
@@ -495,16 +496,7 @@ export default function GlobalProvider({
   useEffect(() => {
     if (shouldMountChatRuntime || isFullScreenChat) return;
     const openChatFromFocusShortcut = (event: KeyboardEvent) => {
-      if (
-        event.key.toLowerCase() !== "q" ||
-        !event.ctrlKey ||
-        event.metaKey ||
-        event.altKey ||
-        event.shiftKey ||
-        event.repeat
-      ) {
-        return;
-      }
+      if (!isControlQFocusShortcut(event)) return;
       event.preventDefault();
       event.stopPropagation();
       setChatRuntimeMounted(true);
