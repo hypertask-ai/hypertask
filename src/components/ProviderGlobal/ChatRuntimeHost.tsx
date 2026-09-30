@@ -5,13 +5,19 @@ import type { ChatContextType } from "@/lib/contexts/Multipages/AI_Agent/AI_Agen
 
 type ChatRuntimeComponent = ComponentType<{
   onValue: (value: ChatContextType | undefined) => void;
+  children?: ReactNode;
 }>;
 
-// Holds ChatContext in one fixed place above every page. The chat runtime loads
-// beside the page and only fills in the value, so mounting it never remounts
-// the route: it used to wrap the page, and an open board lost its columns and
-// refetched every time the chat auto-opened (HTPR-6751). Routes whose pages
-// read the chat context keep showing `loading` until the value exists.
+// Keeps every page in one fixed place while the chat runtime loads. The runtime
+// used to wrap the page, so when the chat auto-opened on a board React rebuilt
+// the whole route and the board lost its columns and refetched (HTPR-6751).
+//
+// Pages that read the chat context (holdChildren: /chat, /detail, flagged
+// mobile /agents/chat) mount the runtime from their first render, so they stay
+// wrapped by it, keep their server render, and show `loading` until it exists.
+// Every other page sits beside the runtime under a provider whose value the
+// runtime fills in once it loads. The runtime itself stays in the same slot on
+// every route, so a chat draft or stream survives navigation.
 export default function ChatRuntimeHost({
   mounted,
   holdChildren,
@@ -28,14 +34,14 @@ export default function ChatRuntimeHost({
   const [chatContext, setChatContext] = useState<ChatContextType>();
   return (
     <>
-      {mounted && (
-        <Suspense fallback={null}>
-          <Runtime onValue={setChatContext} />
+      {(mounted || holdChildren) && (
+        <Suspense fallback={holdChildren ? loading : null}>
+          <Runtime onValue={setChatContext}>
+            {holdChildren ? children : null}
+          </Runtime>
         </Suspense>
       )}
-      {holdChildren && !chatContext ? (
-        loading
-      ) : (
+      {!holdChildren && (
         <ChatContext.Provider value={chatContext}>{children}</ChatContext.Provider>
       )}
     </>

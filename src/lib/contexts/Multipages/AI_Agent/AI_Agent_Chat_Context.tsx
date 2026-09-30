@@ -15,13 +15,14 @@ import {
   ChangeEvent,
   Dispatch,
   memo,
+  ReactNode,
   RefObject,
   SetStateAction,
   useEffect,
   useLayoutEffect,
   useRef,
 } from "react";
-import { useAiChatContext } from "./chatContext";
+import { ChatContext, useAiChatContext } from "./chatContext";
 
 export { useAiChatContext };
 
@@ -123,13 +124,16 @@ const AiChatEditorMount = dynamic(
   { ssr: false }
 );
 
-// Runs the chat hook graph and hands its value to the ChatContext provider the
-// app shell already holds. It renders beside the page rather than around it, so
-// loading it never remounts the page (HTPR-6751).
+// Runs the chat hook graph. It provides the context to its own children (pages
+// that need chat from their first render) and hands the same value to the
+// app shell's provider, which holds every other page beside it. Loading it
+// therefore never remounts a page that is already on screen (HTPR-6751).
 export const ChatRuntime = memo(function ChatRuntime({
   onValue,
+  children,
 }: {
   onValue: (value: ChatContextType | undefined) => void;
+  children?: ReactNode;
 }) {
   const contextProps = useAiChat();
   const layoutKeydownRef = useRef(contextProps.layoutKeydown);
@@ -207,7 +211,12 @@ export const ChatRuntime = memo(function ChatRuntime({
   });
   useLayoutEffect(() => () => onValue(undefined), [onValue]);
 
-  return contextProps.editorEnabled ? (
-    <AiChatEditorMount {...contextProps.editorMountProps} />
-  ) : null;
+  return (
+    <ChatContext.Provider value={contextProps}>
+      {contextProps.editorEnabled && (
+        <AiChatEditorMount {...contextProps.editorMountProps} />
+      )}
+      {children}
+    </ChatContext.Provider>
+  );
 });

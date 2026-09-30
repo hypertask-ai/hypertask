@@ -39,16 +39,24 @@ function load(relativePath, target) {
 load("src/lib/contexts/Multipages/AI_Agent/chatContext.ts", chatContextModule);
 const AIChatClosedLayout = load("src/components/AI_CHAT/AI_Chat_Closed_Layout.tsx", frameModule).default;
 const ChatRuntimeHost = load("src/components/ProviderGlobal/ChatRuntimeHost.tsx", hostModule).default;
-const { useOptionalAiChatContext } = chatContextModule.exports;
+const { ChatContext, useOptionalAiChatContext } = chatContextModule.exports;
 
-test("mounting the chat runtime keeps an open board mounted", async () => {
-  const dom = new JSDOM("<!doctype html><html><body><div id='root'></div></body></html>", {
-    url: "https://app.hypertask.ai/project?id=1",
-  });
+function withDom(url) {
+  const dom = new JSDOM("<!doctype html><html><body><div id='root'></div></body></html>", { url });
   const previous = { window: global.window, document: global.document, IS_REACT_ACT_ENVIRONMENT: global.IS_REACT_ACT_ENVIRONMENT };
   global.window = dom.window;
   global.document = dom.window.document;
   global.IS_REACT_ACT_ENVIRONMENT = true;
+  return () => {
+    global.window = previous.window;
+    global.document = previous.document;
+    global.IS_REACT_ACT_ENVIRONMENT = previous.IS_REACT_ACT_ENVIRONMENT;
+    dom.window.close();
+  };
+}
+
+test("mounting the chat runtime keeps an open board mounted", async () => {
+  const restore = withDom("https://app.hypertask.ai/project?id=1");
 
   let boardMounts = 0;
   let seenChat;
@@ -60,9 +68,9 @@ test("mounting the chat runtime keeps an open board mounted", async () => {
     return React.createElement("div", { "data-testid": "board" }, "Todo");
   };
   const chatValue = { showAiChatInterface: true };
-  const Runtime = ({ onValue }) => {
+  const Runtime = ({ onValue, children }) => {
     React.useLayoutEffect(() => onValue(chatValue), [onValue]);
-    return null;
+    return React.createElement(ChatContext.Provider, { value: chatValue }, children);
   };
   const Panels = () => React.createElement("aside", { "data-testid": "chat" });
 
@@ -97,19 +105,12 @@ test("mounting the chat runtime keeps an open board mounted", async () => {
     assert.equal(seenChat, chatValue, "the board still receives the chat context");
   } finally {
     await React.act(async () => reactRoot.unmount());
-    global.window = previous.window;
-    global.document = previous.document;
-    global.IS_REACT_ACT_ENVIRONMENT = previous.IS_REACT_ACT_ENVIRONMENT;
-    dom.window.close();
+    restore();
   }
 });
 
 test("routes that read the chat context wait for it", async () => {
-  const dom = new JSDOM("<!doctype html><html><body><div id='root'></div></body></html>");
-  const previous = { window: global.window, document: global.document, IS_REACT_ACT_ENVIRONMENT: global.IS_REACT_ACT_ENVIRONMENT };
-  global.window = dom.window;
-  global.document = dom.window.document;
-  global.IS_REACT_ACT_ENVIRONMENT = true;
+  const restore = withDom("https://app.hypertask.ai/detail/project-1/1");
 
   const Detail = () => {
     const chat = chatContextModule.exports.useAiChatContext();
@@ -120,10 +121,8 @@ test("routes that read the chat context wait for it", async () => {
   const Runtime = React.lazy(async () => {
     await ready;
     return {
-      default: ({ onValue }) => {
-        React.useLayoutEffect(() => onValue({ showAiChatInterface: false }), [onValue]);
-        return null;
-      },
+      default: ({ children }) =>
+        React.createElement(ChatContext.Provider, { value: { showAiChatInterface: false } }, children),
     };
   });
   const reactRoot = createRoot(document.getElementById("root"));
@@ -147,9 +146,42 @@ test("routes that read the chat context wait for it", async () => {
     assert.equal(document.querySelector("[data-testid=detail]")?.textContent, "false");
   } finally {
     await React.act(async () => reactRoot.unmount());
-    global.window = previous.window;
-    global.document = previous.document;
-    global.IS_REACT_ACT_ENVIRONMENT = previous.IS_REACT_ACT_ENVIRONMENT;
-    dom.window.close();
+    restore();
+  }
+});
+
+test("the chat runtime survives moving from a board to a task", async () => {
+  const restore = withDom("https://app.hypertask.ai/project?id=1");
+  let runtimeMounts = 0;
+  const Runtime = ({ onValue, children }) => {
+    const [value] = React.useState(() => ({ showAiChatInterface: true }));
+    React.useEffect(() => {
+      runtimeMounts += 1;
+    }, []);
+    React.useLayoutEffect(() => onValue(value));
+    return React.createElement(ChatContext.Provider, { value }, children);
+  };
+  const Page = ({ name }) => {
+    const chat = useOptionalAiChatContext();
+    return React.createElement("div", { "data-testid": name }, String(chat?.showAiChatInterface));
+  };
+  const reactRoot = createRoot(document.getElementById("root"));
+  const render = (holdChildren, name) =>
+    reactRoot.render(
+      React.createElement(
+        ChatRuntimeHost,
+        { mounted: true, holdChildren, loading: null, Runtime },
+        React.createElement(Page, { name }),
+      ),
+    );
+  try {
+    await React.act(async () => render(false, "board"));
+    assert.equal(document.querySelector("[data-testid=board]")?.textContent, "true");
+    await React.act(async () => render(true, "detail"));
+    assert.equal(document.querySelector("[data-testid=detail]")?.textContent, "true");
+    assert.equal(runtimeMounts, 1, "opening a task keeps the same chat runtime, so a draft survives");
+  } finally {
+    await React.act(async () => reactRoot.unmount());
+    restore();
   }
 });
