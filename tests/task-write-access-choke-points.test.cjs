@@ -19,7 +19,7 @@ test("creating a task on a foreign board is refused at the shared controller", (
   assertBefore(
     controller,
     "const allowedProject",
-    "var taskCount = await getUniqueTaskCount(projectId)",
+    "const nextUniqueIndex = await getNextUniqueTaskIndex(projectId, tx)",
     "the project gate must run before creation allocates an index",
   );
   assert.match(controller, /status:\s*404[\s\S]*Project not found or access denied/);
