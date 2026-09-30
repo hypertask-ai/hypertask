@@ -1,5 +1,6 @@
 import { useFlag } from "@/hooks/useFlag";
 import { LUNA_FREE_PLAN_FLAG } from "@/lib/flags/keys";
+import type { TeamBillingSnapshot } from "@/lib/deriveCurrentBoardBilling";
 import { useCurrentBoardBilling } from "@/hooks/General/useCurrentBoardBilling";
 import { isByokProviderEnabledForSource } from "@/lib/byokSelectedProviderGate";
 import {
@@ -28,7 +29,6 @@ import { useTeamCustomEndpoint } from "@/hooks/useTeamCustomEndpoint";
 import {
   currentProjectAtom,
   selectedSettingsTeamIdAtom,
-  type CurrentBoardBilling,
 } from "@/store";
 import { getSettingsPath } from "@/components/Modals/Settings/settingsNavigation";
 import { cn } from "@/utils/undoActions/helperFuncs";
@@ -88,7 +88,7 @@ const AIModelDropDownList = ({
   stackSubmenus?: boolean;
   respectTeamAvailability?: boolean;
   modelTeamId?: string | null;
-  modelBilling?: CurrentBoardBilling | null;
+  modelBilling?: TeamBillingSnapshot | null;
   // Extra classes for the effort word on the trigger (e.g. `hidden` to drop it
   // in the narrow docked chat rail; effort stays selectable in-menu). HTPR-4548.
   effortLabelClassName?: ClassNameValue;
