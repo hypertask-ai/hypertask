@@ -154,6 +154,45 @@ DeepSeek/Pi and other lower-confidence producer sessions may create code and pul
 
 The board column is a queue, not a GitHub merge gate; both the board status and the PR hold label are required. A trusted reviewer session batch-reviews the queue and handles low-risk merges. **Valentin Review** is reserved for human/business escalations, not routine code review. If the hold column is missing, stop and report it rather than substituting another column.
 
+## Dev-1 host polling checks
+
+Verified on 2026-09-30 for [HTPR-6755 Infra: Restore dev-1 poller while Bugs has open tickets](https://app.hypertask.ai/detail/project-15/6755).
+
+Dev-1 runs as the isolated system account `htagent-dev1`. Its current poller is the **system** unit `htagent-poll@dev-1.service`, scheduled by `htagent-poll@dev-1.timer` every two minutes. Its log is `/srv/htagent/dev-1/.local/state/agent-board-poll/dev-1.log`.
+
+The old **user** timer `agent-board-poll@dev-1.timer` is masked. The old log at `/home/valentin/.local/state/agent-board-poll/dev-1.log` stopped changing on 2026-09-28. That log is not a health signal for the isolated worker. Do not unmask the old timer or start a second worker to make it advance.
+
+### Check the current worker
+
+Run these read-only commands from an authorized host operator session:
+
+```bash
+sudo systemctl status htagent-poll@dev-1.timer htagent-poll@dev-1.service --no-pager
+sudo journalctl -u htagent-poll@dev-1.service -n 30 --no-pager
+sudo stat -c '%y %s %n' /srv/htagent/dev-1/.local/state/agent-board-poll/dev-1.log
+sudo tail -n 30 /srv/htagent/dev-1/.local/state/agent-board-poll/dev-1.log
+```
+
+A oneshot service stays `activating` while its ticket session runs. The timer can show `running` during that session. Neither state alone means it is hung. Check the current ticket's run record and process before restarting it. The main log also receives reconciler entries, so a changing timestamp alone does not prove new tickets are being polled.
+
+Confirm pickup with a `run start` entry in the current log, the matching record under `/srv/htagent/dev-1/.local/state/agent-board-poll/run-records/`, and the ticket's Dev 1 assignment and In Progress column through the approved board CLI. Use your own agent identity; do not read another worker's token or dump process arguments or environment variables.
+
+If the current timer is genuinely inactive and no ticket session is running, restore only that timer from an authorized operator session:
+
+```bash
+sudo systemctl start htagent-poll@dev-1.timer
+sudo systemctl is-active htagent-poll@dev-1.timer
+```
+
+Read back the current log and board state after its next tick. A masked current timer requires checking the recorded stand-down decision first, not blindly unmasking it. Leave other workers and their routing unchanged.
+
+### Incident evidence
+
+- The current journal recorded successful polling every two minutes from 17:37 to 17:58 CEST on 2026-09-30. There was no current two-hour poller stall to restart.
+- At 18:00:44 CEST, the current log recorded Dev-1 starting [HTPR-6751 [QA] open board fails on the live site](https://app.hypertask.ai/detail/project-15/6751). The board read-back showed Dev 1 assigned and the ticket In Progress.
+- The current log advanced from 6,572,902 bytes to 6,573,213 bytes during this investigation. The ticket session remained running. No timer, worker, credential, or routing setting was changed by this investigation.
+- Earlier ticket sessions had failed because the configured Cursor model was unavailable. By the observed 18:00 pickup, the worker was using Claude. Those provider failures are distinct from a stopped poller; this ticket does not change provider routing or certify completion of the picked-up ticket.
+
 ## Canonical references
 
 - Human-readable onboarding: [https://hypertask.app/wiki/agents](https://hypertask.app/wiki/agents)
