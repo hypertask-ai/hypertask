@@ -50,6 +50,7 @@ import {
   defaultAiModelOption,
   getDefaultAiModelOptionForPlan,
   getAiModelOptionById,
+  isLunaBlockedOnFreePlan,
   preferredAiModelOption,
   type TAiModelOption,
 } from "@/lib/aiModelOptions";
@@ -64,6 +65,7 @@ import {
 } from "@/lib/aiModelPreferences";
 import {
   assertModelAllowedForPlan,
+  lunaFreePlanEnabled,
   storePlanIdForProject,
 } from "@/app/api/ai/_lib/planGate";
 import {
@@ -1041,9 +1043,11 @@ export async function selectTaskWriterModel(args: {
         credential.trim() !== sharedKey) ||
       (credential !== null && typeof credential === "object");
   }
+  const lunaFree = await lunaFreePlanEnabled(args.userId);
   const requestDefaultModelOption = getDefaultAiModelOptionForPlan(
     storePlanId,
     hasEligibleByokCredential,
+    lunaFree,
   );
   const personalModelOptionId = args.aiFeature
     ? await getPersonalModelOptionId(
@@ -1070,6 +1074,9 @@ export async function selectTaskWriterModel(args: {
     selection = selectionFromModelOption(
       filterModelOptionForTeam(selection.modelOption, teamContext.settings)
     );
+  }
+  if (isLunaBlockedOnFreePlan(selection.modelOption, storePlanId, lunaFree)) {
+    selection = selectionFromModelOption(requestDefaultModelOption);
   }
 
   const getSelectionApiKey = (
@@ -1127,6 +1134,7 @@ export async function selectTaskWriterModel(args: {
     selection.modelOption,
     teamContext.teamId,
     byokApiKey,
+    lunaFree,
   );
 
   const tags = gatewayTagsForLookup({

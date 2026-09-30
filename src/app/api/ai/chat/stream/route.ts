@@ -277,6 +277,7 @@ import {
   defaultAiModelOption,
   getDefaultAiModelOptionForPlan,
   getAiModelOptionById,
+  isLunaBlockedOnFreePlan,
   preferredAiModelOption,
   type TAiModelOption,
 } from "@/lib/aiModelOptions";
@@ -288,6 +289,7 @@ import { getAiRequestUser } from "@/app/api/ai/_lib/requestUser";
 import { getCronServiceRequestUser } from "@/app/api/ai/_lib/cronServiceAuth";
 import {
   assertModelAllowedForPlan,
+  lunaFreePlanEnabled,
   storePlanIdForProject,
 } from "@/app/api/ai/_lib/planGate";
 import {
@@ -9949,9 +9951,11 @@ export async function POST(request: NextRequest) {
           credential.trim() !== sharedKey) ||
         (credential !== null && typeof credential === "object");
     }
+    const lunaFree = await lunaFreePlanEnabled(dbUser.id);
     const requestDefaultModelOption = getDefaultAiModelOptionForPlan(
       storePlanId,
       hasEligibleByokCredential,
+      lunaFree,
     );
     // An agent pinned to a model runs its own turns on it, which is the point
     // of pinning: a sweeper on a cheap model, a coordinator on an expensive
@@ -9975,6 +9979,9 @@ export async function POST(request: NextRequest) {
       selection = selectionFromModelOption(
         filterModelOptionForTeam(selection.modelOption, teamProviderSettings)
       );
+    }
+    if (isLunaBlockedOnFreePlan(selection.modelOption, storePlanId, lunaFree)) {
+      selection = selectionFromModelOption(requestDefaultModelOption);
     }
     const getSelectionApiKey = (
       selected: ModelSelection
@@ -10035,6 +10042,7 @@ export async function POST(request: NextRequest) {
       selection.modelOption,
       gatewayTags.teamId,
       byokApiKey,
+      lunaFree,
     );
 
     titleByokApiKey =

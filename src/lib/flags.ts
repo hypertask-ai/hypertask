@@ -60,6 +60,7 @@ import {
   MY_TASKS_QUICK_ADD_FLAG,
   MY_TASKS_SNOOZE_FLAG,
   MY_TASKS_OVERDUE_BADGES_FLAG,
+  LUNA_FREE_PLAN_FLAG,
   HTPR_6427_ROW_SHORTCUTS_FLAG,
   HTPR_6514_COMMENT_LONG_PRESS_FLAG,
   HTPR_6516_AGENT_ATTRIBUTION_FLAG,
@@ -616,6 +617,12 @@ const FEATURE_FLAG_DEFINITIONS = [
     shippedOn: "2026-09-15",
     description:
       "On My Tasks, H opens the existing Remind Me picker. The chosen date hides the row here and in Inbox until it returns to both.",
+  },
+  {
+    key: LUNA_FREE_PLAN_FLAG,
+    shippedOn: "2026-09-30",
+    description:
+      "Lets Free plans use GPT 6 Luna and makes it their default AI model. Without it Free plans default to Gemini 3.5 Flash Lite.",
   },
   {
     key: MY_TASKS_OVERDUE_BADGES_FLAG,

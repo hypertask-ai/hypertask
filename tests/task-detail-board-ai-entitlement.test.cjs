@@ -69,11 +69,9 @@ test("a paid board opened from a board-agnostic view keeps its premium models", 
   });
   assert.equal(context.teamId, "paid-team");
   assert.equal(context.billing.storePlanId, "Pro");
-  // Luna is the default on every plan since HTPR-6722, so the plan is the
-  // signal that the premium models stay unlocked.
-  assert.equal(
+  assert.notEqual(
     getDefaultAiModelOptionForPlan(context.billing.storePlanId, false).id,
-    "gpt-6-luna",
+    getDefaultAiModelOptionForPlan("Free", false).id,
   );
 });
 
@@ -87,6 +85,6 @@ test("dropping the subscription rows is what downgraded the picker to the free d
   assert.equal(billing.storePlanId, "Free");
   assert.equal(
     getDefaultAiModelOptionForPlan(billing.storePlanId, false).id,
-    "gpt-6-luna",
+    "gemini-3.5-flash-lite",
   );
 });

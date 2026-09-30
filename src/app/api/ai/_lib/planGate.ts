@@ -6,6 +6,7 @@ import {
   pickEntitlingSubscriptionRow,
   subscriptionStatusGrantsAccess,
 } from "@/lib/subscriptionAccess";
+import { LUNA_FREE_PLAN_FLAG } from "@/lib/flags/keys";
 import {
   getAiModelDefinition,
   isPremiumAiModelDefinition,
@@ -96,15 +97,37 @@ export async function storePlanIdForProject(
 
 /** Throws when a Free-plan (or teamless) request asks for a premium model. Free teams without any
  * team/project context are treated as Free, not exempted. */
+/**
+ * HTPR-6722: whether GPT 6 Luna is an included model for this user's Free plan.
+ * Enforced on the server; fails closed when the flag cannot be read.
+ */
+export async function lunaFreePlanEnabled(
+  userId: number | null | undefined,
+): Promise<boolean> {
+  if (!userId) return false;
+  try {
+    // Loaded on demand: @/lib/flags reaches the auth stack, which the many
+    // callers that only need the plan checks below should not pay for.
+    const { isFeatureEnabled } = await import("@/lib/flags");
+    return await isFeatureEnabled(LUNA_FREE_PLAN_FLAG, userId);
+  } catch {
+    return false;
+  }
+}
+
 export async function assertModelAllowedForPlan(
   projectId: number | null | undefined,
   modelOption: TAiModelOption | undefined,
   teamId?: string | null,
   credential?: unknown,
+  lunaFree = false,
 ) {
   if (
     !modelOption ||
-    !isPremiumAiModelDefinition(getAiModelDefinition(modelOption.modelKey))
+    !isPremiumAiModelDefinition(
+      getAiModelDefinition(modelOption.modelKey),
+      lunaFree,
+    )
   ) {
     return;
   }

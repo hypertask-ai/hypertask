@@ -1397,29 +1397,46 @@ test("shared allowance fails closed when Gateway omits Grok pricing", async () =
 
 test("price tiers two and three are premium while tier one stays included", () => {
   const { isPremiumAiModelKey } = loadTs("src/lib/aiModelOptions.ts");
-  assert.equal(isPremiumAiModelKey("gpt-6-luna"), false);
+  assert.equal(isPremiumAiModelKey("gemini-3.5-flash-lite"), false);
+  assert.equal(isPremiumAiModelKey("gpt-6-luna"), true);
   assert.equal(isPremiumAiModelKey("gpt-5.6-terra"), true);
   assert.equal(isPremiumAiModelKey("gpt-6.1-sol"), true);
 });
 
-test("Free plan default is Luna and Free teams may use it but not Sol", async () => {
-  const { getDefaultAiModelOptionForPlan, getAiModelOptionById } = loadTs(
-    "src/lib/aiModelOptions.ts",
-  );
+test("Luna is included on Free plans only with the htpr-6722 flag", async () => {
+  const {
+    getDefaultAiModelOptionForPlan,
+    getAiModelOptionById,
+    getAiModelDefinition,
+    isPremiumAiModelDefinition,
+  } = loadTs("src/lib/aiModelOptions.ts");
   const { assertModelAllowedForPlan } = loadTs(
     "src/app/api/ai/_lib/planGate.ts",
   );
-  assert.equal(getDefaultAiModelOptionForPlan("Free").id, "gpt-6-luna");
+  const luna = getAiModelOptionById("gpt-6-luna");
+  const sol = getAiModelOptionById("gpt-6.1-sol");
+
+  // Flag off: Free defaults to the cheapest tier-1 model and Luna is locked.
+  assert.equal(getDefaultAiModelOptionForPlan("Free").id, "gemini-3.5-flash-lite");
+  assert.equal(getDefaultAiModelOptionForPlan("Free", false, false).id, "gemini-3.5-flash-lite");
+  assert.equal(isPremiumAiModelDefinition(getAiModelDefinition("gpt-6-luna")), true);
   // No project or team context is treated as Free.
-  await assertModelAllowedForPlan(
-    null,
-    getDefaultAiModelOptionForPlan("Free"),
-    null,
-  );
   await assert.rejects(
-    assertModelAllowedForPlan(null, getAiModelOptionById("gpt-6.1-sol"), null),
+    assertModelAllowedForPlan(null, luna, null),
     /paid plan or your own API key/,
   );
+
+  // Flag on: Luna is the Free default and passes the gate; Sol stays locked.
+  assert.equal(getDefaultAiModelOptionForPlan("Free", false, true).id, "gpt-6-luna");
+  assert.equal(isPremiumAiModelDefinition(getAiModelDefinition("gpt-6-luna"), true), false);
+  await assertModelAllowedForPlan(null, luna, null, undefined, true);
+  await assert.rejects(
+    assertModelAllowedForPlan(null, sol, null, undefined, true),
+    /paid plan or your own API key/,
+  );
+
+  // Paid plans default to Luna either way.
+  assert.equal(getDefaultAiModelOptionForPlan("Pro").id, "gpt-6-luna");
 });
 
 test("the allowance team stamp round-trips and ignores unmarked content", () => {

@@ -27,7 +27,23 @@ test("composer filters premium models before send for free boards without BYOK",
   });
 
   assert.equal(result.models.some((model) => model.id === "gpt-6.1-sol"), false);
+  assert.equal(result.models.some((model) => model.id === "gpt-6-luna"), false);
+  assert.equal(result.models.some((model) => model.id === "gemini-3.5-flash-lite"), true);
+  assert.equal(result.selectedModelId, "gemini-3.5-flash-lite");
+});
+
+test("composer offers Luna as the free default when the htpr-6722 flag is on", () => {
+  const result = buildComposerConfig({
+    settings: null,
+    customEndpointConfigured: false,
+    storePlanId: "Free",
+    providersWithByok: new Set(),
+    lunaFree: true,
+  });
+
   assert.equal(result.models.some((model) => model.id === "gpt-6-luna"), true);
+  assert.equal(result.models.some((model) => model.id === "gpt-6.1-sol"), false);
+  assert.equal(result.selectedModelId, "gpt-6-luna");
 });
 
 test("composer keeps premium models gated on free boards even when a key is stored", () => {

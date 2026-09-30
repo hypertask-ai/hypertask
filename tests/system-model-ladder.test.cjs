@@ -148,14 +148,15 @@ test("team default beats the user-facing product default", () => {
   );
 });
 
-test("Luna is the catalog default on every plan, Free included", () => {
+test("Luna is the paid default; Free gets it only with the htpr-6722 flag", () => {
   assert.equal(preferredAiModelOption.id, "gpt-6-luna");
   assert.equal(preferredAiModelOption.effort, "standard");
-  assert.equal(defaultAiModelOption.id, "gpt-6-luna");
+  assert.equal(defaultAiModelOption.id, "gemini-3.5-flash-lite");
   assert.equal(getDefaultAiModelOptionForPlan("Pro").id, "gpt-6-luna");
   assert.equal(getDefaultAiModelOptionForPlan("AI").id, "gpt-6-luna");
-  assert.equal(getDefaultAiModelOptionForPlan("Free").id, "gpt-6-luna");
-  assert.equal(getDefaultAiModelOptionForPlan("BYOK").id, "gpt-6-luna");
+  assert.equal(getDefaultAiModelOptionForPlan("Free").id, "gemini-3.5-flash-lite");
+  assert.equal(getDefaultAiModelOptionForPlan("Free", false, true).id, "gpt-6-luna");
+  assert.equal(getDefaultAiModelOptionForPlan("BYOK").id, "gemini-3.5-flash-lite");
   assert.equal(
     getDefaultAiModelOptionForPlan("BYOK", true).id,
     "gpt-6-luna",
@@ -199,7 +200,7 @@ test("custom team defaults require a configured endpoint", () => {
     resolveUserFacingModelOption("aiChat", settings, null, {
       customEndpointConfigured: false,
     }).id,
-    "gpt-6-luna",
+    "gemini-3.5-flash-lite",
   );
 });
 
@@ -213,7 +214,7 @@ test("disabled providers invalidate personal and team defaults", () => {
       },
       "claude-opus-5-5-thinking",
     ).id,
-    "gpt-6-luna",
+    "gemini-3.5-flash-lite",
   );
 });
 

@@ -36,10 +36,11 @@ function stubModule(relativePath, exports) {
   };
 }
 
-function stubPlan(plan = "Pro") {
+function stubPlan(plan = "Pro", lunaFree = false) {
   stubModule("src/app/api/ai/_lib/planGate.ts", {
     assertImageModelAllowedForPlan: async () => {},
     assertModelAllowedForPlan: async () => {},
+    lunaFreePlanEnabled: async () => lunaFree,
     storePlanIdForProject: async () =>
       typeof plan === "function" ? plan() : plan,
   });
@@ -741,7 +742,7 @@ test("task writer option ids map to provider options and legacy model strings fa
     "src/lib/aiModelOptions.ts",
   );
 
-  assert.equal(defaultAiModelOption.id, "gpt-6-luna");
+  assert.equal(defaultAiModelOption.id, "gemini-3.5-flash-lite");
   assert.equal(preferredAiModelOption.id, "gpt-6-luna");
   assert.equal(preferredAiModelOption.effort, "standard");
   assert.deepEqual(preferredAiModelOption.providerOptions?.openai, {
@@ -854,7 +855,7 @@ test("task writer option ids map to provider options and legacy model strings fa
   });
 });
 
-test("a new Free team defaults to Luna without tripping the premium plan gate", async () => {
+async function selectFreeTeamDefault({ lunaFreeFlag }) {
   resetModules();
   const teamId = "team_free_default";
   process.env.AI_GATEWAY_API_KEY = "vck_shared_allowance";
@@ -870,6 +871,14 @@ test("a new Free team defaults to Luna without tripping the premium plan gate", 
       teamByokApiKey: {
         findUnique: async () => null,
       },
+      userSetting: { findUnique: async () => null },
+    },
+  });
+  stubModule("src/lib/flags.ts", {
+    isFeatureEnabled: async (key, userId) => {
+      assert.equal(key, "htpr-6722-latest-models");
+      assert.equal(userId, 1000);
+      return lunaFreeFlag;
     },
   });
   stubModule("src/lib/crypto/byokCipher.ts", {
@@ -881,13 +890,50 @@ test("a new Free team defaults to Luna without tripping the premium plan gate", 
   });
 
   const { selectTaskWriterModel } = loadTs("src/app/api/ai/_lib/editorAi.ts");
-  const selected = await selectTaskWriterModel({
+  return selectTaskWriterModel({
     aiFeature: "taskWriter",
-    teamContext: { teamId, settings: {} },
+    teamContext: { teamId, settings: {}, userId: 1000 },
+    userId: 1000,
   });
+}
 
+test("a Free team defaults to the tier-1 fallback while the Luna flag is off", async () => {
+  const selected = await selectFreeTeamDefault({ lunaFreeFlag: false });
+  assert.equal(selected.modelId, "google/gemini-3.5-flash-lite");
+});
+
+test("a Free team defaults to Luna and may use it once the Luna flag is on", async () => {
+  const selected = await selectFreeTeamDefault({ lunaFreeFlag: true });
   assert.equal(selected.provider, "openai");
   assert.equal(selected.modelId, "gpt-6-luna");
+});
+
+test("a saved GPT 5.4 Mini on a Free team drops to the default while the Luna flag is off", async () => {
+  resetModules();
+  process.env.AI_GATEWAY_API_KEY = "vck_shared_allowance";
+  stubModule("src/lib/prisma.ts", {
+    default: {
+      team: {
+        findUnique: async () => ({ activeSubscriptionPlanId: null, subscriptionPlan: [] }),
+      },
+      teamByokApiKey: { findUnique: async () => null },
+    },
+  });
+  stubModule("src/lib/flags.ts", { isFeatureEnabled: async () => false });
+  stubModule("src/lib/crypto/byokCipher.ts", { decryptByokSecret: (c) => c });
+  stubModule("src/utils/controllers/projects/getAllIncludes.ts", {
+    getProjectWhere: () => ({}),
+    taskWriteAccessWhere: () => ({}),
+  });
+  const { selectTaskWriterModel } = loadTs("src/app/api/ai/_lib/editorAi.ts");
+  const selected = await selectTaskWriterModel({
+    sourceSelected: "openai",
+    modelSelected: "gpt-5.4-mini",
+    modelOptionId: "gpt-5.4-mini",
+    teamContext: { teamId: "team_free_default", settings: {}, userId: 1000 },
+    userId: 1000,
+  });
+  assert.equal(selected.modelId, "google/gemini-3.5-flash-lite");
 });
 
 test("retired model options keep their saved variant and price tier", () => {
@@ -909,7 +955,7 @@ test("retired model options keep their saved variant and price tier", () => {
   assert.equal(getAiModelOptionById("gpt-5.5-instant")?.id, "gpt-6.1-sol-light");
   assert.equal(getAiModelOptionById("gpt-5.5-thinking")?.id, "gpt-6.1-sol-high");
   assert.equal(getAiModelOptionById("kimi-k2.6")?.id, "kimi-k3");
-  assert.equal(getAiModelDefinition("gpt-6-luna").priceTier, 1);
+  assert.equal(getAiModelDefinition("gpt-6-luna").priceTier, 2);
   assert.equal(getAiModelDefinition("gpt-6.1-sol").priceTier, 3);
   assert.equal(getAiModelDefinition("claude-opus-5-5").priceTier, 3);
 });

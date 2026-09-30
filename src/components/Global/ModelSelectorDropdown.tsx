@@ -1,3 +1,5 @@
+import { useFlag } from "@/hooks/useFlag";
+import { LUNA_FREE_PLAN_FLAG } from "@/lib/flags/keys";
 import { useCurrentBoardBilling } from "@/hooks/General/useCurrentBoardBilling";
 import { isByokProviderEnabledForSource } from "@/lib/byokSelectedProviderGate";
 import {
@@ -99,6 +101,7 @@ const AIModelDropDownButton = ({
   const rootRef = useRef<HTMLDivElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
+  const lunaFree = useFlag(LUNA_FREE_PLAN_FLAG);
   const boardBilling = useCurrentBoardBilling();
   const billing = modelBilling === undefined ? boardBilling : modelBilling;
   const currentProject = useRecoilValue(currentProjectAtom);
@@ -169,6 +172,7 @@ const AIModelDropDownButton = ({
       scopedBilling?.byokProviderFlags,
       preferredAiModelOption.source,
     ),
+    lunaFree,
   );
   const requestedOption =
     getAiModelOptionById(aiSelected?.id) ?? planDefaultOption;
@@ -202,6 +206,7 @@ const AIModelDropDownButton = ({
       (option) =>
         !isPremiumAiModelDefinition(
           getAiModelDefinition(option.modelKey),
+          lunaFree,
         ) || isProviderEnabled(option.source),
     );
 
@@ -406,7 +411,7 @@ const AIModelDropDownButton = ({
               const isPremiumLocked =
                 !isGuest &&
                 respectTeamAvailability &&
-                isPremiumAiModelDefinition(definition) &&
+                isPremiumAiModelDefinition(definition, lunaFree) &&
                 (scopedBilling?.storePlanId === "Free" ||
                   (scopedBilling?.storePlanId === "BYOK" && !hasCustomerKey));
               const locked = isGuestLocked || isPremiumLocked;
@@ -589,7 +594,7 @@ const AIModelDropDownButton = ({
                       const isPremiumLocked =
                         !isGuest &&
                         respectTeamAvailability &&
-                        isPremiumAiModelDefinition(model) &&
+                        isPremiumAiModelDefinition(model, lunaFree) &&
                         (scopedBilling?.storePlanId === "Free" ||
                           (scopedBilling?.storePlanId === "BYOK" &&
                             !hasCustomerKey));
@@ -690,6 +695,7 @@ const AIModelDropDownButton = ({
               (isByokPlan &&
                 isPremiumAiModelDefinition(
                   getAiModelDefinition(fallbackOption.modelKey),
+                  lunaFree,
                 ) &&
                 !isProviderEnabled(fallbackOption.source))
             }

@@ -89,7 +89,7 @@ export type TAiImageModelDefinition = {
 };
 
 export const aiModelDefinitions: TAiModelDefinition[] = [
-  { key: "gpt-6-luna", label: "6 Luna", provider: "openai", priceTier: 1 },
+  { key: "gpt-6-luna", label: "6 Luna", provider: "openai", priceTier: 2 },
   {
     key: "gpt-5.6-terra",
     label: "5.6 Terra",
@@ -462,15 +462,17 @@ export const aiModelOptions: TAiModelOption[] = [
   },
 ];
 
-// Luna Standard is a tier-1 model, so it is the product default on every plan,
-// Free included, and the universal fallback for callers without trusted billing
-// context.
+// Luna Standard is the product default for paid plans, and for Free plans once
+// the htpr-6722-latest-models flag is on for the user (LUNA_FREE_PLAN_FLAG).
+// The universal fallback must be included on every plan, so it is the cheapest
+// tier-1 model: callers without trusted billing context can never select a
+// locked model implicitly.
 export const preferredAiModelOption =
   aiModelOptions.find((option) => option.id === "gpt-6-luna") ??
   aiModelOptions[0];
 
 export const defaultAiModelOption =
-  aiModelOptions.find((option) => option.id === "gpt-6-luna") ??
+  aiModelOptions.find((option) => option.id === "gemini-3.5-flash-lite") ??
   aiModelOptions[0];
 
 export const MOBILE_AI_CHAT_QUICK_MODEL_IDS = [
@@ -480,15 +482,35 @@ export const MOBILE_AI_CHAT_QUICK_MODEL_IDS = [
   "gpt-6.1-sol-light",
 ] as const satisfies readonly TAiModelOptionId[];
 
+export const LUNA_FREE_MODEL_KEY: TAiModelKey = "gpt-6-luna";
+
+// `lunaFree` is the per-user htpr-6722-latest-models flag: with it on, Luna
+// counts as an included (tier 1) model on Free plans and is their default.
 export function getDefaultAiModelOptionForPlan(
   storePlanId: StorePlanKind | null | undefined,
   hasEligibleByokCredential = false,
+  lunaFree = false,
 ): TAiModelOption {
   return storePlanId === "Pro" ||
     storePlanId === "AI" ||
-    (storePlanId === "BYOK" && hasEligibleByokCredential)
+    (storePlanId === "BYOK" && hasEligibleByokCredential) ||
+    (storePlanId === "Free" && lunaFree)
     ? preferredAiModelOption
     : defaultAiModelOption;
+}
+
+// A Free-plan choice of Luna (for example a saved GPT 5.4 Mini, which aliases
+// to Luna) is not allowed while the flag is off, so it drops to the plan default.
+export function isLunaBlockedOnFreePlan(
+  modelOption: TAiModelOption | undefined,
+  storePlanId: StorePlanKind | null | undefined,
+  lunaFree: boolean,
+): boolean {
+  return (
+    !lunaFree &&
+    storePlanId === "Free" &&
+    modelOption?.modelKey === LUNA_FREE_MODEL_KEY
+  );
 }
 
 // Retired option ids map to their replacement so a persisted choice upgrades in
@@ -556,7 +578,9 @@ export function getMobileAiChatModelLabel(
 
 export function isPremiumAiModelDefinition(
   model: TAiModelDefinition | undefined,
+  lunaFree = false,
 ): boolean {
+  if (lunaFree && model?.key === LUNA_FREE_MODEL_KEY) return false;
   return Boolean(model && ((model.priceTier ?? 1) > 1 || model.premium));
 }
 
