@@ -3,6 +3,7 @@ import React, {
   useContext,
   useEffect,
   useLayoutEffect,
+  useMemo,
   useRef,
   useState,
 } from "react";
@@ -13,6 +14,10 @@ import {
   extractTitleAndDescription,
 } from "@/utils/aiWriterUtils";
 import { useAITaskWriterContext } from "@/lib/contexts/TaskDetail/AITaskWriterContext";
+import {
+  repairDuplicateNote,
+  taskTitleFromBrief,
+} from "@/lib/ai/taskWriterDuplicateGuard";
 import { MobileViewContext } from "@/lib/contexts/mobileContext";
 
 // Components
@@ -102,7 +107,7 @@ const AITaskWriterContainer: React.FC<
     currentAiOption,
     responseHistory,
     currentResponseIndex,
-    currentDisplayResponse,
+    currentDisplayResponse: rawDisplayResponse,
     getCurrentResponseItem,
     isLoading,
     loadingText,
@@ -119,6 +124,16 @@ const AITaskWriterContainer: React.FC<
     projectId,
 
   } = useAITaskWriterContext();
+
+  // HTPR-6721: if the writer answers with a "Possible duplicate" note, show and
+  // accept the task the person asked for, with the match as a Related link.
+  // Every other response passes through unchanged.
+  const firstBrief = responseHistory[0]?.userPrompt;
+  const currentDisplayResponse = useMemo(
+    () =>
+      repairDuplicateNote(rawDisplayResponse, taskTitleFromBrief(firstBrief)),
+    [rawDisplayResponse, firstBrief]
+  );
 
 
   // Local state for modal and initialization
