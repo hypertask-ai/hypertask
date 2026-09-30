@@ -66,7 +66,7 @@ const effortNotes: Record<TAiEffort, string> = {
   high: "deep reasoning",
 };
 
-const AIModelDropDownButton = ({
+const AIModelDropDownList = ({
   optionCallback,
   aiSelected,
   currentOptions,
@@ -78,6 +78,7 @@ const AIModelDropDownButton = ({
   modelBilling,
   effortLabelClassName,
   mobileQuickPicker = false,
+  lunaFree,
 }: {
   aiSelected: TAiModal | undefined;
   optionCallback: (item: TAiModal) => void;
@@ -92,6 +93,8 @@ const AIModelDropDownButton = ({
   // in the narrow docked chat rail; effort stays selectable in-menu). HTPR-4548.
   effortLabelClassName?: ClassNameValue;
   mobileQuickPicker?: boolean;
+  // htpr-6722-latest-models: Luna is included on Free plans.
+  lunaFree: boolean;
 }) => {
   const [isOpen, setIsOpen] = useState(false);
   const [submenu, setSubmenu] = useState<Submenu | null>(null);
@@ -101,7 +104,6 @@ const AIModelDropDownButton = ({
   const rootRef = useRef<HTMLDivElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
-  const lunaFree = useFlag(LUNA_FREE_PLAN_FLAG);
   const boardBilling = useCurrentBoardBilling();
   const billing = modelBilling === undefined ? boardBilling : modelBilling;
   const currentProject = useRecoilValue(currentProjectAtom);
@@ -795,5 +797,16 @@ function SubmenuRow({
     </button>
   );
 }
+
+type AIModelDropDownButtonProps = Omit<
+  Parameters<typeof AIModelDropDownList>[0],
+  "lunaFree"
+>;
+
+const AIModelDropDownButton = (props: AIModelDropDownButtonProps) => {
+  const lunaFree = useFlag(LUNA_FREE_PLAN_FLAG);
+  if (lunaFree) return <AIModelDropDownList {...props} lunaFree />;
+  return <AIModelDropDownList {...props} lunaFree={false} />;
+};
 
 export default AIModelDropDownButton;
