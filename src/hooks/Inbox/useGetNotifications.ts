@@ -27,6 +27,7 @@ import {
   type InboxReadModelRevision,
 } from "@/lib/inboxSync/revision";
 import { filterInboxReadModelByProjectAccess } from "@/lib/inboxSync/contract";
+import { useHydrated } from "@/hooks/General/useHydrated";
 
 export const INBOX_QUERY_KEY = ["inbox"] as const;
 export const INBOX_QUERY_STALE_TIME_MS = 30 * 1000;
@@ -425,15 +426,22 @@ export const notificationCountQueryOptions = (userId: number) => ({
 export const useGetNotificationCount = (
   userId: number,
   options?: { enabled?: boolean },
-) =>
-  useQuery({
-    ...notificationCountQueryOptions(userId),
-    enabled: options?.enabled ?? true,
+) => {
+  const hydrated = useHydrated();
+  const queryOptions = notificationCountQueryOptions(userId);
+  return useQuery({
+    ...queryOptions,
+    queryKey: hydrated
+      ? queryOptions.queryKey
+      : [...queryOptions.queryKey, "hydrating"],
+    enabled: hydrated && (options?.enabled ?? true),
     initialData: { all: 0, unseen: 0 },
     initialDataUpdatedAt: 0,
   });
+};
 
 export const useGetNotifications = (userId: number) => {
+  const hydrated = useHydrated();
   const queryClient = useQueryClient();
   const searchParams = useSearchParams();
   const parameter = searchParams?.get(BOARD_SYNC_PILOT_PARAM) ?? null;
@@ -453,8 +461,13 @@ export const useGetNotifications = (userId: number) => {
     return startedAtRef.current;
   }, [userId]);
   const queryKey = useMemo(() => inboxDataQueryKey(userId), [userId]);
+  const observerQueryKey = useMemo(
+    () => (hydrated ? queryKey : [...queryKey, "hydrating"] as const),
+    [hydrated, queryKey],
+  );
   const query = useQuery({
-    queryKey,
+    queryKey: observerQueryKey,
+    enabled: hydrated,
     queryFn: () =>
       fetchInboxPayload(
         userId,
@@ -471,6 +484,7 @@ export const useGetNotifications = (userId: number) => {
   });
 
   useEffect(() => {
+    if (!hydrated) return;
     const startedAt = getStartedAt();
     const readinessLatch = readinessLatchRef.current!;
     const readinessLocalOutcome = readinessLocalOutcomeRef.current!;
@@ -584,7 +598,7 @@ export const useGetNotifications = (userId: number) => {
     return () => {
       cancelled = true;
     };
-  }, [getStartedAt, parameter, queryClient, queryKey, userId]);
+  }, [getStartedAt, hydrated, parameter, queryClient, queryKey, userId]);
 
   return query;
 };
