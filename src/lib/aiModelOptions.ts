@@ -499,18 +499,18 @@ export function getDefaultAiModelOptionForPlan(
     : defaultAiModelOption;
 }
 
-// A Free-plan choice of Luna (for example a saved GPT 5.4 Mini, which aliases
-// to Luna) is not allowed while the flag is off, so it drops to the plan default.
-export function isLunaBlockedOnFreePlan(
+// A saved choice of Luna (for example a saved GPT 5.4 Mini, which aliases to
+// Luna) is not usable on Free plans while the flag is off, or on BYOK plans
+// without an eligible customer key. Those requests drop to the plan default.
+export function isLunaBlockedForPlan(
   modelOption: TAiModelOption | undefined,
   storePlanId: StorePlanKind | null | undefined,
   lunaFree: boolean,
+  hasEligibleByokCredential: boolean,
 ): boolean {
-  return (
-    !lunaFree &&
-    storePlanId === "Free" &&
-    modelOption?.modelKey === LUNA_FREE_MODEL_KEY
-  );
+  if (modelOption?.modelKey !== LUNA_FREE_MODEL_KEY) return false;
+  if (storePlanId === "Free") return !lunaFree;
+  return storePlanId === "BYOK" && !hasEligibleByokCredential;
 }
 
 // Retired option ids map to their replacement so a persisted choice upgrades in

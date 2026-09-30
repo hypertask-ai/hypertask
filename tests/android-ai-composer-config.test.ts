@@ -46,6 +46,18 @@ test("composer offers Luna as the free default when the htpr-6722 flag is on", (
   assert.equal(result.selectedModelId, "gpt-6-luna");
 });
 
+test("composer keeps Luna gated on BYOK boards without a key even with the htpr-6722 flag on", () => {
+  const result = buildComposerConfig({
+    settings: null,
+    customEndpointConfigured: false,
+    storePlanId: "BYOK",
+    providersWithByok: new Set(),
+    lunaFree: true,
+  });
+
+  assert.equal(result.models.some((model) => model.id === "gpt-6-luna"), false);
+});
+
 test("composer keeps premium models gated on free boards even when a key is stored", () => {
   const result = buildComposerConfig({
     settings: null,

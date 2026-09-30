@@ -10,6 +10,7 @@ import { LUNA_FREE_PLAN_FLAG } from "@/lib/flags/keys";
 import {
   getAiModelDefinition,
   isPremiumAiModelDefinition,
+  LUNA_FREE_MODEL_KEY,
   type TAiImageModelDefinition,
   type TAiModelOption,
 } from "@/lib/aiModelOptions";
@@ -124,13 +125,13 @@ export async function assertModelAllowedForPlan(
 ) {
   if (
     !modelOption ||
-    !isPremiumAiModelDefinition(
-      getAiModelDefinition(modelOption.modelKey),
-      lunaFree,
-    )
+    !isPremiumAiModelDefinition(getAiModelDefinition(modelOption.modelKey))
   ) {
     return;
   }
+  // HTPR-6722: with the flag on, Luna is an included model on Free plans only.
+  const lunaIncludedOnFree =
+    lunaFree && modelOption.modelKey === LUNA_FREE_MODEL_KEY;
   const sharedKey = process.env.AI_GATEWAY_API_KEY?.trim();
   const resolvedCredential =
     typeof credential === "string" ? credential.trim() : credential;
@@ -150,6 +151,7 @@ export async function assertModelAllowedForPlan(
   // Free, so retain the plan error instead of treating it as exempt.
   if (!resolvedCredential) {
     if (!projectId && !teamId) {
+      if (lunaIncludedOnFree) return;
       throw new AiPlanAccessError(
         "This model needs a paid plan or your own API key."
       );
@@ -159,6 +161,7 @@ export async function assertModelAllowedForPlan(
 
   const storePlanId = await storePlanIdForProject(projectId, teamId);
   if (storePlanId === "Free") {
+    if (lunaIncludedOnFree) return;
     throw new AiPlanAccessError(
       "This model needs a paid plan or your own API key."
     );

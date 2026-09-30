@@ -59,6 +59,8 @@ function toComposerModel(option: TAiModelOption): ComposerModel {
 
 export function buildComposerConfig(input: ComposerConfigInput) {
   const enabled = isAiFeatureEnabled("aiChat", input.settings);
+  // Luna is included for Free plans only; BYOK still needs its own key.
+  const lunaFree = Boolean(input.lunaFree) && input.storePlanId === "Free";
   const allowedOptions = enabled
     ? aiModelOptions.filter(
         (option) =>
@@ -72,7 +74,7 @@ export function buildComposerConfig(input: ComposerConfigInput) {
             option,
             input.storePlanId,
             input.providersWithByok,
-            input.lunaFree,
+            lunaFree,
           ),
       )
     : [];
@@ -83,7 +85,7 @@ export function buildComposerConfig(input: ComposerConfigInput) {
     {
       customEndpointConfigured: input.customEndpointConfigured,
       defaultModelOption:
-        input.storePlanId === "Free" && input.lunaFree
+        lunaFree
           ? preferredAiModelOption
           : undefined,
     },

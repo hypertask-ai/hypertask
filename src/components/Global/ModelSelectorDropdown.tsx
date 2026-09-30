@@ -168,6 +168,8 @@ const AIModelDropDownList = ({
       isGuest,
     ]
   );
+  // Luna is included for Free plans only; BYOK still needs its own key.
+  const lunaFreeOnPlan = lunaFree && scopedBilling?.storePlanId === "Free";
   const planDefaultOption = getDefaultAiModelOptionForPlan(
     scopedBilling?.storePlanId,
     isByokProviderEnabledForSource(
@@ -208,7 +210,7 @@ const AIModelDropDownList = ({
       (option) =>
         !isPremiumAiModelDefinition(
           getAiModelDefinition(option.modelKey),
-          lunaFree,
+          lunaFreeOnPlan,
         ) || isProviderEnabled(option.source),
     );
 
@@ -413,7 +415,7 @@ const AIModelDropDownList = ({
               const isPremiumLocked =
                 !isGuest &&
                 respectTeamAvailability &&
-                isPremiumAiModelDefinition(definition, lunaFree) &&
+                isPremiumAiModelDefinition(definition, lunaFreeOnPlan) &&
                 (scopedBilling?.storePlanId === "Free" ||
                   (scopedBilling?.storePlanId === "BYOK" && !hasCustomerKey));
               const locked = isGuestLocked || isPremiumLocked;
@@ -596,7 +598,7 @@ const AIModelDropDownList = ({
                       const isPremiumLocked =
                         !isGuest &&
                         respectTeamAvailability &&
-                        isPremiumAiModelDefinition(model, lunaFree) &&
+                        isPremiumAiModelDefinition(model, lunaFreeOnPlan) &&
                         (scopedBilling?.storePlanId === "Free" ||
                           (scopedBilling?.storePlanId === "BYOK" &&
                             !hasCustomerKey));
@@ -697,7 +699,7 @@ const AIModelDropDownList = ({
               (isByokPlan &&
                 isPremiumAiModelDefinition(
                   getAiModelDefinition(fallbackOption.modelKey),
-                  lunaFree,
+                  lunaFreeOnPlan,
                 ) &&
                 !isProviderEnabled(fallbackOption.source))
             }

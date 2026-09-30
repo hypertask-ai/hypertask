@@ -277,7 +277,7 @@ import {
   defaultAiModelOption,
   getDefaultAiModelOptionForPlan,
   getAiModelOptionById,
-  isLunaBlockedOnFreePlan,
+  isLunaBlockedForPlan,
   preferredAiModelOption,
   type TAiModelOption,
 } from "@/lib/aiModelOptions";
@@ -9980,8 +9980,17 @@ export async function POST(request: NextRequest) {
         filterModelOptionForTeam(selection.modelOption, teamProviderSettings)
       );
     }
-    if (isLunaBlockedOnFreePlan(selection.modelOption, storePlanId, lunaFree)) {
-      selection = selectionFromModelOption(requestDefaultModelOption);
+    if (
+      isLunaBlockedForPlan(
+        selection.modelOption,
+        storePlanId,
+        lunaFree,
+        hasEligibleByokCredential,
+      )
+    ) {
+      selection = selectionFromModelOption(
+        filterModelOptionForTeam(requestDefaultModelOption, teamProviderSettings),
+      );
     }
     const getSelectionApiKey = (
       selected: ModelSelection

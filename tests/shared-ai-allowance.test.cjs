@@ -1435,6 +1435,16 @@ test("Luna is included on Free plans only with the htpr-6722 flag", async () => 
     /paid plan or your own API key/,
   );
 
+  // The flag never unlocks Luna for BYOK plans without their own key, and a
+  // saved Luna choice (for example an old GPT 5.4 Mini) drops to the default.
+  const { isLunaBlockedForPlan } = loadTs("src/lib/aiModelOptions.ts");
+  assert.equal(isLunaBlockedForPlan(luna, "Free", false, false), true);
+  assert.equal(isLunaBlockedForPlan(luna, "Free", true, false), false);
+  assert.equal(isLunaBlockedForPlan(luna, "BYOK", true, false), true);
+  assert.equal(isLunaBlockedForPlan(luna, "BYOK", true, true), false);
+  assert.equal(isLunaBlockedForPlan(luna, "Pro", false, false), false);
+  assert.equal(isLunaBlockedForPlan(sol, "Free", false, false), false);
+
   // Paid plans default to Luna either way.
   assert.equal(getDefaultAiModelOptionForPlan("Pro").id, "gpt-6-luna");
 });

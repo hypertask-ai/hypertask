@@ -50,7 +50,7 @@ import {
   defaultAiModelOption,
   getDefaultAiModelOptionForPlan,
   getAiModelOptionById,
-  isLunaBlockedOnFreePlan,
+  isLunaBlockedForPlan,
   preferredAiModelOption,
   type TAiModelOption,
 } from "@/lib/aiModelOptions";
@@ -1075,8 +1075,17 @@ export async function selectTaskWriterModel(args: {
       filterModelOptionForTeam(selection.modelOption, teamContext.settings)
     );
   }
-  if (isLunaBlockedOnFreePlan(selection.modelOption, storePlanId, lunaFree)) {
-    selection = selectionFromModelOption(requestDefaultModelOption);
+  if (
+    isLunaBlockedForPlan(
+      selection.modelOption,
+      storePlanId,
+      lunaFree,
+      hasEligibleByokCredential,
+    )
+  ) {
+    selection = selectionFromModelOption(
+      filterModelOptionForTeam(requestDefaultModelOption, teamContext.settings),
+    );
   }
 
   const getSelectionApiKey = (
