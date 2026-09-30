@@ -24,11 +24,12 @@ function plainText(html: string) {
   return html
     .replace(/<[^>]*>/g, " ")
     .replace(/&nbsp;/gi, " ")
-    .replace(/&amp;/gi, "&")
     .replace(/&lt;/gi, "<")
     .replace(/&gt;/gi, ">")
     .replace(/&quot;/gi, '"')
     .replace(/&#39;/gi, "'")
+    // Last, so "&amp;lt;" reads as the literal "&lt;", not "<".
+    .replace(/&amp;/gi, "&")
     .replace(/\s+/g, " ")
     .trim();
 }
@@ -40,19 +41,19 @@ function escapeHtml(value: string) {
     .replaceAll(">", "&gt;");
 }
 
+// "Possible duplicate", "Duplicate", or either followed by a ticket id
+// ("Possible duplicate of INNE-944, Hero model image swap test").
+const DUPLICATE_NOTE_TITLE_RE =
+  /^(?:(?:possible|potential|likely|probable)\s+)?duplicate(?:\s*(?:of\b|:|-)?\s*[a-z][a-z0-9]*-\d+\b.*)?[\s.!?]*$/i;
+
 /**
- * True for titles that are a duplicate warning rather than a task:
- * "Possible duplicate", "Likely duplicate of X", "Duplicate", "Duplicate of X".
- * A real task about duplicates ("Fix duplicate notifications", "Duplicate
- * board action", "Deduplicate export rows") is not matched.
+ * True only for titles that are a duplicate warning rather than a task. A real
+ * task about duplicates ("Potential duplicate charges when retrying checkout",
+ * "Fix duplicate notifications", "Duplicate board action") is not matched.
  */
 export function isDuplicateNoteTitle(title: string | null | undefined) {
   if (!title) return false;
-  const text = title.replace(/\s+/g, " ").trim();
-  return (
-    /^(possible|potential|likely|probable)\s+duplicate\b/i.test(text) ||
-    /^duplicate(\s+of\b.*)?[.!?]*$/i.test(text)
-  );
+  return DUPLICATE_NOTE_TITLE_RE.test(title.replace(/\s+/g, " ").trim());
 }
 
 /**
@@ -79,7 +80,8 @@ export function taskTitleFromBrief(brief: string | null | undefined) {
 
 /**
  * If the writer answered with a duplicate note instead of a task, put the
- * requested task's title back and shrink the note to one "Related:" link line.
+ * requested task's title back and move the match into a "Related tickets"
+ * section, the same place a normal draft lists similar earlier tickets.
  * Any other output is returned unchanged, byte for byte.
  *
  * With no fallback title the note's heading is dropped, so the caller keeps
@@ -109,7 +111,11 @@ export function repairDuplicateNote(
     if (DIFFERENCE_FILLER_RE.test(text)) return "";
     if (MATCH_NOTE_RE.test(text)) {
       const links = inner.match(ANCHOR_RE);
-      return links ? `<p>Related: ${links.join(", ")}</p>` : paragraph;
+      if (!links) return paragraph;
+      const items = links
+        .map((link) => `<li><p>${link}: similar earlier ticket.</p></li>`)
+        .join("");
+      return `<h2>Related tickets</h2><ul>${items}</ul>`;
     }
     return paragraph;
   });
