@@ -325,10 +325,14 @@ export const useGetAllBoards = (
   }, []);
 
   const query = useQuery({
-    queryKey: hydrated
-      ? PROJECTS_ALL_QUERY_KEY
-      : PROJECTS_ALL_HYDRATING_QUERY_KEY,
-    enabled: hydrated && (options?.enabled ?? true),
+    queryKey: PROJECTS_ALL_QUERY_KEY,
+    enabled: options?.enabled ?? true,
+    ...(hydrated
+      ? {}
+      : {
+          queryKey: PROJECTS_ALL_HYDRATING_QUERY_KEY,
+          enabled: false,
+        }),
     queryFn: async ({ signal }) => {
       const generation = ++requestGenerationRef.current;
       const requestId = nextProjectsAuthorizationRequestId();

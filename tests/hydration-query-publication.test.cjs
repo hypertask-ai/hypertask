@@ -61,14 +61,25 @@ test("hydration-sensitive queries isolate their pre-hydration cache keys", () =>
 
   assert.match(
     inbox,
-    /export const useGetNotifications[\s\S]*?queryKey: observerQueryKey,\s*enabled: hydrated/,
+    /const query = useQuery\(\{\s*queryKey,\s*\.\.\.\(hydrated\s*\?\s*\{\}\s*:\s*\{[\s\S]*?"hydrating"[\s\S]*?enabled: false/,
   );
-  assert.match(inbox, /queryKey: hydrated[\s\S]*?"hydrating"/);
-  assert.match(inbox, /enabled: hydrated && \(options\?\.enabled \?\? true\)/);
-  assert.match(boards, /queryKey: hydrated[\s\S]*?PROJECTS_ALL_HYDRATING_QUERY_KEY/);
-  assert.match(boards, /enabled: hydrated && \(options\?\.enabled \?\? true\)/);
-  assert.match(flags, /const flags = useContext\(FeatureFlagsContext\)/);
-  assert.match(flags, /return hydrated && flags\[key\] === true/);
+  assert.match(
+    inbox,
+    /enabled: options\?\.enabled \?\? true,\s*\.\.\.\(useHydrated\(\)\s*\?\s*\{\}\s*:\s*\{[\s\S]*?"hydrating"[\s\S]*?enabled: false/,
+  );
+  assert.match(inbox, /if \(!hydrated\) return;/);
+  assert.match(
+    boards,
+    /queryKey: PROJECTS_ALL_QUERY_KEY,\s*enabled: options\?\.enabled \?\? true,\s*\.\.\.\(hydrated\s*\?\s*\{\}\s*:\s*\{[\s\S]*?PROJECTS_ALL_HYDRATING_QUERY_KEY[\s\S]*?enabled: false/,
+  );
+  assert.match(
+    flags,
+    /FeatureFlagsContext\.Provider value=\{hydrated \? \(query\.data \?\? \{\}\) : \{\}\}/,
+  );
+  assert.match(
+    flags,
+    /return useContext\(FeatureFlagsContext\)\[key\] === true/,
+  );
 });
 
 test("a shared query isolates late streamed consumers during hydration", { timeout: 5_000 }, async () => {

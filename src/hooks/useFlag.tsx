@@ -106,15 +106,14 @@ export function FeatureFlagProvider({
     };
   }, [queryClient, userId]);
 
+  const hydrated = useHydrated();
   return (
-    <FeatureFlagsContext.Provider value={query.data ?? {}}>
+    <FeatureFlagsContext.Provider value={hydrated ? (query.data ?? {}) : {}}>
       {children}
     </FeatureFlagsContext.Provider>
   );
 }
 
 export function useFlag(key: string): boolean {
-  const hydrated = useHydrated();
-  const flags = useContext(FeatureFlagsContext);
-  return hydrated && flags[key] === true;
+  return useContext(FeatureFlagsContext)[key] === true;
 }
