@@ -47,7 +47,7 @@ written with the write-pr-summary skill, so it cannot come from
 sections before anything is pushed, in dry runs too.
 
 Lanes (see ticket-lifecycle "Route the PR to the right review lane"):
-  ai-review          default. Auto-merge ON. Normal bug fix or flagged
+  ai-review          default. Auto-merge OFF. Normal bug fix or flagged
                      feature, and additive DB migrations behind a flag.
   supervisor-review  auto-merge OFF. Destructive migration, CI or infra
                      decision, shipped-bug verification.
@@ -62,7 +62,7 @@ On success it prints the PR URL, the ticket, the lane, the section the board
 now reports, and the auto-merge setting.
 
 Examples:
-  # Normal bug fix, auto-merge on, default lane:
+  # Normal bug fix, auto-merge off, default lane:
   open-pr.sh HTPR-6471 BUGFIX "stop the sidebar collapsing on reload" \
     --body-file /home/valentin/work/HTPR-6471/pr-body.md
 
@@ -113,9 +113,9 @@ case "$TYPE" in
 esac
 
 case "$LANE" in
-  ai-review)         SECTION="AI Review";         AUTOMERGE="yes" ;;
-  supervisor-review|ht-manager-review) SECTION="Supervisor Review"; AUTOMERGE="no" ;;
-  valentin-review)   SECTION="Valentin Review";   AUTOMERGE="no" ;;
+  ai-review)         SECTION="AI Review" ;;
+  supervisor-review|ht-manager-review) SECTION="Supervisor Review" ;;
+  valentin-review)   SECTION="Valentin Review" ;;
   *) die "--lane must be ai-review, supervisor-review, ht-manager-review or valentin-review, got '$LANE'." "Use ai-review unless the change touches money, auth, security, irreversible data, or a destructive migration." ;;
 esac
 
@@ -158,10 +158,9 @@ if [ "$DRY_RUN" = "yes" ]; then
   run gh pr create --base "$BASE" --title "$PR_TITLE" --body-file "$BODY_FILE"
   run hypertask task move "$TICKET" --section "$SECTION"
   run hypertask --json task get "$TICKET"
-  if [ "$AUTOMERGE" = "yes" ]; then run gh pr merge --auto --squash; fi
   printf 'DRY RUN OK: body file %s has all five write-pr-summary sections.\n' "$BODY_FILE"
-  printf 'DRY RUN OK: %s would go to lane %s (section "%s"), automerge=%s, PR title: %s\n' \
-    "$TICKET" "$LANE" "$SECTION" "$AUTOMERGE" "$PR_TITLE"
+  printf 'DRY RUN OK: %s would go to lane %s (section "%s"), automerge=no, PR title: %s\n' \
+    "$TICKET" "$LANE" "$SECTION" "$PR_TITLE"
   exit 0
 fi
 
@@ -194,20 +193,15 @@ NOW_ASSIGNEES="${NOW##*$'\t'}"
 [ "$NOW_SECTION" = "$SECTION" ] \
   || die "$TICKET is in '$NOW_SECTION', not '$SECTION', after the move, so the PR at $PR_URL is in the wrong review queue." "Run 'hypertask task move $TICKET --section \"$SECTION\"' and check 'hypertask project sections <project id>' for the exact spelling."
 
-# Auto-merge is armed last, after the board has been read back. Arming it
-# before the move meant a PR could merge itself while its ticket sat in the
-# wrong column, with nobody in the review lane aware it existed.
-if [ "$AUTOMERGE" = "yes" ]; then
-  gh pr merge --auto --squash \
-    || die "The PR is open at $PR_URL but auto-merge could not be turned on." "Run 'gh pr merge --auto --squash' in this worktree, or leave it off and tell the review lane a human has to press merge."
-else
-  printf '%s: auto-merge left OFF for lane %s, a human clears this one.\n' "$SELF" "$LANE"
-fi
+# Opening a PR is a review handoff, not permission to merge. The repository
+# disables auto-merge; trying to arm it here turns a successful handoff into
+# a failed run that the runner sends to Infra.
+printf '%s: auto-merge left OFF for lane %s, the merge gate or operator clears this one.\n' "$SELF" "$LANE"
 
 printf '%s: PR opened.\n' "$SELF"
 printf '  pr:        %s\n' "$PR_URL"
 printf '  ticket:    %s\n' "$TICKET"
 printf '  section:   %s (read back from the board)\n' "$NOW_SECTION"
 printf '  assignees: %s\n' "$NOW_ASSIGNEES"
-printf '  lane:      %s, automerge=%s\n' "$LANE" "$AUTOMERGE"
+printf '  lane:      %s, automerge=no\n' "$LANE"
 printf '  title:     %s\n' "$PR_TITLE"

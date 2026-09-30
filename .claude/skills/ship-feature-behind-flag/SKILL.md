@@ -23,7 +23,7 @@ Use with `ticket-lifecycle` (company pack) (board mechanics), `verify-on-phone` 
    .claude/skills/fix-bug/scripts/open-pr.sh <PREFIX-NNN> FEATURE "<short title>" \
      --body-file <path> [--lane <lane>]
    ```
-   Same script `fix-bug` uses; `FEATURE` sets the title to `HTPR-NNNN [FEATURE] ...`. Default lane `ai-review` (auto-merge on) is right for an ordinary flagged feature.
+   Same script `fix-bug` uses; `FEATURE` sets the title to `HTPR-NNNN [FEATURE] ...`. Default lane `ai-review` is right for an ordinary flagged feature. The helper leaves auto-merge off in every lane; the merge gate or operator session handles merging.
    **If the feature needs a database migration:** see `ticket-lifecycle` step 9 for the lane table (including the additive-migration exception) and pick `--lane` from there.
    Mark the PR gate met with the PR URL as evidence: `$COMPANY_SKILLS_DIR/ticket-lifecycle/scripts/gates.sh met <PREFIX-NNN> "<gate>" --evidence "<PR URL>"`.
 10. **Expect the `feature-flag-gate` check.** It mechanically blocks a new-feature PR that omits the flag. It lets valid `[BUGFIX]` or `[INFRA]` titles through within the 150-added-UI-line limit; verified auto-reverts retain their exemption. A title is only a mechanical hint: the reviewer must check the diff for a genuine restoration of intended behaviour. API-only changes fall outside the mechanical check but the server-side rule in step 5 still applies, and no exemption waives semantic review.
@@ -36,4 +36,4 @@ Use with `ticket-lifecycle` (company pack) (board mechanics), `verify-on-phone` 
 ## Notes
 
 - Features stay behind the Owner+QA flag. They do not get the "bug fixes may deploy directly to production" exception that `fix-bug` has.
-- UX and design decisions inside the feature never block merge or auto-merge, and never park a ticket in `Valentin Review`. He judges the real thing behind the flag in the app, not a wireframe.
+- UX and design decisions inside the feature never park a ticket in `Valentin Review`. He judges the real thing behind the flag in the app, not a wireframe.

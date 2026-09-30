@@ -31,7 +31,7 @@ This skill covers bug fixes such as crashes, 500s, wrong or lost data, and resto
    .claude/skills/fix-bug/scripts/open-pr.sh <PREFIX-NNN> BUGFIX "<short title>" \
      --body-file <path> [--lane <lane>]
    ```
-   It pushes the current branch, opens the PR against `production`, titles it `HTPR-NNNN [BUGFIX] ...`, sets auto-merge to match the lane, moves the ticket, and reads the board back. It does not branch or commit: do that first. Default lane is `ai-review`.
+   It pushes the current branch, opens the PR against `production`, titles it `HTPR-NNNN [BUGFIX] ...`, leaves auto-merge off, moves the ticket, and reads the board back. It does not branch or commit: do that first. Default lane is `ai-review`.
    **Lane by risk:** see `ticket-lifecycle` step 9 for the lane table (including the additive-migration exception) and pick `--lane` from there.
    Mark the PR gate met with the PR URL as evidence: `$COMPANY_SKILLS_DIR/ticket-lifecycle/scripts/gates.sh met <PREFIX-NNN> "<gate>" --evidence "<PR URL>"`.
 12. **Request full CI if the workflow would otherwise skip it**, and confirm required checks and review pass on the final commit head before hand-off. A skipped test job is not a pass. If checks read green but GitHub still blocks the merge, look for cancelled duplicate runs of those required jobs and rerun only those, one at a time. Never bypass branch protection and never toggle a label to force a merge green.
@@ -44,7 +44,7 @@ This skill covers bug fixes such as crashes, 500s, wrong or lost data, and resto
 - Branch off `<remote>/production` of `hypertask-ai/hypertask`. Never base work on the legacy `valentinyeo/hypertasks` repo, which is what `origin` points at in some older checkouts. The script uses `$HT_GIT_REMOTE` (falling back to `origin`); check `git remote -v` if you are unsure which is which.
 - PR base is `production`, never `main`. `main` is frozen legacy. Title format is `HTPR-NNNN [TYPE] ...`.
 - Merging to `production` deploys `app.hypertask.ai` in about three minutes. **Bug fixes may deploy directly**, severe ones especially, and QA checks them on production afterwards. Features do not get this: they stay behind the Owner+QA flag.
-- Auto-merge is per-PR and opening the PR does not turn it on. The script enables it on the `ai-review` lane and deliberately leaves it off on the other two.
+- Opening a PR is a review handoff. Never merge or enable auto-merge from the open-PR helper, regardless of lane. A successful handoff must not fail because auto-merge is unavailable. The merge gate or operator session handles merging.
 - Previews are opt-in and share the live production database. Visual verification only, never destructive testing. Never poll a building preview by reloading a browser tab: poll headlessly with `curl -o /dev/null -w '%{http_code}'` or `gh pr checks`, and open the browser only once it is ready.
 - If `gh pr edit` fails on an old gh version, use the REST PATCH endpoint with a JSON body file. Never interpolate prose into shell code.
 - Never open a duplicate PR because an existing branch looks awkward. Recover it instead.
