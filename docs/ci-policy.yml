@@ -1,5 +1,5 @@
 version: 5
-last_updated: 2026-09-17
+last_updated: 2026-09-30
 purpose: "Fixed-cost CI with fast releases and a provider-neutral AI review gate. App CI runs on GitHub-hosted runners; the repo is public, so hosted minutes are free. The canonical reader-facing contract is https://hypertask.app/wiki/deployment; this file is the machine-readable companion."
 
 topology:
@@ -33,22 +33,25 @@ topology:
   # duplicated here.
 
 review_first_gate:
-  # Owner decision 2026-08-26: CI tests run on a PR only after GitHub AI Review
-  # is green. The pr-feedback timer applies the full-ci label on review
-  # success, which triggers the ci-tests run; the workflow itself gates on the
-  # label. Agents run no production builds and no full suites locally; the
-  # only production build anywhere is Vercel's deploy build.
-  pr_ci_build_requires_label: full-ci
+  # Owner decision 2026-08-26 made CI wait for the full-ci label. Retired
+  # 2026-09-30 (HTPR-6734, HR-04): a label-gated run showed SKIPPED, which the
+  # ruleset counts as passing. ci-tests and browser-smoke now run on every
+  # non-draft PR; the full-ci label is still applied but gates nothing.
+  # Agents run no production builds and no full suites locally; the only
+  # production build anywhere is Vercel's deploy build.
+  pr_ci_build_requires_label: none
   label_applied_by: pr-feedback-timer-on-review-success
   local_agent_verification: [tsc-noEmit, targeted-tests]
 
 required_checks:
   # An administrator applied these checks through GitHub's ruleset API on
   # 2026-09-08. ci-tests verifies this live ruleset before every build.
-  contexts: [app-smoke, browser-smoke, ci-tests, ai-review, feature-flag-gate, pr-title, revert-guard, next-public-secrets, secret-scan]
+  # claude-review is the reviewer's legacy status name; the live ruleset
+  # still requires it next to ai-review (HTPR-6734).
+  contexts: [app-smoke, browser-smoke, ci-tests, ai-review, claude-review, feature-flag-gate, pr-title, revert-guard, next-public-secrets, secret-scan]
   automerge_also_requires: [app-smoke, browser-smoke, ci-tests, feature-flag-gate]
-  # ci-tests normally reports after the full-ci label arrives (see
-  # review_first_gate); automerge treats a missing result as not green.
+  # ci-tests and browser-smoke report on every non-draft PR; a missing or
+  # skipped result is not green.
 
 feature_flag_gate:
   workflow: .github/workflows/feature-flag-gate.yml
@@ -113,7 +116,7 @@ policies:
     production_health_check_after_deploy: true
     failed_build_keeps_previous_deployment_live: true
   production_ruleset:
-    required_status_checks: [app-smoke, browser-smoke, ci-tests, ai-review, feature-flag-gate, pr-title, revert-guard, next-public-secrets, secret-scan]
+    required_status_checks: [app-smoke, browser-smoke, ci-tests, ai-review, claude-review, feature-flag-gate, pr-title, revert-guard, next-public-secrets, secret-scan]
 
 ci_tests:
   # .github/workflows/ci-tests.yml; the file remains the implementation source.
