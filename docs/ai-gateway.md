@@ -99,7 +99,7 @@ repurpose a team key for tooling:
   analysis. Stored in the repo's gitignored `.env.report.local` on the VPS.
   Report data is org-wide regardless of which key authenticates.
 - **Anonymous Demo** (added 2026-07-15, HTPR-4303) — powers board generation
-  inside the rate-limited `POST /api/demo/guest` flow using `gpt-5.4-mini` and
+  inside the rate-limited `POST /api/demo/guest` flow using `gpt-6-luna` and
   the `demo-board` tag. `DEMO_AI_GATEWAY_API_KEY` is configured on Vercel for
   production, preview, and development. Missing configuration fails closed;
   there is no shared-key fallback. The standalone public generation route was

@@ -15,12 +15,12 @@ import {
 export type ByokTestResult = "works" | "invalid" | "no_credit" | "error";
 
 const TEST_MODEL_KEYS: Partial<Record<TByokProviderKey, TAiModelKey>> = {
-  openai: "gpt-5.4-mini",
+  openai: "gpt-6-luna",
   claude: "claude-haiku-4.5",
   google: "gemini-3.5-flash-lite",
-  deepseek: "deepseek-v4-flash",
+  deepseek: "deepseek-v4.1-flash",
   moonshot: "kimi-k2.5",
-  zhipu: "glm-5.2",
+  zhipu: "glm-5.3-flash",
   alibaba: "qwen3.7-plus",
 };
 
@@ -95,7 +95,7 @@ export function buildByokTestRequest(
     return jsonRequest(
       "https://ai-gateway.vercel.sh/v1/chat/completions",
       apiKey,
-      { id: "openai/gpt-5.4-mini", label: "GPT-5.4 Mini" }
+      { id: "openai/gpt-6-luna", label: "GPT 6 Luna" }
     );
   }
 
@@ -103,7 +103,7 @@ export function buildByokTestRequest(
     return jsonRequest(
       "https://openrouter.ai/api/v1/chat/completions",
       apiKey,
-      { id: "openai/gpt-5.4-mini", label: "GPT-5.4 Mini" }
+      { id: "openai/gpt-6-luna", label: "GPT 6 Luna" }
     );
   }
 

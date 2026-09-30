@@ -6,7 +6,7 @@ test("composer uses the enabled board default and filters disabled providers", (
   const result = buildComposerConfig({
     settings: {
       providers: { openai: true, anthropic: false },
-      featureModels: { aiChat: "gpt-5.4-mini" },
+      featureModels: { aiChat: "gpt-6-luna" },
     },
     customEndpointConfigured: false,
     storePlanId: "Pro",
@@ -14,7 +14,7 @@ test("composer uses the enabled board default and filters disabled providers", (
   });
 
   assert.equal(result.enabled, true);
-  assert.equal(result.selectedModelId, "gpt-5.4-mini");
+  assert.equal(result.selectedModelId, "gpt-6-luna");
   assert.equal(result.models.some((model) => model.provider === "claude"), false);
 });
 
@@ -26,8 +26,8 @@ test("composer filters premium models before send for free boards without BYOK",
     providersWithByok: new Set(),
   });
 
-  assert.equal(result.models.some((model) => model.id === "gpt-6-sol"), false);
-  assert.equal(result.models.some((model) => model.id === "gpt-5.4-mini"), true);
+  assert.equal(result.models.some((model) => model.id === "gpt-6.1-sol"), false);
+  assert.equal(result.models.some((model) => model.id === "gpt-6-luna"), true);
 });
 
 test("composer keeps premium models gated on free boards even when a key is stored", () => {
@@ -38,7 +38,7 @@ test("composer keeps premium models gated on free boards even when a key is stor
     providersWithByok: new Set(["openai"]),
   });
 
-  assert.equal(result.models.some((model) => model.id === "gpt-6-sol"), false);
+  assert.equal(result.models.some((model) => model.id === "gpt-6.1-sol"), false);
 });
 
 test("composer keeps premium models available when that provider has BYOK", () => {
@@ -49,7 +49,7 @@ test("composer keeps premium models available when that provider has BYOK", () =
     providersWithByok: new Set(["openai"]),
   });
 
-  assert.equal(result.models.some((model) => model.id === "gpt-6-sol"), true);
+  assert.equal(result.models.some((model) => model.id === "gpt-6.1-sol"), true);
   assert.equal(
     result.models.some((model) => model.id === "claude-opus-5-5-thinking"),
     false,

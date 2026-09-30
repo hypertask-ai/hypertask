@@ -206,7 +206,7 @@ async function modelPricing(modelSlug: string): Promise<ModelPricing> {
     const pricing = models.get(slug);
     if (pricing) return pricing;
   }
-  const tier = /^openai\/gpt-6-(luna|sol)$/.exec(modelSlug)?.[1]
+  const tier = /^openai\/gpt-6(?:\.\d+)?-(luna|sol)$/.exec(modelSlug)?.[1]
     ?? (/^anthropic\/claude-opus-5[.-]5$/.test(modelSlug) ? "opus" : null);
   if (tier) {
     // Until Gateway publishes successor pricing, reserve at least the most

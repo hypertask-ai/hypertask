@@ -7,7 +7,7 @@
 // mapping to this codebase's real plan identifiers
 // (src/lib/planFromStripePriceId.ts, StorePlanKind): free -> "Free",
 // byok -> "BYOK", pro -> "Pro". There is no light or premium tier. Free is
-// free forever and its AI chat runs on gpt-5.4-mini.
+// free forever and its AI chat runs on gpt-6-luna.
 export function readTier(): string | undefined {
   return process.env.HT_QA_TIER || undefined
 }

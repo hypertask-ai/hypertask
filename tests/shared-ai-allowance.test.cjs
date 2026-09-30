@@ -1254,6 +1254,7 @@ test("unpriced successor tiers use explicit floors rather than cheap predecessor
     for (const [slug, expected] of [
       ["openai/gpt-6-luna", 50],
       ["openai/gpt-6-sol", 100],
+      ["openai/gpt-6.1-sol", 100],
       ["anthropic/claude-opus-5.5", 150],
     ]) {
       const redis = fakeRedis();
@@ -1396,9 +1397,29 @@ test("shared allowance fails closed when Gateway omits Grok pricing", async () =
 
 test("price tiers two and three are premium while tier one stays included", () => {
   const { isPremiumAiModelKey } = loadTs("src/lib/aiModelOptions.ts");
-  assert.equal(isPremiumAiModelKey("gpt-5.4-mini"), false);
-  assert.equal(isPremiumAiModelKey("gpt-6-luna"), true);
-  assert.equal(isPremiumAiModelKey("gpt-5.5"), true);
+  assert.equal(isPremiumAiModelKey("gpt-6-luna"), false);
+  assert.equal(isPremiumAiModelKey("gpt-5.6-terra"), true);
+  assert.equal(isPremiumAiModelKey("gpt-6.1-sol"), true);
+});
+
+test("Free plan default is Luna and Free teams may use it but not Sol", async () => {
+  const { getDefaultAiModelOptionForPlan, getAiModelOptionById } = loadTs(
+    "src/lib/aiModelOptions.ts",
+  );
+  const { assertModelAllowedForPlan } = loadTs(
+    "src/app/api/ai/_lib/planGate.ts",
+  );
+  assert.equal(getDefaultAiModelOptionForPlan("Free").id, "gpt-6-luna");
+  // No project or team context is treated as Free.
+  await assertModelAllowedForPlan(
+    null,
+    getDefaultAiModelOptionForPlan("Free"),
+    null,
+  );
+  await assert.rejects(
+    assertModelAllowedForPlan(null, getAiModelOptionById("gpt-6.1-sol"), null),
+    /paid plan or your own API key/,
+  );
 });
 
 test("the allowance team stamp round-trips and ignores unmarked content", () => {

@@ -49,24 +49,24 @@ test("default settings resolve to Gemini", () => {
   });
 });
 
-test("disabling Google resolves to GPT-5.4 Mini", () => {
+test("disabling Google resolves to GPT 6 Luna", () => {
   assert.deepEqual(
     resolveSystemModel("summaries", { providers: { google: false } }),
     {
       provider: "openai",
-      model: "openai/gpt-5.4-mini",
+      model: "openai/gpt-6-luna",
     },
   );
 });
 
-test("disabling Google and xAI resolves to GPT-5.4 Mini", () => {
+test("disabling Google and xAI resolves to GPT 6 Luna", () => {
   assert.deepEqual(
     resolveSystemModel("summaries", {
       providers: { google: false, xai: false },
     }),
     {
       provider: "openai",
-      model: "openai/gpt-5.4-mini",
+      model: "openai/gpt-6-luna",
     },
   );
 });
@@ -85,7 +85,7 @@ test("all providers except Zhipu disabled resolves to GLM", () => {
         zhipu: true,
       },
     }),
-    { provider: "zhipu", model: "zai/glm-5.2" },
+    { provider: "zhipu", model: "zai/glm-5.3-flash" },
   );
 });
 
@@ -133,29 +133,29 @@ test("nothing enabled falls back to the first entry", () => {
 test("feature override wins over the default ladder order", () => {
   assert.deepEqual(
     resolveSystemModel("summaries", {
-      featureModels: { summaries: "openai/gpt-5.4-mini" },
+      featureModels: { summaries: "openai/gpt-6-luna" },
     }),
-    { provider: "openai", model: "openai/gpt-5.4-mini" },
+    { provider: "openai", model: "openai/gpt-6-luna" },
   );
 });
 
 test("team default beats the user-facing product default", () => {
   assert.equal(
     resolveUserFacingModelOption("aiChat", {
-      featureModels: { aiChat: "claude-sonnet-5-instant" },
+      featureModels: { aiChat: "claude-sonnet-5-5-instant" },
     }).id,
-    "claude-sonnet-5-instant",
+    "claude-sonnet-5-5-instant",
   );
 });
 
-test("the catalog default is Luna only when billing can use it", () => {
+test("Luna is the catalog default on every plan, Free included", () => {
   assert.equal(preferredAiModelOption.id, "gpt-6-luna");
   assert.equal(preferredAiModelOption.effort, "standard");
-  assert.equal(defaultAiModelOption.id, "gpt-5.4-mini");
+  assert.equal(defaultAiModelOption.id, "gpt-6-luna");
   assert.equal(getDefaultAiModelOptionForPlan("Pro").id, "gpt-6-luna");
   assert.equal(getDefaultAiModelOptionForPlan("AI").id, "gpt-6-luna");
-  assert.equal(getDefaultAiModelOptionForPlan("Free").id, "gpt-5.4-mini");
-  assert.equal(getDefaultAiModelOptionForPlan("BYOK").id, "gpt-5.4-mini");
+  assert.equal(getDefaultAiModelOptionForPlan("Free").id, "gpt-6-luna");
+  assert.equal(getDefaultAiModelOptionForPlan("BYOK").id, "gpt-6-luna");
   assert.equal(
     getDefaultAiModelOptionForPlan("BYOK", true).id,
     "gpt-6-luna",
@@ -179,7 +179,7 @@ test("personal default beats the user-facing team default", () => {
   assert.equal(
     resolveUserFacingModelOption(
       "taskWriter",
-      { featureModels: { taskWriter: "claude-sonnet-5-instant" } },
+      { featureModels: { taskWriter: "claude-sonnet-5-5-instant" } },
       "gpt-6-luna-high",
     ).id,
     "gpt-6-luna-high",
@@ -199,7 +199,7 @@ test("custom team defaults require a configured endpoint", () => {
     resolveUserFacingModelOption("aiChat", settings, null, {
       customEndpointConfigured: false,
     }).id,
-    "gpt-5.4-mini",
+    "gpt-6-luna",
   );
 });
 
@@ -209,11 +209,11 @@ test("disabled providers invalidate personal and team defaults", () => {
       "writeWithAi",
       {
         providers: { anthropic: false },
-        featureModels: { writeWithAi: "claude-sonnet-5-instant" },
+        featureModels: { writeWithAi: "claude-sonnet-5-5-instant" },
       },
       "claude-opus-5-5-thinking",
     ).id,
-    "gpt-5.4-mini",
+    "gpt-6-luna",
   );
 });
 
@@ -228,14 +228,14 @@ test("trusted billing context can supply Luna as the user-facing fallback", () =
 
 test("GDPR safe mode hides China-hosted feature overrides", () => {
   assert.equal(
-    isAiFeatureModelEnabled("aiChat", "deepseek-v4-flash", {
+    isAiFeatureModelEnabled("aiChat", "deepseek-v4.1-flash", {
       gdprSafeMode: true,
       providers: { deepseek: true },
     }),
     false,
   );
   assert.equal(
-    isAiFeatureModelEnabled("summaries", "deepseek/deepseek-v4-flash", {
+    isAiFeatureModelEnabled("summaries", "deepseek/deepseek-v4.1-flash", {
       gdprSafeMode: true,
       providers: { deepseek: true },
     }),
@@ -269,7 +269,7 @@ test("feature override is ignored when its provider is disabled", () => {
   assert.deepEqual(
     resolveSystemModel("summaries", {
       providers: { openai: false },
-      featureModels: { summaries: "openai/gpt-5.4-mini" },
+      featureModels: { summaries: "openai/gpt-6-luna" },
     }),
     { provider: "google", model: "google/gemini-3.5-flash-lite" },
   );
@@ -278,7 +278,7 @@ test("feature override is ignored when its provider is disabled", () => {
 test("feature override is ignored when its model is outside the ladder", () => {
   assert.deepEqual(
     resolveSystemModel("questionSuggestions", {
-      featureModels: { questionSuggestions: "openai/gpt-5.5" },
+      featureModels: { questionSuggestions: "openai/gpt-6.1-sol" },
     }),
     { provider: "google", model: "google/gemini-3.5-flash-lite" },
   );
@@ -288,7 +288,7 @@ test("clearing an override returns the feature to Auto", () => {
   const settings = updateSystemFeatureModelSettings(
     {
       providers: { google: true, openai: true },
-      featureModels: { summaries: "openai/gpt-5.4-mini" },
+      featureModels: { summaries: "openai/gpt-6-luna" },
     },
     "summaries",
     null,
@@ -306,14 +306,14 @@ test("feature model writes leave provider settings untouched", () => {
   const settings = updateSystemFeatureModelSettings(
     { providers, anotherSetting: "preserved" },
     "questionSuggestions",
-    "openai/gpt-5.4-mini",
+    "openai/gpt-6-luna",
   );
 
   assert.deepEqual(settings.providers, providers);
   assert.equal(settings.anotherSetting, "preserved");
   assert.equal(
     settings.featureModels.questionSuggestions,
-    "openai/gpt-5.4-mini",
+    "openai/gpt-6-luna",
   );
 });
 
@@ -322,7 +322,7 @@ test("model, toggle, and reset writes never clobber provider settings", () => {
   const original = {
     providers,
     anotherSetting: "preserved",
-    featureModels: { aiChat: "claude-sonnet-5-instant" },
+    featureModels: { aiChat: "claude-sonnet-5-5-instant" },
     featureToggles: { summaries: false },
   };
 
@@ -345,7 +345,7 @@ test("model, toggle, and reset writes never clobber provider settings", () => {
   assert.equal(reset.featureModels, undefined);
   assert.equal(reset.featureToggles, undefined);
   assert.deepEqual(original.featureModels, {
-    aiChat: "claude-sonnet-5-instant",
+    aiChat: "claude-sonnet-5-5-instant",
   });
   assert.deepEqual(original.featureToggles, { summaries: false });
 });
@@ -357,6 +357,6 @@ test("legacy flat provider settings still control the ladder", () => {
       xai: false,
       openai: true,
     }),
-    { provider: "openai", model: "openai/gpt-5.4-mini" },
+    { provider: "openai", model: "openai/gpt-6-luna" },
   );
 });

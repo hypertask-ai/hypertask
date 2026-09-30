@@ -28,8 +28,8 @@ import {
   type AiGatewayTags,
 } from "@/app/api/ai/_lib/modelProvider";
 
-const CUSTOM_INSTRUCTION_MODEL = "gpt-5.4-mini";
-const CUSTOM_INSTRUCTION_VISION_MODEL = "gpt-5.5";
+const CUSTOM_INSTRUCTION_MODEL = "gpt-6-luna";
+const CUSTOM_INSTRUCTION_VISION_MODEL = "gpt-6.1-sol";
 const MAX_DIRECT_TEXT_CHARS = 80_000;
 
 type ProcessUrlResult = {

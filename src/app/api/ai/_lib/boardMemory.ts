@@ -41,7 +41,7 @@ import {
   upsertCustomInstructionFileRowsToTurbopuffer,
 } from "@/utils/controllers/turbopuffer/turbopufferHelper";
 
-const BOARD_MEMORY_MODEL = "gpt-5.4-mini";
+const BOARD_MEMORY_MODEL = "gpt-6-luna";
 export { ProjectAccessError as BoardMemoryProjectAccessError };
 const learnedFactsSchema = z.object({
   facts: z
