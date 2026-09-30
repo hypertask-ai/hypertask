@@ -4799,6 +4799,9 @@ function buildTools(
           actingUserId: user.id,
         });
 
+        void broadcastBoardChange(task.projectId, { originUserId: user.id });
+        void broadcastTaskChange(task.id, { originUserId: user.id });
+
         return {
           success: true,
           restored_from_version: snapshot.version,
@@ -8302,6 +8305,7 @@ function buildTools(
 
           await persistUrlsForDescription(draft.content, taskId);
           void broadcastBoardChange(draft.projectId, { originUserId: user.id });
+          void broadcastTaskChange(taskId, { originUserId: user.id });
 
           return sanitizeForJson({
             success: true,
