@@ -17,6 +17,8 @@ test("browser smoke exposes no repository or production credentials to PR code",
   // HR-04: agent (bot) PRs run the customer test too; no author exemption.
   assert.doesNotMatch(job, /user\.login/);
   assert.doesNotMatch(job, /\[bot\]/);
+  // HR-04: no label gate either; a label-gated run shows SKIPPED, which counts as passing.
+  assert.doesNotMatch(job, /full-ci/);
   assert.doesNotMatch(job, /\$\{\{\s*secrets\./);
   assert.doesNotMatch(job, /\$\{\{\s*vars\./);
   assert.doesNotMatch(job, /SMOKE_PLAIN_SESSION_STATE/);

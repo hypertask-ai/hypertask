@@ -35,24 +35,15 @@ jobs:
     # `pull_request_target`), holds a read-only token, and never touches a
     # secret, so there was no security reason to give bot-authored code a free
     # pass. Every bot-authored PR now runs the exact same gate as a human one.
-    # NOTE this does not close every skip-counts-as-pass gap: a PR (human or
-    # bot) still shows ci-tests SKIPPED from its opened/synchronize run until
-    # the pr-feedback timer applies `full-ci` after review goes green, and a
-    # GitHub ruleset treats that SKIPPED as passing in the meantime. Turning
-    # that interim skip into a failure was evaluated and rejected here: the
-    # VPS pr-feedback-loop timer (~/.local/bin/pr-feedback-loop, outside this
-    # repo) mentions a PR's owning agent the moment any required check
-    # (ci-tests included) reports FAILURE, with no check for whether full-ci
-    # is present yet, so every PR would get a false "your PR is red" ping
-    # during its normal pre-review wait. Closing that gap needs a change to
-    # that external script, not this file.
-    # Review-first gate (owner, 2026-08-26): a PR run also needs the full-ci
-    # label, which the pr-feedback timer applies once GitHub AI Review is green.
-    # This makes the typecheck+test gate run once per ready PR (plus once per
-    # fix-up push after that) instead of on open and on every label event.
-    # ci-build stays a required automerge check, so an unlabeled PR simply
-    # waits: review first, then the gate, then the merge.
-    if: github.event_name == 'push' || (github.event.pull_request.draft == false && contains(github.event.pull_request.labels.*.name, 'full-ci'))
+    # No label gate any more (HTPR-6734, HR-04: no skipped checks). The
+    # review-first `full-ci` label (owner, 2026-08-26) left ci-tests SKIPPED
+    # until the label arrived, and GitHub's ruleset counts SKIPPED as passing:
+    # PRs 782, 798 and 799 went live that way, and 782 broke the suite. Every
+    # non-draft PR now runs the gate on every event; superseded runs are
+    # cancelled by the concurrency group above, so only the newest one costs
+    # runner time. A job-level skip is never used here, because a skipped run
+    # newer than a failed one would read as passing again.
+    if: github.event_name == 'push' || github.event.pull_request.draft == false
     runs-on: ubuntu-latest
     timeout-minutes: 25
     # This job checks out and executes pull request code, so it never holds a
@@ -106,11 +97,11 @@ jobs:
             exit 1
           }
 
-          expected=$(printf '%s\n' app-smoke ci-tests ai-review feature-flag-gate next-public-secrets pr-title revert-guard secret-scan | sort)
+          expected=$(printf '%s\n' app-smoke ci-tests ai-review claude-review feature-flag-gate next-public-secrets pr-title revert-guard secret-scan | sort)
           expected=$(printf '%s\n' "$expected" browser-smoke | sort)
           actual=$(jq -r '
             [.rules[] | select(.type == "required_status_checks") |
-              .parameters.required_status_checks[].context | if . == "claude-review" then "ai-review" else . end] | unique | sort | .[]
+              .parameters.required_status_checks[].context] | unique | sort | .[]
           ' <<<"$ruleset_json")
           [ "$actual" = "$expected" ] || {
             echo "::error::Live required checks do not match docs/ci-policy.yml."
@@ -381,11 +372,12 @@ jobs:
 
   browser-smoke:
     name: browser-smoke
-    # HR-04 (Valentin, 2026-09-29): no author is exempted, same as ci-tests
-    # (PR 785). This job holds no repository secret (the test above pins
-    # that), so an agent-authored PR from this repo runs it like anyone else;
-    # a skip would let an agent fix ship without the customer test.
-    if: github.event_name == 'push' || (github.event.pull_request.draft == false && contains(github.event.pull_request.labels.*.name, 'full-ci'))
+    # HR-04 (Valentin, 2026-09-29): no author is exempted and no label is
+    # needed, same as ci-tests (PR 785, HTPR-6734). This job holds no
+    # repository secret (tests/browser-smoke-workflow.test.cjs pins that), so
+    # an agent-authored PR runs it like anyone else; a skip would count as
+    # passing and let a fix ship without the customer test.
+    if: github.event_name == 'push' || github.event.pull_request.draft == false
     runs-on: ubuntu-latest
     timeout-minutes: 25
     permissions:
