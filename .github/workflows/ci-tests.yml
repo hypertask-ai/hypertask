@@ -381,7 +381,11 @@ jobs:
 
   browser-smoke:
     name: browser-smoke
-    if: github.event_name == 'push' || (github.event.pull_request.draft == false && (!endsWith(github.event.pull_request.user.login, '[bot]') || github.event.pull_request.user.login == 'dependabot[bot]') && contains(github.event.pull_request.labels.*.name, 'full-ci'))
+    # HR-04 (Valentin, 2026-09-29): no author is exempted, same as ci-tests
+    # (PR 785). This job holds no repository secret (the test above pins
+    # that), so an agent-authored PR from this repo runs it like anyone else;
+    # a skip would let an agent fix ship without the customer test.
+    if: github.event_name == 'push' || (github.event.pull_request.draft == false && contains(github.event.pull_request.labels.*.name, 'full-ci'))
     runs-on: ubuntu-latest
     timeout-minutes: 25
     permissions:
