@@ -22,6 +22,7 @@ const {
 const {
   defaultAiModelOption,
   getDefaultAiModelOptionForPlan,
+  resolveAiModelOption,
   preferredAiModelOption,
 } = jiti(path.join(root, "src/lib/aiModelOptions.ts"));
 
@@ -376,4 +377,23 @@ test("legacy flat provider settings still control the ladder", () => {
     }),
     { provider: "openai", model: "openai/gpt-6-luna" },
   );
+});
+
+test("model picker: Free with no saved choice gets Luna only when the flag is on; saved choice wins", () => {
+  const pick = (saved, lunaFree) =>
+    resolveAiModelOption(saved, getDefaultAiModelOptionForPlan("Free", false, lunaFree)).id;
+  assert.equal(pick([undefined, null], true), "gpt-6-luna");
+  assert.equal(pick([undefined, null], false), "gemini-3.5-flash-lite");
+  assert.equal(pick(["gemini-3.5-flash-lite"], true), "gemini-3.5-flash-lite");
+  assert.equal(pick([null, "gpt-6-luna"], false), "gpt-6-luna");
+  assert.equal(pick(["not-a-model"], true), "gpt-6-luna");
+});
+
+test("useAiModelPreference passes the htpr-6722 flag into the plan default", () => {
+  const src = require("node:fs").readFileSync(
+    path.join(root, "src/hooks/General/useAiModelPreference.ts"),
+    "utf8",
+  );
+  assert.match(src, /useFlag\(LUNA_FREE_PLAN_FLAG\)/);
+  assert.match(src, /getDefaultAiModelOptionForPlan\([\s\S]*?lunaFree,\s*\)/);
 });

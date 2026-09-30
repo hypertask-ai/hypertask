@@ -499,6 +499,19 @@ export function getDefaultAiModelOptionForPlan(
     : defaultAiModelOption;
 }
 
+// Model picker resolution: an explicit saved choice (or team/board default)
+// always wins; only when none exists does the plan default apply.
+export function resolveAiModelOption(
+  savedOptionIds: readonly (string | null | undefined)[],
+  planDefault: TAiModelOption,
+): TAiModelOption {
+  for (const id of savedOptionIds) {
+    const option = getAiModelOptionById(id);
+    if (option) return option;
+  }
+  return planDefault;
+}
+
 // A saved choice of Luna (for example a saved GPT 5.4 Mini, which aliases to
 // Luna) is not usable on Free plans while the flag is off, or on BYOK plans
 // without an eligible customer key. Those requests drop to the plan default.
