@@ -2,10 +2,13 @@ import { useCallback, useEffect, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import axios from "axios";
 import { useRecoilValue } from "@/lib/state";
+import { useFlag } from "@/hooks/useFlag";
+import { LUNA_FREE_PLAN_FLAG } from "@/lib/flags/keys";
 import {
   getDefaultAiModelOptionForPlan,
   getAiModelOptionById,
   preferredAiModelOption,
+  resolveAiModelOption,
 } from "@/lib/aiModelOptions";
 import { isByokProviderEnabledForSource } from "@/lib/byokSelectedProviderGate";
 import {
@@ -37,6 +40,7 @@ export function useAiModelPreference(
   } = {},
 ) {
   const currentProject = useRecoilValue(currentProjectAtom);
+  const lunaFree = useFlag(LUNA_FREE_PLAN_FLAG);
   const boardBilling = useCurrentBoardBilling();
   const billing = billingOverride === undefined ? boardBilling : billingOverride;
   const queryClient = useQueryClient();
@@ -73,14 +77,19 @@ export function useAiModelPreference(
       scopedBilling?.byokProviderFlags,
       preferredAiModelOption.source,
     ),
+    lunaFree,
   );
   const resolveOption = useCallback(
     () =>
-      getAiModelOptionById(storedOptionIds.teamScoped) ??
-      getAiModelOptionById(storedOptionIds.global) ??
-      getAiModelOptionById(teamFeatureModels.data?.[surface]?.model) ??
-      getAiModelOptionById(includeBoardFallback ? boardDefaultId : undefined) ??
-      planDefault,
+      resolveAiModelOption(
+        [
+          storedOptionIds.teamScoped,
+          storedOptionIds.global,
+          teamFeatureModels.data?.[surface]?.model,
+          includeBoardFallback ? boardDefaultId : undefined,
+        ],
+        planDefault,
+      ),
     [
       boardDefaultId,
       includeBoardFallback,
