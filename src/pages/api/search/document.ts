@@ -1,7 +1,9 @@
 import { httpStatusConfig } from "@/lib/configs/http-status.config";
 import { getSessionUser } from "@/lib/auth/getSessionUser";
 import { HTPR_6372_SEARCH_RANKING_FLAG, HTPR_6369_SEARCH_OPERATORS_FLAG, isFeatureEnabled } from "@/lib/flags";
-import { MAX_SEARCH_OPERATOR_CLAUSES, parseSearchWithNames, searchOperatorClauseCount } from "@/lib/search/operators";
+import { HTPR_6370_SEARCH_CHIPS_FLAG } from "@/lib/flags";
+import { MAX_SEARCH_OPERATOR_CLAUSES, searchOperatorClauseCount } from "@/lib/search/operators";
+import { parseSearchWithChipNames, parseSearchWithNames } from "@/lib/search/serverOperators";
 import { rankedSearchWhere } from "@/lib/search/rankedWhere";
 import prisma from "@/lib/prisma";
 import { turbopufferGetDocuments } from "@/utils/controllers/search/document";
@@ -58,7 +60,14 @@ const handler: NextApiHandler = async (
         return res.status(403).json({ message: "Project access denied" });
       }
 
+      const chipsEnabled = operatorsEnabled && await isFeatureEnabled(HTPR_6370_SEARCH_CHIPS_FLAG, session.userId);
+      let selectedParsed
+      if (chipsEnabled) selectedParsed = await parseSearchWithChipNames(normalizedSearchQuery, requestedProjectIds);
+      else {
       const parsed = operatorsEnabled ? await parseSearchWithNames(normalizedSearchQuery, requestedProjectIds) : null;
+        selectedParsed = parsed;
+      }
+      const parsed = selectedParsed;
       if (parsed && Object.keys(parsed.filters).length) {
         const { where, rankedIds, descriptionById, partial } = await rankedSearchWhere(
           parsed, requestedProjectIds, archive === "Normal" || archive === "Archive" ? archive : null,

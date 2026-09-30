@@ -1,11 +1,11 @@
-import prisma from '@/lib/prisma'
-
 export const SEARCH_OPERATORS = ['from', 'assignee', 'in', 'board', 'label', 'is', 'before', 'after', 'on', 'has'] as const
 export type SearchOperator = (typeof SEARCH_OPERATORS)[number]
 export type SearchFilter = { value: string; negated: boolean }
 export type ParsedSearch = { text: string; filters: Partial<Record<SearchOperator, SearchFilter[]>> }
-type NameOperator = 'from' | 'assignee' | 'in' | 'board' | 'label'
+export type NameOperator = 'from' | 'assignee' | 'in' | 'board' | 'label'
 type Names = Partial<Record<NameOperator, string[]>>
+export type { Names }
+export type SearchToken = { operator: SearchOperator; value: string; negated: boolean; raw: string; start: number; end: number }
 export const MAX_SEARCH_OPERATOR_CLAUSES = 12
 
 function operatorMatches(raw: string) {
@@ -40,6 +40,12 @@ export function parseSearchQuery(raw: string, names: Names = {}): ParsedSearch {
     const rawValue = raw.slice(valueStart, end).trim()
     const quoted = rawValue.match(/^"([^"]+)"(?:\s+|$)/)
     let value = quoted ? quoted[1] : rawValue.match(/^\S+/)?.[0] ?? ''
+    if (!quoted && value.startsWith('#') && (operator === 'in' || operator === 'board') && names[operator]) {
+      const matchName = names[operator]?.filter((name) => rawValue.slice(1).toLowerCase().startsWith(name.toLowerCase()) &&
+        (rawValue.length - 1 === name.length || /\s/.test(rawValue[name.length + 1] ?? '')))
+        .sort((a, b) => b.length - a.length)[0]
+      if (matchName) value = `#${matchName}`
+    }
     if (!quoted && operator in names) {
       const prefix = value.replace(/^@/, '')
       const matchName = names[operator as NameOperator]?.filter((name) =>
@@ -63,37 +69,22 @@ export function parseSearchQuery(raw: string, names: Names = {}): ParsedSearch {
   return { text: remaining.join(' ').replace(/\s+/g, ' ').trim(), filters }
 }
 
-export async function parseSearchWithNames(raw: string, projectIds: number[]): Promise<ParsedSearch> {
-  const names: Names = {}
-  const lookedUp = new Set<string>()
-  for (const { operator, valueStart } of operatorMatches(raw).slice(0, MAX_SEARCH_OPERATOR_CLAUSES)) {
-    if (!['from', 'assignee', 'in', 'board', 'label'].includes(operator)) continue
-    const token = raw.slice(valueStart).match(/^@?[^\s"]+/)?.[0] ?? ''
-    const prefix = token.replace(/^@/, '')
-    const key = `${operator}:${prefix.toLowerCase()}`
-    if (!prefix || /^\d+$/.test(prefix) || lookedUp.has(key)) continue
-    lookedUp.add(key)
-    const nameOperator = operator as NameOperator
-    if (nameOperator === 'in' || nameOperator === 'board') {
-      names[nameOperator] = [...(names[nameOperator] ?? []), ...(await prisma.project.findMany({
-        where: { id: { in: projectIds }, title: { startsWith: prefix, mode: 'insensitive' } },
-        select: { title: true },
-      })).map((row) => row.title ?? '')]
-    } else if (operator === 'label') {
-      names.label = [...(names.label ?? []), ...(await prisma.label.findMany({
-        where: { projectId: { in: projectIds }, value: { startsWith: prefix, mode: 'insensitive' } },
-        select: { value: true },
-      })).map((row) => row.value ?? '')]
-    } else {
-      names[nameOperator] = [...(names[nameOperator] ?? []), ...(await prisma.user.findMany({
-        where: { displayName: { startsWith: prefix, mode: 'insensitive' }, OR: [
-          { tasks: { some: { projectId: { in: projectIds } } } },
-          { assignees: { some: { task: { projectId: { in: projectIds } } } } },
-          { members: { some: { projectId: { in: projectIds } } } },
-        ] },
-        select: { displayName: true },
-      })).map((row) => row.displayName ?? '')]
-    }
-  }
-  return parseSearchQuery(raw, names)
+export { operatorMatches }
+
+export function parseSearchTokens(raw: string, names: Names = {}): SearchToken[] {
+  const parsed = parseSearchQuery(raw, names)
+  const used: Partial<Record<SearchOperator, number>> = {}
+  const matches = operatorMatches(raw)
+  return matches.flatMap(({ start, valueStart, operator, negated }, index) => {
+    if (!SEARCH_OPERATORS.includes(operator as SearchOperator)) return []
+    const key = operator as SearchOperator
+    const rawValue = raw.slice(valueStart, matches[index + 1]?.start ?? raw.length).trim()
+    if (!rawValue) return []
+    const value = parsed.filters[key]?.[used[key] ?? 0]?.value
+    if (!value) return []
+    used[key] = (used[key] ?? 0) + 1
+    const offset = raw.slice(valueStart).match(/^\s*/)?.[0].length ?? 0
+    const end = rawValue.startsWith('"') ? raw.indexOf('"', valueStart + offset + 1) + 1 : valueStart + offset + value.length
+    return [{ operator: key, value, negated, raw: raw.slice(start, end), start, end }]
+  })
 }

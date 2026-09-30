@@ -10,11 +10,13 @@ import { cn } from "@/utils/undoActions/helperFuncs";
 import { Fragment, KeyboardEvent, RefObject, useContext } from "react";
 import { useFlag } from "@/hooks/useFlag";
 import { HTPR_6372_SEARCH_RANKING_FLAG } from "@/lib/flags/keys";
+import { HTPR_6370_SEARCH_CHIPS_FLAG, HTPR_6369_SEARCH_OPERATORS_FLAG } from "@/lib/flags/keys";
 import { MobileViewContext } from "@/lib/contexts/mobileContext";
 import { useRecoilValue, useSetRecoilState } from "@/lib/state";
 import { aiChatPendingPromptAtom, appShellRailAtom } from "@/store";
 import { useGlobalUIState } from "@/components/ProviderGlobal/useGlobalUIState";
 import AppShellRail from "@/components/PageComponents/Kanban/HeaderComponents/AppShellRail";
+import SearchChipsInput from "./SearchChipsInput";
 
 interface IProps {
   _searchTerm: string;
@@ -32,6 +34,8 @@ const SearchComp = ({
   currentUser,
 }: IProps) => {
   const rankingEnabled = useFlag(HTPR_6372_SEARCH_RANKING_FLAG);
+  const chipsFlagEnabled = useFlag(HTPR_6370_SEARCH_CHIPS_FLAG);
+  const operatorsFlagEnabled = useFlag(HTPR_6369_SEARCH_OPERATORS_FLAG);
   const setAiChatPendingPrompt = useSetRecoilState(aiChatPendingPromptAtom);
   const { openAIChatInterface } = useGlobalUIState();
   const isMbl = useContext(MobileViewContext);
@@ -54,6 +58,7 @@ const SearchComp = ({
     updateSearchHistory,
     showCommands,
     setInputValue,
+    searchChipsEnabled,
     liSelectedRef,
     tabs,
     activeSplit,
@@ -93,6 +98,15 @@ const SearchComp = ({
       >
         {/* Below @xl the container is full-width, so clear the fixed back button (ends at x≈96) */}
         <div className={cn('w-full px-0', appShellRailOn && 'pl-[64px] @xl:pl-0')}>
+          {chipsFlagEnabled && operatorsFlagEnabled && searchChipsEnabled ? (
+            <SearchChipsInput
+              value={inputValue}
+              onChange={setInputValue}
+              onRun={updateSearchHistory}
+              boardId={_fromProject}
+              inputRef={tasksInputRef}
+            />
+          ) : (
           <div className="relative w-full">
               <span
                 className={`${searchTextClassName} text-icon-hover-gray`}
@@ -125,6 +139,7 @@ const SearchComp = ({
                 }}
               />
             </div>
+          )}
 
           <>
               {responseMessage !== "None" &&

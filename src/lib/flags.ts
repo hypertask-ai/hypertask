@@ -50,6 +50,7 @@ import {
   MY_TASKS_SHORTCUTS_WIDTH_FLAG,
   HTPR_6372_SEARCH_RANKING_FLAG,
   HTPR_6369_SEARCH_OPERATORS_FLAG,
+  HTPR_6370_SEARCH_CHIPS_FLAG,
   MY_TASKS_VIEWS_FLAG,
   MY_TASKS_BULK_SELECTION_FLAG,
   MY_TASKS_FILTER_PARITY_FLAG,
@@ -557,6 +558,11 @@ const FEATURE_FLAG_DEFINITIONS = [
     shippedOn: "2026-09-28",
     description:
       "Searches tasks by author, assignee, board, label, status, date and attachments using query operators, with suggestions for values.",
+  },
+  {
+    key: HTPR_6370_SEARCH_CHIPS_FLAG,
+    shippedOn: "2026-09-28",
+    description: "Shows search operators as removable chips with people, board and label suggestions.",
   },
   {
     key: HTPR_6372_SEARCH_RANKING_FLAG,

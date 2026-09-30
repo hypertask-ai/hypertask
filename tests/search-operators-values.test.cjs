@@ -48,6 +48,8 @@ const mocks = new Map([
     } },
   } }],
 ])
+mocks.get('src/lib/flags.ts').HTPR_6370_SEARCH_CHIPS_FLAG = 'htpr-6370-search-chips'
+mocks.get('src/lib/flags.ts').isFeatureEnabled = async (key) => key !== 'htpr-6370-search-chips' && state.flag
 for (const [file, exports] of mocks) {
   const filename = path.join(root, file)
   require.cache[filename] = { id: filename, filename, loaded: true, exports }
