@@ -55,7 +55,7 @@ function withDom(url) {
   };
 }
 
-test("mounting the chat runtime keeps an open board mounted", async () => {
+test("loading the lazy chat runtime and panels keeps an open board mounted", async () => {
   const restore = withDom("https://app.hypertask.ai/project?id=1");
 
   let boardMounts = 0;
@@ -68,11 +68,23 @@ test("mounting the chat runtime keeps an open board mounted", async () => {
     return React.createElement("div", { "data-testid": "board" }, "Todo");
   };
   const chatValue = { showAiChatInterface: true };
-  const Runtime = ({ onValue, children }) => {
-    React.useLayoutEffect(() => onValue(chatValue), [onValue]);
-    return React.createElement(ChatContext.Provider, { value: chatValue }, children);
-  };
-  const Panels = () => React.createElement("aside", { "data-testid": "chat" });
+  let releaseRuntime;
+  let releasePanels;
+  const runtimeReady = new Promise((resolve) => (releaseRuntime = resolve));
+  const panelsReady = new Promise((resolve) => (releasePanels = resolve));
+  const Runtime = React.lazy(async () => {
+    await runtimeReady;
+    return {
+      default: ({ onValue, children }) => {
+        React.useLayoutEffect(() => onValue(chatValue), [onValue]);
+        return React.createElement(ChatContext.Provider, { value: chatValue }, children);
+      },
+    };
+  });
+  const Panels = React.lazy(async () => {
+    await panelsReady;
+    return { default: () => React.createElement("aside", { "data-testid": "chat" }) };
+  });
 
   const reactRoot = createRoot(document.getElementById("root"));
   const render = (mounted) =>
@@ -85,7 +97,9 @@ test("mounting the chat runtime keeps an open board mounted", async () => {
           {
             onOpenAIChat: noop,
             chatOpen: mounted,
-            panels: mounted ? React.createElement(Panels) : undefined,
+            panels: mounted
+              ? React.createElement(React.Suspense, { fallback: null }, React.createElement(Panels))
+              : undefined,
           },
           React.createElement(Board),
         ),
@@ -99,6 +113,24 @@ test("mounting the chat runtime keeps an open board mounted", async () => {
     assert.equal(seenChat, undefined);
 
     await React.act(async () => render(true));
+    assert.equal(document.querySelector("[data-testid=board]"), boardNode, "pending chat chunks do not hide the board");
+    assert.equal(boardMounts, 1);
+    assert.equal(seenChat, undefined);
+    assert.equal(document.querySelector("[data-testid=chat]"), null);
+
+    await React.act(async () => {
+      releaseRuntime();
+      await runtimeReady;
+    });
+    assert.equal(document.querySelector("[data-testid=board]"), boardNode, "loading panels do not hide the board");
+    assert.equal(boardMounts, 1);
+    assert.equal(seenChat, chatValue);
+    assert.equal(document.querySelector("[data-testid=chat]"), null);
+
+    await React.act(async () => {
+      releasePanels();
+      await panelsReady;
+    });
     assert.ok(document.querySelector("[data-testid=chat]"), "chat panels render beside the board");
     assert.equal(document.querySelector("[data-testid=board]"), boardNode, "the board DOM node survives");
     assert.equal(boardMounts, 1, "the board is not remounted when the chat loads");
