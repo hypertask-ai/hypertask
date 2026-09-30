@@ -61,9 +61,9 @@ this is what keeps the fleet's own noise off the board. Triage refuses to
 re-process a run summary older than 6 hours (a 2026-09-03 outage hid behind
 stale re-triage).
 
-Confirmed bugs go to project 15, labels **`e2b,Bug`**, assignee 6, Bugs
-column, one open ticket per flow (repeat failures get a comment, not a
-duplicate ticket).
+Confirmed bugs go to project 15, labels **`e2b,Bug`**, Bugs column; leave
+unassigned, agents claim with their own identity. One open ticket per flow
+(repeat failures get a comment, not a duplicate ticket).
 
 ## Known false-alarm patterns
 
