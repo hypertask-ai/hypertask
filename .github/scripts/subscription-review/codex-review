@@ -39,7 +39,7 @@ NODE
   -c 'approval_policy="never"' \
   -c "model_instructions_file=\"$review_tmp/instructions.txt\"" \
   -c 'model_reasoning_effort="high"' \
-  --model gpt-5.6-luna \
+  --model gpt-6.1-sol \
   --output-schema /etc/hypertask-ai-review/review-schema.json \
   --output-last-message "$review_tmp/review.json" \
   --color never \
