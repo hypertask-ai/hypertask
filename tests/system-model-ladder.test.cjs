@@ -275,6 +275,22 @@ test("feature override is ignored when its provider is disabled", () => {
   );
 });
 
+test("saved overrides naming retired fast-ladder slugs upgrade to their successors", () => {
+  for (const [old, next, provider] of [
+    ["openai/gpt-5.4-mini", "openai/gpt-6-luna", "openai"],
+    ["deepseek/deepseek-v4-flash", "deepseek/deepseek-v4.1-flash", "deepseek"],
+    ["zai/glm-5.2", "zai/glm-5.3-flash", "zhipu"],
+  ]) {
+    assert.deepEqual(
+      resolveSystemModel("summaries", {
+        providers: { openai: true, deepseek: true, zhipu: true },
+        featureModels: { summaries: old },
+      }),
+      { provider, model: next },
+    );
+  }
+});
+
 test("feature override is ignored when its model is outside the ladder", () => {
   assert.deepEqual(
     resolveSystemModel("questionSuggestions", {
