@@ -589,7 +589,7 @@ const Tiptap = ({
   };
 
   const getAttachments = async (files: File[]) => {
-    setNewCommentAttachments(files);
+    setNewCommentAttachments(files.map((file, id) => ({ id, file })));
   };
 
   const cancelMobileExistingEdit = () => {
