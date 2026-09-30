@@ -8,6 +8,7 @@ import { PersistQueryClientProvider } from "@tanstack/react-query-persist-client
 import { StateRoot } from "@/lib/state";
 import { AuthProvider } from "@/hooks/General/useAuth";
 import GlobalProvider from "@/components/ProviderGlobal/GloablProviders";
+import WorkspaceStartupBoundary from "@/components/ProviderGlobal/WorkspaceStartupBoundary";
 import MobileViewProvider from "@/lib/contexts/mobileContext";
 import { UndoProvider } from "@/hooks/General/useUndo";
 import { DeviceProvider } from "@/lib/contexts/deviceContext";
@@ -162,17 +163,22 @@ export default function Provider({
               <UndoProvider>
                 <MobileBlockingProvider>
                   <AuthProvider authenticatedUserId={authenticatedUserId}>
-                    <TourProvider>
-                      {publicShare ? (
-                        <PublicShell>{children}</PublicShell>
-                      ) : (
-                        <FeatureFlagProvider userId={authenticatedUserId}>
-                          <GlobalProvider authenticatedUserId={authenticatedUserId}>
-                            {children}
-                          </GlobalProvider>
-                        </FeatureFlagProvider>
-                      )}
-                    </TourProvider>
+                    <WorkspaceStartupBoundary
+                      authenticatedUserId={authenticatedUserId}
+                      pathname={pathname}
+                    >
+                      <TourProvider>
+                        {publicShare ? (
+                          <PublicShell>{children}</PublicShell>
+                        ) : (
+                          <FeatureFlagProvider userId={authenticatedUserId}>
+                            <GlobalProvider authenticatedUserId={authenticatedUserId}>
+                              {children}
+                            </GlobalProvider>
+                          </FeatureFlagProvider>
+                        )}
+                      </TourProvider>
+                    </WorkspaceStartupBoundary>
                   </AuthProvider>
                 </MobileBlockingProvider>
               </UndoProvider>

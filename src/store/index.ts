@@ -674,8 +674,7 @@ export const idToDeleteCommentAtom = atom({
 export const currentUserAtom = atom<any>({
     key: "currentUser",
     default: null,
-    // Authentication is restored from the signed session cookie. Persisting
-    // the user in localStorage can publish stale identity before hydration.
+    effects_UNSTABLE: [persistAtom],
 })
 
 // Define the atoms
