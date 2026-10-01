@@ -24,20 +24,20 @@ Scope: Pure extraction of the two assigned agent components on the current branc
   EXPECT: LINT PASS
   EVIDENCE: automatic-evidence=v1; definition-sha256=6f02464ca4e2c53846ba30ed2a6638d4f4ae88a67b105f47f92b967fad2f37b5; exit=0; EXPECT=matched; output-sha256=f798c7213b3f596c52d4cd4f2337a380c461bf909a0105a68bd3e13eb6bd15be; output-bytes=18; shell=/bin/sh; cwd=/home/valentin/projects/hypertask-wt/htpr-6506-b-agents; path=fd5351737ae0/31 entries
 
-- [ ] G5: Related tests and the full suite pass or every failure is proven on origin/production
+- [x] G5: Related tests and the full suite pass or every failure is proven on origin/production
   CHECK: node /tmp/htpr-6506-b-checks.cjs tests
   EXPECT: TESTS PASS
-  EVIDENCE: pending
+  EVIDENCE: automatic-evidence=v1; definition-sha256=bc5a5a8602ea878b04329e8819a277cd7e06d38fe0f03b74e580e9e55eceecb3; exit=0; EXPECT=matched; output-sha256=35a50bb744e6f00c68660a562a3616dd1899c16a1ba35934edf9fae6efea0f23; output-bytes=688; shell=/bin/sh; cwd=/home/valentin/projects/hypertask-wt/htpr-6506-b-agents; path=fd5351737ae0/31 entries
 
-- [ ] G6: Current branch has the requested commits and a clean working tree
+- [x] G6: Current branch has the requested commits and a clean working tree
   CHECK: node /tmp/htpr-6506-b-checks.cjs clean
   EXPECT: CLEAN TREE PASS
-  EVIDENCE: pending
+  EVIDENCE: automatic-evidence=v1; definition-sha256=a458847a1223711e7e0606e539284a7b981852a12aaf2bdc1f61a43a6904a013; exit=0; EXPECT=matched; output-sha256=0a3ff0c32dbed62e3c0cddfad1a5418c0e27acf17103a4e3451b44484e05c710; output-bytes=16; shell=/bin/sh; cwd=/home/valentin/projects/hypertask-wt/htpr-6506-b-agents; path=fd5351737ae0/31 entries
 
-- [ ] G7: Extracted logic, JSX, original exports, hook order and dependencies preserve behavior
+- [x] G7: Extracted logic, JSX, original exports, hook order and dependencies preserve behavior
   CHECK: node /tmp/htpr-6506-b-checks.cjs preservation
   EXPECT: PRESERVATION PASS
-  EVIDENCE: pending
+  EVIDENCE: automatic-evidence=v1; definition-sha256=add0014e34103eef4c958f78aafb85a2c11631724ce2787970c89bdee1822643; exit=0; EXPECT=matched; output-sha256=6d6a1aba0144211fd71b72fa782172b1407f58dbd3bfeee07064276b75aa7c7a; output-bytes=189; shell=/bin/sh; cwd=/home/valentin/projects/hypertask-wt/htpr-6506-b-agents; path=fd5351737ae0/31 entries
 
 - [x] G8: Ledger format is valid
   CHECK: node /home/valentin/.agents/skills/unlazy/scripts/gate-lint.mjs GATES.md
@@ -112,10 +112,34 @@ Scope comparison uses this branch's original HEAD, 283b3c0d89c1021ec7e6495625a75
    137 tests/helpers/agent-visibility-source.ts
     28 tests/helpers/agent-chat-source.cjs
     27 tests/helpers/agent-detail-source.cjs
-   119 GATES.md
-  9141 total
+   145 GATES.md
+  9167 total
 ```
 
 ## Check output
 
-Pending final full-suite results.
+```text
+LINE LIMITS PASS: every touched file below 1500 lines.
+FUNCTION LIMITS PASS: largest AgentChatPane, 335 lines at src/app/agents/chat/AgentChatPane.tsx:106.
+TYPECHECK PASS (baseline exception): next typegen exits 0; tsc exits 2 with the same four baseline errors and zero added errors.
+LINT PASS: npx eslint on all 51 touched source and test files exits 0; ledger lint exits 0.
+Related tests: 267 passing TAP tests plus all four TypeScript files passed; zero failures.
+Full runner: 4825 tests, 4819 pass, 6 fail, 0 cancelled, 0 skipped; exits 1.
+Clean production baseline: 4827 tests, 4816 pass, 11 fail; exits 1.
+PRESERVATION PASS: 126 chat hook calls and 51 detail hook calls match exactly.
+CLEAN TREE PASS is checked again after the final evidence commit.
+```
+
+The full runner stops at the failing Node group, before the 82 TypeScript files. The four related TypeScript files were run separately by the related-test command.
+
+All six full-suite failures also fail on the clean production baseline:
+- firebase-admin is 12.7.0 in the shared install, but the test requires 14.x.
+- jsonwebtoken is 8.5.1 in the shared install, but the test requires 9.x.
+- mobile-sheet-drag-close cannot import useScrollPosition from the installed react-modal-sheet.
+- weekly Strix runner source isolation and failed-report contract.
+- default tsc binary is not the required native TypeScript 7 compiler.
+- SDK native compiler sharing contract.
+
+Typecheck baseline errors: AppSheet.tsx:2 missing useScrollPosition; AppSheet.tsx:147 incompatible detent; AppSheet.tsx:170 unsupported disableScroll; redis.ts:45 unsupported protocol option. The complete current and baseline error output is byte-identical in /tmp/htpr-6506-b-types.log and /tmp/htpr-6506-b-baseline-types.log.
+
+Raw test evidence: /tmp/htpr-6506-b-related-tests.log, /tmp/htpr-6506-b-full-tests.log and /tmp/htpr-6506-b-baseline-tests.log. Baseline file-hash proof: /tmp/htpr-6506-b-baseline-integrity.log.
