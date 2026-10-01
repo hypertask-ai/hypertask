@@ -5,6 +5,7 @@ import * as sectionService from '@/utils/controllers/section/sectionService';
 import getProjectView from '@/utils/controllers/projects/views/viewsHelperAPIfunctions';
 import { broadcastBoardChange } from '@/lib/realtime/server';
 import { getSessionUser } from "@/lib/auth/getSessionUser";
+import { loadSessionUserRecord } from "@/lib/auth/sessionUserRecord";
 
 const handler: NextApiHandler = async (req: NextApiRequest, res: NextApiResponse) => {
     if (req.method === "POST") {
@@ -14,7 +15,7 @@ const handler: NextApiHandler = async (req: NextApiRequest, res: NextApiResponse
         if (!session) {
           return res.status(401).json({ message: "Unauthorized" });
         }
-        const user = { id: session.userId } as IUser;
+        const user = await loadSessionUserRecord(session.userId);
         try {
             const { projectId, title, ranking, after_section_id } = req.body;
             if (!projectId || !title) return res.status(400).json({ message: "Missing projectId or title" });

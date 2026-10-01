@@ -5,6 +5,7 @@ import { validateProjectMemberIds } from "@/lib/mcp/tasks/services";
 import { getProjectWhere } from "@/utils/controllers/projects/getAllIncludes";
 import createActivity from "@/utils/controllers/activities/createActivity";
 import { getSessionUser } from "@/lib/auth/getSessionUser";
+import { loadSessionUserRecord } from "@/lib/auth/sessionUserRecord";
 
 const handler: NextApiHandler = async (req, res) => {
   if (req.method !== "POST") {
@@ -17,7 +18,7 @@ const handler: NextApiHandler = async (req, res) => {
   if (!session) {
     return res.status(401).json({ message: "Unauthorized" });
   }
-  const currentUser = { id: session.userId };
+  const currentUser = await loadSessionUserRecord(session.userId);
 
   try {
     const taskId = Number(req.body.taskId);

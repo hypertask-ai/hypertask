@@ -5,6 +5,7 @@ import prisma from "@/lib/prisma";
 import { broadcastBoardChange } from '@/lib/realtime/server';
 import { taskWriteAccessWhere } from '@/utils/controllers/projects/getAllIncludes';
 import { getSessionUser } from "@/lib/auth/getSessionUser";
+import { loadSessionUserRecord } from "@/lib/auth/sessionUserRecord";
 
 
 // Create an instance of PrismaClient
@@ -18,7 +19,7 @@ if (req.method==="POST"){
     if (!session) {
       return res.status(401).json({ message: "Unauthorized" });
     }
-    const currentUser = { id: session.userId };
+    const currentUser = await loadSessionUserRecord(session.userId);
 
     const { taskIds, agentId } = req.body;
     console.log("🚀 ~ file: resetRanks.ts:14 ~ consthandler:NextApiHandler= ~ taskIds:", taskIds)

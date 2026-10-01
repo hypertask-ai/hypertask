@@ -17,6 +17,7 @@ import {
 import { Prisma } from "@prisma/client";
 import { NextApiHandler, NextApiRequest, NextApiResponse } from "next";
 import { getSessionUser } from "@/lib/auth/getSessionUser";
+import { loadSessionUserRecord } from "@/lib/auth/sessionUserRecord";
 
 // ============= simple stuff here
 // 1. user selects the default view.
@@ -33,7 +34,7 @@ const handler: NextApiHandler = async (
     if (!session) {
       return res.status(401).json({ message: "Unauthorized" });
     }
-    const currentUser = { id: session.userId };
+    const currentUser = await loadSessionUserRecord(session.userId);
     const userId = currentUser.id;
     // lets check if the api request misses info like user, projectid.
 

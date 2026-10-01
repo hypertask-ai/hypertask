@@ -4,6 +4,7 @@ import { broadcastBoardChange } from "@/lib/realtime/server";
 import { isRecurrenceRule } from "@/lib/recurrence";
 import { userCanAccessTask } from "@/utils/controllers/tasks/assertTaskAccess";
 import { getSessionUser } from "@/lib/auth/getSessionUser";
+import { loadSessionUserRecord } from "@/lib/auth/sessionUserRecord";
 import type { IUser } from "@/models/model";
 
 // HTPR-4885: set/clear a task's repeat rule. The rule sits on the task until
@@ -19,7 +20,7 @@ const handler: NextApiHandler = async (req, res) => {
   if (!session) {
     return res.status(401).json({ message: "Unauthorized" });
   }
-  const userObj = { id: session.userId } as IUser;
+  const userObj = await loadSessionUserRecord(session.userId);
 
   try {
     const { taskId, recurrence } = req.body;

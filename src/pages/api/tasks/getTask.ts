@@ -2,6 +2,7 @@ import { NextApiHandler, NextApiRequest, NextApiResponse } from "next";
 import tasksGetTask from "@/utils/controllers/tasks/getTask";
 import { httpStatusConfig } from "@/lib/configs/http-status.config";
 import { getSessionUser } from "@/lib/auth/getSessionUser";
+import { loadSessionUserRecord } from "@/lib/auth/sessionUserRecord";
 import type { IUser } from "@/models/model";
 
 const handler: NextApiHandler = async (
@@ -22,7 +23,7 @@ const handler: NextApiHandler = async (
     if (!session) {
       return res.status(401).json({ message: "Unauthorized" });
     }
-    const userObj = { id: session.userId } as IUser;
+    const userObj = await loadSessionUserRecord(session.userId);
     try {
       const { project, uniqueIndex } = req.query;
       if (!uniqueIndex || !project) {

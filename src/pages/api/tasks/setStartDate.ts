@@ -3,6 +3,7 @@ import { updateTaskSingle } from "@/utils/controllers/tasks/single";
 import { broadcastBoardChange, broadcastTaskChange } from "@/lib/realtime/server";
 import { userCanAccessTask } from "@/utils/controllers/tasks/assertTaskAccess";
 import { getSessionUser } from "@/lib/auth/getSessionUser";
+import { loadSessionUserRecord } from "@/lib/auth/sessionUserRecord";
 import type { IUser } from "@/models/model";
 
 // HTPR-4884: set/clear a task's planned start date. Mirrors setDueDate.ts but
@@ -18,7 +19,7 @@ const handler: NextApiHandler = async (req, res) => {
   if (!session) {
     return res.status(401).json({ message: "Unauthorized" });
   }
-  const userObj = { id: session.userId } as IUser;
+  const userObj = await loadSessionUserRecord(session.userId);
 
   try {
     const { taskId, startDate } = req.body;

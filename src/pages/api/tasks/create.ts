@@ -4,6 +4,7 @@ import generateRank from "@/utils/generateRank";
 import prisma from "@/lib/prisma";
 import { broadcastBoardChange } from "@/lib/realtime/server";
 import { getSessionUser } from "@/lib/auth/getSessionUser";
+import { loadSessionUserRecord } from "@/lib/auth/sessionUserRecord";
 
 const handler: NextApiHandler = async (req: NextApiRequest, res: NextApiResponse) => {
     if (req.method === "POST") {
@@ -13,7 +14,7 @@ const handler: NextApiHandler = async (req: NextApiRequest, res: NextApiResponse
         if (!session) {
           return res.status(401).json({ message: "Unauthorized" });
         }
-        const userObj = { id: session.userId };
+        const userObj = await loadSessionUserRecord(session.userId);
         try {
             const { title, description, section, userId, ranking, projectId,sectionId, index, fullScreenTask, projectIdentifier, agentId } = req.body;
         

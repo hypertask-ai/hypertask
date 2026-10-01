@@ -2,6 +2,7 @@ import prisma from "@/lib/prisma";
 import createPriorityActivity from "@/utils/controllers/activities/CreatePriorityActivity";
 import { NextApiHandler } from "next";
 import { getSessionUser } from "@/lib/auth/getSessionUser";
+import { loadSessionUserRecord } from "@/lib/auth/sessionUserRecord";
 import type { IUser } from "@/models/model";
 
 const handler: NextApiHandler = async (req, res) => {
@@ -14,7 +15,7 @@ const handler: NextApiHandler = async (req, res) => {
   if (!session) {
     return res.status(401).json({ message: "Unauthorized" });
   }
-  const user = { id: session.userId } as IUser;
+  const user = await loadSessionUserRecord(session.userId);
 
   try {
     const { taskId, priority_index, Priority_Value, agentId } = req.body;

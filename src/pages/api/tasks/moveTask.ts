@@ -6,6 +6,7 @@ import { updateTaskSingle } from "@/utils/controllers/tasks/single";
 import { broadcastBoardChange, broadcastTaskChange } from "@/lib/realtime/server";
 import { toErrorMessage } from "@/lib/api/errorMessage";
 import { getSessionUser } from "@/lib/auth/getSessionUser";
+import { loadSessionUserRecord } from "@/lib/auth/sessionUserRecord";
 import type { IUser } from "@/models/model";
 
 const handler: NextApiHandler = async (req, res) => {
@@ -18,7 +19,7 @@ const handler: NextApiHandler = async (req, res) => {
   if (!session) {
     return res.status(401).json({ message: "Unauthorized" });
   }
-  const userObj = { id: session.userId } as IUser;
+  const userObj = await loadSessionUserRecord(session.userId);
 
   try {
     const { taskId, section_title, sectionId, ranking, projectId, agentId } = req.body;

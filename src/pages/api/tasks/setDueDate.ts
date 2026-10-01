@@ -7,6 +7,7 @@ import { cancelDueDateJob, scheduleDueDateJob } from "../queues/duedateQueue";
 import { updateTaskSingle } from "@/utils/controllers/tasks/single";
 import { broadcastBoardChange, broadcastTaskChange } from "@/lib/realtime/server";
 import { getSessionUser } from "@/lib/auth/getSessionUser";
+import { loadSessionUserRecord } from "@/lib/auth/sessionUserRecord";
 import type { IUser } from "@/models/model";
 
 const handler: NextApiHandler = async (req, res) => {
@@ -20,7 +21,7 @@ const handler: NextApiHandler = async (req, res) => {
   if (!session) {
     return res.status(401).json({ message: "Unauthorized" });
   }
-  const userObj = { id: session.userId } as IUser;
+  const userObj = await loadSessionUserRecord(session.userId);
 
   try {
     const { taskId, dueDate, agentId } = req.body;

@@ -69,6 +69,9 @@ const sessionStub = {
   "@/lib/auth/getSessionUser": {
     getSessionUser: async () => ({ userId: USER_ID, source: "legacy", needsBridge: true }),
   },
+  "@/lib/auth/sessionUserRecord": {
+    loadSessionUserRecord: async (id) => ({ id, displayName: "Tester" }),
+  },
 };
 
 const requestHeaders = {};

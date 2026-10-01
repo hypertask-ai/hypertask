@@ -2,6 +2,7 @@ import { NextApiHandler, NextApiRequest, NextApiResponse } from "next";
 
 import updateProject from "@/utils/controllers/projects/update";
 import { getSessionUser } from "@/lib/auth/getSessionUser";
+import { loadSessionUserRecord } from "@/lib/auth/sessionUserRecord";
 import type { IUser } from "@/models/model";
 
 
@@ -13,7 +14,7 @@ const handler: NextApiHandler = async (req: NextApiRequest, res: NextApiResponse
         if (!session) {
           return res.status(401).json({ message: "Unauthorized" });
         }
-        const currentUser = { id: session.userId } as IUser;
+        const currentUser = await loadSessionUserRecord(session.userId);
         try {
             const { projectId, title,sorting_mode,uniqueIdentifier } = req.body;
 

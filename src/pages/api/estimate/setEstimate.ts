@@ -2,6 +2,7 @@ import prisma from "@/lib/prisma";
 import createEstimateActivity from "@/utils/controllers/activities/createEstimateActivity";
 import { NextApiHandler } from "next";
 import { getSessionUser } from "@/lib/auth/getSessionUser";
+import { loadSessionUserRecord } from "@/lib/auth/sessionUserRecord";
 import type { IUser } from "@/models/model";
 
 const handler: NextApiHandler = async (req, res) => {
@@ -15,7 +16,7 @@ const handler: NextApiHandler = async (req, res) => {
   if (!session) {
     return res.status(401).json({ message: "Unauthorized" });
   }
-  const user = { id: session.userId } as IUser;
+  const user = await loadSessionUserRecord(session.userId);
 
   try {
     const { taskId, estimate_index, estimate_value, agentId } = req.body;
