@@ -2,20 +2,61 @@
 # ship-gates HTPR-NNNN: write the standard /ship gates into this session's unlazy ledger.
 set -euo pipefail
 T=${1:?usage: ship-gates HTPR-NNNN}
-[[ $T =~ ^(HTPR|HYFA|YPER4)-[0-9]+$ ]] || { echo "ticket must look like HTPR-1234, HYFA-12 or YPER4-12"; exit 1; }
-ID=${CLAUDE_CODE_SESSION_ID:-${CODEX_SESSION_ID:-}}
-if [ -n "$ID" ]; then L=$HOME/.local/state/unlazy/sessions/${ID:0:8}/GATES.md; else L=$HOME/.local/state/unlazy/sessions/$T-$(date +%s)/GATES.md; fi
+[[ $T =~ ^(HTPR|HYFA|YPER4)-[0-9]+$ ]] || { echo "ticket must look like HTPR-1234, HYFA-12 or YPER4-12" >&2; exit 1; }
+ID=${CLAUDE_CODE_SESSION_ID:-${CODEX_SESSION_ID:-${CODEX_THREAD_ID:-}}}
+[ -n "$ID" ] || { echo "ship-gates needs CLAUDE_CODE_SESSION_ID, CODEX_SESSION_ID or CODEX_THREAD_ID" >&2; exit 1; }
+[[ ${ID:0:8} =~ ^[A-Za-z0-9._-]+$ ]] || { echo "ship-gates: invalid session id prefix" >&2; exit 1; }
+L=$PWD/.unlazy/s-${ID:0:8}/GATES.md
 C=$HOME/.agents/skills/ship/scripts/ship-check
-mkdir -p "$(dirname "$L")"
-grep -q "ship gates for $T" "$L" 2>/dev/null && { echo "already in $L"; exit 0; }
-[ -s "$L" ] || printf '# Gates: /ship %s\n\nScope: take %s end to end, live and verified.\n' "$T" "$T" > "$L"
-n=$(grep -cE '^- \[.\] [A-Z]+[0-9]+' "$L" || true)
-g() { n=$((n+1)); printf '\n- [ ] S%d: %s\n  CHECK: %s %s %s\n  EXPECT: %s\n  EVIDENCE: pending\n' "$n" "$1" "$C" "$2" "$T" "$3" >> "$L"; }
-printf '\n<!-- ship gates for %s -->\n' "$T" >> "$L"
-g "The ticket exists on the board" ticket "ticket ok"
-g "The PR is named HTPR-NNNN [TYPE] description" pr "title ok"
-g "The PR is merged into production" merged "merged ok"
-g "The Production deployment for the merge is success" deployed "deployed ok"
-[[ $T == HTPR-* ]] && g "Live QA proof.md follows the verify-qa contract for the latest merge, with screenshots" proof "proof ok"
-g "The ticket is in Done" done "done ok"
-echo "wrote ship gates for $T to $L"
+U=$HOME/.agents/skills/unlazy/scripts
+node --input-type=module - "$L" "$ID" "$T" "$C" "$U" "$PWD" <<'JS'
+import { dirname } from 'node:path';
+const [ledger, session, ticket, check, scripts, root] = process.argv.slice(2);
+const { parseGates, readStableRegularFile, withFileLock, writeAtomic } = await import(`${scripts}/lib/gates.mjs`);
+const quote = (s) => "'" + s.replaceAll("'", "'\\''") + "'";
+const gates = {
+  ticket: ['The ticket exists on the board', 'ticket ok'],
+  pr: ['The PR is named HTPR-NNNN [TYPE] description', 'title ok'],
+  merged: ['The PR is merged into production', 'merged ok'],
+  deployed: ['The Production deployment for the merge is success', 'deployed ok'],
+  proof: ['Live QA proof.md follows the verify-qa contract for the latest merge, with screenshots', 'proof ok'],
+  done: ['The ticket is in Done', 'done ok'],
+};
+if (/[\r\n\0]/.test(session + root + check) || Buffer.byteLength(session) > 4095) throw new Error('invalid session id or path');
+const read = (file) => {
+  try { return readStableRegularFile(file, { root }); }
+  catch (error) { if (error.code === 'ENOENT') return ''; throw error; }
+};
+await withFileLock(root, ledger, () => {
+  const binding = `${dirname(ledger)}/session`;
+  const bound = read(binding);
+  if (bound && bound.trim() !== session.trim()) throw new Error('ship-gates: session prefix collision');
+  let text = read(ledger);
+  const doc = parseGates(text, { requireGates: !!text });
+  if (doc.errors.length) throw new Error(doc.errors.join('; '));
+  // Never let --approve authorize a CHECK added by another ledger author.
+  for (const gate of doc.gates) {
+    const match = gate.id.match(/^((?:HTPR|HYFA|YPER4)-[0-9]+)\.(ticket|pr|merged|deployed|proof|done)$/);
+    if (!match && !gate.check) continue;
+    if (!match || (match[2] === 'proof' && !match[1].startsWith('HTPR-')) ||
+        gate.check !== `${quote(check)} ${match[2]} ${match[1]}` ||
+        gate.expect !== gates[match[2]][1] || gate.cwd !== root) {
+      throw new Error(`ship-gates: refusing to approve non-generated gate ${gate.id}; put extra gates in gates/extra.md and review them separately`);
+    }
+  }
+  if (!text) text = '# Gates: /ship\n\nScope: take this session\'s tickets end to end, live and verified.\n';
+  for (const [name, [title, expect]] of Object.entries(gates)) {
+    if (name === 'proof' && !ticket.startsWith('HTPR-')) continue;
+    const id = `${ticket}.${name}`;
+    if (doc.gates.some((gate) => gate.id === id)) continue;
+    text += `\n- [ ] ${id}: ${title}\n  CHECK: ${quote(check)} ${name} ${ticket}\n  EXPECT: ${expect}\n  CWD: ${root}\n  EVIDENCE: pending\n`;
+  }
+  writeAtomic(binding, session + '\n', { root });
+  writeAtomic(ledger, text, { root });
+});
+JS
+status=0
+node "$U/gate-check.mjs" --approve "$L" >&2 || status=$?
+printf '%s\n' "$L"
+# Unmet ship steps are expected when creating the ledger.
+[ "$status" -le 1 ] || exit "$status"
