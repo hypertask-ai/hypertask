@@ -252,20 +252,31 @@ export async function POST(request: NextRequest) {
   }
 
   let purpose = "";
-  let validJson = true;
   try {
-    purpose = String((await request.json())?.purpose ?? "").trim();
+    const body = await request.json();
+    if (!body || typeof body !== "object" || Array.isArray(body)) {
+      return NextResponse.json(
+        { error: "request body must be a JSON object" },
+        { status: 400 },
+      );
+    }
+    if (body.purpose !== undefined && typeof body.purpose !== "string") {
+      return NextResponse.json(
+        { error: "purpose must be a string" },
+        { status: 400 },
+      );
+    }
+    purpose = (body.purpose ?? "").trim();
   } catch {
-    validJson = false;
+    return NextResponse.json(
+      { error: "request body must be valid JSON" },
+      { status: 400 },
+    );
   }
 
   const existingGuest = await getExistingGuest(request);
   if (existingGuest && !purpose) {
     return existingGuestResponse(request, existingGuest);
-  }
-
-  if (!validJson) {
-    return NextResponse.json({ error: "bad request" }, { status: 400 });
   }
   // HTPR-4875: no purpose = the default /demo entry, which provisions an empty
   // board with no AI generation. A purpose still has to be a real description.
@@ -306,7 +317,11 @@ export async function POST(request: NextRequest) {
           { status: 503 },
         );
       }
-      console.error("guest demo regeneration failed", error);
+      console.error(
+        "guest demo regeneration failed",
+        error instanceof Error ? error.message : String(error),
+        error,
+      );
       return NextResponse.json(
         { error: "guest board regeneration failed" },
         { status: 500 },
@@ -357,7 +372,11 @@ export async function POST(request: NextRequest) {
         { status: 503 },
       );
     }
-    console.error("guest demo provisioning failed", error);
+    console.error(
+      "guest demo provisioning failed",
+      error instanceof Error ? error.message : String(error),
+      error,
+    );
     return NextResponse.json(
       { error: "guest provisioning failed" },
       { status: 500 },
