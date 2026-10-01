@@ -46,10 +46,10 @@ export async function GET(request: NextRequest) {
       isFeatureEnabled(FEATURE_FLAG_DETAILS_FLAG, FEATURE_FLAG_OWNER_USER_ID),
       isFeatureEnabled(FLAG_TICKET_ID_FLAG, FEATURE_FLAG_OWNER_USER_ID),
     ]);
-    return noStore({
-      flags: ticketIdEnabled ? flags : flags.map((flag) => ({ ...flag, ticketId: null })),
-      detailsEnabled,
-    });
+    if (!ticketIdEnabled) {
+      return noStore({ flags: flags.map((flag) => ({ ...flag, ticketId: null })), detailsEnabled });
+    }
+    return noStore({ flags, detailsEnabled });
   } catch (error) {
     console.error("[feature-flags] admin read failed", error);
     return noStore({ error: "Unable to load feature flags" }, 500);
