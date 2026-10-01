@@ -13,15 +13,18 @@ import type { Editor } from "@tiptap/react";
 import dynamic from "next/dynamic";
 import {
   ChangeEvent,
-  createContext,
   Dispatch,
+  memo,
   ReactNode,
   RefObject,
   SetStateAction,
-  useContext,
   useEffect,
+  useLayoutEffect,
   useRef,
 } from "react";
+import { ChatContext, useAiChatContext } from "./chatContext";
+
+export { useAiChatContext };
 
 export interface Message {
   id: string;
@@ -31,7 +34,7 @@ export interface Message {
 }
 
 // Define the context type
-interface ChatContextType {
+export interface ChatContextType {
   isTyping: boolean;
   isRecording: boolean;
   queuedMessages: {
@@ -121,9 +124,17 @@ const AiChatEditorMount = dynamic(
   { ssr: false }
 );
 
-const ChatContext = createContext<ChatContextType | undefined>(undefined);
-
-export const ChatProvider = ({ children }: { children: ReactNode }) => {
+// Runs the chat hook graph. It provides the context to its own children (pages
+// that need chat from their first render) and hands the same value to the
+// app shell's provider, which holds every other page beside it. Loading it
+// therefore never remounts a page that is already on screen (HTPR-6751).
+export const ChatRuntime = memo(function ChatRuntime({
+  onValue,
+  children,
+}: {
+  onValue: (value: ChatContextType | undefined) => void;
+  children?: ReactNode;
+}) {
   const contextProps = useAiChat();
   const layoutKeydownRef = useRef(contextProps.layoutKeydown);
   layoutKeydownRef.current = contextProps.layoutKeydown;
@@ -195,24 +206,17 @@ export const ChatProvider = ({ children }: { children: ReactNode }) => {
     setPendingAiChatPrompt,
   ]);
 
+  useLayoutEffect(() => {
+    onValue(contextProps);
+  });
+  useLayoutEffect(() => () => onValue(undefined), [onValue]);
+
   return (
-    <ChatContext.Provider
-      value={{
-        ...contextProps,
-      }}
-    >
+    <ChatContext.Provider value={contextProps}>
       {contextProps.editorEnabled && (
         <AiChatEditorMount {...contextProps.editorMountProps} />
       )}
       {children}
     </ChatContext.Provider>
   );
-};
-
-export const useAiChatContext = (): ChatContextType => {
-  const context = useContext(ChatContext);
-  if (context === undefined) {
-    throw new Error("useAiChatContext must be used within a ChatProvider");
-  }
-  return context;
-};
+});

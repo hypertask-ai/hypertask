@@ -1,5 +1,4 @@
 import type { NextApiRequest, NextApiResponse } from "next";
-import { isValidUser } from "@/utils/edgeHelpers";
 import { validateProjectAccess } from "@/lib/mcp/tasks/services";
 import { getRealtimeServer } from "@/lib/realtime/server";
 import { featureFlagsChannel } from "@/lib/realtime/shared";
@@ -60,18 +59,13 @@ export default async function handler(
   }
 
   try {
-    let userId: number | null = null;
-    if (channel === featureFlagsChannel()) {
-      const headers = new Headers();
-      if (req.headers.cookie) headers.set("cookie", req.headers.cookie);
-      userId = (await getSessionUser(headers))?.userId ?? null;
-    } else {
-      const { user, isValid } = isValidUser(req.cookies.nookies_user);
-      if (isValid && user) userId = Number(user.id);
-    }
-    if (userId === null) {
+    const session = await getSessionUser(
+      new Headers(req.headers as Record<string, string>)
+    );
+    if (!session) {
       return res.status(403).json({ error: "Not authenticated" });
     }
+    const userId = session.userId;
 
     const allowed = await userMayAccess(channel, userId);
     if (!allowed) {

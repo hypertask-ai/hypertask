@@ -1,16 +1,23 @@
 import { NextApiHandler, NextApiRequest, NextApiResponse } from "next";
 import tasksGetAll from "@/utils/controllers/tasks/getAll";
+import { getSessionUser } from "@/lib/auth/getSessionUser";
 
 
 const handler: NextApiHandler = async (req: NextApiRequest, res: NextApiResponse) => {
     if (req.method === "POST") {
+        const session = await getSessionUser(
+          new Headers(req.headers as Record<string, string>)
+        );
+        if (!session) {
+          return res.status(401).json({ message: "Unauthorized" });
+        }
         try {
-            const { projectId, userId } = req.body;
+            const { projectId } = req.body;
 
-            if (!projectId || !userId) {
+            if (!projectId) {
                 return res.status(200).json("Missing Required Data");
             }
-            const response = await tasksGetAll(projectId, userId )
+            const response = await tasksGetAll(projectId, session.userId )
             // const tasks = await prisma.task.findMany({
             //     where: {
             //         projectId: parseInt(projectId as string),

@@ -170,13 +170,12 @@ function loadHandler(session = null, { taskBroadcastGate } = {}) {
   }
 }
 
-function call(handler, { method, taskId, userId, body }) {
+function call(handler, { method, taskId, body }) {
   const req = {
     method,
     query: { id: String(taskId) },
     body: body ?? {},
     headers: {},
-    cookies: userId === undefined ? {} : { nookies_user: JSON.stringify({ id: userId }) },
   };
   let status = 0;
   let payload;
@@ -203,7 +202,7 @@ test("GET refuses to hand a task body to an anonymous caller", async () => {
 });
 
 test("GET refuses a logged-in user who is not on the task's board", async () => {
-  const { handler } = loadHandler();
+  const { handler } = loadHandler({ userId: MEMBER_USER_ID });
   const { status } = await call(handler, {
     method: "GET",
     taskId: TASK_ON_FOREIGN_BOARD,
@@ -213,7 +212,7 @@ test("GET refuses a logged-in user who is not on the task's board", async () => 
 });
 
 test("GET returns the task body to a board member", async () => {
-  const { handler } = loadHandler();
+  const { handler } = loadHandler({ userId: MEMBER_USER_ID });
   const { status, payload } = await call(handler, {
     method: "GET",
     taskId: TASK_ON_MEMBER_BOARD,

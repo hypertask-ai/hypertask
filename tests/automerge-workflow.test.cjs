@@ -23,10 +23,7 @@ async function workflowScript() {
 }
 
 async function runWorkflow({ failTemp = false, failList = false, failView = false, malformedView = false, failLabels = false, failMerge = false, failMergeability = false, failFeatureGate = false, featureGated = false, exemptUi = false, invalidGateDecision = false, forkHead = false, sharedHead = false, unknownMergeability = false, omitAppSmoke = false, speed = false, speedQa = true, speedQaCreator = 'owner', title, previousSpeedTitle = false, changedFile = 'src/safe.ts', comments, reviewChecks, productionReason = '', existingFreezeComment = '' } = {}) {
-  // Read off the raw call-site object instead of adding a new destructured
-  // default above: that line was last touched by HTPR-6650 within the
-  // revert-guard's 14-day window, and editing it again (even to add an
-  // unrelated field) makes the guard misread this as reverting that change.
+  // Read off the raw call-site object.
   const omitBrowserSmoke = Boolean(arguments[0] && arguments[0].omitBrowserSmoke)
   const directory = await mkdtemp(join(tmpdir(), 'automerge-workflow-'))
   const bin = join(directory, 'bin')

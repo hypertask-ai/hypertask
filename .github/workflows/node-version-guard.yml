@@ -1,0 +1,62 @@
+name: Node version guard
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+  push:
+    branches: [production]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: node-version-guard-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  vercel-node-version:
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    outputs:
+      node-version: ${{ steps.vercel.outputs.node-version }}
+    steps:
+      # This runner never checks out or executes PR code. Only the public Node
+      # setting crosses into the comparison job, never the Vercel credential.
+      - name: Read live Vercel project Node version
+        id: vercel
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          [ -n "$VERCEL_TOKEN" ] || { echo "::error::VERCEL_TOKEN is unavailable; cannot verify the live Node setting."; exit 1; }
+          version=$(curl --fail --silent --show-error --max-time 30 \
+            -H "Authorization: Bearer $VERCEL_TOKEN" \
+            'https://api.vercel.com/v9/projects/prj_oEok2iMNFPzj6AWe1KQBaIAcPaAf?teamId=team_yureFlJZ6ibwebaOOkKc5whs' \
+            | jq -er '.nodeVersion | select(type == "string") | select(test("^[0-9]+\\.x$"))')
+          echo "node-version=$version" >> "$GITHUB_OUTPUT"
+
+  node-version-guard:
+    needs: vercel-node-version
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 24
+      - name: Install only the workflow parser
+        run: npm ci --prefix .github/scripts/node-version-guard --ignore-scripts --no-audit --no-fund
+      - name: Test comparison logic
+        env:
+          NODE_PATH: ${{ github.workspace }}/.github/scripts/node-version-guard/node_modules
+        run: node --test tests/node-version-guard.test.cjs
+      - name: Compare package and workflow Node majors with Vercel
+        env:
+          NODE_PATH: ${{ github.workspace }}/.github/scripts/node-version-guard/node_modules
+          LIVE_NODE_VERSION: ${{ needs.vercel-node-version.outputs.node-version }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          printf '%s\n' "$LIVE_NODE_VERSION" > "$RUNNER_TEMP/vercel-node-version"
+          node .github/scripts/check-node-version.cjs "$RUNNER_TEMP/vercel-node-version"

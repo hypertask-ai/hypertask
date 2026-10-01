@@ -3,6 +3,7 @@ import tasksGetArchivedTasks, {
     tasksGetArchivedTasksMeta,
 } from "@/utils/controllers/tasks/getArchivedTasks";
 import type { ArchiveBoardScope } from "@/store";
+import { getSessionUser } from "@/lib/auth/getSessionUser";
 
 const parseBoardScope = (value: string | string[] | undefined): ArchiveBoardScope => {
     const scope = Array.isArray(value) ? value[0] : value;
@@ -23,19 +24,17 @@ const parseOptionalQuery = (value: string | string[] | undefined) => {
 
 const handler: NextApiHandler = async (req: NextApiRequest, res: NextApiResponse) => {
     if (req.method === "GET") {
+        const session = await getSessionUser(
+          new Headers(req.headers as Record<string, string>)
+        );
+        if (!session) {
+          return res.status(401).json({ message: "Unauthorized" });
+        }
+        const userId = session.userId;
         try {
-            // Derive the caller from the auth cookie, never from a query param:
+            // The caller is the signed session, never a query param:
             // /api is excluded from middleware, so trusting ?userId would let anyone
             // read another user's archived tasks by guessing an id.
-            let user: { id?: number } | null = null;
-            try {
-                user = JSON.parse(req.cookies.nookies_user!);
-            } catch {
-                user = null;
-            }
-            if (!user?.id) {
-                return res.status(401).json({ message: "Unauthorized" });
-            }
 
             const { projectId, cursor, mode, boardScope: rawBoardScope, q } = req.query;
             const parsedProjectId = parseOptionalInt(projectId);
@@ -44,9 +43,9 @@ const handler: NextApiHandler = async (req: NextApiRequest, res: NextApiResponse
             const parsedQuery = parseOptionalQuery(q);
             const response =
                 mode === "meta"
-                    ? await tasksGetArchivedTasksMeta(user.id, parsedProjectId, boardScope)
+                    ? await tasksGetArchivedTasksMeta(userId, parsedProjectId, boardScope)
                     : await tasksGetArchivedTasks(
-                        user.id,
+                        userId,
                         parsedCursor,
                         parsedProjectId,
                         boardScope,

@@ -52,9 +52,17 @@ test("resetRanks skips a task deleted concurrently instead of 500ing (HTPR-5310)
 
   delete require.cache[path.join(root, "src/lib/prisma.ts")];
   delete require.cache[path.join(root, "src/lib/realtime/server.ts")];
+  delete require.cache[path.join(root, "src/lib/auth/getSessionUser.ts")];
+  delete require.cache[path.join(root, "src/utils/controllers/projects/getAllIncludes.ts")];
   delete require.cache[path.join(root, "src/pages/api/section/resetRanks.ts")];
   stubModule("src/lib/prisma.ts", { default: prisma });
   stubModule("src/lib/realtime/server.ts", { broadcastBoardChange: async () => {} });
+  stubModule("src/lib/auth/getSessionUser.ts", {
+    getSessionUser: async () => ({ userId: 6, source: "legacy", needsBridge: true }),
+  });
+  stubModule("src/utils/controllers/projects/getAllIncludes.ts", {
+    taskWriteAccessWhere: () => ({}),
+  });
   const jiti = require("jiti")(__filename, {
     interopDefault: true,
     alias: { "@": path.join(root, "src") },
@@ -67,7 +75,7 @@ test("resetRanks skips a task deleted concurrently instead of 500ing (HTPR-5310)
   const req = {
     method: "POST",
     body: { taskIds: ["a", "missing", "b"] },
-    cookies: { nookies_user: JSON.stringify({ id: 6 }) },
+    headers: {},
   };
   const res = response();
 

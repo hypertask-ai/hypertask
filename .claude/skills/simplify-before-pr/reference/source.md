@@ -16,9 +16,9 @@ The plugin is a single agent (`agents/code-simplifier.md`, `model: opus`) that r
 - Clause 3 (enhance clarity) — kept close to verbatim, step 4.
 - Clause 4 (maintain balance / what not to touch) — kept close to verbatim, step 5.
 
-## What was dropped or changed for the fleet
+## What was dropped or changed for a ticket session
 
-- **Clause 2** (project-specific coding standards: ES modules, `function` over arrow functions, explicit return types, React prop patterns) is the plugin's own repo's house style, not a universal rule. Dropped rather than imported wholesale — a fleet skill applies across repos with different conventions, and `ticket-lifecycle`'s "match the codebase's conventions" already covers this ground.
-- **Clause 5** (scope = "recently modified in the current session") doesn't translate to a fleet agent, whose session boundary isn't the ticket boundary. Replaced with `git diff --name-only pub/production...HEAD` — the ticket's own diff.
-- **Autonomous trigger** ("runs immediately after code is written, without being asked") replaced with an explicit step wired into `fix-bug` and `ship-feature-behind-flag`, right before the PR step, and a separate commit so a reviewer can see the simplify pass apart from the fix. The plugin runs as a background agent with no commit boundary; a fleet ticket needs one so review and rollback stay clean.
-- **Model pin** (`model: opus`) dropped — model choice is a fleet routing decision (see `~/.claude/CLAUDE.md` rule 5b), not something this skill should hardcode.
+- **Clause 2** (project-specific coding standards: ES modules, `function` over arrow functions, explicit return types, React prop patterns) is the plugin's own repo's house style, not a universal rule. Dropped rather than imported wholesale. Match the codebase you are editing.
+- **Clause 5** (scope = "recently modified in the current session") is replaced with `git diff --name-only pub/production...HEAD`, the ticket's own diff.
+- **Autonomous trigger** ("runs immediately after code is written, without being asked") is replaced with an explicit step wired into `fix-bug` and `ship-feature-behind-flag`, right before the PR step, and a separate commit so a reviewer can see the simplify pass apart from the fix.
+- **Model pin** (`model: opus`) dropped. This skill does not choose a model.

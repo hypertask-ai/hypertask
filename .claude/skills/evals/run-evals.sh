@@ -25,11 +25,9 @@ INDEX="$SKILLS_DIR/INDEX.md"
 FAILS=0
 CHECKS=0
 
-# Skills that predate this INDEX.md and are not governed by it: general
-# Claude Code skills invoked as slash commands, not Product Bot's
-# ticket-routing table. Add a name here only with a reason.
-#   prototype - HTPR-5931, a /prototype slash-command skill, unrelated to
-#   the Product Bot routing this INDEX.md documents.
+# Skills that predate this INDEX.md and are not a /ship step.
+# Add a name here only with a reason.
+#   prototype - HTPR-5931, a /prototype slash-command skill, not a /ship step.
 EXEMPT_SKILLS=(prototype)
 
 is_exempt() {
@@ -48,7 +46,7 @@ a_fail=0
 a_count=0
 in_table=0
 while IFS= read -r line; do
-  if [ "$line" = "| Name | Trigger | Path |" ]; then
+  if [ "$line" = "| Skill | When to load (/ship step) | Path |" ]; then
     in_table=1
     continue
   fi
@@ -77,7 +75,7 @@ while IFS= read -r line; do
   fi
 done < "$INDEX"
 if [ "$a_count" -eq 0 ]; then
-  echo "FAIL A: no rows found in INDEX.md's Name/Trigger/Path table"
+  echo "FAIL A: no rows found in INDEX.md's Skill/When to load/Path table"
   a_fail=1
 fi
 if [ "$a_fail" -eq 0 ]; then
@@ -144,9 +142,8 @@ fi
 # D. Board columns a skill names exist.
 # ---------------------------------------------------------------------------
 CHECKS=$((CHECKS + 1))
-# The agent template lays board.yml down at the repo root; supervise-board's
-# own board files live under .claude/. Take whichever this repo has, or the
-# check never runs on a synced repo.
+# board.yml may live at the repo root or under .claude/. Take whichever
+# this repo has, or the check never runs.
 BOARD=""
 for candidate in "$REPO_ROOT/board.yml" "$REPO_ROOT/.claude/board.yml"; do
   [ -f "$candidate" ] && { BOARD="$candidate"; break; }
@@ -156,8 +153,8 @@ if [ -z "$BOARD" ]; then
 else
   d_fail=0
   d_count=0
-  # Two shapes. supervise-board's board files nest "title:" under columns:; the
-  # agent-template skeleton maps a role to a section name directly under roles:.
+  # Two shapes. Some board files nest "title:" under columns:; others map a
+  # role to a section name directly under roles:.
   columns="$( { sed -n '/^columns:/,$p' "$BOARD" | grep -oE 'title:[[:space:]]*.*' \
                   | sed -E 's/title:[[:space:]]*//'
                 sed -n '/^roles:/,/^[^[:space:]]/p' "$BOARD" \

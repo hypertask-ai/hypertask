@@ -2,17 +2,17 @@ const assert = require('node:assert/strict')
 const path = require('node:path')
 const { test } = require('node:test')
 const React = require('react')
-const { createRoot } = require('react-dom/client')
 const { JSDOM } = require('jsdom')
 const { createJiti } = require('jiti')
 const root = path.resolve(__dirname, '..')
 
-test('URL searches retry the full operator query when flags load after projects', async () => {
+test('URL searches retry the full operator query when flags load after projects', async (t) => {
   const dom = new JSDOM('<div id="root"></div>', { url: 'https://app.hypertask.ai/search?searchTerm=is:open' })
-  const globals = ['window', 'document', 'HTMLElement', 'IS_REACT_ACT_ENVIRONMENT']
+  const globals = ['window', 'document', 'navigator', 'HTMLElement', 'IS_REACT_ACT_ENVIRONMENT']
   const previous = globals.map((name) => [name, Object.getOwnPropertyDescriptor(global, name)])
   global.window = dom.window
   global.document = dom.window.document
+  Object.defineProperty(global, 'navigator', { configurable: true, value: dom.window.navigator })
   global.HTMLElement = dom.window.HTMLElement
   global.IS_REACT_ACT_ENVIRONMENT = true
   dom.window.HTMLElement.prototype.attachEvent = () => {}
@@ -30,6 +30,7 @@ test('URL searches retry the full operator query when flags load after projects'
   let pickerOpen = false
   let searchState
   const posts = []
+  let backs = 0
   let reactRoot
   try {
     stub('src/lib/configs/search.config.ts', { searchConfig: { responseMessages: { default: '', fail: 'No results', error: 'Error' }, elementIds: { input: { id: 'search-input' }, history: { id: 'search-history' } }, handleKeyDown: { classNamesToReturnFrom: [] } } })
@@ -56,7 +57,7 @@ test('URL searches retry the full operator query when flags load after projects'
     require.cache[axiosPath] = { id: axiosPath, filename: axiosPath, loaded: true, exports: { default: { post }, post } }
     const navigationPath = require.resolve('next/navigation')
     stubs.push([navigationPath, require.cache[navigationPath]])
-    require.cache[navigationPath] = { id: navigationPath, filename: navigationPath, loaded: true, exports: { useRouter: () => ({ replace() {}, push() {} }) } }
+    require.cache[navigationPath] = { id: navigationPath, filename: navigationPath, loaded: true, exports: { useRouter: () => ({ replace() {}, push() {}, back() { backs++ } }) } }
     const queryPath = require.resolve('@tanstack/react-query')
     stubs.push([queryPath, require.cache[queryPath]])
     require.cache[queryPath] = { id: queryPath, filename: queryPath, loaded: true, exports: { useQueryClient: () => ({ invalidateQueries() {} }) } }
@@ -66,6 +67,7 @@ test('URL searches retry the full operator query when flags load after projects'
       chipUI = searchState.searchChipsEnabled
       return React.createElement('input', { id: 'search-input', ref: searchState.tasksInputRef, 'aria-expanded': String(pickerOpen) })
     }
+    const { createRoot } = require('react-dom/client')
     reactRoot = createRoot(document.getElementById('root'))
     for (const term of ['is:open', 'Login is:open']) {
       enabled = false
@@ -99,6 +101,25 @@ test('URL searches retry the full operator query when flags load after projects'
     await React.act(async () => { searchState.setSelectedIndex(0) })
     await React.act(async () => { down() })
     assert.equal(searchState.selectedIndex, 0, 'open picker owns ArrowDown')
+    await t.test('page Back yields Escape to an open picker, then resumes when closed or flags are off', async () => {
+      const escape = () => input.dispatchEvent(new dom.window.KeyboardEvent('keydown', { key: 'Escape', keyCode: 27, bubbles: true, cancelable: true }))
+      await React.act(async () => searchState.setInputValue('from:val'))
+      await React.act(async () => escape())
+      assert.equal(backs, 0, 'open picker must not navigate Back')
+      assert.equal(searchState.inputValue, 'from:val')
+      pickerOpen = false
+      await React.act(async () => reactRoot.render(React.createElement(Search, { term: 'login' })))
+      await React.act(async () => escape())
+      assert.equal(backs, 1, 'second Escape with no picker retains Back')
+      pickerOpen = true
+      for (const flags of [[false, true], [true, false], [false, false]]) {
+        ;[enabled, chipsEnabled] = flags
+        await React.act(async () => reactRoot.render(React.createElement(Search, { term: 'login' })))
+        const previousBacks = backs
+        await React.act(async () => escape())
+        assert.equal(backs, previousBacks + 1, 'flag-off Escape remains Back')
+      }
+    })
   } finally {
     if (reactRoot) await React.act(async () => { reactRoot.unmount() })
     for (const [filename, prior] of stubs.reverse()) {

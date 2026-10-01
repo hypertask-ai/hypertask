@@ -5,6 +5,7 @@ import { Prisma } from "@prisma/client";
 import prisma from "@/lib/prisma";
 import { notificationInboxInclude } from "@/utils/controllers/notifications/getAll";
 import type { ArchiveBoardScope } from "@/store";
+import { getSessionUser } from "@/lib/auth/getSessionUser";
 
 const ARCHIVED_INBOX_PAGE_SIZE = 50;
 
@@ -151,7 +152,13 @@ export default  async function handler(
 ) {
  
   try {
-    const user = JSON.parse(req.cookies.nookies_user!)
+    const session = await getSessionUser(
+      new Headers(req.headers as Record<string, string>)
+    );
+    if (!session) {
+      return res.status(401).json({ message: "Unauthorized" });
+    }
+    const userId = session.userId;
     const {cursor, mode, projectId, boardScope: rawBoardScope, q} = req.query
     const parsedCursor = parseOptionalInt(cursor);
     const parsedProjectId = parseOptionalInt(projectId);
@@ -160,7 +167,7 @@ export default  async function handler(
 
     if (mode === "meta") {
       const meta = await getArchivedInboxMeta(
-        user.id,
+        userId,
         parsedProjectId,
         boardScope
       );
@@ -172,9 +179,9 @@ export default  async function handler(
       ...(parsedCursor ? { cursor: { id: parsedCursor }, skip: 1 } : {}),
       distinct: ["type", "taskId"],
       orderBy: archivedInboxOrderBy,
-      include: notificationInboxInclude(user.id),
+      include: notificationInboxInclude(userId),
       where: getArchivedInboxWhere(
-        user.id,
+        userId,
         parsedProjectId,
         boardScope,
         parsedQuery

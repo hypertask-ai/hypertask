@@ -1216,7 +1216,7 @@ export type McpAuthFailureLookup = {
  */
 export async function classifyMcpAuthFailure(
   request: NextRequest,
-  db: McpAuthFailureLookup = prisma as unknown as McpAuthFailureLookup
+  db?: McpAuthFailureLookup
 ): Promise<McpUnauthorizedReason> {
   const token = extractBearerToken(request.headers.get('Authorization'))
   if (!token) return 'missing_token'
@@ -1225,11 +1225,15 @@ export async function classifyMcpAuthFailure(
   // missed would answer "does this key exist".
   if (token.startsWith('htk_')) return 'invalid_token'
 
+  // A missing token returns above, before this binds the client. Evaluating
+  // prisma as a default argument touched the database on every 401.
+  const lookup = db ?? (prisma as unknown as McpAuthFailureLookup)
+
   // A management key that verifies but carries no data permission is a
   // different recovery step: widen the key's scope rather than replace it.
   // Saying so tells the holder of a working key nothing it does not know.
   if (isManagementKeyToken(token)) {
-    const verifyManagementKey = db.verifyManagementKey ?? validateManagementApiKey
+    const verifyManagementKey = lookup.verifyManagementKey ?? validateManagementApiKey
     const managementCtx = await verifyManagementKey(token)
     if (!managementCtx) return 'invalid_token'
     return hasDataPermission(managementCtx.management?.permissions ?? {})
@@ -1258,9 +1262,9 @@ export async function classifyMcpAuthFailure(
     const select = { id: true, mcpTokensRevokedAt: true }
     let user: { id: number; mcpTokensRevokedAt: Date | null } | null = null
     if (userId) {
-      user = await db.user.findUnique({ where: { id: userId }, select })
+      user = await lookup.user.findUnique({ where: { id: userId }, select })
     } else if (email) {
-      user = await db.user.findFirst({ where: { email }, select })
+      user = await lookup.user.findFirst({ where: { email }, select })
     }
     if (!user) return 'invalid_token'
 
@@ -1274,7 +1278,7 @@ export async function classifyMcpAuthFailure(
     if (isOAuthAccessToken && oauthClientId === undefined) {
       revocationJtis.push(oauthLegacyRevocationJti(user.id))
     }
-    const revoked = await db.revokedToken.findFirst({
+    const revoked = await lookup.revokedToken.findFirst({
       where: {
         user_id: user.id,
         jti: { in: revocationJtis },
@@ -1284,7 +1288,7 @@ export async function classifyMcpAuthFailure(
     if (revoked) return 'token_revoked'
 
     if (oauthClientId !== undefined) {
-      const client = await db.oAuthClient.findUnique({
+      const client = await lookup.oAuthClient.findUnique({
         where: { client_id: oauthClientId },
         select: { client_id: true },
       })
@@ -1312,7 +1316,7 @@ export async function classifyMcpAuthFailure(
     // may come back as a bad request.
     const agentId = verified.agentId
     if (typeof agentId === 'string' && agentId.length > 0) {
-      const agent = await db.agent.findFirst({
+      const agent = await lookup.agent.findFirst({
         where: { id: agentId, userId: user.id },
         select: { id: true, mcpTokenJti: true, revokedAt: true },
       })

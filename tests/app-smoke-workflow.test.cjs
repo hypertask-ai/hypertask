@@ -151,7 +151,7 @@ test("app smoke validates the head before isolated build and route checks", asyn
       "actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020",
     ),
   );
-  assert.match(workflow, /node-version: 22/);
+  assert.match(workflow, /node-version: 24/);
   assert.ok(
     uses.includes(
       "actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830",
@@ -315,7 +315,7 @@ test("auto-merge waits for app smoke and runs when it completes", async () => {
   assert.match(workflow, /workflows: \["CI Tests", "Revert Guard"\]/);
   assert.match(
     workflow,
-    /REQUIRED="app-smoke ci-tests ai-review next-public-secrets revert-guard pr-title"/,
+    /REQUIRED="app-smoke ci-tests ai-review next-public-secrets pr-title"/,
   );
   assert.match(workflow, /REQUIRED="\$REQUIRED feature-flag-gate"/);
   assert.match(workflow, /REQUIRED="\$REQUIRED browser-smoke"/);
@@ -329,7 +329,7 @@ test("auto-merge waits for app smoke and runs when it completes", async () => {
   assert.match(ciWorkflow, /Live required checks do not match docs\/ci-policy\.yml/);
   assert.match(
     ciWorkflow,
-    /expected=\$\(printf '%s\\n' app-smoke ci-tests ai-review claude-review feature-flag-gate next-public-secrets pr-title revert-guard secret-scan \| sort\)/,
+    /expected=\$\(printf '%s\\n' app-smoke ci-tests ai-review claude-review feature-flag-gate next-public-secrets pr-title secret-scan \| sort\)/,
   );
   assert.match(
     ciWorkflow,
@@ -347,7 +347,6 @@ test("CI policy keeps the protected smoke producer live and required", async () 
     "claude-review",
     "feature-flag-gate",
     "pr-title",
-    "revert-guard",
     "next-public-secrets",
     "secret-scan",
   ];
