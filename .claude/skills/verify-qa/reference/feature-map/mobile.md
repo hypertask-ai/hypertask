@@ -13,10 +13,11 @@ Real 390x844 phone-viewport screenshot, never a resized desktop window:
 ```
 `e2e/smoke/journeys.spec.ts` tests tagged `@mobile` (`open-board`,
 `open-task`, `create-task`) exercise the same shape, but only when
-`hypertask-qa-runner` runs them with `HT_QA_JOURNEYS=1`; they are not part of
-`prod-health.yml`'s CI job (that job only runs the read-only `prod.spec.ts`
-checks). Reading the `@mobile` test bodies is still the fastest way to see
-what "normal" looks like, just don't assume they ran automatically.
+`HT_QA_JOURNEYS=1`. They are not part of `prod-health.yml`'s CI job (that
+job only runs the read-only `prod.spec.ts` checks). Reading the `@mobile`
+test bodies is still the fastest way to see what "normal" looks like, just
+don't assume they ran automatically. For the session's own proof, shoot
+production with `phone-shot.sh` and `--state`.
 
 ## What usually breaks
 
