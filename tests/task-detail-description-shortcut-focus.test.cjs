@@ -23,10 +23,7 @@ const saveContent = fs.readFileSync(
   ),
   "utf8",
 );
-const tutorialHook = fs.readFileSync(
-  path.join(root, "src/hooks/General/useLearnTutorial.ts"),
-  "utf8",
-);
+const tutorialHook = require("./helpers/learn-tutorial-sources.cjs");
 const dueDateModal = fs.readFileSync(
   path.join(root, "src/components/Modals/DueDate/index.tsx"),
   "utf8",
