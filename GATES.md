@@ -4,50 +4,50 @@ OWNS: GATES.md, src/app/detail/[...slug]/**, src/components/RTE/**
 
 Scope: Pure refactor of TaskDetailComp and TipTapTaskDetail on the current branch. No pushes, dependency changes, or other worktree changes.
 
-- [ ] G0: ledger has valid measurable checks
+- [x] G0: ledger has valid measurable checks
   CHECK: node ~/.agents/skills/unlazy/scripts/gate-lint.mjs GATES.md
   EXPECT: LINT OK
-  EVIDENCE: pending
+  EVIDENCE: automatic-evidence=v1; definition-sha256=2770f040a7cc8da49fa1524d3a3fe5b65db289d5d3f753f22af30412dee16138; exit=0; EXPECT=matched; output-sha256=48630b7361dd44ee870917b12c3d19b9d7bdea738aaca16bb04d4cab83b772d2; output-bytes=8; shell=/bin/sh; cwd=/home/valentin/projects/hypertask-wt/htpr-6506-c-taskdetail; path=fd5351737ae0/31 entries
 
-- [ ] G1: every changed or created file has fewer than 1500 lines
+- [x] G1: every changed or created file has fewer than 1500 lines
   CHECK: node /tmp/hax-taskdetail-6506-dQRgLV/limits.cjs lines
   EXPECT: LINE LIMITS PASS
-  EVIDENCE: pending
+  EVIDENCE: automatic-evidence=v1; definition-sha256=a6028065575723c6b5455c9684690878cb5bc21ab8e3b3464d3c87171fe04854; exit=0; EXPECT=matched; output-sha256=a253104f3e951b45cb833035f66b6b74a0e9567ca452686170c134c2840731e2; output-bytes=2545; shell=/bin/sh; cwd=/home/valentin/projects/hypertask-wt/htpr-6506-c-taskdetail; path=fd5351737ae0/31 entries
 
-- [ ] G2: every touched source function is at most 400 lines
+- [x] G2: every touched source function is at most 400 lines
   CHECK: node /tmp/hax-taskdetail-6506-dQRgLV/limits.cjs functions
   EXPECT: FUNCTION LIMITS PASS
-  EVIDENCE: pending
+  EVIDENCE: automatic-evidence=v1; definition-sha256=ad6a3f95a01b5a1b16f6851d9a4419b9df9f360055db285d9da46bf4cf78180e; exit=0; EXPECT=matched; output-sha256=7d529caa629b6d6080d55ba79a5dca22ef195c341fcd3b12053b18986186f4f6; output-bytes=119; shell=/bin/sh; cwd=/home/valentin/projects/hypertask-wt/htpr-6506-c-taskdetail; path=fd5351737ae0/31 entries
 
-- [ ] G3: typecheck adds zero errors against origin/production
+- [x] G3: typecheck adds zero errors against origin/production
   CHECK: bash /tmp/hax-taskdetail-6506-dQRgLV/typecheck.sh
   EXPECT: TYPECHECK PASS
-  EVIDENCE: pending
+  EVIDENCE: automatic-evidence=v1; definition-sha256=a6f6e2534d4e8f11ebbda1984226bb3b1180e65408b928af61d4948a99e4d115; exit=0; EXPECT=matched; output-sha256=5e8b4afa30a2865785cc67a5f8943ab66933629662d97dfe5d46593e20eeff83; output-bytes=1614; shell=/bin/sh; cwd=/home/valentin/projects/hypertask-wt/htpr-6506-c-taskdetail; path=fd5351737ae0/31 entries
 
-- [ ] G4: every touched source passes ESLint
+- [x] G4: every touched source passes ESLint
   CHECK: node /tmp/hax-taskdetail-6506-dQRgLV/lint.cjs
   EXPECT: LINT PASS
-  EVIDENCE: pending
+  EVIDENCE: automatic-evidence=v1; definition-sha256=90ce1190eff33c5a84e1ae117a3c3ffd550743341f858eb475d4f3f289bff1d1; exit=0; EXPECT=matched; output-sha256=70d31a806f9d7cd754f7d018d9d84e1746b316b179b99a60511eb080379ee90f; output-bytes=194; shell=/bin/sh; cwd=/home/valentin/projects/hypertask-wt/htpr-6506-c-taskdetail; path=fd5351737ae0/31 entries
 
-- [ ] G5: related tests pass and full suite adds zero failures against origin/production
+- [x] G5: related tests pass and full suite adds zero failures against origin/production
   CHECK: node /tmp/hax-taskdetail-6506-dQRgLV/tests.cjs
   EXPECT: TESTS PASS
-  EVIDENCE: pending
+  EVIDENCE: automatic-evidence=v1; definition-sha256=7e7f325a4c66c5de3812bf703689391bef67c1aeef264f16aa34a22a19440181; exit=0; EXPECT=matched; output-sha256=1e732f49a797fafcf096036031dc58613a9c1d84be61cc29d28b06084e7bb193; output-bytes=515; shell=/bin/sh; cwd=/home/valentin/projects/hypertask-wt/htpr-6506-c-taskdetail; path=fd5351737ae0/31 entries
 
-- [ ] G6: final commits leave an empty git status
+- [x] G6: final commits leave an empty git status
   CHECK: test -z "$(git status --short)" && printf 'CLEAN TREE PASS\n'
   EXPECT: CLEAN TREE PASS
-  EVIDENCE: pending
+  EVIDENCE: automatic-evidence=v1; definition-sha256=f0df3e16af7760c807cf5f93eed8e48737ebff82d279056e129629a1e1b69730; exit=0; EXPECT=matched; output-sha256=0a3ff0c32dbed62e3c0cddfad1a5418c0e27acf17103a4e3451b44484e05c710; output-bytes=16; shell=/bin/sh; cwd=/home/valentin/projects/hypertask-wt/htpr-6506-c-taskdetail; path=fd5351737ae0/31 entries
 
-- [ ] G7: exports, command precedence, rendered markup, and moved handler logic remain equivalent
+- [x] G7: exports, command precedence, rendered markup, and moved handler logic remain equivalent
   CHECK: node /tmp/hax-taskdetail-6506-dQRgLV/equivalence.cjs
   EXPECT: EQUIVALENCE PASS
-  EVIDENCE: pending
+  EVIDENCE: automatic-evidence=v1; definition-sha256=c8404a345bb174bad67bf2cfe6e56013543d9dfeee0f26618dc2648896407ae6; exit=0; EXPECT=matched; output-sha256=daf5496ebd9c79aba584bb6269055bbd1a6fcd1c7b397536d107f619a6a1257e; output-bytes=214; shell=/bin/sh; cwd=/home/valentin/projects/hypertask-wt/htpr-6506-c-taskdetail; path=fd5351737ae0/31 entries
 
-- [ ] G8: dependency files and public exports are unchanged and test edits only update source imports
+- [x] G8: dependency files and public exports are unchanged and test edits only update source imports
   CHECK: node /tmp/hax-taskdetail-6506-dQRgLV/scope.cjs
   EXPECT: SCOPE PASS
-  EVIDENCE: pending
+  EVIDENCE: automatic-evidence=v1; definition-sha256=b07b6e575e8919ae10ec3a0d3d753e83f20fec18ef1a3431791a5cbbd19cd427; exit=0; EXPECT=matched; output-sha256=4e723e739527a188f23f03708fda64d18b23e637b20e5bea401b1105a13e68b2; output-bytes=128; shell=/bin/sh; cwd=/home/valentin/projects/hypertask-wt/htpr-6506-c-taskdetail; path=fd5351737ae0/31 entries
 
 ## Work tree
 
