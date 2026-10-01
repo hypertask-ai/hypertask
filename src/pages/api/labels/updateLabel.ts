@@ -11,6 +11,7 @@ import { sanitizeBoardFilters } from "@/utils/helperFunctions/Views/BoardFilterS
 import { getManagedSmartLabelIds } from "@/lib/smartSplits";
 import { Prisma } from "@prisma/client";
 import { acquireBoardFilterWriteLock } from "@/utils/controllers/projects/views/boardFilterWriteLock";
+import { getSessionUser } from "@/lib/auth/getSessionUser";
 
 const MAX_AI_PROMPT_LENGTH = 1000;
 
@@ -53,6 +54,19 @@ export default async function handler(
   res: NextApiResponse
 ) {
   try {
+    const session = await getSessionUser(
+      new Headers(req.headers as Record<string, string>)
+    );
+    if (!session) {
+      return res.status(401).json({ message: "Unauthorized" });
+    }
+    const isProjectMember = async (projectId: number) => {
+      const memberCheck = await validateProjectMemberIds(projectId, [
+        session.userId,
+      ]);
+      return !memberCheck.error && !memberCheck.invalidIds?.length;
+    };
+
     //   ==================== IF POST
     if (req.method === "POST") {
       const { value, labelId, ai_prompt } = req.body;
@@ -80,26 +94,14 @@ export default async function handler(
       if (!existingLabel)
         return res.status(404).json({ message: "Label not found" });
       const existingLabelProjectId = existingLabel.projectId;
-      if (normalizedAiPrompt) {
-        if (existingLabelProjectId == null) {
-          return res.status(400).json({ message: "Label has no project" });
-        }
-        let userId: unknown;
-        try {
-          userId = JSON.parse(req.cookies.nookies_user ?? "null")?.id;
-        } catch {
-          return res.status(403).json({ message: "Forbidden" });
-        }
-        if (typeof userId !== "number") {
-          return res.status(403).json({ message: "Forbidden" });
-        }
-        const memberCheck = await validateProjectMemberIds(
-          existingLabelProjectId,
-          [userId]
-        );
-        if (memberCheck.error || memberCheck.invalidIds?.length) {
-          return res.status(403).json({ message: "Forbidden" });
-        }
+      if (normalizedAiPrompt && existingLabelProjectId == null) {
+        return res.status(400).json({ message: "Label has no project" });
+      }
+      if (
+        existingLabelProjectId != null &&
+        !(await isProjectMember(existingLabelProjectId))
+      ) {
+        return res.status(403).json({ message: "Forbidden" });
       }
 
       // ============  update the value
@@ -162,6 +164,12 @@ export default async function handler(
       });
       if (!existingLabel) {
         return res.status(404).json({ message: "Label not found" });
+      }
+      if (
+        existingLabel.projectId != null &&
+        !(await isProjectMember(existingLabel.projectId))
+      ) {
+        return res.status(403).json({ message: "Forbidden" });
       }
       const deleted = await prisma.$transaction(async (tx) => {
         const actualProjectId = existingLabel.projectId;

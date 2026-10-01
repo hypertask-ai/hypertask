@@ -64,6 +64,9 @@ function loadHandler() {
   stubModule("src/utils/controllers/notifications/getAll.ts", {
     notificationInboxInclude: () => ({}),
   });
+  stubModule("src/lib/auth/getSessionUser.ts", {
+    getSessionUser: async () => ({ userId: 6, source: "legacy", needsBridge: true }),
+  });
   stubModule("src/lib/prisma.ts", {
     default: {
       notification: {
@@ -111,7 +114,7 @@ async function callMeta(handler, query) {
     },
   };
   await handler(
-    { query: { mode: "meta", ...query }, cookies: { nookies_user: JSON.stringify({ id: 6 }) } },
+    { query: { mode: "meta", ...query }, headers: {} },
     res,
   );
   return { statusCode, body };

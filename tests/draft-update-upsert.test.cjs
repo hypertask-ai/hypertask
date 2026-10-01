@@ -42,8 +42,12 @@ test("concurrent first autosaves use the atomic draft upsert key", async () => {
   };
 
   delete require.cache[path.join(root, "src/lib/prisma.ts")];
+  delete require.cache[path.join(root, "src/lib/auth/getSessionUser.ts")];
   delete require.cache[path.join(root, "src/pages/api/drafts/updateDraft.ts")];
   stubModule("src/lib/prisma.ts", { default: prisma });
+  stubModule("src/lib/auth/getSessionUser.ts", {
+    getSessionUser: async () => ({ userId: 6, source: "legacy", needsBridge: true }),
+  });
   const jiti = require("jiti")(__filename, {
     interopDefault: true,
     alias: { "@": path.join(root, "src") },
@@ -55,7 +59,7 @@ test("concurrent first autosaves use the atomic draft upsert key", async () => {
 
   const request = (content) => ({
     method: "POST",
-    cookies: { nookies_user: JSON.stringify({ id: 6 }) },
+    headers: {},
     body: {
       content,
       taskId: 123,
