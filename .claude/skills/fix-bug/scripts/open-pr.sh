@@ -36,27 +36,26 @@ look like a success.
 
 Usage:
   open-pr.sh <PREFIX-NNN> <TYPE> "<short title>" --body-file <absolute path>
-             [--lane ai-review|supervisor-review|ht-manager-review|valentin-review]
+             [--lane ai-review|valentin-review]
              [--remote <name>] [--base <branch>] [--dry-run] [--help]
 
 TYPE is BUGFIX, FEATURE or INFRA. The PR title becomes "<TICKET> [<TYPE>] <title>".
 
 --body-file is required and must be an ABSOLUTE path. The PR body has to be
-written with the write-pr-summary skill, so it cannot come from
-`gh pr create --fill`. The file is checked for the five write-pr-summary
+written by hand (fix-bug step 8), so it cannot come from
+`gh pr create --fill`. The file is checked for the five body
 sections before anything is pushed, in dry runs too.
 
-Lanes (see ticket-lifecycle "Route the PR to the right review lane"):
+Lanes:
   ai-review          default. Auto-merge OFF. Normal bug fix or flagged
                      feature, and additive DB migrations behind a flag.
-  supervisor-review  auto-merge OFF. Destructive migration, CI or infra
-                     decision, shipped-bug verification.
-  ht-manager-review  alias for supervisor-review.
+                     Moves the ticket to AI Review.
   valentin-review    auto-merge OFF. Money, auth, security, irreversible
-                     data, product direction. Moves the ticket and posts
-                     nothing else; never assigns userId 6 (Valentin,
-                     2026-09-14 - only Valentin assigns himself). Post the
-                     one-line question as a comment yourself.
+                     data, product direction, or a destructive migration.
+                     Moves the ticket and posts nothing else; never assigns
+                     userId 6 (Valentin, 2026-09-14 - only Valentin assigns
+                     himself). Post the one-line question as a comment
+                     yourself, with vcc.
 
 On success it prints the PR URL, the ticket, the lane, the section the board
 now reports, and the auto-merge setting.
@@ -114,17 +113,16 @@ esac
 
 case "$LANE" in
   ai-review)         SECTION="AI Review" ;;
-  supervisor-review|ht-manager-review) SECTION="Supervisor Review" ;;
   valentin-review)   SECTION="Valentin Review" ;;
-  *) die "--lane must be ai-review, supervisor-review, ht-manager-review or valentin-review, got '$LANE'." "Use ai-review unless the change touches money, auth, security, irreversible data, or a destructive migration." ;;
+  *) die "--lane must be ai-review or valentin-review, got '$LANE'." "Use ai-review unless the change touches money, auth, security, irreversible data, or a destructive migration." ;;
 esac
 
-[ -n "$BODY_FILE" ] || die "--body-file is missing." "Write the PR body with the write-pr-summary skill, save it to an absolute path, and pass it as --body-file /absolute/path/pr-body.md."
+[ -n "$BODY_FILE" ] || die "--body-file is missing." "Write the PR body as fix-bug step 8 describes, save it to an absolute path, and pass it as --body-file /absolute/path/pr-body.md."
 require_abs "$BODY_FILE" "--body-file" "Re-run with the full path, for example --body-file \"\$PWD/pr-body.md\"."
-[ -f "$BODY_FILE" ] || die "The body file $BODY_FILE does not exist." "Write the PR body with the write-pr-summary skill and save it to that exact path before re-running."
+[ -f "$BODY_FILE" ] || die "The body file $BODY_FILE does not exist." "Write the PR body as fix-bug step 8 describes and save it to that exact path before re-running."
 
-# Refuse a body that skips the write-pr-summary shape (see
-# write-pr-summary/SKILL.md step 2). "The action line" is a first line, not
+# Refuse a body that skips the five sections fix-bug step 8 names.
+# "The action line" is a first line, not
 # a heading string, so it is checked by presence, not by grep; the other four
 # are checked verbatim against the skill's own labels. This runs in dry runs
 # too: a dry run that passes a bad body would be a lie.
@@ -136,9 +134,9 @@ grep -qF "What changes" "$BODY_FILE" || MISSING+=("What changes")
 grep -qF "What you will see" "$BODY_FILE" || MISSING+=("What you will see")
 grep -qF "Watch out for" "$BODY_FILE" || MISSING+=("Watch out for")
 if [ "${#MISSING[@]}" -gt 0 ]; then
-  printf 'ERROR: %s is missing %d write-pr-summary section(s): %s.' \
+  printf 'ERROR: %s is missing %d required section(s): %s.' \
     "$BODY_FILE" "${#MISSING[@]}" "$(IFS=', '; echo "${MISSING[*]}")" >&2
-  printf ' Do this next: open write-pr-summary/SKILL.md step 2, add the missing headings to the body file, then re-run this command.\n' >&2
+  printf ' Do this next: open .claude/skills/fix-bug/SKILL.md step 8, add the missing headings to the body file, then re-run this command.\n' >&2
   exit 1
 fi
 
@@ -156,9 +154,9 @@ if [ "$DRY_RUN" = "yes" ]; then
   run git fetch "$REMOTE" "$BASE"
   run git push -u "$REMOTE" HEAD
   run gh pr create --base "$BASE" --title "$PR_TITLE" --body-file "$BODY_FILE"
-  run hypertask task move "$TICKET" --section "$SECTION"
+  run vcc task move "$TICKET" --section "$SECTION"
   run hypertask --json task get "$TICKET"
-  printf 'DRY RUN OK: body file %s has all five write-pr-summary sections.\n' "$BODY_FILE"
+  printf 'DRY RUN OK: body file %s has all five required sections.\n' "$BODY_FILE"
   printf 'DRY RUN OK: %s would go to lane %s (section "%s"), automerge=no, PR title: %s\n' \
     "$TICKET" "$LANE" "$SECTION" "$PR_TITLE"
   exit 0
@@ -174,8 +172,8 @@ PR_URL="$(gh pr create --base "$BASE" --title "$PR_TITLE" --body-file "$BODY_FIL
 PR_URL="$(printf '%s\n' "$PR_URL" | grep -oE 'https://github\.com/[^[:space:]]+' | tail -1)"
 [ -n "$PR_URL" ] || die "gh pr create returned no PR URL, so there is no PR to review." "Run 'gh pr list --head \"\$(git branch --show-current)\"' and open the PR by hand."
 
-hypertask task move "$TICKET" --section "$SECTION" \
-  || die "Moving $TICKET to '$SECTION' failed, so the PR at $PR_URL is open with the ticket in the wrong column." "Run 'hypertask project sections <project id>' to see the real section names, then 'hypertask task move $TICKET --section \"<name>\"'."
+vcc task move "$TICKET" --section "$SECTION" \
+  || die "Moving $TICKET to '$SECTION' failed, so the PR at $PR_URL is open with the ticket in the wrong column." "Run 'hypertask project sections <project id>' to see the real section names, then 'vcc task move $TICKET --section \"<name>\"'."
 
 # Read the board back. A silently failed move must not look like a success.
 STATE="$(hypertask --json task get "$TICKET" 2>/dev/null || true)"
@@ -191,11 +189,11 @@ NOW_ASSIGNEES="${NOW##*$'\t'}"
 [ -n "$NOW_SECTION" ] \
   || die "Could not read $TICKET back from the board after the move, so the PR at $PR_URL is unverified." "Run 'hypertask --json task get $TICKET' and confirm the section by eye before handing off."
 [ "$NOW_SECTION" = "$SECTION" ] \
-  || die "$TICKET is in '$NOW_SECTION', not '$SECTION', after the move, so the PR at $PR_URL is in the wrong review queue." "Run 'hypertask task move $TICKET --section \"$SECTION\"' and check 'hypertask project sections <project id>' for the exact spelling."
+  || die "$TICKET is in '$NOW_SECTION', not '$SECTION', after the move, so the PR at $PR_URL is in the wrong review queue." "Run 'vcc task move $TICKET --section \"$SECTION\"' and check 'hypertask project sections <project id>' for the exact spelling."
 
 # Opening a PR is a review handoff, not permission to merge. The repository
-# disables auto-merge; trying to arm it here turns a successful handoff into
-# a failed run that the runner sends to Infra.
+# disables auto-merge. Leave it off. This session merges after required
+# checks are green.
 printf '%s: auto-merge left OFF for lane %s, the merge gate or operator clears this one.\n' "$SELF" "$LANE"
 
 printf '%s: PR opened.\n' "$SELF"

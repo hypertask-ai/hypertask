@@ -30,5 +30,5 @@ persisted with the same formatting.
 
 ## Cleanup
 
-Delete any test comment you posted on the QA runner board's task. Comments
+Delete any test comment you posted on the account's own board. Comments
 don't currently have a bulk-cleanup script, so do it by hand through the UI.
