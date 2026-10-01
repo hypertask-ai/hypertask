@@ -93,6 +93,9 @@ export async function PATCH(request: NextRequest) {
     await broadcastFeatureFlagsChange().catch((error) =>
       console.warn("[feature-flags] realtime broadcast failed", error),
     );
+    if (!(await isFeatureEnabled(FLAG_TICKET_ID_FLAG, FEATURE_FLAG_OWNER_USER_ID))) {
+      return noStore({ flag: { ...flag, ticketId: null } });
+    }
     return noStore({ flag });
   } catch (error) {
     if (error instanceof SyntaxError || error instanceof FeatureFlagInputError) {
