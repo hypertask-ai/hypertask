@@ -34,6 +34,7 @@ Pass the state file with `--state`. Never print the file.
 6. **For a new flagged feature, check the flag mode** at `https://app.hypertask.ai/admin/flags` (or `GET /api/admin/flags`, `listFeatureFlagModes` in `src/lib/flags.ts`) before judging the change. FAIL a flagged feature if a logged-in normal account (user 2343) sees it with the flag off, or if the mode is anything other than `OWNER_AND_QA` without Valentin having widened it himself. `OWNER_ONLY` is a FAIL: the QA login cannot see the feature, so nothing was verified. Say so and ask for `OWNER_AND_QA`. `EVERYONE` is never a pass for a flagged feature; name the flag key and its mode. Real bug fixes that restore behaviour that used to work ship to everyone with no flag (Valentin, 2026-09-22). A `[BUGFIX]` title is not proof: if the diff adds new visible behaviour and has no flag, FAIL it.
 7. **Write the evidence** in `~/.local/state/vcc-evidence/HTPR-NNNN/proof.md`. Screenshots (`*.png`) live in that same folder. The file contains:
    - a line starting `Feature map: .claude/skills/verify-qa/reference/feature-map/<file>.md`
+   - a line `Run: <YYYY-MM-DD>-qa-run-<n>` naming this run's folder next to proof.md; every PASS evidence file is a path inside that folder
    - a line starting `Doctor:` with at least the first 9 characters of the latest merge sha and the word `success` (deployment state, and whether `https://app.hypertask.ai/my-tasks` was signed in)
    - a `## Cases` section with one bullet per case, in this shape: `- PASS|FAIL|UNREACHABLE: <case> -> <evidence file name or reason>`
 
@@ -41,7 +42,8 @@ Pass the state file with `--state`. Never print the file.
 
    ```
    Feature map: .claude/skills/verify-qa/reference/feature-map/my-tasks.md
-   Doctor: sha abc123 deployment success; https://app.hypertask.ai/my-tasks signed in as user 985
+   Doctor: sha abc123def deployment success; https://app.hypertask.ai/my-tasks signed in as user 985
+   Run: 2026-10-01-qa-run-1
 
    ## Cases
    - PASS: open My Tasks shows the signed-in list -> my-tasks.png
