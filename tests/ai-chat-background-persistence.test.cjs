@@ -1,5 +1,5 @@
 const assert = require("node:assert/strict");
-const fs = require("./helpers/chat-stream-source.cjs");
+const fs = require("./refactored-module-source.cjs");
 const path = require("node:path");
 const test = require("node:test");
 const { createJiti } = require("jiti");

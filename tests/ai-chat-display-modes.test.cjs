@@ -1,7 +1,7 @@
 const { readRefactoredSource } = require("../src/app/detail/[...slug]/taskDetailTestSources.cjs");
 const test = require("node:test");
 const assert = require("node:assert/strict");
-const fs = require("node:fs");
+const fs = require("./refactored-module-source.cjs");
 const path = require("node:path");
 
 const root = path.resolve(__dirname, "..");

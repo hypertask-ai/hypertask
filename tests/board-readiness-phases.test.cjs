@@ -1,7 +1,7 @@
 const assert = require("node:assert/strict");
 const path = require("node:path");
 const test = require("node:test");
-const fs = require("node:fs");
+const fs = require("./refactored-module-source.cjs");
 const { createJiti } = require("jiti");
 
 const root = path.resolve(__dirname, "..");
