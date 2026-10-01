@@ -80,6 +80,24 @@ test("admin finds teams by name or ID, shows state, defaults expiry one year ahe
     assert.equal(date.value, format(addYears(new Date(), 1), "yyyy-MM-dd"));
     const select = document.querySelector("select");
     assert.deepEqual([...select.options].map((option) => option.value), ["Pro", "BYOK"]);
+    const borderUtility = /(?:^|\s)(?:[\w-]+:)*border(?:-|\s|$)/;
+    assert.match("rounded-sm border border-border-light-gray-thin", borderUtility);
+    assert.match("focus:border-white-black", borderUtility);
+    for (const control of document.querySelectorAll("input, select")) {
+      assert.doesNotMatch(control.className, borderUtility);
+      assert.ok(control.classList.contains("bg-comment-description"));
+    }
+    for (const label of ["Find team", "Clear comp"]) {
+      assert.doesNotMatch(button(label).className, borderUtility);
+      assert.ok(button(label).classList.contains("text-text-light-gray"));
+      assert.equal(button(label).classList.contains("bg-shadcn-primary"), false);
+    }
+    const actions = [...document.querySelectorAll("section form button")];
+    assert.deepEqual(actions.map((action) => action.textContent), ["Clear comp", "Set comp"]);
+    assert.ok(button("Set comp").classList.contains("bg-shadcn-primary"));
+    assert.ok(button("Set comp").classList.contains("text-primary-foreground"));
+    assert.equal(button("Set comp").classList.contains("text-text-light-gray"), false);
+    assert.doesNotMatch(button("Set comp").className, borderUtility);
     await React.act(async () => {
       select.value = "BYOK";
       select.dispatchEvent(new dom.window.Event("change", { bubbles: true }));

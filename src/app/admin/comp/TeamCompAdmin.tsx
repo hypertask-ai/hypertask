@@ -6,8 +6,8 @@ import { TEAM_COMP_PLANS, type TeamCompPlan } from "@/lib/teamComp";
 import type { TeamCompView } from "@/lib/teamCompAdmin";
 
 const ADMIN_COMP_ROUTE = "/api/admin/team-comp";
-const INPUT_STYLE = "rounded-sm border border-border-light-gray-thin bg-comment-description px-3 py-2 text-content text-white-black";
-const BUTTON_STYLE = "rounded-sm border border-border-light-gray-thin px-3 py-2 text-dense font-medium hover:bg-hover-active disabled:opacity-50";
+const INPUT_STYLE = "rounded-sm bg-comment-description px-3 py-2 text-content text-white-black";
+const BUTTON_STYLE = "rounded-sm px-3 py-2 text-dense font-medium disabled:opacity-50";
 
 export default function TeamCompAdmin() {
   const [query, setQuery] = useState("");
@@ -87,7 +87,7 @@ export default function TeamCompAdmin() {
             <input required minLength={2} maxLength={100} value={query} disabled={busy}
               onChange={(event) => setQuery(event.target.value)} className={INPUT_STYLE} />
           </label>
-          <button type="submit" disabled={busy} className={BUTTON_STYLE}>{busy ? "Working…" : "Find team"}</button>
+          <button type="submit" disabled={busy} className={`${BUTTON_STYLE} text-text-light-gray hover:bg-hover-active hover:text-white-black`}>{busy ? "Working…" : "Find team"}</button>
         </form>
         {teams && (
           <div className="mt-6 overflow-hidden rounded-[5px] border border-border-light-gray-thin bg-cardBackground">
@@ -124,8 +124,8 @@ export default function TeamCompAdmin() {
                 <input type="date" required min={format(new Date(), "yyyy-MM-dd")} value={until} disabled={busy}
                   onChange={(event) => setUntil(event.target.value)} className={INPUT_STYLE} />
               </label>
+              <button type="button" disabled={busy || !team.compedUntil} onClick={() => void update(true)} className={`${BUTTON_STYLE} text-text-light-gray hover:bg-hover-active hover:text-white-black`}>Clear comp</button>
               <button type="submit" disabled={busy} className={`${BUTTON_STYLE} bg-shadcn-primary text-primary-foreground`}>Set comp</button>
-              <button type="button" disabled={busy || !team.compedUntil} onClick={() => void update(true)} className={BUTTON_STYLE}>Clear comp</button>
             </form>
           </section>
         )}

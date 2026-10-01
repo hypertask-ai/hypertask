@@ -60,7 +60,7 @@ export async function findTeamForComp(target: TeamCompTarget) {
     where: {
       OR: [
         { googleAccount: { userId: { in: userIds } } },
-        { members: { some: { userId: { in: userIds } } } },
+        { members: { some: { userId: { in: userIds }, status: "Accepted" } } },
       ],
     },
     select: teamCompSelect,
@@ -105,30 +105,35 @@ function compLabel(plan: string | null, until: Date | null) {
  * audit log row commit together, so no comp change goes unlogged.
  */
 export async function setTeamComp(
-  team: { id: string; title: string | null; compedUntil: Date | null; compedPlan: string | null },
+  team: { id: string },
   comp: { plan: TeamCompPlan; until: Date } | null,
   actorUserId: number,
 ) {
   const compedPlan = comp?.plan ?? null;
   const compedUntil = comp?.until ?? null;
-  const log =
-    `Team comp changed for team ${team.id} (${team.title ?? "untitled"}): ` +
-    `${compLabel(team.compedPlan, team.compedUntil)} -> ${compLabel(compedPlan, compedUntil)}`;
 
-  const [updated] = await prisma.$transaction([
-    prisma.team.update({
+  return prisma.$transaction(async (tx) => {
+    // Serialize comp changes before reading the old value used by the audit log.
+    await tx.$queryRaw`SELECT "id" FROM "Team" WHERE "id" = ${team.id} FOR UPDATE`;
+    const current = await tx.team.findUniqueOrThrow({
+      where: { id: team.id },
+      select: teamCompSelect,
+    });
+    const updated = await tx.team.update({
       where: { id: team.id },
       data: { compedPlan, compedUntil },
       select: teamCompSelect,
-    }),
-    prisma.logs.create({
+    });
+    await tx.logs.create({
       data: {
-        log,
+        log:
+          `Team comp changed for team ${current.id} (${current.title ?? "untitled"}): ` +
+          `${compLabel(current.compedPlan, current.compedUntil)} -> ${compLabel(compedPlan, compedUntil)}`,
         type: LogType.Team,
         status: Status.Normal,
         LoggedById: actorUserId,
       },
-    }),
-  ]);
-  return updated;
+    });
+    return updated;
+  });
 }
