@@ -49,6 +49,14 @@ stubModule("src/utils/helperFunctions/Views/ViewsHelperFunctions.ts", {
   sanitizeBoardLayout: (value) => value,
   sanitizeTableSort: () => ({ column: null, direction: null }),
 });
+stubModule("src/lib/auth/getSessionUser.ts", {
+  getSessionUser: async (headers) => {
+    const cookie = headers?.get?.("cookie") ?? "";
+    const match = /(?:^|;\s*)ht_session=(\d+)(?:;|$)/.exec(cookie);
+    if (!match) return null;
+    return { userId: Number(match[1]), source: "legacy", needsBridge: true };
+  },
+});
 stubModule("src/utils/controllers/projects/views/boardFilterWriteLock.ts", {
   assertViewIsNotManagedSmartSplit: async () => undefined,
   ManagedSmartSplitMutationError: BoardFilterError,
@@ -108,14 +116,18 @@ function response() {
 function request({
   method = "POST",
   userId = 6,
-  cookie = JSON.stringify({ id: userId }),
+  session = "signed",
   projectId = 15,
   viewId = "speed",
   setting = "Hidden",
 } = {}) {
+  const headers = {};
+  if (session === "signed") headers.cookie = `ht_session=${userId}`;
+  else if (session === "malformed") headers.cookie = "ht_session=not-json";
+  else if (session === "empty") headers.cookie = "ht_session=";
   return {
     method,
-    cookies: cookie === undefined ? {} : { nookies_user: cookie },
+    headers,
     body: {
       projectId,
       viewId,
@@ -204,7 +216,7 @@ test("the route rejects invalid settings and unauthenticated callers", async () 
   const unsigned = loadHandler();
   const unsignedResult = await call(
     unsigned.handler,
-    { ...request(), cookies: {} },
+    request({ session: "absent" }),
   );
   assert.equal(unsignedResult.statusCode, 401);
   assert.equal(unsigned.calls.findFirst.length, 0);
@@ -213,7 +225,7 @@ test("the route rejects invalid settings and unauthenticated callers", async () 
   const malformed = loadHandler();
   const malformedResult = await call(
     malformed.handler,
-    request({ cookie: "not-json" }),
+    request({ session: "malformed" }),
   );
   assert.equal(malformedResult.statusCode, 401);
   assert.equal(malformed.calls.findFirst.length, 0);
@@ -221,7 +233,7 @@ test("the route rejects invalid settings and unauthenticated callers", async () 
   const nullCookie = loadHandler();
   const nullCookieResult = await call(
     nullCookie.handler,
-    request({ cookie: "null" }),
+    request({ session: "empty" }),
   );
   assert.equal(nullCookieResult.statusCode, 401);
   assert.equal(nullCookie.calls.findFirst.length, 0);

@@ -2,6 +2,7 @@
 import prisma from "@/lib/prisma";
 import { sanitizeViewBoardFilters } from "@/utils/helperFunctions/Views/BoardFilterSanitizer";
 import { NextApiHandler, NextApiRequest, NextApiResponse } from "next";
+import { getSessionUser } from "@/lib/auth/getSessionUser";
 
 
 
@@ -12,18 +13,24 @@ import { NextApiHandler, NextApiRequest, NextApiResponse } from "next";
 // 3. LITERALLY THATS IT
 const handler: NextApiHandler = async (req: NextApiRequest, res: NextApiResponse) => {
     if (req.method === "POST") {
+        const session = await getSessionUser(
+          new Headers(req.headers as Record<string, string>)
+        );
+        if (!session) {
+          return res.status(401).json({ message: "Unauthorized" });
+        }
+        const userId = session.userId;
         // lets check if the api request misses info like user, projectid.
 
         const { projectId, board_columns_view } = req.body
 
-        const currentUser = JSON.parse(req.cookies.nookies_user??"{}")
         try {
-            if (!projectId || !currentUser) return res.status(101).json({ message: "Missing required information" })
+            if (!projectId) return res.status(101).json({ message: "Missing required information" })
             const project_View = await prisma.project_View.upsert({where:{projectId},create:{projectId},update:{}})
             const user_project_view = await prisma.user_Project_View.findUnique({
                 where: {
                     user_project:{
-                        userId:currentUser.id,
+                        userId:userId,
                         project_view_id:project_View.id
                     }
                 },

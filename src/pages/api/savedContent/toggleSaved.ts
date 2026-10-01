@@ -1,16 +1,22 @@
 import { NextApiHandler, NextApiRequest, NextApiResponse } from "next";
-import { IUser } from "@/models/model";
 import { includeSavedContentComment } from "@/utils/controllers/savedContent/helper";
 import { withTaskStarWriteLock } from "@/lib/taskCardActions/writeLocks";
+import { getSessionUser } from "@/lib/auth/getSessionUser";
 
 const handler: NextApiHandler = async (
   req: NextApiRequest,
   res: NextApiResponse
 ) => {
   try {
-    const user: IUser = JSON.parse(req.cookies.nookies_user!);
+    const session = await getSessionUser(
+      new Headers(req.headers as Record<string, string>)
+    );
+    if (!session) {
+      return res.status(401).json({ message: "Unauthorized" });
+    }
+    const userId = session.userId;
     const { taskId, commentId, type, projectId, alwaysRemove } = req.body;
-    if (!taskId || !projectId || !user) {
+    if (!taskId || !projectId) {
       return res.status(400).json({ message: "Missing required information" });
     }
 
@@ -21,7 +27,7 @@ const handler: NextApiHandler = async (
       type,
       ...(type === "Private"
         ? {
-            userId: user.id,
+            userId: userId,
             commentId: commentId ? parseInt(commentId as string) : null,
           }
         : {
@@ -40,7 +46,7 @@ const handler: NextApiHandler = async (
 
       const saved = await tx.savedContent.create({
         data: {
-          userId: user.id,
+          userId: userId,
           taskId,
           projectId,
           commentId:
@@ -51,7 +57,7 @@ const handler: NextApiHandler = async (
         },
         include: {
           task: includeSavedContentComment(
-            user.id,
+            userId,
             !!!(type === "Private" && !commentId)
           ),
           comment: {

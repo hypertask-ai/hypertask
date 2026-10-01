@@ -9671,7 +9671,7 @@ export async function POST(request: NextRequest) {
     (await getAiRequestUser(request)) ??
     (await getCronServiceRequestUser(request));
   if (!requestUser?.id) {
-    return createSseErrorResponse("Unauthorized");
+    return createSseErrorResponse("Unauthorized", 401);
   }
 
   let body: ChatRequest;
@@ -9725,7 +9725,7 @@ export async function POST(request: NextRequest) {
     return createSseErrorResponse(errorMessage(error));
   }
   if (!dbUser) {
-    return createSseErrorResponse("Unauthorized");
+    return createSseErrorResponse("Unauthorized", 401);
   }
 
   // HTPR-6278: the platform kills this function at maxDuration with no

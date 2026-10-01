@@ -10,6 +10,8 @@ import {
   persistAgentTaskUpdatedWebhook,
   publishAgentWebhookDeliveries,
 } from '@/lib/agentWebhooks/outbox';
+import { getSessionUser } from "@/lib/auth/getSessionUser";
+import type { IUser } from "@/models/model";
 
 const MAX_AI_PROMPT_LENGTH = 1000;
 
@@ -19,6 +21,23 @@ export default  async function handler(
 ) {
 
   try {
+    const session = await getSessionUser(
+      new Headers(req.headers as Record<string, string>)
+    );
+    if (!session) {
+      return res.status(401).json({ message: "Unauthorized" });
+    }
+    const userRow = await prisma.user.findUnique({
+      where: { id: session.userId },
+      select: { id: true, displayName: true },
+    });
+    if (!userRow) {
+      return res.status(401).json({ message: "Unauthorized" });
+    }
+    const userObj = {
+      id: userRow.id,
+      displayName: userRow.displayName ?? undefined,
+    } as IUser;
 
     // ============== post body
     const {taskId, projectId, value, ai_prompt, CreateLabelAndReturn} = req.body;
@@ -29,19 +48,9 @@ export default  async function handler(
     const aiPrompt = typeof ai_prompt === "string" && ai_prompt.trim()
       ? ai_prompt.trim()
       : null;
-    let userObj;
-    try {
-      userObj = JSON.parse(req.cookies.nookies_user!);
-    } catch (error) {
-      if (aiPrompt) return res.status(403).json({ message: "Forbidden" });
-      throw error;
-    }
     // Smart labels run an LLM classification pass on every task in the
     // project (cost), so require project membership before setting one.
     if (aiPrompt) {
-      if (typeof userObj?.id !== "number") {
-        return res.status(403).json({ message: "Forbidden" });
-      }
       const memberCheck = await validateProjectMemberIds(projectId, [userObj.id]);
       if (memberCheck.error || memberCheck.invalidIds?.length) {
         return res.status(403).json({ message: "Forbidden" });

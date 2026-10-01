@@ -1,5 +1,6 @@
 import { markTaskRead } from "@/utils/controllers/tasks/markRead";
 import { NextApiHandler, NextApiRequest, NextApiResponse } from "next";
+import { getSessionUser } from "@/lib/auth/getSessionUser";
 
 const parseBody = (body: unknown) => {
   if (typeof body !== "string") return body as { taskId?: unknown };
@@ -16,22 +17,22 @@ const handler: NextApiHandler = async (
   res: NextApiResponse
 ) => {
   if (req.method === "POST") {
+    const session = await getSessionUser(
+      new Headers(req.headers as Record<string, string>)
+    );
+    if (!session) {
+      return res.status(401).json({ message: "Unauthorized" });
+    }
+    const userId = session.userId;
     try {
-      const user = req.cookies?.nookies_user
-        ? JSON.parse(req.cookies.nookies_user)
-        : null;
       const { taskId } = parseBody(req.body);
       const parsedTaskId = parseInt(String(taskId), 10);
-
-      if (!user?.id) {
-        return res.status(401).json({ message: "Unauthorized" });
-      }
 
       if (!Number.isFinite(parsedTaskId)) {
         return res.status(400).json({ message: "Task id is required" });
       }
 
-      const response = await markTaskRead(parsedTaskId, user.id);
+      const response = await markTaskRead(parsedTaskId, userId);
       return res.status(response.status).json(response.json);
     } catch (error) {
       console.log(error);
