@@ -119,7 +119,9 @@ export function useBoardRealtime(
       // the rendered board. Recovery still re-proves account-wide access.
       if (userId !== undefined && !fallbackInFlight) {
         fallbackInFlight = true;
-        void Promise.all([
+        // allSettled waits for both calls. Promise.all clears the guard as
+        // soon as planning fails, and the next poll then cancels the board fetch.
+        void Promise.allSettled([
           reconcileActiveBoardTasks(queryClient, projectId, userId, {
             background: true,
           }),
@@ -127,9 +129,7 @@ export function useBoardRealtime(
             exact: true,
             queryKey: projectPlanningQueryKey(projectId),
           }),
-        ])
-          .catch(() => undefined)
-          .finally(() => {
+        ]).finally(() => {
             fallbackInFlight = false;
           });
       }
