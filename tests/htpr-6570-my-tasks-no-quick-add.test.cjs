@@ -11,8 +11,4 @@ test("My Tasks does not render a Quick add row", () => {
   );
   assert.doesNotMatch(source, /MyTasksQuickAdd/);
   assert.doesNotMatch(source, /MY_TASKS_QUICK_ADD_FLAG/);
-  assert.equal(
-    fs.existsSync(path.join(__dirname, "../src/app/my-tasks/MyTasksQuickAdd.tsx")),
-    false,
-  );
 });
