@@ -9,11 +9,12 @@
 // GET keyed on an autoincrement task id, and it returns follower rows that
 // include full User records (email included). Without a membership check that
 // is a trivially enumerable dump of every user who has ever been mentioned on
-// a task. src/proxy.ts only rejects a *forged* nookies_user; a request with no
+// a task. src/proxy.ts only rejects a *forged* legacy cookie; a request with no
 // cookie at all passes through untouched, so the check belongs here.
 import type { NextApiRequest, NextApiResponse } from "next";
 import prisma from "@/lib/prisma";
 import { getProjectWhere } from "@/utils/controllers/projects/getAllIncludes";
+import { getSessionUser } from "@/lib/auth/getSessionUser";
 
 export default async function handler(
   req: NextApiRequest,
@@ -28,6 +29,14 @@ export default async function handler(
     return res.status(405).json({ message: "Method not allowed" });
   }
 
+  const session = await getSessionUser(
+    new Headers(req.headers as Record<string, string>)
+  );
+  if (!session) {
+    return res.status(401).json({ message: "Unauthorized" });
+  }
+  const userId = session.userId;
+
   const { taskId } = req.query;
   if (!taskId) {
     return res.status(400).json({ message: "Missing Required Task ID" });
@@ -36,16 +45,6 @@ export default async function handler(
   const id = parseInt(taskId as string);
   if (Number.isNaN(id)) {
     return res.status(400).json({ message: "Invalid Task ID" });
-  }
-
-  let userId = NaN;
-  try {
-    userId = Number(JSON.parse(req.cookies.nookies_user!).id);
-  } catch {
-    // no cookie, or not JSON
-  }
-  if (!userId || Number.isNaN(userId)) {
-    return res.status(401).json({ message: "Not authenticated" });
   }
 
   try {

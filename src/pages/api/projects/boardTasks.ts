@@ -1,20 +1,21 @@
 import { NextApiHandler, NextApiRequest, NextApiResponse } from "next";
 
 import getBoardTasks from "@/utils/controllers/projects/getBoardTasks";
-import { SESSION_COOKIE, verifySession } from "@/lib/auth/session";
+import { getSessionUser } from "@/lib/auth/getSessionUser";
 
 const handler: NextApiHandler = async (req: NextApiRequest, res: NextApiResponse) => {
   if (req.method === "POST") {
-    const session = verifySession(req.cookies[SESSION_COOKIE]);
+    const session = await getSessionUser(
+      new Headers(req.headers as Record<string, string>)
+    );
     if (!session) {
       return res.status(401).json({ error: "Unauthorized", code: "SESSION_REQUIRED" });
     }
 
-    const currentUserId = JSON.parse(req.cookies.nookies_user ?? "{}").id;
     const response = await getBoardTasks(
       req.body.projectId,
-      session.id,
-      currentUserId
+      session.userId,
+      session.userId
     );
     return res.status(response.status).json(response.json);
   } else {

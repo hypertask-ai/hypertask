@@ -1,16 +1,23 @@
 import { NextApiHandler, NextApiRequest, NextApiResponse } from "next";
 
 import changeNotificationStatus from "@/utils/controllers/notifications/changeNotificationStatus";
+import { getSessionUser } from "@/lib/auth/getSessionUser";
 
 
 const handler: NextApiHandler = async (req: NextApiRequest, res: NextApiResponse) => {
-    const userid:any = JSON.parse(req.cookies?.nookies_user!) 
     if (req.method === "POST") {
+        const session = await getSessionUser(
+          new Headers(req.headers as Record<string, string>)
+        );
+        if (!session) {
+          return res.status(401).json({ message: "Unauthorized" });
+        }
+        const userId = session.userId;
         try {
             const { notification } = req.body;
            
-            console.log("========================================",userid?.id , notification)
-            const response = await changeNotificationStatus(userid?.id , notification)
+            console.log("========================================",userId , notification)
+            const response = await changeNotificationStatus(userId , notification)
             return res.status(200).json(response)
         } catch (error) {
             console.log(error);

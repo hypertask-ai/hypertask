@@ -2,17 +2,24 @@
 
 import leaveProject from '@/utils/controllers/projects/leave';
 import { NextApiRequest, NextApiResponse } from 'next';
+import { getSessionUser } from "@/lib/auth/getSessionUser";
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   // Check if the request is a POST request
   if (req.method === 'POST') {
+    const session = await getSessionUser(
+      new Headers(req.headers as Record<string, string>)
+    );
+    if (!session) {
+      return res.status(401).json({ message: "Unauthorized" });
+    }
+    const userId = session.userId;
     // Get the project ID and new section title from the request body
     const { projectId } = req.body;
-    const user = JSON.parse(req.cookies.nookies_user!)
 
 
     try {
-      const response = await leaveProject( projectId, parseInt(user.id))
+      const response = await leaveProject( projectId, userId)
       return res.status(response.status).json(response.json)
 
 

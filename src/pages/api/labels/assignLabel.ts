@@ -8,6 +8,8 @@ import {
   persistAgentTaskUpdatedWebhook,
   publishAgentWebhookDeliveries,
 } from '@/lib/agentWebhooks/outbox';
+import { getSessionUser } from "@/lib/auth/getSessionUser";
+import type { IUser } from "@/models/model";
 
 class LabelAssignmentError extends Error {
   constructor(
@@ -27,11 +29,27 @@ export default  async function handler(
 ) {
  
   try {
+    const session = await getSessionUser(
+      new Headers(req.headers as Record<string, string>)
+    );
+    if (!session) {
+      return res.status(401).json({ message: "Unauthorized" });
+    }
+    const userRow = await prisma.user.findUnique({
+      where: { id: session.userId },
+      select: { id: true, displayName: true },
+    });
+    if (!userRow) {
+      return res.status(401).json({ message: "Unauthorized" });
+    }
+    const userObj = {
+      id: userRow.id,
+      displayName: userRow.displayName ?? undefined,
+    } as IUser;
     
     // ============== post body
     const {taskId,  labelId} = req.body;
     if (!taskId || !labelId ) return res.status(400).json({message:"Missing Required Information"})
-    const userObj = JSON.parse(req.cookies.nookies_user!)
     const { projectId, taskLabels, agentWebhookDeliveryIds } =
       await prisma.$transaction(async (tx) => {
       const lockedTasks = await tx.$queryRaw<Array<{ projectId: number }>>`

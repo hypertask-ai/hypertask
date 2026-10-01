@@ -22,7 +22,7 @@ const handler: NextApiHandler = async (req, res) => {
   try {
     const { taskId, status, agentId } = req.body;
     // Pages API auth is route-local: require a verified session (Better Auth or
-    // signed ht_session). Do not fall back to unsigned nookies_user.id.
+    // signed ht_session).
     const session = await getSessionUser(
       new Headers(req.headers as Record<string, string>),
     );
@@ -46,8 +46,7 @@ const handler: NextApiHandler = async (req, res) => {
       return res.status(actingAgent.status).json({ message: actingAgent.message });
     }
 
-    // Audit display comes from the verified session's user row, never from
-    // unsigned nookies_user metadata (same pattern as /api/tasks/single).
+    // Audit display comes from the verified session's user row.
     const [sessionUser, agent] = await Promise.all([
       prisma.user.findUnique({
         where: { id: actingUserId },

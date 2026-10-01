@@ -8,6 +8,7 @@ import { getProjectViewInclude } from '@/utils/controllers/projects/getAll';
 import { getViewFromProject } from '@/utils/helperFunctions/Views/ViewsHelperFunctions';
 import { IViewType } from '@/models/model';
 import { sendEmailNotification } from '@/utils/controllers/notifications/sendNotification';
+import { getSessionUser } from "@/lib/auth/getSessionUser";
 
 
 
@@ -17,9 +18,21 @@ export default  async function handler(
 ) {
  
   try {
+    const session = await getSessionUser(
+      new Headers(req.headers as Record<string, string>)
+    );
+    if (!session) {
+      return res.status(401).json({ message: "Unauthorized" });
+    }
+    const user = await prisma.user.findUnique({
+      where: { id: session.userId },
+      select: { id: true, displayName: true },
+    });
+    if (!user) {
+      return res.status(401).json({ message: "Unauthorized" });
+    }
     
     const {projectId, email, userId} = req.body;
-    const user = JSON.parse(req.cookies.nookies_user!)
     if (!projectId || !email || !userId) return res.status(400).json({message:"Missing required information"})
 
       var invite:any = undefined
@@ -80,7 +93,7 @@ export default  async function handler(
       // ============== create a new notification and another email
       await createNotification(email, inviteLink, user.id, invite.id, projectId)
       await sendEmailNotification("Invite", {
-        sender: user.displayName,
+        sender: user.displayName ?? "",
         recipient: email,
         title: invite.project.name,
         link: inviteLink,

@@ -4,14 +4,20 @@ import prisma from "@/lib/prisma";
 
 
 import { NextApiHandler, NextApiRequest, NextApiResponse } from "next";
+import { getSessionUser } from "@/lib/auth/getSessionUser";
 
 const handler: NextApiHandler = async (req: NextApiRequest, res: NextApiResponse) => {
     if (req.method === "GET") {
+        const session = await getSessionUser(
+          new Headers(req.headers as Record<string, string>)
+        );
+        if (!session) {
+          return res.status(401).json({ message: "Unauthorized" });
+        }
         try {
             const {taskId} = req.query;
 
             if (!taskId) return res.status(400).json({message:"Missing Required Task ID"})
-            const user = JSON.parse(req.cookies.nookies_user!)
 
             // get the estimate if any for that task
             const estimate=  await prisma.estimate.findFirst({

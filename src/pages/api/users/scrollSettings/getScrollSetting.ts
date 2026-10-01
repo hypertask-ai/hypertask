@@ -1,14 +1,21 @@
 import { NextApiHandler, NextApiRequest, NextApiResponse } from "next";
 import getScrollSetting from "@/utils/controllers/scrollSetting/getScrollSetting";
+import { getSessionUser } from "@/lib/auth/getSessionUser";
 
 const handler: NextApiHandler = async (
   req: NextApiRequest,
   res: NextApiResponse
 ) => {
-  const userid: any = JSON.parse(req.cookies?.nookies_user!);
   if (req.method === "GET") {
+    const session = await getSessionUser(
+      new Headers(req.headers as Record<string, string>)
+    );
+    if (!session) {
+      return res.status(401).json({ message: "Unauthorized" });
+    }
+    const userId = session.userId;
     try {
-      const response = await getScrollSetting(userid?.id);
+      const response = await getScrollSetting(userId);
       return res.status(200).json(response);
     } catch (error) {
       console.log(error);

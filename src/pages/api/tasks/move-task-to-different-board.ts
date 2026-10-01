@@ -2,6 +2,9 @@
 import { NextApiHandler, NextApiRequest, NextApiResponse } from "next";
 import { moveTaskToDifferentBoard } from "@/utils/controllers/tasks/moveToDifferentBoard";
 import { broadcastBoardChange } from "@/lib/realtime/server";
+import { getSessionUser } from "@/lib/auth/getSessionUser";
+import { loadSessionUserRecord } from "@/lib/auth/sessionUserRecord";
+import type { IUser } from "@/models/model";
 
 const handler: NextApiHandler = async (
   req: NextApiRequest,
@@ -11,16 +14,19 @@ const handler: NextApiHandler = async (
     return res.status(405).json({ message: "Method not allowed" });
   }
 
+  const session = await getSessionUser(
+    new Headers(req.headers as Record<string, string>)
+  );
+  if (!session) {
+    return res.status(401).json({ message: "Unauthorized" });
+  }
+  const currentUser = await loadSessionUserRecord(session.userId);
+
   try {
     const { id, projectId, sectionId, currentProjectId } = req.body;
 
     if (!id || !projectId || !sectionId || !currentProjectId) {
       return res.status(400).json({ message: "Missing required fields" });
-    }
-
-    const currentUser = JSON.parse(req.cookies.nookies_user!);
-    if (!currentUser?.id) {
-      return res.status(401).json({ message: "Unauthorized" });
     }
 
     const result = await moveTaskToDifferentBoard({
