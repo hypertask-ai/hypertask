@@ -485,6 +485,11 @@ test("declared flags remain listed with ticket details and can be changed", asyn
         updatedAt: null,
       },
       {
+        key: "htpr-6688-search-autocomplete",
+        mode: "OWNER_AND_QA",
+        updatedAt: null,
+      },
+      {
         key: "htpr-6722-latest-models",
         mode: "OWNER_AND_QA",
         updatedAt: null,
