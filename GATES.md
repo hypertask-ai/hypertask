@@ -10,7 +10,7 @@ Scope: Split the eight requested modules by moving code, preserve exports and be
 - [x] G1: Every created or changed file has fewer than 1500 lines
   CHECK: node /tmp/htpr-6506-g-misc/check.cjs lines
   EXPECT: LINE LIMITS PASSED
-  EVIDENCE: automatic-evidence=v1; definition-sha256=fa784be9e0c691e081d214cae8cf6f2ff806af71923fb27a6e5a06ed7b0ec3aa; exit=0; EXPECT=matched; output-sha256=cc43895dc3e5d7875b795bb3047cbfb3f44d95339ccabadb4777b95f30987901; output-bytes=5856; shell=/bin/sh; cwd=/home/valentin/projects/hypertask-wt/htpr-6506-g-misc; path=fd5351737ae0/31 entries
+  EVIDENCE: automatic-evidence=v1; definition-sha256=fa784be9e0c691e081d214cae8cf6f2ff806af71923fb27a6e5a06ed7b0ec3aa; exit=0; EXPECT=matched; output-sha256=a20fbbbb393bf0c64a61dec7ade945e24417fbb636a122bf7a639ca574bfff22; output-bytes=5856; shell=/bin/sh; cwd=/home/valentin/projects/hypertask-wt/htpr-6506-g-misc; path=fd5351737ae0/31 entries
 
 - [x] G2: Every touched function, arrow, and method spans at most 400 lines
   CHECK: node /tmp/htpr-6506-g-misc/functions.cjs
@@ -32,10 +32,10 @@ Scope: Split the eight requested modules by moving code, preserve exports and be
   EXPECT: TESTS PASSED
   EVIDENCE: automatic-evidence=v1; definition-sha256=f613b52256f79032f4524ad95572ee95a2aa57d4576180add42077b8c0960b6d; exit=0; EXPECT=matched; output-sha256=c1a5a42810a2ea1dd5f02045bc9b1df75a2cfff804286b9a80ed29abb9268940; output-bytes=700; shell=/bin/sh; cwd=/home/valentin/projects/hypertask-wt/htpr-6506-g-misc; path=fd5351737ae0/31 entries
 
-- [ ] G6: The final commit leaves a clean working tree
+- [x] G6: The final commit leaves a clean working tree
   CHECK: test -z "$(git status --short)" && printf 'CLEAN TREE PASSED\n'
   EXPECT: CLEAN TREE PASSED
-  EVIDENCE: pending
+  EVIDENCE: automatic-evidence=v1; definition-sha256=33a193a1548a00e8cd71d64b5252a0d5e4e70f2d4d6c232b45a33114c0910760; exit=0; EXPECT=matched; output-sha256=bbc9bdf9e7aac9a8d2792e1377d80c1a6014240231f38416bdd1c59ce9cc7a39; output-bytes=18; shell=/bin/sh; cwd=/home/valentin/projects/hypertask-wt/htpr-6506-g-misc; path=fd5351737ae0/31 entries
 
 - [x] G7: Runtime literals, existing exports, and moved logic are preserved
   CHECK: node /tmp/htpr-6506-g-misc/check.cjs preservation
@@ -45,7 +45,7 @@ Scope: Split the eight requested modules by moving code, preserve exports and be
 - [x] G8: Changes stay in scope and commits use the required format
   CHECK: node /tmp/htpr-6506-g-misc/check.cjs scope
   EXPECT: SCOPE PASSED
-  EVIDENCE: automatic-evidence=v1; definition-sha256=c2d8a48574f1e3775de2fc0f928da41428a675660d7d4ef12a2b0bbeae926f3a; exit=0; EXPECT=matched; output-sha256=3c54adf57ccd99bc9b4a696289fba45ea229142c25bf0962835798559fc486e1; output-bytes=140; shell=/bin/sh; cwd=/home/valentin/projects/hypertask-wt/htpr-6506-g-misc; path=fd5351737ae0/31 entries
+  EVIDENCE: automatic-evidence=v1; definition-sha256=c2d8a48574f1e3775de2fc0f928da41428a675660d7d4ef12a2b0bbeae926f3a; exit=0; EXPECT=matched; output-sha256=5129dbebafa1911b14611728ea8704af6112b9bf83344a7d39ab71d8284356bd; output-bytes=140; shell=/bin/sh; cwd=/home/valentin/projects/hypertask-wt/htpr-6506-g-misc; path=fd5351737ae0/31 entries
 
 ## Execution plan
 
@@ -67,7 +67,7 @@ The clean-tree gate runs after committing the verified ledger. Its evidence is t
 - Preservation: 1,921 distinct runtime literals and 845 existing function bodies unchanged; existing exports preserved. Large split closures were audited separately for statement ordering, hook ordering, captured variables, JSX structure, and command-switch termination/fallthrough.
 - ESLint: all changed/new source and test files pass. The ledger produces only an ignored-file warning.
 - Generation: `npx next typegen` passes. Generated Prisma client already exists; generation skipped to avoid writing shared `node_modules`.
-- Typecheck: `npx tsc --noEmit` exits 2 with exactly the same four baseline diagnostics, zero added errors: `AppSheet.tsx:2` missing `useScrollPosition`, `AppSheet.tsx:147` unsupported `content` detent, `AppSheet.tsx:170` unsupported `disableScroll`, and `redis.ts:45` unsupported `protocol` option. Diagnostics normalize only quoted drag-property union ordering.
+- Typecheck: `npx tsc --noEmit` initially exited 2 and finally exited 1 on both actual and reverified baseline trees, with exactly the same four baseline diagnostics, zero added errors: `AppSheet.tsx:2` missing `useScrollPosition`, `AppSheet.tsx:147` unsupported `content` detent, `AppSheet.tsx:170` unsupported `disableScroll`, and `redis.ts:45` unsupported `protocol` option. Diagnostics normalize only quoted drag-property union ordering.
 - Related runner: exit 0, 784 TAP tests pass, zero failures; related TypeScript scripts also pass.
 - Full runner: `node scripts/run-tests.mjs` exits 1 after completing all Node suites: 4,825 tests, 4,820 pass, 5 fail, zero cancelled/skipped/todo. The runner stops before TypeScript when Node tests fail; all 82 TypeScript test files were therefore run separately and pass on both actual and baseline trees.
 - All five full-suite failures reproduce on the pristine baseline: installed Firebase Admin version, installed jsonwebtoken version, `mobile-sheet-drag-close.test.cjs`, native TypeScript default compiler, and SDK compiler sharing. They reflect the existing shared dependency/compiler mismatch; no dependencies were installed or modified.
@@ -82,7 +82,7 @@ The clean-tree gate runs after committing the verified ledger. Its evidence is t
 The following is the final `wc -l` inventory; the ledger row and total include this section.
 
 ```text
-    201 GATES.md
+    200 GATES.md
    1411 src/app/[...boardURL]/LandingPage.tsx
     240 src/app/[...boardURL]/LandingPageSection.tsx
      90 src/app/[...boardURL]/LandingPageShared.ts
@@ -196,5 +196,5 @@ The following is the final `wc -l` inventory; the ledger row and total include t
     486 tests/time-report-followups.test.cjs
     130 tests/tiptap-attachment-state.test.cjs
     171 tests/tiptap-debounce-lifecycle.test.cjs
-  32108 total
+  32107 total
 ```
