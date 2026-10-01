@@ -3,6 +3,7 @@ import { createMcpHandler, withMcpAuth } from 'mcp-handler'
 import jwt from 'jsonwebtoken'
 import crypto from 'node:crypto'
 import { MCP_TOOLS } from './tools'
+import { recordLegacyMcpRequest } from '@/lib/telemetry/mcpSseAnalytics'
 import {
   McpAttachmentRequestBodyError,
   readRequestBytesWithCap,
@@ -144,64 +145,71 @@ function optionsPortableTools() {
 
 /** Bound JSON-RPC transport bytes before the MCP handler parses tool arguments. */
 export async function mcpHandler(request: Request): Promise<Response> {
-  let working = request
+  const timestamp = new Date()
+  let telemetryUserId: number | undefined
   try {
-    working = await boundMcpRequest(request)
-  } catch (error) {
-    if (!(error instanceof McpAttachmentRequestBodyError)) throw error
-    return Response.json(
-      {
-        jsonrpc: '2.0',
-        error: { code: -32600, message: error.message },
-        id: null,
-      },
-      { status: error.status }
-    )
-  }
+    let working = request
+    try {
+      working = await boundMcpRequest(request)
+    } catch (error) {
+      if (!(error instanceof McpAttachmentRequestBodyError)) throw error
+      return Response.json(
+        {
+          jsonrpc: '2.0',
+          error: { code: -32600, message: error.message },
+          id: null,
+        },
+        { status: error.status }
+      )
+    }
 
-  if (working.method === 'OPTIONS') {
-    return handleStatelessMcpRequest(working, null, optionsPortableTools())
-  }
+    if (working.method === 'OPTIONS') {
+      return handleStatelessMcpRequest(working, null, optionsPortableTools())
+    }
 
-  const bearer = extractBearerToken(working.headers.get('Authorization'))
-  const authInfo = await verifyToken(working, bearer ?? undefined)
-  if (!authInfo) {
-    return mcpUnauthorizedResponse(working)
-  }
+    const bearer = extractBearerToken(working.headers.get('Authorization'))
+    const authInfo = await verifyToken(working, bearer ?? undefined)
+    if (!authInfo) {
+      return mcpUnauthorizedResponse(working)
+    }
 
-  const userId = Number(authInfo.clientId)
-  const listQueryEnabled =
-    Number.isFinite(userId) &&
-    (await isFeatureEnabled(HTPR_6530_MCP_LIST_QUERY_FLAG, userId).catch(() => false))
-  const portableTools = resolvePortableTools(MCP_TOOLS as PortableTool[], listQueryEnabled)
-  const stateless =
-    Number.isFinite(userId) &&
-    (await isFeatureEnabled(HTPR_6532_STATELESS_MCP_FLAG, userId).catch(() => false))
-  const deferred =
-    Number.isFinite(userId) &&
-    (await isFeatureEnabled(HTPR_6531_DEFERRED_MCP_TOOLS_FLAG, userId).catch(() => false))
+    const userId = Number(authInfo.clientId)
+    if (Number.isFinite(userId)) telemetryUserId = userId
+    const listQueryEnabled =
+      Number.isFinite(userId) &&
+      (await isFeatureEnabled(HTPR_6530_MCP_LIST_QUERY_FLAG, userId).catch(() => false))
+    const portableTools = resolvePortableTools(MCP_TOOLS as PortableTool[], listQueryEnabled)
+    const stateless =
+      Number.isFinite(userId) &&
+      (await isFeatureEnabled(HTPR_6532_STATELESS_MCP_FLAG, userId).catch(() => false))
+    const deferred =
+      Number.isFinite(userId) &&
+      (await isFeatureEnabled(HTPR_6531_DEFERRED_MCP_TOOLS_FLAG, userId).catch(() => false))
 
-  // Stateless POST/GET/DELETE stay behind htpr-6532-stateless-mcp (Owner+QA).
-  // OPTIONS has no session. Everyone else keeps the existing session handler.
-  if (usesStatelessMcpTransport(working.method, stateless)) {
-    return handleMcpHttp(working, {
-      authenticate: async () => authInfo,
-      tools: portableTools,
-      deferredEnabled: async () => deferred,
-    })
-  }
+    // Stateless POST/GET/DELETE stay behind htpr-6532-stateless-mcp (Owner+QA).
+    // OPTIONS has no session. Everyone else keeps the existing session handler.
+    if (usesStatelessMcpTransport(working.method, stateless)) {
+      return handleMcpHttp(working, {
+        authenticate: async () => authInfo,
+        tools: portableTools,
+        deferredEnabled: async () => deferred,
+      })
+    }
 
-  if (stateless) {
+    if (stateless) {
+      if (deferred) {
+        return handleStatelessMcpRequest(working, authInfo, portableTools, { deferred: true })
+      }
+      return handleStatelessMcpRequest(working, authInfo, portableTools)
+    }
     if (deferred) {
       return handleStatelessMcpRequest(working, authInfo, portableTools, { deferred: true })
     }
-    return handleStatelessMcpRequest(working, authInfo, portableTools)
-  }
-  if (deferred) {
-    return handleStatelessMcpRequest(working, authInfo, portableTools, { deferred: true })
-  }
 
-  return listQueryEnabled
-    ? authenticatedListQueryHandler(working)
-    : authenticatedMcpHandler(working)
+    return listQueryEnabled
+      ? authenticatedListQueryHandler(working)
+      : authenticatedMcpHandler(working)
+  } finally {
+    recordLegacyMcpRequest(request, telemetryUserId, timestamp)
+  }
 }
