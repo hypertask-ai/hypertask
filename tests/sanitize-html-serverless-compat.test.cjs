@@ -23,6 +23,15 @@ test("the HTML sanitizer stays on the serverless-compatible dependency path", ()
     "30.1.1",
   );
   assert.equal(packageLock.packages["node_modules/jsdom"].version, "26.1.0");
+  assert.equal(
+    packageLock.packages["node_modules/html-encoding-sniffer"].version,
+    "4.0.0",
+  );
+  assert.equal(
+    packageLock.packages["node_modules/isomorphic-dompurify/node_modules/html-encoding-sniffer"].version,
+    "7.0.0",
+  );
+  assert.equal(packageLock.packages["node_modules/@exodus/bytes"].version, "1.16.0");
 });
 
 test("the server keeps the sanitizer and jsdom external so runtime files resolve beside the package", () => {
