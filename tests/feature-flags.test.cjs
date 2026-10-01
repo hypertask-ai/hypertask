@@ -475,11 +475,6 @@ test("declared flags remain listed with ticket details and can be changed", asyn
         updatedAt: null,
       },
       {
-        key: "htpr-6570-remove-quick-add",
-        mode: "OWNER_AND_QA",
-        updatedAt: null,
-      },
-      {
         key: "htpr-6673-capture-user-signed-up-in-posthog",
         mode: "OWNER_AND_QA",
         updatedAt: null,
