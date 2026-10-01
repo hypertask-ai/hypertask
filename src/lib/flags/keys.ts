@@ -24,6 +24,7 @@ export const HTPR_6175_QUICK_ENTRY_CARDS_FLAG =
   "htpr-6175-quick-entry-cards";
 export const AUTO_TASK_DESCRIPTIONS_FLAG = "htpr-6177-auto-task-descriptions";
 export const FLAG_TICKET_TITLE_FLAG = "htpr-6176-flag-ticket-title";
+export const FLAG_TICKET_ID_FLAG = "htpr-6800-flag-ticket-id";
 export const FLAG_SORT_FILTER_FLAG = "htpr-6179-flag-sort-filter";
 export const INBOX_ARCHIVE_CLUSTER_FLAG = "htpr-6160-inbox-archive-cluster";
 export const FLAG_SHIP_DATE_CLUSTER_FLAG = "htpr-6191-flag-ship-date-clusters";
@@ -106,6 +107,8 @@ export const HTPR_6561_DESCRIPTION_STRUCTURE_FLAG =
   "htpr-6561-preserve-ai-edited-description-structure";
 export const HTPR_6542_TEAM_SCOPED_MANAGEMENT_KEYS_FLAG =
   "htpr-6542-team-scoped-management-keys";
+export const HTPR_6348_AGENT_ACCESS_DELEGATION_FLAG =
+  "htpr-6348-agent-access-delegation";
 /** Sent on chat.message when HTPR-6407 is on so agent replies lead with the next action. */
 export const AGENT_CHAT_ADHD_REPLY_GUIDANCE =
   "Lead with the next action. Keep replies short. Number steps. End with one concrete next action when something remains open.";

@@ -1,5 +1,6 @@
 import prisma from "@/lib/prisma";
 import type { NextApiRequest, NextApiResponse } from "next";
+import { getSessionUser } from "@/lib/auth/getSessionUser";
 
 export default async function handler(
   req: NextApiRequest,
@@ -9,15 +10,13 @@ export default async function handler(
     return res.status(405).json({ error: "Method not allowed" });
   }
 
-  let userId: number;
-
-  try {
-    const userObj = JSON.parse(req.cookies?.nookies_user ?? "");
-    userId = Number(userObj?.id);
-    if (!Number.isFinite(userId)) throw new Error("Missing user id");
-  } catch (error) {
-    return res.status(401).json({ error: "Unauthorized" });
+  const session = await getSessionUser(
+    new Headers(req.headers as Record<string, string>)
+  );
+  if (!session) {
+    return res.status(401).json({ message: "Unauthorized" });
   }
+  const userId = session.userId;
 
   try {
     const drafts = await prisma.drafts.findMany({

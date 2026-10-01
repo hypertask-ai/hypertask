@@ -2,6 +2,8 @@
 
 import type { NextApiRequest, NextApiResponse } from 'next'
 import prisma from "@/lib/prisma";
+import { getSessionUser } from "@/lib/auth/getSessionUser";
+import getMemberAndOwner from "@/utils/controllers/getMemberAndOwnerForBoard";
 
 
 
@@ -9,12 +11,21 @@ export default  async function handler(
   req: NextApiRequest,
   res: NextApiResponse
 ) {
+  if (req.method !== "POST") return res.status(405).json({ message: "Method not allowed" });
+  const session = await getSessionUser(new Headers(req.headers as Record<string, string>));
+  if (!session) return res.status(401).json({ message: "Unauthorized" });
+
   const {projectId, email} = req.body;
  
   try {
     if (!projectId || !email) return res.status(400).json({message:"Missing required information"})
+    const parsedProjectId = Number(projectId)
+    if (!Number.isInteger(parsedProjectId)) return res.status(400).json({message:"Missing required information"})
+    const access = await sessionCanManageProjectInvites(session.userId, parsedProjectId)
+    if (access === "missing") return res.status(404).json({message:"Invite not found"})
+    if (access !== "ok") return res.status(403).json({message:"Forbidden"})
 
-      const invite = await prisma.invite.findFirst({where:{emails:{has:email}, projectId}, 
+      const invite = await prisma.invite.findFirst({where:{emails:{has:email}, projectId: parsedProjectId}, 
         include:{
           Notification_Invite:{
             include:{
@@ -26,10 +37,10 @@ export default  async function handler(
         }})
       if (!invite) return res.status(404).json({message:"Invite not found"})
         
-      await cancelInvite(invite.id, email, projectId)
+      await cancelInvite(invite.id, email, parsedProjectId)
       const deletedInvite = await prisma.invite.deleteMany({
         where:{
-          projectId, 
+          projectId: parsedProjectId, 
           emails:{has:email},
         }})
         console.log("🚀 ~ deletedInvite:", deletedInvite)
@@ -41,6 +52,16 @@ export default  async function handler(
   }
 }
 
+
+async function sessionCanManageProjectInvites(userId: number, projectId: number) {
+  const project = await prisma.project.findFirst({
+    where: { id: projectId },
+    select: { id: true },
+  })
+  if (!project) return "missing"
+  const allowed = await getMemberAndOwner(projectId)
+  return Array.isArray(allowed) && allowed.includes(userId) ? "ok" : "forbidden"
+}
 
 export const cancelInvite = async (inviteId:string, email:string, projectId:number)=>{
   const notification_invite_ = await prisma.notification_Invite.findFirst({

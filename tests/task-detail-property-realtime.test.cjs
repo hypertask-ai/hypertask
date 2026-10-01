@@ -65,9 +65,16 @@ const realtimeStubs = (broadcasts) => ({
   broadcastTaskChange: (...args) => broadcasts.push(["task", ...args]),
 });
 
-const cookies = {
-  nookies_user: JSON.stringify({ id: USER_ID, displayName: "Member" }),
+const sessionStub = {
+  "@/lib/auth/getSessionUser": {
+    getSessionUser: async () => ({ userId: USER_ID, source: "legacy", needsBridge: true }),
+  },
+  "@/lib/auth/sessionUserRecord": {
+    loadSessionUserRecord: async (id) => ({ id, displayName: "Tester" }),
+  },
 };
+
+const requestHeaders = {};
 
 test("setDueDate broadcasts task:changed to open detail views", async () => {
   const broadcasts = [];
@@ -96,11 +103,12 @@ test("setDueDate broadcasts task:changed to open detail views", async () => {
       }),
     },
     "@/lib/realtime/server": { __esModule: true, ...realtimeStubs(broadcasts) },
+    ...sessionStub,
   };
   const handler = loadHandler("src/pages/api/tasks/setDueDate.ts", stubs);
   const res = makeResponse();
   await handler(
-    { method: "POST", body: { taskId: TASK_ID, dueDate: new Date() }, cookies },
+    { method: "POST", body: { taskId: TASK_ID, dueDate: new Date() }, headers: requestHeaders },
     res
   );
   assert.equal(res.statusCode(), 200);
@@ -126,11 +134,12 @@ test("setStartDate broadcasts task:changed to open detail views", async () => {
       userCanAccessTask: async () => true,
     },
     "@/lib/realtime/server": { __esModule: true, ...realtimeStubs(broadcasts) },
+    ...sessionStub,
   };
   const handler = loadHandler("src/pages/api/tasks/setStartDate.ts", stubs);
   const res = makeResponse();
   await handler(
-    { method: "POST", body: { taskId: TASK_ID, startDate: new Date() }, cookies },
+    { method: "POST", body: { taskId: TASK_ID, startDate: new Date() }, headers: requestHeaders },
     res
   );
   assert.equal(res.statusCode(), 200);
@@ -160,7 +169,12 @@ test("assignLabel broadcasts task:changed to open detail views", async () => {
   const stubs = {
     "@/lib/prisma": {
       __esModule: true,
-      default: { $transaction: async (fn) => fn(tx) },
+      default: {
+        user: {
+          findUnique: async () => ({ id: USER_ID, displayName: "Member" }),
+        },
+        $transaction: async (fn) => fn(tx),
+      },
     },
     "@/utils/controllers/activities/createLabelActivity": {
       __esModule: true,
@@ -172,11 +186,12 @@ test("assignLabel broadcasts task:changed to open detail views", async () => {
       publishAgentWebhookDeliveries: async () => undefined,
     },
     "@/lib/realtime/server": { __esModule: true, ...realtimeStubs(broadcasts) },
+    ...sessionStub,
   };
   const handler = loadHandler("src/pages/api/labels/assignLabel.ts", stubs);
   const res = makeResponse();
   await handler(
-    { method: "POST", body: { taskId: TASK_ID, labelId: 1 }, cookies },
+    { method: "POST", body: { taskId: TASK_ID, labelId: 1 }, headers: requestHeaders },
     res
   );
   assert.equal(res.statusCode(), 200);
@@ -215,7 +230,7 @@ test("assignees/assign broadcasts task:changed to open detail views", async () =
   const handler = loadHandler("src/pages/api/assignees/assign.ts", stubs);
   const res = makeResponse();
   await handler(
-    { method: "POST", body: { taskId: TASK_ID, userId: USER_ID }, cookies },
+    { method: "POST", body: { taskId: TASK_ID, userId: USER_ID }, headers: requestHeaders },
     res
   );
   assert.equal(res.statusCode(), 200);

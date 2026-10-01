@@ -14,6 +14,9 @@ import {
   persistAgentTaskCreatedPending,
 } from "@/lib/agentWebhooks/outbox";
 
+// Share createGlobally.ts's board lock so both routes serialize ticket-number allocation.
+const TASK_UNIQUE_INDEX_ADVISORY_LOCK_CLASS = 9428471;
+
 /** Subset used by uniqueIndex helpers — works with root client and interactive transaction `tx`. */
 type TaskDb = Pick<PrismaClient, "task">
 
@@ -100,12 +103,6 @@ const create = async ({title, description, section, userId, ranking, projectId,s
                 json:{ message: "Project not found or access denied" }
             })
 
-            var taskCount = await getUniqueTaskCount(projectId)
-            
-
-            console.log("🚀 ~ create ~ taskCount:", taskCount)
-
-
             const sectionExists = await prisma.section.findFirst({
                 where:{
                     id:sectionId
@@ -140,8 +137,6 @@ const create = async ({title, description, section, userId, ranking, projectId,s
                 description,
                 section,
                 userId,
-                uniqueIndex: taskCount + 1,
-                ticketNumber:getProject?.uniqueIdentifier+"-"+(taskCount + 1).toString(),
                 ranking,
                 projectId,
                 sectionId,
@@ -154,9 +149,13 @@ const create = async ({title, description, section, userId, ranking, projectId,s
             if (index==0 && count!==0){
 
                 const created = await createTaskWithBoardWebhookOutbox(prisma, taskCreatedActor, async (tx) => {
+                  await tx.$executeRaw`SELECT pg_advisory_xact_lock(${TASK_UNIQUE_INDEX_ADVISORY_LOCK_CLASS}::int, ${projectId}::int)`;
+                  const nextUniqueIndex = await getNextUniqueTaskIndex(projectId, tx);
                   const row = await tx.task.create({
                     data: {
                         ...body,
+                        uniqueIndex: nextUniqueIndex,
+                        ticketNumber:getProject?.uniqueIdentifier+"-"+nextUniqueIndex.toString(),
                         priority:{
                             create:{
                                 priority_index:1,
@@ -192,9 +191,13 @@ const create = async ({title, description, section, userId, ranking, projectId,s
             }
             else{
                 const created = await createTaskWithBoardWebhookOutbox(prisma, taskCreatedActor, async (tx) => {
+                  await tx.$executeRaw`SELECT pg_advisory_xact_lock(${TASK_UNIQUE_INDEX_ADVISORY_LOCK_CLASS}::int, ${projectId}::int)`;
+                  const nextUniqueIndex = await getNextUniqueTaskIndex(projectId, tx);
                   const row = await tx.task.create({
                     data: {
-                        ...body  
+                        ...body,
+                        uniqueIndex: nextUniqueIndex,
+                        ticketNumber:getProject?.uniqueIdentifier+"-"+nextUniqueIndex.toString(),
                     },
                     include:{
                         priority:true,

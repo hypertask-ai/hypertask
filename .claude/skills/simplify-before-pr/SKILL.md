@@ -35,11 +35,7 @@ Scope is the ticket's own diff, nothing else: `git diff --name-only pub/producti
    git commit -m "Simplify: <PREFIX-NNN>"
    ```
    If step 4 and 5 found nothing worth changing, skip the commit — an empty simplify commit is not evidence of anything.
-8. **Mark the gate**, if `$COMPANY_SKILLS_DIR/ticket-lifecycle/scripts/gates.sh` exists in this checkout (`$COMPANY_SKILLS_DIR` is exported by the runner and points at the installed company-skills plugin, falling back to `~/projects/company-skills` when the plugin is not installed):
-   ```
-   $COMPANY_SKILLS_DIR/ticket-lifecycle/scripts/gates.sh met <PREFIX-NNN> "simplif" --evidence "<commit sha>"
-   ```
-   If step 7 was skipped because there was nothing to simplify, use `gates.sh abandon <PREFIX-NNN> "simplif" --reason "nothing to simplify in this diff"` instead of `met`.
+8. **Record the result in this session's notes.** If you committed a simplify pass, note the commit sha. If step 7 was skipped because there was nothing to simplify, note that reason.
 
 ## Check before hand-off
 
@@ -51,5 +47,5 @@ Scope is the ticket's own diff, nothing else: `git diff --name-only pub/producti
 
 ## Notes
 
-- This is a quality pass, not a bug hunt. It doesn't look for correctness issues — if you spot one while reading, file it as its own ticket instead of fixing it here (see `ticket-lifecycle` "Acceptance criteria decide Done").
-- The source plugin's own scope rule was "recently modified code in the current session." This skill replaces that with the ticket's git diff, because a fleet agent's session boundary doesn't line up with a ticket's boundary the way a single human's editing session does.
+- This is a quality pass, not a bug hunt. It doesn't look for correctness issues. If you spot one while reading, file it as its own ticket instead of fixing it here.
+- The source plugin's own scope rule was "recently modified code in the current session." This skill uses the ticket's git diff instead, so a simplify pass stays inside the ticket.

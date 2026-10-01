@@ -1,17 +1,24 @@
 import { NextApiHandler, NextApiRequest, NextApiResponse } from "next";
 import prisma from "@/lib/prisma";
+import { getSessionUser } from "@/lib/auth/getSessionUser";
 
 const handler: NextApiHandler = async (
   req: NextApiRequest,
   res: NextApiResponse
 ) => {
   try {
-    const user: any = JSON.parse(req.cookies.nookies_user!);
+    const session = await getSessionUser(
+      new Headers(req.headers as Record<string, string>)
+    );
+    if (!session) {
+      return res.status(401).json({ message: "Unauthorized" });
+    }
+    const userId = session.userId;
     const { url, displayName } = req.body;
 
     const userPicture = await prisma.userPicture.update({
       where: {
-        userId: user.id,
+        userId,
       },
       data: {
         photoSet: url ? true : false,
@@ -31,7 +38,7 @@ const handler: NextApiHandler = async (
 
     const updateUser = await prisma.user.update({
       where: {
-        id: user.id,
+        id: userId,
       },
       data: updateData,
       include: {
