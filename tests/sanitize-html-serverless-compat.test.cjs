@@ -13,17 +13,22 @@ const packageLock = JSON.parse(
 );
 
 test("the HTML sanitizer stays on the serverless-compatible dependency path", () => {
-  assert.equal(packageJson.dependencies["isomorphic-dompurify"], "2.26.0");
+  assert.equal(packageJson.dependencies["isomorphic-dompurify"], "4.4.0");
   assert.equal(
     packageLock.packages["node_modules/isomorphic-dompurify"].version,
-    "2.26.0",
+    "4.4.0",
+  );
+  assert.equal(
+    packageLock.packages["node_modules/isomorphic-dompurify/node_modules/jsdom"].version,
+    "30.1.1",
   );
   assert.equal(packageLock.packages["node_modules/jsdom"].version, "26.1.0");
-  assert.equal(
-    packageLock.packages["node_modules/html-encoding-sniffer"].version,
-    "4.0.0",
-  );
-  assert.equal(packageLock.packages["node_modules/@exodus/bytes"], undefined);
+});
+
+test("the server keeps the sanitizer and jsdom external so runtime files resolve beside the package", () => {
+  const config = require(path.join(root, "next.config.js"));
+  assert.ok(config.serverExternalPackages.includes("isomorphic-dompurify"));
+  assert.ok(config.serverExternalPackages.includes("jsdom"));
 });
 
 test("the pinned sanitizer loads on the server and preserves its XSS contract", () => {
