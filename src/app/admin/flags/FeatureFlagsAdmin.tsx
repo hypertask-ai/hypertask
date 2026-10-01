@@ -9,7 +9,6 @@ import {
 } from "@/hooks/useFlag";
 import type { FeatureFlagMode, FeatureFlagRow } from "@/lib/flags";
 import { clusterFeatureFlagsByReleaseDate } from "@/lib/flags/cluster";
-import { FLAG_TICKET_ID_FLAG } from "@/lib/flags/keys";
 import { featureFlagRemovalState } from "@/lib/flags/removal";
 
 const ADMIN_FLAGS_ROUTE = "/api/admin/flags";
@@ -56,10 +55,6 @@ async function updateFlag(input: FlagUpdate) {
 export default function FeatureFlagsAdmin() {
   const queryClient = useQueryClient();
   const ticketTitleEnabled = useFlag("htpr-6176-flag-ticket-title");
-  const ticketIdEnabled = useFlag(FLAG_TICKET_ID_FLAG);
-  const ticketIdPrefix = ticketIdEnabled
-    ? (ticketId: string | null) => (ticketId ? <span>{ticketId} · </span> : null)
-    : () => null;
   const sortFilterEnabled = useFlag("htpr-6179-flag-sort-filter");
   const shipDateClustersEnabled = useFlag("htpr-6191-flag-ship-date-clusters");
   const removalCountdownEnabled = useFlag("htpr-6193-flag-removal-countdown");
@@ -189,7 +184,7 @@ export default function FeatureFlagsAdmin() {
                         href={flag.ticketUrl}
                         className="text-content font-medium text-white-black underline-offset-2 hover:underline focus-visible:underline"
                       >
-                        {ticketIdPrefix(flag.ticketId)}
+                        {flag.ticketId && <span>{flag.ticketId} · </span>}
                         {flag.ticketTitle}
                       </a>
                     ) : (

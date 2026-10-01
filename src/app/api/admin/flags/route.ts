@@ -12,6 +12,7 @@ import {
   setFeatureFlagMode,
   type FeatureFlagMode,
 } from "@/lib/flags";
+import { FLAG_TICKET_ID_FLAG } from "@/lib/flags/keys";
 import { broadcastFeatureFlagsChange } from "@/lib/realtime/server";
 
 export const dynamic = "force-dynamic";
@@ -40,11 +41,15 @@ export async function GET(request: NextRequest) {
     if (!(await isFeatureFlagOwner(request.headers))) {
       return noStore({ error: "Not found" }, 404);
     }
-    const [flags, detailsEnabled] = await Promise.all([
+    const [flags, detailsEnabled, ticketIdEnabled] = await Promise.all([
       listFeatureFlagModes({ includeTicketTitles: true }),
       isFeatureEnabled(FEATURE_FLAG_DETAILS_FLAG, FEATURE_FLAG_OWNER_USER_ID),
+      isFeatureEnabled(FLAG_TICKET_ID_FLAG, FEATURE_FLAG_OWNER_USER_ID),
     ]);
-    return noStore({ flags, detailsEnabled });
+    return noStore({
+      flags: ticketIdEnabled ? flags : flags.map((flag) => ({ ...flag, ticketId: null })),
+      detailsEnabled,
+    });
   } catch (error) {
     console.error("[feature-flags] admin read failed", error);
     return noStore({ error: "Unable to load feature flags" }, 500);
