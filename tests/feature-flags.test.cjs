@@ -593,6 +593,20 @@ test("the retired factory flag remains off for old deployments but disappears fr
   );
 });
 
+test("the retired ticket ID flag is hidden and cannot be changed", async () => {
+  listedRows = [
+    { key: "htpr-6800-flag-ticket-id", mode: "OFF", updatedAt: new Date("2026-10-01T14:00:00.000Z") },
+  ];
+  row = { mode: "OFF", updatedAt: new Date() };
+
+  assert.equal(
+    (await flags.listFeatureFlagModes()).some(({ key }) => key === "htpr-6800-flag-ticket-id"),
+    false,
+  );
+  await assert.rejects(flags.setFeatureFlagMode("htpr-6800-flag-ticket-id", "EVERYONE"), /Unknown feature flag/);
+  await assert.rejects(flags.setFeatureFlagKeep("htpr-6800-flag-ticket-id", true), /Unknown feature flag/);
+});
+
 test("the retired shallow switch stays on in client payloads but is not editable", async () => {
   const key = "htpr-6072-shallow-board-switch";
   listedRows = [{ key, mode: "OFF", updatedAt: new Date() }];

@@ -108,6 +108,8 @@ const FEATURE_FLAG_QA_USER = {
 const RETIRED_FEATURE_FLAG_KEYS = new Set([
   "hyfa-43-factory-owner-preview",
   "htpr-6072-shallow-board-switch",
+  // HTPR-6800: Valentin asked to drop this flag on 2026-10-01; the flags page is owner-only.
+  "htpr-6800-flag-ticket-id",
 ]);
 // Old tabs read this; remove after 2026-10-06.
 const RETIRED_CLIENT_FEATURE_FLAGS = { "htpr-6072-shallow-board-switch": true } as const;
