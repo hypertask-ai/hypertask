@@ -18,6 +18,7 @@ import { aiChatPendingPromptAtom, appShellRailAtom } from "@/store";
 import { useGlobalUIState } from "@/components/ProviderGlobal/useGlobalUIState";
 import AppShellRail from "@/components/PageComponents/Kanban/HeaderComponents/AppShellRail";
 import SearchChipsInput from "./SearchChipsInput";
+import "./search-autocomplete.css";
 
 interface IProps {
   _searchTerm: string;
@@ -96,7 +97,7 @@ const SearchComp = ({
         suppressHydrationWarning
         onClick={(e) => setSelectedIndex(null)}
         autoFocus={false}
-        className={`py-9 min-h-screen bg-containerBackground flex-col rounded-[4px] my-0 global-view-width flex items-center  search-input  ${styles.links_modal}`}
+        className={cn(`py-9 min-h-screen bg-containerBackground flex-col rounded-[4px] my-0 global-view-width flex items-center  search-input  ${styles.links_modal}`, autocompleteEnabled && 'search-autocomplete')}
       >
         {/* Below @xl the container is full-width, so clear the fixed back button (ends at x≈96) */}
         <div className={cn('w-full px-0', appShellRailOn && 'pl-[64px] @xl:pl-0')}>

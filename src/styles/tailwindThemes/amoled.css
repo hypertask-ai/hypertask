@@ -2,20 +2,6 @@
 .amoled {
   --primary: 222 9% 46%;
 
-  --bg-search-filter-people: #30283f;
-  --bg-search-filter-board: #23334c;
-  --bg-search-filter-label: #422a33;
-  --bg-search-filter-status: #203b32;
-  --bg-search-filter-date: #3a331f;
-  --bg-search-filter-has: #20383e;
-  --border-search-filter-people: #a78bfa;
-  --border-search-filter-board: #60a5fa;
-  --border-search-filter-label: #fb7185;
-  --border-search-filter-status: #34d399;
-  --border-search-filter-date: #fbbf24;
-  --border-search-filter-has: #22d3ee;
-  --bg-search-highlight: var(--bg-mention-highlight);
-
   --bg-pageBackground: #000000;
   --bg-taskDetailPage: #000000;
   --bg-label-span: #2d2d2d;

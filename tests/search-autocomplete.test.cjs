@@ -62,7 +62,7 @@ test('dates use UTC calendar boundaries and reject malformed or nonexistent date
   assert.equal(localValueSuggestions('after', 'this', new Date('2026-01-01T00:00:00Z'))[0].id, '2025-12-29')
 })
 
-test('filter palettes and title highlighting use semantic tokens defined in every theme', () => {
+test('filter palettes and title highlighting use scoped semantic tokens for every theme', () => {
   const config = jiti(path.join(root, 'tailwind.config.ts')).default
   const { backgroundColor, borderColor } = config.theme.extend
   const { resolvedThemeDomMetadata } = jiti(path.join(root, 'src/lib/themePreferences.ts'))
@@ -79,16 +79,15 @@ test('filter palettes and title highlighting use semantic tokens defined in ever
     assert.ok(SEARCH_TIPS[operator].meaning)
   }
   assert.equal(backgroundColor['search-highlight'], 'var(--bg-search-highlight)')
+  const palette = readFileSync(path.join(root, 'src/app/search/search-autocomplete.css'), 'utf8')
+  for (const type of Object.keys(SEARCH_FILTER_COLOURS)) {
+    for (const role of ['bg', 'border']) {
+      assert.match(palette, new RegExp(`--${role}-search-filter-${type}: #[0-9a-f]{6};`, 'i'), `${role} ${type}`)
+    }
+  }
+  assert.match(palette, /--bg-search-highlight: var\(--bg-mention-highlight\);/)
   for (const theme of themes) {
     const css = readFileSync(path.join(root, `src/styles/tailwindThemes/${theme}.css`), 'utf8')
-    const selector = theme === 'light' ? ':root' : `.${theme}`
-    const declarations = css.slice(css.indexOf(`${selector} {`)).split('}')[0]
-    for (const type of Object.keys(SEARCH_FILTER_COLOURS)) {
-      for (const role of ['bg', 'border']) {
-        assert.match(declarations, new RegExp(`--${role}-search-filter-${type}: #[0-9a-f]{6};`, 'i'), `${theme}: ${role} ${type}`)
-      }
-    }
-    assert.match(declarations, /--bg-search-highlight: var\(--bg-mention-highlight\);/, theme)
     assert.match(css, /--bg-mention-highlight:\s*#[0-9a-f]{6};/i, theme)
   }
   const component = readFileSync(path.join(root, 'src/app/search/SearchComp.tsx'), 'utf8')
