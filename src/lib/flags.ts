@@ -59,6 +59,7 @@ import {
   MY_TASKS_SCOPES_FLAG,
   MY_TASKS_LIVE_UPDATES_FLAG,
   MY_TASKS_QUICK_ADD_FLAG,
+  HTPR_6570_REMOVE_QUICK_ADD_FLAG,
   MY_TASKS_SNOOZE_FLAG,
   MY_TASKS_OVERDUE_BADGES_FLAG,
   LUNA_FREE_PLAN_FLAG,
@@ -617,6 +618,12 @@ const FEATURE_FLAG_DEFINITIONS = [
     shippedOn: "2026-09-15",
     description:
       "Adds a quick-add row at the top of My Tasks that creates a task on the view's default board, assigned to you.",
+  },
+  {
+    key: HTPR_6570_REMOVE_QUICK_ADD_FLAG,
+    shippedOn: "2026-10-01",
+    description:
+      "Hides the Quick add row on My Tasks. Off by default, so the existing quick-add flag still shows the row until this one is on.",
   },
   {
     key: MY_TASKS_SNOOZE_FLAG,
