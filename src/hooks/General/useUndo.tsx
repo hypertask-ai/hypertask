@@ -215,6 +215,7 @@ const UndoProvider: React.FC<{ children: React.ReactNode }> = ({
       if (
         (!event.ctrlKey && !event.metaKey) ||
         event.shiftKey ||
+        typeof event.key !== "string" ||
         event.key.toLowerCase() !== "z"
       ) {
         return;
