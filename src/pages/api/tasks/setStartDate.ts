@@ -2,6 +2,8 @@ import { NextApiHandler } from "next";
 import { updateTaskSingle } from "@/utils/controllers/tasks/single";
 import { broadcastBoardChange, broadcastTaskChange } from "@/lib/realtime/server";
 import { userCanAccessTask } from "@/utils/controllers/tasks/assertTaskAccess";
+import { getSessionUser } from "@/lib/auth/getSessionUser";
+import type { IUser } from "@/models/model";
 
 // HTPR-4884: set/clear a task's planned start date. Mirrors setDueDate.ts but
 // deliberately lighter: no queue job and no notification fire off a start date.
@@ -10,11 +12,17 @@ const handler: NextApiHandler = async (req, res) => {
     return res.status(405).json({ message: "Method not allowed" });
   }
 
+  const session = await getSessionUser(
+    new Headers(req.headers as Record<string, string>)
+  );
+  if (!session) {
+    return res.status(401).json({ message: "Unauthorized" });
+  }
+  const userObj = { id: session.userId } as IUser;
+
   try {
     const { taskId, startDate } = req.body;
-    const userObj =
-      req.cookies?.nookies_user && JSON.parse(req.cookies.nookies_user);
-    if (!taskId || !userObj) {
+    if (!taskId) {
       return res.status(400).json({ message: "Missing required field" });
     }
 

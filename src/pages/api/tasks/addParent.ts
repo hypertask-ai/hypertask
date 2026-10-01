@@ -2,15 +2,23 @@ import { NextApiHandler, NextApiRequest, NextApiResponse } from "next";
 import AddParentTask from "@/utils/controllers/tasks/addParent";
 import { updateTaskSingle } from "@/utils/controllers/tasks/single";
 import { broadcastBoardChange } from "@/lib/realtime/server";
+import { getSessionUser } from "@/lib/auth/getSessionUser";
+import type { IUser } from "@/models/model";
 
 const handler: NextApiHandler = async (
   req: NextApiRequest,
   res: NextApiResponse
 ) => {
   if (req.method === "POST") {
+    const session = await getSessionUser(
+      new Headers(req.headers as Record<string, string>)
+    );
+    if (!session) {
+      return res.status(401).json({ message: "Unauthorized" });
+    }
+    const currentUser = { id: session.userId } as IUser;
     try {
       const { orphanId, parentId } = req.body;
-      const currentUser = JSON.parse(req.cookies.nookies_user!)
 
       if (!orphanId || !parentId) {
         return res.status(200).json("Missing Required Data");

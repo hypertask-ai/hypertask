@@ -13,12 +13,20 @@ import {
   MissingBoardFilterLabelError,
   withBoardFilterWriteLock,
 } from "@/utils/controllers/projects/views/boardFilterWriteLock";
+import { getSessionUser } from "@/lib/auth/getSessionUser";
 
 const handler: NextApiHandler = async (
   req: NextApiRequest,
   res: NextApiResponse
 ) => {
   if (req.method === "POST") {
+    const session = await getSessionUser(
+      new Headers(req.headers as Record<string, string>)
+    );
+    if (!session) {
+      return res.status(401).json({ message: "Unauthorized" });
+    }
+    const userId = session.userId;
     try {
       const {
         projectId,
@@ -28,15 +36,10 @@ const handler: NextApiHandler = async (
         visibility,
       } = req.body as TCreate_view_body;
 
-      // HTPR-3997: authenticate from the session cookie, never trust a
-      // client-supplied userId. Every sibling view route derives the user
-      // from nookies_user; create-view was the odd one out.
-      const userId = JSON.parse(req.cookies.nookies_user ?? "{}").id;
+      // HTPR-3997: authenticate from the signed session, never trust a
+      // client-supplied userId.
 
       var updatedProjectView;
-      if (!Number.isInteger(userId)) {
-        return res.status(401).json({ message: "Authentication required" });
-      }
       if (!Number.isInteger(projectId)) {
         return res.status(400).json({ message: "Missing required information!" });
       }

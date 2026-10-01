@@ -1,5 +1,6 @@
 import type { NextApiRequest, NextApiResponse } from "next";
 import prisma from "@/lib/prisma";
+import { getSessionUser } from "@/lib/auth/getSessionUser";
 
 const parseTaskId = (value: unknown): number | null => {
   if (typeof value !== "string" && typeof value !== "number") return null;
@@ -13,14 +14,15 @@ const handler = async (req: NextApiRequest, res: NextApiResponse) => {
     return res.status(405).json({ message: "Method not allowed" });
   }
 
+  const session = await getSessionUser(
+    new Headers(req.headers as Record<string, string>)
+  );
+  if (!session) {
+    return res.status(401).json({ message: "Unauthorized" });
+  }
+  const userId = session.userId;
+
   try {
-    const userCookie = req.cookies.nookies_user;
-    if (!userCookie) {
-      return res.status(401).json({ message: "Unauthorized" });
-    }
-
-    const user = JSON.parse(userCookie);
-
     if (req.method === "GET") {
       const taskId = parseTaskId(req.query.taskId);
       if (!taskId) {
@@ -28,7 +30,7 @@ const handler = async (req: NextApiRequest, res: NextApiResponse) => {
       }
 
       const taskMute = await prisma.taskMute.findUnique({
-        where: { taskId_userId: { taskId, userId: user.id } },
+        where: { taskId_userId: { taskId, userId: userId } },
         select: { id: true },
       });
 
@@ -43,13 +45,13 @@ const handler = async (req: NextApiRequest, res: NextApiResponse) => {
 
     if (muted) {
       await prisma.taskMute.upsert({
-        where: { taskId_userId: { taskId, userId: user.id } },
+        where: { taskId_userId: { taskId, userId: userId } },
         update: {},
-        create: { taskId, userId: user.id },
+        create: { taskId, userId: userId },
       });
     } else {
       await prisma.taskMute.deleteMany({
-        where: { taskId, userId: user.id },
+        where: { taskId, userId: userId },
       });
     }
 

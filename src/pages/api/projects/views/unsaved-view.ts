@@ -25,6 +25,7 @@ import {
   MissingBoardFilterLabelError,
   withBoardFilterWriteLock,
 } from "@/utils/controllers/projects/views/boardFilterWriteLock";
+import { getSessionUser } from "@/lib/auth/getSessionUser";
 
 // ============= simple stuff here
 // 1. user selects the default view.
@@ -35,6 +36,14 @@ const handler: NextApiHandler = async (
   res: NextApiResponse
 ) => {
   if (req.method === "POST") {
+    const session = await getSessionUser(
+      new Headers(req.headers as Record<string, string>)
+    );
+    if (!session) {
+      return res.status(401).json({ message: "Unauthorized" });
+    }
+    const currentUser = { id: session.userId };
+    const userId = currentUser.id;
     // lets check if the api request misses info like user, projectid.
 
     const {
@@ -55,10 +64,6 @@ const handler: NextApiHandler = async (
       req.body,
       "baseViewId"
     );
-    const currentUser = JSON.parse(req.cookies.nookies_user ?? "{}");
-    if (!Number.isInteger(currentUser.id)) {
-      return res.status(401).json({ message: "Authentication required" });
-    }
     if (!Number.isInteger(projectId)) {
       return res.status(400).json({ message: "Missing required information!" });
     }
@@ -71,7 +76,7 @@ const handler: NextApiHandler = async (
       where: {
         id: projectId,
         OR: [
-          { ownerId: currentUser.id },
+          { ownerId: userId },
           {
             members: {
               some: { userId: currentUser.id, status: "Accepted" },
@@ -123,7 +128,7 @@ const handler: NextApiHandler = async (
       const user_project_view = await prisma.user_Project_View.findUnique({
         where: {
           user_project: {
-            userId: currentUser.id,
+            userId: userId,
             project_view_id: projectView.id,
           },
         },
@@ -144,7 +149,7 @@ const handler: NextApiHandler = async (
       if (
         hasBaseViewId &&
         baseViewId != null &&
-        (!baseView || !canUseViewAsTabBase(baseView, currentUser.id))
+        (!baseView || !canUseViewAsTabBase(baseView, userId))
       ) {
         return res.status(403).json({ message: "View is not accessible" });
       }
@@ -218,7 +223,7 @@ const handler: NextApiHandler = async (
           : superDefault;
         const projectViewResponse = await getProjectView(
           projectId,
-          currentUser.id
+          userId
         );
         if (!projectViewResponse) {
           return res.status(404).json({ message: "Project view not found" });
@@ -226,7 +231,7 @@ const handler: NextApiHandler = async (
         return res.status(200).json(
           applyTransientTabSettings(
             projectViewResponse,
-            currentUser.id,
+            userId,
             baseViewId == null ? null : baseView,
             settingsFromReqBody,
             !isDeepEqual(settingsFromReqBody, comparisonSettings),
@@ -244,7 +249,7 @@ const handler: NextApiHandler = async (
       ) => {
         const unsavedViewCreated = await withBoardFilterWriteLock(projectId, sanitizedBoardFilters, (tx) => tx.view.create({
           data: {
-            userId: currentUser.id,
+            userId: userId,
             project_view_id: project_view_id,
             board_columns_view,
             board_sorting_mode,
@@ -290,7 +295,7 @@ const handler: NextApiHandler = async (
           "------------------------ need to create anew user_project_view ------------ "
         );
         const user_project_view = await createUserProjectView(
-          currentUser.id,
+          userId,
           projectView.id
         );
 
@@ -457,7 +462,7 @@ const handler: NextApiHandler = async (
 
       const project_view_updated = await getProjectView(
         projectId,
-        currentUser.id
+        userId
       );
       return res.status(200).json(project_view_updated);
     } catch (error) {

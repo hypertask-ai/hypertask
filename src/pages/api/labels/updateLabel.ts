@@ -11,6 +11,7 @@ import { sanitizeBoardFilters } from "@/utils/helperFunctions/Views/BoardFilterS
 import { getManagedSmartLabelIds } from "@/lib/smartSplits";
 import { Prisma } from "@prisma/client";
 import { acquireBoardFilterWriteLock } from "@/utils/controllers/projects/views/boardFilterWriteLock";
+import { getSessionUser } from "@/lib/auth/getSessionUser";
 
 const MAX_AI_PROMPT_LENGTH = 1000;
 
@@ -55,6 +56,9 @@ export default async function handler(
   try {
     //   ==================== IF POST
     if (req.method === "POST") {
+      const session = await getSessionUser(
+        new Headers(req.headers as Record<string, string>)
+      );
       const { value, labelId, ai_prompt } = req.body;
       if (!value || !labelId)
         return res
@@ -71,6 +75,12 @@ export default async function handler(
             : null
           : undefined;
 
+      if (normalizedAiPrompt) {
+        if (!session) {
+          return res.status(401).json({ message: "Unauthorized" });
+        }
+      }
+
       // Smart labels run an LLM classification pass on every task in the
       // project (cost), so require project membership before setting one.
       const existingLabel = await prisma.label.findUnique({
@@ -84,18 +94,12 @@ export default async function handler(
         if (existingLabelProjectId == null) {
           return res.status(400).json({ message: "Label has no project" });
         }
-        let userId: unknown;
-        try {
-          userId = JSON.parse(req.cookies.nookies_user ?? "null")?.id;
-        } catch {
-          return res.status(403).json({ message: "Forbidden" });
-        }
-        if (typeof userId !== "number") {
-          return res.status(403).json({ message: "Forbidden" });
+        if (!session) {
+          return res.status(401).json({ message: "Unauthorized" });
         }
         const memberCheck = await validateProjectMemberIds(
           existingLabelProjectId,
-          [userId]
+          [session.userId]
         );
         if (memberCheck.error || memberCheck.invalidIds?.length) {
           return res.status(403).json({ message: "Forbidden" });

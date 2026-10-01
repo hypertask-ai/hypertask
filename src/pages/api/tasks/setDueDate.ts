@@ -6,17 +6,25 @@ import { subMinutes } from "date-fns";
 import { cancelDueDateJob, scheduleDueDateJob } from "../queues/duedateQueue";
 import { updateTaskSingle } from "@/utils/controllers/tasks/single";
 import { broadcastBoardChange, broadcastTaskChange } from "@/lib/realtime/server";
+import { getSessionUser } from "@/lib/auth/getSessionUser";
+import type { IUser } from "@/models/model";
 
 const handler: NextApiHandler = async (req, res) => {
   if (req.method !== "POST") {
     return res.status(405).json({ message: "Method not allowed" });
   }
 
+  const session = await getSessionUser(
+    new Headers(req.headers as Record<string, string>)
+  );
+  if (!session) {
+    return res.status(401).json({ message: "Unauthorized" });
+  }
+  const userObj = { id: session.userId } as IUser;
+
   try {
     const { taskId, dueDate, agentId } = req.body;
-    const userObj =
-      req.cookies?.nookies_user && JSON.parse(req.cookies.nookies_user);
-    if (!taskId || !userObj) {
+    if (!taskId) {
       return res.status(400).json({ message: "Missing required field" });
     }
 

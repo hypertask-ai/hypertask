@@ -10,6 +10,7 @@ import {
   type TByokProviderKey,
 } from "@/lib/aiProviders";
 import { assertUserCanManageTeamByok } from "@/utils/controllers/teams/assertTeamByokAccess";
+import { getSessionUser } from "@/lib/auth/getSessionUser";
 import { isPaidTeam } from "@/lib/freeTier";
 import { withLockedTeamAiSettings } from "@/utils/controllers/teams/updateTeamAiSettingsAtomically";
 import type { Prisma } from "@prisma/client";
@@ -20,8 +21,6 @@ import {
   parseCustomEndpointConfig,
   serializeCustomEndpointConfig,
 } from "@/lib/ai/customEndpoint";
-
-type CookieUser = { id: number; accountId?: string };
 
 class GdprSafeModeByokError extends Error {}
 
@@ -52,26 +51,24 @@ async function mutateByokWithSafeModeLock(
   );
 }
 
-function parseUser(req: NextApiRequest): CookieUser | null {
-  try {
-    const raw = req.cookies?.nookies_user;
-    if (!raw) return null;
-    const u = JSON.parse(raw) as { id?: number; accountId?: string };
-    if (typeof u?.id !== "number") return null;
-    return { id: u.id, accountId: u.accountId };
-  } catch {
-    return null;
-  }
-}
-
 const handler: NextApiHandler = async (
   req: NextApiRequest,
   res: NextApiResponse,
 ) => {
-  const user = parseUser(req);
-  if (!user) {
+  const session = await getSessionUser(
+    new Headers(req.headers as Record<string, string>)
+  );
+  if (!session) {
     return res.status(401).json({ message: "Unauthorized" });
   }
+  const row = await prisma.user.findUnique({
+    where: { id: session.userId },
+    select: { id: true, accountId: true },
+  });
+  if (!row) {
+    return res.status(401).json({ message: "Unauthorized" });
+  }
+  const user = { id: row.id, accountId: row.accountId ?? undefined };
 
   if (req.method === "GET") {
     const teamId =

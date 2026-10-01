@@ -1,6 +1,8 @@
 import { NextApiHandler, NextApiRequest, NextApiResponse } from "next";
 import tasksGetTask from "@/utils/controllers/tasks/getTask";
 import { httpStatusConfig } from "@/lib/configs/http-status.config";
+import { getSessionUser } from "@/lib/auth/getSessionUser";
+import type { IUser } from "@/models/model";
 
 const handler: NextApiHandler = async (
   req: NextApiRequest,
@@ -14,6 +16,13 @@ const handler: NextApiHandler = async (
   res.setHeader("Vary", "Cookie");
 
   if (req.method === "GET") {
+    const session = await getSessionUser(
+      new Headers(req.headers as Record<string, string>)
+    );
+    if (!session) {
+      return res.status(401).json({ message: "Unauthorized" });
+    }
+    const userObj = { id: session.userId } as IUser;
     try {
       const { project, uniqueIndex } = req.query;
       if (!uniqueIndex || !project) {
@@ -21,7 +30,6 @@ const handler: NextApiHandler = async (
           .status(400)
           .json({ message: httpStatusConfig.statusCodes[400].userMessage });
       }
-      const userObj = JSON.parse(req.cookies?.nookies_user!);
       const response = await tasksGetTask(
         project as string,
         uniqueIndex as string,

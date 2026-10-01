@@ -1,10 +1,10 @@
 // Import PrismaClient from the generated Prisma client
-import sectionGetByTask from '@/utils/controllers/section/getByTask';
 
 import { NextApiHandler, NextApiRequest, NextApiResponse } from 'next';
 import prisma from "@/lib/prisma";
 import { broadcastBoardChange } from '@/lib/realtime/server';
 import { taskWriteAccessWhere } from '@/utils/controllers/projects/getAllIncludes';
+import { getSessionUser } from "@/lib/auth/getSessionUser";
 
 
 // Create an instance of PrismaClient
@@ -12,9 +12,15 @@ import { taskWriteAccessWhere } from '@/utils/controllers/projects/getAllInclude
 // Example usage
 const handler: NextApiHandler = async (req: NextApiRequest, res: NextApiResponse) => {
 if (req.method==="POST"){
+    const session = await getSessionUser(
+      new Headers(req.headers as Record<string, string>)
+    );
+    if (!session) {
+      return res.status(401).json({ message: "Unauthorized" });
+    }
+    const currentUser = { id: session.userId };
 
     const { taskIds, agentId } = req.body;
-    const currentUser = JSON.parse(req.cookies.nookies_user!);
     console.log("🚀 ~ file: resetRanks.ts:14 ~ consthandler:NextApiHandler= ~ taskIds:", taskIds)
     if (!taskIds) {
       return res.status(400).json({ message: "Missing TaskId" });

@@ -1,18 +1,24 @@
 
 
 // Define the API route
-import addSection from '@/utils/controllers/projects/addSection';
 import archiveProject from '@/utils/controllers/projects/archiveProject';
 import { NextApiRequest, NextApiResponse } from 'next';
+import { getSessionUser } from "@/lib/auth/getSessionUser";
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   // Check if the request is a POST request
   if (req.method === 'POST') {
+    const session = await getSessionUser(
+      new Headers(req.headers as Record<string, string>)
+    );
+    if (!session) {
+      return res.status(401).json({ message: "Unauthorized" });
+    }
+    const userId = session.userId;
     // Get the project ID and new section title from the request body
     const { projectId } = req.body;
-    const user = JSON.parse(req.cookies.nookies_user!)
     try {
-      const response = await archiveProject( projectId, parseInt(user.id))
+      const response = await archiveProject( projectId, userId)
       return res.status(response.status).json(response.json)
       // Find the project by ID and update the sections array
       // const updatedProject = await prisma.project.update({

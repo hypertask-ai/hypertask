@@ -2,6 +2,7 @@
 
 import type { NextApiRequest, NextApiResponse } from 'next'
 import prisma from "@/lib/prisma";
+import { getSessionUser } from "@/lib/auth/getSessionUser";
 
 
 
@@ -9,14 +10,17 @@ export default  async function handler(
   req: NextApiRequest,
   res: NextApiResponse
 ) {
- 
+  const session = await getSessionUser(
+    new Headers(req.headers as Record<string, string>)
+  );
+  if (!session) {
+    return res.status(401).json({ message: "Unauthorized" });
+  }
+
   try {
-    
-    const {userId} = req.query
-    console.log("🚀 ~ userId:", userId)
     const reminders = await prisma.reminder.findMany({
         where:{
-            userId:parseInt(userId as string),
+            userId: session.userId,
             status:"Normal"
             
         },

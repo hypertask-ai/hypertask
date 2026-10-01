@@ -1,5 +1,6 @@
 import type { NextApiRequest, NextApiResponse } from "next";
 import prisma from "@/lib/prisma";
+import { getSessionUser } from "@/lib/auth/getSessionUser";
 
 type NotificationLevel = "all" | "direct" | "nothing";
 
@@ -8,13 +9,15 @@ const handler = async (req: NextApiRequest, res: NextApiResponse) => {
     return res.status(405).json({ message: "Method not allowed" });
   }
 
-  try {
-    const userCookie = req.cookies.nookies_user;
-    if (!userCookie) {
-      return res.status(401).json({ message: "Unauthorized" });
-    }
+  const session = await getSessionUser(
+    new Headers(req.headers as Record<string, string>)
+  );
+  if (!session) {
+    return res.status(401).json({ message: "Unauthorized" });
+  }
+  const userId = session.userId;
 
-    const user = JSON.parse(userCookie);
+  try {
     const { notificationLevel } = req.body as { notificationLevel?: NotificationLevel };
 
     if (!notificationLevel || !["all", "direct", "nothing"].includes(notificationLevel)) {
@@ -22,7 +25,7 @@ const handler = async (req: NextApiRequest, res: NextApiResponse) => {
     }
 
     const updated = await prisma.userSetting.update({
-      where: { userId: user.id },
+      where: { userId },
       data: {
         notificationPreference: notificationLevel,
       },

@@ -5,17 +5,26 @@ import sendNotificationForTask from "@/utils/controllers/notifications/creation-
 import { updateTaskSingle } from "@/utils/controllers/tasks/single";
 import { broadcastBoardChange, broadcastTaskChange } from "@/lib/realtime/server";
 import { toErrorMessage } from "@/lib/api/errorMessage";
+import { getSessionUser } from "@/lib/auth/getSessionUser";
+import type { IUser } from "@/models/model";
 
 const handler: NextApiHandler = async (req, res) => {
   if (req.method !== "PUT")
     return res.status(405).json({ message: "Method not allowed" });
 
+  const session = await getSessionUser(
+    new Headers(req.headers as Record<string, string>)
+  );
+  if (!session) {
+    return res.status(401).json({ message: "Unauthorized" });
+  }
+  const userObj = { id: session.userId } as IUser;
+
   try {
     const { taskId, section_title, sectionId, ranking, projectId, agentId } = req.body;
-    const userObj = req.cookies.nookies_user && JSON.parse(req.cookies.nookies_user);
 
     // Validate required fields up front
-    if (!taskId || !section_title || !sectionId || !userObj || !projectId) {
+    if (!taskId || !section_title || !sectionId || !projectId) {
       return res.status(400).json({ message: "Missing Required Information" });
     }
 

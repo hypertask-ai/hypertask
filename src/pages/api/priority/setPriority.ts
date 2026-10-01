@@ -1,17 +1,25 @@
 import prisma from "@/lib/prisma";
 import createPriorityActivity from "@/utils/controllers/activities/CreatePriorityActivity";
 import { NextApiHandler } from "next";
+import { getSessionUser } from "@/lib/auth/getSessionUser";
+import type { IUser } from "@/models/model";
 
 const handler: NextApiHandler = async (req, res) => {
   if (req.method !== "POST")
     return res.status(405).json({ message: "Method not allowed" });
 
+  const session = await getSessionUser(
+    new Headers(req.headers as Record<string, string>)
+  );
+  if (!session) {
+    return res.status(401).json({ message: "Unauthorized" });
+  }
+  const user = { id: session.userId } as IUser;
+
   try {
     const { taskId, priority_index, Priority_Value, agentId } = req.body;
     if (!taskId || !Priority_Value)
       return res.status(400).json({ message: "Missing Required Task ID" });
-
-    const user = JSON.parse(req.cookies.nookies_user!);
 
     // Only fetch agent if provided
     const agent = agentId

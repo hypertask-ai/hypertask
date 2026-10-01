@@ -4,19 +4,23 @@ import { IUser } from '@/models/model';
 import * as sectionService from '@/utils/controllers/section/sectionService';
 import getProjectView from '@/utils/controllers/projects/views/viewsHelperAPIfunctions';
 import { broadcastBoardChange } from '@/lib/realtime/server';
+import { getSessionUser } from "@/lib/auth/getSessionUser";
 
 const handler: NextApiHandler = async (req: NextApiRequest, res: NextApiResponse) => {
     if (req.method === "POST") {
+        const session = await getSessionUser(
+          new Headers(req.headers as Record<string, string>)
+        );
+        if (!session) {
+          return res.status(401).json({ message: "Unauthorized" });
+        }
+        const user = { id: session.userId } as IUser;
         try {
             const { projectId, title, ranking, after_section_id } = req.body;
             if (!projectId || !title) return res.status(400).json({ message: "Missing projectId or title" });
             // Ranking is optional: with neither ranking nor after_section_id the
             // service appends the column after the board's last section, which is
             // what "Add column" means. Clients must not compute the rank themselves.
-            const user: IUser | undefined = req.cookies.nookies_user
-                ? JSON.parse(req.cookies.nookies_user)
-                : undefined;
-            if (!user) return res.status(401).json({ message: "Unauthorized" });
 
             const projectIdNum = typeof projectId === 'string' ? parseInt(projectId, 10) : projectId;
             const afterSectionIdNum = after_section_id != null

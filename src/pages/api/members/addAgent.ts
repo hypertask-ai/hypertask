@@ -1,6 +1,7 @@
 import { NextApiHandler, NextApiRequest, NextApiResponse } from "next";
 import { addAgentToBoard } from "@/utils/controllers/agents/boardMembers";
 import { GUEST_FORBIDDEN_MESSAGE, isGuestRequest } from "@/lib/demo/guestGuard";
+import { getSessionUser } from "@/lib/auth/getSessionUser";
 
 const handler: NextApiHandler = async (
   req: NextApiRequest,
@@ -9,6 +10,14 @@ const handler: NextApiHandler = async (
   if (req.method !== "POST") {
     return res.status(405).json({ message: "Method not allowed" });
   }
+
+  const session = await getSessionUser(
+    new Headers(req.headers as Record<string, string>)
+  );
+  if (!session) {
+    return res.status(401).json({ message: "Unauthorized" });
+  }
+  const userId = session.userId;
 
   try {
     if (await isGuestRequest(req)) {
@@ -20,11 +29,10 @@ const handler: NextApiHandler = async (
       return res.status(400).json({ message: "Missing required information" });
     }
 
-    const currentUser = JSON.parse(req.cookies.nookies_user!);
     const result = await addAgentToBoard(
       parseInt(String(projectId), 10),
       String(agentId),
-      currentUser.id
+      userId
     );
 
     if (!result.ok) {

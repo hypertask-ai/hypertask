@@ -16,6 +16,7 @@ import {
 } from "@/utils/controllers/projects/views/boardFilterWriteLock";
 import { Prisma } from "@prisma/client";
 import { NextApiHandler, NextApiRequest, NextApiResponse } from "next";
+import { getSessionUser } from "@/lib/auth/getSessionUser";
 
 // ============= simple stuff here
 // 1. user selects the default view.
@@ -26,6 +27,14 @@ const handler: NextApiHandler = async (
   res: NextApiResponse
 ) => {
   if (req.method === "POST") {
+    const session = await getSessionUser(
+      new Headers(req.headers as Record<string, string>)
+    );
+    if (!session) {
+      return res.status(401).json({ message: "Unauthorized" });
+    }
+    const currentUser = { id: session.userId };
+    const userId = currentUser.id;
     // lets check if the api request misses info like user, projectid.
 
     const { projectId, viewId, view_settings } = req.body;
@@ -37,21 +46,8 @@ const handler: NextApiHandler = async (
       "board_layout"
     );
 
-    let currentUser: unknown;
     try {
-      currentUser = JSON.parse(req.cookies.nookies_user ?? "{}");
-    } catch {
-      return res.status(401).json({ message: "Authentication required" });
-    }
-    try {
-      if (
-        !projectId ||
-        typeof currentUser !== "object" ||
-        currentUser === null ||
-        !("id" in currentUser) ||
-        typeof currentUser.id !== "number" ||
-        !Number.isInteger(currentUser.id)
-      )
+      if (!projectId)
         return res
           .status(401)
           .json({ message: "Authentication required" });
@@ -62,7 +58,7 @@ const handler: NextApiHandler = async (
             projectId,
             project: {
               OR: [
-                { ownerId: currentUser.id },
+                { ownerId: userId },
                 {
                   members: {
                     some: { userId: currentUser.id, status: "Accepted" },
@@ -71,7 +67,7 @@ const handler: NextApiHandler = async (
               ],
             },
           },
-          OR: [{ visibility: "Public" }, { userId: currentUser.id }],
+          OR: [{ visibility: "Public" }, { userId: userId }],
         },
         select: { id: true },
       });
@@ -85,7 +81,7 @@ const handler: NextApiHandler = async (
         }
         await prisma.view_Last_Used.upsert({
           create: {
-            userId: currentUser.id,
+            userId: userId,
             viewId,
             board_empty_sections: boardEmptySections,
           },
@@ -94,7 +90,7 @@ const handler: NextApiHandler = async (
           },
           where: {
             user_view_last_used: {
-              userId: currentUser.id,
+              userId: userId,
               viewId,
             },
           },
@@ -127,7 +123,7 @@ const handler: NextApiHandler = async (
             data: { board_layout: boardLayout, lastUsedAt: new Date() },
           });
         });
-        broadcastBoardChange(projectId, { originUserId: currentUser.id });
+        broadcastBoardChange(projectId, { originUserId: userId });
         return res.status(200).json({ viewId, board_layout: boardLayout });
       }
       const projectView = await prisma.project_View.upsert({
@@ -209,7 +205,7 @@ const handler: NextApiHandler = async (
       const updatedUserProjectView = await prisma.user_Project_View.upsert({
         create: {
           // ... data to create a User_Project_View
-          userId: currentUser.id,
+          userId: userId,
           project_view_id: projectView.id,
           appliedViewId: updatedView.id,
         },
@@ -217,7 +213,7 @@ const handler: NextApiHandler = async (
         where: {
           // ... the filter for the User_Project_View we want to update
           user_project: {
-            userId: currentUser.id,
+            userId: userId,
             project_view_id: projectView.id,
           },
         },
@@ -235,13 +231,13 @@ const handler: NextApiHandler = async (
       const viewProjectId = updatedView.project_view.projectId;
       const project_view_updated = await getProjectView(
         viewProjectId,
-        currentUser.id
+        userId
       );
       console.log(
         "🚀 ~ consthandler:NextApiHandler= ~ project_view_updated:",
         project_view_updated
       );
-      broadcastBoardChange(viewProjectId, { originUserId: currentUser.id });
+      broadcastBoardChange(viewProjectId, { originUserId: userId });
 
       return res.status(200).json(project_view_updated);
     } catch (error) {
