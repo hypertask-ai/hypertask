@@ -1,21 +1,22 @@
 import { NextApiHandler, NextApiRequest, NextApiResponse } from "next";
 import prisma from "@/lib/prisma";
+import { getSessionUser } from "@/lib/auth/getSessionUser";
 
 const handler: NextApiHandler = async (
   req: NextApiRequest,
   res: NextApiResponse
 ) => {
+  const session = await getSessionUser(
+    new Headers(req.headers as Record<string, string>)
+  );
+  if (!session) {
+    return res.status(401).json({ message: "Unauthorized" });
+  }
   try {
-    const { userId } = req.query;
-
-    if (!userId) {
-      return res.status(300).json({ message: "Missing Required Data!" });
-    }
-
     const team = await prisma.team.findFirst({
       where: {
         googleAccount: {
-          userId: parseInt(userId as string),
+          userId: session.userId,
         },
       },
       include: {

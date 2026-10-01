@@ -1,19 +1,28 @@
 import prisma from "@/lib/prisma";
 import createEstimateActivity from "@/utils/controllers/activities/createEstimateActivity";
 import { NextApiHandler } from "next";
+import { getSessionUser } from "@/lib/auth/getSessionUser";
+import { loadSessionUserRecord } from "@/lib/auth/sessionUserRecord";
+import type { IUser } from "@/models/model";
 
 const handler: NextApiHandler = async (req, res) => {
   if (req.method !== "POST") {
     return res.status(405).json({ message: "Method not allowed" });
   }
 
+  const session = await getSessionUser(
+    new Headers(req.headers as Record<string, string>)
+  );
+  if (!session) {
+    return res.status(401).json({ message: "Unauthorized" });
+  }
+  const user = await loadSessionUserRecord(session.userId);
+
   try {
     const { taskId, estimate_index, estimate_value, agentId } = req.body;
     if (!taskId || !estimate_value) {
       return res.status(400).json({ message: "Missing Required Task ID" });
     }
-
-    const user = JSON.parse(req.cookies.nookies_user!);
 
     // Only fetch agent if provided
     const agent = agentId

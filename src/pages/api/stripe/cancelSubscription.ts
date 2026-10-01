@@ -1,11 +1,30 @@
 import { stripe } from "@/lib/subscription";
 import { NextApiRequest, NextApiResponse } from "next";
+import prisma from "@/lib/prisma";
+import { getSessionUser } from "@/lib/auth/getSessionUser";
 
 export default async function checkoutsSessionHandler(
     req: NextApiRequest,
     res: NextApiResponse
   ) {
+    const session = await getSessionUser(
+      new Headers(req.headers as Record<string, string>)
+    );
+    if (!session) {
+      return res.status(401).json({ message: "Unauthorized" });
+    }
     const {  stripe_customer_id } =req.body;
+    const team = await prisma.team.findFirst({
+      where: {
+        stripe_customer_id:
+          typeof stripe_customer_id === "string" ? stripe_customer_id : "",
+        googleAccount: { userId: session.userId },
+      },
+      select: { id: true },
+    });
+    if (!team) {
+      return res.status(403).json({ message: "Forbidden" });
+    }
     console.log("🚀 ~ file: checkout.ts:9 ~ req.body:", req.body)
    
     // NB: here you may want to check that:

@@ -15,13 +15,14 @@ import { getSessionUser } from "@/lib/auth/getSessionUser";
 import { IUser } from "@/models/model";
 import { taskWriteAccessWhere } from "@/utils/controllers/projects/getAllIncludes";
 
-const readUserIdFromCookie = (req: NextApiRequest): number | null => {
-  try {
-    const id = JSON.parse(req.cookies.nookies_user ?? "null")?.id;
-    return typeof id === "number" ? id : null;
-  } catch {
-    return null;
-  }
+const readUserIdFromCookie = async (
+  req: NextApiRequest,
+): Promise<number | null> => {
+  const session = await getSessionUser(
+    new Headers(req.headers as Record<string, string>),
+  );
+  if (!session) return null;
+  return session.userId;
 };
 
 const userCanAccessProject = async (
@@ -45,15 +46,15 @@ const handler: NextApiHandler = async (
 ) => {
   if (req.method === "GET") {
     try {
+      const currentUserId = await readUserIdFromCookie(req);
+      if (!currentUserId) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
       const { id } = req.query;
       if (!id) {
         return res.status(400).json({ message: "Task id is required" });
       }
       // GET returns the task body, so it must be gated on board access
-      const currentUserId = readUserIdFromCookie(req);
-      if (!currentUserId) {
-        return res.status(401).json({ message: "Unauthorized" });
-      }
       const response = await getTaskSingle(parseInt(id as string));
       const task = response.json as { projectId?: number } | null;
       if (
