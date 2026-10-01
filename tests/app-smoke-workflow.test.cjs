@@ -151,7 +151,7 @@ test("app smoke validates the head before isolated build and route checks", asyn
       "actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020",
     ),
   );
-  assert.match(workflow, /node-version: 22/);
+  assert.match(workflow, /node-version: 24/);
   assert.ok(
     uses.includes(
       "actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830",
