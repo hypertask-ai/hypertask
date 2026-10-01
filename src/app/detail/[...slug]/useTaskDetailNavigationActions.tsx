@@ -188,7 +188,7 @@ export function useTaskDetailNavigationActions(getContext: () => TaskDetailConte
     if (shouldCloseOnUpdate) setShowCreateLabelModal((prev) => !prev);
     if (refresh && taskLabels) {
       queryClient.prefetchQuery({ queryKey: [taskDetailConfig.queryKeys.taskLabels, _parsedTask.id] });
-      
+
       const taskToReturn = { taskLabels: taskLabels };
       updateTaskInCache(
         taskToReturn,

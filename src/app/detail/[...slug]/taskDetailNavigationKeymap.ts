@@ -12,7 +12,7 @@ export function taskDetailNavigationKeymap(context: TaskDetailKeyboardContext & 
 
 
     // [s] for size/estimate && ([g] then [s] Starred tasks & comments)
-    
+
     {
       action: "estimate",
       matches: () => e.keyCode === KeyCodes.S && !e.shiftKey && !e.altKey && !cmdControl,
@@ -28,7 +28,7 @@ export function taskDetailNavigationKeymap(context: TaskDetailKeyboardContext & 
 
 
     // [Z] FOR UNDO
-    
+
     {
       action: "undo",
       matches: () => e.keyCode === KeyCodes.Z && undoData.length > 0,
@@ -41,7 +41,7 @@ export function taskDetailNavigationKeymap(context: TaskDetailKeyboardContext & 
 
 
     // [ctrl]/[cmd] + [e]
-    
+
     {
       action: "archive",
       matches: () => e.keyCode === KeyCodes.E && cmdControl,
@@ -60,7 +60,7 @@ export function taskDetailNavigationKeymap(context: TaskDetailKeyboardContext & 
 
     // ========== [g] then  [t]
 
-    
+
     {
       action: "projectOrLabel",
       matches: () => e.keyCode === KeyCodes.T,
@@ -79,7 +79,7 @@ export function taskDetailNavigationKeymap(context: TaskDetailKeyboardContext & 
     },
 
     // [a] for assign && ([g] then [a] All Tasks)
-    
+
     {
       action: "assign",
       matches: () => e.keyCode === KeyCodes.A && !e.shiftKey,
@@ -94,7 +94,7 @@ export function taskDetailNavigationKeymap(context: TaskDetailKeyboardContext & 
 
 
     // [shift][b] for blocked by person (plain B is Log time)
-    
+
     {
       action: "blockedBy",
       matches: () => e.keyCode === KeyCodes.B &&
@@ -114,7 +114,7 @@ export function taskDetailNavigationKeymap(context: TaskDetailKeyboardContext & 
 
 
     // [shift][#/3] delete task modal
-    
+
     {
       action: "deleteTask",
       matches: () => e.keyCode === KeyCodes.THREE && e.shiftKey && !e.ctrlKey && !e.metaKey,
@@ -125,7 +125,7 @@ export function taskDetailNavigationKeymap(context: TaskDetailKeyboardContext & 
 
 
     // press [e]
-    
+
     {
       action: "nextAfterArchive",
       matches: () => e.keyCode === KeyCodes.E && !cmdControl,
@@ -148,7 +148,7 @@ export function taskDetailNavigationKeymap(context: TaskDetailKeyboardContext & 
 
 
     // press [j]
-    
+
     {
       action: "nextTask",
       matches: () => e.keyCode === KeyCodes.J && !cmdControl,
@@ -160,7 +160,7 @@ export function taskDetailNavigationKeymap(context: TaskDetailKeyboardContext & 
 
 
     // press [cmd/ctrl][j]
-    
+
     {
       action: "aiWriter",
       matches: () => e.keyCode === KeyCodes.J && cmdControl,
@@ -178,7 +178,7 @@ export function taskDetailNavigationKeymap(context: TaskDetailKeyboardContext & 
     },
 
     //[cmdControl][shift][,]
-    
+
     {
       action: "copyUrl",
       matches: () => e.keyCode === KeyCodes.SEMICOLON &&
@@ -192,7 +192,7 @@ export function taskDetailNavigationKeymap(context: TaskDetailKeyboardContext & 
     },
 
     //[cmdControl][,]
-    
+
     {
       action: "copyFormattedUrl",
       matches: () => (e.keyCode === KeyCodes.SEMICOLON || e.keyCode === KeyCodes.COMMA) &&
@@ -212,7 +212,7 @@ export function taskDetailNavigationKeymap(context: TaskDetailKeyboardContext & 
 
 
     //[cmdControl][shift][.]
-    
+
     {
       action: "copySharedUrl",
       matches: () => e.keyCode === KeyCodes.PERIOD && cmdControl && e.shiftKey,
@@ -224,7 +224,7 @@ export function taskDetailNavigationKeymap(context: TaskDetailKeyboardContext & 
 
 
     //[cmdControl][.]
-    
+
     {
       action: "copySharedFormattedUrl",
       matches: () => e.keyCode === KeyCodes.PERIOD && cmdControl && !e.shiftKey,
@@ -240,7 +240,7 @@ export function taskDetailNavigationKeymap(context: TaskDetailKeyboardContext & 
 
 
     //[cmdControl][I]
-    
+
     {
       action: "copyTitle",
       matches: () => e.keyCode === KeyCodes.I && cmdControl && !e.shiftKey,
@@ -255,7 +255,7 @@ export function taskDetailNavigationKeymap(context: TaskDetailKeyboardContext & 
 
 
     //[cmdControl][shift][i]
-    
+
     {
       action: "copyTicket",
       matches: () => e.keyCode === KeyCodes.I && cmdControl && e.shiftKey,
@@ -267,7 +267,7 @@ export function taskDetailNavigationKeymap(context: TaskDetailKeyboardContext & 
 
 
     // press [k]
-    
+
     {
       action: "previousTask",
       matches: () => e.keyCode === KeyCodes.K && !cmdControl,
@@ -278,7 +278,7 @@ export function taskDetailNavigationKeymap(context: TaskDetailKeyboardContext & 
     },
 
 
-    
+
     {
       action: "share",
       matches: () => e.keyCode === KeyCodes.S && cmdControl && !e.altKey && !e.shiftKey,
@@ -293,7 +293,7 @@ export function taskDetailNavigationKeymap(context: TaskDetailKeyboardContext & 
 
 
     // [alt][s]
-    
+
     {
       action: "star",
       matches: () => e.keyCode === KeyCodes.S && e.altKey && !e.shiftKey,
@@ -305,7 +305,7 @@ export function taskDetailNavigationKeymap(context: TaskDetailKeyboardContext & 
 
 
     // [f]
-    
+
     {
       action: "follow",
       matches: () => e.keyCode === KeyCodes.F && !e.altKey && !e.shiftKey && !cmdControl,
@@ -317,7 +317,7 @@ export function taskDetailNavigationKeymap(context: TaskDetailKeyboardContext & 
 
 
     // [alt][f]
-    
+
     {
       action: "unfollow",
       matches: () => e.keyCode === KeyCodes.F && e.altKey && !e.shiftKey,
@@ -329,7 +329,7 @@ export function taskDetailNavigationKeymap(context: TaskDetailKeyboardContext & 
 
 
     // [alt][t] — start/stop the timer for this task
-    
+
     {
       action: "timer",
       matches: () => e.keyCode === KeyCodes.T && e.altKey && !e.shiftKey,

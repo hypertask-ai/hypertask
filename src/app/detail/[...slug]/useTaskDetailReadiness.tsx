@@ -157,4 +157,3 @@ export function useTaskDetailReadiness(context: useTaskDetailInitialScrollValue)
   focusManager.setEventListener(onWindowFocus);
 
 }
-

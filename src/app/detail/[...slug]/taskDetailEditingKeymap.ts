@@ -9,7 +9,7 @@ export function taskDetailEditingKeymap(context: TaskDetailKeyboardContext & { c
   return [
 
     // ========================= ENTER
-    
+
     {
       action: "enter",
       matches: () => e.key === "Enter" && !cmdControl,
@@ -17,7 +17,7 @@ export function taskDetailEditingKeymap(context: TaskDetailKeyboardContext & { c
     },
 
     // ========================= CTRL + ENTER
-    
+
     {
       action: "controlEnter",
       matches: () => e.key === "Enter" && cmdControl,
@@ -26,7 +26,7 @@ export function taskDetailEditingKeymap(context: TaskDetailKeyboardContext & { c
 
 
     // [ctrl] + [d] []
-    
+
     {
       action: "description",
       matches: () => (e.keyCode === KeyCodes.D && e.ctrlKey && !e.shiftKey) ||
@@ -47,7 +47,7 @@ export function taskDetailEditingKeymap(context: TaskDetailKeyboardContext & { c
     },
 
     // [shift][m]
-    
+
     {
       action: "moveToBoard",
       matches: () => e.keyCode === KeyCodes.M && e.shiftKey && !cmdControl,
@@ -62,7 +62,7 @@ export function taskDetailEditingKeymap(context: TaskDetailKeyboardContext & { c
     // [shift][r] → reply with an AI-suggested draft; opens the composer and
     // inserts the suggestion there (never posts anything automatically).
     // Bare R stays reserved for emoji reactions; g-sequence keeps priority.
-    
+
     {
       action: "suggestReply",
       matches: () => e.keyCode === KeyCodes.R &&
@@ -85,7 +85,7 @@ export function taskDetailEditingKeymap(context: TaskDetailKeyboardContext & { c
 
 
     // [ctrl] + [m] [comment edit mode]
-    
+
     {
       action: "comment",
       matches: () => (e.keyCode === KeyCodes.M && !e.shiftKey && cmdControl) ||
@@ -102,7 +102,7 @@ export function taskDetailEditingKeymap(context: TaskDetailKeyboardContext & { c
     // moving task to next/previous column logic
 
     // [ctrl/cmd] + [shift] + [h] → toggle history (activity) events in the feed
-    
+
     {
       action: "history",
       matches: () => cmdControl && e.shiftKey && e.keyCode === KeyCodes.H,
@@ -115,7 +115,7 @@ export function taskDetailEditingKeymap(context: TaskDetailKeyboardContext & { c
 
 
     // shift + [h]
-    
+
     {
       action: "previousColumn",
       matches: () => (e.keyCode === KeyCodes.H || e.key === "ArrowLeft") &&
@@ -134,7 +134,7 @@ export function taskDetailEditingKeymap(context: TaskDetailKeyboardContext & { c
 
 
     // shift + [l]
-    
+
     {
       action: "nextColumn",
       matches: () => (e.keyCode === KeyCodes.L || e.key === "ArrowRight") && e.shiftKey,
@@ -152,7 +152,7 @@ export function taskDetailEditingKeymap(context: TaskDetailKeyboardContext & { c
     },
 
 
-    
+
     {
       action: "controlTab",
       matches: () => e.ctrlKey,
@@ -166,7 +166,7 @@ export function taskDetailEditingKeymap(context: TaskDetailKeyboardContext & { c
 
 
     // [cmd/ctrl][shift][d] [comment edit mode with audio]
-    
+
     {
       action: "dictate",
       matches: () => e.shiftKey &&
@@ -183,7 +183,7 @@ export function taskDetailEditingKeymap(context: TaskDetailKeyboardContext & { c
 
 
     // [cmd/ctrl][shift][f] [comment edit mode with audio + improve]
-    
+
     {
       action: "dictateAndImprove",
       matches: () => e.shiftKey &&
@@ -198,7 +198,7 @@ export function taskDetailEditingKeymap(context: TaskDetailKeyboardContext & { c
     },
 
 
-    
+
     {
       action: "altDictate",
       matches: () => e.keyCode === KeyCodes.V &&
@@ -213,14 +213,14 @@ export function taskDetailEditingKeymap(context: TaskDetailKeyboardContext & { c
 
 
     // [g]
-    
+
     {
       action: "gSequence",
       matches: () => e.keyCode === KeyCodes.G,
       run: () => { return { stop: true, value: gPressHandler(e, e.shiftKey) }; },
     },
 
-    
+
     {
       action: "calendar",
       matches: () => e.keyCode === KeyCodes.C,
@@ -235,7 +235,7 @@ export function taskDetailEditingKeymap(context: TaskDetailKeyboardContext & { c
 
 
     // [c] for creating a task
-    
+
     {
       action: "createTask",
       matches: () => e.keyCode === KeyCodes.C &&
@@ -254,7 +254,7 @@ export function taskDetailEditingKeymap(context: TaskDetailKeyboardContext & { c
 
 
     // [cmd/ctrl][shift][o]
-    
+
     {
       action: "linkSubtask",
       matches: () => e.keyCode === KeyCodes.EQUALS && e.shiftKey && cmdControl,
@@ -266,7 +266,7 @@ export function taskDetailEditingKeymap(context: TaskDetailKeyboardContext & { c
 
 
     // [d] for due date
-    
+
     {
       action: "dueDate",
       matches: () => matchesShortcut(e, keyboard_shortcuts.dueDateModal.default),
@@ -281,7 +281,7 @@ export function taskDetailEditingKeymap(context: TaskDetailKeyboardContext & { c
     },
 
 
-    
+
     {
       action: "scheduled",
       matches: () => e.keyCode === KeyCodes.U && lastGPress.current !== null,
@@ -293,7 +293,7 @@ export function taskDetailEditingKeymap(context: TaskDetailKeyboardContext & { c
     },
 
     // [m] for move task
-    
+
     {
       action: "moveTask",
       matches: () => e.keyCode === KeyCodes.M &&
@@ -317,7 +317,7 @@ export function taskDetailEditingKeymap(context: TaskDetailKeyboardContext & { c
 
 
     // [i] for summary
-    
+
     {
       action: "summary",
       matches: () => e.keyCode === KeyCodes.I && !e.shiftKey && !e.ctrlKey && !cmdControl,
@@ -331,7 +331,7 @@ export function taskDetailEditingKeymap(context: TaskDetailKeyboardContext & { c
     },
 
     // [p] for set priority
-    
+
     {
       action: "priority",
       matches: () => e.keyCode === KeyCodes.P && !cmdControl,
