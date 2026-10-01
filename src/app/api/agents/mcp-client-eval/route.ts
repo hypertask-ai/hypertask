@@ -6,7 +6,7 @@ import latest from "@/lib/mcpClientEval/latest.json";
 
 export const runtime = "nodejs";
 
-export const MCP_CLIENT_EVAL_REPORT_URL =
+const MCP_CLIENT_EVAL_REPORT_URL =
   process.env.MCP_CLIENT_EVAL_REPORT_URL ||
   "https://raw.githubusercontent.com/hypertask-ai/hypertask/eval-reports/latest.json";
 

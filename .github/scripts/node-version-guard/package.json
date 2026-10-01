@@ -1,0 +1,7 @@
+{
+  "name": "hypertask-node-version-guard",
+  "private": true,
+  "dependencies": {
+    "js-yaml": "4.1.1"
+  }
+}

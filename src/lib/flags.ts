@@ -114,6 +114,12 @@ const RETIRED_CLIENT_FEATURE_FLAGS = { "htpr-6072-shallow-board-switch": true } 
 
 const FEATURE_FLAG_DEFINITIONS = [
   {
+    key: "yper4-123-board-check",
+    shippedOn: "2026-10-01",
+    description:
+      "Lets board checks read recent agent activity across all runs on a ticket the caller can read.",
+  },
+  {
     key: HTPR_6673_SIGNUP_ANALYTICS_FLAG,
     shippedOn: "2026-09-28",
     description:

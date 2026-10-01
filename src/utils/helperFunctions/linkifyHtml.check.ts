@@ -37,3 +37,10 @@ assert.strictEqual(
 );
 
 console.log("linkifyHtml: all checks passed");
+
+// HTPR-6802: URLs inside formatting and wrapped in parentheses still link.
+assert.strictEqual(
+  linkifyHtml("<p><strong>after https://a.io/x (https://b.io/pull/1).</strong></p>"),
+  '<p><strong>after <a href="https://a.io/x" target="_blank" rel="noopener noreferrer">https://a.io/x</a> (<a href="https://b.io/pull/1" target="_blank" rel="noopener noreferrer">https://b.io/pull/1</a>).</strong></p>',
+  "urls inside strong and parentheses",
+);

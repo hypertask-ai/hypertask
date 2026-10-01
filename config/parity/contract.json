@@ -36,7 +36,8 @@
           "^GET /api/mcp/agents($|/\\[agentId\\]$|/analytics$|/presence$)",
           "^POST /api/mcp/agents/runtime-heartbeat$",
           "^GET /api/mcp/agents/runs/\\[id\\]$",
-          "^GET /api/mcp/agents/runs/\\[id\\]/activities$"
+          "^GET /api/mcp/agents/runs/\\[id\\]/activities$",
+          "^GET /api/mcp/tasks/\\[taskId\\]/agent-activity$"
         ],
         "mcp": ["^hypertask_(agent_presence|list_agents)$"],
         "cli": ["^presence$", "^agents list$"],

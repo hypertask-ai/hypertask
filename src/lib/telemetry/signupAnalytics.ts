@@ -35,7 +35,7 @@ const MAX_UTM_SOURCE_LENGTH = 200;
 
 let client: PostHog | undefined;
 
-function postHogClient(): PostHog | undefined {
+export function postHogClient(): PostHog | undefined {
   const token = process.env.POSTHOG_SERVER_PROJECT_TOKEN?.trim();
   if (!token) return undefined;
 
