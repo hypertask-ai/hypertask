@@ -85,7 +85,7 @@
     "@upstash/qstash": "^2.11.1",
     "@vercel/functions": "^3.9.9",
     "@vercel/speed-insights": "^2.0.0",
-    "ai": "^7.0.116",
+    "ai": "^7.0.118",
     "autoprefixer": "10.6.1",
     "aws-sdk": "^2.1435.0",
     "axios": "^1.20.0",
