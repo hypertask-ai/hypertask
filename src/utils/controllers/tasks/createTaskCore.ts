@@ -16,6 +16,7 @@ export interface CreateTaskCoreOptions {
     title: string;
     description: string;
     userId: number;
+    agentId?: string | null;
     projectId: number;
     sectionId: number;
     sectionTitle: string;
@@ -45,6 +46,7 @@ export async function createTaskCore(options: CreateTaskCoreOptions): Promise<Cr
         title,
         description,
         userId,
+        agentId,
         projectId,
         sectionId,
         sectionTitle,
@@ -85,6 +87,7 @@ export async function createTaskCore(options: CreateTaskCoreOptions): Promise<Cr
         description: '',
         section: sectionTitle,
         userId,
+        agentId: agentId ?? null,
         uniqueIndex: taskCount + 1,
         ticketNumber,
         ranking,
@@ -142,7 +145,7 @@ export async function createTaskCore(options: CreateTaskCoreOptions): Promise<Cr
 
     // Create task. The board webhook rows are written in the same transaction so
     // the task and its task.created event can never exist without each other.
-    const taskCreatedActor = { userId, agentId: null };
+    const taskCreatedActor = { userId, agentId: agentId ?? null };
     const createdTask = await createTaskWithBoardWebhookOutbox(prisma, taskCreatedActor, async (tx) => {
         const created = await tx.task.create({
             data: taskData,
@@ -196,6 +199,7 @@ export async function createTaskCore(options: CreateTaskCoreOptions): Promise<Cr
         taskId: newTask.id,
         creatorId: userId,
         content: description,
+        agentId,
         actingUserId: userId
     });
 
@@ -241,7 +245,8 @@ export async function createTaskCore(options: CreateTaskCoreOptions): Promise<Cr
         taskId: newTask.id,
         projectId,
         sectionId,
-        currentUserId: userId
+        currentUserId: userId,
+        agentAssignerId: agentId
     });
     if (autoAssigned === 'pending') {
         console.warn('[task-create-core] auto-assignment did not complete; retrying the pending task.created handoff', {
@@ -251,9 +256,7 @@ export async function createTaskCore(options: CreateTaskCoreOptions): Promise<Cr
             const { recoverPendingAgentTaskCreatedWebhook } = await import(
                 '@/lib/agentWebhooks/taskCreatedRecovery'
             );
-            const recoveryResult = await recoverPendingAgentTaskCreatedWebhook(newTask.id, {
-                userId,
-            });
+            const recoveryResult = await recoverPendingAgentTaskCreatedWebhook(newTask.id, taskCreatedActor);
             if (recoveryResult === 'recovered') {
                 // The recovery helper emitted task.created after its final
                 // assignment and task-state checks.
@@ -289,7 +292,7 @@ export async function createTaskCore(options: CreateTaskCoreOptions): Promise<Cr
             await markAgentTaskCreatedReady(newTask.id);
             await emitAgentTaskCreatedWebhook({
                 taskId: newTask.id,
-                actor: { userId },
+                actor: taskCreatedActor,
             });
         } catch (error) {
             // The creation transaction left a pending marker; the minute sweep

@@ -5,6 +5,7 @@ import { hasValidCronAuthorization } from "@/lib/cronAuthorization";
 import {
   FEATURE_FLAG_ADMIN_URL,
   FEATURE_FLAG_OWNER_USER_ID,
+  FEATURE_FLAG_SWEEP_AGENT_ID,
   FEATURE_FLAG_TICKET_PROJECT_ID,
   FLAG_REMOVAL_COUNTDOWN_FLAG,
 } from "@/lib/flags";
@@ -178,6 +179,7 @@ async function sweep() {
             title,
             description: removalDescription(flag.key, flag.releasedAt),
             userId: FEATURE_FLAG_OWNER_USER_ID,
+            agentId: FEATURE_FLAG_SWEEP_AGENT_ID,
             projectId: REMOVAL_PROJECT_ID,
             sectionId: section.id,
             sectionTitle: section.section_title,

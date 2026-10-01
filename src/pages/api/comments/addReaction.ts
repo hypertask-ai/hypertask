@@ -5,6 +5,8 @@ import checkReminderAndCreateNotification from "@/utils/controllers/notification
 import { broadcastTaskComment } from "@/lib/realtime/server";
 import { omitCommentSeen } from "@/utils/controllers/comments/readReceipts";
 import { NextApiHandler, NextApiRequest, NextApiResponse } from "next";
+import { getSessionUser } from "@/lib/auth/getSessionUser";
+import { userCanAccessTaskContent } from "@/utils/controllers/tasks/assertTaskAccess";
 
 // HTPR-5522: every failure here used to answer with the same bare 500, so a
 // missing id, a comment that no longer exists, and a failed push notification
@@ -18,11 +20,20 @@ const handler: NextApiHandler = async (req: NextApiRequest, res: NextApiResponse
     if (req.method === "POST") {
 
         try {
-            const { userId, taskId, commentId, emoji, unified, names,alreadyReacted } = req.body;
-            if (!isId(userId) || !isId(taskId) || !isId(commentId) || !isText(unified) || !isText(emoji)) {
+            const session = await getSessionUser(new Headers(req.headers as Record<string, string>));
+            if (!session) return res.status(401).json({ message: "Unauthorized" });
+            const { userId: bodyUserId, taskId, commentId, emoji, unified, names,alreadyReacted } = req.body;
+            if (bodyUserId != null && Number(bodyUserId) !== session.userId) {
+                return res.status(403).json({ message: "Forbidden" });
+            }
+            const userId = session.userId;
+            if (!isId(taskId) || !isId(commentId) || !isText(unified) || !isText(emoji)) {
                 return res.status(400).json({
-                    message: "userId, taskId and commentId must be ids, and unified and emoji must be non-empty.",
+                    message: "taskId and commentId must be ids, and unified and emoji must be non-empty.",
                 });
+            }
+            if (!(await userCanAccessTaskContent(userId, taskId))) {
+                return res.status(403).json({ message: "Forbidden" });
             }
             // A reaction on a deleted or moved comment would otherwise fail as a
             // foreign key violation, which reads as a server fault, not stale UI.
