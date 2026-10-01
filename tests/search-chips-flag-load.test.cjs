@@ -8,10 +8,11 @@ const root = path.resolve(__dirname, '..')
 
 test('URL searches retry the full operator query when flags load after projects', async (t) => {
   const dom = new JSDOM('<div id="root"></div>', { url: 'https://app.hypertask.ai/search?searchTerm=is:open' })
-  const globals = ['window', 'document', 'HTMLElement', 'IS_REACT_ACT_ENVIRONMENT']
+  const globals = ['window', 'document', 'navigator', 'HTMLElement', 'IS_REACT_ACT_ENVIRONMENT']
   const previous = globals.map((name) => [name, Object.getOwnPropertyDescriptor(global, name)])
   global.window = dom.window
   global.document = dom.window.document
+  Object.defineProperty(global, 'navigator', { configurable: true, value: dom.window.navigator })
   global.HTMLElement = dom.window.HTMLElement
   global.IS_REACT_ACT_ENVIRONMENT = true
   dom.window.HTMLElement.prototype.attachEvent = () => {}
