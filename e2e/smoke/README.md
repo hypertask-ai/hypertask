@@ -83,6 +83,15 @@ delete real data — approved ONLY on a private board named exactly
 account, no other members. `journeys.setup.ts` finds or creates that board
 and refuses (fails loud) if it has any other member.
 
+The AI chat journey starts a new conversation through the "New chat" button
+and waits for that empty session to be selected before sending its prompt.
+It requires a finished, nonempty reply, not an old reply, prompt echo, or
+chat error message. Saved conversations therefore do not affect repeat runs.
+The browser-fixture regression runs with
+`node --test e2e/smoke/ai-chat-journey.test.cjs` without a live account.
+It requires Playwright's Chromium (`npx playwright install chromium`) and
+runs separately from the browser-free Node unit suite.
+
 Env vars these read:
 
 - `HT_QA_JOURNEYS=1` — required to run anything in the `journeys-setup` /

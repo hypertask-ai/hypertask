@@ -317,18 +317,27 @@ test(`ai chat replies`, { tag: [idTag('ai-chat')] }, async ({ page }) => {
   const prompt = 'In one short sentence, what is Hypertask?'
   const editor = page.locator('#ai-chat-tiptap-editor .ProseMirror')
   await editor.waitFor({ state: 'visible', timeout: 10_000 })
+
+  // /chat restores the latest conversation. Start an isolated turn and wait
+  // for the new session selection, so old replies cannot pass or fail this run.
+  await page.getByRole('button', { name: 'New chat', exact: true }).click()
+  await expect(page, 'new chat was not selected').toHaveURL(/\/chat\/[^/?]+/)
+  await expect(page.locator('.submessage-container'), 'new chat was not empty').toHaveCount(0)
+
   await editor.click()
   await expect(editor, 'chat editor did not take focus').toBeFocused()
   await page.keyboard.type(prompt)
   await page.keyboard.press('Enter')
 
-  // The user's own message is also a delivered .content-html, so wait for a
-  // second one and make sure the last is not just the echo of the prompt.
+  // Both messages must be delivered; a streaming placeholder is not a reply.
   const delivered = page.locator('.submessage-container.delivered .content-html')
   await expect(delivered, 'no AI reply arrived within the timeout').toHaveCount(2, { timeout: 45_000 })
   const text = (await delivered.last().innerText()).trim()
   expect(text.length, 'AI reply was empty').toBeGreaterThan(0)
   expect(text, 'last message is the prompt, not an AI reply').not.toBe(prompt)
+  expect(text, 'AI reply was an error').not.toMatch(
+    /^(Sorry, an error occurred while processing your request\.|Stream cancelled\.|Sorry, I'm having trouble responding right now\.)$/,
+  )
 })
 
 test(`plan shows correctly`, { tag: [idTag('plan-check')] }, async ({ page }) => {
