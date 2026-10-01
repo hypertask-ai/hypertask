@@ -36,10 +36,10 @@ Checks run from the worktree root with the existing Node and POSIX shell. Tempor
   EXPECT: TESTS PASS
   EVIDENCE: automatic-evidence=v1; definition-sha256=2de805673ae94a83de185dc8f7251782708a950ac0b09d7e4e26a78e909e7aac; exit=0; EXPECT=matched; output-sha256=c6818f3a797be3f2f8ac3388a667d08dae1b22251fea93049464a9fcae0e88ca; output-bytes=596; shell=/bin/sh; cwd=/home/valentin/projects/hypertask-wt/htpr-6506-e-tutorial; path=fd5351737ae0/31 entries
 
-- [ ] G6: The final committed working tree is clean.
+- [x] G6: The final committed working tree is clean.
   CHECK: test -z "$(git status --short)" && printf 'CLEAN TREE PASS\n'
   EXPECT: CLEAN TREE PASS
-  EVIDENCE: pending
+  EVIDENCE: automatic-evidence=v1; definition-sha256=f0df3e16af7760c807cf5f93eed8e48737ebff82d279056e129629a1e1b69730; exit=0; EXPECT=matched; output-sha256=0a3ff0c32dbed62e3c0cddfad1a5418c0e27acf17103a4e3451b44484e05c710; output-bytes=16; shell=/bin/sh; cwd=/home/valentin/projects/hypertask-wt/htpr-6506-e-tutorial; path=fd5351737ae0/31 entries
 
 - [x] G7: Step definitions, engine statements, public contracts, and tutorial-specific differences are preserved without behavior changes.
   CHECK: node /tmp/htpr-6506-checks.cjs parity
