@@ -36,15 +36,15 @@ team gets: shared allowance key, no managed key, no premium models without a
 customer key. Resolution lives in `src/lib/teamComp.ts` and is used by
 `storePlanIdForTeam` (server) and `deriveTeamBilling` (client).
 
-The owner sets and clears comps through `/api/mcp/admin/team-comp` (owner
+The owner finds teams by ID or name at `/admin/comp` and sets or clears comps through `/api/admin/team-comp` (owner
 identity only, behind the `htpr-6653-admin-team-comp` flag). Team-scoped
-management keys are refused. Every change writes a `Logs` row (type `Team`) in
+management keys cannot use this session-only admin API. Every change writes a `Logs` row (type `Team`) in
 the same transaction:
 
 ```
-GET    /api/mcp/admin/team-comp?teamId=<uuid>   (or ?email=<member email>)
-POST   /api/mcp/admin/team-comp  {"teamId"|"email", "plan": "Pro"|"BYOK", "until": "<ISO date>"}
-DELETE /api/mcp/admin/team-comp  {"teamId"|"email"}
+GET    /api/admin/team-comp?teamId=<uuid>   (or ?email=<member email> or ?query=<team name>)
+POST   /api/admin/team-comp  {"teamId"|"email", "plan": "Pro"|"BYOK", "until": "<ISO date>"}
+DELETE /api/admin/team-comp  {"teamId"|"email"}
 ```
 
 An email on more than one team returns 409 with the candidate team ids.

@@ -6,7 +6,7 @@ const test = require("node:test");
 const { NextRequest } = require("next/server");
 
 const root = path.resolve(__dirname, "..");
-const routePath = "src/app/api/mcp/admin/team-comp/route.ts";
+const routePath = "src/app/api/admin/team-comp/route.ts";
 
 function stubModule(relativePath, exports) {
   const filename = path.join(root, relativePath);
@@ -20,21 +20,21 @@ let flagOn;
 let teams;
 let transactions;
 
-stubModule("src/lib/mcp/auth.ts", {
-  checkMcpRateLimit: async () => null,
-  validateManagementOrSessionAuth: async () => context,
-  createUnauthorizedResponse: () => Response.json({ success: false }, { status: 401 }),
-});
 stubModule("src/lib/flags.ts", {
+  FEATURE_FLAG_OWNER_USER_ID: 6,
   HTPR_6653_ADMIN_TEAM_COMP_FLAG: "htpr-6653-admin-team-comp",
   isFeatureEnabled: async () => flagOn,
+  isFeatureFlagOwner: async () => Boolean(context?.user?.id === OWNER.id &&
+    context.user.email === OWNER.email && !context.management),
 });
 stubModule("src/lib/prisma.ts", {
   default: {
     user: { findMany: async () => [{ id: 50 }] },
     team: {
       findUnique: async ({ where }) => teams.find((t) => t.id === where.id) ?? null,
-      findMany: async () => teams,
+      findMany: async ({ where }) => {
+        return where.title ? teams.filter((t) => t.title.toLowerCase().includes(where.title.contains.toLowerCase())) : teams;
+      },
       update: ({ where, data }) => ({ op: "team.update", where, data }),
     },
     logs: { create: ({ data }) => ({ op: "logs.create", data }) },
@@ -52,12 +52,12 @@ const jiti = require("jiti")(path.join(root, "tests/team-comp-admin-route.test.c
   cache: false,
   interopDefault: true,
 });
-const { POST, DELETE } = jiti(path.join(root, routePath));
+const { GET, POST, DELETE } = jiti(path.join(root, routePath));
 
 function request(method, body) {
-  return new NextRequest("https://app.hypertask.ai/api/mcp/admin/team-comp", {
+  return new NextRequest("https://app.hypertask.ai/api/admin/team-comp", {
     method,
-    headers: { "content-type": "application/json" },
+    headers: { "content-type": "application/json", origin: "https://app.hypertask.ai", host: "app.hypertask.ai" },
     body: JSON.stringify(body),
   });
 }
@@ -137,5 +137,71 @@ test("an email on several teams returns the candidates instead of guessing", ser
   assert.equal(response.status, 409);
   const body = await response.json();
   assert.equal(body.candidates.length, 2);
+  assert.equal(transactions.length, 0);
+});
+
+test("all methods reject non-owners and signed-out callers before lookup", serial, async () => {
+  for (const user of [null, { id: 8, email: "qa@example.test" }, { id: OWNER.id, email: "impostor@example.test" }]) {
+    context = user ? { user } : null;
+    assert.equal((await GET(new NextRequest(`https://app.hypertask.ai/api/admin/team-comp?teamId=${TEAM_ID}`))).status, 403);
+    assert.equal((await POST(request("POST", { teamId: TEAM_ID, plan: "Pro", until: until() }))).status, 403);
+    assert.equal((await DELETE(request("DELETE", { teamId: TEAM_ID }))).status, 403);
+  }
+  assert.equal(transactions.length, 0);
+});
+
+test("owner reads current plan and comp state and searches names case-insensitively", serial, async () => {
+  teams[0] = { ...teams[0], compedPlan: "BYOK", compedUntil: new Date(until()) };
+  const response = await GET(new NextRequest(`https://app.hypertask.ai/api/admin/team-comp?teamId=${TEAM_ID}`));
+  assert.equal(response.status, 200);
+  assert.equal(response.headers.get("cache-control"), "private, no-store");
+  const body = await response.json();
+  assert.equal(body.comp.currentPlan, "BYOK");
+  assert.equal(body.comp.compedUntil, teams[0].compedUntil.toISOString());
+  const matches = await GET(new NextRequest("https://app.hypertask.ai/api/admin/team-comp?query=PART"));
+  assert.equal(matches.status, 200);
+  assert.equal((await matches.json()).teams[0].teamId, TEAM_ID);
+  const empty = await GET(new NextRequest("https://app.hypertask.ai/api/admin/team-comp?query=absent"));
+  assert.deepEqual((await empty.json()).teams, []);
+});
+
+test("read and clear also stay hidden when the flag is off", serial, async () => {
+  flagOn = false;
+  assert.equal((await GET(new NextRequest(`https://app.hypertask.ai/api/admin/team-comp?teamId=${TEAM_ID}`))).status, 404);
+  assert.equal((await DELETE(request("DELETE", { teamId: TEAM_ID }))).status, 404);
+  assert.equal(transactions.length, 0);
+});
+
+test("owner can set Pro and mutation changes only comp fields, not Stripe", serial, async () => {
+  const expiry = until();
+  const response = await POST(request("POST", { teamId: TEAM_ID, plan: "Pro", until: expiry }));
+  assert.equal(response.status, 200);
+  assert.equal((await response.json()).comp.currentPlan, "Pro");
+  assert.deepEqual(transactions[0][0].data, { compedPlan: "Pro", compedUntil: new Date(expiry) });
+  assert.equal(transactions[0].length, 2);
+});
+
+test("expiry is required and must be an ISO future date", serial, async () => {
+  for (const expiry of [undefined, null, "", "not-a-date", 4102444800000]) {
+    assert.equal((await POST(request("POST", { teamId: TEAM_ID, plan: "Pro", until: expiry }))).status, 400);
+  }
+  assert.equal(transactions.length, 0);
+});
+
+test("mutations reject foreign or missing origin", serial, async () => {
+  for (const method of [POST, DELETE]) {
+    const req = request(method === POST ? "POST" : "DELETE", { teamId: TEAM_ID, plan: "Pro", until: until() });
+    req.headers.set("origin", "https://evil.example");
+    assert.equal((await method(req)).status, 403);
+    req.headers.delete("origin");
+    assert.equal((await method(req)).status, 403);
+  }
+  assert.equal(transactions.length, 0);
+});
+
+test("unknown teams and invalid lookups do not mutate data", serial, async () => {
+  assert.equal((await GET(new NextRequest("https://app.hypertask.ai/api/admin/team-comp?query=x"))).status, 400);
+  assert.equal((await GET(new NextRequest("https://app.hypertask.ai/api/admin/team-comp?teamId=invalid"))).status, 400);
+  assert.equal((await GET(new NextRequest("https://app.hypertask.ai/api/admin/team-comp?teamId=99999999-9999-4999-8999-999999999999"))).status, 404);
   assert.equal(transactions.length, 0);
 });

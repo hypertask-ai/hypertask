@@ -642,7 +642,7 @@ model Team {
   activeSubscriptionPlanId     String?
   compedUntil                  DateTime?
   // Plan a comp grants while compedUntil is in the future. Null means Pro.
-  compedPlan                   TeamCompPlan?
+  compedPlan                   TeamCompPlan? @default(Pro)
   subscriptionPlan             SubscriptionPlan[]
   stripe_customer_id           String?
   createdAt                    DateTime           @default(now())

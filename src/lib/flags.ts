@@ -149,7 +149,7 @@ const FEATURE_FLAG_DEFINITIONS = [
     key: HTPR_6653_ADMIN_TEAM_COMP_FLAG,
     shippedOn: "2026-09-27",
     description:
-      "Lets the owner comp a team as Pro or BYOK until a date, and clear the comp, through an owner-only API.",
+      "Lets the owner comp a team as Pro or BYOK until a date, and clear the comp, from the owner-only team comp admin screen.",
   },
   {
     key: HTPR_6561_DESCRIPTION_STRUCTURE_FLAG,

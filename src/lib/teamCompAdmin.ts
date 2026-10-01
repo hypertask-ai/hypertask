@@ -2,16 +2,7 @@ import { LogType, Status } from "@prisma/client";
 
 import prisma from "@/lib/prisma";
 import { teamCompPlan, type TeamCompPlan } from "@/lib/teamComp";
-
-/** The only account allowed to comp teams, matched on id AND email (same identity as team-gateway-keys). */
-const TEAM_COMP_ADMIN = { userId: 6, email: "valentin.yeo@gmail.com" } as const;
-
-export function isTeamCompAdmin(user: { id: number; email: string }) {
-  return (
-    user.id === TEAM_COMP_ADMIN.userId &&
-    user.email.trim().toLowerCase() === TEAM_COMP_ADMIN.email
-  );
-}
+import { storePlanIdForTeam, type TeamPlanSource } from "@/app/api/ai/_lib/planGate";
 
 export class TeamCompLookupError extends Error {
   constructor(
@@ -29,7 +20,20 @@ const teamCompSelect = {
   title: true,
   compedUntil: true,
   compedPlan: true,
+  activeSubscriptionPlanId: true,
+  subscriptionPlan: {
+    select: { subscriptionId: true, subscriptionStatus: true, priceId: true },
+  },
 } as const;
+
+export async function searchTeamsForComp(query: string) {
+  return prisma.team.findMany({
+    where: { title: { contains: query, mode: "insensitive" } },
+    select: teamCompSelect,
+    orderBy: [{ title: "asc" }, { id: "asc" }],
+    take: 20,
+  });
+}
 
 export type TeamCompTarget = { teamId?: string; email?: string };
 
@@ -78,15 +82,18 @@ export function describeTeamComp(team: {
   title: string | null;
   compedUntil: Date | null;
   compedPlan: string | null;
-}) {
+} & TeamPlanSource) {
   return {
     teamId: team.id,
     title: team.title,
     compedPlan: team.compedPlan,
     compedUntil: team.compedUntil?.toISOString() ?? null,
     activeCompPlan: teamCompPlan(team),
+    currentPlan: storePlanIdForTeam(team),
   };
 }
+
+export type TeamCompView = ReturnType<typeof describeTeamComp>;
 
 function compLabel(plan: string | null, until: Date | null) {
   if (!until) return "none";

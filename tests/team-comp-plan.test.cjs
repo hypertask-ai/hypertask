@@ -96,6 +96,11 @@ test("plan resolution: comp null, Pro, BYOK, expired, and alongside a paid plan"
     "BYOK",
   );
   assert.equal(
+    storePlanIdForTeam(team({ compedUntil: past(), compedPlan: "Pro" })),
+    "Free",
+    "an expired Pro comp grants nothing",
+  );
+  assert.equal(
     storePlanIdForTeam(team({ compedUntil: past(), compedPlan: "BYOK" })),
     "Free",
     "an expired comp grants nothing",
