@@ -186,7 +186,7 @@ export default function FeatureFlagsAdmin() {
                         href={flag.ticketUrl}
                         className="text-content font-medium text-white-black underline-offset-2 hover:underline focus-visible:underline"
                       >
-                        {ticketIdEnabled && flag.ticketId ? `${flag.ticketId} · ` : null}
+                        {ticketIdEnabled && flag.ticketId && <span>{flag.ticketId} · </span>}
                         {flag.ticketTitle}
                       </a>
                     ) : (
