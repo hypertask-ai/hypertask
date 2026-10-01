@@ -13,6 +13,8 @@ test("only server-internal callers opt out of the membership check", () => {
     "src/app/api/webhooks/github/route.ts", // signature-checked webhook
     "src/app/api/cron/slack-thread-summaries/route.ts", // authenticated cron
     "src/utils/controllers/comments/createCommentService.ts", // where the option is propagated
+    "src/utils/controllers/comments/persistComment.ts",
+    "src/utils/controllers/comments/commentCreationTypes.ts",
   ]);
   const root = path.join(__dirname, "..", "src");
   const found = [];
