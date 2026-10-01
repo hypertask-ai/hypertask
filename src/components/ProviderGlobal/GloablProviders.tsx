@@ -177,6 +177,7 @@ import { MY_TASKS_SHORTCUTS_WIDTH_FLAG, HTPR_6476_MOBILE_AGENT_CHAT_FULLSCREEN_F
 
 import AIChatClosedLayout from "../AI_CHAT/AI_Chat_Closed_Layout";
 import FullScreenChatLoading from "../AI_CHAT/FullScreenChatLoading";
+import ChatRuntimeHost from "./ChatRuntimeHost";
 import {
   readChatOpenForSession,
   writeChatOpenForSession,
@@ -197,11 +198,11 @@ import { boardContextFromPath, buildSearchUrl } from "@/lib/searchArchive";
 // rendered boundaries, which fetched these chunks while the chat was closed.
 // The chat runtime should not be requested until an open intent or /chat route.
 type AIChatLayoutModule = typeof import("../AI_CHAT/AI_Chat_Layout");
-type ChatProviderModule = {
-  default: (typeof import("@/lib/contexts/Multipages/AI_Agent/AI_Agent_Chat_Context"))["ChatProvider"];
+type ChatRuntimeModule = {
+  default: (typeof import("@/lib/contexts/Multipages/AI_Agent/AI_Agent_Chat_Context"))["ChatRuntime"];
 };
 let aiChatLayoutPromise: Promise<AIChatLayoutModule> | null = null;
-let chatProviderPromise: Promise<ChatProviderModule> | null = null;
+let chatRuntimePromise: Promise<ChatRuntimeModule> | null = null;
 const loadAIChatLayout = () => {
   if (!aiChatLayoutPromise) {
     aiChatLayoutPromise = import("../AI_CHAT/AI_Chat_Layout").catch((error) => {
@@ -211,20 +212,21 @@ const loadAIChatLayout = () => {
   }
   return aiChatLayoutPromise;
 };
-const loadChatProvider = () => {
-  if (!chatProviderPromise) {
-    chatProviderPromise =
+const loadChatRuntime = () => {
+  if (!chatRuntimePromise) {
+    chatRuntimePromise =
       import("@/lib/contexts/Multipages/AI_Agent/AI_Agent_Chat_Context")
-        .then((module) => ({ default: module.ChatProvider }))
+        .then((module) => ({ default: module.ChatRuntime }))
         .catch((error) => {
-          chatProviderPromise = null;
+          chatRuntimePromise = null;
           throw error;
         });
   }
-  return chatProviderPromise;
+  return chatRuntimePromise;
 };
-const AIChatLayout = lazy(loadAIChatLayout);
-const ChatProvider = lazy(loadChatProvider);
+const AIChatPanels = lazy(loadAIChatLayout);
+const ChatRuntime = lazy(loadChatRuntime);
+
 import {
   prefixUseGetAnnouncements,
   useGetAnnouncements,
@@ -442,7 +444,7 @@ export default function GlobalProvider({
     if (!isTaskDetailPage) return;
     // The provider starts during render; start its sibling layout as soon as the
     // loading fallback commits instead of waiting for the provider to resolve.
-    void Promise.all([loadChatProvider(), loadAIChatLayout()]).catch(() => {});
+    void Promise.all([loadChatRuntime(), loadAIChatLayout()]).catch(() => {});
   }, [isTaskDetailPage]);
   // https://app.hypertask.ai/detail/project-15/5424: clear both legacy and
   // user-scoped tutorial state without ever loading the disabled runtime. This
@@ -1438,49 +1440,37 @@ export default function GlobalProvider({
           secondaryStartupEnabled,
         }}
       >
-        {shouldMountChatRuntime ? (
-          <Suspense
-            fallback={
-              isFullScreenChat ||
-              shouldMountAgentChatRuntime ||
-              isTaskDetailPage ? (
-                <FullScreenChatLoading />
-              ) : (
-                <AIChatClosedLayout
-                  mobileTopBarVisible={showMobileTabBar}
-                  mobileTabBarVisible={mobileBottomInsetVisible}
-                  mobilePullCommandEnabled={mobilePullCommandVisible}
-                  onOpenAIChat={openAIChatInterface}
-                >
-                  {children}
-                </AIChatClosedLayout>
-              )
-            }
-          >
-            <ChatProvider>
-              {isFullScreenChat ? (
-                children
-              ) : (
-                <AIChatLayout
-                  mobileTopBarVisible={showMobileTabBar}
-                  mobileTabBarVisible={mobileBottomInsetVisible}
-                  mobilePullCommandEnabled={mobilePullCommandVisible}
-                >
-                  {children}
-                </AIChatLayout>
-              )}
-            </ChatProvider>
-          </Suspense>
-        ) : (
-          <AIChatClosedLayout
-            mobileTopBarVisible={showMobileTabBar}
-            mobileTabBarVisible={mobileBottomInsetVisible}
-            mobilePullCommandEnabled={mobilePullCommandVisible}
-            onOpenAIChat={openAIChatInterface}
-          >
-            {children}
-          </AIChatClosedLayout>
-        )}
+        <ChatRuntimeHost
+          mounted={shouldMountChatRuntime}
+          holdChildren={
+            isFullScreenChat ||
+            shouldMountAgentChatRuntime ||
+            isTaskDetailPage
+          }
+          loading={<FullScreenChatLoading />}
+          Runtime={ChatRuntime}
+        >
+          {isFullScreenChat ? (
+            children
+          ) : (
+            <AIChatClosedLayout
+              mobileTopBarVisible={showMobileTabBar}
+              mobileTabBarVisible={mobileBottomInsetVisible}
+              mobilePullCommandEnabled={mobilePullCommandVisible}
+              onOpenAIChat={openAIChatInterface}
+              chatOpen={showAiChatInterface}
+              panels={
+                shouldMountChatRuntime ? (
+                  <Suspense fallback={null}>
+                    <AIChatPanels />
+                  </Suspense>
+                ) : undefined
+              }
+            >
+              {children}
+            </AIChatClosedLayout>
+          )}
+        </ChatRuntimeHost>
       </BoardStartupContext.Provider>
       {ReactQueryDevtools ? <ReactQueryDevtools initialIsOpen={false} /> : null}
     </div>

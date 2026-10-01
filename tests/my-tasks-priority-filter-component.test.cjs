@@ -93,9 +93,6 @@ stubSourceModule("src/lib/myTasks/reconcileMyTasks.ts", {
   }),
   parseMyTasksListPayload: () => null,
 });
-stubSourceModule("src/app/my-tasks/MyTasksQuickAdd.tsx", {
-  default: () => null,
-});
 stubSourceModule("src/components/Common/TaskRowComponents/TaskListRow.tsx", {
   SplitTitle: () => null,
 });

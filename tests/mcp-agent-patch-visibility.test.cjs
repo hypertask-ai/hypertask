@@ -87,6 +87,9 @@ function loadHandler({ user, visibilityResult, agentRow, flagEnabled } = {}) {
         isFeatureEnabled: async () => state.flagEnabled,
       };
     }
+    if (request === "@/lib/mcp/agents/delegatedAccess") {
+      return { __esModule: true, checkAgentBoardDelegation: async () => null };
+    }
     if (request === "@/lib/agents/runtimeState") {
       return { __esModule: true, clearAgentRuntimeSnapshot: async () => {} };
     }

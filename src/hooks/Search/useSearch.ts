@@ -427,6 +427,8 @@ export function useSearch(
   }
 
   function handleKeyDown(event: KeyboardEvent) {
+    if (searchChipsEnabled && (event.defaultPrevented ||
+      (event.key === "Escape" && tasksInputRef.current?.getAttribute("aria-expanded") === "true"))) return;
     if (searchChipsEnabled && document.activeElement === tasksInputRef.current &&
       (["Enter", "Tab", "Backspace"].includes(event.key) ||
         (["ArrowDown", "ArrowUp"].includes(event.key) && tasksInputRef.current?.getAttribute("aria-expanded") === "true"))) return;

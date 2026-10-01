@@ -15,7 +15,7 @@ function runScript(t, args = [], env = {}) {
   const body = path.join(root, 'body.md');
   fs.writeFileSync(log, '');
   fs.writeFileSync(body, '# Summary for non-engineers\nReview this fix.\nWhat went wrong\nWhat changes\nWhat you will see\nWatch out for\n');
-  for (const command of ['git', 'gh', 'hypertask']) {
+  for (const command of ['git', 'gh', 'hypertask', 'vcc']) {
     fs.writeFileSync(path.join(root, command), `#!/usr/bin/env bash
 printf '%s\\n' '${command} '"$*" >> "$COMMAND_LOG"
 case '${command} '"$*" in
@@ -25,7 +25,7 @@ case '${command} '"$*" in
     if [ "\${CREATE_EXIT:-0}" != 0 ]; then echo 'create refused' >&2; exit "$CREATE_EXIT"; fi
     echo '${prUrl}' ;;
   'gh pr merge '*) echo 'Auto merge is not allowed for this repository' >&2; exit 1 ;;
-  'hypertask task move '*) exit "\${MOVE_EXIT:-0}" ;;
+  'vcc task move '*) exit "\${MOVE_EXIT:-0}" ;;
   'hypertask --json task get '*)
     if [ "\${READ_EXIT:-0}" != 0 ]; then exit "$READ_EXIT"; fi
     printf '{"tasks":[{"section":"%s","assignees":[]}]}' "$BOARD_SECTION" ;;
@@ -45,8 +45,6 @@ esac
 for (const [lane, section] of [
   [null, 'AI Review'],
   ['ai-review', 'AI Review'],
-  ['supervisor-review', 'Supervisor Review'],
-  ['ht-manager-review', 'Supervisor Review'],
   ['valentin-review', 'Valentin Review'],
 ]) {
   test(`PR handoff succeeds with auto-merge disabled for ${lane || 'the default lane'}`, (t) => {
@@ -60,9 +58,18 @@ for (const [lane, section] of [
     assert.equal(result.commands[0], 'git fetch origin production');
     assert.equal(result.commands[1], 'git push -u origin HEAD');
     assert.match(result.commands[2], /^gh pr create --base production /);
-    assert.equal(result.commands[3], `hypertask task move HTPR-6706 --section ${section}`);
+    assert.equal(result.commands[3], `vcc task move HTPR-6706 --section ${section}`);
     assert.equal(result.commands[4], 'hypertask --json task get HTPR-6706');
     assert.ok(!result.commands.some((command) => command.startsWith('gh pr merge')));
+  });
+}
+
+for (const lane of ['supervisor-review', 'ht-manager-review']) {
+  test(`retired lane ${lane} is refused before anything runs`, (t) => {
+    const result = runScript(t, ['--lane', lane]);
+    assert.notEqual(result.status, 0);
+    assert.match(result.stderr, /--lane must be ai-review or valentin-review/);
+    assert.deepEqual(result.commands, ['']);
   });
 }
 

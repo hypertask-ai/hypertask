@@ -12,7 +12,8 @@ type Membership = { projectId: number; project: { teamId: string | null } }
 
 function fakeDatabase(
   agent: { id: string; userId: number; members: Membership[] } | null,
-  serializationFailures = 0
+  serializationFailures = 0,
+  actingAgentProjects: number[] = []
 ) {
   const created: Array<Record<string, unknown>> = []
   const removed: number[] = []
@@ -26,6 +27,10 @@ function fakeDatabase(
       return run({
         agent: { findFirst: async () => agent },
         member: {
+          findMany: async ({ where }) =>
+            actingAgentProjects
+              .filter((id) => where.projectId.in.includes(id))
+              .map((projectId) => ({ projectId })),
           deleteMany: async ({ where }) => {
             removed.push(...where.projectId.in)
             return {
@@ -114,6 +119,7 @@ describe('owned agent board membership updates', () => {
       agentId: 'agent-1',
       addedProjects: 1,
       removedProjects: 1,
+      projectIds: [15, 339],
     })
   })
 
@@ -201,5 +207,64 @@ describe('owned agent board membership updates', () => {
     const removed = await updateOwnedAgentBoards(legacy.database, async () => null, 6,
       update('agent-1', [], [7]))
     assert.equal(removed.removedProjects, 1)
+  })
+})
+
+describe('delegated agent board membership updates (HTPR-6348)', () => {
+  const board = async (id: number) => ({ id, teamId: 'inne' })
+  const manager = () => ({
+    id: 'manager',
+    userId: 6,
+    members: [{ projectId: 15, project: { teamId: 'inne' } }],
+  })
+
+  it('lets the acting agent add and remove on boards it is on', async () => {
+    const state = fakeDatabase(manager(), 0, [15, 339])
+    const result = await updateOwnedAgentBoards(
+      state.database,
+      board,
+      6,
+      update('manager', [339], [15]),
+      undefined,
+      'ceo'
+    )
+    assert.deepEqual(result.projectIds, [339])
+    assert.deepEqual(state.removed, [15])
+  })
+
+  it('refuses boards the acting agent is not on, before any write', async () => {
+    const state = fakeDatabase(manager(), 0, [15])
+    await expectError(
+      updateOwnedAgentBoards(
+        state.database,
+        board,
+        6,
+        update('manager', [339], []),
+        undefined,
+        'ceo'
+      ),
+      403,
+      'project_ids'
+    )
+    assert.deepEqual(state.created, [])
+    assert.deepEqual(state.removed, [])
+  })
+
+  it('repeats the scope check on every serialization retry', async () => {
+    const state = fakeDatabase(manager(), 1, [])
+    await expectError(
+      updateOwnedAgentBoards(
+        state.database,
+        board,
+        6,
+        update('manager', [], [15]),
+        undefined,
+        'ceo'
+      ),
+      403,
+      'project_ids'
+    )
+    assert.equal(state.transactionAttempts(), 2)
+    assert.deepEqual(state.removed, [])
   })
 })

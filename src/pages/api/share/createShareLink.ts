@@ -2,15 +2,30 @@ import { NextApiHandler, NextApiRequest, NextApiResponse } from "next";
 import { TaskShareType } from "@prisma/client";
 import { redactAgentIdentitiesForPublicShare } from "@/lib/agents/publicAgent";
 import prisma from "@/lib/prisma";
+import { getSessionUser } from "@/lib/auth/getSessionUser";
+import { taskWriteAccessWhere } from "@/utils/controllers/projects/getAllIncludes";
 
 const handler: NextApiHandler = async (
   req: NextApiRequest,
   res: NextApiResponse
 ) => {
+  if (req.method !== "POST" && req.method !== "PUT" && req.method !== "GET") {
+    return res.status(405).json({ message: "Method not allowed" });
+  }
+  const session = await getSessionUser(
+    new Headers(req.headers as Record<string, string>),
+  );
+  if (!session) return res.status(401).json({ message: "Unauthorized" });
+
   if (req.method === "POST") {
-    const { userId, taskId, projectId } = req.body;
+    const { userId: bodyUserId, taskId, projectId } = req.body;
+    const parsedTaskId = Number(taskId);
+    const parsedProjectId = Number(projectId);
     try {
-      if (!userId || !taskId || !projectId) {
+      if (bodyUserId != null && Number(bodyUserId) !== session.userId) {
+        return res.status(403).json({ message: "Forbidden" });
+      }
+      if (!Number.isInteger(parsedTaskId) || !Number.isInteger(parsedProjectId)) {
         return res
           .status(400)
           .json({ message: "Missing required information" });
@@ -18,19 +33,32 @@ const handler: NextApiHandler = async (
 
       const currentProject = await prisma.project.findFirst({
         where: {
-          id: parseInt(projectId),
+          id: parsedProjectId,
           status: "Normal",
+          ...taskWriteAccessWhere(session.userId),
         },
       });
       if (!currentProject)
-        throw "The project doesn't seem to exist, or params were incorrect";
+        return res.status(404).json({ message: "Task not found or access denied" });
 
+      const task = await prisma.task.findFirst({
+        where: {
+          id: parsedTaskId,
+          projectId: parsedProjectId,
+          project: taskWriteAccessWhere(session.userId),
+        },
+        select: { id: true },
+      });
+      if (!task)
+        return res.status(404).json({ message: "Task not found or access denied" });
+
+      const userId = session.userId;
       //first things first we are going to find if any links exist for this task by the current user
       const foundLink = await prisma.taskSharing.findMany({
         where: {
           userId: userId,
-          taskId: taskId,
-          projectId: projectId,
+          taskId: parsedTaskId,
+          projectId: parsedProjectId,
         },
       });
 
@@ -50,9 +78,9 @@ const handler: NextApiHandler = async (
       } else {
         const defaultLink = await prisma.taskSharing.create({
           data: {
-            taskId,
+            taskId: parsedTaskId,
             userId,
-            projectId,
+            projectId: parsedProjectId,
           },
         });
 
@@ -69,9 +97,11 @@ const handler: NextApiHandler = async (
       }
     } catch (error) {
       console.log("🚀 ~ error:", error);
-      prisma.taskSharing.deleteMany({
-        where: { projectId, taskId, userId },
-      });
+      if (Number.isInteger(parsedTaskId) && Number.isInteger(parsedProjectId)) {
+        prisma.taskSharing.deleteMany({
+          where: { projectId: parsedProjectId, taskId: parsedTaskId, userId: session.userId },
+        });
+      }
       return res.status(400).json({ message: JSON.stringify(error) });
     }
   } else if (req.method === "PUT") {
@@ -83,9 +113,10 @@ const handler: NextApiHandler = async (
           .json({ message: "Missing required information" });
       }
 
-      const taskShareFound = await prisma.taskSharing.findUnique({
+      const taskShareFound = await prisma.taskSharing.findFirst({
         where: {
           id: shareId,
+          task: { project: taskWriteAccessWhere(session.userId) },
         },
       });
 
@@ -102,7 +133,7 @@ const handler: NextApiHandler = async (
         return res.status(200).json({ message: "Task share link updated" });
       } else
         return res
-          .status(400)
+          .status(404)
           .json({ message: "Task share link does not exist" });
     } catch (error) {
       console.log("🚀 ~ error:", error);
@@ -112,9 +143,10 @@ const handler: NextApiHandler = async (
     const { shareId } = req.query;
 
     try {
-      const taskShared = await prisma.taskSharing.findUnique({
+      const taskShared = await prisma.taskSharing.findFirst({
         where: {
           id: shareId as string,
+          task: { project: taskWriteAccessWhere(session.userId) },
         },
         include: {
           task: true,
