@@ -4,6 +4,6 @@
   "version": "1.0.0",
   "dependencies": {
     "@hypertask/hypertask_cli": "1.13.29",
-    "typescript": "6.0.3"
+    "typescript": "7.0.2"
   }
 }
