@@ -2,6 +2,7 @@ const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const path = require("node:path");
 const test = require("node:test");
+const { spawnSync } = require("node:child_process");
 const createJiti = require("jiti");
 
 const root = path.resolve(__dirname, "..");
@@ -18,9 +19,10 @@ test("the HTML sanitizer stays on the serverless-compatible dependency path", ()
     packageLock.packages["node_modules/isomorphic-dompurify"].version,
     "4.4.0",
   );
+  assert.equal(packageJson.overrides["isomorphic-dompurify"].jsdom, "26.1.0");
   assert.equal(
-    packageLock.packages["node_modules/isomorphic-dompurify/node_modules/jsdom"].version,
-    "30.1.1",
+    packageLock.packages["node_modules/isomorphic-dompurify/node_modules/jsdom"],
+    undefined,
   );
   assert.equal(packageLock.packages["node_modules/jsdom"].version, "26.1.0");
   assert.equal(
@@ -28,16 +30,39 @@ test("the HTML sanitizer stays on the serverless-compatible dependency path", ()
     "4.0.0",
   );
   assert.equal(
-    packageLock.packages["node_modules/isomorphic-dompurify/node_modules/html-encoding-sniffer"].version,
-    "7.0.0",
+    packageLock.packages["node_modules/isomorphic-dompurify/node_modules/html-encoding-sniffer"],
+    undefined,
   );
-  assert.equal(packageLock.packages["node_modules/@exodus/bytes"].version, "1.16.0");
+  assert.equal(packageLock.packages["node_modules/@exodus/bytes"], undefined);
 });
 
 test("the server keeps the sanitizer and jsdom external so runtime files resolve beside the package", () => {
   const config = require(path.join(root, "next.config.js"));
   assert.ok(config.serverExternalPackages.includes("isomorphic-dompurify"));
   assert.ok(config.serverExternalPackages.includes("jsdom"));
+});
+
+test("the sanitizer loads through plain CommonJS require without require(ESM)", () => {
+  // A transpiler or local Node's require(ESM) support can mask the production crash.
+  const result = spawnSync(
+    process.execPath,
+    [
+      "--no-experimental-require-module",
+      "-e",
+      `const assert = require("node:assert/strict");
+       const DOMPurify = require("isomorphic-dompurify");
+       assert.equal(
+         DOMPurify.sanitize('<p>safe</p><script>alert(1)</script><img src="x" onerror="alert(1)">'),
+         '<p>safe</p><img src="x">'
+       );
+       console.log("CommonJS sanitizer loaded and removed XSS");`,
+    ],
+    { cwd: root, encoding: "utf8", timeout: 30_000 },
+  );
+
+  assert.ifError(result.error);
+  assert.equal(result.status, 0, result.stderr);
+  assert.match(result.stdout, /CommonJS sanitizer loaded and removed XSS/);
 });
 
 test("the pinned sanitizer loads on the server and preserves its XSS contract", () => {

@@ -182,6 +182,11 @@
     "tsx": "^4.23.15",
     "webpack": "^5.111.1"
   },
+  "overrides": {
+    "isomorphic-dompurify": {
+      "jsdom": "26.1.0"
+    }
+  },
   "workspaces": [
     "packages/*"
   ]
