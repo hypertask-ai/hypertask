@@ -1,6 +1,6 @@
 import React, { useContext, useEffect, useRef } from "react";
-import { usePathname } from "next/navigation";
-import { useAiChatContext } from "@/lib/contexts/Multipages/AI_Agent/AI_Agent_Chat_Context";
+import type { ChatContextType } from "@/lib/contexts/Multipages/AI_Agent/AI_Agent_Chat_Context";
+import { useOptionalAiChatContext } from "@/lib/contexts/Multipages/AI_Agent/chatContext";
 import { MobileViewContext } from "@/lib/contexts/mobileContext";
 import { useRecoilState } from "@/lib/state";
 import { showQuickTipsAtom } from "@/store";
@@ -56,33 +56,29 @@ const AppSheet = React.lazy(
 // keyboard. Default 64px only applies before the dock has measured.
 const aiChatMobileComposerPad = "pb-[var(--mobile-dock-h,64px)]";
 
-interface AI_Chat_LayoutProps {
-  children: React.ReactNode;
-  /** Mobile shell (top bar) is mounted — reserve the top-bar inset. */
-  mobileTopBarVisible?: boolean;
-  /** Bottom dock is mounted — reserve the dock inset. Off on the detail page. */
-  mobileTabBarVisible?: boolean;
-  mobilePullCommandEnabled?: boolean;
-}
+/**
+ * The chat's own UI (sidebar, mobile sheet, floating window, rename modal and
+ * the desktop "open chat" chevron). It renders beside the page inside
+ * AI_Chat_Closed_Layout, never around it: wrapping the page made React rebuild
+ * the whole route the moment chat loaded, so an open board lost its columns
+ * and refetched (HTPR-6751).
+ */
+const AI_Chat_Panels: React.FC = () => {
+  const chat = useOptionalAiChatContext();
+  return chat ? <ChatPanelsContent chat={chat} /> : null;
+};
 
-const AI_Chat_Layout: React.FC<AI_Chat_LayoutProps> = ({
-  children,
-  mobileTopBarVisible = false,
-  mobileTabBarVisible = false,
-  mobilePullCommandEnabled = false,
-}) => {
-  const pathname = usePathname();
+const ChatPanelsContent = ({ chat }: { chat: ChatContextType }) => {
   const isMbl = useContext(MobileViewContext);
   const [showQuickTips] = useRecoilState(showQuickTipsAtom);
   const {
     isSidebarMode,
     showAiChatInterface,
-    isDetailPage,
     showRenameChatModal,
     renameChat,
     currentSession,
     togglePopover,
-  } = useAiChatContext();
+  } = chat;
   const { toggleAIChatInterface } = useGlobalUIState();
 
   // Android back closes the mobile chat. The chat is an overlay, not a route, so
@@ -106,49 +102,7 @@ const AI_Chat_Layout: React.FC<AI_Chat_LayoutProps> = ({
       window.__htHandleBack = previous;
     };
   }, [isMbl, showAiChatInterface]);
-  if (isDetailPage && isMbl && !showAiChatInterface) {
-    return (
-      <div
-        data-ai-workspace
-        tabIndex={-1}
-        className={cn(
-          "outline-none",
-          // Top-bar inset + shell scope stay whenever the top bar is mounted.
-          mobileTopBarVisible &&
-            "mobile-tab-bar-content pt-[var(--mobile-top-bar-h)]",
-          // The dock is hidden on detail, so its inset only applies if it's up.
-          mobileTabBarVisible && "pb-[var(--mobile-dock-h,64px)]",
-          mobilePullCommandEnabled && "mobile-pull-command-enabled"
-        )}
-      >
-        {children}
-      </div>
-    );
-  }
-  // Settings is a full-screen surface that overlays everything; the AI chat
-  // panel must not sit beside it (Valentin, HTPR-4391 follow-up).
-  // /agents/chat has its own agent-detail pane with a chevron collapse toggle;
-  // the global AI chat panel would overlay it and double up the chevrons.
-  if (pathname?.startsWith("/settings") || pathname?.startsWith("/agents/chat"))
-    return (<>{children}</>)
   return (
-    <div className={`flex ${!isDetailPage ? "h-screen" : ""}`}>
-      <div
-        data-ai-workspace
-        tabIndex={-1}
-        className={cn(
-          "@container min-w-0 flex-1 outline-none",
-          !isDetailPage && "overflow-x-auto",
-          // Top-bar inset + shell scope follow the top bar; the dock inset is
-          // separate so the detail page (dock hidden) keeps its top inset.
-          mobileTopBarVisible &&
-            "mobile-tab-bar-content pt-[var(--mobile-top-bar-h)]",
-          mobileTabBarVisible && "pb-[var(--mobile-dock-h,64px)]",
-          mobilePullCommandEnabled && "mobile-pull-command-enabled"
-        )}
-      >
-        {children}
-      </div>
       <React.Suspense fallback={null}>
         {showAiChatInterface && isSidebarMode && isMbl && (
           <AppSheet
@@ -217,8 +171,7 @@ const AI_Chat_Layout: React.FC<AI_Chat_LayoutProps> = ({
           />
         )}
       </React.Suspense>
-    </div>
   );
 };
 
-export default AI_Chat_Layout;
+export default AI_Chat_Panels;

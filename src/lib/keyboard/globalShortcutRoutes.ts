@@ -46,7 +46,9 @@ export const isGlobalCreateTaskShortcut = (
   pathname: string | null | undefined,
 ) =>
   (event.code === "KeyC" ||
-    (!event.code && event.key.toLowerCase() === "c")) &&
+    (!event.code &&
+      typeof event.key === "string" &&
+      event.key.toLowerCase() === "c")) &&
   !event.ctrlKey &&
   !event.metaKey &&
   !event.shiftKey &&

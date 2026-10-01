@@ -77,6 +77,18 @@ test("the My Tasks flag lifts only its global create-task carve-out", () => {
   );
 });
 
+test("a Control keydown with no key name does not throw", () => {
+  const event = {
+    ctrlKey: true,
+    metaKey: false,
+    shiftKey: false,
+  };
+
+  assert.doesNotThrow(() => isGlobalCreateTaskShortcut(event, "/login"));
+  assert.equal(isGlobalCreateTaskShortcut(event, "/agents"), false);
+  assert.equal(isGlobalCreateTaskShortcut(event, "/login"), false);
+});
+
 test("modified C presses remain available to their platform shortcuts", () => {
   for (const modifier of ["ctrlKey", "metaKey", "shiftKey"]) {
     assert.equal(
