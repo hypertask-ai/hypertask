@@ -1,20 +1,21 @@
 import { NextApiHandler, NextApiRequest, NextApiResponse } from "next";
 import { turbopufferGetSuggestions } from "@/utils/controllers/search/query";
 import prisma from "@/lib/prisma";
+import { getSessionUser } from "@/lib/auth/getSessionUser";
 
 const handler: NextApiHandler = async (
   req: NextApiRequest,
   res: NextApiResponse
 ) => {
   if (req.method === "POST") {
+    const session = await getSessionUser(
+      new Headers(req.headers as Record<string, string>)
+    );
+    if (!session) {
+      return res.status(401).json({ message: "Unauthorized" });
+    }
+    const userId = session.userId;
     try {
-      const userObj = req.cookies?.nookies_user
-        ? JSON.parse(req.cookies.nookies_user)
-        : null;
-      if (!userObj || !userObj.id) {
-        return res.status(401).json({ message: "Unauthorized" });
-      }
-
       const { searchQuery } = req.body;
 
       if (!searchQuery || searchQuery.length === 0) {
@@ -24,8 +25,8 @@ const handler: NextApiHandler = async (
       const projectRows = await prisma.project.findMany({
         where: {
           OR: [
-            { members: { some: { userId: userObj.id } } },
-            { ownerId: { in: [userObj.id] } },
+            { members: { some: { userId: userId } } },
+            { ownerId: { in: [userId] } },
           ],
         },
         select: { id: true },

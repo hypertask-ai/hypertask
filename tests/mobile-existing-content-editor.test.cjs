@@ -231,7 +231,7 @@ test("comment updates authorize against stored ownership and sync attachments at
   assert.match(commentService, /new Map\([\s\S]*?attachment\.fileSource/);
   assert.match(commentService, /attachmentsToCreate[\s\S]*?transaction\.attachment\.createMany/);
   assert.match(commentService, /transaction\.comment\.update/);
-  assert.match(commentRoute, /creatorId !== userObj\.id/);
+  assert.match(commentRoute, /const userId = session\.userId;[\s\S]*?creatorId !== userId/);
   assert.match(commentRoute, /typeof attachment\.fileSize !== "string"/);
   assert.match(commentRoute, /updateCommentService\(\{[\s\S]*?attachments,/);
 });

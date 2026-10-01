@@ -10,12 +10,14 @@ import { useSearchParams } from "next/navigation";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 import { useRecoilState, useSetRecoilState } from "@/lib/state";
+import { useHydrated } from "@/hooks/General/useHydrated";
 
 const useGlobalProvider = (secondaryStartupEnabled = true) => {
   const [_currentProject] = useRecoilState(currentProjectAtom);
   const setCurrentBoardBilling = useSetRecoilState(currentBoardBillingAtom);
   const [currentProjectIndex, setCurrentProjectIndex] = useState<number>();
   const [currentUser, ___] = useRecoilState(currentUserAtom);
+  const hydrated = useHydrated();
   const { data: favoritesTQ } = useGetAllFavorites(
     currentUser?.UserSettingId ?? null,
     { enabled: secondaryStartupEnabled },
@@ -49,7 +51,7 @@ const useGlobalProvider = (secondaryStartupEnabled = true) => {
     setCurrentProjectIndex,
     currentProjectIndex,
     favorites,
-    currentUser,
+    currentUser: hydrated ? currentUser : null,
     _currentProject,
   };
 };

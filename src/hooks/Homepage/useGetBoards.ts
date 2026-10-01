@@ -14,6 +14,7 @@ import {
 } from "@tanstack/react-query";
 import { useEffect, useLayoutEffect, useRef } from "react";
 import { discardEarlyBoardBootstrap } from "@/lib/boardBootstrap/earlyBoardBootstrap";
+import { useHydrated } from "@/hooks/General/useHydrated";
 import { MOBILE_BOARD_SWITCHER_QUERY_KEY } from "@/hooks/MultiPages/useGetAllAccessibleBoardList";
 import {
   persistBoardRevocationFallback,
@@ -21,6 +22,10 @@ import {
 } from "@/lib/boardSync/revocationTombstone";
 
 export const PROJECTS_ALL_QUERY_KEY = ["projectsAll"] as const;
+const PROJECTS_ALL_HYDRATING_QUERY_KEY = [
+  ...PROJECTS_ALL_QUERY_KEY,
+  "hydrating",
+] as const;
 export const PROJECTS_ALL_STALE_TIME_MS = 30 * 1000;
 export const BOARD_TASKS_STALE_TIME_MS = 5 * 60 * 1000;
 
@@ -279,6 +284,7 @@ export const useGetAllBoards = (
     onCriticalBoardRequestSettled?: () => void;
   }
 ) => {
+  const hydrated = useHydrated();
   const queryClient = useQueryClient();
   const accountIdRef = useRef(user.id);
   const optionsRef = useRef(options);
@@ -321,6 +327,12 @@ export const useGetAllBoards = (
   const query = useQuery({
     queryKey: PROJECTS_ALL_QUERY_KEY,
     enabled: options?.enabled ?? true,
+    ...(hydrated
+      ? {}
+      : {
+          queryKey: PROJECTS_ALL_HYDRATING_QUERY_KEY,
+          enabled: false,
+        }),
     queryFn: async ({ signal }) => {
       const generation = ++requestGenerationRef.current;
       const requestId = nextProjectsAuthorizationRequestId();
@@ -529,6 +541,7 @@ export const useGetAllBoards = (
 
   useEffect(() => {
     if (
+      !hydrated ||
       !shouldRequestProjectsAuthorizationForScope({
         required: requiresScopedAuthorization,
         scopeKey: currentScopeKey,
@@ -563,6 +576,7 @@ export const useGetAllBoards = (
     };
   }, [
     currentScopeKey,
+    hydrated,
     query.refetch,
     queryClient,
     requiresScopedAuthorization,

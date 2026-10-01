@@ -38,4 +38,4 @@ of the bugs above only showed up after a refresh or a second board switch.
 ## Cleanup
 
 None if you only viewed and switched. If you changed a saved filter or view
-on the QA runner board, revert it to the account's default state.
+on the account's own board, revert it to the account's default state.

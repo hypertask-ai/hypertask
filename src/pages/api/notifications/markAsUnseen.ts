@@ -2,11 +2,14 @@ import { NextApiHandler, NextApiRequest, NextApiResponse } from "next";
 import { NotificationType, PrismaClient } from "@prisma/client";
 
 import prisma from "@/lib/prisma";
+import { getSessionUser } from "@/lib/auth/getSessionUser";
 
 
 const handler: NextApiHandler = async (req: NextApiRequest, res: NextApiResponse) => {
     if (req.method === "GET") {
         try {
+            const session = await getSessionUser(new Headers(req.headers as Record<string, string>));
+            if (!session) return res.status(401).json({ message: "Unauthorized" });
             const {notificationId,taskId, seen} = req.query;
             if (!notificationId &&!taskId && !seen) {
                 return res.status(400).json({ message: "Notification id and type are required" });
@@ -32,23 +35,31 @@ const handler: NextApiHandler = async (req: NextApiRequest, res: NextApiResponse
 
             // if user wants to mark unread by taskid.
             if (taskId){
+                const parsedTaskId = parseInt(taskId as string)
+                if (!Number.isInteger(parsedTaskId)) {
+                    return res.status(400).json({ message: "Notification id and type are required" });
+                }
                 // get latest notification from that tsak
                 const notification_ = await prisma.notification.findFirst({
                     where:{
-                        taskId:parseInt(taskId as string),
+                        taskId: parsedTaskId,
+                        userId: session.userId,
                         status:"Normal"
                     },
                     orderBy:{
                         createdAt:"desc"
                     }
                 })
+                if (!notification_) {
+                    return res.status(404).json({ message: "Notification not found" });
+                }
                 const updatedNotification = await prisma.notification.update({
                             where:{
-                                id:notification_?.id,
+                                id:notification_.id,
                                 
                             },
                             data:{
-                                seen:!notification_?.seen
+                                seen:!notification_.seen
                             },
                             
                         })
@@ -57,9 +68,18 @@ const handler: NextApiHandler = async (req: NextApiRequest, res: NextApiResponse
             }
             // if by notification id
             else{
+                const parsedNotificationId = parseInt(notificationId as string)
+                if (!Number.isInteger(parsedNotificationId)) {
+                    return res.status(400).json({ message: "Notification id and type are required" });
+                }
+                const owned = await prisma.notification.findFirst({
+                    where: { id: parsedNotificationId, userId: session.userId },
+                    select: { id: true },
+                })
+                if (!owned) return res.status(404).json({ message: "Notification not found" });
                 const updatedNotification = await prisma.notification.update({
                  where:{
-                     id:parseInt(notificationId as string),
+                     id: parsedNotificationId,
                  },
                  data:{
                      seen:seen==="1"?false:true

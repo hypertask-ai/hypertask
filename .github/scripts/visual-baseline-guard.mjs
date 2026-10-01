@@ -7,9 +7,8 @@
 //
 // The rule: touching visual/baseline/** requires the PR body to declare the
 // change under a `## Visual change` heading, so a reviewer knows to compare the
-// new screenshots against the approved wireframe. Same shape as revert-guard's
-// intentional-revert label: deliberate visual changes stay easy, silent ones
-// become impossible.
+// new screenshots against the approved wireframe. Deliberate visual changes
+// stay easy, silent ones become impossible.
 import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 

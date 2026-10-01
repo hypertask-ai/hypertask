@@ -2,6 +2,7 @@
 
 import prisma from '@/lib/prisma'
 import type { NextApiRequest, NextApiResponse } from 'next'
+import { getSessionUser } from "@/lib/auth/getSessionUser";
 
 export default  async function handler(
   req: NextApiRequest,
@@ -9,12 +10,16 @@ export default  async function handler(
 ) {
  
   try {
-    const {content, taskId, type, projectId} = req.body
     if (req.method!=="POST") return
+    const session = await getSessionUser(
+      new Headers(req.headers as Record<string, string>)
+    );
+    if (!session) {
+      return res.status(401).json({ message: "Unauthorized" });
+    }
+    const userId = session.userId;
+    const {content, taskId, type, projectId} = req.body
     if (!content || !taskId || !type ) return res.status(400).json({message:"Missing Required Information"})
-
-    const userObj:any = JSON.parse(req.cookies?.nookies_user!)
-    var userId = userObj.id;
 
     // A canceled browser autosave can still finish on the server while the next
     // request starts. The old find-then-create sequence let both requests see

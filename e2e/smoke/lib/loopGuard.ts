@@ -62,19 +62,28 @@ export async function assertColumnsStayVisible(
   page: Page,
   columnSelector: string,
   durationMs: number,
+  readinessTimeoutMs = 20_000,
 ): Promise<void> {
   const columns = page.locator(columnSelector)
   const tasksHydrated = page.locator(TASKS_HYDRATED_SELECTOR)
   const hiddenEmptyState = page.getByRole('heading', { name: HIDDEN_EMPTY_COLUMNS_HEADING }).first()
 
+  let hydratedColumnCount = 0
+  let isIntentionalEmptyBoard = false
   await expect.poll(
-    async () => (await tasksHydrated.count()) > 0,
-    { message: 'board tasks did not finish hydrating', timeout: 15_000 },
-  ).toBe(true)
+    async () => {
+      if ((await tasksHydrated.count()) === 0) return false
 
-  const hydratedColumnCount = await columns.count()
-  const isIntentionalEmptyBoard =
-    hydratedColumnCount === 0 && await hiddenEmptyState.isVisible()
+      hydratedColumnCount = await columns.count()
+      isIntentionalEmptyBoard =
+        hydratedColumnCount === 0 && await hiddenEmptyState.isVisible()
+      return hydratedColumnCount > 0 || isIntentionalEmptyBoard
+    },
+    {
+      message: `board did not render "${columnSelector}" columns or its intentional empty state`,
+      timeout: readinessTimeoutMs,
+    },
+  ).toBe(true)
 
   // The empty-state heading may briefly coexist with attached columns.
   // Treat it as valid only when there are no columns to hide.
@@ -88,11 +97,7 @@ export async function assertColumnsStayVisible(
     return
   }
 
-  // `load` fires before the board data arrives, so wait for the first
-  // column to render before taking the baseline count.
-  await columns.first().waitFor({ state: 'visible', timeout: 15_000 }).catch(() => {})
-  const initialCount = await columns.count()
-  expect(initialCount, `no "${columnSelector}" columns present to watch`).toBeGreaterThan(0)
+  const initialCount = hydratedColumnCount
   expect(await columns.first().isVisible(), 'board columns became hidden').toBe(true)
 
   const deadline = Date.now() + durationMs
