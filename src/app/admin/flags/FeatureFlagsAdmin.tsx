@@ -55,6 +55,7 @@ async function updateFlag(input: FlagUpdate) {
 export default function FeatureFlagsAdmin() {
   const queryClient = useQueryClient();
   const ticketTitleEnabled = useFlag("htpr-6176-flag-ticket-title");
+  const ticketIdEnabled = useFlag("htpr-6800-flag-ticket-id");
   const sortFilterEnabled = useFlag("htpr-6179-flag-sort-filter");
   const shipDateClustersEnabled = useFlag("htpr-6191-flag-ship-date-clusters");
   const removalCountdownEnabled = useFlag("htpr-6193-flag-removal-countdown");
@@ -184,11 +185,13 @@ export default function FeatureFlagsAdmin() {
                         href={flag.ticketUrl}
                         className="text-content font-medium text-white-black underline-offset-2 hover:underline focus-visible:underline"
                       >
-                        {flag.ticketId} · {flag.ticketTitle}
+                        {ticketIdEnabled && flag.ticketId ? `${flag.ticketId} · ` : null}
+                        {flag.ticketTitle}
                       </a>
                     ) : (
                       <p className="text-content font-medium text-white-black">
-                        {flag.ticketId} · {flag.ticketTitle}
+                        {ticketIdEnabled && flag.ticketId ? `${flag.ticketId} · ` : null}
+                        {flag.ticketTitle}
                       </p>
                     )}
                     <code className="mt-1 block break-all text-dense text-text-light-gray">{flag.key}</code>
