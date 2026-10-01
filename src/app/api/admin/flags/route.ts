@@ -12,6 +12,7 @@ import {
   setFeatureFlagMode,
   type FeatureFlagMode,
 } from "@/lib/flags";
+import { FLAG_TICKET_ID_FLAG } from "@/lib/flags/keys";
 import { broadcastFeatureFlagsChange } from "@/lib/realtime/server";
 
 export const dynamic = "force-dynamic";
@@ -40,10 +41,14 @@ export async function GET(request: NextRequest) {
     if (!(await isFeatureFlagOwner(request.headers))) {
       return noStore({ error: "Not found" }, 404);
     }
-    const [flags, detailsEnabled] = await Promise.all([
+    const [flags, detailsEnabled, ticketIdEnabled] = await Promise.all([
       listFeatureFlagModes({ includeTicketTitles: true }),
       isFeatureEnabled(FEATURE_FLAG_DETAILS_FLAG, FEATURE_FLAG_OWNER_USER_ID),
+      isFeatureEnabled(FLAG_TICKET_ID_FLAG, FEATURE_FLAG_OWNER_USER_ID),
     ]);
+    if (!ticketIdEnabled) {
+      return noStore({ flags: flags.map((flag) => ({ ...flag, ticketId: null })), detailsEnabled });
+    }
     return noStore({ flags, detailsEnabled });
   } catch (error) {
     console.error("[feature-flags] admin read failed", error);
@@ -88,6 +93,9 @@ export async function PATCH(request: NextRequest) {
     await broadcastFeatureFlagsChange().catch((error) =>
       console.warn("[feature-flags] realtime broadcast failed", error),
     );
+    if (!(await isFeatureEnabled(FLAG_TICKET_ID_FLAG, FEATURE_FLAG_OWNER_USER_ID))) {
+      return noStore({ flag: { ...flag, ticketId: null } });
+    }
     return noStore({ flag });
   } catch (error) {
     if (error instanceof SyntaxError || error instanceof FeatureFlagInputError) {
