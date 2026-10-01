@@ -11,7 +11,7 @@
 #   ship-check done <T>          ticket is in Done
 #   ship-check guard             hook mode: reads the hook JSON on stdin, exit 2 blocks the command
 # CLI work: SHIP_REPO=hypertask-ai/cli SHIP_BASE=main ship-check ...
-# Every gate binds to the PR recorded with `bind` (else the ticket's newest PR), so another
+# Every gate binds to the PR recorded with `bind` (required), so another
 # PR's merge never stands in for this fix, and every GitHub lookup fails closed.
 set -uo pipefail
 REPO=${SHIP_REPO:-hypertask-ai/hypertask}
@@ -50,7 +50,7 @@ pr_row() {
     json=$(gh pr view "$n" -R "$REPO" --json number,title,state,mergeCommit,baseRefName 2>/dev/null) || return 1
     jq -r --arg t "$1 " --arg b "$BASE" 'if (.title | startswith($t)) and .baseRefName == $b
       then "\(.number) \(.state) \(.mergeCommit.oid // "-")" else "" end' <<<"$json"
-  else newest_pr "$1"; fi
+  else echo "FAIL: no PR bound for $1; run ship-check bind $1 <pr number> right after opening it"; return 1; fi
 }
 
 check_bind() {
@@ -61,7 +61,7 @@ check_bind() {
 
 merge_sha() {
   local row n state sha
-  row=$(pr_row "$1") || fail "could not read PRs for $1 from GitHub"
+  row=$(pr_row "$1") || fail "${row#FAIL: }"
   [ -n "$row" ] || fail "no PR titled \"$1 [TYPE] ...\" into $BASE (or the bound PR does not match)"
   read -r n state sha <<<"$row"
   [ "$state" = MERGED ] || fail "the PR for $1 (#$n) is $state, not merged"
@@ -69,7 +69,7 @@ merge_sha() {
 }
 
 check_pr() {
-  local row; row=$(pr_row "$1") || fail "could not read PRs for $1 from GitHub"
+  local row; row=$(pr_row "$1") || fail "${row#FAIL: }"
   [ -n "$row" ] || fail "no PR titled \"$1 [TYPE] ...\""
   check_title "${row%% *}"
 }
@@ -102,7 +102,7 @@ check_proof() {
     || fail "proof.md has no 'Feature map: .claude/skills/verify-qa/reference/feature-map/<page>.md' line"
   grep -qE "^[[:space:]]*Doctor:.*${sha:0:9}.*success" "$p" \
     || fail "proof.md 'Doctor:' line must name the latest merge sha ${sha:0:9} and 'success' (stale proof?)"
-  run=$(sed -nE 's/^[[:space:]]*Run:[[:space:]]*([A-Za-z0-9._-]+)[[:space:]]*$/\1/p' "$p" | head -1)
+  run=$(sed -nE 's/^[[:space:]]*Run:[[:space:]]*([0-9]{4}-[0-9]{2}-[0-9]{2}-qa-run-[0-9]+)[[:space:]]*$/\1/p' "$p" | head -1)
   [ -n "$run" ] && [ -d "$d/$run" ] || fail "proof.md needs a 'Run: <YYYY-MM-DD>-qa-run-<n>' line naming a folder under $d"
   grep -qE '^[[:space:]]*## Cases' "$p" || fail "proof.md has no '## Cases' section"
   ! grep -qE '^[[:space:]]*- FAIL:' "$p" || fail "proof.md still lists a FAIL case"
@@ -125,28 +125,28 @@ check_done() {
 }
 
 guard() {
-  local cmd pr t out env='([A-Za-z_][A-Za-z0-9_]*=[^[:space:]]*[[:space:]]+)*' sep='(^|[;&|(][[:space:]]*)'
+  local cmd seg t c pr out checks env='([A-Za-z_][A-Za-z0-9_]*=[^[:space:]]*[[:space:]]+)*'
   cmd=$(jq -r '.tool_input.command // empty')
-  # Honour SHIP_REPO / SHIP_BASE written in front of the command.
-  [[ $cmd =~ SHIP_REPO=([^[:space:]]+) ]] && REPO=${BASH_REMATCH[1]}
-  [[ $cmd =~ SHIP_BASE=([^[:space:]]+) ]] && BASE=${BASH_REMATCH[1]}
-  # gh pr merge: the PR must be named right and its ticket must exist.
-  if [[ $cmd =~ ${sep}${env}gh[[:space:]]+pr[[:space:]]+merge([[:space:]]+([0-9]+))? ]]; then
-    [[ $cmd =~ (-R|--repo)[[:space:]=]+([^[:space:]]+) ]] && REPO=${BASH_REMATCH[2]}
-    [[ $cmd =~ gh[[:space:]]+pr[[:space:]]+merge[[:space:]]+([0-9]+) ]] && pr=${BASH_REMATCH[1]} || pr=$(gh pr view --json number --jq .number 2>/dev/null)
-    [ -n "${pr:-}" ] || { echo "ship-check blocked the merge: name the PR number (gh pr merge <n> -R $REPO)." >&2; exit 2; }
-    out=$(check_title "$pr") || { echo "ship-check blocked the merge: ${out#FAIL: }. Fix it with gh pr edit $pr --title \"PREFIX-NNNN [TYPE] ...\" (create the ticket via vcc if it does not exist)." >&2; exit 2; }
-  fi
-  # vcc task move <ticket> ... Done, checked per command segment: needs the merge and the deploy;
-  # app tickets also need proof.md.
-  local seg
+  # Check every command segment on its own, with its own repo and base overrides.
   while IFS= read -r seg; do
-    [[ $seg =~ ^[[:space:]]*${env}vcc[[:space:]]+tasks?[[:space:]]+move[[:space:]]+[\"\']?((HTPR|HYFA|YPER4)-[0-9]+)[\"\']?[[:space:]].*--section[[:space:]=]+[\"\']?Done ]] || continue
-    t=${BASH_REMATCH[2]}
-    local checks="merged deployed"; [[ $t == HTPR-* ]] && checks="merged deployed proof"
-    for c in $checks; do
-      out=$("check_$c" "$t") || { echo "ship-check blocked moving $t to Done: ${out#FAIL: }. Follow .claude/skills/verify-qa/SKILL.md first." >&2; exit 2; }
-    done
+    REPO=${SHIP_REPO:-hypertask-ai/hypertask}; BASE=${SHIP_BASE:-production}
+    [[ $seg =~ SHIP_REPO=([^[:space:]]+) ]] && REPO=${BASH_REMATCH[1]}
+    [[ $seg =~ SHIP_BASE=([^[:space:]]+) ]] && BASE=${BASH_REMATCH[1]}
+    # PR merge: the PR must be named right and its ticket must exist.
+    if [[ $seg =~ ^[[:space:]]*${env}gh[[:space:]]+pr[[:space:]]+merge([[:space:]]|$) ]]; then
+      [[ $seg =~ (-R|--repo)[[:space:]=]+([^[:space:]]+) ]] && REPO=${BASH_REMATCH[2]}
+      pr=""; [[ $seg =~ merge[[:space:]]+([0-9]+) ]] && pr=${BASH_REMATCH[1]}
+      [ -n "$pr" ] || { echo "ship-check blocked the merge: name the PR number." >&2; exit 2; }
+      out=$(check_title "$pr") || { echo "ship-check blocked the merge: ${out#FAIL: }. Retitle the PR to PREFIX-NNNN [TYPE] ... (create the ticket via vcc if it does not exist)." >&2; exit 2; }
+    fi
+    # Move to Done: needs the merge and the deploy; app tickets also need proof.md.
+    if [[ $seg =~ ^[[:space:]]*${env}vcc[[:space:]]+tasks?[[:space:]]+move[[:space:]]+[\"\']?((HTPR|HYFA|YPER4)-[0-9]+)[\"\']?[[:space:]].*--section[[:space:]=]+[\"\']?Done ]]; then
+      t=${BASH_REMATCH[2]}
+      checks="merged deployed"; [[ $t == HTPR-* ]] && checks="merged deployed proof"
+      for c in $checks; do
+        out=$("check_$c" "$t") || { echo "ship-check blocked moving $t to Done: ${out#FAIL: }. Follow .claude/skills/verify-qa/SKILL.md first." >&2; exit 2; }
+      done
+    fi
   done < <(sed -E 's/(&&|\|\||;|\||&|\(|\))/\n/g' <<<"$cmd")
   exit 0
 }
