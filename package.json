@@ -2,6 +2,9 @@
   "name": "hypertask",
   "version": "0.3.0",
   "private": true,
+  "engines": {
+    "node": "22.x"
+  },
   "scripts": {
     "dev": "concurrently 'next dev' 'npm run stripe:listen'",
     "build": "npx prisma generate && next build --webpack && node scripts/run-production-migrations.mjs",

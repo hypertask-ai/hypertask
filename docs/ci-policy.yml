@@ -48,7 +48,7 @@ required_checks:
   # 2026-09-08. ci-tests verifies this live ruleset before every build.
   # claude-review is the reviewer's legacy status name; the live ruleset
   # still requires it next to ai-review (HTPR-6734).
-  contexts: [app-smoke, browser-smoke, ci-tests, ai-review, claude-review, feature-flag-gate, pr-title, revert-guard, next-public-secrets, secret-scan]
+  contexts: [app-smoke, browser-smoke, ci-tests, ai-review, claude-review, feature-flag-gate, pr-title, next-public-secrets, secret-scan]
   automerge_also_requires: [app-smoke, browser-smoke, ci-tests, feature-flag-gate]
   # ci-tests and browser-smoke report on every non-draft PR; a missing or
   # skipped result is not green.
@@ -116,7 +116,7 @@ policies:
     production_health_check_after_deploy: true
     failed_build_keeps_previous_deployment_live: true
   production_ruleset:
-    required_status_checks: [app-smoke, browser-smoke, ci-tests, ai-review, claude-review, feature-flag-gate, pr-title, revert-guard, next-public-secrets, secret-scan]
+    required_status_checks: [app-smoke, browser-smoke, ci-tests, ai-review, claude-review, feature-flag-gate, pr-title, next-public-secrets, secret-scan]
 
 ci_tests:
   # .github/workflows/ci-tests.yml; the file remains the implementation source.

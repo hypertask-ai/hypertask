@@ -1,5 +1,6 @@
 import { NextApiHandler, NextApiRequest, NextApiResponse } from "next";
 import prisma from "@/lib/prisma";
+import { getSessionUser } from "@/lib/auth/getSessionUser";
 
 const handler: NextApiHandler = async (
   req: NextApiRequest,
@@ -7,13 +8,18 @@ const handler: NextApiHandler = async (
 ) => {
   if (req.method === "POST") {
     try {
-      const { setting, userId } = req.body;
-      if (!userId)
-        return res.status(401).json({ message: "Missing fields" });
+      const session = await getSessionUser(
+        new Headers(req.headers as Record<string, string>),
+      );
+      if (!session) return res.status(401).json({ message: "Unauthorized" });
+      const { setting, userId: bodyUserId } = req.body;
+      if (bodyUserId != null && Number(bodyUserId) !== session.userId) {
+        return res.status(403).json({ message: "Forbidden" });
+      }
 
       const response = await prisma.userSetting.update({
         where: {
-          userId: parseInt(userId as string),
+          userId: session.userId,
         },
         data: {
           onboardingTourStatus: setting,

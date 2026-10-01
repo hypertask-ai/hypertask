@@ -1,10 +1,15 @@
 import { NextApiRequest, NextApiResponse } from "next";
 import { sendMentionEmail } from "@/utils/controllers/notifications/sendMentionEmail";
+import { getSessionUser } from "@/lib/auth/getSessionUser";
+import { userCanAccessTaskContent } from "@/utils/controllers/tasks/assertTaskAccess";
 
 const handler = async (req: NextApiRequest, res: NextApiResponse) => {
   if (req.method === "POST") {
     try {
-      const user = JSON.parse(req.cookies.nookies_user!);
+      const session = await getSessionUser(
+        new Headers(req.headers as Record<string, string>),
+      );
+      if (!session) return res.status(401).json({ message: "Unauthorized" });
       const { sender, receiver, taskTitle, taskLink, mentionType, taskId } =
         req.body as {
           sender: string;
@@ -15,9 +20,16 @@ const handler = async (req: NextApiRequest, res: NextApiResponse) => {
           mentionType?: "mention";
           taskId?: number;
         };
-      if (receiver === user?.id) {
+      if (Number(receiver) === session.userId) {
         return res.status(201).json({ message: "receiver is a sender" });
       } else {
+        const parsedTaskId = Number(taskId);
+        if (!Number.isInteger(parsedTaskId) || parsedTaskId <= 0) {
+          return res.status(400).json({ message: "Missing required information" });
+        }
+        if (!(await userCanAccessTaskContent(session.userId, parsedTaskId))) {
+          return res.status(403).json({ message: "Forbidden" });
+        }
         const result = await sendMentionEmail(
           receiver,
           sender,
@@ -25,7 +37,7 @@ const handler = async (req: NextApiRequest, res: NextApiResponse) => {
           taskLink,
           mentionType,
           undefined,
-          taskId
+          parsedTaskId
         );
         if (result) {
           return res.status(200).json({ message: "success" });
