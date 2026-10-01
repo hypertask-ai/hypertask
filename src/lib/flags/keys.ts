@@ -24,7 +24,6 @@ export const HTPR_6175_QUICK_ENTRY_CARDS_FLAG =
   "htpr-6175-quick-entry-cards";
 export const AUTO_TASK_DESCRIPTIONS_FLAG = "htpr-6177-auto-task-descriptions";
 export const FLAG_TICKET_TITLE_FLAG = "htpr-6176-flag-ticket-title";
-export const FLAG_TICKET_ID_FLAG = "htpr-6800-flag-ticket-id";
 export const FLAG_SORT_FILTER_FLAG = "htpr-6179-flag-sort-filter";
 export const INBOX_ARCHIVE_CLUSTER_FLAG = "htpr-6160-inbox-archive-cluster";
 export const FLAG_SHIP_DATE_CLUSTER_FLAG = "htpr-6191-flag-ship-date-clusters";

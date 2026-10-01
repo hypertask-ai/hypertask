@@ -30,7 +30,6 @@ import {
   FLAG_SHIP_DATE_CLUSTER_FLAG,
   FLAG_SORT_FILTER_FLAG,
   FLAG_TICKET_TITLE_FLAG,
-  FLAG_TICKET_ID_FLAG,
   INBOX_ARCHIVE_CLUSTER_FLAG,
   PAGE_MENTIONS_FLAG,
   SHORTCUT_NUDGES_FLAG,
@@ -468,11 +467,6 @@ const FEATURE_FLAG_DEFINITIONS = [
     key: FLAG_TICKET_TITLE_FLAG,
     shippedOn: "2026-09-05",
     description: "Shows the linked ticket's title as the primary label on the flags admin page.",
-  },
-  {
-    key: FLAG_TICKET_ID_FLAG,
-    shippedOn: "2026-10-01",
-    description: "Starts each flag headline on the flags admin page with its ticket ID, so Ctrl+F finds it.",
   },
   {
     key: FLAG_SORT_FILTER_FLAG,
