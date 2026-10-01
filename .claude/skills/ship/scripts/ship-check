@@ -85,6 +85,13 @@ check_deployed() {
     [[ $cmp == ahead || $cmp == identical ]] || fail "latest release $tag of $REPO does not contain $sha yet"
     echo "deployed ok (release $tag)"; return
   fi
+  local ignored
+  ignored=$(gh api "repos/$REPO/commits/$sha/status" --jq '[.statuses[] | select(.context == "Vercel")][0]
+    | select(.state == "success" and ((.description // "") | contains("Ignored Build Step"))) | .description' 2>/dev/null) \
+    || fail "could not read Vercel commit status for $sha"
+  if [ -n "$ignored" ]; then
+    echo "deployed ok (no app build needed)"; return
+  fi
   id=$(gh api "repos/$REPO/deployments?sha=$sha&environment=Production" --jq '.[0].id // empty' 2>/dev/null) \
     || fail "could not read deployments for $sha"
   [ -n "$id" ] || fail "no Production deployment for $sha"
