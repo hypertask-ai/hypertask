@@ -5,7 +5,7 @@
  * Run: npm run test:file -- tests/htpr-6516-agent-attribution.test.cjs
  */
 const assert = require("node:assert/strict");
-const fs = require("node:fs");
+const fs = require("./helpers/chat-stream-source.cjs");
 const path = require("node:path");
 const test = require("node:test");
 

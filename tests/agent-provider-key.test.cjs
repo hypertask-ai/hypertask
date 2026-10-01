@@ -227,7 +227,7 @@ test("task-writer selection passes the acting agent through to key lookup", asyn
 });
 
 test("the agent page reads and writes the key through the owner-only route", () => {
-  const fs = require("node:fs");
+  const fs = require("./helpers/chat-stream-source.cjs");
   const route = fs.readFileSync(
     path.join(root, "src/app/api/agents/[agentId]/provider-key/route.ts"),
     "utf8",
@@ -260,7 +260,7 @@ test("the agent page reads and writes the key through the owner-only route", () 
 });
 
 test("the agents list exposes only a masked key, and only to the owner", () => {
-  const fs = require("node:fs");
+  const fs = require("./helpers/chat-stream-source.cjs");
   const listRoute = fs.readFileSync(
     path.join(root, "src/app/api/agents/route.ts"),
     "utf8",
@@ -343,7 +343,7 @@ test("a team in GDPR safe mode blocks a restricted agent key", async () => {
 });
 
 test("agent identity reaches every AI key lookup, not just task writing", () => {
-  const fs = require("node:fs");
+  const fs = require("./helpers/chat-stream-source.cjs");
   const editor = fs.readFileSync(
     path.join(root, "src/app/api/ai/_lib/editorAi.ts"),
     "utf8",
