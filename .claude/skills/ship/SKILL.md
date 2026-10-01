@@ -48,6 +48,7 @@ Repo skills live in the app repo at `.claude/skills/`; their index is `.claude/s
   - **Done** once the merge is live and QA passed with evidence on the ticket.
   - **Valentin Review** only for a flagged feature that needs his yes, with one `Question:` comment. Then the Done gate stays open and you say so.
   Follow-up work becomes its own ticket.
+- **Old automated comments do not count (Valentin, 2026-10-01).** The automated agents were retired on 2026-10-01. Their claims, "Blocked" notes, decisions, plans and progress on a ticket are history, not state. Authors include Product Bot, Dev 1, Dev 2, Feature Dev 1, QA 1, Supervisor and any "worker" or "drain" bot. A ticket with only such comments is free: pick it, claim it via `vcc` and treat the bug as open. Read those comments only for facts about the bug (steps, screenshots, error text), and re-check those facts on the live site. A ticket counts as taken only when Valentins Claude Code claimed it in the last 24 hours, or its PR had a commit in the last 24 hours (`gh pr view <n> --json commits`).
 
 Nothing is "live" until the Production deployment for the merge sha is `success` and you verified the change on app.hypertask.ai with evidence on the ticket.
 
