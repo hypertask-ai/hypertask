@@ -16,6 +16,7 @@ function row(overrides: Partial<FeatureFlagRow>): FeatureFlagRow {
     removalTaskId: null,
     shippedOn: null,
     description: "",
+    ticketId: null,
     ticketUrl: null,
     ticketTitle: null,
     ...overrides,

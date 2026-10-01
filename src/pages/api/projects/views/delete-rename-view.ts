@@ -9,13 +9,20 @@ import {
     ManagedSmartSplitMutationError,
 } from "@/utils/controllers/projects/views/boardFilterWriteLock";
 import { NextApiHandler, NextApiRequest, NextApiResponse } from "next";
+import { getSessionUser } from "@/lib/auth/getSessionUser";
 
 // ============= simple stuff here
 // 1. user selects the default view.
 // 2. so that means the applied view in user_project_view is now null.
 // 3. LITERALLY THATS IT
 const handler: NextApiHandler = async (req: NextApiRequest, res: NextApiResponse) => {
-    const currentUser = JSON.parse(req.cookies.nookies_user ?? "{}")
+    const session = await getSessionUser(
+      new Headers(req.headers as Record<string, string>)
+    );
+    if (!session) {
+      return res.status(401).json({ message: "Unauthorized" });
+    }
+    const userId = session.userId;
 
     if (req.method === "POST") {
         // lets check if the api request misses info like user, projectid.
@@ -23,7 +30,7 @@ const handler: NextApiHandler = async (req: NextApiRequest, res: NextApiResponse
         const { viewId, title } = req.body
 
         try {
-            if (!viewId || !currentUser) return res.status(101).json({ message: "Missing required information" })
+            if (!viewId) return res.status(101).json({ message: "Missing required information" })
             if (title.length < 2) throw ("Title length too low!")
             const viewToUpdate = await prisma.view.findUnique({
                     where:{ id: viewId },
@@ -43,8 +50,8 @@ const handler: NextApiHandler = async (req: NextApiRequest, res: NextApiResponse
                 data: { title, slug: newSlug }
               })
             })
-            const project_view_updated = await getProjectView(viewProjectId, currentUser.id)
-            broadcastBoardChange(viewProjectId, { originUserId: currentUser.id })
+            const project_view_updated = await getProjectView(viewProjectId, userId)
+            broadcastBoardChange(viewProjectId, { originUserId: userId })
             return res.status(200).json({view: newSlug === null ? undefined : sanitizeViewBoardFilters(updatedView), project_view_updated: project_view_updated});
         } catch (error) {
             console.log("🚀 ~ consthandler:NextApiHandler= ~ error:", error)
@@ -74,7 +81,7 @@ const handler: NextApiHandler = async (req: NextApiRequest, res: NextApiResponse
                 const user_Project_View = await tx.user_Project_View.findUnique({
                     where: {
                         user_project: {
-                            userId: currentUser.id,
+                            userId: userId,
                             project_view_id: project_View.id
                         }
                     }
@@ -89,8 +96,8 @@ const handler: NextApiHandler = async (req: NextApiRequest, res: NextApiResponse
                 console.log("🤔 ~ handler ~ deleteViewLastUsed:", deleteViewLastUsed)
                 await tx.view.delete({where:{id:viewId as string}})
             })
-            const promise2 = await getProjectView(projectId_, currentUser.id)
-            broadcastBoardChange(projectId_, { originUserId: currentUser.id })
+            const promise2 = await getProjectView(projectId_, userId)
+            broadcastBoardChange(projectId_, { originUserId: userId })
 
             return res.status(200).json(promise2)
         } catch (error) {

@@ -34,15 +34,10 @@ function stubModule(relativePath, exports) {
   require.cache[filename] = { id: filename, filename, loaded: true, exports };
 }
 stubModule("src/lib/prisma.ts", { __esModule: true, default: prisma });
-stubModule("src/lib/flags.ts", {
-  FEATURE_FLAG_ADMIN_URL: "https://app.hypertask.ai/admin/flags",
-  FEATURE_FLAG_OWNER_USER_ID: 6,
-  FEATURE_FLAG_TICKET_PROJECT_ID: 15,
-  FLAG_REMOVAL_COUNTDOWN_FLAG: "htpr-6193-flag-removal-countdown",
-});
+stubModule("src/lib/auth/getSessionUser.ts", { getSessionUser: async () => null });
 stubModule("src/utils/controllers/tasks/createTaskCore.ts", {
-  createTaskCore: async ({ title }) => {
-    filed.push(title);
+  createTaskCore: async (options) => {
+    filed.push(options);
     return { task: { id: 99 } };
   },
 });
@@ -61,7 +56,11 @@ test("the removal sweep skips the legacy shallow-switch flag without blocking ot
     assert.equal(response.status, 200);
     assert.deepEqual(await response.json(), { filed: 1, keys: ["htpr-1234-other"], failed: [] });
     assert.deepEqual(candidates.map(({ key }) => key), ["htpr-1234-other"]);
-    assert.deepEqual(filed, ["Remove feature flag htpr-1234-other"]);
+    assert.deepEqual(filed.map(({ title }) => title), ["Remove feature flag htpr-1234-other"]);
+    assert.equal(filed[0].userId, 6);
+    assert.equal(filed[0].agentId, "85b985ac-afe8-41a3-a1ac-d9549a9310c7");
+    assert.equal(filed[0].assignees, undefined);
+    assert.equal(filed[0].assigneeId, undefined);
   } finally {
     if (previousSecret === undefined) delete process.env.CRON_SECRET;
     else process.env.CRON_SECRET = previousSecret;

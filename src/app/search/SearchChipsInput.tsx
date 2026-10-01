@@ -115,6 +115,17 @@ export default function SearchChipsInput({ value, onChange, onRun, boardId, inpu
     onChange(chipQuery(chips, event.target.value) + (/\s$/.test(event.target.value) ? ' ' : ''));
   }
 
+  function reopenPicker(event: React.SyntheticEvent<HTMLInputElement>) {
+    const caret = event.currentTarget.selectionStart;
+    if (active && caret !== null && caret <= (active.end ?? text.length) && activeSearchValue(text.slice(0, caret), names)?.start === active.start) setDismissed(false);
+  }
+
+  function chipText(chip: SearchToken) {
+    const name = chipLabels[`${chip.operator}:${chip.value}`] ?? chip.value;
+    const marker = chip.operator === 'from' || chip.operator === 'assignee' ? '@' : chip.operator === 'in' || chip.operator === 'board' ? '#' : '';
+    return `${chip.negated ? '-' : ''}${chip.operator}:${marker}${marker && name.startsWith(marker) ? name.slice(1) : name}`;
+  }
+
   function choose(row: Candidate) {
     if (!active) return;
     const before = text.slice(0, active.start).trim();
@@ -171,7 +182,7 @@ export default function SearchChipsInput({ value, onChange, onRun, boardId, inpu
     }
   }
 
-  const summary = [...chips.map((chip) => `${chip.negated ? '-' : ''}${chip.operator}:${chip.value}`), text.trim()].filter(Boolean).join(' ');
+  const summary = [...chips.map(chipText), text.trim()].filter(Boolean).join(' ');
   return (
     <div className="relative w-full px-4 @md:px-9">
       <div className="flex min-h-10 flex-wrap items-center gap-1" onClick={() => inputRef.current?.focus()}>
@@ -185,7 +196,7 @@ export default function SearchChipsInput({ value, onChange, onRun, boardId, inpu
             style={{ backgroundColor: "color-mix(in srgb, var(--color-mention-highlight) 12%, var(--bg-mention))" }}
           >
             {chip.operator === 'from' || chip.operator === 'assignee' ? <UserRound size={14} aria-hidden="true" /> : (chip.operator === 'in' || chip.operator === 'board') ? <Hash size={14} aria-hidden="true" /> : null}
-            <span>{chip.negated ? '-' : ''}{chip.operator}:{chipLabels[`${chip.operator}:${chip.value}`] ?? chip.value}</span>
+            <span>{chipText(chip)}</span>
             <X size={14} strokeWidth={1.5} aria-hidden="true" />
           </button>
         ))}
@@ -201,10 +212,8 @@ export default function SearchChipsInput({ value, onChange, onRun, boardId, inpu
           value={text}
           onChange={change}
           onKeyDown={keyDown}
-          onFocus={(event) => {
-            const caret = event.currentTarget.selectionStart;
-            if (active && caret !== null && caret <= (active.end ?? text.length) && activeSearchValue(text.slice(0, caret), names)?.start === active.start) setDismissed(false);
-          }}
+          onFocus={reopenPicker}
+          onClick={reopenPicker}
           onBlur={(event) => { if (!pickerRef.current?.contains(event.relatedTarget)) setDismissed(true); }}
           role="combobox"
           aria-label="Search tasks"

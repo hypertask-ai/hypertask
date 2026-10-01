@@ -30,6 +30,7 @@ import {
   FLAG_SHIP_DATE_CLUSTER_FLAG,
   FLAG_SORT_FILTER_FLAG,
   FLAG_TICKET_TITLE_FLAG,
+  FLAG_TICKET_ID_FLAG,
   INBOX_ARCHIVE_CLUSTER_FLAG,
   PAGE_MENTIONS_FLAG,
   SHORTCUT_NUDGES_FLAG,
@@ -91,6 +92,8 @@ import {
 export * from "@/lib/flags/keys";
 
 export const FEATURE_FLAG_OWNER_USER_ID = 6;
+// Board writes are never attributed to the owner alone.
+export const FEATURE_FLAG_SWEEP_AGENT_ID = "85b985ac-afe8-41a3-a1ac-d9549a9310c7";
 const FEATURE_FLAG_OWNER = {
   userId: FEATURE_FLAG_OWNER_USER_ID,
   email: "valentin.yeo@gmail.com",
@@ -460,6 +463,11 @@ const FEATURE_FLAG_DEFINITIONS = [
     description: "Shows the linked ticket's title as the primary label on the flags admin page.",
   },
   {
+    key: FLAG_TICKET_ID_FLAG,
+    shippedOn: "2026-10-01",
+    description: "Starts each flag headline on the flags admin page with its ticket ID, so Ctrl+F finds it.",
+  },
+  {
     key: FLAG_SORT_FILTER_FLAG,
     shippedOn: "2026-09-05",
     description:
@@ -705,6 +713,7 @@ export type FeatureFlagRow = {
   removalTaskId: number | null;
   shippedOn: string | null;
   description: string;
+  ticketId: string | null;
   ticketUrl: string | null;
   ticketTitle: string | null;
 };
@@ -738,6 +747,7 @@ function withFeatureFlagMetadata(
     ...row,
     description: definition?.description ?? LEGACY_FEATURE_FLAG_DESCRIPTION,
     shippedOn: definition?.shippedOn ?? null,
+    ticketId: ticketNumber ? `HTPR-${ticketNumber}` : null,
     ticketUrl: ticketNumber ? `${FEATURE_FLAG_TICKET_BASE}/${ticketNumber}` : null,
     ticketTitle: ticketNumber ? (ticketTitleByNumber.get(Number(ticketNumber)) ?? null) : null,
   };

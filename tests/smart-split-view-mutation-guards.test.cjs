@@ -92,12 +92,15 @@ test("create-view overwrite returns 409 before mutating a smart split", async ()
       sanitizeTableSort: () => ({ column: null, direction: null }),
     },
     "src/utils/controllers/projects/views/boardFilterWriteLock.ts": guardStub(prisma),
+    "src/lib/auth/getSessionUser.ts": {
+      getSessionUser: async () => ({ userId: 6, source: "legacy", needsBridge: true }),
+    },
   }).default;
   const res = response();
 
   await route({
     method: "POST",
-    cookies: { nookies_user: JSON.stringify({ id: 6 }) },
+    headers: {},
     body: {
       projectId: 15,
       viewTitle: "Quick wins",
@@ -144,12 +147,15 @@ test("private saves never select a same-title public team view", async () => {
       sanitizeTableSort: () => ({ column: null, direction: null }),
     },
     "src/utils/controllers/projects/views/boardFilterWriteLock.ts": guardStub(prisma),
+    "src/lib/auth/getSessionUser.ts": {
+      getSessionUser: async () => ({ userId: 6, source: "legacy", needsBridge: true }),
+    },
   }).default;
   const res = response();
 
   await route({
     method: "POST",
-    cookies: { nookies_user: JSON.stringify({ id: 6 }) },
+    headers: {},
     body: {
       projectId: 15,
       viewTitle: "Weekly",
@@ -188,12 +194,15 @@ test("update-view returns 409 before mutating a smart split", async () => {
       sanitizeTableSort: () => ({ column: null, direction: null }),
     },
     "src/utils/controllers/projects/views/boardFilterWriteLock.ts": guardStub(prisma),
+    "src/lib/auth/getSessionUser.ts": {
+      getSessionUser: async () => ({ userId: 6, source: "legacy", needsBridge: true }),
+    },
   }).default;
   const res = response();
 
   await route({
     method: "POST",
-    cookies: { nookies_user: JSON.stringify({ id: 6 }) },
+    headers: {},
     body: {
       projectId: 15,
       viewId: "split-1",

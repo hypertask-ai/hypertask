@@ -2,6 +2,7 @@
 import prisma from "@/lib/prisma";
 import getProjectView from "@/utils/controllers/projects/views/viewsHelperAPIfunctions";
 import { NextApiHandler, NextApiRequest, NextApiResponse } from "next";
+import { getSessionUser } from "@/lib/auth/getSessionUser";
 
 
 
@@ -12,13 +13,19 @@ import { NextApiHandler, NextApiRequest, NextApiResponse } from "next";
 // 3. LITERALLY THATS IT
 const handler: NextApiHandler = async (req: NextApiRequest, res: NextApiResponse) => {
     if (req.method === "POST") {
+        const session = await getSessionUser(
+          new Headers(req.headers as Record<string, string>)
+        );
+        if (!session) {
+          return res.status(401).json({ message: "Unauthorized" });
+        }
+        const userId = session.userId;
         // lets check if the api request misses info like user, projectid.
 
         const { projectId,  newViewId } = req.body
 
-        const currentUser = JSON.parse(req.cookies.nookies_user??"{}")
         try {
-            if (!projectId || !currentUser || !newViewId) return res.status(101).json({ message: "Missing required information" })
+            if (!projectId || !newViewId) return res.status(101).json({ message: "Missing required information" })
             const view = await prisma.view.findUnique({
                 where: { id: newViewId },
                 select: {
@@ -35,7 +42,7 @@ const handler: NextApiHandler = async (req: NextApiRequest, res: NextApiResponse
             const updatedUserProjectView = await prisma.user_Project_View.upsert({
                 create: {
                     // ... data to create a User_Project_View
-                    userId:currentUser.id,
+                    userId:userId,
                     project_view_id:project_View.id,
                     appliedViewId:newViewId,
 
@@ -47,7 +54,7 @@ const handler: NextApiHandler = async (req: NextApiRequest, res: NextApiResponse
                   where: {
                     // ... the filter for the User_Project_View we want to update
                     user_project:{
-                        userId:currentUser.id,
+                        userId:userId,
                         project_view_id:project_View.id
                     }
                   }
@@ -66,7 +73,7 @@ const handler: NextApiHandler = async (req: NextApiRequest, res: NextApiResponse
             
             const lastviewused = await prisma.view_Last_Used.upsert({
                 create:{
-                    userId:currentUser.id,
+                    userId:userId,
                     viewId:newViewId,
                     lastUsedAt:currentDate
                 },
@@ -75,7 +82,7 @@ const handler: NextApiHandler = async (req: NextApiRequest, res: NextApiResponse
                 },
                 where:{
                     user_view_last_used:{
-                        userId:currentUser.id,
+                        userId:userId,
                         viewId:newViewId,
                     }
                 }
@@ -87,7 +94,7 @@ const handler: NextApiHandler = async (req: NextApiRequest, res: NextApiResponse
                 }
             })
             console.log("🚀 ~ consthandler:NextApiHandler= ~ updatedUserProjectView:", updatedUserProjectView)
-            const project_view_updated = await getProjectView(viewProjectId, currentUser.id)
+            const project_view_updated = await getProjectView(viewProjectId, userId)
             console.log("🚀 ~ consthandler:NextApiHandler= ~ project_view_updated:", project_view_updated)
             
             return res.status(200).json(project_view_updated)

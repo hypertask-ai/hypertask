@@ -18,7 +18,7 @@ A prototype is a self-contained HTML page a person can tap through on their phon
 
 ## 1. Capture reality
 
-1. Log into production headlessly (the manager-side recipe lives in the app repo AGENTS.md under "Preview auto-login recipe"; agents use `HT_PRODUCTION_STORAGE_STATE_FILE`). Use `agent-browser`, never a visible tab: `agent-browser set viewport 390 844` for mobile (1280x800 desktop), cookie `theme=dark` for the dark theme.
+1. Log into production headlessly. Pass `--state ~/.config/hypertask-videos/storageState-qa.json` (user 985) to `agent-browser`. Never use Valentin's account. Use `agent-browser`, never a visible tab: `agent-browser set viewport 390 844` for mobile (1280x800 desktop), cookie `theme=dark` for the dark theme.
 2. Open exactly the screens the ticket touches (`/detail/project-15/<n>`, `/inbox`, `/connect` …). Scroll every scroller to top before the first shot (`document.documentElement.scrollTop=0`; the page scroller is the HTML element). Take one screenshot per screen and per relevant scroll position.
 3. Read the real markup with `agent-browser eval` or the component source under `src/components` so structure, order and labels are exact.
 4. Upload each screenshot: `PUT https://hypertask.app/explorations/<ticket>-real-<n>.png` with `Content-Type: image/png`, `Authorization: Bearer $HYPERTASK_APP_SHARE_TOKEN`, `CF-Access-Client-Id`, `CF-Access-Client-Secret` (all from `~/.config/hypertask-app/credentials.env`). A GET without the CF headers returns 302; that is normal.
@@ -62,8 +62,8 @@ Walk every state this way. Look at each screenshot. Compare against the real scr
 ## 5. Publish and attach
 
 1. `htmlshare proto.html` prints `https://hypertask.app/explorations/<id>`; running it again on the same file republishes to the same id. Add `?v=N` when telling someone to reload.
-2. Attach to the ticket as a canvas page: `hypertask pages create --task <numeric task id> --title "<flow>" --markdown-file proto.html --html --canvas` (numeric id from `hypertask tasks get`).
-3. Comment on the ticket (HTML block tags, answer first): the direct link per page, and for each page one line saying what to tap and what to look for. Mention @Valentin Yeo for review. Never make him search for the page.
+2. Attach to the ticket as a canvas page: `vcc pages create --task <numeric task id> --title "<flow>" --markdown-file proto.html --html --canvas` (numeric id from `hypertask tasks get`).
+3. Comment on the ticket with `vcc` (HTML block tags, answer first): the direct link per page, and for each page one line saying what to tap and what to look for. Mention @Valentin Yeo for review. Never make him search for the page.
 
 ## 6. Iterate
 

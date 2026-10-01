@@ -10,7 +10,7 @@ sample tasks so a visitor can try the product without signing up.
 `e2e/smoke/demo.spec.ts` (`@demo` tag) creates its own unauthenticated
 context and calls this directly; run it with `HT_QA_RUN_DEMO=1`. Don't run it
 more than once per deploy: `/api/demo/guest` rate-limits at 5 guest creations
-per IP per hour, and the QA runner is responsible for staying under that.
+per IP per hour. Stay under that limit.
 
 ## What usually breaks
 

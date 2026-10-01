@@ -1,5 +1,11 @@
 # Changelog
 
+## 2026-10-01
+
+These skills are for Valentin's own `/ship` sessions. Board writes go
+through `vcc`. The session that ships a change verifies it on production.
+History below is the 1.0.0 move and is left as it was.
+
 ## 1.0.0 - 2026-09-15
 
 The product skill pack moved here from `hypertask-ai/agent-skills`, into the
