@@ -1,7 +1,7 @@
 # Rule map
 
 Product rules a `/ship` session still follows, and the skill in this folder
-that carries each one. Farm, company-pack, and support-bot rows were removed
+that carries each one. Rows for retired bot identities were removed
 on 2026-10-01 when those identities were shut down. Numbers are the original
 ones, so older comments that cite them still point at the same rule.
 

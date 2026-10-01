@@ -4,7 +4,6 @@ Rules for a Valentin's Claude Code session working the Hypertask product
 (board 15, repo `hypertask-ai/hypertask`). Board writes go through `vcc`.
 Reads go through the plain `hypertask` CLI. Never assign userId 6.
 
-Operating rules for the shut-down self-running farm are not in this file.
 
 ## Done means verified on production
 
