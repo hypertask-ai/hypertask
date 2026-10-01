@@ -2,6 +2,7 @@
 # ship-check: proof checks for /ship sessions (Valentin, 2026-10-01).
 # Used by the ledger gates (ship-gates) and by the Claude Code PreToolUse hook (guard).
 #   ship-check bind <T> <pr>     record this session's PR for the ticket (run right after opening it)
+#   ship-check duplicate <T> <ORIG> <pr>  T was already fixed by ORIG's merged PR: gates then check that PR
 #   ship-check pr <T>            the ticket's PR exists and is named right
 #   ship-check title <pr>        PR title is "PREFIX-NNNN [TYPE] ..." and that ticket exists
 #   ship-check ticket <T>        ticket exists on the board
@@ -43,12 +44,14 @@ newest_pr() {
 }
 
 bound_pr() { local f="$EVID/$1/pr"; [ -s "$f" ] && tr -dc '0-9' < "$f"; }
+# The ticket whose PR title the bound PR must carry: the ticket itself, or the one it duplicates.
+pr_owner() { local f="$EVID/$1/duplicate-of"; if [ -s "$f" ]; then tr -dc 'A-Z0-9-' < "$f"; else echo "$1"; fi; }
 
 pr_row() {
   local n json; n=$(bound_pr "$1")
   if [ -n "$n" ]; then
     json=$(gh pr view "$n" -R "$REPO" --json number,title,state,mergeCommit,baseRefName 2>/dev/null) || return 1
-    jq -r --arg t "$1 " --arg b "$BASE" 'if (.title | startswith($t)) and .baseRefName == $b
+    jq -r --arg t "$(pr_owner "$1") " --arg b "$BASE" 'if (.title | startswith($t)) and .baseRefName == $b
       then "\(.number) \(.state) \(.mergeCommit.oid // "-")" else "" end' <<<"$json"
   else echo "FAIL: no PR bound for $1; run ship-check bind $1 <pr number> right after opening it"; return 1; fi
 }
@@ -56,7 +59,16 @@ pr_row() {
 check_bind() {
   local t; t=$(gh pr view "$2" -R "$REPO" --json title --jq .title 2>/dev/null) || fail "PR $2 not found in $REPO"
   [[ $t == "$1 "* ]] || fail "PR $2 is titled \"$t\", not $1"
-  mkdir -p "$EVID/$1" && echo "$2" > "$EVID/$1/pr" && echo "bound $1 to PR $2"
+  mkdir -p "$EVID/$1" && echo "$2" > "$EVID/$1/pr" && rm -f "$EVID/$1/duplicate-of" && echo "bound $1 to PR $2"
+}
+
+check_duplicate() {
+  local t; t=$(gh pr view "$3" -R "$REPO" --json title,state --jq '"\(.state) \(.title)"' 2>/dev/null) || fail "PR $3 not found in $REPO"
+  [[ $t == "MERGED $2 "* ]] || fail "PR $3 must be the merged PR of $2, got: $t"
+  ( check_ticket "$1" ) >/dev/null || fail "ticket $1 not found on the board"
+  ( check_ticket "$2" ) >/dev/null || fail "ticket $2 not found on the board"
+  mkdir -p "$EVID/$1" && echo "$3" > "$EVID/$1/pr" && echo "$2" > "$EVID/$1/duplicate-of" \
+    && echo "bound $1 as a duplicate of $2 (PR $3)"
 }
 
 merge_sha() {
@@ -160,6 +172,7 @@ guard() {
 
 case "${1:-}" in
   bind) check_bind "$2" "$3" ;;
+  duplicate) check_duplicate "$2" "$3" "$4" ;;
   title) check_title "$2" ;;
   ticket) check_ticket "$2" ;;
   pr) check_pr "$2" ;;
@@ -168,5 +181,5 @@ case "${1:-}" in
   proof) check_proof "$2" ;;
   done) check_done "$2" ;;
   guard) guard ;;
-  *) sed -n '2,15p' "$0"; exit 1 ;;
+  *) sed -n '2,16p' "$0"; exit 1 ;;
 esac
