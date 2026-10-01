@@ -1,6 +1,6 @@
 const assert = require("node:assert/strict");
 const { execFileSync } = require("node:child_process");
-const { mkdtempSync, readFileSync, rmSync, writeFileSync } = require("node:fs");
+const { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
 const test = require("node:test");
@@ -21,9 +21,14 @@ test("the default tsc binary uses the native TypeScript 7 compiler", () => {
   }
 });
 
-test("the SDK shares the hoisted compatibility API without nested workspace installs", () => {
-  const sdkTypescript = require.resolve("typescript", { paths: [path.resolve("packages/agent-sdk")] });
-  assert.equal(sdkTypescript, require.resolve("typescript"));
+test("the SDK shares the native compiler without nested workspace installs", () => {
+  const sdkDirectory = path.resolve("packages/agent-sdk");
+  const sdk = JSON.parse(readFileSync(path.join(sdkDirectory, "package.json"), "utf8"));
+  assert.equal(sdk.scripts.build, "tsc -p tsconfig.json");
+  assert.equal(sdk.devDependencies["@typescript/native"], "npm:typescript@^7.0.2");
+  assert.equal(require.resolve("@typescript/native/package.json", { paths: [sdkDirectory] }), require.resolve("@typescript/native/package.json"));
+  assert.equal(existsSync(path.join(sdkDirectory, "node_modules")), false);
+  assert.equal(require.resolve("typescript", { paths: [sdkDirectory] }), require.resolve("typescript"));
 });
 
 test("TypeScript API consumers and ESLint retain a working compiler API", () => {
