@@ -9,7 +9,8 @@ import { useSearch } from "@/hooks/Search/useSearch";
 import { cn } from "@/utils/undoActions/helperFuncs";
 import { Fragment, KeyboardEvent, RefObject, useContext } from "react";
 import { useFlag } from "@/hooks/useFlag";
-import { HTPR_6372_SEARCH_RANKING_FLAG } from "@/lib/flags/keys";
+import { HTPR_6372_SEARCH_RANKING_FLAG, HTPR_6688_SEARCH_AUTOCOMPLETE_FLAG } from "@/lib/flags/keys";
+import { highlightedTitle } from "@/lib/search/autocomplete";
 import { HTPR_6370_SEARCH_CHIPS_FLAG, HTPR_6369_SEARCH_OPERATORS_FLAG } from "@/lib/flags/keys";
 import { MobileViewContext } from "@/lib/contexts/mobileContext";
 import { useRecoilValue, useSetRecoilState } from "@/lib/state";
@@ -34,6 +35,7 @@ const SearchComp = ({
   currentUser,
 }: IProps) => {
   const rankingEnabled = useFlag(HTPR_6372_SEARCH_RANKING_FLAG);
+  const autocompleteEnabled = useFlag(HTPR_6688_SEARCH_AUTOCOMPLETE_FLAG);
   const chipsFlagEnabled = useFlag(HTPR_6370_SEARCH_CHIPS_FLAG);
   const operatorsFlagEnabled = useFlag(HTPR_6369_SEARCH_OPERATORS_FLAG);
   const setAiChatPendingPrompt = useSetRecoilState(aiChatPendingPromptAtom);
@@ -99,13 +101,24 @@ const SearchComp = ({
         {/* Below @xl the container is full-width, so clear the fixed back button (ends at x≈96) */}
         <div className={cn('w-full px-0', appShellRailOn && 'pl-[64px] @xl:pl-0')}>
           {chipsFlagEnabled && operatorsFlagEnabled && searchChipsEnabled ? (
-            <SearchChipsInput
-              value={inputValue}
-              onChange={setInputValue}
-              onRun={updateSearchHistory}
-              boardId={_fromProject}
-              inputRef={tasksInputRef}
-            />
+            autocompleteEnabled ? (
+              <SearchChipsInput
+                value={inputValue}
+                onChange={setInputValue}
+                onRun={updateSearchHistory}
+                boardId={_fromProject}
+                inputRef={tasksInputRef}
+                autocompleteEnabled
+              />
+            ) : (
+              <SearchChipsInput
+                value={inputValue}
+                onChange={setInputValue}
+                onRun={updateSearchHistory}
+                boardId={_fromProject}
+                inputRef={tasksInputRef}
+              />
+            )
           ) : (
           <div className="relative w-full">
               <span
@@ -210,6 +223,7 @@ const SearchComp = ({
                               <TaskListRow
                                 task={item}
                                 highlight={item.highlight}
+                                titleParts={autocompleteEnabled ? highlightedTitle(item.taskTitle ?? '', inputValue) : undefined}
                                 index={index}
                                 handleLinkClick={handleLinkClick}
                                 handleMouseEnter={handleMouseEnter}
@@ -358,6 +372,7 @@ interface ITaskRow {
   index: number;
   isActive: boolean;
   highlight: any;
+  titleParts?: ReturnType<typeof highlightedTitle>;
   liRef: RefObject<HTMLLIElement | null>;
 }
 
@@ -370,6 +385,7 @@ const TaskListRow = (props: ITaskRow) => {
     index,
     isActive,
     highlight,
+    titleParts,
     liRef,
   } = props;
 
@@ -415,7 +431,13 @@ const TaskListRow = (props: ITaskRow) => {
               {task.ticketNumber}
             </span>
           )}
-          {highlight.title ? (
+          {titleParts ? (
+            <span className="font-bold truncate line-clamp-1">
+              {titleParts.map((part, index) => part.matched
+                ? <mark key={index} className="rounded-[2px] bg-amber-100 text-inherit dark:bg-amber-950">{part.text}</mark>
+                : part.text)}
+            </span>
+          ) : highlight.title ? (
             <span
               className="font-bold truncate line-clamp-1"
               dangerouslySetInnerHTML={{ __html: highlight.title.snippet }}
