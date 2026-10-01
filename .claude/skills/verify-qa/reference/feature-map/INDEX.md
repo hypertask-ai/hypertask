@@ -23,6 +23,7 @@ each ticket only needs the one or two areas it touches.
 | Inbox | [inbox.md](inbox.md) | `view-inbox` (load-only); no write journey for archive/undo |
 | Search and filters | [search-and-filters.md](search-and-filters.md) | `view-AI-search` (load-only, capital AI); no write journey for filters |
 | Demo board | [demo-board.md](demo-board.md) | `demo` (tag `@demo`, `demo.spec.ts`) |
+| My Tasks | [my-tasks.md](my-tasks.md) | no write journey; verify by hand |
 | Mobile | [mobile.md](mobile.md) | any id above tagged `@mobile` (`open-board`, `open-task`, `create-task`) |
 
 Load-only ids come from `prod.spec.ts`'s per-view smoke check (page loads,
