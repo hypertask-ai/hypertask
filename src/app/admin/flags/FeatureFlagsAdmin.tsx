@@ -184,10 +184,12 @@ export default function FeatureFlagsAdmin() {
                         href={flag.ticketUrl}
                         className="text-content font-medium text-white-black underline-offset-2 hover:underline focus-visible:underline"
                       >
-                        {flag.ticketTitle}
+                        {flag.ticketId} · {flag.ticketTitle}
                       </a>
                     ) : (
-                      <p className="text-content font-medium text-white-black">{flag.ticketTitle}</p>
+                      <p className="text-content font-medium text-white-black">
+                        {flag.ticketId} · {flag.ticketTitle}
+                      </p>
                     )}
                     <code className="mt-1 block break-all text-dense text-text-light-gray">{flag.key}</code>
                   </>

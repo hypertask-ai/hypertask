@@ -705,6 +705,7 @@ export type FeatureFlagRow = {
   removalTaskId: number | null;
   shippedOn: string | null;
   description: string;
+  ticketId: string | null;
   ticketUrl: string | null;
   ticketTitle: string | null;
 };
@@ -738,6 +739,7 @@ function withFeatureFlagMetadata(
     ...row,
     description: definition?.description ?? LEGACY_FEATURE_FLAG_DESCRIPTION,
     shippedOn: definition?.shippedOn ?? null,
+    ticketId: ticketNumber ? `HTPR-${ticketNumber}` : null,
     ticketUrl: ticketNumber ? `${FEATURE_FLAG_TICKET_BASE}/${ticketNumber}` : null,
     ticketTitle: ticketNumber ? (ticketTitleByNumber.get(Number(ticketNumber)) ?? null) : null,
   };
