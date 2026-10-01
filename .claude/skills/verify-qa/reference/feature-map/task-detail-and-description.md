@@ -39,4 +39,5 @@ pass even with the bug present, hiding exactly what broke.
 ## Cleanup
 
 If you created a test task, hard-delete it via the product UI. Never leave a
-`[qa-runner]`-prefixed task behind past the run.
+task you created (the smoke prefix is `QA_TASK_PREFIX` in
+`e2e/smoke/lib/boardSetup.ts`) past the run.
