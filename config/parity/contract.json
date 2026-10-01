@@ -43,13 +43,6 @@
         "cli": ["^presence$", "^agents list$"],
         "ai_chat": ["^hypertask_(agent_presence|ask_agent)$", "^hypertask_list_agents$"],
         "hyperai": ["^hypertask_(agent_presence|list_agents)$"]
-      },
-      "planned": {
-        "api": {
-          "issue": "https://app.hypertask.ai/detail/project-4060/123",
-          "expires": "2026-10-22",
-          "entries": ["GET /api/mcp/tasks/[taskId]/agent-activity"]
-        }
       }
     },
     {
