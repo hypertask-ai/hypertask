@@ -1,20 +1,19 @@
-## Universal agent onboarding
+## Claude Code and Codex sessions
 
-Start with the [OpenWiki quickstart](openwiki/quickstart.md), which is the repository entrypoint for every provider. The rendered human-readable guide is [https://hypertask.app/wiki/agents](https://hypertask.app/wiki/agents).
+Start with `/ship`, [CLAUDE.md](CLAUDE.md), and the skill map at [.claude/skills/INDEX.md](.claude/skills/INDEX.md). The wiki at [https://hypertask.app/wiki](https://hypertask.app/wiki) and `openwiki/` are technical references.
 
-All agents follow the same operating contract, regardless of whether they run through Claude, OpenAI, DeepSeek, or another provider:
+Valentin's own Claude Code and Codex sessions follow the same workflow:
 
-- Use an individual Hypertask agent identity. Never copy another agent's token or credentials.
-- For board work, use the approved `hypertask` CLI, MCP surface, or product UI. Never use Prisma, SQL, or a database client for ticket content.
-- Before coding on a ticket, claim it as Product Bot (`htbot comment add`), move it to **In Progress**, and never write in Valentin's name.
-- Read [the CI contract](https://hypertask.app/wiki/deployment) before changing workflows, runners, rulesets, previews, or deploy checks. Lower-confidence producers must also read [`openwiki/low-trust-agents.md`](openwiki/low-trust-agents.md) before opening a PR.
-- If the `/hypertask-agent` skill is available, use it as the Claude adapter. Other providers must follow the same board protocol directly.
+- Board writes go only through `vcc`, identity "Valentins Claude Code". The plain `hypertask` CLI is for reads only. Never write in Valentin's name, assign userId 6, or copy another identity's token or credentials.
+- Board content goes only through approved CLI, MCP or app API surfaces. Never use Prisma, SQL, or a database client for ticket content, even for reads.
+- Before coding on a ticket, claim it with `vcc comment add`, then move it to **In Progress** with `vcc task move`.
+- The same session fixes, opens the PR, merges once required checks are green, watches the deploy, verifies live with `.claude/skills/verify-qa/SKILL.md`, and closes the ticket only after verification passes.
+- Read [the CI reference](https://hypertask.app/wiki/deployment) and `docs/ci-policy.yml` before changing workflows, runners, rulesets, previews, or deploy checks.
+- Helpers are Codex sub-sessions: `hax --provider=codex --model=gpt-6.1-sol --effort=high --no-session -p "<task>"`. The owning session remains responsible through live verification and close.
 
-## No specializations: every agent takes every ticket
+## CLI and MCP repositories
 
-There are no specialist agents any more (Valentin, 2026-08-27). All agents carry the same knowledge, so routing tickets by speciality only stalled them. Whatever you pick up is yours to finish, including CLI, MCP, and API tickets. Never hand a ticket off because it "belongs to" another agent.
-
-A ticket about the `hypertask` CLI, the MCP server, or an `/api/mcp/*` route is fixed in a **different repository**, which is why these used to stall:
+CLI tickets are fixed in a **different repository**; server-side MCP/API changes stay in this app repo:
 
 - CLI source: `~/projects/hypertask-cli-zig` (Zig `hypertask`), remote [`hypertask-ai/cli`](https://github.com/hypertask-ai/cli), PRs base `main`
 - Tests: `zig build test` and `python3 scripts/parity_test.py`
@@ -22,11 +21,13 @@ A ticket about the `hypertask` CLI, the MCP server, or an `/api/mcp/*` route is 
 
 Work a CLI ticket in a worktree off `hypertask-ai/cli` the same way you would here: branch from `origin/main`, fix, test, PR, then comment the PR link on the ticket. Do not try to fix a CLI bug inside this repository, and do not park it as blocked. The Node CLI (`@hypertask/hypertask_cli`) is retired; do not extend it. A hidden `htz` symlink still points at `hypertask` for old scripts — do not use `htz` in new work.
 
+The product's managed-agents feature, agents API, agent chat and MCP tokens remain supported. The following token guidance is for those product integrations, not an alternative board-write identity for sessions; session writes still go only through `vcc`.
+
 Managed agent tokens work with the CLI as well as MCP. Use `hypertask --token "$AGENT_TOKEN" ...` or `HYPERTASKS_JWT_TOKEN="$AGENT_TOKEN" hypertask ...`; do not save an agent token with `hypertask login`.
 
 For model and reasoning-effort selection, use Codex `/intensity` when available. It is a recommendation layer, not a required provider or board identity.
 
-Sessions must clean up after shipping: after the PR is merged into `production`, production is health-checked, and the worktree is clean and unused, report `CLEANUP_READY` with its absolute path and branch. A supervisor removes the worktree and branch after the session exits. Never delete your own active cwd, another session's worktree, a dirty worktree, or an open-PR branch.
+Sessions must clean up after shipping: after the PR is merged into `production`, production is health-checked, and the worktree is clean and unused, record its absolute path and branch and remove only your own unused worktree and merged branch from another cwd. Never delete your own active cwd, another session's worktree, a dirty worktree, or an open-PR branch.
 
 ## OpenWiki
 
@@ -38,13 +39,13 @@ Start here:
 
 OpenWiki includes repository overview, architecture notes, workflows, domain concepts, operations, integrations, testing guidance, and source maps.
 
-When working in this repository, read the OpenWiki quickstart and `CLAUDE.md` first, then follow the relevant OpenWiki links for architecture, workflow, domain, operation, and testing notes.
+When working in this repository, read `CLAUDE.md` and `.claude/skills/INDEX.md` first, then follow the relevant OpenWiki links for architecture, workflow, domain, operation, and testing notes.
 
 ## Hypertask Ticket Access
 
 Hard rule: never read or write Hypertask ticket content directly through Prisma, raw SQL, database clients, or production database access. This includes "read-only" ticket lookups. Tickets, comments, inbox items, and task mutations must go through the product interface or approved CLIs/API surfaces so auth, permissions, activity, notifications, and side effects stay intact.
 
-Use the Hypertask CLI for ticket work (prefer **`hypertask`** on this VPS — full native Zig CLI; see [openwiki/hypertask-cli.md](openwiki/hypertask-cli.md)):
+Use **`hypertask`** for ticket reads and **`vcc`** for all board writes on this VPS (full native Zig CLI; see [openwiki/hypertask-cli.md](openwiki/hypertask-cli.md)):
 
 ```bash
 hypertask status
@@ -56,7 +57,7 @@ hypertask capabilities --json
 
 The CLI binaries currently available on the dev machine are:
 - `hypertask` — native Hypertask CLI (Zig, `hypertask 0.2.0 (zig)`); talks to `/api/mcp/*` and reads `~/.hypertask/config.json`.
-- `htbot` — Product Bot wrapper around that CLI (`~/.local/bin/htbot`). It loads the Product Bot token and runs `hypertask --token "$HT_AGENT_TOKEN" ...`. Use it for claim comments and In Progress moves so the write is not in Valentin's name. A session with its own agent token can use `hypertask --token "$AGENT_TOKEN"` the same way.
+- `vcc` — board-write command for Valentin's Claude Code and Codex sessions, using identity "Valentins Claude Code". Use it for every ticket, comment, assignment and move; the plain `hypertask` CLI is read-only for sessions.
 - `ht` — low-level MCP helper (`ht METHOD /mcp/path [json-body]`).
 - `openwiki` — repo documentation CLI; use headless `openwiki -p "..."` / `openwiki --update -p "..."`.
 - `zsb` — browser automation/debugging CLI for the active remote browser/tab.
@@ -72,7 +73,7 @@ When referencing a Hypertask ticket in conversation, write the full clickable ap
 - `--text` takes either plain text (auto-converted to `<p>`/`<ul>` HTML) **or** complete, well-formed HTML (passed through as-is). Don't mix them: once `--text` contains any HTML tag (e.g. an `<a>`), the backend stops converting markdown, so bare newlines won't render as paragraphs and the comment looks unformatted.
 - For links (PRs, related tickets, commits), use HTML anchors — bare URLs and `#1234` are not auto-linked: `<a href="https://github.com/valentinyeo/hypertasks/pull/1288">PR #1288</a>`.
 - Supported inline tags: `<p>`, `<strong>`, `<code>`, `<a>`, `<ul>`/`<li>`, `<h2>`.
-- Edit in place with `hypertask comment update <id> --text ...` instead of deleting and reposting — keeps the thread tidy.
+- Write comments only via `vcc` (identity "Valentins Claude Code"), never in Valentin's name. Edit in place with `vcc comment update <id> --text ...` instead of deleting and reposting — keeps the thread tidy.
 - Keep it short: one summary line, then **Gap / Fix / Status**. Skip the wall of explanation.
 - Before moving a fixed ticket to **Done**, its final comment must explain **what changed in plain language**. In 1–2 sentences, state the user-visible problem, what now works differently, and what the user will notice. A PR link, file list, or technical-only explanation does not satisfy this rule.
 
@@ -80,8 +81,8 @@ When referencing a Hypertask ticket in conversation, write the full clickable ap
 
 The moment you actually start working a ticket (writing code / doing the fix, not just reading or triaging), make it visible on the board so no one else picks up the same work:
 
-1. Claim as Product Bot: `htbot comment add <PREFIX-NNN> --text "<p><strong>Claimed.</strong> Session working it now.</p>"`. **No agent or session ever writes in Valentin's name (Valentin, 2026-09-15): no ticket, comment, assignment or move goes through his user token. Board writes use an agent identity (Product Bot via `htbot`, or the agent's own). Only Valentin assigns himself.**
-2. Move it to In Progress: `htbot task move <PREFIX-NNN> --section "In Progress"`.
+1. Claim via `vcc`: `vcc comment add <PREFIX-NNN> --text "<p><strong>Claimed.</strong> Session working it now.</p>"`. **No session ever writes in Valentin's name: no ticket, comment, assignment or move goes through his user token. All board writes use `vcc`, identity "Valentins Claude Code". Never assign userId 6. Only Valentin assigns himself. A ticket he assigned himself or moved by hand stays exactly as he left it.**
+2. Move it to In Progress: `vcc task move <PREFIX-NNN> --section "In Progress"`.
 
 Signal: **Claimed. comment + In Progress = in flight, do not touch.** Abdul self-assigns tickets he picks up; **never work a ticket assigned to Abdul** — leave it and pick another.
 
@@ -91,17 +92,18 @@ Follow the branch/deploy model from `CLAUDE.md` and `openwiki/deployment.md`:
 
 - Production is Vercel project `hypertasks-prod`, deployed from the `production` branch to `app.hypertask.ai`.
 - New work branches off `origin/production`; PRs target `production`, never `main`.
-- After opening a PR, leave auto-merge off. Agents never merge and never turn on auto-merge; the repo setting `allow_auto_merge` is off (Valentin, 27 Sep 2026). Merging follows the Merge Rules Contract in `hypertask-ai/company-skills` (`agents/Hypertask Product/merge-rules/CONTRACT.md`).
+- One ticket, one PR; fix the open one instead of opening another. PR titles use `HTPR-NNNN [TYPE] ...`; supported ticket prefixes are `HTPR`, `HYFA` and `YPER4`.
+- After opening a PR, leave auto-merge off; the repo setting `allow_auto_merge` is off (Valentin, 27 Sep 2026). The owning session merges once required checks are green, watches the deploy, verifies live with `.claude/skills/verify-qa/SKILL.md`, and closes the ticket only after verification passes.
 - `main` is frozen legacy and only feeds the EC2 warm-rollback box.
 - Every pushed branch gets a Vercel preview. Previews are SSO-protected and share the live production database, so they are for visual verification only, not destructive testing.
 - Branches older than 2026-07-06 should be rebased onto `origin/production` before preview work.
-- Multiple agents and worktrees may be active at once. Never use `git stash`; it is shared across worktrees. Never reset, checkout, or revert files you did not intentionally change.
+- Multiple sessions and worktrees may be active at once. Never use `git stash`; it is shared across worktrees. Never reset, checkout, or revert files you did not intentionally change.
 - Before committing, inspect `git status --short --branch` and separate your changes from pre-existing dirty worktree changes.
 - While a Vercel preview is still building/queued, never poll it by repeatedly navigating/reloading a browser tab (zsb/agent-browser/Playwright) — on zsb that's Valentin's real Edge pane, and looping reloads a heavy React app for no gain. Poll headlessly instead (`curl -s -o /dev/null -w "%{http_code}" <preview-url>` or `gh pr checks`), and only open the browser once the deployment is actually ready to verify.
 
 ## CI contract
 
-Read the [canonical CI contract](https://hypertask.app/wiki/deployment) before changing workflows, runner services, rulesets, required checks, or preview behavior. App CI runs on GitHub-hosted `ubuntu-latest` runners (the repository is public, so hosted minutes are free); the only self-hosted runners on the Contabo host belong to the private reviewer and analytics repositories. Preview verification is opt-in: use the automatic branch preview only when requested or justified by runtime risk. Do not treat it as a merge gate, and do not create extra preview deploys. Do not add a VPN runner or another host implicitly.
+Read the [canonical CI contract](https://hypertask.app/wiki/deployment) before changing workflows, runner services, rulesets, required checks, or preview behavior. App CI runs on GitHub-hosted `ubuntu-latest` runners (the repository is public, so hosted minutes are free). Preview verification is opt-in: use the automatic branch preview only when requested or justified by runtime risk. Do not treat it as a merge gate, and do not create extra preview deploys. Do not add a VPN runner or another host implicitly.
 
 ## Stack Orientation
 

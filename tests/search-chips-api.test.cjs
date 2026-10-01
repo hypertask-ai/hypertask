@@ -2,6 +2,7 @@ const assert = require('node:assert/strict')
 const path = require('node:path')
 const { readFileSync } = require('node:fs')
 const { test } = require('node:test')
+const { Prisma } = require('@prisma/client')
 const root = path.resolve(__dirname, '..')
 test('chip server reuses the operators name resolver instead of duplicating database lookups', () => {
   const source = readFileSync(path.join(root, 'src/lib/search/serverOperators.ts'), 'utf8')
@@ -22,6 +23,8 @@ function eligible(row, where) {
   if (where.AND && !where.AND.every((group) => eligible(row, group))) return false
   if (where.OR && !where.OR.some((group) => eligible(row, group))) return false
   if (where.NOT && eligible(row, where.NOT)) return false
+  if (where.comments?.some && !row.comments?.some((comment) => eligible(comment, where.comments.some))) return false
+  if (where.activity?.equals === Prisma.DbNull && row.activity !== null) return false
   if (where.taskLabels && !where.taskLabels.some.label.OR.some((label) =>
     label.id === row.label || label.value?.equals?.toLowerCase() === row.label)) return false
   if (where.project && row.project.title.toLowerCase() !== where.project.title.equals.toLowerCase()) return false
@@ -75,6 +78,7 @@ function response() {
 }
 function row(id, projectId = 7, label = 'bug') {
   return { id, projectId, label, title: 'Cleanup', description: '', description_: { content: 'zebra-quark' },
+    comments: [{ creatorId: 6, activity: null }],
     userId: 6, user: { displayName: 'Kamil Grzegorzewicz' },
     assignees: [{ userId: 6, user: { displayName: 'Kamil Grzegorzewicz' } }], section: 'Done',
     status: 'Normal', ticketNumber: `HTPR-${id}`, uniqueIndex: id,
@@ -109,6 +113,33 @@ for (const [operator, value, fragment] of [
     assert.deepEqual(res.body.processedData.All.map((task) => task.taskId), [123])
   })
 }
+
+test('has:comment excludes activity-only tickets, including automatic entries attributed to users or agents', async () => {
+  const activity = { creatorId: null, activity: { type: 'TaskMove', data: { fromUserId: 6 } } }
+  const rows = [
+    row(123),
+    { ...row(6616), comments: [activity] },
+    { ...row(124), comments: [{ ...activity, creatorId: 6 }] },
+    { ...row(125), comments: [{ ...activity, agentId: 'bot', activity: { type: 'TaskPullRequest' } }] },
+    { ...row(126), comments: [], agentRuns: [{ activities: [{ type: 'ACTION', text: 'search progress' }] }] },
+    { ...row(127), comments: [activity, { creatorId: 6, activity: null }] },
+    { ...row(128), comments: [{ creatorId: 6, agentId: 'bot', activity: null }] },
+    row(129, 8),
+  ]
+  for (const query of ['has:comment', 'has:comment search', '-has:comment search']) {
+    const { res, state } = await search(query, {
+      rows, taskHits: rows.map(({ id }) => ({ id: String(id), descriptionText: 'search' })),
+    })
+    assert.equal(res.statusCode, 200)
+    assert.deepEqual(res.body.processedData.All.map((task) => task.taskId),
+      query.startsWith('-') ? [6616, 124, 125, 126] : [123, 127, 128], query)
+    const predicate = query.startsWith('-') ? state.where.AND[0].NOT : state.where.AND[0].OR[0]
+    assert.deepEqual(predicate, { comments: { some: { activity: { equals: Prisma.DbNull } } } })
+  }
+  const off = await search('has:comment search', { rows, flag: false })
+  assert.equal(off.state.legacyCalls, 1)
+  assert.equal(off.state.where, undefined)
+})
 
 test('from and assignee match the email shown for a user without a display name', async () => {
   const person = { displayName: null, email: 'kamila@example.com' }

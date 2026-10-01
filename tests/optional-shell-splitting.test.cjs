@@ -38,20 +38,20 @@ test("closed optional shell features stay behind dynamic imports", () => {
 });
 
 test("task detail starts both required chat chunks without a serial waterfall", () => {
-  assert.match(provider, /const AIChatLayout = lazy\(loadAIChatLayout\)/);
-  assert.match(provider, /const ChatProvider = lazy\(loadChatProvider\)/);
+  assert.match(provider, /const AIChatPanels = lazy\(loadAIChatLayout\)/);
+  assert.match(provider, /const ChatRuntime = lazy\(loadChatRuntime\)/);
   assert.match(
     provider,
-    /useEffect\(\(\) => \{[\s\S]*?if \(!isTaskDetailPage\) return;[\s\S]*?Promise\.all\(\[loadChatProvider\(\), loadAIChatLayout\(\)\]\)[\s\S]*?\}, \[isTaskDetailPage\]\)/,
+    /useEffect\(\(\) => \{[\s\S]*?if \(!isTaskDetailPage\) return;[\s\S]*?Promise\.all\(\[loadChatRuntime\(\), loadAIChatLayout\(\)\]\)[\s\S]*?\}, \[isTaskDetailPage\]\)/,
   );
-  assert.doesNotMatch(provider, /import AIChatLayout from/);
-  assert.doesNotMatch(provider, /import \{ ChatProvider \} from/);
+  assert.doesNotMatch(provider, /import AIChatPanels from/);
+  assert.doesNotMatch(provider, /import \{ ChatRuntime \} from/);
 });
 
 test("failed chat chunk loads can be retried", () => {
   for (const [loader, promise] of [
     ["loadAIChatLayout", "aiChatLayoutPromise"],
-    ["loadChatProvider", "chatProviderPromise"],
+    ["loadChatRuntime", "chatRuntimePromise"],
   ]) {
     assert.match(
       provider,

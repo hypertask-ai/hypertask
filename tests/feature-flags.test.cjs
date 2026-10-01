@@ -290,6 +290,11 @@ test("declared flags remain listed with ticket details and can be changed", asyn
         updatedAt: null,
       },
       {
+        key: "htpr-6348-agent-access-delegation",
+        mode: "OWNER_AND_QA",
+        updatedAt: null,
+      },
+      {
         key: "htpr-6363-task-writer-research",
         mode: "OWNER_AND_QA",
         updatedAt: null,
@@ -484,6 +489,7 @@ test("declared flags remain listed with ticket details and can be changed", asyn
         mode: "OWNER_AND_QA",
         updatedAt: null,
       },
+      { key: "htpr-6800-flag-ticket-id", mode: "OWNER_AND_QA", updatedAt: null },
     ],
   );
   listed.forEach(({ key, description, ticketUrl, shippedOn }) => {

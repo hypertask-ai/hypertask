@@ -43,6 +43,10 @@ type AgentRead = {
   } | null>
 }
 type MemberWrite = {
+  findMany(args: {
+    where: { agentId: string; projectId: { in: number[] } }
+    select: { projectId: true }
+  }): Promise<Array<{ projectId: number }>>
   deleteMany(args: {
     where: { agentId: string; projectId: { in: number[] } }
   }): Promise<{ count: number }>
@@ -129,13 +133,36 @@ export async function updateOwnedAgentBoards(
   ) => Promise<AccessibleAgentBoard | null>,
   userId: number,
   input: AgentBoardUpdateInput,
-  teamId?: string
+  teamId?: string,
+  // HTPR-6348: set when an agent credential makes the change. Every project
+  // touched must be one that agent is on, checked inside the transaction so a
+  // concurrent removal of the acting agent cannot slip through.
+  actingAgentId?: string
 ) {
   const scopeWhere = teamId ? agentWithinTeamWhere(teamId) : {}
   for (let attempt = 0; ; attempt += 1) {
     try {
       return await database.$transaction(
         async ({ agent: agentStore, member }) => {
+          if (actingAgentId) {
+            const touched = [...input.addProjectIds, ...input.removeProjectIds]
+            const inScope = new Set(
+              (
+                await member.findMany({
+                  where: { agentId: actingAgentId, projectId: { in: touched } },
+                  select: { projectId: true },
+                })
+              ).map((row) => row.projectId)
+            )
+            const outside = touched.filter((id) => !inScope.has(id))
+            if (outside.length) {
+              throw new AgentBoardUpdateError(
+                `This agent is not a member of project ${outside.join(', ')}, so it cannot grant or remove access there`,
+                403,
+                'project_ids'
+              )
+            }
+          }
           const agent = await agentStore.findFirst({
             where: { ...scopeWhere, id: input.agentId, userId },
             select: {
@@ -205,8 +232,18 @@ export async function updateOwnedAgentBoards(
             }
           }
 
+          const removedSet = new Set(toRemove)
+          const projectIds = [
+            ...[...existing.keys()].filter((id) => !removedSet.has(id)),
+            ...toAdd,
+          ].sort((a, b) => a - b)
           if (!toAdd.length && !toRemove.length) {
-            return { agentId: agent.id, addedProjects: 0, removedProjects: 0 }
+            return {
+              agentId: agent.id,
+              addedProjects: 0,
+              removedProjects: 0,
+              projectIds,
+            }
           }
           const removed = toRemove.length
             ? await member.deleteMany({
@@ -227,6 +264,7 @@ export async function updateOwnedAgentBoards(
             agentId: agent.id,
             addedProjects: added.count,
             removedProjects: removed.count,
+            projectIds,
           }
         },
         { isolationLevel: 'Serializable' }

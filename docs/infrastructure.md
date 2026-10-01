@@ -68,7 +68,7 @@ key must therefore be the percent-decoded path with `+` left literal. Cloudflare
 1. Branch off `origin/production`.
 2. Push. A Vercel preview builds automatically and the bot comments the URL on the PR.
 3. Open a PR with base `production`. The required checks include GitHub AI Review (`ai-review`, or legacy `claude-review` during the transition), `next-public-secrets`,
-   `secret-scan`, `revert-guard`, and `pr-title`; CI Tests and App Smoke run before merge via the
+   `secret-scan` and `pr-title`; CI Tests and App Smoke run before merge via the
    `full-ci` flow. Preview smoke runs only when an opt-in preview exists.
 4. Merge to `production` -> production deploys in ~3 min.
 
