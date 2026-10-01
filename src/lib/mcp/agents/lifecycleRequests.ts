@@ -21,6 +21,7 @@ import {
   managementAgentTokenScope,
   validateMcpAuth,
 } from '@/lib/mcp/auth'
+import { checkAgentBoardDelegation } from '@/lib/mcp/agents/delegatedAccess'
 import { buildFieldError } from '@/lib/mcp/fieldError'
 import { hasManagementWritePermission } from '@/lib/mcp/managementPermissions'
 import { agentWithinTeamWhere } from '@/lib/mcp/managementKeyTeamScope'
@@ -146,7 +147,8 @@ export async function handlePatchAgentRequest(
   if (rateLimited) return rateLimited
 
   // Same gate the sibling DELETE uses: a human or a write-scoped management
-  // key, never an agent credential acting on other agents.
+  // key. An agent credential may only change board membership, and only when
+  // checkAgentBoardDelegation allows it (HTPR-6348).
   const ctx = await validateMcpAuth(request, {
     deferManagementPermissionCheck: true,
   })
@@ -157,12 +159,6 @@ export async function handlePatchAgentRequest(
         error: 'Unauthorized. Invalid or missing authentication token.',
       },
       { status: 401 }
-    )
-  }
-  if (ctx.agentId) {
-    return NextResponse.json(
-      { success: false, error: 'Agents cannot manage agents' },
-      { status: 403 }
     )
   }
   if (
@@ -216,6 +212,13 @@ export async function handlePatchAgentRequest(
   const wantsVisibility = body.visibility !== undefined
   const wantsBoardUpdate =
     body.add_project_ids !== undefined || body.remove_project_ids !== undefined
+  const otherUpdates = wantsLaunch || wantsArchive || wantsRename || wantsVisibility
+  if (ctx.agentId && (!wantsBoardUpdate || otherUpdates)) {
+    return NextResponse.json(
+      { success: false, error: 'Agents cannot manage agents' },
+      { status: 403 }
+    )
+  }
   if (wantsVisibility) {
     // Gated on the server like every other user-visible behavior: the flag
     // decides, not the client. Fail closed as 404 before any other check so
@@ -243,6 +246,8 @@ export async function handlePatchAgentRequest(
     }
     try {
       const input = parseAgentBoardUpdateBody({ ...body, agent_id: agentId })
+      const delegationError = await checkAgentBoardDelegation(ctx, agentId, input)
+      if (delegationError) return delegationError
       const result = await updateOwnedAgentBoards(
         prisma as unknown as AgentBoardUpdateDatabase,
         getAccessibleAgentBoard,
@@ -250,13 +255,28 @@ export async function handlePatchAgentRequest(
         input,
         ctx.management?.teamId
       )
+      if (ctx.agentId) {
+        console.info(
+          '[MCP Update Agent Boards] delegated',
+          JSON.stringify({
+            actingAgentId: ctx.agentId,
+            ownerUserId: ctx.user.id,
+            targetAgentId: result.agentId,
+            add: input.addProjectIds,
+            remove: input.removeProjectIds,
+            added: result.addedProjects,
+            removed: result.removedProjects,
+          })
+        )
+      }
       return NextResponse.json({
         success: true,
-        agent: { id: result.agentId },
+        agent: { id: result.agentId, project_ids: result.projectIds },
         changes: {
           added_projects: result.addedProjects,
           removed_projects: result.removedProjects,
         },
+        ...(ctx.agentId ? { acted_by: { agent_id: ctx.agentId } } : {}),
       })
     } catch (error) {
       if (error instanceof AgentBoardUpdateError) {

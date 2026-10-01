@@ -114,6 +114,7 @@ describe('owned agent board membership updates', () => {
       agentId: 'agent-1',
       addedProjects: 1,
       removedProjects: 1,
+      projectIds: [15, 339],
     })
   })
 

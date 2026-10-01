@@ -82,6 +82,7 @@ import {
   HTPR_6556_MOBILE_DESCRIPTION_FIRST_FLAG,
   HTPR_6561_DESCRIPTION_STRUCTURE_FLAG,
   HTPR_6542_TEAM_SCOPED_MANAGEMENT_KEYS_FLAG,
+  HTPR_6348_AGENT_ACCESS_DELEGATION_FLAG,
 } from "@/lib/flags/keys";
 
 // Re-exported so server code keeps importing keys from here. Client components must
@@ -120,6 +121,12 @@ const FEATURE_FLAG_DEFINITIONS = [
     shippedOn: "2026-09-18",
     description:
       "Lets board owners and admins permanently delete a board and its tasks through the Hypertask CLI after explicit confirmation.",
+  },
+  {
+    key: HTPR_6348_AGENT_ACCESS_DELEGATION_FLAG,
+    shippedOn: "2026-10-01",
+    description:
+      "Lets an agent with the admin role add or remove its owner's other agents on boards it is itself a member of, through the CLI and MCP.",
   },
   {
     key: HTPR_6542_TEAM_SCOPED_MANAGEMENT_KEYS_FLAG,

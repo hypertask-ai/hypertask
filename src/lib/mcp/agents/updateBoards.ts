@@ -205,8 +205,18 @@ export async function updateOwnedAgentBoards(
             }
           }
 
+          const removedSet = new Set(toRemove)
+          const projectIds = [
+            ...[...existing.keys()].filter((id) => !removedSet.has(id)),
+            ...toAdd,
+          ].sort((a, b) => a - b)
           if (!toAdd.length && !toRemove.length) {
-            return { agentId: agent.id, addedProjects: 0, removedProjects: 0 }
+            return {
+              agentId: agent.id,
+              addedProjects: 0,
+              removedProjects: 0,
+              projectIds,
+            }
           }
           const removed = toRemove.length
             ? await member.deleteMany({
@@ -227,6 +237,7 @@ export async function updateOwnedAgentBoards(
             agentId: agent.id,
             addedProjects: added.count,
             removedProjects: removed.count,
+            projectIds,
           }
         },
         { isolationLevel: 'Serializable' }
