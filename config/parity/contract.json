@@ -36,12 +36,20 @@
           "^GET /api/mcp/agents($|/\\[agentId\\]$|/analytics$|/presence$)",
           "^POST /api/mcp/agents/runtime-heartbeat$",
           "^GET /api/mcp/agents/runs/\\[id\\]$",
-          "^GET /api/mcp/agents/runs/\\[id\\]/activities$"
+          "^GET /api/mcp/agents/runs/\\[id\\]/activities$",
+          "^GET /api/mcp/tasks/\\[taskId\\]/agent-activity$"
         ],
         "mcp": ["^hypertask_(agent_presence|list_agents)$"],
         "cli": ["^presence$", "^agents list$"],
         "ai_chat": ["^hypertask_(agent_presence|ask_agent)$", "^hypertask_list_agents$"],
         "hyperai": ["^hypertask_(agent_presence|list_agents)$"]
+      },
+      "planned": {
+        "api": {
+          "issue": "https://app.hypertask.ai/detail/project-4060/123",
+          "expires": "2026-10-22",
+          "entries": ["GET /api/mcp/tasks/[taskId]/agent-activity"]
+        }
       }
     },
     {
