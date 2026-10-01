@@ -1,4 +1,4 @@
-import type { Prisma } from '@prisma/client'
+import { Prisma } from '@prisma/client'
 import prisma from '@/lib/prisma'
 import { isDoneByName } from '@/lib/doneColumns'
 import type { ParsedSearch, SearchFilter, SearchOperator } from './operators'
@@ -40,7 +40,7 @@ function filterWhere(operator: SearchOperator, value: string, done: Prisma.TaskW
     case 'has':
       switch (name.toLowerCase()) {
         case 'attachment': return { OR: [{ attachments: { some: {} } }, { comments: { some: { attachments: { some: {} } } } }] }
-        case 'comment': return { comments: { some: {} } }
+        case 'comment': return { comments: { some: { activity: { equals: Prisma.DbNull } } } }
         case 'due':
         case 'due-date': return { dueDate: { not: null } }
         default: return { id: -1 }

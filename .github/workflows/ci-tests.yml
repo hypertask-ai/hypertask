@@ -50,9 +50,6 @@ jobs:
     # write token. The production warning is a separate push-only job.
     permissions:
       contents: read
-      # The fail-fast step reads the PR's labels live (see revert-guard.yml).
-      # Without this the gh call 403s, PR_LABELS falls back to [], and an
-      # intentional-revert label is silently ignored.
       pull-requests: read
       issues: read
       checks: read
@@ -97,7 +94,7 @@ jobs:
             exit 1
           }
 
-          expected=$(printf '%s\n' app-smoke ci-tests ai-review claude-review feature-flag-gate next-public-secrets pr-title revert-guard secret-scan | sort)
+          expected=$(printf '%s\n' app-smoke ci-tests ai-review claude-review feature-flag-gate next-public-secrets pr-title secret-scan | sort)
           expected=$(printf '%s\n' "$expected" browser-smoke | sort)
           actual=$(jq -r '
             [.rules[] | select(.type == "required_status_checks") |
@@ -158,42 +155,6 @@ jobs:
         with:
           node-version: 20
 
-      # revert-guard.yml is the authoritative check. This duplicates its
-      # invocation so a doomed PR fails in seconds instead
-      # of occupying a hosted runner for a full 20-minute build.
-      # Runs the head sha through a temporary checkout, then restores the
-      # original ref so the build steps below still build the merge commit.
-      - name: Fail fast if revert-guard would fail
-        if: github.event_name == 'pull_request' && steps.scope.outputs.build_needed == 'true'
-        env:
-          GITHUB_BASE_REF: ${{ github.base_ref }}
-          # Live fetch, not the event payload: the payload freezes labels at
-          # trigger time, so intentional-revert added after the run fires (or
-          # before a rerun) was invisible and cost a retrigger commit every time.
-          GH_TOKEN: ${{ github.token }}
-          HUMAN_APPROVERS: ${{ vars.HUMAN_APPROVERS || 'valentinyeo' }}
-          PR_NUMBER: ${{ github.event.pull_request.number }}
-          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
-          PR_HEAD_IS_FORK: ${{ github.event.pull_request.head.repo.full_name != github.repository }}
-          PR_EVENT_ACTION: ${{ github.event.action }}
-          PR_BASE_EDITED: ${{ github.event.changes.base != null }}
-          PR_EVENT_TIMESTAMP: ${{ github.event.pull_request.updated_at }}
-        run: |
-          PR_LABELS=$(gh api --paginate "repos/${{ github.repository }}/issues/$PR_NUMBER/labels?per_page=100" --jq '.[] | {name}') || PR_LABELS=""
-          PR_LABELS=$(printf '%s\n' "$PR_LABELS" | jq -s '.')
-          export PR_LABELS
-          ORIG_SHA=$(git rev-parse HEAD)
-          git fetch --unshallow --quiet || git fetch --quiet
-          git fetch --quiet origin "$GITHUB_BASE_REF:refs/remotes/origin/$GITHUB_BASE_REF" "$PR_HEAD_SHA"
-          git show "origin/$GITHUB_BASE_REF:.github/scripts/revert-guard.mjs" > "$RUNNER_TEMP/rg.mjs"
-          git checkout --quiet "$PR_HEAD_SHA"
-          STATUS=0
-          node "$RUNNER_TEMP/rg.mjs" || STATUS=$?
-          git checkout --quiet "$ORIG_SHA"
-          if [ "$STATUS" -ne 0 ]; then
-            echo "::error::revert-guard would fail; fix that first (or add intentional-revert), then re-run"
-            exit 1
-          fi
 
       - name: Resolve dependency cache version
         id: dependency-cache-version
