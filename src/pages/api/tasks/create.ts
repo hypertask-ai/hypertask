@@ -3,12 +3,20 @@ import create from "@/utils/controllers/tasks/create";
 import generateRank from "@/utils/generateRank";
 import prisma from "@/lib/prisma";
 import { broadcastBoardChange } from "@/lib/realtime/server";
+import { getSessionUser } from "@/lib/auth/getSessionUser";
+import { loadSessionUserRecord } from "@/lib/auth/sessionUserRecord";
 
 const handler: NextApiHandler = async (req: NextApiRequest, res: NextApiResponse) => {
     if (req.method === "POST") {
+        const session = await getSessionUser(
+          new Headers(req.headers as Record<string, string>)
+        );
+        if (!session) {
+          return res.status(401).json({ message: "Unauthorized" });
+        }
+        const userObj = await loadSessionUserRecord(session.userId);
         try {
             const { title, description, section, userId, ranking, projectId,sectionId, index, fullScreenTask, projectIdentifier, agentId } = req.body;
-            const userObj:any = JSON.parse(req.cookies?.nookies_user!) 
         
             if (fullScreenTask) {
                 const newTask = await createFullScreenTaskAndReturn(projectId, userId,projectIdentifier,title, userObj, agentId)
@@ -22,7 +30,7 @@ const handler: NextApiHandler = async (req: NextApiRequest, res: NextApiResponse
             }
 
             
-            if (!title  || !userObj || !projectId) return res.status(400).json({ message: "Missing Required Information" });
+            if (!title  || !projectId) return res.status(400).json({ message: "Missing Required Information" });
 
 
             // if ranking and section are missing, find them and send them, too lazy to adjust frontend, but please feel free to optimize it later

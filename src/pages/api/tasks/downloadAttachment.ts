@@ -6,19 +6,25 @@ import {
   HYPERTASKS_S3_BUCKET,
   parseHypertasksStorageKeyFromUrl,
 } from "@/lib/storage/hypertasksS3";
+import { getSessionUser } from "@/lib/auth/getSessionUser";
 
 export default async function handler(
   req: NextApiRequest,
   res: NextApiResponse
 ) {
+  const session = await getSessionUser(
+    new Headers(req.headers as Record<string, string>)
+  );
+  if (!session) {
+    res.status(401).json({ message: "Unauthorized" });
+    return;
+  }
+  if (req.method !== "GET") {
+    res.status(405).json({ message: "Method not allowed" });
+    return;
+  }
   if (req.method === "GET") {
-    const userObj = req.cookies?.nookies_user
-      ? JSON.parse(req.cookies.nookies_user)
-      : null;
-    if (!userObj || !userObj.id) {
-      res.status(401).send("Unauthorized");
-      return;
-    }
+    const userId = session.userId;
 
     const s3 = getHypertasksS3Client();
     const { fileName, fileSource } = req.query;
@@ -51,7 +57,7 @@ export default async function handler(
 
         if (attachment.chatMessage) {
           // Chat message attachment: only the session owner may download
-          if (attachment.chatMessage.session.userId !== userObj.id) {
+          if (attachment.chatMessage.session.userId !== userId) {
             res.status(403).send("Forbidden");
             return;
           }
@@ -61,8 +67,8 @@ export default async function handler(
             where: {
               id: projectId,
               OR: [
-                { members: { some: { userId: userObj.id } } },
-                { ownerId: userObj.id },
+                { members: { some: { userId: userId } } },
+                { ownerId: userId },
               ],
             },
             select: { id: true },

@@ -27,20 +27,8 @@ import { getTeamAiSettingsForViewer } from "@/utils/controllers/teams/getTeamAiS
 import { updateTeamAiSettingsAtomically } from "@/utils/controllers/teams/updateTeamAiSettingsAtomically";
 import { resolveTeamCustomEndpoint } from "@/app/api/ai/_lib/byokKeys";
 import { getAiModelOptionById } from "@/lib/aiModelOptions";
-
-type CookieUser = { id: number; accountId?: string };
-
-function parseUser(req: NextApiRequest): CookieUser | null {
-  try {
-    const raw = req.cookies?.nookies_user;
-    if (!raw) return null;
-    const user = JSON.parse(raw) as { id?: number; accountId?: string };
-    if (typeof user.id !== "number") return null;
-    return { id: user.id, accountId: user.accountId };
-  } catch {
-    return null;
-  }
-}
+import prisma from "@/lib/prisma";
+import { getSessionUser } from "@/lib/auth/getSessionUser";
 
 function effectiveModel(
   feature: AiFeature,
@@ -125,8 +113,16 @@ const handler: NextApiHandler = async (
   req: NextApiRequest,
   res: NextApiResponse,
 ) => {
-  const user = parseUser(req);
-  if (!user) return res.status(401).json({ message: "Unauthorized" });
+  const session = await getSessionUser(
+    new Headers(req.headers as Record<string, string>)
+  );
+  if (!session) return res.status(401).json({ message: "Unauthorized" });
+  const row = await prisma.user.findUnique({
+    where: { id: session.userId },
+    select: { id: true, accountId: true },
+  });
+  if (!row) return res.status(401).json({ message: "Unauthorized" });
+  const user = { id: row.id, accountId: row.accountId ?? undefined };
 
   if (req.method === "GET") {
     const teamId =

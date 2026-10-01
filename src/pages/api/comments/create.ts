@@ -1,27 +1,30 @@
 import { NextApiHandler, NextApiRequest, NextApiResponse } from "next";
 import { createCommentService } from "@/utils/controllers/comments/createCommentService";
 import { broadcastTaskComment } from "@/lib/realtime/server";
+import prisma from "@/lib/prisma";
+import { getSessionUser } from "@/lib/auth/getSessionUser";
 
 const handler: NextApiHandler = async (
   req: NextApiRequest,
   res: NextApiResponse
 ) => {
   if (req.method === "POST") {
+    const session = await getSessionUser(
+      new Headers(req.headers as Record<string, string>)
+    );
+    if (!session) {
+      return res.status(401).json({ message: "Unauthorized" });
+    }
+    const currentUser = await prisma.user.findUnique({
+      where: { id: session.userId },
+      select: { id: true, displayName: true, email: true, photoURL: true },
+    });
+    if (!currentUser) {
+      return res.status(401).json({ message: "Unauthorized" });
+    }
     try {
       const { text, creatorId, taskId, ownerId, agentId } = req.body;
-      let currentUser;
-      if (req.cookies.nookies_user) {
-        try {
-          currentUser = JSON.parse(req.cookies.nookies_user);
-        } catch (parseError) {
-          console.error("Error parsing nookies_user cookie:", parseError);
-          currentUser = undefined;
-        }
-      }
 
-      if (!currentUser) {
-        return res.status(401).json({ message: "Unauthorized" });
-      }
       if (Number(creatorId) !== Number(currentUser.id)) {
         return res.status(403).json({ message: "Forbidden" });
       }
