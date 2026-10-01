@@ -22,9 +22,11 @@ const root = path.resolve(__dirname, '..')
 
 test('chip picker opens, selects with keyboard, runs, and removes on Backspace', async (t) => {
   const dom = new JSDOM('<div id="root"></div>', { url: 'https://example.test/search' })
-  const globals = ['window', 'document', 'HTMLElement', 'IS_REACT_ACT_ENVIRONMENT', 'fetch']
+  const globals = ['window', 'document', 'HTMLElement', 'IS_REACT_ACT_ENVIRONMENT', 'fetch', 'navigator']
   const previous = globals.map((name) => [name, Object.getOwnPropertyDescriptor(global, name)])
   Object.assign(global, { window: dom.window, document: dom.window.document, HTMLElement: dom.window.HTMLElement, IS_REACT_ACT_ENVIRONMENT: true })
+  // CI runs Node 20, which has no global navigator; react-dom reads it on load.
+  Object.defineProperty(global, 'navigator', { value: dom.window.navigator, configurable: true, writable: true })
   const stubs = []
   const stub = (file, exports) => {
     const filename = path.join(root, file)
@@ -34,10 +36,12 @@ test('chip picker opens, selects with keyboard, runs, and removes on Backspace',
   const calls = []
   let fail = false
   let resolveLookup
+  let summaryFixture = false
   global.fetch = async (url) => {
     calls.push(String(url))
     const params = new URL(String(url), 'https://example.test').searchParams
     if (fail) return { ok: false }
+    if (summaryFixture) return { ok: true, json: async () => ({ candidates: [], resolved: { from: 'Kamil Grzegorzewicz', in: 'Product Board', label: 'Bug' }[params.get('operator')], resolvedId: params.get('value') }) }
     if (String(url).includes('operator=label')) await new Promise((resolve) => { resolveLookup = resolve })
     const candidates = String(url).includes('operator=in')
       ? [{ id: 7, name: 'Product Board' }]
@@ -85,7 +89,10 @@ test('chip picker opens, selects with keyboard, runs, and removes on Backspace',
     assert.equal(document.querySelector('[role="option"][aria-selected="true"]').textContent, 'Kamil')
     await press('Tab')
     assert.equal(runs.at(-1), 'from:1')
-    assert.match(document.querySelector('[aria-label="Remove from:Kamil filter"]').textContent, /from:Kamil/)
+    await t.test('person chips display an @ marker while the query keeps the ID', () => {
+      assert.match(document.querySelector('[aria-label="Remove from:Kamil filter"]').textContent, /from:@Kamil/)
+      assert.equal(runs.at(-1), 'from:1')
+    })
     await press('Backspace')
     assert.equal(runs.at(-1), '')
     assert.equal(document.querySelector('[aria-label^="Remove"]'), null)
@@ -104,7 +111,7 @@ test('chip picker opens, selects with keyboard, runs, and removes on Backspace',
       outside.remove()
       await React.act(async () => input.focus())
     })
-    await t.test('refocusing a value or trigger reopens suggestions only at the active caret', async () => {
+    await t.test('refocusing a value or trigger reopens suggestions only at the active caret', async (t) => {
       const outside = document.createElement('button')
       document.body.append(outside)
       try {
@@ -120,19 +127,47 @@ test('chip picker opens, selects with keyboard, runs, and removes on Backspace',
         input.setSelectionRange(0, 0)
         await React.act(async () => input.focus())
         assert.equal(input.getAttribute('aria-expanded'), 'false', 'caret before the operator does not reopen')
+        await t.test('clicking inside a value reopens after focus lands before the operator', async () => {
+          for (const value of ['from:ka', 'assignee:ka', 'in:pro', 'board:pro', 'label:bu', '@ka', '#pro']) {
+            await type(value)
+            await React.act(async () => outside.focus())
+            input.setSelectionRange(0, 0)
+            await React.act(async () => input.focus())
+            assert.equal(input.getAttribute('aria-expanded'), 'false')
+            input.setSelectionRange(value.length - 1, value.length - 1)
+            await React.act(async () => input.click())
+            assert.equal(input.getAttribute('aria-expanded'), 'true', `${value} reopens at the clicked caret`)
+          }
+        })
         await type('#pro')
       } finally {
         outside.remove()
       }
     })
-    await press('Escape')
-    assert.equal(input.value, '#pro')
-    assert.equal(input.getAttribute('aria-expanded'), 'false')
+    await t.test('Escape closes only the picker and preserves raw text, then allows page Back', async () => {
+      let backs = 0
+      const back = (event) => { if (event.key === 'Escape') backs++ }
+      document.addEventListener('keydown', back)
+      try {
+        await press('Escape')
+        assert.equal(input.value, '#pro')
+        assert.equal(input.getAttribute('aria-expanded'), 'false')
+        assert.equal(backs, 0)
+        await press('Escape')
+        assert.equal(backs, 1)
+      } finally {
+        document.removeEventListener('keydown', back)
+      }
+    })
     await type('#prod')
     await settle()
     await press('Enter')
     assert.equal(runs.at(-1), 'in:7')
     assert.ok(document.querySelector('[aria-label^="Remove in:Product Board"]'))
+    await t.test('board chips display a # marker while the query keeps the ID', () => {
+      assert.match(document.querySelector('[aria-label^="Remove in:Product Board"]').textContent, /in:#Product Board/)
+      assert.equal(runs.at(-1), 'in:7')
+    })
     await type('login')
     await t.test('Backspace with selected input text does not remove the chip', async () => {
       input.setSelectionRange(0, input.value.length)
@@ -205,6 +240,16 @@ test('chip picker opens, selects with keyboard, runs, and removes on Backspace',
       }).length
       assert.equal(resolvedAfter, resolvedBefore, `${operator}:${marked} must not hydrate again after editing`)
     }
+    await t.test('summary uses hydrated chip names and markers but runs the original IDs', async () => {
+      summaryFixture = true
+      const query = 'from:1 in:7 -label:01234567-89ab-cdef-0123-456789abcdef login'
+      await React.act(async () => reactRoot.render(React.createElement(Harness, { key: 'summary', initial: query })))
+      await settle()
+      const summary = [...document.querySelectorAll('button')].find((button) => button.textContent.startsWith('Show results for:'))
+      assert.equal(summary.textContent, 'Show results for: from:@Kamil Grzegorzewicz in:#Product Board -label:Bug login')
+      await React.act(async () => summary.click())
+      assert.equal(runs.at(-1), query)
+    })
   } finally {
     if (reactRoot) await React.act(async () => reactRoot.unmount())
     for (const [filename, prior] of stubs.reverse()) {

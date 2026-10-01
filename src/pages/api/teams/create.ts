@@ -6,11 +6,18 @@ import { LogType, PrismaClient, Status } from "@prisma/client";
 import { NextApiHandler, NextApiRequest, NextApiResponse } from "next";
 
 import prisma from "@/lib/prisma";
+import { getSessionUser } from "@/lib/auth/getSessionUser";
 
 
 const handler: NextApiHandler = async (req: NextApiRequest, res: NextApiResponse) => {
     try {
-            const {userId, teamTitle} = req.body
+        if (req.method !== "POST") {
+            return res.status(405).json({ message: "Method not allowed" });
+        }
+        const session = await getSessionUser(new Headers(req.headers as Record<string, string>));
+        if (!session) return res.status(401).json({ message: "Unauthorized" });
+            const { teamTitle } = req.body
+            const userId = session.userId
             const googleAccountId = await prisma.googleAccount.findFirst({
                 where:{
                     userId:userId

@@ -146,6 +146,9 @@ const labelHandler = (writes, label, view, options = {}) => loadRoute(
     "src/utils/helperFunctions/Views/BoardFilterSanitizer.ts": {
       sanitizeBoardFilters: (value) => value,
     },
+    "src/lib/auth/getSessionUser.ts": {
+      getSessionUser: async () => ({ userId: 6, source: "legacy", needsBridge: true }),
+    },
   },
 );
 
@@ -183,6 +186,9 @@ const viewHandler = (writes, label, view) => loadRoute(
       },
       ManagedSmartSplitMutationError,
     },
+    "src/lib/auth/getSessionUser.ts": {
+      getSessionUser: async () => ({ userId: 6, source: "legacy", needsBridge: true }),
+    },
   },
 );
 
@@ -199,7 +205,7 @@ for (const fixture of [
       method: "POST",
       body: { labelId: fixture.label.id, value: "Renamed" },
       query: {},
-      cookies: { nookies_user: JSON.stringify({ id: 6 }) },
+      headers: {},
     }, res);
 
     assert.equal(res.result.statusCode, 409);
@@ -215,7 +221,7 @@ for (const fixture of [
       method: "DELETE",
       body: {},
       query: { labelId: fixture.label.id, projectId: "15" },
-      cookies: { nookies_user: JSON.stringify({ id: 6 }) },
+      headers: {},
     }, res);
 
     assert.equal(res.result.statusCode, 409);
@@ -231,7 +237,7 @@ for (const fixture of [
       method: "POST",
       body: { viewId: fixture.view.id, projectId: 15, title: "Renamed" },
       query: {},
-      cookies: { nookies_user: JSON.stringify({ id: 6 }) },
+      headers: {},
     }, res);
 
     assert.equal(res.result.statusCode, 409);
@@ -247,7 +253,7 @@ for (const fixture of [
       method: "DELETE",
       body: {},
       query: { viewId: fixture.view.id, projectId: "15" },
-      cookies: { nookies_user: JSON.stringify({ id: 6 }) },
+      headers: {},
     }, res);
 
     assert.equal(res.result.statusCode, 409);
@@ -296,7 +302,7 @@ test("ordinary label deletion scrubs an unlinked null-title view before deleting
     method: "DELETE",
     body: {},
     query: { labelId: ordinaryLabel.id, projectId: "15" },
-    cookies: { nookies_user: JSON.stringify({ id: 6 }) },
+    headers: {},
   }, res);
 
   assert.equal(res.result.statusCode, 200);
@@ -328,7 +334,7 @@ test("a failed view-reference scrub prevents ordinary label deletion", async () 
     method: "DELETE",
     body: {},
     query: { labelId: ordinaryLabel.id, projectId: "15" },
-    cookies: { nookies_user: JSON.stringify({ id: 6 }) },
+    headers: {},
   }, res);
 
   assert.equal(res.result.statusCode, 500);

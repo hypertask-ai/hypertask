@@ -1,23 +1,26 @@
 import { NextApiHandler, NextApiRequest, NextApiResponse } from "next";
-import { IUser } from "@/models/model";
 import { getAllStarred } from "@/utils/controllers/savedContent/getAllStarred";
 import { getAllPinned } from "@/utils/controllers/savedContent/getAllPinned";
+import { getSessionUser } from "@/lib/auth/getSessionUser";
 
 const handler: NextApiHandler = async (
   req: NextApiRequest,
   res: NextApiResponse
 ) => {
   try {
-    const user: IUser = JSON.parse(req.cookies.nookies_user!);
-    if (!user) {
-      return res.status(400).json({ message: "Missing required information" });
+    const session = await getSessionUser(
+      new Headers(req.headers as Record<string, string>)
+    );
+    if (!session) {
+      return res.status(401).json({ message: "Unauthorized" });
     }
+    const userId = session.userId;
 
     const { pinned } = req.body;
 
     let response: any;
-    if (pinned) response = await getAllPinned(user.id);
-    else response = await getAllStarred(user.id);
+    if (pinned) response = await getAllPinned(userId);
+    else response = await getAllStarred(userId);
     res.status(response.status).json(response.json);
   } catch (error) {
     console.log("🚀 ~ error:", error);

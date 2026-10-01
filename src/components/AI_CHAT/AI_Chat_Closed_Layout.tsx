@@ -11,12 +11,17 @@ interface AIChatClosedLayoutProps {
   mobileTabBarVisible?: boolean;
   mobilePullCommandEnabled?: boolean;
   onOpenAIChat: () => void;
+  /** Chat UI rendered beside the page once the chat runtime is mounted. */
+  panels?: React.ReactNode;
+  chatOpen?: boolean;
 }
 
 /**
- * The workspace frame while AI chat has not been requested. It deliberately
- * has no ChatProvider dependency, so the full chat hook graph stays out of
- * board hydration while preserving the same layout and desktop entry point.
+ * The workspace frame around every page, before and after AI chat loads. It
+ * deliberately has no ChatProvider dependency, so the full chat hook graph
+ * stays out of board hydration. The chat arrives later as `panels`, beside the
+ * page: swapping this frame for another one remounted the whole route and made
+ * an open board drop its columns (HTPR-6751).
  */
 export default function AIChatClosedLayout({
   children,
@@ -24,6 +29,8 @@ export default function AIChatClosedLayout({
   mobileTabBarVisible = false,
   mobilePullCommandEnabled = false,
   onOpenAIChat,
+  panels,
+  chatOpen = false,
 }: AIChatClosedLayoutProps) {
   const pathname = usePathname();
   const isMobile = useContext(MobileViewContext);
@@ -47,7 +54,7 @@ export default function AIChatClosedLayout({
     return <>{children}</>;
   }
 
-  if (isDetailPage && isMobile) {
+  if (isDetailPage && isMobile && !chatOpen) {
     return (
       <div data-ai-workspace tabIndex={-1} className={workspaceClasses}>
         {children}
@@ -68,8 +75,9 @@ export default function AIChatClosedLayout({
       >
         {children}
       </div>
+      {panels}
       {/* /agents/chat has its own details-pane chevron; keep this one off there. */}
-      {!isMobile && !pathname?.startsWith("/agents/chat") && (
+      {panels === undefined && !isMobile && !pathname?.startsWith("/agents/chat") && (
         <button
           tabIndex={-1}
           onClick={onOpenAIChat}

@@ -1,13 +1,20 @@
 import setMemberRole from "@/utils/controllers/projects/setMemberRole";
 import { NextApiHandler, NextApiRequest, NextApiResponse } from "next";
+import { getSessionUser } from "@/lib/auth/getSessionUser";
 
 const handler: NextApiHandler = async (req: NextApiRequest, res: NextApiResponse) => {
   if (req.method === "POST") {
+    const session = await getSessionUser(
+      new Headers(req.headers as Record<string, string>)
+    );
+    if (!session) {
+      return res.status(401).json({ message: "Unauthorized" });
+    }
+    const userId = session.userId;
     try {
       const { projectId, targetUserId, role } = req.body;
-      const user = JSON.parse(req.cookies.nookies_user!);
       const response = await setMemberRole(
-        parseInt(user.id),
+        userId,
         projectId,
         targetUserId,
         role,

@@ -57,8 +57,15 @@ function responseRecorder() {
 function loadRecentRoute(identity) {
   const recentCalls = [];
   const handler = loadTypeScript("src/pages/api/tasks/searchAll.ts", {
-    "@/lib/auth/cookieIdentity": {
-      verifyCookieIdentity: async () => identity,
+    "@/lib/auth/getSessionUser": {
+      getSessionUser: async () =>
+        identity && identity.status === "verified"
+          ? { userId: identity.id, source: "legacy", needsBridge: true }
+          : null,
+    },
+    "@/lib/prisma": { __esModule: true, default: {} },
+    "@/utils/controllers/projects/getAllIncludes": {
+      getProjectWhere: () => ({}),
     },
     "@/utils/controllers/tasks/searchAll": {
       __esModule: true,
@@ -85,7 +92,7 @@ async function callRecentRoute(handler) {
         projectIds: [15, 99],
         currentTaskId: 42,
       },
-      cookies: { nookies_user: "claim", ht_session: "signature" },
+      headers: {},
     },
     response,
   );
@@ -196,9 +203,9 @@ test("the relation picker loads recently worked tasks before a search", () => {
 
 test("recent task lookup is authenticated and board-scoped", () => {
   assert.match(route, /mode === "recent"/);
-  assert.match(route, /verifyCookieIdentity\(/);
-  assert.match(route, /req\.cookies\.ht_session/);
-  assert.match(route, /identity\.status !== "verified"/);
+  assert.match(route, /getSessionUser\(/);
+  assert.match(route, /if \(!session\) \{[\s\S]*?status\(401\)/);
+  assert.match(route, /userId: session\.userId/);
   assert.match(route, /status\(401\)/);
   assert.match(recentTasks, /project:\s*getProjectWhere\(userId\)/);
   assert.match(recentTasks, /updatedByUserIds:\s*\{ has: userId \}/);

@@ -1,6 +1,7 @@
 import { NextApiHandler, NextApiRequest, NextApiResponse } from "next";
 
 import prisma from "@/lib/prisma";
+import { getSessionUser } from "@/lib/auth/getSessionUser";
 
 // Replaces the entire favorites set for the *authenticated* user in one
 // transaction. The client sends the desired order; slots (= Cmd/Alt shortcut)
@@ -10,20 +11,15 @@ const handler: NextApiHandler = async (req: NextApiRequest, res: NextApiResponse
     return res.status(405).json({ message: "Method not allowed" });
   }
 
-  // Identity. proxy.ts guarantees a *present* nookies_user is backed by a
-  // matching signed ht_session, but it lets cookie-less requests through — so
-  // require it here and derive the user's own settings row. Never trust a
-  // client-supplied userSettingId (that would let one user rewrite another's).
-  let userId: number | null = null;
-  try {
-    const raw = req.cookies?.nookies_user;
-    if (raw) userId = Number(JSON.parse(raw)?.id);
-  } catch {
-    userId = null;
-  }
-  if (!userId || !Number.isFinite(userId)) {
+  // Identity comes from the signed session. Never trust a client-supplied
+  // userSettingId (that would let one user rewrite another's).
+  const session = await getSessionUser(
+    new Headers(req.headers as Record<string, string>)
+  );
+  if (!session) {
     return res.status(401).json({ message: "Unauthorized" });
   }
+  const userId = session.userId;
 
   const { favorites } = req.body as {
     favorites?: { projectId: number }[];

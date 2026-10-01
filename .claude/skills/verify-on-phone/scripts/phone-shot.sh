@@ -41,10 +41,12 @@ Usage:
   <url>             full https:// URL, scheme included.
   <out.png>         ABSOLUTE path for the PNG. A relative path is rejected,
                     because the browser session does not share your cwd.
-  --state           auth state JSON. Required, or set
-                    $HT_PRODUCTION_STORAGE_STATE_FILE instead. There is no
-                    default: use this agent's OWN state file. Borrowing
-                    another agent's credentials, or the owner's, is banned.
+  --state           auth state JSON. Optional. When omitted, the shot
+                    uses ~/.config/hypertask-videos/storageState-qa.json
+                    (user 985, sees Owner + QA flags). Pass
+                    ~/.config/hypertask-videos/storageState-qa-normal.json
+                    (user 2343) for the flag-off path. Never Valentin's
+                    account.
   --allow-redirect  downgrade "landed on a different path" from a failure to a
                     warning. Only for flows that redirect on purpose, and the
                     success line then says UNVERIFIED.
@@ -76,11 +78,10 @@ URL="$1"
 OUT="$2"
 shift 2
 
-# No owner-account default. An unset variable used to fall back to Valentin's
-# own browser state, so any agent that forgot to set it browsed the product as
-# the owner. The rule is that no agent ever acts as the owner, so an agent that
-# has not been given its own state file gets an error, not his session.
-STATE_FILE="${HT_PRODUCTION_STORAGE_STATE_FILE:-}"
+# Default is the QA login that sees Owner + QA flags. --state overrides it
+# (use the plain account for a flag-off check). Never Valentin's file.
+DEFAULT_STATE="${HOME}/.config/hypertask-videos/storageState-qa.json"
+STATE_FILE=""
 DRY_RUN="no"
 ALLOW_REDIRECT="no"
 SESSION="phone-shot"
@@ -102,13 +103,14 @@ case "$URL" in
 esac
 
 require_abs "$OUT" "The output path" "Re-run with the full path, for example \"\$PWD/after.png\". The browser session does not share your working directory."
-[ -n "$STATE_FILE" ] \
-  || die "No auth state file was given, and there is no default: an agent signs in as itself, never as the owner." "Set \$HT_PRODUCTION_STORAGE_STATE_FILE to this agent's own state JSON, or pass --state <path>."
+if [ -z "$STATE_FILE" ]; then
+  STATE_FILE="$DEFAULT_STATE"
+fi
 case "$STATE_FILE" in
   *storageState-valentin.json)
-    die "That state file is the owner's own browser session." "Write this agent's own state JSON with the login recipe in openwiki/auth.md and point --state at that." ;;
+    die "That state file is Valentin's own browser session." "Pass --state ~/.config/hypertask-videos/storageState-qa.json, or storageState-qa-normal.json for the flag-off path." ;;
 esac
-require_abs "$STATE_FILE" "--state" "Re-run with the full path to this agent's auth state JSON, or set \$HT_PRODUCTION_STORAGE_STATE_FILE."
+require_abs "$STATE_FILE" "--state" "Re-run with the full path, for example --state \"\$HOME/.config/hypertask-videos/storageState-qa.json\"."
 
 OUT_DIR="$(dirname "$OUT")"
 

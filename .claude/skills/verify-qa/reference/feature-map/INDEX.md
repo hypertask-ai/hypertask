@@ -14,6 +14,7 @@ each ticket only needs the one or two areas it touches.
 
 | Area | File | e2e/smoke id |
 |---|---|---|
+| CI Node-version guard | [ci-node-version.md](ci-node-version.md) | throwaway PR negative control, no app writes |
 | Login | [login.md](login.md) | `login` (write journey) |
 | Boards and views | [boards-and-views.md](boards-and-views.md) | `open-board`, `switch-boards` (write); `view-board-list`, `view-kanban-board` (load-only, `prod.spec.ts`) |
 | Task detail and description | [task-detail-and-description.md](task-detail-and-description.md) | `open-task`, `edit-description` (write); `view-task-detail` (load-only) |
@@ -23,7 +24,9 @@ each ticket only needs the one or two areas it touches.
 | Inbox | [inbox.md](inbox.md) | `view-inbox` (load-only); no write journey for archive/undo |
 | Search and filters | [search-and-filters.md](search-and-filters.md) | `view-AI-search` (load-only, capital AI); no write journey for filters |
 | Demo board | [demo-board.md](demo-board.md) | `demo` (tag `@demo`, `demo.spec.ts`) |
+| My Tasks | [my-tasks.md](my-tasks.md) | no write journey; verify by hand |
 | Mobile | [mobile.md](mobile.md) | any id above tagged `@mobile` (`open-board`, `open-task`, `create-task`) |
+| Legacy MCP SSE transport | [mcp-legacy-sse.md](mcp-legacy-sse.md) | no smoke id; verify requests and PostHog ingestion directly |
 
 Load-only ids come from `prod.spec.ts`'s per-view smoke check (page loads,
 no error, right selector present). Real, but shallower than a write journey.
@@ -42,11 +45,12 @@ automation**: `src/lib/realtime/client.ts` checks `navigator.webdriver`
 before it even reads the param, and `agent-browser` reports
 `navigator.webdriver === true` like any automated Chromium. So proof is
 always reload-and-re-read-from-the-server, never "watch it update live" (see
-each area file's "what proof to collect"). Sign in with your own runtime's
-`$HT_PRODUCTION_STORAGE_STATE_FILE`. `zsb` is Valentin's visible browser, not
-yours; use it only when he needs to watch.
+each area file's "what proof to collect"). Pass `--state` explicitly:
+`~/.config/hypertask-videos/storageState-qa.json` (user 985) for a flagged
+path, `storageState-qa-normal.json` (user 2343) for the flag-off path.
+`zsb` is Valentin's visible browser; use it only when he needs to watch.
 
-## QA runner accounts
+## Plan accounts
 
 Three tiered accounts, state files at `~/.config/ht-qa/state-{free,byok,pro}.json`.
 `e2e/smoke/lib/tier.ts` uses `free`/`byok`/`pro` as the tier labels, confirmed
@@ -58,10 +62,10 @@ this one file so renaming them is a one-line edit, not a grep-and-replace:
 - `byok` → `~/.config/ht-qa/state-byok.json`
 - `pro` → `~/.config/ht-qa/state-pro.json`
 
-Each account writes only to its own private **"QA runner board"**
-(`e2e/smoke/lib/boardSetup.ts` enforces solo ownership, no other members).
-Never write to a board you don't own, and never use another account's state
-file.
+Each account writes only to its own private board. The smoke setup names
+that board and prefixes its tasks in `e2e/smoke/lib/boardSetup.ts`
+(`QA_TASK_PREFIX`). Never write to a board you don't own, and never use
+another account's state file. Pass the state file with `--state`.
 
 `HT_QA_EXPECTED_PLAN` gates pass/fail on the confirmed plan mapping above:
 `free` → `Free`, `byok` → `BYOK`, `pro` → `Pro`.

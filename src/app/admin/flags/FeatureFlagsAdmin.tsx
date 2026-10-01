@@ -29,7 +29,7 @@ type AdminFeatureFlags = {
 };
 
 async function loadFlags(): Promise<AdminFeatureFlags> {
-  const response = await fetch(ADMIN_FLAGS_ROUTE, { cache: "no-store" });
+  const response = await fetch("/api/admin/flags", { cache: "no-store" });
   if (!response.ok) throw new Error("Could not load feature flags");
   return (await response.json()) as AdminFeatureFlags;
 }
@@ -184,6 +184,7 @@ export default function FeatureFlagsAdmin() {
                         href={flag.ticketUrl}
                         className="text-content font-medium text-white-black underline-offset-2 hover:underline focus-visible:underline"
                       >
+                        {flag.ticketId && <span>{flag.ticketId} · </span>}
                         {flag.ticketTitle}
                       </a>
                     ) : (
