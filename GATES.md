@@ -6,50 +6,50 @@ Scope: Extract the chat stream route without changing behavior, preserve route e
 
 Checks run from the worktree root using the existing shared dependencies. Verification scripts and baseline copies live only in /tmp.
 
-- [ ] G6: The committed worktree has an empty git status --short.
+- [x] G6: The committed worktree has an empty git status --short.
   CHECK: node /tmp/htpr-6506-a-route-clean.cjs
   EXPECT: CLEAN TREE VERIFIED
-  EVIDENCE: pending
+  EVIDENCE: automatic-evidence=v1; definition-sha256=41a72cbeb6da3b24f0a5c3b5e1fd48ceb2f35fe190ab76cbfaabd8f235c01347; exit=0; EXPECT=matched; output-sha256=a1fdfac9881ca1b8a75274b0acc16c2fca6a40aaeeb9f7f47d08e4e1f993d058; output-bytes=46; shell=/bin/sh; cwd=/home/valentin/projects/hypertask-wt/htpr-6506-a-route; path=fd5351737ae0/31 entries
 
-- [ ] G0: This ledger has valid, falsifiable gates.
+- [x] G0: This ledger has valid, falsifiable gates.
   CHECK: node /home/valentin/.agents/skills/unlazy/scripts/gate-lint.mjs GATES.md
   EXPECT: LINT OK
-  EVIDENCE: pending
+  EVIDENCE: automatic-evidence=v1; definition-sha256=69f81179f3934636347ff01de4824d2a1f500f2d29238b9fd688f82f77d1c57b; exit=0; EXPECT=matched; output-sha256=48630b7361dd44ee870917b12c3d19b9d7bdea738aaca16bb04d4cab83b772d2; output-bytes=8; shell=/bin/sh; cwd=/home/valentin/projects/hypertask-wt/htpr-6506-a-route; path=fd5351737ae0/31 entries
 
-- [ ] G1: Every created or changed file is shorter than 1500 lines, with wc output retained below.
+- [x] G1: Every created or changed file is shorter than 1500 lines, with wc output retained below.
   CHECK: node /tmp/htpr-6506-a-route-lines.cjs
   EXPECT: LINE LIMITS VERIFIED
-  EVIDENCE: pending
+  EVIDENCE: automatic-evidence=v1; definition-sha256=7d03701ac1678a0f03cddfc7f12dbb0a76dc9ece388a6c095d8154f3d77c6311; exit=0; EXPECT=matched; output-sha256=3ae5d5572c10ad311553deb90d87d55bf642bf9741186b3f629ffe4c9591b2b0; output-bytes=5724; shell=/bin/sh; cwd=/home/valentin/projects/hypertask-wt/htpr-6506-a-route; path=fd5351737ae0/31 entries
 
-- [ ] G2: No function, arrow function, method, hook, or component spans more than 400 lines.
+- [x] G2: No function, arrow function, method, hook, or component spans more than 400 lines.
   CHECK: node /tmp/htpr-6506-a-route-functions.cjs && node /tmp/htpr-6506-a-route-function-control.cjs
   EXPECT: FUNCTION LIMITS VERIFIED
-  EVIDENCE: pending
+  EVIDENCE: automatic-evidence=v1; definition-sha256=5f6fa80bdef8b0f34a9f5d6f88e1682032b189e10a0511dba4c18e6a68c9b3c7; exit=0; EXPECT=matched; output-sha256=61a66e84fd196c3d31d014a7c3b1cd3d41a45d378296411c2c4d97bdf086c388; output-bytes=98; shell=/bin/sh; cwd=/home/valentin/projects/hypertask-wt/htpr-6506-a-route; path=fd5351737ae0/31 entries
 
-- [ ] G3: Prisma generation, Next route type generation, and TypeScript succeed, or any baseline errors are proven identical with zero new errors.
+- [x] G3: Prisma generation, Next route type generation, and TypeScript succeed, or any baseline errors are proven identical with zero new errors.
   CHECK: node /tmp/htpr-6506-a-route-typecheck.cjs
   EXPECT: TYPECHECK VERIFIED
-  EVIDENCE: pending
+  EVIDENCE: automatic-evidence=v1; definition-sha256=cf53848811294fbbb60d74848bc110339a712a9175328955e911bfdbc72be74a; exit=0; EXPECT=matched; output-sha256=2057f363cb2e9b0282b31a13c3efdb485b7f4d4f0571b33e30f6743f782f7e84; output-bytes=1839; shell=/bin/sh; cwd=/home/valentin/projects/hypertask-wt/htpr-6506-a-route; path=fd5351737ae0/31 entries
 
-- [ ] G4: ESLint succeeds for every touched or created file.
+- [x] G4: ESLint succeeds for every touched or created file.
   CHECK: node /tmp/htpr-6506-a-route-lint.cjs
   EXPECT: LINT VERIFIED
-  EVIDENCE: pending
+  EVIDENCE: automatic-evidence=v1; definition-sha256=27730196ae4f6825a9db77033a2ef1c8ed3f3784d9845307b4853ccede974be6; exit=0; EXPECT=matched; output-sha256=f8b7c285ebda25be69d015084d677f04331f1272ba56bc3b978bdeb4bf0293e1; output-bytes=272; shell=/bin/sh; cwd=/home/valentin/projects/hypertask-wt/htpr-6506-a-route; path=fd5351737ae0/31 entries
 
-- [ ] G5: Related tests pass and the final full suite has zero new failures against origin/production.
+- [x] G5: Related tests pass and the final full suite has zero new failures against origin/production.
   CHECK: node /tmp/htpr-6506-a-route-tests.cjs
   EXPECT: TESTS VERIFIED
-  EVIDENCE: pending
+  EVIDENCE: automatic-evidence=v1; definition-sha256=d423475bf32874b80a3b1b17614e0582a3063a87550f18fd4948a64be3a6d178; exit=0; EXPECT=matched; output-sha256=3c79731ae624734ee53cb6f71ee8f02a0a104da90b2052e3497e0e3f35b34f38; output-bytes=749; shell=/bin/sh; cwd=/home/valentin/projects/hypertask-wt/htpr-6506-a-route; path=fd5351737ae0/31 entries
 
-- [ ] G7: Extracted tools, helpers, prompts, schemas, descriptions, error strings, and route exports preserve the original code and ordering.
+- [x] G7: Extracted tools, helpers, prompts, schemas, descriptions, error strings, and route exports preserve the original code and ordering.
   CHECK: node /tmp/htpr-6506-a-route-all-preservation.cjs
   EXPECT: ALL PRESERVATION VERIFIED
-  EVIDENCE: pending
+  EVIDENCE: automatic-evidence=v1; definition-sha256=fcd520fc5db3c153e1ad3b679c3208f6b60564ee81bf90c9aa012074b69af0b5; exit=0; EXPECT=matched; output-sha256=81dc7c9bb3a2244c0f41c54ee83a31621ff012834c6c840ccb53903d7a865580; output-bytes=821; shell=/bin/sh; cwd=/home/valentin/projects/hypertask-wt/htpr-6506-a-route; path=fd5351737ae0/31 entries
 
-- [ ] G8: Changes respect the allowed scope, dependency restrictions, and commit-message contract.
+- [x] G8: Changes respect the allowed scope, dependency restrictions, and commit-message contract.
   CHECK: node /tmp/htpr-6506-a-route-scope.cjs
   EXPECT: SCOPE VERIFIED
-  EVIDENCE: pending
+  EVIDENCE: automatic-evidence=v1; definition-sha256=04f7b4287214142deaf098a630f701445e08b4a59f41f602d91454eabeee1d00; exit=0; EXPECT=matched; output-sha256=6e61a791ece5fb986aa8167e69921cd2d6bf9ce47b68127ab3ffcb19f6a460ec; output-bytes=129; shell=/bin/sh; cwd=/home/valentin/projects/hypertask-wt/htpr-6506-a-route; path=fd5351737ae0/31 entries
 
 ## Evidence notes
 
