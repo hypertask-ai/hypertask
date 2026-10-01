@@ -190,10 +190,7 @@ export default function FeatureFlagsAdmin() {
                         {flag.ticketTitle}
                       </a>
                     ) : (
-                      <p className="text-content font-medium text-white-black">
-                        {ticketIdEnabled && flag.ticketId ? `${flag.ticketId} · ` : null}
-                        {flag.ticketTitle}
-                      </p>
+                      <p className="text-content font-medium text-white-black">{flag.ticketTitle}</p>
                     )}
                     <code className="mt-1 block break-all text-dense text-text-light-gray">{flag.key}</code>
                   </>
