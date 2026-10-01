@@ -298,7 +298,7 @@ test("chat and Task Writer share the native-aware request user resolver", () => 
 
 test("AI and OAuth issuance share one issuer and audience module", () => {
   const mcpAuth = fs.readFileSync(
-    path.join(root, "src/lib/mcp/auth.ts"),
+    path.join(root, "src/lib/mcp/auth/verifyJwt.ts"),
     "utf8"
   );
 
@@ -345,7 +345,7 @@ test("OAuth issuance and verification read one shared issuer/audience module", (
     "utf8"
   );
   const mcpAuth = fs.readFileSync(
-    path.join(root, "src/lib/mcp/auth.ts"),
+    path.join(root, "src/lib/mcp/auth/verifyJwt.ts"),
     "utf8"
   );
 
