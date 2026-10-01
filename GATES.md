@@ -74,17 +74,21 @@ Scope: Pure refactor of TaskDetailComp and TipTapTaskDetail on the current branc
 The worktree runner reports 4,820 passing and five failing tests. All five failures also appear in the clean origin/production runner, which reports 4,816 passing and eight failing tests. The baseline additionally fails three repository-ancestry checks because the isolated archive has no Git working tree. The CJS failures stop the runner before its TypeScript phase; the related TypeScript tests were run separately and passed.
 
 1. firebase-admin-v14-modular.test.cjs: shared install has firebase-admin 12.7.0 instead of 14.x.
-2. jsonwebtoken-v9.test.cjs: shared install still has the previous jsonwebtoken version.
+2. jsonwebtoken-v9-token-shapes.test.cjs: shared install still has the jsonwebtoken 8.5.1 instead of 9.x.
 3. mobile-sheet-drag-close.test.cjs: shared react-modal-sheet is incompatible with the committed sheet API.
 4. typescript-toolchain.test.cjs: tsc reports 6.0.3 rather than native TypeScript 7.
 5. typescript-toolchain.test.cjs: @typescript/native/package.json is absent.
 
-Full logs: /tmp/hax-taskdetail-6506-dQRgLV/full-tests.log and baseline-tests.log. Related tests: 134 passing, zero failing. The G5 oracle verifies the source fingerprint and asserts every failing test name occurs in the baseline output.
+Full logs: /tmp/hax-taskdetail-6506-dQRgLV/full-tests.log and baseline-tests.log. Related tests: 134 passing, zero failing. The G5 oracle verifies the captured source fingerprint, compares the current source through the TypeScript printer after whitespace-only cleanup, and asserts every failing test name occurs in the baseline output.
+
+The gate checker runs against an identical temporary ledger with the worktree root as its explicit CWD. This records the clean-tree gate without the checker itself dirtying GATES.md. Its generated evidence is copied back and committed, followed by a final empty git status check.
+
+Largest remaining function: taskDetailEditingKeymap, 342 lines.
 
 ### Line-limit output
 
 ```text
-   135 GATES.md
+   139 GATES.md
     29 src/app/detail/[...slug]/TaskDetailComp.tsx
     62 src/app/detail/[...slug]/TaskDetailContext.ts
     11 src/app/detail/[...slug]/TaskDetailKeyboardContext.ts
@@ -100,7 +104,7 @@ Full logs: /tmp/hax-taskdetail-6506-dQRgLV/full-tests.log and baseline-tests.log
    146 src/app/detail/[...slug]/useTaskDetailModalActions.tsx
    133 src/app/detail/[...slug]/useTaskDetailModals.tsx
    232 src/app/detail/[...slug]/useTaskDetailNavigationActions.tsx
-   160 src/app/detail/[...slug]/useTaskDetailReadiness.tsx
+   159 src/app/detail/[...slug]/useTaskDetailReadiness.tsx
    229 src/app/detail/[...slug]/useTaskDetailState.tsx
     35 src/components/RTE/TaskDetailEditorContext.ts
    168 src/components/RTE/TaskDetailEditorPanels.tsx
@@ -131,5 +135,5 @@ Full logs: /tmp/hax-taskdetail-6506-dQRgLV/full-tests.log and baseline-tests.log
     45 tests/task-detail-usable-mark-fallback-poll.test.cjs
    131 tests/tiptap-attachment-state.test.cjs
    175 tests/tiptap-debounce-lifecycle.test.cjs
-  8314 total
+  8317 total
 ```
