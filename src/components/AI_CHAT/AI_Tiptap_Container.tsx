@@ -104,6 +104,8 @@ export function AI_Tiptap_Container({
     isByokBlocked,
     dropDownButtonAICallback,
     currentAiOption,
+    modelTeamId,
+    modelBilling,
     displayAiOptions,
     contextList,
     handleSendMessage,
@@ -374,6 +376,8 @@ export function AI_Tiptap_Container({
                 <AIModelDropDownButton
                   optionCallback={dropDownButtonAICallback}
                   aiSelected={currentAiOption}
+                  modelTeamId={modelTeamId}
+                  modelBilling={modelBilling}
                   currentOptions={displayAiOptions}
                   className={"bottom-[110%] top-auto"}
                   stackSubmenus
@@ -390,6 +394,8 @@ export function AI_Tiptap_Container({
               <AIModelDropDownButton
                 optionCallback={dropDownButtonAICallback}
                 aiSelected={currentAiOption}
+                modelTeamId={modelTeamId}
+                modelBilling={modelBilling}
                 currentOptions={displayAiOptions}
                 mobileQuickPicker
               />

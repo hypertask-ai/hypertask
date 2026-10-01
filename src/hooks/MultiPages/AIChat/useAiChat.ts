@@ -55,12 +55,11 @@ import {
   getFileTypeFromUrl,
   IMAGE_FALLBACK_MIME,
 } from "@/utils/helperFunctions/getFileTypeFromUrl";
-import { useCurrentBoardBilling } from "@/hooks/General/useCurrentBoardBilling";
+import { useAiChatModelPreference } from "./useAiChatModelPreference";
 import { useFlag } from "@/hooks/useFlag";
 import { HTPR_6278_CHAT_TURN_FAILURE_FLAG } from "@/lib/flags/keys";
 import { extractStreamRefusalMessage } from "@/lib/aiChat/streamRefusal";
 import { shouldBlockAiDueToByokProvider } from "@/lib/byokSelectedProviderGate";
-import { useAiModelPreference } from "@/hooks/General/useAiModelPreference";
 import { isGuestCookieUser } from "@/lib/demo/isGuestClient";
 import {
   generateGuestBoard,
@@ -196,7 +195,8 @@ export function useAiChat() {
   >([]);
   const [showScrollUpIndicator, setShowScrollUpIndicator] =
     useState<boolean>(false);
-  const { currentAiOption, setAiOption } = useAiModelPreference("aiChat");
+  const { currentAiOption, setAiOption, modelTeamId, modelBilling } =
+    useAiChatModelPreference();
   // Mirrors currentStreamingSession, but set synchronously at the moment a stream starts.
   // State only reaches the unmount/unload handlers after a commit, so a tab closed in the
   // instant between "fetch sent" and "React committed" would leave the stream running.
@@ -417,7 +417,7 @@ export function useAiChat() {
       htmlForAttachments: next.html,
     });
   }, []);
-  const billing = useCurrentBoardBilling();
+  const billing = modelBilling;
   const isApple = useDeviceContext();
   const isByokBlocked = shouldBlockAiDueToByokProvider(billing, currentAiOption?.source);
   // HTPR-4303: guests live on the real board, not /demo, so the cheap-key
@@ -1185,7 +1185,7 @@ export function useAiChat() {
     const payload = {
       message: content,
       aiFeature: "aiChat",
-      teamId: currentProject?.teamId,
+      teamId: modelTeamId,
       session_id: session.id,
       assistant_message_id: assistantMessageId,
       stream_id: streamId,
@@ -1809,6 +1809,8 @@ export function useAiChat() {
     chatMounted,
     setChatMounted,
     currentAiOption,
+    modelTeamId,
+    modelBilling,
     displayAiOptions,
     editor,
     editorEnabled,

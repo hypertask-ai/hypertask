@@ -54,6 +54,29 @@ test("Ctrl+Z can undo in the same tick that an inbox archive registers", async (
       );
     });
 
+    const errors = [];
+    dom.window.addEventListener("error", (event) => {
+      errors.push(event.error ?? event.message);
+    });
+    const keylessEvent = new dom.window.Event("keydown", {
+      bubbles: true,
+      cancelable: true,
+    });
+    Object.defineProperty(keylessEvent, "ctrlKey", { value: true });
+    let dispatchError = null;
+    try {
+      document.dispatchEvent(keylessEvent);
+    } catch (error) {
+      dispatchError = error;
+    }
+    assert.equal(
+      dispatchError,
+      null,
+      "a Control keydown with no key name must not throw",
+    );
+    assert.deepEqual(errors, []);
+    assert.equal(keylessEvent.defaultPrevented, false);
+
     const pressUndo = () =>
       document.dispatchEvent(
         new KeyboardEvent("keydown", {

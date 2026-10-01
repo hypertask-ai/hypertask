@@ -22,9 +22,11 @@ const root = path.resolve(__dirname, '..')
 
 test('chip picker opens, selects with keyboard, runs, and removes on Backspace', async (t) => {
   const dom = new JSDOM('<div id="root"></div>', { url: 'https://example.test/search' })
-  const globals = ['window', 'document', 'HTMLElement', 'IS_REACT_ACT_ENVIRONMENT', 'fetch']
+  const globals = ['window', 'document', 'HTMLElement', 'IS_REACT_ACT_ENVIRONMENT', 'fetch', 'navigator']
   const previous = globals.map((name) => [name, Object.getOwnPropertyDescriptor(global, name)])
   Object.assign(global, { window: dom.window, document: dom.window.document, HTMLElement: dom.window.HTMLElement, IS_REACT_ACT_ENVIRONMENT: true })
+  // CI runs Node 20, which has no global navigator; react-dom reads it on load.
+  Object.defineProperty(global, 'navigator', { value: dom.window.navigator, configurable: true, writable: true })
   const stubs = []
   const stub = (file, exports) => {
     const filename = path.join(root, file)

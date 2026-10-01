@@ -17,13 +17,14 @@ import {
   type TAiModelPreferenceSurface,
 } from "@/lib/aiModelPreferences";
 import type { TAiModal } from "@/models/AI_Task_writer_model";
-import { currentProjectAtom, type CurrentBoardBilling } from "@/store";
+import { currentProjectAtom } from "@/store";
 import {
   USER_PREFERENCES_QUERY_KEY,
   useGetUserPreferences,
   type IUserPreferences,
 } from "./useGetUserPreferences";
 import { useCurrentBoardBilling } from "./useCurrentBoardBilling";
+import type { TeamBillingSnapshot } from "@/lib/deriveCurrentBoardBilling";
 
 export function useAiModelPreference(
   surface: TAiModelPreferenceSurface,
@@ -35,7 +36,7 @@ export function useAiModelPreference(
   }: {
     includeBoardFallback?: boolean;
     teamId?: string | number | null;
-    billing?: CurrentBoardBilling | null;
+    billing?: TeamBillingSnapshot | null;
     boardDefaultId?: string | null;
   } = {},
 ) {

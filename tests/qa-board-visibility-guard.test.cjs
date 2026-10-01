@@ -84,12 +84,18 @@ test('accepts the intentional hidden-empty-columns state after hydration', async
   await assertColumnsStayVisible(page, '.kanban-column-title', 0);
 });
 
+test('waits for columns that render after task hydration', async () => {
+  const page = hydratedPage({ columnCounts: [0, 0, 3] });
+
+  await assertColumnsStayVisible(page, '.kanban-column-title', 0);
+});
+
 test('rejects a board that renders neither columns nor its empty state', async () => {
   const page = hydratedPage({ columnCounts: [0] });
 
   await assert.rejects(
-    assertColumnsStayVisible(page, '.kanban-column-title', 0),
-    /no ".kanban-column-title" columns present to watch/,
+    assertColumnsStayVisible(page, '.kanban-column-title', 0, 1),
+    /board did not render ".kanban-column-title" columns or its intentional empty state/,
   );
 });
 

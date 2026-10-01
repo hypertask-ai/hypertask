@@ -44,6 +44,7 @@ export async function reconcileActiveBoardTasks(
   queryClient: BoardQueryClient,
   projectId: number,
   userId: number,
+  options?: { background?: boolean },
 ): Promise<void> {
   let payload;
   try {
@@ -56,7 +57,14 @@ export async function reconcileActiveBoardTasks(
       queryFn: () => fetchBoardTasks(projectId, userId),
       staleTime: 0,
     });
-  } catch {
+  } catch (error) {
+    const status = (error as { response?: { status?: number } } | null)
+      ?.response?.status;
+    // An outage must not turn every background poll into a board loading flash.
+    // Access failures still refresh the account list to remove revoked boards.
+    if (options?.background && status !== 401 && status !== 403 && status !== 404) {
+      return;
+    }
     // Access loss and fetch failures fall back to the account-wide path so a
     // revoked board cannot stay painted from the old cache.
     await reconcileActiveBoardQuery(queryClient, projectId);

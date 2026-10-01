@@ -31,10 +31,6 @@ const closedLayout = fs.readFileSync(
   path.join(root, "src/components/AI_CHAT/AI_Chat_Closed_Layout.tsx"),
   "utf8",
 );
-const openLayout = fs.readFileSync(
-  path.join(root, "src/components/AI_CHAT/AI_Chat_Layout.tsx"),
-  "utf8",
-);
 
 const narrowLayout = chat.slice(
   chat.indexOf("if (isNarrow)"),
@@ -115,12 +111,9 @@ test("chat.message can carry ADHD reply guidance behind the flag", () => {
 });
 
 test("closed AI layout does not double-pad /agents/chat", () => {
+  // The closed layout is also the frame once chat loads (HTPR-6751).
   assert.match(
     closedLayout,
-    /pathname\?\.startsWith\(\s*["']\/agents\/chat["']\s*\)/,
-  );
-  assert.match(
-    openLayout,
     /pathname\?\.startsWith\(\s*["']\/settings["']\s*\)\s*\|\|\s*pathname\?\.startsWith\(\s*["']\/agents\/chat["']\s*\)/,
   );
   // Agent Chat keeps its own chrome insets when the parent bails.
