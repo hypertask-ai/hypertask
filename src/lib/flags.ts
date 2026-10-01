@@ -92,6 +92,8 @@ import {
 export * from "@/lib/flags/keys";
 
 export const FEATURE_FLAG_OWNER_USER_ID = 6;
+// Board writes are never attributed to the owner alone.
+export const FEATURE_FLAG_SWEEP_AGENT_ID = "85b985ac-afe8-41a3-a1ac-d9549a9310c7";
 const FEATURE_FLAG_OWNER = {
   userId: FEATURE_FLAG_OWNER_USER_ID,
   email: "valentin.yeo@gmail.com",
