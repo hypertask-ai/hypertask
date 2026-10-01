@@ -11,17 +11,16 @@ function major(version, label) {
 
 function workflowNodeVersions(content) {
   const versions = [];
-  const visited = new Set();
-  function visit(value, location) {
-    if (!value || typeof value !== "object" || visited.has(value)) return;
-    visited.add(value);
-    for (const [key, child] of Object.entries(value)) {
-      const at = `${location}.${key}`;
-      if (key === "node-version" || key === "node-version-file") versions.push({ key, value: child, location: at });
-      else visit(child, at);
+  const workflow = yaml.load(content, { schema: yaml.JSON_SCHEMA });
+  for (const [job, config] of Object.entries(workflow?.jobs ?? {})) {
+    for (const [index, step] of (config.steps ?? []).entries()) {
+      for (const [key, value] of Object.entries(step.with ?? {})) {
+        if (key === "node-version" || key === "node-version-file") {
+          versions.push({ key, value, location: `workflow.jobs.${job}.steps.${index}.with.${key}` });
+        }
+      }
     }
   }
-  visit(yaml.load(content, { schema: yaml.JSON_SCHEMA }), "workflow");
   return versions;
 }
 

@@ -27,6 +27,19 @@ test("every workflow is checked, including quoted and inline node versions", () 
   assert.match(issues[1], /second.yaml.*20/);
 });
 
+test("job outputs named node-version are not Node settings", () => {
+  const content = 'jobs: {read: {outputs: {node-version: "${{ steps.vercel.outputs.node-version }}"}}, test: {steps: [{with: {node-version: 24}}]}}';
+  assert.deepEqual(compareNodeVersions("24.x", "24.x", [{ file: "guard.yml", content }]), []);
+});
+
+test("the guard compares the repository workflows without mistaking its own output for a pin", () => {
+  const inputs = fs.readdirSync(".github/workflows").filter(file => /\.ya?ml$/.test(file)).map(file => ({
+    file,
+    content: fs.readFileSync(path.join(".github/workflows", file), "utf8"),
+  }));
+  assert.deepEqual(compareNodeVersions("24.x", "24.x", inputs), []);
+});
+
 test("comments and unrelated numeric inputs do not count", () => {
   assert.deepEqual(workflowNodeVersions("# node-version: 22\njobs: {test: {steps: [{with: {timeout: 22}}]}}"), []);
 });
