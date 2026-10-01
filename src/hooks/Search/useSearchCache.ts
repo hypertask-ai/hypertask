@@ -1,32 +1,26 @@
 import { useQuery } from "@tanstack/react-query";
+import { useHydrated } from "@/hooks/General/useHydrated";
 
 export const useGetSearchCache = (initialData?: any) => {
   const CACHE_KEY = "searchCache";
+  const hydrated = useHydrated();
+  const fallback = initialData ?? { history: [], results: [] };
 
-  return useQuery({
+  const query = useQuery({
     queryKey: ["Search"],
     queryFn: async () => {
-      const cachedData = localStorage.getItem(CACHE_KEY);
-      if (cachedData) {
-        return JSON.parse(cachedData);
-      }
-      return (
-        initialData ?? {
-          history: [],
-          results: [],
-        }
-      );
-    },
-    initialData: (() => {
       try {
         const cachedData = localStorage.getItem(CACHE_KEY);
-        return cachedData
-          ? JSON.parse(cachedData)
-          : initialData ?? { history: [], results: [] };
+        return cachedData ? JSON.parse(cachedData) : fallback;
       } catch {
-        return initialData ?? { history: [], results: [] };
+        return fallback;
       }
-    })(),
+    },
+    initialData: fallback,
+    enabled: hydrated,
     refetchOnWindowFocus: false,
   });
+
+  // Restored query data can also differ from the server's search history.
+  return { ...query, data: hydrated ? query.data : fallback };
 };
