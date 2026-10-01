@@ -21,6 +21,11 @@ test("the default tsc binary uses the native TypeScript 7 compiler", () => {
   }
 });
 
+test("the SDK shares the hoisted compatibility API without nested workspace installs", () => {
+  const sdkTypescript = require.resolve("typescript", { paths: [path.resolve("packages/agent-sdk")] });
+  assert.equal(sdkTypescript, require.resolve("typescript"));
+});
+
 test("TypeScript API consumers and ESLint retain a working compiler API", () => {
   const typescript = require("typescript");
   const parser = require("@typescript-eslint/parser");
