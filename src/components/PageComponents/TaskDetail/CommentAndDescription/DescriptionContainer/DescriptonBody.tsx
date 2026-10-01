@@ -13,6 +13,7 @@ import QuoteButton from "../ContextMenu/QuoteButton";
 import Tiptap from "@/components/RTE/TipTapTaskDetail";
 import BackgroundTaskAttachments from "../BackgroundTaskAttachments";
 import type { IAttachment } from "@/models/model";
+import { linkifyHtml } from "@/utils/helperFunctions/linkifyHtml";
 
 const DescriptonBody = ({ draftTQ }: any) => {
   const isMbl = useContext(MobileViewContext);
@@ -43,6 +44,9 @@ const DescriptonBody = ({ draftTQ }: any) => {
     draftTQ?.find((draft: IDraft) => isMeaningfulDescriptionDraft(draft))
       ?.content ??
     description;
+  // HTPR-6802: the editor only linkifies typed or pasted URLs, so bare URLs
+  // in CLI/API-written descriptions stayed plain text here.
+  const linkedContent = useMemo(() => (content ? linkifyHtml(content) : content), [content]);
   const addLinkedAttachment = useCallback(
     (attachment: IAttachment) => {
       setDescriptionAttachments((current) =>
@@ -72,7 +76,7 @@ const DescriptonBody = ({ draftTQ }: any) => {
         creatorname={task.user?.displayName}
         isSelected={currentId === "description"}
         id="description"
-        defaultContent={content}
+        defaultContent={linkedContent}
         isMbl={isMbl}
         descriptionClass="pb-1 flex justify-start gap-[6px]"
       />
