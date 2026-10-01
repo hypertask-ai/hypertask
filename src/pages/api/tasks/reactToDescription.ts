@@ -4,13 +4,33 @@ import { sendDataNewCommentFCM } from "@/utils/controllers/FCM";
 import checkReminderAndCreateNotification from "@/utils/controllers/notifications/creation-service/check-reminder_create-notification";
 import { getReactionsByDescriptionId } from "@/utils/controllers/tasks/getTask";
 import { NextApiHandler, NextApiRequest, NextApiResponse } from "next";
+import { getSessionUser } from "@/lib/auth/getSessionUser";
+import { userCanAccessTaskContent } from "@/utils/controllers/tasks/assertTaskAccess";
 
 
 const handler: NextApiHandler = async (req: NextApiRequest, res: NextApiResponse) => {
     if (req.method === "POST") {
 
         try {
-            const { userId, taskId,descriptionId, emoji, unified, names,alreadyReacted } = req.body;
+            const session = await getSessionUser(new Headers(req.headers as Record<string, string>));
+            if (!session) return res.status(401).json({ message: "Unauthorized" });
+            const { userId: bodyUserId, taskId,descriptionId, emoji, unified, names,alreadyReacted } = req.body;
+            if (bodyUserId != null && Number(bodyUserId) !== session.userId) {
+                return res.status(403).json({ message: "Forbidden" });
+            }
+            const userId = session.userId;
+            const parsedTaskId = Number(taskId);
+            if (!Number.isInteger(parsedTaskId) || parsedTaskId <= 0 || !descriptionId || !unified || !emoji) {
+                return res.status(400).json({ message: "Missing required information" });
+            }
+            if (!(await userCanAccessTaskContent(userId, parsedTaskId))) {
+                return res.status(403).json({ message: "Forbidden" });
+            }
+            const description = await prisma.description.findFirst({
+                where: { id: String(descriptionId), taskId: parsedTaskId },
+                select: { id: true },
+            });
+            if (!description) return res.status(404).json({ message: "Description not found" });
             const findReaction = await prisma.reaction.findMany({
                 where:{
                     unified:unified,
@@ -25,7 +45,7 @@ const handler: NextApiHandler = async (req: NextApiRequest, res: NextApiResponse
                         unified:unified,
                         descriptionId:descriptionId,
                         userId:userId,
-                        taskId:taskId,
+                        taskId:parsedTaskId,
                         names:names,
                         emoji:emoji
                     },
@@ -67,7 +87,7 @@ const handler: NextApiHandler = async (req: NextApiRequest, res: NextApiResponse
                            unified:unified,
                            descriptionId:descriptionId,
                            userId:userId,
-                           taskId:taskId,
+                           taskId:parsedTaskId,
                            names:names,
                            emoji:emoji
                        },

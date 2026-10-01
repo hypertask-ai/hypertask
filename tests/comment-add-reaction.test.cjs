@@ -46,8 +46,10 @@ function loadHandler({
   comment = { id: 7 },
   existing = [],
   notificationThrows = false,
+  session = { userId: 6 },
+  canAccessTask = true,
 } = {}) {
-  const calls = { created: [], deleted: [], notifications: [], broadcast: [] };
+  const calls = { created: [], deleted: [], notifications: [], broadcast: [], access: [] };
 
   resetModules([
     "src/pages/api/comments/addReaction.ts",
@@ -55,7 +57,19 @@ function loadHandler({
     "src/lib/realtime/server.ts",
     "src/utils/controllers/FCM/index.ts",
     "src/utils/controllers/notifications/creation-service/check-reminder_create-notification.ts",
+    "src/lib/auth/getSessionUser.ts",
+    "src/utils/controllers/tasks/assertTaskAccess.ts",
   ]);
+
+  stubModule("src/lib/auth/getSessionUser.ts", {
+    getSessionUser: async () => session,
+  });
+  stubModule("src/utils/controllers/tasks/assertTaskAccess.ts", {
+    userCanAccessTaskContent: async (...args) => {
+      calls.access.push(args);
+      return canAccessTask;
+    },
+  });
 
   stubModule("src/lib/prisma.ts", {
     default: {
@@ -125,7 +139,7 @@ function response() {
 
 async function post(handler, body) {
   const { res, captured } = response();
-  await handler({ method: "POST", body }, res);
+  await handler({ method: "POST", headers: {}, body }, res);
   return captured;
 }
 
@@ -193,6 +207,23 @@ test("defaults missing emoji names to an empty list", async () => {
   const { handler, calls } = loadHandler();
   await post(handler, { ...VALID, names: undefined });
   assert.deepEqual(calls.created[0].names, []);
+});
+
+test("rejects a request with no session", async () => {
+  const { handler, calls } = loadHandler({ session: null });
+  const result = await post(handler, VALID);
+  assert.equal(result.status, 401);
+  assert.deepEqual(calls.created, []);
+  assert.deepEqual(calls.access, []);
+});
+
+test("rejects a non-member with 403", async () => {
+  const { handler, calls } = loadHandler({ canAccessTask: false });
+  const result = await post(handler, VALID);
+  assert.equal(result.status, 403);
+  assert.equal(result.body.message, "Forbidden");
+  assert.deepEqual(calls.created, []);
+  assert.equal(calls.access.length, 1);
 });
 
 test("rejects a non-POST method", async () => {
