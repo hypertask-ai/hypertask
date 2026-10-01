@@ -28,61 +28,43 @@ async function demo() {
   const prismaMock = prisma as any
   const originalFlagFindUnique = prismaMock.featureFlag.findUnique
   const originalAgentFindUnique = prismaMock.agent.findUnique
-  const originalMemberFindMany = prismaMock.member.findMany
 
   let flagMode = 'EVERYONE'
   let role: string | undefined = 'admin'
-  let ceoProjects = [101, 102]
   prismaMock.featureFlag.findUnique = async () => ({ mode: flagMode })
   prismaMock.agent.findUnique = async () => ({
     permissions: role ? { role } : {},
   })
-  prismaMock.member.findMany = async ({ where }: any) =>
-    ceoProjects
-      .filter((id) => where.projectId.in.includes(id))
-      .map((projectId) => ({ projectId }))
 
   const ctx = {
     user: { id: 6, email: 'owner@example.com' },
     agentId: 'ceo',
   } as any
-  const input = (add: number[], remove: number[] = []) => ({
-    agentId: 'manager',
-    addProjectIds: add,
-    removeProjectIds: remove,
-  })
 
   try {
     // Humans and management keys are untouched by this check.
     assert.equal(
-      await checkAgentBoardDelegation({ ...ctx, agentId: undefined }, 'x', input([999])),
+      await checkAgentBoardDelegation({ ...ctx, agentId: undefined }, 'x'),
       null
     )
 
-    // Admin agent inside its own projects: allowed, add and remove.
-    assert.equal(await checkAgentBoardDelegation(ctx, 'manager', input([101])), null)
+    // Admin agent acting on another agent: allowed (board scope is checked
+    // inside updateOwnedAgentBoards).
+    assert.equal(await checkAgentBoardDelegation(ctx, 'manager'), null)
     assert.equal(
-      await checkAgentBoardDelegation(ctx, 'dev-1', input([], [102])),
+      await checkAgentBoardDelegation(ctx, 'dev-1'),
       null
     )
-
-    // A project the acting agent is not on is outside its delegated scope.
-    const outside = await json(
-      await checkAgentBoardDelegation(ctx, 'manager', input([101, 555]))
-    )
-    assert.equal(outside.status, 403)
-    assert.equal(outside.body.code, 'outside_delegated_scope')
-    assert.match(outside.body.error, /project 555/)
 
     // An agent cannot widen its own access.
-    const self = await json(await checkAgentBoardDelegation(ctx, 'ceo', input([101])))
+    const self = await json(await checkAgentBoardDelegation(ctx, 'ceo'))
     assert.equal(self.status, 403)
     assert.equal(self.body.error, 'An agent cannot change its own board access')
 
     // Write-role agents keep the old rejection path via insufficient_scope.
     role = 'write'
     const writer = await json(
-      await checkAgentBoardDelegation(ctx, 'manager', input([101]))
+      await checkAgentBoardDelegation(ctx, 'manager')
     )
     assert.equal(writer.status, 403)
     assert.equal(writer.body.code, 'insufficient_scope')
@@ -91,22 +73,13 @@ async function demo() {
     role = 'admin'
     flagMode = 'OFF'
     const flagOff = await json(
-      await checkAgentBoardDelegation(ctx, 'manager', input([101]))
+      await checkAgentBoardDelegation(ctx, 'manager')
     )
     assert.equal(flagOff.status, 403)
     assert.equal(flagOff.body.error, 'Agents cannot manage agents')
-
-    // Removal from a board the CEO has left is also refused.
-    flagMode = 'EVERYONE'
-    ceoProjects = [101]
-    const removeOutside = await json(
-      await checkAgentBoardDelegation(ctx, 'dev-1', input([], [102]))
-    )
-    assert.equal(removeOutside.status, 403)
   } finally {
     prismaMock.featureFlag.findUnique = originalFlagFindUnique
     prismaMock.agent.findUnique = originalAgentFindUnique
-    prismaMock.member.findMany = originalMemberFindMany
   }
 
   console.log('agent-access-delegation.test.ts: all assertions passed')
