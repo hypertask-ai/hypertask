@@ -2,20 +2,23 @@ import { NextApiHandler, NextApiRequest, NextApiResponse } from "next";
 import { deleteCommentService } from "@/utils/controllers/comments/deleteCommentService";
 import prisma from "@/lib/prisma";
 import { broadcastTaskComment } from "@/lib/realtime/server";
+import { getSessionUser } from "@/lib/auth/getSessionUser";
 
 const handler: NextApiHandler = async (
   req: NextApiRequest,
   res: NextApiResponse
 ) => {
   if (req.method === "POST") {
+    const session = await getSessionUser(
+      new Headers(req.headers as Record<string, string>)
+    );
+    if (!session) {
+      return res.status(401).json({ message: "Unauthorized" });
+    }
+    const userId = session.userId;
     const { id } = req.body;
     if (!id) {
       return res.status(400).json({ message: "Missing Required Data" });
-    }
-
-    const userid = JSON.parse(req.cookies?.nookies_user!);
-    if (!userid?.id) {
-      return res.status(401).json({ message: "Unauthorized" });
     }
 
     try {
@@ -28,7 +31,7 @@ const handler: NextApiHandler = async (
         commentId: id
       });
 
-      void broadcastTaskComment(comment?.taskId, { originUserId: userid.id });
+      void broadcastTaskComment(comment?.taskId, { originUserId: userId });
 
       return res.status(200).json({ message: "Comment deleted" });
     } catch (error) {

@@ -2,18 +2,35 @@
 import { NextApiHandler, NextApiRequest, NextApiResponse } from "next";
 
 import prisma from "@/lib/prisma";
+import { getSessionUser } from "@/lib/auth/getSessionUser";
+import { getProjectWhere } from "@/utils/controllers/projects/getAllIncludes";
 
 
 const handler: NextApiHandler = async (req: NextApiRequest, res: NextApiResponse) => {
     if (req.method === "POST") {
+        const session = await getSessionUser(
+          new Headers(req.headers as Record<string, string>)
+        );
+        if (!session) {
+          return res.status(401).json({ message: "Unauthorized" });
+        }
         try {
             const {taskId} = req.body;
+            const task = await prisma.task.findFirst({
+              where: {
+                id: Number(taskId),
+                project: getProjectWhere(session.userId),
+              },
+              select: { userId: true, agentId: true },
+            });
+            if (!task) {
+              return res.status(404).json({ message: "Task not found" });
+            }
             // const response = await addFollower(userId, title )
             // const followers = await prisma.follower.findMany({
                 
             //   });
-              const [followersRaw, task] = await Promise.all([
-                prisma.follower.findMany({
+              const followersRaw = await prisma.follower.findMany({
                   where: { taskId: taskId },
                   select: {
                     id: true,
@@ -30,12 +47,7 @@ const handler: NextApiHandler = async (req: NextApiRequest, res: NextApiResponse
                     user: { select: { id: true, displayName: true, photoURL: true } },
                     agent: { select: { id: true, displayName: true, photoURL: true } },
                   },
-                }),
-                prisma.task.findUnique({
-                  where: { id: taskId },
-                  select: { userId: true, agentId: true },
-                }),
-              ]);
+                });
 
               // Filter out agent if task was created by agent, otherwise filter out user if created by user
               let followers = followersRaw;

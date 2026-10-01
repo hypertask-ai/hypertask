@@ -1,0 +1,100 @@
+{
+  "allow": [
+    {
+      "path": "/api/auth",
+      "match": "prefix",
+      "reason": "Login, signup, magic-link, OAuth, and clearing session cookies. These run before a session exists."
+    },
+    {
+      "path": "/api/queues",
+      "match": "prefix",
+      "reason": "QStash job callbacks. Authorized by the QStash signature, not a user session."
+    },
+    {
+      "path": "/api/cron",
+      "match": "prefix",
+      "reason": "Scheduled cron handlers. Authorized by the cron secret, not a user session."
+    },
+    {
+      "path": "/api/webhooks",
+      "match": "prefix",
+      "reason": "Inbound webhooks such as GitHub and Resend. Authorized by the provider signature, not a user session."
+    },
+    {
+      "path": "/api/stripe/webhook",
+      "match": "exact",
+      "reason": "Stripe webhook. Authorized by the Stripe signature, not a user session."
+    },
+    {
+      "path": "/api/slack/events",
+      "match": "exact",
+      "reason": "Slack Events API webhook. Authorized by Slack's signing secret, not a user session."
+    },
+    {
+      "path": "/api/slack/commands",
+      "match": "exact",
+      "reason": "Slack slash-command webhook. Authorized by Slack's signing secret, not a user session."
+    },
+    {
+      "path": "/api/slack/oauth_redirect",
+      "match": "exact",
+      "reason": "Slack OAuth redirect. The browser returns here with Slack's code, not a session cookie."
+    },
+    {
+      "path": "/api/figma/oauth/callback",
+      "match": "exact",
+      "reason": "Figma OAuth callback. The browser returns here with Figma's code, not a session cookie."
+    },
+    {
+      "path": "/api/notifications/unsubscribe",
+      "match": "exact",
+      "reason": "Email unsubscribe. A signed token is the authorization so a logged-out recipient can stop mail."
+    },
+    {
+      "path": "/api/share/getSharedTask",
+      "match": "exact",
+      "reason": "Public share-link lookup. The share id is the capability; there is no user session."
+    },
+    {
+      "path": "/api/client-error",
+      "match": "exact",
+      "reason": "Browser crash beacon. It only logs, so a signed-out client can report a crash."
+    },
+    {
+      "path": "/api/errors",
+      "match": "exact",
+      "reason": "Client error intake. Public so the browser can report a failure without a session."
+    },
+    {
+      "path": "/api/demo",
+      "match": "prefix",
+      "reason": "Public demo guest flow. It creates a temporary guest instead of requiring a session."
+    },
+    {
+      "path": "/api/version",
+      "match": "exact",
+      "reason": "Build-id probe. Public and contains no account data, so an open tab can detect a deploy."
+    },
+    {
+      "path": "/api/users/onboarded-webhook",
+      "match": "exact",
+      "reason": "Legacy tutorial-finished ping. It returns success and stores nothing."
+    },
+    {
+      "path": "/api/integrations/posthog/error-alert",
+      "match": "exact",
+      "reason": "PostHog exception webhook. Authorized by the Svix webhook signature, not a user session."
+    },
+    {
+      "path": "/api/cli/token-exchange",
+      "match": "exact",
+      "reason": "CLI login finishes here. The one-time code in the body is read and deleted from redis before a token is minted."
+    },
+    {
+      "path": "/api/mcp/token/refresh",
+      "match": "exact",
+      "reason": "MCP token refresh. The bearer token is verified by validateMcpAuth before a new token is issued."
+    }
+  ],
+  "importFailures": []
+}

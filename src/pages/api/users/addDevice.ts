@@ -20,9 +20,9 @@ const handler: NextApiHandler = async (
   req: NextApiRequest,
   res: NextApiResponse
 ) => {
-  // Identity comes from the signed session. It used to come from nookies_user,
-  // which is unsigned and client-writable, so a caller could register their own
-  // browser against any user id and start receiving that person's push.
+  // Identity comes from the signed session. The old unsigned cookie let a
+  // caller register their own browser against any user id and start receiving
+  // that person's push.
   const session = await getSessionUser(
     new Headers(req.headers as Record<string, string>)
   );

@@ -1,8 +1,8 @@
 // Next.js API route support: https://nextjs.org/docs/api-routes/introduction
 
 import type { NextApiRequest, NextApiResponse } from 'next'
-import prisma from "@/lib/prisma";
 import getTrashByProjectId from '@/utils/controllers/trash/getByProjectId';
+import { getSessionUser } from "@/lib/auth/getSessionUser";
 
 
 
@@ -12,12 +12,18 @@ export default  async function handler(
 ) {
  
   try {
+    const session = await getSessionUser(
+      new Headers(req.headers as Record<string, string>)
+    );
+    if (!session) {
+      return res.status(401).json({ message: "Unauthorized" });
+    }
+    const userId = session.userId;
     const {projectId} = req.query
-    const user = JSON.parse(req.cookies.nookies_user!)
 
-    if (!projectId || !user) return res.status(400).json({message:"Missing Required information"})
+    if (!projectId) return res.status(400).json({message:"Missing Required information"})
 
-    const response = await getTrashByProjectId({projectId:parseInt(projectId as string), userId:user.id})
+    const response = await getTrashByProjectId({projectId:parseInt(projectId as string), userId})
     console.log("🚀 ~ response:", response)
     return res.status(200).json(response)
   } catch (error) {

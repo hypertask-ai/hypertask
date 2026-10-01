@@ -1,5 +1,6 @@
 import { NextApiHandler, NextApiRequest, NextApiResponse } from "next";
 import { removeAgentFromBoard } from "@/utils/controllers/agents/boardMembers";
+import { getSessionUser } from "@/lib/auth/getSessionUser";
 
 const handler: NextApiHandler = async (
   req: NextApiRequest,
@@ -9,17 +10,24 @@ const handler: NextApiHandler = async (
     return res.status(405).json({ message: "Method not allowed" });
   }
 
+  const session = await getSessionUser(
+    new Headers(req.headers as Record<string, string>)
+  );
+  if (!session) {
+    return res.status(401).json({ message: "Unauthorized" });
+  }
+  const userId = session.userId;
+
   try {
     const { projectId, agentId } = req.body;
     if (!projectId || !agentId) {
       return res.status(400).json({ message: "Missing required information" });
     }
 
-    const currentUser = JSON.parse(req.cookies.nookies_user!);
     const result = await removeAgentFromBoard(
       parseInt(String(projectId), 10),
       String(agentId),
-      currentUser.id
+      userId
     );
 
     if (!result.ok) {

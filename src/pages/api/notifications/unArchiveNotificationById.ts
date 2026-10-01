@@ -3,6 +3,7 @@
 import type { NextApiRequest, NextApiResponse } from 'next'
 import prisma from "@/lib/prisma";
 import { broadcastInboxChange, socketIdFromHeader } from "@/lib/realtime/server";
+import { getSessionUser } from "@/lib/auth/getSessionUser";
 
 
 
@@ -12,18 +13,13 @@ export default  async function handler(
 ) {
  
   try {
-    // Derive the caller from the auth cookie: /api is outside middleware, and
-    // Notification.id is a plain autoincrement, so without this anyone could
-    // unarchive another user's notifications by guessing an id.
-    let user: { id?: number } | null = null;
-    try {
-        user = JSON.parse(req.cookies.nookies_user!);
-    } catch {
-        user = null;
+    const session = await getSessionUser(
+      new Headers(req.headers as Record<string, string>)
+    );
+    if (!session) {
+      return res.status(401).json({ message: "Unauthorized" });
     }
-    if (!user?.id) {
-        return res.status(401).json({ message: "Unauthorized" })
-    }
+    const userId = session.userId;
 
     const {notificationId}= req.body;
     if (!notificationId){
@@ -33,7 +29,7 @@ export default  async function handler(
     // Scope the write to the caller's own notification; unknown id or someone
     // else's returns 0 rows -> 404, never touches another user's data.
     const { count } = await prisma.notification.updateMany({
-        where:{ id:notificationId, userId:user.id },
+        where:{ id:notificationId, userId },
         data:{
             status:"Normal",
             archivedAt:null
