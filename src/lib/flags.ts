@@ -52,6 +52,7 @@ import {
   HTPR_6372_SEARCH_RANKING_FLAG,
   HTPR_6369_SEARCH_OPERATORS_FLAG,
   HTPR_6370_SEARCH_CHIPS_FLAG,
+  HTPR_6688_SEARCH_AUTOCOMPLETE_FLAG,
   MY_TASKS_VIEWS_FLAG,
   MY_TASKS_BULK_SELECTION_FLAG,
   MY_TASKS_FILTER_PARITY_FLAG,
@@ -584,6 +585,11 @@ const FEATURE_FLAG_DEFINITIONS = [
     key: HTPR_6370_SEARCH_CHIPS_FLAG,
     shippedOn: "2026-09-28",
     description: "Shows search operators as removable chips with people, board and label suggestions.",
+  },
+  {
+    key: HTPR_6688_SEARCH_AUTOCOMPLETE_FLAG,
+    shippedOn: "2026-10-01",
+    description: "Completes search operators and values with keyboard suggestions, coloured filters, an active filter frame, search tips and highlighted result titles.",
   },
   {
     key: HTPR_6372_SEARCH_RANKING_FLAG,

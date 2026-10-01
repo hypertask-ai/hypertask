@@ -1,8 +1,9 @@
 import { parseSearchTokens, type Names, type SearchToken } from './operators'
 
-export function splitSearchChips(raw: string, editing = false, names: Names = {}) {
+export function splitSearchChips(raw: string, editing = false, names: Names = {}, keepActive = false) {
   const tokens = parseSearchTokens(raw, names)
   const chips = editing ? tokens.filter((token) => {
+    if (keepActive && ((token.end === raw.length && !/\s$/.test(raw)) || /^-?[a-z]+:"[^"]*$/i.test(raw.slice(token.start)))) return false
     if (token.raw.includes('"')) return true
     const namesForOperator = names[token.operator as keyof Names]
     if (['from', 'assignee', 'in', 'board', 'label'].includes(token.operator)) {
