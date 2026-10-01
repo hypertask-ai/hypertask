@@ -510,6 +510,10 @@ export function useSearch(
 
       //Phase 3 (Since we are skipping suggestions right now)
       if (typedTasks.length > 0 && selectedIndex !== null) {
+        if (searchAutocompleteEnabled) {
+          event.preventDefault();
+          tasksInputRef.current?.blur();
+        }
         if (selectedIndex === -1 || selectedIndex === typedTasks.length - 1) {
         } else {
           setSelectedAndInView(
@@ -549,6 +553,10 @@ export function useSearch(
 
       //Phase 3 (Since we are skipping suggestions right now)
       if (typedTasks.length > 0 && selectedIndex !== null) {
+        if (searchAutocompleteEnabled) {
+          event.preventDefault();
+          tasksInputRef.current?.blur();
+        }
         if (selectedIndex <= 0) {
         } else {
           setSelectedAndInView(
@@ -752,6 +760,7 @@ export function useSearch(
     suggestedValue,
     includeArchived,
     searchChipsEnabled,
+    searchAutocompleteEnabled,
   ]);
 
   // -------------------- recieving data from React-Query

@@ -434,7 +434,7 @@ const TaskListRow = (props: ITaskRow) => {
           {titleParts ? (
             <span className="font-bold truncate line-clamp-1">
               {titleParts.map((part, index) => part.matched
-                ? <mark key={index} className="rounded-[2px] bg-amber-100 text-inherit dark:bg-amber-950">{part.text}</mark>
+                ? <mark key={index} className="rounded-[2px] bg-search-highlight text-inherit">{part.text}</mark>
                 : part.text)}
             </span>
           ) : highlight.title ? (

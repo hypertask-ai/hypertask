@@ -90,7 +90,7 @@ test('real search input and reused list work keyboard-only, with an unchanged fl
       assert.match(runs.at(-1), /^after:\d{4}-\d{2}-\d{2}$/)
       assert.equal(input.value, '')
       assert.equal(document.activeElement, input)
-      assert.match(document.querySelector('[aria-label^="Remove after:"]').className, /bg-amber-100/)
+      assert.match(document.querySelector('[aria-label^="Remove after:"]').className, /bg-search-filter-date/)
       await press('Backspace')
       assert.equal(runs.at(-1), '')
     })
@@ -173,7 +173,7 @@ test('real search input and reused list work keyboard-only, with an unchanged fl
       assert.equal(runs.at(-1), 'from:7')
       const chip = document.querySelector('[aria-label="Remove from:Kamil filter"]')
       assert.match(chip.className, /text-mention-highlight/)
-      assert.doesNotMatch(chip.className, /bg-violet/)
+      assert.doesNotMatch(chip.className, /search-filter-/)
     })
     await t.test('IME Enter and Shift+Tab do not accidentally accept suggestions', async () => {
       await reset()

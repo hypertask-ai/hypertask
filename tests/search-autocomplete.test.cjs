@@ -62,18 +62,37 @@ test('dates use UTC calendar boundaries and reject malformed or nonexistent date
   assert.equal(localValueSuggestions('after', 'this', new Date('2026-01-01T00:00:00Z'))[0].id, '2025-12-29')
 })
 
-test('each filter type has a distinct token palette for light and dark, and tips cover every operator', () => {
+test('filter palettes and title highlighting use semantic tokens defined in every theme', () => {
+  const config = jiti(path.join(root, 'tailwind.config.ts')).default
+  const { backgroundColor, borderColor } = config.theme.extend
+  const { resolvedThemeDomMetadata } = jiti(path.join(root, 'src/lib/themePreferences.ts'))
+  const themes = ['light', 'dark', ...Object.keys(resolvedThemeDomMetadata)]
   assert.equal(new Set(Object.values(SEARCH_FILTER_COLOURS)).size, 6)
   assert.equal(searchFilterType('from'), searchFilterType('assignee'))
   assert.equal(searchFilterType('in'), searchFilterType('board'))
   for (const operator of SEARCH_OPERATORS) {
-    const colour = searchFilterColour(operator)
-    assert.match(colour, /bg-[a-z]+-100/)
-    assert.match(colour, /dark:bg-[a-z]+-950/)
-    assert.match(colour, /border-[a-z]+-500/)
+    const type = searchFilterType(operator)
+    assert.equal(searchFilterColour(operator), `bg-search-filter-${type} border-search-filter-${type}`)
+    assert.equal(backgroundColor[`search-filter-${type}`], `var(--bg-search-filter-${type})`)
+    assert.equal(borderColor[`search-filter-${type}`], `var(--border-search-filter-${type})`)
     assert.ok(SEARCH_TIPS[operator].example.startsWith(`${operator}:`))
     assert.ok(SEARCH_TIPS[operator].meaning)
   }
+  assert.equal(backgroundColor['search-highlight'], 'var(--bg-search-highlight)')
+  for (const theme of themes) {
+    const css = readFileSync(path.join(root, `src/styles/tailwindThemes/${theme}.css`), 'utf8')
+    const selector = theme === 'light' ? ':root' : `.${theme}`
+    const declarations = css.slice(css.indexOf(`${selector} {`)).split('}')[0]
+    for (const type of Object.keys(SEARCH_FILTER_COLOURS)) {
+      for (const role of ['bg', 'border']) {
+        assert.match(declarations, new RegExp(`--${role}-search-filter-${type}: #[0-9a-f]{6};`, 'i'), `${theme}: ${role} ${type}`)
+      }
+    }
+    assert.match(declarations, /--bg-search-highlight: var\(--bg-mention-highlight\);/, theme)
+    assert.match(css, /--bg-mention-highlight:\s*#[0-9a-f]{6};/i, theme)
+  }
+  const component = readFileSync(path.join(root, 'src/app/search/SearchComp.tsx'), 'utf8')
+  assert.match(component, /<mark[^>]*className="rounded-\[2px\] bg-search-highlight text-inherit"/)
   assert.deepEqual(Object.keys(SEARCH_TIPS).sort(), [...SEARCH_OPERATORS].sort())
 })
 

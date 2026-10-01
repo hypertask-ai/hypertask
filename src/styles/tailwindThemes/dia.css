@@ -2,6 +2,20 @@
 .dia {
   --primary: 142 27% 33%;
 
+  --bg-search-filter-people: #ede9fe;
+  --bg-search-filter-board: #dbeafe;
+  --bg-search-filter-label: #ffe4e6;
+  --bg-search-filter-status: #d1fae5;
+  --bg-search-filter-date: #fef3c7;
+  --bg-search-filter-has: #cffafe;
+  --border-search-filter-people: #8b5cf6;
+  --border-search-filter-board: #3b82f6;
+  --border-search-filter-label: #f43f5e;
+  --border-search-filter-status: #10b981;
+  --border-search-filter-date: #f59e0b;
+  --border-search-filter-has: #06b6d4;
+  --bg-search-highlight: var(--bg-mention-highlight);
+
   --bg-pageBackground: #f6f4ef;
   --bg-taskDetailPage: #f6f4ef;
   --bg-containerBackground: #f6f4ef;

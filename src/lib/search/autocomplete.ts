@@ -16,12 +16,12 @@ export const SEARCH_TIPS: Record<SearchOperator, { example: string; meaning: str
 }
 
 export const SEARCH_FILTER_COLOURS = {
-  people: 'bg-violet-100 dark:bg-violet-950 border-violet-500',
-  board: 'bg-blue-100 dark:bg-blue-950 border-blue-500',
-  label: 'bg-rose-100 dark:bg-rose-950 border-rose-500',
-  status: 'bg-emerald-100 dark:bg-emerald-950 border-emerald-500',
-  date: 'bg-amber-100 dark:bg-amber-950 border-amber-500',
-  has: 'bg-cyan-100 dark:bg-cyan-950 border-cyan-500',
+  people: 'bg-search-filter-people border-search-filter-people',
+  board: 'bg-search-filter-board border-search-filter-board',
+  label: 'bg-search-filter-label border-search-filter-label',
+  status: 'bg-search-filter-status border-search-filter-status',
+  date: 'bg-search-filter-date border-search-filter-date',
+  has: 'bg-search-filter-has border-search-filter-has',
 } as const
 
 export function searchFilterType(operator: SearchOperator): keyof typeof SEARCH_FILTER_COLOURS {
