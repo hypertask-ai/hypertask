@@ -10,7 +10,9 @@
 #   ship-check done <T>          ticket is in Done
 #   ship-check guard             hook mode: reads the hook JSON on stdin, exit 2 blocks the command
 set -uo pipefail
-REPO=hypertask-ai/hypertask
+# CLI work: SHIP_REPO=hypertask-ai/cli SHIP_BASE=main ship-check ...
+REPO=${SHIP_REPO:-hypertask-ai/hypertask}
+BASE=${SHIP_BASE:-production}
 EVID=${VCC_EVIDENCE_DIR:-$HOME/.local/state/vcc-evidence}
 TITLE_RE='^(HTPR|HYFA|YPER4)-[0-9]+ \[(BUGFIX|FEATURE|IMPROVE|CLI/MCP/AI|SPEED|FEEDBACK|DASH|QA|BOARD|COST|PLAN|INFRA)\] [^ ]'
 
@@ -44,7 +46,8 @@ check_pr() {
 check_merged() { [ -n "$(merged_sha "$1")" ] || fail "no merged PR titled $1"; echo "merged ok"; }
 
 check_deployed() {
-  local sha id state; sha=$(merged_sha "$1"); [ -n "$sha" ] || fail "no merged PR titled $1"
+  local sha id state o; sha=$(merged_sha "$1"); [ -n "$sha" ] || fail "no merged PR titled $1"
+  o=$(open_prs "$1"); [ -z "$o" ] || fail "PR $o for $1 is still open; merge or close it first"
   id=$(gh api "repos/$REPO/deployments?sha=$sha&environment=Production" --jq '.[0].id // empty' 2>/dev/null)
   [ -n "$id" ] || fail "no Production deployment for $sha"
   state=$(gh api "repos/$REPO/deployments/$id/statuses" --jq '.[0].state // empty' 2>/dev/null)
@@ -56,7 +59,8 @@ check_proof() {
   local d="$EVID/$1" p="$EVID/$1/proof.md"
   [ -s "$p" ] || fail "missing $p (verify-qa evidence contract)"
   grep -qE '^[[:space:]]*Feature map: \.claude/skills/verify-qa/reference/feature-map/[a-z0-9-]+\.md' "$p" || fail "proof.md has no 'Feature map: .claude/skills/verify-qa/reference/feature-map/<page>.md' line"
-  grep -qE '^[[:space:]]*Doctor:' "$p" || fail "proof.md has no 'Doctor:' line"
+  local sha; sha=$(merged_sha "$1"); [ -n "$sha" ] || fail "no merged PR titled $1"
+  grep -qE "^[[:space:]]*Doctor:.*${sha:0:9}.*success" "$p" || fail "proof.md 'Doctor:' line must name the latest merge sha ${sha:0:9} and 'success' (stale proof?)"
   grep -qE '^[[:space:]]*## Cases' "$p" || fail "proof.md has no '## Cases' section"
   grep -qE '^[[:space:]]*- PASS: ' "$p" || fail "proof.md has no PASS case"
   ! grep -qE '^[[:space:]]*- FAIL: ' "$p" || fail "proof.md still lists a FAIL case"
@@ -82,9 +86,11 @@ guard() {
     out=$(check_title "$pr") || { echo "ship-check blocked the merge: ${out#FAIL: }. Fix it with gh pr edit $pr --title \"HTPR-NNNN [TYPE] ...\" (create the ticket via vcc if it does not exist)." >&2; exit 2; }
   fi
   # vcc task move <HTPR-NNNN> ... Done: needs a merged PR, a success deploy and proof.md.
-  if [[ $cmd =~ (^|[;&|][[:space:]]*)vcc[[:space:]]+tasks?[[:space:]]+move[[:space:]]+(HTPR-[0-9]+).*--section[[:space:]=]+[\"\']?Done ]]; then
+  if [[ $cmd =~ (^|[;&|][[:space:]]*)vcc[[:space:]]+tasks?[[:space:]]+move[[:space:]]+[\"\']?((HTPR|HYFA|YPER4)-[0-9]+)[\"\']?.*--section[[:space:]=]+[\"\']?Done ]]; then
     t=${BASH_REMATCH[2]}
-    for c in merged deployed proof; do
+    # App tickets need live QA proof; infra tickets need the merge and the deploy.
+    checks="merged deployed"; [[ $t == HTPR-* ]] && checks="merged deployed proof"
+    for c in $checks; do
       out=$("check_$c" "$t") || { echo "ship-check blocked moving $t to Done: ${out#FAIL: }. Follow .claude/skills/verify-qa/SKILL.md first." >&2; exit 2; }
     done
   fi

@@ -2,9 +2,9 @@
 # ship-gates HTPR-NNNN: write the standard /ship gates into this session's unlazy ledger.
 set -euo pipefail
 T=${1:?usage: ship-gates HTPR-NNNN}
-[[ $T =~ ^HTPR-[0-9]+$ ]] || { echo "ticket must look like HTPR-1234"; exit 1; }
-ID=${CLAUDE_CODE_SESSION_ID:-${CODEX_SESSION_ID:-$T}}
-L=$HOME/.local/state/unlazy/sessions/${ID:0:8}/GATES.md
+[[ $T =~ ^(HTPR|HYFA|YPER4)-[0-9]+$ ]] || { echo "ticket must look like HTPR-1234, HYFA-12 or YPER4-12"; exit 1; }
+ID=${CLAUDE_CODE_SESSION_ID:-${CODEX_SESSION_ID:-}}
+if [ -n "$ID" ]; then L=$HOME/.local/state/unlazy/sessions/${ID:0:8}/GATES.md; else L=$HOME/.local/state/unlazy/sessions/$T-$(date +%s)/GATES.md; fi
 C=$HOME/.agents/skills/ship/scripts/ship-check
 mkdir -p "$(dirname "$L")"
 grep -q "ship gates for $T" "$L" 2>/dev/null && { echo "already in $L"; exit 0; }
@@ -16,6 +16,6 @@ g "The ticket exists on the board" ticket "ticket ok"
 g "The PR is named HTPR-NNNN [TYPE] description" pr "title ok"
 g "The PR is merged into production" merged "merged ok"
 g "The Production deployment for the merge is success" deployed "deployed ok"
-g "Live QA proof.md follows the verify-qa contract, with screenshots" proof "proof ok"
+[[ $T == HTPR-* ]] && g "Live QA proof.md follows the verify-qa contract for the latest merge, with screenshots" proof "proof ok"
 g "The ticket is in Done" done "done ok"
 echo "wrote ship gates for $T to $L"
