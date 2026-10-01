@@ -16,7 +16,6 @@ import {
   MY_TASKS_SHORTCUTS_WIDTH_FLAG,
   MY_TASKS_TABLE_COLUMNS_FLAG,
   MY_TASKS_TIME_GROUP_FLAG,
-  MY_TASKS_QUICK_ADD_FLAG,
   MY_TASKS_OVERDUE_BADGES_FLAG,
   MY_TASKS_VIEWS_FLAG,
   MY_TASKS_BULK_SELECTION_FLAG,
@@ -26,10 +25,6 @@ import {
   createMyTasksReconcileRunner,
   parseMyTasksListPayload,
 } from "@/lib/myTasks/reconcileMyTasks";
-import {
-  MY_TASKS_QUICK_ADD_DEFAULT_BOARD_KEY,
-  myTasksQuickAddTaskVisibleInPayload,
-} from "@/lib/myTasks/quickAddHelpers";
 import { useMyTasksRealtime } from "@/hooks/realtime/useMyTasksRealtime";
 import { MyTasksBulkSelectionProvider } from "@/lib/contexts/MyTasks/BulkSelectionContext";
 import MyTasksBulkActionBar from "@/components/PageComponents/MyTasks/MyTasksBulkActionBar";
@@ -100,7 +95,6 @@ import {
   normalizeMyTasksTableVisibleColumns,
 } from "@/utils/helperFunctions/Views/TableColumnsHelperFunctions";
 import TableColumnsPicker from "@/components/PageComponents/Kanban/TableView/TableColumnsPicker";
-import MyTasksQuickAdd from "./MyTasksQuickAdd";
 import MyTasksViewControls from "./MyTasksViewControls";
 import MyTasksViewTabs from "./MyTasksViewTabs";
 import type { SerializableFilterSettings } from "@/lib/filterSettingsMutations";
@@ -186,7 +180,6 @@ const MyTasks = ({
   const myTasksTableColumnsEnabled = useFlag(MY_TASKS_TABLE_COLUMNS_FLAG);
   const myTasksScopesFlag = useFlag(MY_TASKS_SCOPES_FLAG); // HTPR-6457 Involvement UI
   const myTasksSnoozeEnabled = useFlag(MY_TASKS_SNOOZE_FLAG);
-  const myTasksQuickAddEnabled = useFlag(MY_TASKS_QUICK_ADD_FLAG);
   const overdueBadgesEnabled = useFlag(MY_TASKS_OVERDUE_BADGES_FLAG);
   const filterParityEnabled = useFlag(MY_TASKS_FILTER_PARITY_FLAG);
   const viewsFeatureEnabled = viewsEnabled && myTasksViewsEnabled;
@@ -893,77 +886,6 @@ const MyTasks = ({
     return { ...body.view, config: parseMyTasksViewConfig(body.view.config) };
   };
 
-  const persistQuickAddDefaultBoard = useCallback(
-    async (viewId: number | null, defaultBoardId: number) => {
-      if (viewId === null) {
-        try {
-          localStorage.setItem(
-            `${MY_TASKS_QUICK_ADD_DEFAULT_BOARD_KEY}:${currentUser.id}`,
-            String(defaultBoardId),
-          );
-        } catch {
-          // Ignore quota / private-mode failures; in-memory config still updates.
-        }
-        updateViewConfig((current) => ({ ...current, defaultBoardId }));
-        return;
-      }
-      const response = await fetch(myTasksViewAPIRoute(viewId), {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ configPatch: { defaultBoardId } }),
-      });
-      if (!response.ok) {
-        throw new Error(await readError(response, "Unable to update view"));
-      }
-      const body = (await response.json()) as { view: MyTasksSavedView };
-      const saved = {
-        ...body.view,
-        config: parseMyTasksViewConfig(body.view.config),
-      };
-      setViews((current) =>
-        current.map((view) => (view.id === saved.id ? saved : view)),
-      );
-      if (activeViewIdRef.current === viewId) {
-        updateViewConfig((current) => ({ ...current, defaultBoardId }));
-      }
-    },
-    [currentUser.id, updateViewConfig],
-  );
-
-  const quickAddVisibilityRef = useRef({
-    viewConfig,
-    viewsFeatureEnabled,
-    filterParityEnabled,
-    groupBy,
-    activeSplit,
-    prioritySelection,
-    filterEnabled,
-    runtimeContext,
-  });
-  quickAddVisibilityRef.current = {
-    viewConfig,
-    viewsFeatureEnabled,
-    filterParityEnabled,
-    groupBy,
-    activeSplit,
-    prioritySelection,
-    filterEnabled,
-    runtimeContext,
-  };
-
-  const refreshMyTasksAfterQuickAdd = useCallback(
-    async (taskId: number) => {
-      const payload = await reconcileRunner.flush();
-      if (!payload) return false;
-      return myTasksQuickAddTaskVisibleInPayload(
-        payload,
-        taskId,
-        quickAddVisibilityRef.current,
-      );
-    },
-    [reconcileRunner],
-  );
-
   const saveView = async () => {
     if (!activeView) return;
     const requestToken = ++saveRequestToken.current;
@@ -1304,17 +1226,6 @@ const boardTabCounts = useMemo(() => {
       </div>
 
       <div className="mt-3 flex-1 min-h-0 w-full">
-        {myTasksQuickAddEnabled ? (
-          <MyTasksQuickAdd
-            currentUser={currentUser}
-            activeViewId={activeViewId}
-            viewConfig={viewConfig}
-            scopes={reconcileScopes}
-            accessibleProjectIds={accessibleProjectIds}
-            onPersistDefaultBoard={persistQuickAddDefaultBoard}
-            onRefresh={refreshMyTasksAfterQuickAdd}
-          />
-        ) : null}
         <MyTasksBulkSelectionProvider
           enabled={myTasksBulkSelectionEnabled}
           resetSelectionKey={`${activeViewId ?? "all"}:${activeSplit}:${prioritySelection
