@@ -542,7 +542,7 @@ jobs:
         if: steps.provisioned.outputs.ok == 'true' && steps.setup-checkout.outcome == 'success'
         continue-on-error: true
         with:
-          node-version: 22
+          node-version: 24
           cache: npm
 
       - name: Install dependencies
