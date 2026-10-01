@@ -112,7 +112,7 @@ test('enabled drafting retains a complete value until acceptance; flag off keeps
   assert.match(keys, /HTPR_6688_SEARCH_AUTOCOMPLETE_FLAG = "htpr-6688-search-autocomplete"/)
   assert.match(flags, /key: HTPR_6688_SEARCH_AUTOCOMPLETE_FLAG/)
   assert.match(flags, /DEFAULT_FEATURE_FLAG_MODE: FeatureFlagMode = "OWNER_AND_QA"/)
-  assert.match(component, /useFlag\(HTPR_6688_SEARCH_AUTOCOMPLETE_FLAG\)/)
+  assert.match(component, /useFlag\(\s*HTPR_6688_SEARCH_AUTOCOMPLETE_FLAG\s*\)/)
   assert.match(component, /autocompleteEnabled \? \(\s*<SearchChipsInput[\s\S]*?\sautocompleteEnabled\s*\/>/)
 })
 

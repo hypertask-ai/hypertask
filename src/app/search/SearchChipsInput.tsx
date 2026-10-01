@@ -128,7 +128,8 @@ export default function SearchChipsInput({ value, onChange, onRun, boardId, inpu
   }, [value, editing, boardId]);
 
   function change(event: ChangeEvent<HTMLInputElement>) {
-    setEditing(true);
+    // Clearing the draft must not reactivate the last committed chip.
+    setEditing(!autocompleteEnabled || Boolean(event.target.value.trim()));
     setDismissed(false);
     setSelectedIndex(0);
     setCaretAtEnd(event.target.selectionStart === event.target.value.length);

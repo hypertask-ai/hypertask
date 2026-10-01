@@ -509,12 +509,14 @@ export function useSearch(
       }
 
       //Phase 3 (Since we are skipping suggestions right now)
-      if (typedTasks.length > 0 && selectedIndex !== null) {
+      if (typedTasks.length > 0 && (selectedIndex !== null || searchAutocompleteEnabled)) {
         if (searchAutocompleteEnabled) {
           event.preventDefault();
           tasksInputRef.current?.blur();
         }
-        if (selectedIndex === -1 || selectedIndex === typedTasks.length - 1) {
+        if (selectedIndex === null) {
+          setSelectedAndInView(typedTasks[0], 0);
+        } else if (selectedIndex === -1 || selectedIndex === typedTasks.length - 1) {
         } else {
           setSelectedAndInView(
             typedTasks[selectedIndex + 1],
@@ -552,12 +554,14 @@ export function useSearch(
       }
 
       //Phase 3 (Since we are skipping suggestions right now)
-      if (typedTasks.length > 0 && selectedIndex !== null) {
+      if (typedTasks.length > 0 && (selectedIndex !== null || searchAutocompleteEnabled)) {
         if (searchAutocompleteEnabled) {
           event.preventDefault();
           tasksInputRef.current?.blur();
         }
-        if (selectedIndex <= 0) {
+        if (selectedIndex === null) {
+          setSelectedAndInView(typedTasks[typedTasks.length - 1], typedTasks.length - 1);
+        } else if (selectedIndex <= 0) {
         } else {
           setSelectedAndInView(
             typedTasks[selectedIndex - 1],
