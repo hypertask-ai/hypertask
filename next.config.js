@@ -35,8 +35,6 @@ const nextConfig = {
     NEXT_PUBLIC_BUILD_ID: resolveBuildId(),
   },
   distDir: process.env.BUILD_DIR || ".next",
-  // jsdom reads browser CSS beside its own module at runtime, not beside a webpack chunk.
-  serverExternalPackages: ["isomorphic-dompurify", "jsdom"],
   productionBrowserSourceMaps: true,
   reactStrictMode: false,
   images: {
