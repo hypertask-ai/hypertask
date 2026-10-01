@@ -22,16 +22,60 @@ G 2 SHIP_BASE=production vcc task move HTPR-6570 $DONE
 G 2 vcc task move YPER4-118 $DONE '&&' vcc task move HTPR-6570 $DONE
 G 0 vcc task move HTPR-6570 --section '"In Progress"'
 
-# Merges, per command segment.
+# Merges, per command segment. PR 822 was retitled; pin the invalid-title fixture.
+gh() {
+  if [[ ${1:-} == pr && ${2:-} == view && ${3:-} == 822 && "$*" == *'--json title'* ]]; then
+    echo 'Invalid PR title'
+  else command gh "$@"; fi
+}
+export -f gh
 G 2 $M 822 -R hypertask-ai/hypertask
 G 2 FOO=1 $M 822 -R hypertask-ai/hypertask
 G 0 $M 809 -R hypertask-ai/hypertask
 G 2 $M 809 -R hypertask-ai/hypertask '&&' $M 822 -R hypertask-ai/hypertask
 G 0 grep "$M" notes.txt
+unset -f gh
 
 # A bound PR that is still open blocks the merged gate.
 read -r opr ot < <(gh pr list -R hypertask-ai/hypertask --state open --json number,title --jq '[.[] | select(.title | test("^(HTPR|HYFA|YPER4)-[0-9]+ "))][0] | "\(.number) \(.title | split(" ")[0])"')
 ./ship-check bind "$ot" "$opr" >/dev/null; ./ship-check merged "$ot" | grep -q 'OPEN, not merged' && ok "open bound PR #$opr blocks merged gate" || bad "open bound PR not blocking"
+
+# PR 838 changed only skills; Vercel skipped merge ec45678a2 without a deployment.
+sha838=$(gh pr view 838 -R hypertask-ai/hypertask --json mergeCommit --jq .mergeCommit.oid)
+[[ $sha838 == ec45678a2* ]] && ok "PR 838 merge ec45678a2" || bad "PR 838 merge changed"
+./ship-check bind YPER4-122 838 >/dev/null && ok "bind skipped-build PR 838" || bad "bind PR 838"
+out=$(./ship-check deployed YPER4-122)
+[ "$out" = 'deployed ok (no app build needed)' ] && ok "Ignored Build Step accepted" || bad "skipped build: $out"
+
+# A skipped build on another check, an unsuccessful Vercel check, or an older
+# skipped status must not bypass the real deployment requirement.
+mkdir -p "$E/mock-bin" "$E/YPER4-999"; echo 838 > "$E/YPER4-999/pr"
+cat > "$E/mock-bin/gh" <<'MOCK'
+#!/usr/bin/env bash
+case "$1:$2" in
+  pr:view) echo '{"number":838,"title":"YPER4-999 [INFRA] Fixture","state":"MERGED","mergeCommit":{"oid":"ec45678a2"},"baseRefName":"production"}' ;;
+  api:*/status) printf '%s' "$STATUS_FIXTURE" | jq -r "$4" ;;
+  api:*/deployments\?*) echo '[]' | jq -r "$4" ;;
+  *) exit 1 ;;
+esac
+MOCK
+chmod +x "$E/mock-bin/gh"
+for statuses in \
+  '[{"context":"Other check","state":"success","description":"Ignored Build Step"}]' \
+  '[{"context":"Vercel","state":"failure","description":"Ignored Build Step"}]' \
+  '[{"context":"Vercel","state":"pending","description":"Ignored Build Step"}]' \
+  '[{"context":"Vercel","state":"success","description":"Build completed"},{"context":"Vercel","state":"success","description":"Ignored Build Step"}]'; do
+  out=$(PATH="$E/mock-bin:$PATH" STATUS_FIXTURE="{\"statuses\":$statuses}" ./ship-check deployed YPER4-999)
+  [ "$?" != 0 ] && [[ $out == 'FAIL: no Production deployment'* ]] \
+    && ok "non-skipped/latest-success status still requires deployment" || bad "deployment bypass: $out"
+done
+
+# Duplicates: HTPR-6823 was fixed by HTPR-6801's merged PR 837.
+./ship-check duplicate HTPR-6823 HTPR-6801 830 >/dev/null && bad "duplicate accepted another ticket's PR" || ok "duplicate rejects a PR of another ticket"
+./ship-check duplicate HTPR-6823 HTPR-6801 837 >/dev/null && ok "duplicate binds HTPR-6823 to PR 837" || bad "duplicate bind"
+./ship-check merged HTPR-6823 | grep -q 'merged ok' && ok "duplicate passes the merged gate" || bad "duplicate merged gate"
+./ship-check deployed HTPR-6823 | grep -q 'deployed ok' && ok "duplicate passes the deployed gate" || bad "duplicate deployed gate"
+G 2 vcc task move HTPR-6823 $DONE
 
 # Proof contract.
 sha=$(gh pr view 809 -R hypertask-ai/hypertask --json mergeCommit --jq .mergeCommit.oid)
@@ -49,4 +93,4 @@ sed -i '$d' "$E/HTPR-6570/proof.md"; mkdir -p "$E/x"; printf 'png' > "$E/x/a.png
 T fail "run folder outside the ticket rejected"
 
 rm -rf "$E"
-echo "failures: $fails"; [ "$fails" = 0 ]
+echo "failures: $fails"; [ "$fails" = 0 ] && echo 'All ship-check tests passed'

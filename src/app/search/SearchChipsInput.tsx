@@ -2,7 +2,8 @@
 
 import { MentionListRows } from "@/components/AI_CHAT/MentionListComp";
 import { activeSearchValue, candidateQuery, chipQuery, splitSearchChips } from "@/lib/search/chips";
-import { operatorMatches, parseSearchTokens, type Names, type SearchToken } from "@/lib/search/operators";
+import { operatorMatches, parseSearchTokens, SEARCH_OPERATORS, type Names, type SearchToken } from "@/lib/search/operators";
+import { localValueSuggestions, operatorSuggestions, searchCompletion, searchFilterColour, SEARCH_TIPS } from "@/lib/search/autocomplete";
 import { searchConfig } from "@/lib/configs/search.config";
 import { Hash, UserRound, X } from "lucide-react";
 import React, { type ChangeEvent, type KeyboardEvent, type RefObject, useEffect, useRef, useState } from "react";
@@ -14,9 +15,10 @@ type Props = {
   onRun: (value: string) => void;
   boardId: number | null;
   inputRef: RefObject<HTMLInputElement | null>;
+  autocompleteEnabled?: boolean;
 };
 
-export default function SearchChipsInput({ value, onChange, onRun, boardId, inputRef }: Props) {
+export default function SearchChipsInput({ value, onChange, onRun, boardId, inputRef, autocompleteEnabled = false }: Props) {
   const [editing, setEditing] = useState(false);
   const [names, setNames] = useState<Names>({});
   const [chipLabels, setChipLabels] = useState<Record<string, string>>({});
@@ -28,10 +30,26 @@ export default function SearchChipsInput({ value, onChange, onRun, boardId, inpu
   const [dismissed, setDismissed] = useState(false);
   const lookup = useRef(0);
   const pickerRef = useRef<HTMLDivElement>(null);
-  const { chips, text } = splitSearchChips(value, editing, names);
-  const active = activeSearchValue(text, names);
+  const [focused, setFocused] = useState(false);
+  const [caretAtEnd, setCaretAtEnd] = useState(true);
+  const { chips, text } = splitSearchChips(value, editing, names, autocompleteEnabled);
+  const completion = autocompleteEnabled ? searchCompletion(text, names) : null;
+  const active = autocompleteEnabled ? completion : activeSearchValue(text, names);
+  const tips = autocompleteEnabled && focused && !value.trim();
   const picker = dismissed ? null : active;
+  const localRows = completion?.kind === 'operator'
+    ? operatorSuggestions(completion.value).map((operator) => ({ id: operator, name: `${operator}:` }))
+    : completion ? localValueSuggestions(completion.operator, completion.value) : null;
+  const rows = tips ? SEARCH_OPERATORS.map((operator) => ({ id: operator, name: `${SEARCH_TIPS[operator].example} — ${SEARCH_TIPS[operator].meaning}` })) : localRows ?? candidates;
+  const open = !dismissed && Boolean(picker || tips);
   const listId = "search-chip-options";
+  const selectedRow = rows[selectedIndex] ?? rows[0];
+  const ghost = open && completion?.kind === 'operator' && caretAtEnd && selectedRow
+    ? String(selectedRow.id).slice(completion.value.length) + ':' : '';
+
+  useEffect(() => {
+    if (autocompleteEnabled && open) pickerRef.current?.querySelector<HTMLElement>(`#mention-button-${selectedIndex}`)?.scrollIntoView({ block: 'nearest' });
+  }, [autocompleteEnabled, open, selectedIndex]);
 
   useEffect(() => {
     setEditing(false);
@@ -39,7 +57,7 @@ export default function SearchChipsInput({ value, onChange, onRun, boardId, inpu
   }, [boardId]);
 
   useEffect(() => {
-    if (!picker) {
+    if (!picker || (autocompleteEnabled && (completion?.kind === 'operator' || localRows !== null))) {
       setCandidates([]);
       setLoading(false);
       return;
@@ -72,7 +90,7 @@ export default function SearchChipsInput({ value, onChange, onRun, boardId, inpu
         setLoading(false);
       }), 180);
     return () => { clearTimeout(timer); controller.abort(); ++lookup.current; };
-  }, [picker?.operator, picker?.value, dismissed, boardId]);
+  }, [picker?.operator, picker?.value, dismissed, boardId, autocompleteEnabled]);
 
   useEffect(() => {
     if (editing) return;
@@ -112,12 +130,18 @@ export default function SearchChipsInput({ value, onChange, onRun, boardId, inpu
   function change(event: ChangeEvent<HTMLInputElement>) {
     setEditing(true);
     setDismissed(false);
+    setSelectedIndex(0);
+    setCaretAtEnd(event.target.selectionStart === event.target.value.length);
     onChange(chipQuery(chips, event.target.value) + (/\s$/.test(event.target.value) ? ' ' : ''));
   }
 
   function reopenPicker(event: React.SyntheticEvent<HTMLInputElement>) {
     const caret = event.currentTarget.selectionStart;
-    if (active && caret !== null && caret <= (active.end ?? text.length) && activeSearchValue(text.slice(0, caret), names)?.start === active.start) setDismissed(false);
+    setCaretAtEnd(caret === text.length);
+    if (autocompleteEnabled && !value.trim()) { setDismissed(false); setSelectedIndex(0); }
+    if (autocompleteEnabled && completion?.kind === 'operator' && caret === text.length) setDismissed(false);
+    const atCaret = caret === null ? null : autocompleteEnabled ? searchCompletion(text.slice(0, caret), names) : activeSearchValue(text.slice(0, caret), names);
+    if (active && caret !== null && caret <= (active.end ?? text.length) && atCaret?.start === active.start) setDismissed(false);
   }
 
   function chipText(chip: SearchToken) {
@@ -127,12 +151,22 @@ export default function SearchChipsInput({ value, onChange, onRun, boardId, inpu
   }
 
   function choose(row: Candidate) {
+    if (autocompleteEnabled && (tips || completion?.kind === 'operator')) {
+      const nextText = tips ? `${row.id}:` : text.slice(0, completion?.start) + `${completion?.negated ? '-' : ''}${row.id}:` + text.slice(completion?.end);
+      setEditing(true);
+      setDismissed(false);
+      setSelectedIndex(0);
+      setCaretAtEnd(true);
+      onChange(chipQuery(chips, nextText));
+      inputRef.current?.focus();
+      return;
+    }
     if (!active) return;
     const before = text.slice(0, active.start).trim();
     const after = text.slice(active.end ?? text.length).trim();
     const selected = `${active.negated ? '-' : ''}${candidateQuery(active.operator, row.name, row.id)}`;
     setChipLabels((previous) => ({ ...previous, [`${active.operator}:${row.id}`]: row.name }));
-    setNames((previous) => ({ ...previous, [active.operator]: [...(previous[active.operator as keyof Names] ?? []), String(row.id)] }));
+    if (localRows === null) setNames((previous) => ({ ...previous, [active.operator]: [...(previous[active.operator as keyof Names] ?? []), String(row.id)] }));
     const next = chipQuery(chips, [before, selected, after].filter(Boolean).join(' '));
     setEditing(false);
     setDismissed(true);
@@ -150,22 +184,23 @@ export default function SearchChipsInput({ value, onChange, onRun, boardId, inpu
   }
 
   function keyDown(event: KeyboardEvent<HTMLInputElement>) {
-    if (picker && event.key === "Escape") {
+    if (autocompleteEnabled && (event.nativeEvent.isComposing || event.ctrlKey || event.metaKey || event.altKey)) return;
+    if (open && event.key === "Escape") {
       event.preventDefault();
       event.stopPropagation();
       setDismissed(true);
       return;
     }
-    if (picker && (event.key === "ArrowDown" || event.key === "ArrowUp")) {
+    if (open && (event.key === "ArrowDown" || event.key === "ArrowUp")) {
       event.preventDefault();
       event.stopPropagation();
-      setSelectedIndex((current) => Math.max(0, Math.min(candidates.length - 1, current + (event.key === "ArrowDown" ? 1 : -1))));
+      setSelectedIndex((current) => Math.max(0, Math.min(rows.length - 1, current + (event.key === "ArrowDown" ? 1 : -1))));
       return;
     }
-    if (picker && candidates.length && (event.key === "Enter" || event.key === "Tab")) {
+    if (open && rows.length && (event.key === "Enter" || (event.key === "Tab" && (!autocompleteEnabled || !event.shiftKey)))) {
       event.preventDefault();
       event.stopPropagation();
-      choose(candidates[selectedIndex] ?? candidates[0]);
+      choose(selectedRow);
       return;
     }
     if (event.key === "Backspace" && event.currentTarget.selectionStart === 0 && event.currentTarget.selectionEnd === 0 && chips.length) {
@@ -192,14 +227,26 @@ export default function SearchChipsInput({ value, onChange, onRun, boardId, inpu
             type="button"
             onClick={(event) => { event.stopPropagation(); remove(index); }}
             aria-label={`Remove ${chip.operator}:${chipLabels[`${chip.operator}:${chip.value}`] ?? chip.value} filter`}
-            className="inline-flex items-center gap-1 rounded-sm px-2 py-1 text-mention-highlight text-content"
-            style={{ backgroundColor: "color-mix(in srgb, var(--color-mention-highlight) 12%, var(--bg-mention))" }}
+            className={`inline-flex items-center gap-1 rounded-sm px-2 py-1 text-content ${autocompleteEnabled ? `text-white-black border-l-2 ${searchFilterColour(chip.operator)}` : 'text-mention-highlight'}`}
+            style={autocompleteEnabled ? undefined : { backgroundColor: "color-mix(in srgb, var(--color-mention-highlight) 12%, var(--bg-mention))" }}
           >
             {chip.operator === 'from' || chip.operator === 'assignee' ? <UserRound size={14} aria-hidden="true" /> : (chip.operator === 'in' || chip.operator === 'board') ? <Hash size={14} aria-hidden="true" /> : null}
             <span>{chipText(chip)}</span>
             <X size={14} strokeWidth={1.5} aria-hidden="true" />
           </button>
         ))}
+        <div className="relative min-w-[8rem] flex-1 text-subheading font-medium">
+          {autocompleteEnabled && (completion || ghost) && (
+            <div aria-hidden="true" className="pointer-events-none absolute inset-0 flex items-center overflow-hidden whitespace-pre">
+              <span className="invisible">{text.slice(0, completion?.start)}</span>
+              <span className="relative">
+                <span className="invisible">{text.slice(completion?.start, completion?.end)}</span>
+                {completion?.kind === 'value' && <span data-search-filter-frame className={`absolute inset-0 rounded-sm border ${searchFilterColour(completion.operator)}`} />}
+              </span>
+              <span className="invisible">{text.slice(completion?.end)}</span>
+              <span data-search-ghost className="text-icon-hover-gray">{ghost}</span>
+            </div>
+          )}
         <input
           id={searchConfig.elementIds.input.id}
           ref={inputRef}
@@ -208,35 +255,39 @@ export default function SearchChipsInput({ value, onChange, onRun, boardId, inpu
           enterKeyHint="search"
           autoComplete="off"
           placeholder={chips.length ? "" : searchConfig.elementIds.input.placeholder}
-          className="min-w-[8rem] flex-1 bg-transparent text-subheading font-medium text-white-black outline-none [&::-webkit-search-cancel-button]:appearance-none"
+          className="relative w-full bg-transparent text-subheading font-medium text-white-black outline-none [&::-webkit-search-cancel-button]:appearance-none"
           value={text}
           onChange={change}
           onKeyDown={keyDown}
-          onFocus={reopenPicker}
+          onFocus={(event) => { setFocused(true); reopenPicker(event); }}
           onClick={reopenPicker}
-          onBlur={(event) => { if (!pickerRef.current?.contains(event.relatedTarget)) setDismissed(true); }}
+          onSelect={(event) => setCaretAtEnd(event.currentTarget.selectionStart === text.length)}
+          onBlur={(event) => { if (!pickerRef.current?.contains(event.relatedTarget)) { setDismissed(true); setFocused(false); } }}
           role="combobox"
           aria-label="Search tasks"
-          aria-autocomplete="list"
-          aria-expanded={Boolean(picker)}
-          aria-controls={picker ? listId : undefined}
-          aria-activedescendant={picker && candidates.length ? `mention-button-${selectedIndex}` : undefined}
+          aria-autocomplete={autocompleteEnabled ? "both" : "list"}
+          aria-expanded={open}
+          aria-controls={open ? listId : undefined}
+          aria-activedescendant={open && rows.length ? `mention-button-${Math.min(selectedIndex, rows.length - 1)}` : undefined}
         />
+        </div>
       </div>
-      {picker && (
-        <div ref={pickerRef} className="absolute left-4 top-full z-30 @md:left-9" onMouseDown={(event) => event.preventDefault()}>
-          {error ? <div id={listId} role="alert" className="rounded bg-modalBackground p-3 text-white-black">Could not load suggestions. Keep typing to retry.</div> : (
+      {open && (
+        <div ref={pickerRef} className="absolute left-4 top-full z-30 max-w-[calc(100%-2rem)] @md:left-9" onMouseDown={(event) => event.preventDefault()}>
+          {autocompleteEnabled && <div className="rounded-t-sm bg-modalBackground px-3 pt-2 text-meta text-text-light-gray">{tips ? 'Search tips' : 'Suggestions'} · ↑ ↓ to move · Tab / Enter to accept · Esc to close</div>}
+          {error && localRows === null && !tips ? <div id={listId} role="alert" className="rounded bg-modalBackground p-3 text-white-black">Could not load suggestions. Keep typing to retry.</div> : (
             <MentionListRows
               id={listId}
               loadingLabel="Loading suggestions..."
-              isLoading={loading}
-              hasItems={candidates.length > 0}
-              noResults={!candidates.length}
+              className={autocompleteEnabled ? "max-w-full" : undefined}
+              isLoading={localRows === null && !tips && loading}
+              hasItems={rows.length > 0}
+              noResults={!rows.length}
               selectedIndex={selectedIndex}
               setSelectedIndex={setSelectedIndex}
               ignoreItems={[]}
-              items={candidates.map((row, index) => ({ id: typeof row.id === 'number' ? row.id : index, name: row.name, type: (picker.operator === 'in' || picker.operator === 'board') ? 'project' as const : 'name' as const, identifier: '' }))}
-              selectItem={(index) => choose(candidates[index])}
+              items={rows.map((row, index) => ({ id: typeof row.id === 'number' ? row.id : index, name: row.name, type: (picker?.operator === 'in' || picker?.operator === 'board') ? 'project' as const : 'name' as const, identifier: '' }))}
+              selectItem={(index) => choose(rows[index])}
             />
           )}
         </div>

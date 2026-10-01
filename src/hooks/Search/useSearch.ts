@@ -1,6 +1,6 @@
 import { searchConfig } from "@/lib/configs/search.config";
 import { HTPR_6369_SEARCH_OPERATORS_FLAG } from "@/lib/flags/keys";
-import { HTPR_6370_SEARCH_CHIPS_FLAG } from "@/lib/flags/keys";
+import { HTPR_6370_SEARCH_CHIPS_FLAG, HTPR_6688_SEARCH_AUTOCOMPLETE_FLAG } from "@/lib/flags/keys";
 import { useFlag } from "@/hooks/useFlag";
 import { useDeviceContext } from "@/lib/contexts/deviceContext";
 import { useQueryClient } from "@tanstack/react-query";
@@ -84,6 +84,7 @@ export function useSearch(
   const isApple = useDeviceContext();
   const searchOperatorsEnabled = useFlag(HTPR_6369_SEARCH_OPERATORS_FLAG);
   const searchChipsEnabled = useFlag(HTPR_6370_SEARCH_CHIPS_FLAG) && searchOperatorsEnabled;
+  const searchAutocompleteEnabled = useFlag(HTPR_6688_SEARCH_AUTOCOMPLETE_FLAG) && searchChipsEnabled;
 
   function handleProjectsFromCache() {
     setProjects(allProjects);
@@ -161,7 +162,7 @@ export function useSearch(
           const { processedData, tabs: splits } = response.data;
           if (processedData["All"].length > 0) {
             applySearchResults(processedData, splits);
-            tasksInputRef.current?.blur();
+            if (!searchAutocompleteEnabled) tasksInputRef.current?.blur();
           } else {
             handleStatesOnResponse(searchConfig.responseMessages.fail);
           }
@@ -379,7 +380,7 @@ export function useSearch(
             splits,
             options?.resetTab ? 0 : undefined
           );
-          document.getElementById(searchConfig.elementIds.input.id)?.blur();
+          if (!searchAutocompleteEnabled) document.getElementById(searchConfig.elementIds.input.id)?.blur();
         } else handleStatesOnResponse(searchConfig.responseMessages.fail);
       }
     } catch (error) {
@@ -509,6 +510,10 @@ export function useSearch(
 
       //Phase 3 (Since we are skipping suggestions right now)
       if (typedTasks.length > 0 && selectedIndex !== null) {
+        if (searchAutocompleteEnabled) {
+          event.preventDefault();
+          tasksInputRef.current?.blur();
+        }
         if (selectedIndex === -1 || selectedIndex === typedTasks.length - 1) {
         } else {
           setSelectedAndInView(
@@ -548,6 +553,10 @@ export function useSearch(
 
       //Phase 3 (Since we are skipping suggestions right now)
       if (typedTasks.length > 0 && selectedIndex !== null) {
+        if (searchAutocompleteEnabled) {
+          event.preventDefault();
+          tasksInputRef.current?.blur();
+        }
         if (selectedIndex <= 0) {
         } else {
           setSelectedAndInView(
@@ -751,6 +760,7 @@ export function useSearch(
     suggestedValue,
     includeArchived,
     searchChipsEnabled,
+    searchAutocompleteEnabled,
   ]);
 
   // -------------------- recieving data from React-Query

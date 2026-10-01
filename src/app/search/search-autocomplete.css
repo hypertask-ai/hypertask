@@ -1,0 +1,30 @@
+.search-autocomplete {
+  --bg-search-filter-people: #ede9fe;
+  --bg-search-filter-board: #dbeafe;
+  --bg-search-filter-label: #ffe4e6;
+  --bg-search-filter-status: #d1fae5;
+  --bg-search-filter-date: #fef3c7;
+  --bg-search-filter-has: #cffafe;
+  --border-search-filter-people: #8b5cf6;
+  --border-search-filter-board: #3b82f6;
+  --border-search-filter-label: #f43f5e;
+  --border-search-filter-status: #10b981;
+  --border-search-filter-date: #f59e0b;
+  --border-search-filter-has: #06b6d4;
+  --bg-search-highlight: var(--bg-mention-highlight);
+}
+
+:is(.dark, .amoled, .graphite) .search-autocomplete {
+  --bg-search-filter-people: #30283f;
+  --bg-search-filter-board: #23334c;
+  --bg-search-filter-label: #422a33;
+  --bg-search-filter-status: #203b32;
+  --bg-search-filter-date: #3a331f;
+  --bg-search-filter-has: #20383e;
+  --border-search-filter-people: #a78bfa;
+  --border-search-filter-board: #60a5fa;
+  --border-search-filter-label: #fb7185;
+  --border-search-filter-status: #34d399;
+  --border-search-filter-date: #fbbf24;
+  --border-search-filter-has: #22d3ee;
+}

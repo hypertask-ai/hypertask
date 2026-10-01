@@ -22,6 +22,8 @@ __pycache__/
 # misc
 .DS_Store
 *.pem
+.unlazy/
+.unlazy-hook-state.json
 
 # debug
 npm-debug.log*

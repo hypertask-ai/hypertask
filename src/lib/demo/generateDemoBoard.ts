@@ -94,9 +94,12 @@ export async function generateDemoBoard(purpose: string): Promise<DemoBoard> {
   const { object } = await generateObject({
     model,
     schema: BoardSchema,
-    temperature: 0.4,
-    maxOutputTokens: 700,
-    providerOptions: { gateway: { tags: ["demo-board"] } },
+    // Luna's completion budget includes reasoning as well as the board JSON.
+    maxOutputTokens: 4096,
+    providerOptions: {
+      openai: { reasoningEffort: "low" },
+      gateway: { tags: ["demo-board"] },
+    },
     system: SYSTEM,
     prompt: `Board purpose: ${purpose}`,
   });

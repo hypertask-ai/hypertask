@@ -11,9 +11,11 @@ This file is the map. It does not hold the how-to. At each step, load the skill 
 
 ## Before anything else
 
-0. **Session title.** Read the ticket (`hypertask tasks get HTPR-NNNN`) and make the first line of your first reply exactly `/rename HTPR-NNNN | <exact ticket title>`, title word for word. In Codex, print it as the suggested thread name.
+- **No ticket given: board check first** (Valentin, 2026-10-01). Run `~/.agents/skills/ship/scripts/board-check` (read only). It walks open PRs, then AI Review, QA and In Progress, and lists every ticket with no sign of life for 6 hours. Show Valentin each line as the full ticket title with its full URL and the suggested action, and ask per ticket: take it, move it back, or drop it. "move back to Bugs" or "move back to Todo" is only a suggestion; when the ticket is not clearly a bug or a feature, ask where it goes. Do nothing to a listed ticket until he answers. Then pick the top free bug and go to step 0.
+
+0. **Session title and link** (Valentin, 2026-10-01). As soon as you know the ticket, whether he gave it or you picked it ("pick a bug from board 15"), read it (`hypertask tasks get HTPR-NNNN`) and start your reply with exactly two lines: `/rename HTPR-NNNN | <exact ticket title>` (title word for word), then the full ticket URL (`https://app.hypertask.ai/detail/project-<projectId>/<number>`). Open that URL in his zsb pane. In Codex, print it as the suggested thread name.
 1. **Identity.** Every board write (claim, comment, move, assign, attachment) goes through the `vcc` command as "Valentins Claude Code", and only that. Never another identity, never the plain `hypertask` CLI for writes (Valentin's own token; reads only). Every comment's closing `Next:` paragraph ends with this session's exact resume command (`claude --resume <full $CLAUDE_CODE_SESSION_ID>`, or `codex resume <id>`). Read the ticket back after each write. If `vcc` fails, stop and tell Valentin in one line.
-2. **Checklist.** Load `unlazy`, then run `~/.agents/skills/ship/scripts/ship-gates HTPR-NNNN`. It writes the standard proof gates into this session's ledger (`~/.local/state/unlazy/sessions/<first 8 chars of the session id>/GATES.md`): ticket exists, PR named right, merged, deployed, live QA proof, Done. Add a gate for every extra outcome Valentin asks for. Nothing is reported done until `node ~/.agents/skills/unlazy/scripts/gate-check.mjs <ledger>` shows it met.
+2. **Checklist.** Load `unlazy`, then run `~/.agents/skills/ship/scripts/ship-gates HTPR-NNNN`. It writes and approves only its fixed, read-only checks in `$PWD/.unlazy/s-<first 8 chars of the session id>/GATES.md`, binding the full session id in `session`. More tickets append to that ledger. Put extra outcomes in the same scope's `gates/extra.md`; inspect and approve them separately. Run `node ~/.agents/skills/unlazy/scripts/gate-check.mjs <ledger>` after every map step and before any "done" report; quote its met, unmet and abandoned counts to Valentin. The installed unlazy Stop hook blocks ending a turn while gates are unmet. If you must wait for Valentin (a `Question:` comment or Valentin Review), keep each remaining gate and append `ABANDON: <id> waiting for Valentin: <reason>` at column 1 of its ledger. Recheck, report the abandonment and required handoff, and stop without claiming completion. A `ship-check duplicate` ticket uses these same gates.
 3. **Helpers are Codex sub-sessions via hax, each with its own ledger** (Valentin, 2026-10-01). Hand big reading, writing or self-contained coding to Codex: `hax --provider=codex --model=gpt-6.1-sol --effort=high --no-session -p "<prompt>"` (`--effort=xhigh` when hard), in the background, one hax run per independent piece. Never Claude subagents for delegated work, never `--provider=zai` or OpenRouter. Every helper prompt starts with: "Use the unlazy skill (~/.agents/skills/unlazy/SKILL.md): write GATES.md first and prove every gate before your final answer." Re-run its gates yourself (`gate-check.mjs --reverify`) before you trust it.
 4. **Voice.** Load `pospeak` (chains `unslop` and `i-have-adhd`) for every reply to Valentin.
 
@@ -31,6 +33,7 @@ Repo skills live in the app repo at `.claude/skills/`; their index is `.claude/s
 | Merge and deploy | `vcc` QA routine steps 1 to 3 | `ship-check deployed HTPR-NNNN` prints `deployed ok` |
 | Live QA | repo `verify-qa` and its feature map | `ship-check proof HTPR-NNNN` prints `proof ok` |
 | Report and close | `vcc` QA routine step 5, plus the QA record below | `ship-check done HTPR-NNNN` prints `done ok` |
+| Clean up | the cleanup rule below | your worktree and branch are gone (`git worktree list` and `git branch -a` no longer show them) |
 
 ## Rules that hold the whole session
 
@@ -46,9 +49,24 @@ Repo skills live in the app repo at `.claude/skills/`; their index is `.claude/s
   - **In Progress** when you claim and whenever you go back to fixing.
   - **AI Review** as soon as the PR is open, until merged.
   - **Done** once the merge is live and QA passed with evidence on the ticket.
-  - **Valentin Review** only for a flagged feature that needs his yes, with one `Question:` comment. Then the Done gate stays open and you say so.
+  - **Valentin Review** only for a flagged feature that needs his yes, with one `Question:` comment. Abandon the remaining gates with that waiting reason per step 2, and say so.
   Follow-up work becomes its own ticket.
-- **Old automated comments do not count (Valentin, 2026-10-01).** The automated agents were retired on 2026-10-01. Their claims, "Blocked" notes, decisions, plans and progress on a ticket are history, not state. Authors include Product Bot, Dev 1, Dev 2, Feature Dev 1, QA 1, Supervisor and any "worker" or "drain" bot. A ticket with only such comments is free: pick it, claim it via `vcc` and treat the bug as open. Read those comments only for facts about the bug (steps, screenshots, error text), and re-check those facts on the live site. A ticket is taken only when all three hold: it is assigned to Valentins Claude Code, it has a "Claimed." comment from Valentins Claude Code with a `claude --resume <id>` (or `codex resume <id>`) line, and that session is alive: `find ~/.claude/projects ~/.codex/sessions -name '*<id>*' -mmin -1440` finds a file changed in the last 24 hours. Otherwise the claim is stale and the ticket is free.
+- **The ticket tells the whole story; comments are for people** (Valentin, 2026-10-01: "comments are for humans and agent chatter goes into the agent chatter").
+  - **Comments** only when you speak to a person: the claim, a `Question:` for Valentin, the QA verdict. Plain language (pospeak), bold first sentence, never notes to yourself.
+  - **Agent activity** gets everything else: plans, progress, retries, test runs. Write it with `vcc activity add HTPR-NNNN "<one line>"` at every step of the map (claimed, fix done, PR opened, checks green, merged, deployed, QA done) and at least every 2 hours while you work. This is your heartbeat.
+  - **Claim** = assign the ticket to Valentins Claude Code, plus a "Claimed." comment whose `Next:` paragraph carries your resume command.
+  - **Taken or free:** a ticket is taken when it has such a claim and the claiming agent's newest agent activity (`vcc activity last HTPR-NNNN`) is under 6 hours old. Older than 6 hours: the claim is stale, and the board check lists the ticket for Valentin.
+- **Already fixed by another ticket: the duplicate path** (Valentin, 2026-10-01). When your bug was already fixed by another ticket's merged PR, ship nothing and throw away any duplicate fix. Then:
+  1. `~/.agents/skills/ship/scripts/ship-check duplicate HTPR-NNNN HTPR-MMMM <that PR number>` (HTPR-MMMM is the ticket that fixed it). From then on the merged, deployed and proof gates check that PR.
+  2. Prove the bug is gone on the live site, exactly like any QA run (repo `verify-qa`, `proof.md` with the fixing PR's merge sha).
+  3. One comment via `vcc`: bold first sentence "Already fixed by <full title of HTPR-MMMM as a link>.", what you checked live, the evidence attached. Then `vcc task move HTPR-NNNN --section "Done"`.
+  If it is only partly fixed, it is not a duplicate: keep working it as a normal ticket.
+- **Clean up after yourself** (Valentin, 2026-10-01: "I don't want this stuff to linger around as it clogs up the VPS"). Once the ticket is in Done, from the main checkout (never from inside the worktree):
+  1. `git -C <worktree> status --porcelain` must be empty; if not, commit or ask, never discard.
+  2. `git worktree remove <worktree>`, then `git branch -d <branch>` and `git push origin --delete <branch>` (only when the PR is merged).
+  3. Keep the QA evidence in `~/.local/state/vcc-evidence/HTPR-NNNN/`.
+  Only ever remove the worktree and branch this session created. Write one agent activity line saying what you removed.
+- **Old automated comments do not count (Valentin, 2026-10-01).** The automated agents were retired on 2026-10-01. Their claims, "Blocked" notes, decisions, plans and progress on a ticket are history, not state. Authors include Product Bot, Dev 1, Dev 2, Feature Dev 1, QA 1, Supervisor and any "worker" or "drain" bot. A ticket with only such comments is free: pick it, claim it via `vcc` and treat the bug as open. Read those comments only for facts about the bug (steps, screenshots, error text), and re-check those facts on the live site. Whether a ticket is taken follows the rule above, read from the ticket alone.
 
 Nothing is "live" until the Production deployment for the merge sha is `success` and you verified the change on app.hypertask.ai with evidence on the ticket.
 
