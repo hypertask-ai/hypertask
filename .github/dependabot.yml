@@ -55,6 +55,12 @@ updates:
         versions: [">= 1.7.0"]
       - dependency-name: "@better-auth/passkey"
         versions: [">= 1.7.0"]
+      # isomorphic-dompurify 3+ bundles jsdom 27+, which broke the server
+      # sanitizer on Vercel twice on 2026-10-01 (missing jsdom stylesheet,
+      # then ERR_REQUIRE_ESM from @exodus/bytes; HTPR-6795, rolled back in
+      # #842 and #853). The cleaning engine itself (dompurify) still updates.
+      - dependency-name: "isomorphic-dompurify"
+        versions: [">= 3.0.0"]
     groups:
       stack-minor:
         applies-to: version-updates
