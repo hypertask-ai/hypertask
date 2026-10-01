@@ -1,0 +1,104 @@
+#!/usr/bin/env bash
+# ship-check: proof checks for /ship sessions (Valentin, 2026-10-01).
+# Used by the ledger gates (ship-gates) and by the Claude Code PreToolUse hook (guard).
+#   ship-check title <pr>        PR title is "HTPR-NNNN [TYPE] ..." and that ticket exists
+#   ship-check pr <T>            the PR for ticket T exists and is named right
+#   ship-check ticket <T>        ticket exists on the board
+#   ship-check merged <T>        a PR titled with T is merged into production
+#   ship-check deployed <T>      the Production deployment for that merge sha is success
+#   ship-check proof <T>         ~/.local/state/vcc-evidence/<T>/proof.md follows the verify-qa contract
+#   ship-check done <T>          ticket is in Done
+#   ship-check guard             hook mode: reads the hook JSON on stdin, exit 2 blocks the command
+set -uo pipefail
+REPO=hypertask-ai/hypertask
+EVID=${VCC_EVIDENCE_DIR:-$HOME/.local/state/vcc-evidence}
+TITLE_RE='^(HTPR|HYFA|YPER4)-[0-9]+ \[(BUGFIX|FEATURE|IMPROVE|CLI/MCP/AI|SPEED|FEEDBACK|DASH|QA|BOARD|COST|PLAN|INFRA)\] [^ ]'
+
+fail() { echo "FAIL: $*"; exit 1; }
+
+check_ticket() {
+  hypertask tasks get "$1" --json 2>/dev/null | jq -e '.success == true and (.tasks | length) > 0' >/dev/null \
+    || fail "ticket $1 not found on the board"
+  echo "ticket ok"
+}
+
+check_title() {
+  local t; t=$(gh pr view "$1" -R "$REPO" --json title --jq .title 2>/dev/null) || fail "PR $1 not found"
+  [[ $t =~ $TITLE_RE ]] || fail "PR $1 title \"$t\" must be HTPR-NNNN [TYPE] description"
+  ( check_ticket "${t%% *}" ) >/dev/null || fail "PR $1 names ${t%% *}, which is not on the board"
+  echo "title ok"
+}
+
+merged_sha() {
+  gh pr list -R "$REPO" --state merged --base production --search "$1 in:title" --json title,mergeCommit \
+    --jq "[.[] | select(.title | startswith(\"$1 \"))][0].mergeCommit.oid // empty" 2>/dev/null
+}
+
+check_pr() {
+  local n; n=$(gh pr list -R "$REPO" --state all --search "$1 in:title" --json number,title \
+    --jq "[.[] | select(.title | startswith(\"$1 \"))][0].number // empty" 2>/dev/null)
+  [ -n "$n" ] || fail "no PR titled \"$1 [TYPE] ...\""
+  check_title "$n"
+}
+
+check_merged() { [ -n "$(merged_sha "$1")" ] || fail "no merged PR titled $1"; echo "merged ok"; }
+
+check_deployed() {
+  local sha id state; sha=$(merged_sha "$1"); [ -n "$sha" ] || fail "no merged PR titled $1"
+  id=$(gh api "repos/$REPO/deployments?sha=$sha&environment=Production" --jq '.[0].id // empty' 2>/dev/null)
+  [ -n "$id" ] || fail "no Production deployment for $sha"
+  state=$(gh api "repos/$REPO/deployments/$id/statuses" --jq '.[0].state // empty' 2>/dev/null)
+  [ "$state" = success ] || fail "Production deployment for $sha is \"$state\""
+  echo "deployed ok"
+}
+
+check_proof() {
+  local d="$EVID/$1" p="$EVID/$1/proof.md"
+  [ -s "$p" ] || fail "missing $p (verify-qa evidence contract)"
+  grep -qE '^[[:space:]]*Feature map: \.claude/skills/verify-qa/reference/feature-map/[a-z0-9-]+\.md' "$p" || fail "proof.md has no 'Feature map: .claude/skills/verify-qa/reference/feature-map/<page>.md' line"
+  grep -qE '^[[:space:]]*Doctor:' "$p" || fail "proof.md has no 'Doctor:' line"
+  grep -qE '^[[:space:]]*## Cases' "$p" || fail "proof.md has no '## Cases' section"
+  grep -qE '^[[:space:]]*- PASS: ' "$p" || fail "proof.md has no PASS case"
+  ! grep -qE '^[[:space:]]*- FAIL: ' "$p" || fail "proof.md still lists a FAIL case"
+  [ -n "$(find "$d" -name "*.png" -print -quit)" ] || fail "no screenshot (*.png) under $d"
+  echo "proof ok"
+}
+
+check_done() {
+  local s; s=$(hypertask tasks get "$1" --json 2>/dev/null | jq -r '.tasks[0].section // empty')
+  [ "$s" = Done ] || fail "$1 is in \"$s\", not Done"
+  echo "done ok"
+}
+
+guard() {
+  local cmd pr t out
+  cmd=$(jq -r '.tool_input.command // empty')
+  # gh pr merge: PR must be named right and its ticket must exist.
+  if [[ $cmd =~ (^|[;&|][[:space:]]*)gh[[:space:]]+pr[[:space:]]+merge([[:space:]]+([0-9]+))? ]]; then
+    [[ $cmd == *"-R"* || $cmd == *"--repo"* ]] && [[ $cmd != *"$REPO"* ]] && exit 0
+    pr=${BASH_REMATCH[3]:-}
+    [ -n "$pr" ] || pr=$(gh pr view --json number --jq .number 2>/dev/null)
+    [ -n "$pr" ] || exit 0
+    out=$(check_title "$pr") || { echo "ship-check blocked the merge: ${out#FAIL: }. Fix it with gh pr edit $pr --title \"HTPR-NNNN [TYPE] ...\" (create the ticket via vcc if it does not exist)." >&2; exit 2; }
+  fi
+  # vcc task move <HTPR-NNNN> ... Done: needs a merged PR, a success deploy and proof.md.
+  if [[ $cmd =~ (^|[;&|][[:space:]]*)vcc[[:space:]]+tasks?[[:space:]]+move[[:space:]]+(HTPR-[0-9]+).*--section[[:space:]=]+[\"\']?Done ]]; then
+    t=${BASH_REMATCH[2]}
+    for c in merged deployed proof; do
+      out=$("check_$c" "$t") || { echo "ship-check blocked moving $t to Done: ${out#FAIL: }. Follow .claude/skills/verify-qa/SKILL.md first." >&2; exit 2; }
+    done
+  fi
+  exit 0
+}
+
+case "${1:-}" in
+  title) check_title "$2" ;;
+  ticket) check_ticket "$2" ;;
+  pr) check_pr "$2" ;;
+  merged) check_merged "$2" ;;
+  deployed) check_deployed "$2" ;;
+  proof) check_proof "$2" ;;
+  done) check_done "$2" ;;
+  guard) guard ;;
+  *) sed -n '2,12p' "$0"; exit 1 ;;
+esac

@@ -8,6 +8,8 @@ Read the "when to load" column, open that SKILL.md, and follow it, including its
 
 | Skill | When to load (/ship step) | Path |
 |---|---|---|
+| ship | Start of every session (`/ship <ticket>`): the map of steps, the proof checklist, the merge and Done block | .claude/skills/ship/SKILL.md |
+| vcc | Claim, board writes, merge, deploy watch, report | .claude/skills/vcc/SKILL.md |
 | reuse-existing-ui | Before UI code | .claude/skills/reuse-existing-ui/SKILL.md |
 | fix-bug | The fix, when it restores behaviour that used to work | .claude/skills/fix-bug/SKILL.md |
 | ship-feature-behind-flag | The fix, when it adds behaviour the user has not seen | .claude/skills/ship-feature-behind-flag/SKILL.md |

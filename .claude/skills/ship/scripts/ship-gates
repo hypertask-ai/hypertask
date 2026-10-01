@@ -1,0 +1,21 @@
+#!/usr/bin/env bash
+# ship-gates HTPR-NNNN: write the standard /ship gates into this session's unlazy ledger.
+set -euo pipefail
+T=${1:?usage: ship-gates HTPR-NNNN}
+[[ $T =~ ^HTPR-[0-9]+$ ]] || { echo "ticket must look like HTPR-1234"; exit 1; }
+ID=${CLAUDE_CODE_SESSION_ID:-${CODEX_SESSION_ID:-$T}}
+L=$HOME/.local/state/unlazy/sessions/${ID:0:8}/GATES.md
+C=$HOME/.agents/skills/ship/scripts/ship-check
+mkdir -p "$(dirname "$L")"
+grep -q "ship gates for $T" "$L" 2>/dev/null && { echo "already in $L"; exit 0; }
+[ -s "$L" ] || printf '# Gates: /ship %s\n\nScope: take %s end to end, live and verified.\n' "$T" "$T" > "$L"
+n=$(grep -cE '^- \[.\] [A-Z]+[0-9]+' "$L" || true)
+g() { n=$((n+1)); printf '\n- [ ] S%d: %s\n  CHECK: %s %s %s\n  EXPECT: %s\n  EVIDENCE: pending\n' "$n" "$1" "$C" "$2" "$T" "$3" >> "$L"; }
+printf '\n<!-- ship gates for %s -->\n' "$T" >> "$L"
+g "The ticket exists on the board" ticket "ticket ok"
+g "The PR is named HTPR-NNNN [TYPE] description" pr "title ok"
+g "The PR is merged into production" merged "merged ok"
+g "The Production deployment for the merge is success" deployed "deployed ok"
+g "Live QA proof.md follows the verify-qa contract, with screenshots" proof "proof ok"
+g "The ticket is in Done" done "done ok"
+echo "wrote ship gates for $T to $L"
