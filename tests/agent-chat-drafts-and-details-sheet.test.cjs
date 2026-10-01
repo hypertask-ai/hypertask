@@ -1,3 +1,4 @@
+const { readAgentChatSource } = require("./helpers/agent-chat-source.cjs");
 // HTPR-6005 QA regressions: unsent composer text used to vanish when the user
 // switched agents or reloaded, the mobile "Agent details" sheet trapped
 // neither focus nor Escape, and a message showed no time until hovered.
@@ -7,10 +8,7 @@ const path = require("node:path");
 const test = require("node:test");
 
 const root = path.resolve(__dirname, "..");
-const chat = fs.readFileSync(
-  path.join(root, "src/app/agents/chat/AgentChatClient.tsx"),
-  "utf8",
-);
+const chat = readAgentChatSource();
 
 // The helper is plain TypeScript with no imports, so stripping the type
 // annotations is enough to exercise the real logic here.
