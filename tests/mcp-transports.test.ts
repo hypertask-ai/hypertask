@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { spawn } from 'node:child_process'
+import { spawn, spawnSync } from 'node:child_process'
 import { createServer } from 'node:net'
 import { readFileSync, existsSync } from 'node:fs'
 import { createRequire } from 'node:module'
@@ -120,7 +120,7 @@ async function payload(response: Response) {
     : text)
 }
 
-test('actual routes preserve legacy SSE across instances and support MCP 2 streamable HTTP', { timeout: 30000 }, async () => {
+test('actual routes preserve legacy SSE across instances and support MCP 2 streamable HTTP', { timeout: 60000 }, async (t) => {
   const port = await new Promise<number>((resolve) => {
     const server = createServer()
     server.listen(0, '127.0.0.1', () => {
@@ -128,7 +128,14 @@ test('actual routes preserve legacy SSE across instances and support MCP 2 strea
       server.close(() => resolve(port))
     })
   })
-  const redis = spawn('redis-server', ['--bind', '127.0.0.1', '--port', String(port), '--save', '', '--appendonly', 'no'])
+  const redisArgs = ['--bind', '127.0.0.1', '--port', String(port), '--save', '', '--appendonly', 'no']
+  const nativeRedis = spawnSync('redis-server', ['--version']).status === 0
+  const redis = nativeRedis
+    ? spawn('redis-server', redisArgs, { signal: t.signal })
+    : spawn('docker', ['run', '--rm', '--network', 'host',
+      'redis:7-alpine@sha256:ff02b58f971e7d7d156a1267e283fcbbeee91773b6aa36c49dac28ecfe28eadf',
+      'redis-server', ...redisArgs], { signal: t.signal })
+  t.diagnostic(`Redis fixture: ${nativeRedis ? 'local binary' : 'disposable Docker container'}`)
   const previousUrl = process.env.REDIS_URL
   process.env.REDIS_URL = `redis://127.0.0.1:${port}`
   let inspector: Redis | undefined
@@ -231,8 +238,10 @@ test('actual routes preserve legacy SSE across instances and support MCP 2 strea
     else process.env.REDIS_URL = previousUrl
     await Promise.all(streams.map((stream) => stream.reader.cancel().catch(() => {})))
     inspector?.disconnect()
-    const stopped = new Promise((resolve) => redis.once('exit', resolve))
-    redis.kill('SIGTERM')
-    await stopped
+    if (redis.pid && redis.exitCode === null && redis.signalCode === null) {
+      const stopped = new Promise((resolve) => redis.once('exit', resolve))
+      redis.kill('SIGTERM')
+      await stopped
+    }
   }
 })
