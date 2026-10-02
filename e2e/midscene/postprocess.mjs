@@ -32,30 +32,37 @@ export function ticketPlan(result) {
 
 export function processResults(results, state, { listTickets, createTicket, ensureScreenshot = () => {}, dryRun = false, threshold = 1, log = console.log }) {
   const summaries = [];
+  const errors = [];
   for (const result of results) {
     const entry = state[result.flow] || { consecutiveFails: 0, flakeCount: 0 };
     entry.consecutiveFails = result.ok ? 0 : entry.consecutiveFails + 1;
     entry.flakeCount += result.ok ? 0 : 1;
-    if (!result.ok && entry.consecutiveFails >= threshold) {
-      const plan = ticketPlan(result);
-      // Check the board on every failure, including after a green night or a lost state file.
-      const existing = listTickets(plan.title).find((task) => task.title === plan.title && isOpenTicket(task));
-      if (existing || (dryRun && entry.dryRunPlanned)) {
-        if (existing && !dryRun) ensureScreenshot(existing, plan);
-        log(`SUPPRESSED: ${result.flow} already has one open${existing ? '' : ' simulated'} Bugs ticket`);
-      } else if (dryRun) {
-        log(`DRY RUN: would create ONE Bugs ticket on board 15: ${JSON.stringify(plan)}`);
-        // Persist only in the separate dry-run state, never suppress real filing.
-        entry.dryRunPlanned = true;
-      } else {
-        createTicket(plan);
-        log(`FILED: ${result.flow} Bugs ticket with screenshot`);
+    try {
+      if (!result.ok && entry.consecutiveFails >= threshold) {
+        const plan = ticketPlan(result);
+        // Check the board on every failure, including after a green night or a lost state file.
+        const existing = listTickets(plan.title).find((task) => task.title === plan.title && isOpenTicket(task));
+        if (existing || (dryRun && entry.dryRunPlanned)) {
+          if (existing && !dryRun) ensureScreenshot(existing, plan);
+          log(`SUPPRESSED: ${result.flow} already has one open${existing ? '' : ' simulated'} Bugs ticket`);
+        } else if (dryRun) {
+          log(`DRY RUN: would create ONE Bugs ticket on board 15: ${JSON.stringify(plan)}`);
+          // Persist only in the separate dry-run state, never suppress real filing.
+          entry.dryRunPlanned = true;
+        } else {
+          createTicket(plan);
+          log(`FILED: ${result.flow} Bugs ticket with screenshot`);
+        }
       }
+    } catch (err) {
+      errors.push(`${result.flow}: ${err.message}`);
+      log(`REPORT FAILED: ${result.flow}: ${err.message}`);
     }
     state[result.flow] = entry;
     summaries.push(`${result.flow}=${result.ok ? 'pass' : `fail(${entry.consecutiveFails})`}`);
   }
   log(summaries.join(' '));
+  if (errors.length) throw new Error(`Incident reporting failed: ${errors.join('; ')}`);
   return state;
 }
 
@@ -93,20 +100,23 @@ export function main(argv) {
   const dryRun = dryRunArg === '1';
   const targetState = dryRun ? `${statePath}.dry-run` : statePath;
   const state = existsSync(targetState) ? JSON.parse(readFileSync(targetState, 'utf8')) : {};
-  processResults(payload.results, state, {
-    threshold, dryRun, listTickets,
-    ensureScreenshot: (existing, plan) => {
-      const task = cliJson(['tasks', 'get', String(existing.id)]).tasks?.[0];
-      if (!Array.isArray(task?.attachments)) throw new Error('Cannot verify existing failure screenshot');
-      if (!task.attachments.some((attachment) => attachment.fileName?.startsWith(`${plan.flow}-`) && /\.png$/i.test(attachment.fileName))) {
-        // A create can succeed before its attachment fails. Repair the same ticket, never create another.
-        cliJson(['comment', 'add', String(existing.id), '--text', plan.description, '--attach', plan.screenshotPath]);
-      }
-    },
-    createTicket: (plan) => cliJson(['tasks', 'create', '--project', '15', '--section', 'Bugs',
-      '--title', plan.title, '--description', plan.description, '--attach', plan.screenshotPath]),
-  });
-  writeFileSync(targetState, JSON.stringify(state, null, 2));
+  try {
+    processResults(payload.results, state, {
+      threshold, dryRun, listTickets,
+      ensureScreenshot: (existing, plan) => {
+        const task = cliJson(['tasks', 'get', String(existing.id)]).tasks?.[0];
+        if (!Array.isArray(task?.attachments)) throw new Error('Cannot verify existing failure screenshot');
+        if (!task.attachments.some((attachment) => attachment.fileName?.startsWith(`${plan.flow}-`) && /\.png$/i.test(attachment.fileName))) {
+          // A create can succeed before its attachment fails. Repair the same ticket, never create another.
+          cliJson(['comment', 'add', String(existing.id), '--text', plan.description, '--attach', plan.screenshotPath]);
+        }
+      },
+      createTicket: (plan) => cliJson(['tasks', 'create', '--project', '15', '--section', 'Bugs',
+        '--title', plan.title, '--description', plan.description, '--attach', plan.screenshotPath]),
+    });
+  } finally {
+    writeFileSync(targetState, JSON.stringify(state, null, 2));
+  }
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {

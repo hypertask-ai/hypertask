@@ -19,7 +19,7 @@ import path from 'node:path';
 import puppeteer from 'puppeteer';
 import { PuppeteerAgent } from '@midscene/web/puppeteer';
 import { flows, getFlow } from './flows/index.mjs';
-import { api, prepareQa, createFixtureTask, findCreatedTask, cleanupQa, observeFixtures, uploadFixture, resolveStep, APP_ORIGIN } from './qa-session.mjs';
+import { api, prepareQa, createFixtureTask, findCreatedTask, cleanupQaAfterFlow, observeFixtures, uploadFixture, resolveStep, APP_ORIGIN } from './qa-session.mjs';
 
 const RESULTS_DIR = 'midscene_run';
 const RESULTS_FILE = path.join(RESULTS_DIR, 'results-latest.json');
@@ -207,10 +207,7 @@ async function runFlow(browser, flow) {
     if (fixture) {
       const beforeCleanup = !result.screenshotPath ? await page.screenshot({ fullPage: true }).catch(() => null) : null;
       try {
-        // Unmount React so deleting a fixture chat cannot create its replacement.
-        await page.goto(`${APP_ORIGIN}/favicon.ico`, { waitUntil: 'load', timeout: 30_000 });
-        stopObserving?.();
-        await cleanupQa(page, fixture);
+        await cleanupQaAfterFlow(page, fixture, stopObserving);
         console.log(`[${flow.id}] QA cleanup passed`);
       } catch (err) {
         if (result.ok) result.failedStep = 'QA fixture cleanup';

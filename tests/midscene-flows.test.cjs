@@ -93,6 +93,45 @@ test('lookup failure, unknown ticket state and missing evidence do not create du
   assert.throws(() => processResults([{ ...result, screenshotPath: '/missing.png' }], {}, deps), /lacks a failing step/);
 });
 
+test('missing evidence or a CLI failure does not suppress a later flow incident', async (t) => {
+  const [, , { processResults }] = await modules;
+  const first = failureFixture(t);
+  const later = { ...first, flow: 'signed-in-file-upload' };
+  for (const mode of ['evidence', 'lookup', 'create', 'repair']) {
+    const state = {};
+    const created = [];
+    const deps = {
+      listTickets: (title) => {
+        if (title.includes(first.flow) && mode === 'lookup') throw new Error('lookup failed');
+        return title.includes(first.flow) && mode === 'repair' ? [{ title, status: 'Normal', section: 'Bugs' }] : [];
+      },
+      createTicket: (plan) => {
+        if (plan.flow === first.flow && mode === 'create') throw new Error('create failed');
+        created.push(plan.flow);
+      },
+      ensureScreenshot: () => { throw new Error('repair failed'); },
+      log: () => {},
+    };
+    assert.throws(() => processResults([mode === 'evidence' ? { ...first, screenshotPath: null } : first, later], state, deps), /Incident reporting failed/);
+    assert.deepEqual(created, [later.flow], mode);
+    assert.equal(state[later.flow].consecutiveFails, 1);
+  }
+});
+
+test('reporting failure still persists processed state and exits nonzero without a board write', async (t) => {
+  const [, , { main }] = await modules;
+  const failure = { ...failureFixture(t), screenshotPath: null };
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'midscene-state-test-'));
+  t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+  const resultsPath = path.join(dir, 'results.json');
+  const statePath = path.join(dir, 'state.json');
+  fs.writeFileSync(resultsPath, JSON.stringify({ startedAt: new Date().toISOString(), results: [failure, { flow: 'later-green', ok: true }] }));
+  assert.throws(() => main([statePath, resultsPath, '1', '15', 'Bugs', '0', String(Date.now() / 1000)]), /Incident reporting failed/);
+  const state = JSON.parse(fs.readFileSync(statePath));
+  assert.equal(state[failure.flow].consecutiveFails, 1);
+  assert.equal(state['later-green'].consecutiveFails, 0);
+});
+
 test('stale, invalid timestamp and empty results never reach board lookups or overwrite state', async (t) => {
   const [, , { main }] = await modules;
   const result = failureFixture(t);
@@ -134,6 +173,43 @@ test('QA cleanup permanently removes only the exact fixture and discards its gra
   assert(requests.some((r) => r.route === '/api/ai-chat/delete-session?delete=own-session'));
   assert(!requests.some((r) => r.body?.taskId === 999));
   assert.deepEqual(deletedObjects, [{ url: 'https://storage.example/own-file.txt', method: 'HEAD' }]);
+});
+
+test('reminder cancellation failure does not skip permanent task deletion', async () => {
+  const [, { cleanupQa }] = await modules;
+  let removed = false;
+  const fixture = { project: { id: 6859, title: 'QA Sandbox' }, title: 'unique run', tasks: [123], pending: [], uploads: [] };
+  const page = { url: () => 'https://app.hypertask.ai/favicon.ico', evaluate: async (_fn, req) => {
+    if (req.route.includes('taskDeleteReminder')) return { status: 503, body: null };
+    if (req.method === 'DELETE') removed = true;
+    return { status: 200, body: req.route.includes('getAllForAssignees') ? { owner: { id: 2343 }, members: [] }
+      : req.route.includes('boardTasks') ? { tasks: removed ? [] : [{ id: 123, title: 'unique run' }] }
+      : req.route.includes('reminders') ? [] : {} };
+  } };
+  await assert.rejects(cleanupQa(page, fixture), /taskDeleteReminder failed: HTTP 503/);
+  assert.equal(removed, true);
+});
+
+test('failed navigation closes React and still cleans through a fresh same-context page', async () => {
+  const [, { cleanupQaAfterFlow }] = await modules;
+  const events = [];
+  let removed = false;
+  const fixture = { project: { id: 6859, title: 'QA Sandbox' }, title: 'unique run', tasks: [123], pending: [], uploads: [] };
+  const cleanupPage = {
+    goto: async () => { events.push('fresh navigation'); },
+    close: async () => { events.push('fresh close'); },
+    url: () => 'https://app.hypertask.ai/favicon.ico',
+    evaluate: async (_fn, req) => {
+      if (req.method === 'DELETE') { events.push('delete task'); removed = true; }
+      return { status: 200, body: req.route.includes('getAllForAssignees') ? { owner: { id: 2343 }, members: [] }
+        : req.route.includes('boardTasks') ? { tasks: removed ? [] : [{ id: 123, title: 'unique run' }] }
+        : req.route.includes('reminders') ? [] : {} };
+    },
+  };
+  const page = { goto: async () => { throw new Error('navigation failed'); }, close: async () => { events.push('original close'); },
+    browserContext: () => ({ newPage: async () => cleanupPage }) };
+  await assert.rejects(cleanupQaAfterFlow(page, fixture, () => events.push('stop observer')), /navigation failed/);
+  assert.deepEqual(events, ['original close', 'fresh navigation', 'stop observer', 'delete task', 'fresh close']);
 });
 
 test('cleanup rejects an unrelated task id and a storage object that remains accessible', async (t) => {

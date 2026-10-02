@@ -99,6 +99,8 @@ export async function cleanupQa(page, fixture) {
   for (const id of fixture.tasks) {
     try {
       await api(page, '/api/queues/tasks/taskDeleteReminder', 'POST', { taskId: id });
+    } catch (err) { errors.push(err.message); }
+    try {
       await api(page, `/api/tasks/deleteTask?taskId=${id}`, 'DELETE');
     } catch (err) { errors.push(err.message); }
   }
@@ -121,6 +123,27 @@ export async function cleanupQa(page, fixture) {
   const reminders = await api(page, '/api/reminders/getAll');
   if (reminders.some((r) => fixture.tasks.includes(r.taskId))) errors.push('QA fixture reminder still exists');
   if (errors.length) throw new Error(`QA cleanup failed: ${errors.join('; ')}`);
+}
+
+export async function cleanupQaAfterFlow(page, fixture, stopObserving) {
+  const errors = [];
+  let cleanupPage = page;
+  try {
+    await page.goto(`${APP_ORIGIN}/favicon.ico`, { waitUntil: 'load', timeout: 30_000 });
+  } catch (err) {
+    errors.push(err.message);
+    // Closing React prevents deletion of a chat from creating its replacement.
+    const context = page.browserContext();
+    await page.close().catch((closeError) => errors.push(closeError.message));
+    try {
+      cleanupPage = await context.newPage();
+      await cleanupPage.goto(`${APP_ORIGIN}/favicon.ico`, { waitUntil: 'load', timeout: 30_000 });
+    } catch (retryError) { errors.push(retryError.message); }
+  }
+  stopObserving?.();
+  await cleanupQa(cleanupPage, fixture).catch((err) => errors.push(err.message));
+  if (cleanupPage !== page) await cleanupPage.close().catch((err) => errors.push(err.message));
+  if (errors.length) throw new Error(errors.join('; '));
 }
 
 export function observeFixtures(page, fixture) {
