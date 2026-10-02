@@ -24,6 +24,7 @@ stubLocal("src/app/unauthorized/page.tsx", { default: Unavailable });
 stubLocal("src/utils/controllers/taskDetail/load.ts", {
   fetchCommentsForSlug: async () => [],
   fetchTaskDetail: async () => null,
+  findTaskNumberAlias: async () => null,
   parseDetailSlug: () => ({ projectId: 15, uniqueIndex: 6562 }),
   parseProjectSlug: () => 15,
 });

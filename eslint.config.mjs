@@ -2,7 +2,7 @@ import { defineConfig } from "eslint/config";
 import { fixupConfigRules } from "@eslint/compat";
 import tsParser from "@typescript-eslint/parser";
 import nextCoreWebVitals from "eslint-config-next/core-web-vitals";
-import { styleGuideRuleRegistrationConfig } from "./eslint-local-rules/style-guide.mjs";
+import { styleGuideLintConfig } from "./eslint-local-rules/style-guide.mjs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -32,8 +32,8 @@ export default defineConfig([
       parser: tsParser,
     },
   },
-  // YPER4-5 enables the exported rule set after it adds suppressions for existing violations.
-  styleGuideRuleRegistrationConfig,
+  // Existing style debt is recorded in eslint-local-rules/style-guide-suppressions.json.
+  styleGuideLintConfig,
   {
     // HTPR-6160: "@/lib/flags" reaches ioredis through getSessionUser, so a browser
     // component importing it breaks the production build with `Can't resolve 'tls'`.

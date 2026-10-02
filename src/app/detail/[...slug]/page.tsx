@@ -2,6 +2,7 @@ import TaskDetail from "./TaskDetailComp";
 import {
   fetchCommentsForSlug,
   fetchTaskDetail,
+  findTaskNumberAlias,
   parseDetailSlug,
   parseProjectSlug,
 } from "@/utils/controllers/taskDetail/load";
@@ -96,6 +97,10 @@ export default async function Page(
 
   task = taskResult;
   if (!task) {
+    const currentTask = await findTaskNumberAlias(slug, userObj.id);
+    if (currentTask) {
+      redirect(`/detail/project-${currentTask.projectId}/${currentTask.uniqueIndex}`);
+    }
     return <Unauthorized />;
   }
 

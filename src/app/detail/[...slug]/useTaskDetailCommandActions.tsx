@@ -9,7 +9,7 @@ import { wrapBlockQuote } from "@/utils/helperFunctions/TaskDetail";
 import { LIKESHORTCUTEVENT } from "@/lib/constants/constants";
 import type { TaskDetailContext } from "./TaskDetailContext";
 function createTaskDetailCommandActions(getContext: () => TaskDetailContext) {
-  const { currentId, comments, markAsDone, setCurrentTask, summarizeTicket, callBackHandlerSubtaskLinking, currentUser, currentTask, handleStarTask, navigateToNextTask, setShowRemindMeModal, callBackHandlerRemoveParent, PostFollower, queryClient, setAiChatAutoOpenSuppressed, showAiChatInterface, setAiChatExplicitOpenAt, setShowAiChatInterface, startNewSession, aiChatEditor, copyCommentToAiChat, summarizeComment, setEditMode, focusOn, copyTicketNumber, copyTitleAndTicketNumber, copyTaskURL, copyTaskFormattedURL, copySharedTaskURL, sharedLink, copySharedTaskFormattedURL } = getContext();
+  const { currentId, comments, markAsDone, setCurrentTask, summarizeTicket, callBackHandlerSubtaskLinking, currentUser, currentTask, handleStarTask, navigateToNextTask, setShowRemindMeModal, callBackHandlerRemoveParent, PostFollower, queryClient, setAiChatAutoOpenSuppressed, showAiChatInterface, setAiChatExplicitOpenAt, setShowAiChatInterface, copyCommentToAiChat, summarizeComment, setEditMode, focusOn, copyTicketNumber, copyTitleAndTicketNumber, copyTaskURL, copyTaskFormattedURL, copySharedTaskURL, sharedLink, copySharedTaskFormattedURL } = getContext();
 
 
   // =============================== CALLBACK HANDLER FROM COMMANDS
@@ -93,21 +93,30 @@ function createTaskDetailCommandActions(getContext: () => TaskDetailContext) {
     }
   };
 
-  const branchInNewChat = () => {
+  const branchInNewChat = async () => {
     setAiChatAutoOpenSuppressed(false);
     if(!showAiChatInterface) {
       setAiChatExplicitOpenAt(Date.now());
       setShowAiChatInterface(true);
     }
-    startNewSession();
+    const deadline = Date.now() + 5000;
+    while (
+      (!getContext().startNewSession || !getContext().aiChatEditor) &&
+      Date.now() < deadline
+    ) {
+      await new Promise((resolve) => setTimeout(resolve, 50));
+    }
+    const chat = getContext();
+    if (!chat.startNewSession) return;
+    await chat.startNewSession();
     const commentIndex = getCurrentCommentIndex();
     if (commentIndex == null) return;
 
     const comment = comments[commentIndex];
     if (!comment) return;
     const wrapblockquote = wrapBlockQuote(comment.text, comment.creator!, true);
-    aiChatEditor?.commands.setContent(wrapblockquote);
-    aiChatEditor?.commands.focus();
+    getContext().aiChatEditor?.commands.setContent(wrapblockquote);
+    getContext().aiChatEditor?.commands.focus();
   }
 
   const copyFocusedCommentToAiChat = () => {

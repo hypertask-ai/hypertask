@@ -7,7 +7,7 @@ import {
   aiChatAutoOpenSuppressedAtom,
   aiChatExplicitOpenAtAtom,
 } from "@/store";
-import { useAiChatContext } from "@/lib/contexts/Multipages/AI_Agent/AI_Agent_Chat_Context";
+import { useOptionalAiChatContext } from "@/lib/contexts/Multipages/AI_Agent/chatContext";
 import { wrapBlockQuote } from "@/utils/helperFunctions/TaskDetail";
 
 /**
@@ -30,7 +30,7 @@ export function useCommentToAiChat() {
     showAiChatInterface,
     isTyping,
     chatHistoryReady,
-  } = useAiChatContext();
+  } = useOptionalAiChatContext() ?? {};
   const [, setShowAiChatInterface] = useRecoilState(showAIChatInterfaceAtom);
   const [, setAiChatAutoOpenSuppressed] = useRecoilState(
     aiChatAutoOpenSuppressedAtom
@@ -109,7 +109,7 @@ export function useCommentToAiChat() {
         waitForSession(),
       ]);
       if (!editorReady || !sessionReady || isTypingRef.current) return;
-      await handleSendMessageRef.current();
+      await handleSendMessageRef.current?.();
     } finally {
       sendingRef.current = false;
     }
@@ -125,7 +125,7 @@ export function useCommentToAiChat() {
       // The chat already scopes to this ticket via default_context.task_id on
       // detail pages, so we only send the instruction; the model reads the
       // description + comments itself and the user keeps chatting in-thread.
-      await handleSendMessageRef.current(
+      await handleSendMessageRef.current?.(
         "Summarize this ticket, its description and the key points from the comments, concisely."
       );
     } finally {

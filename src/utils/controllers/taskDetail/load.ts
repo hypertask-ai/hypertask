@@ -173,6 +173,25 @@ export function taskWhere(
   };
 }
 
+export async function findTaskNumberAlias(slug: TaskDetailSlug, userId: number) {
+  const liveTask = await prisma.task.findFirst({
+    where: { ...slug, status: { not: Status.Deleted } },
+    select: { id: true },
+  });
+  if (liveTask) return null;
+
+  const alias = await prisma.taskNumberAlias.findUnique({
+    where: { projectId_uniqueIndex: slug },
+    select: { task: { select: { id: true, projectId: true, uniqueIndex: true } } },
+  });
+  if (!alias) return null;
+
+  return prisma.task.findFirst({
+    where: { ...taskWhere(alias.task, userId), id: alias.task.id },
+    select: { projectId: true, uniqueIndex: true },
+  });
+}
+
 /** Task detail SSR — fields used by TaskDetailComp + hooks (see taskDetail benchmark parity). */
 export function taskDetailInclude(userId: number, projectId: number) {
   return {

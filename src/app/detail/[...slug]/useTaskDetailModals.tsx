@@ -11,7 +11,7 @@ import useUpdateSubtask from "@/hooks/Task Detail/useUpdateSubtask";
 import { useProjectQuery } from "@/hooks/General/useProjectQuery";
 import { useHydrated } from "@/hooks/General/useHydrated";
 import globalConstants from "@/lib/constants";
-import { useAiChatContext } from "@/lib/contexts/Multipages/AI_Agent/AI_Agent_Chat_Context";
+import { useOptionalAiChatContext } from "@/lib/contexts/Multipages/AI_Agent/chatContext";
 import { useCommentToAiChat } from "@/hooks/MultiPages/AIChat/useCommentToAiChat";
 import { LEARN_TUTORIAL_DISMISS_TASK_MODAL_EVENT, type LearnTutorialDismissibleSurface } from "@/lib/tutorial/learnTutorialState";
 import type { useTaskDetailStateValue } from "./useTaskDetailState";
@@ -98,7 +98,7 @@ export function useTaskDetailModals(state: useTaskDetailStateValue) {
     useUpdateSubtask();
   const { goToProjectShortcut, updateCommentsActivityQuery } =
     useProjectQuery();
-  const { startNewSession, editor: aiChatEditor } = useAiChatContext();
+  const { startNewSession, editor: aiChatEditor } = useOptionalAiChatContext() ?? {};
   const { copyCommentToAiChat, summarizeComment, summarizeTicket } = useCommentToAiChat();
 
   const _mbl = useContext(MobileViewContext);

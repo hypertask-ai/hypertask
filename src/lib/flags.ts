@@ -108,9 +108,13 @@ const FEATURE_FLAG_QA_USER = {
 const RETIRED_FEATURE_FLAG_KEYS = new Set([
   "hyfa-43-factory-owner-preview",
   "htpr-6072-shallow-board-switch",
+  "htpr-6254-heic-heif-attachments",
 ]);
-// Old tabs read this; remove after 2026-10-06.
-const RETIRED_CLIENT_FEATURE_FLAGS = { "htpr-6072-shallow-board-switch": true } as const;
+// Old tabs read these; remove htpr-6072 after 2026-10-06, htpr-6254 after 2026-10-16.
+const RETIRED_CLIENT_FEATURE_FLAGS = {
+  "htpr-6072-shallow-board-switch": true,
+  "htpr-6254-heic-heif-attachments": true,
+} as const;
 
 const FEATURE_FLAG_DEFINITIONS = [
   {
