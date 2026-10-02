@@ -1,3 +1,4 @@
+const { readRefactoredSource } = require("../src/app/detail/[...slug]/taskDetailTestSources.cjs");
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
@@ -11,7 +12,7 @@ const {
 } = jiti(path.join(root, "src/lib/aiChatDisplayMode.ts"));
 
 function source(relativePath) {
-  return fs.readFileSync(path.join(root, relativePath), "utf8");
+  return readRefactoredSource(path.join(root, relativePath), "utf8");
 }
 
 test("the last side-panel or floating-window mode is persisted", () => {

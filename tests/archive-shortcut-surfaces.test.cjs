@@ -1,3 +1,4 @@
+const { readRefactoredSource } = require("../src/app/detail/[...slug]/taskDetailTestSources.cjs");
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
@@ -18,7 +19,7 @@ const SURFACES = [
 
 for (const relative of SURFACES) {
   test(`${relative} guards Ctrl/Cmd+E archive`, () => {
-    const source = fs.readFileSync(
+    const source = readRefactoredSource(
       path.resolve(__dirname, "..", relative),
       "utf8",
     );
@@ -41,7 +42,7 @@ for (const relative of SURFACES) {
 }
 
 test("TableView My Tasks Ctrl+E focuses the hovered row before archiving", () => {
-  const source = fs.readFileSync(
+  const source = readRefactoredSource(
     path.resolve(
       __dirname,
       "../src/components/PageComponents/Kanban/TableView/TableView.tsx",

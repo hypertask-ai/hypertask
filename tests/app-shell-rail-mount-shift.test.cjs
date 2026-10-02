@@ -1,3 +1,4 @@
+const { readRefactoredSource } = require("../src/app/detail/[...slug]/taskDetailTestSources.cjs");
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const path = require("node:path");
@@ -9,7 +10,7 @@ const test = require("node:test");
 // commits AFTER the browser's first paint — so that first paint used the
 // var's 48px fallback regardless of the real (possibly 130px) rail width.
 
-const railSource = fs.readFileSync(
+const railSource = readRefactoredSource(
   path.resolve(
     __dirname,
     "../src/components/PageComponents/Kanban/HeaderComponents/AppShellRail.tsx",
@@ -29,7 +30,7 @@ test("the effect never clears --app-shell-rail-w on unmount (every reader is gat
   assert.doesNotMatch(cssVarEffect, /removeProperty/);
 });
 
-const inboxSource = fs.readFileSync(
+const inboxSource = readRefactoredSource(
   path.resolve(__dirname, "../src/app/inbox/Inbox.tsx"),
   "utf8",
 );
@@ -53,7 +54,7 @@ test("the rail-padded Inbox containers no longer carry a 1s mount animation", ()
 // <head> script seeds --app-shell-rail-w from the same localStorage blob the
 // atoms persist to, before the browser's first paint — for both the
 // expanded (130px) and fully-off (0px) cases.
-const layoutSource = fs.readFileSync(
+const layoutSource = readRefactoredSource(
   path.resolve(__dirname, "../src/app/layout.tsx"),
   "utf8",
 );
@@ -85,7 +86,7 @@ const RAIL_CONSUMER_FILES = [
 
 test("every appShellRailOn consumer offsets via the shared --app-shell-rail-w var", () => {
   for (const relPath of RAIL_CONSUMER_FILES) {
-    const source = fs.readFileSync(path.resolve(__dirname, relPath), "utf8");
+    const source = readRefactoredSource(path.resolve(__dirname, relPath), "utf8");
     assert.match(
       source,
       /var\(--app-shell-rail-w/,

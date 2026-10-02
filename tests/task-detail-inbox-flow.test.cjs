@@ -1,3 +1,4 @@
+const { readRefactoredSource } = require("../src/app/detail/[...slug]/taskDetailTestSources.cjs");
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const path = require("node:path");
@@ -22,7 +23,7 @@ const { getKeyboardShortcuts } = jiti(
   path.join(root, "src/lib/constants/shortcuts.ts"),
 );
 
-const read = (file) => fs.readFileSync(path.join(root, file), "utf8");
+const read = (file) => readRefactoredSource(path.join(root, file), "utf8");
 
 test("Inbox lineage is added to canonical task URLs without losing query or hash", () => {
   assert.equal(
