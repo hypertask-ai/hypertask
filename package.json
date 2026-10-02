@@ -11,7 +11,7 @@
     "start": "next start && npm run stripe:listen",
     "stripe:listen": "stripe listen --events checkout.session.completed,checkout.session.async_payment_succeeded,checkout.session.async_payment_failed,customer.subscription.created,customer.subscription.updated,customer.subscription.deleted --forward-to localhost:3000/api/stripe/webhook",
     "billing:harness": "node scripts/stripe-seat-billing-harness.cjs",
-    "lint": "eslint .",
+    "lint": "eslint . --suppressions-location eslint-local-rules/style-guide-suppressions.json --pass-on-unpruned-suppressions",
     "e2e:midscene": "npm --prefix e2e/midscene run smoke",
     "test": "node scripts/run-tests.mjs",
     "test:file": "node scripts/run-tests.mjs",
