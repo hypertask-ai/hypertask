@@ -16,9 +16,11 @@ Work from the main checkout (`~/projects/hypertask`), never from inside a worktr
 1. `git -C <worktree> status --porcelain` must be empty. If not, commit the work or ask Valentin; never discard it.
 2. Skip it while its PR is still open (`gh pr list -R hypertask-ai/hypertask --head <branch> --state open`); say so in the report.
 3. `git worktree remove <worktree>` (no `--force`).
-4. `git branch -d <branch>` (lowercase `-d`: refuses unmerged work).
+4. `git branch -D <branch>`, only after step 2 showed its PR is merged or closed (we squash-merge, so lowercase `-d` always refuses).
 5. `git push origin --delete <branch>` only when its PR is merged or closed.
 6. Keep QA evidence in `~/.local/state/vcc-evidence/`; it is never cleaned.
+
+From /ship, `~/.agents/skills/ship/scripts/ship-check cleaned <TICKET>` must print `cleaned ok`; it is the last gate on the /ship checklist. If the session's ledger (`.unlazy/`) sits inside the worktree you remove, it goes with it: run `ship-gates` from the main checkout so the ledger survives.
 
 ## Report
 

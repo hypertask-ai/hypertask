@@ -24,8 +24,8 @@ import json, os, sys
 with open(os.environ['CALLS'], 'a') as f:
     f.write(json.dumps([sys.argv[1:], os.getcwd()]) + '\\n')
 markers = dict(ticket='ticket ok', pr='title ok', merged='merged ok',
-               deployed='deployed ok (no app build needed)', proof='proof ok', done='done ok')
-if sys.argv[1] == 'done' and os.environ.get('DONE') != 'yes':
+               deployed='deployed ok (no app build needed)', proof='proof ok', done='done ok', cleaned='cleaned ok')
+if sys.argv[1] in ('done', 'cleaned') and os.environ.get('DONE') != 'yes':
     print('FAIL: not Done'); sys.exit(1)
 print(markers[sys.argv[1]])
 ''')
@@ -57,35 +57,35 @@ print(markers[sys.argv[1]])
     r = run(CLAUDE_CODE_SESSION_ID=session, CODEX_SESSION_ID='ignoredB-full', CODEX_THREAD_ID='ignoredC-full')
     file = ledger(session)
     assert r.returncode == 0, r.stderr
-    assert r.stdout.strip() == str(file)
+    assert r.stdout.strip() == str(file), (r.stdout, r.stderr)
     assert (file.parent/'session').read_text() == session+'\n'
-    assert ids(file) == ['HTPR-6819.'+g for g in ['ticket','pr','merged','deployed','proof','done']]
-    assert 'UNMET: 1 (met: 5)' in r.stderr, r.stderr
-    assert len(calls()) == 6
+    assert ids(file) == ['HTPR-6819.'+g for g in ['ticket','pr','merged','deployed','proof','done','cleaned']]
+    assert 'UNMET: 2 (met: 5)' in r.stderr, r.stderr
+    assert len(calls()) == 7
     assert all(c[1] == str(repo) for c in calls())
     assert file.read_text().count('automatic-evidence=v1') == 5
-    assert file.read_text().count('  CWD: '+str(repo)) == 6
+    assert file.read_text().count('  CWD: '+str(repo)) == 7
     original = file.read_text()
     r = run(CLAUDE_CODE_SESSION_ID=session)
-    assert r.returncode == 0 and len(ids(file)) == 6 and len(calls()) == 7
+    assert r.returncode == 0 and len(ids(file)) == 7 and len(calls()) == 9
     assert file.read_text() == original
     print('ok Claude precedence, full binding, absolute quoted commands/CWD, executed approvals, deployed suffix and idempotence')
 
     r = run('YPER4-123', CLAUDE_CODE_SESSION_ID=session)
-    assert r.returncode == 0 and len(ids(file)) == 11 and len(set(ids(file))) == 11, r.stderr
+    assert r.returncode == 0 and len(ids(file)) == 13 and len(set(ids(file))) == 13, r.stderr
     assert 'YPER4-123.proof' not in ids(file)
     assert file.read_text().startswith(original)
     assert len([d for d in (repo/'.unlazy').iterdir() if d.name != 'locks']) == 1
     r = run('YPER4-123', CLAUDE_CODE_SESSION_ID=session)
-    assert r.returncode == 0 and len(ids(file)) == 11
+    assert r.returncode == 0 and len(ids(file)) == 13
     print('ok another ticket appends in one scope and repeat calls do not duplicate ids or reset evidence')
 
     for key, sid in [('CODEX_SESSION_ID','codexses-full'), ('CODEX_THREAD_ID','codexthr-full')]:
         r = run('HYFA-12', **{key:sid})
-        assert r.returncode == 0 and len(ids(ledger(sid))) == 5, r.stderr
+        assert r.returncode == 0 and len(ids(ledger(sid))) == 6, r.stderr
         assert (ledger(sid).parent/'session').read_text() == sid+'\n'
     r = run('HYFA-13', CODEX_SESSION_ID='codexses-full', CODEX_THREAD_ID='ignoredC-full')
-    assert r.returncode == 0 and len(ids(ledger('codexses-full'))) == 10
+    assert r.returncode == 0 and len(ids(ledger('codexses-full'))) == 12
     print('ok Codex session/thread fallback and precedence')
 
     before = file.read_text()

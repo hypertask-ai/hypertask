@@ -33,7 +33,7 @@ Repo skills live in the app repo at `.claude/skills/`; their index is `.claude/s
 | Merge and deploy | `vcc` QA routine steps 1 to 3 | `ship-check deployed HTPR-NNNN` prints `deployed ok` |
 | Live QA | repo `verify-qa` and its feature map | `ship-check proof HTPR-NNNN` prints `proof ok` |
 | Report and close | `vcc` QA routine step 5, plus the QA record below | `ship-check done HTPR-NNNN` prints `done ok` |
-| Clean up | `clean-up` (this session's worktree and branch) | your worktree and branch are gone (`git worktree list` and `git branch -a` no longer show them) |
+| Clean up | `clean-up` (this session's worktree and branch) | `ship-check cleaned HTPR-NNNN` prints `cleaned ok` |
 
 ## Rules that hold the whole session
 

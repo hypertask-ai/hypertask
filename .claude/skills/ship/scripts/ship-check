@@ -10,6 +10,7 @@
 #   ship-check deployed <T>      the Production deployment for that merge is success (app repo only)
 #   ship-check proof <T>         ~/.local/state/vcc-evidence/<T>/proof.md follows the verify-qa contract for that merge
 #   ship-check done <T>          ticket is in Done
+#   ship-check cleaned <T>       no worktree, local branch or GitHub branch is left for the ticket's PR
 #   ship-check guard             hook mode: reads the hook JSON on stdin, exit 2 blocks the command
 # CLI work: SHIP_REPO=hypertask-ai/cli SHIP_BASE=main ship-check ...
 # Every gate binds to the PR recorded with `bind` (required), so another
@@ -143,6 +144,17 @@ check_done() {
   echo "done ok"
 }
 
+check_cleaned() {
+  local n b repo=${SHIP_CHECKOUT:-$HOME/projects/hypertask}
+  n=$(bound_pr "$1") || fail "no PR bound for $1"
+  b=$(gh pr view "$n" -R "$REPO" --json headRefName --jq .headRefName 2>/dev/null) || fail "cannot read PR $n"
+  [ -n "$b" ] || fail "PR $n has no branch name"
+  git -C "$repo" worktree list --porcelain | grep -qxF "branch refs/heads/$b" && fail "a worktree still uses $b; run /clean-up"
+  git -C "$repo" show-ref --verify --quiet "refs/heads/$b" && fail "local branch $b still exists; run /clean-up"
+  [ -z "$(git -C "$repo" ls-remote --heads origin "$b" 2>/dev/null)" ] || fail "GitHub branch $b still exists; run /clean-up"
+  echo "cleaned ok"
+}
+
 guard() {
   local cmd seg t c pr out checks env='([A-Za-z_][A-Za-z0-9_]*=[^[:space:]]*[[:space:]]+)*'
   cmd=$(jq -r '.tool_input.command // empty')
@@ -180,6 +192,7 @@ case "${1:-}" in
   deployed) check_deployed "$2" ;;
   proof) check_proof "$2" ;;
   done) check_done "$2" ;;
+  cleaned) check_cleaned "$2" ;;
   guard) guard ;;
-  *) sed -n '2,16p' "$0"; exit 1 ;;
+  *) sed -n '2,17p' "$0"; exit 1 ;;
 esac
