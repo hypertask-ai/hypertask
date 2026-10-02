@@ -1,7 +1,7 @@
 "use client";
 
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useEffect, useRef, type RefObject } from "react";
+import { useEffect, useRef, type ReactNode, type RefObject } from "react";
 import Unauthorized from "@/app/unauthorized/page";
 import { cachedTaskDetailKey, TaskAccessDeniedError } from "@/lib/navigation/cachedTaskDetail";
 import { useTaskContext } from "@/lib/contexts/TaskDetail/TaskProvider";
@@ -26,9 +26,20 @@ type EmbeddedTaskDetailProps = {
   embedded?: boolean;
 };
 
-function RefreshCachedTask({ task }: { task: ITask }) {
+function RefreshCachedTask({ task, error, refetch, children }: { task: ITask; error: Error | null; refetch: () => Promise<unknown>; children: ReactNode }) {
   const { setCurrentTask, setDescription, editMode, hasDraft, hasDraftInit, uploadingDescription } = useTaskContext();
   const previousTask = useRef(task);
+  const preserveContent = shouldPreserveTaskEditorContent({ hasDraft, hasDraftInit, editMode, uploadingDescription });
+  const editing = Boolean(editMode) || preserveContent;
+  useEffect(() => {
+    if (!error) return;
+    if (editing) {
+      const retry = window.setTimeout(() => { void refetch(); }, 1000);
+      return () => window.clearTimeout(retry);
+    }
+    // Recover through the authorized route only when no local work is active.
+    window.location.replace(window.location.href);
+  }, [error, editing, refetch]);
   useEffect(() => {
     if (previousTask.current === task) return;
     previousTask.current = task;
@@ -41,7 +52,8 @@ function RefreshCachedTask({ task }: { task: ITask }) {
     // Reconcile a new server snapshot once, not when editing ends.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [task]);
-  return null;
+  if (error instanceof TaskAccessDeniedError) return <Unauthorized />;
+  return children;
 }
 
 const fetchTaskDetail = async (taskId: number, projectId: number, uniqueIndex: number, signal: AbortSignal) => {
@@ -87,14 +99,6 @@ const EmbeddedTaskDetail = ({
     initialSerializedTask.current = JSON.stringify(taskQuery.data);
   }
 
-  useEffect(() => {
-    if (!embedded && taskQuery.error) {
-      // Recover full detail through the authorized route on any refresh failure.
-      window.location.replace(window.location.href);
-    }
-  }, [embedded, taskQuery.error]);
-
-  if (!embedded && taskQuery.error instanceof TaskAccessDeniedError) return <Unauthorized />;
   if (embedded && (taskQuery.isError || commentsQuery.isError)) {
     return (
       <div className="flex min-h-full items-center justify-center px-6 text-content text-text-light-gray">
@@ -119,6 +123,19 @@ const EmbeddedTaskDetail = ({
   const serializedComments = JSON.stringify(comments);
   const slugs = [`project-${projectId}`, String(uniqueIndex)];
 
+  const detail = (
+    <FollowersProvider>
+      <TaskDetail
+        key={`swipe-unread-task-detail-${taskId}`}
+        allowPerks
+        isMobile={false}
+        _currentUser={currentUser}
+        _slugs={slugs}
+        embedded={embedded}
+      />
+    </FollowersProvider>
+  );
+
   return (
     <TasksProvider
       key={`swipe-unread-task-provider-${taskId}`}
@@ -131,17 +148,11 @@ const EmbeddedTaskDetail = ({
       embedded={embedded}
       scrollElementRef={scrollElementRef}
     >
-      {!embedded && <RefreshCachedTask task={task} />}
-      <FollowersProvider>
-        <TaskDetail
-          key={`swipe-unread-task-detail-${taskId}`}
-          allowPerks
-          isMobile={false}
-          _currentUser={currentUser}
-          _slugs={slugs}
-          embedded={embedded}
-        />
-      </FollowersProvider>
+      {embedded ? detail : (
+        <RefreshCachedTask task={task} error={taskQuery.error} refetch={taskQuery.refetch}>
+          {detail}
+        </RefreshCachedTask>
+      )}
     </TasksProvider>
   );
 };

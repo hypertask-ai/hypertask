@@ -112,6 +112,7 @@ test("board payload checks access before querying task content", async () => {
     userId: 6,
     userDbId: 6,
     currentUserId: 6,
+    includeCachedDescription: false,
   });
   assert.deepEqual(calls.find(([name]) => name === "open-blockers")[1], [
     { id: 101 },

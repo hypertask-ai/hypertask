@@ -21,50 +21,94 @@ function load(relative, mocks) {
   return exports;
 }
 
-// Board, My Tasks and inbox lists always carry ticket bodies. They need no
-// server flag lookup, which would add a database round trip before every list
-// loads (HTPR-6752); the client flag decides whether the cached open is used.
-test("server board and My Tasks projections always include cached bodies without a flag lookup", async () => {
-  const flagMock = { HTPR_6752_INSTANT_TICKET_OPEN_FLAG: key, isFeatureEnabled: async () => { throw new Error("no server flag lookup"); } };
-  let boardArgs;
-  const board = load("src/utils/controllers/projects/getBoardTasks.ts", {
-    "@/lib/flags": flagMock,
-    "@/lib/prisma": { __esModule: true, default: {
-      project: { findFirst: async () => ({ id: 15 }) },
-      task: { findMany: async (args) => { boardArgs = args; return []; } },
-    } },
-    "./getAllIncludes": includes,
-    "@/utils/controllers/tasks/attachOpenBlockingTasks": { attachOpenBlockingTasks: async (tasks) => tasks },
-    "@/utils/controllers/tasks/attachWaitingOnUsers": { attachWaitingOnUsers: async (tasks) => tasks },
-  }).default;
-  assert.equal((await board(15, 985, 985)).status, 200);
-  assert.deepEqual(boardArgs.include.description_, { select: { content: true } });
-  let myTasksArgs;
-  const myTasks = load("src/utils/controllers/tasks/myTasks.ts", {
-    "@/lib/flags": flagMock,
-    "@/lib/prisma": { __esModule: true, default: { task: { findMany: async (args) => { myTasksArgs = args; return []; } } } },
-    "../projects/getAllMinimal": { __esModule: true, default: async () => ({ json: [{ id: 15 }] }) },
-  }).default;
-  await myTasks(985, false, undefined, { throwOnError: true });
-  assert.deepEqual(myTasksArgs.include.description_, { select: { content: true } });
-});
+for (const state of [false, true, "failure"]) {
+  test(`server board and My Tasks bodies are gated with flag ${state}, overlapping the first read`, async () => {
+    const enabled = state === true;
+    const flagCalls = [];
+    let flagRead = Promise.withResolvers();
+    let firstRead = Promise.withResolvers();
+    const flagMock = { HTPR_6752_INSTANT_TICKET_OPEN_FLAG: key, isFeatureEnabled: (flag, userId) => {
+      flagCalls.push([flag, userId]);
+      return flagRead.promise;
+    } };
+    let boardArgs;
+    let boardReadStarted = false;
+    const board = load("src/utils/controllers/projects/getBoardTasks.ts", {
+      "@/lib/flags": flagMock,
+      "@/lib/prisma": { __esModule: true, default: {
+        project: { findFirst: () => { boardReadStarted = true; return firstRead.promise; } },
+        task: { findMany: async (args) => { boardArgs = args; return []; } },
+      } },
+      "./getAllIncludes": includes,
+      "@/utils/controllers/tasks/attachOpenBlockingTasks": { attachOpenBlockingTasks: async (tasks) => tasks },
+      "@/utils/controllers/tasks/attachWaitingOnUsers": { attachWaitingOnUsers: async (tasks) => tasks },
+    }).default;
+    const boardResult = board(15, 985, 985);
+    assert.equal(boardReadStarted, true, "board access starts without waiting for the flag");
+    assert.deepEqual(flagCalls, [[key, 985]], "flag read starts before board access resolves");
+    firstRead.resolve({ id: 15 });
+    await new Promise((resolve) => setImmediate(resolve));
+    assert.equal(boardArgs, undefined, "projection waits for the flag result");
+    if (state === "failure") flagRead.reject(new Error("flag unavailable"));
+    else flagRead.resolve(enabled);
+    assert.equal((await boardResult).status, 200);
+    assert.equal("description_" in boardArgs.include, enabled);
+    if (enabled) assert.deepEqual(boardArgs.include.description_, { select: { content: true } });
 
-test("Inbox description projection is always on and retains the existing visible-account filter", async () => {
-  const { getInboxNotifications, inboxTaskSelect } = load("src/utils/controllers/notifications/getAll.ts", {
-    "@/lib/flags": {},
-    "@/lib/prisma": { __esModule: true, default: {} },
+    flagRead = Promise.withResolvers();
+    firstRead = Promise.withResolvers();
+    let myTasksArgs;
+    let projectReadStarted = false;
+    const myTasks = load("src/utils/controllers/tasks/myTasks.ts", {
+      "@/lib/flags": flagMock,
+      "@/lib/prisma": { __esModule: true, default: { task: { findMany: async (args) => { myTasksArgs = args; return []; } } } },
+      "../projects/getAllMinimal": { __esModule: true, default: () => { projectReadStarted = true; return firstRead.promise; } },
+    }).default;
+    const myTasksResult = myTasks(985, false, undefined, { throwOnError: true });
+    assert.equal(projectReadStarted, true, "My Tasks project read starts without waiting for the flag");
+    assert.deepEqual(flagCalls, [[key, 985], [key, 985]], "flag read starts before My Tasks projects resolve");
+    firstRead.resolve({ json: [{ id: 15 }] });
+    await new Promise((resolve) => setImmediate(resolve));
+    assert.equal(myTasksArgs, undefined, "projection waits for the flag result");
+    if (state === "failure") flagRead.reject(new Error("flag unavailable"));
+    else flagRead.resolve(enabled);
+    await myTasksResult;
+    assert.equal("description_" in myTasksArgs.include, enabled);
+    if (enabled) assert.deepEqual(myTasksArgs.include.description_, { select: { content: true } });
   });
-  assert.deepEqual(inboxTaskSelect(985).description_, { select: { content: true } });
-  let args;
-  await getInboxNotifications(985, {
-    $queryRaw: async () => [{ id: 1 }],
-    notification: { findMany: async (value) => { args = value; return []; } },
+
+  test(`Inbox bodies are gated with flag ${state}, overlapping ID selection and preserving the visible-account filter`, async () => {
+    const enabled = state === true;
+    const flagRead = Promise.withResolvers();
+    const selectedRead = Promise.withResolvers();
+    const flagCalls = [];
+    const { getInboxNotifications, inboxTaskSelect } = load("src/utils/controllers/notifications/getAll.ts", {
+      "@/lib/flags": { HTPR_6752_INSTANT_TICKET_OPEN_FLAG: key, isFeatureEnabled: (flag, userId) => {
+        flagCalls.push([flag, userId]);
+        return flagRead.promise;
+      } },
+      "@/lib/prisma": { __esModule: true, default: {} },
+    });
+    assert.equal("description_" in inboxTaskSelect(985), false);
+    let args;
+    let selectedReadStarted = false;
+    const result = getInboxNotifications(985, {
+      $queryRaw: () => { selectedReadStarted = true; return selectedRead.promise; },
+      notification: { findMany: async (value) => { args = value; return []; } },
+    });
+    assert.equal(selectedReadStarted, true, "ID selection starts without waiting for the flag");
+    assert.deepEqual(flagCalls, [[key, 985]], "flag read starts before ID selection resolves");
+    selectedRead.resolve([{ id: 1 }]);
+    await new Promise((resolve) => setImmediate(resolve));
+    assert.equal(args, undefined, "projection waits for the flag result");
+    if (state === "failure") flagRead.reject(new Error("flag unavailable"));
+    else flagRead.resolve(enabled);
+    await result;
+    assert.equal("description_" in args.include.task.select, enabled);
+    assert.equal(args.where.AND[1].userId, 985);
+    if (enabled) assert.deepEqual(args.include.task.select.description_, { select: { content: true } });
   });
-  assert.deepEqual(args.include.task.select.description_, { select: { content: true } });
-  assert.equal(args.where.AND[1].userId, 985);
-  const source = fs.readFileSync(path.join(root, "src/utils/controllers/notifications/getAll.ts"), "utf8");
-  assert.doesNotMatch(source, /isFeatureEnabled/);
-});
+}
 
 test("bound board and table handlers opt into cached data without changing production navigation or selection", async () => {
   const task = { id: 42, projectId: 15, uniqueIndex: 43 };

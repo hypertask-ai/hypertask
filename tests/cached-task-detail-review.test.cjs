@@ -76,13 +76,13 @@ test("cached network and HTTP refresh failures recover through the authorized ro
       global.window = { location: { href, replace: (url) => replacements.push(url) } };
       try {
         const Detail = compile(source, {
-          react: { useRef: () => ({ current: undefined }), useEffect: (effect) => effects.push(effect) },
+          react: { useRef: (initial) => ({ current: initial }), useEffect: (effect) => effects.push(effect) },
           "react/jsx-runtime": require("react/jsx-runtime"),
           "@tanstack/react-query": { useQueryClient: () => ({}), useQuery: ({ queryKey }) => queryKey[0] === "comments" ? {} : { data: task, error, isError: true } },
           "@/app/unauthorized/page": { __esModule: true, default: () => null },
           "@/lib/navigation/cachedTaskDetail": { cachedTaskDetailKey: () => ["cached-task-detail"], TaskAccessDeniedError: class extends Error {} },
           "@/lib/contexts/TaskDetail/TaskProvider": { TasksProvider: () => null, useTaskContext: () => ({}) },
-          "@/lib/realtime/taskDetailRefresh": {},
+          "@/lib/realtime/taskDetailRefresh": { shouldPreserveTaskEditorContent: () => false },
           "@/app/detail/[...slug]/TaskDetailComp": { __esModule: true, default: () => null },
           "@/hooks/General/useGetUserPreferences": { useGetUserPreferences: () => ({ data: {} }) },
           "@/lib/constants": { __esModule: true, default: { CommentsTQPrefixKey: "comments" } },
@@ -91,7 +91,8 @@ test("cached network and HTTP refresh failures recover through the authorized ro
           "@/store": { currentUserAtom: {} },
           "@/utils/api/Task Detail": {},
         }).default;
-        Detail({ taskId: 42, projectId: 15, uniqueIndex: 43, initialTask: task, embedded });
+        const result = Detail({ taskId: 42, projectId: 15, uniqueIndex: 43, initialTask: task, embedded });
+        if (!embedded) result.props.children.type(result.props.children.props);
         effects.forEach((effect) => effect());
         assert.deepEqual(replacements, embedded ? [] : [href], "cached failures must not silently leave incomplete metadata forever");
       } finally {

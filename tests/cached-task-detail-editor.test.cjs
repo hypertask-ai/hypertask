@@ -177,3 +177,63 @@ test("cached refresh keeps parsedTask stable while updating metadata and preserv
   assert.deepEqual(state.descriptionAttachments, [{ id: 2 }]);
   assert.equal(new Set(parsedSnapshots).size, 1, "provider initialization cannot change underneath an active editor");
 });
+
+test("cached refresh failures retry in place during edits, drafts and uploads, then recover only when idle", async (t) => {
+  const render = await mount(t);
+  const Context = React.createContext(null);
+  let editor = {};
+  let error;
+  let retries = 0;
+  const refetch = async () => { retries += 1; };
+  const Provider = ({ children }) => React.createElement(Context.Provider, { value: editor }, children);
+  const Detail = compile(fs.readFileSync(path.join(root, "src/components/Modals/SwipeUnread/EmbeddedTaskDetail.tsx"), "utf8"), {
+    react: React,
+    "react/jsx-runtime": require("react/jsx-runtime"),
+    "@tanstack/react-query": { useQueryClient: () => ({}), useQuery: ({ queryKey }) => queryKey[0] === "cached-task-detail" ? { data: task, error, refetch } : {} },
+    "@/lib/state": { useRecoilValue: () => ({ id: 2343 }) },
+    "@/store": { currentUserAtom: {} },
+    "@/hooks/General/useGetUserPreferences": { useGetUserPreferences: () => ({ data: {} }) },
+    "@/lib/constants": { __esModule: true, default: { CommentsTQPrefixKey: "comments" } },
+    "@/lib/contexts/TaskDetail/FollowersProvider": { FollowersProvider: ({ children }) => children },
+    "@/lib/contexts/TaskDetail/TaskProvider": { TasksProvider: Provider, useTaskContext: () => React.useContext(Context) },
+    "@/lib/navigation/cachedTaskDetail": jiti(path.join(root, "src/lib/navigation/cachedTaskDetail.ts")),
+    "@/lib/realtime/taskDetailRefresh": refresh,
+    "@/app/unauthorized/page": { __esModule: true, default: () => null },
+    "@/utils/api/Task Detail": {},
+    "@/app/detail/[...slug]/TaskDetailComp": { __esModule: true, default: () => React.createElement("textarea", { defaultValue: "Local unsaved edit" }) },
+  }).default;
+  const replacements = [];
+  const timers = new Map();
+  let timerId = 0;
+  const browserWindow = global.window;
+  const href = browserWindow.location.href;
+  global.window = {
+    location: { href, replace: (url) => replacements.push(url) },
+    setTimeout: (callback, delay) => { assert.equal(delay, 1000); timers.set(++timerId, callback); return timerId; },
+    clearTimeout: (id) => timers.delete(id),
+  };
+  try {
+    const element = () => React.createElement(Detail, { taskId: 42, projectId: 6859, uniqueIndex: 43, initialTask: task, embedded: false });
+    await render(element());
+    const input = document.querySelector("textarea");
+    input.value = "Typed draft";
+    for (const protectedState of [...protectedStates, { editMode: "title" }]) {
+      editor = protectedState;
+      error = new Error("Refresh failed");
+      await render(element());
+      assert.deepEqual(replacements, [], JSON.stringify(editor));
+      assert.equal(document.querySelector("textarea"), input, "the active editor must remain mounted");
+      assert.equal(input.value, "Typed draft");
+      assert.equal(timers.size, 1, "retry is scheduled in place");
+      const before = retries;
+      await React.act(async () => [...timers.values()][0]());
+      assert.equal(retries, before + 1);
+    }
+    editor = {};
+    await render(element());
+    assert.equal(timers.size, 0, "pending retry is cancelled when idle");
+    assert.deepEqual(replacements, [href]);
+  } finally {
+    global.window = browserWindow;
+  }
+});

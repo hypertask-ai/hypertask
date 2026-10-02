@@ -23,7 +23,7 @@ const mocks = {
   "@/lib/navigation/cachedTaskDetail": require("jiti").createJiti(__filename, {
     alias: { "@": path.join(root, "src") },
   })(path.join(root, "src/lib/navigation/cachedTaskDetail.ts")),
-  "@/lib/realtime/taskDetailRefresh": {},
+  "@/lib/realtime/taskDetailRefresh": { shouldPreserveTaskEditorContent: () => false },
   "@/app/unauthorized/page": { default: () => React.createElement("div", null, "No access") },
   "@/utils/api/Task Detail": { fetchCommentsHelper: () => assert.fail("render must not await comments") },
   "@/app/detail/[...slug]/TaskDetailComp": { default: () => {
@@ -98,7 +98,7 @@ test("a denied or moved cached ticket re-enters the normal server route without 
   const error = new mocks["@/lib/navigation/cachedTaskDetail"].TaskAccessDeniedError();
   const dependencies = {
     ...mocks,
-    react: { ...React, useRef: () => ({ current: undefined }), useEffect: (effect) => effects.push(effect) },
+    react: { ...React, useRef: (initial) => ({ current: initial }), useEffect: (effect) => effects.push(effect) },
     "@tanstack/react-query": {
       useQueryClient: () => ({}),
       useQuery: ({ queryKey }) => queryKey[0] === "cached-task-detail" ? { data: task, error } : {},
@@ -106,7 +106,9 @@ test("a denied or moved cached ticket re-enters the normal server route without 
   };
   const loaded = {};
   new Function("require", "exports", compiled)((name) => dependencies[name], loaded);
-  const result = loaded.default({ taskId: 42, projectId: 6859, uniqueIndex: 43, initialTask: task, embedded: false });
+  const provider = loaded.default({ taskId: 42, projectId: 6859, uniqueIndex: 43, initialTask: task, embedded: false });
+  const child = provider.props.children;
+  const result = child.type(child.props);
   assert.equal(result.type, mocks["@/app/unauthorized/page"].default);
   effects.forEach((effect) => effect());
   assert.deepEqual(replacements, [href], "the server must resolve permissions and board-move aliases, preserving inbox/hash context");
