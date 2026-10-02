@@ -17,6 +17,7 @@ const TAGS = [
   "COST",
   "PLAN",
   "INFRA",
+  "REFACTOR",
 ];
 
 async function runTitleCheck(title) {
