@@ -28,7 +28,7 @@ test("shared archive undo restores data before following an optional return path
 
   assert.ok(undoStart >= 0 && undoEnd > undoStart, "undo handler must exist");
   assert.match(undoHandler, /await undoAction\("UNDO_REMOVE", data\)/);
-  assert.match(undoHandler, /await queryClient\.refetchQueries/);
+  assert.match(undoHandler, /await reconcileActiveBoardTasks\(queryClient, data\.projectId, _currentUser\.id\)/);
   assert.match(undoHandler, /typeof data\.undoRedirectPath === "string"/);
   assert.match(undoHandler, /router\.replace\(data\.undoRedirectPath\)/);
 
