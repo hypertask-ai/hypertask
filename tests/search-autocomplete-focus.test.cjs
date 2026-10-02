@@ -20,6 +20,8 @@ test('suggestions retain writing focus; result arrows leave it so Enter opens th
   }
   const source = (file, exports) => stub(path.join(root, file), exports)
   let autocomplete = false
+  let chipsEnabled = true
+  let operatorsEnabled = true
   let state
   let reactRoot
   const requests = []
@@ -27,7 +29,7 @@ test('suggestions retain writing focus; result arrows leave it so Enter opens th
   try {
     source('src/utils/index.ts', { taskBaseUri: '/detail/' })
     source('src/utils/undoActions/helperFuncs.ts', { cn: (...values) => values.filter(Boolean).join(' ') })
-    source('src/hooks/useFlag.tsx', { useFlag: (key) => key === 'htpr-6688-search-autocomplete' ? autocomplete : true })
+    source('src/hooks/useFlag.tsx', { useFlag: (key) => key === 'htpr-6688-search-autocomplete' ? autocomplete : key === 'htpr-6370-search-chips' ? chipsEnabled : key === 'htpr-6369-search-operators' ? operatorsEnabled : true })
     source('src/lib/contexts/deviceContext.tsx', { useDeviceContext: () => false })
     const allProjects = [{ id: 7, title: 'Visible' }]
     source('src/hooks/MultiPages/useGetAllProjectsMinimal.ts', { useGetAllProjectsMinimal: () => ({ data: allProjects }) })
@@ -152,6 +154,13 @@ test('suggestions retain writing focus; result arrows leave it so Enter opens th
     await React.act(async () => state.setInputValue(''))
     await React.act(async () => input.focus())
     assert.ok(document.querySelector('#search-chip-options [role="option"]').textContent.includes('Recent: login'), 'the actual search page passes saved history into Tips')
+    for (const [chips, operators] of [[false, true], [true, false]]) {
+      chipsEnabled = chips
+      operatorsEnabled = operators
+      await React.act(async () => reactRoot.render(React.createElement(SearchComp, { key: `${chips}-${operators}`, _searchTerm: '', _includeArchived: false, currentUser: {} })))
+      assert.equal(document.querySelector('.search-autocomplete'), null, 'the page and hook agree when a prerequisite flag is disabled')
+      assert.equal(document.querySelector('#search-chip-options'), null)
+    }
   } finally {
     if (reactRoot) await React.act(async () => reactRoot.unmount())
     for (const [filename, prior] of stubs.reverse()) {
