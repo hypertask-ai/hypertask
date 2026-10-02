@@ -82,7 +82,7 @@ function dispatchConfiguration() {
   const repositoryOwner = requiredEnv("VERCEL_GIT_REPO_OWNER");
   const repositoryName = requiredEnv("VERCEL_GIT_REPO_SLUG");
   const workflow =
-    process.env.POSTHOG_ROLLBACK_GITHUB_WORKFLOW || "prod-health.yml";
+    process.env.POSTHOG_ROLLBACK_GITHUB_WORKFLOW || "posthog-error-alert.yml";
   if (
     !/^[A-Za-z0-9_.-]{1,100}$/.test(repositoryOwner) ||
     !/^[A-Za-z0-9_.-]{1,100}$/.test(repositoryName) ||

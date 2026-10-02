@@ -3,6 +3,8 @@ const assert = require("node:assert/strict");
 const { createHmac } = require("node:crypto");
 const path = require("node:path");
 const { pathToFileURL } = require("node:url");
+const { readFileSync } = require("node:fs");
+const yaml = require("js-yaml");
 
 process.env.ERROR_ALERT_APP_URL = "https://app.hypertask.ai";
 process.env.ERROR_ALERT_BOARD_ID = "15";
@@ -83,6 +85,29 @@ function workflowFetch(liveCreatedAt = NOW - 5 * 60 * 1000) {
   };
   return { fetchImpl, calls };
 }
+
+test("alerts have a dispatch-only workflow independent of production health checks", () => {
+  const workflow = yaml.load(readFileSync(path.join(root, ".github/workflows/posthog-error-alert.yml"), "utf8"));
+  const health = yaml.load(readFileSync(path.join(root, ".github/workflows/prod-health.yml"), "utf8"));
+  assert.deepEqual(Object.keys(workflow.on), ["workflow_dispatch"]);
+  assert.deepEqual(Object.keys(workflow.on.workflow_dispatch.inputs), ["posthog_payload"]);
+  assert.deepEqual(Object.keys(workflow.jobs), ["posthog-error-alert"]);
+  assert.equal(workflow.concurrency.group, "${{ format('posthog-error-{0}', github.run_id) }}");
+  assert.equal(workflow.concurrency["cancel-in-progress"], false);
+  const job = workflow.jobs["posthog-error-alert"];
+  assert.equal(job.if, "github.event_name == 'workflow_dispatch' && inputs.posthog_payload != ''");
+  assert.deepEqual(job.permissions, { contents: "read" });
+  assert.equal(job["runs-on"], "ubuntu-latest");
+  assert.equal(job["timeout-minutes"], 10);
+  assert.equal(job.steps[1].run, "node .github/scripts/posthog-error-alert.mjs");
+  assert.equal(job.steps[1].env.POSTHOG_ALERT_PAYLOAD, "${{ inputs.posthog_payload }}");
+  for (const name of ["HYPERTASK_MCP_TOKEN", "POSTHOG_ALERT_DISPATCH_SECRET", "VERCEL_TOKEN"]) {
+    assert.equal(job.steps[1].env[name], `\${{ secrets.${name} }}`);
+  }
+  assert.equal(health.jobs["posthog-error-alert"], undefined);
+  assert.equal(health.on.workflow_dispatch.inputs.posthog_payload, undefined);
+  assert.deepEqual(health.concurrency, { group: "prod-health", "cancel-in-progress": false });
+});
 
 test("preview alert verifies the complete relay without board writes or rollback", async () => {
   const { handlePostHogAlert } = await import(scriptUrl);

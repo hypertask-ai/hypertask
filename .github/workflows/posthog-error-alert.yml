@@ -1,0 +1,43 @@
+name: PostHog Error Alert
+
+on:
+  workflow_dispatch:
+    inputs:
+      posthog_payload:
+        description: Signed PostHog error payload relayed by the app
+        required: false
+        default: ""
+
+concurrency:
+  # Alerts must not queue behind health checks or unrelated error alerts.
+  # The receiver's Redis claim stops duplicate dispatches for the same alert.
+  group: ${{ format('posthog-error-{0}', github.run_id) }}
+  cancel-in-progress: false
+
+env:
+  PROJECT_ID: prj_oEok2iMNFPzj6AWe1KQBaIAcPaAf
+  TEAM_ID: team_yureFlJZ6ibwebaOOkKc5whs
+
+jobs:
+  posthog-error-alert:
+    if: github.event_name == 'workflow_dispatch' && inputs.posthog_payload != ''
+    permissions:
+      contents: read
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - name: Alert Manager and roll back a fresh server-error spike
+        env:
+          ERROR_ALERT_APP_URL: https://app.hypertask.ai
+          ERROR_ALERT_BOARD_ID: "15"
+          ERROR_ALERT_BUGS_SECTION_ID: "4389"
+          ERROR_ALERT_MANAGER_AGENT_ID: cca791d8-b96d-4f1e-8abf-e2344263aa21
+          ERROR_ALERT_MANAGER_THREAD: "6225"
+          ERROR_ALERT_VERCEL_PROJECT: hypertasks-prod
+          HYPERTASK_MCP_TOKEN: ${{ secrets.HYPERTASK_MCP_TOKEN }}
+          POSTHOG_ALERT_DISPATCH_SECRET: ${{ secrets.POSTHOG_ALERT_DISPATCH_SECRET }}
+          POSTHOG_ALERT_PAYLOAD: ${{ inputs.posthog_payload }}
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+        run: node .github/scripts/posthog-error-alert.mjs
