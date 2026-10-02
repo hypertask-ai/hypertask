@@ -145,13 +145,24 @@ check_done() {
 }
 
 check_cleaned() {
-  local n b repo=${SHIP_CHECKOUT:-$HOME/projects/hypertask}
+  local n b rc wt repo=${SHIP_CHECKOUT:-}
+  # A duplicate reuses another ticket's merged PR; this session made no branch of its own.
+  [ -s "$EVID/$1/duplicate-of" ] && { echo "cleaned ok (duplicate: no branch of its own)"; return 0; }
+  if [ -z "$repo" ]; then
+    [ "$REPO" = hypertask-ai/hypertask ] || fail "set SHIP_CHECKOUT to the local checkout of $REPO"
+    repo=$HOME/projects/hypertask
+  fi
   n=$(bound_pr "$1") || fail "no PR bound for $1"
   b=$(gh pr view "$n" -R "$REPO" --json headRefName --jq .headRefName 2>/dev/null) || fail "cannot read PR $n"
   [ -n "$b" ] || fail "PR $n has no branch name"
-  git -C "$repo" worktree list --porcelain | grep -qxF "branch refs/heads/$b" && fail "a worktree still uses $b; run /clean-up"
-  git -C "$repo" show-ref --verify --quiet "refs/heads/$b" && fail "local branch $b still exists; run /clean-up"
-  [ -z "$(git -C "$repo" ls-remote --heads origin "$b" 2>/dev/null)" ] || fail "GitHub branch $b still exists; run /clean-up"
+  wt=$(git -C "$repo" worktree list --porcelain) || fail "cannot list worktrees in $repo"
+  grep -qxF "branch refs/heads/$b" <<<"$wt" && fail "a worktree still uses $b; run /clean-up"
+  git -C "$repo" show-ref --verify --quiet "refs/heads/$b"; rc=$?
+  [ "$rc" = 0 ] && fail "local branch $b still exists; run /clean-up"
+  [ "$rc" = 1 ] || fail "cannot check local branch $b (git exit $rc)"
+  git -C "$repo" ls-remote --exit-code --heads origin "$b" >/dev/null 2>&1; rc=$?
+  [ "$rc" = 0 ] && fail "GitHub branch $b still exists; run /clean-up"
+  [ "$rc" = 2 ] || fail "cannot check GitHub branch $b (git exit $rc)"
   echo "cleaned ok"
 }
 
