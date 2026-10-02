@@ -36,6 +36,8 @@ const nextConfig = {
   },
   distDir: process.env.BUILD_DIR || ".next",
   // jsdom reads its stylesheet relative to its module, not a bundled server chunk.
+  // The sanitizer's jsdom is pinned in npm overrides to avoid requiring ESM in
+  // serverless runtimes where Node's optional require(esm) support is disabled.
   serverExternalPackages: ["isomorphic-dompurify", "jsdom"],
   productionBrowserSourceMaps: true,
   reactStrictMode: false,
