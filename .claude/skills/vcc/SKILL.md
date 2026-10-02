@@ -56,7 +56,7 @@ The session that built a change also QAs it on the live site. Valentin never QAs
 ## Stay in your lane
 
 - Touch only the ticket you claimed. Do not move or comment on other tickets.
-- Infra problems you hit (CI, deploy, tooling) go on the Hypertask Infra board (project 4060) via `vcc`, with the exact time and what happened, and one line to Valentin.
+- Infra problems you hit (CI, deploy, tooling) go on the Agents & Infra board (project 4060) via `vcc`, with the exact time and what happened, and one line to Valentin.
 
 ## Talking to Valentin
 
