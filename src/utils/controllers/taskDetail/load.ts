@@ -3,6 +3,7 @@ import prisma from "@/lib/prisma";
 import type { TaskDetailSlug } from "./types";
 import type { IComment } from "@/models/model";
 import { CYCLE_WINDOW_SIZE } from "@/lib/cycles";
+import { refreshTaskPullRequests } from "@/lib/pullRequests/taskPullRequests";
 import {
   projectPublicAgent,
   publicAgentSelect,
@@ -411,10 +412,14 @@ export async function fetchTaskDetail(
 
   if (!task) return null;
 
-  const reactions = await fetchDescriptionReactions(task.description_?.id ?? "");
+  const [reactions, pullRequests] = await Promise.all([
+    fetchDescriptionReactions(task.description_?.id ?? ""),
+    refreshTaskPullRequests(task.id, task.pullRequests),
+  ]);
   const visibleAgent = projectVisibleTaskAgent(task.agent, userId, task.projectId);
   return {
     ...task,
+    pullRequests,
     agentId: visibleAgent ? task.agentId : null,
     agent: visibleAgent,
     description_: task.description_
