@@ -13,8 +13,6 @@ import {
   IMAGE_FALLBACK_MIME,
 } from "@/utils/helperFunctions/getFileTypeFromUrl";
 import { isBrowserRenderableImage } from "@/lib/media/browserRenderableImage";
-import { useFlag } from "@/hooks/useFlag";
-import { HEIC_ATTACHMENTS_FLAG } from "@/lib/flags/keys";
 import "./styles.scss";
 
 // Loading spinner component
@@ -131,15 +129,12 @@ export const ResizableMediaNodeView = ({
   // into an error, gets the download chip instead of a dead <img>. The src
   // carries no MIME, so the extension is what we have; an unknown extension
   // still renders, and onError catches it if that guess was wrong.
-  // Flag off keeps today's behaviour: always an <img>, broken icon and all.
-  const heicFallbackEnabled = useFlag(HEIC_ATTACHMENTS_FLAG);
   const canRenderImage =
-    !heicFallbackEnabled ||
-    (!imageFailed &&
-      isBrowserRenderableImage(
-        getFileTypeFromUrl(node.attrs.src ?? "", IMAGE_FALLBACK_MIME),
-        node.attrs.src
-      ));
+    !imageFailed &&
+    isBrowserRenderableImage(
+      getFileTypeFromUrl(node.attrs.src ?? "", IMAGE_FALLBACK_MIME),
+      node.attrs.src
+    );
 
   useEffect(() => {
     setImageFailed(false);

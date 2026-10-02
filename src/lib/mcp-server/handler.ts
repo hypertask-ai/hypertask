@@ -1,8 +1,9 @@
 import type { AuthInfo } from '@modelcontextprotocol/sdk/server/auth/types.js'
-import { createMcpHandler, withMcpAuth } from 'mcp-handler'
+import { withMcpAuth } from 'mcp-handler'
 import jwt from 'jsonwebtoken'
-import crypto from 'node:crypto'
 import { MCP_TOOLS } from './tools'
+import { bindMcpTools } from './streamable-http'
+import { handleLegacySseRequest, isLegacySseRequest } from './legacy-sse'
 import { recordLegacyMcpRequest } from '@/lib/telemetry/mcpSseAnalytics'
 import {
   McpAttachmentRequestBodyError,
@@ -20,57 +21,8 @@ import { handleMcpHttp, usesStatelessMcpTransport } from './mcp-http'
 import {
   handleStatelessMcpRequest,
   mcpUnauthorizedResponse,
-  MCP_SERVER_INFO,
   type PortableTool,
 } from './stateless-http'
-
-function tokenFrom(extra: { authInfo?: AuthInfo }): string {
-  const token = extra.authInfo?.token
-  if (!token) throw new Error('Missing MCP bearer token')
-  return token
-}
-
-function bindMcpTools(tools: readonly PortableTool[]) {
-  return createMcpHandler(
-    (server) => {
-      for (const tool of tools) {
-        server.tool(tool.name, tool.description, tool.parameters.shape, async (args, extra) => {
-          const token = tokenFrom(extra)
-          return {
-            content: [
-              {
-                type: 'text',
-                text: await tool.execute(
-                  args,
-                  token,
-                  extra.requestId === undefined || extra.requestId === null
-                    ? undefined
-                    : {
-                        requestId: String(extra.requestId),
-                        sessionId: extra.sessionId,
-                        clientFingerprint: crypto
-                          .createHash('sha256')
-                          .update(token)
-                          .digest('hex'),
-                      }
-                ),
-              },
-            ],
-          }
-        })
-      }
-    },
-    {
-      serverInfo: MCP_SERVER_INFO,
-    },
-    {
-      basePath: '',
-      redisUrl: process.env.REDIS_URL,
-      maxDuration: 800,
-      verboseLogs: false,
-    }
-  )
-}
 
 const handler = bindMcpTools(MCP_TOOLS as PortableTool[])
 const listQueryHandler = bindMcpTools(resolvePortableTools(MCP_TOOLS as PortableTool[], true))
@@ -179,6 +131,10 @@ export async function mcpHandler(request: Request): Promise<Response> {
       Number.isFinite(userId) &&
       (await isFeatureEnabled(HTPR_6530_MCP_LIST_QUERY_FLAG, userId).catch(() => false))
     const portableTools = resolvePortableTools(MCP_TOOLS as PortableTool[], listQueryEnabled)
+    if (isLegacySseRequest(working)) {
+      return handleLegacySseRequest(working, authInfo, portableTools)
+    }
+
     const stateless =
       Number.isFinite(userId) &&
       (await isFeatureEnabled(HTPR_6532_STATELESS_MCP_FLAG, userId).catch(() => false))

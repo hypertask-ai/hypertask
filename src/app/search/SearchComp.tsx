@@ -36,11 +36,10 @@ const SearchComp = ({
   currentUser,
 }: IProps) => {
   const rankingEnabled = useFlag(HTPR_6372_SEARCH_RANKING_FLAG);
-  const autocompleteEnabled = useFlag(
-    HTPR_6688_SEARCH_AUTOCOMPLETE_FLAG
-  );
   const chipsFlagEnabled = useFlag(HTPR_6370_SEARCH_CHIPS_FLAG);
   const operatorsFlagEnabled = useFlag(HTPR_6369_SEARCH_OPERATORS_FLAG);
+  const autocompleteFlagEnabled = useFlag(HTPR_6688_SEARCH_AUTOCOMPLETE_FLAG);
+  const autocompleteEnabled = autocompleteFlagEnabled && chipsFlagEnabled && operatorsFlagEnabled;
   const setAiChatPendingPrompt = useSetRecoilState(aiChatPendingPromptAtom);
   const { openAIChatInterface } = useGlobalUIState();
   const isMbl = useContext(MobileViewContext);
@@ -104,13 +103,14 @@ const SearchComp = ({
         {/* Below @xl the container is full-width, so clear the fixed back button (ends at x≈96) */}
         <div className={cn('w-full px-0', appShellRailOn && 'pl-[64px] @xl:pl-0')}>
           {chipsFlagEnabled && operatorsFlagEnabled && searchChipsEnabled ? (
-            autocompleteEnabled ? (
+            autocompleteFlagEnabled ? (
               <SearchChipsInput
                 value={inputValue}
                 onChange={setInputValue}
                 onRun={updateSearchHistory}
                 boardId={_fromProject}
                 inputRef={tasksInputRef}
+                recentSearches={searchCache.history}
                 autocompleteEnabled
               />
             ) : (

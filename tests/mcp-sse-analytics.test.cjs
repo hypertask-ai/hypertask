@@ -22,6 +22,10 @@ function source(file, exports) {
   stub(path.join(root, file), exports)
 }
 
+source('src/lib/mcp-server/legacy-sse.ts', {
+  isLegacySseRequest: (request) => ['/sse', '/message'].includes(new URL(request.url).pathname),
+  handleLegacySseRequest: async () => response,
+})
 source('src/lib/mcp-server/tools.ts', { MCP_TOOLS: [] })
 source('src/lib/mcp-server/listQueryContract.ts', { resolvePortableTools: () => [] })
 source('src/lib/flags.ts', { isFeatureEnabled: async () => false })

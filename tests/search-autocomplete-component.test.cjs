@@ -60,7 +60,7 @@ test('real search input and reused list work keyboard-only, with an unchanged fl
       await reset()
       assert.match(document.body.textContent, /Search tips/)
       assert.equal(options().length, 10)
-      assert.ok(options().every((option) => option.textContent.includes(' — ')))
+      assert.ok(options().every((option) => option.textContent.includes(' - ')))
       for (let i = 0; i < 9; i++) await press('ArrowDown')
       assert.ok(selected().textContent.startsWith('has:'))
       assert.equal(scrolled.at(-1), 'mention-button-9', 'keyboard selection scrolls hidden tips into view')
@@ -93,6 +93,26 @@ test('real search input and reused list work keyboard-only, with an unchanged fl
       assert.match(document.querySelector('[aria-label^="Remove after:"]').className, /bg-search-filter-date/)
       await press('Backspace')
       assert.equal(runs.at(-1), '')
+    })
+    await t.test('j/k navigate empty Tips but stay ordinary letters in a nonempty query', async () => {
+      await reset()
+      await press('j')
+      assert.ok(selected().textContent.startsWith('assignee:'))
+      await press('k')
+      assert.ok(selected().textContent.startsWith('from:'))
+      assert.equal(input.value, '')
+      await type('a')
+      for (const key of ['j', 'k']) {
+        const event = new dom.window.KeyboardEvent('keydown', { key, bubbles: true, cancelable: true })
+        await React.act(async () => input.dispatchEvent(event))
+        assert.equal(event.defaultPrevented, false, `${key} remains normal typing while there is text`)
+      }
+      await type('aj')
+      assert.equal(input.value, 'aj')
+      await reset(false)
+      const event = new dom.window.KeyboardEvent('keydown', { key: 'j', bubbles: true, cancelable: true })
+      await React.act(async () => input.dispatchEvent(event))
+      assert.equal(event.defaultPrevented, false, 'flag-off keyboard behavior is unchanged')
     })
     await t.test('Escape closes only the operator/value/tips list, leaving the query and focus intact', async () => {
       let escaped = 0

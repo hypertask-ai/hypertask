@@ -113,7 +113,7 @@ test('enabled drafting retains a complete value until acceptance; flag off keeps
   assert.match(flags, /key: HTPR_6688_SEARCH_AUTOCOMPLETE_FLAG/)
   assert.match(flags, /DEFAULT_FEATURE_FLAG_MODE: FeatureFlagMode = "OWNER_AND_QA"/)
   assert.match(component, /useFlag\(\s*HTPR_6688_SEARCH_AUTOCOMPLETE_FLAG\s*\)/)
-  assert.match(component, /autocompleteEnabled \? \(\s*<SearchChipsInput[\s\S]*?\sautocompleteEnabled\s*\/>/)
+  assert.match(component, /autocompleteFlagEnabled \? \(\s*<SearchChipsInput[\s\S]*?\sautocompleteEnabled\s*\/>/)
 })
 
 test('title highlights are literal, case insensitive and omit filter values without HTML injection', () => {

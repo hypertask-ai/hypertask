@@ -20,6 +20,8 @@ test('suggestions retain writing focus; result arrows leave it so Enter opens th
   }
   const source = (file, exports) => stub(path.join(root, file), exports)
   let autocomplete = false
+  let chipsEnabled = true
+  let operatorsEnabled = true
   let state
   let reactRoot
   const requests = []
@@ -27,7 +29,7 @@ test('suggestions retain writing focus; result arrows leave it so Enter opens th
   try {
     source('src/utils/index.ts', { taskBaseUri: '/detail/' })
     source('src/utils/undoActions/helperFuncs.ts', { cn: (...values) => values.filter(Boolean).join(' ') })
-    source('src/hooks/useFlag.tsx', { useFlag: (key) => key === 'htpr-6688-search-autocomplete' ? autocomplete : true })
+    source('src/hooks/useFlag.tsx', { useFlag: (key) => key === 'htpr-6688-search-autocomplete' ? autocomplete : key === 'htpr-6370-search-chips' ? chipsEnabled : key === 'htpr-6369-search-operators' ? operatorsEnabled : true })
     source('src/lib/contexts/deviceContext.tsx', { useDeviceContext: () => false })
     const allProjects = [{ id: 7, title: 'Visible' }]
     source('src/hooks/MultiPages/useGetAllProjectsMinimal.ts', { useGetAllProjectsMinimal: () => ({ data: allProjects }) })
@@ -41,10 +43,11 @@ test('suggestions retain writing focus; result arrows leave it so Enter opens th
     source('src/styles/search.module.scss', {})
     source('src/app/search/search-autocomplete.css', {})
     source('src/store/index.ts', { inViewObjectAtom: {}, SearchTaskIndexAtom, showCommandsAtom: {}, tasksPlayListAtom: {} })
-    source('src/hooks/Search/useSearchCache.ts', { useGetSearchCache: () => ({ data: { history: [] } }) })
+    const cache = { history: [] }
+    source('src/hooks/Search/useSearchCache.ts', { useGetSearchCache: () => ({ data: cache }) })
     source('src/lib/constants/index.ts', { default: { multipleKeys: {}, gThenKeyDelay: 500 } })
     source('src/lib/constants/APIRouteConstants.ts', { searchDocumentsRoute: '/api/search/document' })
-    source('src/lib/constants/keyboard-handler.ts', { KeyCodes: { ARROW_DOWN: 40, ARROW_UP: 38, ENTER: 13, ESCAPE: 27 } })
+    source('src/lib/constants/keyboard-handler.ts', { KeyCodes: { ARROW_DOWN: 40, ARROW_UP: 38, ENTER: 13, ESCAPE: 27, J: 74, K: 75 } })
     const post = async (_url, body) => {
       requests.push(body)
       return { status: 200, data: { processedData: { All: [
@@ -62,6 +65,11 @@ test('suggestions retain writing focus; result arrows leave it so Enter opens th
       state = useSearch('')
       return React.createElement(SearchChipsInput, { value: state.inputValue, onChange: state.setInputValue, onRun: state.updateSearchHistory, boardId: null, inputRef: state.tasksInputRef, autocompleteEnabled: autocomplete })
     }
+    // The app-shell listener runs first and prevents body arrows from scrolling.
+    const preventArrowScroll = (event) => {
+      if (autocomplete && document.activeElement.tagName !== 'INPUT' && ['ArrowDown', 'ArrowUp'].includes(event.key)) event.preventDefault()
+    }
+    document.addEventListener('keydown', preventArrowScroll)
     const press = async (key, keyCode) => React.act(async () => {
       document.activeElement.dispatchEvent(new dom.window.KeyboardEvent('keydown', { key, keyCode, bubbles: true, cancelable: true }))
     })
@@ -131,6 +139,10 @@ test('suggestions retain writing focus; result arrows leave it so Enter opens th
     assert.equal(state.selectedIndex, 0)
     await press('ArrowDown', 40)
     assert.equal(state.selectedIndex, 1)
+    await press('k', 75)
+    assert.equal(state.selectedIndex, 0, 'k selects the previous result outside writing mode')
+    await press('j', 74)
+    assert.equal(state.selectedIndex, 1, 'j selects the next result outside writing mode')
     await press('Enter', 13)
     assert.equal(opened.at(-1), '/detail/project-7/2')
     assert.equal(requests.length, before, 'clicked-input arrows then Enter open a ticket, not another search')
@@ -138,6 +150,17 @@ test('suggestions retain writing focus; result arrows leave it so Enter opens th
     assert.equal(state.selectedIndex, null)
     await press('ArrowUp', 38)
     assert.equal(state.selectedIndex, state.typedTasks.length - 1, 'ArrowUp starts at the last result after blank-space deselection')
+    cache.history = ['login']
+    await React.act(async () => state.setInputValue(''))
+    await React.act(async () => input.focus())
+    assert.ok(document.querySelector('#search-chip-options [role="option"]').textContent.includes('Recent: login'), 'the actual search page passes saved history into Tips')
+    for (const [chips, operators] of [[false, true], [true, false]]) {
+      chipsEnabled = chips
+      operatorsEnabled = operators
+      await React.act(async () => reactRoot.render(React.createElement(SearchComp, { key: `${chips}-${operators}`, _searchTerm: '', _includeArchived: false, currentUser: {} })))
+      assert.equal(document.querySelector('.search-autocomplete'), null, 'the page and hook agree when a prerequisite flag is disabled')
+      assert.equal(document.querySelector('#search-chip-options'), null)
+    }
   } finally {
     if (reactRoot) await React.act(async () => reactRoot.unmount())
     for (const [filename, prior] of stubs.reverse()) {

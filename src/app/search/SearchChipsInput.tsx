@@ -8,7 +8,7 @@ import { searchConfig } from "@/lib/configs/search.config";
 import { Hash, UserRound, X } from "lucide-react";
 import React, { type ChangeEvent, type KeyboardEvent, type RefObject, useEffect, useRef, useState } from "react";
 
-type Candidate = { id: number | string; name: string };
+type Candidate = { id: number | string; name: string; query?: string };
 type Props = {
   value: string;
   onChange: (value: string) => void;
@@ -16,9 +16,10 @@ type Props = {
   boardId: number | null;
   inputRef: RefObject<HTMLInputElement | null>;
   autocompleteEnabled?: boolean;
+  recentSearches?: string[];
 };
 
-export default function SearchChipsInput({ value, onChange, onRun, boardId, inputRef, autocompleteEnabled = false }: Props) {
+export default function SearchChipsInput({ value, onChange, onRun, boardId, inputRef, autocompleteEnabled = false, recentSearches = [] }: Props) {
   const [editing, setEditing] = useState(false);
   const [names, setNames] = useState<Names>({});
   const [chipLabels, setChipLabels] = useState<Record<string, string>>({});
@@ -40,7 +41,10 @@ export default function SearchChipsInput({ value, onChange, onRun, boardId, inpu
   const localRows = completion?.kind === 'operator'
     ? operatorSuggestions(completion.value).map((operator) => ({ id: operator, name: `${operator}:` }))
     : completion ? localValueSuggestions(completion.operator, completion.value) : null;
-  const rows = tips ? SEARCH_OPERATORS.map((operator) => ({ id: operator, name: `${SEARCH_TIPS[operator].example} — ${SEARCH_TIPS[operator].meaning}` })) : localRows ?? candidates;
+  const rows: Candidate[] = tips ? [
+    ...recentSearches.map((query, index) => ({ id: `recent-${index}`, name: `Recent: ${query}`, query })),
+    ...SEARCH_OPERATORS.map((operator) => ({ id: operator, name: `${SEARCH_TIPS[operator].example} - ${SEARCH_TIPS[operator].meaning}` })),
+  ] : localRows ?? candidates;
   const open = !dismissed && Boolean(picker || tips);
   const listId = "search-chip-options";
   const selectedRow = rows[selectedIndex] ?? rows[0];
@@ -152,6 +156,14 @@ export default function SearchChipsInput({ value, onChange, onRun, boardId, inpu
   }
 
   function choose(row: Candidate) {
+    if (tips && row.query !== undefined) {
+      setEditing(false);
+      setDismissed(true);
+      onChange(row.query);
+      onRun(row.query);
+      inputRef.current?.focus();
+      return;
+    }
     if (autocompleteEnabled && (tips || completion?.kind === 'operator')) {
       const nextText = tips ? `${row.id}:` : text.slice(0, completion?.start) + `${completion?.negated ? '-' : ''}${row.id}:` + text.slice(completion?.end);
       setEditing(true);
@@ -192,10 +204,12 @@ export default function SearchChipsInput({ value, onChange, onRun, boardId, inpu
       setDismissed(true);
       return;
     }
-    if (open && (event.key === "ArrowDown" || event.key === "ArrowUp")) {
+    const moveDown = event.key === "ArrowDown" || (tips && event.key === "j");
+    const moveUp = event.key === "ArrowUp" || (tips && event.key === "k");
+    if (open && (moveDown || moveUp)) {
       event.preventDefault();
       event.stopPropagation();
-      setSelectedIndex((current) => Math.max(0, Math.min(rows.length - 1, current + (event.key === "ArrowDown" ? 1 : -1))));
+      setSelectedIndex((current) => Math.max(0, Math.min(rows.length - 1, current + (moveDown ? 1 : -1))));
       return;
     }
     if (open && rows.length && (event.key === "Enter" || (event.key === "Tab" && (!autocompleteEnabled || !event.shiftKey)))) {
@@ -275,7 +289,7 @@ export default function SearchChipsInput({ value, onChange, onRun, boardId, inpu
       </div>
       {open && (
         <div ref={pickerRef} className="absolute left-4 top-full z-30 max-w-[calc(100%-2rem)] @md:left-9" onMouseDown={(event) => event.preventDefault()}>
-          {autocompleteEnabled && <div className="rounded-t-sm bg-modalBackground px-3 pt-2 text-meta text-text-light-gray">{tips ? 'Search tips' : 'Suggestions'} · ↑ ↓ to move · Tab / Enter to accept · Esc to close</div>}
+          {autocompleteEnabled && <div className="rounded-t-sm bg-modalBackground px-3 pt-2 text-meta text-text-light-gray">{tips ? 'Search tips' : 'Suggestions'} · {tips ? '↑ ↓ or j/k' : '↑ ↓'} to move · Tab / Enter to accept · Esc to close</div>}
           {error && localRows === null && !tips ? <div id={listId} role="alert" className="rounded bg-modalBackground p-3 text-white-black">Could not load suggestions. Keep typing to retry.</div> : (
             <MentionListRows
               id={listId}
