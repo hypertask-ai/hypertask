@@ -17,6 +17,7 @@ Work from the main checkout (`~/projects/hypertask`), never from inside a worktr
 2. Skip it while its PR is still open (`gh pr list -R hypertask-ai/hypertask --head <branch> --state open`); say so in the report.
 3. `git worktree remove <worktree>` (no `--force`).
 4. Delete the local branch only when its PR is **merged** and the branch has nothing beyond what was merged: `git rev-parse <branch>` equals the PR's `headRefOid` (`gh pr view <pr> --json headRefOid`). Then `git branch -D <branch>` (we squash-merge, so lowercase `-d` always refuses). A closed but unmerged PR, or extra local commits: keep the branch and say so in the report.
+   Duplicate path only: the branch you recorded with `ship-check branch` held a fix you were told to throw away. Delete it with `git branch -D`, and `git push origin --delete` if you pushed it and no open PR uses it. Never any other branch.
 5. `git push origin --delete <branch>` only when its PR is merged.
 6. Keep QA evidence in `~/.local/state/vcc-evidence/`; it is never cleaned.
 

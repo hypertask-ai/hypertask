@@ -60,13 +60,14 @@ pr_row() {
 
 check_branch() {
   [[ ${2:-} =~ ^[A-Za-z0-9._/-]+$ ]] || fail "usage: ship-check branch <T> <branch|none>"
+  [ -s "$EVID/$1/duplicate-of" ] || fail "ship-check branch is only for the duplicate path; run ship-check duplicate first"
   mkdir -p "$EVID/$1" && echo "$2" > "$EVID/$1/branch" && echo "recorded branch $2 for $1"
 }
 
 check_bind() {
   local t; t=$(gh pr view "$2" -R "$REPO" --json title --jq .title 2>/dev/null) || fail "PR $2 not found in $REPO"
   [[ $t == "$1 "* ]] || fail "PR $2 is titled \"$t\", not $1"
-  mkdir -p "$EVID/$1" && echo "$2" > "$EVID/$1/pr" && rm -f "$EVID/$1/duplicate-of" && echo "bound $1 to PR $2"
+  mkdir -p "$EVID/$1" && echo "$2" > "$EVID/$1/pr" && rm -f "$EVID/$1/duplicate-of" "$EVID/$1/branch" && echo "bound $1 to PR $2"
 }
 
 check_duplicate() {
@@ -74,7 +75,7 @@ check_duplicate() {
   [[ $t == "MERGED $2 "* ]] || fail "PR $3 must be the merged PR of $2, got: $t"
   ( check_ticket "$1" ) >/dev/null || fail "ticket $1 not found on the board"
   ( check_ticket "$2" ) >/dev/null || fail "ticket $2 not found on the board"
-  mkdir -p "$EVID/$1" && echo "$3" > "$EVID/$1/pr" && echo "$2" > "$EVID/$1/duplicate-of" \
+  mkdir -p "$EVID/$1" && rm -f "$EVID/$1/branch" && echo "$3" > "$EVID/$1/pr" && echo "$2" > "$EVID/$1/duplicate-of" \
     && echo "bound $1 as a duplicate of $2 (PR $3)"
 }
 
@@ -156,13 +157,12 @@ check_cleaned() {
     [ "$REPO" = hypertask-ai/hypertask ] || fail "set SHIP_CHECKOUT to the local checkout of $REPO"
     repo=$HOME/projects/hypertask
   fi
-  # The branch this session made: recorded with `ship-check branch`, else the bound PR's own branch.
-  # A duplicate is bound to another ticket's PR, so it must record its branch (or "none") explicitly.
-  if [ -s "$EVID/$1/branch" ]; then
+  # Normal ticket: the bound PR's own branch. Duplicate (bound to another ticket's PR): the branch it
+  # recorded with `ship-check branch` after `ship-check duplicate` (rebinding clears that record).
+  if [ -s "$EVID/$1/duplicate-of" ]; then
+    [ -s "$EVID/$1/branch" ] || fail "duplicate: record this session's branch first: ship-check branch $1 <branch>, or ship-check branch $1 none"
     b=$(cat "$EVID/$1/branch")
-    [ "$b" = none ] && { echo "cleaned ok (session recorded no branch)"; return 0; }
-  elif [ -s "$EVID/$1/duplicate-of" ]; then
-    fail "duplicate: record this session's branch first: ship-check branch $1 <branch>, or ship-check branch $1 none"
+    [ "$b" = none ] && { echo "cleaned ok (duplicate, session recorded no branch)"; return 0; }
   else
     n=$(bound_pr "$1") || fail "no PR bound for $1"
     b=$(gh pr view "$n" -R "$REPO" --json headRefName --jq .headRefName 2>/dev/null) || fail "cannot read PR $n"
