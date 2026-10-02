@@ -487,6 +487,10 @@ test("unavailable realtime silently updates only the visible board even with the
   const before = cachedProjects();
   const harness = mountFallbackHook(t, { queryClient });
   await settle();
+  assert.deepEqual(operations, [], "startup must reuse the initial board load");
+  assert.equal(cachedProjects(), before);
+  harness.tick();
+  await settle();
   assert.deepEqual(cachedProjects()[1].tasks, changedPayload.tasks);
   assert.equal(cachedProjects()[0], before[0]);
   assert.equal(cachedProjects()[2], before[2]);
