@@ -262,22 +262,15 @@ export const WelcomeScreen = () => {
               <span>{taskSummaryAction.label}</span>
             </button>
           )}
-          {taskQuestions.isLoading
-            ? Array.from({ length: 5 }, (_, index) => (
-                <div
-                  key={index}
-                  className="h-8 animate-pulse bg-kanban-active-cardbg rounded w-full"
-                />
-              ))
-            : displayedQuestions.map((suggestion) => (
-                <button
-                  key={suggestion}
-                  className="bg-kanban-active-cardbg hover:bg-hover-active rounded p-2 text-xs text-left w-full"
-                  onClick={() => handleSendMessage(suggestion)}
-                >
-                  {suggestion}
-                </button>
-              ))}
+          {displayedQuestions.map((suggestion) => (
+            <button
+              key={suggestion}
+              className="bg-kanban-active-cardbg hover:bg-hover-active rounded p-2 text-xs text-left w-full"
+              onClick={() => handleSendMessage(suggestion)}
+            >
+              {suggestion}
+            </button>
+          ))}
           {generatedQuestions.length > 0 && !taskQuestions.isLoading && (
             <button
               className="self-start px-2 text-[11px] text-text-light-gray hover:text-white-black"

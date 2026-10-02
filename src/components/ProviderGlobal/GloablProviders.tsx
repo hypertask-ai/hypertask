@@ -1446,11 +1446,7 @@ export default function GlobalProvider({
       >
         <ChatRuntimeHost
           mounted={shouldMountChatRuntime}
-          holdChildren={
-            isFullScreenChat ||
-            shouldMountAgentChatRuntime ||
-            isTaskDetailPage
-          }
+          holdChildren={isFullScreenChat || shouldMountAgentChatRuntime}
           loading={<FullScreenChatLoading />}
           Runtime={ChatRuntime}
         >
