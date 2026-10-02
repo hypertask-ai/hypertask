@@ -46,7 +46,8 @@ function isUiFile(path) {
 function refactorUiLineCounts(baseSha, headSha) {
   const diff = git(["-c", "core.quotePath=false", "diff", "--unified=0", "--no-renames", `${baseSha}...${headSha}`]);
   const normalizeLine = (line) => line.trim().replace(/\s+/g, " ").replace(/[,;]$/, "");
-  const removed = new Set();
+  // Multiset: each removed line can credit only one added line.
+  const removed = new Map();
   const added = [];
   let uiFile = false;
   let inHunk = false;
@@ -60,21 +61,28 @@ function refactorUiLineCounts(baseSha, headSha) {
     } else if (row.startsWith("@@ ")) {
       inHunk = true;
     } else if (inHunk && row.startsWith("-")) {
-      removed.add(normalizeLine(row.slice(1)));
+      const key = normalizeLine(row.slice(1));
+      removed.set(key, (removed.get(key) ?? 0) + 1);
     } else if (inHunk && uiFile && row.startsWith("+")) {
       added.push(normalizeLine(row.slice(1)));
     }
   }
 
   const candidates = added.filter((line) => line !== "" &&
-    !/^[\]\)}{(\[<>\/,;:]+$/.test(line) && !/^(import|export)\b/.test(line) &&
+    !/^[\]\)}{(\[<>\/,;:]+$/.test(line) && !/^import\b/.test(line) &&
+    !/^export (\{[^}]*\}|\*)( from ["'][^"']+["'])?$/.test(line) &&
     !/^(\/\/|\*|\/\*)/.test(line) && !/^["']use client["']$/.test(line) &&
     !/^[A-Za-z_$][\w$]*$/.test(line));
-  const newLines = candidates.filter((line) => !removed.has(line));
+  const newLines = candidates.filter((line) => {
+    const left = removed.get(line) ?? 0;
+    if (left === 0) return true;
+    removed.set(line, left - 1);
+    return false;
+  });
   // Pick-key union members are type plumbing, not new UI strings.
   const riskyNew = newLines.filter((line) =>
     (/(^|[\s(={?:&|,])<[A-Za-z]/.test(line) || /["'`]/.test(line)) &&
-    !/^\|? ?["'][\w$]+["']\|?$/.test(line)).length;
+    !/^\| ["'][\w$]+["']$/.test(line)).length;
   return {
     uiAdded: added.length,
     moved: candidates.length - newLines.length,
