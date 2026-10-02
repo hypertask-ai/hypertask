@@ -73,7 +73,7 @@ const RAIL_CONSUMER_FILES = [
   "../src/app/my-tasks/MyTasks.tsx",
   "../src/app/archived/ArchivedComp.tsx",
   "../src/app/agents/AgentsRegister.tsx",
-  "../src/app/agents/[agentId]/AgentDetail.tsx",
+  "../src/app/agents/[agentId]/AgentDetailView.tsx",
   "../src/app/report/ReportsOverview.tsx",
   "../src/app/report/[projectSlug]/velocity/VelocityReport.tsx",
   "../src/app/detail/[...slug]/TaskDetailComp.tsx",

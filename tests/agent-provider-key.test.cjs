@@ -1,3 +1,4 @@
+const { readAgentDetailSource } = require("./helpers/agent-detail-source.cjs");
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const path = require("node:path");
@@ -232,10 +233,7 @@ test("the agent page reads and writes the key through the owner-only route", () 
     path.join(root, "src/app/api/agents/[agentId]/provider-key/route.ts"),
     "utf8",
   );
-  const detail = fs.readFileSync(
-    path.join(root, "src/app/agents/[agentId]/AgentDetail.tsx"),
-    "utf8",
-  );
+  const detail = readAgentDetailSource();
 
   // Every handler resolves the agent through the owner's own agent list.
   assert.equal(route.match(/requireOwnedAgent\(/g).length, 4);
@@ -280,10 +278,7 @@ test("the agents list exposes only a masked key, and only to the owner", () => {
   );
   assert.match(shared, /if \(row\.enabled === false\) continue;/);
   assert.match(shared, /maskByokSecret\(decryptByokSecret\(ciphertext\)\)/);
-  const detail = fs.readFileSync(
-    path.join(root, "src/app/agents/[agentId]/AgentDetail.tsx"),
-    "utf8",
-  );
+  const detail = readAgentDetailSource();
   assert.match(detail, /k\.enabled !== false/);
 
   assert.match(listRoute, /byokApiKeys,\s*\.\.\.a\s*\}/);
