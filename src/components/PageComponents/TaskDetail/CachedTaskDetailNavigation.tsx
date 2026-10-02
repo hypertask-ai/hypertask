@@ -55,7 +55,7 @@ export default function CachedTaskDetailNavigation({ children, accountId }: {
   previousLocation.current = location;
   useEffect(() => {
     if (!instantTicketOpen || accountId === null || currentUser?.id !== accountId ||
-        !["/project", "/my-tasks", "/inbox"].includes(pathname)) return;
+        !pathname || !["/project", "/my-tasks", "/inbox"].includes(pathname)) return;
     let warming = false;
     const warm = () => {
       if (warming) return;
