@@ -1,10 +1,12 @@
 import prisma from "@/lib/prisma";
+import { teamBillingSnapshotSelect } from "@/lib/ai/teamBillingSnapshotSelect";
 import {
   getBoardTaskInclude,
   getProjectIncludeWithoutTasks,
   getProjectViewInclude,
   getProjectWhere,
   getTaskWhere,
+  projectBootstrapSelect,
   taskBoardOmit,
 } from "./getAllIncludes";
 import { sanitizeProjectBoardFilters } from "@/utils/helperFunctions/Views/BoardFilterSanitizer";
@@ -34,12 +36,26 @@ const getBoardTasks = async (
     // Access guard: only owners/members of the board may read its board payload.
     const project = await prisma.project.findFirst({
       where: { id: projectId, status: "Normal", ...getProjectWhere(userId) },
-      include: {
+      select: {
+        ...projectBootstrapSelect,
+        sections: true,
+        targetDate: true,
         ...getProjectIncludeWithoutTasks({
           userId,
           userDbId: userId,
           currentUserId,
         }),
+        team: {
+          select: {
+            ...teamBillingSnapshotSelect,
+            totalSeats: true,
+            googleAccountId: true,
+            stripe_customer_id: true,
+            allowedEmailDomains: true,
+            googleAccount: { select: { userId: true } },
+            team_activity: { select: { hasCompletedTrial: true } },
+          },
+        },
         project_view: getProjectViewInclude({ currentUserId }),
       },
     });

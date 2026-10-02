@@ -21,6 +21,7 @@ function loadController(prisma, calls) {
 
   const stubs = {
     "@/lib/prisma": { __esModule: true, default: prisma },
+    "@/lib/ai/teamBillingSnapshotSelect": { teamBillingSnapshotSelect: {} },
     "./getAllIncludes": {
       getBoardTaskInclude: (options) => {
         calls.push(["board-task-include", options]);
@@ -133,7 +134,7 @@ test("board payload checks access before querying task content", async () => {
     },
   });
   assert.deepEqual(
-    calls.find(([name]) => name === "project")[1].include.project_view,
+    calls.find(([name]) => name === "project")[1].select.project_view,
     { include: { default_view: true } },
   );
   assert.deepEqual(project.project_view.allViews, ["my-view"]);
