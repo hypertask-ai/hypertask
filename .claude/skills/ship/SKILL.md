@@ -33,7 +33,7 @@ Repo skills live in the app repo at `.claude/skills/`; their index is `.claude/s
 | Merge and deploy | `vcc` QA routine steps 1 to 3 | `ship-check deployed HTPR-NNNN` prints `deployed ok` |
 | Live QA | repo `verify-qa` and its feature map | `ship-check proof HTPR-NNNN` prints `proof ok` |
 | Report and close | `vcc` QA routine step 5, plus the QA record below | `ship-check done HTPR-NNNN` prints `done ok` |
-| Clean up | the cleanup rule below | your worktree and branch are gone (`git worktree list` and `git branch -a` no longer show them) |
+| Clean up | `clean-up` (this session's worktree and branch) | your worktree and branch are gone (`git worktree list` and `git branch -a` no longer show them) |
 
 ## Rules that hold the whole session
 
@@ -61,11 +61,7 @@ Repo skills live in the app repo at `.claude/skills/`; their index is `.claude/s
   2. Prove the bug is gone on the live site, exactly like any QA run (repo `verify-qa`, `proof.md` with the fixing PR's merge sha).
   3. One comment via `vcc`: bold first sentence "Already fixed by <full title of HTPR-MMMM as a link>.", what you checked live, the evidence attached. Then `vcc task move HTPR-NNNN --section "Done"`.
   If it is only partly fixed, it is not a duplicate: keep working it as a normal ticket.
-- **Clean up after yourself** (Valentin, 2026-10-01: "I don't want this stuff to linger around as it clogs up the VPS"). Once the ticket is in Done, from the main checkout (never from inside the worktree):
-  1. `git -C <worktree> status --porcelain` must be empty; if not, commit or ask, never discard.
-  2. `git worktree remove <worktree>`, then `git branch -d <branch>` and `git push origin --delete <branch>` (only when the PR is merged).
-  3. Keep the QA evidence in `~/.local/state/vcc-evidence/HTPR-NNNN/`.
-  Only ever remove the worktree and branch this session created. Write one agent activity line saying what you removed.
+- **Clean up after yourself** (Valentin, 2026-10-01). Once the ticket is Done, load `clean-up` and remove only the worktree and branch this session created.
 - **Agents are human companions** (Valentin, 2026-10-02: "if I add myself to the ticket as the human assignee, the agent mustn't remove me"). A ticket usually has a human assignee and an agent together; agent-only is fine. Never remove or change a human assignee, never add Valentin yourself, and never use a command that replaces the assignee list.
 - **Old automated comments do not count (Valentin, 2026-10-01).** The automated agents were retired on 2026-10-01. Their claims, "Blocked" notes, decisions, plans and progress on a ticket are history, not state. Authors include Product Bot, Dev 1, Dev 2, Feature Dev 1, QA 1, Supervisor and any "worker" or "drain" bot. A ticket with only such comments is free: pick it, claim it via `vcc` and treat the bug as open. Read those comments only for facts about the bug (steps, screenshots, error text), and re-check those facts on the live site. Whether a ticket is taken follows the rule above, read from the ticket alone.
 
