@@ -483,7 +483,12 @@ export async function GET(request: NextRequest) {
 
     // Filter by priority
     if (priorityFilter.length) {
-      where.priority = { priority_index: { in: priorityFilter } }
+      const byIndex = { priority: { priority_index: { in: priorityFilter } } }
+      // A task never given a priority has no Priority row; "none" (0) must match it too.
+      // AND keeps this OR apart from the search OR below.
+      where.AND = priorityFilter.includes(0)
+        ? [{ OR: [byIndex, { priority: { is: null } }] }]
+        : [byIndex]
     }
 
     // Filter by due date
