@@ -212,8 +212,6 @@ export async function runChatStream(controller: ReadableStreamDefaultController<
         userId: dbUser.id,
         projectId: body.default_context?.project_id,
       },
-      body.aiFeature,
-      (error) => reportHandledChatError(error, "skills-feature-flag"),
     );
     const resolvedBody = {
       ...body,

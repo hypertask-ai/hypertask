@@ -10,14 +10,14 @@ const { createJiti } = require("jiti");
 const root = path.resolve(__dirname, "..");
 const modulePath = (relativePath) => path.join(root, relativePath);
 
-test("Agent Chat skill UI follows the feature flag without hiding other skill flows", async () => {
+test("Agent Chat skill UI is always available without a feature flag lookup", async () => {
   const stubs = new Map();
   const globals = ["window", "document", "HTMLElement", "IS_REACT_ACT_ENVIRONMENT"];
   const previousGlobals = new Map(
     globals.map((name) => [name, Object.getOwnPropertyDescriptor(global, name)])
   );
   const previousReact = global.React;
-  let agentChatSkillsEnabled = true;
+  let flagChecks = 0;
   let reactRoot;
   let dom;
   let fetches = 0;
@@ -31,7 +31,10 @@ test("Agent Chat skill UI follows the feature flag without hiding other skill fl
   try {
     global.React = React;
     stubModule("src/hooks/useFlag.tsx", {
-      useFlag: () => agentChatSkillsEnabled,
+      useFlag: () => {
+        flagChecks += 1;
+        assert.fail("Skill UI must not read a feature flag");
+      },
     });
     stubModule("src/components/Modals/Settings/SettingsToggle.tsx", {
       default: () => React.createElement("span", { "data-settings-toggle": true }),
@@ -86,18 +89,13 @@ test("Agent Chat skill UI follows the feature flag without hiding other skill fl
     const renderSettings = (Component, props = {}) =>
       renderToStaticMarkup(React.createElement(Component, props));
 
-    agentChatSkillsEnabled = true;
     assert.match(renderSettings(SkillLibrary, { scope: "user" }), /Import from GitHub/);
     assert.match(renderSettings(SkillsSection), /Type \/slug in AI chat/);
     assert.match(renderSettings(BoardSkillsSection), /Type \/slug in AI chat/);
 
-    agentChatSkillsEnabled = false;
-    const disabledLibrary = renderSettings(SkillLibrary, { scope: "user" });
-    assert.doesNotMatch(disabledLibrary, /Import from GitHub/);
-    assert.match(disabledLibrary, /New skill/);
+    assert.match(renderSettings(SkillLibrary, { scope: "user" }), /New skill/);
     for (const html of [renderSettings(SkillsSection), renderSettings(BoardSkillsSection)]) {
-      assert.doesNotMatch(html, /Type \/slug in AI chat/);
-      assert.match(html, /Type @hyperai \/slug in a comment/);
+      assert.match(html, /@hyperai \/slug in a comment/);
     }
 
     dom = new JSDOM('<div id="root"></div>', {
@@ -116,23 +114,17 @@ test("Agent Chat skill UI follows the feature flag without hiding other skill fl
       query: "",
     });
 
-    agentChatSkillsEnabled = true;
     await React.act(async () => {
       reactRoot.render(React.createElement(CommandsList, propsForMode("ai-chat")));
     });
     assert.match(container.textContent, /Unslop/);
-
-    agentChatSkillsEnabled = false;
-    await React.act(async () => {
-      reactRoot.render(React.createElement(CommandsList, propsForMode("ai-chat")));
-    });
-    assert.doesNotMatch(container.textContent, /Unslop/);
 
     await React.act(async () => {
       reactRoot.render(React.createElement(CommandsList, propsForMode("create-comment")));
     });
     assert.match(container.textContent, /Unslop/);
-    assert.equal(fetches, 2);
+    assert.equal(fetches, 1);
+    assert.equal(flagChecks, 0);
   } finally {
     if (reactRoot) await React.act(async () => reactRoot.unmount());
     dom?.window.close();

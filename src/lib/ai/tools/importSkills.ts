@@ -28,7 +28,7 @@ export function createImportSkillsTool(context: ToolContext) {
           input.scope,
           input.project_id
         );
-        const parsed = await importSkillsFromGitHub(input.url, user.id);
+        const parsed = await importSkillsFromGitHub(input.url);
         const selected = input.slugs
           ? parsed.filter((skill) => input.slugs?.includes(skill.slug))
           : parsed;
