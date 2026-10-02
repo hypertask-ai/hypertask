@@ -1,5 +1,7 @@
 # Skills for Valentin's Claude Code sessions
 
+Together these skills, their scripts, the hooks and the rule files (CLAUDE.md, AGENTS.md) are the **Agent Kit**: how every Hypertask session works (Valentin, 2026-10-02). It lives in this repo, next to the code it works on. Changes to it are tickets on the Agents & Infra board (project 4060) and PRs, like any other change. (Not to be confused with Product Bot, the retired farm agent.)
+
 These skills are for an interactive session started with `/ship`. One session takes one ticket from the fix through the production check. Board writes go through `vcc` (identity "Valentins Claude Code CLI"). Reads go through the plain `hypertask` CLI.
 
 Read the "when to load" column, open that SKILL.md, and follow it, including its scripts. Paths are repo-relative from the repo root.
