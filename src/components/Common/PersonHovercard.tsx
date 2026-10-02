@@ -5,6 +5,9 @@ import { usePersonHovercard } from "@/hooks/MultiPages/usePersonHovercard";
 import type { PersonHovercardSubject } from "@/models/personHovercard";
 import { agentPageHref } from "@/lib/agents/pageHref";
 import Link from "next/link";
+import { usePathname } from "next/navigation";
+import { useFlag } from "@/hooks/useFlag";
+import { HTPR_6752_INSTANT_TICKET_OPEN_FLAG } from "@/lib/flags/keys";
 import {
   autoUpdate,
   flip,
@@ -99,6 +102,9 @@ const PersonHovercardSurface = ({
     role,
   ]);
 
+  const instantTicketOpen = useFlag(HTPR_6752_INSTANT_TICKET_OPEN_FLAG);
+  const pathname = usePathname();
+  const quietContact = instantTicketOpen && pathname?.startsWith("/detail/");
   const query = usePersonHovercard(projectId, subject ?? null, open);
   const profile = query.isFetching || query.isError ? undefined : query.data;
   const profileHref = profile ? agentPageHref(profile) : null;
@@ -133,7 +139,7 @@ const PersonHovercardSurface = ({
   return (
     <>
       {reference}
-      {open && (
+      {open && (!quietContact || profile || query.isError) && (
         <FloatingPortal>
           <FloatingFocusManager context={context} modal={false} initialFocus={-1}>
             <section

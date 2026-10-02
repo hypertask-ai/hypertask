@@ -21,6 +21,7 @@ import SwipeableCommentRow from "./SwipeableCommentRow";
 import { Reply } from "lucide-react";
 import { useFlag } from "@/hooks/useFlag";
 import {
+  HTPR_6752_INSTANT_TICKET_OPEN_FLAG,
   HTPR_6514_COMMENT_LONG_PRESS_FLAG,
   HTPR_6554_LIGHT_COMMENT_SEPARATION_FLAG,
 } from "@/lib/flags/keys";
@@ -84,6 +85,7 @@ const CommentsContainer = () => {
     useDescriptionAndCommentsContext();
   const [currentUser, _setCurrentUser] = useRecoilState(currentUserAtom);
   const [, setShowCommands] = useRecoilState(showCommandsAtom);
+  const instantTicketOpen = useFlag(HTPR_6752_INSTANT_TICKET_OPEN_FLAG);
   const commentLongPress = useFlag(HTPR_6514_COMMENT_LONG_PRESS_FLAG);
   const lightCommentSeparationEnabled = useFlag(
     HTPR_6554_LIGHT_COMMENT_SEPARATION_FLAG,
@@ -192,7 +194,7 @@ const CommentsContainer = () => {
         onClick={handleSingleTap}
         onDoubleClick={handleDesktopDoubleClick}
       >
-        <Suspense fallback={<>loading...</>}>
+        <Suspense fallback={instantTicketOpen ? null : <>loading...</>}>
           {!comment.activity ? (
             <>
               <CommentBodyDesktop>
