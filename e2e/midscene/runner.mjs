@@ -57,6 +57,8 @@ async function runStep(page, agent, step, fixture) {
       if (step.optional && !(await page.$(step.arg))) return;
       await page.waitForSelector(step.arg, { visible: true, timeout: 30_000 });
       return page.click(step.arg);
+    case 'input':
+      return page.locator(step.arg).fill(step.value);
     case 'createFixtureTask':
       return createFixtureTask(page, fixture);
     case 'saveTask': {

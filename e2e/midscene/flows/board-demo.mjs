@@ -15,7 +15,7 @@ export default {
     { action: 'aiAssert', arg: 'a kanban board with task cards is visible on the page' },
     {
       action: 'aiQuery',
-      arg: 'string[], the visible column/section names on the kanban board',
+      arg: 'string[], only the visible column/section names on the kanban board, excluding task counts or other numbers',
       expect: { contains: ['To Do', 'In Progress', 'Done'] },
     },
   ],
