@@ -29,6 +29,10 @@ const stubSourceModule = (relativePath, exports) =>
 
 stubModule(require.resolve("next/navigation"), {
   useRouter: () => ({ push: () => {} }),
+  usePathname: () => "/project",
+});
+stubSourceModule("src/hooks/useFlag.tsx", {
+  useFlag: () => false,
 });
 stubModule(require.resolve("react-hot-toast"), {
   default: { error: (message) => toastErrors.push(message) },

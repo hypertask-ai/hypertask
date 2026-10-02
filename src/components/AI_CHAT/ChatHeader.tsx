@@ -16,7 +16,9 @@ import {
   Trash2,
   X,
 } from "lucide-react";
-import { useRouter } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
+import { useFlag } from "@/hooks/useFlag";
+import { HTPR_6752_INSTANT_TICKET_OPEN_FLAG } from "@/lib/flags/keys";
 import Tooltip from "../Common/Tooltip";
 import { format } from "date-fns";
 import { useContext, useEffect, useMemo, useRef, useState } from "react";
@@ -89,6 +91,9 @@ function ChatSessionRow({
 
 export const ChatHeader = () => {
   const router = useRouter();
+  const pathname = usePathname();
+  const instantTicketOpen = useFlag(HTPR_6752_INSTANT_TICKET_OPEN_FLAG);
+  const quietTicketOpen = instantTicketOpen && pathname?.startsWith("/detail/");
   const {
     togglePopover,
     minimizeChat,
@@ -314,7 +319,7 @@ export const ChatHeader = () => {
           className="flex min-w-0 max-w-full items-center gap-1 hover:bg-active-modal-element transition-colors rounded px-1 py-0.5"
         >
           <span className="min-w-0 truncate font-medium">
-            {currentSession?.title ?? (isSessionPending ? "Loading..." : "AI Chat")}
+            {currentSession?.title ?? (isSessionPending && !quietTicketOpen ? "Loading..." : "AI Chat")}
           </span>
           <span
             style={{
