@@ -4,6 +4,7 @@ import type { TAgentBoardAccess } from "@/lib/agents/boardAccess";
 import { isWorking } from "@/lib/agents/registerView";
 import toast from "react-hot-toast";
 import { healthDotClass, healthLabel } from "./AgentDetailParts";
+import { runtimeStateKey } from "./runtimeStateKey";
 import type { useAgentDetailRefresh } from "./useAgentDetailRefresh";
 import type { useAgentDetailState } from "./useAgentDetailState";
 import type { useAgentProviderKey } from "./useAgentProviderKey";
@@ -155,7 +156,7 @@ export function useAgentBoardAccess({
       : null;
   const visiblePending = pendingQueue.slice(0, isMbl ? 2 : 3);
   const runtimeSnapshot = agent?.operations.snapshot;
-  const operationsHealth = agent?.operations.health ?? "offline";
+  const operationsHealth = agent ? runtimeStateKey(agent) : "offline";
   const workingNowLabel = runtimeActive
     ? healthLabel[operationsHealth]
     : working
