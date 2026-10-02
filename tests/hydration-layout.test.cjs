@@ -16,7 +16,9 @@ const jiti = createJiti(__filename, {
   jsx: true,
   moduleCache: false,
 });
-const state = jiti(path.join(root, "src/lib/state.tsx"));
+// Share the native ESM Jotai context with the Provider used by these tests.
+require("tsx/cjs");
+const state = require(path.join(root, "src/lib/state.tsx"));
 
 async function withBrowser(html, saved, run) {
   const dom = new JSDOM(`<div id="root">${html}</div>`, { url: "https://app.hypertask.ai/inbox" });
