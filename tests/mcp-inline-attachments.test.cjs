@@ -1621,10 +1621,14 @@ test("the MCP handler forwards transport identity and attachment writes rebroadc
     path.join(root, "src/lib/mcp-server/handler.ts"),
     "utf8"
   );
-  assert.match(handlerSource, /requestId: String\(extra\.requestId\)/);
-  assert.match(handlerSource, /sessionId: extra\.sessionId/);
-  assert.match(handlerSource, /extra\.requestId === undefined/);
-  assert.match(handlerSource, /clientFingerprint: crypto/);
+  const streamableSource = fs.readFileSync(
+    path.join(root, "src/lib/mcp-server/streamable-http.ts"),
+    "utf8"
+  );
+  assert.match(streamableSource, /requestId: String\(extra\.mcpReq\.id\)/);
+  assert.match(streamableSource, /sessionId: extra\.sessionId/);
+  assert.match(streamableSource, /extra\.http\?\.authInfo\?\.token/);
+  assert.match(streamableSource, /clientFingerprint: crypto/);
   assert.match(handlerSource, /readRequestBytesWithCap\(/);
   assert.match(handlerSource, /new Request\(request\.url/);
   assert.doesNotMatch(handlerSource, /new Request\(request,\s*\{/);
