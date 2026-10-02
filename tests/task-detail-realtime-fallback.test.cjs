@@ -178,3 +178,71 @@ test("fallback reconciliation refreshes the task detail without replacing an act
     global.window = original.window;
   }
 });
+
+test("linked PR tasks reconcile on subscription so a pre-mount GitHub update is not lost", async () => {
+  const original = { document: global.document, window: global.window, fetch: global.fetch };
+  global.document = createEventTarget({ visibilityState: "visible" });
+  global.window = createEventTarget();
+  const fetchedTask = { id: 42, projectId: 15, uniqueIndex: 6281, pullRequests: [{ lifecycle: "merged" }] };
+  let fetchCount = 0;
+  global.fetch = async () => {
+    fetchCount++;
+    return { ok: true, json: async () => fetchedTask };
+  };
+  let cleanup;
+  let currentTask;
+  const handlers = new Map();
+  const channel = {
+    subscribed: false,
+    bind: (event, handler) => handlers.set(event, handler),
+    unbind: (event) => handlers.delete(event),
+  };
+  const client = {
+    subscribe: () => channel,
+    unsubscribe() {},
+    connection: { state: "connected", bind() {}, unbind() {} },
+  };
+  try {
+    const hook = loadHook({
+      react: {
+        useEffect: (effect) => { cleanup = effect(); },
+        useRef: (current) => ({ current }),
+      },
+      "@tanstack/react-query": { useQueryClient: () => ({}) },
+      "@/lib/realtime/client": {
+        connectRealtimeClient: async () => client,
+        releaseRealtimeClientIfIdle() {},
+      },
+      "@/lib/realtime/shared": {
+        COMMENT_EVENT: "comment:changed", TASK_EVENT: "task:changed",
+        taskChannel: (id) => `private-task-${id}`,
+      },
+      "@/lib/realtime/taskCommentsRefresh": { refreshTaskComments: async () => {} },
+      "@/lib/realtime/taskDetailRefresh": {
+        refreshTaskDetailQueryCache: ({ fetchTask }) => fetchTask(),
+        mergeRealtimeTaskDetail: (_current, fetched) => fetched,
+        shouldApplyRealtimeTaskDetail: () => true,
+        shouldRefetchTaskDetail: () => true,
+        shouldSyncTaskDetailContent: () => false,
+      },
+    });
+    for (const hasPullRequests of [false, true]) {
+      fetchCount = 0;
+      currentTask = { ...fetchedTask, pullRequests: [{ lifecycle: "open" }] };
+      hook.useTaskCommentsRealtime(42, {
+        taskProjectId: 15, taskUniqueIndex: 6281, hasPullRequests,
+        setCurrentTask: (update) => { currentTask = update(currentTask); },
+      });
+      await settle();
+      handlers.get("pusher:subscription_succeeded")();
+      await settle();
+      assert.equal(fetchCount, hasPullRequests ? 1 : 0);
+      assert.equal(currentTask.pullRequests[0].lifecycle, hasPullRequests ? "merged" : "open");
+      cleanup();
+      cleanup = undefined;
+    }
+  } finally {
+    cleanup?.();
+    Object.assign(global, original);
+  }
+});

@@ -1,4 +1,6 @@
 import { Prisma, PrismaClient, Status } from "@prisma/client";
+import { waitUntil } from "@vercel/functions";
+import { broadcastTaskChange } from "@/lib/realtime/server";
 import prisma from "@/lib/prisma";
 import type { TaskDetailSlug } from "./types";
 import type { IComment } from "@/models/model";
@@ -431,14 +433,27 @@ export async function fetchTaskDetail(
 
   if (!task) return null;
 
-  const [reactions, pullRequests] = await Promise.all([
-    fetchDescriptionReactions(task.description_?.id ?? ""),
-    refreshTaskPullRequests(task.id, task.pullRequests),
-  ]);
+  if (task.pullRequests.length > 0) {
+    // Keep GitHub off the render path without losing work when Vercel sends the response.
+    waitUntil(
+      refreshTaskPullRequests(task.id, task.pullRequests)
+        .then(async (refreshed) => {
+          const changed = refreshed.some((pullRequest, index) => {
+            const saved = task.pullRequests[index];
+            return pullRequest.title !== saved.title ||
+              pullRequest.lifecycle !== saved.lifecycle ||
+              pullRequest.checkState !== saved.checkState ||
+              pullRequest.headSha !== saved.headSha;
+          });
+          if (changed) await broadcastTaskChange(task.id);
+        })
+        .catch((error) => console.warn("[Pull requests] Background refresh failed", task.id, error)),
+    );
+  }
+  const reactions = await fetchDescriptionReactions(task.description_?.id ?? "");
   const visibleAgent = projectVisibleTaskAgent(task.agent, userId, task.projectId);
   return {
     ...task,
-    pullRequests,
     agentId: visibleAgent ? task.agentId : null,
     agent: visibleAgent,
     description_: task.description_

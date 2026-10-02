@@ -87,6 +87,8 @@ function fixture({ tasks = [currentTask], visibleProjects = [20], agentId = null
   const resolver = load("src/lib/mcp/tasks/resolveTask.ts", base);
   const detail = load("src/utils/controllers/taskDetail/load.ts", {
     ...base,
+    "@vercel/functions": {},
+    "@/lib/realtime/server": {},
     "@/lib/cycles": {},
     "@/lib/pullRequests/taskPullRequests": {},
     "@/lib/agents/publicAgent": {},
