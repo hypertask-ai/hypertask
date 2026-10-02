@@ -22,7 +22,7 @@ with tempfile.TemporaryDirectory(prefix='ship-gates-') as tmp:
     check.write_text('''#!/usr/bin/env python3
 import json, os, sys
 with open(os.environ['CALLS'], 'a') as f:
-    f.write(json.dumps([sys.argv[1:], os.getcwd()]) + '\\n')
+    f.write(json.dumps([sys.argv[1:], os.getcwd(), os.environ.get('SHIP_REPO'), os.environ.get('SHIP_CHECKOUT')]) + '\\n')
 markers = dict(ticket='ticket ok', pr='title ok', merged='merged ok',
                deployed='deployed ok (no app build needed)', proof='proof ok', done='done ok', cleaned='cleaned ok')
 if sys.argv[1] in ('done', 'cleaned') and os.environ.get('DONE') != 'yes':
@@ -124,5 +124,36 @@ print(markers[sys.argv[1]])
         assert file.read_text() == tainted and not (p/'bad').exists()
     file.write_text(before)
     print('ok custom/mutating commands, altered expectations/CWD and duplicate ids never get auto-approved')
+
+    cli = dict(SHIP_REPO='hypertask-ai/cli', SHIP_BASE='main')
+    r = run('HTPR-6806', CLAUDE_CODE_SESSION_ID='cliSessA-full', **cli)
+    assert r.returncode != 0 and 'SHIP_CHECKOUT' in r.stderr and not ledger('cliSessA-full').exists()
+    r = run('HTPR-6806', CLAUDE_CODE_SESSION_ID='cliSessA-full', SHIP_CHECKOUT="/x';touch bad", **cli)
+    assert r.returncode != 0 and not ledger('cliSessA-full').exists()
+    cli['SHIP_CHECKOUT'] = '/home/u/hypertask cli'
+    count = len(calls())
+    r = run('HTPR-6806', CLAUDE_CODE_SESSION_ID='cliSessA-full', **cli)
+    cfile = ledger('cliSessA-full')
+    assert r.returncode == 0, r.stderr
+    prefix = "SHIP_REPO=hypertask-ai/cli SHIP_BASE=main SHIP_CHECKOUT='/home/u/hypertask cli' "
+    assert cfile.read_text().count('  CHECK: '+prefix) == 7
+    new = calls()[count:]
+    assert len(new) == 7 and all(c[2] == 'hypertask-ai/cli' and c[3] == '/home/u/hypertask cli' for c in new), new
+    r = run('HTPR-6819', CLAUDE_CODE_SESSION_ID='cliSessA-full')
+    assert r.returncode == 0 and len(ids(cfile)) == 14, r.stderr
+    assert all(c[2] is None for c in calls()[-7:])
+    print('ok CLI tickets carry SHIP_REPO, SHIP_BASE and SHIP_CHECKOUT into every check; app tickets append without them')
+
+    before = cfile.read_text()
+    for tainted in [before.replace('SHIP_BASE=main ', 'SHIP_BASE=main;touch${IFS}bad ', 1),
+                    before.replace("SHIP_CHECKOUT='/home/u/hypertask cli'", "SHIP_CHECKOUT=$(touch bad)", 1),
+                    before.replace('SHIP_REPO=hypertask-ai/cli ', 'FOO=1 SHIP_REPO=hypertask-ai/cli ', 1)]:
+        assert tainted != before
+        cfile.write_text(tainted)
+        count = len(calls())
+        r = run('HTPR-6806', CLAUDE_CODE_SESSION_ID='cliSessA-full', **cli)
+        assert r.returncode != 0 and len(calls()) == count and not (p/'bad').exists(), r.stderr
+    cfile.write_text(before)
+    print('ok an altered env prefix is never auto-approved')
     print('ship-gates regression passed')
 PY

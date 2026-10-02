@@ -9,9 +9,17 @@ ID=${CLAUDE_CODE_SESSION_ID:-${CODEX_SESSION_ID:-${CODEX_THREAD_ID:-}}}
 L=$PWD/.unlazy/s-${ID:0:8}/GATES.md
 C=$HOME/.agents/skills/ship/scripts/ship-check
 U=$HOME/.agents/skills/unlazy/scripts
-node --input-type=module - "$L" "$ID" "$T" "$C" "$U" "$PWD" <<'JS'
+# CLI tickets (SHIP_REPO=hypertask-ai/cli): every CHECK carries the repo settings, or it would read the app repo.
+ENVP=
+if [ -n "${SHIP_REPO:-}" ] && [ "$SHIP_REPO" != hypertask-ai/hypertask ]; then
+  [ -n "${SHIP_BASE:-}" ] && [ -n "${SHIP_CHECKOUT:-}" ] || { echo "ship-gates: SHIP_REPO=$SHIP_REPO also needs SHIP_BASE and SHIP_CHECKOUT (the local checkout)" >&2; exit 1; }
+  [[ $SHIP_REPO =~ ^[A-Za-z0-9._-]+/[A-Za-z0-9._-]+$ && $SHIP_BASE =~ ^[A-Za-z0-9._/-]+$ && $SHIP_CHECKOUT =~ ^/[A-Za-z0-9._/\ -]+$ ]] \
+    || { echo "ship-gates: invalid SHIP_REPO, SHIP_BASE or SHIP_CHECKOUT" >&2; exit 1; }
+  ENVP="SHIP_REPO=$SHIP_REPO SHIP_BASE=$SHIP_BASE SHIP_CHECKOUT='$SHIP_CHECKOUT' "
+fi
+node --input-type=module - "$L" "$ID" "$T" "$C" "$U" "$PWD" "$ENVP" <<'JS'
 import { dirname } from 'node:path';
-const [ledger, session, ticket, check, scripts, root] = process.argv.slice(2);
+const [ledger, session, ticket, check, scripts, root, envPrefix] = process.argv.slice(2);
 const { parseGates, readStableRegularFile, withFileLock, writeAtomic } = await import(`${scripts}/lib/gates.mjs`);
 const quote = (s) => "'" + s.replaceAll("'", "'\\''") + "'";
 const gates = {
@@ -23,7 +31,7 @@ const gates = {
   done: ['The ticket is in Done', 'done ok'],
   cleaned: ['This session removed its worktree and branch for the ticket (/clean-up)', 'cleaned ok'],
 };
-if (/[\r\n\0]/.test(session + root + check) || Buffer.byteLength(session) > 4095) throw new Error('invalid session id or path');
+if (/[\r\n\0]/.test(session + root + check + envPrefix) || Buffer.byteLength(session) > 4095) throw new Error('invalid session id or path');
 const read = (file) => {
   try { return readStableRegularFile(file, { root }); }
   catch (error) { if (error.code === 'ENOENT') return ''; throw error; }
@@ -36,11 +44,14 @@ await withFileLock(root, ledger, () => {
   const doc = parseGates(text, { requireGates: !!text });
   if (doc.errors.length) throw new Error(doc.errors.join('; '));
   // Never let --approve authorize a CHECK added by another ledger author.
+  // Allowed: the bare ship-check call, optionally behind the exact env prefix ship-gates writes for CLI tickets.
+  const escape = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const generatedCheck = new RegExp(`^(SHIP_REPO=[A-Za-z0-9._-]+/[A-Za-z0-9._-]+ SHIP_BASE=[A-Za-z0-9._/-]+ SHIP_CHECKOUT='/[A-Za-z0-9._/ -]+' )?${escape(quote(check))} [a-z]+ (HTPR|HYFA|YPER4)-[0-9]+$`);
   for (const gate of doc.gates) {
     const match = gate.id.match(/^((?:HTPR|HYFA|YPER4)-[0-9]+)\.(ticket|pr|merged|deployed|proof|done|cleaned)$/);
     if (!match && !gate.check) continue;
     if (!match || (match[2] === 'proof' && !match[1].startsWith('HTPR-')) ||
-        gate.check !== `${quote(check)} ${match[2]} ${match[1]}` ||
+        !generatedCheck.test(gate.check) || !gate.check.endsWith(`${quote(check)} ${match[2]} ${match[1]}`) ||
         gate.expect !== gates[match[2]][1] || gate.cwd !== root) {
       throw new Error(`ship-gates: refusing to approve non-generated gate ${gate.id}; put extra gates in gates/extra.md and review them separately`);
     }
@@ -50,7 +61,7 @@ await withFileLock(root, ledger, () => {
     if (name === 'proof' && !ticket.startsWith('HTPR-')) continue;
     const id = `${ticket}.${name}`;
     if (doc.gates.some((gate) => gate.id === id)) continue;
-    text += `\n- [ ] ${id}: ${title}\n  CHECK: ${quote(check)} ${name} ${ticket}\n  EXPECT: ${expect}\n  CWD: ${root}\n  EVIDENCE: pending\n`;
+    text += `\n- [ ] ${id}: ${title}\n  CHECK: ${envPrefix}${quote(check)} ${name} ${ticket}\n  EXPECT: ${expect}\n  CWD: ${root}\n  EVIDENCE: pending\n`;
   }
   writeAtomic(binding, session + '\n', { root });
   writeAtomic(ledger, text, { root });
