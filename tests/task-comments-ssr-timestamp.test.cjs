@@ -4,7 +4,7 @@ const path = require("node:path");
 const test = require("node:test");
 const ts = require("typescript");
 
-test("the real task page passes the server snapshot timestamp to both comments consumers", async () => {
+test("the real task page sends task and comments snapshots once, preserving their server timestamp", async () => {
   const filename = path.join(__dirname, "../src/app/detail/[...slug]/page.tsx");
   const javascript = ts.transpileModule(fs.readFileSync(filename, "utf8"), {
     compilerOptions: {
@@ -15,7 +15,8 @@ test("the real task page passes the server snapshot timestamp to both comments c
     },
     fileName: filename,
   }).outputText;
-  const comments = [{ id: 1, text: "Server comment" }];
+  const comments = [{ id: 1, text: "Server comment ".repeat(1000) }];
+  const taskSnapshot = { id: 42, project: { team: {} }, description: "Long task ".repeat(1000) };
   let fetchStartedAt;
   const component = () => null;
   const stubs = {
@@ -25,7 +26,7 @@ test("the real task page passes the server snapshot timestamp to both comments c
     "@/lib/prisma": { default: {} },
     "@/utils/controllers/taskDetail/load": {
       parseDetailSlug: () => ({ projectId: 6859, uniqueIndex: 43 }),
-      fetchTaskDetail: async () => ({ id: 42, project: { team: {} } }),
+      fetchTaskDetail: async () => taskSnapshot,
       fetchCommentsForSlug: async () => { fetchStartedAt = Date.now(); return comments; },
     },
     "@/lib/contexts/TaskDetail/TaskProvider": { TasksProvider: component },
@@ -52,18 +53,22 @@ test("the real task page passes the server snapshot timestamp to both comments c
     searchParams: Promise.resolve({}),
   });
   const payloads = [];
+  const tasks = [];
   function visit(node) {
     if (!node?.props) return;
     if (node.props._comments) payloads.push(JSON.parse(node.props._comments));
+    for (const key of ["parsedTask", "_currentTask"]) {
+      if (node.props[key]) tasks.push(JSON.parse(node.props[key]));
+    }
     for (const child of [node.props.children].flat()) visit(child);
   }
   visit(tree);
-  assert.equal(payloads.length, 2);
+  assert.equal(payloads.length, 1, "only the provider should receive the comments snapshot");
+  assert.deepEqual(tasks, [taskSnapshot], "only the provider should receive the task snapshot");
   for (const payload of payloads) {
     assert.deepEqual(payload.comments, comments);
     assert.ok(Number.isFinite(payload.updatedAt));
     assert.ok(payload.updatedAt >= before);
     assert.ok(payload.updatedAt <= fetchStartedAt, "timestamp must not hide server processing age");
   }
-  assert.equal(payloads[0].updatedAt, payloads[1].updatedAt);
 });

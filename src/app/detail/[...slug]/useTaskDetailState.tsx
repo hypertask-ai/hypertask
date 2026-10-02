@@ -31,23 +31,17 @@ import { markTaskDetailPhase, TASK_DETAIL_COMP_MOUNT_MARK, TASK_DETAIL_SUSPENSE_
 export interface TaskDetailProps {
   isMobile: boolean;
   _slugs: string[];
-  _currentTask: string;
-  _comments: string;
   allowPerks: boolean;
   _currentUser: IUser;
   embedded?: boolean;
 }
 export function useTaskDetailState({
   _slugs,
-  _currentTask,
-  _comments,
   _currentUser,
   embedded = false,
 }: TaskDetailProps) {
 
   // ================== DATA FROM SERVER
-  const _parsedTask = JSON.parse(_currentTask);
-  const _parsedComments = JSON.parse(_comments);
   const currentUser = _currentUser;
   // HTPR-6047: mark the first render of the component the shared Suspense
   // boundary is gating - this is as close as a render-phase mark can get to
@@ -74,6 +68,7 @@ export function useTaskDetailState({
   const setArchiveNudge = useSetRecoilState(archiveShortcutNudgeAtom);
 
   const {
+    parsedTask: _currentTask,
     currentId,
     setCurrentTask,
     currentTask,
@@ -120,6 +115,7 @@ export function useTaskDetailState({
     virtualizeIndexes,
     scrollElementRef,
   } = useTaskContext();
+  const _parsedTask = useMemo(() => JSON.parse(_currentTask), [_currentTask]);
   const { markAsDone, navigateToNextTask, navigateToPreviousTask } =
     useArchiveAndNavigate();
   const { callBackHandlerRemoveParent } = useUpdateSubtask();
@@ -223,7 +219,7 @@ export function useTaskDetailState({
   );
 
   const taskTimer = useTaskTime(_parsedTask.id);
-  return { _slugs, _currentTask, _comments, _currentUser, embedded, _parsedTask, _parsedComments, currentUser, suspenseCommitMarkedRef, queryClient, undoData, undoAction, currentProject, setCurrentProject, nonEssentialReady, setNonEssentialReady, setArchiveNudge, currentId, setCurrentTask, currentTask, editMode, setEditMode, requestDescriptionFocus, setEditState, focusOn, editModeCheck, onGoback, setIsSummaryExpand, isSummaryExpanded, refocusAndOpenTaskWriter, scrollSetting, showSubtaskLinkingModal, toggleSubtaskLinkingModal, showCommentDeleteModal, setShowCommentDeleteModal, showTaskDeleteModal, setShowTaskDeleteModal, setShowTaskOptionsModal, showRemoveSubtaskModal, setShowRemoveSubtaskModal, handlePinComment, handleStarTask, createContextOptionsForHTC, setShowRemindMeModal, editCommentHandler, replyToCommentHandler, toggleEmojiPicker, isRecording, scrollVirtualize, comments, setComments, carousalItems, setCarousalItems, defaultCommentFocus, showRemindMeModal, toggleHistory, newCommentIds, newCommentsSnapshotReady, virtualizer, visibleCommentIndices, virtualizeIndexes, scrollElementRef, markAsDone, navigateToNextTask, navigateToPreviousTask, callBackHandlerRemoveParent, dynamicTopValue, dynamicElementRef, setStickyElementHeight, followers, followerKeyPrefix, PostFollower, onWindowFocus, navigate, searchParams, lastGPress, hasScrolledToUnreadRef, readinessTaskRef, hasBottomScrolledRef, bottomScrollCancelRef, initialScrollGuard, initialScrollGenerationRef, lastM_APress, movingItem, setMovingItem, currentItemInTasksPlaylist, updateTaskInCache, moveItem, removeFromListWithStatus, getProjectIdxAndAllData, copyTaskURL, copyTaskFormattedURL, copySharedTaskFormattedURL, copySharedTaskURL, copyTitleAndTicketNumber, copyTicketNumber, removeRelation, router, sectionsForProjectTQ, priorityForTaskTQ, estimateForTaskTQ, sharedLink, labelsFromTQ, isRefetching, taskTimer };
+  return { _slugs, _currentTask, _currentUser, embedded, _parsedTask, currentUser, suspenseCommitMarkedRef, queryClient, undoData, undoAction, currentProject, setCurrentProject, nonEssentialReady, setNonEssentialReady, setArchiveNudge, currentId, setCurrentTask, currentTask, editMode, setEditMode, requestDescriptionFocus, setEditState, focusOn, editModeCheck, onGoback, setIsSummaryExpand, isSummaryExpanded, refocusAndOpenTaskWriter, scrollSetting, showSubtaskLinkingModal, toggleSubtaskLinkingModal, showCommentDeleteModal, setShowCommentDeleteModal, showTaskDeleteModal, setShowTaskDeleteModal, setShowTaskOptionsModal, showRemoveSubtaskModal, setShowRemoveSubtaskModal, handlePinComment, handleStarTask, createContextOptionsForHTC, setShowRemindMeModal, editCommentHandler, replyToCommentHandler, toggleEmojiPicker, isRecording, scrollVirtualize, comments, setComments, carousalItems, setCarousalItems, defaultCommentFocus, showRemindMeModal, toggleHistory, newCommentIds, newCommentsSnapshotReady, virtualizer, visibleCommentIndices, virtualizeIndexes, scrollElementRef, markAsDone, navigateToNextTask, navigateToPreviousTask, callBackHandlerRemoveParent, dynamicTopValue, dynamicElementRef, setStickyElementHeight, followers, followerKeyPrefix, PostFollower, onWindowFocus, navigate, searchParams, lastGPress, hasScrolledToUnreadRef, readinessTaskRef, hasBottomScrolledRef, bottomScrollCancelRef, initialScrollGuard, initialScrollGenerationRef, lastM_APress, movingItem, setMovingItem, currentItemInTasksPlaylist, updateTaskInCache, moveItem, removeFromListWithStatus, getProjectIdxAndAllData, copyTaskURL, copyTaskFormattedURL, copySharedTaskFormattedURL, copySharedTaskURL, copyTitleAndTicketNumber, copyTicketNumber, removeRelation, router, sectionsForProjectTQ, priorityForTaskTQ, estimateForTaskTQ, sharedLink, labelsFromTQ, isRefetching, taskTimer };
 }
 
 export type useTaskDetailStateValue = ReturnType<typeof useTaskDetailState>;

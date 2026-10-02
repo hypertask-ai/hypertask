@@ -89,8 +89,6 @@ const EmbeddedTaskDetail = ({
           allowPerks
           isMobile={false}
           _currentUser={currentUser}
-          _currentTask={serializedTask}
-          _comments={serializedComments}
           _slugs={slugs}
           embedded
         />
