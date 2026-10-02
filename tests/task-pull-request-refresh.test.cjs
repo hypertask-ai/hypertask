@@ -24,7 +24,18 @@ const metadata = {
   headSha: "merged-head",
   sourceUpdatedAt: new Date("2026-09-18T16:55:04Z"),
 };
-const calls = { writes: [], reads: [], fetches: [] };
+const calls = { writes: [], reads: [], fetches: [], broadcasts: [] };
+const scheduled = [];
+const functionsPath = require.resolve("@vercel/functions");
+require.cache[functionsPath] = {
+  id: functionsPath, filename: functionsPath, loaded: true,
+  exports: { waitUntil: (promise) => scheduled.push(promise) },
+};
+const realtimePath = path.join(root, "src/lib/realtime/server.ts");
+require.cache[realtimePath] = {
+  id: realtimePath, filename: realtimePath, loaded: true,
+  exports: { broadcastTaskChange: async (taskId) => calls.broadcasts.push(taskId) },
+};
 let task = null;
 let current = row;
 let updateCount = 1;
@@ -71,7 +82,8 @@ function options(fetchMetadata = async (parsed) => {
 }
 
 test.beforeEach(() => {
-  calls.writes.length = calls.reads.length = calls.fetches.length = 0;
+  calls.writes.length = calls.reads.length = calls.fetches.length = calls.broadcasts.length = 0;
+  scheduled.length = 0;
   task = null;
   current = row;
   updateCount = 1;
@@ -212,10 +224,87 @@ test("task detail heals stale rows only after the authorized task lookup", async
     calls.reads.length = 0;
     task = { id: 40660, projectId: 15, agent: null, description_: null, pullRequests: [row] };
     const result = await fetchTaskDetail("project-15", "6806", 6);
-    assert.equal(result.pullRequests[0].lifecycle, "merged");
+    assert.equal(result.pullRequests[0].lifecycle, "open");
+    assert.equal(scheduled.length, 1);
+    await scheduled[0];
     assert.equal(calls.writes.length, 1);
+    assert.deepEqual(calls.broadcasts, [40660]);
     assert.deepEqual(calls.fetches, ["https://api.github.com/repos/hypertask-ai/cli/pulls/81"]);
   } finally {
     global.fetch = originalFetch;
   }
+});
+
+test("task detail returns saved PR state and reactions while GitHub is still pending", async () => {
+  const originalFetch = global.fetch;
+  let releaseGithub;
+  const github = new Promise((resolve) => { releaseGithub = resolve; });
+  global.fetch = async () => {
+    calls.fetches.push("github");
+    return github;
+  };
+  const reactions = [{ emoji: "thumbsup", count: "1", unified: "1f44d", users: [] }];
+  db.$queryRaw = async () => reactions;
+  task = {
+    id: 40660, projectId: 15, agent: null,
+    description_: { id: "description-1", content: "Saved description" },
+    pullRequests: [row],
+  };
+  const detail = fetchTaskDetail("project-15", "6806", 6);
+  try {
+    const result = await Promise.race([
+      detail,
+      new Promise((resolve) => setImmediate(() => resolve("blocked-on-github"))),
+    ]);
+    assert.notEqual(result, "blocked-on-github", "Task content must not await GitHub");
+    assert.deepEqual(result.pullRequests, [row]);
+    assert.deepEqual(result.description_.reactions, reactions);
+    assert.equal(calls.fetches.length, 1);
+    assert.equal(calls.writes.length, 0);
+    assert.equal(scheduled.length, 1, "Serverless lifetime must cover the refresh");
+  } finally {
+    releaseGithub(Response.json({
+      id: 456, html_url: row.url, title: row.title, state: "closed",
+      merged_at: "2026-09-18T16:55:04Z", updated_at: "2026-09-18T16:55:04Z",
+      base: { repo: { id: 123 } }, head: { sha: "merged-head" },
+    }));
+    await detail;
+    await Promise.all(scheduled);
+    delete db.$queryRaw;
+    global.fetch = originalFetch;
+  }
+  assert.equal(calls.writes.length, 1);
+  assert.deepEqual(calls.broadcasts, [40660]);
+});
+
+test("task detail does not broadcast unchanged PR observations or GitHub failures", async () => {
+  const originalFetch = global.fetch;
+  const warning = console.warn;
+  console.warn = () => {};
+  task = { id: 40660, projectId: 15, agent: null, description_: null, pullRequests: [row] };
+  try {
+    for (const unavailable of [false, true]) {
+      global.fetch = async () => {
+        if (unavailable) throw new Error("GitHub unavailable");
+        return Response.json({
+          id: 456, html_url: row.url, title: row.title, state: "open",
+          merged_at: null, updated_at: "2026-09-18T16:55:04Z",
+          base: { repo: { id: 123 } }, head: { sha: row.headSha },
+        });
+      };
+      assert.deepEqual((await fetchTaskDetail("project-15", "6806", 6)).pullRequests, [row]);
+      await Promise.all(scheduled);
+      assert.deepEqual(calls.broadcasts, [], "No refetch loop for timestamp-only updates or failures");
+    }
+    assert.equal(calls.writes.length, 1);
+  } finally {
+    global.fetch = originalFetch;
+    console.warn = warning;
+  }
+});
+
+test("task detail with no PRs schedules no background work", async () => {
+  task = { id: 40660, projectId: 15, agent: null, description_: null, pullRequests: [] };
+  assert.deepEqual((await fetchTaskDetail("project-15", "6806", 6)).pullRequests, []);
+  assert.deepEqual(scheduled, []);
 });

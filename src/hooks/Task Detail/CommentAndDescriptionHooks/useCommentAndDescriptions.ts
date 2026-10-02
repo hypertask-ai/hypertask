@@ -218,6 +218,7 @@ const useDescriptionAndCommentsStates = () => {
     currentUserId: currentUser?.id,
     taskProjectId: _parsedTask?.projectId,
     taskUniqueIndex: _parsedTask?.uniqueIndex,
+    hasPullRequests: (_parsedTask?.pullRequests?.length ?? 0) > 0,
     setCurrentTask,
     setDescription,
     setDescriptionAttachments,

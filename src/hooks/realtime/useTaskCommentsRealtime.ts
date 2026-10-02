@@ -30,6 +30,7 @@ type UseTaskCommentsRealtimeOptions = {
   setDescription?: Dispatch<SetStateAction<string>>;
   setDescriptionAttachments?: Dispatch<SetStateAction<IAttachment[]>>;
   preserveEditorContent?: boolean;
+  hasPullRequests?: boolean;
 };
 
 /** Exported for the HTPR-6281 regression that asserts no-store on this path. */
@@ -71,6 +72,7 @@ export function useTaskCommentsRealtime(
     setDescription,
     setDescriptionAttachments,
     preserveEditorContent = false,
+    hasPullRequests = false,
   } = options;
 
   useEffect(() => {
@@ -270,7 +272,8 @@ export function useTaskCommentsRealtime(
           if (cancelled) return;
           const recovered = fallbackActive;
           stopFallback();
-          if (recovered) refetch(true, !preserveEditorContent);
+          // GitHub may finish refreshing the saved PR snapshot before we subscribe.
+          if (recovered || hasPullRequests) refetch(true, !preserveEditorContent);
         };
         const onSubscriptionError = () => {
           if (cancelled) return;
@@ -355,5 +358,6 @@ export function useTaskCommentsRealtime(
     setDescription,
     setDescriptionAttachments,
     preserveEditorContent,
+    hasPullRequests,
   ]);
 }
