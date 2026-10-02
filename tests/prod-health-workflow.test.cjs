@@ -49,15 +49,13 @@ test("drift can read workflow runs for the health-gate check", async () => {
 
 test("health and drift jobs cannot overlap", async () => {
   const workflow = await readFile(".github/workflows/prod-health.yml", "utf8");
-  // Push and scheduled triggers share one workflow-level "prod-health" lock;
-  // only a signed PostHog dispatch escapes into its own run-scoped group so
-  // an alert is never queued behind a health run. Drift therefore needs no
+  // All triggers share one workflow-level "prod-health" lock. Drift needs no
   // job-level lock of its own: one named group cannot be held by a workflow
   // run and one of its own jobs at the same time, so a job-level "prod-health"
   // on drift would leave the job pending behind its parent run forever.
   assert.match(
     workflow,
-    /^concurrency:\n(?:  #[^\n]*\n)*  group: \$\{\{ inputs\.posthog_payload != '' && format\('posthog-error-\{0\}', github\.run_id\) \|\| 'prod-health' \}\}\n  cancel-in-progress: false\n/m,
+    /^concurrency:\n(?:  #[^\n]*\n)*  group: prod-health\n  cancel-in-progress: false\n/m,
   );
   const driftStart = workflow.indexOf("\n  drift:");
   const nextJob = workflow.indexOf("\n  core-actions:", driftStart);
