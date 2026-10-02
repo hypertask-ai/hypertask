@@ -78,7 +78,7 @@ test("hydration-sensitive queries isolate their pre-hydration cache keys", () =>
   );
   assert.match(
     flags,
-    /return useContext\(FeatureFlagsContext\)\[key\] === true/,
+    /const enabled = useContext\(FeatureFlagsContext\)\[key\] === true;\s*return useHydrated\(\) && enabled/,
   );
 });
 

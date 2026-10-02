@@ -3,6 +3,7 @@ import { IAnnouncement } from "@/models/Announcements/model";
 import { useQuery } from "@tanstack/react-query";
 import axios from "axios";
 import { consumeEarlyAppShellBootstrapSlice } from "@/lib/appShellBootstrap/client";
+import { useHydrated } from "@/hooks/General/useHydrated";
 
 export const prefixUseGetAnnouncements = 'In-App Announcements'
 
@@ -15,6 +16,9 @@ export const useGetAnnouncements = (
         queryKey:[prefixUseGetAnnouncements, userId], 
         queryFn:() => getUserAnnouncements(userId),
         enabled: options?.enabled ?? true,
+        ...(useHydrated()
+          ? {}
+          : { queryKey: [prefixUseGetAnnouncements, userId, "hydrating"], enabled: false }),
         
         initialData:initialData??[],
         // The empty seed is a placeholder, not a fresh server response. Keep it
