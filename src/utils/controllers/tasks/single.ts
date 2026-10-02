@@ -357,6 +357,32 @@ export async function updateTaskSingle(
         if (sectionChanged) updateData.sectionChangedAt = new Date();
         updateData.updatedAt = new Date();
 
+        if (
+          updateData.projectId !== currentState.projectId ||
+          updateData.uniqueIndex !== currentState.uniqueIndex
+        ) {
+          // Read under the mutation fence so concurrent moves preserve the
+          // identity actually replaced, in the same transaction as the move.
+          await tx.taskNumberAlias.upsert({
+            where: {
+              projectId_uniqueIndex: {
+                projectId: currentState.projectId,
+                uniqueIndex: currentState.uniqueIndex,
+              },
+            },
+            create: {
+              projectId: currentState.projectId,
+              uniqueIndex: currentState.uniqueIndex,
+              ticketNumber: currentState.ticketNumber,
+              taskId: currentState.id,
+            },
+            update: {
+              ticketNumber: currentState.ticketNumber,
+              taskId: currentState.id,
+            },
+          });
+        }
+
         let updatedTask = await tx.task.update({
           where: { id: newTask.id },
           data: updateData,

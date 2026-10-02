@@ -37,40 +37,53 @@ export async function findTaskByIdentifier(
     });
   }
 
-  if (ticket_number) {
-    const where: Record<string, unknown> = {
-      ticketNumber: ticket_number,
+  if (!ticket_number && (unique_index == null || project_id == null)) return null;
+
+  const identityWhere = ticket_number
+    ? { ticketNumber: ticket_number, ...(project_id ? { projectId: project_id } : {}) }
+    : { projectId: project_id!, uniqueIndex: unique_index! };
+  const matches = await prisma.task.findMany({
+    where: { ...identityWhere, status: { not: 'Deleted' }, project: projectFilter },
+    select: { id: true, projectId: true },
+    orderBy: [{ projectId: 'asc' }, { id: 'asc' }],
+    take: project_id ? 1 : 2,
+  });
+  if (!project_id && matches.length > 1) {
+    throw new TaskIdentifierAmbiguityError(ticket_number!);
+  }
+  if (matches.length) return matches[0];
+
+  // A real ticket wins even when it is inaccessible to this caller.
+  const liveTask = await prisma.task.findFirst({
+    where: { ...identityWhere, status: { not: 'Deleted' } },
+    select: { id: true },
+  });
+  if (liveTask) return null;
+
+  const aliases = await prisma.taskNumberAlias.findMany({
+    where: {
+      ...identityWhere,
+      task: { status: { not: 'Deleted' }, project: projectFilter },
+    },
+    select: { projectId: true, uniqueIndex: true, task: { select: { id: true, projectId: true } } },
+    orderBy: [{ projectId: 'asc' }, { id: 'asc' }],
+  });
+  if (!aliases.length) return null;
+  const reusedNumbers = await prisma.task.findMany({
+    where: {
+      OR: aliases.map(({ projectId, uniqueIndex }) => ({ projectId, uniqueIndex })),
       status: { not: 'Deleted' },
-      project: projectFilter,
-    };
-    if (project_id) {
-      where.projectId = project_id;
-    }
-    const matches = await prisma.task.findMany({
-      where,
-      select: { id: true, projectId: true },
-      orderBy: [{ projectId: 'asc' }, { id: 'asc' }],
-      take: project_id ? 1 : 2,
-    });
-    if (!project_id && matches.length > 1) {
-      throw new TaskIdentifierAmbiguityError(ticket_number);
-    }
-    return matches[0] ?? null;
+    },
+    select: { projectId: true, uniqueIndex: true },
+  });
+  const availableAliases = aliases.filter(alias => !reusedNumbers.some(
+    task => task.projectId === alias.projectId && task.uniqueIndex === alias.uniqueIndex
+  ));
+  const tasks = [...new Map(availableAliases.map(({ task }) => [task.id, task])).values()];
+  if (!project_id && tasks.length > 1) {
+    throw new TaskIdentifierAmbiguityError(ticket_number!);
   }
-
-  if (unique_index !== null && unique_index !== undefined && project_id !== null && project_id !== undefined) {
-    return await prisma.task.findFirst({
-      where: {
-        projectId: project_id,
-        uniqueIndex: unique_index,
-        status: { not: 'Deleted' },
-        project: projectFilter,
-      },
-      select: { id: true, projectId: true },
-    });
-  }
-
-  return null;
+  return tasks[0] ?? null;
 }
 
 /**

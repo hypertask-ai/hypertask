@@ -84,6 +84,9 @@ function loadUpdateController(
     initialSectionId = SECTION_ID - 1,
     updateErrorCode = null,
     updateErrorTarget = ["projectId", "uniqueIndex"],
+    initialTask = {},
+    aliasError = false,
+    stateAtFence,
   } = {},
 ) {
   const calls = { transaction: 0, sideEffects: 0 };
@@ -109,8 +112,20 @@ function loadUpdateController(
     uniqueIndex: 1,
     dueDate: null,
     recurrence: null,
+    ...initialTask,
   };
+  const aliases = new Map();
   const tx = {
+    taskNumberAlias: {
+      upsert: async (query) => {
+        assert.equal(calls.transactionActive, true);
+        if (aliasError) throw new Error("Alias persistence failed");
+        (calls.aliases ??= []).push(query);
+        (calls.order ??= []).push("number-alias");
+        const key = `${query.create.projectId}/${query.create.uniqueIndex}`;
+        aliases.set(key, aliases.has(key) ? { ...aliases.get(key), ...query.update } : query.create);
+      },
+    },
     task: {
       findUnique: async () => ({ ...currentTask }),
       update: async ({ data }) => {
@@ -182,12 +197,20 @@ function loadUpdateController(
       if (destinationSectionProjectId === undefined) {
         throw new Error("a denied write reached the transaction");
       }
+      if (stateAtFence) currentTask = { ...currentTask, ...stateAtFence };
+      const taskSnapshot = { ...currentTask };
+      const aliasSnapshot = new Map(aliases);
       const transaction = { ...tx };
       activeTransactions.add(transaction);
       calls.transactionActive = true;
       calls.transactionClient = transaction;
       try {
         return await callback(transaction);
+      } catch (error) {
+        currentTask = taskSnapshot;
+        aliases.clear();
+        for (const [key, alias] of aliasSnapshot) aliases.set(key, alias);
+        throw error;
       } finally {
         fenceReleases.get(transaction)?.();
         activeTransactions.delete(transaction);
@@ -280,8 +303,90 @@ function loadUpdateController(
       stubs,
     ).updateTaskSingle,
     calls,
+    aliases,
   };
 }
+
+test("board moves preserve each previous identity in the task transaction", async () => {
+  const { updateTaskSingle, calls, aliases } = loadUpdateController(OWNER_PROJECT, MEMBER_PROJECT);
+  for (const [projectId, uniqueIndex, ticketNumber] of [
+    [MEMBER_PROJECT, 2, "M-2"],
+    [OWNER_PROJECT, 1, "S-1"],
+    [MEMBER_PROJECT, 4, "M-4"],
+  ]) {
+    const result = await updateTaskSingle(
+      { id: TASK_ID, projectId, uniqueIndex, ticketNumber },
+      { id: USER_ID },
+      null,
+      { allowProjectChange: true, skipAutoAssign: true, skipRecurrence: true },
+    );
+    assert.equal(result.status, 200);
+  }
+  assert.deepEqual(calls.aliases, [
+    [OWNER_PROJECT, 1, "S-1"],
+    [MEMBER_PROJECT, 2, "M-2"],
+    [OWNER_PROJECT, 1, "S-1"],
+  ].map(([projectId, uniqueIndex, ticketNumber]) => ({
+    where: { projectId_uniqueIndex: { projectId, uniqueIndex } },
+    create: { projectId, uniqueIndex, ticketNumber, taskId: TASK_ID },
+    update: { ticketNumber, taskId: TASK_ID },
+  })));
+  assert.deepEqual(calls.order, [
+    "number-alias", "task-update", "number-alias", "task-update", "number-alias", "task-update",
+  ]);
+  assert.equal(aliases.size, 2);
+});
+
+test("aliases use the identity read under the mutation fence", async () => {
+  const { updateTaskSingle, aliases } = loadUpdateController(OWNER_PROJECT, MEMBER_PROJECT, {
+    stateAtFence: { projectId: SOURCE_PROJECT, uniqueIndex: 55, ticketNumber: "HTPR-55" },
+  });
+  const result = await updateTaskSingle(
+    { id: TASK_ID, projectId: MEMBER_PROJECT, uniqueIndex: 2, ticketNumber: "M-2" },
+    { id: USER_ID }, null, { allowProjectChange: true },
+  );
+  assert.equal(result.status, 200);
+  assert.deepEqual([...aliases.values()], [{
+    taskId: TASK_ID, projectId: SOURCE_PROJECT, uniqueIndex: 55, ticketNumber: "HTPR-55",
+  }]);
+});
+
+test("a failed destination write rolls back its number alias", async () => {
+  const { updateTaskSingle, aliases } = loadUpdateController(OWNER_PROJECT, MEMBER_PROJECT, { updateErrorCode: "P2002" });
+  const result = await updateTaskSingle(
+    { id: TASK_ID, projectId: MEMBER_PROJECT, uniqueIndex: 2, ticketNumber: "M-2" },
+    { id: USER_ID }, null, { allowProjectChange: true },
+  );
+  assert.equal(result.status, 409);
+  assert.equal(aliases.size, 0);
+});
+
+test("legacy tasks without a ticket number still preserve their old web identity", async () => {
+  const { updateTaskSingle, aliases } = loadUpdateController(OWNER_PROJECT, MEMBER_PROJECT, { initialTask: { ticketNumber: null } });
+  const result = await updateTaskSingle(
+    { id: TASK_ID, projectId: MEMBER_PROJECT, uniqueIndex: 2, ticketNumber: "M-2" },
+    { id: USER_ID }, null, { allowProjectChange: true },
+  );
+  assert.equal(result.status, 200);
+  assert.equal([...aliases.values()][0].ticketNumber, null);
+});
+
+test("a move cannot replace its identity when alias persistence fails", async () => {
+  const { updateTaskSingle, calls } = loadUpdateController(OWNER_PROJECT, MEMBER_PROJECT, { aliasError: true });
+  const result = await updateTaskSingle(
+    { id: TASK_ID, projectId: MEMBER_PROJECT, uniqueIndex: 2, ticketNumber: "M-2" },
+    { id: USER_ID }, null, { allowProjectChange: true },
+  );
+  assert.equal(result.status, 500);
+  assert.equal(calls.order, undefined);
+});
+
+test("same-board section changes do not create a number alias", async () => {
+  const { updateTaskSingle, calls } = loadUpdateController(OWNER_PROJECT, OWNER_PROJECT);
+  const result = await updateTaskSingle({ id: TASK_ID, title: "Renamed" }, { id: USER_ID });
+  assert.equal(result.status, 200);
+  assert.equal(calls.aliases, undefined);
+});
 
 test("the shared update controller refuses a foreign board before any write or side effect", async () => {
   const { updateTaskSingle, calls } = loadUpdateController(FOREIGN_PROJECT);
@@ -581,6 +686,8 @@ function loadMoveController({
   agentId,
   projectIdentifier = "T",
   identityConflicts = 0,
+  subTasks = [],
+  updateImplementation,
 }) {
   const calls = { downstream: 0, queue: 0 };
   const currentTask = {
@@ -591,11 +698,16 @@ function loadMoveController({
     dueDate: null,
     uniqueIndex: 5731,
     ticketNumber: "HTPR-5731",
-    subTasks: [],
+    subTasks,
   };
+  const tasks = new Map([[TASK_ID, currentTask]]);
+  for (const child of subTasks) {
+    tasks.set(child.id, child);
+    for (const grandchild of child.subTasks ?? []) tasks.set(grandchild.id, grandchild);
+  }
   const prisma = {
     task: {
-      findUnique: async () => currentTask,
+      findUnique: async ({ where }) => tasks.get(where.id),
       findFirst: async () => null,
     },
     project: {
@@ -635,6 +747,7 @@ function loadMoveController({
     calls.updateAttempts = (calls.updateAttempts ?? 0) + 1;
     calls.allowProjectChange = options?.allowProjectChange;
     calls.updatedTask = task;
+    if (updateImplementation) return updateImplementation(task, _user, _agentId, options, tasks.get(task.id));
     if (remainingIdentityConflicts > 0) {
       remainingIdentityConflicts -= 1;
       return {
@@ -695,6 +808,33 @@ function loadMoveController({
     calls,
   };
 }
+
+test("cross-board moves record aliases for the parent and nested subtasks through the real updater", async () => {
+  const aliases = [];
+  const child = (id, uniqueIndex, subTasks = []) => ({
+    id, uniqueIndex, ticketNumber: `HTPR-${uniqueIndex}`, projectId: SOURCE_PROJECT,
+    userId: USER_ID, dueDate: null, subTasks,
+  });
+  const { move } = loadMoveController({
+    targetProjectId: OWNER_PROJECT,
+    sectionProjectId: OWNER_PROJECT,
+    agentId: null,
+    subTasks: [child(102, 5732, [child(103, 5733)])],
+    updateImplementation: async (task, user, agentId, options, initialTask) => {
+      const controller = loadUpdateController(SOURCE_PROJECT, OWNER_PROJECT, { initialTask });
+      const result = await controller.updateTaskSingle(task, user, agentId, options);
+      aliases.push(...controller.calls.aliases);
+      return result;
+    },
+  });
+  const result = await move();
+  assert.equal(result.success, true);
+  assert.deepEqual(aliases.map(({ create }) => create), [
+    [101, 5731], [102, 5732], [103, 5733],
+  ].map(([taskId, uniqueIndex]) => ({
+    taskId, uniqueIndex, projectId: SOURCE_PROJECT, ticketNumber: `HTPR-${uniqueIndex}`,
+  })));
+});
 
 test("cross-board moves adopt the destination ticket identity", async () => {
   const { move, calls } = loadMoveController({
