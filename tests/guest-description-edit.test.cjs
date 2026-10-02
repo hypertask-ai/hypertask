@@ -1,3 +1,4 @@
+const { readRefactoredSource } = require("../src/app/detail/[...slug]/taskDetailTestSources.cjs");
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
@@ -12,7 +13,7 @@ if (typeof workerThreads.markAsUncloneable !== "function") {
 }
 const { JSDOM } = require("jsdom");
 
-const source = fs.readFileSync(
+const source = readRefactoredSource(
   path.join(__dirname, "../src/lib/demo/guestDescriptionEdit.ts"),
   "utf8",
 );
@@ -82,7 +83,7 @@ test("mobile keeps its existing double-tap interaction", () => {
 });
 
 test("the guest component path requests editing synchronously without changing established paths", () => {
-  const component = fs.readFileSync(
+  const component = readRefactoredSource(
     path.join(
       __dirname,
       "../src/components/PageComponents/TaskDetail/CommentAndDescription/DescriptionContainer/index.tsx",
@@ -114,7 +115,7 @@ test("the guest component path requests editing synchronously without changing e
   );
   assert.match(doubleClickHandler, /if \(isGuest\) return;/);
 
-  const tiptap = fs.readFileSync(
+  const tiptap = readRefactoredSource(
     path.join(__dirname, "../src/components/RTE/TipTapTaskDetail.tsx"),
     "utf8",
   );

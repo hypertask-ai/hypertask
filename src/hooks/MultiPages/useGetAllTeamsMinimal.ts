@@ -5,6 +5,7 @@ import {
     sidebarTeamsQueryKey,
 } from "@/utils/api/Homepage/sidebarTeamsResponse";
 import { useQuery } from "@tanstack/react-query";
+import { useHydrated } from "@/hooks/General/useHydrated";
 
 
 
@@ -23,6 +24,9 @@ export const useGetAllTeamsMinimal = (
         select:selectSidebarTeams,
         enabled:
           typeof currentUserId === "number" && (options?.enabled ?? true),
+        ...(useHydrated()
+          ? {}
+          : { queryKey: [...sidebarTeamsQueryKey(currentUserId), "hydrating"], enabled: false }),
         initialData:initialData??[],
         // The seeded [] is a placeholder, never real data, so date it at the epoch.
         // Without this react-query stamps it as fetched *now*, staleTime below then

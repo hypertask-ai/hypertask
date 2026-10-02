@@ -1,6 +1,6 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
-const fs = require("./helpers/chat-stream-source.cjs");
+const fs = require("./refactored-module-source.cjs");
 const path = require("node:path");
 const ts = require("typescript");
 
@@ -41,7 +41,7 @@ test("quick-log prefers the focused task's board over the ambient board", () => 
 });
 
 test("both Ctrl+K task-time commands use quick-log navigation", () => {
-  const source = read("src/components/commands.tsx");
+  const source = read("src/components/commandDispatcher.ts").split("function dispatchCommandGroup1")[1];
   const start = source.indexOf("case CommandMode.GoToTimeThisTask:");
   const end = source.indexOf("case CommandMode.GoToTimeThisBoard:", start);
   const taskTimeCommands = source.slice(start, end);

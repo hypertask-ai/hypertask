@@ -7,7 +7,7 @@
 // an unbound key is not merely inert: it opens browser chrome over the app.
 const test = require("node:test");
 const assert = require("node:assert/strict");
-const fs = require("node:fs");
+const fs = require("./refactored-module-source.cjs");
 const path = require("node:path");
 
 const root = path.resolve(__dirname, "..");
@@ -105,7 +105,7 @@ test("registration 2 of 4: the ctrl+K palette can find it by name", () => {
   );
 
   // A palette entry with no case in the switch is a dead menu item.
-  const dispatch = read("src/components/commands.tsx");
+  const dispatch = read("src/components/commandDispatcher.ts").split("function dispatchCommandGroup1")[1];
   const branch = dispatch.slice(
     dispatch.indexOf("case CommandMode.CreateTaskWithAiWriter:"),
   );

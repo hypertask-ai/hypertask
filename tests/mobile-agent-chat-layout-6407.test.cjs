@@ -1,3 +1,4 @@
+const { readAgentChatSource } = require("./helpers/agent-chat-source.cjs");
 // HTPR-6407 redeploy marker: keep prod health from rolling back a no-diff empty commit.
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
@@ -5,10 +6,7 @@ const path = require("node:path");
 const test = require("node:test");
 
 const root = path.resolve(__dirname, "..");
-const chat = fs.readFileSync(
-  path.join(root, "src/app/agents/chat/AgentChatClient.tsx"),
-  "utf8",
-);
+const chat = readAgentChatSource();
 const audio = fs.readFileSync(
   path.join(root, "src/components/RTE/Components/AudioButton.tsx"),
   "utf8",

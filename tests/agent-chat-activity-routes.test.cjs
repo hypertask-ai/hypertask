@@ -1,3 +1,4 @@
+const { readAgentChatSource } = require("./helpers/agent-chat-source.cjs");
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
@@ -5,10 +6,7 @@ const path = require("node:path");
 const { createJiti } = require("jiti");
 
 const root = path.resolve(__dirname, "..");
-const chatClientSource = fs.readFileSync(
-  path.join(root, "src/app/agents/chat/AgentChatClient.tsx"),
-  "utf8",
-);
+const chatClientSource = readAgentChatSource();
 let loadId = 0;
 let flagEnabled = true;
 let activityCalls = [];

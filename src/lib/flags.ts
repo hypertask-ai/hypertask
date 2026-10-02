@@ -85,6 +85,7 @@ import {
   HTPR_6561_DESCRIPTION_STRUCTURE_FLAG,
   HTPR_6542_TEAM_SCOPED_MANAGEMENT_KEYS_FLAG,
   HTPR_6348_AGENT_ACCESS_DELEGATION_FLAG,
+  HTPR_6653_ADMIN_TEAM_COMP_FLAG,
 } from "@/lib/flags/keys";
 
 // Re-exported so server code keeps importing keys from here. Client components must
@@ -143,6 +144,12 @@ const FEATURE_FLAG_DEFINITIONS = [
     shippedOn: "2026-09-18",
     description:
       "Lets management keys be limited to one team while existing account-wide keys keep their current access.",
+  },
+  {
+    key: HTPR_6653_ADMIN_TEAM_COMP_FLAG,
+    shippedOn: "2026-09-27",
+    description:
+      "Lets the owner comp a team as Pro or BYOK until a date, and clear the comp, from the owner-only team comp admin screen.",
   },
   {
     key: HTPR_6561_DESCRIPTION_STRUCTURE_FLAG,

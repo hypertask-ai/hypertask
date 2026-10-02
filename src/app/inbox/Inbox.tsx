@@ -5,7 +5,6 @@ import {
   FC,
   ReactNode,
   useCallback,
-  useContext,
   useEffect,
   useMemo,
   useRef,
@@ -70,7 +69,7 @@ import useHypertasksNavigate from "@/hooks/MultiPages/Route/useHypertasksNavigat
 import { useWarmProjectsAllQuery } from "@/hooks/Homepage/useGetBoards";
 import SplitTitle from "@/components/notifications/inboxSplit/SplitTitle";
 import AppShellRail from "@/components/PageComponents/Kanban/HeaderComponents/AppShellRail";
-import { MobileViewContext } from "@/lib/contexts/mobileContext";
+import { useMobileView } from "@/lib/contexts/mobileContext";
 import InboxNotifyNudge from "@/components/notifications/InboxNotifyNudge";
 import ManageSplitsModal from "@/components/notifications/ManageSplitsModal";
 import GuestAuthLinks from "@/components/PageComponents/Kanban/HeaderComponents/GuestAuthLinks";
@@ -105,7 +104,7 @@ const Inbox = ({
   originProject: string;
 }) => {
   const queryClient = useQueryClient();
-  const isMbl = useContext(MobileViewContext);
+  const isMbl = useMobileView();
   const [appShellRail] = useRecoilState(appShellRailAtom);
   const appShellRailOn = appShellRail && !isMbl;
   const [globalFocus, setGlobalFocus] = useRecoilState(

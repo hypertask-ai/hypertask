@@ -375,7 +375,7 @@ test("Inbox All excludes synthetic blocked rows from its denominator", () => {
 });
 
 test("Inbox Zero execution requires a serializable matching preview", () => {
-  const source = require("node:fs").readFileSync(
+  const source = require("./refactored-module-source.cjs").readFileSync(
     path.join(
       root,
       "src/app/api/notifications/inbox-zero/execute/route.ts"
@@ -409,7 +409,7 @@ test("Inbox Zero command presets are registered without bare shortcuts", () => {
 });
 
 test("Inbox Zero and archived inbox live in Ctrl+K, not the inbox header", () => {
-  const source = require("node:fs").readFileSync(
+  const source = require("./refactored-module-source.cjs").readFileSync(
     path.join(root, "src/app/inbox/Inbox.tsx"),
     "utf8"
   );
@@ -439,7 +439,7 @@ test("Inbox Zero and archived inbox live in Ctrl+K, not the inbox header", () =>
 // nothing rendered it.
 test("the command palette confirms before archiving the inbox", () => {
   const readSource = (rel) =>
-    require("node:fs").readFileSync(path.join(root, rel), "utf8");
+    require("./refactored-module-source.cjs").readFileSync(path.join(root, rel), "utf8");
   const palette = readSource("src/components/commands.tsx");
 
   // The palette opens the sheet and lets it do the archiving.
@@ -460,7 +460,7 @@ test("the command palette confirms before archiving the inbox", () => {
 // archive without one. Anything that reintroduces a self-fetched preview here
 // puts the instant-archive bug straight back.
 test("executing Inbox Zero cannot self-confirm its own preview", () => {
-  const hook = require("node:fs").readFileSync(
+  const hook = require("./refactored-module-source.cjs").readFileSync(
     path.join(root, "src/hooks/Inbox/useInboxZeroActions.ts"),
     "utf8"
   );
@@ -473,7 +473,7 @@ test("executing Inbox Zero cannot self-confirm its own preview", () => {
 // The sheet opens on whichever preset the command chose, so "Archive reactions"
 // does not silently present the default rules.
 test("the confirm sheet opens on the preset its command chose", () => {
-  const sheet = require("node:fs").readFileSync(
+  const sheet = require("./refactored-module-source.cjs").readFileSync(
     path.join(root, "src/components/notifications/InboxZeroSheet.tsx"),
     "utf8"
   );

@@ -9,6 +9,7 @@ import type {
 } from "@prisma/client";
 import type { CalendarViewsPreference } from "@/models/Calendar/model";
 import { consumeEarlyAppShellBootstrapSlice } from "@/lib/appShellBootstrap/client";
+import { useHydrated } from "@/hooks/General/useHydrated";
 
 export interface IUserPreferences {
   displayAvatar: DisplayAvatar;
@@ -57,6 +58,9 @@ export const useGetUserPreferences = (
     queryKey,
     queryFn: () => fetchUserPreference(false),
     enabled: options?.enabled ?? true,
+    ...(useHydrated()
+      ? {}
+      : { queryKey: [...queryKey, "hydrating"], enabled: false }),
     initialData: initialData ?? DEFAULT_USER_PREFERENCES,
     initialDataUpdatedAt: initialData ? undefined : 0,
     refetchOnWindowFocus: false,

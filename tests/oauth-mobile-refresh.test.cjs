@@ -29,6 +29,8 @@ const revokedAccessTokens = []
 let authorizationCodeUsed = false
 let claimedOwnerId = null
 const clientLocks = []
+// Runs once after a refresh-row read is snapshotted, to race another request in.
+let afterNextRefreshRead = null
 
 const authCode = {
   code: 'android-one-time-code',
@@ -142,7 +144,15 @@ stubModule('src/lib/prisma.ts', {
       }),
     },
     oAuthRefreshToken: {
-      findUnique: async ({ where }) => refreshRows.get(where.tokenHash) ?? null,
+      findUnique: async ({ where }) => {
+        const row = refreshRows.get(where.tokenHash)
+        if (!row || !afterNextRefreshRead) return row ?? null
+        const snapshot = { ...row }
+        const race = afterNextRefreshRead
+        afterNextRefreshRead = null
+        await race()
+        return snapshot
+      },
     },
     agent: { findFirst: async () => null },
   },
@@ -278,4 +288,47 @@ test('native revocation endpoint explicitly rejects access-token hints', async (
 
   assert.equal(response.status, 400)
   assert.equal((await response.json()).error, 'unsupported_token_type')
+})
+
+test('a refresh token replayed concurrently still revokes the winning successor', async () => {
+  const token = 'refresh-raced-by-attacker'
+  const hash = crypto.createHash('sha256').update(token).digest('hex')
+  refreshRows.set(hash, {
+    id: 'raced-refresh',
+    tokenHash: hash,
+    familyId: 'raced-family',
+    clientId,
+    userId: owner.id,
+    firebaseUid: owner.uid,
+    user: owner,
+    accessTokenJti: 'raced-access-jti',
+    accessTokenExpiresAt: new Date(Date.now() - 1_000),
+    revokedAt: null,
+    replacedByHash: null,
+    expiresAt: new Date(Date.now() + 60_000),
+    createdAt: new Date(),
+  })
+
+  let winner
+  // The loser reads the row while it is still active, then the winner rotates it.
+  afterNextRefreshRead = async () => {
+    const response = await exchangeToken(formRequest('/oauth/token', {
+      grant_type: 'refresh_token',
+      refresh_token: token,
+      client_id: clientId,
+    }))
+    assert.equal(response.status, 200)
+    winner = await response.json()
+  }
+  const loser = await exchangeToken(formRequest('/oauth/token', {
+    grant_type: 'refresh_token',
+    refresh_token: token,
+    client_id: clientId,
+  }))
+
+  assert.equal(loser.status, 400)
+  assert.equal((await loser.json()).error, 'invalid_grant')
+  const winnerHash = crypto.createHash('sha256').update(winner.refresh_token).digest('hex')
+  assert.ok(refreshRows.get(winnerHash).revokedAt instanceof Date)
+  assert.equal(revokedAccessTokens.at(-1).jti, jwt.decode(winner.access_token).jti)
 })

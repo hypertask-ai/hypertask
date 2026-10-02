@@ -157,6 +157,25 @@ test('real search input and reused list work keyboard-only, with an unchanged fl
         assert.equal(input.value, 'login')
       }
     })
+    await t.test('committed is:open stays a chip after deleting login one Backspace at a time', async () => {
+      await reset()
+      await type('is:')
+      await press('Enter')
+      const chip = () => document.querySelector('[aria-label="Remove is:open filter"]')
+      assert.ok(chip())
+      await type('login')
+      for (let remaining = 4; remaining >= 0; remaining--) {
+        input.setSelectionRange(input.value.length, input.value.length)
+        await press('Backspace')
+        await type(input.value.slice(0, -1))
+        assert.ok(chip(), 'deleting free text must not turn a committed filter into a draft')
+        assert.equal(input.value, 'login'.slice(0, remaining))
+        if (remaining === 0) assert.equal(input.getAttribute('aria-expanded'), 'false')
+      }
+      await press('Backspace')
+      assert.equal(chip(), null, 'Backspace on an empty draft still removes the last chip')
+      assert.equal(runs.at(-1), '')
+    })
     await t.test('flag off has no operator list, ghost, tips, new frame or colour, and retains old value selection', async () => {
       await reset(false)
       assert.equal(input.getAttribute('aria-expanded'), 'false')

@@ -1,3 +1,4 @@
+const { readRefactoredSource } = require("../src/app/detail/[...slug]/taskDetailTestSources.cjs");
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const path = require("node:path");
@@ -16,7 +17,7 @@ const { markTaskSeen } = jiti(
 // asserts the shape rather than re-reproducing the bug at runtime.
 
 test("HTPR-6047: TaskDetailComp does not hold its own comments query", () => {
-  const src = fs.readFileSync(
+  const src = readRefactoredSource(
     path.join(__dirname, "..", "src/app/detail/[...slug]/TaskDetailComp.tsx"),
     "utf8",
   );
@@ -37,7 +38,7 @@ test("HTPR-6047: TaskDetailComp does not hold its own comments query", () => {
 });
 
 test("HTPR-6047: fetchCommentsHelper reads preferences from the shared React Query cache", () => {
-  const src = fs.readFileSync(
+  const src = readRefactoredSource(
     path.join(__dirname, "..", "src/utils/api/Task Detail/index.ts"),
     "utf8",
   );
@@ -59,7 +60,7 @@ test("HTPR-6047: fetchCommentsHelper reads preferences from the shared React Que
 });
 
 test("task detail uses the shared seen-request helper exactly once", () => {
-  const src = fs.readFileSync(
+  const src = readRefactoredSource(
     path.join(
       root,
       "src/hooks/Task Detail/CommentAndDescriptionHooks/useCommentAndDescriptions.ts",
@@ -173,7 +174,7 @@ test("failed task seen requests retry without clearing newer state", async (t) =
 });
 
 test("HTPR-6047: FollowersProvider mounts inside the task-detail Suspense boundary", () => {
-  const src = fs.readFileSync(
+  const src = readRefactoredSource(
     path.join(__dirname, "..", "src/app/detail/[...slug]/page.tsx"),
     "utf8",
   );

@@ -36,7 +36,9 @@ const SearchComp = ({
   currentUser,
 }: IProps) => {
   const rankingEnabled = useFlag(HTPR_6372_SEARCH_RANKING_FLAG);
-  const autocompleteEnabled = useFlag(HTPR_6688_SEARCH_AUTOCOMPLETE_FLAG);
+  const autocompleteEnabled = useFlag(
+    HTPR_6688_SEARCH_AUTOCOMPLETE_FLAG
+  );
   const chipsFlagEnabled = useFlag(HTPR_6370_SEARCH_CHIPS_FLAG);
   const operatorsFlagEnabled = useFlag(HTPR_6369_SEARCH_OPERATORS_FLAG);
   const setAiChatPendingPrompt = useSetRecoilState(aiChatPendingPromptAtom);

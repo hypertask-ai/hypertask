@@ -6,7 +6,7 @@
 // real signed tokens against a stubbed database.
 const test = require("node:test");
 const assert = require("node:assert/strict");
-const fs = require("./helpers/chat-stream-source.cjs");
+const fs = require("./refactored-module-source.cjs");
 const path = require("node:path");
 const jwt = require("jsonwebtoken");
 const { NextRequest } = require("next/server");

@@ -72,6 +72,7 @@ const create = async (userId: number, title: string, teamId: string, googleAccou
             stripe_customer_id: true,
             activeSubscriptionPlanId: true,
             compedUntil: true,
+            compedPlan: true,
             subscriptionPlan: { select: { priceId: true } },
           },
         },
