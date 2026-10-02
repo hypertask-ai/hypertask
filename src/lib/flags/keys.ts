@@ -110,6 +110,7 @@ export const HTPR_6542_TEAM_SCOPED_MANAGEMENT_KEYS_FLAG =
   "htpr-6542-team-scoped-management-keys";
 export const HTPR_6348_AGENT_ACCESS_DELEGATION_FLAG =
   "htpr-6348-agent-access-delegation";
+export const HTPR_6653_ADMIN_TEAM_COMP_FLAG = "htpr-6653-admin-team-comp";
 /** Sent on chat.message when HTPR-6407 is on so agent replies lead with the next action. */
 export const AGENT_CHAT_ADHD_REPLY_GUIDANCE =
   "Lead with the next action. Keep replies short. Number steps. End with one concrete next action when something remains open.";

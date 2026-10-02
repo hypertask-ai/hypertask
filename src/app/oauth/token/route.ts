@@ -268,6 +268,15 @@ async function exchangeRefreshToken(formData: FormData) {
   }
 
   if (!rotated) {
+    // A concurrent request may have consumed this token after our first read:
+    // treat that as replay and revoke the family, like the sequential path above.
+    const current = await prisma.oAuthRefreshToken.findUnique({
+      where: { tokenHash: refreshTokenHash(refreshToken) },
+      select: { revokedAt: true, replacedByHash: true },
+    })
+    if (current?.revokedAt && current.replacedByHash) {
+      await revokeRefreshFamily(stored.familyId, stored.user.id, now)
+    }
     return NextResponse.json(
       { error: 'invalid_grant', error_description: 'Refresh token is invalid or expired' },
       { status: 400 },

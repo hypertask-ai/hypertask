@@ -1,3 +1,4 @@
+const { readRefactoredSource } = require("../src/app/detail/[...slug]/taskDetailTestSources.cjs");
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const path = require("node:path");
@@ -11,7 +12,7 @@ const test = require("node:test");
 // call sites must still pass the readiness flag through.
 
 test("HTPR-6047: task-detail readiness effect flips the non-essential gate", () => {
-  const src = fs.readFileSync(
+  const src = readRefactoredSource(
     path.join(__dirname, "..", "src/app/detail/[...slug]/TaskDetailComp.tsx"),
     "utf8",
   );
@@ -38,7 +39,7 @@ test("HTPR-6047: task-detail readiness effect flips the non-essential gate", () 
 });
 
 test("HTPR-6047: deferrable hooks accept an enabled input that defaults true", () => {
-  const shareLinks = fs.readFileSync(
+  const shareLinks = readRefactoredSource(
     path.join(__dirname, "..", "src/hooks/Task Detail/useGetShareLinks.ts"),
     "utf8",
   );
@@ -47,7 +48,7 @@ test("HTPR-6047: deferrable hooks accept an enabled input that defaults true", (
     "useGetTaskShareLinks must accept an enabled param (default true) and pass it to useQuery",
   );
 
-  const moveSections = fs.readFileSync(
+  const moveSections = readRefactoredSource(
     path.join(__dirname, "..", "src/hooks/MultiPages/useGetSectionsMoveTask.ts"),
     "utf8",
   );
@@ -59,7 +60,7 @@ test("HTPR-6047: deferrable hooks accept an enabled input that defaults true", (
 });
 
 test("HTPR-6047: the non-essential gate fails open on a short timer, independent of the 30s readiness measurement", () => {
-  const src = fs.readFileSync(
+  const src = readRefactoredSource(
     path.join(__dirname, "..", "src/app/detail/[...slug]/TaskDetailComp.tsx"),
     "utf8",
   );
@@ -80,7 +81,7 @@ test("HTPR-6047: the non-essential gate fails open on a short timer, independent
 });
 
 test("HTPR-6056: the emoji-finder data file is only imported once the non-essential gate is open", () => {
-  const src = fs.readFileSync(
+  const src = readRefactoredSource(
     path.join(
       __dirname,
       "..",
@@ -100,7 +101,7 @@ test("HTPR-6056: the emoji-finder data file is only imported once the non-essent
 });
 
 test("HTPR-6047: WelcomeScreen gates AI task-questions/sessions on task-detail readiness", () => {
-  const src = fs.readFileSync(
+  const src = readRefactoredSource(
     path.join(__dirname, "..", "src/components/AI_CHAT/WelcomeScreen.tsx"),
     "utf8",
   );

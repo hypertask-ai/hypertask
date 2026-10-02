@@ -115,5 +115,6 @@ export function FeatureFlagProvider({
 }
 
 export function useFlag(key: string): boolean {
-  return useContext(FeatureFlagsContext)[key] === true;
+  const enabled = useContext(FeatureFlagsContext)[key] === true;
+  return useHydrated() && enabled;
 }

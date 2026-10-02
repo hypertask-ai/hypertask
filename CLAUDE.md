@@ -10,7 +10,7 @@ Start with `/ship`: Valentin's own Claude Code or Codex session takes one ticket
 3. **Ticket references are full URLs** (`https://app.hypertask.ai/detail/project-15/<number>`), never a bare id, everywhere.
 
 ### Board writes
-4. **Never write in Valentin's name.** Board writes go only through `vcc` (identity "Valentins Claude Code"), never his user token (the plain `hypertask` CLI on this machine is his and is for reads only). Never assign userId 6. A ticket he assigned himself or moved by hand stays exactly as he left it.
+4. **Never write in Valentin's name.** Board writes go only through `vcc` (identity "Valentins Claude Code"), never his user token (the plain `hypertask` CLI on this machine is his and is for reads only). Never add or remove him as assignee: Agents are human companions (Valentin, 2026-10-02): a ticket usually has a human assignee and an agent together, and agent-only is fine. Add only your own agent (`vcc task assign <TICKET> --self`); never remove or change a human assignee, and never add Valentin (userId 6) yourself. A ticket he assigned himself or moved by hand stays exactly as he left it.
 5. **Claim before coding:** `vcc comment add <PREFIX-NNN> --text "<p><strong>Claimed.</strong> Session working it now.</p>"`, then `vcc task move <PREFIX-NNN> --section "In Progress"`. "Claimed." plus In Progress means in flight: do not touch. Never work a ticket assigned to Abdul.
 6. **Board content only through the CLI, MCP or app APIs, never Prisma, SQL or a database client**, not even for reads. Direct database writes are only for migrations, schema work, requested data repair or local seed data. Why: https://app.hypertask.ai/detail/project-15/3891 and https://app.hypertask.ai/detail/project-15/3892.
 

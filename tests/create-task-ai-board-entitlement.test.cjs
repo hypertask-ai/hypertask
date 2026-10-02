@@ -29,6 +29,7 @@ test("minimal board payload includes the fields needed for destination AI access
     title: true,
     activeSubscriptionPlanId: true,
     compedUntil: true,
+    compedPlan: true,
     subscriptionPlan: {
       select: {
         priceId: true,

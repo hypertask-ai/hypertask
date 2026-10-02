@@ -10,6 +10,7 @@ import { useContext } from "react";
 import { IAttachment } from "@/models/model";
 import { cn } from "@/utils/undoActions/helperFuncs";
 import { linkifyHtml } from "@/utils/helperFunctions/linkifyHtml";
+import { sanitizeAiHtml } from "@/utils/helperFunctions/sanitizeHtml";
 import { useRouter, useSearchParams } from "next/navigation";
 import { HighlightMenu } from "../ContextMenu";
 
@@ -67,9 +68,11 @@ const InnerHTMLComment = memo(
     // HTPR-3779: turn bare URLs (e.g. CLI-posted comments) into clickable links.
     const renderedHtml = useMemo(
       () =>
-        linkifyHtml(
-          normalizeImageSourcesInHtml(
-            normalizeRichHtmlForRender(commentText ?? ""),
+        sanitizeAiHtml(
+          linkifyHtml(
+            normalizeImageSourcesInHtml(
+              normalizeRichHtmlForRender(commentText ?? ""),
+            ),
           ),
         ),
       [commentText],

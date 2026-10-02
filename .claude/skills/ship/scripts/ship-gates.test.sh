@@ -22,10 +22,10 @@ with tempfile.TemporaryDirectory(prefix='ship-gates-') as tmp:
     check.write_text('''#!/usr/bin/env python3
 import json, os, sys
 with open(os.environ['CALLS'], 'a') as f:
-    f.write(json.dumps([sys.argv[1:], os.getcwd()]) + '\\n')
+    f.write(json.dumps([sys.argv[1:], os.getcwd(), os.environ.get('SHIP_REPO'), os.environ.get('SHIP_CHECKOUT')]) + '\\n')
 markers = dict(ticket='ticket ok', pr='title ok', merged='merged ok',
-               deployed='deployed ok (no app build needed)', proof='proof ok', done='done ok')
-if sys.argv[1] == 'done' and os.environ.get('DONE') != 'yes':
+               deployed='deployed ok (no app build needed)', proof='proof ok', done='done ok', cleaned='cleaned ok')
+if sys.argv[1] in ('done', 'cleaned') and os.environ.get('DONE') != 'yes':
     print('FAIL: not Done'); sys.exit(1)
 print(markers[sys.argv[1]])
 ''')
@@ -57,35 +57,35 @@ print(markers[sys.argv[1]])
     r = run(CLAUDE_CODE_SESSION_ID=session, CODEX_SESSION_ID='ignoredB-full', CODEX_THREAD_ID='ignoredC-full')
     file = ledger(session)
     assert r.returncode == 0, r.stderr
-    assert r.stdout.strip() == str(file)
+    assert r.stdout.strip() == str(file), (r.stdout, r.stderr)
     assert (file.parent/'session').read_text() == session+'\n'
-    assert ids(file) == ['HTPR-6819.'+g for g in ['ticket','pr','merged','deployed','proof','done']]
-    assert 'UNMET: 1 (met: 5)' in r.stderr, r.stderr
-    assert len(calls()) == 6
+    assert ids(file) == ['HTPR-6819.'+g for g in ['ticket','pr','merged','deployed','proof','done','cleaned']]
+    assert 'UNMET: 2 (met: 5)' in r.stderr, r.stderr
+    assert len(calls()) == 7
     assert all(c[1] == str(repo) for c in calls())
     assert file.read_text().count('automatic-evidence=v1') == 5
-    assert file.read_text().count('  CWD: '+str(repo)) == 6
+    assert file.read_text().count('  CWD: '+str(repo)) == 7
     original = file.read_text()
     r = run(CLAUDE_CODE_SESSION_ID=session)
-    assert r.returncode == 0 and len(ids(file)) == 6 and len(calls()) == 7
+    assert r.returncode == 0 and len(ids(file)) == 7 and len(calls()) == 9
     assert file.read_text() == original
     print('ok Claude precedence, full binding, absolute quoted commands/CWD, executed approvals, deployed suffix and idempotence')
 
     r = run('YPER4-123', CLAUDE_CODE_SESSION_ID=session)
-    assert r.returncode == 0 and len(ids(file)) == 11 and len(set(ids(file))) == 11, r.stderr
+    assert r.returncode == 0 and len(ids(file)) == 13 and len(set(ids(file))) == 13, r.stderr
     assert 'YPER4-123.proof' not in ids(file)
     assert file.read_text().startswith(original)
     assert len([d for d in (repo/'.unlazy').iterdir() if d.name != 'locks']) == 1
     r = run('YPER4-123', CLAUDE_CODE_SESSION_ID=session)
-    assert r.returncode == 0 and len(ids(file)) == 11
+    assert r.returncode == 0 and len(ids(file)) == 13
     print('ok another ticket appends in one scope and repeat calls do not duplicate ids or reset evidence')
 
     for key, sid in [('CODEX_SESSION_ID','codexses-full'), ('CODEX_THREAD_ID','codexthr-full')]:
         r = run('HYFA-12', **{key:sid})
-        assert r.returncode == 0 and len(ids(ledger(sid))) == 5, r.stderr
+        assert r.returncode == 0 and len(ids(ledger(sid))) == 6, r.stderr
         assert (ledger(sid).parent/'session').read_text() == sid+'\n'
     r = run('HYFA-13', CODEX_SESSION_ID='codexses-full', CODEX_THREAD_ID='ignoredC-full')
-    assert r.returncode == 0 and len(ids(ledger('codexses-full'))) == 10
+    assert r.returncode == 0 and len(ids(ledger('codexses-full'))) == 12
     print('ok Codex session/thread fallback and precedence')
 
     before = file.read_text()
@@ -124,5 +124,36 @@ print(markers[sys.argv[1]])
         assert file.read_text() == tainted and not (p/'bad').exists()
     file.write_text(before)
     print('ok custom/mutating commands, altered expectations/CWD and duplicate ids never get auto-approved')
+
+    cli = dict(SHIP_REPO='hypertask-ai/cli', SHIP_BASE='main')
+    r = run('HTPR-6806', CLAUDE_CODE_SESSION_ID='cliSessA-full', **cli)
+    assert r.returncode != 0 and 'SHIP_CHECKOUT' in r.stderr and not ledger('cliSessA-full').exists()
+    r = run('HTPR-6806', CLAUDE_CODE_SESSION_ID='cliSessA-full', SHIP_CHECKOUT="/x';touch bad", **cli)
+    assert r.returncode != 0 and not ledger('cliSessA-full').exists()
+    cli['SHIP_CHECKOUT'] = '/home/u/hypertask cli'
+    count = len(calls())
+    r = run('HTPR-6806', CLAUDE_CODE_SESSION_ID='cliSessA-full', **cli)
+    cfile = ledger('cliSessA-full')
+    assert r.returncode == 0, r.stderr
+    prefix = "SHIP_REPO=hypertask-ai/cli SHIP_BASE=main SHIP_CHECKOUT='/home/u/hypertask cli' "
+    assert cfile.read_text().count('  CHECK: '+prefix) == 7
+    new = calls()[count:]
+    assert len(new) == 7 and all(c[2] == 'hypertask-ai/cli' and c[3] == '/home/u/hypertask cli' for c in new), new
+    r = run('HTPR-6819', CLAUDE_CODE_SESSION_ID='cliSessA-full')
+    assert r.returncode == 0 and len(ids(cfile)) == 14, r.stderr
+    assert all(c[2] is None for c in calls()[-7:])
+    print('ok CLI tickets carry SHIP_REPO, SHIP_BASE and SHIP_CHECKOUT into every check; app tickets append without them')
+
+    before = cfile.read_text()
+    for tainted in [before.replace('SHIP_BASE=main ', 'SHIP_BASE=main;touch${IFS}bad ', 1),
+                    before.replace("SHIP_CHECKOUT='/home/u/hypertask cli'", "SHIP_CHECKOUT=$(touch bad)", 1),
+                    before.replace('SHIP_REPO=hypertask-ai/cli ', 'FOO=1 SHIP_REPO=hypertask-ai/cli ', 1)]:
+        assert tainted != before
+        cfile.write_text(tainted)
+        count = len(calls())
+        r = run('HTPR-6806', CLAUDE_CODE_SESSION_ID='cliSessA-full', **cli)
+        assert r.returncode != 0 and len(calls()) == count and not (p/'bad').exists(), r.stderr
+    cfile.write_text(before)
+    print('ok an altered env prefix is never auto-approved')
     print('ship-gates regression passed')
 PY

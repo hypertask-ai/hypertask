@@ -3,7 +3,7 @@
 // registration, archive confirmation, authorization split, and invite dispatch.
 const test = require("node:test");
 const assert = require("node:assert/strict");
-const fs = require("node:fs");
+const fs = require("./helpers/chat-stream-source.cjs");
 const path = require("node:path");
 
 const ROUTE = path.resolve(

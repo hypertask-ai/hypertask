@@ -30,6 +30,8 @@ import {
   showMcpTokenModalAtom,
   announcementSlideAtom,
   aiChatExplicitOpenAtAtom,
+  aiChatAutoOpenSuppressedAtom,
+  showAIChatInterfaceAtom,
   mobileCommentComposerOpenAtom,
   showAccountSwitcherAtom,
   appShellRailAtom,
@@ -390,6 +392,8 @@ export default function GlobalProvider({
     closeAnnouncements,
   } = useGlobalUIState();
   const [, setAiChatExplicitOpenAt] = useRecoilState(aiChatExplicitOpenAtAtom);
+  const aiChatAutoOpenSuppressed = useRecoilValue(aiChatAutoOpenSuppressedAtom);
+  const setShowAiChatInterface = useSetRecoilState(showAIChatInterfaceAtom);
   // Settings is the full-screen /settings page now; the old right sidebar is
   // retired (nothing opens it — the render below is left dormant).
   const { openSettings } = useSettingsNavigation();
@@ -479,14 +483,14 @@ export default function GlobalProvider({
     }
     hasAttemptedChatRestoreRef.current = true;
     if (window.innerWidth < 768) return;
-    if (readChatOpenForSession()) {
+    if (!aiChatAutoOpenSuppressed && readChatOpenForSession()) {
       setChatRuntimeMounted(true);
-      openAIChatInterface();
+      setShowAiChatInterface(true);
       // Restoring after a reload is auto-open, not a user action: the panel
       // must mount without stealing the cursor (HTPR-6317).
       setAiChatExplicitOpenAt(null);
     }
-  }, [currentUser?.id, openAIChatInterface, pathname, setAiChatExplicitOpenAt]);
+  }, [currentUser?.id, aiChatAutoOpenSuppressed, pathname, setShowAiChatInterface, setAiChatExplicitOpenAt]);
 
   useEffect(() => {
     if (!hasAttemptedChatRestoreRef.current) return;

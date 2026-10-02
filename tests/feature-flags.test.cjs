@@ -479,6 +479,7 @@ test("declared flags remain listed with ticket details and can be changed", asyn
         mode: "OWNER_AND_QA",
         updatedAt: null,
       },
+      { key: "htpr-6653-admin-team-comp", mode: "OWNER_AND_QA", updatedAt: null },
       {
         key: "htpr-6673-capture-user-signed-up-in-posthog",
         mode: "OWNER_AND_QA",

@@ -25,7 +25,7 @@ test('suggestions retain writing focus; result arrows leave it so Enter opens th
   const requests = []
   const opened = []
   try {
-    source('src/lib/configs/search.config.ts', { searchConfig: { responseMessages: { default: '', fail: 'No results', error: 'Error' }, elementIds: { input: { id: 'search-input', placeholder: 'Search' }, history: { id: 'search-history' } }, handleKeyDown: { classNamesToReturnFrom: [] }, urls: { taskDetail: (projectId, index) => `/detail/project-${projectId}/${index}` } } })
+    source('src/utils/index.ts', { taskBaseUri: '/detail/' })
     source('src/utils/undoActions/helperFuncs.ts', { cn: (...values) => values.filter(Boolean).join(' ') })
     source('src/hooks/useFlag.tsx', { useFlag: (key) => key === 'htpr-6688-search-autocomplete' ? autocomplete : true })
     source('src/lib/contexts/deviceContext.tsx', { useDeviceContext: () => false })
@@ -33,7 +33,13 @@ test('suggestions retain writing focus; result arrows leave it so Enter opens th
     source('src/hooks/MultiPages/useGetAllProjectsMinimal.ts', { useGetAllProjectsMinimal: () => ({ data: allProjects }) })
     source('src/hooks/RecoilRoot/useHypertasksRecoilStates.ts', { default: () => ({ toggleShowCommands() {} }) })
     const SearchTaskIndexAtom = {}
-    source('src/lib/state.tsx', { useRecoilState: (atom) => [atom === SearchTaskIndexAtom ? 0 : { show: false }, () => {}] })
+    source('src/lib/state.tsx', { useRecoilState: (atom) => [atom === SearchTaskIndexAtom ? 0 : { show: false }, () => {}], useSetRecoilState: () => () => {}, useRecoilValue: () => false })
+    source('src/lib/contexts/mobileContext.tsx', { MobileViewContext: React.createContext(false) })
+    source('src/components/ProviderGlobal/useGlobalUIState.ts', { useGlobalUIState: () => ({ openAIChatInterface() {} }) })
+    source('src/components/commands.tsx', { default: () => null })
+    source('src/components/PageComponents/Kanban/HeaderComponents/AppShellRail.tsx', { default: () => null })
+    source('src/styles/search.module.scss', {})
+    source('src/app/search/search-autocomplete.css', {})
     source('src/store/index.ts', { inViewObjectAtom: {}, SearchTaskIndexAtom, showCommandsAtom: {}, tasksPlayListAtom: {} })
     source('src/hooks/Search/useSearchCache.ts', { useGetSearchCache: () => ({ data: { history: [] } }) })
     source('src/lib/constants/index.ts', { default: { multipleKeys: {}, gThenKeyDelay: 500 } })
@@ -42,14 +48,14 @@ test('suggestions retain writing focus; result arrows leave it so Enter opens th
     const post = async (_url, body) => {
       requests.push(body)
       return { status: 200, data: { processedData: { All: [
-        { taskId: 1, projectId: 7, uniqueIndex: 1, taskTitle: 'One' },
-        { taskId: 2, projectId: 7, uniqueIndex: 2, taskTitle: 'Two' },
+        { taskId: 1, projectId: 7, uniqueIndex: 1, taskTitle: 'One', highlight: {} },
+        { taskId: 2, projectId: 7, uniqueIndex: 2, taskTitle: 'Two', highlight: {} },
       ] }, tabs: ['All'] } }
     }
     stub(require.resolve('axios'), { default: { post }, post })
     stub(require.resolve('next/navigation'), { useRouter: () => ({ replace() {}, push(url) { opened.push(url) }, back() {} }) })
     stub(require.resolve('@tanstack/react-query'), { useQueryClient: () => ({ invalidateQueries() {}, setQueryData() {} }) })
-    const jiti = require('jiti')(__filename, { alias: { '@': path.join(root, 'src') }, interopDefault: true, jsx: true })
+    const jiti = require('jiti')(__filename, { alias: { '@': path.join(root, 'src') }, interopDefault: true, fsCache: false, jsx: { runtime: 'automatic' } })
     const { useSearch } = jiti(path.join(root, 'src/hooks/Search/useSearch.ts'))
     const SearchChipsInput = jiti(path.join(root, 'src/app/search/SearchChipsInput.tsx')).default
     const Harness = () => {
@@ -111,6 +117,27 @@ test('suggestions retain writing focus; result arrows leave it so Enter opens th
         assert.equal(requests.length, before)
       }
     }
+    autocomplete = true
+    source('src/hooks/Search/useSearch.ts', { useSearch: (...args) => { state = useSearch(...args); return state } })
+    const SearchComp = jiti(path.join(root, 'src/app/search/SearchComp.tsx')).default
+    await React.act(async () => reactRoot.render(React.createElement(SearchComp, { _searchTerm: 'login is:open', _includeArchived: false, currentUser: {} })))
+    assert.equal(state.typedTasks.length, 2, 'URL search has loaded its real result rows')
+    const input = document.getElementById('search-input')
+    await React.act(async () => { input.focus(); input.click() })
+    assert.equal(state.selectedIndex, null, 'the real search container clears selection on input click')
+    const before = requests.length
+    await press('ArrowDown', 40)
+    assert.notEqual(document.activeElement, input, 'first arrow leaves writing mode after a click')
+    assert.equal(state.selectedIndex, 0)
+    await press('ArrowDown', 40)
+    assert.equal(state.selectedIndex, 1)
+    await press('Enter', 13)
+    assert.equal(opened.at(-1), '/detail/project-7/2')
+    assert.equal(requests.length, before, 'clicked-input arrows then Enter open a ticket, not another search')
+    await React.act(async () => document.querySelector('.search-input').click())
+    assert.equal(state.selectedIndex, null)
+    await press('ArrowUp', 38)
+    assert.equal(state.selectedIndex, state.typedTasks.length - 1, 'ArrowUp starts at the last result after blank-space deselection')
   } finally {
     if (reactRoot) await React.act(async () => reactRoot.unmount())
     for (const [filename, prior] of stubs.reverse()) {

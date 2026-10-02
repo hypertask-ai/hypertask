@@ -1,5 +1,6 @@
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
+const { createRefactoredModuleRequire } = require("./refactored-module-require.cjs");
 const path = require("node:path");
 const test = require("node:test");
 const React = require("react");
@@ -72,6 +73,7 @@ const moduleMocks = {
   "@/hooks/MultiPages/useGetAllTeamsMinimal": { useGetAllTeamsMinimal: noop },
   "@/hooks/General/useProjectQuery": { useProjectQuery: () => ({ goToProjectShortcut: noop }) },
   "@/hooks/General/useDeferredSubscriptionCheck": { useDeferredSubscriptionCheck: noop },
+  "@/hooks/General/useHydrated": { useHydrated: () => true },
   "@/hooks/Homepage/Views/useViewCyclingShortcuts": { __esModule: true, default: noop },
   "@/hooks/MultiPages/Route/useTrialModal": { __esModule: true, default: () => ({ showTrial: false, setShowTrial: noop }) },
   "@/hooks/Task Detail/useTimeTracking": { useBoardRunningTimers: () => ({ timers: new Map(), timerDataReady: true }) },
@@ -131,7 +133,7 @@ const compiled = ts.transpileModule(source, {
 }).outputText;
 const landingModule = { exports: {} };
 new Function("require", "module", "exports", compiled)(
-  (specifier) => moduleMocks[specifier] ?? require(specifier),
+  createRefactoredModuleRequire(path.join(__dirname, "../src/app/[...boardURL]"), moduleMocks),
   landingModule,
   landingModule.exports,
 );
