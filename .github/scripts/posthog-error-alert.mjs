@@ -23,15 +23,7 @@ function appUrlConfig() {
   return parsed.origin;
 }
 
-export function isUuid(value) {
-  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
-}
-
 function productionConfig() {
-  const managerAgentId = requiredConfig("ERROR_ALERT_MANAGER_AGENT_ID");
-  if (!isUuid(managerAgentId)) {
-    throw new Error("ERROR_ALERT_MANAGER_AGENT_ID is invalid");
-  }
   const projectSlug = requiredConfig("ERROR_ALERT_VERCEL_PROJECT");
   if (!/^[a-z0-9][a-z0-9._-]{0,99}$/i.test(projectSlug)) {
     throw new Error("ERROR_ALERT_VERCEL_PROJECT is invalid");
@@ -40,8 +32,6 @@ function productionConfig() {
     appUrl: appUrlConfig(),
     boardId: positiveIntegerConfig("ERROR_ALERT_BOARD_ID"),
     bugsSectionId: positiveIntegerConfig("ERROR_ALERT_BUGS_SECTION_ID"),
-    managerThread: positiveIntegerConfig("ERROR_ALERT_MANAGER_THREAD"),
-    managerAgentId,
     projectSlug,
   };
 }
@@ -236,31 +226,6 @@ async function createIncident(fetchImpl, mcpToken, alert, rollback, config) {
   };
 }
 
-async function commentOnManagerThread(fetchImpl, mcpToken, alert, incident, rollback, config) {
-  const result = rollbackMessage(alert, rollback);
-  const opening = alert.alert_kind === "server_error_spike"
-    ? `A server error crossed ${alert.count} occurrences in five minutes.`
-    : "PostHog found a new production server error.";
-  const incidentText = incident
-    ? `<a href="${incident.url}">Open incident HTPR-${incident.number}</a>.`
-    : "The incident ticket could not be created.";
-  const text =
-    `<p><strong>${escapeHtml(opening)}</strong></p>` +
-    `<p><span data-type="mention" class="mention" data-id="Manager" data-label="agent-${config.managerAgentId}">Manager</span> ` +
-    `${incidentText} ${escapeHtml(result)} ` +
-    `<a href="${escapeHtml(alert.issue_url)}">Open PostHog</a>.</p>`;
-  await jsonRequest(fetchImpl, `${config.appUrl}/api/mcp/comments`, {
-    method: "POST",
-    headers: mcpHeaders(mcpToken, `posthog-manager-${alert.event_id}`),
-    body: JSON.stringify({
-      unique_index: config.managerThread,
-      project_id: config.boardId,
-      text,
-      content_type: "html",
-    }),
-  });
-}
-
 async function commentOnIncident(fetchImpl, mcpToken, alert, incident, rollback, config) {
   const text = `<p><strong>${escapeHtml(rollbackMessage(alert, rollback))}</strong></p>`;
   await jsonRequest(fetchImpl, `${config.appUrl}/api/mcp/comments`, {
@@ -340,9 +305,7 @@ export async function handlePostHogAlert(
     ? incidentResult.value
     : undefined;
 
-  const comments = [
-    commentOnManagerThread(fetchImpl, mcpToken, alert, incident, rollback, config),
-  ];
+  const comments = [];
   if (rollbackEligible && incident) {
     comments.push(commentOnIncident(fetchImpl, mcpToken, alert, incident, rollback, config));
   }
