@@ -89,6 +89,8 @@ export default async function Page(
   console.time(`🤔 ~ TDP Fetch for ${params.slug[0]}/${params.slug[1]}`)
   const slug = detailSlug;
 
+  // Retain the server snapshot's age even if a prefetched route mounts later.
+  const commentsUpdatedAt = currentDate.getTime();
   const [taskResult, commentsJson, userPreferences] = await Promise.all([
     fetchTaskDetail(params.slug[0], params.slug[1], userObj.id),
     fetchCommentsForSlug(slug, userObj.id),
@@ -147,7 +149,7 @@ export default async function Page(
         key={`task-detail-page-tasks-provider-${task.id}`}
         stack={{ stack }}
         _initialStacked={initialMap}
-        _comments={JSON.stringify({ comments: comments.json, stacked: initialMap, lastReadAt, agentRunActivities })}
+        _comments={JSON.stringify({ comments: comments.json, stacked: initialMap, lastReadAt, agentRunActivities, updatedAt: commentsUpdatedAt })}
         allowPerks={true}
         parsedTask={JSON.stringify(task)}
         scrollSetting={scrollSetting}
@@ -171,7 +173,7 @@ export default async function Page(
               isMobile={false}
               _currentUser={userObj}
               _currentTask={JSON.stringify(task)}
-              _comments={JSON.stringify({ comments: comments.json, stacked: initialMap, lastReadAt, agentRunActivities })}
+              _comments={JSON.stringify({ comments: comments.json, stacked: initialMap, lastReadAt, agentRunActivities, updatedAt: commentsUpdatedAt })}
               _slugs={[params.slug[0], params.slug[1]]}
             />
           </FollowersProvider>
