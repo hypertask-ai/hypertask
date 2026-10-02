@@ -169,10 +169,16 @@ test("quiet: contact hover waits for final content only on flagged detail, retai
     "lucide-react": { Check: () => null, Copy: () => null },
   };
   for (const name of ["offset", "flip", "shift", "useHover", "useFocus", "useDismiss", "useRole", "safePolygon"]) mocks["@floating-ui/react"][name] = noop;
-  const Surface = compile(`${read("src/components/Common/PersonHovercard.tsx")}\nexport { PersonHovercardSurface };`, mocks).PersonHovercardSurface;
-  const render = () => renderToString(React.createElement(Surface, { projectId: 7049, subject: { kind: "user", id: 985 }, externallyOpen: true }));
+  const loaded = compile(read("src/components/Common/PersonHovercard.tsx"), mocks);
+  const Surface = loaded.PersonHovercardSurface;
+  const props = { projectId: 7049, subject: { kind: "user", id: 985 }, externallyOpen: true };
+  const render = (extra = {}) => renderToString(React.createElement(Surface, { ...props, ...extra }));
+  const reference = React.createElement("span", null, "Contact");
+  assert.equal(loaded.default({ ...props, children: reference }).props.quiet, true);
+  assert.match(render({ quiet: false }), /Loading contact/, "exported callers can explicitly retain the legacy loading mode");
   assert.equal(render(), "", "no empty hovercard or loading text while fetching");
   enabled = false;
+  assert.equal(loaded.default({ ...props, children: reference }).props.quiet, false);
   assert.match(render(), /Loading contact/);
   enabled = true;
   pathname = "/project";

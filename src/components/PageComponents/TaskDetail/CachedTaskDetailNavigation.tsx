@@ -78,7 +78,7 @@ export default function CachedTaskDetailNavigation({ children, accountId }: {
   useEffect(() => {
     if (location && !task) router.replace(window.location.pathname + window.location.search + window.location.hash);
   }, [location, task, router]);
-  if (!location || !task || task.projectId !== location.projectId || task.uniqueIndex !== location.uniqueIndex) return children;
+  if (!instantTicketOpen || !location || !task || task.projectId !== location.projectId || task.uniqueIndex !== location.uniqueIndex) return children;
   return (
     <EmbeddedTaskDetail
       key={`${location.accountId}:${location.taskId}`}

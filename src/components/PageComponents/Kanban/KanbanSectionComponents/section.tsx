@@ -138,7 +138,9 @@ export const Section = ({
   const setActiveSection = useSetRecoilState(activeSectionAtom);
   const setActiveSectionId = useSetRecoilState(activeSectionIdAtom);
   const setTasksPlayList = useSetRecoilState(tasksPlayListAtom);
-  const instantTicketOpen = useFlag(HTPR_6752_INSTANT_TICKET_OPEN_FLAG);
+  const instantTicketOpen = useFlag(
+    HTPR_6752_INSTANT_TICKET_OPEN_FLAG,
+  );
   const { navigateToTask } = useHypertasksNavigate();
   const [revealedTaskIds, setRevealedTaskIds] = useState<Set<number>>(
     () => new Set(),
