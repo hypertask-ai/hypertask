@@ -5,6 +5,7 @@ import { canAccessTrialPage } from './utils/helperFunctions/helperFunctions';
 import { parseSafeReturnTo } from '@/lib/auth/safeReturnTo';
 import { verifySessionEdge } from '@/lib/auth/sessionEdge';
 import { verifyCookieIdentity } from '@/lib/auth/cookieIdentity';
+import { detailWithoutTicketRedirect } from '@/lib/routing/detailWithoutTicket';
 import {
   hasKeyboardShortcutTutorialQuery,
   isKeyboardShortcutTutorialPath,
@@ -29,6 +30,13 @@ async function authMiddleware(request: NextRequest) {
 
   if (currentPath === '/mcp' || currentPath === '/sse' || currentPath === '/message' || currentPath === '/mcp-health') {
     return NextResponse.next();
+  }
+
+  // HTPR-6818: a detail URL without a ticket number used to redirect from inside
+  // the streamed page, which React reports as error #419. Redirect before rendering.
+  const detailRedirect = detailWithoutTicketRedirect(currentPath);
+  if (detailRedirect) {
+    return NextResponse.redirect(new URL(detailRedirect, request.url), 307);
   }
 
   // mcp.hypertask.ai parity with the retired standalone server: bare-domain
