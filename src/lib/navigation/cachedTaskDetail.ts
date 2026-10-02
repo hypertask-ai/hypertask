@@ -65,6 +65,7 @@ export function openCachedTaskDetail({
     cachedTaskDetail: location,
   };
   window.history[replace ? "replaceState" : "pushState"](state, "", href);
+  window.dispatchEvent(new Event("cached-task-detail-navigation"));
   window.scrollTo(0, 0);
   return true;
 }

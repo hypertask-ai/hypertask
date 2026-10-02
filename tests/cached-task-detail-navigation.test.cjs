@@ -48,7 +48,7 @@ function historyFixture(t) {
   for (const method of ["pushState", "replaceState"]) {
     history[method] = (state, unused, href) => { calls.push({ method, state, href }); history.state = state; };
   }
-  global.window = { history, scrollTo: (x, y) => { assert.equal(x, 0); assert.equal(y, 0); } };
+  global.window = { history, dispatchEvent: () => {}, scrollTo: (x, y) => { assert.equal(x, 0); assert.equal(y, 0); } };
   t.after(() => { global.window = original; });
   return { calls, history };
 }
@@ -238,7 +238,7 @@ test("background history refreshes preserve the mounted cached detail, but route
   const previousLocation = { current: undefined };
   const Detail = () => null;
   const mocks = {
-    "react": { useRef: () => previousLocation, useEffect: () => {} },
+    "react": { useRef: () => previousLocation, useEffect: () => {}, useSyncExternalStore: () => pathname },
     "react/jsx-runtime": require("react/jsx-runtime"),
     "next/navigation": { usePathname: () => pathname, useRouter: () => ({}) },
     "@tanstack/react-query": { useQueryClient: () => queryClient },

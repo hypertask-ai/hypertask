@@ -5,6 +5,9 @@ import { usePersonHovercard } from "@/hooks/MultiPages/usePersonHovercard";
 import type { PersonHovercardSubject } from "@/models/personHovercard";
 import { agentPageHref } from "@/lib/agents/pageHref";
 import Link from "next/link";
+import { usePathname } from "next/navigation";
+import { useFlag } from "@/hooks/useFlag";
+import { HTPR_6752_INSTANT_TICKET_OPEN_FLAG } from "@/lib/flags/keys";
 import {
   autoUpdate,
   flip,
@@ -38,6 +41,7 @@ type PersonHovercardProps = {
 };
 
 type PersonHovercardSurfaceProps = {
+  quiet?: boolean;
   projectId?: number;
   subject?: PersonHovercardSubject | null;
   anchor?: HTMLElement | null;
@@ -51,6 +55,7 @@ type PersonHovercardSurfaceProps = {
 };
 
 const PersonHovercardSurface = ({
+  quiet,
   projectId,
   subject,
   anchor,
@@ -99,6 +104,9 @@ const PersonHovercardSurface = ({
     role,
   ]);
 
+  const instantTicketOpen = useFlag(HTPR_6752_INSTANT_TICKET_OPEN_FLAG);
+  const pathname = usePathname();
+  const detailRoute = pathname?.startsWith("/detail/");
   const query = usePersonHovercard(projectId, subject ?? null, open);
   const profile = query.isFetching || query.isError ? undefined : query.data;
   const profileHref = profile ? agentPageHref(profile) : null;
@@ -133,7 +141,7 @@ const PersonHovercardSurface = ({
   return (
     <>
       {reference}
-      {open && (
+      {open && (!instantTicketOpen || quiet === false || !detailRoute || profile || query.isError) && (
         <FloatingPortal>
           <FloatingFocusManager context={context} modal={false} initialFocus={-1}>
             <section
@@ -206,9 +214,10 @@ const PersonHovercardSurface = ({
 };
 
 const PersonHovercard = ({ projectId, subject, children }: PersonHovercardProps) => {
+  const instantTicketOpen = useFlag(HTPR_6752_INSTANT_TICKET_OPEN_FLAG);
   if (!projectId || !subject) return children;
   return (
-    <PersonHovercardSurface projectId={projectId} subject={subject}>
+    <PersonHovercardSurface projectId={projectId} subject={subject} quiet={instantTicketOpen ? true : false}>
       {children}
     </PersonHovercardSurface>
   );
@@ -221,6 +230,7 @@ const ParentPersonHovercard = ({
   projectId?: number;
   subject?: PersonHovercardSubject | null;
 }) => {
+  const instantTicketOpen = useFlag(HTPR_6752_INSTANT_TICKET_OPEN_FLAG);
   const markerRef = useRef<HTMLSpanElement>(null);
   const closeTimerRef = useRef<number | null>(null);
   const [anchor, setAnchor] = useState<HTMLElement | null>(null);
@@ -277,6 +287,7 @@ const ParentPersonHovercard = ({
           projectId={projectId}
           subject={subject}
           anchor={anchor}
+          quiet={instantTicketOpen ? true : false}
           externallyOpen={open}
           onExternallyOpenChange={setOpen}
           onFloatingPointerEnter={cancelClose}

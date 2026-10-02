@@ -45,6 +45,7 @@ const PROGRESSIVE_REVEAL_SETTLE_MS = 160;
 
 // Task skeleton component to prevent CLS
 const TaskSkeleton = ({ provided }: { provided?: DraggableProvided }) => {
+  const instantTicketOpen = useFlag(HTPR_6752_INSTANT_TICKET_OPEN_FLAG);
   return (
     <div
       ref={provided?.innerRef}
@@ -53,7 +54,7 @@ const TaskSkeleton = ({ provided }: { provided?: DraggableProvided }) => {
       className="outline-none rounded-[5px]"
     >
       <div className="shadow-md border-l-4 border-transparent bg-cardBackground rounded-[5px] outline-none min-h-[100px]">
-        <div className="flex items-start p-2 gap-2 flex-col animate-pulse">
+        {!instantTicketOpen && <div className="flex items-start p-2 gap-2 flex-col animate-pulse">
           {/* Task top row skeleton */}
           <div className="w-full flex justify-between items-center">
             <div className="flex items-center gap-2">
@@ -78,7 +79,7 @@ const TaskSkeleton = ({ provided }: { provided?: DraggableProvided }) => {
             <div className="w-16 h-5 bg-gray-300 dark:bg-gray-600 rounded-full"></div>
             <div className="w-14 h-5 bg-gray-300 dark:bg-gray-600 rounded-full"></div>
           </div>
-        </div>
+        </div>}
       </div>
     </div>
   );
@@ -137,7 +138,9 @@ export const Section = ({
   const setActiveSection = useSetRecoilState(activeSectionAtom);
   const setActiveSectionId = useSetRecoilState(activeSectionIdAtom);
   const setTasksPlayList = useSetRecoilState(tasksPlayListAtom);
-  const instantTicketOpen = useFlag(HTPR_6752_INSTANT_TICKET_OPEN_FLAG);
+  const instantTicketOpen = useFlag(
+    HTPR_6752_INSTANT_TICKET_OPEN_FLAG,
+  );
   const { navigateToTask } = useHypertasksNavigate();
   const [revealedTaskIds, setRevealedTaskIds] = useState<Set<number>>(
     () => new Set(),
