@@ -1,171 +1,74 @@
 'use client'
+import type { useLandingSectionState } from "./useLandingSectionState";
+import { completeBoardReadinessTrace, emitBoardReadinessAfterPaint, markBoardReadinessPhase } from "@/lib/analytics/boardReadinessPhases";
+import { resolveBoardSwitchIntent } from "@/lib/analytics/boardSwitchLatency";
+
+import { useLandingSection } from "./LandingPageSection";
+import type { SectionCompProps } from "./LandingPageSection";
+import type { LandingPageInput } from "./LandingPageShared";
+
+
+import { BoardRenderSnapshot, EMPTY_NOTIFICATION_COUNT, useCommittedBoardReadinessTrace, AppShellRail, TrialModal, ViewTabsBar, ShellViewControls, GuestAuthLinks, Header, TableView } from "./LandingPageShared";
+export { type LandingPageInput } from "./LandingPageShared";
+
 import nookies from "nookies"
-import {  IFavorites, IProject, IProjectsAll, ISection, IUser } from "@/models/model";
+import { IProject, IProjectsAll, IUser } from "@/models/model";
 
-import {     activeBuiltinViewsAtom, showBoardManagerAtom, currentProjectAtom, isXScrollOnKanbanAtom, boardLayoutAtom, boardLayoutPreferenceAtom, showAIChatInterfaceAtom, openAiChatByDefaultAtom, aiChatAutoOpenSuppressedAtom, aiChatExplicitOpenAtAtom, aiChatPinnedAtom, appShellRailAtom, showQuickTipsAtom } from "@/store";
+import { currentProjectAtom, boardLayoutAtom, boardLayoutPreferenceAtom, showAIChatInterfaceAtom, openAiChatByDefaultAtom, aiChatAutoOpenSuppressedAtom, aiChatExplicitOpenAtAtom, aiChatPinnedAtom } from "@/store";
 import { useRecoilState, useRecoilValue, useSetRecoilState } from "@/lib/state";
-import  { lazy, Suspense, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { debounce, deepCopy } from "@/utils/helperFunctions/helperFunctions";
+import { Suspense, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 
 
-import { useRouter,useSearchParams,usePathname } from "next/navigation";
-import {
-  ActiveBoardPayloadUnavailableError,
-  PROJECTS_ALL_QUERY_KEY,
-  purgeRevokedBoardTaskQueries,
-  isRevocationStillActiveBoard,
-  normalizeRequestedProjectId,
-  type ProjectsAuthorizationContext,
-  revokeBoardAccess,
-  useGetAllBoards,
-} from "@/hooks/Homepage/useGetBoards";
-import {
-  useGetNotificationCount,
-} from "@/hooks/Inbox/useGetNotifications";
+
+import { useRouter, useSearchParams, usePathname } from "next/navigation";
+import { ActiveBoardPayloadUnavailableError, PROJECTS_ALL_QUERY_KEY, purgeRevokedBoardTaskQueries, isRevocationStillActiveBoard, normalizeRequestedProjectId, type ProjectsAuthorizationContext, revokeBoardAccess, useGetAllBoards } from "@/hooks/Homepage/useGetBoards";
+import { useGetNotificationCount } from "@/hooks/Inbox/useGetNotifications";
 import { useQueryClient } from "@tanstack/react-query";
-import { useGetAllFavorites } from "@/hooks/MultiPages/useGetAllFavorites";
+
 import HomePage from "@/components/PageComponents/Kanban/KanbanHomepageComponents/Homepage";
 import { KanbanModalsProvider } from "@/lib/contexts/Kanban/KanbanContainer/KanbanModalContext";
 
 import { addLastActivityAt } from "@/utils/api/helperFunctions";
 import { BOARD_TASKS_KEY, fetchBoardTasks, hydrateBoardWithPayload, isBoardPayloadHydrated, isBoardTasksPayload } from "@/utils/api/Homepage";
-import { useGetAllTeamsMinimal } from "@/hooks/MultiPages/useGetAllTeamsMinimal";
+
 import { MOBILE_BOARD_SWITCHER_QUERY_KEY } from "@/hooks/MultiPages/useGetAllAccessibleBoardList";
 import { getActiveBoardLayoutPreferenceFromProject, getActiveSortingModeFromProject, getViewFromProject, pinProjectToUrlView, resolveBoardLayoutFromSurface } from "@/utils/helperFunctions/Views/ViewsHelperFunctions";
 import { TBoardSortingViewMode } from "@/models/Views/model";
-import { useProjectQuery } from "@/hooks/General/useProjectQuery";
+
 import { useDeferredSubscriptionCheck } from "@/hooks/General/useDeferredSubscriptionCheck";
-import useViewCyclingShortcuts from "@/hooks/Homepage/Views/useViewCyclingShortcuts";
+import { useHydrated } from "@/hooks/General/useHydrated";
+
 import { MobileViewContext } from "@/lib/contexts/mobileContext";
-import useTrialModal from "@/hooks/MultiPages/Route/useTrialModal";
+
 import { isGuestUser } from "@/lib/demo/guest";
 import NoBoardsEmptyState from "./NoBoardsEmptyState";
-import { getFilteredSections } from "@/utils/helperFunctions/Views/FilterHelperFunctions";
-import { getAppliedSubtaskSections } from "@/utils/helperFunctions/Views/SubtaskHelperFunction";
-import { getFilteredEmptySections } from "@/utils/helperFunctions/Views/EmptySectionsHelperFunction";
-import { buildBuiltinViewContext, getActiveBoardViewId, getBuiltinView, isBuiltinViewId } from "@/lib/constants/builtinViews";
-import { buildBoardDocumentTitle } from "@/lib/boardDocumentTitle";
+
+
+
+import { getActiveBoardViewId } from "@/lib/constants/builtinViews";
+
 import CycleBoardMeta from "@/components/PageComponents/Kanban/HeaderComponents/CycleBoardMeta";
-import { useBoardRunningTimers } from "@/hooks/Task Detail/useTimeTracking";
-import {
-  type BoardAuthorizationProof,
-  usePreparedBoardReadModel,
-  useSyncedBoardReadModel,
-} from "@/hooks/Homepage/useSyncedBoardReadModel";
-import {
-  getBoardSyncPilotEnabled,
-  persistBoardSyncPilotPreference,
-} from "@/lib/boardSync/pilot";
+
+import { type BoardAuthorizationProof, usePreparedBoardReadModel, useSyncedBoardReadModel } from "@/hooks/Homepage/useSyncedBoardReadModel";
+import { getBoardSyncPilotEnabled, persistBoardSyncPilotPreference } from "@/lib/boardSync/pilot";
 import { useBoardStartup } from "@/lib/contexts/boardStartupContext";
 import { discardEarlyBoardBootstrap } from "@/lib/boardBootstrap/earlyBoardBootstrap";
-import { setLastBoardTeam } from "@/lib/lastBoardTeam";
-import {
-  type BoardReadinessTraceScope,
-  createBoardReadinessRouteEntryId,
-  completeBoardReadinessTrace,
-  emitBoardReadinessAfterPaint,
-  flushBoardReadinessTrace,
-  getBoardReadinessTraceScope,
-  markBoardNetworkQueryPublished,
-  markBoardReadinessPhase,
-  prepareBoardReadinessTrace,
-} from "@/lib/analytics/boardReadinessPhases";
-import {
-  markBoardSwitchIntent,
-  resolveBoardSwitchIntent,
-} from "@/lib/analytics/boardSwitchLatency";
+
+import { createBoardReadinessRouteEntryId, flushBoardReadinessTrace, markBoardNetworkQueryPublished } from "@/lib/analytics/boardReadinessPhases";
+
 import { getNextRouterAwareHistoryState } from "@/lib/navigation/nextHistoryState";
-import {
-  shouldReleaseSecondaryStartupForTerminalBoard,
-  shouldReleaseSecondaryStartupOnBoardRequest,
-} from "@/lib/boardStartup/secondaryRequests";
-import {
-  clearRevokedBoardMarker,
-  clearRevokedBoardReadModel,
-} from "@/lib/localReadModels/clear";
-
-// React.lazy calls import() only when the conditional branch actually renders.
-// next/dynamic preloads client boundaries from this route even while closed.
-const TrialModal = lazy(
-  () => import("@/components/Modals/TrialPlan/TrialModal"),
-);
-const TableView = lazy(
-  () => import("@/components/PageComponents/Kanban/TableView/TableView"),
-);
-const Header = lazy(
-  () => import("@/components/PageComponents/Kanban/HeaderComponents/header"),
-);
-const ViewTabsBar = lazy(
-  () =>
-    import("@/components/PageComponents/Kanban/HeaderComponents/ViewTabsBar"),
-);
-const AppShellRail = lazy(
-  () =>
-    import("@/components/PageComponents/Kanban/HeaderComponents/AppShellRail"),
-);
-const ShellViewControls = lazy(
-  () =>
-    import("@/components/PageComponents/Kanban/HeaderComponents/ShellViewControls"),
-);
-const GuestAuthLinks = lazy(
-  () =>
-    import("@/components/PageComponents/Kanban/HeaderComponents/GuestAuthLinks"),
-);
-
-const EMPTY_NOTIFICATION_COUNT = { all: 0, unseen: 0 } as const
-
-type BoardRenderSnapshot = {
-  accountId: number;
-  projects: IProject[];
-  projectIndex: number;
-  activeSortingMode: TBoardSortingViewMode;
-  boardLayout: "board" | "table";
-  readinessSource: "indexeddb" | "network" | "unknown";
-  readinessProjectId: number;
-  readinessRouteEntryId: number;
-};
-
-const useCommittedBoardReadinessTrace = ({
-  accountId,
-  projectId,
-  routeEntryId,
-}: {
-  accountId: number;
-  projectId: number | null;
-  routeEntryId: number;
-}): BoardReadinessTraceScope | null => {
-  const [scope, setScope] = useState<BoardReadinessTraceScope | null>(null)
-
-  useLayoutEffect(() => {
-    if (projectId === null) {
-      setScope(null)
-      return
-    }
-
-    prepareBoardReadinessTrace({ accountId, projectId, routeEntryId })
-    setScope(getBoardReadinessTraceScope())
-  }, [accountId, projectId, routeEntryId])
-
-  if (
-    scope?.accountId !== accountId ||
-    scope.projectId !== projectId ||
-    scope.routeEntryId !== routeEntryId
-  ) {
-    return null
-  }
-  return scope
-}
+import { shouldReleaseSecondaryStartupForTerminalBoard, shouldReleaseSecondaryStartupOnBoardRequest } from "@/lib/boardStartup/secondaryRequests";
+import { clearRevokedBoardMarker, clearRevokedBoardReadModel } from "@/lib/localReadModels/clear";
 
 
-const  LandingPage= ({
-  user,
-  authenticated,
-  slugs: slugsProp
-    }: {
-  slugs:any,
-  user: IUser,
-  authenticated: boolean,
-}) =>{
+type useLandingBoardAccessContext = Pick<LandingPageInput, "slugsProp" | "user">;
+
+
+export function useLandingBoardAccess(context: useLandingBoardAccessContext) {
+  const {
+  slugsProp, user,
+  } = context;
+
 
 const queryClient = useQueryClient();
 const setRouteCurrentProject = useSetRecoilState(currentProjectAtom)
@@ -393,6 +296,32 @@ useEffect(() => {
   requestedProjectId,
   user.id,
 ])
+  return {
+  queryClient, router, releaseSecondaryStartup, secondaryStartupEnabled, isMblForChat,
+  searchParams, slugs, pilotParameter, currentView, requestedSurface,
+  surfaceInitializationKey, surfaceInitializedFor, setSurfaceInitializedFor, surfaceResolutionRef, pendingProgrammaticSurfaceRef,
+  requestedProjectId, isGuest, boardAccessKey, readinessRouteEntryId, readinessTraceScope,
+  boardAccess, setBoardAccess, networkAccess, setNetworkAccess, setSyncedBoardPilotEnabled,
+  pilotPreferenceResolved, setPilotPreferenceResolved, localDatabasePilotEnabled, pilotExplicitlyDisabled, boardLayout,
+  setBoardLayout, lastObservedBoardLayoutRef, userSurfaceChangeVersionRef, boardLayoutPreference, cancelPreparedLocalPublication,
+  latestBoardAuthorizationProofRef, publishedAuthorizationKeyRef, publishAuthorizedLocalBoard, revokeActiveBoard,
+  };
+}
+
+
+
+type useLandingBoardQueryContext = Pick<LandingPageInput, "user"> &
+  Pick<ReturnType<typeof useLandingBoardAccess>, "slugs" | "requestedProjectId" | "latestBoardAuthorizationProofRef" | "pilotExplicitlyDisabled" | "setNetworkAccess" | "boardAccessKey" | "localDatabasePilotEnabled" | "setBoardAccess" | "publishAuthorizedLocalBoard" | "revokeActiveBoard" | "queryClient" | "cancelPreparedLocalPublication" | "isMblForChat" | "releaseSecondaryStartup" | "secondaryStartupEnabled" | "boardAccess" | "networkAccess" | "readinessTraceScope">;
+
+
+export function useLandingBoardQuery(context: useLandingBoardQueryContext) {
+  const {
+  user, slugs, requestedProjectId, latestBoardAuthorizationProofRef, pilotExplicitlyDisabled,
+  setNetworkAccess, boardAccessKey, localDatabasePilotEnabled, setBoardAccess, publishAuthorizedLocalBoard,
+  revokeActiveBoard, queryClient, cancelPreparedLocalPublication, isMblForChat, releaseSecondaryStartup,
+  secondaryStartupEnabled, boardAccess, networkAccess, readinessTraceScope,
+  } = context;
+
 const {
   data: fetchedData,
   isFetching: dataFetching,
@@ -657,6 +586,30 @@ useEffect(() => {
   releaseSecondaryStartup,
   isMblForChat,
 ]);
+  return {
+  fetchedData, dataFetching, projectsError, refetchProjects, notificationCount,
+  currentBoardAccessStatus, queryData, data, hasAccountOwnedNetworkData,
+  };
+}
+
+
+
+type useLandingBoardSurfaceContext = Pick<LandingPageInput, "user"> &
+  Pick<ReturnType<typeof useLandingBoardAccess>, "setBoardAccess" | "boardAccessKey" | "setNetworkAccess" | "pilotParameter" | "setSyncedBoardPilotEnabled" | "setPilotPreferenceResolved" | "pilotPreferenceResolved" | "pilotExplicitlyDisabled" | "latestBoardAuthorizationProofRef" | "publishedAuthorizationKeyRef" | "localDatabasePilotEnabled" | "queryClient" | "requestedProjectId" | "slugs" | "isMblForChat" | "releaseSecondaryStartup" | "currentView" | "surfaceResolutionRef" | "surfaceInitializationKey" | "requestedSurface" | "boardLayoutPreference" | "boardLayout"> &
+  Pick<ReturnType<typeof useLandingBoardQuery>, "refetchProjects" | "currentBoardAccessStatus" | "fetchedData" | "hasAccountOwnedNetworkData" | "dataFetching" | "projectsError" | "data" | "queryData">;
+
+
+export function useLandingBoardSurface(context: useLandingBoardSurfaceContext) {
+  const {
+  setBoardAccess, boardAccessKey, setNetworkAccess, pilotParameter, setSyncedBoardPilotEnabled,
+  setPilotPreferenceResolved, pilotPreferenceResolved, pilotExplicitlyDisabled, latestBoardAuthorizationProofRef, publishedAuthorizationKeyRef,
+  refetchProjects, localDatabasePilotEnabled, queryClient, user, requestedProjectId,
+  currentBoardAccessStatus, fetchedData, hasAccountOwnedNetworkData, dataFetching, projectsError,
+  data, slugs, isMblForChat, queryData, releaseSecondaryStartup,
+  currentView, surfaceResolutionRef, surfaceInitializationKey, requestedSurface, boardLayoutPreference,
+  boardLayout,
+  } = context;
+
 const pathname = usePathname()
 const [, setShowAiChatInterface] = useRecoilState(showAIChatInterfaceAtom)
 const [, setAiChatExplicitOpenAt] = useRecoilState(aiChatExplicitOpenAtAtom)
@@ -801,11 +754,43 @@ const boardLayoutForRender =
         boardLayoutPreference,
       )
     : boardLayout
+  return {
+  pathname, setShowAiChatInterface, setAiChatExplicitOpenAt, openAiChatByDefault, aiChatAutoOpenSuppressed,
+  aiChatPinned, welcomeAiHandledRef, hydratingRef, hydrationRetryAttemptsRef, hydrationRetryToken,
+  setHydrationRetryToken, hydrationFailedProjectId, setHydrationFailedProjectId, projectLookupFailed, setProjectLookupFailed,
+  projectIndex, projectsForSection, pinnedProject, boardLayoutForRender,
+  };
+}
+
+
+
+type useLandingBoardHydrationContext = Pick<LandingPageInput, "user"> &
+  Pick<ReturnType<typeof useLandingBoardAccess>, "isMblForChat" | "isGuest" | "slugs" | "surfaceResolutionRef" | "lastObservedBoardLayoutRef" | "boardLayout" | "pendingProgrammaticSurfaceRef" | "surfaceInitializationKey" | "userSurfaceChangeVersionRef" | "requestedSurface" | "boardLayoutPreference" | "setBoardLayout" | "setSurfaceInitializedFor" | "searchParams" | "surfaceInitializedFor" | "currentView" | "router" | "queryClient"> &
+  Pick<ReturnType<typeof useLandingBoardSurface>, "aiChatPinned" | "openAiChatByDefault" | "aiChatAutoOpenSuppressed" | "setShowAiChatInterface" | "pinnedProject" | "projectIndex" | "hydrationFailedProjectId" | "welcomeAiHandledRef" | "setAiChatExplicitOpenAt" | "pathname" | "setProjectLookupFailed" | "hydrationRetryAttemptsRef" | "setHydrationFailedProjectId" | "hydratingRef" | "setHydrationRetryToken" | "hydrationRetryToken"> &
+  Pick<ReturnType<typeof useLandingBoardQuery>, "data" | "dataFetching" | "refetchProjects">;
+
+
+export function useLandingBoardHydration(context: useLandingBoardHydrationContext) {
+  const {
+  isMblForChat, isGuest, aiChatPinned, openAiChatByDefault, aiChatAutoOpenSuppressed,
+  setShowAiChatInterface, slugs, pinnedProject, data, surfaceResolutionRef,
+  lastObservedBoardLayoutRef, boardLayout, pendingProgrammaticSurfaceRef, surfaceInitializationKey, userSurfaceChangeVersionRef,
+  requestedSurface, boardLayoutPreference, setBoardLayout, setSurfaceInitializedFor, searchParams,
+  surfaceInitializedFor, projectIndex, hydrationFailedProjectId, dataFetching, welcomeAiHandledRef,
+  setAiChatExplicitOpenAt, currentView, pathname, router, refetchProjects,
+  setProjectLookupFailed, user, hydrationRetryAttemptsRef, setHydrationFailedProjectId, hydratingRef,
+  queryClient, setHydrationRetryToken, hydrationRetryToken,
+  } = context;
+  const hydrated = useHydrated()
+  const setAiChatAutoOpenSuppressed = useSetRecoilState(aiChatAutoOpenSuppressedAtom)
+
 
 // Pinning always opens chat. Otherwise, the default setting opens it unless
 // a manual close suppressed auto-open or the board is shown on mobile.
 useEffect(() => {
+  // The state adapter exposes SSR defaults until this consumer has hydrated.
   if (
+    !hydrated ||
     isMblForChat ||
     (!isGuest &&
       !aiChatPinned &&
@@ -814,6 +799,7 @@ useEffect(() => {
   setShowAiChatInterface(true);
   // eslint-disable-next-line react-hooks/exhaustive-deps
 }, [
+  hydrated,
   slugs,
   openAiChatByDefault,
   aiChatAutoOpenSuppressed,
@@ -905,6 +891,7 @@ useEffect(() => {
   if (params.get("welcome_ai") === "1" && !welcomeAiHandledRef.current) {
     welcomeAiHandledRef.current = true;
     // A welcome link is an explicit ask for the chat; focus the composer.
+    setAiChatAutoOpenSuppressed(false);
     setAiChatExplicitOpenAt(Date.now());
     setShowAiChatInterface(true);
   }
@@ -1058,6 +1045,69 @@ const activeSortingMode: TBoardSortingViewMode = useMemo(()=>{
   const currentSortMode = getActiveSortingModeFromProject(pinnedProject);
   return currentSortMode;
 },[pinnedProject])
+  return {
+  retryBoardHydration, activeSortingMode,
+  };
+}
+
+
+
+const  LandingPage= ({
+  user,
+  authenticated,
+  slugs: slugsProp
+    }: {
+  slugs:any,
+  user: IUser,
+  authenticated: boolean,
+}) =>{
+  const {
+  queryClient, router, releaseSecondaryStartup, secondaryStartupEnabled, isMblForChat,
+  searchParams, slugs, pilotParameter, currentView, requestedSurface,
+  surfaceInitializationKey, surfaceInitializedFor, setSurfaceInitializedFor, surfaceResolutionRef, pendingProgrammaticSurfaceRef,
+  requestedProjectId, isGuest, boardAccessKey, readinessRouteEntryId, readinessTraceScope,
+  boardAccess, setBoardAccess, networkAccess, setNetworkAccess, setSyncedBoardPilotEnabled,
+  pilotPreferenceResolved, setPilotPreferenceResolved, localDatabasePilotEnabled, pilotExplicitlyDisabled, boardLayout,
+  setBoardLayout, lastObservedBoardLayoutRef, userSurfaceChangeVersionRef, boardLayoutPreference, cancelPreparedLocalPublication,
+  latestBoardAuthorizationProofRef, publishedAuthorizationKeyRef, publishAuthorizedLocalBoard, revokeActiveBoard,
+  } = useLandingBoardAccess({
+    slugsProp, user,
+  });
+  const {
+  fetchedData, dataFetching, projectsError, refetchProjects, notificationCount,
+  currentBoardAccessStatus, queryData, data, hasAccountOwnedNetworkData,
+  } = useLandingBoardQuery({
+    user, slugs, requestedProjectId, latestBoardAuthorizationProofRef, pilotExplicitlyDisabled,
+    setNetworkAccess, boardAccessKey, localDatabasePilotEnabled, setBoardAccess, publishAuthorizedLocalBoard,
+    revokeActiveBoard, queryClient, cancelPreparedLocalPublication, isMblForChat, releaseSecondaryStartup,
+    secondaryStartupEnabled, boardAccess, networkAccess, readinessTraceScope,
+  });
+  const {
+  pathname, setShowAiChatInterface, setAiChatExplicitOpenAt, openAiChatByDefault, aiChatAutoOpenSuppressed,
+  aiChatPinned, welcomeAiHandledRef, hydratingRef, hydrationRetryAttemptsRef, hydrationRetryToken,
+  setHydrationRetryToken, hydrationFailedProjectId, setHydrationFailedProjectId, projectLookupFailed, setProjectLookupFailed,
+  projectIndex, projectsForSection, pinnedProject, boardLayoutForRender,
+  } = useLandingBoardSurface({
+    setBoardAccess, boardAccessKey, setNetworkAccess, pilotParameter, setSyncedBoardPilotEnabled,
+    setPilotPreferenceResolved, pilotPreferenceResolved, pilotExplicitlyDisabled, latestBoardAuthorizationProofRef, publishedAuthorizationKeyRef,
+    refetchProjects, localDatabasePilotEnabled, queryClient, user, requestedProjectId,
+    currentBoardAccessStatus, fetchedData, hasAccountOwnedNetworkData, dataFetching, projectsError,
+    data, slugs, isMblForChat, queryData, releaseSecondaryStartup,
+    currentView, surfaceResolutionRef, surfaceInitializationKey, requestedSurface, boardLayoutPreference,
+    boardLayout,
+  });
+  const {
+  retryBoardHydration, activeSortingMode,
+  } = useLandingBoardHydration({
+    isMblForChat, isGuest, aiChatPinned, openAiChatByDefault, aiChatAutoOpenSuppressed,
+    setShowAiChatInterface, slugs, pinnedProject, data, surfaceResolutionRef,
+    lastObservedBoardLayoutRef, boardLayout, pendingProgrammaticSurfaceRef, surfaceInitializationKey, userSurfaceChangeVersionRef,
+    requestedSurface, boardLayoutPreference, setBoardLayout, setSurfaceInitializedFor, searchParams,
+    surfaceInitializedFor, projectIndex, hydrationFailedProjectId, dataFetching, welcomeAiHandledRef,
+    setAiChatExplicitOpenAt, currentView, pathname, router, refetchProjects,
+    setProjectLookupFailed, user, hydrationRetryAttemptsRef, setHydrationFailedProjectId, hydratingRef,
+    queryClient, setHydrationRetryToken, hydrationRetryToken,
+  });
 
 // Update previousBoard cookie whenever user lands on a project
 useEffect(() => {
@@ -1189,359 +1239,18 @@ return (
 
 export default LandingPage
 
+const SectionComp = (props: SectionCompProps) => {
+  return renderLandingSection(useLandingSection(props, useLandingSectionReadiness));
+};
 
-const SectionComp = ({
-  _notifications,
-  _allProjects,
-  _currentUser, 
-  _projectIndex,
-  _activeSortingMode,
-  _authenticated,
-  _localDatabasePilotEnabled,
-  _boardLayout,
-  _readinessSource,
-  _readinessProjectId,
-  _readinessRouteEntryId,
-}:{
-  _notifications:any,
-  _allProjects:any,
-  _projectCount:number,
-  _currentUser:IUser, 
-  _projectIndex:number,
-  _activeSortingMode: TBoardSortingViewMode,
-  _authenticated:boolean,
-  _localDatabasePilotEnabled:boolean,
-  _boardLayout:"board" | "table",
-  _readinessSource:"indexeddb" | "network" | "unknown",
-  _readinessProjectId:number,
-  _readinessRouteEntryId:number,
-}) =>{
+function renderLandingSection(context: ReturnType<typeof useLandingSection>) {
+  const {
+  boardLayout, isMbl, appShellRailOn, showQuickTips, _currentProject,
+  sections, setShowTrial, showTrial, activeBuiltinViews, filteredSectionsForActiveView,
+  kanbanContainerRef, handleSideBar, handleBoardChange, debouncedHandleBoardChange, _notifications,
+  _currentUser, _activeSortingMode,
+  } = context;
 
-const router = useRouter();
-const queryClient = useQueryClient();
-const {
-  markBoardUsable,
-  releaseSecondaryStartup,
-  secondaryStartupEnabled,
-} = useBoardStartup();
-// const _allProjects = JSON.parse(_allStringifiedProjects)
-const [projects, setProjects]= useState<IProject[]>(_allProjects)
-const [showBoardManager, setShowBoardManager] = useRecoilState(showBoardManagerAtom);
-const boardLayout = _boardLayout;
-const isMbl = useContext(MobileViewContext);
-const appShellRailOn = useRecoilValue(appShellRailAtom) && !isMbl;
-const showQuickTips = useRecoilValue(showQuickTipsAtom);
-const [_currentProject,setCurrentProject] = useState( _allProjects && _projectIndex >= 0 ? _allProjects[_projectIndex] : null)
-const setRecoilCurrentProject = useSetRecoilState(currentProjectAtom)
-const [sections, setSections] = useState<ISection[]>(deepCopy(_allProjects && _projectIndex >= 0 ? _allProjects[_projectIndex]?.sections : []));
-const [currentIndex, setCurrentIndex] = useState<number>(_projectIndex);
-// Adjusting state during render makes React restart SectionComp before it
-// reconciles descendants, instead of rendering the old board tree and then
-// forcing the whole tree through a synchronous layout-effect render.
-const [syncedBoardInput, setSyncedBoardInput] = useState({
-  projects: _allProjects,
-  projectIndex: _projectIndex,
-});
-if (
-  syncedBoardInput.projects !== _allProjects ||
-  syncedBoardInput.projectIndex !== _projectIndex
-) {
-  const nextProject = _allProjects?.[_projectIndex] ?? null;
-  setSyncedBoardInput({ projects: _allProjects, projectIndex: _projectIndex });
-  setProjects(_allProjects);
-  setCurrentProject(nextProject);
-  setSections(nextProject?.sections ?? []);
-  setCurrentIndex(_projectIndex);
-}
-const { setShowTrial, showTrial } = useTrialModal(_currentProject);
-const { timers: runningTimers, timerDataReady } = useBoardRunningTimers(
-  _currentProject?.id ?? null,
-  { enabled: secondaryStartupEnabled },
-);
-const filterRuntimeContext = useMemo(() => ({
-  // A running-only saved view must not render as empty while its deferred timer
-  // data is unavailable. Treat every task as a match until cached/network data
-  // can answer the filter accurately.
-  runningTaskIds: timerDataReady
-    ? new Set(runningTimers.keys())
-    : new Set(sections.flatMap((section) =>
-        (section.items ?? []).map((task) => task.id)
-      )),
-}), [runningTimers, sections, timerDataReady]);
-
-useEffect(() => {
-  const project = _allProjects?.[_projectIndex]
-  if (project?.teamId) setLastBoardTeam(project.teamId)
-}, [_allProjects, _projectIndex])
-
-const activeBuiltinViews = useRecoilValue(activeBuiltinViewsAtom);
-const filteredSectionsForActiveView = useMemo(() => {
-  const persistedFilteredSections = _allProjects?.[_projectIndex]?.filteredSections ?? [];
-  if (!_currentProject) return persistedFilteredSections;
-
-  // HTPR-5021: filteredSections is baked by the server for whichever view was
-  // applied when getAll ran. Switching a saved view updates project_view in the
-  // cache but never regenerates that array, so the board kept rendering the
-  // PREVIOUS view's tasks until a refetch. Built-in views were unaffected only
-  // because they already recomputed here. Recompute for saved views too, so the
-  // rendered set always matches the view that is actually applied.
-  const activeViewId = getActiveBoardViewId(_currentProject, activeBuiltinViews);
-  const filtered = getFilteredSections(
-    sections,
-    _currentProject,
-    isBuiltinViewId(activeViewId) ? activeViewId : undefined,
-    buildBuiltinViewContext(_currentProject, _currentUser.id),
-    filterRuntimeContext,
-  );
-  return getFilteredEmptySections(
-    getAppliedSubtaskSections(filtered, _currentProject),
-    _currentProject,
-  );
-}, [
-  _allProjects,
-  _currentProject,
-  _currentUser.id,
-  _projectIndex,
-  activeBuiltinViews,
-  filterRuntimeContext,
-  sections,
-]);
-
-const [favorites, setFavorites] = useState<IFavorites[]>([]);
-const [hasHorizontalScrollbar, setHasHorizontalScrollbar] = useRecoilState(isXScrollOnKanbanAtom);
-const kanbanContainerRef = useRef<HTMLDivElement>(null);
-const restoredScrollForProject = useRef<number | null>(null);
-const restoringScroll = useRef(false);
-const readinessFrameRef = useRef<number | null>(null);
-const readinessPaintFrameRef = useRef<number | null>(null);
-const readinessEntryKey = `${_currentUser.id}:${_readinessProjectId}:${_readinessRouteEntryId}`;
-const readinessCompletionRef = useRef({
-  entryKey: readinessEntryKey,
-  accountId: _currentUser.id,
-  projectId: _readinessProjectId,
-  authenticated: _authenticated,
-  localDatabasePilot: _localDatabasePilotEnabled,
-  readinessSource: _readinessSource,
-  viewSurface: boardLayout,
-});
-// HTPR-6072: SectionComp no longer remounts on a board switch, so this ref's
-// one-time useRef initializer would otherwise stay pinned to the first
-// board forever. Recreate it whenever the readiness entry changes, but
-// leave it untouched (frozen) for re-renders within the same entry. A
-// layout effect (not a render-time write) so it runs once per entry,
-// before the readiness completion effect below reads it.
-useLayoutEffect(() => {
-  if (readinessCompletionRef.current.entryKey === readinessEntryKey) return;
-  readinessCompletionRef.current = {
-    entryKey: readinessEntryKey,
-    accountId: _currentUser.id,
-    projectId: _readinessProjectId,
-    authenticated: _authenticated,
-    localDatabasePilot: _localDatabasePilotEnabled,
-    readinessSource: _readinessSource,
-    viewSurface: boardLayout,
-  };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-}, [readinessEntryKey]);
-const boardReadinessTraceScope = useCommittedBoardReadinessTrace({
-  accountId: _currentUser.id,
-  projectId: _readinessProjectId,
-  routeEntryId: _readinessRouteEntryId,
-});
-
-useLayoutEffect(() => {
-  if (!boardReadinessTraceScope) return;
-  // HTPR-6072: belt-and-suspenders on top of the useLayoutEffect re-sync
-  // above - a readiness sample must never be taken while local state (the
-  // currentProject this render actually used) still lags the routed
-  // project. If they disagree, this frame is transitional; skip it rather
-  // than mark or complete a trace against it.
-  if (_currentProject?.id !== _allProjects[_projectIndex]?.id) return;
-  const readinessCompletion = readinessCompletionRef.current;
-  markBoardReadinessPhase("firstBoardCommit", boardReadinessTraceScope);
-  readinessFrameRef.current = window.requestAnimationFrame(() => {
-    readinessPaintFrameRef.current = window.requestAnimationFrame(() => {
-      emitBoardReadinessAfterPaint(
-        readinessCompletion,
-        boardReadinessTraceScope,
-      );
-      resolveBoardSwitchIntent(readinessCompletion);
-      completeBoardReadinessTrace(
-        readinessCompletion,
-        boardReadinessTraceScope,
-      );
-      markBoardUsable();
-      releaseSecondaryStartup();
-    });
-  });
-
-  return () => {
-    if (readinessFrameRef.current !== null) {
-      window.cancelAnimationFrame(readinessFrameRef.current);
-    }
-    if (readinessPaintFrameRef.current !== null) {
-      window.cancelAnimationFrame(readinessPaintFrameRef.current);
-    }
-  };
-}, [
-  boardReadinessTraceScope,
-  markBoardUsable,
-  readinessEntryKey,
-  releaseSecondaryStartup,
-]);
-
-const {data:favoritesTQ} = useGetAllFavorites(
-  _currentUser.UserSettingId,
-  { enabled: secondaryStartupEnabled },
-)
-const { goToProjectShortcut } = useProjectQuery()
-useGetAllTeamsMinimal(_currentUser?.id ?? null, undefined, {
-  enabled: secondaryStartupEnabled,
-})
-useViewCyclingShortcuts(_currentProject)
-
-// console.log("🚀 ~ file: [...boardURL].tsx:46 ~ currentProject:", projectSections) 
-
-
-
-// ================== fetch Sections on server and pass down the component
-      // ------- on favorites update
-  useEffect(()=>{
-    setFavorites(favoritesTQ)
-  },[favoritesTQ])
-
-
-// ================= update tab title
-  useEffect(()=>{
-    const builtinView = getBuiltinView(
-      getActiveBoardViewId(_currentProject, activeBuiltinViews),
-    );
-    const savedView = getViewFromProject(_currentProject);
-    const viewTitle =
-      builtinView?.title ??
-      (savedView?.type === "Default" ? undefined : savedView?.view.title);
-    document.title = buildBoardDocumentTitle(_currentProject.title, viewTitle)
-    // mixPageTrack({
-    //   team_name: _currentProject.team.title,
-    //   team_id: _currentProject.team.id,
-    //   page: "Kanban"
-    // })
-
-  },[_currentProject, activeBuiltinViews])
-
-// Local state already targets the incoming board before descendants reconcile.
-// Keep only the shared atom synchronized before paint for external consumers.
-useLayoutEffect(() => {
-  const project = _allProjects?.[_projectIndex] ?? null
-  setRecoilCurrentProject((current) => current === project ? current : project)
-}, [_allProjects, _projectIndex, setRecoilCurrentProject])
-
-// ================= detect horizontal scrollbar
-useEffect(() => {
-  const checkScrollbar = () => {
-    if (kanbanContainerRef.current) {
-      const hasScroll = kanbanContainerRef.current.scrollWidth > kanbanContainerRef.current.clientWidth;
-      setHasHorizontalScrollbar(hasScroll);
-    }
-  };
-
-  checkScrollbar();
-
-  const resizeObserver = new ResizeObserver(() => {
-    checkScrollbar();
-  });
-
-  if (kanbanContainerRef.current) {
-    resizeObserver.observe(kanbanContainerRef.current);
-  }
-
-  window.addEventListener('resize', checkScrollbar);
-
-  return () => {
-    resizeObserver.disconnect();
-    window.removeEventListener('resize', checkScrollbar);
-  };
-}, [sections, _currentProject]);
-
-// ================= remember board horizontal scroll position across card navigation
-useEffect(() => {
-  const projectId = _currentProject?.id;
-  if (!projectId) return;
-  const key = `board-scroll-${projectId}`;
-
-  const save = () => {
-    // don't clobber the stored target while we're re-applying it
-    if (restoringScroll.current) return;
-    sessionStorage.setItem(key, JSON.stringify({
-      c: kanbanContainerRef.current?.scrollLeft ?? 0,
-      w: window.scrollX,
-    }));
-  };
-
-  // restore once per project, but only after its columns have rendered.
-  // The board can paint empty for a frame on remount, so re-apply across a
-  // few animation frames until the scroller is wide enough for it to stick.
-  if (restoredScrollForProject.current !== projectId && sections?.length) {
-    restoredScrollForProject.current = projectId;
-    const raw = sessionStorage.getItem(key);
-    if (raw) {
-      try {
-        const { c = 0, w = 0 } = JSON.parse(raw);
-        restoringScroll.current = true;
-        let tries = 0;
-        const apply = () => {
-          const box = kanbanContainerRef.current;
-          if (box) box.scrollLeft = c;
-          window.scrollTo(w, window.scrollY);
-          const boxOk = !box || box.scrollLeft === c || box.scrollWidth - box.clientWidth <= c;
-          const winOk = window.scrollX === w || document.documentElement.scrollWidth - window.innerWidth <= w;
-          if ((!boxOk || !winOk) && tries++ < 20) requestAnimationFrame(apply);
-          else restoringScroll.current = false;
-        };
-        requestAnimationFrame(apply);
-      } catch { restoringScroll.current = false; }
-    }
-  }
-
-  const el = kanbanContainerRef.current;
-  el?.addEventListener('scroll', save, { passive: true });
-  window.addEventListener('scroll', save, { passive: true });
-  return () => {
-    el?.removeEventListener('scroll', save);
-    window.removeEventListener('scroll', save);
-  };
-}, [sections, _currentProject]);
-
-function handleSideBar(){
-  setShowBoardManager((prevState:boolean)=>!prevState);
-}
-
-// HTPR-6072: navigation lets the parent authorize and hydrate the target before publishing it.
-function handleStateChangesOnBoardChange (index:number){
-  const target = projects[index]
-  if (target) goToProjectShortcut(target.id, true)
-}
-
-
-const handleBoardChange = (idx:number) => {
-  const favoritesindex = favorites?.findIndex(favorite=>favorite.index===idx)
-  if (favoritesindex<0)return ;
-  const index = projects.findIndex((project: { id: number; })=>project.id===favorites[favoritesindex].projectId)
-  if (index < 0) return;
-  markBoardSwitchIntent({ surface: "keyboard_shortcut", projectId: favorites[favoritesindex].projectId })
-  return handleStateChangesOnBoardChange(index)
-  }
-
-const handleBoardChangeRef = useRef(handleBoardChange);
-handleBoardChangeRef.current = handleBoardChange;
-
-const debouncedHandleBoardChange = useMemo(
-  () =>
-    debounce((idx: number) => {
-      handleBoardChangeRef.current(idx);
-    }, 50),
-  []
-);
 
 
 // Render user datas
@@ -1657,4 +1366,53 @@ return (
     </>
 
 );
+}
+
+export function useLandingSectionReadiness(context: Pick<SectionCompProps & ReturnType<typeof useLandingSectionState> & { boardReadinessTraceScope: ReturnType<typeof useCommittedBoardReadinessTrace> }, "boardReadinessTraceScope" | "_currentProject" | "_allProjects" | "_projectIndex" | "readinessCompletionRef" | "readinessFrameRef" | "readinessPaintFrameRef" | "markBoardUsable" | "releaseSecondaryStartup" | "readinessEntryKey">) {
+  const {
+  boardReadinessTraceScope, _currentProject, _allProjects, _projectIndex, readinessCompletionRef,
+  readinessFrameRef, readinessPaintFrameRef, markBoardUsable, releaseSecondaryStartup, readinessEntryKey,
+  } = context;
+
+
+useLayoutEffect(() => {
+  if (!boardReadinessTraceScope) return;
+  // HTPR-6072: belt-and-suspenders on top of the useLayoutEffect re-sync
+  // above - a readiness sample must never be taken while local state (the
+  // currentProject this render actually used) still lags the routed
+  // project. If they disagree, this frame is transitional; skip it rather
+  // than mark or complete a trace against it.
+  if (_currentProject?.id !== _allProjects[_projectIndex]?.id) return;
+  const readinessCompletion = readinessCompletionRef.current;
+  markBoardReadinessPhase("firstBoardCommit", boardReadinessTraceScope);
+  readinessFrameRef.current = window.requestAnimationFrame(() => {
+    readinessPaintFrameRef.current = window.requestAnimationFrame(() => {
+      emitBoardReadinessAfterPaint(
+        readinessCompletion,
+        boardReadinessTraceScope,
+      );
+      resolveBoardSwitchIntent(readinessCompletion);
+      completeBoardReadinessTrace(
+        readinessCompletion,
+        boardReadinessTraceScope,
+      );
+      markBoardUsable();
+      releaseSecondaryStartup();
+    });
+  });
+
+  return () => {
+    if (readinessFrameRef.current !== null) {
+      window.cancelAnimationFrame(readinessFrameRef.current);
+    }
+    if (readinessPaintFrameRef.current !== null) {
+      window.cancelAnimationFrame(readinessPaintFrameRef.current);
+    }
+  };
+}, [
+  boardReadinessTraceScope,
+  markBoardUsable,
+  readinessEntryKey,
+  releaseSecondaryStartup,
+]);
 }

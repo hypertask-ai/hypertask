@@ -1,3 +1,4 @@
+const { readRefactoredSource } = require("../src/app/detail/[...slug]/taskDetailTestSources.cjs");
 // HTPR-5480: archiving from the task detail page must show the archived state
 // immediately when the page does not navigate away.
 const assert = require("node:assert/strict");
@@ -23,7 +24,7 @@ test("notification archive advances only from the inbox flow", () => {
 });
 
 test("the task-detail E shortcut uses the inbox-flow navigation decision", () => {
-  const taskDetail = fs.readFileSync(
+  const taskDetail = readRefactoredSource(
     path.join(root, "src/app/detail/[...slug]/TaskDetailComp.tsx"),
     "utf8",
   );
@@ -160,7 +161,7 @@ test("unarchiving keeps its own status update and is not overridden", () => {
 });
 
 test("the archive hook reports whether it navigated", () => {
-  const hook = fs.readFileSync(
+  const hook = readRefactoredSource(
     path.join(root, "src/hooks/Task Detail/useArchiveAndNavigate.ts"),
     "utf8",
   );

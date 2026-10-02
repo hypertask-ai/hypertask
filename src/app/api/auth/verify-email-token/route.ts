@@ -14,6 +14,7 @@ import { adoptGuestBoards } from '@/utils/controllers/demo/adoptGuestBoards'
 import { slimUserForCookie } from '@/lib/auth/slimUserCookie'
 import { seedResponseThemeCookie } from '@/lib/auth/themeCookie'
 import { signupAttributionFromHeaders } from '@/lib/telemetry/signupAnalytics'
+import { consumeEmailLinkToken } from '@/lib/auth/emailLinkToken'
 
 const JWT_ISSUER = process.env.JWT_ISSUER || 'hypertask'
 const JWT_AUDIENCE = process.env.JWT_AUDIENCE || 'email-link'
@@ -47,11 +48,11 @@ export async function POST(request: NextRequest) {
     console.log('⏭️  Should Skip Interactive (email link):', skipInteractive)
 
     let email: string
+    let decoded: jwt.JwtPayload
     let isVerificationToken = false // Track if this is a verification token (from email) vs login token (from instant signup)
     try {
       const jwtSecret = getJwtSecret()
       // Try verification audience first (for email verification links)
-      let decoded: jwt.JwtPayload
       try {
         decoded = jwt.verify(token, jwtSecret, {
           issuer: JWT_ISSUER,
@@ -78,6 +79,14 @@ export async function POST(request: NextRequest) {
       email = decoded.sub.toLowerCase()
     } catch (err) {
       console.error('🔒 JWT verification failed:', err)
+      return NextResponse.json(
+        { success: false, error: 'Invalid or expired token' },
+        { status: 400 }
+      )
+    }
+
+    // Both emailed token audiences must pass this atomic gate before any user/session side effects.
+    if (!await consumeEmailLinkToken(decoded)) {
       return NextResponse.json(
         { success: false, error: 'Invalid or expired token' },
         { status: 400 }

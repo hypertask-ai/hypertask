@@ -5,7 +5,7 @@
  * Run: npm run test:file -- tests/htpr-6516-agent-attribution.test.cjs
  */
 const assert = require("node:assert/strict");
-const fs = require("node:fs");
+const fs = require("./helpers/chat-stream-source.cjs");
 const path = require("node:path");
 const test = require("node:test");
 
@@ -105,7 +105,7 @@ test("createActivity and createCommentService stamp agentDisplayName on insert",
   const activity = read("src/utils/controllers/activities/createActivity.ts");
   assert.match(activity, /agentDisplayName: activityAgentDisplayName/);
   const comment = read(
-    "src/utils/controllers/comments/createCommentService.ts",
+    "src/utils/controllers/comments/persistComment.ts",
   );
   assert.match(comment, /agentDisplayName: actingAgentName/);
 });
@@ -165,7 +165,7 @@ test("MCP label writes pass the acting agent into the activity", () => {
   const services = read("src/lib/mcp/tasks/services.ts");
   assert.match(services, /fromAgent\?: ActingAgent \| null/);
   assert.equal(services.match(/fromAgent,/g)?.length >= 4, true);
-  const update = read("src/lib/mcp/tasks/updateTask.ts");
+  const update = ["src/lib/mcp/tasks/fields/persist.ts", "src/lib/mcp/tasks/fields/labels.ts"].map(read).join("\n");
   assert.match(update, /fromAgent: actingAgent|actingAgent\n\s*\)/);
   assert.match(update, /select: actingAgentSelect/);
 });

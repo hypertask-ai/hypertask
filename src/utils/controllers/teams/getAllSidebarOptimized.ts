@@ -101,6 +101,7 @@ const getAllTeamsSidebarOptimized = async (userId: number) => {
                 stripe_customer_id: true,
                 activeSubscriptionPlanId:true,
                 compedUntil: true,
+                compedPlan: true,
                 subscriptionPlan:{
                     select:{
                         id:true,

@@ -14,10 +14,11 @@ const { directReplyStateForNotification } = jiti(
     "src/utils/controllers/notifications/agentImportantPermission.ts",
   ),
 );
-const serviceSource = fs.readFileSync(
-  path.join(root, "src/utils/controllers/comments/createCommentService.ts"),
-  "utf8"
-);
+const serviceSource = [
+  "src/utils/controllers/comments/createCommentService.ts",
+  "src/utils/controllers/comments/persistComment.ts",
+  "src/utils/controllers/comments/commentFanout.ts",
+].map((file) => fs.readFileSync(path.join(root, file), "utf8")).join("\n");
 const hyperAiSource = fs.readFileSync(
   path.join(root, "src/app/api/ai/hyper-mentioned/route.ts"),
   "utf8"

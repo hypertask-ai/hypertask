@@ -69,6 +69,7 @@ const accountTeamSelect = {
   aiProviderSettings: true,
   activeSubscriptionPlanId: true,
   compedUntil: true,
+  compedPlan: true,
   subscriptionPlan: {
     select: {
       subscriptionId: true,

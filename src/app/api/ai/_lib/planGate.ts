@@ -1,7 +1,7 @@
 import prisma from "@/lib/prisma";
 import { planKindFromStripePriceId } from "@/lib/planFromStripePriceId";
 import { isInternalCompTeam } from "@/lib/internalCompTeams";
-import { isTeamComped } from "@/lib/teamComp";
+import { applyTeamComp } from "@/lib/teamComp";
 import {
   pickEntitlingSubscriptionRow,
   subscriptionStatusGrantsAccess,
@@ -26,6 +26,7 @@ export type TeamPlanSource = {
   id?: string | null;
   activeSubscriptionPlanId?: string | null;
   compedUntil?: Date | string | null;
+  compedPlan?: string | null;
   subscriptionPlan?: ReadonlyArray<{
     subscriptionId?: string | null;
     subscriptionStatus: string;
@@ -36,17 +37,19 @@ export type TeamPlanSource = {
 /** Resolves the current store plan from one already-loaded team row. */
 export function storePlanIdForTeam(team: TeamPlanSource | null | undefined) {
   if (!team) return "Free" as const;
-  if (isInternalCompTeam(team.id) || isTeamComped(team)) return "Pro" as const;
+  if (isInternalCompTeam(team.id)) return "Pro" as const;
   const row = pickEntitlingSubscriptionRow(
     team.subscriptionPlan,
     team.activeSubscriptionPlanId,
   );
   // A dead subscription row keeps its priceId, so the status has to gate the
   // plan itself (HTPR-4863) — otherwise a failed card still resolves to Pro.
-  if (!row || !subscriptionStatusGrantsAccess(row.subscriptionStatus)) {
-    return "Free" as const;
-  }
-  return planKindFromStripePriceId(row.priceId ?? null).storePlanId;
+  const paidPlan =
+    row && subscriptionStatusGrantsAccess(row.subscriptionStatus)
+      ? planKindFromStripePriceId(row.priceId ?? null).storePlanId
+      : ("Free" as const);
+  // A comp (HTPR-6653) grants its plan, Pro when unset, unless the team pays for more.
+  return applyTeamComp(team, paidPlan);
 }
 
 /** Server-side mirror of deriveCurrentBoardBilling's plan pick — trusts the DB, not the client payload. */
@@ -66,6 +69,7 @@ export async function storePlanIdForProject(
                 id: true,
                 activeSubscriptionPlanId: true,
                 compedUntil: true,
+                compedPlan: true,
                 subscriptionPlan: {
                   select: {
                     subscriptionId: true,
@@ -84,6 +88,7 @@ export async function storePlanIdForProject(
           id: true,
           activeSubscriptionPlanId: true,
           compedUntil: true,
+          compedPlan: true,
           subscriptionPlan: {
             select: {
               subscriptionId: true,

@@ -82,6 +82,9 @@ function loadRoute() {
     "@/lib/mcp/readListQuery": {
       readEnabledListQuery: () => ({ listQuery: null }),
     },
+    "@/lib/mcp/priorityFilter": {
+      parsePriorityFilter: () => [],
+    },
   };
   const routeModule = { exports: {} };
 

@@ -37,7 +37,11 @@ const WIDE_FANOUT_THRESHOLD = 5;
 const TOTAL_CHANGE_THRESHOLD = 40;
 
 // Cheap suites that guard the runner and the demo path regardless of scope.
-const ALWAYS = ["tests/test-inventory.test.cjs", "tests/demo-smoke.test.cjs"];
+const ALWAYS = [
+  "tests/test-inventory.test.cjs",
+  "tests/demo-smoke.test.cjs",
+  "tests/file-size-limit.test.cjs",
+];
 
 const isTest = (file) => /^tests\/.*\.test\.(cjs|ts)$/.test(file);
 

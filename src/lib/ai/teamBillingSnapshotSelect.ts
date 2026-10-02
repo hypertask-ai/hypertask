@@ -6,6 +6,7 @@ export const teamBillingSnapshotSelect = {
   title: true,
   activeSubscriptionPlanId: true,
   compedUntil: true,
+  compedPlan: true,
   subscriptionPlan: {
     select: {
       priceId: true,

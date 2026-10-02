@@ -1,3 +1,4 @@
+const { readAgentDetailSource } = require("./helpers/agent-detail-source.cjs");
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const path = require("node:path");
@@ -7,10 +8,7 @@ const source = fs.readFileSync(
   path.resolve(__dirname, "../src/app/api/agents/[agentId]/activity/route.ts"),
   "utf8",
 );
-const detailSource = fs.readFileSync(
-  path.resolve(__dirname, "../src/app/agents/[agentId]/AgentDetail.tsx"),
-  "utf8",
-);
+const detailSource = readAgentDetailSource();
 
 // Activity rows are read by board owners, not by agent authors, so the label
 // has to name the event in product language. "Ran a turn" (HTPR-5473) is

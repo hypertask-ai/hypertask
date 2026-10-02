@@ -27,6 +27,7 @@ import {
   withTaskPresentation,
 } from '@/lib/mcp/listQuery'
 import { readEnabledListQuery } from '@/lib/mcp/readListQuery'
+import { parsePriorityFilter } from '@/lib/mcp/priorityFilter'
 
 /** Minimal parent task info for MCP responses (when this task is a subtask). */
 export interface ParentTaskSummary {
@@ -341,7 +342,13 @@ export async function GET(request: NextRequest) {
     if (!sectionIdParam.ok) return sectionIdParam.response
     let section = searchParams.get('section') || undefined
     let assignedTo = searchParams.get('assigned_to') || undefined
-    const priorityParam = searchParams.get('priority')
+    const priorityFilter = parsePriorityFilter(searchParams.getAll('priority'))
+    if (!priorityFilter) {
+      return NextResponse.json(
+        { success: false, error: 'Invalid priority. Use urgent, high, medium, low, none or 0-4.' },
+        { status: 400 },
+      )
+    }
     const hasDueDate = searchParams.get('has_due_date') ? searchParams.get('has_due_date') === 'true' : undefined
     const dueDateBefore = searchParams.get('due_date_before') || undefined
     const dueDateAfter = searchParams.get('due_date_after') || undefined
@@ -475,11 +482,13 @@ export async function GET(request: NextRequest) {
     }
 
     // Filter by priority
-    if (priorityParam) {
-      const priorities = Array.isArray(priorityParam) ? priorityParam : [priorityParam]
-      where.priority = {
-        Priority_Value: { in: priorities }
-      }
+    if (priorityFilter.length) {
+      const byIndex = { priority: { priority_index: { in: priorityFilter } } }
+      // A task never given a priority has no Priority row; "none" (0) must match it too.
+      // AND keeps this OR apart from the search OR below.
+      where.AND = priorityFilter.includes(0)
+        ? [{ OR: [byIndex, { priority: { is: null } }] }]
+        : [byIndex]
     }
 
     // Filter by due date

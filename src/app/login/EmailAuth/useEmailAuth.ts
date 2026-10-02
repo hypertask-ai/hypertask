@@ -36,7 +36,7 @@ const PROCESSED_TOKEN_KEY = 'email_token_processed'
 export function useEmailAuth(initialEmail = '') {
   // HTPR-4175: the Better Auth magic-link email regressed email login (no code
   // fallback, 5-min expiry, single-use so mail scanners prefetch and burn it).
-  // Email login/signup runs on the legacy reusable link+code email again; this
+  // Email login/signup uses the legacy link+code email (links redeem by JS POST); this
   // gate is separate from NEXT_PUBLIC_BETTER_AUTH_ENABLED so Google + the session
   // bridge stay on Better Auth. Unset => off => legacy flow (the working path).
   const isBetterAuthEnabled = process.env.NEXT_PUBLIC_BETTER_AUTH_EMAIL === '1'
