@@ -35,6 +35,8 @@ const nextConfig = {
     NEXT_PUBLIC_BUILD_ID: resolveBuildId(),
   },
   distDir: process.env.BUILD_DIR || ".next",
+  // jsdom reads its stylesheet relative to its module, not a bundled server chunk.
+  serverExternalPackages: ["isomorphic-dompurify", "jsdom"],
   productionBrowserSourceMaps: true,
   reactStrictMode: false,
   images: {
