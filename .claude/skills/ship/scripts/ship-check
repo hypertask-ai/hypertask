@@ -74,7 +74,8 @@ check_duplicate() {
   local t; t=$(gh pr view "$3" -R "$REPO" --json title,state --jq '"\(.state) \(.title)"' 2>/dev/null) || fail "PR $3 not found in $REPO"
   [[ $t == "MERGED $2 "* ]] || fail "PR $3 must be the merged PR of $2, got: $t"
   ( check_ticket "$1" ) >/dev/null || fail "ticket $1 not found on the board"
-  ( check_ticket "$2" ) >/dev/null || fail "ticket $2 not found on the board"
+  # The fix is already merged, so a deleted original ticket does not block the duplicate path.
+  ( check_ticket "$2" ) >/dev/null || echo "note: $2 is no longer on the board; PR $3 is merged, so it still counts"
   mkdir -p "$EVID/$1" && rm -f "$EVID/$1/branch" && echo "$3" > "$EVID/$1/pr" && echo "$2" > "$EVID/$1/duplicate-of" \
     && echo "bound $1 as a duplicate of $2 (PR $3)"
 }
@@ -91,7 +92,12 @@ merge_sha() {
 check_pr() {
   local row; row=$(pr_row "$1") || fail "${row#FAIL: }"
   [ -n "$row" ] || fail "no PR titled \"$1 [TYPE] ...\""
-  check_title "${row%% *}"
+  # A duplicate's PR was checked at bind time and is merged; its original ticket may since be deleted.
+  if [ -s "$EVID/$1/duplicate-of" ]; then
+    [[ $(gh pr view "${row%% *}" -R "$REPO" --json title --jq .title 2>/dev/null) =~ $TITLE_RE ]] \
+      || fail "PR ${row%% *} title must be PREFIX-NNNN [TYPE] description"
+    echo "title ok"
+  else check_title "${row%% *}"; fi
 }
 
 check_merged() { local s; s=$(merge_sha "$1") || { echo "$s"; exit 1; }; echo "merged ok"; }
