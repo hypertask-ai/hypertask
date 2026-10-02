@@ -8,6 +8,7 @@ export type GetAllIncludesOptions = {
   userId: number;
   userDbId: number;
   currentUserId?: number;
+  includeCachedDescription?: boolean;
 };
 
 const humanProjectAccessBranches = (
@@ -375,7 +376,9 @@ export const getBoardTaskInclude = (
     layers.priorityEstimate,
     layers.subTasks,
     layers.parentTask,
-    layers.savedContent
+    layers.savedContent,
+    // Ticket bodies travel with the authorized board cache for instant opening.
+    options.includeCachedDescription ? { description_: { select: { content: true } } } : {}
   );
 };
 

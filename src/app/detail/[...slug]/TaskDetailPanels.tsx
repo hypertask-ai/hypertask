@@ -3,6 +3,9 @@ import { instrumentedDynamicImport } from "@/lib/analytics/taskDetailPhaseTiming
 import { TaskRelations, ICycle } from "@/models/model";
 import { showAIChatInterfaceAtom, isAiChatSidebarModeAtom } from "@/store";
 import DescriptionAndCommentsProvider from "@/lib/contexts/TaskDetail/DescriptionProvider";
+import { useFlag } from "@/hooks/useFlag";
+import { HTPR_6752_INSTANT_TICKET_OPEN_FLAG } from "@/lib/flags/keys";
+import { useTaskContext } from "@/lib/contexts/TaskDetail/TaskProvider";
 
 import { Suspense } from "react";
 import { ArrowLeft } from "lucide-react";
@@ -69,6 +72,8 @@ export function TaskDetailPanels(context: TaskDetailContext) {
   const { embedded, _slugs, currentTask, setCurrentTask, showCommands, callback, commandContextOptions, showShortucts, scrollElementRef, _mbl, currentItemInTasksPlaylist, navigateToNextTask, searchParams, navigateToPreviousTask, dynamicElementRef, toggleDueDate, showAssignModal, toggleModal, _parsedTask, estimate_, priority_, labelsFromTQ, removeRelationHandler, toggleEstimateModal, toggleLabelModal, toggleMoveModal, toggleMoveToBoardModal, togglePriorityModal, dynamicTopValue, sectionsForProjectTQ, moveTaskToNextColumn, followers, onGoback, appShellRailOn, showTaskDeleteModal, deleteTask, carousalItems, setCarousalItems, showLinksModal, idToDelete, currentId, linksModalToggle, showMoveModal, moveTaskModalCallback, taskUpdateCommentsInCache, showCommentDeleteModal, setShowCommentDeleteModal, comments, setComments, showPriorityModal, showEstimateModal, showMoveTaskToBoard, setShowMoveTaskToBoard, showCreateLabelModal, setShowCreateLabelModal, setShowCommands, showDueDateModal, setDueDateCallback, showSubtaskLinkingModal, toggleSubtaskLinkingModal, callBackHandlerSubtaskLinking, showRemoveSubtaskModal, toggleRemoveSubtaskModal, callBackHandlerRemoveSubtask, showRemindMeModal, toggleRemindMeModal, currentUser } = context;
 
 
+  const instantTicketOpen = useFlag(HTPR_6752_INSTANT_TICKET_OPEN_FLAG);
+  const { secondaryPanelsReady } = useTaskContext();
   if (!currentTask) return <></>;
 
   const updateWaitingOn = (fields: {
@@ -164,7 +169,7 @@ export function TaskDetailPanels(context: TaskDetailContext) {
                   updateWaitingOn={updateWaitingOn}
                   updateCycle={updateCycle}
                 />
-                {!_mbl && (
+                {!_mbl && secondaryPanelsReady !== false && (
                   <TaskInfo
                     showAssignModal={showAssignModal}
                     toggleModal={toggleModal}
@@ -190,11 +195,11 @@ export function TaskDetailPanels(context: TaskDetailContext) {
                   />
                 )}
               </div>
-                {_mbl && !embedded && <NewCommentComponent />}
+                {_mbl && !embedded && secondaryPanelsReady !== false && (instantTicketOpen ? <Suspense fallback={null}><NewCommentComponent /></Suspense> : <NewCommentComponent />)}
               </TaskDetailMainContainer>
             </MobileTaskDetailSwipe>
           </div>
-          {_mbl && embedded && <NewCommentComponent />}
+          {_mbl && embedded && secondaryPanelsReady !== false && (instantTicketOpen ? <Suspense fallback={null}><NewCommentComponent /></Suspense> : <NewCommentComponent />)}
 
           {
             // Hide Go Back only for Mobile Devices
@@ -374,6 +379,7 @@ const DesktopNavigation = ({
 }) => {
   const [showAiChatInterface] = useRecoilState(showAIChatInterfaceAtom);
   const [isSidebarMode] = useRecoilState(isAiChatSidebarModeAtom);
+  const instantTicketOpen = useFlag(HTPR_6752_INSTANT_TICKET_OPEN_FLAG);
   return (
     <div
       // className="fixed  flex gap-2  items-center  flex-col xl:flex-row xl:left-10 left-5"
@@ -402,13 +408,17 @@ const DesktopNavigation = ({
         }`}
       >
         <ArrowLeft size={18} strokeWidth={1.75}/>
-        <Tooltip left={taskDetailConfig.dimensions.tooltip.leftOffset} bottom={taskDetailConfig.dimensions.tooltip.bottomOffset} text="Back" keyCombination={[...taskDetailConfig.keyboard.escapeCombination]} />
+        {instantTicketOpen ? <Suspense fallback={null}>
+          <Tooltip left={taskDetailConfig.dimensions.tooltip.leftOffset} bottom={taskDetailConfig.dimensions.tooltip.bottomOffset} text="Back" keyCombination={[...taskDetailConfig.keyboard.escapeCombination]} />
+        </Suspense> : <Tooltip left={taskDetailConfig.dimensions.tooltip.leftOffset} bottom={taskDetailConfig.dimensions.tooltip.bottomOffset} text="Back" keyCombination={[...taskDetailConfig.keyboard.escapeCombination]} />}
       </div>
-      <TaskMovement
-        currentItemInTasksPlaylist={currentItemInTasksPlaylist}
-        navigateToNextTask={navigateToNextTask}
-        navigateToPreviousTask={navigateToPreviousTask}
-      />
+      {instantTicketOpen ? <Suspense fallback={null}>
+        <TaskMovement
+          currentItemInTasksPlaylist={currentItemInTasksPlaylist}
+          navigateToNextTask={navigateToNextTask}
+          navigateToPreviousTask={navigateToPreviousTask}
+        />
+      </Suspense> : <TaskMovement currentItemInTasksPlaylist={currentItemInTasksPlaylist} navigateToNextTask={navigateToNextTask} navigateToPreviousTask={navigateToPreviousTask} />}
     </div>
   );
 };

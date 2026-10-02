@@ -67,6 +67,7 @@ type TLoginWithEmail = {
  * @property {Function} loginWithGoogle - Function to log in with Google
  */
 interface IAuth {
+  authenticatedUserId: number | null;
   currentUser: HUser | null;
   signupWithGoogle: () => Promise<void>;
   loginWithGoogle: (
@@ -83,6 +84,7 @@ interface IAuth {
 
 // Create auth context
 const AuthContext = createContext<IAuth>({
+  authenticatedUserId: null,
   currentUser: null,
   signupWithGoogle: () => Promise.resolve(),
   loginWithGoogle: (
@@ -672,7 +674,7 @@ export const AuthProvider = ({
 
   return (
     <AuthContext.Provider
-      value={{ currentUser, signupWithGoogle, loginWithGoogle, loginWithEmail, isAuthenticating }}
+      value={{ authenticatedUserId, currentUser, signupWithGoogle, loginWithGoogle, loginWithEmail, isAuthenticating }}
     >
       {children}
     </AuthContext.Provider>

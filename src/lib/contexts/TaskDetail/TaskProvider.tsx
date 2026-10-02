@@ -54,6 +54,7 @@ export type ITaskDetailEditMode =
   | "description-ai";
 // Define the type for the modal state
 interface GlobalStates extends TaskContextProps {
+  secondaryPanelsReady: boolean;
   parsedTask: string;
   allowPerks: boolean;
   _comments: string;

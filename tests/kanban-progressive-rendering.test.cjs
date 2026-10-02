@@ -54,7 +54,7 @@ test("large boards progressively mount cards near the viewport", () => {
 
 test("loading cards do not render transient full outlines", () => {
   const taskSkeleton = section.match(
-    /const TaskSkeleton[\s\S]*?\n};\n\nconst Section/,
+    /const TaskSkeleton[\s\S]*?\n};\n\nexport const Section/,
   )?.[0];
 
   assert.ok(taskSkeleton);
@@ -83,7 +83,7 @@ test("progressive placeholders preserve navigation and focus identity", () => {
   assert.match(placeholder, /onReveal\(task\.id, true\)/);
   assert.match(placeholder, /onOpen\(task\)/);
   assert.match(section, /setTasksPlayList\(tasksPlayList\)/);
-  assert.match(section, /navigateToTask\(task\.projectId, task\.uniqueIndex\)/);
+  assert.match(section, /navigateToTask\(task\.projectId, task\.uniqueIndex, "push", undefined, includeCachedTask \? task : undefined\)/);
   assert.match(section, /pendingFocusTaskId/);
   assert.match(section, /new MutationObserver/);
   assert.doesNotMatch(section, /attempts < 10/);

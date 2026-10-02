@@ -24,6 +24,7 @@ const Draggable = dynamic(() =>
 );
 import globalConstants from "@/lib/constants";
 import { useDeviceContext } from "@/lib/contexts/deviceContext";
+import { HTPR_6752_INSTANT_TICKET_OPEN_FLAG } from "@/lib/flags/keys";
 import useHypertasksNavigate from "@/hooks/MultiPages/Route/useHypertasksNavigate";
 import { TBoardSubtaskSetting } from "@/models/Views/model";
 import useHypertasksRecoilStates from "@/hooks/RecoilRoot/useHypertasksRecoilStates";
@@ -77,7 +78,7 @@ interface IProps {
   dragSnapshot?: DraggableStateSnapshot;
 }
 
-type TaskContentProps = IProps & { rowShortcutsEnabled: boolean };
+type TaskContentProps = IProps & { rowShortcutsEnabled: boolean; instantTicketOpen: boolean };
 
 const TaskContent = ({
   task,
@@ -99,6 +100,7 @@ const TaskContent = ({
   dragProvided,
   dragSnapshot,
   rowShortcutsEnabled,
+  instantTicketOpen,
 }: TaskContentProps) => {
   const isApple = useDeviceContext();
   const {
@@ -657,7 +659,7 @@ const TaskContent = ({
       console.time("EnterPressOnTask");
       if (!task.uniqueIndex) return;
       setTasksPlayList(tasksPlayList);
-      navigateToTask(task.projectId, task.uniqueIndex);
+      navigateToTask(task.projectId, task.uniqueIndex, "push", undefined, instantTicketOpen ? task : undefined);
       console.timeEnd("EnterPressOnTask");
     }
 
@@ -665,7 +667,7 @@ const TaskContent = ({
     if (e.keyCode === KeyCodes.M && cmdControl) {
       if (!task.uniqueIndex) return;
       setTasksPlayList(tasksPlayList);
-      navigateToTask(task.projectId, task.uniqueIndex, "push", `?reply=true`);
+      navigateToTask(task.projectId, task.uniqueIndex, "push", `?reply=true`, instantTicketOpen ? task : undefined);
     }
 
     // GG
@@ -796,7 +798,7 @@ const TaskContent = ({
     if (e.keyCode === KeyCodes.V && e.altKey && !e.shiftKey) {
       if (!task.uniqueIndex) return;
       setTasksPlayList(tasksPlayList);
-      navigateToTask(task.projectId, task.uniqueIndex, "push", `?audio=true`);
+      navigateToTask(task.projectId, task.uniqueIndex, "push", `?audio=true`, instantTicketOpen ? task : undefined);
     }
 
     if (
@@ -847,7 +849,7 @@ const TaskContent = ({
     )
       return;
     setTasksPlayList(tasksPlayList);
-    navigateToTask(task.projectId, task.uniqueIndex);
+    navigateToTask(task.projectId, task.uniqueIndex, "push", undefined, instantTicketOpen ? task : undefined);
   };
 
   // ============ toggle remove subtask modal
@@ -1022,11 +1024,11 @@ const TaskContent = ({
       handleStarTask={handleStarTask}
       eHandler={eHandler}
       onParentTaskClick={() => {
-        navigateToTask(task.projectId, task.uniqueIndex);
+        navigateToTask(task.projectId, task.uniqueIndex, "push", undefined, instantTicketOpen ? task : undefined);
       }}
       onSubtaskClick={() => {
         setTasksPlayList(subTaskPlaylist);
-        navigateToTask(task.projectId, task.uniqueIndex);
+        navigateToTask(task.projectId, task.uniqueIndex, "push", undefined, instantTicketOpen ? task : undefined);
       }}
       selectionMode={bulkSelectedCount > 0}
       onSelectionClick={
@@ -1088,9 +1090,10 @@ const MemoizedTaskContent = React.memo(TaskContent);
 
 export default function Task(props: IProps) {
   const rowShortcutsEnabled = useFlag(HTPR_6427_ROW_SHORTCUTS_FLAG);
-  return rowShortcutsEnabled ? (
-    <MemoizedTaskContent {...props} rowShortcutsEnabled />
+  const instantTicketOpen = useFlag(HTPR_6752_INSTANT_TICKET_OPEN_FLAG);
+  return instantTicketOpen ? (
+    <MemoizedTaskContent {...props} rowShortcutsEnabled={rowShortcutsEnabled} instantTicketOpen />
   ) : (
-    <MemoizedTaskContent {...props} rowShortcutsEnabled={false} />
+    <MemoizedTaskContent {...props} rowShortcutsEnabled={rowShortcutsEnabled} instantTicketOpen={false} />
   );
 }

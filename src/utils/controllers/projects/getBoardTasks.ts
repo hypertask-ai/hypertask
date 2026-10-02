@@ -1,3 +1,4 @@
+import { isFeatureEnabled, HTPR_6752_INSTANT_TICKET_OPEN_FLAG } from "@/lib/flags";
 import prisma from "@/lib/prisma";
 import { teamBillingSnapshotSelect } from "@/lib/ai/teamBillingSnapshotSelect";
 import {
@@ -63,11 +64,12 @@ const getBoardTasks = async (
       return { status: 403, json: { message: "No access to this board" } };
     }
 
+    const includeCachedDescription = await isFeatureEnabled(HTPR_6752_INSTANT_TICKET_OPEN_FLAG, userId);
     const tasks = await prisma.task.findMany({
       where: { projectId, ...getTaskWhere() },
       omit: taskBoardOmit,
       include: {
-        ...getBoardTaskInclude({ userId, userDbId: userId, currentUserId }),
+        ...getBoardTaskInclude({ userId, userDbId: userId, currentUserId, includeCachedDescription }),
         customFieldValues: {
           select: { fieldId: true, value: true, numericValue: true },
         },

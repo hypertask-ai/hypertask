@@ -1,5 +1,7 @@
 "use client";
-import React from "react";
+import { useFlag } from "@/hooks/useFlag";
+import { HTPR_6752_INSTANT_TICKET_OPEN_FLAG } from "@/lib/flags/keys";
+import React, { Suspense } from "react";
 import { MobileViewContext } from "@/lib/contexts/mobileContext";
 import { useContext } from "react";
 import dynamic from "next/dynamic";
@@ -53,8 +55,10 @@ const CommentAndDescriptionContainer = (props: ITaskInfoContainer) => {
   const _mbl = useContext(MobileViewContext);
   const { uploadingDescription, comments, stacked } =
     useDescriptionAndCommentsContext();
+  const instantTicketOpen = useFlag(HTPR_6752_INSTANT_TICKET_OPEN_FLAG);
   const {
     currentTask,
+    secondaryPanelsReady,
     hasDraft,
     virtualizer,
     uploadingComments,
@@ -98,7 +102,7 @@ const CommentAndDescriptionContainer = (props: ITaskInfoContainer) => {
           let contentToRender = null;
           const currentItemIndex = vItem.index;
 
-          if (currentItemIndex === taskInfoVirtualIndex && _mbl) {
+          if (currentItemIndex === taskInfoVirtualIndex && _mbl && secondaryPanelsReady !== false) {
             contentToRender = (
               <TaskInfo
                 showAssignModal={showAssignModal}
@@ -158,7 +162,7 @@ const CommentAndDescriptionContainer = (props: ITaskInfoContainer) => {
                     i={commentIndex}
                     isStacked={stacked[commentIndex]}
                   >
-                    <CommentsContainer />
+                    {instantTicketOpen ? <Suspense fallback={null}><CommentsContainer /></Suspense> : <CommentsContainer />}
                   </CommentsProvider>
                 );
               }
@@ -209,7 +213,7 @@ const CommentAndDescriptionContainer = (props: ITaskInfoContainer) => {
           );
         })}
       </div>
-      {!_mbl && <NewCommentComponent />}
+      {!_mbl && secondaryPanelsReady !== false && (instantTicketOpen ? <Suspense fallback={null}><NewCommentComponent /></Suspense> : <NewCommentComponent />)}
       {/* HTPR-5513: trailing space below the composer lives INSIDE this column
           so the properties rail's containing block (the column + rail row)
           reaches the end of the page. Put it on the page wrapper instead and
@@ -241,6 +245,7 @@ const Description = ({
   projectId?: number;
   subject: import("@/models/personHovercard").PersonHovercardSubject | null;
 }) => {
+  const instantTicketOpen = useFlag(HTPR_6752_INSTANT_TICKET_OPEN_FLAG);
   return (
     <>
       <DescriptionContainer>
@@ -253,7 +258,7 @@ const Description = ({
         />
         <DescriptonBody draftTQ={draftsFromTQ} />
         {isUploadingDescription && <UploadingDescriptionContainer />}
-        <DescriptionReactions />
+        {instantTicketOpen ? <Suspense fallback={null}><DescriptionReactions /></Suspense> : <DescriptionReactions />}
         {isUploadingDescription || hasDraft ? null : (
           <TaskPagesProvider>
             <DescriptionSubTask />

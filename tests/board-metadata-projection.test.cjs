@@ -11,6 +11,7 @@ function loadBoardController(prisma) {
   const cache = new Map();
   const stubs = {
     "@/lib/prisma": { __esModule: true, default: prisma },
+    "@/lib/flags": { isFeatureEnabled: async () => false },
     "@/utils/controllers/tasks/attachOpenBlockingTasks": {
       attachOpenBlockingTasks: async (tasks) => tasks,
     },
