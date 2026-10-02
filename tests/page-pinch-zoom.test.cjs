@@ -16,5 +16,7 @@ test("page content does not block the pinch gesture", () => {
   assert.doesNotMatch(editor, /touch-pan-y/);
   assert.match(editor, /touch-manipulation/);
   const hook = read("src/hooks/General/useContentZoom.ts");
-  assert.doesNotMatch(hook, /touchmove/);
+  // Pinching in from 100% is left to the browser; ours only goes up to 100%.
+  assert.match(hook, /mode = "native"|: "native"/);
+  assert.match(hook, /Math\.min\(1, pinch\.startZoom \* ratio\)/);
 });

@@ -3,13 +3,15 @@ import { useCallback, useEffect, useRef, useState } from "react";
 /**
  * In-app zoom for a scrollable content region (e.g. the Page editor body).
  *
- * Phones use native pinch zoom (the page route re-enables it in its
- * `viewport`), which also enlarges images. This hook only adds desktop zoom.
+ * Zooming in on a phone is native pinch zoom (the page route re-enables it in
+ * its `viewport`), which also enlarges images. Native zoom cannot go below
+ * the device width, so pinching out to a desktop-like overview stays here.
  * It applies to the target element via CSS `zoom`, which reflows text within
  * the container width instead of overflowing (unlike `transform: scale`), and
  * keeps pointer/caret coordinates correct for the underlying editor.
  *
  * Mechanisms (no new visible chrome, no registered keyboard shortcuts):
+ *  - touch pinch out, and back in up to 100% (mobile)
  *  - Ctrl/⌘ + wheel — also fires for trackpad pinch (desktop)
  *
  * The chosen level is persisted so a reader's comfort setting survives reloads.
@@ -39,6 +41,11 @@ export function useContentZoom(
   const [showIndicator, setShowIndicator] = useState(false);
   const zoomRef = useRef(1);
   const hideTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const pinchRef = useRef<{
+    startDist: number;
+    startZoom: number;
+    mode: "pending" | "custom" | "native";
+  } | null>(null);
 
   const clamp = useCallback(
     (value: number) =>
@@ -114,6 +121,62 @@ export function useContentZoom(
 
     el.addEventListener("wheel", onWheel, { passive: false });
     return () => el.removeEventListener("wheel", onWheel);
+  }, [applyZoom, targetRef]);
+
+  // Touch pinch.
+  useEffect(() => {
+    const el = targetRef.current;
+    if (!el) return;
+
+    const distance = (touches: TouchList) => {
+      const dx = touches[0].clientX - touches[1].clientX;
+      const dy = touches[0].clientY - touches[1].clientY;
+      return Math.hypot(dx, dy);
+    };
+
+    const onTouchStart = (event: TouchEvent) => {
+      if (event.touches.length === 2) {
+        pinchRef.current = {
+          startDist: distance(event.touches),
+          startZoom: zoomRef.current,
+          mode: "pending",
+        };
+      }
+    };
+
+    const onTouchMove = (event: TouchEvent) => {
+      const pinch = pinchRef.current;
+      if (event.touches.length !== 2 || !pinch) return;
+      const ratio = distance(event.touches) / pinch.startDist;
+      if (pinch.mode === "pending") {
+        // Pinching in from 100% is the browser's own zoom, so images grow.
+        // Pinching out, or anything while already zoomed out, is ours.
+        const nativeScale = window.visualViewport?.scale ?? 1;
+        if (ratio === 1) return;
+        pinch.mode =
+          nativeScale <= 1.01 && (ratio < 1 || pinch.startZoom < 1)
+            ? "custom"
+            : "native";
+      }
+      if (pinch.mode === "native") return;
+      event.preventDefault();
+      applyZoom(Math.min(1, pinch.startZoom * ratio));
+    };
+
+    const onTouchEnd = (event: TouchEvent) => {
+      if (event.touches.length < 2) pinchRef.current = null;
+    };
+
+    el.addEventListener("touchstart", onTouchStart, { passive: false });
+    el.addEventListener("touchmove", onTouchMove, { passive: false });
+    el.addEventListener("touchend", onTouchEnd);
+    el.addEventListener("touchcancel", onTouchEnd);
+    return () => {
+      el.removeEventListener("touchstart", onTouchStart);
+      el.removeEventListener("touchmove", onTouchMove);
+      el.removeEventListener("touchend", onTouchEnd);
+      el.removeEventListener("touchcancel", onTouchEnd);
+    };
   }, [applyZoom, targetRef]);
 
   // Clear any pending indicator timer on unmount.
