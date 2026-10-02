@@ -58,8 +58,9 @@ Repo skills live in the app repo at `.claude/skills/`; their index is `.claude/s
   - **Taken or free:** a ticket is taken when it has such a claim and the claiming agent's newest agent activity (`vcc activity last HTPR-NNNN`) is under 6 hours old. Older than 6 hours: the claim is stale, and the board check lists the ticket for Valentin.
 - **Already fixed by another ticket: the duplicate path** (Valentin, 2026-10-01). When your bug was already fixed by another ticket's merged PR, ship nothing and throw away any duplicate fix. Then:
   1. `~/.agents/skills/ship/scripts/ship-check duplicate HTPR-NNNN HTPR-MMMM <that PR number>` (HTPR-MMMM is the ticket that fixed it). From then on the merged, deployed and proof gates check that PR.
-  2. Prove the bug is gone on the live site, exactly like any QA run (repo `verify-qa`, `proof.md` with the fixing PR's merge sha).
-  3. One comment via `vcc`: bold first sentence "Already fixed by <full title of HTPR-MMMM as a link>.", what you checked live, the evidence attached. Then `vcc task move HTPR-NNNN --section "Done"`.
+  2. Record the branch you made, so cleanup can check it: `ship-check branch HTPR-NNNN <your branch>`, or `ship-check branch HTPR-NNNN none` if you made none.
+  3. Prove the bug is gone on the live site, exactly like any QA run (repo `verify-qa`, `proof.md` with the fixing PR's merge sha).
+  4. One comment via `vcc`: bold first sentence "Already fixed by <full title of HTPR-MMMM as a link>.", what you checked live, the evidence attached. Then `vcc task move HTPR-NNNN --section "Done"`.
   If it is only partly fixed, it is not a duplicate: keep working it as a normal ticket.
 - **Clean up after yourself** (Valentin, 2026-10-01). Once the ticket is Done, load `clean-up` and remove only the worktree and branch this session created.
 - **Agents are human companions** (Valentin, 2026-10-02: "if I add myself to the ticket as the human assignee, the agent mustn't remove me"). A ticket usually has a human assignee and an agent together; agent-only is fine. Never remove or change a human assignee, never add Valentin yourself, and never use a command that replaces the assignee list.

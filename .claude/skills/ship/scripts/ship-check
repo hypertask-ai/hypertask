@@ -2,6 +2,7 @@
 # ship-check: proof checks for /ship sessions (Valentin, 2026-10-01).
 # Used by the ledger gates (ship-gates) and by the Claude Code PreToolUse hook (guard).
 #   ship-check bind <T> <pr>     record this session's PR for the ticket (run right after opening it)
+#   ship-check branch <T> <b|none> record the branch this session made (required on the duplicate path)
 #   ship-check duplicate <T> <ORIG> <pr>  T was already fixed by ORIG's merged PR: gates then check that PR
 #   ship-check pr <T>            the ticket's PR exists and is named right
 #   ship-check title <pr>        PR title is "PREFIX-NNNN [TYPE] ..." and that ticket exists
@@ -55,6 +56,11 @@ pr_row() {
     jq -r --arg t "$(pr_owner "$1") " --arg b "$BASE" 'if (.title | startswith($t)) and .baseRefName == $b
       then "\(.number) \(.state) \(.mergeCommit.oid // "-")" else "" end' <<<"$json"
   else echo "FAIL: no PR bound for $1; run ship-check bind $1 <pr number> right after opening it"; return 1; fi
+}
+
+check_branch() {
+  [[ ${2:-} =~ ^[A-Za-z0-9._/-]+$ ]] || fail "usage: ship-check branch <T> <branch|none>"
+  mkdir -p "$EVID/$1" && echo "$2" > "$EVID/$1/branch" && echo "recorded branch $2 for $1"
 }
 
 check_bind() {
@@ -150,20 +156,18 @@ check_cleaned() {
     [ "$REPO" = hypertask-ai/hypertask ] || fail "set SHIP_CHECKOUT to the local checkout of $REPO"
     repo=$HOME/projects/hypertask
   fi
-  # A duplicate is bound to another ticket's PR, so look for any branch this ticket's session made (names carry the ticket).
-  if [ -s "$EVID/$1/duplicate-of" ]; then
-    local t left; t=$(tr '[:upper:]' '[:lower:]' <<<"$1")
-    wt=$(git -C "$repo" worktree list --porcelain) || fail "cannot list worktrees in $repo"
-    left=$(git -C "$repo" for-each-ref --format='%(refname:short)' refs/heads) || fail "cannot list branches in $repo"
-    left+=$'\n'$(git -C "$repo" ls-remote --heads origin 2>/dev/null | sed 's#.*refs/heads/##') || fail "cannot list GitHub branches"
-    left+=$'\n'$(sed -n 's#^branch refs/heads/##p' <<<"$wt")
-    left=$(grep -iE "(^|[^0-9a-z])$t([^0-9]|$)" <<<"$left" | sort -u)
-    [ -z "$left" ] || fail "branches for $1 still exist: $(tr '\n' ' ' <<<"$left"); run /clean-up"
-    echo "cleaned ok"; return 0
+  # The branch this session made: recorded with `ship-check branch`, else the bound PR's own branch.
+  # A duplicate is bound to another ticket's PR, so it must record its branch (or "none") explicitly.
+  if [ -s "$EVID/$1/branch" ]; then
+    b=$(cat "$EVID/$1/branch")
+    [ "$b" = none ] && { echo "cleaned ok (session recorded no branch)"; return 0; }
+  elif [ -s "$EVID/$1/duplicate-of" ]; then
+    fail "duplicate: record this session's branch first: ship-check branch $1 <branch>, or ship-check branch $1 none"
+  else
+    n=$(bound_pr "$1") || fail "no PR bound for $1"
+    b=$(gh pr view "$n" -R "$REPO" --json headRefName --jq .headRefName 2>/dev/null) || fail "cannot read PR $n"
+    [ -n "$b" ] || fail "PR $n has no branch name"
   fi
-  n=$(bound_pr "$1") || fail "no PR bound for $1"
-  b=$(gh pr view "$n" -R "$REPO" --json headRefName --jq .headRefName 2>/dev/null) || fail "cannot read PR $n"
-  [ -n "$b" ] || fail "PR $n has no branch name"
   wt=$(git -C "$repo" worktree list --porcelain) || fail "cannot list worktrees in $repo"
   grep -qxF "branch refs/heads/$b" <<<"$wt" && fail "a worktree still uses $b; run /clean-up"
   git -C "$repo" show-ref --verify --quiet "refs/heads/$b"; rc=$?
@@ -204,6 +208,7 @@ guard() {
 
 case "${1:-}" in
   bind) check_bind "$2" "$3" ;;
+  branch) check_branch "$2" "${3:-}" ;;
   duplicate) check_duplicate "$2" "$3" "$4" ;;
   title) check_title "$2" ;;
   ticket) check_ticket "$2" ;;
@@ -214,5 +219,5 @@ case "${1:-}" in
   done) check_done "$2" ;;
   cleaned) check_cleaned "$2" ;;
   guard) guard ;;
-  *) sed -n '2,17p' "$0"; exit 1 ;;
+  *) sed -n '2,18p' "$0"; exit 1 ;;
 esac
