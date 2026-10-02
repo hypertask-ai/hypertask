@@ -1,0 +1,2267 @@
+{
+  "src/app/(tutorial space)/demo/page.tsx": {
+    "hypertask-style/no-raw-tailwind-colors": {
+      "count": 1
+    }
+  },
+  "src/app/(tutorial space)/interactive-onboarding/end/page.tsx": {
+    "tailwindcss/no-custom-classname": {
+      "count": 2
+    }
+  },
+  "src/app/(tutorial space)/learn/page.tsx": {
+    "hypertask-style/no-raw-tailwind-colors": {
+      "count": 1
+    }
+  },
+  "src/app/[...boardURL]/LandingPage.tsx": {
+    "hypertask-style/no-forbidden-utilities": {
+      "count": 1
+    },
+    "hypertask-style/no-raw-tailwind-colors": {
+      "count": 1
+    },
+    "tailwindcss/no-custom-classname": {
+      "count": 6
+    }
+  },
+  "src/app/[...boardURL]/NoBoardsEmptyState.tsx": {
+    "tailwindcss/no-custom-classname": {
+      "count": 1
+    }
+  },
+  "src/app/[...boardURL]/error.tsx": {
+    "hypertask-style/no-forbidden-utilities": {
+      "count": 4
+    },
+    "tailwindcss/no-custom-classname": {
+      "count": 5
+    }
+  },
+  "src/app/agents/AgentsRegister.tsx": {
+    "hypertask-style/no-raw-tailwind-colors": {
+      "count": 1
+    }
+  },
+  "src/app/agents/[agentId]/AgentBoardAccess.tsx": {
+    "hypertask-style/no-raw-tailwind-colors": {
+      "count": 2
+    }
+  },
+  "src/app/agents/[agentId]/AgentConfigForm.tsx": {
+    "hypertask-style/no-raw-tailwind-colors": {
+      "count": 1
+    }
+  },
+  "src/app/agents/[agentId]/AgentDetailParts.tsx": {
+    "hypertask-style/no-raw-tailwind-colors": {
+      "count": 1
+    }
+  },
+  "src/app/agents/[agentId]/AgentDetailView.tsx": {
+    "hypertask-style/no-raw-tailwind-colors": {
+      "count": 1
+    }
+  },
+  "src/app/agents/[agentId]/AgentInstructions.tsx": {
+    "hypertask-style/no-raw-tailwind-colors": {
+      "count": 1
+    }
+  },
+  "src/app/agents/chat/AgentChatCreateModal.tsx": {
+    "hypertask-style/no-raw-tailwind-colors": {
+      "count": 1
+    }
+  },
+  "src/app/agents/chat/AgentChatFeedItems.tsx": {
+    "hypertask-style/no-raw-tailwind-colors": {
+      "count": 2
+    }
+  },
+  "src/app/agents/chat/AgentChatPane.tsx": {
+    "hypertask-style/no-raw-tailwind-colors": {
+      "count": 1
+    }
+  },
+  "src/app/agents/chat/AgentChatRosterPane.tsx": {
+    "hypertask-style/no-raw-tailwind-colors": {
+      "count": 1
+    }
+  },
+  "src/app/agents/chat/AgentChatView.tsx": {
+    "tailwindcss/no-custom-classname": {
+      "count": 2
+    }
+  },
+  "src/app/agents/chat/AgentRoomClient.tsx": {
+    "hypertask-style/no-raw-tailwind-colors": {
+      "count": 1
+    }
+  },
+  "src/app/all-tasks/AllTasks.tsx": {
+    "hypertask-style/no-raw-tailwind-colors": {
+      "count": 2
+    },
+    "tailwindcss/no-custom-classname": {
+      "count": 4
+    }
+  },
+  "src/app/archived/ArchivedComp.tsx": {
+    "tailwindcss/no-custom-classname": {
+      "count": 2
+    }
+  },
+  "src/app/archived/ArchivedInboxComp.tsx": {
+    "tailwindcss/no-custom-classname": {
+      "count": 2
+    }
+  },
+  "src/app/archived/ArchivedTasksComp.tsx": {
+    "tailwindcss/no-custom-classname": {
+      "count": 3
+    }
+  },
+  "src/app/chat/Chat.tsx": {
+    "hypertask-style/no-forbidden-utilities": {
+      "count": 2
+    }
+  },
+  "src/app/cli-auth/page.tsx": {
+    "hypertask-style/no-forbidden-utilities": {
+      "count": 9
+    },
+    "hypertask-style/no-raw-tailwind-colors": {
+      "count": 6
+    },
+    "hypertask-style/no-unapproved-color-literals": {
+      "count": 12
+    }
+  },
+  "src/app/detail/[...slug]/TaskDetailPanels.tsx": {
+    "tailwindcss/no-custom-classname": {
+      "count": 2
+    }
+  },
+  "src/app/detail/[...slug]/error.tsx": {
+    "tailwindcss/no-custom-classname": {
+      "count": 4
+    }
+  },
+  "src/app/drafts/Drafts.tsx": {
+    "tailwindcss/no-custom-classname": {
+      "count": 9
+    }
+  },
+  "src/app/error.tsx": {
+    "hypertask-style/no-forbidden-utilities": {
+      "count": 4
+    },
+    "tailwindcss/no-custom-classname": {
+      "count": 7
+    }
+  },
+  "src/app/full-plan-confirmation/SuccessPage.tsx": {
+    "hypertask-style/no-forbidden-utilities": {
+      "count": 1
+    },
+    "tailwindcss/no-custom-classname": {
+      "count": 1
+    }
+  },
+  "src/app/global-error.tsx": {
+    "hypertask-style/no-unapproved-color-literals": {
+      "count": 4
+    }
+  },
+  "src/app/inbox/Inbox.tsx": {
+    "tailwindcss/no-custom-classname": {
+      "count": 13
+    }
+  },
+  "src/app/inbox/agent/AgentInbox.tsx": {
+    "tailwindcss/no-custom-classname": {
+      "count": 10
+    }
+  },
+  "src/app/inbox/page.tsx": {
+    "tailwindcss/no-custom-classname": {
+      "count": 1
+    }
+  },
+  "src/app/integrations/IntegrationsComponent.tsx": {
+    "hypertask-style/no-forbidden-utilities": {
+      "count": 4
+    },
+    "hypertask-style/no-raw-tailwind-colors": {
+      "count": 32
+    },
+    "hypertask-style/no-unapproved-color-literals": {
+      "count": 2
+    }
+  },
+  "src/app/login/EmailAuth/EmailAuthComponents.tsx": {
+    "hypertask-style/no-raw-tailwind-colors": {
+      "count": 15
+    }
+  },
+  "src/app/login/Login-2-AB-test/index.tsx": {
+    "hypertask-style/no-raw-tailwind-colors": {
+      "count": 1
+    },
+    "hypertask-style/no-unapproved-color-literals": {
+      "count": 1
+    }
+  },
+  "src/app/login/LoginComponent.tsx": {
+    "hypertask-style/no-forbidden-utilities": {
+      "count": 1
+    },
+    "hypertask-style/no-unapproved-color-literals": {
+      "count": 1
+    },
+    "tailwindcss/no-custom-classname": {
+      "count": 1
+    }
+  },
+  "src/app/login/LoginMiddle.tsx": {
+    "hypertask-style/no-forbidden-utilities": {
+      "count": 4
+    },
+    "hypertask-style/no-raw-tailwind-colors": {
+      "count": 1
+    },
+    "hypertask-style/no-unapproved-color-literals": {
+      "count": 2
+    }
+  },
+  "src/app/logs/Logs.tsx": {
+    "tailwindcss/no-custom-classname": {
+      "count": 3
+    }
+  },
+  "src/app/my-tasks/MyTasks.tsx": {
+    "tailwindcss/no-custom-classname": {
+      "count": 6
+    }
+  },
+  "src/app/my-tasks/MyTasksKanbanFilterModal.tsx": {
+    "tailwindcss/no-custom-classname": {
+      "count": 1
+    }
+  },
+  "src/app/my-tasks/MyTasksViewTabs.tsx": {
+    "tailwindcss/no-custom-classname": {
+      "count": 1
+    }
+  },
+  "src/app/oauth/success/page.tsx": {
+    "hypertask-style/no-forbidden-utilities": {
+      "count": 4
+    },
+    "hypertask-style/no-raw-tailwind-colors": {
+      "count": 6
+    },
+    "hypertask-style/no-unapproved-color-literals": {
+      "count": 7
+    }
+  },
+  "src/app/page.tsx": {
+    "hypertask-style/no-raw-tailwind-colors": {
+      "count": 3
+    }
+  },
+  "src/app/page/[publicId]/PageEditor.tsx": {
+    "hypertask-style/no-forbidden-utilities": {
+      "count": 1
+    }
+  },
+  "src/app/pinned/PinnedComp.tsx": {
+    "tailwindcss/no-custom-classname": {
+      "count": 2
+    }
+  },
+  "src/app/reminders/ReminderPageComponent.tsx": {
+    "tailwindcss/no-custom-classname": {
+      "count": 7
+    }
+  },
+  "src/app/report/[projectSlug]/velocity/VelocityReport.tsx": {
+    "tailwindcss/no-custom-classname": {
+      "count": 1
+    }
+  },
+  "src/app/reset/components/PasswordGate.tsx": {
+    "hypertask-style/no-forbidden-utilities": {
+      "count": 1
+    },
+    "hypertask-style/no-raw-tailwind-colors": {
+      "count": 14
+    }
+  },
+  "src/app/reset/components/ResetTrialTab.tsx": {
+    "hypertask-style/no-forbidden-utilities": {
+      "count": 3
+    },
+    "hypertask-style/no-raw-tailwind-colors": {
+      "count": 20
+    }
+  },
+  "src/app/reset/components/ResetUserConfirmationModal.tsx": {
+    "hypertask-style/no-forbidden-utilities": {
+      "count": 3
+    },
+    "hypertask-style/no-raw-tailwind-colors": {
+      "count": 20
+    },
+    "tailwindcss/no-custom-classname": {
+      "count": 1
+    }
+  },
+  "src/app/reset/components/ResetUserTab.tsx": {
+    "hypertask-style/no-forbidden-utilities": {
+      "count": 6
+    },
+    "hypertask-style/no-raw-tailwind-colors": {
+      "count": 35
+    }
+  },
+  "src/app/reset/components/StatusMessage.tsx": {
+    "hypertask-style/no-raw-tailwind-colors": {
+      "count": 8
+    }
+  },
+  "src/app/reset/components/TabNavigation.tsx": {
+    "hypertask-style/no-raw-tailwind-colors": {
+      "count": 11
+    }
+  },
+  "src/app/reset/components/UserSearch.tsx": {
+    "hypertask-style/no-forbidden-utilities": {
+      "count": 1
+    },
+    "hypertask-style/no-raw-tailwind-colors": {
+      "count": 11
+    }
+  },
+  "src/app/reset/page.tsx": {
+    "hypertask-style/no-raw-tailwind-colors": {
+      "count": 3
+    }
+  },
+  "src/app/scheduled/index.tsx": {
+    "hypertask-style/no-raw-tailwind-colors": {
+      "count": 2
+    },
+    "tailwindcss/no-custom-classname": {
+      "count": 7
+    }
+  },
+  "src/app/search/SearchComp.tsx": {
+    "hypertask-style/no-raw-tailwind-colors": {
+      "count": 2
+    },
+    "hypertask-style/no-unapproved-color-literals": {
+      "count": 1
+    },
+    "tailwindcss/no-custom-classname": {
+      "count": 9
+    }
+  },
+  "src/app/share/SharedTaskDetailComp.tsx": {
+    "tailwindcss/no-custom-classname": {
+      "count": 2
+    }
+  },
+  "src/app/snippets/Snippets.tsx": {
+    "hypertask-style/no-raw-tailwind-colors": {
+      "count": 1
+    },
+    "tailwindcss/no-custom-classname": {
+      "count": 1
+    }
+  },
+  "src/app/starred/StarredComp.tsx": {
+    "hypertask-style/no-raw-tailwind-colors": {
+      "count": 1
+    },
+    "tailwindcss/no-custom-classname": {
+      "count": 2
+    }
+  },
+  "src/app/time/TimeComp.tsx": {
+    "tailwindcss/no-custom-classname": {
+      "count": 1
+    }
+  },
+  "src/app/trial-plan-confirmation/SuccessPage.tsx": {
+    "hypertask-style/no-forbidden-utilities": {
+      "count": 1
+    },
+    "tailwindcss/no-custom-classname": {
+      "count": 1
+    }
+  },
+  "src/app/trial-plan-confirmation/TrialPlan.tsx": {
+    "hypertask-style/no-forbidden-utilities": {
+      "count": 1
+    },
+    "tailwindcss/no-custom-classname": {
+      "count": 1
+    }
+  },
+  "src/app/verify-email/page.tsx": {
+    "hypertask-style/no-forbidden-utilities": {
+      "count": 2
+    }
+  },
+  "src/components/AI_CHAT/AI_Chat_Closed_Layout.tsx": {
+    "tailwindcss/no-custom-classname": {
+      "count": 2
+    }
+  },
+  "src/components/AI_CHAT/AI_Chat_Sidebar.tsx": {
+    "hypertask-style/no-unapproved-color-literals": {
+      "count": 1
+    },
+    "tailwindcss/no-custom-classname": {
+      "count": 1
+    }
+  },
+  "src/components/AI_CHAT/AI_Tiptap_Container.tsx": {
+    "hypertask-style/no-forbidden-utilities": {
+      "count": 2
+    }
+  },
+  "src/components/AI_CHAT/AiChatComposerActionRow.tsx": {
+    "hypertask-style/no-raw-tailwind-colors": {
+      "count": 1
+    }
+  },
+  "src/components/AI_CHAT/AiChatSidebarResizeHandle.tsx": {
+    "hypertask-style/no-forbidden-utilities": {
+      "count": 1
+    }
+  },
+  "src/components/AI_CHAT/ChatHeader.tsx": {
+    "hypertask-style/no-forbidden-utilities": {
+      "count": 2
+    },
+    "hypertask-style/no-raw-tailwind-colors": {
+      "count": 3
+    }
+  },
+  "src/components/AI_CHAT/ChatWindow.tsx": {
+    "hypertask-style/no-forbidden-utilities": {
+      "count": 1
+    },
+    "hypertask-style/no-unapproved-color-literals": {
+      "count": 3
+    },
+    "tailwindcss/no-custom-classname": {
+      "count": 1
+    }
+  },
+  "src/components/AI_CHAT/GuestBoardSpotlight.tsx": {
+    "hypertask-style/no-unapproved-color-literals": {
+      "count": 2
+    }
+  },
+  "src/components/AI_CHAT/MentionListComp.tsx": {
+    "hypertask-style/no-raw-tailwind-colors": {
+      "count": 3
+    },
+    "hypertask-style/no-unapproved-color-literals": {
+      "count": 1
+    },
+    "tailwindcss/no-custom-classname": {
+      "count": 6
+    }
+  },
+  "src/components/AI_CHAT/MessageItem.tsx": {
+    "hypertask-style/no-forbidden-utilities": {
+      "count": 1
+    },
+    "hypertask-style/no-raw-tailwind-colors": {
+      "count": 3
+    },
+    "tailwindcss/no-custom-classname": {
+      "count": 5
+    }
+  },
+  "src/components/AI_CHAT/TypingIndicator.tsx": {
+    "hypertask-style/no-raw-tailwind-colors": {
+      "count": 6
+    }
+  },
+  "src/components/Common/AttachmentsUpload/AttachmentControls.tsx": {
+    "hypertask-style/no-unapproved-color-literals": {
+      "count": 2
+    },
+    "tailwindcss/no-custom-classname": {
+      "count": 1
+    }
+  },
+  "src/components/Common/AttachmentsUpload/ImageGalleryView.tsx": {
+    "tailwindcss/no-custom-classname": {
+      "count": 10
+    }
+  },
+  "src/components/Common/AttachmentsUpload/MobileAttachmentEdit.tsx": {
+    "tailwindcss/no-custom-classname": {
+      "count": 2
+    }
+  },
+  "src/components/Common/AttachmentsUpload/SingleFileInputPreview.tsx": {
+    "hypertask-style/no-raw-tailwind-colors": {
+      "count": 1
+    },
+    "tailwindcss/no-custom-classname": {
+      "count": 4
+    }
+  },
+  "src/components/Common/AttachmentsUpload/index.tsx": {
+    "tailwindcss/no-custom-classname": {
+      "count": 2
+    }
+  },
+  "src/components/Common/AttachmentsView/AttachmentsCarousel.tsx": {
+    "tailwindcss/no-custom-classname": {
+      "count": 6
+    }
+  },
+  "src/components/Common/AttachmentsView/index.tsx": {
+    "tailwindcss/no-custom-classname": {
+      "count": 6
+    }
+  },
+  "src/components/Common/CommonModalComponents/index.tsx": {
+    "tailwindcss/no-custom-classname": {
+      "count": 5
+    }
+  },
+  "src/components/Common/GuestLock/GuestSignupOverlay.tsx": {
+    "tailwindcss/no-custom-classname": {
+      "count": 3
+    }
+  },
+  "src/components/Common/InboxZeroState.tsx": {
+    "tailwindcss/no-custom-classname": {
+      "count": 2
+    }
+  },
+  "src/components/Common/PageContainer.tsx": {
+    "tailwindcss/no-custom-classname": {
+      "count": 1
+    }
+  },
+  "src/components/Common/PersonHovercard.tsx": {
+    "hypertask-style/no-raw-tailwind-colors": {
+      "count": 1
+    }
+  },
+  "src/components/Common/ReactTooltip.tsx": {
+    "hypertask-style/no-forbidden-utilities": {
+      "count": 1
+    },
+    "hypertask-style/no-unapproved-color-literals": {
+      "count": 1
+    }
+  },
+  "src/components/Common/TaskRowComponents/TaskListRow.tsx": {
+    "hypertask-style/no-unapproved-color-literals": {
+      "count": 6
+    },
+    "tailwindcss/no-custom-classname": {
+      "count": 6
+    }
+  },
+  "src/components/Common/TaskRowComponents/TaskTitle.tsx": {
+    "hypertask-style/no-unapproved-color-literals": {
+      "count": 1
+    }
+  },
+  "src/components/Common/Tooltip.tsx": {
+    "hypertask-style/no-raw-tailwind-colors": {
+      "count": 4
+    },
+    "hypertask-style/no-unapproved-color-literals": {
+      "count": 2
+    }
+  },
+  "src/components/Common/kbd.tsx": {
+    "hypertask-style/no-raw-tailwind-colors": {
+      "count": 2
+    },
+    "hypertask-style/no-unapproved-color-literals": {
+      "count": 1
+    }
+  },
+  "src/components/Common/selection-checkbox.tsx": {
+    "tailwindcss/no-custom-classname": {
+      "count": 1
+    }
+  },
+  "src/components/EmailVerification/EmailVerificationContent.tsx": {
+    "hypertask-style/no-forbidden-utilities": {
+      "count": 5
+    },
+    "hypertask-style/no-raw-tailwind-colors": {
+      "count": 4
+    }
+  },
+  "src/components/EmailVerification/VerificationStatusDisplay.tsx": {
+    "hypertask-style/no-forbidden-utilities": {
+      "count": 2
+    },
+    "hypertask-style/no-raw-tailwind-colors": {
+      "count": 13
+    }
+  },
+  "src/components/ErrorBoundary/RootErrorBoundary.tsx": {
+    "hypertask-style/no-forbidden-utilities": {
+      "count": 4
+    },
+    "tailwindcss/no-custom-classname": {
+      "count": 7
+    }
+  },
+  "src/components/Global/BottomSettings_QuickTips.tsx": {
+    "tailwindcss/no-custom-classname": {
+      "count": 6
+    }
+  },
+  "src/components/Global/CookieConsentBanner.tsx": {
+    "tailwindcss/no-custom-classname": {
+      "count": 3
+    }
+  },
+  "src/components/Global/MobileBoardViewPicker.tsx": {
+    "tailwindcss/no-custom-classname": {
+      "count": 1
+    }
+  },
+  "src/components/Global/MobileHeaderStrip.tsx": {
+    "hypertask-style/no-forbidden-utilities": {
+      "count": 1
+    },
+    "hypertask-style/no-unapproved-color-literals": {
+      "count": 1
+    }
+  },
+  "src/components/Global/MobileTabBar.tsx": {
+    "hypertask-style/no-unapproved-color-literals": {
+      "count": 1
+    }
+  },
+  "src/components/Global/ModelSelectorDropdown.tsx": {
+    "hypertask-style/no-raw-tailwind-colors": {
+      "count": 2
+    },
+    "hypertask-style/no-unapproved-color-literals": {
+      "count": 1
+    },
+    "tailwindcss/no-custom-classname": {
+      "count": 1
+    }
+  },
+  "src/components/Global/NotificationCountBadge.tsx": {
+    "hypertask-style/no-unapproved-color-literals": {
+      "count": 1
+    }
+  },
+  "src/components/Global/NotificationPromoteBanner.tsx": {
+    "hypertask-style/no-unapproved-color-literals": {
+      "count": 6
+    }
+  },
+  "src/components/Global/ShortcutArchiveNudge.tsx": {
+    "tailwindcss/no-custom-classname": {
+      "count": 1
+    }
+  },
+  "src/components/Input/AutoResizableTextArea.tsx": {
+    "hypertask-style/no-raw-tailwind-colors": {
+      "count": 1
+    },
+    "tailwindcss/no-custom-classname": {
+      "count": 1
+    }
+  },
+  "src/components/Labels/DueDateLabel.tsx": {
+    "hypertask-style/no-unapproved-color-literals": {
+      "count": 2
+    }
+  },
+  "src/components/Labels/LabelWrapper.tsx": {
+    "tailwindcss/no-custom-classname": {
+      "count": 1
+    }
+  },
+  "src/components/LoadingSpinners/CircleProgressBar.tsx": {
+    "hypertask-style/no-raw-tailwind-colors": {
+      "count": 1
+    },
+    "tailwindcss/no-custom-classname": {
+      "count": 4
+    }
+  },
+  "src/components/Modals/AICustomPrompt/FileList.tsx": {
+    "hypertask-style/no-raw-tailwind-colors": {
+      "count": 11
+    },
+    "tailwindcss/no-custom-classname": {
+      "count": 3
+    }
+  },
+  "src/components/Modals/AICustomPrompt/FileUploader.tsx": {
+    "hypertask-style/no-forbidden-utilities": {
+      "count": 1
+    },
+    "tailwindcss/no-custom-classname": {
+      "count": 2
+    }
+  },
+  "src/components/Modals/Agent/AgentWebhookPanel.tsx": {
+    "hypertask-style/no-raw-tailwind-colors": {
+      "count": 1
+    },
+    "tailwindcss/no-custom-classname": {
+      "count": 9
+    }
+  },
+  "src/components/Modals/Agent/agent.modal.tsx": {
+    "tailwindcss/no-custom-classname": {
+      "count": 11
+    }
+  },
+  "src/components/Modals/Agent/disabled.modal.tsx": {
+    "hypertask-style/no-forbidden-utilities": {
+      "count": 1
+    },
+    "tailwindcss/no-custom-classname": {
+      "count": 9
+    }
+  },
+  "src/components/Modals/AnnouncementBanner/AnnouncementBanner.tsx": {
+    "hypertask-style/no-forbidden-utilities": {
+      "count": 1
+    },
+    "hypertask-style/no-unapproved-color-literals": {
+      "count": 1
+    }
+  },
+  "src/components/Modals/AnnouncementSlide/AnnouncementSlide.tsx": {
+    "hypertask-style/no-raw-tailwind-colors": {
+      "count": 2
+    },
+    "tailwindcss/no-custom-classname": {
+      "count": 2
+    }
+  },
+  "src/components/Modals/AssignToUser/AssignToUser.tsx": {
+    "tailwindcss/no-custom-classname": {
+      "count": 1
+    }
+  },
+  "src/components/Modals/BlockedByPerson/BlockedByPerson.tsx": {
+    "tailwindcss/no-custom-classname": {
+      "count": 1
+    }
+  },
+  "src/components/Modals/BoardCreationAssistant/index.tsx": {
+    "hypertask-style/no-raw-tailwind-colors": {
+      "count": 2
+    }
+  },
+  "src/components/Modals/Calendar/views.modal.tsx": {
+    "tailwindcss/no-custom-classname": {
+      "count": 1
+    }
+  },
+  "src/components/Modals/CliInstall/CliInstallModal.tsx": {
+    "hypertask-style/no-forbidden-utilities": {
+      "count": 1
+    },
+    "hypertask-style/no-raw-tailwind-colors": {
+      "count": 1
+    },
+    "hypertask-style/no-unapproved-color-literals": {
+      "count": 4
+    }
+  },
+  "src/components/Modals/CommentOptionsModal/CommentOptionModal.tsx": {
+    "hypertask-style/no-raw-tailwind-colors": {
+      "count": 2
+    },
+    "hypertask-style/no-unapproved-color-literals": {
+      "count": 1
+    }
+  },
+  "src/components/Modals/CreateLabel/CreateLabel.tsx": {
+    "tailwindcss/no-custom-classname": {
+      "count": 1
+    }
+  },
+  "src/components/Modals/CreateLabel/TaskLabelComponent.tsx": {
+    "hypertask-style/no-forbidden-utilities": {
+      "count": 1
+    }
+  },
+  "src/components/Modals/CreateTaskGloballyModal/CreateTaskModalBody.tsx": {
+    "tailwindcss/no-custom-classname": {
+      "count": 1
+    }
+  },
+  "src/components/Modals/CreateTaskGloballyModal/TaskTitleModal.tsx": {
+    "hypertask-style/no-raw-tailwind-colors": {
+      "count": 3
+    }
+  },
+  "src/components/Modals/CustomField/CreateCustomFieldModal.tsx": {
+    "hypertask-style/no-raw-tailwind-colors": {
+      "count": 1
+    }
+  },
+  "src/components/Modals/CustomField/ManageCustomFieldsModal.tsx": {
+    "hypertask-style/no-raw-tailwind-colors": {
+      "count": 1
+    },
+    "tailwindcss/no-custom-classname": {
+      "count": 3
+    }
+  },
+  "src/components/Modals/CyclePicker/index.tsx": {
+    "tailwindcss/no-custom-classname": {
+      "count": 1
+    }
+  },
+  "src/components/Modals/DueDate/index.tsx": {
+    "tailwindcss/no-custom-classname": {
+      "count": 1
+    }
+  },
+  "src/components/Modals/EmailVerificationModal/index.tsx": {
+    "hypertask-style/no-forbidden-utilities": {
+      "count": 1
+    }
+  },
+  "src/components/Modals/FilterModals/AssigneeFilters/index.tsx": {
+    "tailwindcss/no-custom-classname": {
+      "count": 1
+    }
+  },
+  "src/components/Modals/FilterModals/BlockedByPersonFilters/index.tsx": {
+    "tailwindcss/no-custom-classname": {
+      "count": 1
+    }
+  },
+  "src/components/Modals/FilterModals/SelectFilters/FilterHTC.tsx": {
+    "tailwindcss/no-custom-classname": {
+      "count": 1
+    }
+  },
+  "src/components/Modals/GuestLoginModal/index.tsx": {
+    "hypertask-style/no-raw-tailwind-colors": {
+      "count": 2
+    },
+    "tailwindcss/no-custom-classname": {
+      "count": 4
+    }
+  },
+  "src/components/Modals/InteractiveTutorialMobileBlocking/InteractiveTutorialMobileBlocking.tsx": {
+    "hypertask-style/no-forbidden-utilities": {
+      "count": 5
+    },
+    "hypertask-style/no-raw-tailwind-colors": {
+      "count": 13
+    }
+  },
+  "src/components/Modals/Kanban/BoardPriorityMode.tsx": {
+    "tailwindcss/no-custom-classname": {
+      "count": 1
+    }
+  },
+  "src/components/Modals/LinksModal/index.tsx": {
+    "tailwindcss/no-custom-classname": {
+      "count": 1
+    }
+  },
+  "src/components/Modals/ManageFavorites/index.tsx": {
+    "tailwindcss/no-custom-classname": {
+      "count": 5
+    }
+  },
+  "src/components/Modals/ManageLabels/EditSingleLabel.tsx": {
+    "hypertask-style/no-raw-tailwind-colors": {
+      "count": 3
+    },
+    "tailwindcss/no-custom-classname": {
+      "count": 2
+    }
+  },
+  "src/components/Modals/ManageLabels/index.tsx": {
+    "hypertask-style/no-forbidden-utilities": {
+      "count": 1
+    },
+    "hypertask-style/no-raw-tailwind-colors": {
+      "count": 3
+    },
+    "tailwindcss/no-custom-classname": {
+      "count": 1
+    }
+  },
+  "src/components/Modals/McpToken/McpTokenModal.tsx": {
+    "hypertask-style/no-forbidden-utilities": {
+      "count": 1
+    },
+    "hypertask-style/no-unapproved-color-literals": {
+      "count": 3
+    }
+  },
+  "src/components/Modals/McpToken/components/AvailableToolsSection.tsx": {
+    "hypertask-style/no-forbidden-utilities": {
+      "count": 1
+    },
+    "hypertask-style/no-unapproved-color-literals": {
+      "count": 1
+    }
+  },
+  "src/components/Modals/McpToken/components/ConnectInstructions.tsx": {
+    "hypertask-style/no-forbidden-utilities": {
+      "count": 1
+    },
+    "hypertask-style/no-raw-tailwind-colors": {
+      "count": 1
+    },
+    "hypertask-style/no-unapproved-color-literals": {
+      "count": 2
+    }
+  },
+  "src/components/Modals/McpToken/components/DisconnectAllSection.tsx": {
+    "hypertask-style/no-unapproved-color-literals": {
+      "count": 2
+    }
+  },
+  "src/components/Modals/McpToken/components/ExternalConnectionsList.tsx": {
+    "hypertask-style/no-forbidden-utilities": {
+      "count": 2
+    },
+    "hypertask-style/no-raw-tailwind-colors": {
+      "count": 2
+    },
+    "hypertask-style/no-unapproved-color-literals": {
+      "count": 3
+    }
+  },
+  "src/components/Modals/McpToken/components/McpServerUrlSection.tsx": {
+    "hypertask-style/no-raw-tailwind-colors": {
+      "count": 1
+    }
+  },
+  "src/components/Modals/McpToken/components/TokenStatusBar.tsx": {
+    "hypertask-style/no-raw-tailwind-colors": {
+      "count": 3
+    },
+    "hypertask-style/no-unapproved-color-literals": {
+      "count": 3
+    }
+  },
+  "src/components/Modals/MobileBlockingOverlay/MobileBlockingOverlay.tsx": {
+    "hypertask-style/no-forbidden-utilities": {
+      "count": 5
+    },
+    "hypertask-style/no-raw-tailwind-colors": {
+      "count": 11
+    }
+  },
+  "src/components/Modals/MoveTaskToBoard/index.tsx": {
+    "tailwindcss/no-custom-classname": {
+      "count": 2
+    }
+  },
+  "src/components/Modals/MoveTaskToBoard/legacyCreateTaskModal.tsx": {
+    "tailwindcss/no-custom-classname": {
+      "count": 1
+    }
+  },
+  "src/components/Modals/OptionPicker/index.tsx": {
+    "tailwindcss/no-custom-classname": {
+      "count": 1
+    }
+  },
+  "src/components/Modals/PurchasePlan/TestimonialCarousel.tsx": {
+    "hypertask-style/no-forbidden-utilities": {
+      "count": 1
+    },
+    "hypertask-style/no-raw-tailwind-colors": {
+      "count": 7
+    },
+    "tailwindcss/no-custom-classname": {
+      "count": 3
+    }
+  },
+  "src/components/Modals/PurchasePlan/index.tsx": {
+    "hypertask-style/no-forbidden-utilities": {
+      "count": 4
+    },
+    "hypertask-style/no-raw-tailwind-colors": {
+      "count": 13
+    }
+  },
+  "src/components/Modals/RemindMe/RemindMeComponent.tsx": {
+    "tailwindcss/no-custom-classname": {
+      "count": 2
+    }
+  },
+  "src/components/Modals/RenameTask.modal.tsx": {
+    "tailwindcss/no-custom-classname": {
+      "count": 1
+    }
+  },
+  "src/components/Modals/RestApi/RestApiModal.tsx": {
+    "hypertask-style/no-forbidden-utilities": {
+      "count": 1
+    },
+    "hypertask-style/no-raw-tailwind-colors": {
+      "count": 3
+    },
+    "hypertask-style/no-unapproved-color-literals": {
+      "count": 12
+    }
+  },
+  "src/components/Modals/Settings/AccountsSection.tsx": {
+    "hypertask-style/no-raw-tailwind-colors": {
+      "count": 3
+    }
+  },
+  "src/components/Modals/Settings/AiUsageSection.tsx": {
+    "hypertask-style/no-raw-tailwind-colors": {
+      "count": 3
+    }
+  },
+  "src/components/Modals/Settings/BoardLifecycleSettings.tsx": {
+    "hypertask-style/no-raw-tailwind-colors": {
+      "count": 1
+    }
+  },
+  "src/components/Modals/Settings/DeveloperAccessSection.tsx": {
+    "hypertask-style/no-forbidden-utilities": {
+      "count": 1
+    },
+    "hypertask-style/no-raw-tailwind-colors": {
+      "count": 1
+    }
+  },
+  "src/components/Modals/Settings/GeneralSection.tsx": {
+    "hypertask-style/no-raw-tailwind-colors": {
+      "count": 3
+    }
+  },
+  "src/components/Modals/Settings/ManagementKeysSection.tsx": {
+    "hypertask-style/no-forbidden-utilities": {
+      "count": 1
+    },
+    "hypertask-style/no-raw-tailwind-colors": {
+      "count": 1
+    }
+  },
+  "src/components/Modals/Settings/SettingsBoardPicker.tsx": {
+    "hypertask-style/no-forbidden-utilities": {
+      "count": 1
+    }
+  },
+  "src/components/Modals/Settings/SettingsShell.tsx": {
+    "tailwindcss/no-custom-classname": {
+      "count": 2
+    }
+  },
+  "src/components/Modals/Settings/SettingsTeamPicker.tsx": {
+    "hypertask-style/no-forbidden-utilities": {
+      "count": 1
+    }
+  },
+  "src/components/Modals/Settings/SettingsToggle.tsx": {
+    "tailwindcss/no-custom-classname": {
+      "count": 1
+    }
+  },
+  "src/components/Modals/Settings/SkillLibrary.tsx": {
+    "hypertask-style/no-raw-tailwind-colors": {
+      "count": 1
+    }
+  },
+  "src/components/Modals/Settings/SlackSection.tsx": {
+    "hypertask-style/no-raw-tailwind-colors": {
+      "count": 1
+    }
+  },
+  "src/components/Modals/Settings/WebhooksSection.tsx": {
+    "hypertask-style/no-raw-tailwind-colors": {
+      "count": 1
+    }
+  },
+  "src/components/Modals/Settings/announcementIndicator.tsx": {
+    "hypertask-style/no-unapproved-color-literals": {
+      "count": 1
+    }
+  },
+  "src/components/Modals/ShareTaskModal/index.tsx": {
+    "tailwindcss/no-custom-classname": {
+      "count": 2
+    }
+  },
+  "src/components/Modals/Sheets/MobileBottomSheet.tsx": {
+    "tailwindcss/no-custom-classname": {
+      "count": 1
+    }
+  },
+  "src/components/Modals/Sheets/SummarySheet.tsx": {
+    "hypertask-style/no-unapproved-color-literals": {
+      "count": 1
+    },
+    "tailwindcss/no-custom-classname": {
+      "count": 3
+    }
+  },
+  "src/components/Modals/SignOut/SignOutModal.tsx": {
+    "hypertask-style/no-raw-tailwind-colors": {
+      "count": 1
+    }
+  },
+  "src/components/Modals/StartDate/index.tsx": {
+    "tailwindcss/no-custom-classname": {
+      "count": 1
+    }
+  },
+  "src/components/Modals/TaskEstimate/TaskEstimate.tsx": {
+    "tailwindcss/no-custom-classname": {
+      "count": 1
+    }
+  },
+  "src/components/Modals/TaskOptions/TaskOptionsModal.tsx": {
+    "hypertask-style/no-raw-tailwind-colors": {
+      "count": 2
+    },
+    "hypertask-style/no-unapproved-color-literals": {
+      "count": 1
+    }
+  },
+  "src/components/Modals/TaskPriority/index.tsx": {
+    "tailwindcss/no-custom-classname": {
+      "count": 1
+    }
+  },
+  "src/components/Modals/TrialPlan/TrialModalV2.tsx": {
+    "hypertask-style/no-forbidden-utilities": {
+      "count": 6
+    },
+    "hypertask-style/no-raw-tailwind-colors": {
+      "count": 5
+    },
+    "hypertask-style/no-unapproved-color-literals": {
+      "count": 10
+    }
+  },
+  "src/components/Modals/TrialPlan/TrialPlanComponents.tsx": {
+    "hypertask-style/no-unapproved-color-literals": {
+      "count": 2
+    },
+    "tailwindcss/no-custom-classname": {
+      "count": 2
+    }
+  },
+  "src/components/Modals/ViewModals/ManageViewsModals.tsx": {
+    "hypertask-style/no-raw-tailwind-colors": {
+      "count": 2
+    },
+    "tailwindcss/no-custom-classname": {
+      "count": 4
+    }
+  },
+  "src/components/Modals/ViewModals/SmartSplitModal.tsx": {
+    "hypertask-style/no-raw-tailwind-colors": {
+      "count": 3
+    },
+    "tailwindcss/no-custom-classname": {
+      "count": 2
+    }
+  },
+  "src/components/Modals/ViewModals/ViewsForBoardModal.tsx": {
+    "tailwindcss/no-custom-classname": {
+      "count": 2
+    }
+  },
+  "src/components/Modals/commands/HTC/CommandGroup.tsx": {
+    "tailwindcss/no-custom-classname": {
+      "count": 1
+    }
+  },
+  "src/components/Modals/commands/HTC/commands.tsx": {
+    "tailwindcss/no-custom-classname": {
+      "count": 1
+    }
+  },
+  "src/components/Modals/commands/SwitchAccount/SwitchAccountModal.tsx": {
+    "hypertask-style/no-raw-tailwind-colors": {
+      "count": 1
+    }
+  },
+  "src/components/Modals/commands/addColumn.tsx": {
+    "tailwindcss/no-custom-classname": {
+      "count": 1
+    }
+  },
+  "src/components/Modals/commands/createBoard.tsx": {
+    "tailwindcss/no-custom-classname": {
+      "count": 1
+    }
+  },
+  "src/components/Modals/commands/editBoard.tsx": {
+    "tailwindcss/no-custom-classname": {
+      "count": 1
+    }
+  },
+  "src/components/Modals/commands/inviteMember.tsx": {
+    "tailwindcss/no-custom-classname": {
+      "count": 1
+    }
+  },
+  "src/components/Modals/commands/manageColumn.tsx": {
+    "hypertask-style/no-raw-tailwind-colors": {
+      "count": 2
+    },
+    "tailwindcss/no-custom-classname": {
+      "count": 5
+    }
+  },
+  "src/components/Modals/commands/moveToColumn.tsx": {
+    "tailwindcss/no-custom-classname": {
+      "count": 1
+    }
+  },
+  "src/components/Modals/commands/searchTasks.tsx": {
+    "tailwindcss/no-custom-classname": {
+      "count": 1
+    }
+  },
+  "src/components/PageComponents/Calendar/CalendarSplitsRow.tsx": {
+    "tailwindcss/no-custom-classname": {
+      "count": 2
+    }
+  },
+  "src/components/PageComponents/Calendar/ColoredCheckbox.tsx": {
+    "hypertask-style/no-forbidden-utilities": {
+      "count": 1
+    }
+  },
+  "src/components/PageComponents/Calendar/MobileCalendar.tsx": {
+    "hypertask-style/no-unapproved-color-literals": {
+      "count": 2
+    },
+    "tailwindcss/no-custom-classname": {
+      "count": 1
+    }
+  },
+  "src/components/PageComponents/Calendar/calendar.tsx": {
+    "hypertask-style/no-unapproved-color-literals": {
+      "count": 4
+    },
+    "tailwindcss/no-custom-classname": {
+      "count": 4
+    }
+  },
+  "src/components/PageComponents/Calendar/card.tsx": {
+    "hypertask-style/no-forbidden-utilities": {
+      "count": 1
+    },
+    "tailwindcss/no-custom-classname": {
+      "count": 2
+    }
+  },
+  "src/components/PageComponents/Calendar/index.tsx": {
+    "hypertask-style/no-raw-tailwind-colors": {
+      "count": 1
+    },
+    "hypertask-style/no-unapproved-color-literals": {
+      "count": 1
+    },
+    "tailwindcss/no-custom-classname": {
+      "count": 3
+    }
+  },
+  "src/components/PageComponents/Calendar/month-navigation.tsx": {
+    "tailwindcss/no-custom-classname": {
+      "count": 4
+    }
+  },
+  "src/components/PageComponents/Calendar/month-view.tsx": {
+    "tailwindcss/no-custom-classname": {
+      "count": 1
+    }
+  },
+  "src/components/PageComponents/Calendar/task-card.tsx": {
+    "hypertask-style/no-forbidden-utilities": {
+      "count": 1
+    },
+    "hypertask-style/no-raw-tailwind-colors": {
+      "count": 2
+    }
+  },
+  "src/components/PageComponents/Calendar/week-view.tsx": {
+    "tailwindcss/no-custom-classname": {
+      "count": 2
+    }
+  },
+  "src/components/PageComponents/Interactive-Onboarding/Components/Footer/Footer.tsx": {
+    "hypertask-style/no-raw-tailwind-colors": {
+      "count": 6
+    },
+    "hypertask-style/no-unapproved-color-literals": {
+      "count": 2
+    },
+    "tailwindcss/no-custom-classname": {
+      "count": 5
+    }
+  },
+  "src/components/PageComponents/Interactive-Onboarding/Components/Header/HeaderInbox.tsx": {
+    "hypertask-style/no-unapproved-color-literals": {
+      "count": 1
+    }
+  },
+  "src/components/PageComponents/Interactive-Onboarding/Components/Header/HeaderOptions.tsx": {
+    "tailwindcss/no-custom-classname": {
+      "count": 2
+    }
+  },
+  "src/components/PageComponents/Interactive-Onboarding/Components/Inbox/InboxPage.tsx": {
+    "tailwindcss/no-custom-classname": {
+      "count": 3
+    }
+  },
+  "src/components/PageComponents/Interactive-Onboarding/Components/Inbox/NotificationsList.tsx": {
+    "hypertask-style/no-unapproved-color-literals": {
+      "count": 1
+    },
+    "tailwindcss/no-custom-classname": {
+      "count": 4
+    }
+  },
+  "src/components/PageComponents/Interactive-Onboarding/Components/Inbox/SplitTitle.tsx": {
+    "tailwindcss/no-custom-classname": {
+      "count": 5
+    }
+  },
+  "src/components/PageComponents/Interactive-Onboarding/Components/Landing/LandingHome.tsx": {
+    "tailwindcss/no-custom-classname": {
+      "count": 1
+    }
+  },
+  "src/components/PageComponents/Interactive-Onboarding/Components/Landing/Section.tsx": {
+    "hypertask-style/no-raw-tailwind-colors": {
+      "count": 1
+    },
+    "hypertask-style/no-unapproved-color-literals": {
+      "count": 1
+    },
+    "tailwindcss/no-custom-classname": {
+      "count": 4
+    }
+  },
+  "src/components/PageComponents/Interactive-Onboarding/Components/Landing/Task.tsx": {
+    "hypertask-style/no-forbidden-utilities": {
+      "count": 1
+    }
+  },
+  "src/components/PageComponents/Interactive-Onboarding/Components/Modals/AddColumnModal.tsx": {
+    "hypertask-style/no-unapproved-color-literals": {
+      "count": 1
+    },
+    "tailwindcss/no-custom-classname": {
+      "count": 1
+    }
+  },
+  "src/components/PageComponents/Interactive-Onboarding/Components/Modals/AssigneeModal.tsx": {
+    "tailwindcss/no-custom-classname": {
+      "count": 1
+    }
+  },
+  "src/components/PageComponents/Interactive-Onboarding/Components/Modals/DueDateModal.tsx": {
+    "tailwindcss/no-custom-classname": {
+      "count": 1
+    }
+  },
+  "src/components/PageComponents/Interactive-Onboarding/Components/Modals/MoveModal.tsx": {
+    "tailwindcss/no-custom-classname": {
+      "count": 1
+    }
+  },
+  "src/components/PageComponents/Interactive-Onboarding/Components/Modals/PriorityModal.tsx": {
+    "tailwindcss/no-custom-classname": {
+      "count": 3
+    }
+  },
+  "src/components/PageComponents/Interactive-Onboarding/Components/Sidebar/Sidebar.tsx": {
+    "hypertask-style/no-raw-tailwind-colors": {
+      "count": 4
+    },
+    "hypertask-style/no-unapproved-color-literals": {
+      "count": 2
+    },
+    "tailwindcss/no-custom-classname": {
+      "count": 3
+    }
+  },
+  "src/components/PageComponents/Interactive-Onboarding/Components/TaskDetail/Comment/CommentActivity.tsx": {
+    "tailwindcss/no-custom-classname": {
+      "count": 1
+    }
+  },
+  "src/components/PageComponents/Interactive-Onboarding/Components/TaskDetail/Comment/CommentContainer.tsx": {
+    "tailwindcss/no-custom-classname": {
+      "count": 2
+    }
+  },
+  "src/components/PageComponents/Interactive-Onboarding/Components/TaskDetail/Description/DescriptionContainer.tsx": {
+    "tailwindcss/no-custom-classname": {
+      "count": 1
+    }
+  },
+  "src/components/PageComponents/Interactive-Onboarding/Components/TaskDetail/Task/TaskHeading.tsx": {
+    "hypertask-style/no-unapproved-color-literals": {
+      "count": 3
+    },
+    "tailwindcss/no-custom-classname": {
+      "count": 3
+    }
+  },
+  "src/components/PageComponents/Interactive-Onboarding/Components/TaskDetail/Task/TaskMovementButtons.tsx": {
+    "hypertask-style/no-forbidden-utilities": {
+      "count": 1
+    }
+  },
+  "src/components/PageComponents/Interactive-Onboarding/Components/TaskDetail/Tiptap/InteractiveTiptapContainer.tsx": {
+    "tailwindcss/no-custom-classname": {
+      "count": 3
+    }
+  },
+  "src/components/PageComponents/Kanban/HeaderComponents/AppShellRail.tsx": {
+    "hypertask-style/no-unapproved-color-literals": {
+      "count": 1
+    },
+    "tailwindcss/no-custom-classname": {
+      "count": 1
+    }
+  },
+  "src/components/PageComponents/Kanban/HeaderComponents/FilterHeaderKanban.tsx": {
+    "hypertask-style/no-unapproved-color-literals": {
+      "count": 1
+    },
+    "tailwindcss/no-custom-classname": {
+      "count": 1
+    }
+  },
+  "src/components/PageComponents/Kanban/HeaderComponents/HeaderDivider.tsx": {
+    "hypertask-style/no-unapproved-color-literals": {
+      "count": 1
+    },
+    "tailwindcss/no-custom-classname": {
+      "count": 1
+    }
+  },
+  "src/components/PageComponents/Kanban/HeaderComponents/HeaderIconWrapper.tsx": {
+    "tailwindcss/no-custom-classname": {
+      "count": 1
+    }
+  },
+  "src/components/PageComponents/Kanban/HeaderComponents/HiddenColumnsHeaderKanban.tsx": {
+    "hypertask-style/no-unapproved-color-literals": {
+      "count": 1
+    },
+    "tailwindcss/no-custom-classname": {
+      "count": 1
+    }
+  },
+  "src/components/PageComponents/Kanban/HeaderComponents/InviteHeaderKanban.tsx": {
+    "hypertask-style/no-unapproved-color-literals": {
+      "count": 2
+    },
+    "tailwindcss/no-custom-classname": {
+      "count": 5
+    }
+  },
+  "src/components/PageComponents/Kanban/HeaderComponents/PriorityHeaderKanban.tsx": {
+    "hypertask-style/no-unapproved-color-literals": {
+      "count": 2
+    },
+    "tailwindcss/no-custom-classname": {
+      "count": 1
+    }
+  },
+  "src/components/PageComponents/Kanban/HeaderComponents/SaveViewHeaderKanban.tsx": {
+    "hypertask-style/no-unapproved-color-literals": {
+      "count": 2
+    },
+    "tailwindcss/no-custom-classname": {
+      "count": 1
+    }
+  },
+  "src/components/PageComponents/Kanban/HeaderComponents/ShellViewControls.tsx": {
+    "hypertask-style/no-unapproved-color-literals": {
+      "count": 4
+    }
+  },
+  "src/components/PageComponents/Kanban/HeaderComponents/TitleKanbanHeader.tsx": {
+    "tailwindcss/no-custom-classname": {
+      "count": 1
+    }
+  },
+  "src/components/PageComponents/Kanban/HeaderComponents/ViewTabsBar.tsx": {
+    "hypertask-style/no-forbidden-utilities": {
+      "count": 2
+    },
+    "hypertask-style/no-raw-tailwind-colors": {
+      "count": 2
+    },
+    "tailwindcss/no-custom-classname": {
+      "count": 5
+    }
+  },
+  "src/components/PageComponents/Kanban/HeaderComponents/ViewsHeaderKanban.tsx": {
+    "tailwindcss/no-custom-classname": {
+      "count": 1
+    }
+  },
+  "src/components/PageComponents/Kanban/HeaderComponents/header.tsx": {
+    "hypertask-style/no-unapproved-color-literals": {
+      "count": 3
+    },
+    "tailwindcss/no-custom-classname": {
+      "count": 5
+    }
+  },
+  "src/components/PageComponents/Kanban/KanbanHomepageComponents/BoardEmptyState.tsx": {
+    "hypertask-style/no-forbidden-utilities": {
+      "count": 1
+    },
+    "hypertask-style/no-raw-tailwind-colors": {
+      "count": 2
+    }
+  },
+  "src/components/PageComponents/Kanban/KanbanHomepageComponents/Homepage.tsx": {
+    "tailwindcss/no-custom-classname": {
+      "count": 1
+    }
+  },
+  "src/components/PageComponents/Kanban/KanbanHomepageComponents/KanbanBulkActionBar.tsx": {
+    "tailwindcss/no-custom-classname": {
+      "count": 1
+    }
+  },
+  "src/components/PageComponents/Kanban/KanbanSectionComponents/NewTaskButton.tsx": {
+    "hypertask-style/no-raw-tailwind-colors": {
+      "count": 1
+    },
+    "tailwindcss/no-custom-classname": {
+      "count": 3
+    }
+  },
+  "src/components/PageComponents/Kanban/KanbanSectionComponents/section.tsx": {
+    "hypertask-style/no-raw-tailwind-colors": {
+      "count": 18
+    },
+    "tailwindcss/no-custom-classname": {
+      "count": 7
+    }
+  },
+  "src/components/PageComponents/Kanban/KanbanTaskComponents/KanbanTaskCard.tsx": {
+    "hypertask-style/no-raw-tailwind-colors": {
+      "count": 4
+    }
+  },
+  "src/components/PageComponents/Kanban/KanbanTaskComponents/ProgressiveTaskPlaceholder.tsx": {
+    "tailwindcss/no-custom-classname": {
+      "count": 1
+    }
+  },
+  "src/components/PageComponents/Kanban/KanbanTaskComponents/TaskDraggableContainer.tsx": {
+    "hypertask-style/no-forbidden-utilities": {
+      "count": 1
+    },
+    "hypertask-style/no-unapproved-color-literals": {
+      "count": 3
+    },
+    "tailwindcss/no-custom-classname": {
+      "count": 1
+    }
+  },
+  "src/components/PageComponents/Kanban/KanbanTaskComponents/TaskTopRow.tsx": {
+    "hypertask-style/no-unapproved-color-literals": {
+      "count": 1
+    },
+    "tailwindcss/no-custom-classname": {
+      "count": 1
+    }
+  },
+  "src/components/PageComponents/Kanban/TableView/TableColumnsPicker.tsx": {
+    "tailwindcss/no-custom-classname": {
+      "count": 4
+    }
+  },
+  "src/components/PageComponents/Kanban/TableView/TableTaskRow.tsx": {
+    "tailwindcss/no-custom-classname": {
+      "count": 1
+    }
+  },
+  "src/components/PageComponents/Kanban/TableView/TableView.tsx": {
+    "tailwindcss/no-custom-classname": {
+      "count": 2
+    }
+  },
+  "src/components/PageComponents/Login/HypertaskLoginCarousel.tsx": {
+    "hypertask-style/no-forbidden-utilities": {
+      "count": 3
+    },
+    "hypertask-style/no-raw-tailwind-colors": {
+      "count": 2
+    }
+  },
+  "src/components/PageComponents/MyTasks/MyTasksBulkActionBar.tsx": {
+    "tailwindcss/no-custom-classname": {
+      "count": 1
+    }
+  },
+  "src/components/PageComponents/Onboarding/Screens/ConnectAIOnboardingScreen.tsx": {
+    "hypertask-style/no-raw-tailwind-colors": {
+      "count": 5
+    },
+    "hypertask-style/no-unapproved-color-literals": {
+      "count": 1
+    }
+  },
+  "src/components/PageComponents/Onboarding/Screens/OnboardingScreen5.tsx": {
+    "hypertask-style/no-raw-tailwind-colors": {
+      "count": 2
+    }
+  },
+  "src/components/PageComponents/Pricing/pricing-settings.tsx": {
+    "hypertask-style/no-unapproved-color-literals": {
+      "count": 3
+    },
+    "tailwindcss/no-custom-classname": {
+      "count": 1
+    }
+  },
+  "src/components/PageComponents/Search/SearchList.tsx": {
+    "hypertask-style/no-forbidden-utilities": {
+      "count": 1
+    },
+    "hypertask-style/no-raw-tailwind-colors": {
+      "count": 1
+    }
+  },
+  "src/components/PageComponents/Shared/Project/header.tsx": {
+    "hypertask-style/no-unapproved-color-literals": {
+      "count": 2
+    },
+    "tailwindcss/no-custom-classname": {
+      "count": 1
+    }
+  },
+  "src/components/PageComponents/Shared/Project/kanban.tsx": {
+    "tailwindcss/no-custom-classname": {
+      "count": 2
+    }
+  },
+  "src/components/PageComponents/Shared/Project/section.tsx": {
+    "tailwindcss/no-custom-classname": {
+      "count": 5
+    }
+  },
+  "src/components/PageComponents/Starred/SavedContentRow.tsx": {
+    "hypertask-style/no-unapproved-color-literals": {
+      "count": 3
+    },
+    "tailwindcss/no-custom-classname": {
+      "count": 3
+    }
+  },
+  "src/components/PageComponents/TaskDetail/AI Task Writer/AIAttachmentsPreview.tsx": {
+    "hypertask-style/no-forbidden-utilities": {
+      "count": 1
+    },
+    "hypertask-style/no-raw-tailwind-colors": {
+      "count": 3
+    },
+    "tailwindcss/no-custom-classname": {
+      "count": 6
+    }
+  },
+  "src/components/PageComponents/TaskDetail/AI Task Writer/AITaskWriterAttachments.tsx": {
+    "hypertask-style/no-forbidden-utilities": {
+      "count": 1
+    },
+    "hypertask-style/no-raw-tailwind-colors": {
+      "count": 3
+    },
+    "tailwindcss/no-custom-classname": {
+      "count": 6
+    }
+  },
+  "src/components/PageComponents/TaskDetail/AI Task Writer/AITaskWriterContainer.tsx": {
+    "hypertask-style/no-forbidden-utilities": {
+      "count": 3
+    },
+    "tailwindcss/no-custom-classname": {
+      "count": 5
+    }
+  },
+  "src/components/PageComponents/TaskDetail/AI Task Writer/AITaskWriterInputArea.tsx": {
+    "tailwindcss/no-custom-classname": {
+      "count": 4
+    }
+  },
+  "src/components/PageComponents/TaskDetail/AI Task Writer/AI_OPTIONS.tsx": {
+    "hypertask-style/no-forbidden-utilities": {
+      "count": 3
+    }
+  },
+  "src/components/PageComponents/TaskDetail/AI Task Writer/ResponseNavigator.tsx": {
+    "hypertask-style/no-raw-tailwind-colors": {
+      "count": 1
+    }
+  },
+  "src/components/PageComponents/TaskDetail/AI Task Writer/useSkillSlashMenu.tsx": {
+    "hypertask-style/no-raw-tailwind-colors": {
+      "count": 2
+    },
+    "tailwindcss/no-custom-classname": {
+      "count": 2
+    }
+  },
+  "src/components/PageComponents/TaskDetail/CommentAndDescription/AgentRunActivityRow.tsx": {
+    "hypertask-style/no-raw-tailwind-colors": {
+      "count": 1
+    }
+  },
+  "src/components/PageComponents/TaskDetail/CommentAndDescription/BaseCommentAndDescriptionContainer.tsx": {
+    "tailwindcss/no-custom-classname": {
+      "count": 1
+    }
+  },
+  "src/components/PageComponents/TaskDetail/CommentAndDescription/CommentContainer/CommentBodyDesktop.tsx": {
+    "tailwindcss/no-custom-classname": {
+      "count": 1
+    }
+  },
+  "src/components/PageComponents/TaskDetail/CommentAndDescription/CommentContainer/CommentCreatedBy.tsx": {
+    "hypertask-style/no-raw-tailwind-colors": {
+      "count": 1
+    }
+  },
+  "src/components/PageComponents/TaskDetail/CommentAndDescription/CommentContainer/CommentEmojiTooltip.tsx": {
+    "hypertask-style/no-raw-tailwind-colors": {
+      "count": 2
+    },
+    "hypertask-style/no-unapproved-color-literals": {
+      "count": 1
+    }
+  },
+  "src/components/PageComponents/TaskDetail/CommentAndDescription/CommentContainer/CommentReactions.tsx": {
+    "hypertask-style/no-forbidden-utilities": {
+      "count": 4
+    },
+    "tailwindcss/no-custom-classname": {
+      "count": 1
+    }
+  },
+  "src/components/PageComponents/TaskDetail/CommentAndDescription/CommentContainer/CommentTaskActivity.tsx": {
+    "tailwindcss/no-custom-classname": {
+      "count": 1
+    }
+  },
+  "src/components/PageComponents/TaskDetail/CommentAndDescription/CommentContainer/CommentsContainer.tsx": {
+    "hypertask-style/no-raw-tailwind-colors": {
+      "count": 6
+    },
+    "hypertask-style/no-unapproved-color-literals": {
+      "count": 1
+    },
+    "tailwindcss/no-custom-classname": {
+      "count": 3
+    }
+  },
+  "src/components/PageComponents/TaskDetail/CommentAndDescription/CommentContainer/EmojiComponent.tsx": {
+    "tailwindcss/no-custom-classname": {
+      "count": 1
+    }
+  },
+  "src/components/PageComponents/TaskDetail/CommentAndDescription/CommentContainer/EmojiOptionsComp.tsx": {
+    "hypertask-style/no-forbidden-utilities": {
+      "count": 1
+    },
+    "tailwindcss/no-custom-classname": {
+      "count": 1
+    }
+  },
+  "src/components/PageComponents/TaskDetail/CommentAndDescription/CommentContainer/NewCommentComponent.tsx": {
+    "hypertask-style/no-forbidden-utilities": {
+      "count": 1
+    },
+    "hypertask-style/no-unapproved-color-literals": {
+      "count": 1
+    }
+  },
+  "src/components/PageComponents/TaskDetail/CommentAndDescription/CommentContainer/SwipeableCommentRow.tsx": {
+    "hypertask-style/no-unapproved-color-literals": {
+      "count": 1
+    },
+    "tailwindcss/no-custom-classname": {
+      "count": 1
+    }
+  },
+  "src/components/PageComponents/TaskDetail/CommentAndDescription/Common/CreatedBy.tsx": {
+    "hypertask-style/no-unapproved-color-literals": {
+      "count": 2
+    }
+  },
+  "src/components/PageComponents/TaskDetail/CommentAndDescription/Common/MobileEmojiReactionSheet.tsx": {
+    "tailwindcss/no-custom-classname": {
+      "count": 1
+    }
+  },
+  "src/components/PageComponents/TaskDetail/CommentAndDescription/Common/MobileReactorsSheet.tsx": {
+    "tailwindcss/no-custom-classname": {
+      "count": 1
+    }
+  },
+  "src/components/PageComponents/TaskDetail/CommentAndDescription/ContextMenu/HighlightMenu.tsx": {
+    "tailwindcss/no-custom-classname": {
+      "count": 1
+    }
+  },
+  "src/components/PageComponents/TaskDetail/CommentAndDescription/DescriptionContainer/BottomRow/DescriptionReactions.tsx": {
+    "hypertask-style/no-forbidden-utilities": {
+      "count": 1
+    },
+    "tailwindcss/no-custom-classname": {
+      "count": 1
+    }
+  },
+  "src/components/PageComponents/TaskDetail/CommentAndDescription/DescriptionContainer/TopRow/DescriptionEmojiButton.tsx": {
+    "hypertask-style/no-forbidden-utilities": {
+      "count": 1
+    },
+    "tailwindcss/no-custom-classname": {
+      "count": 1
+    }
+  },
+  "src/components/PageComponents/TaskDetail/CommentAndDescription/UploadingComment/index.tsx": {
+    "tailwindcss/no-custom-classname": {
+      "count": 1
+    }
+  },
+  "src/components/PageComponents/TaskDetail/CommentAndDescription/UploadingDescription/index.tsx": {
+    "tailwindcss/no-custom-classname": {
+      "count": 1
+    }
+  },
+  "src/components/PageComponents/TaskDetail/SharedTask/CommentsAndDescription/Comments/CommentReactions.tsx": {
+    "hypertask-style/no-forbidden-utilities": {
+      "count": 2
+    }
+  },
+  "src/components/PageComponents/TaskDetail/SharedTask/CommentsAndDescription/Description/DescriptionBottomRow.tsx": {
+    "hypertask-style/no-forbidden-utilities": {
+      "count": 1
+    }
+  },
+  "src/components/PageComponents/TaskDetail/SharedTask/MainPage/TaskInfoColumn.tsx": {
+    "tailwindcss/no-custom-classname": {
+      "count": 1
+    }
+  },
+  "src/components/PageComponents/TaskDetail/TaskDetailMainContainer.tsx": {
+    "tailwindcss/no-custom-classname": {
+      "count": 1
+    }
+  },
+  "src/components/PageComponents/TaskDetail/TaskInfoColumn/TaskInfo.tsx": {
+    "hypertask-style/no-raw-tailwind-colors": {
+      "count": 6
+    },
+    "tailwindcss/no-custom-classname": {
+      "count": 1
+    }
+  },
+  "src/components/PageComponents/TaskDetail/TaskMovement.tsx": {
+    "hypertask-style/no-forbidden-utilities": {
+      "count": 1
+    },
+    "tailwindcss/no-custom-classname": {
+      "count": 1
+    }
+  },
+  "src/components/PageComponents/TaskDetail/TaskOptions/ArchiveTaskNotifications.tsx": {
+    "hypertask-style/no-unapproved-color-literals": {
+      "count": 1
+    },
+    "tailwindcss/no-custom-classname": {
+      "count": 2
+    }
+  },
+  "src/components/PageComponents/TaskDetail/TaskOptions/MarkTaskAsDone.tsx": {
+    "hypertask-style/no-unapproved-color-literals": {
+      "count": 1
+    },
+    "tailwindcss/no-custom-classname": {
+      "count": 3
+    }
+  },
+  "src/components/PageComponents/TaskDetail/TaskOptions/RemindMeTaskDetail.tsx": {
+    "hypertask-style/no-unapproved-color-literals": {
+      "count": 1
+    },
+    "tailwindcss/no-custom-classname": {
+      "count": 1
+    }
+  },
+  "src/components/PageComponents/TaskDetail/TaskOptions/ShareTaskButton.tsx": {
+    "hypertask-style/no-unapproved-color-literals": {
+      "count": 1
+    },
+    "tailwindcss/no-custom-classname": {
+      "count": 2
+    }
+  },
+  "src/components/PageComponents/TaskDetail/TaskOptions/TaskDotOptions.tsx": {
+    "hypertask-style/no-unapproved-color-literals": {
+      "count": 2
+    }
+  },
+  "src/components/PageComponents/TaskDetail/TopRow/BaseTitleContainer.tsx": {
+    "tailwindcss/no-custom-classname": {
+      "count": 2
+    }
+  },
+  "src/components/PageComponents/TaskDetail/TopRow/TaskDetailTitleContainer.tsx": {
+    "tailwindcss/no-custom-classname": {
+      "count": 1
+    }
+  },
+  "src/components/PageComponents/TaskDetail/TopRow/TaskSummary.tsx": {
+    "tailwindcss/no-custom-classname": {
+      "count": 5
+    }
+  },
+  "src/components/PageComponents/TaskDetail/TopRow/TaskTitle.tsx": {
+    "hypertask-style/no-unapproved-color-literals": {
+      "count": 1
+    }
+  },
+  "src/components/PageComponents/Trash/TaskRow.tsx": {
+    "tailwindcss/no-custom-classname": {
+      "count": 1
+    }
+  },
+  "src/components/PageComponents/Trial/TrialCard.tsx": {
+    "hypertask-style/no-unapproved-color-literals": {
+      "count": 4
+    },
+    "tailwindcss/no-custom-classname": {
+      "count": 1
+    }
+  },
+  "src/components/ProviderGlobal/GloablProviders.tsx": {
+    "tailwindcss/no-custom-classname": {
+      "count": 1
+    }
+  },
+  "src/components/RTE/Components/AIDropdown.tsx": {
+    "hypertask-style/no-forbidden-utilities": {
+      "count": 1
+    },
+    "tailwindcss/no-custom-classname": {
+      "count": 1
+    }
+  },
+  "src/components/RTE/Components/AIEnhanceActionButton.tsx": {
+    "hypertask-style/no-raw-tailwind-colors": {
+      "count": 1
+    },
+    "tailwindcss/no-custom-classname": {
+      "count": 1
+    }
+  },
+  "src/components/RTE/Components/AudioButton.tsx": {
+    "tailwindcss/no-custom-classname": {
+      "count": 6
+    }
+  },
+  "src/components/RTE/Components/DragHandleTiptap.tsx": {
+    "hypertask-style/no-unapproved-color-literals": {
+      "count": 1
+    }
+  },
+  "src/components/RTE/Components/EditorFormatButtons.tsx": {
+    "hypertask-style/no-raw-tailwind-colors": {
+      "count": 1
+    },
+    "tailwindcss/no-custom-classname": {
+      "count": 6
+    }
+  },
+  "src/components/RTE/Components/HighlightButton.tsx": {
+    "tailwindcss/no-custom-classname": {
+      "count": 1
+    }
+  },
+  "src/components/RTE/Components/InlineDraftAiFloat.tsx": {
+    "hypertask-style/no-forbidden-utilities": {
+      "count": 1
+    },
+    "tailwindcss/no-custom-classname": {
+      "count": 1
+    }
+  },
+  "src/components/RTE/Components/MobileCommentImproveButton.tsx": {
+    "hypertask-style/no-raw-tailwind-colors": {
+      "count": 1
+    }
+  },
+  "src/components/RTE/Components/TiptapBubbleMenu.tsx": {
+    "hypertask-style/no-raw-tailwind-colors": {
+      "count": 1
+    },
+    "tailwindcss/no-custom-classname": {
+      "count": 1
+    }
+  },
+  "src/components/RTE/Components/TiptapEditor.tsx": {
+    "hypertask-style/no-unapproved-color-literals": {
+      "count": 2
+    },
+    "tailwindcss/no-custom-classname": {
+      "count": 2
+    }
+  },
+  "src/components/RTE/Components/TiptapMainContainer.tsx": {
+    "tailwindcss/no-custom-classname": {
+      "count": 4
+    }
+  },
+  "src/components/RTE/Extensions/HtmlBlock/HtmlBlockView.tsx": {
+    "hypertask-style/no-forbidden-utilities": {
+      "count": 2
+    },
+    "tailwindcss/no-custom-classname": {
+      "count": 2
+    }
+  },
+  "src/components/RTE/Extensions/LoomTiptap/LoomNodeView.tsx": {
+    "hypertask-style/no-raw-tailwind-colors": {
+      "count": 2
+    },
+    "tailwindcss/no-custom-classname": {
+      "count": 4
+    }
+  },
+  "src/components/RTE/Extensions/SlashCommands/CommandsList.tsx": {
+    "hypertask-style/no-raw-tailwind-colors": {
+      "count": 3
+    },
+    "tailwindcss/no-custom-classname": {
+      "count": 3
+    }
+  },
+  "src/components/RTE/Extensions/Snippets/SnippetsList.tsx": {
+    "hypertask-style/no-raw-tailwind-colors": {
+      "count": 2
+    },
+    "tailwindcss/no-custom-classname": {
+      "count": 2
+    }
+  },
+  "src/components/RTE/Extensions/YoutubeTiptap/YoutubeNodeView.tsx": {
+    "hypertask-style/no-raw-tailwind-colors": {
+      "count": 2
+    },
+    "tailwindcss/no-custom-classname": {
+      "count": 4
+    }
+  },
+  "src/components/RTE/Extensions/dBlock/dBlockNodeView.tsx": {
+    "hypertask-style/no-forbidden-utilities": {
+      "count": 1
+    },
+    "tailwindcss/no-custom-classname": {
+      "count": 3
+    }
+  },
+  "src/components/RTE/Extensions/resizableMedia/ResizableMediaNodeView.tsx": {
+    "hypertask-style/no-forbidden-utilities": {
+      "count": 5
+    },
+    "tailwindcss/no-custom-classname": {
+      "count": 9
+    }
+  },
+  "src/components/commandModalPanels2.tsx": {
+    "tailwindcss/no-custom-classname": {
+      "count": 1
+    }
+  },
+  "src/components/notifications/InboxDraftRow.tsx": {
+    "hypertask-style/no-raw-tailwind-colors": {
+      "count": 2
+    },
+    "tailwindcss/no-custom-classname": {
+      "count": 3
+    }
+  },
+  "src/components/notifications/InboxZeroSheet.tsx": {
+    "tailwindcss/no-custom-classname": {
+      "count": 7
+    }
+  },
+  "src/components/notifications/MobileInboxSplitDock.tsx": {
+    "hypertask-style/no-forbidden-utilities": {
+      "count": 1
+    }
+  },
+  "src/components/notifications/NotificationRow.tsx": {
+    "hypertask-style/no-unapproved-color-literals": {
+      "count": 2
+    },
+    "tailwindcss/no-custom-classname": {
+      "count": 2
+    }
+  },
+  "src/components/notifications/assigned.tsx": {
+    "hypertask-style/no-forbidden-utilities": {
+      "count": 1
+    },
+    "hypertask-style/no-raw-tailwind-colors": {
+      "count": 4
+    },
+    "tailwindcss/no-custom-classname": {
+      "count": 3
+    }
+  },
+  "src/components/notifications/comment.tsx": {
+    "hypertask-style/no-forbidden-utilities": {
+      "count": 1
+    },
+    "hypertask-style/no-raw-tailwind-colors": {
+      "count": 4
+    },
+    "hypertask-style/no-unapproved-color-literals": {
+      "count": 1
+    },
+    "tailwindcss/no-custom-classname": {
+      "count": 3
+    }
+  },
+  "src/components/notifications/inboxSplit/SplitTitle.tsx": {
+    "tailwindcss/no-custom-classname": {
+      "count": 3
+    }
+  },
+  "src/components/notifications/inboxSplit/SwipeableNotificationRow.tsx": {
+    "hypertask-style/no-unapproved-color-literals": {
+      "count": 2
+    },
+    "tailwindcss/no-custom-classname": {
+      "count": 2
+    }
+  },
+  "src/components/notifications/inboxSplit/bulk-actions-inbox.tsx": {
+    "hypertask-style/no-forbidden-utilities": {
+      "count": 2
+    },
+    "hypertask-style/no-raw-tailwind-colors": {
+      "count": 4
+    }
+  },
+  "src/components/notifications/inboxSplit/index.tsx": {
+    "hypertask-style/no-forbidden-utilities": {
+      "count": 3
+    },
+    "hypertask-style/no-raw-tailwind-colors": {
+      "count": 2
+    },
+    "hypertask-style/no-unapproved-color-literals": {
+      "count": 3
+    },
+    "tailwindcss/no-custom-classname": {
+      "count": 11
+    }
+  },
+  "src/components/sidebars/Announcements/index.tsx": {
+    "hypertask-style/no-forbidden-utilities": {
+      "count": 1
+    },
+    "hypertask-style/no-unapproved-color-literals": {
+      "count": 1
+    }
+  },
+  "src/components/sidebars/BackDropContainer.tsx": {
+    "tailwindcss/no-custom-classname": {
+      "count": 2
+    }
+  },
+  "src/components/sidebars/RightSidebar/BottomBar.tsx": {
+    "tailwindcss/no-custom-classname": {
+      "count": 1
+    }
+  },
+  "src/components/sidebars/RightSidebar/Notifications Sidebar/MentionNotificationsSidebar.tsx": {
+    "hypertask-style/no-forbidden-utilities": {
+      "count": 1
+    }
+  },
+  "src/components/sidebars/RightSidebar/Notifications Sidebar/PushNotificationSidebar.tsx": {
+    "tailwindcss/no-custom-classname": {
+      "count": 1
+    }
+  },
+  "src/components/sidebars/RightSidebar/Single section items/index.tsx": {
+    "tailwindcss/no-custom-classname": {
+      "count": 4
+    }
+  },
+  "src/components/sidebars/RightSidebar/index.tsx": {
+    "tailwindcss/no-custom-classname": {
+      "count": 1
+    }
+  },
+  "src/components/sidebars/keyboardShortcuts.tsx": {
+    "hypertask-style/no-unapproved-color-literals": {
+      "count": 1
+    },
+    "tailwindcss/no-custom-classname": {
+      "count": 2
+    }
+  },
+  "src/components/sidebars/leftSidebar.tsx": {
+    "hypertask-style/no-forbidden-utilities": {
+      "count": 1
+    },
+    "hypertask-style/no-raw-tailwind-colors": {
+      "count": 4
+    },
+    "hypertask-style/no-unapproved-color-literals": {
+      "count": 2
+    },
+    "tailwindcss/no-custom-classname": {
+      "count": 3
+    }
+  },
+  "src/components/undoToast/index.tsx": {
+    "hypertask-style/no-forbidden-utilities": {
+      "count": 1
+    },
+    "hypertask-style/no-raw-tailwind-colors": {
+      "count": 2
+    }
+  }
+}
