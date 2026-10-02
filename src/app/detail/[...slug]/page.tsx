@@ -172,8 +172,6 @@ export default async function Page(
               allowPerks={true}
               isMobile={false}
               _currentUser={userObj}
-              _currentTask={JSON.stringify(task)}
-              _comments={JSON.stringify({ comments: comments.json, stacked: initialMap, lastReadAt, agentRunActivities, updatedAt: commentsUpdatedAt })}
               _slugs={[params.slug[0], params.slug[1]]}
             />
           </FollowersProvider>

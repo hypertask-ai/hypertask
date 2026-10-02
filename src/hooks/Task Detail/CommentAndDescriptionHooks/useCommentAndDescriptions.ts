@@ -193,11 +193,12 @@ const useDescriptionAndCommentsStates = () => {
   }, [nonEssentialReady]);
   const queryClient = useQueryClient();
 
+  const initialComments = useMemo(() => JSON.parse(_comments), [_comments]);
   const { data: commentsFromQueryTQ } = useGetAllComments(
     [globalConstants.CommentsTQPrefixKey, _parsedTask?.id],
     _parsedTask?.id,
     currentUser?.id,
-    JSON.parse(_comments),
+    initialComments,
     { enabled: !isShareView && !!currentUser?.id }
   );
   const commentsQueryPayload = useMemo(

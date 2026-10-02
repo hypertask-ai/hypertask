@@ -4,6 +4,7 @@ import React, {
   useContext,
   ReactNode,
   useState,
+  useMemo,
   type RefObject,
 } from "react";
 import {
@@ -183,8 +184,9 @@ const TasksProvider: React.FC<TaskContextProps> = ({ children, ...props }) => {
   const [newCommentIds, setNewCommentIds] = useState<number[]>([]);
   const [newCommentsSnapshotReady, setNewCommentsSnapshotReady] =
     useState<boolean>(false);
+  const initialTask = useMemo(() => JSON.parse(props.parsedTask), [props.parsedTask]);
   const taskGlobalStates = useTaskDetailGlobalStates(
-    JSON.parse(props.parsedTask),
+    initialTask,
     props._comments,
     props._initialStacked,
     props.stack,
