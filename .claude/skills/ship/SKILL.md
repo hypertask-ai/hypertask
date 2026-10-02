@@ -54,7 +54,7 @@ Repo skills live in the app repo at `.claude/skills/`; their index is `.claude/s
 - **The ticket tells the whole story; comments are for people** (Valentin, 2026-10-01: "comments are for humans and agent chatter goes into the agent chatter").
   - **Comments** only when you speak to a person: the claim, a `Question:` for Valentin, the QA verdict. Plain language (pospeak), bold first sentence, never notes to yourself.
   - **Agent activity** gets everything else: plans, progress, retries, test runs. Write it with `vcc activity add HTPR-NNNN "<one line>"` at every step of the map (claimed, fix done, PR opened, checks green, merged, deployed, QA done) and at least every 2 hours while you work. This is your heartbeat.
-  - **Claim** = assign the ticket to Valentins Claude Code, plus a "Claimed." comment whose `Next:` paragraph carries your resume command.
+  - **Claim** = add your agent with `vcc task assign HTPR-NNNN --self`, plus a "Claimed." comment whose `Next:` paragraph carries your resume command.
   - **Taken or free:** a ticket is taken when it has such a claim and the claiming agent's newest agent activity (`vcc activity last HTPR-NNNN`) is under 6 hours old. Older than 6 hours: the claim is stale, and the board check lists the ticket for Valentin.
 - **Already fixed by another ticket: the duplicate path** (Valentin, 2026-10-01). When your bug was already fixed by another ticket's merged PR, ship nothing and throw away any duplicate fix. Then:
   1. `~/.agents/skills/ship/scripts/ship-check duplicate HTPR-NNNN HTPR-MMMM <that PR number>` (HTPR-MMMM is the ticket that fixed it). From then on the merged, deployed and proof gates check that PR.
@@ -66,6 +66,7 @@ Repo skills live in the app repo at `.claude/skills/`; their index is `.claude/s
   2. `git worktree remove <worktree>`, then `git branch -d <branch>` and `git push origin --delete <branch>` (only when the PR is merged).
   3. Keep the QA evidence in `~/.local/state/vcc-evidence/HTPR-NNNN/`.
   Only ever remove the worktree and branch this session created. Write one agent activity line saying what you removed.
+- **Agents are human companions** (Valentin, 2026-10-02: "if I add myself to the ticket as the human assignee, the agent mustn't remove me"). A ticket usually has a human assignee and an agent together; agent-only is fine. Never remove or change a human assignee, never add Valentin yourself, and never use a command that replaces the assignee list.
 - **Old automated comments do not count (Valentin, 2026-10-01).** The automated agents were retired on 2026-10-01. Their claims, "Blocked" notes, decisions, plans and progress on a ticket are history, not state. Authors include Product Bot, Dev 1, Dev 2, Feature Dev 1, QA 1, Supervisor and any "worker" or "drain" bot. A ticket with only such comments is free: pick it, claim it via `vcc` and treat the bug as open. Read those comments only for facts about the bug (steps, screenshots, error text), and re-check those facts on the live site. Whether a ticket is taken follows the rule above, read from the ticket alone.
 
 Nothing is "live" until the Production deployment for the merge sha is `success` and you verified the change on app.hypertask.ai with evidence on the ticket.
