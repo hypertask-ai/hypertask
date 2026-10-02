@@ -94,10 +94,15 @@ test("the delete scheduler refuses a foreign task before mutating it", () => {
 
 test("comment creation refuses a foreign task before dedupe or writes", () => {
   const service = read("src/utils/controllers/comments/createCommentService.ts");
+  const persistence = read("src/utils/controllers/comments/persistComment.ts");
   assert.match(service, /taskWriteAccessWhere\(\s*accessUserId \?\? currentUser\.id,\s*agentId/);
   assertBefore(service, "const task = await prisma.task.findFirst", "const handledInvocation =", "comment access must be checked before idempotency checks can return data");
   assertBefore(service, "const task = await prisma.task.findFirst", "const duplicate =", "comment access must be checked before text dedupe can return data");
-  assertBefore(service, "const task = await prisma.task.findFirst", "const comment = await tx.comment.create", "comment access must be checked before writes");
+  assertBefore(service, "const task = await prisma.task.findFirst", "await persistComment(", "comment access must be checked before persistence is called");
+  assertBefore(service, "if (!task)", "await persistComment(", "a foreign task must be refused before persistence is called");
+  assert.match(persistence, /taskWriteAccessWhere\(\s*accessUserId \?\? currentUser\.id,\s*agentId/);
+  assertBefore(persistence, "const currentTask = await tx.task.findFirst", "const comment = await tx.comment.create", "comment access must be rechecked before writes");
+  assertBefore(persistence, "if (!currentTask)", "const comment = await tx.comment.create", "a foreign task must be refused before writes");
   assert.ok(service.includes('throw new Error("Task not found or access denied")'));
 });
 

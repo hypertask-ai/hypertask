@@ -59,7 +59,7 @@ test("agent archive and delete are registered in MCP and blocked for native agen
 
 test("management-only keys can authenticate the MCP transport without gaining data scope", () => {
   const handler = read("src/lib/mcp-server/handler.ts");
-  const auth = read("src/lib/mcp/auth.ts");
+  const auth = ["src/lib/mcp/auth/session.ts", "src/lib/mcp/auth/verifyJwt.ts", "src/lib/mcp/auth/mcpAuthErrors.ts"].map(read).join("\n");
 
   assert.match(handler, /const ctx = await validateMcpAuth\(request,/);
   assert.match(handler, /if \(ctx\.management\)/);
