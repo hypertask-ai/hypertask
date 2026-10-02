@@ -42,6 +42,7 @@ export default defineConfig([
     // not every page.tsx: a page carrying "use client" is a browser bundle too.
     ignores: [
       "src/app/admin/flags/page.tsx",
+      "src/app/admin/comp/page.tsx",
       // HTPR-4857: server component; gates the public /add-to-slack page.
       "src/app/add-to-slack/page.tsx",
       // HTPR-6536: server component; gates the public /qa/login page.
