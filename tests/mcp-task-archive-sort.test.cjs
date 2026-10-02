@@ -66,6 +66,10 @@ function loadRoute() {
       encodeCursor: () => null,
     },
     "@/lib/prisma": { __esModule: true, default: prisma },
+    "@/lib/mcp/tasks/resolveTask": {
+      findTaskByIdentifier: async () => null,
+      TaskIdentifierAmbiguityError: class TaskIdentifierAmbiguityError extends Error {},
+    },
     "@/lib/flags": {
       HTPR_6530_MCP_LIST_QUERY_FLAG: "htpr-6530-mcp-list-query",
       isFeatureEnabled: async () => false,
