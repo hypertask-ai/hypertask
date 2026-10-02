@@ -248,6 +248,7 @@ export interface ITeam {
   activeSubscriptionPlanItemId?: string;
   activeSubscriptionPlanId?: string;
   compedUntil?: Date | string | null;
+  compedPlan?: "Pro" | "BYOK" | null;
   title: string;
   description?: string;
   projects: IProject[];

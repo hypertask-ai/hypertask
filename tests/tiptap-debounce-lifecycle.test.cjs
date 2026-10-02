@@ -1,17 +1,15 @@
+const { readRefactoredSource } = require("../src/app/detail/[...slug]/taskDetailTestSources.cjs");
 const test = require("node:test");
 const assert = require("node:assert/strict");
-const fs = require("node:fs");
+const fs = require("./refactored-module-source.cjs");
 const path = require("node:path");
 const ts = require("typescript");
 
 const root = path.join(__dirname, "..");
-const helperSource = fs.readFileSync(
-  path.join(root, "src/utils/helperFunctions/helperFunctions.ts"),
-  "utf8"
+const functionSource = fs.readFunctionSource(
+  "src/utils/helperFunctions/helperFunctions.ts",
+  "debounceWithCancel",
 );
-const functionSource = helperSource.match(
-  /export function debounceWithCancel[\s\S]*?(?=\n\nexport interface ISplit)/
-)?.[0];
 
 assert.ok(functionSource, "debounceWithCancel implementation not found");
 
@@ -50,11 +48,11 @@ test("flush immediately delivers only the latest captured value", async () => {
 });
 
 test("task draft autosave captures HTML while the editor is alive and flushes on unmount", () => {
-  const hookSource = fs.readFileSync(
+  const hookSource = readRefactoredSource(
     path.join(root, "src/hooks/General/useDebounceWithCancel.jsx"),
     "utf8"
   );
-  const editorSource = fs.readFileSync(
+  const editorSource = readRefactoredSource(
     path.join(root, "src/components/RTE/TipTapTaskDetail.tsx"),
     "utf8"
   );
@@ -68,7 +66,7 @@ test("task draft autosave captures HTML while the editor is alive and flushes on
 });
 
 test("a captured autosave updates only its source task's draft cache", async () => {
-  const editorSource = fs.readFileSync(
+  const editorSource = readRefactoredSource(
     path.join(root, "src/components/RTE/TipTapTaskDetail.tsx"),
     "utf8"
   );

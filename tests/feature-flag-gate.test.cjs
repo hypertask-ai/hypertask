@@ -244,15 +244,155 @@ test("App Router route handlers and spec files do not need a flag", async (t) =>
   assert.equal((await evaluate("HTPR-2 [FEATURE] non-ui files", base, head, dir)).pass, true);
 });
 
-test("small BUGFIX changes are exempt", async (t) => {
+test("small BUGFIX and INFRA changes are exempt", async (t) => {
   const { dir, git } = makeRepo(t);
   writeFile(dir, "src/components/Widget.tsx", "export const Widget = () => null;\n");
   const base = commit(git, "base");
   writeFile(dir, "src/components/Widget.tsx", "export const Widget = () => <div />;\n");
   const head = commit(git, "fix");
-  const result = await evaluate("HTPR-2 [BUGFIX] fix widget", base, head, dir);
+  for (const tag of ["BUGFIX", "INFRA"]) {
+    const result = await evaluate(`HTPR-2 [${tag}] fix widget`, base, head, dir);
+    assert.equal(result.pass, true);
+    assert.equal(result.ownerReview, "exempt-ui");
+  }
+});
+
+test("REFACTOR moves over 400 JSX lines without using the new UI budget", async (t) => {
+  const { dir, git } = makeRepo(t);
+  const source = `export const Widget = () => (\n  <>\n${Array.from({ length: 420 }, (_, i) => `    <div>Row ${i}</div>`).join("\n")}\n  </>\n);\n`;
+  writeFile(dir, "src/components/Widget.tsx", source);
+  const base = commit(git, "base");
+  writeFile(dir, "src/components/Extracted.tsx", source);
+  const copy = commit(git, "copy widget without removing it");
+  const copied = await evaluate("HTPR-2 [REFACTOR] copy widget", base, copy, dir);
+  assert.equal(copied.pass, false);
+  assert.match(copied.reason, /adds 420 new UI lines that are not moved code/);
+  writeFile(dir, "src/components/Widget.tsx", 'export { Widget } from "./Extracted";\n');
+  const head = commit(git, "extract widget");
+  const result = await evaluate("HTPR-2 [REFACTOR] extract widget", base, head, dir);
   assert.equal(result.pass, true);
   assert.equal(result.ownerReview, "exempt-ui");
+  assert.equal(result.reason, "[REFACTOR] is exempt (425 UI lines added, 421 moved, 0 new, 0 risky new).");
+  for (const tag of ["BUGFIX", "INFRA"]) {
+    const existingExemption = await evaluate(`HTPR-2 [${tag}] extract widget`, base, head, dir);
+    assert.equal(existingExemption.pass, false);
+    assert.match(existingExemption.reason, /425 lines to UI files.*over the 150-line budget/);
+  }
+});
+
+test("REFACTOR rejects 200 new JSX lines rather than trusting the title", async (t) => {
+  const { dir, git } = makeRepo(t);
+  const base = commit(git, "base");
+  writeFile(dir, "src/components/Widget.tsx", `export const Widget = () => (\n  <>\n${Array.from({ length: 200 }, (_, i) => `    <div>New row ${i}</div>`).join("\n")}\n  </>\n);\n`);
+  const head = commit(git, "new widget");
+  const result = await evaluate("HTPR-2 [REFACTOR] add widget", base, head, dir);
+  assert.equal(result.pass, false);
+  assert.match(result.reason, /adds 200 new UI lines that are not moved code.*over the 150-line budget/);
+  assert.match(result.reason, /Retitle it as \[FEATURE\] with a feature flag or split it/);
+});
+
+test("REFACTOR counts new UI on export lines", async (t) => {
+  const { dir, git } = makeRepo(t);
+  const base = commit(git, "base");
+  writeFile(dir, "src/components/Widget.tsx", `${Array.from({ length: 151 }, (_, i) => `export const Row${i} = () => <div>Row ${i}</div>;`).join("\n")}\n`);
+  const head = commit(git, "exported widgets");
+  const result = await evaluate("HTPR-2 [REFACTOR] add exports", base, head, dir);
+  assert.equal(result.pass, false);
+  assert.match(result.reason, /adds 151 new UI lines/);
+});
+
+test("REFACTOR credits each removed line to only one added line", async (t) => {
+  const { dir, git } = makeRepo(t);
+  writeFile(dir, "src/components/Widget.tsx", "export const Widget = () => (\n  <div>Same</div>\n);\n");
+  const base = commit(git, "base");
+  writeFile(dir, "src/components/Widget.tsx", 'export { Widget } from "./Many";\n');
+  writeFile(dir, "src/components/Many.tsx", `export const Widget = () => (\n  <>\n${Array.from({ length: 152 }, () => "  <div>Same</div>").join("\n")}\n  </>\n);\n`);
+  const head = commit(git, "duplicate one removed line");
+  const result = await evaluate("HTPR-2 [REFACTOR] duplicate rows", base, head, dir);
+  assert.equal(result.pass, false);
+  assert.match(result.reason, /adds 151 new UI lines/);
+});
+
+test("REFACTOR treats lone quoted words as strings unless they are union members", async (t) => {
+  const { dir, git } = makeRepo(t);
+  const base = commit(git, "base");
+  writeFile(dir, "src/components/Labels.tsx", `export const labels = [\n${Array.from({ length: 151 }, (_, i) => `  "Label${i}",`).join("\n")}\n];\n`);
+  const head = commit(git, "lone strings");
+  const result = await evaluate("HTPR-2 [REFACTOR] add labels", base, head, dir);
+  assert.equal(result.pass, false);
+  assert.match(result.reason, /adds 151 new UI lines/);
+});
+
+test("REFACTOR budgets new strings inclusively, not all new logic lines", async (t) => {
+  const { dir, git } = makeRepo(t);
+  const base = commit(git, "base");
+  const strings = Array.from({ length: 150 }, (_, i) => {
+    const quote = ['"', "'", "`"][i % 3];
+    return `const label${i} = ${quote}Label ${i}${quote};`;
+  });
+  const logic = Array.from({ length: 151 }, (_, i) => `const value${i} = ${i};`);
+  writeFile(dir, "src/components/Widget.tsx", `${[...strings.slice(0, 149), ...logic].join("\n")}\n`);
+  const head = commit(git, "small new strings");
+  const result = await evaluate("HTPR-2 [REFACTOR] reorganize labels", base, head, dir);
+  assert.equal(result.pass, true);
+  assert.equal(result.ownerReview, "exempt-ui");
+  assert.equal(result.reason, "[REFACTOR] is exempt (300 UI lines added, 0 moved, 300 new, 149 risky new).");
+  fs.appendFileSync(path.join(dir, "src/components/Widget.tsx"), `${strings[149]}\n`);
+  const atBudget = commit(git, "exactly at string budget");
+  const boundary = await evaluate("HTPR-2 [REFACTOR] reorganize labels", base, atBudget, dir);
+  assert.equal(boundary.pass, true);
+  assert.equal(boundary.reason, "[REFACTOR] is exempt (301 UI lines added, 0 moved, 301 new, 150 risky new).");
+  fs.appendFileSync(path.join(dir, "src/components/Widget.tsx"), 'const extra = "Over budget";\n');
+  const overBudget = commit(git, "one more string");
+  const failed = await evaluate("HTPR-2 [REFACTOR] reorganize labels", base, overBudget, dir);
+  assert.equal(failed.pass, false);
+  assert.match(failed.reason, /adds 151 new UI lines that are not moved code/);
+});
+
+test("REFACTOR matches normalized removals from non-UI files and retains the UI filter", async (t) => {
+  const { dir, git } = makeRepo(t);
+  const removed = Array.from({ length: 200 }, (_, i) => `  const label${i}  =  "Label ${i}";`).join("\n");
+  writeFile(dir, "src/utils/labels.ts", `${removed}\n`);
+  const base = commit(git, "base");
+  fs.rmSync(path.join(dir, "src/utils/labels.ts"));
+  const moved = Array.from({ length: 200 }, (_, i) => `\tconst label${i} = "Label ${i}",`).join("\n");
+  writeFile(dir, "src/pages/Widget.tsx", `${moved}\n`);
+  for (const file of ["src/app/api/widget/route.ts", "src/app/webhooks/route.ts", "src/components/Widget.test.tsx"]) {
+    writeFile(dir, file, `${removed.replaceAll("Label", "Not moved")}\n`);
+  }
+  const head = commit(git, "move labels");
+  const result = await evaluate("HYFA-2 [REFACTOR] move labels", base, head, dir);
+  assert.equal(result.pass, true);
+  assert.equal(result.ownerReview, "exempt-ui");
+  assert.equal(result.reason, "[REFACTOR] is exempt (200 UI lines added, 200 moved, 0 new, 0 risky new).");
+});
+
+test("REFACTOR ignores trivial lines and Pick-key union members", async (t) => {
+  const { dir, git } = makeRepo(t);
+  const base = commit(git, "base");
+  const lines = [
+    "", "{}", "[]", "();", "<>/", 'import Widget from "./Widget";',
+    'export { Widget } from "./Widget";', '// "Comment"', '/* "Comment" */',
+    '* "Comment"', '"use client";', "'use client';", "Widget,",
+    ...Array.from({ length: 200 }, (_, i) => `| "key${i}"`),
+  ];
+  writeFile(dir, "src/components/Widget.tsx", `${lines.join("\n")}\n`);
+  const head = commit(git, "type plumbing");
+  const result = await evaluate("HTPR-2 [REFACTOR] type plumbing", base, head, dir);
+  assert.equal(result.pass, true);
+  assert.equal(result.reason, "[REFACTOR] is exempt (213 UI lines added, 0 moved, 200 new, 0 risky new).");
+});
+
+test("REFACTOR requires the same valid ticket title as other exemptions", async (t) => {
+  const { dir, git } = makeRepo(t);
+  const base = commit(git, "base");
+  writeFile(dir, "src/components/Widget.tsx", "const Widget = () => <div />;\n");
+  const head = commit(git, "widget");
+  for (const title of ["[REFACTOR] widget", "OTHER-2 [REFACTOR] widget", "HTPR-2 [REFACTOR] "]) {
+    const result = await evaluate(title, base, head, dir);
+    assert.equal(result.pass, false);
+    assert.match(result.reason, /no valid HTPR or HYFA ticket and tag/);
+  }
 });
 
 test("small AI CHAT title tags are exempt", async (t) => {

@@ -43,6 +43,54 @@ function isUiFile(path) {
     UI_INCLUDE.some((pattern) => pattern.test(path));
 }
 
+function refactorUiLineCounts(baseSha, headSha) {
+  const diff = git(["-c", "core.quotePath=false", "diff", "--unified=0", "--no-renames", `${baseSha}...${headSha}`]);
+  const normalizeLine = (line) => line.trim().replace(/\s+/g, " ").replace(/[,;]$/, "");
+  // Multiset: each removed line can credit only one added line.
+  const removed = new Map();
+  const added = [];
+  let uiFile = false;
+  let inHunk = false;
+  for (const row of diff.split("\n")) {
+    if (row.startsWith("diff --git ")) {
+      uiFile = false;
+      inHunk = false;
+    } else if (!inHunk && row.startsWith("+++ ")) {
+      const path = row.slice(4);
+      uiFile = isUiFile((path.startsWith('"') ? JSON.parse(path) : path).slice(2));
+    } else if (row.startsWith("@@ ")) {
+      inHunk = true;
+    } else if (inHunk && row.startsWith("-")) {
+      const key = normalizeLine(row.slice(1));
+      removed.set(key, (removed.get(key) ?? 0) + 1);
+    } else if (inHunk && uiFile && row.startsWith("+")) {
+      added.push(normalizeLine(row.slice(1)));
+    }
+  }
+
+  const candidates = added.filter((line) => line !== "" &&
+    !/^[\]\)}{(\[<>\/,;:]+$/.test(line) && !/^import\b/.test(line) &&
+    !/^export (\{[^}]*\}|\*)( from ["'][^"']+["'])?$/.test(line) &&
+    !/^(\/\/|\*|\/\*)/.test(line) && !/^["']use client["']$/.test(line) &&
+    !/^[A-Za-z_$][\w$]*$/.test(line));
+  const newLines = candidates.filter((line) => {
+    const left = removed.get(line) ?? 0;
+    if (left === 0) return true;
+    removed.set(line, left - 1);
+    return false;
+  });
+  // Pick-key union members are type plumbing, not new UI strings.
+  const riskyNew = newLines.filter((line) =>
+    (/(^|[\s(={?:&|,])<[A-Za-z]/.test(line) || /["'`]/.test(line)) &&
+    !/^\| ["'][\w$]+["']$/.test(line)).length;
+  return {
+    uiAdded: added.length,
+    moved: candidates.length - newLines.length,
+    newLines: newLines.length,
+    riskyNew,
+  };
+}
+
 function addedLinesFor(baseSha, headSha, path) {
   const lines = new Set();
   const diff = git(["diff", "--unified=0", "--no-renames", `${baseSha}...${headSha}`, "--", path]);
@@ -1810,6 +1858,20 @@ export function evaluate({ title, baseSha, headSha, labels = [] }) {
   const titleMatch = title.match(/^(?:HTPR|HYFA)-(\d+) \[([^\]]+)\] \S/);
   const autoRevert = isVerifiedAutoRevert(title, baseSha, headSha);
   const tag = titleMatch?.[2] ?? null;
+  if (tag === "REFACTOR") {
+    const { uiAdded, moved, newLines, riskyNew } = refactorUiLineCounts(baseSha, headSha);
+    if (riskyNew > CROSS_CHECK_LINE_BUDGET) {
+      return failure(
+        `This [REFACTOR] pull request adds ${riskyNew} new UI lines that are not moved code ` +
+        `(over the ${CROSS_CHECK_LINE_BUDGET}-line budget). Retitle it as [FEATURE] with a feature flag or split it.`,
+      );
+    }
+    return {
+      pass: true,
+      ownerReview: "exempt-ui",
+      reason: `[REFACTOR] is exempt (${uiAdded} UI lines added, ${moved} moved, ${newLines} new, ${riskyNew} risky new).`,
+    };
+  }
   const titleExempt = isExemptTitleTag(tag);
   const aiChatLabel = hasAiChatLabel(labels);
   const exempt = autoRevert || titleExempt || aiChatLabel;

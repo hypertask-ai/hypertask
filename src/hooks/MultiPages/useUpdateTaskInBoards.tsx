@@ -22,6 +22,7 @@ import { nextFocusAfterRemoval } from "@/utils/helperFunctions/focusAfterRemoval
 import { appendCreatedSectionToProject } from "@/utils/helperFunctions/Views/appendCreatedSection";
 import { buildBuiltinViewContext, BuiltinViewId, isBuiltinViewId } from "@/lib/constants/builtinViews";
 import type { IFilterRuntimeContext } from "@/models/Filters/model";
+import { reconcileActiveBoardTasks } from "@/lib/boardSync/reconcileActiveBoardQuery";
 
 type UpdateOptions = {
   updatedProjectView?: IProjectView | null;
@@ -496,7 +497,7 @@ const UpdateKanban = () => {
       if (status === "Deleted") {
         const response = await globalAPIHandlers.deleteTaskAPI(taskId);
         if (!hasSubtasks) {
-          deleteTodo("Undo task delete", { id: taskId,  status: "Deleted" });
+          deleteTodo("Undo task delete", { id: taskId, projectId, status: "Deleted" });
         }
         return response;
       } else if (status !== "Move") {
@@ -504,6 +505,7 @@ const UpdateKanban = () => {
         if (!hasSubtasks) {
           deleteTodo("Undo task archive", {
             id: taskId,
+            projectId,
             status: "Archive",
             undoRedirectPath: options.undoRedirectPath,
           });
@@ -718,7 +720,7 @@ const UpdateKanban = () => {
     // then you need to run the api call so there is no render blocking. 
     await undoAction("UNDO_REMOVE", data)
     toast.dismiss(toastId);  // Dismiss the toast here
-    await queryClient.refetchQueries({ queryKey: ["projectsAll"] })
+    await reconcileActiveBoardTasks(queryClient, data.projectId, _currentUser.id)
     if (typeof data.undoRedirectPath === "string") {
       router.replace(data.undoRedirectPath)
     }

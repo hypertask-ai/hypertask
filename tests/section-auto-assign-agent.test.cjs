@@ -1,6 +1,6 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
-const fs = require("node:fs");
+const fs = require("./refactored-module-source.cjs");
 const path = require("node:path");
 const ts = require("typescript");
 const { createJiti } = require("jiti");

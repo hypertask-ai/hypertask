@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { useRecoilState } from '@/lib/state'
 import { currentUserAtom } from '@/store'
 import { IUser } from '@/models/model'
@@ -47,6 +47,7 @@ export const useEmailVerificationStatus = (
   const [currentUser, setCurrentUser] = useRecoilState(currentUserAtom)
   const [status, setStatus] = useState<VerificationStatus>(initialStatus)
   const [errorMessage, setErrorMessage] = useState<string>('')
+  const processedToken = useRef<string | null>(null)
 
   /**
    * Update currentUser atom with verification status
@@ -138,6 +139,9 @@ export const useEmailVerificationStatus = (
    */
   useEffect(() => {
     if (token) {
+      // Effect reruns (including Strict Mode) must not redeem a single-use link twice.
+      if (processedToken.current === token) return
+      processedToken.current = token
       verifyWithToken(token)
     } else if (!enablePolling) {
       // If no token and not polling, set to pending

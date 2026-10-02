@@ -10,7 +10,7 @@
 // with an error body, so a bad read made Enter do nothing at all.
 import assert from "node:assert/strict";
 import test from "node:test";
-import { readFileSync } from "node:fs";
+import { readFileSync } from "./refactored-module-source.cjs";
 import path from "node:path";
 
 import { buildViewColumnEntry } from "../src/utils/controllers/section/viewColumnEntry";

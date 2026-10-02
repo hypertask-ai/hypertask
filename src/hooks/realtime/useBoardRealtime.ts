@@ -38,7 +38,13 @@ export function useBoardRealtime(
     return reconcileActiveBoardQuery;
   };
   const eventReconcile = pickEventReconcile();
+  const eventReconcileRef = useRef(eventReconcile);
   const wasConnected = useRef(false);
+
+  // Flag hydration changes event routing, not the board's subscription lifecycle.
+  useEffect(() => {
+    eventReconcileRef.current = eventReconcile;
+  }, [eventReconcile]);
 
   useEffect(() => {
     if (projectId == null) return;
@@ -77,7 +83,7 @@ export function useBoardRealtime(
       const userId = options?.accountId;
       const reconcile = () =>
         Promise.all([
-          eventReconcile === reconcileActiveBoardTasks &&
+          eventReconcileRef.current === reconcileActiveBoardTasks &&
           trigger === "event" &&
           userId !== undefined
             ? runScopedReconcile(userId)
@@ -143,7 +149,9 @@ export function useBoardRealtime(
     const startFallback = () => {
       if (cancelled || fallbackActive) return;
       fallbackActive = true;
-      runFallbackCycle();
+      // The initial query already loads the board. Retry the connection now,
+      // but wait for the polling interval before downloading the board again.
+      void connectAndSubscribe();
       fallbackTimer = setInterval(runFallbackCycle, BOARD_RECONCILE_INTERVAL_MS);
     };
     const onVisibilityChange = () => runFallbackCycle();
@@ -265,7 +273,5 @@ export function useBoardRealtime(
     options?.accountId,
     projectId,
     queryClient,
-    scopedRefetch,
-    eventReconcile,
   ]);
 }

@@ -1,41 +1,39 @@
+const { readRefactoredSource } = require("../src/app/detail/[...slug]/taskDetailTestSources.cjs");
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const path = require("node:path");
 const test = require("node:test");
 
 const root = path.resolve(__dirname, "..");
-const taskDetail = fs.readFileSync(
+const taskDetail = readRefactoredSource(
   path.join(root, "src/app/detail/[...slug]/TaskDetailComp.tsx"),
   "utf8",
 );
-const tiptap = fs.readFileSync(
+const tiptap = readRefactoredSource(
   path.join(root, "src/components/RTE/TipTapTaskDetail.tsx"),
   "utf8",
 );
-const taskState = fs.readFileSync(
+const taskState = readRefactoredSource(
   path.join(root, "src/hooks/Task Detail/useTaskDetailGlobalStates.ts"),
   "utf8",
 );
-const saveContent = fs.readFileSync(
+const saveContent = readRefactoredSource(
   path.join(
     root,
     "src/hooks/Task Detail/CommentAndDescriptionHooks/useSaveContent.ts",
   ),
   "utf8",
 );
-const tutorialHook = fs.readFileSync(
-  path.join(root, "src/hooks/General/useLearnTutorial.ts"),
-  "utf8",
-);
-const dueDateModal = fs.readFileSync(
+const tutorialHook = require("./helpers/learn-tutorial-sources.cjs");
+const dueDateModal = readRefactoredSource(
   path.join(root, "src/components/Modals/DueDate/index.tsx"),
   "utf8",
 );
-const universalMovement = fs.readFileSync(
+const universalMovement = readRefactoredSource(
   path.join(root, "src/hooks/useUniversalMovement.ts"),
   "utf8",
 );
-const moveTaskHandler = fs.readFileSync(
+const moveTaskHandler = readRefactoredSource(
   path.join(root, "src/utils/api/global/apiHelpers/moveTaskHandler.ts"),
   "utf8",
 );

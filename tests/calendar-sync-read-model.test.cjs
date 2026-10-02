@@ -946,7 +946,15 @@ test("Calendar integrates cache-first hydration, authoritative reconciliation, r
   const serverUser = read("src/lib/auth/serverUser.ts");
   const hook = read("src/hooks/Calendar/useSyncedCalendarReadModel.ts");
   const realtime = read("src/hooks/realtime/useCalendarRealtime.ts");
-  const calendarView = read("src/hooks/Calendar/useCalendarView.ts");
+  const calendarView = [
+    "src/hooks/Calendar/useCalendarView.ts",
+    "src/hooks/Calendar/calendarTaskFilters.ts",
+    "src/hooks/Calendar/useCalendarTasks.ts",
+    "src/hooks/Calendar/useCalendarFocus.ts",
+    "src/hooks/Calendar/useCalendarTaskActions.ts",
+    "src/hooks/Calendar/useCalendarDragDrop.ts",
+    "src/hooks/Calendar/useCalendarKeyboard.ts",
+  ].map(read).join("\n");
   const calendarPage = read("src/components/PageComponents/Calendar/index.tsx");
   const taskCard = read("src/components/PageComponents/Calendar/task-card.tsx");
   const indexedDb = read("src/lib/calendarSync/indexedDbReadModel.ts");

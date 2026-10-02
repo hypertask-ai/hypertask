@@ -138,7 +138,7 @@ test("Ctrl+K offers Add smart split on board contexts only", () => {
 });
 
 test("deleting an active smart split clears the board cookie without writing an undefined slug", () => {
-  const source = require("node:fs").readFileSync(
+  const source = require("./refactored-module-source.cjs").readFileSync(
     path.join(root, "src/components/Modals/ViewModals/SmartSplitModal.tsx"),
     "utf8",
   );
@@ -154,7 +154,7 @@ test("deleting an active smart split clears the board cookie without writing an 
 });
 
 test("Manage views settings controls are semantic focusable buttons", () => {
-  const source = require("node:fs").readFileSync(
+  const source = require("./refactored-module-source.cjs").readFileSync(
     path.join(root, "src/components/Modals/ViewModals/ManageViewsModals.tsx"),
     "utf8",
   );
@@ -174,7 +174,7 @@ test("Manage views settings controls are semantic focusable buttons", () => {
 });
 
 test("unpaired legacy smart labels keep generic tag management controls", () => {
-  const source = require("node:fs").readFileSync(
+  const source = require("./refactored-module-source.cjs").readFileSync(
     path.join(root, "src/components/Modals/ManageLabels/index.tsx"),
     "utf8",
   );
@@ -186,7 +186,7 @@ test("unpaired legacy smart labels keep generic tag management controls", () => 
   assert.match(source, /!protectedSmartLabelIds\.has\(label\.id\) && \(/);
   assert.doesNotMatch(source, /disabled=\{deleting \|\| Boolean\(label\.ai_prompt\)\}/);
 
-  const editor = require("node:fs").readFileSync(
+  const editor = require("./refactored-module-source.cjs").readFileSync(
     path.join(root, "src/components/Modals/ManageLabels/EditSingleLabel.tsx"),
     "utf8",
   );
@@ -196,11 +196,11 @@ test("unpaired legacy smart labels keep generic tag management controls", () => 
 });
 
 test("generic label and view endpoints reject paired smart-split mutations", () => {
-  const labelRoute = require("node:fs").readFileSync(
+  const labelRoute = require("./refactored-module-source.cjs").readFileSync(
     path.join(root, "src/pages/api/labels/updateLabel.ts"),
     "utf8",
   );
-  const viewRoute = require("node:fs").readFileSync(
+  const viewRoute = require("./refactored-module-source.cjs").readFileSync(
     path.join(root, "src/pages/api/projects/views/delete-rename-view.ts"),
     "utf8",
   );
@@ -218,7 +218,7 @@ test("generic label and view endpoints reject paired smart-split mutations", () 
 });
 
 test("Save View surfaces smart-split mutation guidance from the API", () => {
-  const source = require("node:fs").readFileSync(
+  const source = require("./refactored-module-source.cjs").readFileSync(
     path.join(root, "src/components/Modals/ViewModals/SaveViewModal.tsx"),
     "utf8",
   );

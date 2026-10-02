@@ -124,7 +124,7 @@ jobs:
             const PREFIXES = ['HTPR', 'HYFA', 'YPER4'];
             const TAGS = [
               'BUGFIX', 'FEATURE', 'IMPROVE', 'CLI/MCP/AI', 'SPEED', 'FEEDBACK',
-              'DASH', 'QA', 'BOARD', 'COST', 'PLAN', 'INFRA',
+              'DASH', 'QA', 'BOARD', 'COST', 'PLAN', 'INFRA', 'REFACTOR',
             ];
             const shape = new RegExp(
               '^(?:' + PREFIXES.join('|') + ')-\\d+ \\[(' +

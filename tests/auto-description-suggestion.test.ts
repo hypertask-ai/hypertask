@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { readRefactoredSource as readFileSync } from "../src/app/detail/[...slug]/taskDetailTestSources.cjs";
 import { resolve } from "node:path";
 import test from "node:test";
 import {

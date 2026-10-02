@@ -4,12 +4,18 @@ import { useCallback, type ReactNode } from "react";
 import {
   Provider as JotaiProvider,
   atom as jotaiAtom,
+  createStore,
   useAtomValueRawSync,
   useSetAtom,
   type Atom as JotaiAtom,
   type WritableAtom,
 } from "jotai";
 import { RESET } from "jotai/utils";
+import { useHydrated } from "@/hooks/General/useHydrated";
+
+// A late streamed consumer must still see SSR defaults even if storage or an
+// already-mounted sibling has populated the live store (including selectors).
+const hydrationDefaults = createStore();
 
 type SetStateAction<T> = T | ((prev: T) => T);
 type ResettableAtom<T> = WritableAtom<T, [SetStateAction<T> | typeof RESET], void>;
@@ -207,6 +213,7 @@ export function atom<T>(options: RecoilAtomOptions<T>): ResettableAtom<T> {
     ? readPersistedValue(options.key, options.default)
     : options.default;
   const baseAtom = jotaiAtom<T>(initialValue);
+  hydrationDefaults.set(baseAtom, options.default);
 
   const recoilShapedAtom = jotaiAtom(
     (get) => get(baseAtom),
@@ -251,7 +258,9 @@ export function useRecoilState<T>(
 
 export function useRecoilValue<T>(recoilAtom: JotaiAtom<T>) {
   // Child mount effects initialize shared state before parent subscriptions exist.
-  return useAtomValueRawSync(recoilAtom);
+  const value = useAtomValueRawSync(recoilAtom);
+  const hydrated = useHydrated();
+  return hydrated ? value : hydrationDefaults.get(recoilAtom);
 }
 
 export function useSetRecoilState<T>(

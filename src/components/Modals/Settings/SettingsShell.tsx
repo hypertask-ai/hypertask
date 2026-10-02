@@ -4,7 +4,6 @@ import dynamic from "next/dynamic";
 import { useRouter } from "next/navigation";
 import {
   ComponentType,
-  useContext,
   useEffect,
   useMemo,
   useState,
@@ -18,7 +17,7 @@ import {
 } from "lucide-react";
 import Tooltip from "@/components/Common/Tooltip";
 import { useSignout } from "@/hooks/MultiPages/HTC/useSignout";
-import { MobileViewContext } from "@/lib/contexts/mobileContext";
+import { useMobileView } from "@/lib/contexts/mobileContext";
 import { SidebarContextProvider } from "@/lib/contexts/Sidebars/SidebarProvider";
 import { currentUserAtom } from "@/store";
 import { cn } from "@/utils/undoActions/helperFuncs";
@@ -266,7 +265,7 @@ const SECTION_COMPONENTS: Record<SettingsSectionId, ComponentType> = {
 const SettingsShell: React.FC<SettingsShellProps> = ({ section }) => {
   const activeSection = normalizeSettingsSection(section);
   const activeTab = getSettingsTabForSection(activeSection);
-  const mbl = useContext(MobileViewContext);
+  const mbl = useMobileView();
   const currentUser = useRecoilValue(currentUserAtom);
   const { data: announcementsData } = useGetAnnouncements(
     currentUser?.id,

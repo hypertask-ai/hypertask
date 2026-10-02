@@ -968,14 +968,15 @@ export default function useSaveContent() {
     // NEW:
     //   1: We will append source from the deepest component, send it back in callbacl.
     //   2: In the parent uploading component, we will then send back the entire array,
-    //   3: if an item doesn't have createdAt, it means its a new attachment.
+    //   3: an item without a non-negative persisted id is a new attachment.
 
     var AttachmentUrls: IUrl[] = [];
     var AttachmentObjectsToPush: IAttachment[] = [];
 
     if (attachments) {
+      // Reloaded attachments can omit createdAt/taskId; keep the id-based groups disjoint.
       const attachmentsToUpload = attachments.filter(
-        (item) => !item.createdAt || !item.taskId
+        (item) => !(item.id > -1)
       );
       const previousAttachments: any[] = attachments.filter((attachment) =>
         attachment.id > -1 ? attachment : null
