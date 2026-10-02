@@ -1,5 +1,6 @@
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
+const { createRequire } = require("node:module");
 const path = require("node:path");
 const test = require("node:test");
 const createJiti = require("jiti");
@@ -18,12 +19,13 @@ test("the HTML sanitizer stays on the serverless-compatible dependency path", ()
     packageLock.packages["node_modules/isomorphic-dompurify"].version,
     "2.26.0",
   );
-  assert.equal(packageLock.packages["node_modules/jsdom"].version, "26.1.0");
-  assert.equal(
-    packageLock.packages["node_modules/html-encoding-sniffer"].version,
-    "4.0.0",
-  );
-  assert.equal(packageLock.packages["node_modules/@exodus/bytes"], undefined);
+  // Follow the sanitizer's runtime dependencies, not the test-only root jsdom.
+  const sanitizerRequire = createRequire(require.resolve("isomorphic-dompurify"));
+  const jsdomRequire = createRequire(sanitizerRequire.resolve("jsdom"));
+  const snifferPackage = jsdomRequire("html-encoding-sniffer/package.json");
+  assert.equal(sanitizerRequire("jsdom/package.json").version, "26.1.0");
+  assert.equal(snifferPackage.version, "4.0.0");
+  assert.equal(snifferPackage.dependencies["@exodus/bytes"], undefined);
 });
 
 test("the pinned sanitizer loads on the server and preserves its XSS contract", () => {
