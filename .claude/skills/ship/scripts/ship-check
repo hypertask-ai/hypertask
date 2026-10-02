@@ -146,11 +146,20 @@ check_done() {
 
 check_cleaned() {
   local n b rc wt repo=${SHIP_CHECKOUT:-}
-  # A duplicate reuses another ticket's merged PR; this session made no branch of its own.
-  [ -s "$EVID/$1/duplicate-of" ] && { echo "cleaned ok (duplicate: no branch of its own)"; return 0; }
   if [ -z "$repo" ]; then
     [ "$REPO" = hypertask-ai/hypertask ] || fail "set SHIP_CHECKOUT to the local checkout of $REPO"
     repo=$HOME/projects/hypertask
+  fi
+  # A duplicate is bound to another ticket's PR, so look for any branch this ticket's session made (names carry the ticket).
+  if [ -s "$EVID/$1/duplicate-of" ]; then
+    local t left; t=$(tr '[:upper:]' '[:lower:]' <<<"$1")
+    wt=$(git -C "$repo" worktree list --porcelain) || fail "cannot list worktrees in $repo"
+    left=$(git -C "$repo" for-each-ref --format='%(refname:short)' refs/heads) || fail "cannot list branches in $repo"
+    left+=$'\n'$(git -C "$repo" ls-remote --heads origin 2>/dev/null | sed 's#.*refs/heads/##') || fail "cannot list GitHub branches"
+    left+=$'\n'$(sed -n 's#^branch refs/heads/##p' <<<"$wt")
+    left=$(grep -iE "(^|[^0-9a-z])$t([^0-9]|$)" <<<"$left" | sort -u)
+    [ -z "$left" ] || fail "branches for $1 still exist: $(tr '\n' ' ' <<<"$left"); run /clean-up"
+    echo "cleaned ok"; return 0
   fi
   n=$(bound_pr "$1") || fail "no PR bound for $1"
   b=$(gh pr view "$n" -R "$REPO" --json headRefName --jq .headRefName 2>/dev/null) || fail "cannot read PR $n"
