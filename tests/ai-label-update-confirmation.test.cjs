@@ -2,7 +2,7 @@
 // confirmation round-trip then failed to apply it. Retagging must never gate.
 const test = require("node:test");
 const assert = require("node:assert/strict");
-const fs = require("node:fs");
+const fs = require("./helpers/chat-stream-source.cjs");
 const path = require("node:path");
 
 const root = path.resolve(__dirname, "..");
