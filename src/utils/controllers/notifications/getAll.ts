@@ -272,94 +272,6 @@ const notificationGetAll = async (userId: string | string[]) => {
     const actorAndWaitingUserIds = Array.from(
       new Set([...pageUserIds, ...waitingOnSetByUserIds])
     );
-    const [pageAgents, actorAndWaitingUsers] = await Promise.all([
-      pageAgentIds.length
-        ? prisma.agent.findMany({
-            where: { id: { in: pageAgentIds } },
-            select: {
-              id: true,
-              permissions: true,
-              displayName: true,
-              photoURL: true,
-            },
-          })
-        : Promise.resolve([]),
-      actorAndWaitingUserIds.length
-        ? prisma.user.findMany({
-            where: { id: { in: actorAndWaitingUserIds } },
-            select: { id: true, displayName: true, photoURL: true, email: true },
-          })
-        : Promise.resolve([]),
-    ]);
-    const mutedAgentIds = new Set(
-      pageAgents
-        .filter(
-          (agent) =>
-            (agent.permissions as AgentScopes | null)?.postsToImportant === false
-        )
-        .map((agent) => agent.id)
-    );
-    const directReplyTypesByTaskId = directReplyTypesByTask(
-      directReplyRows,
-      mutedAgentIds,
-    );
-
-    const usersById = new Map(
-      actorAndWaitingUsers.map((user) => [user.id, user])
-    );
-    const waitingOnSetByUserMap = usersById;
-    const agentsById = new Map(pageAgents.map((agent) => [agent.id, agent]));
-
-    const hyperAiInvitedTaskIds = new Set(
-      hyperAiInvites.map((invite) => invite.taskId)
-    );
-    const activeNotificationTypesByTaskId: Record<number, NotificationType[]> = {};
-    // A type counts as agent-only when no human authored that event on the task, so a
-    // human comment is never demoted just because an agent also touched the task.
-    const humanAuthoredTypes = new Set<string>();
-    const agentAuthoredTypes = new Set<string>();
-    const mutedAuthoredTypes = new Set<string>();
-    const nonMutedAuthoredTypes = new Set<string>();
-    for (const row of activeNotificationTypeRows) {
-      if (row.taskId == null) continue;
-      activeNotificationTypesByTaskId[row.taskId] ??= [];
-      if (!activeNotificationTypesByTaskId[row.taskId].includes(row.type)) {
-        activeNotificationTypesByTaskId[row.taskId].push(row.type);
-      }
-      const key = `${row.taskId}:${row.type}`;
-      // HyperAI posts under its own user account rather than an Agent record, so it has
-      // to be recognised here or its autonomous work (GitHub webhooks, board moves)
-      // reads as a person's. Once you invite it into a task it is answering you.
-      const byAgent =
-        !!row.fromAgentId ||
-        (row.fromUserId === generalConfig.hyperAiId &&
-          !hyperAiInvitedTaskIds.has(row.taskId));
-      (byAgent ? agentAuthoredTypes : humanAuthoredTypes).add(key);
-      if (row.fromAgentId && mutedAgentIds.has(row.fromAgentId)) {
-        mutedAuthoredTypes.add(key);
-      } else {
-        nonMutedAuthoredTypes.add(key);
-      }
-    }
-    const agentOnlyTypesByTaskId: Record<number, NotificationType[]> = {};
-    const mutedTypesByTaskId: Record<number, NotificationType[]> = {};
-    for (const [taskId, types] of Object.entries(activeNotificationTypesByTaskId)) {
-      agentOnlyTypesByTaskId[Number(taskId)] = types.filter(
-        (type) =>
-          agentAuthoredTypes.has(`${taskId}:${type}`) &&
-          !humanAuthoredTypes.has(`${taskId}:${type}`)
-      );
-      mutedTypesByTaskId[Number(taskId)] = types.filter(
-        (type) =>
-          mutedAuthoredTypes.has(`${taskId}:${type}`) &&
-          !nonMutedAuthoredTypes.has(`${taskId}:${type}`)
-      );
-    }
-    const recentActorsByTaskId = buildRecentInboxActors({
-      activity: activeNotificationTypeRows,
-      agentsById,
-      usersById,
-    });
     const taskIds = Array.from(
       new Set(
         notifications
@@ -371,210 +283,322 @@ const notificationGetAll = async (userId: string | string[]) => {
       )
     );
 
-    const unreadCountByTaskId = new Map<number, number>();
-    const clusterCountByTaskId = new Map<number, number>();
-    if (taskIds.length) {
-      const readStates = await prisma.taskReadState.findMany({
-        where: {
-          userId: parsedUserId,
-          taskId: { in: taskIds },
-        },
-        select: {
-          taskId: true,
-          lastReadAt: true,
-        },
-      });
+    // Actor permissions determine earning events; unread counts only need task IDs.
+    const [actorEnrichment, counts] = await Promise.all([
+      (async () => {
+        const [pageAgents, actorAndWaitingUsers] = await Promise.all([
+          pageAgentIds.length
+            ? prisma.agent.findMany({
+                where: { id: { in: pageAgentIds } },
+                select: {
+                  id: true,
+                  permissions: true,
+                  displayName: true,
+                  photoURL: true,
+                },
+              })
+            : Promise.resolve([]),
+          actorAndWaitingUserIds.length
+            ? prisma.user.findMany({
+                where: { id: { in: actorAndWaitingUserIds } },
+                select: { id: true, displayName: true, photoURL: true, email: true },
+              })
+            : Promise.resolve([]),
+        ]);
+        const mutedAgentIds = new Set(
+          pageAgents
+            .filter(
+              (agent) =>
+                (agent.permissions as AgentScopes | null)?.postsToImportant === false
+            )
+            .map((agent) => agent.id)
+        );
+        const directReplyTypesByTaskId = directReplyTypesByTask(
+          directReplyRows,
+          mutedAgentIds,
+        );
 
-      const taskIdsWithReadState = new Set(
-        readStates.map((readState) => readState.taskId)
-      );
-      const taskIdsWithoutReadState = taskIds.filter(
-        (taskId) => !taskIdsWithReadState.has(taskId)
-      );
+        const usersById = new Map(
+          actorAndWaitingUsers.map((user) => [user.id, user])
+        );
+        const waitingOnSetByUserMap = usersById;
+        const agentsById = new Map(pageAgents.map((agent) => [agent.id, agent]));
 
-      const [unreadCommentCounts, unreadNotificationCounts, clusterCounts] =
-        await Promise.all([
-        readStates.length
-          ? prisma.comment.groupBy({
-              by: ["taskId"],
-              where: {
-                AND: [
-                  {
-                    OR: readStates.map((readState) => ({
-                      taskId: readState.taskId,
-                      createdAt: { gt: readState.lastReadAt },
-                    })),
-                  },
-                  {
-                    // own comments don't count, unless agent-authored
-                    // (agent comments carry the token owner's creatorId)
-                    OR: [
-                      { creatorId: null },
-                      { creatorId: { not: parsedUserId } },
-                      { agentId: { not: null } },
-                    ],
-                  },
-                ],
-                activity: { equals: Prisma.DbNull },
-              },
-              _count: { _all: true },
-            })
-          : Promise.resolve([]),
-        taskIdsWithoutReadState.length
-          ? prisma.notification.groupBy({
-              by: ["taskId"],
-              where: {
-                status: "Normal",
-                userId: parsedUserId,
-                agentId: null,
-                seen: false,
-                taskId: { in: taskIdsWithoutReadState },
-                // Rows hidden from the inbox must not show up in its unread count.
-                NOT: inboxWhere.NOT,
-              },
-              _count: { _all: true },
-            })
-          : Promise.resolve([]),
-        // HTPR-6160: a ticket collapses to one inbox row, and archiving that row
-        // archives its whole pile. unreadCount cannot stand in for the pile size:
-        // it counts unread only, and the biggest piles (agent chatter) are read.
-        prisma.notification.groupBy({
-          by: ["taskId"],
-          where: { ...inboxWhere, taskId: { in: taskIds } },
-          _count: { _all: true },
-        }),
-      ]);
-
-      unreadCommentCounts.forEach((row) => {
-        unreadCountByTaskId.set(row.taskId, row._count._all);
-      });
-
-      unreadNotificationCounts.forEach((row) => {
-        if (row.taskId != null) {
-          unreadCountByTaskId.set(row.taskId, row._count._all);
+        const hyperAiInvitedTaskIds = new Set(
+          hyperAiInvites.map((invite) => invite.taskId)
+        );
+        const activeNotificationTypesByTaskId: Record<number, NotificationType[]> = {};
+        // A type counts as agent-only when no human authored that event on the task, so a
+        // human comment is never demoted just because an agent also touched the task.
+        const humanAuthoredTypes = new Set<string>();
+        const agentAuthoredTypes = new Set<string>();
+        const mutedAuthoredTypes = new Set<string>();
+        const nonMutedAuthoredTypes = new Set<string>();
+        for (const row of activeNotificationTypeRows) {
+          if (row.taskId == null) continue;
+          activeNotificationTypesByTaskId[row.taskId] ??= [];
+          if (!activeNotificationTypesByTaskId[row.taskId].includes(row.type)) {
+            activeNotificationTypesByTaskId[row.taskId].push(row.type);
+          }
+          const key = `${row.taskId}:${row.type}`;
+          // HyperAI posts under its own user account rather than an Agent record, so it has
+          // to be recognised here or its autonomous work (GitHub webhooks, board moves)
+          // reads as a person's. Once you invite it into a task it is answering you.
+          const byAgent =
+            !!row.fromAgentId ||
+            (row.fromUserId === generalConfig.hyperAiId &&
+              !hyperAiInvitedTaskIds.has(row.taskId));
+          (byAgent ? agentAuthoredTypes : humanAuthoredTypes).add(key);
+          if (row.fromAgentId && mutedAgentIds.has(row.fromAgentId)) {
+            mutedAuthoredTypes.add(key);
+          } else {
+            nonMutedAuthoredTypes.add(key);
+          }
         }
-      });
-
-      clusterCounts.forEach((row) => {
-        if (row.taskId !== null && row.taskId !== undefined) {
-          clusterCountByTaskId.set(row.taskId, row._count._all);
+        const agentOnlyTypesByTaskId: Record<number, NotificationType[]> = {};
+        const mutedTypesByTaskId: Record<number, NotificationType[]> = {};
+        for (const [taskId, types] of Object.entries(activeNotificationTypesByTaskId)) {
+          agentOnlyTypesByTaskId[Number(taskId)] = types.filter(
+            (type) =>
+              agentAuthoredTypes.has(`${taskId}:${type}`) &&
+              !humanAuthoredTypes.has(`${taskId}:${type}`)
+          );
+          mutedTypesByTaskId[Number(taskId)] = types.filter(
+            (type) =>
+              mutedAuthoredTypes.has(`${taskId}:${type}`) &&
+              !nonMutedAuthoredTypes.has(`${taskId}:${type}`)
+          );
         }
-      });
-    }
+        const recentActorsByTaskId = buildRecentInboxActors({
+          activity: activeNotificationTypeRows,
+          agentsById,
+          usersById,
+        });
+        const notificationsWithDirectReplies = notifications.map((notification) => {
+          const directReplyState = directReplyStateForNotification(
+            notification,
+            directReplyTypesByTaskId,
+            mutedAgentIds,
+          );
 
-    const notificationsWithUnreadCount = notifications.map((notification) => {
-      const hasTaskId =
-        typeof notification.taskId === "number" &&
-        Number.isFinite(notification.taskId);
-      const directReplyState = directReplyStateForNotification(
-        notification,
-        directReplyTypesByTaskId,
-        mutedAgentIds,
-      );
+          return {
+            ...notification,
+            // A later row can represent the task after a direct answer. Preserve the
+            // addressed marker while any active direct-reply row remains in the inbox.
+            ...directReplyState,
+          };
+        });
 
-      return {
-        ...notification,
-        // A later row can represent the task after a direct answer. Preserve the
-        // addressed marker while any active direct-reply row remains in the inbox.
-        ...directReplyState,
-        ...(hasTaskId
-          ? {
-              unreadCount: unreadCountByTaskId.get(notification.taskId!) ?? 0,
-              clusterCount: clusterCountByTaskId.get(notification.taskId!) ?? 1,
-            }
-          : {}),
-      };
-    });
+        const notificationsWithActors = notificationsWithDirectReplies.map((notification) => {
+          const nudgedAt = notification.task?.staleNudgedAt?.getTime();
+          const latestActivity = notification.task
+            ? Math.max(
+                notification.task.sectionChangedAt.getTime(),
+                (notification.task.lastCommentAt ?? notification.task.createdAt).getTime(),
+              )
+            : null;
+          const staleNudgeDays =
+            notification.type === "TaskReminder" &&
+            notification.fromUserId === generalConfig.hyperAiId &&
+            nudgedAt &&
+            latestActivity !== null &&
+            latestActivity <= nudgedAt &&
+            notification.createdAt.getTime() >= nudgedAt &&
+            notification.createdAt.getTime() - nudgedAt < 300_000
+              ? Math.floor((nudgedAt - latestActivity) / 86_400_000)
+              : undefined;
 
-    const enrichedNotifications = notificationsWithUnreadCount.map((notification) => {
-      const nudgedAt = notification.task?.staleNudgedAt?.getTime();
-      const latestActivity = notification.task
-        ? Math.max(
-            notification.task.sectionChangedAt.getTime(),
-            (notification.task.lastCommentAt ?? notification.task.createdAt).getTime(),
-          )
-        : null;
-      const staleNudgeDays =
-        notification.type === "TaskReminder" &&
-        notification.fromUserId === generalConfig.hyperAiId &&
-        nudgedAt &&
-        latestActivity !== null &&
-        latestActivity <= nudgedAt &&
-        notification.createdAt.getTime() >= nudgedAt &&
-        notification.createdAt.getTime() - nudgedAt < 300_000
-          ? Math.floor((nudgedAt - latestActivity) / 86_400_000)
-          : undefined;
-
-      return {
-        ...notification,
-        activeNotificationTypes: notification.taskId == null
-          ? [notification.type]
-          : activeNotificationTypesByTaskId[notification.taskId] ?? [notification.type],
-        agentOnlyTypes: notification.taskId == null
-          ? (notification.fromAgentId ? [notification.type] : [])
-          : agentOnlyTypesByTaskId[notification.taskId] ?? [],
-        mutedTypes: notification.taskId == null
-          ? (notification.fromAgentId && mutedAgentIds.has(notification.fromAgentId)
+          return {
+            ...notification,
+            activeNotificationTypes: notification.taskId == null
               ? [notification.type]
-              : [])
-          : mutedTypesByTaskId[notification.taskId] ?? [],
-        recentActors: notification.taskId ? recentActorsByTaskId[notification.taskId] : undefined,
-        ...(staleNudgeDays === undefined ? {} : { staleNudgeDays }),
-      };
-    });
+              : activeNotificationTypesByTaskId[notification.taskId] ?? [notification.type],
+            agentOnlyTypes: notification.taskId == null
+              ? (notification.fromAgentId ? [notification.type] : [])
+              : agentOnlyTypesByTaskId[notification.taskId] ?? [],
+            mutedTypes: notification.taskId == null
+              ? (notification.fromAgentId && mutedAgentIds.has(notification.fromAgentId)
+                  ? [notification.type]
+                  : [])
+              : mutedTypesByTaskId[notification.taskId] ?? [],
+            recentActors: notification.taskId ? recentActorsByTaskId[notification.taskId] : undefined,
+            ...(staleNudgeDays === undefined ? {} : { staleNudgeDays }),
+          };
+        });
 
-    // Show the event that EARNED the row its place, not the newest event. A task can
-    // sit in Important because of a mention or its own overdue state while a due-date
-    // bot bump is the newest row; displaying the bump makes Important read as bot
-    // noise (HTPR-4769). Mirror getInboxTabs' strongest-active-event pick (chores
-    // skipped) and swap the display fields to the newest row of that type;
-    // id/seen/createdAt/unreadCount stay the representative's so archive, read state,
-    // sorting and date groups keep working.
-    const splitPickOrder: NotificationType[] = [
-      ...inboxConfig.mentionedSplit,
-      ...inboxConfig.importantSplit,
-      ...inboxConfig.reactionSplit,
-      ...inboxConfig.statusSplits,
-    ] as NotificationType[];
-    const earningTypeOf = (notification: (typeof enrichedNotifications)[number]) => {
-      const activeTypes = notification.activeNotificationTypes;
-      const agentOnly = notification.agentOnlyTypes ?? [];
-      const muted = notification.mutedTypes ?? [];
-      const directReplyTypes = notification.directReplyTypes ?? [];
-      const isChore = (type: NotificationType) =>
-        !directReplyTypes.includes(type) &&
-        ((agentOnly.includes(type) &&
-          (inboxConfig.agentSplitTypes as string[]).includes(type)) ||
-          muted.includes(type));
-      return (
-        splitPickOrder.find((type) => activeTypes.includes(type) && !isChore(type)) ??
-        splitPickOrder.find((type) => activeTypes.includes(type))
-      );
-    };
-    const swapWanted = new Map<number, NotificationType>();
-    for (const notification of enrichedNotifications) {
-      if (notification.taskId == null) continue;
-      const earningType = earningTypeOf(notification);
-      if (earningType && earningType !== notification.type) {
-        swapWanted.set(notification.taskId, earningType);
-      }
-    }
-    const earnerRows = swapWanted.size
-      ? await prisma.notification.findMany({
-          where: {
-            ...inboxWhere,
-            taskId: { in: Array.from(swapWanted.keys()) },
-            type: { in: Array.from(new Set(swapWanted.values())) },
-          },
-          orderBy: { createdAt: "desc" },
-          distinct: ["taskId", "type", "fromAgentId"],
-          include: {
-            comment: { select: { id: true, text: true } },
-            fromUser: { select: { displayName: true, photoURL: true } },
-            fromAgent: { select: { displayName: true, photoURL: true } },
-          },
-        })
-      : [];
+        // Show the event that EARNED the row its place, not the newest event. A task can
+        // sit in Important because of a mention or its own overdue state while a due-date
+        // bot bump is the newest row; displaying the bump makes Important read as bot
+        // noise (HTPR-4769). Mirror getInboxTabs' strongest-active-event pick (chores
+        // skipped) and swap the display fields to the newest row of that type;
+        // id/seen/createdAt/unreadCount stay the representative's so archive, read state,
+        // sorting and date groups keep working.
+        const splitPickOrder: NotificationType[] = [
+          ...inboxConfig.mentionedSplit,
+          ...inboxConfig.importantSplit,
+          ...inboxConfig.reactionSplit,
+          ...inboxConfig.statusSplits,
+        ] as NotificationType[];
+        const earningTypeOf = (notification: (typeof notificationsWithActors)[number]) => {
+          const activeTypes = notification.activeNotificationTypes;
+          const agentOnly = notification.agentOnlyTypes ?? [];
+          const muted = notification.mutedTypes ?? [];
+          const directReplyTypes = notification.directReplyTypes ?? [];
+          const isChore = (type: NotificationType) =>
+            !directReplyTypes.includes(type) &&
+            ((agentOnly.includes(type) &&
+              (inboxConfig.agentSplitTypes as string[]).includes(type)) ||
+              muted.includes(type));
+          return (
+            splitPickOrder.find((type) => activeTypes.includes(type) && !isChore(type)) ??
+            splitPickOrder.find((type) => activeTypes.includes(type))
+          );
+        };
+        const swapWanted = new Map<number, NotificationType>();
+        for (const notification of notificationsWithActors) {
+          if (notification.taskId == null) continue;
+          const earningType = earningTypeOf(notification);
+          if (earningType && earningType !== notification.type) {
+            swapWanted.set(notification.taskId, earningType);
+          }
+        }
+        const earnerRows = swapWanted.size
+          ? await prisma.notification.findMany({
+              where: {
+                ...inboxWhere,
+                taskId: { in: Array.from(swapWanted.keys()) },
+                type: { in: Array.from(new Set(swapWanted.values())) },
+              },
+              orderBy: { createdAt: "desc" },
+              distinct: ["taskId", "type", "fromAgentId"],
+              include: {
+                comment: { select: { id: true, text: true } },
+                fromUser: { select: { displayName: true, photoURL: true } },
+                fromAgent: { select: { displayName: true, photoURL: true } },
+              },
+            })
+          : [];
+        return {
+          notificationsWithActors,
+          earnerRows,
+          swapWanted,
+          mutedAgentIds,
+          mutedTypesByTaskId,
+          waitingOnSetByUserMap,
+        };
+      })(),
+      (async () => {
+        const unreadCountByTaskId = new Map<number, number>();
+        const clusterCountByTaskId = new Map<number, number>();
+        if (taskIds.length) {
+          const readStates = await prisma.taskReadState.findMany({
+            where: {
+              userId: parsedUserId,
+              taskId: { in: taskIds },
+            },
+            select: {
+              taskId: true,
+              lastReadAt: true,
+            },
+          });
+
+          const taskIdsWithReadState = new Set(
+            readStates.map((readState) => readState.taskId)
+          );
+          const taskIdsWithoutReadState = taskIds.filter(
+            (taskId) => !taskIdsWithReadState.has(taskId)
+          );
+
+          const [unreadCommentCounts, unreadNotificationCounts, clusterCounts] =
+            await Promise.all([
+            readStates.length
+              ? prisma.comment.groupBy({
+                  by: ["taskId"],
+                  where: {
+                    AND: [
+                      {
+                        OR: readStates.map((readState) => ({
+                          taskId: readState.taskId,
+                          createdAt: { gt: readState.lastReadAt },
+                        })),
+                      },
+                      {
+                        // own comments don't count, unless agent-authored
+                        // (agent comments carry the token owner's creatorId)
+                        OR: [
+                          { creatorId: null },
+                          { creatorId: { not: parsedUserId } },
+                          { agentId: { not: null } },
+                        ],
+                      },
+                    ],
+                    activity: { equals: Prisma.DbNull },
+                  },
+                  _count: { _all: true },
+                })
+              : Promise.resolve([]),
+            taskIdsWithoutReadState.length
+              ? prisma.notification.groupBy({
+                  by: ["taskId"],
+                  where: {
+                    status: "Normal",
+                    userId: parsedUserId,
+                    agentId: null,
+                    seen: false,
+                    taskId: { in: taskIdsWithoutReadState },
+                    // Rows hidden from the inbox must not show up in its unread count.
+                    NOT: inboxWhere.NOT,
+                  },
+                  _count: { _all: true },
+                })
+              : Promise.resolve([]),
+            // HTPR-6160: a ticket collapses to one inbox row, and archiving that row
+            // archives its whole pile. unreadCount cannot stand in for the pile size:
+            // it counts unread only, and the biggest piles (agent chatter) are read.
+            prisma.notification.groupBy({
+              by: ["taskId"],
+              where: { ...inboxWhere, taskId: { in: taskIds } },
+              _count: { _all: true },
+            }),
+          ]);
+
+          unreadCommentCounts.forEach((row) => {
+            unreadCountByTaskId.set(row.taskId, row._count._all);
+          });
+
+          unreadNotificationCounts.forEach((row) => {
+            if (row.taskId != null) {
+              unreadCountByTaskId.set(row.taskId, row._count._all);
+            }
+          });
+
+          clusterCounts.forEach((row) => {
+            if (row.taskId !== null && row.taskId !== undefined) {
+              clusterCountByTaskId.set(row.taskId, row._count._all);
+            }
+          });
+        }
+
+        return { unreadCountByTaskId, clusterCountByTaskId };
+      })(),
+    ]);
+    const {
+      earnerRows,
+      swapWanted,
+      mutedAgentIds,
+      mutedTypesByTaskId,
+      waitingOnSetByUserMap,
+    } = actorEnrichment;
+    const { unreadCountByTaskId, clusterCountByTaskId } = counts;
+    const enrichedNotifications = actorEnrichment.notificationsWithActors.map((notification) => ({
+      ...notification,
+      ...(typeof notification.taskId === "number" && Number.isFinite(notification.taskId)
+        ? {
+            unreadCount: unreadCountByTaskId.get(notification.taskId) ?? 0,
+            clusterCount: clusterCountByTaskId.get(notification.taskId) ?? 1,
+          }
+        : {}),
+    }));
     type EarnerRow = (typeof earnerRows)[number];
     const earnersByTaskAndType = new Map<string, EarnerRow>();
     for (const earner of earnerRows) {
