@@ -4,7 +4,7 @@ Start with `/ship`, [CLAUDE.md](CLAUDE.md), and the skill map at [.claude/skills
 
 Valentin's own Claude Code and Codex sessions follow the same workflow:
 
-- Board writes go only through `vcc`, identity "Valentins Claude Code". The plain `hypertask` CLI is for reads only. Never write in Valentin's name, assign userId 6, or copy another identity's token or credentials.
+- Board writes go only through `vcc`, identity "Valentins Claude Code". The plain `hypertask` CLI is for reads only. Never write in Valentin's name or copy another identity's token or credentials. Agents are human companions (Valentin, 2026-10-02): a ticket usually has a human assignee and an agent together, and agent-only is fine. Add only your own agent (`vcc task assign <TICKET> --self`); never remove or change a human assignee, and never add Valentin (userId 6) yourself.
 - Board content goes only through approved CLI, MCP or app API surfaces. Never use Prisma, SQL, or a database client for ticket content, even for reads.
 - Before coding on a ticket, claim it with `vcc comment add`, then move it to **In Progress** with `vcc task move`.
 - The same session fixes, opens the PR, merges once required checks are green, watches the deploy, verifies live with `.claude/skills/verify-qa/SKILL.md`, and closes the ticket only after verification passes.
