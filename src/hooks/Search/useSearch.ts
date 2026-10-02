@@ -123,7 +123,7 @@ export function useSearch(
 
   function currentSearchKey(searchTerm: string, showArchived: boolean) {
     return JSON.stringify([
-      searchTerm,
+      searchTerm.trim(),
       showArchived,
       _fromProject,
       projects.map((project) => project.id),
@@ -333,12 +333,13 @@ export function useSearch(
   async function executeSearch(
     searchTerm: string,
     updatedHistory: string[],
-    options?: { showArchived?: boolean; resetTab?: boolean }
+    options?: { showArchived?: boolean; resetTab?: boolean; live?: boolean }
   ) {
     const showArchived = options?.showArchived ?? includeArchived;
     const requestId = beginSearch(searchTerm, showArchived);
     try {
-      router.replace(
+      // Draft results must not navigate: a delayed URL render can overwrite newer typing.
+      if (!options?.live) router.replace(
         searchUrl(
           searchTerm,
           options?.resetTab ? null : explicitTabIndex,
@@ -373,8 +374,10 @@ export function useSearch(
             results: [],
           };
 
-          queryClient.setQueryData(["Search"], newData);
-          localStorage.setItem("searchCache", JSON.stringify(newData));
+          if (!options?.live) {
+            queryClient.setQueryData(["Search"], newData);
+            localStorage.setItem("searchCache", JSON.stringify(newData));
+          }
           applySearchResults(
             processedData,
             splits,
@@ -428,7 +431,12 @@ export function useSearch(
   }
 
   function handleKeyDown(event: KeyboardEvent) {
-    if (searchChipsEnabled && (event.defaultPrevented ||
+    // The app shell prevents body arrows from scrolling, not from selecting results.
+    const resultArrow = searchAutocompleteEnabled &&
+      document.activeElement === document.body &&
+      !event.ctrlKey && !event.metaKey && !event.altKey &&
+      ["ArrowDown", "ArrowUp"].includes(event.key);
+    if (searchChipsEnabled && ((event.defaultPrevented && !resultArrow) ||
       (event.key === "Escape" && tasksInputRef.current?.getAttribute("aria-expanded") === "true"))) return;
     if (searchChipsEnabled && document.activeElement === tasksInputRef.current &&
       (["Enter", "Tab", "Backspace"].includes(event.key) ||
@@ -792,6 +800,25 @@ export function useSearch(
       handleStatesOnResponse(searchConfig.responseMessages.default);
     }
   }, [projects, _includeArchived, _searchTerm, _fromProject, searchOperatorsEnabled]);
+
+  useEffect(() => {
+    if (!searchAutocompleteEnabled || !projects.length) return;
+    const term = inputValue.trim();
+    const key = currentSearchKey(term, includeArchived);
+    if (lastSearchKey.current === key) return;
+    searchRequestGate.invalidate();
+    lastSearchKey.current = null;
+    if (term.length < 2) {
+      handleStatesOnResponse(searchConfig.responseMessages.default);
+      return;
+    }
+    const timer = setTimeout(() => {
+      if (lastSearchKey.current !== key) {
+        void executeSearch(term, searchCache.history ?? [], { live: true });
+      }
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [inputValue, includeArchived, projects, _fromProject, searchOperatorsEnabled, searchAutocompleteEnabled]);
 
   return {
     setSelectedIndex,

@@ -111,6 +111,7 @@ const SearchComp = ({
                 onRun={updateSearchHistory}
                 boardId={_fromProject}
                 inputRef={tasksInputRef}
+                recentSearches={searchCache.history}
                 autocompleteEnabled
               />
             ) : (
