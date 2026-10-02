@@ -9,8 +9,6 @@ const yaml = require("js-yaml");
 process.env.ERROR_ALERT_APP_URL = "https://app.hypertask.ai";
 process.env.ERROR_ALERT_BOARD_ID = "15";
 process.env.ERROR_ALERT_BUGS_SECTION_ID = "4389";
-process.env.ERROR_ALERT_MANAGER_AGENT_ID = "cca791d8-b96d-4f1e-8abf-e2344263aa21";
-process.env.ERROR_ALERT_MANAGER_THREAD = "6225";
 process.env.ERROR_ALERT_VERCEL_PROJECT = "hypertasks-prod";
 
 const root = path.resolve(__dirname, "..");
@@ -80,7 +78,11 @@ function workflowFetch(liveCreatedAt = NOW - 5 * 60 * 1000) {
     if (url.endsWith("/api/mcp/tasks/create")) {
       return response(200, { task: { uniqueIndex: 7001 } });
     }
-    if (url.endsWith("/api/mcp/comments")) return response(200, { success: true });
+    if (url.endsWith("/api/mcp/comments")) {
+      return JSON.parse(options.body).unique_index === 7001
+        ? response(200, { success: true })
+        : response(404, {});
+    }
     throw new Error(`unexpected fetch ${url}`);
   };
   return { fetchImpl, calls };
@@ -101,6 +103,16 @@ test("alerts have a dispatch-only workflow independent of production health chec
   assert.equal(job["timeout-minutes"], 10);
   assert.equal(job.steps[1].run, "node .github/scripts/posthog-error-alert.mjs");
   assert.equal(job.steps[1].env.POSTHOG_ALERT_PAYLOAD, "${{ inputs.posthog_payload }}");
+  assert.deepEqual(Object.keys(job.steps[1].env).sort(), [
+    "ERROR_ALERT_APP_URL",
+    "ERROR_ALERT_BOARD_ID",
+    "ERROR_ALERT_BUGS_SECTION_ID",
+    "ERROR_ALERT_VERCEL_PROJECT",
+    "HYPERTASK_MCP_TOKEN",
+    "POSTHOG_ALERT_DISPATCH_SECRET",
+    "POSTHOG_ALERT_PAYLOAD",
+    "VERCEL_TOKEN",
+  ]);
   for (const name of ["HYPERTASK_MCP_TOKEN", "POSTHOG_ALERT_DISPATCH_SECRET", "VERCEL_TOKEN"]) {
     assert.equal(job.steps[1].env[name], `\${{ secrets.${name} }}`);
   }
@@ -166,13 +178,7 @@ test("accepts a delayed event when its signed dispatch is fresh", async () => {
   );
 });
 
-test("validates the complete Manager agent id", async () => {
-  const { isUuid } = await import(scriptUrl);
-  assert.equal(isUuid("cca791d8-b96d-4f1e-8abf-e2344263aa21"), true);
-  assert.equal(isUuid("deadbeef---------------------------"), false);
-});
-
-test("fresh spike rolls back, files one incident, and alerts the Manager thread", async () => {
+test("fresh spike succeeds with one incident and only its rollback comment", async () => {
   const { handlePostHogAlert } = await import(scriptUrl);
   const { fetchImpl, calls } = workflowFetch();
   const rollbackCalls = [];
@@ -194,22 +200,44 @@ test("fresh spike rolls back, files one incident, and alerts the Manager thread"
   const creates = calls.filter((call) => call.url.endsWith("/api/mcp/tasks/create"));
   const comments = calls.filter((call) => call.url.endsWith("/api/mcp/comments"));
   assert.equal(creates.length, 1);
-  assert.equal(comments.length, 2);
+  assert.equal(comments.length, 1);
   const [create] = creates;
-  const managerComment = comments.find((call) =>
-    call.options.body.includes('"unique_index":6225'),
-  );
   const incidentComment = comments.find((call) =>
     call.options.body.includes('"unique_index":7001'),
   );
-  assert.ok(managerComment);
   assert.ok(incidentComment);
   assert.equal(create.options.headers["Idempotency-Key"], `posthog-incident-${payload().event_id}`);
+  assert.match(create.options.body, /"project_id":15/);
   assert.match(create.options.body, /"section_id":4389/);
+  assert.match(create.options.body, /\[incident\] Server error spike/);
+  assert.equal(incidentComment.options.headers["Idempotency-Key"], `posthog-rollback-result-${payload().event_id}`);
   assert.match(create.options.body, /Database &lt;timeout&gt;/);
-  assert.match(managerComment.options.body, /agent-cca791d8-b96d-4f1e-8abf-e2344263aa21/);
-  assert.match(managerComment.options.body, /https:\/\/app\.hypertask\.ai\/detail\/project-15\/7001/);
   assert.match(incidentComment.options.body, /previous ready release/);
+});
+
+test("first server error succeeds with an incident and no thread note", async () => {
+  const { handlePostHogAlert } = await import(scriptUrl);
+  const { fetchImpl, calls } = workflowFetch();
+  const result = await handlePostHogAlert(
+    payload({ alert_kind: "new_server_error", count: 1 }),
+    {
+      now: NOW,
+      dispatchSecret: DISPATCH_SECRET,
+      fetchImpl,
+      vercelToken: "vercel-test",
+      mcpToken: "mcp-test",
+      rollbackImpl: async () => { assert.fail("first occurrence must not roll back"); },
+    },
+  );
+
+  assert.equal(result.action, "alerted");
+  assert.equal(result.incident.number, 7001);
+  const creates = calls.filter((call) => call.url.endsWith("/api/mcp/tasks/create"));
+  assert.equal(creates.length, 1);
+  assert.match(creates[0].options.body, /\[incident\] New server error/);
+  assert.match(creates[0].options.body, /"project_id":15/);
+  assert.match(creates[0].options.body, /first occurrence/);
+  assert.equal(calls.filter((call) => call.url.endsWith("/api/mcp/comments")).length, 0);
 });
 
 test("spike outside the post-deploy window alerts but does not roll back", async () => {
@@ -273,8 +301,9 @@ test("a spike before the current deployment reports the correct no-rollback reas
   assert.equal(result.rollback.action, "not_eligible");
   assert.match(result.rollback.reason, /started before the current deployment/);
   const comments = calls.filter((call) => call.url.endsWith("/api/mcp/comments"));
-  assert.equal(comments.length, 1);
-  assert.match(comments[0].options.body, /started before the current deployment/);
+  assert.equal(comments.length, 0);
+  const create = calls.find((call) => call.url.endsWith("/api/mcp/tasks/create"));
+  assert.match(create.options.body, /started before the current deployment/);
 });
 
 test("stale release neither writes to the board nor rolls back", async () => {
@@ -319,9 +348,7 @@ test("incident filing failure does not block an eligible rollback", async () => 
   );
   assert.equal(rollbackCalled, true);
   const comments = calls.filter((call) => call.url.endsWith("/api/mcp/comments"));
-  assert.equal(comments.length, 1);
-  assert.match(comments[0].options.body, /incident ticket could not be created/);
-  assert.match(comments[0].options.body, /previous ready release/);
+  assert.equal(comments.length, 0);
 });
 
 test("rejects a malformed incident number before building its link", async () => {
@@ -345,8 +372,7 @@ test("rejects a malformed incident number before building its link", async () =>
     /no valid ticket number/,
   );
   const comments = calls.filter((call) => call.url.endsWith("/api/mcp/comments"));
-  assert.equal(comments.length, 1);
-  assert.doesNotMatch(comments[0].options.body, /img src/);
+  assert.equal(comments.length, 0);
 });
 
 test("rollback failures are reported as failures", async () => {
@@ -365,7 +391,8 @@ test("rollback failures are reported as failures", async () => {
 
   assert.equal(result.rollback.action, "failed");
   const comments = calls.filter((call) => call.url.endsWith("/api/mcp/comments"));
-  assert.equal(comments.length, 2);
+  assert.equal(comments.length, 1);
+  assert.equal(JSON.parse(comments[0].options.body).unique_index, 7001);
   assert.match(comments[0].options.body, /Automatic rollback failed/);
   assert.doesNotMatch(comments[0].options.body, /stopped safely/);
 });
