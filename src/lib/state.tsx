@@ -4,8 +4,7 @@ import { useCallback, type ReactNode } from "react";
 import {
   Provider as JotaiProvider,
   atom as jotaiAtom,
-  useAtom,
-  useAtomValue,
+  useAtomValueRawSync,
   useSetAtom,
   type Atom as JotaiAtom,
   type WritableAtom,
@@ -247,11 +246,12 @@ export function selectorFamily<T, P>(options: SelectorFamilyOptions<T, P>) {
 export function useRecoilState<T>(
   recoilAtom: WritableAtom<T, [SetStateAction<T> | typeof RESET], void>
 ) {
-  return useAtom(recoilAtom) as [T, SetterOrUpdater<T>];
+  return [useRecoilValue(recoilAtom), useSetAtom(recoilAtom)] as [T, SetterOrUpdater<T>];
 }
 
 export function useRecoilValue<T>(recoilAtom: JotaiAtom<T>) {
-  return useAtomValue(recoilAtom);
+  // Child mount effects initialize shared state before parent subscriptions exist.
+  return useAtomValueRawSync(recoilAtom);
 }
 
 export function useSetRecoilState<T>(
