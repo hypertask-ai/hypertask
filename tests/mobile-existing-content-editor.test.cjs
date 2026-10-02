@@ -1,11 +1,10 @@
-const { readRefactoredSource } = require("../src/app/detail/[...slug]/taskDetailTestSources.cjs");
 const assert = require("node:assert/strict");
 const fs = require("./refactored-module-source.cjs");
 const path = require("node:path");
 const test = require("node:test");
 
 const root = path.resolve(__dirname, "..");
-const read = (file) => readRefactoredSource(path.join(root, file), "utf8");
+const read = (file) => fs.readFileSync(path.join(root, file), "utf8");
 
 const tiptap = read("src/components/RTE/TipTapTaskDetail.tsx");
 const shell = read("src/components/RTE/Components/TiptapMainContainer.tsx");

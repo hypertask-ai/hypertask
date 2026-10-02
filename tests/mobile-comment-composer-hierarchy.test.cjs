@@ -1,11 +1,10 @@
-const { readRefactoredSource } = require("../src/app/detail/[...slug]/taskDetailTestSources.cjs");
 const assert = require("node:assert/strict");
 const fs = require("./refactored-module-source.cjs");
 const path = require("node:path");
 const test = require("node:test");
 
 const read = (relativePath) =>
-  readRefactoredSource(path.join(__dirname, "..", relativePath), "utf8");
+  fs.readFileSync(path.join(__dirname, "..", relativePath), "utf8");
 
 const attachments = read("src/components/Common/AttachmentsUpload/index.tsx");
 const jiti = require("jiti")(__filename, { interopDefault: true });

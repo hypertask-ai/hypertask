@@ -1,5 +1,6 @@
 const fs = require("./helpers/chat-stream-source.cjs");
 const path = require("node:path");
+const { readRefactoredSource } = require("../src/app/detail/[...slug]/taskDetailTestSources.cjs");
 
 const root = path.resolve(__dirname, "..");
 const modules = {
@@ -37,6 +38,10 @@ const readFileSync = (file, options) => {
   const contents = fs.readFileSync(file, options);
   if (typeof file !== "string" || typeof contents !== "string") return contents;
   const key = path.relative(root, path.resolve(file)).split(path.sep).join("/");
+  if (key === "src/app/detail/[...slug]/TaskDetailComp.tsx" ||
+      key === "src/components/RTE/TipTapTaskDetail.tsx") {
+    return readRefactoredSource(file, options);
+  }
   const siblings = modules[key];
   if (!siblings) return contents;
   const moved = siblings.map((sibling) =>

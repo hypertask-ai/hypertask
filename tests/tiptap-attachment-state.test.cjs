@@ -1,4 +1,3 @@
-const { readRefactoredSource } = require("../src/app/detail/[...slug]/taskDetailTestSources.cjs");
 const assert = require("node:assert/strict");
 const fs = require("./refactored-module-source.cjs");
 const path = require("node:path");
@@ -6,11 +5,11 @@ const test = require("node:test");
 const ts = require("typescript");
 
 const root = path.resolve(__dirname, "..");
-const editorSource = readRefactoredSource(
+const editorSource = fs.readFileSync(
   path.join(root, "src/components/RTE/TipTapTaskDetail.tsx"),
   "utf8",
 );
-const uploadSource = readRefactoredSource(
+const uploadSource = fs.readFileSync(
   path.join(root, "src/components/Common/AttachmentsUpload/index.tsx"),
   "utf8",
 );
@@ -60,7 +59,7 @@ const filesForSave = new Function(
 function mountUploader(initialFiles) {
   let state = initialFiles;
   const loaded = { exports: {} };
-  new Function("module", "exports", "require", compile(readRefactoredSource(
+  new Function("module", "exports", "require", compile(fs.readFileSync(
     path.join(root, "src/components/Common/AttachmentsUpload/FileUploadHandler.tsx"),
     "utf8",
   )))(loaded, loaded.exports, (request) => {
