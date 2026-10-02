@@ -12,8 +12,8 @@ type ChatRuntimeComponent = ComponentType<{
 // used to wrap the page, so when the chat auto-opened on a board React rebuilt
 // the whole route and the board lost its columns and refetched (HTPR-6751).
 //
-// Pages that read the chat context (holdChildren: /chat, /detail, flagged
-// mobile /agents/chat) mount the runtime from their first render, so they stay
+// Pages that require the chat context (holdChildren: /chat, flagged mobile
+// /agents/chat) mount the runtime from their first render, so they stay
 // wrapped by it, keep their server render, and show `loading` until it exists.
 // Every other page sits beside the runtime under a provider whose value the
 // runtime fills in once it loads. The runtime itself stays in the same slot on
