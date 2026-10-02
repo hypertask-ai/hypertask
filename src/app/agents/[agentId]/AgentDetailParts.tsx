@@ -46,7 +46,7 @@ export const healthDotClass: Record<RuntimeStateKey, string> = {
   waiting: "bg-amber-400",
   stalled: "bg-red-400",
   offline: "bg-gray-500",
-  on_demand: "bg-gray-400",
+  on_demand: "bg-[var(--color-text-light-gray)]",
 };
 
 export const queueReasonLabel = {
