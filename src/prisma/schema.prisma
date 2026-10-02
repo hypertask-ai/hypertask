@@ -1144,6 +1144,7 @@ model Task {
   relatedFromTasks    TaskRelations[] @relation("RelatedFromTasks")
   evidence            TaskEvidence[]
   taskSessions        TaskSession[]
+  numberAliases       TaskNumberAlias[]
   sectionEvents       TaskSectionEvent[]
   pullRequests        TaskPullRequest[]
   customFieldValues   CustomFieldValue[]
@@ -1187,6 +1188,20 @@ model Task {
   // ticket refs on most turns); applied to prod Neon via CREATE INDEX CONCURRENTLY.
   @@index([ticketNumber])
   @@unique([projectId, uniqueIndex])
+}
+
+model TaskNumberAlias {
+  id           Int      @id @default(autoincrement())
+  projectId    Int
+  uniqueIndex  Int
+  ticketNumber String?
+  taskId       Int
+  task         Task     @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  createdAt    DateTime @default(now())
+
+  @@unique([projectId, uniqueIndex])
+  @@index([ticketNumber])
+  @@index([taskId])
 }
 
 model TaskPullRequest {

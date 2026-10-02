@@ -14,6 +14,7 @@ import {
   taskMcpGetInclude,
 } from '@/lib/mcp/tasks/mappers'
 import { mcpTaskUserCommentCount } from '@/lib/mcp/tasks/mappers'
+import { findTaskByIdentifier, TaskIdentifierAmbiguityError } from '@/lib/mcp/tasks/resolveTask'
 import { decodeCursor, encodeCursor } from '@/lib/mcp/pagination/cursor'
 import prisma from '@/lib/prisma'
 import { HTPR_6530_MCP_LIST_QUERY_FLAG, isFeatureEnabled } from '@/lib/flags'
@@ -290,16 +291,30 @@ export async function GET(request: NextRequest) {
           project: getProjectWhere(user.id, ctx.agentId)
         }
 
-        const tasks = await prisma.task.findMany({
-          where,
-          include: {
-            ...taskMcpGetInclude(user.id),
-            savedContent: {
-              where: { userId: ctx.agentId ? -1 : user.id, commentId: null, type: 'Private' },
-              select: { id: true, type: true },
-            },
-          }
-        })
+        const include = {
+          ...taskMcpGetInclude(user.id),
+          savedContent: {
+            where: { userId: ctx.agentId ? -1 : user.id, commentId: null, type: 'Private' as const },
+            select: { id: true, type: true },
+          },
+        }
+        const tasks = await prisma.task.findMany({ where, include })
+        const missingTickets = ticketNumbers?.filter(number => !tasks.some(task => task.ticketNumber === number)) ?? []
+        const aliasTargets = await Promise.all([
+          ...missingTickets.map(ticket_number => findTaskByIdentifier(
+            user, { ticket_number, project_id: projectIdForLookup }, ctx.agentId
+          )),
+          ...(uniqueIndex !== null && projectIdForLookup !== null && tasks.length === 0
+            ? [findTaskByIdentifier(user, { unique_index: uniqueIndex, project_id: projectIdForLookup }, ctx.agentId)]
+            : []),
+        ])
+        const aliasIds = aliasTargets.flatMap(task => task && !tasks.some(live => live.id === task.id) ? [task.id] : [])
+        if (aliasIds.length) {
+          tasks.push(...await prisma.task.findMany({
+            where: { id: { in: aliasIds }, status: { not: 'Deleted' }, project: getProjectWhere(user.id, ctx.agentId) },
+            include,
+          }))
+        }
 
         if (tasks.length === 0) {
           console.warn('[MCP] tasks', {
@@ -805,6 +820,9 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json(response)
   } catch (error) {
+    if (error instanceof TaskIdentifierAmbiguityError) {
+      return NextResponse.json({ success: false, error: error.message }, { status: 400 })
+    }
     console.error('[MCP] tasks', {
       user: userObj,
       error,
