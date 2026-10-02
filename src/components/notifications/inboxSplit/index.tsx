@@ -20,7 +20,6 @@ import {
   globalNotificationFocusAtom,
   currentProjectAtom,
 } from "@/store";
-import { useFlag } from "@/hooks/useFlag";
 import { SHORTCUT_NUDGES_FLAG } from "@/lib/flags/keys";
 import {
   clearArchiveShortcutNudge,
@@ -46,6 +45,8 @@ import { useDeviceContext } from "@/lib/contexts/deviceContext";
 import SubtaskLinkingModal from "@/components/Modals/SubtaskLinkingModal/SubtaskLinking";
 import useCurrentUser from "@/hooks/General/useCurrentUserCheckFromCookies";
 import { useProjectQuery } from "@/hooks/General/useProjectQuery";
+import { useFlag } from "@/hooks/useFlag";
+import { HTPR_6752_INSTANT_TICKET_OPEN_FLAG } from "@/lib/flags/keys";
 import useHypertasksNavigate from "@/hooks/MultiPages/Route/useHypertasksNavigate";
 import { BulkAction, useBulkActions } from "@/hooks/MultiPages/useBulkActions";
 import { KeyCodes, KeyValues } from "@/lib/constants/keyboard-handler";
@@ -332,6 +333,7 @@ const InboxSplit = ({
   const [showSubtaskLinkingModal, setShowSubtaskLinkingModal] =
     useState<boolean>(false);
   const currentUser = useCurrentUser();
+  const instantTicketOpen = useFlag(HTPR_6752_INSTANT_TICKET_OPEN_FLAG);
   const { navigate, navigateToTask } = useHypertasksNavigate();
   const taskRef = useRef<HTMLDivElement>(null);
   const activeSplitRef = useRef<HTMLDivElement>(null);
@@ -959,7 +961,8 @@ const InboxSplit = ({
   };
 
   // ==================== OPEN TASK ==========================
-  const openTask = async (
+  const openTaskWithCachedData = async (
+    includeCachedTask: boolean,
     mode: string,
     notification: INotification | null = null,
     index?: number,
@@ -1026,6 +1029,15 @@ const InboxSplit = ({
           notification.task?.uniqueIndex,
           mentionedQueryParam,
         ) + (disableInboxFlow ? "" : queryParams);
+      if (includeCachedTask) {
+        return navigateToTask(
+          notification.projectId,
+          notification.task?.uniqueIndex,
+          "push",
+          `${mentionedQueryParam}${disableInboxFlow ? "" : queryParams}`,
+          notification.task,
+        );
+      }
       markTaskDetailNavigationStart("inbox", finalUrl);
       return router.push(finalUrl);
     }
@@ -1047,8 +1059,13 @@ const InboxSplit = ({
       taskIndex,
       "push",
       `${inboxFlowQuery}${mentionedQueryParam}`,
+      includeCachedTask ? selectedInbox.task : undefined,
     );
   };
+
+  const openTask = instantTicketOpen
+    ? openTaskWithCachedData.bind(null, true)
+    : openTaskWithCachedData.bind(null, false);
 
   const buildUniqueTasksPlaylist = (notifications: INotification[]) => {
     const uniqueMap = new Map<
@@ -1358,6 +1375,14 @@ const InboxSplit = ({
                                 className={
                                   appShellRail ? "min-w-0 flex-1" : "w-full"
                                 }
+                                onClickCapture={instantTicketOpen && notification.type !== "Invited" ? (event) => {
+                                  const control = (event.target as Element).closest("button, input, select, textarea, a");
+                                  if (control && control !== event.currentTarget) return;
+                                  event.stopPropagation();
+                                  if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+                                  event.preventDefault();
+                                  void openTask("view", notification, globalIndex);
+                                } : undefined}
                                 onClick={() =>
                                   notification.type !== "Invited" &&
                                   setTasksPlayList(

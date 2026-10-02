@@ -8,17 +8,22 @@ import { MobileViewContext } from "@/lib/contexts/mobileContext";
 import { IDraft } from "@/models/model";
 import { isMeaningfulDescriptionDraft } from "@/hooks/General/useHasDrafts";
 import { useCallback, useContext, useMemo } from "react";
+import InnerHTMLDescription from "./InnerHtmlDescription";
 import { HighlightMenu } from "../ContextMenu";
 import QuoteButton from "../ContextMenu/QuoteButton";
 import Tiptap from "@/components/RTE/TipTapTaskDetail";
 import BackgroundTaskAttachments from "../BackgroundTaskAttachments";
 import type { IAttachment } from "@/models/model";
 import { linkifyHtml } from "@/utils/helperFunctions/linkifyHtml";
+import { useFlag } from "@/hooks/useFlag";
+import { HTPR_6752_INSTANT_TICKET_OPEN_FLAG } from "@/lib/flags/keys";
 
 const DescriptonBody = ({ draftTQ }: any) => {
   const isMbl = useContext(MobileViewContext);
   const {
+    secondaryPanelsReady,
     parsedTask,
+    currentTask,
     editMode,
     currentId,
     allowPerks,
@@ -27,6 +32,8 @@ const DescriptonBody = ({ draftTQ }: any) => {
     setCarousalItems,
   } = useTaskContext();
   const task = useMemo(() => JSON.parse(parsedTask), [parsedTask]);
+  const instantTicketOpen = useFlag(HTPR_6752_INSTANT_TICKET_OPEN_FLAG);
+  const creator = instantTicketOpen ? currentTask?.user : task.user;
   const {
     description,
     descriptionAttachments,
@@ -64,29 +71,33 @@ const DescriptonBody = ({ draftTQ }: any) => {
 
   return (
     <>
-      <Tiptap
+      {secondaryPanelsReady !== false ? <Tiptap
         key={task.id}
         allowPerks={allowPerks}
         attachments={descriptionAttachments}
         mode="read-edit-description"
         allowEdit={isEditing && !uploadingDescription}
         handleSave={redirectAPI}
-        user={task.user}
+        user={creator}
         shouldTriggerAiTaskWriter={editMode === "description-ai"}
-        creatorname={task.user?.displayName}
+        creatorname={creator?.displayName}
         isSelected={currentId === "description"}
         id="description"
         defaultContent={linkedContent}
         isMbl={isMbl}
         descriptionClass="pb-1 flex justify-start gap-[6px]"
-      />
+      /> : <InnerHTMLDescription
+        id="description-input"
+        descriptionText={linkedContent ?? ""}
+        attachmentsFromProps={[]}
+      />}
 
-      {!isEditing && task.user && (
+      {!isEditing && creator && (
         <HighlightMenu
           target="#description-input"
           allowedPlacements={["top", "bottom"]}
           menu={({ selectedHtml }) => (
-            <QuoteButton selection={selectedHtml ?? ""} creator={task.user} />
+            <QuoteButton selection={selectedHtml ?? ""} creator={creator} />
           )}
         />
       )}

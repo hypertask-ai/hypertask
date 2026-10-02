@@ -13,7 +13,7 @@ export const useGetAllComments = (
   return useQuery({
     queryKey,
     queryFn: () => fetchCommentsHelper(taskId, userId!, queryClient),
-    initialData,
+    initialData: initialData?.pending ? undefined : initialData,
     initialDataUpdatedAt: initialData?.updatedAt,
     staleTime: 30_000,
     refetchOnWindowFocus: true,

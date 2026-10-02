@@ -1,3 +1,5 @@
+import { useFlag } from "@/hooks/useFlag";
+import { HTPR_6752_INSTANT_TICKET_OPEN_FLAG } from "@/lib/flags/keys";
 import { useCallback, useEffect } from "react";
 import type { DragEvent as ReactDragEvent } from "react";
 import { IAssignees, ITask } from "@/models/model";
@@ -21,6 +23,7 @@ type Context = Pick<TableViewProps, "myTasksSort" | "onMyTasksSortChange" | "_cu
   Pick<ReturnType<typeof useTableRows>, "rows" | "focusRowElement" | "focusTo">;
 
 export function useTableActions(context: Context) {
+  const instantTicketOpen = useFlag(HTPR_6752_INSTANT_TICKET_OPEN_FLAG);
   const {
   customFieldBySortColumn, sortState, myTasksSort, onMyTasksSortChange, setSortState,
   _currentProject, setTableSortViewAndReturn, setSelectedIndex, updateActiveItemAndItemInView, setTasksPlayList,
@@ -88,15 +91,18 @@ export function useTableActions(context: Context) {
     [_currentProject?.uniqueIdentifier]
   );
 
-  const openTask = useCallback(
-    async (task: ITask, index: number) => {
+  const openTaskWithCachedData = useCallback(
+    async (includeCachedTask: boolean, task: ITask, index: number) => {
       setSelectedIndex(index);
       updateActiveItemAndItemInView(task);
       setTasksPlayList(rows.filter(isTaskRow).map(({ task }) => ({ projectId: task.projectId, uniqueIndex: task.uniqueIndex })));
-      navigateToTask(task.projectId, task.uniqueIndex);
+      navigateToTask(task.projectId, task.uniqueIndex, "push", undefined, includeCachedTask ? task : undefined);
     },
     [navigateToTask, rows, setTasksPlayList, updateActiveItemAndItemInView]
   );
+  const openTask = instantTicketOpen
+    ? openTaskWithCachedData.bind(null, true)
+    : openTaskWithCachedData.bind(null, false);
   const handleMouseEnter = useCallback(
     (index: number) => {
       setSelectedIndex(index);

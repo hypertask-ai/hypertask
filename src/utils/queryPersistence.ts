@@ -4,6 +4,7 @@ import type { PersistedClient } from "@tanstack/react-query-persist-client";
 const NEVER_PERSIST_QUERY_KEYS = [
   "projectsAll",
   "boardTasks",
+  "cached-task-detail", // A reload must use the authorized server route, not a prior navigation seed.
   "projectLabels",
   "chat-sessions",
   "comments",

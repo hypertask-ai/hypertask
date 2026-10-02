@@ -10,6 +10,7 @@ import {
 } from "@/lib/agentRuns/model";
 
 import {
+  HTPR_6752_INSTANT_TICKET_OPEN_FLAG,
   AGENT_CHAT_BRIEF_FLAG,
   AGENT_CHAT_TICKET_CONFIRM_FLAG,
   AUTO_TASK_DESCRIPTIONS_FLAG,
@@ -117,6 +118,12 @@ const RETIRED_CLIENT_FEATURE_FLAGS = {
 } as const;
 
 const FEATURE_FLAG_DEFINITIONS = [
+  {
+    key: HTPR_6752_INSTANT_TICKET_OPEN_FLAG,
+    shippedOn: "2026-10-02",
+    description:
+      "Shows a ticket immediately from authorized cached board, My Tasks, or Inbox data while its full detail refreshes in the background.",
+  },
   {
     key: "yper4-123-board-check",
     shippedOn: "2026-10-01",

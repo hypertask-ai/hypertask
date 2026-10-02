@@ -20,6 +20,7 @@ function loadController(prisma, calls) {
   }).outputText;
 
   const stubs = {
+    "@/lib/flags": { isFeatureEnabled: async () => false, HTPR_6752_INSTANT_TICKET_OPEN_FLAG: "htpr-6752-instant-ticket-open" },
     "@/lib/prisma": { __esModule: true, default: prisma },
     "@/lib/ai/teamBillingSnapshotSelect": { teamBillingSnapshotSelect: {} },
     "./getAllIncludes": {
@@ -111,6 +112,7 @@ test("board payload checks access before querying task content", async () => {
     userId: 6,
     userDbId: 6,
     currentUserId: 6,
+    includeCachedDescription: false,
   });
   assert.deepEqual(calls.find(([name]) => name === "open-blockers")[1], [
     { id: 101 },

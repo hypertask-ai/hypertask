@@ -89,6 +89,12 @@ test("old SSR timestamps refetch immediately instead of becoming fresh at mount"
   assert.deepEqual(client.getQueryData(queryKey), response);
 });
 
+test("pending cached comments fetch immediately rather than becoming a fresh empty thread", async (t) => {
+  const { calls, client, queryKey, response } = await mountComments(t, { initialData: { pending: true } });
+  assert.equal(calls.length, 1);
+  assert.deepEqual(client.getQueryData(queryKey), response);
+});
+
 test("missing server comments fetch immediately instead of treating an empty fallback as fresh", async (t) => {
   const { calls } = await mountComments(t);
   assert.equal(calls.length, 1);

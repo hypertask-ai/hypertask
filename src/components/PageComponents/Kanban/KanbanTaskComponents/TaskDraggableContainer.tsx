@@ -1,4 +1,6 @@
 import { IProject, ITask } from "@/models/model";
+import { useFlag } from "@/hooks/useFlag";
+import { HTPR_6752_INSTANT_TICKET_OPEN_FLAG } from "@/lib/flags/keys";
 import Link from "next/link";
 import React, { useCallback, ReactNode, useContext } from "react";
 import { DraggableProvided, DraggableStateSnapshot } from "@hello-pangea/dnd";
@@ -33,6 +35,7 @@ const TaskDraggableContainer: React.FC<ITaskDraggableContainer> = ({
   parentClassName,
   linkClassName,
 }) => {
+  const instantTicketOpen = useFlag(HTPR_6752_INSTANT_TICKET_OPEN_FLAG);
   const isMbl = useContext(MobileViewContext);
 
   const getStyle = useCallback(
@@ -90,6 +93,14 @@ const TaskDraggableContainer: React.FC<ITaskDraggableContainer> = ({
         // style={{pointerEvents:showBoardManager?"none":"auto"}}
         className={cn(`flex items-center p-2 gap-1.5 flex-wrap`, linkClassName)}
         href={taskHref}
+        onClick={instantTicketOpen ? (event) => {
+          if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey || event.button !== 0) {
+            event.stopPropagation();
+            return;
+          }
+          // The parent owns navigation; don't also start Next's RSC route.
+          event.preventDefault();
+        } : undefined}
       >
         {children}
       </Link>

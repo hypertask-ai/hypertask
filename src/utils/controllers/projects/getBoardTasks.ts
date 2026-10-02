@@ -1,4 +1,5 @@
 import prisma from "@/lib/prisma";
+import { HTPR_6752_INSTANT_TICKET_OPEN_FLAG, isFeatureEnabled } from "@/lib/flags";
 import { teamBillingSnapshotSelect } from "@/lib/ai/teamBillingSnapshotSelect";
 import {
   getBoardTaskInclude,
@@ -33,6 +34,8 @@ const getBoardTasks = async (
       return { status: 400, json: { message: "projectId and userId are required" } };
     }
 
+    const cachedDescriptionPromise = isFeatureEnabled(HTPR_6752_INSTANT_TICKET_OPEN_FLAG, userId).catch(() => false);
+
     // Access guard: only owners/members of the board may read its board payload.
     const project = await prisma.project.findFirst({
       where: { id: projectId, status: "Normal", ...getProjectWhere(userId) },
@@ -63,11 +66,12 @@ const getBoardTasks = async (
       return { status: 403, json: { message: "No access to this board" } };
     }
 
+    const includeCachedDescription = await cachedDescriptionPromise;
     const tasks = await prisma.task.findMany({
       where: { projectId, ...getTaskWhere() },
       omit: taskBoardOmit,
       include: {
-        ...getBoardTaskInclude({ userId, userDbId: userId, currentUserId }),
+        ...getBoardTaskInclude({ userId, userDbId: userId, currentUserId, includeCachedDescription }),
         customFieldValues: {
           select: { fieldId: true, value: true, numericValue: true },
         },

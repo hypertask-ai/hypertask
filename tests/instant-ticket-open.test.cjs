@@ -10,8 +10,12 @@ const ts = require("typescript");
 const root = path.resolve(__dirname, "..");
 let pathname = "/project";
 const mocks = {
-  "next/navigation": { usePathname: () => pathname },
+  "next/navigation": { usePathname: () => pathname, useRouter: () => ({ replace: () => {} }) },
   "lucide-react": { ChevronLeft: () => null },
+  "@/lib/state": { useRecoilValue: () => ({ id: 2343 }) },
+  "@/store": { currentUserAtom: {} },
+  "@/hooks/useFlag": { useFlag: () => true },
+  "@/lib/flags/keys": { HTPR_6752_INSTANT_TICKET_OPEN_FLAG: "htpr-6752-instant-ticket-open" },
   "@/components/Common/Tooltip": { __esModule: true, default: () => null },
   "@/lib/contexts/mobileContext": { MobileViewContext: React.createContext(false) },
   "@/utils/undoActions/helperFuncs": { cn: (...parts) => parts.filter(Boolean).join(" ") },
@@ -30,6 +34,13 @@ mocks["@/lib/contexts/Multipages/AI_Agent/chatContext"] = context;
 const ChatRuntimeHost = load("src/components/ProviderGlobal/ChatRuntimeHost.tsx").default;
 const AIChatClosedLayout = load("src/components/AI_CHAT/AI_Chat_Closed_Layout.tsx").default;
 const FullScreenChatLoading = load("src/components/AI_CHAT/FullScreenChatLoading.tsx").default;
+const queryClient = new (require("@tanstack/react-query").QueryClient)();
+mocks["@tanstack/react-query"] = { useQueryClient: () => queryClient };
+mocks["@/components/Modals/SwipeUnread/EmbeddedTaskDetail"] = { __esModule: true, default: () => null };
+mocks["@/lib/navigation/cachedTaskDetail"] = require("jiti").createJiti(__filename, {
+  alias: { "@": path.join(root, "src") },
+})(path.join(root, "src/lib/navigation/cachedTaskDetail.ts"));
+const CachedTaskDetailNavigation = load("src/components/PageComponents/TaskDetail/CachedTaskDetailNavigation.tsx").default;
 
 // Execute the production shell's JSX, not a copy of its route/loading policy.
 const globalSource = ts.createSourceFile("GloablProviders.tsx", fs.readFileSync(path.join(root, "src/components/ProviderGlobal/GloablProviders.tsx"), "utf8"), ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
@@ -44,9 +55,11 @@ visit(globalSource);
 assert.ok(shell && mountPolicy, "the actual global chat shell must be exercised");
 const compiledShell = ts.transpileModule(`
 export function Shell({ pathname, children, ChatRuntime }) {
+  const instantTicketOpen = false;
   const isFullScreenChat = pathname.startsWith('/chat');
   const isTaskDetailPage = pathname.startsWith('/detail');
   const shouldMountAgentChatRuntime = false;
+  const authenticatedUserId = 2343;
   const chatRuntimeMounted = false;
   const showAiChatInterface = false;
   const shouldMountChatRuntime = ${mountPolicy};
@@ -58,7 +71,7 @@ export function Shell({ pathname, children, ChatRuntime }) {
   return (${shell});
 }`, { compilerOptions: { jsx: ts.JsxEmit.ReactJSX, module: ts.ModuleKind.CommonJS } }).outputText;
 const shellExports = {};
-new Function("require", "exports", "ChatRuntimeHost", "AIChatClosedLayout", "FullScreenChatLoading", "Suspense", compiledShell)(require, shellExports, ChatRuntimeHost, AIChatClosedLayout, FullScreenChatLoading, React.Suspense);
+new Function("require", "exports", "ChatRuntimeHost", "AIChatClosedLayout", "FullScreenChatLoading", "Suspense", "CachedTaskDetailNavigation", compiledShell)(require, shellExports, ChatRuntimeHost, AIChatClosedLayout, FullScreenChatLoading, React.Suspense, CachedTaskDetailNavigation);
 
 for (const mobile of [true, false]) {
   test(`${mobile ? "phone" : "desktop"} ticket shell renders immediately while chat is pending and does not remount when it resolves`, async () => {

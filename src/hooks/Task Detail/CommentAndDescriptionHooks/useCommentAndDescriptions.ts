@@ -1,4 +1,6 @@
 /* eslint-disable react-hooks/exhaustive-deps */
+import { useFlag } from "@/hooks/useFlag";
+import { HTPR_6752_INSTANT_TICKET_OPEN_FLAG } from "@/lib/flags/keys";
 import { useTaskContext } from "@/lib/contexts/TaskDetail/TaskProvider";
 import { IAttachment, IComment } from "@/models/model";
 import {
@@ -150,10 +152,19 @@ const useDescriptionAndCommentsStates = () => {
     toggleEmojiPickerDescription,
     emojiClickHandlerDescriptionr,
   } = useDescriptionReactions();
+  const instantTicketOpen = useFlag(HTPR_6752_INSTANT_TICKET_OPEN_FLAG);
   const _parsedTask = useMemo(() => JSON.parse(parsed_task), [parsed_task]);
   const [descriptionAttachments, setDescriptionAttachments] = useState<
     IAttachment[]
   >(_parsedTask?.description_?.attachments ?? []);
+  const preserveEditorContent = shouldPreserveTaskEditorContent({
+    hasDraft, hasDraftInit, editMode, uploadingDescription,
+  });
+  useEffect(instantTicketOpen ? () => {
+    if (!preserveEditorContent) {
+      setDescriptionAttachments(currentTask?.description_?.attachments ?? []);
+    }
+  } : () => {}, [currentTask?.description_]);
   const [_, setIdToDelete] = useRecoilState<any>(idToDeleteCommentAtom);
   const [resetDraft, setResetDraft] = useState<
     "Comment" | "Description" | undefined
@@ -205,7 +216,7 @@ const useDescriptionAndCommentsStates = () => {
     () => normalizeCommentsQueryPayload(commentsFromQueryTQ),
     [commentsFromQueryTQ]
   );
-  const commentsListFromQuery = commentsQueryPayload.comments;
+  const commentsListFromQuery = instantTicketOpen && commentsFromQueryTQ === undefined ? undefined : commentsQueryPayload.comments;
   const lastReadAtFromQuery = commentsQueryPayload.lastReadAt;
   const agentRunActivitiesFromQuery = commentsQueryPayload.agentRunActivities;
   const unreadSnapshotRef = useRef<{
@@ -223,12 +234,7 @@ const useDescriptionAndCommentsStates = () => {
     setCurrentTask,
     setDescription,
     setDescriptionAttachments,
-    preserveEditorContent: shouldPreserveTaskEditorContent({
-      hasDraft,
-      hasDraftInit,
-      editMode,
-      uploadingDescription,
-    }),
+    preserveEditorContent,
   });
 
   const markTaskReadOnLeave = useCallback(
@@ -884,10 +890,16 @@ const useDescriptionAndCommentsStates = () => {
     }
   }, [comments]);
 
-  useEffect(() => {
+  useEffect(instantTicketOpen ? () => {
+    if (!preserveEditorContent) setDescription(_parsedTask?.description_?.content ?? "");
+  } : () => {
     setDescription(_parsedTask?.description_?.content);
   }, [_parsedTask?.description_?.content]);
-  useEffect(() => {
+  useEffect(instantTicketOpen ? () => {
+    if (!preserveEditorContent) {
+      setDescriptionAttachments(_parsedTask?.description_?.attachments ?? []);
+    }
+  } : () => {
     setDescriptionAttachments(_parsedTask?.description_?.attachments);
   }, [_parsedTask?.description_?.attachments]);
 

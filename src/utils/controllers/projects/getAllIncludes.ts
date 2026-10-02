@@ -8,6 +8,7 @@ export type GetAllIncludesOptions = {
   userId: number;
   userDbId: number;
   currentUserId?: number;
+  includeCachedDescription?: boolean;
 };
 
 const humanProjectAccessBranches = (
@@ -375,7 +376,8 @@ export const getBoardTaskInclude = (
     layers.priorityEstimate,
     layers.subTasks,
     layers.parentTask,
-    layers.savedContent
+    layers.savedContent,
+    options.includeCachedDescription ? { description_: { select: { content: true } } } : {}
   );
 };
 

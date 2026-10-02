@@ -30,6 +30,8 @@ import {
 } from "@/models/Views/model";
 import { CommandMode } from "@/models/enums";
 import ProgressiveTaskPlaceholder from "../KanbanTaskComponents/ProgressiveTaskPlaceholder";
+import { useFlag } from "@/hooks/useFlag";
+import { HTPR_6752_INSTANT_TICKET_OPEN_FLAG } from "@/lib/flags/keys";
 import useHypertasksNavigate from "@/hooks/MultiPages/Route/useHypertasksNavigate";
 import {
   getMobileSectionObserverOptions,
@@ -82,7 +84,7 @@ const TaskSkeleton = ({ provided }: { provided?: DraggableProvided }) => {
   );
 };
 
-const Section = ({
+export const Section = ({
   section,
   moveItemUp,
   updateAssignees,
@@ -135,6 +137,7 @@ const Section = ({
   const setActiveSection = useSetRecoilState(activeSectionAtom);
   const setActiveSectionId = useSetRecoilState(activeSectionIdAtom);
   const setTasksPlayList = useSetRecoilState(tasksPlayListAtom);
+  const instantTicketOpen = useFlag(HTPR_6752_INSTANT_TICKET_OPEN_FLAG);
   const { navigateToTask } = useHypertasksNavigate();
   const [revealedTaskIds, setRevealedTaskIds] = useState<Set<number>>(
     () => new Set(),
@@ -254,14 +257,17 @@ const Section = ({
     });
   }, [taskModuleReady]);
 
-  const openTask = useCallback(
-    (task: ITask) => {
+  const openTaskWithCachedData = useCallback(
+    (includeCachedTask: boolean, task: ITask) => {
       if (task.uniqueIndex === undefined) return;
       setTasksPlayList(tasksPlayList);
-      navigateToTask(task.projectId, task.uniqueIndex);
+      navigateToTask(task.projectId, task.uniqueIndex, "push", undefined, includeCachedTask ? task : undefined);
     },
     [navigateToTask, setTasksPlayList, tasksPlayList],
   );
+  const openTask = instantTicketOpen
+    ? openTaskWithCachedData.bind(null, true)
+    : openTaskWithCachedData.bind(null, false);
 
   useEffect(() => {
     if (

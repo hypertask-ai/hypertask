@@ -488,6 +488,7 @@ test("declared flags remain listed with ticket details and can be changed", asyn
         mode: "OWNER_AND_QA",
         updatedAt: null,
       },
+      { key: "htpr-6752-instant-ticket-open", mode: "OWNER_AND_QA", updatedAt: null },
       { key: "htpr-6800-flag-ticket-id", mode: "OWNER_AND_QA", updatedAt: null },
       { key: "yper4-123-board-check", mode: "OWNER_AND_QA", updatedAt: null },
     ],

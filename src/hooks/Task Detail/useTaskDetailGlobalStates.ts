@@ -62,7 +62,8 @@ import type { SerializedAgentRunActivity } from "@/lib/agentRuns/model";
 import { mergeTaskThreadFeed } from "@/lib/agentRuns/taskActivityFeed";
 import { isCommentCreatedByUser } from "@/lib/htc/isCommentCreatedByUser";
 import { useFlag } from "@/hooks/useFlag";
-import { HTPR_6551_QUIET_RUN_ACTIVITY_FLAG } from "@/lib/flags/keys";
+import { useHydrated } from "@/hooks/General/useHydrated";
+import { HTPR_6752_INSTANT_TICKET_OPEN_FLAG, HTPR_6551_QUIET_RUN_ACTIVITY_FLAG } from "@/lib/flags/keys";
 
 // import useSetStickyHeight from "./useSetStickyHeight";
 export type TReturnFocusedEl =
@@ -90,7 +91,17 @@ const useTaskDetailGlobalStates = (
   // const{setStickyElementHeight} =useSetStickyHeight()
   const [editMode, setEditMode] = useState<ITaskDetailEditMode>(null);
   // console.log("🚀 ~ useTaskDetailGlobalStates ~ editMode:", editMode)
+  const instantTicketOpen = useFlag(HTPR_6752_INSTANT_TICKET_OPEN_FLAG);
   const initialCommentsPayload = useMemo(() => JSON.parse(_comments), [_comments]);
+  const [secondaryPanelsReady, setSecondaryPanelsReady] = useState(!instantTicketOpen || !initialCommentsPayload.pending);
+  useEffect(() => {
+    if (secondaryPanelsReady) return;
+    // Cached title and body paint before mounting editors and property controls.
+    let frame = requestAnimationFrame(() => {
+      frame = requestAnimationFrame(() => setSecondaryPanelsReady(true));
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [secondaryPanelsReady]);
   const [comments, setComments] = useState<IComment[]>(
     initialCommentsPayload.comments ?? []
   );
@@ -313,9 +324,12 @@ const useTaskDetailGlobalStates = (
   // The normal detail page virtualizes against the browser window. Embedded
   // task detail has its own scrollable card, so keep the same renderer and
   // measurements while swapping only the scroll element.
+  const hydrated = useHydrated();
   const windowVirtualizer = useWindowVirtualizer({
     ...virtualizerOptions,
     count: scrollElementRef ? 0 : _count,
+    // Cached client navigation already knows the viewport; render its body on the first commit.
+    initialRect: instantTicketOpen && hydrated ? { width: window.innerWidth, height: window.innerHeight } : undefined,
   });
   const elementVirtualizer = useVirtualizer({
     ...virtualizerOptions,
@@ -804,6 +818,7 @@ const useTaskDetailGlobalStates = (
   };
 
   return {
+    secondaryPanelsReady,
     setEditMode,
     editMode,
     currentTask,

@@ -3,6 +3,13 @@ import { useRouter, usePathname } from "next/navigation";
 import toast from "react-hot-toast";
 import { useQueryClient } from "@tanstack/react-query";
 import { REACT_QUERY_KEYS } from "@/lib/constants/constants";
+import { useRecoilValue } from "@/lib/state";
+import { currentUserAtom } from "@/store";
+import { useAuth } from "@/hooks/General/useAuth";
+import type { ITask } from "@/models/model";
+import { useFlag } from "@/hooks/useFlag";
+import { HTPR_6752_INSTANT_TICKET_OPEN_FLAG } from "@/lib/flags/keys";
+import { openCachedTaskDetail } from "@/lib/navigation/cachedTaskDetail";
 import {
   markTaskDetailNavigationStart,
   taskDetailEntryPathForRoute,
@@ -29,8 +36,12 @@ type Pages =
   | "Timers";
 
 const useHypertasksNavigate = () => {
+  const instantTicketOpen = useFlag(HTPR_6752_INSTANT_TICKET_OPEN_FLAG);
   const router = useRouter();
   const pathname = usePathname();
+  const queryClient = useQueryClient();
+  const currentUser = useRecoilValue(currentUserAtom);
+  const { authenticatedUserId } = useAuth();
 
   const navigateToReminders = () => router.push(`/reminders`);
   const navigateToInbox = (showAll: true) =>
@@ -49,13 +60,18 @@ const useHypertasksNavigate = () => {
   const navigateToPinned = () => router.push(globalConstants.pinnedRoute);
   const navigateToDrafts = () => router.push(globalConstants.draftsRoute);
   const navigateToSnippets = () => router.push(globalConstants.snippetsRoute);
-  const navigateToTask = (projectId:number, taskUnqIdx:number, pushOrReplace:"push"|"replace"='push', additionalSQuery?:string) =>{
+  const navigateToTask = (projectId:number, taskUnqIdx:number, pushOrReplace:"push"|"replace"='push', additionalSQuery?:string, task?: ITask) =>{
     const finalURL = `/detail/project-${projectId}/${taskUnqIdx}` + (additionalSQuery??"");
     const entryPath = taskDetailEntryPathForRoute(pathname);
     if (entryPath) markTaskDetailNavigationStart(entryPath, finalURL);
+    if (instantTicketOpen && currentUser?.id && authenticatedUserId === currentUser.id) {
+      if (openCachedTaskDetail({
+        queryClient, accountId: currentUser.id, projectId, uniqueIndex: taskUnqIdx,
+        href: finalURL, replace: pushOrReplace === "replace", task,
+      })) return;
+    }
     pushOrReplace === "push" ? router.push(finalURL):router.replace(finalURL);
   }
-  const queryClient = useQueryClient();
   const navigate = (page: Pages, payload?: any) => {
     const uploadInProgress = queryClient.getQueryData(
       REACT_QUERY_KEYS.uploadStates

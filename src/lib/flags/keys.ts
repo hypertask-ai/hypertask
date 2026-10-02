@@ -11,6 +11,8 @@
 // HTPR-6722: GPT 6 Luna as a Free-plan model and the Free-plan default.
 export const LUNA_FREE_PLAN_FLAG = "htpr-6722-latest-models";
 
+export const HTPR_6752_INSTANT_TICKET_OPEN_FLAG = "htpr-6752-instant-ticket-open";
+
 export const FEATURE_FLAG_DETAILS_FLAG = "htpr-6133-feature-flag-details";
 export const LOCAL_WRITING_ASSISTANCE_FLAG =
   "htpr-5908-local-writing-assistance";
