@@ -29,10 +29,39 @@ function returnedArrow(file, factory) {
 // providers. Follow the extracted catalog and expose the same lexical source.
 function chatStreamSource() {
   const catalog = source(path.join(tools, "index.ts"));
-  const factoryFiles = catalog.statements.filter(ts.isImportDeclaration)
-    .map((node) => node.moduleSpecifier.text)
-    .filter((name) => name.startsWith("./") && name !== "./context")
-    .map((name) => path.join(tools, `${name}.ts`));
+  const imports = new Map(catalog.statements.filter(ts.isImportDeclaration)
+    .flatMap((node) => node.importClause?.namedBindings?.elements?.map((binding) =>
+      [binding.name.text, node.moduleSpecifier.text],
+    ) ?? []));
+  const builder = find(catalog, (node) =>
+    ts.isFunctionDeclaration(node) && node.name?.text === "buildTools",
+  );
+  const registry = find(builder, (node) =>
+    ts.isVariableDeclaration(node) && node.name.getText(catalog) === "tools",
+  ).initializer;
+  const factoryFiles = registry.properties.map((node) => {
+    const selected = node.initializer;
+    const call = selected?.expression;
+    const modulePath = imports.get(call?.expression?.text);
+    if (!ts.isPropertyAssignment(node) ||
+      !selected || !ts.isPropertyAccessExpression(selected) ||
+      !call || !ts.isCallExpression(call) ||
+      call.arguments.length !== 1 || call.arguments[0].getText(catalog) !== "context" ||
+      selected.name.text !== node.name.getText(catalog) || !modulePath?.startsWith("./")) {
+      throw new Error("Invalid chat tool registration");
+    }
+    const file = path.join(tools, `${modulePath}.ts`);
+    const factory = source(file);
+    const declaration = find(factory, (candidate) =>
+      ts.isFunctionDeclaration(candidate) && candidate.name?.text === call.expression.text,
+    );
+    const returned = declaration?.body.statements.find(ts.isReturnStatement)?.expression;
+    if (!returned || !ts.isObjectLiteralExpression(returned) ||
+      !returned.properties.some((property) => property.name?.getText(factory) === selected.name.text)) {
+      throw new Error("Invalid chat tool registration");
+    }
+    return file;
+  });
   const schemaSource = source(path.join(tools, "updateTaskSchema.ts"));
   const schema = find(schemaSource, (node) =>
     ts.isVariableDeclaration(node) && node.name.getText(schemaSource) === "updateTaskSchema",
