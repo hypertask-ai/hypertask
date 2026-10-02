@@ -588,8 +588,7 @@ test("the retired factory flag remains off for old deployments but disappears fr
   );
 });
 
-test("the retired shallow switch stays on in client payloads but is not editable", async () => {
-  const key = "htpr-6072-shallow-board-switch";
+for (const key of ["htpr-6072-shallow-board-switch", "htpr-6254-heic-heif-attachments"]) test(`the retired ${key} stays on in client payloads but is not editable`, async () => {
   listedRows = [{ key, mode: "OFF", updatedAt: new Date() }];
   row = { mode: "OFF", updatedAt: new Date() };
 
