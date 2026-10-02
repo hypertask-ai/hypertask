@@ -4,8 +4,6 @@ import {
   isUnrenderableImage,
 } from "@/lib/media/browserRenderableImage";
 import { heicPreviewUrl } from "@/lib/media/heicPreview";
-import { useFlag } from "@/hooks/useFlag";
-import { HEIC_ATTACHMENTS_FLAG } from "@/lib/flags/keys";
 import React, { useState, useEffect, useContext } from "react";
 import "@/styles/AttachmentView.scss";
 import DocViewer, { DocViewerRenderers } from "react-doc-viewer";
@@ -64,13 +62,9 @@ const AttachmentCarousel: React.FC<AttachmentCarouselProps> = ({
 
   const filesToCheck = ["xlsx", "docx", "doc", "pptx", "ppt"];
 
-  // HTPR-6254. Flag off keeps the old behaviour exactly: anything typed
-  // "image/" goes to the lightbox's image renderer, HEIC included.
-  const heicFallbackEnabled = useFlag(HEIC_ATTACHMENTS_FLAG);
+  // HTPR-6254: a HEIC is an "image/" the lightbox cannot paint.
   const renderableImage = (fileType?: string | null, fileName?: string | null) =>
-    heicFallbackEnabled
-      ? isBrowserRenderableImage(fileType, fileName)
-      : Boolean(fileType?.startsWith("image/"));
+    isBrowserRenderableImage(fileType, fileName);
 
   /**
    * Which HEIC previews actually exist (HTPR-6264).
@@ -101,7 +95,6 @@ const AttachmentCarousel: React.FC<AttachmentCarouselProps> = ({
   const previewIsShowable = (url: string) => previewLoaded[url] !== false;
 
   useEffect(() => {
-    if (!heicFallbackEnabled) return;
     let cancelled = false;
     const images: HTMLImageElement[] = [];
 
@@ -133,7 +126,7 @@ const AttachmentCarousel: React.FC<AttachmentCarouselProps> = ({
         image.onerror = null;
       });
     };
-  }, [attachments, heicFallbackEnabled]);
+  }, [attachments]);
 
 
   // Transform attachments to lightbox slides format
@@ -148,13 +141,11 @@ const AttachmentCarousel: React.FC<AttachmentCarouselProps> = ({
     // Both download paths below resolve the file from `attachments[index]`
     // rather than from the slide, so they already hand back the original HEIC
     // and need no change here.
-    const previewUrl = heicFallbackEnabled
-      ? heicPreviewUrl(
-          attachment.fileSource,
-          attachment.fileType,
-          attachment.fileName
-        )
-      : null;
+    const previewUrl = heicPreviewUrl(
+      attachment.fileSource,
+      attachment.fileType,
+      attachment.fileName
+    );
     if (previewUrl && previewIsShowable(previewUrl)) {
       return {
         src: previewUrl,
@@ -271,7 +262,6 @@ const AttachmentCarousel: React.FC<AttachmentCarouselProps> = ({
     // MIME at all, so the document branch below would miss it and the lightbox
     // would fall through to a blank slide (HTPR-6254). Offer the download.
     else if (
-      heicFallbackEnabled &&
       (slide as any).fileSource &&
       isUnrenderableImage((slide as any).fileType, (slide as any).fileName)
     ) {

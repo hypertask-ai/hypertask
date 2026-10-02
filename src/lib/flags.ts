@@ -16,7 +16,6 @@ import {
   HTPR_6157_AUTO_DESCRIPTION_FLAG,
   COLUMN_ALL_VIEWS_FLAG,
   CORE_ACTIONS_SMOKE_FLAG,
-  HEIC_ATTACHMENTS_FLAG,
   HTPR_6278_CHAT_TURN_FAILURE_FLAG,
   AGENT_VISIBILITY_FLAG,
   FEATURE_FLAG_DETAILS_FLAG,
@@ -317,12 +316,6 @@ const FEATURE_FLAG_DEFINITIONS = [
     shippedOn: "2026-09-08",
     description:
       "Shares one agent conversation across authorized teammates, with private unread position and drafts for each person.",
-  },
-  {
-    key: HEIC_ATTACHMENTS_FLAG,
-    shippedOn: "2026-09-08",
-    description:
-      "Shows a HEIC, HEIF or TIFF attachment as a named file you can download, instead of the broken-image icon a browser paints when it cannot decode the format.",
   },
   {
     key: CORE_ACTIONS_SMOKE_FLAG,
