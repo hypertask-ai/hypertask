@@ -3,8 +3,6 @@ import { currentProjectAtom } from "@/store";
 import type { SuggestionOptions, SuggestionProps } from "@tiptap/suggestion";
 import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from "react";
 import { useRecoilState } from "@/lib/state";
-import { useFlag } from "@/hooks/useFlag";
-import { AGENT_CHAT_SKILLS_FLAG } from "@/lib/flags/keys";
 import AILogo from "@/assets/AILogo.png"
 import {
   buildSkillSlashItems,
@@ -30,13 +28,12 @@ const CommandsList = forwardRef<SuggestionListRef, SuggestionListProps>(
     const [currentProject, _] =useRecoilState(currentProjectAtom);
     const [selectedIndex, setSelectedIndex] = useState(0);
     const [skillItems, setSkillItems] = useState<SkillSlashItem[]>([]);
-    const agentChatSkillsEnabled = useFlag(AGENT_CHAT_SKILLS_FLAG);
     const mode = (props.editor?.storage as any)?.slashCommands?.mode as
       | string
       | undefined;
     const skillsEnabled =
       mode === COMMENT_SKILL_MODE ||
-      (mode === AGENT_CHAT_SKILL_MODE && agentChatSkillsEnabled);
+      mode === AGENT_CHAT_SKILL_MODE;
     // Track whether this editor ever had base commands. Tiptap v3 emits a
     // transient empty props.items frame between keystrokes; once we've seen real
     // base items, an empty frame is that loading placeholder (keep the prior

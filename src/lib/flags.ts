@@ -11,7 +11,6 @@ import {
 
 import {
   AGENT_CHAT_BRIEF_FLAG,
-  AGENT_CHAT_SKILLS_FLAG,
   AGENT_CHAT_TICKET_CONFIRM_FLAG,
   AUTO_TASK_DESCRIPTIONS_FLAG,
   HTPR_6157_AUTO_DESCRIPTION_FLAG,
@@ -330,12 +329,6 @@ const FEATURE_FLAG_DEFINITIONS = [
     shippedOn: "2026-09-08",
     description:
       "Runs the logged-in core-action production check and restores its isolated fixture after each run.",
-  },
-  {
-    key: AGENT_CHAT_SKILLS_FLAG,
-    shippedOn: "2026-09-07",
-    description:
-      "Lets people import skills from GitHub and invoke installed skills in Agent Chat with /slug.",
   },
   {
     key: "htpr-5913-consistent-comment-shortcuts",
