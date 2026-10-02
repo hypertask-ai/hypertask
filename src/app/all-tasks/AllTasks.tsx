@@ -28,7 +28,6 @@ import {
   ALL_TASKS_DATE_RANGES,
   type AllTasksDateRange,
 } from "@/lib/configs/allTasks.config";
-import { useFlag } from "@/hooks/useFlag";
 import { MOBILE_TARGET } from "@/lib/configs/general.config";
 const HypertasksCommands = dynamic(() => import("@/components/commands"), {
   ssr: false,
@@ -43,7 +42,6 @@ interface IProps {
 
 const AllTasks = ({ _allData, tabs, currentUser, dateRange }: IProps) => {
   const isMbl = useContext(MobileViewContext);
-  const mobileRedesignEnabled = useFlag("htpr-5992-mobile-all-tasks");
   const appShellRailOn = useRecoilValue(appShellRailAtom) && !isMbl;
   const [allData, setAllData] = useState<Record<string, any[]>>(_allData);
   const [currentProject, ____] = useRecoilState(currentProjectAtom);
@@ -525,28 +523,26 @@ const AllTasks = ({ _allData, tabs, currentUser, dateRange }: IProps) => {
           </div>
         </div>
 
-        {mobileRedesignEnabled && (
-          <div className="mt-4 flex w-full gap-1 overflow-x-auto border-b border-border-light-gray-thin pb-2 @md:hidden scrollbar-none no-scrollbar">
-            {tabs.map((item, index) => (
-              <button
-                key={`mobile-split-alltasks-${index}`}
-                type="button"
-                aria-pressed={activeSplit === index}
-                onClick={() => updateSplitAndTasks(index)}
-                className={`${MOBILE_TARGET} rounded-[4px] px-2.5 py-1.5 text-dense ${
-                  activeSplit === index
-                    ? "bg-active-elementBg text-white-black"
-                    : "text-text-light-gray"
-                }`}
-              >
-                {item}
-                <span className="ml-1 text-micro text-text-light-gray">
-                  {allData[item].length}
-                </span>
-              </button>
-            ))}
-          </div>
-        )}
+        <div className="mt-4 flex w-full gap-1 overflow-x-auto border-b border-border-light-gray-thin pb-2 @md:hidden scrollbar-none no-scrollbar">
+          {tabs.map((item, index) => (
+            <button
+              key={`mobile-split-alltasks-${index}`}
+              type="button"
+              aria-pressed={activeSplit === index}
+              onClick={() => updateSplitAndTasks(index)}
+              className={`${MOBILE_TARGET} rounded-[4px] px-2.5 py-1.5 text-dense ${
+                activeSplit === index
+                  ? "bg-active-elementBg text-white-black"
+                  : "text-text-light-gray"
+              }`}
+            >
+              {item}
+              <span className="ml-1 text-micro text-text-light-gray">
+                {allData[item].length}
+              </span>
+            </button>
+          ))}
+        </div>
 
         <div className="w-full">
           <div className="p-0 rounded-b-[4px]  ">
@@ -554,15 +550,12 @@ const AllTasks = ({ _allData, tabs, currentUser, dateRange }: IProps) => {
               id="users-list"
               ref={ulRef}
               onMouseMove={handleMouseMove}
-              className={`rounded-b-[4px] px-0 @md:!px-16 text-dense text-gray-200 overflow-y-auto scrollbar-none pb-20 @md:!pb-0 ${
-                mobileRedesignEnabled ? "mt-1 @md:mt-3" : "mt-3"
-              }`}
+              className="rounded-b-[4px] px-0 @md:!px-16 text-dense text-gray-200 overflow-y-auto scrollbar-none pb-20 @md:!pb-0 mt-1 @md:mt-3"
               aria-labelledby="assignDelayButton"
             >
               {tasks &&
                 tasks.map((task: ITask, index: number) => {
                   const showProjectHeading =
-                    mobileRedesignEnabled &&
                     activeSplit === 0 &&
                     task.project?.title &&
                     task.project.title !== tasks[index - 1]?.project?.title;
@@ -581,7 +574,7 @@ const AllTasks = ({ _allData, tabs, currentUser, dateRange }: IProps) => {
                         handleMouseLeave={handleMouseLeave}
                         selected={selectedIndex === index}
                         flushMobilePadding
-                        compactMobile={mobileRedesignEnabled}
+                        compactMobile
                       />
                     </Fragment>
                   );
@@ -590,23 +583,6 @@ const AllTasks = ({ _allData, tabs, currentUser, dateRange }: IProps) => {
           </div>
         </div>
         </div>
-        {!mobileRedesignEnabled && (
-          <div className="flex inbox_footer @md:hidden no-scrollbar scrollbar-none  @md:gap-8 w-100 bg-hoverCardBackground  h-20 @md:h-8 inbox_title">
-            {tabs.map((item, index) => (
-              <SplitTitle
-                key={`split-alltasks-${index}`}
-                isSelected={activeSplit === index}
-                onClick={() => updateSplitAndTasks(index)}
-                tab={{
-                  idx: index,
-                  project: item,
-                  length: allData[item].length,
-                  hasUnseen: false,
-                }}
-              />
-            ))}
-          </div>
-        )}
       </div>
   );
 

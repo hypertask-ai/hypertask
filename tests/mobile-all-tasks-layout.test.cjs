@@ -11,7 +11,6 @@ const allTasks = read("src/app/all-tasks/AllTasks.tsx");
 const taskListRow = read(
   "src/components/Common/TaskRowComponents/TaskListRow.tsx",
 );
-const flags = read("src/lib/flags.ts");
 const allTasksSource = ts.createSourceFile(
   "AllTasks.tsx",
   allTasks,
@@ -44,19 +43,6 @@ const attributeText = (element, name) => {
   return initializer.getText(allTasksSource);
 };
 
-const guardedBy = (node, condition) => {
-  for (let ancestor = node.parent; ancestor; ancestor = ancestor.parent) {
-    if (
-      ts.isBinaryExpression(ancestor) &&
-      ancestor.operatorToken.kind === ts.SyntaxKind.AmpersandAmpersandToken &&
-      ancestor.left.getText(allTasksSource) === condition
-    ) {
-      return true;
-    }
-  }
-  return false;
-};
-
 const mobileTabButton = jsxElements.find(
   (element) =>
     element.openingElement.tagName.getText(allTasksSource) === "button" &&
@@ -80,16 +66,10 @@ test("All Tasks owns one mobile horizontal inset around its header and rows", ()
   assert.match(taskRowTag[1], /\bflushMobilePadding\b/);
 });
 
-test("the mobile redesign is gated behind its declared feature flag", () => {
-  assert.match(flags, /"htpr-5992-mobile-all-tasks"/);
-  assert.match(
-    allTasks,
-    /useFlag\("htpr-5992-mobile-all-tasks"\)/,
-  );
+test("the mobile redesign is permanent without the legacy footer or flag lookup", () => {
+  assert.doesNotMatch(allTasks, /useFlag|mobileRedesignEnabled/);
   assert.ok(mobileTabButton, "expected the redesigned mobile tab button");
-  assert.equal(guardedBy(mobileTabButton, "mobileRedesignEnabled"), true);
-  assert.ok(legacyFooter, "expected the legacy mobile tab footer");
-  assert.equal(guardedBy(legacyFooter, "!mobileRedesignEnabled"), true);
+  assert.equal(legacyFooter, undefined);
 });
 
 test("the redesigned project tabs are inline, scrollable, and selectable", () => {
@@ -128,7 +108,7 @@ test("the redesigned project tabs are inline, scrollable, and selectable", () =>
   assert.match(allTasks, /activeSplit === 0/);
   assert.match(
     allTasks,
-    /mobileRedesignEnabled \? "mt-1 @md:mt-3" : "mt-3"/,
+    /pb-20 @md:!pb-0 mt-1 @md:mt-3/,
   );
 });
 
@@ -170,7 +150,7 @@ test("buttons defer task shortcuts without changing Escape navigation", () => {
 test("All Tasks opts into compact mobile rows without changing shared desktop rows", () => {
   const taskRowTag = allTasks.match(/<TaskListRow\b([\s\S]*?)\/>/);
   assert.ok(taskRowTag);
-  assert.match(taskRowTag[1], /compactMobile=\{mobileRedesignEnabled\}/);
+  assert.match(taskRowTag[1], /\bcompactMobile\s*\n/);
   assert.match(taskListRow, /compactMobile\?: boolean/);
   assert.match(
     taskListRow,

@@ -330,11 +330,6 @@ const FEATURE_FLAG_DEFINITIONS = [
       "Makes comment shortcuts consistent: Ctrl+Enter sends and moves on, while Ctrl+Shift+Enter sends and stays.",
   },
   {
-    key: "htpr-5992-mobile-all-tasks",
-    shippedOn: "2026-09-04",
-    description: "Shows the redesigned All Tasks view on mobile devices.",
-  },
-  {
     key: "htpr-5993-optimistic-task-uploads",
     shippedOn: "2026-09-04",
     description: "Saves new tasks immediately while their attachments continue uploading.",
