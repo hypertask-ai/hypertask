@@ -47,13 +47,18 @@ newest_pr() {
 
 bound_pr() { local f="$EVID/$1/pr"; [ -s "$f" ] && tr -dc '0-9' < "$f"; }
 # The ticket whose PR title the bound PR must carry: the ticket itself, or the one it duplicates.
+# Older merged PRs put the type first ("[BUGFIX] HTPR-6501 ..."). Accepted only for a duplicate's fixing PR.
+OLD_TITLE_RE='^\[(BUGFIX|FEATURE|IMPROVE|CLI/MCP/AI|SPEED|FEEDBACK|DASH|QA|BOARD|COST|PLAN|INFRA|REFACTOR)\] (HTPR|HYFA|YPER4)-[0-9]+ [^ ]'
+
 pr_owner() { local f="$EVID/$1/duplicate-of"; if [ -s "$f" ]; then tr -dc 'A-Z0-9-' < "$f"; else echo "$1"; fi; }
 
 pr_row() {
   local n json; n=$(bound_pr "$1")
   if [ -n "$n" ]; then
     json=$(gh pr view "$n" -R "$REPO" --json number,title,state,mergeCommit,baseRefName 2>/dev/null) || return 1
-    jq -r --arg t "$(pr_owner "$1") " --arg b "$BASE" 'if (.title | startswith($t)) and .baseRefName == $b
+    local dup=false; [ -s "$EVID/$1/duplicate-of" ] && dup=true
+    jq -r --arg t "$(pr_owner "$1") " --arg b "$BASE" --argjson dup "$dup" 'if ((.title | startswith($t))
+        or ($dup and (.title | test("^\\[[A-Z/]+\\] " + $t)))) and .baseRefName == $b
       then "\(.number) \(.state) \(.mergeCommit.oid // "-")" else "" end' <<<"$json"
   else echo "FAIL: no PR bound for $1; run ship-check bind $1 <pr number> right after opening it"; return 1; fi
 }
@@ -72,7 +77,8 @@ check_bind() {
 
 check_duplicate() {
   local t; t=$(gh pr view "$3" -R "$REPO" --json title,state --jq '"\(.state) \(.title)"' 2>/dev/null) || fail "PR $3 not found in $REPO"
-  [[ $t == "MERGED $2 "* ]] || fail "PR $3 must be the merged PR of $2, got: $t"
+  [[ $t == "MERGED $2 "* || ( $t == "MERGED ["* && ${t#MERGED } =~ $OLD_TITLE_RE && ${t#MERGED } == *"] $2 "* ) ]] \
+    || fail "PR $3 must be the merged PR of $2, got: $t"
   ( check_ticket "$1" ) >/dev/null || fail "ticket $1 not found on the board"
   # The fix is already merged, so a deleted original ticket does not block the duplicate path.
   ( check_ticket "$2" ) >/dev/null || echo "note: $2 is no longer on the board; PR $3 is merged, so it still counts"
@@ -94,7 +100,8 @@ check_pr() {
   [ -n "$row" ] || fail "no PR titled \"$1 [TYPE] ...\""
   # A duplicate's PR was checked at bind time and is merged; its original ticket may since be deleted.
   if [ -s "$EVID/$1/duplicate-of" ]; then
-    [[ $(gh pr view "${row%% *}" -R "$REPO" --json title --jq .title 2>/dev/null) =~ $TITLE_RE ]] \
+    local t; t=$(gh pr view "${row%% *}" -R "$REPO" --json title --jq .title 2>/dev/null)
+    [[ $t =~ $TITLE_RE || $t =~ $OLD_TITLE_RE ]] \
       || fail "PR ${row%% *} title must be PREFIX-NNNN [TYPE] description"
     echo "title ok"
   else check_title "${row%% *}"; fi

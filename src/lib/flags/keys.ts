@@ -16,7 +16,6 @@ export const LOCAL_WRITING_ASSISTANCE_FLAG =
   "htpr-5908-local-writing-assistance";
 export const AGENT_CHAT_BRIEF_FLAG = "htpr-6155-chat-agent-brief";
 export const SHARED_AGENT_CHAT_FLAG = "htpr-6002-shared-agent-chat";
-export const AGENT_CHAT_SKILLS_FLAG = "htpr-6035-agent-chat-skills";
 export const AGENT_CHAT_TICKET_CONFIRM_FLAG = "htpr-6006-chat-confirm-ticket";
 export const HTPR_6157_AUTO_DESCRIPTION_FLAG =
   "htpr-6157-new-task-auto-description";

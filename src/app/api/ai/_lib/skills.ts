@@ -5,7 +5,6 @@ import { STRUCTURED_WRITING_STYLE } from "@/app/api/ai/_lib/writingSkills";
 type SkillContext = {
   userId: number;
   projectId?: number;
-  allowInstalledSkills?: boolean;
 };
 type SkillLookup = (
   slugs: string[],
@@ -47,9 +46,7 @@ export async function resolveSkills(
   if (tokens.length === 0) return emptyResolution(text);
 
   const slugs = Array.from(new Set(tokens.map((match) => match[2])));
-  const databaseSlugs = context.allowInstalledSkills === false
-    ? []
-    : slugs.filter((slug) => !BUILTIN_SKILLS.has(slug));
+  const databaseSlugs = slugs.filter((slug) => !BUILTIN_SKILLS.has(slug));
   const available = databaseSlugs.length
     ? await lookup(databaseSlugs, context)
     : [];

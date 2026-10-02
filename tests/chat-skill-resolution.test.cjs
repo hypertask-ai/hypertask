@@ -4,33 +4,51 @@ const path = require("node:path");
 
 const root = path.resolve(__dirname, "..");
 const flagsPath = path.join(root, "src/lib/flags.ts");
-const skillsPath = path.join(root, "src/app/api/ai/_lib/skills.ts");
-let featureEnabled = async () => false;
+const prismaPath = path.join(root, "src/lib/prisma.ts");
+const projectAccessPath = path.join(root, "src/utils/controllers/projects/getAllIncludes.ts");
 const flagChecks = [];
-const resolutions = [];
+const lookups = [];
+const skill = {
+  id: 1,
+  userId: 42,
+  projectId: null,
+  slug: "foo",
+  name: "Foo reviewer",
+  body: "Review this as Foo.",
+  enabled: true,
+};
 
 require.cache[flagsPath] = {
   id: flagsPath,
   filename: flagsPath,
   loaded: true,
   exports: {
-    AGENT_CHAT_SKILLS_FLAG: "htpr-6035-agent-chat-skills",
-    isFeatureEnabled: async (key, userId) => {
-      flagChecks.push({ key, userId });
-      return featureEnabled();
+    isFeatureEnabled: async (...args) => {
+      flagChecks.push(args);
+      assert.fail("Skill resolution must not read a feature flag");
     },
   },
 };
-require.cache[skillsPath] = {
-  id: skillsPath,
-  filename: skillsPath,
+require.cache[prismaPath] = {
+  id: prismaPath,
+  filename: prismaPath,
   loaded: true,
   exports: {
-    resolveSkills: async (text, context) => {
-      resolutions.push({ text, context });
-      return { text, context };
+    default: {
+      aI_Skill: {
+        findMany: async (query) => {
+          lookups.push(query);
+          return [{ ...skill, userId: query.where.OR[0].userId }];
+        },
+      },
     },
   },
+};
+require.cache[projectAccessPath] = {
+  id: projectAccessPath,
+  filename: projectAccessPath,
+  loaded: true,
+  exports: { getProjectWhere: (userId) => ({ userId }) },
 };
 
 const jiti = require("jiti")(path.join(root, "tests/chat-skill-resolution.test.cjs"), {
@@ -41,58 +59,28 @@ const { resolveSkillsForAiRequest } = jiti(
   path.join(root, "src/app/api/ai/_lib/chatSkillResolution.ts")
 );
 
-test("gates installed skills in Agent Chat but preserves Task Writer", async () => {
-  const onFlagError = () => assert.fail("feature flag lookup should not fail");
+for (const [name, userId, text] of [
+  ["Agent Chat", 42, "chat"],
+  ["Task Writer", 2343, "rewrite"],
+]) {
+  test(`resolves installed skills for ${name} without a flag lookup`, async () => {
+    const result = await resolveSkillsForAiRequest(
+      `/foo ${text}`,
+      { userId, projectId: 15 }
+    );
 
-  featureEnabled = async () => false;
-  await resolveSkillsForAiRequest(
-    "/foo chat",
-    { userId: 42, projectId: 15 },
-    "aiChat",
-    onFlagError
-  );
-  assert.deepEqual(flagChecks, [
-    { key: "htpr-6035-agent-chat-skills", userId: 42 },
-  ]);
-  assert.equal(resolutions.at(-1).context.allowInstalledSkills, false);
-
-  featureEnabled = async () => true;
-  await resolveSkillsForAiRequest(
-    "/foo chat",
-    { userId: 42, projectId: 15 },
-    "aiChat",
-    onFlagError
-  );
-  assert.equal(resolutions.at(-1).context.allowInstalledSkills, true);
-
-  const checksBeforeTaskWriter = flagChecks.length;
-  featureEnabled = async () => {
-    throw new Error("Task Writer must not read the Agent Chat flag");
-  };
-  await resolveSkillsForAiRequest(
-    "/foo rewrite",
-    { userId: 2343, projectId: 15 },
-    "askAi",
-    onFlagError
-  );
-  assert.equal(flagChecks.length, checksBeforeTaskWriter);
-  assert.equal(resolutions.at(-1).context.allowInstalledSkills, true);
-});
-
-test("fails Agent Chat installed skills closed when the flag lookup fails", async () => {
-  const errors = [];
-  featureEnabled = async () => {
-    throw new Error("flag unavailable");
-  };
-
-  await resolveSkillsForAiRequest(
-    "/foo chat",
-    { userId: 42 },
-    "aiChat",
-    (error) => errors.push(error)
-  );
-
-  assert.equal(errors.length, 1);
-  assert.match(errors[0].message, /flag unavailable/);
-  assert.equal(resolutions.at(-1).context.allowInstalledSkills, false);
-});
+    assert.deepEqual(flagChecks, []);
+    assert.equal(result.cleanedText, text);
+    assert.deepEqual(result.skills, [{ ...skill, userId }]);
+    assert.match(result.systemPromptAddition, /Review this as Foo\./);
+    assert.match(result.systemPromptAddition, /user-supplied data/);
+    assert.deepEqual(lookups.at(-1).where, {
+      enabled: true,
+      slug: { in: ["foo"] },
+      OR: [
+        { userId, projectId: null },
+        { projectId: 15, userId: null, project: { is: { userId } } },
+      ],
+    });
+  });
+}
