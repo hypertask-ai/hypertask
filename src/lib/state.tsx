@@ -5,8 +5,7 @@ import {
   Provider as JotaiProvider,
   atom as jotaiAtom,
   createStore,
-  useAtom,
-  useAtomValue,
+  useAtomValueRawSync,
   useSetAtom,
   type Atom as JotaiAtom,
   type WritableAtom,
@@ -254,13 +253,12 @@ export function selectorFamily<T, P>(options: SelectorFamilyOptions<T, P>) {
 export function useRecoilState<T>(
   recoilAtom: WritableAtom<T, [SetStateAction<T> | typeof RESET], void>
 ) {
-  const [value, setValue] = useAtom(recoilAtom);
-  const hydrated = useHydrated();
-  return [hydrated ? value : hydrationDefaults.get(recoilAtom), setValue] as [T, SetterOrUpdater<T>];
+  return [useRecoilValue(recoilAtom), useSetAtom(recoilAtom)] as [T, SetterOrUpdater<T>];
 }
 
 export function useRecoilValue<T>(recoilAtom: JotaiAtom<T>) {
-  const value = useAtomValue(recoilAtom);
+  // Child mount effects initialize shared state before parent subscriptions exist.
+  const value = useAtomValueRawSync(recoilAtom);
   const hydrated = useHydrated();
   return hydrated ? value : hydrationDefaults.get(recoilAtom);
 }

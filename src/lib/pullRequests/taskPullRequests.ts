@@ -117,7 +117,11 @@ export async function fetchGithubPullRequest(
   try {
     response = await fetch(
       `https://api.github.com/repos/${encodeURIComponent(parsed.owner)}/${encodeURIComponent(parsed.repository)}/pulls/${parsed.number}`,
-      { headers: githubHeaders(), cache: "no-store" },
+      {
+        headers: githubHeaders(),
+        cache: "no-store",
+        signal: AbortSignal.timeout(3_000),
+      },
     );
   } catch {
     throw new PullRequestLinkError(
@@ -188,6 +192,81 @@ export async function fetchGithubPullRequest(
     headSha: head.sha,
     sourceUpdatedAt: updatedAt,
   };
+}
+
+export async function refreshTaskPullRequests(
+  taskId: number,
+  pullRequests: Prisma.TaskPullRequestGetPayload<{
+    select: typeof pullRequestSelect;
+  }>[],
+  {
+    db = prisma,
+    fetchMetadata = fetchGithubPullRequest,
+    now = new Date(),
+  }: Pick<LinkTaskPullRequestInput, "db" | "fetchMetadata"> & { now?: Date } = {},
+) {
+  return Promise.all(pullRequests.map(async (pullRequest) => {
+    // Webhook delivery is configured per repository, so a linked repo may
+    // never send its merge. Successful observations stay fresh for a minute.
+    if (
+      pullRequest.lifecycle === "merged" ||
+      now.getTime() - pullRequest.updatedAt.getTime() < 60_000
+    ) return pullRequest;
+
+    const parsed = parseGithubPullRequestUrl(pullRequest.url);
+    if (
+      !parsed ||
+      parsed.owner !== pullRequest.repositoryOwner ||
+      parsed.repository !== pullRequest.repositoryName ||
+      parsed.number !== pullRequest.number
+    ) return pullRequest;
+
+    try {
+      const metadata = await fetchMetadata(parsed);
+      const data = {
+        githubRepositoryId: metadata.repositoryId,
+        githubPullRequestId: metadata.pullRequestId,
+        title: metadata.title,
+        lifecycle: metadata.lifecycle,
+        headSha: metadata.headSha,
+        checkState: pullRequest.headSha === metadata.headSha
+          ? pullRequest.checkState
+          : "pending",
+        sourceUpdatedAt: metadata.sourceUpdatedAt,
+        updatedAt: now,
+      };
+      // A webhook or check-suite update that raced the fetch must win.
+      const updated = await db.taskPullRequest.updateMany({
+        where: {
+          id: pullRequest.id,
+          taskId,
+          updatedAt: pullRequest.updatedAt,
+          OR: [
+            { sourceUpdatedAt: null },
+            { sourceUpdatedAt: { lte: metadata.sourceUpdatedAt } },
+          ],
+        },
+        data,
+      });
+      if (updated.count > 0) {
+        return {
+          ...pullRequest,
+          title: data.title,
+          lifecycle: data.lifecycle,
+          headSha: data.headSha,
+          checkState: data.checkState,
+          updatedAt: data.updatedAt,
+        };
+      }
+      return await db.taskPullRequest.findUnique({
+        where: { id: pullRequest.id },
+        select: pullRequestSelect,
+      }) ?? pullRequest;
+    } catch (error) {
+      console.warn("[Pull requests] GitHub refresh failed", pullRequest.url, error);
+      return pullRequest;
+    }
+  }));
 }
 
 export async function linkTaskPullRequest({

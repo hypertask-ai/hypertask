@@ -12,7 +12,6 @@ import type { useAgentDetailState } from "./useAgentDetailState";
 
 type Props = Pick<
   ReturnType<typeof useAgentDetailState>,
-  | "embedded"
   | "editingName"
   | "nameDraft"
   | "setNameDraft"
@@ -37,15 +36,14 @@ type Props = Pick<
 >;
 
 export function AgentDetailHeader({
-  embedded, agent, working, editingName, nameDraft, setNameDraft, handleSaveName, setEditingName,
+  agent, working, editingName, nameDraft, setNameDraft, handleSaveName, setEditingName,
   savingName, openingChat, handleOpenChat, handleToggle, togglePending,
 }: Props) {
   return (
             <div
-              className={cn(
-                "mt-4 flex items-center gap-3",
-                embedded && "flex-wrap",
-              )}
+              // Wraps at every width: on a phone the actions drop to a second
+              // line instead of squeezing the name to one letter (HTPR-6836).
+              className="mt-4 flex flex-wrap items-center gap-3"
             >
               <AgentAvatar agentId={agent.id} name={agent.displayName} photoURL={agent.photoURL} size={34} className="text-[13px]" />
               {working ? (
@@ -76,7 +74,7 @@ export function AgentDetailHeader({
                 />
               ) : (
                 <h1
-                  className="text-[20px] font-semibold truncate cursor-text"
+                  className="text-[20px] font-semibold truncate max-w-full cursor-text"
                   title="Click to rename"
                   onClick={() => {
                     setNameDraft(agent.displayName);
