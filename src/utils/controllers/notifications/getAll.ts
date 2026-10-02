@@ -1,5 +1,4 @@
 import { NotificationType, Prisma } from "@prisma/client";
-import { isFeatureEnabled, HTPR_6752_INSTANT_TICKET_OPEN_FLAG } from "@/lib/flags";
 import prisma from "@/lib/prisma";
 import { getInboxTabs } from "@/utils/helperFunctions/helperFunctions";
 import { inboxConfig } from "@/lib/configs/inbox.config";
@@ -22,7 +21,7 @@ import {
 } from "@/utils/controllers/notifications/agentImportantPermission";
 
 /** Prisma include for inbox notification rows — fields match inbox UI usage only. */
-export function inboxTaskSelect(userId: number, includeCachedDescription = false): Prisma.TaskSelect {
+export function inboxTaskSelect(userId: number): Prisma.TaskSelect {
   return {
     _count: {
       select: {
@@ -37,7 +36,7 @@ export function inboxTaskSelect(userId: number, includeCachedDescription = false
     sectionId: true,
     priority: true,
     title: true,
-    ...(includeCachedDescription ? { description_: { select: { content: true } } } : {}),
+    description_: { select: { content: true } },
     estimate: true,
     section: true,
     sectionChangedAt: true,
@@ -67,8 +66,7 @@ export function inboxTaskSelect(userId: number, includeCachedDescription = false
 }
 
 export function notificationInboxInclude(
-  userId: number,
-  includeCachedDescription = false
+  userId: number
 ): Prisma.NotificationInclude {
   return {
     comment: { select: { id: true, text: true } },
@@ -78,7 +76,7 @@ export function notificationInboxInclude(
       select: { id: true, title: true, name: true, teamId: true, stalenessEnabled: true },
     },
     task: {
-      select: inboxTaskSelect(userId, includeCachedDescription),
+      select: inboxTaskSelect(userId),
     },
     fromUser: { select: { displayName: true, photoURL: true } },
     fromAgent: { select: { displayName: true, photoURL: true } },
@@ -126,7 +124,6 @@ const visibleInboxSql = (userId: number) => {
 export async function getInboxNotifications(
   userId: number,
   client: typeof prisma = prisma,
-  includeCachedDescription = false,
 ) {
   const selectedRows = await client.$queryRaw<{ id: number }[]>(Prisma.sql`
     SELECT selected.id
@@ -149,7 +146,7 @@ export async function getInboxNotifications(
   if (!selectedRows.length) return [];
 
   return client.notification.findMany({
-    include: notificationInboxInclude(userId, includeCachedDescription),
+    include: notificationInboxInclude(userId),
     where: {
       AND: [
         { id: { in: selectedRows.map(({ id }) => id) } },
@@ -193,7 +190,6 @@ const getRecentInboxActorActivity = (userId: number) => {
 const notificationGetAll = async (userId: string | string[]) => {
   const parsedUserId = parseInt(userId as string);
   try {
-    const includeCachedDescription = await isFeatureEnabled(HTPR_6752_INSTANT_TICKET_OPEN_FLAG, parsedUserId);
     const inboxWhere = visibleUserInboxWhere(parsedUserId);
     const [
       notifications,
@@ -203,7 +199,7 @@ const notificationGetAll = async (userId: string | string[]) => {
       blockedTasks,
       userSetting,
     ] = await Promise.all([
-      getInboxNotifications(parsedUserId, prisma, includeCachedDescription),
+      getInboxNotifications(parsedUserId, prisma),
       getRecentInboxActorActivity(parsedUserId),
       prisma.notification.findMany({
         where: { ...inboxWhere, directReply: true },

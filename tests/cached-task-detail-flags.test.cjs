@@ -21,59 +21,49 @@ function load(relative, mocks) {
   return exports;
 }
 
-for (const enabled of [false, true]) {
-  test(`server board and My Tasks projections include cached bodies only with the flag ${enabled ? "on" : "off"}`, async () => {
-    const flagCalls = [];
-    const flagMock = { HTPR_6752_INSTANT_TICKET_OPEN_FLAG: key, isFeatureEnabled: async (flag, userId) => {
-      flagCalls.push([flag, userId]);
-      return enabled;
-    } };
-    let boardArgs;
-    const board = load("src/utils/controllers/projects/getBoardTasks.ts", {
-      "@/lib/flags": flagMock,
-      "@/lib/prisma": { __esModule: true, default: {
-        project: { findFirst: async () => ({ id: 15 }) },
-        task: { findMany: async (args) => { boardArgs = args; return []; } },
-      } },
-      "./getAllIncludes": includes,
-      "@/utils/controllers/tasks/attachOpenBlockingTasks": { attachOpenBlockingTasks: async (tasks) => tasks },
-      "@/utils/controllers/tasks/attachWaitingOnUsers": { attachWaitingOnUsers: async (tasks) => tasks },
-    }).default;
-    assert.equal((await board(15, 985, 985)).status, 200);
-    assert.equal("description_" in boardArgs.include, enabled);
-    if (enabled) assert.deepEqual(boardArgs.include.description_, { select: { content: true } });
-    let myTasksArgs;
-    const myTasks = load("src/utils/controllers/tasks/myTasks.ts", {
-      "@/lib/flags": flagMock,
-      "@/lib/prisma": { __esModule: true, default: { task: { findMany: async (args) => { myTasksArgs = args; return []; } } } },
-      "../projects/getAllMinimal": { __esModule: true, default: async () => ({ json: [{ id: 15 }] }) },
-    }).default;
-    await myTasks(985, false, undefined, { throwOnError: true });
-    assert.equal("description_" in myTasksArgs.include, enabled);
-    if (enabled) assert.deepEqual(myTasksArgs.include.description_, { select: { content: true } });
-    assert.deepEqual(flagCalls, [[key, 985], [key, 985]], "the signed-in account determines the rollout on the server");
-  });
-}
+// Board, My Tasks and inbox lists always carry ticket bodies. They need no
+// server flag lookup, which would add a database round trip before every list
+// loads (HTPR-6752); the client flag decides whether the cached open is used.
+test("server board and My Tasks projections always include cached bodies without a flag lookup", async () => {
+  const flagMock = { HTPR_6752_INSTANT_TICKET_OPEN_FLAG: key, isFeatureEnabled: async () => { throw new Error("no server flag lookup"); } };
+  let boardArgs;
+  const board = load("src/utils/controllers/projects/getBoardTasks.ts", {
+    "@/lib/flags": flagMock,
+    "@/lib/prisma": { __esModule: true, default: {
+      project: { findFirst: async () => ({ id: 15 }) },
+      task: { findMany: async (args) => { boardArgs = args; return []; } },
+    } },
+    "./getAllIncludes": includes,
+    "@/utils/controllers/tasks/attachOpenBlockingTasks": { attachOpenBlockingTasks: async (tasks) => tasks },
+    "@/utils/controllers/tasks/attachWaitingOnUsers": { attachWaitingOnUsers: async (tasks) => tasks },
+  }).default;
+  assert.equal((await board(15, 985, 985)).status, 200);
+  assert.deepEqual(boardArgs.include.description_, { select: { content: true } });
+  let myTasksArgs;
+  const myTasks = load("src/utils/controllers/tasks/myTasks.ts", {
+    "@/lib/flags": flagMock,
+    "@/lib/prisma": { __esModule: true, default: { task: { findMany: async (args) => { myTasksArgs = args; return []; } } } },
+    "../projects/getAllMinimal": { __esModule: true, default: async () => ({ json: [{ id: 15 }] }) },
+  }).default;
+  await myTasks(985, false, undefined, { throwOnError: true });
+  assert.deepEqual(myTasksArgs.include.description_, { select: { content: true } });
+});
 
-test("Inbox description projection is opt-in and retains the existing visible-account filter", async () => {
+test("Inbox description projection is always on and retains the existing visible-account filter", async () => {
   const { getInboxNotifications, inboxTaskSelect } = load("src/utils/controllers/notifications/getAll.ts", {
     "@/lib/flags": {},
     "@/lib/prisma": { __esModule: true, default: {} },
   });
-  assert.equal("description_" in inboxTaskSelect(985), false);
-  for (const enabled of [false, true]) {
-    let args;
-    await getInboxNotifications(985, {
-      $queryRaw: async () => [{ id: 1 }],
-      notification: { findMany: async (value) => { args = value; return []; } },
-    }, enabled);
-    assert.equal("description_" in args.include.task.select, enabled);
-    assert.equal(args.where.AND[1].userId, 985);
-    if (enabled) assert.deepEqual(args.include.task.select.description_, { select: { content: true } });
-  }
+  assert.deepEqual(inboxTaskSelect(985).description_, { select: { content: true } });
+  let args;
+  await getInboxNotifications(985, {
+    $queryRaw: async () => [{ id: 1 }],
+    notification: { findMany: async (value) => { args = value; return []; } },
+  });
+  assert.deepEqual(args.include.task.select.description_, { select: { content: true } });
+  assert.equal(args.where.AND[1].userId, 985);
   const source = fs.readFileSync(path.join(root, "src/utils/controllers/notifications/getAll.ts"), "utf8");
-  assert.match(source, /includeCachedDescription = await isFeatureEnabled\(HTPR_6752_INSTANT_TICKET_OPEN_FLAG, parsedUserId\)/);
-  assert.match(source, /getInboxNotifications\(parsedUserId, prisma, includeCachedDescription\)/);
+  assert.doesNotMatch(source, /isFeatureEnabled/);
 });
 
 test("bound board and table handlers opt into cached data without changing production navigation or selection", async () => {

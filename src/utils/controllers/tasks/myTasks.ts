@@ -1,4 +1,3 @@
-import { isFeatureEnabled, HTPR_6752_INSTANT_TICKET_OPEN_FLAG } from "@/lib/flags";
 import prisma from "@/lib/prisma";
 import getAllMinimal from "../projects/getAllMinimal";
 import { groupMyTasksByBoard } from "@/lib/myTasksGrouping";
@@ -66,7 +65,6 @@ const getMyTasks = async (
       userId,
       effectiveMyTasksScopes(scopes, true),
     );
-    const includeCachedDescription = await isFeatureEnabled(HTPR_6752_INSTANT_TICKET_OPEN_FLAG, userId);
     const tasks = await prisma.task.findMany({
       where: {
         AND: [
@@ -92,7 +90,8 @@ const getMyTasks = async (
         },
         priority: true,
         estimate: true,
-        ...(includeCachedDescription ? { description_: { select: { content: true } } } : {}),
+        // Ticket bodies travel with My Tasks so a ticket opens instantly (HTPR-6752).
+        description_: { select: { content: true } },
         // HTPR-5024: this used to be include: { user: true, agent: true },
         // which serialises the whole User row (uid, stripe_customer_id,
         // accountId, the token timestamps and the rest) for every co-assignee
