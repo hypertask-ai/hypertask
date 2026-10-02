@@ -73,6 +73,7 @@ const moduleMocks = {
   "@/hooks/MultiPages/useGetAllTeamsMinimal": { useGetAllTeamsMinimal: noop },
   "@/hooks/General/useProjectQuery": { useProjectQuery: () => ({ goToProjectShortcut: noop }) },
   "@/hooks/General/useDeferredSubscriptionCheck": { useDeferredSubscriptionCheck: noop },
+  "@/hooks/General/useHydrated": { useHydrated: () => true },
   "@/hooks/Homepage/Views/useViewCyclingShortcuts": { __esModule: true, default: noop },
   "@/hooks/MultiPages/Route/useTrialModal": { __esModule: true, default: () => ({ showTrial: false, setShowTrial: noop }) },
   "@/hooks/Task Detail/useTimeTracking": { useBoardRunningTimers: () => ({ timers: new Map(), timerDataReady: true }) },

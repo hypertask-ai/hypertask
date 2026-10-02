@@ -36,6 +36,7 @@ import { getActiveBoardLayoutPreferenceFromProject, getActiveSortingModeFromProj
 import { TBoardSortingViewMode } from "@/models/Views/model";
 
 import { useDeferredSubscriptionCheck } from "@/hooks/General/useDeferredSubscriptionCheck";
+import { useHydrated } from "@/hooks/General/useHydrated";
 
 import { MobileViewContext } from "@/lib/contexts/mobileContext";
 
@@ -780,12 +781,16 @@ export function useLandingBoardHydration(context: useLandingBoardHydrationContex
   setProjectLookupFailed, user, hydrationRetryAttemptsRef, setHydrationFailedProjectId, hydratingRef,
   queryClient, setHydrationRetryToken, hydrationRetryToken,
   } = context;
+  const hydrated = useHydrated()
+  const setAiChatAutoOpenSuppressed = useSetRecoilState(aiChatAutoOpenSuppressedAtom)
 
 
 // Pinning always opens chat. Otherwise, the default setting opens it unless
 // a manual close suppressed auto-open or the board is shown on mobile.
 useEffect(() => {
+  // The state adapter exposes SSR defaults until this consumer has hydrated.
   if (
+    !hydrated ||
     isMblForChat ||
     (!isGuest &&
       !aiChatPinned &&
@@ -794,6 +799,7 @@ useEffect(() => {
   setShowAiChatInterface(true);
   // eslint-disable-next-line react-hooks/exhaustive-deps
 }, [
+  hydrated,
   slugs,
   openAiChatByDefault,
   aiChatAutoOpenSuppressed,
@@ -885,6 +891,7 @@ useEffect(() => {
   if (params.get("welcome_ai") === "1" && !welcomeAiHandledRef.current) {
     welcomeAiHandledRef.current = true;
     // A welcome link is an explicit ask for the chat; focus the composer.
+    setAiChatAutoOpenSuppressed(false);
     setAiChatExplicitOpenAt(Date.now());
     setShowAiChatInterface(true);
   }

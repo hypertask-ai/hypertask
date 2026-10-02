@@ -9,6 +9,7 @@ import taskDetailConfig from "@/lib/configs/taskDetail.config";
 import useHypertasksRecoilStates from "@/hooks/RecoilRoot/useHypertasksRecoilStates";
 import useUpdateSubtask from "@/hooks/Task Detail/useUpdateSubtask";
 import { useProjectQuery } from "@/hooks/General/useProjectQuery";
+import { useHydrated } from "@/hooks/General/useHydrated";
 import globalConstants from "@/lib/constants";
 import { useAiChatContext } from "@/lib/contexts/Multipages/AI_Agent/AI_Agent_Chat_Context";
 import { useCommentToAiChat } from "@/hooks/MultiPages/AIChat/useCommentToAiChat";
@@ -84,6 +85,7 @@ export function useTaskDetailModals(state: useTaskDetailStateValue) {
   const [activeItem, _setActiveItem] = useRecoilState(activeItemAtom);
   const [inViewObject, setInViewObject] = useRecoilState(inViewObjectAtom);
   const [showAiChatInterface, setShowAiChatInterface] = useRecoilState(showAIChatInterfaceAtom);
+  const hydrated = useHydrated();
   const openAiChatByDefault = useRecoilValue(openAiChatByDefaultAtom);
   const aiChatAutoOpenSuppressed = useRecoilValue(aiChatAutoOpenSuppressedAtom);
   const aiChatPinned = useRecoilValue(aiChatPinnedAtom);
@@ -110,13 +112,16 @@ export function useTaskDetailModals(state: useTaskDetailStateValue) {
   // Pinning always opens chat. Otherwise, the default setting opens it unless
   // a manual close suppressed auto-open or the task is shown on mobile.
   useEffect(() => {
+    // The state adapter exposes SSR defaults until this consumer has hydrated.
     if (
+      !hydrated ||
       _mbl ||
       (!aiChatPinned && (!openAiChatByDefault || aiChatAutoOpenSuppressed))
     ) return;
     setShowAiChatInterface(true);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
+    hydrated,
     _parsedTask?.id,
     openAiChatByDefault,
     aiChatAutoOpenSuppressed,
