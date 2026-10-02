@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import fs from "node:fs";
+import fs from "./refactored-module-source.cjs";
 import path from "node:path";
 import test from "node:test";
 import {

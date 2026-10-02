@@ -20,7 +20,7 @@
 // a retuned token fails here, and the send-arrow test isolates the arrow path
 // by its own `d` geometry rather than by a byte offset.
 const assert = require("node:assert/strict");
-const fs = require("node:fs");
+const fs = require("./refactored-module-source.cjs");
 const path = require("node:path");
 const test = require("node:test");
 

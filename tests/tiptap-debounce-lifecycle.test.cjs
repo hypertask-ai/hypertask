@@ -1,18 +1,15 @@
 const { readRefactoredSource } = require("../src/app/detail/[...slug]/taskDetailTestSources.cjs");
 const test = require("node:test");
 const assert = require("node:assert/strict");
-const fs = require("node:fs");
+const fs = require("./refactored-module-source.cjs");
 const path = require("node:path");
 const ts = require("typescript");
 
 const root = path.join(__dirname, "..");
-const helperSource = readRefactoredSource(
-  path.join(root, "src/utils/helperFunctions/helperFunctions.ts"),
-  "utf8"
+const functionSource = fs.readFunctionSource(
+  "src/utils/helperFunctions/helperFunctions.ts",
+  "debounceWithCancel",
 );
-const functionSource = helperSource.match(
-  /export function debounceWithCancel[\s\S]*?(?=\n\nexport interface ISplit)/
-)?.[0];
 
 assert.ok(functionSource, "debounceWithCancel implementation not found");
 

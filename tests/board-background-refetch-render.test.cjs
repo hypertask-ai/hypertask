@@ -1,5 +1,6 @@
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
+const { createRefactoredModuleRequire } = require("./refactored-module-require.cjs");
 const path = require("node:path");
 const test = require("node:test");
 const React = require("react");
@@ -131,7 +132,7 @@ const compiled = ts.transpileModule(source, {
 }).outputText;
 const landingModule = { exports: {} };
 new Function("require", "module", "exports", compiled)(
-  (specifier) => moduleMocks[specifier] ?? require(specifier),
+  createRefactoredModuleRequire(path.join(__dirname, "../src/app/[...boardURL]"), moduleMocks),
   landingModule,
   landingModule.exports,
 );

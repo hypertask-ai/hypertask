@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import fs from "node:fs";
+import fs from "./refactored-module-source.cjs";
 import path from "node:path";
 import {
   beginEmptySectionMutation,
@@ -338,9 +338,9 @@ test("the command toggles both directions through the optimistic shared save", (
   const nextFunction = saveHookSource.indexOf("const saveStalenessToViewAPI", saveStart);
   const saveSource = saveHookSource.slice(saveStart, nextFunction);
   const commandSource = fs.readFileSync(
-    path.join(root, "src/components/commands.tsx"),
+    path.join(root, "src/components/commandDispatcher.ts"),
     "utf8",
-  );
+  ).split("function dispatchCommandGroup1")[1];
   const commandStart = commandSource.indexOf("case CommandMode.ToggleEmptyColumns");
   const nextCommand = commandSource.indexOf("case CommandMode.HideColumn", commandStart);
   const toggleSource = commandSource.slice(commandStart, nextCommand);

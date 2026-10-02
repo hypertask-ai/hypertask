@@ -1,7 +1,6 @@
-const { readRefactoredSource } = require("../src/app/detail/[...slug]/taskDetailTestSources.cjs");
 const test = require("node:test");
 const assert = require("node:assert/strict");
-const fs = require("node:fs");
+const fs = require("./refactored-module-source.cjs");
 const path = require("node:path");
 
 // Ctrl/Cmd+E archives and then advances the selection, so every surface that
@@ -19,7 +18,7 @@ const SURFACES = [
 
 for (const relative of SURFACES) {
   test(`${relative} guards Ctrl/Cmd+E archive`, () => {
-    const source = readRefactoredSource(
+    const source = fs.readFileSync(
       path.resolve(__dirname, "..", relative),
       "utf8",
     );
@@ -42,7 +41,7 @@ for (const relative of SURFACES) {
 }
 
 test("TableView My Tasks Ctrl+E focuses the hovered row before archiving", () => {
-  const source = readRefactoredSource(
+  const source = fs.readFileSync(
     path.resolve(
       __dirname,
       "../src/components/PageComponents/Kanban/TableView/TableView.tsx",
