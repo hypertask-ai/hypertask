@@ -21,6 +21,7 @@ const gates = {
   deployed: ['The Production deployment for the merge is success', 'deployed ok'],
   proof: ['Live QA proof.md follows the verify-qa contract for the latest merge, with screenshots', 'proof ok'],
   done: ['The ticket is in Done', 'done ok'],
+  cleaned: ['This session removed its worktree and branch for the ticket (/clean-up)', 'cleaned ok'],
 };
 if (/[\r\n\0]/.test(session + root + check) || Buffer.byteLength(session) > 4095) throw new Error('invalid session id or path');
 const read = (file) => {
@@ -36,7 +37,7 @@ await withFileLock(root, ledger, () => {
   if (doc.errors.length) throw new Error(doc.errors.join('; '));
   // Never let --approve authorize a CHECK added by another ledger author.
   for (const gate of doc.gates) {
-    const match = gate.id.match(/^((?:HTPR|HYFA|YPER4)-[0-9]+)\.(ticket|pr|merged|deployed|proof|done)$/);
+    const match = gate.id.match(/^((?:HTPR|HYFA|YPER4)-[0-9]+)\.(ticket|pr|merged|deployed|proof|done|cleaned)$/);
     if (!match && !gate.check) continue;
     if (!match || (match[2] === 'proof' && !match[1].startsWith('HTPR-')) ||
         gate.check !== `${quote(check)} ${match[2]} ${match[1]}` ||

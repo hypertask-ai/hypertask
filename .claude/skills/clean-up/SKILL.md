@@ -16,9 +16,12 @@ Work from the main checkout (`~/projects/hypertask`), never from inside a worktr
 1. `git -C <worktree> status --porcelain` must be empty. If not, commit the work or ask Valentin; never discard it.
 2. Skip it while its PR is still open (`gh pr list -R hypertask-ai/hypertask --head <branch> --state open`); say so in the report.
 3. `git worktree remove <worktree>` (no `--force`).
-4. `git branch -d <branch>` (lowercase `-d`: refuses unmerged work).
-5. `git push origin --delete <branch>` only when its PR is merged or closed.
+4. Delete the local branch only when its PR is **merged** and the branch has nothing beyond what was merged: `git rev-parse <branch>` equals the PR's `headRefOid` (`gh pr view <pr> --json headRefOid`). Then `git branch -D <branch>` (we squash-merge, so lowercase `-d` always refuses). A closed but unmerged PR, or extra local commits: keep the branch and say so in the report.
+   Duplicate path only: the branch you recorded with `ship-check branch` held a fix you were told to throw away. Delete it with `git branch -D`, and `git push origin --delete` if you pushed it and no open PR uses it. Never any other branch.
+5. `git push origin --delete <branch>` only when its PR is merged.
 6. Keep QA evidence in `~/.local/state/vcc-evidence/`; it is never cleaned.
+
+From /ship, `~/.agents/skills/ship/scripts/ship-check cleaned <TICKET>` must print `cleaned ok`; it is the last gate on the /ship checklist. If the session's ledger (`.unlazy/`) sits inside the worktree you remove, it goes with it: run `ship-gates` from the main checkout so the ledger survives.
 
 ## Report
 
