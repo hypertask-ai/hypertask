@@ -359,7 +359,7 @@ const PageEditor = ({ _page, _user }: PageEditorProps) => {
             <div
               ref={contentRef}
               style={{ zoom, width: `${100 / zoom}%` }}
-              className={`min-h-[420px] cursor-text touch-pan-y ${
+              className={`min-h-[420px] cursor-text touch-manipulation ${
                 isMobile ? "mt-5" : "mt-8"
               } ${styles.hellow}`}
               onClick={() => editor?.commands.focus()}
