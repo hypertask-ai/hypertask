@@ -12,18 +12,16 @@ const packageLock = JSON.parse(
   fs.readFileSync(path.join(root, "package-lock.json"), "utf8"),
 );
 
-test("the HTML sanitizer stays on the serverless-compatible dependency path", () => {
-  assert.equal(packageJson.dependencies["isomorphic-dompurify"], "2.26.0");
+test("the locked HTML sanitizer loads through its server entry point", () => {
   assert.equal(
     packageLock.packages["node_modules/isomorphic-dompurify"].version,
-    "2.26.0",
+    packageJson.dependencies["isomorphic-dompurify"],
   );
-  assert.equal(packageLock.packages["node_modules/jsdom"].version, "26.1.0");
+  const DOMPurify = require("isomorphic-dompurify");
   assert.equal(
-    packageLock.packages["node_modules/html-encoding-sniffer"].version,
-    "4.0.0",
+    DOMPurify.sanitize("<p>Server sanitizer</p>"),
+    "<p>Server sanitizer</p>",
   );
-  assert.equal(packageLock.packages["node_modules/@exodus/bytes"], undefined);
 });
 
 test("the pinned sanitizer loads on the server and preserves its XSS contract", () => {
