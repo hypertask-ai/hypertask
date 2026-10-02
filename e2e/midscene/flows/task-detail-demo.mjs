@@ -12,6 +12,7 @@ export default {
       timeoutMs: 30_000,
     },
     { action: 'aiTap', arg: 'the first visible task card on the board' },
+    { action: 'aiWaitFor', arg: 'the task detail title and fields including assignees, due date and project are visible' },
     {
       action: 'aiAssert',
       arg: 'a task detail panel is open on the page showing task fields like assignees, due date, or project',

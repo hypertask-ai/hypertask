@@ -17,15 +17,19 @@
 #      Chrome/Chromium processes on the box.
 
 set -u
-cd "$(dirname "${BASH_SOURCE[0]}")"
+cd "$(dirname "${BASH_SOURCE[0]}")" || exit 1
 
 LOCK_FILE=/tmp/midscene-e2e.lock
 PROFILE_DIR="/tmp/midscene-profile-$$"
 export MIDSCENE_PROFILE_DIR="$PROFILE_DIR"
 
-if [ -f .env ]; then
-  set -a; . ./.env; set +a
+if [ -f "${MIDSCENE_ENV_FILE:-.env}" ]; then
+  set -a
+  # shellcheck source=/dev/null
+  . "${MIDSCENE_ENV_FILE:-./.env}"
+  set +a
 fi
+export MIDSCENE_MODEL_FAMILY="${MIDSCENE_MODEL_FAMILY:-gemini}"
 
 cleanup() {
   pkill -f -- "--user-data-dir=$PROFILE_DIR" 2>/dev/null || true

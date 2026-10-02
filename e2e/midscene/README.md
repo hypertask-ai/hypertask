@@ -1,190 +1,63 @@
-# Midscene E2E flow pack (HTPR-5720, scaffold from HTPR-5715)
+# Nightly Midscene flows
 
-AI-driven UI checks against the live Hypertask app using
-[Midscene](https://github.com/web-infra-dev/midscene) + Puppeteer. HTPR-5715
-built the guarded runner and one smoke flow; HTPR-5720 turns that into an
-organized flow pack:
+[Midscene](https://github.com/web-infra-dev/midscene) and Puppeteer check the live app. The three guest-board checks and five signed-in checks run together through `nightly.sh` (the script calls `guarded-run.sh --all`). Landing and login-screen checks were removed because prod-health already owns them.
 
-- `flows/*.mjs` -- one flow per feature area. Each file's default export is
-  **data**, not code: `{ id, area, title, description, safe, steps }` where
-  `steps` are declarative `{ action, arg, ... }` objects (`goto`, `aiAssert`,
-  `aiTap`, `aiInput`, `aiKeyboardPress`, `aiQuery`, `aiWaitFor`). Being data
-  means the same flow file drives both the test run and the human-readable
-  docs page (`hypertask.app/qa-flows`, see `hypertask-analytics` repo).
-- `flows/index.mjs` -- the flow registry.
-- `manifest.json` -- maps feature areas (from `openwiki/feature-map.md`) to
-  flow ids, so coverage gaps are visible (`flowIds: []`).
-- `runner.mjs` -- generic executor: loads a flow's `steps` and runs them
-  against one puppeteer session, writes `midscene_run/results-latest.json`.
-- `nightly.sh` -- cron entry point (not run by CI). Runs `guarded-run.sh
-  --all`, then tracks per-flow consecutive failures in `flake-state.json` and
-  auto-files a Hypertask bug ticket the first time a flow crosses 2
-  consecutive nightly failures.
+| Flow | Proof |
+|---|---|
+| `board-demo` | Guest board and its three columns render |
+| `task-detail-demo` | A guest task detail opens |
+| `task-create-demo` | A task created on the disposable guest board appears |
+| `signed-in-create-task` | Create through the QA UI and reload the saved card |
+| `signed-in-file-upload` | Upload a text file, save the comment, reload and download matching bytes |
+| `signed-in-notification` | The normal move-to-Inbox action creates a notification that opens the QA task |
+| `signed-in-reminder` | Schedule tomorrow through the UI, then verify the future reminder survives a reload |
+| `signed-in-ai-answer` | A new QA chat answers a short arithmetic question, not just echoing the prompt |
 
-## Flows in the starter pack
+Reminder delivery at the scheduled time is not covered. Notification setup uses the app's regular authenticated Inbox action, not a fabricated notification or a second person's account.
 
-| id | area | what it checks |
-|---|---|---|
-| `board-demo` | board | demo board renders, columns are To Do / In Progress / Done |
-| `task-detail-demo` | board | tapping a card opens the task detail panel |
-| `task-create-demo` | board | creating a task through the UI on the demo board (disposable guest board, safe to write to) |
-| `landing` | marketing | `hypertask.ai` (falls back to `app.hypertask.ai`) renders with branding, no error text |
-| `login-screen` | auth | login page shows the email input and Google sign-in option (does not log in) |
+## Where nightly runs today
 
-All five are `safe: true`: no writes to real user data. `task-create-demo`
-writes to the `/demo` guest board, which is disposable by design; everything
-else is read-only.
+Checked on the VPS on 2026-10-02: **no active nightly Midscene schedule exists**. The old 03:30 VPS cron ran from `~/projects/hypertasks-qa`, which was deleted when Midscene was retired on 2026-09-15. The retirement is recorded in `.claude/skills/verify-qa/reference/midscene-flows.md`. The old `~/.cache/midscene-nightly.log` contains the missing-clone failures; the current user's crontab and systemd timers contain no Midscene entry. GitHub has no Midscene workflow. This change prepares the existing VPS entry point; it does not install or change a cron job or replace the E2B fleet.
 
-## Setup
+**Release operator action, after this PR is merged:**
+
+1. In `/home/valentin/projects/hypertask/e2e/midscene`, run `npm ci`. The maintained checkout must contain the merged production code.
+2. Create `~/.config/hypertask-videos/midscene.env`, mode `0600`, using `env.example` and an approved vision-model API key. The local proof used OpenRouter's OpenAI-compatible endpoint, `google/gemini-2.5-flash`, and `MIDSCENE_MODEL_FAMILY=gemini`. Do not copy credentials into Git or logs. The retired `~/.config/val-staging/credentials.env` is not needed.
+3. Keep the plain QA state at `~/.config/hypertask-videos/storageState-qa-normal.json` valid. `MIDSCENE_STORAGE_STATE` can override the path. The signed-in bootstrap must resolve to user **2343**, and that user must own an unshared board named **QA Sandbox**. Owner + QA state (985), Valentin (6), other identities, shared boards and other board names are rejected before fixture mutations.
+4. Verify `vcc` is on the cron PATH and its own agent identity can read/create tickets with attachments on board 15. All automated board writes use `vcc`, never Valentin's `hypertask` credentials. Keep `systemd-run --user --scope` available.
+5. Add this single line to Valentin's VPS crontab, preserving every other entry. It runs at 03:30 in the VPS's timezone and logs all flow output:
+
+   ```cron
+   30 3 * * * PATH=/home/valentin/.local/bin:/usr/local/bin:/usr/bin:/bin /home/valentin/projects/hypertask/e2e/midscene/nightly.sh >> /home/valentin/.cache/midscene-nightly.log 2>&1
+   ```
+
+**No new GitHub secret is needed for the current VPS job.** If the job is deliberately moved to GitHub later, store the *entire plain QA storage-state JSON* in secret `MIDSCENE_QA_STORAGE_STATE`, materialize it in a mode-0600 file under `RUNNER_TEMP`, and set `MIDSCENE_STORAGE_STATE` to that file. Never echo the value. Such a move also needs the model credentials, board-writer identity and equivalent resource guards; it is not configured by this PR.
+
+## Local run and safety
 
 ```bash
 cd e2e/midscene
-npm install
+npm ci
 cp env.example .env
-# fill OPENAI_API_KEY with the Vercel AI Gateway key (see below)
+# Set the model credentials in the ignored .env without printing them.
+npm run smoke
+./guarded-run.sh --flow signed-in-reminder
+npm run lint
+npm run test:failure-dry-run
 ```
 
-`@midscene/web` must stay on 1.x: every 0.x release pulls in
-`@xmldom/xmldom`, which carries a security advisory (HTPR-6289). CI never
-installs this package, so `tests/midscene-dependency-guard.test.cjs` in the
-repo root is what enforces the floor — a downgrade or a lockfile that
-resolves `@xmldom/xmldom` at any depth fails `ci-tests`.
+Always use `guarded-run.sh`, not `node runner.mjs` directly. It retains the single-flight `flock`, pre-run sweep, fail-closed cgroup caps (2G RAM, no swap, 1.5 CPUs, 256 tasks), ten-minute hard timeout and dedicated Chrome-profile cleanup. Nightly also holds a separate lock across execution and ticket reporting. Model family defaults to `gemini`; explicitly configure the appropriate family when changing models. Configure `MIDSCENE_OPENAI_SOCKS_PROXY` only when the selected gateway actually needs the existing tunnel; OpenRouter's direct endpoint was used for the proof.
 
-## Run
+Signed-in flows have isolated browser contexts. The upload flow blocks the buffered fallback, which has no discard grant, so a direct-upload failure cannot leave an unremovable test file. They import only app cookies, not Google cookies, MCP tokens or persisted account-switcher state. Each fixture has a run-unique title. Fixtures use authenticated product APIs, never Prisma or SQL. Cleanup runs in `finally`, on pass and failure: it rechecks private-board ownership, recovers exact-title creates, soft-deletes then permanently deletes only this run's task, clears its reminders/notifications/attachment rows, discards only its granted storage keys, removes its local upload and deletes its isolated chat. A cleanup error turns the flow red. Do not interrupt a run: a forced process kill or host crash can interrupt network cleanup. Use the exact run title/results to recover only those QA fixtures if that happens.
 
-```bash
-npm run smoke              # runs every flow (guarded-run.sh --all)
-./guarded-run.sh --flow board-demo   # runs one flow
-```
+`@midscene/web` stays on 1.x to avoid the vulnerable `@xmldom/xmldom` dependency. Root regression tests check the dependency floor, flow registry, QA isolation, cleanup, stale results and incident deduplication.
 
-**Always run through `guarded-run.sh` — never run `node runner.mjs`
-directly.** It's the only supported entry point because it guards the VPS.
-`guarded-run.sh` passes its arguments straight through to `runner.mjs`
-(`--flow <id>` or `--all`).
+## Results and bug tickets
 
-Guards, unchanged from HTPR-5715:
+Ignored `midscene_run/results-latest.json` contains `startedAt` and a result for each flow: status, failing step, error, duration, resolved URL, report and screenshot paths. `--all` continues after failures and exits nonzero when any flow fails. Screenshots are taken before cleanup. Reports stay under `midscene_run/report/`, pruned to ten recent files.
 
-- **Single-flight lock**: `flock` on `/tmp/midscene-e2e.lock`, held for the
-  entire script (never just probed then released, and the lock file is never
-  unlinked). A second concurrent run exits 0 immediately with "another run in
-  progress, skipped". The pre-run sweep (`cleanup.sh --locked`) runs under
-  that same held lock, so it can never race a new run starting in the gap
-  between a probe and the cleanup.
-- **Resource caps**: `systemd-run --user --scope` with `MemoryMax=2G`,
-  `MemorySwapMax=0`, `CPUQuota=150%`, `TasksMax=256`. **Fails closed** if
-  `systemd-run --user --scope` doesn't work on the box: exits non-zero with
-  an error instead of running unguarded. There is no fallback execution path
-  without cgroup limits.
-- **Hard timeout**: 10 minutes wall clock (`timeout --signal=TERM
-  --kill-after=30 600`).
-- **Cleanup**: the pre-run sweep kills any orphaned Chrome from a previous
-  crashed run and clears stale profile artifacts, and an EXIT trap after
-  every run kills only the Chrome instance launched with this run's own
-  `--user-data-dir=/tmp/midscene-profile-<pid>`, deletes that profile dir,
-  and prunes `midscene_run/report/` down to the 10 most recent reports.
+The **first red night** files a Bugs ticket on board 15 titled `Midscene nightly: <flow> failing`, with the failing step, error and screenshot attached using `vcc tasks create --attach`. Before every filing, the reporter uses the authoritative task list, not vector search, to find an exact-title open ticket, including tickets moved out of Bugs. If ticket creation succeeded but attaching its screenshot failed, the next run attaches the evidence to that same ticket instead of filing another. A passing night or lost local flake state does not permit a duplicate while that ticket is open. Done/Completed/Cancelled or archived/deleted tickets permit a new incident. Lookup failure, unknown ticket state, missing screenshot, stale results or CLI failure fail closed, without claiming successful reporting. A flow's reporting error does not suppress later incidents: the reporter attempts every flow, saves its state, then exits nonzero if any report failed.
 
-To force-reset everything by hand (or from cron): `./cleanup.sh` or
-`npm run cleanup`. It takes the same lock itself for its whole run, so it's
-safe to run at any time (it just skips if a real run currently holds it).
+`./nightly.sh --dry-run` still runs the real flows and QA cleanup, but only prints planned bug tickets. Dry-run state is separate from real state. `npm run test:failure-dry-run` forces an actual browser failure, verifies its PNG and failing step, then exercises the reporter twice with a simulated board: exactly one would-create and one duplicate suppression. It never invokes a board writer. Local evidence lives in `midscene_run/forced-failure-results.json` and its screenshot.
 
-## Provider: Vercel AI Gateway
-
-```
-OPENAI_BASE_URL=https://ai-gateway.vercel.sh/v1
-OPENAI_API_KEY=<GATEWAY_KEY_VALENTIN>
-MIDSCENE_MODEL_NAME=google/gemini-2.5-flash
-```
-
-`google/gemini-2.5-flash` is confirmed available through the gateway and is
-what the working run used. `openai/gpt-4o` is the documented fallback if
-Gemini is ever pulled from the gateway; `qwen/qwen2.5-vl-72b-instruct` was not
-listed on the gateway at the time this was written. If you do switch to a
-Qwen VL model, also set `MIDSCENE_USE_QWEN_VL=1` per Midscene's docs.
-
-## Proxy requirement
-
-The Contabo VPS IP is bot-challenged by Vercel — Midscene's AI gateway calls
-must go through the SOCKS tunnel on port 1088. Use Midscene's own proxy var,
-**not** the generic `ALL_PROXY`:
-
-```
-MIDSCENE_OPENAI_SOCKS_PROXY=socks5h://127.0.0.1:1088
-```
-
-Two things went wrong when this was tried with `ALL_PROXY` set process-wide,
-both fixed by using `MIDSCENE_OPENAI_SOCKS_PROXY` instead:
-
-- Chrome inherits `ALL_PROXY` too and tried to route the demo-site page load
-  through the same tunnel, which isn't set up for general browsing —
-  `net::ERR_EMPTY_RESPONSE`. (`run.mjs` also strips proxy vars from the
-  Chrome subprocess's env as a second layer of defense.)
-- Node's built-in `fetch` (undici) going through the tunnel got a `403
-  Vercel Security Checkpoint` HTML page back even though `curl` through the
-  identical tunnel got a clean 200 — looks like TLS/HTTP client
-  fingerprinting on Vercel's side, not a tunnel problem. Midscene's own
-  `socks-proxy-agent` path for `MIDSCENE_OPENAI_SOCKS_PROXY` doesn't hit
-  this.
-
-If a call ever comes back with a "Vercel Security Checkpoint" HTML page
-instead of a JSON response, check the tunnel is up first
-(`ss -ltnp | grep 1088`), and confirm you're using
-`MIDSCENE_OPENAI_SOCKS_PROXY`, not `ALL_PROXY`.
-
-## Results and reports
-
-Every run writes `midscene_run/results-latest.json` (gitignored):
-`{ startedAt, results: [...] }`, where `startedAt` is the ISO time this
-runner invocation began and each result is `{ flow, ok, error, durationMs,
-reportPath, screenshotPath, resolvedUrl }`. `resolvedUrl` is the URL a
-`goto` step actually ended up on (only differs from the flow's declared URL
-when a DNS/connection-refused fallback kicked in). `--all` continues past a
-failed flow and still exits non-zero if any flow failed. On failure the
-runner also saves a full-page screenshot to `midscene_run/screenshots/`.
-
-`startedAt` exists so `nightly.sh`'s postprocessor (`postprocess.mjs`) can
-tell a fresh results file from a stale one left over by a crashed or
-timed-out run -- see below.
-
-Midscene itself writes HTML run reports to `./midscene_run/report/`
-(gitignored, pruned to the 10 most recent by every run).
-
-## Nightly cron and auto-filed tickets
-
-`nightly.sh` is a **cron entry point, not part of CI**. The whole script runs
-under its own single-flight `flock` (`/tmp/midscene-nightly.lock`, separate
-from `guarded-run.sh`'s own lock file) -- a second concurrent nightly
-invocation skips immediately instead of racing the first over
-`flake-state.json`. It:
-
-1. Checks the SOCKS tunnel (port 1088) is up, starts it if not
-   (`ssh -f -N -D 1088 vps`), and aborts with a clear message if that fails.
-2. Sources `~/.config/val-staging/credentials.env` for the AI gateway key.
-3. Removes any leftover `results-latest.json`, records the run's start time,
-   then runs `./guarded-run.sh --all`.
-4. Runs `postprocess.mjs` (a real file, not an inline `node -` heredoc --
-   ESM import syntax on stdin can be misdetected as CommonJS), which:
-   - refuses to process a results file whose `startedAt` predates this
-     nightly run (a crashed/timed-out runner never causes the previous
-     night's results to be silently reprocessed as fresh) -- exits non-zero,
-     `nightly.sh` logs `postprocess FAILED` and exits non-zero too;
-   - otherwise updates `flake-state.json` (gitignored, per-flow
-     `consecutiveFails` / `flakeCount` / `ticketFiled`): a single failure
-     just increments `flakeCount`; **2 consecutive failures** files one
-     Hypertask bug ticket (project 15, section Bugs, title `Midscene
-     nightly: <flow id> failing`, the error and screenshot attached) and
-     marks `ticketFiled: true` **only after the `hypertask` CLI call actually
-     succeeds** -- a CLI error, or `--dry-run`, leaves `ticketFiled: false` so
-     the next failing night retries filing; a pass resets the flow's state.
-5. Appends a one-line summary to `~/.cache/midscene-nightly.log`.
-
-Test the ticket-filing logic without touching the board: `./nightly.sh
---dry-run` prints the `hypertask` command instead of running it (still runs
-the real flows first). To test `postprocess.mjs` in isolation without running
-`--all`, call it directly: `node postprocess.mjs flake-state.json
-midscene_run/results-latest.json 2 15 Bugs 1 <run-start-unix-seconds>`.
-
-**Install the cron job by hand** (this repo does not install it for you):
-
-```
-30 3 * * * /home/valentin/projects/hypertasks/e2e/midscene/nightly.sh
-```
+Ticket: https://app.hypertask.ai/detail/project-4060/105

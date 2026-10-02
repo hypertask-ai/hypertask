@@ -1,101 +1,125 @@
 #!/usr/bin/env node
-// HTPR-5720 nightly hardening: pulled out of nightly.sh's inline `node -`
-// heredoc (ESM imports there can parse as CommonJS) into a real, testable
-// file. Tracks per-flow consecutive failures in flake-state.json and files
-// one Hypertask bug ticket the first time a flow crosses the threshold.
-//
-// Usage: node postprocess.mjs <statePath> <resultsPath> <threshold> <project>
-//        <section> <dryRun 0|1> <runStartUnixSeconds>
-//
-// Exits nonzero (without touching flake-state.json) if the results file is
-// missing, unparseable, or stale (its embedded startedAt is older than this
-// nightly run started) -- a crashed/timed-out runner must never cause the
-// previous run's results to be silently reprocessed as fresh.
 import { readFileSync, writeFileSync, existsSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
+import { pathToFileURL } from 'node:url';
 
-const [, , statePath, resultsPath, thresholdArg, project, section, dryRunArg, runStartArg] = process.argv;
-const threshold = Number(thresholdArg);
-const dryRun = dryRunArg === '1';
-const runStartUnix = Number(runStartArg);
-
-if (!existsSync(resultsPath)) {
-  console.error(`postprocess: results file ${resultsPath} not found.`);
-  process.exit(1);
+export function escapeHtml(value) {
+  return String(value).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 }
 
-let payload;
-try {
-  payload = JSON.parse(readFileSync(resultsPath, 'utf8'));
-} catch (err) {
-  console.error(`postprocess: could not parse ${resultsPath}: ${err.message}`);
-  process.exit(1);
+export function isOpenTicket(task) {
+  const section = typeof task.section === 'string' ? task.section : task.section?.title;
+  if (typeof section !== 'string' || typeof task.status !== 'string') {
+    throw new Error('Ticket lookup returned no section/status; refusing duplicate-prone filing');
+  }
+  return task.status === 'Normal' && !/^(done|completed|cancelled|canceled)$/i.test(section);
 }
 
-const { startedAt, results } = payload;
-if (!startedAt || !Array.isArray(results)) {
-  console.error(`postprocess: ${resultsPath} is missing startedAt/results -- refusing to process a results file from an older runner.mjs.`);
-  process.exit(1);
+export function ticketPlan(result) {
+  if (!result.failedStep || !result.screenshotPath || !existsSync(result.screenshotPath)) {
+    throw new Error(`Flow ${result.flow} lacks a failing step or screenshot; refusing incomplete bug report`);
+  }
+  return {
+    flow: result.flow,
+    title: `Midscene nightly: ${result.flow} failing`,
+    description: `<p><strong>The ${escapeHtml(result.flow)} nightly flow failed.</strong></p>` +
+      `<p>Failing step: ${escapeHtml(result.failedStep)}</p>` +
+      `<p>Error: ${escapeHtml(result.error || 'unknown')}</p>` +
+      `<p>The attached screenshot shows the failure. Runtime: ${Number(result.durationMs) || 0}ms.</p>`,
+    screenshotPath: result.screenshotPath,
+  };
 }
 
-// A few seconds of slack for clock/IO jitter between nightly.sh recording
-// its own start time and runner.mjs recording its own.
-const STALE_TOLERANCE_SECONDS = 5;
-const resultsStartUnix = Date.parse(startedAt) / 1000;
-if (resultsStartUnix < runStartUnix - STALE_TOLERANCE_SECONDS) {
-  console.error(`postprocess: STALE results -- ${resultsPath} was started at ${startedAt}, before this nightly run began. Treating as a failed run.`);
-  process.exit(1);
-}
-
-const state = existsSync(statePath) ? JSON.parse(readFileSync(statePath, 'utf8')) : {};
-const summaryParts = [];
-
-for (const r of results) {
-  const entry = state[r.flow] || { consecutiveFails: 0, flakeCount: 0, ticketFiled: false };
-
-  if (r.ok) {
-    entry.consecutiveFails = 0;
-    entry.ticketFiled = false;
-  } else {
-    entry.consecutiveFails += 1;
-    entry.flakeCount += 1;
-
-    if (entry.consecutiveFails >= threshold && !entry.ticketFiled) {
-      const title = `Midscene nightly: ${r.flow} failing`;
-      const description = `<p><strong>Flow "${r.flow}" has failed ${entry.consecutiveFails} nights in a row.</strong></p>` +
-        `<p>Error: ${escapeHtml(r.error || 'unknown')}</p>` +
-        `<p>Duration: ${r.durationMs}ms</p>`;
-      const args = ['tasks', 'create', '--project', project, '--section', section, '--title', title, '--description', description];
-      if (r.screenshotPath && existsSync(r.screenshotPath)) {
-        args.push('--attach', r.screenshotPath);
-      }
-
-      if (dryRun) {
-        // Dry run never marks ticketFiled -- it must be retried for real next time.
-        console.log(`DRY RUN: hypertask ${args.map(quote).join(' ')}`);
-      } else {
-        try {
-          execFileSync('hypertask', args, { stdio: 'inherit' });
-          entry.ticketFiled = true;
-        } catch (err) {
-          // Leave ticketFiled false so the next failing night retries filing.
-          console.error(`Failed to file ticket for ${r.flow}: ${err.message}`);
+export function processResults(results, state, { listTickets, createTicket, ensureScreenshot = () => {}, dryRun = false, threshold = 1, log = console.log }) {
+  const summaries = [];
+  const errors = [];
+  for (const result of results) {
+    const entry = state[result.flow] || { consecutiveFails: 0, flakeCount: 0 };
+    entry.consecutiveFails = result.ok ? 0 : entry.consecutiveFails + 1;
+    entry.flakeCount += result.ok ? 0 : 1;
+    try {
+      if (!result.ok && entry.consecutiveFails >= threshold) {
+        const plan = ticketPlan(result);
+        // Check the board on every failure, including after a green night or a lost state file.
+        const existing = listTickets(plan.title).find((task) => task.title === plan.title && isOpenTicket(task));
+        if (existing || (dryRun && entry.dryRunPlanned)) {
+          if (existing && !dryRun) ensureScreenshot(existing, plan);
+          log(`SUPPRESSED: ${result.flow} already has one open${existing ? '' : ' simulated'} Bugs ticket`);
+        } else if (dryRun) {
+          log(`DRY RUN: would create ONE Bugs ticket on board 15: ${JSON.stringify(plan)}`);
+          // Persist only in the separate dry-run state, never suppress real filing.
+          entry.dryRunPlanned = true;
+        } else {
+          createTicket(plan);
+          log(`FILED: ${result.flow} Bugs ticket with screenshot`);
         }
       }
+    } catch (err) {
+      errors.push(`${result.flow}: ${err.message}`);
+      log(`REPORT FAILED: ${result.flow}: ${err.message}`);
     }
+    state[result.flow] = entry;
+    summaries.push(`${result.flow}=${result.ok ? 'pass' : `fail(${entry.consecutiveFails})`}`);
   }
-
-  state[r.flow] = entry;
-  summaryParts.push(`${r.flow}=${r.ok ? 'pass' : `fail(${entry.consecutiveFails})`}`);
+  log(summaries.join(' '));
+  if (errors.length) throw new Error(`Incident reporting failed: ${errors.join('; ')}`);
+  return state;
 }
 
-writeFileSync(statePath, JSON.stringify(state, null, 2));
-console.log(summaryParts.join(' '));
-
-function escapeHtml(s) {
-  return String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+function cliJson(args) {
+  const output = execFileSync('vcc', [...args, '--json'], { encoding: 'utf8', timeout: 60_000, maxBuffer: 8 * 1024 * 1024, stdio: ['ignore', 'pipe', 'pipe'] });
+  const payload = JSON.parse(output);
+  if (payload.success === false) throw new Error('Board CLI returned failure');
+  return payload;
 }
 
-function quote(a) {
-  return /\s/.test(a) ? `"${a.replace(/"/g, '\\"')}"` : a;
+function listTickets(title) {
+  const tasks = [];
+  for (let offset = 0; ; offset += 100) {
+    // The list route is authoritative; vector-search indexing can lag a newly filed ticket.
+    const payload = cliJson(['tasks', 'list', '--project', '15', '--status', 'Normal', '--query', title, '--limit', '100', '--offset', String(offset)]);
+    if (!Array.isArray(payload.tasks)) throw new Error('Board CLI returned no tasks array');
+    tasks.push(...payload.tasks);
+    if (payload.tasks.length < 100) return tasks;
+  }
+}
+
+export function main(argv) {
+  const [statePath, resultsPath, thresholdArg, project, section, dryRunArg, runStartArg] = argv;
+  const threshold = Number(thresholdArg);
+  const runStartUnix = Number(runStartArg);
+  if (!statePath || !resultsPath || !Number.isInteger(threshold) || threshold < 1 ||
+      project !== '15' || section !== 'Bugs' || !['0', '1'].includes(dryRunArg) || !Number.isFinite(runStartUnix)) {
+    throw new Error('Usage: postprocess.mjs <state> <results> <threshold> 15 Bugs <dryRun 0|1> <runStartUnix>');
+  }
+  const payload = JSON.parse(readFileSync(resultsPath, 'utf8'));
+  const startedAt = Date.parse(payload.startedAt) / 1000;
+  if (!Number.isFinite(startedAt) || startedAt < runStartUnix - 5 || !Array.isArray(payload.results) || !payload.results.length) {
+    throw new Error('Missing, invalid or STALE results; refusing to reprocess an earlier nightly run');
+  }
+  const dryRun = dryRunArg === '1';
+  const targetState = dryRun ? `${statePath}.dry-run` : statePath;
+  const state = existsSync(targetState) ? JSON.parse(readFileSync(targetState, 'utf8')) : {};
+  try {
+    processResults(payload.results, state, {
+      threshold, dryRun, listTickets,
+      ensureScreenshot: (existing, plan) => {
+        const task = cliJson(['tasks', 'get', String(existing.id)]).tasks?.[0];
+        if (!Array.isArray(task?.attachments)) throw new Error('Cannot verify existing failure screenshot');
+        if (!task.attachments.some((attachment) => attachment.fileName?.startsWith(`${plan.flow}-`) && /\.png$/i.test(attachment.fileName))) {
+          // A create can succeed before its attachment fails. Repair the same ticket, never create another.
+          cliJson(['comment', 'add', String(existing.id), '--text', plan.description, '--attach', plan.screenshotPath]);
+        }
+      },
+      createTicket: (plan) => cliJson(['tasks', 'create', '--project', '15', '--section', 'Bugs',
+        '--title', plan.title, '--description', plan.description, '--attach', plan.screenshotPath]),
+    });
+  } finally {
+    writeFileSync(targetState, JSON.stringify(state, null, 2));
+  }
+}
+
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  try { main(process.argv.slice(2)); }
+  catch (err) { console.error(`postprocess: ${err.message}`); process.exitCode = 1; }
 }
