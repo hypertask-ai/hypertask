@@ -1,6 +1,6 @@
 "use client";
 
-import type { AgentRuntimeHealth } from "@/lib/agents/runtimeState";
+import type { RuntimeStateKey } from "./runtimeStateKey";
 import { cn } from "@/utils/undoActions/helperFuncs";
 import Link from "next/link";
 import type { TAgent } from "../AgentsRegister";
@@ -31,20 +31,22 @@ export function elapsedSince(iso: string | null | undefined, now: number): strin
   return `${Math.floor(minutes / 60)}h ${minutes % 60}m`;
 }
 
-export const healthLabel: Record<AgentRuntimeHealth, string> = {
+export const healthLabel: Record<RuntimeStateKey, string> = {
   working: "Working",
   connected: "Connected",
   waiting: "Waiting",
   stalled: "Stalled",
   offline: "Offline",
+  on_demand: "On demand",
 };
 
-export const healthDotClass: Record<AgentRuntimeHealth, string> = {
+export const healthDotClass: Record<RuntimeStateKey, string> = {
   working: "bg-hypertasks-green",
   connected: "bg-hypertasks-green",
   waiting: "bg-amber-400",
   stalled: "bg-red-400",
   offline: "bg-gray-500",
+  on_demand: "bg-[var(--color-text-light-gray)]",
 };
 
 export const queueReasonLabel = {

@@ -137,7 +137,6 @@ export function AgentDetailView({
         {!error && agent && (
           <>
             <AgentDetailHeader
-              embedded={embedded}
               agent={agent}
               working={working}
               editingName={editingName}
