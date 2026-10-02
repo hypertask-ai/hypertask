@@ -19,6 +19,7 @@ import path from 'node:path';
 import puppeteer from 'puppeteer';
 import { PuppeteerAgent } from '@midscene/web/puppeteer';
 import { flows, getFlow } from './flows/index.mjs';
+import { api, prepareQa, createFixtureTask, findCreatedTask, cleanupQa, observeFixtures, uploadFixture, resolveStep, APP_ORIGIN } from './qa-session.mjs';
 
 const RESULTS_DIR = 'midscene_run';
 const RESULTS_FILE = path.join(RESULTS_DIR, 'results-latest.json');
@@ -50,8 +51,73 @@ function parseArgs(argv) {
 // failure) must fail the flow, not silently swap in a different page.
 const DNS_OR_CONNECTION_ERROR = /ERR_NAME_NOT_RESOLVED|ERR_CONNECTION_REFUSED/;
 
-async function runStep(page, agent, step) {
+async function runStep(page, agent, step, fixture) {
   switch (step.action) {
+    case 'click':
+      if (step.optional && !(await page.$(step.arg))) return;
+      await page.waitForSelector(step.arg, { visible: true, timeout: 30_000 });
+      return page.click(step.arg);
+    case 'createFixtureTask':
+      return createFixtureTask(page, fixture);
+    case 'saveTask': {
+      const saved = page.waitForResponse((res) => /\/api\/tasks\/(create|createGlobally)$/.test(new URL(res.url()).pathname) && res.request().method() === 'POST', { timeout: 30_000 });
+      const [response] = await Promise.all([saved, page.locator('::-p-text(Save & close)').click()]);
+      if (!response.ok()) throw new Error(`Task save failed: HTTP ${response.status()}`);
+      return;
+    }
+    case 'verifyCreatedTask':
+      if ((await findCreatedTask(page, fixture)).length !== 1) throw new Error('Expected one persisted QA task');
+      return;
+    case 'moveToInbox':
+      return api(page, '/api/notifications/moveTaskToInbox', 'POST', { taskId: fixture.tasks[0], projectId: fixture.project.id });
+    case 'uploadFile':
+      return uploadFixture(page, fixture, step.arg);
+    case 'postAttachmentComment': {
+      const saved = page.waitForResponse((res) => new URL(res.url()).pathname === '/api/comments/create' && res.request().method() === 'POST', { timeout: 30_000 });
+      const [response] = await Promise.all([saved, (async () => {
+        await page.click('#comment-input');
+        await page.keyboard.down('Control');
+        await page.keyboard.press('Enter');
+        await page.keyboard.up('Control');
+      })()]);
+      if (!response.ok()) throw new Error('Attachment comment failed to save');
+      return;
+    }
+    case 'verifyUpload': {
+      await Promise.all(fixture.pending);
+      if (!fixture.uploads.length) throw new Error('No cleanup-capable direct upload grant captured');
+      const comments = await api(page, `/api/comments/getByTask?taskId=${fixture.tasks[0]}`);
+      const urls = fixture.uploads.flatMap((upload) => upload.urls);
+      if (!urls.some((url) => JSON.stringify(comments.comments).includes(url))) throw new Error('Uploaded file was not linked to a saved comment');
+      const bytes = await page.evaluate(async (url) => {
+        const res = await fetch(url);
+        return res.ok ? await res.text() : null;
+      }, urls[0]);
+      if (!bytes?.includes(`Nightly QA upload: ${fixture.title}`)) throw new Error('Uploaded attachment bytes did not match');
+      return;
+    }
+    case 'verifyReminder': {
+      const reminders = await api(page, '/api/reminders/getAll');
+      if (!reminders.some((r) => r.taskId === fixture.tasks[0] && Date.parse(r.remindAt) > Date.now())) {
+        throw new Error('Future QA reminder was not persisted');
+      }
+      return;
+    }
+    case 'verifyChatAnswer': {
+      const chats = await api(page, '/api/ai-chat/all-sessions');
+      const chat = chats.sessions?.find((session) => session.id === fixture.sessionId);
+      if (!chat?.messages.some((message) => message.role === 'assistant' && /(^|\D)42(\D|$)/.test(message.content))) {
+        throw new Error('No persisted assistant answer in the isolated QA chat');
+      }
+      return;
+    }
+    case 'createChat': {
+      const chat = await api(page, '/api/ai-chat/create-session', 'POST', {});
+      fixture.sessionId = chat.session?.id;
+      if (!fixture.sessionId) throw new Error('Chat create returned no session id');
+      fixture.values.chatUrl = `${APP_ORIGIN}/chat/${fixture.sessionId}`;
+      return;
+    }
     case 'goto': {
       try {
         await page.goto(step.arg, { waitUntil: 'networkidle2', timeout: 60_000 });
@@ -90,15 +156,28 @@ async function runStep(page, agent, step) {
 
 async function runFlow(browser, flow) {
   const start = Date.now();
-  const result = { flow: flow.id, ok: false, error: null, durationMs: 0, reportPath: null, screenshotPath: null, resolvedUrl: null };
-
-  const page = await browser.newPage();
+  const result = { flow: flow.id, ok: false, error: null, failedStep: null, durationMs: 0, reportPath: null, screenshotPath: null, resolvedUrl: null };
+  const context = flow.signedIn ? await browser.createBrowserContext() : null;
+  const page = context ? await context.newPage() : await browser.newPage();
+  let fixture;
+  let stopObserving;
+  let agent;
   try {
-    await page.setViewport({ width: 1280, height: 900 });
-    const agent = new PuppeteerAgent(page);
+    await page.setViewport({ width: 1440, height: 1000 });
+    result.failedStep = 'QA sign-in and private board ownership check';
+    if (flow.signedIn) {
+      fixture = await prepareQa(page, flow);
+      stopObserving = observeFixtures(page, fixture);
+    }
+    agent = new PuppeteerAgent(page);
 
-    for (const step of flow.steps) {
-      const output = await runStep(page, agent, step);
+    for (const [index, template] of flow.steps.entries()) {
+      const step = resolveStep(template, fixture?.values || {});
+      result.failedStep = `${index + 1}. ${step.action}: ${step.arg}`;
+      const output = await runStep(page, agent, step, fixture);
+      if (process.argv.includes('--force-failure') && process.argv[process.argv.indexOf('--force-failure') + 1] === flow.id) {
+        throw new Error('Forced failure for reporter dry-run verification');
+      }
       if (step.action === 'goto') {
         result.resolvedUrl = output.resolvedUrl;
         if (output.resolvedUrl !== step.arg) {
@@ -116,13 +195,40 @@ async function runFlow(browser, flow) {
     try {
       await mkdir(SCREENSHOT_DIR, { recursive: true });
       const screenshotPath = path.join(SCREENSHOT_DIR, `${flow.id}-${Date.now()}.png`);
-      await page.screenshot({ path: screenshotPath, fullPage: true });
+      await page.screenshot({ path: screenshotPath, fullPage: true }).catch(async (err) => {
+        console.warn(`[${flow.id}] Full-page screenshot failed: ${err.message}; capturing viewport`);
+        await page.screenshot({ path: screenshotPath });
+      });
       result.screenshotPath = screenshotPath;
     } catch {
       // best effort -- a screenshot failure must not mask the real error
     }
   } finally {
-    await page.close();
+    if (fixture) {
+      const beforeCleanup = !result.screenshotPath ? await page.screenshot({ fullPage: true }).catch(() => null) : null;
+      try {
+        // Unmount React so deleting a fixture chat cannot create its replacement.
+        await page.goto(`${APP_ORIGIN}/favicon.ico`, { waitUntil: 'load', timeout: 30_000 });
+        stopObserving?.();
+        await cleanupQa(page, fixture);
+        console.log(`[${flow.id}] QA cleanup passed`);
+      } catch (err) {
+        if (result.ok) result.failedStep = 'QA fixture cleanup';
+        result.ok = false;
+        result.error = [result.error, err.message].filter(Boolean).join('; ');
+        if (!result.screenshotPath) {
+          await mkdir(SCREENSHOT_DIR, { recursive: true });
+          result.screenshotPath = path.join(SCREENSHOT_DIR, `${flow.id}-${Date.now()}.png`);
+          if (beforeCleanup) await writeFile(result.screenshotPath, beforeCleanup);
+          else await page.screenshot({ path: result.screenshotPath, fullPage: true }).catch(() => { result.screenshotPath = null; });
+        }
+      }
+    }
+    stopObserving?.();
+    result.reportPath = agent?.reportFile || null;
+    if (result.ok) result.failedStep = null;
+    if (context) await context.close();
+    else await page.close();
     result.durationMs = Date.now() - start;
   }
   return result;
@@ -174,7 +280,7 @@ async function main() {
     console.error(`\n${failed.length}/${results.length} flow(s) failed: ${failed.map((f) => f.flow).join(', ')}`);
     process.exit(1);
   }
-  console.log(`\nAll ${results.length} flow(s) passed.`);
+  console.log(`\nAll flows passed. (${results.length}/${results.length})`);
 }
 
 main().catch((err) => {

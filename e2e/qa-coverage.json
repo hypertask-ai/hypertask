@@ -245,16 +245,16 @@
     {
       "id": "open-login",
       "label": "Open the login screen",
-      "detail": "The public login screen renders. It does not complete a login.",
-      "checkIds": ["nightly-browser"],
-      "sources": [{ "file": "e2e/midscene/flows/login-screen.mjs", "token": "login-screen" }]
+      "detail": "Covered by prod-health outside this Midscene nightly suite.",
+      "checkIds": [],
+      "sources": []
     },
     {
       "id": "open-marketing",
       "label": "Open the marketing page",
-      "detail": "The public landing page renders its main heading and actions.",
-      "checkIds": ["nightly-browser"],
-      "sources": [{ "file": "e2e/midscene/flows/landing.mjs", "token": "id: 'landing'" }]
+      "detail": "Covered by prod-health outside this Midscene nightly suite.",
+      "checkIds": [],
+      "sources": []
     },
     {
       "id": "attachment-rules",
@@ -283,23 +283,44 @@
     {
       "id": "create-signed-in-task",
       "label": "Create a task while signed in",
-      "detail": "The form opens, but no live signed-in check submits and reloads the new task.",
-      "checkIds": [],
-      "sources": []
+      "detail": "The plain QA account creates and reloads a private-board task, then removes it.",
+      "checkIds": [
+        "nightly-browser"
+      ],
+      "sources": [
+        {
+          "file": "e2e/midscene/flows/signed-in-create-task.mjs",
+          "token": "signed-in-create-task"
+        }
+      ]
     },
     {
       "id": "upload-in-browser",
       "label": "Attach a file in the browser",
-      "detail": "Code tests cover upload rules, but no live browser check uploads and reopens a file.",
-      "checkIds": [],
-      "sources": []
+      "detail": "The plain QA account uploads and reopens a text attachment, then removes the file and task.",
+      "checkIds": [
+        "nightly-browser"
+      ],
+      "sources": [
+        {
+          "file": "e2e/midscene/flows/signed-in-file-upload.mjs",
+          "token": "signed-in-file-upload"
+        }
+      ]
     },
     {
       "id": "notification-delivery",
       "label": "Receive a new notification",
-      "detail": "The inbox loads, but no live check triggers and receives a notification.",
-      "checkIds": [],
-      "sources": []
+      "detail": "A QA task moved to Inbox produces a visible notification that opens the task.",
+      "checkIds": [
+        "nightly-browser"
+      ],
+      "sources": [
+        {
+          "file": "e2e/midscene/flows/signed-in-notification.mjs",
+          "token": "signed-in-notification"
+        }
+      ]
     },
     {
       "id": "realtime-sync",
@@ -311,16 +332,30 @@
     {
       "id": "reminder-delivery",
       "label": "Receive a reminder",
-      "detail": "No live browser check schedules a reminder and proves it arrives.",
-      "checkIds": [],
-      "sources": []
+      "detail": "The QA account schedules a future reminder in the UI and verifies it is saved. Delivery at the future time is not covered.",
+      "checkIds": [
+        "nightly-browser"
+      ],
+      "sources": [
+        {
+          "file": "e2e/midscene/flows/signed-in-reminder.mjs",
+          "token": "signed-in-reminder"
+        }
+      ]
     },
     {
       "id": "ai-answer",
       "label": "Get an answer from the AI assistant",
-      "detail": "No live browser check sends an AI request because that spends money and changes data.",
-      "checkIds": [],
-      "sources": []
+      "detail": "The QA account asks a short question and verifies a real assistant answer in an isolated chat.",
+      "checkIds": [
+        "nightly-browser"
+      ],
+      "sources": [
+        {
+          "file": "e2e/midscene/flows/signed-in-ai-answer.mjs",
+          "token": "signed-in-ai-answer"
+        }
+      ]
     }
   ]
 }

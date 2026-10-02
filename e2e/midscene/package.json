@@ -7,7 +7,9 @@
   "scripts": {
     "smoke": "./guarded-run.sh --all",
     "run": "./guarded-run.sh",
-    "cleanup": "./cleanup.sh"
+    "cleanup": "./cleanup.sh",
+    "lint": "node lint.mjs",
+    "test:failure-dry-run": "node failure-dry-run.mjs"
   },
   "dependencies": {
     "@midscene/web": "^1.13.3",
