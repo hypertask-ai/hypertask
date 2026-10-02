@@ -1,4 +1,6 @@
 import { useEffect, useRef } from "react";
+import { useRecoilValue } from "@/lib/state";
+import { aiChatAutoOpenSuppressedAtom } from "@/store";
 import { TAiModal } from "@/models/AI_Task_writer_model";
 import { focusAiChatEditorForRequest, isEditableElement } from "@/utils/aiChat/focusRequestWindow";
 import { IChatMessage } from "@/models/model";
@@ -12,6 +14,7 @@ type Context = Pick<ReturnType<typeof useAiChatState>, "setAiOption" | "contextL
   Pick<ReturnType<typeof useAiChatAttachments>, "handleCancelStream">;
 
 export function useAiChatPresentation(context: Context) {
+  const aiChatAutoOpenSuppressed = useRecoilValue(aiChatAutoOpenSuppressedAtom);
   const {
   setAiOption, contextList, setContextList, editor, handleCancelStream,
   streamingSessionRef, showAiChatInterface, aiChatExplicitOpenAt, setAiChatExplicitOpenAt, setChatMounted,
@@ -111,11 +114,11 @@ export function useAiChatPresentation(context: Context) {
     if (hasAttemptedRestoreRef.current || !currentUser?.id) return;
     hasAttemptedRestoreRef.current = true;
     if (window.innerWidth < MOBILE_VIEWPORT_MAX_PX) return;
-    if (readChatOpenForSession()) {
+    if (!aiChatAutoOpenSuppressed && readChatOpenForSession()) {
       setChatMounted(true);
       setShowAIChat(true);
     }
-  }, [currentUser?.id]);
+  }, [currentUser?.id, aiChatAutoOpenSuppressed]);
 
   // Gated on the restore having been attempted: this effect also runs on mount, where it
   // would otherwise stamp "0" over the stored "1" before a late-arriving currentUser let
