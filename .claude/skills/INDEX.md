@@ -13,6 +13,7 @@ Read the "when to load" column, open that SKILL.md, and follow it, including its
 | vcc | Claim, board writes, merge, deploy watch, report | .claude/skills/vcc/SKILL.md |
 | reuse-existing-ui | Before UI code | .claude/skills/reuse-existing-ui/SKILL.md |
 | fix-bug | The fix, when it restores behaviour that used to work | .claude/skills/fix-bug/SKILL.md |
+| fix-slow-page | The fix, for a speed ticket: reproduce, trace, smallest fix, before/after proof | .claude/skills/fix-slow-page/SKILL.md |
 | ship-feature-behind-flag | The fix, when it adds behaviour the user has not seen | .claude/skills/ship-feature-behind-flag/SKILL.md |
 | simplify-before-pr | Before the PR | .claude/skills/simplify-before-pr/SKILL.md |
 | design-compliance | Before the PR (UI) | .claude/skills/design-compliance/SKILL.md |
