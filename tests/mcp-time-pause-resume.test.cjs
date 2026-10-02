@@ -2,7 +2,7 @@
 // and resume routes only existed on the cookie-authenticated web surface.
 const test = require("node:test");
 const assert = require("node:assert/strict");
-const fs = require("node:fs");
+const fs = require("./helpers/chat-stream-source.cjs");
 const path = require("node:path");
 
 const root = path.resolve(__dirname, "..");

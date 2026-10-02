@@ -8,9 +8,10 @@ an email magic link (15-minute expiry, audience `email-link`).
 
 ## How to drive it
 
-`agent-browser`, headless, against production, signed in with one of the QA
-runner accounts' saved storage state (`INDEX.md`'s "QA runner accounts"
-section has the paths). Don't drive the OAuth consent screen or mint your own
+`agent-browser`, headless, against production, signed in with a saved
+storage state passed as `--state` (the plan files are in `INDEX.md`'s
+"Plan accounts" section; flag checks use the two files named in
+`verify-qa/SKILL.md`). Don't drive the OAuth consent screen or mint your own
 JWT; use the saved session cookies like every other verification does.
 Confirm the `nookies_user` cookie lands and the app boots into a board, not a
 blank shell.

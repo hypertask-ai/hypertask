@@ -1,3 +1,4 @@
+const { readRefactoredSource } = require("../src/app/detail/[...slug]/taskDetailTestSources.cjs");
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const test = require("node:test");
@@ -112,7 +113,7 @@ test("listener cleanup stops later gestures from changing the guard", () => {
 });
 
 test("task detail wires the guard to task lifecycle and every delayed mobile scroll", () => {
-  const source = fs.readFileSync(
+  const source = readRefactoredSource(
     path.join(root, "src/app/detail/[...slug]/TaskDetailComp.tsx"),
     "utf8"
   );
@@ -186,7 +187,7 @@ test("task detail wires the guard to task lifecycle and every delayed mobile scr
 });
 
 test("the task detail virtualizer leaves row-resize scroll compensation to the browser (HTPR-6277)", () => {
-  const source = fs.readFileSync(
+  const source = readRefactoredSource(
     path.join(root, "src/hooks/Task Detail/useTaskDetailGlobalStates.ts"),
     "utf8"
   );
@@ -202,7 +203,7 @@ test("the task detail virtualizer leaves row-resize scroll compensation to the b
 });
 
 test("task detail isolates HypertasksCommands in Suspense so Share cannot remount the page (HTPR-6277)", () => {
-  const source = fs.readFileSync(
+  const source = readRefactoredSource(
     path.join(root, "src/app/detail/[...slug]/TaskDetailComp.tsx"),
     "utf8"
   );

@@ -8,6 +8,8 @@ import { getProjectViewInclude } from "@/utils/controllers/projects/getAll";
 import { getViewFromProject } from "@/utils/helperFunctions/Views/ViewsHelperFunctions";
 import { sendEmailNotification } from "@/utils/controllers/notifications/sendNotification";
 import { GUEST_FORBIDDEN_MESSAGE, isGuestRequest } from "@/lib/demo/guestGuard";
+import { getSessionUser } from "@/lib/auth/getSessionUser";
+import getMemberAndOwner from "@/utils/controllers/getMemberAndOwnerForBoard";
 
 const handler: NextApiHandler = async (
   req: NextApiRequest,
@@ -18,17 +20,43 @@ const handler: NextApiHandler = async (
     if (await isGuestRequest(req)) {
       return res.status(403).json({ message: GUEST_FORBIDDEN_MESSAGE });
     }
-    const { userId, projectId, emails } = req.body;
-    if (!userId || !projectId || !emails) {
+    const session = await getSessionUser(
+      new Headers(req.headers as Record<string, string>),
+    );
+    if (!session) return res.status(401).json({ message: "Unauthorized" });
+    const { userId: bodyUserId, projectId, emails } = req.body;
+    if (bodyUserId != null && Number(bodyUserId) !== session.userId) {
+      return res.status(403).json({ message: "Forbidden" });
+    }
+    const parsedProjectId = Number(projectId);
+    if (!Number.isInteger(parsedProjectId) || !emails) {
       return res.status(400).json({ message: "Missing required information" });
     }
+    const access = await sessionCanManageProjectInvites(
+      session.userId,
+      parsedProjectId,
+    );
+    if (access === "missing") {
+      return res.status(404).json({ message: "Project not found" });
+    }
+    if (access !== "ok") return res.status(403).json({ message: "Forbidden" });
 
-    const result = await addMemberController(userId, projectId, emails);
+    const result = await addMemberController(session.userId, parsedProjectId, emails);
     res.status(result?.status).json(result?.json)
   } else {
     res.status(405).json({ message: "Method not allowed" });
   }
 };
+
+async function sessionCanManageProjectInvites(userId: number, projectId: number) {
+  const project = await prisma.project.findFirst({
+    where: { id: projectId, status: "Normal" },
+    select: { id: true },
+  });
+  if (!project) return "missing";
+  const allowed = await getMemberAndOwner(projectId);
+  return Array.isArray(allowed) && allowed.includes(userId) ? "ok" : "forbidden";
+}
 
 export const addMemberController = async (
   userId: number,

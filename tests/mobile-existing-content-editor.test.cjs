@@ -1,5 +1,5 @@
 const assert = require("node:assert/strict");
-const fs = require("node:fs");
+const fs = require("./refactored-module-source.cjs");
 const path = require("node:path");
 const test = require("node:test");
 
@@ -8,7 +8,10 @@ const read = (file) => fs.readFileSync(path.join(root, file), "utf8");
 
 const tiptap = read("src/components/RTE/TipTapTaskDetail.tsx");
 const shell = read("src/components/RTE/Components/TiptapMainContainer.tsx");
-const actions = read("src/components/Common/AttachmentsUpload/index.tsx");
+const actions = [
+  read("src/components/Common/AttachmentsUpload/MobileAttachmentEdit.tsx"),
+  read("src/components/Common/AttachmentsUpload/index.tsx"),
+].join("\n");
 const imageGallery = read("src/components/Common/AttachmentsUpload/ImageGalleryView.tsx");
 const singleFilePreview = read(
   "src/components/Common/AttachmentsUpload/SingleFileInputPreview.tsx",
@@ -231,7 +234,7 @@ test("comment updates authorize against stored ownership and sync attachments at
   assert.match(commentService, /new Map\([\s\S]*?attachment\.fileSource/);
   assert.match(commentService, /attachmentsToCreate[\s\S]*?transaction\.attachment\.createMany/);
   assert.match(commentService, /transaction\.comment\.update/);
-  assert.match(commentRoute, /creatorId !== userObj\.id/);
+  assert.match(commentRoute, /const userId = session\.userId;[\s\S]*?creatorId !== userId/);
   assert.match(commentRoute, /typeof attachment\.fileSize !== "string"/);
   assert.match(commentRoute, /updateCommentService\(\{[\s\S]*?attachments,/);
 });

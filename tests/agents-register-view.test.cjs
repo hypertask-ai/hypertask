@@ -235,7 +235,7 @@ test("the palette's Disabled agents link parses back to the off filter", () => {
   // The parser falls back to "all" for anything it does not recognise, so a
   // stale link in commands.tsx opens an unfiltered register and the command
   // silently does nothing. Only the round trip catches that.
-  const fs = require("node:fs");
+  const fs = require("./refactored-module-source.cjs");
   const source = fs.readFileSync(path.join(root, "src/components/commands.tsx"), "utf8");
   const link = source.match(/router\.push\("(\/agents\?[^"]+)"\)/)?.[1];
   assert.ok(link, "expected a filtered /agents link for the Disabled agents command");

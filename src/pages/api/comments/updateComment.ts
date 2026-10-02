@@ -1,12 +1,20 @@
 import { NextApiHandler, NextApiRequest, NextApiResponse } from "next";
 import { updateCommentService } from "@/utils/controllers/comments/updateCommentService";
 import { broadcastTaskComment } from "@/lib/realtime/server";
+import { getSessionUser } from "@/lib/auth/getSessionUser";
 
 const handler: NextApiHandler = async (
   req: NextApiRequest,
   res: NextApiResponse
 ) => {
   if (req.method === "PUT") {
+    const session = await getSessionUser(
+      new Headers(req.headers as Record<string, string>)
+    );
+    if (!session) {
+      return res.status(401).json({ message: "Unauthorized" });
+    }
+    const userId = session.userId;
     if (!req.body || typeof req.body !== "object" || Array.isArray(req.body)) {
       return res.status(400).json({ message: "Invalid request body" });
     }
@@ -50,8 +58,7 @@ const handler: NextApiHandler = async (
       return res.status(400).json({ message: "Invalid attachments" });
     }
 
-    const userObj = JSON.parse(req.cookies.nookies_user!);
-    if (creatorId !== userObj.id) {
+    if (creatorId !== userId) {
       return res.status(403).json({ message: "Not the comment owner" });
     }
 
@@ -59,12 +66,12 @@ const handler: NextApiHandler = async (
       const toUpdate = await updateCommentService({
         commentId,
         text,
-        userId: userObj.id,
+        userId,
         attachments,
         replaceAttachments,
       });
 
-      void broadcastTaskComment(toUpdate.taskId, { originUserId: userObj.id }).catch(
+      void broadcastTaskComment(toUpdate.taskId, { originUserId: userId }).catch(
         (broadcastError) =>
           console.warn("Comment update broadcast failed", broadcastError),
       );

@@ -1,3 +1,4 @@
+const { readRefactoredSource } = require("../src/app/detail/[...slug]/taskDetailTestSources.cjs");
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
@@ -31,7 +32,7 @@ const { FIGMA_CONNECTION_VERSION_COOKIE } = jiti(
 );
 
 const source = (relativePath) =>
-  fs.readFileSync(path.join(root, relativePath), "utf8");
+  readRefactoredSource(path.join(root, relativePath), "utf8");
 
 test("detects stored Figma iframes on approved HTTPS hosts", () => {
   assert.equal(

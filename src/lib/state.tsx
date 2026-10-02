@@ -4,6 +4,7 @@ import { useCallback, type ReactNode } from "react";
 import {
   Provider as JotaiProvider,
   atom as jotaiAtom,
+  createStore,
   useAtom,
   useAtomValue,
   useSetAtom,
@@ -11,6 +12,11 @@ import {
   type WritableAtom,
 } from "jotai";
 import { RESET } from "jotai/utils";
+import { useHydrated } from "@/hooks/General/useHydrated";
+
+// A late streamed consumer must still see SSR defaults even if storage or an
+// already-mounted sibling has populated the live store (including selectors).
+const hydrationDefaults = createStore();
 
 type SetStateAction<T> = T | ((prev: T) => T);
 type ResettableAtom<T> = WritableAtom<T, [SetStateAction<T> | typeof RESET], void>;
@@ -208,6 +214,7 @@ export function atom<T>(options: RecoilAtomOptions<T>): ResettableAtom<T> {
     ? readPersistedValue(options.key, options.default)
     : options.default;
   const baseAtom = jotaiAtom<T>(initialValue);
+  hydrationDefaults.set(baseAtom, options.default);
 
   const recoilShapedAtom = jotaiAtom(
     (get) => get(baseAtom),
@@ -247,11 +254,15 @@ export function selectorFamily<T, P>(options: SelectorFamilyOptions<T, P>) {
 export function useRecoilState<T>(
   recoilAtom: WritableAtom<T, [SetStateAction<T> | typeof RESET], void>
 ) {
-  return useAtom(recoilAtom) as [T, SetterOrUpdater<T>];
+  const [value, setValue] = useAtom(recoilAtom);
+  const hydrated = useHydrated();
+  return [hydrated ? value : hydrationDefaults.get(recoilAtom), setValue] as [T, SetterOrUpdater<T>];
 }
 
 export function useRecoilValue<T>(recoilAtom: JotaiAtom<T>) {
-  return useAtomValue(recoilAtom);
+  const value = useAtomValue(recoilAtom);
+  const hydrated = useHydrated();
+  return hydrated ? value : hydrationDefaults.get(recoilAtom);
 }
 
 export function useSetRecoilState<T>(

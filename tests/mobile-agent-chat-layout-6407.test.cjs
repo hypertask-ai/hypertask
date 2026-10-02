@@ -1,3 +1,4 @@
+const { readAgentChatSource } = require("./helpers/agent-chat-source.cjs");
 // HTPR-6407 redeploy marker: keep prod health from rolling back a no-diff empty commit.
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
@@ -5,10 +6,7 @@ const path = require("node:path");
 const test = require("node:test");
 
 const root = path.resolve(__dirname, "..");
-const chat = fs.readFileSync(
-  path.join(root, "src/app/agents/chat/AgentChatClient.tsx"),
-  "utf8",
-);
+const chat = readAgentChatSource();
 const audio = fs.readFileSync(
   path.join(root, "src/components/RTE/Components/AudioButton.tsx"),
   "utf8",
@@ -29,10 +27,6 @@ const events = fs.readFileSync(
 );
 const closedLayout = fs.readFileSync(
   path.join(root, "src/components/AI_CHAT/AI_Chat_Closed_Layout.tsx"),
-  "utf8",
-);
-const openLayout = fs.readFileSync(
-  path.join(root, "src/components/AI_CHAT/AI_Chat_Layout.tsx"),
   "utf8",
 );
 
@@ -115,12 +109,9 @@ test("chat.message can carry ADHD reply guidance behind the flag", () => {
 });
 
 test("closed AI layout does not double-pad /agents/chat", () => {
+  // The closed layout is also the frame once chat loads (HTPR-6751).
   assert.match(
     closedLayout,
-    /pathname\?\.startsWith\(\s*["']\/agents\/chat["']\s*\)/,
-  );
-  assert.match(
-    openLayout,
     /pathname\?\.startsWith\(\s*["']\/settings["']\s*\)\s*\|\|\s*pathname\?\.startsWith\(\s*["']\/agents\/chat["']\s*\)/,
   );
   // Agent Chat keeps its own chrome insets when the parent bails.

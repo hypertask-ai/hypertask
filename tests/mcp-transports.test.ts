@@ -35,6 +35,7 @@ function loadRoutes() {
     loaded.filename = file
     loaded.paths = (Module as any)._nodeModulePaths(path.dirname(file))
     loaded.require = (request: string) => {
+      if (request === '@/lib/telemetry/mcpSseAnalytics') return { recordLegacyMcpRequest: () => {} }
       if (request === './tools') return { MCP_TOOLS: [echoTool] }
       if (request === '@/lib/mcp/auth') return {
         extractBearerToken: (header: string | null) => header?.match(/^Bearer (.+)$/)?.[1] ?? null,

@@ -290,6 +290,11 @@ test("declared flags remain listed with ticket details and can be changed", asyn
         updatedAt: null,
       },
       {
+        key: "htpr-6348-agent-access-delegation",
+        mode: "OWNER_AND_QA",
+        updatedAt: null,
+      },
+      {
         key: "htpr-6363-task-writer-research",
         mode: "OWNER_AND_QA",
         updatedAt: null,
@@ -474,8 +479,14 @@ test("declared flags remain listed with ticket details and can be changed", asyn
         mode: "OWNER_AND_QA",
         updatedAt: null,
       },
+      { key: "htpr-6653-admin-team-comp", mode: "OWNER_AND_QA", updatedAt: null },
       {
         key: "htpr-6673-capture-user-signed-up-in-posthog",
+        mode: "OWNER_AND_QA",
+        updatedAt: null,
+      },
+      {
+        key: "htpr-6688-search-autocomplete",
         mode: "OWNER_AND_QA",
         updatedAt: null,
       },
@@ -484,6 +495,8 @@ test("declared flags remain listed with ticket details and can be changed", asyn
         mode: "OWNER_AND_QA",
         updatedAt: null,
       },
+      { key: "htpr-6800-flag-ticket-id", mode: "OWNER_AND_QA", updatedAt: null },
+      { key: "yper4-123-board-check", mode: "OWNER_AND_QA", updatedAt: null },
     ],
   );
   listed.forEach(({ key, description, ticketUrl, shippedOn }) => {
@@ -491,9 +504,10 @@ test("declared flags remain listed with ticket details and can be changed", asyn
     // The flags admin page clusters on this day, so a typo would silently create a
     // one-flag heading instead of failing.
     assert.match(shippedOn, /^\d{4}-\d{2}-\d{2}$/, `${key} needs a shippedOn day`);
+    const ticketNumber = key.match(/^htpr-(\d+)-/)?.[1];
     assert.equal(
       ticketUrl,
-      `https://app.hypertask.ai/detail/project-15/${key.match(/^htpr-(\d+)-/)[1]}`,
+      ticketNumber ? `https://app.hypertask.ai/detail/project-15/${ticketNumber}` : null,
     );
   });
 

@@ -6,6 +6,7 @@ import {
     getAiModelOptionById,
 } from '@/lib/aiModelOptions';
 import { getProjectWhere } from '@/utils/controllers/projects/getAllIncludes';
+import { getSessionUser } from "@/lib/auth/getSessionUser";
 
 export default async function handler(
     req: NextApiRequest,
@@ -13,13 +14,16 @@ export default async function handler(
 ) {
 
     if (req.method === "GET") {
+        const session = await getSessionUser(
+          new Headers(req.headers as Record<string, string>)
+        );
+        if (!session) {
+          return res.status(401).json({ message: "Unauthorized" });
+        }
+        const userId = session.userId;
         try {
-            const currentUser = JSON.parse(req.cookies.nookies_user ?? "{}");
             const projectId = validateIntegerParam(req.query.projectId, 'projectId', res);
 
-            if (!currentUser?.id) {
-                return res.status(401).json({ message: "Missing user" });
-            }
             if (projectId === null) {
                 return res.status(422).json({ message: "Must be an integer" });
             }
@@ -27,7 +31,7 @@ export default async function handler(
             const customInstructions = await prisma.aI_Custom_Instructions.findFirst({
                 where: {
                     projectId,
-                    project: getProjectWhere(currentUser.id),
+                    project: getProjectWhere(userId),
                 },
                 include: { attachments: true },
             });
@@ -40,15 +44,35 @@ export default async function handler(
     }
 
     if (req.method === "DELETE"){
+        const session = await getSessionUser(
+          new Headers(req.headers as Record<string, string>)
+        );
+        if (!session) {
+          return res.status(401).json({ message: "Unauthorized" });
+        }
         // delete an attachment
         const fileId = validateIntegerParam(req.query.fileIdToRemove, 'fileIdToRemove', res);
         const projectId = validateIntegerParam(req.query.projectId, 'projectId', res);
         // const fileId = validateIntegerParam(req.query.fileIdToRemove, 'fileIdToRemove', res);
 
         // Early return if validation failed
-        if (fileId === null) {
+        if (fileId === null || projectId === null) {
             return res.status(422).json({message:"Must be an integer"});
-        }        
+        }
+
+        const attachment = await prisma.attachment.findFirst({
+            where: {
+                id: fileId,
+                AI_Custom_Instructions: {
+                    projectId,
+                    project: getProjectWhere(session.userId),
+                },
+            },
+            select: { id: true },
+        })
+        if (!attachment) {
+            return res.status(404).json({ message: "Not found" });
+        }
 
         await prisma.attachment.delete({
             where:{
@@ -59,6 +83,12 @@ export default async function handler(
     }
 
     else if (req.method === "POST"){
+        const session = await getSessionUser(
+          new Headers(req.headers as Record<string, string>)
+        );
+        if (!session) {
+          return res.status(401).json({ message: "Unauthorized" });
+        }
 
         // lets create a fuckin view shall we. and now lets lets lets add a view
         try {
@@ -73,11 +103,21 @@ export default async function handler(
                 : undefined;
             if (!projectId) return res.status(101).json({ message: "Missing required information" })
 
+            const project = await prisma.project.findFirst({
+                where: {
+                    id: Number(projectId),
+                    ...getProjectWhere(session.userId),
+                },
+                select: { id: true },
+            })
+            if (!project) return res.status(404).json({ message: "Project not found" })
+
             var customInstructions;
             // lets first find out if the customInstruction exists or not.
             customInstructions = await prisma.aI_Custom_Instructions.findFirst({
                 where: {
-                    projectId
+                    projectId,
+                    project: getProjectWhere(session.userId),
                 }
             })
             // ============ if doesn't exist, create it

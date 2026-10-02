@@ -5,12 +5,20 @@ import {
 import prisma from "@/lib/prisma";
 import { broadcastBoardChange } from "@/lib/realtime/server";
 import { NextApiHandler, NextApiRequest, NextApiResponse } from "next";
+import { getSessionUser } from "@/lib/auth/getSessionUser";
 
 const handler: NextApiHandler = async (
   req: NextApiRequest,
   res: NextApiResponse
 ) => {
   if (req.method === "POST") {
+    const session = await getSessionUser(
+      new Headers(req.headers as Record<string, string>)
+    );
+    if (!session) {
+      return res.status(401).json({ message: "Unauthorized" });
+    }
+    const userId = session.userId;
     try {
       const { relations } = req.body;
       if (!relations) {
@@ -25,14 +33,7 @@ const handler: NextApiHandler = async (
         return res.status(400).json({ message: "Invalid relation type" });
       }
 
-      const currentUser = req.cookies.nookies_user
-        ? JSON.parse(req.cookies.nookies_user)
-        : null;
-      if (!currentUser?.id) {
-        return res.status(401).json({ message: "Unauthorized" });
-      }
-
-      const response = await addRelatedTasks(relations, currentUser.id);
+      const response = await addRelatedTasks(relations, userId);
 
       if (response.status === 200) {
         const currentTask = await prisma.task.findUnique({

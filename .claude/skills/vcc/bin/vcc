@@ -1,0 +1,97 @@
+#!/usr/bin/env bash
+# vcc: Hypertask CLI as "Valentins Claude Code" (Valentin's hand-run sessions).
+set -euo pipefail
+# Identity: the session's own name if a token exists for it, else Valentins Claude Code (ship-identity).
+TOKEN_FILE="$HOME/.config/hypertask-agents/credentials/valentins-claude-code-agent-token"
+IDENTITY="Valentins Claude Code"
+if [ -x "$HOME/.agents/skills/ship/scripts/ship-identity" ]; then
+  IFS=$'\t' read -r IDENTITY TOKEN_FILE < <("$HOME/.agents/skills/ship/scripts/ship-identity")
+fi
+HT_TOKEN="$(cat "$TOKEN_FILE")"
+export HT_TOKEN
+if [ "${1:-}" != activity ] || { [ "${2:-}" != add ] && [ "${2:-}" != last ]; }; then
+  exec /usr/bin/env -S hypertask "$@"
+fi
+
+fail() { echo "vcc activity: $*" >&2; exit 1; }
+[ "$#" -ge 3 ] || fail 'usage: vcc activity add <TICKET> "<text>" | vcc activity last <TICKET>'
+command=$2; ticket=$3
+[[ $ticket =~ ^[A-Za-z][A-Za-z0-9_-]*-[0-9]+$ ]] || fail 'expected a ticket number'
+ticket=${ticket^^}
+case "$command" in
+  add) [ "$#" = 4 ] && [ -n "${4//[[:space:]]/}" ] || fail 'add needs one non-empty text argument' ;;
+  last) [ "$#" = 3 ] || fail 'last needs only a ticket number' ;;
+  *) fail "unknown activity command: $command" ;;
+esac
+
+body=$(mktemp)
+trap 'rm -f "$body"' EXIT
+# Keep the token out of curl's arguments and logs.
+request() {
+  local method=$1 path=$2 data=${3:-}
+  code=$(printf 'header = "Authorization: Bearer %s"\n' "$HT_TOKEN" |
+    curl --config - --silent --show-error --connect-timeout 10 --max-time 30 \
+      --request "$method" --header 'Content-Type: application/json' \
+      ${activity_key:+--header "Idempotency-Key: $activity_key"} \
+      --data "$data" --output "$body" --write-out '%{http_code}' \
+      "https://app.hypertask.ai/api/mcp/$path") || fail 'request failed'
+}
+success() {
+  [[ $code == 2?? ]] && jq -e '.success == true' "$body" >/dev/null 2>&1 \
+    || fail "HTTP $code: $(jq -r '.error // .message // "request failed"' "$body" 2>/dev/null || echo 'request failed')"
+}
+
+if [ "$command" = last ]; then
+  path="tasks/$ticket/agent-activity?limit=1"
+  # Board checks use the immutable claimant id; normal last reads every agent.
+  if [ -n "${VCC_ACTIVITY_AGENT_ID:-}" ]; then
+    path+="&agent_id=$(jq -rn --arg id "$VCC_ACTIVITY_AGENT_ID" '$id | @uri')"
+  fi
+  request GET "$path"
+  if [ "$code" = 404 ]; then
+    echo 'vcc activity last: ticket activity route is not deployed yet (HTTP 404), or is unavailable for this ticket/caller.' >&2
+    exit 4
+  fi
+  success
+  jq -er '.activities | if length == 0 then "" else .[0] | [.createdAt, .agentName] | @tsv end' "$body" | sed '/^$/d'
+  exit 0
+fi
+
+# One run per identity per ticket, so two runners never share a run.
+slug=$(printf '%s' "$IDENTITY" | tr '[:upper:]' '[:lower:]' | sed -E 's/[^a-z0-9]+/-/g; s/^-+|-+$//g')
+cache="$HOME/.local/state/vcc-runs/$slug/$ticket"
+umask 077
+mkdir -p "$(dirname "$cache")"
+run=''
+if [ -s "$cache" ]; then
+  run=$(cat "$cache")
+  [[ $run =~ ^[A-Za-z0-9-]+$ ]] || fail 'invalid cached run id'
+fi
+open_run() {
+  local task_id
+  task_id=$(hypertask tasks get "$ticket" --json | jq -er '.tasks[0].id') || fail "cannot read $ticket"
+  request POST agents/runs "$(jq -nc --argjson id "$task_id" '{taskId:$id,source:"runtime"}')"
+  success
+  run=$(jq -er '.run.id | select(type == "string" and test("^[A-Za-z0-9-]+$"))' "$body") || fail 'open returned no run id'
+  printf '%s\n' "$run" > "$cache"
+}
+if [ -n "$run" ]; then
+  request GET "agents/runs/$run"
+  if [ "$code" = 404 ]; then
+    run=''
+  else
+    success
+    jq -e '.run.status | IN("active", "stale")' "$body" >/dev/null || run=''
+  fi
+fi
+[ -n "$run" ] || open_run
+activity_key=$(cat /proc/sys/kernel/random/uuid)
+data=$(jq -nc --arg text "$4" '{type:"thought",text:$text}')
+request POST "agents/runs/$run/activities" "$data"
+# A cached run can be stopped/deleted between the read and the write.
+if [ "$code" = 404 ] || { [ "$code" = 409 ] && jq -e '.error | test("(not|no longer) active"; "i")' "$body" >/dev/null; }; then
+  open_run
+  request POST "agents/runs/$run/activities" "$data"
+fi
+success
+jq -er '.activity.id' "$body"

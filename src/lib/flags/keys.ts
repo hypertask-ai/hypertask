@@ -24,6 +24,7 @@ export const HTPR_6175_QUICK_ENTRY_CARDS_FLAG =
   "htpr-6175-quick-entry-cards";
 export const AUTO_TASK_DESCRIPTIONS_FLAG = "htpr-6177-auto-task-descriptions";
 export const FLAG_TICKET_TITLE_FLAG = "htpr-6176-flag-ticket-title";
+export const FLAG_TICKET_ID_FLAG = "htpr-6800-flag-ticket-id";
 export const FLAG_SORT_FILTER_FLAG = "htpr-6179-flag-sort-filter";
 export const INBOX_ARCHIVE_CLUSTER_FLAG = "htpr-6160-inbox-archive-cluster";
 export const FLAG_SHIP_DATE_CLUSTER_FLAG = "htpr-6191-flag-ship-date-clusters";
@@ -66,6 +67,7 @@ export const MY_TASKS_SHORTCUTS_WIDTH_FLAG =
 export const HTPR_6372_SEARCH_RANKING_FLAG = "htpr-6372-search-ranking";
 export const HTPR_6369_SEARCH_OPERATORS_FLAG = "htpr-6369-search-operators";
 export const HTPR_6370_SEARCH_CHIPS_FLAG = "htpr-6370-search-chips";
+export const HTPR_6688_SEARCH_AUTOCOMPLETE_FLAG = "htpr-6688-search-autocomplete";
 export const MY_TASKS_VIEWS_FLAG = "htpr-6422-my-tasks-views";
 export const MY_TASKS_BULK_SELECTION_FLAG =
   "htpr-6444-my-tasks-bulk-selection";
@@ -106,6 +108,9 @@ export const HTPR_6561_DESCRIPTION_STRUCTURE_FLAG =
   "htpr-6561-preserve-ai-edited-description-structure";
 export const HTPR_6542_TEAM_SCOPED_MANAGEMENT_KEYS_FLAG =
   "htpr-6542-team-scoped-management-keys";
+export const HTPR_6348_AGENT_ACCESS_DELEGATION_FLAG =
+  "htpr-6348-agent-access-delegation";
+export const HTPR_6653_ADMIN_TEAM_COMP_FLAG = "htpr-6653-admin-team-comp";
 /** Sent on chat.message when HTPR-6407 is on so agent replies lead with the next action. */
 export const AGENT_CHAT_ADHD_REPLY_GUIDANCE =
   "Lead with the next action. Keep replies short. Number steps. End with one concrete next action when something remains open.";

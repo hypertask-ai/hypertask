@@ -27,7 +27,7 @@ last one, since undo bugs tend to be about state surviving a reload.
 
 ## Cleanup
 
-Clear any test notification you created (archive it) so the QA runner
+Clear any test notification you created (archive it) so the QA
 account's inbox stays empty between runs.
 
 ## Gap

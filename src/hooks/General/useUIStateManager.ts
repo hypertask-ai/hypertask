@@ -205,8 +205,7 @@ export const useUIStateManager = (stateKey: UIStateKey) => {
     closeOthers();
     if (stateKey === 'aiChatInterface') {
       setAiChatAutoOpenSuppressed(false);
-      // Explicit opens let the mounted composer take focus (HTPR-6317); the
-      // reload-restore caller clears this right after to stay auto-open.
+      // Explicit opens let the mounted composer take focus (HTPR-6317).
       setAiChatExplicitOpenAt(Date.now());
     }
     setIsOpen(true);

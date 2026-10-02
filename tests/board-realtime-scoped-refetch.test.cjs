@@ -406,3 +406,204 @@ test("the visible board subscribes before deferred startup work is released", ()
   assert.doesNotMatch(subscription, /enabled\s*:/u);
   assert.doesNotMatch(hook, /options\?\.enabled/u);
 });
+
+function mountFallbackHook(t, { connect, queryClient, accountId = USER_ID } = {}) {
+  let cleanup;
+  const timers = new Map();
+  const listeners = new Map();
+  const originals = {
+    setInterval: global.setInterval,
+    clearInterval: global.clearInterval,
+    document: global.document,
+    window: global.window,
+    navigator: Object.getOwnPropertyDescriptor(global, "navigator"),
+  };
+  global.setInterval = (callback, delay) => {
+    assert.equal(delay, 10_000);
+    timers.set(callback, callback);
+    return callback;
+  };
+  global.clearInterval = (id) => timers.delete(id);
+  const target = (name, properties = {}) => ({
+    ...properties,
+    addEventListener: (event, callback) => listeners.set(`${name}:${event}`, callback),
+    removeEventListener: (event) => listeners.delete(`${name}:${event}`),
+  });
+  global.document = target("document", { visibilityState: "visible" });
+  global.window = target("window");
+  Object.defineProperty(global, "navigator", {
+    configurable: true,
+    value: { onLine: true },
+  });
+  t.after(() => {
+    cleanup?.();
+    global.setInterval = originals.setInterval;
+    global.clearInterval = originals.clearInterval;
+    global.document = originals.document;
+    global.window = originals.window;
+    if (originals.navigator) Object.defineProperty(global, "navigator", originals.navigator);
+    else delete global.navigator;
+  });
+  const hook = loadTypeScriptModule(
+    path.join(root, "src/hooks/realtime/useBoardRealtime.ts"),
+    {
+      react: {
+        useEffect: (effect) => { cleanup = effect(); },
+        useRef: (initialValue) => ({ current: initialValue }),
+      },
+      "@tanstack/react-query": { useQueryClient: () => queryClient },
+      "@/lib/realtime/client": {
+        connectRealtimeClient: connect ?? (async () => null),
+        releaseRealtimeClientIfIdle() {},
+      },
+      "@/lib/projectPlanning": { projectPlanningQueryKey: (id) => ["planning", id] },
+      "@/lib/realtime/shared": {
+        BOARD_EVENT: "board:changed",
+        boardChannel: (id) => `private-board-${id}`,
+      },
+      "@/lib/boardSync/reconcileActiveBoardQuery": {
+        reconcileActiveBoardQuery,
+        reconcileActiveBoardTasks,
+      },
+      "@/lib/realtime/latencyCanary": {
+        runRealtimeReconciliation: ({ reconcile }) => reconcile(),
+      },
+      "@/hooks/useFlag": { useFlag: () => false },
+      "@/lib/flags/keys": { SCOPED_BOARD_REFETCH_FLAG: "scoped" },
+      "@/lib/realtime/boardRealtimeEventHandler": { createBoardRealtimeEventHandler },
+    },
+  );
+  hook.useBoardRealtime(PROJECT_ID, { accountId });
+  return {
+    timers,
+    listeners,
+    tick: () => { for (const callback of timers.values()) callback(); },
+    cleanup: () => cleanup?.(),
+  };
+}
+
+test("unavailable realtime silently updates only the visible board even with the scoped flag off", async (t) => {
+  const { queryClient, operations, cachedProjects } = buildQueryClient(buildProjects());
+  const before = cachedProjects();
+  const harness = mountFallbackHook(t, { queryClient });
+  await settle();
+  assert.deepEqual(operations, [], "startup must reuse the initial board load");
+  assert.equal(cachedProjects(), before);
+  harness.tick();
+  await settle();
+  assert.deepEqual(cachedProjects()[1].tasks, changedPayload.tasks);
+  assert.equal(cachedProjects()[0], before[0]);
+  assert.equal(cachedProjects()[2], before[2]);
+  assert.equal(harness.timers.size, 1);
+  operations.length = 0;
+  harness.tick();
+  await settle();
+  assert.deepEqual(operations, [
+    ["cancel", ["boardTasks", USER_ID, PROJECT_ID]],
+    ["refetch", ["planning", PROJECT_ID]],
+    ["fetch", ["boardTasks", USER_ID, PROJECT_ID]],
+  ]);
+  harness.cleanup();
+  assert.equal(harness.timers.size, 0);
+  assert.equal(harness.listeners.size, 0);
+});
+
+test("fallback pauses while hidden or offline and resumes when visible and online", async (t) => {
+  const { queryClient, operations } = buildQueryClient(buildProjects());
+  const harness = mountFallbackHook(t, { queryClient });
+  await settle();
+  operations.length = 0;
+  global.document.visibilityState = "hidden";
+  harness.tick();
+  await settle();
+  assert.deepEqual(operations, []);
+  global.document.visibilityState = "visible";
+  global.navigator.onLine = false;
+  harness.tick();
+  await settle();
+  assert.deepEqual(operations, []);
+  global.navigator.onLine = true;
+  harness.listeners.get("window:online")();
+  await settle();
+  assert.equal(operations.filter(([op]) => op === "fetch").length, 1);
+});
+
+test("slow fallback requests never overlap or queue a refresh on every timer tick", async (t) => {
+  const { queryClient, operations } = buildQueryClient(buildProjects());
+  let finishFetch;
+  let fetches = 0;
+  queryClient.fetchQuery = () => {
+    fetches += 1;
+    return new Promise((resolve) => { finishFetch = resolve; });
+  };
+  const harness = mountFallbackHook(t, { queryClient });
+  await settle();
+  harness.tick();
+  harness.tick();
+  await settle();
+  assert.equal(fetches, 1);
+  finishFetch(changedPayload);
+  await settle();
+  assert.equal(fetches, 1);
+  assert.ok(!operations.some(([op, key]) => op === "refetch" && key[0] === "projectsAll"));
+});
+
+test("failed subscriptions retry and stop fallback only after server confirmation", async (t) => {
+  const { queryClient, operations } = buildQueryClient(buildProjects());
+  const channel = createBindingTarget({ subscribed: false });
+  const connection = createBindingTarget({ state: "connected" });
+  let subscribes = 0;
+  let unsubscribes = 0;
+  const harness = mountFallbackHook(t, {
+    queryClient,
+    connect: async () => {
+      if (connection.state === "unavailable") connection.state = "connecting";
+      return {
+        connection,
+        subscribe() { subscribes += 1; return channel; },
+        unsubscribe() { unsubscribes += 1; channel.subscribed = false; },
+      };
+    },
+  });
+  await settle();
+  channel.emit("pusher:subscription_error");
+  await settle();
+  assert.equal(unsubscribes, 1);
+  assert.equal(harness.timers.size, 1);
+  assert.equal(subscribes, 2);
+  channel.subscribed = true;
+  channel.emit("pusher:subscription_succeeded");
+  await settle();
+  assert.equal(harness.timers.size, 0);
+  assert.ok(operations.some(([op, key]) => op === "refetch" && key[0] === "projectsAll"));
+  operations.length = 0;
+  harness.tick();
+  await settle();
+  assert.deepEqual(operations, []);
+  connection.state = "unavailable";
+  connection.emit("state_change", { current: "unavailable" });
+  await settle();
+  assert.equal(harness.timers.size, 1);
+  assert.equal(unsubscribes, 2);
+});
+
+
+test("a transient background board fetch failure keeps the existing board painted", async () => {
+  const { queryClient, operations, cachedProjects } = buildQueryClient(buildProjects(), USER_ID, {
+    fetchShouldThrow: true,
+  });
+  const before = cachedProjects();
+  await reconcileActiveBoardTasks(queryClient, PROJECT_ID, USER_ID, { background: true });
+  assert.equal(cachedProjects(), before);
+  assert.deepEqual(operations, [
+    ["cancel", ["boardTasks", USER_ID, PROJECT_ID]],
+    ["fetch", ["boardTasks", USER_ID, PROJECT_ID]],
+  ]);
+});
+
+test("a background poll re-proves board access after a forbidden response", async () => {
+  const { queryClient, operations } = buildQueryClient(buildProjects());
+  queryClient.fetchQuery = async () => { throw { response: { status: 403 } }; };
+  await reconcileActiveBoardTasks(queryClient, PROJECT_ID, USER_ID, { background: true });
+  assert.ok(operations.some(([op, key]) => op === "refetch" && key[0] === "projectsAll"));
+});

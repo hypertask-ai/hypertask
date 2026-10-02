@@ -1,5 +1,5 @@
 const assert = require("node:assert/strict");
-const fs = require("node:fs");
+const fs = require("./refactored-module-source.cjs");
 const path = require("node:path");
 const test = require("node:test");
 const ts = require("typescript");
@@ -54,6 +54,27 @@ const filesForSave = new Function(
   `${compile("const " + findNode(editorSource, (node) =>
     ts.isVariableDeclaration(node) && node.name.getText() === "currentAttachmentFiles",
   ))}; return currentAttachmentFiles;`,
+);
+
+const measuredSize = { exports: {} };
+new Function("module", "exports", compile(fs.readFileSync(
+  path.join(root, "src/lib/attachments/measuredSize.ts"),
+  "utf8",
+)))(measuredSize, measuredSize.exports);
+const descriptionFilesForSave = new Function(
+  "currentTask",
+  "measuredSizeNumber",
+  "measuredSizeString",
+  `${compile("const " + findNode(fs.readFileSync(
+    path.join(root, "src/hooks/Task Detail/CommentAndDescriptionHooks/useSaveContent.ts"),
+    "utf8",
+  ), (node) =>
+    ts.isVariableDeclaration(node) && node.name.getText() === "uploadAttachmentsDescription",
+  ))}; return uploadAttachmentsDescription;`,
+)(
+  { id: 42, description_: { id: "description-42" } },
+  measuredSize.exports.measuredSizeNumber,
+  measuredSize.exports.measuredSizeString,
 );
 
 function mountUploader(initialFiles) {
@@ -127,4 +148,40 @@ test("remounted attachments remain removable and an empty snapshot stays empty",
   emitAttachments(render().fileItems, { callback });
   assert.deepEqual(getSnapshot(), []);
   assert.deepEqual(filesForSave(getSnapshot()), []);
+});
+
+test("removing the second reloaded description attachment saves the remaining file once", async () => {
+  // Task-detail responses omit createdAt and taskId on stored attachments.
+  const first = { id: 23, name: "first.txt", type: "text/plain", size: "5", source: "https://example.com/first.txt" };
+  const second = { id: 24, name: "second.txt", type: "text/plain", size: "6", source: "https://example.com/second.txt" };
+  const { snapshot, callback, getSnapshot } = roundTrip([
+    { id: 0, file: first },
+    { id: 1, file: second },
+  ]);
+  const render = mountUploader(snapshot);
+  render().removeFile(second.name);
+  emitAttachments(render().fileItems, { callback });
+
+  const saved = await descriptionFilesForSave(filesForSave(getSnapshot()));
+  assert.equal(saved.AttachmentObjectsToPush.length, 1);
+  assert.equal(saved.AttachmentUrls.length, 1);
+  assert.equal(saved.AttachmentObjectsToPush[0].fileSource, first.source);
+  assert.equal(saved.AttachmentObjectsToPush[0].fileSize, "5");
+  assert.equal(saved.AttachmentUrls[0].urlString, first.source);
+  assert.equal(saved.AttachmentUrls[0].fileSize, 5);
+});
+
+test("description save keeps each new and existing attachment once and supports clearing all", async () => {
+  const files = [
+    { name: "new.txt", source: "https://example.com/new.txt", type: "text/plain", size: 3 },
+    { id: -1, name: "ai.txt", source: "https://example.com/ai.txt", type: "text/plain", size: 4 },
+    { id: 0, name: "existing.txt", source: "https://example.com/existing.txt", type: "text/plain", size: "5", createdAt: 1, taskId: 42 },
+    { id: 23, name: "reloaded.txt", source: "https://example.com/reloaded.txt", type: "text/plain", size: "6" },
+  ];
+  const saved = await descriptionFilesForSave(files);
+  assert.deepEqual(saved.AttachmentObjectsToPush.map((file) => file.fileSource), files.map((file) => file.source));
+  assert.deepEqual(saved.AttachmentUrls.map((url) => url.urlString), files.map((file) => file.source));
+  for (const empty of [[], undefined]) {
+    assert.deepEqual(await descriptionFilesForSave(empty), { AttachmentUrls: [], AttachmentObjectsToPush: [] });
+  }
 });

@@ -30,6 +30,7 @@ import {
   FLAG_SHIP_DATE_CLUSTER_FLAG,
   FLAG_SORT_FILTER_FLAG,
   FLAG_TICKET_TITLE_FLAG,
+  FLAG_TICKET_ID_FLAG,
   INBOX_ARCHIVE_CLUSTER_FLAG,
   PAGE_MENTIONS_FLAG,
   SHORTCUT_NUDGES_FLAG,
@@ -51,6 +52,7 @@ import {
   HTPR_6372_SEARCH_RANKING_FLAG,
   HTPR_6369_SEARCH_OPERATORS_FLAG,
   HTPR_6370_SEARCH_CHIPS_FLAG,
+  HTPR_6688_SEARCH_AUTOCOMPLETE_FLAG,
   MY_TASKS_VIEWS_FLAG,
   MY_TASKS_BULK_SELECTION_FLAG,
   MY_TASKS_FILTER_PARITY_FLAG,
@@ -82,6 +84,8 @@ import {
   HTPR_6556_MOBILE_DESCRIPTION_FIRST_FLAG,
   HTPR_6561_DESCRIPTION_STRUCTURE_FLAG,
   HTPR_6542_TEAM_SCOPED_MANAGEMENT_KEYS_FLAG,
+  HTPR_6348_AGENT_ACCESS_DELEGATION_FLAG,
+  HTPR_6653_ADMIN_TEAM_COMP_FLAG,
 } from "@/lib/flags/keys";
 
 // Re-exported so server code keeps importing keys from here. Client components must
@@ -90,6 +94,8 @@ import {
 export * from "@/lib/flags/keys";
 
 export const FEATURE_FLAG_OWNER_USER_ID = 6;
+// Board writes are never attributed to the owner alone.
+export const FEATURE_FLAG_SWEEP_AGENT_ID = "85b985ac-afe8-41a3-a1ac-d9549a9310c7";
 const FEATURE_FLAG_OWNER = {
   userId: FEATURE_FLAG_OWNER_USER_ID,
   email: "valentin.yeo@gmail.com",
@@ -110,6 +116,12 @@ const RETIRED_CLIENT_FEATURE_FLAGS = { "htpr-6072-shallow-board-switch": true } 
 
 const FEATURE_FLAG_DEFINITIONS = [
   {
+    key: "yper4-123-board-check",
+    shippedOn: "2026-10-01",
+    description:
+      "Lets board checks read recent agent activity across all runs on a ticket the caller can read.",
+  },
+  {
     key: HTPR_6673_SIGNUP_ANALYTICS_FLAG,
     shippedOn: "2026-09-28",
     description:
@@ -122,10 +134,22 @@ const FEATURE_FLAG_DEFINITIONS = [
       "Lets board owners and admins permanently delete a board and its tasks through the Hypertask CLI after explicit confirmation.",
   },
   {
+    key: HTPR_6348_AGENT_ACCESS_DELEGATION_FLAG,
+    shippedOn: "2026-10-01",
+    description:
+      "Lets an agent with the admin role add or remove its owner's other agents on boards it is itself a member of, through the CLI and MCP.",
+  },
+  {
     key: HTPR_6542_TEAM_SCOPED_MANAGEMENT_KEYS_FLAG,
     shippedOn: "2026-09-18",
     description:
       "Lets management keys be limited to one team while existing account-wide keys keep their current access.",
+  },
+  {
+    key: HTPR_6653_ADMIN_TEAM_COMP_FLAG,
+    shippedOn: "2026-09-27",
+    description:
+      "Lets the owner comp a team as Pro or BYOK until a date, and clear the comp, from the owner-only team comp admin screen.",
   },
   {
     key: HTPR_6561_DESCRIPTION_STRUCTURE_FLAG,
@@ -453,6 +477,11 @@ const FEATURE_FLAG_DEFINITIONS = [
     description: "Shows the linked ticket's title as the primary label on the flags admin page.",
   },
   {
+    key: FLAG_TICKET_ID_FLAG,
+    shippedOn: "2026-10-01",
+    description: "Starts each flag headline on the flags admin page with its ticket ID, so Ctrl+F finds it.",
+  },
+  {
     key: FLAG_SORT_FILTER_FLAG,
     shippedOn: "2026-09-05",
     description:
@@ -563,6 +592,11 @@ const FEATURE_FLAG_DEFINITIONS = [
     key: HTPR_6370_SEARCH_CHIPS_FLAG,
     shippedOn: "2026-09-28",
     description: "Shows search operators as removable chips with people, board and label suggestions.",
+  },
+  {
+    key: HTPR_6688_SEARCH_AUTOCOMPLETE_FLAG,
+    shippedOn: "2026-10-01",
+    description: "Completes search operators and values with keyboard suggestions, coloured filters, an active filter frame, search tips and highlighted result titles.",
   },
   {
     key: HTPR_6372_SEARCH_RANKING_FLAG,
@@ -698,6 +732,7 @@ export type FeatureFlagRow = {
   removalTaskId: number | null;
   shippedOn: string | null;
   description: string;
+  ticketId: string | null;
   ticketUrl: string | null;
   ticketTitle: string | null;
 };
@@ -731,6 +766,7 @@ function withFeatureFlagMetadata(
     ...row,
     description: definition?.description ?? LEGACY_FEATURE_FLAG_DESCRIPTION,
     shippedOn: definition?.shippedOn ?? null,
+    ticketId: ticketNumber ? `HTPR-${ticketNumber}` : null,
     ticketUrl: ticketNumber ? `${FEATURE_FLAG_TICKET_BASE}/${ticketNumber}` : null,
     ticketTitle: ticketNumber ? (ticketTitleByNumber.get(Number(ticketNumber)) ?? null) : null,
   };

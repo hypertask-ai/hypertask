@@ -13,11 +13,6 @@ type RelayMessage = {
   authInfo: AuthInfo
 }
 
-type LegacySseOptions = {
-  redisUrl?: string
-  maxDuration?: number
-}
-
 function redisConnection(url: string) {
   return new Redis(url, {
     lazyConnect: true,
@@ -35,8 +30,7 @@ export function isLegacySseRequest(request: Request): boolean {
 export async function handleLegacySseRequest(
   request: Request,
   authInfo: AuthInfo,
-  tools: readonly PortableTool[],
-  options: LegacySseOptions = {}
+  tools: readonly PortableTool[]
 ): Promise<Response> {
   const url = new URL(request.url)
   const isStream = url.pathname === '/sse'
@@ -64,7 +58,7 @@ export async function handleLegacySseRequest(
       return new Response('Invalid JSON', { status: 400 })
     }
   }
-  const redisUrl = options.redisUrl ?? process.env.REDIS_URL ?? process.env.KV_URL
+  const redisUrl = process.env.REDIS_URL ?? process.env.KV_URL
   if (!redisUrl) return new Response('Legacy SSE requires Redis', { status: 503 })
   const subscriber = redisConnection(redisUrl)
   const publisher = redisConnection(redisUrl)
@@ -170,7 +164,7 @@ export async function handleLegacySseRequest(
     try {
       await subscriber.subscribe(channel)
       await server.connect(transport)
-      timer = setTimeout(cleanup, (options.maxDuration ?? 800) * 1000)
+      timer = setTimeout(cleanup, 800 * 1000)
       if (request.signal.aborted) cleanup()
       return new Response(Readable.toWeb(stream) as ReadableStream<Uint8Array>, {
         headers: {

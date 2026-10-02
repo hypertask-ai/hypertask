@@ -1,3 +1,4 @@
+const { readRefactoredSource } = require("../src/app/detail/[...slug]/taskDetailTestSources.cjs");
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const path = require("node:path");
@@ -10,7 +11,7 @@ const test = require("node:test");
 // that gap and catches usability even when the primary path drops its
 // pending check, so the mark - and the app_task_detail_readiness event -
 // still fires instead of hitting the 30s usable_state_timeout.
-const source = fs.readFileSync(
+const source = readRefactoredSource(
   path.join(__dirname, "../src/app/detail/[...slug]/TaskDetailComp.tsx"),
   "utf8",
 );
