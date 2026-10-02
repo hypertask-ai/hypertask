@@ -2,7 +2,6 @@
 INSERT INTO "TaskNumberAlias" ("projectId", "uniqueIndex", "ticketNumber", "taskId")
 SELECT v.p, v.u, v.t, v.task
 FROM (VALUES
-    (15, 6084, 'HTPR-6084', 37421),
     (15, 6265, 'HTPR-6265', 38736),
     (15, 6402, 'HTPR-6402', 39737),
     (15, 6410, 'HTPR-6410', 39783),
@@ -16,7 +15,6 @@ FROM (VALUES
     (15, 6499, 'HTPR-6499', 40728),
     (15, 6501, 'HTPR-6501', 40775),
     (15, 6549, 'HTPR-6549', 41695),
-    (15, 6579, 'HTPR-6579', 42599),
     (15, 6584, 'HTPR-6584', 42668),
     (15, 6596, 'HTPR-6596', 42785),
     (15, 6618, 'HTPR-6618', 43812),
