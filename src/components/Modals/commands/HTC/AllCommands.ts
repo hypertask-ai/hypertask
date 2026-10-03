@@ -738,6 +738,13 @@ const settings: CommandGroup = {
       keywords: "settings board time tracking timers enable disable project",
     },
     {
+      key: "settingsBoardTicketPrefix",
+      name: "Settings: Ticket prefix (board)",
+      commandMode: CommandMode.Setting,
+      payload: "board-general",
+      keywords: "settings board ticket prefix identifier id key code letters rename",
+    },
+    {
       key: "settingsBoardMembers",
       name: "Settings: Members (board)",
       commandMode: CommandMode.Setting,
