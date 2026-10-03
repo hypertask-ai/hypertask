@@ -81,6 +81,8 @@ export default function SearchChipsInput({ value, onChange, onRun, boardId, inpu
     ...((localRows === null || genericPrefix) ? candidates.map((row) => ({ ...row, kind: 'value' as const })) : []),
   ] : localRows ?? candidates;
   const open = (searchEscBackEnabled && tips) || (!dismissed && (layoutEnabled ? focused && showSuggestions && Boolean(value.trim() || tips) : Boolean(picker || tips)));
+  const openRef = useRef(open);
+  openRef.current = open;
   const listId = "search-chip-options";
   const selectedRow = rows[selectedIndex] ?? rows[layoutEnabled && !tips ? 1 : 0] ?? rows[0];
   const ghost = open && caretAtEnd && selectedRow && completion?.kind === 'operator' && (!layoutEnabled || selectedRow.kind === 'operator')
@@ -105,7 +107,10 @@ export default function SearchChipsInput({ value, onChange, onRun, boardId, inpu
     };
     // The list stays open when focus leaves, so Escape must still close it from anywhere.
     const dismissOnEscape = (event: globalThis.KeyboardEvent) => {
-      if (event.key === 'Escape' && document.activeElement !== inputRef.current) setDismissed(true);
+      if (event.key !== 'Escape' || document.activeElement === inputRef.current || !openRef.current) return;
+      // Handled here: stop the search page's Escape-back from also clearing the query.
+      event.preventDefault();
+      setDismissed(true);
     };
     document.addEventListener('pointerdown', dismissOutside);
     document.addEventListener('keydown', dismissOnEscape);
