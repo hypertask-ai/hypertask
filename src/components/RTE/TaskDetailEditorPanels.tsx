@@ -1,4 +1,6 @@
 
+import { useFlag } from "@/hooks/useFlag";
+import { HTPR_6752_INSTANT_TICKET_OPEN_FLAG } from "@/lib/flags/keys";
 import { createPortal } from "react-dom";
 import TiptapProvider from "@/lib/contexts/TaskDetail/TiptapProvider";
 import TiptapBubbleMenu from "./Components/TiptapBubbleMenu";
@@ -25,7 +27,8 @@ import type { TaskDetailEditorPresentation } from "./taskDetailEditorPresentatio
 export function TaskDetailEditorPanels(context: TaskDetailEditorPresentation) {
   const { divIds, handleReadOnlyContentClick, isMbl, id, newCommentAttachments, creatorname, trigger, allowEdit, isRecording, saveInFlight, mode, uploadingDescription, toggleHighlightHandler, createdAt, editor, stack, user, isSelected, handleCallback, sendComment, handleFocus, getAttachments, handleKeydown, handleCommentEscape, inInbox, currentTask, handleTaskOptions, handleFileDrop, filesDropped, resetDropFiles, discardDraft, toggleAiTaskWriter, shouldShowInlineDraftAi, setShouldShowAITaskWriter, setAiTriggerData, inViewObject, hasCommentDraft, audioTiptapCallback, toggleRecording, allowPerks, toggleHighlight, shouldShowAiTaskWriter, shouldShowFullAiTaskWriter, getBackgroundContent, handleEscape, handleAISave, handleTitleAndDescriptionReturn, getDefaultMode, taskWriterOpening, editMode, mobileExistingEditOpen, mobileEditViewport, mobileEditHeight, mobileEditSaving, cancelMobileExistingEdit, showSetLinkModal, setShowSetLinkModal, setLinkHandlerCallback, emojiGifPicker, setEmojiGifPicker } = context;
 
-  const mainContainer = !editor && mode === "read-edit-description" ? (
+  const instantTicketOpen = useFlag(HTPR_6752_INSTANT_TICKET_OPEN_FLAG);
+  const mainContainer = instantTicketOpen && !editor && mode === "read-edit-description" ? (
     <InnerHTMLDescription
       id={`${id}-input`}
       descriptionText={context.defaultContent}

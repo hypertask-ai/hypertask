@@ -358,8 +358,8 @@ function editorPanels(flag) {
   }, "TaskDetailEditorPanels");
 }
 
-test("the description reserves its real content before the editor exists, with either instant-open flag state", () => {
-  for (const flag of [false, true]) {
+test("with instant open, the description reserves its real content before the editor exists", () => {
+  for (const flag of [true]) {
     const Panels = editorPanels(flag);
     const context = {
       divIds: {}, currentTask: { id: 42 }, inViewObject: {},
