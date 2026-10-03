@@ -14,7 +14,6 @@ import {
   AGENT_CHAT_BRIEF_FLAG,
   AGENT_CHAT_TICKET_CONFIRM_FLAG,
   AUTO_TASK_DESCRIPTIONS_FLAG,
-  HTPR_6157_AUTO_DESCRIPTION_FLAG,
   COLUMN_ALL_VIEWS_FLAG,
   HTPR_6278_CHAT_TURN_FAILURE_FLAG,
   FIGMA_CONNECT_FLAG,
@@ -104,6 +103,7 @@ const FEATURE_FLAG_QA_USER = {
 
 // Hide and reject retired flags without changing stored rows needed by older deployments.
 export const RETIRED_FEATURE_FLAG_KEYS = new Set([
+  "htpr-6157-new-task-auto-description",
   "htpr-6322-agent-chat-parked-reply",
   "hyfa-43-factory-owner-preview",
   "htpr-6072-shallow-board-switch",
@@ -428,12 +428,6 @@ const FEATURE_FLAG_DEFINITIONS = [
     shippedOn: "2026-09-11",
     description:
       "Restores board research in the AI task writer: related tickets, Done-style examples, open questions, and refine search from user text.",
-  },
-  {
-    key: HTPR_6157_AUTO_DESCRIPTION_FLAG,
-    shippedOn: "2026-09-09",
-    description:
-      "Shows automatic Task Writer drafts in the desktop create-task modal after a title pause.",
   },
   {
     key: HTPR_6873_QUICK_ENTRY_GROW_FLAG,

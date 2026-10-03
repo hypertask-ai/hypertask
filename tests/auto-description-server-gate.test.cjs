@@ -6,7 +6,6 @@ const { createJiti } = require("jiti");
 const root = path.resolve(__dirname, "..");
 const preferenceReads = [];
 const featureFlagChecks = [];
-let newTaskAutoDescriptionEnabled = true;
 let autoTaskDescriptionsEnabled = true;
 let autoDescriptionSuggestions = true;
 let preferenceFetchMode = "existing";
@@ -33,13 +32,10 @@ stubModule("src/app/api/ai/_lib/providerGate.ts", {
 });
 stubModule("src/lib/systemModelLadder.ts", {});
 stubModule("src/lib/flags.ts", {
-  HTPR_6157_AUTO_DESCRIPTION_FLAG: "htpr-6157-new-task-auto-description",
   AUTO_TASK_DESCRIPTIONS_FLAG: "htpr-6177-auto-task-descriptions",
   isFeatureEnabled: async (key, userId) => {
     featureFlagChecks.push({ key, userId });
-    return key === "htpr-6157-new-task-auto-description"
-      ? newTaskAutoDescriptionEnabled
-      : autoTaskDescriptionsEnabled;
+    return autoTaskDescriptionsEnabled;
   },
 });
 stubModule("src/lib/prisma.ts", {
@@ -97,18 +93,14 @@ function request(requestKind) {
 }
 
 test.beforeEach(() => {
-  process.env.NEXT_PUBLIC_NEW_TASK_AUTO_DESCRIPTION = "1";
   preferenceReads.length = 0;
   featureFlagChecks.length = 0;
-  newTaskAutoDescriptionEnabled = true;
   autoTaskDescriptionsEnabled = true;
   autoDescriptionSuggestions = true;
   preferenceFetchMode = "existing";
 });
 
-test("automatic task-writer requests stop when the deploy switch is off", async () => {
-  delete process.env.NEXT_PUBLIC_NEW_TASK_AUTO_DESCRIPTION;
-
+test("legacy automatic task-writer requests remain disabled before flags or preferences are read", async () => {
   await assert.rejects(
     prepareTaskWriterRun(request("auto-description"), 6),
     AutoDescriptionSuggestionsDisabledError,
@@ -117,36 +109,7 @@ test("automatic task-writer requests stop when the deploy switch is off", async 
   assert.deepEqual(preferenceReads, []);
 });
 
-test("automatic task-writer requests stop when the ticket feature flag is off", async () => {
-  newTaskAutoDescriptionEnabled = false;
-
-  await assert.rejects(
-    prepareTaskWriterRun(request("auto-description"), 42),
-    AutoDescriptionSuggestionsDisabledError,
-  );
-  assert.deepEqual(featureFlagChecks, [
-    { key: "htpr-6157-new-task-auto-description", userId: 42 },
-  ]);
-  assert.deepEqual(preferenceReads, []);
-});
-
-test("automatic task-writer requests stop when the user preference is disabled", async () => {
-  autoDescriptionSuggestions = false;
-
-  await assert.rejects(
-    prepareTaskWriterRun(request("auto-description"), 6),
-    AutoDescriptionSuggestionsDisabledError,
-  );
-  assert.deepEqual(preferenceReads, [
-    {
-      where: { userId: 6 },
-      select: { autoDescriptionSuggestions: true },
-    },
-  ]);
-});
-
 test("manual task-writer requests ignore the automatic description controls", async () => {
-  delete process.env.NEXT_PUBLIC_NEW_TASK_AUTO_DESCRIPTION;
   autoDescriptionSuggestions = false;
 
   await assert.rejects(
@@ -154,14 +117,6 @@ test("manual task-writer requests ignore the automatic description controls", as
     (error) => error === afterGate,
   );
   assert.deepEqual(preferenceReads, []);
-});
-
-test("enabled automatic requests continue through the existing writer gates", async () => {
-  await assert.rejects(
-    prepareTaskWriterRun(request("auto-description"), 6),
-    (error) => error === afterGate,
-  );
-  assert.equal(preferenceReads.length, 1);
 });
 
 test("new users receive an enabled auto-description preference fallback", async () => {
@@ -180,23 +135,6 @@ test("failed preference reads retain the auto-description fallback", async () =>
 
   assert.equal(result.status, 500);
   assert.equal(result.res.autoDescriptionSuggestions, true);
-});
-
-// HTPR-6177: automatic drafting shipped before it was ready, so it is owner-only
-// until the flag opens up. The manual writer predates it and must stay untouched.
-test("automatic task-writer requests stop when the feature flag is off", async () => {
-  autoTaskDescriptionsEnabled = false;
-
-  await assert.rejects(
-    prepareTaskWriterRun(request("auto-description"), 42),
-    AutoDescriptionSuggestionsDisabledError,
-  );
-  assert.deepEqual(featureFlagChecks, [
-    { key: "htpr-6157-new-task-auto-description", userId: 42 },
-    { key: "htpr-6177-auto-task-descriptions", userId: 42 },
-  ]);
-  // The flag is checked before the preference, so a blocked user is never read.
-  assert.deepEqual(preferenceReads, []);
 });
 
 test("manual task-writer requests ignore the auto-description feature flag", async () => {

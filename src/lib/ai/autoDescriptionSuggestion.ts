@@ -1,10 +1,3 @@
-export const AUTO_DESCRIPTION_SUGGESTION_DELAY_MS = 5_000;
-
-export function isNewTaskAutoDescriptionEnabled() {
-  // HTPR-6157 ships dark: only an explicit 1 may enable either request path.
-  return process.env.NEXT_PUBLIC_NEW_TASK_AUTO_DESCRIPTION === "1";
-}
-
 export function buildTaskWriterPrompt(
   prompt: string,
   taskTitle?: string | null,
@@ -23,20 +16,6 @@ export function resolveTaskWriterSubmitPrompt(
   return autoTrigger && presentation === "overlay" ? initialPrompt : userPrompt;
 }
 
-export interface AutoDescriptionTakeover {
-  before: string;
-  inserted: string;
-}
-
-export interface CreateAutoDescriptionEligibility {
-  enabled: boolean;
-  isDesktop: boolean;
-  title?: string | null;
-  description?: string | null;
-  preferencesHydrated: boolean;
-  dismissed: boolean;
-}
-
 const DESCRIPTION_MEDIA_RE = /<(?:audio|embed|iframe|img|object|video)\b/i;
 const ZERO_WIDTH_RE =
   /[\u200B-\u200D\uFEFF]|&(?:#(?:8203|8204|8205|65279)|#x(?:200B|200C|200D|FEFF)|ZeroWidthSpace);/gi;
@@ -53,13 +32,6 @@ export function hasDescriptionContent(value?: string | null) {
       .replace(/\s+/g, " ")
       .trim(),
   );
-}
-
-export function canUndoDescriptionTakeover(
-  currentHtml: string,
-  takeover: AutoDescriptionTakeover,
-) {
-  return currentHtml === takeover.inserted;
 }
 
 export function mergeDescriptionTakeoverAttachments<TExisting, TGenerated>(
@@ -82,45 +54,5 @@ export function snapshotDescriptionAttachments(attachments: readonly unknown[]) 
           : item;
       return [file.id, file.name, file.size, file.type, file.source];
     }),
-  );
-}
-
-export function hasMeaningfulDescriptionSuggestionTitle(
-  title?: string | null,
-) {
-  const words = title?.toLocaleLowerCase().match(/[\p{L}\p{N}]+/gu) ?? [];
-  return words.length >= 3;
-}
-
-export function shouldSuggestCreateDescription(
-  input: CreateAutoDescriptionEligibility,
-) {
-  return (
-    input.enabled &&
-    input.isDesktop &&
-    input.preferencesHydrated &&
-    !input.dismissed &&
-    hasMeaningfulDescriptionSuggestionTitle(input.title) &&
-    !hasDescriptionContent(input.description)
-  );
-}
-
-export function canApplyCreateDescriptionSuggestion(
-  expectedTitle: string,
-  currentTitle: string,
-  currentDescription: string,
-  enabled: boolean,
-  dismissed: boolean,
-) {
-  return (
-    expectedTitle === currentTitle.trim() &&
-    shouldSuggestCreateDescription({
-      enabled,
-      isDesktop: true,
-      title: currentTitle,
-      description: currentDescription,
-      preferencesHydrated: true,
-      dismissed,
-    })
   );
 }

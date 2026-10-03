@@ -4,43 +4,11 @@ import { resolve } from "node:path";
 import test from "node:test";
 import {
   buildTaskWriterPrompt,
-  canApplyCreateDescriptionSuggestion,
-  canUndoDescriptionTakeover,
   hasDescriptionContent,
-  hasMeaningfulDescriptionSuggestionTitle,
-  isNewTaskAutoDescriptionEnabled,
   mergeDescriptionTakeoverAttachments,
   resolveTaskWriterSubmitPrompt,
-  shouldSuggestCreateDescription,
   snapshotDescriptionAttachments,
 } from "../src/lib/ai/autoDescriptionSuggestion";
-
-const eligible = {
-  enabled: true,
-  isDesktop: true,
-  title: "Draft onboarding checklist",
-  description: "<p></p>",
-  preferencesHydrated: true,
-  dismissed: false,
-};
-
-test("the create-task description deploy switch defaults off and accepts only 1 as on", () => {
-  const original = process.env.NEXT_PUBLIC_NEW_TASK_AUTO_DESCRIPTION;
-  try {
-    delete process.env.NEXT_PUBLIC_NEW_TASK_AUTO_DESCRIPTION;
-    assert.equal(isNewTaskAutoDescriptionEnabled(), false);
-    process.env.NEXT_PUBLIC_NEW_TASK_AUTO_DESCRIPTION = "0";
-    assert.equal(isNewTaskAutoDescriptionEnabled(), false);
-    process.env.NEXT_PUBLIC_NEW_TASK_AUTO_DESCRIPTION = "1";
-    assert.equal(isNewTaskAutoDescriptionEnabled(), true);
-  } finally {
-    if (original === undefined) {
-      delete process.env.NEXT_PUBLIC_NEW_TASK_AUTO_DESCRIPTION;
-    } else {
-      process.env.NEXT_PUBLIC_NEW_TASK_AUTO_DESCRIPTION = original;
-    }
-  }
-});
 
 test("task-writer prompts preserve user text and add title context once", () => {
   assert.equal(buildTaskWriterPrompt("Draft details"), "Draft details");
@@ -63,96 +31,6 @@ test("task-writer prompts preserve user text and add title context once", () => 
   );
 });
 
-test("new-task description suggestions require a hydrated desktop form with a meaningful title", () => {
-  assert.equal(shouldSuggestCreateDescription(eligible), true);
-  assert.equal(
-    shouldSuggestCreateDescription({ ...eligible, isDesktop: false }),
-    false,
-  );
-  assert.equal(
-    shouldSuggestCreateDescription({ ...eligible, preferencesHydrated: false }),
-    false,
-  );
-  assert.equal(
-    shouldSuggestCreateDescription({ ...eligible, title: "new task" }),
-    false,
-  );
-  assert.equal(
-    shouldSuggestCreateDescription({ ...eligible, title: "Fix login" }),
-    false,
-  );
-  assert.equal(
-    shouldSuggestCreateDescription({ ...eligible, title: "Fix --- login failure" }),
-    true,
-  );
-  assert.equal(
-    shouldSuggestCreateDescription({ ...eligible, description: "<p>Details</p>" }),
-    false,
-  );
-  assert.equal(shouldSuggestCreateDescription({ ...eligible, enabled: false }), false);
-  assert.equal(shouldSuggestCreateDescription({ ...eligible, dismissed: true }), false);
-});
-
-test("meaningful title detection normalizes punctuation, whitespace, case, and non-English words", () => {
-  assert.equal(hasMeaningfulDescriptionSuggestionTitle("  FIX   LOGIN   FAILURE  "), true);
-  assert.equal(hasMeaningfulDescriptionSuggestionTitle("Plan, launch, review"), true);
-  assert.equal(hasMeaningfulDescriptionSuggestionTitle("修复 登录 问题"), true);
-  assert.equal(hasMeaningfulDescriptionSuggestionTitle("... !!!"), false);
-});
-
-test("stale or unsafe create-form drafts cannot take over the description", () => {
-  assert.equal(
-    canApplyCreateDescriptionSuggestion(
-      "Draft onboarding checklist",
-      "Draft onboarding checklist",
-      "<p></p>",
-      true,
-      false,
-    ),
-    true,
-  );
-  assert.equal(
-    canApplyCreateDescriptionSuggestion(
-      "Draft onboarding checklist",
-      "Draft a different checklist",
-      "<p></p>",
-      true,
-      false,
-    ),
-    false,
-  );
-  assert.equal(
-    canApplyCreateDescriptionSuggestion(
-      "Draft onboarding checklist",
-      "Draft onboarding checklist",
-      "<p>User details</p>",
-      true,
-      false,
-    ),
-    false,
-  );
-  assert.equal(
-    canApplyCreateDescriptionSuggestion(
-      "Draft onboarding checklist",
-      "Draft onboarding checklist",
-      "<p></p>",
-      false,
-      false,
-    ),
-    false,
-  );
-  assert.equal(
-    canApplyCreateDescriptionSuggestion(
-      "Draft onboarding checklist",
-      "Draft onboarding checklist",
-      "<p></p>",
-      true,
-      true,
-    ),
-    false,
-  );
-});
-
 test("empty markup stays eligible while text and media count as descriptions", () => {
   assert.equal(hasDescriptionContent("<html><body><p><br></p></body></html>"), false);
   assert.equal(hasDescriptionContent("<p>&nbsp;</p>"), false);
@@ -161,8 +39,7 @@ test("empty markup stays eligible while text and media count as descriptions", (
   assert.equal(hasDescriptionContent('<p><img src="example.png"></p>'), true);
 });
 
-test("Undo requires unchanged generated content and attachment snapshots remain stable", () => {
-  const takeover = { before: "<p></p>", inserted: "<p>AI draft</p>" };
+test("description takeover attachment snapshots remain stable", () => {
   const generatedFile = {
     id: "ai-0",
     name: "draft.png",
@@ -171,11 +48,6 @@ test("Undo requires unchanged generated content and attachment snapshots remain 
     source: "https://example.com/draft.png",
   };
 
-  assert.equal(canUndoDescriptionTakeover(takeover.inserted, takeover), true);
-  assert.equal(
-    canUndoDescriptionTakeover("<p>AI draft with user edit</p>", takeover),
-    false,
-  );
   assert.deepEqual(
     mergeDescriptionTakeoverAttachments(
       [{ id: "existing" }],
@@ -189,7 +61,7 @@ test("Undo requires unchanged generated content and attachment snapshots remain 
   );
 });
 
-test("automatic description UI exists only in the new-task form", () => {
+test("new-task form keeps explicit Task Writer and save behavior without automatic drafts", () => {
   const root = resolve(import.meta.dirname, "..");
   const createForm = readFileSync(
     resolve(root, "src/components/RTE/TiptapCreateTaskModal.tsx"),
@@ -200,30 +72,14 @@ test("automatic description UI exists only in the new-task form", () => {
     "utf8",
   );
 
-  const takeoverHandler = createForm.slice(
-    createForm.indexOf("const handleAutoDescriptionTakeover"),
-    createForm.indexOf("const undoAutoDescriptionTakeover"),
-  );
-
-  assert.match(createForm, /id="create-task-auto-description-writer"/);
-  assert.match(createForm, /requestKind="auto-description"/);
-  assert.match(
-    createForm,
-    /isNewTaskAutoDescriptionEnabled\(\)\s*&&\s*newTaskAutoDescriptionEnabled\s*&&\s*autoTaskDescriptionsEnabled/,
-  );
+  assert.doesNotMatch(createForm, /autoDescription|auto-description|description-suggestion/);
+  assert.match(createForm, /shouldShowAiTaskWriter &&/);
+  assert.match(createForm, /<AITaskWriterContainer/);
+  assert.match(createForm, /toggleAiTaskWriter=\{toggleAiTaskWriter\}/);
+  assert.match(createForm, /initialPrompt=\{taskWriterOpening\.initialPrompt\}/);
   assert.match(
     createForm,
     /CreateTaskAndDescription\(\s*descriptionAtSave,\s*titleAtSave,\s*formValuesAtSave,?\s*\)/,
   );
-  assert.match(
-    createForm,
-    /if \(takeover && description !== takeover\.inserted\) \{[\s\S]*?setAutoDescriptionTakeover\(null\)/,
-  );
-  assert.doesNotMatch(
-    takeoverHandler,
-    /setNewCommentAttachments|callbackAttachments/,
-    "taking over a text suggestion must leave selected attachments unchanged",
-  );
-  assert.doesNotMatch(taskDetail, /requestKind="auto-description"/);
   assert.match(taskDetail, /shouldTriggerAiTaskWriter/);
 });
