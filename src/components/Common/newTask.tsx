@@ -121,7 +121,7 @@ const NewTask = ({
         />
       </div>
       <div
-        className="flex items-center gap-2 mt-2"
+        className="flex items-center justify-end gap-2 mt-2"
         onMouseDown={(e) => e.preventDefault()}
         onKeyDown={(e) => {
           if (e.key === "Escape" && !isSubmitting) {
@@ -133,20 +133,20 @@ const NewTask = ({
       >
         <button
           type="button"
-          disabled={isSubmitting}
-          onClick={() => { void createItem() }}
-          className={`${MOBILE_TARGET} sm:min-h-0 sm:min-w-0 h-7 rounded-sm bg-shadcn-primary px-2.5 text-content font-medium text-primary-foreground hover:opacity-90 disabled:opacity-60`}
-        >
-          Create task
-        </button>
-        <button
-          type="button"
           aria-label="Close quick entry"
           disabled={isSubmitting}
           onClick={onCancelCreate}
           className={`${MOBILE_TARGET} sm:min-h-0 sm:min-w-0 h-7 w-7 rounded-sm text-text-light-gray hover:bg-hover-active hover:text-white-black disabled:opacity-60`}
         >
           <X size={16} />
+        </button>
+        <button
+          type="button"
+          disabled={isSubmitting}
+          onClick={() => { void createItem() }}
+          className={`${MOBILE_TARGET} sm:min-h-0 sm:min-w-0 h-7 rounded-sm bg-shadcn-primary px-2.5 text-content font-medium text-primary-foreground hover:opacity-90 disabled:opacity-60`}
+        >
+          Create task
         </button>
       </div>
     </div>

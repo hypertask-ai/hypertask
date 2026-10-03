@@ -115,13 +115,13 @@ test("quick-entry growth preserves single-line titles and existing create/cancel
       assert.equal(area().rows, 1);
     });
     await t.test("desktop/mobile controls match approved tokens and touch targets", () => {
-      assert.equal(buttons()[0].textContent, "Create task");
+      assert.equal(buttons()[1].textContent, "Create task");
       for (const button of buttons()) {
         for (const token of ["h-7", "min-h-[44px]", "sm:min-h-0", "rounded-sm"]) assert.ok(button.classList.contains(token));
       }
-      for (const token of ["bg-shadcn-primary", "text-primary-foreground", "px-2.5", "text-content", "font-medium"]) assert.ok(buttons()[0].classList.contains(token));
-      assert.equal(buttons()[1].getAttribute("aria-label"), "Close quick entry");
-      assert.ok(buttons()[1].querySelector("svg.lucide-x"));
+      for (const token of ["bg-shadcn-primary", "text-primary-foreground", "px-2.5", "text-content", "font-medium"]) assert.ok(buttons()[1].classList.contains(token));
+      assert.equal(buttons()[0].getAttribute("aria-label"), "Close quick entry");
+      assert.ok(buttons()[0].querySelector("svg.lucide-x"));
     });
     await t.test("Enter and Shift+Enter submit trimmed titles and reset growth", async () => {
       for (const shiftKey of [false, true]) {
@@ -144,10 +144,10 @@ test("quick-entry growth preserves single-line titles and existing create/cancel
     await t.test("button mousedown cannot blur-cancel; click shares Enter submission", async () => {
       await fill("Button title");
       const down = new dom.window.MouseEvent("mousedown", { bubbles: true, cancelable: true });
-      await React.act(async () => buttons()[0].dispatchEvent(down));
+      await React.act(async () => buttons()[1].dispatchEvent(down));
       assert.equal(down.defaultPrevented, true);
       assert.equal(cancels, 0);
-      await event(buttons()[0], "click");
+      await event(buttons()[1], "click");
       assert.deepEqual(creates.at(-1), ["Button title", true]);
       assert.equal(title, "");
     });
@@ -155,7 +155,7 @@ test("quick-entry growth preserves single-line titles and existing create/cancel
       pending = true;
       await fill("Pending");
       const before = creates.length;
-      await event(buttons()[0], "click");
+      await event(buttons()[1], "click");
       assert.equal(area().readOnly, true);
       assert.equal(area().getAttribute("aria-busy"), "true");
       assert.ok(buttons().every((button) => button.disabled));
@@ -172,7 +172,7 @@ test("quick-entry growth preserves single-line titles and existing create/cancel
       for (const failure of [false, new Error("network")]) {
         result = failure;
         await fill("Retry title");
-        await event(buttons()[0], "click");
+        await event(buttons()[1], "click");
         assert.equal(title, "Retry title");
         assert.equal(area().readOnly, false);
         assert.equal(toasts.at(-1), "Could not create the task, try again");
@@ -181,8 +181,8 @@ test("quick-entry growth preserves single-line titles and existing create/cancel
     });
     await t.test("keyboard focus can move to actions without cancellation, then leaving cancels", async () => {
       await React.act(async () => area().focus());
-      await React.act(async () => buttons()[0].focus());
       await React.act(async () => buttons()[1].focus());
+      await React.act(async () => buttons()[0].focus());
       assert.equal(cancels, 0);
       await React.act(async () => document.getElementById("outside").focus());
       assert.equal(cancels, 1);
@@ -197,8 +197,8 @@ test("quick-entry growth preserves single-line titles and existing create/cancel
       for (const action of ["Escape", "X", "action-row Escape"]) {
         await mount();
         await fill("Discard");
-        if (action === "X") await event(buttons()[1], "click");
-        else await event(action === "Escape" ? area() : buttons()[1], "keydown", { key: "Escape" });
+        if (action === "X") await event(buttons()[0], "click");
+        else await event(action === "Escape" ? area() : buttons()[0], "keydown", { key: "Escape" });
         assert.equal(area(), null);
         assert.equal(title, "");
         await mount();
