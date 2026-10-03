@@ -82,6 +82,7 @@ test("required browser smoke clicks its seeded ticket under live modes and the i
   assert.match(seed, /detailPath: `\/detail\/project-\$\{board\.id\}\/\$\{board\.task\.uniqueIndex\}`/);
   assert.match(smoke, /width: 1440, height: 900/);
   assert.match(smoke, /width: 390, height: 844/);
+  assert.match(smoke, /page\.route\('\*\*\/api\/pages\/list\?\*', \(\) => \{\}\)/);
   assert.match(smoke, /await card\.click\(\)/);
   assert.match(smoke, /toHaveURL\(\(url\) => url\.pathname === fixture\.detailPath/);
   assert.match(smoke, /expect\(flags\[key\]/);

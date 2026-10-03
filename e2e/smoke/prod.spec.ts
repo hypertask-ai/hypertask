@@ -119,6 +119,8 @@ test('seeded board card opens a ticket and stays open', { tag: ['@id:board-card-
   await page.setViewportSize(testInfo.project.name === 'Mobile'
     ? { width: 390, height: 844 }
     : { width: 1440, height: 900 })
+  // Optional pages must never gate the title or description, even if their request never settles.
+  await page.route('**/api/pages/list?*', () => {})
   // Wait for the app's own flag read, not a separate API request that could race hydration.
   const flagsResponse = page.waitForResponse((response) => new URL(response.url()).pathname === '/api/flags' && response.ok())
   await page.goto(withRealtime(process.env.SMOKE_BOARD_PATH!), { waitUntil: 'load' })

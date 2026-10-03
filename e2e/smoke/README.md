@@ -35,8 +35,9 @@ with `BASE_URL=http://127.0.0.1:3100` and `BROWSER_SMOKE_PR=1`. It watches both
 board-data endpoints after the first load and checks the columns every 250 ms
 for 30 seconds. It also clicks the seeded ticket at 1440x900 and 390x844,
 checks its actual title and description, and keeps checking the detail URL and
-visible content for three seconds without a document reload. It never opens
-`/demo`: that route creates a guest.
+visible content for three seconds without a document reload. The optional pages
+request is deliberately left pending to prove it cannot hold back the ticket.
+It never opens `/demo`: that route creates a guest.
 
 Every run starts an empty PostgreSQL service and a dedicated local Soketi
 realtime service. `scripts/seed-browser-smoke.mjs` creates a plain local user,
