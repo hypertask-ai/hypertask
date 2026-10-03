@@ -1,8 +1,8 @@
-name: Prod Health Check + Auto-Rollback
+name: Prod Health Check (Alert Only)
 
 # After every push to production (= production deploy), wait for the Vercel
-# deployment to finish, health-check the live app, and if the app is broken
-# promote the previous READY deployment (instant rollback) + notify Telegram.
+# deployment to finish, health-check the live app, and report failures.
+# Alert only: never promote a deployment, revert production, or freeze merges.
 on:
   push:
     branches: [production]
@@ -47,7 +47,7 @@ jobs:
         with:
           fetch-depth: 200
 
-      - name: Wait for deploy, health-check, rollback if broken
+      - name: Wait for deploy, health-check, report failures
         id: check
         env:
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
@@ -67,7 +67,7 @@ jobs:
           }
           # Drift must not treat a green workflow run as "this SHA was probed".
           # NOTFOUND / superseded / challenged-only also exit 0. This status is
-          # set only after the probes for this exact SHA succeed or roll back.
+          # set only after the probes for this exact SHA produce a verdict.
           publish_health_gate() {
             local sha="$1" state="$2" desc="$3"
             if [ -z "${GITHUB_TOKEN:-}" ] || [ -z "${GITHUB_REPOSITORY:-}" ]; then
@@ -176,68 +176,41 @@ jobs:
 
           if [ "$LIVE_BUILD" != "$SHA" ]; then
             # READY is not the same as live. An older deploy can keep the
-            # production alias (HTPR-6511). Promote this deploy instead of
-            # only alerting, but never overwrite a newer live SHA or a newer
-            # origin/production tip that landed while we were waiting.
-            CURRENT_UID=$(echo "$DEPLOY_JSON" | jq -r '.uid')
+            # production alias (HTPR-6511). Alert without changing deployments;
+            # a newer app-changing SHA makes this check superseded instead.
             PROD_HEAD=$(current_prod_head)
-            skip_promote=no
+            superseded=no
             if [ -n "$PROD_HEAD" ] && [ "$PROD_HEAD" != "$SHA" ] && git merge-base --is-ancestor "$SHA" "$PROD_HEAD" 2>/dev/null; then
               if ignored_only_between "$SHA" "$PROD_HEAD"; then
-                echo "origin/production moved to $PROD_HEAD by ignored files only; keep repairing $SHA"
+                echo "origin/production moved to $PROD_HEAD by ignored files only; keep checking $SHA"
               else
-                echo "Skip alias repair: origin/production already moved to $PROD_HEAD"
-                skip_promote=yes
+                echo "Skip stale health check: origin/production already moved to $PROD_HEAD"
+                superseded=yes
               fi
             fi
             fetch_live_build
-            if [ "$skip_promote" = "no" ] && [ -n "$LIVE_BUILD" ] && [ "$LIVE_BUILD" != "$SHA" ]; then
+            if [ "$superseded" = "no" ] && [ -n "$LIVE_BUILD" ] && [ "$LIVE_BUILD" != "$SHA" ]; then
               if ! git cat-file -e "$LIVE_BUILD^{commit}" 2>/dev/null; then
                 git fetch --depth=50 origin "$LIVE_BUILD" || true
               fi
               if git merge-base --is-ancestor "$SHA" "$LIVE_BUILD" 2>/dev/null; then
                 if ignored_only_between "$SHA" "$LIVE_BUILD"; then
-                  echo "Live SHA $LIVE_BUILD is only ignored files ahead of $SHA; keep repairing $SHA"
+                  echo "Live SHA $LIVE_BUILD is only ignored files ahead of $SHA; keep checking $SHA"
                 else
-                  echo "Skip alias repair: production already serves newer build $LIVE_BUILD"
-                  skip_promote=yes
+                  echo "Skip stale health check: production already serves newer build $LIVE_BUILD"
+                  superseded=yes
                 fi
               fi
             fi
-            if [ "$skip_promote" = "yes" ]; then
+            if [ "$superseded" = "yes" ]; then
               echo "Superseded: production already serves newer build ${LIVE_BUILD:-$PROD_HEAD}; nothing to check for $SHA"
               exit 0
             fi
-            echo "READY deploy $CURRENT_UID missed the production alias (live=$LIVE_BUILD); promoting it (HTPR-6511)"
-            code=$(curl -s -o /tmp/promote.json -w '%{http_code}' -X POST \
-              -H "Authorization: Bearer $VERCEL_TOKEN" \
-              "https://api.vercel.com/v10/projects/$PROJECT_ID/promote/$CURRENT_UID?teamId=$TEAM_ID")
-            echo "promote -> $code"; cat /tmp/promote.json
-            if [ "$code" = "200" ] || [ "$code" = "201" ] || [ "$code" = "202" ]; then
-              for i in 1 2 3 4 5 6; do
-                fetch_live_build
-                echo "[repair $i] live build: ${LIVE_BUILD:-none} (status $version_code)"
-                if [ "$version_code" = "200" ] && [ "$version_challenged" = "no" ] && [ "$LIVE_BUILD" = "$SHA" ]; then
-                  break
-                fi
-                [ "$i" -lt 6 ] && sleep 10
-              done
-            fi
-            PROD_HEAD=$(current_prod_head)
-            if [ -n "$PROD_HEAD" ] && [ "$PROD_HEAD" != "$SHA" ] && git merge-base --is-ancestor "$SHA" "$PROD_HEAD" 2>/dev/null; then
-              if ignored_only_between "$SHA" "$PROD_HEAD"; then
-                echo "Production advanced to $PROD_HEAD by ignored files only; keep $SHA"
-              else
-                echo "Production advanced to app-changing $PROD_HEAD; leaving alias repair to that SHA's health run"
-                exit 0
-              fi
-            fi
-            if [ "$LIVE_BUILD" = "$SHA" ]; then
-              echo "Alias repair landed; production now serves $SHA"
-            else
-            notify "🔴 hypertasks: production still serves $LIVE_BUILD, expected $SHA after READY; not rolling back, investigate Vercel aliasing"
-            echo "::error::Production still serves $LIVE_BUILD, expected $SHA after READY; not rolling back"
-            exit 1
+            if [ "$version_code" != "200" ] || [ "$version_challenged" = "yes" ] || [ "$LIVE_BUILD" != "$SHA" ]; then
+              MSG="🔴 hypertasks: production serves ${LIVE_BUILD:-none}, expected $SHA after READY. Alert only; investigate Vercel aliasing."
+              notify "$MSG"
+              echo "::error::$MSG"
+              exit 1
             fi
           fi
 
@@ -350,8 +323,8 @@ jobs:
               attempt_unchallenged_failure=true
             fi
 
-            # The FINAL attempt decides rollback (HTPR-5467): the retry loop
-            # exists to filter transients, so rollback needs the failure signal
+            # The FINAL attempt decides the failure alert (HTPR-5467): the retry
+            # loop filters transients, so a definitive alert needs the signal
             # to still be standing when retries are exhausted. A challenge on
             # one endpoint still never masks an unchallenged failure elsewhere
             # in that same final attempt. Each attempt's verdict displaces the
@@ -370,11 +343,10 @@ jobs:
             exit 0
           fi
 
-          # The FINAL attempt decides rollback (HTPR-5467). An unchallenged
+          # The FINAL attempt decides the alert (HTPR-5467). An unchallenged
           # definitive failure (broken read or broken probe) on the final
-          # attempt means production is provably broken when retries are
-          # exhausted and must roll back. Only fall through to the
-          # skip-rollback branches below when the final attempt had no
+          # attempt must fail the run after retries. Only fall through to the
+          # inconclusive branches below when the final attempt had no
           # unchallenged failure (purely challenged, purely inconclusive, or an
           # earlier failure that did not recur).
           if ! $unchallenged_failure; then
@@ -386,7 +358,7 @@ jobs:
             # scripts/ensure-task-write-probe-fixture.mjs.
             #
             # This sits INSIDE the no-unchallenged-failure branch on purpose: a
-            # definitive failure standing on the final attempt still rolls back,
+            # definitive failure standing on the final attempt still fails loudly,
             # so a setup problem can never mask a proven outage.
             if [ "$probe_status" = "misconfigured" ]; then
               notify "🔴 hypertasks: the task-write probe for $SHA is NOT PROVISIONED, so the write health gate is not running. Run scripts/ensure-task-write-probe-fixture.mjs for the health identity. NOT rolling back."
@@ -425,53 +397,22 @@ jobs:
             exit 0
           fi
 
-          fetch_live_build
-          if [ "$version_code" != "200" ] || [ "$version_challenged" = "yes" ] || [ "$LIVE_BUILD" != "$SHA" ]; then
-            MSG="⚠️ hypertasks: probes failed for $SHA but production now serves ${LIVE_BUILD:-none} (status $version_code); skipping rollback"
-            notify "$MSG"
-            echo "::error::$MSG"
-            exit 1
-          fi
-
-          # ── 3. Rollback: promote the previous READY production deployment ──
-          CURRENT_UID=$(echo "$DEPLOY_JSON" | jq -r '.uid')
-          PREV_UID=$(api "/v6/deployments?projectId=$PROJECT_ID&teamId=$TEAM_ID&target=production&state=READY&limit=10" \
-            | jq -r --arg cur "$CURRENT_UID" '[.deployments[] | select(.uid != $cur)][0].uid // empty')
-
-          if [ -z "$PREV_UID" ]; then
-            notify "🔴 hypertasks: production UNHEALTHY after $SHA and NO previous deployment found to roll back to. Manual action needed NOW."
-            echo "::error::Unhealthy and no rollback target"
-            exit 1
-          fi
-
-          echo "Rolling back: promoting $PREV_UID"
-          code=$(curl -s -o /tmp/promote.json -w '%{http_code}' -X POST \
-            -H "Authorization: Bearer $VERCEL_TOKEN" \
-            "https://api.vercel.com/v10/projects/$PROJECT_ID/promote/$PREV_UID?teamId=$TEAM_ID")
-          echo "promote -> $code"; cat /tmp/promote.json
-
-          if [ "$code" = "200" ] || [ "$code" = "201" ] || [ "$code" = "202" ]; then
-            publish_health_gate "$SHA" failure "Rolled back after failed health"
-            notify "🔴 hypertasks: $SHA deployed but FAILED health checks. Auto-rolled back to previous deployment ($PREV_UID). Investigate: https://github.com/${{ github.repository }}/commit/$SHA"
-            echo "::error::Health check failed — rolled back to $PREV_UID"
-          else
-            notify "🔴🔴 hypertasks: $SHA UNHEALTHY and auto-rollback FAILED (HTTP $code). Promote previous deployment manually in Vercel NOW."
-            echo "::error::Health check failed AND rollback failed"
-          fi
+          publish_health_gate "$SHA" failure "Health probes failed (alert only)"
+          notify "🔴 hypertasks: production FAILED health checks for $SHA (home=$home, api=$apic, probe=$probe_code/$probe_status). Automatic rollback is disabled; investigate: https://github.com/${{ github.repository }}/commit/$SHA"
+          echo "::error::Production health checks failed; automatic rollback is disabled"
           exit 1
 
   # ── Playwright smoke QA (HTPR-6199): open every main view as a real user ──
   # The curl-based `health` job above proves the app responds; this proves the
   # main screens actually render for a logged-in user. `live` is set as soon
   # as health confirms this SHA is live, before its own probes run, so it
-  # alone would still be true after a rollback or cancellation further down
+  # alone would still be true after failed probes or cancellation further down
   # that same job. Requiring a successful health result excludes both cases;
   # an inconclusive write-probe run also exits non-zero, so it's skipped here
   # too rather than smoke-tested.
   # workflow_dispatch runs the checks without any of this (nothing to gate
   # on, `health` doesn't run) so this job is dispatchable for manual
-  # verification; rollback is skipped there too, since a manual run is
-  # exploratory, not a deploy signal.
+  # verification. Every trigger is alert-only.
   smoke:
     needs: health
     if: ${{ !cancelled() && ((github.event_name == 'push' && needs.health.outputs.live == 'true' && needs.health.result == 'success') || github.event_name == 'workflow_dispatch') }}
@@ -481,13 +422,10 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     # The GLM QA job (HTPR-6239) reads these: `ran` says the browser checks
-    # actually executed (not skipped for a missing session), `rolledback` says
-    # a confirmed failure reverted the production branch; exploratory QA
-    # must not treat this SHA as a verified live build.
+    # actually executed (not skipped for a missing session), `ok` its verdict.
     outputs:
       ran: ${{ steps.smoke.outcome != 'skipped' && steps.smoke.outcome != 'cancelled' && steps.smoke.outcome != '' }}
       ok: ${{ steps.smoke.outcome == 'success' }}
-      rolledback: ${{ steps.decide.outputs.rolledback == 'true' }}
     steps:
       # SMOKE_SESSION_STATE isn't provisioned yet (HTPR-6199 needs a real
       # signup + email verification). Check first so production pushes do not
@@ -585,25 +523,21 @@ jobs:
         if: steps.provisioned.outputs.ok != 'true'
         run: echo "::warning::SMOKE_SESSION_STATE is not set — skipping smoke QA. See e2e/smoke/README.md to provision it."
 
-      - name: Decide unrunnable vs. real failure, rollback if confirmed
+      - name: Classify and report a failed smoke check
         id: decide
         if: ${{ !cancelled() && steps.provisioned.outputs.ok == 'true' && (steps.smoke.outcome == 'failure' || steps.setup-checkout.outcome == 'failure' || steps.setup-node.outcome == 'failure' || steps.setup-npm.outcome == 'failure' || steps.setup-pw.outcome == 'failure') }}
         env:
-          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
           TG_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TG_CHAT: ${{ secrets.TELEGRAM_CHAT_ID }}
           SHA: ${{ github.sha }}
           GITHUB_TOKEN: ${{ github.token }}
           GITHUB_REPOSITORY: ${{ github.repository }}
-          # Rulesets reject github.token pushes. A human clears the freeze with:
-          # gh variable delete MERGE_FREEZE
-          ROLLBACK_GITHUB_TOKEN: ${{ secrets.AUTOMERGE_TOKEN }}
         run: |
           set -uo pipefail
           notify() {
             curl --fail-with-body -sS -o /dev/null "https://api.telegram.org/bot$TG_TOKEN/sendMessage" \
               -d chat_id="$TG_CHAT" --data-urlencode text="$1" || \
-              echo "::warning::Smoke rollback alert could not be delivered"
+              echo "::warning::Smoke failure alert could not be delivered"
           }
 
           PREFLIGHT=e2e/smoke/.state/preflight.json
@@ -621,48 +555,15 @@ jobs:
             exit 1
           fi
 
-          if [ "${{ github.event_name }}" != "push" ]; then
-            echo "::error::Smoke QA failed on a manual run; not rolling back (workflow_dispatch never rolls back)"
-            exit 1
-          fi
-
-          echo "Smoke QA confirmed a real failure on $SHA. Rolling back."
-          RESULT=$(node .github/scripts/emergency-rollback.mjs "$SHA")
-          echo "$RESULT"
-          PROMOTION_ACTION=$(echo "$RESULT" | jq -r '.promotion.action // "failed"')
-          PROMOTION_REASON=$(echo "$RESULT" | jq -r '.promotion.reason // ""')
-          case "$PROMOTION_ACTION:$PROMOTION_REASON" in
-            requested:*|skip:production\ already\ moved*|skip:production\ moved\ during*)
-              PROMOTION_SAFE=true ;;
-            *) PROMOTION_SAFE=false ;;
-          esac
-          REVERT_STATUS=$(echo "$RESULT" | jq -r '.revert.status // "failed"')
-          if [ "$PROMOTION_SAFE" = true ]; then
-          case "$REVERT_STATUS" in
-            created|already-reverted|auto-rollback) echo "rolledback=true" >> "$GITHUB_OUTPUT" ;;
-          esac
-          fi
-          # A confirmed failure is never a green deploy, even if freeze or revert failed.
-          if [ -n "${GITHUB_TOKEN:-}" ] && [ -n "${GITHUB_REPOSITORY:-}" ]; then
+          if [ "${{ github.event_name }}" = "push" ] && [ -n "${GITHUB_TOKEN:-}" ] && [ -n "${GITHUB_REPOSITORY:-}" ]; then
             curl -sS -o /dev/null -X POST \
               -H "Authorization: Bearer $GITHUB_TOKEN" \
               -H "Accept: application/vnd.github+json" \
               "https://api.github.com/repos/${GITHUB_REPOSITORY}/statuses/${SHA}" \
-              -d '{"state":"failure","context":"prod-health-gate","description":"Failed production smoke"}' || true
+              -d '{"state":"failure","context":"prod-health-gate","description":"Failed production smoke (alert only)"}' || true
           fi
-          DETAILS=$(echo "$RESULT" | jq -r '
-            "Freeze: " + (if .freeze then "set" else "FAILED" end) +
-            "\nRevert: " + (.revert.status // "unknown") +
-            "\nPromote: " + (.promotion.action // "skipped") + (if .promotion.reason then " (" + .promotion.reason + ")" else "" end) +
-            "\nErrors: " + (if ((.errors // {}) | length) > 0 then (.errors | to_entries | map(.key + ": " + .value) | join("; ")) else "none" end) +
-            "\nDropped commits:\n" + (if ((.revert.dropped // []) | length) > 0 then (.revert.dropped | map(.sha + " " + .title) | join("\n")) else "none" end)
-          ')
-          # A failed or skipped promotion may leave this broken SHA live; never
-          # wait for another smoke result to warn the on-call operator.
-          if [ "$(echo "$RESULT" | jq -r '.action // "failed"')" = "failed" ] || [ "$PROMOTION_SAFE" != true ]; then
-            notify "🔴 hypertasks: smoke QA failed for $SHA. $DETAILS
-          Verify production, roll back manually if revert failed, and clear MERGE_FREEZE only after resolution. https://github.com/${{ github.repository }}/commit/$SHA"
-          fi
+          notify "🔴 hypertasks: smoke QA confirmed an application failure for $SHA. Automatic rollback is disabled; investigate: https://github.com/${{ github.repository }}/commit/$SHA"
+          echo "::error::Smoke QA confirmed an application failure; automatic rollback is disabled"
           exit 1
 
       - name: Update the consecutive smoke alarm
@@ -677,17 +578,15 @@ jobs:
         run: node .github/scripts/prod-smoke-alarm.mjs
 
   # ── GLM exploratory QA (HTPR-6239): a 5-minute human-style pass on the live app ──
-  # Runs whenever a production push is actually live and nothing rolled back,
+  # Runs whenever a production push is actually live,
   # independent of the smoke suite (HTPR-5781): smoke stays skipped while its
   # session secret is unprovisioned, and gating the brief on it kept the pass
   # permanently dead. The dispatcher tells the brief honestly when smoke did
-  # not run. A smoke-confirmed break that reverted production (rolledback)
-  # still suppresses the brief: the failing SHA is not a verified live build
-  # to explore. Exploratory, never a gate: a dispatch failure alerts
+  # not run. Exploratory, never a gate: a dispatch failure alerts
   # on Telegram and never blocks, fails, or rolls back the deploy itself.
   glm-qa:
     needs: [health, smoke]
-    if: ${{ !cancelled() && github.event_name == 'push' && needs.health.outputs.live == 'true' && needs.health.result == 'success' && needs.smoke.outputs.rolledback != 'true' }}
+    if: ${{ !cancelled() && github.event_name == 'push' && needs.health.outputs.live == 'true' && needs.health.result == 'success' }}
     concurrency:
       # Fixed group: a newer production push cancels a still-running older
       # run, so a brief can only go out while its own SHA is the live deploy.
@@ -786,8 +685,6 @@ jobs:
     if: ${{ github.event_name == 'workflow_dispatch' || (github.event_name == 'schedule' && github.event.schedule == '*/30 * * * *') }}
     permissions:
       contents: read
-      statuses: read
-      actions: read
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -801,8 +698,6 @@ jobs:
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
           TG_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TG_CHAT: ${{ secrets.TELEGRAM_CHAT_ID }}
-          GITHUB_TOKEN: ${{ github.token }}
-          GITHUB_REPOSITORY: ${{ github.repository }}
         run: |
           set -uo pipefail
 
@@ -858,138 +753,7 @@ jobs:
             fi
             BEHIND=$(git rev-list --count "$LIVE..$TIP" 2>/dev/null || echo "?")
 
-            # Only promote a SHA whose push health/smoke run already passed.
-            # A rolled-back tip stays READY on Vercel; promoting it would undo
-            # the rollback (HTPR-6511 review).
-            sha_passed_health_gate() {
-              local sha="$1"
-              local repo="${GITHUB_REPOSITORY:-hypertask-ai/hypertask}"
-              if [ -z "${GITHUB_TOKEN:-}" ]; then
-                echo "No GITHUB_TOKEN; cannot confirm health gate for $sha"
-                return 1
-              fi
-              local state
-              state=$(curl -sS -H "Authorization: Bearer $GITHUB_TOKEN" \
-                -H "Accept: application/vnd.github+json" \
-                "https://api.github.com/repos/${repo}/commits/${sha}/status?per_page=100" \
-                | jq -r '[.statuses[] | select(.context=="prod-health-gate")][0].state // empty') || state=""
-              if [ "$state" != "success" ]; then
-                echo "Skip $sha: prod-health-gate is '${state:-missing}'"
-                return 1
-              fi
-              # A later job in the same workflow can fail after health posted
-              # success (core-actions). Fail closed on that later conclusion
-              # rather than trusting a stale success status.
-              local runs_code conclusion
-              runs_code=$(curl -sS -o "$DRIFT_DIR/runs.json" -w '%{http_code}' \
-                -H "Authorization: Bearer $GITHUB_TOKEN" \
-                -H "Accept: application/vnd.github+json" \
-                "https://api.github.com/repos/${repo}/actions/workflows/prod-health.yml/runs?head_sha=${sha}&event=push&per_page=10") || runs_code=000
-              if [ "$runs_code" != "200" ]; then
-                echo "Skip $sha: cannot read prod-health runs (HTTP $runs_code)"
-                return 1
-              fi
-              conclusion=$(jq -r '[.workflow_runs[] | select(.status=="completed")] | sort_by(.updated_at) | reverse | .[0].conclusion // empty' "$DRIFT_DIR/runs.json") || conclusion=""
-              if [ "$conclusion" != "success" ]; then
-                echo "Skip $sha: latest prod-health run concluded '${conclusion:-missing}'"
-                return 1
-              fi
-              return 0
-            }
-
-            ignored_only_to_tip() {
-              local sha="$1"
-              [ -z "$(git diff --name-only "$sha..$TIP" -- . ':!*.md' ':!.github' ':!openwiki' ':!docs' ':!.claude' | head -1)" ]
-            }
-            ignored_only_between() {
-              local from="$1" to="$2"
-              [ -z "$(git diff --name-only "$from..$to" -- . ':!*.md' ':!.github' ':!openwiki' ':!docs' ':!.claude' | head -1)" ]
-            }
-
-            CANDIDATE_UID=""
-            CANDIDATE_SHA=""
-            while IFS=$'\t' read -r uid sha; do
-              [ -n "$uid" ] && [ -n "$sha" ] || continue
-              if [ "$sha" != "$TIP" ]; then
-                git merge-base --is-ancestor "$sha" "$TIP" 2>/dev/null || continue
-                ignored_only_to_tip "$sha" || continue
-              fi
-              if ! sha_passed_health_gate "$sha"; then
-                echo "Skip $uid ($sha): no green prod-health gate"
-                continue
-              fi
-              CANDIDATE_UID=$uid
-              CANDIDATE_SHA=$sha
-              break
-            done < <(api "/v6/deployments?projectId=$PROJECT_ID&teamId=$TEAM_ID&target=production&state=READY&limit=20" \
-              | jq -r '.deployments[] | [.uid, .meta.githubCommitSha] | @tsv')
-
-            if [ -n "$CANDIDATE_UID" ]; then
-              git fetch --depth=50 origin production || true
-              FRESH_HEAD=$(git rev-parse origin/production 2>/dev/null || git rev-parse HEAD)
-              fetch_live_version
-              if [ "$version_code" != "200" ] || [ "${version_challenged:-no}" = "yes" ] || [ -z "$LIVE" ]; then
-                LIVE=$(api "/v9/projects/$PROJECT_ID?teamId=$TEAM_ID" \
-                  | jq -r '.targets.production.meta.githubCommitSha // empty')
-              fi
-              if [ -n "$LIVE" ] && [ "$LIVE" != "$CANDIDATE_SHA" ]; then
-                if ! git cat-file -e "$LIVE^{commit}" 2>/dev/null; then
-                  git fetch --depth=50 origin "$LIVE" || true
-                fi
-                if git merge-base --is-ancestor "$CANDIDATE_SHA" "$LIVE" 2>/dev/null; then
-                  if ignored_only_between "$CANDIDATE_SHA" "$LIVE"; then
-                    echo "Live SHA $LIVE is only ignored files ahead of $CANDIDATE_SHA; keep promoting"
-                  else
-                    echo "Skip promote: production already serves newer descendant $LIVE"
-                    exit 0
-                  fi
-                fi
-              fi
-              if [ "$FRESH_HEAD" != "$TIP" ] && [ "$FRESH_HEAD" != "$CANDIDATE_SHA" ] && git merge-base --is-ancestor "$CANDIDATE_SHA" "$FRESH_HEAD" 2>/dev/null; then
-                if ignored_only_between "$CANDIDATE_SHA" "$FRESH_HEAD"; then
-                  echo "origin/production moved to $FRESH_HEAD by ignored files only; keep $CANDIDATE_SHA"
-                else
-                  echo "Skip promote: origin/production moved to app-changing $FRESH_HEAD"
-                  if [ "$LIVE" = "$FRESH_HEAD" ]; then
-                    echo "Live already matches the new production head."
-                    exit 0
-                  fi
-                  echo "Leaving promotion to that SHA's health run."
-                  exit 0
-                fi
-              fi
-              echo "Promoting $CANDIDATE_UID ($CANDIDATE_SHA) so production serves the tip (HTPR-6511)"
-              code=$(curl -s -o "$DRIFT_DIR/promote.json" -w '%{http_code}' -X POST \
-                -H "Authorization: Bearer $VERCEL_TOKEN" \
-                "https://api.vercel.com/v10/projects/$PROJECT_ID/promote/$CANDIDATE_UID?teamId=$TEAM_ID")
-              echo "promote -> $code"; cat "$DRIFT_DIR/promote.json"
-              if [ "$code" = "200" ] || [ "$code" = "201" ] || [ "$code" = "202" ]; then
-                for i in 1 2 3 4 5 6; do
-                  fetch_live_version
-                  echo "[repair $i] live build: ${LIVE:-none} (status $version_code)"
-                  if [ "$LIVE" = "$CANDIDATE_SHA" ] || [ "$LIVE" = "$TIP" ]; then
-                    git fetch --depth=50 origin production || true
-                    FRESH_HEAD=$(git rev-parse origin/production 2>/dev/null || git rev-parse HEAD)
-                    if [ "$FRESH_HEAD" != "$TIP" ] && [ "$FRESH_HEAD" != "$CANDIDATE_SHA" ] && git merge-base --is-ancestor "$CANDIDATE_SHA" "$FRESH_HEAD" 2>/dev/null; then
-                      if ignored_only_between "$CANDIDATE_SHA" "$FRESH_HEAD"; then
-                        echo "Production advanced to $FRESH_HEAD by ignored files only; keep $CANDIDATE_SHA"
-                      else
-                        echo "Production advanced to app-changing $FRESH_HEAD; leaving alias repair to that SHA's health run"
-                        exit 0
-                      fi
-                    fi
-                    echo "Promoted $CANDIDATE_UID; production now serves the tip."
-                    exit 0
-                  fi
-                  [ "$i" -lt 6 ] && sleep 10
-                done
-                MSG="🔴 hypertasks: promoted $CANDIDATE_UID for ${CANDIDATE_SHA:0:9} but /api/version still reports ${LIVE:-none}. $BEHIND commit(s) still missing from the live app."
-              else
-                MSG="🔴 hypertasks: production is serving ${LIVE:0:9}, which is $BEHIND commit(s) BEHIND the production tip ${TIP:0:9}. Promote of $CANDIDATE_UID failed (HTTP $code)."
-              fi
-            else
-              MSG="🔴 hypertasks: production is serving ${LIVE:0:9}, which is $BEHIND commit(s) BEHIND the production tip ${TIP:0:9}. No READY deploy with a green health gate to promote."
-            fi
+            MSG="🔴 hypertasks: production is serving ${LIVE:0:9}, which is $BEHIND commit(s) BEHIND the production tip ${TIP:0:9}. Alert only; no deployment was promoted."
           else
             MSG="🔴 hypertasks: production is serving ${LIVE:0:9}, which is not an ancestor of the production tip ${TIP:0:9}. The live app is on a commit that is not on production at all."
           fi
@@ -1086,25 +850,16 @@ jobs:
           CORE_SMOKE_RESULT_FILE: ${{ runner.temp }}/core-smoke-result.json
         run: node .github/scripts/core-actions-smoke.mjs run
 
-      - name: Roll back a confirmed post-deploy application failure
+      - name: Invalidate the health gate after a failed post-deploy probe
         if: ${{ !cancelled() && github.event_name == 'push' && steps.probe.outcome == 'failure' }}
         env:
-          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
-          CORE_SMOKE_RESULT_FILE: ${{ runner.temp }}/core-smoke-result.json
-          ROLLBACK_GITHUB_TOKEN: ${{ secrets.AUTOMERGE_TOKEN }}
           GITHUB_TOKEN: ${{ github.token }}
           GITHUB_REPOSITORY: ${{ github.repository }}
         run: |
-          SHOULD_ROLLBACK=$(node .github/scripts/core-actions-smoke.mjs rollback-decision)
-          if [ "$SHOULD_ROLLBACK" != "true" ]; then
-            echo "CORE_SMOKE_ROLLBACK=not requested for this result" >> "$GITHUB_ENV"
-            exit 0
-          fi
           if [ -z "${GITHUB_TOKEN:-}" ] || [ -z "${GITHUB_REPOSITORY:-}" ]; then
             echo "::error::Cannot invalidate prod-health-gate; missing GITHUB_TOKEN or repository"
             exit 1
           fi
-          posted=no
           invalidate_health_gate() {
             local i code state
             for i in 1 2 3; do
@@ -1112,37 +867,21 @@ jobs:
                 -H "Authorization: Bearer $GITHUB_TOKEN" \
                 -H "Accept: application/vnd.github+json" \
                 "https://api.github.com/repos/${GITHUB_REPOSITORY}/statuses/${GITHUB_SHA}" \
-                -d '{"state":"failure","context":"prod-health-gate","description":"Rolled back after failed core-actions"}') || code=000
+                -d '{"state":"failure","context":"prod-health-gate","description":"Failed core-actions (alert only)"}') || code=000
               state=$(curl -sS -H "Authorization: Bearer $GITHUB_TOKEN" \
                 -H "Accept: application/vnd.github+json" \
                 "https://api.github.com/repos/${GITHUB_REPOSITORY}/commits/${GITHUB_SHA}/status?per_page=100" \
                 | jq -r '[.statuses[] | select(.context=="prod-health-gate")][0].state // empty') || state=""
               echo "invalidate prod-health-gate try $i -> http $code state ${state:-missing}"
               if { [ "$code" = "201" ] || [ "$code" = "200" ]; } && [ "$state" = "failure" ]; then
-                posted=yes
                 return 0
               fi
               [ "$i" -lt 3 ] && sleep 2
             done
             return 1
           }
-          invalidate_health_gate || true
-          RESULT=$(node .github/scripts/emergency-rollback.mjs "$GITHUB_SHA")
-          echo "$RESULT"
-          SUMMARY=$(echo "$RESULT" | jq -r '
-            "freeze=" + (if .freeze then "set" else "FAILED" end) +
-            "; revert=" + (.revert.status // "unknown") +
-            "; promote=" + (.promotion.action // "skipped") +
-            "; errors=" + ((.errors // {}) | to_entries | map(.key + ": " + .value) | join("; ")) +
-            "; dropped=" + ((.revert.dropped // []) | map(.sha + " " + .title) | join("; ")) |
-            gsub("[\\r\\n]+"; " ")
-          ')
-          echo "CORE_SMOKE_ROLLBACK=$SUMMARY" >> "$GITHUB_ENV"
-          if [ "$posted" != "yes" ]; then
-            invalidate_health_gate || true
-          fi
-          if [ "$posted" != "yes" ]; then
-            echo "::error::Rolled back $GITHUB_SHA but failed to invalidate prod-health-gate"
+          if ! invalidate_health_gate; then
+            echo "::error::Failed core-actions probe; could not invalidate prod-health-gate"
             exit 1
           fi
 
@@ -1151,6 +890,7 @@ jobs:
         env:
           HYPERTASK_MCP_TOKEN: ${{ secrets.HYPERTASK_HEALTH_USER_TOKEN }}
           CORE_SMOKE_RESULT_FILE: ${{ runner.temp }}/core-smoke-result.json
+          CORE_SMOKE_ROLLBACK: disabled (alert-only)
         run: node .github/scripts/core-actions-smoke.mjs report
 
       - name: Keep failed monitoring visible

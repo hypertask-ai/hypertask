@@ -261,15 +261,13 @@ test("promotes only a deployment whose smoke test step actually succeeded", asyn
   assert.equal(green.result.freeze, true);
 });
 
-test("both rollback alerts include all dropped commits and each failed operation", async () => {
+test("the production monitor cannot invoke the standalone rollback script", async () => {
   const workflow = await readFile(path.join(__dirname, "../.github/workflows/prod-health.yml"), "utf8");
-  assert.match(workflow, /Dropped commits:[\s\S]*?\.revert\.dropped/);
-  assert.match(workflow, /Errors: [\s\S]*?\.errors/);
-  assert.match(workflow, /CORE_SMOKE_ROLLBACK=\$SUMMARY/);
-  assert.match(workflow, /SUMMARY=[\s\S]*?\.revert\.dropped/);
+  assert.doesNotMatch(workflow, /emergency-rollback|ROLLBACK_GITHUB_TOKEN|MERGE_FREEZE|\/promote\//);
+  assert.match(workflow, /automatic rollback is disabled/);
 });
 
-test("rollback-capable test jobs do not retain a write-capable checkout token", async () => {
+test("alert-only test jobs do not retain a write-capable checkout token", async () => {
   const workflow = await readFile(path.join(__dirname, "../.github/workflows/prod-health.yml"), "utf8");
   const smoke = workflow.slice(workflow.indexOf("\n  smoke:"), workflow.indexOf("\n  glm-qa:"));
   const coreActions = workflow.slice(
@@ -282,7 +280,7 @@ test("rollback-capable test jobs do not retain a write-capable checkout token", 
     assert.doesNotMatch(job, /^\s+(?:actions|contents): write$/m);
     assert.match(job, /persist-credentials: false/);
   }
-  assert.match(smoke, /"Freeze: " \+ \(if \.freeze then "set" else "FAILED" end\)/);
+  assert.doesNotMatch(smoke, /ROLLBACK_GITHUB_TOKEN|VERCEL_TOKEN/);
   assert.doesNotMatch(smoke, /froze merging/);
 });
 

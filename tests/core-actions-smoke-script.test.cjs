@@ -381,7 +381,7 @@ test("the workflow schedules and serializes the production fixture", async () =>
   );
   assert.match(
     workflow,
-    /name: Roll back a confirmed post-deploy application failure\s+if: .*github\.event_name == 'push'/,
+    /name: Invalidate the health gate after a failed post-deploy probe\s+if: .*github\.event_name == 'push'/,
   );
   assert.match(
     workflow,
@@ -392,7 +392,7 @@ test("the workflow schedules and serializes the production fixture", async () =>
     /name: core-actions-fixture-\$\{\{ github\.run_id \}\}/,
   );
   assert.doesNotMatch(workflow, /gh variable set CORE_SMOKE_/);
-  assert.match(workflow, /SUMMARY=\$\(echo "\$RESULT" \| jq -r '[\s\S]*?\.revert\.dropped[\s\S]*?gsub\(/);
+  assert.doesNotMatch(workflow, /emergency-rollback|rollback-decision|ROLLBACK_GITHUB_TOKEN|\/promote\//);
 });
 
 test("the monitor runs the probe unconditionally and stays loud when it fails", async () => {
