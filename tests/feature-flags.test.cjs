@@ -588,6 +588,16 @@ test("the retired factory flag remains off for old deployments but disappears fr
   );
 });
 
+test("the retired infra board-check flag is hidden and not editable", async () => {
+  const key = "yper4-123-board-check";
+  listedRows = [{ key, mode: "OWNER_AND_QA", updatedAt: new Date() }];
+  row = { mode: "OWNER_AND_QA", updatedAt: new Date() };
+
+  assert.equal(flags.FEATURE_FLAG_KEYS.includes(key), false);
+  assert.equal((await flags.listFeatureFlagModes()).some((flag) => flag.key === key), false);
+  await assert.rejects(flags.setFeatureFlagMode(key, "OFF"), /Unknown feature flag/);
+});
+
 test("the retired core-actions smoke flag is hidden and not editable", async () => {
   const key = "htpr-6236-core-actions-smoke";
   listedRows = [{ key, mode: "EVERYONE", updatedAt: new Date() }];

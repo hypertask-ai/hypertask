@@ -116,6 +116,7 @@ const RETIRED_FEATURE_FLAG_KEYS = new Set([
   "htpr-6254-heic-heif-attachments",
   "htpr-6236-core-actions-smoke",
   "htpr-6035-agent-chat-skills",
+  "yper4-123-board-check",
 ]);
 // Old tabs read these; remove htpr-6072 after 2026-10-06, htpr-6254 and htpr-6035 after 2026-10-16.
 const RETIRED_CLIENT_FEATURE_FLAGS = {
