@@ -447,7 +447,7 @@ export async function fetchTaskDetail(
 ) {
   // Guard here, not just at the page: getTask() takes `uniqueIndex: any` from
   // the API layer and would otherwise send NaN into Prisma too (HTPR-4838).
-  const ticketNumber = typeof uniqueIndex === "string" && /^[A-Z0-9]+-\d+$/i.test(uniqueIndex)
+  const ticketNumber = typeof uniqueIndex === "string" && /^[A-Za-z0-9][A-Za-z0-9_-]*-\d+$/.test(uniqueIndex)
     ? uniqueIndex : null;
   if (ticketNumber && !(await isFeatureEnabled(HTPR_6868_TICKET_PREFIX_FLAG, userId))) return null;
   const slug = ticketNumber

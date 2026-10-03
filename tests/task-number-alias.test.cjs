@@ -87,7 +87,10 @@ function fixture({ tasks = [currentTask], visibleProjects = [20], agentId = null
     },
   };
   base["@/utils/controllers/projects/findPrefixAliasTasks"] = load("src/utils/controllers/projects/findPrefixAliasTasks.ts", base);
-  const resolver = load("src/lib/mcp/tasks/resolveTask.ts", base);
+  const resolver = load("src/lib/mcp/tasks/resolveTask.ts", {
+    ...base,
+    "@/lib/flags": { HTPR_6868_TICKET_PREFIX_FLAG: "htpr-6868-ticket-prefix", isFeatureEnabled: async () => true },
+  });
   base["@/lib/mcp/tasks/resolveTask"] = resolver;
   const detail = load("src/utils/controllers/taskDetail/load.ts", {
     ...base,

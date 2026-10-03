@@ -67,7 +67,7 @@ export default async function Page(
   // No ticket number in the URL: send them to the board rather than query for
   // task NaN, which Prisma rejects outright (HTPR-4838). Done before any other
   // await so nothing has started streaming.
-  if (/^[A-Z0-9]+-\d+$/i.test(params.slug?.[1] ?? "")) {
+  if (/^[A-Za-z0-9][A-Za-z0-9_-]*-\d+$/.test(params.slug?.[1] ?? "")) {
     const user = await requireServerCookieUser();
     if (await isFeatureEnabled(HTPR_6868_TICKET_PREFIX_FLAG, user.id)) {
       const task = await findTaskByTicketNumber(params.slug[1], user.id, parseProjectSlug(params.slug[0]));

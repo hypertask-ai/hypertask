@@ -1,5 +1,6 @@
 import type { Prisma } from '@prisma/client';
 import prisma from '@/lib/prisma';
+import { HTPR_6868_TICKET_PREFIX_FLAG, isFeatureEnabled } from '@/lib/flags';
 import { findPrefixAliasTasks } from '@/utils/controllers/projects/findPrefixAliasTasks';
 import { getProjectWhere } from '@/utils/controllers/projects/getAllIncludes';
 
@@ -82,7 +83,7 @@ export async function findTaskByIdentifier(
   const availableAliases = aliases.filter(alias => !reusedNumbers.some(
     task => task.projectId === alias.projectId && task.uniqueIndex === alias.uniqueIndex
   ));
-  const prefixTasks = ticket_number
+  const prefixTasks = ticket_number && await isFeatureEnabled(HTPR_6868_TICKET_PREFIX_FLAG, user.id)
     ? await findPrefixAliasTasks(ticket_number, projectFilter, project_id)
     : [];
   const tasks = [...new Map([
@@ -134,8 +135,6 @@ export async function resolveTaskIdOnly(options: {
     if (!project_id && tasks.length > 1) {
       throw new TaskIdentifierAmbiguityError(ticket_number);
     }
-    if (!tasks.length) tasks.push(...await findPrefixAliasTasks(ticket_number, {}, project_id));
-    if (!project_id && tasks.length > 1) throw new TaskIdentifierAmbiguityError(ticket_number);
     return tasks[0]?.id ?? null;
   }
 

@@ -6,7 +6,8 @@ export async function findPrefixAliasTasks(
   projectAccess: Prisma.ProjectWhereInput,
   projectId?: number | null,
 ) {
-  const match = /^([A-Z0-9]+)-(\d+)$/i.exec(ticketNumber);
+  // Legacy prefixes may contain underscores or hyphens (TEAM_A, TEAM-OPS); the number is the last part.
+  const match = /^(.+)-(\d+)$/.exec(ticketNumber.trim());
   if (!match) return [];
   const uniqueIndex = Number(match[2]);
   if (!Number.isSafeInteger(uniqueIndex) || uniqueIndex <= 0) return [];

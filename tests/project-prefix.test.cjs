@@ -236,7 +236,10 @@ function lookups({ enabled = true, visible = true, live = false, liveAccess = tr
     "@/utils/controllers/projects/getAllIncludes": { getProjectWhere: (id, actualAgent) => { assert.equal(actualAgent ?? null, agentId); return { ownerId: id }; } },
   };
   base["@/utils/controllers/projects/findPrefixAliasTasks"] = load("src/utils/controllers/projects/findPrefixAliasTasks.ts", base);
-  const resolver = load("src/lib/mcp/tasks/resolveTask.ts", base);
+  const resolver = load("src/lib/mcp/tasks/resolveTask.ts", {
+    ...base,
+    "@/lib/flags": { HTPR_6868_TICKET_PREFIX_FLAG: "htpr-6868-ticket-prefix", isFeatureEnabled: async () => enabled },
+  });
   base["@/lib/mcp/tasks/resolveTask"] = resolver;
   const detail = load("src/utils/controllers/taskDetail/load.ts", {
     ...base, "@vercel/functions": {}, "@/lib/realtime/server": {}, "@/lib/cycles": {}, "@/lib/pullRequests/taskPullRequests": {}, "@/lib/agents/publicAgent": {},
@@ -832,4 +835,15 @@ test("registry defines one ticket-specific flag with Owner + QA default", () => 
   const registry = read("src/lib/flags.ts");
   assert.equal((registry.match(/key: HTPR_6868_TICKET_PREFIX_FLAG/g) ?? []).length, 1);
   assert.match(registry, /DEFAULT_FEATURE_FLAG_MODE: FeatureFlagMode = "OWNER_AND_QA"/);
+});
+
+test("round 3: MCP prefix history needs the flag, keeps legacy prefixes, and ID-only lookup ignores history", async () => {
+  const off = lookups({ enabled: false });
+  assert.equal(await off.resolver.findTaskByIdentifier({ id: 6 }, { ticket_number: "OLD-123" }), null);
+  for (const prefix of ["TEAM_A", "TEAM-OPS"]) {
+    const f = lookups({ prefixAliases: [{ projectId: 15, prefix }] });
+    assert.equal((await f.resolver.findTaskByIdentifier({ id: 6 }, { ticket_number: `${prefix}-123` })).id, 101);
+  }
+  const f = lookups();
+  assert.equal(await f.resolver.resolveTaskIdOnly({ ticket_number: "OLD-123" }), null);
 });
