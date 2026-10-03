@@ -63,6 +63,20 @@ function paletteGroups(enabled, frequent = {}) {
     isInboxClusterCommandKey: () => false,
     INBOX_CLUSTER_COMMAND_GROUP: "Inbox clusters",
   };
+  const source = ts.createSourceFile(palette, read(palette), ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+  const names = new Set(["excludeTicketPrefixCommand", "includeTicketPrefixCommand", "isTicketPrefixCommandVisible"]);
+  const statements = [];
+  function visit(node) {
+    if ((ts.isVariableStatement(node) && node.declarationList.declarations.some((declaration) => names.has(declaration.name.getText(source)))) ||
+        (ts.isIfStatement(node) && node.expression.getText(source) === "ticketPrefixEnabled")) {
+      statements.push(node.getText(source));
+    }
+    ts.forEachChild(node, visit);
+  }
+  visit(source);
+  bindings.isTicketPrefixCommandVisible = evaluate(`(() => { ${statements.join("\n")} return isTicketPrefixCommandVisible; })()`, {
+    ...bindings, useCallback: (callback) => callback,
+  });
   return evaluate(initializer(palette, "allCommands_"), bindings);
 }
 
@@ -115,9 +129,11 @@ test("flag on: Ticket prefix aliases and partial case-insensitive queries are se
 
 
 test("the command search memo re-evaluates when the Ticket prefix flag changes", () => {
-  for (const [file, name] of [[palette, "allCommands_"]]) {
+  for (const [file, name, dependency] of [
+    [palette, "allCommands_", "isTicketPrefixCommandVisible"],
+  ]) {
     const source = ts.createSourceFile(file, initializer(file, name), ts.ScriptTarget.Latest, true);
     const expression = source.statements[0].expression;
-    assert.ok(expression.arguments[1].elements.some((element) => element.getText(source) === "ticketPrefixEnabled"));
+    assert.ok(expression.arguments[1].elements.some((element) => element.getText(source) === dependency));
   }
 });

@@ -106,6 +106,16 @@ const Commands = (props: Props) => {
   const onMyTasks = !!pathname?.startsWith(myTasksRoute);
   const cmdkVersionEnabled = useFlag(HTPR_6892_CMDK_VERSION_FLAG);
   const ticketPrefixEnabled = useFlag(HTPR_6868_TICKET_PREFIX_FLAG);
+  const excludeTicketPrefixCommand = useCallback(
+    (command: ICommandList) => command.key !== "settingsBoardTicketPrefix",
+    []
+  );
+  const includeTicketPrefixCommand = useCallback(() => true, []);
+  let isTicketPrefixCommandVisible = excludeTicketPrefixCommand;
+  // Keep the runtime gate in the component body so CI can trace UI coverage.
+  if (ticketPrefixEnabled) {
+    isTicketPrefixCommandVisible = includeTicketPrefixCommand;
+  }
   const buildId = process.env.NEXT_PUBLIC_BUILD_ID?.slice(0, 7) || "dev";
   const buildTime = new Date(process.env.NEXT_PUBLIC_BUILD_TIME || "");
   const buildTimeLabel = buildId !== "dev" && !Number.isNaN(buildTime.getTime())
@@ -184,8 +194,7 @@ const Commands = (props: Props) => {
               showByokApiKeys) &&
             (command.commandMode !== CommandMode.CopyViewURL ||
               copyCurrentUrlEnabled) &&
-            (command.key !== "settingsBoardTicketPrefix" ||
-              ticketPrefixEnabled) &&
+            isTicketPrefixCommandVisible(command) &&
             (command.commandMode !== CommandMode.ToggleBoardTimeTracking ||
               !!currentProject) &&
             (command.commandMode !== CommandMode.ConfigureTableColumns ||
@@ -340,7 +349,7 @@ const Commands = (props: Props) => {
     myTasksTableColumnsEnabled,
     projects,
     showByokApiKeys,
-    ticketPrefixEnabled,
+    isTicketPrefixCommandVisible,
   ])
 
   const emptyQueryCommands = useMemo(() => {
