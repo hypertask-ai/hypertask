@@ -5,6 +5,10 @@
     "background_color": "#6441D5"
   },
   "features": {
+    "app_home": {
+      "messages_tab_enabled": true,
+      "messages_tab_read_only": false
+    },
     "bot_user": {
       "display_name": "Hypertask",
       "always_online": false
@@ -44,6 +48,7 @@
       "bot_events": [
         "app_mention",
         "assistant_thread_started",
+        "assistant_thread_context_changed",
         "message.channels",
         "message.groups",
         "message.im"

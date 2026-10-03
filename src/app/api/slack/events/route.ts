@@ -16,6 +16,8 @@ import {
   hasSlackTaskReferences,
 } from "@/lib/slack/references";
 import { latestSlackTs } from "@/lib/slack/idle";
+import { isSlackAppEnabled } from "@/lib/slack/feature";
+import { saveSlackAssistantContext } from "@/lib/slack/assistant";
 import { verifySlackSignature } from "@/lib/slack/signature";
 import { claimSlackEventOnce } from "@/lib/slack/taskCreateIntent";
 import { deleteSlackInstallForRevocation } from "@/lib/slack/uninstall";
@@ -61,7 +63,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ ok: true });
   }
 
-  // HTPR-4857: the app left the workspace (or its bot token was revoked) —
+  // HTPR-4857: the app left the workspace (or its bot token was revoked).
   // delete everything stored for that install. Retries stay harmless because
   // the second pass finds no install. A failure surfaces as 500 so Slack retries.
   if (
@@ -88,67 +90,58 @@ export async function POST(request: NextRequest) {
     payload.team_id ?? payload.authorizations?.find((auth) => auth.team_id)?.team_id;
   if (!slackTeamId) return NextResponse.json({ ok: true });
 
-  const eventRoute = routeSlackEvent(payload.event);
-  if (eventRoute === "create_task" && isCreateTaskMention(payload.event)) {
+  const eventRoute = routeSlackEvent(payload.event, true);
+  if (
+    eventRoute === "create_task" || eventRoute === "general_chat" ||
+    eventRoute === "assistant_welcome" || eventRoute === "assistant_context"
+  ) {
     const eventId = payload.event_id?.trim();
     if (!eventId || !(await claimSlackEventOnce(prisma, eventId))) {
       return NextResponse.json({ ok: true });
     }
-    const event = payload.event;
+    const event = payload.event!;
+    // Email resolution can call Slack, so keep it after the acknowledgement.
     waitUntil(
-      import("@/lib/slack/taskCreate")
-        .then(({ createSlackTaskFromThread }) =>
-          createSlackTaskFromThread({
+      (async () => {
+        const slackAppEnabled = await isSlackAppEnabled(
+          slackTeamId,
+          event.user ?? event.assistant_thread?.user_id,
+        );
+        const route = routeSlackEvent(event, slackAppEnabled);
+        if (route === "create_task" && isCreateTaskMention(event)) {
+          const { createSlackTaskFromThread } = await import("@/lib/slack/taskCreate");
+          await createSlackTaskFromThread({
             channelId: event.channel,
             slackTeamId,
             slackUserId: event.user,
             threadTs: event.thread_ts ?? event.ts,
-          }),
-        )
-        .catch((error) => console.error("Slack create-task event failed", error)),
-    );
-    return NextResponse.json({ ok: true });
-  }
-
-  if (eventRoute === "general_chat" && isGeneralChatEvent(payload.event)) {
-    const eventId = payload.event_id?.trim();
-    if (!eventId || !(await claimSlackEventOnce(prisma, eventId))) {
-      return NextResponse.json({ ok: true });
-    }
-    const event = payload.event;
-    waitUntil(
-      import("@/lib/slack/chat")
-        .then(({ handleSlackChat }) =>
-          handleSlackChat({
+          });
+        } else if (route === "general_chat" && isGeneralChatEvent(event)) {
+          const { handleSlackChat } = await import("@/lib/slack/chat");
+          await handleSlackChat({
             channelId: event.channel,
             channelType: event.channel_type,
             slackTeamId,
             slackUserId: event.user,
             text: event.text,
             threadTs: event.thread_ts ?? event.ts,
-          }),
-        )
-        .catch((error) => console.error("Slack chat event failed", error)),
-    );
-    return NextResponse.json({ ok: true });
-  }
-
-  if (eventRoute === "assistant_welcome") {
-    const eventId = payload.event_id?.trim();
-    if (!eventId || !(await claimSlackEventOnce(prisma, eventId))) {
-      return NextResponse.json({ ok: true });
-    }
-    const thread = payload.event?.assistant_thread;
-    waitUntil(
-      import("@/lib/slack/chat")
-        .then(({ postSlackAssistantWelcome }) =>
-          postSlackAssistantWelcome({
-            channelId: thread!.channel_id!,
+          });
+        } else if (route === "assistant_welcome") {
+          const thread = event.assistant_thread!;
+          const { postSlackAssistantWelcome } = await import("@/lib/slack/chat");
+          await postSlackAssistantWelcome({
+            channelId: thread.channel_id!,
             slackTeamId,
-            threadTs: thread!.thread_ts!,
-          }),
-        )
-        .catch((error) => console.error("Slack assistant welcome failed", error)),
+            threadTs: thread.thread_ts!,
+            ...(slackAppEnabled ? { assistantThread: thread } : {}),
+          });
+        } else if (route === "assistant_context") {
+          const install = await prisma.slackInstall.findUnique({
+            where: { slackTeamId }, select: { id: true },
+          });
+          if (install) await saveSlackAssistantContext(install.id, slackTeamId, event.assistant_thread!);
+        }
+      })().catch(() => console.error("Slack conversational event failed")),
     );
     return NextResponse.json({ ok: true });
   }
