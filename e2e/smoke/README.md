@@ -33,7 +33,9 @@ still run. Set them once the seeded account exists.
 `browser-smoke` runs the same spec against a locally built app on a hosted runner,
 with `BASE_URL=http://127.0.0.1:3100` and `BROWSER_SMOKE_PR=1`. It watches both
 board-data endpoints after the first load and checks the columns every 250 ms
-for 30 seconds. It never opens
+for 30 seconds. It also clicks the seeded ticket at 1440x900 and 390x844,
+checks its actual title and description, and keeps checking the detail URL and
+visible content for three seconds without a document reload. It never opens
 `/demo`: that route creates a guest.
 
 Every run starts an empty PostgreSQL service and a dedicated local Soketi
@@ -43,6 +45,15 @@ is runner-local with mode `0600`; it is never printed or uploaded. The job
 does not read repository secrets or production configuration, so code from a
 pull request cannot reach a production account, database, signing key, or
 realtime service through this check.
+
+The seed copies `production-flag-modes.json` into the local database, including
+all released `EVERYONE` modes. This dated snapshot comes from a read of the live
+admin API; refresh its keys, modes and capture date when production release
+modes change. The browser asserts the app's flag response matches those modes
+for its plain user. A second card-click run uses `--instant-open-control` to
+turn on only the instant-open flag in the disposable database, so a temporary
+production OFF mode cannot conceal the PR #997 regression. Neither run changes
+production flags or uses a production session.
 
 The query-string realtime override works for automated browsers only on
 `localhost` and `127.0.0.1`. Production automation remains disconnected from

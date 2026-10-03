@@ -457,6 +457,9 @@ jobs:
           done
           curl -fsS -o /dev/null "$BASE_URL/login" || { echo '::error::Local app did not become ready'; exit 1; }
           npx playwright test -c playwright.config.smoke.ts e2e/smoke/prod.spec.ts
+          # Keep the instant-open regression covered even while its live mode is OFF.
+          BROWSER_SMOKE_STATE_FILE=e2e/smoke/.state/smoke-state.json node scripts/seed-browser-smoke.mjs --instant-open-control
+          npx playwright test -c playwright.config.smoke.ts e2e/smoke/prod.spec.ts --grep 'seeded board card opens'
 
   production-test-warning:
     name: production-test-warning
