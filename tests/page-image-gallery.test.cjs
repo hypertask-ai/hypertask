@@ -70,6 +70,7 @@ mocks["@tiptap/react"] = { EditorContent: () => React.createElement("div", {
   className: "ProseMirror", contentEditable: editor.isEditable, suppressContentEditableWarning: true,
 },
 React.createElement("img", { "data-image": "first", src: "https://files.hypertask.app/first.png" }),
+React.createElement("img", { className: "ProseMirror-separator", "data-separator": true }),
 React.createElement("div", { className: "horizontal-resize-handle" }, "Resize"),
 React.createElement("button", { "data-media-control": true }, "Align"),
 React.createElement("div", { "data-figma-embed-preview": true }, React.createElement("img", { src: "https://files.hypertask.app/figma.png" })),
