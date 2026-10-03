@@ -253,6 +253,42 @@ test('Escape from draft C restores submitted B without popping it, then A, then 
   })
 })
 
+for (const lateHydration of [false, true]) {
+  test(`empty-route remount restores persisted tab history before Escape (late flag hydration: ${lateHydration})`, async (t) => {
+    await withSearch(t, { storedHistory: '["search A","search B"]', history: ['other tab search'], flags: { [escFlag]: !lateHydration } }, async ({ type, press, complete, render, input, state, requests, navigations, flags }) => {
+      await render('', true)
+      if (lateHydration) {
+        flags[escFlag] = true
+        await render('')
+      }
+      assert.equal(requests.length, 0)
+      await type('draft C')
+      assert.equal(input().getAttribute('aria-expanded'), 'true')
+      await press('Escape')
+      assert.equal(state().inputValue, 'draft C')
+      assert.equal(requests.length, 0)
+      assert.equal(sessionStorage.getItem('htpr-6879-search-history'), '["search A","search B"]')
+      for (const [query, history] of [['search B', ['search A', 'search B']], ['search A', ['search A']]]) {
+        await press('Escape')
+        assert.equal(state().inputValue, query)
+        assert.equal(input().value, query)
+        assert.equal(requests.at(-1).body.searchQuery, query)
+        assert.equal(new URL(navigations.at(-1), 'https://example.test').searchParams.get('searchTerm'), query)
+        assert.deepEqual(JSON.parse(sessionStorage.getItem('htpr-6879-search-history')), history)
+        await complete()
+        await render(query)
+      }
+      await press('Escape')
+      assert.equal(input().value, '')
+      assert.equal(sessionStorage.getItem('htpr-6879-search-history'), '[]')
+      assert.deepEqual(headings(), ['Recent searches', 'Tips'])
+      await render('')
+      await press('Escape')
+      assert.equal(requests.length, 2, 'exhausted history must not reload stale persisted searches')
+    })
+  })
+}
+
 test('board and in chips keep their icon, omit text hash and still accept hash picker and prefixed input', async (t) => {
   await withSearch(t, { history: ['in:#inne recent', 'board:#inne recent'] }, async ({ type, press, tick, input, requests, options, complete, render }) => {
     for (const row of options().slice(0, 2)) {

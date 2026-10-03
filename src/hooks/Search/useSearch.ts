@@ -139,18 +139,23 @@ export function useSearch(
     ]);
   }
 
+  function getTabSearchHistory() {
+    if (tabSearchHistory.current === null) {
+      try {
+        const stored: unknown = JSON.parse(sessionStorage.getItem("htpr-6879-search-history") ?? "[]");
+        tabSearchHistory.current = Array.isArray(stored) ? stored.filter((term): term is string => typeof term === "string" && term.trim().length >= 2) : [];
+      } catch { tabSearchHistory.current = []; }
+    }
+    return tabSearchHistory.current;
+  }
+
   function beginSearch(searchTerm: string, showArchived: boolean) {
     if (searchEscBackEnabled) {
-      if (tabSearchHistory.current === null) {
-        try {
-          const stored: unknown = JSON.parse(sessionStorage.getItem("htpr-6879-search-history") ?? "[]");
-          tabSearchHistory.current = Array.isArray(stored) ? stored.filter((term): term is string => typeof term === "string" && term.trim().length >= 2) : [];
-        } catch { tabSearchHistory.current = []; }
-      }
+      const history = getTabSearchHistory();
       const term = searchTerm.trim();
-      if (term.length >= 2 && tabSearchHistory.current.at(-1) !== term) {
-        tabSearchHistory.current.push(term);
-        try { sessionStorage.setItem("htpr-6879-search-history", JSON.stringify(tabSearchHistory.current)); } catch { /* Keep history in memory when storage is unavailable. */ }
+      if (term.length >= 2 && history.at(-1) !== term) {
+        history.push(term);
+        try { sessionStorage.setItem("htpr-6879-search-history", JSON.stringify(history)); } catch { /* Keep history in memory when storage is unavailable. */ }
       }
     }
     setSubmittedQuery(searchTerm.trim());
@@ -477,7 +482,7 @@ export function useSearch(
     if (event.keyCode === KeyCodes.ESCAPE && !showCommands.show) {
       event.preventDefault();
       if (searchEscBackEnabled) {
-        const history = tabSearchHistory.current ?? [];
+        const history = getTabSearchHistory();
         if (!isSearchDraft) history.pop();
         const previous = history.at(-1) ?? "";
         try { sessionStorage.setItem("htpr-6879-search-history", JSON.stringify(history)); } catch { /* The in-memory history still works. */ }
@@ -831,7 +836,7 @@ export function useSearch(
     setInputValue(_searchTerm);
     if (projects.length > 0 && _searchTerm.length >= 2) {
       const key = currentSearchKey(_searchTerm, _includeArchived);
-      if (lastSearchKey.current !== key || (searchEscBackEnabled && tabSearchHistory.current?.at(-1) !== _searchTerm.trim())) {
+      if (lastSearchKey.current !== key || (searchEscBackEnabled && getTabSearchHistory().at(-1) !== _searchTerm.trim())) {
         void handleSearchOnMount(_includeArchived);
       }
       return;
