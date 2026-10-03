@@ -47,16 +47,15 @@ new Function("require", "exports", compiled)((name) => {
 }, exportsObject);
 const Detail = exportsObject.default;
 
-test("existing client detail renders cached title and body before task, preferences or comments responses", () => {
+test("cached navigation keeps the source board visible until the complete layout snapshot arrives", () => {
   const client = new query.QueryClient();
-  const html = renderToString(React.createElement(query.QueryClientProvider, { client }, React.createElement(Detail, { taskId: 42, projectId: 6859, uniqueIndex: 43, initialTask: task, embedded: false })));
-  assert.match(html, /Cached title/);
-  assert.match(html, /Cached description/);
-  assert.doesNotMatch(html, /Loading|spinner/);
+  const html = renderToString(React.createElement(query.QueryClientProvider, { client }, React.createElement(Detail, { taskId: 42, projectId: 6859, uniqueIndex: 43, initialTask: task, embedded: false, pendingFallback: "Source board" })));
+  assert.match(html, /Source board/);
+  assert.doesNotMatch(html, /Cached title|Cached description|Loading|spinner/);
   client.clear();
 });
 
-test("server permission denials remove cached content, while a network outage retains it", async (t) => {
+test("server permission denials remove cached content, while a network outage retains the pending source view", async (t) => {
   const originalFetch = global.fetch;
   t.after(() => { global.fetch = originalFetch; });
   for (const response of [
@@ -71,7 +70,7 @@ test("server permission denials remove cached content, while a network outage re
     { status: 500, ok: false, json: async () => ({ message: "Transient outage" }) },
   ]) {
     const client = new query.QueryClient();
-    const render = () => renderToString(React.createElement(query.QueryClientProvider, { client }, React.createElement(Detail, { taskId: 42, projectId: 6859, uniqueIndex: 43, initialTask: task, embedded: false })));
+    const render = () => renderToString(React.createElement(query.QueryClientProvider, { client }, React.createElement(Detail, { taskId: 42, projectId: 6859, uniqueIndex: 43, initialTask: task, embedded: false, pendingFallback: "Source board" })));
     render();
     const key = ["cached-task-detail", 2343, 42];
     const queryFn = client.getQueryCache().find({ queryKey: key }).options.queryFn;
@@ -79,7 +78,7 @@ test("server permission denials remove cached content, while a network outage re
     await assert.rejects(client.fetchQuery({ queryKey: key, queryFn, retry: false }));
     const html = render();
     if (response.status === 500) {
-      assert.match(html, /Cached title/);
+      assert.match(html, /Source board/);
     } else {
       assert.match(html, /No access/);
       assert.doesNotMatch(html, /Cached title|Cached description/);

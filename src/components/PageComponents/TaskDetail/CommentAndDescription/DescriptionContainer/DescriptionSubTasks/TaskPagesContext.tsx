@@ -11,6 +11,11 @@ import {
   useState,
 } from "react";
 import toast from "react-hot-toast";
+import { useQueryClient } from "@tanstack/react-query";
+import { useFlag } from "@/hooks/useFlag";
+import { HTPR_6752_INSTANT_TICKET_OPEN_FLAG } from "@/lib/flags/keys";
+import { useRecoilValue } from "@/lib/state";
+import { currentUserAtom } from "@/store";
 
 import {
   createPageRoute,
@@ -57,17 +62,33 @@ export const TaskPagesProvider = ({ children }: PropsWithChildren) => {
   const taskId = currentTask?.id;
   const taskProjectId = currentTask?.projectId;
   const taskUniqueIndex = currentTask?.uniqueIndex;
-  const [pagesState, setPagesState] = useState<PagesState>({
-    taskId: null,
-    pages: [],
-    loading: false,
+  const queryClient = useQueryClient();
+  const currentUser = useRecoilValue(currentUserAtom);
+  const instantTicketOpen = useFlag(HTPR_6752_INSTANT_TICKET_OPEN_FLAG);
+  const pagesQuery = queryClient.getQueryCache().find({
+    queryKey: ["task-pages", currentUser?.id, taskId],
+    exact: true,
   });
+  const initialPages = instantTicketOpen && pagesQuery?.isActive()
+    ? pagesQuery.state.data as TaskPage[] | undefined
+    : undefined;
+  const [pagesState, setPagesState] = useState<PagesState>(() => ({
+    taskId: initialPages && taskId ? taskId : null,
+    pages: initialPages ?? [],
+    loading: false,
+  }));
   const [fetchVersion, setFetchVersion] = useState(0);
   const isCreatingRef = useRef(false);
 
   useEffect(() => {
     if (!taskId) {
       setPagesState({ taskId: null, pages: [], loading: false });
+      return;
+    }
+
+    const cachedPages = fetchVersion === 0 ? initialPages : undefined;
+    if (cachedPages) {
+      setPagesState({ taskId, pages: cachedPages, loading: false });
       return;
     }
 
@@ -100,7 +121,7 @@ export const TaskPagesProvider = ({ children }: PropsWithChildren) => {
     fetchPages();
 
     return () => controller.abort();
-  }, [fetchVersion, taskId]);
+  }, [fetchVersion, taskId, initialPages]);
 
   const createAndOpenPage = useCallback(async () => {
     if (!taskId || isCreatingRef.current) return;
