@@ -176,7 +176,7 @@ import { useProjectQuery } from "@/hooks/General/useProjectQuery";
 import { markBoardSwitchIntent } from "@/lib/analytics/boardSwitchLatency";
 import { useEmojiFrequencyHydration } from "@/hooks/General/useEmojiFrequencyHydration";
 import { useFlag } from "@/hooks/useFlag";
-import { HTPR_6752_INSTANT_TICKET_OPEN_FLAG, MY_TASKS_SHORTCUTS_WIDTH_FLAG, HTPR_6476_MOBILE_AGENT_CHAT_FULLSCREEN_FLAG, HTPR_6860_MOBILE_PAGE_HIDE_DOCK_FLAG } from "@/lib/flags/keys";
+import { MY_TASKS_SHORTCUTS_WIDTH_FLAG, HTPR_6476_MOBILE_AGENT_CHAT_FULLSCREEN_FLAG, HTPR_6860_MOBILE_PAGE_HIDE_DOCK_FLAG } from "@/lib/flags/keys";
 
 import AIChatClosedLayout from "../AI_CHAT/AI_Chat_Closed_Layout";
 import FullScreenChatLoading from "../AI_CHAT/FullScreenChatLoading";
@@ -316,7 +316,6 @@ export default function GlobalProvider({
   const isApple = useDeviceContext();
   const mbl = useContext(MobileViewContext);
   const pathname = usePathname();
-  const instantTicketOpen = useFlag(HTPR_6752_INSTANT_TICKET_OPEN_FLAG);
   const myTasksShortcutsWidthEnabled = useFlag(MY_TASKS_SHORTCUTS_WIDTH_FLAG);
   useAppShellSurfaceShortcuts();
   const startupUser = useRecoilValue(currentUserAtom);
@@ -1475,11 +1474,11 @@ export default function GlobalProvider({
                 ) : undefined
               }
             >
-              {instantTicketOpen ? (
-                <CachedTaskDetailNavigation accountId={authenticatedUserId}>
-                  {children}
-                </CachedTaskDetailNavigation>
-              ) : children}
+              {/* The navigation component gates itself; inserting its wrapper
+                  when flags resolve would remount the already-rendered board. */}
+              <CachedTaskDetailNavigation accountId={authenticatedUserId}>
+                {children}
+              </CachedTaskDetailNavigation>
             </AIChatClosedLayout>
           )}
         </ChatRuntimeHost>
