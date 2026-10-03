@@ -4,6 +4,7 @@
 // that uses them, read from the app database (needs DATABASE_URL).
 import Stripe from "stripe";
 import pg from "pg";
+import fs from "node:fs";
 
 const ID_SUFFIX = /(?:Hypertask team:)?[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const apply = process.argv.includes("--apply");
@@ -46,26 +47,17 @@ async function appNamesFor(customerIds) {
 }
 
 if (process.argv.includes("--fill-blank")) {
-  // Only customers the HTPR-6862 repair blanked: Stripe's change log shows a
-  // previous name with a glued-on id and no name now. Customers that never had a
-  // name are left alone.
-  // --apply needs the exact window of that repair run, so a name cleared by
-  // anything else is never refilled.
-  const since = Number(process.env.SINCE_UNIX), until = Number(process.env.UNTIL_UNIX);
-  if (!Number.isInteger(since) || !Number.isInteger(until) || since >= until) {
-    console.error("Set SINCE_UNIX and UNTIL_UNIX to the HTPR-6862 repair window.");
+  // Only customers listed in the manifest the repair wrote when it blanked them
+  // (--apply below), so a name cleared by anything else is never refilled.
+  const manifestPath = process.argv[process.argv.indexOf("--fill-blank") + 1];
+  if (!manifestPath || manifestPath.startsWith("--")) {
+    console.error("Usage: --fill-blank <manifest.json written by the repair run> [--apply]");
     process.exit(1);
   }
   const blank = new Set();
-  const window = { gte: since, lte: until };
-  for await (const event of stripe.events.list({ type: "customer.updated", created: window, limit: 100 })) {
-    const previous = event.data.previous_attributes?.name;
-    const customer = event.data.object;
-    if (typeof previous === "string" && ID_SUFFIX.test(previous) && !readable(customer.name)) blank.add(customer.id);
-  }
-  for (const id of [...blank]) {
+  for (const id of JSON.parse(fs.readFileSync(manifestPath, "utf8")).blanked) {
     const current = await stripe.customers.retrieve(id);
-    if (current.deleted || readable(current.name)) blank.delete(id);
+    if (!current.deleted && !readable(current.name)) blank.add(id);
   }
   const names = await appNamesFor([...blank]);
   if (apply) for (const [id, name] of names) await stripe.customers.update(id, { name });
@@ -74,11 +66,18 @@ if (process.argv.includes("--fill-blank")) {
 }
 
 let scanned = 0, fixed = 0;
+const blanked = [];
 for await (const customer of stripe.customers.list({ limit: 100 })) {
   scanned++;
   const next = repairedName(customer.name, customer.email);
   if (next === null) continue;
   fixed++;
+  if (next === "") blanked.push(customer.id);
   if (apply) await stripe.customers.update(customer.id, { name: next });
+}
+if (apply && blanked.length) {
+  const manifest = `stripe-name-repair-${Date.now()}.json`;
+  fs.writeFileSync(manifest, JSON.stringify({ blanked }, null, 2));
+  console.log(`Blanked customers listed in ${manifest}; pass it to --fill-blank.`);
 }
 console.log(JSON.stringify({ mode: apply ? "apply" : "dry-run", scanned, toFix: fixed }));
