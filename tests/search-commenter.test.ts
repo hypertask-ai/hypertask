@@ -277,8 +277,10 @@ test('text and commenter match the same comment, never the title, description or
   reset()
   const res = await search('needle commenter:1')
   assert.deepEqual(res.body.processedData.All.map((row: any) => [row.taskId, row.commentId]), [[101, 2]])
-  assert.equal(state.commentQueries[0].where.AND[0].commentText.contains, 'needle')
-  assert.equal(state.commentQueries[0].where.AND[0].commentText.mode, 'insensitive')
+  assert.deepEqual(state.commentQueries[0].where.AND[0].OR, [
+    { commentText: { contains: 'needle', mode: 'insensitive' } },
+    { text: { contains: 'needle', mode: 'insensitive' } },
+  ])
   assert.deepEqual((await rank('needle commenter:1 commenter:2')).rankedIds, [103, 101])
   assert.deepEqual((await rank('missing commenter:1')).rankedIds, [])
   assert.equal(state.indexCalls, 0)
@@ -552,4 +554,21 @@ test('review scanAll pages latest-per-task comment timestamps with ties and many
     assert.ok(state.commentQueries.every((args: any) => args.take === 1 && args.select === undefined))
     assert.ok(state.countQueries.every((args: any) => args.where.id === undefined))
   } finally { comments.splice(-added.length) }
+})
+
+test('API and CLI comments with only HTML text match words and supply the snippet', async () => {
+  reset()
+  const htmlOnly = { ...comment(11, 105, 1, '', 11), text: '<p><strong>Claimed.</strong> Working on it</p>' }
+  comments.push(htmlOnly)
+  tasks[4].comments.push(htmlOnly)
+  try {
+    const res = await search('claimed commenter:1')
+    assert.equal(res.code, 200)
+    assert.deepEqual(res.body.processedData.All.map((row: any) => [row.taskId, row.commentId]), [[105, 11]])
+    // searchPreviewText is mocked as identity; the real one strips the tags.
+    assert.equal(res.body.processedData.All[0].commentText, htmlOnly.text)
+  } finally {
+    comments.pop()
+    tasks[4].comments.pop()
+  }
 })

@@ -51,13 +51,14 @@ export async function rankedSearchWhere(
     }
     const comments = await Promise.all(page.map(({ taskId }) => prisma.comment.findFirst({
       where: { ...matching, taskId, task: taskWhere },
-      select: { id: true, taskId: true, commentText: true, createdAt: true, creator: { select: { displayName: true, email: true } } },
+      select: { id: true, taskId: true, commentText: true, text: true, createdAt: true, creator: { select: { displayName: true, email: true } } },
       orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
     })))
     for (const comment of comments) {
       if (!comment) continue
       rankedIds.push(comment.taskId)
-      commentById.set(comment.taskId, { ...comment, commentText: searchPreviewText(comment.commentText ?? ''), creatorName: comment.creator?.displayName || comment.creator?.email || '' })
+      const { text, ...rest } = comment
+      commentById.set(comment.taskId, { ...rest, commentText: searchPreviewText(comment.commentText || text || ''), creatorName: comment.creator?.displayName || comment.creator?.email || '' })
     }
     return { where, rankedIds, descriptionById, commentById, partial: false, paged: true, cursorValid }
   }
