@@ -58,6 +58,7 @@ import {
 import {
   HTPR_6514_COMMENT_LONG_PRESS_FLAG,
   HTPR_6892_CMDK_VERSION_FLAG,
+  HTPR_6868_TICKET_PREFIX_FLAG,
   HTPR_6861_MOBILE_PAGE_BACK_ROW_FLAG,
   INBOX_ARCHIVE_CLUSTER_FLAG,
   MY_TASKS_TABLE_COLUMNS_FLAG,
@@ -104,6 +105,7 @@ const Commands = (props: Props) => {
   const onAgentChat = !!pathname?.startsWith("/agents/chat");
   const onMyTasks = !!pathname?.startsWith(myTasksRoute);
   const cmdkVersionEnabled = useFlag(HTPR_6892_CMDK_VERSION_FLAG);
+  const ticketPrefixEnabled = useFlag(HTPR_6868_TICKET_PREFIX_FLAG);
   const buildId = process.env.NEXT_PUBLIC_BUILD_ID?.slice(0, 7) || "dev";
   const buildTime = new Date(process.env.NEXT_PUBLIC_BUILD_TIME || "");
   const buildTimeLabel = buildId !== "dev" && !Number.isNaN(buildTime.getTime())
@@ -182,6 +184,8 @@ const Commands = (props: Props) => {
               showByokApiKeys) &&
             (command.commandMode !== CommandMode.CopyViewURL ||
               copyCurrentUrlEnabled) &&
+            (command.key !== "settingsBoardTicketPrefix" ||
+              ticketPrefixEnabled) &&
             (command.commandMode !== CommandMode.ToggleBoardTimeTracking ||
               !!currentProject) &&
             (command.commandMode !== CommandMode.ConfigureTableColumns ||
@@ -336,6 +340,7 @@ const Commands = (props: Props) => {
     myTasksTableColumnsEnabled,
     projects,
     showByokApiKeys,
+    ticketPrefixEnabled,
   ])
 
   const emptyQueryCommands = useMemo(() => {
