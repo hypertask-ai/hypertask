@@ -207,6 +207,10 @@ test("warm: board commit loads cold chunks before an idle opportunity; pointerdo
     "@/components/PageComponents/TaskDetail/CommentAndDescription/DescriptionContainer/BottomRow/DescriptionReactions",
     "@/components/PageComponents/TaskDetail/CommentAndDescription/CommentContainer/CommentReactions",
     "@/components/PageComponents/TaskDetail/TaskMovement",
+    "@/components/PageComponents/TaskDetail/CommentAndDescription/CommentContainer/EmojiOptionsComp",
+    "@/lib/constants/emojiData",
+    "@/firebase",
+    "firebase/messaging",
   ];
   for (const chunk of chunks) Object.defineProperty(mocks, chunk, { get: () => { loaded.push(chunk); return {}; } });
   mocks["@/components/RTE/Extensions/lazyEmojiData"] = { ensureEmojiData: () => { emojiLoads++; return Promise.resolve(); } };

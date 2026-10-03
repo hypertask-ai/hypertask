@@ -27,6 +27,11 @@ const warmTaskDetail = () => Promise.all([
   import("@/components/PageComponents/TaskDetail/CommentAndDescription/DescriptionContainer/BottomRow/DescriptionReactions"),
   import("@/components/PageComponents/TaskDetail/CommentAndDescription/CommentContainer/CommentReactions"),
   import("@/components/PageComponents/TaskDetail/TaskMovement"),
+  // These nested imports otherwise start when the first comments/provider mount.
+  import("@/components/PageComponents/TaskDetail/CommentAndDescription/CommentContainer/EmojiOptionsComp"),
+  import("@/lib/constants/emojiData"),
+  import("@/firebase"),
+  import("firebase/messaging"),
   import("@/components/RTE/Extensions/lazyEmojiData").then(({ ensureEmojiData }) => ensureEmojiData()),
 ]);
 
