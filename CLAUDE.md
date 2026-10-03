@@ -26,7 +26,7 @@ Start with `/ship`: Valentin's own Claude Code or Codex session takes one ticket
 13. **Previews share the live database** and are for looking only. Every pushed branch already gets one; never create another (enforced: `.claude/hooks/preview-guard.sh`; an exception needs Valentin's recorded yes on the ticket, then `touch /tmp/ht-preview-approved`, removed when done). Never mint, inject or print login credentials for Valentin's account. When an approved preview is ready, open it in zsb with your own identity or the QA account and confirm you are in the app, not on the login page.
 14. **Never poll a building preview by reloading a browser tab** (zsb drives Valentin's real Edge). Poll with `curl` or `gh pr checks`; open the browser once it is ready.
 
-- When live QA FAILs on code behind a flag, switch that flag Off on /admin/flags first (seconds, no deploy), then repair. A revert PR is the second step, not the first. (Valentin, 2026-10-03)
+- When live QA FAILs on code behind a flag, switch that flag Off on /admin/flags first (seconds, no deploy), then repair. Only Valentin's login can open that page: a runner sends the flag key and the failure to the INFRA MANAGER session with SendMessage at once, and it switches the flag Off. A revert PR is the second step, not the first. (Valentin, 2026-10-03)
 - Any change to code inside a flag that is already on for Everyone, whatever its PR type ([BUGFIX] included), needs one recorded browser click-through of the changed path on a real board before merge, on the preview or locally against the PR build, with the live flag states. Record commit, account and flag state in ~/.local/state/vcc-evidence/<TICKET>/premerge.md.
 
 ### CI and other repos
