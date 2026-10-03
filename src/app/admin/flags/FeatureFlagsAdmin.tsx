@@ -8,7 +8,11 @@ import {
   FEATURE_FLAGS_QUERY_PREFIX,
 } from "@/hooks/useFlag";
 import type { FeatureFlagMode, FeatureFlagRow } from "@/lib/flags";
-import { clusterFeatureFlagsByReleaseDate } from "@/lib/flags/cluster";
+import {
+  clusterFeatureFlagsByReleaseDate,
+  countFeatureFlagsByAudience,
+  type FeatureFlagAudienceFilter,
+} from "@/lib/flags/cluster";
 import { featureFlagRemovalState } from "@/lib/flags/removal";
 
 const ADMIN_FLAGS_ROUTE = "/api/admin/flags";
@@ -18,8 +22,9 @@ const OPTIONS: { mode: FeatureFlagMode; label: string }[] = [
   { mode: "EVERYONE", label: "Everyone" },
   { mode: "OFF", label: "Off" },
 ];
-const AUDIENCE_FILTERS: { mode: FeatureFlagMode | "ALL"; label: string }[] = [
+const AUDIENCE_FILTERS: { mode: FeatureFlagAudienceFilter; label: string }[] = [
   { mode: "ALL", label: "All" },
+  { mode: "UNRELEASED", label: "Unreleased" },
   ...OPTIONS,
 ];
 
@@ -59,7 +64,7 @@ export default function FeatureFlagsAdmin({
 }) {
   const queryClient = useQueryClient();
   const [sortDirection, setSortDirection] = useState<"desc" | "asc">("desc");
-  const [audienceFilter, setAudienceFilter] = useState<FeatureFlagMode | "ALL">("ALL");
+  const [audienceFilter, setAudienceFilter] = useState<FeatureFlagAudienceFilter>("ALL");
   const flags = useQuery({
     queryKey: ADMIN_FEATURE_FLAGS_QUERY_KEY,
     queryFn: loadFlags,
@@ -99,6 +104,10 @@ export default function FeatureFlagsAdmin({
     onSettled: () => queryClient.invalidateQueries({ queryKey: ADMIN_FEATURE_FLAGS_QUERY_KEY }),
   });
 
+  const counts = useMemo(
+    () => countFeatureFlagsByAudience(flags.data?.flags ?? []),
+    [flags.data?.flags],
+  );
   const clusters = useMemo(
     () => {
       if (flagKey) {
@@ -126,6 +135,12 @@ export default function FeatureFlagsAdmin({
           New features start with Owner + QA. Release or hide them without a deploy.
         </p>
 
+        {!flagKey && flags.data && (
+          <p className="mt-2 text-content text-text-light-gray">
+            {counts.UNRELEASED} unreleased {counts.UNRELEASED === 1 ? "flag" : "flags"} waiting for release
+          </p>
+        )}
+
         {!flagKey && (
           <div className="mt-6 flex flex-wrap items-center justify-between gap-3">
             <div
@@ -145,7 +160,7 @@ export default function FeatureFlagsAdmin({
                       : "text-text-light-gray hover:bg-hover-active hover:text-white-black"
                   }`}
                 >
-                  {filter.label}
+                  {filter.label} {counts[filter.mode]}
                 </button>
               ))}
             </div>

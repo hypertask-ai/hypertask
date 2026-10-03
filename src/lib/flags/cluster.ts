@@ -1,6 +1,25 @@
 import type { FeatureFlagMode, FeatureFlagRow } from "@/lib/flags";
 
 export const NOT_YET_RELEASED_LABEL = "Not yet released";
+export type FeatureFlagAudienceFilter = FeatureFlagMode | "ALL" | "UNRELEASED";
+
+export function countFeatureFlagsByAudience(
+  flags: FeatureFlagRow[],
+): Record<FeatureFlagAudienceFilter, number> {
+  const counts = {
+    ALL: flags.length,
+    UNRELEASED: 0,
+    OWNER_ONLY: 0,
+    OWNER_AND_QA: 0,
+    EVERYONE: 0,
+    OFF: 0,
+  };
+  for (const flag of flags) {
+    counts[flag.mode]++;
+    if (flag.mode !== "EVERYONE") counts.UNRELEASED++;
+  }
+  return counts;
+}
 
 /**
  * `shippedOn` is a bare calendar day ("2026-09-04") with no timezone. Date.parse would read
@@ -40,10 +59,14 @@ function dayLabel(date: Date | null): string {
 export function clusterFeatureFlagsByReleaseDate(
   flags: FeatureFlagRow[],
   sortDirection: "asc" | "desc",
-  audienceFilter: FeatureFlagMode | "ALL",
+  audienceFilter: FeatureFlagAudienceFilter,
 ): [string, FeatureFlagRow[]][] {
   const filtered = flags.filter(
-    (flag) => audienceFilter === "ALL" || flag.mode === audienceFilter,
+    (flag) => audienceFilter === "ALL" || (
+      audienceFilter === "UNRELEASED"
+        ? flag.mode !== "EVERYONE"
+        : flag.mode === audienceFilter
+    ),
   );
   const sorted = [...filtered].sort((a, b) => {
     const aTime = clusterDate(a)?.getTime() ?? null;
