@@ -294,6 +294,16 @@ try:
                     continue
                 keys = constants(source('src/lib/flags/keys.ts', ref)) | constants(text)
                 key = resolve(call[1], keys)
+                if not key:
+                    # Follow one `import { NAME } from "@/..."` hop to the module that defines the key.
+                    name = call[1].strip()
+                    imp = re.search(r'import\s*\{[^}]*\b' + re.escape(name) + r'\b[^}]*\}\s*from\s*[\'\"]@/([^\'\"]+)[\'\"]', text)
+                    for ext in (('.ts', '.tsx', '/index.ts') if imp else ()):
+                        try:
+                            key = resolve(name, constants(source('src/' + imp[1] + ext, ref)))
+                        except Exception:
+                            continue
+                        break
                 if key:
                     touched.add(key)
                 else:
@@ -312,6 +322,20 @@ try:
             modes = {f['key']: f['mode'] for f in flags}
         except Exception:
             pass
+    if modes is None:
+        # /api/admin/flags is owner-only. A flag that is on for the plain QA account (user 2343, never in the QA group) is on for Everyone.
+        state = os.environ.get('SHIP_CHECK_PLAIN_QA_STATE', os.path.expanduser('~/.config/hypertask-videos/storageState-qa-normal.json'))
+        try:
+            cookies = json.load(open(state))['cookies']
+            cookie = '; '.join(f"{c['name']}={c['value']}" for c in cookies if 'hypertask' in c.get('domain', ''))
+            request = urllib.request.Request('https://app.hypertask.ai/api/flags', headers={'Cookie': cookie})
+            with urllib.request.urlopen(request, timeout=10) as response:
+                seen = json.load(response)['flags']
+            if not isinstance(seen, dict) or not seen or not all(isinstance(v, bool) for v in seen.values()):
+                raise ValueError('invalid flags')
+            modes = {key: 'EVERYONE' if on else 'NOT_EVERYONE' for key, on in seen.items()}
+        except Exception:
+            pass
     registry = source('src/lib/flags.ts', base)
     keys = constants(source('src/lib/flags/keys.ts', base))
     default = re.search(r'\bDEFAULT_FEATURE_FLAG_MODE[^=]*=\s*[\'\"](\w+)[\'\"]', registry)
@@ -328,7 +352,8 @@ try:
         print('note: live flag modes unavailable; registry defaults cannot prove a flag is not released')
         modes = defaults
     released = {key for key in touched if modes.get(key) == 'EVERYONE'}
-    unknown = unknown or not live or any(key not in modes for key in touched)
+    # A key the base registry does not know is a flag this PR adds: it starts at Owner + QA, so it is not released.
+    unknown = unknown or not live or any(key not in modes and key in defaults for key in touched)
     if not released and not unknown:
         sys.exit(0)
     folder = Path(evidence) / ticket

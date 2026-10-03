@@ -31,7 +31,7 @@ gh() {
 export -f gh
 G 2 $M 822 -R hypertask-ai/hypertask
 G 2 FOO=1 $M 822 -R hypertask-ai/hypertask
-AGENT_TOKEN= HYPERTASKS_JWT_TOKEN= G 2 $M 809 -R hypertask-ai/hypertask # No live modes or premerge evidence.
+SHIP_CHECK_PLAIN_QA_STATE=/nonexistent AGENT_TOKEN= HYPERTASKS_JWT_TOKEN= G 2 $M 809 -R hypertask-ai/hypertask # No live modes or premerge evidence.
 G 0 $M 838 -R hypertask-ai/hypertask # Skills-only PR, no product flag reads.
 G 2 $M 838 -R hypertask-ai/hypertask '&&' $M 822 -R hypertask-ai/hypertask
 G 0 grep "$M" notes.txt
@@ -230,6 +230,11 @@ MOCK
 cat > "$E/flag-http/sitecustomize.py" <<'MOCK'
 import io, os, urllib.request
 def live(request, timeout):
+    if request.full_url == 'https://app.hypertask.ai/api/flags':
+        assert request.get_header('Cookie') == 'session=plain'
+        if not os.environ.get('FLAG_PUBLIC'):
+            raise OSError('no plain QA view')
+        return io.BytesIO(os.environ['FLAG_PUBLIC'].encode())
     assert request.full_url == 'https://app.hypertask.ai/api/admin/flags'
     assert request.get_header('Authorization') == 'Bearer fixture'
     if os.environ.get('FLAG_HTTP_ERROR'):
@@ -238,13 +243,14 @@ def live(request, timeout):
 urllib.request.urlopen = live
 MOCK
 chmod +x "$E/flag-bin/gh" "$E/flag-bin/hypertask"
+printf '{"cookies":[{"name":"session","value":"plain","domain":"app.hypertask.ai"}]}' > "$E/plain-state.json"
 printf 'export const RELEASED_FLAG = "htpr-1-released";\n' > "$E/flag-source/keys"
 printf 'const FEATURE_FLAG_DEFINITIONS = [{ key: RELEASED_FLAG } ] as const;\nconst DEFAULT_FEATURE_FLAG_MODE = "OWNER_AND_QA";\n' > "$E/flag-source/registry"
 printf 'const released = useFlag(RELEASED_FLAG);\n' > "$E/flag-source/base"
 cp "$E/flag-source/base" "$E/flag-source/head"
 F() {
   local want=$1 expected=$2 out got; shift 2
-  out=$(echo '{"tool_input":{"command":"gh pr merge 999"}}' | env PATH="$E/flag-bin:$PATH" PYTHONPATH="$E/flag-http" FLAG_SOURCE="$E/flag-source" AGENT_TOKEN=fixture HYPERTASKS_JWT_TOKEN= "$@" ./ship-check guard 2>&1); got=$?
+  out=$(echo '{"tool_input":{"command":"gh pr merge 999"}}' | env PATH="$E/flag-bin:$PATH" PYTHONPATH="$E/flag-http" FLAG_SOURCE="$E/flag-source" SHIP_CHECK_PLAIN_QA_STATE="$E/plain-state.json" AGENT_TOKEN=fixture HYPERTASKS_JWT_TOKEN= "$@" ./ship-check guard 2>&1); got=$?
   if [ "$got" = "$want" ] && [[ $out == *"$expected"* ]]; then ok "released flag: $want $expected $*"
   else bad "released flag: want $want $expected got $got $out"; fi
 }
@@ -254,6 +260,14 @@ F 0 '' FLAG_HTTP='{"flags":[{"key":"htpr-1-released","mode":"OWNER_AND_QA"}]}'
 F 0 '' FLAG_HTTP='{"flags":[{"key":"htpr-1-released","mode":"OFF"}]}'
 F 2 'registry defaults cannot prove' FLAG_HTTP_ERROR=1
 F 2 'registry defaults cannot prove' AGENT_TOKEN=
+# Without the owner-only endpoint, the plain QA account's view decides: on for it means on for Everyone.
+F 2 'record a browser click-through' AGENT_TOKEN= FLAG_PUBLIC='{"flags":{"htpr-1-released":true}}'
+F 0 '' AGENT_TOKEN= FLAG_PUBLIC='{"flags":{"htpr-1-released":false}}'
+F 2 'registry defaults cannot prove' AGENT_TOKEN= FLAG_PUBLIC='{"flags":{"htpr-1-released":"yes"}}'
+# A flag the PR adds itself is not in the base registry and starts unreleased.
+printf 'const added = useFlag("htpr-2-new");\n' > "$E/flag-source/head"
+F 0 '' FLAG_STATUS=added AGENT_TOKEN= FLAG_PUBLIC='{"flags":{"htpr-1-released":true}}'
+cp "$E/flag-source/base" "$E/flag-source/head"
 sed -i 's/OWNER_AND_QA/EVERYONE/' "$E/flag-source/registry"
 F 2 'record a browser click-through' FLAG_HTTP_ERROR=1
 F 2 'record a browser click-through' AGENT_TOKEN=
@@ -323,7 +337,7 @@ F 2 'record a browser click-through' FLAG_STATUS=added FLAG_COUNT=2 FLAG_PAGE2=1
 printf 'const released = useFlag(dynamicKey);\n' > "$E/flag-source/head"
 F 2 'unresolved flag reads' FLAG_STATUS=added
 printf 'const released = useFlag("htpr-2-new");\n' > "$E/flag-source/head"
-F 2 'unresolved flag reads' FLAG_STATUS=added
+F 0 '' FLAG_STATUS=added # A flag the PR adds starts unreleased.
 F 2 'cannot read the PR diff' FLAG_GH_ERROR=1
 F 2 'cannot read the PR diff' FLAG_SOURCE_ERROR=1
 F 2 'complete PR diff' FLAG_COUNT=2
