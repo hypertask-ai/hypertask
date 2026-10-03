@@ -1,7 +1,7 @@
 import type { NextApiHandler } from 'next'
 import { getSessionUser } from '@/lib/auth/getSessionUser'
 import { HTPR_6369_SEARCH_OPERATORS_FLAG, isFeatureEnabled } from '@/lib/flags'
-import { HTPR_6370_SEARCH_CHIPS_FLAG } from '@/lib/flags'
+import { HTPR_6370_SEARCH_CHIPS_FLAG, HTPR_6688_SEARCH_AUTOCOMPLETE_FLAG, HTPR_6865_SEARCH_LAYOUT_FLAG } from '@/lib/flags'
 import prisma from '@/lib/prisma'
 import { getProjectWhere } from '@/utils/controllers/projects/getAllIncludes'
 
@@ -26,7 +26,10 @@ const handler: NextApiHandler = async (req, res) => {
   const ids = boards.map((board) => board.id)
   if (!ids.length) return res.status(200).json({ candidates: [] })
   const activeBoardId = ids.includes(boardId) ? boardId : null
-  let candidates: { id: string | number; name: string; preferred: boolean; recent: number }[]
+  const layoutEnabled = chipsEnabled &&
+    await isFeatureEnabled(HTPR_6865_SEARCH_LAYOUT_FLAG, session.userId) &&
+    await isFeatureEnabled(HTPR_6688_SEARCH_AUTOCOMPLETE_FLAG, session.userId)
+  let candidates: { id: string | number; name: string; email?: string; preferred: boolean; recent: number }[]
   let resolved: string | undefined
   let resolvedId: string | undefined
   const rawTail = chipsEnabled && typeof req.query.resolve === 'string' ? req.query.resolve.replace(/^[@#]/, '').trim().slice(0, 100) : ''
@@ -123,6 +126,7 @@ const handler: NextApiHandler = async (req, res) => {
     }
     candidates = people.map((person) => ({
       id: person.id, name: person.displayName || person.email,
+      ...(layoutEnabled ? { email: person.email } : {}),
       preferred: person.members.length > 0,
       recent: Math.max(person.tasks[0]?.createdAt.getTime() ?? 0, person.assignees[0]?.assignedAt.getTime() ?? 0),
     }))
@@ -151,7 +155,7 @@ const handler: NextApiHandler = async (req, res) => {
     .sort((a, b) =>
       rank(a) - rank(b) || Number(b.preferred) - Number(a.preferred) || b.recent - a.recent || a.name.localeCompare(b.name)
     )
-    .slice(0, 10).map(({ id, name }) => ({ id, name }))
+    .slice(0, 10).map(({ id, name, email }) => ({ id, name, ...(email !== undefined ? { email } : {}) }))
   if (resolved) return res.status(200).json({ candidates: ranked, resolved, ...(resolvedId ? { resolvedId } : {}) })
   return res.status(200).json({ candidates: ranked })
 }

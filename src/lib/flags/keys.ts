@@ -71,6 +71,7 @@ export const HTPR_6372_SEARCH_RANKING_FLAG = "htpr-6372-search-ranking";
 export const HTPR_6369_SEARCH_OPERATORS_FLAG = "htpr-6369-search-operators";
 export const HTPR_6370_SEARCH_CHIPS_FLAG = "htpr-6370-search-chips";
 export const HTPR_6688_SEARCH_AUTOCOMPLETE_FLAG = "htpr-6688-search-autocomplete";
+export const HTPR_6865_SEARCH_LAYOUT_FLAG = "htpr-6865-search-layout";
 export const MY_TASKS_VIEWS_FLAG = "htpr-6422-my-tasks-views";
 export const MY_TASKS_BULK_SELECTION_FLAG =
   "htpr-6444-my-tasks-bulk-selection";

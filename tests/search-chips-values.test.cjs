@@ -29,7 +29,7 @@ const query = (rows, args) => rows.filter((row) => matches(row, args.where))
   }).slice(0, args.take)
 const mocks = new Map([
   ['src/lib/auth/getSessionUser.ts', { getSessionUser: async () => state.session }],
-  ['src/lib/flags.ts', { HTPR_6369_SEARCH_OPERATORS_FLAG: 'htpr-6369-search-operators', HTPR_6370_SEARCH_CHIPS_FLAG: 'htpr-6370-search-chips', isFeatureEnabled: async (key) => key === 'htpr-6370-search-chips' ? state.chipsFlag : state.flag }],
+  ['src/lib/flags.ts', { HTPR_6369_SEARCH_OPERATORS_FLAG: 'htpr-6369-search-operators', HTPR_6370_SEARCH_CHIPS_FLAG: 'htpr-6370-search-chips', HTPR_6688_SEARCH_AUTOCOMPLETE_FLAG: 'htpr-6688-search-autocomplete', HTPR_6865_SEARCH_LAYOUT_FLAG: 'htpr-6865-search-layout', isFeatureEnabled: async (key) => key === 'htpr-6370-search-chips' ? state.chipsFlag : key === 'htpr-6865-search-layout' ? state.layoutFlag : key === 'htpr-6688-search-autocomplete' ? state.autocompleteFlag : state.flag }],
   ['src/utils/controllers/projects/getAllIncludes.ts', { getProjectWhere: (id) => ({ ownerId: id }) }],
   ['src/lib/prisma.ts', { default: {
     project: { findMany: async ({ where }) => {
@@ -183,4 +183,21 @@ test('recent collaborator beats the alphabetical cap and fuzzy scans are name-fi
 test('lookup requires authorization and feature flag', async () => {
   assert.equal((await lookup('from', 'a', { session: null })).res.statusCode, 401)
   assert.equal((await lookup('from', 'a', { flag: false })).res.statusCode, 404)
+})
+
+test('layout people emails require every flag and retain session-scoped authorization', async () => {
+  for (const operator of ['from', 'assignee']) {
+    const { res } = await lookup(operator, 'mal', { chipsFlag: true, layoutFlag: true, autocompleteFlag: true, people: [person(77, 'Malcolm Stern')] })
+    assert.deepEqual(res.body.candidates, [{ id: 77, name: 'Malcolm Stern', email: '77@example.com' }])
+    for (const disabled of ['chipsFlag', 'layoutFlag', 'autocompleteFlag']) {
+      const off = await lookup(operator, 'mal', { chipsFlag: true, layoutFlag: true, autocompleteFlag: true, [disabled]: false, people: [person(77, 'Malcolm Stern')] })
+      assert.deepEqual(off.res.body.candidates, [{ id: 77, name: 'Malcolm Stern' }])
+    }
+  }
+  for (const operator of ['label', 'in', 'board']) {
+    const { res } = await lookup(operator, '', { chipsFlag: true, layoutFlag: true, autocompleteFlag: true, labels: [{ id: 'bug', value: 'Bug', projectId: 7 }] })
+    assert.ok(res.body.candidates.every((row) => !('email' in row)))
+  }
+  assert.equal((await lookup('from', 'mal', { session: null, layoutFlag: true })).res.statusCode, 401)
+  assert.equal((await lookup('from', 'mal', { flag: false, layoutFlag: true })).res.statusCode, 404)
 })

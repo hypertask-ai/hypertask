@@ -9,7 +9,7 @@ import { useSearch } from "@/hooks/Search/useSearch";
 import { cn } from "@/utils/undoActions/helperFuncs";
 import { Fragment, KeyboardEvent, RefObject, useContext } from "react";
 import { useFlag } from "@/hooks/useFlag";
-import { HTPR_6372_SEARCH_RANKING_FLAG, HTPR_6688_SEARCH_AUTOCOMPLETE_FLAG } from "@/lib/flags/keys";
+import { HTPR_6372_SEARCH_RANKING_FLAG, HTPR_6688_SEARCH_AUTOCOMPLETE_FLAG, HTPR_6865_SEARCH_LAYOUT_FLAG } from "@/lib/flags/keys";
 import { highlightedTitle } from "@/lib/search/autocomplete";
 import { HTPR_6370_SEARCH_CHIPS_FLAG, HTPR_6369_SEARCH_OPERATORS_FLAG } from "@/lib/flags/keys";
 import { MobileViewContext } from "@/lib/contexts/mobileContext";
@@ -40,6 +40,8 @@ const SearchComp = ({
   const operatorsFlagEnabled = useFlag(HTPR_6369_SEARCH_OPERATORS_FLAG);
   const autocompleteFlagEnabled = useFlag(HTPR_6688_SEARCH_AUTOCOMPLETE_FLAG);
   const autocompleteEnabled = autocompleteFlagEnabled && chipsFlagEnabled && operatorsFlagEnabled;
+  const layoutFlagEnabled = useFlag(HTPR_6865_SEARCH_LAYOUT_FLAG);
+  const layoutEnabled = layoutFlagEnabled && autocompleteEnabled;
   const setAiChatPendingPrompt = useSetRecoilState(aiChatPendingPromptAtom);
   const { openAIChatInterface } = useGlobalUIState();
   const isMbl = useContext(MobileViewContext);
@@ -52,6 +54,7 @@ const SearchComp = ({
     handleChange,
     responseMessage,
     typedTasks,
+    isSearchDraft,
     ulRef,
     handleLinkClick,
     handleMouseEnter,
@@ -73,7 +76,7 @@ const SearchComp = ({
     setIncludeArchivedResults,
   } = useSearch(_searchTerm, _initialTabIndex, _includeArchived, _fromProject);
   const showAskAiRow =
-    inputValue.trim().length >= 2 && typedTasks.length === 0;
+    !layoutEnabled && inputValue.trim().length >= 2 && typedTasks.length === 0;
   const searchTextClassName =
     "w-full px-4 @md:!px-9 text-subheading font-medium leading-normal rounded-b-[4px] bg-inherit outline-none";
 
@@ -81,7 +84,7 @@ const SearchComp = ({
   // aiChatPendingPromptAtom) instead of a separate in-search panel.
   function openAskAi() {
     const query = inputValue.trim();
-    if (query.length < 2) return;
+    if (!query || (!layoutEnabled && query.length < 2)) return;
     setAiChatPendingPrompt(query);
     openAIChatInterface();
   }
@@ -111,6 +114,9 @@ const SearchComp = ({
                 boardId={_fromProject}
                 inputRef={tasksInputRef}
                 recentSearches={searchCache.history}
+                layoutEnabled={layoutEnabled}
+                onAskAi={openAskAi}
+                showSuggestions={isSearchDraft}
                 autocompleteEnabled
               />
             ) : (
@@ -161,13 +167,13 @@ const SearchComp = ({
               {responseMessage !== "None" &&
               typedTasks.length === 0 &&
               !showAskAiRow ? (
-                <div className="px-0 @md:!px-16 my-4">
-                  <span className="text-[#8e9093]">{responseMessage}</span>
+                <div className={layoutFlagEnabled && autocompleteEnabled ? "px-4 @md:px-9 my-4" : "px-0 @md:!px-16 my-4"}>
+                  <span className={layoutEnabled ? "text-text-light-gray" : "text-[#8e9093]"}>{responseMessage}</span>
                 </div>
               ) : (
                 <div>
                   {results && (
-                    <div className="hidden @md:block w-full overflow-x-auto scrollbar-none no-scrollbar @md:px-9 mt-4">
+                    <div className={cn("hidden @md:block w-full overflow-x-auto scrollbar-none no-scrollbar @md:px-9 mt-4", layoutEnabled && "px-4")}>
                       <div className="flex flex-wrap grow gap-3">
                         {tabs.map((item, index) => (
                           <SplitTitle
@@ -189,7 +195,7 @@ const SearchComp = ({
                       id={searchConfig.elementIds.results.id}
                       ref={ulRef}
                       onMouseMove={handleMouseMove}
-                      className="rounded-b-[4px] mt-3 px-0 text-dense text-gray-200 overflow-y-auto scrollbar-none"
+                      className={layoutEnabled ? "rounded-b-[4px] mt-3 px-4 @md:px-9 text-dense text-white-black overflow-y-auto scrollbar-none" : "rounded-b-[4px] mt-3 px-0 text-dense text-gray-200 overflow-y-auto scrollbar-none"}
                     >
                       {showAskAiRow && (
                         <AskAiRow query={inputValue} onSelect={openAskAi} />
@@ -218,10 +224,10 @@ const SearchComp = ({
                               key={`${searchConfig.elementIds.results.childKeys}-${index}`}
                             >
                               {showThisBoard && (
-                                <SearchGroupLabel label="This board" />
+                                <SearchGroupLabel label="This board" aligned={layoutEnabled} />
                               )}
                               {showOtherBoards && (
-                                <SearchGroupLabel label="Other boards" />
+                                <SearchGroupLabel label="Other boards" aligned={layoutEnabled} />
                               )}
                               <TaskListRow
                                 task={item}
@@ -233,6 +239,7 @@ const SearchComp = ({
                                 handleMouseLeave={handleMouseLeave}
                                 isActive={selectedIndex === index}
                                 liRef={liSelectedRef}
+                                aligned={layoutEnabled}
                               />
                             </Fragment>
                           );
@@ -267,7 +274,7 @@ const SearchComp = ({
                 </div>
               )}
 
-              {typedTasks.length === 0 &&
+              {!layoutEnabled && typedTasks.length === 0 &&
                 !showAskAiRow &&
                 searchCache.history &&
                 searchCache.history.length > 0 && (
@@ -320,10 +327,10 @@ const SearchComp = ({
   ) : content;
 };
 
-const SearchGroupLabel = ({ label }: { label: string }) => (
+const SearchGroupLabel = ({ label, aligned }: { label: string; aligned?: boolean }) => (
   <li
     aria-hidden="true"
-    className="px-4 py-2 text-micro font-medium text-text-light-gray list-none"
+    className={aligned ? "py-2 text-micro font-medium text-text-light-gray list-none" : "px-4 py-2 text-micro font-medium text-text-light-gray list-none"}
   >
     {label}
   </li>
@@ -376,6 +383,7 @@ interface ITaskRow {
   isActive: boolean;
   highlight: any;
   titleParts?: ReturnType<typeof highlightedTitle>;
+  aligned?: boolean;
   liRef: RefObject<HTMLLIElement | null>;
 }
 
@@ -389,6 +397,7 @@ const TaskListRow = (props: ITaskRow) => {
     isActive,
     highlight,
     titleParts,
+    aligned,
     liRef,
   } = props;
 
@@ -399,7 +408,7 @@ const TaskListRow = (props: ITaskRow) => {
       onMouseEnter={() => handleMouseEnter(index)}
       onMouseLeave={handleMouseLeave}
       className={cn(
-        "@md:border-l-4  sm:px-2 group/selection_row flex items-center gap-2 cursor-pointer",
+        aligned ? "group/selection_row flex min-w-0 items-center gap-2 cursor-pointer" : "@md:border-l-4  sm:px-2 group/selection_row flex items-center gap-2 cursor-pointer",
         {
           ["@md:bg-active-elementBg border-l-selected-item-border"]: isActive,
           ["@md:border-l-transparent bg-transparent"]: !isActive,
@@ -409,7 +418,7 @@ const TaskListRow = (props: ITaskRow) => {
       ref={liRef}
     >
       <div
-        className={`font-medium px-4 text-white-black flex flex-col @md:flex py-2 @md:items-center gap-1 @md:!gap-3 ${styles.list_container}`}
+        className={`font-medium ${aligned ? "min-w-0 [&>div]:min-w-0" : "px-4"} text-white-black flex flex-col @md:flex py-2 @md:items-center gap-1 @md:!gap-3 ${styles.list_container}`}
       >
         <div className="flex justify-between items-center">
           <div className="flex items-center justify-center">
