@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { useFlag } from "@/hooks/useFlag";
-import { HTPR_6902_N_QUICK_ADD_FLAG } from "@/lib/flags/keys";
+import { HTPR_6914_SHIFT_C_QUICK_ADD_FLAG, HTPR_6902_N_QUICK_ADD_FLAG } from "@/lib/flags/keys";
 import {
   createTaskFromTableSelection,
   getTableCreateTaskButtonLabelsForSelection,
@@ -66,6 +66,7 @@ export const TableCreateTaskControl = ({
   quickCreateTask,
 }: TableCreateTaskControlProps) => {
   const nQuickAddEnabled = useFlag(HTPR_6902_N_QUICK_ADD_FLAG);
+  const shiftCQuickAddEnabled = useFlag(HTPR_6914_SHIFT_C_QUICK_ADD_FLAG);
   const [openTarget, setOpenTarget] = useState<
     { projectId: number; sectionId: number; sectionTitle: string } | null
   >(null);
@@ -137,7 +138,7 @@ export const TableCreateTaskControl = ({
       hasCurrentProject={hasCurrentProject}
       disabled={!selectedSectionPayload}
       labels={nQuickAddEnabled && quickEntry
-        ? { ...labels, title: labels.title.replace("(C)", "(N / Shift+C)") }
+        ? { ...labels, title: labels.title.replace("(C)", shiftCQuickAddEnabled ? "(N / Shift+C)" : "(N)") }
         : labels}
       onCreate={onCreate}
     />

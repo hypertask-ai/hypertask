@@ -1,6 +1,6 @@
 import Tooltip from '@/components/Common/Tooltip';
 import { useFlag } from '@/hooks/useFlag';
-import { HTPR_6902_N_QUICK_ADD_FLAG } from '@/lib/flags/keys';
+import { HTPR_6914_SHIFT_C_QUICK_ADD_FLAG, HTPR_6902_N_QUICK_ADD_FLAG } from '@/lib/flags/keys';
 import { TDefaultEditFocus, TSectionPayload } from '@/models/CreateTaskModalModels/model';
 import React, { useState } from 'react'
 import { DroppableStateSnapshot } from '@hello-pangea/dnd';
@@ -22,6 +22,7 @@ interface INewTaskButton{
 const NewTaskButton:React.FC<INewTaskButton> = ({buttonPosition, createTaskAt, snapshot, sectionPayload}) => {
     const quickEntryCardsEnabled = useFlag("htpr-6175-quick-entry-cards");
     const nQuickAddEnabled = useFlag(HTPR_6902_N_QUICK_ADD_FLAG);
+    const shiftCQuickAddEnabled = useFlag(HTPR_6914_SHIFT_C_QUICK_ADD_FLAG);
     let quickEntryRequested: true | undefined;
     if (quickEntryCardsEnabled) quickEntryRequested = true;
     
@@ -51,7 +52,7 @@ const NewTaskButton:React.FC<INewTaskButton> = ({buttonPosition, createTaskAt, s
                 group-hover/main:scale-100 w-full mt-[16px] py-2
                 rounded flex justify-center"
                 >
-                <TooltipAndIcon text='Create task' keyCombination={nQuickAddEnabled && quickEntryCardsEnabled ? ["N / Shift+C"] : ["C"]} left={20} bottom={-40} size={14} className='text-text-light-gray'/>
+                <TooltipAndIcon text='Create task' keyCombination={nQuickAddEnabled && quickEntryCardsEnabled ? (shiftCQuickAddEnabled ? ["N / Shift+C"] : ["N"]) : ["C"]} left={20} bottom={-40} size={14} className='text-text-light-gray'/>
             </div>
         )
     }

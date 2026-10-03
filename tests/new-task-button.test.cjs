@@ -35,7 +35,7 @@ test("the bottom action keeps its click, tooltip, drag suppression and responsiv
   assert.match(bottom, /onClick=\{\(\)=>createTaskAt\("bottom", sectionPayload, undefined, quickEntryRequested\)\}/);
   assert.match(bottom, /scale-100 sm:scale-0/);
   assert.match(bottom, /group-hover\/main:scale-100/);
-  assert.match(bottom, /text='Create task' keyCombination=\{nQuickAddEnabled && quickEntryCardsEnabled \? \["N \/ Shift\+C"\] : \["C"\]\} left=\{20\} bottom=\{-40\}/);
+  assert.match(bottom, /text='Create task' keyCombination=\{nQuickAddEnabled && quickEntryCardsEnabled \? \(shiftCQuickAddEnabled \? \["N \/ Shift\+C"\] : \["N"\]\) : \["C"\]\} left=\{20\} bottom=\{-40\}/);
   assert.match(bottom, /size=\{14\} className='text-text-light-gray'/);
   assert.match(button, /size = 10, className = 'text-white-black'/);
   assert.match(button, /<Plus size=\{size\} className=\{`sm:mx-0 xs:mx-2 \$\{className\}`\} strokeWidth=\{1\.75\}/);
