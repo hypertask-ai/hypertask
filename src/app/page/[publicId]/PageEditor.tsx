@@ -165,7 +165,7 @@ const PageEditor = ({ _page, _user }: PageEditorProps) => {
       const frame = Array.from(frames ?? []).find((item) => item.contentWindow === event.source);
       const data = event.data;
       if (!frame || data?.__htPageImage !== 1 || !Array.isArray(data.images) ||
-          !data.images.every((src: unknown) => typeof src === "string") ||
+          !data.images.every((src: unknown) => typeof src === "string" && /^(https?:|data:image\/|blob:)/i.test(src)) ||
           !Number.isInteger(data.index) || data.index < 0 || data.index >= data.images.length) return;
       openImageGallery(frame, data.images, data.index);
     };
