@@ -22,6 +22,7 @@ const figmaRegex =
 
 type FigmaPreviewData = {
   canConnectFigma?: boolean;
+  liveEmbed?: boolean;
   height?: number;
   previewImages?: { name: string; url: string }[];
   thumbnailUrl?: string;
@@ -54,6 +55,7 @@ export const fetchFigmaOembed = (
 
   const request = fetch(
     `${FIGMA_OEMBED_PATH}?url=${encodeURIComponent(figmaUrl)}`,
+    { cache: 'no-store' },
   ).then(async (response) => {
     if (!response.ok) throw new Error('Figma preview unavailable');
     const data: FigmaPreviewData = await response.json();
@@ -258,9 +260,9 @@ export const Figma = Node.create({
       preview.append(affordance);
       dom.append(preview);
 
-      const loadLiveEmbed = (event: Event) => {
-        event.preventDefault();
-        event.stopPropagation();
+      const loadLiveEmbed = (event?: Event) => {
+        event?.preventDefault();
+        event?.stopPropagation();
         if (iframe) return;
 
         abortController.abort();
@@ -285,12 +287,16 @@ export const Figma = Node.create({
           fetchFigmaOembed(figmaUrl)
             .then((data) => {
               if (iframe || abortController.signal.aborted) return;
-              renderFigmaPreview(
-                preview,
-                affordance,
-                data,
-                () => !iframe && !abortController.signal.aborted,
-              );
+              if (data.liveEmbed) {
+                loadLiveEmbed();
+              } else {
+                renderFigmaPreview(
+                  preview,
+                  affordance,
+                  data,
+                  () => !iframe && !abortController.signal.aborted,
+                );
+              }
 
               if (data.canConnectFigma) {
                 const returnTo = `${window.location.pathname}${window.location.search}${window.location.hash}`;
@@ -298,7 +304,7 @@ export const Figma = Node.create({
                 connectLink.href = `${FIGMA_OAUTH_START_PATH}?returnTo=${encodeURIComponent(returnTo)}`;
                 connectLink.className =
                   'mt-2 inline-flex text-dense font-semibold text-white-black hover:text-text-light-gray focus-visible:outline-none';
-                connectLink.textContent = 'Connect Figma to preview';
+                connectLink.textContent = 'Connect Figma for faster previews';
                 connectLink.setAttribute('contenteditable', 'false');
                 connectLink.addEventListener('click', (event) =>
                   event.stopPropagation(),
