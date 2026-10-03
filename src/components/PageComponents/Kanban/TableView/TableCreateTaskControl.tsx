@@ -136,7 +136,9 @@ export const TableCreateTaskControl = ({
     <TableCreateTaskButton
       hasCurrentProject={hasCurrentProject}
       disabled={!selectedSectionPayload}
-      labels={labels}
+      labels={nQuickAddEnabled && quickEntry
+        ? { ...labels, title: labels.title.replace("(C)", "(N / Shift+C)") }
+        : labels}
       onCreate={onCreate}
     />
   );

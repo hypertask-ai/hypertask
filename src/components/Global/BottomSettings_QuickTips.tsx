@@ -164,7 +164,7 @@ const BottomSettings_QuickTips = ({
   const quickEntryCardsEnabled = useFlag(HTPR_6175_QUICK_ENTRY_CARDS_FLAG);
   const boardTips = nQuickAddEnabled && quickEntryCardsEnabled
     ? KanbanTipsConstants.flatMap(tip => tip.hint === "add task"
-      ? [tip, { key: ["N"], hint: "quick add" }]
+      ? [tip, { key: ["N / Shift+C"], hint: "quick add" }]
       : [tip])
     : KanbanTipsConstants;
   const mbl = useContext(MobileViewContext);

@@ -83,9 +83,13 @@ const sections = [
   { sectionId: 20, section_title: "Doing", items: [{ id: 201, ranking: "b" }] },
 ];
 
-for (const surface of ["board", "table"]) {
+for (const [surface, key, shiftKey, shortcut] of [
+  ["board", "n", false, "N"], ["board", "C", true, "Shift+C"], ["board", "c", true, "Shift+c"],
+  ["table", "n", false, "N"], ["table", "C", true, "Shift+C"], ["table", "c", true, "Shift+c"],
+]) {
   for (const [nEnabled, quickEnabled] of [[true, true], [false, true], [true, false], [false, false]]) {
-    test(`${surface}: N requires both flags (${nEnabled}/${quickEnabled}); C stays the full editor`, async () => fixture(async ({ reactRoot, press }) => {
+    test(`${surface}: ${shortcut} requires both flags (${nEnabled}/${quickEnabled}); plain and Caps Lock C stay unchanged`, async () => fixture(async ({ reactRoot, press }) => {
+      const pressQuick = (overrides = {}) => press(key, { shiftKey, ...overrides });
       const flags = { [nFlag]: nEnabled, [quickFlag]: quickEnabled };
       const calls = [];
       const mocks = commonMocks(flags, calls);
@@ -146,7 +150,7 @@ for (const surface of ["board", "table"]) {
           "./tableCreateTask": load(`${tablePath}tableCreateTask.ts`),
           "@/lib/keyboard/archiveShortcutGuard": {},
           "./tableViewShared": { isTaskRow: (row) => row?.type === "task" },
-          "./TableCreateTaskButton": { TableCreateTaskButton: () => React.createElement("button", null, "New task") },
+          "./TableCreateTaskButton": { TableCreateTaskButton: ({ labels }) => React.createElement("button", { title: labels.title }, "New task") },
           "../../../Common/newTask": { default: ({ invokeCreateItem }) => React.createElement("input", { "data-quick": "table", ref: (element) => { if (element) element.quickCreate = invokeCreateItem; } }) },
         });
         const useTable = load(`${tablePath}useTableKeyboard.ts`, mocks).useTableKeyboard;
@@ -160,9 +164,13 @@ for (const surface of ["board", "table"]) {
       }
       const render = async () => React.act(async () => reactRoot.render(React.createElement(Harness)));
       await render();
-      await press("n");
+      if (surface === "table") assert.equal(document.querySelector("button").title,
+        `Create task in the selected column (${nEnabled && quickEnabled ? "N / Shift+C" : "C"})`);
+      await pressQuick();
       assert.equal(Boolean(document.querySelector("[data-quick]")), nEnabled && quickEnabled);
-      assert.equal(calls.length, 0, "N must not fall back to the full editor");
+      assert.equal(calls.length, surface === "board" && shiftKey && !(nEnabled && quickEnabled) ? 1 : 0,
+        "flags-off Shift+C keeps the legacy board editor; enabled quick add never opens it");
+      calls.length = 0;
       // Remount closes quick entry without changing the keyboard code under test.
       await React.act(async () => reactRoot.render(null));
       await render();
@@ -171,23 +179,36 @@ for (const surface of ["board", "table"]) {
       assert.equal(calls[0][0].sectionId, 10);
       assert.equal(document.querySelector("[data-quick]"), null);
       calls.length = 0;
+      await React.act(async () => reactRoot.render(null));
+      await render();
+      await press("C", { shiftKey: false });
+      assert.equal(calls.length, surface === "board" ? 1 : 0, "Caps Lock C keeps each surface's existing behavior");
+      assert.equal(document.querySelector("[data-quick]"), null);
+      calls.length = 0;
+      await React.act(async () => reactRoot.render(null));
+      await render();
       if (!(nEnabled && quickEnabled)) return;
-      for (const overrides of [{ ctrlKey: true }, { metaKey: true }, { altKey: true }, { shiftKey: true }, { repeat: true }, { isComposing: true }]) {
-        await press("n", overrides);
+      // Isolate the new listener from existing Ctrl/Alt+C column shortcuts.
+      activeColumn = -1;
+      await render();
+      for (const overrides of [{ ctrlKey: true }, { metaKey: true }, { altKey: true }, ...(!shiftKey ? [{ shiftKey: true }] : []), { repeat: true }, { isComposing: true }]) {
+        await pressQuick(overrides);
         assert.equal(document.querySelector("[data-quick]"), null);
       }
+      calls.length = 0;
       for (const tag of ["input", "textarea", "select", "div"]) {
         const typing = document.createElement(tag);
         if (tag === "div") typing.setAttribute("contenteditable", "true");
         typing.tabIndex = 0;
         document.body.append(typing);
         typing.focus();
-        await press("n");
-        assert.equal(document.querySelector("[data-quick]"), null, `${tag} must keep N`);
+        await pressQuick();
+        assert.equal(document.querySelector("[data-quick]"), null, `${tag} must keep ${shortcut}`);
+        assert.equal(calls.length, 0, `${tag} must not open the full editor`);
         typing.remove();
       }
       modalOpen = true;
-      await press("n");
+      await pressQuick();
       assert.equal(document.querySelector("[data-quick]"), null);
       modalOpen = false;
       activeColumn = 1;
@@ -195,9 +216,10 @@ for (const surface of ["board", "table"]) {
       activeItem = 201;
       await render();
       if (surface === "board") document.getElementById("task-201").focus();
-      await press("n");
+      await pressQuick();
       const quick = document.querySelector("[data-quick]");
       assert.ok(quick);
+      assert.equal(calls.length, 0, "focused quick add must not also open the full editor");
       if (surface === "board") {
         assert.equal(quick.dataset.quick, "20");
         assert.equal(quick.dataset.position, "bottom");
@@ -210,19 +232,19 @@ for (const surface of ["board", "table"]) {
       selectedIndex = -1;
       await render();
       if (surface === "board") document.querySelector('[data-column="20"]').focus();
-      await press("n");
+      await pressQuick();
       const columnQuick = document.querySelector("[data-quick]");
       if (surface === "board") {
         assert.equal(columnQuick.dataset.quick, "20", "focused column wins");
         await React.act(async () => reactRoot.render(null));
         activeItem = 201;
         await render();
-        await press("n");
+        await pressQuick();
         assert.equal(document.querySelector("[data-quick]").dataset.quick, "20", "active task supplies its column when DOM focus is absent");
         await React.act(async () => reactRoot.render(null));
         activeItem = null;
         await render();
-        await press("n");
+        await pressQuick();
         assert.equal(document.querySelector("[data-quick]").dataset.quick, "10", "no column or task focus falls back to the first column");
       } else {
         await columnQuick.quickCreate("Fallback");
@@ -232,7 +254,7 @@ for (const surface of ["board", "table"]) {
   }
 }
 
-test("table: flags toggle N with every context dependency stable", async () => fixture(async ({ reactRoot, press }) => {
+test("table: flags toggle N and Shift+C with every context dependency stable", async () => fixture(async ({ reactRoot, press }) => {
   const flags = { [nFlag]: false, [quickFlag]: false };
   const calls = [];
   const useTable = load(`${tablePath}useTableKeyboard.ts`, {
@@ -258,6 +280,12 @@ test("table: flags toggle N with every context dependency stable", async () => f
     await press("n");
     assert.equal(opened - before, Number(nEnabled && quickEnabled));
     assert.equal(calls.length, 0);
+    for (const key of ["C", "c"]) {
+      const beforeShift = opened;
+      await press(key, { shiftKey: true });
+      assert.equal(opened - beforeShift, Number(nEnabled && quickEnabled));
+      assert.equal(calls.length, 0);
+    }
   }
 }));
 
@@ -308,7 +336,7 @@ test("bottom shortcut hint follows both flags; top hint and clicks stay unchange
       await React.act(async () => reactRoot.render(React.createElement(Button, {
         buttonPosition: position, sectionPayload: payload, createTaskAt: (...args) => calls.push(args),
       })));
-      assert.equal(document.querySelector("[data-keys]").dataset.keys, position === "bottom" && nEnabled && quickEnabled ? "N" : "C");
+      assert.equal(document.querySelector("[data-keys]").dataset.keys, position === "bottom" && nEnabled && quickEnabled ? "N / Shift+C" : "C");
       await React.act(async () => document.querySelector("#root > div").click());
       assert.deepEqual(calls.pop(), [position, payload, undefined, quickEnabled ? true : undefined]);
     }
@@ -319,8 +347,8 @@ test("flag registration, reused hints and existing full-editor scope are explici
   assert.match(source("src/lib/flags/keys.ts"), /HTPR_6902_N_QUICK_ADD_FLAG = "htpr-6902-n-quick-add"/);
   assert.match(source("src/lib/flags.ts"), /key: HTPR_6902_N_QUICK_ADD_FLAG/);
   assert.match(source("src/lib/flags.ts"), /DEFAULT_FEATURE_FLAG_MODE: FeatureFlagMode = "OWNER_AND_QA"/);
-  assert.match(source("src/components/Global/BottomSettings_QuickTips.tsx"), /nQuickAddEnabled && quickEntryCardsEnabled[\s\S]*key: \["N"\], hint: "quick add"/);
-  assert.match(source("src/components/PageComponents/Kanban/KanbanSectionComponents/NewTaskButton.tsx"), /nQuickAddEnabled && quickEntryCardsEnabled \? \["N"\] : \["C"\]/);
+  assert.match(source("src/components/Global/BottomSettings_QuickTips.tsx"), /nQuickAddEnabled && quickEntryCardsEnabled[\s\S]*key: \["N \/ Shift\+C"\], hint: "quick add"/);
+  assert.match(source("src/components/PageComponents/Kanban/KanbanSectionComponents/NewTaskButton.tsx"), /nQuickAddEnabled && quickEntryCardsEnabled \? \["N \/ Shift\+C"\] : \["C"\]/);
   assert.match(source(sectionPath), /useEffect\(nQuickAddEnabled && quickEntryCardsEnabled \?/);
   assert.match(source(boardPath), /if \(returnIfModalOrInputActive\(\)\) return/);
   assert.match(source(`${tablePath}useTableKeyboard.ts`), /returnIfModalOrInputActive\(\)/);

@@ -103,8 +103,9 @@ const useHandleKeyDownOperations= (props:IHandleKeyDownOperations) => {
     useEffect(nQuickAddEnabled && quickEntryCardsEnabled ? () => {
       const handleNQuickAdd = (e: KeyboardEvent) => {
         if (
-          e.key.toLowerCase() !== "n" ||
-          e.ctrlKey || e.metaKey || e.altKey || e.shiftKey || e.repeat || e.isComposing ||
+          !((e.key.toLowerCase() === "n" && !e.shiftKey) ||
+            (e.key.toLowerCase() === "c" && e.shiftKey)) ||
+          e.ctrlKey || e.metaKey || e.altKey || e.repeat || e.isComposing ||
           showCommands.show || returnIfModalOrInputActive() ||
           shouldIgnoreTaskShortcutTarget(e.target as HTMLElement | null) ||
           shouldIgnoreTaskShortcutTarget(document.activeElement as HTMLElement | null)
@@ -300,7 +301,7 @@ const useHandleKeyDownOperations= (props:IHandleKeyDownOperations) => {
     }
     
 
-    if (!activeItem && activeElementIndex === -1 && (e.key === 'c')) {
+    if (!activeItem && activeElementIndex === -1 && (e.key === 'c') && !e.shiftKey) {
       const event = new CustomEvent('ADD_NEW_TASK_ON_NO_FOCUS');
       document.dispatchEvent(event);
     }

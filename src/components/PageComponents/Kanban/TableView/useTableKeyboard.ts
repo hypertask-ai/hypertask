@@ -184,8 +184,10 @@ export function useTableKeyboard(context: Context) {
   useEffect(nQuickAddEnabled && quickEntryEnabled ? () => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (
-        !_currentProject || e.key.toLowerCase() !== "n" ||
-        e.ctrlKey || e.metaKey || e.altKey || e.shiftKey || e.repeat || e.isComposing ||
+        !_currentProject ||
+        !((e.key.toLowerCase() === "n" && !e.shiftKey) ||
+          (e.key.toLowerCase() === "c" && e.shiftKey)) ||
+        e.ctrlKey || e.metaKey || e.altKey || e.repeat || e.isComposing ||
         showCommands.show || assignTask || returnIfModalOrInputActive() ||
         shouldIgnoreTaskShortcutTarget(e.target as HTMLElement | null) ||
         shouldIgnoreTaskShortcutTarget(document.activeElement as HTMLElement | null)

@@ -163,6 +163,7 @@ const useSections = ({
     index,
     navigate,
     quickEntryCardsEnabled,
+    nQuickAddEnabled,
     sectionId,
     title,
     _currentProject,
@@ -175,6 +176,7 @@ const useSections = ({
     index,
     navigate,
     quickEntryCardsEnabled,
+    nQuickAddEnabled,
     sectionId,
     title,
     _currentProject,
@@ -190,6 +192,7 @@ const useSections = ({
       index,
       navigate,
       quickEntryCardsEnabled,
+      nQuickAddEnabled,
       sectionId,
       title,
       _currentProject,
@@ -197,6 +200,10 @@ const useSections = ({
     } = latestRef.current;
 
     if (!active) return;
+    // The board quick-add listener owns Shift+C while both flags are enabled.
+    if (nQuickAddEnabled && quickEntryCardsEnabled &&
+      e.key.toLowerCase() === "c" && e.shiftKey &&
+      !e.ctrlKey && !e.metaKey && !e.altKey) return;
     if (keyPressed[e.key]) return;
     if (returnIfModalOrInputActive()) return
 

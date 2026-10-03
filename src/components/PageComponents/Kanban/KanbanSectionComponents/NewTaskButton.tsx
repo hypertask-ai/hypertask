@@ -51,7 +51,7 @@ const NewTaskButton:React.FC<INewTaskButton> = ({buttonPosition, createTaskAt, s
                 group-hover/main:scale-100 w-full mt-[16px] py-2
                 rounded flex justify-center"
                 >
-                <TooltipAndIcon text='Create task' keyCombination={nQuickAddEnabled && quickEntryCardsEnabled ? ["N"] : ["C"]} left={20} bottom={-40} size={14} className='text-text-light-gray'/>
+                <TooltipAndIcon text='Create task' keyCombination={nQuickAddEnabled && quickEntryCardsEnabled ? ["N / Shift+C"] : ["C"]} left={20} bottom={-40} size={14} className='text-text-light-gray'/>
             </div>
         )
     }
