@@ -55,7 +55,11 @@ async function fixture(t, { mobile = false, enabled = true, rail = true } = {}) 
   hotToast.toast.removeAll();
   hotToast.toast.removeAll(undo.SINGLE_UNDO_TOASTER_ID);
   const root = createRoot(document.getElementById("root"));
+  let namedStore;
+  let defaultStore;
   function App() {
+    namedStore = hotToast.useToasterStore({}, undo.SINGLE_UNDO_TOASTER_ID);
+    defaultStore = hotToast.useToasterStore();
     useMobileToastAutoDismiss();
     useMobileToastAutoDismiss(undo.SINGLE_UNDO_TOASTER_ID);
     return React.createElement(mobileContext.Provider, { value: mobile },
@@ -80,6 +84,8 @@ async function fixture(t, { mobile = false, enabled = true, rail = true } = {}) 
     async event(target, type) { await React.act(async () => target.dispatchEvent(new dom.window.MouseEvent(type, { bubbles: true }))); },
     async setEnabled(value) { enabled = value; await React.act(async () => root.render(React.createElement(App))); },
     card() { return document.querySelector(`[data-rht-toaster="${undo.SINGLE_UNDO_TOASTER_ID}"] > div > div`); },
+    namedToasts() { return namedStore.toasts; },
+    defaultToasts() { return defaultStore.toasts; },
   };
 }
 
@@ -88,20 +94,26 @@ for (const mobile of [false, true]) {
     const f = await fixture(t, { mobile });
     await React.act(async () => hotToast.toast.success("Other notification", { duration: Infinity }));
     const first = await f.show("First action");
+    assert.deepEqual(f.namedToasts().map((toast) => toast.id), [first]);
+    // A matching ID in another store must survive scoped removal/dismissal.
+    await React.act(async () => hotToast.toast.success("Default toaster twin", { id: first, toasterId: "default", duration: Infinity }));
     const undone = [];
     const second = await f.show("Marked as Done.", { id: 2 }, async (data, id) => undone.push([data, id]));
     assert.notEqual(first, second);
+    assert.deepEqual(f.namedToasts().map((toast) => toast.id), [second]);
+    assert.equal(f.defaultToasts().find((toast) => toast.id === first).visible, true);
     assert.equal(document.body.textContent.includes("First action"), false);
     assert.equal(document.querySelectorAll('[aria-label="Undo"]').length, 1);
     assert.ok(document.body.textContent.includes("Other notification"));
     const card = f.card();
     assert.equal(card.style.opacity, "1");
     assert.equal(card.style.transition, "opacity 200ms ease-in-out");
-    for (const token of ["bg-modalBackground", "text-white-black", "font-normal", "border-l-[3px]", "border-hypertasks-header-blue", "rounded-[5px]", "min-h-10"]) assert.ok(card.classList.contains(token));
+    for (const token of ["bg-modalBackground", "text-white-black", "font-normal", "border-l-[3px]", "border-hypertasks-header-blue", "rounded-[5px]", "min-h-10", "gap-2"]) assert.ok(card.classList.contains(token));
     const undoButton = card.querySelector('[aria-label="Undo"]');
     assert.equal(undoButton.textContent, "Undo");
     assert.ok(undoButton.classList.contains("font-normal"));
-    assert.ok(undoButton.classList.contains("text-hypertasks-header-blue"));
+    assert.ok(undoButton.classList.contains("text-text-light-gray"));
+    assert.ok(undoButton.classList.contains("hover:text-white-black"));
     assert.equal(card.querySelector("svg").getAttribute("width"), "14");
     if (mobile) for (const button of card.querySelectorAll("button")) assert.ok(button.classList.contains("min-h-[44px]"));
     const container = card.parentElement.parentElement;
@@ -110,9 +122,31 @@ for (const mobile of [false, true]) {
     if (mobile) assert.equal(container.style.bottom, "calc(72px + env(safe-area-inset-bottom))");
     await f.event(undoButton, "click");
     assert.deepEqual(undone, [[{ id: 2 }, second]]);
+    await React.act(async () => hotToast.toast.success("Second default twin", { id: second, toasterId: "default", duration: Infinity }));
     await f.event(card.querySelector('[aria-label="Dismiss"]'), "click");
+    assert.equal(f.namedToasts().find((toast) => toast.id === second).visible, false);
+    assert.equal(f.defaultToasts().find((toast) => toast.id === second).visible, true);
     assert.equal(f.card().style.opacity, "0");
     await f.tick(200);
+    assert.deepEqual(f.namedToasts(), []);
+    assert.equal(f.defaultToasts().find((toast) => toast.id === second).visible, true);
+    assert.equal(f.card(), null);
+  });
+
+  test(`Undo handler's unscoped dismissal reaches the real named store (${mobile ? "phone" : "desktop"})`, async (t) => {
+    const f = await fixture(t, { mobile });
+    const undone = [];
+    const id = await f.show("Undo action", { id: 3 }, async (data, toastId) => {
+      undone.push([data, toastId]);
+      // Existing undo handlers call dismiss with just the action ID.
+      hotToast.toast.dismiss(toastId);
+    });
+    await f.event(f.card().querySelector('[aria-label="Undo"]'), "click");
+    assert.deepEqual(undone, [[{ id: 3 }, id]]);
+    assert.equal(f.namedToasts().find((toast) => toast.id === id).visible, false);
+    assert.equal(f.card().style.opacity, "0");
+    await f.tick(200);
+    assert.deepEqual(f.namedToasts(), []);
     assert.equal(f.card(), null);
   });
 
