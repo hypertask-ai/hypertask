@@ -21,6 +21,7 @@ const rollback = (sha, parent = PARENT) => ({
 async function run(overrides = {}, opts = {}) {
   const calls = [];
   const replies = {
+    [`GET ${gh}/actions/variables/MERGE_FREEZE`]: [404],
     [`PATCH ${gh}/actions/variables/MERGE_FREEZE`]: [204],
     [`GET ${gh}/git/ref/heads/production`]: [{ object: { sha: opts.head || X } }],
     [`GET ${gh}/git/commits/${X}`]: [{ parents: [{ sha: PARENT }], message: "bad merge" }],
@@ -47,7 +48,11 @@ async function run(overrides = {}, opts = {}) {
     repo: opts.repo ?? "hypertask-ai/hypertask", githubToken: opts.githubToken ?? "github-token",
     runUrl: opts.runUrl ?? "https://github.com/hypertask-ai/hypertask/actions/runs/123",
   });
-  return { result, calls };
+  const retried = opts.repeatSha ? await emergencyRollback(opts.repeatSha, "vercel-token", fetchImpl, async () => {}, {
+    repo: "hypertask-ai/hypertask", githubToken: "github-token",
+    runUrl: "https://github.com/hypertask-ai/hypertask/actions/runs/124",
+  }) : undefined;
+  return { result, calls, retried };
 }
 
 function called(calls, fragment) { return calls.find((c) => c.key.includes(fragment)); }
@@ -261,13 +266,15 @@ test("promotes only a deployment whose smoke test step actually succeeded", asyn
   assert.equal(green.result.freeze, true);
 });
 
-test("the production monitor cannot invoke the standalone rollback script", async () => {
+test("only the isolated confirmed-failure job invokes rollback", async () => {
   const workflow = await readFile(path.join(__dirname, "../.github/workflows/prod-health.yml"), "utf8");
-  assert.doesNotMatch(workflow, /emergency-rollback|ROLLBACK_GITHUB_TOKEN|MERGE_FREEZE|\/promote\//);
-  assert.match(workflow, /automatic rollback is disabled/);
+  const boundary = workflow.indexOf("\n  rollback:");
+  assert.ok(boundary > 0);
+  assert.doesNotMatch(workflow.slice(0, boundary), /emergency-rollback|ROLLBACK_GITHUB_TOKEN|\/promote\//);
+  assert.match(workflow.slice(boundary), /emergency-rollback|ROLLBACK_GITHUB_TOKEN/);
 });
 
-test("alert-only test jobs do not retain a write-capable checkout token", async () => {
+test("monitoring test jobs do not retain a write-capable checkout token", async () => {
   const workflow = await readFile(path.join(__dirname, "../.github/workflows/prod-health.yml"), "utf8");
   const smoke = workflow.slice(workflow.indexOf("\n  smoke:"), workflow.indexOf("\n  glm-qa:"));
   const coreActions = workflow.slice(
@@ -295,5 +302,45 @@ test("manual dispatch never freezes or reverts", async () => {
   } finally {
     if (before === undefined) delete process.env.GITHUB_EVENT_NAME;
     else process.env.GITHUB_EVENT_NAME = before;
+  }
+});
+
+
+test("an existing freeze stops all GitHub and Vercel mutations", async () => {
+  const { result, calls } = await run({ [`GET ${gh}/actions/variables/MERGE_FREEZE`]: [{ value: "incident run" }] });
+  assert.equal(result.action, "skip");
+  assert.equal(result.freeze, true);
+  assert.equal(calls.length, 1);
+  assert.equal(result.revert.status, "skipped");
+});
+
+test("a failed rollback is not retried while its freeze remains", async () => {
+  const { result, retried, calls } = await run({
+    [`GET ${gh}/actions/variables/MERGE_FREEZE`]: [404, { value: "incident run" }],
+    [`POST ${gh}/git/commits`]: [403],
+  }, { repeatSha: X });
+  assert.equal(result.action, "failed");
+  assert.equal(result.freeze, true);
+  assert.equal(retried.action, "skip");
+  assert.equal(calls.filter((call) => call.key === `POST ${gh}/git/commits`).length, 1);
+  assert.equal(calls.filter((call) => call.key === `PATCH ${gh}/actions/variables/MERGE_FREEZE`).length, 1);
+});
+
+test("a red rollback commit cannot start another rollback or promotion", async () => {
+  const { result, retried, calls } = await run({
+    [`GET ${gh}/actions/variables/MERGE_FREEZE`]: [404, { value: "incident run" }],
+  }, { repeatSha: REVERT });
+  assert.equal(result.revert.status, "created");
+  assert.equal(retried.action, "skip");
+  assert.equal(calls.filter((call) => call.key === `POST ${gh}/git/commits`).length, 1);
+  assert.equal(calls.some((call) => call.key.includes("/promote/")), false);
+});
+
+test("an unreadable freeze fails closed without attempting a rollback", async () => {
+  for (const reply of [403, 503, {}, { value: 42 }]) {
+    const { result, calls } = await run({ [`GET ${gh}/actions/variables/MERGE_FREEZE`]: [reply] });
+    assert.equal(result.action, "failed");
+    assert.match(result.reason, /Cannot read MERGE_FREEZE/);
+    assert.equal(calls.length, 1);
   }
 });

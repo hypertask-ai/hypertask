@@ -166,6 +166,17 @@ export async function emergencyRollback(failingSha, token, fetchImpl = fetch, de
   const githubToken = options.githubToken ?? process.env.ROLLBACK_GITHUB_TOKEN;
   const runUrl = options.runUrl ?? `${process.env.GITHUB_SERVER_URL || "https://github.com"}/${repo}/actions/runs/${process.env.GITHUB_RUN_ID}`;
   if (process.env.GITHUB_EVENT_NAME === "workflow_dispatch") return { action: "skip", reason: "manual runs never roll back", revert: { status: "skipped" }, freeze: false };
+  // A freeze is also the incident latch: never retry a failed rollback or
+  // react to a red rollback commit until a session has verified recovery.
+  if (repo && githubToken) {
+    const freeze = await getJsonRequest(fetchImpl, `${GITHUB_API}/repos/${repo}/actions/variables/MERGE_FREEZE`, githubToken);
+    if (freeze.ok && typeof freeze.data?.value === "string" && freeze.data.value) {
+      return { action: "skip", reason: "MERGE_FREEZE is already set; investigate before retrying", revert: { status: "skipped" }, freeze: true };
+    }
+    if ((!freeze.ok && freeze.status !== 404) || (freeze.ok && typeof freeze.data?.value !== "string")) {
+      return { action: "failed", reason: `Cannot read MERGE_FREEZE: HTTP ${freeze.status ?? "unreadable value"}`, revert: { status: "skipped" }, freeze: false };
+    }
+  }
   const errors = {};
   let frozen = false;
   let revert;

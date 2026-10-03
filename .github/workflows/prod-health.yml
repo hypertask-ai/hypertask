@@ -1,8 +1,8 @@
-name: Prod Health Check (Alert Only)
+name: Prod Health Check + Auto-Rollback
 
 # After every push to production (= production deploy), wait for the Vercel
-# deployment to finish, health-check the live app, and report failures.
-# Alert only: never promote a deployment, revert production, or freeze merges.
+# deployment to finish and check the live app. Confirmed application failures
+# freeze merging and revert production; manual/scheduled runs only report.
 on:
   push:
     branches: [production]
@@ -42,6 +42,7 @@ jobs:
     timeout-minutes: 30
     outputs:
       live: ${{ steps.check.outputs.live }}
+      rollback: ${{ steps.check.outputs.rollback }}
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
@@ -397,9 +398,10 @@ jobs:
             exit 0
           fi
 
-          publish_health_gate "$SHA" failure "Health probes failed (alert only)"
-          notify "🔴 hypertasks: production FAILED health checks for $SHA (home=$home, api=$apic, probe=$probe_code/$probe_status). Automatic rollback is disabled; investigate: https://github.com/${{ github.repository }}/commit/$SHA"
-          echo "::error::Production health checks failed; automatic rollback is disabled"
+          echo "rollback=true" >> "$GITHUB_OUTPUT"
+          publish_health_gate "$SHA" failure "Health probes failed; rollback requested"
+          notify "🔴 hypertasks: production FAILED health checks for $SHA (home=$home, api=$apic, probe=$probe_code/$probe_status). Guarded rollback requested; investigate: https://github.com/${{ github.repository }}/commit/$SHA"
+          echo "::error::Production health checks failed; guarded rollback requested"
           exit 1
 
   # ── Playwright smoke QA (HTPR-6199): open every main view as a real user ──
@@ -412,7 +414,7 @@ jobs:
   # too rather than smoke-tested.
   # workflow_dispatch runs the checks without any of this (nothing to gate
   # on, `health` doesn't run) so this job is dispatchable for manual
-  # verification. Every trigger is alert-only.
+  # verification. Only push failures can request guarded rollback.
   smoke:
     needs: health
     if: ${{ !cancelled() && ((github.event_name == 'push' && needs.health.outputs.live == 'true' && needs.health.result == 'success') || github.event_name == 'workflow_dispatch') }}
@@ -426,6 +428,7 @@ jobs:
     outputs:
       ran: ${{ steps.smoke.outcome != 'skipped' && steps.smoke.outcome != 'cancelled' && steps.smoke.outcome != '' }}
       ok: ${{ steps.smoke.outcome == 'success' }}
+      rollback: ${{ steps.alarm.outputs.rollback }}
     steps:
       # SMOKE_SESSION_STATE isn't provisioned yet (HTPR-6199 needs a real
       # signup + email verification). Check first so production pushes do not
@@ -560,13 +563,14 @@ jobs:
               -H "Authorization: Bearer $GITHUB_TOKEN" \
               -H "Accept: application/vnd.github+json" \
               "https://api.github.com/repos/${GITHUB_REPOSITORY}/statuses/${SHA}" \
-              -d '{"state":"failure","context":"prod-health-gate","description":"Failed production smoke (alert only)"}' || true
+              -d '{"state":"failure","context":"prod-health-gate","description":"Failed production smoke"}' || true
           fi
-          notify "🔴 hypertasks: smoke QA confirmed an application failure for $SHA. Automatic rollback is disabled; investigate: https://github.com/${{ github.repository }}/commit/$SHA"
-          echo "::error::Smoke QA confirmed an application failure; automatic rollback is disabled"
+          notify "🔴 hypertasks: smoke QA confirmed an application failure for $SHA. Rollback requires the consecutive smoke alarm; investigate: https://github.com/${{ github.repository }}/commit/$SHA"
+          echo "::error::Smoke QA confirmed an application failure; waiting for consecutive smoke alarm"
           exit 1
 
       - name: Update the consecutive smoke alarm
+        id: alarm
         if: ${{ always() && github.event_name == 'push' && (steps.smoke.outcome == 'success' || steps.smoke.outcome == 'failure') }}
         env:
           SMOKE_OUTCOME: ${{ steps.smoke.outcome == 'success' && 'green' || 'red' }}
@@ -586,7 +590,7 @@ jobs:
   # on Telegram and never blocks, fails, or rolls back the deploy itself.
   glm-qa:
     needs: [health, smoke]
-    if: ${{ !cancelled() && github.event_name == 'push' && needs.health.outputs.live == 'true' && needs.health.result == 'success' }}
+    if: ${{ !cancelled() && github.event_name == 'push' && needs.health.outputs.live == 'true' && needs.health.result == 'success' && needs.smoke.outputs.rollback != 'true' }}
     concurrency:
       # Fixed group: a newer production push cancels a still-running older
       # run, so a brief can only go out while its own SHA is the live deploy.
@@ -830,6 +834,8 @@ jobs:
       cancel-in-progress: false
     runs-on: ubuntu-latest
     timeout-minutes: 8
+    outputs:
+      rollback: ${{ steps.rollback-decision.outputs.rollback }}
     permissions:
       contents: read
       statuses: write
@@ -850,6 +856,13 @@ jobs:
           CORE_SMOKE_RESULT_FILE: ${{ runner.temp }}/core-smoke-result.json
         run: node .github/scripts/core-actions-smoke.mjs run
 
+      - name: Classify a confirmed post-deploy application failure
+        id: rollback-decision
+        if: ${{ !cancelled() && github.event_name == 'push' && steps.probe.outcome == 'failure' }}
+        env:
+          CORE_SMOKE_RESULT_FILE: ${{ runner.temp }}/core-smoke-result.json
+        run: echo "rollback=$(node .github/scripts/core-actions-smoke.mjs rollback-decision)" >> "$GITHUB_OUTPUT"
+
       - name: Invalidate the health gate after a failed post-deploy probe
         if: ${{ !cancelled() && github.event_name == 'push' && steps.probe.outcome == 'failure' }}
         env:
@@ -867,7 +880,7 @@ jobs:
                 -H "Authorization: Bearer $GITHUB_TOKEN" \
                 -H "Accept: application/vnd.github+json" \
                 "https://api.github.com/repos/${GITHUB_REPOSITORY}/statuses/${GITHUB_SHA}" \
-                -d '{"state":"failure","context":"prod-health-gate","description":"Failed core-actions (alert only)"}') || code=000
+                -d '{"state":"failure","context":"prod-health-gate","description":"Failed core-actions"}') || code=000
               state=$(curl -sS -H "Authorization: Bearer $GITHUB_TOKEN" \
                 -H "Accept: application/vnd.github+json" \
                 "https://api.github.com/repos/${GITHUB_REPOSITORY}/commits/${GITHUB_SHA}/status?per_page=100" \
@@ -890,7 +903,7 @@ jobs:
         env:
           HYPERTASK_MCP_TOKEN: ${{ secrets.HYPERTASK_HEALTH_USER_TOKEN }}
           CORE_SMOKE_RESULT_FILE: ${{ runner.temp }}/core-smoke-result.json
-          CORE_SMOKE_ROLLBACK: disabled (alert-only)
+          CORE_SMOKE_ROLLBACK: ${{ steps.rollback-decision.outputs.rollback == 'true' && 'guarded rollback requested' || 'not requested' }}
         run: node .github/scripts/core-actions-smoke.mjs report
 
       - name: Keep failed monitoring visible
@@ -926,3 +939,40 @@ jobs:
           name: core-actions-fixture-${{ github.run_id }}
           path: ${{ runner.temp }}/core-smoke-fixture.json
           retention-days: 1
+
+  rollback:
+    needs: [health, smoke, core-actions]
+    if: ${{ !cancelled() && github.event_name == 'push' && (needs.health.outputs.rollback == 'true' || needs.smoke.outputs.rollback == 'true' || needs.core-actions.outputs.rollback == 'true') }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    permissions:
+      contents: read
+    steps:
+      # Keep rollback credentials out of jobs that install and run the tests.
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 24
+      - name: Freeze merging and revert the confirmed failed release
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          ROLLBACK_GITHUB_TOKEN: ${{ secrets.AUTOMERGE_TOKEN }}
+          TG_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TG_CHAT: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: |
+          RESULT=$(node .github/scripts/emergency-rollback.mjs "$GITHUB_SHA")
+          echo "$RESULT"
+          MESSAGE=$(echo "$RESULT" | jq -r '
+            "Production rollback: " + .action + ". " + (.reason // "") +
+            " Freeze: " + (if .freeze then "set" else "FAILED" end) +
+            "; revert: " + (.revert.status // "unknown") +
+            "; promotion: " + (.promotion.action // "skipped") +
+            ". Dropped commits: " + ((.revert.dropped // []) | map(.sha + " " + .title) | join("; ")) +
+            ". Errors: " + ((.errors // {}) | to_entries | map(.key + ": " + .value) | join("; "))
+          ')
+          curl --fail-with-body -sS -o /dev/null "https://api.telegram.org/bot$TG_TOKEN/sendMessage" \
+            -d chat_id="$TG_CHAT" --data-urlencode text="$MESSAGE" || \
+            echo "::warning::Rollback alert could not be delivered"
+          [ "$(echo "$RESULT" | jq -r '.action')" != "failed" ]

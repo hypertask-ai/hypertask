@@ -153,7 +153,7 @@ test("the glm-qa job is exploratory: gated on smoke, wired to the dispatcher, an
   assert.match(job, /needs: \[health, smoke\]/);
   assert.match(job, /needs\.health\.outputs\.live == 'true'/);
   assert.doesNotMatch(job, /needs\.smoke\.outputs\.ran == 'true'/);
-  assert.doesNotMatch(job, /needs\.smoke\.outputs\.rolledback/);
+  assert.match(job, /needs\.smoke\.outputs\.rollback != 'true'/);
   assert.match(job, /github\.event_name == 'push'/);
   // Dispatches the committed script and alerts without failing the deploy.
   assert.match(job, /dispatch-glm-qa\.mjs/);
@@ -169,12 +169,12 @@ test("the glm-qa job is exploratory: gated on smoke, wired to the dispatcher, an
   assert.doesNotMatch(job, /emergency-rollback|\/promote\/|api\.vercel\.com/);
 });
 
-test("smoke exposes ran/ok outputs for exploratory QA without a rollback output", async () => {
+test("smoke exposes ran/ok and confirmed rollback outputs for exploratory QA", async () => {
   const workflow = await readFile(WORKFLOW, "utf8");
   const smokeStart = workflow.indexOf("  smoke:");
   const smokeEnd = workflow.indexOf("\n  glm-qa:", smokeStart);
   const smoke = workflow.slice(smokeStart, smokeEnd);
   assert.match(smoke, /ran: \$\{\{ steps\.smoke\.outcome != 'skipped'/);
   assert.match(smoke, /ok: \$\{\{ steps\.smoke\.outcome == 'success' \}\}/);
-  assert.doesNotMatch(smoke, /rolledback:|echo "rolledback=true"/);
+  assert.match(smoke, /rollback: \$\{\{ steps\.alarm\.outputs\.rollback \}\}/);
 });

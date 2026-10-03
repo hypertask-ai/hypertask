@@ -1,5 +1,5 @@
 version: 5
-last_updated: 2026-10-02
+last_updated: 2026-10-03
 purpose: "Fixed-cost CI with fast releases and a provider-neutral AI review gate. App CI runs on GitHub-hosted runners; the repo is public, so hosted minutes are free. The canonical reader-facing contract is https://hypertask.app/wiki/deployment; this file is the machine-readable companion."
 
 topology:
@@ -122,6 +122,26 @@ policies:
     merge_to_production_deploys_via_vercel: true
     production_health_check_after_deploy: true
     failed_build_keeps_previous_deployment_live: true
+    automatic_rollback:
+      workflow: .github/workflows/prod-health.yml
+      approval: "Valentin, 2026-10-03: https://app.hypertask.ai/detail/project-4060/21"
+      triggers:
+        health: unchallenged_definitive_failure_on_final_retry
+        browser_smoke: second_consecutive_red_with_confirmed_application_failure
+        core_actions: same_application_failure_confirmed_twice
+      push_only: true
+      manual_scheduled_build_and_alias_failures: alert_only
+      revert: restore_pre_failure_tree_in_one_non_force_commit_including_later_merges
+      promotion: older_ready_deployment_with_successful_push_smoke_only
+      merge_freeze: MERGE_FREEZE_repository_variable_set_to_run_url
+      loop_guard: existing_freeze_skips_all_rollback_operations_even_after_failure
+      rollback_commit_guard: verified_auto_rollback_commit_is_never_reverted
+      recovery:
+        owner: trusted_claude_session
+        prerequisites: "Investigate the incident, repair any failed rollback, verify the live production SHA and passing health/core-action/browser checks that can run. Do not clear just because a rollback was requested. Session merges must respect MERGE_FREEZE too."
+        clear_command: "gh variable delete MERGE_FREEZE --repo hypertask-ai/hypertask"
+        human_github_action_required: false
+        note: "The next automatic merge sweep re-evaluates health. Green monitoring alone never clears the freeze; if the restored workflow is disabled or red, repair it before resuming merges."
   production_ruleset:
     required_status_checks: [app-smoke, browser-smoke, ci-tests, ai-review, claude-review, feature-flag-gate, pr-title, next-public-secrets, secret-scan]
 
