@@ -12,6 +12,44 @@
   --border-search-filter-date: #f59e0b;
   --border-search-filter-has: #06b6d4;
   --bg-search-highlight: var(--bg-mention-highlight);
+  --search-row-gutter: 1rem;
+}
+
+[data-search-layout-row] {
+  position: relative;
+}
+
+[data-search-layout-row] > * {
+  position: relative;
+  z-index: 1;
+}
+
+/* Extend only the highlight into the list gutter, leaving content in place. */
+[data-search-layout-row]:is([data-selected="true"], [aria-selected="true"])::before,
+button[data-search-layout-row]:hover::before {
+  content: "";
+  position: absolute;
+  inset-block: 0;
+  left: var(--search-row-left, calc(-1 * var(--search-row-gutter)));
+  right: var(--search-row-right, calc(-1 * var(--search-row-gutter)));
+  background-color: var(--active-elementBg);
+  border-left: 4px solid var(--border-active);
+  pointer-events: none;
+}
+
+@container (min-width: 768px) {
+  .search-autocomplete {
+    --search-row-gutter: 2.25rem;
+  }
+
+  /* Both tip columns share the full list highlight and its far-left accent. */
+  [data-search-layout-tips] > [data-search-layout-row]:nth-child(odd) {
+    --search-row-right: calc(-100% - 1.5rem - var(--search-row-gutter));
+  }
+
+  [data-search-layout-tips] > [data-search-layout-row]:nth-child(even) {
+    --search-row-left: calc(-100% - 1.5rem - var(--search-row-gutter));
+  }
 }
 
 :is(.dark, .amoled, .graphite) .search-autocomplete {

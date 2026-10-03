@@ -11,7 +11,7 @@ import { Fragment, KeyboardEvent, RefObject, useContext } from "react";
 import { useFlag } from "@/hooks/useFlag";
 import { HTPR_6372_SEARCH_RANKING_FLAG, HTPR_6688_SEARCH_AUTOCOMPLETE_FLAG, HTPR_6865_SEARCH_LAYOUT_FLAG, HTPR_6878_SEARCH_LABEL_SCOPE_FLAG, HTPR_6879_SEARCH_ESC_BACK_FLAG, HTPR_6880_SEARCH_COMMENTER_FLAG } from "@/lib/flags/keys";
 import { highlightedSearchSnippet, highlightedTitle } from "@/lib/search/autocomplete";
-import { HTPR_6882_SEARCH_MATCH_HIGHLIGHTS_FLAG, HTPR_6909_SEARCH_ONE_BOARD_TABS_FLAG } from "@/lib/flags/keys";
+import { HTPR_6882_SEARCH_MATCH_HIGHLIGHTS_FLAG, HTPR_6909_SEARCH_ONE_BOARD_TABS_FLAG, HTPR_6911_SEARCH_ROW_HIGHLIGHT_FLAG } from "@/lib/flags/keys";
 import LabelWrapper from "@/components/Labels/LabelWrapper";
 import { HTPR_6370_SEARCH_CHIPS_FLAG, HTPR_6369_SEARCH_OPERATORS_FLAG } from "@/lib/flags/keys";
 import { MobileViewContext } from "@/lib/contexts/mobileContext";
@@ -45,6 +45,7 @@ const SearchComp = ({
   const layoutFlagEnabled = useFlag(HTPR_6865_SEARCH_LAYOUT_FLAG);
   const layoutEnabled = layoutFlagEnabled && autocompleteEnabled;
   const matchHighlightsFlagEnabled = useFlag(HTPR_6882_SEARCH_MATCH_HIGHLIGHTS_FLAG);
+  const rowHighlightFlagEnabled = useFlag(HTPR_6911_SEARCH_ROW_HIGHLIGHT_FLAG);
   // Hides the tab row when the tabs are only "All" plus one board.
   const oneBoardTabsFlagEnabled = useFlag(HTPR_6909_SEARCH_ONE_BOARD_TABS_FLAG);
   const commenterFlagEnabled = useFlag(HTPR_6880_SEARCH_COMMENTER_FLAG);
@@ -253,6 +254,7 @@ const SearchComp = ({
                                 isActive={selectedIndex === index}
                                 liRef={liSelectedRef}
                                 aligned={layoutEnabled}
+                                inboxHighlight={layoutEnabled && rowHighlightFlagEnabled}
                                 snippetParts={matchSnippets?.[index]}
                               />
                             </Fragment>
@@ -398,6 +400,7 @@ interface ITaskRow {
   highlight: any;
   titleParts?: ReturnType<typeof highlightedTitle>;
   aligned?: boolean;
+  inboxHighlight?: boolean;
   snippetParts?: ReturnType<typeof highlightedSearchSnippet>;
   liRef: RefObject<HTMLLIElement | null>;
 }
@@ -413,6 +416,7 @@ const TaskListRow = (props: ITaskRow) => {
     highlight,
     titleParts,
     aligned,
+    inboxHighlight,
     snippetParts,
     liRef,
   } = props;
@@ -425,11 +429,13 @@ const TaskListRow = (props: ITaskRow) => {
       onMouseLeave={handleMouseLeave}
       className={cn(
         aligned ? "group/selection_row flex min-w-0 items-center gap-2 cursor-pointer" : "@md:border-l-4  sm:px-2 group/selection_row flex items-center gap-2 cursor-pointer",
-        {
+        !inboxHighlight && {
           ["@md:bg-active-elementBg border-l-selected-item-border"]: isActive,
           ["@md:border-l-transparent bg-transparent"]: !isActive,
         }
       )}
+      data-search-layout-row={inboxHighlight ? "" : undefined}
+      data-selected={inboxHighlight ? isActive : undefined}
       onClick={() => handleLinkClick(task, index)}
       ref={liRef}
     >

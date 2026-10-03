@@ -2,7 +2,7 @@
 
 import UserAvatar from "@/components/Common/UserAvatar";
 import { useFlag } from "@/hooks/useFlag";
-import { HTPR_6865_SEARCH_LAYOUT_FLAG, HTPR_6878_SEARCH_LABEL_SCOPE_FLAG, HTPR_6879_SEARCH_ESC_BACK_FLAG, HTPR_6880_SEARCH_COMMENTER_FLAG } from "@/lib/flags/keys";
+import { HTPR_6865_SEARCH_LAYOUT_FLAG, HTPR_6911_SEARCH_ROW_HIGHLIGHT_FLAG, HTPR_6878_SEARCH_LABEL_SCOPE_FLAG, HTPR_6879_SEARCH_ESC_BACK_FLAG, HTPR_6880_SEARCH_COMMENTER_FLAG } from "@/lib/flags/keys";
 import { MentionListRows } from "@/components/AI_CHAT/MentionListComp";
 import { activeSearchValue, candidateQuery, chipQuery, searchChipText, splitSearchChips } from "@/lib/search/chips";
 import { operatorMatches, parseSearchTokens, SEARCH_OPERATORS, type Names, type SearchOperator, type SearchToken } from "@/lib/search/operators";
@@ -28,6 +28,7 @@ type Props = {
 
 export default function SearchChipsInput({ value, onChange, onRun, boardId, inputRef, autocompleteEnabled = false, recentSearches = [], layoutEnabled: layoutRequested = false, availableBoards = [], onAskAi, showSuggestions = true }: Props) {
   const layoutFlagEnabled = useFlag(HTPR_6865_SEARCH_LAYOUT_FLAG);
+  const rowHighlightEnabled = useFlag(HTPR_6911_SEARCH_ROW_HIGHLIGHT_FLAG);
   const layoutEnabled = layoutFlagEnabled && layoutRequested && autocompleteEnabled;
   const labelScopeFlagEnabled = useFlag(HTPR_6878_SEARCH_LABEL_SCOPE_FLAG);
   const labelScopeEnabled = labelScopeFlagEnabled && layoutEnabled;
@@ -329,7 +330,8 @@ export default function SearchChipsInput({ value, onChange, onRun, boardId, inpu
       <button key={`${row.kind}-${row.operator ?? ''}-${row.id}`} id={`mention-button-${index}`} type="button" role="option"
         aria-selected={row === selectedRow} onMouseEnter={() => setSelectedIndex(index)} onClick={() => choose(row)}
         onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') event.stopPropagation(); }}
-        className={`grid w-full min-w-0 grid-cols-1 gap-1 rounded-sm py-2 text-left text-dense text-white-black hover:bg-active-elementBg ${row === selectedRow ? 'bg-active-elementBg' : ''} ${row.email ? '@md:grid-cols-2 @md:gap-4' : ''}${labelScopeEnabled && row.count === 0 ? ' opacity-50' : ''}`}>
+        data-search-layout-row={rowHighlightEnabled ? '' : undefined}
+        className={`grid w-full min-w-0 grid-cols-1 gap-1 py-2 text-left text-dense text-white-black ${rowHighlightEnabled ? '' : `rounded-sm hover:bg-active-elementBg ${row === selectedRow ? 'bg-active-elementBg' : ''}`} ${row.email ? '@md:grid-cols-2 @md:gap-4' : ''}${labelScopeEnabled && row.count === 0 ? ' opacity-50' : ''}`}>
         {tip ? <span><strong className="block font-semibold">{tip.example}</strong><span className="text-meta text-text-light-gray">{tip.meaning}</span></span>
           : recent ? <span className="flex min-w-0 flex-wrap items-center gap-1 break-words">{recent.chips.map((chip, i) => <span key={i} className={`min-w-0 max-w-full break-all rounded-sm px-2 py-1 text-micro ${searchFilterColour(chip.operator)}`}>{chipText(chip)}</span>)}<span className="min-w-0 break-all">{recent.text}</span></span>
           : row.kind === 'ai' ? <span className="flex min-w-0 gap-2"><span className="shrink-0 font-semibold text-hypertasks-ai-purple">Ask AI</span><span className="min-w-0 break-words">{row.name}</span></span>
@@ -400,7 +402,7 @@ export default function SearchChipsInput({ value, onChange, onRun, boardId, inpu
             <h2 className="mb-2 text-meta font-medium text-text-light-gray">Recent searches</h2>
             {rows.filter((row) => row.kind === 'recent').map((row) => renderRow(row, rows.indexOf(row)))}
             <h2 className="mb-2 mt-4 text-meta font-medium text-text-light-gray">Tips</h2>
-            <div className="grid min-w-0 grid-cols-1 gap-x-6 @md:grid-cols-2">{rows.filter((row) => row.kind === 'operator').map((row) => renderRow(row, rows.indexOf(row)))}</div>
+            <div data-search-layout-tips className="grid min-w-0 grid-cols-1 gap-x-6 @md:grid-cols-2">{rows.filter((row) => row.kind === 'operator').map((row) => renderRow(row, rows.indexOf(row)))}</div>
           </> : rows.map(renderRow)}
           {!tips && loading && <div role="status" className="py-2 text-meta text-text-light-gray">Loading suggestions...</div>}
           {!tips && error && <div role="alert" className="py-2 text-meta text-text-light-gray">Could not load suggestions. Keep typing to retry.</div>}
