@@ -8,20 +8,14 @@ const { QueryClient, QueryClientProvider } = require("@tanstack/react-query");
 
 const root = path.resolve(__dirname, "..");
 const QUERY_KEY = ["admin-feature-flags"];
-const PAGES_FLAG = "yper4-160-flag-pages";
 function stub(filename, exports) {
   require.cache[filename] = { id: filename, filename, loaded: true, exports };
 }
 let owner = true;
-let flagOn = true;
 let reads = 0;
-let gates = [];
 let rows = [];
 stub(path.join(root, "src/lib/flags.ts"), {
-  FEATURE_FLAG_OWNER_USER_ID: 6,
-  FEATURE_FLAG_PAGES_FLAG: PAGES_FLAG,
   isFeatureFlagOwner: async () => owner,
-  isFeatureEnabled: async (key, userId) => { gates.push([key, userId]); return flagOn; },
   listFeatureFlagModes: async () => { reads++; return rows; },
 });
 stub(path.join(root, "src/hooks/useFlag.tsx"), {
@@ -43,26 +37,15 @@ const fixture = (key, extra = {}) => ({
 const detail = (key) => Detail({ params: Promise.resolve({ key }) });
 
 test.beforeEach(() => {
-  owner = true; flagOn = true; reads = 0; gates = [];
+  owner = true; reads = 0;
   rows = [fixture("htpr-6752-instant-ticket-open"), fixture("yper4-123-board-check")];
 });
 
-test("both server pages reject non-owners before reading flags or evaluating the rollout", async () => {
+test("both server pages reject non-owners before reading flags", async () => {
   owner = false;
   await assert.rejects(Overview(), /NOT_FOUND/);
   await assert.rejects(detail(rows[0].key), /NOT_FOUND/);
   assert.equal(reads, 0);
-  assert.deepEqual(gates, []);
-});
-
-test("detail is server-gated while overview stays available with the rollout off", async () => {
-  flagOn = false;
-  await assert.rejects(detail(rows[0].key), /NOT_FOUND/);
-  assert.equal(reads, 0);
-  const page = await Overview();
-  assert.equal(page.type, Admin);
-  assert.equal(page.props.pagesEnabled, false);
-  assert.deepEqual(gates, [[PAGES_FLAG, 6], [PAGES_FLAG, 6]]);
 });
 
 test("known and legacy flags reuse the admin component; unknown keys return not found", async () => {
@@ -70,10 +53,10 @@ test("known and legacy flags reuse the admin component; unknown keys return not 
   for (const row of rows) {
     const page = await detail(row.key);
     assert.equal(page.type, Admin);
-    assert.deepEqual(page.props, { flagKey: row.key, pagesEnabled: true });
+    assert.deepEqual(page.props, { flagKey: row.key });
   }
   await assert.rejects(detail("unknown-flag"), /NOT_FOUND/);
-  assert.equal((await Overview()).props.pagesEnabled, true);
+  assert.equal((await Overview()).type, Admin);
 });
 
 async function withAdmin(props, data, run) {
@@ -124,7 +107,7 @@ async function withAdmin(props, data, run) {
 for (const detailsEnabled of [true, false]) {
   test(`overview keys link to pages across metadata and title variants (details=${detailsEnabled})`, async () => {
     rows[0] = { ...rows[0], ticketTitle: "Instant ticket open", ticketUrl: "https://app.hypertask.ai/detail/project-15/6752" };
-    await withAdmin({ pagesEnabled: true }, { flags: rows, detailsEnabled }, async ({ document }) => {
+    await withAdmin({}, { flags: rows, detailsEnabled }, async ({ document }) => {
       for (const row of rows) {
         const code = [...document.querySelectorAll("code")].find((node) => node.textContent === row.key);
         assert.equal(code.closest("a").getAttribute("href"), `/admin/flags/${row.key}`);
@@ -133,17 +116,9 @@ for (const detailsEnabled of [true, false]) {
   });
 }
 
-test("overview rollout off preserves the existing ticket links", async () => {
-  rows[0].ticketUrl = "https://app.hypertask.ai/detail/project-15/6752";
-  await withAdmin({ pagesEnabled: false }, { flags: rows, detailsEnabled: true }, async ({ document }) => {
-    assert.equal(document.querySelector('a[href^="/admin/flags/"]'), null);
-    assert.equal(document.querySelector("a").getAttribute("href"), rows[0].ticketUrl);
-  });
-});
-
 for (const [key, project, number] of [["htpr-6752-instant-ticket-open", 15, 6752], ["yper4-123-board-check", 4060, 123]]) {
   test(`detail shows just ${key}, metadata, audience, ticket and back link even when overview details are off`, async () => {
-    await withAdmin({ flagKey: key, pagesEnabled: true }, { flags: rows, detailsEnabled: false }, async ({ document }) => {
+    await withAdmin({ flagKey: key }, { flags: rows, detailsEnabled: false }, async ({ document }) => {
       assert.equal(document.querySelector("h1").textContent, key);
       assert.equal(document.querySelectorAll("code").length, 1);
       assert.match(document.body.textContent, new RegExp(`Description for ${key}`));
@@ -159,11 +134,11 @@ for (const [key, project, number] of [["htpr-6752-instant-ticket-open", 15, 6752
 }
 
 test("legacy detail has no invented ticket or shipped date; missing client row has a plain not-found state", async () => {
-  await withAdmin({ flagKey: "legacy-rollout", pagesEnabled: true }, { flags: [fixture("legacy-rollout", { shippedOn: null })], detailsEnabled: true }, async ({ document }) => {
+  await withAdmin({ flagKey: "legacy-rollout" }, { flags: [fixture("legacy-rollout", { shippedOn: null })], detailsEnabled: true }, async ({ document }) => {
     assert.match(document.body.textContent, /Shipped: Not recorded/);
     assert.equal(document.querySelector('a[href^="https://app.hypertask.ai/detail/"]'), null);
   });
-  await withAdmin({ flagKey: "missing", pagesEnabled: true }, { flags: rows, detailsEnabled: true }, async ({ document }) => {
+  await withAdmin({ flagKey: "missing" }, { flags: rows, detailsEnabled: true }, async ({ document }) => {
     assert.match(document.body.textContent, /Feature flag not found\./);
     assert.equal(document.querySelectorAll("button").length, 0);
   });
@@ -172,7 +147,7 @@ test("legacy detail has no invented ticket or shipped date; missing client row h
 for (const singleFlag of [false, true]) {
   test(`shared controls PATCH the existing API, refetch, invalidate and roll back failures (detail=${singleFlag})`, async () => {
     const row = fixture("htpr-6752-instant-ticket-open", { mode: "EVERYONE", releasedAt: new Date().toISOString() });
-    await withAdmin({ pagesEnabled: true, ...(singleFlag ? { flagKey: row.key } : {}) }, { flags: [row], detailsEnabled: true }, async ({ document, client, calls, click, setFail }) => {
+    await withAdmin({ ...(singleFlag ? { flagKey: row.key } : {}) }, { flags: [row], detailsEnabled: true }, async ({ document, client, calls, click, setFail }) => {
       const invalidated = [];
       const invalidate = client.invalidateQueries.bind(client);
       client.invalidateQueries = (options) => { invalidated.push(options.queryKey); return invalidate(options); };

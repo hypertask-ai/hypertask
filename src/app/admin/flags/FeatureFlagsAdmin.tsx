@@ -55,10 +55,8 @@ async function updateFlag(input: FlagUpdate) {
 
 export default function FeatureFlagsAdmin({
   flagKey,
-  pagesEnabled = false,
 }: {
   flagKey?: string;
-  pagesEnabled?: boolean;
 }) {
   const queryClient = useQueryClient();
   const ticketTitleEnabled = useFlag("htpr-6176-flag-ticket-title");
@@ -224,27 +222,14 @@ export default function FeatureFlagsAdmin({
                     ) : (
                       <p className="text-content font-medium text-white-black">{flag.ticketTitle}</p>
                     )}
-                    {pagesEnabled ? (
-                      <Link href={`/admin/flags/${encodeURIComponent(flag.key)}`} className="mt-1 block text-text-light-gray underline-offset-2 hover:underline focus-visible:underline">
-                        <code className="break-all text-dense">{flag.key}</code>
-                      </Link>
-                    ) : (
-                      <code className="mt-1 block break-all text-dense text-text-light-gray">{flag.key}</code>
-                    )}
+                    <Link href={`/admin/flags/${encodeURIComponent(flag.key)}`} className="mt-1 block text-text-light-gray underline-offset-2 hover:underline focus-visible:underline">
+                      <code className="break-all text-dense">{flag.key}</code>
+                    </Link>
                   </>
-                ) : pagesEnabled ? (
+                ) : (
                   <Link href={`/admin/flags/${encodeURIComponent(flag.key)}`} className="text-white-black underline-offset-2 hover:underline focus-visible:underline">
                     <code className="break-all text-dense">{flag.key}</code>
                   </Link>
-                ) : flags.data?.detailsEnabled && flag.ticketUrl ? (
-                  <a
-                    href={flag.ticketUrl}
-                    className="text-white-black underline-offset-2 hover:underline focus-visible:underline"
-                  >
-                    <code className="break-all text-dense">{flag.key}</code>
-                  </a>
-                ) : (
-                  <code className="break-all text-dense text-white-black">{flag.key}</code>
                 )}
                 {!flagKey && flags.data?.detailsEnabled && (
                   <p className="mt-1 text-content text-text-light-gray">{flag.description}</p>

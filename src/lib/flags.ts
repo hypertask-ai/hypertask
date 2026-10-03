@@ -19,7 +19,6 @@ import {
   HTPR_6278_CHAT_TURN_FAILURE_FLAG,
   AGENT_VISIBILITY_FLAG,
   FEATURE_FLAG_DETAILS_FLAG,
-  FEATURE_FLAG_PAGES_FLAG,
   FIGMA_CONNECT_FLAG,
   GOOGLE_CALENDAR_FLAG,
   FLAG_REMOVAL_COUNTDOWN_FLAG,
@@ -119,6 +118,7 @@ const RETIRED_FEATURE_FLAG_KEYS = new Set([
   "htpr-6236-core-actions-smoke",
   "htpr-6035-agent-chat-skills",
   "yper4-123-board-check",
+  "yper4-160-flag-pages",
 ]);
 // Old tabs read these; remove htpr-6072 after 2026-10-06, htpr-6254 and htpr-6035 after 2026-10-16.
 const RETIRED_CLIENT_FEATURE_FLAGS = {
@@ -128,11 +128,6 @@ const RETIRED_CLIENT_FEATURE_FLAGS = {
 } as const;
 
 const FEATURE_FLAG_DEFINITIONS = [
-  {
-    key: FEATURE_FLAG_PAGES_FLAG,
-    shippedOn: "2026-10-03",
-    description: "Gives each feature flag an owner-only page with its details, existing controls, ticket link and a link back to all flags.",
-  },
   {
     key: HTPR_6752_INSTANT_TICKET_OPEN_FLAG,
     shippedOn: "2026-10-02",
