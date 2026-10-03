@@ -9,6 +9,8 @@ import { mergeRealtimeTaskDetail, shouldPreserveTaskEditorContent } from "@/lib/
 
 import TaskDetail from "@/app/detail/[...slug]/TaskDetailComp";
 import { useGetUserPreferences } from "@/hooks/General/useGetUserPreferences";
+import { useFlag } from "@/hooks/useFlag";
+import { HTPR_6899_STABLE_LAYOUT_FLAG } from "@/lib/flags/keys";
 import globalConstants from "@/lib/constants";
 import { FollowersProvider } from "@/lib/contexts/TaskDetail/FollowersProvider";
 import { TasksProvider } from "@/lib/contexts/TaskDetail/TaskProvider";
@@ -82,6 +84,7 @@ const EmbeddedTaskDetail = ({
   const currentUser = useRecoilValue(currentUserAtom);
   const queryClient = useQueryClient();
   const { data: preferences } = useGetUserPreferences();
+  const stableLayoutFlag = useFlag(HTPR_6899_STABLE_LAYOUT_FLAG);
   const taskQuery = useQuery({
     queryKey: embedded ? ["swipe-unread-task-detail", taskId] : cachedTaskDetailKey(currentUser?.id, taskId),
     queryFn: ({ signal }) => fetchTaskDetail(taskId, projectId, uniqueIndex, signal),
@@ -146,6 +149,7 @@ const EmbeddedTaskDetail = ({
       parsedTask={serializedTask}
       scrollSetting={preferences.scrollSetting}
       embedded={embedded}
+      cachedNavigation={!embedded && stableLayoutFlag}
       scrollElementRef={scrollElementRef}
     >
       {embedded ? detail : (

@@ -4,7 +4,7 @@ import { TaskRelations, ICycle } from "@/models/model";
 import { showAIChatInterfaceAtom, isAiChatSidebarModeAtom } from "@/store";
 import DescriptionAndCommentsProvider from "@/lib/contexts/TaskDetail/DescriptionProvider";
 import { useFlag } from "@/hooks/useFlag";
-import { HTPR_6752_INSTANT_TICKET_OPEN_FLAG } from "@/lib/flags/keys";
+import { HTPR_6752_INSTANT_TICKET_OPEN_FLAG, HTPR_6899_STABLE_LAYOUT_FLAG } from "@/lib/flags/keys";
 import { useTaskContext } from "@/lib/contexts/TaskDetail/TaskProvider";
 
 import { Suspense } from "react";
@@ -73,7 +73,8 @@ export function TaskDetailPanels(context: TaskDetailContext) {
 
 
   const instantTicketOpen = useFlag(HTPR_6752_INSTANT_TICKET_OPEN_FLAG);
-  const { secondaryPanelsReady } = useTaskContext();
+  const stableLayoutFlag = useFlag(HTPR_6899_STABLE_LAYOUT_FLAG);
+  const { secondaryPanelsReady, cachedLayout } = useTaskContext();
   if (!currentTask) return <></>;
 
   const updateWaitingOn = (fields: {
@@ -169,7 +170,7 @@ export function TaskDetailPanels(context: TaskDetailContext) {
                   updateWaitingOn={updateWaitingOn}
                   updateCycle={updateCycle}
                 />
-                {!_mbl && secondaryPanelsReady !== false && (
+                {!_mbl && ((stableLayoutFlag && cachedLayout) || secondaryPanelsReady !== false) && (
                   <TaskInfo
                     showAssignModal={showAssignModal}
                     toggleModal={toggleModal}

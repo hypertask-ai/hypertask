@@ -6,6 +6,7 @@ import { cn } from "@/utils/undoActions/helperFuncs";
 import { MobileViewContext } from "@/lib/contexts/mobileContext";
 import { useContext } from "react";
 import type { PersonHovercardSubject } from "@/models/personHovercard";
+import { useTaskContext } from "@/lib/contexts/TaskDetail/TaskProvider";
 
 interface IProps {
   name: string;
@@ -16,9 +17,10 @@ interface IProps {
 }
 const DescriptionTopRow: React.FC<IProps> = ({ name, pfp, isUploadingDescription, projectId, subject }) => {
   const isMbl = useContext(MobileViewContext);
+  const { cachedLayout } = useTaskContext();
   return (
     <div
-      className={cn("flex justify-between", isMbl ? taskDetailSpacing.mobile.descriptionContainer : "")}>
+      className={cn("flex justify-between", cachedLayout && "h-6 overflow-hidden", isMbl ? taskDetailSpacing.mobile.descriptionContainer : "")}>
       <span className='text-meta text-text-light-gray'>
         {
           !isUploadingDescription ?

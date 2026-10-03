@@ -112,6 +112,20 @@ test("every declared flag without a stored row is on for the owner and QA, nobod
   }
 });
 
+test("stable layout has its own dated Owner + QA flag and respects OFF", async () => {
+  assert.equal(flags.HTPR_6899_STABLE_LAYOUT_FLAG, "htpr-6899-stable-layout");
+  const listed = await flags.listFeatureFlagModes();
+  const stable = listed.find(({ key }) => key === flags.HTPR_6899_STABLE_LAYOUT_FLAG);
+  assert.ok(stable);
+  assert.equal(stable.mode, "OWNER_AND_QA");
+  assert.equal(stable.shippedOn, "2026-10-03");
+  assert.equal(stable.ticketUrl, "https://app.hypertask.ai/detail/project-15/6899");
+  assert.match(stable.description, /cached tickets/);
+  assert.deepEqual(await Promise.all([6, 985, 7].map(userId => flags.isFeatureEnabled(stable.key, userId))), [true, true, false]);
+  row = { mode: "OFF", updatedAt: new Date() };
+  assert.deepEqual(await Promise.all([6, 985, 7].map(userId => flags.isFeatureEnabled(stable.key, userId))), [false, false, false]);
+});
+
 test("per-user flag responses distinguish QA from normal members", async () => {
   const qaFlags = await flags.featureFlagsForUser(985);
   const normalFlags = await flags.featureFlagsForUser(7);
@@ -431,6 +445,7 @@ test("declared flags remain listed with ticket details and can be changed", asyn
       { key: "htpr-6882-search-match-highlights", mode: "OWNER_AND_QA", updatedAt: null },
       { key: "htpr-6885-single-undo-toast", mode: "OWNER_AND_QA", updatedAt: null },
       { key: "htpr-6892-cmdk-version", mode: "OWNER_AND_QA", updatedAt: null },
+      { key: "htpr-6899-stable-layout", mode: "OWNER_AND_QA", updatedAt: null },
       { key: "htpr-6902-n-quick-add", mode: "OWNER_AND_QA", updatedAt: null },
       { key: "htpr-6909-search-one-board-tabs", mode: "OWNER_AND_QA", updatedAt: null },
       { key: "htpr-6914-shift-c-quick-add", mode: "OWNER_AND_QA", updatedAt: null },

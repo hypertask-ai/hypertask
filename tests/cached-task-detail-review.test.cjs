@@ -85,6 +85,8 @@ test("cached network and HTTP refresh failures recover through the authorized ro
           "@/lib/realtime/taskDetailRefresh": { shouldPreserveTaskEditorContent: () => false },
           "@/app/detail/[...slug]/TaskDetailComp": { __esModule: true, default: () => null },
           "@/hooks/General/useGetUserPreferences": { useGetUserPreferences: () => ({ data: {} }) },
+          "@/hooks/useFlag": { useFlag: () => true },
+          "@/lib/flags/keys": { HTPR_6899_STABLE_LAYOUT_FLAG: "htpr-6899-stable-layout" },
           "@/lib/constants": { __esModule: true, default: { CommentsTQPrefixKey: "comments" } },
           "@/lib/contexts/TaskDetail/FollowersProvider": { FollowersProvider: ({ children }) => children },
           "@/lib/state": { useRecoilValue: () => ({ id: 6 }) },

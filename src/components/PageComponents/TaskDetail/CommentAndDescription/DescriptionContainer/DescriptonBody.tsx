@@ -22,6 +22,7 @@ const DescriptonBody = ({ draftTQ }: any) => {
   const isMbl = useContext(MobileViewContext);
   const {
     secondaryPanelsReady,
+    cachedLayout,
     parsedTask,
     currentTask,
     editMode,
@@ -71,7 +72,8 @@ const DescriptonBody = ({ draftTQ }: any) => {
 
   return (
     <>
-      {secondaryPanelsReady !== false ? <Tiptap
+      {/* A passive editor swap reflows already-painted cached HTML. Mount it only for editing. */}
+      {secondaryPanelsReady !== false && (!cachedLayout || isEditing) ? <Tiptap
         key={task.id}
         allowPerks={allowPerks}
         attachments={descriptionAttachments}
@@ -89,7 +91,8 @@ const DescriptonBody = ({ draftTQ }: any) => {
       /> : <InnerHTMLDescription
         id="description-input"
         descriptionText={linkedContent ?? ""}
-        attachmentsFromProps={[]}
+        attachmentsFromProps={cachedLayout ? descriptionAttachments : []}
+        setCarousalItems={cachedLayout ? setCarousalItems : undefined}
       />}
 
       {!isEditing && creator && (
