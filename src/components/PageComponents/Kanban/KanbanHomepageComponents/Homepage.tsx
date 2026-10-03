@@ -710,7 +710,7 @@ const HomePage = ({
     async (task: ITask) => {
       const sourceSectionId = getBulkSourceSectionId(task);
       if (sourceSectionId == null) throw new Error("Task column is unavailable");
-      await removeFromListWithStatus(
+      return await removeFromListWithStatus(
         sourceSectionId,
         _currentProject.id,
         task.id,

@@ -49,6 +49,7 @@ import HypertasksCommands from "@/components/commands";
 import { useQueryClient } from "@tanstack/react-query";
 import Image from "next/image";
 import toast from "react-hot-toast";
+import { undoToastSettings } from "@/components/undoToast";
 import useGlobalFocusHandler from "@/hooks/Inbox/useGlobalFocusHandler";
 import { useDeviceContext } from "@/lib/contexts/deviceContext";
 import { type InboxTabMeta } from "@/utils/helperFunctions/helperFunctions";
@@ -466,7 +467,7 @@ const Inbox = ({
       afterNotificationId: data.afterNotificationId,
     });
     toast.dismiss(toastId);
-    toast("Undo notification archive");
+    if (!undoToastSettings.single) toast("Undo notification archive");
   };
 
   const toggleCreateTask = useCallback(() => {

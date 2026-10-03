@@ -10,6 +10,7 @@ import generateRanking from '@/utils/generateRank'
 import globalConstants from "@/lib/constants";
 import { useRouter } from "next/navigation";
 import toast from "react-hot-toast";
+import { undoToastSettings } from "@/components/undoToast";
 import { getFilteredSections } from "../../utils/helperFunctions/Views/FilterHelperFunctions";
 import { getAppliedSubtaskSections } from "@/utils/helperFunctions/Views/SubtaskHelperFunction";
 import { getActiveSubtaskSettingFromProject } from "@/utils/helperFunctions/Views/ViewsHelperFunctions";
@@ -432,6 +433,7 @@ const UpdateKanban = () => {
     if (!sectionId) return;
     let itemIndex: number;
     let hasSubtasks=false;
+    let hasUndo = false;
   
     // Function to handle the update logic
     const updateSections = async () => {
@@ -489,7 +491,7 @@ const UpdateKanban = () => {
   
       mutationHandler(projectToUpdateIndex, updatedSections, allData, updatedTasksArray);
   
-      if (status === "Deleted") toast(`Task deleted`);
+      if (status === "Deleted" && (!undoToastSettings.single || hasSubtasks)) toast(`Task deleted`);
     };
   
     // Function to handle the API call based on status
@@ -498,6 +500,7 @@ const UpdateKanban = () => {
         const response = await globalAPIHandlers.deleteTaskAPI(taskId);
         if (!hasSubtasks) {
           deleteTodo("Undo task delete", { id: taskId, projectId, status: "Deleted" });
+          hasUndo = true;
         }
         return response;
       } else if (status !== "Move") {
@@ -509,6 +512,7 @@ const UpdateKanban = () => {
             status: "Archive",
             undoRedirectPath: options.undoRedirectPath,
           });
+          hasUndo = true;
         }
         return response;
       }
@@ -535,6 +539,7 @@ const UpdateKanban = () => {
       // Server cascades subtask deletion; refetch (guarded by hasSubtasks) is the
       // only reconciliation for parent-with-subtasks deletes from the detail modal.
       await handleClose();
+      return hasUndo;
 
     } catch (error) {
       console.error("Error updating sections or handling status:", error);
