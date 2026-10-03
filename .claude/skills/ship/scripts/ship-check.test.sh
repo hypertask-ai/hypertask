@@ -70,6 +70,47 @@ for statuses in \
     && ok "non-skipped/latest-success status still requires deployment" || bad "deployment bypass: $out"
 done
 
+# Non-app repos without releases may deploy through a Publish or Deploy workflow.
+cat > "$E/mock-bin/gh" <<'MOCK'
+#!/usr/bin/env bash
+case "$1:$2" in
+  pr:view) echo '{"number":838,"title":"YPER4-999 [INFRA] Fixture","state":"MERGED","mergeCommit":{"oid":"ec45678a2"},"baseRefName":"master"}' ;;
+  release:view) [ -n "${RELEASE_TAG:-}" ] && echo "$RELEASE_TAG" ;;
+  release:list) [ "${RELEASE_ERROR:-0}" = 0 ] || exit 1; echo "${RELEASES_FIXTURE:-[]}" ;;
+  api:*/compare/*) [ "${COMPARE_ERROR:-0}" = 0 ] || exit 1; echo "${COMPARE_FIXTURE:-behind}" ;;
+  run:list)
+    [[ "$*" == 'run list -R hypertask-ai/analytics --commit ec45678a2 --json workflowName,conclusion,headSha' ]] || exit 1
+    [ "${RUN_ERROR:-0}" = 0 ] || exit 1; echo "$RUNS_FIXTURE" ;;
+  *) exit 1 ;;
+esac
+MOCK
+publish='[{"workflowName":"Publish hypertask.app","conclusion":"success","headSha":"ec45678a2"}]'
+D() {
+  local want=$1 expected=$2 out got; shift 2
+  out=$(env PATH="$E/mock-bin:$PATH" SHIP_REPO=hypertask-ai/analytics SHIP_BASE=master RUNS_FIXTURE="$publish" "$@" ./ship-check deployed YPER4-999); got=$?
+  [ "$got" = "$want" ] && [[ $out == "$expected"* ]] && ok "$out" || bad "want $want $expected got $got $out"
+}
+D 0 'deployed ok (workflow)'
+D 0 'deployed ok (workflow)' RUNS_FIXTURE='[{"workflowName":"Production Deploy site","conclusion":"success","headSha":"ec45678a2"}]'
+for runs in \
+  '[]' \
+  '[{"workflowName":"Tests","conclusion":"success","headSha":"ec45678a2"}]' \
+  '[{"workflowName":"Publish hypertask.app","conclusion":"failure","headSha":"ec45678a2"}]' \
+  '[{"workflowName":"Publish hypertask.app","conclusion":null,"headSha":"ec45678a2"}]' \
+  '[{"workflowName":"Deploy site","conclusion":"cancelled","headSha":"ec45678a2"}]' \
+  '[{"workflowName":"Publish hypertask.app","conclusion":"success","headSha":"different"}]'; do
+  D 1 'FAIL: no successful Publish or Deploy workflow' RUNS_FIXTURE="$runs"
+done
+D 1 'FAIL: could not read workflow runs' RUN_ERROR=1
+D 1 'FAIL: could not read releases' RELEASE_ERROR=1
+D 1 'FAIL: no release found' RELEASES_FIXTURE='[{"tagName":"v1"}]'
+for comparison in ahead identical; do
+  D 0 'deployed ok (release v1)' RELEASE_TAG=v1 COMPARE_FIXTURE="$comparison"
+done
+D 1 'FAIL: latest release' RELEASE_TAG=v1 COMPARE_FIXTURE=behind
+D 1 'FAIL: latest release' RELEASE_TAG=v1 COMPARE_FIXTURE=diverged
+D 1 'FAIL: could not compare' RELEASE_TAG=v1 COMPARE_ERROR=1
+
 # Duplicates: HTPR-6823 was fixed by HTPR-6801's merged PR 837.
 ./ship-check duplicate HTPR-6823 HTPR-6801 830 >/dev/null && bad "duplicate accepted another ticket's PR" || ok "duplicate rejects a PR of another ticket"
 ./ship-check duplicate HTPR-6823 HTPR-6801 837 >/dev/null && ok "duplicate binds HTPR-6823 to PR 837" || bad "duplicate bind"

@@ -113,7 +113,17 @@ check_deployed() {
   local sha id state
   sha=$(merge_sha "$1") || { echo "$sha"; exit 1; }
   if [ "$REPO" != hypertask-ai/hypertask ]; then
-    local tag cmp; tag=$(gh release view -R "$REPO" --json tagName --jq .tagName 2>/dev/null) || fail "no release found in $REPO"
+    local tag cmp releases runs
+    if ! tag=$(gh release view -R "$REPO" --json tagName --jq .tagName 2>/dev/null); then
+      releases=$(gh release list -R "$REPO" --limit 1 --json tagName 2>/dev/null) || fail "could not read releases in $REPO"
+      jq -e 'length == 0' <<<"$releases" >/dev/null || fail "no release found in $REPO"
+      runs=$(gh run list -R "$REPO" --commit "$sha" --json workflowName,conclusion,headSha 2>/dev/null) \
+        || fail "could not read workflow runs for $sha"
+      jq -e --arg sha "$sha" 'any(.[]; .headSha == $sha and .conclusion == "success"
+        and (.workflowName | test("Publish|Deploy")))' <<<"$runs" >/dev/null \
+        || fail "no successful Publish or Deploy workflow for $sha"
+      echo "deployed ok (workflow)"; return
+    fi
     cmp=$(gh api "repos/$REPO/compare/$sha...$tag" --jq .status 2>/dev/null) || fail "could not compare $sha with release $tag"
     [[ $cmp == ahead || $cmp == identical ]] || fail "latest release $tag of $REPO does not contain $sha yet"
     echo "deployed ok (release $tag)"; return
