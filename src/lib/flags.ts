@@ -11,6 +11,7 @@ import {
 
 import {
   HTPR_6752_INSTANT_TICKET_OPEN_FLAG,
+  HTPR_6873_QUICK_ENTRY_GROW_FLAG,
   AGENT_CHAT_BRIEF_FLAG,
   AGENT_CHAT_TICKET_CONFIRM_FLAG,
   AUTO_TASK_DESCRIPTIONS_FLAG,
@@ -467,6 +468,11 @@ const FEATURE_FLAG_DEFINITIONS = [
     shippedOn: "2026-09-09",
     description:
       "Shows automatic Task Writer drafts in the desktop create-task modal after a title pause.",
+  },
+  {
+    key: HTPR_6873_QUICK_ENTRY_GROW_FLAG,
+    shippedOn: "2026-10-03",
+    description: "Lets the board and table quick-entry box grow to eight lines, then scroll, with Create task and close buttons.",
   },
   {
     key: "htpr-6175-quick-entry-cards",

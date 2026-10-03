@@ -9,6 +9,7 @@ const root = path.resolve(__dirname, "..");
 const jiti = jitiModule.createJiti
   ? jitiModule.createJiti(__filename, {
       interopDefault: true,
+      alias: { "@": path.join(root, "src") },
       moduleCache: false,
       jsx: true,
     })
