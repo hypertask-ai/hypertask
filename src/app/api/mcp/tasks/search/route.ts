@@ -298,8 +298,8 @@ export async function GET(request: NextRequest) {
       const fuzzyPersonEnabled = await isFeatureEnabled(HTPR_6881_SEARCH_FUZZY_PERSON_FLAG, user.id)
       const personProjectIds = fuzzyPersonEnabled && targetProjectId != null ? [targetProjectId] : accessibleProjectIds
       const parsedQuery = chipsEnabled
-        ? await parseSearchWithChipNames(query, personProjectIds, fuzzyPersonEnabled)
-        : await parseSearchWithNames(query, personProjectIds, fuzzyPersonEnabled)
+        ? await parseSearchWithChipNames(query, accessibleProjectIds, fuzzyPersonEnabled, personProjectIds)
+        : await parseSearchWithNames(query, accessibleProjectIds, fuzzyPersonEnabled, personProjectIds)
       const parsed = Object.keys(parsedQuery.filters).length ? parsedQuery : null
       if (parsed) {
         const filtered = await rankedSearchWhere(parsed, accessibleProjectIds, status, limit,

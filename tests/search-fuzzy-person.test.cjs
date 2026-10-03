@@ -18,7 +18,7 @@ function matches(row, where) {
   if (where.AND && !where.AND.every((part) => matches(row, part))) return false
   if (where.OR && !where.OR.some((part) => matches(row, part))) return false
   if (where.NOT && matches(row, where.NOT)) return false
-  for (const key of ['id', 'projectId', 'userId', 'status', 'displayName', 'email']) {
+  for (const key of ['id', 'projectId', 'userId', 'status', 'displayName', 'email', 'title']) {
     if (where[key] === undefined) continue
     const condition = where[key]
     if (condition?.in) { if (!condition.in.includes(row[key])) return false }
@@ -28,6 +28,7 @@ function matches(row, where) {
       if (!row[key]?.toLowerCase().startsWith(condition.startsWith.toLowerCase())) return false
     } else if (row[key] !== condition) return false
   }
+  if (where.project && !matches(row.project, where.project)) return false
   if (where.user && !matches(row.user, where.user)) return false
   if (where.assignees?.some && !row.assignees.some((person) => matches(person, where.assignees.some))) return false
   return true
@@ -39,11 +40,13 @@ const tasks = people.map((person) => ({
   id: 100 + person.id, userId: person.id, user: person, projectId: person.boards[0],
   assignees: [{ userId: person.id, user: person }], title: 'Fixture', status: 'Normal',
   description_: { content: '' }, ticketNumber: `TEST-${person.id}`, section: 'Todo',
-  uniqueIndex: person.id, project: { id: person.boards[0], title: 'Visible' },
+  uniqueIndex: person.id, project: { id: person.boards[0], title: person.boards[0] === 9 ? 'Other Board' : 'Visible' },
   updatedAt: new Date('2026-10-01'), createdAt: new Date('2026-10-01'), dueDate: null,
 }))
 const db = {
-  project: { findMany: async ({ where }) => [7, 9].filter((id) => !where.id || where.id.in.includes(id)).map((id) => ({ id })) },
+  project: { findMany: async ({ where }) => [
+    { id: 7, title: 'Visible', status: 'Normal' }, { id: 9, title: 'Other Board', status: 'Normal' },
+  ].filter((row) => matches(row, where)) },
   user: { findMany: async ({ where, select }) => {
     const ids = where.OR[0].tasks.some.projectId.in
     assert.deepEqual(where.OR, [
@@ -174,6 +177,40 @@ for (const surface of ['API', 'MCP']) {
         assert.ok(state.flagCalls.some(([key, userId]) => key === flag && userId === 42))
         assert.equal(state.poolQueries, Number(fuzzy))
       }
+    }
+  })
+}
+test('board-name parsing keeps accessible boards separate from the scoped fuzzy person pool', async () => {
+  for (const chips of [false, true]) {
+    reset(true, chips)
+    const parsed = await (chips ? parseSearchWithChipNames : parseSearchWithNames)(
+      '-in:Other Board from:valentin', [7, 9], true, [7],
+    )
+    assert.equal(parsed.text, '')
+    assert.deepEqual(parsed.filters.in, [{ value: 'Other Board', negated: true }])
+    assert.deepEqual(parsed.filters.from[0].userIds, [1, 2, 3])
+  }
+})
+for (const surface of ['API', 'MCP']) {
+  test(`${surface} board-name parsing consumes other accessible board names with a board scope`, async () => {
+    for (const chips of [false, true]) {
+      reset(true, chips)
+      const query = '-in:Other Board from:valentin'
+      let ids
+      if (surface === 'API') {
+        const res = { status(code) { this.code = code; return this }, json(body) { this.body = body; return this } }
+        await handler({ method: 'POST', headers: {}, body: { searchQuery: query, projectIds: [7, 9], contextProjectId: 7 } }, res)
+        assert.equal(res.code, 200)
+        ids = res.body.processedData.All.map((row) => row.taskId)
+      } else {
+        const res = await GET(new NextRequest(`http://localhost/api/mcp/tasks/search?q=${encodeURIComponent(query)}&board_id=7`))
+        assert.equal(res.status, 200)
+        ids = (await res.json()).tasks.map((row) => row.id)
+      }
+      assert.deepEqual(ids, [101, 102, 103])
+      assert.ok(state.taskQueries.every((where) => where.AND.some((part) =>
+        part.NOT?.project?.title?.equals === 'Other Board',
+      )))
     }
   })
 }
