@@ -63,7 +63,7 @@ import { mergeTaskThreadFeed } from "@/lib/agentRuns/taskActivityFeed";
 import { isCommentCreatedByUser } from "@/lib/htc/isCommentCreatedByUser";
 import { useFlag } from "@/hooks/useFlag";
 import { useHydrated } from "@/hooks/General/useHydrated";
-import { HTPR_6752_INSTANT_TICKET_OPEN_FLAG, HTPR_6551_QUIET_RUN_ACTIVITY_FLAG } from "@/lib/flags/keys";
+import { HTPR_6752_INSTANT_TICKET_OPEN_FLAG, HTPR_6899_STABLE_LAYOUT_FLAG, HTPR_6551_QUIET_RUN_ACTIVITY_FLAG } from "@/lib/flags/keys";
 
 // import useSetStickyHeight from "./useSetStickyHeight";
 export type TReturnFocusedEl =
@@ -93,8 +93,9 @@ const useTaskDetailGlobalStates = (
   const [editMode, setEditMode] = useState<ITaskDetailEditMode>(null);
   // console.log("🚀 ~ useTaskDetailGlobalStates ~ editMode:", editMode)
   const instantTicketOpen = useFlag(HTPR_6752_INSTANT_TICKET_OPEN_FLAG);
+  const stableLayoutFlag = useFlag(HTPR_6899_STABLE_LAYOUT_FLAG);
   const initialCommentsPayload = useMemo(() => JSON.parse(_comments), [_comments]);
-  const [cachedLayout] = useState(instantTicketOpen && (cachedNavigation || Boolean(initialCommentsPayload.pending)));
+  const [cachedLayout] = useState(instantTicketOpen && stableLayoutFlag && (cachedNavigation || Boolean(initialCommentsPayload.pending)));
   const [secondaryPanelsReady, setSecondaryPanelsReady] = useState(!instantTicketOpen || !initialCommentsPayload.pending);
   useEffect(() => {
     if (secondaryPanelsReady) return;
@@ -594,7 +595,7 @@ const useTaskDetailGlobalStates = (
       setReplyQuote(wrapblockquote);
       focusOn("comment-input", false);
       setEditMode("comment");
-      scrollVirtualize("comment", undefined, true);
+      scrollVirtualize(cachedLayout ? "new-comment" : "comment", undefined, true);
       setTimeout(() => {
         setReplyQuote("");
       }, 100);

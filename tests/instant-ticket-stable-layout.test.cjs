@@ -267,14 +267,66 @@ test("real cached description retains its first-painted HTML until editing start
   assert.match(html(body, false, { draftTQ: [] }), /Rich editor/, "flag-off editor mounting is unchanged");
 });
 
-test("cached layout is selected even when comments were already cached, but never for flag-off or ordinary detail", () => {
+test("cached layout requires both flags and flag-off keeps the production layout", () => {
   const statement = hook.body.statements.find(node => ts.isVariableStatement(node) && node.declarationList.declarations.some(declaration => declaration.name.getText(hookSource) === "[cachedLayout]"));
   assert.ok(statement, "the real hook must declare its cached-layout state");
+  const flag = hook.body.statements.find(node => ts.isVariableStatement(node) && node.declarationList.declarations.some(declaration => declaration.name.getText(hookSource) === "stableLayoutFlag"));
+  assert.ok(flag, "stable layout must read its own ticket-specific flag");
+  assert.equal(flag.declarationList.declarations[0].initializer.getText(hookSource), "useFlag(HTPR_6899_STABLE_LAYOUT_FLAG)");
   const initializer = statement.declarationList.declarations[0].initializer.getText(hookSource);
   const js = ts.transpileModule(`return ${initializer};`, { compilerOptions: { module: ts.ModuleKind.CommonJS } }).outputText;
-  const initialize = new Function("instantTicketOpen", "cachedNavigation", "initialCommentsPayload", "useState", js);
+  const initialize = new Function("instantTicketOpen", "stableLayoutFlag", "cachedNavigation", "initialCommentsPayload", "useState", js);
   const state = (value) => [value];
-  assert.deepEqual(initialize(true, true, { comments: [] }, state), [true]);
-  assert.deepEqual(initialize(false, true, { pending: true }, state), [false]);
-  assert.deepEqual(initialize(true, false, { comments: [] }, state), [false]);
+  for (const instant of [false, true]) {
+    for (const stable of [false, true]) {
+      for (const navigation of [false, true]) {
+        for (const pending of [false, true]) {
+          assert.deepEqual(initialize(instant, stable, navigation, { pending }, state), [instant && stable && (navigation || pending)]);
+        }
+      }
+    }
+  }
+  commentCount = 1;
+  secondaryPanelsReady = true;
+  late = false;
+  [cachedLayout] = initialize(true, false, true, { pending: true }, state);
+  for (const isMobile of [false, true]) {
+    const output = html(thread, isMobile);
+    assert.match(output, /data-index="1"[^>]*translateY\(500px\)/);
+    assert.match(output, /<article[^>]*>.*data-part="pages".*<\/article>/);
+    assert.doesNotMatch(output, /data-part="late-info"/);
+    assert.doesNotMatch(html(title, isMobile, { toggleDueDate: noop }), /data-task-summary-slot/);
+    if (!isMobile) {
+      assert.ok(output.indexOf('data-part="composer"') > output.indexOf('data-part="comment"'), "flag-off retains the composer after comments");
+      assert.equal((output.match(/data-part="composer"/g) || []).length, 1);
+    }
+  }
+  commentCount = 0;
+});
+
+test("quote scroll targets the composer under cached layout and retains legacy scrolling otherwise", () => {
+  const declaration = name => hook.body.statements.find(node => ts.isVariableStatement(node) && node.declarationList.declarations.some(item => item.name.getText(hookSource) === name)).declarationList.declarations[0];
+  const source = `const ${declaration("scrollVirtualize").getText(hookSource)}; const ${declaration("InsertContentInCommentInput").getText(hookSource)}; return InsertContentInCommentInput;`;
+  const js = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.CommonJS } }).outputText;
+  for (const cached of [false, true]) {
+    for (const isMobile of [false, true]) {
+      const scrolls = [];
+      const quotes = [];
+      const modes = [];
+      const focuses = [];
+      const timers = [];
+      const insert = new Function("cachedLayout", "_mbl", "virtualizer", "virtualizeIndexes", "_count", "wrapBlockQuote", "selectPElementWithDataPlaceholderInDiv", "setReplyQuote", "focusOn", "setEditMode", "setTimeout", js)(
+        cached, isMobile, { scrollToIndex: (...args) => scrolls.push(args) }, { descriptionBottomVirtualIndex: 2 }, 25,
+        content => `<blockquote>${content}</blockquote>`, () => ({}), value => quotes.push(value), (...args) => focuses.push(args), value => modes.push(value), callback => timers.push(callback),
+      );
+      insert("Quoted text", {});
+      assert.deepEqual(scrolls, [[cached && !isMobile ? 2 : 24, { align: cached ? "center" : "end" }]]);
+      assert.deepEqual(quotes, ["<blockquote>Quoted text</blockquote>"]);
+      assert.deepEqual(modes, ["comment"]);
+      assert.deepEqual(focuses, [["comment-input", false]]);
+      assert.equal(timers.length, 1);
+      timers[0]();
+      assert.deepEqual(quotes, ["<blockquote>Quoted text</blockquote>", ""]);
+    }
+  }
 });

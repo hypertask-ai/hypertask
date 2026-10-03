@@ -10,6 +10,7 @@ import {
   HTPR_6752_INSTANT_TICKET_OPEN_FLAG,
   HTPR_6873_QUICK_ENTRY_GROW_FLAG,
   HTPR_6892_CMDK_VERSION_FLAG,
+  HTPR_6899_STABLE_LAYOUT_FLAG,
   HTPR_6902_N_QUICK_ADD_FLAG,
   HTPR_6914_SHIFT_C_QUICK_ADD_FLAG,
   AGENT_CHAT_BRIEF_FLAG,
@@ -173,6 +174,12 @@ const FEATURE_FLAG_DEFINITIONS = [
     shippedOn: "2026-10-03",
     description:
       "Shows the build loaded by this tab at the bottom of the desktop Ctrl+K command center, with its commit and local build time.",
+  },
+  {
+    key: HTPR_6899_STABLE_LAYOUT_FLAG,
+    shippedOn: "2026-10-03",
+    description:
+      "Keeps cached tickets steady while comments, summaries, pages and properties load, with the desktop comment composer above the thread.",
   },
   {
     key: HTPR_6752_INSTANT_TICKET_OPEN_FLAG,
