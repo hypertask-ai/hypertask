@@ -26,7 +26,7 @@ function createFixture(source = fs.readFileSync(path.join(root, rowPath), "utf8"
     "@/lib/inboxClusters": { inboxArchiveTooltip: () => "Archive" },
     "@/lib/nativeAgent/agentMessageEnvelope": { decodeAgentMessage: (text) => text },
     "@/utils/helperFunctions/helperFunctions": {
-      convertToPlain: (html) => html.replace(/<[^>]*>/g, ""),
+      convertToPlain: (html) => { const el = window.document.createElement("div"); el.innerHTML = html; return el.textContent; },
       returnIfModalOrInputActive: () => false,
     },
     "@/lib/waitingOn": { formatWaitingOnAge: () => "1 day" },
