@@ -39,7 +39,7 @@ async function run(overrides = {}, opts = {}) {
     calls.push({ key, body: init.body && JSON.parse(init.body) });
     if (!(key in replies)) throw Error(`unexpected ${key}`);
     const value = replies[key];
-    const item = Array.isArray(value) ? (value.length > 1 ? value.shift() : value[0]) : value;
+    const item = typeof value === "function" ? value(calls) : Array.isArray(value) ? (value.length > 1 ? value.shift() : value[0]) : value;
     const status = typeof item === "number" ? item : 200;
     return { ok: status >= 200 && status < 300, status, json: async () => item };
   };
@@ -189,38 +189,20 @@ test("revert failure still freezes and promotes a verified deployment", async ()
   assert.ok(called(calls, `POST ${vercel}/v10/projects/project/promote/old`));
 });
 
-test("missing GitHub token and run URL do not prevent a verified Vercel promotion", async () => {
-  const { result, calls } = await run(greenSmoke(), { githubToken: "", runUrl: "" });
-  assert.equal(result.action, "failed");
-  assert.match(result.errors.freeze, /ROLLBACK_GITHUB_TOKEN.*run URL/);
-  assert.match(result.errors.revert, /ROLLBACK_GITHUB_TOKEN/);
-  assert.equal(result.freeze, false);
-  assert.equal(result.revert.status, "failed");
-  assert.equal(result.promotion.action, "requested");
-  assert.ok(called(calls, `POST ${vercel}/v10/projects/project/promote/old`));
-  assert.equal(called(calls, `GET ${gh}/actions/workflows/prod-health.yml/runs`).body, undefined);
-  assert.equal(calls.some((c) => c.key === `PATCH ${gh}/actions/variables/MERGE_FREEZE`), false);
-});
-
-test("missing repository skips GitHub writes but still checks the public smoke run for promotion", async () => {
-  const { result, calls } = await run(greenSmoke(), { repo: "" });
-  assert.match(result.errors.freeze, /GITHUB_REPOSITORY/);
-  assert.match(result.errors.revert, /GITHUB_REPOSITORY/);
-  assert.equal(result.promotion.action, "requested");
-  assert.equal(calls.some((c) => c.key === `POST ${gh}/git/commits`), false);
-});
-
-test("missing run URL still reverts; missing Vercel token still freezes and reverts", async () => {
-  const missingUrl = await run({}, { runUrl: "" });
-  assert.match(missingUrl.result.errors.freeze, /run URL/);
-  assert.equal(missingUrl.result.revert.status, "created");
-  assert.ok(called(missingUrl.calls, `POST ${gh}/git/commits`));
-
-  const missingVercel = await run({}, { vercelToken: "" });
-  assert.equal(missingVercel.result.freeze, true);
-  assert.equal(missingVercel.result.revert.status, "created");
-  assert.match(missingVercel.result.errors.promotion, /VERCEL_TOKEN/);
-  assert.equal(missingVercel.result.promotion.action, "failed");
+test("missing rollback credentials or run context fail closed before any operation", async () => {
+  for (const [options, expected] of [
+    [{ githubToken: "", runUrl: "" }, /ROLLBACK_GITHUB_TOKEN.*run URL/],
+    [{ repo: "" }, /GITHUB_REPOSITORY/],
+    [{ runUrl: "" }, /run URL/],
+    [{ vercelToken: "" }, /VERCEL_TOKEN/],
+  ]) {
+    const { result, calls } = await run(greenSmoke(), options);
+    assert.equal(result.action, "failed");
+    assert.equal(result.freeze, false);
+    assert.equal(result.revert.status, "skipped");
+    assert.match(result.reason, expected);
+    assert.equal(calls.length, 0);
+  }
 });
 
 test("promotion failure is reported independently of a successful freeze and revert", async () => {
@@ -243,11 +225,11 @@ function greenSmoke() {
       { jobs: [{ name: "smoke", conclusion: "success", steps: [{ name: "Run the smoke checks", conclusion: "success" }] }] },
     ],
     [`POST ${vercel}/v10/projects/project/promote/old`]: [200],
-    [`GET ${vercel}/v9/projects/hypertasks-prod`]: [
-      { id: "project", targets: { production: { id: "live", createdAt: 200, meta: { githubCommitSha: X } } } },
-      { id: "project", targets: { production: { id: "live", createdAt: 200, meta: { githubCommitSha: X } } } },
-      { id: "project", targets: { production: { id: "old", createdAt: 100, meta: { githubCommitSha: OLD } } } },
-    ],
+    [`GET ${vercel}/v9/projects/hypertasks-prod`]: (calls) => ({
+      id: "project", targets: { production: calls.some((call) => call.key.includes("POST") && call.key.includes("/promote/"))
+        ? { id: "old", createdAt: 100, meta: { githubCommitSha: OLD } }
+        : { id: "live", createdAt: 200, meta: { githubCommitSha: X } } },
+    }),
   };
 }
 
@@ -342,5 +324,37 @@ test("an unreadable freeze fails closed without attempting a rollback", async ()
     assert.equal(result.action, "failed");
     assert.match(result.reason, /Cannot read MERGE_FREEZE/);
     assert.equal(calls.length, 1);
+  }
+});
+
+
+test("a superseded failure never freezes merging or reverts the newer live release", async () => {
+  const { result, calls } = await run({
+    [`GET ${vercel}/v9/projects/hypertasks-prod`]: [{ id: "project", targets: { production: { id: "new", meta: { githubCommitSha: HEAD } } } }],
+  }, { head: HEAD });
+  assert.equal(result.action, "skip");
+  assert.equal(result.freeze, false);
+  assert.equal(result.revert.status, "superseded");
+  assert.equal(calls.some((call) => /^(POST|PATCH) /.test(call.key)), false);
+});
+
+test("a newer release becoming live during the freeze cannot be reverted or promoted away", async () => {
+  const { result, calls } = await run({
+    [`GET ${vercel}/v9/projects/hypertasks-prod`]: [
+      { id: "project", targets: { production: { id: "live", meta: { githubCommitSha: X } } } },
+      { id: "project", targets: { production: { id: "new", meta: { githubCommitSha: HEAD } } } },
+    ],
+  });
+  assert.equal(result.freeze, true);
+  assert.equal(result.revert.status, "superseded");
+  assert.equal(calls.some((call) => call.key === `POST ${gh}/git/commits` || call.key.includes("/promote/")), false);
+});
+
+test("unavailable or missing live production identity cannot trigger a rollback", async () => {
+  for (const reply of [403, 503, {}, { targets: { production: { id: "live" } } }]) {
+    const { result, calls } = await run({ [`GET ${vercel}/v9/projects/hypertasks-prod`]: [reply] });
+    assert.equal(result.action, "failed");
+    assert.equal(result.freeze, false);
+    assert.equal(calls.some((call) => /^(POST|PATCH) /.test(call.key)), false);
   }
 });

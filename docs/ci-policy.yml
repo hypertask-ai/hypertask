@@ -135,6 +135,8 @@ policies:
       promotion: older_ready_deployment_with_successful_push_smoke_only
       merge_freeze: MERGE_FREEZE_repository_variable_set_to_run_url
       loop_guard: existing_freeze_skips_all_rollback_operations_even_after_failure
+      live_release_guard: revalidate_failing_sha_before_freeze_and_immediately_before_revert
+      missing_credentials_or_unreadable_live_identity: fail_closed_without_mutations
       rollback_commit_guard: verified_auto_rollback_commit_is_never_reverted
       recovery:
         owner: trusted_claude_session
