@@ -26,6 +26,17 @@ source('src/lib/mcp-server/legacy-sse.ts', {
   isLegacySseRequest: (request) => ['/sse', '/message'].includes(new URL(request.url).pathname),
   handleLegacySseRequest: async () => response,
 })
+const flagChecks = []
+source('src/lib/flags.ts', {
+  HTPR_6804_MCP_TOOLS_FLAG: 'htpr-6804-mcp-tools',
+  isFeatureEnabled: async (key, userId) => {
+    flagChecks.push({ key, userId })
+    return false
+  },
+})
+source('src/lib/prisma.ts', { __esModule: true, default: new Proxy({}, {
+  get: () => { throw new Error('Analytics tests must not access the database') },
+}) })
 source('src/lib/mcp-server/tools.ts', { MCP_TOOLS: [] })
 source('src/lib/mcp-server/listQueryContract.ts', { resolvePortableTools: () => [] })
 source('src/lib/mcp/auth.ts', {
@@ -73,6 +84,7 @@ const routes = {
 async function call(endpoint, method = 'GET') {
   captures.length = 0
   scheduled.length = 0
+  flagChecks.length = 0
   const request = new Request(`https://app.hypertask.ai${endpoint}?sessionId=private-session`, {
     method,
     headers: { Authorization: 'Bearer private-token', 'User-Agent': 'legacy-client/1.0' },
@@ -102,6 +114,20 @@ test('each legacy route and supported method captures verified identity and requ
       assert.ok(!JSON.stringify(capture).includes('private-token'))
       assert.ok(!JSON.stringify(capture).includes('private-session'))
     }
+  }
+})
+
+test('transport analytics evaluates the catalog flag through an isolated fixture for the verified user', async () => {
+  for (const endpoint of ['/sse', '/message', '/mcp']) {
+    await call(endpoint)
+    assert.deepEqual(flagChecks, [{ key: 'htpr-6804-mcp-tools', userId: 2343 }])
+  }
+  authenticated = false
+  try {
+    assert.equal((await call('/sse')).status, 401)
+    assert.deepEqual(flagChecks, [])
+  } finally {
+    authenticated = true
   }
 })
 
