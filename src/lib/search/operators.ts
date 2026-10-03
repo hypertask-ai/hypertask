@@ -1,6 +1,6 @@
 export const SEARCH_OPERATORS = ['from', 'assignee', 'in', 'board', 'label', 'is', 'before', 'after', 'on', 'has'] as const
 export type SearchOperator = (typeof SEARCH_OPERATORS)[number]
-export type SearchFilter = { value: string; negated: boolean }
+export type SearchFilter = { value: string; negated: boolean; userIds?: number[] }
 export type ParsedSearch = { text: string; filters: Partial<Record<SearchOperator, SearchFilter[]>> }
 export type NameOperator = 'from' | 'assignee' | 'in' | 'board' | 'label'
 type Names = Partial<Record<NameOperator, string[]>>

@@ -17,10 +17,11 @@ const mocks = new Map([
     checkMcpRateLimit: async () => null,
   }],
   ['src/lib/flags.ts', {
+    HTPR_6881_SEARCH_FUZZY_PERSON_FLAG: 'htpr-6881-search-fuzzy-person',
     HTPR_6369_SEARCH_OPERATORS_FLAG: 'htpr-6369-search-operators',
     HTPR_6370_SEARCH_CHIPS_FLAG: 'htpr-6370-search-chips',
     HTPR_6530_MCP_LIST_QUERY_FLAG: 'htpr-6530-mcp-list-query',
-    isFeatureEnabled: async (key) => key === 'htpr-6369-search-operators' ? state.flag : state.listFlag,
+    isFeatureEnabled: async (key) => key === 'htpr-6881-search-fuzzy-person' ? false : key === 'htpr-6369-search-operators' ? state.flag : state.listFlag,
   }],
   ['src/lib/mcp/readListQuery.ts', { readEnabledListQuery: (_, params) => ({ listQuery: state.listFlag
     ? { query: null, cursor: params.get('cursor'), filter: {}, fields: [], sortBy: state.sortBy, sortOrder: state.sortOrder }
@@ -58,7 +59,7 @@ const mocks = new Map([
     },
   } }],
 ])
-mocks.get('src/lib/flags.ts').isFeatureEnabled = async (key) => key === 'htpr-6369-search-operators' ? state.flag : key === 'htpr-6370-search-chips' ? state.chipsFlag : state.listFlag
+mocks.get('src/lib/flags.ts').isFeatureEnabled = async (key) => key === 'htpr-6881-search-fuzzy-person' ? false : key === 'htpr-6369-search-operators' ? state.flag : key === 'htpr-6370-search-chips' ? state.chipsFlag : state.listFlag
 mocks.get('src/lib/prisma.ts').default.project.findMany = async ({ select }) => select.title ? [{ title: 'Visible' }] : [{ id: 7 }]
 for (const [file, exports] of mocks) {
   const filename = path.join(root, file)

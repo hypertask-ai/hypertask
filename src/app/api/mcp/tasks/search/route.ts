@@ -7,7 +7,7 @@ import prisma from '@/lib/prisma'
 import { turbopufferSearchTaskIds } from '@/utils/controllers/search/document'
 import { HTPR_6530_MCP_LIST_QUERY_FLAG, isFeatureEnabled } from '@/lib/flags'
 import { HTPR_6369_SEARCH_OPERATORS_FLAG } from '@/lib/flags'
-import { HTPR_6370_SEARCH_CHIPS_FLAG } from '@/lib/flags'
+import { HTPR_6370_SEARCH_CHIPS_FLAG, HTPR_6881_SEARCH_FUZZY_PERSON_FLAG } from '@/lib/flags'
 import { MAX_SEARCH_OPERATOR_CLAUSES, searchOperatorClauseCount } from '@/lib/search/operators'
 import { parseSearchWithChipNames, parseSearchWithNames } from '@/lib/search/serverOperators'
 import { rankedSearchWhere } from '@/lib/search/rankedWhere'
@@ -295,14 +295,11 @@ export async function GET(request: NextRequest) {
 
     if (operatorsEnabled) {
       const chipsEnabled = await isFeatureEnabled(HTPR_6370_SEARCH_CHIPS_FLAG, user.id)
-      let selectedQuery
-      if (chipsEnabled) {
-        selectedQuery = await parseSearchWithChipNames(query, accessibleProjectIds)
-      } else {
-      const parsedQuery = await parseSearchWithNames(query, accessibleProjectIds)
-        selectedQuery = parsedQuery
-      }
-      const parsedQuery = selectedQuery
+      const fuzzyPersonEnabled = await isFeatureEnabled(HTPR_6881_SEARCH_FUZZY_PERSON_FLAG, user.id)
+      const personProjectIds = fuzzyPersonEnabled && targetProjectId != null ? [targetProjectId] : accessibleProjectIds
+      const parsedQuery = chipsEnabled
+        ? await parseSearchWithChipNames(query, accessibleProjectIds, fuzzyPersonEnabled, personProjectIds)
+        : await parseSearchWithNames(query, accessibleProjectIds, fuzzyPersonEnabled, personProjectIds)
       const parsed = Object.keys(parsedQuery.filters).length ? parsedQuery : null
       if (parsed) {
         const filtered = await rankedSearchWhere(parsed, accessibleProjectIds, status, limit,

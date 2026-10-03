@@ -56,6 +56,7 @@ import {
   HTPR_6688_SEARCH_AUTOCOMPLETE_FLAG,
   HTPR_6865_SEARCH_LAYOUT_FLAG,
   HTPR_6878_SEARCH_LABEL_SCOPE_FLAG,
+  HTPR_6881_SEARCH_FUZZY_PERSON_FLAG,
   MY_TASKS_VIEWS_FLAG,
   MY_TASKS_BULK_SELECTION_FLAG,
   MY_TASKS_FILTER_PARITY_FLAG,
@@ -613,6 +614,11 @@ const FEATURE_FLAG_DEFINITIONS = [
     key: HTPR_6878_SEARCH_LABEL_SCOPE_FLAG,
     shippedOn: "2026-10-03",
     description: "Scopes search label suggestions to picked boards, shows ticket counts and combines same-name labels across boards. Requires the search layout flag.",
+  },
+  {
+    key: HTPR_6881_SEARCH_FUZZY_PERSON_FLAG,
+    shippedOn: "2026-10-03",
+    description: "Typed author and assignee filters match all similar names or emails in accessible requested boards, ignoring case and accents; selected person IDs stay exact.",
   },
   {
     key: HTPR_6372_SEARCH_RANKING_FLAG,
