@@ -19,7 +19,7 @@ import Tooltip from "@/components/Common/Tooltip";
 import { useSignout } from "@/hooks/MultiPages/HTC/useSignout";
 import { useMobileView } from "@/lib/contexts/mobileContext";
 import { SidebarContextProvider } from "@/lib/contexts/Sidebars/SidebarProvider";
-import { currentUserAtom } from "@/store";
+import { currentUserAtom, showCommandsAtom } from "@/store";
 import { cn } from "@/utils/undoActions/helperFuncs";
 import { useRecoilValue } from "@/lib/state";
 import { useGetUserPreferences } from "@/hooks/General/useGetUserPreferences";
@@ -267,6 +267,7 @@ const SettingsShell: React.FC<SettingsShellProps> = ({ section }) => {
   const activeTab = getSettingsTabForSection(activeSection);
   const mbl = useMobileView();
   const currentUser = useRecoilValue(currentUserAtom);
+  const showCommands = useRecoilValue(showCommandsAtom);
   const { data: announcementsData } = useGetAnnouncements(
     currentUser?.id,
     undefined,
@@ -330,7 +331,7 @@ const SettingsShell: React.FC<SettingsShellProps> = ({ section }) => {
 
   useEffect(() => {
     const handleKeydown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") {
+      if (event.key === "Escape" && !showCommands.show) {
         event.preventDefault();
         if (showFeedback) {
           setShowFeedback(false);
@@ -342,7 +343,7 @@ const SettingsShell: React.FC<SettingsShellProps> = ({ section }) => {
 
     document.addEventListener("keydown", handleKeydown);
     return () => document.removeEventListener("keydown", handleKeydown);
-  }, [closeSettings, showFeedback]);
+  }, [closeSettings, showFeedback, showCommands.show]);
 
   const { bottomGroups, primaryGroups } = useMemo(() => {
     const normalizedSearch = searchTerm.trim().toLowerCase();

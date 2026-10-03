@@ -130,7 +130,7 @@ import { useDeviceContext } from "@/lib/contexts/deviceContext";
 import { isFavoriteBoardShortcut } from "@/lib/constants/shortcuts";
 import { isControlQFocusShortcut } from "@/lib/aiChat/chatFocusShortcut";
 import {
-  isAgentsRoute,
+  shouldRenderGlobalCommandMenu,
   isCommandCenterShortcut,
 } from "@/lib/constants/commandCenterShortcut";
 import useHypertasksRecoilStates from "@/hooks/RecoilRoot/useHypertasksRecoilStates";
@@ -724,6 +724,28 @@ export default function GlobalProvider({
     return () =>
       document.removeEventListener("keydown", handleGlobalGShortcut, true);
   }, []);
+  useEffect(() => {
+    const handleCommandCenterShortcut = (e: KeyboardEvent) => {
+      if (authenticatedUserId === null) return;
+      if (showTrialModal || showEmailVerificationModal) return;
+      if (!isCommandCenterShortcut(e, isApple, pathname)) return;
+      e.preventDefault();
+      // Capture before route/input handlers so one keypress cannot toggle twice.
+      e.stopImmediatePropagation();
+      toggleShowCommands();
+    };
+    document.addEventListener("keydown", handleCommandCenterShortcut, true);
+    return () =>
+      document.removeEventListener("keydown", handleCommandCenterShortcut, true);
+  }, [
+    authenticatedUserId,
+    isApple,
+    pathname,
+    showTrialModal,
+    showEmailVerificationModal,
+    toggleShowCommands,
+  ]);
+
   const handleKeyPress = async (e: KeyboardEvent) => {
     // console.log("🚀 ~ handleKeyPress ~ e GLOBAL PROVIDER:", e.keyCode)
     if (showTrialModal || showEmailVerificationModal) return;
@@ -751,15 +773,6 @@ export default function GlobalProvider({
         }
         return;
       }
-    }
-
-    // The Command Center is a workspace-level shortcut. Keep it available on
-    // task detail, agent pages, and Settings, including from focused inputs.
-    if (isCommandCenterShortcut(e, isApple, pathname)) {
-      e.preventDefault();
-      e.stopImmediatePropagation();
-      toggleShowCommands();
-      return;
     }
 
     const isInputFocused = ["input", "textarea"].includes(
@@ -1442,7 +1455,9 @@ export default function GlobalProvider({
         />
       )}
 
-      {showCommands.show && isAgentsRoute(pathname) && <HypertasksCommands />}
+      {authenticatedUserId !== null &&
+        showCommands.show &&
+        shouldRenderGlobalCommandMenu(pathname) && <HypertasksCommands />}
 
       <BoardStartupContext.Provider
         value={{

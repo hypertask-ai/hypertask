@@ -171,7 +171,7 @@ test("the board route id overrides a stale board in the same team", async (t) =>
   assert.equal(page.selectedBoard()?.id, 15);
 });
 
-for (const [pathname, section] of [["/project", "appearance"], ["/inbox", "board-general"], ["/settings/board-general", "board-members"]]) {
+for (const [pathname, section] of [["/project", "appearance"], ["/inbox", "board-general"], ["/settings/board-general", "board-members"], ["/settings/profile", "board-members"]]) {
   test(`${pathname} opening ${section} preserves deliberate settings selection without board context`, async (t) => {
     const page = fixture(t, { pathname, query: "" });
     await page.run(CommandMode.Setting, section);
