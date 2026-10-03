@@ -109,8 +109,12 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const contentType = body.content_type ?? 'markdown'
-    if (hasContent && !CONTENT_TYPES.includes(contentType as PageContentType)) {
+    const contentType = body.content_type ?? undefined
+    if (
+      hasContent &&
+      contentType !== undefined &&
+      !CONTENT_TYPES.includes(contentType as PageContentType)
+    ) {
       return NextResponse.json(
         buildFieldError(
           'invalid_field',

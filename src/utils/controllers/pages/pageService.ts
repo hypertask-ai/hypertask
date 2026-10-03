@@ -8,7 +8,7 @@ import {
 } from '@/utils/controllers/turbopuffer/turbopufferHelper'
 import { markdownToHtml } from '@/utils/helperFunctions/markdownToHtml'
 import { sanitizeRichHtml } from '@/utils/helperFunctions/sanitizeRichHtml'
-import { extractCanvasText, wrapHtmlCanvas } from './htmlCanvas'
+import { decodeHtmlCanvas, extractCanvasText, wrapHtmlCanvas } from './htmlCanvas'
 
 export type PageContentType = 'html' | 'markdown' | 'html_canvas'
 export type PageUpdateMode = 'replace' | 'append' | 'prepend'
@@ -246,7 +246,10 @@ export async function updatePage({
       : mergePageContent({
           currentHtml: current.contentHtml,
           content,
-          contentType: contentType ?? 'markdown',
+          // Canvas type is encoded in contentHtml; ordinary pages have no stored type.
+          contentType: contentType ?? (
+            decodeHtmlCanvas(current.contentHtml) !== null ? 'html_canvas' : 'markdown'
+          ),
           mode,
         })
 
