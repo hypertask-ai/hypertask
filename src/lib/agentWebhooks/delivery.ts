@@ -139,6 +139,24 @@ export async function deliverAgentWebhook(
     });
   }
 
+  const chat = typeof payload === "object" && payload !== null && !Array.isArray(payload)
+    ? payload.chat
+    : null;
+  if (typeof chat === "object" && chat !== null && !Array.isArray(chat) &&
+    typeof chat.messageId === "string" && chat.messageId.startsWith("ai-chat-alert:")) {
+    try {
+      const { reportError } = await import("@/lib/errors/reportError");
+      await reportError({
+        source: "handled",
+        message: "AI Chat Manager alert webhook delivery failed",
+        fingerprintKey: "ai-chat-alerts:webhook-delivery",
+        extra: { attemptCount, statusCode: result.statusCode },
+      });
+    } catch {
+      console.warn("[ai/chat/alerts] webhook error reporting failed");
+    }
+  }
+
   return {
     status: failedPermanently ? "failed" : "retrying",
     statusCode: result.statusCode,

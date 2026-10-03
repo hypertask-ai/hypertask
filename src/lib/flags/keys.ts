@@ -34,6 +34,7 @@ export const COLUMN_ALL_VIEWS_FLAG = "htpr-5937-show-column-in-all-views";
 export const SHORTCUT_NUDGES_FLAG = "htpr-5906-shortcut-nudges";
 export const CONFIRMED_PROPOSAL_HEADING_FLAG = "htpr-6197-confirmed-proposal-heading";
 export const MANAGER_LOOP_ACTIVITY_FLAG = "htpr-6243-manager-loop-activity";
+export const HTPR_6354_AI_CHAT_ALERTS_FLAG = "htpr-6354-ai-chat-alerts";
 export const LAZY_EMOJI_LIST_FLAG = "htpr-6059-lazy-emoji-list";
 export const HTPR_6278_CHAT_TURN_FAILURE_FLAG =
   "htpr-6278-chat-turn-failure-state";

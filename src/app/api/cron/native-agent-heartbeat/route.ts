@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { Prisma } from "@prisma/client";
 import prisma from "@/lib/prisma";
 import { hasValidCronAuthorization } from "@/lib/cronAuthorization";
+import { after } from "next/server";
+import { sweepAiChatAlerts } from "@/lib/ai/chatAlerts/service";
 import { getStructuredInboxForAgent } from "@/utils/controllers/notifications/getStructuredInboxForAgent";
 import { broadcastInboxChange } from "@/lib/realtime/server";
 import {
@@ -430,6 +432,8 @@ export async function GET(request: NextRequest) {
   ) {
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   }
+
+  after(sweepAiChatAlerts);
 
   let callbackBase: string;
   try {

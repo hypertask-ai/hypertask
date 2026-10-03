@@ -8,6 +8,7 @@ import { persistAssistantMessage } from "@/app/api/ai/chat/stream/persistAssista
 import { linkifyTicketRefs } from "@/utils/controllers/comments/linkifyTicketRefs";
 import { type AiChatTurnOutcome, recordAiChatTurn } from "@/lib/telemetry/aiChatObservability";
 import { waitUntil } from "@vercel/functions";
+import { recordAiChatAlertSample } from "@/lib/ai/chatAlerts/service";
 import { resolveSkillsForAiRequest } from "@/app/api/ai/_lib/chatSkillResolution";
 
 import { reportHandledChatError, errorMessage, sseFrame, userFacingErrorMessage, userFacingErrorDetails } from "@/lib/ai/chatStream/errors";
@@ -195,8 +196,14 @@ export async function runChatStream(controller: ReadableStreamDefaultController<
         observationError,
       );
     });
+    const alertObservation = recordAiChatAlertSample({
+      userId: dbUser.id,
+      outcome,
+      latencyMs: Date.now() - state.generationStartedAt,
+    });
     try {
       waitUntil(observation);
+      waitUntil(alertObservation);
     } catch (observationError) {
       console.warn(
         "[ai/chat/stream] turn observation could not outlive the request",
