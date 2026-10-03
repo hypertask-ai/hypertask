@@ -310,6 +310,111 @@ test('empty tips keep j/k typing native while arrows, Tab/Enter, Escape and firs
   })
 })
 
+test('layout suggestions and selected row survive input/window blur, return focus and pointer leave', async (t) => {
+  await withSearch(t, {}, async ({ input, type, tick, press, selected, options, lookups, dom }) => {
+    for (const query of ['', 'board:', 'from:mal']) {
+      await type(query)
+      await tick(180)
+      await press(query === 'board:' ? 'ArrowUp' : 'ArrowDown')
+      const list = document.querySelector('[data-search-layout]')
+      const html = list.outerHTML
+      const active = input().getAttribute('aria-activedescendant')
+      const before = lookups.length
+      await React.act(async () => {
+        selected().dispatchEvent(new dom.window.MouseEvent('mouseout', { bubbles: true, relatedTarget: null }))
+        input().blur()
+        dom.window.dispatchEvent(new dom.window.Event('blur'))
+      })
+      await tick(200)
+      assert.equal(input().getAttribute('aria-expanded'), 'true')
+      assert.equal(document.querySelector('[data-search-layout]'), list)
+      assert.equal(list.outerHTML, html)
+      assert.equal(input().getAttribute('aria-activedescendant'), active)
+      await React.act(async () => {
+        dom.window.dispatchEvent(new dom.window.Event('focus'))
+        input().focus()
+      })
+      assert.equal(list.outerHTML, html)
+      assert.equal(input().getAttribute('aria-activedescendant'), active)
+      assert.equal(lookups.length, before, 'blur and refocus must not restart candidate lookup')
+      assert.ok(options().includes(selected()))
+      const otherInput = document.createElement('input')
+      document.body.append(otherInput)
+      await React.act(async () => otherInput.focus())
+      assert.equal(list.outerHTML, html, 'keyboard focus elsewhere on the page must retain suggestions')
+      assert.equal(input().getAttribute('aria-activedescendant'), active)
+      await React.act(async () => input().focus())
+      assert.equal(list.outerHTML, html)
+      otherInput.remove()
+    }
+  })
+})
+
+test('layout outside clicks dismiss suggestions, inside clicks retain them and refocus reopens them', async (t) => {
+  await withSearch(t, {}, async ({ input, type, tick, selected, dom }) => {
+    await type('board:')
+    await tick(180)
+    const list = document.querySelector('[data-search-layout]')
+    await React.act(async () => list.dispatchEvent(new dom.window.Event('pointerdown', { bubbles: true })))
+    assert.equal(input().getAttribute('aria-expanded'), 'true')
+    await React.act(async () => document.body.dispatchEvent(new dom.window.Event('pointerdown', { bubbles: true })))
+    assert.equal(document.querySelector('[data-search-layout]'), null)
+    assert.equal(input().getAttribute('aria-expanded'), 'false')
+    await React.act(async () => { input().blur(); input().focus() })
+    await tick(180)
+    assert.match(selected().textContent, /Product Board/)
+  })
+})
+
+test('layout explicit Escape, value acceptance and search submission still dismiss suggestions', async (t) => {
+  await withSearch(t, {}, async ({ input, type, tick, press, requests }) => {
+    await type('board:')
+    await tick(180)
+    await press('Escape')
+    assert.equal(input().getAttribute('aria-expanded'), 'false')
+    assert.equal(requests.length, 0)
+    await React.act(async () => input().click())
+    await tick(180)
+    await press('Tab')
+    assert.equal(document.querySelector('[data-search-layout]'), null)
+    assert.equal(requests.at(-1).body.searchQuery, 'board:7')
+    await type('plain search')
+    await press('Enter')
+    assert.equal(document.querySelector('[data-search-layout]'), null)
+    assert.equal(requests.at(-1).body.searchQuery, 'board:7 plain search')
+  })
+})
+
+test('result pointer leave retains layout row focus and selection but keeps legacy blur behavior', async (t) => {
+  for (const enabled of [true, false]) {
+    await withSearch(t, { query: 'login', flags: { [layoutFlag]: enabled } }, async ({ complete, state, tick, dom }) => {
+      await complete()
+      const row = document.getElementById('task_1')
+      row.tabIndex = -1
+      await React.act(async () => {
+        row.focus()
+        row.dispatchEvent(new dom.window.MouseEvent('mouseover', { bubbles: true }))
+        row.dispatchEvent(new dom.window.MouseEvent('mouseout', { bubbles: true, relatedTarget: null }))
+      })
+      const index = state().selectedIndex
+      await tick(100)
+      assert.equal(document.activeElement === row, enabled)
+      assert.equal(state().selectedIndex, index)
+    })
+  }
+})
+
+test('legacy input blur still dismisses its floating suggestions', async (t) => {
+  await withSearch(t, { flags: { [layoutFlag]: false } }, async ({ input, type, tick }) => {
+    await type('board:')
+    await tick(180)
+    assert.equal(input().getAttribute('aria-expanded'), 'true')
+    await React.act(async () => input().blur())
+    assert.equal(input().getAttribute('aria-expanded'), 'false')
+    assert.equal(document.getElementById('search-chip-options'), null)
+  })
+})
+
 test('typing suggestions put Ask AI once before operators and values and bold substring matches', async (t) => {
   await withSearch(t, {}, async ({ type, tick, options, selected, input, requests }) => {
     await type('a')
@@ -765,5 +870,20 @@ test('one-board results hide the tab row only when its flag is on; two boards ke
     await press('Enter')
     await complete(undefined, both, ['All', 'Product Board', 'Other Board'])
     assert.ok(tabNames().includes('Other Board'))
+  })
+})
+
+test('Escape closes retained layout suggestions after focus moved elsewhere', async (t) => {
+  await withSearch(t, {}, async ({ input, type, tick, dom }) => {
+    await type('board:')
+    await tick(180)
+    assert.equal(input().getAttribute('aria-expanded'), 'true')
+    const otherInput = document.createElement('input')
+    document.body.append(otherInput)
+    await React.act(async () => otherInput.focus())
+    assert.equal(input().getAttribute('aria-expanded'), 'true')
+    await React.act(async () => otherInput.dispatchEvent(new dom.window.KeyboardEvent('keydown', { key: 'Escape', keyCode: 27, bubbles: true, cancelable: true })))
+    assert.equal(input().getAttribute('aria-expanded'), 'false')
+    otherInput.remove()
   })
 })
