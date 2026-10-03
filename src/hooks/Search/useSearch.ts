@@ -780,7 +780,7 @@ export function useSearch(
 
     debounceTimeout.current = setTimeout(() => {
       if (currentHoveredDiv.current !== null && liSelectedRef.current) {
-        (liSelectedRef.current as HTMLLIElement)?.blur();
+        if (!searchLayoutEnabled) (liSelectedRef.current as HTMLLIElement)?.blur();
         currentHoveredDiv.current = null;
       }
     }, 100);

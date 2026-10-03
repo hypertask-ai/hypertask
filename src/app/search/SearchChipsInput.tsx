@@ -46,6 +46,7 @@ export default function SearchChipsInput({ value, onChange, onRun, boardId, inpu
   const [dismissed, setDismissed] = useState(false);
   const lookup = useRef(0);
   const pickerRef = useRef<HTMLDivElement>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
   const [focused, setFocused] = useState(false);
   const [caretAtEnd, setCaretAtEnd] = useState(true);
   const queryNames = labelScopeEnabled ? { ...names,
@@ -93,6 +94,18 @@ export default function SearchChipsInput({ value, onChange, onRun, boardId, inpu
   useEffect(() => {
     if (autocompleteEnabled && open) pickerRef.current?.querySelector<HTMLElement>(`#mention-button-${selectedIndex}`)?.scrollIntoView({ block: 'nearest' });
   }, [autocompleteEnabled, open, selectedIndex]);
+
+  useEffect(() => {
+    if (!layoutEnabled) return;
+    const dismissOutside = (event: PointerEvent) => {
+      if (!containerRef.current?.contains(event.target as Node)) {
+        setDismissed(true);
+        setFocused(false);
+      }
+    };
+    document.addEventListener('pointerdown', dismissOutside);
+    return () => document.removeEventListener('pointerdown', dismissOutside);
+  }, [layoutEnabled]);
 
   useEffect(() => {
     setEditing(false);
@@ -319,7 +332,7 @@ export default function SearchChipsInput({ value, onChange, onRun, boardId, inpu
   }
 
   return (
-    <div className="relative w-full px-4 @md:px-9">
+    <div ref={containerRef} className="relative w-full px-4 @md:px-9">
       <div className="flex min-h-10 flex-wrap items-center gap-1" onClick={() => inputRef.current?.focus()}>
         {chips.map((chip: SearchToken, index: number) => (
           <button
@@ -359,10 +372,10 @@ export default function SearchChipsInput({ value, onChange, onRun, boardId, inpu
           value={text}
           onChange={change}
           onKeyDown={keyDown}
-          onFocus={(event) => { setFocused(true); reopenPicker(event); }}
+          onFocus={(event) => { setFocused(true); if (!layoutEnabled || !open) reopenPicker(event); }}
           onClick={reopenPicker}
           onSelect={(event) => setCaretAtEnd(event.currentTarget.selectionStart === text.length)}
-          onBlur={(event) => { if (!pickerRef.current?.contains(event.relatedTarget)) { setDismissed(true); setFocused(false); } }}
+          onBlur={(event) => { if (!layoutEnabled && !pickerRef.current?.contains(event.relatedTarget)) { setDismissed(true); setFocused(false); } }}
           role="combobox"
           aria-label="Search tasks"
           aria-autocomplete={autocompleteEnabled ? "both" : "list"}
