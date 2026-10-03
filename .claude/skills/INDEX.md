@@ -12,6 +12,7 @@ Read the "when to load" column, open that SKILL.md, and follow it, including its
 |---|---|---|
 | ship | Start of every session (`/ship <ticket>`): the map of steps, the proof checklist, the merge and Done block | .claude/skills/ship/SKILL.md |
 | clean-up | After Done (from /ship), or by hand with `/clean-up`: removes this session's own finished worktrees and branches | .claude/skills/clean-up/SKILL.md |
+| drain-board | `/drain-board <board>`: works every open ticket on a board until each is Done or waiting on Valentin, one ledger gate per ticket | .claude/skills/drain-board/SKILL.md |
 | vcc | Claim, board writes, merge, deploy watch, report | .claude/skills/vcc/SKILL.md |
 | reuse-existing-ui | Before UI code | .claude/skills/reuse-existing-ui/SKILL.md |
 | fix-bug | The fix, when it restores behaviour that used to work | .claude/skills/fix-bug/SKILL.md |
