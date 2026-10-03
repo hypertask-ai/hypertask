@@ -27,6 +27,7 @@ export const getKeyboardShortcuts = (
   appShellRailOn = false,
   consistentCommentShortcuts = false,
   keepDirectTaskOpen = false,
+  historyToggleLabel = "Toggle history events",
 ): IShortcut[] => {
   const cmdControl = isApple ? "CMD" : "CTRL";
   const altOptions = isApple ? "OPT" : "ALT";
@@ -173,7 +174,7 @@ export const getKeyboardShortcuts = (
         { shortTitle: "Expand summary", pressKey: ["I"] },
         { shortTitle: "Expand single comment", pressKey: ["O"] },
         { shortTitle: "Expand all comments", pressKey: ["SHIFT", "O"] },
-        { shortTitle: "Toggle history events", pressKey: [cmdControl, "SHIFT", "H"] },
+        { shortTitle: historyToggleLabel, pressKey: [cmdControl, "SHIFT", "H"] },
         { shortTitle: "View all links", pressKey: ["CTRL", "O"] },
         { shortTitle: "Write Comment", pressKey: ["CTRL", "M"] },
         { shortTitle: "Edit Description", pressKey: ["CTRL", "D"] },

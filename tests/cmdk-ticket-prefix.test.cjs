@@ -77,6 +77,7 @@ function paletteGroups(enabled, frequent = {}) {
   bindings.isTicketPrefixCommandVisible = evaluate(`(() => { ${statements.join("\n")} return isTicketPrefixCommandVisible; })()`, {
     ...bindings, useCallback: (callback) => callback,
   });
+  bindings.getCommands = registry.getAllCommands;
   return evaluate(initializer(palette, "allCommands_"), bindings);
 }
 

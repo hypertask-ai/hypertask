@@ -60,6 +60,7 @@ import {
   HTPR_6514_COMMENT_LONG_PRESS_FLAG,
   HTPR_6892_CMDK_VERSION_FLAG,
   HTPR_6868_TICKET_PREFIX_FLAG,
+  HTPR_6662_AGENT_LOG_NAME_FLAG,
   HTPR_6861_MOBILE_PAGE_BACK_ROW_FLAG,
   INBOX_ARCHIVE_CLUSTER_FLAG,
   MY_TASKS_TABLE_COLUMNS_FLAG,
@@ -107,6 +108,16 @@ const Commands = (props: Props) => {
   const onMyTasks = !!pathname?.startsWith(myTasksRoute);
   const cmdkVersionEnabled = useFlag(HTPR_6892_CMDK_VERSION_FLAG);
   const ticketPrefixEnabled = useFlag(HTPR_6868_TICKET_PREFIX_FLAG);
+  const agentLogNameEnabled = useFlag(HTPR_6662_AGENT_LOG_NAME_FLAG);
+  const getAgentLogCommands = useCallback(
+    (options?: IAllCommands) => getAllCommands(options, true),
+    []
+  );
+  let getCommands = getAllCommands;
+  // Keep the label gate in the component body so CI can trace UI coverage.
+  if (agentLogNameEnabled) {
+    getCommands = getAgentLogCommands;
+  }
   const excludeTicketPrefixCommand = useCallback(
     (command: ICommandList) => command.key !== "settingsBoardTicketPrefix",
     []
@@ -178,7 +189,7 @@ const Commands = (props: Props) => {
           keywords: `inbox archive cluster clear notifications ${cluster.ticketNumber}`,
         }))
       : [];
-    const registryGroups = getAllCommands({
+    const registryGroups = getCommands({
       context: "Others",
       ...contextOptions,
       appShellRailOn,
@@ -339,6 +350,7 @@ const Commands = (props: Props) => {
     boardLayout,
     calendarSettings.showWeekends,
     contextOptions,
+    getCommands,
     commentLongPressEnabled,
     pinCommentActions,
     pageActions,

@@ -115,3 +115,4 @@ export const AGENT_CHAT_ADHD_REPLY_GUIDANCE =
   "Lead with the next action. Keep replies short. Number steps. End with one concrete next action when something remains open.";
 
 export const HTPR_6868_TICKET_PREFIX_FLAG = "htpr-6868-ticket-prefix";
+export const HTPR_6662_AGENT_LOG_NAME_FLAG = "htpr-6662-agent-log-name";

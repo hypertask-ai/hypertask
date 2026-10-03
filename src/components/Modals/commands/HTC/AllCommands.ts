@@ -1307,13 +1307,14 @@ const help: CommandGroup = {
  * Returns the command registry, putting task actions first in task context.
  */
 export const getAllCommands = (
-  commandOptions: IAllCommands = { context: "Others" }
+  commandOptions: IAllCommands = { context: "Others" },
+  agentLogNameEnabled = false
 ): CommandGroup[] => {
   const navigate = getNavigateCommands(commandOptions);
   const time = getTimeCommands(commandOptions);
   const bulk = getBulkTaskCommands(commandOptions);
   const comment = getCommentCommands(commandOptions);
-  const task = getTaskCommands(commandOptions);
+  const task = getTaskCommands(commandOptions, agentLogNameEnabled);
   const board = getBoardCommands(commandOptions);
   const appShell = getAppShellCommands();
   const agentChat = getAgentChatCommands();
