@@ -15,7 +15,6 @@ import {
 } from "@/lib/agents/chatTicketProposal";
 import {
   AGENT_CHAT_PARKED_MESSAGE,
-  AGENT_CHAT_PARKED_REPLY_FLAG,
   isAgentChatSystemMessage,
 } from "@/lib/agentRuns/model";
 import { readAgentChatTurn } from "@/lib/agentRuns/service";
@@ -51,14 +50,13 @@ function unreadSince(
   sessionId: string,
   userId: number,
   since: Date,
-  exclude?: Prisma.ChatMessageWhereInput,
 ) {
   return prisma.chatMessage.count({
     where: {
       sessionId,
       createdAt: { gt: since },
       // A row this reader cannot see must not count towards their unread.
-      ...(exclude ? { NOT: exclude } : {}),
+      NOT: PARKED_NOTICE_WHERE,
       OR: [{ authorUserId: null }, { authorUserId: { not: userId } }],
     },
   });
@@ -124,13 +122,6 @@ export async function GET(
       AGENT_CHAT_TICKET_CONFIRM_FLAG,
       userId,
     );
-    // The parked notice is stored in a shared thread, so a reader outside the
-    // rollout must not see it: for them the thread still ends at the human
-    // message, exactly as it does today.
-    const parkedReplyEnabled = await isFeatureEnabled(
-      AGENT_CHAT_PARKED_REPLY_FLAG,
-      userId,
-    );
     const pollingChatEnabledForUser = await isFeatureEnabled(
       HTPR_6553_AGENT_CHAT_POLLING_FLAG,
       userId,
@@ -167,11 +158,9 @@ export async function GET(
     const messageRows = hasMore ? pageRows.slice(0, limit) : pageRows;
     const messages = messageRows
       .reverse()
-      // Filtered after the read, so paging still walks the stored rows: a
-      // reader outside the rollout sees a shorter page, never a shifted one.
+      // Keep legacy parked notices hidden without changing stored-row paging.
       .filter(
         (message) =>
-          parkedReplyEnabled ||
           !(isAgentChatSystemMessage(message) &&
             message.content === AGENT_CHAT_PARKED_MESSAGE),
       );
@@ -192,7 +181,6 @@ export async function GET(
             session.id,
             userId,
             participant.lastReadAt ?? participant.joinedAt,
-            parkedReplyEnabled ? undefined : PARKED_NOTICE_WHERE,
           )
         : null,
       before || !access.sharedConversationEnabled

@@ -1,6 +1,5 @@
 "use client";
 
-import { AGENT_CHAT_PARKED_MESSAGE } from "@/lib/agentRuns/model";
 import { type AgentChatActivity } from "@/lib/agents/chatActivityFeed";
 import { readDraft, writeDraft } from "@/lib/agents/chatDrafts";
 import { markChatRead, saveDraftToServer, } from "@/lib/agents/chatViewerState";
@@ -87,12 +86,8 @@ export function useAgentChatSession({
       setMessagesError(null);
       setDeliveryMode(data.deliveryMode ?? null);
       // Same signal a failed send sets: no live delivery path means the human
-      // side of the notice must survive a reload. The parked line already says
-      // it in the thread, so two copies of the same sentence would be noise.
-      setDeliveryNotice(
-        data.chatEnabled === false &&
-          data.messages.at(-1)?.content !== AGENT_CHAT_PARKED_MESSAGE,
-      );
+      // side of the notice must survive a reload.
+      setDeliveryNotice(data.chatEnabled === false);
       // First load of this thread: reconcile the two draft copies. Whatever is
       // on this device wins, because it is what was typed most recently here,
       // and it gets pushed up so the next device sees it. An empty device slot

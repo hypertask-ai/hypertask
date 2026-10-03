@@ -4,10 +4,7 @@ import type {
 } from "@prisma/client";
 import prisma from "@/lib/prisma";
 import { getSessionUser } from "@/lib/auth/getSessionUser";
-import {
-  AGENT_CHAT_PARKED_REPLY_FLAG,
-  AGENT_CHAT_STOP_AND_TIMEOUT_FEATURE_FLAG,
-} from "@/lib/agentRuns/model";
+import { AGENT_CHAT_STOP_AND_TIMEOUT_FEATURE_FLAG } from "@/lib/agentRuns/model";
 
 import {
   HTPR_6752_INSTANT_TICKET_OPEN_FLAG,
@@ -106,6 +103,7 @@ const FEATURE_FLAG_QA_USER = {
 
 // Hide and reject retired flags without changing stored rows needed by older deployments.
 export const RETIRED_FEATURE_FLAG_KEYS = new Set([
+  "htpr-6322-agent-chat-parked-reply",
   "hyfa-43-factory-owner-preview",
   "htpr-6072-shallow-board-switch",
   "htpr-6254-heic-heif-attachments",
@@ -463,12 +461,6 @@ const FEATURE_FLAG_DEFINITIONS = [
     shippedOn: "2026-09-06",
     description:
       "Lets people stop stuck Agent Chat turns and ends unanswered turns after five minutes.",
-  },
-  {
-    key: AGENT_CHAT_PARKED_REPLY_FLAG,
-    shippedOn: "2026-09-09",
-    description:
-      "Replies in the thread with one line saying an agent is parked when no runtime is connected to its chat, instead of leaving the message unanswered.",
   },
   {
     key: PAGE_MENTIONS_FLAG,
