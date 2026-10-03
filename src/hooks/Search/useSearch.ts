@@ -1,6 +1,6 @@
 import { searchConfig } from "@/lib/configs/search.config";
 import { HTPR_6369_SEARCH_OPERATORS_FLAG } from "@/lib/flags/keys";
-import { HTPR_6370_SEARCH_CHIPS_FLAG, HTPR_6688_SEARCH_AUTOCOMPLETE_FLAG, HTPR_6865_SEARCH_LAYOUT_FLAG, HTPR_6878_SEARCH_LABEL_SCOPE_FLAG } from "@/lib/flags/keys";
+import { HTPR_6370_SEARCH_CHIPS_FLAG, HTPR_6688_SEARCH_AUTOCOMPLETE_FLAG, HTPR_6865_SEARCH_LAYOUT_FLAG, HTPR_6878_SEARCH_LABEL_SCOPE_FLAG, HTPR_6879_SEARCH_ESC_BACK_FLAG } from "@/lib/flags/keys";
 import { useFlag } from "@/hooks/useFlag";
 import { useDeviceContext } from "@/lib/contexts/deviceContext";
 import { useQueryClient } from "@tanstack/react-query";
@@ -75,6 +75,7 @@ export function useSearch(
   const lastgClick = useRef<number | null>(null);
   const searchRequestGate = useRef(new SearchRequestGate()).current;
   const lastSearchKey = useRef<string | null>(null);
+  const tabSearchHistory = useRef<string[] | null>(null);
   const controller: { [key: number]: { pressed: boolean } } = {
     ...globalConstants.multipleKeys,
   };
@@ -89,6 +90,8 @@ export function useSearch(
   const searchLayoutFlagEnabled = useFlag(HTPR_6865_SEARCH_LAYOUT_FLAG);
   const searchLayoutEnabled = searchLayoutFlagEnabled && searchAutocompleteEnabled;
   const searchLabelScopeFlagEnabled = useFlag(HTPR_6878_SEARCH_LABEL_SCOPE_FLAG);
+  const searchEscBackFlagEnabled = useFlag(HTPR_6879_SEARCH_ESC_BACK_FLAG);
+  const searchEscBackEnabled = searchEscBackFlagEnabled && searchLayoutEnabled;
   const isSearchDraft = searchLayoutEnabled && submittedQuery !== inputValue.trim();
 
   function handleProjectsFromCache() {
@@ -136,7 +139,25 @@ export function useSearch(
     ]);
   }
 
+  function getTabSearchHistory() {
+    if (tabSearchHistory.current === null) {
+      try {
+        const stored: unknown = JSON.parse(sessionStorage.getItem("htpr-6879-search-history") ?? "[]");
+        tabSearchHistory.current = Array.isArray(stored) ? stored.filter((term): term is string => typeof term === "string" && term.trim().length >= 2) : [];
+      } catch { tabSearchHistory.current = []; }
+    }
+    return tabSearchHistory.current;
+  }
+
   function beginSearch(searchTerm: string, showArchived: boolean) {
+    if (searchEscBackEnabled) {
+      const history = getTabSearchHistory();
+      const term = searchTerm.trim();
+      if (term.length >= 2 && history.at(-1) !== term) {
+        history.push(term);
+        try { sessionStorage.setItem("htpr-6879-search-history", JSON.stringify(history)); } catch { /* Keep history in memory when storage is unavailable. */ }
+      }
+    }
     setSubmittedQuery(searchTerm.trim());
     lastSearchKey.current = currentSearchKey(searchTerm, showArchived);
     return searchRequestGate.begin();
@@ -460,6 +481,19 @@ export function useSearch(
 
     if (event.keyCode === KeyCodes.ESCAPE && !showCommands.show) {
       event.preventDefault();
+      if (searchEscBackEnabled) {
+        const history = getTabSearchHistory();
+        if (!isSearchDraft) history.pop();
+        const previous = history.at(-1) ?? "";
+        try { sessionStorage.setItem("htpr-6879-search-history", JSON.stringify(history)); } catch { /* The in-memory history still works. */ }
+        setInputValue(previous);
+        setExplicitTabIndex(undefined);
+        handleStatesOnResponse(searchConfig.responseMessages.default);
+        if (previous) void executeSearch(previous, searchCache.history ?? [], { resetTab: true });
+        else updateSearchHistory("");
+        tasksInputRef.current?.focus();
+        return;
+      }
       return router.back();
     }
 
@@ -784,6 +818,7 @@ export function useSearch(
     includeArchived,
     searchChipsEnabled,
     searchAutocompleteEnabled,
+    searchEscBackEnabled,
     isSearchDraft,
   ]);
 
@@ -801,7 +836,7 @@ export function useSearch(
     setInputValue(_searchTerm);
     if (projects.length > 0 && _searchTerm.length >= 2) {
       const key = currentSearchKey(_searchTerm, _includeArchived);
-      if (lastSearchKey.current !== key) {
+      if (lastSearchKey.current !== key || (searchEscBackEnabled && getTabSearchHistory().at(-1) !== _searchTerm.trim())) {
         void handleSearchOnMount(_includeArchived);
       }
       return;
@@ -811,7 +846,7 @@ export function useSearch(
       lastSearchKey.current = currentSearchKey("", _includeArchived);
       handleStatesOnResponse(searchConfig.responseMessages.default);
     }
-  }, [projects, _includeArchived, _searchTerm, _fromProject, searchOperatorsEnabled]);
+  }, [projects, _includeArchived, _searchTerm, _fromProject, searchOperatorsEnabled, searchEscBackEnabled]);
 
   useEffect(() => {
     if (!searchAutocompleteEnabled || !projects.length) return;

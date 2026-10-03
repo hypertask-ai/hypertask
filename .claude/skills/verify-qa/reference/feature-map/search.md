@@ -16,6 +16,8 @@ Layout flag `htpr-6865-search-layout` (default Owner + QA, needs the flags above
 
 Label flag `htpr-6878-search-label-scope` (Owner + QA; requires layout): positive board chips scope labels, muted ticket counts put unused labels last, unscoped same-name labels combine and filter by name, and Ask AI shows readable chip names.
 
+Flag `htpr-6879-search-esc-back` (Owner + QA, requires `htpr-6865-search-layout`): Esc with suggestions closed restores the previous search in this tab, or empty recents + tips; empty searches always show that list, and board chips omit the extra text `#` while the icon and typed `#` picker remain.
+
 1. Focus an empty bar: Search tips lists all ten operators (`from`, `assignee`, `in`, `board`, `label`, `is`, `has`, `after`, `before`, `on`), each with an example and meaning. Click a tip, or use arrows then Tab/Enter: only its operator is inserted, ready for a value.
 2. Type `fr`, `la`, `is`, `as`, `in`, `ha`, `af`, `be`, `bo`, `on`. Matching operators appear with grey inline completion. Refocusing an unfinished status, `has:` or date filter reopens its values; accepting a value keeps writing focus even after results return. Keyboard selection scrolls hidden tips into view. For `a`, arrows switch between `assignee:` and `after:` and update the ghost; Tab or Enter accepts. Escape dismisses only the list without clearing text or leaving search; a second Escape retains existing page navigation.
 3. Accept `from:`/`assignee:`/`in:`/`board:`/`label:` and choose an existing, accessible value. These retain the existing permission-scoped people/board/label lookup and `@`/`#` shortcuts. Selecting a row uses its ID, not its display name, and preserves any free text and `-` exclusion.

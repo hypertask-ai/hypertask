@@ -2,9 +2,9 @@
 
 import UserAvatar from "@/components/Common/UserAvatar";
 import { useFlag } from "@/hooks/useFlag";
-import { HTPR_6865_SEARCH_LAYOUT_FLAG, HTPR_6878_SEARCH_LABEL_SCOPE_FLAG } from "@/lib/flags/keys";
+import { HTPR_6865_SEARCH_LAYOUT_FLAG, HTPR_6878_SEARCH_LABEL_SCOPE_FLAG, HTPR_6879_SEARCH_ESC_BACK_FLAG } from "@/lib/flags/keys";
 import { MentionListRows } from "@/components/AI_CHAT/MentionListComp";
-import { activeSearchValue, candidateQuery, chipQuery, splitSearchChips } from "@/lib/search/chips";
+import { activeSearchValue, candidateQuery, chipQuery, searchChipText, splitSearchChips } from "@/lib/search/chips";
 import { operatorMatches, parseSearchTokens, SEARCH_OPERATORS, type Names, type SearchOperator, type SearchToken } from "@/lib/search/operators";
 import { localValueSuggestions, operatorSuggestions, searchCompletion, searchFilterColour, highlightedTitle, SEARCH_TIPS, type SearchCandidate } from "@/lib/search/autocomplete";
 import { searchConfig } from "@/lib/configs/search.config";
@@ -31,6 +31,8 @@ export default function SearchChipsInput({ value, onChange, onRun, boardId, inpu
   const layoutEnabled = layoutFlagEnabled && layoutRequested && autocompleteEnabled;
   const labelScopeFlagEnabled = useFlag(HTPR_6878_SEARCH_LABEL_SCOPE_FLAG);
   const labelScopeEnabled = labelScopeFlagEnabled && layoutEnabled;
+  const searchEscBackFlagEnabled = useFlag(HTPR_6879_SEARCH_ESC_BACK_FLAG);
+  const searchEscBackEnabled = searchEscBackFlagEnabled && layoutEnabled;
   const [editing, setEditing] = useState(false);
   const [names, setNames] = useState<Names>({});
   const [chipLabels, setChipLabels] = useState<Record<string, string>>({});
@@ -59,7 +61,7 @@ export default function SearchChipsInput({ value, onChange, onRun, boardId, inpu
   const summary = [...chips.map(chipText), text.trim()].filter(Boolean).join(' ');
   const completion = autocompleteEnabled ? searchCompletion(text, names) : null;
   const active = autocompleteEnabled ? completion : activeSearchValue(text, names);
-  const tips = autocompleteEnabled && focused && !value.trim();
+  const tips = autocompleteEnabled && (focused || searchEscBackEnabled) && !value.trim();
   const picker = dismissed ? null : active;
   const localRows = completion?.kind === 'operator'
     ? operatorSuggestions(completion.value).map((operator) => ({ id: operator, name: `${operator}:` }))
@@ -75,7 +77,7 @@ export default function SearchChipsInput({ value, onChange, onRun, boardId, inpu
     ...(localRows ?? []).map((row) => ({ ...row, kind: completion?.kind === 'operator' ? 'operator' as const : 'value' as const })),
     ...((localRows === null || genericPrefix) ? candidates.map((row) => ({ ...row, kind: 'value' as const })) : []),
   ] : localRows ?? candidates;
-  const open = !dismissed && (layoutEnabled ? focused && showSuggestions && Boolean(value.trim() || tips) : Boolean(picker || tips));
+  const open = (searchEscBackEnabled && tips) || (!dismissed && (layoutEnabled ? focused && showSuggestions && Boolean(value.trim() || tips) : Boolean(picker || tips)));
   const listId = "search-chip-options";
   const selectedRow = rows[selectedIndex] ?? rows[layoutEnabled && !tips ? 1 : 0] ?? rows[0];
   const ghost = open && caretAtEnd && selectedRow && completion?.kind === 'operator' && (!layoutEnabled || selectedRow.kind === 'operator')
@@ -94,6 +96,10 @@ export default function SearchChipsInput({ value, onChange, onRun, boardId, inpu
     setEditing(false);
     setDismissed(false);
   }, [boardId]);
+
+  useEffect(() => {
+    if (searchEscBackEnabled && !showSuggestions) setEditing(false);
+  }, [searchEscBackEnabled, showSuggestions, value]);
 
   useEffect(() => {
     if (!(genericPrefix || picker) || (!genericPrefix && autocompleteEnabled && (completion?.kind === 'operator' || localRows !== null))) {
@@ -196,8 +202,7 @@ export default function SearchChipsInput({ value, onChange, onRun, boardId, inpu
 
   function chipText(chip: SearchToken) {
     const name = chipLabels[`${chip.operator}:${chip.value}`] ?? chip.value;
-    const marker = chip.operator === 'from' || chip.operator === 'assignee' ? '@' : chip.operator === 'in' || chip.operator === 'board' ? '#' : '';
-    return `${chip.negated ? '-' : ''}${chip.operator}:${marker}${marker && name.startsWith(marker) ? name.slice(1) : name}`;
+    return searchChipText(chip, name, searchEscBackEnabled);
   }
 
   function choose(row: Candidate) {

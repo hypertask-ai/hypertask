@@ -57,6 +57,7 @@ import {
   HTPR_6688_SEARCH_AUTOCOMPLETE_FLAG,
   HTPR_6865_SEARCH_LAYOUT_FLAG,
   HTPR_6878_SEARCH_LABEL_SCOPE_FLAG,
+  HTPR_6879_SEARCH_ESC_BACK_FLAG,
   HTPR_6881_SEARCH_FUZZY_PERSON_FLAG,
   MY_TASKS_VIEWS_FLAG,
   MY_TASKS_BULK_SELECTION_FLAG,
@@ -620,6 +621,11 @@ const FEATURE_FLAG_DEFINITIONS = [
     key: HTPR_6878_SEARCH_LABEL_SCOPE_FLAG,
     shippedOn: "2026-10-03",
     description: "Scopes search label suggestions to picked boards, shows ticket counts and combines same-name labels across boards. Requires the search layout flag.",
+  },
+  {
+    key: HTPR_6879_SEARCH_ESC_BACK_FLAG,
+    shippedOn: "2026-10-03",
+    description: "Escape restores the previous search in this tab or recents and tips; empty searches never hide that list, and board chips omit the extra hash. Requires search layout.",
   },
   {
     key: HTPR_6881_SEARCH_FUZZY_PERSON_FLAG,
