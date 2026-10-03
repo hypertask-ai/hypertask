@@ -1263,7 +1263,7 @@ return (
      >
           <KanbanModalsProvider>
             {appShellRailOn ? (
-              <Suspense fallback={<div className="h-[48px]" aria-label="Loading Board controls" />}>
+              <Suspense fallback={<div className="h-[56px] shrink-0" aria-label="Loading Board controls" />}>
                 <AppShellRail
                   variant="board"
                   currentUser={_currentUser}

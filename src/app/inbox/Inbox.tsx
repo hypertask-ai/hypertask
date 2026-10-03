@@ -971,7 +971,7 @@ const SplitTitlesContainer: FC<IProps> = ({ children, contentGap = false }) => {
         contentGap ? "mx-[12px] w-[calc(100%-24px)] pb-4" : "w-full"
       } responsive-inbox-padding @md:flex @md:gap-[9px] h-full inbox_title overflow-x-auto scrollbar-none no-scrollbar`}
     >
-      <div className="pills-row group relative flex grow flex-wrap items-center gap-[9px]">
+      <div className="pills-row group relative flex min-h-8 grow flex-wrap items-center gap-[9px]">
         {children}
       </div>
       <ButtonGroup />

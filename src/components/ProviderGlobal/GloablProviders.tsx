@@ -34,6 +34,10 @@ import {
   announcementSlideAtom,
   aiChatExplicitOpenAtAtom,
   aiChatAutoOpenSuppressedAtom,
+  aiChatPinnedAtom,
+  openAiChatByDefaultAtom,
+  isAiChatSidebarModeAtom,
+  aiChatSidebarWidthPxAtom,
   showAIChatInterfaceAtom,
   mobileCommentComposerOpenAtom,
   showAccountSwitcherAtom,
@@ -44,6 +48,7 @@ import {
   agentChatTeamCycleAtom,
   agentChatMobileFullscreenAtom,
 } from "@/store";
+import { AI_CHAT_SIDEBAR_MIN_PX } from "@/lib/configs/style.config";
 import { orderTeamsForSwitcher } from "@/lib/teamSwitcherOrder";
 import { getLastBoardTeam, setLastBoardTeam } from "@/lib/lastBoardTeam";
 
@@ -437,6 +442,17 @@ export default function GlobalProvider({
   const isFullScreenChat = pathname?.startsWith("/chat") ?? false;
   const isAgentChatPage = pathname?.startsWith("/agents/chat") ?? false;
   const isTaskDetailPage = pathname?.startsWith("/detail") ?? false;
+  const aiChatPinned = useRecoilValue(aiChatPinnedAtom);
+  const openAiChatByDefault = useRecoilValue(openAiChatByDefaultAtom);
+  const isAiChatSidebarMode = useRecoilValue(isAiChatSidebarModeAtom);
+  const aiChatSidebarWidthPx = useRecoilValue(aiChatSidebarWidthPxAtom);
+  // Match task auto-open before its hooks or the lazy chat runtime mount.
+  const reserveAiSidebar = !mbl && isAiChatSidebarMode && (
+    showAiChatInterface || (
+      isTaskDetailPage && authenticatedUserId !== null &&
+      (aiChatPinned || (openAiChatByDefault && !aiChatAutoOpenSuppressed))
+    )
+  );
   const agentChatMobileFullscreenFlag = useFlag(
     HTPR_6476_MOBILE_AGENT_CHAT_FULLSCREEN_FLAG,
   );
@@ -592,8 +608,9 @@ export default function GlobalProvider({
   );
   // Keep the path/auth shell check separate so the ticket flag can gate the
   // rendered chrome in JSX (feature-flag-gate requires that shape).
+  // Reserve shell space from the server session before the profile query resolves.
   const showMobileShellPath =
-    mbl && Boolean(currentUser?.id) && shouldShowMobileTabBar(pathname);
+    mbl && (authenticatedUserId !== null || Boolean(currentUser?.id)) && shouldShowMobileTabBar(pathname);
   const agentChatHidesMobileShell =
     (agentChatMobileFullscreenFlag && agentChatMobileFullscreenAtomOn) ||
     (agentChatMobileFullscreenFlag && isAgentChatPath(pathname));
@@ -603,7 +620,7 @@ export default function GlobalProvider({
   const commentComposerOpen = useRecoilValue(mobileCommentComposerOpenAtom);
   const showMobileBottomInset =
     mbl &&
-    Boolean(currentUser?.id) &&
+    (authenticatedUserId !== null || Boolean(currentUser?.id)) &&
     shouldShowMobileDock(pathname) &&
     // HTPR-6860: ticket pages drop the dock like the ticket screen does.
     !(mobilePageHideDockFlag && isTicketPagePath(pathname)) &&
@@ -1422,7 +1439,7 @@ export default function GlobalProvider({
 
       {(agentChatMobileFullscreenFlag && agentChatMobileFullscreenAtomOn) ||
       (agentChatMobileFullscreenFlag && isAgentChatPath(pathname)) ? null : (
-        showMobileShellPath && (
+        showMobileShellPath && currentUser && (
         <>
           <MobileTopBar
             currentUser={currentUser}
@@ -1475,6 +1492,9 @@ export default function GlobalProvider({
               mobilePullCommandEnabled={mobilePullCommandVisible}
               onOpenAIChat={openAIChatInterface}
               chatOpen={showAiChatInterface}
+              sidebarWidthPx={reserveAiSidebar
+                ? Math.max(aiChatSidebarWidthPx, AI_CHAT_SIDEBAR_MIN_PX)
+                : 0}
               panels={
                 shouldMountChatRuntime ? (
                   <Suspense fallback={null}>
