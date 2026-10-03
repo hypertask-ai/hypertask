@@ -1,7 +1,8 @@
+import { searchPreviewText } from '@/utils/controllers/turbopuffer/turbopufferHelper'
 import type { Prisma } from '@prisma/client'
 import prisma from '@/lib/prisma'
 import { searchComments, searchTasks } from '@/utils/controllers/turbopuffer/turbopufferHelper'
-import { searchFilterWhere } from './filters'
+import { commenterWhere, searchFilterWhere } from './filters'
 import type { ParsedSearch } from './operators'
 
 export async function rankedSearchWhere(
@@ -12,11 +13,54 @@ export async function rankedSearchWhere(
   extraWhere: Prisma.TaskWhereInput = {},
   cursorId?: number | null,
   scanAll = false,
+  commenterEnabled = false,
+  taskOrderBy?: Prisma.TaskOrderByWithRelationInput[],
 ) {
   const where = await searchFilterWhere(parsed, projectIds, status)
   const rankedIds: number[] = []
   const descriptionById = new Map<number, string>()
-  const commentById = new Map<number, { id: string; commentText: string; creatorName: string }>()
+  const commentById = new Map<number, { id: string | number; commentText: string; creatorName: string; createdAt?: Date | string }>()
+  const commenters = parsed.filters.commenter?.filter(({ negated }) => !negated) ?? []
+  if (commenters.length) {
+    const matching = commenterWhere(commenters, parsed.text)
+    const taskWhere: Prisma.TaskWhereInput = { AND: [where, extraWhere] }
+    let cursorValid = true
+    let page: { taskId: number }[]
+    if (taskOrderBy) {
+      page = (await prisma.task.findMany({
+        where: taskWhere, select: { id: true }, orderBy: taskOrderBy, take: limit,
+        skip: cursorId ? 1 : 0, ...(cursorId ? { cursor: { id: cursorId } } : {}),
+      })).map(({ id }) => ({ taskId: id }))
+    } else {
+      const anchor = cursorId ? await prisma.comment.findFirst({
+        where: { ...matching, taskId: cursorId, task: taskWhere },
+        select: { createdAt: true }, orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+      }) : null
+      cursorValid = !cursorId || Boolean(anchor)
+      const having = anchor && cursorId ? { OR: [
+        { createdAt: { _max: { lt: anchor.createdAt } } },
+        { createdAt: { _max: { equals: anchor.createdAt } }, taskId: { lt: cursorId } },
+      ] } : undefined
+      // Group and page in the database: Prisma's distinct would deduplicate in memory.
+      const groups = cursorValid ? await prisma.comment.groupBy({
+        by: ['taskId'], where: { ...matching, task: taskWhere },
+        _max: { createdAt: true }, having,
+        orderBy: [{ _max: { createdAt: 'desc' } }, { taskId: 'desc' }], take: limit,
+      }) : []
+      page = groups
+    }
+    const comments = await Promise.all(page.map(({ taskId }) => prisma.comment.findFirst({
+      where: { ...matching, taskId, task: taskWhere },
+      select: { id: true, taskId: true, commentText: true, createdAt: true, creator: { select: { displayName: true, email: true } } },
+      orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+    })))
+    for (const comment of comments) {
+      if (!comment) continue
+      rankedIds.push(comment.taskId)
+      commentById.set(comment.taskId, { ...comment, commentText: searchPreviewText(comment.commentText ?? ''), creatorName: comment.creator?.displayName || comment.creator?.email || '' })
+    }
+    return { where, rankedIds, descriptionById, commentById, partial: false, paged: true, cursorValid }
+  }
   if (!parsed.text) return { where, rankedIds, descriptionById, commentById, partial: false }
 
   const maxWindow = 800
@@ -45,7 +89,9 @@ export async function rankedSearchWhere(
       }
       seen.add(id)
       if (description) descriptionById.set(id, description)
-      if (comment) commentById.set(id, comment)
+      if (comment) commentById.set(id, commenterEnabled
+        ? { id: comment.id, commentText: comment.commentText, creatorName: comment.creatorName, createdAt: comment.createdAt ? new Date(comment.createdAt) : undefined }
+        : comment)
       return true
     })
     if (fresh.length) {

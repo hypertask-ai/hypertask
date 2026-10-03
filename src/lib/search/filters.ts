@@ -21,7 +21,21 @@ function dateCondition(operator: 'before' | 'after' | 'on', raw: string): Prisma
       : { gte: day, lt: next } }
 }
 
-function filterWhere(operator: SearchOperator, { value, userIds }: SearchFilter, done: Prisma.TaskWhereInput[]): Prisma.TaskWhereInput {
+export function commenterWhere(filters: SearchFilter[], text = ''): Prisma.CommentWhereInput {
+  return {
+    activity: { equals: Prisma.DbNull },
+    OR: filters.map(({ value, userIds }) => {
+      const name = identity(value)
+      const id = numeric(name)
+      if (id !== null) return { creatorId: id }
+      if (userIds !== undefined) return { creatorId: { in: userIds } }
+      return { creator: { OR: [{ displayName: exact(name) }, { email: exact(name) }] } }
+    }),
+    ...(text.trim() ? { AND: text.trim().split(/\s+/).map((word) => ({ commentText: { contains: word, mode: 'insensitive' as const } })) } : {}),
+  }
+}
+
+function filterWhere(operator: SearchOperator, { value, userIds }: SearchFilter, done: Prisma.TaskWhereInput[], text = ''): Prisma.TaskWhereInput {
   const name = identity(value)
   const id = numeric(name)
   if (id === null && userIds !== undefined) {
@@ -29,6 +43,7 @@ function filterWhere(operator: SearchOperator, { value, userIds }: SearchFilter,
     if (operator === 'assignee') return { assignees: { some: { userId: { in: userIds } } } }
   }
   switch (operator) {
+    case 'commenter': return { comments: { some: commenterWhere([{ value, negated: false, userIds }], text) } }
     case 'from': return id !== null ? { userId: id } : { user: { OR: [{ displayName: exact(name) }, { email: exact(name) }] } }
     case 'assignee': return { assignees: { some: id !== null ? { userId: id } : { user: { OR: [{ displayName: exact(name) }, { email: exact(name) }] } } } }
     case 'in':
@@ -72,7 +87,7 @@ export async function searchFilterWhere(
   const groups: Prisma.TaskWhereInput[] = []
   for (const [key, values] of Object.entries(parsed.filters) as [SearchOperator, SearchFilter[]][]) {
     const included = values.filter(({ negated }) => !negated)
-    if (included.length) groups.push({ OR: included.map((filter) => filterWhere(key, filter, done)) })
+    if (included.length) groups.push({ OR: included.map((filter) => filterWhere(key, filter, done, parsed.text)) })
     for (const filter of values.filter(({ negated }) => negated)) {
       groups.push({ NOT: filterWhere(key, filter, done) })
     }

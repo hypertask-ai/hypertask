@@ -7,6 +7,7 @@ const { JSDOM } = require('jsdom')
 const { createJiti } = require('jiti')
 const root = path.resolve(__dirname, '..')
 const escFlag = 'htpr-6879-search-esc-back'
+const commenterFlag = 'htpr-6880-search-commenter'
 const labelFlag = 'htpr-6878-search-label-scope'
 const layoutFlag = 'htpr-6865-search-layout'
 const prerequisites = ['htpr-6369-search-operators', 'htpr-6370-search-chips', 'htpr-6688-search-autocomplete']
@@ -40,7 +41,7 @@ async function withSearch(t, config, check) {
     lookups.push(params)
     const operator = params.get('operator')
     const value = params.get('value').toLowerCase()
-    let candidates = operator === 'from' || operator === 'assignee' ? people
+    let candidates = operator === 'from' || operator === 'commenter' || operator === 'assignee' ? people
       : operator === 'label' ? [{ id: 'bug', name: 'Bug', count: 3 }]
       : [{ id: 7, name: 'inne' }]
     candidates = candidates.filter((row) => row.name.toLowerCase().includes(value) || String(row.id) === value)
@@ -419,6 +420,47 @@ for (const labelEnabled of [false, true]) {
         }
       })
     })
+  }
+}
+
+for (const commenterEnabled of [false, true]) {
+  for (const escEnabled of [false, true]) {
+    for (const labelEnabled of [false, true]) {
+      test(`commenter ${commenterEnabled}, Esc back ${escEnabled}, label scope ${labelEnabled}: independent chips, picker and history`, async (t) => {
+        const query = 'board:7 commenter:77 first'
+        await withSearch(t, { query, flags: { [commenterFlag]: commenterEnabled, [escFlag]: escEnabled, [labelFlag]: labelEnabled } }, async ({ complete, type, tick, options, lookups, press, requests, state, navigations }) => {
+          await complete()
+          assert.equal(document.querySelector('[aria-label^="Remove board:"] span').textContent, escEnabled ? 'board:inne' : 'board:#inne')
+          const chip = document.querySelector('[aria-label^="Remove commenter:"]')
+          if (commenterEnabled) assert.match(chip.textContent, /commenter:@Malcolm Stern/)
+          else assert.equal(chip, null)
+          await type('commenter:mal')
+          await tick(180)
+          assert.equal(lookups.some((params) => params.get('operator') === 'commenter'), commenterEnabled)
+          assert.equal(options().some((row) => row.textContent.includes('malstern@aol.com')), commenterEnabled)
+          await type('second')
+          await press('Escape')
+          await press('Enter')
+          assert.equal(requests.at(-1).body.searchQuery, `board:7 ${commenterEnabled ? 'commenter:77 ' : ''}second`)
+          await complete()
+          await press('Escape')
+          if (escEnabled) {
+            assert.equal(state().inputValue, query)
+            assert.equal(requests.at(-1).body.searchQuery, query)
+            await complete()
+            assert.equal(document.querySelector('[aria-label^="Remove commenter:"]') !== null, commenterEnabled)
+            await press('Escape')
+            assert.equal(state().inputValue, '')
+            assert.deepEqual(headings(), ['Recent searches', 'Tips'])
+            assert.equal(options().some((row) => row.textContent.startsWith('commenter:@Hicham')), commenterEnabled)
+            assert.equal(sessionStorage.getItem('htpr-6879-search-history'), '[]')
+          } else {
+            assert.equal(navigations.at(-1), 'back')
+            assert.equal(sessionStorage.getItem('htpr-6879-search-history'), null)
+          }
+        })
+      })
+    }
   }
 }
 

@@ -28,10 +28,10 @@ test('all operators get either access-scoped entity lookups or valid local value
   const now = new Date('2026-10-01T23:45:00Z')
   const server = readFileSync(path.join(root, 'src/lib/search/filters.ts'), 'utf8')
   for (const operator of SEARCH_OPERATORS) {
-    assert.equal(searchCompletion(`${operator}:`).kind, 'value')
-    assert.equal(searchCompletion(`${operator}:`).operator, operator)
+    assert.equal(searchCompletion(`${operator}:`, {}, true).kind, 'value')
+    assert.equal(searchCompletion(`${operator}:`, {}, true).operator, operator)
     const suggestions = localValueSuggestions(operator, '', now)
-    if (['from', 'assignee', 'in', 'board', 'label'].includes(operator)) {
+    if (['from', 'commenter', 'assignee', 'in', 'board', 'label'].includes(operator)) {
       assert.equal(suggestions, null, 'entities use the existing authorized API')
     } else {
       assert.ok(suggestions.length)

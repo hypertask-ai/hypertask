@@ -1,8 +1,8 @@
-export const SEARCH_OPERATORS = ['from', 'assignee', 'in', 'board', 'label', 'is', 'before', 'after', 'on', 'has'] as const
+export const SEARCH_OPERATORS = ['from', 'commenter', 'assignee', 'in', 'board', 'label', 'is', 'before', 'after', 'on', 'has'] as const
 export type SearchOperator = (typeof SEARCH_OPERATORS)[number]
 export type SearchFilter = { value: string; negated: boolean; userIds?: number[] }
 export type ParsedSearch = { text: string; filters: Partial<Record<SearchOperator, SearchFilter[]>> }
-export type NameOperator = 'from' | 'assignee' | 'in' | 'board' | 'label'
+export type NameOperator = 'from' | 'commenter' | 'assignee' | 'in' | 'board' | 'label'
 type Names = Partial<Record<NameOperator, string[]>>
 export type { Names }
 export type SearchToken = { operator: SearchOperator; value: string; negated: boolean; raw: string; start: number; end: number }
@@ -27,10 +27,10 @@ export function searchOperatorClauseCount(raw: string) {
   return operatorMatches(raw).length
 }
 
-export function parseSearchQuery(raw: string, names: Names = {}): ParsedSearch {
+export function parseSearchQuery(raw: string, names: Names = {}, commenterEnabled = false): ParsedSearch {
   const filters: ParsedSearch['filters'] = {}
   const remaining: string[] = []
-  const operators = new Set<string>(SEARCH_OPERATORS)
+  const operators = new Set<string>(SEARCH_OPERATORS.filter((operator) => operator !== 'commenter' || commenterEnabled))
   const matches = operatorMatches(raw)
   let position = 0
   for (let i = 0; i < matches.length; i++) {
@@ -71,8 +71,8 @@ export function parseSearchQuery(raw: string, names: Names = {}): ParsedSearch {
 
 export { operatorMatches }
 
-export function parseSearchTokens(raw: string, names: Names = {}): SearchToken[] {
-  const parsed = parseSearchQuery(raw, names)
+export function parseSearchTokens(raw: string, names: Names = {}, commenterEnabled = false): SearchToken[] {
+  const parsed = parseSearchQuery(raw, names, commenterEnabled)
   const used: Partial<Record<SearchOperator, number>> = {}
   const matches = operatorMatches(raw)
   return matches.flatMap(({ start, valueStart, operator, negated }, index) => {

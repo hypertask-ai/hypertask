@@ -1,6 +1,7 @@
+import { parseSearchQuery } from "@/lib/search/operators";
 import { searchConfig } from "@/lib/configs/search.config";
 import { HTPR_6369_SEARCH_OPERATORS_FLAG } from "@/lib/flags/keys";
-import { HTPR_6370_SEARCH_CHIPS_FLAG, HTPR_6688_SEARCH_AUTOCOMPLETE_FLAG, HTPR_6865_SEARCH_LAYOUT_FLAG, HTPR_6878_SEARCH_LABEL_SCOPE_FLAG, HTPR_6879_SEARCH_ESC_BACK_FLAG } from "@/lib/flags/keys";
+import { HTPR_6370_SEARCH_CHIPS_FLAG, HTPR_6688_SEARCH_AUTOCOMPLETE_FLAG, HTPR_6865_SEARCH_LAYOUT_FLAG, HTPR_6878_SEARCH_LABEL_SCOPE_FLAG, HTPR_6879_SEARCH_ESC_BACK_FLAG, HTPR_6880_SEARCH_COMMENTER_FLAG } from "@/lib/flags/keys";
 import { useFlag } from "@/hooks/useFlag";
 import { useDeviceContext } from "@/lib/contexts/deviceContext";
 import { useQueryClient } from "@tanstack/react-query";
@@ -34,6 +35,7 @@ export function useSearch(
   _includeArchived = false,
   _fromProject: number | null = null
 ) {
+  const commenterFlagEnabled = useFlag(HTPR_6880_SEARCH_COMMENTER_FLAG);
   const { data: searchCache } = useGetSearchCache();
   const { data: allProjects } = useGetAllProjectsMinimal([
     "projectsAllMinimal",
@@ -216,7 +218,13 @@ export function useSearch(
       uniqueIndex: item.uniqueIndex,
     }));
     setTasksPlayList(tasksPlayList);
-    router.push(searchConfig.urls.taskDetail(task.projectId, task.uniqueIndex));
+    const url = searchConfig.urls.taskDetail(task.projectId, task.uniqueIndex);
+    if (commenterFlagEnabled && searchLayoutEnabled && task.commentId &&
+      parseSearchQuery(inputValue, {}, true).filters.commenter?.some((filter) => !filter.negated)) {
+      router.push(`${url}?commentId=comment-${task.commentId}`);
+    } else {
+      router.push(url);
+    }
   }
 
   function handleStatesOnResponse(message: string) {

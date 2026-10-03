@@ -9,7 +9,7 @@ import { useSearch } from "@/hooks/Search/useSearch";
 import { cn } from "@/utils/undoActions/helperFuncs";
 import { Fragment, KeyboardEvent, RefObject, useContext } from "react";
 import { useFlag } from "@/hooks/useFlag";
-import { HTPR_6372_SEARCH_RANKING_FLAG, HTPR_6688_SEARCH_AUTOCOMPLETE_FLAG, HTPR_6865_SEARCH_LAYOUT_FLAG, HTPR_6878_SEARCH_LABEL_SCOPE_FLAG, HTPR_6879_SEARCH_ESC_BACK_FLAG } from "@/lib/flags/keys";
+import { HTPR_6372_SEARCH_RANKING_FLAG, HTPR_6688_SEARCH_AUTOCOMPLETE_FLAG, HTPR_6865_SEARCH_LAYOUT_FLAG, HTPR_6878_SEARCH_LABEL_SCOPE_FLAG, HTPR_6879_SEARCH_ESC_BACK_FLAG, HTPR_6880_SEARCH_COMMENTER_FLAG } from "@/lib/flags/keys";
 import { highlightedSearchSnippet, highlightedTitle } from "@/lib/search/autocomplete";
 import { HTPR_6882_SEARCH_MATCH_HIGHLIGHTS_FLAG } from "@/lib/flags/keys";
 import LabelWrapper from "@/components/Labels/LabelWrapper";
@@ -45,6 +45,7 @@ const SearchComp = ({
   const layoutFlagEnabled = useFlag(HTPR_6865_SEARCH_LAYOUT_FLAG);
   const layoutEnabled = layoutFlagEnabled && autocompleteEnabled;
   const matchHighlightsFlagEnabled = useFlag(HTPR_6882_SEARCH_MATCH_HIGHLIGHTS_FLAG);
+  const commenterFlagEnabled = useFlag(HTPR_6880_SEARCH_COMMENTER_FLAG);
   const labelScopeFlagEnabled = useFlag(HTPR_6878_SEARCH_LABEL_SCOPE_FLAG);
   const searchEscBackFlagEnabled = useFlag(HTPR_6879_SEARCH_ESC_BACK_FLAG);
   const setAiChatPendingPrompt = useSetRecoilState(aiChatPendingPromptAtom);
@@ -82,7 +83,7 @@ const SearchComp = ({
     setIncludeArchivedResults,
   } = useSearch(_searchTerm, _initialTabIndex, _includeArchived, _fromProject);
   const matchSnippets = matchHighlightsFlagEnabled && layoutEnabled
-    ? typedTasks.map((task) => highlightedSearchSnippet((task.commentId ? task.commentText : task.descriptionText) ?? '', inputValue))
+    ? typedTasks.map((task) => highlightedSearchSnippet((task.commentId ? task.commentText : task.descriptionText) ?? '', inputValue, commenterFlagEnabled && layoutEnabled))
     : undefined;
   const showAskAiRow =
     !layoutEnabled && inputValue.trim().length >= 2 && typedTasks.length === 0;
@@ -242,7 +243,7 @@ const SearchComp = ({
                               <TaskListRow
                                 task={item}
                                 highlight={item.highlight}
-                                titleParts={autocompleteEnabled ? highlightedTitle(item.taskTitle ?? '', inputValue) : undefined}
+                                titleParts={autocompleteEnabled ? highlightedTitle(item.taskTitle ?? '', inputValue, commenterFlagEnabled && layoutEnabled) : undefined}
                                 index={index}
                                 handleLinkClick={handleLinkClick}
                                 handleMouseEnter={handleMouseEnter}
