@@ -6,6 +6,7 @@ import { PassThrough, Readable } from 'node:stream'
 import crypto from 'node:crypto'
 import Redis from 'ioredis'
 import { MCP_SERVER_INFO, type PortableTool } from './stateless-http'
+import { bindConsolidatedSseTools } from './tool-response'
 
 type RelayMessage = {
   replyChannel: string
@@ -124,6 +125,7 @@ export async function handleLegacySseRequest(
         }
       })
     }
+    bindConsolidatedSseTools(server, tools, transport.sessionId)
     let closed = false
     let timer: ReturnType<typeof setTimeout> | undefined
     const cleanup = () => {

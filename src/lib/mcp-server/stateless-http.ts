@@ -3,6 +3,7 @@ import { z } from 'zod'
 import type { AuthInfo } from '@modelcontextprotocol/sdk/server/auth/types.js'
 import { listToolsDeferred, parseStructuredContent, toolsForConnect } from './deferred-tools'
 import { listMetaTools } from './deferred-tools'
+import { executeToolResult, toolErrorResult } from './tool-response'
 
 export const MCP_SERVER_INFO = {
   name: 'hyperTask',
@@ -23,6 +24,10 @@ export type PortableTool = {
   name: string
   description: string
   parameters: z.ZodObject<z.ZodRawShape>
+  inputSchema?: Record<string, unknown>
+  outputSchema?: Record<string, unknown>
+  input_examples?: unknown[]
+  hidden?: boolean
   execute: (
     args: unknown,
     token: string,
@@ -217,19 +222,30 @@ async function dispatchMethod(
         })
       }
       return jsonRpcResult(id, {
-        tools: tools.map((tool) => ({
+        tools: tools.filter((tool) => !tool.hidden).map((tool) => ({
           name: tool.name,
           description: tool.description,
-          inputSchema: jsonSchemaFor(tool.parameters),
+          inputSchema: tool.inputSchema ?? jsonSchemaFor(tool.parameters),
+          ...(tool.outputSchema ? { outputSchema: tool.outputSchema } : {}),
+          ...(tool.input_examples?.length ? { input_examples: tool.input_examples } : {}),
         })),
       })
     case 'tools/call': {
       const name = typeof params.name === 'string' ? params.name : ''
       const tool = tools.find((candidate) => candidate.name === name)
       if (!tool) {
+        if (tools.some((candidate) => candidate.inputSchema)) {
+          return jsonRpcResult(id, toolErrorResult(new Error(`Unknown tool ${name || '(missing)'}. Refresh tools/list and choose an advertised tool name`)))
+        }
         return jsonRpcError(id, -32602, `Unknown tool: ${name || '(missing)'}`)
       }
       const rawArgs = params.arguments === undefined ? {} : params.arguments
+      if (tool.outputSchema) {
+        return jsonRpcResult(id, await executeToolResult(tool, rawArgs, auth.token, {
+          requestId: id === null ? crypto.randomUUID() : String(id),
+          clientFingerprint: crypto.createHash('sha256').update(auth.token).digest('hex'),
+        }))
+      }
       const parsed = tool.parameters.safeParse(rawArgs)
       if (!parsed.success) {
         return jsonRpcError(id, -32602, 'Invalid tool arguments', parsed.error.flatten())

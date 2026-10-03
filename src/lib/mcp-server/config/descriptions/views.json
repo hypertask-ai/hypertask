@@ -1,0 +1,40 @@
+{
+  "name": "hypertask_views",
+  "does": "List, read, create, update, delete or switch saved board views and their filters or sorting.",
+  "use_when": "Use to persist a board presentation or choose the user’s active view.",
+  "do_not_use_when": "Do not use for a one-time task search; use hypertask_tasks list or hypertask_search instead.",
+  "parameters_and_caveats": "action selects an operation; input contains only that operation’s documented fields. response_format defaults to concise for reads; detailed retains full fields. limit defaults to 20 (maximum 50) and offset defaults to 0 for bounded read results; use returned pagination or narrower filters. Identifiers and required fields depend on the selected action; writes keep existing authorization and confirmation rules.",
+  "actions": {
+    "list": {
+      "tool": "hypertask_list_views",
+      "read_only": true,
+      "permission": "data"
+    },
+    "get": {
+      "tool": "hypertask_get_view",
+      "read_only": true,
+      "permission": "data"
+    },
+    "create": {
+      "tool": "hypertask_create_view",
+      "read_only": false,
+      "permission": "data"
+    },
+    "update": {
+      "tool": "hypertask_update_view",
+      "read_only": false,
+      "permission": "data"
+    },
+    "delete": {
+      "tool": "hypertask_delete_view",
+      "read_only": false,
+      "permission": "data"
+    },
+    "switch": {
+      "tool": "hypertask_switch_view",
+      "read_only": false,
+      "permission": "data"
+    }
+  },
+  "input_examples": []
+}

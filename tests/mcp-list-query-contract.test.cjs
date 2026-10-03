@@ -20,7 +20,8 @@ test("list query fields are always merged without an infra flag", () => {
   assert.match(taskValidation, /withListQuerySchema\(listTasksBaseSchema\)/);
   assert.match(contract, /getListTasksInputSchema\(\)/);
   assert.match(handler, /resolvePortableTools\(MCP_TOOLS as PortableTool\[\]\)/);
-  assert.doesNotMatch(handler, /isFeatureEnabled|authenticatedMcpHandler|authenticatedListQueryHandler/);
+  assert.doesNotMatch(contract, /isFeatureEnabled|HTPR_6530/);
+  assert.doesNotMatch(handler, /HTPR_6530|htpr-6530-mcp-list-query|authenticatedMcpHandler|authenticatedListQueryHandler/);
 });
 
 test("routes return nextCursor and project after building link", () => {

@@ -7,16 +7,9 @@ import {
 } from './config/tool-summaries'
 import { TOOL_OUTPUT_SCHEMA, withSharedDefs } from './schema-defs'
 
-type CatalogTool = {
-  name: string
-  description: string
-  parameters: z.ZodObject<z.ZodRawShape>
-  execute: (
-    args: unknown,
-    token: string,
-    invocation?: { requestId: string; clientFingerprint: string; sessionId?: string }
-  ) => Promise<string>
-}
+import type { PortableTool } from './stateless-http'
+
+type CatalogTool = PortableTool
 
 export function estimateTokens(value: unknown): number {
   return Math.ceil(JSON.stringify(value).length / 4)
@@ -105,6 +98,7 @@ export function searchToolCatalog(
 ): Array<{ name: string; description: string }> {
   const needle = query.trim().toLowerCase()
   const ranked = tools
+    .filter((tool) => !tool.hidden)
     .map((tool) => {
       const name = tool.name.toLowerCase()
       const description = tool.description.toLowerCase()
@@ -135,8 +129,9 @@ export function describeToolCatalog(
   return {
     name: tool.name,
     description: tool.description,
-    inputSchema: withSharedDefs(jsonSchemaFor(tool.parameters)),
-    outputSchema: { ...TOOL_OUTPUT_SCHEMA },
+    inputSchema: withSharedDefs(tool.inputSchema ?? jsonSchemaFor(tool.parameters)),
+    outputSchema: { ...(tool.outputSchema ?? TOOL_OUTPUT_SCHEMA) },
+    ...(tool.input_examples?.length ? { input_examples: tool.input_examples } : {}),
   }
 }
 

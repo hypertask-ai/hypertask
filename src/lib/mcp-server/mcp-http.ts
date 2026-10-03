@@ -35,6 +35,6 @@ export async function handleMcpHttp(
     request,
     authInfo,
     deps.tools,
-    { deferred: true }
+    { deferred: !deps.tools.some((tool) => tool.inputSchema) }
   )
 }
