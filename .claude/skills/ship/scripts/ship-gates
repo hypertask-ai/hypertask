@@ -1,7 +1,14 @@
 #!/usr/bin/env bash
-# ship-gates HTPR-NNNN: write the standard /ship gates into this session's unlazy ledger.
+# ship-gates HTPR-NNNN [more tickets...]: write the standard /ship gates into this session's unlazy ledger.
+# Several tickets (or "6857, 6856") each get their own gates in the same ledger; a bare number means HTPR-.
 set -euo pipefail
-T=${1:?usage: ship-gates HTPR-NNNN}
+[ $# -ge 1 ] || { echo "usage: ship-gates HTPR-NNNN [more tickets...]" >&2; exit 1; }
+if [ $# -gt 1 ] || [[ $1 == *,* ]]; then
+  for t in $(printf '%s ' "$@" | tr ',' ' '); do "$0" "$t"; done
+  exit 0
+fi
+T=$1
+[[ $T =~ ^[0-9]+$ ]] && T=HTPR-$T
 [[ $T =~ ^(HTPR|HYFA|YPER4)-[0-9]+$ ]] || { echo "ticket must look like HTPR-1234, HYFA-12 or YPER4-12" >&2; exit 1; }
 ID=${CLAUDE_CODE_SESSION_ID:-${CODEX_SESSION_ID:-${CODEX_THREAD_ID:-}}}
 [ -n "$ID" ] || { echo "ship-gates needs CLAUDE_CODE_SESSION_ID, CODEX_SESSION_ID or CODEX_THREAD_ID" >&2; exit 1; }
