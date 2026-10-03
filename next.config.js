@@ -33,6 +33,7 @@ const nextConfig = {
   typescript: { ignoreBuildErrors: true },
   env: {
     NEXT_PUBLIC_BUILD_ID: resolveBuildId(),
+    NEXT_PUBLIC_BUILD_TIME: new Date().toISOString(),
   },
   distDir: process.env.BUILD_DIR || ".next",
   // jsdom reads its stylesheet relative to its module, not a bundled server chunk.

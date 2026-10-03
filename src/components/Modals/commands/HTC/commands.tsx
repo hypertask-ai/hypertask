@@ -57,6 +57,7 @@ import {
 } from "@/lib/inboxClusters";
 import {
   HTPR_6514_COMMENT_LONG_PRESS_FLAG,
+  HTPR_6892_CMDK_VERSION_FLAG,
   HTPR_6861_MOBILE_PAGE_BACK_ROW_FLAG,
   INBOX_ARCHIVE_CLUSTER_FLAG,
   MY_TASKS_TABLE_COLUMNS_FLAG,
@@ -102,6 +103,12 @@ const Commands = (props: Props) => {
   const onCalendar = !!pathname?.startsWith("/calendar");
   const onAgentChat = !!pathname?.startsWith("/agents/chat");
   const onMyTasks = !!pathname?.startsWith(myTasksRoute);
+  const cmdkVersionEnabled = useFlag(HTPR_6892_CMDK_VERSION_FLAG);
+  const buildId = process.env.NEXT_PUBLIC_BUILD_ID?.slice(0, 7) || "dev";
+  const buildTime = new Date(process.env.NEXT_PUBLIC_BUILD_TIME || "");
+  const buildTimeLabel = buildId !== "dev" && !Number.isNaN(buildTime.getTime())
+    ? `${buildTime.toLocaleDateString("en-GB", { day: "numeric", month: "short" })} ${buildTime.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit", hour12: false })}`
+    : "";
   const copyCurrentUrlEnabled = useFlag("htpr-6112-copy-current-url");
   const inboxClusterEnabled = useFlag(INBOX_ARCHIVE_CLUSTER_FLAG);
   const myTasksViewsEnabled = useFlag(MY_TASKS_VIEWS_FLAG);
@@ -642,6 +649,11 @@ const Commands = (props: Props) => {
             commandGroups
           )}
           <ModalHintBar />
+          {cmdkVersionEnabled && (
+            <div data-cmdk-version className="px-4 pb-2 text-micro text-text-light-gray">
+              v {buildId}{buildTimeLabel && ` · ${buildTimeLabel}`}
+            </div>
+          )}
         </ModalBody>
       </ModalContainerCustom>
   );
