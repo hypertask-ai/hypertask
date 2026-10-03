@@ -188,5 +188,129 @@ T fail "evidence outside the current run rejected"
 sed -i '$d' "$E/HTPR-6570/proof.md"; mkdir -p "$E/x"; printf 'png' > "$E/x/a.png"; sed -i 's/^Run: .*/Run: ..\/..\/x/' "$E/HTPR-6570/proof.md"
 T fail "run folder outside the ticket rejected"
 
+# Released-flag premerge guard: deterministic GitHub and live-mode boundaries.
+mkdir -p "$E/flag-bin" "$E/flag-source" "$E/flag-http" "$E/YPER4-999"
+cat > "$E/flag-bin/gh" <<'MOCK'
+#!/usr/bin/env python3
+import base64, json, os, sys, urllib.parse
+args = sys.argv[1:]
+if args[:2] == ['pr', 'view']:
+    print('YPER4-999 [' + os.environ.get('FLAG_TYPE', 'BUGFIX') + '] Fixture')
+    sys.exit(0)
+if args[0] != 'api' or os.environ.get('FLAG_GH_ERROR'):
+    sys.exit(1)
+url = args[1]
+if '/contents/' in url:
+    if os.environ.get('FLAG_SOURCE_ERROR'):
+        sys.exit(1)
+    path = urllib.parse.unquote(url.split('/contents/')[1].split('?')[0])
+    ref = urllib.parse.parse_qs(urllib.parse.urlsplit(url).query)['ref'][0]
+    name = {'src/lib/flags.ts': 'registry', 'src/lib/flags/keys.ts': 'keys'}.get(path, 'base' if ref == 'b' * 40 else 'head')
+    with open(os.environ['FLAG_SOURCE'] + '/' + name) as f:
+        print(json.dumps({'encoding': 'base64', 'content': base64.b64encode(f.read().encode()).decode()}))
+elif '/files?' in url:
+    file = {'filename': os.environ.get('FLAG_FILE', 'src/card.tsx'), 'status': os.environ.get('FLAG_STATUS', 'modified')}
+    if file['status'] == 'renamed':
+        file['previous_filename'] = 'src/old-card.tsx'
+    print(json.dumps([file]))
+    if os.environ.get('FLAG_PAGE2'):
+        print(json.dumps([{'filename': 'AGENTS.md', 'status': 'modified'}]))
+else:
+    print(json.dumps({'head': {'sha': 'a' * 40}, 'base': {'sha': 'b' * 40}, 'title': 'YPER4-999 [BUGFIX] Fixture', 'changed_files': int(os.environ.get('FLAG_COUNT', '1'))}))
+MOCK
+cat > "$E/flag-bin/hypertask" <<'MOCK'
+#!/usr/bin/env bash
+echo '{"success":true,"tasks":[{"id":1}]}'
+MOCK
+cat > "$E/flag-http/sitecustomize.py" <<'MOCK'
+import io, os, urllib.request
+def live(request, timeout):
+    assert request.full_url == 'https://app.hypertask.ai/api/admin/flags'
+    assert request.get_header('Authorization') == 'Bearer fixture'
+    if os.environ.get('FLAG_HTTP_ERROR'):
+        raise OSError('unreachable')
+    return io.BytesIO(os.environ.get('FLAG_HTTP', '{"flags":[{"key":"htpr-1-released","mode":"EVERYONE"}]}').encode())
+urllib.request.urlopen = live
+MOCK
+chmod +x "$E/flag-bin/gh" "$E/flag-bin/hypertask"
+printf 'export const RELEASED_FLAG = "htpr-1-released";\n' > "$E/flag-source/keys"
+printf 'const FEATURE_FLAG_DEFINITIONS = [{ key: RELEASED_FLAG } ] as const;\nconst DEFAULT_FEATURE_FLAG_MODE = "OWNER_AND_QA";\n' > "$E/flag-source/registry"
+printf 'const released = useFlag(RELEASED_FLAG);\n' > "$E/flag-source/base"
+cp "$E/flag-source/base" "$E/flag-source/head"
+F() {
+  local want=$1 expected=$2 out got; shift 2
+  out=$(echo '{"tool_input":{"command":"gh pr merge 999"}}' | env PATH="$E/flag-bin:$PATH" PYTHONPATH="$E/flag-http" FLAG_SOURCE="$E/flag-source" AGENT_TOKEN=fixture HYPERTASKS_JWT_TOKEN= "$@" ./ship-check guard 2>&1); got=$?
+  if [ "$got" = "$want" ] && [[ $out == *"$expected"* ]]; then ok "released flag: $want $expected $*"
+  else bad "released flag: want $want $expected got $got $out"; fi
+}
+F 2 'record a browser click-through'
+for type in BUGFIX INFRA REFACTOR FEATURE; do F 2 'record a browser click-through' FLAG_TYPE="$type"; done
+F 0 '' FLAG_HTTP='{"flags":[{"key":"htpr-1-released","mode":"OWNER_AND_QA"}]}'
+F 0 '' FLAG_HTTP='{"flags":[{"key":"htpr-1-released","mode":"OFF"}]}'
+F 0 '' FLAG_HTTP_ERROR=1
+sed -i 's/OWNER_AND_QA/EVERYONE/' "$E/flag-source/registry"
+F 2 'record a browser click-through' FLAG_HTTP_ERROR=1
+F 2 'record a browser click-through' AGENT_TOKEN=
+F 2 'record a browser click-through' FLAG_HTTP='invalid'
+F 2 'record a browser click-through' FLAG_HTTP='{"flags":[{"key":"htpr-1-released","mode":"invalid"}]}'
+F 0 '' FLAG_HTTP='{"flags":[{"key":"htpr-1-released","mode":"OWNER_ONLY"}]}'
+# Exact head, account, flag states and a recording are required.
+head=$(printf 'a%.0s' {1..40})
+premerge="$E/YPER4-999/premerge.md"
+cat > "$premerge" <<RECORD
+Commit: $head
+Account: 985 QA
+Flags: htpr-1-released=EVERYONE
+Board: https://app.hypertask.ai/projects/project-7283
+Build: http://localhost:3000
+Click: PASS card opens the expected title and body and stays open
+Recording: click.webm
+RECORD
+F 2 'recording must be non-empty'
+printf 'recording fixture' > "$E/YPER4-999/click.webm"
+F 0 ''
+cp "$premerge" "$E/record"
+for change in \
+  's/^Commit:.*/Commit: deadbeef/|must name PR head sha' \
+  '/^Account:/d|missing Account:' \
+  's/^Account:.*/Account: /|missing Account:' \
+  '/^Flags:/d|missing Flags:' \
+  's/=EVERYONE/=OFF/|record each released flag' \
+  '/^Board:/d|missing Board:' \
+  's@/projects/project-7283@/demo@|real board URL' \
+  '/^Build:/d|missing Build:' \
+  's/Click: PASS/Click: FAIL/|missing passing click' \
+  '/^Recording:/d|missing passing click' \
+  's/click.webm/..\/record/|recording must be non-empty' \
+  's/click.webm/missing.webm/|recording must be non-empty'; do
+  sed "${change%%|*}" "$E/record" > "$premerge"
+  F 2 "${change#*|}"
+done
+cp "$E/record" "$premerge"
+# Whole files, server reads, literals, removed reads and renames are covered.
+printf 'const released = isFeatureEnabled(\n  "htpr-1-released", userId);\n' > "$E/flag-source/base"
+printf 'const changed = 1;\n' > "$E/flag-source/head"
+rm "$premerge"
+F 2 'record a browser click-through'
+F 2 'record a browser click-through' FLAG_STATUS=removed
+F 2 'record a browser click-through' FLAG_STATUS=renamed
+F 2 'record a browser click-through' FLAG_STATUS=renamed FLAG_FILE=docs/card.md
+F 0 '' FLAG_STATUS=added
+printf 'import { useFlag as enabled } from "@/hooks/useFlag";\nconst released = enabled(RELEASED_FLAG);\n' > "$E/flag-source/head"
+F 2 'record a browser click-through' FLAG_STATUS=added
+F 2 'record a browser click-through' FLAG_STATUS=added FLAG_COUNT=2 FLAG_PAGE2=1
+printf 'const released = useFlag(dynamicKey);\n' > "$E/flag-source/head"
+F 2 'unresolved flag reads' FLAG_STATUS=added
+printf 'const released = useFlag("htpr-2-new");\n' > "$E/flag-source/head"
+F 2 'unresolved flag reads' FLAG_STATUS=added
+F 2 'cannot read the PR diff' FLAG_GH_ERROR=1
+F 2 'cannot read the PR diff' FLAG_SOURCE_ERROR=1
+F 2 'complete PR diff' FLAG_COUNT=2
+F 0 '' FLAG_FILE=AGENTS.md
+F 0 '' SHIP_REPO=hypertask-ai/cli SHIP_BASE=main FLAG_GH_ERROR=1
+printf 'export function useFlag(key: string) { return true; }\n' > "$E/flag-source/base"
+cp "$E/flag-source/base" "$E/flag-source/head"
+F 0 ''
+
 rm -rf "$E"
 echo "failures: $fails"; [ "$fails" = 0 ] && echo 'All ship-check tests passed'

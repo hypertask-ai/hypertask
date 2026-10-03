@@ -9,6 +9,24 @@ Load this at the `/ship` step **after deploy**. The session that built the chang
 
 Proof bar follows Lauren Tan's verification skills: [create-verification-skill](https://github.com/cursor/plugins/tree/main/pstack/skills/create-verification-skill), [maintain-verification-skill](https://github.com/cursor/plugins/tree/main/pstack/skills/maintain-verification-skill), and [poteto/verification-skill-example](https://github.com/poteto/verification-skill-example). Doctor first. Drive the real app. Prove side effects. Mocks never count.
 
+## Released flags: before merge and after a failure
+
+When live QA FAILs on code behind a flag, switch that flag Off on /admin/flags first (seconds, no deploy), then repair. A revert PR is the second step, not the first. (Valentin, 2026-10-03)
+
+Any change to code inside a flag that is already on for Everyone, whatever its PR type ([BUGFIX] included), needs one recorded browser click-through of the changed path on a real board before merge, on the preview or locally against the PR build, with the live flag states. Record commit, account and flag state in ~/.local/state/vcc-evidence/<TICKET>/premerge.md.
+
+Use this premerge record. The recording must show the changed path working, not just the board loading. For ticket opening, click a real card and check its title and body appear and stay open without reloading. Use a QA account, never Valentin's login. This does not replace live QA after deploy.
+
+```text
+Commit: <full PR head sha>
+Account: <user id and role, never credentials>
+Flags: <key>=EVERYONE, <other key>=<live mode>
+Board: <real board URL, not /demo>
+Build: <preview or local PR build URL>
+Click: PASS <changed path and result>
+Recording: <video file next to premerge.md>
+```
+
 ## Logins
 
 Pass the state file with `--state`. Never print the file. Pick the account for the permission, plan or flag path being checked; the flag QA account is not an admin.
