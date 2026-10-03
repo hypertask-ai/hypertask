@@ -2,10 +2,14 @@ import type { Prisma } from "@prisma/client";
 
 import { decryptSecret } from "@/lib/crypto/byokCipher";
 import prisma from "@/lib/prisma";
+import { HTPR_6817_SLACK_APP_FLAG, isFeatureEnabled } from "@/lib/flags";
+import { getRedis } from "@/lib/redis";
 import { callSlackApi } from "@/lib/slack/api";
 
 type SlackUserInfo = {
   is_email_confirmed?: boolean;
+  is_bot?: boolean;
+  deleted?: boolean;
   profile?: { email?: string };
 };
 
@@ -84,6 +88,7 @@ export async function resolveSlackActor(
     select: {
       encryptedBotToken: true,
       id: true,
+      installedByUserId: true,
       slackTeamId: true,
       teamId: true,
       team: { select: { aiProviderSettings: true } },
@@ -98,6 +103,15 @@ export async function resolveSlackActor(
 
   const botToken = decryptSecret(install.encryptedBotToken);
   let user: LinkedSlackUser | null = install.userLinks[0]?.user ?? null;
+  const slackAppEnabled = await isFeatureEnabled(
+    HTPR_6817_SLACK_APP_FLAG,
+    user?.id ?? install.installedByUserId,
+  );
+  if (slackAppEnabled) {
+    // Keep an explicit disconnect from silently relinking on the next action.
+    const redis = await getRedis();
+    if (await redis.get(slackAutoLinkDisabledKey(install.id, slackUserId))) return null;
+  }
   if (user && !(await isSlackInstallTeamMember(install.id, user.id))) {
     await prisma.slackUserLink.deleteMany({
       where: { installId: install.id, slackUserId },
@@ -113,7 +127,9 @@ export async function resolveSlackActor(
       listSlackInstallTeamMembers(install.teamId),
     ]);
     const match = selectConfirmedUniqueTeamMember(
-      slackResult?.user,
+      slackAppEnabled && (slackResult?.user?.is_bot || slackResult?.user?.deleted)
+        ? null
+        : slackResult?.user,
       teamMembers,
     );
     if (match) {
@@ -140,6 +156,9 @@ export async function resolveSlackActor(
     }
   }
 
+  if (slackAppEnabled && user && !(await isSlackInstallTeamMember(install.id, user.id))) {
+    return null;
+  }
   return user
     ? {
         botToken,
@@ -151,6 +170,21 @@ export async function resolveSlackActor(
         user,
       }
     : null;
+}
+
+function slackAutoLinkDisabledKey(installId: string, slackUserId: string): string {
+  return `slack:disconnected:${installId}:${slackUserId}`;
+}
+
+export async function setSlackAutoLinkDisabled(
+  installId: string,
+  slackUserId: string,
+  disabled: boolean,
+): Promise<void> {
+  const redis = await getRedis();
+  const key = slackAutoLinkDisabledKey(installId, slackUserId);
+  if (disabled) await redis.set(key, "1");
+  else await redis.del(key);
 }
 
 async function listSlackInstallTeamMembers(

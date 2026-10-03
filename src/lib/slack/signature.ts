@@ -9,7 +9,13 @@ export function verifySlackSignature(
   signingSecret: string | undefined,
   nowMs = Date.now(),
 ): boolean {
-  if (!signingSecret || !signatureHeader?.startsWith("v0=") || !timestampHeader) {
+  if (
+    !signingSecret ||
+    !signatureHeader ||
+    !/^v0=[a-f0-9]{64}$/.test(signatureHeader) ||
+    !timestampHeader ||
+    !/^\d+$/.test(timestampHeader)
+  ) {
     return false;
   }
 

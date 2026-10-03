@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { NextRequest, NextResponse } from "next/server";
 import { waitUntil } from "@vercel/functions";
 
+import { getRequestBaseUrl } from "@/lib/auth/requestBaseUrl";
 import prisma from "@/lib/prisma";
 import { handleSlackCommand } from "@/lib/slack/commandHandler";
 import { verifySlackSignature } from "@/lib/slack/signature";
@@ -50,7 +51,7 @@ export async function POST(request: NextRequest) {
                 text: form.get("text") ?? "",
                 triggerId,
               },
-              new URL(request.url).origin,
+              getRequestBaseUrl(request),
             )
           : undefined,
       )
