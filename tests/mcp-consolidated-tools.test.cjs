@@ -324,6 +324,48 @@ test('response dispatcher forwards filters, renamed parameters and supported pag
   assert.match(invalid.content[0].text, /input.view_id/)
 })
 
+test('limit-only reads fetch the prefix needed for subsequent local pages without exceeding endpoint caps', async () => {
+  const rows = Array.from({ length: 30 }, (_, id) => ({ id, title: `Hit ${id}` }))
+  const calls = []
+  const tools = selectMcpTools(legacy.map((tool) => ({ ...tool, execute: async (args) => {
+    calls.push({ name: tool.name, args })
+    return JSON.stringify({ documents: rows.slice(0, args.limit) })
+  } })), true)
+  for (const [action, name, maximum] of [
+    ['semantic', 'hypertask_rag_retrieval', 25],
+    ['help', 'hypertask_search_help_docs', 6],
+  ]) {
+    assert.equal(toolNamed(legacy, name).parameters.shape.offset, undefined)
+    for (const [limit, offset, inputLimit] of [[5, 5], [20, 20], [2, 2], [2, 5], [5, 5, 2]]) {
+      const result = await executeToolResult(toolNamed(tools, 'hypertask_search'), {
+        action, input: { query: 'checkout', ...(inputLimit ? { limit: inputLimit } : {}) },
+        response_format: 'detailed', limit, offset,
+      }, 'fixture-token')
+      assert.notEqual(result.isError, true)
+      const fetched = Math.min(Math.min(inputLimit ?? limit, limit) + offset, maximum)
+      assert.equal(calls.at(-1).name, name)
+      assert.equal(calls.at(-1).args.limit, fetched)
+      assert.deepEqual(result.structuredContent.data.documents, rows.slice(offset, Math.min(offset + limit, fetched)))
+    }
+  }
+})
+
+test('both cursor spellings imply continuation even without an upstream has_more field', () => {
+  const tasks = [{ id: 1, title: 'First page' }]
+  for (const cursor of [{ nextCursor: 'next' }, { next_cursor: 'next' }, { nextCursor: null, next_cursor: 'next' }]) {
+    const result = JSON.parse(formatToolResponse(JSON.stringify({ tasks, ...cursor }), 'detailed', true, 20, 5, true))
+    assert.equal(result.pagination.next_cursor, 'next')
+    assert.equal(result.pagination.has_more, true)
+    assert.equal(result.pagination.next_offset, 6)
+    assert.match(result.pagination.guidance, /next_cursor/)
+  }
+  for (const cursor of [{}, { nextCursor: null }, { next_cursor: '' }]) {
+    const result = JSON.parse(formatToolResponse(JSON.stringify({ tasks, ...cursor }), 'detailed', true, 20, 0, true))
+    assert.equal(result.pagination.has_more, false)
+    assert.equal(result.pagination.next_offset, undefined)
+  }
+})
+
 test('read limits still bound resource collections and nested ticket relationships in both formats', () => {
   const rows = Array.from({ length: 30 }, (_, id) => ({ id, title: `Resource ${id}` }))
   for (const format of ['concise', 'detailed']) {

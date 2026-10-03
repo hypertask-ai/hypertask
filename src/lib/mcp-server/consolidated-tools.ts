@@ -127,7 +127,9 @@ export function selectMcpTools(
         const supportsLimit = 'limit' in tool.parameters.shape
         if (action.read_only && supportsLimit) {
           const limitSchema = z.toJSONSchema(tool.parameters.shape.limit, { unrepresentable: 'any', io: 'input' }) as { maximum?: number }
-          input.limit = Math.min(Number(input.limit ?? args.limit), args.limit, limitSchema.maximum ?? 50)
+          // Limit-only endpoints must include the skipped rows before local slicing.
+          const prefix = supportsOffset ? 0 : args.offset
+          input.limit = Math.min(Math.min(Number(input.limit ?? args.limit), args.limit) + prefix, limitSchema.maximum ?? 50)
         }
         if (action.read_only && supportsOffset) input.offset ??= args.offset
         try {
