@@ -46,6 +46,23 @@ async function appNamesFor(customerIds) {
   }
 }
 
+// HTPR-6869: --list-blank <file> writes every customer with no readable name to
+// <file> (read only), for review and then --fill-blank <file>.
+if (process.argv.includes("--list-blank")) {
+  const file = process.argv[process.argv.indexOf("--list-blank") + 1];
+  if (!file || file.startsWith("--")) {
+    console.error("Usage: --list-blank <file>");
+    process.exit(1);
+  }
+  const ids = [];
+  for await (const customer of stripe.customers.list({ limit: 100 })) {
+    if (!readable(customer.name)) ids.push(customer.id);
+  }
+  fs.writeFileSync(file, ids.map((id) => `${id}\n`).join(""));
+  console.log(JSON.stringify({ mode: "list-blank", blank: ids.length, file }));
+  process.exit(0);
+}
+
 if (process.argv.includes("--fill-blank")) {
   // Only customers listed in the manifest the repair wrote when it blanked them
   // (--apply below), so a name cleared by anything else is never refilled.
