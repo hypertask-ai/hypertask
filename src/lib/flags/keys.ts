@@ -14,6 +14,7 @@ export const LUNA_FREE_PLAN_FLAG = "htpr-6722-latest-models";
 export const HTPR_6752_INSTANT_TICKET_OPEN_FLAG = "htpr-6752-instant-ticket-open";
 
 export const FEATURE_FLAG_DETAILS_FLAG = "htpr-6133-feature-flag-details";
+export const FEATURE_FLAG_PAGES_FLAG = "yper4-160-flag-pages";
 export const LOCAL_WRITING_ASSISTANCE_FLAG =
   "htpr-5908-local-writing-assistance";
 export const AGENT_CHAT_BRIEF_FLAG = "htpr-6155-chat-agent-brief";

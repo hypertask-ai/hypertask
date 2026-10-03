@@ -490,6 +490,7 @@ test("declared flags remain listed with ticket details and can be changed", asyn
       { key: "htpr-6865-search-layout", mode: "OWNER_AND_QA", updatedAt: null },
       { key: "htpr-6872-page-image-gallery", mode: "OWNER_AND_QA", updatedAt: null },
       { key: "yper4-123-board-check", mode: "OWNER_AND_QA", updatedAt: null },
+      { key: "yper4-160-flag-pages", mode: "OWNER_AND_QA", updatedAt: null },
     ],
   );
   listed.forEach(({ key, description, ticketUrl, shippedOn }) => {

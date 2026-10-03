@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import Link from "next/link";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   ADMIN_FEATURE_FLAGS_QUERY_KEY,
@@ -52,7 +53,13 @@ async function updateFlag(input: FlagUpdate) {
   return body.flag;
 }
 
-export default function FeatureFlagsAdmin() {
+export default function FeatureFlagsAdmin({
+  flagKey,
+  pagesEnabled = false,
+}: {
+  flagKey?: string;
+  pagesEnabled?: boolean;
+}) {
   const queryClient = useQueryClient();
   const ticketTitleEnabled = useFlag("htpr-6176-flag-ticket-title");
   const sortFilterEnabled = useFlag("htpr-6179-flag-sort-filter");
@@ -101,27 +108,36 @@ export default function FeatureFlagsAdmin() {
 
   // Off: one unlabelled group, so the rows below render exactly as they did before.
   const clusters = useMemo(
-    () =>
-      sortFilterEnabled
+    () => {
+      if (flagKey) {
+        return [["", (flags.data?.flags ?? []).filter((flag) => flag.key === flagKey)] as [string, FeatureFlagRow[]]];
+      }
+      return sortFilterEnabled
         ? clusterFeatureFlagsByReleaseDate(
             flags.data?.flags ?? [],
             sortDirection,
             audienceFilter,
             shipDateClustersEnabled,
           )
-        : [["", flags.data?.flags ?? []] as [string, FeatureFlagRow[]]],
-    [sortFilterEnabled, flags.data?.flags, sortDirection, audienceFilter, shipDateClustersEnabled],
+        : [["", flags.data?.flags ?? []] as [string, FeatureFlagRow[]]];
+    },
+    [flagKey, sortFilterEnabled, flags.data?.flags, sortDirection, audienceFilter, shipDateClustersEnabled],
   );
 
   return (
     <main className="min-h-screen bg-pageBackground px-4 py-8 text-white-black sm:px-8">
       <div className="mx-auto max-w-4xl">
-        <h1 className="text-heading font-semibold">Feature flags</h1>
+        {flagKey && (
+          <Link href="/admin/flags" className="mb-4 inline-block text-content text-text-light-gray underline-offset-2 hover:underline focus-visible:underline">
+            Back to all flags
+          </Link>
+        )}
+        <h1 className="break-all text-heading font-semibold">{flagKey ?? "Feature flags"}</h1>
         <p className="mt-2 text-content text-text-light-gray">
           New features start with Owner + QA. Release or hide them without a deploy.
         </p>
 
-        {sortFilterEnabled && (
+        {!flagKey && sortFilterEnabled && (
           <div className="mt-6 flex flex-wrap items-center justify-between gap-3">
             <div
               className="flex flex-wrap gap-1 rounded-sm bg-comment-description p-1"
@@ -159,7 +175,7 @@ export default function FeatureFlagsAdmin() {
             {flags.isLoading && <p className="p-4 text-content text-text-light-gray">Loading flags...</p>}
             {flags.isError && <p className="p-4 text-content text-destructive">Could not load feature flags.</p>}
             {!flags.isLoading && !flags.isError && (
-              <p className="p-4 text-content text-text-light-gray">No flags match this filter.</p>
+              <p className="p-4 text-content text-text-light-gray">{flagKey ? "Feature flag not found." : "No flags match this filter."}</p>
             )}
           </div>
         )}
@@ -167,17 +183,35 @@ export default function FeatureFlagsAdmin() {
         {clusters.map(([dateLabel, rows]) =>
           rows.length === 0 ? null : (
           <div key={dateLabel || "all"} className="mt-6">
-            {sortFilterEnabled && (
+            {!flagKey && sortFilterEnabled && (
               <h2 className="mb-2 text-dense font-semibold text-text-light-gray">{dateLabel}</h2>
             )}
             <div className="overflow-hidden rounded-[5px] border border-border-light-gray-thin bg-cardBackground">
-          {rows.map((flag) => (
+          {rows.map((flag) => {
+            const ticket = /^(htpr|yper4)-([1-9]\d*)-[a-z0-9]+(?:-[a-z0-9]+)*$/.exec(flag.key);
+            return (
             <div
               key={flag.key}
               className="flex flex-col gap-3 border-b border-border-light-gray-thin p-4 last:border-b-0 sm:flex-row sm:items-center sm:justify-between"
             >
               <div className="min-w-0 sm:max-w-lg">
-                {flags.data?.detailsEnabled && ticketTitleEnabled && flag.ticketTitle ? (
+                {flagKey ? (
+                  <>
+                    <code className="break-all text-dense text-white-black">{flag.key}</code>
+                    <p className="mt-1 text-content text-text-light-gray">{flag.description}</p>
+                    <p className="mt-1 text-content text-text-light-gray">
+                      Shipped: {flag.shippedOn ? <time dateTime={flag.shippedOn}>{flag.shippedOn}</time> : "Not recorded"}
+                    </p>
+                    {ticket && (
+                      <a
+                        href={`https://app.hypertask.ai/detail/project-${ticket[1] === "htpr" ? 15 : 4060}/${ticket[2]}`}
+                        className="mt-1 inline-block text-content text-text-light-gray underline-offset-2 hover:underline focus-visible:underline"
+                      >
+                        {ticket[1].toUpperCase()}-{ticket[2]}
+                      </a>
+                    )}
+                  </>
+                ) : flags.data?.detailsEnabled && ticketTitleEnabled && flag.ticketTitle ? (
                   <>
                     {flag.ticketUrl ? (
                       <a
@@ -190,8 +224,18 @@ export default function FeatureFlagsAdmin() {
                     ) : (
                       <p className="text-content font-medium text-white-black">{flag.ticketTitle}</p>
                     )}
-                    <code className="mt-1 block break-all text-dense text-text-light-gray">{flag.key}</code>
+                    {pagesEnabled ? (
+                      <Link href={`/admin/flags/${encodeURIComponent(flag.key)}`} className="mt-1 block text-text-light-gray underline-offset-2 hover:underline focus-visible:underline">
+                        <code className="break-all text-dense">{flag.key}</code>
+                      </Link>
+                    ) : (
+                      <code className="mt-1 block break-all text-dense text-text-light-gray">{flag.key}</code>
+                    )}
                   </>
+                ) : pagesEnabled ? (
+                  <Link href={`/admin/flags/${encodeURIComponent(flag.key)}`} className="text-white-black underline-offset-2 hover:underline focus-visible:underline">
+                    <code className="break-all text-dense">{flag.key}</code>
+                  </Link>
                 ) : flags.data?.detailsEnabled && flag.ticketUrl ? (
                   <a
                     href={flag.ticketUrl}
@@ -202,7 +246,7 @@ export default function FeatureFlagsAdmin() {
                 ) : (
                   <code className="break-all text-dense text-white-black">{flag.key}</code>
                 )}
-                {flags.data?.detailsEnabled && (
+                {!flagKey && flags.data?.detailsEnabled && (
                   <p className="mt-1 text-content text-text-light-gray">{flag.description}</p>
                 )}
                 {removalCountdownEnabled &&
@@ -262,7 +306,8 @@ export default function FeatureFlagsAdmin() {
                 })}
               </div>
             </div>
-          ))}
+            );
+          })}
             </div>
           </div>
           ),
