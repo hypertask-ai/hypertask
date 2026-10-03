@@ -46,6 +46,12 @@ export function getBoardManifestInputSchema() {
 export const BoardManifestInputSchema = getBoardManifestInputSchema();
 export type BoardManifestInput = z.infer<typeof BoardManifestInputSchema>;
 
+export const RenameBoardInputSchema = z.object({
+  project_id: z.number().int().positive(),
+  title: z.string().trim().min(1).max(200),
+}).strict();
+export type RenameBoardInput = z.infer<typeof RenameBoardInputSchema>;
+
 /**
  * Schema for get_board_playbook tool input
  */
