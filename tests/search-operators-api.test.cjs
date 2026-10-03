@@ -45,6 +45,7 @@ const mocks = new Map([
     HTPR_6369_SEARCH_OPERATORS_FLAG: 'htpr-6369-search-operators',
     HTPR_6372_SEARCH_RANKING_FLAG: 'htpr-6372-search-ranking',
     HTPR_6878_SEARCH_LABEL_SCOPE_FLAG: 'htpr-6878-search-label-scope',
+    HTPR_6880_SEARCH_COMMENTER_FLAG: 'htpr-6880-search-commenter',
     HTPR_6882_SEARCH_MATCH_HIGHLIGHTS_FLAG: 'htpr-6882-search-match-highlights',
     HTPR_6865_SEARCH_LAYOUT_FLAG: 'htpr-6865-search-layout',
     HTPR_6688_SEARCH_AUTOCOMPLETE_FLAG: 'htpr-6688-search-autocomplete',

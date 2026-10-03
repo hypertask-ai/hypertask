@@ -20,6 +20,7 @@ const mocks = new Map([
     HTPR_6881_SEARCH_FUZZY_PERSON_FLAG: 'htpr-6881-search-fuzzy-person',
     HTPR_6369_SEARCH_OPERATORS_FLAG: 'htpr-6369-search-operators',
     HTPR_6370_SEARCH_CHIPS_FLAG: 'htpr-6370-search-chips',
+    HTPR_6880_SEARCH_COMMENTER_FLAG: 'htpr-6880-search-commenter',
     isFeatureEnabled: async (key) => key === 'htpr-6881-search-fuzzy-person' ? false : key === 'htpr-6369-search-operators' ? state.flag : state.listFlag,
   }],
   ['src/lib/mcp/readListQuery.ts', { readListQuery: (params) => ({ listQuery: state.listFlag

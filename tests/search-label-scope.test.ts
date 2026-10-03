@@ -32,7 +32,11 @@ for (const [file, exports] of [
   ['src/lib/flags.ts', {
     HTPR_6369_SEARCH_OPERATORS_FLAG: 'htpr-6369-search-operators', HTPR_6370_SEARCH_CHIPS_FLAG: 'htpr-6370-search-chips',
     HTPR_6688_SEARCH_AUTOCOMPLETE_FLAG: 'htpr-6688-search-autocomplete', HTPR_6865_SEARCH_LAYOUT_FLAG: layoutFlag,
-    HTPR_6878_SEARCH_LABEL_SCOPE_FLAG: flag, isFeatureEnabled: async (key: string, userId: number) => { assert.equal(userId, 6); return state.flags[key] ?? false },
+    HTPR_6878_SEARCH_LABEL_SCOPE_FLAG: flag,
+    HTPR_6372_SEARCH_RANKING_FLAG: 'htpr-6372-search-ranking',
+    HTPR_6881_SEARCH_FUZZY_PERSON_FLAG: 'htpr-6881-search-fuzzy-person',
+    HTPR_6880_SEARCH_COMMENTER_FLAG: 'htpr-6880-search-commenter',
+    isFeatureEnabled: async (key: string, userId: number) => { assert.equal(userId, 6); return state.flags[key] ?? false },
   }],
   ['src/utils/controllers/projects/getAllIncludes.ts', { getProjectWhere: (userId: number) => ({ ownerId: userId }), projectContentAccessWhere: (userId: number) => ({ ownerId: userId }) }],
   ['src/lib/search/serverOperators.ts', { parseSearchWithChipNames: async (query: string) => parseSearchQuery(query), parseSearchWithNames: async (query: string) => parseSearchQuery(query) }],

@@ -6,7 +6,7 @@ import { createJiti } from 'jiti'
 import { NextRequest } from 'next/server'
 import * as keys from '../src/lib/flags/keys'
 import { parseSearchQuery, parseSearchTokens } from '../src/lib/search/operators'
-import { candidateQuery, splitSearchChips } from '../src/lib/search/chips'
+import { candidateQuery, searchChipText, splitSearchChips } from '../src/lib/search/chips'
 import { operatorSuggestions, searchCompletion, SEARCH_TIPS, searchFilterType } from '../src/lib/search/autocomplete'
 
 const require = createRequire(import.meta.url)
@@ -140,6 +140,16 @@ test('parser recognizes commenter only when enabled, including names, quotes and
   assert.equal(splitSearchChips('commenter:1', false, {}, false, true).chips.length, 1)
   assert.equal(searchFilterType('commenter'), searchFilterType('from'))
   assert.deepEqual(SEARCH_TIPS.commenter, { example: 'commenter:@Hicham', meaning: 'Commented by this person' })
+})
+
+test('commenter chips retain the person marker independently of the board hash flag', () => {
+  for (const raw of ['commenter:1', 'commenter:@Hicham', '-commenter:1']) {
+    const chip = splitSearchChips(raw, false, {}, false, true).chips[0]
+    for (const omitBoardHash of [false, true]) {
+      assert.equal(searchChipText(chip, 'Hicham', omitBoardHash), `${chip.negated ? '-' : ''}commenter:@Hicham`)
+      assert.equal(searchChipText(chip, '@Hicham', omitBoardHash), `${chip.negated ? '-' : ''}commenter:@Hicham`)
+    }
+  }
 })
 
 test('where requires a real comment by the exact picked ID on accessible non-deleted tickets', async () => {
