@@ -81,6 +81,9 @@ const SearchComp = ({
     includeArchived,
     setIncludeArchivedResults,
   } = useSearch(_searchTerm, _initialTabIndex, _includeArchived, _fromProject);
+  const matchSnippets = matchHighlightsFlagEnabled && layoutEnabled
+    ? typedTasks.map((task) => highlightedSearchSnippet((task.commentId ? task.commentText : task.descriptionText) ?? '', inputValue))
+    : undefined;
   const showAskAiRow =
     !layoutEnabled && inputValue.trim().length >= 2 && typedTasks.length === 0;
   const searchTextClassName =
@@ -247,7 +250,7 @@ const SearchComp = ({
                                 isActive={selectedIndex === index}
                                 liRef={liSelectedRef}
                                 aligned={layoutEnabled}
-                                matchQuery={matchHighlightsFlagEnabled && layoutEnabled ? inputValue : undefined}
+                                snippetParts={matchSnippets?.[index]}
                               />
                             </Fragment>
                           );
@@ -392,7 +395,7 @@ interface ITaskRow {
   highlight: any;
   titleParts?: ReturnType<typeof highlightedTitle>;
   aligned?: boolean;
-  matchQuery?: string;
+  snippetParts?: ReturnType<typeof highlightedSearchSnippet>;
   liRef: RefObject<HTMLLIElement | null>;
 }
 
@@ -407,12 +410,9 @@ const TaskListRow = (props: ITaskRow) => {
     highlight,
     titleParts,
     aligned,
-    matchQuery,
+    snippetParts,
     liRef,
   } = props;
-  const snippetParts = matchQuery !== undefined
-    ? highlightedSearchSnippet((task.commentId ? task.commentText : task.descriptionText) ?? '', matchQuery)
-    : undefined;
 
   return (
     <li
