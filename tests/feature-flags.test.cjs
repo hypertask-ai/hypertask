@@ -615,6 +615,21 @@ test("the retired core-actions smoke flag is hidden and not editable", async () 
   await assert.rejects(flags.setFeatureFlagMode(key, "OFF"), /Unknown feature flag/);
 });
 
+test("the retired infra flag-pages key is hidden and cannot be re-enabled", async () => {
+  const key = "yper4-160-flag-pages";
+  listedRows = [{ key, mode: "EVERYONE", updatedAt: new Date() }];
+  row = { mode: "EVERYONE", updatedAt: new Date() };
+
+  assert.equal(flags.FEATURE_FLAG_KEYS.includes(key), false);
+  assert.equal((await flags.listFeatureFlagModes()).some((flag) => flag.key === key), false);
+  for (const userId of [6, 985, 42]) {
+    assert.equal(await flags.isFeatureEnabled(key, userId), false);
+    assert.equal((await flags.featureFlagsForUser(userId))[key], undefined);
+  }
+  await assert.rejects(flags.setFeatureFlagMode(key, "EVERYONE"), /Unknown feature flag/);
+  await assert.rejects(flags.setFeatureFlagKeep(key, true), /Unknown feature flag/);
+});
+
 for (const key of ["htpr-6072-shallow-board-switch", "htpr-6254-heic-heif-attachments", "htpr-6035-agent-chat-skills"]) test(`the retired ${key} stays on in client payloads but is not editable`, async () => {
   listedRows = [{ key, mode: "OFF", updatedAt: new Date() }];
   row = { mode: "OFF", updatedAt: new Date() };
