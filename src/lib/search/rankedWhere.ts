@@ -28,7 +28,7 @@ export async function rankedSearchWhere(
     })
     for (const comment of comments) {
       rankedIds.push(comment.taskId)
-      commentById.set(comment.taskId, { ...comment, creatorName: comment.creator.displayName || comment.creator.email || '' })
+      commentById.set(comment.taskId, { ...comment, creatorName: comment.creator?.displayName || comment.creator?.email || '' })
     }
     return { where, rankedIds, descriptionById, commentById, partial: false }
   }
@@ -60,7 +60,7 @@ export async function rankedSearchWhere(
       }
       seen.add(id)
       if (description) descriptionById.set(id, description)
-      if (comment) commentById.set(id, comment)
+      if (comment) commentById.set(id, { id: comment.id, commentText: comment.commentText, creatorName: comment.creatorName, createdAt: comment.createdAt ? new Date(comment.createdAt) : undefined })
       return true
     })
     if (fresh.length) {
