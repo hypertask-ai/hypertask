@@ -34,10 +34,6 @@ import {
   announcementSlideAtom,
   aiChatExplicitOpenAtAtom,
   aiChatAutoOpenSuppressedAtom,
-  aiChatPinnedAtom,
-  openAiChatByDefaultAtom,
-  isAiChatSidebarModeAtom,
-  aiChatSidebarWidthPxAtom,
   showAIChatInterfaceAtom,
   mobileCommentComposerOpenAtom,
   showAccountSwitcherAtom,
@@ -48,7 +44,6 @@ import {
   agentChatTeamCycleAtom,
   agentChatMobileFullscreenAtom,
 } from "@/store";
-import { AI_CHAT_SIDEBAR_MIN_PX } from "@/lib/configs/style.config";
 import { orderTeamsForSwitcher } from "@/lib/teamSwitcherOrder";
 import { getLastBoardTeam, setLastBoardTeam } from "@/lib/lastBoardTeam";
 
@@ -138,6 +133,7 @@ import { isFavoriteBoardShortcut } from "@/lib/constants/shortcuts";
 import { isControlQFocusShortcut } from "@/lib/aiChat/chatFocusShortcut";
 import { shouldRenderGlobalCommandMenu } from "@/lib/constants/commandCenterShortcut";
 import { useCommandCenterShortcut } from "@/hooks/General/useCommandCenterShortcut";
+import { usePageLoadReservations } from "@/hooks/General/usePageLoadReservations";
 import useHypertasksRecoilStates from "@/hooks/RecoilRoot/useHypertasksRecoilStates";
 import { useGlobalUIState } from "./useGlobalUIState";
 import { useSettingsNavigation } from "@/components/Modals/Settings/settingsNavigation";
@@ -258,9 +254,6 @@ import {
   matchesShortcut,
 } from "@/lib/utils/keyboardShortcuts";
 import {
-  shouldShowMobileTabBar,
-  shouldShowMobileDock,
-  shouldShowMobilePrimaryDock,
   shouldShowMobileCreateTaskButton,
   shouldEnableMobilePullDownCommand,
   isAgentChatPath,
@@ -442,17 +435,6 @@ export default function GlobalProvider({
   const isFullScreenChat = pathname?.startsWith("/chat") ?? false;
   const isAgentChatPage = pathname?.startsWith("/agents/chat") ?? false;
   const isTaskDetailPage = pathname?.startsWith("/detail") ?? false;
-  const aiChatPinned = useRecoilValue(aiChatPinnedAtom);
-  const openAiChatByDefault = useRecoilValue(openAiChatByDefaultAtom);
-  const isAiChatSidebarMode = useRecoilValue(isAiChatSidebarModeAtom);
-  const aiChatSidebarWidthPx = useRecoilValue(aiChatSidebarWidthPxAtom);
-  // Match task auto-open before its hooks or the lazy chat runtime mount.
-  const reserveAiSidebar = !mbl && isAiChatSidebarMode && (
-    showAiChatInterface || (
-      isTaskDetailPage && authenticatedUserId !== null &&
-      (aiChatPinned || (openAiChatByDefault && !aiChatAutoOpenSuppressed))
-    )
-  );
   const agentChatMobileFullscreenFlag = useFlag(
     HTPR_6476_MOBILE_AGENT_CHAT_FULLSCREEN_FLAG,
   );
@@ -599,35 +581,25 @@ export default function GlobalProvider({
     resetShowCommands();
   }, [pathname, resetShowCommands]);
 
-  // The mobile shell (top bar + pull-to-command) is present on every root view
-  // including task detail. The bottom dock is the exception: hidden on detail
-  // (shouldShowMobileDock) so the composer owns the bottom edge.
   // HTPR-6476: Agent Chat with an agent open owns the whole phone screen.
   const agentChatMobileFullscreenAtomOn = useRecoilValue(
     agentChatMobileFullscreenAtom,
   );
-  // Keep the path/auth shell check separate so the ticket flag can gate the
-  // rendered chrome in JSX (feature-flag-gate requires that shape).
-  // Reserve shell space from the server session before the profile query resolves.
-  const showMobileShellPath =
-    mbl && (authenticatedUserId !== null || Boolean(currentUser?.id)) && shouldShowMobileTabBar(pathname);
   const agentChatHidesMobileShell =
     (agentChatMobileFullscreenFlag && agentChatMobileFullscreenAtomOn) ||
     (agentChatMobileFullscreenFlag && isAgentChatPath(pathname));
-  const showMobileTabBar = showMobileShellPath && !agentChatHidesMobileShell;
-  // Entering the mobile comment composer hides the bottom nav so the sheet
-  // sits directly on the keyboard (the top bar stays for the back button).
   const commentComposerOpen = useRecoilValue(mobileCommentComposerOpenAtom);
-  const showMobileBottomInset =
-    mbl &&
-    (authenticatedUserId !== null || Boolean(currentUser?.id)) &&
-    shouldShowMobileDock(pathname) &&
-    // HTPR-6860: ticket pages drop the dock like the ticket screen does.
-    !(mobilePageHideDockFlag && isTicketPagePath(pathname)) &&
-    !commentComposerOpen &&
-    !agentChatHidesMobileShell;
-  const showMobileBottomNav =
-    showMobileBottomInset && shouldShowMobilePrimaryDock(pathname);
+  const { sidebarWidthPx, showMobileShellPath, showMobileTabBar, showMobileBottomInset, showMobileBottomNav } = usePageLoadReservations({
+    mbl,
+    pathname,
+    authenticatedUserId,
+    currentUserId: currentUser?.id,
+    showAiChatInterface,
+    aiChatAutoOpenSuppressed,
+    mobilePageHideDockFlag,
+    commentComposerOpen,
+    agentChatHidesMobileShell,
+  });
   // Pull-to-command follows the shell, not the dock, so it stays live on detail
   // even though the dock is gone (this also keeps pull-to-refresh disabled).
   const enableMobilePullDownCommand =
@@ -1492,9 +1464,7 @@ export default function GlobalProvider({
               mobilePullCommandEnabled={mobilePullCommandVisible}
               onOpenAIChat={openAIChatInterface}
               chatOpen={showAiChatInterface}
-              sidebarWidthPx={reserveAiSidebar
-                ? Math.max(aiChatSidebarWidthPx, AI_CHAT_SIDEBAR_MIN_PX)
-                : 0}
+              sidebarWidthPx={sidebarWidthPx}
               panels={
                 shouldMountChatRuntime ? (
                   <Suspense fallback={null}>

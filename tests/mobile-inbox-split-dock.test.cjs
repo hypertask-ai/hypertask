@@ -38,7 +38,8 @@ test("Inbox routes replace the regular mobile navigation", () => {
     visibility,
     /shouldShowMobileDock\(pathname\) && !isMobileInboxPath\(pathname\)/,
   );
-  assert.match(provider, /shouldShowMobilePrimaryDock\(pathname\)/);
+  const reservations = read("src/hooks/General/usePageLoadReservations.ts");
+  assert.match(reservations, /shouldShowMobilePrimaryDock\(pathname\)/);
   assert.match(primaryDock, /shouldShowMobilePrimaryDock\(pathname\)/);
   assert.match(
     provider,

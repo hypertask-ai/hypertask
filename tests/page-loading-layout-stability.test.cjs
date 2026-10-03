@@ -98,6 +98,20 @@ test("empty inbox split titles reserve the loaded 32px row and remain hidden on 
 
 const globalProvider = "src/components/ProviderGlobal/GloablProviders.tsx";
 
+function reservations(state) {
+  const atoms = {
+    aiChatPinnedAtom: "aiChatPinned", openAiChatByDefaultAtom: "openAiChatByDefault",
+    isAiChatSidebarModeAtom: "isAiChatSidebarMode", aiChatSidebarWidthPxAtom: "aiChatSidebarWidthPx",
+  };
+  const { usePageLoadReservations } = load("src/hooks/General/usePageLoadReservations.ts", {
+    "@/lib/state": { useRecoilValue: (atom) => state[atom] },
+    "@/store": atoms,
+    "@/lib/configs/style.config": { AI_CHAT_SIDEBAR_MIN_PX: 340 },
+    "@/components/Global/mobileShellVisibility": load("src/components/Global/mobileShellVisibility.ts", {}),
+  });
+  return usePageLoadReservations(state);
+}
+
 function renderWorkspace({ pathname, mobile = false, topBar = false, dock = false, sidebar = false, width = 420, panels }) {
   const MobileViewContext = React.createContext(mobile);
   const Frame = load("src/components/AI_CHAT/AI_Chat_Closed_Layout.tsx", {
@@ -112,7 +126,10 @@ function renderWorkspace({ pathname, mobile = false, topBar = false, dock = fals
     AIChatClosedLayout: Frame, showMobileTabBar: topBar,
     mobileBottomInsetVisible: dock, mobilePullCommandVisible: false,
     openAIChatInterface: noop, showAiChatInterface: sidebar,
-    reserveAiSidebar: sidebar, aiChatSidebarWidthPx: width, AI_CHAT_SIDEBAR_MIN_PX: 340,
+    sidebarWidthPx: reservations({
+      mbl: mobile, pathname, authenticatedUserId: 985, showAiChatInterface: sidebar,
+      isAiChatSidebarMode: true, aiChatSidebarWidthPx: width,
+    }).sidebarWidthPx,
     shouldMountChatRuntime: true, Suspense: React.Suspense,
     AIChatPanels: () => panels,
     CachedTaskDetailNavigation: ({ children }) => children,
@@ -123,25 +140,22 @@ function renderWorkspace({ pathname, mobile = false, topBar = false, dock = fals
 const documentFor = (element) => new JSDOM(renderToString(element)).window.document;
 
 test("mobile shell space exists before the authenticated profile finishes loading", () => {
-  const visibility = load("src/components/Global/mobileShellVisibility.ts", {});
   for (const pathname of ["/project", "/inbox", "/detail/project-7049/31", "/login", "/share/task/1"]) {
     const dependencies = {
-      ...visibility, mbl: true, authenticatedUserId: 985, currentUser: undefined, pathname,
+      mbl: true, authenticatedUserId: 985, currentUserId: undefined, pathname,
       mobilePageHideDockFlag: false, commentComposerOpen: false, agentChatHidesMobileShell: false,
     };
     const render = () => {
-      dependencies.showMobileShellPath = load(globalProvider, dependencies, "showMobileShellPath");
-      const topBar = load(globalProvider, dependencies, "showMobileTabBar");
-      const dock = load(globalProvider, dependencies, "showMobileBottomInset");
+      const { showMobileTabBar: topBar, showMobileBottomInset: dock } = reservations(dependencies);
       return documentFor(renderWorkspace({ pathname, mobile: true, topBar, dock })).querySelector("[data-ai-workspace]");
     };
     const pending = render();
-    dependencies.currentUser = { id: 985 };
+    dependencies.currentUserId = 985;
     const ready = render();
     assert.equal(pending.className, ready.className, "profile resolution must not move the page");
     const hidden = pathname.startsWith("/login") || pathname.startsWith("/share");
     assert.equal(pending.className.includes("pt-[var(--mobile-top-bar-h)]"), !hidden, pathname);
-    dependencies.currentUser = undefined;
+    dependencies.currentUserId = undefined;
     dependencies.authenticatedUserId = null;
     assert.equal(render().className.includes("mobile-tab-bar-content"), false, "signed-out pages must not gain shell padding");
   }
@@ -150,10 +164,10 @@ test("mobile shell space exists before the authenticated profile finishes loadin
 test("task auto-open reserves the lazy desktop sidebar width without affecting closed, floating or mobile chat", () => {
   const state = {
     mbl: false, isAiChatSidebarMode: true, showAiChatInterface: false,
-    isTaskDetailPage: true, authenticatedUserId: 985,
+    pathname: "/detail/project-7049/31", authenticatedUserId: 985, aiChatSidebarWidthPx: 420,
     aiChatPinned: false, openAiChatByDefault: true, aiChatAutoOpenSuppressed: false,
   };
-  assert.equal(load(globalProvider, state, "reserveAiSidebar"), true);
+  assert.equal(reservations(state).sidebarWidthPx, 420);
   for (const [change, expected] of [
     [{ aiChatAutoOpenSuppressed: true }, false],
     [{ openAiChatByDefault: false }, false],
@@ -161,9 +175,9 @@ test("task auto-open reserves the lazy desktop sidebar width without affecting c
     [{ isAiChatSidebarMode: false }, false],
     [{ mbl: true }, false],
     [{ authenticatedUserId: null }, false],
-    [{ isTaskDetailPage: false }, false],
-    [{ isTaskDetailPage: false, showAiChatInterface: true }, true],
-  ]) assert.equal(load(globalProvider, { ...state, ...change }, "reserveAiSidebar"), expected, JSON.stringify(change));
+    [{ pathname: "/project" }, false],
+    [{ pathname: "/project", showAiChatInterface: true }, true],
+  ]) assert.equal(reservations({ ...state, ...change }).sidebarWidthPx, expected ? 420 : 0, JSON.stringify(change));
 
   for (const width of [280, 420, 600]) {
     const pending = documentFor(renderWorkspace({ pathname: "/detail/project-7049/31", sidebar: true, width }));

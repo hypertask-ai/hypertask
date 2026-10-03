@@ -217,9 +217,7 @@ const shellSource = `
   exports.Workspace = function Workspace({ children, instantTicketOpen, chatMounted }) {
     const shouldMountChatRuntime = chatMounted;
     const showAiChatInterface = chatMounted;
-    const reserveAiSidebar = chatMounted;
-    const aiChatSidebarWidthPx = 420;
-    const AI_CHAT_SIDEBAR_MIN_PX = 340;
+    const sidebarWidthPx = chatMounted ? 420 : 0;
     return (${workspace});
   };
 `;
