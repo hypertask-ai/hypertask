@@ -1,7 +1,7 @@
 import type { Prisma } from '@prisma/client'
 import prisma from '@/lib/prisma'
 import { searchComments, searchTasks } from '@/utils/controllers/turbopuffer/turbopufferHelper'
-import { searchFilterWhere } from './filters'
+import { commenterWhere, searchFilterWhere } from './filters'
 import type { ParsedSearch } from './operators'
 
 export async function rankedSearchWhere(
@@ -16,7 +16,22 @@ export async function rankedSearchWhere(
   const where = await searchFilterWhere(parsed, projectIds, status)
   const rankedIds: number[] = []
   const descriptionById = new Map<number, string>()
-  const commentById = new Map<number, { id: string; commentText: string; creatorName: string }>()
+  const commentById = new Map<number, { id: string | number; commentText: string; creatorName: string; createdAt?: Date }>()
+  const commenters = parsed.filters.commenter?.filter(({ negated }) => !negated) ?? []
+  if (commenters.length) {
+    const comments = await prisma.comment.findMany({
+      where: { ...commenterWhere(commenters, parsed.text), task: { AND: [where, extraWhere] } },
+      select: { id: true, taskId: true, commentText: true, createdAt: true, creator: { select: { displayName: true, email: true } } },
+      orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+      distinct: ['taskId'],
+      ...(scanAll ? {} : { take: limit }),
+    })
+    for (const comment of comments) {
+      rankedIds.push(comment.taskId)
+      commentById.set(comment.taskId, { ...comment, creatorName: comment.creator.displayName || comment.creator.email || '' })
+    }
+    return { where, rankedIds, descriptionById, commentById, partial: false }
+  }
   if (!parsed.text) return { where, rankedIds, descriptionById, commentById, partial: false }
 
   const maxWindow = 800

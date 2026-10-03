@@ -37,7 +37,7 @@ async function withSearch(t, config, check) {
     lookups.push(params)
     const operator = params.get('operator')
     const value = params.get('value').toLowerCase()
-    let candidates = operator === 'from' || operator === 'assignee' ? people
+    let candidates = operator === 'from' || operator === 'commenter' || operator === 'assignee' ? people
       : operator === 'label' ? [{ id: 'bug', name: 'Bug' }]
       : [{ id: 7, name: 'Product Board' }]
     candidates = candidates.filter((row) => row.name.toLowerCase().includes(value) || String(row.id) === value)
@@ -70,10 +70,10 @@ async function withSearch(t, config, check) {
     source('src/lib/constants/keyboard-handler.ts', { KeyCodes: { ARROW_DOWN: 40, ARROW_UP: 38, ENTER: 13, ESCAPE: 27, J: 74, K: 75, TAB: 9 } })
     const post = (_url, body) => new Promise((resolve) => requests.push({ body, resolve }))
     stub(require.resolve('axios'), { default: { post }, post })
-    stub(require.resolve('next/navigation'), { useRouter: () => ({ replace(url) { navigations.push(url) }, push() {}, back() {} }) })
+    stub(require.resolve('next/navigation'), { useRouter: () => ({ replace(url) { navigations.push(url) }, push(url) { navigations.push(url) }, back() {} }) })
     stub(require.resolve('@tanstack/react-query'), { useQueryClient: () => ({ invalidateQueries() {}, setQueryData(_key, data) { cache.history = data.history } }) })
-    const jiti = createJiti(__filename, { alias: { '@': path.join(root, 'src') }, interopDefault: true, fsCache: false, jsx: { runtime: 'automatic' } })
     const baseline = config.baseline && process.env.SEARCH_LAYOUT_BASELINE_DIR
+    const jiti = createJiti(__filename, { alias: { ...(baseline ? { '@/lib/search': path.join(baseline, 'search') } : {}), '@': path.join(root, 'src') }, interopDefault: true, fsCache: false, jsx: { runtime: 'automatic' } })
     if (baseline) stub(path.join(baseline, 'search-autocomplete.css'), {})
     const { useSearch } = jiti(baseline ? path.join(baseline, 'useSearch.ts') : path.join(root, 'src/hooks/Search/useSearch.ts'))
     source('src/hooks/Search/useSearch.ts', { useSearch: (...args) => { state = useSearch(...args); return state } })
@@ -452,6 +452,28 @@ test('comment result author is an inbox pill before the safely highlighted snipp
   })
 })
 
+test('commenter snippet and author pill use both flags without highlighting the operator or injecting HTML', async (t) => {
+  for (const commenter of [false, true]) {
+    for (const highlights of [false, true]) {
+      await withSearch(t, { query: 'login commenter:77', flags: { [matchFlag]: highlights, 'htpr-6880-search-commenter': commenter } }, async ({ complete, requests }) => {
+        const text = 'Login commenter:77 <img src=x onerror=alert(1)>'
+        await complete(requests[0], [{ ...matchTask, commentId: 44,
+          commentText: highlights ? text : 'Login commenter:77 &lt;img src=x onerror=alert(1)&gt;',
+          searchMatch: { commentAuthor: 'Malcolm Stern' } }])
+        const row = document.getElementById('task_1')
+        const matches = row.querySelector('[data-search-match-highlights]')
+        assert.equal(Boolean(matches), highlights)
+        assert.equal(row.querySelector('img'), null)
+        assert.match(row.textContent, /<img src=x onerror=alert\(1\)>/)
+        if (highlights) {
+          assert.equal(matches.firstElementChild.textContent, '@Malcolm Stern')
+          assert.deepEqual([...matches.querySelectorAll('mark')].map((mark) => mark.textContent), commenter ? ['Login'] : ['Login', 'commenter:77'])
+        }
+      })
+    }
+  }
+})
+
 test('match flag and layout prerequisites off retain byte-identical row HTML despite match metadata', async (t) => {
   for (const disabled of [matchFlag, layoutFlag, ...prerequisites]) {
     await withSearch(t, { query: 'login', flags: { [matchFlag]: true, [disabled]: false }, baseline: true }, async ({ complete, requests, render, capture }) => {
@@ -465,4 +487,60 @@ test('match flag and layout prerequisites off retain byte-identical row HTML des
       capture(`match-off-${disabled}`)
     })
   }
+})
+
+test('commenter tip, people email, grey completion and exact person chip reuse the layout picker', async (t) => {
+  await withSearch(t, { flags: { 'htpr-6880-search-commenter': true } }, async ({ input, type, press, tick, complete, options, requests, lookups, navigations }) => {
+    await React.act(async () => input().focus())
+    assert.ok(options().some((row) => row.textContent === 'commenter:@HichamCommented by this person'))
+    await type('comm')
+    assert.equal(document.querySelector('[data-search-ghost]').textContent, 'enter:')
+    await press('Tab')
+    assert.equal(input().value, 'commenter:')
+    await type('commenter:mal')
+    await tick(180)
+    assert.equal(lookups.at(-1).get('operator'), 'commenter')
+    assert.ok(options().some((row) => row.textContent.includes('malstern@aol.com')))
+    assert.equal(document.querySelector('[data-search-ghost]').textContent, 'colm Stern')
+    await press('Tab')
+    assert.equal(requests.at(-1).body.searchQuery, 'commenter:77')
+    const chip = document.querySelector('[aria-label="Remove commenter:Malcolm Stern filter"]')
+    assert.match(chip.textContent, /commenter:@Malcolm Stern/)
+    assert.ok(chip.querySelector('.lucide-user-round'))
+    await complete(requests.at(-1), [{ taskId: 1, projectId: 7, uniqueIndex: 1, projectTitle: 'Product Board', taskTitle: 'Result', commentId: 42, commentText: 'The person’s comment', highlight: {} }])
+    assert.match(document.getElementById('tasks-list').textContent, /The person’s comment/)
+    await React.act(async () => document.getElementById('task_1').click())
+    assert.equal(navigations.at(-1), '/detail/project-7/1?commentId=comment-42')
+  })
+})
+
+test('commenter is literal text without its flag or without search layout; no tip, chip or people lookup', async (t) => {
+  for (const flags of [{ 'htpr-6880-search-commenter': false }, { 'htpr-6880-search-commenter': true, [layoutFlag]: false }]) {
+    await withSearch(t, { flags }, async ({ input, type, tick, options, lookups }) => {
+      await React.act(async () => input().focus())
+      assert.ok(!options().some((row) => row.textContent.includes('commenter:')))
+      await type('comm')
+      assert.ok(!options().some((row) => row.textContent === 'commenter:'))
+      await type('commenter:mal')
+      await tick(180)
+      assert.equal(input().value, 'commenter:mal')
+      assert.equal(document.querySelector('[aria-label^="Remove commenter:"]'), null)
+      assert.ok(!lookups.some((params) => params.get('operator') === 'commenter'))
+    })
+  }
+})
+
+
+test('commenter flag off preserves the baseline rendered HTML byte for byte', async (t) => {
+  const snapshots = []
+  for (const baseline of [true, false]) {
+    await withSearch(t, { baseline, flags: { 'htpr-6880-search-commenter': false }, history: ['from:77 login'] }, async ({ input, type, tick, lookups }) => {
+      await React.act(async () => input().focus())
+      const empty = document.getElementById('root').innerHTML
+      await type('commenter:mal')
+      await tick(180)
+      snapshots.push([empty, document.getElementById('root').innerHTML, lookups.map((params) => params.toString())])
+    })
+  }
+  assert.deepEqual(snapshots[1], snapshots[0])
 })

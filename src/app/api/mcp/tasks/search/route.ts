@@ -7,7 +7,7 @@ import prisma from '@/lib/prisma'
 import { turbopufferSearchTaskIds } from '@/utils/controllers/search/document'
 import { isFeatureEnabled } from '@/lib/flags'
 import { HTPR_6369_SEARCH_OPERATORS_FLAG } from '@/lib/flags'
-import { HTPR_6370_SEARCH_CHIPS_FLAG, HTPR_6881_SEARCH_FUZZY_PERSON_FLAG } from '@/lib/flags'
+import { HTPR_6370_SEARCH_CHIPS_FLAG, HTPR_6881_SEARCH_FUZZY_PERSON_FLAG, HTPR_6880_SEARCH_COMMENTER_FLAG } from '@/lib/flags'
 import { MAX_SEARCH_OPERATOR_CLAUSES, searchOperatorClauseCount } from '@/lib/search/operators'
 import { parseSearchWithChipNames, parseSearchWithNames } from '@/lib/search/serverOperators'
 import { rankedSearchWhere } from '@/lib/search/rankedWhere'
@@ -38,6 +38,9 @@ export interface TaskSearchItem {
   section: string
   dueDate?: string
   createdAt: string
+  commentId?: number
+  commentText?: string
+  commentCreatedAt?: string
   agent?: McpAgentSummary
   url?: string
   link?: {
@@ -292,31 +295,35 @@ export async function GET(request: NextRequest) {
     )
     let operatorResult: Awaited<ReturnType<typeof legacySearch>> | null = null
     let operatorPartial = false
+    let commentById: Awaited<ReturnType<typeof rankedSearchWhere>>['commentById'] | undefined
 
     if (operatorsEnabled) {
       const chipsEnabled = await isFeatureEnabled(HTPR_6370_SEARCH_CHIPS_FLAG, user.id)
       const fuzzyPersonEnabled = await isFeatureEnabled(HTPR_6881_SEARCH_FUZZY_PERSON_FLAG, user.id)
+      const commenterEnabled = await isFeatureEnabled(HTPR_6880_SEARCH_COMMENTER_FLAG, user.id)
       const personProjectIds = fuzzyPersonEnabled && targetProjectId != null ? [targetProjectId] : accessibleProjectIds
       const parsedQuery = chipsEnabled
-        ? await parseSearchWithChipNames(query, accessibleProjectIds, fuzzyPersonEnabled, personProjectIds)
-        : await parseSearchWithNames(query, accessibleProjectIds, fuzzyPersonEnabled, personProjectIds)
+        ? await parseSearchWithChipNames(query, accessibleProjectIds, fuzzyPersonEnabled, personProjectIds, commenterEnabled)
+        : await parseSearchWithNames(query, accessibleProjectIds, fuzzyPersonEnabled, personProjectIds, commenterEnabled)
       const parsed = Object.keys(parsedQuery.filters).length ? parsedQuery : null
       if (parsed) {
         const filtered = await rankedSearchWhere(parsed, accessibleProjectIds, status, limit,
           { ...where, ...(parsed.filters.is ? { status: undefined } : {}) }, cursorId, true)
+        commentById = filtered.commentById
+        const rankedResults = Boolean(parsed.text || parsed.filters.commenter?.some((filter) => !filter.negated))
         operatorPartial = parsed.text ? filtered.partial : false
         where.AND = filtered.where.AND
         if (parsed.filters.is) where.status = filtered.where.status
-        if (parsed.text) where.id = { in: filtered.rankedIds }
+        if (rankedResults) where.id = { in: filtered.rankedIds }
         const total = await prisma.task.count({ where })
         const rankedIds = filtered.rankedIds
         const rankedCursor = cursorId ? rankedIds.indexOf(cursorId) : -1
-        if (parsed.text && cursorId && rankedCursor < 0 && !sortField) {
+        if (rankedResults && cursorId && rankedCursor < 0 && !sortField) {
           return NextResponse.json({ success: false, error: 'Validation error', message: 'cursor must be a previous nextCursor value' }, { status: 400 })
         }
         const primaryIds = cursorId && rankedCursor < 0 ? [] : rankedIds.slice(rankedCursor + 1, rankedCursor + 1 + limit)
         const operatorTasks = await prisma.task.findMany({
-          where: rankedIds.length && !sortField ? { ...where, id: { in: primaryIds } } : where,
+          where: rankedResults && !sortField ? { ...where, id: { in: primaryIds } } : where,
           select: {
             id: true,
             ticketNumber: true,
@@ -338,10 +345,10 @@ export async function GET(request: NextRequest) {
               select: mcpVisibleAgentSelect(user.id),
             },
           },
-          ...(!parsed.text || sortField ? { orderBy: sortField
+          ...(!rankedResults || sortField ? { orderBy: sortField
             ? [{ [sortField]: sortOrder }, { id: 'asc' as const }]
             : [{ updatedAt: 'desc' as const }, { id: 'asc' as const }] } : {}),
-          ...(parsed.text && !sortField ? {} : {
+          ...(rankedResults && !sortField ? {} : {
             take: limit,
             skip: cursorId ? 1 : 0,
             ...(cursorId ? { cursor: { id: cursorId } } : {}),
@@ -451,6 +458,7 @@ export async function GET(request: NextRequest) {
     // Transform to response format
     const taskList: TaskSearchItem[] = orderedTasks.map(task => {
       const agent = mapVisibleMcpAgent(task.agent, user.id, task.projectId)
+      const comment = commentById?.get(task.id)
       const item: TaskSearchItem = {
         id: task.id,
         ticketNumber: task.ticketNumber || undefined,
@@ -463,6 +471,7 @@ export async function GET(request: NextRequest) {
         dueDate: task.dueDate?.toISOString() || undefined,
         createdAt: task.createdAt.toISOString(),
         ...(agent ? { agent } : {}),
+        ...(comment?.createdAt ? { commentId: Number(comment.id), commentText: comment.commentText, commentCreatedAt: comment.createdAt.toISOString() } : {}),
       }
       return withTaskPresentation({ ...item, uniqueIndex: task.uniqueIndex })
     })

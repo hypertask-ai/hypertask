@@ -4,7 +4,7 @@ import { parseSearchQuery, SEARCH_OPERATORS } from '../src/lib/search/operators'
 
 test('each search operator consumes a value without lowercasing free text', () => {
   for (const operator of SEARCH_OPERATORS) {
-    const parsed = parseSearchQuery(`MixedCase ${operator}:Value`)
+    const parsed = parseSearchQuery(`MixedCase ${operator}:Value`, {}, true)
     assert.equal(parsed.text, 'MixedCase')
     assert.deepEqual(parsed.filters[operator], [{ value: 'Value', negated: false }])
   }

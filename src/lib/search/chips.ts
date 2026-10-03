@@ -1,12 +1,12 @@
 import { parseSearchTokens, type Names, type SearchToken } from './operators'
 
-export function splitSearchChips(raw: string, editing = false, names: Names = {}, keepActive = false) {
-  const tokens = parseSearchTokens(raw, names)
+export function splitSearchChips(raw: string, editing = false, names: Names = {}, keepActive = false, commenterEnabled = false) {
+  const tokens = parseSearchTokens(raw, names, commenterEnabled)
   const chips = editing ? tokens.filter((token) => {
     if (keepActive && ((token.end === raw.length && !/\s$/.test(raw)) || /^-?[a-z]+:"[^"]*$/i.test(raw.slice(token.start)))) return false
     if (token.raw.includes('"')) return true
     const namesForOperator = names[token.operator as keyof Names]
-    if (['from', 'assignee', 'in', 'board', 'label'].includes(token.operator)) {
+    if (['from', 'commenter', 'assignee', 'in', 'board', 'label'].includes(token.operator)) {
       const value = token.value.replace(/^[@#]/, '').toLowerCase()
       if (/^\d+$/.test(token.value) && namesForOperator?.includes(token.value)) return true
       if (!namesForOperator?.some((name) => name.toLowerCase() === value) ||
@@ -31,7 +31,7 @@ export function splitSearchChips(raw: string, editing = false, names: Names = {}
 }
 
 export function searchChipText(chip: SearchToken, name = chip.value, omitBoardHash = false) {
-  const marker = chip.operator === 'from' || chip.operator === 'assignee' ? '@' : chip.operator === 'in' || chip.operator === 'board' ? '#' : ''
+  const marker = chip.operator === 'from' || chip.operator === 'commenter' || chip.operator === 'assignee' ? '@' : chip.operator === 'in' || chip.operator === 'board' ? '#' : ''
   const value = marker && name.startsWith(marker) ? name.slice(1) : name
   return `${chip.negated ? '-' : ''}${chip.operator}:${omitBoardHash && marker === '#' ? '' : marker}${value}`
 }
@@ -42,15 +42,15 @@ export function chipQuery(chips: SearchToken[], text: string) {
 
 export function candidateQuery(operator: string, name: string, id?: number | string) {
   if (id !== undefined) return `${operator}:${id}`
-  const value = `${operator === 'from' || operator === 'assignee' ? '@' : operator === 'in' ? '#' : ''}${name}`
+  const value = `${operator === 'from' || operator === 'commenter' || operator === 'assignee' ? '@' : operator === 'in' ? '#' : ''}${name}`
   return `${operator}:${/\s|"/.test(value) ? JSON.stringify(value) : value}`
 }
 
-export function activeSearchValue(text: string, names: Names = {}): { operator: string; value: string; start: number; end?: number; negated?: boolean } | null {
+export function activeSearchValue(text: string, names: Names = {}, commenterEnabled = false): { operator: string; value: string; start: number; end?: number; negated?: boolean } | null {
   if (/\s$/.test(text)) return null
-  const tokens = parseSearchTokens(text)
+  const tokens = parseSearchTokens(text, {}, commenterEnabled)
   const last = tokens.at(-1)
-  if (last && ['from', 'assignee', 'in', 'board', 'label'].includes(last.operator)) {
+  if (last && ['from', 'commenter', 'assignee', 'in', 'board', 'label'].includes(last.operator)) {
     const valueStart = last.start + last.raw.indexOf(':') + 1
     const marker = /^[@#]/.test(text.slice(valueStart)) ? 1 : 0
     const tail = text.slice(valueStart + marker)
@@ -61,6 +61,6 @@ export function activeSearchValue(text: string, names: Names = {}): { operator: 
   }
   const trigger = text.match(/(?:^|\s)([@#])([^\s]*)$/)
   if (trigger) return { operator: trigger[1] === '@' ? 'from' : 'in', value: trigger[2], start: text.length - trigger[0].trimStart().length }
-  const empty = text.match(/(?:^|\s)(from|assignee|in|board|label):$/i)
-  return empty ? { operator: empty[1].toLowerCase(), value: '', start: text.length - empty[0].trimStart().length } : null
+  const empty = text.match(/(?:^|\s)(from|assignee|in|board|label|commenter):$/i)
+  return empty && (empty[1].toLowerCase() !== 'commenter' || commenterEnabled) ? { operator: empty[1].toLowerCase(), value: '', start: text.length - empty[0].trimStart().length } : null
 }

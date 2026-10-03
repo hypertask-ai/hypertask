@@ -2,7 +2,7 @@
 
 import UserAvatar from "@/components/Common/UserAvatar";
 import { useFlag } from "@/hooks/useFlag";
-import { HTPR_6865_SEARCH_LAYOUT_FLAG, HTPR_6878_SEARCH_LABEL_SCOPE_FLAG, HTPR_6879_SEARCH_ESC_BACK_FLAG } from "@/lib/flags/keys";
+import { HTPR_6865_SEARCH_LAYOUT_FLAG, HTPR_6878_SEARCH_LABEL_SCOPE_FLAG, HTPR_6879_SEARCH_ESC_BACK_FLAG, HTPR_6880_SEARCH_COMMENTER_FLAG } from "@/lib/flags/keys";
 import { MentionListRows } from "@/components/AI_CHAT/MentionListComp";
 import { activeSearchValue, candidateQuery, chipQuery, searchChipText, splitSearchChips } from "@/lib/search/chips";
 import { operatorMatches, parseSearchTokens, SEARCH_OPERATORS, type Names, type SearchOperator, type SearchToken } from "@/lib/search/operators";
@@ -33,6 +33,8 @@ export default function SearchChipsInput({ value, onChange, onRun, boardId, inpu
   const labelScopeEnabled = labelScopeFlagEnabled && layoutEnabled;
   const searchEscBackFlagEnabled = useFlag(HTPR_6879_SEARCH_ESC_BACK_FLAG);
   const searchEscBackEnabled = searchEscBackFlagEnabled && layoutEnabled;
+  const commenterFlagEnabled = useFlag(HTPR_6880_SEARCH_COMMENTER_FLAG);
+  const commenterEnabled = commenterFlagEnabled && layoutEnabled;
   const [editing, setEditing] = useState(false);
   const [names, setNames] = useState<Names>({});
   const [chipLabels, setChipLabels] = useState<Record<string, string>>({});
@@ -50,7 +52,7 @@ export default function SearchChipsInput({ value, onChange, onRun, boardId, inpu
     in: [...(names.in ?? []), ...availableBoards.map((board) => board.title ?? '')],
     board: [...(names.board ?? []), ...availableBoards.map((board) => board.title ?? '')],
   } : names;
-  const { chips, text } = splitSearchChips(value, editing, queryNames, autocompleteEnabled);
+  const { chips, text } = splitSearchChips(value, editing, queryNames, autocompleteEnabled, commenterFlagEnabled && layoutEnabled);
   const pickedBoards = labelScopeEnabled ? [...new Set(parseSearchTokens(value, queryNames)
     .filter((token) => !token.negated && (token.operator === 'in' || token.operator === 'board'))
     .flatMap((token) => {
@@ -59,19 +61,19 @@ export default function SearchChipsInput({ value, onChange, onRun, boardId, inpu
         .filter((board) => board.title?.toLowerCase() === name.toLowerCase()).map((board) => board.id);
     }))].join(',') : '';
   const summary = [...chips.map(chipText), text.trim()].filter(Boolean).join(' ');
-  const completion = autocompleteEnabled ? searchCompletion(text, names) : null;
-  const active = autocompleteEnabled ? completion : activeSearchValue(text, names);
+  const completion = autocompleteEnabled ? searchCompletion(text, names, commenterEnabled) : null;
+  const active = autocompleteEnabled ? completion : activeSearchValue(text, names, commenterEnabled);
   const tips = autocompleteEnabled && (focused || searchEscBackEnabled) && !value.trim();
   const picker = dismissed ? null : active;
   const localRows = completion?.kind === 'operator'
-    ? operatorSuggestions(completion.value).map((operator) => ({ id: operator, name: `${operator}:` }))
+    ? operatorSuggestions(completion.value, commenterEnabled).map((operator) => ({ id: operator, name: `${operator}:` }))
     : completion ? localValueSuggestions(completion.operator, completion.value) : null;
   const genericPrefix = layoutEnabled && !dismissed && showSuggestions && completion?.kind !== 'value' &&
     (text.match(/(?<!\\)"/g)?.length ?? 0) % 2 === 0 ? text.match(/(?:^|\s)([a-z]+)$/i) : null;
   const lookupValue = genericPrefix?.[1] ?? picker?.value;
   const rows: Candidate[] = tips ? [
     ...(layoutEnabled ? [...new Set(recentSearches)] : recentSearches).map((query, index) => ({ id: `recent-${index}`, name: layoutEnabled ? query : `Recent: ${query}`, query, kind: 'recent' as const })),
-    ...SEARCH_OPERATORS.map((operator) => ({ id: operator, name: `${SEARCH_TIPS[operator].example} - ${SEARCH_TIPS[operator].meaning}`, operator, kind: 'operator' as const })),
+    ...SEARCH_OPERATORS.filter((operator) => operator !== 'commenter' || (commenterFlagEnabled && layoutEnabled)).map((operator) => ({ id: operator, name: `${SEARCH_TIPS[operator].example} - ${SEARCH_TIPS[operator].meaning}`, operator, kind: 'operator' as const })),
   ] : layoutEnabled ? [
     ...(value.trim() ? [{ id: 'ask-ai', name: labelScopeEnabled ? summary : value.trim(), kind: 'ai' as const }] : []),
     ...(localRows ?? []).map((row) => ({ ...row, kind: completion?.kind === 'operator' ? 'operator' as const : 'value' as const })),
@@ -83,8 +85,8 @@ export default function SearchChipsInput({ value, onChange, onRun, boardId, inpu
   const ghost = open && caretAtEnd && selectedRow && completion?.kind === 'operator' && (!layoutEnabled || selectedRow.kind === 'operator')
     ? String(selectedRow.id).slice(completion.value.length) + ':'
     : open && layoutEnabled && caretAtEnd && completion?.kind === 'value' && selectedRow?.kind === 'value' &&
-      ['from', 'assignee', 'in', 'board', 'label'].includes(completion.operator) && completion.value &&
-      /^-?(from|assignee|in|board|label):/i.test(text.slice(completion.start)) && !text.endsWith('"') &&
+      ['from', 'commenter', 'assignee', 'in', 'board', 'label'].includes(completion.operator) && completion.value &&
+      /^-?(from|commenter|assignee|in|board|label):/i.test(text.slice(completion.start)) && !text.endsWith('"') &&
       selectedRow.name.toLowerCase().startsWith(completion.value.toLowerCase())
       ? selectedRow.name.slice(completion.value.length) : '';
 
@@ -142,14 +144,14 @@ export default function SearchChipsInput({ value, onChange, onRun, boardId, inpu
         setLoading(false);
       }), 180);
     return () => { clearTimeout(timer); controller.abort(); ++lookup.current; };
-  }, [picker?.operator, picker?.value, dismissed, boardId, autocompleteEnabled, layoutEnabled, genericPrefix?.[1], labelScopeEnabled, pickedBoards]);
+  }, [picker?.operator, picker?.value, dismissed, boardId, autocompleteEnabled, layoutEnabled, genericPrefix?.[1], labelScopeEnabled, pickedBoards, commenterEnabled]);
 
   useEffect(() => {
     if (editing) return;
     const queries = layoutEnabled && !value.trim() ? [value, ...new Set(recentSearches)] : [value];
-    const tokens = queries.flatMap((query) => parseSearchTokens(query, names).map((token) => ({ ...token, query })));
+    const tokens = queries.flatMap((query) => parseSearchTokens(query, names, commenterEnabled).map((token) => ({ ...token, query })));
     const unresolved = tokens.filter((token) =>
-      ['from', 'assignee', 'in', 'board', 'label'].includes(token.operator) &&
+      ['from', 'commenter', 'assignee', 'in', 'board', 'label'].includes(token.operator) &&
       !token.raw.includes('"') && !names[token.operator as keyof Names]?.includes(token.value.replace(/^[@#]/, '')));
     if (!unresolved.length) { setHydrationStatus(null); return; }
     const controller = new AbortController();
@@ -179,7 +181,7 @@ export default function SearchChipsInput({ value, onChange, onRun, boardId, inpu
       setHydrationStatus(null);
     }).catch(() => { if (!controller.signal.aborted) setHydrationStatus('error'); });
     return () => controller.abort();
-  }, [value, editing, boardId, layoutEnabled, layoutEnabled ? recentSearches.join('\n') : '', labelScopeEnabled, pickedBoards]);
+  }, [value, editing, boardId, layoutEnabled, layoutEnabled ? recentSearches.join('\n') : '', labelScopeEnabled, pickedBoards, commenterEnabled]);
 
   function change(event: ChangeEvent<HTMLInputElement>) {
     // Clearing the draft must not reactivate the last committed chip.
@@ -196,7 +198,7 @@ export default function SearchChipsInput({ value, onChange, onRun, boardId, inpu
     if (autocompleteEnabled && !value.trim()) { setDismissed(false); setSelectedIndex(0); }
     if (layoutEnabled && showSuggestions && value.trim()) { setDismissed(false); setSelectedIndex(1); }
     if (autocompleteEnabled && completion?.kind === 'operator' && caret === text.length) setDismissed(false);
-    const atCaret = caret === null ? null : autocompleteEnabled ? searchCompletion(text.slice(0, caret), names) : activeSearchValue(text.slice(0, caret), names);
+    const atCaret = caret === null ? null : autocompleteEnabled ? searchCompletion(text.slice(0, caret), names, commenterEnabled) : activeSearchValue(text.slice(0, caret), names, commenterEnabled);
     if (active && caret !== null && caret <= (active.end ?? text.length) && atCaret?.start === active.start) setDismissed(false);
   }
 
@@ -299,7 +301,7 @@ export default function SearchChipsInput({ value, onChange, onRun, boardId, inpu
 
   function renderRow(row: Candidate, index: number) {
     const tip = tips && row.kind === 'operator' ? SEARCH_TIPS[row.operator!] : null;
-    const recent = row.query !== undefined ? splitSearchChips(row.query, false, names) : null;
+    const recent = row.query !== undefined ? splitSearchChips(row.query, false, names, false, commenterEnabled) : null;
     return (
       <button key={`${row.kind}-${row.operator ?? ''}-${row.id}`} id={`mention-button-${index}`} type="button" role="option"
         aria-selected={row === selectedRow} onMouseEnter={() => setSelectedIndex(index)} onClick={() => choose(row)}
@@ -326,7 +328,7 @@ export default function SearchChipsInput({ value, onChange, onRun, boardId, inpu
             className={`inline-flex ${layoutEnabled ? "min-w-0 max-w-full " : ""}items-center gap-1 rounded-sm px-2 py-1 text-content ${autocompleteEnabled ? `text-white-black border-l-2 ${searchFilterColour(chip.operator)}` : 'text-mention-highlight'}`}
             style={autocompleteEnabled ? undefined : { backgroundColor: "color-mix(in srgb, var(--color-mention-highlight) 12%, var(--bg-mention))" }}
           >
-            {chip.operator === 'from' || chip.operator === 'assignee' ? <UserRound size={14} aria-hidden="true" /> : (chip.operator === 'in' || chip.operator === 'board') ? <Hash size={14} aria-hidden="true" /> : null}
+            {chip.operator === 'from' || chip.operator === 'commenter' || chip.operator === 'assignee' ? <UserRound size={14} aria-hidden="true" /> : (chip.operator === 'in' || chip.operator === 'board') ? <Hash size={14} aria-hidden="true" /> : null}
             <span className={layoutEnabled ? "min-w-0 break-all" : undefined}>{chipText(chip)}</span>
             <X size={14} strokeWidth={1.5} aria-hidden="true" />
           </button>

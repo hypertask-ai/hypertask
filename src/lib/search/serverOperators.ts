@@ -1,11 +1,11 @@
 import prisma from '@/lib/prisma'
 import { MAX_SEARCH_OPERATOR_CLAUSES, operatorMatches, parseSearchQuery, type NameOperator, type Names, type ParsedSearch } from './operators'
 
-export async function parseSearchWithNames(raw: string, projectIds: number[], fuzzyPersonEnabled = false, personProjectIds = projectIds): Promise<ParsedSearch> {
+export async function parseSearchWithNames(raw: string, projectIds: number[], fuzzyPersonEnabled = false, personProjectIds = projectIds, commenterEnabled = false): Promise<ParsedSearch> {
   const names: Names = {}
   const lookedUp = new Set<string>()
   for (const { operator, valueStart } of operatorMatches(raw).slice(0, MAX_SEARCH_OPERATOR_CLAUSES)) {
-    if (!['from', 'assignee', 'in', 'board', 'label'].includes(operator)) continue
+    if (!['from', 'assignee', 'in', 'board', 'label', ...(commenterEnabled ? ['commenter'] : [])].includes(operator)) continue
     const token = raw.slice(valueStart).match(/^@?[^\s"]+/)?.[0] ?? ''
     const prefix = token.replace(/^@/, '')
     const key = `${operator}:${prefix.toLowerCase()}`
@@ -33,9 +33,9 @@ export async function parseSearchWithNames(raw: string, projectIds: number[], fu
       })).map((row) => row.displayName ?? '')]
     }
   }
-  const parsed = parseSearchQuery(raw, names)
+  const parsed = parseSearchQuery(raw, names, commenterEnabled)
   if (fuzzyPersonEnabled) {
-    const filters = [...(parsed.filters.from ?? []), ...(parsed.filters.assignee ?? [])]
+    const filters = [...(parsed.filters.from ?? []), ...(parsed.filters.assignee ?? []), ...(parsed.filters.commenter ?? [])]
       .filter(({ value }) => !/^\d+$/.test(value.replace(/^@/, '').trim()))
     if (filters.length) {
       const people = await prisma.user.findMany({
@@ -58,9 +58,9 @@ export async function parseSearchWithNames(raw: string, projectIds: number[], fu
   return parsed
 }
 
-export async function parseSearchWithChipNames(raw: string, projectIds: number[], fuzzyPersonEnabled = false, personProjectIds = projectIds) {
+export async function parseSearchWithChipNames(raw: string, projectIds: number[], fuzzyPersonEnabled = false, personProjectIds = projectIds, commenterEnabled = false) {
   const normalized = raw.replace(/(^|\s)(-?(?:in|board):)#(?=\S)/gi, '$1$2')
-  const parsed = await parseSearchWithNames(normalized, projectIds, fuzzyPersonEnabled, personProjectIds)
+  const parsed = await parseSearchWithNames(normalized, projectIds, fuzzyPersonEnabled, personProjectIds, commenterEnabled)
   for (const key of ['in', 'board'] as const) {
     for (const filter of parsed.filters[key] ?? []) filter.value = filter.value.replace(/^#/, '')
   }

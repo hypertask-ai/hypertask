@@ -18,6 +18,14 @@ test('snippet window finds late matches without changing or injecting user text'
   assert.ok(parts.map((part) => part.text).join('').length <= 226)
 })
 
+test('commenter operator is independently parsed for early, late and unmatched snippet windows', () => {
+  for (const text of ['commenter:77 login', `${'prefix '.repeat(100)}commenter:77 login`, 'commenter:77 with no free-text match']) {
+    assert.ok(!highlightedSearchSnippet(text, 'login commenter:77', true).some((part) => part.matched && part.text === 'commenter:77'))
+    assert.ok(highlightedSearchSnippet(text, 'login commenter:77', false).some((part) => part.matched && part.text === 'commenter:77'))
+  }
+  assert.ok(highlightedSearchSnippet('commenter:77', 'commenter:77', true).every((part) => !part.matched))
+})
+
 test('operator-only and unmatched snippets never invent highlights', () => {
   assert.ok(highlightedSearchSnippet('Valentin Bug board', 'from:Valentin label:Bug in:board').every((part) => !part.matched))
   assert.equal(highlightedSearchSnippet('', 'login').map((part) => part.text).join(''), '')
