@@ -168,7 +168,7 @@ test("transaction writes an alias then the project then one SQL ticket rewrite",
   assert.deepEqual(f.board.tasks.map(t => t.ticketNumber), ["NEW-1", "NEW-99"]);
   const updates = f.sql.filter(s => s.text.startsWith("UPDATE"));
   assert.equal(updates.length, 1);
-  assert.match(updates[0].text, /"ticketNumber" = \? \|\| '-' \|\| "uniqueIndex" WHERE "projectId" = \?/);
+  assert.match(updates[0].text, /"ticketNumber" = \? \|\| '-' \|\| "uniqueIndex", "updatedAt" = CURRENT_TIMESTAMP WHERE "projectId" = \?/);
   assert.deepEqual(updates[0].values, ["NEW", 15]);
   assert.match(f.sql[0].text, /9428471/);
   assert.match(f.sql[1].text, /hashtext/);
@@ -205,7 +205,7 @@ test("update route uses the safe controller with the authenticated caller", asyn
   assert.equal(f.aliases.length, 1);
 });
 
-function lookups({ visible = true, live = false, liveAccess = true, deleted = false, deletedBoard = false, agentId = null, ambiguous = false, moved = false, destinationOwnerId = 6, sourceOwnerId, members = [], prefixAliases = [{ prefix: "OLD", projectId: 15 }] } = {}) {
+function lookups({ enabled = true, visible = true, live = false, liveAccess = true, deleted = false, deletedBoard = false, agentId = null, ambiguous = false, moved = false, destinationOwnerId = 6, sourceOwnerId, members = [], prefixAliases = [{ prefix: "OLD", projectId: 15 }] } = {}) {
   const board = { id: 15, ownerId: sourceOwnerId ?? (visible ? 6 : 9), members, status: deletedBoard ? "Deleted" : "Normal", teamId: "team-1" };
   const current = { id: 101, projectId: 15, uniqueIndex: 123, ticketNumber: "NEW-123", status: deleted ? "Deleted" : "Normal", project: board };
   const tasks = [current];
@@ -221,10 +221,12 @@ function lookups({ visible = true, live = false, liveAccess = true, deleted = fa
     moveAliases.push({ projectId: 15, uniqueIndex: 123, ticketNumber: "NEW-123", task: current });
   }
   let aliasQueries = 0;
+  const flagCalls = [];
+  const taskQueries = [];
   const prisma = {
     task: {
-      findFirst: async ({ where }) => tasks.find(row => matches(row, where)) ?? null,
-      findMany: async ({ where, take }) => tasks.filter(row => matches(row, where)).slice(0, take ?? tasks.length),
+      findFirst: async ({ where }) => { taskQueries.push(where); return tasks.find(row => matches(row, where)) ?? null; },
+      findMany: async ({ where, take }) => { taskQueries.push(where); return tasks.filter(row => matches(row, where)).slice(0, take ?? tasks.length); },
     },
     projectPrefixAlias: { findMany: async ({ where }) => { aliasQueries++; return aliases.filter(row => matches(row, where)); } },
     taskNumberAlias: { findMany: async ({ where }) => moveAliases.filter(row => matches(row, where)) },
@@ -237,7 +239,10 @@ function lookups({ visible = true, live = false, liveAccess = true, deleted = fa
   const resolver = load("src/lib/mcp/tasks/resolveTask.ts", base);
   base["@/lib/mcp/tasks/resolveTask"] = resolver;
   const detail = load("src/utils/controllers/taskDetail/load.ts", {
-    ...base, "@vercel/functions": {}, "@/lib/realtime/server": {}, "@/lib/cycles": {}, "@/lib/pullRequests/taskPullRequests": {}, "@/lib/agents/publicAgent": {}, "@/lib/flags": {}, "@/lib/agents/visibility": {}, "@/utils/controllers/notifications/visibleInboxScope": {},
+    ...base, "@vercel/functions": {}, "@/lib/realtime/server": {}, "@/lib/cycles": {}, "@/lib/pullRequests/taskPullRequests": {}, "@/lib/agents/publicAgent": {},
+    "@/lib/flags": { HTPR_6868_TICKET_PREFIX_FLAG: flagKey, isFeatureEnabled: async (key, id) => { flagCalls.push([key, id]); return enabled; } },
+    "@/lib/agents/visibility": { boardAgentVisibilityWhere: () => ({}), accessibleAgentMembershipWhere: () => ({}) },
+    "@/utils/controllers/notifications/visibleInboxScope": { visibleUserInboxWhere: () => ({}) },
   });
   const route = load("src/app/api/mcp/tasks/route.ts", {
     ...base,
@@ -247,7 +252,7 @@ function lookups({ visible = true, live = false, liveAccess = true, deleted = fa
     "@/lib/mcp/tasks/mappers": { taskMcpGetInclude: () => ({}), mapTaskToMcpGetResponse: task => ({ id: task.id, ticketNumber: task.ticketNumber }) },
     "@/lib/mcp/tasks/resolveTask": resolver, "@/lib/mcp/pagination/cursor": {}, "@/lib/flags": {}, "@/lib/mcp/listQuery": {}, "@/lib/mcp/readListQuery": {}, "@/lib/mcp/priorityFilter": {},
   });
-  return { resolver, detail, prisma, tasks, moveAliases, aliasQueries: () => aliasQueries, get: query => route.GET({ nextUrl: { searchParams: new URLSearchParams(query) } }) };
+  return { resolver, detail, prisma, tasks, moveAliases, flagCalls, taskQueries, aliasQueries: () => aliasQueries, get: query => route.GET({ nextUrl: { searchParams: new URLSearchParams(query) } }) };
 }
 test("old prefix alias lookup resolves in MCP, CLI batch and detail", async () => {
   const f = lookups();
@@ -715,6 +720,110 @@ test("review: bulk reindex schedules tasks and comments only after successful co
     assert.deepEqual(failed.scheduled, []);
     assert.deepEqual(failed.reindexed, []);
   }
+});
+
+test("round 2: shared detail loader gates ticket identifiers but preserves numeric lookup", async () => {
+  for (const enabled of [false, true]) {
+    for (const identifier of ["OLD-123", "old-123", "OlD-123", "NEW-123"]) {
+      const f = lookups({ enabled });
+      f.tasks[0].pullRequests = [];
+      const task = await f.detail.fetchTaskDetail("project-15", identifier, 6);
+      assert.equal(task?.id ?? null, enabled ? 101 : null);
+      assert.deepEqual(f.flagCalls, [[flagKey, 6]]);
+      if (!enabled) {
+        assert.deepEqual(f.taskQueries, []);
+        assert.equal(f.aliasQueries(), 0);
+      }
+    }
+    for (const identifier of [123, "123"]) {
+      const f = lookups({ enabled });
+      f.tasks[0].pullRequests = [];
+      assert.equal((await f.detail.fetchTaskDetail("project-15", identifier, 6)).id, 101);
+      assert.deepEqual(f.flagCalls, []);
+      assert.equal(f.taskQueries.length, 1);
+      assert.equal(f.aliasQueries(), 0);
+    }
+    const moved = lookups({ enabled, moved: true });
+    moved.tasks[0].pullRequests = [];
+    assert.equal((await moved.detail.fetchTaskDetail("project-15", "OLD-123", 6))?.projectId ?? null, enabled ? 20 : null);
+    const denied = lookups({ enabled, visible: false });
+    assert.equal(await denied.detail.fetchTaskDetail("project-15", "OLD-123", 6), null);
+  }
+});
+
+test("round 2: combined move and prefix history is ambiguous across teams until scoped", async () => {
+  const f = lookups();
+  const moved = { ...f.tasks[0], id: 404, projectId: 20, uniqueIndex: 7, ticketNumber: "DEST-7", project: { id: 20, ownerId: 6, status: "Normal", teamId: "team-2" } };
+  f.tasks.push(moved);
+  f.moveAliases.push({ projectId: 17, uniqueIndex: 123, ticketNumber: "OLD-123", task: moved });
+  await assert.rejects(f.resolver.findTaskByIdentifier({ id: 6 }, { ticket_number: "OLD-123" }), /ambiguous/);
+  assert.equal(await f.detail.findTaskByTicketNumber("OLD-123", 6), null);
+  assert.equal((await f.get({ ticket_number: "OLD-123" })).status, 400);
+  for (const [projectId, expected] of [[15, 101], [17, 404]]) {
+    assert.equal((await f.resolver.findTaskByIdentifier({ id: 6 }, { ticket_number: "OLD-123", project_id: projectId })).id, expected);
+    assert.equal((await f.detail.findTaskByTicketNumber("OLD-123", 6, projectId)).id, expected);
+    assert.equal((await f.get({ ticket_number: "OLD-123", project_id: String(projectId) })).body.tasks[0].id, expected);
+  }
+});
+
+test("round 2: combined move and prefix history deduplicates the same destination", async () => {
+  const f = lookups({ moved: true });
+  f.moveAliases[0].ticketNumber = "OLD-123";
+  assert.equal((await f.resolver.findTaskByIdentifier({ id: 6 }, { ticket_number: "OLD-123" })).id, 101);
+  assert.ok(f.aliasQueries() > 0, "prefix history must be consulted even when a move alias exists");
+  assert.equal((await f.detail.findTaskByTicketNumber("OLD-123", 6)).id, 101);
+  assert.deepEqual((await f.get({ ticket_number: "OLD-123" })).body.tasks, [{ id: 101, ticketNumber: "DEST-7" }]);
+});
+
+test("round 2: combined history excludes inaccessible move destinations", async () => {
+  const f = lookups();
+  const hidden = { ...f.tasks[0], id: 404, projectId: 20, uniqueIndex: 7, ticketNumber: "DEST-7", project: { id: 20, ownerId: 9, status: "Normal" } };
+  f.tasks.push(hidden);
+  f.moveAliases.push({ projectId: 17, uniqueIndex: 123, ticketNumber: "OLD-123", task: hidden });
+  assert.equal((await f.resolver.findTaskByIdentifier({ id: 6 }, { ticket_number: "OLD-123" })).id, 101);
+  assert.equal((await f.detail.findTaskByTicketNumber("OLD-123", 6)).id, 101);
+  assert.equal((await f.get({ ticket_number: "OLD-123" })).body.tasks[0].id, 101);
+});
+
+test("round 2: live precedence and inaccessible-live blocking are case-insensitive", async () => {
+  for (const stored of ["OLD-123", "old-123", "OlD-123"]) {
+    for (const identifier of ["OLD-123", "old-123", "OlD-123"]) {
+      for (const liveAccess of [false, true]) {
+        const f = lookups({ live: true, liveAccess });
+        f.tasks[1].ticketNumber = stored;
+        f.moveAliases.push({ projectId: 17, uniqueIndex: 123, ticketNumber: "OLD-123", task: f.tasks[0] });
+        const expected = liveAccess ? 202 : null;
+        assert.equal((await f.resolver.findTaskByIdentifier({ id: 6 }, { ticket_number: identifier }))?.id ?? null, expected);
+        assert.equal((await f.detail.findTaskByTicketNumber(identifier, 6))?.id ?? null, expected);
+        const response = await f.get({ ticket_number: identifier });
+        assert.equal(response.status, liveAccess ? 200 : 404);
+        if (liveAccess) assert.equal(response.body.tasks[0].id, 202);
+        assert.equal(f.aliasQueries(), 0);
+      }
+    }
+  }
+});
+
+test("round 2: case-insensitive live collisions remain ambiguous until scoped", async () => {
+  const f = lookups({ live: true });
+  f.tasks[0].ticketNumber = "old-123";
+  await assert.rejects(f.resolver.findTaskByIdentifier({ id: 6 }, { ticket_number: "OlD-123" }), /ambiguous/);
+  assert.equal(await f.detail.findTaskByTicketNumber("OlD-123", 6), null);
+  assert.equal((await f.get({ ticket_number: "OlD-123" })).status, 400);
+  assert.equal((await f.resolver.findTaskByIdentifier({ id: 6 }, { ticket_number: "OlD-123", project_id: 15 })).id, 101);
+  assert.equal((await f.detail.findTaskByTicketNumber("OlD-123", 6, 16)).id, 202);
+  assert.equal(f.aliasQueries(), 0);
+});
+
+test("round 2: bulk prefix rewrite advances updatedAt in the same parameterized statement", async () => {
+  const f = writes();
+  f.board.tasks = [{ id: 101, uniqueIndex: 1, ticketNumber: "OLD-1", updatedAt: new Date(0) }];
+  assert.equal((await f.update("NEW")).status, 200);
+  const updates = f.sql.filter(row => row.text.startsWith("UPDATE"));
+  assert.equal(updates.length, 1);
+  assert.match(updates[0].text, /^UPDATE "Task" SET "ticketNumber" = \? \|\| '-' \|\| "uniqueIndex", "updatedAt" = CURRENT_TIMESTAMP WHERE "projectId" = \?$/);
+  assert.deepEqual(updates[0].values, ["NEW", 15]);
+  assert.match(read("src/app/api/mcp/tasks/route.ts"), /where.updatedAt = \{ gte: new Date\(updatedSince\) \}/);
 });
 
 test("registry defines one ticket-specific flag with Owner + QA default", () => {

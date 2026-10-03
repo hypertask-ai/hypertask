@@ -24,6 +24,10 @@ test("the real task page sends task and comments snapshots once, preserving thei
     "../../unauthorized/page": { default: component },
     "@/lib/auth/serverUser": { requireServerCookieUser: async () => ({ id: 2343 }) },
     "@/lib/prisma": { default: {} },
+    "@/lib/flags": {
+      HTPR_6868_TICKET_PREFIX_FLAG: "htpr-6868-ticket-prefix",
+      isFeatureEnabled: async () => false,
+    },
     "@/utils/controllers/taskDetail/load": {
       parseDetailSlug: () => ({ projectId: 6859, uniqueIndex: 43 }),
       fetchTaskDetail: async () => taskSnapshot,

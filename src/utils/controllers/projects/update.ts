@@ -52,7 +52,7 @@ export async function changeProjectPrefix(
       where: { id: projectId, status: { not: "Deleted" }, AND: accessWhere },
       data: { ...settings, uniqueIdentifier: prefix },
     });
-    await tx.$executeRaw`UPDATE "Task" SET "ticketNumber" = ${prefix} || '-' || "uniqueIndex" WHERE "projectId" = ${projectId}`;
+    await tx.$executeRaw`UPDATE "Task" SET "ticketNumber" = ${prefix} || '-' || "uniqueIndex", "updatedAt" = CURRENT_TIMESTAMP WHERE "projectId" = ${projectId}`;
     return tx.project.findUnique({ where: { id: projectId }, include: { tasks: true } });
   });
   if (!project) return { status: 403, json: { message: "Not allowed to edit this board" } };

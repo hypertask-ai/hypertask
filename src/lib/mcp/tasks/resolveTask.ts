@@ -43,7 +43,7 @@ export async function findTaskByIdentifier(
   if (!ticket_number && (unique_index == null || project_id == null)) return null;
 
   const identityWhere = ticket_number
-    ? { ticketNumber: ticket_number, ...(project_id ? { projectId: project_id } : {}) }
+    ? { ticketNumber: { equals: ticket_number, mode: 'insensitive' as const }, ...(project_id ? { projectId: project_id } : {}) }
     : { projectId: project_id!, uniqueIndex: unique_index! };
   const matches = await prisma.task.findMany({
     where: { ...identityWhere, status: { not: 'Deleted' }, project: projectFilter },
@@ -66,7 +66,6 @@ export async function findTaskByIdentifier(
   const aliases = await prisma.taskNumberAlias.findMany({
     where: {
       ...identityWhere,
-      ...(ticket_number ? { ticketNumber: { equals: ticket_number, mode: 'insensitive' as const } } : {}),
       task: { status: { not: 'Deleted' }, project: projectFilter },
     },
     select: { projectId: true, uniqueIndex: true, task: { select: { id: true, projectId: true } } },
@@ -83,10 +82,13 @@ export async function findTaskByIdentifier(
   const availableAliases = aliases.filter(alias => !reusedNumbers.some(
     task => task.projectId === alias.projectId && task.uniqueIndex === alias.uniqueIndex
   ));
-  const tasks = [...new Map(availableAliases.map(({ task }) => [task.id, task])).values()];
-  if (!tasks.length && ticket_number) {
-    tasks.push(...await findPrefixAliasTasks(ticket_number, projectFilter, project_id));
-  }
+  const prefixTasks = ticket_number
+    ? await findPrefixAliasTasks(ticket_number, projectFilter, project_id)
+    : [];
+  const tasks = [...new Map([
+    ...availableAliases.map(({ task }) => task),
+    ...prefixTasks,
+  ].map(task => [task.id, task])).values()];
   if (!project_id && tasks.length > 1) {
     throw new TaskIdentifierAmbiguityError(ticket_number!);
   }
