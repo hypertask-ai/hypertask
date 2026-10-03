@@ -2,6 +2,8 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   clusterFeatureFlagsByReleaseDate,
+  countFeatureFlagsByAudience,
+  type FeatureFlagAudienceFilter,
   NOT_YET_RELEASED_LABEL,
 } from "../src/lib/flags/cluster";
 import type { FeatureFlagRow } from "../src/lib/flags";
@@ -22,6 +24,49 @@ function row(overrides: Partial<FeatureFlagRow>): FeatureFlagRow {
     ...overrides,
   };
 }
+
+test("audience counts are zero for an empty list", () => {
+  assert.deepEqual(countFeatureFlagsByAudience([]), {
+    ALL: 0, UNRELEASED: 0, OWNER_ONLY: 0, OWNER_AND_QA: 0, EVERYONE: 0, OFF: 0,
+  });
+});
+
+test("audience counts match every filter in both sort directions", () => {
+  const flags = [
+    row({ key: "owner", mode: "OWNER_ONLY" }),
+    row({ key: "qa", mode: "OWNER_AND_QA", shippedOn: "2026-09-04" }),
+    row({ key: "qa-again", mode: "OWNER_AND_QA", shippedOn: "2026-09-05" }),
+    row({ key: "released", mode: "EVERYONE" }),
+    row({ key: "hidden", mode: "OFF" }),
+  ];
+  const counts = countFeatureFlagsByAudience(flags);
+  assert.deepEqual(counts, { ALL: 5, UNRELEASED: 4, OWNER_ONLY: 1, OWNER_AND_QA: 2, EVERYONE: 1, OFF: 1 });
+  for (const filter of Object.keys(counts) as FeatureFlagAudienceFilter[]) {
+    for (const direction of ["asc", "desc"] as const) {
+      const visible = clusterFeatureFlagsByReleaseDate(flags, direction, filter).flatMap(([, rows]) => rows);
+      assert.equal(visible.length, counts[filter], filter);
+      if (filter === "UNRELEASED") {
+        assert.deepEqual(visible.map((flag) => flag.key).sort(), ["hidden", "owner", "qa", "qa-again"]);
+      }
+    }
+  }
+});
+
+test("counts recompute across every mode change without mutating the input", () => {
+  for (const from of ["OWNER_ONLY", "OWNER_AND_QA", "EVERYONE", "OFF"] as const) {
+    const original = [row({ mode: from })];
+    const previous = countFeatureFlagsByAudience(original);
+    for (const mode of ["OWNER_ONLY", "OWNER_AND_QA", "EVERYONE", "OFF"] as const) {
+      const changed = original.map((flag) => ({ ...flag, mode }));
+      const counts = countFeatureFlagsByAudience(changed);
+      assert.equal(counts.ALL, 1);
+      assert.equal(counts[mode], 1);
+      assert.equal(counts.UNRELEASED, mode === "EVERYONE" ? 0 : 1);
+      assert.deepEqual(countFeatureFlagsByAudience(original), previous);
+      assert.equal(original[0].mode, from);
+    }
+  }
+});
 
 test("clusters flags by calendar day, newest first by default", () => {
   const older = row({ key: "old", updatedAt: new Date("2026-01-01T10:00:00Z") });

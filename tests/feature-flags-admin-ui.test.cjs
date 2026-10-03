@@ -66,6 +66,8 @@ async function withAdmin(props, data, run) {
   let reactRoot;
   let fail = false;
   let current = data;
+  let patchGate;
+  let releasePatch;
   const calls = [];
   try {
     for (const name of ["window", "self", "document", "HTMLElement", "navigator"]) {
@@ -75,6 +77,7 @@ async function withAdmin(props, data, run) {
     global.fetch = async (url, options = {}) => {
       calls.push({ url, ...options });
       if (options.method === "PATCH") {
+        if (patchGate) await patchGate;
         if (fail) return Response.json({ error: "Update unavailable" }, { status: 500 });
         const input = JSON.parse(options.body);
         current = { ...current, flags: current.flags.map((row) => row.key === input.key ? { ...row, ...input } : row) };
@@ -91,8 +94,13 @@ async function withAdmin(props, data, run) {
       await React.act(async () => button.click());
       await settle();
     };
-    await run({ document, client, calls, click, settle, setFail: () => { fail = true; } });
+    const pausePatch = () => {
+      patchGate = new Promise((resolve) => { releasePatch = resolve; });
+      return () => { releasePatch(); patchGate = undefined; };
+    };
+    await run({ document, client, calls, click, settle, pausePatch, setFail: () => { fail = true; } });
   } finally {
+    releasePatch?.();
     if (reactRoot) await React.act(async () => reactRoot.unmount());
     client.clear();
     dom.window.close();
@@ -140,6 +148,57 @@ test("legacy detail has no invented ticket or shipped date; missing client row h
   await withAdmin({ flagKey: "missing" }, { flags: rows, detailsEnabled: true }, async ({ document }) => {
     assert.match(document.body.textContent, /Feature flag not found\./);
     assert.equal(document.querySelectorAll("button").length, 0);
+  });
+});
+
+test("overview counts every audience and Unreleased filters exactly the release pile", async () => {
+  const flags = [
+    fixture("owner", { mode: "OWNER_ONLY" }),
+    fixture("qa", { mode: "OWNER_AND_QA" }),
+    fixture("released", { mode: "EVERYONE" }),
+    fixture("hidden", { mode: "OFF" }),
+  ];
+  await withAdmin({}, { flags, detailsEnabled: true }, async ({ document, click }) => {
+    const chips = () => [...document.querySelectorAll('[aria-label="Filter by audience"] button')];
+    assert.deepEqual(chips().map((button) => button.textContent), ["All 4", "Unreleased 3", "Only me 1", "Owner + QA 1", "Everyone 1", "Off 1"]);
+    assert.match(document.body.textContent, /3 unreleased flags waiting for release/);
+    for (const [index, keys] of [[1, ["owner", "qa", "hidden"]], [2, ["owner"]], [3, ["qa"]], [4, ["released"]], [5, ["hidden"]], [0, flags.map((flag) => flag.key)]]) {
+      await click(chips()[index]);
+      assert.deepEqual([...document.querySelectorAll("code")].map((code) => code.textContent).sort(), keys.sort());
+      assert.equal(chips()[index].getAttribute("aria-pressed"), "true");
+    }
+  });
+});
+
+test("counts and the active Unreleased list update before PATCH finishes, then roll back a failed release", async () => {
+  await withAdmin({}, { flags: [fixture("qa")], detailsEnabled: true }, async ({ document, click, settle, pausePatch, setFail }) => {
+    const chip = (label) => [...document.querySelectorAll('[aria-label="Filter by audience"] button')].find((button) => button.textContent.startsWith(`${label} `));
+    const mode = (label) => [...document.querySelectorAll('[aria-label^="Mode for"] button')].find((button) => button.textContent === label);
+    await click(chip("Unreleased"));
+    assert.match(document.body.textContent, /1 unreleased flag waiting for release/);
+    const finishRelease = pausePatch();
+    await click(mode("Everyone"));
+    assert.equal(chip("Unreleased").textContent, "Unreleased 0");
+    assert.equal(chip("Everyone").textContent, "Everyone 1");
+    assert.equal(document.querySelectorAll("code").length, 0);
+    assert.match(document.body.textContent, /No flags match this filter/);
+    await React.act(async () => finishRelease());
+    await settle();
+    await click(chip("All"));
+    await click(mode("Owner + QA"));
+    assert.equal(chip("Unreleased").textContent, "Unreleased 1");
+    await click(chip("Unreleased"));
+    setFail();
+    const finishFailure = pausePatch();
+    await click(mode("Everyone"));
+    assert.equal(chip("Unreleased").textContent, "Unreleased 0");
+    await React.act(async () => finishFailure());
+    await settle();
+    assert.equal(chip("All").textContent, "All 1");
+    assert.equal(chip("Unreleased").textContent, "Unreleased 1");
+    assert.equal(chip("Everyone").textContent, "Everyone 0");
+    assert.equal(document.querySelectorAll("code").length, 1);
+    assert.equal(document.querySelector('[role="alert"]').textContent, "Update unavailable");
   });
 });
 
