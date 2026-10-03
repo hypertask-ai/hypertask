@@ -338,7 +338,7 @@ const PageEditor = ({ _page, _user }: PageEditorProps) => {
                 // Same control as Settings "Back to app"; 44px phone target.
                 className={cn(
                   MOBILE_TARGET,
-                  "min-w-0 flex-1 justify-start gap-2 rounded-sm px-2 text-left text-content font-medium text-white-black transition hover:bg-hover-active focus-visible:bg-hover-active focus-visible:outline-none",
+                  "min-w-0 flex-1 justify-start gap-2 rounded-sm px-2 text-left text-content font-medium text-text-light-gray transition hover:bg-hover-active hover:text-white-black focus-visible:bg-hover-active focus-visible:text-white-black focus-visible:outline-none",
                 )}
               >
                 <ArrowLeft strokeWidth={1.75} className="h-4 w-4 shrink-0" />
