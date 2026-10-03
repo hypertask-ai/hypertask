@@ -198,6 +198,27 @@
       "sources": [{ "file": "src/lib/productionSmoke/coreActions.ts", "token": "assign and unassign" }]
     },
     {
+      "id": "inbox-add",
+      "label": "Put a task into the inbox",
+      "detail": "Moving a task to the inbox succeeds.",
+      "checkIds": ["pre-merge-app", "live-core-actions"],
+      "sources": [{ "file": "src/lib/productionSmoke/coreActions.ts", "token": "inbox add task" }]
+    },
+    {
+      "id": "inbox-list",
+      "label": "See the task listed in the inbox",
+      "detail": "The task the check added shows up in the inbox list.",
+      "checkIds": ["pre-merge-app", "live-core-actions"],
+      "sources": [{ "file": "src/lib/productionSmoke/coreActions.ts", "token": "inbox list added task" }]
+    },
+    {
+      "id": "inbox-task-remove",
+      "label": "Remove a task from the inbox on its ticket page",
+      "detail": "The ticket page knows the task is in the inbox; removing it, undoing, archiving from the inbox row and undoing each take effect.",
+      "checkIds": ["pre-merge-app", "live-core-actions"],
+      "sources": [{ "file": "src/lib/productionSmoke/coreActions.ts", "token": "inbox task detail" }]
+    },
+    {
       "id": "search",
       "label": "Search for a task",
       "detail": "Search returns the known task and the signed-in search screen renders.",
