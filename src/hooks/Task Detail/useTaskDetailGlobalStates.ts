@@ -84,6 +84,7 @@ const useTaskDetailGlobalStates = (
   stack: any,
   isShareView = false,
   scrollElementRef?: RefObject<HTMLDivElement | null>,
+  cachedNavigation = false,
 ) => {
   const { navigate } = useHypertasksNavigate();
   const queryClient = useQueryClient();
@@ -93,10 +94,11 @@ const useTaskDetailGlobalStates = (
   // console.log("🚀 ~ useTaskDetailGlobalStates ~ editMode:", editMode)
   const instantTicketOpen = useFlag(HTPR_6752_INSTANT_TICKET_OPEN_FLAG);
   const initialCommentsPayload = useMemo(() => JSON.parse(_comments), [_comments]);
+  const [cachedLayout] = useState(instantTicketOpen && (cachedNavigation || Boolean(initialCommentsPayload.pending)));
   const [secondaryPanelsReady, setSecondaryPanelsReady] = useState(!instantTicketOpen || !initialCommentsPayload.pending);
   useEffect(() => {
     if (secondaryPanelsReady) return;
-    // Cached title and body paint before mounting editors and property controls.
+    // Keep rich editors off the cached first paint; property geometry is already mounted.
     let frame = requestAnimationFrame(() => {
       frame = requestAnimationFrame(() => setSecondaryPanelsReady(true));
     });
@@ -298,6 +300,10 @@ const useTaskDetailGlobalStates = (
     // description sits at 1, so the writer's own row was never pinned there.
     rangeExtractor: (range: Range) => {
       const normalRange = defaultRangeExtractor(range);
+      if (cachedLayout) {
+        const topRows = Array.from({ length: virtualizeIndexes.commentsStartVirtualIndex }, (_, index) => index);
+        return Array.from(new Set([...topRows, ...normalRange])).sort((a, b) => a - b);
+      }
       const pinned = virtualizeIndexes.descriptionVirtualIndex;
       if (pinned < 0 || normalRange.includes(pinned)) return normalRange;
       // The virtualizer wants an ascending range, and the pinned index is not
@@ -785,7 +791,7 @@ const useTaskDetailGlobalStates = (
     withCommentId?: boolean
   ) => {
     if (type === "new-comment")
-      virtualizer.scrollToIndex(_count - 1, { align: "center" });
+      virtualizer.scrollToIndex(cachedLayout && !_mbl ? virtualizeIndexes.descriptionBottomVirtualIndex : _count - 1, { align: "center" });
     else if (type === "edit-description")
       virtualizer.scrollToIndex(1, { align: "center" });
     else if (type === "description")
@@ -818,6 +824,7 @@ const useTaskDetailGlobalStates = (
   };
 
   return {
+    cachedLayout,
     secondaryPanelsReady,
     setEditMode,
     editMode,

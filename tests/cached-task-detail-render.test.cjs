@@ -19,7 +19,7 @@ const mocks = {
   "@/hooks/General/useGetUserPreferences": { useGetUserPreferences: () => ({ data: { commentsStacked: false, scrollSetting: "Bottom" } }) },
   "@/lib/constants": { default: { CommentsTQPrefixKey: "comments" } },
   "@/lib/contexts/TaskDetail/FollowersProvider": { FollowersProvider: ({ children }) => children },
-  "@/lib/contexts/TaskDetail/TaskProvider": { TasksProvider: ({ children, parsedTask, _comments }) => { providerPayload = { parsedTask, _comments }; return children; }, useTaskContext: () => ({}) },
+  "@/lib/contexts/TaskDetail/TaskProvider": { TasksProvider: ({ children, parsedTask, _comments, cachedNavigation }) => { providerPayload = { parsedTask, _comments, cachedNavigation }; return children; }, useTaskContext: () => ({}) },
   "@/lib/navigation/cachedTaskDetail": require("jiti").createJiti(__filename, {
     alias: { "@": path.join(root, "src") },
   })(path.join(root, "src/lib/navigation/cachedTaskDetail.ts")),
@@ -53,6 +53,7 @@ test("existing client detail renders cached title and body before task, preferen
   assert.match(html, /Cached title/);
   assert.match(html, /Cached description/);
   assert.doesNotMatch(html, /Loading|spinner/);
+  assert.equal(providerPayload.cachedNavigation, true, "cached layout must not depend on whether comments are already in the query cache");
   client.clear();
 });
 
@@ -163,15 +164,15 @@ test("description paints cached content and drafts before constructing the rich 
   assert.equal(editorMounts, 1, "the existing editor mounts after the cached body paints");
 });
 
-test("only pending cached details defer property controls and comment editors until after first paint", () => {
+test("pending cached details paint property geometry immediately but defer editors until after first paint", () => {
   const state = fs.readFileSync(path.join(root, "src/hooks/Task Detail/useTaskDetailGlobalStates.ts"), "utf8");
   const panels = fs.readFileSync(path.join(root, "src/app/detail/[...slug]/TaskDetailPanels.tsx"), "utf8");
   const thread = fs.readFileSync(path.join(root, "src/components/PageComponents/TaskDetail/CommentAndDescription/index.tsx"), "utf8");
   assert.match(state, /useState\(!instantTicketOpen \|\| !initialCommentsPayload\.pending\)/);
   assert.match(state, /requestAnimationFrame\(\(\) => \{\s*frame = requestAnimationFrame\(\(\) => setSecondaryPanelsReady\(true\)\)/);
   assert.match(state, /return \(\) => cancelAnimationFrame\(frame\)/);
-  assert.match(panels, /!_mbl && secondaryPanelsReady !== false && \(\s*<TaskInfo/);
+  assert.match(panels, /!_mbl && \(cachedLayout \|\| secondaryPanelsReady !== false\) && \(\s*<TaskInfo/);
   assert.match(panels, /_mbl && !embedded && secondaryPanelsReady !== false && \(instantTicketOpen \? <Suspense fallback=\{null\}><NewCommentComponent/);
-  assert.match(thread, /taskInfoVirtualIndex && _mbl && secondaryPanelsReady !== false/);
+  assert.match(thread, /taskInfoVirtualIndex && _mbl && \(cachedLayout \|\| secondaryPanelsReady !== false\)/);
   assert.match(thread, /!_mbl && secondaryPanelsReady !== false && \(instantTicketOpen \? <Suspense fallback=\{null\}><NewCommentComponent/);
 });

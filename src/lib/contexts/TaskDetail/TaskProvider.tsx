@@ -39,6 +39,7 @@ interface TaskContextProps {
   isShareView?: boolean;
   /** Task detail is mounted inside another scrollable surface, such as SwipeUnread. */
   embedded?: boolean;
+  cachedNavigation?: boolean;
   scrollElementRef?: RefObject<HTMLDivElement | null>;
 }
 
@@ -55,6 +56,7 @@ export type ITaskDetailEditMode =
 // Define the type for the modal state
 interface GlobalStates extends TaskContextProps {
   secondaryPanelsReady: boolean;
+  cachedLayout: boolean;
   parsedTask: string;
   allowPerks: boolean;
   _comments: string;
@@ -193,6 +195,7 @@ const TasksProvider: React.FC<TaskContextProps> = ({ children, ...props }) => {
     props.stack,
     props.isShareView ?? false,
     props.scrollElementRef,
+    props.cachedNavigation ?? false,
   );
   // get current task keys
   // ----------------- CLICKING ON MAIN DIVS TO FORCE FOCUS AND SET EDIT MODE FOR STATE

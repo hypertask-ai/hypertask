@@ -146,6 +146,7 @@ const EmbeddedTaskDetail = ({
       parsedTask={serializedTask}
       scrollSetting={preferences.scrollSetting}
       embedded={embedded}
+      cachedNavigation={!embedded}
       scrollElementRef={scrollElementRef}
     >
       {embedded ? detail : (

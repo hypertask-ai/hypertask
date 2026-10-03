@@ -16,7 +16,7 @@ import { useSearchParams } from "next/navigation";
 import { preserveInboxFlowOnTaskHref } from "@/lib/taskDetailInboxFlow";
 
 const DescriptionSubTask = () => {
-  const { currentTask, editMode, toggleSubtaskLinkingModal } = useTaskContext();
+  const { currentTask, editMode, toggleSubtaskLinkingModal, cachedLayout } = useTaskContext();
   const { loading, hasPages, createAndOpenPage } = useTaskPages();
   const inboxFlow = useSearchParams()?.get("inboxFlow");
   const [_, setTasksPlayList] = useRecoilState(tasksPlayListAtom);
@@ -100,7 +100,7 @@ const DescriptionSubTask = () => {
             />
           </span>
 
-          {!loading && !hasPages && (
+          {(cachedLayout || (!loading && !hasPages)) && (
             <span
               onClick={() => void createAndOpenPage()}
               className="w-fit inline-flex items-center text-meta text-text-light-gray hover:text-white-black mt-2 mb-3 group cursor-pointer relative"

@@ -16,7 +16,7 @@ interface TaskDetailTitleContainerProps {
 }
 
 const TaskDetailTitleContainer = ({ containerRef, toggleDueDate }: TaskDetailTitleContainerProps) => {
-  const { currentTask, parsedTask } = useTaskContext();
+  const { currentTask, parsedTask, cachedLayout } = useTaskContext();
   const _mbl = useContext(MobileViewContext);
   const [isScrolled, setIsScrolled] = useState(false);
 
@@ -36,6 +36,13 @@ const TaskDetailTitleContainer = ({ containerRef, toggleDueDate }: TaskDetailTit
   }, []);
 
   const hasSummary = !!currentTask?.Task_Summary?.[0]?.content;
+  const summary = hasSummary && currentTask?.Task_Summary?.[0]?.content && (
+    _mbl ? (
+      <TaskSummaryMobile markdown={currentTask.Task_Summary[0].content} />
+    ) : (
+      <TaskSummary taskSummary={currentTask.Task_Summary[0].content} />
+    )
+  );
 
   return (
     <>
@@ -43,7 +50,7 @@ const TaskDetailTitleContainer = ({ containerRef, toggleDueDate }: TaskDetailTit
         dataAttribute="task-detail"
         containerRef={containerRef}
         showScrollShadow={isScrolled}
-        hasSummary={hasSummary}
+        hasSummary={cachedLayout || hasSummary}
         titleRowContent={
           <>
             <TaskTitle />
@@ -52,13 +59,12 @@ const TaskDetailTitleContainer = ({ containerRef, toggleDueDate }: TaskDetailTit
         }
       >
         {/* --------------------------- TASK SUMMARY --------------------------- */}
-        {hasSummary && currentTask?.Task_Summary?.[0]?.content && (
-          _mbl ? (
-            <TaskSummaryMobile markdown={currentTask.Task_Summary[0].content} />
-          ) : (
-            <TaskSummary taskSummary={currentTask.Task_Summary[0].content} />
-          )
-        )}
+        {/* The collapsed summary has a known one-line height, even before its text arrives. */}
+        {cachedLayout ? (
+          <div data-task-summary-slot className={_mbl ? "h-10 w-full shrink-0" : "h-[21px] w-full shrink-0"}>
+            {summary}
+          </div>
+        ) : summary}
 
         <MobileTaskDueDate
           dueDate={currentTask?.dueDate}

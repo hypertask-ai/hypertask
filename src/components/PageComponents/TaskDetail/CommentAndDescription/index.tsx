@@ -24,7 +24,7 @@ import CommentsContainer from "./CommentContainer/CommentsContainer";
 import UploadingCommentsContainer from "./UploadingComment/UploadingCommentContainer";
 import NewCommentComponent from "./CommentContainer/NewCommentComponent";
 import DescriptonBody from "./DescriptionContainer/DescriptonBody";
-import TaskInfo, { ITaskInfoContainer } from "../TaskInfoColumn/TaskInfo";
+import TaskInfo, { ITaskInfoContainer, TaskInfoLateDetails } from "../TaskInfoColumn/TaskInfo";
 import { taskDetailSpacing } from "@/lib/configs/taskDetail.config";
 import BaseCommentAndDescriptionContainer from "./BaseCommentAndDescriptionContainer";
 import RichTextPersonHovercards from "@/components/Common/RichTextPersonHovercards";
@@ -60,6 +60,7 @@ const CommentAndDescriptionContainer = (props: ITaskInfoContainer) => {
   const {
     currentTask,
     secondaryPanelsReady,
+    cachedLayout,
     hasDraft,
     virtualizer,
     uploadingComments,
@@ -93,7 +94,7 @@ const CommentAndDescriptionContainer = (props: ITaskInfoContainer) => {
 
   // ------------------------------------------------------------------
 
-  return (
+  const content = (
     <BaseCommentAndDescriptionContainer 
     ref={listRef}
     showScrollToTop={showScrollToTop}
@@ -102,8 +103,8 @@ const CommentAndDescriptionContainer = (props: ITaskInfoContainer) => {
       <RichTextPersonHovercards projectId={allowPerks ? currentTask?.projectId : undefined} />
       <div
         style={{
-          height: _mbl ? `${virtualizer.getTotalSize()}px` : undefined,
-          minHeight: !_mbl ? `${virtualizer.getTotalSize()}px` : undefined,
+          height: _mbl && (!cachedLayout || numberOfComments || numberOfUploadingComments) ? `${virtualizer.getTotalSize()}px` : undefined,
+          minHeight: !_mbl && (!cachedLayout || numberOfComments || numberOfUploadingComments) ? `${virtualizer.getTotalSize()}px` : undefined,
           position: "relative",
           width: "100%",
           zIndex: 1,
@@ -113,7 +114,7 @@ const CommentAndDescriptionContainer = (props: ITaskInfoContainer) => {
           let contentToRender = null;
           const currentItemIndex = vItem.index;
 
-          if (currentItemIndex === taskInfoVirtualIndex && _mbl && secondaryPanelsReady !== false) {
+          if (currentItemIndex === taskInfoVirtualIndex && _mbl && (cachedLayout || secondaryPanelsReady !== false)) {
             contentToRender = (
               <TaskInfo
                 showAssignModal={showAssignModal}
@@ -156,7 +157,10 @@ const CommentAndDescriptionContainer = (props: ITaskInfoContainer) => {
               />
             );
           } else if (currentItemIndex === descriptionBottomVirtualIndex) {
-            contentToRender = <div id="bottom-description" className="h-0" />;
+            contentToRender = <>
+              <div id="bottom-description" className="h-0" />
+              {cachedLayout && !_mbl && secondaryPanelsReady !== false && <Suspense fallback={null}><NewCommentComponent /></Suspense>}
+            </>;
           } else if (
             currentItemIndex >= commentsStartVirtualIndex &&
             currentItemIndex < commentsStartVirtualIndex + numberOfComments
@@ -211,11 +215,12 @@ const CommentAndDescriptionContainer = (props: ITaskInfoContainer) => {
               data-index={vItem.index}
               ref={virtualizer.measureElement}
               style={{
-                position: !_mbl && currentItemIndex === descriptionVirtualIndex ? "relative" : "absolute",
+                // Cached top rows use their actual height, not the mobile 500px estimate.
+                position: (!_mbl && currentItemIndex === descriptionVirtualIndex) || (cachedLayout && currentItemIndex <= descriptionBottomVirtualIndex) ? "relative" : "absolute",
                 top: 0,
                 left: 0,
                 width: "100%",
-                transform: !_mbl && currentItemIndex === descriptionVirtualIndex ? undefined : `translateY(${vItem.start}px)`,
+                transform: (!_mbl && currentItemIndex === descriptionVirtualIndex) || (cachedLayout && currentItemIndex <= descriptionBottomVirtualIndex) ? undefined : `translateY(${vItem.start}px)`,
                 zIndex: 2000 - vItem.index,
               }}
             >
@@ -224,7 +229,11 @@ const CommentAndDescriptionContainer = (props: ITaskInfoContainer) => {
           );
         })}
       </div>
-      {!_mbl && secondaryPanelsReady !== false && (instantTicketOpen ? <Suspense fallback={null}><NewCommentComponent /></Suspense> : <NewCommentComponent />)}
+      {!cachedLayout && !_mbl && secondaryPanelsReady !== false && (instantTicketOpen ? <Suspense fallback={null}><NewCommentComponent /></Suspense> : <NewCommentComponent />)}
+      {cachedLayout && !uploadingDescription && !hasDraft && <DescriptionPages />}
+      {cachedLayout && _mbl && currentTask && (
+        <TaskInfoLateDetails currentTask={currentTask} removeRelationHandler={removeRelationHandler} />
+      )}
       {/* HTPR-5513: trailing space below the composer lives INSIDE this column
           so the properties rail's containing block (the column + rail row)
           reaches the end of the page. Put it on the page wrapper instead and
@@ -237,6 +246,7 @@ const CommentAndDescriptionContainer = (props: ITaskInfoContainer) => {
       {/* {!_mbl && <div id="bottom" className="h-0" />} */}
     </BaseCommentAndDescriptionContainer>
   );
+  return cachedLayout ? <TaskPagesProvider>{content}</TaskPagesProvider> : content;
 };
 
 const Description = ({
@@ -257,6 +267,7 @@ const Description = ({
   subject: import("@/models/personHovercard").PersonHovercardSubject | null;
 }) => {
   const instantTicketOpen = useFlag(HTPR_6752_INSTANT_TICKET_OPEN_FLAG);
+  const { cachedLayout } = useTaskContext();
   return (
     <>
       <DescriptionContainer>
@@ -270,7 +281,9 @@ const Description = ({
         <DescriptonBody draftTQ={draftsFromTQ} />
         {isUploadingDescription && <UploadingDescriptionContainer />}
         {instantTicketOpen ? <Suspense fallback={null}><DescriptionReactions /></Suspense> : <DescriptionReactions />}
-        {isUploadingDescription || hasDraft ? null : (
+        {isUploadingDescription || hasDraft ? null : cachedLayout ? (
+          <DescriptionSubTask />
+        ) : (
           <TaskPagesProvider>
             <DescriptionSubTask />
             <DescriptionPages />
