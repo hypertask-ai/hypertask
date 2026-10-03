@@ -22,8 +22,8 @@ const useArchiveAndNavigate = () => {
   const { undoAction} = useUndoContext();
   const _mbl = useContext(MobileViewContext);
 
-  const {  currentItemInTasksPlaylist, onGoback, setCurrentTask, parsedTask:taskFromServer} = useTaskContext();
-  const currentTask = JSON.parse(taskFromServer)
+  // Cached opens keep parsedTask frozen; inbox membership lives in currentTask.
+  const {  currentItemInTasksPlaylist, onGoback, setCurrentTask, currentTask} = useTaskContext();
 
   const {removeFromListWithStatus}=UpdateKanban();
   const {moveIdxDown, moveIdxUp, archiveNotificationGetter} = useGlobalFocusHandler()
