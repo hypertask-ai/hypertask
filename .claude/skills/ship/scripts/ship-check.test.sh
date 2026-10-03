@@ -211,6 +211,8 @@ if '/contents/' in url:
     path = urllib.parse.unquote(url.split('/contents/')[1].split('?')[0])
     ref = urllib.parse.parse_qs(urllib.parse.urlsplit(url).query)['ref'][0]
     name = {'src/lib/flags.ts': 'registry', 'src/lib/flags/keys.ts': 'keys'}.get(path, 'base' if ref == 'b' * 40 else 'head')
+    if name == 'keys' and ref == 'a' * 40 and os.path.exists(os.environ['FLAG_SOURCE'] + '/keys-head'):
+        name = 'keys-head'
     with open(os.environ['FLAG_SOURCE'] + '/' + name) as f:
         print(json.dumps({'encoding': 'base64', 'content': base64.b64encode(f.read().encode()).decode()}))
 elif '/files?' in url:
@@ -266,7 +268,10 @@ F 0 '' AGENT_TOKEN= FLAG_PUBLIC='{"flags":{"htpr-1-released":false}}'
 F 2 'registry defaults cannot prove' AGENT_TOKEN= FLAG_PUBLIC='{"flags":{"htpr-1-released":"yes"}}'
 # A flag the PR adds itself is not in the base registry and starts unreleased.
 printf 'const added = useFlag("htpr-2-new");\n' > "$E/flag-source/head"
+F 2 'unresolved flag reads' FLAG_STATUS=added AGENT_TOKEN= FLAG_PUBLIC='{"flags":{"htpr-1-released":true}}' # not defined by the PR
+printf 'export const RELEASED_FLAG = "htpr-1-released";\nexport const NEW_FLAG = "htpr-2-new";\n' > "$E/flag-source/keys-head"
 F 0 '' FLAG_STATUS=added AGENT_TOKEN= FLAG_PUBLIC='{"flags":{"htpr-1-released":true}}'
+rm "$E/flag-source/keys-head"
 cp "$E/flag-source/base" "$E/flag-source/head"
 sed -i 's/OWNER_AND_QA/EVERYONE/' "$E/flag-source/registry"
 F 2 'record a browser click-through' FLAG_HTTP_ERROR=1
@@ -337,7 +342,10 @@ F 2 'record a browser click-through' FLAG_STATUS=added FLAG_COUNT=2 FLAG_PAGE2=1
 printf 'const released = useFlag(dynamicKey);\n' > "$E/flag-source/head"
 F 2 'unresolved flag reads' FLAG_STATUS=added
 printf 'const released = useFlag("htpr-2-new");\n' > "$E/flag-source/head"
-F 0 '' FLAG_STATUS=added # A flag the PR adds starts unreleased.
+F 2 'unresolved flag reads' FLAG_STATUS=added
+printf 'export const RELEASED_FLAG = "htpr-1-released";\nexport const NEW_FLAG = "htpr-2-new";\n' > "$E/flag-source/keys-head"
+F 0 '' FLAG_STATUS=added # A flag the PR defines starts unreleased.
+rm "$E/flag-source/keys-head"
 F 2 'cannot read the PR diff' FLAG_GH_ERROR=1
 F 2 'cannot read the PR diff' FLAG_SOURCE_ERROR=1
 F 2 'complete PR diff' FLAG_COUNT=2
