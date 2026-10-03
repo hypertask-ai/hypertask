@@ -144,7 +144,7 @@ const NewTask = ({
           type="button"
           disabled={isSubmitting}
           onClick={() => { void createItem() }}
-          className={`${MOBILE_TARGET} sm:min-h-0 sm:min-w-0 h-7 rounded-sm bg-shadcn-primary px-2.5 text-content font-medium text-primary-foreground hover:opacity-90 disabled:opacity-60`}
+          className={`${MOBILE_TARGET} sm:min-h-0 sm:min-w-0 h-7 rounded-sm bg-white-black px-2.5 text-content font-medium text-white-black-inverted hover:opacity-90 disabled:opacity-60`}
         >
           Create task
         </button>

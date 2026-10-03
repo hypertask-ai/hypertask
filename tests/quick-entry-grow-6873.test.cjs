@@ -119,7 +119,7 @@ test("quick-entry growth preserves single-line titles and existing create/cancel
       for (const button of buttons()) {
         for (const token of ["h-7", "min-h-[44px]", "sm:min-h-0", "rounded-sm"]) assert.ok(button.classList.contains(token));
       }
-      for (const token of ["bg-shadcn-primary", "text-primary-foreground", "px-2.5", "text-content", "font-medium"]) assert.ok(buttons()[1].classList.contains(token));
+      for (const token of ["bg-white-black", "text-white-black-inverted", "px-2.5", "text-content", "font-medium"]) assert.ok(buttons()[1].classList.contains(token));
       assert.equal(buttons()[0].getAttribute("aria-label"), "Close quick entry");
       assert.ok(buttons()[0].querySelector("svg.lucide-x"));
     });
