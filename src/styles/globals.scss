@@ -499,6 +499,8 @@ span[data-label^="project"] {
   }
 }
 #sectionsContainer {
+  // An intrinsic grid row can overflow the board and let focus scroll its headers away.
+  grid-template-rows: minmax(0, 1fr);
   // Columns fill the viewport; --quick-tips-h is set live by the tips bar
   // (BottomSettings_QuickTips), so they shrink only while the bar is shown.
   max-height: calc(100svh - 64px - var(--quick-tips-h, 0px));
