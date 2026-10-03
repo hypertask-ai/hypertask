@@ -8,6 +8,7 @@ import {
 } from "./constants/constants";
 import { allMonthlyPrices, allYearlyPrices } from "./subscriptionPlans";
 import { planKindFromStripePriceId } from "./planFromStripePriceId";
+import { stripeCustomerName } from "@/lib/stripeCustomerName";
 
 export const stripe = new Stripe(String(process.env.STRIPE_SECRET_KEY), {
   // Deliberately pinned; account/webhook payload shapes depend on it.
@@ -292,7 +293,7 @@ export async function createCustomerIfNull(
 
   const team = await prisma.team.findFirst({
     where: { id: teamId },
-    select: { id: true, stripe_customer_id: true },
+    select: { id: true, title: true, stripe_customer_id: true },
   });
   if (!team) {
     throw new Error(`createCustomerIfNull: team ${teamId} not found`);
@@ -302,7 +303,7 @@ export async function createCustomerIfNull(
   // The key and request parameters must both be team-stable. Stripe rejects an
   // idempotency-key retry when another team member supplies a different email.
   const customer = await stripe.customers.create(
-    { name: `Hypertask team:${team.id}` },
+    { name: stripeCustomerName(team.title), metadata: { teamId: team.id } },
     {
       idempotencyKey: `hypertask-team:${teamId}:stripe-customer`,
       // Stripe reports an in-flight use of this key as HTTP 409. stripe-node

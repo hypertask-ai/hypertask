@@ -5,6 +5,7 @@ import createLog from "../logs/createLog";
 import autoJoinByEmailDomain from "./autoJoinByEmailDomain";
 
 import prisma from "@/lib/prisma";
+import { stripeCustomerName } from "@/lib/stripeCustomerName";
 
 type ProvisionNewUserInput = {
   userId: number;
@@ -106,7 +107,8 @@ export const provisionNewUser = async ({
   }
   // =================== CREATE stripe customer
   const customer = await stripe.customers.create({
-    name: String(stripeCustomerNameEmail) + `${googleAccount?.id ?? ""}`,
+    name: stripeCustomerName(stripeCustomerNameEmail),
+    ...(googleAccount ? { metadata: { googleAccountId: googleAccount.id } } : {}),
   });
 
   // now update the googleaccount with the right stripeId

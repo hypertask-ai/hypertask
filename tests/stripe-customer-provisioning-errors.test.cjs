@@ -64,7 +64,7 @@ const accessModule = loadTs(
 const routeModule = loadTs("src/app/api/stripe/ensure-customer/route.ts");
 
 function reset() {
-  teamRow = { id: "team-1", stripe_customer_id: null, googleAccountId: "ga-1" };
+  teamRow = { id: "team-1", title: "Acme", stripe_customer_id: null, googleAccountId: "ga-1" };
   findFirstError = undefined;
   updateCalls = [];
   updateManyError = undefined;
@@ -153,7 +153,7 @@ test("customer creation keeps its Stripe request stable across team members", as
     stripeCustomers[1],
     "concurrent team members must send identical idempotent requests",
   );
-  assert.deepEqual(stripeCustomers[0].input, { name: "Hypertask team:team-1" });
+  assert.deepEqual(stripeCustomers[0].input, { name: "Acme", metadata: { teamId: "team-1" } });
   assert.equal(
     stripeCustomers[0].options.idempotencyKey,
     "hypertask-team:team-1:stripe-customer",
@@ -225,4 +225,14 @@ test("ensure-customer answers 500, not 200-with-null, when provisioning fails", 
     prisma.team.findFirst = originalFindFirst;
     accessModule.default = originalHasAccess;
   }
+});
+
+test("HTPR-6862: a team without a title never gets the name \"undefined\"", async () => {
+  reset();
+  teamRow = { id: "team-1", title: null, stripe_customer_id: null, googleAccountId: "ga-1" };
+
+  await createCustomerIfNull("owner@example.com", "team-1");
+
+  assert.equal(stripeCustomers[0].input.name, undefined);
+  assert.deepEqual(stripeCustomers[0].input.metadata, { teamId: "team-1" });
 });

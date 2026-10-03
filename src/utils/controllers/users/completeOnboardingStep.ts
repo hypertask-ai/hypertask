@@ -9,6 +9,7 @@ import { generalConfig } from "@/lib/configs/general.config";
 import { createProjectWithStableName } from "../projects/createProjectWithStableName";
 import { createTaskCore } from "../tasks/createTaskCore";
 import assigneesAssign from "../assignees/assign";
+import { stripeCustomerName } from "@/lib/stripeCustomerName";
 
 type CompleteOnboardingFirstStepOptions = {
   createInitialBoard?: boolean;
@@ -62,7 +63,7 @@ export const CompleteOnboardingFirstStep = async (
     }
     const customer = await createCustomerIfNull(
       googleAccount.stripe_customer_id,
-      String(exist_user?.email) + `${googleAccount.id}`,
+      stripeCustomerName(exist_user?.email),
       googleAccount.id
     );
 
@@ -367,7 +368,7 @@ export const createOnboardingSampleBoardProject = async ({
 
 const createCustomerIfNull = async (
   customerId: string,
-  newStripeId: string,
+  customerName: string | undefined,
   googleAccountId: string
 ) => {
   try {
@@ -377,7 +378,8 @@ const createCustomerIfNull = async (
   } catch (error) {
     // =================== CREATE stripe customer
     const customer = await stripe.customers.create({
-      name: newStripeId,
+      name: customerName,
+      metadata: { googleAccountId },
     });
     // now update the googleaccount with the right stripeId
     await prisma.googleAccount.update({
