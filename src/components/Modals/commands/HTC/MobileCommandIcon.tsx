@@ -33,7 +33,6 @@ import { CommandMode } from "@/models/enums";
 import type { ICommandList } from "./HTCTypes";
 
 const iconForCommand = (command: ICommandList): LucideIcon => {
-  if (command.key === "deletePage") return Trash2;
   switch (command.commandMode) {
     case CommandMode.ReloadApp:
       return RefreshCw;

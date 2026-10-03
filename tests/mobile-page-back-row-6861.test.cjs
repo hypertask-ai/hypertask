@@ -108,13 +108,13 @@ test("page actions are transient, published only on flagged mobile and use the e
 test("This page group is first, single-action, and gated by flag, mobile and matching page route", () => {
   assert.match(palette, /useFlag\(HTPR_6861_MOBILE_PAGE_BACK_ROW_FLAG\)/);
   const guard = find(palette, (node) => ts.isVariableDeclaration(node) && node.name.getText() === "pageActions").initializer.getText();
-  const prepend = find(palette, (node) => ts.isIfStatement(node) && node.expression.getText() === "pageActions" && node.getText().includes("unshift")).getText();
+  const prepend = find(palette, (node) => ts.isVariableDeclaration(node) && node.name.getText() === "rankedGroups" && node.initializer.getText().includes("This page")).initializer.getText();
   for (const [enabled, mobile, pathname, active] of [
     [true, true, "/page/example", true], [false, true, "/page/example", false],
     [true, false, "/page/example", false], [true, true, "/project/15", false],
     [true, true, "/page/stale", false], [true, true, "/page/example/other", false],
   ]) {
-    const groups = evaluate(`const pageActions = ${guard}; const rankedGroups = [{group: "App", commandLists: []}]; ${prepend}; rankedGroups;`, {
+    const groups = evaluate(`const pageActions = ${guard}; const mobileGroups = [{group: "App", commandLists: []}]; (${prepend});`, {
       mobilePageBackRowEnabled: enabled, isMobile: mobile, pathname,
       currentPageActions: { publicId: "example", version: 9 }, CommandMode: { Command: "Command" },
     });
@@ -129,11 +129,10 @@ test("This page group is first, single-action, and gated by flag, mobile and mat
 });
 
 test("Delete page dispatch closes Commands then invokes the page callback, never a task command", () => {
-  const branch = find(palette, (node) => ts.isIfStatement(node) && node.expression.getText() === 'command.key === "deletePage"').getText();
+  const branch = find(palette, (node) => ts.isIfStatement(node) && node.expression.getText() === 'mobilePageBackRowEnabled && command.key === "deletePage"').getText();
   const calls = [];
-  evaluate(`(() => { ${branch} })()`, { command: { key: "deletePage" }, pageActions: { onDelete: () => calls.push("delete") }, resetShowCommands: () => calls.push("close") });
+  evaluate(`(() => { ${branch} })()`, { mobilePageBackRowEnabled: true, command: { key: "deletePage" }, pageActions: { onDelete: () => calls.push("delete") }, resetShowCommands: () => calls.push("close") });
   assert.deepEqual(calls, ["close", "delete"]);
-  evaluate(`(() => { ${branch} })()`, { command: { key: "deletePage" }, pageActions: null, resetShowCommands: () => calls.push("unexpected") });
+  evaluate(`(() => { ${branch} })()`, { mobilePageBackRowEnabled: true, command: { key: "deletePage" }, pageActions: null, resetShowCommands: () => calls.push("unexpected") });
   assert.deepEqual(calls, ["close", "delete"]);
-  assert.match(read("src/components/Modals/commands/HTC/MobileCommandIcon.tsx"), /if \(command.key === "deletePage"\) return Trash2;/);
 });

@@ -293,18 +293,19 @@ const Commands = (props: Props) => {
         ? [{ group: "Get started", commandLists: getStartedCommands }, ...commandGroups]
         : commandGroups;
 
-    const rankedGroups = getMobileCommandGroups(rankedCommandGroups, isMobile);
-    if (pageActions) {
-      rankedGroups.unshift({
-        group: `This page (Version ${pageActions.version})`,
-        commandLists: [{
-          key: "deletePage",
-          name: "Delete page",
-          commandMode: CommandMode.Command,
-          keywords: "delete remove archive page",
-        }],
-      });
-    }
+    const mobileGroups = getMobileCommandGroups(rankedCommandGroups, isMobile);
+    // HTPR-6861: the open page's own actions lead the palette on phones.
+    const rankedGroups = mobilePageBackRowEnabled && pageActions
+      ? [{
+          group: `This page (Version ${pageActions.version})`,
+          commandLists: [{
+            key: "deletePage",
+            name: "Delete page",
+            commandMode: CommandMode.Command,
+            keywords: "delete remove archive page",
+          }],
+        }, ...mobileGroups]
+      : mobileGroups;
     return commentLongPressEnabled && pinCommentActions
       ? pinCommentGroupFirst(rankedGroups)
       : rankedGroups;
@@ -503,7 +504,7 @@ const Commands = (props: Props) => {
         recordHTCCommandUsage(previousUsage, command)
       );
       (document.activeElement as HTMLElement).blur();
-      if (command.key === "deletePage") {
+      if (mobilePageBackRowEnabled && command.key === "deletePage") {
         if (!pageActions) return;
         resetShowCommands();
         void pageActions.onDelete();
@@ -627,7 +628,15 @@ const Commands = (props: Props) => {
                className="px-0"
             />
           </div>
-          {commentLongPressEnabled ? (
+          {mobilePageBackRowEnabled ? (
+            <div data-htpr-6861-page-actions="">
+              {commentLongPressEnabled ? (
+                <div data-htpr-6514-comment-long-press="">{commandGroups}</div>
+              ) : (
+                commandGroups
+              )}
+            </div>
+          ) : commentLongPressEnabled ? (
             <div data-htpr-6514-comment-long-press="">{commandGroups}</div>
           ) : (
             commandGroups
