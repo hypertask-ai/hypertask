@@ -17,7 +17,8 @@ function load(relative, dependencies, declaration) {
     function visit(statement) {
       if (statement.name?.text === declaration ||
           statement.declarationList?.declarations.some((item) => item.name.text === declaration) ||
-          (ts.isJsxElement(statement) && `<${statement.openingElement.tagName.getText(tree)}>` === declaration)) node = statement;
+          (ts.isJsxElement(statement) && `<${statement.openingElement.tagName.getText(tree)}>` === declaration) ||
+          (ts.isJsxSelfClosingElement(statement) && `<${statement.tagName.getText(tree)}>` === declaration)) node = statement;
       if (!node) ts.forEachChild(statement, visit);
     }
     visit(tree);
@@ -291,4 +292,151 @@ test("the task title passes its stable ref to autosizing on the first render", (
   assert.ok(sizingRef && "current" in sizingRef, "the initial null DOM node cannot size the title");
   assert.match(html, /Cached title/);
   assert.equal(new JSDOM(html).window.document.querySelector("textarea").rows, 1);
+});
+
+test("an unset priority stays null while its background query loads, keeping the No Priority row height", () => {
+  const { useGetPriorityForTask } = load("src/hooks/MultiPages/useGetPriorityForTask.ts", {
+    "@tanstack/react-query": { useQuery: (options) => ({ data: options.initialData }) },
+    "@/utils/api/global": { default: {} },
+  });
+  assert.equal(useGetPriorityForTask(["priority", 42], 42, null).data, null, "an empty array is truthy and renders a blank 24px priority instead of the final 27px label");
+  const priority = { priority_index: 1 };
+  assert.equal(useGetPriorityForTask(["priority", 42], 42, priority).data, priority);
+});
+
+test("a disabled board's empty Time row is absent before and after its summary loads", () => {
+  let data;
+  const TaskTime = load("src/components/PageComponents/TaskDetail/TaskInfoColumn/TaskTime.tsx", {
+    react: React,
+    "@/lib/constants": { default: {} },
+    "react-hot-toast": { default: noop },
+    "@/components/Common/Tooltip": { default: noop },
+    "@/components/Modals/TimeLog/TimeLogModal": { default: noop },
+    "@/hooks/Task Detail/useTimeTracking": { useTaskTime: () => ({ data, dataUpdatedAt: 0 }), useTimerNow: () => 0 },
+    "@/lib/constants/TaskDetail": {},
+    "@/lib/timeDuration": { formatElapsed: (seconds) => `${seconds}s` },
+    "@/lib/timeLogModal": {},
+    "../MainPageComponents": {
+      TaskInfoRow: ({ children }) => React.createElement("div", { "data-time-row": true }, children),
+      LocalRightSideInfo: ({ title }) => title,
+      TaskInfoValue: ({ children }) => children,
+    },
+  });
+  const props = { taskId: 42, ticketId: "QA-42", title: "Task", timeTrackingEnabled: false };
+  const render = () => documentFor(React.createElement(TaskTime, props));
+  assert.equal(render().querySelector("[data-time-row]"), null, "pending data must not invent a row that disappears 48px later");
+  data = { enabled: false, taskTotalSeconds: 0, runningEntry: null };
+  assert.equal(render().querySelector("[data-time-row]"), null);
+  data = undefined;
+  props.timeTrackingEnabled = true;
+  assert.ok(render().querySelector("[data-time-row]"), "enabled boards still reserve their timer row immediately");
+  data = { enabled: false, taskTotalSeconds: 90, otherEntriesSeconds: 90 };
+  props.timeTrackingEnabled = false;
+  assert.match(render().body.textContent, /90s/, "disabled boards retain logged history");
+  data = { enabled: false, taskTotalSeconds: 0, runningEntry: { startedAt: new Date(0).toISOString() } };
+  assert.match(render().body.textContent, /Stop/, "an existing timer can still be stopped");
+  const timer = load("src/components/PageComponents/TaskDetail/TaskInfoColumn/TaskInfo.tsx", {
+    currentTask: { id: 42, title: "Task", project: { timeTrackingEnabled: false } },
+    TaskTime: noop,
+  }, "<TaskTime>");
+  assert.equal(timer.props.timeTrackingEnabled, false, "use the board setting already present in the task snapshot");
+});
+
+function editorPanels(flag) {
+  return load("src/components/RTE/TaskDetailEditorPanels.tsx", {
+    useFlag: () => flag,
+    HTPR_6752_INSTANT_TICKET_OPEN_FLAG: "instant",
+    createPortal: noop,
+    TiptapProvider: ({ children }) => children,
+    TiptapBubbleMenu: noop,
+    TiptapMainContainer: () => React.createElement("div", { "data-editor": true }),
+    InnerHTMLDescription: ({ descriptionText }) => React.createElement("article", null, descriptionText),
+    cn: (...parts) => parts.filter(Boolean).join(" "),
+    taskDetailSpacing: { mobile: {} },
+    EmojiGifPicker: noop,
+    SetLinkModal: noop,
+  }, "TaskDetailEditorPanels");
+}
+
+test("the description reserves its real content before the editor exists, with either instant-open flag state", () => {
+  for (const flag of [false, true]) {
+    const Panels = editorPanels(flag);
+    const context = {
+      divIds: {}, currentTask: { id: 42 }, inViewObject: {},
+      mode: "read-edit-description", id: "description", defaultContent: "Long cached description",
+    };
+    const first = documentFor(React.createElement(Panels, context));
+    assert.equal(first.querySelector("article")?.textContent, context.defaultContent, "do not paint the 21px empty editor placeholder");
+    const ready = documentFor(React.createElement(Panels, { ...context, editor: {} }));
+    assert.ok(ready.querySelector("[data-editor]"), "the loaded editor still replaces the read-only placeholder");
+    const comment = documentFor(React.createElement(Panels, { ...context, mode: "create-comment" }));
+    assert.equal(comment.querySelector("article"), null, "new-comment editors are unchanged");
+  }
+});
+
+function threadRender({ hydrated, mobile = false, measured = false, comments = false }) {
+  const items = measured ? [{ index: 0, key: "description", start: 0 }, { index: 1, key: "bottom", start: 711 }] : [];
+  if (comments) items.push({ index: 2, key: "comment-42", start: 711 });
+  const Component = load("src/components/PageComponents/TaskDetail/CommentAndDescription/index.tsx", {
+    useContext: React.useContext,
+    MobileViewContext: React.createContext(mobile),
+    useDescriptionAndCommentsContext: () => ({ comments: [{ text: "Existing comment" }], stacked: [] }),
+    useFlag: () => true,
+    HTPR_6752_INSTANT_TICKET_OPEN_FLAG: "instant",
+    useTaskContext: () => ({
+      currentTask: { id: 42 }, secondaryPanelsReady: true,
+      virtualizer: { getVirtualItems: () => items, getTotalSize: () => measured ? (comments ? 800 : 711) : 200, measureElement: noop },
+      virtualizeIndexes: { taskInfoVirtualIndex: -1, descriptionVirtualIndex: 0, descriptionBottomVirtualIndex: 1, commentsStartVirtualIndex: 2, numberOfComments: comments ? 1 : 0 },
+      visibleFeedItems: [{ kind: "comment", commentIndex: 0 }],
+    }),
+    useHydrated: () => hydrated,
+    BaseCommentAndDescriptionContainer: ({ children }) => React.createElement("main", null, children),
+    RichTextPersonHovercards: noop,
+    Description: () => React.createElement("article", { style: { height: 711 }, "data-description": true }, "Cached description"),
+    NewCommentComponent: () => React.createElement("div", { id: "comment", style: { height: 168 } }, "Composer"),
+    taskDetailSpacing: { mobile: {} },
+    CommentsProvider: ({ children }) => children,
+    CommentsContainer: () => React.createElement("div", { "data-stored-comment": true }, "Existing comment"),
+    Suspense: React.Suspense,
+  }, "CommentAndDescriptionContainer");
+  return React.createElement(Component, {});
+}
+
+test("desktop description is in normal flow on the first paint, while comments and mobile keep virtualization", () => {
+  for (const hydrated of [false, true]) {
+    const document = documentFor(threadRender({ hydrated }));
+    const description = document.querySelector("[data-description]");
+    assert.ok(description, "the pinned description must exist before virtualizer viewport measurements");
+    assert.equal(description.parentElement.style.position, "relative");
+    assert.equal(description.parentElement.style.transform, "");
+    assert.equal(description.parentElement.parentElement.style.height, "");
+    assert.equal(description.parentElement.parentElement.style.minHeight, "200px");
+  }
+  const ready = documentFor(threadRender({ hydrated: true, measured: true, comments: true }));
+  assert.equal(ready.querySelectorAll("[data-description]").length, 1, "do not mount a second description or reload embeds");
+  assert.equal(ready.querySelector("[data-stored-comment]").parentElement.style.position, "absolute");
+  assert.equal(ready.querySelector("[data-stored-comment]").parentElement.style.transform, "translateY(711px)");
+  const phone = documentFor(threadRender({ hydrated: true, measured: true, mobile: true }));
+  assert.equal(phone.querySelector("[data-description]").parentElement.style.position, "absolute");
+  assert.equal(phone.querySelector("[data-description]").parentElement.parentElement.style.height, "711px");
+});
+
+test("rendered desktop composer does not move when description estimates settle or the AI sidebar toggles and resizes", async () => {
+  const { chromium } = require("playwright");
+  const browser = await chromium.launch({ headless: true });
+  try {
+    const page = await browser.newPage({ viewport: { width: 1440, height: 900 } });
+    const compose = (measured, width) => renderToString(renderWorkspace({
+      pathname: "/detail/project-7049/31", sidebar: width > 0, width,
+      panels: width > 0 ? React.createElement("aside", { style: { width } }) : undefined,
+    })).replace('<div data-page="true">Page content</div>', renderToString(threadRender({ hydrated: measured, measured })));
+    const positions = [];
+    for (const [measured, width] of [[false, 420], [true, 420], [true, 600], [true, 0], [true, 420]]) {
+      await page.setContent(`<style>body{margin:0}.flex{display:flex}.flex-1{flex:1;min-width:0}.shrink-0{flex-shrink:0}.contents{display:contents}</style>${compose(measured, width)}`);
+      positions.push(await page.locator("#comment").evaluate((node) => node.getBoundingClientRect().y));
+    }
+    assert.deepEqual(positions, [711, 711, 711, 711, 711], "reserve the description's natural height, not the virtualizer's initial 200px estimate");
+  } finally {
+    await browser.close();
+  }
 });
