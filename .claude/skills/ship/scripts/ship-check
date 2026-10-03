@@ -277,7 +277,7 @@ try:
     files = [f for page in pages for f in page]
     if len(files) != row['changed_files']:
         raise ValueError('cannot read the complete PR diff; retry before merging')
-    touched, unknown = set(), False
+    touched, base_touched, unknown = set(), set(), False
     for f in files:
         versions = []
         if f['status'] != 'added':
@@ -294,8 +294,20 @@ try:
                     continue
                 keys = constants(source('src/lib/flags/keys.ts', ref)) | constants(text)
                 key = resolve(call[1], keys)
+                if not key:
+                    # Follow one `import { NAME } from "@/..."` hop to the module that defines the key.
+                    name = call[1].strip()
+                    imp = re.search(r'import\s*\{[^}]*\b' + re.escape(name) + r'\b[^}]*\}\s*from\s*[\'\"]@/([^\'\"]+)[\'\"]', text)
+                    for ext in (('.ts', '.tsx', '/index.ts') if imp else ()):
+                        try:
+                            key = resolve(name, constants(source('src/' + imp[1] + ext, ref)))
+                        except Exception:
+                            continue
+                        break
                 if key:
                     touched.add(key)
+                    if ref == base:
+                        base_touched.add(key)
                 else:
                     unknown = True
     if not touched and not unknown:
@@ -310,6 +322,21 @@ try:
             if not all(f.get('mode') in ('OFF', 'OWNER_ONLY', 'OWNER_AND_QA', 'EVERYONE') for f in flags):
                 raise ValueError('invalid modes')
             modes = {f['key']: f['mode'] for f in flags}
+        except Exception:
+            pass
+    if modes is None:
+        # /api/admin/flags is owner-only. A flag that is on for the plain QA account (user 2343, never in the QA group) is on for Everyone.
+        # An expired or anonymous session gets 401, so this fails closed.
+        state = os.environ.get('SHIP_CHECK_PLAIN_QA_STATE', os.path.expanduser('~/.config/hypertask-videos/storageState-qa-normal.json'))
+        try:
+            cookies = json.load(open(state))['cookies']
+            cookie = '; '.join(f"{c['name']}={c['value']}" for c in cookies if 'hypertask' in c.get('domain', ''))
+            request = urllib.request.Request('https://app.hypertask.ai/api/flags', headers={'Cookie': cookie})
+            with urllib.request.urlopen(request, timeout=10) as response:
+                seen = json.load(response)['flags']
+            if not isinstance(seen, dict) or not seen or not all(isinstance(v, bool) for v in seen.values()):
+                raise ValueError('invalid flags')
+            modes = {key: 'EVERYONE' if on else 'NOT_EVERYONE' for key, on in seen.items()}
         except Exception:
             pass
     registry = source('src/lib/flags.ts', base)
@@ -328,7 +355,11 @@ try:
         print('note: live flag modes unavailable; registry defaults cannot prove a flag is not released')
         modes = defaults
     released = {key for key in touched if modes.get(key) == 'EVERYONE'}
-    unknown = unknown or not live or any(key not in modes for key in touched)
+    # A flag this PR defines (in head keys.ts, not in base keys.ts or registry, not read before) starts at Owner + QA.
+    base_values = set(keys.values()) | set(defaults)
+    head_values = set(constants(source('src/lib/flags/keys.ts', sha)).values())
+    added = {key for key in touched if key in head_values and key not in base_values and key not in base_touched}
+    unknown = unknown or not live or any(key not in modes and key not in added for key in touched)
     if not released and not unknown:
         sys.exit(0)
     folder = Path(evidence) / ticket
@@ -349,7 +380,7 @@ try:
     if any(states.get(key) != 'EVERYONE' for key in released):
         raise ValueError(message + ' (record each released flag as EVERYONE)')
     if any(states.get(key) not in ('OFF', 'OWNER_ONLY', 'OWNER_AND_QA', 'EVERYONE')
-           or (live and key in modes and states[key] != modes[key]) for key in touched):
+           or (live and key in modes and (states[key] == 'EVERYONE' if modes[key] == 'NOT_EVERYONE' else states[key] != modes[key])) for key in touched):
         raise ValueError(message + ' (record the live state of every touched flag)')
     if not re.match(r'PASS\s+\S', fields.get('Click', '')) or not fields.get('Recording'):
         raise ValueError(message + ' (missing passing click or recording)')
