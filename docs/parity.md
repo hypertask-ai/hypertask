@@ -23,7 +23,7 @@ Regenerate it with `node scripts/parity-contract.mjs --write --cli-capabilities 
 | **Link, unlink, and inspect task relations** | ✅ 3 | ✅ 1 | ✅ 3 | ✅ 1 | ✅ 1 |
 | **Review and authorize factory acceptance transitions** | ✅ 2 | ↪ MCP tools do not approve acceptance contracts or issue factory authority grants; enrolled workers request ordinary task moves through existing tools. | ↪ The CLI does not approve acceptance contracts or issue factory authority grants; the isolated factory authority calls these API endpoints directly. | ↪ AI Chat tools are model-facing task tools, not acceptance authorities. | ↪ HyperAI tools are model-facing task tools, not acceptance authorities. |
 | **List boards, teams, members, manifests, and playbooks** | ✅ 4 | ✅ 4 | ✅ 8 | ✅ 4 | ✅ 4 |
-| **Create, rename, archive, invite to, and configure boards** | ✅ 6 (transition) | ✅ 3 (transition) | ✅ 4 | ✅ 3 (transition) | ✅ 3 (transition) |
+| **Create, archive, invite to, and configure boards** | ✅ 6 (transition) | ✅ 3 (transition) | ✅ 4 | ✅ 3 (transition) | ✅ 3 (transition) |
 | **Manage labels, columns, and custom fields** | ✅ 10 | ✅ 5 (transition) | ✅ 15 (transition) | ✅ 5 (transition) | ✅ 5 (transition) |
 | **Read, add, edit, and delete task comments** | ✅ 5 | ✅ 4 | ✅ 4 | ✅ 4 | ✅ 4 |
 | **Read and triage inbox notifications** | ✅ 6 | ✅ 4 | ✅ 5 (transition) | ✅ 4 | ✅ 4 |
