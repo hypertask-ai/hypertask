@@ -56,7 +56,7 @@ const BlockedByPersonFilters = ({
               key={user.id}
               onMouseEnter={() => handleMouseEnter(index)}
               handleMouseLeave={handleMouseLeave}
-              onClick={enterHandler}
+              onClick={() => enterHandler(index)}
               id={`blocked-by-person-filter-option-${index}`}
               index={index}
               commandRef={elRef}

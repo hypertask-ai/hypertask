@@ -172,7 +172,7 @@ const SearchTasks = ({
               index={index}
               isSelected={selectedIndex === index}
               onMouseEnter={() => setSelectedIndex(index)}
-              onClick={selectTask}
+              onClick={() => selectTask(index)}
               key={task.id}
             >
               <div className="flex w-full min-w-0 items-center gap-3 font-normal">

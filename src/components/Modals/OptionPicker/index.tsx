@@ -125,7 +125,7 @@ const OptionPickerModal: React.FC<Props> = ({
                 key={`${option.id ?? "none"}-${index}`}
                 onMouseEnter={() => handleMouseEnter(index)}
                 handleMouseLeave={handleMouseLeave}
-                onClick={selectAt}
+                onClick={() => selectAt(index)}
                 id={`option-picker-${index}`}
                 index={index}
                 commandRef={elRef}

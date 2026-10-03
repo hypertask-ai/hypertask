@@ -46,6 +46,7 @@ const EditBoard = (props: Props) => {
                 <ModalRowElementContainer
                     id={`editboard-htc-option-`}
                     isSelected={true}
+                    onClick={onSubmit}
                 >
                     <span>{`Change name to '${title}'`}</span>
 

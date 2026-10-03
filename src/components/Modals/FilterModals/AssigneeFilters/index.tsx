@@ -60,7 +60,7 @@ const AssigneeFilters = ({ closeHandler, calendarAssignees, view }: IProps) => {
               key={index}
               onMouseEnter={() => handleMouseEnter(index)}
               handleMouseLeave={handleMouseLeave}
-              onClick={enterHandler}
+              onClick={() => enterHandler(index)}
               id={`assignee-htc-option-${index}`}
               index={index}
               commandRef={elRef}
