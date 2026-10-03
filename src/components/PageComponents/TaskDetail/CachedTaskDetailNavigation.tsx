@@ -101,7 +101,6 @@ export default function CachedTaskDetailNavigation({ children, accountId }: {
       uniqueIndex={location.uniqueIndex}
       initialTask={task}
       embedded={false}
-      pendingFallback={children}
     />
   );
 }
