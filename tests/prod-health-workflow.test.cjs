@@ -1,4 +1,4 @@
-// HTPR-5467 — behavioral tests for the prod-health workflow's challenge/rollback
+// HTPR-5467 — behavioral tests for the prod-health workflow's challenge/alert
 // decision. Follows the same pattern as tests/automerge-workflow.test.cjs: the
 // health job's `run: |` block is extracted from the workflow YAML, de-indented,
 // and executed as a bash script with stub `curl`/`sleep` binaries on the PATH so
@@ -38,13 +38,16 @@ async function workflowScript() {
     .replaceAll("${{ github.repository }}", "test/repo");
 }
 
-test("drift can read workflow runs for the health-gate check", async () => {
+test("production health has no deployment mutation path, even with rollback credentials", async () => {
   const workflow = await readFile(".github/workflows/prod-health.yml", "utf8");
-  const start = workflow.indexOf("\n  drift:");
-  const next = workflow.indexOf("\n  core-actions:", start);
-  const block = workflow.slice(start, next);
-  assert.match(block, /actions: read/);
-  assert.match(block, /cannot read prod-health runs/);
+  const forbidden = /emergency-rollback|rollback-decision|\/promote\/|ROLLBACK_GITHUB_TOKEN|MERGE_FREEZE|git (?:push|revert)/;
+  assert.doesNotMatch(workflow, forbidden);
+  // Prove the absence assertion rejects a workflow with a rollback call.
+  assert.throws(() => assert.doesNotMatch(
+    `${workflow}\nrun: node .github/scripts/emergency-rollback.mjs`,
+    forbidden,
+  ), { code: "ERR_ASSERTION" });
+  assert.match(workflow, /name: Prod Health Check \(Alert Only\)/);
 });
 
 test("health and drift jobs cannot overlap", async () => {
@@ -168,10 +171,15 @@ async function runHealthCheck(hcSequence, extraEnv = {}) {
   await mkdir(bin);
   await mkdir(runnerTemp);
 
+  const realGit = spawnSync("bash", ["-c", "command -v git"], { encoding: "utf8" });
+  assert.equal(realGit.status, 0, realGit.stderr);
   await writeFile(join(bin, "curl"), CURL_STUB);
   await writeFile(join(bin, "sleep"), "#!/usr/bin/env bash\nexit 0\n");
+  // Replay health logic without fetching or changing shared remote-tracking refs.
+  await writeFile(join(bin, "git"), '#!/usr/bin/env bash\nif [ "$1" = "fetch" ]; then exit 0; fi\nexec "$HC_REAL_GIT" "$@"\n');
   await chmod(join(bin, "curl"), 0o755);
   await chmod(join(bin, "sleep"), 0o755);
+  await chmod(join(bin, "git"), 0o755);
 
   try {
     const result = spawnSync("bash", ["-c", await workflowScript()], {
@@ -182,6 +190,7 @@ async function runHealthCheck(hcSequence, extraEnv = {}) {
         PATH: `${bin}:${process.env.PATH}`,
         VERCEL_TOKEN: "stub-vercel-token",
         MCP_TOKEN: "stub-mcp-token",
+        ROLLBACK_GITHUB_TOKEN: "stub-rollback-token",
         TG_TOKEN: "stub-tg-token",
         TG_CHAT: "stub-tg-chat",
         SHA: "c".repeat(40),
@@ -190,6 +199,7 @@ async function runHealthCheck(hcSequence, extraEnv = {}) {
         RUNNER_TEMP: runnerTemp,
         GITHUB_OUTPUT: join(runnerTemp, "github-output"),
         HC_SEQUENCE: hcSequence,
+        HC_REAL_GIT: realGit.stdout.trim(),
         ...extraEnv,
       },
     });
@@ -204,17 +214,16 @@ async function runHealthCheck(hcSequence, extraEnv = {}) {
 
 // The bug (HTPR-5467): attempt 1 is Vercel-challenged, but attempt 3 returns an
 // unchallenged broken verdict. A sticky `challenged` flag would exit 0 here; the
-// fix must still roll production back.
-test("an unchallenged broken response rolls back even after an earlier challenge", async () => {
+// failure must still be reported without changing production.
+test("an unchallenged broken response alerts without rollback even after an earlier challenge", async () => {
   const { result, promoted } = await runHealthCheck(
     "challenge challenge challenge ok ok broken ok ok broken",
   );
 
   assert.equal(result.status, 1, result.stdout + result.stderr);
-  assert.match(result.stdout, /rolled back to deploy-prev/);
+  assert.match(result.stdout, /health checks failed; automatic rollback is disabled/);
   assert.doesNotMatch(result.stdout, /Bot-challenged responses only/);
-  assert.ok(promoted, "rollback promote call was never made");
-  assert.match(promoted, /\/promote\/deploy-prev/);
+  assert.equal(promoted, null, "a failed health check must not promote");
 });
 
 // The guarantee that must not be weakened: when every failed response was
@@ -245,8 +254,8 @@ test("a read-passing inconclusive probe fails the job but never rolls back", asy
 // The bug (HTPR-5467, stale body): attempt 1's probe is healthy but the reads
 // are challenged, so the loop continues. On attempt 2 the probe request fails to
 // connect (curl prints 000) and — like real curl — leaves the previous -o file
-// untouched. The stale healthy body must NOT count as healthy; the run must roll
-// back off the definitive connection failure instead of exiting 0.
+// untouched. The stale healthy body must NOT count as healthy; the run must fail
+// on the definitive connection failure instead of exiting 0.
 // An unprovisioned probe fixture must not warn forever: the write gate is not
 // running, so the job fails loudly. It must still never roll back, because no
 // rollback creates a fixture.
@@ -263,15 +272,15 @@ test("an unprovisioned probe fixture fails the job without rolling back", async 
 
 // A setup problem must never mask a proven outage: an early misconfigured probe
 // plus an unchallenged definitive failure standing on the final attempt still
-// rolls back.
-test("a missing fixture does not suppress rollback for a real final-attempt failure", async () => {
+// reports the failure.
+test("a missing fixture does not suppress the alert for a real final-attempt failure", async () => {
   const { result, promoted } = await runHealthCheck(
     "ok ok misconfigured ok ok misconfigured ok 500 broken",
   );
 
   assert.equal(result.status, 1, result.stdout + result.stderr);
-  assert.match(result.stdout, /rolled back to deploy-prev/);
-  assert.ok(promoted, "a standing definitive failure must still promote");
+  assert.match(result.stdout, /health checks failed; automatic rollback is disabled/);
+  assert.equal(promoted, null, "a standing definitive failure must not promote");
 });
 
 // A challenge on an earlier attempt parses as http-403. A sticky run-wide
@@ -304,9 +313,8 @@ test("a stale healthy probe body from an earlier attempt is not healthy", async 
 
   assert.equal(result.status, 1, result.stdout + result.stderr);
   assert.doesNotMatch(result.stdout, /Production healthy/);
-  assert.match(result.stdout, /rolled back to deploy-prev/);
-  assert.ok(promoted, "rollback promote call was never made");
-  assert.match(promoted, /\/promote\/deploy-prev/);
+  assert.match(result.stdout, /health checks failed; automatic rollback is disabled/);
+  assert.equal(promoted, null, "a failed health check must not promote");
 });
 
 // The bug (HTPR-5467, non-200 verdict): a probe that answers HTTP 500 but whose
@@ -318,9 +326,8 @@ test("a non-200 probe response with a healthy-looking body is not healthy", asyn
 
   assert.equal(result.status, 1, result.stdout + result.stderr);
   assert.doesNotMatch(result.stdout, /Production healthy/);
-  assert.match(result.stdout, /rolled back to deploy-prev/);
-  assert.ok(promoted, "rollback promote call was never made");
-  assert.match(promoted, /\/promote\/deploy-prev/);
+  assert.match(result.stdout, /health checks failed; automatic rollback is disabled/);
+  assert.equal(promoted, null, "a failed health check must not promote");
 });
 
 // The bug (HTPR-5467, per-endpoint masking): a challenged homepage in the SAME
@@ -334,9 +341,8 @@ test("a challenged homepage does not mask an unchallenged broken probe in the sa
 
   assert.equal(result.status, 1, result.stdout + result.stderr);
   assert.doesNotMatch(result.stdout, /Production healthy/);
-  assert.match(result.stdout, /rolled back to deploy-prev/);
-  assert.ok(promoted, "rollback promote call was never made");
-  assert.match(promoted, /\/promote\/deploy-prev/);
+  assert.match(result.stdout, /health checks failed; automatic rollback is disabled/);
+  assert.equal(promoted, null, "a failed health check must not promote");
 });
 
 // Mirror case (HTPR-5467): a challenged probe must not mask an unchallenged
@@ -348,9 +354,8 @@ test("a challenged probe does not mask an unchallenged non-200 API response in t
 
   assert.equal(result.status, 1, result.stdout + result.stderr);
   assert.doesNotMatch(result.stdout, /Production healthy/);
-  assert.match(result.stdout, /rolled back to deploy-prev/);
-  assert.ok(promoted, "rollback promote call was never made");
-  assert.match(promoted, /\/promote\/deploy-prev/);
+  assert.match(result.stdout, /health checks failed; automatic rollback is disabled/);
+  assert.equal(promoted, null, "a failed health check must not promote");
 });
 
 // HTPR-5467 round-5: `unchallenged_failure` must be evaluated on the FINAL
@@ -370,31 +375,42 @@ test("an unchallenged failure on an earlier attempt does not roll back when the 
 });
 
 // The fix must not over-correct: a persistent unchallenged broken probe on every
-// attempt (including the final one) still rolls back.
-test("a persistent unchallenged broken probe across all attempts still rolls back", async () => {
+// attempt (including the final one) still fails loudly.
+test("a persistent unchallenged broken probe fails without rollback", async () => {
   const { result, promoted } = await runHealthCheck(
     "ok ok broken ok ok broken ok ok broken",
   );
 
   assert.equal(result.status, 1, result.stdout + result.stderr);
   assert.doesNotMatch(result.stdout, /Production healthy/);
-  assert.match(result.stdout, /rolled back to deploy-prev/);
-  assert.ok(promoted, "rollback promote call was never made");
-  assert.match(promoted, /\/promote\/deploy-prev/);
+  assert.match(result.stdout, /health checks failed; automatic rollback is disabled/);
+  assert.equal(promoted, null, "a failed health check must not promote");
 });
 
 // HTPR-6511: a READY production deploy can miss the alias. /api/version keeps
 // serving the previous commit. The health job used to error and stop; it must
-// promote that READY deploy so the merge actually ships.
-test("a READY deploy that missed the alias is promoted onto production", async () => {
+// report that deployment drift without changing the alias.
+test("a READY deploy that missed the alias fails without promotion", async () => {
   const { result, promoted } = await runHealthCheck("ok ok healthy", {
     HC_VERSION_SHA: "a".repeat(40),
+    ROLLBACK_GITHUB_TOKEN: "stub-rollback-token",
+  });
+
+  assert.equal(result.status, 1, result.stdout + result.stderr);
+  assert.match(result.stdout, /Alert only; investigate Vercel aliasing/);
+  assert.doesNotMatch(result.stdout, /Production healthy/);
+  assert.equal(promoted, null, "alias drift must not promote");
+});
+
+test("health passes when the alias catches up on the final read without promotion", async () => {
+  const { result, promoted } = await runHealthCheck("ok ok healthy", {
+    HC_VERSION_SHA: "a".repeat(40),
+    HC_VERSION_RECHECK_SHA: "c".repeat(40),
   });
 
   assert.equal(result.status, 0, result.stdout + result.stderr);
   assert.match(result.stdout, /Production healthy/);
-  assert.ok(promoted, "alias-repair promote was never made");
-  assert.match(promoted, /\/promote\/deploy-current/);
+  assert.equal(promoted, null);
 });
 
 async function driftScript() {
@@ -624,14 +640,13 @@ async function runDriftCheck({
 
 // HTPR-6511: Vercel already had a READY deploy for 95f3471, and the newest
 // READY SHA matched the production tip, but /api/version still served 058a6cf.
-// Drift trusted the newest READY row and stayed green for hours.
-test("drift promotes when /api/version lags a READY production tip", async () => {
+// Drift must report the discrepancy without changing deployments.
+test("drift alerts without promotion when /api/version lags a READY production tip", async () => {
   const { result, promoted } = await runDriftCheck();
 
-  assert.equal(result.status, 0, result.stdout + result.stderr);
-  assert.match(result.stdout, /Promoted deploy-tip|production now serves the tip/i);
-  assert.ok(promoted, "drift must promote the tip deploy when /api/version is stale");
-  assert.match(promoted, /\/promote\/deploy-tip/);
+  assert.equal(result.status, 1, result.stdout + result.stderr);
+  assert.match(result.stdout, /BEHIND the production tip.*Alert only/);
+  assert.equal(promoted, null, "drift must not promote even a green READY deploy");
 });
 
 test("drift does not promote when /api/version already matches the tip", async () => {
@@ -656,7 +671,7 @@ test("drift does not promote a SHA whose prod-health run failed", async () => {
   });
 
   assert.equal(result.status, 1, result.stdout + result.stderr);
-  assert.match(result.stdout, /no green prod-health gate|No READY deploy with a green health gate/);
+  assert.match(result.stdout, /BEHIND the production tip.*Alert only/);
   assert.equal(promoted, null);
 });
 
@@ -667,7 +682,7 @@ test("drift does not promote a SHA whose later prod-health job failed", async ()
   });
 
   assert.equal(result.status, 1, result.stdout + result.stderr);
-  assert.match(result.stdout, /latest prod-health run concluded|No READY deploy with a green health gate/);
+  assert.match(result.stdout, /BEHIND the production tip.*Alert only/);
   assert.equal(promoted, null);
 });
 
@@ -678,17 +693,16 @@ test("drift does not promote a SHA whose latest prod-health run timed out", asyn
   });
 
   assert.equal(result.status, 1, result.stdout + result.stderr);
-  assert.match(result.stdout, /latest prod-health run concluded|No READY deploy with a green health gate/);
+  assert.match(result.stdout, /BEHIND the production tip.*Alert only/);
   assert.equal(promoted, null);
 });
 
-test("drift promotes the READY app ancestor when the tip is a docs commit", async () => {
+test("drift alerts without promotion when an app ancestor precedes a docs tip", async () => {
   const { result, promoted } = await runDriftCheck({ ignoredTipAfterApp: true });
 
-  assert.equal(result.status, 0, result.stdout + result.stderr);
-  assert.match(result.stdout, /Promoted deploy-tip|production now serves the tip/i);
-  assert.ok(promoted, "drift must promote the app deploy in front of an ignored tip");
-  assert.match(promoted, /\/promote\/deploy-tip/);
+  assert.equal(result.status, 1, result.stdout + result.stderr);
+  assert.match(result.stdout, /BEHIND the production tip.*Alert only/);
+  assert.equal(promoted, null, "an ignored tip must not authorize promotion");
 });
 
 function makeCommitChild(parent, { appChange = false, message = "htpr-6511-child" } = {}) {
@@ -761,7 +775,7 @@ test("health skips alias repair when origin/production already moved on", async 
   assert.equal(promoted, null);
 });
 
-test("health still repairs when origin/production only moved by ignored files", async () => {
+test("health still reports drift when origin/production only moved by ignored files", async () => {
   const head = spawnSync("git", ["rev-parse", "HEAD"], { encoding: "utf8" });
   assert.equal(head.status, 0, head.stderr);
   const docs = makeCommitChild(head.stdout.trim(), {
@@ -773,10 +787,10 @@ test("health still repairs when origin/production only moved by ignored files", 
     PROD_HEAD_OVERRIDE: docs,
   });
 
-  assert.equal(result.status, 0, result.stdout + result.stderr);
-  assert.match(result.stdout, /ignored files only|Alias repair landed|Production healthy/);
-  assert.ok(promoted, "docs-only tip must not block alias repair of the app SHA");
-  assert.match(promoted, /\/promote\/deploy-current/);
+  assert.equal(result.status, 1, result.stdout + result.stderr);
+  assert.match(result.stdout, /ignored files only/);
+  assert.match(result.stdout, /Alert only; investigate Vercel aliasing/);
+  assert.equal(promoted, null, "docs-only tip must not authorize alias repair");
 });
 
 test("health skips alias repair when a later version read is a newer descendant", async () => {
@@ -797,7 +811,7 @@ test("health skips alias repair when a later version read is a newer descendant"
   assert.equal(promoted, null);
 });
 
-test("core-actions rollback invalidates the health gate", async () => {
+test("a failed post-deploy core-actions probe invalidates the health gate without rollback", async () => {
   const workflow = await readFile(".github/workflows/prod-health.yml", "utf8");
   const start = workflow.indexOf("\n  core-actions:");
   const next = workflow.indexOf("\n  provision-core-actions:", start);
@@ -805,12 +819,8 @@ test("core-actions rollback invalidates the health gate", async () => {
   const block = workflow.slice(start, next);
   assert.match(block, /statuses: write/);
   assert.match(block, /prod-health-gate/);
-  assert.match(block, /Rolled back after failed core-actions/);
-  assert.match(block, /SHOULD_ROLLBACK/);
-  const rollbackAt = block.indexOf("SHOULD_ROLLBACK");
-  const invalidateAt = block.indexOf("invalidate prod-health-gate");
-  const emergencyAt = block.indexOf("emergency-rollback.mjs");
-  assert.ok(rollbackAt !== -1 && invalidateAt !== -1 && emergencyAt !== -1);
-  assert.ok(invalidateAt < emergencyAt, "gate invalidation is attempted before rollback");
-  assert.match(block, /Rolled back \$GITHUB_SHA but failed to invalidate/);
+  assert.match(block, /Failed core-actions \(alert only\)/);
+  assert.match(block, /could not invalidate prod-health-gate/);
+  assert.match(block, /CORE_SMOKE_ROLLBACK: disabled \(alert-only\)/);
+  assert.doesNotMatch(block, /emergency-rollback|SHOULD_ROLLBACK|\/promote\//);
 });
