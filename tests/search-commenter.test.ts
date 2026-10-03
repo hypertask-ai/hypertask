@@ -58,6 +58,8 @@ function matches(row: any, where: any): boolean {
     if (condition.in) { if (!condition.in.includes(value)) return false; continue }
     if (condition instanceof Date) { if (value?.getTime() !== condition.getTime()) return false; continue }
     if (condition.gt !== undefined) { if (!(value > condition.gt)) return false; continue }
+    if (condition.lt !== undefined) { if (!(value < condition.lt)) return false; continue }
+    if (condition.equals instanceof Date) { if (value?.getTime() !== condition.equals.getTime()) return false; continue }
     if (condition.gte) { if (!(value >= condition.gte)) return false; continue }
     const text = String(value ?? '').toLowerCase()
     if (condition.equals !== undefined) { if (text !== String(condition.equals).toLowerCase()) return false; continue }
@@ -87,17 +89,33 @@ const db = {
     findMany: async (args: any) => { state.taskQueries.push(args); return pageRows(tasks.filter((row) => matches(row, args.where)), args) },
     count: async (args: any) => { state.countQueries.push(args); return tasks.filter((row) => matches(row, args.where)).length },
   },
-  comment: { findFirst: async (args: any) => { state.anchorQueries.push(args); return pageRows(comments.filter((row) => !state.deleted.includes(row.id) && matches(row, args.where)), args)[0] ?? null }, findMany: async (args: any) => {
-    if (args.distinct) state.commentQueries.push(args)
-    else { state.detailQueries.push(args); assert.ok(args.take > 0); assert.ok(args.where.id.in.length <= args.take) }
-    assert.deepEqual(args.orderBy, [{ createdAt: 'desc' }, { id: 'desc' }])
-    if (args.distinct) { assert.deepEqual(args.distinct, ['taskId']); assert.equal(args.select.commentText, undefined) }
-    const seen = new Set<number>()
-    const rows = comments.filter((row) => !state.deleted.includes(row.id) && matches(row, args.where))
-      .toSorted((a, b) => b.createdAt.getTime() - a.createdAt.getTime() || b.id - a.id)
-      .filter((row) => { if (!args.distinct) return true; if (seen.has(row.taskId)) return false; seen.add(row.taskId); return true })
-    return pageRows(rows, args)
-  } },
+  comment: {
+    findFirst: async (args: any) => {
+      if (args.select.commentText) state.detailQueries.push(args)
+      else state.anchorQueries.push(args)
+      assert.equal(typeof args.where.taskId, 'number')
+      assert.deepEqual(args.orderBy, [{ createdAt: 'desc' }, { id: 'desc' }])
+      return pageRows(comments.filter((row) => !state.deleted.includes(row.id) && matches(row, args.where)), args)[0] ?? null
+    },
+    groupBy: async (args: any) => {
+      state.commentQueries.push(args)
+      assert.deepEqual(args.by, ['taskId'])
+      assert.deepEqual(args._max, { createdAt: true })
+      assert.deepEqual(args.orderBy, [{ _max: { createdAt: 'desc' } }, { taskId: 'desc' }])
+      assert.ok(args.take > 0)
+      assert.equal(args.select, undefined)
+      const groups = new Map<number, Date>()
+      for (const row of comments.filter((row) => !state.deleted.includes(row.id) && matches(row, args.where))) {
+        if (!groups.has(row.taskId) || groups.get(row.taskId)! < row.createdAt) groups.set(row.taskId, row.createdAt)
+      }
+      const having = (row: any, filter: any): boolean => !filter || filter.OR.some((part: any) =>
+        matches(row, { ...(part.taskId ? { taskId: part.taskId } : {}), createdAt: part.createdAt._max }))
+      return [...groups].map(([taskId, createdAt]) => ({ taskId, createdAt, _max: { createdAt } }))
+        .filter((row) => having(row, args.having))
+        .toSorted((a, b) => b.createdAt.getTime() - a.createdAt.getTime() || b.taskId - a.taskId)
+        .slice(0, args.take)
+    },
+  },
 }
 for (const [file, exports] of [
   ['src/lib/prisma.ts', { default: db }],
@@ -411,6 +429,7 @@ test('review comment-only authors appear only in bounded accessible commenter re
     { id: 41, displayName: 'Comment Private', email: 'private-comment@example.test', members: [], tasks: [], assignees: [], comments: [comment(41, 106, 41, 'needle', 13)] },
     { id: 42, displayName: 'Comment Activity', email: 'activity@example.test', members: [], tasks: [], assignees: [], comments: [comment(42, 101, 42, 'needle', 13, { action: 'changed' })] },
     { id: 43, displayName: 'Comment Deleted', email: 'deleted@example.test', members: [], tasks: [], assignees: [], comments: [comment(43, 107, 43, 'needle', 13)] },
+    { id: 44, displayName: 'Comment Elsewhere', email: 'elsewhere@example.test', members: [], tasks: [], assignees: [], comments: [{ ...comment(44, 101, 44, 'needle', 13), task: { ...tasks[0], projectId: 8 } }] },
   ]
   people.push(...added)
   try {
@@ -432,6 +451,12 @@ test('review comment-only authors appear only in bounded accessible commenter re
         assert.deepEqual(res.body.candidates.map((row: any) => row.id), operator === 'commenter' ? [40] : [])
       }
       assert.ok(state.peopleQueries.filter((args: any) => JSON.stringify(args.where).includes('comments')).every((args: any) => args.take <= 1000))
+      const resolved = response()
+      await valuesHandler({ method: 'GET', headers: {}, query: { operator: 'commenter', resolve: 'Comment Only trailing text', boardId: '7' } }, resolved)
+      assert.equal(resolved.body.resolved, chips ? 'Comment Only' : undefined)
+      assert.deepEqual((await parser('commenter:comment@example', [7], true, [7], true)).filters.commenter[0].userIds, [40])
+      assert.deepEqual((await parser('commenter:comment', [7, 8], true, [7], true)).filters.commenter[0].userIds, [40])
+      assert.deepEqual((await parser('commenter:comment', [7, 8], true, [8], true)).filters.commenter[0].userIds, [44])
       const scoped = await parser('commenter:comment', [7], true, [], true)
       assert.deepEqual(scoped.filters.commenter[0].userIds, [])
     }
@@ -455,15 +480,18 @@ test('review paging uses bounded comment DB pages and separate full totals for c
   const first = await (await request()).json()
   assert.deepEqual([first.tasks[0].id, first.total, first.nextCursor], [102, 2, '102'])
   assert.equal(state.commentQueries[0].take, 1)
-  assert.equal(state.commentQueries[0].skip, 0)
-  assert.deepEqual(state.detailQueries[0].where.id, { in: [4] })
-  assert.equal(state.detailQueries[0].take, 1)
+  assert.equal(state.commentQueries[0].having, undefined)
+  assert.equal(state.detailQueries[0].where.taskId, 102)
+  assert.equal(state.detailQueries.length, 1)
   assert.equal(state.countQueries[0].where.id, undefined)
   const second = await (await request('&cursor=102')).json()
   assert.deepEqual([second.tasks[0].id, second.total, second.nextCursor], [101, 2, '101'])
   assert.equal(state.commentQueries[1].take, 1)
-  assert.equal(state.commentQueries[1].skip, 1)
-  assert.deepEqual(state.anchorQueries[0].select, { id: true, createdAt: true })
+  assert.deepEqual(state.commentQueries[1].having, { OR: [
+    { createdAt: { _max: { lt: comments[3].createdAt } } },
+    { createdAt: { _max: { equals: comments[3].createdAt } }, taskId: { lt: 102 } },
+  ] })
+  assert.deepEqual(state.anchorQueries[0].select, { createdAt: true })
   const last = await (await request('&cursor=101')).json()
   assert.equal(last.total, 2)
   assert.deepEqual(last.tasks, [])
@@ -475,5 +503,49 @@ test('review paging uses bounded comment DB pages and separate full totals for c
   const sortedSecond = await (await request('&sort=createdAt:asc&cursor=101')).json()
   assert.equal(sortedSecond.tasks[0].id, 102)
   assert.equal(sortedSecond.total, 2)
-  assert.ok(state.commentQueries.every((args: any) => args.take === 1 && args.where.task.id.in.length === 1))
+  assert.equal(state.commentQueries.length, 0)
+  assert.deepEqual(state.detailQueries.map((args: any) => args.where.taskId), [101, 102])
+  assert.ok(state.taskQueries.filter((args: any) => args.take !== undefined).every((args: any) => args.take === 1))
+})
+
+test('review flag-off ordinary comment output is byte-identical with either highlight mode', async () => {
+  for (const highlights of [false, true]) {
+    reset()
+    state.flags[flag] = false
+    state.flags[keys.HTPR_6882_SEARCH_MATCH_HIGHLIGHTS_FLAG] = highlights
+    const hit = { id: '2', taskId: 101, commentText: comments[1].commentText, creatorName: 'Hicham', createdAt: '2026-10-05T00:00:00.000Z' }
+    state.indexComments = [hit]
+    const row = {
+      taskId: 101, projectId: 7, ticketNumber: 'TEST-1', taskTitle: tasks[0].title,
+      descriptionText: tasks[0].description, projectTitle: 'Visible', status: 'Normal',
+      updatedAt: tasks[0].updatedAt.toISOString(), uniqueIndex: 1, highlight: {},
+      ...(highlights ? { searchMatch: { people: [], labels: [], commentAuthor: 'Hicham' }, commentId: 2, commentText: hit.commentText } : {}),
+    }
+    const expected = { processedData: { All: [row], Visible: [row] }, tabs: ['All', 'Visible'], contextProjectId: null, status: 200 }
+    assert.equal(JSON.stringify((await search('needle from:3')).body), JSON.stringify(expected))
+    assert.equal(state.commentQueries.length, 0)
+    assert.equal(state.detailQueries.length, 0)
+  }
+})
+
+test('review scanAll pages latest-per-task comment timestamps with ties and many older comments', async () => {
+  const added = [
+    ...Array.from({ length: 500 }, (_, i) => comment(2000 + i, 101, 1, 'older comment', 2)),
+    comment(1000, 101, 1, 'latest comment at the same timestamp as task 102', 6),
+  ]
+  comments.push(...added)
+  try {
+    reset()
+    const request = async (suffix = '') => (await GET(new NextRequest(`http://localhost/api/mcp/tasks/search?q=commenter:1&board_id=7&limit=1${suffix}`))).json()
+    const first = await request()
+    assert.deepEqual([first.tasks[0].id, first.total, first.tasks[0].commentId], [102, 2, 4])
+    const second = await request('&cursor=102')
+    assert.deepEqual([second.tasks[0].id, second.total, second.tasks[0].commentId], [101, 2, 1000])
+    const last = await request('&cursor=101')
+    assert.deepEqual(last.tasks, [])
+    assert.equal(last.total, 2)
+    assert.equal(state.detailQueries.length, 2)
+    assert.ok(state.commentQueries.every((args: any) => args.take === 1 && args.select === undefined))
+    assert.ok(state.countQueries.every((args: any) => args.where.id === undefined))
+  } finally { comments.splice(-added.length) }
 })

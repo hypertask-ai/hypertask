@@ -23,45 +23,38 @@ export async function rankedSearchWhere(
   if (commenters.length) {
     const matching = commenterWhere(commenters, parsed.text)
     const taskWhere: Prisma.TaskWhereInput = { AND: [where, extraWhere] }
-    let skip = 0
     let cursorValid = true
+    let page: { taskId: number }[]
     if (taskOrderBy) {
-      const page = await prisma.task.findMany({
+      page = (await prisma.task.findMany({
         where: taskWhere, select: { id: true }, orderBy: taskOrderBy, take: limit,
         skip: cursorId ? 1 : 0, ...(cursorId ? { cursor: { id: cursorId } } : {}),
-      })
-      taskWhere.id = { in: page.map(({ id }) => id) }
-    } else if (cursorId) {
-      const anchor = await prisma.comment.findFirst({
+      })).map(({ id }) => ({ taskId: id }))
+    } else {
+      const anchor = cursorId ? await prisma.comment.findFirst({
         where: { ...matching, taskId: cursorId, task: taskWhere },
-        select: { id: true, createdAt: true }, orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
-      })
-      cursorValid = Boolean(anchor)
-      if (anchor) {
-        skip = 1 + await prisma.task.count({ where: { AND: [taskWhere, { comments: { some: {
-          ...matching, AND: [...(Array.isArray(matching.AND) ? matching.AND : []), { OR: [
-            { createdAt: { gt: anchor.createdAt } },
-            { createdAt: anchor.createdAt, id: { gt: anchor.id } },
-          ] }],
-        } } }] } })
-      } else taskWhere.id = { in: [] }
+        select: { createdAt: true }, orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+      }) : null
+      cursorValid = !cursorId || Boolean(anchor)
+      const having = anchor && cursorId ? { OR: [
+        { createdAt: { _max: { lt: anchor.createdAt } } },
+        { createdAt: { _max: { equals: anchor.createdAt } }, taskId: { lt: cursorId } },
+      ] } : undefined
+      // Group and page in the database: Prisma's distinct would deduplicate in memory.
+      const groups = cursorValid ? await prisma.comment.groupBy({
+        by: ['taskId'], where: { ...matching, task: taskWhere },
+        _max: { createdAt: true }, having,
+        orderBy: [{ _max: { createdAt: 'desc' } }, { taskId: 'desc' }], take: limit,
+      }) : []
+      page = groups
     }
-    // Prisma may deduplicate in memory; fetch comment bodies only for the resulting page.
-    const page = await prisma.comment.findMany({
-      where: { ...matching, task: taskWhere },
-      select: { id: true, taskId: true, createdAt: true },
-      orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
-      distinct: ['taskId'],
-      take: limit,
-      skip,
-    })
-    const comments = page.length ? await prisma.comment.findMany({
-      where: { id: { in: page.map(({ id }) => id) }, ...matching, task: taskWhere },
+    const comments = await Promise.all(page.map(({ taskId }) => prisma.comment.findFirst({
+      where: { ...matching, taskId, task: taskWhere },
       select: { id: true, taskId: true, commentText: true, createdAt: true, creator: { select: { displayName: true, email: true } } },
       orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
-      take: limit,
-    }) : []
+    })))
     for (const comment of comments) {
+      if (!comment) continue
       rankedIds.push(comment.taskId)
       commentById.set(comment.taskId, { ...comment, creatorName: comment.creator?.displayName || comment.creator?.email || '' })
     }

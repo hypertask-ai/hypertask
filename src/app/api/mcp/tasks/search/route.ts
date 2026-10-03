@@ -301,7 +301,7 @@ export async function GET(request: NextRequest) {
       const chipsEnabled = await isFeatureEnabled(HTPR_6370_SEARCH_CHIPS_FLAG, user.id)
       const fuzzyPersonEnabled = await isFeatureEnabled(HTPR_6881_SEARCH_FUZZY_PERSON_FLAG, user.id)
       const commenterEnabled = await isFeatureEnabled(HTPR_6880_SEARCH_COMMENTER_FLAG, user.id)
-      const personProjectIds = fuzzyPersonEnabled && targetProjectId != null ? [targetProjectId] : accessibleProjectIds
+      const personProjectIds = (fuzzyPersonEnabled || commenterEnabled) && targetProjectId != null ? [targetProjectId] : accessibleProjectIds
       const parsedQuery = chipsEnabled
         ? await parseSearchWithChipNames(query, accessibleProjectIds, fuzzyPersonEnabled, personProjectIds, commenterEnabled)
         : await parseSearchWithNames(query, accessibleProjectIds, fuzzyPersonEnabled, personProjectIds, commenterEnabled)
