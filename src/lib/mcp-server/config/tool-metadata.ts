@@ -452,7 +452,7 @@ Technical: Requires team_id from get_user_context.teams (UUID string or number).
   TIME: {
     name: buildToolName('time'),
     description:
-      'Track time with action: start, stop, status, running, report, or log. Start/stop/status/log require a task id, unique index, or ticket id. Log also requires minutes. Report supports board, task, user, from, to, and running filters.',
+      'Track time with action: start, stop, status, running, report, or log. Start/stop/status/log require a task id, unique index, or ticket id. Log also requires minutes (1–1440) and accepts note, date (YYYY-MM-DD), and timezone_offset_minutes (minutes west of UTC). Report supports board, task, user, from, to, and running filters.',
   },
   PAUSE_TIMER: {
     name: buildToolName('pause_timer'),

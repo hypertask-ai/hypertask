@@ -21,8 +21,12 @@ import {
   updateTimeEntryOnActiveBoard,
 } from "@/lib/timeEntryWriter";
 
-const normalizeNote = (note?: string | null) =>
-  note?.trim().slice(0, 500) || null;
+const normalizeNote = (note?: string | null) => {
+  if (note !== undefined && note !== null && typeof note !== "string") {
+    throw new RangeError("note must be a string or null");
+  }
+  return note?.trim().slice(0, 500) || null;
+};
 
 export { TimeTrackingDisabledError } from "@/lib/timeEntryWriter";
 
@@ -219,20 +223,26 @@ export async function logMinutes(
   userId: number,
   taskId: number,
   minutes: number,
-  agentId?: string | null
+  agentId?: string | null,
+  date?: string,
+  timezoneOffsetMinutes?: number,
+  note?: string | null
 ) {
   if (!Number.isInteger(minutes) || minutes <= 0 || minutes > 1440) {
     throw new RangeError("Minutes must be an integer from 1 to 1440");
   }
 
-  const endedAt = new Date();
-  const startedAt = new Date(endedAt.getTime() - minutes * 60 * 1000);
+  const now = new Date();
+  const { startedAt, endedAt } = date === undefined
+    ? { startedAt: new Date(now.getTime() - minutes * 60 * 1000), endedAt: now }
+    : manualEntryTimes(date, minutes, timezoneOffsetMinutes);
 
   const entry = await createTimeEntryOnActiveBoard(
     timeWriteClient,
     {
       userId,
       taskId,
+      note: normalizeNote(note),
       startedAt,
       endedAt,
     },
@@ -490,28 +500,38 @@ export async function administeredProjectIds(
 export async function updateEntry(
   userId: number,
   entryId: number,
-  minutes: number,
+  minutes?: number,
   date?: string,
   timezoneOffsetMinutes?: number,
   note?: string | null,
   agentId?: string | null
 ) {
-  if (!Number.isInteger(minutes) || minutes <= 0 || minutes > 1440) {
+  if (minutes !== undefined && (!Number.isInteger(minutes) || minutes <= 0 || minutes > 1440)) {
     throw new RangeError("Minutes must be an integer from 1 to 1440");
   }
+  if (minutes === undefined && date === undefined && note === undefined) {
+    throw new RangeError("Provide at least one of minutes, date, or note");
+  }
+  const normalizedNote = note !== undefined ? normalizeNote(note) : undefined;
 
   const result = await updateTimeEntryOnActiveBoard(
     timeWriteClient,
     { userId, entryId, projectWhere: getProjectWhere(userId, agentId) },
-    (entry) => ({
-      ...(date === undefined
-        ? {
-            startedAt: entry.startedAt,
-            endedAt: new Date(entry.startedAt.getTime() + minutes * 60 * 1000),
-          }
-        : manualEntryTimes(date, minutes, timezoneOffsetMinutes)),
-      ...(note !== undefined ? { note: normalizeNote(note) } : {}),
-    })
+    (entry) => {
+      const startedAt = date === undefined
+        ? entry.startedAt
+        : manualEntryTimes(date, minutes ?? 1, timezoneOffsetMinutes).startedAt;
+      // Date-only edits retain exact timer duration, including partial minutes.
+      const duration = minutes === undefined
+        ? entry.endedAt!.getTime() - entry.startedAt.getTime()
+        : minutes * 60 * 1000;
+      return {
+        ...(minutes !== undefined || date !== undefined
+          ? { startedAt, endedAt: new Date(startedAt.getTime() + duration) }
+          : {}),
+        ...(normalizedNote !== undefined ? { note: normalizedNote } : {}),
+      };
+    }
   );
   if (!result) return null;
 

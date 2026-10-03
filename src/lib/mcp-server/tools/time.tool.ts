@@ -47,7 +47,13 @@ export const timeTool = {
           context,
           TimeService,
           (service, actionInput) => service.log(actionInput),
-          { task: input.task!, minutes: input.minutes! }
+          {
+            task: input.task!,
+            minutes: input.minutes!,
+            note: input.note,
+            date: input.date,
+            timezone_offset_minutes: input.timezone_offset_minutes,
+          }
         );
       case 'running':
         return executeWithService(

@@ -17,9 +17,16 @@ export async function POST(request: NextRequest) {
   if (entry.response) return entry.response;
 
   const minutes = typeof body.minutes === "string" ? Number(body.minutes) : body.minutes;
-  if (!Number.isInteger(minutes) || minutes <= 0 || minutes > 1440) {
+  if (minutes !== undefined && (!Number.isInteger(minutes) || minutes <= 0 || minutes > 1440)) {
     return NextResponse.json(
       { success: false, error: "minutes must be an integer from 1 to 1440" },
+      { status: 400 }
+    );
+  }
+
+  if (minutes === undefined && body.date === undefined && body.note === undefined) {
+    return NextResponse.json(
+      { success: false, error: "Provide at least one of minutes, date, or note" },
       { status: 400 }
     );
   }
