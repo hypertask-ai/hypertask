@@ -142,16 +142,6 @@ const Commands = (props: Props) => {
   const myTasksViewsEnabled = useFlag(MY_TASKS_VIEWS_FLAG);
   const commandScopePickerEnabled = useFlag(HTPR_6567_COMMAND_SCOPE_PICKER_FLAG);
   const myTasksFilterParityEnabled = useFlag(MY_TASKS_FILTER_PARITY_FLAG);
-  let scopeCommand: ICommandList | undefined;
-  if (commandScopePickerEnabled && onMyTasks && myTasksViewsEnabled && myTasksFilterParityEnabled) {
-    scopeCommand = {
-      key: "myTasksScope",
-      name: "Scope",
-      // Keep the board row's mobile icon; selection is handled by key below.
-      commandMode: CommandMode.GoToBoard,
-      keywords: "scope boards project select filter my tasks",
-    };
-  }
   const myTasksTableColumnsEnabled = useFlag(MY_TASKS_TABLE_COLUMNS_FLAG);
   const commentLongPressEnabled = useFlag(HTPR_6514_COMMENT_LONG_PRESS_FLAG);
   const mobilePageBackRowEnabled = useFlag(HTPR_6861_MOBILE_PAGE_BACK_ROW_FLAG);
@@ -191,6 +181,16 @@ const Commands = (props: Props) => {
         commandMode: CommandMode.GoToBoard,
         keywords: `${project.title} board project go open switch`,
       }));
+    let scopeCommand: ICommandList | undefined;
+    if (commandScopePickerEnabled && onMyTasks && myTasksViewsEnabled && myTasksFilterParityEnabled) {
+      scopeCommand = {
+        key: "myTasksScope",
+        name: "Scope",
+        // Keep the board row's mobile icon; selection is handled by key below.
+        commandMode: CommandMode.GoToBoard,
+        keywords: "scope boards project select filter my tasks",
+      };
+    }
     if (scopeCommand) boardCommands.unshift(scopeCommand);
     // HTPR-6160: the inbox sorts by recency, so the noisiest tickets are invisible
     // until you scroll. These rank by pile size instead. Own group: every group's
