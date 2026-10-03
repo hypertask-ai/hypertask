@@ -7,7 +7,7 @@ description: Work through every open ticket on one Hypertask board until each is
 
 Valentin, 2026-10-03: "makes the agent go through all tickets in the board using /unlazy ledger". He types `/drain-board <project id or board link>` (no id: ask which board).
 
-**Settled** means one of: Done (fixed with proof, or closed with a reason), or Valentin Review with one `Question:` comment for him. Nothing else ends a ticket's gate.
+**Settled** means one of: Done (fixed with proof, or closed with a reason), archived, or Valentin Review with one `Question:` comment for him. A ticket that cannot be read never counts as settled.
 
 ## Steps
 
