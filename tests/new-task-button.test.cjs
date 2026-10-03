@@ -10,7 +10,8 @@ const bottom = button.slice(button.indexOf('else if (buttonPosition ==="bottom"'
 
 function assertGhostClasses(source) {
   assert.doesNotMatch(source, /\bbg-opacity-\d+\b|\bbg-slate-500\b/);
-  assert.match(source, /\bbg-transparent\b/);
+  // HTPR-6875: a fill class (even bg-transparent) beats the hover color in the live CSS.
+  assert.doesNotMatch(source, /(^|\s)bg-(transparent|[a-z]+-\d+)\b/);
   assert.match(source, /\bhover:bg-hover-active\b/);
 }
 
@@ -26,6 +27,7 @@ test("bottom add-task buttons use theme-aware ghost styling, not removed opacity
 test("the styling guard rejects the original solid-background pattern", () => {
   assert.throws(() => assertGhostClasses("bg-slate-500 bg-opacity-20 hover:bg-opacity-70"));
   assert.throws(() => assertGhostClasses("bg-transparent hover:bg-hover-active bg-opacity-20"));
+  assert.throws(() => assertGhostClasses("bg-transparent hover:bg-hover-active"));
 });
 
 test("the bottom action keeps its click, tooltip, drag suppression and responsive reveal", () => {

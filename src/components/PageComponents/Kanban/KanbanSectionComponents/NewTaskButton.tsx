@@ -45,7 +45,7 @@ const NewTaskButton:React.FC<INewTaskButton> = ({buttonPosition, createTaskAt, s
             onClick={()=>createTaskAt("bottom", sectionPayload, undefined, quickEntryRequested)}
             className="
                 group
-                scale-100 sm:scale-0 hover:bg-hover-active cursor-pointer bg-transparent
+                scale-100 sm:scale-0 hover:bg-hover-active cursor-pointer
                 group-hover/main:scale-100 w-full mt-[16px] py-2
                 rounded flex justify-center"
                 >
