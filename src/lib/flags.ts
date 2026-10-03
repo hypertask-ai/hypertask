@@ -27,6 +27,7 @@ import {
   SHORTCUT_NUDGES_FLAG,
   SHARED_AGENT_CHAT_FLAG,
   MANAGER_LOOP_ACTIVITY_FLAG,
+  HTPR_6354_AI_CHAT_ALERTS_FLAG,
   MY_TASKS_PRIORITY_FILTER_FLAG,
   HTPR_4228_ADMIN_ONLY_TIME_REPORTS_FLAG,
   HTPR_4857_ADD_TO_SLACK_FLAG,
@@ -161,6 +162,12 @@ const RETIRED_CLIENT_FEATURE_FLAGS = {
 } as const;
 
 const FEATURE_FLAG_DEFINITIONS = [
+  {
+    key: HTPR_6354_AI_CHAT_ALERTS_FLAG,
+    shippedOn: "2026-10-03",
+    description:
+      "Sends bounded AI Chat error-rate and latency incidents and recovery messages to Manager, with metadata-only monitoring and three retries.",
+  },
   {
     key: HTPR_6892_CMDK_VERSION_FLAG,
     shippedOn: "2026-10-03",

@@ -2595,6 +2595,46 @@ model AgentByokApiKey {
   @@index([agentId])
 }
 
+model AiChatAlertSample {
+  id          BigInt   @id @default(autoincrement())
+  environment String
+  happenedAt  DateTime @default(now()) @db.Timestamptz(3)
+  latencyMs   Int
+  statusCode  Int
+
+  @@index([environment, happenedAt])
+}
+
+model AiChatAlertIncident {
+  id           String   @id @default(uuid())
+  environment  String
+  kind         String
+  openedAt     DateTime @default(now()) @db.Timestamptz(3)
+  healthySince DateTime? @db.Timestamptz(3)
+  closedAt     DateTime? @db.Timestamptz(3)
+  deliveries   AiChatAlertDelivery[]
+
+  // The migration adds a partial unique index for one open incident per kind.
+  @@index([environment, closedAt])
+}
+
+model AiChatAlertDelivery {
+  id            String              @id
+  incidentId    String
+  incident      AiChatAlertIncident @relation(fields: [incidentId], references: [id], onDelete: Cascade)
+  phase         String
+  requestCount  Int
+  errorCount    Int
+  p95Ms         Int
+  happenedAt    DateTime            @default(now()) @db.Timestamptz(3)
+  status        String              @default("pending")
+  attemptCount  Int                 @default(0)
+  nextAttemptAt DateTime            @default(now()) @db.Timestamptz(3)
+
+  @@unique([incidentId, phase])
+  @@index([status, nextAttemptAt])
+}
+
 model AiUsage {
   id           String   @id @default(uuid())
   createdAt    DateTime @default(now())
