@@ -94,7 +94,7 @@ const EmbeddedTaskDetail = ({
     queryKey: [globalConstants.CommentsTQPrefixKey, taskId],
     queryFn: () => fetchCommentsHelper(taskId, currentUser.id, queryClient),
     enabled: Boolean(currentUser?.id),
-    ...(embedded ? {} : { staleTime: 30_000 }),
+    ...(embedded ? {} : { staleTime: 30_000, retry: false }),
   });
   const pagesQuery = useQuery({
     queryKey: ["task-pages", currentUser?.id, taskId],
@@ -112,7 +112,8 @@ const EmbeddedTaskDetail = ({
   // the detail providers together, rather than moving already-painted cards.
   const snapshotPending = !embedded && !(taskQuery.error instanceof TaskAccessDeniedError) && (
     (!taskQuery.isFetchedAfterMount && !taskQuery.isError) ||
-    commentsQuery.isFetching || commentsQuery.isPending || pagesQuery.isFetching || pagesQuery.isPending
+    (!commentsQuery.isError && (commentsQuery.isFetching || commentsQuery.isPending)) ||
+    (!pagesQuery.isError && (pagesQuery.isFetching || pagesQuery.isPending))
   );
   const initialSerializedTask = useRef<string | undefined>(undefined);
   if (!snapshotPending && taskQuery.data && initialSerializedTask.current === undefined) {
