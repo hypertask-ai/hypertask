@@ -43,7 +43,7 @@ const updateProject= async (projectId:number, title:unknown,sorting_mode:Sorting
                 where: {
                     id: projectId,
                     status: { not: "Deleted" },
-                    ...accessWhere
+                    AND: accessWhere
                 },
                 data: {
                     title:trimmedTitle,

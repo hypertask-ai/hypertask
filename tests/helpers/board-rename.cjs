@@ -36,6 +36,7 @@ function matches(value, where) {
   if (value == null) return false;
   return Object.entries(where).every(([key, expected]) => {
     if (key === "OR") return expected.some((branch) => matches(value, branch));
+    if (key === "AND") return (Array.isArray(expected) ? expected : [expected]).every((branch) => matches(value, branch));
     const actual = value[key];
     if (expected && typeof expected === "object") {
       if ("not" in expected) return actual !== expected.not;
@@ -46,10 +47,10 @@ function matches(value, where) {
   });
 }
 
-function harness({ ownerId = 99, members = [], status = "Normal", missing = false, auth = { user: { id: 6 }, agentId: null }, rateLimited = null, loseAccess = false } = {}) {
+function harness({ ownerId = 99, ownerAgents = [], members = [], status = "Normal", missing = false, auth = { user: { id: 6 }, agentId: null }, rateLimited = null, loseAccess = false } = {}) {
   const updates = [];
   const broadcasts = [];
-  const board = { id: 15, title: "Old name", name: "project-15", ownerId, members, status, tasks: [], sorting_mode: "Manual", uniqueIdentifier: "HTPR" };
+  const board = { id: 15, title: "Old name", name: "project-15", ownerId, owner: { id: ownerId, agents: ownerAgents }, members, status, tasks: [], sorting_mode: "Manual", uniqueIdentifier: "HTPR" };
   const prisma = {
     project: {
       findFirst: async ({ where }) => !missing && matches(board, where) ? board : null,
@@ -91,7 +92,7 @@ function harness({ ownerId = 99, members = [], status = "Normal", missing = fals
   return { patch, controller, updates, broadcasts, board, route, userRecord, realtime };
 }
 
-const humanMember = (role = "Member") => ({ userId: 6, agentId: null, role });
+const humanMember = (role = "Member", overrides = {}) => ({ userId: 6, agentId: null, role, ...overrides });
 const agentMember = (overrides = {}) => ({
   userId: 6,
   agentId: "agent-owned",

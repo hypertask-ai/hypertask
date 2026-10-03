@@ -5,6 +5,12 @@ const { read, loadTs, harness, humanMember, agentMember } = require("./helpers/b
 const root = path.resolve(__dirname, "..");
 const jiti = require("jiti")(__filename, { interopDefault: true, alias: { "@": path.join(root, "src") } });
 const schemas = jiti(path.join(root, "src/lib/mcp-server/validations/project.validation.ts"));
+const { TOOL_METADATA } = loadTs("src/lib/mcp-server/config/tool-metadata.ts", {
+  "./mcp-standards": jiti(path.join(root, "src/lib/mcp-server/config/mcp-standards.ts")),
+  "@/utils/controllers/reports/reportService": { REPORT_CAPABILITIES: "" },
+  "./tool-summaries": jiti(path.join(root, "src/lib/mcp-server/config/tool-summaries.ts")),
+});
+const { listToolsDeferred, searchToolCatalog, describeToolCatalog } = jiti(path.join(root, "src/lib/mcp-server/deferred-tools.ts"));
 
 function mcpTool(h) {
   const { BoardService } = loadTs("src/lib/mcp-server/lib/services/board.service.ts", {
@@ -30,7 +36,7 @@ function mcpTool(h) {
   });
   const { renameBoardTool } = loadTs("src/lib/mcp-server/tools/rename-board.tool.ts", {
     "../validations/project.validation": schemas,
-    "../config/tool-metadata": { TOOL_METADATA: { RENAME_BOARD: { name: "hypertask_rename_board", description: "Rename a board" } } },
+    "../config/tool-metadata": { TOOL_METADATA },
     "../utils/executeWithService": { executeWithService },
     "../lib/services/board.service": { BoardService },
   });
@@ -59,6 +65,13 @@ test("rename_board is present in MCP registry, metadata and deferred catalog", (
   assert.match(registry, /\n  renameBoardTool,/);
   assert.match(read("src/lib/mcp-server/config/tool-metadata.ts"), /RENAME_BOARD: \{\s*name: buildToolName\('rename_board'\)/);
   assert.match(read("src/lib/mcp-server/config/tool-summaries.ts"), /RENAME_BOARD: 'Returns the renamed board\.'/);
+  const { tool } = mcpTool(harness());
+  assert.equal(tool.name, "hypertask_rename_board");
+  assert.equal(listToolsDeferred([tool])[0].description, "Returns the renamed board.");
+  assert.equal(searchToolCatalog([tool], "rename board")[0].name, tool.name);
+  const described = describeToolCatalog([tool], tool.name);
+  assert.deepEqual(described.inputSchema.required, ["project_id", "title"]);
+  assert.equal(described.inputSchema.properties.title.maxLength, 200);
 });
 
 test("rename_board is registered in AI chat and marked as a write with a status label", () => {
@@ -77,6 +90,14 @@ test("MCP tool sends the CLI-compatible PATCH and reaches the UI controller", as
   assert.equal(result.success, true);
   assert.deepEqual(requests, [{ endpoint: "/mcp/projects/15", method: "PATCH", body: '{"title":"Agents & Infra"}' }]);
   assert.equal(h.board.title, "Agents & Infra");
+  assert.equal(h.updates.length, 1);
+});
+
+test("MCP managed-agent rename reaches the shared controller with its agent scope", async () => {
+  const h = harness({ members: [agentMember()], auth: { user: { id: 6 }, agentId: "agent-owned" } });
+  const result = JSON.parse(await mcpTool(h).tool.execute({ project_id: 15, title: "Agent rename" }, "test-token"));
+  assert.equal(result.success, true);
+  assert.equal(h.board.title, "Agent rename");
   assert.equal(h.updates.length, 1);
 });
 
