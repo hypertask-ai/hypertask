@@ -9,7 +9,7 @@ import { useSearch } from "@/hooks/Search/useSearch";
 import { cn } from "@/utils/undoActions/helperFuncs";
 import { Fragment, KeyboardEvent, RefObject, useContext } from "react";
 import { useFlag } from "@/hooks/useFlag";
-import { HTPR_6372_SEARCH_RANKING_FLAG, HTPR_6688_SEARCH_AUTOCOMPLETE_FLAG, HTPR_6865_SEARCH_LAYOUT_FLAG } from "@/lib/flags/keys";
+import { HTPR_6372_SEARCH_RANKING_FLAG, HTPR_6688_SEARCH_AUTOCOMPLETE_FLAG, HTPR_6865_SEARCH_LAYOUT_FLAG, HTPR_6878_SEARCH_LABEL_SCOPE_FLAG } from "@/lib/flags/keys";
 import { highlightedTitle } from "@/lib/search/autocomplete";
 import { HTPR_6370_SEARCH_CHIPS_FLAG, HTPR_6369_SEARCH_OPERATORS_FLAG } from "@/lib/flags/keys";
 import { MobileViewContext } from "@/lib/contexts/mobileContext";
@@ -42,11 +42,13 @@ const SearchComp = ({
   const autocompleteEnabled = autocompleteFlagEnabled && chipsFlagEnabled && operatorsFlagEnabled;
   const layoutFlagEnabled = useFlag(HTPR_6865_SEARCH_LAYOUT_FLAG);
   const layoutEnabled = layoutFlagEnabled && autocompleteEnabled;
+  const labelScopeFlagEnabled = useFlag(HTPR_6878_SEARCH_LABEL_SCOPE_FLAG);
   const setAiChatPendingPrompt = useSetRecoilState(aiChatPendingPromptAtom);
   const { openAIChatInterface } = useGlobalUIState();
   const isMbl = useContext(MobileViewContext);
   const appShellRailOn = useRecoilValue(appShellRailAtom) && !isMbl;
   const {
+    availableSearchBoards,
     setSelectedIndex,
     selectedIndex,
     tasksInputRef,
@@ -82,8 +84,8 @@ const SearchComp = ({
 
   // Ask AI hands the query to the single general AI chat (auto-sent there via
   // aiChatPendingPromptAtom) instead of a separate in-search panel.
-  function openAskAi() {
-    const query = inputValue.trim();
+  function openAskAi(readableQuery?: string) {
+    const query = labelScopeFlagEnabled && layoutEnabled && readableQuery !== undefined ? readableQuery : inputValue.trim();
     if (!query || (!layoutEnabled && query.length < 2)) return;
     setAiChatPendingPrompt(query);
     openAIChatInterface();
@@ -115,6 +117,7 @@ const SearchComp = ({
                 inputRef={tasksInputRef}
                 recentSearches={searchCache.history}
                 layoutEnabled={layoutEnabled}
+                availableBoards={labelScopeFlagEnabled && layoutEnabled ? availableSearchBoards : undefined}
                 onAskAi={openAskAi}
                 showSuggestions={isSearchDraft}
                 autocompleteEnabled

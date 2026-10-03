@@ -2,7 +2,7 @@
 
 import UserAvatar from "@/components/Common/UserAvatar";
 import { useFlag } from "@/hooks/useFlag";
-import { HTPR_6865_SEARCH_LAYOUT_FLAG } from "@/lib/flags/keys";
+import { HTPR_6865_SEARCH_LAYOUT_FLAG, HTPR_6878_SEARCH_LABEL_SCOPE_FLAG } from "@/lib/flags/keys";
 import { MentionListRows } from "@/components/AI_CHAT/MentionListComp";
 import { activeSearchValue, candidateQuery, chipQuery, splitSearchChips } from "@/lib/search/chips";
 import { operatorMatches, parseSearchTokens, SEARCH_OPERATORS, type Names, type SearchOperator, type SearchToken } from "@/lib/search/operators";
@@ -11,7 +11,7 @@ import { searchConfig } from "@/lib/configs/search.config";
 import { Hash, UserRound, X } from "lucide-react";
 import React, { type ChangeEvent, type KeyboardEvent, type RefObject, useEffect, useRef, useState } from "react";
 
-type Candidate = SearchCandidate & { query?: string; operator?: SearchOperator; kind?: "ai" | "operator" | "value" | "recent" };
+type Candidate = SearchCandidate & { count?: number; byName?: boolean; query?: string; operator?: SearchOperator; kind?: "ai" | "operator" | "value" | "recent" };
 type Props = {
   value: string;
   onChange: (value: string) => void;
@@ -21,13 +21,16 @@ type Props = {
   autocompleteEnabled?: boolean;
   recentSearches?: string[];
   layoutEnabled?: boolean;
-  onAskAi?: () => void;
+  availableBoards?: { id: number; title?: string }[];
+  onAskAi?: (readableQuery?: string) => void;
   showSuggestions?: boolean;
 };
 
-export default function SearchChipsInput({ value, onChange, onRun, boardId, inputRef, autocompleteEnabled = false, recentSearches = [], layoutEnabled: layoutRequested = false, onAskAi, showSuggestions = true }: Props) {
+export default function SearchChipsInput({ value, onChange, onRun, boardId, inputRef, autocompleteEnabled = false, recentSearches = [], layoutEnabled: layoutRequested = false, availableBoards = [], onAskAi, showSuggestions = true }: Props) {
   const layoutFlagEnabled = useFlag(HTPR_6865_SEARCH_LAYOUT_FLAG);
   const layoutEnabled = layoutFlagEnabled && layoutRequested && autocompleteEnabled;
+  const labelScopeFlagEnabled = useFlag(HTPR_6878_SEARCH_LABEL_SCOPE_FLAG);
+  const labelScopeEnabled = labelScopeFlagEnabled && layoutEnabled;
   const [editing, setEditing] = useState(false);
   const [names, setNames] = useState<Names>({});
   const [chipLabels, setChipLabels] = useState<Record<string, string>>({});
@@ -41,7 +44,19 @@ export default function SearchChipsInput({ value, onChange, onRun, boardId, inpu
   const pickerRef = useRef<HTMLDivElement>(null);
   const [focused, setFocused] = useState(false);
   const [caretAtEnd, setCaretAtEnd] = useState(true);
-  const { chips, text } = splitSearchChips(value, editing, names, autocompleteEnabled);
+  const queryNames = labelScopeEnabled ? { ...names,
+    in: [...(names.in ?? []), ...availableBoards.map((board) => board.title ?? '')],
+    board: [...(names.board ?? []), ...availableBoards.map((board) => board.title ?? '')],
+  } : names;
+  const { chips, text } = splitSearchChips(value, editing, queryNames, autocompleteEnabled);
+  const pickedBoards = labelScopeEnabled ? [...new Set(parseSearchTokens(value, queryNames)
+    .filter((token) => !token.negated && (token.operator === 'in' || token.operator === 'board'))
+    .flatMap((token) => {
+      const name = token.value.replace(/^#/, '').trim();
+      return /^\d+$/.test(name) ? [Number(name)] : availableBoards
+        .filter((board) => board.title?.toLowerCase() === name.toLowerCase()).map((board) => board.id);
+    }))].join(',') : '';
+  const summary = [...chips.map(chipText), text.trim()].filter(Boolean).join(' ');
   const completion = autocompleteEnabled ? searchCompletion(text, names) : null;
   const active = autocompleteEnabled ? completion : activeSearchValue(text, names);
   const tips = autocompleteEnabled && focused && !value.trim();
@@ -56,7 +71,7 @@ export default function SearchChipsInput({ value, onChange, onRun, boardId, inpu
     ...(layoutEnabled ? [...new Set(recentSearches)] : recentSearches).map((query, index) => ({ id: `recent-${index}`, name: layoutEnabled ? query : `Recent: ${query}`, query, kind: 'recent' as const })),
     ...SEARCH_OPERATORS.map((operator) => ({ id: operator, name: `${SEARCH_TIPS[operator].example} - ${SEARCH_TIPS[operator].meaning}`, operator, kind: 'operator' as const })),
   ] : layoutEnabled ? [
-    ...(value.trim() ? [{ id: 'ask-ai', name: value.trim(), kind: 'ai' as const }] : []),
+    ...(value.trim() ? [{ id: 'ask-ai', name: labelScopeEnabled ? summary : value.trim(), kind: 'ai' as const }] : []),
     ...(localRows ?? []).map((row) => ({ ...row, kind: completion?.kind === 'operator' ? 'operator' as const : 'value' as const })),
     ...((localRows === null || genericPrefix) ? candidates.map((row) => ({ ...row, kind: 'value' as const })) : []),
   ] : localRows ?? candidates;
@@ -96,6 +111,7 @@ export default function SearchChipsInput({ value, onChange, onRun, boardId, inpu
     const timer = setTimeout(() => Promise.all(operators.map(async (operator) => {
       const params = new URLSearchParams({ operator, value: lookupValue ?? '' });
       if (boardId) params.set("boardId", String(boardId));
+      if (labelScopeEnabled && operator === 'label' && pickedBoards) params.set('boards', pickedBoards);
       const response = await fetch(`/api/search/values?${params}`, { signal: controller.signal });
       if (!response.ok) throw new Error("Value lookup failed");
       const result = await response.json() as { candidates: Candidate[] };
@@ -120,7 +136,7 @@ export default function SearchChipsInput({ value, onChange, onRun, boardId, inpu
         setLoading(false);
       }), 180);
     return () => { clearTimeout(timer); controller.abort(); ++lookup.current; };
-  }, [picker?.operator, picker?.value, dismissed, boardId, autocompleteEnabled, layoutEnabled, genericPrefix?.[1]]);
+  }, [picker?.operator, picker?.value, dismissed, boardId, autocompleteEnabled, layoutEnabled, genericPrefix?.[1], labelScopeEnabled, pickedBoards]);
 
   useEffect(() => {
     if (editing) return;
@@ -138,6 +154,7 @@ export default function SearchChipsInput({ value, onChange, onRun, boardId, inpu
       const tail = token.query.slice(matches[matchIndex].valueStart, matches[matchIndex + 1]?.start ?? token.query.length).trim();
       const params = new URLSearchParams({ operator: token.operator, value: token.value.replace(/^[@#]/, ''), resolve: tail });
       if (boardId) params.set('boardId', String(boardId));
+      if (labelScopeEnabled && token.operator === 'label' && pickedBoards) params.set('boards', pickedBoards);
       const response = await fetch(`/api/search/values?${params}`, { signal: controller.signal });
       if (!response.ok) throw new Error('Value lookup failed');
       const result = await response.json() as { candidates: Candidate[]; resolved?: string; resolvedId?: string };
@@ -156,7 +173,7 @@ export default function SearchChipsInput({ value, onChange, onRun, boardId, inpu
       setHydrationStatus(null);
     }).catch(() => { if (!controller.signal.aborted) setHydrationStatus('error'); });
     return () => controller.abort();
-  }, [value, editing, boardId, layoutEnabled, layoutEnabled ? recentSearches.join('\n') : '']);
+  }, [value, editing, boardId, layoutEnabled, layoutEnabled ? recentSearches.join('\n') : '', labelScopeEnabled, pickedBoards]);
 
   function change(event: ChangeEvent<HTMLInputElement>) {
     // Clearing the draft must not reactivate the last committed chip.
@@ -186,7 +203,8 @@ export default function SearchChipsInput({ value, onChange, onRun, boardId, inpu
   function choose(row: Candidate) {
     if (layoutEnabled && row.kind === 'ai') {
       setDismissed(true);
-      onAskAi?.();
+      if (labelScopeEnabled) onAskAi?.(summary);
+      else onAskAi?.();
       return;
     }
     if (tips && row.query !== undefined) {
@@ -213,9 +231,10 @@ export default function SearchChipsInput({ value, onChange, onRun, boardId, inpu
     if (!target) return;
     const before = text.slice(0, target.start - (genericPrefix && target.negated ? 1 : 0)).trim();
     const after = text.slice(target.end ?? text.length).trim();
-    const selected = `${target.negated ? '-' : ''}${candidateQuery(target.operator, row.name, row.id)}`;
-    setChipLabels((previous) => ({ ...previous, [`${target.operator}:${row.id}`]: row.name }));
-    if (localRows === null || genericPrefix) setNames((previous) => ({ ...previous, [target.operator]: [...(previous[target.operator as keyof Names] ?? []), String(row.id)] }));
+    const selectedId = labelScopeEnabled && target.operator === 'label' && row.byName ? undefined : row.id;
+    const selected = `${target.negated ? '-' : ''}${candidateQuery(target.operator, row.name, selectedId)}`;
+    setChipLabels((previous) => ({ ...previous, [`${target.operator}:${selectedId ?? row.name}`]: row.name }));
+    if (localRows === null || genericPrefix) setNames((previous) => ({ ...previous, [target.operator]: [...(previous[target.operator as keyof Names] ?? []), String(selectedId ?? row.name)] }));
     const next = chipQuery(chips, [before, selected, after].filter(Boolean).join(' '));
     setEditing(false);
     setDismissed(true);
@@ -280,17 +299,16 @@ export default function SearchChipsInput({ value, onChange, onRun, boardId, inpu
       <button key={`${row.kind}-${row.operator ?? ''}-${row.id}`} id={`mention-button-${index}`} type="button" role="option"
         aria-selected={row === selectedRow} onMouseEnter={() => setSelectedIndex(index)} onClick={() => choose(row)}
         onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') event.stopPropagation(); }}
-        className={`grid w-full min-w-0 grid-cols-1 gap-1 rounded-sm py-2 text-left text-dense text-white-black hover:bg-active-elementBg ${row === selectedRow ? 'bg-active-elementBg' : ''} ${row.email ? '@md:grid-cols-2 @md:gap-4' : ''}`}>
+        className={`grid w-full min-w-0 grid-cols-1 gap-1 rounded-sm py-2 text-left text-dense text-white-black hover:bg-active-elementBg ${row === selectedRow ? 'bg-active-elementBg' : ''} ${row.email ? '@md:grid-cols-2 @md:gap-4' : ''}${labelScopeEnabled && row.count === 0 ? ' opacity-50' : ''}`}>
         {tip ? <span><strong className="block font-semibold">{tip.example}</strong><span className="text-meta text-text-light-gray">{tip.meaning}</span></span>
           : recent ? <span className="flex min-w-0 flex-wrap items-center gap-1 break-words">{recent.chips.map((chip, i) => <span key={i} className={`min-w-0 max-w-full break-all rounded-sm px-2 py-1 text-micro ${searchFilterColour(chip.operator)}`}>{chipText(chip)}</span>)}<span className="min-w-0 break-all">{recent.text}</span></span>
           : row.kind === 'ai' ? <span className="flex min-w-0 gap-2"><span className="shrink-0 font-semibold text-hypertasks-ai-purple">Ask AI</span><span className="min-w-0 break-words">{row.name}</span></span>
-          : <span className="flex min-w-0 items-center gap-2 break-words">{row.email && <UserAvatar name={row.name} size={20} alt="" />}<span className="min-w-0 break-words">{matched(row.name)}</span></span>}
+          : <span className="flex min-w-0 items-center gap-2 break-words">{row.email && <UserAvatar name={row.name} size={20} alt="" />}<span className="min-w-0 break-words">{matched(row.name)}</span>{labelScopeEnabled && row.count !== undefined && <span className="ml-auto shrink-0 text-right text-meta text-text-light-gray">{row.count}</span>}</span>}
         {row.email && <span className="min-w-0 break-all text-meta text-text-light-gray">{matched(row.email)}</span>}
       </button>
     );
   }
 
-  const summary = [...chips.map(chipText), text.trim()].filter(Boolean).join(' ');
   return (
     <div className="relative w-full px-4 @md:px-9">
       <div className="flex min-h-10 flex-wrap items-center gap-1" onClick={() => inputRef.current?.focus()}>

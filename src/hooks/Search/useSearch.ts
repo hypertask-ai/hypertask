@@ -1,6 +1,6 @@
 import { searchConfig } from "@/lib/configs/search.config";
 import { HTPR_6369_SEARCH_OPERATORS_FLAG } from "@/lib/flags/keys";
-import { HTPR_6370_SEARCH_CHIPS_FLAG, HTPR_6688_SEARCH_AUTOCOMPLETE_FLAG, HTPR_6865_SEARCH_LAYOUT_FLAG } from "@/lib/flags/keys";
+import { HTPR_6370_SEARCH_CHIPS_FLAG, HTPR_6688_SEARCH_AUTOCOMPLETE_FLAG, HTPR_6865_SEARCH_LAYOUT_FLAG, HTPR_6878_SEARCH_LABEL_SCOPE_FLAG } from "@/lib/flags/keys";
 import { useFlag } from "@/hooks/useFlag";
 import { useDeviceContext } from "@/lib/contexts/deviceContext";
 import { useQueryClient } from "@tanstack/react-query";
@@ -88,6 +88,7 @@ export function useSearch(
   const searchAutocompleteEnabled = useFlag(HTPR_6688_SEARCH_AUTOCOMPLETE_FLAG) && searchChipsEnabled;
   const searchLayoutFlagEnabled = useFlag(HTPR_6865_SEARCH_LAYOUT_FLAG);
   const searchLayoutEnabled = searchLayoutFlagEnabled && searchAutocompleteEnabled;
+  const searchLabelScopeFlagEnabled = useFlag(HTPR_6878_SEARCH_LABEL_SCOPE_FLAG);
   const isSearchDraft = searchLayoutEnabled && submittedQuery !== inputValue.trim();
 
   function handleProjectsFromCache() {
@@ -837,6 +838,7 @@ export function useSearch(
   }, [inputValue, includeArchived, projects, _fromProject, searchOperatorsEnabled, searchAutocompleteEnabled, searchLayoutEnabled]);
 
   return {
+    availableSearchBoards: searchLabelScopeFlagEnabled && searchLayoutEnabled ? projects : [],
     setSelectedIndex,
     selectedIndex,
     tasksInputRef,
