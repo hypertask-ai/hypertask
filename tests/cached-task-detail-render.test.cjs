@@ -163,13 +163,13 @@ test("description paints cached content and drafts before constructing the rich 
   assert.equal(editorMounts, 1, "the existing editor mounts after the cached body paints");
 });
 
-test("only pending cached details defer property controls and comment editors until after first paint", () => {
+test("instant cached details defer property controls and comment editors until after first paint", () => {
   const state = fs.readFileSync(path.join(root, "src/hooks/Task Detail/useTaskDetailGlobalStates.ts"), "utf8");
   const panels = fs.readFileSync(path.join(root, "src/app/detail/[...slug]/TaskDetailPanels.tsx"), "utf8");
   const thread = fs.readFileSync(path.join(root, "src/components/PageComponents/TaskDetail/CommentAndDescription/index.tsx"), "utf8");
-  assert.match(state, /useState\(!instantTicketOpen \|\| !initialCommentsPayload\.pending\)/);
-  assert.match(state, /requestAnimationFrame\(\(\) => \{\s*frame = requestAnimationFrame\(\(\) => setSecondaryPanelsReady\(true\)\)/);
-  assert.match(state, /return \(\) => cancelAnimationFrame\(frame\)/);
+  assert.match(state, /useState\(!instantTicketOpen\)/);
+  assert.match(state, /requestAnimationFrame\(\(\) => \{\s*frame = requestAnimationFrame\(\(\) => \{\s*if \(window\.requestIdleCallback\)/);
+  assert.match(state, /return \(\) => \{\s*cancelAnimationFrame\(frame\)/);
   assert.match(panels, /!_mbl && secondaryPanelsReady !== false && \(\s*<TaskInfo/);
   assert.match(panels, /_mbl && !embedded && secondaryPanelsReady !== false && \(instantTicketOpen \? <Suspense fallback=\{null\}><NewCommentComponent/);
   assert.match(thread, /taskInfoVirtualIndex && _mbl && secondaryPanelsReady !== false/);

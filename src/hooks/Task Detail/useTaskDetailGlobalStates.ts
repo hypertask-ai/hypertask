@@ -93,14 +93,32 @@ const useTaskDetailGlobalStates = (
   // console.log("🚀 ~ useTaskDetailGlobalStates ~ editMode:", editMode)
   const instantTicketOpen = useFlag(HTPR_6752_INSTANT_TICKET_OPEN_FLAG);
   const initialCommentsPayload = useMemo(() => JSON.parse(_comments), [_comments]);
-  const [secondaryPanelsReady, setSecondaryPanelsReady] = useState(!instantTicketOpen || !initialCommentsPayload.pending);
+  // Cached comments do not make the first editor/property-control mount cheap.
+  const [secondaryPanelsReady, setSecondaryPanelsReady] = useState(!instantTicketOpen);
   useEffect(() => {
     if (secondaryPanelsReady) return;
-    // Cached title and body paint before mounting editors and property controls.
+    const reveal = () => setSecondaryPanelsReady(true);
+    let idle: number | undefined;
+    let timer: number | undefined;
+    // Let the primary content paint before doing synchronous editor setup.
     let frame = requestAnimationFrame(() => {
-      frame = requestAnimationFrame(() => setSecondaryPanelsReady(true));
+      frame = requestAnimationFrame(() => {
+        if (window.requestIdleCallback) {
+          idle = window.requestIdleCallback(reveal, { timeout: 1000 });
+        } else {
+          timer = window.setTimeout(reveal, 0);
+        }
+      });
     });
-    return () => cancelAnimationFrame(frame);
+    document.addEventListener("pointerdown", reveal, true);
+    document.addEventListener("keydown", reveal, true);
+    return () => {
+      cancelAnimationFrame(frame);
+      if (idle !== undefined) window.cancelIdleCallback(idle);
+      if (timer !== undefined) window.clearTimeout(timer);
+      document.removeEventListener("pointerdown", reveal, true);
+      document.removeEventListener("keydown", reveal, true);
+    };
   }, [secondaryPanelsReady]);
   const [comments, setComments] = useState<IComment[]>(
     initialCommentsPayload.comments ?? []
