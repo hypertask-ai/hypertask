@@ -49,6 +49,8 @@ test("pages query never fires must not block opening a cached ticket", async (t)
     },
     "@/lib/state": { useRecoilValue: () => ({ id: 2343 }) },
     "@/store": { currentUserAtom: {} },
+    "@/hooks/useFlag": { useFlag: () => true },
+    "@/lib/flags/keys": { HTPR_6899_STABLE_LAYOUT_FLAG: "htpr-6899-stable-layout" },
     "@/hooks/General/useGetUserPreferences": { useGetUserPreferences: () => ({ data: { commentsStacked: false, scrollSetting: "None" } }) },
     "@/lib/constants": { default: { CommentsTQPrefixKey: "comments" } },
     "@/lib/contexts/TaskDetail/FollowersProvider": { FollowersProvider: ({ children }) => children },
