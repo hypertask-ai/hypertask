@@ -116,6 +116,8 @@ function loadUpdateController(
   };
   const aliases = new Map();
   const tx = {
+    $executeRaw: async () => {},
+    project: { findUnique: async ({ where }) => ({ uniqueIdentifier: where.id === MEMBER_PROJECT ? "M" : "S" }) },
     taskNumberAlias: {
       upsert: async (query) => {
         assert.equal(calls.transactionActive, true);
@@ -688,6 +690,7 @@ function loadMoveController({
   identityConflicts = 0,
   subTasks = [],
   updateImplementation,
+  destinationIndices = [],
 }) {
   const calls = { downstream: 0, queue: 0 };
   const currentTask = {
@@ -766,10 +769,10 @@ function loadMoveController({
     "@/lib/api/errorMessage": execute(compile("src/lib/api/errorMessage.ts"), {}),
     "@/utils/controllers/getMemberAndOwnerForBoard": async () => [],
     "@/utils/generateRank": () => "rank",
-    "@/utils/controllers/tasks/create": {
-      getUniqueTaskCount: async () => {
+    "./getNextUniqueTaskIndex": {
+      getNextUniqueTaskIndex: async () => {
         calls.downstream += 1;
-        return taskCount++;
+        return Math.max(0, ...destinationIndices) + (++taskCount);
       },
     },
     "@/pages/api/queues/duedateQueue": {
@@ -954,4 +957,17 @@ test("cross-board moves reject a section from another board without side effects
 
   assert.equal(result.statusCode, 404);
   assert.deepEqual(calls, { downstream: 0, queue: 0 });
+});
+
+test("cross-board move after permanent deletes allocates beyond the highest surviving index", async () => {
+  const { move } = loadMoveController({
+    targetProjectId: OWNER_PROJECT,
+    sectionProjectId: OWNER_PROJECT,
+    agentId: null,
+    destinationIndices: [1, 3, 4],
+  });
+  const result = await move();
+  assert.equal(result.success, true);
+  assert.equal(result.task.uniqueIndex, 5);
+  assert.equal(result.task.ticketNumber, "T-5");
 });

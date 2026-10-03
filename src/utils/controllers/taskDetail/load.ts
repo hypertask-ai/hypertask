@@ -2,6 +2,7 @@ import { Prisma, PrismaClient, Status } from "@prisma/client";
 import { waitUntil } from "@vercel/functions";
 import { broadcastTaskChange } from "@/lib/realtime/server";
 import prisma from "@/lib/prisma";
+import { findPrefixAliasTasks } from "@/utils/controllers/projects/findPrefixAliasTasks";
 import type { TaskDetailSlug } from "./types";
 import type { IComment } from "@/models/model";
 import { CYCLE_WINDOW_SIZE } from "@/lib/cycles";
@@ -192,6 +193,26 @@ export async function findTaskNumberAlias(slug: TaskDetailSlug, userId: number) 
     where: { ...taskWhere(alias.task, userId), id: alias.task.id },
     select: { projectId: true, uniqueIndex: true },
   });
+}
+
+export async function findTaskByTicketNumber(ticketNumber: string, userId: number, projectId?: number) {
+  const projectAccess = {
+    status: { not: Status.Deleted },
+    OR: [{ members: { some: { userId } } }, { ownerId: userId }],
+  };
+  const identity = { ticketNumber, ...(projectId ? { projectId } : {}), status: { not: Status.Deleted } };
+  const live = await prisma.task.findFirst({
+    where: identity,
+    select: { id: true },
+  });
+  if (live) {
+    return prisma.task.findFirst({
+      where: { ...identity, id: live.id, project: projectAccess },
+      select: { projectId: true, uniqueIndex: true },
+    });
+  }
+  const tasks = await findPrefixAliasTasks(ticketNumber, projectAccess, projectId);
+  return tasks.length === 1 ? tasks[0] : null;
 }
 
 /** Task detail SSR — fields used by TaskDetailComp + hooks (see taskDetail benchmark parity). */
@@ -423,7 +444,11 @@ export async function fetchTaskDetail(
 ) {
   // Guard here, not just at the page: getTask() takes `uniqueIndex: any` from
   // the API layer and would otherwise send NaN into Prisma too (HTPR-4838).
-  const slug = parseDetailSlug([projectSlug, String(uniqueIndex)]);
+  const ticketNumber = typeof uniqueIndex === "string" && /^[A-Z0-9]+-\d+$/.test(uniqueIndex)
+    ? uniqueIndex : null;
+  const slug = ticketNumber
+    ? await findTaskByTicketNumber(ticketNumber, userId, parseProjectSlug(projectSlug))
+    : parseDetailSlug([projectSlug, String(uniqueIndex)]);
   if (!slug) return null;
 
   const task = await prisma.task.findFirst({

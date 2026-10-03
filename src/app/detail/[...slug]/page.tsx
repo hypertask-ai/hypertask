@@ -3,6 +3,7 @@ import {
   fetchCommentsForSlug,
   fetchTaskDetail,
   findTaskNumberAlias,
+  findTaskByTicketNumber,
   parseDetailSlug,
   parseProjectSlug,
 } from "@/utils/controllers/taskDetail/load";
@@ -65,6 +66,12 @@ export default async function Page(
   // No ticket number in the URL: send them to the board rather than query for
   // task NaN, which Prisma rejects outright (HTPR-4838). Done before any other
   // await so nothing has started streaming.
+  if (/^[A-Z0-9]+-\d+$/.test(params.slug?.[1] ?? "")) {
+    const user = await requireServerCookieUser();
+    const task = await findTaskByTicketNumber(params.slug[1], user.id, parseProjectSlug(params.slug[0]));
+    if (!task) return <Unauthorized />;
+    redirect(`/detail/project-${task.projectId}/${task.uniqueIndex}`);
+  }
   const detailSlug = parseDetailSlug(params.slug);
   if (!detailSlug) {
     const projectId = parseProjectSlug(params.slug?.[0] ?? "");

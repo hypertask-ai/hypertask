@@ -3,13 +3,14 @@ import createLog from "../logs/createLog";
 import { CreateLogInput } from "@/models/model";
 
 import prisma from "@/lib/prisma";
-import { getSequentialLetters } from "@/utils/helperFunctions/helperFunctions";
+import { normalizeProjectPrefix, suggestProjectPrefix } from "@/lib/projectPrefix";
+import { HTPR_6868_TICKET_PREFIX_FLAG, isFeatureEnabled } from "@/lib/flags";
 import { buildDefaultTitle } from "@/utils/helperFunctions/Views/ViewsHelperFunctions";
 import { defaultFilterSettings } from "@/utils/helperFunctions/Views/FilterHelperFunctions";
 import { FREE_BOARD_LIMIT_MESSAGE, isBoardLimitReached } from "./boardQuota";
 
 
-const create = async (userId: number, title: string, teamId: string, googleAccountId: string) => {
+const create = async (userId: number, title: string, teamId: string, googleAccountId: string, ticketPrefix?: unknown) => {
   try {
     if (!userId || !title || !teamId || !googleAccountId) {
 
@@ -44,21 +45,36 @@ const create = async (userId: number, title: string, teamId: string, googleAccou
     let projectCount = Date.now() //temp count
     let project : any = undefined
 
-    project = await prisma.project.create({
-      data: {
-        ownerId: userId,
-        name: `project-${projectCount + 1}`,
-        title: title,
-        teamId: teamId,
-        googleAccountId: googleAccountId,
-        section: { // Add the section field with the related section records
-          create: [
-            { section_title: "Todo", ranking: "A0100" },
-            { section_title: "Doing", ranking: "A0200" },
-            { section_title: "Done", ranking: "A0300" },
-          ],
+    const hasPrefix = ticketPrefix !== undefined;
+    if (hasPrefix && !(await isFeatureEnabled(HTPR_6868_TICKET_PREFIX_FLAG, userId))) {
+      return { status: 403, json: { message: "Custom ticket prefixes are not enabled" } };
+    }
+    const prefix = hasPrefix ? normalizeProjectPrefix(ticketPrefix) : undefined;
+    project = await prisma.$transaction(async (tx) => {
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${teamId}))`;
+      if (prefix && await tx.project.findFirst({
+        where: { teamId, uniqueIdentifier: prefix, status: { not: "Deleted" } },
+        select: { id: true },
+      })) {
+        throw new Error("Ticket prefix is already used by another board in this team");
+      }
+      return tx.project.create({
+        data: {
+          ownerId: userId,
+          uniqueIdentifier: prefix,
+          name: `project-${projectCount + 1}`,
+          title: title,
+          teamId: teamId,
+          googleAccountId: googleAccountId,
+          section: { // Add the section field with the related section records
+            create: [
+              { section_title: "Todo", ranking: "A0100" },
+              { section_title: "Doing", ranking: "A0200" },
+              { section_title: "Done", ranking: "A0300" },
+            ],
+          },
         },
-      },
+      });
     });
 
     project = await prisma.project.update({
@@ -89,7 +105,9 @@ const create = async (userId: number, title: string, teamId: string, googleAccou
       },
     });
     createProjectViewAndCreateDefault({projectId:project.id, userId})
-    await updateUniqueIdentifier(teamId, title, project.id)
+    if (!hasPrefix) {
+      project.uniqueIdentifier = await updateUniqueIdentifier(teamId, title, project.id);
+    }
 
     const createLogBody: CreateLogInput = {
       log: `${project.owner.displayName} created a board "${project.title}" in team "${project.team?.title}"`,
@@ -107,7 +125,7 @@ const create = async (userId: number, title: string, teamId: string, googleAccou
     console.log(error);
     return ({
       status: 400,
-      json: { message: JSON.stringify(error) }
+      json: { message: error instanceof Error ? error.message : "Unable to create board" }
     })
   }
 
@@ -198,32 +216,30 @@ export async function createProjectViewAndCreateDefault(
 }
 
 export async function updateUniqueIdentifier(teamId: string, title: string, projectId: number) {
-  // getSequentialLetters returns "Not enough characters" for very short titles — fall back to a
-  // cleaned slug so a board ALWAYS gets a usable base. Every board MUST end up with a non-null
-  // identifier; a null one renders task IDs as "-<n>".
-  const raw = getSequentialLetters(title);
-  const base = /^[A-Z0-9]{2,5}$/.test(raw)
-    ? raw
-    : ((title || "").replace(/[^a-zA-Z0-9]/g, "").toUpperCase().slice(0, 4) || "BRD");
+  const base = suggestProjectPrefix(title);
+  return prisma.$transaction(async (tx) => {
+    await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${teamId}))`;
 
-  // Ensure uniqueness within the team; on collision append a counter (kept <= 5 chars).
-  let candidate = base;
-  let clash = await prisma.project.findFirst({
-    where: { teamId, uniqueIdentifier: candidate, status: { not: "Deleted" } },
-  });
-  for (let i = 1; clash; i++) {
-    const suffix = String(i);
-    if (suffix.length > 5) {
-      throw new Error("Could not assign unique project identifier");
-    }
-    candidate = `${base.slice(0, 5 - suffix.length)}${suffix}`;
-    clash = await prisma.project.findFirst({
+    // Ensure uniqueness within the team; on collision append a counter (kept <= 5 chars).
+    let candidate = base;
+    let clash = await tx.project.findFirst({
       where: { teamId, uniqueIdentifier: candidate, status: { not: "Deleted" } },
     });
-  }
+    for (let i = 1; clash; i++) {
+      const suffix = String(i);
+      if (suffix.length >= 5) {
+        throw new Error("Could not assign unique project identifier");
+      }
+      candidate = `${base.slice(0, 5 - suffix.length)}${suffix}`;
+      clash = await tx.project.findFirst({
+        where: { teamId, uniqueIdentifier: candidate, status: { not: "Deleted" } },
+      });
+    }
 
-  await prisma.project.update({
-    where: { id: projectId },
-    data: { uniqueIdentifier: candidate },
+    await tx.project.update({
+      where: { id: projectId },
+      data: { uniqueIdentifier: candidate },
+    });
+    return candidate;
   });
 }

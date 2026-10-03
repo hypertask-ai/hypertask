@@ -1,4 +1,5 @@
 import prisma from '@/lib/prisma';
+import { findPrefixAliasTasks } from '@/utils/controllers/projects/findPrefixAliasTasks';
 import { getProjectWhere } from '@/utils/controllers/projects/getAllIncludes';
 
 export class TaskIdentifierAmbiguityError extends Error {
@@ -68,7 +69,7 @@ export async function findTaskByIdentifier(
     select: { projectId: true, uniqueIndex: true, task: { select: { id: true, projectId: true } } },
     orderBy: [{ projectId: 'asc' }, { id: 'asc' }],
   });
-  if (!aliases.length) return null;
+  if (!aliases.length && !ticket_number) return null;
   const reusedNumbers = await prisma.task.findMany({
     where: {
       OR: aliases.map(({ projectId, uniqueIndex }) => ({ projectId, uniqueIndex })),
@@ -80,6 +81,9 @@ export async function findTaskByIdentifier(
     task => task.projectId === alias.projectId && task.uniqueIndex === alias.uniqueIndex
   ));
   const tasks = [...new Map(availableAliases.map(({ task }) => [task.id, task])).values()];
+  if (!tasks.length && ticket_number) {
+    tasks.push(...await findPrefixAliasTasks(ticket_number, projectFilter, project_id));
+  }
   if (!project_id && tasks.length > 1) {
     throw new TaskIdentifierAmbiguityError(ticket_number!);
   }
@@ -125,6 +129,8 @@ export async function resolveTaskIdOnly(options: {
     if (!project_id && tasks.length > 1) {
       throw new TaskIdentifierAmbiguityError(ticket_number);
     }
+    if (!tasks.length) tasks.push(...await findPrefixAliasTasks(ticket_number, {}, project_id));
+    if (!project_id && tasks.length > 1) throw new TaskIdentifierAmbiguityError(ticket_number);
     return tasks[0]?.id ?? null;
   }
 

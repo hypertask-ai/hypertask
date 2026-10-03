@@ -60,6 +60,7 @@ function fixture({ tasks = [currentTask], visibleProjects = [20], agentId = null
       },
       findFirst: async ({ where }) => tasks.find(task => matches(task, where)) ?? null,
     },
+    projectPrefixAlias: { findMany: async () => [] },
     taskNumberAlias: {
       findMany: async ({ where, select }) => {
         aliasQueries++;
@@ -84,6 +85,7 @@ function fixture({ tasks = [currentTask], visibleProjects = [20], agentId = null
       },
     },
   };
+  base["@/utils/controllers/projects/findPrefixAliasTasks"] = load("src/utils/controllers/projects/findPrefixAliasTasks.ts", base);
   const resolver = load("src/lib/mcp/tasks/resolveTask.ts", base);
   const detail = load("src/utils/controllers/taskDetail/load.ts", {
     ...base,

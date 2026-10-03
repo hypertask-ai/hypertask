@@ -161,7 +161,8 @@ export function createGeneralCommandActions(context: Context) {
     title: string,
     teamId: string | null,
     googleAccountId: string | null,
-    teamTitle?: string
+    teamTitle?: string,
+    ticketPrefix?: string
   ) => {
     if (!_currentProject) return;
     // The create route rejects with a reason the user needs to see (e.g. the free
@@ -176,6 +177,7 @@ export function createGeneralCommandActions(context: Context) {
         const { data } = await axios.post("/api/projects/create", {
           userId: currentUser?.id,
           title,
+          ...(ticketPrefix !== undefined ? { ticketPrefix } : {}),
           googleAccountId: response.data.googleAccountId,
           teamId: response.data.id,
 
@@ -185,6 +187,7 @@ export function createGeneralCommandActions(context: Context) {
         const { data } = await axios.post("/api/projects/create", {
           userId: currentUser?.id,
           title,
+          ...(ticketPrefix !== undefined ? { ticketPrefix } : {}),
           googleAccountId: googleAccountId,
           teamId: teamId,
 

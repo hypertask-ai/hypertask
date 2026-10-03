@@ -144,7 +144,6 @@ const handler: NextApiHandler = async (
       title,
       userId: requestedUserId,
       projectId: requestedProjectId,
-      projectIdentifier,
       ranking,
       section_title,
       sectionId,
@@ -412,6 +411,7 @@ const handler: NextApiHandler = async (
         });
         if (!sectionRow) throw new TaskSectionValidationError(sectionErrorMessage);
 
+        const currentProject = await tx.project.findUnique({ where: { id: projectId }, select: { uniqueIdentifier: true } });
         const nextUniqueIndex = await getNextUniqueTaskIndex(projectId, tx);
         const currentDate = new Date();
         const body = {
@@ -420,7 +420,7 @@ const handler: NextApiHandler = async (
           section: sectionRow.section_title,
           userId,
           uniqueIndex: nextUniqueIndex,
-          ticketNumber: projectIdentifier + "-" + nextUniqueIndex.toString(),
+          ticketNumber: currentProject?.uniqueIdentifier + "-" + nextUniqueIndex.toString(),
           ranking,
           projectId,
           sectionId: sectionRow.id,

@@ -29,7 +29,8 @@ function loadUpdateUniqueIdentifier(prisma) {
     "@prisma/client": { LogType: {}, Status: {} },
     "../logs/createLog": { __esModule: true, default: () => {} },
     "@/lib/prisma": { __esModule: true, default: prisma },
-    "@/utils/helperFunctions/helperFunctions": { getSequentialLetters },
+    "@/lib/projectPrefix": { suggestProjectPrefix: title => getSequentialLetters(title) },
+    "@/lib/flags": {},
     "@/utils/helperFunctions/Views/ViewsHelperFunctions": {
       buildDefaultTitle: () => "",
     },
@@ -78,6 +79,7 @@ test("identically titled boards receive predictable collision suffixes", async (
       },
     },
   };
+  prisma.$transaction = async callback => callback({ ...prisma, $executeRaw: async () => {} });
   const updateUniqueIdentifier = loadUpdateUniqueIdentifier(prisma);
 
   for (let projectId = 101; projectId <= 112; projectId++) {

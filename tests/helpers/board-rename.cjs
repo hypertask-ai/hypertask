@@ -66,7 +66,8 @@ function harness({ ownerId = 99, ownerAgents = [], members = [], status = "Norma
   };
   const controller = loadTs("src/utils/controllers/projects/update.ts", {
     "@/lib/prisma": prisma,
-    "../tasks/single": { updateTaskSingle: async () => {} },
+    "@/lib/flags": {},
+    "@/lib/projectPrefix": {},
     "./getAllIncludes": access,
   }).default;
   const userRecord = { loadSessionUserRecord: async (id) => ({ id }) };

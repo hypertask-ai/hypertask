@@ -84,6 +84,7 @@ function loadCreateRoute() {
     dueDate: null,
   };
   const tx = {
+    project: { findUnique: async () => ({ uniqueIdentifier: "TEST" }) },
     $executeRaw: async () => undefined,
     section: {
       findFirst: async ({ where }) => {

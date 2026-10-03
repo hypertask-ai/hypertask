@@ -18,6 +18,9 @@ import { useRecoilValue } from "@/lib/state";
 import { currentUserAtom } from "@/store";
 import { KeyCodes } from "@/lib/constants/keyboard-handler";
 import toast from "react-hot-toast";
+import { useFlag } from "@/hooks/useFlag";
+import { HTPR_6868_TICKET_PREFIX_FLAG } from "@/lib/flags/keys";
+import { normalizeProjectPrefix, suggestProjectPrefix } from "@/lib/projectPrefix";
 import { getCreateBoardPendingHeader } from "./createBoardStatus";
 
 type Props = {
@@ -26,7 +29,8 @@ type Props = {
     title: string,
     teamId: string | null,
     googleAccountId: string | null,
-    teamTitle?: string
+    teamTitle?: string,
+    ticketPrefix?: string
   ) => void;
   //payload is only for creating team
   payload?: {
@@ -39,6 +43,9 @@ const CreateBoard = (props: Props) => {
   const currentUser = useRecoilValue(currentUserAtom);
   const { createBoard, payload } = props;
   const [title, setTitle] = useState("");
+  const ticketPrefixEnabled = useFlag(HTPR_6868_TICKET_PREFIX_FLAG);
+  const [prefixDraft, setPrefixDraft] = useState<string | null>(null);
+  const ticketPrefix = prefixDraft ?? suggestProjectPrefix(title);
   const [currentScreen, setCurrentScreen] = useState<
     "Create Board" | "Select Team"
   >("Create Board");
@@ -77,10 +84,12 @@ const CreateBoard = (props: Props) => {
         "Create Board",
         title,
         selectedTeam.id,
-        selectedTeam.googleAccountId
+        selectedTeam.googleAccountId,
+        undefined,
+        ticketPrefixEnabled ? ticketPrefix : undefined
       );
     else if (filteredTeams.length === 0)
-      createBoard("CreateTeamBoard", title, null, null, keyword);
+      createBoard("CreateTeamBoard", title, null, null, keyword, ticketPrefixEnabled ? ticketPrefix : undefined);
   };
 
   const handleKeyDown = (e: KeyboardEvent) => {
@@ -88,11 +97,12 @@ const CreateBoard = (props: Props) => {
       (item) => item.id === selectedTeam.id
     );
 
-    if (e.keyCode === KeyCodes.TAB) {
+    const editingBoardFields = ticketPrefixEnabled && currentScreen === "Create Board";
+    if (e.keyCode === KeyCodes.TAB && !editingBoardFields) {
       e.preventDefault();
       return;
     }
-    if (e.keyCode === KeyCodes.J || e.keyCode === KeyCodes.ARROW_DOWN) {
+    if (!editingBoardFields && (e.keyCode === KeyCodes.J || e.keyCode === KeyCodes.ARROW_DOWN)) {
       if (selectedTeam) {
         if (index === -1 || index === filteredTeams.length - 1) {
           // No action needed
@@ -105,7 +115,7 @@ const CreateBoard = (props: Props) => {
       }
     }
 
-    if (e.keyCode === KeyCodes.K || e.keyCode === KeyCodes.ARROW_UP) {
+    if (!editingBoardFields && (e.keyCode === KeyCodes.K || e.keyCode === KeyCodes.ARROW_UP)) {
       if (selectedTeam) {
         if (index <= 0) {
           // No action needed
@@ -120,13 +130,21 @@ const CreateBoard = (props: Props) => {
 
     if (e.keyCode === KeyCodes.ENTER) {
       if (currentScreen === "Create Board") {
+        if (ticketPrefixEnabled) {
+          try { normalizeProjectPrefix(ticketPrefix); } catch (error) {
+            toast.error((error as Error).message);
+            return;
+          }
+        }
         if (payload) {
           setCreatingTeam(true);
           createBoard(
             "Create Board",
             title,
             payload.teamId,
-            payload.googleAccountId
+            payload.googleAccountId,
+            undefined,
+            ticketPrefixEnabled ? ticketPrefix : undefined
           );
         } else {
           if (title.length < 4) {
@@ -184,7 +202,7 @@ const CreateBoard = (props: Props) => {
   useEffect(() => {
     document.addEventListener("keydown", handleKeyDown);
     return () => document.removeEventListener("keydown", handleKeyDown);
-  }, [title, keyword, selectedTeam, filteredTeams, currentScreen]);
+  }, [title, keyword, selectedTeam, filteredTeams, currentScreen, ticketPrefix, ticketPrefixEnabled]);
 
   useLayoutEffect(() => {
     handleGetTeams();
@@ -221,6 +239,18 @@ const CreateBoard = (props: Props) => {
             value={title}
             placeholder="Board name"
           />
+          {ticketPrefixEnabled && (
+            <>
+              <ModalHeaderComp className="px-[20px]" header="Ticket prefix" />
+              <ModalInput
+                aria-label="Ticket prefix"
+                autofocus={false}
+                onChange={(event: ChangeEvent<HTMLInputElement>) => setPrefixDraft(event.target.value.toUpperCase())}
+                value={ticketPrefix}
+                placeholder="Ticket prefix"
+              />
+            </>
+          )}
         </div>
       ) : (
         //{/* ---------------------- SELECT TEAM ----------------*/}
