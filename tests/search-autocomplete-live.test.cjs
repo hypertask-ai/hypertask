@@ -29,7 +29,7 @@ test('flagged search debounces typing, rejects stale results, and exposes submit
   try {
     source('src/utils/index.ts', { taskBaseUri: '/detail/' })
     source('src/utils/undoActions/helperFuncs.ts', { cn: (...values) => values.filter(Boolean).join(' ') })
-    source('src/hooks/useFlag.tsx', { useFlag: (key) => key === 'htpr-6688-search-autocomplete' ? enabled : true })
+    source('src/hooks/useFlag.tsx', { useFlag: (key) => key === 'htpr-6865-search-layout' ? false : key === 'htpr-6688-search-autocomplete' ? enabled : true })
     source('src/lib/contexts/deviceContext.tsx', { useDeviceContext: () => false })
     const allProjects = [{ id: 7, title: 'Visible' }]
     source('src/hooks/MultiPages/useGetAllProjectsMinimal.ts', { useGetAllProjectsMinimal: () => ({ data: allProjects }) })

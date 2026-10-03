@@ -1,6 +1,6 @@
 import { searchConfig } from "@/lib/configs/search.config";
 import { HTPR_6369_SEARCH_OPERATORS_FLAG } from "@/lib/flags/keys";
-import { HTPR_6370_SEARCH_CHIPS_FLAG, HTPR_6688_SEARCH_AUTOCOMPLETE_FLAG } from "@/lib/flags/keys";
+import { HTPR_6370_SEARCH_CHIPS_FLAG, HTPR_6688_SEARCH_AUTOCOMPLETE_FLAG, HTPR_6865_SEARCH_LAYOUT_FLAG } from "@/lib/flags/keys";
 import { useFlag } from "@/hooks/useFlag";
 import { useDeviceContext } from "@/lib/contexts/deviceContext";
 import { useQueryClient } from "@tanstack/react-query";
@@ -44,6 +44,7 @@ export function useSearch(
   const [__, setTasksPlayList] = useRecoilState(tasksPlayListAtom);
   const [showCommands, ___] = useRecoilState(showCommandsAtom);
   const [inputValue, setInputValue] = useState<string>(_searchTerm ?? "");
+  const [submittedQuery, setSubmittedQuery] = useState<string | null>(null);
   const [typedTasks, setTypedTasks] = useState<ITypedTask[]>([]);
   const [tempInput, setTempInput] = useState<string>("");
   const [selectedHistory, setSelectedHistory] = useState<number | null>(null);
@@ -85,6 +86,8 @@ export function useSearch(
   const searchOperatorsEnabled = useFlag(HTPR_6369_SEARCH_OPERATORS_FLAG);
   const searchChipsEnabled = useFlag(HTPR_6370_SEARCH_CHIPS_FLAG) && searchOperatorsEnabled;
   const searchAutocompleteEnabled = useFlag(HTPR_6688_SEARCH_AUTOCOMPLETE_FLAG) && searchChipsEnabled;
+  const searchLayoutEnabled = useFlag(HTPR_6865_SEARCH_LAYOUT_FLAG) && searchAutocompleteEnabled;
+  const isSearchDraft = searchLayoutEnabled && submittedQuery !== inputValue.trim();
 
   function handleProjectsFromCache() {
     setProjects(allProjects);
@@ -132,6 +135,7 @@ export function useSearch(
   }
 
   function beginSearch(searchTerm: string, showArchived: boolean) {
+    setSubmittedQuery(searchTerm.trim());
     lastSearchKey.current = currentSearchKey(searchTerm, showArchived);
     return searchRequestGate.begin();
   }
@@ -313,6 +317,7 @@ export function useSearch(
   function updateSearchHistory(searchTerm: string) {
     if (searchTerm.length < 2) {
       searchRequestGate.invalidate();
+      if (searchLayoutEnabled) { setSubmittedQuery(null); setResponseMessage(searchConfig.responseMessages.default); }
       router.replace(searchUrl(searchTerm, null, includeArchived));
       setTypedTasks([]);
       setSelectedIndex(null);
@@ -397,6 +402,7 @@ export function useSearch(
   function setIncludeArchivedResults(showArchived: boolean) {
     setIncludeArchived(showArchived);
     setExplicitTabIndex(undefined);
+    if (isSearchDraft) return;
     const term = inputValue.trim();
     if (term.length < 2) {
       searchRequestGate.invalidate();
@@ -467,6 +473,9 @@ export function useSearch(
       document.activeElement?.id === "boardManager"
     )
       return;
+
+    // Draft suggestions own navigation; old result rows must never be actionable.
+    if (isSearchDraft && [KeyCodes.ARROW_DOWN, KeyCodes.ARROW_UP, KeyCodes.J, KeyCodes.K, KeyCodes.TAB].some((key) => key === event.keyCode) && !cmdControl) return;
 
     // press k
     if (event.keyCode === KeyCodes.K && cmdControl) {
@@ -773,6 +782,7 @@ export function useSearch(
     includeArchived,
     searchChipsEnabled,
     searchAutocompleteEnabled,
+    isSearchDraft,
   ]);
 
   // -------------------- recieving data from React-Query
@@ -808,6 +818,11 @@ export function useSearch(
     if (lastSearchKey.current === key) return;
     searchRequestGate.invalidate();
     lastSearchKey.current = null;
+    if (searchLayoutEnabled) {
+      setSubmittedQuery(null);
+      handleStatesOnResponse(searchConfig.responseMessages.default);
+      return;
+    }
     if (term.length < 2) {
       handleStatesOnResponse(searchConfig.responseMessages.default);
       return;
@@ -818,7 +833,7 @@ export function useSearch(
       }
     }, 300);
     return () => clearTimeout(timer);
-  }, [inputValue, includeArchived, projects, _fromProject, searchOperatorsEnabled, searchAutocompleteEnabled]);
+  }, [inputValue, includeArchived, projects, _fromProject, searchOperatorsEnabled, searchAutocompleteEnabled, searchLayoutEnabled]);
 
   return {
     setSelectedIndex,
@@ -826,8 +841,9 @@ export function useSearch(
     tasksInputRef,
     inputValue,
     handleChange,
-    responseMessage,
-    typedTasks,
+    responseMessage: isSearchDraft ? searchConfig.responseMessages.default : responseMessage,
+    typedTasks: isSearchDraft ? [] : typedTasks,
+    isSearchDraft,
     ulRef,
     handleLinkClick,
     handleMouseEnter,
@@ -843,7 +859,7 @@ export function useSearch(
     tabs,
     activeSplit,
     updateSplitAndTasks,
-    results,
+    results: isSearchDraft ? null : results,
     suggestedValue,
     includeArchived,
     setIncludeArchivedResults,

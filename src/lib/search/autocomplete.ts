@@ -1,7 +1,7 @@
 import { activeSearchValue } from './chips'
 import { operatorMatches, parseSearchQuery, SEARCH_OPERATORS, type Names, type SearchOperator } from './operators'
 
-export type SearchCandidate = { id: number | string; name: string }
+export type SearchCandidate = { id: number | string; name: string; email?: string }
 export const SEARCH_TIPS: Record<SearchOperator, { example: string; meaning: string }> = {
   from: { example: 'from:@Kamil', meaning: 'Created by this person' },
   assignee: { example: 'assignee:@Kamil', meaning: 'Assigned to this person' },

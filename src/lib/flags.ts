@@ -53,6 +53,7 @@ import {
   HTPR_6369_SEARCH_OPERATORS_FLAG,
   HTPR_6370_SEARCH_CHIPS_FLAG,
   HTPR_6688_SEARCH_AUTOCOMPLETE_FLAG,
+  HTPR_6865_SEARCH_LAYOUT_FLAG,
   MY_TASKS_VIEWS_FLAG,
   MY_TASKS_BULK_SELECTION_FLAG,
   MY_TASKS_FILTER_PARITY_FLAG,
@@ -599,6 +600,11 @@ const FEATURE_FLAG_DEFINITIONS = [
     key: HTPR_6688_SEARCH_AUTOCOMPLETE_FLAG,
     shippedOn: "2026-10-01",
     description: "Completes search operators and values with keyboard suggestions, coloured filters, an active filter frame, search tips and highlighted result titles.",
+  },
+  {
+    key: HTPR_6865_SEARCH_LAYOUT_FLAG,
+    shippedOn: "2026-10-03",
+    description: "Shows one aligned search suggestion list with recents, tips, people emails and grey value completion; searches only after acceptance or Enter. Requires search autocomplete, chips and operators.",
   },
   {
     key: HTPR_6372_SEARCH_RANKING_FLAG,
