@@ -458,7 +458,7 @@ test('commenter snippet and author pill use both flags without highlighting the 
       await withSearch(t, { query: 'login commenter:77', flags: { [matchFlag]: highlights, 'htpr-6880-search-commenter': commenter } }, async ({ complete, requests }) => {
         const text = 'Login commenter:77 <img src=x onerror=alert(1)>'
         await complete(requests[0], [{ ...matchTask, commentId: 44,
-          commentText: highlights ? text : 'Login commenter:77 &lt;img src=x onerror=alert(1)&gt;',
+          commentText: text,
           searchMatch: { commentAuthor: 'Malcolm Stern' } }])
         const row = document.getElementById('task_1')
         const matches = row.querySelector('[data-search-match-highlights]')

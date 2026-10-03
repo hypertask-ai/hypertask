@@ -6,7 +6,6 @@ import { HTPR_6882_SEARCH_MATCH_HIGHLIGHTS_FLAG } from "@/lib/flags";
 import { MAX_SEARCH_OPERATOR_CLAUSES, searchOperatorClauseCount, type SearchFilter } from "@/lib/search/operators";
 import { parseSearchWithChipNames, parseSearchWithNames } from "@/lib/search/serverOperators";
 import { rankedSearchWhere } from "@/lib/search/rankedWhere";
-import { escapeHtml } from "@/utils/htmlEscape";
 import prisma from "@/lib/prisma";
 import type { Prisma } from "@prisma/client";
 import { turbopufferGetDocuments } from "@/utils/controllers/search/document";
@@ -137,7 +136,7 @@ const handler: NextApiHandler = async (
             } : {}),
             ...(comment ? {
               commentId: Number(comment.id),
-              commentText: matchHighlightsEnabled ? comment.commentText : escapeHtml(comment.commentText),
+              commentText: comment.commentText,
               ...(commenterEnabled && comment.createdAt ? { updatedAt: new Date(comment.createdAt).toISOString() } : {}),
             } : {}),
           };

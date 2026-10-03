@@ -126,6 +126,7 @@ for (const [file, exports] of [
   ['src/lib/mcp/agents.ts', { mcpVisibleAgentSelect: () => ({}), mapVisibleMcpAgent: () => null }],
   ['src/utils/controllers/search/document.ts', { turbopufferGetDocuments: async (query: string) => ({ status: 200, legacyQuery: query }), turbopufferSearchTaskIds: async () => [] }],
   ['src/utils/controllers/turbopuffer/turbopufferHelper.ts', {
+    searchPreviewText: (text: string) => text,
     convertToPlain: (text: string) => text,
     searchTasks: async () => { state.indexCalls++; return state.indexComments.length ? [] : tasks.map((row) => ({ id: row.id, descriptionText: row.description })) },
     searchComments: async () => { state.indexCalls++; return state.indexComments },
@@ -221,7 +222,7 @@ test('newest matching comment supplies snippets and date, not the newest unrelat
   assert.equal(res.code, 200)
   assert.deepEqual(res.body.processedData.All.map((row: any) => [row.taskId, row.commentId]), [[102, 4], [101, 2]])
   const row = res.body.processedData.All[1]
-  assert.equal(row.commentText, 'Newest NEEDLE &lt;img src=x onerror=alert(1)&gt;')
+  assert.equal(row.commentText, comments[1].commentText)
   assert.equal(row.updatedAt, '2026-10-05T00:00:00.000Z')
   assert.ok(state.flagCalls.includes(flag))
   assert.equal(state.indexCalls, 0)
@@ -243,7 +244,7 @@ test('commenter and match highlight flags independently select matching comment 
       const row = res.body.processedData.All[0]
       assert.equal(row.commentId, 2)
       assert.equal(row.updatedAt, '2026-10-05T00:00:00.000Z')
-      assert.equal(row.commentText, highlights ? comments[1].commentText : 'Newest NEEDLE &lt;img src=x onerror=alert(1)&gt;')
+      assert.equal(row.commentText, comments[1].commentText)
       assert.deepEqual(row.searchMatch, highlights ? { people: [], labels: [], commentAuthor: 'Hicham' } : undefined)
       assert.deepEqual(state.detailQueries[0].select.creator, { select: { displayName: true, email: true } })
       assert.equal(state.indexCalls, 0)
@@ -265,7 +266,7 @@ test('comment author pill falls back to email and highlight prerequisites do not
       const row = (await search('needle commenter:1')).body.processedData.All[0]
       assert.equal(row.commentId, 2)
       assert.equal(row.searchMatch, undefined)
-      assert.equal(row.commentText, 'Newest NEEDLE &lt;img src=x onerror=alert(1)&gt;')
+      assert.equal(row.commentText, comments[1].commentText)
     }
   } finally {
     people[0].displayName = displayName

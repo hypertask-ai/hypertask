@@ -1,3 +1,4 @@
+import { searchPreviewText } from '@/utils/controllers/turbopuffer/turbopufferHelper'
 import type { Prisma } from '@prisma/client'
 import prisma from '@/lib/prisma'
 import { searchComments, searchTasks } from '@/utils/controllers/turbopuffer/turbopufferHelper'
@@ -56,7 +57,7 @@ export async function rankedSearchWhere(
     for (const comment of comments) {
       if (!comment) continue
       rankedIds.push(comment.taskId)
-      commentById.set(comment.taskId, { ...comment, creatorName: comment.creator?.displayName || comment.creator?.email || '' })
+      commentById.set(comment.taskId, { ...comment, commentText: searchPreviewText(comment.commentText ?? ''), creatorName: comment.creator?.displayName || comment.creator?.email || '' })
     }
     return { where, rankedIds, descriptionById, commentById, partial: false, paged: true, cursorValid }
   }
