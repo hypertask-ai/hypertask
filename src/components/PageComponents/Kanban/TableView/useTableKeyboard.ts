@@ -138,18 +138,6 @@ export function useTableKeyboard(context: Context) {
         myTasksBulk.toggleTaskSelection(row.task.id, e.shiftKey);
         return;
       }
-      if (
-        _currentProject && nQuickAddEnabled && quickEntryEnabled &&
-        e.key.toLowerCase() === "n" &&
-        !e.ctrlKey && !e.metaKey && !e.altKey && !e.shiftKey &&
-        !e.repeat && !e.isComposing &&
-        !shouldIgnoreTaskShortcutTarget(e.target as HTMLElement | null) &&
-        !shouldIgnoreTaskShortcutTarget(document.activeElement as HTMLElement | null)
-      ) {
-        e.preventDefault();
-        document.dispatchEvent(new CustomEvent("OPEN_TABLE_QUICK_ENTRY"));
-        return;
-      }
       // [c] creates a task; /project is excluded from the global handler because
       // the Kanban surface owns it there, so the table surface must own it too
       if (_currentProject && e.key === "c" && !e.ctrlKey && !e.metaKey && !e.shiftKey) {
@@ -193,6 +181,22 @@ export function useTableKeyboard(context: Context) {
     document.addEventListener("keydown", handleKeyDown);
     return () => document.removeEventListener("keydown", handleKeyDown);
   }, [_currentProject, _sections, archiveTaskFromTable, assignTask, changeBoardLayout, createTaskInCurrentTableContext, enableMyTasksBulkSelection, expandSection, focusTo, handleBoardChange, myTasksBulk, openTask, rows, rowShortcutsEnabled, runTaskShortcut, selectedIndex, setShowCommands, showCommands.show, toggleSelectedTaskTimer]);
+  useEffect(nQuickAddEnabled && quickEntryEnabled ? () => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (
+        !_currentProject || e.key.toLowerCase() !== "n" ||
+        e.ctrlKey || e.metaKey || e.altKey || e.shiftKey || e.repeat || e.isComposing ||
+        showCommands.show || assignTask || returnIfModalOrInputActive() ||
+        shouldIgnoreTaskShortcutTarget(e.target as HTMLElement | null) ||
+        shouldIgnoreTaskShortcutTarget(document.activeElement as HTMLElement | null)
+      ) return;
+      e.preventDefault();
+      document.dispatchEvent(new CustomEvent("OPEN_TABLE_QUICK_ENTRY"));
+    };
+    document.addEventListener("keydown", handleKeyDown);
+    return () => document.removeEventListener("keydown", handleKeyDown);
+  } : () => {}, [_currentProject, nQuickAddEnabled, quickEntryEnabled, showCommands.show, assignTask]);
+
   return {
   quickEntryEnabled, quickCreateTask,
   };

@@ -80,8 +80,8 @@ export const TableCreateTaskControl = ({
   const quickEntry = Boolean(quickEntryEnabled && quickCreateTask && projectId);
   const activeTarget = openTarget?.projectId === projectId ? openTarget : null;
 
-  useEffect(() => {
-    if (!nQuickAddEnabled || !quickEntry || !hasCurrentProject || !projectId) return;
+  useEffect(nQuickAddEnabled ? () => {
+    if (!quickEntry || !hasCurrentProject || !projectId) return;
     const openQuickEntry = () => {
       const payload = selectedSectionPayload ?? resolveTableCreateTaskSectionPayload(
         sections[0] && tableSectionId(sections[0]), sections,
@@ -91,7 +91,7 @@ export const TableCreateTaskControl = ({
     };
     document.addEventListener("OPEN_TABLE_QUICK_ENTRY", openQuickEntry);
     return () => document.removeEventListener("OPEN_TABLE_QUICK_ENTRY", openQuickEntry);
-  }, [nQuickAddEnabled, quickEntry, hasCurrentProject, projectId, selectedSectionPayload, sections]);
+  } : () => {}, [nQuickAddEnabled, quickEntry, hasCurrentProject, projectId, selectedSectionPayload, sections]);
 
   const onCreate = () => {
     if (!quickEntry) {

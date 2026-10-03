@@ -100,6 +100,33 @@ const useHandleKeyDownOperations= (props:IHandleKeyDownOperations) => {
       }
     };
 
+    useEffect(nQuickAddEnabled && quickEntryCardsEnabled ? () => {
+      const handleNQuickAdd = (e: KeyboardEvent) => {
+        if (
+          e.key.toLowerCase() !== "n" ||
+          e.ctrlKey || e.metaKey || e.altKey || e.shiftKey || e.repeat || e.isComposing ||
+          showCommands.show || returnIfModalOrInputActive() ||
+          shouldIgnoreTaskShortcutTarget(e.target as HTMLElement | null) ||
+          shouldIgnoreTaskShortcutTarget(document.activeElement as HTMLElement | null)
+        ) return;
+        const sectionEls = document.getElementById("sectionsContainer")?.children;
+        if (!sectionEls) return;
+        const focusedColumn = document.activeElement?.closest('.section-container');
+        const focusedColumnIndex = Array.from(sectionEls).indexOf(focusedColumn!);
+        const activeItem = store.get(activeItemAtom);
+        const taskColumnIndex = filteredSections.findIndex(section =>
+          section.items.some(task => task.id === activeItem)
+        );
+        const targetIndex = focusedColumnIndex >= 0
+          ? focusedColumnIndex
+          : Math.max(taskColumnIndex, 0);
+        e.preventDefault();
+        sectionEls[targetIndex]?.dispatchEvent(new CustomEvent('OPEN_QUICK_ENTRY'));
+      };
+      document.addEventListener("keydown", handleNQuickAdd);
+      return () => document.removeEventListener("keydown", handleNQuickAdd);
+    } : () => {}, [nQuickAddEnabled, quickEntryCardsEnabled, showCommands.show, filteredSections, store]);
+
     const handleKeyDown = (e: any) => {
     let cmdControl = isApple&&e.metaKey || !isApple&&e.ctrlKey;
     e.preventDefault();
@@ -140,25 +167,6 @@ const useHandleKeyDownOperations= (props:IHandleKeyDownOperations) => {
     const activeElement = document.activeElement;
     const activeElementIndex = Array.from(sectionEls).indexOf(activeElement!);
     const activeItem = getActiveItem();
-    if (
-      nQuickAddEnabled && quickEntryCardsEnabled &&
-      e.key.toLowerCase() === "n" &&
-      !e.ctrlKey && !e.metaKey && !e.altKey && !e.shiftKey &&
-      !e.repeat && !e.isComposing && !showCommands.show &&
-      !shouldIgnoreTaskShortcutTarget(e.target) &&
-      !shouldIgnoreTaskShortcutTarget(activeElement as HTMLElement | null)
-    ) {
-      const focusedColumn = activeElement?.closest('.section-container');
-      const focusedColumnIndex = Array.from(sectionEls).indexOf(focusedColumn!);
-      const taskColumnIndex = filteredSections.findIndex(section =>
-        section.items.some(task => task.id === activeItem)
-      );
-      const targetIndex = focusedColumnIndex >= 0
-        ? focusedColumnIndex
-        : Math.max(taskColumnIndex, 0);
-      sectionEls[targetIndex]?.dispatchEvent(new CustomEvent('OPEN_QUICK_ENTRY'));
-      return;
-    }
     if (
       e.key === "w" &&
       !e.ctrlKey &&

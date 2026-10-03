@@ -231,13 +231,96 @@ for (const surface of ["board", "table"]) {
   }
 }
 
+test("table: flags toggle N with every context dependency stable", async () => fixture(async ({ reactRoot, press }) => {
+  const flags = { [nFlag]: false, [quickFlag]: false };
+  const calls = [];
+  const useTable = load(`${tablePath}useTableKeyboard.ts`, {
+    ...commonMocks(flags, calls),
+    "./tableCreateTask": load(`${tablePath}tableCreateTask.ts`),
+    "@/lib/keyboard/archiveShortcutGuard": {},
+    "./tableViewShared": { isTaskRow: (row) => row?.type === "task" },
+  }).useTableKeyboard;
+  const context = {
+    _currentProject: { id: 15 }, rows: [{ type: "task", sid: 10 }], selectedIndex: 0,
+    sections, toggleCreateTaskGlobally: (payload) => calls.push(payload),
+    showCommands: { show: false }, lastGAt: { current: null },
+    timerToggling: { current: false }, runTaskShortcut: () => false,
+  };
+  const Harness = () => { useTable(context); return null; };
+  let opened = 0;
+  document.addEventListener("OPEN_TABLE_QUICK_ENTRY", () => opened++);
+  for (const [nEnabled, quickEnabled] of [[false, false], [true, false], [true, true], [false, true], [true, true], [true, false]]) {
+    flags[nFlag] = nEnabled;
+    flags[quickFlag] = quickEnabled;
+    await React.act(async () => reactRoot.render(React.createElement(Harness)));
+    const before = opened;
+    await press("n");
+    assert.equal(opened - before, Number(nEnabled && quickEnabled));
+    assert.equal(calls.length, 0);
+  }
+}));
+
+for (const [nEnabled, quickEnabled] of [[true, true], [false, true], [true, false], [false, false]]) {
+  test(`mobile AI writer: N stays inline or does nothing (${nEnabled}/${quickEnabled})`, async () => fixture(async ({ dom, reactRoot }) => {
+    const flags = { [nFlag]: nEnabled, [quickFlag]: quickEnabled, "htpr-6141-ai-first-task-writer": true };
+    const calls = [];
+    const atoms = { activeItemAtom: {}, currentProjectAtom: {} };
+    const useSections = load(sectionPath, {
+      ...commonMocks(flags, calls),
+      "@/store": atoms,
+      "@/lib/state": { useRecoilState: () => React.useState({ id: 15 }), useSetRecoilState: () => () => {} },
+      "jotai": { useStore: () => ({ get: () => null }) },
+      "next/navigation": { useRouter: () => ({}) },
+      "../MultiPages/Route/useHypertasksNavigate": { default: () => ({ navigate: () => {} }) },
+      "@/lib/contexts/mobileContext": { MobileViewContext: React.createContext(true) },
+      "@/models/CreateTaskModalModels/model": { MOBILE_AI_TASK_WRITER_FOCUS: "AI_TASK_WRITER" },
+    }).default;
+    let state;
+    const Harness = () => {
+      state = useSections({ items: [], active: false, index: 0, title: "Inbox", sectionId: 10, projectId: 15 });
+      return React.createElement("div", { ref: state.sectionRef, "data-column": "10" },
+        state.showAddItem && React.createElement("input", { "data-quick": "10", "data-position": state.position }));
+    };
+    await React.act(async () => reactRoot.render(React.createElement(Harness)));
+    await React.act(async () => document.querySelector("[data-column]").dispatchEvent(new dom.window.CustomEvent("OPEN_QUICK_ENTRY")));
+    assert.equal(Boolean(document.querySelector("[data-quick]")), nEnabled && quickEnabled);
+    assert.equal(calls.length, 0, "N must never open the full mobile editor");
+    if (nEnabled && quickEnabled) assert.equal(document.querySelector("[data-quick]").dataset.position, "bottom");
+    await React.act(async () => state.createTaskAt("bottom", { sectionId: 10 }, undefined, true));
+    assert.equal(calls.length, 1, "the plus-button mobile behavior stays unchanged");
+    assert.equal(calls[0][1], "AI_TASK_WRITER");
+  }));
+}
+
+test("bottom shortcut hint follows both flags; top hint and clicks stay unchanged", async () => fixture(async ({ reactRoot }) => {
+  const flags = { [nFlag]: false, [quickFlag]: false };
+  const calls = [];
+  const Button = load("src/components/PageComponents/Kanban/KanbanSectionComponents/NewTaskButton.tsx", {
+    ...commonMocks(flags, calls),
+    "@/components/Common/Tooltip": { default: ({ keyCombination }) => React.createElement("span", { "data-keys": keyCombination.join("+") }) },
+  }).default;
+  const payload = { sectionId: 10 };
+  for (const [nEnabled, quickEnabled] of [[false, false], [true, false], [false, true], [true, true]]) {
+    flags[nFlag] = nEnabled;
+    flags[quickFlag] = quickEnabled;
+    for (const position of ["top", "bottom"]) {
+      await React.act(async () => reactRoot.render(React.createElement(Button, {
+        buttonPosition: position, sectionPayload: payload, createTaskAt: (...args) => calls.push(args),
+      })));
+      assert.equal(document.querySelector("[data-keys]").dataset.keys, position === "bottom" && nEnabled && quickEnabled ? "N" : "C");
+      await React.act(async () => document.querySelector("#root > div").click());
+      assert.deepEqual(calls.pop(), [position, payload, undefined, quickEnabled ? true : undefined]);
+    }
+  }
+}));
+
 test("flag registration, reused hints and existing full-editor scope are explicit", () => {
   assert.match(source("src/lib/flags/keys.ts"), /HTPR_6902_N_QUICK_ADD_FLAG = "htpr-6902-n-quick-add"/);
   assert.match(source("src/lib/flags.ts"), /key: HTPR_6902_N_QUICK_ADD_FLAG/);
   assert.match(source("src/lib/flags.ts"), /DEFAULT_FEATURE_FLAG_MODE: FeatureFlagMode = "OWNER_AND_QA"/);
   assert.match(source("src/components/Global/BottomSettings_QuickTips.tsx"), /nQuickAddEnabled && quickEntryCardsEnabled[\s\S]*key: \["N"\], hint: "quick add"/);
   assert.match(source("src/components/PageComponents/Kanban/KanbanSectionComponents/NewTaskButton.tsx"), /nQuickAddEnabled && quickEntryCardsEnabled \? \["N"\] : \["C"\]/);
-  assert.match(source(sectionPath), /createTaskAt\("bottom", \{[\s\S]*?\}, undefined, true\)/);
+  assert.match(source(sectionPath), /useEffect\(nQuickAddEnabled && quickEntryCardsEnabled \?/);
   assert.match(source(boardPath), /if \(returnIfModalOrInputActive\(\)\) return/);
   assert.match(source(`${tablePath}useTableKeyboard.ts`), /returnIfModalOrInputActive\(\)/);
   assert.match(source("src/components/Common/newTask.tsx"), /e.key === "Enter"/);

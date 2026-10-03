@@ -118,17 +118,16 @@ const useSections = ({
     toggleCreateTaskGlobally(sectionPayload, editFocus)
   };
 
-  useEffect(() => {
-    if (!nQuickAddEnabled || !quickEntryCardsEnabled) return;
+  useEffect(nQuickAddEnabled && quickEntryCardsEnabled ? () => {
     const sectionElement = sectionRef.current;
-    const openQuickEntry = () => createTaskAt("bottom", {
-      sectionId,
-      sectionTitle: title,
-      position: "bottom",
-    }, undefined, true);
+    const openQuickEntry = () => {
+      // N owns inline entry only, never the mobile full-editor fallback.
+      setPosition("bottom");
+      setShowAddItem(true);
+    };
     sectionElement?.addEventListener("OPEN_QUICK_ENTRY", openQuickEntry);
     return () => sectionElement?.removeEventListener("OPEN_QUICK_ENTRY", openQuickEntry);
-  }, [nQuickAddEnabled, quickEntryCardsEnabled, createTaskAt, sectionId, title]);
+  } : () => {}, [nQuickAddEnabled, quickEntryCardsEnabled]);
 
   // ======================== user presses [Enter] to CREATE a task, keeping the box open for the next one
   const invokeCreateItem = async (taskTitle: string, createAnother: boolean): Promise<boolean> => {
