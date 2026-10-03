@@ -117,7 +117,7 @@ const NewTask = ({
           onKeyDown={onKeyDown}
           style={{ resize: 'none', background: 'transparent', width: '100%', outline: 'none', overflowWrap: 'anywhere' }}
           placeholder="Title"
-          className="block border-0 p-0 overflow-x-hidden overflow-y-auto sm:text-content xs:text-emphasis text-white-black font-bold scrollbar-thin scrollbar-thumb-gray-500 scrollbar-track-kanban-column-scrollbar"
+          className="block border-0 p-0 overflow-x-hidden overflow-y-auto sm:text-content xs:text-emphasis text-white-black font-bold scrollbar-thin scrollbar-thumb-text-light-gray scrollbar-track-kanban-column-scrollbar"
         />
       </div>
       <div
@@ -135,7 +135,7 @@ const NewTask = ({
           type="button"
           disabled={isSubmitting}
           onClick={() => { void createItem() }}
-          className={`${MOBILE_TARGET} sm:min-h-0 sm:min-w-0 h-7 rounded-sm bg-white-black px-2.5 text-content font-medium text-white-black-inverted hover:opacity-90 disabled:opacity-60`}
+          className={`${MOBILE_TARGET} sm:min-h-0 sm:min-w-0 h-7 rounded-sm bg-shadcn-primary px-2.5 text-content font-medium text-primary-foreground hover:opacity-90 disabled:opacity-60`}
         >
           Create task
         </button>
