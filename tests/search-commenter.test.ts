@@ -145,7 +145,7 @@ const { GET } = jiti(path.join(root, 'src/app/api/mcp/tasks/search/route.ts')) a
 function reset(overrides: any = {}) {
   state = { session: { userId: 42 }, flags: { [flag]: true, [fuzzyFlag]: true,
     [keys.HTPR_6369_SEARCH_OPERATORS_FLAG]: true, [keys.HTPR_6370_SEARCH_CHIPS_FLAG]: true,
-    [keys.HTPR_6530_MCP_LIST_QUERY_FLAG]: true, [keys.HTPR_6688_SEARCH_AUTOCOMPLETE_FLAG]: true, [keys.HTPR_6865_SEARCH_LAYOUT_FLAG]: true },
+    [keys.HTPR_6688_SEARCH_AUTOCOMPLETE_FLAG]: true, [keys.HTPR_6865_SEARCH_LAYOUT_FLAG]: true },
     indexComments: [], countQueries: [], anchorQueries: [], peopleQueries: [], taskQueries: [], commentQueries: [], detailQueries: [], flagCalls: [], deleted: [], indexCalls: 0, ...overrides }
 }
 const response = () => ({ code: 0, body: undefined as any, status(code: number) { this.code = code; return this }, json(body: any) { this.body = body; return this } })
@@ -412,14 +412,15 @@ test('review flag-off preserves ordinary indexed comment metadata and production
     const legacyItem = {
       id: 101, ticketNumber: 'TEST-1', title: tasks[0].title, description: tasks[0].description,
       boardId: 7, boardTitle: 'Visible', projectId: 7, section: 'Todo', createdAt: tasks[0].createdAt.toISOString(),
+      uniqueIndex: 1, url: 'https://app.hypertask.ai/detail/project-7/1',
+      link: { url: 'https://app.hypertask.ai/detail/project-7/1', format: 'https://app.hypertask.ai/detail/project-{projectId}/{uniqueIndex}', example: 'https://app.hypertask.ai/detail/project-7/1' },
     }
     // Disable presentation additions to compare the legacy serialized item independently.
     reset()
     state.flags[flag] = enabled
-    state.flags[keys.HTPR_6530_MCP_LIST_QUERY_FLAG] = false
     state.indexComments = [hit]
     const raw = await (await GET(new NextRequest('http://localhost/api/mcp/tasks/search?q=needle%20from:3&board_id=7'))).json()
-    assert.equal(JSON.stringify(raw.tasks[0]), JSON.stringify({ ...legacyItem, ...(enabled ? { commentId: 2, commentText: hit.commentText, commentCreatedAt: hit.createdAt } : {}) }))
+    assert.deepStrictEqual(raw.tasks[0], ({ ...legacyItem, ...(enabled ? { commentId: 2, commentText: hit.commentText, commentCreatedAt: hit.createdAt } : {}) }))
     assert.equal(mcp.tasks[0].commentCreatedAt, enabled ? hit.createdAt : undefined)
   }
 })
