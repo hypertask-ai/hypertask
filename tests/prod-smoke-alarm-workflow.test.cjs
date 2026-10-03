@@ -56,7 +56,7 @@ test("every failed smoke classification alerts immediately without invoking roll
         assert.equal(output.status, 1, output.stdout + output.stderr);
         assert.match(output.stdout, expected);
         const requests = await readFile(join(directory, "requests"), "utf8");
-        assert.equal(requests.split("\n").filter((line) => line.includes("api.telegram.org")).length, 1);
+        assert.equal(requests.split("\n").filter((line) => /https:\/\/api\.telegram\.org\//.test(line)).length, 1);
         assert.doesNotMatch(requests, /api\.vercel\.com|\/git\/|MERGE_FREEZE/);
         if (event === "push" && applicationFailure) {
           assert.match(requests, /prod-health-gate/);
