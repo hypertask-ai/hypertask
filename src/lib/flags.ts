@@ -49,6 +49,7 @@ import {
   HTPR_6688_SEARCH_AUTOCOMPLETE_FLAG,
   HTPR_6865_SEARCH_LAYOUT_FLAG,
   HTPR_6882_SEARCH_MATCH_HIGHLIGHTS_FLAG,
+  HTPR_6911_SEARCH_ROW_HIGHLIGHT_FLAG,
   HTPR_6909_SEARCH_ONE_BOARD_TABS_FLAG,
   HTPR_6878_SEARCH_LABEL_SCOPE_FLAG,
   HTPR_6879_SEARCH_ESC_BACK_FLAG,
@@ -565,6 +566,11 @@ const FEATURE_FLAG_DEFINITIONS = [
     key: HTPR_6882_SEARCH_MATCH_HIGHLIGHTS_FLAG,
     shippedOn: "2026-10-03",
     description: "Shows why search results matched with inbox-style person highlights, label and board pills, safe text highlights and comment authors. Requires the search layout flag.",
+  },
+  {
+    key: HTPR_6911_SEARCH_ROW_HIGHLIGHT_FLAG,
+    shippedOn: "2026-10-03",
+    description: "Gives selected search results and suggestions the inbox highlight: background edge to edge and the accent bar on the far left. Requires the search layout flag.",
   },
   {
     key: HTPR_6909_SEARCH_ONE_BOARD_TABS_FLAG,
