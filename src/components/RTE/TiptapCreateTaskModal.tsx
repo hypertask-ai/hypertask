@@ -54,26 +54,10 @@ import type { IAgent, IUser } from "@/models/model";
 import { mergeMobileCreateTaskWriterResult } from "@/utils/aiWriterUtils";
 import { getActiveColumnsViewFromProject } from "@/utils/helperFunctions/Views/ViewsHelperFunctions";
 import {
-  USER_PREFERENCES_QUERY_KEY,
-  useGetUserPreferences,
-  type IUserPreferences,
-} from "@/hooks/General/useGetUserPreferences";
-import { useQueryClient } from "@tanstack/react-query";
-import axios from "axios";
-import { userPreferencesRoute } from "@/lib/constants/APIRouteConstants";
-import {
   buildTaskWriterAutoDraftPrompt,
   resolveCreateTaskWriterOpening,
   resolveTaskWriterDescription,
 } from "@/lib/ai/taskWriterAutoDraft";
-import {
-  AUTO_DESCRIPTION_SUGGESTION_DELAY_MS,
-  canApplyCreateDescriptionSuggestion,
-  canUndoDescriptionTakeover,
-  isNewTaskAutoDescriptionEnabled,
-  shouldSuggestCreateDescription,
-  type AutoDescriptionTakeover,
-} from "@/lib/ai/autoDescriptionSuggestion";
 import {
   completeTaskCreatePerformanceTrace,
   completeTaskCreatePerformanceTraceAfterElementRemoved,
@@ -82,10 +66,7 @@ import {
   type TaskCreateTraceScope,
 } from "@/lib/analytics/productPerformance";
 import { useFlag } from "@/hooks/useFlag";
-import {
-  HTPR_6157_AUTO_DESCRIPTION_FLAG,
-  HTPR_6556_MOBILE_DESCRIPTION_FIRST_FLAG,
-} from "@/lib/flags/keys";
+import { HTPR_6556_MOBILE_DESCRIPTION_FIRST_FLAG } from "@/lib/flags/keys";
 import {
   createTaskUploadCount,
   discardUnboundCreateTaskUploads,
@@ -100,14 +81,9 @@ const TiptapCreateTaskModal = () => {
   const backgroundTaskUploadsEnabled = useFlag(
     "htpr-5993-optimistic-task-uploads",
   );
-  const newTaskAutoDescriptionEnabled = useFlag(
-    HTPR_6157_AUTO_DESCRIPTION_FLAG,
-  );
   const descriptionFirstEnabled = useFlag(
     HTPR_6556_MOBILE_DESCRIPTION_FIRST_FLAG,
   );
-  // HTPR-6177: automatic description drafting is owner-only until it is ready.
-  const autoTaskDescriptionsEnabled = useFlag("htpr-6177-auto-task-descriptions");
   const createSubmissionRef = useRef(false);
   const {
     editMode,
@@ -163,12 +139,6 @@ const TiptapCreateTaskModal = () => {
   const [shouldShowAiTaskWriter, setShouldShowAITaskWriter] = useState(
     editMode === "Description-ai" ? true : false
   );
-  const [autoDescriptionVisible, setAutoDescriptionVisible] = useState(false);
-  const [autoDescriptionDismissed, setAutoDescriptionDismissed] = useState(false);
-  const [autoDescriptionTakeover, setAutoDescriptionTakeover] =
-    useState<AutoDescriptionTakeover | null>(null);
-  const autoDescriptionTakeoverRef = useRef<AutoDescriptionTakeover | null>(null);
-  const autoDescriptionTitleRef = useRef("");
   const [hasOpenedClassicForm, setHasOpenedClassicForm] = useState(false);
   const openingSectionIdRef = useRef<number | undefined>(
     formValues.status?.sectionId,
@@ -222,13 +192,6 @@ const TiptapCreateTaskModal = () => {
     seedPrompt,
     autoDraftPrompt,
   );
-  const queryClient = useQueryClient();
-  const {
-    data: userPreferences,
-    isFetched: preferencesFetched,
-    isSuccess: preferencesFetchSucceeded,
-  } = useGetUserPreferences();
-  const preferencesHydrated = preferencesFetched && preferencesFetchSucceeded;
   useEffect(() => {
     if (!shouldShowAiTaskWriter) return;
     enableAutoTitleGeneration();
@@ -331,11 +294,6 @@ const TiptapCreateTaskModal = () => {
     const description = editor?.getHTML() ?? "";
     handleChange("description", description);
     scheduleTitleGeneration(description);
-    const takeover = autoDescriptionTakeoverRef.current;
-    if (takeover && description !== takeover.inserted) {
-      autoDescriptionTakeoverRef.current = null;
-      setAutoDescriptionTakeover(null);
-    }
     editor?.commands.setMeta("projectId", 2);
   };
   // ==================== get attachments from the componetn =============
@@ -379,135 +337,6 @@ const TiptapCreateTaskModal = () => {
     editor?.on("update", onChangeHandler);
   }, [editor, scheduleTitleGeneration]);
 
-  const autoDescriptionTitle = formValues.title.trim();
-  // HTPR-6177: fold the flag in once so every eligibility check shares the same
-  // switch, rather than relying on the effect below returning early to stay off.
-  const autoDescriptionPreferenceEnabled =
-    isNewTaskAutoDescriptionEnabled() &&
-    newTaskAutoDescriptionEnabled &&
-    autoTaskDescriptionsEnabled &&
-    (userPreferences.autoDescriptionSuggestions ?? true);
-  const autoDescriptionEligible = shouldSuggestCreateDescription({
-    enabled: autoDescriptionPreferenceEnabled,
-    isDesktop: !isMbl,
-    title: autoDescriptionTitle,
-    description: taskWriterDescription,
-    preferencesHydrated,
-    dismissed: autoDescriptionDismissed,
-  });
-
-  useEffect(() => {
-    setAutoDescriptionVisible(false);
-    autoDescriptionTitleRef.current = "";
-    if (
-      !autoDescriptionEligible ||
-      shouldShowAiTaskWriter ||
-      autoDescriptionTakeover
-    ) {
-      return;
-    }
-
-    const expectedTitle = autoDescriptionTitle;
-    const timeout = window.setTimeout(() => {
-      const currentDescription = editor?.getHTML() ?? formValues.description;
-      if (
-        !canApplyCreateDescriptionSuggestion(
-          expectedTitle,
-          formValues.title,
-          currentDescription,
-          autoDescriptionPreferenceEnabled,
-          autoDescriptionDismissed,
-        )
-      ) {
-        return;
-      }
-      autoDescriptionTitleRef.current = expectedTitle;
-      setAutoDescriptionVisible(true);
-    }, AUTO_DESCRIPTION_SUGGESTION_DELAY_MS);
-
-    return () => window.clearTimeout(timeout);
-  }, [
-    autoDescriptionDismissed,
-    autoDescriptionEligible,
-    autoDescriptionTakeover,
-    autoDescriptionTitle,
-    editor,
-    formValues.currentProject?.id,
-    formValues.description,
-    shouldShowAiTaskWriter,
-    autoDescriptionPreferenceEnabled,
-  ]);
-
-  const handleAutoDescriptionTakeover = (content: string) => {
-    const currentDescription = editor?.getHTML() ?? formValues.description;
-    if (
-      !editor ||
-      !canApplyCreateDescriptionSuggestion(
-        autoDescriptionTitleRef.current,
-        formValues.title,
-        currentDescription,
-        autoDescriptionPreferenceEnabled,
-        autoDescriptionDismissed,
-      )
-    ) {
-      setAutoDescriptionVisible(false);
-      toast("Your description changed, so the AI draft was not inserted.");
-      return;
-    }
-
-    const before = editor.getHTML();
-    // Auto suggestions are text-only, so neither selected nor generated files change here.
-    editor.commands.setContent(content, { emitUpdate: true });
-    const inserted = editor.getHTML();
-    handleChange("description", inserted);
-    setAutoDescriptionVisible(false);
-    const takeover = { before, inserted };
-    autoDescriptionTakeoverRef.current = takeover;
-    setAutoDescriptionTakeover(takeover);
-  };
-
-  const undoAutoDescriptionTakeover = () => {
-    if (
-      !editor ||
-      !autoDescriptionTakeover ||
-      !canUndoDescriptionTakeover(editor.getHTML(), autoDescriptionTakeover)
-    ) {
-      autoDescriptionTakeoverRef.current = null;
-      setAutoDescriptionTakeover(null);
-      return;
-    }
-    editor.commands.setContent(autoDescriptionTakeover.before, {
-      emitUpdate: true,
-    });
-    handleChange("description", autoDescriptionTakeover.before);
-    autoDescriptionTakeoverRef.current = null;
-    setAutoDescriptionTakeover(null);
-    setAutoDescriptionDismissed(true);
-  };
-
-  const turnOffAutoDescriptionsPermanently = async () => {
-    const previous =
-      queryClient.getQueryData<IUserPreferences>(USER_PREFERENCES_QUERY_KEY) ??
-      userPreferences;
-    queryClient.setQueryData<IUserPreferences>(
-      USER_PREFERENCES_QUERY_KEY,
-      (current) => ({
-        ...(current ?? userPreferences),
-        autoDescriptionSuggestions: false,
-      }),
-    );
-    setAutoDescriptionVisible(false);
-    try {
-      const response = await axios.post(userPreferencesRoute, {
-        autoDescriptionSuggestions: false,
-      });
-      if (response.status !== 200) throw new Error("Preference update failed");
-    } catch {
-      queryClient.setQueryData(USER_PREFERENCES_QUERY_KEY, previous);
-      toast.error("Could not turn off description suggestions");
-    }
-  };
-
   useEffect(
     () => () => {
       if (backgroundTaskUploadsEnabled) {
@@ -527,11 +356,6 @@ const TiptapCreateTaskModal = () => {
     setTrigger((current) => !current);
     handleSetUserInput("");
     aiPromptRef.current = undefined;
-    autoDescriptionTitleRef.current = "";
-    autoDescriptionTakeoverRef.current = null;
-    setAutoDescriptionVisible(false);
-    setAutoDescriptionDismissed(false);
-    setAutoDescriptionTakeover(null);
     setHasOpenedClassicForm(false);
     setShouldShowAITaskWriter(false);
     editor?.chain().unsetHighlight().clearContent().run();
@@ -1215,45 +1039,6 @@ const TiptapCreateTaskModal = () => {
               </div>
             ) : (
               <div className="h-[21px]"></div>
-            )}
-            {autoDescriptionVisible &&
-              autoDescriptionEligible &&
-              autoDescriptionTitleRef.current === autoDescriptionTitle &&
-              autoDraftPrompt &&
-              !shouldShowAiTaskWriter && (
-                <AITaskWriterContainer
-                  key={`create-auto-description-${projectId}-${autoDescriptionTitle}`}
-                  id="create-task-auto-description-writer"
-                  backgroundContent=""
-                  EscapeHandler={() => setAutoDescriptionVisible(false)}
-                  AISaveHandler={handleAutoDescriptionTakeover}
-                  returnTitleAndDescription={() => undefined}
-                  defaultMode="AiTaskWriter"
-                  autoTrigger
-                  initialPrompt={autoDraftPrompt}
-                  project={projectForContext}
-                  presentation="description-suggestion"
-                  requestKind="auto-description"
-                  onTurnOffTask={() => {
-                    setAutoDescriptionDismissed(true);
-                    setAutoDescriptionVisible(false);
-                  }}
-                  onTurnOffPermanently={turnOffAutoDescriptionsPermanently}
-                  toggleRecording={toggleRecording}
-                  isRecording={isRecording}
-                />
-              )}
-            {!autoDescriptionVisible && autoDescriptionTakeover && (
-              <div className="mt-3 flex items-center gap-2 rounded-[4px] bg-cardBackground px-3 py-2 text-dense text-text-light-gray">
-                <span>Draft moved into the description.</span>
-                <button
-                  type="button"
-                  className="font-semibold text-hypertasks-ai-purple"
-                  onClick={undoAutoDescriptionTakeover}
-                >
-                  Undo
-                </button>
-              </div>
             )}
             <AttachmentsUpload
               hasTitle={formValues.title.trim().length > 0}
