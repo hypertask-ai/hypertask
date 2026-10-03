@@ -113,7 +113,24 @@ check_deployed() {
   local sha id state
   sha=$(merge_sha "$1") || { echo "$sha"; exit 1; }
   if [ "$REPO" != hypertask-ai/hypertask ]; then
-    local tag cmp; tag=$(gh release view -R "$REPO" --json tagName --jq .tagName 2>/dev/null) || fail "no release found in $REPO"
+    local tag cmp releases runs jobs
+    if ! tag=$(gh release view -R "$REPO" --json tagName --jq .tagName 2>/dev/null); then
+      [[ $REPO == hypertask-ai/analytics && $BASE == master ]] || fail "no release found in $REPO"
+      releases=$(gh release list -R "$REPO" --limit 1 --json tagName 2>/dev/null) || fail "could not read releases in $REPO"
+      jq -e 'length == 0' <<<"$releases" >/dev/null || fail "no release found in $REPO"
+      runs=$(gh api "repos/$REPO/actions/workflows/deploy.yml/runs?head_sha=$sha&event=push&per_page=100" 2>/dev/null) \
+        || fail "could not read workflow runs for $sha"
+      id=$(jq -r --arg sha "$sha" '[.workflow_runs[] | select(.path == ".github/workflows/deploy.yml"
+        and .name == "Publish hypertask.app" and .event == "push" and .head_branch == "master"
+        and .head_sha == $sha and .conclusion == "success")] | first | .id // empty' <<<"$runs") \
+        || fail "could not read publishing workflow identity for $sha"
+      [ -n "$id" ] || fail "no successful production publishing push for $sha"
+      # This workflow can succeed with its production deploy job disabled.
+      jobs=$(gh api "repos/$REPO/actions/runs/$id/jobs?per_page=100" 2>/dev/null) || fail "could not read publishing jobs for $sha"
+      jq -e 'any(.jobs[]; .name == "deploy" and .conclusion == "success")' <<<"$jobs" >/dev/null \
+        || fail "no successful production deploy job for $sha"
+      echo "deployed ok (workflow)"; return
+    fi
     cmp=$(gh api "repos/$REPO/compare/$sha...$tag" --jq .status 2>/dev/null) || fail "could not compare $sha with release $tag"
     [[ $cmp == ahead || $cmp == identical ]] || fail "latest release $tag of $REPO does not contain $sha yet"
     echo "deployed ok (release $tag)"; return

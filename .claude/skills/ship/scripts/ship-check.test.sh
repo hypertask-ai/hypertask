@@ -70,6 +70,72 @@ for statuses in \
     && ok "non-skipped/latest-success status still requires deployment" || bad "deployment bypass: $out"
 done
 
+# Only analytics/master may use its exact production publishing push without a release.
+cat > "$E/mock-bin/gh" <<'MOCK'
+#!/usr/bin/env bash
+case "$1:$2" in
+  pr:view) printf '{"number":838,"title":"YPER4-999 [INFRA] Fixture","state":"MERGED","mergeCommit":{"oid":"ec45678a2"},"baseRefName":"%s"}\n' "$SHIP_BASE" ;;
+  release:view) [ -n "${RELEASE_TAG:-}" ] && echo "$RELEASE_TAG" ;;
+  release:list) [ "${RELEASE_ERROR:-0}" = 0 ] || exit 1; echo "${RELEASES_FIXTURE:-[]}" ;;
+  api:*/compare/*) [ "${COMPARE_ERROR:-0}" = 0 ] || exit 1; echo "${COMPARE_FIXTURE:-behind}" ;;
+  api:*/actions/workflows/*)
+    [[ "$2" == 'repos/hypertask-ai/analytics/actions/workflows/deploy.yml/runs?head_sha=ec45678a2&event=push&per_page=100' ]] || exit 1
+    [ "${RUN_ERROR:-0}" = 0 ] || exit 1; echo "$RUNS_FIXTURE" ;;
+  api:*/actions/runs/*)
+    [[ "$2" == 'repos/hypertask-ai/analytics/actions/runs/123/jobs?per_page=100' ]] || exit 1
+    [ "${JOBS_ERROR:-0}" = 0 ] || exit 1; echo "$JOBS_FIXTURE" ;;
+  *) exit 1 ;;
+esac
+MOCK
+publish='{"workflow_runs":[{"id":123,"name":"Publish hypertask.app","path":".github/workflows/deploy.yml","event":"push","head_branch":"master","conclusion":"success","head_sha":"ec45678a2"}]}'
+D() {
+  local want=$1 expected=$2 out got; shift 2
+  out=$(env PATH="$E/mock-bin:$PATH" SHIP_REPO=hypertask-ai/analytics SHIP_BASE=master RUNS_FIXTURE="$publish" JOBS_FIXTURE='{"jobs":[{"name":"deploy","conclusion":"success"}]}' "$@" ./ship-check deployed YPER4-999); got=$?
+  [ "$got" = "$want" ] && [[ $out == "$expected"* ]] && ok "$out" || bad "want $want $expected got $got $out"
+}
+D 0 'deployed ok (workflow)'
+D 1 'FAIL: no successful production publishing push' RUNS_FIXTURE='{"workflow_runs":[]}'
+for change in \
+  '.name = "Deploy Preview"' \
+  '.name = "Publish validation"' \
+  '.path = ".github/workflows/preview.yml"' \
+  '.path = ".github/workflows/validation.yml"' \
+  '.event = "pull_request"' \
+  '.event = "workflow_dispatch"' \
+  '.head_branch = "preview"' \
+  '.conclusion = "failure"' \
+  '.conclusion = null' \
+  '.conclusion = "cancelled"' \
+  '.head_sha = "different"' \
+  'del(.path)' \
+  'del(.event)'; do
+  runs=$(jq ".workflow_runs[0] |= ($change)" <<<"$publish")
+  D 1 'FAIL: no successful production publishing push' RUNS_FIXTURE="$runs"
+done
+for jobs in \
+  '{"jobs":[]}' \
+  '{"jobs":[{"name":"deploy","conclusion":"skipped"}]}' \
+  '{"jobs":[{"name":"deploy","conclusion":"failure"}]}' \
+  '{"jobs":[{"name":"deploy","conclusion":null}]}' \
+  '{"jobs":[{"name":"validate","conclusion":"success"}]}'; do
+  D 1 'FAIL: no successful production deploy job' JOBS_FIXTURE="$jobs"
+done
+D 1 'FAIL: could not read publishing jobs' JOBS_ERROR=1
+D 1 'FAIL: could not read workflow runs' RUN_ERROR=1
+D 1 'FAIL: could not read publishing workflow identity' RUNS_FIXTURE='invalid'
+D 1 'FAIL: could not read releases' RELEASE_ERROR=1
+D 1 'FAIL: no release found' RELEASES_FIXTURE='[{"tagName":"v1"}]'
+D 1 'FAIL: no release found' SHIP_BASE=main
+D 1 'FAIL: no release found' SHIP_REPO=hypertask-ai/cli SHIP_BASE=main
+D 1 'FAIL: no release found' SHIP_REPO=hypertask-ai/other
+for comparison in ahead identical; do
+  D 0 'deployed ok (release v1)' RELEASE_TAG=v1 COMPARE_FIXTURE="$comparison" RUN_ERROR=1
+  D 0 'deployed ok (release v1)' SHIP_REPO=hypertask-ai/cli SHIP_BASE=main RELEASE_TAG=v1 COMPARE_FIXTURE="$comparison" RUN_ERROR=1
+done
+D 1 'FAIL: latest release' RELEASE_TAG=v1 COMPARE_FIXTURE=behind
+D 1 'FAIL: latest release' RELEASE_TAG=v1 COMPARE_FIXTURE=diverged
+D 1 'FAIL: could not compare' RELEASE_TAG=v1 COMPARE_ERROR=1
+
 # Duplicates: HTPR-6823 was fixed by HTPR-6801's merged PR 837.
 ./ship-check duplicate HTPR-6823 HTPR-6801 830 >/dev/null && bad "duplicate accepted another ticket's PR" || ok "duplicate rejects a PR of another ticket"
 ./ship-check duplicate HTPR-6823 HTPR-6801 837 >/dev/null && ok "duplicate binds HTPR-6823 to PR 837" || bad "duplicate bind"
