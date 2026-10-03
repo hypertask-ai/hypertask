@@ -21,6 +21,8 @@ import useTiptap from "@/components/RTE/Tiptap";
 import { useContentZoom } from "@/hooks/General/useContentZoom";
 import useDebounceWithCancel from "@/hooks/General/useDebounceWithCancel";
 import { useFlag } from "@/hooks/useFlag";
+import { MOBILE_TARGET } from "@/lib/configs/general.config";
+import { cn } from "@/utils/undoActions/helperFuncs";
 import { pageRoute } from "@/lib/constants/APIRouteConstants";
 import { HTPR_6861_MOBILE_PAGE_BACK_ROW_FLAG } from "@/lib/flags/keys";
 import { MobileViewContext } from "@/lib/contexts/mobileContext";
@@ -333,7 +335,11 @@ const PageEditor = ({ _page, _user }: PageEditorProps) => {
               <button
                 type="button"
                 onClick={() => void returnToTask()}
-                className="flex flex-1 min-w-0 items-center gap-2 rounded-[5px] px-2 py-2 text-left text-content font-medium text-white-black transition hover:bg-hover-active focus-visible:bg-hover-active focus-visible:outline-none"
+                // Same control as Settings "Back to app"; 44px phone target.
+                className={cn(
+                  MOBILE_TARGET,
+                  "min-w-0 flex-1 justify-start gap-2 rounded-sm px-2 text-left text-content font-medium text-white-black transition hover:bg-hover-active focus-visible:bg-hover-active focus-visible:outline-none",
+                )}
               >
                 <ArrowLeft strokeWidth={1.75} className="h-4 w-4 shrink-0" />
                 <span className="truncate">Back to task</span>

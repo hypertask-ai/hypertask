@@ -12,7 +12,6 @@ const root = path.resolve(__dirname, "..");
 const read = (file) => fs.readFileSync(path.join(root, file), "utf8");
 const editor = read("src/app/page/[publicId]/PageEditor.tsx");
 const palette = read("src/components/Modals/commands/HTC/commands.tsx");
-const settings = read("src/components/Modals/Settings/SettingsShell.tsx");
 const parse = (source) => ts.createSourceFile("source.tsx", source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
 const find = (source, predicate) => {
   let result;
@@ -33,7 +32,7 @@ const mobileRow = row.whenTrue.getText();
 const icon = (props) => React.createElement("svg", props);
 const renderRow = (mobilePageBackRowEnabled, isMobile, statusText = "Saved") => renderToStaticMarkup(evaluate(`(${row.getText()})`, {
   mobilePageBackRowEnabled, isMobile, statusText, version: 7, isDeleting: false,
-  returnToTask() {}, deletePage() {}, ArrowLeft: icon, ChevronLeft: icon, Trash2: icon,
+  returnToTask() {}, deletePage() {}, cn: (...c) => c.filter(Boolean).join(" "), MOBILE_TARGET: "min-h-[44px] min-w-[44px] shrink-0 flex items-center justify-center", ArrowLeft: icon, ChevronLeft: icon, Trash2: icon,
 }));
 
 const checkNoUtilityActions = (markup) => assert.doesNotMatch(markup, /Version|Delete|Trash2/);
@@ -46,18 +45,18 @@ test("the new flag is registered with the requested ship date and Owner + QA def
 });
 
 test("the Settings-style row renders only with flag AND mobile, using the original return flow", () => {
-  const expectedClasses = settings.match(/className="mb-4 flex w-full ([^"]+)"/)[1];
-  assert.match(mobileRow, /className="flex flex-1 min-w-0 /);
-  assert.ok(mobileRow.includes(expectedClasses));
+  // Settings "Back to app" look, with the shared 44px phone target and 4px corners.
+  assert.match(mobileRow, /MOBILE_TARGET,/);
+  assert.match(mobileRow, /min-w-0 flex-1 justify-start gap-2 rounded-sm px-2 text-left text-content font-medium text-white-black/);
   assert.match(mobileRow, /<ArrowLeft strokeWidth=\{1\.75\} className="h-4 w-4 shrink-0" \/>/);
   assert.match(mobileRow, /<span className="truncate">Back to task<\/span>/);
   assert.match(mobileRow, /onClick=\{\(\) => void returnToTask\(\)\}/);
   assert.match(mobileRow, /flex w-full items-center gap-2 px-2 pt-2/);
   for (const [enabled, mobile] of [[false, false], [true, false], [false, true]]) {
     assert.match(renderRow(enabled, mobile), /Version 7/);
-    assert.doesNotMatch(renderRow(enabled, mobile), /flex-1 min-w-0/);
+    assert.doesNotMatch(renderRow(enabled, mobile), /min-w-0 flex-1/);
   }
-  assert.match(renderRow(true, true), /flex-1 min-w-0/);
+  assert.match(renderRow(true, true), /min-h-\[44px\].*min-w-0 flex-1/);
 });
 
 test("flagged mobile row has only save status on the right, never Version or Delete", () => {
