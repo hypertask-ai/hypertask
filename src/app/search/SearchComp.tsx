@@ -45,6 +45,7 @@ const SearchComp = ({
   const layoutFlagEnabled = useFlag(HTPR_6865_SEARCH_LAYOUT_FLAG);
   const layoutEnabled = layoutFlagEnabled && autocompleteEnabled;
   const matchHighlightsFlagEnabled = useFlag(HTPR_6882_SEARCH_MATCH_HIGHLIGHTS_FLAG);
+  // Hides the tab row when the tabs are only "All" plus one board.
   const oneBoardTabsFlagEnabled = useFlag(HTPR_6909_SEARCH_ONE_BOARD_TABS_FLAG);
   const commenterFlagEnabled = useFlag(HTPR_6880_SEARCH_COMMENTER_FLAG);
   const labelScopeFlagEnabled = useFlag(HTPR_6878_SEARCH_LABEL_SCOPE_FLAG);
@@ -83,8 +84,6 @@ const SearchComp = ({
     includeArchived,
     setIncludeArchivedResults,
   } = useSearch(_searchTerm, _initialTabIndex, _includeArchived, _fromProject);
-  // Tabs are only "All" plus one board: the row repeats the same list.
-  const hideOneBoardTabs = oneBoardTabsFlagEnabled && tabs.length <= 2;
   const matchSnippets = matchHighlightsFlagEnabled && layoutEnabled
     ? typedTasks.map((task) => highlightedSearchSnippet((task.commentId ? task.commentText : task.descriptionText) ?? '', inputValue, commenterFlagEnabled && layoutEnabled))
     : undefined;
@@ -186,7 +185,7 @@ const SearchComp = ({
                 </div>
               ) : (
                 <div>
-                  {results && !hideOneBoardTabs && (
+                  {results && !(oneBoardTabsFlagEnabled && tabs.length <= 2) && (
                     <div className={cn("hidden @md:block w-full overflow-x-auto scrollbar-none no-scrollbar @md:px-9 mt-4", layoutEnabled && "px-4")}>
                       <div className="flex flex-wrap grow gap-3">
                         {tabs.map((item, index) => (
@@ -270,7 +269,7 @@ const SearchComp = ({
                         </span>
                       </div>
                     )}
-                  {results && !hideOneBoardTabs && (
+                  {results && !(oneBoardTabsFlagEnabled && tabs.length <= 2) && (
                     <div className="flex inbox_footer @md:hidden no-scrollbar scrollbar-none gap-3 w-100 bg-hoverCardBackground  h-20 @md:h-8 inbox_title px-4">
                       {tabs.map((item, index) => (
                         <SplitTitle
