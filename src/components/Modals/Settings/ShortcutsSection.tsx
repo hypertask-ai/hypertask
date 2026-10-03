@@ -10,7 +10,7 @@ import { MobileViewContext } from "@/lib/contexts/mobileContext";
 import { useRecoilValue } from "@/lib/state";
 import { appShellRailAtom } from "@/store";
 import { useFlag } from "@/hooks/useFlag";
-import { HTPR_6559_KEEP_DIRECT_TASK_OPEN_FLAG } from "@/lib/flags/keys";
+import { HTPR_6559_KEEP_DIRECT_TASK_OPEN_FLAG, HTPR_6662_AGENT_LOG_NAME_FLAG } from "@/lib/flags/keys";
 
 const ShortcutsSection = () => {
   const isApple = useDeviceContext();
@@ -20,11 +20,17 @@ const ShortcutsSection = () => {
     "htpr-5913-consistent-comment-shortcuts",
   );
   const keepDirectTaskOpen = useFlag(HTPR_6559_KEEP_DIRECT_TASK_OPEN_FLAG);
+  const agentLogNameEnabled = useFlag(HTPR_6662_AGENT_LOG_NAME_FLAG);
+  let historyToggleLabel = "Toggle history events";
+  if (agentLogNameEnabled) {
+    historyToggleLabel = "Toggle agent log";
+  }
   const shortcutGroups = getKeyboardShortcuts(
     isApple,
     appShellRailOn,
     consistentCommentShortcuts,
     keepDirectTaskOpen,
+    historyToggleLabel,
   );
   const [searchTerm, setSearchTerm] = useState("");
 

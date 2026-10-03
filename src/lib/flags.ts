@@ -38,6 +38,7 @@ import {
   HTPR_6861_MOBILE_PAGE_BACK_ROW_FLAG,
   HTPR_6872_PAGE_IMAGE_GALLERY_FLAG,
   HTPR_6868_TICKET_PREFIX_FLAG,
+  HTPR_6662_AGENT_LOG_NAME_FLAG,
   POSTHOG_ERROR_ALERT_FLAG,
   SCOPED_BOARD_REFETCH_FLAG,
   MY_TASKS_CROSS_BOARD_PRIORITY_SORT_FLAG,
@@ -373,6 +374,11 @@ const FEATURE_FLAG_DEFINITIONS = [
     shippedOn: "2026-10-03",
     description:
       "Lets you click images on pages to view them full size, browse all page images, and download them in the ticket image gallery.",
+  },
+  {
+    key: HTPR_6662_AGENT_LOG_NAME_FLAG,
+    shippedOn: "2026-10-03",
+    description: "Names the task history toggle Show agent log or Hide agent log in Ctrl+K and Toggle agent log in shortcut help.",
   },
   {
     key: HTPR_6868_TICKET_PREFIX_FLAG,

@@ -11,7 +11,7 @@ import {
 import { getKeyboardShortcuts } from "@/lib/constants/shortcuts";
 import { MobileViewContext } from "@/lib/contexts/mobileContext";
 import { useFlag } from "@/hooks/useFlag";
-import { HTPR_6559_KEEP_DIRECT_TASK_OPEN_FLAG } from "@/lib/flags/keys";
+import { HTPR_6559_KEEP_DIRECT_TASK_OPEN_FLAG, HTPR_6662_AGENT_LOG_NAME_FLAG } from "@/lib/flags/keys";
 
 const KeyboardShortcuts = () => {
   const isApple = useDeviceContext();
@@ -21,6 +21,11 @@ const KeyboardShortcuts = () => {
     "htpr-5913-consistent-comment-shortcuts",
   );
   const keepDirectTaskOpen = useFlag(HTPR_6559_KEEP_DIRECT_TASK_OPEN_FLAG);
+  const agentLogNameEnabled = useFlag(HTPR_6662_AGENT_LOG_NAME_FLAG);
+  let historyToggleLabel = "Toggle history events";
+  if (agentLogNameEnabled) {
+    historyToggleLabel = "Toggle agent log";
+  }
   const [_showShortcuts, setShowShortcuts] = useRecoilState(showShortcutsAtom);
   const [keyword, setKeyword] = useState("");
   const mainData = getKeyboardShortcuts(
@@ -28,13 +33,12 @@ const KeyboardShortcuts = () => {
     appShellRailOn,
     consistentCommentShortcuts,
     keepDirectTaskOpen,
+    historyToggleLabel,
   );
-  const [filteredShortcuts, setFilteredShortcuts] = useState(mainData);
 
   // ====================== ON INPUT KEY CHANGE
   const onKeyChange = (e: any) => {
     setKeyword(e.target.value);
-    filterData(e.target.value);
   };
 
   // ======================== keydown handler
@@ -52,11 +56,9 @@ const KeyboardShortcuts = () => {
     }
   };
 
-  // =================== Function to filter based on search term
-  const filterData = (searchTerm: string) => {
-    const searchTermLower = searchTerm?.toLowerCase() || "";
-    
-    const filteredData: any = mainData
+  // Derive the filtered list each render so flag changes also update visible labels.
+  const searchTermLower = keyword.toLowerCase();
+  const filteredShortcuts = mainData
       .map((group) => {
         // Check if the group has a 'sub' property
         if (group.sub) {
@@ -91,10 +93,6 @@ const KeyboardShortcuts = () => {
         return group;
       })
       .filter(Boolean); // Remove null values from the array
-
-    // Set the filtered array in the state
-    setFilteredShortcuts(filteredData);
-  };
 
   function handleClick(event: any) {
     try {
