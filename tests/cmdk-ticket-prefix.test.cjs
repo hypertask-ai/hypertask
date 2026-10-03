@@ -11,8 +11,6 @@ const { CommandMode } = jiti(path.join(root, "src/models/enums.ts"));
 const flags = jiti(path.join(root, "src/lib/flags/keys.ts"));
 const registry = jiti(path.join(root, "src/components/Modals/commands/HTC/AllCommands.ts"));
 const palette = "src/components/Modals/commands/HTC/commands.tsx";
-const shell = "src/components/Modals/Settings/SettingsShell.tsx";
-const navigation = "src/components/Modals/Settings/settingsNavigation.ts";
 const prefixKey = "settingsBoardTicketPrefix";
 const read = (file) => fs.readFileSync(path.join(root, file), "utf8");
 
@@ -89,15 +87,6 @@ function searchCommands(groups, query) {
   return result.flatMap((group) => group.commandLists);
 }
 
-function sidebarGroups(enabled, searchTerm = "") {
-  const bindings = { ...flagBindings(shell, enabled), searchTerm, billing: null, useMemo: (callback) => callback() };
-  for (const name of ["SETTINGS_TABS", "SETTINGS_CROSS_TAB_GROUPS", "SETTINGS_NAV_GROUPS", "isSettingsNavLink"]) {
-    bindings[name] = evaluate(initializer(navigation, name), bindings);
-  }
-  bindings.navigationTab = bindings.SETTINGS_TABS.find((tab) => tab.id === "board");
-  return evaluate(initializer(shell, "{ bottomGroups, primaryGroups }"), bindings).primaryGroups;
-}
-
 function prefixResult(enabled, query = "ticket prefix") {
   return searchCommands(paletteGroups(enabled), query).find((command) => command.key === prefixKey);
 }
@@ -124,18 +113,9 @@ test("flag on: Ticket prefix aliases and partial case-insensitive queries are se
   }
 });
 
-test("settings sidebar: Ticket prefix search alias is flag-gated and uses board-general", () => {
-  for (const query of ["ticket prefix", " TICKET PREFIX ", "ticket pre"]) {
-    const on = sidebarGroups(true, query).flatMap((group) => group.items);
-    assert.ok(on.some((item) => item.id === "board-general" && item.label === "Ticket prefix"), `Missing sidebar alias for ${query}`);
-    assert.deepEqual(sidebarGroups(false, query), []);
-  }
-  assert.deepEqual(sidebarGroups(true), sidebarGroups(false));
-  assert.ok(sidebarGroups(false, "general").flatMap((group) => group.items).some((item) => item.id === "board-general"));
-});
 
-test("both search memos re-evaluate when the Ticket prefix flag changes", () => {
-  for (const [file, name] of [[palette, "allCommands_"], [shell, "{ bottomGroups, primaryGroups }"]]) {
+test("the command search memo re-evaluates when the Ticket prefix flag changes", () => {
+  for (const [file, name] of [[palette, "allCommands_"]]) {
     const source = ts.createSourceFile(file, initializer(file, name), ts.ScriptTarget.Latest, true);
     const expression = source.statements[0].expression;
     assert.ok(expression.arguments[1].elements.some((element) => element.getText(source) === "ticketPrefixEnabled"));

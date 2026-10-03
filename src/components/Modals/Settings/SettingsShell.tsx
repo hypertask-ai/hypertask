@@ -18,8 +18,6 @@ import {
 import Tooltip from "@/components/Common/Tooltip";
 import { useSignout } from "@/hooks/MultiPages/HTC/useSignout";
 import { useMobileView } from "@/lib/contexts/mobileContext";
-import { useFlag } from "@/hooks/useFlag";
-import { HTPR_6868_TICKET_PREFIX_FLAG } from "@/lib/flags/keys";
 import { SidebarContextProvider } from "@/lib/contexts/Sidebars/SidebarProvider";
 import { currentUserAtom, showCommandsAtom } from "@/store";
 import { cn } from "@/utils/undoActions/helperFuncs";
@@ -268,7 +266,6 @@ const SettingsShell: React.FC<SettingsShellProps> = ({ section }) => {
   const activeSection = normalizeSettingsSection(section);
   const activeTab = getSettingsTabForSection(activeSection);
   const mbl = useMobileView();
-  const ticketPrefixEnabled = useFlag(HTPR_6868_TICKET_PREFIX_FLAG);
   const currentUser = useRecoilValue(currentUserAtom);
   const showCommands = useRecoilValue(showCommandsAtom);
   const { data: announcementsData } = useGetAnnouncements(
@@ -354,13 +351,7 @@ const SettingsShell: React.FC<SettingsShellProps> = ({ section }) => {
       groups
         .map((group) => ({
           ...group,
-          items: group.items.map((item) =>
-            ticketPrefixEnabled && normalizedSearch &&
-            !isSettingsNavLink(item) && item.id === "board-general" &&
-            "ticket prefix".includes(normalizedSearch)
-              ? { ...item, label: "Ticket prefix" }
-              : item,
-          ).filter(
+          items: group.items.filter(
             (item) =>
               (isSettingsNavLink(item) ||
                 item.id !== "apiKeys" ||
@@ -382,7 +373,7 @@ const SettingsShell: React.FC<SettingsShellProps> = ({ section }) => {
       bottomGroups: filterGroups(SETTINGS_CROSS_TAB_GROUPS),
       primaryGroups: filterGroups(navigationTab.groups),
     };
-  }, [billing, navigationTab.groups, searchTerm, ticketPrefixEnabled]);
+  }, [billing, navigationTab.groups, searchTerm]);
 
   const isSearching = searchTerm.trim().length > 0;
   const hasVisibleGroups = primaryGroups.length > 0 || bottomGroups.length > 0;
