@@ -132,12 +132,6 @@ const FEATURE_FLAG_DEFINITIONS = [
       "Shows a ticket immediately from authorized cached board, My Tasks, or Inbox data while its full detail refreshes in the background.",
   },
   {
-    key: "yper4-123-board-check",
-    shippedOn: "2026-10-01",
-    description:
-      "Lets board checks read recent agent activity across all runs on a ticket the caller can read.",
-  },
-  {
     key: HTPR_6673_SIGNUP_ANALYTICS_FLAG,
     shippedOn: "2026-09-28",
     description:
