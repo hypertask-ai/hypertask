@@ -24,15 +24,9 @@ export const shouldShowMobileTabBar = (pathname: string | null) =>
     ),
   );
 
-// Full-screen reading surfaces: a ticket and its pages carry their own back
-// control, so the bottom dock only takes space.
-const docklessPaths = ["/detail", "/page"];
-
 export const shouldShowMobileDock = (pathname: string | null) =>
   shouldShowMobileTabBar(pathname) &&
-  !docklessPaths.some(
-    (path) => pathname === path || (pathname?.startsWith(`${path}/`) ?? false),
-  );
+  !(pathname?.startsWith("/detail") ?? false);
 
 export const shouldShowMobileCreateTaskButton = (pathname: string | null) =>
   shouldShowMobileDock(pathname) &&
@@ -42,6 +36,9 @@ export const shouldShowMobileCreateTaskButton = (pathname: string | null) =>
         (path) => pathname === path || pathname.startsWith(`${path}/`),
       ),
   );
+
+export const isTicketPagePath = (pathname: string | null) =>
+  pathname?.startsWith("/page/") ?? false;
 
 export const isMobileInboxPath = (pathname: string | null) =>
   pathname === "/inbox" || (pathname?.startsWith("/inbox/") ?? false);
