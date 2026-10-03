@@ -408,6 +408,8 @@ const useSections = ({
   if (shiftCQuickAddEnabled && nQuickAddEnabled && quickEntryCardsEnabled) {
     handleKeyDown = handleShiftCKeyDown;
   }
+  const handleKeyDownRef = useRef(handleKeyDown);
+  handleKeyDownRef.current = handleKeyDown;
 
   // ==================== check for duplicate rankins and return true/false
   function hasDuplicateRankings(items: ITask[]) {
@@ -489,7 +491,7 @@ const useSections = ({
     const sectionListenerKey = sectionListenerKeyRef.current;
     if (!sectionListenerKey) return;
 
-    sectionKeydownHandlers.set(sectionListenerKey, handleKeyDown);
+    sectionKeydownHandlers.set(sectionListenerKey, (event) => handleKeyDownRef.current(event));
     if (sectionKeydownHandlers.size === 1) {
       document.addEventListener("keydown", handleDelegatedSectionKeydown);
     }
@@ -503,7 +505,7 @@ const useSections = ({
         document.removeEventListener("keydown", handleDelegatedSectionKeydown);
       }
     };
-  }, [handleKeyDown]);
+  }, []);
 
   useEffect(() => {
     const sectionListenerKey = sectionListenerKeyRef.current;
