@@ -14,19 +14,20 @@ just skips every write test — see "Write journeys" below.
 
 ## Secrets/vars this job needs
 
-- `SMOKE_SESSION_STATE` (secret) — Playwright `storageState` JSON (cookies)
-  for a dedicated, low-privilege production account. Session cookies last 7
-  days (`src/lib/configs/auth.config.ts`), so this needs re-capturing weekly;
-  when it expires the job alerts on Telegram instead of rolling back
-  (see `e2e/smoke/global-setup.ts`) — that's expected, not a bug.
-- `SMOKE_BOARD_PATH` (var) — canonical URL path of the seeded board with a
-  couple of cards on the smoke account, e.g. `/detail/project-<id>`.
-- `SMOKE_TASK_PATH` (var) — canonical URL path of one seeded task on that
-  board, e.g. `/detail/project-<id>/<taskNumber>`.
+- `SMOKE_SESSION_STATE` (secret): Playwright `storageState` JSON for plain
+  QA user 2343. Owner + QA user 985 is also accepted, never Valentin (6).
+  Refresh before the `ht_session` expires. A missing, invalid or expired
+  login fails the job with `not tested: QA login missing/expired`, without
+  authorizing rollback of a healthy app.
+- `SMOKE_BOARD_PATH` (var): `/project?id=6859&surface=board`, the plain QA
+  account's existing QA Sandbox board.
+- `SMOKE_TASK_PATH` (var): `/detail/project-6859/43`, an existing card on
+  that board. Keep both paths pointing at a card visible to the QA account.
 
-Without `SMOKE_BOARD_PATH`/`SMOKE_TASK_PATH` the kanban-board and task-detail
-checks are skipped (they have nothing real to open) — the other six views
-still run. Set them once the seeded account exists.
+Post-deploy runs set `SMOKE_POSTDEPLOY=1`. Both paths are required: a missing
+fixture is not a passing test. On desktop and phone, the board check clicks
+that card, asserts its actual title and body, and observes it staying open
+for ten seconds without reloading. No ticket content is changed.
 
 ## Required PR browser check
 
@@ -57,8 +58,8 @@ Each view in `prod.spec.ts` asserts one route-specific DOM element (a
 `data-`/`id` attribute or class read straight from the component that
 renders it — see the comment above each `VIEWS` entry for the source file).
 This is what stops a blank or generic app shell from passing. They're
-verified against the current component source, not against a live session
-(the smoke account doesn't exist yet) — if a selector ever goes stale after
+verified against the current component source and the live QA Sandbox.
+If a selector ever goes stale after
 a UI change, the fix is a one-line update to the `selector` field for that
 view, not a redesign of the check.
 
@@ -71,9 +72,37 @@ must actually be visible.
 
 ## Re-capturing the session
 
-Log in as the smoke account in a real browser, then export cookies as
-Playwright storage state (`await context.storageState()`), and set it with
-`gh secret set SMOKE_SESSION_STATE < state.json`.
+Log in as plain QA user 2343 in a real browser, export Playwright storage
+state (`await context.storageState()`) to
+`~/.config/hypertask-videos/storageState-qa-normal.json`, then refresh:
+
+```bash
+gh secret set SMOKE_SESSION_STATE -R hypertask-ai/hypertask < ~/.config/hypertask-videos/storageState-qa-normal.json
+```
+
+Never print, commit or upload the state, and never use Valentin's login.
+Manually prove the browser step on a non-production branch without data
+writes or rollback. The existing input disables the core-actions write probe;
+its provisioning job is restricted to the production ref, so it also skips:
+
+```bash
+gh workflow run prod-health.yml -R hypertask-ai/hypertask --ref <non-production-branch> -f provision_core_actions=true
+```
+
+Do not use that input on production unless you intend to provision the
+core-actions fixture. A normal production dispatch also runs core-actions.
+
+For a local read-only run with the same suite:
+
+```bash
+umask 077
+mkdir -p e2e/smoke/.state
+cp ~/.config/hypertask-videos/storageState-qa-normal.json e2e/smoke/.state/smoke-state.json
+SMOKE_BASE_URL=https://app.hypertask.ai SMOKE_POSTDEPLOY=1 \
+  SMOKE_BOARD_PATH='/project?id=6859&surface=board' \
+  SMOKE_TASK_PATH='/detail/project-6859/43' \
+  npx playwright test -c playwright.config.smoke.ts --project Desktop --project Mobile
+```
 
 ## Write journeys (HTPR-6636 phase 2)
 
