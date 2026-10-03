@@ -56,7 +56,7 @@ const TaskTitle = () => {
   const showAiChatInterface = useRecoilValue(showAIChatInterfaceAtom);
   const aiChatSidebarWidthPx = useRecoilValue(aiChatSidebarWidthPxAtom);
   useAutosizeTextArea(
-    textAreaRef.current,
+    textAreaRef,
     value,
     undefined,
     `${showAiChatInterface}:${aiChatSidebarWidthPx}`
@@ -159,6 +159,7 @@ const TaskTitle = () => {
       )}
       <textarea
         ref={textAreaRef}
+        rows={1}
         tabIndex={0}
         id="title-input"
         value={value ?? ""}

@@ -14,6 +14,7 @@ interface AIChatClosedLayoutProps {
   /** Chat UI rendered beside the page once the chat runtime is mounted. */
   panels?: React.ReactNode;
   chatOpen?: boolean;
+  sidebarWidthPx?: number;
 }
 
 /**
@@ -31,6 +32,7 @@ export default function AIChatClosedLayout({
   onOpenAIChat,
   panels,
   chatOpen = false,
+  sidebarWidthPx = 0,
 }: AIChatClosedLayoutProps) {
   const pathname = usePathname();
   const isMobile = useContext(MobileViewContext);
@@ -75,7 +77,14 @@ export default function AIChatClosedLayout({
       >
         {children}
       </div>
-      {panels}
+      {/* Keep the page width stable while the open sidebar's chunks load. */}
+      <div
+        data-ai-chat-slot
+        className={sidebarWidthPx > 0 && !isMobile ? "shrink-0" : "contents"}
+        style={sidebarWidthPx > 0 && !isMobile ? { width: sidebarWidthPx } : undefined}
+      >
+        {panels}
+      </div>
       {/* /agents/chat has its own details-pane chevron; keep this one off there. */}
       {panels === undefined && !isMobile && !pathname?.startsWith("/agents/chat") && (
         <button

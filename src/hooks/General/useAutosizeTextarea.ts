@@ -1,10 +1,10 @@
 import { aiTaskWriterConfig } from "@/lib/configs/aiTaskWriter.config";
 import { ITaskDetailEditMode } from "@/lib/contexts/TaskDetail/TaskProvider";
-import { useEffect, useRef } from "react";
+import { useEffect, useLayoutEffect, useRef, type RefObject } from "react";
 
 // Updates the height of a <textarea> when the value changes.
 const useAutosizeTextArea = (
-  textAreaRef: HTMLTextAreaElement | null,
+  textArea: HTMLTextAreaElement | RefObject<HTMLTextAreaElement | null> | null,
   value: string,
   taskWriterDetails?: {
     editMode: ITaskDetailEditMode | undefined;
@@ -18,6 +18,7 @@ const useAutosizeTextArea = (
   resizeTrigger?: unknown
 ) => {
   const recalc = () => {
+    const textAreaRef = textArea && "current" in textArea ? textArea.current : textArea;
     if (!textAreaRef) return;
     textAreaRef.style.height = taskWriterDetails
       ? aiTaskWriterConfig.fontSizes.placeholder
@@ -42,15 +43,16 @@ const useAutosizeTextArea = (
   const recalcRef = useRef(recalc);
   recalcRef.current = recalc;
 
-  // Recalc on value change and whenever the caller signals a layout-width shift
-  // (chat sidebar toggle). rAF lets the new layout settle before we measure, or
-  // the height baked in at the old width goes stale and the textarea overlaps
-  // the content below it (HTPR-4321). A textarea ResizeObserver does NOT fire
-  // for width changes driven by an ancestor flex reflow, so we can't rely on it.
+  // Measure the committed width before paint, including the initial ref attachment.
+  useLayoutEffect(() => {
+    recalcRef.current();
+  }, [textArea, value, resizeTrigger]);
+
+  // Ancestor flex reflow can settle after the layout pass (HTPR-4321).
   useEffect(() => {
     const raf = requestAnimationFrame(() => recalcRef.current());
     return () => cancelAnimationFrame(raf);
-  }, [textAreaRef, value, resizeTrigger]);
+  }, [resizeTrigger]);
 
   // Viewport resize (e.g. dragging the window to/from half-screen) also changes
   // the wrap width.
