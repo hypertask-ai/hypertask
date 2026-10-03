@@ -16,6 +16,8 @@ let enabled = false;
 let pathname = "/my-tasks";
 let memberQueryEnabled;
 let changeBoardSearch;
+let cachedCommands;
+let lastCommands;
 const noop = () => {};
 const box = ({ children }) => React.createElement("div", null, children);
 const members = { members: [], owner: null };
@@ -58,16 +60,25 @@ stub("src/components/Modals/Sheets/index.ts", { MobileBottomSheet: box });
 stub("src/components/Modals/commands/HTC/AllCommands.ts", {
   getAllCommands: () => [], getMobileCommandGroups: (groups) => groups, getBoardMenuCommands: (groups) => groups,
 });
-stub("src/hooks/MultiPages/HTC/useHTC.tsx", { default: (groups) => ({
-  keyword: "", filterCommands: groups, hoveredGroup: 0, selectedCommand: null,
-  onKeyChange: noop, handleCommandSelect: noop, setHoveredGroupIndex: noop, setCurrentCommandIndex: noop, setSelectedCommand: noop,
-}) });
+stub("src/hooks/MultiPages/HTC/useHTC.tsx", { default: (groups) => {
+  lastCommands = groups;
+  return {
+    keyword: "", filterCommands: cachedCommands ?? groups, hoveredGroup: 0, selectedCommand: null,
+    onKeyChange: noop, handleCommandSelect: noop, setHoveredGroupIndex: noop, setCurrentCommandIndex: noop, setSelectedCommand: noop,
+  };
+} });
 stub("src/components/Modals/commands/HTC/CommandGroup.tsx", { default: ({ filterCommands, onClickHandler }) =>
   filterCommands.map((group) => React.createElement("section", { key: group.group, "data-group": group.group },
     group.commandLists.map((command) => React.createElement("button", { key: command.key, "data-mode": command.commandMode, onClick: () => onClickHandler(command) }, command.name)))) });
 stub("src/components/Modals/FilterModals/SelectFilters/FilterHTC.tsx", { default: ({ extraFilters }) => React.createElement("div", { "data-filters": true }, extraFilters) });
 const jiti = require("jiti")(__filename, { interopDefault: true, jsx: { runtime: "automatic" }, alias: { "@": path.join(root, "src") } });
 global.React = React;
+stub("src/hooks/MultiPages/Filters/useFilterView.ts", { useFilterView: () => ({
+  keyword: "", onKeyChange: noop, selectedIndex: 0, setSelectedIndex: noop,
+  filteredCommands: [], activeFilters: { matchFilters: "ANY", addedFilters: [] },
+}) });
+const Assign = jiti(path.join(root, "src/components/Modals/AssignToUser/AssignToUser.tsx")).default;
+const FilterOptions = jiti(path.join(root, "src/components/Modals/FilterModals/SelectFilters/ShowFilterOptionsModal.tsx")).default;
 const Controls = jiti(path.join(root, "src/app/my-tasks/MyTasksViewControls.tsx")).default;
 const Filters = jiti(path.join(root, "src/app/my-tasks/MyTasksKanbanFilterModal.tsx")).default;
 const Commands = jiti(path.join(root, "src/components/Modals/commands/HTC/commands.tsx")).default;
@@ -90,6 +101,7 @@ function Harness({ filters = false, commands = false, boardList = boards }) {
 }
 test.beforeEach(() => {
   enabled = false;
+  cachedCommands = undefined;
   pathname = "/my-tasks";
   config = structuredClone(DEFAULT_MY_TASKS_VIEW_CONFIG);
   dom = new JSDOM('<div id="root"></div>', { url: "https://app.hypertask.ai/my-tasks" });
@@ -170,6 +182,14 @@ test("Scope command is in Boards only on My Tasks and opens the same picker", ()
   assert.equal(document.querySelector('[data-group="Boards"]')?.textContent.includes("Scope"), false);
 });
 
+test("live flag-off hides Scope even while command search retains cached rows", () => {
+  enabled = true; render({ commands: true });
+  assert.equal(document.querySelector('[data-group="Boards"] button').textContent, "Scope");
+  cachedCommands = lastCommands;
+  enabled = false; render({ commands: true });
+  assert.equal(document.querySelector('[data-group="Boards"]').textContent.includes("Scope"), false);
+});
+
 test("flag-on Filters has Columns, Completed tasks and snoozed controls tied to current view state", () => {
   enabled = true; render({ filters: true });
   const filters = document.querySelector('[data-filters]');
@@ -181,6 +201,40 @@ test("flag-on Filters has Columns, Completed tasks and snoozed controls tied to 
   assert.equal(document.querySelector('[aria-label="Filter My Tasks"]').textContent, "Filters3");
   const filterHost = fs.readFileSync(path.join(root, "src/components/Modals/FilterModals/SelectFilters/FilterHTC.tsx"), "utf8");
   const filterList = fs.readFileSync(path.join(root, "src/components/Modals/FilterModals/SelectFilters/ShowFilterOptionsModal.tsx"), "utf8");
-  assert.match(filterHost, /<ShowFilterOptions\s+extraFilters=\{extraFilters\}/);
-  assert.match(filterList, /\{extraFilters\}\s*<\/ModalListContainer>/);
+  assert.match(filterHost, /<ShowFilterOptions\s+extraFilters=\{commandScopePickerEnabled \? extraFilters : undefined\}/);
+  assert.match(filterList, /\{commandScopePickerEnabled && extraFilters\}\s*<\/ModalListContainer>/);
+});
+
+test("shared Assign picker ignores boardPicker props while the scope flag is off", () => {
+  let selected = false;
+  act(() => reactRoot.render(React.createElement(Assign, {
+    assignees: [], onClose: noop,
+    boardPicker: { options: [{ id: 1, label: "Alpha", checked: true }], onSelect: () => { selected = true; } },
+  })));
+  assert.ok(document.querySelector('[placeholder="Type user name"]'));
+  assert.equal(document.querySelector('[id^="scope-board-"]'), null);
+  assert.equal(memberQueryEnabled, true);
+  act(() => document.dispatchEvent(new dom.window.KeyboardEvent("keydown", { key: "Enter", bubbles: true })));
+  assert.equal(selected, false);
+});
+
+test("shared filter list gates extra controls and checkbox keyboard handling through live flag changes", () => {
+  let toggles = 0;
+  const props = {
+    view: "MyTasks", handleAction: noop, toggleFilterMatchOptions: () => { toggles += 1; },
+    extraFilters: React.createElement("label", null, "Extra scope control", React.createElement("input", { type: "checkbox" })),
+  };
+  const renderOptions = () => act(() => reactRoot.render(React.createElement(FilterOptions, props)));
+  const arrow = (target) => act(() => target.dispatchEvent(new dom.window.KeyboardEvent("keydown", { key: "ArrowRight", keyCode: 39, bubbles: true })));
+  renderOptions();
+  assert.equal(document.querySelector('input[type="checkbox"]'), null);
+  const checkbox = document.createElement("input"); checkbox.type = "checkbox"; document.body.append(checkbox);
+  arrow(checkbox); assert.equal(toggles, 1, "flag off retains the existing keyboard handler");
+  checkbox.remove();
+  enabled = true; renderOptions();
+  assert.match(document.body.textContent, /Extra scope control/);
+  arrow(document.querySelector('input[type="checkbox"]'));
+  assert.equal(toggles, 1, "flag on does not intercept checkbox keys");
+  enabled = false; renderOptions();
+  assert.equal(document.querySelector('input[type="checkbox"]'), null);
 });

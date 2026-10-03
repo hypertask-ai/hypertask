@@ -32,6 +32,8 @@ import {
   sortAssigneeOptionsByRecency,
 } from "@/lib/assigneeRecency";
 import UserAvatar from "@/components/Common/UserAvatar";
+import { useFlag } from "@/hooks/useFlag";
+import { HTPR_6567_COMMAND_SCOPE_PICKER_FLAG } from "@/lib/flags/keys";
 
 interface IProps {
   onClose: any; // Change 'any' to the specific function type if possible
@@ -71,8 +73,10 @@ const AssignModal = ({
   extraUsers = [],
   bulkTaskIds,
   onBulkAssign,
-  boardPicker,
+  boardPicker: boardPickerProp,
 }: IProps) => {
+  const commandScopePickerEnabled = useFlag(HTPR_6567_COMMAND_SCOPE_PICKER_FLAG);
+  const boardPicker = commandScopePickerEnabled ? boardPickerProp : undefined;
   const [selectedIndex, setSelectedIndex] = useState(0);
   const [hoveredIndex, setHoveredIndex] = useState<number | null>(null);
   const { handleMouseEnter, handleMouseLeave, handleMouseMove } =
@@ -434,7 +438,7 @@ const AssignModal = ({
           handleMouseMove={handleMouseMove}
           id="assignees-list"
         >
-          {boardPicker ? (
+          {commandScopePickerEnabled && boardPicker ? (
             <div>
               <h3 className="px-4 pt-2.5 pb-1 text-text-light-gray font-semibold text-micro uppercase tracking-wider">Boards</h3>
               {filteredBoards?.map((board, index) => (

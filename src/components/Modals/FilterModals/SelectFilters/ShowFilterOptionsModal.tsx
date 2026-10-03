@@ -20,6 +20,8 @@ import { currentUserAtom } from "@/store";
 import { KeyCodes } from "@/lib/constants/keyboard-handler";
 import { formatDateDisplay } from "@/utils/helperFunctions/Views/FilterHelperFunctions";
 import { useFilterView } from "@/hooks/MultiPages/Filters/useFilterView";
+import { useFlag } from "@/hooks/useFlag";
+import { HTPR_6567_COMMAND_SCOPE_PICKER_FLAG } from "@/lib/flags/keys";
 
 const ShowFilterOptions: React.FC<IFilterModalProps & { extraFilters?: React.ReactNode }> = ({
   handleAction,
@@ -27,6 +29,7 @@ const ShowFilterOptions: React.FC<IFilterModalProps & { extraFilters?: React.Rea
   view,
   extraFilters,
 }) => {
+  const commandScopePickerEnabled = useFlag(HTPR_6567_COMMAND_SCOPE_PICKER_FLAG);
   const {
     keyword,
     onKeyChange,
@@ -43,7 +46,7 @@ const ShowFilterOptions: React.FC<IFilterModalProps & { extraFilters?: React.Rea
   };
 
   const keyDownHandler = (e: KeyboardEvent) => {
-    if ((e.target as HTMLElement)?.closest?.('input[type="checkbox"]')) return;
+    if (commandScopePickerEnabled && (e.target as HTMLElement)?.closest?.('input[type="checkbox"]')) return;
     if (e.keyCode === KeyCodes.ENTER && filteredCommands[selectedIndex])
       onClickOrEnterHandler(selectedIndex);
 
@@ -63,7 +66,7 @@ const ShowFilterOptions: React.FC<IFilterModalProps & { extraFilters?: React.Rea
     return () => {
       document.removeEventListener("keydown", keyDownHandler);
     };
-  }, [keyword, filteredCommands, selectedIndex, toggleFilterMatchOptions]);
+  }, [commandScopePickerEnabled, keyword, filteredCommands, selectedIndex, toggleFilterMatchOptions]);
 
   return (
     <>
@@ -99,7 +102,7 @@ const ShowFilterOptions: React.FC<IFilterModalProps & { extraFilters?: React.Rea
               </ModalRowElementContainer>
             );
           })}
-          {extraFilters}
+          {commandScopePickerEnabled && extraFilters}
         </ModalListContainer>
       </ModalBody>
     </>
