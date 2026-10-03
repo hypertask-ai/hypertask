@@ -1,5 +1,6 @@
 import { IComment, ITaskLabel, ISection } from "@/models/model";
 import toast from "react-hot-toast";
+import { undoToastSettings } from "@/components/undoToast";
 import taskDetailConfig from "@/lib/configs/taskDetail.config";
 import { descriptionContainerId } from "@/lib/constants/TaskDetail";
 import globalConstants from "@/lib/constants";
@@ -168,7 +169,7 @@ export function useTaskDetailNavigationActions(getContext: () => TaskDetailConte
     await undoAction("UNDO_INBOX_ARCHIVE", data);
     queryClient.refetchQueries({ queryKey: [taskDetailConfig.queryKeys.inbox] });
     navigate("Refresh");
-    toast(taskDetailConfig.toastMessages.undoNotificationArchive);
+    if (!undoToastSettings.single) toast(taskDetailConfig.toastMessages.undoNotificationArchive);
     toast.dismiss(toastId); // Dismiss the toast here
     navigateToPreviousTask(false, true); // false, true means undo wasn't CLICKED, but pressed
   };

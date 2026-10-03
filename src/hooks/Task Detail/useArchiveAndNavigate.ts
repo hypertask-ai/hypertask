@@ -5,6 +5,7 @@ import useGlobalFocusHandler from '../Inbox/useGlobalFocusHandler';
 import { useRecoilState } from '@/lib/state';
 import { currentUserAtom, tasksPlayListAtom } from '@/store';
 import toast from 'react-hot-toast';
+import { undoToastSettings } from "@/components/undoToast";
 import { useQueryClient } from '@tanstack/react-query';
 import { useUndoContext } from '../General/useUndo';
 import { MobileViewContext } from "@/lib/contexts/mobileContext";
@@ -163,7 +164,7 @@ const navigateToPreviousTask = useCallback((isUndoClicked:boolean, isUndo:boolea
     //   }),
     // });
     const isUnarchiving = currentTask.status === "Archive";
-    await removeFromListWithStatus(
+    const hasUndo = await removeFromListWithStatus(
       currentTask.sectionId,
       currentTask.projectId,
       currentTask.id,
@@ -192,8 +193,10 @@ const navigateToPreviousTask = useCallback((isUndoClicked:boolean, isUndo:boolea
     }
     const toastMessage = currentTask.status === "Archive" ? "Task was unmarked as done" : "Task was marked as done"
     const toastMessageNavigation = currentTask.status === "Archive" ? "Go to Home Page" : "Go to task archive G then E"
-    toast(toastMessage)
-    !_mbl&&toast(toastMessageNavigation)
+    if (!undoToastSettings.single || !hasUndo) {
+      toast(toastMessage)
+      !_mbl&&toast(toastMessageNavigation)
+    }
     const navigationOutcome = navigateToNextTask(true,currentTask.status !== "Archive", false, "forceNavigate")
     // Archiving usually leaves the page, but when the playlist cannot place this
     // task nothing navigates. Show the archived state immediately instead of

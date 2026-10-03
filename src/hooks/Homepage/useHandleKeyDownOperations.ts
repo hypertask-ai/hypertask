@@ -7,6 +7,7 @@ import { useRecoilState, useRecoilValue, useSetRecoilState } from '@/lib/state'
 import { useStore } from 'jotai'
 import { useUndoContext } from '../General/useUndo'
 import toast from 'react-hot-toast'
+import { undoToastSettings } from "@/components/undoToast";
 import { throttle, returnSortedItems, returnIfModalOrInputActive, isAIChatElementFocused } from '@/utils/helperFunctions/helperFunctions'
 import globalConstants from '@/lib/constants'
 import UpdateKanban from '../MultiPages/useUpdateTaskInBoards'
@@ -50,7 +51,7 @@ const useHandleKeyDownOperations= (props:IHandleKeyDownOperations) => {
     //This hook is for handling focus right now.
     const spaceship = useUniversalMovement({type: "Kanban", initialSections, filteredSections})
 
-    const {undoData, undoAction} = useUndoContext();
+    const {undoData, undoAction, undoLatest} = useUndoContext();
 
   //Updarte to useRead only recoil values or setOnly
     // =========== RECOIL STATES
@@ -167,7 +168,8 @@ const useHandleKeyDownOperations= (props:IHandleKeyDownOperations) => {
       // console.log("🚀 ~ handleKeyDown ~ e.keyCode:", e.keyCode)
       const firstUndoData = undoData[undoData.length - 1];
       // console.log("🚀 ~ handleKeyDown ~ firstUndoData:", firstUndoData)
-      undoHandler(firstUndoData, firstUndoData.id);
+      if (undoToastSettings.single) void undoLatest();
+      else undoHandler(firstUndoData, firstUndoData.id);
 
   }
     // [shift] + [f] for filters
@@ -296,7 +298,7 @@ const useHandleKeyDownOperations= (props:IHandleKeyDownOperations) => {
     // router.refresh()
     toast.dismiss(toastId);  // Dismiss the toast here
     queryClient.refetchQueries({queryKey:["projectsAll"]})
-    toast("Undo remove")
+    if (!undoToastSettings.single) toast("Undo remove")
     
   }
 

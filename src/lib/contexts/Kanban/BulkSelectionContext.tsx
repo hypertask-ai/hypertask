@@ -9,6 +9,7 @@ import {
   useState,
 } from "react";
 import toast from "react-hot-toast";
+import { undoToastSettings } from "@/components/undoToast";
 
 import { CommandMode } from "@/models/enums";
 import { IAgent, ILabel, ISection, ITask, IUser } from "@/models/model";
@@ -21,7 +22,7 @@ import { getInclusiveRange, toggleId } from "@/lib/kanbanBulkSelection";
 type Assignee = IUser | IAgent;
 type AssigneeIntent = "assign" | "unassign" | "toggle";
 
-type TaskOperation = (task: ITask) => Promise<void>;
+type TaskOperation = (task: ITask) => Promise<void | boolean>;
 
 interface KanbanBulkSelectionContextValue {
   selectedIds: Set<number>;
@@ -164,6 +165,7 @@ export const KanbanBulkSelectionProvider = ({
 
       const snapshot = selectedTasks;
       const failures: ITask[] = [];
+      let hasUndo = false;
       setIsProcessing(true);
 
       try {
@@ -171,7 +173,7 @@ export const KanbanBulkSelectionProvider = ({
         // cache, and the next task must see the previous update.
         for (const task of snapshot) {
           try {
-            await operation(task);
+            hasUndo = (await operation(task)) === true || hasUndo;
           } catch (error) {
             console.error("Kanban bulk action failed", task.id, error);
             failures.push(task);
@@ -186,7 +188,7 @@ export const KanbanBulkSelectionProvider = ({
           toast.error(
             `${failures.length} of ${snapshot.length} tasks could not be updated`,
           );
-        } else {
+        } else if (!undoToastSettings.single || !hasUndo) {
           toast.success(successText);
         }
       } finally {
