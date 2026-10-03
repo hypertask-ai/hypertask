@@ -1,0 +1,105 @@
+#!/usr/bin/env bash
+# Bootstrap a neutral runner without exposing or replacing its token.
+set +x
+set -euo pipefail
+umask 077
+SELF=$(readlink -f "$0")
+CREDS=$HOME/.config/hypertask-agents/credentials
+SESSION_CREDS=$CREDS/sessions
+fail() { printf 'setup-runner: %s\n' "$1" >&2; exit 1; }
+
+[ "$#" -le 1 ] || fail 'usage: setup-runner [positive runner number]'
+if [ "$#" -eq 1 ]; then
+  [[ "$1" =~ ^[1-9][0-9]*$ ]] || fail 'runner number must be a positive integer (no leading zeros)'
+fi
+
+# Match ship-identity: the nearest ancestor session and user-supplied name.
+pid=$$
+own_pid=
+name=${SHIP_SESSION_NAME:-}
+while [ "$pid" -gt 1 ]; do
+  f=$HOME/.claude/sessions/$pid.json
+  if [ -f "$f" ]; then
+    own_pid=$pid
+    if [ -z "$name" ]; then
+      name=$(jq -er 'if .nameSource == "user" then (.name // "") else "" end' "$f") || fail 'cannot read this session name'
+    fi
+    break
+  fi
+  pid=$(ps -o ppid= -p "$pid" | tr -d ' ')
+  [ -n "$pid" ] || fail 'cannot find parent process'
+done
+name=${name%% | *}
+
+mkdir -p "$SESSION_CREDS"
+# Serialize picking and provisioning so simultaneous setups cannot claim one number.
+exec 9>"$CREDS/.setup-runner.lock"
+flock -x 9
+live_numbers=()
+shopt -s nullglob
+for f in "$HOME"/.claude/sessions/*.json; do
+  session_pid=${f##*/}
+  session_pid=${session_pid%.json}
+  [[ "$session_pid" =~ ^[1-9][0-9]*$ ]] || fail 'invalid session filename'
+  [ "$session_pid" != "$own_pid" ] || continue
+  if kill -0 "$session_pid" 2>/dev/null; then
+    live_name=$(jq -er '.name // ""' "$f") || fail 'cannot read a live session name'
+    live_name=${live_name%% | *}
+    if [[ "$live_name" =~ ^RUNNER\ ([1-9][0-9]*)$ ]]; then
+      live_numbers+=("${BASH_REMATCH[1]}")
+    fi
+  fi
+done
+busy() {
+  local used
+  for used in "${live_numbers[@]}"; do
+    [ "$used" != "$1" ] || return 0
+  done
+  return 1
+}
+if [[ "$name" =~ ^RUNNER\ ([1-9][0-9]*)$ ]]; then
+  n=${BASH_REMATCH[1]}
+elif [ "$#" -eq 1 ]; then
+  n=$1
+else
+  n=1
+  while [ -e "$CREDS/runner-$n-agent-token" ] || [ -L "$CREDS/runner-$n-agent-token" ] || busy "$n"; do
+    n=$((n+1))
+  done
+fi
+if busy "$n"; then fail "RUNNER $n is already used by another live session"; fi
+token=$CREDS/runner-$n-agent-token
+tmp=
+trap '[ -z "$tmp" ] || rm -f "$tmp"' EXIT
+if [ ! -e "$token" ] && [ ! -L "$token" ]; then
+  response=$(hypertask agents create --name "Runner $n" --project 15 --project 4060 --json 2>/dev/null) || fail 'agent creation failed (output withheld to protect tokens)'
+  tmp=$(mktemp "$CREDS/.runner-$n-token.XXXXXX")
+  if ! jq -er '.token | select(type == "string" and length > 0 and (test("\\s") | not))' <<<"$response" >"$tmp" 2>/dev/null; then
+    fail 'agent creation did not return a valid token'
+  fi
+  # Hard-link publication refuses to overwrite even if a different writer races us.
+  ln "$tmp" "$token" || fail 'token already exists; rerun to reuse it'
+  rm -f "$tmp"
+  tmp=
+  unset response
+fi
+if [ ! -f "$token" ] || [ ! -s "$token" ] || [ ! -r "$token" ]; then
+  fail 'existing token is empty or unreadable; refusing to replace it'
+fi
+link=$SESSION_CREDS/runner-$n-agent-token
+if [ -e "$link" ] && [ ! -L "$link" ]; then
+  fail 'session credential is not a symlink; refusing to overwrite it'
+fi
+ln -sfn "../runner-$n-agent-token" "$link"
+
+# CLI errors may echo credentials, so show only our own failure messages.
+ticket=$(hypertask --json --token "$(cat "$token")" tasks get YPER4-159 2>/dev/null) || fail 'login verification failed (output withheld to protect tokens)'
+jq -e '.success == true and any(.tasks[]; .ticketNumber == "YPER4-159")' <<<"$ticket" >/dev/null 2>&1 || fail 'login verification did not return YPER4-159'
+if [ "$name" = "RUNNER $n" ]; then
+  identity=$("$(dirname "$SELF")/../../ship/scripts/ship-identity") || fail 'identity verification failed'
+  [ "$identity" = "RUNNER $n"$'\t'"$link" ] || fail 'ship-identity does not match the runner credential'
+  printf 'RUNNER %s: login ok, identity ok\n' "$n"
+else
+  printf 'RUNNER %s: login ok; type /rename RUNNER %s then rerun\n' "$n" "$n"
+  printf '/rename RUNNER %s\n' "$n"
+fi
