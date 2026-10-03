@@ -1,4 +1,6 @@
 "use client";
+import { useFlag } from "@/hooks/useFlag";
+import { HTPR_6885_SINGLE_UNDO_TOAST_FLAG } from "@/lib/flags/keys";
 import React, {
   createContext,
   useCallback,
@@ -39,6 +41,7 @@ const UndoProvider: React.FC<{ children: React.ReactNode }> = ({
   children,
 }) => {
   const isMobile = useContext(MobileViewContext);
+  const singleUndoToast = useFlag(HTPR_6885_SINGLE_UNDO_TOAST_FLAG);
   const [data, setData] = useState<any>(null);
   // console.log("🚀 ~ data:", data)
   const [undoData, setRenderedUndoData] = useState<any[]>([]);
@@ -151,6 +154,7 @@ const UndoProvider: React.FC<{ children: React.ReactNode }> = ({
         actionData,
         handleUndo,
         isMobile,
+        singleUndoToast,
       );
       const undoId = String(toasterId);
       pendingUndoData = {
@@ -164,7 +168,7 @@ const UndoProvider: React.FC<{ children: React.ReactNode }> = ({
       commitUndoData((prevUndoData) => [...prevUndoData, pendingUndoData]);
       scheduleExpiry(undoId, pendingUndoData.expiresAt);
     },
-    [commitUndoData, isMobile],
+    [commitUndoData, isMobile, singleUndoToast],
   );
 
   const undoAction = useCallback(async (mode: Mode, actionData: any) => {

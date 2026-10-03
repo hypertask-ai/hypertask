@@ -88,8 +88,8 @@ test("every UndoToaster call site passes the viewport flag", () => {
     assert.ok(callSite !== -1, `${rel} calls UndoToaster`);
     assert.match(
       source.slice(callSite),
-      /,\s*(isMobile|true)\s*,?\s*\)/m,
-      `${rel} passes isMobile as the last argument`,
+      /,\s*(isMobile|true)\s*,\s*singleUndoToast\s*,?\s*\)/m,
+      `${rel} passes the viewport and feature flag arguments`,
     );
   }
 });

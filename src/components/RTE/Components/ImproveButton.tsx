@@ -1,3 +1,5 @@
+import { useFlag } from "@/hooks/useFlag";
+import { HTPR_6885_SINGLE_UNDO_TOAST_FLAG } from "@/lib/flags/keys";
 import type { Editor } from "@tiptap/react";
 import React, { useContext, useRef, useState } from "react";
 import toast from "react-hot-toast";
@@ -14,6 +16,7 @@ interface IProps {
 }
 const ImproveButton = ({ editor }: IProps) => {
   const isMobile = useContext(MobileViewContext);
+  const singleUndoToast = useFlag(HTPR_6885_SINGLE_UNDO_TOAST_FLAG);
   const [disable, setDisable] = useState<boolean>(false);
   const isImproving = useRef(false);
   const currentProject = useRecoilValue(currentProjectAtom);
@@ -68,7 +71,8 @@ const ImproveButton = ({ editor }: IProps) => {
               editor.commands.focus("end");
               toast.dismiss(toastId);
             },
-            isMobile
+            isMobile,
+            singleUndoToast,
           );
           return true;
         })().catch((error) => {

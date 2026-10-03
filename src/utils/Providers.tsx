@@ -159,23 +159,23 @@ export default function Provider({
               the viewport to anchor the toast left on mobile (HTPR-5564). */}
           <MobileViewProvider initialIsMobile={initialIsMobile}>
             <StateRoot>
-              <UndoProvider>
-                <MobileBlockingProvider>
-                  <AuthProvider authenticatedUserId={authenticatedUserId}>
-                    <TourProvider>
-                      {publicShare ? (
-                        <PublicShell>{children}</PublicShell>
-                      ) : (
-                        <FeatureFlagProvider userId={authenticatedUserId}>
+              <FeatureFlagProvider userId={publicShare ? null : authenticatedUserId}>
+                <UndoProvider>
+                  <MobileBlockingProvider>
+                    <AuthProvider authenticatedUserId={authenticatedUserId}>
+                      <TourProvider>
+                        {publicShare ? (
+                          <PublicShell>{children}</PublicShell>
+                        ) : (
                           <GlobalProvider authenticatedUserId={authenticatedUserId}>
                             {children}
                           </GlobalProvider>
-                        </FeatureFlagProvider>
-                      )}
-                    </TourProvider>
-                  </AuthProvider>
-                </MobileBlockingProvider>
-              </UndoProvider>
+                        )}
+                      </TourProvider>
+                    </AuthProvider>
+                  </MobileBlockingProvider>
+                </UndoProvider>
+              </FeatureFlagProvider>
             </StateRoot>
           </MobileViewProvider>
         </DeviceProvider>

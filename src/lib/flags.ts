@@ -57,6 +57,7 @@ import {
   HTPR_6865_SEARCH_LAYOUT_FLAG,
   HTPR_6878_SEARCH_LABEL_SCOPE_FLAG,
   HTPR_6881_SEARCH_FUZZY_PERSON_FLAG,
+  HTPR_6885_SINGLE_UNDO_TOAST_FLAG,
   MY_TASKS_VIEWS_FLAG,
   MY_TASKS_BULK_SELECTION_FLAG,
   MY_TASKS_FILTER_PARITY_FLAG,
@@ -399,6 +400,12 @@ const FEATURE_FLAG_DEFINITIONS = [
     shippedOn: "2026-09-11",
     description:
       "Pins the Agent Chat composer on mobile, keeps one message scroller, shows the agent name in the top bar, and makes mic dictation use the agent's board.",
+  },
+  {
+    key: HTPR_6885_SINGLE_UNDO_TOAST_FLAG,
+    shippedOn: "2026-10-03",
+    description:
+      "Shows one compact undo confirmation at the bottom left, replacing the previous card and fading after five seconds.",
   },
   {
     key: HTPR_6872_PAGE_IMAGE_GALLERY_FLAG,
