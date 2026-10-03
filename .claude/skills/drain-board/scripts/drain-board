@@ -1,0 +1,47 @@
+#!/usr/bin/env bash
+# drain-board gates <project-id>: one unlazy gate per open ticket, in this session's ledger.
+# drain-board check <TICKET>:      prints "settled" when the ticket is Done or archived, or in
+#                                  Valentin Review with a Question: comment. A failed read never settles.
+set -euo pipefail
+SELF=$(readlink -f "$0")
+LIMIT=500
+
+case "${1:-}" in
+  check)
+    [ -n "${2:-}" ] || { echo "usage: drain-board check <TICKET>" >&2; exit 2; }
+    j=$(hypertask tasks get "$2" --json) || { echo "read failed: $2"; exit 1; }
+    s=$(jq -er '.tasks[0] | if .archived then "archived" else .section end' <<<"$j") || { echo "read failed: $2"; exit 1; }
+    case "$s" in
+      Done|archived) echo settled ;;
+      "Valentin Review")
+        c=$(hypertask comments list "$2" --json) || { echo "read failed: $2 comments"; exit 1; }
+        if jq -r '(.comments // .)[] | (.text // .content // .body // "")' <<<"$c" | grep -q 'Question:'; then echo settled
+        else echo "open: $2 is in Valentin Review without a Question: comment"; exit 1; fi ;;
+      *) echo "open: $2 is in \"$s\""; exit 1 ;;
+    esac ;;
+  gates)
+    P=${2:?usage: drain-board gates <project-id>}
+    ID=${CLAUDE_CODE_SESSION_ID:-${CODEX_SESSION_ID:-${CODEX_THREAD_ID:-}}}
+    [ -n "$ID" ] || { echo "drain-board needs CLAUDE_CODE_SESSION_ID, CODEX_SESSION_ID or CODEX_THREAD_ID" >&2; exit 1; }
+    F=$PWD/.unlazy/s-${ID:0:8}/gates/drain-$P.md
+    mkdir -p "$(dirname "$F")"
+    [ -f "$F" ] || printf '# Drain board %s\n' "$P" > "$F"
+    list=$(hypertask tasks list --project "$P" --limit $LIMIT --json)
+    rows=$(jq -r '(.tasks // .)[] | select(.archived != true) | select(.section != "Done") | [.ticketNumber, .title] | @tsv' <<<"$list")
+    total=$(jq '(.tasks // .) | length' <<<"$list")
+    [ "$total" -lt $LIMIT ] || { echo "board $P has $LIMIT+ tickets; listing may be cut off, stopping" >&2; exit 1; }
+    n=0
+    while IFS=$'\t' read -r t title; do
+      [ -n "$t" ] || continue
+      grep -q "^- \[.\] drain-$P\.$t:" "$F" && continue
+      printf '\n- [ ] drain-%s.%s: %s\n  CHECK: %s check %s\n  EXPECT: settled\n  CWD: %s\n  EVIDENCE: pending\n' \
+        "$P" "$t" "$title" "$SELF" "$t" "$PWD" >> "$F"
+      n=$((n+1))
+    done <<<"$rows"
+    status=0
+    node "$HOME/.agents/skills/unlazy/scripts/gate-check.mjs" --approve "$F" >/dev/null || status=$?
+    # Exit 1 only means tickets are still open, which is expected while draining.
+    [ "$status" -le 1 ] || exit "$status"
+    echo "$F: $n new ticket gates, $(grep -c '^- \[ \] drain-' "$F") open" ;;
+  *) echo "usage: drain-board gates <project-id> | check <TICKET>" >&2; exit 2 ;;
+esac
