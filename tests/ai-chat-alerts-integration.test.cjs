@@ -11,10 +11,10 @@ const jiti = createJiti(__filename, { interopDefault: true });
 const policy = jiti(path.join(root, "src/lib/ai/chatAlerts/policy.ts"));
 
 function load(file, modules, environment = "production") {
-  const module = { exports: {} };
+  const loadedModule = { exports: {} };
   const code = ts.transpileModule(read(file), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText;
   vm.runInNewContext(code, {
-    module, exports: module.exports,
+    module: loadedModule, exports: loadedModule.exports,
     require: (name) => {
       assert.ok(Object.hasOwn(modules, name), `Unexpected runtime dependency: ${name}`);
       return modules[name];
@@ -22,7 +22,7 @@ function load(file, modules, environment = "production") {
     process: { env: { VERCEL_ENV: environment } },
     console: { warn: () => {} },
   }, { filename: file });
-  return module.exports;
+  return loadedModule.exports;
 }
 
 function serviceHarness({ enabled = true, environment = "production", deliveryError = false, processingError = false, flagError = false } = {}) {
