@@ -73,7 +73,7 @@ test("identically titled boards receive predictable collision suffixes", async (
   const prisma = {
     project: {
       findFirst: async ({ where }) => {
-        const filter = where.uniqueIdentifier;
+        const filter = where.OR[0].uniqueIdentifier;
         const clash = [...identifiers.values()].some(identifier =>
           filter.mode === "insensitive" ? identifier.toUpperCase() === filter.equals : identifier === filter,
         );
@@ -116,7 +116,7 @@ test("automatic prefixes avoid legacy lowercase and mixed-case collisions", asyn
   const prisma = {
     project: {
       findFirst: async ({ where }) => {
-        const filter = where.uniqueIdentifier;
+        const filter = where.OR[0].uniqueIdentifier;
         const clash = ["qaex", "qAeX1"].some(identifier =>
           filter.mode === "insensitive" ? identifier.toUpperCase() === filter.equals : identifier === filter,
         );

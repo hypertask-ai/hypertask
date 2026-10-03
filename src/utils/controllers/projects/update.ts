@@ -1,4 +1,6 @@
 import { SortingMode } from "@prisma/client";
+import { waitUntil } from "@vercel/functions";
+import { upsertAllCommentsToTurbopuffer, upsertTaskToTurbopuffer } from "../turbopuffer/turbopufferHelper";
 import prisma from "@/lib/prisma";
 import { HTPR_6868_TICKET_PREFIX_FLAG, isFeatureEnabled } from "@/lib/flags";
 import { normalizeProjectPrefix } from "@/lib/projectPrefix";
@@ -30,8 +32,10 @@ export async function changeProjectPrefix(
       where: {
         teamId: board.teamId,
         id: { not: projectId },
-        uniqueIdentifier: { equals: prefix, mode: "insensitive" },
-        status: { not: "Deleted" },
+        OR: [
+          { uniqueIdentifier: { equals: prefix, mode: "insensitive" }, status: { not: "Deleted" } },
+          { prefixAliases: { some: { prefix: { equals: prefix, mode: "insensitive" } } } },
+        ],
       },
       select: { id: true },
     });
@@ -52,6 +56,10 @@ export async function changeProjectPrefix(
     return tx.project.findUnique({ where: { id: projectId }, include: { tasks: true } });
   });
   if (!project) return { status: 403, json: { message: "Not allowed to edit this board" } };
+  waitUntil(Promise.all(project.tasks.map(task => Promise.all([
+    upsertTaskToTurbopuffer(task.id),
+    upsertAllCommentsToTurbopuffer(task.id),
+  ]))).catch(error => console.error("Ticket prefix search reindex failed", error)));
   return { status: 200, json: project };
 }
 
@@ -64,8 +72,14 @@ const updateProject = async (
   agentId?: string | null,
 ) => {
   try {
+    if (!Number.isSafeInteger(projectId) || projectId <= 0) {
+      return { status: 400, json: { message: "projectId must be a positive integer" } };
+    }
+    if (title === undefined && sorting_mode === undefined && uniqueIdentifier !== undefined) {
+      return await changeProjectPrefix(projectId, uniqueIdentifier, currentUser, agentId);
+    }
     const trimmedTitle = typeof title === "string" ? title.trim() : "";
-    if (!Number.isSafeInteger(projectId) || projectId <= 0 || !trimmedTitle || trimmedTitle.length > 200) {
+    if (!trimmedTitle || trimmedTitle.length > 200) {
       return { status: 400, json: { message: "projectId must be a positive integer and title must be between 1 and 200 characters" } };
     }
     const exists = await prisma.project.findFirst({

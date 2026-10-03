@@ -53,7 +53,10 @@ const create = async (userId: number, title: string, teamId: string, googleAccou
     project = await prisma.$transaction(async (tx) => {
       await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${teamId}))`;
       if (prefix && await tx.project.findFirst({
-        where: { teamId, uniqueIdentifier: { equals: prefix, mode: "insensitive" }, status: { not: "Deleted" } },
+        where: { teamId, OR: [
+          { uniqueIdentifier: { equals: prefix, mode: "insensitive" }, status: { not: "Deleted" } },
+          { prefixAliases: { some: { prefix: { equals: prefix, mode: "insensitive" } } } },
+        ] },
         select: { id: true },
       })) {
         throw new Error("Ticket prefix is already used by another board in this team");
@@ -223,7 +226,10 @@ export async function updateUniqueIdentifier(teamId: string, title: string, proj
     // Ensure uniqueness within the team; on collision append a counter (kept <= 5 chars).
     let candidate = base;
     let clash = await tx.project.findFirst({
-      where: { teamId, uniqueIdentifier: { equals: candidate, mode: "insensitive" }, status: { not: "Deleted" } },
+      where: { teamId, id: { not: projectId }, OR: [
+        { uniqueIdentifier: { equals: candidate, mode: "insensitive" }, status: { not: "Deleted" } },
+        { prefixAliases: { some: { prefix: { equals: candidate, mode: "insensitive" } } } },
+      ] },
     });
     for (let i = 1; clash; i++) {
       const suffix = String(i);
@@ -232,7 +238,10 @@ export async function updateUniqueIdentifier(teamId: string, title: string, proj
       }
       candidate = `${base.slice(0, 5 - suffix.length)}${suffix}`;
       clash = await tx.project.findFirst({
-        where: { teamId, uniqueIdentifier: { equals: candidate, mode: "insensitive" }, status: { not: "Deleted" } },
+        where: { teamId, id: { not: projectId }, OR: [
+          { uniqueIdentifier: { equals: candidate, mode: "insensitive" }, status: { not: "Deleted" } },
+          { prefixAliases: { some: { prefix: { equals: candidate, mode: "insensitive" } } } },
+        ] },
       });
     }
 

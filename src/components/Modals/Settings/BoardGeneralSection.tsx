@@ -50,7 +50,6 @@ const BoardTicketPrefixSetting = ({ project }: { project: IProject }) => {
     mutationFn: async (uniqueIdentifier: string) => {
       const response = await axios.post<IProject>("/api/projects/update", {
         projectId: project.id,
-        title: project.title ?? project.name,
         uniqueIdentifier,
       });
       return response.data;
@@ -87,7 +86,7 @@ const BoardTicketPrefixSetting = ({ project }: { project: IProject }) => {
         </label>
         <input
           id="settings-ticket-prefix"
-          className="h-8 min-w-0 flex-1 rounded-[5px] border-0 bg-transparent px-2 text-right text-dense font-medium text-white-black outline-none placeholder:text-text-light-gray focus:bg-active-modal-element"
+          className="h-8 min-w-0 flex-1 rounded-[4px] border-0 bg-transparent px-2 text-right text-dense font-medium text-white-black outline-none placeholder:text-text-light-gray focus:bg-active-modal-element"
           disabled={!canEdit || mutation.isPending}
           onBlur={savePrefix}
           onChange={event => setPrefix(event.target.value.toUpperCase())}

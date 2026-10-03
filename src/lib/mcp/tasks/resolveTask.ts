@@ -1,3 +1,4 @@
+import type { Prisma } from '@prisma/client';
 import prisma from '@/lib/prisma';
 import { findPrefixAliasTasks } from '@/utils/controllers/projects/findPrefixAliasTasks';
 import { getProjectWhere } from '@/utils/controllers/projects/getAllIncludes';
@@ -21,10 +22,11 @@ export async function findTaskByIdentifier(
     unique_index?: number | null;
     project_id?: number | null;
   },
-  agentId?: string | null
+  agentId?: string | null,
+  projectAccess?: Prisma.ProjectWhereInput,
 ) {
   const { task_id, ticket_number, unique_index, project_id } = options;
-  const projectFilter = getProjectWhere(user.id, agentId);
+  const projectFilter = projectAccess ?? getProjectWhere(user.id, agentId);
 
   if (task_id) {
     return await prisma.task.findFirst({
@@ -64,6 +66,7 @@ export async function findTaskByIdentifier(
   const aliases = await prisma.taskNumberAlias.findMany({
     where: {
       ...identityWhere,
+      ...(ticket_number ? { ticketNumber: { equals: ticket_number, mode: 'insensitive' as const } } : {}),
       task: { status: { not: 'Deleted' }, project: projectFilter },
     },
     select: { projectId: true, uniqueIndex: true, task: { select: { id: true, projectId: true } } },

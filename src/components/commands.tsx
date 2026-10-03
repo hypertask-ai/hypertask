@@ -11,6 +11,8 @@ import { createGeneralCommandActions } from "./generalCommandActions";
 import { createCommandModalCallbacks } from "./commandModalCallbacks";
 import { createCommandDispatcher } from "./commandDispatcher";
 import { useEffect } from "react";
+import { useFlag } from "@/hooks/useFlag";
+import { HTPR_6868_TICKET_PREFIX_FLAG } from "@/lib/flags/keys";
 
 
 
@@ -80,6 +82,7 @@ import "./Modals/commands/HTC/AllCommands";
 
 
 const HypertasksCommands = ({ callbackHandler, contextOptions }: IHTCProps) => {
+  const ticketPrefixEnabled = useFlag(HTPR_6868_TICKET_PREFIX_FLAG);
   const {
   queryClient, copyCurrentUrlEnabled, rowShortcutsEnabled, myTasksViewsEnabled, myTasksTableColumnsEnabled,
   myTasksSnoozeEnabled, myTasksBulkSelectionEnabled, activeSectionId, updateTaskInCache, moveItem,
@@ -137,6 +140,7 @@ const HypertasksCommands = ({ callbackHandler, contextOptions }: IHTCProps) => {
     _activeItem, activeSectionId, setBoardColumnsViewAPI, getProjectIdxAndAllData, updateProjectView,
     renameBoard, removeMemberFromBoard, addAgentToBoard, removeAgentFromBoard, inviteNewMembersToBoard,
     setShowCommands, setCommandMode,
+    ...(ticketPrefixEnabled ? { ticketPrefixEnabled: true } : {}),
   });
   const {
   handleAction,

@@ -47,6 +47,8 @@ export default defineConfig([
       "src/app/add-to-slack/page.tsx",
       // HTPR-6536: server component; gates the public /qa/login page.
       "src/app/qa/login/page.tsx",
+      // Server component; gates ticket-number detail URL resolution.
+      "src/app/detail/\\[...slug\\]/page.tsx",
     ],
     rules: {
       // Types are erased, so a type-only import never reaches the bundle.

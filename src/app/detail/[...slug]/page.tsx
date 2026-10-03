@@ -9,6 +9,7 @@ import {
 } from "@/utils/controllers/taskDetail/load";
 import { Metadata } from "next";
 import { requireServerCookieUser } from "@/lib/auth/serverUser";
+import { HTPR_6868_TICKET_PREFIX_FLAG, isFeatureEnabled } from "@/lib/flags";
 
 
 import { redirect } from "next/navigation";
@@ -66,11 +67,13 @@ export default async function Page(
   // No ticket number in the URL: send them to the board rather than query for
   // task NaN, which Prisma rejects outright (HTPR-4838). Done before any other
   // await so nothing has started streaming.
-  if (/^[A-Z0-9]+-\d+$/.test(params.slug?.[1] ?? "")) {
+  if (/^[A-Z0-9]+-\d+$/i.test(params.slug?.[1] ?? "")) {
     const user = await requireServerCookieUser();
-    const task = await findTaskByTicketNumber(params.slug[1], user.id, parseProjectSlug(params.slug[0]));
-    if (!task) return <Unauthorized />;
-    redirect(`/detail/project-${task.projectId}/${task.uniqueIndex}`);
+    if (await isFeatureEnabled(HTPR_6868_TICKET_PREFIX_FLAG, user.id)) {
+      const task = await findTaskByTicketNumber(params.slug[1], user.id, parseProjectSlug(params.slug[0]));
+      if (!task) return <Unauthorized />;
+      redirect(`/detail/project-${task.projectId}/${task.uniqueIndex}`);
+    }
   }
   const detailSlug = parseDetailSlug(params.slug);
   if (!detailSlug) {

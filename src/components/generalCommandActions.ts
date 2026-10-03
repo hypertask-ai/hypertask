@@ -14,7 +14,8 @@ import type { useCommandsState } from "./useCommandsState";
 import type { createCommandModalCallbacks } from "./commandModalCallbacks";
 
 type Context = Pick<ReturnType<typeof useCommandsState>, "boardCloseHandler" | "inViewObject" | "assignTaskUser" | "currentUser" | "router" | "_currentProject" | "queryClient" | "setCurrentProject" | "goToProjectShortcut" | "_activeItem" | "activeSectionId" | "setBoardColumnsViewAPI" | "getProjectIdxAndAllData" | "updateProjectView" | "renameBoard" | "removeMemberFromBoard" | "addAgentToBoard" | "removeAgentFromBoard" | "inviteNewMembersToBoard" | "setShowCommands" | "setCommandMode"> &
-  Pick<ReturnType<typeof createCommandModalCallbacks>, "toggleAssignModal">;
+  Pick<ReturnType<typeof createCommandModalCallbacks>, "toggleAssignModal"> &
+  { ticketPrefixEnabled?: boolean };
 
 export function createGeneralCommandActions(context: Context) {
   const {
@@ -22,7 +23,7 @@ export function createGeneralCommandActions(context: Context) {
   router, _currentProject, queryClient, setCurrentProject, goToProjectShortcut,
   _activeItem, activeSectionId, setBoardColumnsViewAPI, getProjectIdxAndAllData, updateProjectView,
   renameBoard, removeMemberFromBoard, addAgentToBoard, removeAgentFromBoard, inviteNewMembersToBoard,
-  setShowCommands, setCommandMode,
+  setShowCommands, setCommandMode, ticketPrefixEnabled = false,
   } = context;
 
 
@@ -177,7 +178,7 @@ export function createGeneralCommandActions(context: Context) {
         const { data } = await axios.post("/api/projects/create", {
           userId: currentUser?.id,
           title,
-          ...(ticketPrefix !== undefined ? { ticketPrefix } : {}),
+          ...(ticketPrefixEnabled && ticketPrefix !== undefined ? { ticketPrefix } : {}),
           googleAccountId: response.data.googleAccountId,
           teamId: response.data.id,
 
@@ -187,7 +188,7 @@ export function createGeneralCommandActions(context: Context) {
         const { data } = await axios.post("/api/projects/create", {
           userId: currentUser?.id,
           title,
-          ...(ticketPrefix !== undefined ? { ticketPrefix } : {}),
+          ...(ticketPrefixEnabled && ticketPrefix !== undefined ? { ticketPrefix } : {}),
           googleAccountId: googleAccountId,
           teamId: teamId,
 

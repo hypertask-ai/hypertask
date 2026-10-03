@@ -52,6 +52,10 @@ function writes({ enabled = true, ownerId = 6, boards = [], failSql = false, los
   const aliases = [];
   const sql = [];
   const events = [];
+  const updates = [];
+  const reindexed = [];
+  const scheduled = [];
+  let committed = false;
   let transactions = 0;
   const prisma = {
     project: {
@@ -60,6 +64,7 @@ function writes({ enabled = true, ownerId = 6, boards = [], failSql = false, los
       update: async ({ where, data }) => {
         assert.ok(matches(board, where));
         events.push("project");
+        updates.push(data);
         Object.assign(board, Object.fromEntries(Object.entries(data).filter(([, v]) => v !== undefined)));
         return board;
       },
@@ -85,7 +90,7 @@ function writes({ enabled = true, ownerId = 6, boards = [], failSql = false, los
       const before = structuredClone(board);
       const aliasCount = aliases.length;
       if (loseAccess) board.ownerId = 9;
-      try { return await callback(prisma); } catch (error) {
+      try { const result = await callback(prisma); committed = true; return result; } catch (error) {
         Object.assign(board, before);
         aliases.length = aliasCount;
         throw error;
@@ -97,8 +102,13 @@ function writes({ enabled = true, ownerId = 6, boards = [], failSql = false, los
     "@/lib/projectPrefix": prefix,
     "@/lib/flags": { HTPR_6868_TICKET_PREFIX_FLAG: flagKey, isFeatureEnabled: async (key, id) => { assert.equal(key, flagKey); assert.equal(id, 6); return enabled; } },
     "./getAllIncludes": access,
+    "@vercel/functions": { waitUntil: promise => { assert.ok(committed); scheduled.push(promise); } },
+    "../turbopuffer/turbopufferHelper": {
+      upsertTaskToTurbopuffer: async id => { assert.ok(committed); reindexed.push(["task", id]); },
+      upsertAllCommentsToTurbopuffer: async id => { assert.ok(committed); reindexed.push(["comments", id]); },
+    },
   });
-  return { board, aliases, sql, events, prisma, controller, transactions: () => transactions, update: value => controller.default(15, "Board", undefined, value, { id: 6 }) };
+  return { board, aliases, sql, events, updates, reindexed, scheduled, prisma, controller, transactions: () => transactions, update: value => controller.default(15, "Board", undefined, value, { id: 6 }) };
 }
 
 for (const input of ["", "A", "ABCDEF", "1AB", "A-B", "A B", "ÉB", "AB_", 42, {}, null]) {
@@ -195,8 +205,8 @@ test("update route uses the safe controller with the authenticated caller", asyn
   assert.equal(f.aliases.length, 1);
 });
 
-function lookups({ visible = true, live = false, liveAccess = true, deleted = false, deletedBoard = false, agentId = null, ambiguous = false, prefixAliases = [{ prefix: "OLD", projectId: 15 }] } = {}) {
-  const board = { id: 15, ownerId: visible ? 6 : 9, members: [], status: deletedBoard ? "Deleted" : "Normal", teamId: "team-1" };
+function lookups({ visible = true, live = false, liveAccess = true, deleted = false, deletedBoard = false, agentId = null, ambiguous = false, moved = false, destinationOwnerId = 6, sourceOwnerId, members = [], prefixAliases = [{ prefix: "OLD", projectId: 15 }] } = {}) {
+  const board = { id: 15, ownerId: sourceOwnerId ?? (visible ? 6 : 9), members, status: deletedBoard ? "Deleted" : "Normal", teamId: "team-1" };
   const current = { id: 101, projectId: 15, uniqueIndex: 123, ticketNumber: "NEW-123", status: deleted ? "Deleted" : "Normal", project: board };
   const tasks = [current];
   if (live) tasks.push({ ...current, id: 202, projectId: 16, ticketNumber: "OLD-123", project: { ...board, id: 16, ownerId: liveAccess ? 6 : 9 } });
@@ -205,6 +215,11 @@ function lookups({ visible = true, live = false, liveAccess = true, deleted = fa
     tasks.push({ ...current, id: 303, projectId: 17 });
     aliases.push({ prefix: "OLD", projectId: 17, project: board });
   }
+  const moveAliases = [];
+  if (moved) {
+    Object.assign(current, { projectId: 20, uniqueIndex: 7, ticketNumber: "DEST-7", project: { ...board, id: 20, ownerId: destinationOwnerId } });
+    moveAliases.push({ projectId: 15, uniqueIndex: 123, ticketNumber: "NEW-123", task: current });
+  }
   let aliasQueries = 0;
   const prisma = {
     task: {
@@ -212,7 +227,7 @@ function lookups({ visible = true, live = false, liveAccess = true, deleted = fa
       findMany: async ({ where, take }) => tasks.filter(row => matches(row, where)).slice(0, take ?? tasks.length),
     },
     projectPrefixAlias: { findMany: async ({ where }) => { aliasQueries++; return aliases.filter(row => matches(row, where)); } },
-    taskNumberAlias: { findMany: async () => [] },
+    taskNumberAlias: { findMany: async ({ where }) => moveAliases.filter(row => matches(row, where)) },
   };
   const base = {
     "@/lib/prisma": { __esModule: true, default: prisma },
@@ -220,6 +235,7 @@ function lookups({ visible = true, live = false, liveAccess = true, deleted = fa
   };
   base["@/utils/controllers/projects/findPrefixAliasTasks"] = load("src/utils/controllers/projects/findPrefixAliasTasks.ts", base);
   const resolver = load("src/lib/mcp/tasks/resolveTask.ts", base);
+  base["@/lib/mcp/tasks/resolveTask"] = resolver;
   const detail = load("src/utils/controllers/taskDetail/load.ts", {
     ...base, "@vercel/functions": {}, "@/lib/realtime/server": {}, "@/lib/cycles": {}, "@/lib/pullRequests/taskPullRequests": {}, "@/lib/agents/publicAgent": {}, "@/lib/flags": {}, "@/lib/agents/visibility": {}, "@/utils/controllers/notifications/visibleInboxScope": {},
   });
@@ -231,7 +247,7 @@ function lookups({ visible = true, live = false, liveAccess = true, deleted = fa
     "@/lib/mcp/tasks/mappers": { taskMcpGetInclude: () => ({}), mapTaskToMcpGetResponse: task => ({ id: task.id, ticketNumber: task.ticketNumber }) },
     "@/lib/mcp/tasks/resolveTask": resolver, "@/lib/mcp/pagination/cursor": {}, "@/lib/flags": {}, "@/lib/mcp/listQuery": {}, "@/lib/mcp/readListQuery": {}, "@/lib/mcp/priorityFilter": {},
   });
-  return { resolver, detail, aliasQueries: () => aliasQueries, get: query => route.GET({ nextUrl: { searchParams: new URLSearchParams(query) } }) };
+  return { resolver, detail, prisma, tasks, moveAliases, aliasQueries: () => aliasQueries, get: query => route.GET({ nextUrl: { searchParams: new URLSearchParams(query) } }) };
 }
 test("old prefix alias lookup resolves in MCP, CLI batch and detail", async () => {
   const f = lookups();
@@ -372,14 +388,14 @@ test("transaction locks and fresh prefix reads protect concurrent create and mov
   assert.doesNotMatch(single, /ticketNumber: currentState.ticketNumber,\s+parentTaskId/);
 });
 
-function ui({ enabled = true, ownerId = 6, members = [] } = {}) {
+function ui({ enabled = true, ownerId = 6, members = [], mutations = [], posts = [] } = {}) {
   const project = { id: 15, title: "Hypertask", uniqueIdentifier: "HTPR", ownerId, members };
   const shell = load("src/components/Modals/Settings/SettingsSectionShell.tsx", {
     "@/lib/contexts/mobileContext": { MobileViewContext: React.createContext(false) },
   });
   const stubs = {
-    axios: { post: async () => ({ data: { uniqueIdentifier: "NEW" } }), isAxiosError: () => false },
-    "@tanstack/react-query": { useQueryClient: () => ({ invalidateQueries: async () => {} }), useQuery: () => ({ data: {}, isLoading: false }), useMutation: () => ({ isPending: false, mutate: () => {} }) },
+    axios: { post: async (...args) => { posts.push(args); return { data: { uniqueIdentifier: "NEW" } }; }, isAxiosError: () => false },
+    "@tanstack/react-query": { useQueryClient: () => ({ invalidateQueries: async () => {} }), useQuery: () => ({ data: {}, isLoading: false }), useMutation: options => { mutations.push(options); return { isPending: false, mutate: () => {} }; } },
     "react-hot-toast": { error: () => {} },
     "@/hooks/useFlag": { useFlag: key => { assert.equal(key, flagKey); return enabled; } },
     "@/lib/flags/keys": { HTPR_6868_TICKET_PREFIX_FLAG: flagKey },
@@ -406,7 +422,7 @@ test("UI settings row is first, uses the source input pattern and mirrors edit p
   const settings = read("src/components/Modals/Settings/BoardGeneralSection.tsx");
   const source = read("src/components/Modals/Settings/GeneralSection.tsx");
   const inputClass = source.match(/id="settings-display-name"\s+className="([^"]+)"/)[1];
-  assert.ok(settings.includes(`className="${inputClass}"`));
+  assert.ok(settings.includes(`className="${inputClass.replace("rounded-[5px]", "rounded-[4px]")}"`));
   assert.match(settings, /onBlur=\{savePrefix\}/);
   assert.match(settings, /event.key === "Enter"\) event.currentTarget.blur/);
   assert.match(settings, /toast.error/);
@@ -420,7 +436,7 @@ test("UI create reuses ModalInput, keeps manual edits and threads the prefix thr
   assert.match(source, /setPrefixDraft\(event.target.value.toUpperCase\(\)\)/);
   assert.equal((source.match(/ticketPrefixEnabled \? ticketPrefix : undefined/g) ?? []).length, 3);
   const actions = read("src/components/generalCommandActions.ts");
-  assert.equal((actions.match(/ticketPrefix !== undefined \? \{ ticketPrefix \} : \{\}/g) ?? []).length, 2);
+  assert.equal((actions.match(/ticketPrefixEnabled && ticketPrefix !== undefined \? \{ ticketPrefix \} : \{\}/g) ?? []).length, 2);
 });
 test("UI create updates the automatic suggestion until edited and submits the override", async () => {
   const { JSDOM } = require("jsdom");
@@ -487,6 +503,217 @@ test("UI create updates the automatic suggestion until edited and submits the ov
     else delete global.navigator;
     global.IS_REACT_ACT_ENVIRONMENT = previous.act;
     dom.window.close();
+  }
+});
+
+function detailPage({ enabled = true, task = { id: 101, projectId: 20, uniqueIndex: 7 } } = {}) {
+  const calls = [];
+  const detail = lookups().detail;
+  const page = load("src/app/detail/[...slug]/page.tsx", {
+    "./TaskDetailComp": {},
+    "@/utils/controllers/taskDetail/load": {
+      ...detail,
+      findTaskByTicketNumber: async (...args) => { calls.push(["lookup", ...args]); return task; },
+      fetchTaskDetail: async () => null, fetchCommentsForSlug: async () => [], findTaskNumberAlias: async () => null,
+    },
+    "@/lib/auth/serverUser": { requireServerCookieUser: async () => ({ id: 6 }) },
+    "@/lib/flags": { HTPR_6868_TICKET_PREFIX_FLAG: flagKey, isFeatureEnabled: async (key, id) => { calls.push(["flag", key, id]); return enabled; } },
+    "next/navigation": { redirect: url => { throw new Error(`REDIRECT ${url}`); } },
+    "@/lib/prisma": {}, "@/lib/contexts/TaskDetail/TaskProvider": {}, "@/lib/contexts/TaskDetail/FollowersProvider": {},
+    "@/utils/helperFunctions/TaskDetail": {}, "@/utils/controllers/users/fetch_preferences": { fetchUserPreferenceController: async () => ({}) },
+    "@/utils/controllers/tasks/markRead": {}, "@/utils/controllers/comments/readReceipts": {}, "@/lib/agentRuns/service": {},
+    "../../unauthorized/page": { __esModule: true, default: "Unauthorized" },
+  }).default;
+  return { calls, page: identifier => page({ params: Promise.resolve({ slug: ["project-15", identifier] }), searchParams: Promise.resolve({}) }) };
+}
+
+test("review: detail URLs check the server flag before resolving and redirecting", async () => {
+  for (const identifier of ["OLD-123", "old-123", "OlD-123"]) {
+    const f = detailPage();
+    await assert.rejects(f.page(identifier), /REDIRECT \/detail\/project-20\/7/);
+    assert.deepEqual(f.calls, [["flag", flagKey, 6], ["lookup", identifier, 6, 15]]);
+    const off = detailPage({ enabled: false });
+    await assert.rejects(off.page(identifier), /REDIRECT \/project\?id=15/);
+    assert.deepEqual(off.calls, [["flag", flagKey, 6]]);
+  }
+  const missing = detailPage({ task: null });
+  assert.equal((await missing.page("OLD-123")).type, "Unauthorized");
+  for (const enabled of [false, true]) {
+    const numeric = detailPage({ enabled });
+    assert.equal((await numeric.page("123")).type, "Unauthorized");
+    assert.deepEqual(numeric.calls, []);
+  }
+});
+
+test("review: rename then move resolves historical prefixes on the destination board", async () => {
+  const f = lookups({ moved: true });
+  for (const identifier of ["OLD-123", "NEW-123"]) {
+    assert.equal((await f.resolver.findTaskByIdentifier({ id: 6 }, { ticket_number: identifier, project_id: 15 })).id, 101);
+    const task = await f.detail.findTaskByTicketNumber(identifier, 6, 15);
+    assert.equal(task.projectId, 20);
+    assert.equal(task.uniqueIndex, 7);
+    assert.equal((await f.get({ ticket_number: identifier, project_id: "15" })).body.tasks[0].ticketNumber, "DEST-7");
+  }
+  const denied = lookups({ moved: true, destinationOwnerId: 9 });
+  assert.equal(await denied.resolver.findTaskByIdentifier({ id: 6 }, { ticket_number: "OLD-123" }), null);
+  assert.equal(await denied.detail.findTaskByTicketNumber("OLD-123", 6), null);
+  assert.equal((await denied.get({ ticket_number: "OLD-123" })).status, 404);
+  const destinationOnly = lookups({ moved: true, sourceOwnerId: 9 });
+  assert.equal((await destinationOnly.detail.findTaskByTicketNumber("OLD-123", 6)).id, 101);
+});
+
+test("review: rename then move keeps reused numbers and ambiguous history safe", async () => {
+  const f = lookups({ moved: true });
+  f.tasks.push({ id: 505, projectId: 15, uniqueIndex: 123, ticketNumber: "NEW-123", status: "Normal", project: { id: 15, ownerId: 6, status: "Normal" } });
+  assert.equal((await f.resolver.findTaskByIdentifier({ id: 6 }, { ticket_number: "OLD-123" })).id, 505);
+  assert.equal((await f.detail.findTaskByTicketNumber("OLD-123", 6)).id, 505);
+  const ambiguous = lookups({ moved: true, ambiguous: true });
+  await assert.rejects(ambiguous.resolver.findTaskByIdentifier({ id: 6 }, { ticket_number: "OLD-123" }), /ambiguous/);
+  assert.equal(await ambiguous.detail.findTaskByTicketNumber("OLD-123", 6), null);
+});
+
+test("review: historical reservation protects custom create and prefix updates", async () => {
+  for (const status of ["Normal", "Archived", "Deleted"]) {
+    for (const prefix of ["OLD", "old", "OlD"]) {
+      const reserved = { id: 16, teamId: "team-1", uniqueIdentifier: "NEW", status, prefixAliases: [{ prefix }] };
+      const update = writes({ boards: [reserved] });
+      update.board.uniqueIdentifier = "CUR";
+      assert.equal((await update.update("OLD")).status, 400);
+      assert.equal(update.board.uniqueIdentifier, "CUR");
+      assert.deepEqual(update.updates, []);
+      const create = creation({ boards: [reserved] });
+      assert.equal((await create.controller.default(6, "Board", "team-1", "account-1", "OLD")).status, 400);
+      assert.equal(create.created(), null);
+    }
+  }
+  const otherTeam = creation({ boards: [{ id: 16, teamId: "team-2", uniqueIdentifier: "NEW", status: "Normal", prefixAliases: [{ prefix: "OLD" }] }] });
+  assert.equal((await otherTeam.controller.default(6, "Board", "team-1", "account-1", "OLD")).status, 200);
+  const ownHistory = writes();
+  ownHistory.board.prefixAliases = [{ prefix: "ABC" }];
+  assert.equal((await ownHistory.update("ABC")).status, 200);
+});
+
+test("review: historical reservation protects automatic allocation including suffixes", async () => {
+  const boards = [
+    { id: 16, teamId: "team-1", uniqueIdentifier: "OTHER", status: "Normal", prefixAliases: [{ prefix: "repl" }] },
+    { id: 17, teamId: "team-1", uniqueIdentifier: "OTHER2", status: "Deleted", prefixAliases: [{ prefix: "RePl1" }] },
+  ];
+  const f = creation({ boards });
+  assert.equal((await f.controller.default(6, "Release Plan", "team-1", "account-1")).json.uniqueIdentifier, "REPL2");
+  assert.equal((await creation({ boards }).controller.updateUniqueIdentifier("team-2", "Release Plan", 15)), "REPL");
+  assert.equal((await creation({ boards }).controller.updateUniqueIdentifier("team-1", "Release Plan", 16)), "REPL");
+});
+
+test("review: case-insensitive history resolves legacy lowercase and mixed-case prefixes", async () => {
+  for (const prefix of ["OLD", "old", "OlD"]) {
+    for (const moved of [false, true]) {
+      const f = lookups({ moved, prefixAliases: [{ projectId: 15, prefix }] });
+      for (const identifier of ["OLD-123", "old-123", "OlD-123"]) {
+        assert.equal((await f.resolver.findTaskByIdentifier({ id: 6 }, { ticket_number: identifier })).id, 101);
+        assert.equal((await f.detail.findTaskByTicketNumber(identifier, 6)).id, 101);
+        assert.equal((await f.get({ ticket_number: identifier })).body.tasks[0].id, 101);
+      }
+    }
+  }
+  const moved = lookups({ moved: true });
+  moved.moveAliases[0].ticketNumber = "new-123";
+  for (const identifier of ["NEW-123", "new-123", "NeW-123"]) {
+    assert.equal((await moved.resolver.findTaskByIdentifier({ id: 6 }, { ticket_number: identifier })).id, 101);
+    assert.equal((await moved.detail.findTaskByTicketNumber(identifier, 6)).id, 101);
+  }
+});
+
+test("review: shared detail resolver handles move aliases and keeps detail access checks", async () => {
+  const f = lookups({ moved: true });
+  assert.equal((await f.detail.findTaskByTicketNumber("NEW-123", 6, 15)).projectId, 20);
+  assert.equal(await f.detail.findTaskByTicketNumber("NEW-123", 6, 16), null);
+  const source = read("src/utils/controllers/taskDetail/load.ts");
+  assert.match(source, /await findTaskByIdentifier\(/);
+  assert.doesNotMatch(source, /findPrefixAliasTasks/);
+  const member = lookups({ sourceOwnerId: 9, members: [{ userId: 6, agentId: "legacy-agent" }] });
+  assert.equal(await member.resolver.findTaskByIdentifier({ id: 6 }, { ticket_number: "NEW-123" }), null);
+  assert.equal((await member.detail.findTaskByTicketNumber("NEW-123", 6)).id, 101);
+  const deleted = lookups({ deletedBoard: true, live: true });
+  assert.equal(await deleted.detail.findTaskByTicketNumber("OLD-123", 6), null);
+  const lostAccess = lookups();
+  const find = lostAccess.prisma.task.findFirst;
+  lostAccess.prisma.task.findFirst = async args => args.where.id ? null : find(args);
+  assert.equal(await lostAccess.detail.findTaskByTicketNumber("NEW-123", 6), null);
+});
+
+test("review: prefix-only patch submits no title and preserves a concurrent rename", async () => {
+  const mutations = [], posts = [];
+  ui({ mutations, posts });
+  await mutations[0].mutationFn("NEW");
+  assert.deepEqual(posts[0], ["/api/projects/update", { projectId: 15, uniqueIdentifier: "NEW" }]);
+  const f = writes();
+  f.board.title = "Renamed by another user";
+  const route = load("src/pages/api/projects/update.ts", {
+    "@/utils/controllers/projects/update": f.controller,
+    "@/lib/auth/getSessionUser": { getSessionUser: async () => ({ userId: 6 }) },
+    "@/lib/auth/sessionUserRecord": { loadSessionUserRecord: async id => ({ id }) },
+  }).default;
+  const res = { status(code) { this.code = code; return this; }, json(body) { this.body = body; } };
+  await route({ method: "POST", headers: {}, body: posts[0][1] }, res);
+  assert.equal(res.code, 200);
+  assert.equal(f.board.title, "Renamed by another user");
+  assert.deepEqual(f.updates, [{ uniqueIdentifier: "NEW" }]);
+  for (const options of [{ enabled: false }, { ownerId: 9 }, { loseAccess: true }]) {
+    const rejected = writes(options);
+    assert.equal((await rejected.controller.default(15, undefined, undefined, "NEW", { id: 6 })).status, 403);
+    assert.deepEqual(rejected.updates, []);
+  }
+  assert.equal((await f.controller.default(15, undefined, undefined, "1BAD", { id: 6 })).status, 400);
+  assert.equal((await f.controller.default(-15, undefined, undefined, "NEW", { id: 6 })).status, 400);
+});
+
+test("review: compact radius is 4px on the new prefix input", () => {
+  const input = ui().match(/<input[^>]*id="settings-ticket-prefix"[^>]*>/)[0];
+  assert.match(input, /rounded-\[4px\]|rounded-sm/);
+  assert.doesNotMatch(input, /rounded-\[5px\]/);
+  assert.match(read("src/components/Modals/Settings/GeneralSection.tsx"), /rounded-\[5px\]/, "positive control: the old copied pattern used 5px");
+});
+
+test("review: feature flag payload is omitted in both command create paths when off", async () => {
+  const source = read("src/components/commands.tsx");
+  assert.match(source, /useFlag\(HTPR_6868_TICKET_PREFIX_FLAG\)/);
+  for (const ticketPrefixEnabled of [false, true]) {
+    for (const mode of ["Create Board", "CreateTeamBoard"]) {
+      const posts = [];
+      const actions = load("src/components/generalCommandActions.ts", {
+        "@/models/enums": {},
+        axios: { post: async (url, body) => { posts.push([url, body]); return { data: { id: 15 } }; } },
+        "react-hot-toast": { error: message => { throw new Error(message); } },
+        "@/utils/api/Homepage": { createTeam: async () => ({ data: { id: "new-team", googleAccountId: "new-account" } }) },
+        "@/utils/api/Inbox": {}, "@/lib/tutorial/learnTutorialState": {}, "@/lib/constants": {},
+        "@/utils/helperFunctions/Views/ViewsHelperFunctions": {}, "@/hooks/Task Detail/useTimeTracking": {},
+        "@/utils/branchName": {}, "@/lib/utils/clipboard": {},
+      }).createGeneralCommandActions({
+        currentUser: { id: 6 }, _currentProject: { id: 15 }, ticketPrefixEnabled,
+        boardCloseHandler: () => {}, setCurrentProject: () => {}, router: { refresh: () => {} },
+        queryClient: { refetchQueries: async () => {} }, goToProjectShortcut: () => {},
+      });
+      await actions.createBoard(mode, "Release Plan", "team-1", "account-1", "Team", "NEW");
+      assert.equal(posts.length, 1);
+      assert.equal(Object.hasOwn(posts[0][1], "ticketPrefix"), ticketPrefixEnabled);
+      if (ticketPrefixEnabled) assert.equal(posts[0][1].ticketPrefix, "NEW");
+    }
+  }
+});
+
+test("review: bulk reindex schedules tasks and comments only after successful commit", async () => {
+  const f = writes();
+  f.board.tasks = [{ id: 101, uniqueIndex: 1 }, { id: 102, uniqueIndex: 2, status: "Archive" }];
+  assert.equal((await f.update("NEW")).status, 200);
+  await Promise.all(f.scheduled);
+  assert.equal(f.scheduled.length, 1);
+  assert.deepEqual(f.reindexed, [["task", 101], ["comments", 101], ["task", 102], ["comments", 102]]);
+  assert.equal(f.sql.filter(row => row.text.startsWith("UPDATE")).length, 1);
+  for (const options of [{ failSql: true }, { enabled: false }, { loseAccess: true }]) {
+    const failed = writes(options);
+    await failed.update("NEW");
+    assert.deepEqual(failed.scheduled, []);
+    assert.deepEqual(failed.reindexed, []);
   }
 });
 

@@ -67,6 +67,8 @@ function harness({ ownerId = 99, ownerAgents = [], members = [], status = "Norma
   const controller = loadTs("src/utils/controllers/projects/update.ts", {
     "@/lib/prisma": prisma,
     "@/lib/flags": {},
+    "@vercel/functions": {},
+    "../turbopuffer/turbopufferHelper": {},
     "@/lib/projectPrefix": {},
     "./getAllIncludes": access,
   }).default;

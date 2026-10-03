@@ -2,7 +2,7 @@ import { Prisma, PrismaClient, Status } from "@prisma/client";
 import { waitUntil } from "@vercel/functions";
 import { broadcastTaskChange } from "@/lib/realtime/server";
 import prisma from "@/lib/prisma";
-import { findPrefixAliasTasks } from "@/utils/controllers/projects/findPrefixAliasTasks";
+import { findTaskByIdentifier, TaskIdentifierAmbiguityError } from "@/lib/mcp/tasks/resolveTask";
 import type { TaskDetailSlug } from "./types";
 import type { IComment } from "@/models/model";
 import { CYCLE_WINDOW_SIZE } from "@/lib/cycles";
@@ -200,19 +200,22 @@ export async function findTaskByTicketNumber(ticketNumber: string, userId: numbe
     status: { not: Status.Deleted },
     OR: [{ members: { some: { userId } } }, { ownerId: userId }],
   };
-  const identity = { ticketNumber, ...(projectId ? { projectId } : {}), status: { not: Status.Deleted } };
-  const live = await prisma.task.findFirst({
-    where: identity,
-    select: { id: true },
-  });
-  if (live) {
+  try {
+    const task = await findTaskByIdentifier(
+      { id: userId },
+      { ticket_number: ticketNumber, project_id: projectId },
+      null,
+      projectAccess,
+    );
+    if (!task) return null;
     return prisma.task.findFirst({
-      where: { ...identity, id: live.id, project: projectAccess },
-      select: { projectId: true, uniqueIndex: true },
+      where: { id: task.id, status: { not: Status.Deleted }, project: projectAccess },
+      select: { id: true, projectId: true, uniqueIndex: true },
     });
+  } catch (error) {
+    if (error instanceof TaskIdentifierAmbiguityError) return null;
+    throw error;
   }
-  const tasks = await findPrefixAliasTasks(ticketNumber, projectAccess, projectId);
-  return tasks.length === 1 ? tasks[0] : null;
 }
 
 /** Task detail SSR — fields used by TaskDetailComp + hooks (see taskDetail benchmark parity). */
