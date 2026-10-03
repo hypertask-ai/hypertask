@@ -27,6 +27,12 @@ Click: PASS <changed path and result>
 Recording: <video file next to premerge.md>
 ```
 
+### Disposable local PR build
+
+From the PR worktree, run `scripts/premerge-local.sh up` (Docker and Node 24 required). It runs the CI browser-smoke migrations, seed and webpack build against fresh local Postgres, Redis and Soketi, then prints the build URL, seeded board URL, Playwright storage-state path and premerge record lines. Use the printed state in a Playwright context, click a seeded card, and record the changed path, screenshot and video in the ticket's evidence folder. Never print the state or private credentials/log files. Run `scripts/premerge-local.sh down` in the same worktree when finished; it stops the server and removes the disposable containers and credentials.
+
+The command refuses worktrees containing `.env` files and ignores inherited service credentials. It installs dependencies with `npm ci` when `node_modules` is absent. Seeded flags use the checked-in production-mode snapshot, not a live read: confirm the live modes match before counting this as released-flag premerge proof. This is a local seeded board, not production QA, and does not replace verification after deploy.
+
 ## Logins
 
 Pass the state file with `--state`. Never print the file. Pick the account for the permission, plan or flag path being checked; the flag QA account is not an admin.

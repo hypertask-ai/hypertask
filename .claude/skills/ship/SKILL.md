@@ -46,6 +46,10 @@ Repo skills live in the app repo at `.claude/skills/`; their index is `.claude/s
 | Report and close | `vcc` QA routine step 5, plus the QA record below | `ship-check done HTPR-NNNN` prints `done ok` |
 | Clean up | `clean-up` (this session's worktree and branch) | `ship-check cleaned HTPR-NNNN` prints `cleaned ok` |
 
+## Local premerge board click
+
+Use `scripts/premerge-local.sh up` from the PR worktree to build and serve the CI browser-smoke app with disposable Docker services and a seeded signed-in board. It prints URLs, a Playwright storage-state path and the `premerge.md` starting lines. Follow `.claude/skills/verify-qa/SKILL.md` "Disposable local PR build" to capture the changed-path click and recording, confirming the snapshot matches live flag modes. Finish with `scripts/premerge-local.sh down`. This needs Docker, Node 24 and no `.env` files; it never uses a production database and does not replace live QA after deploy.
+
 ## Rules that hold the whole session
 
 - **PR name (Valentin, 2026-10-01).** Exactly `HTPR-NNNN [TYPE] <short description>`: a ticket that exists on the board, then a type the repo title check accepts: `[BUGFIX]`, `[FEATURE]`, `[IMPROVE]`, `[INFRA]` (also `[SPEED]`, `[QA]`, `[CLI/MCP/AI]`, `[DASH]`, `[BOARD]`, `[COST]`, `[PLAN]`, `[FEEDBACK]`, `[REFACTOR]`). Example: `HTPR-6370 [BUGFIX] Chip markers, readable summary, Escape and refocus in search picker`. Wrong name: `gh pr edit <n> --title "..."`, or create the missing ticket via `vcc` and retitle.
