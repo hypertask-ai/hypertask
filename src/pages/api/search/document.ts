@@ -9,7 +9,7 @@ import { rankedSearchWhere } from "@/lib/search/rankedWhere";
 import prisma from "@/lib/prisma";
 import type { Prisma } from "@prisma/client";
 import { turbopufferGetDocuments } from "@/utils/controllers/search/document";
-import { convertToPlain } from "@/utils/controllers/turbopuffer/turbopufferHelper";
+import { searchPreviewText } from "@/utils/controllers/turbopuffer/turbopufferHelper";
 import { projectContentAccessWhere } from "@/utils/controllers/projects/getAllIncludes";
 import { NextApiHandler, NextApiRequest, NextApiResponse } from "next";
 
@@ -116,7 +116,7 @@ const handler: NextApiHandler = async (
           const comment = matchHighlightsEnabled ? commentById.get(row.id) : undefined;
           return {
             taskId: row.id, projectId: row.projectId, ticketNumber: row.ticketNumber,
-            taskTitle: row.title, descriptionText: descriptionById.get(row.id) ?? convertToPlain(row.description_?.content ?? ''),
+            taskTitle: row.title, descriptionText: descriptionById.get(row.id) ?? searchPreviewText(row.description_?.content ?? ''),
             projectTitle: row.project.title, status: row.status,
             updatedAt: row.updatedAt?.toISOString(), uniqueIndex: row.uniqueIndex,
             highlight: {},

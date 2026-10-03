@@ -1,5 +1,6 @@
 import { Prisma } from "@prisma/client";
 import { createHash } from "crypto";
+import { TextNode } from "node-html-parser";
 
 import prisma from "@/lib/prisma";
 import turbopuffer, { turbopufferNamespaces } from "@/lib/turbopuffer";
@@ -1335,7 +1336,7 @@ function normalizeTaskRow(row: TurbopufferTaskRow): TurbopufferTaskRow {
     id: row.id.toString(),
     ticketNumber: stringify(row.ticketNumber),
     title: stringify(row.title),
-    descriptionText: stringify(row.descriptionText),
+    descriptionText: searchPreviewText(stringify(row.descriptionText)),
     projectId: Number(row.projectId),
     creatorName: stringify(row.creatorName),
     status: stringify(row.status),
@@ -1351,7 +1352,7 @@ function normalizeCommentRow(row: TurbopufferCommentRow): TurbopufferCommentRow 
     ...row,
     id: row.id.toString(),
     taskId: row.taskId.toString(),
-    commentText: stringify(row.commentText),
+    commentText: searchPreviewText(stringify(row.commentText)),
     creatorName: stringify(row.creatorName),
     projectId: Number(row.projectId),
     createdAt: stringify(row.createdAt),
@@ -1453,4 +1454,9 @@ function dateValue(value: string) {
 export function convertToPlain(htmlString: string = "") {
   const regex = /<[^>]*>/g;
   return htmlString.replace(regex, "");
+}
+
+export function searchPreviewText(htmlString: string = "") {
+  // Keep the index encoded; decode once on reads, after stripping source tags.
+  return new TextNode(convertToPlain(htmlString)).text;
 }

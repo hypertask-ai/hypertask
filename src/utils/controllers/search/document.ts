@@ -483,10 +483,12 @@ function highlightedSnippet(value: string, searchQuery: string) {
   const rawSnippet = `${start > 0 ? "..." : ""}${value.slice(start, end)}${
     end < value.length ? "..." : ""
   }`;
-  const escapedSnippet = escapeHtml(rawSnippet);
   const regex = new RegExp(`(${terms.map(escapeRegExp).join("|")})`, "gi");
 
-  return escapedSnippet.replace(regex, "<mark>$1</mark>");
+  return rawSnippet
+    .split(regex)
+    .map((part, index) => index % 2 ? `<mark>${escapeHtml(part)}</mark>` : escapeHtml(part))
+    .join("");
 }
 
 function getQueryTerms(searchQuery: string) {
