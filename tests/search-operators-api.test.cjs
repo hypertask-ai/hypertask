@@ -41,7 +41,8 @@ const mocks = new Map([
   ['src/lib/flags.ts', {
     HTPR_6369_SEARCH_OPERATORS_FLAG: 'htpr-6369-search-operators',
     HTPR_6372_SEARCH_RANKING_FLAG: 'htpr-6372-search-ranking',
-    isFeatureEnabled: async () => state.flag,
+    HTPR_6878_SEARCH_LABEL_SCOPE_FLAG: 'htpr-6878-search-label-scope',
+    isFeatureEnabled: async (key) => key === 'htpr-6878-search-label-scope' ? false : state.flag,
   }],
   ['src/utils/controllers/projects/getAllIncludes.ts', {
     projectContentAccessWhere: (userId) => ({ ownerId: userId }),

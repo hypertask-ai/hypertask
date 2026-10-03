@@ -1,7 +1,7 @@
 import { httpStatusConfig } from "@/lib/configs/http-status.config";
 import { getSessionUser } from "@/lib/auth/getSessionUser";
 import { HTPR_6372_SEARCH_RANKING_FLAG, HTPR_6369_SEARCH_OPERATORS_FLAG, isFeatureEnabled } from "@/lib/flags";
-import { HTPR_6370_SEARCH_CHIPS_FLAG } from "@/lib/flags";
+import { HTPR_6370_SEARCH_CHIPS_FLAG, HTPR_6688_SEARCH_AUTOCOMPLETE_FLAG, HTPR_6865_SEARCH_LAYOUT_FLAG, HTPR_6878_SEARCH_LABEL_SCOPE_FLAG } from "@/lib/flags";
 import { MAX_SEARCH_OPERATOR_CLAUSES, searchOperatorClauseCount } from "@/lib/search/operators";
 import { parseSearchWithChipNames, parseSearchWithNames } from "@/lib/search/serverOperators";
 import { rankedSearchWhere } from "@/lib/search/rankedWhere";
@@ -68,6 +68,21 @@ const handler: NextApiHandler = async (
         selectedParsed = parsed;
       }
       const parsed = selectedParsed;
+      if (parsed?.filters.label && chipsEnabled &&
+        ![...(parsed.filters.in ?? []), ...(parsed.filters.board ?? [])].some((filter) => !filter.negated) &&
+        await isFeatureEnabled(HTPR_6878_SEARCH_LABEL_SCOPE_FLAG, session.userId) &&
+        await isFeatureEnabled(HTPR_6865_SEARCH_LAYOUT_FLAG, session.userId) &&
+        await isFeatureEnabled(HTPR_6688_SEARCH_AUTOCOMPLETE_FLAG, session.userId)) {
+        // The picker groups trimmed names; resolve every spelling to IDs before the exact-name filter trims them.
+        const labels = await prisma.label.findMany({
+          where: { projectId: { in: requestedProjectIds } }, select: { id: true, value: true },
+        });
+        parsed.filters.label = parsed.filters.label.flatMap((filter) => {
+          const matching = labels.filter((label) => label.id === filter.value ||
+            label.value?.trim().toLowerCase() === filter.value.trim().toLowerCase());
+          return matching.length ? matching.map((label) => ({ ...filter, value: label.id })) : [filter];
+        });
+      }
       if (parsed && Object.keys(parsed.filters).length) {
         const { where, rankedIds, descriptionById, partial } = await rankedSearchWhere(
           parsed, requestedProjectIds, archive === "Normal" || archive === "Archive" ? archive : null,
