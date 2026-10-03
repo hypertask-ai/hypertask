@@ -29,7 +29,7 @@ test("description changes preserve an existing empty description", () => {
 });
 
 test("version viewing checks task access and returns actor details", () => {
-  const access = versionsRoute.indexOf("getProjectWhere(userId, null)");
+  const access = versionsRoute.indexOf("taskAccessWhere(userId, taskId, { projectStatus: 'Normal' })");
   const versions = versionsRoute.indexOf("prisma.docVersion.findMany");
   assert.ok(access >= 0 && access < versions);
   assert.match(versionsRoute, /description_: \{ select: \{ content: true \} \}/);
@@ -43,7 +43,7 @@ test("version viewing checks task access and returns actor details", () => {
 });
 
 test("restoration is task-scoped and uses the normal description update path", () => {
-  const access = restoreRoute.indexOf("getProjectWhere(userId, null)");
+  const access = restoreRoute.indexOf("taskAccessWhere(userId, taskId, { projectStatus: 'Normal' })");
   const snapshot = restoreRoute.indexOf("prisma.docVersion.findFirst");
   const update = restoreRoute.indexOf("updateTaskSingle(");
   assert.ok(access >= 0 && access < snapshot && snapshot < update);
