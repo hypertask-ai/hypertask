@@ -36,6 +36,7 @@ Repo skills live in the app repo at `.claude/skills/`; their index is `.claude/s
 | Step | Load | Done when |
 |---|---|---|
 | Claim and start | step 2 above, then `vcc` (start steps) | Your own agent assigned, "Claimed." comment, In Progress, all before you examine anything |
+| Only if Valentin asked for a wireframe (ticket or chat; Valentin, 2026-10-03) | repo `wireframe` | Wireframe page on the ticket, one `Question:`, Valentin Review, remaining gates `ABANDON`ed "waiting for Valentin: wireframe choice". Without his request, skip this row: build behind a flag |
 | Before writing UI code | repo `reuse-existing-ui` | You know which existing components you reuse |
 | The fix | repo `fix-slow-page` for speed tickets; otherwise `fix-bug` (restores intended behaviour, no flag) or `ship-feature-behind-flag` (new behaviour, flag named after the ticket) | Tests pass locally |
 | Before the PR | repo `simplify-before-pr`; plus `design-compliance` and `verify-on-phone` for UI; `update-docs` when users see a change | Each skill's own check passes |
