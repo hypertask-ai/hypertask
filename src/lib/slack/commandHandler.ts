@@ -107,7 +107,7 @@ async function handleConnect(
       where: { slackTeamId: payload.slackTeamId },
       select: { id: true },
     });
-    if (install) await setSlackAutoLinkDisabled(install.id, payload.slackUserId, false);
+    if (install) await setSlackAutoLinkDisabled(install.id, payload.slackUserId, null);
   }
   const actor = await resolveSlackActor(payload.slackTeamId, payload.slackUserId);
   if (actor) {
@@ -272,7 +272,7 @@ async function handleConnectConfirmation(
   }
 
   if (await isSlackAppEnabled(payload.slackTeamId, payload.slackUserId)) {
-    await setSlackAutoLinkDisabled(confirmation.installId, confirmation.slackUserId, false);
+    await setSlackAutoLinkDisabled(confirmation.installId, confirmation.slackUserId, null);
   }
   await postSlackResponseUrl(
     payload.responseUrl,
@@ -288,7 +288,8 @@ async function handleDisconnect(payload: SlackCommandPayload): Promise<void> {
   });
   if (install) {
     if (await isSlackAppEnabled(payload.slackTeamId, payload.slackUserId)) {
-      await setSlackAutoLinkDisabled(install.id, payload.slackUserId, true);
+      const actor = await resolveSlackActor(payload.slackTeamId, payload.slackUserId);
+      if (actor) await setSlackAutoLinkDisabled(install.id, payload.slackUserId, actor.user.id);
     }
     await prisma.slackUserLink.deleteMany({
       where: { installId: install.id, slackUserId: payload.slackUserId },

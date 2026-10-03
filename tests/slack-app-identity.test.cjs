@@ -5,12 +5,12 @@ const { actor, loadTs, memoryRedis } = require("./slack-app-fixtures.cjs");
 function identityFixture(options = {}) {
   const writes = [];
   const redis = memoryRedis();
-  const teamUser = { ...actor.user, emailVerified: true };
+  const teamUser = { ...actor.user, emailVerified: true, ...options.teamUser };
   const prisma = {
     slackInstall: {
       findUnique: async ({ where }) => where.slackTeamId === "T1" ? {
-        ...actor, id: actor.installId, encryptedBotToken: "test-ciphertext", installedByUserId: 6,
-        team: { aiProviderSettings: {} }, userLinks: options.linked ? [{ user: options.linked }] : [],
+        ...actor, id: actor.installId, encryptedBotToken: "test-ciphertext", installedByUserId: options.installerId ?? 6,
+        team: { aiProviderSettings: {} }, userLinks: options.linked ? [{ user: options.linked, userId: options.linked.id }] : [],
       } : null,
       findFirst: async ({ where }) => {
         assert.equal(where.id, actor.installId);
@@ -25,22 +25,22 @@ function identityFixture(options = {}) {
     } },
     user: { findUnique: async () => ({ id: 6, email: "owner@example.com", emailVerified: true }) },
     slackUserLink: {
-      create: async ({ data }) => { writes.push(data); if (options.collision) throw { code: "P2002" }; return { user: teamUser }; },
+      create: async ({ data }) => { writes.push(data); if (options.collision) throw { code: "P2002" }; options.linked = teamUser; return { user: teamUser }; },
       findUnique: async () => ({ user: options.collisionUser ?? actor.user }),
-      deleteMany: async (args) => writes.push({ deleted: args.where }),
+      deleteMany: async (args) => { options.linked = null; writes.push({ deleted: args.where }); },
     },
   };
   const loaded = loadTs("src/lib/slack/userLink.ts", {
     "@/lib/prisma": { __esModule: true, default: prisma },
     "@/lib/crypto/byokCipher": { decryptSecret: () => actor.botToken },
     "@/lib/redis": { getRedis: async () => redis },
-    "@/lib/flags": { HTPR_6817_SLACK_APP_FLAG: "htpr-6817-slack-app", isFeatureEnabled: async () => options.enabled !== false },
+    "@/lib/flags": { HTPR_6817_SLACK_APP_FLAG: "htpr-6817-slack-app", isFeatureEnabled: async (_key, userId) => options.enabledIds ? options.enabledIds.includes(userId) : options.enabled !== false },
     "@/lib/slack/api": { callSlackApi: async (method, _token, params) => {
       assert.equal(method, "users.info"); assert.equal(params.user, "U1");
       return { ok: true, user: { is_email_confirmed: true, profile: { email: " PERSON@EXAMPLE.COM " }, ...options.slackUser } };
     } },
   });
-  return { ...loaded, redis, writes };
+  return { ...loaded, prisma, redis, writes };
 }
 
 test("auto-match uses a confirmed Slack email and exactly one verified installing-team member", async () => {
@@ -88,15 +88,50 @@ test("stale links are removed and a concurrent link cannot escape the installing
 
 test("disconnect suppression lasts until explicit connect, and flag off leaves legacy mapping unchanged", async () => {
   const fixture = identityFixture();
-  await fixture.setSlackAutoLinkDisabled(actor.installId, "U1", true);
+  await fixture.setSlackAutoLinkDisabled(actor.installId, "U1", actor.user.id);
   assert.equal(await fixture.resolveSlackActor("T1", "U1"), null);
   assert.equal(fixture.writes.length, 0);
-  await fixture.setSlackAutoLinkDisabled(actor.installId, "U1", false);
+  await fixture.setSlackAutoLinkDisabled(actor.installId, "U1", null);
   assert.equal((await fixture.resolveSlackActor("T1", "U1")).user.id, 42);
   const legacy = identityFixture({ enabled: false });
-  await legacy.setSlackAutoLinkDisabled(actor.installId, "U1", true);
+  await legacy.setSlackAutoLinkDisabled(actor.installId, "U1", actor.user.id);
   assert.equal((await legacy.resolveSlackActor("T1", "U1")).user.id, 42);
 });
+
+for (const userId of [6, 985]) {
+  test(`disconnect retains rollout identity ${userId} after link deletion in an ordinary user's installation`, async () => {
+    const options = { installerId: 42, linked: { ...actor.user, id: userId }, teamUser: { id: userId }, allowedIds: [userId], enabledIds: [userId] };
+    const fixture = identityFixture(options);
+    const feature = loadTs("src/lib/slack/feature.ts", {
+      "@/lib/prisma": { __esModule: true, default: fixture.prisma },
+      "@/lib/slack/userLink": fixture,
+      "@/lib/flags": { HTPR_6817_SLACK_APP_FLAG: "htpr-6817-slack-app", isFeatureEnabled: async (_key, id) => options.enabledIds.includes(id) },
+    });
+    const { handleSlackCommand } = loadTs("src/lib/slack/commandHandler.ts", {
+      "@/lib/prisma": { __esModule: true, default: fixture.prisma },
+      "@/lib/slack/userLink": fixture,
+      "@/lib/slack/feature": feature,
+      "@/lib/slack/actions": {},
+      "@/lib/slack/rateLimit": { claimSlackActionCapacity: async () => true },
+      "@/lib/slack/api": { postSlackResponseUrl: async () => {} },
+    });
+    const payload = { channelId: "C1", responseUrl: "https://hooks.slack.com/test", slackTeamId: "T1", slackUserId: "U1", text: "disconnect" };
+    await handleSlackCommand(payload, "https://app.hypertask.ai");
+    assert.equal(options.linked, null);
+    assert.equal(fixture.redis.strings.get(`slack:disconnected:${actor.installId}:U1`), String(userId));
+    assert.equal(await fixture.resolveSlackActor("T1", "U1"), null);
+    assert.equal(await feature.isSlackAppEnabled("T1", "U1"), true);
+    assert.equal(fixture.writes.filter((write) => write.userId).length, 0);
+    await handleSlackCommand({ ...payload, text: "connect" }, "https://app.hypertask.ai");
+    assert.equal((await fixture.resolveSlackActor("T1", "U1")).user.id, userId);
+    assert.equal(fixture.redis.strings.size, 0);
+
+    await handleSlackCommand(payload, "https://app.hypertask.ai");
+    options.enabledIds = [];
+    assert.equal((await fixture.resolveSlackActor("T1", "U1")).user.id, userId);
+    assert.equal(await feature.isSlackAppEnabled("T1", "U1"), false);
+  });
+}
 
 test("connect fallback issues a signed user-bound link and confirmation refuses another Slack member", async () => {
   const previous = process.env.SLACK_CLIENT_SECRET;

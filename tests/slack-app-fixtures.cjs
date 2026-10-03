@@ -59,6 +59,17 @@ function memoryRedis() {
     },
     async hmget(key, ...fields) { return fields.map((field) => hashes.get(key)?.get(field) ?? null); },
     async expire(key, seconds) { expiry.set(key, seconds); },
+    async eval(_script, keyCount, key, field, turn, maxBytes, ttl) {
+      if (keyCount !== 1) throw new Error("Expected one history key");
+      if (!hashes.has(key)) hashes.set(key, new Map());
+      const hash = hashes.get(key);
+      const bytes = Buffer.from((hash.get(field) ?? "") + turn);
+      let start = Math.max(0, bytes.length - maxBytes);
+      while (start < bytes.length && bytes[start] >= 128 && bytes[start] < 192) start++;
+      hash.set(field, bytes.subarray(start).toString());
+      expiry.set(key, ttl);
+      return 1;
+    },
   };
 }
 

@@ -103,15 +103,13 @@ export async function resolveSlackActor(
 
   const botToken = decryptSecret(install.encryptedBotToken);
   let user: LinkedSlackUser | null = install.userLinks[0]?.user ?? null;
+  const disconnectedUserId = await getSlackAutoLinkDisabledUserId(install.id, slackUserId);
   const slackAppEnabled = await isFeatureEnabled(
     HTPR_6817_SLACK_APP_FLAG,
-    user?.id ?? install.installedByUserId,
+    disconnectedUserId ?? user?.id ?? install.installedByUserId,
   );
-  if (slackAppEnabled) {
-    // Keep an explicit disconnect from silently relinking on the next action.
-    const redis = await getRedis();
-    if (await redis.get(slackAutoLinkDisabledKey(install.id, slackUserId))) return null;
-  }
+  // The link is gone after disconnect, so the marker owns the rollout identity.
+  if (disconnectedUserId && slackAppEnabled) return null;
   if (user && !(await isSlackInstallTeamMember(install.id, user.id))) {
     await prisma.slackUserLink.deleteMany({
       where: { installId: install.id, slackUserId },
@@ -176,14 +174,23 @@ function slackAutoLinkDisabledKey(installId: string, slackUserId: string): strin
   return `slack:disconnected:${installId}:${slackUserId}`;
 }
 
+export async function getSlackAutoLinkDisabledUserId(
+  installId: string,
+  slackUserId: string,
+): Promise<number | null> {
+  const redis = await getRedis();
+  const userId = Number(await redis.get(slackAutoLinkDisabledKey(installId, slackUserId)));
+  return Number.isSafeInteger(userId) && userId > 0 ? userId : null;
+}
+
 export async function setSlackAutoLinkDisabled(
   installId: string,
   slackUserId: string,
-  disabled: boolean,
+  userId: number | null,
 ): Promise<void> {
   const redis = await getRedis();
   const key = slackAutoLinkDisabledKey(installId, slackUserId);
-  if (disabled) await redis.set(key, "1");
+  if (userId !== null) await redis.set(key, String(userId));
   else await redis.del(key);
 }
 
