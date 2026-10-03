@@ -80,34 +80,32 @@ const NotificationRow = (props: Props) => {
                 {notification.type !== "Invited" && notification.task && <TaskMetaChips task={notification.task} showDueDate={flipMentionHierarchy} />}
             </div>
 
-            <CreatedAtDesktop hidden={!disableButtons && selected} />
-            {/* Superhuman-style overlay (HTPR-4954 v2, reserved-gutter approach
-                banned): absolutely positioned, so mounting/unmounting on hover
-                never affects the flow siblings (timestamp, content) beside it.
-                bg-active-elementBg matches the row's own selected/hover
-                background (inboxSplit/index.tsx md:bg-active-elementBg) so it
-                opaquely suppresses the timestamp underneath instead of blending. */}
-            {!disableButtons && selected && <div className={`${selectedIds && selectedIds?.length > 0 ? "!invisible" : ""} absolute right-0 top-1/2 z-10 hidden -translate-y-1/2 items-center gap-[10px] bg-active-elementBg pl-3 pr-1 md:flex`}>
-                <button
-                    className="relative group"
-                    onClick={(e) => {
-                        e.preventDefault();
-                        e.stopPropagation(); // Prevent the click event from propagating to the parent div
-                        eHandler(false, index, e.detail === 0 ? "keyboard" : "mouse");
-                    }}
-                >
-                    <Tooltip
-                        left={-195}
-                        bottom={-40}
-                        text={inboxArchiveTooltip(clusterArchiveEnabled ? notification.clusterCount : undefined)}
-                        keyCombination={["E"]}
-                    />
-                    <ArchiveNotificationIcon color={inboxConfig.bulkSelectionStyling.archive_reminder_icon(isIbxSlctd)} height={18} width={18} show={selected} />
+            {/* Keep the same outer flex children: space-x adds a margin to the
+                timestamp if hover controls become its next sibling. */}
+            <div className="relative hidden md:block md:w-[62px] md:shrink-0">
+                <CreatedAtDesktop hidden={!disableButtons && selected} />
+                {!disableButtons && selected && <div className={`${selectedIds && selectedIds?.length > 0 ? "!invisible" : ""} absolute right-0 top-1/2 z-10 hidden -translate-y-1/2 items-center gap-[10px] bg-active-elementBg pl-3 pr-1 md:flex`}>
+                    <button
+                        className="relative group"
+                        onClick={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation(); // Prevent the click event from propagating to the parent div
+                            eHandler(false, index, e.detail === 0 ? "keyboard" : "mouse");
+                        }}
+                    >
+                        <Tooltip
+                            left={-195}
+                            bottom={-40}
+                            text={inboxArchiveTooltip(clusterArchiveEnabled ? notification.clusterCount : undefined)}
+                            keyCombination={["E"]}
+                        />
+                        <ArchiveNotificationIcon color={inboxConfig.bulkSelectionStyling.archive_reminder_icon(isIbxSlctd)} height={18} width={18} show={selected} />
 
-                    {/* <Check size={15} color={notification.type==="Assigned"? (notification.assignee?.task?.status === 'Archive' ? 'green' : '#8E9093'): (notification.comment?.task?.status === 'Archive' ? 'green' : '#8E9093')} strokeWidth={1.75} /> */}
-                </button>
-                <RemindMeInbox color={inboxConfig.bulkSelectionStyling.archive_reminder_icon(isIbxSlctd)} height={18} width={18} show={selected} />
-            </div>}
+                        {/* <Check size={15} color={notification.type==="Assigned"? (notification.assignee?.task?.status === 'Archive' ? 'green' : '#8E9093'): (notification.comment?.task?.status === 'Archive' ? 'green' : '#8E9093')} strokeWidth={1.75} /> */}
+                    </button>
+                    <RemindMeInbox color={inboxConfig.bulkSelectionStyling.archive_reminder_icon(isIbxSlctd)} height={18} width={18} show={selected} />
+                </div>}
+            </div>
         </TaskRowContainer>
 
     )
