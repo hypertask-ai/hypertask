@@ -112,6 +112,54 @@ const VIEWS: Array<{
   { name: 'new-task modal', path: process.env.SMOKE_POSTDEPLOY === '1' ? `/new?board=${process.env.SMOKE_TASK_PATH?.match(/^\/detail\/project-(\d+)\//)?.[1]}` : '/new', title: 'New', selector: '#createTaskModal' },
 ]
 
+test('seeded board card opens a ticket and stays open', { tag: ['@id:board-card-click'] }, async ({ page }, testInfo) => {
+  test.skip(!process.env.BROWSER_SMOKE_PR, 'isolated PR fixtures only')
+  const fixture = JSON.parse(readFileSync(path.join(__dirname, '.state', 'card-fixture.json'), 'utf8')) as {
+    taskId: number; title: string; description: string; detailPath: string; flags: Record<string, boolean>
+  }
+  await page.setViewportSize(testInfo.project.name === 'Mobile'
+    ? { width: 390, height: 844 }
+    : { width: 1440, height: 900 })
+  // Optional pages must never gate the title or description, even if their request never settles.
+  await page.route('**/api/pages/list?*', () => {})
+  // Wait for the app's own flag read, not a separate API request that could race hydration.
+  const flagsResponse = page.waitForResponse((response) => new URL(response.url()).pathname === '/api/flags' && response.ok())
+  await page.goto(withRealtime(process.env.SMOKE_BOARD_PATH!), { waitUntil: 'load' })
+  const { flags } = await (await flagsResponse).json() as { flags: Record<string, boolean> }
+  for (const [key, enabled] of Object.entries(fixture.flags)) {
+    expect(flags[key] === true, `seeded flag ${key} must match the production mode`).toBe(enabled)
+  }
+  const card = page.locator(`#task-${fixture.taskId} a[href="${fixture.detailPath}"]`)
+  await expect(card).toContainText(fixture.title)
+  await expect(card).toBeVisible()
+  // A full navigation could conceal a failed instant-open attempt. Observe from before the click.
+  let documentRequests = 0
+  page.on('request', (request) => {
+    if (request.isNavigationRequest() && request.frame() === page.mainFrame()) documentRequests++
+  })
+  await card.click()
+  await expect(page).toHaveURL((url) => url.pathname === fixture.detailPath, { timeout: 10_000 })
+  const title = page.locator('#title-input')
+  const description = page.getByText(fixture.description, { exact: true })
+  await expect(title, 'card click must reveal the ticket title').toBeVisible({ timeout: 10_000 })
+  await expect(title).toHaveValue(fixture.title)
+  await expect(description, 'card click must reveal the ticket description').toBeVisible()
+  const deadline = Date.now() + 3_000
+  while (Date.now() < deadline) {
+    expect(new URL(page.url()).pathname, 'ticket must stay on its detail route').toBe(fixture.detailPath)
+    expect(await title.isVisible(), 'ticket title disappeared after opening').toBe(true)
+    expect(await title.inputValue()).toBe(fixture.title)
+    expect(await description.isVisible(), 'ticket description disappeared after opening').toBe(true)
+    expect(documentRequests, 'card click must not reload the document').toBe(0)
+    await page.waitForTimeout(Math.min(100, Math.max(0, deadline - Date.now())))
+  }
+  expect(new URL(page.url()).pathname).toBe(fixture.detailPath)
+  expect(await title.isVisible()).toBe(true)
+  expect(await title.inputValue()).toBe(fixture.title)
+  expect(await description.isVisible()).toBe(true)
+  expect(documentRequests, 'card click must not reload the document').toBe(0)
+})
+
 const ERROR_MARKERS = [/something went wrong/i, /application error/i, /internal server error/i]
 
 // A Vercel bot challenge on the runner's IP is not a broken view — the health

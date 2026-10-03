@@ -1,4 +1,4 @@
-import { appendFile, mkdir, writeFile } from "node:fs/promises";
+import { appendFile, mkdir, readFile, writeFile } from "node:fs/promises";
 import { createRequire } from "node:module";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
@@ -7,8 +7,21 @@ import { fileURLToPath } from "node:url";
 const stateFile = process.env.BROWSER_SMOKE_STATE_FILE;
 if (!stateFile) throw new Error("BROWSER_SMOKE_STATE_FILE is required");
 if (!process.env.GITHUB_OUTPUT) throw new Error("GITHUB_OUTPUT is required");
+if (!process.env.DATABASE_URL || !["127.0.0.1", "localhost"].includes(new URL(process.env.DATABASE_URL).hostname)) {
+  throw new Error("Browser smoke seeding requires an isolated loopback database");
+}
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
+const fixtureFile = path.join(path.dirname(stateFile), "card-fixture.json");
+// A dated, credential-free copy of the live modes. Refresh it when release modes change.
+const { modes } = JSON.parse(await readFile(path.join(root, "e2e/smoke/production-flag-modes.json"), "utf8"));
+const instantOpenControl = process.argv.includes("--instant-open-control");
+if (instantOpenControl) modes["htpr-6752-instant-ticket-open"] = "EVERYONE";
+for (const [key, mode] of Object.entries(modes)) {
+  if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(key) || !["OFF", "OWNER_ONLY", "OWNER_AND_QA", "EVERYONE"].includes(mode)) {
+    throw new Error("Invalid production flag-mode snapshot");
+  }
+}
 const jiti = createRequire(path.join(root, "package.json"))("jiti")(
   import.meta.url,
   {
@@ -49,12 +62,15 @@ async function createBoard({ ownerId, teamId, title, suffix }) {
   await prisma.member.create({
     data: { projectId: project.id, userId: ownerId },
   });
-  await prisma.task.create({
+  const task = await prisma.task.create({
     data: {
       uniqueIndex: 1,
       ticketNumber: `${suffix.toUpperCase()}-1`,
       title: `${title} fixture`,
       description: "",
+      description_: {
+        create: { content: "<p>This seeded ticket must open from its board card.</p>", creatorId: ownerId },
+      },
       projectId: project.id,
       userId: ownerId,
       section: sections[0].section_title,
@@ -62,10 +78,10 @@ async function createBoard({ ownerId, teamId, title, suffix }) {
       ranking: "A0100",
     },
   });
-  return project;
+  return { ...project, task };
 }
 
-try {
+async function seedSessionFixtures(flags) {
   const user = await prisma.user.create({
     data: {
       uid: `browser-smoke-${runKey}`,
@@ -213,10 +229,31 @@ try {
     flag: "wx",
     mode: 0o600,
   });
+  await writeFile(fixtureFile, JSON.stringify({
+    taskId: board.task.id,
+    title: board.task.title,
+    description: "This seeded ticket must open from its board card.",
+    detailPath: `/detail/project-${board.id}/${board.task.uniqueIndex}`,
+    flags,
+  }));
   await appendFile(
     process.env.GITHUB_OUTPUT,
     `board_path=/project?id=${board.id}&surface=board\ndemo_board_path=/project?id=${demoBoard.id}&surface=board\n`,
   );
+}
+
+try {
+  for (const [key, mode] of Object.entries(modes)) {
+    await prisma.featureFlag.upsert({ where: { key }, create: { key, mode }, update: { mode } });
+  }
+  const flags = Object.fromEntries(Object.entries(modes).map(([key, mode]) => [key, mode === "EVERYONE"]));
+  if (instantOpenControl) {
+    // Exercise the released path even while production has contained it with OFF.
+    const fixture = JSON.parse(await readFile(fixtureFile, "utf8"));
+    await writeFile(fixtureFile, JSON.stringify({ ...fixture, flags }));
+  } else {
+    await seedSessionFixtures(flags);
+  }
   console.log("Seeded isolated browser smoke fixtures.");
 } finally {
   await prisma.$disconnect();

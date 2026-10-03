@@ -57,6 +57,52 @@ test("browser smoke creates a fresh verified session without logging it", async 
   assert.doesNotMatch(setup, /token\?\.split\('\.'\)\[0\]/);
 });
 
+test("required browser smoke clicks its seeded ticket under live modes and the instant-open control", async () => {
+  const [workflow, seed, smoke, snapshotSource] = await Promise.all([
+    source(".github/workflows/ci-tests.yml"),
+    source("scripts/seed-browser-smoke.mjs"),
+    source("e2e/smoke/prod.spec.ts"),
+    source("e2e/smoke/production-flag-modes.json"),
+  ]);
+  const snapshot = JSON.parse(snapshotSource);
+  assert.equal(snapshot.source, "https://app.hypertask.ai/api/admin/flags");
+  assert.ok(Number.isFinite(Date.parse(snapshot.capturedAt)));
+  assert.ok(Object.values(snapshot.modes).includes("EVERYONE"), "released flags cannot all default off");
+  for (const mode of Object.values(snapshot.modes)) {
+    assert.ok(["OFF", "OWNER_ONLY", "OWNER_AND_QA", "EVERYONE"].includes(mode));
+  }
+  const job = workflow.slice(workflow.indexOf("  browser-smoke:"), workflow.indexOf("  production-test-warning:"));
+  assert.match(job, /name: browser-smoke/);
+  assert.match(job, /node scripts\/seed-browser-smoke\.mjs --instant-open-control/);
+  assert.match(job, /playwright test[^\n]+--grep 'seeded board card opens'/);
+  assert.match(seed, /prisma\.featureFlag\.upsert/);
+  assert.match(seed, /mode === "EVERYONE"/);
+  assert.match(seed, /description_:\s*\{\s*create: \{ content: "<p>[^<]+<\/p>", creatorId: ownerId/);
+  assert.match(seed, /taskId: board\.task\.id/);
+  assert.match(seed, /detailPath: `\/detail\/project-\$\{board\.id\}\/\$\{board\.task\.uniqueIndex\}`/);
+  assert.match(smoke, /width: 1440, height: 900/);
+  assert.match(smoke, /width: 390, height: 844/);
+  assert.match(smoke, /page\.route\('\*\*\/api\/pages\/list\?\*', \(\) => \{\}\)/);
+  assert.match(smoke, /await card\.click\(\)/);
+  assert.match(smoke, /toHaveURL\(\(url\) => url\.pathname === fixture\.detailPath/);
+  assert.match(smoke, /expect\(flags\[key\]/);
+  assert.match(smoke, /expect\(title\)\.toHaveValue\(fixture\.title\)/);
+  assert.match(smoke, /expect\(description,[^\n]+\.toBeVisible\(\)/);
+  assert.match(smoke, /Date\.now\(\) \+ 3_000/);
+  assert.match(smoke, /request\.isNavigationRequest\(\)/);
+  assert.match(smoke, /expect\(documentRequests,[^\n]+\.toBe\(0\)/);
+});
+
+test("browser fixture seeding rejects a nonlocal database before any write", () => {
+  const { spawnSync } = require("node:child_process");
+  const result = spawnSync(process.execPath, ["scripts/seed-browser-smoke.mjs"], {
+    encoding: "utf8",
+    env: { ...process.env, DATABASE_URL: "postgresql://smoke:smoke@example.invalid/smoke", BROWSER_SMOKE_STATE_FILE: "unused.json", GITHUB_OUTPUT: "unused.env" },
+  });
+  assert.notEqual(result.status, 0);
+  assert.match(result.stderr, /Browser smoke seeding requires an isolated loopback database/);
+});
+
 test("automated realtime opt-in is limited to the isolated local smoke", async () => {
   const [client, smoke, inbox] = await Promise.all([
     source("src/lib/realtime/client.ts"),
