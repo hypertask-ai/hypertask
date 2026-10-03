@@ -57,7 +57,6 @@ import {
 } from "@/lib/inboxClusters";
 import {
   GOOGLE_CALENDAR_FLAG,
-  HTPR_6542_TEAM_SCOPED_MANAGEMENT_KEYS_FLAG,
   HTPR_6514_COMMENT_LONG_PRESS_FLAG,
   HTPR_6892_CMDK_VERSION_FLAG,
   HTPR_6868_TICKET_PREFIX_FLAG,
@@ -123,10 +122,8 @@ const Commands = (props: Props) => {
   const buildTimeLabel = buildId !== "dev" && !Number.isNaN(buildTime.getTime())
     ? `${buildTime.toLocaleDateString("en-GB", { day: "numeric", month: "short" })} ${buildTime.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit", hour12: false })}`
     : "";
-  const figmaSettingsEnabled = useFlag("htpr-6136-figma-connect");
   const googleCalendarSettingsEnabled = useFlag(GOOGLE_CALENDAR_FLAG);
   const autoTaskDescriptionsEnabled = useFlag("htpr-6177-auto-task-descriptions");
-  const teamScopedManagementKeysEnabled = useFlag(HTPR_6542_TEAM_SCOPED_MANAGEMENT_KEYS_FLAG);
   const copyCurrentUrlEnabled = useFlag("htpr-6112-copy-current-url");
   const inboxClusterEnabled = useFlag(INBOX_ARCHIVE_CLUSTER_FLAG);
   const myTasksViewsEnabled = useFlag(MY_TASKS_VIEWS_FLAG);
@@ -198,10 +195,8 @@ const Commands = (props: Props) => {
           (command) =>
             (command.commandMode !== CommandMode.ManageTeamAIAPIKeys ||
               showByokApiKeys) &&
-            (command.key !== "settingsAccountsFigmaAccount" || figmaSettingsEnabled) &&
-            (!["settingsCalendarGoogleCalendar", "settingsCalendarGoogleAccount", "settingsCalendarKeepTasksUpdated"].includes(command.key) || googleCalendarSettingsEnabled) &&
+            (command.key !== "settingsCalendarKeepTasksUpdated" || googleCalendarSettingsEnabled) &&
             (command.key !== "settingsTaskPageSuggestDescriptionsFromTaskTitles" || autoTaskDescriptionsEnabled) &&
-            (command.key !== "settingsManagementKeysTeam" || teamScopedManagementKeysEnabled) &&
             (command.commandMode !== CommandMode.CopyViewURL ||
               copyCurrentUrlEnabled) &&
             isTicketPrefixCommandVisible(command) &&
@@ -348,10 +343,8 @@ const Commands = (props: Props) => {
     pinCommentActions,
     pageActions,
     copyCurrentUrlEnabled,
-    figmaSettingsEnabled,
     googleCalendarSettingsEnabled,
     autoTaskDescriptionsEnabled,
-    teamScopedManagementKeysEnabled,
     currentProject,
     inboxClusterEnabled,
     frequentlyUsed,
