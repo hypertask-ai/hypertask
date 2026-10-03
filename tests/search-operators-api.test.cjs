@@ -18,7 +18,8 @@ function eligible(row, where) {
   if (where.OR && !where.OR.some((group) => eligible(row, group))) return false
   if (where.NOT && eligible(row, where.NOT)) return false
   if (where.taskLabels && !where.taskLabels.some.label.OR.some((label) =>
-    label.id === row.label || label.value?.equals?.toLowerCase() === row.label)) return false
+    label.id === row.label || label.value?.equals?.toLowerCase() === row.label ||
+    row.taskLabels?.some((link) => label.id === link.label.id || label.value?.equals?.toLowerCase() === link.label.value.toLowerCase()))) return false
   if (where.project && row.project.title.toLowerCase() !== where.project.title.equals.toLowerCase()) return false
   return true
 }
@@ -31,6 +32,7 @@ const db = {
     .filter((section) => where.deleted !== false || !section.deleted) },
   task: { findMany: async ({ where, select, take }) => {
     state.where = where
+    state.selects.push(select)
     const rows = state.rows.filter((row) => eligible(row, where))
     return (take ? rows.slice(0, take) : rows).map((row) => select.id && Object.keys(select).length === 1 ? { id: row.id } : row)
   } },
@@ -43,7 +45,13 @@ const mocks = new Map([
     HTPR_6369_SEARCH_OPERATORS_FLAG: 'htpr-6369-search-operators',
     HTPR_6372_SEARCH_RANKING_FLAG: 'htpr-6372-search-ranking',
     HTPR_6878_SEARCH_LABEL_SCOPE_FLAG: 'htpr-6878-search-label-scope',
-    isFeatureEnabled: async (key) => ['htpr-6878-search-label-scope', 'htpr-6881-search-fuzzy-person'].includes(key) ? false : state.flag,
+    HTPR_6882_SEARCH_MATCH_HIGHLIGHTS_FLAG: 'htpr-6882-search-match-highlights',
+    HTPR_6865_SEARCH_LAYOUT_FLAG: 'htpr-6865-search-layout',
+    HTPR_6688_SEARCH_AUTOCOMPLETE_FLAG: 'htpr-6688-search-autocomplete',
+    HTPR_6370_SEARCH_CHIPS_FLAG: 'htpr-6370-search-chips',
+    isFeatureEnabled: async (key) => ['htpr-6878-search-label-scope', 'htpr-6881-search-fuzzy-person'].includes(key) ? false
+      : key === 'htpr-6882-search-match-highlights' ? state.matchFlag
+      : key === state.disabledFlag ? false : state.flag,
   }],
   ['src/utils/controllers/projects/getAllIncludes.ts', {
     projectContentAccessWhere: (userId) => ({ ownerId: userId }),
@@ -78,7 +86,7 @@ function row(id, projectId = 7, label = 'bug') {
 }
 async function search(searchQuery, overrides = {}) {
   state = { flag: true, session: { userId: 6 }, boards: [7], rows: [row(123), row(8, 8)],
-    taskHits: [], commentHits: [], windows: [], commentWindows: [], legacyCalls: 0, labelQueries: 0, ...overrides }
+    taskHits: [], commentHits: [], windows: [], commentWindows: [], legacyCalls: 0, labelQueries: 0, selects: [], matchFlag: false, ...overrides }
   const res = response()
   await handler({ method: 'POST', headers: {}, body: {
     searchQuery, projectIds: overrides.requested ?? [7], archive: null,
@@ -110,9 +118,10 @@ test('from and assignee match the email shown for a user without a display name'
   const person = { displayName: null, email: 'kamila@example.com' }
   const task = { ...row(123), userId: 4, user: person, assignees: [{ userId: 4, user: person }] }
   for (const operator of ['from', 'assignee']) {
-    const { res } = await search(`${operator}:kamila@example.com`, { rows: [task] })
+    const { res } = await search(`${operator}:kamila@example.com`, { rows: [task], matchFlag: true })
     assert.equal(res.statusCode, 200)
     assert.deepEqual(res.body.processedData.All.map((item) => item.taskId), [123])
+    assert.deepEqual(res.body.processedData.All[0].searchMatch.people, ['kamila@example.com'])
   }
 })
 
@@ -216,4 +225,47 @@ test('local fixture times filtered query against flag-off search path', async ()
 test('unknown operators stay free text', async () => {
   const { state } = await search('foo:bar label:bug', { taskHits: [{ id: '123', descriptionText: '' }] })
   assert.equal(state.windows.length, 1)
+})
+
+test('match highlights fetch names in the existing query and show only positively matched people, labels and boards', async () => {
+  const task = { ...row(123), taskLabels: [{ label: { id: 'bug-id', value: 'Bug' } }, { label: { id: 'other', value: 'Other' } }],
+    assignees: [...row(123).assignees, { userId: 9, user: { displayName: 'Unmatched', email: 'other@example.test' } }] }
+  for (const [query, expected] of [
+    ['from:6', { people: ['Kamil Grzegorzewicz'], labels: [] }],
+    ['assignee:6', { people: ['Kamil Grzegorzewicz'], labels: [] }],
+    ['from:6 assignee:9', { people: ['Kamil Grzegorzewicz', 'Unmatched'], labels: [] }],
+    ['assignee:"@Kamil Grzegorzewicz"', { people: ['Kamil Grzegorzewicz'], labels: [] }],
+    ['label:bug-id', { people: [], labels: ['Bug'] }],
+    ['label:bug', { people: [], labels: ['Bug'] }],
+    ['in:7', { people: [], labels: [], board: 'Visible board' }],
+    ['board:"Visible board"', { people: [], labels: [], board: 'Visible board' }],
+    ['-from:9 -assignee:10 -label:nope -in:8', { people: [], labels: [] }],
+  ]) {
+    const { res, state } = await search(query, { rows: [task], matchFlag: true })
+    assert.equal(res.statusCode, 200, query)
+    assert.deepEqual(res.body.processedData.All[0].searchMatch, expected, query)
+    assert.equal(state.selects.length, 1, 'no per-row query')
+    assert.deepEqual(state.selects[0].assignees.select.user.select, { displayName: true, email: true })
+  }
+})
+
+test('filtered comment-only matches preserve the actual comment author and snippet only when enabled', async () => {
+  const commentHits = [{ id: '44', taskId: '123', commentText: 'webhook failed', creatorName: 'Comment Writer' }]
+  const on = await search('webhook from:6', { commentHits, matchFlag: true })
+  assert.equal(on.res.body.processedData.All[0].commentId, 44)
+  assert.equal(on.res.body.processedData.All[0].commentText, 'webhook failed')
+  assert.equal(on.res.body.processedData.All[0].searchMatch.commentAuthor, 'Comment Writer')
+  const off = await search('webhook from:6', { commentHits })
+  assert.equal(off.res.body.processedData.All[0].commentId, undefined)
+})
+
+test('match flag and every layout prerequisite off preserve legacy response bytes and do not select names', async () => {
+  const baseline = JSON.stringify((await search('from:6')).res.body)
+  for (const disabledFlag of ['htpr-6865-search-layout', 'htpr-6688-search-autocomplete', 'htpr-6370-search-chips']) {
+    const { res, state } = await search('from:6', { matchFlag: true, disabledFlag })
+    assert.equal(JSON.stringify(res.body), baseline)
+    assert.equal(state.selects[0].user, undefined)
+    assert.equal(state.selects[0].assignees, undefined)
+    assert.equal(state.selects[0].taskLabels, undefined)
+  }
 })

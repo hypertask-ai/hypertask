@@ -121,6 +121,7 @@ export async function turbopufferGetDocuments(
   options?: {
     contextProjectId?: number | null;
     applyRelevanceCut?: boolean;
+    matchHighlightsEnabled?: boolean;
   }
 ) {
   const applyRelevanceCut = options?.applyRelevanceCut === true;
@@ -306,6 +307,7 @@ export async function turbopufferGetDocuments(
           status: hit.document.task.status,
           updatedAt: hit.document.task.updatedAt,
           commentText: hit.document.commentText,
+          ...(options?.matchHighlightsEnabled ? { searchMatch: { commentAuthor: hit.document.creatorName } } : {}),
           uniqueIndex: hit.document.task.uniqueIndex,
         };
         if (archive === null) processedData.push({ ...data });

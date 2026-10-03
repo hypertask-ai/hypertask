@@ -75,6 +75,7 @@ export const HTPR_6369_SEARCH_OPERATORS_FLAG = "htpr-6369-search-operators";
 export const HTPR_6370_SEARCH_CHIPS_FLAG = "htpr-6370-search-chips";
 export const HTPR_6688_SEARCH_AUTOCOMPLETE_FLAG = "htpr-6688-search-autocomplete";
 export const HTPR_6865_SEARCH_LAYOUT_FLAG = "htpr-6865-search-layout";
+export const HTPR_6882_SEARCH_MATCH_HIGHLIGHTS_FLAG = "htpr-6882-search-match-highlights";
 export const HTPR_6878_SEARCH_LABEL_SCOPE_FLAG = "htpr-6878-search-label-scope";
 export const HTPR_6879_SEARCH_ESC_BACK_FLAG = "htpr-6879-search-esc-back";
 export const HTPR_6881_SEARCH_FUZZY_PERSON_FLAG = "htpr-6881-search-fuzzy-person";

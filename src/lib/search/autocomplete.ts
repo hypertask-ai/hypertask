@@ -83,6 +83,16 @@ export function localValueSuggestions(operator: SearchOperator, prefix = '', now
   return values.filter(({ id, name }) => name.toLowerCase().startsWith(prefix.toLowerCase()) || String(id).startsWith(prefix))
 }
 
+export function highlightedSearchSnippet(text: string, query: string) {
+  const parts = highlightedTitle(text, query)
+  const firstMatch = parts.findIndex((part) => part.matched)
+  if (firstMatch < 0) return highlightedTitle(text.slice(0, 220), query)
+  const offset = parts.slice(0, firstMatch).reduce((length, part) => length + part.text.length, 0)
+  const start = Math.max(0, offset - 60)
+  const end = Math.min(text.length, offset + 160)
+  return highlightedTitle(`${start ? '...' : ''}${text.slice(start, end)}${end < text.length ? '...' : ''}`, query)
+}
+
 export function highlightedTitle(title: string, query: string) {
   const terms = parseSearchQuery(query).text.split(/\s+/).filter(Boolean)
   if (!terms.length) return [{ text: title, matched: false }]

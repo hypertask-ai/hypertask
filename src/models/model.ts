@@ -1188,6 +1188,7 @@ export interface ITypedTask {
   commentText?: string;
   descriptionText?: string;
   searchGroup?: "current-board" | "other";
+  searchMatch?: { people?: string[]; labels?: string[]; board?: string; commentAuthor?: string };
 }
 
 export type IgnoreItemType =

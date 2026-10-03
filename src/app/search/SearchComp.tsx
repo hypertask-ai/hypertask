@@ -10,7 +10,9 @@ import { cn } from "@/utils/undoActions/helperFuncs";
 import { Fragment, KeyboardEvent, RefObject, useContext } from "react";
 import { useFlag } from "@/hooks/useFlag";
 import { HTPR_6372_SEARCH_RANKING_FLAG, HTPR_6688_SEARCH_AUTOCOMPLETE_FLAG, HTPR_6865_SEARCH_LAYOUT_FLAG, HTPR_6878_SEARCH_LABEL_SCOPE_FLAG, HTPR_6879_SEARCH_ESC_BACK_FLAG } from "@/lib/flags/keys";
-import { highlightedTitle } from "@/lib/search/autocomplete";
+import { highlightedSearchSnippet, highlightedTitle } from "@/lib/search/autocomplete";
+import { HTPR_6882_SEARCH_MATCH_HIGHLIGHTS_FLAG } from "@/lib/flags/keys";
+import LabelWrapper from "@/components/Labels/LabelWrapper";
 import { HTPR_6370_SEARCH_CHIPS_FLAG, HTPR_6369_SEARCH_OPERATORS_FLAG } from "@/lib/flags/keys";
 import { MobileViewContext } from "@/lib/contexts/mobileContext";
 import { useRecoilValue, useSetRecoilState } from "@/lib/state";
@@ -42,6 +44,7 @@ const SearchComp = ({
   const autocompleteEnabled = autocompleteFlagEnabled && chipsFlagEnabled && operatorsFlagEnabled;
   const layoutFlagEnabled = useFlag(HTPR_6865_SEARCH_LAYOUT_FLAG);
   const layoutEnabled = layoutFlagEnabled && autocompleteEnabled;
+  const matchHighlightsFlagEnabled = useFlag(HTPR_6882_SEARCH_MATCH_HIGHLIGHTS_FLAG);
   const labelScopeFlagEnabled = useFlag(HTPR_6878_SEARCH_LABEL_SCOPE_FLAG);
   const searchEscBackFlagEnabled = useFlag(HTPR_6879_SEARCH_ESC_BACK_FLAG);
   const setAiChatPendingPrompt = useSetRecoilState(aiChatPendingPromptAtom);
@@ -244,6 +247,7 @@ const SearchComp = ({
                                 isActive={selectedIndex === index}
                                 liRef={liSelectedRef}
                                 aligned={layoutEnabled}
+                                matchQuery={matchHighlightsFlagEnabled && layoutEnabled ? inputValue : undefined}
                               />
                             </Fragment>
                           );
@@ -388,6 +392,7 @@ interface ITaskRow {
   highlight: any;
   titleParts?: ReturnType<typeof highlightedTitle>;
   aligned?: boolean;
+  matchQuery?: string;
   liRef: RefObject<HTMLLIElement | null>;
 }
 
@@ -402,8 +407,12 @@ const TaskListRow = (props: ITaskRow) => {
     highlight,
     titleParts,
     aligned,
+    matchQuery,
     liRef,
   } = props;
+  const snippetParts = matchQuery !== undefined
+    ? highlightedSearchSnippet((task.commentId ? task.commentText : task.descriptionText) ?? '', matchQuery)
+    : undefined;
 
   return (
     <li
@@ -465,7 +474,24 @@ const TaskListRow = (props: ITaskRow) => {
           )}
         </div>
 
-        {task.commentId ? (
+        {snippetParts ? (
+          <div className="flex min-w-0 items-center gap-1 overflow-hidden mb-1 @md:!mb-0" data-search-match-highlights>
+            {task.searchMatch?.people?.map((name) => (
+              <span key={name} title={name} className="bg-mention-highlight text-mention-highlight rounded-[4px] px-1 py-0.5 truncate max-w-[120px] shrink-0">@{name}</span>
+            ))}
+            {[...(task.searchMatch?.labels ?? []), ...(task.searchMatch?.board ? [task.searchMatch.board] : [])].map((name, index) => (
+              <LabelWrapper key={`${name}-${index}`} title={name} className="min-w-0 max-w-[120px] shrink-0"><span className="truncate">{name}</span></LabelWrapper>
+            ))}
+            {task.commentId && task.searchMatch?.commentAuthor && (
+              <span title={task.searchMatch.commentAuthor} className="bg-mention-highlight text-mention-highlight rounded-[4px] px-1 py-0.5 truncate max-w-[120px] shrink-0">@{task.searchMatch.commentAuthor}</span>
+            )}
+            <span className="min-w-0 truncate text-text-light-gray">
+              {snippetParts.map((part, index) => part.matched
+                ? <mark key={index} className="rounded-[2px] bg-search-highlight text-inherit">{part.text}</mark>
+                : part.text)}
+            </span>
+          </div>
+        ) : task.commentId ? (
           highlight.commentText ? (
             <span
               suppressHydrationWarning
