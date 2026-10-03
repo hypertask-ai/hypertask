@@ -614,9 +614,9 @@ const Commands = (props: Props) => {
   const commandGroups = (
     <CommandGroups
       handleMouseMove={handleMouseMove}
-      filterCommands={commandScopePickerEnabled ? filterCommands : filterCommands.map((group) => ({
-        ...group,
-        commandLists: group.commandLists.filter((command) => command.key !== "myTasksScope"),
+      filterCommands={commandScopePickerEnabled ? filterCommands : filterCommands.map((filteredGroup) => ({
+        ...filteredGroup,
+        commandLists: filteredGroup.commandLists.filter((command) => command.key !== "myTasksScope"),
       }))}
       selectedCommand={selectedCommand}
       handleMouseLeave={handleMouseLeave}
