@@ -21,10 +21,11 @@ import { KeyCodes } from "@/lib/constants/keyboard-handler";
 import { formatDateDisplay } from "@/utils/helperFunctions/Views/FilterHelperFunctions";
 import { useFilterView } from "@/hooks/MultiPages/Filters/useFilterView";
 
-const ShowFilterOptions: React.FC<IFilterModalProps> = ({
+const ShowFilterOptions: React.FC<IFilterModalProps & { extraFilters?: React.ReactNode }> = ({
   handleAction,
   toggleFilterMatchOptions,
   view,
+  extraFilters,
 }) => {
   const {
     keyword,
@@ -42,6 +43,7 @@ const ShowFilterOptions: React.FC<IFilterModalProps> = ({
   };
 
   const keyDownHandler = (e: KeyboardEvent) => {
+    if ((e.target as HTMLElement)?.closest?.('input[type="checkbox"]')) return;
     if (e.keyCode === KeyCodes.ENTER && filteredCommands[selectedIndex])
       onClickOrEnterHandler(selectedIndex);
 
@@ -97,6 +99,7 @@ const ShowFilterOptions: React.FC<IFilterModalProps> = ({
               </ModalRowElementContainer>
             );
           })}
+          {extraFilters}
         </ModalListContainer>
       </ModalBody>
     </>

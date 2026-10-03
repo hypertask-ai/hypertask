@@ -36,6 +36,7 @@ interface Props {
   view: "Kanban" | "Calendar" | "MyTasks";
   filteredMembers?: CalendarUserSummary[];
   allTags?: CalendarLabelSummary[];
+  extraFilters?: React.ReactNode;
 }
 
 const AllFilterHTC: React.FC<Props> = ({
@@ -43,6 +44,7 @@ const AllFilterHTC: React.FC<Props> = ({
   view,
   filteredMembers,
   allTags,
+  extraFilters,
 }) => {
   const [commandMode, setCommandMode] = useState<FilterCommandMode>(
     FilterCommandMode.ShowAllFilters,
@@ -309,6 +311,7 @@ const AllFilterHTC: React.FC<Props> = ({
   const commandComponents: TFilterCommandComponents = {
     [FilterCommandMode.ShowAllFilters]: (
       <ShowFilterOptions
+        extraFilters={extraFilters}
         handleAction={handleAction}
         toggleFilterMatchOptions={toggleFilterMatchOptionsHandler}
         view={view}
@@ -316,6 +319,7 @@ const AllFilterHTC: React.FC<Props> = ({
     ),
     [FilterCommandMode.InInbox]: (
       <ShowFilterOptions
+        extraFilters={extraFilters}
         handleAction={handleAction}
         toggleFilterMatchOptions={toggleFilterMatchOptionsHandler}
         view={view}
@@ -341,6 +345,7 @@ const AllFilterHTC: React.FC<Props> = ({
     ),
     [FilterCommandMode.Unread]: (
       <ShowFilterOptions
+        extraFilters={extraFilters}
         handleAction={handleAction}
         toggleFilterMatchOptions={toggleFilterMatchOptionsHandler}
         view={view}
@@ -348,6 +353,7 @@ const AllFilterHTC: React.FC<Props> = ({
     ),
     [FilterCommandMode.NoRecentComment]: (
       <ShowFilterOptions
+        extraFilters={extraFilters}
         handleAction={handleAction}
         toggleFilterMatchOptions={toggleFilterMatchOptionsHandler}
         view={view}
@@ -355,6 +361,7 @@ const AllFilterHTC: React.FC<Props> = ({
     ),
     [FilterCommandMode.StuckInColumn]: (
       <ShowFilterOptions
+        extraFilters={extraFilters}
         handleAction={handleAction}
         toggleFilterMatchOptions={toggleFilterMatchOptionsHandler}
         view={view}
@@ -362,6 +369,7 @@ const AllFilterHTC: React.FC<Props> = ({
     ),
     [FilterCommandMode.RunningTimer]: (
       <ShowFilterOptions
+        extraFilters={extraFilters}
         handleAction={handleAction}
         toggleFilterMatchOptions={toggleFilterMatchOptionsHandler}
         view={view}
@@ -369,6 +377,7 @@ const AllFilterHTC: React.FC<Props> = ({
     ),
     [FilterCommandMode.StaleOnBoard]: (
       <ShowFilterOptions
+        extraFilters={extraFilters}
         handleAction={handleAction}
         toggleFilterMatchOptions={toggleFilterMatchOptionsHandler}
         view={view}
@@ -376,6 +385,7 @@ const AllFilterHTC: React.FC<Props> = ({
     ),
     [FilterCommandMode.NotStale]: (
       <ShowFilterOptions
+        extraFilters={extraFilters}
         handleAction={handleAction}
         toggleFilterMatchOptions={toggleFilterMatchOptionsHandler}
         view={view}
@@ -394,6 +404,7 @@ const AllFilterHTC: React.FC<Props> = ({
     ),
     [FilterCommandMode.ClearAll]: (
       <ShowFilterOptions
+        extraFilters={extraFilters}
         handleAction={handleAction}
         toggleFilterMatchOptions={toggleFilterMatchOptionsHandler}
         view={view}
@@ -401,6 +412,7 @@ const AllFilterHTC: React.FC<Props> = ({
     ),
     [FilterCommandMode.ToggleMatchCriterai]: (
       <ShowFilterOptions
+        extraFilters={extraFilters}
         handleAction={handleAction}
         toggleFilterMatchOptions={toggleFilterMatchOptionsHandler}
         view={view}
@@ -437,6 +449,7 @@ const AllFilterHTC: React.FC<Props> = ({
     ),
     [FilterCommandMode.AssignedToMe]: (
       <ShowFilterOptions
+        extraFilters={extraFilters}
         handleAction={handleAction}
         toggleFilterMatchOptions={toggleFilterMatchOptionsHandler}
         view={view}
@@ -444,6 +457,7 @@ const AllFilterHTC: React.FC<Props> = ({
     ),
     [FilterCommandMode.Starred]: (
       <ShowFilterOptions
+        extraFilters={extraFilters}
         handleAction={handleAction}
         toggleFilterMatchOptions={toggleFilterMatchOptionsHandler}
         view={view}
