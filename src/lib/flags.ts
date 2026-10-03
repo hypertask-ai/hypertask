@@ -16,7 +16,6 @@ import {
   AUTO_TASK_DESCRIPTIONS_FLAG,
   HTPR_6157_AUTO_DESCRIPTION_FLAG,
   COLUMN_ALL_VIEWS_FLAG,
-  CORE_ACTIONS_SMOKE_FLAG,
   HTPR_6278_CHAT_TURN_FAILURE_FLAG,
   AGENT_VISIBILITY_FLAG,
   FEATURE_FLAG_DETAILS_FLAG,
@@ -110,6 +109,7 @@ const RETIRED_FEATURE_FLAG_KEYS = new Set([
   "hyfa-43-factory-owner-preview",
   "htpr-6072-shallow-board-switch",
   "htpr-6254-heic-heif-attachments",
+  "htpr-6236-core-actions-smoke",
 ]);
 // Old tabs read these; remove htpr-6072 after 2026-10-06, htpr-6254 after 2026-10-16.
 const RETIRED_CLIENT_FEATURE_FLAGS = {
@@ -327,12 +327,6 @@ const FEATURE_FLAG_DEFINITIONS = [
     shippedOn: "2026-09-08",
     description:
       "Shares one agent conversation across authorized teammates, with private unread position and drafts for each person.",
-  },
-  {
-    key: CORE_ACTIONS_SMOKE_FLAG,
-    shippedOn: "2026-09-08",
-    description:
-      "Runs the logged-in core-action production check and restores its isolated fixture after each run.",
   },
   {
     key: "htpr-5913-consistent-comment-shortcuts",

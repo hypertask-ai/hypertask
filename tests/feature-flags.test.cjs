@@ -228,11 +228,6 @@ test("declared flags remain listed with ticket details and can be changed", asyn
         updatedAt: null,
       },
       {
-        key: "htpr-6236-core-actions-smoke",
-        mode: "OWNER_AND_QA",
-        updatedAt: null,
-      },
-      {
         key: "htpr-6238-posthog-error-alert",
         mode: "OWNER_AND_QA",
         updatedAt: null,
@@ -587,6 +582,16 @@ test("the retired factory flag remains off for old deployments but disappears fr
     flags.setFeatureFlagMode("hyfa-43-factory-owner-preview", "EVERYONE"),
     /Unknown feature flag/,
   );
+});
+
+test("the retired core-actions smoke flag is hidden and not editable", async () => {
+  const key = "htpr-6236-core-actions-smoke";
+  listedRows = [{ key, mode: "EVERYONE", updatedAt: new Date() }];
+  row = { mode: "EVERYONE", updatedAt: new Date() };
+
+  assert.equal(flags.FEATURE_FLAG_KEYS.includes(key), false);
+  assert.equal((await flags.listFeatureFlagModes()).some((flag) => flag.key === key), false);
+  await assert.rejects(flags.setFeatureFlagMode(key, "OFF"), /Unknown feature flag/);
 });
 
 for (const key of ["htpr-6072-shallow-board-switch", "htpr-6254-heic-heif-attachments"]) test(`the retired ${key} stays on in client payloads but is not editable`, async () => {
