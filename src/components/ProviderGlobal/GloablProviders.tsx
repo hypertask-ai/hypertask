@@ -1422,10 +1422,10 @@ export default function GlobalProvider({
             currentUser={currentUser}
             boardUsable={mobileBoardControlsReady}
           />
-          {showMobileBottomNav &&
-            mobileBoardControlsReady &&
-            !(mobilePageHideDockFlag && isTicketPagePath(pathname)) && (
-            <MobileTabBar currentUserId={currentUser.id} />
+          {showMobileBottomNav && mobileBoardControlsReady && (
+            mobilePageHideDockFlag && isTicketPagePath(pathname) ? null : (
+              <MobileTabBar currentUserId={currentUser.id} />
+            )
           )}
           {mobileCreateTaskButtonVisible && <MobileCreateTaskButton />}
           {mobilePullCommandVisible && (

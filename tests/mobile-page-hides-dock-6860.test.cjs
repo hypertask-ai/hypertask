@@ -24,7 +24,7 @@ test("the bottom bar and its inset hide on ticket pages only behind the HTPR-686
   const keys = read("src/lib/flags/keys.ts");
   assert.match(keys, /HTPR_6860_MOBILE_PAGE_HIDE_DOCK_FLAG =\s*"htpr-6860-mobile-page-hide-dock"/);
   const shell = read("src/components/ProviderGlobal/GloablProviders.tsx");
-  const gate = /!\(mobilePageHideDockFlag && isTicketPagePath\(pathname\)\)/g;
-  assert.equal(shell.match(gate)?.length, 2);
+  assert.match(shell, /!\(mobilePageHideDockFlag && isTicketPagePath\(pathname\)\) &&/);
+  assert.match(shell, /mobilePageHideDockFlag && isTicketPagePath\(pathname\) \? null : \(\s*<MobileTabBar/);
   assert.match(shell, /useFlag\(HTPR_6860_MOBILE_PAGE_HIDE_DOCK_FLAG\)/);
 });
