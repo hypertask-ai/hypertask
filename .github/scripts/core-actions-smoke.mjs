@@ -39,7 +39,7 @@ async function api(path, options = {}) {
   const response = await fetch(new URL(path, BASE_URL), {
     ...options,
     redirect: "manual",
-    signal: AbortSignal.timeout(30_000),
+    signal: options.signal ?? AbortSignal.timeout(30_000),
     headers: {
       Authorization: `Bearer ${TOKEN}`,
       Accept: "application/json",
@@ -219,6 +219,8 @@ export async function run(options = {}) {
     const response = await api("/api/ops/core-actions-smoke", {
       method: "POST",
       body: JSON.stringify(fixture),
+      // The route waits for the 30s lock, 90s action budget, and fixture cleanup.
+      signal: AbortSignal.timeout(180_000),
     });
     const result = response?.result;
     if (!isProbeResult(result)) throw new Error("The probe returned a malformed result");

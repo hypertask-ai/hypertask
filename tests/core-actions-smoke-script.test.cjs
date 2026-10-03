@@ -92,6 +92,69 @@ test("the probe target cannot be redirected away from production", async () => {
   }
 });
 
+for (const responds of [true, false]) {
+  test(`the synchronous probe ${responds ? "can exceed 30 seconds" : "still times out without retry"}`, async (t) => {
+    const originalFetch = global.fetch;
+    let elapsed = 0;
+    const deadlines = [];
+    t.mock.method(AbortSignal, "timeout", (milliseconds) => {
+      const controller = new AbortController();
+      deadlines.push({ controller, at: elapsed + milliseconds, milliseconds });
+      return controller.signal;
+    });
+    const advance = (milliseconds) => {
+      elapsed += milliseconds;
+      for (const { controller, at } of deadlines) {
+        if (elapsed >= at) {
+          controller.abort(new DOMException("The operation was aborted due to timeout", "TimeoutError"));
+        }
+      }
+    };
+    let calls = 0;
+    global.fetch = fixtureFetch({
+      overrides: {
+        "/api/ops/core-actions-smoke": async (_url, init) => {
+          calls += 1;
+          advance(responds ? 130_000 : 180_000);
+          init.signal.throwIfAborted();
+          return {
+            ok: true,
+            text: async () => {
+              advance(45_000);
+              init.signal.throwIfAborted();
+              return JSON.stringify({ result: {
+                ok: true, kind: "pass", action: "complete",
+                detail: "fixture restored", steps: [], cleanup: [],
+              } });
+            },
+          };
+        },
+      },
+    });
+    try {
+      const { run, classifyProbeStartFailure, shouldRollback } = await import(scriptUrl);
+      if (responds) {
+        assert.equal((await run()).ok, true);
+      } else {
+        await assert.rejects(run(), (error) => {
+          assert.equal(error.name, "TimeoutError");
+          const result = classifyProbeStartFailure(error);
+          assert.equal(result.kind, "unrunnable");
+          assert.equal(result.action, "start core-actions probe");
+          assert.equal(shouldRollback(result, "push"), false);
+          return true;
+        });
+      }
+      assert.equal(calls, 1);
+      assert.deepEqual(deadlines.map(({ milliseconds }) => milliseconds), [
+        30_000, 30_000, 30_000, 30_000, 30_000, 180_000,
+      ]);
+    } finally {
+      global.fetch = originalFetch;
+    }
+  });
+}
+
 test("a truncated probe response is unrunnable, never green", async () => {
   const originalFetch = global.fetch;
   global.fetch = fixtureFetch({
