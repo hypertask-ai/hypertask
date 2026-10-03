@@ -60,15 +60,7 @@ function keyboardFixture(pathname, isApple = false, authenticatedUserId = 1) {
     KeyCodes: jiti(path.join(root, "src/lib/constants/keyboard-handler.ts")).KeyCodes,
     toggleShowCommands: () => { toggles++; showCommands.show = !showCommands.show; },
   };
-  const source = fs.readFileSync(path.join(root, provider), "utf8");
-  let cleanup;
-  if (source.includes('"keydown", handleCommandCenterShortcut')) {
-    cleanup = effect(provider, "handleCommandCenterShortcut", bindings);
-  } else {
-    const declaration = findNode(provider, (node) => ts.isVariableDeclaration(node) && node.name.getText() === "handleKeyPress");
-    bindings.handleKeyPress = evaluate(declaration.slice("handleKeyPress = ".length), bindings);
-    cleanup = effect(provider, "handleKeyPress", bindings);
-  }
+  const cleanup = effect("src/hooks/General/useCommandCenterShortcut.ts", "handleCommandCenterShortcut", bindings);
   return {
     document, bindings, showCommands, toggles: () => toggles,
     press: (key, modifiers = {}) => {

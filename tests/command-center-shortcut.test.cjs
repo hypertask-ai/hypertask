@@ -131,8 +131,11 @@ for (const route of publicRoutes) {
 
 test("only the global capture handler owns command shortcut toggling", () => {
   const provider = fs.readFileSync(path.join(__dirname, "../src/components/ProviderGlobal/GloablProviders.tsx"), "utf8");
-  assert.equal((provider.match(/isCommandCenterShortcut\(e, isApple, pathname\)/g) || []).length, 1);
-  assert.match(provider, /addEventListener\("keydown", handleCommandCenterShortcut, true\)/);
-  assert.match(provider, /removeEventListener\("keydown", handleCommandCenterShortcut, true\)/);
-  assert.match(provider, /if \(!isCommandCenterShortcut\(e, isApple, pathname\)\) return;\s*e\.preventDefault\(\);[\s\S]*?e\.stopImmediatePropagation\(\);\s*toggleShowCommands\(\);/);
+  const hook = fs.readFileSync(path.join(__dirname, "../src/hooks/General/useCommandCenterShortcut.ts"), "utf8");
+  assert.match(provider, /import \{ useCommandCenterShortcut \} from "@\/hooks\/General\/useCommandCenterShortcut"/);
+  assert.match(provider, /useCommandCenterShortcut\(\s*authenticatedUserId,\s*isApple,\s*pathname,\s*showTrialModal,\s*showEmailVerificationModal,\s*toggleShowCommands,\s*\)/);
+  assert.equal((hook.match(/isCommandCenterShortcut\(e, isApple, pathname\)/g) || []).length, 1);
+  assert.match(hook, /addEventListener\("keydown", handleCommandCenterShortcut, true\)/);
+  assert.match(hook, /removeEventListener\("keydown", handleCommandCenterShortcut, true\)/);
+  assert.match(hook, /if \(!isCommandCenterShortcut\(e, isApple, pathname\)\) return;\s*e\.preventDefault\(\);[\s\S]*?e\.stopImmediatePropagation\(\);\s*toggleShowCommands\(\);/);
 });

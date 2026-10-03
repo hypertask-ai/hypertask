@@ -129,10 +129,8 @@ import useHypertasksNavigate from "@/hooks/MultiPages/Route/useHypertasksNavigat
 import { useDeviceContext } from "@/lib/contexts/deviceContext";
 import { isFavoriteBoardShortcut } from "@/lib/constants/shortcuts";
 import { isControlQFocusShortcut } from "@/lib/aiChat/chatFocusShortcut";
-import {
-  shouldRenderGlobalCommandMenu,
-  isCommandCenterShortcut,
-} from "@/lib/constants/commandCenterShortcut";
+import { shouldRenderGlobalCommandMenu } from "@/lib/constants/commandCenterShortcut";
+import { useCommandCenterShortcut } from "@/hooks/General/useCommandCenterShortcut";
 import useHypertasksRecoilStates from "@/hooks/RecoilRoot/useHypertasksRecoilStates";
 import { useGlobalUIState } from "./useGlobalUIState";
 import { useSettingsNavigation } from "@/components/Modals/Settings/settingsNavigation";
@@ -724,27 +722,14 @@ export default function GlobalProvider({
     return () =>
       document.removeEventListener("keydown", handleGlobalGShortcut, true);
   }, []);
-  useEffect(() => {
-    const handleCommandCenterShortcut = (e: KeyboardEvent) => {
-      if (authenticatedUserId === null) return;
-      if (showTrialModal || showEmailVerificationModal) return;
-      if (!isCommandCenterShortcut(e, isApple, pathname)) return;
-      e.preventDefault();
-      // Capture before route/input handlers so one keypress cannot toggle twice.
-      e.stopImmediatePropagation();
-      toggleShowCommands();
-    };
-    document.addEventListener("keydown", handleCommandCenterShortcut, true);
-    return () =>
-      document.removeEventListener("keydown", handleCommandCenterShortcut, true);
-  }, [
+  useCommandCenterShortcut(
     authenticatedUserId,
     isApple,
     pathname,
     showTrialModal,
     showEmailVerificationModal,
     toggleShowCommands,
-  ]);
+  );
 
   const handleKeyPress = async (e: KeyboardEvent) => {
     // console.log("🚀 ~ handleKeyPress ~ e GLOBAL PROVIDER:", e.keyCode)
