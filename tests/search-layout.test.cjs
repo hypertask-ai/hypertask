@@ -872,3 +872,18 @@ test('one-board results hide the tab row only when its flag is on; two boards ke
     assert.ok(tabNames().includes('Other Board'))
   })
 })
+
+test('Escape closes retained layout suggestions after focus moved elsewhere', async (t) => {
+  await withSearch(t, {}, async ({ input, type, tick, dom }) => {
+    await type('board:')
+    await tick(180)
+    assert.equal(input().getAttribute('aria-expanded'), 'true')
+    const otherInput = document.createElement('input')
+    document.body.append(otherInput)
+    await React.act(async () => otherInput.focus())
+    assert.equal(input().getAttribute('aria-expanded'), 'true')
+    await React.act(async () => otherInput.dispatchEvent(new dom.window.KeyboardEvent('keydown', { key: 'Escape', keyCode: 27, bubbles: true, cancelable: true })))
+    assert.equal(input().getAttribute('aria-expanded'), 'false')
+    otherInput.remove()
+  })
+})

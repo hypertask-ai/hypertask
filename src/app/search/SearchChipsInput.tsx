@@ -103,8 +103,16 @@ export default function SearchChipsInput({ value, onChange, onRun, boardId, inpu
         setFocused(false);
       }
     };
+    // The list stays open when focus leaves, so Escape must still close it from anywhere.
+    const dismissOnEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape' && document.activeElement !== inputRef.current) setDismissed(true);
+    };
     document.addEventListener('pointerdown', dismissOutside);
-    return () => document.removeEventListener('pointerdown', dismissOutside);
+    document.addEventListener('keydown', dismissOnEscape);
+    return () => {
+      document.removeEventListener('pointerdown', dismissOutside);
+      document.removeEventListener('keydown', dismissOnEscape);
+    };
   }, [layoutEnabled]);
 
   useEffect(() => {
