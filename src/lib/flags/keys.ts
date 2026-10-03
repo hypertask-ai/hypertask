@@ -62,6 +62,8 @@ export const HTPR_6476_MOBILE_AGENT_CHAT_FULLSCREEN_FLAG =
   "htpr-6476-mobile-agent-chat-fullscreen";
 export const HTPR_6860_MOBILE_PAGE_HIDE_DOCK_FLAG =
   "htpr-6860-mobile-page-hide-dock";
+export const HTPR_6861_MOBILE_PAGE_BACK_ROW_FLAG =
+  "htpr-6861-mobile-page-back-row";
 export const SCOPED_BOARD_REFETCH_FLAG = "htpr-6166-scoped-board-refetch";
 export const MY_TASKS_SHORTCUTS_WIDTH_FLAG =
   "htpr-6421-my-tasks-shortcuts-width";

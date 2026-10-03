@@ -1,7 +1,7 @@
 "use client";
 
 import { EditorContent } from "@tiptap/react";
-import { ChevronLeft, Trash2 } from "lucide-react";
+import { ArrowLeft, ChevronLeft, Trash2 } from "lucide-react";
 import dynamic from "next/dynamic";
 import { useRouter } from "next/navigation";
 import {
@@ -20,7 +20,11 @@ import TiptapBubbleMenu from "@/components/RTE/Components/TiptapBubbleMenu";
 import useTiptap from "@/components/RTE/Tiptap";
 import { useContentZoom } from "@/hooks/General/useContentZoom";
 import useDebounceWithCancel from "@/hooks/General/useDebounceWithCancel";
+import { useFlag } from "@/hooks/useFlag";
+import { MOBILE_TARGET } from "@/lib/configs/general.config";
+import { cn } from "@/utils/undoActions/helperFuncs";
 import { pageRoute } from "@/lib/constants/APIRouteConstants";
+import { HTPR_6861_MOBILE_PAGE_BACK_ROW_FLAG } from "@/lib/flags/keys";
 import { MobileViewContext } from "@/lib/contexts/mobileContext";
 import {
   bindPageReturnEntry,
@@ -28,9 +32,10 @@ import {
   shouldReturnFromPageOnEscape,
   type NavigationHistoryLike,
 } from "@/lib/navigation/pageReturn";
-import { useRecoilValue } from "@/lib/state";
+import { useRecoilValue, useSetRecoilState } from "@/lib/state";
 import type { IUser } from "@/models/model";
 import { appShellRailAtom, showCommandsAtom } from "@/store";
+import { currentPageActionsAtom } from "@/store/currentPageActions";
 import styles from "@/styles/tiptap.module.scss";
 
 type SerializedPage = {
@@ -71,6 +76,8 @@ const PageEditor = ({ _page, _user }: PageEditorProps) => {
   const railOn = useRecoilValue(appShellRailAtom);
   const showCommands = useRecoilValue(showCommandsAtom);
   const isMobile = useContext(MobileViewContext);
+  const mobilePageBackRowEnabled = useFlag(HTPR_6861_MOBILE_PAGE_BACK_ROW_FLAG);
+  const setCurrentPageActions = useSetRecoilState(currentPageActionsAtom);
   const showRail = railOn && !isMobile;
   const versionRef = useRef(page.version);
   const titleRef = useRef(page.title);
@@ -271,7 +278,7 @@ const PageEditor = ({ _page, _user }: PageEditorProps) => {
     debouncedTitleSave();
   };
 
-  const deletePage = async () => {
+  const deletePage = useCallback(async () => {
     if (isDeleting || !window.confirm("Delete this page?")) return;
 
     setIsDeleting(true);
@@ -295,7 +302,14 @@ const PageEditor = ({ _page, _user }: PageEditorProps) => {
       );
       setIsDeleting(false);
     }
-  };
+  }, [isDeleting, page.publicId, router, taskHref]);
+
+  useEffect(() => {
+    if (!mobilePageBackRowEnabled || !isMobile) return;
+
+    setCurrentPageActions({ publicId: page.publicId, version, onDelete: deletePage });
+    return () => setCurrentPageActions(null);
+  }, [deletePage, isMobile, mobilePageBackRowEnabled, page.publicId, setCurrentPageActions, version]);
 
   const statusText =
     saveStatus === "saving"
@@ -316,33 +330,51 @@ const PageEditor = ({ _page, _user }: PageEditorProps) => {
         <div
           className={`w-full ${isMobile ? "px-0" : "px-3"}`}
         >
-          <div
-            className="flex h-8 items-center justify-between px-0 pt-2 text-meta text-text-light-gray"
-            aria-live="polite"
-          >
-            <button
-              type="button"
-              onClick={() => void returnToTask()}
-              className="inline-flex items-center gap-1 border-0 bg-transparent p-0 transition-colors hover:text-white-black"
-            >
-              <ChevronLeft size={14} strokeWidth={1.75} />
-              Back to task
-            </button>
-            <div className="flex items-center gap-3">
-              <span>{statusText}</span>
-              <span className="opacity-40">·</span>
-              <span>Version {version}</span>
+          {mobilePageBackRowEnabled && isMobile ? (
+            <div className="flex w-full items-center gap-2 px-2 pt-2" aria-live="polite">
               <button
                 type="button"
-                onClick={() => void deletePage()}
-                disabled={isDeleting}
-                className="inline-flex items-center gap-1 transition-colors hover:text-white-black focus:outline-none disabled:cursor-default disabled:opacity-50"
+                onClick={() => void returnToTask()}
+                // Same control as Settings "Back to app"; 44px phone target.
+                className={cn(
+                  MOBILE_TARGET,
+                  "min-w-0 flex-1 justify-start gap-2 rounded-sm px-2 text-left text-content font-medium text-text-light-gray transition hover:bg-hover-active hover:text-white-black focus-visible:bg-hover-active focus-visible:text-white-black focus-visible:outline-none",
+                )}
               >
-                <Trash2 size={13} strokeWidth={1.75} />
-                Delete
+                <ArrowLeft strokeWidth={1.75} className="h-4 w-4 shrink-0" />
+                <span className="truncate">Back to task</span>
               </button>
+              <span className="shrink-0 pr-2 text-meta text-text-light-gray">{statusText}</span>
             </div>
-          </div>
+          ) : (
+            <div
+              className="flex h-8 items-center justify-between px-0 pt-2 text-meta text-text-light-gray"
+              aria-live="polite"
+            >
+              <button
+                type="button"
+                onClick={() => void returnToTask()}
+                className="inline-flex items-center gap-1 border-0 bg-transparent p-0 transition-colors hover:text-white-black"
+              >
+                <ChevronLeft size={14} strokeWidth={1.75} />
+                Back to task
+              </button>
+              <div className="flex items-center gap-3">
+                <span>{statusText}</span>
+                <span className="opacity-40">·</span>
+                <span>Version {version}</span>
+                <button
+                  type="button"
+                  onClick={() => void deletePage()}
+                  disabled={isDeleting}
+                  className="inline-flex items-center gap-1 transition-colors hover:text-white-black focus:outline-none disabled:cursor-default disabled:opacity-50"
+                >
+                  <Trash2 size={13} strokeWidth={1.75} />
+                  Delete
+                </button>
+              </div>
+            </div>
+          )}
 
           <div className="mb-8 rounded-none px-0 pb-16 pt-2">
             <input
@@ -351,7 +383,7 @@ const PageEditor = ({ _page, _user }: PageEditorProps) => {
               onChange={handleTitleChange}
               placeholder="Untitled"
               style={{ border: 0, boxShadow: "none" }}
-              className={`w-full bg-transparent p-0 font-semibold leading-tight text-white-black outline-none placeholder:text-text-light-gray focus:ring-0 ${
+              className={`w-full bg-transparent ${mobilePageBackRowEnabled && isMobile ? "px-4 py-0" : "p-0"} font-semibold leading-tight text-white-black outline-none placeholder:text-text-light-gray focus:ring-0 ${
                 isMobile ? "text-[24px]" : "text-[32px]"
               }`}
             />

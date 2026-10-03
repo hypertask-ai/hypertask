@@ -15,6 +15,7 @@ import {
   frequentlyUsedHTCAton,
   tableTitleWrapAtom,
 } from "@/store";
+import { currentPageActionsAtom } from "@/store/currentPageActions";
 import { usePathname } from "next/navigation";
 import { Search } from "lucide-react";
 import { ModalBody } from "reactstrap";
@@ -56,6 +57,7 @@ import {
 } from "@/lib/inboxClusters";
 import {
   HTPR_6514_COMMENT_LONG_PRESS_FLAG,
+  HTPR_6861_MOBILE_PAGE_BACK_ROW_FLAG,
   INBOX_ARCHIVE_CLUSTER_FLAG,
   MY_TASKS_TABLE_COLUMNS_FLAG,
   MY_TASKS_VIEWS_FLAG,
@@ -105,6 +107,12 @@ const Commands = (props: Props) => {
   const myTasksViewsEnabled = useFlag(MY_TASKS_VIEWS_FLAG);
   const myTasksTableColumnsEnabled = useFlag(MY_TASKS_TABLE_COLUMNS_FLAG);
   const commentLongPressEnabled = useFlag(HTPR_6514_COMMENT_LONG_PRESS_FLAG);
+  const mobilePageBackRowEnabled = useFlag(HTPR_6861_MOBILE_PAGE_BACK_ROW_FLAG);
+  const currentPageActions = useRecoilValue(currentPageActionsAtom);
+  const pageActions = mobilePageBackRowEnabled && isMobile && currentPageActions &&
+    pathname === `/page/${currentPageActions.publicId}`
+    ? currentPageActions
+    : null;
   const pinCommentActions = !!contextOptions?.commentOptions;
   const currentProject = useRecoilValue(currentProjectAtom);
   const { data: projects = [] } = useGetAllProjectsMinimal([
@@ -285,7 +293,19 @@ const Commands = (props: Props) => {
         ? [{ group: "Get started", commandLists: getStartedCommands }, ...commandGroups]
         : commandGroups;
 
-    const rankedGroups = getMobileCommandGroups(rankedCommandGroups, isMobile);
+    const mobileGroups = getMobileCommandGroups(rankedCommandGroups, isMobile);
+    // HTPR-6861: the open page's own actions lead the palette on phones.
+    const rankedGroups = mobilePageBackRowEnabled && pageActions
+      ? [{
+          group: `This page (Version ${pageActions.version})`,
+          commandLists: [{
+            key: "deletePage",
+            name: "Delete page",
+            commandMode: CommandMode.Command,
+            keywords: "delete remove archive page",
+          }],
+        }, ...mobileGroups]
+      : mobileGroups;
     return commentLongPressEnabled && pinCommentActions
       ? pinCommentGroupFirst(rankedGroups)
       : rankedGroups;
@@ -296,6 +316,7 @@ const Commands = (props: Props) => {
     contextOptions,
     commentLongPressEnabled,
     pinCommentActions,
+    pageActions,
     copyCurrentUrlEnabled,
     currentProject,
     inboxClusterEnabled,
@@ -483,6 +504,12 @@ const Commands = (props: Props) => {
         recordHTCCommandUsage(previousUsage, command)
       );
       (document.activeElement as HTMLElement).blur();
+      if (mobilePageBackRowEnabled && command.key === "deletePage") {
+        if (!pageActions) return;
+        resetShowCommands();
+        void pageActions.onDelete();
+        return;
+      }
       if (command.key === "toggleTableTitleWrap") {
         setTableTitleWrap((prev) => !prev);
         resetShowCommands();
@@ -601,7 +628,15 @@ const Commands = (props: Props) => {
                className="px-0"
             />
           </div>
-          {commentLongPressEnabled ? (
+          {mobilePageBackRowEnabled ? (
+            <div data-htpr-6861-page-actions="">
+              {commentLongPressEnabled ? (
+                <div data-htpr-6514-comment-long-press="">{commandGroups}</div>
+              ) : (
+                commandGroups
+              )}
+            </div>
+          ) : commentLongPressEnabled ? (
             <div data-htpr-6514-comment-long-press="">{commandGroups}</div>
           ) : (
             commandGroups
