@@ -1,5 +1,6 @@
 "use client";
 import { useFlag } from "@/hooks/useFlag";
+import { useHydrated } from "@/hooks/General/useHydrated";
 import { HTPR_6752_INSTANT_TICKET_OPEN_FLAG } from "@/lib/flags/keys";
 import React, { Suspense } from "react";
 import { MobileViewContext } from "@/lib/contexts/mobileContext";
@@ -81,6 +82,10 @@ const CommentAndDescriptionContainer = (props: ITaskInfoContainer) => {
     numberOfUploadingComments,
   } = virtualizeIndexes;
 
+  // The provider can populate viewport rows before this streamed child hydrates.
+  const hydrated = useHydrated();
+  const virtualItems = hydrated ? virtualizer.getVirtualItems() : [];
+
   // ------------------------------------------------------------------
 
   return (
@@ -98,7 +103,7 @@ const CommentAndDescriptionContainer = (props: ITaskInfoContainer) => {
           zIndex: 1,
         }}
       >
-        {virtualizer.getVirtualItems().map((vItem: { index: any; key: React.Key | null | undefined; start: any; }) => {
+        {virtualItems.map((vItem: { index: any; key: React.Key | null | undefined; start: any; }) => {
           let contentToRender = null;
           const currentItemIndex = vItem.index;
 
