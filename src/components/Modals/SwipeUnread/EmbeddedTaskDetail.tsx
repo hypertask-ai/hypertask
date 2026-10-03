@@ -24,7 +24,6 @@ type EmbeddedTaskDetailProps = {
   scrollElementRef?: RefObject<HTMLDivElement | null>;
   initialTask?: ITask;
   embedded?: boolean;
-  pendingFallback?: ReactNode;
 };
 
 function RefreshCachedTask({ task, error, refetch, children }: { task: ITask; error: Error | null; refetch: () => Promise<unknown>; children: ReactNode }) {
@@ -79,7 +78,6 @@ const EmbeddedTaskDetail = ({
   scrollElementRef,
   initialTask,
   embedded = true,
-  pendingFallback = null,
 }: EmbeddedTaskDetailProps) => {
   const currentUser = useRecoilValue(currentUserAtom);
   const queryClient = useQueryClient();
@@ -93,30 +91,11 @@ const EmbeddedTaskDetail = ({
   const commentsQuery = useQuery({
     queryKey: [globalConstants.CommentsTQPrefixKey, taskId],
     queryFn: () => fetchCommentsHelper(taskId, currentUser.id, queryClient),
-    enabled: Boolean(currentUser?.id),
-    ...(embedded ? {} : { staleTime: 30_000, retry: false }),
+    enabled: embedded && Boolean(currentUser?.id),
   });
-  const pagesQuery = useQuery({
-    queryKey: ["task-pages", currentUser?.id, taskId],
-    queryFn: async ({ signal }) => {
-      const response = await fetch(`/api/pages/list?task_id=${taskId}`, { signal });
-      if (!response.ok) throw new Error("Unable to load pages");
-      const result = await response.json();
-      return Array.isArray(result?.pages) ? result.pages : [];
-    },
-    enabled: !embedded && Boolean(currentUser?.id),
-    retry: false,
-    refetchOnMount: "always",
-  });
-  // The board snapshot lacks author, relations, comments and pages. Initialize
-  // the detail providers together, rather than moving already-painted cards.
-  const snapshotPending = !embedded && !(taskQuery.error instanceof TaskAccessDeniedError) && (
-    (!taskQuery.isFetchedAfterMount && !taskQuery.isError) ||
-    (!commentsQuery.isError && (commentsQuery.isFetching || commentsQuery.isPending)) ||
-    (!pagesQuery.isError && (pagesQuery.isFetching || pagesQuery.isPending))
-  );
+
   const initialSerializedTask = useRef<string | undefined>(undefined);
-  if (!snapshotPending && taskQuery.data && initialSerializedTask.current === undefined) {
+  if (taskQuery.data && initialSerializedTask.current === undefined) {
     initialSerializedTask.current = JSON.stringify(taskQuery.data);
   }
 
@@ -127,8 +106,6 @@ const EmbeddedTaskDetail = ({
       </div>
     );
   }
-
-  if (snapshotPending && initialSerializedTask.current === undefined) return pendingFallback;
 
   const task = taskQuery.data;
   const comments = commentsQuery.data ?? (embedded ? undefined : { pending: true });
