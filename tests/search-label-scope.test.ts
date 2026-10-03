@@ -41,7 +41,7 @@ for (const [file, exports] of [
     state.searchWhere = await searchFilterWhere(parsed, ids, status)
     return { where: state.searchWhere, rankedIds: [], descriptionById: new Map(), partial: false }
   } }],
-  ['src/utils/controllers/turbopuffer/turbopufferHelper.ts', { convertToPlain: (text: string) => text }],
+  ['src/utils/controllers/turbopuffer/turbopufferHelper.ts', { searchPreviewText: (text: string) => text }],
   ['src/utils/controllers/search/document.ts', { turbopufferGetDocuments: async () => ({ status: 200 }) }],
   ['src/lib/prisma.ts', { default: {
     project: { findMany: async ({ where }: any) => { assert.equal(where.ownerId, 6); return [{ id: 7, title: 'One' }, { id: 8, title: 'Two' }] } },

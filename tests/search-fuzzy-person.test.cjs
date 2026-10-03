@@ -91,7 +91,7 @@ const mocks = new Map([
   ['src/utils/controllers/projects/getAllIncludes.ts', { getProjectWhere: () => ({}), projectContentAccessWhere: () => ({}) }],
   ['src/lib/mcp/readListQuery.ts', { readEnabledListQuery: () => ({ listQuery: null }) }],
   ['src/lib/mcp/agents.ts', { mcpVisibleAgentSelect: () => ({}), mapVisibleMcpAgent: () => null }],
-  ['src/utils/controllers/turbopuffer/turbopufferHelper.ts', { convertToPlain: (text) => text }],
+  ['src/utils/controllers/turbopuffer/turbopufferHelper.ts', { searchPreviewText: (text) => text }],
 ])
 for (const [file, exports] of mocks) {
   const filename = path.join(root, file)

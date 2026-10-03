@@ -504,10 +504,9 @@ const TaskListRow = (props: ITaskRow) => {
             <span
               suppressHydrationWarning
               className={`${styles.links_list} text-[#8E9093] font-bold mb-1 @md:!mb-0`}
-              dangerouslySetInnerHTML={{
-                __html: task.commentText ?? "",
-              }}
-            />
+            >
+              {task.commentText ?? ""}
+            </span>
           )
         ) : highlight.descriptionText ? (
           <span
@@ -521,10 +520,9 @@ const TaskListRow = (props: ITaskRow) => {
           <span
             suppressHydrationWarning
             className={`${styles.links_list} text-[#8E9093] font-bold mb-1 @md:!mb-0`}
-            dangerouslySetInnerHTML={{
-              __html: task.descriptionText ?? "",
-            }}
-          />
+          >
+            {task.descriptionText ?? ""}
+          </span>
         )}
 
         <span

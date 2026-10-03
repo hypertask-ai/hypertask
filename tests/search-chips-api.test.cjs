@@ -61,7 +61,7 @@ const mocks = new Map([
     projectContentAccessWhere: (userId) => ({ ownerId: userId }),
   }],
   ['src/utils/controllers/turbopuffer/turbopufferHelper.ts', {
-    convertToPlain: (text) => text,
+    searchPreviewText: (text) => text,
     searchTasks: async ({ topK }) => { state.windows.push(topK); return state.taskHits.slice(0, topK) },
     searchComments: async ({ limit }) => { state.commentWindows.push(limit); return state.commentHits.slice(0, limit) },
   }],
