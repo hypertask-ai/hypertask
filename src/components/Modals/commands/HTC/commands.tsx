@@ -110,7 +110,7 @@ const Commands = (props: Props) => {
   const ticketPrefixEnabled = useFlag(HTPR_6868_TICKET_PREFIX_FLAG);
   const agentLogNameEnabled = useFlag(HTPR_6662_AGENT_LOG_NAME_FLAG);
   const getAgentLogCommands = useCallback(
-    (options: IAllCommands) => getAllCommands(options, true),
+    (options?: IAllCommands) => getAllCommands(options, true),
     []
   );
   let getCommands = getAllCommands;
