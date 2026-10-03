@@ -87,7 +87,7 @@ const ShowFilterOptions: React.FC<IFilterModalProps> = ({
               <ModalRowElementContainer
                 onMouseEnter={() => handleMouseEnter(index)}
                 handleMouseLeave={handleMouseLeave}
-                onClick={onClickOrEnterHandler}
+                onClick={() => onClickOrEnterHandler(index)}
                 id={`filter-htc-option-${index}`}
                 index={index}
                 commandRef={elRef}

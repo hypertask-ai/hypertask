@@ -40,13 +40,13 @@ export interface ICustomModalContainerProps extends React.HTMLAttributes<HTMLEle
     scrollable?: boolean;
   }
 
-export interface IModalRowProps extends React.HTMLAttributes<HTMLLIElement> {
+export interface IModalRowProps extends Omit<React.HTMLAttributes<HTMLLIElement>, "onClick"> {
     children:ReactNode;
     commandRef?:any;
     handleMouseLeave?: () => void;
     handleMouseEnter?: (index: number) => void;
     isSelected:boolean;
-    onClick?:any;
+    onClick?: (index?: number) => void;
     index?:number,
     id?:string,
     ref?:RefObject<HTMLDivElement | null>

@@ -232,7 +232,7 @@ const SugarDateScreen: React.FC<IScreenProps> = ({ closebackHandler,isActive, mo
             key={index}
             onMouseEnter={()=>handleMouseEnter(index)}
             handleMouseLeave={handleMouseLeave}
-            onClick={enterHandler}
+            onClick={() => enterHandler(index)}
             id={`label-htc-option-${index}`}
             index={index} commandRef={elRef} isSelected={selectedIndex === index}
           >

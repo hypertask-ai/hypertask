@@ -158,7 +158,7 @@ const StartDateModal: React.FC<Props> = ({
               key={index}
               onMouseEnter={() => handleMouseEnter(index)}
               handleMouseLeave={handleMouseLeave}
-              onClick={enterHandler}
+              onClick={() => enterHandler(index)}
               id={`start-date-option-${index}`}
               index={index}
               commandRef={elRef}

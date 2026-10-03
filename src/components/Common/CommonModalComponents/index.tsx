@@ -208,7 +208,9 @@ export const ModalRowElementContainer: React.FC<IModalRowProps> = ({
       }
       id={id}
       // key={command.key}
-      onClick={() => onClick(index)}
+      onClick={() => {
+        if (typeof onClick === "function") onClick?.(index);
+      }}
     >
       {children}
     </li>
