@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { appendFileSync, readFileSync } from "node:fs";
 import { pathToFileURL } from "node:url";
 
 const VARIABLE_NAME = "PROD_SMOKE_STREAK";
@@ -184,6 +184,11 @@ export async function handleSmokeResult(config, fetchImpl = fetch) {
       errors.push(error);
       reservationFailed = true;
     }
+    // Reserve the threshold before rollback so later reds and reruns cannot
+    // repeat it. Unrunnable browser checks still alarm, but never roll back.
+    if (config.githubOutput) {
+      appendFileSync(config.githubOutput, `rollback=${decision.action === "alarm" && !reservationFailed && Boolean(config.failingViews)}\n`);
+    }
     if (reservationFailed && !state.episode) {
       try {
         await sendTelegram(
@@ -300,6 +305,7 @@ async function main() {
     runUrl,
     sha: process.env.GITHUB_SHA || "",
     failingViews: failingViews(),
+    githubOutput: process.env.GITHUB_OUTPUT,
   });
   console.log(`Production smoke streak is ${decision.streak}; action=${decision.action}`);
 }

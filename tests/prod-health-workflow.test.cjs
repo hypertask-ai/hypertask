@@ -38,16 +38,19 @@ async function workflowScript() {
     .replaceAll("${{ github.repository }}", "test/repo");
 }
 
-test("production health has no deployment mutation path, even with rollback credentials", async () => {
+test("only the guarded rollback job has deployment mutation authority", async () => {
   const workflow = await readFile(".github/workflows/prod-health.yml", "utf8");
-  const forbidden = /emergency-rollback|rollback-decision|\/promote\/|ROLLBACK_GITHUB_TOKEN|MERGE_FREEZE|git (?:push|revert)/;
-  assert.doesNotMatch(workflow, forbidden);
+  const forbidden = /emergency-rollback|\/promote\/|ROLLBACK_GITHUB_TOKEN|MERGE_FREEZE|git (?:push|revert)/;
+  const monitors = workflow.slice(0, workflow.indexOf("\n  rollback:"));
+  assert.doesNotMatch(monitors, forbidden);
   // Prove the absence assertion rejects a workflow with a rollback call.
   assert.throws(() => assert.doesNotMatch(
-    `${workflow}\nrun: node .github/scripts/emergency-rollback.mjs`,
+    `${monitors}\nrun: node .github/scripts/emergency-rollback.mjs`,
     forbidden,
   ), { code: "ERR_ASSERTION" });
-  assert.match(workflow, /name: Prod Health Check \(Alert Only\)/);
+  assert.match(workflow, /name: Prod Health Check \+ Auto-Rollback/);
+  assert.match(workflow, /needs: \[health, smoke, core-actions\]/);
+  assert.match(workflow.slice(workflow.indexOf("\n  rollback:")), /github\.event_name == 'push'/);
 });
 
 test("health and drift jobs cannot overlap", async () => {
@@ -206,7 +209,8 @@ async function runHealthCheck(hcSequence, extraEnv = {}) {
     const promoted = await readFile(join(runnerTemp, "promoted"), "utf8").catch(
       () => null,
     );
-    return { result, promoted };
+    const outputs = await readFile(join(runnerTemp, "github-output"), "utf8").catch(() => "");
+    return { result, promoted, outputs };
   } finally {
     await rm(directory, { recursive: true, force: true });
   }
@@ -215,13 +219,13 @@ async function runHealthCheck(hcSequence, extraEnv = {}) {
 // The bug (HTPR-5467): attempt 1 is Vercel-challenged, but attempt 3 returns an
 // unchallenged broken verdict. A sticky `challenged` flag would exit 0 here; the
 // failure must still be reported without changing production.
-test("an unchallenged broken response alerts without rollback even after an earlier challenge", async () => {
+test("an unchallenged final broken response requests guarded rollback after an earlier challenge", async () => {
   const { result, promoted } = await runHealthCheck(
     "challenge challenge challenge ok ok broken ok ok broken",
   );
 
   assert.equal(result.status, 1, result.stdout + result.stderr);
-  assert.match(result.stdout, /health checks failed; automatic rollback is disabled/);
+  assert.match(result.stdout, /health checks failed; guarded rollback requested/);
   assert.doesNotMatch(result.stdout, /Bot-challenged responses only/);
   assert.equal(promoted, null, "a failed health check must not promote");
 });
@@ -279,7 +283,7 @@ test("a missing fixture does not suppress the alert for a real final-attempt fai
   );
 
   assert.equal(result.status, 1, result.stdout + result.stderr);
-  assert.match(result.stdout, /health checks failed; automatic rollback is disabled/);
+  assert.match(result.stdout, /health checks failed; guarded rollback requested/);
   assert.equal(promoted, null, "a standing definitive failure must not promote");
 });
 
@@ -313,7 +317,7 @@ test("a stale healthy probe body from an earlier attempt is not healthy", async 
 
   assert.equal(result.status, 1, result.stdout + result.stderr);
   assert.doesNotMatch(result.stdout, /Production healthy/);
-  assert.match(result.stdout, /health checks failed; automatic rollback is disabled/);
+  assert.match(result.stdout, /health checks failed; guarded rollback requested/);
   assert.equal(promoted, null, "a failed health check must not promote");
 });
 
@@ -326,7 +330,7 @@ test("a non-200 probe response with a healthy-looking body is not healthy", asyn
 
   assert.equal(result.status, 1, result.stdout + result.stderr);
   assert.doesNotMatch(result.stdout, /Production healthy/);
-  assert.match(result.stdout, /health checks failed; automatic rollback is disabled/);
+  assert.match(result.stdout, /health checks failed; guarded rollback requested/);
   assert.equal(promoted, null, "a failed health check must not promote");
 });
 
@@ -341,7 +345,7 @@ test("a challenged homepage does not mask an unchallenged broken probe in the sa
 
   assert.equal(result.status, 1, result.stdout + result.stderr);
   assert.doesNotMatch(result.stdout, /Production healthy/);
-  assert.match(result.stdout, /health checks failed; automatic rollback is disabled/);
+  assert.match(result.stdout, /health checks failed; guarded rollback requested/);
   assert.equal(promoted, null, "a failed health check must not promote");
 });
 
@@ -354,7 +358,7 @@ test("a challenged probe does not mask an unchallenged non-200 API response in t
 
   assert.equal(result.status, 1, result.stdout + result.stderr);
   assert.doesNotMatch(result.stdout, /Production healthy/);
-  assert.match(result.stdout, /health checks failed; automatic rollback is disabled/);
+  assert.match(result.stdout, /health checks failed; guarded rollback requested/);
   assert.equal(promoted, null, "a failed health check must not promote");
 });
 
@@ -376,14 +380,14 @@ test("an unchallenged failure on an earlier attempt does not roll back when the 
 
 // The fix must not over-correct: a persistent unchallenged broken probe on every
 // attempt (including the final one) still fails loudly.
-test("a persistent unchallenged broken probe fails without rollback", async () => {
+test("a persistent unchallenged broken probe requests guarded rollback", async () => {
   const { result, promoted } = await runHealthCheck(
     "ok ok broken ok ok broken ok ok broken",
   );
 
   assert.equal(result.status, 1, result.stdout + result.stderr);
   assert.doesNotMatch(result.stdout, /Production healthy/);
-  assert.match(result.stdout, /health checks failed; automatic rollback is disabled/);
+  assert.match(result.stdout, /health checks failed; guarded rollback requested/);
   assert.equal(promoted, null, "a failed health check must not promote");
 });
 
@@ -819,8 +823,25 @@ test("a failed post-deploy core-actions probe invalidates the health gate withou
   const block = workflow.slice(start, next);
   assert.match(block, /statuses: write/);
   assert.match(block, /prod-health-gate/);
-  assert.match(block, /Failed core-actions \(alert only\)/);
+  assert.match(block, /Failed core-actions/);
+  assert.match(block, /rollback-decision/);
   assert.match(block, /could not invalidate prod-health-gate/);
-  assert.match(block, /CORE_SMOKE_ROLLBACK: disabled \(alert-only\)/);
-  assert.doesNotMatch(block, /emergency-rollback|SHOULD_ROLLBACK|\/promote\//);
+  assert.match(block, /CORE_SMOKE_ROLLBACK: .*guarded rollback requested/);
+  assert.doesNotMatch(block, /emergency-rollback|\/promote\//);
+});
+
+
+test("only the existing definitive final-attempt health alarm requests rollback", async () => {
+  for (const [sequence, expected] of [
+    ["ok ok broken ok ok broken ok ok broken", true],
+    ["challenge challenge challenge ok ok broken ok ok broken", true],
+    ["ok ok broken ok ok broken ok ok healthy", false],
+    ["ok ok broken challenge challenge challenge challenge challenge challenge", false],
+    ["ok ok inconclusive ok ok inconclusive ok ok inconclusive", false],
+    ["ok ok misconfigured ok ok misconfigured ok ok misconfigured", false],
+    ["challenge challenge challenge challenge challenge challenge challenge challenge challenge", false],
+  ]) {
+    const { outputs } = await runHealthCheck(sequence);
+    assert.equal(outputs.includes("rollback=true"), expected, sequence);
+  }
 });

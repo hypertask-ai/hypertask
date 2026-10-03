@@ -145,12 +145,13 @@ test("a production unit-test failure can only warn", async () => {
   );
 });
 
-test("neither CI nor production monitoring has automatic rollback authority", async () => {
+test("only confirmed live production monitoring retains automatic rollback authority", async () => {
   const workflow = await readFile(workflowPath, "utf8");
   const healthWorkflow = await readFile(healthWorkflowPath, "utf8");
 
   assert.doesNotMatch(workflow, /emergency-rollback\.mjs|api\.vercel\.com\/v10\/projects\/.*\/promote/);
-  assert.doesNotMatch(healthWorkflow, /emergency-rollback\.mjs|\/promote\//);
+  assert.match(healthWorkflow, /emergency-rollback\.mjs/);
+  assert.doesNotMatch(healthWorkflow, /\/promote\//);
   assert.match(healthWorkflow, /if ! \$unchallenged_failure; then/);
-  assert.match(healthWorkflow, /automatic rollback is disabled/);
+  assert.match(healthWorkflow, /guarded rollback requested/);
 });

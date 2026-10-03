@@ -4,6 +4,8 @@ const { spawnSync } = require("node:child_process");
 const { chmod, mkdir, mkdtemp, readFile, rm, writeFile } = require("node:fs/promises");
 const { tmpdir } = require("node:os");
 const { join } = require("node:path");
+const yaml = require("js-yaml");
+const vm = require("node:vm");
 
 test("every failed smoke classification alerts immediately without invoking rollback", async () => {
   const workflow = await readFile(".github/workflows/prod-health.yml", "utf8");
@@ -18,7 +20,7 @@ test("every failed smoke classification alerts immediately without invoking roll
 
   for (const event of ["push", "workflow_dispatch"]) {
     for (const [preflight, applicationFailure, expected] of [
-      [{ ok: true }, true, /confirmed an application failure; automatic rollback is disabled/],
+      [{ ok: true }, true, /confirmed an application failure; waiting for consecutive smoke alarm/],
       [{ ok: false, reason: "expired session" }, false, /Smoke QA unrunnable: expired session/],
       [{ ok: true }, false, /failed without a confirmed application-failure verdict/],
     ]) {
@@ -60,7 +62,7 @@ test("every failed smoke classification alerts immediately without invoking roll
         assert.doesNotMatch(requests, /api\.vercel\.com|\/git\/|MERGE_FREEZE/);
         if (event === "push" && applicationFailure) {
           assert.match(requests, /prod-health-gate/);
-          assert.match(requests, /Failed production smoke \(alert only\)/);
+          assert.match(requests, /Failed production smoke/);
         } else {
           assert.doesNotMatch(requests, /api\.github\.com/);
         }
@@ -68,6 +70,63 @@ test("every failed smoke classification alerts immediately without invoking roll
       } finally {
         await rm(directory, { recursive: true, force: true });
       }
+    }
+  }
+});
+
+test("the rollback job runs only for confirmed production-push signals, even when monitoring failed", async () => {
+  const workflow = yaml.load(await readFile(".github/workflows/prod-health.yml", "utf8"));
+  const job = workflow.jobs.rollback;
+  assert.deepEqual(job.needs, ["health", "smoke", "core-actions"]);
+  assert.deepEqual(job.permissions, { contents: "read" });
+  assert.equal(job.steps[0].with["persist-credentials"], false);
+  const expression = job.if.slice(3, -2).replaceAll("needs.core-actions", 'needs["core-actions"]');
+  for (const event of ["push", "schedule", "workflow_dispatch"]) {
+    for (const signal of ["health", "smoke", "core-actions", "none"]) {
+      for (const cancelled of [false, true]) {
+        const needs = Object.fromEntries(job.needs.map((name) => [name, {
+          result: name === signal ? "failure" : "skipped",
+          outputs: { rollback: name === signal ? "true" : "" },
+        }]));
+        const enabled = vm.runInNewContext(expression, {
+          github: { event_name: event }, needs, cancelled: () => cancelled,
+        });
+        assert.equal(enabled, event === "push" && signal !== "none" && !cancelled);
+      }
+    }
+  }
+});
+
+test("rollback reports freeze, dropped commits and failures without hiding failed operations", async () => {
+  const workflow = yaml.load(await readFile(".github/workflows/prod-health.yml", "utf8"));
+  const script = workflow.jobs.rollback.steps.find((step) => step.run).run;
+  for (const [result, status, expected] of [
+    [{ action: "requested", freeze: true, revert: { status: "created", dropped: [{ sha: "abc", title: "bad release" }] } }, 0, /Dropped commits: abc bad release/],
+    [{ action: "failed", freeze: true, revert: { status: "failed" }, errors: { revert: "HTTP 403" } }, 1, /Errors: revert: HTTP 403/],
+    [{ action: "skip", freeze: true, reason: "MERGE_FREEZE is already set", revert: { status: "skipped" } }, 0, /MERGE_FREEZE is already set/],
+  ]) {
+    const directory = await mkdtemp(join(tmpdir(), "guarded-rollback-workflow-"));
+    try {
+      const bin = join(directory, "bin");
+      await mkdir(bin);
+      await writeFile(join(bin, "node"), '#!/bin/sh\nprintf "%s\\n" "$ROLLBACK_RESULT"\n');
+      await writeFile(join(bin, "curl"), '#!/bin/sh\nprintf "%s\\n" "$*" > "$ALERT_LOG"\n');
+      await chmod(join(bin, "node"), 0o755);
+      await chmod(join(bin, "curl"), 0o755);
+      const output = spawnSync("bash", ["-e", "-o", "pipefail", "-c", script], {
+        cwd: directory, encoding: "utf8",
+        env: {
+          ...process.env, PATH: `${bin}:${process.env.PATH}`,
+          ROLLBACK_RESULT: JSON.stringify(result), ALERT_LOG: join(directory, "alert"),
+          GITHUB_SHA: "a".repeat(40), TG_TOKEN: "stub", TG_CHAT: "stub",
+        },
+      });
+      assert.equal(output.status, status, output.stdout + output.stderr);
+      const alert = await readFile(join(directory, "alert"), "utf8");
+      assert.match(alert, expected);
+      assert.match(alert, /Freeze: set/);
+    } finally {
+      await rm(directory, { recursive: true, force: true });
     }
   }
 });

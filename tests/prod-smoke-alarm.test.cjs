@@ -1,6 +1,8 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const path = require("node:path");
+const { mkdtemp, readFile, rm } = require("node:fs/promises");
+const { tmpdir } = require("node:os");
 const { pathToFileURL } = require("node:url");
 
 const scriptUrl = pathToFileURL(
@@ -301,4 +303,37 @@ test("recovery delivery failure remains pending and is retried once", async () =
   await handleSmokeResult(config({ outcome: "green", previousStreak: state }), retry.fetchImpl);
   assert.equal(retry.calls.filter((call) => isTelegramUrl(call.url)).length, 1);
   assert.equal(JSON.parse(retry.calls.filter((call) => call.url.endsWith("/actions/variables/PROD_SMOKE_STREAK")).at(-1).options.body).value, "0");
+});
+
+
+test("browser rollback output requires the reserved second red and a confirmed application failure", async () => {
+  const { handleSmokeResult } = await import(scriptUrl);
+  const directory = await mkdtemp(path.join(tmpdir(), "smoke-rollback-output-"));
+  try {
+    for (const [previousStreak, outcome, failingViews, expected] of [
+      ["0", "red", "inbox", false],
+      ["1", "red", "inbox", true],
+      ["2", "red", "inbox", false],
+      ["1", "red", "", false],
+      ["1", "green", "inbox", false],
+    ]) {
+      const githubOutput = path.join(directory, `${previousStreak}-${outcome}-${failingViews}`);
+      const { fetchImpl } = alarmFetch();
+      await handleSmokeResult(config({ previousStreak, outcome, failingViews, githubOutput }), fetchImpl);
+      const output = await readFile(githubOutput, "utf8").catch(() => "");
+      assert.equal(output.includes("rollback=true"), expected);
+    }
+    for (const failReservation of [false, true]) {
+      const githubOutput = path.join(directory, `delivery-failure-${failReservation}`);
+      const { fetchImpl } = alarmFetch();
+      await assert.rejects(handleSmokeResult(config({ githubOutput }), async (url, options) => {
+        if ((failReservation && url.endsWith("/actions/variables/PROD_SMOKE_STREAK")) || isTelegramUrl(url)) return response(503);
+        return fetchImpl(url, options);
+      }));
+      const output = await readFile(githubOutput, "utf8");
+      assert.equal(output.includes("rollback=true"), !failReservation);
+    }
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
 });

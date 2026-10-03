@@ -392,7 +392,9 @@ test("the workflow schedules and serializes the production fixture", async () =>
     /name: core-actions-fixture-\$\{\{ github\.run_id \}\}/,
   );
   assert.doesNotMatch(workflow, /gh variable set CORE_SMOKE_/);
-  assert.doesNotMatch(workflow, /emergency-rollback|rollback-decision|ROLLBACK_GITHUB_TOKEN|\/promote\//);
+  const core = workflow.slice(workflow.indexOf("\n  core-actions:"), workflow.indexOf("\n  provision-core-actions:"));
+  assert.match(core, /rollback-decision/);
+  assert.doesNotMatch(core, /emergency-rollback|ROLLBACK_GITHUB_TOKEN|\/promote\//);
 });
 
 test("the monitor runs the probe unconditionally and stays loud when it fails", async () => {

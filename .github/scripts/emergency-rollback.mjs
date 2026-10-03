@@ -99,7 +99,7 @@ async function freezeMerges(fetchImpl, repo, token, runUrl) {
   if (!created.ok) throw new Error(`MERGE_FREEZE create: HTTP ${created.status}`);
 }
 
-async function revertProduction(failingSha, fetchImpl, repo, token) {
+async function revertProduction(failingSha, fetchImpl, repo, token, vercelToken, liveId) {
   const refPath = "/git/ref/heads/production";
   const head = (await github(fetchImpl, repo, token, refPath)).object.sha;
   const failing = await github(fetchImpl, repo, token, `/git/commits/${failingSha}`);
@@ -129,6 +129,9 @@ async function revertProduction(failingSha, fetchImpl, repo, token) {
   // Git trees snapshot the entire state; parenting that snapshot to the
   // current HEAD reverts X..HEAD atomically, including merges and deletions.
   const previous = await github(fetchImpl, repo, token, `/git/commits/${parent}`);
+  const moved = await recheckLiveProduction(fetchImpl, vercelToken, liveId, failingSha);
+  if (moved?.action === "failed") throw new Error(moved.reason);
+  if (moved) return { status: "superseded", reason: moved.reason, dropped: [] };
   const message = `Revert ${failingSha.slice(0, 7)}: production smoke failed (auto-rollback)\n\nAuto-Rollback-Of: ${failingSha}`;
   const commit = await github(fetchImpl, repo, token, "/git/commits", "POST", {
     message, tree: previous.tree.sha, parents: [head], author: ROLLBACK_IDENTITY, committer: ROLLBACK_IDENTITY,
@@ -166,14 +169,32 @@ export async function emergencyRollback(failingSha, token, fetchImpl = fetch, de
   const githubToken = options.githubToken ?? process.env.ROLLBACK_GITHUB_TOKEN;
   const runUrl = options.runUrl ?? `${process.env.GITHUB_SERVER_URL || "https://github.com"}/${repo}/actions/runs/${process.env.GITHUB_RUN_ID}`;
   if (process.env.GITHUB_EVENT_NAME === "workflow_dispatch") return { action: "skip", reason: "manual runs never roll back", revert: { status: "skipped" }, freeze: false };
+  const missing = [!repo && "GITHUB_REPOSITORY", !githubToken && "ROLLBACK_GITHUB_TOKEN", !token && "VERCEL_TOKEN",
+    !/^https?:\/\/[^/]+\/[^/]+\/[^/]+\/actions\/runs\/\d+$/.test(runUrl) && "valid GitHub run URL"].filter(Boolean);
+  if (missing.length) return { action: "failed", reason: `missing ${missing.join(", ")}`, revert: { status: "skipped" }, freeze: false };
+  // A freeze is also the incident latch: never retry a failed rollback or
+  // react to a red rollback commit until a session has verified recovery.
+  const freeze = await getJsonRequest(fetchImpl, `${GITHUB_API}/repos/${repo}/actions/variables/MERGE_FREEZE`, githubToken);
+  if (freeze.ok && typeof freeze.data?.value === "string" && freeze.data.value) {
+    return { action: "skip", reason: "MERGE_FREEZE is already set; investigate before retrying", revert: { status: "skipped" }, freeze: true };
+  }
+  if ((!freeze.ok && freeze.status !== 404) || (freeze.ok && typeof freeze.data?.value !== "string")) {
+    return { action: "failed", reason: `Cannot read MERGE_FREEZE: HTTP ${freeze.status ?? "unreadable value"}`, revert: { status: "skipped" }, freeze: false };
+  }
+  // A queued failure must not undo a newer release that is already live.
+  const liveResult = await getJson(fetchImpl, `${API}/v9/projects/${PROJECT_SLUG}`, token);
+  const live = liveResult.data?.targets?.production;
+  if (!liveResult.ok || !live?.id || !live.meta?.githubCommitSha) {
+    return { action: "failed", reason: "Cannot verify the live production deployment", revert: { status: "skipped" }, freeze: false };
+  }
+  if (live.meta.githubCommitSha !== failingSha) {
+    return { action: "skip", reason: "production already moved past the failing commit", revert: { status: "superseded", dropped: [] }, freeze: false };
+  }
   const errors = {};
   let frozen = false;
   let revert;
   let promotion;
   try {
-    const missing = [!repo && "GITHUB_REPOSITORY", !githubToken && "ROLLBACK_GITHUB_TOKEN",
-      !/^https?:\/\/[^/]+\/[^/]+\/[^/]+\/actions\/runs\/\d+$/.test(runUrl) && "valid GitHub run URL"].filter(Boolean);
-    if (missing.length) throw new Error(`missing ${missing.join(", ")}`);
     await freezeMerges(fetchImpl, repo, githubToken, runUrl);
     frozen = true;
   } catch (err) {
@@ -181,17 +202,16 @@ export async function emergencyRollback(failingSha, token, fetchImpl = fetch, de
     console.error(`Freeze failed: ${err.message}`);
   }
   try {
-    if (!repo) throw new Error("missing GITHUB_REPOSITORY");
-    if (!githubToken) throw new Error("missing ROLLBACK_GITHUB_TOKEN");
-    revert = await revertProduction(failingSha, fetchImpl, repo, githubToken);
+    revert = await revertProduction(failingSha, fetchImpl, repo, githubToken, token, live.id);
   } catch (err) {
     errors.revert = err.message;
     revert = { status: "failed", reason: err.message };
     console.error(`Revert failed: ${err.message}`);
   }
   try {
-    if (!token) throw new Error("missing VERCEL_TOKEN");
-    promotion = await promoteVerifiedDeployment(failingSha, token, fetchImpl, delayImpl, repo || "hypertask-ai/hypertask", githubToken);
+    promotion = revert.status === "superseded"
+      ? { action: "skip", reason: revert.reason }
+      : await promoteVerifiedDeployment(failingSha, token, fetchImpl, delayImpl, repo, githubToken);
     if (promotion.action === "failed") throw new Error(promotion.reason);
   } catch (err) {
     errors.promotion = err.message;
