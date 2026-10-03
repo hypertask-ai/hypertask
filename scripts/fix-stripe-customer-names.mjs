@@ -49,9 +49,16 @@ if (process.argv.includes("--fill-blank")) {
   // Only customers the HTPR-6862 repair blanked: Stripe's change log shows a
   // previous name with a glued-on id and no name now. Customers that never had a
   // name are left alone.
-  const since = Number(process.env.SINCE_UNIX || Math.floor(Date.now() / 1000) - 7 * 86400);
+  // --apply needs the exact window of that repair run, so a name cleared by
+  // anything else is never refilled.
+  const since = Number(process.env.SINCE_UNIX), until = Number(process.env.UNTIL_UNIX);
+  if (!Number.isInteger(since) || !Number.isInteger(until) || since >= until) {
+    console.error("Set SINCE_UNIX and UNTIL_UNIX to the HTPR-6862 repair window.");
+    process.exit(1);
+  }
   const blank = new Set();
-  for await (const event of stripe.events.list({ type: "customer.updated", created: { gte: since }, limit: 100 })) {
+  const window = { gte: since, lte: until };
+  for await (const event of stripe.events.list({ type: "customer.updated", created: window, limit: 100 })) {
     const previous = event.data.previous_attributes?.name;
     const customer = event.data.object;
     if (typeof previous === "string" && ID_SUFFIX.test(previous) && !readable(customer.name)) blank.add(customer.id);
