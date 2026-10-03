@@ -466,7 +466,6 @@ test("the flag and its constant are removed from the registry and runtime code",
   const retired = /htpr-6322-agent-chat-parked-reply|AGENT_CHAT_PARKED_REPLY_FLAG/;
   assert.throws(() => assert.doesNotMatch("AGENT_CHAT_PARKED_REPLY_FLAG", retired), "positive control catches a retained reference");
   for (const file of [
-    "src/lib/flags.ts",
     "src/lib/agentRuns/model.ts",
     "src/app/api/agent-chat/[sessionId]/route.ts",
     "src/app/api/agent-chat/[sessionId]/messages/route.ts",
@@ -476,7 +475,16 @@ test("the flag and its constant are removed from the registry and runtime code",
   assert.equal(model.AGENT_CHAT_PARKED_REPLY_FLAG, undefined);
 });
 
-test("the migration deletes only the retired flag row, not stored messages", () => {
-  const sql = fs.readFileSync(path.join(root, "src/prisma/migrations/20261003160000_drop_htpr_6322_agent_chat_parked_reply_flag/migration.sql"), "utf8");
-  assert.equal(sql.trim(), `DELETE FROM "FeatureFlag" WHERE "key" = 'htpr-6322-agent-chat-parked-reply';`);
+test("the flag stays retired, not deleted, so older deployments keep reading it as Off", () => {
+  const flags = fs.readFileSync(path.join(root, "src/lib/flags.ts"), "utf8");
+  const retiredSet = flags.match(/RETIRED_FEATURE_FLAG_KEYS = new Set\(\[([\s\S]*?)\]\)/);
+  assert.ok(retiredSet, "RETIRED_FEATURE_FLAG_KEYS exists");
+  assert.match(retiredSet[1], /"htpr-6322-agent-chat-parked-reply"/);
+  const outside = flags.replace(retiredSet[0], "");
+  assert.doesNotMatch(outside, /htpr-6322-agent-chat-parked-reply|AGENT_CHAT_PARKED_REPLY_FLAG/);
+  const migrations = path.join(root, "src/prisma/migrations");
+  for (const dir of fs.readdirSync(migrations)) {
+    const file = path.join(migrations, dir, "migration.sql");
+    if (fs.existsSync(file)) assert.doesNotMatch(fs.readFileSync(file, "utf8"), /htpr-6322-agent-chat-parked-reply/, dir);
+  }
 });

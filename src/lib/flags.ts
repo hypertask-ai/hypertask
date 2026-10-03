@@ -101,6 +101,7 @@ const FEATURE_FLAG_QA_USER = {
 
 // Hide and reject retired flags without changing stored rows needed by older deployments.
 export const RETIRED_FEATURE_FLAG_KEYS = new Set([
+  "htpr-6322-agent-chat-parked-reply",
   "hyfa-43-factory-owner-preview",
   "htpr-6072-shallow-board-switch",
   "htpr-6254-heic-heif-attachments",
