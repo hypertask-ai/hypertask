@@ -46,6 +46,7 @@ import {
   HTPR_6860_MOBILE_PAGE_HIDE_DOCK_FLAG,
   HTPR_6861_MOBILE_PAGE_BACK_ROW_FLAG,
   HTPR_6872_PAGE_IMAGE_GALLERY_FLAG,
+  HTPR_6868_TICKET_PREFIX_FLAG,
   POSTHOG_ERROR_ALERT_FLAG,
   SCOPED_BOARD_REFETCH_FLAG,
   MY_TASKS_CROSS_BOARD_PRIORITY_SORT_FLAG,
@@ -405,6 +406,11 @@ const FEATURE_FLAG_DEFINITIONS = [
     shippedOn: "2026-10-03",
     description:
       "Lets you click images on pages to view them full size, browse all page images, and download them in the ticket image gallery.",
+  },
+  {
+    key: HTPR_6868_TICKET_PREFIX_FLAG,
+    shippedOn: "2026-10-03",
+    description: "Lets board editors change ticket prefixes and choose a prefix when creating a board, while old IDs keep resolving.",
   },
   {
     key: HTPR_6860_MOBILE_PAGE_HIDE_DOCK_FLAG,

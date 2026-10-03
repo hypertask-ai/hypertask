@@ -46,6 +46,7 @@ function fixture({ tasks = [currentTask], visibleProjects = [20], agentId = null
       if (key === "task") return matches(row.task, value);
       if (value && typeof value === "object") {
         if (value.in) return value.in.includes(row[key]);
+        if (Object.hasOwn(value, "equals")) return value.mode === "insensitive" ? row[key]?.toUpperCase() === value.equals.toUpperCase() : row[key] === value.equals;
         if (value.not) return row[key] !== value.not;
       }
       return row[key] === value;
@@ -60,6 +61,7 @@ function fixture({ tasks = [currentTask], visibleProjects = [20], agentId = null
       },
       findFirst: async ({ where }) => tasks.find(task => matches(task, where)) ?? null,
     },
+    projectPrefixAlias: { findMany: async () => [] },
     taskNumberAlias: {
       findMany: async ({ where, select }) => {
         aliasQueries++;
@@ -84,7 +86,12 @@ function fixture({ tasks = [currentTask], visibleProjects = [20], agentId = null
       },
     },
   };
-  const resolver = load("src/lib/mcp/tasks/resolveTask.ts", base);
+  base["@/utils/controllers/projects/findPrefixAliasTasks"] = load("src/utils/controllers/projects/findPrefixAliasTasks.ts", base);
+  const resolver = load("src/lib/mcp/tasks/resolveTask.ts", {
+    ...base,
+    "@/lib/flags": { HTPR_6868_TICKET_PREFIX_FLAG: "htpr-6868-ticket-prefix", isFeatureEnabled: async () => true },
+  });
+  base["@/lib/mcp/tasks/resolveTask"] = resolver;
   const detail = load("src/utils/controllers/taskDetail/load.ts", {
     ...base,
     "@vercel/functions": {},
@@ -123,6 +130,7 @@ function fixture({ tasks = [currentTask], visibleProjects = [20], agentId = null
       ...detail, fetchTaskDetail: async () => null, fetchCommentsForSlug: async () => [],
     },
     "@/lib/auth/serverUser": { requireServerCookieUser: async () => ({ id: 6 }) },
+    "@/lib/flags": { isFeatureEnabled: async () => true },
     "next/navigation": { redirect: url => { throw new Error(`REDIRECT ${url}`); } },
     "@/lib/contexts/TaskDetail/TaskProvider": {},
     "@/lib/contexts/TaskDetail/FollowersProvider": {},

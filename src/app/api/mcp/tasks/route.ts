@@ -299,7 +299,8 @@ export async function GET(request: NextRequest) {
           },
         }
         const tasks = await prisma.task.findMany({ where, include })
-        const missingTickets = ticketNumbers?.filter(number => !tasks.some(task => task.ticketNumber === number)) ?? []
+        const requestedTickets = ticketNumbers ?? (legacyTicketNumber ? [legacyTicketNumber] : [])
+        const missingTickets = requestedTickets.filter(number => !tasks.some(task => task.ticketNumber === number))
         const aliasTargets = await Promise.all([
           ...missingTickets.map(ticket_number => findTaskByIdentifier(
             user, { ticket_number, project_id: projectIdForLookup }, ctx.agentId

@@ -129,9 +129,6 @@ const create = async ({title, description, section, userId, ranking, projectId,s
                     status:"Normal"
                 }
             })
-            // ========================== create ticket number (GET PROJECT)
-            const getProject = await prisma.project.findUnique({where:{id:projectId}})
-
             // ------------------- BODY 
             const body = {title,
                 description,
@@ -150,6 +147,7 @@ const create = async ({title, description, section, userId, ranking, projectId,s
 
                 const created = await createTaskWithBoardWebhookOutbox(prisma, taskCreatedActor, async (tx) => {
                   await tx.$executeRaw`SELECT pg_advisory_xact_lock(${TASK_UNIQUE_INDEX_ADVISORY_LOCK_CLASS}::int, ${projectId}::int)`;
+                  const getProject = await tx.project.findUnique({ where: { id: projectId }, select: { uniqueIdentifier: true } });
                   const nextUniqueIndex = await getNextUniqueTaskIndex(projectId, tx);
                   const row = await tx.task.create({
                     data: {
@@ -192,6 +190,7 @@ const create = async ({title, description, section, userId, ranking, projectId,s
             else{
                 const created = await createTaskWithBoardWebhookOutbox(prisma, taskCreatedActor, async (tx) => {
                   await tx.$executeRaw`SELECT pg_advisory_xact_lock(${TASK_UNIQUE_INDEX_ADVISORY_LOCK_CLASS}::int, ${projectId}::int)`;
+                  const getProject = await tx.project.findUnique({ where: { id: projectId }, select: { uniqueIdentifier: true } });
                   const nextUniqueIndex = await getNextUniqueTaskIndex(projectId, tx);
                   const row = await tx.task.create({
                     data: {

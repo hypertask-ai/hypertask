@@ -29,7 +29,8 @@ function loadUpdateUniqueIdentifier(prisma) {
     "@prisma/client": { LogType: {}, Status: {} },
     "../logs/createLog": { __esModule: true, default: () => {} },
     "@/lib/prisma": { __esModule: true, default: prisma },
-    "@/utils/helperFunctions/helperFunctions": { getSequentialLetters },
+    "@/lib/projectPrefix": { suggestProjectPrefix: title => getSequentialLetters(title) },
+    "@/lib/flags": {},
     "@/utils/helperFunctions/Views/ViewsHelperFunctions": {
       buildDefaultTitle: () => "",
     },
@@ -71,13 +72,19 @@ test("identically titled boards receive predictable collision suffixes", async (
   const identifiers = new Map();
   const prisma = {
     project: {
-      findFirst: async ({ where }) =>
-        [...identifiers.values()].includes(where.uniqueIdentifier) ? { id: 1 } : null,
+      findFirst: async ({ where }) => {
+        const filter = where.OR[0].uniqueIdentifier;
+        const clash = [...identifiers.values()].some(identifier =>
+          filter.mode === "insensitive" ? identifier.toUpperCase() === filter.equals : identifier === filter,
+        );
+        return clash ? { id: 1 } : null;
+      },
       update: async ({ where, data }) => {
         identifiers.set(where.id, data.uniqueIdentifier);
       },
     },
   };
+  prisma.$transaction = async callback => callback({ ...prisma, $executeRaw: async () => {} });
   const updateUniqueIdentifier = loadUpdateUniqueIdentifier(prisma);
 
   for (let projectId = 101; projectId <= 112; projectId++) {
@@ -102,4 +109,24 @@ test("identically titled boards receive predictable collision suffixes", async (
     "QAE10",
     "QAE11",
   ]);
+});
+
+test("automatic prefixes avoid legacy lowercase and mixed-case collisions", async () => {
+  let assigned;
+  const prisma = {
+    project: {
+      findFirst: async ({ where }) => {
+        const filter = where.OR[0].uniqueIdentifier;
+        const clash = ["qaex", "qAeX1"].some(identifier =>
+          filter.mode === "insensitive" ? identifier.toUpperCase() === filter.equals : identifier === filter,
+        );
+        return clash ? { id: 1 } : null;
+      },
+      update: async ({ data }) => { assigned = data.uniqueIdentifier; },
+    },
+  };
+  prisma.$transaction = async callback => callback({ ...prisma, $executeRaw: async () => {} });
+  const updateUniqueIdentifier = loadUpdateUniqueIdentifier(prisma);
+  assert.equal(await updateUniqueIdentifier("team-1", "qa-2026-08-30-exploratory", 101), "QAEX2");
+  assert.equal(assigned, "QAEX2");
 });

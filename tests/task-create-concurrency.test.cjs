@@ -51,6 +51,7 @@ function harness() {
     $transaction: async (callback) => {
       let releaseLock;
       const tx = {
+        project: prisma.project,
         $executeRaw: async (strings, ...values) => {
           assert.match(strings.join("?"), /pg_advisory_xact_lock\(\?::int, \?::int\)/);
           assert.deepEqual(values, [9428471, 15], "must share createGlobally's board lock key");

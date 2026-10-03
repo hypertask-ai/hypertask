@@ -794,6 +794,7 @@ model Project {
   labels                 Label[]
   Reminders              Reminder[]
   uniqueIdentifier       String?
+  prefixAliases          ProjectPrefixAlias[]
   project_view           Project_View?
   ai_custom_instructions AI_Custom_Instructions[]
   tasksSharing           TaskSharing[]
@@ -827,6 +828,17 @@ model Project {
   // @@index([status, teamId]) // For WHERE status="Normal" AND teamId IS NOT NULL
   // @@index([ownerId, status]) // For owner-based queries
   
+}
+
+model ProjectPrefixAlias {
+  id        Int      @id @default(autoincrement())
+  projectId Int
+  project   Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  prefix    String
+  createdAt DateTime @default(now())
+
+  @@unique([projectId, prefix])
+  @@index([prefix])
 }
 
 enum ProjectHealth {

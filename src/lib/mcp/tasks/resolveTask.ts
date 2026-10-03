@@ -1,4 +1,7 @@
+import type { Prisma } from '@prisma/client';
 import prisma from '@/lib/prisma';
+import { HTPR_6868_TICKET_PREFIX_FLAG, isFeatureEnabled } from '@/lib/flags';
+import { findPrefixAliasTasks } from '@/utils/controllers/projects/findPrefixAliasTasks';
 import { getProjectWhere } from '@/utils/controllers/projects/getAllIncludes';
 
 export class TaskIdentifierAmbiguityError extends Error {
@@ -20,10 +23,11 @@ export async function findTaskByIdentifier(
     unique_index?: number | null;
     project_id?: number | null;
   },
-  agentId?: string | null
+  agentId?: string | null,
+  projectAccess?: Prisma.ProjectWhereInput,
 ) {
   const { task_id, ticket_number, unique_index, project_id } = options;
-  const projectFilter = getProjectWhere(user.id, agentId);
+  const projectFilter = projectAccess ?? getProjectWhere(user.id, agentId);
 
   if (task_id) {
     return await prisma.task.findFirst({
@@ -40,7 +44,7 @@ export async function findTaskByIdentifier(
   if (!ticket_number && (unique_index == null || project_id == null)) return null;
 
   const identityWhere = ticket_number
-    ? { ticketNumber: ticket_number, ...(project_id ? { projectId: project_id } : {}) }
+    ? { ticketNumber: { equals: ticket_number, mode: 'insensitive' as const }, ...(project_id ? { projectId: project_id } : {}) }
     : { projectId: project_id!, uniqueIndex: unique_index! };
   const matches = await prisma.task.findMany({
     where: { ...identityWhere, status: { not: 'Deleted' }, project: projectFilter },
@@ -68,7 +72,7 @@ export async function findTaskByIdentifier(
     select: { projectId: true, uniqueIndex: true, task: { select: { id: true, projectId: true } } },
     orderBy: [{ projectId: 'asc' }, { id: 'asc' }],
   });
-  if (!aliases.length) return null;
+  if (!aliases.length && !ticket_number) return null;
   const reusedNumbers = await prisma.task.findMany({
     where: {
       OR: aliases.map(({ projectId, uniqueIndex }) => ({ projectId, uniqueIndex })),
@@ -79,7 +83,13 @@ export async function findTaskByIdentifier(
   const availableAliases = aliases.filter(alias => !reusedNumbers.some(
     task => task.projectId === alias.projectId && task.uniqueIndex === alias.uniqueIndex
   ));
-  const tasks = [...new Map(availableAliases.map(({ task }) => [task.id, task])).values()];
+  const prefixTasks = ticket_number && await isFeatureEnabled(HTPR_6868_TICKET_PREFIX_FLAG, user.id)
+    ? await findPrefixAliasTasks(ticket_number, projectFilter, project_id)
+    : [];
+  const tasks = [...new Map([
+    ...availableAliases.map(({ task }) => task),
+    ...prefixTasks,
+  ].map(task => [task.id, task])).values()];
   if (!project_id && tasks.length > 1) {
     throw new TaskIdentifierAmbiguityError(ticket_number!);
   }

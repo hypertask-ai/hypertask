@@ -2,6 +2,7 @@ import { Prisma, PrismaClient, Status } from "@prisma/client";
 import { waitUntil } from "@vercel/functions";
 import { broadcastTaskChange } from "@/lib/realtime/server";
 import prisma from "@/lib/prisma";
+import { findTaskByIdentifier, TaskIdentifierAmbiguityError } from "@/lib/mcp/tasks/resolveTask";
 import type { TaskDetailSlug } from "./types";
 import type { IComment } from "@/models/model";
 import { CYCLE_WINDOW_SIZE } from "@/lib/cycles";
@@ -12,7 +13,7 @@ import {
   sanitizeAgentCredentials,
   type PublicAgent,
 } from "@/lib/agents/publicAgent";
-import { HTPR_6516_AGENT_ATTRIBUTION_FLAG, isFeatureEnabled } from "@/lib/flags";
+import { HTPR_6516_AGENT_ATTRIBUTION_FLAG, HTPR_6868_TICKET_PREFIX_FLAG, isFeatureEnabled } from "@/lib/flags";
 import {
   accessibleAgentMembershipWhere,
   boardAgentVisibilityWhere,
@@ -192,6 +193,29 @@ export async function findTaskNumberAlias(slug: TaskDetailSlug, userId: number) 
     where: { ...taskWhere(alias.task, userId), id: alias.task.id },
     select: { projectId: true, uniqueIndex: true },
   });
+}
+
+export async function findTaskByTicketNumber(ticketNumber: string, userId: number, projectId?: number) {
+  const projectAccess = {
+    status: { not: Status.Deleted },
+    OR: [{ members: { some: { userId } } }, { ownerId: userId }],
+  };
+  try {
+    const task = await findTaskByIdentifier(
+      { id: userId },
+      { ticket_number: ticketNumber, project_id: projectId },
+      null,
+      projectAccess,
+    );
+    if (!task) return null;
+    return prisma.task.findFirst({
+      where: { id: task.id, status: { not: Status.Deleted }, project: projectAccess },
+      select: { id: true, projectId: true, uniqueIndex: true },
+    });
+  } catch (error) {
+    if (error instanceof TaskIdentifierAmbiguityError) return null;
+    throw error;
+  }
 }
 
 /** Task detail SSR — fields used by TaskDetailComp + hooks (see taskDetail benchmark parity). */
@@ -423,7 +447,12 @@ export async function fetchTaskDetail(
 ) {
   // Guard here, not just at the page: getTask() takes `uniqueIndex: any` from
   // the API layer and would otherwise send NaN into Prisma too (HTPR-4838).
-  const slug = parseDetailSlug([projectSlug, String(uniqueIndex)]);
+  const ticketNumber = typeof uniqueIndex === "string" && /^[A-Za-z0-9][A-Za-z0-9_-]*-\d+$/.test(uniqueIndex)
+    ? uniqueIndex : null;
+  if (ticketNumber && !(await isFeatureEnabled(HTPR_6868_TICKET_PREFIX_FLAG, userId))) return null;
+  const slug = ticketNumber
+    ? await findTaskByTicketNumber(ticketNumber, userId, parseProjectSlug(projectSlug))
+    : parseDetailSlug([projectSlug, String(uniqueIndex)]);
   if (!slug) return null;
 
   const task = await prisma.task.findFirst({

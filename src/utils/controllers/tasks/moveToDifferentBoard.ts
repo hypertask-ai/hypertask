@@ -5,7 +5,7 @@
 import prisma from "@/lib/prisma";
 import getMemberAndOwner from "@/utils/controllers/getMemberAndOwnerForBoard";
 import generateRank from "@/utils/generateRank";
-import { getUniqueTaskCount } from "@/utils/controllers/tasks/create";
+import { getNextUniqueTaskIndex } from "./getNextUniqueTaskIndex";
 import {
   cancelDueDateJob,
   scheduleDueDateJob,
@@ -75,8 +75,8 @@ async function moveTaskWithDestinationIdentity({
   agentId?: string | null;
 }) {
   for (let attempt = 0; ; attempt++) {
-    const [taskCount, ranking] = await Promise.all([
-      getUniqueTaskCount(projectId),
+    const [nextUniqueIndex, ranking] = await Promise.all([
+      getNextUniqueTaskIndex(projectId),
       getNewTaskRanking(sectionId, projectId),
     ]);
     const result = await updateTaskSingle(
@@ -87,8 +87,8 @@ async function moveTaskWithDestinationIdentity({
         sectionId,
         ranking,
         section: sectionTitle,
-        uniqueIndex: taskCount + 1,
-        ticketNumber: `${projectIdentifier}-${taskCount + 1}`,
+        uniqueIndex: nextUniqueIndex,
+        ticketNumber: `${projectIdentifier}-${nextUniqueIndex}`,
         updatedAt: new Date(),
         parentTaskId,
       },

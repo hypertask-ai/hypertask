@@ -1,7 +1,9 @@
 "use client";
 
 import axios from "axios";
-import { useMemo, useState } from "react";
+import { useFlag } from "@/hooks/useFlag";
+import { HTPR_6868_TICKET_PREFIX_FLAG } from "@/lib/flags/keys";
+import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import toast from "react-hot-toast";
 import AssignModal from "@/components/Modals/AssignToUser/AssignToUser";
@@ -18,8 +20,8 @@ import {
   IAgent,
   IUser,
 } from "@/models/model";
-import { currentProjectAtom } from "@/store";
-import { useSetRecoilState } from "@/lib/state";
+import { currentProjectAtom, currentUserAtom } from "@/store";
+import { useRecoilValue, useSetRecoilState } from "@/lib/state";
 import SettingsSectionShell from "./SettingsSectionShell";
 import SettingsToggle from "./SettingsToggle";
 import { useSettingsTeam } from "./useSettingsTeam";
@@ -30,6 +32,78 @@ const NONE_ASSIGNEE = {
   displayName: "None",
   assigned: false,
 } as IUser;
+
+const BoardTicketPrefixSetting = ({ project }: { project: IProject }) => {
+  const currentUser = useRecoilValue(currentUserAtom);
+  const setCurrentProject = useSetRecoilState(currentProjectAtom);
+  const queryClient = useQueryClient();
+  const [prefix, setPrefix] = useState(project.uniqueIdentifier ?? "");
+  const [oldPrefix, setOldPrefix] = useState(project.uniqueIdentifier ?? "");
+  const canEdit = currentUser && (
+    String(project.ownerId) === String(currentUser.id) ||
+    (project.members ?? []).some(member => member.userId === currentUser.id && !member.agentId)
+  );
+  useEffect(() => {
+    setPrefix(project.uniqueIdentifier ?? "");
+  }, [project.uniqueIdentifier]);
+  const mutation = useMutation({
+    mutationFn: async (uniqueIdentifier: string) => {
+      const response = await axios.post<IProject>("/api/projects/update", {
+        projectId: project.id,
+        uniqueIdentifier,
+      });
+      return response.data;
+    },
+    onSuccess: async (updated) => {
+      setOldPrefix(project.uniqueIdentifier ?? "");
+      setPrefix(updated.uniqueIdentifier ?? "");
+      setCurrentProject(current => current?.id === project.id
+        ? { ...current, uniqueIdentifier: updated.uniqueIdentifier } : current);
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["projectsAll"] }),
+        queryClient.invalidateQueries({ queryKey: ["projectsAllMinimal"] }),
+        queryClient.invalidateQueries({ queryKey: ["getAllTeamsMinimal"] }),
+        queryClient.invalidateQueries({ queryKey: ["boardTasks"] }),
+        queryClient.invalidateQueries({ queryKey: ["task"] }),
+      ]);
+    },
+    onError: (error) => {
+      setPrefix(project.uniqueIdentifier ?? "");
+      toast.error(axios.isAxiosError(error)
+        ? error.response?.data?.message ?? "Unable to update ticket prefix"
+        : "Unable to update ticket prefix");
+    },
+  });
+  const savePrefix = () => {
+    const next = prefix.trim().toUpperCase();
+    if (canEdit && !mutation.isPending && next !== project.uniqueIdentifier) mutation.mutate(next);
+  };
+  return (
+    <div className="flex flex-col gap-1">
+      <div className="flex items-center justify-between gap-4 border-b border-light-black-border-1 px-2 py-2">
+        <label className="shrink-0 text-dense font-semibold text-white-black" htmlFor="settings-ticket-prefix">
+          Ticket prefix
+        </label>
+        <input
+          id="settings-ticket-prefix"
+          className="h-8 min-w-0 flex-1 rounded-[4px] border-0 bg-transparent px-2 text-right text-dense font-medium text-white-black outline-none placeholder:text-text-light-gray focus:bg-active-modal-element"
+          disabled={!canEdit || mutation.isPending}
+          onBlur={savePrefix}
+          onChange={event => setPrefix(event.target.value.toUpperCase())}
+          onKeyDown={event => {
+            if (event.key === "Enter") event.currentTarget.blur();
+          }}
+          placeholder="Ticket prefix"
+          type="text"
+          value={prefix}
+        />
+      </div>
+      <p className="px-2 text-dense font-medium text-text-light-gray">
+        Tickets will read {prefix || project.uniqueIdentifier}-123. Old IDs like {oldPrefix}-123 keep working.
+      </p>
+    </div>
+  );
+};
 
 const BoardNotificationSetting = ({ project }: { project: IProject }) => {
   const queryKey = ["projectNotificationMute", project.id] as const;
@@ -389,9 +463,11 @@ const BoardAutoAssignSetting = ({ project }: { project: IProject }) => {
 
 const BoardGeneralSection = () => {
   const { project } = useSettingsTeam();
+  const ticketPrefixEnabled = useFlag(HTPR_6868_TICKET_PREFIX_FLAG);
 
   return (
     <SettingsSectionShell title="General">
+      {project && ticketPrefixEnabled && <BoardTicketPrefixSetting key={project.id} project={project} />}
       {project && <BoardNotificationSetting project={project} />}
       {project && <BoardTimeTrackingSetting project={project} />}
       <BoardLifecycleSettings />

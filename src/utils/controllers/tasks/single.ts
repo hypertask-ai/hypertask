@@ -205,6 +205,20 @@ export async function updateTaskSingle(
       agentWebhookDeliveryIds = [],
     } = await prisma.$transaction(
       async (tx) => {
+        if (options.allowProjectChange && requestedMutation.projectId !== undefined) {
+          // Take board locks before the task fence, matching prefix changes.
+          const projectIds = [...new Set([oldTask.projectId, requestedMutation.projectId as number])].sort((a, b) => a - b);
+          for (const projectId of projectIds) {
+            await tx.$executeRaw`SELECT pg_advisory_xact_lock(9428471::int, ${projectId}::int)`;
+          }
+          const destination = await tx.project.findUnique({
+            where: { id: requestedMutation.projectId as number },
+            select: { uniqueIdentifier: true },
+          });
+          if (!destination?.uniqueIdentifier) throw new Error("Destination board has no ticket prefix");
+          requestedMutation.ticketNumber = `${destination.uniqueIdentifier}-${requestedMutation.uniqueIndex ?? oldTask.uniqueIndex}`;
+        }
+
         if (typeof requestedMutation.cycleId === "number") {
           await assertCycleAssignable(
             tx,
@@ -291,7 +305,6 @@ export async function updateTaskSingle(
           archivedAt: currentState.archivedAt,
           deletedAt: currentState.deletedAt,
           updatedAt: currentState.updatedAt,
-          ticketNumber: currentState.ticketNumber,
           parentTaskId: currentState.parentTaskId,
           uniqueIndex: currentState.uniqueIndex,
           projectId: currentState.projectId,
