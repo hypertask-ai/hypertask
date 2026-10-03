@@ -93,7 +93,7 @@ async function withSearch(t, config, check) {
     })
     const press = async (key, extra = {}) => React.act(async () => input().dispatchEvent(new dom.window.KeyboardEvent('keydown', { key, bubbles: true, cancelable: true, ...extra })))
     const tick = async (ms = 1000) => React.act(async () => t.mock.timers.tick(ms))
-    const complete = async (request = requests.at(-1), tasks = [{ taskId: 1, projectId: 7, projectTitle: 'Product Board', uniqueIndex: 1, taskTitle: 'Result', highlight: {} }]) => React.act(async () => request.resolve({ status: 200, data: { processedData: { All: tasks }, tabs: ['All'] } }))
+    const complete = async (request = requests.at(-1), tasks = [{ taskId: 1, projectId: 7, projectTitle: 'Product Board', uniqueIndex: 1, taskTitle: 'Result', highlight: {} }], tabs = ['All']) => React.act(async () => request.resolve({ status: 200, data: { processedData: Object.fromEntries(tabs.map((tab) => [tab, tab === 'All' ? tasks : tasks.filter((task) => task.projectTitle === tab)])), tabs } }))
     const capture = (name) => {
       if (process.env.SEARCH_LAYOUT_EVIDENCE_DIR) fs.writeFileSync(path.join(process.env.SEARCH_LAYOUT_EVIDENCE_DIR, `${name}.html`), document.getElementById('root').innerHTML)
     }
@@ -543,4 +543,24 @@ test('commenter flag off preserves the baseline rendered HTML byte for byte', as
     })
   }
   assert.deepEqual(snapshots[1], snapshots[0])
+})
+
+test('one-board results hide the tab row only when its flag is on; two boards keep it', async (t) => {
+  const tabNames = () => [...document.querySelectorAll('.footer_tags')].map((node) => node.textContent)
+  const tasks = [{ taskId: 1, projectId: 7, projectTitle: 'Product Board', uniqueIndex: 1, taskTitle: 'Result', highlight: {} }]
+  const both = [...tasks, { taskId: 2, projectId: 8, projectTitle: 'Other Board', uniqueIndex: 2, taskTitle: 'Second', highlight: {} }]
+  for (const enabled of [false, true]) {
+    await withSearch(t, { flags: { 'htpr-6909-search-one-board-tabs': enabled } }, async ({ type, press, complete }) => {
+      await type('login')
+      await press('Enter')
+      await complete(undefined, tasks, ['All', 'Product Board'])
+      assert.equal(tabNames().includes('Product Board'), !enabled)
+    })
+  }
+  await withSearch(t, { flags: { 'htpr-6909-search-one-board-tabs': true } }, async ({ type, press, complete }) => {
+    await type('login')
+    await press('Enter')
+    await complete(undefined, both, ['All', 'Product Board', 'Other Board'])
+    assert.ok(tabNames().includes('Other Board'))
+  })
 })
