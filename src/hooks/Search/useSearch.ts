@@ -169,6 +169,7 @@ export function useSearch(
     // If there's a search term from URL params, fetch results from server
     if (_searchTerm && _searchTerm.length >= 2) {
       const requestId = beginSearch(_searchTerm, showArchived);
+      if (searchLayoutEnabled) tasksInputRef.current?.blur();
       const { searchProjectIds, processedSearchTerm, archive } =
         searchOperatorsEnabled
           ? { searchProjectIds: [], processedSearchTerm: _searchTerm, archive: defaultSearchArchiveStatus(showArchived) }
@@ -529,6 +530,7 @@ export function useSearch(
     if (event.keyCode === KeyCodes.FORWARD_SLASH) {
       event.preventDefault();
       document.getElementById(searchConfig.elementIds.input.id)?.focus();
+      if (searchLayoutEnabled) tasksInputRef.current?.setSelectionRange(tasksInputRef.current.value.length, tasksInputRef.current.value.length);
       setSelectedIndex(null);
     }
 
@@ -826,6 +828,7 @@ export function useSearch(
     includeArchived,
     searchChipsEnabled,
     searchAutocompleteEnabled,
+    searchLayoutEnabled,
     searchEscBackEnabled,
     isSearchDraft,
   ]);

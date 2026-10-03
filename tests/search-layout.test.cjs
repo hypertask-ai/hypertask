@@ -67,7 +67,7 @@ async function withSearch(t, config, check) {
     source('src/hooks/Search/useSearchCache.ts', { useGetSearchCache: () => ({ data: cache }) })
     source('src/lib/constants/index.ts', { default: { multipleKeys: {}, gThenKeyDelay: 500 } })
     source('src/lib/constants/APIRouteConstants.ts', { searchDocumentsRoute: '/api/search/document' })
-    source('src/lib/constants/keyboard-handler.ts', { KeyCodes: { ARROW_DOWN: 40, ARROW_UP: 38, ENTER: 13, ESCAPE: 27, J: 74, K: 75, TAB: 9 } })
+    source('src/lib/constants/keyboard-handler.ts', { KeyCodes: { ARROW_DOWN: 40, ARROW_UP: 38, ENTER: 13, ESCAPE: 27, J: 74, K: 75, TAB: 9, FORWARD_SLASH: 191 } })
     const post = (_url, body) => new Promise((resolve) => requests.push({ body, resolve }))
     stub(require.resolve('axios'), { default: { post }, post })
     stub(require.resolve('next/navigation'), { useRouter: () => ({ replace(url) { navigations.push(url) }, push(url) { navigations.push(url) }, back() {} }) })
@@ -88,6 +88,7 @@ async function withSearch(t, config, check) {
     t.mock.timers.enable({ apis: ['setTimeout'] })
     const input = () => document.getElementById('search-input')
     const type = async (value) => React.act(async () => {
+      input().focus()
       Object.getOwnPropertyDescriptor(dom.window.HTMLInputElement.prototype, 'value').set.call(input(), value)
       input().dispatchEvent(new dom.window.Event('input', { bubbles: true }))
     })
@@ -183,13 +184,16 @@ test('recents appear once with readable chips in-flow, tips follow in responsive
   })
 })
 
-test('empty tips keyboard arrows, j/k, Tab/Enter, Escape and first-row selection still work', async (t) => {
-  await withSearch(t, {}, async ({ input, press, selected, requests }) => {
+test('empty tips keep j/k typing native while arrows, Tab/Enter, Escape and first-row selection still work', async (t) => {
+  await withSearch(t, {}, async ({ input, press, selected, requests, dom }) => {
     assert.match(selected().textContent, /^from:/)
-    await press('j')
-    assert.match(selected().textContent, /^assignee:/)
-    await press('k')
-    assert.match(selected().textContent, /^from:/)
+    for (const [key, keyCode] of [['j', 74], ['k', 75]]) {
+      let accepted
+      await React.act(async () => { accepted = input().dispatchEvent(new dom.window.KeyboardEvent('keydown', { key, keyCode, bubbles: true, cancelable: true })) })
+      assert.equal(accepted, true, `${key} keeps its native typing behavior`)
+      assert.match(selected().textContent, /^from:/)
+      assert.equal(document.activeElement, input())
+    }
     await press('ArrowDown')
     await press('ArrowDown')
     assert.match(selected().textContent, /^in:/)
@@ -309,6 +313,103 @@ test('typing makes no live search request; Enter runs search, draft changes hide
     await type('changed again')
     await complete(pending)
     assert.equal(document.getElementById('task_1'), null, 'old pending searches cannot reappear for drafts')
+  })
+})
+
+test('Enter blurs immediately, j/k and arrows select results, Enter opens, and slash or click restores editing', async (t) => {
+  await withSearch(t, {}, async ({ input, type, press, requests, complete, state, navigations, dom }) => {
+    assert.equal(document.activeElement, input(), 'empty search starts focused')
+    await type('label:bug login')
+    await press('Enter', { keyCode: 13 })
+    assert.equal(requests.length, 1)
+    assert.equal(document.activeElement, document.body, 'submission blurs before results arrive')
+    const tasks = [1, 2, 3].map((id) => ({ taskId: id, projectId: 7, uniqueIndex: id, projectTitle: 'Product Board', taskTitle: `Login ${id}`, highlight: {} }))
+    await complete(requests[0], tasks)
+    const resultKey = async (key, keyCode) => React.act(async () => document.activeElement.dispatchEvent(new dom.window.KeyboardEvent('keydown', { key, keyCode, bubbles: true, cancelable: true })))
+    const query = state().inputValue
+    const start = state().selectedIndex
+    await resultKey('j', 74)
+    assert.equal(state().selectedIndex, start + 1)
+    await resultKey('j', 74)
+    assert.equal(state().selectedIndex, 2)
+    await resultKey('k', 75)
+    assert.equal(state().selectedIndex, 1)
+    await resultKey('ArrowUp', 38)
+    assert.equal(state().selectedIndex, 0)
+    await resultKey('ArrowDown', 40)
+    assert.equal(state().selectedIndex, 1)
+    assert.equal(state().inputValue, query)
+    await resultKey('Enter', 13)
+    assert.equal(navigations.at(-1), '/detail/project-7/2')
+    const chip = document.querySelector('[aria-label="Remove label:Bug filter"]')
+    assert.ok(chip)
+    input().setSelectionRange(0, 0)
+    await resultKey('/', 191)
+    assert.equal(document.activeElement, input())
+    assert.equal(input().selectionStart, input().value.length)
+    assert.equal(input().selectionEnd, input().value.length)
+    assert.equal(document.querySelector('[aria-label="Remove label:Bug filter"]'), chip)
+    for (const [key, keyCode] of [['j', 74], ['k', 75]]) {
+      let accepted
+      await React.act(async () => { accepted = input().dispatchEvent(new dom.window.KeyboardEvent('keydown', { key, keyCode, bubbles: true, cancelable: true })) })
+      assert.equal(accepted, true, `${key} keeps its native typing behavior`)
+      assert.equal(document.activeElement, input())
+      assert.equal(state().selectedIndex, null)
+    }
+    await type(`${input().value}jk`)
+    assert.equal(state().inputValue, 'label:bug loginjk')
+    await press('Enter', { keyCode: 13 })
+    await React.act(async () => input().parentElement.parentElement.click())
+    assert.equal(document.activeElement, input())
+    assert.ok(document.querySelector('[aria-label="Remove label:Bug filter"]'))
+    await complete(requests.at(-1), tasks)
+    assert.equal(document.activeElement, input(), 'delayed results do not steal restored editing focus')
+  })
+})
+
+test('Enter submits values and recents without retaining focus, but operator completion stays focused', async (t) => {
+  await withSearch(t, {}, async ({ input, type, tick, press, requests }) => {
+    await type('fr')
+    await press('Enter', { keyCode: 13 })
+    assert.equal(input().value, 'from:')
+    assert.equal(requests.length, 0)
+    assert.equal(document.activeElement, input())
+    await type('from:mal')
+    await tick(180)
+    await press('Enter', { keyCode: 13 })
+    assert.equal(requests.at(-1).body.searchQuery, 'from:77')
+    assert.equal(document.activeElement, document.body)
+  })
+  await withSearch(t, { history: ['login'] }, async ({ input, press, requests }) => {
+    await press('Enter', { keyCode: 13 })
+    assert.equal(input().value, 'login')
+    assert.equal(requests.at(-1).body.searchQuery, 'login')
+    assert.equal(document.activeElement, document.body)
+  })
+})
+
+test('URL results blur only layout-on input; empty search and legacy autocomplete keep focus', async (t) => {
+  for (const enabled of [true, false]) {
+    await withSearch(t, { query: 'login', flags: { [layoutFlag]: enabled } }, async ({ input, complete }) => {
+      await complete()
+      assert.equal(document.activeElement, enabled ? document.body : input())
+    })
+    await withSearch(t, { flags: { [layoutFlag]: enabled } }, async ({ input }) => {
+      assert.equal(document.activeElement, input())
+    })
+  }
+  await withSearch(t, { query: 'login' }, async ({ input, complete }) => {
+    assert.equal(document.activeElement, document.body, 'URL search starts in result navigation mode')
+    await React.act(async () => input().focus())
+    await complete()
+    assert.equal(document.activeElement, input(), 'URL results do not steal restored editing focus')
+  })
+  await withSearch(t, { flags: { [layoutFlag]: false } }, async ({ input, type, press, complete }) => {
+    await type('login')
+    await press('Enter', { keyCode: 13 })
+    assert.equal(document.activeElement, input())
+    await complete()
+    assert.equal(document.activeElement, input())
   })
 })
 
