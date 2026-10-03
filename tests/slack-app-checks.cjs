@@ -15,7 +15,8 @@ const result = spawnSync("npx", ["tsc", "--noEmit", "-p", "."], { cwd: root, enc
 assert.ifError(result.error);
 const output = result.stdout + result.stderr;
 const diagnostics = [...output.matchAll(/^(.+?)\(\d+,\d+\): error TS(\d+): ([\s\S]*?)(?=^.+?\(\d+,\d+\): error TS\d+: |$(?![\s\S]))/gm)];
-assert.ok(result.status === 0 || (result.status === 2 && diagnostics.length > 0), "tsc must run to completion");
+// Incremental noEmit can use either TypeScript diagnostic exit status.
+assert.ok(result.status === 0 || ([1, 2].includes(result.status) && diagnostics.length > 0), "tsc must run to completion");
 assert.ok(diagnostics.every((match) => !changed.has(match[1])), "changed TypeScript has diagnostics:\n" + diagnostics.filter((match) => changed.has(match[1])).map((match) => match[0]).join("\n"));
 if (result.status !== 0) {
   // Read baseline sources through a compiler host, without changing any worktree files.
