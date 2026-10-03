@@ -208,6 +208,9 @@ const nextConfig = {
     config.resolve.alias = {
       ...(config.resolve.alias || {}),
       "react-joyride$": require.resolve("react-joyride"),
+      // Browser lockdown can freeze inherited Error fields; preserve markdown's
+      // behavior with own prototype defaults rather than strict-mode assignment.
+      "vfile-message$": require.resolve("./src/lib/vendor/vfile-message.mjs"),
     };
 
     return config;
