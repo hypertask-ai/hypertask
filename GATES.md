@@ -12,12 +12,12 @@ Scope: [REFACTOR] the existing task APIs without changing URLs, status codes, JS
 - [x] G1: Every touched route retains its baseline response contract, including errors, auth, and supported methods.
   CHECK: node --test tests/task-route-consolidation.test.cjs
   EXPECT: /# fail 0\b/
-  EVIDENCE: automatic-evidence=v1; definition-sha256=ce3f254fd2c77d0c856e71a2263c9d4a47719a5b2d5a5ae893afc10597b5281c; exit=0; EXPECT=matched; output-sha256=394ba0e50124ad40de733c9022a52df920606cb77cb29bf9ef2ccc7e6d084ca8; output-bytes=7236; shell=/bin/sh; cwd=/home/valentin/projects/ht-wt-6509; path=fd5351737ae0/31 entries
+  EVIDENCE: automatic-evidence=v1; definition-sha256=ce3f254fd2c77d0c856e71a2263c9d4a47719a5b2d5a5ae893afc10597b5281c; exit=0; EXPECT=matched; output-sha256=ee3da2a21bb528dae7c19d01958f0f8938c621fda73d83c932a59fa0e0b85510; output-bytes=7232; shell=/bin/sh; cwd=/home/valentin/projects/ht-wt-6509; path=fd5351737ae0/31 entries
 
 - [x] G2: The bounded task slice uses one current-user loader and shared parsing/response helpers; query counts and any duplicate migrations preserve access and URLs.
   CHECK: node --test tests/task-route-consolidation-scope.test.cjs
   EXPECT: /# fail 0\b/
-  EVIDENCE: automatic-evidence=v1; definition-sha256=056e8edd3547b6af16ef913051765da826fdba3bfe4fbb159820a599758d7dbe; exit=0; EXPECT=matched; output-sha256=22bcfb041c0498f0266f2ba6e2c14ac5690dd4d171d75bc68ec12d011ad31e1e; output-bytes=1605; shell=/bin/sh; cwd=/home/valentin/projects/ht-wt-6509; path=fd5351737ae0/31 entries
+  EVIDENCE: automatic-evidence=v1; definition-sha256=056e8edd3547b6af16ef913051765da826fdba3bfe4fbb159820a599758d7dbe; exit=0; EXPECT=matched; output-sha256=d8ac579d70f852f1e0644c331024b7a5ff6edbda92aaa7d9c9ad312bb903d4db; output-bytes=1605; shell=/bin/sh; cwd=/home/valentin/projects/ht-wt-6509; path=fd5351737ae0/31 entries
 
 - [x] G3: Full TypeScript checking emits no new diagnostics beyond the recorded unrelated baseline and no changed-file diagnostics.
   CHECK: node tests/task-route-typecheck.cjs
@@ -32,10 +32,10 @@ Scope: [REFACTOR] the existing task APIs without changing URLs, status codes, JS
 - [x] G5: Expert review finds no behavior drift; the follow-up document precisely identifies completed ticket sections, deferred work, route inventory, and measured query counts.
   EVIDENCE: Reviewed all production diffs and new helpers after the full 91-test run (91 pass, 0 fail). Shared auth always resolves the signed session; description profile/actor requirements remain, matching the proxy's existing identity invariant. Existing team/content and archived/status predicates, numeric ranges, error keys/messages/statuses, optimistic restore lock and broadcasts are pinned. The real Prisma planner fixture measures 8 versus 1 SQL calls with identical JSON and pinned original selection/filter/order arguments. Inventory independently measured 3 App and 33 Pages task files, zero twins. docs/htpr-6509-first-slice.md explicitly records partial sections 2/3/6, the completed twin audit, every section's follow-up, the full-row compatibility constraint and synthetic-only limitations. No improvement remains in this authorized slice after the final review pass.
 
-- [ ] G6: The requested local commit contains only this worktree's reviewable slice, no forbidden paths or new em dashes, with exact attribution; nothing is pushed and no PR is opened.
-  EVIDENCE: pending
+- [x] G6: The requested local commit contains only this worktree's reviewable slice, no forbidden paths or new em dashes, with exact attribution; nothing is pushed and no PR is opened.
+  EVIDENCE: Verified local commit 396a659c38d0a80c3ecb2c8e0967001f0369dd56 on htpr-6509 in /home/valentin/projects/ht-wt-6509. Git status was clean immediately after the commit. Independent assertions measured 18 changed files against baseline 33c5a4ad1a05b375185b42a6c1bd7b7115d63514, rejected changes under src/app/api/mcp and src/lib/mcp-server, and scanned all added lines for em dashes. Commit subject begins HTPR-6509: [REFACTOR] and the message ends with the exact requested Co-Authored-By attribution. The subsequent local evidence-only commit records this verified ledger. Session command history contains no board writes, push, PR, stash, branch switching, destructive git command, other-worktree operation or secret printing.
 
 - [x] G7: Existing task mutation, history, cookie identity, session resolution, and MCP JSON contracts remain compatible.
   CHECK: node --test tests/task-cycle-route.test.cjs tests/task-description-version-history-ui.test.cjs tests/mcp-malformed-json-body.test.cjs tests/get-session-user-fast-path.test.cjs tests/cookie-identity.test.cjs tests/task-detail-property-realtime.test.cjs tests/task-write-access-choke-points.test.cjs tests/task-single-auth.test.cjs
   EXPECT: /# fail 0\b/
-  EVIDENCE: automatic-evidence=v1; definition-sha256=95a73ce69760cd3817d6c807b9e4caa59c61acf8017963d49e35bab3769127ed; exit=0; EXPECT=matched; output-sha256=af0de9d43febb69947699ce23e5c700ee9764b443745ba6e04f3876d34670508; output-bytes=13770; shell=/bin/sh; cwd=/home/valentin/projects/ht-wt-6509; path=fd5351737ae0/31 entries
+  EVIDENCE: automatic-evidence=v1; definition-sha256=95a73ce69760cd3817d6c807b9e4caa59c61acf8017963d49e35bab3769127ed; exit=0; EXPECT=matched; output-sha256=0d413468e5810a722c9ebe62a6bd9bf0a8ebdf3325f64a3e6f7dbde2c74509f9; output-bytes=13774; shell=/bin/sh; cwd=/home/valentin/projects/ht-wt-6509; path=fd5351737ae0/31 entries
