@@ -421,7 +421,12 @@ test("desktop description is in normal flow on the first paint, while comments a
   assert.equal(phone.querySelector("[data-description]").parentElement.parentElement.style.height, "711px");
 });
 
-test("rendered desktop composer does not move when description estimates settle or the AI sidebar toggles and resizes", async () => {
+// CI runs unit tests without a Playwright browser; the source checks above still guard it there.
+const browserInstalled = (() => {
+  try { return require("node:fs").existsSync(require("playwright").chromium.executablePath()); } catch { return false; }
+})();
+
+test("rendered desktop composer does not move when description estimates settle or the AI sidebar toggles and resizes", { skip: !browserInstalled && "Playwright browser not installed" }, async () => {
   const { chromium } = require("playwright");
   const browser = await chromium.launch({ headless: true });
   try {
