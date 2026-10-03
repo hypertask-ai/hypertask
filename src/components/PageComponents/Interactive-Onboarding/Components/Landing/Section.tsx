@@ -53,8 +53,8 @@ const Section = ({
           {/**--------------------------------------Bottom New Task Button */}
           {showBottomButton && (
             <div className="h-[32px]">
-              <div className="group scale-100 bg-opacity-20 w-full mt-[16px] bg-slate-500 py-2 rounded flex justify-center">
-                <Plus className="sm:mx-0 xs:mx-2 text-white-black"  strokeWidth={1.75}/>
+              <div className="group scale-100 bg-transparent hover:bg-hover-active w-full mt-[16px] py-2 rounded flex justify-center">
+                <Plus size={14} className="sm:mx-0 xs:mx-2 text-text-light-gray"  strokeWidth={1.75}/>
               </div>
             </div>
           )}

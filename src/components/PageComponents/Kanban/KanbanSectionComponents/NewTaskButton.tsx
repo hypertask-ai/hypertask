@@ -45,11 +45,11 @@ const NewTaskButton:React.FC<INewTaskButton> = ({buttonPosition, createTaskAt, s
             onClick={()=>createTaskAt("bottom", sectionPayload, undefined, quickEntryRequested)}
             className="
                 group
-                scale-100 sm:scale-0 hover:bg-opacity-70 cursor-pointer  bg-opacity-20  
-                group-hover/main:scale-100 w-full mt-[16px] bg-slate-500 py-2 
+                scale-100 sm:scale-0 hover:bg-hover-active cursor-pointer bg-transparent
+                group-hover/main:scale-100 w-full mt-[16px] py-2
                 rounded flex justify-center"
                 >
-                <TooltipAndIcon text='Create task' keyCombination={["C"]} left={20} bottom={-40}/>
+                <TooltipAndIcon text='Create task' keyCombination={["C"]} left={20} bottom={-40} size={14} className='text-text-light-gray'/>
             </div>
         )
     }
@@ -58,13 +58,13 @@ const NewTaskButton:React.FC<INewTaskButton> = ({buttonPosition, createTaskAt, s
 
 const TooltipAndIcon = (
     {
-        text, keyCombination, left, bottom
+        text, keyCombination, left, bottom, size = 10, className = 'text-white-black'
     }:{
-        text:string,keyCombination:string[], left:number, bottom:number
+        text:string,keyCombination:string[], left:number, bottom:number, size?:number, className?:string
     })=>{
     return (
         <>
-        <Plus size={10} className='sm:mx-0 xs:mx-2  text-white-black' strokeWidth={1.75}/>
+        <Plus size={size} className={`sm:mx-0 xs:mx-2 ${className}`} strokeWidth={1.75}/>
              <Tooltip
                     left={left}
                     bottom={bottom}
