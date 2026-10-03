@@ -44,6 +44,8 @@ function loadRoute({ enabled = true, session = { userId: 6 }, task = undefined }
   for (const relativePath of [
     "src/app/api/tasks/cycle/route.ts",
     "src/lib/auth/getSessionUser.ts",
+    "src/lib/auth/currentUser.ts",
+    "src/utils/controllers/tasks/assertTaskAccess.ts",
     "src/lib/cycleService.ts",
     "src/lib/prisma.ts",
     "src/lib/realtime/server.ts",

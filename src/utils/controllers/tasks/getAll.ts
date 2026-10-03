@@ -24,6 +24,7 @@ const tasksGetAll = async (projectId:number|string|string[], userId:number|strin
             }
 
             const tasks = await prisma.task.findMany({
+                relationLoadStrategy: "join",
                 where: {
                     projectId: projectIdNum,
                     status: 'Normal',

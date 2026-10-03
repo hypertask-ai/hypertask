@@ -1,7 +1,31 @@
+import type { Prisma, Status } from "@prisma/client";
 import prisma from "@/lib/prisma";
 import { getProjectWhere, taskWriteAccessWhere } from "@/utils/controllers/projects/getAllIncludes";
 
-// updateTaskSingle does no membership check of its own — it looks the task up
+export function taskAccessWhere(
+  userId: number,
+  taskId: number,
+  options: {
+    agentId?: string | null;
+    projectStatus?: Status;
+    taskStatus?: Status;
+    scope?: "team" | "content";
+  } = {},
+): Prisma.TaskWhereInput {
+  const projectAccess = options.scope === "content"
+    ? taskWriteAccessWhere(userId, options.agentId)
+    : getProjectWhere(userId, options.agentId);
+  return {
+    id: taskId,
+    ...(options.taskStatus ? { status: options.taskStatus } : {}),
+    project: {
+      ...(options.projectStatus ? { status: options.projectStatus } : {}),
+      ...projectAccess,
+    },
+  };
+}
+
+// updateTaskSingle does no membership check of its own. It looks the task up
 // by id and writes. Routes that take a caller-supplied taskId therefore have to
 // gate access themselves; this is that gate.
 export async function userCanAccessTask(
@@ -11,7 +35,7 @@ export async function userCanAccessTask(
 ): Promise<boolean> {
   if (!Number.isInteger(taskId) || taskId <= 0) return false;
   const task = await prisma.task.findFirst({
-    where: { id: taskId, project: { ...getProjectWhere(userId, agentId) } },
+    where: taskAccessWhere(userId, taskId, { agentId }),
     select: { id: true },
   });
   return Boolean(task);
@@ -25,7 +49,7 @@ export async function userCanAccessTaskContent(
 ): Promise<boolean> {
   if (!Number.isInteger(taskId) || taskId <= 0) return false;
   const task = await prisma.task.findFirst({
-    where: { id: taskId, project: taskWriteAccessWhere(userId) },
+    where: taskAccessWhere(userId, taskId, { scope: "content" }),
     select: { id: true },
   });
   return Boolean(task);

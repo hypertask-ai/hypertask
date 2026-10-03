@@ -1,9 +1,10 @@
-import { cookies } from 'next/headers'
 import { NextRequest, NextResponse } from 'next/server'
 
 import prisma from '@/lib/prisma'
-import { isValidUser } from '@/utils/edgeHelpers'
-import { getProjectWhere } from '@/utils/controllers/projects/getAllIncludes'
+import { loadCurrentUser } from '@/lib/auth/currentUser'
+import { jsonError, unauthorized } from '@/lib/api/response'
+import { parsePositiveInt } from '@/lib/parsePositiveInt'
+import { taskAccessWhere } from '@/utils/controllers/tasks/assertTaskAccess'
 
 type RouteContext = { params: Promise<{ taskId: string }> }
 const MAX_DESCRIPTION_VERSIONS = 100
@@ -19,40 +20,25 @@ function stripHtml(html: string): string {
     .trim()
 }
 
-function parseTaskId(value: string): number | null {
-  if (!/^\d+$/.test(value)) return null
-
-  const taskId = Number(value)
-  return Number.isSafeInteger(taskId) && taskId > 0 ? taskId : null
-}
-
 export async function GET(_request: NextRequest, { params }: RouteContext) {
   try {
-    const userCookie = (await cookies()).get('nookies_user')
-    if (!userCookie?.value) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    const { isValid, user } = isValidUser(userCookie.value)
-    if (!isValid || !user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    const userId = user.id
+    const currentUser = await loadCurrentUser(_request.headers, true)
+    if (!currentUser) return unauthorized()
+    const { userId } = currentUser
 
-    const taskId = parseTaskId((await params).taskId)
+    const taskId = parsePositiveInt((await params).taskId)
     if (taskId === null) {
-      return NextResponse.json({ error: 'taskId must be a positive integer' }, { status: 400 })
+      return jsonError('taskId must be a positive integer', 400)
     }
 
     const task = await prisma.task.findFirst({
-      where: {
-        id: taskId,
-        project: {
-          status: 'Normal',
-          ...getProjectWhere(userId, null),
-        },
-      },
+      where: taskAccessWhere(userId, taskId, { projectStatus: 'Normal' }),
       select: {
         id: true,
         description_: { select: { content: true } },
       },
     })
-    if (!task) return NextResponse.json({ error: 'Task not found' }, { status: 404 })
+    if (!task) return jsonError('Task not found', 404)
 
     const versionRows = await prisma.docVersion.findMany({
       where: { entityType: 'task_description', entityId: taskId },
@@ -97,6 +83,6 @@ export async function GET(_request: NextRequest, { params }: RouteContext) {
     })
   } catch (error) {
     console.error('[Task Description Versions] Error:', error)
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
+    return jsonError('Internal server error', 500)
   }
 }

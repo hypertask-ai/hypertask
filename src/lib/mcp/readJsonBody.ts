@@ -12,7 +12,11 @@ export type JsonBodyResult<T> =
  * unguarded `request.json()` crashed the route with a 500 (HTPR-5568).
  */
 export async function readJsonBody<T>(
-  request: Request
+  request: Request,
+  errors: {
+    invalidJson?: () => NextResponse
+    invalidObject?: () => NextResponse
+  } = {},
 ): Promise<JsonBodyResult<T>> {
   let parsed: unknown
   try {
@@ -20,7 +24,7 @@ export async function readJsonBody<T>(
   } catch {
     return {
       ok: false,
-      response: NextResponse.json(
+      response: errors.invalidJson?.() ?? NextResponse.json(
         buildFieldError(
           'invalid_field',
           'body',
@@ -34,7 +38,7 @@ export async function readJsonBody<T>(
   if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) {
     return {
       ok: false,
-      response: NextResponse.json(
+      response: errors.invalidObject?.() ?? NextResponse.json(
         buildFieldError(
           'invalid_field',
           'body',

@@ -1,33 +1,30 @@
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
-import { getSessionUser } from "@/lib/auth/getSessionUser";
+import { loadCurrentUser } from "@/lib/auth/currentUser";
+import { jsonError, unauthorized } from "@/lib/api/response";
+import { readJsonBody } from "@/lib/mcp/readJsonBody";
+import { parsePositiveInt } from "@/lib/parsePositiveInt";
 import { getProjectCycleOverview } from "@/lib/cycleService";
 import { broadcastBoardChange, broadcastTaskChange } from "@/lib/realtime/server";
-import { taskWriteAccessWhere } from "@/utils/controllers/projects/getAllIncludes";
+import { taskAccessWhere } from "@/utils/controllers/tasks/assertTaskAccess";
 import { updateTaskSingle } from "@/utils/controllers/tasks/single";
 import type { IUser } from "@/models/model";
 
 const MAX_DATABASE_ID = 2_147_483_647;
 
-const validDatabaseId = (value: number): number | null =>
-  Number.isSafeInteger(value) && value > 0 && value <= MAX_DATABASE_ID ? value : null;
-
 const queryId = (value: string | null): number | null =>
-  value && /^\d+$/.test(value) ? validDatabaseId(Number(value)) : null;
+  parsePositiveInt(value, { max: MAX_DATABASE_ID });
 
 const jsonId = (value: unknown): number | null =>
-  typeof value === "number" ? validDatabaseId(value) : null;
+  typeof value === "number" ? parsePositiveInt(value, { max: MAX_DATABASE_ID }) : null;
 
 const accessibleTask = (taskId: number, userId: number) =>
   prisma.task.findFirst({
-    where: {
-      id: taskId,
-      status: "Normal",
-      project: {
-        status: "Normal",
-        ...taskWriteAccessWhere(userId),
-      },
-    },
+    where: taskAccessWhere(userId, taskId, {
+      taskStatus: "Normal",
+      projectStatus: "Normal",
+      scope: "content",
+    }),
     select: {
       id: true,
       cycleId: true,
@@ -39,24 +36,21 @@ const accessibleTask = (taskId: number, userId: number) =>
 
 const serverError = (operation: "load" | "update", error: unknown) => {
   console.error(`[task-cycle] ${operation} failed`, error);
-  return NextResponse.json(
-    { error: operation === "load" ? "Unable to load cycles" : "Unable to update cycle" },
-    { status: 500 },
-  );
+  return jsonError(operation === "load" ? "Unable to load cycles" : "Unable to update cycle", 500);
 };
 
 export async function GET(request: NextRequest) {
   try {
-    const session = await getSessionUser(request.headers);
-    if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    const session = await loadCurrentUser(request.headers);
+    if (!session) return unauthorized();
 
     const taskId = queryId(request.nextUrl.searchParams.get("taskId"));
     if (!taskId) {
-      return NextResponse.json({ error: "A valid taskId is required" }, { status: 400 });
+      return jsonError("A valid taskId is required", 400);
     }
 
     const task = await accessibleTask(taskId, session.userId);
-    if (!task) return NextResponse.json({ error: "Task not found" }, { status: 404 });
+    if (!task) return jsonError("Task not found", 404);
 
     const cursor = queryId(request.nextUrl.searchParams.get("cursor"));
     const query = request.nextUrl.searchParams.get("query")?.trim().slice(0, 40) ?? "";
@@ -97,51 +91,44 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
-    const session = await getSessionUser(request.headers);
-    if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    const session = await loadCurrentUser(request.headers);
+    if (!session) return unauthorized();
 
-    const body = await request.json().catch(() => null);
+    const parsed = await readJsonBody<{ taskId?: unknown; cycleId?: unknown }>(request, {
+      invalidJson: () => jsonError("taskId and a valid cycleId or null are required"),
+      invalidObject: () => jsonError("taskId and a valid cycleId or null are required"),
+    });
+    if (!parsed.ok) return parsed.response;
+    const body = parsed.body;
     const taskId = jsonId(body?.taskId);
     const cycleId = body?.cycleId === null ? null : jsonId(body?.cycleId);
     if (!taskId || (body?.cycleId !== null && !cycleId)) {
-      return NextResponse.json(
-        { error: "taskId and a valid cycleId or null are required" },
-        { status: 400 },
-      );
+      return jsonError("taskId and a valid cycleId or null are required", 400);
     }
 
     const task = await accessibleTask(taskId, session.userId);
-    if (!task) return NextResponse.json({ error: "Task not found" }, { status: 404 });
+    if (!task) return jsonError("Task not found", 404);
 
     let cycle = null;
     if (cycleId !== null) {
       if (!task.project.cyclesEnabled) {
-        return NextResponse.json(
-          { error: "Cycles are disabled for this board" },
-          { status: 409 },
-        );
+        return jsonError("Cycles are disabled for this board", 409);
       }
       const overview = await getProjectCycleOverview(task.projectId);
       if (cycleId !== overview?.current?.id && cycleId !== overview?.next?.id) {
-        return NextResponse.json(
-          { error: "Only the current or next cycle can be assigned" },
-          { status: 400 },
-        );
+        return jsonError("Only the current or next cycle can be assigned", 400);
       }
       cycle = cycleId === overview.current?.id ? overview.current : overview.next;
     }
 
     const user = await prisma.user.findUnique({ where: { id: session.userId } });
-    if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    if (!user) return unauthorized();
     const result = await updateTaskSingle(
       { id: task.id, cycleId },
       user as unknown as IUser,
     );
     if (result.status !== 200) {
-      return NextResponse.json(
-        { error: result.json?.message ?? "Unable to update cycle" },
-        { status: result.status },
-      );
+      return jsonError(result.json?.message ?? "Unable to update cycle", result.status);
     }
 
     const broadcasts = await Promise.allSettled([

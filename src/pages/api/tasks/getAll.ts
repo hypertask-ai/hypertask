@@ -1,11 +1,11 @@
 import { NextApiHandler, NextApiRequest, NextApiResponse } from "next";
 import tasksGetAll from "@/utils/controllers/tasks/getAll";
-import { getSessionUser } from "@/lib/auth/getSessionUser";
+import { loadCurrentUser } from "@/lib/auth/currentUser";
 
 
 const handler: NextApiHandler = async (req: NextApiRequest, res: NextApiResponse) => {
     if (req.method === "POST") {
-        const session = await getSessionUser(
+        const session = await loadCurrentUser(
           new Headers(req.headers as Record<string, string>)
         );
         if (!session) {
