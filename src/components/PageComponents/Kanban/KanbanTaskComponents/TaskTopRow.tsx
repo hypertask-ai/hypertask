@@ -88,9 +88,9 @@ const TaskTopRow: React.FC<ITaskTopRow> = ({
         {isMbl ? (
           <></>
         ) : (
-          hover && (
-            <HTCButton isKanban={true} htcButtonCallback={htcButtonCallback} />
-          )
+          <div className="relative flex h-4 w-[14px] shrink-0 items-center justify-center">
+            {hover && <HTCButton isKanban={true} htcButtonCallback={htcButtonCallback} />}
+          </div>
         )}
         {hasNotifications ? (
           <span
