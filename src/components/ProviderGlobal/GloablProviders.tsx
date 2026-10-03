@@ -176,7 +176,7 @@ import { useProjectQuery } from "@/hooks/General/useProjectQuery";
 import { markBoardSwitchIntent } from "@/lib/analytics/boardSwitchLatency";
 import { useEmojiFrequencyHydration } from "@/hooks/General/useEmojiFrequencyHydration";
 import { useFlag } from "@/hooks/useFlag";
-import { HTPR_6752_INSTANT_TICKET_OPEN_FLAG, MY_TASKS_SHORTCUTS_WIDTH_FLAG, HTPR_6476_MOBILE_AGENT_CHAT_FULLSCREEN_FLAG } from "@/lib/flags/keys";
+import { HTPR_6752_INSTANT_TICKET_OPEN_FLAG, MY_TASKS_SHORTCUTS_WIDTH_FLAG, HTPR_6476_MOBILE_AGENT_CHAT_FULLSCREEN_FLAG, HTPR_6860_MOBILE_PAGE_HIDE_DOCK_FLAG } from "@/lib/flags/keys";
 
 import AIChatClosedLayout from "../AI_CHAT/AI_Chat_Closed_Layout";
 import FullScreenChatLoading from "../AI_CHAT/FullScreenChatLoading";
@@ -259,6 +259,7 @@ import {
   shouldShowMobileCreateTaskButton,
   shouldEnableMobilePullDownCommand,
   isAgentChatPath,
+  isTicketPagePath,
 } from "../Global/mobileShellVisibility";
 import { BoardStartupContext } from "@/lib/contexts/boardStartupContext";
 import {
@@ -434,6 +435,7 @@ export default function GlobalProvider({
   const agentChatMobileFullscreenFlag = useFlag(
     HTPR_6476_MOBILE_AGENT_CHAT_FULLSCREEN_FLAG,
   );
+  const mobilePageHideDockFlag = useFlag(HTPR_6860_MOBILE_PAGE_HIDE_DOCK_FLAG);
   const shouldMountAgentChatRuntime =
     isAgentChatPage && mbl && agentChatMobileFullscreenFlag;
   const [chatRuntimeMounted, setChatRuntimeMounted] = useState(
@@ -598,6 +600,8 @@ export default function GlobalProvider({
     mbl &&
     Boolean(currentUser?.id) &&
     shouldShowMobileDock(pathname) &&
+    // HTPR-6860: ticket pages drop the dock like the ticket screen does.
+    !(mobilePageHideDockFlag && isTicketPagePath(pathname)) &&
     !commentComposerOpen &&
     !agentChatHidesMobileShell;
   const showMobileBottomNav =
@@ -1419,7 +1423,9 @@ export default function GlobalProvider({
             boardUsable={mobileBoardControlsReady}
           />
           {showMobileBottomNav && mobileBoardControlsReady && (
-            <MobileTabBar currentUserId={currentUser.id} />
+            mobilePageHideDockFlag && isTicketPagePath(pathname) ? null : (
+              <MobileTabBar currentUserId={currentUser.id} />
+            )
           )}
           {mobileCreateTaskButtonVisible && <MobileCreateTaskButton />}
           {mobilePullCommandVisible && (

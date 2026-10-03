@@ -43,6 +43,7 @@ import {
   HTPR_6673_SIGNUP_ANALYTICS_FLAG,
   HTPR_6407_MOBILE_AGENT_CHAT_LAYOUT_FLAG,
   HTPR_6476_MOBILE_AGENT_CHAT_FULLSCREEN_FLAG,
+  HTPR_6860_MOBILE_PAGE_HIDE_DOCK_FLAG,
   POSTHOG_ERROR_ALERT_FLAG,
   SCOPED_BOARD_REFETCH_FLAG,
   MY_TASKS_CROSS_BOARD_PRIORITY_SORT_FLAG,
@@ -396,6 +397,12 @@ const FEATURE_FLAG_DEFINITIONS = [
     shippedOn: "2026-09-11",
     description:
       "Pins the Agent Chat composer on mobile, keeps one message scroller, shows the agent name in the top bar, and makes mic dictation use the agent's board.",
+  },
+  {
+    key: HTPR_6860_MOBILE_PAGE_HIDE_DOCK_FLAG,
+    shippedOn: "2026-10-03",
+    description:
+      "On mobile ticket pages (/page/...): hide the bottom bar, the same as the ticket screen.",
   },
   {
     key: HTPR_6476_MOBILE_AGENT_CHAT_FULLSCREEN_FLAG,

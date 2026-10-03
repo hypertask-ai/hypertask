@@ -37,6 +37,9 @@ export const shouldShowMobileCreateTaskButton = (pathname: string | null) =>
       ),
   );
 
+export const isTicketPagePath = (pathname: string | null) =>
+  pathname?.startsWith("/page/") ?? false;
+
 export const isMobileInboxPath = (pathname: string | null) =>
   pathname === "/inbox" || (pathname?.startsWith("/inbox/") ?? false);
 
