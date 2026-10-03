@@ -873,8 +873,8 @@ test('one-board results hide the tab row only when its flag is on; two boards ke
   })
 })
 
-test('Escape closes retained layout suggestions after focus moved elsewhere', async (t) => {
-  await withSearch(t, {}, async ({ input, type, tick, dom }) => {
+test('Escape closes retained layout suggestions after focus moved elsewhere, keeping the query', async (t) => {
+  await withSearch(t, { flags: { 'htpr-6879-search-esc-back': true } }, async ({ input, type, tick, dom }) => {
     await type('board:')
     await tick(180)
     assert.equal(input().getAttribute('aria-expanded'), 'true')
@@ -882,8 +882,11 @@ test('Escape closes retained layout suggestions after focus moved elsewhere', as
     document.body.append(otherInput)
     await React.act(async () => otherInput.focus())
     assert.equal(input().getAttribute('aria-expanded'), 'true')
-    await React.act(async () => otherInput.dispatchEvent(new dom.window.KeyboardEvent('keydown', { key: 'Escape', keyCode: 27, bubbles: true, cancelable: true })))
+    const escape = new dom.window.KeyboardEvent('keydown', { key: 'Escape', keyCode: 27, bubbles: true, cancelable: true })
+    await React.act(async () => otherInput.dispatchEvent(escape))
     assert.equal(input().getAttribute('aria-expanded'), 'false')
+    assert.equal(escape.defaultPrevented, true)
+    assert.equal(input().value, 'board:', 'Escape closes the list without clearing the query')
     otherInput.remove()
   })
 })
