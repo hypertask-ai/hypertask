@@ -138,7 +138,7 @@ test("cached refresh keeps parsedTask stable while updating metadata and preserv
   const mocks = {
     react: React,
     "react/jsx-runtime": require("react/jsx-runtime"),
-    "@tanstack/react-query": { useQueryClient: () => ({}), useQuery: ({ queryKey }) => queryKey[0] === "cached-task-detail" ? { data: incoming, isFetchedAfterMount: true } : { data: queryKey[0] === "comments" ? { comments: [], stacked: {} } : [] } },
+    "@tanstack/react-query": { useQueryClient: () => ({}), useQuery: ({ queryKey }) => queryKey[0] === "cached-task-detail" ? { data: incoming } : {} },
     "@/lib/state": { useRecoilValue: () => ({ id: 2343 }) },
     "@/store": { currentUserAtom: {} },
     "@/hooks/General/useGetUserPreferences": { useGetUserPreferences: () => ({ data: {} }) },
@@ -189,7 +189,7 @@ test("cached refresh failures retry in place during edits, drafts and uploads, t
   const Detail = compile(fs.readFileSync(path.join(root, "src/components/Modals/SwipeUnread/EmbeddedTaskDetail.tsx"), "utf8"), {
     react: React,
     "react/jsx-runtime": require("react/jsx-runtime"),
-    "@tanstack/react-query": { useQueryClient: () => ({}), useQuery: ({ queryKey }) => queryKey[0] === "cached-task-detail" ? { data: task, error, refetch, isFetchedAfterMount: true } : { data: queryKey[0] === "comments" ? { comments: [], stacked: {} } : [] } },
+    "@tanstack/react-query": { useQueryClient: () => ({}), useQuery: ({ queryKey }) => queryKey[0] === "cached-task-detail" ? { data: task, error, refetch } : {} },
     "@/lib/state": { useRecoilValue: () => ({ id: 2343 }) },
     "@/store": { currentUserAtom: {} },
     "@/hooks/General/useGetUserPreferences": { useGetUserPreferences: () => ({ data: {} }) },
