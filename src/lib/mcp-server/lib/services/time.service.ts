@@ -199,7 +199,13 @@ export class TimeService {
     }
   }
 
-  async log(input: { task: string; minutes: number }): Promise<TimeEntryResponse> {
+  async log(input: {
+    task: string;
+    minutes: number;
+    note?: string | null;
+    date?: string;
+    timezone_offset_minutes?: number;
+  }): Promise<TimeEntryResponse> {
     const correlationId = generateCorrelationId();
 
     try {

@@ -27,9 +27,15 @@ export function getTimeBaseSchema() {
         .describe('task id, unique index, or ticket id (required for start/stop/status/log)'),
       minutes: z
         .number()
-        .positive()
+        .int()
+        .min(1)
+        .max(1440)
         .optional()
-        .describe('minutes to log (required for action=log)'),
+        .describe('minutes to log, 1–1440 (required for action=log)'),
+      note: z.string().nullable().optional().describe('log note; trimmed to 500 characters'),
+      date: z.string().optional().describe('logged day in YYYY-MM-DD format; omitted means today'),
+      timezone_offset_minutes: z.number().int().min(-840).max(840).optional()
+        .describe('minutes west of UTC for local noon on date (JavaScript getTimezoneOffset)'),
       board: z.union([z.string(), z.number()]).optional(),
       user: z.string().optional().describe('numeric user id or "me"'),
       from: z.string().optional(),

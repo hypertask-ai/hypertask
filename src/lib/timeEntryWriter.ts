@@ -93,7 +93,7 @@ export async function createTimeEntryOnActiveBoard(
 
 type MutableTimeEntry = Pick<
   TimeEntry,
-  "id" | "taskId" | "userId" | "startedAt"
+  "id" | "taskId" | "userId" | "startedAt" | "endedAt"
 > & {
   task: { projectId: number };
 };
