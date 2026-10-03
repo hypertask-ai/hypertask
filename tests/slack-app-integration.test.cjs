@@ -131,7 +131,7 @@ test("server flag uses the actual linked user, installation fallback and Owner +
     const { isSlackAppEnabled } = loadTs("src/lib/slack/feature.ts", {
       "@/lib/prisma": { __esModule: true, default: { slackInstall: { findUnique: async () => ({ installedByUserId: 6, userLinks: userId ? [{ userId }] : [] }) } } },
       "@/lib/flags": { HTPR_6817_SLACK_APP_FLAG: "htpr-6817-slack-app", isFeatureEnabled: async (...args) => { calls.push(args); return true; } },
-      "@/lib/slack/userLink": { resolveSlackActor: async () => null },
+      "@/lib/slack/userLink": { resolveSlackActor: async () => null, getSlackAutoLinkDisabledUserId: async () => null },
     });
     assert.equal(await isSlackAppEnabled("T1", "U1"), true);
   }
@@ -178,7 +178,7 @@ test("first-contact email matches cannot inherit the installer's enabled flag", 
   const { isSlackAppEnabled } = loadTs("src/lib/slack/feature.ts", {
     "@/lib/prisma": { __esModule: true, default: { slackInstall: { findUnique: async () => ({ installedByUserId: 6, userLinks: [] }) } } },
     "@/lib/flags": { HTPR_6817_SLACK_APP_FLAG: "htpr-6817-slack-app", isFeatureEnabled: async (_key, userId) => { checked.push(userId); return userId === 6; } },
-    "@/lib/slack/userLink": { resolveSlackActor: async () => actor },
+    "@/lib/slack/userLink": { resolveSlackActor: async () => actor, getSlackAutoLinkDisabledUserId: async () => null },
   });
   assert.equal(await isSlackAppEnabled("T1", "U1"), false);
   assert.deepEqual(checked, [6, 42]);

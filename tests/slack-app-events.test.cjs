@@ -7,7 +7,7 @@ function fixture(enabled) {
   const { POST } = loadTs("src/app/api/slack/events/route.ts", {
     "@vercel/functions": { waitUntil: (promise) => work.push(promise) },
     "@/lib/slack/signature": { verifySlackSignature: () => true },
-    "@/lib/slack/feature": { isSlackAppEnabled: async () => enabled },
+    "@/lib/slack/feature": { isSlackAppEnabled: typeof enabled === "function" ? enabled : async () => enabled },
     "@/lib/slack/taskCreate": { createSlackTaskFromThread: async (input) => dispatched.push({ action: "create", input }) },
     "@/lib/slack/chat": { handleSlackChat: async (input) => dispatched.push({ action: "chat", input }), postSlackAssistantWelcome: async (input) => dispatched.push({ action: "welcome", input }) },
     "@/lib/slack/assistant": { saveSlackAssistantContext: async (...input) => dispatched.push({ action: "context", input }) },
@@ -29,6 +29,23 @@ function fixture(enabled) {
     return response;
   }
   return { send, dispatched, watched, receipts };
+}
+
+for (const userId of [6, 985, 42]) {
+  test(`first-contact user ${userId} chooses creation routing by their own flag, not an ordinary installer`, async () => {
+    const checked = [];
+    let resolved = 0;
+    const { isSlackAppEnabled } = loadTs("src/lib/slack/feature.ts", {
+      "@/lib/prisma": { __esModule: true, default: { slackInstall: { findUnique: async () => ({ id: actor.installId, installedByUserId: 42, userLinks: [] }) } } },
+      "@/lib/flags": { HTPR_6817_SLACK_APP_FLAG: "htpr-6817-slack-app", isFeatureEnabled: async (_key, id) => { checked.push(id); return id === 6 || id === 985; } },
+      "@/lib/slack/userLink": { getSlackAutoLinkDisabledUserId: async () => null, resolveSlackActor: async () => { resolved++; return { ...actor, user: { ...actor.user, id: userId } }; } },
+    });
+    const instance = fixture(isSlackAppEnabled);
+    await instance.send({ type: "app_mention", channel: "C1", user: "U1", ts: "1.0", text: "<@BOT> create a task Fix login in Web" });
+    assert.equal(resolved, 1);
+    assert.ok(checked.includes(userId));
+    assert.equal(instance.dispatched[0].action, userId === 42 ? "create" : "chat");
+  });
 }
 
 for (const enabled of [false, true]) {

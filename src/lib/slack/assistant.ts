@@ -4,6 +4,17 @@ import type { SlackActor } from "@/lib/slack/userLink";
 
 const THREAD_TTL_SECONDS = 24 * 60 * 60;
 const MAX_HISTORY_CHARACTERS = 8_000;
+const APPEND_HISTORY_SCRIPT = `
+local history = (redis.call('HGET', KEYS[1], ARGV[1]) or '') .. ARGV[2]
+local start = math.max(1, #history - tonumber(ARGV[3]) + 1)
+-- Redis strings are bytes; skip continuation bytes to preserve UTF-8.
+while start <= #history and string.byte(history, start) >= 128 and string.byte(history, start) < 192 do
+  start = start + 1
+end
+redis.call('HSET', KEYS[1], ARGV[1], string.sub(history, start))
+redis.call('EXPIRE', KEYS[1], tonumber(ARGV[4]))
+return 1
+`;
 
 type ThreadIdentity = {
   installId: string;
@@ -61,8 +72,13 @@ export async function saveSlackChatTurn(
 ): Promise<void> {
   const redis = await getRedis();
   const key = threadKey({ ...input, installId: actor.installId, slackUserId: actor.slackUserId });
-  const [previousHistory] = await redis.hmget(key, `history:${actor.user.id}`);
-  const history = `${previousHistory ?? ""}\nUser: ${message}\nHypertask result: ${JSON.stringify(blocks)}`;
-  await redis.hset(key, `history:${actor.user.id}`, history.slice(-MAX_HISTORY_CHARACTERS));
-  await redis.expire(key, THREAD_TTL_SECONDS);
+  await redis.eval(
+    APPEND_HISTORY_SCRIPT,
+    1,
+    key,
+    `history:${actor.user.id}`,
+    `\nUser: ${message}\nHypertask result: ${JSON.stringify(blocks)}`,
+    MAX_HISTORY_CHARACTERS,
+    THREAD_TTL_SECONDS,
+  );
 }
