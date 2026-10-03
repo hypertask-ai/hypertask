@@ -3,9 +3,18 @@
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { parseCookies } from "nookies";
 import { useCallback } from "react";
-import { useSetRecoilState } from "@/lib/state";
-import { showGuestLoginAtom } from "@/store";
+import { useRecoilState, useSetRecoilState } from "@/lib/state";
+import {
+  currentProjectAtom,
+  selectedSettingsTeamIdAtom,
+  showGuestLoginAtom,
+} from "@/store";
 import { isGuestCookieUser } from "@/lib/demo/isGuestClient";
+import { useQueryClient } from "@tanstack/react-query";
+import toast from "react-hot-toast";
+import type { IProject } from "@/models/model";
+import { boardContextFromPath } from "@/lib/searchArchive";
+import { getAllProjectsMinimal } from "@/utils/api/global/apiHelpers/getAllProjectsMinimal";
 
 export type SettingsSectionId =
   | "general"
@@ -336,9 +345,12 @@ export const useSettingsNavigation = () => {
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const setShowGuestLogin = useSetRecoilState(showGuestLoginAtom);
+  const [currentProject, setCurrentProject] = useRecoilState(currentProjectAtom);
+  const setSettingsTeamId = useSetRecoilState(selectedSettingsTeamIdAtom);
+  const queryClient = useQueryClient();
 
   const openSettings = useCallback(
-    (section?: SettingsSectionId) => {
+    async (section?: SettingsSectionId) => {
       // HTPR-4890: guests get no settings — every entry point (rail, floating
       // gear, Ctrl+K, the "\" shortcut) routes through here, so this one guard
       // turns them all into a sign-in prompt.
@@ -346,10 +358,39 @@ export const useSettingsNavigation = () => {
         setShowGuestLogin(true);
         return;
       }
+      if (section?.startsWith("board-")) {
+        const projectId = boardContextFromPath(
+          pathname,
+          Number(searchParams?.get("id")) || currentProject?.id,
+        );
+        if (projectId) {
+          try {
+            let project = currentProject?.id === projectId ? currentProject : undefined;
+            if (!project) {
+              project = queryClient
+                .getQueryData<IProject[]>(["projectsAllMinimal"])
+                ?.find((board) => board.id === projectId);
+            }
+            if (!project) {
+              const projects = await queryClient.fetchQuery<IProject[]>({
+                queryKey: ["projectsAllMinimal"],
+                queryFn: () => getAllProjectsMinimal("ExtraMinimal"),
+              });
+              project = projects.find((board) => board.id === projectId);
+            }
+            if (!project?.teamId) throw new Error("Board not available");
+            setCurrentProject(project);
+            setSettingsTeamId(project.teamId);
+          } catch {
+            toast.error("Unable to open settings for this board");
+            return;
+          }
+        }
+      }
       rememberSettingsReturnTo(getCurrentPath(pathname, searchParams));
       router.push(section ? getSettingsPath(section) : SETTINGS_BASE_PATH);
     },
-    [pathname, router, searchParams, setShowGuestLogin],
+    [currentProject, pathname, queryClient, router, searchParams, setCurrentProject, setSettingsTeamId, setShowGuestLogin],
   );
 
   const closeSettings = useCallback(() => {
