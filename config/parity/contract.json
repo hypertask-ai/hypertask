@@ -245,13 +245,19 @@
     },
     {
       "id": "boards.manage",
-      "title": "Create, archive, invite to, and configure boards",
+      "title": "Create, rename, archive, invite to, and configure boards",
       "matches": {
-        "api": ["^(POST|PATCH) /api/mcp/projects$", "^(POST|PATCH) /api/mcp/projects/archive$", "^(GET|PUT|DELETE) /api/mcp/projects/\\[projectId\\]/instructions$", "^POST /api/mcp/projects/\\[projectId\\]/members$", "^POST /api/mcp/teams/\\[teamId\\]/boards$", "^PUT /api/mcp/projects/\\[projectId\\]/playbook$"],
-        "mcp": ["^hypertask_(create_board|project_admin|board_config)$"],
+        "api": ["^(POST|PATCH) /api/mcp/projects$", "^PATCH /api/mcp/projects/\\[projectId\\]$", "^(POST|PATCH) /api/mcp/projects/archive$", "^(GET|PUT|DELETE) /api/mcp/projects/\\[projectId\\]/instructions$", "^POST /api/mcp/projects/\\[projectId\\]/members$", "^POST /api/mcp/teams/\\[teamId\\]/boards$", "^PUT /api/mcp/projects/\\[projectId\\]/playbook$"],
+        "mcp": ["^hypertask_(create_board|rename_board|project_admin|board_config)$"],
         "cli": ["^project (create-board|archive|invite|instructions)( |$)"],
-        "ai_chat": ["^hypertask_(create_board|project_admin|board_config)$"],
-        "hyperai": ["^hypertask_(create_board|project_admin|board_config)$"]
+        "ai_chat": ["^hypertask_(create_board|rename_board|project_admin|board_config)$"],
+        "hyperai": ["^hypertask_(create_board|rename_board|project_admin|board_config)$"]
+      },
+      "planned": {
+        "api": { "issue": "https://app.hypertask.ai/detail/project-15/6846", "expires": "2026-10-31", "entries": ["PATCH /api/mcp/projects/[projectId]"] },
+        "mcp": { "issue": "https://app.hypertask.ai/detail/project-15/6846", "expires": "2026-10-31", "entries": ["hypertask_rename_board"] },
+        "ai_chat": { "issue": "https://app.hypertask.ai/detail/project-15/6846", "expires": "2026-10-31", "entries": ["hypertask_rename_board"] },
+        "hyperai": { "issue": "https://app.hypertask.ai/detail/project-15/6846", "expires": "2026-10-31", "entries": ["hypertask_rename_board"] }
       }
     },
     {
