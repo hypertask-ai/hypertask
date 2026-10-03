@@ -159,6 +159,14 @@ function conciseValue(value: unknown): unknown {
   return result
 }
 
+const RESOURCE_COLLECTION_KEYS = new Set([
+  'items', 'tasks', 'projects', 'boards', 'sections', 'columns', 'members', 'labels', 'customFields',
+  'views', 'pages', 'subPages', 'versions', 'skills', 'agents', 'connections', 'comments',
+  'documents', 'articles', 'related', 'relatedTasks', 'relations', 'subtasks', 'sub_tasks', 'children',
+  'assignees', 'attachments', 'timers', 'entries', 'reports', 'decision_requests', 'drafts',
+  'notifications', 'user_notifications', 'agent_notifications', 'agent_invocations', 'users',
+])
+
 export function formatToolResponse(
   text: string,
   format: 'concise' | 'detailed',
@@ -174,9 +182,10 @@ export function formatToolResponse(
   let hasMore = false
   let truncated = false
   let returnedRows = 0
-  // Bound collections, not nested write receipts or evidence passages.
-  function bound(value: unknown, depth = 0): unknown {
+  // Only resource collections are pageable; document nodes and configuration arrays are indivisible.
+  function bound(value: unknown, depth = 0, collection = true): unknown {
     if (Array.isArray(value)) {
+      if (!collection) return value
       const start = depth <= 1 && !serverPaginated ? offset : 0
       const rows = value.slice(start, start + limit)
       if (value.length > start + limit) {
@@ -184,10 +193,12 @@ export function formatToolResponse(
         truncated = true
       }
       if (depth <= 1) returnedRows = Math.max(returnedRows, rows.length)
-      return rows.map((row) => bound(row, depth + 1))
+      return rows.map((row) => bound(row, depth + 1, false))
     }
     if (!value || typeof value !== 'object') return value
-    return Object.fromEntries(Object.entries(value).map(([key, item]) => [key, bound(item, depth + 1)]))
+    return Object.fromEntries(Object.entries(value).map(([key, item]) => [key,
+      key === 'content' || key === 'descriptionJson' ? item : bound(item, depth + 1, RESOURCE_COLLECTION_KEYS.has(key)),
+    ]))
   }
   if (readOnly) data = bound(data)
   if (readOnly && format === 'concise') data = conciseValue(data)

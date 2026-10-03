@@ -233,6 +233,55 @@ test('concise response has stable ticket fields; detailed response retains full 
   assert.equal(ajv.validate(visible(selectMcpTools(legacy, true))[0].outputSchema, { wrong: true }), false)
 })
 
+test('detailed reads preserve complete JSON documents independently of collection limits and offsets', () => {
+  const document = { type: 'doc', attrs: { labels: Array.from({ length: 30 }, (_, id) => `Document label ${id}`) }, content: Array.from({ length: 30 }, (_, paragraph) => ({
+    type: 'paragraph', content: Array.from({ length: 25 }, (_, word) => ({
+      type: 'text', text: `Paragraph ${paragraph}, word ${word}`, marks: [{ type: 'bold' }],
+    })),
+  })) }
+  for (const source of [
+    { page: { id: 1, title: 'Full document', content: document } },
+    { tasks: [{ id: 1, title: 'Full task', descriptionJson: document }] },
+    { versions: [{ id: 1, content: document.content }] },
+  ]) {
+    for (const serverPaginated of [false, true]) {
+      const result = JSON.parse(formatToolResponse(JSON.stringify(source), 'detailed', true, 20, 0, serverPaginated))
+      assert.deepEqual(result.data, source)
+      assert.equal(result.pagination.has_more, false)
+      assert.equal(result.pagination.truncated, undefined)
+      assert.equal(result.pagination.guidance, undefined)
+    }
+  }
+  const page = { page: { id: 1, content: document } }
+  const offset = JSON.parse(formatToolResponse(JSON.stringify(page), 'detailed', true, 1, 10, false))
+  assert.deepEqual(offset.data, page)
+})
+
+test('detailed page dispatch bounds result collections without truncating their document nodes', async () => {
+  const document = { type: 'doc', content: Array.from({ length: 30 }, (_, id) => ({ type: 'paragraph', content: [{ type: 'text', text: `Paragraph ${id}` }] })) }
+  const pages = Array.from({ length: 25 }, (_, id) => ({ id, title: `Page ${id}`, content: document }))
+  const tools = selectMcpTools(legacy.map((tool) => ({ ...tool, execute: async () => JSON.stringify({ pages }) })), true)
+  const result = await rpc(tools, 'tools/call', { name: 'hypertask_pages', arguments: {
+    action: 'list', input: { project_id: 15 }, response_format: 'detailed', limit: 20, offset: 2,
+  } })
+  assert.notEqual(result.result.isError, true)
+  const output = result.result.structuredContent
+  assert.deepEqual(output, JSON.parse(result.result.content[0].text))
+  assert.deepEqual(output.data.pages, pages.slice(2, 22))
+  assert.equal(output.pagination.has_more, true)
+  assert.equal(output.pagination.next_offset, 22)
+  assert.equal(output.pagination.truncated, true)
+})
+
+test('read limits preserve non-collection arrays such as decision options and view filter payloads', () => {
+  const values = Array.from({ length: 30 }, (_, id) => `Value ${id}`)
+  const source = { decision_request: { id: 1, options: values }, view: { addedFilters: [{ searchPayload: values }] } }
+  const result = JSON.parse(formatToolResponse(JSON.stringify(source), 'detailed', true, 20, 10, false))
+  assert.deepEqual(result.data, source)
+  assert.equal(result.pagination.has_more, false)
+  assert.equal(result.pagination.truncated, undefined)
+})
+
 test('concise response retains semantic evidence, source identifiers and ticket tree relationships', () => {
   const source = { documents: [{ type: 'comment', taskId: 1234, commentId: 99, projectId: 15, ticketNumber: 'HTPR-1234', title: 'Checkout', content: 'Retries share the idempotency key.', uniqueIndex: 1234 }] }
   const semantic = JSON.parse(formatToolResponse(JSON.stringify(source), 'concise', true, 20, 0, false))
@@ -273,6 +322,28 @@ test('response dispatcher forwards filters, renamed parameters and supported pag
   const invalid = await executeToolResult(toolNamed(tools, 'hypertask_views'), { action: 'get', input: { view_id: -1 } }, 'fixture-token')
   assert.equal(invalid.isError, true)
   assert.match(invalid.content[0].text, /input.view_id/)
+})
+
+test('read limits still bound resource collections and nested ticket relationships in both formats', () => {
+  const rows = Array.from({ length: 30 }, (_, id) => ({ id, title: `Resource ${id}` }))
+  for (const format of ['concise', 'detailed']) {
+    for (const key of ['items', 'tasks', 'projects', 'pages', 'versions', 'comments', 'documents', 'customFields', 'decision_requests', 'entries', 'user_notifications', 'agent_notifications', 'agent_invocations']) {
+      const result = JSON.parse(formatToolResponse(JSON.stringify({ [key]: rows }), format, true, 20, 5, false))
+      assert.equal(result.data[key].length, 20, `${format}/${key}`)
+      assert.equal(result.data[key][0].id, 5)
+      assert.equal(result.pagination.has_more, true)
+      assert.equal(result.pagination.next_offset, 25)
+    }
+    const raw = JSON.parse(formatToolResponse(JSON.stringify(rows), format, true, 20, 5, false))
+    assert.equal(raw.data.length, 20)
+    assert.equal(raw.data[0].id, 5)
+    const nested = JSON.parse(formatToolResponse(JSON.stringify({ tree: { id: 1, children: rows } }), format, true, 20, 5, false))
+    assert.equal(nested.data.tree.children.length, 20)
+    assert.equal(nested.data.tree.children[0].id, 0)
+    assert.equal(nested.pagination.has_more, false)
+    assert.equal(nested.pagination.truncated, true)
+    assert.equal(nested.pagination.next_offset, undefined)
+  }
 })
 
 test('pagination bounds reads, preserves cursor continuation and guides targeted searches', () => {
