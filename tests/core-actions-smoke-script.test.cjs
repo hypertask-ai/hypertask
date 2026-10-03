@@ -582,3 +582,72 @@ test("an invalid report destination names the attempted section", async () => {
     global.fetch = originalFetch;
   }
 });
+
+for (const action of [
+  "inbox add task", "inbox list added task", "inbox task detail",
+  "inbox task-page remove", "inbox verify task-page removal",
+  "inbox undo task-page removal", "inbox verify task-page undo",
+  "inbox row archive", "inbox verify row archive", "inbox undo row archive",
+  "inbox verify row undo", "inbox cleanup delete",
+]) {
+  test(`${action} fails immediately, preserves its name, and never requests rollback`, async () => {
+    const originalFetch = global.fetch;
+    let calls = 0;
+    const failure = {
+      ok: false, kind: "application", action, status: 400,
+      detail: "This task is not in inbox", steps: [], cleanup: [],
+    };
+    global.fetch = fixtureFetch({
+      probeResult: failure,
+      onRequest: (url) => { if (url.pathname === "/api/ops/core-actions-smoke") calls += 1; },
+    });
+    try {
+      const { run, shouldRollback } = await import(scriptUrl);
+      const result = await run({ sleep: async () => assert.fail("inbox failures must not retry into green") });
+      assert.equal(calls, 1);
+      assert.deepEqual(result, failure);
+      assert.equal(shouldRollback({ ...result, rollbackEligible: true }, "push"), false);
+    } finally {
+      global.fetch = originalFetch;
+    }
+  });
+}
+
+test("a core cleanup failure following inbox steps is also alert-only", async () => {
+  const { shouldRollback } = await import(scriptUrl);
+  assert.equal(shouldRollback({
+    kind: "application", rollbackEligible: true, action: "cleanup comment delete",
+    steps: ["inbox add task"],
+  }, "push"), false);
+});
+
+test("an inbox failure alerts the parent and incident with the exact broken step", async () => {
+  const originalFetch = global.fetch;
+  const comments = [];
+  global.fetch = async (input, init = {}) => {
+    const url = new URL(String(input));
+    const body = init.body ? JSON.parse(init.body) : null;
+    if (url.pathname === "/api/mcp/tasks") return Response.json({ tasks: [{ id: 777,
+      title: "[INCIDENT] Core-action smoke: inbox task-page remove" }] });
+    if (url.pathname === "/api/mcp/comments") {
+      comments.push(body);
+      return Response.json({ success: true });
+    }
+    throw new Error(`Unexpected report request ${url.pathname}`);
+  };
+  try {
+    const { report } = await import(scriptUrl);
+    await report({ kind: "application", action: "inbox task-page remove", status: 400,
+      detail: "This task is not in inbox" });
+    assert.equal(comments.length, 2);
+    assert.ok(comments.some((body) => body.ticket_number === "HTPR-6225"));
+    assert.ok(comments.some((body) => body.task_id === 777));
+    for (const body of comments) {
+      assert.match(body.text, /inbox task-page remove/);
+      assert.match(body.text, /not in inbox/);
+      assert.match(body.text, /Rollback not requested/);
+    }
+  } finally {
+    global.fetch = originalFetch;
+  }
+});

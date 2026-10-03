@@ -186,6 +186,9 @@ export async function runCoreActionsSmoke(options: {
   const knownCommentIds = new Set<number>();
   const ownedCommentIds = new Set<number>();
   let cleaningUp = false;
+  let inboxStarted = false;
+  const baselineInboxIds = new Set<number>();
+  const ownedInboxIds = new Set<number>();
 
   const markerText = () =>
     `<p data-core-smoke-ids="${[...ownedCommentIds].sort((a, b) => a - b).join(",")}">${marker} User and agent mention check: <span data-type="mention" class="mention" data-id="${escapeHtml(fixture.userDisplayName)}" data-label="name-${fixture.userId}" uniqueindex="" projectid="">${escapeHtml(fixture.userDisplayName)}</span> <span data-type="mention" class="mention" data-id="${escapeHtml(fixture.agentDisplayName)}" data-label="agent-${escapeHtml(fixture.agentId)}">${escapeHtml(fixture.agentDisplayName)}</span></p>`;
@@ -344,6 +347,63 @@ export async function runCoreActionsSmoke(options: {
       );
     }
     return comments;
+  };
+
+  const getInbox = async (action: string, archived = false) => {
+    const { data } = await request(
+      action,
+      archived
+        ? `/api/notifications/getAllInbox?userId=${fixture.userId}&projectId=${fixture.projectId}`
+        : `/api/notifications/getAll?userId=${fixture.userId}`,
+      { cache: "no-store" },
+    );
+    const rows = archived ? data : data?.notifications;
+    if (!Array.isArray(rows)) {
+      throw new SmokeFailure("application", action, 200, "response did not contain an inbox array");
+    }
+    if (inboxStarted) {
+      for (const row of rows) {
+        const id = Number(row?.id);
+        if (
+          Number.isSafeInteger(id) && id > 0 &&
+          Number(row?.taskId) === fixture.taskId &&
+          Number(row?.projectId) === fixture.projectId &&
+          Number(row?.userId) === fixture.userId && !row?.agentId &&
+          Number(row?.fromUserId) === fixture.userId &&
+          row?.type === "TaskMovedToInbox" && !baselineInboxIds.has(id)
+        ) ownedInboxIds.add(id);
+      }
+    }
+    return rows;
+  };
+
+  const verifyInbox = async (action: string, notificationId: number, present: boolean) => {
+    const rows = await getInbox(action);
+    const found = rows.some((row: any) => Number(row?.taskId) === fixture.taskId);
+    const exact = rows.some((row: any) => Number(row?.id) === notificationId);
+    if (present ? !exact : found) {
+      throw new SmokeFailure("application", action, 200,
+        present ? "smoke notification was missing from inbox" : "smoke task remained in inbox");
+    }
+    steps.push(action);
+  };
+
+  const toggleInbox = async (action: string, notification: any, status: "Archive" | "Normal") => {
+    const { data } = await request(action,
+      `/api/notifications/markAsDone?id=${notification.id}&taskId=${fixture.taskId}&userId=${fixture.userId}&type=${notification.type}`,
+      { method: "GET" },
+    );
+    if (
+      data?.success === false || typeof data?.error === "string" ||
+      (typeof data?.message === "string" && /not in (?:the )?inbox/i.test(data.message)) ||
+      Number(data?.id) !== Number(notification.id) ||
+      Number(data?.taskId) !== fixture.taskId ||
+      Number(data?.userId) !== fixture.userId || data?.status !== status ||
+      (status === "Normal" && data?.archivedAt !== null)
+    ) {
+      throw new SmokeFailure("application", action, 200, safeDetail(data, true));
+    }
+    steps.push(action);
   };
 
   const move = async (
@@ -600,6 +660,30 @@ export async function runCoreActionsSmoke(options: {
   };
 
   let failure: SmokeFailure | null = null;
+  const recordCleanupFailure = (error: unknown) => {
+    const cleanupFailure = toSmokeFailure(error, "cleanup");
+    if (!failure) {
+      failure = cleanupFailure;
+    } else if (
+      failure.kind === "application" ||
+      cleanupFailure.kind === "unrunnable"
+    ) {
+      failure = new SmokeFailure(
+        failure.kind,
+        failure.action,
+        failure.status,
+        `${failure.detail}; cleanup failed at ${cleanupFailure.action}: ${cleanupFailure.detail}`,
+      );
+    } else {
+      failure = new SmokeFailure(
+        cleanupFailure.kind,
+        cleanupFailure.action,
+        cleanupFailure.status,
+        `${cleanupFailure.detail}; followed ${failure.action}: ${failure.detail}`,
+      );
+    }
+    cleanup.push(`failed: ${cleanupFailure.action}`);
+  };
   try {
     await reconcile();
 
@@ -770,6 +854,61 @@ export async function runCoreActionsSmoke(options: {
       );
     }
     steps.push("search");
+
+    const beforeInbox = await getInbox("inbox baseline list");
+    if (beforeInbox.some((row: any) => Number(row?.taskId) === fixture.taskId)) {
+      throw new SmokeFailure("unrunnable", "inbox baseline", 200, "fixture already has an active inbox notification");
+    }
+    for (const row of await getInbox("inbox baseline archive", true)) {
+      baselineInboxIds.add(Number(row?.id));
+    }
+    inboxStarted = true;
+    const added = await request("inbox add task", "/api/notifications/moveTaskToInbox", {
+      method: "POST",
+      body: JSON.stringify({ taskId: fixture.taskId, projectId: fixture.projectId, userId: fixture.userId }),
+    });
+    if (added.data?.success === false || added.data?.error || added.data?.message !== "Success") {
+      throw new SmokeFailure("application", "inbox add task", 200, safeDetail(added.data, true));
+    }
+    steps.push("inbox add task");
+    const inboxRows = await getInbox("inbox list added task");
+    const notification = inboxRows.find((row: any) => ownedInboxIds.has(Number(row?.id)));
+    if (!notification) {
+      throw new SmokeFailure("application", "inbox list added task", 200, "smoke notification was missing from inbox");
+    }
+    steps.push("inbox list added task");
+
+    // getTask uses fetchTaskDetail, the same controller as the detail page SSR.
+    // Checking only markAsDone misses the UI's earlier 'not in inbox' guard.
+    const identity = await getTask("inbox task identity");
+    if (!Number.isSafeInteger(identity.uniqueIndex) || identity.uniqueIndex <= 0) {
+      throw new SmokeFailure("application", "inbox task detail", 200, "fixture ticket number was missing");
+    }
+    const detail = await request("inbox task detail",
+      `/api/tasks/getTask?project=project-${fixture.projectId}&uniqueIndex=${identity.uniqueIndex}`,
+      { cache: "no-store" });
+    const detailNotification = detail.data?.notifications?.[0];
+    if (
+      Number(detail.data?.id) !== fixture.taskId ||
+      Number(detail.data?.projectId) !== fixture.projectId ||
+      !(Number(detail.data?._count?.notifications) > 0) ||
+      Number(detailNotification?.id) !== Number(notification.id)
+    ) {
+      throw new SmokeFailure("application", "inbox task detail", 200, "task detail would report not in inbox");
+    }
+    steps.push("inbox task detail");
+    await toggleInbox("inbox task-page remove", detailNotification, "Archive");
+    await verifyInbox("inbox verify task-page removal", Number(notification.id), false);
+    await toggleInbox("inbox undo task-page removal", notification, "Normal");
+    await verifyInbox("inbox verify task-page undo", Number(notification.id), true);
+    const row = (await getInbox("inbox row archive target")).find((item: any) => Number(item?.id) === Number(notification.id));
+    if (!row) {
+      throw new SmokeFailure("application", "inbox row archive", 200, "smoke notification was missing from inbox");
+    }
+    await toggleInbox("inbox row archive", row, "Archive");
+    await verifyInbox("inbox verify row archive", Number(notification.id), false);
+    await toggleInbox("inbox undo row archive", row, "Normal");
+    await verifyInbox("inbox verify row undo", Number(notification.id), true);
   } catch (error) {
     failure = toSmokeFailure(error, "core actions");
   } finally {
@@ -777,6 +916,40 @@ export async function runCoreActionsSmoke(options: {
     if (!cleanupAuthorized) {
       cleanup.push("skipped: this run did not own fixture state");
     } else {
+      if (inboxStarted) {
+        try {
+          // Recover an id even if add committed but its response was lost.
+          // Delete by owned id only, never by taskId or the user's whole inbox.
+          const discovery = await Promise.allSettled([
+            getInbox("inbox cleanup discover active"),
+            getInbox("inbox cleanup discover archived", true),
+          ]);
+          if (ownedInboxIds.size > 0) {
+            const deleted = await request("inbox cleanup delete", "/api/notifications/(un)archiveBulk", {
+              method: "POST",
+              body: JSON.stringify({
+                notificationIds: [...ownedInboxIds].map((notificationId) => ({ notificationId, userId: fixture.userId })),
+                status: "Deleted",
+              }),
+            });
+            if (deleted.data?.archivedCount !== ownedInboxIds.size) {
+              throw new SmokeFailure("application", "inbox cleanup delete", 200, "owned notifications were not deleted");
+            }
+          }
+          const remaining = [
+            ...await getInbox("inbox cleanup verify active"),
+            ...await getInbox("inbox cleanup verify archived", true),
+          ].some((row: any) => ownedInboxIds.has(Number(row?.id)));
+          if (remaining) {
+            throw new SmokeFailure("application", "inbox cleanup verify", 200, "smoke notifications remained after cleanup");
+          }
+          const discoveryFailure = discovery.find((result) => result.status === "rejected");
+          if (discoveryFailure?.status === "rejected") throw discoveryFailure.reason;
+          cleanup.push("inbox deleted smoke notifications");
+        } catch (error) {
+          recordCleanupFailure(error);
+        }
+      }
       try {
         if (markerId === null) {
           const comments = await getComments("cleanup marker discovery");
@@ -841,28 +1014,7 @@ export async function runCoreActionsSmoke(options: {
           );
         }
       } catch (error) {
-        const cleanupFailure = toSmokeFailure(error, "cleanup");
-        if (!failure) {
-          failure = cleanupFailure;
-        } else if (
-          failure.kind === "application" ||
-          cleanupFailure.kind === "unrunnable"
-        ) {
-          failure = new SmokeFailure(
-            failure.kind,
-            failure.action,
-            failure.status,
-            `${failure.detail}; cleanup failed at ${cleanupFailure.action}: ${cleanupFailure.detail}`,
-          );
-        } else {
-          failure = new SmokeFailure(
-            cleanupFailure.kind,
-            cleanupFailure.action,
-            cleanupFailure.status,
-            `${cleanupFailure.detail}; followed ${failure.action}: ${failure.detail}`,
-          );
-        }
-        cleanup.push(`failed: ${cleanupFailure.action}`);
+        recordCleanupFailure(error);
       }
     }
   }

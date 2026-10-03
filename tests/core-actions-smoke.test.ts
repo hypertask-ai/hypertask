@@ -358,6 +358,7 @@ function fakeApp(
     }>,
     nextCommentId: 100,
     taskReads: 0,
+    notifications: [] as any[],
   };
 
   const taskBody = () => ({
@@ -365,6 +366,7 @@ function fakeApp(
     projectId: fixture.projectId,
     userId: fixture.userId,
     title: CORE_SMOKE_TASK_TITLE,
+    uniqueIndex: 1,
     sectionId: state.sectionId,
     section: state.section,
     ranking: state.ranking,
@@ -568,6 +570,33 @@ function fakeApp(
         status: 200,
       });
     }
+    if (url.pathname === "/api/notifications/moveTaskToInbox") {
+      state.notifications.push({ id: 201, taskId: fixture.taskId, projectId: fixture.projectId,
+        userId: fixture.userId, fromUserId: fixture.userId, type: "TaskMovedToInbox", status: "Normal", archivedAt: null });
+      return json({ message: "Success" });
+    }
+    if (url.pathname === "/api/notifications/getAll") {
+      return json({ notifications: state.notifications.filter((row) => row.status === "Normal") });
+    }
+    if (url.pathname === "/api/notifications/getAllInbox") {
+      return json(state.notifications.filter((row) => row.status === "Archive"));
+    }
+    if (url.pathname === "/api/tasks/getTask") {
+      const notifications = state.notifications.filter((row) => row.status === "Normal");
+      return json({ ...taskBody(), notifications, _count: { notifications: notifications.length } });
+    }
+    if (url.pathname === "/api/notifications/markAsDone") {
+      const row = state.notifications.find((item) => item.id === Number(url.searchParams.get("id")));
+      row.status = row.status === "Normal" ? "Archive" : "Normal";
+      row.archivedAt = row.status === "Normal" ? null : "2026-10-03T00:00:00Z";
+      return json(row);
+    }
+    if (url.pathname === "/api/notifications/(un)archiveBulk") {
+      for (const row of state.notifications) {
+        if (body.notificationIds.some((item: any) => item.notificationId === row.id)) row.status = body.status;
+      }
+      return json({ archivedCount: body.notificationIds.length });
+    }
     return json({ message: `Unhandled ${url.pathname}` }, 500);
   };
 
@@ -594,6 +623,17 @@ test("runs every core action and restores the fixture", async () => {
     "move task",
     "assign and unassign",
     "search",
+    "inbox add task",
+    "inbox list added task",
+    "inbox task detail",
+    "inbox task-page remove",
+    "inbox verify task-page removal",
+    "inbox undo task-page removal",
+    "inbox verify task-page undo",
+    "inbox row archive",
+    "inbox verify row archive",
+    "inbox undo row archive",
+    "inbox verify row undo",
   ]);
   assert.equal(app.state.sectionId, fixture.baseSectionId);
   assert.equal(app.state.ranking, "rank-original");

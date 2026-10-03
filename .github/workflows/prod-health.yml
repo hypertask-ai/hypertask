@@ -847,6 +847,8 @@ jobs:
           persist-credentials: false
 
       # HTPR-6258: core-actions runs as the dedicated Health Check user.
+      # HTPR-6894: inbox add, detail removal, row archive and undo fail on the
+      # first broken step. The script keeps inbox failures alert-only.
       - name: Run the logged-in core actions and restore the fixture
         id: probe
         continue-on-error: true
@@ -909,7 +911,7 @@ jobs:
       - name: Keep failed monitoring visible
         if: ${{ !cancelled() && steps.probe.outcome == 'failure' }}
         run: |
-          echo "::error::Core-actions smoke did not pass"
+          echo "::error::Core-actions smoke, including inbox routines, did not pass"
           exit 1
 
   provision-core-actions:
