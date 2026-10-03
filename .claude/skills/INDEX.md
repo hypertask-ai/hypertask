@@ -26,6 +26,8 @@ Read the "when to load" column, open that SKILL.md, and follow it, including its
 
 `prototype` is the `/prototype` slash command, not a `/ship` step. When a change touches auth, billing, or user data, `fix-bug` also reads `.claude/skills/fix-bug/reference/security-findings.md`.
 
+`wireframe` runs only when Valentin asks for a wireframe on the ticket or in chat: it builds the options from the live app (Ctrl+K for menus, no invented UI), puts them on the ticket as a page and asks one `Question:`. Without that request, build behind a flag as usual.
+
 ## The flag rule
 
 A real bug fix restores behaviour that used to work or was clearly intended;
