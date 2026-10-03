@@ -60,7 +60,8 @@ Repo skills live in the app repo at `.claude/skills/`; their index is `.claude/s
   - **In Progress** when you claim and whenever you go back to fixing.
   - **AI Review** as soon as the PR is open, until merged.
   - **Done** once the merge is live and QA passed with evidence on the ticket.
-  - **Valentin Review** only for a flagged feature that needs his yes, with one `Question:` comment. Abandon the remaining gates with that waiting reason per step 3, and say so.
+  - **Valentin Review** only for a real decision only he can make (a wireframe he asked for, money, login and access, security, something nobody can undo), with one `Question:` comment. Abandon the remaining gates with that waiting reason per step 3, and say so.
+  - **Never Valentin Review to ask about a flag** (Valentin, 2026-10-03: "you cannot put stuff in Valentin review to ask me to turn on the flag. I decide when to turn on the flag"). A flagged ticket goes to **Done** once its live QA passes on Owner + QA. Do not ask him to switch the flag on, in a comment or in chat; he switches it on the flags page when he wants.
   Follow-up work becomes its own ticket.
 - **The ticket tells the whole story; comments are for people** (Valentin, 2026-10-01: "comments are for humans and agent chatter goes into the agent chatter").
   - **Comments** only when you speak to a person: the claim, a `Question:` for Valentin, the QA verdict. Plain language (pospeak), bold first sentence, never notes to yourself.
