@@ -1,3 +1,4 @@
+import { reportError } from "@/lib/errors/reportError";
 import { generateText } from "ai";
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
@@ -271,6 +272,13 @@ ${formattedComments}`,
 
     return NextResponse.json({ questions });
   } catch (error) {
+    await reportError({
+      message: error instanceof Error ? error.message : "AI request failed",
+      stack: error instanceof Error ? error.stack : undefined,
+      url: "/api/ai/task-questions",
+      source: "handled",
+      extra: { stage: "empty-questions-fallback" },
+    });
     console.error("[ai/task-questions] failed:", error);
     return NextResponse.json({ questions: [] });
   }

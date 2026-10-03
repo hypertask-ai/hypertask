@@ -1,3 +1,4 @@
+import { reportError } from "@/lib/errors/reportError";
 import { NextRequest, NextResponse } from "next/server";
 import { generateText } from "ai";
 import { z } from "zod";
@@ -119,6 +120,13 @@ export async function POST(request: NextRequest) {
   } catch (error) {
     // Log the real error server-side, but never echo raw exception text back
     // to the caller - same as the cookie route (tiptap-forwardslash/route.ts).
+    await reportError({
+      message: error instanceof Error ? error.message : "AI request failed",
+      stack: error instanceof Error ? error.stack : undefined,
+      url: "/api/mcp/ai/improve",
+      source: "handled",
+      extra: { stage: "request" },
+    });
     console.error("[mcp/ai/improve] error", errorMessage(error));
     return NextResponse.json(
       { success: false, error: "An internal error occurred. Please try again later." },

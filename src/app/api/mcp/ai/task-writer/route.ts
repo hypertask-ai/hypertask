@@ -1,3 +1,4 @@
+import { reportError } from "@/lib/errors/reportError";
 import { NextRequest, NextResponse } from "next/server";
 import { generateText } from "ai";
 import { z } from "zod";
@@ -150,6 +151,13 @@ export async function POST(request: NextRequest) {
         { status: 403 }
       );
     }
+    await reportError({
+      message: error instanceof Error ? error.message : "AI request failed",
+      stack: error instanceof Error ? error.stack : undefined,
+      url: "/api/mcp/ai/task-writer",
+      source: "handled",
+      extra: { stage: "request" },
+    });
     console.error("[mcp/ai/task-writer] error", error);
     return NextResponse.json(
       { success: false, error: errorMessage(error) },

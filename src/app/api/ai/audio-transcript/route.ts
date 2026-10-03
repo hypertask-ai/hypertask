@@ -1,3 +1,4 @@
+import { reportError } from "@/lib/errors/reportError";
 import { NextRequest, NextResponse } from "next/server";
 import { generateText } from "ai";
 import { z } from "zod";
@@ -167,13 +168,20 @@ export async function POST(request: NextRequest) {
 
     const encoder = new TextEncoder();
     const stream = new ReadableStream<Uint8Array>({
-      start(controller) {
+      async start(controller) {
         try {
           // One SSE payload: the client inserts the full transcript in a single
           // editor operation instead of animating word-by-word (HTPR-5691).
           const normalized = normalizeDictationTranscriptForSse(transcript);
           controller.enqueue(encoder.encode(`data: ${normalized}\n\n`));
         } catch (error) {
+          await reportError({
+            message: error instanceof Error ? error.message : "AI request failed",
+            stack: error instanceof Error ? error.stack : undefined,
+            url: "/api/ai/audio-transcript",
+            source: "handled",
+            extra: { stage: "stream" },
+          });
           controller.enqueue(
             encoder.encode(
               `event: error\ndata: ${JSON.stringify({ content: errorMessage(error) })}\n\n`,
@@ -190,6 +198,13 @@ export async function POST(request: NextRequest) {
     if (error instanceof DictationAudioTooLargeError) {
       return NextResponse.json({ error: error.message }, { status: 413 });
     }
+    await reportError({
+      message: error instanceof Error ? error.message : "AI request failed",
+      stack: error instanceof Error ? error.stack : undefined,
+      url: "/api/ai/audio-transcript",
+      source: "handled",
+      extra: { stage: "request" },
+    });
     console.error("[ai/audio-transcript] error", error);
     if (body.improve) {
       return NextResponse.json({ error: String(errorMessage(error)) }, { status: 500 });

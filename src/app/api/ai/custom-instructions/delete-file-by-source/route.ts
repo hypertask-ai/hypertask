@@ -1,3 +1,4 @@
+import { reportError } from "@/lib/errors/reportError";
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 
@@ -34,6 +35,13 @@ export async function DELETE(request: NextRequest) {
 
     return NextResponse.json(result, { status: 200 });
   } catch (error) {
+    await reportError({
+      message: error instanceof Error ? error.message : "AI request failed",
+      stack: error instanceof Error ? error.stack : undefined,
+      url: "/api/ai/custom-instructions/delete-file-by-source",
+      source: "handled",
+      extra: { stage: "delete" },
+    });
     console.error("[ai/custom-instructions/delete-file-by-source] error:", error);
     return NextResponse.json(
       { error: errorMessage(error) },

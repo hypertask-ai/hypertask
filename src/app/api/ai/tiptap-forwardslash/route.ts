@@ -1,3 +1,4 @@
+import { reportError } from "@/lib/errors/reportError";
 import { NextRequest, NextResponse } from "next/server";
 import { generateText } from "ai";
 
@@ -107,6 +108,13 @@ export async function POST(request: NextRequest) {
       { status: 200 }
     );
   } catch (error) {
+    await reportError({
+      message: error instanceof Error ? error.message : "AI request failed",
+      stack: error instanceof Error ? error.stack : undefined,
+      url: "/api/ai/tiptap-forwardslash",
+      source: "handled",
+      extra: { stage: "request" },
+    });
     console.error("[ai/tiptap-forwardslash] error", errorMessage(error));
     return NextResponse.json(
       { error: "An internal error occurred. Please try again later." },

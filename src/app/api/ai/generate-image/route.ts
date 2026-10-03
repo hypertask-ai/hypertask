@@ -1,3 +1,4 @@
+import { reportError } from "@/lib/errors/reportError";
 import { NextRequest, NextResponse } from "next/server";
 import { generateImage, generateText } from "ai";
 import { z } from "zod";
@@ -156,6 +157,13 @@ export async function POST(request: NextRequest) {
           { status: 429 },
         );
       }
+      await reportError({
+        message: error instanceof Error ? error.message : "AI request failed",
+        stack: error instanceof Error ? error.stack : undefined,
+        url: "/api/ai/generate-image",
+        source: "handled",
+        extra: { stage: "image-fallback" },
+      });
       console.error("[ai/generate-image] unavailable:", error);
     }
 
@@ -204,6 +212,13 @@ export async function POST(request: NextRequest) {
       { status: 200 }
     );
   } catch (error) {
+    await reportError({
+      message: error instanceof Error ? error.message : "AI request failed",
+      stack: error instanceof Error ? error.stack : undefined,
+      url: "/api/ai/generate-image",
+      source: "handled",
+      extra: { stage: "request" },
+    });
     console.error("[ai/generate-image] error:", error);
     return NextResponse.json(
       { error: errorMessage(error) },

@@ -1,3 +1,4 @@
+import { reportError } from "@/lib/errors/reportError";
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 
@@ -118,6 +119,13 @@ async function withUser(handler: (userId: number) => Promise<NextResponse>) {
         { status: 404 },
       );
     }
+    await reportError({
+      message: error instanceof Error ? error.message : "AI request failed",
+      stack: error instanceof Error ? error.stack : undefined,
+      url: "/api/ai/project/memory",
+      source: "handled",
+      extra: { stage: "request" },
+    });
     console.error("Board memory request failed", error);
     return NextResponse.json({ error: "Request failed" }, { status: 500 });
   }

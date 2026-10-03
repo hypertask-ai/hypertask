@@ -1,3 +1,4 @@
+import { reportError } from "@/lib/errors/reportError";
 import { NextRequest, NextResponse } from "next/server";
 import { generateObject } from "ai";
 import { z } from "zod";
@@ -369,6 +370,13 @@ export async function POST(request: NextRequest) {
       };
     } catch (error) {
       if (request.signal.aborted) throw error;
+      await reportError({
+        message: error instanceof Error ? error.message : "AI request failed",
+        stack: error instanceof Error ? error.stack : undefined,
+        url: "/api/ai/generate-board",
+        source: "handled",
+        extra: { stage: "sample-board-fallback" },
+      });
       console.error("[ai/generate-board] falling back to sample board", error);
       const project = await createSampleBoard({ user, team });
       return {
