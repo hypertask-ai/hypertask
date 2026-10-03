@@ -514,7 +514,7 @@ test("UI create updates the automatic suggestion until edited and submits the ov
   }
 });
 
-function detailPage({ enabled = true, task = { id: 101, projectId: 20, uniqueIndex: 7 } } = {}) {
+function detailPage({ enabled = true, task = { id: 101, projectId: 20, uniqueIndex: 7 }, projectId = 15, userId = 6 } = {}) {
   const calls = [];
   const detail = lookups().detail;
   const page = load("src/app/detail/[...slug]/page.tsx", {
@@ -524,16 +524,65 @@ function detailPage({ enabled = true, task = { id: 101, projectId: 20, uniqueInd
       findTaskByTicketNumber: async (...args) => { calls.push(["lookup", ...args]); return task; },
       fetchTaskDetail: async () => null, fetchCommentsForSlug: async () => [], findTaskNumberAlias: async () => null,
     },
-    "@/lib/auth/serverUser": { requireServerCookieUser: async () => ({ id: 6 }) },
+    "@/lib/auth/serverUser": { requireServerCookieUser: async () => ({ id: userId }) },
     "@/lib/flags": { HTPR_6868_TICKET_PREFIX_FLAG: flagKey, isFeatureEnabled: async (key, id) => { calls.push(["flag", key, id]); return enabled; } },
     "next/navigation": { redirect: url => { throw new Error(`REDIRECT ${url}`); } },
     "@/lib/prisma": {}, "@/lib/contexts/TaskDetail/TaskProvider": {}, "@/lib/contexts/TaskDetail/FollowersProvider": {},
     "@/utils/helperFunctions/TaskDetail": {}, "@/utils/controllers/users/fetch_preferences": { fetchUserPreferenceController: async () => ({}) },
     "@/utils/controllers/tasks/markRead": {}, "@/utils/controllers/comments/readReceipts": {}, "@/lib/agentRuns/service": {},
     "../../unauthorized/page": { __esModule: true, default: "Unauthorized" },
-  }).default;
-  return { calls, page: identifier => page({ params: Promise.resolve({ slug: ["project-15", identifier] }), searchParams: Promise.resolve({}) }) };
+  });
+  const props = identifier => ({ params: Promise.resolve({ slug: [`project-${projectId}`, identifier] }), searchParams: Promise.resolve({}) });
+  return { calls, page: identifier => page.default(props(identifier)), metadata: identifier => page.generateMetadata(props(identifier)) };
 }
+
+test("production: prefixed ticket URLs pass the proxy before page flag and access checks", async () => {
+  const { NextRequest } = require("next/server");
+  const proxy = load("src/proxy.ts", {
+    "next/server": require("next/server"),
+    "./utils/edgeHelpers": { isValidUser: () => ({ isValid: true, user: { id: 985, UserSetting: { onboardingTourStatus: true } } }) },
+    "./utils/serverActions": {},
+    "./utils/helperFunctions/helperFunctions": {},
+    "@/lib/auth/safeReturnTo": {},
+    "@/lib/auth/sessionEdge": { verifySessionEdge: async () => ({ id: 985 }) },
+    "@/lib/auth/cookieIdentity": {},
+    "@/lib/routing/detailWithoutTicket": load("src/lib/routing/detailWithoutTicket.ts"),
+    "@/lib/tutorial/keyboardShortcutTutorial": { isKeyboardShortcutTutorialPath: () => false, hasKeyboardShortcutTutorialQuery: () => false },
+  }).default;
+  for (const identifier of ["QASA-33", "qasa-33", "QaSa-33", "ZZZZ-33", "33"]) {
+    const response = await proxy(new NextRequest(`https://app.hypertask.ai/detail/project-7049/${identifier}`, {
+      headers: { cookie: "nookies_user=mock; ht_session=mock" },
+    }));
+    assert.equal(response.status, 200, `${identifier} must reach the page, not redirect to the board`);
+    assert.equal(response.headers.get("location"), null);
+    assert.equal(response.headers.get("x-middleware-next"), "1");
+  }
+  const malformed = await proxy(new NextRequest("https://app.hypertask.ai/detail/project-7049/abc"));
+  assert.equal(malformed.status, 307);
+  assert.equal(malformed.headers.get("location"), "https://app.hypertask.ai/project?id=7049");
+
+  for (const identifier of ["QASA-33", "qasa-33", "QaSa-33"]) {
+    const on = detailPage({ projectId: 7049, userId: 985, task: { id: 101, projectId: 7049, uniqueIndex: 33 } });
+    await Promise.all([
+      assert.rejects(on.page(identifier), /REDIRECT \/detail\/project-7049\/33/),
+      on.metadata(identifier).then(metadata => assert.deepEqual(metadata, { title: "Hypertask" })),
+    ]);
+    assert.deepEqual(on.calls, [["flag", flagKey, 985], ["lookup", identifier, 985, 7049]]);
+    const off = detailPage({ enabled: false, projectId: 7049, userId: 985 });
+    await assert.rejects(off.page(identifier), /REDIRECT \/project\?id=7049/);
+    assert.deepEqual(off.calls, [["flag", flagKey, 985]]);
+  }
+  for (const identifier of ["ZZZZ-33", "QASA-33"]) {
+    const unavailable = detailPage({ task: null, projectId: 7049, userId: 985 });
+    assert.equal((await unavailable.page(identifier)).type, "Unauthorized");
+    assert.deepEqual(unavailable.calls, [["flag", flagKey, 985], ["lookup", identifier, 985, 7049]]);
+  }
+  for (const enabled of [false, true]) {
+    const numeric = detailPage({ enabled, projectId: 7049, userId: 985 });
+    assert.equal((await numeric.page("33")).type, "Unauthorized");
+    assert.deepEqual(numeric.calls, []);
+  }
+});
 
 test("review: detail URLs check the server flag before resolving and redirecting", async () => {
   for (const identifier of ["OLD-123", "old-123", "OlD-123"]) {

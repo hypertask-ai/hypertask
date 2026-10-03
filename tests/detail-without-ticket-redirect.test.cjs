@@ -19,8 +19,24 @@ test("detail URLs without a ticket number go to their board", () => {
 test("real ticket URLs and other routes pass through", () => {
   assert.equal(detailWithoutTicketRedirect("/detail/project-15/6818"), null);
   assert.equal(detailWithoutTicketRedirect("/detail/project-15/6818/comments"), null);
+  assert.equal(detailWithoutTicketRedirect("/detail/project-15/-33"), null);
+  assert.equal(detailWithoutTicketRedirect("/detail/project-15/33abc"), null);
   assert.equal(detailWithoutTicketRedirect("/project"), null);
   assert.equal(detailWithoutTicketRedirect("/details/project-15"), null);
+});
+
+test("prefixed ticket IDs reach the page for flag and access checks", () => {
+  for (const identifier of ["QASA-33", "qasa-33", "QaSa-33", "ZZZZ-33", "A9_B-C-33", "1AB-33"]) {
+    assert.equal(detailWithoutTicketRedirect(`/detail/project-7049/${identifier}`), null);
+    assert.equal(detailWithoutTicketRedirect(`/detail/project-7049/${identifier}/comments`), null);
+  }
+});
+
+test("malformed ticket IDs still redirect before rendering", () => {
+  for (const identifier of ["abc", "QASA-", "QASA-abc", "_QASA-33"]) {
+    assert.equal(detailWithoutTicketRedirect(`/detail/project-7049/${identifier}`), "/project?id=7049");
+  }
+  assert.equal(detailWithoutTicketRedirect("/detail/project-abc/QASA-33"), "/");
 });
 
 test("the proxy applies the redirect before its other branches", () => {
