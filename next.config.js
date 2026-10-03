@@ -141,10 +141,20 @@ const nextConfig = {
         source: "/api/v1/:path*",
         destination: "/api/mcp/:path*",
       },
+      {
+        source: "/files/:path*",
+        destination: "https://files.hypertask.app/:path*",
+      },
     ];
   },
   async headers() {
     return [
+      {
+        source: "/files/:path*",
+        headers: [
+          { key: "Cache-Control", value: "public, max-age=31536000, immutable" },
+        ],
+      },
       {
         // CORS for general API routes
         source: "/api/:path*",
