@@ -251,3 +251,7 @@ html.amoled {
 .amoled .inbox-split-panel {
   background: #000000;
 }
+
+.amoled .search-input {
+  background-color: var(--bg-pageBackground);
+}
