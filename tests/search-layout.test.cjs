@@ -94,7 +94,10 @@ async function withSearch(t, config, check) {
     })
     const press = async (key, extra = {}) => React.act(async () => input().dispatchEvent(new dom.window.KeyboardEvent('keydown', { key, bubbles: true, cancelable: true, ...extra })))
     const tick = async (ms = 1000) => React.act(async () => t.mock.timers.tick(ms))
-    const complete = async (request = requests.at(-1), tasks = [{ taskId: 1, projectId: 7, projectTitle: 'Product Board', uniqueIndex: 1, taskTitle: 'Result', highlight: {} }], tabs = ['All']) => React.act(async () => request.resolve({ status: 200, data: { processedData: Object.fromEntries(tabs.map((tab) => [tab, tab === 'All' ? tasks : tasks.filter((task) => task.projectTitle === tab)])), tabs } }))
+    const complete = async (request = requests.at(-1), tasks = [{ taskId: 1, projectId: 7, projectTitle: 'Product Board', uniqueIndex: 1, taskTitle: 'Result', highlight: {} }], split = ['All']) => {
+      const processedData = Array.isArray(split) ? Object.fromEntries(split.map((tab) => [tab, tab === 'All' ? tasks : tasks.filter((task) => task.projectTitle === tab)])) : split
+      return React.act(async () => request.resolve({ status: 200, data: { processedData, tabs: Object.keys(processedData) } }))
+    }
     const capture = (name) => {
       if (process.env.SEARCH_LAYOUT_EVIDENCE_DIR) fs.writeFileSync(path.join(process.env.SEARCH_LAYOUT_EVIDENCE_DIR, `${name}.html`), document.getElementById('root').innerHTML)
     }
@@ -147,6 +150,100 @@ test('flag off retains the floating popover, duplicate legacy history, Ask AI an
     await complete()
     assert.ok(document.getElementById('task_1'))
     capture('off-results')
+  })
+})
+
+test('result Tab cycles board splits in both directions with focused or blurred input', async (t) => {
+  await withSearch(t, {}, async ({ input, type, press, complete, state, navigations, requests, dom }) => {
+    await type('login')
+    await press('Enter')
+    const tasks = [
+      { taskId: 1, projectId: 7, projectTitle: 'Product Board', uniqueIndex: 1, taskTitle: 'Product result', highlight: {} },
+      { taskId: 2, projectId: 8, projectTitle: 'Other Board', uniqueIndex: 2, taskTitle: 'Other result', highlight: {} },
+    ]
+    const splits = { All: tasks, 'Product Board': [tasks[0]], 'Other Board': [tasks[1]] }
+    await complete(undefined, tasks, splits)
+    assert.equal(input().getAttribute('aria-expanded'), 'false')
+    assert.equal(document.querySelector('[data-search-ghost]'), null)
+    for (const focused of [true, false]) {
+      await React.act(async () => focused ? input().focus() : input().blur())
+      for (const keyCode of [0, 9]) {
+        for (const [shiftKey, indices] of [[false, [1, 2, 0]], [true, [2, 1, 0]]]) {
+          for (const index of indices) {
+            const event = new dom.window.KeyboardEvent('keydown', { key: 'Tab', keyCode, shiftKey, bubbles: true, cancelable: true })
+            await React.act(async () => document.activeElement.dispatchEvent(event))
+            assert.equal(event.defaultPrevented, true)
+            assert.equal(state().activeSplit, index)
+            assert.deepEqual(state().typedTasks, Object.values(splits)[index])
+            assert.equal(state().selectedIndex, 0)
+            assert.equal(new URL(navigations.at(-1), dom.window.location).searchParams.get('index'), String(index))
+            assert.equal(document.activeElement, focused ? input() : document.body)
+          }
+        }
+      }
+    }
+    assert.equal(requests.length, 1, 'cycling reuses the existing results')
+  })
+})
+
+test('result Tab keeps current split state when two tabs share the same task list in either layout', async (t) => {
+  for (const enabled of [true, false]) {
+    await withSearch(t, { query: 'login', flags: { [layoutFlag]: enabled } }, async ({ complete, state, dom }) => {
+      const tasks = [{ taskId: 1, projectId: 7, projectTitle: 'Product Board', uniqueIndex: 1, taskTitle: 'Result', highlight: {} }]
+      await complete(undefined, tasks, { All: tasks, 'Product Board': tasks })
+      await React.act(async () => document.activeElement.blur())
+      for (const index of [1, 0, 1, 0]) {
+        await React.act(async () => document.body.dispatchEvent(new dom.window.KeyboardEvent('keydown', { key: 'Tab', keyCode: 9, bubbles: true, cancelable: true })))
+        assert.equal(state().activeSplit, index)
+      }
+    })
+  }
+})
+
+test('result Tab leaves modifiers, composition and other text fields alone; draft suggestions retain Tab', async (t) => {
+  await withSearch(t, { query: 'login' }, async ({ input, type, tick, press, complete, state, selected, dom }) => {
+    const tasks = [{ taskId: 1, projectId: 7, projectTitle: 'Product Board', uniqueIndex: 1, taskTitle: 'Result', highlight: {} }]
+    await complete(undefined, tasks, { All: tasks, 'Product Board': tasks })
+    for (const focused of [true, false]) {
+      await React.act(async () => focused ? input().focus() : input().blur())
+      for (const extra of [{ ctrlKey: true }, { metaKey: true }, { altKey: true }, { isComposing: true }]) {
+        const event = new dom.window.KeyboardEvent('keydown', { key: 'Tab', keyCode: 9, bubbles: true, cancelable: true, ...extra })
+        await React.act(async () => document.activeElement.dispatchEvent(event))
+        assert.equal(event.defaultPrevented, false)
+        assert.equal(state().activeSplit, 0)
+      }
+    }
+    const otherInput = document.createElement('input')
+    document.body.append(otherInput)
+    otherInput.focus()
+    const event = new dom.window.KeyboardEvent('keydown', { key: 'Tab', keyCode: 9, bubbles: true, cancelable: true })
+    await React.act(async () => otherInput.dispatchEvent(event))
+    assert.equal(event.defaultPrevented, false)
+    assert.equal(state().activeSplit, 0)
+    await React.act(async () => input().focus())
+    await type('from:mal')
+    await tick(180)
+    assert.match(selected().textContent, /Malcolm Stern/)
+    assert.equal(document.querySelector('[data-search-ghost]').textContent, 'colm Stern')
+    await press('Tab', { keyCode: 9, shiftKey: true })
+    assert.equal(input().value, 'from:mal')
+    await press('Tab', { keyCode: 9 })
+    assert.ok(document.querySelector('[aria-label="Remove from:Malcolm Stern filter"]'))
+    assert.equal(state().activeSplit, 0, 'acceptance does not cycle the old splits')
+  })
+})
+
+test('layout-off result Tab remains native in the search field and cycles only after blur', async (t) => {
+  await withSearch(t, { query: 'login', flags: { [layoutFlag]: false } }, async ({ input, complete, state, dom }) => {
+    const tasks = [{ taskId: 1, projectId: 7, projectTitle: 'Product Board', uniqueIndex: 1, taskTitle: 'Result', highlight: {} }]
+    await complete(undefined, tasks, { All: tasks, 'Product Board': tasks })
+    const event = new dom.window.KeyboardEvent('keydown', { key: 'Tab', keyCode: 9, bubbles: true, cancelable: true })
+    await React.act(async () => input().dispatchEvent(event))
+    assert.equal(event.defaultPrevented, false)
+    assert.equal(state().activeSplit, 0)
+    await React.act(async () => input().blur())
+    await React.act(async () => document.body.dispatchEvent(new dom.window.KeyboardEvent('keydown', { key: 'Tab', keyCode: 9, bubbles: true, cancelable: true })))
+    assert.equal(state().activeSplit, 1)
   })
 })
 

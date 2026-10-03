@@ -476,8 +476,11 @@ export function useSearch(
       ["ArrowDown", "ArrowUp"].includes(event.key);
     if (searchChipsEnabled && ((event.defaultPrevented && !resultArrow) ||
       (event.key === "Escape" && tasksInputRef.current?.getAttribute("aria-expanded") === "true"))) return;
+    const cycleSearchTabs = searchLayoutEnabled && !isSearchDraft && event.key === "Tab" &&
+      !event.isComposing && !event.ctrlKey && !event.metaKey && !event.altKey &&
+      tasksInputRef.current?.getAttribute("aria-expanded") !== "true";
     if (searchChipsEnabled && document.activeElement === tasksInputRef.current &&
-      (["Enter", "Tab", "Backspace"].includes(event.key) ||
+      (["Enter", "Backspace"].includes(event.key) || (event.key === "Tab" && !cycleSearchTabs) ||
         (["ArrowDown", "ArrowUp"].includes(event.key) && tasksInputRef.current?.getAttribute("aria-expanded") === "true"))) return;
     let cmdControl = (isApple && event.metaKey) || (!isApple && event.ctrlKey);
     if (controller[event.keyCode]) {
@@ -637,7 +640,12 @@ export function useSearch(
       }
     }
 
-    if (event.keyCode === KeyCodes.TAB && tabs.length > 0 && !isInputFocused) {
+    if (
+      (event.keyCode === KeyCodes.TAB || cycleSearchTabs) && tabs.length > 0 &&
+      (searchLayoutEnabled
+        ? cycleSearchTabs && (!isInputFocused || document.activeElement === tasksInputRef.current)
+        : !isInputFocused)
+    ) {
       event.preventDefault();
       let newValue;
       if (event.shiftKey) {
@@ -831,6 +839,9 @@ export function useSearch(
     searchLayoutEnabled,
     searchEscBackEnabled,
     isSearchDraft,
+    activeSplit,
+    tabs,
+    results,
   ]);
 
   // -------------------- recieving data from React-Query
