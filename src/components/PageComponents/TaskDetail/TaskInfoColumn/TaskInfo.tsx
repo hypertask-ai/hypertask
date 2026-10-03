@@ -598,6 +598,7 @@ const TaskInfo = (props: ITaskInfoContainer) => {
           taskId={currentTask.id}
           ticketId={currentTask.ticketNumber ?? String(currentTask.uniqueIndex)}
           title={currentTask.title}
+          timeTrackingEnabled={currentTask.project?.timeTrackingEnabled}
         />
       )}
 

@@ -84,7 +84,12 @@ const CommentAndDescriptionContainer = (props: ITaskInfoContainer) => {
 
   // The provider can populate viewport rows before this streamed child hydrates.
   const hydrated = useHydrated();
-  const virtualItems = hydrated ? virtualizer.getVirtualItems() : [];
+  const measuredItems = hydrated ? virtualizer.getVirtualItems() : [];
+  // The pinned desktop description supplies its real height before viewport measurement.
+  // Server rows stay empty so the streamed thread hydrates cleanly.
+  const virtualItems = hydrated && !_mbl && !measuredItems.some((item) => item.index === descriptionVirtualIndex)
+    ? [{ index: descriptionVirtualIndex, key: "description", start: 0 }, ...measuredItems]
+    : measuredItems;
 
   // ------------------------------------------------------------------
 
@@ -97,7 +102,8 @@ const CommentAndDescriptionContainer = (props: ITaskInfoContainer) => {
       <RichTextPersonHovercards projectId={allowPerks ? currentTask?.projectId : undefined} />
       <div
         style={{
-          height: `${virtualizer.getTotalSize()}px`,
+          height: _mbl ? `${virtualizer.getTotalSize()}px` : undefined,
+          minHeight: !_mbl ? `${virtualizer.getTotalSize()}px` : undefined,
           position: "relative",
           width: "100%",
           zIndex: 1,
@@ -205,11 +211,11 @@ const CommentAndDescriptionContainer = (props: ITaskInfoContainer) => {
               data-index={vItem.index}
               ref={virtualizer.measureElement}
               style={{
-                position: "absolute",
+                position: !_mbl && currentItemIndex === descriptionVirtualIndex ? "relative" : "absolute",
                 top: 0,
                 left: 0,
                 width: "100%",
-                transform: `translateY(${vItem.start}px)`,
+                transform: !_mbl && currentItemIndex === descriptionVirtualIndex ? undefined : `translateY(${vItem.start}px)`,
                 zIndex: 2000 - vItem.index,
               }}
             >

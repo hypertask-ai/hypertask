@@ -8,7 +8,7 @@ export const useGetPriorityForTask = (queryKey:any, taskId:number|null, initialD
     return useQuery({
         queryKey:queryKey, 
         queryFn:() => globalAPIHandlers.getPriorityForTask(taskId),
-        initialData:initialData??[]
+        initialData:initialData??null
 
 })
 }

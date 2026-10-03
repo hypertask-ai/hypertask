@@ -15,14 +15,17 @@ const TaskTime = ({
   taskId,
   ticketId,
   title,
+  timeTrackingEnabled,
 }: {
   taskId: number;
   ticketId: string;
   title: string;
+  timeTrackingEnabled?: boolean;
 }) => {
   const [showTimeLog, setShowTimeLog] = useState(false);
   const timer = useTaskTime(taskId);
   const runningEntry = timer.data?.runningEntry;
+  const enabled = timer.data?.enabled ?? timeTrackingEnabled ?? true;
   const activeRunningEntryCount = timer.data?.activeRunningEntryCount ?? 0;
   const now = useTimerNow(activeRunningEntryCount > 0);
   const runningSeconds = runningEntry
@@ -56,7 +59,7 @@ const TaskTime = ({
 
   useEffect(() => {
     const openTimeLog = () => {
-      if (timer.data?.enabled === false) return;
+      if (!enabled) return;
       setShowTimeLog(true);
     };
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -94,7 +97,7 @@ const TaskTime = ({
       if (event.key === "w") {
         if (
           timer.isToggling ||
-          (timer.data?.enabled === false && !runningEntry)
+          (!enabled && !runningEntry)
         )
           return;
         event.preventDefault();
@@ -102,7 +105,7 @@ const TaskTime = ({
         return;
       }
 
-      if (timer.data?.enabled === false) return;
+      if (!enabled) return;
       if (lastgClick.current !== null) return; // g pending: [g][b] navigates
       event.preventDefault();
       setShowTimeLog(true);
@@ -114,13 +117,13 @@ const TaskTime = ({
       window.removeEventListener(OPEN_TASK_TIME_LOG_EVENT, openTimeLog);
       document.removeEventListener("keydown", handleKeyDown);
     };
-  }, [runningEntry, timer.data?.enabled, timer.isToggling, toggle]);
+  }, [runningEntry, enabled, timer.isToggling, toggle]);
 
+  // The task already knows the board setting; do not paint a row the summary will remove.
   const hideTimeRow =
-    timer.data &&
-    !timer.data.enabled &&
-    timer.data.taskTotalSeconds === 0 &&
-    !timer.data.runningEntry;
+    !enabled &&
+    (timer.data?.taskTotalSeconds ?? 0) === 0 &&
+    !runningEntry;
 
   return (
     <>
@@ -168,7 +171,7 @@ const TaskTime = ({
                     />
                   </span>
                 )}
-                {(timer.data?.enabled !== false || runningEntry) && (
+                {(enabled || runningEntry) && (
                   <span className="relative group inline-flex">
                     <button
                       type="button"
@@ -187,7 +190,7 @@ const TaskTime = ({
                     />
                   </span>
                 )}
-                {timer.data?.enabled !== false && (
+                {enabled && (
                   <span className="relative group inline-flex">
                     <button
                       type="button"
