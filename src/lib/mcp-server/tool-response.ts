@@ -202,8 +202,8 @@ export function formatToolResponse(
   }
   if (readOnly) data = bound(data)
   if (readOnly && format === 'concise') data = conciseValue(data)
-  hasMore ||= original?.has_more === true || Boolean(original?.nextCursor)
   const nextCursor = original?.nextCursor ?? original?.next_cursor
+  hasMore ||= original?.has_more === true || Boolean(nextCursor)
   return JSON.stringify({
     data,
     response_format: readOnly ? format : 'detailed',
