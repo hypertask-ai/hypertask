@@ -1,7 +1,32 @@
 import { useContext } from "react";
-import { toast } from "react-hot-toast";
+import { X } from "lucide-react";
+import { toast, Toaster } from "react-hot-toast";
+import { APP_SHELL_RAIL_OFFSET } from "@/lib/constants/appShellRail";
 import { MobileViewContext } from "@/lib/contexts/mobileContext";
 import { MOBILE_TARGET } from "@/lib/configs/general.config";
+
+export const SINGLE_UNDO_TOASTER_ID = "htpr-6885-undo";
+// UndoToaster is imperative and also called outside FeatureFlagProvider.
+// The authenticated global toaster publishes its flag here; default is off.
+export const undoToastSettings = { single: false };
+let previousUndoToastId: string | undefined;
+
+export const SingleUndoToaster = ({
+  mobile,
+  appShellRailOn,
+}: {
+  mobile: boolean;
+  appShellRailOn: boolean;
+}) => (
+  <Toaster
+    toasterId={SINGLE_UNDO_TOASTER_ID}
+    position="bottom-left"
+    containerStyle={{
+      left: appShellRailOn ? APP_SHELL_RAIL_OFFSET : 16,
+      bottom: mobile ? "calc(72px + env(safe-area-inset-bottom))" : 16,
+    }}
+  />
+);
 
 export const UNDO_ACTION_WINDOW_MS = 15_000;
 // The toast is the only visible way to undo an archive, so it must stay on
@@ -36,12 +61,41 @@ export const UndoToastContent = ({
   t,
   toastText,
   onUndo,
+  singleUndoToast = false,
 }: {
   t: { id: string; visible: boolean };
   toastText: string;
   onUndo: (toastId: string) => void;
+  singleUndoToast?: boolean;
 }) => {
   const isMbl = useContext(MobileViewContext);
+
+  if (singleUndoToast) {
+    return (
+      <div
+        className="flex min-h-10 max-w-full items-center gap-2 rounded-[5px] border-l-[3px] border-hypertasks-header-blue bg-modalBackground px-3 text-content font-normal text-white-black shadow-md"
+        style={{ opacity: t.visible ? 1 : 0, transition: "opacity 200ms ease-in-out" }}
+      >
+        <span className="min-w-0 break-words">{toastText}</span>
+        <button
+          type="button"
+          aria-label="Undo"
+          className={`shrink-0 cursor-pointer font-normal text-text-light-gray hover:text-white-black hover:underline ${isMbl ? MOBILE_TARGET : ""}`}
+          onClick={() => onUndo(t.id)}
+        >
+          Undo
+        </button>
+        <button
+          type="button"
+          aria-label="Dismiss"
+          className={`flex shrink-0 cursor-pointer items-center justify-center text-text-light-gray hover:text-white-black ${isMbl ? MOBILE_TARGET : ""}`}
+          onClick={() => toast.dismiss(t.id, SINGLE_UNDO_TOASTER_ID)}
+        >
+          <X size={14} />
+        </button>
+      </div>
+    );
+  }
 
   const fade = {
     opacity: t.visible ? 1 : 0,
@@ -124,6 +178,7 @@ export const UndoToaster = (
   undoHandler: (data: any, toastId: string) => Promise<void>,
   isMobile: boolean,
 ) => {
+  const singleUndoToast = undoToastSettings.single;
   const callback = async (toastId: string) => {
     // toast.dismiss(toastId)
     await undoHandler(dataBeforeDeletion, toastId);
@@ -131,9 +186,25 @@ export const UndoToaster = (
     // then you need to run the api call so there is no render blocking.
   };
 
+  // Keep action IDs unique for undo history. Removing (not dismissing) the
+  // previous card avoids two cards overlapping during its exit animation.
+  if (singleUndoToast && previousUndoToastId) toast.remove(previousUndoToastId, SINGLE_UNDO_TOASTER_ID);
+
   const toastHandler: any = toast.custom(
-    (t) => <UndoToastContent t={t} toastText={toastText} onUndo={callback} />,
-    {
+    (t) => (
+      <UndoToastContent
+        t={t}
+        toastText={toastText}
+        onUndo={callback}
+        singleUndoToast={singleUndoToast}
+      />
+    ),
+    singleUndoToast ? {
+      toasterId: SINGLE_UNDO_TOASTER_ID,
+      duration: 5000,
+      removeDelay: 200,
+      position: "bottom-left",
+    } : {
       // Matches the undo action window on each viewport: the prompt never
       // disappears while the action behind it can still be undone.
       duration: isMobile
@@ -148,5 +219,6 @@ export const UndoToaster = (
       position: isMobile ? "top-left" : "bottom-left",
     },
   );
+  previousUndoToastId = toastHandler;
   return toastHandler;
 };

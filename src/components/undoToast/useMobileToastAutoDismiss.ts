@@ -15,9 +15,9 @@ import { useToaster, useToasterStore } from "react-hot-toast";
 export const shouldResume = (pausedAt: number | undefined) =>
   pausedAt !== undefined;
 
-export function useMobileToastAutoDismiss() {
-  const { handlers } = useToaster();
-  const { pausedAt } = useToasterStore();
+export function useMobileToastAutoDismiss(toasterId?: string) {
+  const { handlers } = useToaster(undefined, toasterId);
+  const { pausedAt } = useToasterStore(undefined, toasterId);
 
   const pausedRef = useRef<number | undefined>(undefined);
   pausedRef.current = pausedAt ?? undefined;
