@@ -271,9 +271,7 @@ async function handleConnectConfirmation(
     }
   }
 
-  if (await isSlackAppEnabled(payload.slackTeamId, payload.slackUserId)) {
-    await setSlackAutoLinkDisabled(confirmation.installId, confirmation.slackUserId, null);
-  }
+  await setSlackAutoLinkDisabled(confirmation.installId, confirmation.slackUserId, null);
   await postSlackResponseUrl(
     payload.responseUrl,
     confirmBlock("Slack account connected to Hypertask."),

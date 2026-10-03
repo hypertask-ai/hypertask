@@ -1,8 +1,10 @@
 # Gates: PR review fixes
 
+Follow-up: The 2026-10-03T23:46:30Z review found that an authenticated confirmation could retain the previous account's disconnect marker when the new account's flag was off. The final CI reconciliation failure reported trusted production checkout drift after production changed, while the PR's own feature-flag gate, tests and browser smoke passed.
+
 OWNS: GATES.md, src/lib/slack/**, tests/slack-app-*
 
-Scope: Fix all four findings in the latest review of the existing PR, add a regression per finding, preserve behavior outside the existing ticket flag, and update only origin htpr-6817.
+Scope: Fix every finding in the latest reviews of the existing PR, add a regression per finding, preserve behavior outside the existing ticket flag, and update only origin htpr-6817.
 
 Toolchain: Ubuntu bash, Node 24, npm, TypeScript, git, authenticated gh, and local Redis for the atomic-script integration test. No board writes, secrets, other worktree edits, new PR, merge, or flag rollout. All code work stays in /home/valentin/projects/ht-wt-6817. The user explicitly authorizes the final fetch, rebase if needed, and push.
 
@@ -63,3 +65,11 @@ Initial evidence: Review comment dated 2026-10-03T22:07:13Z on PR https://github
 
 - [x] G11: Required regression, typecheck and lint gates pass again after fetching and synchronizing production.
   EVIDENCE: Fetched origin production and htpr-6817, then rebased all five ticket commits onto production 6539e3ccc7ca642b7da5125a1bb2a9ed2cb25a00 without conflicts. Re-ran every runnable gate with --reverify after the rebase: G0 through G6, G8, and G9 passed. npm test executed 848 Node files and 89 TypeScript files; 6,634 cases passed, zero failed, and one pre-existing opt-in Redis redemption case skipped. The relevant Slack and flag suite passed all 109 cases with no skips, including the real local Redis test. Refreshed the worktree-local Prisma client and directly repeated the typecheck/lint wrapper: npx tsc --noEmit -p . passed with zero diagnostics and npm run lint passed across all 24 PR code/test files with zero warnings. No source changes followed these checks.
+
+- [ ] G12: Every successful authenticated connection confirmation clears the old disconnect marker, including when the newly connected account has its flag off.
+  CHECK: node --test --test-reporter=tap tests/slack-app-identity.test.cjs
+  EXPECT: /# fail 0\b/
+  EVIDENCE: pending
+
+- [ ] G13: The PR passes feature-flag evaluation and final CI has no failures caused by this change.
+  EVIDENCE: pending

@@ -133,6 +133,44 @@ for (const userId of [6, 985]) {
   });
 }
 
+for (const disconnectedUserId of [6, 985]) {
+  for (const alreadyLinked of [false, true]) {
+    test(`authenticated confirmation clears disconnect ${disconnectedUserId} for a flag-off account (${alreadyLinked ? "existing" : "new"} link)`, async () => {
+      const previous = process.env.SLACK_CLIENT_SECRET;
+      process.env.SLACK_CLIENT_SECRET = "test-client-secret";
+      try {
+        const fixture = identityFixture({ installerId: 42, enabledIds: [disconnectedUserId], linked: alreadyLinked ? actor.user : null });
+        const findFirst = fixture.prisma.slackInstall.findFirst;
+        fixture.prisma.slackInstall.findFirst = async (input) => input.where.team ? findFirst(input) : { id: actor.installId };
+        fixture.prisma.slackUserLink.findUnique = async ({ where }) => !alreadyLinked ? null : where.installId_slackUserId ? { userId: actor.user.id } : { slackUserId: "U1" };
+        await fixture.setSlackAutoLinkDisabled(actor.installId, "U1", disconnectedUserId);
+        const responses = [];
+        const { handleSlackCommand } = loadTs("src/lib/slack/commandHandler.ts", {
+          "@/lib/prisma": { __esModule: true, default: fixture.prisma },
+          "@/lib/slack/userLink": fixture,
+          "@/lib/slack/feature": { isSlackAppEnabled: async () => false },
+          "@/lib/slack/actions": {},
+          "@/lib/slack/rateLimit": { claimSlackActionCapacity: async () => true },
+          "@/lib/slack/taskCreateIntent": { claimSlackEventOnce: async () => true },
+          "@/lib/slack/api": { postSlackResponseUrl: async (_url, blocks) => responses.push(blocks) },
+        });
+        const payload = { channelId: "C1", responseUrl: "https://hooks.slack.com/test", slackTeamId: "T1", slackUserId: "U1", text: "connect invalid" };
+        await handleSlackCommand(payload, "https://app.hypertask.ai");
+        assert.equal(await fixture.getSlackAutoLinkDisabledUserId(actor.installId, "U1"), disconnectedUserId);
+        const { createSlackLinkConfirmation } = loadTs("src/lib/slack/linkState.ts");
+        const token = createSlackLinkConfirmation({ installId: actor.installId, slackUserId: "U1", userId: actor.user.id }, process.env.SLACK_CLIENT_SECRET);
+        await handleSlackCommand({ ...payload, text: `connect ${token}` }, "https://app.hypertask.ai");
+        assert.match(JSON.stringify(responses.at(-1)), /Slack account connected to Hypertask/);
+        assert.equal(await fixture.getSlackAutoLinkDisabledUserId(actor.installId, "U1"), null);
+        assert.equal((await fixture.resolveSlackActor("T1", "U1")).user.id, actor.user.id);
+      } finally {
+        if (previous === undefined) delete process.env.SLACK_CLIENT_SECRET;
+        else process.env.SLACK_CLIENT_SECRET = previous;
+      }
+    });
+  }
+}
+
 test("connect fallback issues a signed user-bound link and confirmation refuses another Slack member", async () => {
   const previous = process.env.SLACK_CLIENT_SECRET;
   process.env.SLACK_CLIENT_SECRET = "test-client-secret";
