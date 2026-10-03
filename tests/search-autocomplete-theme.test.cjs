@@ -42,6 +42,28 @@ test('search semantic tokens retain all six palettes and apply only inside the f
   }
 })
 
+test('AMOLED search uses the true-black page token without changing other themes or containers', () => {
+  const themeCss = ['amoled', 'dia', 'graphite', 'porcelain']
+    .map((theme) => fs.readFileSync(path.join(root, `src/styles/tailwindThemes/${theme}.css`), 'utf8')).join('\n')
+  const containerColour = config.theme.extend.backgroundColor.containerBackground
+  for (const theme of ['amoled', 'graphite', 'porcelain', 'dia']) {
+    const dom = new JSDOM(`<style>.bg-containerBackground { background-color: ${containerColour}; }\n${themeCss}\n${css}</style><div id="search" class="search-input bg-containerBackground"></div><div id="other" class="bg-containerBackground"></div>`)
+    try {
+      const document = dom.window.document
+      document.documentElement.className = `${['amoled', 'graphite'].includes(theme) ? 'dark' : 'light'} ${theme}`
+      for (const autocomplete of [false, true]) {
+        document.getElementById('search').classList.toggle('search-autocomplete', autocomplete)
+        const search = dom.window.getComputedStyle(document.getElementById('search'))
+        assert.equal(search.backgroundColor, theme === 'amoled' ? 'var(--bg-pageBackground)' : containerColour, `${theme}, autocomplete ${autocomplete}`)
+      }
+      assert.equal(dom.window.getComputedStyle(document.getElementById('other')).backgroundColor, containerColour, `${theme}: unrelated containers are unchanged`)
+      if (theme === 'amoled') {
+        assert.equal(dom.window.getComputedStyle(document.documentElement).getPropertyValue('--bg-pageBackground').trim(), '#000000')
+      }
+    } finally { dom.window.close() }
+  }
+})
+
 test('filter utilities and title highlighting resolve semantic theme variables, not Tailwind palette colours', () => {
   for (const [index, type] of types.entries()) {
     assert.equal(searchFilterColour(operators[index]), `bg-search-filter-${type} border-search-filter-${type}`)
