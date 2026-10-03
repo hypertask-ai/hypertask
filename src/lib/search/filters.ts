@@ -21,9 +21,13 @@ function dateCondition(operator: 'before' | 'after' | 'on', raw: string): Prisma
       : { gte: day, lt: next } }
 }
 
-function filterWhere(operator: SearchOperator, value: string, done: Prisma.TaskWhereInput[]): Prisma.TaskWhereInput {
+function filterWhere(operator: SearchOperator, { value, userIds }: SearchFilter, done: Prisma.TaskWhereInput[]): Prisma.TaskWhereInput {
   const name = identity(value)
   const id = numeric(name)
+  if (id === null && userIds !== undefined) {
+    if (operator === 'from') return { userId: { in: userIds } }
+    if (operator === 'assignee') return { assignees: { some: { userId: { in: userIds } } } }
+  }
   switch (operator) {
     case 'from': return id !== null ? { userId: id } : { user: { OR: [{ displayName: exact(name) }, { email: exact(name) }] } }
     case 'assignee': return { assignees: { some: id !== null ? { userId: id } : { user: { OR: [{ displayName: exact(name) }, { email: exact(name) }] } } } }
@@ -68,9 +72,9 @@ export async function searchFilterWhere(
   const groups: Prisma.TaskWhereInput[] = []
   for (const [key, values] of Object.entries(parsed.filters) as [SearchOperator, SearchFilter[]][]) {
     const included = values.filter(({ negated }) => !negated)
-    if (included.length) groups.push({ OR: included.map(({ value }) => filterWhere(key, value, done)) })
-    for (const { value } of values.filter(({ negated }) => negated)) {
-      groups.push({ NOT: filterWhere(key, value, done) })
+    if (included.length) groups.push({ OR: included.map((filter) => filterWhere(key, filter, done)) })
+    for (const filter of values.filter(({ negated }) => negated)) {
+      groups.push({ NOT: filterWhere(key, filter, done) })
     }
   }
   return {

@@ -3,6 +3,8 @@
 Ticket: https://app.hypertask.ai/detail/project-15/6688
 Flag: `htpr-6688-search-autocomplete` (default Owner + QA). Existing search operators and chips must also be enabled. No new endpoint or permission is added: entity values use the existing access-scoped `/api/search/values` route; statuses, dates and `has:` values are local suggestions for already supported server filters.
 
+Flag `htpr-6881-search-fuzzy-person` (Owner + QA): typed `from:`/`assignee:` names or emails match every case/accent-insensitive substring in accessible requested boards; numeric chips stay exact and negation excludes all matches.
+
 ## Reach it
 
 Open `https://app.hypertask.ai/search` (or use the existing `/` search shortcut). A shared query uses **searchTerm**, e.g. `https://app.hypertask.ai/search?searchTerm=login%20is%3Aopen`. Sign in as Owner or QA; do not change the flag to Everyone. Use existing tasks only, without creating or modifying data.

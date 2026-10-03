@@ -47,11 +47,12 @@ const mocks = new Map([
   ['src/lib/auth/getSessionUser.ts', { getSessionUser: async () => state.session }],
   ['src/lib/prisma.ts', { default: db }],
   ['src/lib/flags.ts', {
+    HTPR_6881_SEARCH_FUZZY_PERSON_FLAG: 'htpr-6881-search-fuzzy-person',
     HTPR_6369_SEARCH_OPERATORS_FLAG: 'htpr-6369-search-operators',
     HTPR_6370_SEARCH_CHIPS_FLAG: 'htpr-6370-search-chips',
     HTPR_6372_SEARCH_RANKING_FLAG: 'htpr-6372-search-ranking',
     HTPR_6878_SEARCH_LABEL_SCOPE_FLAG: 'htpr-6878-search-label-scope',
-    isFeatureEnabled: async (key) => key === 'htpr-6878-search-label-scope' ? false : key === 'htpr-6370-search-chips' ? state.chipsFlag ?? state.flag : state.flag,
+    isFeatureEnabled: async (key) => ['htpr-6878-search-label-scope', 'htpr-6881-search-fuzzy-person'].includes(key) ? false : key === 'htpr-6370-search-chips' ? state.chipsFlag ?? state.flag : state.flag,
   }],
   ['src/utils/controllers/projects/getAllIncludes.ts', {
     projectContentAccessWhere: (userId) => ({ ownerId: userId }),

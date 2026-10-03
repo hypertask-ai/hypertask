@@ -1,7 +1,7 @@
 import { httpStatusConfig } from "@/lib/configs/http-status.config";
 import { getSessionUser } from "@/lib/auth/getSessionUser";
 import { HTPR_6372_SEARCH_RANKING_FLAG, HTPR_6369_SEARCH_OPERATORS_FLAG, isFeatureEnabled } from "@/lib/flags";
-import { HTPR_6370_SEARCH_CHIPS_FLAG, HTPR_6688_SEARCH_AUTOCOMPLETE_FLAG, HTPR_6865_SEARCH_LAYOUT_FLAG, HTPR_6878_SEARCH_LABEL_SCOPE_FLAG } from "@/lib/flags";
+import { HTPR_6370_SEARCH_CHIPS_FLAG, HTPR_6688_SEARCH_AUTOCOMPLETE_FLAG, HTPR_6865_SEARCH_LAYOUT_FLAG, HTPR_6878_SEARCH_LABEL_SCOPE_FLAG, HTPR_6881_SEARCH_FUZZY_PERSON_FLAG } from "@/lib/flags";
 import { MAX_SEARCH_OPERATOR_CLAUSES, searchOperatorClauseCount } from "@/lib/search/operators";
 import { parseSearchWithChipNames, parseSearchWithNames } from "@/lib/search/serverOperators";
 import { rankedSearchWhere } from "@/lib/search/rankedWhere";
@@ -61,13 +61,10 @@ const handler: NextApiHandler = async (
       }
 
       const chipsEnabled = operatorsEnabled && await isFeatureEnabled(HTPR_6370_SEARCH_CHIPS_FLAG, session.userId);
-      let selectedParsed
-      if (chipsEnabled) selectedParsed = await parseSearchWithChipNames(normalizedSearchQuery, requestedProjectIds);
-      else {
-      const parsed = operatorsEnabled ? await parseSearchWithNames(normalizedSearchQuery, requestedProjectIds) : null;
-        selectedParsed = parsed;
-      }
-      const parsed = selectedParsed;
+      const fuzzyPersonEnabled = operatorsEnabled && await isFeatureEnabled(HTPR_6881_SEARCH_FUZZY_PERSON_FLAG, session.userId);
+      const parsed = chipsEnabled
+        ? await parseSearchWithChipNames(normalizedSearchQuery, requestedProjectIds, fuzzyPersonEnabled)
+        : operatorsEnabled ? await parseSearchWithNames(normalizedSearchQuery, requestedProjectIds, fuzzyPersonEnabled) : null;
       if (parsed?.filters.label && chipsEnabled &&
         ![...(parsed.filters.in ?? []), ...(parsed.filters.board ?? [])].some((filter) => !filter.negated) &&
         await isFeatureEnabled(HTPR_6878_SEARCH_LABEL_SCOPE_FLAG, session.userId) &&
