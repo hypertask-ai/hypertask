@@ -1,0 +1,177 @@
+{
+  "version": 1,
+  "origin": "Minimal five-task fallback: no HTPR-6804 golden LLM tasks file exists in this worktree. Existing evals/mcp-client/tasks.json tests connector parity, not LLM tool selection.",
+  "tasks": [
+    {
+      "id": "board-due-tasks",
+      "surface": "chat",
+      "request": "Find the board called Eval, then list all its tasks with due dates.",
+      "expected": [
+        "hypertask_list_projects",
+        "hypertask_list_tasks"
+      ],
+      "arguments": {
+        "0": {
+          "search": "Eval"
+        },
+        "1": {
+          "project_id": 99,
+          "has_due_date": true
+        }
+      },
+      "results": {
+        "hypertask_list_projects": {
+          "success": true,
+          "projects": [
+            {
+              "id": 99,
+              "title": "Eval"
+            }
+          ]
+        },
+        "hypertask_list_tasks": {
+          "success": true,
+          "tasks": [
+            {
+              "task_id": 1001,
+              "title": "payment gateway",
+              "url": "/detail/project-99/1"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "keyword-details",
+      "surface": "chat",
+      "request": "Find the payment gateway task on board 99, then show its full details.",
+      "expected": [
+        "hypertask_search_tasks",
+        "hypertask_get_tasks"
+      ],
+      "arguments": {
+        "0": {
+          "query": "payment gateway",
+          "project_id": 99
+        },
+        "1": {
+          "task_ids": [
+            1001
+          ]
+        }
+      },
+      "results": {
+        "hypertask_search_tasks": {
+          "success": true,
+          "tasks": [
+            {
+              "task_id": 1001,
+              "title": "payment gateway",
+              "url": "/detail/project-99/1"
+            }
+          ]
+        },
+        "hypertask_get_tasks": {
+          "success": true
+        }
+      }
+    },
+    {
+      "id": "create-assign",
+      "surface": "chat",
+      "request": "Create a task named Check invoices on board 99 and assign it to me.",
+      "expected": [
+        "hypertask_create_task",
+        "hypertask_assign_user"
+      ],
+      "arguments": {
+        "0": {
+          "project_id": 99,
+          "title": "Check invoices"
+        },
+        "1": {
+          "task_id": 1002,
+          "users": [
+            "me"
+          ]
+        }
+      },
+      "results": {
+        "hypertask_create_task": {
+          "success": true,
+          "task": {
+            "task_id": 1002,
+            "title": "Check invoices",
+            "url": "/detail/project-99/2"
+          }
+        },
+        "hypertask_assign_user": {
+          "success": true
+        }
+      }
+    },
+    {
+      "id": "labels-priority",
+      "surface": "mcp",
+      "request": "List labels on board 99, then set EVAL-1 to priority 1 without changing its labels.",
+      "expected": [
+        "hypertask_list_labels",
+        "hypertask_update_task"
+      ],
+      "arguments": {
+        "0": {
+          "project_id": 99
+        },
+        "1": {
+          "ticket_number": "EVAL-1",
+          "priority": 1
+        }
+      },
+      "results": {
+        "hypertask_list_labels": {
+          "success": true
+        },
+        "hypertask_update_task": {
+          "success": true
+        }
+      }
+    },
+    {
+      "id": "comment-retry",
+      "surface": "mcp",
+      "request": "Read comments on EVAL-1, retry if temporarily unavailable, then comment \"Reviewed\".",
+      "expected": [
+        "hypertask_get_comments_for_task",
+        "hypertask_get_comments_for_task",
+        "hypertask_add_comment_to_task"
+      ],
+      "arguments": {
+        "0": {
+          "ticket_number": "EVAL-1"
+        },
+        "1": {
+          "ticket_number": "EVAL-1"
+        },
+        "2": {
+          "ticket_number": "EVAL-1",
+          "text": "Reviewed"
+        }
+      },
+      "results": {
+        "hypertask_get_comments_for_task": [
+          {
+            "success": false,
+            "retryable": true
+          },
+          {
+            "success": true,
+            "comments": []
+          }
+        ],
+        "hypertask_add_comment_to_task": {
+          "success": true
+        }
+      }
+    }
+  ]
+}

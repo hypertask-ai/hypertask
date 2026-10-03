@@ -1,7 +1,7 @@
+import { configureAiModelUsage } from "@/app/api/ai/_lib/modelProvider";
 import { generateObject } from "ai";
 import { z } from "zod";
 
-import { logAiUsage } from "@/app/api/ai/_lib/aiUsage";
 import { getTeamGatewayApiKey } from "@/app/api/ai/_lib/byokKeys";
 import {
   providerOptionsForAiModel,
@@ -164,6 +164,12 @@ async function parseSlackIntent(
   if (!systemModel) return null;
   const gatewayApiKey = await getTeamGatewayApiKey({ trustedTeamId: actor.teamId });
   const model = resolveAiModel("gateway", systemModel.model, gatewayApiKey);
+  configureAiModelUsage(model, {
+    userId: actor.user.id,
+    teamId: actor.teamId,
+    provider: systemModel.provider,
+    feature: "chat",
+  });
   const result = await generateObject({
     model,
     schema: slackIntentSchema,
@@ -175,17 +181,6 @@ async function parseSlackIntent(
     }),
     system: `${SLACK_CHAT_SYSTEM_PROMPT}\n\n${SLACK_ACTION_PARAMETER_GUIDE}\n\nCurrent Hypertask user: ${actor.user.displayName || actor.user.email}.`,
     prompt: `Untrusted Slack message:\n${message}`,
-  });
-
-  await logAiUsage({
-    userId: actor.user.id,
-    teamId: actor.teamId,
-    provider: systemModel.provider,
-    model: systemModel.model,
-    feature: "chat",
-    inputTokens: result.usage.inputTokens ?? 0,
-    outputTokens: result.usage.outputTokens ?? 0,
-    totalTokens: result.usage.totalTokens ?? 0,
   });
 
   return result.object.action

@@ -1,0 +1,50 @@
+name: AI evals
+
+on:
+  pull_request:
+    paths:
+      - "src/app/api/ai/**"
+      - "src/lib/mcp-server/config/**"
+      - "src/lib/mcp-server/validations/**"
+      - "src/lib/ai/**"
+      - "scripts/ai-eval.cjs"
+      - "tests/ai-eval.test.cjs"
+      - "tests/ai-prompt-registry.test.cjs"
+      - "tests/fixtures/ai/**"
+      - ".github/workflows/ai-evals.yml"
+  push:
+    branches: [production]
+    paths:
+      - "src/app/api/ai/**"
+      - "src/lib/mcp-server/config/**"
+      - "src/lib/mcp-server/validations/**"
+      - "src/lib/ai/**"
+      - "scripts/ai-eval.cjs"
+      - "tests/ai-eval.test.cjs"
+      - "tests/ai-prompt-registry.test.cjs"
+      - "tests/fixtures/ai/**"
+      - ".github/workflows/ai-evals.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ai-evals-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  ai-evals:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci --ignore-scripts
+      - run: node --test tests/ai-eval.test.cjs tests/ai-prompt-registry.test.cjs
+      - run: node scripts/ai-eval.cjs
+        env:
+          AI_EVAL_LIVE: "0"
+          AI_EVAL_WRONG_TOOL_THRESHOLD: "0"

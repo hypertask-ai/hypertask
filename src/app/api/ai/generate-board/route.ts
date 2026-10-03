@@ -1,4 +1,5 @@
 import { reportError } from "@/lib/errors/reportError";
+import { renderPrompt } from "@/lib/ai/prompts/registry";
 import { NextRequest, NextResponse } from "next/server";
 import { generateObject } from "ai";
 import { z } from "zod";
@@ -233,15 +234,8 @@ async function generateBoardManifest({
     abortSignal,
     ...selected.settings,
     system:
-      "You create practical Hypertask kanban boards for a new user's stated workflow. Keep tasks concrete, actionable, and specific to the user's context. Use 3-5 sections and 6-14 total tasks.",
-    prompt: `Team: ${team.title || "Untitled team"}
-User goal: ${prompt}
-
-Return a board with:
-- 3 to 5 workflow sections.
-- 6 to 14 total starter tasks.
-- Task descriptions that explain the desired outcome in one or two sentences.
-- Priorities using only these values: ${priorityList}.`,
+      renderPrompt("generate-board-system-1"),
+    prompt: renderPrompt("generate-board-prompt-2", (team.title || "Untitled team"), (prompt), (priorityList)),
   });
 
   return toBoardManifest(object);
@@ -408,6 +402,11 @@ export async function POST(request: NextRequest) {
         { status: error.status },
       );
     }
+    await reportError({
+      message: "AI generate-board request failed",
+      source: "server",
+      extra: { route: "/api/ai/generate-board", stage: "request" },
+    }).catch(() => undefined);
     throw error;
   }
 }

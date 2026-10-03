@@ -1,3 +1,4 @@
+import { configureAiModelUsage } from "@/app/api/ai/_lib/modelProvider";
 import prisma from "@/lib/prisma";
 import { getSessionUser } from "@/lib/auth/getSessionUser";
 import { getProjectWhere } from "@/utils/controllers/projects/getAllIncludes";
@@ -22,7 +23,6 @@ import {
   providerOptionsForAiModel,
   resolveAiModel,
 } from "@/app/api/ai/_lib/modelProvider";
-import { logAiUsage } from "@/app/api/ai/_lib/aiUsage";
 import { escapeHtml } from "@/utils/helperFunctions/escapeHtml";
 import { generateObject } from "ai";
 import { z } from "zod";
@@ -228,6 +228,13 @@ export async function POST(request: NextRequest) {
       trustedTeamId: project.team?.id ?? null,
     });
     const model = resolveAiModel("gateway", systemModel.model, gatewayApiKey);
+    configureAiModelUsage(model, {
+      userId: session.userId,
+      teamId: project.team?.id ?? null,
+      projectId,
+      provider: systemModel.provider,
+      feature: "summary",
+    });
     const result = await generateObject({
       model,
       schema: statusSchema,
@@ -256,18 +263,6 @@ Write the status update:
 - shipped: work that reached a done column or was archived.
 - inFlight: work currently moving through non-done columns.
 - risks: tickets sitting still, piling up, or otherwise worth attention.`,
-    });
-
-    await logAiUsage({
-      userId: session.userId,
-      teamId: project.team?.id ?? null,
-      projectId,
-      provider: systemModel.provider,
-      model: systemModel.model,
-      feature: "summary",
-      inputTokens: result.usage?.inputTokens ?? 0,
-      outputTokens: result.usage?.outputTokens ?? 0,
-      totalTokens: result.usage?.totalTokens ?? 0,
     });
 
     const bodyHtml = renderStatusHtml(result.object, {

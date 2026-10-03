@@ -200,7 +200,7 @@ function gatewayPricingLookupSlugs(modelSlug: string): string[] {
   return slugs;
 }
 
-async function modelPricing(modelSlug: string): Promise<ModelPricing> {
+export async function modelPricing(modelSlug: string): Promise<ModelPricing> {
   const models = await loadGatewayPricing();
   for (const slug of gatewayPricingLookupSlugs(modelSlug)) {
     const pricing = models.get(slug);

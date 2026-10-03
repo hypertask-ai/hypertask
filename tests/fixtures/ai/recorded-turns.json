@@ -1,0 +1,190 @@
+{
+  "board-due-tasks": [
+    {
+      "calls": [
+        {
+          "id": "board-due-tasks-0",
+          "name": "hypertask_list_projects",
+          "arguments": {
+            "search": "Eval"
+          }
+        }
+      ],
+      "inputTokens": 120,
+      "outputTokens": 30
+    },
+    {
+      "calls": [
+        {
+          "id": "board-due-tasks-1",
+          "name": "hypertask_list_tasks",
+          "arguments": {
+            "project_id": 99,
+            "has_due_date": true
+          }
+        }
+      ],
+      "inputTokens": 180,
+      "outputTokens": 30
+    },
+    {
+      "calls": [],
+      "inputTokens": 300,
+      "outputTokens": 15
+    }
+  ],
+  "keyword-details": [
+    {
+      "calls": [
+        {
+          "id": "keyword-details-0",
+          "name": "hypertask_search_tasks",
+          "arguments": {
+            "query": "payment gateway",
+            "project_id": 99
+          }
+        }
+      ],
+      "inputTokens": 120,
+      "outputTokens": 30
+    },
+    {
+      "calls": [
+        {
+          "id": "keyword-details-1",
+          "name": "hypertask_get_tasks",
+          "arguments": {
+            "task_ids": [
+              1001
+            ]
+          }
+        }
+      ],
+      "inputTokens": 180,
+      "outputTokens": 30
+    },
+    {
+      "calls": [],
+      "inputTokens": 300,
+      "outputTokens": 15
+    }
+  ],
+  "create-assign": [
+    {
+      "calls": [
+        {
+          "id": "create-assign-0",
+          "name": "hypertask_create_task",
+          "arguments": {
+            "project_id": 99,
+            "title": "Check invoices"
+          }
+        }
+      ],
+      "inputTokens": 120,
+      "outputTokens": 30
+    },
+    {
+      "calls": [
+        {
+          "id": "create-assign-1",
+          "name": "hypertask_assign_user",
+          "arguments": {
+            "task_id": 1002,
+            "users": [
+              "me"
+            ]
+          }
+        }
+      ],
+      "inputTokens": 180,
+      "outputTokens": 30
+    },
+    {
+      "calls": [],
+      "inputTokens": 300,
+      "outputTokens": 15
+    }
+  ],
+  "labels-priority": [
+    {
+      "calls": [
+        {
+          "id": "labels-priority-0",
+          "name": "hypertask_list_labels",
+          "arguments": {
+            "project_id": 99
+          }
+        }
+      ],
+      "inputTokens": 120,
+      "outputTokens": 30
+    },
+    {
+      "calls": [
+        {
+          "id": "labels-priority-1",
+          "name": "hypertask_update_task",
+          "arguments": {
+            "ticket_number": "EVAL-1",
+            "priority": 1
+          }
+        }
+      ],
+      "inputTokens": 180,
+      "outputTokens": 30
+    },
+    {
+      "calls": [],
+      "inputTokens": 300,
+      "outputTokens": 15
+    }
+  ],
+  "comment-retry": [
+    {
+      "calls": [
+        {
+          "id": "comment-retry-0",
+          "name": "hypertask_get_comments_for_task",
+          "arguments": {
+            "ticket_number": "EVAL-1"
+          }
+        }
+      ],
+      "inputTokens": 120,
+      "outputTokens": 30
+    },
+    {
+      "calls": [
+        {
+          "id": "comment-retry-1",
+          "name": "hypertask_get_comments_for_task",
+          "arguments": {
+            "ticket_number": "EVAL-1"
+          }
+        }
+      ],
+      "inputTokens": 180,
+      "outputTokens": 30
+    },
+    {
+      "calls": [
+        {
+          "id": "comment-retry-2",
+          "name": "hypertask_add_comment_to_task",
+          "arguments": {
+            "ticket_number": "EVAL-1",
+            "text": "Reviewed"
+          }
+        }
+      ],
+      "inputTokens": 240,
+      "outputTokens": 30
+    },
+    {
+      "calls": [],
+      "inputTokens": 300,
+      "outputTokens": 15
+    }
+  ]
+}

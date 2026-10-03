@@ -4,6 +4,14 @@ const fs = require("node:fs");
 const path = require("node:path");
 
 const root = path.resolve(__dirname, "..");
+const ai = require("ai");
+// Constructor checks inspect routing config, which the production wrapper hides.
+require.cache[require.resolve("ai")].exports = {
+  ...ai,
+  wrapLanguageModel: (options) => Object.assign(ai.wrapLanguageModel(options), {
+    config: options.model.config,
+  }),
+};
 let jitiEntryId = 0;
 
 const stubbedModulePaths = [
@@ -1580,8 +1588,7 @@ test("editor models retry unavailable Luna once before output, but not after out
   const retryError = { name: "RetryError", lastError: { status: 404 } };
   stubModule("src/lib/prisma.ts", { default: { userSetting: { findUnique: async () => null } } });
   stubModule("src/utils/controllers/turbopuffer/turbopufferHelper.ts", {});
-  const usageRows = [];
-  stubModule("src/app/api/ai/_lib/aiUsage.ts", { logAiUsage: async (row) => usageRows.push(row) });
+  const usageContexts = [];
   stubModule("src/utils/controllers/projects/getAllIncludes.ts", {});
   stubModule("src/app/api/ai/_lib/byokKeys.ts", {
     getByokOrTeamGatewayApiKeyForModelOption: async () => "vck_test",
@@ -1590,6 +1597,8 @@ test("editor models retry unavailable Luna once before output, but not after out
     filterModelOptionForTeam: (option) => option,
   });
   stubModule("src/app/api/ai/_lib/modelProvider.ts", {
+    configureAiModelUsage: (_model, context) => usageContexts.push(context),
+    inheritAiModelUsage: () => {},
     aiUsageProviderForCredential: () => "gateway",
     isCustomEndpointConfig: () => false,
     isVercelAiGatewayKey: (key) => key?.startsWith("vck_"),
@@ -1643,7 +1652,7 @@ test("editor models retry unavailable Luna once before output, but not after out
     await editor.model.doGenerate({ prompt: [] });
     assert.deepEqual(calls, ["gpt-6-luna", "gpt-5.6-luna"]);
     assert.equal(editor.modelId, "gpt-5.6-luna");
-    assert.equal(usageRows.at(-1).model, "gpt-5.6-luna");
+    assert.equal(usageContexts.at(-1).feature, "editor");
     calls.length = 0;
     const streaming = await selectTaskWriterModel(options);
     const { stream } = await streaming.model.doStream({ prompt: [] });

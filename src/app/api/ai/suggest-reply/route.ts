@@ -1,4 +1,5 @@
 import { reportError } from "@/lib/errors/reportError";
+import { renderPrompt } from "@/lib/ai/prompts/registry";
 import { NextRequest, NextResponse } from "next/server";
 import { generateText } from "ai";
 import { z } from "zod";
@@ -139,28 +140,7 @@ async function generateSuggestion(task: NonNullable<ReplyContext>, userId: numbe
     .filter(Boolean)
     .join(", ");
 
-  const prompt = `
-You are drafting a reply comment for the current user on the Hypertask task below. Write it from the current user's point of view, as if they were answering the people involved.
-
-TASK
-- Title: ${task.title}
-${task.ticketNumber ? `- Ticket: ${task.ticketNumber}` : ""}
-- Board: ${task.project.title}
-- Current status (column): ${task.section || "Unknown"}
-${assignees ? `- Assignees: ${assignees}` : "- Assignees: none"}
-${task.dueDate ? `- Due date: ${task.dueDate.toISOString().slice(0, 10)}` : ""}
-
-DESCRIPTION
-${clamp(htmlToPlainText(task.description), MAX_DESCRIPTION_CHARS) || "(empty)"}
-
-RECENT COMMENTS (oldest first)
-${commentTranscript}
-
-INSTRUCTIONS
-- Respond to any open questions or requests that are still unanswered, using the latest comments as the source of truth for what has already been said.
-- If the thread contains a question directed at the task's participants, answer or acknowledge it concretely; do not just summarize the thread.
-- Keep it short: a few sentences at most, or a short list when listing items.
-- Return ONLY a valid HTML fragment using <p>, <ul>, <li>, <strong>, and <a> tags. No markdown fences, no greetings like "Sure", no sign-offs, no headings.`;
+  const prompt = renderPrompt("suggest-reply-context-1", (task.title), (task.ticketNumber ? `- Ticket: ${task.ticketNumber}` : ""), (task.project.title), (task.section || "Unknown"), (assignees ? `- Assignees: ${assignees}` : "- Assignees: none"), (task.dueDate ? `- Due date: ${task.dueDate.toISOString().slice(0, 10)}` : ""), (clamp(htmlToPlainText(task.description), MAX_DESCRIPTION_CHARS) || "(empty)"), (commentTranscript));
 
   const selected = await selectTaskWriterModel({
     projectId: task.projectId,

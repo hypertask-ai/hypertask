@@ -1,3 +1,9 @@
+import { randomUUID } from "node:crypto";
+import { waitUntil } from "@vercel/functions";
+import { logAiUsage, type AiUsageRecord } from "./aiUsage";
+import { identifyPrompt } from "@/lib/ai/prompts/registry";
+import { recordAiChatTurn } from "@/lib/telemetry/aiChatObservability";
+import { reportError } from "@/lib/errors/reportError";
 import { createAnthropic } from "@ai-sdk/anthropic";
 import { createOpenAI } from "@ai-sdk/openai";
 import { createOpenRouter } from "@openrouter/ai-sdk-provider";
@@ -7,11 +13,13 @@ import {
   wrapLanguageModel,
   type ImageModel,
   type LanguageModel,
+  type LanguageModelMiddleware,
 } from "ai";
 import {
   createImageAllowanceMiddleware,
   createSharedAllowanceMiddleware,
   gatewayCatalogModelSlug,
+  modelPricing,
 } from "@/app/api/ai/_lib/sharedAllowance";
 import {
   getAiModelDefinition,
@@ -64,6 +72,8 @@ export type AiGatewayTags = {
   teamId?: string | null;
   projectId?: number | null;
   userId?: number | null;
+  taskId?: number | null;
+  agentId?: string | null;
 };
 
 export type GatewayTaggedProviderOptions = AiProviderOptions & {
@@ -174,7 +184,7 @@ function gatewayProviderSlug(provider: ModelProviderId) {
   }
 }
 
-export function resolveAiModel(
+function resolveUntracedAiModel(
   provider: ModelProviderId,
   modelId: string,
   byokCredential?: AiModelCredential,
@@ -215,7 +225,7 @@ export function resolveAiModel(
         baseURL: providerInfo.openAiCompatibleBaseUrl,
       }).chat(directModel);
     }
-    return resolveGatewayModel(model, byokApiKey);
+    return resolveUntracedGatewayModel(model, byokApiKey);
   }
 
   const directApiKey = byokApiKey?.trim() || undefined;
@@ -252,6 +262,183 @@ export function resolveAiModel(
   }
 }
 
+type ModelUsageContext = Partial<Pick<AiUsageRecord,
+  "userId" | "teamId" | "projectId" | "taskId" | "agentId" | "feature" | "provider" | "promptId" | "promptVersion"
+>>;
+
+const modelUsageContexts = new WeakMap<object, ModelUsageContext>();
+
+export function configureAiModelUsage(model: LanguageModel, context: ModelUsageContext): void {
+  if (typeof model === "string") return;
+  const current = modelUsageContexts.get(model);
+  if (current) Object.assign(current, Object.fromEntries(Object.entries(context).filter(([, value]) => value != null)));
+}
+
+export function inheritAiModelUsage(model: LanguageModel, source: LanguageModel): void {
+  if (typeof model === "string" || typeof source === "string") return;
+  const context = modelUsageContexts.get(source);
+  if (!context) return;
+  const current = modelUsageContexts.get(model);
+  if (current) Object.assign(current, context);
+  else modelUsageContexts.set(model, context);
+}
+
+async function generationCostUsd(modelId: string, provider: string, inputTokens: number, outputTokens: number) {
+  if (!inputTokens && !outputTokens) return 0;
+  if (provider === "byok:custom") return null;
+  const slug = modelId.includes("/") ? modelId : `${modelId.startsWith("claude-") ? "anthropic" : "openai"}/${modelId}`;
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    const pricing = await Promise.race([
+      modelPricing(slug),
+      new Promise<null>((resolve) => { timer = setTimeout(() => resolve(null), 1500); }),
+    ]);
+    return pricing ? inputTokens * pricing.inputUsdPerToken + outputTokens * pricing.outputUsdPerToken : null;
+  } catch {
+    return null;
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
+
+export function createUsageTracingMiddleware(context: ModelUsageContext, modelId: string): LanguageModelMiddleware {
+  const start = (prompt: unknown) => {
+    const startedAt = performance.now();
+    const attribution = { ...context };
+    const identity = identifyPrompt(prompt);
+    const traceId = randomUUID();
+    let recorded = false;
+    return (outcome: "ok" | "failed" | "cancelled", usage?: { inputTokens: { total?: number }; outputTokens: { total?: number } }, error?: unknown) => {
+      if (recorded) return;
+      recorded = true;
+      const inputTokens = usage?.inputTokens.total ?? 0;
+      const outputTokens = usage?.outputTokens.total ?? 0;
+      const row: AiUsageRecord = {
+        userId: attribution.userId ?? null,
+        teamId: attribution.teamId,
+        projectId: attribution.projectId,
+        taskId: attribution.taskId,
+        agentId: attribution.agentId,
+        feature: attribution.feature ?? "unattributed",
+        provider: attribution.provider ?? "unknown",
+        model: modelId,
+        promptId: attribution.promptId ?? identity.promptId,
+        promptVersion: attribution.promptVersion ?? identity.promptVersion,
+        traceId,
+        outcome,
+        inputTokens,
+        outputTokens,
+        totalTokens: inputTokens + outputTokens,
+        latencyMs: Math.min(2147483647, Math.max(0, Math.round(performance.now() - startedAt))),
+      };
+      const failure = error && typeof error === "object"
+        ? error as { name?: unknown; statusCode?: unknown }
+        : undefined;
+      const errorName = typeof failure?.name === "string" && /^[A-Za-z][A-Za-z0-9_]{0,80}$/.test(failure.name)
+        ? failure.name : "ModelError";
+      const statusCode = typeof failure?.statusCode === "number" && Number.isInteger(failure.statusCode) && failure.statusCode >= 100 && failure.statusCode <= 599
+        ? failure.statusCode : null;
+      const observation = (async () => {
+        row.costUsd = await generationCostUsd(modelId, row.provider, inputTokens, outputTokens);
+        await Promise.allSettled([
+          logAiUsage(row),
+          recordAiChatTurn({ ...row, traceId, latencyMs: row.latencyMs!, outcome, error: outcome === "failed" ? "AI model generation failed" : undefined }),
+          ...(outcome === "failed" ? [reportError({
+            message: "AI model generation failed",
+            source: "server",
+            fingerprintKey: `ai-generation:${row.provider}:${modelId}:${errorName}:${statusCode}`,
+            extra: { route: "modelProvider", stage: "inference", model: modelId, promptId: row.promptId!, errorName, statusCode },
+          })] : []),
+        ]);
+      })().catch(() => undefined);
+      try { waitUntil(observation); } catch { /* Non-Vercel runtimes keep the same best-effort telemetry. */ }
+    };
+  };
+  return {
+    specificationVersion: "v4",
+    wrapGenerate: async ({ doGenerate, params }) => {
+      const record = start(params.prompt);
+      try {
+        const result = await doGenerate();
+        record(result.finishReason.unified === "error" ? "failed" : "ok", result.usage);
+        return result;
+      } catch (error) {
+        record(params.abortSignal?.aborted ? "cancelled" : "failed", undefined, error);
+        throw error;
+      }
+    },
+    wrapStream: async ({ doStream, params }) => {
+      const record = start(params.prompt);
+      try {
+        const result = await doStream();
+        const reader = result.stream.getReader();
+        let failed = false;
+        let streamError: unknown;
+        return {
+          ...result,
+          stream: new ReadableStream({
+            async pull(controller) {
+              try {
+                const item = await reader.read();
+                if (item.done) {
+                  record(params.abortSignal?.aborted ? "cancelled" : "failed", undefined, streamError);
+                  controller.close();
+                  return;
+                }
+                const chunk = item.value;
+                if (chunk.type === "finish") record(failed || chunk.finishReason.unified === "error" ? "failed" : "ok", chunk.usage, streamError);
+                if (chunk.type === "error") {
+                  failed = true;
+                  streamError = chunk.error;
+                }
+                controller.enqueue(chunk);
+              } catch (error) {
+                record(params.abortSignal?.aborted ? "cancelled" : "failed", undefined, error);
+                controller.error(error);
+              }
+            },
+            async cancel(reason) {
+              record(failed ? "failed" : "cancelled", undefined, streamError);
+              await reader.cancel(reason);
+            },
+          }),
+        };
+      } catch (error) {
+        record(params.abortSignal?.aborted ? "cancelled" : "failed", undefined, error);
+        throw error;
+      }
+    },
+  };
+}
+
+function traceLanguageModel(model: LanguageModel, provider: string): LanguageModel {
+  if (typeof model === "string") throw new Error("A resolved AI model is required");
+  const context: ModelUsageContext = { provider };
+  const traced = wrapLanguageModel({
+    model,
+    middleware: createUsageTracingMiddleware(context, model.modelId),
+  });
+  modelUsageContexts.set(traced, context);
+  return traced;
+}
+
+export function resolveAiModel(
+  provider: ModelProviderId,
+  modelId: string,
+  byokCredential?: AiModelCredential,
+  modelOption?: TAiModelOption,
+  directProvider?: TAiProviderKey,
+): LanguageModel {
+  return traceLanguageModel(
+    resolveUntracedAiModel(provider, modelId, byokCredential, modelOption, directProvider),
+    aiUsageProviderForCredential(provider, byokCredential, modelOption, directProvider),
+  );
+}
+
+export function resolveGatewayModel(modelSlug: string, gatewayApiKey?: string): LanguageModel {
+  return traceLanguageModel(resolveUntracedGatewayModel(modelSlug, gatewayApiKey), "gateway");
+}
+
 export function aiUsageProviderForCredential(
   provider: ModelProviderId,
   credential?: AiModelCredential,
@@ -279,7 +466,7 @@ export function aiUsageProviderForCredential(
 // The caller must supply the plan-aware credential resolved for the owning
 // team. Free/BYOK teams deliberately supply the capped shared key; paid teams
 // supply a capped managed key; customer BYOK remains outside either pool.
-export function resolveGatewayModel(
+function resolveUntracedGatewayModel(
   modelSlug: string,
   gatewayApiKey?: string,
 ): LanguageModel {
@@ -316,6 +503,7 @@ export function gatewayProviderOptionsForModel(
   feature: AiGatewayFeature,
   tags?: AiGatewayTags,
 ): GatewayTaggedProviderOptions | undefined {
+  configureAiModelUsage(model as LanguageModel, { feature, ...tags });
   if (
     typeof model !== "string" &&
     (model as { provider?: unknown }).provider !== "gateway"

@@ -1,0 +1,289 @@
+[
+  {
+    "file": "src/app/api/ai/suggest-reply/route.ts",
+    "id": "suggest-reply-context-1",
+    "version": "1",
+    "partsHash": "95ac09239af169eac59fc7eae87b568f5ff6a235c39fb2674dbbadf559c33443",
+    "expressionsHash": "30c927c1e729d8b2f0bb4d5da0fc4e8a83773f1850d65885e5ed94184a0e2e5f"
+  },
+  {
+    "file": "src/app/api/ai/generate-board/route.ts",
+    "id": "generate-board-system-1",
+    "version": "1",
+    "partsHash": "742a766543e229284d2d7ed7fb69c68830516820c1dc34211ddc587a48d5768b",
+    "expressionsHash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+  },
+  {
+    "file": "src/app/api/ai/generate-board/route.ts",
+    "id": "generate-board-prompt-2",
+    "version": "1",
+    "partsHash": "0bfa123b33f0ac082202794404ee38b72464c48156e044d684c001c5ceb15650",
+    "expressionsHash": "66b4cd0f3224a58726a67f0b8bf64bfa207caa6669ecabc6bf1755e96e356159"
+  },
+  {
+    "file": "src/app/api/ai/hyper-mentioned/route.ts",
+    "id": "hyper-mentioned-instructions-1",
+    "version": "1",
+    "partsHash": "f9bf5357eb4e90dd7b6cc6eb05e4c706d0d0eee2d4528dadc8c481127ff9006a",
+    "expressionsHash": "d532091fc534fcc9c4e77bfe60a3802aadfc7a7abcb995c06465e0a5bd3d1549"
+  },
+  {
+    "file": "src/app/api/ai/task-questions/route.ts",
+    "id": "task-questions-context-1",
+    "version": "1",
+    "partsHash": "76ac6b1ab485689dca8adeb961e5d84b887e43809179ccc45e834d9109a06bc0",
+    "expressionsHash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+  },
+  {
+    "file": "src/app/api/ai/task-questions/route.ts",
+    "id": "task-questions-prompt-2",
+    "version": "1",
+    "partsHash": "b55c36e59a852d455b04fc2086a4c154aace42f24b5e18ff03d5b56d24cdc41d",
+    "expressionsHash": "56415611cc131fe6e0d58df4060c83df346c8cbf4ebdc0157434c09526279b0a"
+  },
+  {
+    "file": "src/app/api/ai/_lib/boardMemory.ts",
+    "id": "board-memory-system-1",
+    "version": "1",
+    "partsHash": "69d62173b4e2cc53f807c5fd4814fce049dbe893b082e5e18608722bbce9a94b",
+    "expressionsHash": "dca0181003325afd2f328dfeeba9fc05dcfa3c66801926309cac990441fe4e73"
+  },
+  {
+    "file": "src/app/api/ai/_lib/commentSummaries.ts",
+    "id": "comment-summaries-instructions-1",
+    "version": "1",
+    "partsHash": "63b4d2fae174d50fa27402366c299f8f0c9b6ded82f68f297926aab5391973f0",
+    "expressionsHash": "78cfd42412efae7e7fab16388abcdefd6ffc558e777951b84085825ba1f1c1eb"
+  },
+  {
+    "file": "src/app/api/ai/_lib/boardTemplateContext.ts",
+    "id": "board-template-match-rule",
+    "version": "1",
+    "partsHash": "07dcf2d04176ca1f267d4cfef3d236707c2c29eedd70218f4440d9cd7c4a5455",
+    "expressionsHash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+  },
+  {
+    "file": "src/app/api/ai/_lib/writingSkills.ts",
+    "id": "structured-writing-style",
+    "version": "1",
+    "partsHash": "b0b9dc7f4e8b3d7b693258969360fff7d20c7e2df8da2a82c148cc23c16c7397",
+    "expressionsHash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+  },
+  {
+    "file": "src/app/api/ai/_lib/writingSkills.ts",
+    "id": "unslop-skill",
+    "version": "1",
+    "partsHash": "4ee34be91ac645d497e4286a301f09f71a2ad3c8f34bbcab92da13db3663f7e5",
+    "expressionsHash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+  },
+  {
+    "file": "src/app/api/ai/_lib/writingSkills.ts",
+    "id": "i-have-adhd-skill",
+    "version": "1",
+    "partsHash": "62afee8af43067b9bf398aaecef42f3ba52c0ec33a729a1eacd763591927807d",
+    "expressionsHash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+  },
+  {
+    "file": "src/app/api/ai/_lib/taskWriterBoardResearch.ts",
+    "id": "task-writer-board-research-rules",
+    "version": "1",
+    "partsHash": "e9352f7adb6acd83dda712d7d6518d7a261aa1bd598bbee7d53edc396106f35a",
+    "expressionsHash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+  },
+  {
+    "file": "src/app/api/ai/_lib/taskWriterPrompt.ts",
+    "id": "task-writer-context-synthesis-rules",
+    "version": "1",
+    "partsHash": "3f8cdb7585666c6cd7fdfbfb4d8d60d605b3279604bf62bb4f31bad64c514103",
+    "expressionsHash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+  },
+  {
+    "file": "src/app/api/ai/_lib/taskWriterPrompt.ts",
+    "id": "task-writer-prompt-context-2",
+    "version": "1",
+    "partsHash": "bd1938208c115dbefd387be36593c03230449bbe6e45d81cde4b053982cb90ab",
+    "expressionsHash": "21f4e1ce3358e7b9b8f6059f034788fe43aa8bfad8cdcf844689cd4260bc9eea"
+  },
+  {
+    "file": "src/app/api/ai/_lib/taskSummaries.ts",
+    "id": "task-summaries-system-2",
+    "version": "1",
+    "partsHash": "7424b97b5ab44534a3b301a53d895d9642818b186e100617aaccef4b3a6b4b49",
+    "expressionsHash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+  },
+  {
+    "file": "src/app/api/ai/_lib/taskSummaries.ts",
+    "id": "task-summaries-prompt-3",
+    "version": "1",
+    "partsHash": "91c8a25da7aa1f3140360cf8866c18ed0444c4f9ef3543046f7ccbf94b8ece64",
+    "expressionsHash": "ce9cd33d6bb393990d7c37f85c4aee6779879d352bf805a2bdd0020f64cd9e5d"
+  },
+  {
+    "file": "src/app/api/ai/_lib/editorAiPrompts.ts",
+    "id": "nvc-style-rule",
+    "version": "1",
+    "partsHash": "b6d2b67a3079bf9d014142ae50b8de6cc3cb7f2832154a45071cc4f83429e32a",
+    "expressionsHash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+  },
+  {
+    "file": "src/app/api/ai/_lib/editorAiPrompts.ts",
+    "id": "house-output-style",
+    "version": "1",
+    "partsHash": "bfb81fc57eef696d578fe7f87f5b4afb94d6eb751e3474029fd5525925c615b1",
+    "expressionsHash": "2d9a83fecbf837377eb595c1cfe4f07491c8d5cf3b39ccc086d8b6ff669bc64d"
+  },
+  {
+    "file": "src/app/api/ai/_lib/editorAiPrompts.ts",
+    "id": "task-authoring-style",
+    "version": "1",
+    "partsHash": "24d7464e4f824a7f5891d8a590f964163a3771e67d95b7266bb4c20755b1a415",
+    "expressionsHash": "ae9f477d6d6fbc615c0ad46886ee58e7a6048baa92b7466a42d5a6c88ed544b4"
+  },
+  {
+    "file": "src/app/api/ai/_lib/editorAiPrompts.ts",
+    "id": "editor-ai-prompts-context-4",
+    "version": "1",
+    "partsHash": "573ccc4fe254613a7837d03e357e092141ae954ba61ff287e8f6cfef7715ad99",
+    "expressionsHash": "2d9a83fecbf837377eb595c1cfe4f07491c8d5cf3b39ccc086d8b6ff669bc64d"
+  },
+  {
+    "file": "src/app/api/ai/_lib/editorAiPrompts.ts",
+    "id": "editor-ai-prompts-context-5",
+    "version": "1",
+    "partsHash": "ac5388c2b3642f6ac687502bb9d77765fe68f01a8ace32328ff63557ee0bf1ae",
+    "expressionsHash": "cd77ee7021b522d97fb0d88036973189d53a318dd8f0e79da3c45bfcee047d18"
+  },
+  {
+    "file": "src/app/api/ai/_lib/editorAiPrompts.ts",
+    "id": "editor-ai-prompts-context-6",
+    "version": "1",
+    "partsHash": "518ab76bea1409f787f623294421b6acdc944147453852e290d94b860ad0ad18",
+    "expressionsHash": "cd77ee7021b522d97fb0d88036973189d53a318dd8f0e79da3c45bfcee047d18"
+  },
+  {
+    "file": "src/app/api/ai/_lib/editorAiPrompts.ts",
+    "id": "editor-ai-prompts-context-7",
+    "version": "1",
+    "partsHash": "f91ace42d6fe9b0da8f6cca8c48e2d9f657304c140b938118a22c4dfb97ec9b5",
+    "expressionsHash": "7afda15219bb5f30aad2a35d6eed4284dccfc71608e3b3f2f916a194ee72d5f9"
+  },
+  {
+    "file": "src/app/api/ai/_lib/editorAiPrompts.ts",
+    "id": "editor-ai-prompts-context-8",
+    "version": "1",
+    "partsHash": "b954303349b1902303337e1a7baba62406072a5d9048467bc140a67a5e34a1da",
+    "expressionsHash": "cd77ee7021b522d97fb0d88036973189d53a318dd8f0e79da3c45bfcee047d18"
+  },
+  {
+    "file": "src/app/api/ai/_lib/editorAiPrompts.ts",
+    "id": "editor-ai-prompts-context-9",
+    "version": "1",
+    "partsHash": "eee7eaf84da4e032c1f5d546c157f73293cc9aa22c7e7268a68bd8f99d528aee",
+    "expressionsHash": "cd77ee7021b522d97fb0d88036973189d53a318dd8f0e79da3c45bfcee047d18"
+  },
+  {
+    "file": "src/app/api/ai/_lib/editorAiPrompts.ts",
+    "id": "editor-ai-prompts-context-10",
+    "version": "1",
+    "partsHash": "8c13beae9a6b6758713bd1b56165d3e2bee258fbc419ae4802065f05852b3aa7",
+    "expressionsHash": "e9b738e8a342b225c6b4a476c89a76049ed3f700b437f00b54cd9e0df952860c"
+  },
+  {
+    "file": "src/app/api/ai/_lib/editorAiPrompts.ts",
+    "id": "editor-ai-prompts-context-11",
+    "version": "1",
+    "partsHash": "948b181eaf8fb5eacb497574614f2e804a5c64cbeda1264b137d1f2ac288d1c7",
+    "expressionsHash": "029187774c0aa3fb624426bf3c3d93148eba11fcafb4d2ac5ba6c0b89d995275"
+  },
+  {
+    "file": "src/app/api/ai/_lib/editorAiPrompts.ts",
+    "id": "editor-ai-prompts-context-12",
+    "version": "1",
+    "partsHash": "42504027766717e807a56de7cebab4a85563572f14a8acd4b80fb57742c568f5",
+    "expressionsHash": "53c64b3d5a6805faf2439460ceca9d5fdbbbfed1f7ea6c5f406904ad827fc497"
+  },
+  {
+    "file": "src/app/api/ai/_lib/editorAiPrompts.ts",
+    "id": "editor-ai-prompts-context-13",
+    "version": "1",
+    "partsHash": "4487a8a995362adbd26e940a31074f7c6121aff46b39a2987087b681eb811218",
+    "expressionsHash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+  },
+  {
+    "file": "src/app/api/ai/_lib/editorAiPrompts.ts",
+    "id": "editor-ai-prompts-context-14",
+    "version": "1",
+    "partsHash": "f20ffbf8db4d449b68ed66aed3a8dbf1a4a5db6dff22e48ede9eea9827f31efd",
+    "expressionsHash": "1df490e6672f3d95cf91448140ae86983fdf174b7c45f3eb2920ade2c93e2349"
+  },
+  {
+    "file": "src/app/api/ai/_lib/editorAiPrompts.ts",
+    "id": "editor-ai-prompts-context-15",
+    "version": "1",
+    "partsHash": "6a2e4cb546aa2a271826ca17a4177d5ab8621f4fe53487267da941bd89431109",
+    "expressionsHash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+  },
+  {
+    "file": "src/app/api/ai/_lib/editorAiPrompts.ts",
+    "id": "editor-ai-prompts-context-16",
+    "version": "1",
+    "partsHash": "9151aac0000069ff6103d83294371545b5c8522fc47557af913d715b6e4f4ccd",
+    "expressionsHash": "c6c6e2055b78253388b59206a0b8ff56ff1ee101dcf86e614b0fd9a2c06e7bca"
+  },
+  {
+    "file": "src/app/api/ai/_lib/editorAiPrompts.ts",
+    "id": "editor-ai-prompts-context-17",
+    "version": "1",
+    "partsHash": "dcab7b7c53cf713fb83e35922840c9d7d710fb9eb64b391ec0e2d8b25d45c985",
+    "expressionsHash": "f80f07192919cae9d372eeb896aac4545f3f383e55a0907a208bf50e642d2ae3"
+  },
+  {
+    "file": "src/app/api/ai/_lib/editorAiPrompts.ts",
+    "id": "editor-ai-prompts-context-18",
+    "version": "1",
+    "partsHash": "a33803e379cf139d8857ffe86f234f779656a2a0c7a17358237ab8f9fc84dcdb",
+    "expressionsHash": "3d14d59867181655a52f92f1806c1b2c0d0b63da4f9a7772699848e01e54683a"
+  },
+  {
+    "file": "src/app/api/ai/_lib/editorAiPrompts.ts",
+    "id": "editor-ai-prompts-context-19",
+    "version": "1",
+    "partsHash": "fbc23c52e13dc15b21d9b34b7fa9b84d24136559e5f1d078dbeeb4a0800947b2",
+    "expressionsHash": "2da9476eb76b42488fda305c77d336b41f70967ecaed78751f10568286639fd8"
+  },
+  {
+    "file": "src/lib/ai/chatStream/prompt.ts",
+    "id": "comment-task-link-rule",
+    "version": "1",
+    "partsHash": "f6554a32b0314f0ad2438cb570842dfc6a2ef339d7c320eda4bd6221ae9d9f79",
+    "expressionsHash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+  },
+  {
+    "file": "src/lib/ai/chatStream/prompt.ts",
+    "id": "agent-system-prompt",
+    "version": "1",
+    "partsHash": "cbe07e00931582770548622a04d27f557e2f621e1dffd7a36fa56f0154c818a2",
+    "expressionsHash": "f25482aca279220b626a7e98b3b496b4113853b09f608a5c80187135a0023824"
+  },
+  {
+    "file": "src/lib/ai/chatStream/title.ts",
+    "id": "title-instructions-1",
+    "version": "1",
+    "partsHash": "e5cb0d18586859b3830c85083f688673617c03fb6b83bad7c6bef010ac0fe81e",
+    "expressionsHash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+  },
+  {
+    "file": "src/app/api/ai/_lib/customInstructions.ts",
+    "id": "custom-instruction-image",
+    "version": "1",
+    "partsHash": "e5eb68919e0f089c4e537509460c25f24e035e58ae9ef0afae23beab5eb057fe",
+    "expressionsHash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+  },
+  {
+    "file": "src/app/api/ai/_lib/customInstructions.ts",
+    "id": "custom-instruction-document",
+    "version": "1",
+    "partsHash": "2da46bf540f49169e8406d99b90d3d977fa6dc057e4c643b424499889b2bdae5",
+    "expressionsHash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+  }
+]

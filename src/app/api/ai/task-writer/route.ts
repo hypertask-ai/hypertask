@@ -1,4 +1,5 @@
 import { reportError } from "@/lib/errors/reportError";
+import { configureAiModelUsage } from "@/app/api/ai/_lib/modelProvider";
 import { NextRequest, NextResponse } from "next/server";
 import { streamText } from "ai";
 
@@ -19,7 +20,6 @@ import {
   taskWriterRequestSchema,
   type TaskWriterRequest,
 } from "@/app/api/ai/_lib/taskWriterRun";
-import { logAiUsage } from "@/app/api/ai/_lib/aiUsage";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -71,26 +71,20 @@ export async function POST(request: NextRequest) {
         };
 
         try {
+          configureAiModelUsage(selected.model, {
+            userId,
+            teamId: selected.teamId,
+            projectId: body.projectId,
+            taskId: usageTaskId,
+            provider: selected.usageProvider,
+            feature: "task-writer",
+          });
           const result = streamText({
             model: selected.model,
             instructions,
             messages,
             tools: selected.tools,
             maxRetries: 2,
-            onFinish: async ({ usage }) => {
-              await logAiUsage({
-                userId,
-                teamId: selected.teamId,
-                projectId: body.projectId,
-                taskId: usageTaskId,
-                provider: selected.usageProvider,
-                model: selected.modelId,
-                feature: "task-writer",
-                inputTokens: usage.inputTokens ?? 0,
-                outputTokens: usage.outputTokens ?? 0,
-                totalTokens: usage.totalTokens ?? 0,
-              });
-            },
             providerOptions: selected.providerOptions,
             ...selected.settings,
           });

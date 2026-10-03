@@ -2638,7 +2638,7 @@ model AiChatAlertDelivery {
 model AiUsage {
   id           String   @id @default(uuid())
   createdAt    DateTime @default(now())
-  userId       Int
+  userId       Int?
   teamId       String?
   projectId    Int?
   // Historical attribution only: intentionally no foreign keys, so metering
@@ -2651,6 +2651,12 @@ model AiUsage {
   inputTokens  Int      @default(0)
   outputTokens Int      @default(0)
   totalTokens  Int      @default(0)
+  costUsd      Float?
+  latencyMs    Int?
+  promptId     String?
+  promptVersion String?
+  outcome      String?
+  traceId      String?
 
   @@index([teamId, createdAt])
   @@index([projectId, createdAt])

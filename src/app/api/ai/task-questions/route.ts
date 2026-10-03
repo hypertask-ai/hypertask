@@ -1,9 +1,10 @@
 import { reportError } from "@/lib/errors/reportError";
+import { configureAiModelUsage } from "@/app/api/ai/_lib/modelProvider";
+import { renderPrompt } from "@/lib/ai/prompts/registry";
 import { generateText } from "ai";
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 
-import { logAiUsage } from "@/app/api/ai/_lib/aiUsage";
 import { getTeamGatewayApiKey } from "@/app/api/ai/_lib/byokKeys";
 import { getCurrentUserFromCookies } from "@/app/api/ai/_lib/editorAi";
 import {
@@ -28,30 +29,7 @@ const taskQuestionsRequestSchema = z.object({
   taskId: z.coerce.number().int().positive(),
 });
 
-const TASK_QUESTIONS_INSTRUCTIONS = `You predict the next move of a specific user (the VIEWER) looking at a task in Hypertask, a project management tool.
-
-Generate the 5 prompts the viewer is most likely to want to send to their AI assistant next. The assistant executing these prompts has full access to this task, its comments, and the whole board, and can draft comments the viewer pastes or sends.
-
-Produce EXACTLY 5 prompts in this fixed structure:
-- Prompt 1-2: COMMUNICATION — each drafts the viewer's next likely message: answering a question directed at them, unblocking a named person, chasing an open decision, posting the update the thread is waiting for. Start with "Draft". If someone asked the VIEWER something still unanswered, prompt 1 drafts that reply, naming the person or topic.
-- Prompt 3-5: FORWARD MOTION — checks that surface what moves this ticket forward: an open decision, an unverified claim, a missing sign-off, a risk nobody addressed. NEVER start with "Draft". Verb-first checks ("Check...", "Verify...") or blunt questions ("Is the fix live yet?").
-
-STYLE — each prompt is a short headline, not a sentence:
-- Max 7 words. Hard cap. Fragments are fine.
-- Verb-first ("Draft...", "Check...", "Verify...") or a blunt question.
-- No hedging: never "Should I...", "Can you...", "Would it be worth...". The prompt IS the ask.
-- The assistant expands the headline from full ticket context when sent — the prompt only needs to identify the thread, not carry its detail.
-- Anchor by person or topic ("Draft reply to Sarah"), never by comment position — the assistant cannot resolve "comment 3".
-- Examples of the target shape: "Draft reply to Sarah's pricing question", "Check the fallback pricing patch", "Any opus-4.8 refs left?", "Is the QA blocker fixed yet?"
-
-HARD RULES:
-- Each of the 5 prompts covers a DIFFERENT open thread or topic. Never restate one thread twice.
-- Every prompt MUST be anchored in ONE concrete detail of THIS ticket: a name, number, claim, artifact, or open thread. If you cannot anchor it, do not write it.
-- Banned: generic templates like "What are the next steps?", "Summarize this ticket", "What's blocking this?" with no specifics.
-- Banned phrasing: "Ask the assistant..." — every prompt already addresses the assistant directly.
-- Never suggest drafting something the viewer already posted in their own recent comments. Their next move is what comes AFTER their last message.
-- Say "this ticket" instead of this ticket's own number; other ticket/PR numbers are good anchors.
-- Output STRICT JSON, nothing else: {"questions":["...","..."]}`;
+const TASK_QUESTIONS_INSTRUCTIONS = renderPrompt("task-questions-context-1");
 
 type TaskComment = {
   creatorId: number | null;
@@ -218,18 +196,18 @@ export async function POST(request: NextRequest) {
       projectId: task.projectId,
     };
     const model = resolveAiModel("gateway", systemModel.model, gatewayApiKey);
+    configureAiModelUsage(model, {
+      userId: viewer.id,
+      teamId: task.project.teamId,
+      projectId: task.projectId,
+      taskId: task.id,
+      provider: systemModel.provider,
+      feature: "task-questions",
+    });
     const result = await generateText({
       model,
       instructions: TASK_QUESTIONS_INSTRUCTIONS,
-      prompt: `${viewerBlock}
-
-TASK TITLE: ${task.title}
-STATUS/SECTION: ${task.status} / ${task.section}
-DESCRIPTION:
-${description || "(empty)"}
-
-COMMENTS (newest first):
-${formattedComments}`,
+      prompt: renderPrompt("task-questions-prompt-2", (viewerBlock), (task.title), (task.status), (task.section), (description || "(empty)"), (formattedComments)),
       maxOutputTokens: 500,
       maxRetries: 2,
       providerOptions: providerOptionsForAiModel(
@@ -237,19 +215,6 @@ ${formattedComments}`,
         "task-questions",
         gatewayTags
       ),
-    });
-
-    await logAiUsage({
-      userId: viewer.id,
-      teamId: task.project.teamId,
-      projectId: task.projectId,
-      taskId: task.id,
-      provider: systemModel.provider,
-      model: systemModel.model,
-      feature: "task-questions",
-      inputTokens: result.usage.inputTokens ?? 0,
-      outputTokens: result.usage.outputTokens ?? 0,
-      totalTokens: result.usage.totalTokens ?? 0,
     });
 
     const json = result.text
