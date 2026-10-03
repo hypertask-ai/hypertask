@@ -13,6 +13,10 @@ let accessToken;
 let tokenUserIds;
 let calls;
 let handler;
+let configured;
+stub("src/lib/figma/oauth.ts", {
+  getFigmaOAuthConfig: () => configured ? { clientId: "client", clientSecret: "secret" } : null,
+});
 function stub(file, exports) {
   const filename = path.join(root, file);
   require.cache[filename] = { id: filename, filename, loaded: true, exports };
@@ -47,7 +51,7 @@ const json = (body, status = 200) => Response.json(body, { status });
 const request = (url = FIGMA) =>
   new NextRequest(`https://app.test/api/figma/oembed?url=${encodeURIComponent(url)}`);
 function reset() {
-  authenticated = enabled = true;
+  authenticated = enabled = configured = true;
   principalError = false;
   accessToken = "viewer-token";
   tokenUserIds = [];
@@ -75,9 +79,9 @@ test("requires a signed session and server feature eligibility", async () => {
   reset();
   enabled = false;
   const response = await GET(request());
-  assert.equal(calls.length, 1);
-  assert.equal((await response.json()).thumbnailUrl, COVER.thumbnail_url);
-  assert.equal(response.headers.get("cache-control"), "private, max-age=3600");
+  assert.equal(calls.length, 0);
+  assert.deepEqual(await response.json(), { liveEmbed: true });
+  assert.equal(response.headers.get("cache-control"), "private, no-store");
   assert.deepEqual(tokenUserIds, []);
 
   reset();
@@ -206,13 +210,39 @@ test("renders at most six first-page frames and falls back on denial", async () 
   );
 });
 
-test("offers connection only when the eligible viewer has no stored account", async () => {
+test("connected viewers keep the cover fallback for links without a renderable target", async () => {
+  const url = "https://www.figma.com/community/file/123";
+  const response = await GET(request(url));
+  assert.equal(response.status, 200);
+  assert.equal((await response.json()).thumbnailUrl, COVER.thumbnail_url);
+  assert.equal(response.headers.get("cache-control"), "private, max-age=3600");
+  assert.equal(calls.length, 1);
+
+  handler = () => json({}, 502);
+  const unavailable = await GET(request(url));
+  assert.equal(unavailable.status, 502);
+  assert.deepEqual(await unavailable.json(), { error: "Figma preview is unavailable" });
+});
+
+test("unconnected viewers get a live embed without fetching cover images", async () => {
   accessToken = null;
-  const body = await (await GET(request())).json();
-  assert.equal(body.canConnectFigma, true);
-  assert.equal(body.thumbnailUrl, COVER.thumbnail_url);
+  for (const url of [FIGMA, `${FIGMA}?node-id=12-34`, "https://www.figma.com/community/file/123"]) {
+    const response = await GET(request(url));
+    assert.deepEqual(await response.json(), { liveEmbed: true, canConnectFigma: true });
+    assert.equal(response.headers.get("cache-control"), "private, no-store");
+  }
+  assert.equal(calls.length, 0);
 
   enabled = false;
   const disabledBody = await (await GET(request())).json();
   assert.equal(disabledBody.canConnectFigma, undefined);
+});
+
+test("missing server keys select the live embed even with a stored connection", async () => {
+  configured = false;
+  const response = await GET(request());
+  assert.deepEqual(await response.json(), { liveEmbed: true });
+  assert.equal(response.headers.get("cache-control"), "private, no-store");
+  assert.equal(calls.length, 0);
+  assert.deepEqual(tokenUserIds, []);
 });

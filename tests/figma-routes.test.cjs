@@ -76,6 +76,8 @@ const appRequest = (pathname, init) =>
   new NextRequest(`https://app.hypertask.ai${pathname}`, init);
 
 test.beforeEach(() => {
+  process.env.FIGMA_CLIENT_ID = "figma-client";
+  process.env.FIGMA_CLIENT_SECRET = "figma-secret";
   global.fetch = originalFetch;
   sessionUserId = 6;
   sessionError = null;
@@ -180,6 +182,7 @@ test("OAuth start sends minimum scope, PKCE, and a secure HttpOnly attempt cooki
     ),
   );
   const location = new URL(response.headers.get("location"));
+  assert.equal(response.status, 307);
   assert.equal(location.origin, "https://www.figma.com");
   assert.equal(location.pathname, "/oauth");
   assert.equal(location.searchParams.get("client_id"), "figma-client");
@@ -324,6 +327,20 @@ test("callback exchanges the code and returns to the initiating screen", async (
   assert.match(connectionCookie, /Secure/i);
   assert.match(connectionCookie, /SameSite=lax/i);
   assert.doesNotMatch(connectionCookie, /HttpOnly/i);
+});
+
+test("connection reports server configuration without exposing OAuth keys", async () => {
+  connectionSummary = null;
+  for (const missing of [null, "FIGMA_CLIENT_ID", "FIGMA_CLIENT_SECRET"]) {
+    process.env.FIGMA_CLIENT_ID = "figma-client";
+    process.env.FIGMA_CLIENT_SECRET = "figma-secret";
+    if (missing) delete process.env[missing];
+    const response = await connectionRoute.GET(appRequest("/api/figma/connection"));
+    assert.deepEqual(await response.json(), { configured: missing === null, connection: null });
+    assert.equal(response.headers.get("cache-control"), "private, no-store");
+  }
+  process.env.FIGMA_CLIENT_ID = "figma-client";
+  process.env.FIGMA_CLIENT_SECRET = "figma-secret";
 });
 
 test("connection reads and disconnects only the signed user's row", async () => {

@@ -2,6 +2,7 @@ import { NextRequest } from "next/server";
 
 import { getFigmaRequestUser, noStore } from "@/app/api/figma/_lib";
 import { getFigmaConnection } from "@/lib/figma/connection";
+import { getFigmaOAuthConfig } from "@/lib/figma/oauth";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -19,7 +20,10 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    return noStore({ connection: await getFigmaConnection(principal.userId) });
+    return noStore({
+      configured: Boolean(getFigmaOAuthConfig()),
+      connection: await getFigmaConnection(principal.userId),
+    });
   } catch (error) {
     console.error("Figma connection read failed", error);
     return noStore({ error: "Figma connection is unavailable" }, 500);

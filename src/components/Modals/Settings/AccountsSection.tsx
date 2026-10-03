@@ -57,6 +57,7 @@ const AccountsSection = () => {
   const [passkeyMessage, setPasskeyMessage] = useState<string | null>(null);
   const [figmaConnection, setFigmaConnection] =
     useState<FigmaConnection | null>(null);
+  const [figmaConfigured, setFigmaConfigured] = useState(false);
   const [figmaLoading, setFigmaLoading] = useState(true);
   const [figmaError, setFigmaError] = useState<string | null>(null);
   const [figmaDisconnecting, setFigmaDisconnecting] = useState(false);
@@ -75,11 +76,13 @@ const AccountsSection = () => {
         credentials: "include",
       });
       const data = (await response.json().catch(() => null)) as {
+        configured?: boolean;
         connection?: FigmaConnection | null;
       } | null;
       if (!response.ok || !data) {
         throw new Error("Could not load the Figma connection");
       }
+      setFigmaConfigured(data.configured === true);
       setFigmaConnection(data.connection ?? null);
     } catch {
       setFigmaError("Could not load the Figma connection");
@@ -246,9 +249,11 @@ const AccountsSection = () => {
   // page is otherwise identical after the bounce and a note below the card
   // reads as unrelated.
   const figmaMessage =
-    figmaError ?? (searchParams?.get("figma_error")
-      ? figmaConnectErrorMessage(searchParams.get("figma_error"))
-      : null);
+    figmaError ?? (!figmaLoading && !figmaConfigured
+      ? "Figma is not set up on this server yet."
+      : searchParams?.get("figma_error")
+        ? figmaConnectErrorMessage(searchParams.get("figma_error"))
+        : null);
 
   let figmaAction = (
     <a className={settingsActionButtonClass} href={FIGMA_CONNECT_URL}>
@@ -276,6 +281,12 @@ const AccountsSection = () => {
           {figmaDisconnecting ? "Disconnecting" : "Disconnect"}
         </button>
       </div>
+    );
+  } else if (!figmaConfigured) {
+    figmaAction = (
+      <button className={settingsActionButtonClass} disabled type="button">
+        Connect Figma
+      </button>
     );
   }
 

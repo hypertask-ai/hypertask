@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getFigmaRequestUser } from "@/app/api/figma/_lib";
 import { getFigmaAccessToken } from "@/lib/figma/connection";
 import { FIGMA_API_BASE_URL } from "@/lib/figma/paths";
+import { getFigmaOAuthConfig } from "@/lib/figma/oauth";
 
 const CACHE_CONTROL = "private, max-age=3600";
 const NO_STORE_CACHE_CONTROL = "private, no-store";
@@ -244,29 +245,42 @@ export async function GET(request: NextRequest) {
     );
   }
 
+  if (principal.status !== "allowed" || !getFigmaOAuthConfig()) {
+    return previewResponse({ liveEmbed: true }, NO_STORE_CACHE_CONTROL);
+  }
+
+  let token: string | null | undefined;
+  let degraded = false;
+  try {
+    token = await getFigmaAccessToken(principal.userId);
+  } catch {
+    degraded = true;
+  }
+  if (token === null) {
+    return previewResponse(
+      { liveEmbed: true, canConnectFigma: true },
+      NO_STORE_CACHE_CONTROL,
+    );
+  }
+
   const target = parseFigmaTarget(figmaUrl);
   const fallbackPromise = getOembed(figmaUrl).catch(() => null);
-  if (principal.status !== "allowed" || !target) {
+  if (!target) {
     const fallback = await fallbackPromise;
-    const cacheControl =
-      principal.status === "error" ? NO_STORE_CACHE_CONTROL : CACHE_CONTROL;
     return fallback
-      ? previewResponse(fallback, cacheControl)
+      ? previewResponse(fallback, degraded ? NO_STORE_CACHE_CONTROL : CACHE_CONTROL)
       : NextResponse.json(
           { error: "Figma preview is unavailable" },
           { status: 502 },
         );
   }
 
-  let token: string | null | undefined;
   let rendered: Awaited<ReturnType<typeof getRenderedImages>> | null = null;
-  let degraded = false;
   try {
-    token = await getFigmaAccessToken(principal.userId);
     if (token) rendered = await getRenderedImages(target, token);
   } catch {
     degraded = true;
-    // A connection or Figma failure keeps the cover and the live embed click.
+    // A connected viewer keeps the cover and the live embed click on failure.
   }
 
   const fallback = await fallbackPromise;
@@ -292,7 +306,6 @@ export async function GET(request: NextRequest) {
     {
       ...basePreview,
       ...(fallback ? {} : { previewUnavailable: true }),
-      ...(token === null ? { canConnectFigma: true } : {}),
     },
     degraded || !fallback ? NO_STORE_CACHE_CONTROL : CACHE_CONTROL,
   );

@@ -24,7 +24,7 @@ const { hasFigmaEmbed } = jiti(
 const { isContentCarouselImage } = jiti(
   path.join(root, "src/utils/helperFunctions/isContentCarouselImage.ts"),
 );
-const { fetchFigmaOembed, renderFigmaPreview } = jiti(
+const { Figma, fetchFigmaOembed, renderFigmaPreview } = jiti(
   path.join(root, "src/components/RTE/Extensions/FigmaTiptap/index.ts"),
 );
 const { FIGMA_CONNECTION_VERSION_COOKIE } = jiti(
@@ -161,6 +161,76 @@ test("keeps a live-file fallback when every preview image fails", () => {
   }
 });
 
+test("node views load the historical iframe automatically only for live-embed responses", async () => {
+  const dom = new JSDOM("<!doctype html><body></body>", {
+    url: "https://app.hypertask.ai/detail/project-15/6690?view=comments#design",
+  });
+  const originals = { document: global.document, window: global.window, fetch: global.fetch };
+  global.document = dom.window.document;
+  global.window = dom.window;
+  const figmaUrl = "https://www.figma.com/design/abcdefghijklmnopqrstuv/Preview?node-id=12-34";
+  const src = `https://www.figma.com/embed?embed_host=tiptap&url=${encodeURIComponent(figmaUrl)}`;
+  const createView = () => Figma.config.addNodeView.call(Figma)({
+    node: { type: Figma, attrs: { src } },
+    HTMLAttributes: { src, width: "95%", height: "500", title: "Design", unused: null },
+  });
+  try {
+    for (const canConnectFigma of [true, false]) {
+      global.fetch = async () => Response.json({ liveEmbed: true, canConnectFigma });
+      const view = createView();
+      await new Promise((resolve) => setImmediate(resolve));
+      const iframe = view.dom.querySelector("iframe");
+      assert.ok(iframe, "no click should be needed to see the design");
+      assert.equal(iframe.src, src);
+      assert.equal(iframe.getAttribute("allowfullscreen"), "true");
+      assert.equal(iframe.getAttribute("height"), "500");
+      assert.equal(iframe.hasAttribute("unused"), false);
+      assert.equal(view.dom.querySelector("button"), null);
+      assert.equal(view.dom.querySelector("img"), null);
+      const link = view.dom.querySelector("a");
+      assert.equal(Boolean(link), canConnectFigma);
+      if (link) {
+        assert.equal(link.textContent, "Connect Figma for faster previews");
+        assert.equal(new URL(link.href).pathname, "/api/figma/oauth/start");
+        assert.equal(new URL(link.href).searchParams.get("returnTo"), "/detail/project-15/6690?view=comments#design");
+      }
+      view.destroy();
+    }
+
+    const createdImages = [];
+    const createElement = document.createElement.bind(document);
+    document.createElement = (tagName, options) => {
+      const element = createElement(tagName, options);
+      if (tagName === "img") createdImages.push(element);
+      return element;
+    };
+    global.fetch = async () => Response.json({ thumbnailUrl: "https://s3-alpha.figma.com/cover.png" });
+    const connected = createView();
+    await new Promise((resolve) => setImmediate(resolve));
+    assert.equal(connected.dom.querySelector("iframe"), null);
+    assert.ok(connected.dom.querySelector("button"));
+    createdImages[0].onload();
+    assert.equal(connected.dom.querySelector("img").src, "https://s3-alpha.figma.com/cover.png");
+    assert.match(connected.dom.textContent, /Click to open the live file/);
+    assert.equal(connected.dom.querySelector("a"), null);
+    connected.dom.querySelector("button").click();
+    assert.equal(connected.dom.querySelector("iframe").src, src);
+    connected.destroy();
+
+    let respond;
+    global.fetch = () => new Promise((resolve) => { respond = resolve; });
+    const destroyed = createView();
+    destroyed.destroy();
+    respond(Response.json({ liveEmbed: true, canConnectFigma: true }));
+    await new Promise((resolve) => setImmediate(resolve));
+    assert.equal(destroyed.dom.querySelector("iframe"), null);
+    assert.equal(destroyed.dom.querySelector("a"), null);
+  } finally {
+    Object.assign(global, originals);
+    dom.window.close();
+  }
+});
+
 test("deduplicates only in-flight previews within one connection version", async () => {
   const dom = new JSDOM("<!doctype html><body></body>", {
     url: "https://app.hypertask.ai/detail/project-15/6136",
@@ -173,7 +243,8 @@ test("deduplicates only in-flight previews within one connection version", async
 
   const responses = [];
   let fetchCalls = 0;
-  global.fetch = async () => {
+  global.fetch = async (_url, init) => {
+    assert.equal(init.cache, "no-store");
     fetchCalls += 1;
     return new Promise((resolve) => responses.push(resolve));
   };
@@ -211,7 +282,8 @@ test("partitions and rejects previews after account or connection changes", asyn
 
   const responses = [];
   let fetchCalls = 0;
-  global.fetch = async () => {
+  global.fetch = async (_url, init) => {
+    assert.equal(init.cache, "no-store");
     fetchCalls += 1;
     return new Promise((resolve) => responses.push(resolve));
   };
@@ -313,7 +385,7 @@ test("the persistent read view is inert but keeps its existing interactions", ()
   assert.match(editorContainer, /!isEditModeActive &&/);
   assert.match(editorContainer, /!isReadOnlyExistingContent && \(/);
   assert.match(figmaNode, /preview\.dataset\.figmaEmbedPreview = 'true'/);
-  assert.match(figmaNode, /Connect Figma to preview/);
+  assert.match(figmaNode, /Connect Figma for faster previews/);
   assert.match(figmaNode, /FIGMA_OAUTH_START_PATH/);
   assert.match(figmaPaths, /\/api\/figma\/oauth\/start/);
   assert.match(taskEditor, /\.filter\(isContentCarouselImage\)/);
