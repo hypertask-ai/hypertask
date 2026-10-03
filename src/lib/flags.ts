@@ -45,6 +45,7 @@ import {
   HTPR_6476_MOBILE_AGENT_CHAT_FULLSCREEN_FLAG,
   HTPR_6860_MOBILE_PAGE_HIDE_DOCK_FLAG,
   HTPR_6861_MOBILE_PAGE_BACK_ROW_FLAG,
+  HTPR_6872_PAGE_IMAGE_GALLERY_FLAG,
   POSTHOG_ERROR_ALERT_FLAG,
   SCOPED_BOARD_REFETCH_FLAG,
   MY_TASKS_CROSS_BOARD_PRIORITY_SORT_FLAG,
@@ -401,6 +402,12 @@ const FEATURE_FLAG_DEFINITIONS = [
     shippedOn: "2026-09-11",
     description:
       "Pins the Agent Chat composer on mobile, keeps one message scroller, shows the agent name in the top bar, and makes mic dictation use the agent's board.",
+  },
+  {
+    key: HTPR_6872_PAGE_IMAGE_GALLERY_FLAG,
+    shippedOn: "2026-10-03",
+    description:
+      "Lets you click images on pages to view them full size, browse all page images, and download them in the ticket image gallery.",
   },
   {
     key: HTPR_6860_MOBILE_PAGE_HIDE_DOCK_FLAG,

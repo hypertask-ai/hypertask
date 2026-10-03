@@ -64,6 +64,8 @@ export const HTPR_6860_MOBILE_PAGE_HIDE_DOCK_FLAG =
   "htpr-6860-mobile-page-hide-dock";
 export const HTPR_6861_MOBILE_PAGE_BACK_ROW_FLAG =
   "htpr-6861-mobile-page-back-row";
+export const HTPR_6872_PAGE_IMAGE_GALLERY_FLAG =
+  "htpr-6872-page-image-gallery";
 export const SCOPED_BOARD_REFETCH_FLAG = "htpr-6166-scoped-board-refetch";
 export const MY_TASKS_SHORTCUTS_WIDTH_FLAG =
   "htpr-6421-my-tasks-shortcuts-width";

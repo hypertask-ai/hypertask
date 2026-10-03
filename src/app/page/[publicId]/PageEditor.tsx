@@ -6,6 +6,7 @@ import dynamic from "next/dynamic";
 import { useRouter } from "next/navigation";
 import {
   ChangeEvent,
+  type MouseEvent as ReactMouseEvent,
   useCallback,
   useContext,
   useEffect,
@@ -23,6 +24,8 @@ import useDebounceWithCancel from "@/hooks/General/useDebounceWithCancel";
 import { useFlag } from "@/hooks/useFlag";
 import { MOBILE_TARGET } from "@/lib/configs/general.config";
 import { cn } from "@/utils/undoActions/helperFuncs";
+import { HTPR_6872_PAGE_IMAGE_GALLERY_FLAG } from "@/lib/flags/keys";
+import { isContentCarouselImage } from "@/utils/helperFunctions/isContentCarouselImage";
 import { pageRoute } from "@/lib/constants/APIRouteConstants";
 import { HTPR_6861_MOBILE_PAGE_BACK_ROW_FLAG } from "@/lib/flags/keys";
 import { MobileViewContext } from "@/lib/contexts/mobileContext";
@@ -33,7 +36,7 @@ import {
   type NavigationHistoryLike,
 } from "@/lib/navigation/pageReturn";
 import { useRecoilValue, useSetRecoilState } from "@/lib/state";
-import type { IUser } from "@/models/model";
+import type { IUser, TCarousalItems } from "@/models/model";
 import { appShellRailAtom, showCommandsAtom } from "@/store";
 import { currentPageActionsAtom } from "@/store/currentPageActions";
 import styles from "@/styles/tiptap.module.scss";
@@ -64,6 +67,11 @@ const HypertasksCommands = dynamic(() => import("@/components/commands"), {
   ssr: false,
 });
 
+const AttachmentCarousel = dynamic(
+  () => import("@/components/Common/AttachmentsView/AttachmentsCarousel"),
+  { ssr: false },
+);
+
 const PageEditor = ({ _page, _user }: PageEditorProps) => {
   const page = JSON.parse(_page) as SerializedPage;
   const currentUser = JSON.parse(_user) as IUser;
@@ -73,6 +81,8 @@ const PageEditor = ({ _page, _user }: PageEditorProps) => {
   const [saveStatus, setSaveStatus] = useState<SaveStatus>("saved");
   const [toggleHighlight, setToggleHighlight] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
+  const galleryEnabled = useFlag(HTPR_6872_PAGE_IMAGE_GALLERY_FLAG);
+  const [galleryItems, setGalleryItems] = useState<TCarousalItems>();
   const railOn = useRecoilValue(appShellRailAtom);
   const showCommands = useRecoilValue(showCommandsAtom);
   const isMobile = useContext(MobileViewContext);
@@ -98,6 +108,70 @@ const PageEditor = ({ _page, _user }: PageEditorProps) => {
     mode: "read-edit-description",
     defaultContent: page.contentHtml,
   });
+
+  const openImageGallery = useCallback((
+    target: HTMLImageElement | HTMLIFrameElement,
+    frameImages?: string[],
+    frameIndex = 0,
+  ) => {
+    if (!galleryEnabled || !contentRef.current) return;
+
+    const media = Array.from(contentRef.current.querySelectorAll<HTMLImageElement | HTMLIFrameElement>(
+      ".ProseMirror img, .ProseMirror .ht-html-block iframe",
+    ));
+    const images = media.flatMap<{ element: HTMLImageElement | HTMLIFrameElement; src: string; index: number }>((element) => {
+      if (element instanceof HTMLImageElement) {
+        return isContentCarouselImage(element) ? [{ element, src: element.src, index: 0 }] : [];
+      }
+      const sources = element === target && frameImages
+        ? frameImages
+        : Array.from(new DOMParser().parseFromString(element.srcdoc, "text/html").querySelectorAll("img"))
+            .filter(isContentCarouselImage)
+            .map((image) => new URL(image.getAttribute("src") || "", window.location.href).href);
+      return sources.map((src, index) => ({ element, src, index }));
+    });
+    const currentIndex = images.findIndex((image) => image.element === target && image.index === frameIndex);
+    if (currentIndex < 0) return;
+
+    setGalleryItems({
+      attachments: images.map((image, index) => ({
+        id: index + 1,
+        createdAt: -1,
+        fileType: "image/png",
+        taskId: page.taskId,
+        fileSource: image.src,
+        fileName: "Image.png",
+      })),
+      currentIndex,
+    });
+  }, [galleryEnabled, page.taskId]);
+
+  const handleContentClick = (event: ReactMouseEvent<HTMLDivElement>) => {
+    if (galleryEnabled && !event.defaultPrevented && event.button === 0 &&
+        !event.shiftKey && !event.ctrlKey && !event.metaKey && !event.altKey &&
+        event.target instanceof HTMLImageElement && isContentCarouselImage(event.target)) {
+      event.preventDefault();
+      openImageGallery(event.target);
+      return;
+    }
+    editor?.commands.focus();
+  };
+
+  useEffect(() => {
+    if (!galleryEnabled) return;
+    // Canvas frames have opaque origins, so only accept messages from this page's frames.
+    const handleMessage = (event: MessageEvent) => {
+      const frames = contentRef.current?.querySelectorAll<HTMLIFrameElement>(".ht-html-block iframe");
+      const frame = Array.from(frames ?? []).find((item) => item.contentWindow === event.source);
+      const data = event.data;
+      if (!frame || data?.__htPageImage !== 1 || !Array.isArray(data.images) ||
+          !data.images.every((src: unknown) => typeof src === "string" && /^(https?:|data:image\/|blob:)/i.test(src)) ||
+          !Number.isInteger(data.index) || data.index < 0 || data.index >= data.images.length) return;
+      openImageGallery(frame, data.images, data.index);
+    };
+    window.addEventListener("message", handleMessage);
+    return () => window.removeEventListener("message", handleMessage);
+  }, [galleryEnabled, openImageGallery]);
 
   const taskHref = `/detail/project-${page.task.projectId}/${page.task.uniqueIndex}`;
 
@@ -239,14 +313,14 @@ const PageEditor = ({ _page, _user }: PageEditorProps) => {
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
-      if (shouldReturnFromPageOnEscape(event, showCommands.show)) {
+      if (!(galleryEnabled && galleryItems) && shouldReturnFromPageOnEscape(event, showCommands.show)) {
         void returnToTask();
       }
     };
 
     document.addEventListener("keydown", handleKeyDown);
     return () => document.removeEventListener("keydown", handleKeyDown);
-  }, [returnToTask, showCommands.show]);
+  }, [galleryEnabled, galleryItems, returnToTask, showCommands.show]);
 
   useEffect(() => {
     if (!editor) return;
@@ -323,6 +397,13 @@ const PageEditor = ({ _page, _user }: PageEditorProps) => {
       aria-label={`Page editor for ${currentUser.displayName || "current user"}`}
       className="min-h-SVH-full bg-taskDetailPage text-white-black"
     >
+      {galleryEnabled && galleryItems && (
+        <AttachmentCarousel
+          attachments={galleryItems.attachments}
+          currentIndex={galleryItems.currentIndex}
+          closeCallback={() => setGalleryItems(undefined)}
+        />
+      )}
       {showCommands.show && <HypertasksCommands />}
       {showRail && <AppShellRail variant="global" currentUser={currentUser} />}
 
@@ -394,7 +475,7 @@ const PageEditor = ({ _page, _user }: PageEditorProps) => {
               className={`min-h-[420px] cursor-text touch-manipulation ${
                 isMobile ? "mt-5" : "mt-8"
               } ${styles.hellow}`}
-              onClick={() => editor?.commands.focus()}
+              onClick={handleContentClick}
             >
               <div
                 className={`min-h-[420px] w-full break-normal text-white-black ${styles.editorContainer}`}

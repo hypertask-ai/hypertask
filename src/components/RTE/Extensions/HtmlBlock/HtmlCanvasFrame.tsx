@@ -1,7 +1,10 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import { usePathname } from "next/navigation";
 
+import { useFlag } from "@/hooks/useFlag";
+import { HTPR_6872_PAGE_IMAGE_GALLERY_FLAG } from "@/lib/flags/keys";
 import { buildHtmlBlockSrcDoc } from "./buildSrcDoc";
 
 const MIN_HEIGHT = 120;
@@ -17,7 +20,13 @@ export function HtmlCanvasFrame({
 }) {
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const [height, setHeight] = useState(MIN_HEIGHT);
-  const srcDoc = useMemo(() => buildHtmlBlockSrcDoc(html), [html]);
+  const pathname = usePathname();
+  const galleryEnabled = useFlag(HTPR_6872_PAGE_IMAGE_GALLERY_FLAG);
+  const pageGalleryEnabled = galleryEnabled && Boolean(pathname?.startsWith("/page/"));
+  const srcDoc = useMemo(
+    () => buildHtmlBlockSrcDoc(html, pageGalleryEnabled),
+    [html, pageGalleryEnabled],
+  );
 
   useEffect(() => {
     const handleMessage = (event: MessageEvent) => {

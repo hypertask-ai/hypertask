@@ -27,7 +27,19 @@ const RESIZE_SCRIPT =
   "ipt>(function(){function h(){try{var d=document;parent.postMessage({__htHtmlBlock:1,h:Math.max(d.documentElement.scrollHeight,d.body?d.body.scrollHeight:0)},'*');}catch(e){}}window.addEventListener('load',h);window.addEventListener('resize',h);if(window.ResizeObserver){try{new ResizeObserver(h).observe(document.documentElement);if(document.body)new ResizeObserver(h).observe(document.body);}catch(e){}}var n=0,t=setInterval(function(){h();if(++n>25)clearInterval(t);},150);})();</scr" +
   "ipt>";
 
-export function buildHtmlBlockSrcDoc(raw: string): string {
+const IMAGE_CLICK_SCRIPT = `<script>
+document.addEventListener('click', function(event) {
+  if (event.defaultPrevented || event.button !== 0 || event.shiftKey || event.ctrlKey || event.metaKey || event.altKey) return;
+  var image = event.target.closest('img');
+  var images = Array.from(document.querySelectorAll('img')).filter(function(img) { return !img.closest('[data-figma-embed-preview]'); });
+  var index = images.indexOf(image);
+  if (index < 0) return;
+  event.preventDefault();
+  parent.postMessage({__htPageImage:1, images:images.map(function(img) { return img.src; }), index:index}, '*');
+});
+</script>`;
+
+export function buildHtmlBlockSrcDoc(raw: string, imageGalleryEnabled = false): string {
   let headExtra = "";
   let body = raw;
 
@@ -54,6 +66,7 @@ export function buildHtmlBlockSrcDoc(raw: string): string {
     "</head><body>" +
     body +
     RESIZE_SCRIPT +
+    (imageGalleryEnabled ? IMAGE_CLICK_SCRIPT : "") +
     "</body></html>"
   );
 }
