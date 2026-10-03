@@ -36,7 +36,14 @@ const stubs = new Map([
     "src/lib/flags.ts",
     {
       HTPR_6372_SEARCH_RANKING_FLAG: "htpr-6372-search-ranking",
-      isFeatureEnabled: async () => setup.rankingEnabled ?? false,
+      HTPR_6369_SEARCH_OPERATORS_FLAG: "htpr-6369-search-operators",
+      HTPR_6370_SEARCH_CHIPS_FLAG: "htpr-6370-search-chips",
+      HTPR_6688_SEARCH_AUTOCOMPLETE_FLAG: "htpr-6688-search-autocomplete",
+      HTPR_6865_SEARCH_LAYOUT_FLAG: "htpr-6865-search-layout",
+      HTPR_6878_SEARCH_LABEL_SCOPE_FLAG: "htpr-6878-search-label-scope",
+      HTPR_6881_SEARCH_FUZZY_PERSON_FLAG: "htpr-6881-search-fuzzy-person",
+      HTPR_6882_SEARCH_MATCH_HIGHLIGHTS_FLAG: "htpr-6882-search-match-highlights",
+      isFeatureEnabled: async (key) => key === "htpr-6372-search-ranking" && (setup.rankingEnabled ?? false),
     },
   ],
 ]);

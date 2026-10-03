@@ -57,6 +57,7 @@ import {
   HTPR_6370_SEARCH_CHIPS_FLAG,
   HTPR_6688_SEARCH_AUTOCOMPLETE_FLAG,
   HTPR_6865_SEARCH_LAYOUT_FLAG,
+  HTPR_6882_SEARCH_MATCH_HIGHLIGHTS_FLAG,
   HTPR_6878_SEARCH_LABEL_SCOPE_FLAG,
   HTPR_6879_SEARCH_ESC_BACK_FLAG,
   HTPR_6881_SEARCH_FUZZY_PERSON_FLAG,
@@ -629,6 +630,11 @@ const FEATURE_FLAG_DEFINITIONS = [
     key: HTPR_6865_SEARCH_LAYOUT_FLAG,
     shippedOn: "2026-10-03",
     description: "Shows one aligned search suggestion list with recents, tips, people emails and grey value completion; searches only after acceptance or Enter. Requires search autocomplete, chips and operators.",
+  },
+  {
+    key: HTPR_6882_SEARCH_MATCH_HIGHLIGHTS_FLAG,
+    shippedOn: "2026-10-03",
+    description: "Shows why search results matched with inbox-style person highlights, label and board pills, safe text highlights and comment authors. Requires the search layout flag.",
   },
   {
     key: HTPR_6878_SEARCH_LABEL_SCOPE_FLAG,

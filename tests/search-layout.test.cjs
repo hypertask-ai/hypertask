@@ -416,3 +416,53 @@ test('typing after chip removal or archive changes remains a draft until Enter',
     assert.equal(requests.at(-1).body.archive, null)
   })
 })
+
+const matchFlag = 'htpr-6882-search-match-highlights'
+const matchTask = { taskId: 1, projectId: 7, projectTitle: 'Product Board', uniqueIndex: 1, ticketNumber: 'HTPR-1',
+  taskTitle: 'Login <script>alert(1)</script>', descriptionText: 'Login needs login help', highlight: {},
+  searchMatch: { people: ['Valentin Yeo'], labels: ['Bug'], board: 'Product Board' } }
+
+test('match results reuse inbox mention and board label pills with safe title and snippet marks', async (t) => {
+  await withSearch(t, { query: 'login from:6 label:bug in:7', flags: { [matchFlag]: true } }, async ({ complete, requests, capture }) => {
+    await complete(requests[0], [matchTask])
+    const row = document.getElementById('task_1')
+    const matches = row.querySelector('[data-search-match-highlights]')
+    assert.equal(matches.querySelector('.bg-mention-highlight.text-mention-highlight').textContent, '@Valentin Yeo')
+    assert.deepEqual([...matches.querySelectorAll('.label-pill')].map((pill) => pill.textContent), ['Bug', 'Product Board'])
+    assert.deepEqual([...row.querySelectorAll('mark')].map((mark) => mark.textContent.toLowerCase()), ['login', 'login', 'login'])
+    assert.equal(row.querySelector('script'), null)
+    assert.match(row.textContent, /<script>alert\(1\)<\/script>/)
+    assert.match(matches.className, /min-w-0.*overflow-hidden/)
+    assert.match(matches.lastElementChild.className, /truncate/)
+    assert.match(row.firstElementChild.className, /flex-col.*@md:flex/)
+    capture('match-results')
+  })
+})
+
+test('comment result author is an inbox pill before the safely highlighted snippet, including late matches', async (t) => {
+  await withSearch(t, { query: 'login', flags: { [matchFlag]: true } }, async ({ complete, requests }) => {
+    await complete(requests[0], [{ ...matchTask, commentId: 44, commentText: `${'before '.repeat(80)}Login <img src=x onerror=alert(1)>`,
+      searchMatch: { commentAuthor: 'Comment Writer' } }])
+    const matches = document.querySelector('[data-search-match-highlights]')
+    assert.equal(matches.firstElementChild.textContent, '@Comment Writer')
+    assert.equal(matches.lastElementChild.querySelector('mark').textContent, 'Login')
+    assert.match(matches.lastElementChild.textContent, /^\.\.\./)
+    assert.equal(matches.querySelector('img'), null)
+    assert.match(matches.textContent, /<img src=x onerror=alert\(1\)>/)
+  })
+})
+
+test('match flag and layout prerequisites off retain byte-identical row HTML despite match metadata', async (t) => {
+  for (const disabled of [matchFlag, layoutFlag, ...prerequisites]) {
+    await withSearch(t, { query: 'login', flags: { [matchFlag]: true, [disabled]: false }, baseline: true }, async ({ complete, requests, render, capture }) => {
+      const { searchMatch, ...legacy } = matchTask
+      await complete(requests[0], [legacy])
+      const before = document.getElementById('task_1').outerHTML
+      await render('login', true)
+      await complete(requests.at(-1), [matchTask])
+      assert.equal(document.getElementById('task_1').outerHTML, before)
+      assert.equal(document.querySelector('[data-search-match-highlights]'), null)
+      capture(`match-off-${disabled}`)
+    })
+  }
+})

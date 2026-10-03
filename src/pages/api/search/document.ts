@@ -2,10 +2,12 @@ import { httpStatusConfig } from "@/lib/configs/http-status.config";
 import { getSessionUser } from "@/lib/auth/getSessionUser";
 import { HTPR_6372_SEARCH_RANKING_FLAG, HTPR_6369_SEARCH_OPERATORS_FLAG, isFeatureEnabled } from "@/lib/flags";
 import { HTPR_6370_SEARCH_CHIPS_FLAG, HTPR_6688_SEARCH_AUTOCOMPLETE_FLAG, HTPR_6865_SEARCH_LAYOUT_FLAG, HTPR_6878_SEARCH_LABEL_SCOPE_FLAG, HTPR_6881_SEARCH_FUZZY_PERSON_FLAG } from "@/lib/flags";
-import { MAX_SEARCH_OPERATOR_CLAUSES, searchOperatorClauseCount } from "@/lib/search/operators";
+import { HTPR_6882_SEARCH_MATCH_HIGHLIGHTS_FLAG } from "@/lib/flags";
+import { MAX_SEARCH_OPERATOR_CLAUSES, searchOperatorClauseCount, type SearchFilter } from "@/lib/search/operators";
 import { parseSearchWithChipNames, parseSearchWithNames } from "@/lib/search/serverOperators";
 import { rankedSearchWhere } from "@/lib/search/rankedWhere";
 import prisma from "@/lib/prisma";
+import type { Prisma } from "@prisma/client";
 import { turbopufferGetDocuments } from "@/utils/controllers/search/document";
 import { convertToPlain } from "@/utils/controllers/turbopuffer/turbopufferHelper";
 import { projectContentAccessWhere } from "@/utils/controllers/projects/getAllIncludes";
@@ -62,6 +64,10 @@ const handler: NextApiHandler = async (
 
       const chipsEnabled = operatorsEnabled && await isFeatureEnabled(HTPR_6370_SEARCH_CHIPS_FLAG, session.userId);
       const fuzzyPersonEnabled = operatorsEnabled && await isFeatureEnabled(HTPR_6881_SEARCH_FUZZY_PERSON_FLAG, session.userId);
+      const matchHighlightsEnabled = chipsEnabled &&
+        await isFeatureEnabled(HTPR_6882_SEARCH_MATCH_HIGHLIGHTS_FLAG, session.userId) &&
+        await isFeatureEnabled(HTPR_6865_SEARCH_LAYOUT_FLAG, session.userId) &&
+        await isFeatureEnabled(HTPR_6688_SEARCH_AUTOCOMPLETE_FLAG, session.userId);
       const parsed = chipsEnabled
         ? await parseSearchWithChipNames(normalizedSearchQuery, requestedProjectIds, fuzzyPersonEnabled)
         : operatorsEnabled ? await parseSearchWithNames(normalizedSearchQuery, requestedProjectIds, fuzzyPersonEnabled) : null;
@@ -81,28 +87,54 @@ const handler: NextApiHandler = async (
         });
       }
       if (parsed && Object.keys(parsed.filters).length) {
-        const { where, rankedIds, descriptionById, partial } = await rankedSearchWhere(
+        const { where, rankedIds, descriptionById, commentById, partial } = await rankedSearchWhere(
           parsed, requestedProjectIds, archive === "Normal" || archive === "Archive" ? archive : null,
         );
-        const select = {
+        const matchSelect = {
+          userId: true, user: { select: { displayName: true, email: true } },
+          assignees: { select: { userId: true, user: { select: { displayName: true, email: true } } } },
+          taskLabels: { select: { label: { select: { id: true, value: true } } } },
+        } as const;
+        const legacySelect = {
             id: true, projectId: true, ticketNumber: true, title: true,
             description_: { select: { content: true } }, status: true, updatedAt: true, uniqueIndex: true,
             project: { select: { title: true } },
         } as const;
-        const primary = rankedIds.length ? await prisma.task.findMany({
-          where: { ...where, id: { in: rankedIds.slice(0, 50) } }, select,
-        }) : [];
+        const select = { ...legacySelect, ...matchSelect };
+        type SearchRow = Prisma.TaskGetPayload<{ select: typeof legacySelect }> & Partial<Prisma.TaskGetPayload<{ select: typeof matchSelect }>>;
+        const primaryWhere = { ...where, id: { in: rankedIds.slice(0, 50) } };
+        const primary: SearchRow[] = rankedIds.length ? await (matchHighlightsEnabled
+          ? prisma.task.findMany({ where: primaryWhere, select })
+          : prisma.task.findMany({ where: primaryWhere, select: legacySelect })) : [];
         const rankedPrimary = primary.toSorted((a, b) => rankedIds.indexOf(a.id) - rankedIds.indexOf(b.id));
-        const fallback = !parsed.text ? await prisma.task.findMany({
-          where, select, orderBy: [{ updatedAt: 'desc' }, { id: 'asc' }], take: 50,
-        }) : [];
-        const ranked = [...rankedPrimary, ...fallback].map((row) => ({
-          taskId: row.id, projectId: row.projectId, ticketNumber: row.ticketNumber,
-          taskTitle: row.title, descriptionText: descriptionById.get(row.id) ?? convertToPlain(row.description_?.content ?? ''),
-          projectTitle: row.project.title, status: row.status,
-          updatedAt: row.updatedAt?.toISOString(), uniqueIndex: row.uniqueIndex,
-          highlight: {},
-        }));
+        const fallbackArgs = { where, orderBy: [{ updatedAt: 'desc' as const }, { id: 'asc' as const }], take: 50 };
+        const fallback: SearchRow[] = !parsed.text ? await (matchHighlightsEnabled
+          ? prisma.task.findMany({ ...fallbackArgs, select })
+          : prisma.task.findMany({ ...fallbackArgs, select: legacySelect })) : [];
+        const ranked = [...rankedPrimary, ...fallback].map((row) => {
+          const match = matchHighlightsEnabled ? row : undefined;
+          const comment = matchHighlightsEnabled ? commentById.get(row.id) : undefined;
+          return {
+            taskId: row.id, projectId: row.projectId, ticketNumber: row.ticketNumber,
+            taskTitle: row.title, descriptionText: descriptionById.get(row.id) ?? convertToPlain(row.description_?.content ?? ''),
+            projectTitle: row.project.title, status: row.status,
+            updatedAt: row.updatedAt?.toISOString(), uniqueIndex: row.uniqueIndex,
+            highlight: {},
+            ...(matchHighlightsEnabled ? {
+              searchMatch: {
+                people: [...new Set([
+                  ...(matchesFilter(parsed.filters.from, [match?.userId, match?.user?.displayName, match?.user?.email]) ? [match?.user?.displayName || match?.user?.email || ''] : []),
+                  ...(match?.assignees ?? []).filter((person) => matchesFilter(parsed.filters.assignee, [person.userId, person.user.displayName, person.user.email]))
+                    .map((person) => person.user.displayName || person.user.email || ''),
+                ].filter(Boolean))],
+                labels: (match?.taskLabels ?? []).filter(({ label }) => matchesFilter(parsed.filters.label, [label.id, label.value])).map(({ label }) => label.value ?? ''),
+                ...(matchesFilter([...(parsed.filters.in ?? []), ...(parsed.filters.board ?? [])], [row.projectId, row.project.title]) ? { board: row.project.title ?? '' } : {}),
+                ...(comment ? { commentAuthor: comment.creatorName } : {}),
+              },
+              ...(comment ? { commentId: Number(comment.id), commentText: comment.commentText } : {}),
+            } : {}),
+          };
+        });
         const processedData: Record<string, typeof ranked> = { All: ranked };
         const tabs = ["All"];
         if (new Set(ranked.map((row) => row.status)).size > 1) {
@@ -136,6 +168,7 @@ const handler: NextApiHandler = async (
         {
           contextProjectId,
           applyRelevanceCut,
+          ...(matchHighlightsEnabled ? { matchHighlightsEnabled: true } : {}),
         }
       );
       return res.status(results.status).json(results);
@@ -149,5 +182,11 @@ const handler: NextApiHandler = async (
     return res.status(405).json(httpStatusConfig.statusCodes[405].userMessage);
   }
 };
+
+function matchesFilter(filters: SearchFilter[] | undefined, values: (string | number | null | undefined)[]) {
+  return filters?.some(({ value, negated, userIds }) => !negated && (userIds
+    ? values.some((candidate) => typeof candidate === 'number' && userIds.includes(candidate))
+    : values.some((candidate) => candidate != null && String(candidate).trim().toLowerCase() === value.replace(/^@/, '').trim().toLowerCase()))) ?? false;
+}
 
 export default handler;

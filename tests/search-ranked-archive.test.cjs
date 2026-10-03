@@ -4,6 +4,7 @@ const test = require("node:test");
 
 const root = path.resolve(__dirname, "..");
 const calls = [];
+let commentOnly = false;
 const archivedTask = {
   id: "39321",
   ticketNumber: "HTPR-6365",
@@ -60,7 +61,7 @@ require.cache[helperPath] = {
   exports: {
     searchTasks: async (params) => {
       calls.push(["searchTasks", params]);
-      return rowsForStatus(params.status, [archivedTask], [openTask]);
+      return commentOnly ? [] : rowsForStatus(params.status, [archivedTask], [openTask]);
     },
     searchComments: async (params) => {
       calls.push(["searchComments", params]);
@@ -134,3 +135,19 @@ test("ranked ticket search pins an archived ticket first", async () => {
 });
 
 console.log("ranked archive search checks passed");
+
+test('free-text comment results return the indexed author only for match highlights', async () => {
+  commentOnly = true;
+  try {
+    const legacy = await turbopufferGetDocuments('inbox icon', [15], 'Normal');
+    const off = await turbopufferGetDocuments('inbox icon', [15], 'Normal', { matchHighlightsEnabled: false });
+    assert.equal(JSON.stringify(off), JSON.stringify(legacy));
+    calls.length = 0;
+    const on = await turbopufferGetDocuments('inbox icon', [15], 'Normal', { matchHighlightsEnabled: true });
+    assert.equal(on.processedData.All[0].searchMatch.commentAuthor, 'QA');
+    assert.equal(on.processedData.All[0].commentText, openComment.commentText);
+    assert.equal(calls.length, 2, 'author uses the indexed row, not another query');
+  } finally {
+    commentOnly = false;
+  }
+});

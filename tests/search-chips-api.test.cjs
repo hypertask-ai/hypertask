@@ -52,7 +52,10 @@ const mocks = new Map([
     HTPR_6370_SEARCH_CHIPS_FLAG: 'htpr-6370-search-chips',
     HTPR_6372_SEARCH_RANKING_FLAG: 'htpr-6372-search-ranking',
     HTPR_6878_SEARCH_LABEL_SCOPE_FLAG: 'htpr-6878-search-label-scope',
-    isFeatureEnabled: async (key) => ['htpr-6878-search-label-scope', 'htpr-6881-search-fuzzy-person'].includes(key) ? false : key === 'htpr-6370-search-chips' ? state.chipsFlag ?? state.flag : state.flag,
+    HTPR_6882_SEARCH_MATCH_HIGHLIGHTS_FLAG: 'htpr-6882-search-match-highlights',
+    HTPR_6865_SEARCH_LAYOUT_FLAG: 'htpr-6865-search-layout',
+    HTPR_6688_SEARCH_AUTOCOMPLETE_FLAG: 'htpr-6688-search-autocomplete',
+    isFeatureEnabled: async (key) => ['htpr-6878-search-label-scope', 'htpr-6881-search-fuzzy-person', 'htpr-6882-search-match-highlights'].includes(key) ? false : key === 'htpr-6370-search-chips' ? state.chipsFlag ?? state.flag : state.flag,
   }],
   ['src/utils/controllers/projects/getAllIncludes.ts', {
     projectContentAccessWhere: (userId) => ({ ownerId: userId }),
