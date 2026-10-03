@@ -33,7 +33,6 @@ export async function parseSearchWithNames(raw: string, projectIds: number[], fu
           ...(operator === 'commenter' ? [{ comments: { some: { activity: { equals: Prisma.DbNull }, task: { projectId: { in: personProjectIds }, status: { in: ['Normal' as const, 'Archive' as const] } } } } }] : []),
         ] },
         select: { displayName: true },
-        ...(operator === 'commenter' ? { take: 1000, orderBy: { id: 'asc' as const } } : {}),
       })).map((row) => row.displayName ?? '')]
     }
   }
@@ -53,7 +52,6 @@ export async function parseSearchWithNames(raw: string, projectIds: number[], fu
           ...(isCommenter ? [{ comments: { some: { activity: { equals: Prisma.DbNull }, task: { projectId: { in: personProjectIds }, status: { in: ['Normal' as const, 'Archive' as const] } } } } }] : []),
         ] },
         select: { id: true, displayName: true, email: true },
-        ...(isCommenter ? { take: 1000, orderBy: { id: 'asc' as const } } : {}),
       })
       const normalize = (value: string) => value.normalize('NFD').replace(/\p{M}/gu, '').toLowerCase()
       for (const filter of filters) {

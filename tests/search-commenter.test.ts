@@ -443,14 +443,16 @@ test('review comment-only authors appear only in bounded accessible commenter re
       const full = await parser('commenter:@Comment Only', [7], false, [7], true)
       assert.equal(full.filters.commenter[0].value, '@Comment Only')
       assert.equal(full.text, '')
-      assert.ok(state.peopleQueries.filter((args: any) => JSON.stringify(args.where).includes('comments')).every((args: any) => args.take <= 1000))
+      // Resolver must match before limiting, so it never caps the people pool (review on PR 977).
+      assert.ok(state.peopleQueries.filter((args: any) => JSON.stringify(args.where).includes('comments')).every((args: any) => args.take === undefined))
       state.flags[keys.HTPR_6370_SEARCH_CHIPS_FLAG] = chips
+      const pickerStart = state.peopleQueries.length
       for (const operator of ['commenter', 'from', 'assignee']) {
         const res = response()
         await valuesHandler({ method: 'GET', headers: {}, query: { operator, value: 'comment', boardId: '7' } }, res)
         assert.deepEqual(res.body.candidates.map((row: any) => row.id), operator === 'commenter' ? [40] : [])
       }
-      assert.ok(state.peopleQueries.filter((args: any) => JSON.stringify(args.where).includes('comments')).every((args: any) => args.take <= 1000))
+      assert.ok(state.peopleQueries.slice(pickerStart).filter((args: any) => JSON.stringify(args.where).includes('comments')).every((args: any) => args.take <= 1000))
       const resolved = response()
       await valuesHandler({ method: 'GET', headers: {}, query: { operator: 'commenter', resolve: 'Comment Only trailing text', boardId: '7' } }, resolved)
       assert.equal(resolved.body.resolved, chips ? 'Comment Only' : undefined)
