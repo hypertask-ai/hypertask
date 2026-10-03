@@ -73,6 +73,7 @@ import {
   HTPR_6516_AGENT_ATTRIBUTION_FLAG,
   HTPR_6512_SEED_TEAM_AGENT_FLAG,
   HTPR_6533_MCP_CLIENT_EVAL_FLAG,
+  HTPR_6804_MCP_TOOLS_FLAG,
   HTPR_6470_PROJECT_DELETE_FLAG,
   HTPR_6536_QA_LOGIN_FLAG,
   HTPR_6551_QUIET_RUN_ACTIVITY_FLAG,
@@ -163,6 +164,12 @@ const RETIRED_CLIENT_FEATURE_FLAGS = {
 } as const;
 
 const FEATURE_FLAG_DEFINITIONS = [
+  {
+    key: HTPR_6804_MCP_TOOLS_FLAG,
+    shippedOn: "2026-10-03",
+    description:
+      "Advertises consolidated MCP tools with action parameters, concise structured responses and actionable errors while retaining callable legacy names.",
+  },
   {
     key: HTPR_6354_AI_CHAT_ALERTS_FLAG,
     shippedOn: "2026-10-03",

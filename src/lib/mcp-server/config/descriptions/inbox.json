@@ -1,0 +1,30 @@
+{
+  "name": "hypertask_inbox",
+  "does": "Read an inbox, archive or restore notification items, or send a ticket to a user inbox.",
+  "use_when": "Use to triage notifications or explicitly bring an existing ticket to a person’s attention.",
+  "do_not_use_when": "Do not use to archive tickets or boards; notification_ids identify inbox items, not task ids.",
+  "parameters_and_caveats": "action selects an operation; input contains only that operation’s documented fields. response_format defaults to concise for reads; detailed retains full fields. limit defaults to 20 (maximum 50) and offset defaults to 0 for bounded read results; use returned pagination or narrower filters. Identifiers and required fields depend on the selected action; writes keep existing authorization and confirmation rules.",
+  "actions": {
+    "list": {
+      "tool": "hypertask_inbox_list",
+      "read_only": true,
+      "permission": "data"
+    },
+    "archive": {
+      "tool": "hypertask_inbox_archive",
+      "read_only": false,
+      "permission": "data"
+    },
+    "unarchive": {
+      "tool": "hypertask_inbox_unarchive",
+      "read_only": false,
+      "permission": "data"
+    },
+    "move_task": {
+      "tool": "hypertask_move_task_to_inbox",
+      "read_only": false,
+      "permission": "data"
+    }
+  },
+  "input_examples": []
+}

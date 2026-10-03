@@ -1,0 +1,53 @@
+{
+  "name": "hypertask_pages",
+  "does": "Create, read, update, list or search ticket pages, and inspect, restore or archive their versions.",
+  "use_when": "Use for longer documents attached to tickets; get with format retrieves the current page content.",
+  "do_not_use_when": "Do not use for conversation replies or ticket descriptions; use hypertask_comments or hypertask_tasks instead.",
+  "parameters_and_caveats": "action selects an operation; input contains only that operation’s documented fields. response_format defaults to concise for reads; detailed retains full fields. limit defaults to 20 (maximum 50) and offset defaults to 0 for bounded read results; use returned pagination or narrower filters. page_id or id identifies a page; update supports if_version for optimistic concurrency. Concise reads summarize pages; request detailed for full content.",
+  "actions": {
+    "create": {
+      "tool": "hypertask_create_page",
+      "read_only": false,
+      "permission": "data"
+    },
+    "get": {
+      "tool": "hypertask_get_page",
+      "read_only": true,
+      "permission": "data"
+    },
+    "update": {
+      "tool": "hypertask_update_page",
+      "read_only": false,
+      "permission": "data"
+    },
+    "list": {
+      "tool": "hypertask_list_pages",
+      "read_only": true,
+      "permission": "data"
+    },
+    "search": {
+      "tool": "hypertask_search_pages",
+      "read_only": true,
+      "permission": "data"
+    },
+    "versions": {
+      "tool": "hypertask_page_history",
+      "legacy_action": "versions",
+      "read_only": true,
+      "permission": "data"
+    },
+    "restore": {
+      "tool": "hypertask_page_history",
+      "legacy_action": "restore",
+      "read_only": false,
+      "permission": "data"
+    },
+    "archive": {
+      "tool": "hypertask_page_history",
+      "legacy_action": "archive",
+      "read_only": false,
+      "permission": "data"
+    }
+  },
+  "input_examples": []
+}

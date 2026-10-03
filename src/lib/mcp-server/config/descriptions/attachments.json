@@ -1,0 +1,15 @@
+{
+  "name": "hypertask_attachments",
+  "does": "Upload files to a ticket or one of its comments.",
+  "use_when": "Use when an existing ticket or comment needs a file; create and update actions can also accept inline attachments.",
+  "do_not_use_when": "Do not use to fetch arbitrary URLs or upload without a known target ticket.",
+  "parameters_and_caveats": "action selects an operation; input contains only that operation’s documented fields. response_format defaults to concise for reads; detailed retains full fields. limit defaults to 20 (maximum 50) and offset defaults to 0 for bounded read results; use returned pagination or narrower filters. files contains upload objects with filename, content_type and exactly one of data (base64) or url, subject to existing request size limits. Partial upload failures include retry guidance; do not repeat a successful mutation.",
+  "actions": {
+    "attach": {
+      "tool": "hypertask_attach_files",
+      "read_only": false,
+      "permission": "data"
+    }
+  },
+  "input_examples": []
+}

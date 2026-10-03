@@ -1,0 +1,30 @@
+{
+  "name": "hypertask_search",
+  "does": "Search tickets by text and filters, retrieve semantic document chunks, find related tickets, or search product help.",
+  "use_when": "Use tasks for keyword discovery, semantic for relevant evidence passages, related for neighbors of a ticket, and help for product instructions.",
+  "do_not_use_when": "Do not use when you already know a ticket number and need its current fields; use hypertask_tasks get instead.",
+  "parameters_and_caveats": "action selects an operation; input contains only that operation’s documented fields. response_format defaults to concise for reads; detailed retains full fields. limit defaults to 20 (maximum 50) and offset defaults to 0 for bounded read results; use returned pagination or narrower filters. query is plain text; tasks supports the existing search operators and structured filter, semantic supports metadata_filters, related accepts a ticket identifier or text. Returned semantic evidence keeps passage text and source references.",
+  "actions": {
+    "tasks": {
+      "tool": "hypertask_search_tasks",
+      "read_only": true,
+      "permission": "data"
+    },
+    "semantic": {
+      "tool": "hypertask_rag_retrieval",
+      "read_only": true,
+      "permission": "data"
+    },
+    "related": {
+      "tool": "hypertask_find_related_tasks",
+      "read_only": true,
+      "permission": "data"
+    },
+    "help": {
+      "tool": "hypertask_search_help_docs",
+      "read_only": true,
+      "permission": "data"
+    }
+  },
+  "input_examples": []
+}

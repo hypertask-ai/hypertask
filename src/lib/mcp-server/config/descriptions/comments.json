@@ -1,0 +1,31 @@
+{
+  "name": "hypertask_comments",
+  "does": "List ticket comments and activity, add replies, and edit or delete comments allowed by the current credential.",
+  "use_when": "Use to discuss a ticket or inspect its conversation; list with include_activity also retrieves work history.",
+  "do_not_use_when": "Do not use for ticket descriptions or unpublished drafts; use hypertask_tasks or hypertask_drafts instead.",
+  "parameters_and_caveats": "action selects an operation; input contains only that operation’s documented fields. response_format defaults to concise for reads; detailed retains full fields. limit defaults to 20 (maximum 50) and offset defaults to 0 for bounded read results; use returned pagination or narrower filters. text is HTML unless content_type=markdown; comment_id is required to edit or delete, and ticket identifiers locate list/add targets. Ownership and board membership still apply.",
+  "actions": {
+    "list": {
+      "tool": "hypertask_get_comments_for_task",
+      "read_only": true,
+      "permission": "data"
+    },
+    "add": {
+      "tool": "hypertask_add_comment_to_task",
+      "legacy_action": "add",
+      "read_only": false,
+      "permission": "data"
+    },
+    "update": {
+      "tool": "hypertask_update_comment",
+      "read_only": false,
+      "permission": "data"
+    },
+    "delete": {
+      "tool": "hypertask_delete_comment",
+      "read_only": false,
+      "permission": "data"
+    }
+  },
+  "input_examples": []
+}
