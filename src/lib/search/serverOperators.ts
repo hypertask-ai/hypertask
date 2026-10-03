@@ -1,3 +1,4 @@
+import { Prisma } from '@prisma/client'
 import prisma from '@/lib/prisma'
 import { MAX_SEARCH_OPERATOR_CLAUSES, operatorMatches, parseSearchQuery, type NameOperator, type Names, type ParsedSearch } from './operators'
 
@@ -23,28 +24,36 @@ export async function parseSearchWithNames(raw: string, projectIds: number[], fu
         select: { value: true },
       })).map((row) => row.value ?? '')]
     } else {
+      const scope = operator === 'commenter' ? personProjectIds : projectIds
       names[nameOperator] = [...(names[nameOperator] ?? []), ...(await prisma.user.findMany({
         where: { displayName: { startsWith: prefix, mode: 'insensitive' }, OR: [
-          { tasks: { some: { projectId: { in: projectIds } } } },
-          { assignees: { some: { task: { projectId: { in: projectIds } } } } },
-          { members: { some: { projectId: { in: projectIds } } } },
+          { tasks: { some: { projectId: { in: scope } } } },
+          { assignees: { some: { task: { projectId: { in: scope } } } } },
+          { members: { some: { projectId: { in: scope } } } },
+          ...(operator === 'commenter' ? [{ comments: { some: { activity: { equals: Prisma.DbNull }, task: { projectId: { in: personProjectIds }, status: { in: ['Normal' as const, 'Archive' as const] } } } } }] : []),
         ] },
         select: { displayName: true },
+        ...(operator === 'commenter' ? { take: 1000, orderBy: { id: 'asc' as const } } : {}),
       })).map((row) => row.displayName ?? '')]
     }
   }
   const parsed = parseSearchQuery(raw, names, commenterEnabled)
   if (fuzzyPersonEnabled) {
-    const filters = [...(parsed.filters.from ?? []), ...(parsed.filters.assignee ?? []), ...(parsed.filters.commenter ?? [])]
-      .filter(({ value }) => !/^\d+$/.test(value.replace(/^@/, '').trim()))
-    if (filters.length) {
+    for (const [clauses, isCommenter] of [
+      [[...(parsed.filters.from ?? []), ...(parsed.filters.assignee ?? [])], false],
+      [parsed.filters.commenter ?? [], true],
+    ] as const) {
+      const filters = clauses.filter(({ value }) => !/^\d+$/.test(value.replace(/^@/, '').trim()))
+      if (!filters.length) continue
       const people = await prisma.user.findMany({
         where: { OR: [
           { tasks: { some: { projectId: { in: personProjectIds } } } },
           { assignees: { some: { task: { projectId: { in: personProjectIds } } } } },
           { members: { some: { projectId: { in: personProjectIds } } } },
+          ...(isCommenter ? [{ comments: { some: { activity: { equals: Prisma.DbNull }, task: { projectId: { in: personProjectIds }, status: { in: ['Normal' as const, 'Archive' as const] } } } } }] : []),
         ] },
         select: { id: true, displayName: true, email: true },
+        ...(isCommenter ? { take: 1000, orderBy: { id: 'asc' as const } } : {}),
       })
       const normalize = (value: string) => value.normalize('NFD').replace(/\p{M}/gu, '').toLowerCase()
       for (const filter of filters) {

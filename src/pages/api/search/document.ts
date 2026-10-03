@@ -91,6 +91,7 @@ const handler: NextApiHandler = async (
       if (parsed && Object.keys(parsed.filters).length) {
         const { where, rankedIds, descriptionById, commentById, partial } = await rankedSearchWhere(
           parsed, requestedProjectIds, archive === "Normal" || archive === "Archive" ? archive : null,
+          50, {}, undefined, false, commenterEnabled,
         );
         const matchSelect = {
           userId: true, user: { select: { displayName: true, email: true } },
@@ -137,7 +138,7 @@ const handler: NextApiHandler = async (
             ...(comment ? {
               commentId: Number(comment.id),
               commentText: matchHighlightsEnabled ? comment.commentText : escapeHtml(comment.commentText),
-              ...(comment.createdAt ? { updatedAt: comment.createdAt.toISOString() } : {}),
+              ...(commenterEnabled && comment.createdAt ? { updatedAt: new Date(comment.createdAt).toISOString() } : {}),
             } : {}),
           };
         });

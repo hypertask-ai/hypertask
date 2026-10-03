@@ -1,4 +1,5 @@
 import type { NextApiHandler } from 'next'
+import { Prisma } from '@prisma/client'
 import { getSessionUser } from '@/lib/auth/getSessionUser'
 import { HTPR_6369_SEARCH_OPERATORS_FLAG, isFeatureEnabled } from '@/lib/flags'
 import { HTPR_6370_SEARCH_CHIPS_FLAG, HTPR_6688_SEARCH_AUTOCOMPLETE_FLAG, HTPR_6865_SEARCH_LAYOUT_FLAG, HTPR_6878_SEARCH_LABEL_SCOPE_FLAG, HTPR_6880_SEARCH_COMMENTER_FLAG } from '@/lib/flags'
@@ -124,6 +125,7 @@ const handler: NextApiHandler = async (req, res) => {
       ...(chipsEnabled ? [{ members: { some: { projectId: { in: ids } } } }] : []),
       { tasks: { some: { projectId: { in: scope }, ...(!activeBoardId ? { createdAt: { gte: recent } } : {}) } } },
       { assignees: { some: { task: { projectId: { in: scope } }, ...(!activeBoardId ? { assignedAt: { gte: recent } } : {}) } } },
+      ...(operator === 'commenter' ? [{ comments: { some: { activity: { equals: Prisma.DbNull }, task: { projectId: { in: scope }, status: { in: ['Normal' as const, 'Archive' as const] } } } } }] : []),
     ] }
     const select = {
       id: true, displayName: true, email: true,

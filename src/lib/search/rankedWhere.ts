@@ -12,25 +12,60 @@ export async function rankedSearchWhere(
   extraWhere: Prisma.TaskWhereInput = {},
   cursorId?: number | null,
   scanAll = false,
+  commenterEnabled = false,
+  taskOrderBy?: Prisma.TaskOrderByWithRelationInput[],
 ) {
   const where = await searchFilterWhere(parsed, projectIds, status)
   const rankedIds: number[] = []
   const descriptionById = new Map<number, string>()
-  const commentById = new Map<number, { id: string | number; commentText: string; creatorName: string; createdAt?: Date }>()
+  const commentById = new Map<number, { id: string | number; commentText: string; creatorName: string; createdAt?: Date | string }>()
   const commenters = parsed.filters.commenter?.filter(({ negated }) => !negated) ?? []
   if (commenters.length) {
-    const comments = await prisma.comment.findMany({
-      where: { ...commenterWhere(commenters, parsed.text), task: { AND: [where, extraWhere] } },
-      select: { id: true, taskId: true, commentText: true, createdAt: true, creator: { select: { displayName: true, email: true } } },
+    const matching = commenterWhere(commenters, parsed.text)
+    const taskWhere: Prisma.TaskWhereInput = { AND: [where, extraWhere] }
+    let skip = 0
+    let cursorValid = true
+    if (taskOrderBy) {
+      const page = await prisma.task.findMany({
+        where: taskWhere, select: { id: true }, orderBy: taskOrderBy, take: limit,
+        skip: cursorId ? 1 : 0, ...(cursorId ? { cursor: { id: cursorId } } : {}),
+      })
+      taskWhere.id = { in: page.map(({ id }) => id) }
+    } else if (cursorId) {
+      const anchor = await prisma.comment.findFirst({
+        where: { ...matching, taskId: cursorId, task: taskWhere },
+        select: { id: true, createdAt: true }, orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+      })
+      cursorValid = Boolean(anchor)
+      if (anchor) {
+        skip = 1 + await prisma.task.count({ where: { AND: [taskWhere, { comments: { some: {
+          ...matching, AND: [...(Array.isArray(matching.AND) ? matching.AND : []), { OR: [
+            { createdAt: { gt: anchor.createdAt } },
+            { createdAt: anchor.createdAt, id: { gt: anchor.id } },
+          ] }],
+        } } }] } })
+      } else taskWhere.id = { in: [] }
+    }
+    // Prisma may deduplicate in memory; fetch comment bodies only for the resulting page.
+    const page = await prisma.comment.findMany({
+      where: { ...matching, task: taskWhere },
+      select: { id: true, taskId: true, createdAt: true },
       orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
       distinct: ['taskId'],
-      ...(scanAll ? {} : { take: limit }),
+      take: limit,
+      skip,
     })
+    const comments = page.length ? await prisma.comment.findMany({
+      where: { id: { in: page.map(({ id }) => id) }, ...matching, task: taskWhere },
+      select: { id: true, taskId: true, commentText: true, createdAt: true, creator: { select: { displayName: true, email: true } } },
+      orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+      take: limit,
+    }) : []
     for (const comment of comments) {
       rankedIds.push(comment.taskId)
       commentById.set(comment.taskId, { ...comment, creatorName: comment.creator?.displayName || comment.creator?.email || '' })
     }
-    return { where, rankedIds, descriptionById, commentById, partial: false }
+    return { where, rankedIds, descriptionById, commentById, partial: false, paged: true, cursorValid }
   }
   if (!parsed.text) return { where, rankedIds, descriptionById, commentById, partial: false }
 
@@ -60,7 +95,9 @@ export async function rankedSearchWhere(
       }
       seen.add(id)
       if (description) descriptionById.set(id, description)
-      if (comment) commentById.set(id, { id: comment.id, commentText: comment.commentText, creatorName: comment.creatorName, createdAt: comment.createdAt ? new Date(comment.createdAt) : undefined })
+      if (comment) commentById.set(id, commenterEnabled
+        ? { id: comment.id, commentText: comment.commentText, creatorName: comment.creatorName, createdAt: comment.createdAt ? new Date(comment.createdAt) : undefined }
+        : comment)
       return true
     })
     if (fresh.length) {

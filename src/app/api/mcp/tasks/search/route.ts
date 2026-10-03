@@ -308,22 +308,23 @@ export async function GET(request: NextRequest) {
       const parsed = Object.keys(parsedQuery.filters).length ? parsedQuery : null
       if (parsed) {
         const filtered = await rankedSearchWhere(parsed, accessibleProjectIds, status, limit,
-          { ...where, ...(parsed.filters.is ? { status: undefined } : {}) }, cursorId, true)
-        commentById = filtered.commentById
+          { ...where, ...(parsed.filters.is ? { status: undefined } : {}) }, cursorId, true, commenterEnabled,
+          sortField ? [{ [sortField]: sortOrder }, { id: 'asc' }] : undefined)
+        if (commenterEnabled) commentById = filtered.commentById
         const rankedResults = Boolean(parsed.text || parsed.filters.commenter?.some((filter) => !filter.negated))
         operatorPartial = parsed.text ? filtered.partial : false
         where.AND = filtered.where.AND
         if (parsed.filters.is) where.status = filtered.where.status
-        if (rankedResults) where.id = { in: filtered.rankedIds }
+        if (rankedResults && !filtered.paged) where.id = { in: filtered.rankedIds }
         const total = await prisma.task.count({ where })
         const rankedIds = filtered.rankedIds
         const rankedCursor = cursorId ? rankedIds.indexOf(cursorId) : -1
-        if (rankedResults && cursorId && rankedCursor < 0 && !sortField) {
+        if (rankedResults && cursorId && !sortField && (filtered.paged ? !filtered.cursorValid : rankedCursor < 0)) {
           return NextResponse.json({ success: false, error: 'Validation error', message: 'cursor must be a previous nextCursor value' }, { status: 400 })
         }
-        const primaryIds = cursorId && rankedCursor < 0 ? [] : rankedIds.slice(rankedCursor + 1, rankedCursor + 1 + limit)
+        const primaryIds = filtered.paged ? rankedIds : cursorId && rankedCursor < 0 ? [] : rankedIds.slice(rankedCursor + 1, rankedCursor + 1 + limit)
         const operatorTasks = await prisma.task.findMany({
-          where: rankedResults && !sortField ? { ...where, id: { in: primaryIds } } : where,
+          where: filtered.paged || rankedResults && !sortField ? { ...where, id: { in: primaryIds } } : where,
           select: {
             id: true,
             ticketNumber: true,
@@ -348,7 +349,7 @@ export async function GET(request: NextRequest) {
           ...(!rankedResults || sortField ? { orderBy: sortField
             ? [{ [sortField]: sortOrder }, { id: 'asc' as const }]
             : [{ updatedAt: 'desc' as const }, { id: 'asc' as const }] } : {}),
-          ...(rankedResults && !sortField ? {} : {
+          ...(filtered.paged || rankedResults && !sortField ? {} : {
             take: limit,
             skip: cursorId ? 1 : 0,
             ...(cursorId ? { cursor: { id: cursorId } } : {}),
@@ -471,7 +472,7 @@ export async function GET(request: NextRequest) {
         dueDate: task.dueDate?.toISOString() || undefined,
         createdAt: task.createdAt.toISOString(),
         ...(agent ? { agent } : {}),
-        ...(comment?.createdAt ? { commentId: Number(comment.id), commentText: comment.commentText, commentCreatedAt: comment.createdAt.toISOString() } : {}),
+        ...(comment?.createdAt ? { commentId: Number(comment.id), commentText: comment.commentText, commentCreatedAt: new Date(comment.createdAt).toISOString() } : {}),
       }
       return withTaskPresentation({ ...item, uniqueIndex: task.uniqueIndex })
     })

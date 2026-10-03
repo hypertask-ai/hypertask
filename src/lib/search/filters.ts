@@ -31,7 +31,7 @@ export function commenterWhere(filters: SearchFilter[], text = ''): Prisma.Comme
       if (userIds !== undefined) return { creatorId: { in: userIds } }
       return { creator: { OR: [{ displayName: exact(name) }, { email: exact(name) }] } }
     }),
-    ...(text ? { commentText: { contains: text, mode: 'insensitive' as const } } : {}),
+    ...(text.trim() ? { AND: text.trim().split(/\s+/).map((word) => ({ commentText: { contains: word, mode: 'insensitive' as const } })) } : {}),
   }
 }
 

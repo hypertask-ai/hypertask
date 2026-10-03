@@ -56,6 +56,8 @@ function matches(row: any, where: any): boolean {
     if (key === 'activity') { if (value !== null) return false; continue }
     if (condition.some) { if (!value?.some((item: any) => matches(item, condition.some))) return false; continue }
     if (condition.in) { if (!condition.in.includes(value)) return false; continue }
+    if (condition instanceof Date) { if (value?.getTime() !== condition.getTime()) return false; continue }
+    if (condition.gt !== undefined) { if (!(value > condition.gt)) return false; continue }
     if (condition.gte) { if (!(value >= condition.gte)) return false; continue }
     const text = String(value ?? '').toLowerCase()
     if (condition.equals !== undefined) { if (text !== String(condition.equals).toLowerCase()) return false; continue }
@@ -65,22 +67,36 @@ function matches(row: any, where: any): boolean {
   }
   return true
 }
+function pageRows(rows: any[], args: any) {
+  const sorted = rows.toSorted((a, b) => {
+    for (const order of Array.isArray(args.orderBy) ? args.orderBy : args.orderBy ? [args.orderBy] : []) {
+      const [key, direction] = Object.entries(order)[0]
+      if (a[key] < b[key]) return direction === 'asc' ? -1 : 1
+      if (a[key] > b[key]) return direction === 'asc' ? 1 : -1
+    }
+    return 0
+  })
+  const start = (args.cursor ? sorted.findIndex((row) => row.id === args.cursor.id) : 0) + (args.skip ?? 0)
+  return sorted.slice(start, args.take === undefined ? undefined : start + args.take)
+}
 const db = {
   project: { findMany: async ({ where }: any) => [{ id: 7, title: 'Visible', status: 'Normal', ownerId: 42 }].filter((row) => matches(row, where)) },
   user: { findMany: async (args: any) => { state.peopleQueries.push(args); return people.filter((row) => matches(row, args.where)).slice(0, args.take) } },
   assignees: { findMany: async () => [] },
   task: {
-    findMany: async (args: any) => { state.taskQueries.push(args); return tasks.filter((row) => matches(row, args.where)).slice(0, args.take) },
-    count: async ({ where }: any) => tasks.filter((row) => matches(row, where)).length,
+    findMany: async (args: any) => { state.taskQueries.push(args); return pageRows(tasks.filter((row) => matches(row, args.where)), args) },
+    count: async (args: any) => { state.countQueries.push(args); return tasks.filter((row) => matches(row, args.where)).length },
   },
-  comment: { findMany: async (args: any) => {
-    state.commentQueries.push(args)
+  comment: { findFirst: async (args: any) => { state.anchorQueries.push(args); return pageRows(comments.filter((row) => !state.deleted.includes(row.id) && matches(row, args.where)), args)[0] ?? null }, findMany: async (args: any) => {
+    if (args.distinct) state.commentQueries.push(args)
+    else { state.detailQueries.push(args); assert.ok(args.take > 0); assert.ok(args.where.id.in.length <= args.take) }
     assert.deepEqual(args.orderBy, [{ createdAt: 'desc' }, { id: 'desc' }])
-    assert.deepEqual(args.distinct, ['taskId'])
+    if (args.distinct) { assert.deepEqual(args.distinct, ['taskId']); assert.equal(args.select.commentText, undefined) }
     const seen = new Set<number>()
-    return comments.filter((row) => !state.deleted.includes(row.id) && matches(row, args.where))
+    const rows = comments.filter((row) => !state.deleted.includes(row.id) && matches(row, args.where))
       .toSorted((a, b) => b.createdAt.getTime() - a.createdAt.getTime() || b.id - a.id)
-      .filter((row) => { if (seen.has(row.taskId)) return false; seen.add(row.taskId); return true }).slice(0, args.take)
+      .filter((row) => { if (!args.distinct) return true; if (seen.has(row.taskId)) return false; seen.add(row.taskId); return true })
+    return pageRows(rows, args)
   } },
 }
 for (const [file, exports] of [
@@ -93,8 +109,8 @@ for (const [file, exports] of [
   ['src/utils/controllers/search/document.ts', { turbopufferGetDocuments: async (query: string) => ({ status: 200, legacyQuery: query }), turbopufferSearchTaskIds: async () => [] }],
   ['src/utils/controllers/turbopuffer/turbopufferHelper.ts', {
     convertToPlain: (text: string) => text,
-    searchTasks: async () => { state.indexCalls++; return tasks.map((row) => ({ id: row.id, descriptionText: row.description })) },
-    searchComments: async () => { state.indexCalls++; return [] },
+    searchTasks: async () => { state.indexCalls++; return state.indexComments.length ? [] : tasks.map((row) => ({ id: row.id, descriptionText: row.description })) },
+    searchComments: async () => { state.indexCalls++; return state.indexComments },
   }],
 ] as const) {
   const filename = path.join(root, file)
@@ -111,7 +127,7 @@ function reset(overrides: any = {}) {
   state = { session: { userId: 42 }, flags: { [flag]: true, [fuzzyFlag]: true,
     [keys.HTPR_6369_SEARCH_OPERATORS_FLAG]: true, [keys.HTPR_6370_SEARCH_CHIPS_FLAG]: true,
     [keys.HTPR_6530_MCP_LIST_QUERY_FLAG]: true, [keys.HTPR_6688_SEARCH_AUTOCOMPLETE_FLAG]: true, [keys.HTPR_6865_SEARCH_LAYOUT_FLAG]: true },
-    peopleQueries: [], taskQueries: [], commentQueries: [], flagCalls: [], deleted: [], indexCalls: 0, ...overrides }
+    indexComments: [], countQueries: [], anchorQueries: [], peopleQueries: [], taskQueries: [], commentQueries: [], detailQueries: [], flagCalls: [], deleted: [], indexCalls: 0, ...overrides }
 }
 const response = () => ({ code: 0, body: undefined as any, status(code: number) { this.code = code; return this }, json(body: any) { this.body = body; return this } })
 async function search(query: string, projectIds = [7]) {
@@ -211,7 +227,7 @@ test('commenter and match highlight flags independently select matching comment 
       assert.equal(row.updatedAt, '2026-10-05T00:00:00.000Z')
       assert.equal(row.commentText, highlights ? comments[1].commentText : 'Newest NEEDLE &lt;img src=x onerror=alert(1)&gt;')
       assert.deepEqual(row.searchMatch, highlights ? { people: [], labels: [], commentAuthor: 'Hicham' } : undefined)
-      assert.deepEqual(state.commentQueries[0].select.creator, { select: { displayName: true, email: true } })
+      assert.deepEqual(state.detailQueries[0].select.creator, { select: { displayName: true, email: true } })
       assert.equal(state.indexCalls, 0)
     }
   }
@@ -242,8 +258,8 @@ test('text and commenter match the same comment, never the title, description or
   reset()
   const res = await search('needle commenter:1')
   assert.deepEqual(res.body.processedData.All.map((row: any) => [row.taskId, row.commentId]), [[101, 2]])
-  assert.equal(state.commentQueries[0].where.commentText.contains, 'needle')
-  assert.equal(state.commentQueries[0].where.commentText.mode, 'insensitive')
+  assert.equal(state.commentQueries[0].where.AND[0].commentText.contains, 'needle')
+  assert.equal(state.commentQueries[0].where.AND[0].commentText.mode, 'insensitive')
   assert.deepEqual((await rank('needle commenter:1 commenter:2')).rankedIds, [103, 101])
   assert.deepEqual((await rank('missing commenter:1')).rankedIds, [])
   assert.equal(state.indexCalls, 0)
@@ -355,4 +371,109 @@ test('commenter values still require session authentication and the operators fl
     assert.equal(res.code, code)
     assert.equal(state.peopleQueries.length, 0)
   }
+})
+
+
+test('review flag-off preserves ordinary indexed comment metadata and production timestamps', async () => {
+  for (const enabled of [false, true]) {
+    reset()
+    state.flags[flag] = enabled
+    state.flags[keys.HTPR_6882_SEARCH_MATCH_HIGHLIGHTS_FLAG] = true
+    const hit = { id: '2', taskId: 101, commentText: comments[1].commentText, creatorName: 'Hicham', createdAt: '2026-10-05T00:00:00.000Z' }
+    state.indexComments = [hit]
+    const parsed = await parseSearchWithNames('needle from:3', [7], false, [7], enabled)
+    const ranked = await rankedSearchWhere(parsed, [7], 'Normal', 50, {}, null, false, enabled)
+    if (!enabled) assert.equal(JSON.stringify(ranked.commentById.get(101)), JSON.stringify(hit))
+    const api = await search('needle from:3')
+    const row = api.body.processedData.All[0]
+    assert.equal(row.updatedAt, enabled ? hit.createdAt : tasks[0].updatedAt.toISOString())
+    assert.equal(row.commentId, 2)
+    assert.equal(row.commentText, hit.commentText)
+    const mcp = await (await GET(new NextRequest('http://localhost/api/mcp/tasks/search?q=needle%20from:3&board_id=7'))).json()
+    const legacyItem = {
+      id: 101, ticketNumber: 'TEST-1', title: tasks[0].title, description: tasks[0].description,
+      boardId: 7, boardTitle: 'Visible', projectId: 7, section: 'Todo', createdAt: tasks[0].createdAt.toISOString(),
+    }
+    // Disable presentation additions to compare the legacy serialized item independently.
+    reset()
+    state.flags[flag] = enabled
+    state.flags[keys.HTPR_6530_MCP_LIST_QUERY_FLAG] = false
+    state.indexComments = [hit]
+    const raw = await (await GET(new NextRequest('http://localhost/api/mcp/tasks/search?q=needle%20from:3&board_id=7'))).json()
+    assert.equal(JSON.stringify(raw.tasks[0]), JSON.stringify({ ...legacyItem, ...(enabled ? { commentId: 2, commentText: hit.commentText, commentCreatedAt: hit.createdAt } : {}) }))
+    assert.equal(mcp.tasks[0].commentCreatedAt, enabled ? hit.createdAt : undefined)
+  }
+})
+
+test('review comment-only authors appear only in bounded accessible commenter resolver and picker pools', async () => {
+  const added = [
+    { id: 40, displayName: 'Comment Only', email: 'comment@example.test', members: [], tasks: [], assignees: [], comments: [comment(40, 101, 40, 'Needle apart WORD', 13)] },
+    { id: 41, displayName: 'Comment Private', email: 'private-comment@example.test', members: [], tasks: [], assignees: [], comments: [comment(41, 106, 41, 'needle', 13)] },
+    { id: 42, displayName: 'Comment Activity', email: 'activity@example.test', members: [], tasks: [], assignees: [], comments: [comment(42, 101, 42, 'needle', 13, { action: 'changed' })] },
+    { id: 43, displayName: 'Comment Deleted', email: 'deleted@example.test', members: [], tasks: [], assignees: [], comments: [comment(43, 107, 43, 'needle', 13)] },
+  ]
+  people.push(...added)
+  try {
+    for (const chips of [false, true]) {
+      reset()
+      const parser = chips ? parseSearchWithChipNames : parseSearchWithNames
+      const parsed = await parser('commenter:comment from:comment assignee:comment', [7], true, [7], true)
+      assert.deepEqual(parsed.filters.commenter[0].userIds, [40])
+      assert.deepEqual(parsed.filters.from[0].userIds, [])
+      assert.deepEqual(parsed.filters.assignee[0].userIds, [])
+      const full = await parser('commenter:@Comment Only', [7], false, [7], true)
+      assert.equal(full.filters.commenter[0].value, '@Comment Only')
+      assert.equal(full.text, '')
+      assert.ok(state.peopleQueries.filter((args: any) => JSON.stringify(args.where).includes('comments')).every((args: any) => args.take <= 1000))
+      state.flags[keys.HTPR_6370_SEARCH_CHIPS_FLAG] = chips
+      for (const operator of ['commenter', 'from', 'assignee']) {
+        const res = response()
+        await valuesHandler({ method: 'GET', headers: {}, query: { operator, value: 'comment', boardId: '7' } }, res)
+        assert.deepEqual(res.body.candidates.map((row: any) => row.id), operator === 'commenter' ? [40] : [])
+      }
+      assert.ok(state.peopleQueries.filter((args: any) => JSON.stringify(args.where).includes('comments')).every((args: any) => args.take <= 1000))
+      const scoped = await parser('commenter:comment', [7], true, [], true)
+      assert.deepEqual(scoped.filters.commenter[0].userIds, [])
+    }
+  } finally { people.splice(-added.length) }
+})
+
+test('review multi-word text matches non-adjacent case-insensitive words in the same author comment', async () => {
+  reset()
+  assert.deepEqual((await rank('NEEDLE newest commenter:1')).rankedIds, [101])
+  assert.deepEqual((await rank('needle later commenter:1')).rankedIds, [])
+  assert.deepEqual((await rank('needle old newest commenter:1')).rankedIds, [])
+  const api = await search('NEEDLE newest commenter:1')
+  assert.deepEqual(api.body.processedData.All.map((row: any) => row.commentId), [2])
+  const body = await (await GET(new NextRequest('http://localhost/api/mcp/tasks/search?q=NEEDLE%20newest%20commenter:1&board_id=7'))).json()
+  assert.deepEqual(body.tasks.map((row: any) => row.commentId), [2])
+})
+
+test('review paging uses bounded comment DB pages and separate full totals for cursors and explicit sorts', async () => {
+  const request = async (suffix = '') => (await GET(new NextRequest(`http://localhost/api/mcp/tasks/search?q=commenter:1&board_id=7&limit=1${suffix}`)))
+  reset()
+  const first = await (await request()).json()
+  assert.deepEqual([first.tasks[0].id, first.total, first.nextCursor], [102, 2, '102'])
+  assert.equal(state.commentQueries[0].take, 1)
+  assert.equal(state.commentQueries[0].skip, 0)
+  assert.deepEqual(state.detailQueries[0].where.id, { in: [4] })
+  assert.equal(state.detailQueries[0].take, 1)
+  assert.equal(state.countQueries[0].where.id, undefined)
+  const second = await (await request('&cursor=102')).json()
+  assert.deepEqual([second.tasks[0].id, second.total, second.nextCursor], [101, 2, '101'])
+  assert.equal(state.commentQueries[1].take, 1)
+  assert.equal(state.commentQueries[1].skip, 1)
+  assert.deepEqual(state.anchorQueries[0].select, { id: true, createdAt: true })
+  const last = await (await request('&cursor=101')).json()
+  assert.equal(last.total, 2)
+  assert.deepEqual(last.tasks, [])
+  assert.equal((await request('&cursor=105')).status, 400)
+  reset()
+  const sortedFirst = await (await request('&sort=createdAt:asc')).json()
+  assert.equal(sortedFirst.total, 2)
+  assert.equal(sortedFirst.tasks[0].id, 101)
+  const sortedSecond = await (await request('&sort=createdAt:asc&cursor=101')).json()
+  assert.equal(sortedSecond.tasks[0].id, 102)
+  assert.equal(sortedSecond.total, 2)
+  assert.ok(state.commentQueries.every((args: any) => args.take === 1 && args.where.task.id.in.length === 1))
 })
