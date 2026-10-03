@@ -1,3 +1,4 @@
+import { reportError } from "@/lib/errors/reportError";
 import type { NextApiRequest, NextApiResponse } from 'next'
 import prisma from "@/lib/prisma";
 import { validateIntegerParam } from '@/utils/helperFunctions/multiPages';
@@ -38,6 +39,13 @@ export default async function handler(
 
             return res.status(200).json(customInstructions);
         } catch (error) {
+            await reportError({
+              message: error instanceof Error ? error.message : "AI request failed",
+              stack: error instanceof Error ? error.stack : undefined,
+              url: "/api/ai/project/customInstruction",
+              source: "handled",
+              extra: { stage: "load" },
+            });
             console.log(error);
             return res.status(500).json(error);
         }
@@ -159,6 +167,13 @@ export default async function handler(
 
             return res.status(200).json(customInstructions)
         } catch (error) {
+            await reportError({
+              message: error instanceof Error ? error.message : "AI request failed",
+              stack: error instanceof Error ? error.stack : undefined,
+              url: "/api/ai/project/customInstruction",
+              source: "handled",
+              extra: { stage: "update" },
+            });
             console.log(error)
             return res.status(500).json(error)
         }

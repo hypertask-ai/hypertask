@@ -1,3 +1,4 @@
+import { reportError } from "@/lib/errors/reportError";
 // Next.js API route support: https://nextjs.org/docs/api-routes/introduction
 import type { NextApiRequest, NextApiResponse } from 'next'
 import prisma from "@/lib/prisma";
@@ -27,6 +28,13 @@ export default async function handler(
     // console.log("🚀 ~ response:", response)
     return res.status(200).json({ task, comments: response })
   } catch (error) {
+    await reportError({
+      message: error instanceof Error ? error.message : "AI request failed",
+      stack: error instanceof Error ? error.stack : undefined,
+      url: "/api/ai/generateComments",
+      source: "handled",
+      extra: { stage: "request" },
+    });
     console.log(error)
     return res.status(500).json(error)
   }

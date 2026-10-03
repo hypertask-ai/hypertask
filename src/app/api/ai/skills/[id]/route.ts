@@ -1,3 +1,4 @@
+import { reportError } from "@/lib/errors/reportError";
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 
@@ -57,6 +58,13 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
     });
     return NextResponse.json({ skill: updated });
   } catch (error) {
+    await reportError({
+      message: error instanceof Error ? error.message : "AI request failed",
+      stack: error instanceof Error ? error.stack : undefined,
+      url: "/api/ai/skills/[id]",
+      source: "handled",
+      extra: { stage: "request" },
+    });
     return skillErrorResponse(error);
   }
 }
@@ -74,6 +82,13 @@ export async function DELETE(request: NextRequest, context: RouteContext) {
     await prisma.aI_Skill.delete({ where: { id: skill.id } });
     return NextResponse.json({ success: true });
   } catch (error) {
+    await reportError({
+      message: error instanceof Error ? error.message : "AI request failed",
+      stack: error instanceof Error ? error.stack : undefined,
+      url: "/api/ai/skills/[id]",
+      source: "handled",
+      extra: { stage: "request" },
+    });
     return skillErrorResponse(error);
   }
 }

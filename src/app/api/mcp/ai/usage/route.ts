@@ -1,3 +1,4 @@
+import { reportError } from "@/lib/errors/reportError";
 import { NextRequest, NextResponse } from 'next/server'
 import { getTeamGatewayFunding } from '@/app/api/ai/_lib/byokKeys'
 import {
@@ -93,6 +94,13 @@ async function getTeamUsage(ctx: McpAuthContext, request: NextRequest) {
         take: 2,
       })
     } catch (error) {
+      await reportError({
+        message: error instanceof Error ? error.message : "AI request failed",
+        stack: error instanceof Error ? error.stack : undefined,
+        url: "/api/mcp/ai/usage",
+        source: "handled",
+        extra: { stage: "owned-team-lookup" },
+      });
       console.error('[MCP AI Usage] Owned-team lookup unavailable:', error)
       return NextResponse.json(
         { success: false, error: 'Could not load AI usage' },
@@ -163,6 +171,13 @@ async function getTeamUsage(ctx: McpAuthContext, request: NextRequest) {
       totalTokens: snapshot.totals._sum.totalTokens ?? 0,
     }
   } catch (error) {
+    await reportError({
+      message: error instanceof Error ? error.message : "AI request failed",
+      stack: error instanceof Error ? error.stack : undefined,
+      url: "/api/mcp/ai/usage",
+      source: "handled",
+      extra: { stage: "usage-snapshot" },
+    });
     console.error('[MCP AI Usage] Team usage snapshot unavailable:', error)
     return NextResponse.json(
       { success: false, error: 'Could not load AI usage' },
@@ -231,6 +246,13 @@ async function getTeamUsage(ctx: McpAuthContext, request: NextRequest) {
 
     return response
   } catch (error) {
+    await reportError({
+      message: error instanceof Error ? error.message : "AI request failed",
+      stack: error instanceof Error ? error.stack : undefined,
+      url: "/api/mcp/ai/usage",
+      source: "handled",
+      extra: { stage: "spend" },
+    });
     console.error('[MCP AI Usage] Failed to load AI spend:', error)
     return NextResponse.json(
       { success: false, error: 'Could not load AI usage' },
@@ -350,6 +372,13 @@ export async function GET(request: NextRequest) {
       groups,
     })
   } catch (error) {
+    await reportError({
+      message: error instanceof Error ? error.message : "AI request failed",
+      stack: error instanceof Error ? error.stack : undefined,
+      url: "/api/mcp/ai/usage",
+      source: "handled",
+      extra: { stage: "request" },
+    });
     console.error('[MCP AI Usage] Error:', error)
     return NextResponse.json({ success: false, error: 'Internal server error' }, { status: 500 })
   }

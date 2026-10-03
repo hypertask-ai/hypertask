@@ -1,3 +1,4 @@
+import { reportError } from "@/lib/errors/reportError";
 import { NextRequest, NextResponse } from "next/server";
 import { htmlToText } from "@/app/api/ai/_lib/currentTaskContext";
 import { generateText, stepCountIs } from "ai";
@@ -272,6 +273,13 @@ export async function POST(request: NextRequest) {
       selected = await selectModel();
     } catch (error) {
       if (!requestedMentionLabel) throw error;
+      await reportError({
+        message: error instanceof Error ? error.message : "AI request failed",
+        stack: error instanceof Error ? error.stack : undefined,
+        url: "/api/ai/hyper-mentioned",
+        source: "handled",
+        extra: { stage: "model-fallback" },
+      });
       mentionModelUnavailable = true;
       selected = await selectModel(true);
     }
@@ -459,6 +467,13 @@ Do not include markdown fences, greetings, or sign-offs.${
 
     return NextResponse.json({ success: true }, { status: 200 });
   } catch (error) {
+    await reportError({
+      message: error instanceof Error ? error.message : "AI request failed",
+      stack: error instanceof Error ? error.stack : undefined,
+      url: "/api/ai/hyper-mentioned",
+      source: "handled",
+      extra: { stage: "request" },
+    });
     console.error("[ai/hyper-mentioned] error:", error);
     return NextResponse.json(
       { error: errorMessage(error) },

@@ -1,3 +1,4 @@
+import { reportError } from "@/lib/errors/reportError";
 import { NextApiHandler, NextApiRequest, NextApiResponse } from "next";
 import { httpStatusConfig } from "@/lib/configs/http-status.config";
 import prisma from "@/lib/prisma";
@@ -223,6 +224,13 @@ const handler: NextApiHandler = async (
         ]);
       }
     } catch (error) {
+      await reportError({
+        message: error instanceof Error ? error.message : "AI request failed",
+        stack: error instanceof Error ? error.stack : undefined,
+        url: "/api/ai/chat/mention",
+        source: "handled",
+        extra: { stage: "mention-search" },
+      });
       console.log("🤔 ~ TaskSearchByParams ERROR:", error);
       return res
         .status(500)
@@ -264,6 +272,13 @@ const fetchidlist = async (id: number) => {
     }
     return [];
   } catch (error) {
+    await reportError({
+      message: error instanceof Error ? error.message : "AI request failed",
+      stack: error instanceof Error ? error.stack : undefined,
+      url: "/api/ai/chat/mention",
+      source: "handled",
+      extra: { stage: "project-lookup" },
+    });
     console.log("r🤔 ~ fetchidlist ~ error:", error);
     return [];
   }

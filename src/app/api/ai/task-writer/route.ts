@@ -1,3 +1,4 @@
+import { reportError } from "@/lib/errors/reportError";
 import { NextRequest, NextResponse } from "next/server";
 import { streamText } from "ai";
 
@@ -112,6 +113,13 @@ export async function POST(request: NextRequest) {
           }
           streamCompleted = true;
         } catch (error) {
+          await reportError({
+            message: error instanceof Error ? error.message : "AI request failed",
+            stack: error instanceof Error ? error.stack : undefined,
+            url: "/api/ai/task-writer",
+            source: "handled",
+            extra: { stage: "stream" },
+          });
           console.error("[ai/task-writer] stream error", error);
           enqueueError("error", errorMessage(error));
         } finally {
@@ -135,6 +143,13 @@ export async function POST(request: NextRequest) {
     ) {
       return createSseErrorResponse(error.message, 403);
     }
+    await reportError({
+      message: error instanceof Error ? error.message : "AI request failed",
+      stack: error instanceof Error ? error.stack : undefined,
+      url: "/api/ai/task-writer",
+      source: "handled",
+      extra: { stage: "request" },
+    });
     console.error("[ai/task-writer] fatal error", error);
     return NextResponse.json({ error: errorMessage(error) }, { status: 500 });
   }

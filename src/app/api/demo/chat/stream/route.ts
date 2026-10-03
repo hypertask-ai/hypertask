@@ -1,3 +1,4 @@
+import { reportError } from "@/lib/errors/reportError";
 import { createGateway, streamText, type ModelMessage } from "ai";
 import { NextRequest } from "next/server";
 import { z } from "zod";
@@ -279,6 +280,13 @@ export async function POST(request: NextRequest) {
         }
         finish("complete");
       } catch (error) {
+        await reportError({
+          message: error instanceof Error ? error.message : "AI request failed",
+          stack: error instanceof Error ? error.stack : undefined,
+          url: "/api/demo/chat/stream",
+          source: "handled",
+          extra: { stage: "stream" },
+        });
         console.error("demo chat generation failed", error);
         fail(error);
       }

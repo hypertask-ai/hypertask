@@ -1,3 +1,4 @@
+import { reportError } from "@/lib/errors/reportError";
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 
@@ -48,6 +49,13 @@ export async function POST(request: NextRequest) {
     }
     return NextResponse.json({ success: true, status: "cancelling" });
   } catch (error) {
+    await reportError({
+      message: error instanceof Error ? error.message : "AI request failed",
+      stack: error instanceof Error ? error.stack : undefined,
+      url: "/api/ai/chat/cancel",
+      source: "handled",
+      extra: { stage: "cancel" },
+    });
     console.error("[ai/chat/cancel] cancellation unavailable", error);
     return NextResponse.json(
       { success: false, error: "Cancellation is temporarily unavailable" },

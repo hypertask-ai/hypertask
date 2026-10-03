@@ -1,3 +1,4 @@
+import { reportError } from "@/lib/errors/reportError";
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 
@@ -59,6 +60,13 @@ export async function GET(request: NextRequest) {
     });
     return NextResponse.json({ skills });
   } catch (error) {
+    await reportError({
+      message: error instanceof Error ? error.message : "AI request failed",
+      stack: error instanceof Error ? error.stack : undefined,
+      url: "/api/ai/skills",
+      source: "handled",
+      extra: { stage: "request" },
+    });
     return skillErrorResponse(error);
   }
 }
@@ -91,6 +99,13 @@ export async function POST(request: NextRequest) {
     });
     return NextResponse.json({ skill }, { status: 201 });
   } catch (error) {
+    await reportError({
+      message: error instanceof Error ? error.message : "AI request failed",
+      stack: error instanceof Error ? error.stack : undefined,
+      url: "/api/ai/skills",
+      source: "handled",
+      extra: { stage: "request" },
+    });
     return skillErrorResponse(error);
   }
 }

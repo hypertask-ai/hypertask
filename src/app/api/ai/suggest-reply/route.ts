@@ -1,3 +1,4 @@
+import { reportError } from "@/lib/errors/reportError";
 import { NextRequest, NextResponse } from "next/server";
 import { generateText } from "ai";
 import { z } from "zod";
@@ -218,6 +219,13 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({ html: safeHtml });
   } catch (error) {
+    await reportError({
+      message: error instanceof Error ? error.message : "AI request failed",
+      stack: error instanceof Error ? error.stack : undefined,
+      url: "/api/ai/suggest-reply",
+      source: "handled",
+      extra: { stage: "request" },
+    });
     console.error("[ai/suggest-reply] request failed", error);
     return NextResponse.json(
       { error: `Failed to generate suggestion: ${errorMessage(error)}` },
