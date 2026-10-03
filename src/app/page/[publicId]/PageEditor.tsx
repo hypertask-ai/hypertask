@@ -67,6 +67,10 @@ const HypertasksCommands = dynamic(() => import("@/components/commands"), {
   ssr: false,
 });
 
+// ProseMirror adds src-less separator images after inline nodes; they are not media.
+const isPageGalleryImage = (image: HTMLImageElement) =>
+  Boolean(image.getAttribute("src")) && isContentCarouselImage(image);
+
 const AttachmentCarousel = dynamic(
   () => import("@/components/Common/AttachmentsView/AttachmentsCarousel"),
   { ssr: false },
@@ -121,7 +125,7 @@ const PageEditor = ({ _page, _user }: PageEditorProps) => {
     ));
     const images = media.flatMap<{ element: HTMLImageElement | HTMLIFrameElement; src: string; index: number }>((element) => {
       if (element instanceof HTMLImageElement) {
-        return isContentCarouselImage(element) ? [{ element, src: element.src, index: 0 }] : [];
+        return isPageGalleryImage(element) ? [{ element, src: element.src, index: 0 }] : [];
       }
       const sources = element === target && frameImages
         ? frameImages
@@ -149,7 +153,7 @@ const PageEditor = ({ _page, _user }: PageEditorProps) => {
   const handleContentClick = (event: ReactMouseEvent<HTMLDivElement>) => {
     if (galleryEnabled && !event.defaultPrevented && event.button === 0 &&
         !event.shiftKey && !event.ctrlKey && !event.metaKey && !event.altKey &&
-        event.target instanceof HTMLImageElement && isContentCarouselImage(event.target)) {
+        event.target instanceof HTMLImageElement && isPageGalleryImage(event.target)) {
       event.preventDefault();
       openImageGallery(event.target);
       return;
