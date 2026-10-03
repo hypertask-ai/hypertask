@@ -25,6 +25,23 @@ export async function evaluateAlerts(
     const [clock] = await tx.$queryRaw<Array<{ now: Date }>>`SELECT clock_timestamp() AS "now"`;
     const now = clock.now;
     const cutoff = new Date(now.getTime() - AI_CHAT_ALERT_WINDOW_MS);
+    // Expiry can breach a healthy window without a new sample. Check each
+    // timestamp group before pruning so a later empty window cannot hide it.
+    // Nearest-rank p95 exceeds 20s exactly when more than 5% of samples do.
+    await tx.$executeRaw`WITH expiry_windows AS (
+      SELECT "happenedAt" + ${AI_CHAT_ALERT_WINDOW_MS} * interval '1 millisecond' AS "expiresAt",
+        count(*) OVER remaining AS "requestCount",
+        count(*) FILTER (WHERE "statusCode" >= 500) OVER remaining AS "errorCount",
+        count(*) FILTER (WHERE "latencyMs" > 20000) OVER remaining AS "slowCount"
+      FROM "AiChatAlertSample" WHERE "environment" = ${environment}
+        AND EXISTS (SELECT 1 FROM "AiChatAlertIncident" WHERE "environment" = ${environment}
+          AND "closedAt" IS NULL AND "healthySince" IS NOT NULL)
+        AND EXISTS (SELECT 1 FROM "AiChatAlertSample" WHERE "environment" = ${environment} AND "happenedAt" <= ${cutoff})
+      WINDOW remaining AS (ORDER BY "happenedAt" GROUPS BETWEEN 1 FOLLOWING AND UNBOUNDED FOLLOWING)
+    ) UPDATE "AiChatAlertIncident" i SET "healthySince" = NULL
+      WHERE i."environment" = ${environment} AND i."closedAt" IS NULL AND i."healthySince" IS NOT NULL
+        AND EXISTS (SELECT 1 FROM expiry_windows w WHERE w."expiresAt" > i."healthySince" AND w."expiresAt" <= ${now}
+          AND CASE i."kind" WHEN 'error_rate' THEN w."errorCount" ELSE w."slowCount" END > w."requestCount" * 0.05)`;
     await tx.$executeRaw`DELETE FROM "AiChatAlertSample" WHERE "environment" = ${environment} AND "happenedAt" <= ${cutoff}`;
     if (sample) {
       await tx.$executeRaw`INSERT INTO "AiChatAlertSample" ("environment", "happenedAt", "latencyMs", "statusCode")

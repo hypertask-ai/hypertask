@@ -163,6 +163,78 @@ test("a new breach resets the recovery timer, including low-volume bad windows",
   assert.equal((await rows("AiChatAlertIncident"))[0].closedAt, null);
 });
 
+for (const kind of ["error_rate", "latency"]) {
+  const badSample = () => kind === "error_rate" ? sample(500) : sample(200, 30_000);
+
+  for (const recordSample of [false, true]) {
+    test(`${kind} recovery detects staggered-expiry breaches before ${recordSample ? "a new sample" : "a sweep"}`, async () => {
+      for (let index = 0; index < 38; index++) await sample();
+      advance(60_000);
+      for (let index = 0; index < 3; index++) await badSample();
+      for (let index = 0; index < 19; index++) await sample();
+      const initial = (await rows("AiChatAlertIncident"))[0];
+      assert.equal(initial.kind, kind);
+      assert.equal(initial.healthySince.toISOString(), now.toISOString());
+      await deliverNext();
+
+      // At minute 15 the older successes expire, leaving 3 bad out of 22.
+      // At minute 16 everything expires, hiding that intervening breach.
+      advance(16 * 60_000);
+      await store.evaluateAlerts(db, "production", recordSample ? { statusCode: 200, latencyMs: 1000 } : undefined);
+      let incident = (await rows("AiChatAlertIncident"))[0];
+      assert.equal(incident.closedAt, null);
+      assert.equal(incident.healthySince.toISOString(), now.toISOString());
+      assert.equal(await deliverNext(), undefined);
+
+      advance(policy.AI_CHAT_ALERT_WINDOW_MS - 1);
+      await store.evaluateAlerts(db, "production");
+      assert.equal((await rows("AiChatAlertIncident"))[0].closedAt, null);
+      advance(1);
+      await store.evaluateAlerts(db, "production");
+      incident = (await rows("AiChatAlertIncident"))[0];
+      assert.equal(incident.closedAt.toISOString(), now.toISOString());
+      const recovered = await deliverNext();
+      assert.equal(recovered.phase, "recovery");
+      assert.equal(recovered.incidentId, initial.id);
+      assert.equal((await rows("AiChatAlertDelivery")).length, 2);
+    });
+  }
+
+  test(`${kind} staggered expiry resets recovery even below the opening volume`, async () => {
+    for (let index = 0; index < 49; index++) await sample();
+    advance(60_000);
+    for (let index = 0; index < 3; index++) await badSample();
+    for (let index = 0; index < 8; index++) await sample();
+    assert.equal((await rows("AiChatAlertIncident"))[0].healthySince.toISOString(), now.toISOString());
+    advance(16 * 60_000);
+    await store.evaluateAlerts(db, "production");
+    const incident = (await rows("AiChatAlertIncident"))[0];
+    assert.equal(incident.closedAt, null);
+    assert.equal(incident.healthySince.toISOString(), now.toISOString());
+  });
+
+  test(`${kind} recovery treats equal-time expiry as one transition`, async () => {
+    for (let index = 0; index < 38; index++) await sample();
+    for (let index = 0; index < 3; index++) await badSample();
+    for (let index = 0; index < 19; index++) await sample();
+    assert.equal((await rows("AiChatAlertIncident"))[0].healthySince.toISOString(), now.toISOString());
+    advance(policy.AI_CHAT_ALERT_WINDOW_MS);
+    await store.evaluateAlerts(db, "production");
+    assert.equal((await rows("AiChatAlertIncident"))[0].closedAt.toISOString(), now.toISOString());
+  });
+
+  test(`${kind} recovery does not reset when expiry leaves exactly 5% bad samples`, async () => {
+    for (let index = 0; index < 20; index++) await sample();
+    advance(60_000);
+    for (let index = 0; index < 2; index++) await badSample();
+    for (let index = 0; index < 38; index++) await sample();
+    assert.equal((await rows("AiChatAlertIncident"))[0].healthySince.toISOString(), now.toISOString());
+    advance(policy.AI_CHAT_ALERT_WINDOW_MS);
+    await store.evaluateAlerts(db, "production");
+    assert.equal((await rows("AiChatAlertIncident"))[0].closedAt.toISOString(), now.toISOString());
+  });
+}
+
 test("recovery delivery retries independently without blocking a subsequent incident", async () => {
   await breach();
   await deliverNext();
