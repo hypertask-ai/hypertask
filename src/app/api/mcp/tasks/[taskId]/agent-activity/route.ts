@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { checkMcpRateLimit, mcpUnauthorizedResponse, validateMcpAuth } from '@/lib/mcp/auth'
 import { findTaskByIdentifier, TaskIdentifierAmbiguityError } from '@/lib/mcp/tasks/resolveTask'
-import { isFeatureEnabled } from '@/lib/flags'
 import prisma from '@/lib/prisma'
 
 export const dynamic = 'force-dynamic'
@@ -21,9 +20,6 @@ export async function GET(
     if (rateLimited) return rateLimited
     const ctx = await validateMcpAuth(request)
     if (!ctx) return await mcpUnauthorizedResponse(request)
-    if (!(await isFeatureEnabled('yper4-123-board-check', ctx.user.id))) {
-      return noStore({ success: false, error: 'Not found' }, 404)
-    }
 
     const identifier = (await params).taskId.trim()
     const rawLimit = request.nextUrl.searchParams.get('limit') ?? '20'

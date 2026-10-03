@@ -3,8 +3,56 @@ type CommandCenterKeyboardEvent = Pick<
   "altKey" | "code" | "ctrlKey" | "metaKey" | "shiftKey"
 >;
 
-export const isAgentsRoute = (pathname: string | null | undefined) =>
-  pathname === "/agents" || Boolean(pathname?.startsWith("/agents/"));
+// These surfaces already mount the palette, sometimes with task/board context.
+// The shell owns it everywhere else, including settings and new app routes.
+export const COMMAND_MENU_ROUTE_HOSTS = [
+  "/project",
+  "/detail",
+  "/page",
+  "/search",
+  "/inbox",
+  "/all-tasks",
+  "/calendar",
+  "/scheduled",
+  "/reminders",
+  "/report",
+  "/starred",
+  "/pinned",
+  "/archived",
+] as const;
+
+const NO_COMMAND_MENU_ROUTES = [
+  "/login",
+  "/qa/login",
+  "/invite",
+  "/reset",
+  "/pricing",
+  "/oauth",
+  "/cli-auth",
+  "/share",
+  "/verify-email",
+  "/trial",
+  "/trial-plan-confirmation",
+  "/full-plan-confirmation",
+  "/unauthorized",
+  "/onboarding",
+  "/interactive-onboarding",
+  "/new",
+  "/learn",
+  "/demo",
+] as const;
+
+const isCommandMenuRoute = (pathname: string | null) =>
+  Boolean(pathname) &&
+  !NO_COMMAND_MENU_ROUTES.some(
+    (route) => pathname === route || pathname?.startsWith(`${route}/`),
+  );
+
+export const shouldRenderGlobalCommandMenu = (pathname: string | null) =>
+  isCommandMenuRoute(pathname) &&
+  !COMMAND_MENU_ROUTE_HOSTS.some(
+    (route) => pathname === route || pathname?.startsWith(`${route}/`),
+  );
 
 export const isCommandCenterShortcut = (
   event: CommandCenterKeyboardEvent,
@@ -15,10 +63,4 @@ export const isCommandCenterShortcut = (
   !event.altKey &&
   !event.shiftKey &&
   (event.ctrlKey || (isApple && event.metaKey)) &&
-  Boolean(
-    pathname?.startsWith("/project") ||
-      pathname?.startsWith("/detail/") ||
-      pathname?.startsWith("/page/") ||
-      isAgentsRoute(pathname) ||
-      pathname?.startsWith("/settings"),
-  );
+  isCommandMenuRoute(pathname);

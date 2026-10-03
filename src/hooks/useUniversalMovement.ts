@@ -12,7 +12,11 @@ import { useRecoilValue, useSetRecoilState } from "@/lib/state";
 import { useProjectQuery } from "./General/useProjectQuery";
 import UpdateKanban from "./MultiPages/useUpdateTaskInBoards";
 import { getActiveSortingModeFromProject } from "@/utils/helperFunctions/Views/ViewsHelperFunctions";
-import { focusedCardIndexInColumn } from "@/utils/helperFunctions/Kanban/columnFocus";
+import {
+  focusKanbanCard,
+  focusedCardIndexInColumn,
+} from "@/utils/helperFunctions/Kanban/columnFocus";
+import { scrollBoardColumnIntoView } from "@/utils/helperFunctions/Views/scrollBoardColumnIntoView";
 import toast from "react-hot-toast";
 import globalAPIHandlers from "@/utils/api/global";
 import generateRanking from "@/utils/generateRank";
@@ -53,7 +57,9 @@ export function useUniversalMovement(props: TProps) {
   const { updateActiveItemAndItemInView } = useProjectQuery();
 
   function refocus(itmId: number) {
-    document.getElementById("task-" + itmId)?.focus();
+    const element = document.getElementById("task-" + itmId);
+    if (props.type === "Kanban") focusKanbanCard(element);
+    else element?.focus();
   }
 
   async function moveTaskHorizontally(
@@ -337,7 +343,7 @@ export function useUniversalMovement(props: TProps) {
     if (index >= 0 && index < sectionEls.length) {
       // @ts-ignore
       // I dont think this section focus is working right now
-      sectionEls[index].focus();
+      sectionEls[index].focus({ preventScroll: props.type === "Kanban" });
       setActiveSection(index);
       const sectionLength = filteredSections[index].items.length;
       if (sectionLength > 0) {
@@ -361,14 +367,20 @@ export function useUniversalMovement(props: TProps) {
           ItemId = item.id;
         }
       } else {
-        document
-          .getElementById("header")
-          ?.scrollIntoView({ block: "start", behavior: "smooth" });
+        if (props.type === "List") {
+          document
+            .getElementById("header")
+            ?.scrollIntoView({ block: "start", behavior: "smooth" });
+        }
         updateActiveItemAndItemInView(null);
       }
     } else updateActiveItemAndItemInView(null);
 
-    if (ItemId) {
+    if (props.type === "Kanban") {
+      if (ItemId) refocus(ItemId);
+      const sectionId = filteredSections[index]?.sectionId;
+      if (sectionId != null) scrollBoardColumnIntoView(sectionId);
+    } else if (ItemId) {
       refocus(ItemId);
       const element = document.getElementById(`task-${ItemId}`);
       element && scrollToCenterIfNear(element, 10);
@@ -405,7 +417,7 @@ export function useUniversalMovement(props: TProps) {
             if (props.type === "List") {
               focus.left(true);
             } else {
-              document.getElementById(tasksList[0].id)?.focus();
+              focusKanbanCard(document.getElementById(tasksList[0].id));
             }
           } else if (index === 0) {
             // Here we need to check if the props.type is List. Because in List view we have sections stacked on top of each other.
@@ -415,12 +427,16 @@ export function useUniversalMovement(props: TProps) {
             const activeElement_ = document.getElementById(
               tasksList[index - 1].id,
             );
-            activeElement_ && scrollToCenterIfNearTop(activeElement_, 30);
-            activeElement_?.focus();
-            if (index - 1 === 0)
-              document
-                .getElementById(tasksList[0].id)
-                ?.scrollIntoView({ block: "center" });
+            if (props.type === "Kanban") {
+              focusKanbanCard(activeElement_);
+            } else {
+              activeElement_ && scrollToCenterIfNearTop(activeElement_, 30);
+              activeElement_?.focus();
+              if (index - 1 === 0)
+                document
+                  .getElementById(tasksList[0].id)
+                  ?.scrollIntoView({ block: "center" });
+            }
           }
         }
       }
@@ -446,7 +462,7 @@ export function useUniversalMovement(props: TProps) {
             if (props.type === "List") {
               focus.right(true);
             } else {
-              document.getElementById(tasksList[0].id)?.focus();
+              focusKanbanCard(document.getElementById(tasksList[0].id));
             }
           } else if (index === tasksList.length - 2) {
             // Here we need to check if the props.type is List. Because in List view we have sections stacked on top of each other.
@@ -456,8 +472,12 @@ export function useUniversalMovement(props: TProps) {
             const activeElement_ = document.getElementById(
               tasksList[index + 1].id,
             );
-            activeElement_ && scrollToCenterIfNearBottom(activeElement_, 15);
-            activeElement_?.focus();
+            if (props.type === "Kanban") {
+              focusKanbanCard(activeElement_);
+            } else {
+              activeElement_ && scrollToCenterIfNearBottom(activeElement_, 15);
+              activeElement_?.focus();
+            }
           }
         }
       }

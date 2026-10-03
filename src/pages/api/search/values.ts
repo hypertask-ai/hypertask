@@ -1,7 +1,7 @@
 import type { NextApiHandler } from 'next'
 import { getSessionUser } from '@/lib/auth/getSessionUser'
 import { HTPR_6369_SEARCH_OPERATORS_FLAG, isFeatureEnabled } from '@/lib/flags'
-import { HTPR_6370_SEARCH_CHIPS_FLAG, HTPR_6688_SEARCH_AUTOCOMPLETE_FLAG, HTPR_6865_SEARCH_LAYOUT_FLAG } from '@/lib/flags'
+import { HTPR_6370_SEARCH_CHIPS_FLAG, HTPR_6688_SEARCH_AUTOCOMPLETE_FLAG, HTPR_6865_SEARCH_LAYOUT_FLAG, HTPR_6878_SEARCH_LABEL_SCOPE_FLAG } from '@/lib/flags'
 import prisma from '@/lib/prisma'
 import { getProjectWhere } from '@/utils/controllers/projects/getAllIncludes'
 
@@ -29,7 +29,11 @@ const handler: NextApiHandler = async (req, res) => {
   const layoutEnabled = chipsEnabled &&
     await isFeatureEnabled(HTPR_6865_SEARCH_LAYOUT_FLAG, session.userId) &&
     await isFeatureEnabled(HTPR_6688_SEARCH_AUTOCOMPLETE_FLAG, session.userId)
-  let candidates: { id: string | number; name: string; email?: string; preferred: boolean; recent: number }[]
+  const labelScopeEnabled = operator === 'label' && layoutEnabled &&
+    await isFeatureEnabled(HTPR_6878_SEARCH_LABEL_SCOPE_FLAG, session.userId)
+  const pickedBoardIds = labelScopeEnabled ? String(req.query.boards ?? '').split(',')
+    .filter((id) => /^\d+$/.test(id)).map(Number).filter((id) => Number.isSafeInteger(id) && id > 0) : []
+  let candidates: { id: string | number; name: string; email?: string; count?: number; byName?: boolean; preferred: boolean; recent: number }[]
   let resolved: string | undefined
   let resolvedId: string | undefined
   const rawTail = chipsEnabled && typeof req.query.resolve === 'string' ? req.query.resolve.replace(/^[@#]/, '').trim().slice(0, 100) : ''
@@ -42,36 +46,73 @@ const handler: NextApiHandler = async (req, res) => {
   } else if (operator === 'label') {
     const scope = { projectId: { in: activeBoardId ? [activeBoardId] : ids } }
     if (chipsEnabled) scope.projectId.in = ids
-    const prefix = await prisma.label.findMany({
-      where: { ...scope, value: { startsWith: value, mode: 'insensitive' } },
-      select: { id: true, value: true, projectId: true },
-      orderBy: [{ value: 'asc' }, { id: 'asc' }],
-      take: 100,
-    })
-    const contains = prefix.length < 100 && value ? await prisma.label.findMany({
-      where: { ...scope, AND: [
-        { value: { contains: value, mode: 'insensitive' } },
-        { NOT: { value: { startsWith: value, mode: 'insensitive' } } },
-      ] },
-      select: { id: true, value: true, projectId: true },
-      orderBy: [{ value: 'asc' }, { id: 'asc' }],
-      take: 100 - prefix.length,
-    }) : []
-    const seen = new Set([...prefix, ...contains].map((label) => label.id))
-    const fuzzy = chipsEnabled && value.length >= 2 && seen.size < 10 ? await prisma.label.findMany({
-      where: { ...scope, AND: [...new Set(value)].map((letter) => ({ value: { contains: letter, mode: 'insensitive' as const } })) },
-      select: { id: true, value: true, projectId: true },
-      orderBy: [{ value: 'asc' }, { id: 'asc' }], take: 500,
-    }) : []
-    candidates = [...prefix, ...contains].map((label) => ({ id: label.id, name: label.value ?? '', preferred: label.projectId === activeBoardId, recent: 0 }))
-    candidates.push(...fuzzy.filter((label) => !seen.has(label.id)).map((label) => ({ id: label.id, name: label.value ?? '', preferred: label.projectId === activeBoardId, recent: 0 })))
-    if (rawTail) {
-      const exact = await prisma.label.findMany({
-        where: { ...scope, OR: variants.flatMap((part) => [{ value: { equals: part, mode: 'insensitive' as const } }, { id: part }]) },
-        select: { id: true, value: true }, take: variants.length,
+    if (labelScopeEnabled) {
+      scope.projectId.in = pickedBoardIds.length ? ids.filter((id) => pickedBoardIds.includes(id)) : ids
+      // Read the whole label scope so duplicate names and used labels cannot fall behind a candidate cap.
+      const labels = await prisma.label.findMany({
+        where: scope, select: { id: true, value: true, projectId: true },
+        orderBy: [{ value: 'asc' }, { id: 'asc' }],
       })
-      resolved = exact.map((label) => label.value ?? '').sort((a, b) => b.length - a.length)[0]
-      resolvedId = exact.find((label) => label.value === resolved && variants.includes(label.id))?.id
+      const counts = await prisma.taskLabel.groupBy({
+        by: ['labelId'],
+        where: { labelId: { in: labels.map((label) => label.id) }, task: { status: 'Normal', projectId: scope.projectId } },
+        _count: { _all: true },
+      })
+      const countById = new Map(counts.map((row) => [row.labelId, row._count._all]))
+      candidates = labels.map((label) => ({
+        id: label.id, name: label.value ?? '', count: countById.get(label.id) ?? 0,
+        preferred: label.projectId === activeBoardId, recent: 0,
+      }))
+      if (!pickedBoardIds.length) {
+        const unique = new Map<string, typeof candidates[number]>()
+        for (const candidate of candidates) {
+          const name = candidate.name.trim()
+          const key = name.toLowerCase()
+          const previous = unique.get(key)
+          if (previous) {
+            previous.count! += candidate.count!
+            previous.preferred ||= candidate.preferred
+          } else unique.set(key, { ...candidate, name, byName: true })
+        }
+        candidates = [...unique.values()]
+      }
+      if (rawTail) {
+        const exact = labels.filter((label) => variants.some((part) => part === label.id || part.toLowerCase() === label.value?.toLowerCase()))
+        resolved = exact.map((label) => label.value ?? '').sort((a, b) => b.length - a.length)[0]
+        resolvedId = exact.find((label) => label.value === resolved && variants.includes(label.id))?.id
+      }
+    } else {
+      const prefix = await prisma.label.findMany({
+        where: { ...scope, value: { startsWith: value, mode: 'insensitive' } },
+        select: { id: true, value: true, projectId: true },
+        orderBy: [{ value: 'asc' }, { id: 'asc' }],
+        take: 100,
+      })
+      const contains = prefix.length < 100 && value ? await prisma.label.findMany({
+        where: { ...scope, AND: [
+          { value: { contains: value, mode: 'insensitive' } },
+          { NOT: { value: { startsWith: value, mode: 'insensitive' } } },
+        ] },
+        select: { id: true, value: true, projectId: true },
+        orderBy: [{ value: 'asc' }, { id: 'asc' }],
+        take: 100 - prefix.length,
+      }) : []
+      const seen = new Set([...prefix, ...contains].map((label) => label.id))
+      const fuzzy = chipsEnabled && value.length >= 2 && seen.size < 10 ? await prisma.label.findMany({
+        where: { ...scope, AND: [...new Set(value)].map((letter) => ({ value: { contains: letter, mode: 'insensitive' as const } })) },
+        select: { id: true, value: true, projectId: true },
+        orderBy: [{ value: 'asc' }, { id: 'asc' }], take: 500,
+      }) : []
+      candidates = [...prefix, ...contains].map((label) => ({ id: label.id, name: label.value ?? '', preferred: label.projectId === activeBoardId, recent: 0 }))
+      candidates.push(...fuzzy.filter((label) => !seen.has(label.id)).map((label) => ({ id: label.id, name: label.value ?? '', preferred: label.projectId === activeBoardId, recent: 0 })))
+      if (rawTail) {
+        const exact = await prisma.label.findMany({
+          where: { ...scope, OR: variants.flatMap((part) => [{ value: { equals: part, mode: 'insensitive' as const } }, { id: part }]) },
+          select: { id: true, value: true }, take: variants.length,
+        })
+        resolved = exact.map((label) => label.value ?? '').sort((a, b) => b.length - a.length)[0]
+        resolvedId = exact.find((label) => label.value === resolved && variants.includes(label.id))?.id
+      }
     }
   } else {
     const scope = activeBoardId ? [activeBoardId] : ids
@@ -153,9 +194,10 @@ const handler: NextApiHandler = async (req, res) => {
   }
   const ranked = candidates.filter((item) => rank(item) < 3)
     .sort((a, b) =>
+      (labelScopeEnabled ? Number(b.count! > 0) - Number(a.count! > 0) : 0) ||
       rank(a) - rank(b) || Number(b.preferred) - Number(a.preferred) || b.recent - a.recent || a.name.localeCompare(b.name)
     )
-    .slice(0, 10).map(({ id, name, email }) => ({ id, name, ...(email !== undefined ? { email } : {}) }))
+    .slice(0, 10).map(({ id, name, email, count, byName }) => ({ id, name, ...(email !== undefined ? { email } : {}), ...(count !== undefined ? { count } : {}), ...(byName ? { byName } : {}) }))
   if (resolved) return res.status(200).json({ candidates: ranked, resolved, ...(resolvedId ? { resolvedId } : {}) })
   return res.status(200).json({ candidates: ranked })
 }
