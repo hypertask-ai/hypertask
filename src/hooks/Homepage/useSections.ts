@@ -410,13 +410,11 @@ const useSections = ({
   const onCancelCreate = () => {
     setShowAddItem(false);
     setPosition(null);
-    console.log(position);
-    document
-      .getElementById(
-        `task-${items[position == "top" ? 0 : items?.length - 1]?.id}`
-      )
-      ?.focus();
-    setActiveItem(items[items?.length - 1]?.id);
+    setNewTaskDraftTitle("");
+    const focusTask = items[position === "top" ? 0 : items.length - 1];
+    setActiveItem(focusTask?.id ?? null);
+    if (focusTask) document.getElementById(`task-${focusTask.id}`)?.focus();
+    else sectionRef.current?.focus();
   };
 
 
