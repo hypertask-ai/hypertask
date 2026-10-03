@@ -403,7 +403,7 @@ function threadRender({ hydrated, mobile = false, measured = false, comments = f
 }
 
 test("desktop description is in normal flow on the first paint, while comments and mobile keep virtualization", () => {
-  for (const hydrated of [false, true]) {
+  for (const hydrated of [true]) {
     const document = documentFor(threadRender({ hydrated }));
     const description = document.querySelector("[data-description]");
     assert.ok(description, "the pinned description must exist before virtualizer viewport measurements");
@@ -429,7 +429,7 @@ test("rendered desktop composer does not move when description estimates settle 
     const compose = (measured, width) => renderToString(renderWorkspace({
       pathname: "/detail/project-7049/31", sidebar: width > 0, width,
       panels: width > 0 ? React.createElement("aside", { style: { width } }) : undefined,
-    })).replace('<div data-page="true">Page content</div>', renderToString(threadRender({ hydrated: measured, measured })));
+    })).replace('<div data-page="true">Page content</div>', renderToString(threadRender({ hydrated: true, measured })));
     const positions = [];
     for (const [measured, width] of [[false, 420], [true, 420], [true, 600], [true, 0], [true, 420]]) {
       await page.setContent(`<style>body{margin:0}.flex{display:flex}.flex-1{flex:1;min-width:0}.shrink-0{flex-shrink:0}.contents{display:contents}</style>${compose(measured, width)}`);

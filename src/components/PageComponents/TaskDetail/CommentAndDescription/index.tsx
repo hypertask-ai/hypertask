@@ -86,7 +86,8 @@ const CommentAndDescriptionContainer = (props: ITaskInfoContainer) => {
   const hydrated = useHydrated();
   const measuredItems = hydrated ? virtualizer.getVirtualItems() : [];
   // The pinned desktop description supplies its real height before viewport measurement.
-  const virtualItems = !_mbl && !measuredItems.some((item) => item.index === descriptionVirtualIndex)
+  // Server rows stay empty so the streamed thread hydrates cleanly.
+  const virtualItems = hydrated && !_mbl && !measuredItems.some((item) => item.index === descriptionVirtualIndex)
     ? [{ index: descriptionVirtualIndex, key: "description", start: 0 }, ...measuredItems]
     : measuredItems;
 
