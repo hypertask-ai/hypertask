@@ -9,6 +9,8 @@ Use with `simplify-before-pr` and `design-compliance` (right before the PR step)
 
 **Flag rule (matches `INDEX.md`):** a real bug fix restores behaviour that used to work or was clearly intended; it never gets a flag and ships to everyone, even when visible (Valentin, 2026-09-22). A `[BUGFIX]` title is only a hint to the mechanical gate. The reviewer decides from the diff whether it really restores intended behaviour; new visible behaviour dressed as a fix still needs a flag.
 
+Any change to code inside a flag that is already on for Everyone, whatever its PR type ([BUGFIX] included), needs one recorded browser click-through of the changed path on a real board before merge, on the preview or locally against the PR build, with the live flag states. Record commit, account and flag state in ~/.local/state/vcc-evidence/<TICKET>/premerge.md.
+
 Only Valentin widens a feature flag to Everyone. A PR that enables a flag for all users, removes a flag gate, or changes default-on state is not self-mergeable: park it in `Valentin Review` with one line.
 
 This skill covers bug fixes such as crashes, 500s, wrong or lost data, and restoring intended behaviour, as well as performance work with identical output, security fixes, dependency or CI changes, and spelling corrections. **"Flag-exempt" is not the same as "invisible".** Restoring a broken screen changes what is on it, and a spelling fix changes what a user reads. So step 7 still applies whenever the result shows up on screen: no flag, but still a phone screenshot. If the change introduces new behaviour or design rather than fixing a bug, use `ship-feature-behind-flag`.
