@@ -98,7 +98,7 @@ if (require.main === module) {
   test("desktop timestamp and existing icons share one fixed non-shrinking slot", () => {
     const selected = row({ selected: true });
     const slot = selected.lastElementChild;
-    assert.match(slot.className, /md:w-\[62px\]/);
+    assert.match(slot.className, /md:min-w-\[62px\]/);
     assert.match(slot.className, /md:shrink-0/);
     assert.match(slot.className, /hidden md:block/);
     assert.equal(slot.querySelectorAll("button").length, 2);

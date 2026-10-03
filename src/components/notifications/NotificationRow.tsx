@@ -82,7 +82,7 @@ const NotificationRow = (props: Props) => {
 
             {/* Keep the same outer flex children: space-x adds a margin to the
                 timestamp if hover controls become its next sibling. */}
-            <div className="relative hidden md:block md:w-[62px] md:shrink-0">
+            <div className="relative hidden md:block md:min-w-[62px] md:shrink-0">
                 <CreatedAtDesktop hidden={!disableButtons && selected} />
                 {!disableButtons && selected && <div className={`${selectedIds && selectedIds?.length > 0 ? "!invisible" : ""} absolute right-0 top-1/2 z-10 hidden -translate-y-1/2 items-center gap-[10px] bg-active-elementBg pl-3 pr-1 md:flex`}>
                     <button
