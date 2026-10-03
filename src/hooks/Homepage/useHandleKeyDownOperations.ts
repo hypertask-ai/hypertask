@@ -31,7 +31,7 @@ import { buildBuiltinViewContext, isBuiltinViewId } from '@/lib/constants/builti
 import { useToggleShowArchivedOnBoard } from './useShowArchivedOnBoard'
 import useKanbanViews from '@/hooks/Homepage/Views/useKanbanViews'
 import { useFlag } from '@/hooks/useFlag'
-import { HTPR_6902_N_QUICK_ADD_FLAG, HTPR_6175_QUICK_ENTRY_CARDS_FLAG } from '@/lib/flags/keys'
+import { HTPR_6914_SHIFT_C_QUICK_ADD_FLAG, HTPR_6902_N_QUICK_ADD_FLAG, HTPR_6175_QUICK_ENTRY_CARDS_FLAG } from '@/lib/flags/keys'
 import { shouldIgnoreTaskShortcutTarget } from '@/lib/keyboard/taskShortcuts'
 
 interface IHandleKeyDownOperations {
@@ -77,6 +77,7 @@ const useHandleKeyDownOperations= (props:IHandleKeyDownOperations) => {
     const isApple = useDeviceContext()
     const sorting_mode_current = getActiveSortingModeFromProject(_currentProject)
     const nQuickAddEnabled = useFlag(HTPR_6902_N_QUICK_ADD_FLAG);
+    const shiftCQuickAddEnabled = useFlag(HTPR_6914_SHIFT_C_QUICK_ADD_FLAG);
     const quickEntryCardsEnabled = useFlag(HTPR_6175_QUICK_ENTRY_CARDS_FLAG);
     const getActiveItem = () => store.get(activeItemAtom);
     const getActiveSection = () => store.get(activeSectionAtom);
@@ -100,11 +101,12 @@ const useHandleKeyDownOperations= (props:IHandleKeyDownOperations) => {
       }
     };
 
-    useEffect(nQuickAddEnabled && quickEntryCardsEnabled ? () => {
+    const registerQuickAdd = (allowShiftC: boolean) => {
       const handleNQuickAdd = (e: KeyboardEvent) => {
         if (
-          e.key.toLowerCase() !== "n" ||
-          e.ctrlKey || e.metaKey || e.altKey || e.shiftKey || e.repeat || e.isComposing ||
+          !((e.key.toLowerCase() === "n" && !e.shiftKey) ||
+            (allowShiftC && e.key.toLowerCase() === "c" && e.shiftKey)) ||
+          e.ctrlKey || e.metaKey || e.altKey || e.repeat || e.isComposing ||
           showCommands.show || returnIfModalOrInputActive() ||
           shouldIgnoreTaskShortcutTarget(e.target as HTMLElement | null) ||
           shouldIgnoreTaskShortcutTarget(document.activeElement as HTMLElement | null)
@@ -125,7 +127,10 @@ const useHandleKeyDownOperations= (props:IHandleKeyDownOperations) => {
       };
       document.addEventListener("keydown", handleNQuickAdd);
       return () => document.removeEventListener("keydown", handleNQuickAdd);
-    } : () => {}, [nQuickAddEnabled, quickEntryCardsEnabled, showCommands.show, filteredSections, store]);
+    };
+    useEffect(nQuickAddEnabled && quickEntryCardsEnabled
+      ? (shiftCQuickAddEnabled ? () => registerQuickAdd(true) : () => registerQuickAdd(false))
+      : () => {}, [nQuickAddEnabled, shiftCQuickAddEnabled, quickEntryCardsEnabled, showCommands.show, filteredSections, store]);
 
     const handleKeyDown = (e: any) => {
     let cmdControl = isApple&&e.metaKey || !isApple&&e.ctrlKey;
@@ -300,7 +305,7 @@ const useHandleKeyDownOperations= (props:IHandleKeyDownOperations) => {
     }
     
 
-    if (!activeItem && activeElementIndex === -1 && (e.key === 'c')) {
+    if (!activeItem && activeElementIndex === -1 && (e.key === 'c') && !e.shiftKey) {
       const event = new CustomEvent('ADD_NEW_TASK_ON_NO_FOCUS');
       document.dispatchEvent(event);
     }

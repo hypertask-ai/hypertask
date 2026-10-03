@@ -18,7 +18,7 @@ import { KeyCodes } from "@/lib/constants/keyboard-handler";
 import useHypertasksNavigate from "../MultiPages/Route/useHypertasksNavigate";
 import { MobileViewContext } from "@/lib/contexts/mobileContext";
 import { useFlag } from "@/hooks/useFlag";
-import { HTPR_6902_N_QUICK_ADD_FLAG } from "@/lib/flags/keys";
+import { HTPR_6914_SHIFT_C_QUICK_ADD_FLAG, HTPR_6902_N_QUICK_ADD_FLAG } from "@/lib/flags/keys";
 
 type SectionKeydownHandler = (event: KeyboardEvent) => void;
 
@@ -84,6 +84,7 @@ const useSections = ({
   const aiFirstTaskWriterEnabled = useFlag("htpr-6141-ai-first-task-writer");
   const quickEntryCardsEnabled = useFlag("htpr-6175-quick-entry-cards");
   const nQuickAddEnabled = useFlag(HTPR_6902_N_QUICK_ADD_FLAG);
+  const shiftCQuickAddEnabled = useFlag(HTPR_6914_SHIFT_C_QUICK_ADD_FLAG);
   const { navigate } = useHypertasksNavigate();
   const sectionListenerKeyRef = useRef<string | null>(null);
   if (!sectionListenerKeyRef.current) {
@@ -182,7 +183,7 @@ const useSections = ({
   };
 
   // ======================= HANDLE KEYDOWN FUNCTION =========================
-  const handleKeyDown = useCallback((e: KeyboardEvent) => {
+  const handleLegacyKeyDown = useCallback((e: KeyboardEvent) => {
     const {
       active,
       keyPressed,
@@ -397,10 +398,18 @@ const useSections = ({
 
   }, []);
 
-
-
-
-
+  // Let the board listener own Shift+C without changing the legacy C handler.
+  const handleShiftCKeyDown = useCallback((e: KeyboardEvent) => {
+    if (e.key.toLowerCase() === "c" && e.shiftKey &&
+      !e.ctrlKey && !e.metaKey && !e.altKey) return;
+    handleLegacyKeyDown(e);
+  }, [handleLegacyKeyDown]);
+  let handleKeyDown = handleLegacyKeyDown;
+  if (shiftCQuickAddEnabled && nQuickAddEnabled && quickEntryCardsEnabled) {
+    handleKeyDown = handleShiftCKeyDown;
+  }
+  const handleKeyDownRef = useRef(handleKeyDown);
+  handleKeyDownRef.current = handleKeyDown;
 
   // ==================== check for duplicate rankins and return true/false
   function hasDuplicateRankings(items: ITask[]) {
@@ -482,7 +491,7 @@ const useSections = ({
     const sectionListenerKey = sectionListenerKeyRef.current;
     if (!sectionListenerKey) return;
 
-    sectionKeydownHandlers.set(sectionListenerKey, handleKeyDown);
+    sectionKeydownHandlers.set(sectionListenerKey, (event) => handleKeyDownRef.current(event));
     if (sectionKeydownHandlers.size === 1) {
       document.addEventListener("keydown", handleDelegatedSectionKeydown);
     }
@@ -496,7 +505,7 @@ const useSections = ({
         document.removeEventListener("keydown", handleDelegatedSectionKeydown);
       }
     };
-  }, [handleKeyDown]);
+  }, []);
 
   useEffect(() => {
     const sectionListenerKey = sectionListenerKeyRef.current;
