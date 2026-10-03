@@ -82,7 +82,15 @@ CLI='SHIP_REPO=hypertask-ai/cli SHIP_BASE=main'
 env $CLI ./ship-check duplicate HTPR-6810 HTPR-6482 97 >/dev/null && ok "duplicate binds to a merged PR of a deleted ticket" || bad "duplicate with deleted original"
 env $CLI ./ship-check pr HTPR-6810 | grep -q 'title ok' && ok "duplicate pr gate passes with a deleted original" || bad "duplicate pr gate with deleted original"
 env $CLI ./ship-check merged HTPR-6810 | grep -q 'merged ok' && ok "duplicate merged gate passes with a deleted original" || bad "duplicate merged gate with deleted original"
+# HTPR-6482 now opens as HTPR-6810 (old numbers follow a board move, HTPR-6839), so point PR 97 at a number that never existed.
+gh() {
+  if [[ ${1:-} == pr && ${2:-} == view && ${3:-} == 97 ]]; then
+    command gh "$@" | sed 's/HTPR-6482/HTPR-9999999/'
+  else command gh "$@"; fi
+}
+export -f gh
 env $CLI ./ship-check title 97 >/dev/null && bad "title accepted a PR whose ticket is gone" || ok "title (merge guard) still needs the ticket to exist"
+unset -f gh
 
 # Older merged PRs put the type first ("[BUGFIX] HTPR-6501 ..."); the duplicate path accepts that order (YPER4-140).
 # cli PR 87 was since retitled, so pin its old title.
