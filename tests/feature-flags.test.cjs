@@ -19,7 +19,7 @@ const prisma = {
       return row;
     },
     findMany: async () =>
-      listedRows ?? (row ? [{ key: "htpr-6091-feature-flags", ...row }] : []),
+      listedRows ?? (row ? [{ key: "htpr-6136-figma-connect", ...row }] : []),
     upsert: async ({ where, create, update }) => {
       const data = row ? update : create;
       row = { ...(row ?? {}), ...data, key: where.key, updatedAt: new Date() };
@@ -82,11 +82,11 @@ test("owner access requires both the approved id and login identity", async () =
 });
 
 test("QA access requires both the approved id and login identity", async () => {
-  assert.equal(await flags.isFeatureEnabled("htpr-6091-feature-flags", 985), true);
+  assert.equal(await flags.isFeatureEnabled("htpr-6136-figma-connect", 985), true);
   usersById.set(985, { email: "someone@example.com" });
-  assert.equal(await flags.isFeatureEnabled("htpr-6091-feature-flags", 985), false);
+  assert.equal(await flags.isFeatureEnabled("htpr-6136-figma-connect", 985), false);
   usersById.set(7, { email: "valentin@hypertask.ai" });
-  assert.equal(await flags.isFeatureEnabled("htpr-6091-feature-flags", 7), false);
+  assert.equal(await flags.isFeatureEnabled("htpr-6136-figma-connect", 7), false);
 });
 
 test("feature flag modes enforce owner, QA, everyone, and off access", () => {
@@ -115,21 +115,21 @@ test("every declared flag without a stored row is on for the owner and QA, nobod
 test("per-user flag responses distinguish QA from normal members", async () => {
   const qaFlags = await flags.featureFlagsForUser(985);
   const normalFlags = await flags.featureFlagsForUser(7);
-  assert.equal(qaFlags["htpr-6118-comment-reactions-api"], true);
-  assert.equal(normalFlags["htpr-6118-comment-reactions-api"], false);
+  assert.equal(qaFlags["htpr-6136-figma-connect"], true);
+  assert.equal(normalFlags["htpr-6136-figma-connect"], false);
 });
 
 test("stored owner-only flags stay unavailable to QA until changed", async () => {
   row = { mode: "OWNER_ONLY", updatedAt: new Date() };
-  assert.equal(await flags.isFeatureEnabled("htpr-6091-feature-flags", 6), true);
-  assert.equal(await flags.isFeatureEnabled("htpr-6091-feature-flags", 985), false);
-  await flags.setFeatureFlagMode("htpr-6091-feature-flags", "OWNER_AND_QA");
-  assert.equal(await flags.isFeatureEnabled("htpr-6091-feature-flags", 985), true);
+  assert.equal(await flags.isFeatureEnabled("htpr-6136-figma-connect", 6), true);
+  assert.equal(await flags.isFeatureEnabled("htpr-6136-figma-connect", 985), false);
+  await flags.setFeatureFlagMode("htpr-6136-figma-connect", "OWNER_AND_QA");
+  assert.equal(await flags.isFeatureEnabled("htpr-6136-figma-connect", 985), true);
 });
 
 test("database failures fail closed instead of becoming the default", async () => {
   readError = new Error("database unavailable");
-  await assert.rejects(flags.isFeatureEnabled("htpr-6091-feature-flags", 6), /database unavailable/);
+  await assert.rejects(flags.isFeatureEnabled("htpr-6136-figma-connect", 6), /database unavailable/);
 });
 
 test("declared flags remain listed with ticket details and can be changed", async () => {
@@ -165,25 +165,16 @@ test("declared flags remain listed with ticket details and can be changed", asyn
       { key: "htpr-6002-shared-agent-chat", mode: "OWNER_AND_QA", updatedAt: null },
       { key: "htpr-6006-chat-confirm-ticket", mode: "OWNER_AND_QA", updatedAt: null },
       { key: "htpr-6059-lazy-emoji-list", mode: "OWNER_AND_QA", updatedAt: null },
-      { key: "htpr-6091-feature-flags", mode: "OWNER_AND_QA", updatedAt: null },
       { key: "htpr-6094-agent-activity-rows", mode: "OWNER_AND_QA", updatedAt: null },
       { key: "htpr-6112-copy-current-url", mode: "OWNER_AND_QA", updatedAt: null },
       { key: "htpr-6115-agent-sdk", mode: "OWNER_AND_QA", updatedAt: null },
-      { key: "htpr-6118-comment-reactions-api", mode: "OWNER_AND_QA", updatedAt: null },
       { key: "htpr-6122-agent-run-activities", mode: "OWNER_AND_QA", updatedAt: null },
-      {
-        key: "htpr-6123-add-typescript-agent-sdk",
-        mode: "OWNER_AND_QA",
-        updatedAt: null,
-      },
-      { key: "htpr-6124-agent-dev-loop", mode: "OWNER_AND_QA", updatedAt: null },
       {
         key: "htpr-6129-mobile-agent-chat-viewport",
         mode: "OWNER_AND_QA",
         updatedAt: null,
       },
       { key: "htpr-6130-mobile-reminder-safe-area", mode: "OWNER_AND_QA", updatedAt: null },
-      { key: "htpr-6133-feature-flag-details", mode: "OWNER_AND_QA", updatedAt: null },
       { key: "htpr-6136-figma-connect", mode: "OWNER_AND_QA", updatedAt: null },
       { key: "htpr-6141-ai-first-task-writer", mode: "OWNER_AND_QA", updatedAt: null },
       { key: "htpr-6154-chat-stop-and-timeout", mode: "OWNER_AND_QA", updatedAt: null },
@@ -200,20 +191,8 @@ test("declared flags remain listed with ticket details and can be changed", asyn
         updatedAt: null,
       },
       { key: "htpr-6175-quick-entry-cards", mode: "OWNER_AND_QA", updatedAt: null },
-      { key: "htpr-6176-flag-ticket-title", mode: "OWNER_AND_QA", updatedAt: null },
       {
         key: "htpr-6177-auto-task-descriptions",
-        mode: "OWNER_AND_QA",
-        updatedAt: null,
-      },
-      { key: "htpr-6179-flag-sort-filter", mode: "OWNER_AND_QA", updatedAt: null },
-      {
-        key: "htpr-6191-flag-ship-date-clusters",
-        mode: "OWNER_AND_QA",
-        updatedAt: null,
-      },
-      {
-        key: "htpr-6193-flag-removal-countdown",
         mode: "OWNER_AND_QA",
         updatedAt: null,
       },
@@ -234,11 +213,6 @@ test("declared flags remain listed with ticket details and can be changed", asyn
       },
       {
         key: "htpr-6243-manager-loop-activity",
-        mode: "OWNER_AND_QA",
-        updatedAt: null,
-      },
-      {
-        key: "htpr-6268-agent-visibility",
         mode: "OWNER_AND_QA",
         updatedAt: null,
       },
@@ -268,17 +242,7 @@ test("declared flags remain listed with ticket details and can be changed", asyn
         updatedAt: null,
       },
       {
-        key: "htpr-6320-ai-observability",
-        mode: "OWNER_AND_QA",
-        updatedAt: null,
-      },
-      {
         key: "htpr-6322-agent-chat-parked-reply",
-        mode: "OWNER_AND_QA",
-        updatedAt: null,
-      },
-      {
-        key: "htpr-6348-agent-access-delegation",
         mode: "OWNER_AND_QA",
         updatedAt: null,
       },
@@ -373,11 +337,6 @@ test("declared flags remain listed with ticket details and can be changed", asyn
         updatedAt: null,
       },
       {
-        key: "htpr-6473-get-agent",
-        mode: "OWNER_AND_QA",
-        updatedAt: null,
-      },
-      {
         key: "htpr-6476-mobile-agent-chat-fullscreen",
         mode: "OWNER_AND_QA",
         updatedAt: null,
@@ -394,21 +353,6 @@ test("declared flags remain listed with ticket details and can be changed", asyn
       },
       {
         key: "htpr-6516-agent-attribution",
-        mode: "OWNER_AND_QA",
-        updatedAt: null,
-      },
-      {
-        key: "htpr-6530-mcp-list-query",
-        mode: "OWNER_AND_QA",
-        updatedAt: null,
-      },
-      {
-        key: "htpr-6531-deferred-mcp-tools",
-        mode: "OWNER_AND_QA",
-        updatedAt: null,
-      },
-      {
-        key: "htpr-6532-stateless-mcp",
         mode: "OWNER_AND_QA",
         updatedAt: null,
       },
@@ -467,12 +411,6 @@ test("declared flags remain listed with ticket details and can be changed", asyn
         mode: "OWNER_AND_QA",
         updatedAt: null,
       },
-      { key: "htpr-6653-admin-team-comp", mode: "OWNER_AND_QA", updatedAt: null },
-      {
-        key: "htpr-6673-capture-user-signed-up-in-posthog",
-        mode: "OWNER_AND_QA",
-        updatedAt: null,
-      },
       {
         key: "htpr-6688-search-autocomplete",
         mode: "OWNER_AND_QA",
@@ -484,7 +422,6 @@ test("declared flags remain listed with ticket details and can be changed", asyn
         updatedAt: null,
       },
       { key: "htpr-6752-instant-ticket-open", mode: "OWNER_AND_QA", updatedAt: null },
-      { key: "htpr-6800-flag-ticket-id", mode: "OWNER_AND_QA", updatedAt: null },
       { key: "htpr-6860-mobile-page-hide-dock", mode: "OWNER_AND_QA", updatedAt: null },
       { key: "htpr-6861-mobile-page-back-row", mode: "OWNER_AND_QA", updatedAt: null },
       { key: "htpr-6865-search-layout", mode: "OWNER_AND_QA", updatedAt: null },
@@ -511,41 +448,41 @@ test("declared flags remain listed with ticket details and can be changed", asyn
     );
   });
 
-  const changed = await flags.setFeatureFlagMode("htpr-6091-feature-flags", "EVERYONE");
+  const changed = await flags.setFeatureFlagMode("htpr-6136-figma-connect", "EVERYONE");
   assert.equal(changed.mode, "EVERYONE");
-  assert.match(changed.description, /feature flag controls/);
-  assert.equal(changed.ticketUrl, "https://app.hypertask.ai/detail/project-15/6091");
-  assert.equal(await flags.isFeatureEnabled("htpr-6091-feature-flags", 7), true);
+  assert.match(changed.description, /Figma/);
+  assert.equal(changed.ticketUrl, "https://app.hypertask.ai/detail/project-15/6136");
+  assert.equal(await flags.isFeatureEnabled("htpr-6136-figma-connect", 7), true);
 });
 
 test("switching to Everyone starts a fresh removal countdown", async () => {
   const before = Date.now();
-  const released = await flags.setFeatureFlagMode("htpr-6091-feature-flags", "EVERYONE");
+  const released = await flags.setFeatureFlagMode("htpr-6136-figma-connect", "EVERYONE");
   // The countdown has to start from the switch, not from whenever the row was last written.
   assert.ok(released.releasedAt.getTime() >= before);
 
   // Re-pressing Everyone must not extend the deadline of a flag already released.
   row.releasedAt = new Date("2026-01-01T00:00:00.000Z");
   row.removalTaskId = 4242;
-  const again = await flags.setFeatureFlagMode("htpr-6091-feature-flags", "EVERYONE");
+  const again = await flags.setFeatureFlagMode("htpr-6136-figma-connect", "EVERYONE");
   assert.equal(again.releasedAt.toISOString(), "2026-01-01T00:00:00.000Z");
   assert.equal(again.removalTaskId, 4242);
 
   // Leaving Everyone and coming back is a new release, so it earns its own countdown and ticket.
-  await flags.setFeatureFlagMode("htpr-6091-feature-flags", "OWNER_ONLY");
-  const rereleased = await flags.setFeatureFlagMode("htpr-6091-feature-flags", "EVERYONE");
+  await flags.setFeatureFlagMode("htpr-6136-figma-connect", "OWNER_ONLY");
+  const rereleased = await flags.setFeatureFlagMode("htpr-6136-figma-connect", "EVERYONE");
   assert.ok(rereleased.releasedAt.getTime() >= before);
   assert.equal(rereleased.removalTaskId, null);
 });
 
 test("Keep pauses removal without moving the release date", async () => {
-  const released = await flags.setFeatureFlagMode("htpr-6091-feature-flags", "EVERYONE");
-  const kept = await flags.setFeatureFlagKeep("htpr-6091-feature-flags", true);
+  const released = await flags.setFeatureFlagMode("htpr-6136-figma-connect", "EVERYONE");
+  const kept = await flags.setFeatureFlagKeep("htpr-6136-figma-connect", true);
   assert.equal(kept.keep, true);
   assert.equal(kept.mode, "EVERYONE");
   assert.equal(kept.releasedAt.toISOString(), released.releasedAt.toISOString());
 
-  const resumed = await flags.setFeatureFlagKeep("htpr-6091-feature-flags", false);
+  const resumed = await flags.setFeatureFlagKeep("htpr-6136-figma-connect", false);
   assert.equal(resumed.keep, false);
   assert.equal(resumed.releasedAt.toISOString(), released.releasedAt.toISOString());
 
@@ -647,7 +584,7 @@ for (const key of ["htpr-6072-shallow-board-switch", "htpr-6254-heic-heif-attach
 test("ticket titles are only fetched when requested, and cover undeclared stored keys too", async () => {
   listedRows = [{ key: "htpr-1111-aaa", mode: "OFF", updatedAt: null }];
   taskRows = [
-    { uniqueIndex: 6091, title: "Add owner-controlled feature flags" },
+    { uniqueIndex: 6136, title: "Connect Figma" },
     { uniqueIndex: 1111, title: "Some legacy ticket" },
   ];
 
@@ -655,8 +592,8 @@ test("ticket titles are only fetched when requested, and cover undeclared stored
   withoutTitles.forEach(({ ticketTitle }) => assert.equal(ticketTitle, null));
 
   const withTitles = await flags.listFeatureFlagModes({ includeTicketTitles: true });
-  const declared = withTitles.find(({ key }) => key === "htpr-6091-feature-flags");
-  assert.equal(declared.ticketTitle, "Add owner-controlled feature flags");
+  const declared = withTitles.find(({ key }) => key === "htpr-6136-figma-connect");
+  assert.equal(declared.ticketTitle, "Connect Figma");
   const undeclaredStored = withTitles.find(({ key }) => key === "htpr-1111-aaa");
   assert.equal(undeclaredStored.ticketTitle, "Some legacy ticket");
 });
@@ -665,4 +602,44 @@ test("unknown flags fail closed and cannot create rows", async () => {
   assert.equal(await flags.isFeatureEnabled("unknown-flag", 6), false);
   await assert.rejects(flags.setFeatureFlagMode("unknown-flag", "OFF"), /Unknown feature flag/);
   await assert.rejects(flags.setFeatureFlagMode("Bad Flag", "OFF"), /Invalid feature flag/);
+});
+
+const retiredInfraKeys = [
+  "htpr-6091-feature-flags",
+  "htpr-6133-feature-flag-details",
+  "htpr-6176-flag-ticket-title",
+  "htpr-6179-flag-sort-filter",
+  "htpr-6191-flag-ship-date-clusters",
+  "htpr-6193-flag-removal-countdown",
+  "htpr-6800-flag-ticket-id",
+  "htpr-6653-admin-team-comp",
+  "htpr-6118-comment-reactions-api",
+  "htpr-6123-add-typescript-agent-sdk",
+  "htpr-6124-agent-dev-loop",
+  "htpr-6348-agent-access-delegation",
+  "htpr-6473-get-agent",
+  "htpr-6530-mcp-list-query",
+  "htpr-6531-deferred-mcp-tools",
+  "htpr-6532-stateless-mcp",
+  "htpr-6268-agent-visibility",
+  "htpr-6320-ai-observability",
+  "htpr-6673-capture-user-signed-up-in-posthog"
+];
+
+test("the 19 retired infra flags are hidden, immutable and enabled for old tabs", async () => {
+  listedRows = retiredInfraKeys.map((key) => ({ key, mode: "OFF", updatedAt: new Date() }));
+  listedRows.push({ key: "htpr-6536-qa-login", mode: "OWNER_AND_QA", updatedAt: null });
+  const listed = await flags.listFeatureFlagModes();
+  const listedKeys = new Set(listed.map(({ key }) => key));
+  assert.ok(listedKeys.has("htpr-6536-qa-login"), "positive control remains listed");
+  for (const key of retiredInfraKeys) {
+    assert.equal(flags.FEATURE_FLAG_KEYS.includes(key), false, key);
+    assert.equal(listedKeys.has(key), false, key);
+    await assert.rejects(flags.setFeatureFlagMode(key, "OFF"), /Unknown feature flag/);
+    await assert.rejects(flags.setFeatureFlagKeep(key, true), /Unknown feature flag/);
+  }
+  for (const userId of [6, 985, 42]) {
+    const clientFlags = await flags.featureFlagsForUser(userId);
+    for (const key of retiredInfraKeys) assert.equal(clientFlags[key], true, key);
+  }
 });

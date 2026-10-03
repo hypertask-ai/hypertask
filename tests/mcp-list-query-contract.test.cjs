@@ -9,23 +9,18 @@ function read(rel) {
   return fs.readFileSync(path.join(root, rel), "utf8");
 }
 
-test("list query fields are merged only when the flag is on", () => {
+test("list query fields are always merged without an infra flag", () => {
   const taskValidation = read("src/lib/mcp-server/validations/task.validation.ts");
   const handler = read("src/lib/mcp-server/handler.ts");
   const contract = read("src/lib/mcp-server/listQueryContract.ts");
   const listQuerySchema = read("src/lib/mcp-server/validations/common/listQuery.ts");
 
-  assert.match(listQuerySchema, /if \(!options\?\.listQuery\) return schema/);
   assert.match(listQuerySchema, /SchemaWithListQuery/);
-  assert.doesNotMatch(listQuerySchema, /return schema\.merge\(extra\) as T/);
-  assert.match(taskValidation, /withListQuerySchema\(/);
-  assert.match(taskValidation, /getListTasksInputSchema\(options\?: ListQuerySchemaOptions\)/);
-  assert.match(taskValidation, /withListQuerySchema\(listTasksBaseSchema, \{ listQuery: true \}\)/);
-  assert.match(contract, /getListTasksInputSchema\(\{ listQuery: enabled \}\)/);
-  assert.match(handler, /HTPR_6530_MCP_LIST_QUERY_FLAG/);
-  assert.match(handler, /resolvePortableTools\(MCP_TOOLS as PortableTool\[\], listQueryEnabled\)/);
-  assert.match(handler, /authenticatedListQueryHandler/);
-  assert.match(handler, /authenticatedMcpHandler/);
+  assert.doesNotMatch(listQuerySchema, /if \(!options\?\.listQuery\)/);
+  assert.match(taskValidation, /withListQuerySchema\(listTasksBaseSchema\)/);
+  assert.match(contract, /getListTasksInputSchema\(\)/);
+  assert.match(handler, /resolvePortableTools\(MCP_TOOLS as PortableTool\[\]\)/);
+  assert.doesNotMatch(handler, /isFeatureEnabled|authenticatedMcpHandler|authenticatedListQueryHandler/);
 });
 
 test("routes return nextCursor and project after building link", () => {
@@ -39,13 +34,13 @@ test("routes return nextCursor and project after building link", () => {
   const searchService = read("src/lib/mcp-server/lib/services/search.service.ts");
 
   assert.match(tasks, /withTaskPresentation/);
-  assert.match(tasks, /listQueryEnabled \|\| usesCursor/);
+  assert.doesNotMatch(tasks, /listQueryEnabled/);
   assert.match(tasks, /sort must be one of/);
   assert.match(search, /listQuery\?\.sortBy/);
   assert.match(search, /nextCursor/);
   assert.match(search, /if \(!prWhere\)/);
   assert.match(search, /section \|\|/);
-  assert.match(search, /listQueryEnabled[\s\S]{0,40}withTaskPresentation/);
+  assert.match(search, /return withTaskPresentation/);
   assert.match(comments, /sort must be createdAt or id/);
   assert.match(comments, /requestedSortOrder/);
   assert.match(projects, /filter\.updated_since/);
@@ -56,13 +51,14 @@ test("routes return nextCursor and project after building link", () => {
   assert.match(searchService, /requestedFields\.length > 0 \|\| task\.link/);
 });
 
-test("label parse and disabled agent schema keep the flag contract", () => {
+test("label and agent schemas include list fields and keep validation", () => {
   const projectValidation = read("src/lib/mcp-server/validations/project.validation.ts");
   const agentValidation = read("src/lib/mcp-server/validations/agent.validation.ts");
   const listQuery = read("src/lib/mcp/listQuery.ts");
 
-  assert.match(projectValidation, /getListLabelsBaseSchema\(\{ listQuery: true \}\)/);
-  assert.match(agentValidation, /if \(!options\?\.listQuery\) return z\.object\(\{\}\)\.strict\(\)/);
+  assert.match(projectValidation, /getListLabelsBaseSchema\(\)/);
+  assert.match(agentValidation, /withListQuerySchema\(z\.object\(\{\}\)\)/);
+  assert.doesNotMatch(agentValidation, /options\?\.listQuery/);
   assert.match(listQuery, /filter must be a JSON object/);
   assert.match(listQuery, /cursor must be a previous nextCursor value/);
 });

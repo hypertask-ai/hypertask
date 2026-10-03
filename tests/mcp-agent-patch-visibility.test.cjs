@@ -13,7 +13,6 @@ const state = {
   user: null,
   visibilityResult: null,
   agentRow: null,
-  flagEnabled: true,
 };
 
 function transpile(relativePath) {
@@ -43,12 +42,11 @@ function loadReal(relativePath) {
   return loaded.exports;
 }
 
-function loadHandler({ user, visibilityResult, agentRow, flagEnabled } = {}) {
+function loadHandler({ user, visibilityResult, agentRow } = {}) {
   state.user =
     user ?? { user: { id: 6, email: "owner@example.test" }, agentId: null };
   state.visibilityResult =
     visibilityResult ?? { ok: true, visibility: "PRIVATE" };
-  state.flagEnabled = flagEnabled ?? true;
   state.agentRow = agentRow ?? {
     id: "agent-1",
     displayName: "GLM Dev 1",
@@ -78,13 +76,6 @@ function loadHandler({ user, visibilityResult, agentRow, flagEnabled } = {}) {
           Object.values(body).filter((value) => value !== undefined).length ===
             1 && (body.visibility === "PRIVATE" || body.visibility === "TEAM"),
         setOwnedAgentVisibility: async () => state.visibilityResult,
-      };
-    }
-    if (request === "@/lib/flags") {
-      return {
-        __esModule: true,
-        AGENT_VISIBILITY_FLAG: "htpr-6268-agent-visibility",
-        isFeatureEnabled: async () => state.flagEnabled,
       };
     }
     if (request === "@/lib/mcp/agents/delegatedAccess") {
@@ -212,20 +203,6 @@ test("visibility cannot hide extra fields, recognized or not", async () => {
   }
 });
 
-test("with the flag off the verb does not exist, whatever the body says (fail closed)", async () => {
-  const { handlePatchAgentRequest } = loadHandler({ flagEnabled: false });
-  for (const body of [
-    { visibility: "TEAM" },
-    { visibility: "TEAM", archived: true },
-    { visibility: "TEAM", add_project_ids: ["project-1"] },
-  ]) {
-    const response = await handlePatchAgentRequest(request(body), "agent-1");
-    assert.equal(response.status, 404, JSON.stringify(body));
-    const parsed = await response.json();
-    assert.equal(parsed.success, false);
-    assert.equal(parsed.error, "Agent not found");
-  }
-});
 
 test("an agent credential may not manage agents", async () => {
   const { handlePatchAgentRequest } = loadHandler({

@@ -46,9 +46,6 @@ stubModule('src/lib/redis.ts', {
 })
 stubModule('src/lib/flags.ts', {
   HTPR_4638_AI_DIRECTORY_METADATA_FLAG: 'htpr-4638-ai-directory-metadata',
-  HTPR_6530_MCP_LIST_QUERY_FLAG: 'htpr-6530-mcp-list-query',
-  HTPR_6531_DEFERRED_MCP_TOOLS_FLAG: 'htpr-6531-deferred-mcp-tools',
-  HTPR_6532_STATELESS_MCP_FLAG: 'htpr-6532-stateless-mcp',
   HTPR_6542_TEAM_SCOPED_MANAGEMENT_KEYS_FLAG: 'htpr-6542-team-scoped-management-keys',
   isFeatureEnabled: async () => false,
 })

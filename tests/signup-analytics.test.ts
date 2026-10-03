@@ -23,7 +23,7 @@ test("a new account captures user_signed_up once with approved properties", asyn
           captures.push(capture);
         },
       },
-      isEnabled: async () => true,
+
       schedule: (promise) => {
         scheduled = promise;
       },
@@ -67,7 +67,7 @@ test("an existing-user login does not capture a signup", () => {
   assert.equal(captures, 0);
 });
 
-test("a signup outside the server flag does not capture", async () => {
+test("a signup by a normal member captures without a rollout flag", async () => {
   let captures = 0;
   let scheduled: Promise<unknown> | undefined;
 
@@ -83,7 +83,7 @@ test("a signup outside the server flag does not capture", async () => {
           captures += 1;
         },
       },
-      isEnabled: async () => false,
+
       schedule: (promise) => {
         scheduled = promise;
       },
@@ -91,7 +91,7 @@ test("a signup outside the server flag does not capture", async () => {
   );
 
   await scheduled;
-  assert.equal(captures, 0);
+  assert.equal(captures, 1);
 });
 
 test("existing first-touch UTM and invite context become signup properties", () => {
@@ -123,7 +123,7 @@ test("a PostHog failure is swallowed outside the signup request", async () => {
             throw new Error("PostHog unavailable");
           },
         },
-        isEnabled: async () => true,
+
         onError: (error) => failures.push(error),
         schedule: (promise) => {
           scheduled = promise;

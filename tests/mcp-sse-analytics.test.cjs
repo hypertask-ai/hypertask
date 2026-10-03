@@ -28,7 +28,6 @@ source('src/lib/mcp-server/legacy-sse.ts', {
 })
 source('src/lib/mcp-server/tools.ts', { MCP_TOOLS: [] })
 source('src/lib/mcp-server/listQueryContract.ts', { resolvePortableTools: () => [] })
-source('src/lib/flags.ts', { isFeatureEnabled: async () => false })
 source('src/lib/mcp/auth.ts', {
   extractBearerToken: () => 'test-token',
   validateMcpAuth: async () => authenticated ? { user: { id: 2343 } } : null,
@@ -131,7 +130,7 @@ test('oversized legacy requests are still counted and preserve the rejection', a
 })
 
 test('the current /mcp transport does not contribute to the legacy counter', async () => {
-  assert.equal(await call('/mcp'), response)
+  assert.equal((await call('/mcp')).status, 405)
   assert.equal(captures.length, 0)
   assert.equal(scheduled.length, 0)
 })

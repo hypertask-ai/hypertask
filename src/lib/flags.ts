@@ -19,18 +19,11 @@ import {
   HTPR_6157_AUTO_DESCRIPTION_FLAG,
   COLUMN_ALL_VIEWS_FLAG,
   HTPR_6278_CHAT_TURN_FAILURE_FLAG,
-  AGENT_VISIBILITY_FLAG,
-  FEATURE_FLAG_DETAILS_FLAG,
   FIGMA_CONNECT_FLAG,
   GOOGLE_CALENDAR_FLAG,
-  FLAG_REMOVAL_COUNTDOWN_FLAG,
   CONFIRMED_PROPOSAL_HEADING_FLAG,
   LAZY_EMOJI_LIST_FLAG,
   LOCAL_WRITING_ASSISTANCE_FLAG,
-  FLAG_SHIP_DATE_CLUSTER_FLAG,
-  FLAG_SORT_FILTER_FLAG,
-  FLAG_TICKET_TITLE_FLAG,
-  FLAG_TICKET_ID_FLAG,
   INBOX_ARCHIVE_CLUSTER_FLAG,
   PAGE_MENTIONS_FLAG,
   SHORTCUT_NUDGES_FLAG,
@@ -41,8 +34,6 @@ import {
   HTPR_4857_ADD_TO_SLACK_FLAG,
   HTPR_6283_AGENT_CHAT_LIVE_SORT_FLAG,
   HTPR_6284_AGENT_MENTION_ROUTING_FLAG,
-  HTPR_6320_AI_OBSERVABILITY_FLAG,
-  HTPR_6673_SIGNUP_ANALYTICS_FLAG,
   HTPR_6407_MOBILE_AGENT_CHAT_LAYOUT_FLAG,
   HTPR_6476_MOBILE_AGENT_CHAT_FULLSCREEN_FLAG,
   HTPR_6860_MOBILE_PAGE_HIDE_DOCK_FLAG,
@@ -79,10 +70,6 @@ import {
   HTPR_6516_AGENT_ATTRIBUTION_FLAG,
   HTPR_6512_SEED_TEAM_AGENT_FLAG,
   HTPR_6533_MCP_CLIENT_EVAL_FLAG,
-  HTPR_6532_STATELESS_MCP_FLAG,
-  HTPR_6530_MCP_LIST_QUERY_FLAG,
-  HTPR_6531_DEFERRED_MCP_TOOLS_FLAG,
-  HTPR_6473_GET_AGENT_FLAG,
   HTPR_6470_PROJECT_DELETE_FLAG,
   HTPR_6536_QA_LOGIN_FLAG,
   HTPR_6551_QUIET_RUN_ACTIVITY_FLAG,
@@ -94,8 +81,6 @@ import {
   HTPR_6556_MOBILE_DESCRIPTION_FIRST_FLAG,
   HTPR_6561_DESCRIPTION_STRUCTURE_FLAG,
   HTPR_6542_TEAM_SCOPED_MANAGEMENT_KEYS_FLAG,
-  HTPR_6348_AGENT_ACCESS_DELEGATION_FLAG,
-  HTPR_6653_ADMIN_TEAM_COMP_FLAG,
 } from "@/lib/flags/keys";
 
 // Re-exported so server code keeps importing keys from here. Client components must
@@ -117,7 +102,7 @@ const FEATURE_FLAG_QA_USER = {
 } as const;
 
 // Hide and reject retired flags without changing stored rows needed by older deployments.
-const RETIRED_FEATURE_FLAG_KEYS = new Set([
+export const RETIRED_FEATURE_FLAG_KEYS = new Set([
   "hyfa-43-factory-owner-preview",
   "htpr-6072-shallow-board-switch",
   "htpr-6254-heic-heif-attachments",
@@ -125,9 +110,48 @@ const RETIRED_FEATURE_FLAG_KEYS = new Set([
   "htpr-6035-agent-chat-skills",
   "yper4-123-board-check",
   "yper4-160-flag-pages",
+  "htpr-6091-feature-flags",
+  "htpr-6133-feature-flag-details",
+  "htpr-6176-flag-ticket-title",
+  "htpr-6179-flag-sort-filter",
+  "htpr-6191-flag-ship-date-clusters",
+  "htpr-6193-flag-removal-countdown",
+  "htpr-6800-flag-ticket-id",
+  "htpr-6653-admin-team-comp",
+  "htpr-6118-comment-reactions-api",
+  "htpr-6123-add-typescript-agent-sdk",
+  "htpr-6124-agent-dev-loop",
+  "htpr-6348-agent-access-delegation",
+  "htpr-6473-get-agent",
+  "htpr-6530-mcp-list-query",
+  "htpr-6531-deferred-mcp-tools",
+  "htpr-6532-stateless-mcp",
+  "htpr-6268-agent-visibility",
+  "htpr-6320-ai-observability",
+  "htpr-6673-capture-user-signed-up-in-posthog",
 ]);
-// Old tabs read these; remove htpr-6072 after 2026-10-06, htpr-6254 and htpr-6035 after 2026-10-16.
+// Old tabs read these infra flags as enabled; keep them until old deployments and tabs expire.
+// Existing product retirement dates: remove htpr-6072 after 2026-10-06, htpr-6254 and htpr-6035 after 2026-10-16.
 const RETIRED_CLIENT_FEATURE_FLAGS = {
+  "htpr-6091-feature-flags": true,
+  "htpr-6133-feature-flag-details": true,
+  "htpr-6176-flag-ticket-title": true,
+  "htpr-6179-flag-sort-filter": true,
+  "htpr-6191-flag-ship-date-clusters": true,
+  "htpr-6193-flag-removal-countdown": true,
+  "htpr-6800-flag-ticket-id": true,
+  "htpr-6653-admin-team-comp": true,
+  "htpr-6118-comment-reactions-api": true,
+  "htpr-6123-add-typescript-agent-sdk": true,
+  "htpr-6124-agent-dev-loop": true,
+  "htpr-6348-agent-access-delegation": true,
+  "htpr-6473-get-agent": true,
+  "htpr-6530-mcp-list-query": true,
+  "htpr-6531-deferred-mcp-tools": true,
+  "htpr-6532-stateless-mcp": true,
+  "htpr-6268-agent-visibility": true,
+  "htpr-6320-ai-observability": true,
+  "htpr-6673-capture-user-signed-up-in-posthog": true,
   "htpr-6072-shallow-board-switch": true,
   "htpr-6254-heic-heif-attachments": true,
   "htpr-6035-agent-chat-skills": true,
@@ -147,34 +171,16 @@ const FEATURE_FLAG_DEFINITIONS = [
       "Shows a ticket immediately from authorized cached board, My Tasks, or Inbox data while its full detail refreshes in the background.",
   },
   {
-    key: HTPR_6673_SIGNUP_ANALYTICS_FLAG,
-    shippedOn: "2026-09-28",
-    description:
-      "Records one PostHog signup event when a permanent account is created. Existing logins and temporary demo guests are excluded.",
-  },
-  {
     key: HTPR_6470_PROJECT_DELETE_FLAG,
     shippedOn: "2026-09-18",
     description:
       "Lets board owners and admins permanently delete a board and its tasks through the Hypertask CLI after explicit confirmation.",
   },
   {
-    key: HTPR_6348_AGENT_ACCESS_DELEGATION_FLAG,
-    shippedOn: "2026-10-01",
-    description:
-      "Lets an agent with the admin role add or remove its owner's other agents on boards it is itself a member of, through the CLI and MCP.",
-  },
-  {
     key: HTPR_6542_TEAM_SCOPED_MANAGEMENT_KEYS_FLAG,
     shippedOn: "2026-09-18",
     description:
       "Lets management keys be limited to one team while existing account-wide keys keep their current access.",
-  },
-  {
-    key: HTPR_6653_ADMIN_TEAM_COMP_FLAG,
-    shippedOn: "2026-09-27",
-    description:
-      "Lets the owner comp a team as Pro or BYOK until a date, and clear the comp, from the owner-only team comp admin screen.",
   },
   {
     key: HTPR_6561_DESCRIPTION_STRUCTURE_FLAG,
@@ -243,30 +249,6 @@ const FEATURE_FLAG_DEFINITIONS = [
       "Shows the agent that made a comment, move, assignment or label change by the name it acted under, including after that agent is deleted. Without it a retired agent reads as Private agent.",
   },
   {
-    key: HTPR_6530_MCP_LIST_QUERY_FLAG,
-    shippedOn: "2026-09-16",
-    description:
-      "Lets MCP list and search tools take query, filter, sort, fields, limit, and cursor so one call can return only the rows and columns the client asked for.",
-  },
-  {
-    key: HTPR_6473_GET_AGENT_FLAG,
-    shippedOn: "2026-09-16",
-    description:
-      "Lets hypertask agents get load one owned agent's mission text, boards, created time, and revoked state.",
-  },
-  {
-    key: HTPR_6531_DEFERRED_MCP_TOOLS_FLAG,
-    shippedOn: "2026-09-16",
-    description:
-      "MCP tools/list sends one short line per tool on connect. Full schemas load through hypertask_describe_tool, and hypertask_search_tools finds a tool by name.",
-  },
-  {
-    key: HTPR_6532_STATELESS_MCP_FLAG,
-    shippedOn: "2026-09-16",
-    description:
-      "Serves MCP over stateless Streamable HTTP: each request carries its own bearer token, session ids are ignored, and any server instance can answer any call.",
-  },
-  {
     key: HTPR_6512_SEED_TEAM_AGENT_FLAG,
     shippedOn: "2026-09-16",
     description:
@@ -283,12 +265,6 @@ const FEATURE_FLAG_DEFINITIONS = [
     shippedOn: "2026-09-14",
     description:
       "Lets the selected table or My Tasks row use the same task property shortcuts as a Kanban card without opening the task.",
-  },
-  {
-    key: HTPR_6320_AI_OBSERVABILITY_FLAG,
-    shippedOn: "2026-09-09",
-    description:
-      "Records every AI Chat turn in PostHog AI observability (user, model, tokens, time taken, and failures). No chat text is stored.",
   },
   {
     key: HTPR_4228_ADMIN_ONLY_TIME_REPORTS_FLAG,
@@ -333,12 +309,6 @@ const FEATURE_FLAG_DEFINITIONS = [
       "Lets each user connect Google Calendar and keep assigned tasks with due dates in a dedicated Hypertask calendar.",
   },
   {
-    key: AGENT_VISIBILITY_FLAG,
-    shippedOn: "2026-09-08",
-    description:
-      "Lets the CLI and MCP change an agent's visibility between PRIVATE and TEAM, like the web dashboard already can.",
-  },
-  {
     key: SHARED_AGENT_CHAT_FLAG,
     shippedOn: "2026-09-08",
     description:
@@ -361,12 +331,6 @@ const FEATURE_FLAG_DEFINITIONS = [
     description: "Requires a confirmed board ticket before Agent Chat can start side-effecting work.",
   },
   {
-    key: "htpr-6091-feature-flags",
-    shippedOn: "2026-09-04",
-    description:
-      "Registers the feature flag controls themselves; the owner-only admin page stays available in every mode.",
-  },
-  {
     key: "htpr-6094-agent-activity-rows",
     shippedOn: "2026-09-05",
     description: "Shows passive ticket progress between normal messages in Agent Chat.",
@@ -382,25 +346,9 @@ const FEATURE_FLAG_DEFINITIONS = [
     description: "Enables the shared Agent SDK run model and lifecycle endpoints.",
   },
   {
-    key: "htpr-6118-comment-reactions-api",
-    shippedOn: "2026-09-04",
-    description: "Lets agents add and remove emoji reactions on comments through the API and CLI.",
-  },
-  {
     key: "htpr-6122-agent-run-activities",
     shippedOn: "2026-09-04",
     description: "Enables typed thought, action, response, error, and question updates for agent runs.",
-  },
-  {
-    key: "htpr-6123-add-typescript-agent-sdk",
-    shippedOn: "2026-09-05",
-    description: "Allows the TypeScript Agent SDK to read and update agent runs.",
-  },
-  {
-    key: "htpr-6124-agent-dev-loop",
-    shippedOn: "2026-09-05",
-    description:
-      "Lets an agent author replay a recorded run into a handler running on their own machine.",
   },
   {
     key: "htpr-6129-mobile-agent-chat-viewport",
@@ -459,11 +407,6 @@ const FEATURE_FLAG_DEFINITIONS = [
     description: "Keeps the mobile reminder time selector aligned and clear of bottom controls.",
   },
   {
-    key: FEATURE_FLAG_DETAILS_FLAG,
-    shippedOn: "2026-09-04",
-    description: "Shows a plain-language description and ticket link for every feature flag.",
-  },
-  {
     key: FIGMA_CONNECT_FLAG,
     shippedOn: "2026-09-06",
     description: "Lets each user connect a Figma account so linked frames render as previews.",
@@ -508,27 +451,6 @@ const FEATURE_FLAG_DEFINITIONS = [
       "Drafts a task description from the title while you type, below an empty description.",
   },
   {
-    key: FLAG_TICKET_TITLE_FLAG,
-    shippedOn: "2026-09-05",
-    description: "Shows the linked ticket's title as the primary label on the flags admin page.",
-  },
-  {
-    key: FLAG_TICKET_ID_FLAG,
-    shippedOn: "2026-10-01",
-    description: "Starts each flag headline on the flags admin page with its ticket ID, so Ctrl+F finds it.",
-  },
-  {
-    key: FLAG_SORT_FILTER_FLAG,
-    shippedOn: "2026-09-05",
-    description:
-      "Sorts and clusters the feature flags page by release date, with an audience filter.",
-  },
-  {
-    key: FLAG_SHIP_DATE_CLUSTER_FLAG,
-    shippedOn: "2026-09-06",
-    description: "Groups the feature flags page by the day each flag first reached production.",
-  },
-  {
     key: AGENT_CHAT_STOP_AND_TIMEOUT_FEATURE_FLAG,
     shippedOn: "2026-09-06",
     description:
@@ -557,12 +479,6 @@ const FEATURE_FLAG_DEFINITIONS = [
     shippedOn: "2026-09-07",
     description:
       "Adds Show in all views and Hide in all views to the column editor, so one column's visibility changes across every saved view at once.",
-  },
-  {
-    key: FLAG_REMOVAL_COUNTDOWN_FLAG,
-    shippedOn: "2026-09-07",
-    description:
-      "Counts down the 14 days before an Everyone flag is removed from the code, with a Keep switch that stops it. Set this flag itself to Everyone to let the daily sweep file the removal tickets.",
   },
   {
     key: SHORTCUT_NUDGES_FLAG,

@@ -71,7 +71,7 @@ function loadRoute() {
       TaskIdentifierAmbiguityError: class TaskIdentifierAmbiguityError extends Error {},
     },
     "@/lib/flags": {
-      HTPR_6530_MCP_LIST_QUERY_FLAG: "htpr-6530-mcp-list-query",
+
       isFeatureEnabled: async () => false,
     },
     "@/lib/mcp/listQuery": {
@@ -84,7 +84,7 @@ function loadRoute() {
       withTaskPresentation: (task) => task,
     },
     "@/lib/mcp/readListQuery": {
-      readEnabledListQuery: () => ({ listQuery: null }),
+      readListQuery: () => ({ listQuery: null }),
     },
     "@/lib/mcp/priorityFilter": {
       parsePriorityFilter: () => [],

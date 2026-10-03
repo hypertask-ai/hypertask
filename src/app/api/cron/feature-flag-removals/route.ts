@@ -7,7 +7,7 @@ import {
   FEATURE_FLAG_OWNER_USER_ID,
   FEATURE_FLAG_SWEEP_AGENT_ID,
   FEATURE_FLAG_TICKET_PROJECT_ID,
-  FLAG_REMOVAL_COUNTDOWN_FLAG,
+  RETIRED_FEATURE_FLAG_KEYS,
 } from "@/lib/flags";
 import { FEATURE_FLAG_REMOVAL_DAYS, PENDING_REMOVAL_TASK_ID } from "@/lib/flags/removal";
 import { createTaskCore } from "@/utils/controllers/tasks/createTaskCore";
@@ -47,23 +47,12 @@ function removalDescription(key: string, releasedAt: Date) {
  * HTPR-6193: daily sweep that hands a flag over for deletion once it has spent
  * FEATURE_FLAG_REMOVAL_DAYS on Everyone without the owner pressing Keep.
  *
- * Dormant until the owner sets htpr-6193-flag-removal-countdown to Everyone. isFeatureEnabled is
- * deliberately not used: a cron has no user, and at the default mode it would answer true for the
- * owner id and arm the board writes before anyone opted in.
  */
 export async function GET(request: NextRequest) {
   if (
     !hasValidCronAuthorization(request.headers.get("authorization"), process.env.CRON_SECRET)
   ) {
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });
-  }
-
-  const sweepFlag = await prisma.featureFlag.findUnique({
-    where: { key: FLAG_REMOVAL_COUNTDOWN_FLAG },
-    select: { mode: true },
-  });
-  if (sweepFlag?.mode !== "EVERYONE") {
-    return NextResponse.json({ skipped: "sweep flag is not released", filed: 0 });
   }
 
   // sweep() writes with the module-level client, so its tickets commit as they are created; this
@@ -110,7 +99,7 @@ async function sweep() {
   const cutoff = new Date(Date.now() - FEATURE_FLAG_REMOVAL_DAYS * 24 * 60 * 60 * 1000);
   const due = await prisma.featureFlag.findMany({
     where: {
-      key: { not: "htpr-6072-shallow-board-switch" },
+      key: { notIn: [...RETIRED_FEATURE_FLAG_KEYS] },
       mode: "EVERYONE",
       keep: false,
       removalTaskId: null,

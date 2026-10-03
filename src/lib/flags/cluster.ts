@@ -13,8 +13,8 @@ function localDay(shippedOn: string): Date | null {
   return new Date(year, month - 1, day);
 }
 
-function clusterDate(flag: FeatureFlagRow, byShipDate: boolean): Date | null {
-  const shipped = byShipDate && flag.shippedOn ? localDay(flag.shippedOn) : null;
+function clusterDate(flag: FeatureFlagRow): Date | null {
+  const shipped = flag.shippedOn ? localDay(flag.shippedOn) : null;
   if (shipped) return shipped;
   return flag.updatedAt ? new Date(flag.updatedAt) : null;
 }
@@ -31,27 +31,23 @@ function dayLabel(date: Date | null): string {
 /**
  * Sorts flags by date and clusters them by calendar day.
  *
- * With `byShipDate` the date is the day the flag key first reached production. Every declared
+ * The date is the day the flag key first reached production. Every declared
  * flag carries one, and a stored key with no definition left behind by a removed flag falls
  * back to its `updatedAt`, which the database sets on write, so in practice the trailing
  * "Not yet released" cluster stays empty. The null handling below is still the honest
  * fallback for a row that somehow has neither date; do not remove it.
- *
- * Without `byShipDate` the date is the last mode change, and never-touched flags fall into that
- * trailing cluster in either sort direction.
  */
 export function clusterFeatureFlagsByReleaseDate(
   flags: FeatureFlagRow[],
   sortDirection: "asc" | "desc",
   audienceFilter: FeatureFlagMode | "ALL",
-  byShipDate = false,
 ): [string, FeatureFlagRow[]][] {
   const filtered = flags.filter(
     (flag) => audienceFilter === "ALL" || flag.mode === audienceFilter,
   );
   const sorted = [...filtered].sort((a, b) => {
-    const aTime = clusterDate(a, byShipDate)?.getTime() ?? null;
-    const bTime = clusterDate(b, byShipDate)?.getTime() ?? null;
+    const aTime = clusterDate(a)?.getTime() ?? null;
+    const bTime = clusterDate(b)?.getTime() ?? null;
     if (aTime === null && bTime === null) return 0;
     if (aTime === null) return 1;
     if (bTime === null) return -1;
@@ -59,7 +55,7 @@ export function clusterFeatureFlagsByReleaseDate(
   });
   const grouped = new Map<string, FeatureFlagRow[]>();
   for (const flag of sorted) {
-    const label = dayLabel(clusterDate(flag, byShipDate));
+    const label = dayLabel(clusterDate(flag));
     const existing = grouped.get(label);
     if (existing) existing.push(flag);
     else grouped.set(label, [flag]);

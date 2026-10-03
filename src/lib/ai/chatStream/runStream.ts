@@ -18,7 +18,7 @@ import { routeAgentMention } from "./fleetTurn";
 import { runModelTurn } from "./modelTurn";
 
 export async function runChatStream(controller: ReadableStreamDefaultController<Uint8Array>, state: StreamState) {
-  const { body, dbUser, requestMessage, heartbeatExecutionId, turnDeadlineEnabled, aiObservabilityEnabled, contextTaskId, gatewayTags, usageProjectId, actingAgent, streamId, streamLease, turnStartedAtMs, maxDuration, encoder } = state;
+  const { body, dbUser, requestMessage, heartbeatExecutionId, turnDeadlineEnabled, contextTaskId, gatewayTags, usageProjectId, actingAgent, streamId, streamLease, turnStartedAtMs, maxDuration, encoder } = state;
 
   state.doneSent = false;
   state.errorSent = false;
@@ -174,7 +174,7 @@ export async function runChatStream(controller: ReadableStreamDefaultController<
     outcome: AiChatTurnOutcome,
     error?: unknown,
   ) => {
-    if (!aiObservabilityEnabled || state.turnOutcomeRecorded) return;
+    if (state.turnOutcomeRecorded) return;
     state.turnOutcomeRecorded = true;
     const observation = recordAiChatTurn({
       userId: dbUser.id,

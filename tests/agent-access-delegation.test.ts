@@ -26,12 +26,9 @@ async function demo() {
     ])
 
   const prismaMock = prisma as any
-  const originalFlagFindUnique = prismaMock.featureFlag.findUnique
   const originalAgentFindUnique = prismaMock.agent.findUnique
 
-  let flagMode = 'EVERYONE'
   let role: string | undefined = 'admin'
-  prismaMock.featureFlag.findUnique = async () => ({ mode: flagMode })
   prismaMock.agent.findUnique = async () => ({
     permissions: role ? { role } : {},
   })
@@ -69,16 +66,7 @@ async function demo() {
     assert.equal(writer.status, 403)
     assert.equal(writer.body.code, 'insufficient_scope')
 
-    // Flag off: behaves exactly like before.
-    role = 'admin'
-    flagMode = 'OFF'
-    const flagOff = await json(
-      await checkAgentBoardDelegation(ctx, 'manager')
-    )
-    assert.equal(flagOff.status, 403)
-    assert.equal(flagOff.body.error, 'Agents cannot manage agents')
   } finally {
-    prismaMock.featureFlag.findUnique = originalFlagFindUnique
     prismaMock.agent.findUnique = originalAgentFindUnique
   }
 

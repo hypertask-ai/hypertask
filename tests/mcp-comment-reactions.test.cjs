@@ -266,7 +266,6 @@ function loadCommentsRoute({
     },
     '@/lib/flags': {
       HTPR_6516_AGENT_ATTRIBUTION_FLAG: 'htpr-6516-agent-attribution',
-      HTPR_6530_MCP_LIST_QUERY_FLAG: 'htpr-6530-mcp-list-query',
       isFeatureEnabled: async () => false,
     },
     '@/lib/flags/keys': {
@@ -278,7 +277,7 @@ function loadCommentsRoute({
       projectRows: (rows) => rows,
     },
     '@/lib/mcp/readListQuery': {
-      readEnabledListQuery: () => ({ listQuery: null }),
+      readListQuery: () => ({ listQuery: null }),
     },
   }
   const mockRequire = (request) => {

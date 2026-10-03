@@ -12,9 +12,7 @@ import type {
 } from "@/lib/agentWebhooks/events";
 
 export const AGENT_RUN_FEATURE_FLAG = "htpr-6115-agent-sdk";
-export const AGENT_SDK_FEATURE_FLAG = "htpr-6123-add-typescript-agent-sdk";
 export const AGENT_RUN_ACTIVITY_FEATURE_FLAG = "htpr-6122-agent-run-activities";
-export const AGENT_DEV_LOOP_FEATURE_FLAG = "htpr-6124-agent-dev-loop";
 export const AGENT_CHAT_STOP_AND_TIMEOUT_FEATURE_FLAG =
   "htpr-6154-chat-stop-and-timeout";
 export const AGENT_CHAT_PARKED_REPLY_FLAG =

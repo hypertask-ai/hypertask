@@ -6,7 +6,6 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   ADMIN_FEATURE_FLAGS_QUERY_KEY,
   FEATURE_FLAGS_QUERY_PREFIX,
-  useFlag,
 } from "@/hooks/useFlag";
 import type { FeatureFlagMode, FeatureFlagRow } from "@/lib/flags";
 import { clusterFeatureFlagsByReleaseDate } from "@/lib/flags/cluster";
@@ -59,10 +58,6 @@ export default function FeatureFlagsAdmin({
   flagKey?: string;
 }) {
   const queryClient = useQueryClient();
-  const ticketTitleEnabled = useFlag("htpr-6176-flag-ticket-title");
-  const sortFilterEnabled = useFlag("htpr-6179-flag-sort-filter");
-  const shipDateClustersEnabled = useFlag("htpr-6191-flag-ship-date-clusters");
-  const removalCountdownEnabled = useFlag("htpr-6193-flag-removal-countdown");
   const [sortDirection, setSortDirection] = useState<"desc" | "asc">("desc");
   const [audienceFilter, setAudienceFilter] = useState<FeatureFlagMode | "ALL">("ALL");
   const flags = useQuery({
@@ -104,22 +99,18 @@ export default function FeatureFlagsAdmin({
     onSettled: () => queryClient.invalidateQueries({ queryKey: ADMIN_FEATURE_FLAGS_QUERY_KEY }),
   });
 
-  // Off: one unlabelled group, so the rows below render exactly as they did before.
   const clusters = useMemo(
     () => {
       if (flagKey) {
         return [["", (flags.data?.flags ?? []).filter((flag) => flag.key === flagKey)] as [string, FeatureFlagRow[]]];
       }
-      return sortFilterEnabled
-        ? clusterFeatureFlagsByReleaseDate(
-            flags.data?.flags ?? [],
-            sortDirection,
-            audienceFilter,
-            shipDateClustersEnabled,
-          )
-        : [["", flags.data?.flags ?? []] as [string, FeatureFlagRow[]]];
+      return clusterFeatureFlagsByReleaseDate(
+        flags.data?.flags ?? [],
+        sortDirection,
+        audienceFilter,
+      );
     },
-    [flagKey, sortFilterEnabled, flags.data?.flags, sortDirection, audienceFilter, shipDateClustersEnabled],
+    [flagKey, flags.data?.flags, sortDirection, audienceFilter],
   );
 
   return (
@@ -135,7 +126,7 @@ export default function FeatureFlagsAdmin({
           New features start with Owner + QA. Release or hide them without a deploy.
         </p>
 
-        {!flagKey && sortFilterEnabled && (
+        {!flagKey && (
           <div className="mt-6 flex flex-wrap items-center justify-between gap-3">
             <div
               className="flex flex-wrap gap-1 rounded-sm bg-comment-description p-1"
@@ -181,7 +172,7 @@ export default function FeatureFlagsAdmin({
         {clusters.map(([dateLabel, rows]) =>
           rows.length === 0 ? null : (
           <div key={dateLabel || "all"} className="mt-6">
-            {!flagKey && sortFilterEnabled && (
+            {!flagKey && (
               <h2 className="mb-2 text-dense font-semibold text-text-light-gray">{dateLabel}</h2>
             )}
             <div className="overflow-hidden rounded-[5px] border border-border-light-gray-thin bg-cardBackground">
@@ -209,7 +200,7 @@ export default function FeatureFlagsAdmin({
                       </a>
                     )}
                   </>
-                ) : flags.data?.detailsEnabled && ticketTitleEnabled && flag.ticketTitle ? (
+                ) : flag.ticketTitle ? (
                   <>
                     {flag.ticketUrl ? (
                       <a
@@ -231,11 +222,10 @@ export default function FeatureFlagsAdmin({
                     <code className="break-all text-dense">{flag.key}</code>
                   </Link>
                 )}
-                {!flagKey && flags.data?.detailsEnabled && (
+                {!flagKey && (
                   <p className="mt-1 text-content text-text-light-gray">{flag.description}</p>
                 )}
-                {removalCountdownEnabled &&
-                  (() => {
+                {(() => {
                     const removal = featureFlagRemovalState(flag);
                     if (!removal) return null;
                     return (

@@ -17,7 +17,6 @@ import { mcpTaskUserCommentCount } from '@/lib/mcp/tasks/mappers'
 import { findTaskByIdentifier, TaskIdentifierAmbiguityError } from '@/lib/mcp/tasks/resolveTask'
 import { decodeCursor, encodeCursor } from '@/lib/mcp/pagination/cursor'
 import prisma from '@/lib/prisma'
-import { HTPR_6530_MCP_LIST_QUERY_FLAG, isFeatureEnabled } from '@/lib/flags'
 import {
   hasPrWhere,
   normalizeTaskStatus,
@@ -27,7 +26,7 @@ import {
   resolveListLimit,
   withTaskPresentation,
 } from '@/lib/mcp/listQuery'
-import { readEnabledListQuery } from '@/lib/mcp/readListQuery'
+import { readListQuery } from '@/lib/mcp/readListQuery'
 import { parsePriorityFilter } from '@/lib/mcp/priorityFilter'
 
 /** Minimal parent task info for MCP responses (when this task is a subtask). */
@@ -84,7 +83,7 @@ export interface ListTasksResponse {
   offset: number
   /**
    * Opaque cursor for the next page, or null when there are no more rows.
-   * When htpr-6530-mcp-list-query is on, a full first page also returns this.
+   * A full first page also returns this.
    */
   nextCursor: string | null
   metadata?: {
@@ -350,8 +349,8 @@ export async function GET(request: NextRequest) {
     // Continue with list tasks logic
     const projectId = projectIdForLookup
     const boardId = boardIdResult.value
-    const listQueryEnabled = await isFeatureEnabled(HTPR_6530_MCP_LIST_QUERY_FLAG, user.id)
-    const parsedListQuery = readEnabledListQuery(listQueryEnabled, searchParams)
+
+    const parsedListQuery = readListQuery(searchParams)
     if (parsedListQuery.error) return parsedListQuery.error
     const listQuery = parsedListQuery.listQuery
     const sectionIdParam = parsePositiveIntegerParam(searchParams, 'section_id')
@@ -595,14 +594,9 @@ export async function GET(request: NextRequest) {
       Object.assign(where, prWhere)
     }
 
-    // Flag-off cursor mode still walks id-ascending. Flag-on keeps the
-    // requested sort and uses a stable id tie-breaker so nextCursor can
-    // continue that same order.
-    const preserveRequestedSort = listQueryEnabled || !usesCursor
+    // Keep the requested sort with a stable id tie-breaker across cursor pages.
     const orderBy: any[] = []
-    if (!preserveRequestedSort) {
-      orderBy.push({ id: 'asc' })
-    } else if (sortBy === 'createdAt') {
+    if (sortBy === 'createdAt') {
       orderBy.push({ createdAt: sortOrder }, { id: 'asc' })
     } else if (sortBy === 'updatedAt') {
       orderBy.push({ updatedAt: { sort: sortOrder, nulls: 'last' } }, { id: 'asc' })
@@ -618,18 +612,12 @@ export async function GET(request: NextRequest) {
       orderBy.push({ updatedAt: 'desc' }, { id: 'asc' })
     }
 
-    // total is the full match set — counted BEFORE the cursor window so it stays
-    // constant across a cursor walk. The cursor `gt` filter applies only to the
-    // legacy flag-off walk below.
+    // Count the full match set before applying the cursor window.
     const total = await prisma.task.count({ where })
-    const listWhere =
-      !listQueryEnabled && usesCursor && cursorId !== null
-        ? { ...where, id: { ...(where.id ?? {}), gt: cursorId } }
-        : where
 
     // Get tasks
     const tasks = await prisma.task.findMany({
-      where: listWhere,
+      where,
       select: {
         id: true,
         ticketNumber: true,
@@ -726,9 +714,8 @@ export async function GET(request: NextRequest) {
       },
       orderBy,
       take: limit,
-      // Flag-off cursor mode pages via the id filter. Flag-on uses Prisma
-      // cursor+skip so the requested sort is preserved across pages.
-      ...(listQueryEnabled && cursorId
+      // Use cursor+skip so the requested sort is preserved across pages.
+      ...(cursorId
         ? { cursor: { id: cursorId }, skip: 1 }
         : { skip: usesCursor ? 0 : offset }),
     })
@@ -785,18 +772,15 @@ export async function GET(request: NextRequest) {
       }
     })
 
-    const presentedTasks = listQueryEnabled
-      ? taskList.map((task) => withTaskPresentation(task))
-      : taskList
+    const presentedTasks = taskList.map((task) => withTaskPresentation(task))
     const projectedTasks = listQuery?.fields.length
       // @ts-expect-error TaskListItem has no string index signature
       ? projectRows(presentedTasks as Array<Record<string, unknown>>, listQuery.fields)
       : presentedTasks
 
-    // A full page implies there may be more rows. Flag-on also returns
-    // nextCursor on the first page so clients can start paging.
+    // A full page returns nextCursor so clients can start paging.
     const nextCursor =
-      tasks.length === limit && (listQueryEnabled || usesCursor)
+      tasks.length === limit
         ? encodeCursor(tasks[tasks.length - 1].id)
         : null
 

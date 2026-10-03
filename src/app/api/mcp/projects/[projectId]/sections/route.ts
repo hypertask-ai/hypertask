@@ -4,8 +4,7 @@ import { getProjectWhere } from '@/utils/controllers/projects/getAllIncludes'
 import prisma from '@/lib/prisma'
 import { createSection } from '@/lib/mcp/sections/services'
 import { broadcastBoardChange } from '@/lib/realtime/server'
-import { HTPR_6530_MCP_LIST_QUERY_FLAG, isFeatureEnabled } from '@/lib/flags'
-import { readEnabledListQuery, tryApplyCollectionQuery } from '@/lib/mcp/readListQuery'
+import { readListQuery, tryApplyCollectionQuery } from '@/lib/mcp/readListQuery'
 
 export interface SectionListItem {
   id: number
@@ -261,8 +260,8 @@ export async function GET(request: NextRequest, props: { params: Promise<{ proje
     // Parse query parameters
     const searchParams = request.nextUrl.searchParams
     const includeHidden = searchParams.get('include_hidden') === 'true'
-    const listQueryEnabled = await isFeatureEnabled(HTPR_6530_MCP_LIST_QUERY_FLAG, user.id)
-    const parsedListQuery = readEnabledListQuery(listQueryEnabled, searchParams)
+
+    const parsedListQuery = readListQuery(searchParams)
     if (parsedListQuery.error) return parsedListQuery.error
     const listQuery = parsedListQuery.listQuery
 
@@ -332,7 +331,7 @@ export async function GET(request: NextRequest, props: { params: Promise<{ proje
       success: true,
       sections: (projected?.value.items ?? sectionList) as SectionListItem[],
       projectId,
-      ...(listQueryEnabled ? { nextCursor: projected?.value.nextCursor ?? null } : {}),
+      nextCursor: projected?.value.nextCursor ?? null,
     }
 
     return NextResponse.json(response)

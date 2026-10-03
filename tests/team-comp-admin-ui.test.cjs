@@ -14,12 +14,9 @@ function stub(filename, exports) {
 }
 
 let owner = true;
-let flagOn = true;
 stub(path.join(root, "src/lib/flags.ts"), {
   FEATURE_FLAG_OWNER_USER_ID: 6,
-  HTPR_6653_ADMIN_TEAM_COMP_FLAG: "htpr-6653-admin-team-comp",
   isFeatureFlagOwner: async () => owner,
-  isFeatureEnabled: async () => flagOn,
 });
 stub(require.resolve("next/headers"), { headers: async () => new Headers() });
 stub(require.resolve("next/navigation"), { notFound: () => { throw new Error("NOT_FOUND"); } });
@@ -27,13 +24,10 @@ const jiti = createJiti(__filename, { alias: { "@": path.join(root, "src") }, in
 const Page = jiti(path.join(root, "src/app/admin/comp/page.tsx")).default;
 const Admin = jiti(path.join(root, "src/app/admin/comp/TeamCompAdmin.tsx")).default;
 
-test("server page requires owner identity and the ticket flag", async () => {
+test("server page requires owner identity", async () => {
   owner = false;
   await assert.rejects(Page(), /NOT_FOUND/);
   owner = true;
-  flagOn = false;
-  await assert.rejects(Page(), /NOT_FOUND/);
-  flagOn = true;
   assert.equal((await Page()).type, Admin);
 });
 

@@ -10,8 +10,7 @@ import {
   listOwnedAgents,
   type AgentManagementDatabase,
 } from './ownedAgents'
-import { HTPR_6530_MCP_LIST_QUERY_FLAG, isFeatureEnabled } from '@/lib/flags'
-import { readEnabledListQuery, tryApplyCollectionQuery } from '@/lib/mcp/readListQuery'
+import { readListQuery, tryApplyCollectionQuery } from '@/lib/mcp/readListQuery'
 
 export async function handleListAgentsRequest(
   request: NextRequest,
@@ -56,9 +55,8 @@ export async function handleListAgentsRequest(
     ctx.user.id,
     ctx.management?.teamId
   )
-  const listQueryEnabled = await isFeatureEnabled(HTPR_6530_MCP_LIST_QUERY_FLAG, ctx.user.id)
-  const parsedListQuery = readEnabledListQuery(
-    listQueryEnabled,
+
+  const parsedListQuery = readListQuery(
     request.nextUrl.searchParams,
   )
   if (parsedListQuery.error) return parsedListQuery.error

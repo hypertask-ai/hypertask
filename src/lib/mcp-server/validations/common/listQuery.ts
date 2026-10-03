@@ -1,15 +1,10 @@
 /**
  * Shared MCP tool input fields for list/search (HTPR-6530).
  * Same names on every list tool: query, filter, sort, fields, limit, cursor.
- * Merge these only when the caller has htpr-6530-mcp-list-query.
  */
 
 import { z } from 'zod'
 import { HAS_PR_VALUES, type HasPrValue } from '@/lib/mcp/listQuery'
-
-export type ListQuerySchemaOptions = {
-  listQuery?: boolean
-}
 
 export const listFilterSchema = z
   .object({
@@ -64,20 +59,8 @@ export type SchemaWithListQuery<T extends z.ZodObject<z.ZodRawShape>> = z.ZodObj
 
 export function withListQuerySchema<T extends z.ZodObject<z.ZodRawShape>>(
   schema: T,
-  options: { listQuery: true },
-  extras?: { omitQuery?: boolean },
-): SchemaWithListQuery<T>
-export function withListQuerySchema<T extends z.ZodObject<z.ZodRawShape>>(
-  schema: T,
-  options?: ListQuerySchemaOptions,
-  extras?: { omitQuery?: boolean },
-): T
-export function withListQuerySchema<T extends z.ZodObject<z.ZodRawShape>>(
-  schema: T,
-  options?: ListQuerySchemaOptions,
   extras: { omitQuery?: boolean } = {},
-): T | SchemaWithListQuery<T> {
-  if (!options?.listQuery) return schema
+): SchemaWithListQuery<T> {
   const extra = extras.omitQuery
     ? listQueryToolSchema.omit({ query: true })
     : listQueryToolSchema

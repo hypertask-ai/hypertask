@@ -42,13 +42,13 @@ import {
   type McpCommentReaction,
 } from '@/lib/mcp/comments/reactionResponse'
 import { overlayDurableAgentDisplayName } from '@/lib/agents/publicAgent'
-import { HTPR_6530_MCP_LIST_QUERY_FLAG, isFeatureEnabled } from '@/lib/flags'
+import { isFeatureEnabled } from '@/lib/flags'
 import {
   HTPR_6516_AGENT_ATTRIBUTION_FLAG,
   HTPR_6561_DESCRIPTION_STRUCTURE_FLAG,
 } from '@/lib/flags/keys'
 import { parseNumericCursor, parseUpdatedSince, projectRows } from '@/lib/mcp/listQuery'
-import { readEnabledListQuery } from '@/lib/mcp/readListQuery'
+import { readListQuery } from '@/lib/mcp/readListQuery'
 
 export interface CommentItem {
   id: number
@@ -247,8 +247,8 @@ export async function GET(request: NextRequest) {
     const requestedSortOrder = searchParams.get('sort_order')
     const sortOrder = requestedSortOrder || 'desc'
     const includeActivity = searchParams.get('include_activity') === 'true'
-    const listQueryEnabled = await isFeatureEnabled(HTPR_6530_MCP_LIST_QUERY_FLAG, user.id)
-    const parsedListQuery = readEnabledListQuery(listQueryEnabled, searchParams)
+
+    const parsedListQuery = readListQuery(searchParams)
     if (parsedListQuery.error) return parsedListQuery.error
     const listQuery = parsedListQuery.listQuery
 
@@ -383,9 +383,7 @@ export async function GET(request: NextRequest) {
       total,
       limit: pageLimit,
       offset: cursorId ? 0 : offset,
-      ...(listQueryEnabled
-        ? { nextCursor: comments.length === pageLimit ? String(comments[comments.length - 1].id) : null }
-        : {}),
+      nextCursor: comments.length === pageLimit ? String(comments[comments.length - 1].id) : null,
     }
 
     return NextResponse.json(response)

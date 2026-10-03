@@ -16,7 +16,7 @@ import {
   sortOrderSchema,
   createSearchPaginationSchema,
 } from './common/pagination';
-import { type ListQuerySchemaOptions, withListQuerySchema } from './common/listQuery';
+import { withListQuerySchema } from './common/listQuery';
 import {
   priorityFilterNoNoneSchema,
   priorityFilterSchema,
@@ -310,12 +310,12 @@ function finishListTasksSchema<T extends z.ZodObject<z.ZodRawShape>>(schema: T) 
     .strict()
 }
 
-export function getListTasksInputSchema(options?: ListQuerySchemaOptions) {
-  return finishListTasksSchema(withListQuerySchema(listTasksBaseSchema, options))
+export function getListTasksInputSchema() {
+  return finishListTasksSchema(withListQuerySchema(listTasksBaseSchema))
 }
 
 export const ListTasksInputSchema = finishListTasksSchema(
-  withListQuerySchema(listTasksBaseSchema, { listQuery: true }),
+  withListQuerySchema(listTasksBaseSchema),
 )
 export type ListTasksInput = z.infer<typeof ListTasksInputSchema>;
 
@@ -332,11 +332,11 @@ const searchTasksBaseSchema = z
   })
   .merge(createSearchPaginationSchema(config.limits.searchLimitMax, config.limits.searchLimitDefault))
 
-export function getSearchTasksInputSchema(options?: ListQuerySchemaOptions) {
-  return withListQuerySchema(searchTasksBaseSchema, options, { omitQuery: true }).strict()
+export function getSearchTasksInputSchema() {
+  return withListQuerySchema(searchTasksBaseSchema, { omitQuery: true }).strict()
 }
 
-export const SearchTasksInputSchema = withListQuerySchema(searchTasksBaseSchema, { listQuery: true }, {
+export const SearchTasksInputSchema = withListQuerySchema(searchTasksBaseSchema, {
   omitQuery: true,
 }).strict()
 export type SearchTasksInput = z.infer<typeof SearchTasksInputSchema>;
@@ -359,13 +359,12 @@ const enhancedSearchTasksBaseSchema = z
   })
   .merge(createSearchPaginationSchema(config.limits.searchLimitMax, config.limits.searchLimitDefault))
 
-export function getEnhancedSearchTasksInputSchema(options?: ListQuerySchemaOptions) {
-  return withListQuerySchema(enhancedSearchTasksBaseSchema, options, { omitQuery: true }).strict()
+export function getEnhancedSearchTasksInputSchema() {
+  return withListQuerySchema(enhancedSearchTasksBaseSchema, { omitQuery: true }).strict()
 }
 
 export const EnhancedSearchTasksInputSchema = withListQuerySchema(
   enhancedSearchTasksBaseSchema,
-  { listQuery: true },
   { omitQuery: true },
 ).strict()
 export type EnhancedSearchTasksInput = z.infer<typeof EnhancedSearchTasksInputSchema>;

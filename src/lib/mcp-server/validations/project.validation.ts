@@ -6,13 +6,13 @@
 
 import { z } from 'zod';
 import { paginationSchema, sortBySchema, sortOrderSchema } from './common/pagination';
-import { type ListQuerySchemaOptions, withListQuerySchema } from './common/listQuery';
+import { withListQuerySchema } from './common/listQuery';
 import { estimateIndexOptionalSchema, statusFilterSchema } from './common/filters';
 
 /**
  * Schema for list_projects tool input
  */
-export function getListProjectsInputSchema(options?: ListQuerySchemaOptions) {
+export function getListProjectsInputSchema() {
   return withListQuerySchema(
     z
       .object({
@@ -20,7 +20,6 @@ export function getListProjectsInputSchema(options?: ListQuerySchemaOptions) {
         search: z.string().min(1).optional(),
       })
       .merge(paginationSchema),
-    options,
   )
     .extend({
       sort_by: sortBySchema,
@@ -29,7 +28,7 @@ export function getListProjectsInputSchema(options?: ListQuerySchemaOptions) {
     .strict();
 }
 
-export const ListProjectsInputSchema = getListProjectsInputSchema({ listQuery: true });
+export const ListProjectsInputSchema = getListProjectsInputSchema();
 export type ListProjectsInput = z.infer<typeof ListProjectsInputSchema>;
 
 /**
@@ -161,14 +160,13 @@ export type ProjectAdminInput = z.infer<typeof ProjectAdminInputSchema>;
  * Base schema for list_sections tool (without refine validation)
  * Used for FastMCP parameter validation
  */
-export function getListSectionsBaseSchema(options?: ListQuerySchemaOptions) {
+export function getListSectionsBaseSchema() {
   return withListQuerySchema(
     z.object({
       project_id: z.number().int().positive().optional(),
       board_id: z.number().int().positive().optional(),
       include_hidden: z.boolean().optional(),
     }),
-    options,
   )
     .merge(paginationSchema)
     .strict();
@@ -178,8 +176,8 @@ export function getListSectionsBaseSchema(options?: ListQuerySchemaOptions) {
  * Schema for list_sections tool input (with refine validation)
  * Either project_id or board_id must be provided
  */
-export function getListSectionsInputSchema(options?: ListQuerySchemaOptions) {
-  return getListSectionsBaseSchema(options).refine(
+export function getListSectionsInputSchema() {
+  return getListSectionsBaseSchema().refine(
     (data) => data.project_id !== undefined || data.board_id !== undefined,
     {
       message: 'Either project_id or board_id must be provided',
@@ -188,7 +186,7 @@ export function getListSectionsInputSchema(options?: ListQuerySchemaOptions) {
   );
 }
 
-export const ListSectionsInputSchema = getListSectionsInputSchema({ listQuery: true });
+export const ListSectionsInputSchema = getListSectionsInputSchema();
 export type ListSectionsInput = z.infer<typeof ListSectionsInputSchema>;
 
 /**
@@ -250,7 +248,7 @@ export type CreateLabelInput = z.infer<typeof CreateLabelInputSchema>;
 /**
  * Schema for list_labels tool input.
  */
-export function getListLabelsBaseSchema(options?: ListQuerySchemaOptions) {
+export function getListLabelsBaseSchema() {
   return withListQuerySchema(
     z.object({
       project_id: z.coerce
@@ -258,13 +256,12 @@ export function getListLabelsBaseSchema(options?: ListQuerySchemaOptions) {
         .int()
         .positive('project_id must be a positive integer'),
     }),
-    options,
   )
     .merge(paginationSchema)
     .strict();
 }
 
-export const ListLabelsInputSchema = getListLabelsBaseSchema({ listQuery: true });
+export const ListLabelsInputSchema = getListLabelsBaseSchema();
 export type ListLabelsInput = z.infer<typeof ListLabelsInputSchema>;
 
 /**
@@ -368,7 +365,7 @@ export type CreateBoardInput = z.infer<typeof CreateBoardInputSchema>;
  * Base schema for section CRUD tool - single tool for Create, Read, Update, Delete
  * Action determines which params are required.
  */
-export function getSectionCrudBaseSchema(options?: ListQuerySchemaOptions) {
+export function getSectionCrudBaseSchema() {
   return withListQuerySchema(
     z.object({
       action: z
@@ -428,15 +425,14 @@ export function getSectionCrudBaseSchema(options?: ListQuerySchemaOptions) {
       limit: z.number().int().positive().optional().describe('For get: max tasks to return. Default 50.'),
       offset: z.number().int().nonnegative().optional().describe('For get: pagination offset.'),
     }),
-    options,
   ).strict();
 }
 
 /**
  * Section CRUD input with action-based validation
  */
-export function getSectionCrudInputSchema(options?: ListQuerySchemaOptions) {
-  return getSectionCrudBaseSchema(options).superRefine((data, ctx) => {
+export function getSectionCrudInputSchema() {
+  return getSectionCrudBaseSchema().superRefine((data, ctx) => {
     const { action, project_id, section_id, title, move_after_section_id, is_done, auto_assign } = data;
 
     if (!project_id) {
@@ -459,5 +455,5 @@ export function getSectionCrudInputSchema(options?: ListQuerySchemaOptions) {
   });
 }
 
-export const SectionCrudInputSchema = getSectionCrudInputSchema({ listQuery: true });
+export const SectionCrudInputSchema = getSectionCrudInputSchema();
 export type SectionCrudInput = z.infer<ReturnType<typeof getSectionCrudBaseSchema>>;

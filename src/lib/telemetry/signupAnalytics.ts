@@ -1,8 +1,6 @@
 import { waitUntil } from "@vercel/functions";
 import { PostHog } from "posthog-node";
 
-import { HTPR_6673_SIGNUP_ANALYTICS_FLAG } from "@/lib/flags/keys";
-
 export type SignupMethod = "email" | "google" | "invite";
 
 export type SignupAttribution = {
@@ -25,7 +23,6 @@ type PostHogCapture = {
 
 type SignupAnalyticsDependencies = {
   client?: PostHogCapture;
-  isEnabled?: (userId: number) => Promise<boolean>;
   onError?: (error: unknown) => void;
   schedule?: (promise: Promise<unknown>) => void;
 };
@@ -50,12 +47,6 @@ export function postHogClient(): PostHog | undefined {
   }
 
   return client;
-}
-
-async function signupAnalyticsEnabled(userId: number): Promise<boolean> {
-  // Dynamic import avoids a static cycle: flags -> auth -> Better Auth -> signup.
-  const { isFeatureEnabled } = await import("@/lib/flags");
-  return isFeatureEnabled(HTPR_6673_SIGNUP_ANALYTICS_FLAG, userId);
 }
 
 function cleanUtmSource(value: string | undefined): string | undefined {
@@ -145,9 +136,7 @@ export function recordUserSignedUp(
   }
   if (!captureClient) return;
 
-  const isEnabled = dependencies.isEnabled ?? signupAnalyticsEnabled;
   const capturePromise = (async () => {
-    if (!(await isEnabled(signup.userId))) return;
     await captureClient.captureImmediate(buildUserSignedUpCapture(signup));
   })().catch(reportError);
 

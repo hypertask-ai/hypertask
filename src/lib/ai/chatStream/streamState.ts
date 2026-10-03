@@ -15,7 +15,6 @@ export type StreamOptions = TurnModel & {
   heartbeatExecutionId: string | null;
   heartbeatTurn: ReturnType<typeof decodeHeartbeatTurnMessage>;
   turnDeadlineEnabled: boolean;
-  aiObservabilityEnabled: boolean;
   userMessagePersisted: boolean;
   contextTaskId: number | null;
   streamId: string;

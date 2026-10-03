@@ -1,8 +1,6 @@
 import type { AuthInfo } from '@modelcontextprotocol/sdk/server/auth/types.js'
-import { withMcpAuth } from 'mcp-handler'
 import jwt from 'jsonwebtoken'
 import { MCP_TOOLS } from './tools'
-import { bindMcpTools } from './streamable-http'
 import { handleLegacySseRequest, isLegacySseRequest } from './legacy-sse'
 import { recordLegacyMcpRequest } from '@/lib/telemetry/mcpSseAnalytics'
 import {
@@ -12,20 +10,14 @@ import {
 import { MCP_ATTACHMENT_MAX_REQUEST_BYTES } from '@/lib/mcp/attachments/constants'
 import { extractBearerToken, validateMcpAuth } from '@/lib/mcp/auth'
 import { hasAnyManagementPermission } from '@/lib/mcp/managementPermissions'
-import { HTPR_6532_STATELESS_MCP_FLAG, isFeatureEnabled } from '@/lib/flags'
-import { HTPR_6531_DEFERRED_MCP_TOOLS_FLAG } from '@/lib/flags'
-import { HTPR_6530_MCP_LIST_QUERY_FLAG } from '@/lib/flags'
 import { resolvePortableTools } from './listQueryContract'
 import { NextRequest } from 'next/server'
-import { handleMcpHttp, usesStatelessMcpTransport } from './mcp-http'
+import { handleMcpHttp } from './mcp-http'
 import {
   handleStatelessMcpRequest,
   mcpUnauthorizedResponse,
   type PortableTool,
 } from './stateless-http'
-
-const handler = bindMcpTools(MCP_TOOLS as PortableTool[])
-const listQueryHandler = bindMcpTools(resolvePortableTools(MCP_TOOLS as PortableTool[], true))
 
 async function verifyToken(_request: Request, bearerToken?: string): Promise<AuthInfo | undefined> {
   if (!bearerToken) return undefined
@@ -62,15 +54,6 @@ async function verifyToken(_request: Request, bearerToken?: string): Promise<Aut
     expiresAt,
   }
 }
-
-const authenticatedMcpHandler = withMcpAuth(handler, verifyToken, {
-  required: true,
-  resourceMetadataPath: '/.well-known/oauth-protected-resource',
-})
-const authenticatedListQueryHandler = withMcpAuth(listQueryHandler, verifyToken, {
-  required: true,
-  resourceMetadataPath: '/.well-known/oauth-protected-resource',
-})
 
 async function boundMcpRequest(request: Request): Promise<Request> {
   if (request.method !== 'POST' || !request.body) return request
@@ -127,44 +110,15 @@ export async function mcpHandler(request: Request): Promise<Response> {
 
     const userId = Number(authInfo.clientId)
     if (Number.isFinite(userId)) telemetryUserId = userId
-    const listQueryEnabled =
-      Number.isFinite(userId) &&
-      (await isFeatureEnabled(HTPR_6530_MCP_LIST_QUERY_FLAG, userId).catch(() => false))
-    const portableTools = resolvePortableTools(MCP_TOOLS as PortableTool[], listQueryEnabled)
+    const portableTools = resolvePortableTools(MCP_TOOLS as PortableTool[])
     if (isLegacySseRequest(working)) {
       return handleLegacySseRequest(working, authInfo, portableTools)
     }
 
-    const stateless =
-      Number.isFinite(userId) &&
-      (await isFeatureEnabled(HTPR_6532_STATELESS_MCP_FLAG, userId).catch(() => false))
-    const deferred =
-      Number.isFinite(userId) &&
-      (await isFeatureEnabled(HTPR_6531_DEFERRED_MCP_TOOLS_FLAG, userId).catch(() => false))
-
-    // Stateless POST/GET/DELETE stay behind htpr-6532-stateless-mcp (Owner+QA).
-    // OPTIONS has no session. Everyone else keeps the existing session handler.
-    if (usesStatelessMcpTransport(working.method, stateless)) {
-      return handleMcpHttp(working, {
-        authenticate: async () => authInfo,
-        tools: portableTools,
-        deferredEnabled: async () => deferred,
-      })
-    }
-
-    if (stateless) {
-      if (deferred) {
-        return handleStatelessMcpRequest(working, authInfo, portableTools, { deferred: true })
-      }
-      return handleStatelessMcpRequest(working, authInfo, portableTools)
-    }
-    if (deferred) {
-      return handleStatelessMcpRequest(working, authInfo, portableTools, { deferred: true })
-    }
-
-    return listQueryEnabled
-      ? authenticatedListQueryHandler(working)
-      : authenticatedMcpHandler(working)
+    return handleMcpHttp(working, {
+      authenticate: async () => authInfo,
+      tools: portableTools,
+    })
   } finally {
     recordLegacyMcpRequest(request, telemetryUserId, timestamp)
   }
