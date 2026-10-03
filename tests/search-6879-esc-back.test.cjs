@@ -92,6 +92,7 @@ async function withSearch(t, config, check) {
     t.mock.timers.enable({ apis: ['setTimeout'] })
     const input = () => document.getElementById('search-input')
     const type = async (value) => React.act(async () => {
+      input().focus()
       Object.getOwnPropertyDescriptor(dom.window.HTMLInputElement.prototype, 'value').set.call(input(), value)
       input().dispatchEvent(new dom.window.Event('input', { bubbles: true }))
     })

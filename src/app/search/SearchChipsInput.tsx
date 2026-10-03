@@ -266,8 +266,8 @@ export default function SearchChipsInput({ value, onChange, onRun, boardId, inpu
       setDismissed(true);
       return;
     }
-    const moveDown = event.key === "ArrowDown" || (tips && event.key === "j");
-    const moveUp = event.key === "ArrowUp" || (tips && event.key === "k");
+    const moveDown = event.key === "ArrowDown" || (tips && !layoutEnabled && event.key === "j");
+    const moveUp = event.key === "ArrowUp" || (tips && !layoutEnabled && event.key === "k");
     if (open && (moveDown || moveUp)) {
       event.preventDefault();
       event.stopPropagation();
@@ -278,6 +278,7 @@ export default function SearchChipsInput({ value, onChange, onRun, boardId, inpu
       event.preventDefault();
       event.stopPropagation();
       choose(selectedRow);
+      if (layoutEnabled && event.key === "Enter" && (selectedRow.kind === 'value' || selectedRow.kind === 'recent')) inputRef.current?.blur();
       return;
     }
     if (event.key === "Backspace" && event.currentTarget.selectionStart === 0 && event.currentTarget.selectionEnd === 0 && chips.length) {
@@ -292,6 +293,7 @@ export default function SearchChipsInput({ value, onChange, onRun, boardId, inpu
       setEditing(false);
       if (layoutEnabled) setDismissed(true);
       onRun(value);
+      if (layoutEnabled && value.trim().length >= 2) inputRef.current?.blur();
     }
   }
 
@@ -381,7 +383,7 @@ export default function SearchChipsInput({ value, onChange, onRun, boardId, inpu
           </> : rows.map(renderRow)}
           {!tips && loading && <div role="status" className="py-2 text-meta text-text-light-gray">Loading suggestions...</div>}
           {!tips && error && <div role="alert" className="py-2 text-meta text-text-light-gray">Could not load suggestions. Keep typing to retry.</div>}
-          <div className="mt-4 text-meta text-text-light-gray">{tips ? '↑ ↓ or j/k' : '↑ ↓'} to move · Tab / Enter to accept · Esc to close</div>
+          <div className="mt-4 text-meta text-text-light-gray">↑ ↓ to move · Tab / Enter to accept · Esc to close</div>
         </div>
       ) : open && (
         <div ref={pickerRef} className="absolute left-4 top-full z-30 max-w-[calc(100%-2rem)] @md:left-9" onMouseDown={(event) => event.preventDefault()}>
