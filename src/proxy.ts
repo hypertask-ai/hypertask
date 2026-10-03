@@ -512,7 +512,7 @@ export default async function requireAuthMiddleware(request: NextRequest) {
 
 export const config = {
   matcher: [
-    '/((?!api|_next|flask-app|.*\\..*).*)',
+    '/((?!api|_next|flask-app|files(?:/|$)|.*\\..*).*)',
     '/api/:path*' // HTPR-4182: run the identity gate for every /api route (covers /api/mcp and /api/v1)
   ]
 };

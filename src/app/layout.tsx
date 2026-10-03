@@ -6,6 +6,7 @@ import PostHogAnalytics from "@/components/Analytics/PostHogAnalytics";
 import { SpeedInsights } from "@vercel/speed-insights/next";
 import ClientErrorReporter from "@/components/ErrorBoundary/ClientErrorReporter";
 import DeploySkewGuard from "@/components/System/DeploySkewGuard";
+import FilesImageFallback from "@/components/FilesImageFallback";
 import { isMobileDevice } from "@/utils/serverActions";
 import authConfig from "@/lib/configs/auth.config";
 import { DIV_ID_CONSTANTS } from "@/lib/configs/general.config";
@@ -153,6 +154,7 @@ export default async function RootLayout(
             }}
           />
         ) : null}
+        <FilesImageFallback />
         <ClientErrorReporter />
         <PostHogAnalytics
           authenticatedUserId={analyticsSession?.id ?? null}
