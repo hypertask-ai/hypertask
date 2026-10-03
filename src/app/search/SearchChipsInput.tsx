@@ -104,7 +104,7 @@ export default function SearchChipsInput({ value, onChange, onRun, boardId, inpu
       }
     };
     // The list stays open when focus leaves, so Escape must still close it from anywhere.
-    const dismissOnEscape = (event: KeyboardEvent) => {
+    const dismissOnEscape = (event: globalThis.KeyboardEvent) => {
       if (event.key === 'Escape' && document.activeElement !== inputRef.current) setDismissed(true);
     };
     document.addEventListener('pointerdown', dismissOutside);
