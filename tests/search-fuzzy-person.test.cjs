@@ -33,8 +33,8 @@ function matches(row, where) {
   if (where.assignees?.some && !row.assignees.some((person) => matches(person, where.assignees.some))) return false
   return true
 }
-function reset(fuzzy = true, chips = true) {
-  state = { fuzzy, chips, poolQueries: 0, flagCalls: [], taskQueries: [] }
+function reset(fuzzy = true, chips = true, match = false) {
+  state = { fuzzy, chips, match, poolQueries: 0, flagCalls: [], taskQueries: [] }
 }
 const tasks = people.map((person) => ({
   id: 100 + person.id, userId: person.id, user: person, projectId: person.boards[0],
@@ -75,10 +75,17 @@ const mocks = new Map([
     HTPR_6881_SEARCH_FUZZY_PERSON_FLAG: flag,
     HTPR_6369_SEARCH_OPERATORS_FLAG: 'operators', HTPR_6370_SEARCH_CHIPS_FLAG: 'chips',
     HTPR_6530_MCP_LIST_QUERY_FLAG: 'list',
+    HTPR_6372_SEARCH_RANKING_FLAG: 'htpr-6372-search-ranking',
+    HTPR_6878_SEARCH_LABEL_SCOPE_FLAG: 'htpr-6878-search-label-scope',
+    HTPR_6882_SEARCH_MATCH_HIGHLIGHTS_FLAG: 'htpr-6882-search-match-highlights',
+    HTPR_6865_SEARCH_LAYOUT_FLAG: 'htpr-6865-search-layout',
+    HTPR_6688_SEARCH_AUTOCOMPLETE_FLAG: 'htpr-6688-search-autocomplete',
     isFeatureEnabled: async (key, userId) => {
       state.flagCalls.push([key, userId])
       assert.equal(userId, 42)
-      return key === flag ? state.fuzzy : key === 'chips' ? state.chips : key === 'operators'
+      return key === flag ? state.fuzzy : key === 'chips' ? state.chips
+        : ['htpr-6882-search-match-highlights', 'htpr-6865-search-layout', 'htpr-6688-search-autocomplete'].includes(key) ? state.match
+        : key === 'operators'
     },
   }],
   ['src/utils/controllers/projects/getAllIncludes.ts', { getProjectWhere: () => ({}), projectContentAccessWhere: () => ({}) }],
@@ -180,6 +187,23 @@ for (const surface of ['API', 'MCP']) {
     }
   })
 }
+test('fuzzy people and match highlights work independently in every flag combination', async () => {
+  for (const operator of ['from', 'assignee']) {
+    for (const fuzzy of [false, true]) {
+      for (const match of [false, true]) {
+        reset(fuzzy, true, match)
+        const res = { status(code) { this.code = code; return this }, json(body) { this.body = body; return this } }
+        await handler({ method: 'POST', headers: {}, body: { searchQuery: `${operator}:valentin`, projectIds: [7], archive: 'Normal' } }, res)
+        assert.equal(res.code, 200)
+        const rows = res.body.processedData.All
+        const expected = fuzzy ? people.slice(0, 3) : [people[1]]
+        assert.deepEqual(rows.map((row) => row.taskId), expected.map((person) => 100 + person.id))
+        assert.deepEqual(rows.map((row) => row.searchMatch?.people), expected.map((person) => match ? [person.displayName] : undefined))
+      }
+    }
+  }
+})
+
 test('board-name parsing keeps accessible boards separate from the scoped fuzzy person pool', async () => {
   for (const chips of [false, true]) {
     reset(true, chips)

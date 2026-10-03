@@ -184,8 +184,9 @@ const handler: NextApiHandler = async (
 };
 
 function matchesFilter(filters: SearchFilter[] | undefined, values: (string | number | null | undefined)[]) {
-  return filters?.some(({ value, negated }) => !negated && values.some((candidate) =>
-    candidate != null && String(candidate).trim().toLowerCase() === value.replace(/^@/, '').trim().toLowerCase())) ?? false;
+  return filters?.some(({ value, negated, userIds }) => !negated && (userIds
+    ? values.some((candidate) => typeof candidate === 'number' && userIds.includes(candidate))
+    : values.some((candidate) => candidate != null && String(candidate).trim().toLowerCase() === value.replace(/^@/, '').trim().toLowerCase()))) ?? false;
 }
 
 export default handler;

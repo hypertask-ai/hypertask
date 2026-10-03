@@ -26,7 +26,7 @@ function eligible(row, where) {
 const db = {
   project: { findMany: async ({ select }) => select.title
     ? [{ title: 'Visible board' }] : state.boards.map((id) => ({ id })) },
-  label: { findMany: async () => { state.labelQueries++; return [{ value: 'bug' }] } },
+  label: { findMany: async () => { state.labelQueries++; return state.labels ?? [{ value: 'bug' }] } },
   user: { findMany: async () => [{ displayName: 'Kamil Grzegorzewicz' }] },
   section: { findMany: async ({ where }) => (state.sections ?? [{ projectId: 7, section_title: 'Done', isDone: true }])
     .filter((section) => where.deleted !== false || !section.deleted) },
@@ -49,7 +49,8 @@ const mocks = new Map([
     HTPR_6865_SEARCH_LAYOUT_FLAG: 'htpr-6865-search-layout',
     HTPR_6688_SEARCH_AUTOCOMPLETE_FLAG: 'htpr-6688-search-autocomplete',
     HTPR_6370_SEARCH_CHIPS_FLAG: 'htpr-6370-search-chips',
-    isFeatureEnabled: async (key) => ['htpr-6878-search-label-scope', 'htpr-6881-search-fuzzy-person'].includes(key) ? false
+    isFeatureEnabled: async (key) => key === 'htpr-6881-search-fuzzy-person' ? false
+      : key === 'htpr-6878-search-label-scope' ? state.labelFlag ?? false
       : key === 'htpr-6882-search-match-highlights' ? state.matchFlag
       : key === state.disabledFlag ? false : state.flag,
   }],
@@ -246,6 +247,20 @@ test('match highlights fetch names in the existing query and show only positivel
     assert.deepEqual(res.body.processedData.All[0].searchMatch, expected, query)
     assert.equal(state.selects.length, 1, 'no per-row query')
     assert.deepEqual(state.selects[0].assignees.select.user.select, { displayName: true, email: true })
+  }
+})
+
+test('label scope and match highlights work independently in every flag combination', async () => {
+  const labels = [{ id: 'padded-bug', value: ' Bug ' }, { id: 'plain-bug', value: 'Bug' }]
+  const rows = labels.map((label, index) => ({ ...row(123 + index, 7, label.id), taskLabels: [{ label }] }))
+  for (const labelFlag of [false, true]) {
+    for (const matchFlag of [false, true]) {
+      const { res } = await search('label:bug', { labels, rows, labelFlag, matchFlag })
+      assert.equal(res.statusCode, 200)
+      const results = res.body.processedData.All
+      assert.deepEqual(results.map((task) => task.taskId), labelFlag ? [123, 124] : [124])
+      assert.deepEqual(results.map((task) => task.searchMatch?.labels), matchFlag ? (labelFlag ? [[' Bug '], ['Bug']] : [['Bug']]) : results.map(() => undefined))
+    }
   }
 })
 
