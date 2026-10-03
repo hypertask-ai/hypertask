@@ -6,8 +6,8 @@
 // BillingActionRow/BoardActionRow actions, SettingsMemberRow list items,
 // SettingsCodeRow editors, buttons and native form fields do not count.
 // BoardTicketPrefixSetting is the one native-row exception: its labelled
-// settings-ticket-prefix control predates SettingsToggle and stays covered
-// with the temporary PR 990 skip below. New settings toggles using the shared
+// settings-ticket-prefix control predates SettingsToggle and is collected
+// explicitly. New settings toggles using the shared
 // component are collected automatically; unresolved labels fail closed.
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
@@ -221,17 +221,11 @@ function words(text) {
 assert.ok(rows.length > 0, "No settings rows collected");
 assert.ok(commands.length > 0, "No settings commands collected");
 for (const { file, section, label } of rows) {
-  test(`${file}: ${label} -> ${section}`, (t) => {
+  test(`${file}: ${label} -> ${section}`, () => {
     const covered = commands.some((command) => {
       const searchable = new Set(words(`${command.name} ${command.keywords}`));
       return command.payload === section && words(label).every((word) => searchable.has(word));
     });
-    // PR 990 adds this command first. Remove only this temporary exception after rebasing:
-    // https://github.com/hypertask-ai/hypertask/pull/990 (HTPR-6900).
-    if (!covered && section === "board-general" && label === "Ticket prefix" && file === `${settingsDir}/BoardGeneralSection.tsx`) {
-      t.skip("Ticket prefix command pending PR 990");
-      return;
-    }
     assert.ok(covered, `${file}: '${label}' is not findable in Ctrl+K in section '${section}'. Add a 'Settings: ${label} (...)' entry with payload '${section}' to ${commandsFile}`);
   });
 }
@@ -303,7 +297,7 @@ for (const { keys, flag, file, uiFlag } of gatedCommands) {
     assert.ok(dependencies.elements.some((item) => item.getText() === flag), `${flag}: missing memo dependency`);
     const bindings = {
       CommandMode: new Proxy({}, { get: (_, key) => key }), showByokApiKeys: true,
-      copyCurrentUrlEnabled: true, currentProject: {}, boardLayout: "table",
+      copyCurrentUrlEnabled: true, isTicketPrefixCommandVisible: () => true, currentProject: {}, boardLayout: "table",
       onMyTasks: false, myTasksViewsEnabled: false, myTasksTableColumnsEnabled: false,
       onCalendar: false,
       ...Object.fromEntries(gatedCommands.map((item) => [item.flag, false])),
