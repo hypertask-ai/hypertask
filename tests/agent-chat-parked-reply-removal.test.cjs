@@ -1,10 +1,8 @@
-// HTPR-6322: a message sent to an agent with no runtime listening is answered
-// in the thread instead of being left hanging. The line has to be a system
-// notice, not an agent reply, and it must never reach the runtime as if
-// someone had said it.
+// Retired parked replies must stay absent while legacy stored notices stay hidden.
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const path = require("node:path");
+const fs = require("node:fs");
 const { createJiti } = require("jiti");
 
 process.env.NEXT_PUBLIC_BASEURL = "https://app.hypertask.ai";
@@ -36,8 +34,6 @@ let routeLoad = 0;
  * is what the webhook outbox hands back: an empty list is the parked agent.
  */
 function loadMessageRoute({
-  flag = model.AGENT_CHAT_PARKED_REPLY_FLAG,
-  flagEnabled = true,
   deliveryIds = [],
   heartbeatAt = null,
   activeWebhook = false,
@@ -110,11 +106,10 @@ function loadMessageRoute({
   });
   stubModule("src/lib/flags.ts", {
     AGENT_CHAT_BRIEF_FLAG: "htpr-6155-chat-agent-brief",
-    // Keyed, so a notice gated on the wrong flag fails here instead of
-    // passing because some other flag happened to be on.
     isFeatureEnabled: async (key) => {
       if (key === "htpr-6553-agent-chat-polling") return pollingEnabled;
-      return key === flag ? flagEnabled : false;
+      assert.notEqual(key, "htpr-6322-agent-chat-parked-reply");
+      return false;
     },
   });
   stubModule("src/lib/agents/chatBrief.ts", {
@@ -144,27 +139,20 @@ async function send(route, text = "are you there?") {
   return { response, body: await response.json() };
 }
 
-test("a message nobody is listening for is answered in the thread", async () => {
-  const { route, writes } = loadMessageRoute({ deliveryIds: [] });
+test("a message with no connected runtime stays unanswered", async () => {
+  const { route, writes, updates, broadcasts } = loadMessageRoute();
   const { response, body } = await send(route);
 
   assert.equal(response.status, 200);
   assert.equal(body.delivered, false);
-  const notices = writes.filter(({ data }) => data.role === "assistant");
-  assert.equal(notices.length, 1, "exactly one parked line per unanswered message");
-  assert.equal(writes.length, 2, "written inside the same transaction as the human message");
-  const [notice] = notices;
-  assert.equal(notice.data.role, "assistant");
-  assert.equal(notice.data.isDelivered, false);
-  assert.equal(notice.data.content, model.AGENT_CHAT_PARKED_MESSAGE);
-  assert.equal(notice.data.replyToMessageId, "chatMessage-1");
-  assert.doesNotMatch(
-    JSON.stringify(notice.data),
-    /author(User|Agent)Id/,
-    "a system notice is not signed by the agent or by the person who wrote it",
-  );
-  assert.equal(body.notice.role, "system");
-  assert.equal(body.notice.content, model.AGENT_CHAT_PARKED_MESSAGE);
+  assert.equal(body.notice, null);
+  assert.equal(writes.length, 1, "only the human turn is stored");
+  assert.equal(writes[0].data.role, "human");
+  assert.equal(writes[0].data.isDelivered, true);
+  assert.equal(writes[0].data.content, "are you there?");
+  assert.equal(writes[0].data.replyToMessageId, undefined);
+  assert.deepEqual(updates, []);
+  assert.deepEqual(broadcasts, [{ sessionId: "session-1", alsoUserIds: [6] }]);
 });
 
 test("a webhook runtime keeps the existing delivery path", async () => {
@@ -196,20 +184,18 @@ test("a fresh polling runtime queues an undelivered message without a parked not
   ]);
 });
 
-test("with the flag off the thread keeps today's behaviour", async () => {
-  const { route, writes } = loadMessageRoute({
-    flag: model.AGENT_CHAT_PARKED_REPLY_FLAG,
-    flagEnabled: false,
-    deliveryIds: [],
+test("an expired heartbeat does not queue a message or post a reply", async () => {
+  const { route, writes, updates } = loadMessageRoute({
+    heartbeatAt: new Date(Date.now() - 2 * 60 * 1000),
   });
   const { body } = await send(route);
-
   assert.equal(body.delivered, false);
   assert.equal(body.notice, null);
   assert.equal(writes.length, 1);
+  assert.deepEqual(updates, []);
 });
 
-test("the parked line reads as a system notice", () => {
+test("legacy parked rows remain recognized for runtime exclusion", () => {
   assert.equal(
     model.isAgentChatSystemMessage({
       role: "assistant",
@@ -217,7 +203,7 @@ test("the parked line reads as a system notice", () => {
       content: model.AGENT_CHAT_PARKED_MESSAGE,
     }),
     true,
-    "the browser shows it as a system line, not as the agent's answer",
+    "the runtime recognizes it as a system row to exclude",
   );
 });
 
@@ -318,14 +304,15 @@ test("the runtime's own transcript never carries the parked line", async () => {
  * and, after it, the parked notice the send path wrote.
  */
 function loadHistoryRoute({
-  flagEnabled,
   heartbeatAt = null,
   subscription = { active: false, events: [] },
   pollingEnabled = true,
-}) {
+  extraRows = [],
+} = {}) {
   const counts = [];
   // Newest first: the route reads descending and flips, like Prisma would.
   const rows = [
+    ...extraRows,
     {
       id: "chatMessage-2",
       role: "assistant",
@@ -379,7 +366,8 @@ function loadHistoryRoute({
     isFeatureEnabled: async (key) => {
       if (key === "htpr-6002-shared-agent-chat") return true;
       if (key === "htpr-6553-agent-chat-polling") return pollingEnabled;
-      return key === model.AGENT_CHAT_PARKED_REPLY_FLAG ? flagEnabled : false;
+      assert.notEqual(key, "htpr-6322-agent-chat-parked-reply");
+      return false;
     },
   });
   stubModule("src/lib/agents/agentChatActivity.ts", {
@@ -405,8 +393,8 @@ function loadHistoryRoute({
   return { route, counts };
 }
 
-async function readHistory(flagEnabled, availability = {}) {
-  const { route, counts } = loadHistoryRoute({ flagEnabled, ...availability });
+async function readHistory(availability = {}) {
+  const { route, counts } = loadHistoryRoute(availability);
   const response = await route.GET(
     new Request("https://app.hypertask.ai/api/agent-chat/session-1"),
     { params: Promise.resolve({ sessionId: "session-1" }) },
@@ -414,25 +402,15 @@ async function readHistory(flagEnabled, availability = {}) {
   return { body: await response.json(), counts };
 }
 
-test("a reader inside the rollout sees the parked line", async () => {
-  const { body } = await readHistory(true);
-  assert.equal(body.success, true);
-  assert.deepEqual(
-    body.messages.map(({ role }) => role),
-    ["human", "system"],
-  );
-  assert.equal(body.awaiting, false, "the thread is answered, not waiting");
-});
-
 test("the page reports a fresh heartbeat as polling chat", async () => {
-  const { body } = await readHistory(true, { heartbeatAt: new Date() });
+  const { body } = await readHistory({ heartbeatAt: new Date() });
 
   assert.equal(body.chatEnabled, true);
   assert.equal(body.deliveryMode, "polling");
 });
 
 test("the page expires polling chat after two minutes", async () => {
-  const { body } = await readHistory(true, {
+  const { body } = await readHistory({
     heartbeatAt: new Date(Date.now() - 2 * 60 * 1000),
   });
 
@@ -441,7 +419,7 @@ test("the page expires polling chat after two minutes", async () => {
 });
 
 test("the page keeps webhook chat ahead of a fresh heartbeat", async () => {
-  const { body } = await readHistory(true, {
+  const { body } = await readHistory({
     heartbeatAt: new Date(),
     subscription: { active: true, events: ["chat.message"] },
   });
@@ -450,15 +428,15 @@ test("the page keeps webhook chat ahead of a fresh heartbeat", async () => {
   assert.equal(body.deliveryMode, "webhook");
 });
 
-test("a reader outside the rollout keeps today's thread", async () => {
-  const { body, counts } = await readHistory(false);
+test("stored parked notices are hidden and excluded from unread for everyone", async () => {
+  const { body, counts } = await readHistory();
   assert.equal(body.success, true);
   assert.deepEqual(
     body.messages.map(({ role }) => role),
     ["human"],
-    "the notice is stored in a shared thread, so it is hidden per reader",
+    "legacy notices never appear in the returned transcript",
   );
-  assert.equal(body.awaiting, true, "for them the message is still unanswered");
+  assert.equal(body.awaiting, true, "the message remains unanswered");
   assert.deepEqual(
     counts[0].where.NOT,
     {
@@ -468,4 +446,37 @@ test("a reader outside the rollout keeps today's thread", async () => {
     },
     "a hidden row must not bump their unread count either",
   );
+});
+
+
+test("notice matching does not hide quoted human text, delivered replies, or other system notices", async () => {
+  const { body } = await readHistory({
+    extraRows: [
+      { id: "delivered", role: "assistant", isDelivered: true, content: model.AGENT_CHAT_PARKED_MESSAGE },
+      { id: "quote", role: "human", isDelivered: true, content: model.AGENT_CHAT_PARKED_MESSAGE },
+      { id: "timeout", role: "assistant", isDelivered: false, content: model.AGENT_CHAT_TIMEOUT_MESSAGE },
+    ],
+  });
+  assert.equal(body.success, true);
+  assert.deepEqual(body.messages.map(({ id }) => id), ["chatMessage-1", "timeout", "quote", "delivered"]);
+  assert.deepEqual(body.messages.map(({ role }) => role), ["human", "system", "human", "assistant"]);
+});
+
+test("the flag and its constant are removed from the registry and runtime code", () => {
+  const retired = /htpr-6322-agent-chat-parked-reply|AGENT_CHAT_PARKED_REPLY_FLAG/;
+  assert.throws(() => assert.doesNotMatch("AGENT_CHAT_PARKED_REPLY_FLAG", retired), "positive control catches a retained reference");
+  for (const file of [
+    "src/lib/flags.ts",
+    "src/lib/agentRuns/model.ts",
+    "src/app/api/agent-chat/[sessionId]/route.ts",
+    "src/app/api/agent-chat/[sessionId]/messages/route.ts",
+  ]) {
+    assert.doesNotMatch(fs.readFileSync(path.join(root, file), "utf8"), retired, file);
+  }
+  assert.equal(model.AGENT_CHAT_PARKED_REPLY_FLAG, undefined);
+});
+
+test("the migration deletes only the retired flag row, not stored messages", () => {
+  const sql = fs.readFileSync(path.join(root, "src/prisma/migrations/20261003160000_drop_htpr_6322_agent_chat_parked_reply_flag/migration.sql"), "utf8");
+  assert.equal(sql.trim(), `DELETE FROM "FeatureFlag" WHERE "key" = 'htpr-6322-agent-chat-parked-reply';`);
 });

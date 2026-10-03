@@ -71,9 +71,6 @@ stub("src/lib/flags.ts", {
     // The history route also reads the ticket-confirmation flag; only the
     // activity flag is under test here.
     if (key === "htpr-6006-chat-confirm-ticket") return false;
-    // HTPR-6322: the history route also reads the parked-reply flag, which
-    // decides whether a stored parked notice is visible to this reader.
-    if (key === "htpr-6322-agent-chat-parked-reply") return false;
     if (key === "htpr-6553-agent-chat-polling") return false;
     // Shared-chat rollout is evaluated against the agent owner before history
     // loads. Keep it on here so this suite stays about activity rows.

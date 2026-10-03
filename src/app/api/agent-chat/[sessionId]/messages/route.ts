@@ -18,10 +18,6 @@ import {
   HTPR_6407_MOBILE_AGENT_CHAT_LAYOUT_FLAG,
   HTPR_6553_AGENT_CHAT_POLLING_FLAG,
 } from "@/lib/flags/keys";
-import {
-  AGENT_CHAT_PARKED_MESSAGE,
-  AGENT_CHAT_PARKED_REPLY_FLAG,
-} from "@/lib/agentRuns/model";
 import { hasFreshAgentChatHeartbeat } from "@/lib/agents/chatAvailability";
 
 export const runtime = "nodejs";
@@ -106,20 +102,12 @@ export async function POST(
       userId,
     );
 
-    // Read before the transaction: this can reach Redis, and the write below
-    // holds the session row lock. The sender, not the thread's owner: a rollout
-    // must not switch on for someone outside its audience just because they
-    // are writing in a thread the owner can see.
-    const parkedReplyEnabled = await isFeatureEnabled(
-      AGENT_CHAT_PARKED_REPLY_FLAG,
-      userId,
-    );
     const pollingChatEnabledForUser = await isFeatureEnabled(
       HTPR_6553_AGENT_CHAT_POLLING_FLAG,
       userId,
     );
 
-    const { message, deliveryIds, notice, pollingChatEnabled } =
+    const { message, deliveryIds, pollingChatEnabled } =
       await prisma.$transaction(async (tx) => {
       // Runtime heartbeats update this row. Taking its lock before the session
       // lock makes the heartbeat/send/poll decision linearizable.
@@ -192,24 +180,7 @@ export async function POST(
         });
       }
 
-      // Without a webhook or a recently polling runtime, nothing will ever
-      // answer this message. Replying to the turn makes it terminal, like the
-      // timeout marker: a runtime that reconnects later cannot append an
-      // answer below a notice that already told the reader it was parked.
-      const notice =
-        deliveryIds.length === 0 && !pollingChatEnabled && parkedReplyEnabled
-          ? await tx.chatMessage.create({
-              data: {
-                sessionId: session.id,
-                content: AGENT_CHAT_PARKED_MESSAGE,
-                role: "assistant",
-                isDelivered: false,
-                replyToMessageId: message.id,
-              },
-            })
-          : null;
-
-      return { message, deliveryIds, notice, pollingChatEnabled };
+      return { message, deliveryIds, pollingChatEnabled };
     });
 
     // Queue only after commit; a failure stays sweepable.
@@ -228,16 +199,7 @@ export async function POST(
         createdAt: message.createdAt,
       },
       delivered: deliveryIds.length > 0 || pollingChatEnabled,
-      // The sender's own tab can miss the broadcast while its POST is still in
-      // flight, so the notice rides back on the response instead.
-      notice: notice
-        ? {
-            id: notice.id,
-            role: "system" as const,
-            content: notice.content,
-            createdAt: notice.createdAt,
-          }
-        : null,
+      notice: null,
     });
   } catch (error: any) {
     console.error("🚀 ~ POST ~ Error adding agent chat message", error);

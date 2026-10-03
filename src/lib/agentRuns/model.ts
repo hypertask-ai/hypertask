@@ -15,13 +15,11 @@ export const AGENT_RUN_FEATURE_FLAG = "htpr-6115-agent-sdk";
 export const AGENT_RUN_ACTIVITY_FEATURE_FLAG = "htpr-6122-agent-run-activities";
 export const AGENT_CHAT_STOP_AND_TIMEOUT_FEATURE_FLAG =
   "htpr-6154-chat-stop-and-timeout";
-export const AGENT_CHAT_PARKED_REPLY_FLAG =
-  "htpr-6322-agent-chat-parked-reply";
 export const AGENT_RUN_STALE_AFTER_MS = 5 * 60 * 1000;
 export const AGENT_CHAT_TIMEOUT_MESSAGE = "Agent did not answer, try again";
 export const AGENT_CHAT_STOPPED_MESSAGE = "Run stopped";
-// Written when a message goes to an agent no runtime is listening to, so the
-// thread says why nobody will answer instead of leaving the sender waiting.
+// Legacy stored notices remain excluded from browser and runtime transcripts.
+// No new parked notices are written.
 export const AGENT_CHAT_PARKED_MESSAGE =
   "This agent is parked: no runtime is connected to its chat, so it cannot answer right now. Your message is saved here.";
 

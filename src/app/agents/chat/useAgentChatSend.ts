@@ -103,7 +103,6 @@ export function useAgentChatSend({
         success?: boolean;
         message?: TChatMessage;
         delivered?: boolean;
-        notice?: TChatMessage;
         error?: string;
       };
       if (!res.ok || !data.success || !data.message) {
@@ -128,19 +127,7 @@ export function useAgentChatSend({
       }
       // The webhook outbox had no subscriber for chat.message: the agent will
       // never see this message unless its runtime is set up later.
-      if (data.delivered === false && !data.notice) setDeliveryNotice(true);
-      // The parked notice is the answer: it lands in the thread right away,
-      // without waiting for a broadcast that this send can still outrun.
-      // Upsert, not append: that broadcast can also win, and the same row
-      // would then appear twice.
-      const notice = data.notice;
-      if (notice) {
-        setMessages((prev) => [
-          ...(prev ?? []).filter((m) => m.id !== notice.id),
-          notice,
-        ]);
-        setAwaiting(false);
-      }
+      if (data.delivered === false) setDeliveryNotice(true);
     } catch (e) {
       if (sessionIdRef.current !== targetSessionId) return;
       // Roll the optimistic bubble back and reopen the composer.
