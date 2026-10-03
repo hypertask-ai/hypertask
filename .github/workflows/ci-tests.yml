@@ -243,6 +243,12 @@ jobs:
           path: .cache/eslint
           key: ${{ steps.restore-eslint-cache.outputs.cache-primary-key }}
 
+      # Directory discovery in this check is broader than the PR selector's
+      # exact-path heuristic, so run it even when another suite owns the diff.
+      - name: Settings Ctrl+K coverage
+        if: github.event_name == 'push' || steps.scope.outputs.build_needed == 'true'
+        run: node --test tests/settings-cmdk-coverage.test.cjs
+
       # Every PR body claims "npm test N passed" and nothing checked it, so a
       # broken suite sat green on production for days (HTPR-5161).
       # HT_REQUIRE_PG_TESTS turns the real-PostgreSQL suites' "docker missing"
