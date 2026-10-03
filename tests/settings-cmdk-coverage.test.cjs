@@ -291,7 +291,7 @@ for (const { keys, flag, file, uiFlag } of gatedCommands) {
     let dependencies;
     walk(source(menuFile), (node) => {
       if (ts.isCallExpression(node) && node.expression.getText().replace(/\s+/g, "") === "group.commandLists.filter") predicate = node.arguments[0];
-      if (ts.isCallExpression(node) && node.expression.getText() === "useMemo" && node.arguments[0].getText().includes("getAllCommands")) dependencies = node.arguments[1];
+      if (ts.isCallExpression(node) && node.expression.getText() === "useMemo" && /get(All)?Commands\(/.test(node.arguments[0].getText())) dependencies = node.arguments[1];
     });
     assert.ok(predicate, "Command availability filter missing");
     assert.ok(dependencies.elements.some((item) => item.getText() === flag), `${flag}: missing memo dependency`);
