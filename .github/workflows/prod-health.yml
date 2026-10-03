@@ -430,12 +430,22 @@ jobs:
       ok: ${{ steps.smoke.outcome == 'success' }}
       rollback: ${{ steps.alarm.outputs.rollback }}
     steps:
-      # SMOKE_SESSION_STATE isn't provisioned yet (HTPR-6199 needs a real
-      # signup + email verification). Check first so production pushes do not
-      # install dependencies and Chromium only to skip the browser tests.
-      - name: Check the smoke session secret is provisioned
+      # SMOKE_SESSION_STATE: Playwright storageState for plain QA user 2343.
+      # Refresh by signing in as QA (never Valentin) and exporting storageState
+      # to ~/.config/hypertask-videos/storageState-qa-normal.json, then run:
+      # gh secret set SMOKE_SESSION_STATE -R hypertask-ai/hypertask < ~/.config/hypertask-videos/storageState-qa-normal.json
+      # Refresh before its ht_session expires; missing/expired login fails QA,
+      # but is not an application failure and must never authorize rollback.
+      - name: Require the QA login
         id: provisioned
-        run: echo "ok=${{ secrets.SMOKE_SESSION_STATE != '' }}" >> "$GITHUB_OUTPUT"
+        env:
+          SMOKE_SESSION_STATE: ${{ secrets.SMOKE_SESSION_STATE }}
+        run: |
+          if [ -z "$SMOKE_SESSION_STATE" ]; then
+            echo "::error::not tested: QA login missing/expired (SMOKE_SESSION_STATE is missing)"
+            exit 1
+          fi
+          echo "ok=true" >> "$GITHUB_OUTPUT"
 
       # Setup steps expose their outcomes so the classifier below can alert
       # without mistaking a runner problem for a broken application.
@@ -498,6 +508,7 @@ jobs:
         env:
           SMOKE_SESSION_STATE: ${{ secrets.SMOKE_SESSION_STATE }}
         run: |
+          umask 077
           mkdir -p e2e/smoke/.state
           printf '%s' "$SMOKE_SESSION_STATE" > e2e/smoke/.state/smoke-state.json
 
@@ -507,9 +518,10 @@ jobs:
         continue-on-error: true
         env:
           SMOKE_BASE_URL: https://app.hypertask.ai
+          SMOKE_POSTDEPLOY: '1'
           SMOKE_BOARD_PATH: ${{ vars.SMOKE_BOARD_PATH }}
           SMOKE_TASK_PATH: ${{ vars.SMOKE_TASK_PATH }}
-        run: npx playwright test -c playwright.config.smoke.ts
+        run: npx playwright test -c playwright.config.smoke.ts --project Desktop --project Mobile
 
       # Playwright traces are disabled because they include authenticated
       # network traffic. Only screenshots from the isolated smoke account are
@@ -521,10 +533,6 @@ jobs:
           name: smoke-failure-evidence
           path: test-results/
           retention-days: 7
-
-      - name: Not provisioned yet — see e2e/smoke/README.md
-        if: steps.provisioned.outputs.ok != 'true'
-        run: echo "::warning::SMOKE_SESSION_STATE is not set — skipping smoke QA. See e2e/smoke/README.md to provision it."
 
       - name: Classify and report a failed smoke check
         id: decide

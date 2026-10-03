@@ -44,7 +44,7 @@ function isUnrunnableError(err: unknown): boolean {
 
 test.afterEach(({ page }, testInfo) => {
   if (page.url().includes(LOGIN_PATH)) {
-    markUnrunnable(`smoke session redirected to ${LOGIN_PATH} during the view checks`)
+    markUnrunnable(`not tested: QA login missing/expired (redirected to ${LOGIN_PATH} during the view checks)`)
   } else if (testInfo.status === 'timedOut' || (testInfo.error && isUnrunnableError(testInfo.error))) {
     markUnrunnable(`browser runner failed during ${testInfo.title}`)
   } else if (testInfo.status === 'failed' && testInfo.retry === testInfo.project.retries && preflightAllowsRollback()) {
@@ -107,8 +107,9 @@ const VIEWS: Array<{
   // The sidebar's own search box, present whether or not a section is
   // selected and on both viewports — src/components/Modals/Settings/SettingsShell.tsx
   { name: 'settings', path: '/settings', title: 'Settings', selector: 'input[placeholder="Search settings"]' },
+  // Target the fixture board instead of a stale previousBoard login cookie.
   // <div id="createTaskModal"> — src/components/Modals/CreateTaskGloballyModal/index.tsx
-  { name: 'new-task modal', path: '/new', title: 'New', selector: '#createTaskModal' },
+  { name: 'new-task modal', path: process.env.SMOKE_POSTDEPLOY === '1' ? `/new?board=${process.env.SMOKE_TASK_PATH?.match(/^\/detail\/project-(\d+)\//)?.[1]}` : '/new', title: 'New', selector: '#createTaskModal' },
 ]
 
 const ERROR_MARKERS = [/something went wrong/i, /application error/i, /internal server error/i]
@@ -126,7 +127,7 @@ for (const view of VIEWS) {
   // two tiers failing the same view would share one ticket) , see
   // lib/process-report.mjs in the runner repo, which reads this tag.
   const idTag = `@id:${tieredId(`view-${view.name.replace(/\s+/g, '-')}`)}`
-  test(`${view.name} loads`, { tag: [idTag] }, async ({ page }) => {
+  test(`${view.name} loads`, { tag: [idTag] }, async ({ page }, testInfo) => {
     test.skip(view.requiresFixture === true && !view.path, `no seeded fixture (${view.name} not opened)`)
 
     const pageErrors: Error[] = []
@@ -178,10 +179,10 @@ for (const view of VIEWS) {
     }
 
     if (response && (response.status() === 401 || response.status() === 403)) {
-      abortUnrunnable(`smoke session got HTTP ${response.status()} on ${view.path}`)
+      abortUnrunnable(`not tested: QA login missing/expired (HTTP ${response.status()} on ${view.path})`)
     }
     if (page.url().includes(LOGIN_PATH)) {
-      abortUnrunnable(`smoke session redirected to ${LOGIN_PATH} on ${view.path}`)
+      abortUnrunnable(`not tested: QA login missing/expired (redirected to ${LOGIN_PATH} on ${view.path})`)
     }
 
     expect(response, `no response for ${view.path}`).toBeTruthy()
@@ -268,6 +269,32 @@ for (const view of VIEWS) {
         await page.waitForTimeout(Math.max(0, 30_000 - (Date.now() - loadedAt)))
       }
       expect(loads, `${view.name} loaded ${loads} times`).toBeLessThanOrEqual(1)
+    }
+    if (process.env.SMOKE_POSTDEPLOY === '1' && view.name === 'kanban board') {
+      const taskPath = process.env.SMOKE_TASK_PATH!
+      const link = page.locator(`[id^="task-"] a[href="${taskPath}"]`).first()
+      await expect(link, 'configured QA ticket card is missing from the real board').toBeVisible()
+      const cardTitle = (await link.locator('p.whitespace-pre-line').innerText()).trim()
+      expect(cardTitle, 'QA card has no title').not.toBe('')
+      let reloads = 0
+      page.on('load', () => { reloads++ })
+      await link.click()
+      const titleInput = page.locator('#title-input')
+      await expect(titleInput).toBeVisible({ timeout: 15_000 })
+      await expect(titleInput).toHaveValue(cardTitle)
+      await expect(page.locator('#description-input')).toBeAttached({ timeout: 15_000 })
+      // The missed regression briefly opened the ticket, then dismissed it.
+      // Observe continuously, not just once after a delay, and never reload.
+      const deadline = Date.now() + 10_000
+      while (Date.now() < deadline) {
+        expect(new URL(page.url()).pathname, 'card opened the wrong ticket or returned to the board').toBe(taskPath)
+        expect(await titleInput.isVisible(), 'clicked ticket disappeared').toBe(true)
+        expect(await titleInput.inputValue(), 'clicked ticket changed').toBe(cardTitle)
+        expect(await page.locator('#description-input').count(), 'ticket body disappeared').toBeGreaterThan(0)
+        expect(reloads, 'card navigation reloaded the page').toBe(0)
+        await page.waitForTimeout(250)
+      }
+      console.log(`${testInfo.project.name}: QA board card opened ${taskPath} and stayed open for 10 seconds without reload`)
     }
     expect(pageErrors, `${view.path} threw a page error: ${pageErrors[0]?.message}`).toHaveLength(0)
   })

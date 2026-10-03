@@ -35,7 +35,7 @@ export default async function globalSetup(config: FullConfig) {
   // alone (e.g. `--grep @demo`) would otherwise fail this login precheck
   // against whatever storageState the config carries. The runner sets this
   // when it invokes a demo-only run.
-  if (process.env.HT_QA_NO_ACCOUNT === '1') {
+  if (process.env.HT_QA_NO_ACCOUNT === '1' && process.env.SMOKE_POSTDEPLOY !== '1') {
     writePreflight({ ok: true })
     return
   }
@@ -45,7 +45,15 @@ export default async function globalSetup(config: FullConfig) {
 
   const { baseURL, storageState } = project.use
   if (typeof baseURL !== 'string' || !baseURL) fail('smoke config has no baseURL')
-  if (typeof storageState !== 'string' || !storageState) fail('smoke config has no storageState file')
+  if (typeof storageState !== 'string' || !storageState) fail('not tested: QA login missing/expired (no storageState file)')
+  try {
+    const state = JSON.parse(readFileSync(storageState, 'utf8'))
+    if (!Array.isArray(state.cookies) || !state.cookies.some((cookie: { name: string; value: string }) => cookie.name === 'ht_session' && cookie.value)) {
+      fail('not tested: QA login missing/expired (no ht_session cookie)')
+    }
+  } catch {
+    fail('not tested: QA login missing/expired (missing or invalid storageState)')
+  }
   if (process.env.BROWSER_SMOKE_PR) {
     const state = JSON.parse(readFileSync(storageState, 'utf8')) as { cookies?: Array<{ name: string; value: string }> }
     const token = state.cookies?.find((cookie) => cookie.name === 'ht_session')?.value
@@ -62,6 +70,16 @@ export default async function globalSetup(config: FullConfig) {
   const browser = await chromium.launch()
   try {
     const context = await browser.newContext({ storageState, baseURL })
+    if (process.env.SMOKE_POSTDEPLOY === '1') {
+      const identity = await context.request.get('/api/users/getById')
+      if (identity.status() === 401 || identity.status() === 403) {
+        fail('not tested: QA login missing/expired (server rejected the session)')
+      }
+      if (identity.status() !== 200) fail(`login check got HTTP ${identity.status()} verifying QA identity`)
+      const user = await identity.json()
+      if (user?.id !== 2343 && user?.id !== 985) fail('not tested: production smoke requires QA user 2343 or 985, never Valentin')
+      console.log(`Production smoke authenticated as QA user ${user.id}`)
+    }
     const page = await context.newPage()
     let response
     try {
@@ -71,7 +89,7 @@ export default async function globalSetup(config: FullConfig) {
     }
 
     if (!response || response.status() === 401 || response.status() === 403) {
-      fail(`login check got HTTP ${response?.status() ?? 'no response'} on ${INBOX_PATH}`)
+      fail(`not tested: QA login missing/expired (HTTP ${response?.status() ?? 'no response'} on ${INBOX_PATH})`)
     }
 
     // A client-side auth guard can redirect to /login after hydration, which
@@ -85,7 +103,7 @@ export default async function globalSetup(config: FullConfig) {
       }
     }
     if (page.url().includes(LOGIN_PATH)) {
-      fail(`login check was redirected to ${LOGIN_PATH} — the smoke session cookie is expired or invalid`)
+      fail(`not tested: QA login missing/expired (redirected to ${LOGIN_PATH})`)
     }
 
   } finally {
