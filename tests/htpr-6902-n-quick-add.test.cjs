@@ -66,6 +66,7 @@ function commonMocks(flags, calls) {
       "@/lib/utils/keyboardShortcuts": {},
     }),
     "@/lib/constants/shortcuts": { isFavoriteBoardShortcut: () => false },
+    "@/components/undoToast": { undoToastSettings: { single: false } },
     "@/lib/constants/keyboard-handler": { KeyCodes: { C: 67 } },
     "@/lib/contexts/deviceContext": { useDeviceContext: () => false },
     "@/lib/contexts/mobileContext": { MobileViewContext: React.createContext(false) },
