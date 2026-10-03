@@ -1,4 +1,5 @@
 import { useCallback, useEffect } from "react";
+import { HTPR_6902_N_QUICK_ADD_FLAG } from "@/lib/flags/keys";
 import { returnIfModalOrInputActive } from "@/utils/helperFunctions/helperFunctions";
 import { isFavoriteBoardShortcut } from "@/lib/constants/shortcuts";
 import { KeyCodes } from "@/lib/constants/keyboard-handler";
@@ -30,6 +31,7 @@ export function useTableKeyboard(context: Context) {
 
   // HTPR-6175: quick entry creates straight from a title, no modal.
   const quickEntryEnabled = useFlag("htpr-6175-quick-entry-cards");
+  const nQuickAddEnabled = useFlag(HTPR_6902_N_QUICK_ADD_FLAG);
   const { createItem } = useAddDeleteTaskInBoards();
   const quickCreateTask = (
     title: string,
@@ -179,6 +181,22 @@ export function useTableKeyboard(context: Context) {
     document.addEventListener("keydown", handleKeyDown);
     return () => document.removeEventListener("keydown", handleKeyDown);
   }, [_currentProject, _sections, archiveTaskFromTable, assignTask, changeBoardLayout, createTaskInCurrentTableContext, enableMyTasksBulkSelection, expandSection, focusTo, handleBoardChange, myTasksBulk, openTask, rows, rowShortcutsEnabled, runTaskShortcut, selectedIndex, setShowCommands, showCommands.show, toggleSelectedTaskTimer]);
+  useEffect(nQuickAddEnabled && quickEntryEnabled ? () => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (
+        !_currentProject || e.key.toLowerCase() !== "n" ||
+        e.ctrlKey || e.metaKey || e.altKey || e.shiftKey || e.repeat || e.isComposing ||
+        showCommands.show || assignTask || returnIfModalOrInputActive() ||
+        shouldIgnoreTaskShortcutTarget(e.target as HTMLElement | null) ||
+        shouldIgnoreTaskShortcutTarget(document.activeElement as HTMLElement | null)
+      ) return;
+      e.preventDefault();
+      document.dispatchEvent(new CustomEvent("OPEN_TABLE_QUICK_ENTRY"));
+    };
+    document.addEventListener("keydown", handleKeyDown);
+    return () => document.removeEventListener("keydown", handleKeyDown);
+  } : () => {}, [_currentProject, nQuickAddEnabled, quickEntryEnabled, showCommands.show, assignTask]);
+
   return {
   quickEntryEnabled, quickCreateTask,
   };

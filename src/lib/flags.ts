@@ -13,6 +13,7 @@ import {
   HTPR_6752_INSTANT_TICKET_OPEN_FLAG,
   HTPR_6873_QUICK_ENTRY_GROW_FLAG,
   HTPR_6892_CMDK_VERSION_FLAG,
+  HTPR_6902_N_QUICK_ADD_FLAG,
   AGENT_CHAT_BRIEF_FLAG,
   AGENT_CHAT_TICKET_CONFIRM_FLAG,
   AUTO_TASK_DESCRIPTIONS_FLAG,
@@ -433,6 +434,11 @@ const FEATURE_FLAG_DEFINITIONS = [
     key: HTPR_6873_QUICK_ENTRY_GROW_FLAG,
     shippedOn: "2026-10-03",
     description: "Lets the board and table quick-entry box grow to eight lines, then scroll, with Create task and close buttons.",
+  },
+  {
+    key: HTPR_6902_N_QUICK_ADD_FLAG,
+    shippedOn: "2026-10-03",
+    description: "N opens the existing quick-entry box in the focused board or table column when quick-entry cards are enabled. C keeps opening the full editor.",
   },
   {
     key: "htpr-6175-quick-entry-cards",

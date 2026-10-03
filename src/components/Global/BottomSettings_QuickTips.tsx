@@ -41,6 +41,8 @@ import { useGlobalUIState } from "../ProviderGlobal/useGlobalUIState";
 import { useSettingsNavigation } from "../Modals/Settings/settingsNavigation";
 import { tooltipConfig } from "@/lib/configs/tooltip.config";
 import { CLASS_NAME_CONSTANTS } from "@/lib/configs/general.config";
+import { useFlag } from "@/hooks/useFlag";
+import { HTPR_6902_N_QUICK_ADD_FLAG, HTPR_6175_QUICK_ENTRY_CARDS_FLAG } from "@/lib/flags/keys";
 
 // Simple utility function for conditional classes
 const cn = (...classes: (string | boolean | undefined)[]) =>
@@ -158,6 +160,13 @@ const BottomSettings_QuickTips = ({
 }: {
   announcements: any;
 }) => {
+  const nQuickAddEnabled = useFlag(HTPR_6902_N_QUICK_ADD_FLAG);
+  const quickEntryCardsEnabled = useFlag(HTPR_6175_QUICK_ENTRY_CARDS_FLAG);
+  const boardTips = nQuickAddEnabled && quickEntryCardsEnabled
+    ? KanbanTipsConstants.flatMap(tip => tip.hint === "add task"
+      ? [tip, { key: ["N"], hint: "quick add" }]
+      : [tip])
+    : KanbanTipsConstants;
   const mbl = useContext(MobileViewContext);
   const pathname = usePathname();
   const { toggleShowCommands } = useHypertasksRecoilStates();
@@ -277,12 +286,12 @@ const BottomSettings_QuickTips = ({
         </div>
       )}
 
-      {!mbl && <QuickTips />}
+      {!mbl && <QuickTips boardTips={boardTips} />}
     </>
   );
 };
 
-export const QuickTips = () => {
+const QuickTips = ({ boardTips }: { boardTips: ITips[] }) => {
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const tutorialRequested = searchParams?.get("tutorial") === "1";
@@ -320,7 +329,7 @@ export const QuickTips = () => {
   // /demo is the anonymous kanban board, so it gets the same board tips.
   if (pathname?.startsWith("/project") || pathname?.startsWith("/demo")) {
     return (
-      <TipsComp tips={KanbanTipsConstants} toggleQuickTips={toggleQuickTips} appShellRailOn={appShellRailOn} />
+      <TipsComp tips={boardTips} toggleQuickTips={toggleQuickTips} appShellRailOn={appShellRailOn} />
       // <></>￼Get started
     );
   } else if (pathname?.startsWith("/detail")) {
@@ -350,7 +359,7 @@ export const QuickTips = () => {
   } else return <></>;
 };
 
-export const TipsComp = ({
+const TipsComp = ({
   tips,
   toggleQuickTips,
   appShellRailOn = false,

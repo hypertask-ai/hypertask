@@ -23,6 +23,7 @@ export const HTPR_6157_AUTO_DESCRIPTION_FLAG =
   "htpr-6157-new-task-auto-description";
 export const HTPR_6175_QUICK_ENTRY_CARDS_FLAG =
   "htpr-6175-quick-entry-cards";
+export const HTPR_6902_N_QUICK_ADD_FLAG = "htpr-6902-n-quick-add";
 export const HTPR_6873_QUICK_ENTRY_GROW_FLAG = "htpr-6873-quick-entry-grow";
 export const AUTO_TASK_DESCRIPTIONS_FLAG = "htpr-6177-auto-task-descriptions";
 export const INBOX_ARCHIVE_CLUSTER_FLAG = "htpr-6160-inbox-archive-cluster";

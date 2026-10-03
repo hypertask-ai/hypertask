@@ -30,6 +30,9 @@ import { toggleTaskTimer } from '@/hooks/Task Detail/useTimeTracking'
 import { buildBuiltinViewContext, isBuiltinViewId } from '@/lib/constants/builtinViews'
 import { useToggleShowArchivedOnBoard } from './useShowArchivedOnBoard'
 import useKanbanViews from '@/hooks/Homepage/Views/useKanbanViews'
+import { useFlag } from '@/hooks/useFlag'
+import { HTPR_6902_N_QUICK_ADD_FLAG, HTPR_6175_QUICK_ENTRY_CARDS_FLAG } from '@/lib/flags/keys'
+import { shouldIgnoreTaskShortcutTarget } from '@/lib/keyboard/taskShortcuts'
 
 interface IHandleKeyDownOperations {
     initialSections: ISection[];
@@ -73,6 +76,8 @@ const useHandleKeyDownOperations= (props:IHandleKeyDownOperations) => {
     const timerToggling = useRef(false);
     const isApple = useDeviceContext()
     const sorting_mode_current = getActiveSortingModeFromProject(_currentProject)
+    const nQuickAddEnabled = useFlag(HTPR_6902_N_QUICK_ADD_FLAG);
+    const quickEntryCardsEnabled = useFlag(HTPR_6175_QUICK_ENTRY_CARDS_FLAG);
     const getActiveItem = () => store.get(activeItemAtom);
     const getActiveSection = () => store.get(activeSectionAtom);
 
@@ -94,6 +99,33 @@ const useHandleKeyDownOperations= (props:IHandleKeyDownOperations) => {
         timerToggling.current = false;
       }
     };
+
+    useEffect(nQuickAddEnabled && quickEntryCardsEnabled ? () => {
+      const handleNQuickAdd = (e: KeyboardEvent) => {
+        if (
+          e.key.toLowerCase() !== "n" ||
+          e.ctrlKey || e.metaKey || e.altKey || e.shiftKey || e.repeat || e.isComposing ||
+          showCommands.show || returnIfModalOrInputActive() ||
+          shouldIgnoreTaskShortcutTarget(e.target as HTMLElement | null) ||
+          shouldIgnoreTaskShortcutTarget(document.activeElement as HTMLElement | null)
+        ) return;
+        const sectionEls = document.getElementById("sectionsContainer")?.children;
+        if (!sectionEls) return;
+        const focusedColumn = document.activeElement?.closest('.section-container');
+        const focusedColumnIndex = Array.from(sectionEls).indexOf(focusedColumn!);
+        const activeItem = store.get(activeItemAtom);
+        const taskColumnIndex = filteredSections.findIndex(section =>
+          section.items.some(task => task.id === activeItem)
+        );
+        const targetIndex = focusedColumnIndex >= 0
+          ? focusedColumnIndex
+          : Math.max(taskColumnIndex, 0);
+        e.preventDefault();
+        sectionEls[targetIndex]?.dispatchEvent(new CustomEvent('OPEN_QUICK_ENTRY'));
+      };
+      document.addEventListener("keydown", handleNQuickAdd);
+      return () => document.removeEventListener("keydown", handleNQuickAdd);
+    } : () => {}, [nQuickAddEnabled, quickEntryCardsEnabled, showCommands.show, filteredSections, store]);
 
     const handleKeyDown = (e: any) => {
     let cmdControl = isApple&&e.metaKey || !isApple&&e.ctrlKey;
