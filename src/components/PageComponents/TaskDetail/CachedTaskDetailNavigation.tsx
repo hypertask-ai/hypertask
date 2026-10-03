@@ -34,9 +34,7 @@ export default function CachedTaskDetailNavigation({ children, accountId }: {
   children: ReactNode;
   accountId: number | null;
 }) {
-  const instantTicketOpen = useFlag(
-    HTPR_6752_INSTANT_TICKET_OPEN_FLAG,
-  );
+  const instantTicketOpen = useFlag(HTPR_6752_INSTANT_TICKET_OPEN_FLAG);
   const pathname = usePathname();
   const queryClient = useQueryClient();
   const router = useRouter();
@@ -54,6 +52,21 @@ export default function CachedTaskDetailNavigation({ children, accountId }: {
   );
   previousLocation.current = location;
   useEffect(() => {
+    if (!location) return;
+    const restoreSourceRoute = (event: PopStateEvent) => {
+      if (!event.state?.__NA || !event.state?.__PRIVATE_NEXTJS_INTERNALS_TREE ||
+          cachedTaskDetailLocation(window.location.pathname, accountId, event.state)) return;
+      // Next's native-history restore can cache detail RSC in the source route's slot.
+      // Revalidate the source URL instead of traversing that stale route payload.
+      event.stopImmediatePropagation();
+      router.replace(window.location.pathname + window.location.search + window.location.hash);
+      router.refresh();
+      window.dispatchEvent(new Event("cached-task-detail-navigation"));
+    };
+    window.addEventListener("popstate", restoreSourceRoute, true);
+    return () => window.removeEventListener("popstate", restoreSourceRoute, true);
+  }, [location, accountId, router]);
+  useEffect(() => {
     if (!instantTicketOpen || accountId === null || currentUser?.id !== accountId ||
         !pathname || !["/project", "/my-tasks", "/inbox"].includes(pathname)) return;
     let warming = false;
@@ -63,14 +76,10 @@ export default function CachedTaskDetailNavigation({ children, accountId }: {
       // Import only: no ticket requests, editor mounts or permission prompts.
       void warmTaskDetail().catch(() => { warming = false; });
     };
-    const idle = "requestIdleCallback" in window;
-    const handle = idle ? window.requestIdleCallback(warm, { timeout: 1000 }) : window.setTimeout(warm, 150);
+    // Start after board commit, not at idle: the first click may beat the idle callback.
+    warm();
     document.addEventListener("pointerdown", warm, { capture: true, passive: true });
-    return () => {
-      if (idle) window.cancelIdleCallback(handle);
-      else window.clearTimeout(handle);
-      document.removeEventListener("pointerdown", warm, true);
-    };
+    return () => document.removeEventListener("pointerdown", warm, true);
   }, [instantTicketOpen, accountId, currentUser?.id, pathname]);
   const task = location && queryClient.getQueryData<ITask>(
     cachedTaskDetailKey(location.accountId, location.taskId),

@@ -190,7 +190,7 @@ test("quiet: contact hover waits for final content only on flagged detail, retai
   assert.match(render(), /QA contact/);
 });
 
-test("warm: idle and pointerdown load the measured cold chunks once, cancel scheduled work, and never warm with flag off", async (t) => {
+test("warm: board commit loads cold chunks before an idle opportunity; pointerdown deduplicates and flag off does nothing", async (t) => {
   domFixture(t);
   const client = new QueryClient();
   t.after(() => client.clear());
@@ -198,10 +198,7 @@ test("warm: idle and pointerdown load the measured cold chunks once, cancel sche
   const effects = [];
   const loaded = [];
   let emojiLoads = 0;
-  let idleCallback;
-  const canceled = [];
-  window.requestIdleCallback = (callback) => { idleCallback = callback; return 7; };
-  window.cancelIdleCallback = (id) => canceled.push(id);
+  window.requestIdleCallback = () => assert.fail("the first open must not wait for idle");
   const mocks = navigationMocks(client, () => enabled, () => "/project", {
     ...React, useRef: (initial) => ({ current: initial }), useEffect: (effect) => effects.push(effect), useSyncExternalStore: (subscribe, snapshot) => snapshot(),
   });
@@ -215,37 +212,24 @@ test("warm: idle and pointerdown load the measured cold chunks once, cancel sche
   mocks["@/components/RTE/Extensions/lazyEmojiData"] = { ensureEmojiData: () => { emojiLoads++; return Promise.resolve(); } };
   const Navigation = compile(read(navigationPath), mocks).default;
   Navigation({ accountId: 985, children: "Board" });
-  const cleanup = effects[0]();
-  assert.equal(loaded.length, 0, "warm work is not synchronous with board render");
-  document.dispatchEvent(new Event("pointerdown"));
+  assert.equal(loaded.length, 0, "imports do not block board render");
+  const cleanups = effects.map((effect) => effect()).filter(Boolean);
   await new Promise(setImmediate);
-  assert.deepEqual(loaded, chunks);
+  assert.deepEqual(loaded, chunks, "commit alone warms before any pointer or idle event");
   assert.equal(emojiLoads, 1);
-  idleCallback();
-  await new Promise(setImmediate);
-  assert.equal(loaded.length, chunks.length, "idle following pointerdown does not duplicate imports");
-  cleanup();
-  assert.deepEqual(canceled, [7]);
   document.dispatchEvent(new Event("pointerdown"));
+  await new Promise(setImmediate);
   assert.equal(loaded.length, chunks.length);
+  cleanups.forEach((cleanup) => cleanup());
   effects.length = 0;
   loaded.length = 0;
-  emojiLoads = 0;
-  Navigation({ accountId: 985, children: "Board" });
-  const cleanupIdle = effects[0]();
-  idleCallback();
-  await new Promise(setImmediate);
-  assert.deepEqual(loaded, chunks, "idle alone warms before any pointer interaction");
-  assert.equal(emojiLoads, 1);
-  cleanupIdle();
-  effects.length = 0;
   enabled = false;
   Navigation({ accountId: 985, children: "Board" });
-  assert.equal(effects[0](), undefined, "flag off schedules nothing");
+  assert.ok(effects.every((effect) => effect() === undefined), "flag off schedules nothing");
   enabled = true;
   effects.length = 0;
   Navigation({ accountId: null, children: "Board" });
-  assert.equal(effects[0](), undefined, "unknown accounts never warm");
+  assert.ok(effects.every((effect) => effect() === undefined), "unknown accounts never warm");
 });
 
 
