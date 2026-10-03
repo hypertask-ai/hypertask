@@ -1855,6 +1855,10 @@ export function evaluate({ title, baseSha, headSha, labels = [] }) {
     return { pass: true, ownerReview: null, reason: "No changed file matches the UI-change path filter." };
   }
 
+  if (/^YPER4-\d+ \[[^\]]+\] \S/.test(title)) {
+    return { pass: true, ownerReview: "exempt-ui", reason: "Infra ticket: no flag required" };
+  }
+
   const titleMatch = title.match(/^(?:HTPR|HYFA)-(\d+) \[([^\]]+)\] \S/);
   const autoRevert = isVerifiedAutoRevert(title, baseSha, headSha);
   const tag = titleMatch?.[2] ?? null;

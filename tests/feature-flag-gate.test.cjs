@@ -67,6 +67,34 @@ test("loose JSX UI files require a feature flag", async (t) => {
   assert.equal((await evaluate("HTPR-2 [FEATURE] add view", base, head, dir)).pass, false);
 });
 
+test("YPER4 UI changes are exempt regardless of tag or line count", async (t) => {
+  const { dir, git } = makeRepo(t);
+  const base = commit(git, "base");
+  writeFile(dir, "src/components/Widget.tsx", Array.from({ length: 151 }, (_, i) => `export const Widget${i} = () => <div />;`).join("\n"));
+  const head = commit(git, "infra ui");
+  for (const tag of ["INFRA", "FEATURE", "REFACTOR"]) {
+    const result = await evaluate(`YPER4-165 [${tag}] update widget`, base, head, dir);
+    assert.equal(result.pass, true);
+    assert.equal(result.ownerReview, "exempt-ui");
+    assert.equal(result.reason, "Infra ticket: no flag required");
+  }
+  for (const prefix of ["HTPR", "HYFA"]) {
+    const result = await evaluate(`${prefix}-165 [FEATURE] update widget`, base, head, dir);
+    assert.equal(result.pass, false);
+    assert.match(result.reason, /without a feature flag/);
+  }
+});
+
+test("malformed YPER4 titles do not bypass the feature flag requirement", async (t) => {
+  const { dir, git } = makeRepo(t);
+  const base = commit(git, "base");
+  writeFile(dir, "src/components/Widget.tsx", "export const Widget = () => <div />;\n");
+  const head = commit(git, "ui");
+  for (const title of ["YPER4-x [INFRA] widget", "YPER4-165 [] widget", "YPER4-165 [INFRA] ", "YPER4-165 widget", "YPER4X-165 [INFRA] widget"]) {
+    assert.equal((await evaluate(title, base, head, dir)).pass, false, title);
+  }
+});
+
 test("JavaScript UI paths and API helpers keep the UI-only scope", async (t) => {
   const jsUi = makeRepo(t);
   const jsUiBase = commit(jsUi.git, "base");
