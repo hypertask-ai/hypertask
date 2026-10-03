@@ -33,14 +33,16 @@ const { useMobileToastAutoDismiss } = load("src/components/undoToast/useMobileTo
 // Exercise the production Toaster JSX, including isolation and rail/phone offsets.
 const globalSource = read("src/components/ProviderGlobal/GloablProviders.tsx");
 const toasterMarkup = globalSource.slice(globalSource.indexOf("      <Toaster"), globalSource.indexOf("      <ShortcutArchiveNudge"));
+const flagEffect = globalSource.slice(globalSource.indexOf("  useEffect(() => {\n    undoToastSettings.single"), globalSource.indexOf("  const isApple", globalSource.indexOf("  useEffect(() => {\n    undoToastSettings.single")));
 const { Toasts } = load("src/components/ProviderGlobal/GloablProviders.tsx", {
   "react-hot-toast": hotToast,
   "@/components/undoToast": undo,
   "@/lib/constants/appShellRail": { APP_SHELL_RAIL_OFFSET: "calc(var(--app-shell-rail-w, 48px) + 8px)" },
-}, `import { Toaster } from "react-hot-toast";
-import { SINGLE_UNDO_TOASTER_ID } from "@/components/undoToast";
+}, `import { useEffect } from "react";
+import { Toaster } from "react-hot-toast";
+import { SINGLE_UNDO_TOASTER_ID, undoToastSettings } from "@/components/undoToast";
 import { APP_SHELL_RAIL_OFFSET } from "@/lib/constants/appShellRail";
-export function Toasts({mbl, singleUndoToast, appShellRailOn}) { return <>${toasterMarkup}</>; }`);
+export function Toasts({mbl, singleUndoToast, appShellRailOn}) { ${flagEffect} return <>${toasterMarkup}</>; }`);
 
 async function fixture(t, { mobile = false, enabled = true, rail = true } = {}) {
   const dom = new JSDOM("<!doctype html><div id='root'></div>", { url: "https://example.test" });
@@ -71,11 +73,12 @@ async function fixture(t, { mobile = false, enabled = true, rail = true } = {}) 
   return {
     async show(message, data = message, handler = async () => {}) {
       let id;
-      await React.act(async () => { id = undo.UndoToaster(message, data, handler, mobile, enabled); });
+      await React.act(async () => { id = undo.UndoToaster(message, data, handler, mobile); });
       return id;
     },
     async tick(ms) { await React.act(async () => t.mock.timers.tick(ms)); },
     async event(target, type) { await React.act(async () => target.dispatchEvent(new dom.window.MouseEvent(type, { bubbles: true }))); },
+    async setEnabled(value) { enabled = value; await React.act(async () => root.render(React.createElement(App))); },
     card() { return document.querySelector(`[data-rht-toaster="${undo.SINGLE_UNDO_TOASTER_ID}"] > div > div`); },
   };
 }
@@ -178,13 +181,21 @@ for (const mobile of [false, true]) {
   });
 }
 
-test("flag is registered with Owner + QA default, and every caller receives it from the provider", () => {
+test("flag is registered with Owner + QA default and the global toaster publishes it to imperative callers", async (t) => {
+  assert.equal(undo.undoToastSettings.single, false);
   assert.match(read("src/lib/flags/keys.ts"), /HTPR_6885_SINGLE_UNDO_TOAST_FLAG = "htpr-6885-single-undo-toast"/);
   assert.match(read("src/lib/flags.ts"), /key: HTPR_6885_SINGLE_UNDO_TOAST_FLAG/);
   assert.match(read("src/lib/flags.ts"), /DEFAULT_FEATURE_FLAG_MODE: FeatureFlagMode = "OWNER_AND_QA"/);
-  const providers = read("src/utils/Providers.tsx");
-  assert.ok(providers.indexOf("<FeatureFlagProvider") < providers.indexOf("<UndoProvider>"));
-  for (const file of ["src/hooks/General/useUndo.tsx", "src/components/RTE/Components/ImproveButton.tsx", "src/components/RTE/Components/MobileCommentImproveButton.tsx", "src/components/ProviderGlobal/GloablProviders.tsx"]) {
-    assert.match(read(file), /useFlag\(HTPR_6885_SINGLE_UNDO_TOAST_FLAG\)/);
-  }
+  assert.match(globalSource, /useFlag\(HTPR_6885_SINGLE_UNDO_TOAST_FLAG\)/);
+  const f = await fixture(t, { enabled: false });
+  assert.equal(undo.undoToastSettings.single, false);
+  await f.setEnabled(true);
+  assert.equal(undo.undoToastSettings.single, true);
+  await f.show("Enabled action");
+  assert.ok(f.card());
+  await f.setEnabled(false);
+  assert.equal(undo.undoToastSettings.single, false);
+  await f.show("Disabled action");
+  assert.equal(f.card(), null);
+  assert.equal(document.querySelector('[aria-label="Undo"]').textContent, "UNDO");
 });

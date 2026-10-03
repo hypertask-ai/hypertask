@@ -6,10 +6,6 @@ const files = [
   "src/components/undoToast/index.tsx",
   "src/components/undoToast/useMobileToastAutoDismiss.ts",
   "src/components/ProviderGlobal/GloablProviders.tsx",
-  "src/components/RTE/Components/ImproveButton.tsx",
-  "src/components/RTE/Components/MobileCommentImproveButton.tsx",
-  "src/hooks/General/useUndo.tsx",
-  "src/utils/Providers.tsx",
   "src/lib/flags.ts",
   "src/lib/flags/keys.ts",
 ];

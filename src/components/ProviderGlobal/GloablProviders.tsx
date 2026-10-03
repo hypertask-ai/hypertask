@@ -11,7 +11,7 @@ import {
   useContext,
 } from "react";
 import { Toaster } from "react-hot-toast";
-import { SINGLE_UNDO_TOASTER_ID } from "@/components/undoToast";
+import { SINGLE_UNDO_TOASTER_ID, undoToastSettings } from "@/components/undoToast";
 import { HTPR_6885_SINGLE_UNDO_TOAST_FLAG } from "@/lib/flags/keys";
 import { APP_SHELL_RAIL_OFFSET } from "@/lib/constants/appShellRail";
 import { useMobileToastAutoDismiss } from "@/components/undoToast/useMobileToastAutoDismiss";
@@ -316,6 +316,10 @@ export default function GlobalProvider({
   useMobileToastAutoDismiss(); // PERT-92: resume stuck dismiss timers after a tap
   useMobileToastAutoDismiss(SINGLE_UNDO_TOASTER_ID);
   const singleUndoToast = useFlag(HTPR_6885_SINGLE_UNDO_TOAST_FLAG);
+  useEffect(() => {
+    undoToastSettings.single = singleUndoToast;
+    return () => { undoToastSettings.single = false; };
+  }, [singleUndoToast]);
   const isApple = useDeviceContext();
   const mbl = useContext(MobileViewContext);
   const pathname = usePathname();

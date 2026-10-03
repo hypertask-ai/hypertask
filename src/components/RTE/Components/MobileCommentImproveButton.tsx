@@ -1,6 +1,4 @@
 "use client";
-import { useFlag } from "@/hooks/useFlag";
-import { HTPR_6885_SINGLE_UNDO_TOAST_FLAG } from "@/lib/flags/keys";
 
 import type { Editor } from "@tiptap/react";
 import { Check, Loader2, Sparkles } from "lucide-react";
@@ -77,7 +75,6 @@ const requestImprovedContent = async ({
 };
 
 const MobileCommentImproveButton = ({ editor }: { editor: Editor | null }) => {
-  const singleUndoToast = useFlag(HTPR_6885_SINGLE_UNDO_TOAST_FLAG);
   const currentProject = useRecoilValue(currentProjectAtom);
   const triggerRef = useRef<HTMLButtonElement>(null);
   const firstActionRef = useRef<HTMLButtonElement>(null);
@@ -171,7 +168,6 @@ const MobileCommentImproveButton = ({ editor }: { editor: Editor | null }) => {
         toast.dismiss(toastId);
       },
       true,
-      singleUndoToast,
     );
     closeSheet();
   };

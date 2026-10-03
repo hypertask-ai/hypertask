@@ -5,6 +5,9 @@ import { MobileViewContext } from "@/lib/contexts/mobileContext";
 import { MOBILE_TARGET } from "@/lib/configs/general.config";
 
 export const SINGLE_UNDO_TOASTER_ID = "htpr-6885-undo";
+// UndoToaster is imperative and also called outside FeatureFlagProvider.
+// The authenticated global toaster publishes its flag here; default is off.
+export const undoToastSettings = { single: false };
 let previousUndoToastId: string | undefined;
 
 export const UNDO_ACTION_WINDOW_MS = 15_000;
@@ -156,8 +159,8 @@ export const UndoToaster = (
   dataBeforeDeletion: any,
   undoHandler: (data: any, toastId: string) => Promise<void>,
   isMobile: boolean,
-  singleUndoToast = false,
 ) => {
+  const singleUndoToast = undoToastSettings.single;
   const callback = async (toastId: string) => {
     // toast.dismiss(toastId)
     await undoHandler(dataBeforeDeletion, toastId);
