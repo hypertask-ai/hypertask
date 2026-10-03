@@ -16,7 +16,6 @@ import {
   decideCoreSmokeAccess,
   isProductionCoreSmokeRequest,
 } from "@/lib/productionSmoke/access";
-import { CORE_ACTIONS_SMOKE_FLAG, isFeatureEnabled } from "@/lib/flags";
 import {
   CoreSmokeLockUnavailableError,
   withCoreSmokeLock,
@@ -57,19 +56,6 @@ export async function POST(request: NextRequest) {
     );
   }
   const principal = access.principal;
-  if (!(await isFeatureEnabled(CORE_ACTIONS_SMOKE_FLAG, principal.user.id))) {
-    return NextResponse.json({
-      success: false,
-      result: {
-        ok: false,
-        kind: "unrunnable",
-        action: "check feature flag",
-        detail: "the core-actions smoke flag is disabled for this user",
-        steps: [],
-        cleanup: [],
-      },
-    });
-  }
 
   let parsed: unknown;
   try {
