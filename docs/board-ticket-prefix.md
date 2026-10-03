@@ -8,7 +8,7 @@ In Settings > Board > General, Ticket prefix appears above Board notifications. 
 
 The create-board dialog uses the existing name-field input for Ticket prefix. Its suggestion follows the automatic identifier generator until the user edits the prefix. A supplied prefix is uppercased and validated on the server. It must contain 2 to 5 letters or numbers, start with a letter, and be unique among non-deleted boards in that team. A conflict returns an error rather than silently changing the user's choice.
 
-Prefix changes write ProjectPrefixAlias, change the board prefix and rewrite all task ticket numbers with one SQL UPDATE in one transaction. Team locks serialize prefix claims; board locks coordinate ticket creation and moves. Normal task edits do not write a stale ticket-number snapshot back over a prefix change.
+Prefix changes write an uppercase ProjectPrefixAlias, change the board prefix and rewrite all task ticket numbers with one SQL UPDATE in one transaction. Legacy lowercase board prefixes retain historical lookup, and prefix uniqueness checks are case-insensitive. Team locks serialize prefix claims; board locks coordinate ticket creation and moves. Normal task edits do not write a stale ticket-number snapshot back over a prefix change.
 
 MCP, CLI task lookup and ticket-number detail lookup try live tickets before historical prefixes. Alias lookup retains the caller's existing board access filters, rejects deleted boards and tasks, and requires a board scope when the identifier is ambiguous. Numeric detail URLs are unchanged. Moved tasks use the existing highest-index-plus-one allocator, not a task count.
 

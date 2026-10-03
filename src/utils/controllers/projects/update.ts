@@ -30,16 +30,17 @@ export async function changeProjectPrefix(
       where: {
         teamId: board.teamId,
         id: { not: projectId },
-        uniqueIdentifier: prefix,
+        uniqueIdentifier: { equals: prefix, mode: "insensitive" },
         status: { not: "Deleted" },
       },
       select: { id: true },
     });
     if (clash) throw new Error("Ticket prefix is already used by another board in this team");
-    if (board.uniqueIdentifier && board.uniqueIdentifier !== prefix) {
+    const previousPrefix = board.uniqueIdentifier?.toUpperCase();
+    if (previousPrefix && previousPrefix !== prefix) {
       await tx.projectPrefixAlias.upsert({
-        where: { projectId_prefix: { projectId, prefix: board.uniqueIdentifier } },
-        create: { projectId, prefix: board.uniqueIdentifier },
+        where: { projectId_prefix: { projectId, prefix: previousPrefix } },
+        create: { projectId, prefix: previousPrefix },
         update: {},
       });
     }

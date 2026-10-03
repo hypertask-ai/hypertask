@@ -37,6 +37,7 @@ function matches(row, where) {
     if (key === "AND") return (Array.isArray(value) ? value : [value]).every(part => matches(row, part));
     if (value && typeof value === "object") {
       if (Object.hasOwn(value, "not")) return row[key] !== value.not;
+      if (Object.hasOwn(value, "equals")) return value.mode === "insensitive" ? row[key]?.toUpperCase() === value.equals.toUpperCase() : row[key] === value.equals;
       if (value.in) return value.in.includes(row[key]);
       if (value.some) return (row[key] ?? []).some(part => matches(part, value.some));
       return matches(row[key], value);
@@ -66,7 +67,7 @@ function writes({ enabled = true, ownerId = 6, boards = [], failSql = false, los
     projectPrefixAlias: {
       upsert: async args => {
         events.push("alias");
-        assert.deepEqual(args.where.projectId_prefix, { projectId: 15, prefix: board.uniqueIdentifier });
+        assert.deepEqual(args.where.projectId_prefix, { projectId: 15, prefix: board.uniqueIdentifier.toUpperCase() });
         if (!aliases.some(a => a.prefix === args.create.prefix)) aliases.push(args.create);
       },
     },
@@ -115,6 +116,14 @@ test("unique prefix rejects another non-deleted board in the team", async () => 
   assert.equal((await f.update("NEW")).status, 400);
   assert.equal(f.board.uniqueIdentifier, "OLD");
   assert.deepEqual(f.aliases, []);
+});
+test("unique prefix rejects legacy lowercase and mixed-case board prefixes", async () => {
+  for (const uniqueIdentifier of ["new", "NeW"]) {
+    const f = writes({ boards: [{ id: 16, teamId: "team-1", uniqueIdentifier, status: "Normal" }] });
+    assert.equal((await f.update("NEW")).status, 400);
+    assert.equal(f.board.uniqueIdentifier, "OLD");
+    assert.deepEqual(f.aliases, []);
+  }
 });
 test("unique prefix permits deleted boards, other teams and the same board", async () => {
   const f = writes({ boards: [{ id: 16, teamId: "team-1", uniqueIdentifier: "NEW", status: "Deleted" }, { id: 17, teamId: "team-2", uniqueIdentifier: "NEW", status: "Normal" }] });
@@ -186,12 +195,12 @@ test("update route uses the safe controller with the authenticated caller", asyn
   assert.equal(f.aliases.length, 1);
 });
 
-function lookups({ visible = true, live = false, liveAccess = true, deleted = false, deletedBoard = false, agentId = null, ambiguous = false } = {}) {
+function lookups({ visible = true, live = false, liveAccess = true, deleted = false, deletedBoard = false, agentId = null, ambiguous = false, prefixAliases = [{ prefix: "OLD", projectId: 15 }] } = {}) {
   const board = { id: 15, ownerId: visible ? 6 : 9, members: [], status: deletedBoard ? "Deleted" : "Normal", teamId: "team-1" };
   const current = { id: 101, projectId: 15, uniqueIndex: 123, ticketNumber: "NEW-123", status: deleted ? "Deleted" : "Normal", project: board };
   const tasks = [current];
   if (live) tasks.push({ ...current, id: 202, projectId: 16, ticketNumber: "OLD-123", project: { ...board, id: 16, ownerId: liveAccess ? 6 : 9 } });
-  const aliases = [{ prefix: "OLD", projectId: 15, project: board }];
+  const aliases = prefixAliases.map(alias => ({ ...alias, project: board }));
   if (ambiguous) {
     tasks.push({ ...current, id: 303, projectId: 17 });
     aliases.push({ prefix: "OLD", projectId: 17, project: board });
@@ -234,6 +243,21 @@ test("old prefix alias lookup resolves in MCP, CLI batch and detail", async () =
   const batch = await f.get({ ticket_number: "OLD-123,NEW-123" });
   assert.equal(batch.body.tasks.length, 1);
 });
+test("transaction alias lookup preserves uppercase IDs from legacy lowercase prefixes", async () => {
+  for (const oldPrefix of ["old", "OlD"]) {
+    const write = writes();
+    write.board.uniqueIdentifier = oldPrefix;
+    write.board.tasks = [{ uniqueIndex: 123, ticketNumber: "OLD-123" }];
+    assert.equal((await write.update("NEW")).status, 200);
+    assert.deepEqual(write.aliases, [{ projectId: 15, prefix: "OLD" }]);
+    assert.equal(write.board.tasks[0].ticketNumber, "NEW-123");
+    const f = lookups({ prefixAliases: write.aliases });
+    assert.equal((await f.resolver.findTaskByIdentifier({ id: 6 }, { ticket_number: "OLD-123" })).id, 101);
+    assert.equal((await f.detail.findTaskByTicketNumber("OLD-123", 6)).id, 101);
+    assert.equal((await f.get({ ticket_number: "OLD-123" })).body.tasks[0].id, 101);
+    assert.equal((await f.get({ ticket_number: "OLD-123,NEW-123" })).body.tasks.length, 1);
+  }
+});
 test("a live ticket wins without consulting any prefix alias", async () => {
   const f = lookups({ live: true });
   assert.equal((await f.resolver.findTaskByIdentifier({ id: 6 }, { ticket_number: "OLD-123" })).id, 202);
@@ -270,12 +294,12 @@ test("detail lookup is wired before numeric parsing and canonicalizes ticket URL
   assert.match(page, /redirect\(`\/detail\/project-\$\{task.projectId\}\/\$\{task.uniqueIndex\}`\)/);
 });
 
-function creation({ enabled = true, clash = false } = {}) {
+function creation({ enabled = true, clash = false, boards = [] } = {}) {
   let created = null;
   const prisma = {
     user: { findUnique: async () => ({ id: 6 }) },
     project: {
-      findFirst: async () => clash ? { id: 99 } : null,
+      findFirst: async ({ where }) => clash ? { id: 99 } : boards.find(board => matches(board, where)) ?? null,
       create: async ({ data }) => { created = { ...data, id: 15 }; return created; },
       update: async ({ data }) => ({ ...created, ...data, owner: { displayName: "User" }, team: { title: "Team" } }),
     },
@@ -304,6 +328,13 @@ test("create with prefix rejects flag off, invalid prefixes and uniqueness confl
   for (const [options, input, status] of [[{ enabled: false }, "NEW", 403], [{}, "1AB", 400], [{}, null, 400], [{ clash: true }, "NEW", 400]]) {
     const f = creation(options);
     assert.equal((await f.controller.default(6, "Release Plan", "team-1", "account-1", input)).status, status);
+    assert.equal(f.created(), null);
+  }
+});
+test("create unique prefix rejects legacy lowercase and mixed-case board prefixes", async () => {
+  for (const uniqueIdentifier of ["new", "NeW"]) {
+    const f = creation({ boards: [{ id: 99, teamId: "team-1", uniqueIdentifier, status: "Normal" }] });
+    assert.equal((await f.controller.default(6, "Board", "team-1", "account-1", "NEW")).status, 400);
     assert.equal(f.created(), null);
   }
 });

@@ -72,8 +72,13 @@ test("identically titled boards receive predictable collision suffixes", async (
   const identifiers = new Map();
   const prisma = {
     project: {
-      findFirst: async ({ where }) =>
-        [...identifiers.values()].includes(where.uniqueIdentifier) ? { id: 1 } : null,
+      findFirst: async ({ where }) => {
+        const filter = where.uniqueIdentifier;
+        const clash = [...identifiers.values()].some(identifier =>
+          filter.mode === "insensitive" ? identifier.toUpperCase() === filter.equals : identifier === filter,
+        );
+        return clash ? { id: 1 } : null;
+      },
       update: async ({ where, data }) => {
         identifiers.set(where.id, data.uniqueIdentifier);
       },
@@ -104,4 +109,24 @@ test("identically titled boards receive predictable collision suffixes", async (
     "QAE10",
     "QAE11",
   ]);
+});
+
+test("automatic prefixes avoid legacy lowercase and mixed-case collisions", async () => {
+  let assigned;
+  const prisma = {
+    project: {
+      findFirst: async ({ where }) => {
+        const filter = where.uniqueIdentifier;
+        const clash = ["qaex", "qAeX1"].some(identifier =>
+          filter.mode === "insensitive" ? identifier.toUpperCase() === filter.equals : identifier === filter,
+        );
+        return clash ? { id: 1 } : null;
+      },
+      update: async ({ data }) => { assigned = data.uniqueIdentifier; },
+    },
+  };
+  prisma.$transaction = async callback => callback({ ...prisma, $executeRaw: async () => {} });
+  const updateUniqueIdentifier = loadUpdateUniqueIdentifier(prisma);
+  assert.equal(await updateUniqueIdentifier("team-1", "qa-2026-08-30-exploratory", 101), "QAEX2");
+  assert.equal(assigned, "QAEX2");
 });
