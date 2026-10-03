@@ -478,7 +478,7 @@ export function useSearch(
       event.preventDefault();
       if (searchEscBackEnabled) {
         const history = tabSearchHistory.current ?? [];
-        history.pop();
+        if (!isSearchDraft) history.pop();
         const previous = history.at(-1) ?? "";
         try { sessionStorage.setItem("htpr-6879-search-history", JSON.stringify(history)); } catch { /* The in-memory history still works. */ }
         setInputValue(previous);

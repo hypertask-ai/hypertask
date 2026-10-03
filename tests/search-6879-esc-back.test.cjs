@@ -212,6 +212,47 @@ test('Escape over typed draft suggestions only dismisses the list and preserves 
   })
 })
 
+test('Escape from draft C restores submitted B without popping it, then A, then recents and tips', async (t) => {
+  await withSearch(t, { query: 'search A' }, async ({ type, press, complete, render, input, state, requests, navigations }) => {
+    await complete()
+    await type('search B')
+    await press('Enter')
+    await complete()
+    await render('search B')
+    await type('draft C')
+    assert.equal(input().getAttribute('aria-expanded'), 'true')
+    const requestCount = requests.length
+    const navigationCount = navigations.length
+    await press('Escape')
+    assert.equal(input().getAttribute('aria-expanded'), 'false')
+    assert.equal(state().inputValue, 'draft C')
+    assert.equal(requests.length, requestCount)
+    assert.equal(navigations.length, navigationCount)
+    assert.deepEqual(JSON.parse(sessionStorage.getItem('htpr-6879-search-history')), ['search A', 'search B'])
+
+    for (const [query, history] of [['search B', ['search A', 'search B']], ['search A', ['search A']]]) {
+      await press('Escape')
+      assert.equal(state().inputValue, query)
+      assert.equal(input().value, query)
+      assert.equal(requests.at(-1).body.searchQuery, query)
+      assert.equal(new URL(navigations.at(-1), 'https://example.test').searchParams.get('searchTerm'), query)
+      assert.deepEqual(JSON.parse(sessionStorage.getItem('htpr-6879-search-history')), history)
+      await complete()
+      await render(query)
+      assert.equal(state().isSearchDraft, false)
+      assert.ok(document.getElementById('task_1'))
+    }
+    await press('Escape')
+    assert.equal(state().inputValue, '')
+    assert.equal(input().value, '')
+    assert.equal(new URL(navigations.at(-1), 'https://example.test').searchParams.get('searchTerm'), '')
+    assert.deepEqual(JSON.parse(sessionStorage.getItem('htpr-6879-search-history')), [])
+    assert.deepEqual(headings(), ['Recent searches', 'Tips'])
+    assert.equal(document.getElementById('task_1'), null)
+    assert.ok(!navigations.includes('back'))
+  })
+})
+
 test('board and in chips keep their icon, omit text hash and still accept hash picker and prefixed input', async (t) => {
   await withSearch(t, { history: ['in:#inne recent', 'board:#inne recent'] }, async ({ type, press, tick, input, requests, options, complete, render }) => {
     for (const row of options().slice(0, 2)) {
