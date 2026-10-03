@@ -436,18 +436,14 @@ test("the allowance error carries the period it was rejected against", () => {
 
 test("agent chat turns bill the team under the agent's own name", () => {
   const stream = read("src/app/api/ai/chat/stream/route.ts");
-  // The three spending paths of one chat turn are the main answer, its
-  // empty-completion retry, and the thread-title call. Each must name the
-  // acting agent, or the team is charged for work nobody can trace back.
-  // The trailing comma keeps this to object properties on a spend call, so
-  // the agent id passed to the BYOK key lookup is not miscounted as a spend.
-  const attributed =
-    stream.match(/agentId: actingAgent\?\.id \?\? null,/g) ?? [];
-  assert.equal(
-    attributed.length,
-    3,
-    "every AI spend on an agent session must record which agent spent it",
-  );
+  // Main generation and its empty-completion retry share the configured
+  // traced model. The separate title model receives its own usage context.
+  const reply = read("src/lib/ai/chatStream/modelReply.ts");
+  assert.match(reply, /configureAiModelUsage\(state\.selected\.model, \{[\s\S]*?agentId: actingAgent\?\.id \?\? null,/);
+  assert.match(reply, /streamText\(\{\s*model: state\.selected\.model,/);
+  assert.match(reply, /generateText\(\{\s*model: state\.selected\.model,/);
+  assert.match(stream, /generateConversationTitle\([\s\S]*?agentId: actingAgent\?\.id \?\? null,/);
+  assert.match(read("src/lib/ai/chatStream/title.ts"), /configureAiModelUsage\(model, \{\s*\.\.\.usageContext,/);
   // The title call receives its attribution through usageContext, so the type
   // has to carry the field or the value is silently dropped.
   assert.match(read("src/app/api/ai/chat/stream/route.ts"), /agentId\?: string \| null;/);

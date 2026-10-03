@@ -20,6 +20,7 @@ import {
   createSharedAllowanceMiddleware,
   gatewayCatalogModelSlug,
   modelPricing,
+  sharedAiAllowanceErrorMessage,
 } from "@/app/api/ai/_lib/sharedAllowance";
 import {
   getAiModelDefinition,
@@ -343,7 +344,7 @@ export function createUsageTracingMiddleware(context: ModelUsageContext, modelId
         await Promise.allSettled([
           logAiUsage(row),
           recordAiChatTurn({ ...row, traceId, latencyMs: row.latencyMs!, outcome, error: outcome === "failed" ? "AI model generation failed" : undefined }),
-          ...(outcome === "failed" ? [reportError({
+          ...(outcome === "failed" && !sharedAiAllowanceErrorMessage(error) ? [reportError({
             message: "AI model generation failed",
             source: "server",
             fingerprintKey: `ai-generation:${row.provider}:${modelId}:${errorName}:${statusCode}`,

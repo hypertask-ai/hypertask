@@ -53,17 +53,19 @@ test('missing fixtures, nonterminating models and invalid thresholds fail closed
   await assert.rejects(runTask(task, chatTools(), async () => fixtures[task.id][0], 2), /Step limit/);
 });
 
-test('offline mode cannot import database modules or make network calls', () => {
+test('offline mode can load generated enums but cannot import database services or make network calls', () => {
   const { spawnSync } = require('node:child_process');
   const result = spawnSync(process.execPath, ['-e', `
     const assert = require('node:assert/strict');
     const Module = require('node:module');
-    const original = Module._load;
-    Module._load = function(id, ...args) {
-      if (id.includes('prisma') || id.includes('reportService')) throw new Error('Forbidden production dependency');
+    const original = Module._resolveFilename;
+    Module._resolveFilename = function(id, ...args) {
+      if (id.includes('reportService') || id.includes('@prisma/adapter-pg') || id.endsWith('/lib/prisma') || id.endsWith('/lib/prisma.ts')) throw new Error('Forbidden production dependency');
       return original.call(this, id, ...args);
     };
-    assert.throws(() => require('@prisma/client'), /Forbidden production dependency/);
+    assert.throws(() => require('@prisma/adapter-pg'), /Forbidden production dependency/);
+    assert.throws(() => require('./src/lib/prisma.ts'), /Forbidden production dependency/);
+    assert.ok(require('@prisma/client').SortingMode);
     global.fetch = async () => { throw new Error('Offline network call'); };
     const { evaluate } = require('./scripts/ai-eval.cjs');
     evaluate({ golden: require('./tests/fixtures/ai/golden-tasks.json'), fixtures: require('./tests/fixtures/ai/recorded-turns.json') })
@@ -105,6 +107,8 @@ test('CI is path scoped, hosted and explicitly offline without credentials', () 
   const workflow = fs.readFileSync(path.join(__dirname, '../.github/workflows/ai-evals.yml'), 'utf8');
   for (const directory of ['src/app/api/ai/**', 'src/lib/mcp-server/config/**', 'src/lib/mcp-server/validations/**', 'src/lib/ai/**']) assert.ok(workflow.includes(directory));
   assert.match(workflow, /runs-on: ubuntu-latest/);
+  assert.match(workflow, /node-version: 24/);
+  assert.match(workflow, /npm ci --ignore-scripts[\s\S]*?run: npx prisma generate[\s\S]*?run: node --test/);
   assert.match(workflow, /AI_EVAL_LIVE: "0"/);
   assert.match(workflow, /AI_EVAL_WRONG_TOOL_THRESHOLD: "0"/);
   assert.doesNotMatch(workflow, /secrets\.|pull_request_target/);

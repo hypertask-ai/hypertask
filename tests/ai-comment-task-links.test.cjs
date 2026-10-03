@@ -18,10 +18,15 @@ function sourceBetween(startMarker, endMarker) {
 }
 
 test("AI chat validates resolved task links before writing comments", () => {
-  const rule = sourceBetween(
+  const definition = sourceBetween(
     "const COMMENT_TASK_LINK_RULE",
     "const AGENT_SYSTEM_PROMPT"
   );
+  assert.match(definition, /renderPrompt\("comment-task-link-rule"\)/);
+  const { COMMENT_TASK_LINK_RULE: rule } = require("jiti")(__filename, {
+    alias: { "@": path.join(process.cwd(), "src") },
+    fsCache: false,
+  })(path.join(process.cwd(), "src/lib/ai/chatStream/prompt.ts"));
   assert.match(rule, /relative .*url.* field exactly/i);
   assert.match(rule, /task title as the link text/i);
   assert.match(rule, /ticket number only when.*title/i);

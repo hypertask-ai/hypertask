@@ -8,6 +8,7 @@ const { wrapLanguageModel } = require('ai');
 const root = path.resolve(__dirname, '..');
 const load = require('jiti')(__filename, { alias: { '@': path.join(root, 'src') }, fsCache: false });
 const registry = load(path.join(root, 'src/lib/ai/prompts/registry.ts'));
+const { SharedAiAllowanceExceededError, sharedAiAllowanceErrorMessage } = load(path.join(root, 'src/app/api/ai/_lib/sharedAllowance.ts'));
 
 function harness({ rejectTelemetry = false, rejectPricing = false, observationSink } = {}) {
   const rows = [], captures = [], errors = [], pending = [], allowances = [];
@@ -25,6 +26,7 @@ function harness({ rejectTelemetry = false, rejectPricing = false, observationSi
     '@openrouter/ai-sdk-provider': { createOpenRouter: () => factory('openrouter') },
     ai: { ...require('ai'), createGateway: () => factory('gateway') },
     '@/app/api/ai/_lib/sharedAllowance': {
+      sharedAiAllowanceErrorMessage,
       gatewayCatalogModelSlug: (id) => id,
       createSharedAllowanceMiddleware: (args) => { allowances.push(args); return { specificationVersion: 'v4' }; },
       modelPricing: async () => { if (rejectPricing) throw new Error('unknown price'); return { inputUsdPerToken: 0.000003, outputUsdPerToken: 0.000015 }; },
@@ -89,6 +91,27 @@ test('failures, successful retries and unknown costs each produce a metadata-onl
   assert.equal(h.errors.length, 1);
   assert.ok(!JSON.stringify([h.rows, h.captures, h.errors]).includes('private'));
   assert.notEqual(h.rows[0].traceId, h.rows[1].traceId);
+});
+
+test('allowance stops retain attempt metadata without reporting inference incidents', async () => {
+  for (const method of ['wrapGenerate', 'wrapStream']) {
+    for (const wrapped of [false, true]) {
+      const h = harness();
+      const middleware = h.api.createUsageTracingMiddleware({ userId: 7, provider: 'gateway', feature: 'chat' }, 'openai/gpt-6-luna');
+      const allowance = new SharedAiAllowanceExceededError('2026-10');
+      const error = wrapped ? new Error('retry exhausted', { cause: allowance }) : allowance;
+      const invoke = async () => { throw error; };
+      await assert.rejects(middleware[method]({ params, doGenerate: invoke, doStream: invoke }), (actual) => actual === error);
+      await h.flush();
+      assert.equal(h.errors.length, 0);
+      assert.equal(h.rows.length, 1);
+      assert.equal(h.captures.length, 1);
+      assert.equal(h.rows[0].userId, 7);
+      assert.equal(h.rows[0].outcome, 'failed');
+      assert.equal(h.rows[0].totalTokens, 0);
+      assert.equal(h.rows[0].costUsd, 0);
+    }
+  }
 });
 
 test('stream preserves every chunk and records exactly one finish despite close and cancellation', async () => {
