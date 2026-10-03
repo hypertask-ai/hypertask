@@ -186,6 +186,7 @@ function makeFlow(t, initialTask, currentTask, playlist = [task]) {
     "../MultiPages/Route/useHypertasksNavigate": { default: () => ({ navigate: (...args) => navigations.push(args) }) },
     "next/navigation": nextNavigation,
     "@/lib/taskDetailArchiveNavigation": navigation,
+    "@/components/undoToast": { undoToastSettings: { single: false } },
   }).default;
   return { client, key, context, requests, pending, broadcasts, toasts, navigations, reconciliations, rows, useArchive };
 }
