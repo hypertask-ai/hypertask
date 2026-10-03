@@ -54,6 +54,7 @@ test('chip picker opens, selects with keyboard, runs, and removes on Backspace',
   }
   let reactRoot
   try {
+    stub('src/hooks/useFlag.tsx', { useFlag: () => false })
     stub('src/lib/configs/search.config.ts', { searchConfig: { elementIds: { input: { id: 'search-input', placeholder: 'Search' } } } })
     stub('src/components/AI_CHAT/MentionListComp.tsx', {
       MentionListRows: ({ id, items, selectedIndex, selectItem, optionIdPrefix, isLoading, loadingLabel }) => React.createElement('div', { id, role: 'listbox' },

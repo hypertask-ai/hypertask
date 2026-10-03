@@ -86,7 +86,8 @@ export function useSearch(
   const searchOperatorsEnabled = useFlag(HTPR_6369_SEARCH_OPERATORS_FLAG);
   const searchChipsEnabled = useFlag(HTPR_6370_SEARCH_CHIPS_FLAG) && searchOperatorsEnabled;
   const searchAutocompleteEnabled = useFlag(HTPR_6688_SEARCH_AUTOCOMPLETE_FLAG) && searchChipsEnabled;
-  const searchLayoutEnabled = useFlag(HTPR_6865_SEARCH_LAYOUT_FLAG) && searchAutocompleteEnabled;
+  const searchLayoutFlagEnabled = useFlag(HTPR_6865_SEARCH_LAYOUT_FLAG);
+  const searchLayoutEnabled = searchLayoutFlagEnabled && searchAutocompleteEnabled;
   const isSearchDraft = searchLayoutEnabled && submittedQuery !== inputValue.trim();
 
   function handleProjectsFromCache() {
@@ -317,7 +318,7 @@ export function useSearch(
   function updateSearchHistory(searchTerm: string) {
     if (searchTerm.length < 2) {
       searchRequestGate.invalidate();
-      if (searchLayoutEnabled) { setSubmittedQuery(null); setResponseMessage(searchConfig.responseMessages.default); }
+      if (searchLayoutFlagEnabled && searchAutocompleteEnabled) { setSubmittedQuery(null); setResponseMessage(searchConfig.responseMessages.default); }
       router.replace(searchUrl(searchTerm, null, includeArchived));
       setTypedTasks([]);
       setSelectedIndex(null);

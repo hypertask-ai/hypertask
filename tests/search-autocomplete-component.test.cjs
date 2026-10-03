@@ -31,13 +31,14 @@ test('real search input and reused list work keyboard-only, with an unchanged fl
   }
   let reactRoot
   try {
+    stub('src/hooks/useFlag.tsx', { useFlag: () => false })
     stub('src/lib/configs/search.config.ts', { searchConfig: { elementIds: { input: { id: 'search-input', placeholder: 'Search' } } } })
     stub('src/utils/undoActions/helperFuncs.ts', { cn: (...values) => values.filter(Boolean).join(' ') })
     const SearchChipsInput = createJiti(__filename, { alias: { '@': path.join(root, 'src') }, interopDefault: true, jsx: true })(path.join(root, 'src/app/search/SearchChipsInput.tsx')).default
     const runs = []
     const Harness = ({ enabled }) => {
       const [value, onChange] = React.useState('')
-      return React.createElement(SearchChipsInput, { value, onChange, onRun: (query) => runs.push(query), boardId: 7, inputRef: React.useRef(null), autocompleteEnabled: enabled })
+      return React.createElement(SearchChipsInput, { value, onChange, onRun: (query) => runs.push(query), boardId: 7, inputRef: React.useRef(null), autocompleteEnabled: enabled, layoutEnabled: true })
     }
     reactRoot = require('react-dom/client').createRoot(document.getElementById('root'))
     let input
@@ -46,6 +47,7 @@ test('real search input and reused list work keyboard-only, with an unchanged fl
       await React.act(async () => reactRoot.render(React.createElement(Harness, { key: ++counter, enabled })))
       input = document.getElementById('search-input')
       await React.act(async () => input.focus())
+      assert.equal(document.querySelector('[data-search-layout]'), null, 'the layout prop cannot bypass the disabled runtime flag')
     }
     const type = async (value) => React.act(async () => {
       Object.getOwnPropertyDescriptor(dom.window.HTMLInputElement.prototype, 'value').set.call(input, value)

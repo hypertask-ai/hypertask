@@ -1,6 +1,8 @@
 "use client";
 
 import UserAvatar from "@/components/Common/UserAvatar";
+import { useFlag } from "@/hooks/useFlag";
+import { HTPR_6865_SEARCH_LAYOUT_FLAG } from "@/lib/flags/keys";
 import { MentionListRows } from "@/components/AI_CHAT/MentionListComp";
 import { activeSearchValue, candidateQuery, chipQuery, splitSearchChips } from "@/lib/search/chips";
 import { operatorMatches, parseSearchTokens, SEARCH_OPERATORS, type Names, type SearchOperator, type SearchToken } from "@/lib/search/operators";
@@ -23,8 +25,9 @@ type Props = {
   showSuggestions?: boolean;
 };
 
-export default function SearchChipsInput({ value, onChange, onRun, boardId, inputRef, autocompleteEnabled = false, recentSearches = [], layoutEnabled: layoutFlagEnabled = false, onAskAi, showSuggestions = true }: Props) {
-  const layoutEnabled = layoutFlagEnabled && autocompleteEnabled;
+export default function SearchChipsInput({ value, onChange, onRun, boardId, inputRef, autocompleteEnabled = false, recentSearches = [], layoutEnabled: layoutRequested = false, onAskAi, showSuggestions = true }: Props) {
+  const layoutFlagEnabled = useFlag(HTPR_6865_SEARCH_LAYOUT_FLAG);
+  const layoutEnabled = layoutFlagEnabled && layoutRequested && autocompleteEnabled;
   const [editing, setEditing] = useState(false);
   const [names, setNames] = useState<Names>({});
   const [chipLabels, setChipLabels] = useState<Record<string, string>>({});
@@ -342,7 +345,7 @@ export default function SearchChipsInput({ value, onChange, onRun, boardId, inpu
         />
         </div>
       </div>
-      {open && layoutEnabled ? (
+      {open && layoutFlagEnabled && layoutRequested && autocompleteEnabled ? (
         <div ref={pickerRef} id={listId} role="listbox" aria-label="Search suggestions" data-search-layout
           className="mt-4 w-full min-w-0" onMouseDown={(event) => event.preventDefault()}>
           {tips ? <>

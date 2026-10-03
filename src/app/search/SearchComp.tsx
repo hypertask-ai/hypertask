@@ -167,7 +167,7 @@ const SearchComp = ({
               {responseMessage !== "None" &&
               typedTasks.length === 0 &&
               !showAskAiRow ? (
-                <div className={layoutEnabled ? "px-4 @md:px-9 my-4" : "px-0 @md:!px-16 my-4"}>
+                <div className={layoutFlagEnabled && autocompleteEnabled ? "px-4 @md:px-9 my-4" : "px-0 @md:!px-16 my-4"}>
                   <span className={layoutEnabled ? "text-text-light-gray" : "text-[#8e9093]"}>{responseMessage}</span>
                 </div>
               ) : (
