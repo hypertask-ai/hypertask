@@ -10,6 +10,7 @@ const ts = require("typescript");
 const root = path.resolve(__dirname, "..");
 const task = { id: 42, projectId: 6859, uniqueIndex: 43, title: "Cached title", description_: { content: "<p>Cached description</p>" } };
 let providerPayload;
+let stableLayoutEnabled = true;
 const mocks = {
   "react": React,
   "react/jsx-runtime": require("react/jsx-runtime"),
@@ -17,6 +18,8 @@ const mocks = {
   "@/lib/state": { useRecoilValue: () => ({ id: 2343 }) },
   "@/store": { currentUserAtom: {} },
   "@/hooks/General/useGetUserPreferences": { useGetUserPreferences: () => ({ data: { commentsStacked: false, scrollSetting: "Bottom" } }) },
+  "@/hooks/useFlag": { useFlag: (key) => { assert.equal(key, "htpr-6899-stable-layout"); return stableLayoutEnabled; } },
+  "@/lib/flags/keys": { HTPR_6899_STABLE_LAYOUT_FLAG: "htpr-6899-stable-layout" },
   "@/lib/constants": { default: { CommentsTQPrefixKey: "comments" } },
   "@/lib/contexts/TaskDetail/FollowersProvider": { FollowersProvider: ({ children }) => children },
   "@/lib/contexts/TaskDetail/TaskProvider": { TasksProvider: ({ children, parsedTask, _comments, cachedNavigation }) => { providerPayload = { parsedTask, _comments, cachedNavigation }; return children; }, useTaskContext: () => ({}) },
@@ -55,6 +58,16 @@ test("existing client detail renders cached title and body before task, preferen
   assert.doesNotMatch(html, /Loading|spinner/);
   assert.equal(providerPayload.cachedNavigation, true, "cached layout must not depend on whether comments are already in the query cache");
   client.clear();
+});
+
+test("stable-layout flag off keeps cached content available without opting into the stable layout", (t) => {
+  stableLayoutEnabled = false;
+  const client = new query.QueryClient();
+  t.after(() => { stableLayoutEnabled = true; client.clear(); });
+  const html = renderToString(React.createElement(query.QueryClientProvider, { client }, React.createElement(Detail, { taskId: 42, projectId: 6859, uniqueIndex: 43, initialTask: task, embedded: false })));
+  assert.match(html, /Cached title/);
+  assert.match(html, /Cached description/);
+  assert.equal(providerPayload.cachedNavigation, false);
 });
 
 test("server permission denials remove cached content, while a network outage retains it", async (t) => {
@@ -171,7 +184,8 @@ test("pending cached details paint property geometry immediately but defer edito
   assert.match(state, /useState\(!instantTicketOpen \|\| !initialCommentsPayload\.pending\)/);
   assert.match(state, /requestAnimationFrame\(\(\) => \{\s*frame = requestAnimationFrame\(\(\) => setSecondaryPanelsReady\(true\)\)/);
   assert.match(state, /return \(\) => cancelAnimationFrame\(frame\)/);
-  assert.match(panels, /!_mbl && \(cachedLayout \|\| secondaryPanelsReady !== false\) && \(\s*<TaskInfo/);
+  assert.match(panels, /const stableLayoutFlag = useFlag\(HTPR_6899_STABLE_LAYOUT_FLAG\)/);
+  assert.match(panels, /!_mbl && \(\(stableLayoutFlag && cachedLayout\) \|\| secondaryPanelsReady !== false\) && \(\s*<TaskInfo/);
   assert.match(panels, /_mbl && !embedded && secondaryPanelsReady !== false && \(instantTicketOpen \? <Suspense fallback=\{null\}><NewCommentComponent/);
   assert.match(thread, /taskInfoVirtualIndex && _mbl && \(cachedLayout \|\| secondaryPanelsReady !== false\)/);
   assert.match(thread, /!_mbl && secondaryPanelsReady !== false && \(instantTicketOpen \? <Suspense fallback=\{null\}><NewCommentComponent/);

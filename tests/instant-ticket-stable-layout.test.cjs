@@ -225,6 +225,7 @@ test("late comments remain below the desktop composer and empty cached threads h
   commentCount = 1;
   const afterComments = html(thread, false);
   assert.match(afterComments, /data-part="comment"/);
+  assert.match(afterComments, /<div style="min-height:2000px;/, "cached desktop comments keep production's expandable container");
   assert.ok(afterComments.indexOf('data-part="comment"') > afterComments.indexOf('data-part="composer"'));
   assert.equal((afterComments.match(/data-part="composer"/g) || []).length, 1);
   commentCount = 0;
@@ -240,7 +241,7 @@ const body = load("src/components/PageComponents/TaskDetail/CommentAndDescriptio
   "@/hooks/Task Detail/CommentAndDescriptionHooks/useSaveContent": { default: () => ({ redirectAPI: noop }) },
   "@/hooks/General/useHasDrafts": { isMeaningfulDescriptionDraft: () => false },
   "./InnerHtmlDescription": { default: ({ id, descriptionText, setCarousalItems }) => {
-    assert.equal(setCarousalItems, noop, "static images retain the existing attachment-gallery action");
+    assert.equal(setCarousalItems, cachedLayout ? noop : undefined, "only cached static images add the attachment-gallery action");
     return React.createElement("div", { id, dangerouslySetInnerHTML: { __html: descriptionText } });
   } },
   "../ContextMenu": { HighlightMenu: () => null },
@@ -289,16 +290,24 @@ test("cached layout requires both flags and flag-off keeps the production layout
   commentCount = 1;
   secondaryPanelsReady = true;
   late = false;
-  [cachedLayout] = initialize(true, false, true, { pending: true }, state);
-  for (const isMobile of [false, true]) {
-    const output = html(thread, isMobile);
-    assert.match(output, /data-index="1"[^>]*translateY\(500px\)/);
-    assert.match(output, /<article[^>]*>.*data-part="pages".*<\/article>/);
-    assert.doesNotMatch(output, /data-part="late-info"/);
-    assert.doesNotMatch(html(title, isMobile, { toggleDueDate: noop }), /data-task-summary-slot/);
-    if (!isMobile) {
-      assert.ok(output.indexOf('data-part="composer"') > output.indexOf('data-part="comment"'), "flag-off retains the composer after comments");
-      assert.equal((output.match(/data-part="composer"/g) || []).length, 1);
+  for (const [instant, stable] of [[true, false], [false, true], [false, false]]) {
+    [cachedLayout] = initialize(instant, stable, true, { pending: true }, state);
+    for (const isMobile of [false, true]) {
+      const output = html(thread, isMobile);
+      const row = output.match(/<div[^>]*data-index="1"[^>]*>/)?.[0];
+      if (isMobile) {
+        assert.match(row, /position:absolute.*translateY\(500px\)/);
+        assert.match(output, /<div style="height:2000px;/);
+      } else {
+        assert.match(row, /position:relative/);
+        assert.doesNotMatch(row, /translateY/);
+        assert.match(output, /<div style="min-height:2000px;/, "production reserves desktop space without fixing its height");
+        assert.ok(output.indexOf('data-part="composer"') > output.indexOf('data-part="comment"'), "flag-off retains the composer after comments");
+        assert.equal((output.match(/data-part="composer"/g) || []).length, 1);
+      }
+      assert.match(output, /<article[^>]*>.*data-part="pages".*<\/article>/);
+      assert.doesNotMatch(output, /data-part="late-info"/);
+      assert.doesNotMatch(html(title, isMobile, { toggleDueDate: noop }), /data-task-summary-slot/);
     }
   }
   commentCount = 0;

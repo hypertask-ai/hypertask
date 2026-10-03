@@ -91,8 +91,8 @@ const DescriptonBody = ({ draftTQ }: any) => {
       /> : <InnerHTMLDescription
         id="description-input"
         descriptionText={linkedContent ?? ""}
-        attachmentsFromProps={descriptionAttachments}
-        setCarousalItems={setCarousalItems}
+        attachmentsFromProps={cachedLayout ? descriptionAttachments : []}
+        setCarousalItems={cachedLayout ? setCarousalItems : undefined}
       />}
 
       {!isEditing && creator && (
