@@ -3,7 +3,6 @@ import { Prisma } from "@prisma/client";
 import prisma from "@/lib/prisma";
 import { isFeatureEnabled } from "@/lib/flags";
 import {
-  AGENT_DEV_LOOP_FEATURE_FLAG,
   AGENT_RUN_FEATURE_FLAG,
 } from "@/lib/agentRuns/model";
 import { assertSafeWebhookTarget } from "@/lib/mcp/webhooks/ssrfGuard";
@@ -310,14 +309,7 @@ export async function manageAgentWebhook(input: {
       AGENT_RUN_FEATURE_FLAG,
       input.userId,
     );
-    // The recorded payload is what `hypertask agent replay` re-sends to a
-    // handler running on the author's own machine, so it only travels once
-    // the local dev loop is switched on for them, and only for run events.
-    // A comment or chat delivery carries body text that replay never reads.
-    const replayEnabled = await isFeatureEnabled(
-      AGENT_DEV_LOOP_FEATURE_FLAG,
-      input.userId,
-    );
+    // Replay includes recorded payloads only for run events, never comment or chat text.
     const availableEvents = availableAgentWebhookEvents(runsEnabled);
     const eventDefinitions = availableAgentWebhookEventDefinitions(runsEnabled);
     return {
@@ -346,8 +338,7 @@ export async function manageAgentWebhook(input: {
             )
             .map((delivery) => ({
               ...serializeAgentWebhookDelivery(delivery),
-              ...(replayEnabled &&
-              (AGENT_RUN_WEBHOOK_EVENTS as readonly string[]).includes(
+              ...((AGENT_RUN_WEBHOOK_EVENTS as readonly string[]).includes(
                 delivery.event,
               )
                 ? { payload: delivery.payload }

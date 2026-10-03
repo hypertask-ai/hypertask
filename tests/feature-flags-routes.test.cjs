@@ -16,15 +16,12 @@ let keepWrites = 0;
 let broadcasts = 0;
 let broadcastFails = false;
 let authFails = false;
-let detailsEnabled = true;
 class FeatureFlagInputError extends Error {}
 
 stubModule("src/lib/flags.ts", {
-  FEATURE_FLAG_DETAILS_FLAG: "htpr-6133-feature-flag-details",
   FEATURE_FLAG_MODES: ["OWNER_ONLY", "OWNER_AND_QA", "EVERYONE", "OFF"],
   FEATURE_FLAG_OWNER_USER_ID: 6,
   FeatureFlagInputError,
-  isFeatureEnabled: async () => detailsEnabled,
   isFeatureFlagOwner: async () => {
     if (authFails) throw new Error("auth unavailable");
     return userId === 6;
@@ -33,11 +30,11 @@ stubModule("src/lib/flags.ts", {
     reads += 1;
     return [
       {
-        key: "htpr-6091-feature-flags",
+        key: "htpr-6136-figma-connect",
         mode: "OWNER_ONLY",
         updatedAt: null,
-        description: "Registers the feature flag controls themselves.",
-        ticketUrl: "https://app.hypertask.ai/detail/project-15/6091",
+        description: "Connects Figma files to boards.",
+        ticketUrl: "https://app.hypertask.ai/detail/project-15/6136",
       },
     ];
   },
@@ -47,8 +44,8 @@ stubModule("src/lib/flags.ts", {
       key,
       mode,
       updatedAt: new Date(),
-      description: "Registers the feature flag controls themselves.",
-      ticketUrl: "https://app.hypertask.ai/detail/project-15/6091",
+      description: "Connects Figma files to boards.",
+      ticketUrl: "https://app.hypertask.ai/detail/project-15/6136",
     };
   },
   setFeatureFlagKeep: async (key, keep) => {
@@ -58,8 +55,8 @@ stubModule("src/lib/flags.ts", {
       mode: "EVERYONE",
       keep,
       updatedAt: new Date(),
-      description: "Registers the feature flag controls themselves.",
-      ticketUrl: "https://app.hypertask.ai/detail/project-15/6091",
+      description: "Connects Figma files to boards.",
+      ticketUrl: "https://app.hypertask.ai/detail/project-15/6136",
     };
   },
   featureFlagsForUser: async (id) => ({ example: id === 6 }),
@@ -109,7 +106,6 @@ test.beforeEach(() => {
   broadcasts = 0;
   broadcastFails = false;
   authFails = false;
-  detailsEnabled = true;
 });
 
 test("non-owners receive 404 before flag metadata is read or changed", async () => {
@@ -120,7 +116,7 @@ test("non-owners receive 404 before flag metadata is read or changed", async () 
   assert.deepEqual(
     await json(
       await admin.PATCH(
-        request("PATCH", { key: "htpr-6091-feature-flags", mode: "EVERYONE" }),
+        request("PATCH", { key: "htpr-6136-figma-connect", mode: "EVERYONE" }),
       ),
     ),
     { status: 404, body: { error: "Not found" } },
@@ -146,16 +142,16 @@ test("the owner can list and change a declared flag with server-owned metadata",
   assert.equal(listed.status, 200);
   assert.equal(listed.body.detailsEnabled, true);
   assert.deepEqual(listed.body.flags[0], {
-    key: "htpr-6091-feature-flags",
+    key: "htpr-6136-figma-connect",
     mode: "OWNER_ONLY",
     updatedAt: null,
-    description: "Registers the feature flag controls themselves.",
-    ticketUrl: "https://app.hypertask.ai/detail/project-15/6091",
+    description: "Connects Figma files to boards.",
+    ticketUrl: "https://app.hypertask.ai/detail/project-15/6136",
   });
   const result = await json(
     await admin.PATCH(
       request("PATCH", {
-        key: "htpr-6091-feature-flags",
+        key: "htpr-6136-figma-connect",
         mode: "OWNER_AND_QA",
         description: "attacker copy",
         ticketUrl: "https://evil.test",
@@ -164,26 +160,19 @@ test("the owner can list and change a declared flag with server-owned metadata",
   );
   assert.equal(result.status, 200);
   assert.equal(result.body.flag.mode, "OWNER_AND_QA");
-  assert.equal(result.body.flag.description, "Registers the feature flag controls themselves.");
-  assert.equal(result.body.flag.ticketUrl, "https://app.hypertask.ai/detail/project-15/6091");
+  assert.equal(result.body.flag.description, "Connects Figma files to boards.");
+  assert.equal(result.body.flag.ticketUrl, "https://app.hypertask.ai/detail/project-15/6136");
   assert.equal(writes, 1);
   assert.equal(broadcasts, 1);
 });
 
-test("the owner response disables ticket details when the rollout flag is off", async () => {
-  userId = 6;
-  detailsEnabled = false;
-  const listed = await json(await admin.GET(request()));
-  assert.equal(listed.status, 200);
-  assert.equal(listed.body.detailsEnabled, false);
-});
 
 test("committed updates still succeed when realtime delivery fails", async (t) => {
   t.mock.method(console, "warn", () => {});
   userId = 6;
   broadcastFails = true;
   const result = await admin.PATCH(
-    request("PATCH", { key: "htpr-6091-feature-flags", mode: "EVERYONE" }),
+    request("PATCH", { key: "htpr-6136-figma-connect", mode: "EVERYONE" }),
   );
   assert.equal(result.status, 200);
   assert.equal(writes, 1);
@@ -193,11 +182,11 @@ test("committed updates still succeed when realtime delivery fails", async (t) =
 test("owner writes reject cross-origin and invalid modes", async () => {
   userId = 6;
   assert.equal(
-    (await admin.PATCH(request("PATCH", { key: "htpr-6091-feature-flags", mode: "OFF" }, "https://evil.test"))).status,
+    (await admin.PATCH(request("PATCH", { key: "htpr-6136-figma-connect", mode: "OFF" }, "https://evil.test"))).status,
     403,
   );
   assert.equal(
-    (await admin.PATCH(request("PATCH", { key: "htpr-6091-feature-flags", mode: "MAYBE" }))).status,
+    (await admin.PATCH(request("PATCH", { key: "htpr-6136-figma-connect", mode: "MAYBE" }))).status,
     400,
   );
   assert.equal(writes, 0);
@@ -206,7 +195,7 @@ test("owner writes reject cross-origin and invalid modes", async () => {
 test("the owner can pause removal with Keep without touching the mode", async () => {
   userId = 6;
   const result = await json(
-    await admin.PATCH(request("PATCH", { key: "htpr-6091-feature-flags", keep: true })),
+    await admin.PATCH(request("PATCH", { key: "htpr-6136-figma-connect", keep: true })),
   );
   assert.equal(result.status, 200);
   assert.equal(result.body.flag.keep, true);
@@ -215,25 +204,16 @@ test("the owner can pause removal with Keep without touching the mode", async ()
   assert.equal(broadcasts, 1);
 });
 
-test("Keep writes are refused while the countdown flag is off for the owner", async () => {
-  userId = 6;
-  detailsEnabled = false;
-  const result = await json(
-    await admin.PATCH(request("PATCH", { key: "htpr-6091-feature-flags", keep: true })),
-  );
-  assert.deepEqual(result, { status: 404, body: { error: "Not found" } });
-  assert.equal(keepWrites, 0);
-});
 
 test("a Keep write must say exactly one thing", async () => {
   userId = 6;
   const bodies = [
     // Both fields: which change was meant is ambiguous, so neither is applied.
-    { key: "htpr-6091-feature-flags", mode: "EVERYONE", keep: true },
+    { key: "htpr-6136-figma-connect", mode: "EVERYONE", keep: true },
     // Neither field: nothing to change.
-    { key: "htpr-6091-feature-flags" },
+    { key: "htpr-6136-figma-connect" },
     // Keep must be a boolean, not a truthy string.
-    { key: "htpr-6091-feature-flags", keep: "yes" },
+    { key: "htpr-6136-figma-connect", keep: "yes" },
   ];
   for (const body of bodies) {
     assert.equal((await admin.PATCH(request("PATCH", body))).status, 400);

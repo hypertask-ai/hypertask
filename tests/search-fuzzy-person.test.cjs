@@ -74,7 +74,6 @@ const mocks = new Map([
   ['src/lib/flags.ts', {
     HTPR_6881_SEARCH_FUZZY_PERSON_FLAG: flag,
     HTPR_6369_SEARCH_OPERATORS_FLAG: 'operators', HTPR_6370_SEARCH_CHIPS_FLAG: 'chips',
-    HTPR_6530_MCP_LIST_QUERY_FLAG: 'list',
     HTPR_6372_SEARCH_RANKING_FLAG: 'htpr-6372-search-ranking',
     HTPR_6878_SEARCH_LABEL_SCOPE_FLAG: 'htpr-6878-search-label-scope',
     HTPR_6882_SEARCH_MATCH_HIGHLIGHTS_FLAG: 'htpr-6882-search-match-highlights',
@@ -89,7 +88,7 @@ const mocks = new Map([
     },
   }],
   ['src/utils/controllers/projects/getAllIncludes.ts', { getProjectWhere: () => ({}), projectContentAccessWhere: () => ({}) }],
-  ['src/lib/mcp/readListQuery.ts', { readEnabledListQuery: () => ({ listQuery: null }) }],
+  ['src/lib/mcp/readListQuery.ts', { readListQuery: () => ({ listQuery: null }) }],
   ['src/lib/mcp/agents.ts', { mcpVisibleAgentSelect: () => ({}), mapVisibleMcpAgent: () => null }],
   ['src/utils/controllers/turbopuffer/turbopufferHelper.ts', { convertToPlain: (text) => text }],
 ])

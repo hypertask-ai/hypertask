@@ -3,8 +3,6 @@ import { z } from "zod";
 
 import {
   FEATURE_FLAG_OWNER_USER_ID,
-  HTPR_6653_ADMIN_TEAM_COMP_FLAG,
-  isFeatureEnabled,
   isFeatureFlagOwner,
 } from "@/lib/flags";
 import { TEAM_COMP_PLANS } from "@/lib/teamComp";
@@ -57,9 +55,6 @@ function trustedOrigin(request: NextRequest) {
 async function ownerAccess(request: NextRequest) {
   if (!(await isFeatureFlagOwner(request.headers))) {
     return noStore({ success: false, error: "Forbidden" }, 403);
-  }
-  if (!(await isFeatureEnabled(HTPR_6653_ADMIN_TEAM_COMP_FLAG, FEATURE_FLAG_OWNER_USER_ID))) {
-    return noStore({ success: false, error: "Not found" }, 404);
   }
   if (request.method !== "GET" && !trustedOrigin(request)) {
     return noStore({ success: false, error: "Forbidden" }, 403);

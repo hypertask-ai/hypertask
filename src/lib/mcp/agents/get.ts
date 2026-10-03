@@ -1,4 +1,3 @@
-import { HTPR_6473_GET_AGENT_FLAG, isFeatureEnabled } from '@/lib/flags'
 import {
   checkMcpRateLimit,
   validateMcpAuth,
@@ -44,19 +43,6 @@ export async function handleGetAgentRequest(
         error: 'Management key does not have permission to list agents',
       },
       { status: 403 }
-    )
-  }
-
-  let featureEnabled = false
-  try {
-    featureEnabled = await isFeatureEnabled(HTPR_6473_GET_AGENT_FLAG, ctx.user.id)
-  } catch (error) {
-    console.error('[get-agent] feature flag check failed', error)
-  }
-  if (!featureEnabled) {
-    return NextResponse.json(
-      { success: false, error: 'Not found.' },
-      { status: 404 }
     )
   }
 

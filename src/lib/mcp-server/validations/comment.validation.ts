@@ -10,7 +10,7 @@ import {
   createTaskIdentificationBaseSchema,
 } from './common/task-identification';
 import { paginationSchema, sortOrderSchema } from './common/pagination';
-import { type ListQuerySchemaOptions, withListQuerySchema } from './common/listQuery';
+import { withListQuerySchema } from './common/listQuery';
 import { inlineAttachmentsSchema } from './attachment.validation';
 
 const config = getConfig();
@@ -214,10 +214,9 @@ export function validateAndSanitizeAddCommentInput(input: unknown): AddCommentIn
  * Base schema for get_comments tool (without refine validation)
  * Used for FastMCP parameter validation
  */
-export function getGetCommentsBaseSchema(options?: ListQuerySchemaOptions) {
+export function getGetCommentsBaseSchema() {
   return withListQuerySchema(
     createTaskIdentificationBaseSchema().merge(paginationSchema),
-    options,
   )
     .extend({
       sort_order: sortOrderSchema,
@@ -233,8 +232,8 @@ export function getGetCommentsBaseSchema(options?: ListQuerySchemaOptions) {
  * Schema for get_comments tool input (with refine validation)
  * Either task_id or ticket_number must be provided
  */
-export function getGetCommentsInputSchema(options?: ListQuerySchemaOptions) {
-  const baseSchema = getGetCommentsBaseSchema(options);
+export function getGetCommentsInputSchema() {
+  const baseSchema = getGetCommentsBaseSchema();
 
   return baseSchema
     .refine(
@@ -276,7 +275,7 @@ export function getGetCommentsInputSchema(options?: ListQuerySchemaOptions) {
     );
 }
 
-export const GetCommentsInputSchema = getGetCommentsInputSchema({ listQuery: true });
+export const GetCommentsInputSchema = getGetCommentsInputSchema();
 export type GetCommentsInput = z.infer<typeof GetCommentsInputSchema>;
 
 /**

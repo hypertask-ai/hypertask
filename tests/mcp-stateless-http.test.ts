@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import { z } from 'zod'
-import { handleMcpHttp, usesStatelessMcpTransport } from '../src/lib/mcp-server/mcp-http'
+import { handleMcpHttp } from '../src/lib/mcp-server/mcp-http'
 import {
   handleStatelessMcpRequest,
   type PortableTool,
@@ -187,26 +187,14 @@ test('stateless tools/call omits client Mcp-Session-Id from the tool invocation'
   assert.ok(invocation?.clientFingerprint)
 })
 
-function publicHandler(options: { deferred?: boolean } = {}) {
+function publicHandler() {
   return (request: Request) =>
     handleMcpHttp(request, {
       authenticate: async (_request, token) =>
         token ? { token, clientId: '985' } : null,
       tools: [echoTool],
-      deferredEnabled: async () => options.deferred === true,
     })
 }
-
-test('POST follows the feature flag; OPTIONS stays stateless', () => {
-  assert.equal(usesStatelessMcpTransport('POST', false), false)
-  assert.equal(usesStatelessMcpTransport('OPTIONS', false), true)
-  assert.equal(usesStatelessMcpTransport('GET', false), false)
-  assert.equal(usesStatelessMcpTransport('DELETE', false), false)
-  assert.equal(usesStatelessMcpTransport('PUT', false), false)
-  assert.equal(usesStatelessMcpTransport('PATCH', false), false)
-  assert.equal(usesStatelessMcpTransport('POST', true), true)
-  assert.equal(usesStatelessMcpTransport('GET', true), true)
-})
 
 test('public HTTP wrapper interleaves two isolated instances without a session flag', async () => {
   const instanceA = publicHandler()
@@ -227,7 +215,11 @@ test('public HTTP wrapper interleaves two isolated instances without a session f
   )
   assert.equal(listed.status, 200)
   assert.equal(listed.headers.get('mcp-session-id'), null)
-  assert.equal((await json(listed)).result.tools[0].name, 'echo')
+  const listedTools = (await json(listed)).result.tools
+  assert.equal(listedTools[0].name, 'echo')
+  assert.deepEqual(listedTools[0].inputSchema, { type: 'object' })
+  assert.ok(listedTools.some((tool: { name: string }) => tool.name === 'hypertask_search_tools'))
+  assert.ok(listedTools.some((tool: { name: string }) => tool.name === 'hypertask_describe_tool'))
 
   const callOnA = await instanceA(
     rpc('tools/call', { name: 'echo', arguments: { text: 'alpha' } }, { id: 3 })
@@ -255,7 +247,6 @@ test('public /mcp connector probe: no token is 401 with WWW-Authenticate and no 
     {
       authenticate: async () => null,
       tools: [echoTool],
-      deferredEnabled: async () => false,
     }
   )
   assert.equal(response.status, 401)

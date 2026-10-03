@@ -12,7 +12,6 @@ import {
   isVisibilityOnlyBody,
   setOwnedAgentVisibility,
 } from '@/lib/agents/visibility'
-import { AGENT_VISIBILITY_FLAG, isFeatureEnabled } from '@/lib/flags'
 import { clearAgentRuntimeSnapshot } from '@/lib/agents/runtimeState'
 import {
   agentTokenCredentialFields,
@@ -218,20 +217,6 @@ export async function handlePatchAgentRequest(
       { success: false, error: 'Agents cannot manage agents' },
       { status: 403 }
     )
-  }
-  if (wantsVisibility) {
-    // Gated on the server like every other user-visible behavior: the flag
-    // decides, not the client. Fail closed as 404 before any other check so
-    // the verb simply does not exist while the flag is off.
-    let visibilityEnabled = false
-    try {
-      visibilityEnabled = await isFeatureEnabled(AGENT_VISIBILITY_FLAG, ctx.user.id)
-    } catch (error) {
-      console.error('[MCP Update Agent Visibility] feature flag check failed', error)
-    }
-    if (!visibilityEnabled) {
-      return notFound()
-    }
   }
   if (wantsBoardUpdate) {
     if (wantsLaunch || wantsArchive || wantsRename || wantsVisibility) {

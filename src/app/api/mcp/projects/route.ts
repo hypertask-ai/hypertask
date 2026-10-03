@@ -2,14 +2,13 @@ import { NextRequest, NextResponse } from 'next/server'
 import { validateMcpAuth, checkMcpRateLimit } from '@/lib/mcp/auth'
 import { getProjectListingWhere } from '@/utils/controllers/projects/getAllIncludes'
 import prisma from '@/lib/prisma'
-import { HTPR_6530_MCP_LIST_QUERY_FLAG, isFeatureEnabled } from '@/lib/flags'
 import {
   normalizeTaskStatus,
   parseNumericCursor,
   parseUpdatedSince,
   projectRows,
 } from '@/lib/mcp/listQuery'
-import { readEnabledListQuery } from '@/lib/mcp/readListQuery'
+import { readListQuery } from '@/lib/mcp/readListQuery'
 
 export interface ProjectLabel {
   id: string
@@ -80,8 +79,8 @@ export async function GET(request: NextRequest) {
     const user = ctx.user;
     // Parse query parameters
     const searchParams = request.nextUrl.searchParams
-    const listQueryEnabled = await isFeatureEnabled(HTPR_6530_MCP_LIST_QUERY_FLAG, user.id)
-    const parsedListQuery = readEnabledListQuery(listQueryEnabled, searchParams)
+
+    const parsedListQuery = readListQuery(searchParams)
     if (parsedListQuery.error) return parsedListQuery.error
     const listQuery = parsedListQuery.listQuery
     const rawStatus = listQuery?.filter.status ?? searchParams.get('status')
@@ -243,9 +242,7 @@ export async function GET(request: NextRequest) {
       total,
       limit,
       offset: cursorId ? 0 : offset,
-      ...(listQueryEnabled
-        ? { nextCursor: projects.length === limit ? String(projects[projects.length - 1].id) : null }
-        : {}),
+      nextCursor: projects.length === limit ? String(projects[projects.length - 1].id) : null,
     }
 
     return NextResponse.json(response)

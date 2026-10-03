@@ -16,7 +16,6 @@ function stubModule(relativePath, exports) {
 const OWNER = { id: 6, email: "valentin.yeo@gmail.com" };
 const TEAM_ID = "11111111-1111-4111-8111-111111111111";
 let context;
-let flagOn;
 let teams;
 let transactions;
 let transactionLock;
@@ -24,8 +23,6 @@ let failAudit;
 
 stubModule("src/lib/flags.ts", {
   FEATURE_FLAG_OWNER_USER_ID: 6,
-  HTPR_6653_ADMIN_TEAM_COMP_FLAG: "htpr-6653-admin-team-comp",
-  isFeatureEnabled: async () => flagOn,
   isFeatureFlagOwner: async () => Boolean(context?.user?.id === OWNER.id &&
     context.user.email === OWNER.email && !context.management),
 });
@@ -121,7 +118,6 @@ const serial = { concurrency: false };
 
 test.beforeEach(() => {
   context = { user: OWNER };
-  flagOn = true;
   teams = [{ id: TEAM_ID, title: "Partner", compedUntil: null, compedPlan: null, members: [{ userId: 50, status: "Accepted" }] }];
   transactions = [];
   transactionLock = Promise.resolve();
@@ -148,12 +144,6 @@ test("a team-scoped management key cannot comp, even the owner's", serial, async
   assert.equal(transactions.length, 0);
 });
 
-test("the route stays hidden while its flag is off", serial, async () => {
-  flagOn = false;
-  const response = await POST(request("POST", { teamId: TEAM_ID, plan: "BYOK", until: until() }));
-  assert.equal(response.status, 404);
-  assert.equal(transactions.length, 0);
-});
 
 test("owner comps a team as BYOK and the change is logged in the same transaction", serial, async () => {
   const response = await POST(request("POST", { teamId: TEAM_ID, plan: "BYOK", until: until() }));
@@ -274,12 +264,6 @@ test("owner reads current plan and comp state and searches names case-insensitiv
   assert.deepEqual((await empty.json()).teams, []);
 });
 
-test("read and clear also stay hidden when the flag is off", serial, async () => {
-  flagOn = false;
-  assert.equal((await GET(new NextRequest(`https://app.hypertask.ai/api/admin/team-comp?teamId=${TEAM_ID}`))).status, 404);
-  assert.equal((await DELETE(request("DELETE", { teamId: TEAM_ID }))).status, 404);
-  assert.equal(transactions.length, 0);
-});
 
 test("owner can set Pro and mutation changes only comp fields, not Stripe", serial, async () => {
   const expiry = until();

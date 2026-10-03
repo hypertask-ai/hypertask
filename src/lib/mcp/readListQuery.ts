@@ -17,11 +17,9 @@ function listQueryValidationError(message: string): NextResponse {
   )
 }
 
-export function readEnabledListQuery(
-  enabled: boolean,
+export function readListQuery(
   searchParams: URLSearchParams,
 ): { listQuery: ParsedListQuery | null; error?: NextResponse } {
-  if (!enabled) return { listQuery: null }
   try {
     return { listQuery: parseListQueryFromSearchParams(searchParams) }
   } catch (error) {

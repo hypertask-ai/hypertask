@@ -1,18 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import {
-  FEATURE_FLAG_DETAILS_FLAG,
   FEATURE_FLAG_MODES,
-  FEATURE_FLAG_OWNER_USER_ID,
   FeatureFlagInputError,
-  FLAG_REMOVAL_COUNTDOWN_FLAG,
-  isFeatureEnabled,
   isFeatureFlagOwner,
   listFeatureFlagModes,
   setFeatureFlagKeep,
   setFeatureFlagMode,
   type FeatureFlagMode,
 } from "@/lib/flags";
-import { FLAG_TICKET_ID_FLAG } from "@/lib/flags/keys";
 import { broadcastFeatureFlagsChange } from "@/lib/realtime/server";
 
 export const dynamic = "force-dynamic";
@@ -41,15 +36,8 @@ export async function GET(request: NextRequest) {
     if (!(await isFeatureFlagOwner(request.headers))) {
       return noStore({ error: "Not found" }, 404);
     }
-    const [flags, detailsEnabled, ticketIdEnabled] = await Promise.all([
-      listFeatureFlagModes({ includeTicketTitles: true }),
-      isFeatureEnabled(FEATURE_FLAG_DETAILS_FLAG, FEATURE_FLAG_OWNER_USER_ID),
-      isFeatureEnabled(FLAG_TICKET_ID_FLAG, FEATURE_FLAG_OWNER_USER_ID),
-    ]);
-    if (!ticketIdEnabled) {
-      return noStore({ flags: flags.map((flag) => ({ ...flag, ticketId: null })), detailsEnabled });
-    }
-    return noStore({ flags, detailsEnabled });
+    const flags = await listFeatureFlagModes({ includeTicketTitles: true });
+    return noStore({ flags, detailsEnabled: true });
   } catch (error) {
     console.error("[feature-flags] admin read failed", error);
     return noStore({ error: "Unable to load feature flags" }, 500);
@@ -82,20 +70,12 @@ export async function PATCH(request: NextRequest) {
     if (setsKeep && typeof body.keep !== "boolean") {
       return noStore({ error: "Invalid feature flag" }, 400);
     }
-    if (setsKeep && !(await isFeatureEnabled(FLAG_REMOVAL_COUNTDOWN_FLAG, FEATURE_FLAG_OWNER_USER_ID))) {
-      // Defaults to enabled for the owner, so this only trips when the owner explicitly turns the
-      // countdown flag OFF. That should also retire the Keep control, not just hide it client-side.
-      return noStore({ error: "Not found" }, 404);
-    }
     const flag = setsMode
       ? await setFeatureFlagMode(body.key, body.mode as FeatureFlagMode)
       : await setFeatureFlagKeep(body.key, body.keep as boolean);
     await broadcastFeatureFlagsChange().catch((error) =>
       console.warn("[feature-flags] realtime broadcast failed", error),
     );
-    if (!(await isFeatureEnabled(FLAG_TICKET_ID_FLAG, FEATURE_FLAG_OWNER_USER_ID))) {
-      return noStore({ flag: { ...flag, ticketId: null } });
-    }
     return noStore({ flag });
   } catch (error) {
     if (error instanceof SyntaxError || error instanceof FeatureFlagInputError) {

@@ -71,7 +71,7 @@ test("ship-date mode groups on the day the flag reached production, not the last
     updatedAt: new Date("2026-09-04T12:00:00Z"),
   });
 
-  const clusters = clusterFeatureFlagsByReleaseDate([early, late], "desc", "ALL", true);
+  const clusters = clusterFeatureFlagsByReleaseDate([early, late], "desc", "ALL");
 
   assert.equal(clusters.length, 2);
   assert.deepEqual(clusters[0][1].map((f) => f.key), ["shipped-second"]);
@@ -81,7 +81,7 @@ test("ship-date mode groups on the day the flag reached production, not the last
 test("ship-date mode has no Not yet released cluster for a flag no one has touched", () => {
   const untouched = row({ key: "untouched", shippedOn: "2026-09-04", updatedAt: null });
 
-  const clusters = clusterFeatureFlagsByReleaseDate([untouched], "desc", "ALL", true);
+  const clusters = clusterFeatureFlagsByReleaseDate([untouched], "desc", "ALL");
 
   assert.equal(clusters.length, 1);
   assert.notEqual(clusters[0][0], NOT_YET_RELEASED_LABEL);
@@ -95,7 +95,7 @@ test("ship-date labels use the local calendar day, not UTC midnight", () => {
     day: "numeric",
   });
 
-  const clusters = clusterFeatureFlagsByReleaseDate([flag], "desc", "ALL", true);
+  const clusters = clusterFeatureFlagsByReleaseDate([flag], "desc", "ALL");
 
   assert.equal(clusters[0][0], expected);
 });
@@ -104,7 +104,7 @@ test("ship-date mode falls back to the mode-change date for a stored key with no
   const legacy = row({ key: "legacy", shippedOn: null, updatedAt: new Date("2026-09-03T09:00:00Z") });
   const declared = row({ key: "declared", shippedOn: "2026-09-05" });
 
-  const clusters = clusterFeatureFlagsByReleaseDate([legacy, declared], "desc", "ALL", true);
+  const clusters = clusterFeatureFlagsByReleaseDate([legacy, declared], "desc", "ALL");
 
   assert.equal(clusters.length, 2);
   assert.deepEqual(clusters[0][1].map((f) => f.key), ["declared"]);
@@ -116,8 +116,8 @@ test("ship-date headings follow the sort direction", () => {
   const older = row({ key: "older", shippedOn: "2026-09-04" });
   const newer = row({ key: "newer", shippedOn: "2026-09-05" });
 
-  const desc = clusterFeatureFlagsByReleaseDate([older, newer], "desc", "ALL", true);
-  const asc = clusterFeatureFlagsByReleaseDate([older, newer], "asc", "ALL", true);
+  const desc = clusterFeatureFlagsByReleaseDate([older, newer], "desc", "ALL");
+  const asc = clusterFeatureFlagsByReleaseDate([older, newer], "asc", "ALL");
 
   assert.deepEqual(desc[0][1].map((f) => f.key), ["newer"]);
   assert.deepEqual(asc[0][1].map((f) => f.key), ["older"]);

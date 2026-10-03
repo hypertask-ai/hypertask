@@ -6,7 +6,7 @@ import { getCronServiceRequestUser } from "@/app/api/ai/_lib/cronServiceAuth";
 import { decodeHeartbeatTurnMessage } from "@/lib/nativeAgent/heartbeatTurnEnvelope";
 import prisma from "@/lib/prisma";
 import { isFeatureEnabled } from "@/lib/flags";
-import { HTPR_6278_CHAT_TURN_FAILURE_FLAG, HTPR_6320_AI_OBSERVABILITY_FLAG } from "@/lib/flags/keys";
+import { HTPR_6278_CHAT_TURN_FAILURE_FLAG } from "@/lib/flags/keys";
 import { ensureNativeChatTurn, findNativeAssistantReplay } from "@/app/api/ai/chat/stream/ensureNativeChatTurn";
 import { resolveAiUsageTaskId } from "@/app/api/ai/_lib/currentTaskContext";
 
@@ -99,12 +99,6 @@ export async function POST(request: NextRequest) {
   // per-phase timeouts at each trust boundary.
   const turnDeadlineEnabled = await isFeatureEnabled(
     HTPR_6278_CHAT_TURN_FAILURE_FLAG,
-    dbUser.id,
-  );
-  // HTPR-6320: one flag read per turn decides whether this turn is recorded in
-  // PostHog AI observability.
-  const aiObservabilityEnabled = await isFeatureEnabled(
-    HTPR_6320_AI_OBSERVABILITY_FLAG,
     dbUser.id,
   );
 
@@ -269,5 +263,5 @@ export async function POST(request: NextRequest) {
   }
 
   const firstTurn = !body.chat_history?.length;
-  return createChatStream({ body, dbUser, requestMessage, heartbeatExecutionId, heartbeatTurn, turnDeadlineEnabled, aiObservabilityEnabled, userMessagePersisted, contextTaskId, selected, titleByokApiKey, streamCredential, streamModelOption, gatewayTags, usageProjectId, actingAgent, streamId, streamLease, firstTurn, turnStartedAtMs, maxDuration, heartbeatExecutionTerminal });
+  return createChatStream({ body, dbUser, requestMessage, heartbeatExecutionId, heartbeatTurn, turnDeadlineEnabled, userMessagePersisted, contextTaskId, selected, titleByokApiKey, streamCredential, streamModelOption, gatewayTags, usageProjectId, actingAgent, streamId, streamLease, firstTurn, turnStartedAtMs, maxDuration, heartbeatExecutionTerminal });
 }

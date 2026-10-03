@@ -27,7 +27,6 @@ import {
   AGENT_CHAT_TIMEOUT_MESSAGE,
   AGENT_RUN_ACTIVITY_FEATURE_FLAG,
   AGENT_RUN_FEATURE_FLAG,
-  AGENT_SDK_FEATURE_FLAG,
   AGENT_RUN_STALE_AFTER_MS,
   AgentRunActivityConflictError,
   AgentRunActivityInputError,
@@ -119,11 +118,7 @@ function accessibleRunWhere(principal: AgentRunPrincipal, id: string) {
 export async function agentRunsEnabledFor(
   principal: AgentRunPrincipal,
 ): Promise<boolean> {
-  if (!(await isFeatureEnabled(AGENT_RUN_FEATURE_FLAG, principal.userId))) return false;
-  return (
-    principal.sdk !== "typescript" ||
-    isFeatureEnabled(AGENT_SDK_FEATURE_FLAG, principal.userId)
-  );
+  return isFeatureEnabled(AGENT_RUN_FEATURE_FLAG, principal.userId);
 }
 
 export async function agentRunActivitiesEnabledFor(

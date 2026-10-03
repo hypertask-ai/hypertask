@@ -5,7 +5,7 @@ import type { McpAgentSummary } from '@/lib/mcp/agents'
 import { mapVisibleMcpAgent, mcpVisibleAgentSelect } from '@/lib/mcp/agents'
 import prisma from '@/lib/prisma'
 import { turbopufferSearchTaskIds } from '@/utils/controllers/search/document'
-import { HTPR_6530_MCP_LIST_QUERY_FLAG, isFeatureEnabled } from '@/lib/flags'
+import { isFeatureEnabled } from '@/lib/flags'
 import { HTPR_6369_SEARCH_OPERATORS_FLAG } from '@/lib/flags'
 import { HTPR_6370_SEARCH_CHIPS_FLAG, HTPR_6881_SEARCH_FUZZY_PERSON_FLAG } from '@/lib/flags'
 import { MAX_SEARCH_OPERATOR_CLAUSES, searchOperatorClauseCount } from '@/lib/search/operators'
@@ -21,7 +21,7 @@ import {
   resolveListLimit,
   withTaskPresentation,
 } from '@/lib/mcp/listQuery'
-import { readEnabledListQuery } from '@/lib/mcp/readListQuery'
+import { readListQuery } from '@/lib/mcp/readListQuery'
 
 const SEARCH_SORT_FIELDS = ['id', 'createdAt', 'updatedAt', 'title', 'dueDate', 'ticketNumber'] as const
 type SearchSortField = (typeof SEARCH_SORT_FIELDS)[number]
@@ -81,8 +81,8 @@ export async function GET(request: NextRequest) {
     const user = ctx.user;
     // Parse query parameters
     const searchParams = request.nextUrl.searchParams
-    const listQueryEnabled = await isFeatureEnabled(HTPR_6530_MCP_LIST_QUERY_FLAG, user.id)
-    const parsedListQuery = readEnabledListQuery(listQueryEnabled, searchParams)
+
+    const parsedListQuery = readListQuery(searchParams)
     if (parsedListQuery.error) return parsedListQuery.error
     const listQuery = parsedListQuery.listQuery
     const query = searchParams.get('q') ?? searchParams.get('query') ?? listQuery?.query
@@ -464,9 +464,7 @@ export async function GET(request: NextRequest) {
         createdAt: task.createdAt.toISOString(),
         ...(agent ? { agent } : {}),
       }
-      return listQueryEnabled
-        ? withTaskPresentation({ ...item, uniqueIndex: task.uniqueIndex })
-        : item
+      return withTaskPresentation({ ...item, uniqueIndex: task.uniqueIndex })
     })
 
     const response: SearchTasksResponse = {
@@ -478,7 +476,7 @@ export async function GET(request: NextRequest) {
       total,
       ...(operatorPartial ? { partial: true } : {}),
       boardId: boardId || projectId || undefined,
-      ...(listQueryEnabled ? { nextCursor: nextCursor || null } : {}),
+      nextCursor: nextCursor || null,
     }
 
     return NextResponse.json(response)

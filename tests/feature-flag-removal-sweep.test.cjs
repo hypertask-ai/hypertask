@@ -7,6 +7,8 @@ const { NextRequest } = require("next/server");
 const root = path.resolve(__dirname, "..");
 const protectedKey = "htpr-6072-shallow-board-switch";
 const dueFlags = [
+  { key: "htpr-6193-flag-removal-countdown", releasedAt: new Date("2026-09-01") },
+  { key: "htpr-6653-admin-team-comp", releasedAt: new Date("2026-09-01") },
   { key: protectedKey, releasedAt: new Date("2026-09-01") },
   { key: "htpr-1234-other", releasedAt: new Date("2026-09-01") },
 ];
@@ -14,11 +16,11 @@ let candidates = [];
 let filed = [];
 const prisma = {
   featureFlag: {
-    findUnique: async () => ({ mode: "EVERYONE" }),
+    findUnique: async () => { throw new Error("retired countdown must not be read"); },
     updateMany: async () => ({ count: 1 }),
     findMany: async ({ where, take }) => {
       candidates = dueFlags.filter((flag) =>
-        flag.key !== where.key?.not && flag.releasedAt <= where.releasedAt.lte,
+        !where.key.notIn.includes(flag.key) && flag.releasedAt <= where.releasedAt.lte,
       ).slice(0, take);
       return candidates;
     },

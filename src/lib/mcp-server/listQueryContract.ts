@@ -15,34 +15,32 @@ import { withListQueryDescription } from './listQueryDescriptions'
 
 export {
   LIST_QUERY_DESCRIPTION_SUFFIX,
-  LIST_TASKS_LEGACY_DESCRIPTION,
   withListQueryDescription,
 } from './listQueryDescriptions'
 
 const LIST_QUERY_PARAMETER_FACTORIES: Record<
   string,
-  (listQueryEnabled: boolean) => PortableTool['parameters']
+  () => PortableTool['parameters']
 > = {
-  [TOOL_METADATA.LIST_TASKS.name]: (enabled) => getListTasksInputSchema({ listQuery: enabled }),
-  [TOOL_METADATA.SEARCH_TASKS.name]: (enabled) =>
-    getEnhancedSearchTasksInputSchema({ listQuery: enabled }),
-  [TOOL_METADATA.LIST_PROJECTS.name]: (enabled) => getListProjectsInputSchema({ listQuery: enabled }),
-  [TOOL_METADATA.LIST_LABELS.name]: (enabled) => getListLabelsBaseSchema({ listQuery: enabled }),
-  [TOOL_METADATA.SECTION_CRUD.name]: (enabled) => getSectionCrudBaseSchema({ listQuery: enabled }),
-  [TOOL_METADATA.GET_COMMENTS.name]: (enabled) => getGetCommentsBaseSchema({ listQuery: enabled }),
-  [TOOL_METADATA.LIST_AGENTS.name]: (enabled) => getListAgentsInputSchema({ listQuery: enabled }),
+  [TOOL_METADATA.LIST_TASKS.name]: () => getListTasksInputSchema(),
+  [TOOL_METADATA.SEARCH_TASKS.name]: () =>
+    getEnhancedSearchTasksInputSchema(),
+  [TOOL_METADATA.LIST_PROJECTS.name]: () => getListProjectsInputSchema(),
+  [TOOL_METADATA.LIST_LABELS.name]: () => getListLabelsBaseSchema(),
+  [TOOL_METADATA.SECTION_CRUD.name]: () => getSectionCrudBaseSchema(),
+  [TOOL_METADATA.GET_COMMENTS.name]: () => getGetCommentsBaseSchema(),
+  [TOOL_METADATA.LIST_AGENTS.name]: () => getListAgentsInputSchema(),
 }
 
 export function resolvePortableTools(
   tools: readonly PortableTool[],
-  listQueryEnabled: boolean,
 ): PortableTool[] {
   return tools.map((tool) => {
     const parametersFactory = LIST_QUERY_PARAMETER_FACTORIES[tool.name]
     return {
       ...tool,
-      parameters: parametersFactory ? parametersFactory(listQueryEnabled) : tool.parameters,
-      description: withListQueryDescription(tool.name, tool.description, listQueryEnabled),
+      parameters: parametersFactory ? parametersFactory() : tool.parameters,
+      description: withListQueryDescription(tool.name, tool.description),
     }
   })
 }

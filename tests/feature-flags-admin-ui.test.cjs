@@ -21,7 +21,6 @@ stub(path.join(root, "src/lib/flags.ts"), {
 stub(path.join(root, "src/hooks/useFlag.tsx"), {
   ADMIN_FEATURE_FLAGS_QUERY_KEY: QUERY_KEY,
   FEATURE_FLAGS_QUERY_PREFIX: ["feature-flags"],
-  useFlag: () => true,
 });
 stub(require.resolve("next/headers"), { headers: async () => new Headers() });
 stub(require.resolve("next/navigation"), { notFound: () => { throw new Error("NOT_FOUND"); } });

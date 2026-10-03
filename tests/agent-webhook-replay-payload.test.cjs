@@ -62,29 +62,16 @@ const { manageAgentWebhook } = jiti(
 );
 
 const RUNS_FLAG = "htpr-6115-agent-sdk";
-const DEV_LOOP_FLAG = "htpr-6124-agent-dev-loop";
 
 async function getWebhook(flags) {
   state.enabledFlags = new Set(flags);
   return manageAgentWebhook({ userId: 6, agentId: "agent-a", action: "get" });
 }
 
-test("the recorded payload only reaches an author whose local dev loop is on", async () => {
-  const off = await getWebhook([RUNS_FLAG]);
-  assert.equal(off.deliveries.length, 1);
-  assert.equal(
-    "payload" in off.deliveries[0],
-    false,
-    "a run payload names tickets and prompts, so it stays behind its own flag",
-  );
-
-  const on = await getWebhook([RUNS_FLAG, DEV_LOOP_FLAG]);
+test("the recorded run payload reaches an authorized author without a dev-loop flag", async () => {
+  const on = await getWebhook([RUNS_FLAG]);
   assert.deepEqual(on.deliveries[0].payload, state.delivery.payload);
-  assert.equal(
-    on.deliveries[0].id,
-    "wd_1",
-    "replay needs the delivery id alongside the payload it re-sends",
-  );
+  assert.equal(on.deliveries[0].id, "wd_1");
 });
 
 test("only a run delivery carries its payload", async () => {
@@ -94,7 +81,7 @@ test("only a run delivery carries its payload", async () => {
     event: "comment.mention",
     payload: { event: "comment.mention", commentHtml: "<p>hello</p>" },
   };
-  const result = await getWebhook([RUNS_FLAG, DEV_LOOP_FLAG]);
+  const result = await getWebhook([RUNS_FLAG]);
   assert.equal(
     "payload" in result.deliveries[0],
     false,
@@ -104,9 +91,9 @@ test("only a run delivery carries its payload", async () => {
 });
 
 test("the payload never travels without the agent run flag that records it", async () => {
-  const devLoopOnly = await getWebhook([DEV_LOOP_FLAG]);
+  const runsDisabled = await getWebhook([]);
   assert.deepEqual(
-    devLoopOnly.deliveries,
+    runsDisabled.deliveries,
     [],
     "run deliveries are filtered out entirely when agent runs are off",
   );

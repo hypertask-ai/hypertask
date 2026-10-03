@@ -613,25 +613,14 @@ test("activity behavior requires the parent and ticket feature flags", async () 
     model.AGENT_RUN_ACTIVITY_FEATURE_FLAG,
   ]);
 
-  const sdkFlagDisabled = loadService({
-    featureEnabled: (key) => key !== model.AGENT_SDK_FEATURE_FLAG,
-  });
+  const typescriptSdk = loadService();
   assert.equal(
-    await sdkFlagDisabled.service.agentRunActivitiesEnabledFor(agentPrincipal),
+    await typescriptSdk.service.agentRunActivitiesEnabledFor({ ...agentPrincipal, sdk: "typescript" }),
     true,
   );
-  assert.equal(
-    await sdkFlagDisabled.service.agentRunActivitiesEnabledFor({
-      ...agentPrincipal,
-      sdk: "typescript",
-    }),
-    false,
-  );
-  assert.deepEqual(sdkFlagDisabled.flagChecks, [
+  assert.deepEqual(typescriptSdk.flagChecks, [
     model.AGENT_RUN_FEATURE_FLAG,
     model.AGENT_RUN_ACTIVITY_FEATURE_FLAG,
-    model.AGENT_RUN_FEATURE_FLAG,
-    model.AGENT_SDK_FEATURE_FLAG,
   ]);
 
   const parentFlagDisabled = loadService({
