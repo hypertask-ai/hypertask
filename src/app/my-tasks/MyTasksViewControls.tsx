@@ -1,10 +1,12 @@
 "use client";
 
+import AssignModal from "@/components/Modals/AssignToUser/AssignToUser";
 import useClickOutside from "@/hooks/MultiPages/useClickOutside";
 import { useFlag } from "@/hooks/useFlag";
 import { MOBILE_TARGET } from "@/lib/configs/general.config";
 import { EstimateConstants, PriorityConstants } from "@/lib/constants/constants";
 import {
+  HTPR_6567_COMMAND_SCOPE_PICKER_FLAG,
   MY_TASKS_FILTER_PARITY_FLAG,
   MY_TASKS_SCOPES_FLAG,
   MY_TASKS_SNOOZE_FLAG,
@@ -28,7 +30,7 @@ import {
   type MyTasksViewConfig,
 } from "@/models/MyTasksView";
 import { ArrowUpDown, Columns3, Layers, LayoutGrid, SlidersHorizontal, UserRound } from "lucide-react";
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 interface Props {
   boards: MyTasksBoardMetadata[];
@@ -71,14 +73,14 @@ const localDateInputValue = (date: Date): string =>
     date.getDate(),
   ).padStart(2, "0")}`;
 
-const Field = ({ label, children }: { label: string; children: React.ReactNode }) => (
+export const Field = ({ label, children }: { label: string; children: React.ReactNode }) => (
   <section className="space-y-1.5">
     <p className="text-meta font-semibold text-text-light-gray">{label}</p>
     {children}
   </section>
 );
 
-const CheckRow = ({
+export const CheckRow = ({
   checked,
   label,
   onChange,
@@ -114,6 +116,7 @@ const MyTasksViewControls = ({
 }: Props) => {
   const myTasksViewsEnabled = useFlag(MY_TASKS_VIEWS_FLAG);
   const filterParityEnabled = useFlag(MY_TASKS_FILTER_PARITY_FLAG);
+  const commandScopePickerEnabled = useFlag(HTPR_6567_COMMAND_SCOPE_PICKER_FLAG);
   const myTasksTableColumnsFlag = useFlag(MY_TASKS_TABLE_COLUMNS_FLAG);
   const myTasksScopesFlag = useFlag(MY_TASKS_SCOPES_FLAG);
   const myTasksSnoozeFlag = useFlag(MY_TASKS_SNOOZE_FLAG);
@@ -136,6 +139,19 @@ const MyTasksViewControls = ({
   useClickOutside(involvementRef, () => setInvolvementOpen(false));
   useClickOutside(sortRef, () => setSortOpen(false));
   useClickOutside(groupRef, () => setGroupOpen(false));
+
+  useEffect(() => {
+    if (!commandScopePickerEnabled || !myTasksViewsEnabled || !filterParityEnabled) return;
+    const openScope = () => {
+      setScopeOpen(true);
+      setInvolvementOpen(false);
+      setSortOpen(false);
+      setGroupOpen(false);
+      setFilterOpen(false);
+    };
+    window.addEventListener("my-tasks-scope-picker", openScope);
+    return () => window.removeEventListener("my-tasks-scope-picker", openScope);
+  }, [commandScopePickerEnabled, myTasksViewsEnabled, filterParityEnabled]);
 
   const scopes = normalizeMyTasksScopes(config.scopes);
   const involvementCount =
@@ -176,8 +192,12 @@ const MyTasksViewControls = ({
     snoozeEnabled && config.filters.showSnoozed ? true : null,
   ].filter((value) => value !== null).length;
 
-  const kanbanFilterCount = myTasksParityFilterCount(config);
-  const scopeCount = [
+  const kanbanFilterCount = myTasksParityFilterCount(config) + (commandScopePickerEnabled ? [
+    config.filters.sectionIds.length > 0,
+    config.filters.showDone,
+    snoozeEnabled && config.filters.showSnoozed,
+  ].filter(Boolean).length : 0);
+  const scopeCount = commandScopePickerEnabled ? Number(config.boardIds !== null) : [
     config.boardIds,
     config.filters.sectionIds.length ? config.filters.sectionIds : null,
     config.filters.showDone ? true : null,
@@ -418,7 +438,20 @@ const MyTasksViewControls = ({
                 <span className="text-meta font-semibold">{scopeCount}</span>
               )}
             </button>
-            {scopeOpen && scopePanel}
+            {scopeOpen && (commandScopePickerEnabled ? (
+              <AssignModal
+                assignees={[]}
+                title="Scope"
+                onClose={() => setScopeOpen(false)}
+                boardPicker={{
+                  options: [
+                    { id: null, label: "All boards", checked: config.boardIds === null },
+                    ...boards.map((board) => ({ id: board.id, label: board.title, checked: selectedBoardIds.includes(board.id) })),
+                  ],
+                  onSelect: (id) => id === null ? setBoards(null) : toggleBoard(id),
+                }}
+              />
+            ) : scopePanel)}
           </div>
 
           <button

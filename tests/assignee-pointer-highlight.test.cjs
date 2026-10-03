@@ -34,7 +34,7 @@ test("the assignee picker connects each pointer row to its selection state", () 
   );
   assert.equal(
     assignPickerSource.match(/setHoveredIndex\(null\)/g)?.length,
-    2,
+    3, // Search, people refresh, and board-picker keyboard navigation.
   );
 });
 

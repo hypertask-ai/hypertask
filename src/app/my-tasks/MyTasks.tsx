@@ -8,6 +8,7 @@ import TableView from "@/components/PageComponents/Kanban/TableView/TableView";
 import useClickOutside from "@/hooks/MultiPages/useClickOutside";
 import { useFlag } from "@/hooks/useFlag";
 import {
+  HTPR_6567_COMMAND_SCOPE_PICKER_FLAG,
   MY_TASKS_FILTER_PARITY_FLAG,
   MY_TASKS_LIVE_UPDATES_FLAG,
   MY_TASKS_PRIORITY_FILTER_FLAG,
@@ -207,6 +208,7 @@ const MyTasks = ({
   );
   const lastColumnsPickerRequest = useRef(columnsPickerRequest);
 
+  const commandScopePickerEnabled = useFlag(HTPR_6567_COMMAND_SCOPE_PICKER_FLAG);
   const filterEnabled = useFlag(MY_TASKS_PRIORITY_FILTER_FLAG);
   const myTasksBulkSelectionEnabled = useFlag(MY_TASKS_BULK_SELECTION_FLAG);
   // My Tasks spans every board, so unlike board filters (which persist to a
@@ -1339,10 +1341,11 @@ const boardTabCounts = useMemo(() => {
         dueDate: null,
         createdRange: null,
         updatedRange: null,
+        ...(commandScopePickerEnabled ? { sectionIds: [], showDone: false, showSnoozed: false } : {}),
       },
       filterSettings: emptyFilterSettings(),
     }));
-  }, [updateViewConfig]);
+  }, [commandScopePickerEnabled, updateViewConfig]);
 
   const onClearNotStarred = useCallback(() => {
     updateViewConfig((current) => ({
@@ -1375,6 +1378,10 @@ const boardTabCounts = useMemo(() => {
       <BackButton left={appShellRailOn ? 56 : undefined} />
       {filterParityEnabled && kanbanFiltersOpen && (
         <MyTasksKanbanFilterModal
+          boards={boards}
+          config={commandScopePickerEnabled ? viewConfig : undefined}
+          onViewChange={updateViewConfig}
+          snoozeEnabled={myTasksSnoozeEnabled}
           settings={viewConfig.filterSettings}
           onChange={onFilterSettingsChange}
           onClearAll={onClearAllFilters}
