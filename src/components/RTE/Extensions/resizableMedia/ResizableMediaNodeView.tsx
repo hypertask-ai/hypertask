@@ -222,15 +222,22 @@ export const ResizableMediaNodeView = ({
         setAspectRatio(naturalWidth / naturalHeight);
 
         if (!dimensionsCalculated) {
-          // Pass the container width to the calculation
-          const { width, height } = calculateProperDimensions(
-            naturalWidth,
-            naturalHeight,
-            proseMirrorContainerWidth,
-          );
-
-          const currentWidth = parseInt(node.attrs.width || "0");
-          const currentHeight = parseInt(node.attrs.height || "0");
+          const currentWidth = Number(node.attrs.width);
+          const currentHeight = Number(node.attrs.height);
+          // Saved widths belong to the user, not the initial natural-size fit.
+          // Page sanitization can drop fractional heights, so recover just the height.
+          const { width, height } = Number.isFinite(currentWidth) && currentWidth > 0
+            ? {
+                width: currentWidth,
+                height: Number.isFinite(currentHeight) && currentHeight > 0
+                  ? currentHeight
+                  : Math.round(currentWidth * naturalHeight / naturalWidth),
+              }
+            : calculateProperDimensions(
+                naturalWidth,
+                naturalHeight,
+                proseMirrorContainerWidth,
+              );
 
           if (
             currentWidth !== width ||
