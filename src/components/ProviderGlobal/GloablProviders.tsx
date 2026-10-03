@@ -129,10 +129,8 @@ import useHypertasksNavigate from "@/hooks/MultiPages/Route/useHypertasksNavigat
 import { useDeviceContext } from "@/lib/contexts/deviceContext";
 import { isFavoriteBoardShortcut } from "@/lib/constants/shortcuts";
 import { isControlQFocusShortcut } from "@/lib/aiChat/chatFocusShortcut";
-import {
-  isAgentsRoute,
-  isCommandCenterShortcut,
-} from "@/lib/constants/commandCenterShortcut";
+import { shouldRenderGlobalCommandMenu } from "@/lib/constants/commandCenterShortcut";
+import { useCommandCenterShortcut } from "@/hooks/General/useCommandCenterShortcut";
 import useHypertasksRecoilStates from "@/hooks/RecoilRoot/useHypertasksRecoilStates";
 import { useGlobalUIState } from "./useGlobalUIState";
 import { useSettingsNavigation } from "@/components/Modals/Settings/settingsNavigation";
@@ -724,6 +722,15 @@ export default function GlobalProvider({
     return () =>
       document.removeEventListener("keydown", handleGlobalGShortcut, true);
   }, []);
+  useCommandCenterShortcut(
+    authenticatedUserId,
+    isApple,
+    pathname,
+    showTrialModal,
+    showEmailVerificationModal,
+    toggleShowCommands,
+  );
+
   const handleKeyPress = async (e: KeyboardEvent) => {
     // console.log("🚀 ~ handleKeyPress ~ e GLOBAL PROVIDER:", e.keyCode)
     if (showTrialModal || showEmailVerificationModal) return;
@@ -751,15 +758,6 @@ export default function GlobalProvider({
         }
         return;
       }
-    }
-
-    // The Command Center is a workspace-level shortcut. Keep it available on
-    // task detail, agent pages, and Settings, including from focused inputs.
-    if (isCommandCenterShortcut(e, isApple, pathname)) {
-      e.preventDefault();
-      e.stopImmediatePropagation();
-      toggleShowCommands();
-      return;
     }
 
     const isInputFocused = ["input", "textarea"].includes(
@@ -1442,7 +1440,9 @@ export default function GlobalProvider({
         />
       )}
 
-      {showCommands.show && isAgentsRoute(pathname) && <HypertasksCommands />}
+      {authenticatedUserId !== null &&
+        showCommands.show &&
+        shouldRenderGlobalCommandMenu(pathname) && <HypertasksCommands />}
 
       <BoardStartupContext.Provider
         value={{
