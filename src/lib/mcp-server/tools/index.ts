@@ -57,6 +57,7 @@ import { moveTaskBetweenBoardsTool } from './move-task-between-boards.tool';
 import { assignUserTool } from './assign-user.tool';
 import { attachFilesTool } from './attach-files.tool';
 import { createBoardTool } from './create-board.tool';
+import { renameBoardTool } from './rename-board.tool';
 import { decisionRequestTool } from './decision-request.tool';
 import { draftTool } from './draft.tool';
 import { listSkillsTool } from './list-skills.tool';
@@ -117,6 +118,7 @@ export const MCP_TOOLS = [
   getBoardPlaybookTool,
   boardConfigTool,
   createBoardTool,
+  renameBoardTool,
   listProjectMembersTool,
   createLabelTool,
   listLabelsTool,

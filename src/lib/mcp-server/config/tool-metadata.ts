@@ -173,6 +173,12 @@ const RAW_TOOL_METADATA = {
       'Lists all projects/boards the user has access to with filtering and pagination. Use this when you need to filter by status (Normal/Archive), search by title/description, or paginate through large lists. For initial context setup, use get_user_context instead (which includes projects).',
   },
 
+  RENAME_BOARD: {
+    name: buildToolName('rename_board'),
+    description:
+      'Renames a board/project to the requested title using the same permissions as the app. Requires project_id and a non-empty title of up to 200 characters. Find the board ID with list_projects; do not infer IDs from board names.',
+  },
+
   PROJECT_ADMIN: {
     name: buildToolName('project_admin'),
     description:

@@ -21,6 +21,7 @@ import { createGetBoardPlaybookTool } from "./getBoardPlaybook";
 import { createBoardConfigTool } from "./boardConfig";
 import { createProjectAdminTool } from "./projectAdmin";
 import { createCreateBoardTool } from "./createBoard";
+import { createRenameBoardTool } from "./renameBoard";
 import { createListProjectMembersTool } from "./listProjectMembers";
 import { createListCustomFieldsTool } from "./listCustomFields";
 import { createSetCustomFieldValueTool } from "./setCustomFieldValue";
@@ -120,6 +121,7 @@ export function buildTools(
     hypertask_board_config: createBoardConfigTool(context).hypertask_board_config,
     hypertask_project_admin: createProjectAdminTool(context).hypertask_project_admin,
     hypertask_create_board: createCreateBoardTool(context).hypertask_create_board,
+    hypertask_rename_board: createRenameBoardTool(context).hypertask_rename_board,
     hypertask_list_project_members: createListProjectMembersTool(context).hypertask_list_project_members,
     hypertask_list_custom_fields: createListCustomFieldsTool(context).hypertask_list_custom_fields,
     hypertask_set_custom_field_value: createSetCustomFieldValueTool(context).hypertask_set_custom_field_value,

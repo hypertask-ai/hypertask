@@ -252,12 +252,6 @@
         "cli": ["^project (create-board|archive|invite|instructions)( |$)"],
         "ai_chat": ["^hypertask_(create_board|project_admin|board_config)$", "^hypertask_rename_board$"],
         "hyperai": ["^hypertask_(create_board|project_admin|board_config)$", "^hypertask_rename_board$"]
-      },
-      "planned": {
-        "api": { "issue": "https://app.hypertask.ai/detail/project-15/6846", "expires": "2026-10-31", "entries": ["PATCH /api/mcp/projects/[projectId]"] },
-        "mcp": { "issue": "https://app.hypertask.ai/detail/project-15/6846", "expires": "2026-10-31", "entries": ["hypertask_rename_board"] },
-        "ai_chat": { "issue": "https://app.hypertask.ai/detail/project-15/6846", "expires": "2026-10-31", "entries": ["hypertask_rename_board"] },
-        "hyperai": { "issue": "https://app.hypertask.ai/detail/project-15/6846", "expires": "2026-10-31", "entries": ["hypertask_rename_board"] }
       }
     },
     {

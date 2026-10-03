@@ -2,7 +2,7 @@ import type { IApiClient } from '../../types/index';
 import { getConfig } from '../../config/index';
 import { logger } from '../../utils/logger';
 import { generateCorrelationId } from '../../utils/correlation';
-import { CreateBoardInputSchema, type CreateBoardInput } from '../../validations/project.validation';
+import { CreateBoardInputSchema, RenameBoardInputSchema, type CreateBoardInput } from '../../validations/project.validation';
 import { buildTaskLink, getTaskLinkInfo } from '../../utils/task-link';
 
 export interface CreateBoardSectionResult {
@@ -50,6 +50,17 @@ export interface CreateBoardResponse {
  */
 export class BoardService {
   constructor(private readonly apiClient: IApiClient) {}
+
+  async renameBoard(params: unknown) {
+    const input = RenameBoardInputSchema.parse(params);
+    return this.apiClient.makeRequest<{
+      success: boolean;
+      project: { id: number; title: string; name: string };
+    }>(`/mcp/projects/${input.project_id}`, {
+      method: 'PATCH',
+      body: JSON.stringify({ title: input.title }),
+    });
+  }
 
   async createBoard(params: unknown): Promise<CreateBoardResponse> {
     const correlationId = generateCorrelationId();

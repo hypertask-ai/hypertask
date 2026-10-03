@@ -35,6 +35,7 @@ export const TOOL_SUMMARIES: Record<string, string> = {
   GET_BOARD_PLAYBOOK: 'Returns the board playbook.',
   BOARD_CONFIG: 'Returns board instructions.',
   CREATE_BOARD: 'Returns the new board.',
+  RENAME_BOARD: 'Returns the renamed board.',
   LIST_PROJECT_MEMBERS: 'Returns board members.',
   CREATE_LABEL: 'Returns the created label.',
   LIST_LABELS: 'Returns board labels.',
