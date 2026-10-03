@@ -643,7 +643,8 @@ export function useSearch(
     if (
       (event.keyCode === KeyCodes.TAB || cycleSearchTabs) && tabs.length > 0 &&
       (searchLayoutEnabled
-        ? cycleSearchTabs && (!isInputFocused || document.activeElement === tasksInputRef.current)
+        // Enter leaves the search box, so Tab cycles only outside it and never traps the cursor.
+        ? cycleSearchTabs && !isInputFocused && tabs.length > 1
         : !isInputFocused)
     ) {
       event.preventDefault();

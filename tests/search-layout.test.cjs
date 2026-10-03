@@ -153,7 +153,7 @@ test('flag off retains the floating popover, duplicate legacy history, Ask AI an
   })
 })
 
-test('result Tab cycles board splits in both directions with focused or blurred input', async (t) => {
+test('result Tab cycles board splits in both directions outside the input and never traps it', async (t) => {
   await withSearch(t, {}, async ({ input, type, press, complete, state, navigations, requests, dom }) => {
     await type('login')
     await press('Enter')
@@ -165,8 +165,13 @@ test('result Tab cycles board splits in both directions with focused or blurred 
     await complete(undefined, tasks, splits)
     assert.equal(input().getAttribute('aria-expanded'), 'false')
     assert.equal(document.querySelector('[data-search-ghost]'), null)
-    for (const focused of [true, false]) {
-      await React.act(async () => focused ? input().focus() : input().blur())
+    await React.act(async () => input().focus())
+    const inside = new dom.window.KeyboardEvent('keydown', { key: 'Tab', keyCode: 9, bubbles: true, cancelable: true })
+    await React.act(async () => input().dispatchEvent(inside))
+    assert.equal(inside.defaultPrevented, false, 'Tab inside the search box keeps normal focus movement')
+    assert.equal(state().activeSplit, 0)
+    for (const focused of [false]) {
+      await React.act(async () => input().blur())
       for (const keyCode of [0, 9]) {
         for (const [shiftKey, indices] of [[false, [1, 2, 0]], [true, [2, 1, 0]]]) {
           for (const index of indices) {
