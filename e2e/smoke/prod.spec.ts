@@ -124,9 +124,9 @@ test('seeded board card opens a ticket and stays open', { tag: ['@id:board-card-
   await page.goto(withRealtime(process.env.SMOKE_BOARD_PATH!), { waitUntil: 'load' })
   const { flags } = await (await flagsResponse).json() as { flags: Record<string, boolean> }
   for (const [key, enabled] of Object.entries(fixture.flags)) {
-    expect(flags[key], `seeded flag ${key} must match the production mode`).toBe(enabled)
+    expect(flags[key] === true, `seeded flag ${key} must match the production mode`).toBe(enabled)
   }
-  const card = page.locator(`#task-${fixture.taskId}`)
+  const card = page.locator(`#task-${fixture.taskId} a[href="${fixture.detailPath}"]`)
   await expect(card).toContainText(fixture.title)
   await expect(card).toBeVisible()
   // A full navigation could conceal a failed instant-open attempt. Observe from before the click.
