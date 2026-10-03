@@ -20,6 +20,15 @@ This file is the map. It does not hold the how-to. At each step, load the skill 
 4. **Helpers are Codex sub-sessions via hax, each with its own ledger** (Valentin, 2026-10-01). Hand big reading, writing or self-contained coding to Codex: `hax --provider=codex --model=gpt-6.1-sol --effort=high --no-session -p "<prompt>"` (`--effort=xhigh` when hard), in the background, one hax run per independent piece. Never Claude subagents for delegated work, never `--provider=zai` or OpenRouter. Every helper prompt starts with: "Use the unlazy skill (~/.agents/skills/unlazy/SKILL.md): write GATES.md first and prove every gate before your final answer." Re-run its gates yourself (`gate-check.mjs --reverify`) before you trust it.
 5. **Voice.** Load `pospeak` (chains `unslop` and `i-have-adhd`) for every reply to Valentin.
 
+## Several tickets
+
+Valentin, 2026-10-03: "/ship 6857, 6856, 6855 ... claim all of these tasks right away so other sessions know you are working on them". A bare number means `HTPR-`.
+
+1. **Claim all first.** Do steps 0 to 2 for every ticket before any work: read each, claim each (comment, `--self`, In Progress). Name the session after the first ticket plus "+N more".
+2. **One checklist.** `ship-gates HTPR-6857 HTPR-6856 HTPR-6855` writes every ticket's gates into the same ledger. The unlazy stop hook keeps the session going until all of them are met.
+3. **One at a time, in the order given.** Each ticket gets its own branch, pull request, QA and Done, as if shipped alone.
+4. **A ticket you cannot finish** (taken by someone else, needs Valentin's answer): give it its normal handoff on the ticket, add `ABANDON: <gate id> <reason>` for its open gates, and move on to the next.
+
 ## The map
 
 Repo skills live in the app repo at `.claude/skills/`; their index is `.claude/skills/INDEX.md`. Read the index once, then open only the skill for the step you are on.
