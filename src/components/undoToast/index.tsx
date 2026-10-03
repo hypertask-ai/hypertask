@@ -1,6 +1,7 @@
 import { useContext } from "react";
 import { X } from "lucide-react";
-import { toast } from "react-hot-toast";
+import { toast, Toaster } from "react-hot-toast";
+import { APP_SHELL_RAIL_OFFSET } from "@/lib/constants/appShellRail";
 import { MobileViewContext } from "@/lib/contexts/mobileContext";
 import { MOBILE_TARGET } from "@/lib/configs/general.config";
 
@@ -9,6 +10,23 @@ export const SINGLE_UNDO_TOASTER_ID = "htpr-6885-undo";
 // The authenticated global toaster publishes its flag here; default is off.
 export const undoToastSettings = { single: false };
 let previousUndoToastId: string | undefined;
+
+export const SingleUndoToaster = ({
+  mobile,
+  appShellRailOn,
+}: {
+  mobile: boolean;
+  appShellRailOn: boolean;
+}) => (
+  <Toaster
+    toasterId={SINGLE_UNDO_TOASTER_ID}
+    position="bottom-left"
+    containerStyle={{
+      left: appShellRailOn ? APP_SHELL_RAIL_OFFSET : 16,
+      bottom: mobile ? "calc(72px + env(safe-area-inset-bottom))" : 16,
+    }}
+  />
+);
 
 export const UNDO_ACTION_WINDOW_MS = 15_000;
 // The toast is the only visible way to undo an archive, so it must stay on

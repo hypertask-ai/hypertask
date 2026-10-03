@@ -11,9 +11,8 @@ import {
   useContext,
 } from "react";
 import { Toaster } from "react-hot-toast";
-import { SINGLE_UNDO_TOASTER_ID, undoToastSettings } from "@/components/undoToast";
+import { SINGLE_UNDO_TOASTER_ID, SingleUndoToaster, undoToastSettings } from "@/components/undoToast";
 import { HTPR_6885_SINGLE_UNDO_TOAST_FLAG } from "@/lib/flags/keys";
-import { APP_SHELL_RAIL_OFFSET } from "@/lib/constants/appShellRail";
 import { useMobileToastAutoDismiss } from "@/components/undoToast/useMobileToastAutoDismiss";
 import { usePathname, useRouter } from "next/navigation";
 import dynamic from "next/dynamic";
@@ -1335,16 +1334,7 @@ export default function GlobalProvider({
         }}
         position={mbl ? "top-right" : "bottom-left"}
       />
-      {singleUndoToast && (
-        <Toaster
-          toasterId={SINGLE_UNDO_TOASTER_ID}
-          position="bottom-left"
-          containerStyle={{
-            left: appShellRailOn ? APP_SHELL_RAIL_OFFSET : 16,
-            bottom: mbl ? "calc(72px + env(safe-area-inset-bottom))" : 16,
-          }}
-        />
-      )}
+      {singleUndoToast && <SingleUndoToaster mobile={mbl} appShellRailOn={appShellRailOn} />}
       <ShortcutArchiveNudge />
 
       {showGlobalCreateHTCTask.show && (

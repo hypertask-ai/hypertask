@@ -28,6 +28,7 @@ function load(relativePath, stubs = {}, source = read(relativePath)) {
 const undo = load("src/components/undoToast/index.tsx", {
   "@/lib/contexts/mobileContext": { MobileViewContext: mobileContext },
   "@/lib/configs/general.config": { MOBILE_TARGET: mobileTarget },
+  "@/lib/constants/appShellRail": { APP_SHELL_RAIL_OFFSET: "calc(var(--app-shell-rail-w, 48px) + 8px)" },
 });
 const { useMobileToastAutoDismiss } = load("src/components/undoToast/useMobileToastAutoDismiss.ts");
 // Exercise the production Toaster JSX, including isolation and rail/phone offsets.
@@ -37,11 +38,9 @@ const flagEffect = globalSource.slice(globalSource.indexOf("  useEffect(() => {\
 const { Toasts } = load("src/components/ProviderGlobal/GloablProviders.tsx", {
   "react-hot-toast": hotToast,
   "@/components/undoToast": undo,
-  "@/lib/constants/appShellRail": { APP_SHELL_RAIL_OFFSET: "calc(var(--app-shell-rail-w, 48px) + 8px)" },
 }, `import { useEffect } from "react";
 import { Toaster } from "react-hot-toast";
-import { SINGLE_UNDO_TOASTER_ID, undoToastSettings } from "@/components/undoToast";
-import { APP_SHELL_RAIL_OFFSET } from "@/lib/constants/appShellRail";
+import { SingleUndoToaster, undoToastSettings } from "@/components/undoToast";
 export function Toasts({mbl, singleUndoToast, appShellRailOn}) { ${flagEffect} return <>${toasterMarkup}</>; }`);
 
 async function fixture(t, { mobile = false, enabled = true, rail = true } = {}) {
