@@ -30,6 +30,12 @@ export function splitSearchChips(raw: string, editing = false, names: Names = {}
   return { chips, text: editing && /\s$/.test(raw) ? `${draft} ` : draft }
 }
 
+export function searchChipText(chip: SearchToken, name = chip.value, omitBoardHash = false) {
+  const marker = chip.operator === 'from' || chip.operator === 'assignee' ? '@' : chip.operator === 'in' || chip.operator === 'board' ? '#' : ''
+  const value = marker && name.startsWith(marker) ? name.slice(1) : name
+  return `${chip.negated ? '-' : ''}${chip.operator}:${omitBoardHash && marker === '#' ? '' : marker}${value}`
+}
+
 export function chipQuery(chips: SearchToken[], text: string) {
   return [...chips.map((chip) => chip.raw), text].filter(Boolean).join(' ').trim()
 }

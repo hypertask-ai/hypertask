@@ -9,7 +9,7 @@ import { useSearch } from "@/hooks/Search/useSearch";
 import { cn } from "@/utils/undoActions/helperFuncs";
 import { Fragment, KeyboardEvent, RefObject, useContext } from "react";
 import { useFlag } from "@/hooks/useFlag";
-import { HTPR_6372_SEARCH_RANKING_FLAG, HTPR_6688_SEARCH_AUTOCOMPLETE_FLAG, HTPR_6865_SEARCH_LAYOUT_FLAG, HTPR_6878_SEARCH_LABEL_SCOPE_FLAG } from "@/lib/flags/keys";
+import { HTPR_6372_SEARCH_RANKING_FLAG, HTPR_6688_SEARCH_AUTOCOMPLETE_FLAG, HTPR_6865_SEARCH_LAYOUT_FLAG, HTPR_6878_SEARCH_LABEL_SCOPE_FLAG, HTPR_6879_SEARCH_ESC_BACK_FLAG } from "@/lib/flags/keys";
 import { highlightedTitle } from "@/lib/search/autocomplete";
 import { HTPR_6370_SEARCH_CHIPS_FLAG, HTPR_6369_SEARCH_OPERATORS_FLAG } from "@/lib/flags/keys";
 import { MobileViewContext } from "@/lib/contexts/mobileContext";
@@ -43,6 +43,7 @@ const SearchComp = ({
   const layoutFlagEnabled = useFlag(HTPR_6865_SEARCH_LAYOUT_FLAG);
   const layoutEnabled = layoutFlagEnabled && autocompleteEnabled;
   const labelScopeFlagEnabled = useFlag(HTPR_6878_SEARCH_LABEL_SCOPE_FLAG);
+  const searchEscBackFlagEnabled = useFlag(HTPR_6879_SEARCH_ESC_BACK_FLAG);
   const setAiChatPendingPrompt = useSetRecoilState(aiChatPendingPromptAtom);
   const { openAIChatInterface } = useGlobalUIState();
   const isMbl = useContext(MobileViewContext);
@@ -119,7 +120,7 @@ const SearchComp = ({
                 layoutEnabled={layoutEnabled}
                 availableBoards={labelScopeFlagEnabled && layoutEnabled ? availableSearchBoards : undefined}
                 onAskAi={openAskAi}
-                showSuggestions={isSearchDraft}
+                showSuggestions={isSearchDraft || (searchEscBackFlagEnabled && layoutEnabled && !inputValue.trim())}
                 autocompleteEnabled
               />
             ) : (
