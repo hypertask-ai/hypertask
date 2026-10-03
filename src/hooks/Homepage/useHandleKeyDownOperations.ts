@@ -30,6 +30,9 @@ import { toggleTaskTimer } from '@/hooks/Task Detail/useTimeTracking'
 import { buildBuiltinViewContext, isBuiltinViewId } from '@/lib/constants/builtinViews'
 import { useToggleShowArchivedOnBoard } from './useShowArchivedOnBoard'
 import useKanbanViews from '@/hooks/Homepage/Views/useKanbanViews'
+import { useFlag } from '@/hooks/useFlag'
+import { HTPR_6902_N_QUICK_ADD_FLAG, HTPR_6175_QUICK_ENTRY_CARDS_FLAG } from '@/lib/flags/keys'
+import { shouldIgnoreTaskShortcutTarget } from '@/lib/keyboard/taskShortcuts'
 
 interface IHandleKeyDownOperations {
     initialSections: ISection[];
@@ -73,6 +76,8 @@ const useHandleKeyDownOperations= (props:IHandleKeyDownOperations) => {
     const timerToggling = useRef(false);
     const isApple = useDeviceContext()
     const sorting_mode_current = getActiveSortingModeFromProject(_currentProject)
+    const nQuickAddEnabled = useFlag(HTPR_6902_N_QUICK_ADD_FLAG);
+    const quickEntryCardsEnabled = useFlag(HTPR_6175_QUICK_ENTRY_CARDS_FLAG);
     const getActiveItem = () => store.get(activeItemAtom);
     const getActiveSection = () => store.get(activeSectionAtom);
 
@@ -135,6 +140,25 @@ const useHandleKeyDownOperations= (props:IHandleKeyDownOperations) => {
     const activeElement = document.activeElement;
     const activeElementIndex = Array.from(sectionEls).indexOf(activeElement!);
     const activeItem = getActiveItem();
+    if (
+      nQuickAddEnabled && quickEntryCardsEnabled &&
+      e.key.toLowerCase() === "n" &&
+      !e.ctrlKey && !e.metaKey && !e.altKey && !e.shiftKey &&
+      !e.repeat && !e.isComposing && !showCommands.show &&
+      !shouldIgnoreTaskShortcutTarget(e.target) &&
+      !shouldIgnoreTaskShortcutTarget(activeElement as HTMLElement | null)
+    ) {
+      const focusedColumn = activeElement?.closest('.section-container');
+      const focusedColumnIndex = Array.from(sectionEls).indexOf(focusedColumn!);
+      const taskColumnIndex = filteredSections.findIndex(section =>
+        section.items.some(task => task.id === activeItem)
+      );
+      const targetIndex = focusedColumnIndex >= 0
+        ? focusedColumnIndex
+        : Math.max(taskColumnIndex, 0);
+      sectionEls[targetIndex]?.dispatchEvent(new CustomEvent('OPEN_QUICK_ENTRY'));
+      return;
+    }
     if (
       e.key === "w" &&
       !e.ctrlKey &&

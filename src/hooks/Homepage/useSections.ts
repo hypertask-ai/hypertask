@@ -18,6 +18,7 @@ import { KeyCodes } from "@/lib/constants/keyboard-handler";
 import useHypertasksNavigate from "../MultiPages/Route/useHypertasksNavigate";
 import { MobileViewContext } from "@/lib/contexts/mobileContext";
 import { useFlag } from "@/hooks/useFlag";
+import { HTPR_6902_N_QUICK_ADD_FLAG } from "@/lib/flags/keys";
 
 type SectionKeydownHandler = (event: KeyboardEvent) => void;
 
@@ -82,6 +83,7 @@ const useSections = ({
   const isMbl = useContext(MobileViewContext);
   const aiFirstTaskWriterEnabled = useFlag("htpr-6141-ai-first-task-writer");
   const quickEntryCardsEnabled = useFlag("htpr-6175-quick-entry-cards");
+  const nQuickAddEnabled = useFlag(HTPR_6902_N_QUICK_ADD_FLAG);
   const { navigate } = useHypertasksNavigate();
   const sectionListenerKeyRef = useRef<string | null>(null);
   if (!sectionListenerKeyRef.current) {
@@ -115,6 +117,18 @@ const useSections = ({
     }
     toggleCreateTaskGlobally(sectionPayload, editFocus)
   };
+
+  useEffect(() => {
+    if (!nQuickAddEnabled || !quickEntryCardsEnabled) return;
+    const sectionElement = sectionRef.current;
+    const openQuickEntry = () => createTaskAt("bottom", {
+      sectionId,
+      sectionTitle: title,
+      position: "bottom",
+    }, undefined, true);
+    sectionElement?.addEventListener("OPEN_QUICK_ENTRY", openQuickEntry);
+    return () => sectionElement?.removeEventListener("OPEN_QUICK_ENTRY", openQuickEntry);
+  }, [nQuickAddEnabled, quickEntryCardsEnabled, createTaskAt, sectionId, title]);
 
   // ======================== user presses [Enter] to CREATE a task, keeping the box open for the next one
   const invokeCreateItem = async (taskTitle: string, createAnother: boolean): Promise<boolean> => {

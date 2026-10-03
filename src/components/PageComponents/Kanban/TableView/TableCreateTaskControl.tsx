@@ -1,8 +1,11 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
+import { useFlag } from "@/hooks/useFlag";
+import { HTPR_6902_N_QUICK_ADD_FLAG } from "@/lib/flags/keys";
 import {
   createTaskFromTableSelection,
   getTableCreateTaskButtonLabelsForSelection,
   resolveTableCreateTaskSectionPayload,
+  tableSectionId,
   type TableCreateTaskRow,
   type TableCreateTaskSection,
   type ToggleCreateTaskGlobally,
@@ -62,6 +65,7 @@ export const TableCreateTaskControl = ({
   quickEntryEnabled,
   quickCreateTask,
 }: TableCreateTaskControlProps) => {
+  const nQuickAddEnabled = useFlag(HTPR_6902_N_QUICK_ADD_FLAG);
   const [openTarget, setOpenTarget] = useState<
     { projectId: number; sectionId: number; sectionTitle: string } | null
   >(null);
@@ -75,6 +79,19 @@ export const TableCreateTaskControl = ({
   const labels = getTableCreateTaskButtonLabelsForSelection(selectedRow, sections);
   const quickEntry = Boolean(quickEntryEnabled && quickCreateTask && projectId);
   const activeTarget = openTarget?.projectId === projectId ? openTarget : null;
+
+  useEffect(() => {
+    if (!nQuickAddEnabled || !quickEntry || !hasCurrentProject || !projectId) return;
+    const openQuickEntry = () => {
+      const payload = selectedSectionPayload ?? resolveTableCreateTaskSectionPayload(
+        sections[0] && tableSectionId(sections[0]), sections,
+      );
+      if (!payload) return;
+      setOpenTarget({ projectId, sectionId: payload.sectionId, sectionTitle: payload.sectionTitle });
+    };
+    document.addEventListener("OPEN_TABLE_QUICK_ENTRY", openQuickEntry);
+    return () => document.removeEventListener("OPEN_TABLE_QUICK_ENTRY", openQuickEntry);
+  }, [nQuickAddEnabled, quickEntry, hasCurrentProject, projectId, selectedSectionPayload, sections]);
 
   const onCreate = () => {
     if (!quickEntry) {
