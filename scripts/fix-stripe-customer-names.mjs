@@ -51,11 +51,11 @@ if (process.argv.includes("--fill-blank")) {
   // (--apply below), so a name cleared by anything else is never refilled.
   const manifestPath = process.argv[process.argv.indexOf("--fill-blank") + 1];
   if (!manifestPath || manifestPath.startsWith("--")) {
-    console.error("Usage: --fill-blank <manifest.json written by the repair run> [--apply]");
+    console.error("Usage: --fill-blank <journal .txt written by the repair run> [--apply]");
     process.exit(1);
   }
   const blank = new Set();
-  for (const id of JSON.parse(fs.readFileSync(manifestPath, "utf8")).blanked) {
+  for (const id of fs.readFileSync(manifestPath, "utf8").split("\n").filter(Boolean)) {
     const current = await stripe.customers.retrieve(id);
     if (!current.deleted && !readable(current.name)) blank.add(id);
   }
@@ -66,18 +66,16 @@ if (process.argv.includes("--fill-blank")) {
 }
 
 let scanned = 0, fixed = 0;
-const blanked = [];
+const journal = `stripe-name-repair-${Date.now()}.txt`;
 for await (const customer of stripe.customers.list({ limit: 100 })) {
   scanned++;
   const next = repairedName(customer.name, customer.email);
   if (next === null) continue;
   fixed++;
-  if (next === "") blanked.push(customer.id);
+  // Journal each customer before blanking it, so a run that fails halfway
+  // still leaves the list --fill-blank needs.
+  if (apply && next === "") fs.appendFileSync(journal, `${customer.id}\n`);
   if (apply) await stripe.customers.update(customer.id, { name: next });
 }
-if (apply && blanked.length) {
-  const manifest = `stripe-name-repair-${Date.now()}.json`;
-  fs.writeFileSync(manifest, JSON.stringify({ blanked }, null, 2));
-  console.log(`Blanked customers listed in ${manifest}; pass it to --fill-blank.`);
-}
+if (apply && fs.existsSync(journal)) console.log(`Blanked customers listed in ${journal}; pass it to --fill-blank.`);
 console.log(JSON.stringify({ mode: apply ? "apply" : "dry-run", scanned, toFix: fixed }));
