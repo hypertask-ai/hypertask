@@ -7,6 +7,7 @@ import { NextApiHandler, NextApiRequest, NextApiResponse } from "next";
 
 import prisma from "@/lib/prisma";
 import { getSessionUser } from "@/lib/auth/getSessionUser";
+import { stripeCustomerName } from "@/lib/stripeCustomerName";
 
 
 const handler: NextApiHandler = async (req: NextApiRequest, res: NextApiResponse) => {
@@ -61,7 +62,8 @@ const handler: NextApiHandler = async (req: NextApiRequest, res: NextApiResponse
               createLog(logBody)
         // =================== CREATE stripe customer 
             const customer = await stripe.customers.create({
-                name: Team.title + `${Team.id}`
+                name: stripeCustomerName(Team.title),
+                metadata: { teamId: Team.id },
             })
             await prisma.team.update({
                 where:{
