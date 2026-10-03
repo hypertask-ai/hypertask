@@ -496,6 +496,7 @@ test("declared flags remain listed with ticket details and can be changed", asyn
       { key: "htpr-6881-search-fuzzy-person", mode: "OWNER_AND_QA", updatedAt: null },
       { key: "htpr-6882-search-match-highlights", mode: "OWNER_AND_QA", updatedAt: null },
       { key: "htpr-6885-single-undo-toast", mode: "OWNER_AND_QA", updatedAt: null },
+      { key: "htpr-6892-cmdk-version", mode: "OWNER_AND_QA", updatedAt: null },
     ],
   );
   listed.forEach(({ key, description, ticketUrl, shippedOn }) => {

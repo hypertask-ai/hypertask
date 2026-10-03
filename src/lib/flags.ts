@@ -12,6 +12,7 @@ import {
 import {
   HTPR_6752_INSTANT_TICKET_OPEN_FLAG,
   HTPR_6873_QUICK_ENTRY_GROW_FLAG,
+  HTPR_6892_CMDK_VERSION_FLAG,
   AGENT_CHAT_BRIEF_FLAG,
   AGENT_CHAT_TICKET_CONFIRM_FLAG,
   AUTO_TASK_DESCRIPTIONS_FLAG,
@@ -132,6 +133,12 @@ const RETIRED_CLIENT_FEATURE_FLAGS = {
 } as const;
 
 const FEATURE_FLAG_DEFINITIONS = [
+  {
+    key: HTPR_6892_CMDK_VERSION_FLAG,
+    shippedOn: "2026-10-03",
+    description:
+      "Shows the build loaded by this tab at the bottom of the desktop Ctrl+K command center, with its commit and local build time.",
+  },
   {
     key: HTPR_6752_INSTANT_TICKET_OPEN_FLAG,
     shippedOn: "2026-10-02",
