@@ -226,7 +226,11 @@ export async function run(options = {}) {
   };
 
   const first = await invoke();
-  if (first.ok || first.kind !== "application") return first;
+  if (
+    first.ok || first.kind !== "application" ||
+    first.action.startsWith("inbox ") ||
+    first.steps.some((step) => step.startsWith("inbox "))
+  ) return first;
 
   await (
     options.sleep ||
@@ -269,7 +273,9 @@ export function shouldRollback(result, eventName) {
   return (
     eventName === "push" &&
     result?.kind === "application" &&
-    result?.rollbackEligible === true
+    result?.rollbackEligible === true &&
+    !String(result?.action).startsWith("inbox ") &&
+    !result?.steps?.some((step) => step.startsWith("inbox "))
   );
 }
 

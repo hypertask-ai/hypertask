@@ -845,3 +845,31 @@ test("only the existing definitive final-attempt health alarm requests rollback"
     assert.equal(outputs.includes("rollback=true"), expected, sequence);
   }
 });
+
+test("every failed inbox step is reported and leaves production health red", async () => {
+  const yaml = require("js-yaml");
+  const workflow = yaml.load(await readFile(".github/workflows/prod-health.yml", "utf8"));
+  const core = workflow.jobs["core-actions"];
+  assert.match(core.if, /github.event_name == 'push'.*needs.health.outputs.live == 'true'/);
+  const probe = core.steps.find((step) => step.id === "probe");
+  const report = core.steps.find((step) => step.name === "Report a failed or unrunnable check");
+  const final = core.steps.find((step) => step.name === "Keep failed monitoring visible");
+  assert.equal(probe.env.HYPERTASK_MCP_TOKEN, "${{ secrets.HYPERTASK_HEALTH_USER_TOKEN }}");
+  assert.equal(probe.run, "node .github/scripts/core-actions-smoke.mjs run");
+  assert.equal(probe["continue-on-error"], true);
+  assert.equal(report.run, "node .github/scripts/core-actions-smoke.mjs report");
+  assert.equal(report["continue-on-error"], undefined);
+  for (const step of [report, final]) {
+    assert.equal(step.if, "${{ !cancelled() && steps.probe.outcome == 'failure' }}");
+    assert.doesNotMatch(step.run, /emergency-rollback|git (?:push|revert)|\/promote\//);
+  }
+  const result = spawnSync("bash", ["-c", final.run], { encoding: "utf8" });
+  assert.equal(result.status, 1, result.stdout + result.stderr);
+  assert.match(result.stdout, /::error::.*inbox routines.*did not pass/);
+  const script = await readFile(".github/scripts/core-actions-smoke.mjs", "utf8");
+  assert.match(script, /if \(!result.ok\) process.exitCode = 1/);
+  assert.match(script, /!String\(result\?\.action\).startsWith\("inbox "\)/);
+  // Positive control: a hidden final failure would turn the same shell gate green.
+  const green = spawnSync("bash", ["-c", "exit 0"], { encoding: "utf8" });
+  assert.notEqual(green.status, result.status);
+});
