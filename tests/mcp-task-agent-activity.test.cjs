@@ -5,7 +5,7 @@ const { createJiti } = require('jiti')
 
 const root = path.resolve(__dirname, '..')
 const calls = []
-let ctx, allowed, task, rows, rateLimited, dbError
+let ctx, task, rows, rateLimited, dbError
 function stub(relativePath, exports) {
   const filename = path.join(root, relativePath)
   require.cache[filename] = { id: filename, filename, loaded: true, exports }
@@ -19,13 +19,6 @@ class TaskIdentifierAmbiguityError extends Error {}
 stub('src/lib/mcp/tasks/resolveTask.ts', {
   TaskIdentifierAmbiguityError,
   findTaskByIdentifier: async (...args) => { calls.push(args); return task },
-})
-stub('src/lib/flags.ts', {
-  isFeatureEnabled: async (key, userId) => {
-    assert.equal(key, 'yper4-123-board-check')
-    assert.equal(userId, ctx.user.id)
-    return allowed
-  },
 })
 stub('src/lib/prisma.ts', {
   agentRunActivity: {
@@ -43,7 +36,6 @@ const { GET } = createJiti(__filename, {
 function reset() {
   calls.length = 0
   ctx = { user: { id: 6 }, agentId: 'caller-agent' }
-  allowed = true
   task = { id: 42, projectId: 15 }
   rows = []
   rateLimited = null
@@ -62,15 +54,12 @@ function row(n) {
   }
 }
 
-test('unauthenticated, rate-limited, disabled and inaccessible requests never read activity', async () => {
+test('unauthenticated, rate-limited and inaccessible requests never read activity', async () => {
   reset(); ctx = null
   assert.equal((await read()).status, 401)
   assert.equal(calls.length, 0)
   reset(); rateLimited = Response.json({}, { status: 429 })
   assert.equal((await read()).status, 429)
-  assert.equal(calls.length, 0)
-  reset(); allowed = false
-  assert.equal((await read()).status, 404)
   assert.equal(calls.length, 0)
   reset(); task = null
   assert.equal((await read()).status, 404)

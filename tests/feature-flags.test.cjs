@@ -491,7 +491,7 @@ test("declared flags remain listed with ticket details and can be changed", asyn
       { key: "htpr-6868-ticket-prefix", mode: "OWNER_AND_QA", updatedAt: null },
       { key: "htpr-6872-page-image-gallery", mode: "OWNER_AND_QA", updatedAt: null },
       { key: "htpr-6878-search-label-scope", mode: "OWNER_AND_QA", updatedAt: null },
-      { key: "yper4-123-board-check", mode: "OWNER_AND_QA", updatedAt: null },
+      { key: "htpr-6881-search-fuzzy-person", mode: "OWNER_AND_QA", updatedAt: null },
     ],
   );
   listed.forEach(({ key, description, ticketUrl, shippedOn }) => {
@@ -588,6 +588,16 @@ test("the retired factory flag remains off for old deployments but disappears fr
     flags.setFeatureFlagMode("hyfa-43-factory-owner-preview", "EVERYONE"),
     /Unknown feature flag/,
   );
+});
+
+test("the retired infra board-check flag is hidden and not editable", async () => {
+  const key = "yper4-123-board-check";
+  listedRows = [{ key, mode: "OWNER_AND_QA", updatedAt: new Date() }];
+  row = { mode: "OWNER_AND_QA", updatedAt: new Date() };
+
+  assert.equal(flags.FEATURE_FLAG_KEYS.includes(key), false);
+  assert.equal((await flags.listFeatureFlagModes()).some((flag) => flag.key === key), false);
+  await assert.rejects(flags.setFeatureFlagMode(key, "OFF"), /Unknown feature flag/);
 });
 
 test("the retired core-actions smoke flag is hidden and not editable", async () => {

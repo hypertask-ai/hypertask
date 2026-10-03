@@ -57,6 +57,7 @@ import {
   HTPR_6688_SEARCH_AUTOCOMPLETE_FLAG,
   HTPR_6865_SEARCH_LAYOUT_FLAG,
   HTPR_6878_SEARCH_LABEL_SCOPE_FLAG,
+  HTPR_6881_SEARCH_FUZZY_PERSON_FLAG,
   MY_TASKS_VIEWS_FLAG,
   MY_TASKS_BULK_SELECTION_FLAG,
   MY_TASKS_FILTER_PARITY_FLAG,
@@ -117,6 +118,7 @@ const RETIRED_FEATURE_FLAG_KEYS = new Set([
   "htpr-6254-heic-heif-attachments",
   "htpr-6236-core-actions-smoke",
   "htpr-6035-agent-chat-skills",
+  "yper4-123-board-check",
 ]);
 // Old tabs read these; remove htpr-6072 after 2026-10-06, htpr-6254 and htpr-6035 after 2026-10-16.
 const RETIRED_CLIENT_FEATURE_FLAGS = {
@@ -131,12 +133,6 @@ const FEATURE_FLAG_DEFINITIONS = [
     shippedOn: "2026-10-02",
     description:
       "Shows a ticket immediately from authorized cached board, My Tasks, or Inbox data while its full detail refreshes in the background.",
-  },
-  {
-    key: "yper4-123-board-check",
-    shippedOn: "2026-10-01",
-    description:
-      "Lets board checks read recent agent activity across all runs on a ticket the caller can read.",
   },
   {
     key: HTPR_6673_SIGNUP_ANALYTICS_FLAG,
@@ -624,6 +620,11 @@ const FEATURE_FLAG_DEFINITIONS = [
     key: HTPR_6878_SEARCH_LABEL_SCOPE_FLAG,
     shippedOn: "2026-10-03",
     description: "Scopes search label suggestions to picked boards, shows ticket counts and combines same-name labels across boards. Requires the search layout flag.",
+  },
+  {
+    key: HTPR_6881_SEARCH_FUZZY_PERSON_FLAG,
+    shippedOn: "2026-10-03",
+    description: "Typed author and assignee filters match all similar names or emails in accessible requested boards, ignoring case and accents; selected person IDs stay exact.",
   },
   {
     key: HTPR_6372_SEARCH_RANKING_FLAG,
