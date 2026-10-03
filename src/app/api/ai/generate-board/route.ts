@@ -403,10 +403,12 @@ export async function POST(request: NextRequest) {
       );
     }
     await reportError({
-      message: "AI generate-board request failed",
-      source: "server",
-      extra: { route: "/api/ai/generate-board", stage: "request" },
-    }).catch(() => undefined);
+      message: error instanceof Error ? error.message : "AI request failed",
+      stack: error instanceof Error ? error.stack : undefined,
+      url: "/api/ai/generate-board",
+      source: "handled",
+      extra: { stage: "request" },
+    });
     throw error;
   }
 }

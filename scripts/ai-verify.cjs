@@ -5,6 +5,7 @@ const { spawnSync, execFileSync } = require('node:child_process');
 const root = path.resolve(__dirname, '..');
 const regressionTests = [
   'ai-eval', 'ai-prompt-registry', 'ai-model-tracing', 'ai-error-tracking',
+  'ai-handled-fallbacks', 'feature-flags',
   'editor-ai-prompt', 'ai-output-style-unslop', 'ai-usage-attribution',
   'ai-chat-observability', 'task-summaries', 'comment-summary-lines',
   'task-writer-context-synthesis', 'task-writer-source-fidelity',
