@@ -44,6 +44,7 @@ import {
   HTPR_6407_MOBILE_AGENT_CHAT_LAYOUT_FLAG,
   HTPR_6476_MOBILE_AGENT_CHAT_FULLSCREEN_FLAG,
   HTPR_6860_MOBILE_PAGE_HIDE_DOCK_FLAG,
+  HTPR_6861_MOBILE_PAGE_BACK_ROW_FLAG,
   POSTHOG_ERROR_ALERT_FLAG,
   SCOPED_BOARD_REFETCH_FLAG,
   MY_TASKS_CROSS_BOARD_PRIORITY_SORT_FLAG,
@@ -405,6 +406,12 @@ const FEATURE_FLAG_DEFINITIONS = [
     shippedOn: "2026-10-03",
     description:
       "On mobile ticket pages (/page/...): hide the bottom bar, the same as the ticket screen.",
+  },
+  {
+    key: HTPR_6861_MOBILE_PAGE_BACK_ROW_FLAG,
+    shippedOn: "2026-10-03",
+    description:
+      "On mobile ticket pages: use the Settings-style back row, inset the title, and move page deletion into Commands.",
   },
   {
     key: HTPR_6476_MOBILE_AGENT_CHAT_FULLSCREEN_FLAG,

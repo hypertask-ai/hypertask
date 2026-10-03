@@ -144,6 +144,9 @@ test("task comment commands remember usage and rank within their group", async (
 
     cleanups.push(
       setMock(modulePath("src/store/index.ts"), atoms),
+      setMock(modulePath("src/store/currentPageActions.ts"), {
+        currentPageActionsAtom: { default: null },
+      }),
       setMock(modulePath("src/lib/state.tsx"), {
         useRecoilState: (atom) => {
           const [value, setValue] = React.useState(
