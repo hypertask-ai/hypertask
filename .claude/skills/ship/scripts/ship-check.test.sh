@@ -31,8 +31,9 @@ gh() {
 export -f gh
 G 2 $M 822 -R hypertask-ai/hypertask
 G 2 FOO=1 $M 822 -R hypertask-ai/hypertask
-G 0 $M 809 -R hypertask-ai/hypertask
-G 2 $M 809 -R hypertask-ai/hypertask '&&' $M 822 -R hypertask-ai/hypertask
+AGENT_TOKEN= HYPERTASKS_JWT_TOKEN= G 2 $M 809 -R hypertask-ai/hypertask # No live modes or premerge evidence.
+G 0 $M 838 -R hypertask-ai/hypertask # Skills-only PR, no product flag reads.
+G 2 $M 838 -R hypertask-ai/hypertask '&&' $M 822 -R hypertask-ai/hypertask
 G 0 grep "$M" notes.txt
 unset -f gh
 
@@ -195,7 +196,11 @@ cat > "$E/flag-bin/gh" <<'MOCK'
 import base64, json, os, sys, urllib.parse
 args = sys.argv[1:]
 if args[:2] == ['pr', 'view']:
-    print('YPER4-999 [' + os.environ.get('FLAG_TYPE', 'BUGFIX') + '] Fixture')
+    title = 'YPER4-999 [' + os.environ.get('FLAG_TYPE', 'BUGFIX') + '] Fixture'
+    if args[args.index('--json') + 1] == 'title':
+        print(title)
+    else:
+        print(json.dumps({'number': 999, 'title': title, 'state': os.environ.get('FLAG_PR_STATE', 'OPEN'), 'mergeCommit': {'oid': 'a' * 40}, 'baseRefName': 'production'}))
     sys.exit(0)
 if args[0] != 'api' or os.environ.get('FLAG_GH_ERROR'):
     sys.exit(1)
@@ -247,7 +252,8 @@ F 2 'record a browser click-through'
 for type in BUGFIX INFRA REFACTOR FEATURE; do F 2 'record a browser click-through' FLAG_TYPE="$type"; done
 F 0 '' FLAG_HTTP='{"flags":[{"key":"htpr-1-released","mode":"OWNER_AND_QA"}]}'
 F 0 '' FLAG_HTTP='{"flags":[{"key":"htpr-1-released","mode":"OFF"}]}'
-F 0 '' FLAG_HTTP_ERROR=1
+F 2 'registry defaults cannot prove' FLAG_HTTP_ERROR=1
+F 2 'registry defaults cannot prove' AGENT_TOKEN=
 sed -i 's/OWNER_AND_QA/EVERYONE/' "$E/flag-source/registry"
 F 2 'record a browser click-through' FLAG_HTTP_ERROR=1
 F 2 'record a browser click-through' AGENT_TOKEN=
@@ -269,6 +275,17 @@ RECORD
 F 2 'recording must be non-empty'
 printf 'recording fixture' > "$E/YPER4-999/click.webm"
 F 0 ''
+F 0 '' FLAG_HTTP_ERROR=1
+# Hookless commands use the same current-head guard; merged records stay valid.
+P() {
+  local want=$1 mode=$2 id=$3 out got; shift 3
+  out=$(env PATH="$E/flag-bin:$PATH" PYTHONPATH="$E/flag-http" FLAG_SOURCE="$E/flag-source" AGENT_TOKEN=fixture HYPERTASKS_JWT_TOKEN= "$@" ./ship-check "$mode" "$id" 2>&1); got=$?
+  if [ "$got" = "$want" ]; then ok "manual $mode: $got"
+  else bad "manual $mode: want $want got $got $out"; fi
+}
+echo 999 > "$E/YPER4-999/pr"
+P 0 premerge 999
+P 0 pr YPER4-999
 cp "$premerge" "$E/record"
 for change in \
   's/^Commit:.*/Commit: deadbeef/|must name PR head sha' \
@@ -276,6 +293,7 @@ for change in \
   's/^Account:.*/Account: /|missing Account:' \
   '/^Flags:/d|missing Flags:' \
   's/=EVERYONE/=OFF/|record each released flag' \
+  's/=EVERYONE/=EVERYONE-invalid/|record each released flag' \
   '/^Board:/d|missing Board:' \
   's@/projects/project-7283@/demo@|real board URL' \
   '/^Build:/d|missing Build:' \
@@ -291,6 +309,9 @@ cp "$E/record" "$premerge"
 printf 'const released = isFeatureEnabled(\n  "htpr-1-released", userId);\n' > "$E/flag-source/base"
 printf 'const changed = 1;\n' > "$E/flag-source/head"
 rm "$premerge"
+P 1 premerge 999
+P 1 pr YPER4-999
+P 0 pr YPER4-999 FLAG_PR_STATE=MERGED FLAG_GH_ERROR=1
 F 2 'record a browser click-through'
 F 2 'record a browser click-through' FLAG_STATUS=removed
 F 2 'record a browser click-through' FLAG_STATUS=renamed

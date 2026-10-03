@@ -5,6 +5,7 @@
 #   ship-check branch <T> <b|none> record the branch this session made (required on the duplicate path)
 #   ship-check duplicate <T> <ORIG> <pr>  T was already fixed by ORIG's merged PR: gates then check that PR
 #   ship-check pr <T>            the ticket's PR exists and is named right
+#   ship-check premerge <pr>     released-flag browser proof for the current PR head (hookless sessions)
 #   ship-check title <pr>        PR title is "PREFIX-NNNN [TYPE] ..." and that ticket exists
 #   ship-check ticket <T>        ticket exists on the board
 #   ship-check merged <T>        the ticket's newest PR is merged into the base branch
@@ -104,7 +105,10 @@ check_pr() {
     [[ $t =~ $TITLE_RE || $t =~ $OLD_TITLE_RE ]] \
       || fail "PR ${row%% *} title must be PREFIX-NNNN [TYPE] description"
     echo "title ok"
-  else check_title "${row%% *}"; fi
+  else
+    check_title "${row%% *}"
+    if [[ $row == *" OPEN "* ]]; then check_premerge "${row%% *}"; fi
+  fi
 }
 
 check_merged() { local s; s=$(merge_sha "$1") || { echo "$s"; exit 1; }; echo "merged ok"; }
@@ -319,11 +323,12 @@ try:
         key = re.search(r'\bkey:\s*([\'\"][^\'\"]+[\'\"]|\w+)', block)
         if key:
             defaults[resolve(key[1], keys)] = default[1]
-    if modes is None:
-        print('note: live flag modes unavailable; using production flag registry defaults')
+    live = modes is not None
+    if not live:
+        print('note: live flag modes unavailable; registry defaults cannot prove a flag is not released')
         modes = defaults
     released = {key for key in touched if modes.get(key) == 'EVERYONE'}
-    unknown = unknown or any(key not in modes for key in touched)
+    unknown = unknown or not live or any(key not in modes for key in touched)
     if not released and not unknown:
         sys.exit(0)
     folder = Path(evidence) / ticket
@@ -340,8 +345,12 @@ try:
             raise ValueError(message + f' (missing {field}:)')
     if not re.fullmatch(r'https?://\S+/projects/project-[0-9]+(?:[/?#]\S*)?', fields['Board']):
         raise ValueError(message + ' (Board: must name a real board URL, not /demo)')
-    if any(not re.search(r'(?<![\w-])' + re.escape(key) + r'=EVERYONE\b', fields['Flags']) for key in released):
+    states = dict(part.strip().split('=', 1) for part in fields['Flags'].split(','))
+    if any(states.get(key) != 'EVERYONE' for key in released):
         raise ValueError(message + ' (record each released flag as EVERYONE)')
+    if any(states.get(key) not in ('OFF', 'OWNER_ONLY', 'OWNER_AND_QA', 'EVERYONE')
+           or (live and key in modes and states[key] != modes[key]) for key in touched):
+        raise ValueError(message + ' (record the live state of every touched flag)')
     if not re.match(r'PASS\s+\S', fields.get('Click', '')) or not fields.get('Recording'):
         raise ValueError(message + ' (missing passing click or recording)')
     video = (folder / fields['Recording']).resolve()
@@ -386,6 +395,7 @@ case "${1:-}" in
   bind) check_bind "$2" "$3" ;;
   branch) check_branch "$2" "${3:-}" ;;
   duplicate) check_duplicate "$2" "$3" "$4" ;;
+  premerge) check_title "$2"; check_premerge "$2" ;;
   title) check_title "$2" ;;
   ticket) check_ticket "$2" ;;
   pr) check_pr "$2" ;;
