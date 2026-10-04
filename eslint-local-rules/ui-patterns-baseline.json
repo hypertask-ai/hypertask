@@ -60,5 +60,15 @@
     "src/components/notifications/inboxSplit/index.tsx": 3,
     "src/components/sidebars/RightSidebar/UserPreference.tsx": 1,
     "src/components/sidebars/leftSidebar.tsx": 1
+  },
+  "no-new-view-save-actions": {
+    "src/app/my-tasks/MyTasksViewTabs.tsx": 3,
+    "src/app/time/TimeComp.tsx": 1,
+    "src/components/Common/AttachmentsUpload/AttachmentControls.tsx": 3,
+    "src/components/Global/MobileHeaderStrip.tsx": 2,
+    "src/components/Modals/Settings/BillingSection.tsx": 1,
+    "src/components/Modals/commands/manageColumn.tsx": 1,
+    "src/components/PageComponents/Calendar/calendar.tsx": 3,
+    "src/components/PageComponents/TaskDetail/TaskInfoColumn/TaskInfo.tsx": 1
   }
 }

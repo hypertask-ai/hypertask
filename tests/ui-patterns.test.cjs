@@ -75,3 +75,31 @@ test("the actual required CI lint entry point enables the UI checks", async () =
   assert.match(workflow, /name: ci-tests/);
   assert.match(workflow, /name: Lint[\s\S]*?run: npm run lint/);
 });
+
+// HTPR-6422, ee15925f7 (#547): parallel dirty-state Save and Save as view.
+// HTPR-6572, 6e166acdd (#706): another mobile Save view implementation.
+test("rejects historical parallel view-save actions", async () => {
+  for (const code of [
+    'const MyTasksViewTabs = () => <button onClick={onSave}>Save</button>;',
+    '<button onClick={saveAs}><span>Save as view</span></button>;',
+    '<button onClick={() => { onSave(); setActionsOpen(false); }}>Save view</button>;',
+    'const ViewTabs = () => <button onClick={onReset}>Reset changes</button>;',
+  ]) {
+    const messages = await lint(code, undefined, "no-new-view-save-actions");
+    assert.equal(messages.length, 1, code);
+    assert.match(messages[0].message, /SaveViewHeaderKanban.*SaveViewModal/);
+  }
+});
+
+test("allows shared view save controls and ordinary non-view form saves", async () => {
+  assert.deepEqual(await lint(`
+    import { SaveView } from "@/components/PageComponents/Kanban/HeaderComponents/SaveViewHeaderKanban";
+    import SaveViewModal from "@/components/Modals/ViewModals/SaveViewModal";
+    <><SaveView dirty={dirty} onSaveClick={save} /><SaveViewModal /></>;
+  `), []);
+  assert.deepEqual(await lint('<button onClick={submit}>Save profile</button>;'), []);
+  const filename = "src/app/my-tasks/MyTasksViewTabs.tsx";
+  const current = readFileSync(resolve(root, filename), "utf8");
+  assert.deepEqual(await lint(current, filename, "no-new-view-save-actions"), []);
+  assert.equal((await lint(`${current}\nconst extra = <button>Save as view</button>;`, filename, "no-new-view-save-actions")).length, 1);
+});

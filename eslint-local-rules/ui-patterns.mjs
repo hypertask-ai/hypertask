@@ -66,13 +66,35 @@ const noNewChoiceMenus = ratchet(
   },
 );
 
+const noNewViewSaveActions = ratchet(
+  "no-new-view-save-actions",
+  'Reuse SaveView from @/components/PageComponents/Kanban/HeaderComponents/SaveViewHeaderKanban and SaveViewModal from @/components/Modals/ViewModals/SaveViewModal. Do not add a parallel Save, Reset or Save as view action. Existing per-file debt cannot increase.',
+  (node, source) => {
+    if (!["button", "span", "a", "Button"].includes(name(node.name))) return false;
+    if (!attribute(node, "onClick", source) && name(node.name) !== "button" && name(node.name) !== "Button") return false;
+    const body = source.getText(node.parent);
+    if (/\bsave\s+(?:as\s+(?:new\s+)?)?view\b/i.test(body)) return true;
+    return /view/i.test(source.text) && (
+      />\s*(?:Save|Reset(?: changes| view)?)\s*</i.test(body) ||
+      /\b(?:onSave|onReset|saveAs)\b/.test(attribute(node, "onClick", source))
+    );
+  },
+  [
+    "src/components/PageComponents/Kanban/HeaderComponents/SaveViewHeaderKanban.tsx",
+    "src/components/Modals/ViewModals/SaveViewModal.tsx",
+  ],
+);
+
 export const uiPatternsPlugin = {
   meta: { name: "hypertask-ui-reuse", version: "1.0.0" },
-  rules: { "no-new-choice-menus": noNewChoiceMenus },
+  rules: {
+    "no-new-choice-menus": noNewChoiceMenus,
+    "no-new-view-save-actions": noNewViewSaveActions,
+  },
 };
 
 export const uiPatternsLintConfig = {
   files: ["src/**/*.{js,jsx,ts,tsx}"],
   plugins: { "hypertask-ui": uiPatternsPlugin },
-  rules: { "hypertask-ui/no-new-choice-menus": "error" },
+  rules: Object.fromEntries(Object.keys(uiPatternsPlugin.rules).map((rule) => [`hypertask-ui/${rule}`, "error"])),
 };
