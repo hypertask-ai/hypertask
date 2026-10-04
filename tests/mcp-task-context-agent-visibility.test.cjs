@@ -6,7 +6,7 @@ const Module = require("node:module");
 const ts = require("typescript");
 
 const root = path.resolve(__dirname, "..");
-const routePath = path.join(root, "src/app/api/mcp/tasks/context/route.ts");
+const routePath = path.join(root, "src/lib/mcp/operations/tasks/context/operation.ts");
 const routeSource = fs.readFileSync(routePath, "utf8");
 
 function loadRoute(comments) {

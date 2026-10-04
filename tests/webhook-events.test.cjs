@@ -140,7 +140,7 @@ test('omitted subscriptions mean all events and invalid selections fail clearly'
 
 test('the MCP webhook route uses shared parsing and returns event definitions', () => {
   const route = fs.readFileSync(
-    path.join(root, 'src/app/api/mcp/webhooks/route.ts'),
+    path.join(root, 'src/lib/mcp/operations/webhooks/operation.ts'),
     'utf8'
   )
 

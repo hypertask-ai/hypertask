@@ -163,9 +163,9 @@ test("MCP section updates reject auto-assignees outside the board", async () => 
 });
 
 test("MCP section list and update routes expose autoAssign", () => {
-  const listRoute = read("src/app/api/mcp/projects/[projectId]/sections/route.ts");
+  const listRoute = read("src/lib/mcp/operations/projects/[projectId]/sections/operation.ts");
   const updateRoute = read(
-    "src/app/api/mcp/projects/[projectId]/sections/[sectionId]/route.ts",
+    "src/lib/mcp/operations/projects/[projectId]/sections/[sectionId]/operation.ts",
   );
 
   assert.match(listRoute, /autoAssignUserId: true/);

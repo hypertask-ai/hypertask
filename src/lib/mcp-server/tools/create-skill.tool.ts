@@ -1,4 +1,4 @@
-import { validateAndSanitizeCreateSkillInput, getCreateSkillBaseSchema } from '../validations/skill.validation';
+import { getCreateSkillBaseSchema } from '../validations/skill.validation';
 import { SkillService } from '../lib/services/skill.service';
 import { executeWithService } from '../utils/executeWithService';
 import { TOOL_METADATA } from '../config/tool-metadata';
@@ -12,7 +12,7 @@ export const createSkillTool = {
   description: TOOL_METADATA.CREATE_SKILL.description,
   parameters: getCreateSkillBaseSchema(),
   execute: async (args: unknown, context: any) => {
-    const validatedInput = validateAndSanitizeCreateSkillInput(args);
+    const validatedInput = args;
     return executeWithService(context, SkillService, 'createSkill', validatedInput);
   },
 };

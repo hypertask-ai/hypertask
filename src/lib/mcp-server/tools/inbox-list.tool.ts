@@ -1,10 +1,7 @@
 import { InboxService } from '../lib/services/inbox.service';
 import { executeWithService } from '../utils/executeWithService';
 import { TOOL_METADATA } from '../config/tool-metadata';
-import {
-  getInboxListBaseSchema,
-  InboxListInputSchema,
-} from '../validations/inbox.validation';
+import { getInboxListBaseSchema } from '../validations/inbox.validation';
 
 /**
  * Tool: inbox_list
@@ -15,7 +12,7 @@ export const inboxListTool = {
   description: TOOL_METADATA.INBOX_LIST.description,
   parameters: getInboxListBaseSchema(),
   execute: async (args: unknown, context: any) => {
-    const validatedInput = InboxListInputSchema.parse(args);
+    const validatedInput = args;
     return executeWithService(
       context,
       InboxService,

@@ -1,4 +1,4 @@
-import { validateAndSanitizeDeleteSkillInput, getDeleteSkillBaseSchema } from '../validations/skill.validation';
+import { getDeleteSkillBaseSchema } from '../validations/skill.validation';
 import { SkillService } from '../lib/services/skill.service';
 import { executeWithService } from '../utils/executeWithService';
 import { TOOL_METADATA } from '../config/tool-metadata';
@@ -12,7 +12,7 @@ export const deleteSkillTool = {
   description: TOOL_METADATA.DELETE_SKILL.description,
   parameters: getDeleteSkillBaseSchema(),
   execute: async (args: unknown, context: any) => {
-    const validatedInput = validateAndSanitizeDeleteSkillInput(args);
+    const validatedInput = args;
     return executeWithService(context, SkillService, 'deleteSkill', validatedInput);
   },
 };

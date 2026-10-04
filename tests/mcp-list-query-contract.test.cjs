@@ -25,12 +25,12 @@ test("list query fields are always merged without an infra flag", () => {
 });
 
 test("routes return nextCursor and project after building link", () => {
-  const tasks = read("src/app/api/mcp/tasks/route.ts");
-  const search = read("src/app/api/mcp/tasks/search/route.ts");
-  const comments = read("src/app/api/mcp/comments/route.ts");
-  const projects = read("src/app/api/mcp/projects/route.ts");
-  const sections = read("src/app/api/mcp/projects/[projectId]/sections/route.ts");
-  const labels = read("src/app/api/mcp/projects/[projectId]/labels/route.ts");
+  const tasks = read("src/lib/mcp/operations/tasks/operation.ts");
+  const search = read("src/lib/mcp/operations/tasks/search/operation.ts");
+  const comments = read("src/lib/mcp/operations/comments/operation.ts");
+  const projects = read("src/lib/mcp/operations/projects/operation.ts");
+  const sections = read("src/lib/mcp/operations/projects/[projectId]/sections/operation.ts");
+  const labels = read("src/lib/mcp/operations/projects/[projectId]/labels/operation.ts");
   const taskService = read("src/lib/mcp-server/lib/services/task.service.ts");
   const searchService = read("src/lib/mcp-server/lib/services/search.service.ts");
 

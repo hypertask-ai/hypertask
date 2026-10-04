@@ -69,10 +69,10 @@ function harness({ authenticated = true, limited = false, accessible = true, ena
   stubs["@/lib/timeManualEntry"] = load("src/lib/timeManualEntry.ts", stubs);
   stubs["@/lib/timeEntryWriter"] = load("src/lib/timeEntryWriter.ts", stubs);
   stubs["@/lib/timeTracking"] = load("src/lib/timeTracking.ts", stubs);
-  stubs["../_lib"] = load("src/app/api/mcp/time/_lib.ts", stubs);
+  stubs["../_lib"] = stubs["@/lib/mcp/operations/time/helpers"] = load("src/lib/mcp/operations/time/helpers.ts", stubs);
   return {
     writes, scopes,
-    log: load("src/app/api/mcp/time/log/route.ts", stubs).POST,
+    log: load("src/lib/mcp/operations/time/log/operation.ts", stubs).POST,
     update: load("src/app/api/mcp/time/update/route.ts", stubs).POST,
   };
 }

@@ -1,4 +1,3 @@
-import { handleListAgentsRequest } from '@/lib/mcp/agents/list'
-import type { NextRequest } from 'next/server'
+import { GET as executeGET } from '@/lib/mcp/operations/agents/operation'
 
-export const GET = (request: NextRequest) => handleListAgentsRequest(request)
+export const GET = executeGET

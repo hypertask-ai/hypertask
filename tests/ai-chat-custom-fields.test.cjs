@@ -52,7 +52,7 @@ test("hypertask_set_custom_field_value resolves task refs and reuses the shared 
   );
 
   // Auto-create + upsert must go through the same controllers the MCP route
-  // uses (src/app/api/mcp/custom-fields/value/route.ts), so validation and
+  // uses (src/lib/mcp/operations/custom-fields/value/operation.ts), so validation and
   // auto-create-on-missing-name behavior can't drift between clients.
   assert.match(body, /createCustomField\(/, "must reuse createCustomField for auto-create");
   assert.match(

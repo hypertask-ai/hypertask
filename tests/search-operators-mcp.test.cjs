@@ -66,7 +66,7 @@ for (const [file, exports] of mocks) {
   require.cache[filename] = { id: filename, filename, loaded: true, exports }
 }
 const jiti = require('jiti')(__filename, { alias: { '@': path.join(root, 'src') }, cache: false, interopDefault: true })
-const { GET } = jiti(path.join(root, 'src/app/api/mcp/tasks/search/route.ts'))
+const { GET } = jiti(path.join(root, 'src/lib/mcp/operations/tasks/search/operation.ts'))
 const { NextRequest } = require('next/server')
 function row(id, projectId = 7, updatedAt = new Date('2026-09-01')) {
   return { id, projectId, title: 'Cleanup', description: '', ticketNumber: `X-${id}`, section: 'Todo',

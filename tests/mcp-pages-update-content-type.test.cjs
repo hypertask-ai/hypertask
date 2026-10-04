@@ -27,7 +27,7 @@ const canvas = jiti(path.join(root, "src/utils/controllers/pages/htmlCanvas.ts")
 const { sanitizeRichHtml } = jiti(path.join(root, "src/utils/helperFunctions/sanitizeRichHtml.ts"));
 const { markdownToHtml } = jiti(path.join(root, "src/utils/helperFunctions/markdownToHtml.ts"));
 const fieldError = jiti(path.join(root, "src/lib/mcp/fieldError.ts"));
-const routeUtils = load("src/app/api/mcp/pages/_lib/routeUtils.ts", {
+const routeUtils = load("src/lib/mcp/operations/pages/helpers.ts", {
   "@/lib/mcp/fieldError": fieldError,
   "@/lib/mcp/tasks/services": { validateProjectAccess: async () => ({ error: null }) },
 });
@@ -72,10 +72,10 @@ function harness(contentHtml, { authorized = true, accessible = true } = {}) {
     "@/utils/controllers/pages/pageService": service,
     "@/utils/controllers/pages/htmlCanvas": canvas,
     "@/utils/controllers/pages/htmlToMarkdown": jiti(path.join(root, "src/utils/controllers/pages/htmlToMarkdown.ts")),
-    "../_lib/routeUtils": { ...routeUtils, canAccessProject: async () => accessible },
+    "@/lib/mcp/operations/pages/helpers": { ...routeUtils, canAccessProject: async () => accessible },
   };
-  const { POST } = load("src/app/api/mcp/pages/update/route.ts", stubs);
-  const { GET } = load("src/app/api/mcp/pages/get/route.ts", stubs);
+  const { POST } = load("src/lib/mcp/operations/pages/update/operation.ts", stubs);
+  const { GET } = load("src/lib/mcp/operations/pages/get/operation.ts", stubs);
   return {
     service, snapshots, indexed, page: () => page,
     post: (body) => POST(new Request("https://app.hypertask.ai/api/mcp/pages/update", {

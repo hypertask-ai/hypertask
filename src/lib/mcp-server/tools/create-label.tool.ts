@@ -15,7 +15,7 @@ export const createLabelTool = {
   description: TOOL_METADATA.CREATE_LABEL.description,
   parameters: CreateLabelInputSchema,
   execute: async (args: unknown, context: unknown) => {
-    const validatedInput = CreateLabelInputSchema.parse(args);
+    const validatedInput = args;
     return executeWithService(context, ProjectService, 'createLabel', validatedInput);
   },
 };

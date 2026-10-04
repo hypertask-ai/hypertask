@@ -99,7 +99,7 @@ test('set custom field value requires task, field, and value identifiers', () =>
 });
 
 test('set response type mirrors the route customField plus customFieldValue shape', () => {
-  const route = read('src/app/api/mcp/custom-fields/value/route.ts');
+  const route = read('src/lib/mcp/operations/custom-fields/value/operation.ts');
   const service = read(
     'src/lib/mcp-server/lib/services/custom-field.service.ts'
   );
@@ -127,7 +127,7 @@ test('set response type mirrors the route customField plus customFieldValue shap
 });
 
 test('shared route preserves agent board access and auto-create-on-set', () => {
-  const route = read('src/app/api/mcp/custom-fields/value/route.ts');
+  const route = read('src/lib/mcp/operations/custom-fields/value/operation.ts');
 
   assert.match(
     route,

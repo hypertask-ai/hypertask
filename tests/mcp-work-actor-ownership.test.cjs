@@ -29,7 +29,7 @@ test("session heartbeats do not treat sibling agents as the same owner", () => {
 });
 
 test("only the creating agent or an authorized human may cancel a decision", () => {
-  const source = read("src/app/api/mcp/decisions/[id]/route.ts");
+  const source = read("src/lib/mcp/operations/decisions/[id]/operation.ts");
   assert.match(
     source,
     /const canCancel = ctx\.agentId !== null\s+\? ctx\.agentId === decisionRequest\.agentId\s+: ctx\.user\.id === decisionRequest\.createdById \|\|\s+ctx\.user\.id === taskOwner\.userId/,

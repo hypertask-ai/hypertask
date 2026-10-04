@@ -1,10 +1,7 @@
 import { HelpDocsService } from '../lib/services/help-docs.service';
 import { executeWithService } from '../utils/executeWithService';
 import { TOOL_METADATA } from '../config/tool-metadata';
-import {
-  getSearchHelpDocsBaseSchema,
-  SearchHelpDocsInputSchema,
-} from '../validations/help-docs.validation';
+import { getSearchHelpDocsBaseSchema } from '../validations/help-docs.validation';
 
 /**
  * Tool: search_help_docs
@@ -15,7 +12,7 @@ export const searchHelpDocsTool = {
   description: TOOL_METADATA.SEARCH_HELP_DOCS.description,
   parameters: getSearchHelpDocsBaseSchema(),
   execute: async (args: unknown, context: any) => {
-    const validatedInput = SearchHelpDocsInputSchema.parse(args);
+    const validatedInput = args;
     return executeWithService(
       context,
       HelpDocsService,

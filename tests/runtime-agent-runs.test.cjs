@@ -30,7 +30,7 @@ function loadRoute({ principal = null, enabled = true, createRun = async () => n
   });
   const filename = path.join(
     root,
-    "src/app/api/mcp/agents/[agentId]/route.ts",
+    "src/lib/mcp/operations/agents/[agentId]/operation.ts",
   );
   delete require.cache[filename];
   return createJiti(

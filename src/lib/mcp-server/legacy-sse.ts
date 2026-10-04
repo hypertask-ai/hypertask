@@ -9,6 +9,8 @@ import { handleStatelessMcpRequest, MCP_SERVER_INFO, type PortableTool } from '.
 import { selectMcpTools } from './consolidated-tools'
 import { HTPR_6804_MCP_TOOLS_FLAG, isFeatureEnabled } from '@/lib/flags'
 import type { ManagementPermissions } from '@/lib/mcp/managementPermissions'
+import type { McpAuthContext } from '@/lib/mcp/auth/types'
+import { withMcpExecutionContext } from '@/lib/mcp/operationContext'
 
 type RelayMessage = {
   replyChannel: string
@@ -119,11 +121,11 @@ export async function handleLegacySseRequest(
         const token = extra.authInfo?.token
         if (!token) throw new Error('Missing MCP bearer token')
         return {
-          content: [{ type: 'text', text: await tool.execute(args, token, {
+          content: [{ type: 'text', text: await withMcpExecutionContext(token, extra.authInfo?.extra?.mcpAuthContext as McpAuthContext | undefined, () => tool.execute(args, token, {
             requestId: String(extra.requestId),
             sessionId: transport.sessionId,
             clientFingerprint: crypto.createHash('sha256').update(token).digest('hex'),
-          }) }],
+          })) }],
         }
       })
     }
@@ -166,11 +168,11 @@ export async function handleLegacySseRequest(
                 teamScoped: incoming.authInfo.extra?.teamScoped === true,
                 agent: incoming.authInfo.extra?.agent === true,
               })
-              const rpcResponse = await handleStatelessMcpRequest(new Request('http://localhost/mcp', {
+              const rpcResponse = await withMcpExecutionContext(incoming.authInfo.token, incoming.authInfo.extra?.mcpAuthContext as McpAuthContext | undefined, () => handleStatelessMcpRequest(new Request('http://localhost/mcp', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(incoming.body),
-              }), incoming.authInfo, catalog, { sessionId: transport.sessionId })
+              }), incoming.authInfo, catalog, { sessionId: transport.sessionId }))
               if (rpcResponse.status !== 202) await transport.send(await rpcResponse.json())
             } else {
               await transport.handleMessage(incoming.body, { authInfo: incoming.authInfo })

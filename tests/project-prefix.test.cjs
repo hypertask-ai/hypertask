@@ -247,7 +247,7 @@ function lookups({ enabled = true, visible = true, live = false, liveAccess = tr
     "@/lib/agents/visibility": { boardAgentVisibilityWhere: () => ({}), accessibleAgentMembershipWhere: () => ({}) },
     "@/utils/controllers/notifications/visibleInboxScope": { visibleUserInboxWhere: () => ({}) },
   });
-  const route = load("src/app/api/mcp/tasks/route.ts", {
+  const route = load("src/lib/mcp/operations/tasks/operation.ts", {
     ...base,
     "next/server": { NextResponse: { json: (body, init = {}) => ({ body, status: init.status ?? 200 }) } },
     "@/lib/mcp/auth": { checkMcpRateLimit: async () => null, validateMcpAuth: async () => ({ user: { id: 6 }, agentId }) },
@@ -875,7 +875,7 @@ test("round 2: bulk prefix rewrite advances updatedAt in the same parameterized 
   assert.equal(updates.length, 1);
   assert.match(updates[0].text, /^UPDATE "Task" SET "ticketNumber" = \? \|\| '-' \|\| "uniqueIndex", "updatedAt" = CURRENT_TIMESTAMP WHERE "projectId" = \?$/);
   assert.deepEqual(updates[0].values, ["NEW", 15]);
-  assert.match(read("src/app/api/mcp/tasks/route.ts"), /where.updatedAt = \{ gte: new Date\(updatedSince\) \}/);
+  assert.match(read("src/lib/mcp/operations/tasks/operation.ts"), /where.updatedAt = \{ gte: new Date\(updatedSince\) \}/);
 });
 
 test("registry defines one ticket-specific flag with Owner + QA default", () => {

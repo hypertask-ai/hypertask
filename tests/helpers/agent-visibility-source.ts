@@ -30,7 +30,7 @@ export async function assertAgentVisibilitySources() {
     readFile("src/app/api/agent-chat/[sessionId]/route.ts", "utf8"),
     readFile("src/app/api/agent-chat/[sessionId]/messages/route.ts", "utf8"),
     readFile("src/lib/agents/chatAccess.ts", "utf8"),
-    readFile("src/app/api/mcp/assignees/assign/route.ts", "utf8"),
+    readFile("src/lib/mcp/operations/assignees/assign/operation.ts", "utf8"),
   ]);
   assert.match(detail, /<InfoRow label="Visibility">/);
   assert.match(detail, /<AgentOption value="PRIVATE">Private<\/AgentOption>/);

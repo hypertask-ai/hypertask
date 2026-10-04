@@ -22,16 +22,17 @@ function mcpTool(h) {
   });
   const requests = [];
   const { executeWithService } = loadTs("src/lib/mcp-server/utils/executeWithService.ts", {
-    "../lib/api-client": { createApiClient: (token) => {
+    "@/lib/mcp/inProcessClient": { createInProcessMcpClient: async (token) => {
       assert.equal(token, "test-token");
-      return { makeRequest: async (endpoint, options) => {
+      return { auth: { user: { id: 6 }, agentId: null }, client: { makeRequest: async (endpoint, options) => {
         requests.push({ endpoint, ...options });
         const response = await h.patch(JSON.parse(options.body).title, endpoint.split("/").at(-1));
         const payload = await response.json();
         if (!response.ok) throw new Error(payload.error);
         return payload;
-      } };
+      } } };
     } },
+    "@/lib/mcp/operationContext": { withMcpExecutionContext: (_token, _auth, execute) => execute() },
     "./serialization": { sanitizeResponse: (value) => value },
   });
   const { renameBoardTool } = loadTs("src/lib/mcp-server/tools/rename-board.tool.ts", {

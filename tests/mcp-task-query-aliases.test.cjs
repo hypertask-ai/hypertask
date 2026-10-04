@@ -6,7 +6,7 @@ const ts = require("typescript");
 
 const root = path.resolve(__dirname, "..");
 const routeSource = fs.readFileSync(
-  path.join(root, "src/app/api/mcp/tasks/route.ts"),
+  path.join(root, "src/lib/mcp/operations/tasks/operation.ts"),
   "utf8",
 );
 

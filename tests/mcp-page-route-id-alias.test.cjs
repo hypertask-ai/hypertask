@@ -7,7 +7,7 @@ const ts = require("typescript");
 const root = path.resolve(__dirname, "..");
 const routeUtilsPath = path.join(
   root,
-  "src/app/api/mcp/pages/_lib/routeUtils.ts",
+  "src/lib/mcp/operations/pages/helpers.ts",
 );
 const routeUtilsSource = fs.readFileSync(routeUtilsPath, "utf8");
 const javascript = ts.transpileModule(routeUtilsSource, {
@@ -46,7 +46,7 @@ const { resolvePageIdentifierAlias } = routeUtilsModule.exports;
 
 function readRoute(name) {
   return fs.readFileSync(
-    path.join(root, `src/app/api/mcp/pages/${name}/route.ts`),
+    path.join(root, `src/lib/mcp/operations/pages/${name}/operation.ts`),
     "utf8",
   );
 }

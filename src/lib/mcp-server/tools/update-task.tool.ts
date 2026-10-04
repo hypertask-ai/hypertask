@@ -1,4 +1,4 @@
-import { getUpdateTaskBaseSchema, UpdateTaskInputSchema } from '../validations/task.validation';
+import { getUpdateTaskBaseSchema } from '../validations/task.validation';
 import { TOOL_METADATA } from '../config/tool-metadata';
 import { executeWithService } from '../utils/executeWithService';
 import { TaskService } from '../lib/services/task.service';
@@ -8,8 +8,8 @@ import { normalizeTaskInput } from '../utils/normalize-task-input';
  * Tool: update_task
  * Updates a task with new values for title, description, priority, estimate, etc.
  * 
- * Note: We use the base schema (without refine) for FastMCP parameters,
- * then validate the refine logic (task identification + at least one update field) in execute.
+ * The base schema describes protocol parameters; TaskService validates
+ * task identification and requires at least one update field.
  */
 const UpdateTaskBaseSchema = getUpdateTaskBaseSchema();
 
@@ -25,8 +25,7 @@ export const updateTaskTool = {
     // Normalize input to handle URLs (extract project_id + unique_index from URLs)
     const normalizedArgs = normalizeTaskInput(args as Record<string, any>);
     
-    // Validate with full schema (including refines)
-    const validatedInput = UpdateTaskInputSchema.parse(normalizedArgs);
+    const validatedInput = normalizedArgs;
     
     return executeWithService(
       context,

@@ -112,9 +112,9 @@ test("createActivity and createCommentService stamp agentDisplayName on insert",
 
 test("read paths gate durable attribution behind htpr-6516-agent-attribution", () => {
   for (const relativePath of [
-    "src/app/api/mcp/comments/route.ts",
-    "src/app/api/mcp/comments/[comment_id]/route.ts",
-    "src/app/api/mcp/tasks/context/route.ts",
+    "src/lib/mcp/operations/comments/operation.ts",
+    "src/lib/mcp/operations/comments/[comment_id]/operation.ts",
+    "src/lib/mcp/operations/tasks/context/operation.ts",
     "src/app/api/ai/chat/stream/route.ts",
     "src/utils/controllers/taskDetail/load.ts",
   ]) {

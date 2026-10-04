@@ -26,7 +26,7 @@ const jiti = jitiModule.createJiti
 test("agent webhook discovery is complete and test deliveries use the durable queue", () => {
   const events = read("src/lib/agentWebhooks/events.ts");
   const outbox = read("src/lib/agentWebhooks/outbox.ts");
-  const api = read("src/app/api/mcp/webhooks/route.ts");
+  const api = read("src/lib/mcp/operations/webhooks/operation.ts");
 
   assert.match(events, /AGENT_WEBHOOK_EVENT_DEFINITIONS/);
   assert.match(events, /signedContent: "<X-Hypertask-Timestamp>\.<raw request body>"/);

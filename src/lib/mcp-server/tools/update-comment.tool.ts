@@ -1,10 +1,7 @@
 import { CommentService } from '../lib/services/comment.service';
 import { executeWithService } from '../utils/executeWithService';
 import { TOOL_METADATA } from '../config/tool-metadata';
-import {
-  getUpdateCommentBaseSchema,
-  UpdateCommentInputSchema,
-} from '../validations/comment.validation';
+import { getUpdateCommentBaseSchema } from '../validations/comment.validation';
 
 /**
  * Tool: update_comment
@@ -15,7 +12,7 @@ export const updateCommentTool = {
   description: TOOL_METADATA.UPDATE_COMMENT.description,
   parameters: getUpdateCommentBaseSchema(),
   execute: async (args: unknown, context: any) => {
-    const validatedInput = UpdateCommentInputSchema.parse(args);
+    const validatedInput = args;
     return executeWithService(
       context,
       CommentService,

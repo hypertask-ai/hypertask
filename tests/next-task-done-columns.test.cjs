@@ -20,7 +20,7 @@ const { columnRole } = jiti(
   path.join(root, 'src/lib/mcp/boards/columnRole.ts')
 )
 const routeSource = fs.readFileSync(
-  path.join(root, 'src/app/api/mcp/tasks/next/route.ts'),
+  path.join(root, 'src/lib/mcp/operations/tasks/next/operation.ts'),
   'utf8'
 )
 const routeJavascript = ts.transpileModule(routeSource, {

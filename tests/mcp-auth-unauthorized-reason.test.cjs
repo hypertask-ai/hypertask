@@ -280,9 +280,9 @@ test('the routes the ticket names answer through the shared helper', () => {
   // that failed in the report. Each must hand its rejection to the helper
   // instead of hand-rolling a 401 with no reason.
   const routes = [
-    'src/app/api/mcp/tasks/route.ts',
-    'src/app/api/mcp/tasks/move/route.ts',
-    'src/app/api/mcp/comments/route.ts',
+    'src/lib/mcp/operations/tasks/operation.ts',
+    'src/lib/mcp/operations/tasks/move/operation.ts',
+    'src/lib/mcp/operations/comments/operation.ts',
   ]
 
   for (const route of routes) {

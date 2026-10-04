@@ -103,7 +103,7 @@ function fixture({ tasks = [currentTask], visibleProjects = [20], agentId = null
     "@/lib/agents/visibility": {},
     "@/utils/controllers/notifications/visibleInboxScope": {},
   });
-  const { GET } = load("src/app/api/mcp/tasks/route.ts", {
+  const { GET } = load("src/lib/mcp/operations/tasks/operation.ts", {
     ...base,
     "next/server": { NextResponse: { json: (body, init = {}) => ({ body, status: init.status ?? 200 }) } },
     "@/lib/mcp/auth": {

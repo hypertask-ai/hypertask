@@ -141,7 +141,7 @@ const { searchFilterWhere } = jiti(path.join(root, 'src/lib/search/filters.ts'))
 const { rankedSearchWhere } = jiti(path.join(root, 'src/lib/search/rankedWhere.ts')) as any
 const documentHandler = jiti(path.join(root, 'src/pages/api/search/document.ts')).default as any
 const valuesHandler = jiti(path.join(root, 'src/pages/api/search/values.ts')).default as any
-const { GET } = jiti(path.join(root, 'src/app/api/mcp/tasks/search/route.ts')) as any
+const { GET } = jiti(path.join(root, 'src/lib/mcp/operations/tasks/search/operation.ts')) as any
 function reset(overrides: any = {}) {
   state = { session: { userId: 42 }, flags: { [flag]: true, [fuzzyFlag]: true,
     [keys.HTPR_6369_SEARCH_OPERATORS_FLAG]: true, [keys.HTPR_6370_SEARCH_CHIPS_FLAG]: true,

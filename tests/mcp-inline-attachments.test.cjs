@@ -360,7 +360,7 @@ test("the attachment endpoint accepts and forwards project_id + unique_index", (
   assert.equal(parsed.unique_index, 3099);
 
   const route = fs.readFileSync(
-    path.join(root, "src/app/api/mcp/tasks/attachments/route.ts"),
+    path.join(root, "src/lib/mcp/operations/tasks/attachments/operation.ts"),
     "utf8"
   );
   assert.match(route, /unique_index: parsed\.unique_index \?\? null/);
@@ -369,7 +369,7 @@ test("the attachment endpoint accepts and forwards project_id + unique_index", (
 
 test("the attachment endpoint delegates persistence to the atomic batch path", () => {
   const route = fs.readFileSync(
-    path.join(root, "src/app/api/mcp/tasks/attachments/route.ts"),
+    path.join(root, "src/lib/mcp/operations/tasks/attachments/operation.ts"),
     "utf8"
   );
   assert.match(route, /storeAttachmentBatchWithTargetLock\(/);
@@ -427,7 +427,7 @@ test("the attachment HTTP body is bounded before JSON parsing", async () => {
 
 test("the attachment endpoint requires write scope for managed agents", () => {
   const route = fs.readFileSync(
-    path.join(root, "src/app/api/mcp/tasks/attachments/route.ts"),
+    path.join(root, "src/lib/mcp/operations/tasks/attachments/operation.ts"),
     "utf8"
   );
   assert.match(route, /if \(ctx\.agentId\)/);
@@ -435,13 +435,13 @@ test("the attachment endpoint requires write scope for managed agents", () => {
   assert.match(route, /if \(scopeError\) return scopeError/);
 
   const createRoute = fs.readFileSync(
-    path.join(root, "src/app/api/mcp/tasks/create/route.ts"),
+    path.join(root, "src/lib/mcp/operations/tasks/create/operation.ts"),
     "utf8"
   );
   assert.match(createRoute, /requireRole\(ctx, ['"]write['"]\)/);
 
   const commentsRoute = fs.readFileSync(
-    path.join(root, "src/app/api/mcp/comments/route.ts"),
+    path.join(root, "src/lib/mcp/operations/comments/operation.ts"),
     "utf8"
   );
   const commentPost = commentsRoute.slice(commentsRoute.indexOf("export async function POST"));
@@ -1634,7 +1634,7 @@ test("the MCP handler forwards transport identity and attachment writes rebroadc
   assert.doesNotMatch(handlerSource, /new Request\(request,\s*\{/);
 
   const routeSource = fs.readFileSync(
-    path.join(root, "src/app/api/mcp/tasks/attachments/route.ts"),
+    path.join(root, "src/lib/mcp/operations/tasks/attachments/operation.ts"),
     "utf8"
   );
   assert.match(routeSource, /broadcastTaskComment\(task\.id/);

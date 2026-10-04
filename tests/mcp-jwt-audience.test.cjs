@@ -54,7 +54,7 @@ const jiti = require('jiti')(__filename, {
   cache: false,
   alias: { '@': path.join(root, 'src') },
 })
-const projectsRoute = jiti(path.join(root, 'src/app/api/mcp/projects/route.ts'))
+const projectsRoute = jiti(path.join(root, 'src/lib/mcp/operations/projects/operation.ts'))
 const { validateMcpAuth, verifyMcpJwtToken } = jiti(
   path.join(root, 'src/lib/mcp/auth.ts'),
 )

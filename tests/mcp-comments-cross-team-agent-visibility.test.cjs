@@ -8,7 +8,7 @@ const Module = require("node:module");
 // loads the real route plus the real visibility helpers (only prisma/auth are
 // stubbed), so two fixture users/projects stand in for a live second account.
 const root = path.resolve(__dirname, "..");
-const routePath = path.join(root, "src/app/api/mcp/comments/route.ts");
+const routePath = path.join(root, "src/lib/mcp/operations/comments/operation.ts");
 
 const {
   mcpVisibleAgentSelect,

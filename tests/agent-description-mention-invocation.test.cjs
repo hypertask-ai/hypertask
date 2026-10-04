@@ -27,7 +27,7 @@ const {
 } = jiti(path.join(root, "src/lib/mcp-server/validations/comment.validation.ts"));
 
 const routeSource = fs.readFileSync(
-  path.join(root, "src/app/api/mcp/comments/route.ts"),
+  path.join(root, "src/lib/mcp/operations/comments/operation.ts"),
   "utf8"
 );
 const followerJavascript = ts.transpileModule(fs.readFileSync(

@@ -264,7 +264,7 @@ test("every workspace operation stops at the owner boundary", async () => {
 
 test("workspace management is owner-scoped and agent rows have no mutation path", () => {
   const service = read("src/lib/mcp/webhooks/workspaceManagement.ts");
-  const mcpRoute = read("src/app/api/mcp/webhooks/route.ts");
+  const mcpRoute = read("src/lib/mcp/operations/webhooks/operation.ts");
 
   assert.match(service, /where: \{ id: teamId, googleAccount: \{ userId \} \}/);
   assert.match(service, /OR: \[\{ teamId, projectId: null \}, \{ project: \{ teamId \} \}\]/);

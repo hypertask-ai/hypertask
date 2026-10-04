@@ -110,7 +110,7 @@ test("JSON minute routes reject values that only coerce to numbers", () => {
     assert.match(read(file), /parseTimeMinutes\(body\?\.minutes\)/);
   }
   assert.match(
-    read("src/app/api/mcp/time/log/route.ts"),
+    read("src/lib/mcp/operations/time/log/operation.ts"),
     /parseTimeMinutes\(resolved\.body\?\.minutes\)/
   );
   assert.match(

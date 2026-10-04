@@ -8,8 +8,8 @@ const read = (relativePath) =>
   fs.readFileSync(path.join(root, relativePath), "utf8");
 
 test("view routes reject string booleans instead of coercing them", () => {
-  const createRoute = read("src/app/api/mcp/view/route.ts");
-  const updateRoute = read("src/app/api/mcp/view/[viewId]/route.ts");
+  const createRoute = read("src/lib/mcp/operations/view/operation.ts");
+  const updateRoute = read("src/lib/mcp/operations/view/[viewId]/operation.ts");
 
   for (const source of [createRoute, updateRoute]) {
     assert.match(
@@ -21,7 +21,7 @@ test("view routes reject string booleans instead of coercing them", () => {
 });
 
 test("view reads and mutations return one subtask setting field name", () => {
-  const detailRoute = read("src/app/api/mcp/view/[viewId]/route.ts");
+  const detailRoute = read("src/lib/mcp/operations/view/[viewId]/operation.ts");
   const service = read("src/lib/mcp/views/services.ts");
 
   assert.match(detailRoute, /board_subtask_setting: v\.board_subtask_setting/);
@@ -37,7 +37,7 @@ test("view reads and mutations return one subtask setting field name", () => {
 });
 
 test("project view listing can return one complete native cache snapshot", () => {
-  const listRoute = read("src/app/api/mcp/view/route.ts");
+  const listRoute = read("src/lib/mcp/operations/view/operation.ts");
 
   assert.match(listRoute, /searchParams\.get\('include_settings'\) === 'true'/);
   assert.match(listRoute, /select: \{ appliedViewId: true \}/);
@@ -47,7 +47,7 @@ test("project view listing can return one complete native cache snapshot", () =>
 });
 
 test("inbox listing exposes canonical compact split membership", () => {
-  const inboxRoute = read("src/app/api/mcp/inbox/list/route.ts");
+  const inboxRoute = read("src/lib/mcp/operations/inbox/list/operation.ts");
 
   assert.match(inboxRoute, /user_structured_data: json\.structuredData/);
   assert.match(inboxRoute, /agent_structured_data: agentInbox\.structuredData/);

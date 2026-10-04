@@ -28,12 +28,12 @@ function methodSource(source, method, nextMethod) {
 }
 
 const relationsRoute = readSource(
-  "src/app/api/mcp/tasks/relations/route.ts"
+  "src/lib/mcp/operations/tasks/relations/operation.ts"
 );
 const relationsPost = methodSource(relationsRoute, "POST", "GET");
 const relationsGet = methodSource(relationsRoute, "GET", "DELETE");
 const relationsDelete = methodSource(relationsRoute, "DELETE");
-const relatedRoute = readSource("src/app/api/mcp/tasks/related/route.ts");
+const relatedRoute = readSource("src/lib/mcp/operations/tasks/related/operation.ts");
 const relatedGet = methodSource(relatedRoute, "GET", "POST");
 const relatedPost = methodSource(relatedRoute, "POST");
 const taskService = readSource(

@@ -4,7 +4,7 @@ const fs = require('node:fs')
 const path = require('node:path')
 
 const root = path.resolve(__dirname, '..')
-const routePath = path.join(root, 'src/app/api/mcp/comments/route.ts')
+const routePath = path.join(root, 'src/lib/mcp/operations/comments/operation.ts')
 const servicePath = path.join(
   root,
   'src/lib/mcp-server/lib/services/comment.service.ts'

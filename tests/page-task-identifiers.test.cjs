@@ -16,8 +16,8 @@ const { CreatePageInputSchema, ListPagesInputSchema } = jiti(
   path.join(root, "src/lib/mcp-server/validations/page.validation.ts")
 );
 
-const createRoute = readSource("src/app/api/mcp/pages/create/route.ts");
-const listRoute = readSource("src/app/api/mcp/pages/list/route.ts");
+const createRoute = readSource("src/lib/mcp/operations/pages/create/operation.ts");
+const listRoute = readSource("src/lib/mcp/operations/pages/list/operation.ts");
 const pageValidation = readSource(
   "src/lib/mcp-server/validations/page.validation.ts"
 );

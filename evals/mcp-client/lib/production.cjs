@@ -4,7 +4,8 @@ const http = require("node:http");
 const https = require("node:https");
 const path = require("node:path");
 const { createRequire } = require("node:module");
-const { startIsolatedApi } = require("./isolated-api.cjs");
+const { startIsolatedApi, handleIsolatedRequest } = require("./isolated-api.cjs");
+const { writeBoardFile } = require("./fixture.cjs");
 const { which } = require("./executors.cjs");
 
 const SRC_ROOT = path.resolve(__dirname, "..", "..", "..", "src");
@@ -19,18 +20,27 @@ function resolveHypertaskBin(env = process.env) {
 function disableKeepAlive() {
   http.globalAgent.keepAlive = false;
   https.globalAgent.keepAlive = false;
-  try {
-    const axios = requireFromRepo("axios");
-    axios.defaults.httpAgent = new http.Agent({ keepAlive: false });
-    axios.defaults.httpsAgent = new https.Agent({ keepAlive: false });
-    axios.defaults.headers.common.Connection = "close";
-  } catch {
-    // axios loads with the MCP stack
-  }
 }
 
-function loadProductionMcp() {
+function loadProductionMcp(board, boardFile) {
   disableKeepAlive();
+  // Fixture calls now replace the shared operation boundary, not an HTTP backend.
+  if (board) {
+    const authPath = path.join(SRC_ROOT, "lib/mcp/auth.ts");
+    require.cache[authPath] = { id: authPath, filename: authPath, loaded: true, exports: {
+      validateMcpAuth: async () => ({ user: { id: 1, email: "eval@example.com" }, agentId: null }),
+      checkMcpRateLimit: async () => null,
+    } };
+    const operationsPath = path.join(SRC_ROOT, "lib/mcp/operations/index.ts");
+    require.cache[operationsPath] = { id: operationsPath, filename: operationsPath, loaded: true, exports: {
+      executeMcpOperation: async (request) => {
+        const body = request.method === "GET" ? {} : await request.json();
+        const result = handleIsolatedRequest(board, { url: request.url, method: request.method }, body);
+        if (boardFile) writeBoardFile(board, boardFile);
+        return Response.json(result.data, { status: result.status });
+      },
+    } };
+  }
   const jiti = requireFromRepo("jiti")(__filename, {
     interopDefault: true,
     alias: { "@": SRC_ROOT },
@@ -65,10 +75,8 @@ function isolateHelpTool(tools, board) {
   });
 }
 
-async function startProductionMcpServer(apiUrl, board) {
-  process.env.MCP_SELF_API_URL = apiUrl;
-  const { handleStatelessMcpRequest, MCP_TOOLS, getConfig } = loadProductionMcp();
-  getConfig().apiUrl = apiUrl;
+async function startProductionMcpServer(_apiUrl, board, { boardFile } = {}) {
+  const { handleStatelessMcpRequest, MCP_TOOLS } = loadProductionMcp(board, boardFile);
   const tools = isolateHelpTool(MCP_TOOLS, board);
 
   const server = http.createServer(async (req, res) => {
@@ -136,7 +144,7 @@ async function startProductionHarness(board, env = process.env, { boardFile } = 
   disableKeepAlive();
   const api = await startIsolatedApi(board, { boardFile: boardFile || env.EVAL_FIXTURE_BOARD });
   try {
-    const mcp = await startProductionMcpServer(api.apiUrl, board);
+    const mcp = await startProductionMcpServer(api.apiUrl, board, { boardFile: boardFile || env.EVAL_FIXTURE_BOARD });
     const hypertaskBin = resolveHypertaskBin(env);
     if (!hypertaskBin) {
       await mcp.close();
