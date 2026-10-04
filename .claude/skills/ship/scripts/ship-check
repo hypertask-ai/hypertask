@@ -381,7 +381,11 @@ try:
     for field in ('Account', 'Flags', 'Board', 'Build'):
         if not fields.get(field):
             raise ValueError(message + f' (missing {field}:)')
-    if not re.fullmatch(r'https?://\S+/projects/project-[0-9]+(?:[/?#]\S*)?', fields['Board']):
+    board = urllib.parse.urlsplit(fields['Board'])
+    board_ids = urllib.parse.parse_qs(board.query).get('id', [])
+    canonical_board = board.path == '/project' and len(board_ids) == 1 and re.fullmatch(r'[1-9][0-9]*', board_ids[0])
+    legacy_board = re.fullmatch(r'/projects/project-[1-9][0-9]*(?:[/?#]\S*)?', board.path)
+    if board.scheme not in ('http', 'https') or not board.netloc or re.search(r'\s', fields['Board']) or not (canonical_board or legacy_board):
         raise ValueError(message + ' (Board: must name a real board URL, not /demo)')
     states = dict(part.strip().split('=', 1) for part in fields['Flags'].split(','))
     if any(states.get(key) != 'EVERYONE' for key in released):

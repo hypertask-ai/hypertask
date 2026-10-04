@@ -3,13 +3,24 @@ set -euo pipefail
 # Never allow caller tracing to reveal disposable credentials.
 set +x
 
-usage() { echo 'Usage: scripts/premerge-local.sh [up|down]' >&2; }
-if [ "$#" -gt 1 ]; then usage; exit 2; fi
-case "${1:-up}" in up|down) action=${1:-up} ;; *) usage; exit 2 ;; esac
+usage() { echo 'Usage: scripts/premerge-local.sh [up|down] [--flag key=MODE ...]' >&2; }
+action=up
+if [ "$#" -gt 0 ]; then
+  case "$1" in up|down) action=$1; shift ;; --flag) ;; *) usage; exit 2 ;; esac
+fi
+flag_overrides=()
+while [ "$#" -gt 0 ]; do
+  if [ "$action" != up ] || [ "$1" != --flag ] || [ "$#" -lt 2 ] ||
+     [[ ! $2 =~ ^[a-z0-9]+(-[a-z0-9]+)*=(OFF|OWNER_ONLY|OWNER_AND_QA|EVERYONE)$ ]]; then
+    usage; exit 2
+  fi
+  flag_overrides+=(--flag "$2")
+  shift 2
+done
 root=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd -P)
 # Inherited production variables must not reach npm, Prisma, the seed or Next.
 if [ "${PREMERGE_CLEAN_ENV:-}" != "$root" ]; then
-  exec env -i PATH="$PATH" HOME="$HOME" PREMERGE_CLEAN_ENV="$root" bash "$root/scripts/premerge-local.sh" "$action"
+  exec env -i PATH="$PATH" HOME="$HOME" PREMERGE_CLEAN_ENV="$root" bash "$root/scripts/premerge-local.sh" "$action" "${flag_overrides[@]}"
 fi
 cd "$root"
 umask 077
@@ -22,18 +33,21 @@ key=$(printf '%s' "$root" | sha256sum | cut -c1-16)
 prefix="ht-premerge-$key"
 
 stop() {
-  if [ -f "$state/server.pid" ]; then
-    read -r pid started <"$state/server.pid"
-    # Guard PID reuse, stripping Next's process title (which contains spaces).
-    if [ -r "/proc/$pid/stat" ] && [ "$(sed 's/.*) //' "/proc/$pid/stat" | awk '{print $20}')" = "$started" ]; then
-      kill -TERM -- "-$pid" 2>/dev/null || true
-      for ((attempt=0; attempt<50; attempt++)); do
-        kill -0 -- "-$pid" 2>/dev/null || break
-        sleep 0.1
-      done
-      if kill -0 -- "-$pid" 2>/dev/null; then kill -KILL -- "-$pid" 2>/dev/null || true; fi
+  local process_file
+  for process_file in server.pid search.pid; do
+    if [ -f "$state/$process_file" ]; then
+      read -r pid started <"$state/$process_file"
+      # Guard PID reuse, stripping Next's process title (which contains spaces).
+      if [ -r "/proc/$pid/stat" ] && [ "$(sed 's/.*) //' "/proc/$pid/stat" | awk '{print $20}')" = "$started" ]; then
+        kill -TERM -- "-$pid" 2>/dev/null || true
+        for ((attempt=0; attempt<50; attempt++)); do
+          kill -0 -- "-$pid" 2>/dev/null || break
+          sleep 0.1
+        done
+        if kill -0 -- "-$pid" 2>/dev/null; then kill -KILL -- "-$pid" 2>/dev/null || true; fi
+      fi
     fi
-  fi
+  done
   local result=0
   if command -v docker >/dev/null && docker info >/dev/null 2>&1; then
     for service in postgres redis soketi; do
@@ -45,7 +59,7 @@ stop() {
     echo 'Docker unavailable. Rerun down when Docker returns to remove containers.' >&2
     result=1
   fi
-  rm -f "$state/server.pid" "$state/credentials.env" "$state/postgres.env" "$state/soketi.env" "$state/smoke-state.json" "$state/card-fixture.json" "$state/fixtures.out"
+  rm -f "$state/server.pid" "$state/search.pid" "$state/credentials.env" "$state/postgres.env" "$state/soketi.env" "$state/smoke-state.json" "$state/card-fixture.json" "$state/fixtures.out" "$state/flag-modes.json"
   return "$result"
 }
 if [ "$action" = down ]; then stop; exit 0; fi
@@ -58,7 +72,7 @@ for file in .env .env.local .env.production .env.production.local; do
     exit 1
   fi
 done
-if [ -f "$state/server.pid" ] || [ -f "$state/credentials.env" ]; then
+if [ -f "$state/server.pid" ] || [ -f "$state/search.pid" ] || [ -f "$state/credentials.env" ]; then
   echo 'Environment already exists. Run scripts/premerge-local.sh down first.' >&2
   exit 1
 fi
@@ -114,11 +128,14 @@ port() { docker port "$prefix-$1" "$2/tcp" | cut -d: -f2; }
 pg_port=$(port postgres 5432)
 redis_port=$(port redis 6379)
 pusher_port=$(port soketi 6001)
-app_port=$(node -e "const s=require('node:net').createServer();s.listen(0,'127.0.0.1',()=>{console.log(s.address().port);s.close()})")
+free_port() { node -e "const s=require('node:net').createServer();s.listen(0,'127.0.0.1',()=>{console.log(s.address().port);s.close()})"; }
+app_port=$(free_port)
+search_port=$(free_port)
 url="http://127.0.0.1:$app_port"
 {
   printf 'DATABASE_URL=postgresql://browser_smoke:%s@127.0.0.1:%s/hypertask_smoke\n' "$pg_secret" "$pg_port"
   printf 'REDIS_URL=redis://127.0.0.1:%s\n' "$redis_port"
+  printf 'TURBOPUFFER_BASE_URL=http://127.0.0.1:%s\nTURBOPUFFER_API_KEY=disposable-fixture\n' "$search_port"
   printf 'SESSION_SECRET=%s\nJWT_SECRET=%s\nBETTER_AUTH_SECRET=%s\n' "$(secret)" "$(secret)" "$(secret)"
   printf 'BETTER_AUTH_URL=%s\nQSTASH_CALLBACK_BASE_URL=%s\nQSTASH_AUTO_REGISTER_SWEEP=false\n' "$url" "$url"
   printf 'NEXT_PUBLIC_PUSHER_KEY=app-key\nNEXT_PUBLIC_PUSHER_HOST=127.0.0.1\nNEXT_PUBLIC_PUSHER_PORT=%s\nNEXT_PUBLIC_PUSHER_USE_TLS=false\nNEXT_PUBLIC_PUSHER_CLUSTER=mt1\n' "$pusher_port"
@@ -129,9 +146,18 @@ set -a
 # shellcheck disable=SC1091
 source "$state/credentials.env"
 set +a
-export BROWSER_SMOKE_STATE_FILE="$state/smoke-state.json" GITHUB_OUTPUT="$state/fixtures.out" NEXT_TELEMETRY_DISABLED=1
+export BROWSER_SMOKE_STATE_FILE="$state/smoke-state.json" GITHUB_OUTPUT="$state/fixtures.out" NEXT_TELEMETRY_DISABLED=1 PREMERGE_LOCAL=1
 npx --no-install prisma migrate deploy
-node scripts/seed-browser-smoke.mjs
+node scripts/seed-browser-smoke.mjs "${flag_overrides[@]}"
+setsid node "$root/scripts/premerge-local-search.mjs" "$state/card-fixture.json" "$search_port" >"$state/search.log" 2>&1 9>&- 3>&- 4>&- < /dev/null &
+pid=$!
+printf '%s %s\n' "$pid" "$(sed 's/.*) //' "/proc/$pid/stat" | awk '{print $20}')" >"$state/search.pid"
+for ((attempt=0; attempt<30; attempt++)); do
+  kill -0 "$pid" 2>/dev/null || exit 1
+  if curl -fsS --max-time 2 -o /dev/null "$TURBOPUFFER_BASE_URL/health"; then break; fi
+  sleep 1
+done
+curl -fsS --max-time 2 -o /dev/null "$TURBOPUFFER_BASE_URL/health"
 npx --no-install next build --webpack
 setsid node "$root/node_modules/next/dist/bin/next" start -H 127.0.0.1 -p "$app_port" >"$state/server.log" 2>&1 9>&- 3>&- 4>&- < /dev/null &
 pid=$!
@@ -146,6 +172,6 @@ done
 board_path=$(sed -n 's/^board_path=//p' "$state/fixtures.out")
 [ -n "$board_path" ] || exit 1
 account=$(node -e 'const s=require(process.argv[1]);console.log(JSON.parse(decodeURIComponent(s.cookies.find(c=>c.name==="nookies_user").value)).id)' "$BROWSER_SMOKE_STATE_FILE")
-flags=$(node -e 'const {modes}=require("./e2e/smoke/production-flag-modes.json");console.log(Object.entries(modes).map(([k,v])=>k+"="+v).join(", "))')
-printf 'Build URL: %s\nBoard URL: %s%s\nStorage state: %s\nCommit: %s\nAccount: %s (disposable board owner)\nFlags: %s (checked-in snapshot, confirm live modes)\nBoard: %s%s\nBuild: %s\n' \
+flags=$(node -e 'const {modes}=require(process.argv[1]);console.log(Object.entries(modes).map(([k,v])=>k+"="+v).join(", "))' "$state/flag-modes.json")
+printf 'Build URL: %s\nBoard URL: %s%s\nStorage state: %s\nCommit: %s\nAccount: %s (disposable QA, board owner)\nFlags: %s\nBoard: %s%s\nBuild: %s\n' \
   "$url" "$url" "$board_path" "$BROWSER_SMOKE_STATE_FILE" "$(git rev-parse HEAD)" "$account" "$flags" "$url" "$board_path" "$url" >&3
