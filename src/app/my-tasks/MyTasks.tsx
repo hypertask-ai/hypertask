@@ -737,23 +737,31 @@ const MyTasks = ({
   }, [boardParam, boardSplitSources, groupBy, myTasksShortcutsWidthEnabled, sections]);
 
   useEffect(() => {
-    if (groupBy === "time") {
-      if (!myTasksShortcutsWidthEnabled) {
-        const split = getMyTasksSplitIndex(
-          boardSplitSources,
-          activeBoardId.current === null ? null : String(activeBoardId.current),
-        );
-        activeBoardId.current = availableBoards[split - 1]?.id ?? null;
-        setActiveSplit(split);
-        return;
-      }
-      const split = getMyTasksSplitIndex(boardSplitSources, boardParam);
+    if (groupBy !== "time") return;
+    if (!myTasksShortcutsWidthEnabled) {
+      const split = getMyTasksSplitIndex(
+        boardSplitSources,
+        activeBoardId.current === null ? null : String(activeBoardId.current),
+      );
       activeBoardId.current = availableBoards[split - 1]?.id ?? null;
       setActiveSplit(split);
-      if (boardParam && split === 0) replaceBoardParam(null);
       return;
     }
-    if (!viewsFeatureEnabled) return;
+    const split = getMyTasksSplitIndex(boardSplitSources, boardParam);
+    activeBoardId.current = availableBoards[split - 1]?.id ?? null;
+    setActiveSplit(split);
+    if (boardParam && split === 0) replaceBoardParam(null);
+  }, [
+    availableBoards,
+    boardParam,
+    boardSplitSources,
+    groupBy,
+    myTasksShortcutsWidthEnabled,
+    replaceBoardParam,
+  ]);
+
+  useEffect(() => {
+    if (groupBy === "time" || !viewsFeatureEnabled) return;
     if (!myTasksShortcutsWidthEnabled) {
       const split = getMyTasksSplitIndex(
         filteredSections,
