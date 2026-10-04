@@ -28,6 +28,8 @@ const config: Config = {
         "SVH-full":"100svh",
       },
       colors: {
+        "view-control-active": "rgb(var(--view-control-active) / <alpha-value>)",
+        "view-control-active-hover": "rgb(var(--view-control-active-hover) / <alpha-value>)",
         "pageBackground":"var(--color-page-background)",
         "hypertasks-green":"#C2CFA5",
         "hypertasks-purple":"#4455BB",

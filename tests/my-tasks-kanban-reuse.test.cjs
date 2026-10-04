@@ -163,7 +163,7 @@ const box = ({ children }) => React.createElement("div", null, children);
 const overrides = {
   "react": React,
   "reactstrap": { ModalBody: box },
-  "@/hooks/useFlag": { useFlag: (key) => key === flagKey ? enabled : key !== "htpr-6567-command-scope-picker" },
+  "@/hooks/useFlag": { useFlag: (key) => key === flagKey ? enabled : !["htpr-6567-command-scope-picker", "htpr-6938-my-tasks-icon-controls"].includes(key) },
   "@/hooks/MultiPages/useClickOutside": { default: noop },
   "@/hooks/General/useHandleMouse": { default: ({ setSelectedIndex }) => ({ handleMouseEnter: setSelectedIndex, handleMouseLeave: noop, handleMouseMove: noop, elRef: React.useRef(null) }) },
   "@/hooks/General/useHandleKeydownBasic": { default: () => { const [selectedIndex, setSelectedIndex] = React.useState(0); return { selectedIndex, setSelectedIndex, handleKeydown: noop }; } },

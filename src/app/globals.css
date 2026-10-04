@@ -4,6 +4,8 @@
 
 @layer base {
   :root {
+    --view-control-active: 35 131 226;
+    --view-control-active-hover: 25 105 185;
     --bg-pageBackground: 0 0% 100%;
     --foreground: 0 0% 3.9%;
     --card: 0 0% 100%;
@@ -27,6 +29,8 @@
   }
 
   .dark {
+    --view-control-active: 111 182 255;
+    --view-control-active-hover: 163 208 255;
     --bg-pageBackground: 0 0% 3.9%;
     --foreground: 0 0% 98%;
     --card: 0 0% 3.9%;

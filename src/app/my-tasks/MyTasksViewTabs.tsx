@@ -1,11 +1,12 @@
 "use client";
 
+import Tooltip from "@/components/Common/Tooltip";
 import { SaveView } from "@/components/PageComponents/Kanban/HeaderComponents/SaveViewHeaderKanban";
 import SaveViewModal from "@/components/Modals/ViewModals/SaveViewModal";
 import useClickOutside from "@/hooks/MultiPages/useClickOutside";
 import { useFlag } from "@/hooks/useFlag";
 import { MOBILE_TARGET } from "@/lib/configs/general.config";
-import { HTPR_6930_MY_TASKS_KANBAN_REUSE_FLAG, MY_TASKS_VIEWS_FLAG } from "@/lib/flags/keys";
+import { HTPR_6938_MY_TASKS_ICON_CONTROLS_FLAG, HTPR_6930_MY_TASKS_KANBAN_REUSE_FLAG, MY_TASKS_VIEWS_FLAG } from "@/lib/flags/keys";
 import { MY_TASKS_OVERDUE_BADGES_FLAG } from "@/lib/flags/keys";
 import type { MyTasksSavedView } from "@/models/MyTasksView";
 import { House, MoreHorizontal, Plus } from "lucide-react";
@@ -42,6 +43,7 @@ const MyTasksViewTabs = ({
   overdueAll = 0,
   overdueByViewId = {},
 }: Props) => {
+  const iconControlsEnabled = useFlag(HTPR_6938_MY_TASKS_ICON_CONTROLS_FLAG);
   const kanbanReuseEnabled = useFlag(HTPR_6930_MY_TASKS_KANBAN_REUSE_FLAG);
   const [saveOpen, setSaveOpen] = useState(false);
   const myTasksViewsEnabled = useFlag(MY_TASKS_VIEWS_FLAG);
@@ -54,9 +56,11 @@ const MyTasksViewTabs = ({
     overdueBadgesEnabled && count > 0 ? (
       <span
         data-htpr-6459-my-tasks-overdue-badges=""
+        aria-label={iconControlsEnabled ? `${count} overdue` : undefined}
         className="text-micro font-semibold text-destructive"
       >
         {count}
+        {iconControlsEnabled && <Tooltip text={`${count} overdue`} left={0} bottom={-34} keyCombination={[]} portal />}
       </span>
     ) : null;
   const overdueLabel = (name: string, count: number) =>

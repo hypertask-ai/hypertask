@@ -1,7 +1,7 @@
 'use client'
 
 import { useFlag } from "@/hooks/useFlag"
-import { HTPR_6930_MY_TASKS_KANBAN_REUSE_FLAG } from "@/lib/flags/keys"
+import { HTPR_6938_MY_TASKS_ICON_CONTROLS_FLAG, HTPR_6930_MY_TASKS_KANBAN_REUSE_FLAG } from "@/lib/flags/keys"
 import Tooltip from "@/components/Common/Tooltip"
 import { MobileViewContext } from "@/lib/contexts/mobileContext"
 import { useRecoilState, useSetRecoilState } from "@/lib/state"
@@ -104,6 +104,7 @@ export const ViewControlButton = ({
   children,
   keyCombination = [],
   label,
+  tooltipText = label,
   onClick,
   tooltipLeft,
   expanded,
@@ -113,23 +114,25 @@ export const ViewControlButton = ({
   children: React.ReactNode
   keyCombination?: (string | null)[]
   label: string
+  tooltipText?: string
   onClick: () => void
   tooltipLeft: number
   expanded?: boolean
   className?: string
 }) => {
+  const iconControlsEnabled = useFlag(HTPR_6938_MY_TASKS_ICON_CONTROLS_FLAG)
   const kanbanReuseEnabled = useFlag(HTPR_6930_MY_TASKS_KANBAN_REUSE_FLAG)
   return (
   <button
     type="button"
     aria-label={label}
-    aria-expanded={kanbanReuseEnabled ? expanded : undefined}
+    aria-expanded={kanbanReuseEnabled || iconControlsEnabled ? expanded : undefined}
     onClick={onClick}
-    className={`group relative flex size-8 items-center justify-center transition-colors ${active ? (kanbanReuseEnabled ? "text-shadcn-primary hover:text-white-black" : "text-[#6FB6FF] hover:text-[#A3D0FF]") : "text-text-light-gray hover:text-white-black"} ${kanbanReuseEnabled ? className : ""}`}
+    className={`group relative flex size-8 items-center justify-center transition-colors ${active ? (iconControlsEnabled ? "text-view-control-active hover:text-view-control-active-hover" : kanbanReuseEnabled ? "text-shadcn-primary hover:text-white-black" : "text-[#6FB6FF] hover:text-[#A3D0FF]") : "text-text-light-gray hover:text-white-black"} ${kanbanReuseEnabled || iconControlsEnabled ? className : ""}`}
   >
     {children}
     <Tooltip
-      text={label}
+      text={tooltipText}
       left={tooltipLeft}
       bottom={-34}
       keyCombination={keyCombination}

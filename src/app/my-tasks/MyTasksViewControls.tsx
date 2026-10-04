@@ -11,6 +11,7 @@ import { useFlag } from "@/hooks/useFlag";
 import { MOBILE_TARGET } from "@/lib/configs/general.config";
 import { EstimateConstants, PriorityConstants } from "@/lib/constants/constants";
 import {
+  HTPR_6938_MY_TASKS_ICON_CONTROLS_FLAG,
   HTPR_6930_MY_TASKS_KANBAN_REUSE_FLAG,
   HTPR_6567_COMMAND_SCOPE_PICKER_FLAG,
   MY_TASKS_FILTER_PARITY_FLAG,
@@ -29,12 +30,14 @@ import { migrateFlatFiltersToFilterSettings, myTasksParityFilterCount } from "@/
 import {
   DEFAULT_MY_TASKS_VIEW_CONFIG,
   effectiveMyTasksGroupBy,
+  effectiveMyTasksTableVisibleColumns,
   type MyTasksBoardMetadata,
   type MyTasksDateRange,
   type MyTasksDueDatePreset,
   type MyTasksGroupBy,
   type MyTasksViewConfig,
 } from "@/models/MyTasksView";
+import { DEFAULT_MY_TASKS_TABLE_COLUMNS } from "@/utils/helperFunctions/Views/TableColumnsHelperFunctions";
 import { Check, ArrowUpDown, Columns3, Layers, LayoutGrid, SlidersHorizontal, UserRound } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 
@@ -142,6 +145,7 @@ const MyTasksViewControls = ({
   snoozeEnabled: snoozeEnabledProp = false,
 }: Props) => {
   const myTasksViewsEnabled = useFlag(MY_TASKS_VIEWS_FLAG);
+  const iconControlsEnabled = useFlag(HTPR_6938_MY_TASKS_ICON_CONTROLS_FLAG);
   const filterParityEnabled = useFlag(MY_TASKS_FILTER_PARITY_FLAG);
   const kanbanReuseEnabled = useFlag(HTPR_6930_MY_TASKS_KANBAN_REUSE_FLAG);
   const commandScopePickerFlag = useFlag(HTPR_6567_COMMAND_SCOPE_PICKER_FLAG);
@@ -402,8 +406,8 @@ const MyTasksViewControls = ({
     <div
       className={
         myTasksScopesEnabled
-          ? "ml-auto flex min-w-0 max-w-full flex-1 flex-wrap items-center justify-end gap-1"
-          : "ml-auto flex shrink-0 items-center gap-1"
+          ? `ml-auto flex min-w-0 max-w-full flex-1 flex-wrap items-center justify-end ${iconControlsEnabled ? "gap-2" : "gap-1"}`
+          : `ml-auto flex shrink-0 items-center ${iconControlsEnabled ? "gap-2" : "gap-1"}`
       }
     >
       {timeGroupFlag ? (
@@ -411,6 +415,28 @@ const MyTasksViewControls = ({
       ) : null}
       {myTasksScopesEnabled ? (
         <div ref={involvementRef} className="relative">
+          {iconControlsEnabled ? (
+            <ViewControlButton
+              label="My Tasks involvement"
+              tooltipText="Involvement"
+              tooltipLeft={-72}
+              className={`${MOBILE_TARGET} @md:min-h-0 @md:min-w-0`}
+              active={involvementCount > 0}
+              expanded={involvementOpen}
+              onClick={() => {
+                setInvolvementOpen((open) => !open);
+                setScopeOpen(false);
+                setSortOpen(false);
+                setGroupOpen(false);
+                setFilterOpen(false);
+              }}
+            >
+              <UserRound size={18} strokeWidth={1.75} />
+              {involvementCount > 0 && (
+                <span className="absolute -right-0.5 -top-0.5 text-[9px] font-semibold leading-none">{involvementCount}</span>
+              )}
+            </ViewControlButton>
+          ) : (
           <button
             type="button"
             aria-label="My Tasks involvement"
@@ -434,6 +460,7 @@ const MyTasksViewControls = ({
               <span className="text-meta font-semibold">{involvementCount}</span>
             )}
           </button>
+          )}
           {kanbanReuseEnabled && involvementOpen && (
             <MyTasksInvolvementPicker scopes={scopes} onToggle={toggleScope} onClose={() => setInvolvementOpen(false)} />
           )}
@@ -454,7 +481,22 @@ const MyTasksViewControls = ({
         </div>
       ) : null}
       {myTasksTableColumnsFlag && tableColumnsEnabled && onOpenTableColumns ? (
-        <button
+        iconControlsEnabled ? (
+            <ViewControlButton
+              label="Configure table columns"
+              tooltipText="Columns"
+              tooltipLeft={-72}
+              className={`${MOBILE_TARGET} @md:min-h-0 @md:min-w-0`}
+              active={JSON.stringify(effectiveMyTasksTableVisibleColumns(config)) !== JSON.stringify(DEFAULT_MY_TASKS_TABLE_COLUMNS)}
+              onClick={() => {
+                closeOtherMenus();
+                onOpenTableColumns();
+              }}
+            >
+              <Columns3 size={18} strokeWidth={1.75} />
+            </ViewControlButton>
+          ) : (
+          <button
           type="button"
           aria-label="Configure table columns"
           onClick={() => {
@@ -466,11 +508,33 @@ const MyTasksViewControls = ({
           <Columns3 size={16} strokeWidth={1.5} />
           <span className="hidden @md:inline">Columns</span>
         </button>
+        )
       ) : null}
       {myTasksViewsEnabled && filterParityEnabled ? (
         <>
           <div ref={scopeRef} className="relative">
-            <button
+            {iconControlsEnabled ? (
+            <ViewControlButton
+              label="My Tasks scope"
+              tooltipText="Scope"
+              tooltipLeft={-72}
+              className={`${MOBILE_TARGET} @md:min-h-0 @md:min-w-0`}
+              active={config.boardIds !== null && (selectedBoardIds.length !== boards.length || boards.some((board) => !selectedBoardIds.includes(board.id)))}
+              expanded={scopeOpen}
+              onClick={() => {
+                setScopeOpen((open) => !open);
+                setInvolvementOpen(false);
+                setSortOpen(false);
+                setGroupOpen(false);
+              }}
+            >
+              <LayoutGrid size={18} strokeWidth={1.75} />
+              {scopeCount > 0 && (
+                <span className="absolute -right-0.5 -top-0.5 text-[9px] font-semibold leading-none">{scopeCount}</span>
+              )}
+            </ViewControlButton>
+          ) : (
+          <button
               type="button"
               aria-label="My Tasks scope"
               aria-expanded={scopeOpen}
@@ -492,6 +556,7 @@ const MyTasksViewControls = ({
                 <span className="text-meta font-semibold">{scopeCount}</span>
               )}
             </button>
+          )}
             {scopeOpen && (commandScopePickerEnabled ? (
               <AssignModal
                 assignees={[]}
@@ -508,6 +573,27 @@ const MyTasksViewControls = ({
             ) : scopePanel)}
           </div>
 
+          {iconControlsEnabled ? (
+            <ViewControlButton
+              label="Filter My Tasks"
+              tooltipText="Filters"
+              tooltipLeft={-72}
+              className={`${MOBILE_TARGET} @md:min-h-0 @md:min-w-0`}
+              active={kanbanFilterCount > 0}
+              onClick={() => {
+                setScopeOpen(false);
+                setInvolvementOpen(false);
+                setSortOpen(false);
+                setGroupOpen(false);
+                onOpenKanbanFilters?.();
+              }}
+            >
+              <SlidersHorizontal size={18} strokeWidth={1.75} />
+              {kanbanFilterCount > 0 && (
+                <span className="absolute -right-0.5 -top-0.5 text-[9px] font-semibold leading-none">{kanbanFilterCount}</span>
+              )}
+            </ViewControlButton>
+          ) : (
           <button
             type="button"
             aria-label="Filter My Tasks"
@@ -530,9 +616,31 @@ const MyTasksViewControls = ({
               <span className="text-meta font-semibold">{kanbanFilterCount}</span>
             )}
           </button>
+          )}
         </>
       ) : myTasksViewsEnabled ? (
         <div ref={filterRef} className="relative">
+          {iconControlsEnabled ? (
+            <ViewControlButton
+              label="Filter My Tasks"
+              tooltipText="Filters"
+              tooltipLeft={-72}
+              className={`${MOBILE_TARGET} @md:min-h-0 @md:min-w-0`}
+              active={flatFilterCount > 0}
+              expanded={filterOpen}
+              onClick={() => {
+                setFilterOpen((open) => !open);
+                setInvolvementOpen(false);
+                setSortOpen(false);
+                setGroupOpen(false);
+              }}
+            >
+              <SlidersHorizontal size={18} strokeWidth={1.75} />
+              {flatFilterCount > 0 && (
+                <span className="absolute -right-0.5 -top-0.5 text-[9px] font-semibold leading-none">{flatFilterCount}</span>
+              )}
+            </ViewControlButton>
+          ) : (
           <button
             type="button"
             aria-label="Filter My Tasks"
@@ -555,6 +663,7 @@ const MyTasksViewControls = ({
               <span className="text-meta font-semibold">{flatFilterCount}</span>
             )}
           </button>
+          )}
 
           {filterOpen && (
             <div className="absolute right-0 top-full z-40 mt-1 max-h-[min(72vh,620px)] w-[min(92vw,560px)] overflow-y-auto rounded-[5px] bg-modalBackground p-4 shadow-md">
@@ -812,9 +921,10 @@ const MyTasksViewControls = ({
 
       {myTasksViewsEnabled ? (
       <div ref={sortRef} className="relative">
-        {kanbanReuseEnabled ? (
+        {kanbanReuseEnabled || iconControlsEnabled ? (
           <ViewControlButton
             label="Sort My Tasks"
+            tooltipText={iconControlsEnabled ? "Sort" : "Sort My Tasks"}
             tooltipLeft={-72}
             className={`${MOBILE_TARGET} @md:min-h-0 @md:min-w-0`}
             active={
@@ -899,6 +1009,25 @@ const MyTasksViewControls = ({
 
       {timeGroupOn && (
         <div ref={groupRef} className="relative">
+          {iconControlsEnabled ? (
+            <ViewControlButton
+              label="Group My Tasks"
+              tooltipText={`Group: ${groupBy === "time" ? "Due date" : "Board"}`}
+              tooltipLeft={-72}
+              className={`${MOBILE_TARGET} @md:min-h-0 @md:min-w-0`}
+              active={groupBy !== effectiveMyTasksGroupBy(DEFAULT_MY_TASKS_VIEW_CONFIG, timeGroupOn)}
+              expanded={groupOpen}
+              onClick={() => {
+                setGroupOpen((open) => !open);
+                setFilterOpen(false);
+                setScopeOpen(false);
+                setInvolvementOpen(false);
+                setSortOpen(false);
+              }}
+            >
+              <Layers size={18} strokeWidth={1.75} />
+            </ViewControlButton>
+          ) : (
           <button
             type="button"
             aria-label="Group My Tasks"
@@ -921,6 +1050,7 @@ const MyTasksViewControls = ({
               {kanbanReuseEnabled ? `Group: ${groupBy === "time" ? "Due date" : "Board"}` : groupBy === "time" ? "Time" : "Board"}
             </span>
           </button>
+          )}
           {kanbanReuseEnabled && groupOpen && (
             <MyTasksGroupPicker groupBy={groupBy} onChange={(next) => onChange({ ...config, groupBy: next })} onClose={() => setGroupOpen(false)} />
           )}
