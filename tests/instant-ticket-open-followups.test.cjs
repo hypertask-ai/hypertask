@@ -14,7 +14,9 @@ const cache = require("jiti").createJiti(__filename, { alias: { "@": path.join(r
 const flag = "htpr-6752-instant-ticket-open";
 const navigationPath = "src/components/PageComponents/TaskDetail/CachedTaskDetailNavigation.tsx";
 const task = { id: 42, projectId: 7049, uniqueIndex: 31, status: "Normal", title: "Cached title", description_: { content: "Cached body" } };
-const read = (file) => fs.readFileSync(path.join(root, file), "utf8");
+const read = (file) => file === navigationPath && process.env.CACHED_NAVIGATION_BASELINE
+  ? execFileSync("git", ["show", `origin/production:${file}`], { cwd: root, encoding: "utf8" })
+  : fs.readFileSync(path.join(root, file), "utf8");
 function compile(source, mocks) {
   const exports = {};
   const js = ts.transpileModule(source, { compilerOptions: { jsx: ts.JsxEmit.ReactJSX, module: ts.ModuleKind.CommonJS } }).outputText;
@@ -30,6 +32,8 @@ function domFixture(t) {
   const previous = Object.fromEntries(names.map((name) => [name, global[name]]));
   Object.assign(global, { window: dom.window, document: dom.window.document, Event: dom.window.Event, IS_REACT_ACT_ENVIRONMENT: true });
   window.scrollTo = () => {};
+  window.requestAnimationFrame = () => 1;
+  window.cancelAnimationFrame = () => {};
   t.after(() => { for (const name of names) global[name] = previous[name]; dom.window.close(); });
   return dom;
 }
@@ -190,19 +194,35 @@ test("quiet: contact hover waits for final content only on flagged detail, retai
   assert.match(render(), /QA contact/);
 });
 
-test("warm: board commit loads cold chunks before an idle opportunity; pointerdown deduplicates and flag off does nothing", async (t) => {
+test("warm: imports wait for paint and idle, cancel on navigation, and skip slow connections", async (t) => {
   domFixture(t);
   const client = new QueryClient();
   t.after(() => client.clear());
   let enabled = true;
+  let pathname = "/project";
   const effects = [];
   const loaded = [];
+  const frames = new Map();
+  const idles = new Map();
+  const timers = new Map();
+  let id = 0;
   let emojiLoads = 0;
-  window.requestIdleCallback = () => assert.fail("the first open must not wait for idle");
-  const mocks = navigationMocks(client, () => enabled, () => "/project", {
-    ...React, useRef: (initial) => ({ current: initial }), useEffect: (effect) => effects.push(effect), useSyncExternalStore: (subscribe, snapshot) => snapshot(),
+  window.requestAnimationFrame = (callback) => { frames.set(++id, callback); return id; };
+  window.cancelAnimationFrame = (key) => frames.delete(key);
+  window.requestIdleCallback = (callback, options) => {
+    assert.equal(options.timeout, 5000);
+    idles.set(++id, callback);
+    return id;
+  };
+  window.cancelIdleCallback = (key) => idles.delete(key);
+  window.setTimeout = (callback, delay) => { assert.equal(delay, 2000); timers.set(++id, callback); return id; };
+  window.clearTimeout = (key) => timers.delete(key);
+  const flush = (queue) => { const callbacks = [...queue.values()]; queue.clear(); callbacks.forEach((callback) => callback()); };
+  const mocks = navigationMocks(client, () => enabled, () => pathname, {
+    ...React, useRef: (initial) => ({ current: initial }), useState: (initial) => [initial(), () => {}], useEffect: (effect) => effects.push(effect), useSyncExternalStore: (subscribe, snapshot) => snapshot(),
   });
   const chunks = [
+    "@/components/Modals/SwipeUnread/EmbeddedTaskDetail",
     "@/components/PageComponents/TaskDetail/CommentAndDescription/DescriptionContainer/TopRow/DescriptionEmojiButton",
     "@/components/PageComponents/TaskDetail/CommentAndDescription/DescriptionContainer/BottomRow/DescriptionReactions",
     "@/components/PageComponents/TaskDetail/CommentAndDescription/CommentContainer/CommentReactions",
@@ -215,27 +235,119 @@ test("warm: board commit loads cold chunks before an idle opportunity; pointerdo
   for (const chunk of chunks) Object.defineProperty(mocks, chunk, { get: () => { loaded.push(chunk); return {}; } });
   mocks["@/components/RTE/Extensions/lazyEmojiData"] = { ensureEmojiData: () => { emojiLoads++; return Promise.resolve(); } };
   const Navigation = compile(read(navigationPath), mocks).default;
-  Navigation({ accountId: 985, children: "Board" });
-  assert.equal(loaded.length, 0, "imports do not block board render");
-  const cleanups = effects.map((effect) => effect()).filter(Boolean);
-  await new Promise(setImmediate);
-  assert.deepEqual(loaded, chunks, "commit alone warms before any pointer or idle event");
-  assert.equal(emojiLoads, 1);
-  document.dispatchEvent(new Event("pointerdown"));
-  await new Promise(setImmediate);
-  assert.equal(loaded.length, chunks.length);
-  cleanups.forEach((cleanup) => cleanup());
-  effects.length = 0;
+  const mount = (accountId = 985) => {
+    effects.length = 0;
+    Navigation({ accountId, children: "Board" });
+    const cleanups = effects.map((effect) => effect()).filter(Boolean);
+    return () => cleanups.forEach((cleanup) => cleanup());
+  };
+  for (pathname of ["/project", "/inbox", "/my-tasks"]) {
+    loaded.length = 0;
+    const cleanup = mount();
+    await new Promise(setImmediate);
+    assert.equal(loaded.length, 0, "commit must not import viewer code");
+    flush(frames);
+    assert.equal(idles.size, 0, "one animation frame has not allowed a paint yet");
+    flush(frames);
+    document.dispatchEvent(new Event("pointerdown"));
+    await new Promise(setImmediate);
+    assert.equal(loaded.length, 0, "unrelated clicks must not start the bulk warmup");
+    flush(idles);
+    await new Promise(setImmediate);
+    assert.deepEqual(loaded, chunks);
+    cleanup();
+  }
+  assert.equal(emojiLoads, 3);
+  let cleanup = mount();
+  cleanup();
+  assert.equal(frames.size, 0, "unmount cancels the pending paint callback");
+  cleanup = mount();
+  flush(frames); flush(frames); cleanup();
+  assert.equal(idles.size, 0, "navigation cancels the pending idle callback");
+  delete window.requestIdleCallback;
   loaded.length = 0;
+  cleanup = mount();
+  flush(frames); flush(frames);
+  await new Promise(setImmediate);
+  assert.equal(loaded.length, 0, "fallback does not warm immediately");
+  flush(timers);
+  await new Promise(setImmediate);
+  assert.deepEqual(loaded, chunks, "browsers without idle callbacks eventually warm");
+  cleanup();
+  cleanup = mount();
+  flush(frames); flush(frames); cleanup();
+  assert.equal(timers.size, 0, "navigation cancels the fallback timer");
   enabled = false;
-  Navigation({ accountId: 985, children: "Board" });
-  assert.ok(effects.every((effect) => effect() === undefined), "flag off schedules nothing");
+  mount();
+  assert.equal(frames.size, 0, "flag off schedules nothing");
   enabled = true;
-  effects.length = 0;
-  Navigation({ accountId: null, children: "Board" });
-  assert.ok(effects.every((effect) => effect() === undefined), "unknown accounts never warm");
+  mount(null);
+  assert.equal(frames.size, 0, "unknown accounts never warm");
+  pathname = "/settings";
+  mount();
+  assert.equal(frames.size, 0, "unrelated routes never warm");
+  pathname = "/project";
+  for (const connection of [{ saveData: true }, ...["slow-2g", "2g", "3g"].map(effectiveType => ({ effectiveType }))]) {
+    Object.defineProperty(window.navigator, "connection", { configurable: true, value: connection });
+    mount();
+    assert.equal(frames.size, 0, "data saver and slow connections must not preload");
+  }
 });
 
+test("cold click: the source page stays visible until the lazy viewer resolves, and back still works", async (t) => {
+  domFixture(t);
+  const client = new QueryClient();
+  t.after(() => client.clear());
+  let release;
+  let imports = 0;
+  const pending = Object.assign(new Promise(resolve => { release = resolve; }), { __esModule: true });
+  const mocks = navigationMocks(client, () => true, () => "/project");
+  const detail = mocks["@/components/Modals/SwipeUnread/EmbeddedTaskDetail"];
+  Object.defineProperty(mocks, "@/components/Modals/SwipeUnread/EmbeddedTaskDetail", { get: () => { imports++; return pending; } });
+  const Navigation = compile(read(navigationPath), mocks).default;
+  const renderer = createRoot(document.getElementById("root"));
+  const board = React.createElement("ul", { id: "board" }, React.createElement("li", null, "Board row"));
+  await React.act(async () => renderer.render(React.createElement(Navigation, { accountId: 985 }, board)));
+  assert.equal(imports, 0, "initial render must not import the viewer");
+  const originalBoard = document.querySelector("#board");
+  await React.act(async () => cache.openCachedTaskDetail({ queryClient: client, accountId: 985, projectId: 7049, uniqueIndex: 31, href: "/detail/project-7049/31", task }));
+  assert.equal(imports, 1, "an early click loads the viewer without idle warmup");
+  assert.equal(document.querySelector("#board"), originalBoard, "loading must not remount the source page or replay its startup effects");
+  assert.equal(document.body.textContent, "Board row", "no blank page, spinner or skeleton while loading");
+  await React.act(async () => { release(detail); await pending; });
+  assert.match(document.body.textContent, /Cached titleCached body/);
+  await React.act(async () => {
+    await new Promise(resolve => { window.addEventListener("popstate", resolve, { once: true }); window.history.back(); });
+  });
+  assert.equal(document.body.textContent, "Board row");
+  await React.act(async () => renderer.unmount());
+});
+
+
+test("cold click: Back before the viewer import finishes does not reopen the ticket", async (t) => {
+  domFixture(t);
+  const client = new QueryClient();
+  t.after(() => client.clear());
+  let release;
+  const pending = Object.assign(new Promise(resolve => { release = resolve; }), { __esModule: true });
+  const mocks = navigationMocks(client, () => true, () => "/project");
+  const detail = mocks["@/components/Modals/SwipeUnread/EmbeddedTaskDetail"];
+  mocks["@/components/Modals/SwipeUnread/EmbeddedTaskDetail"] = pending;
+  const Navigation = compile(read(navigationPath), mocks).default;
+  const renderer = createRoot(document.getElementById("root"));
+  const board = React.createElement("div", { id: "board" }, "Board row");
+  await React.act(async () => renderer.render(React.createElement(Navigation, { accountId: 985 }, board)));
+  const originalBoard = document.querySelector("#board");
+  await React.act(async () => cache.openCachedTaskDetail({ queryClient: client, accountId: 985, projectId: 7049, uniqueIndex: 31, href: "/detail/project-7049/31", task }));
+  await React.act(async () => {
+    await new Promise(resolve => { window.addEventListener("popstate", resolve, { once: true }); window.history.back(); });
+  });
+  await React.act(async () => { release(detail); await pending; });
+  assert.equal(window.location.pathname, "/project");
+  assert.equal(document.querySelector("#board"), originalBoard);
+  assert.equal(document.querySelector("#ticket"), null, "a late import cannot undo Back");
+  await React.act(async () => renderer.unmount());
+});
 
 test("warm: a cold desktop reaction chunk cannot delay the title/body or change its reserved layout", () => {
   let enabled = true;

@@ -870,6 +870,8 @@ useEffect(() => {
 // turn inherited state into an explicit override on the next view switch.
 useEffect(() => {
   if (!searchParams || !slugs || surfaceInitializedFor !== surfaceInitializationKey) return;
+  // A cold cached open keeps this board mounted until the viewer chunk is ready.
+  if (window.location.pathname.startsWith("/detail/") && window.history.state?.cachedTaskDetail) return;
   const currentProject = data?.updatedProjects?.[projectIndex]
   const allViews = currentProject?.project_view?.allViews
   const viewMetadataReady = Boolean(currentProject && Array.isArray(allViews))

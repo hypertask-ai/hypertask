@@ -23,6 +23,44 @@ test("project startup canonicalizes URL state with one replace site", () => {
   );
 });
 
+test("canonicalization cannot overwrite a cold cached ticket URL while the board is still mounted", () => {
+  const start = source.indexOf("// Canonicalize id, view, and one-shot flags");
+  const end = source.indexOf("// Retry fetching projects", start);
+  const block = source.slice(start, end);
+  for (const [pathname, cachedTaskDetail, expectedWrites] of [
+    ["/detail/project-1/1", { accountId: 985, taskId: 1 }, 0],
+    ["/detail/project-1/1", undefined, 1],
+    ["/project", { accountId: 985, taskId: 1 }, 1],
+    ["/project", undefined, 1],
+  ]) {
+    const writes = [];
+    const bindings = {
+      useEffect: effect => effect(),
+      window: { location: { pathname }, history: { state: { cachedTaskDetail }, replaceState: (...args) => writes.push(args) } },
+      pathname,
+      searchParams: new URLSearchParams(),
+      slugs: 1,
+      surfaceInitializedFor: "ready",
+      surfaceInitializationKey: "ready",
+      data: { updatedProjects: [{ id: 1, project_view: { allViews: [] } }] },
+      projectIndex: 0,
+      dataFetching: false,
+      hydrationFailedProjectId: undefined,
+      currentView: undefined,
+      welcomeAiHandledRef: { current: false },
+      isBoardPayloadHydrated: () => true,
+      getViewFromProject: () => ({ type: "Default" }),
+      getNextRouterAwareHistoryState: state => state,
+      setAiChatAutoOpenSuppressed: () => {},
+      setAiChatExplicitOpenAt: () => {},
+      setShowAiChatInterface: () => {},
+      router: { replace: (...args) => writes.push(args) },
+    };
+    new Function(...Object.keys(bindings), block)(...Object.values(bindings));
+    assert.equal(writes.length, expectedWrites, `${pathname}: cached=${Boolean(cachedTaskDetail)}`);
+  }
+});
+
 test("shared surface links initialize layout before canonicalization", () => {
   assert.match(
     source,

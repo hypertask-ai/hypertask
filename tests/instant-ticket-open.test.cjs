@@ -80,6 +80,8 @@ for (const mobile of [true, false]) {
     const previous = { window: global.window, document: global.document, act: global.IS_REACT_ACT_ENVIRONMENT };
     global.window = dom.window;
     global.document = dom.window.document;
+    window.requestAnimationFrame = () => 1;
+    window.cancelAnimationFrame = () => {};
     global.IS_REACT_ACT_ENVIRONMENT = true;
     const reactRoot = createRoot(document.getElementById("root"));
     let release;
