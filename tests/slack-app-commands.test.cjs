@@ -34,7 +34,7 @@ for (const [text, actionName, params] of cases) {
         calls.push(action);
         return [{ type: "section", text: { type: "mrkdwn", text: "Done" } }];
       } },
-      "@/lib/slack/userLink": { resolveSlackActor: async () => actor },
+      "@/lib/slack/userLink": { resolveSlackActor: async () => actor, setSlackAutoLinkDisabled: async (installId, slackUserId, userId) => { assert.equal(installId, actor.installId); assert.equal(slackUserId, actor.slackUserId); assert.equal(userId, null); } },
       "@/lib/slack/rateLimit": { claimSlackActionCapacity: async () => true },
       "@/lib/slack/api": { postSlackResponseUrl: async (...args) => responses.push(args) },
     });
@@ -51,6 +51,7 @@ for (const [text, actionName, params] of cases) {
     assert.equal(responses.length, 1);
     assert.equal(responses[0][2], true);
     assert.ok(responses[0][1].length > 0);
+    if (parsed.subcommand === "connect") assert.match(JSON.stringify(responses[0][1]), /Connected as/);
   });
 }
 
