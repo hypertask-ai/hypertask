@@ -21,7 +21,7 @@ let lastCommands;
 const noop = () => {};
 const box = ({ children }) => React.createElement("div", null, children);
 const members = { members: [], owner: null };
-stub("src/hooks/useFlag.tsx", { useFlag: (key) => key === "htpr-6930-my-tasks-kanban-reuse" ? false : key === flag ? enabled : true });
+stub("src/hooks/useFlag.tsx", { useFlag: (key) => ["htpr-6930-my-tasks-kanban-reuse", "htpr-6938-my-tasks-icon-controls"].includes(key) ? false : key === flag ? enabled : true });
 stub("src/lib/state.tsx", {
   useRecoilValue: (atom) => atom?.default ?? null,
   useRecoilState: (atom) => React.useState(atom?.default ?? {}),

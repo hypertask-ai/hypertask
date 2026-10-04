@@ -8,6 +8,7 @@ import TableView from "@/components/PageComponents/Kanban/TableView/TableView";
 import useClickOutside from "@/hooks/MultiPages/useClickOutside";
 import { useFlag } from "@/hooks/useFlag";
 import {
+  HTPR_6938_MY_TASKS_ICON_CONTROLS_FLAG,
   HTPR_6567_COMMAND_SCOPE_PICKER_FLAG,
   MY_TASKS_FILTER_PARITY_FLAG,
   MY_TASKS_LIVE_UPDATES_FLAG,
@@ -57,6 +58,7 @@ import {
   msUntilNextLocalMidnight,
   parseMyTasksViewOverdueCounts,
 } from "@/lib/myTasksOverdueCountUtils";
+import { readMyTasksViewMemory, rememberMyTasksView } from "@/lib/myTasksViewMemory";
 import { browserTimeZone } from "@/lib/myTasksTimeZone";
 import { effectiveMyTasksScopes } from "@/lib/myTasksScopes";
 import type {
@@ -154,6 +156,7 @@ const MyTasks = ({
   const showCommands = useRecoilValue(showCommandsAtom);
   const router = useRouter();
   const searchParams = useSearchParams();
+  const iconControlsEnabled = useFlag(HTPR_6938_MY_TASKS_ICON_CONTROLS_FLAG);
   const myTasksShortcutsWidthEnabled = useFlag(MY_TASKS_SHORTCUTS_WIDTH_FLAG);
   const boardParam = searchParams?.get("board") ?? null;
   const [sections, setSections] = useState(initialSections);
@@ -189,6 +192,10 @@ const MyTasks = ({
   const [kanbanFiltersOpen, setKanbanFiltersOpen] = useState(false);
   const { data: runningTimerEntries } = useRunningTimers();
   const viewParam = searchParams?.get("view") ?? null;
+  const entryParams = useRef({ view: viewParam, board: boardParam });
+  const memoryRestored = useRef(false);
+  const pickedView = useRef(false);
+  const pickedBoard = useRef(false);
   const initialView = initialViews.find((view) => view.id === initialViewId);
   const [views, setViews] = useState(initialViews);
   const [activeViewId, setActiveViewId] = useState<number | null>(initialViewId);
@@ -674,9 +681,10 @@ const MyTasks = ({
   );
 
   const replaceParams = useCallback(
-    (changes: { boardId?: null; viewId: number | null }) => {
+    (changes: { boardId?: number | null; viewId: number | null }) => {
       const next = new URLSearchParams(searchParams?.toString() ?? "");
       if (changes.boardId === null) next.delete("board");
+      else if (changes.boardId !== undefined) next.set("board", String(changes.boardId));
       if (changes.viewId === null) next.set("view", "all");
       else next.set("view", String(changes.viewId));
       const query = next.toString();
@@ -689,15 +697,21 @@ const MyTasks = ({
     (index: number) => {
       const nextIndex = Math.max(0, Math.min(index, tabs.length - 1));
       setActiveSplit(nextIndex);
-      if (myTasksShortcutsWidthEnabled) {
+      if (myTasksShortcutsWidthEnabled || iconControlsEnabled) {
         replaceBoardParam(sections[nextIndex - 1]?.projectId ?? null);
       }
     },
-    [myTasksShortcutsWidthEnabled, replaceBoardParam, sections, tabs.length]
+    [iconControlsEnabled, myTasksShortcutsWidthEnabled, replaceBoardParam, sections, tabs.length]
   );
 
   const updateSplit = useCallback(
     (index: number) => {
+      pickedBoard.current = true;
+      if (iconControlsEnabled) {
+        const sources = groupBy === "time" ? boardSplitSources : viewsFeatureEnabled ? filteredSections : sections;
+        const nextIndex = Math.max(0, Math.min(index, activeTabs.length - 1));
+        rememberMyTasksView(currentUser.id, { boardId: sources[nextIndex - 1]?.projectId ?? null });
+      }
       if (groupBy !== "time" && !viewsFeatureEnabled) {
         updateLegacySplit(index);
         return;
@@ -707,22 +721,26 @@ const MyTasks = ({
         const nextBoardId = availableBoards[nextIndex - 1]?.id ?? null;
         activeBoardId.current = nextBoardId;
         setActiveSplit(nextIndex);
-        if (myTasksShortcutsWidthEnabled) {
+        if (myTasksShortcutsWidthEnabled || iconControlsEnabled) {
           replaceBoardParam(nextBoardId);
         }
         return;
       }
       activeBoardId.current = filteredSections[nextIndex - 1]?.projectId ?? null;
       setActiveSplit(nextIndex);
-      if (myTasksShortcutsWidthEnabled) {
+      if (myTasksShortcutsWidthEnabled || iconControlsEnabled) {
         replaceBoardParam(filteredSections[nextIndex - 1]?.projectId ?? null);
       }
     },
     [
       activeTabs.length,
+      boardSplitSources,
+      sections,
       availableBoards,
       filteredSections,
       groupBy,
+      iconControlsEnabled,
+      currentUser.id,
       myTasksShortcutsWidthEnabled,
       replaceBoardParam,
       updateLegacySplit,
@@ -731,14 +749,14 @@ const MyTasks = ({
   );
 
   useEffect(() => {
-    if (!myTasksShortcutsWidthEnabled) return;
+    if (!myTasksShortcutsWidthEnabled && !iconControlsEnabled) return;
     const sources = groupBy === "time" ? boardSplitSources : sections;
     setActiveSplit(getMyTasksSplitIndex(sources, boardParam));
-  }, [boardParam, boardSplitSources, groupBy, myTasksShortcutsWidthEnabled, sections]);
+  }, [boardParam, boardSplitSources, groupBy, iconControlsEnabled, myTasksShortcutsWidthEnabled, sections]);
 
   useEffect(() => {
     if (groupBy !== "time") return;
-    if (!myTasksShortcutsWidthEnabled) {
+    if (!myTasksShortcutsWidthEnabled && !iconControlsEnabled) {
       const split = getMyTasksSplitIndex(
         boardSplitSources,
         activeBoardId.current === null ? null : String(activeBoardId.current),
@@ -756,13 +774,14 @@ const MyTasks = ({
     boardParam,
     boardSplitSources,
     groupBy,
+    iconControlsEnabled,
     myTasksShortcutsWidthEnabled,
     replaceBoardParam,
   ]);
 
   useEffect(() => {
     if (groupBy === "time" || !viewsFeatureEnabled) return;
-    if (!myTasksShortcutsWidthEnabled) {
+    if (!myTasksShortcutsWidthEnabled && !iconControlsEnabled) {
       const split = getMyTasksSplitIndex(
         filteredSections,
         activeBoardId.current === null ? null : String(activeBoardId.current),
@@ -781,10 +800,37 @@ const MyTasks = ({
     boardSplitSources,
     filteredSections,
     groupBy,
+    iconControlsEnabled,
     myTasksShortcutsWidthEnabled,
     replaceBoardParam,
     viewsFeatureEnabled,
   ]);
+
+  useEffect(() => {
+    if (!iconControlsEnabled || memoryRestored.current) return;
+    memoryRestored.current = true;
+    const memory = readMyTasksViewMemory(currentUser.id);
+    const defaultViewId = views.find((view) => view.isDefault)?.id ?? null;
+    const restoreView = viewsFeatureEnabled && entryParams.current.view === null && !pickedView.current &&
+      memory.viewId !== undefined && memory.defaultViewId === defaultViewId &&
+      (memory.viewId === null || views.some((view) => view.id === memory.viewId));
+    const restoreBoard = entryParams.current.board === null && !pickedBoard.current && memory.boardId !== undefined;
+    if (restoreView) {
+      // Apply config before board validation sees the restored URL.
+      setActiveViewId(memory.viewId ?? null);
+      updateViewConfig(parseMyTasksViewConfig(
+        views.find((view) => view.id === memory.viewId)?.config ?? DEFAULT_MY_TASKS_VIEW_CONFIG,
+      ));
+    }
+    if (restoreView || restoreBoard) {
+      observedViewParam.current = viewParam;
+      if (!viewsFeatureEnabled) replaceBoardParam(memory.boardId ?? null);
+      else replaceParams({
+        viewId: restoreView ? memory.viewId ?? null : activeViewId,
+        ...(restoreBoard ? { boardId: memory.boardId } : {}),
+      });
+    }
+  }, [activeViewId, currentUser.id, iconControlsEnabled, replaceBoardParam, replaceParams, updateViewConfig, viewParam, views, viewsFeatureEnabled]);
 
   useEffect(() => {
     if (!viewsFeatureEnabled || observedViewParam.current === viewParam) return;
@@ -842,6 +888,10 @@ const MyTasks = ({
   }, [activeSplit, activeTabs.length, filterOpen, router, showCommands.show, updateSplit]);
 
   const selectView = (viewId: number | null) => {
+    pickedView.current = true;
+    if (iconControlsEnabled) rememberMyTasksView(currentUser.id, {
+      viewId, defaultViewId: views.find((view) => view.isDefault)?.id ?? null,
+    });
     const view = views.find((candidate) => candidate.id === viewId);
     const nextConfig = parseMyTasksViewConfig(
       view?.config ?? DEFAULT_MY_TASKS_VIEW_CONFIG,
@@ -873,6 +923,8 @@ const MyTasks = ({
       const created = { ...body.view, config: parseMyTasksViewConfig(body.view.config) };
       setViews((current) => [...current, created]);
       setActiveViewId(created.id);
+      pickedView.current = true;
+      if (iconControlsEnabled) rememberMyTasksView(currentUser.id, { viewId: created.id, defaultViewId: views.find((view) => view.isDefault)?.id ?? null });
       updateViewConfig(created.config);
       replaceParams({ viewId: created.id });
     } catch (error) {
@@ -934,6 +986,7 @@ const MyTasks = ({
     setViewBusy(true);
     try {
       const saved = await patchView(viewId, { isDefault: true });
+      if (iconControlsEnabled) rememberMyTasksView(currentUser.id, { viewId, defaultViewId: viewId });
       setViews((current) =>
         current.map((view) => ({
           ...(view.id === saved.id ? saved : view),
@@ -1140,6 +1193,7 @@ const boardTabCounts = useMemo(() => {
         </span>
         {((viewsEnabled && myTasksViewsEnabled) || myTasksTimeGroupEnabled) && (
           <MyTasksViewControls
+            variant={iconControlsEnabled ? "icons" : "labels"}
             boards={boards}
             config={viewConfig}
             onChange={updateViewConfig}
