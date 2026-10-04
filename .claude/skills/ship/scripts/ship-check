@@ -233,7 +233,7 @@ check_cleaned() {
 check_premerge() {
   [ "$REPO" = hypertask-ai/hypertask ] || return 0
   python3 - "$REPO" "$1" "$EVID" "${2:-}" <<'PY'
-import base64, json, os, re, subprocess, sys, urllib.parse, urllib.request
+import base64, json, os, re, subprocess, sys, time, urllib.parse, urllib.request
 from pathlib import Path
 
 repo, pr, evidence, expected_sha = sys.argv[1:]
@@ -269,14 +269,16 @@ def resolve(arg, keys):
     return keys.get(arg)
 
 try:
-    row = gh('api', f'repos/{repo}/pulls/{pr}')
+    # Mutable PR endpoints can briefly serve an earlier head after a push.
+    freshness = time.time_ns()
+    row = gh('api', f'repos/{repo}/pulls/{pr}?premerge={freshness}')
     sha, base = row['head']['sha'], row['base']['sha']
     if not re.fullmatch(r'[0-9a-f]{40}', sha):
         raise ValueError('cannot read the full PR head sha')
     if expected_sha and sha != expected_sha:
         raise ValueError('PR head changed while checking evidence; retry')
     ticket = row['title'].split()[0]
-    pages = gh('api', f'repos/{repo}/pulls/{pr}/files?per_page=100', '--paginate')
+    pages = gh('api', f'repos/{repo}/pulls/{pr}/files?per_page=100&premerge={freshness}', '--paginate')
     files = [f for page in pages for f in page]
     if len(files) != row['changed_files']:
         raise ValueError('cannot read the complete PR diff; retry before merging')

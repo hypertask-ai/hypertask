@@ -240,6 +240,8 @@ if args[:2] == ['pr', 'view']:
 if args[0] != 'api':
     sys.exit(1)
 url = args[1]
+if os.environ.get('FLAG_ASSERT_FRESH') and '/pulls/' in url:
+    assert urllib.parse.parse_qs(urllib.parse.urlsplit(url).query).get('premerge'), 'mutable PR read must be fresh'
 if os.environ.get('FLAG_ASSERT_LOCK'):
     import fcntl
     with open(os.environ['PREMERGE_STATUS_STATE'] + '/publish.lock', 'w') as lock:
@@ -424,7 +426,7 @@ env FLAG_ASSERT_LOCK=1 PREMERGE_STATUS_STATE="$PREMERGE_STATUS_STATE" "$E/flag-b
 S() {
   local want=$1 state=$2 description=$3 got out; shift 3
   : > "$E/status-log"
-  out=$(env PATH="$E/flag-bin:$PATH" PYTHONPATH="$E/flag-http" FLAG_SOURCE="$E/flag-source" FLAG_LOG="$E/status-log" FLAG_ASSERT_LOCK=1 AGENT_TOKEN=fixture HYPERTASKS_JWT_TOKEN= "$@" ./ship-check premerge-status 999 2>&1); got=$?
+  out=$(env PATH="$E/flag-bin:$PATH" PYTHONPATH="$E/flag-http" FLAG_SOURCE="$E/flag-source" FLAG_LOG="$E/status-log" FLAG_ASSERT_LOCK=1 FLAG_ASSERT_FRESH=1 AGENT_TOKEN=fixture HYPERTASKS_JWT_TOKEN= "$@" ./ship-check premerge-status 999 2>&1); got=$?
   if [ "$got" = "$want" ] && python3 - "$E/status-log" "$state" "$description" <<'PY'
 import json, sys
 calls = [json.loads(line) for line in open(sys.argv[1])]
