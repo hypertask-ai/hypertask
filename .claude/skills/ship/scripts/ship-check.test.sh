@@ -45,9 +45,15 @@ G 2 $M 838 -R hypertask-ai/hypertask '&&' $M 822 -R hypertask-ai/hypertask
 G 0 grep "$M" notes.txt
 unset -f gh
 
-# A bound PR that is still open blocks the merged gate.
-read -r opr ot < <(gh pr list -R hypertask-ai/hypertask --state open --json number,title --jq '[.[] | select(.title | test("^(HTPR|HYFA|YPER4)-[0-9]+ "))][0] | "\(.number) \(.title | split(" ")[0])"')
-./ship-check bind "$ot" "$opr" >/dev/null; ./ship-check merged "$ot" | grep -q 'OPEN, not merged' && ok "open bound PR #$opr blocks merged gate" || bad "open bound PR not blocking"
+# No real open PR is needed to test the unmerged gate.
+gh() {
+  if [[ ${1:-} == pr && ${2:-} == view && ${3:-} == 809 && "$*" == *'--json number,title,state,mergeCommit,baseRefName'* ]]; then
+    command gh "$@" | jq '.state = "OPEN"'
+  else command gh "$@"; fi
+}
+export -f gh
+./ship-check merged HTPR-6570 | grep -q 'OPEN, not merged' && ok 'open bound PR blocks merged gate' || bad 'open bound PR not blocking'
+unset -f gh
 
 # PR 838 changed only skills; Vercel skipped merge ec45678a2 without a deployment.
 sha838=$(gh pr view 838 -R hypertask-ai/hypertask --json mergeCommit --jq .mergeCommit.oid)
@@ -237,9 +243,9 @@ if args[:2] == ['pr', 'view']:
     else:
         print(json.dumps({'number': 999, 'title': title, 'state': os.environ.get('FLAG_PR_STATE', 'OPEN'), 'mergeCommit': {'oid': 'a' * 40}, 'baseRefName': 'production'}))
     sys.exit(0)
-if args == ['api', '-H', 'Accept: application/vnd.github.raw', 'repos/hypertask-ai/hypertask/contents/.claude/skills/ship/scripts/ship-check?ref=production']:
-    with open('ship-check') as checker:
-        print(checker.read(), end='')
+if args == ['api', 'repos/hypertask-ai/hypertask/contents/.claude/skills/ship/scripts/ship-check?ref=production']:
+    with open('ship-check', 'rb') as checker:
+        print(json.dumps({'encoding': 'base64', 'content': base64.b64encode(checker.read()).decode()}))
     sys.exit(0)
 if args[0] != 'api':
     sys.exit(1)
