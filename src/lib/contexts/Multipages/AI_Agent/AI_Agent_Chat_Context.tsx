@@ -1,6 +1,8 @@
 "use client";
 import type { FileItem } from "@/components/Common/AttachmentsUpload/FileUploadHandler";
 import { useAiChat } from "@/hooks/MultiPages/AIChat/useAiChat";
+import { useFlag } from "@/hooks/useFlag";
+import { HTPR_6936_ASK_AI_FULLSCREEN_FLAG } from "@/lib/flags/keys";
 import { isControlQFocusShortcut } from "@/lib/aiChat/chatFocusShortcut";
 import { useRecoilState } from "@/lib/state";
 import { aiChatPendingPromptAtom } from "@/store";
@@ -11,6 +13,7 @@ import { IChatMessage, IChatSession, MentionItem } from "@/models/model";
 // initial chunk and defeat the dynamic mount below (HTPR-4508).
 import type { Editor } from "@tiptap/react";
 import dynamic from "next/dynamic";
+import { usePathname } from "next/navigation";
 import {
   ChangeEvent,
   Dispatch,
@@ -21,6 +24,7 @@ import {
   useEffect,
   useLayoutEffect,
   useRef,
+  useState,
 } from "react";
 import { ChatContext, useAiChatContext } from "./chatContext";
 
@@ -36,6 +40,7 @@ export interface Message {
 // Define the context type
 export interface ChatContextType {
   isTyping: boolean;
+  sendSettledVersion: number;
   isRecording: boolean;
   queuedMessages: {
     id: string;
@@ -83,7 +88,7 @@ export interface ChatContextType {
   dropDownButtonAICallback: (selectedAiModel: TAiModal) => void;
   handleRemoveContext: (index: number) => void;
   handleAddContext(): void;
-  handleSendMessage: (retryContent?: string) => Promise<void>;
+  handleSendMessage: (retryContent?: string, options?: { preserveComposer?: boolean }) => Promise<boolean>;
   tiptapKeydown: (event: any) => void;
   layoutKeydown: (event: any) => void;
   handleMessageListScroll: (element?: HTMLElement | null) => void;
@@ -172,7 +177,29 @@ export const ChatRuntime = memo(function ChatRuntime({
   const handleSendMessageRef = useRef(contextProps.handleSendMessage);
   handleSendMessageRef.current = contextProps.handleSendMessage;
   const { editor, fileItems } = contextProps;
+  const pathname = usePathname();
+  const askAiFullscreenEnabled = useFlag(HTPR_6936_ASK_AI_FULLSCREEN_FLAG);
+  const [failedFullScreenQuery, setFailedFullScreenQuery] = useState<string | null>(null);
   useEffect(() => {
+    if (!failedFullScreenQuery || !editor) return;
+    editor.commands.insertContentAt(editor.state.doc.content.size, {
+      type: "paragraph",
+      content: [{ type: "text", text: failedFullScreenQuery }],
+    });
+    editor.commands.focus("end");
+    setFailedFullScreenQuery(null);
+  }, [failedFullScreenQuery, editor]);
+  const pendingFullScreenSessionRef = useRef<{
+    prompt: typeof pendingAiChatPrompt;
+    previousSessionId: string | null;
+    sending: boolean;
+  } | null>(null);
+  useEffect(() => {
+    if (pendingAiChatPrompt && typeof pendingAiChatPrompt !== "string" && !askAiFullscreenEnabled) {
+      pendingFullScreenSessionRef.current = null;
+      setPendingAiChatPrompt(null);
+      return;
+    }
     if (
       !pendingAiChatPrompt ||
       contextProps.isByokBlocked ||
@@ -181,7 +208,54 @@ export const ChatRuntime = memo(function ChatRuntime({
     ) {
       return;
     }
-    const query = pendingAiChatPrompt;
+    if (typeof pendingAiChatPrompt !== "string") {
+      // A warm side-panel runtime must not consume this before /chat is ready.
+      if (pathname !== "/chat" || !contextProps.chatHistoryReady) return;
+      if (pendingFullScreenSessionRef.current?.prompt !== pendingAiChatPrompt) {
+        pendingFullScreenSessionRef.current = {
+          prompt: pendingAiChatPrompt,
+          previousSessionId: contextProps.activeSession,
+          sending: false,
+        };
+        void contextProps.startNewSession().catch(() => {
+          if (pendingFullScreenSessionRef.current?.prompt !== pendingAiChatPrompt) return;
+          pendingFullScreenSessionRef.current = null;
+          setPendingAiChatPrompt((pending) => pending === pendingAiChatPrompt ? null : pending);
+          setFailedFullScreenQuery(pendingAiChatPrompt.query);
+        });
+        return;
+      }
+      if (pendingFullScreenSessionRef.current.sending) return;
+      if (
+        !contextProps.currentSession ||
+        contextProps.activeSession === pendingFullScreenSessionRef.current.previousSessionId
+      ) return;
+    }
+    const query = typeof pendingAiChatPrompt === "string" ? pendingAiChatPrompt : pendingAiChatPrompt.query;
+    if (typeof pendingAiChatPrompt !== "string") {
+      const handoff = pendingFullScreenSessionRef.current!;
+      const recoverQuestion = () => {
+        if (pendingFullScreenSessionRef.current !== handoff) return;
+        pendingFullScreenSessionRef.current = null;
+        setPendingAiChatPrompt((pending) => pending === pendingAiChatPrompt ? null : pending);
+        setFailedFullScreenQuery(query);
+      };
+      // A manual send may have filled the fresh conversation while we waited.
+      if (contextProps.currentSession!.messages.length > 0) {
+        recoverQuestion();
+        return;
+      }
+      handoff.sending = true;
+      void handleSendMessageRef.current(query, { preserveComposer: true }).then((accepted) => {
+        if (pendingFullScreenSessionRef.current !== handoff) return;
+        handoff.sending = false;
+        if (!accepted) return; // Retry only when readiness or sender settlement changes.
+        pendingFullScreenSessionRef.current = null;
+        setPendingAiChatPrompt((pending) => pending === pendingAiChatPrompt ? null : pending);
+      }).catch(recoverQuestion);
+      return;
+    }
+    pendingFullScreenSessionRef.current = null;
     setPendingAiChatPrompt(null);
     // handleSendMessage() sends the composer's existing attachments and clears
     // its editor, so only auto-send when the composer is CLEAN — otherwise we'd
@@ -198,9 +272,16 @@ export const ChatRuntime = memo(function ChatRuntime({
     }
   }, [
     pendingAiChatPrompt,
+    askAiFullscreenEnabled,
     contextProps.isByokBlocked,
     contextProps.isTyping,
+    contextProps.sendSettledVersion,
     contextProps.sessions.length,
+    contextProps.chatHistoryReady,
+    contextProps.activeSession,
+    contextProps.currentSession,
+    contextProps.startNewSession,
+    pathname,
     editor,
     fileItems,
     setPendingAiChatPrompt,

@@ -9,6 +9,9 @@ import { useSearch } from "@/hooks/Search/useSearch";
 import { cn } from "@/utils/undoActions/helperFuncs";
 import { Fragment, KeyboardEvent, RefObject, useContext } from "react";
 import { useFlag } from "@/hooks/useFlag";
+import { useRouter, useSearchParams } from "next/navigation";
+import { buildFullScreenChatPath } from "@/lib/aiChatDisplayMode";
+import { HTPR_6936_ASK_AI_FULLSCREEN_FLAG } from "@/lib/flags/keys";
 import { HTPR_6372_SEARCH_RANKING_FLAG, HTPR_6688_SEARCH_AUTOCOMPLETE_FLAG, HTPR_6865_SEARCH_LAYOUT_FLAG, HTPR_6878_SEARCH_LABEL_SCOPE_FLAG, HTPR_6879_SEARCH_ESC_BACK_FLAG, HTPR_6880_SEARCH_COMMENTER_FLAG } from "@/lib/flags/keys";
 import { highlightedSearchSnippet, highlightedTitle } from "@/lib/search/autocomplete";
 import { HTPR_6882_SEARCH_MATCH_HIGHLIGHTS_FLAG, HTPR_6909_SEARCH_ONE_BOARD_TABS_FLAG, HTPR_6911_SEARCH_ROW_HIGHLIGHT_FLAG } from "@/lib/flags/keys";
@@ -28,6 +31,7 @@ interface IProps {
   _includeArchived: boolean;
   _fromProject?: number | null;
   currentUser: IUser;
+  askAiFullscreenEnabled?: boolean;
 }
 
 const SearchComp = ({
@@ -36,7 +40,15 @@ const SearchComp = ({
   _includeArchived,
   _fromProject = null,
   currentUser,
+  askAiFullscreenEnabled = false,
 }: IProps) => {
+  const router = useRouter();
+  const askAiFullscreenFlagEnabled = useFlag(HTPR_6936_ASK_AI_FULLSCREEN_FLAG);
+  const searchParams = useSearchParams();
+  // Native replaceState preserves the draft URL, but Back can reuse older server props.
+  const searchTerm = askAiFullscreenEnabled && askAiFullscreenFlagEnabled
+    ? searchParams?.get("searchTerm") ?? _searchTerm
+    : _searchTerm;
   const rankingEnabled = useFlag(HTPR_6372_SEARCH_RANKING_FLAG);
   const chipsFlagEnabled = useFlag(HTPR_6370_SEARCH_CHIPS_FLAG);
   const operatorsFlagEnabled = useFlag(HTPR_6369_SEARCH_OPERATORS_FLAG);
@@ -84,7 +96,7 @@ const SearchComp = ({
     suggestedValue,
     includeArchived,
     setIncludeArchivedResults,
-  } = useSearch(_searchTerm, _initialTabIndex, _includeArchived, _fromProject);
+  } = useSearch(searchTerm, _initialTabIndex, _includeArchived, _fromProject);
   const matchSnippets = matchHighlightsFlagEnabled && layoutEnabled
     ? typedTasks.map((task) => highlightedSearchSnippet((task.commentId ? task.commentText : task.descriptionText) ?? '', inputValue, commenterFlagEnabled && layoutEnabled))
     : undefined;
@@ -98,6 +110,16 @@ const SearchComp = ({
   function openAskAi(readableQuery?: string) {
     const query = labelScopeFlagEnabled && layoutEnabled && readableQuery !== undefined ? readableQuery : inputValue.trim();
     if (!query || (!layoutEnabled && query.length < 2)) return;
+    if (askAiFullscreenEnabled && askAiFullscreenFlagEnabled) {
+      const searchUrl = new URL(window.location.href);
+      searchUrl.searchParams.set("searchTerm", inputValue);
+      const returnPath = `${searchUrl.pathname}${searchUrl.search}${searchUrl.hash}`;
+      // Draft queries are not in the URL yet; preserve this history entry for Back.
+      window.history.replaceState(window.history.state, "", returnPath);
+      setAiChatPendingPrompt({ query, fullScreen: true });
+      router.push(buildFullScreenChatPath(returnPath));
+      return;
+    }
     setAiChatPendingPrompt(query);
     openAIChatInterface();
   }

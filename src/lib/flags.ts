@@ -54,6 +54,7 @@ import {
   HTPR_6882_SEARCH_MATCH_HIGHLIGHTS_FLAG,
   HTPR_6911_SEARCH_ROW_HIGHLIGHT_FLAG,
   HTPR_6909_SEARCH_ONE_BOARD_TABS_FLAG,
+  HTPR_6936_ASK_AI_FULLSCREEN_FLAG,
   HTPR_6878_SEARCH_LABEL_SCOPE_FLAG,
   HTPR_6879_SEARCH_ESC_BACK_FLAG,
   HTPR_6881_SEARCH_FUZZY_PERSON_FLAG,
@@ -595,6 +596,11 @@ const FEATURE_FLAG_DEFINITIONS = [
     key: HTPR_6911_SEARCH_ROW_HIGHLIGHT_FLAG,
     shippedOn: "2026-10-03",
     description: "Gives selected search results and suggestions the inbox highlight: background edge to edge and the accent bar on the far left. Requires the search layout flag.",
+  },
+  {
+    key: HTPR_6936_ASK_AI_FULLSCREEN_FLAG,
+    shippedOn: "2026-10-04",
+    description: "Opens Ask AI from search in the existing full-screen AI chat, sends the question in a new conversation and keeps the search query for Back.",
   },
   {
     key: HTPR_6909_SEARCH_ONE_BOARD_TABS_FLAG,

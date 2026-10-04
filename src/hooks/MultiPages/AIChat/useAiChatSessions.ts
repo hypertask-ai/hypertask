@@ -72,8 +72,8 @@ export function useAiChatSessions(context: Context) {
     (
       retryContent?: string,
       options?: { htmlForAttachments?: string }
-    ) => Promise<void>
-  >(async () => {});
+    ) => Promise<boolean>
+  >(async () => false);
 
   const removeQueuedMessage = useCallback((id: string) => {
     messageQueueRef.current = messageQueueRef.current.filter(

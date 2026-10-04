@@ -71,6 +71,7 @@ export const HTPR_6865_SEARCH_LAYOUT_FLAG = "htpr-6865-search-layout";
 export const HTPR_6882_SEARCH_MATCH_HIGHLIGHTS_FLAG = "htpr-6882-search-match-highlights";
 export const HTPR_6911_SEARCH_ROW_HIGHLIGHT_FLAG = "htpr-6911-search-row-highlight";
 export const HTPR_6909_SEARCH_ONE_BOARD_TABS_FLAG = "htpr-6909-search-one-board-tabs";
+export const HTPR_6936_ASK_AI_FULLSCREEN_FLAG = "htpr-6936-ask-ai-fullscreen";
 export const HTPR_6878_SEARCH_LABEL_SCOPE_FLAG = "htpr-6878-search-label-scope";
 export const HTPR_6879_SEARCH_ESC_BACK_FLAG = "htpr-6879-search-esc-back";
 export const HTPR_6880_SEARCH_COMMENTER_FLAG = "htpr-6880-search-commenter";
