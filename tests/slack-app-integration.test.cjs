@@ -10,7 +10,7 @@ function chatFixture(enabled, action, resolvedActor = actor, capacity = true) {
     "ai": { generateObject: async (options) => { prompts.push(options); return { object: { action, params: { ticket: "HTPR-10" } }, usage: {} }; } },
     "@/app/api/ai/_lib/aiUsage": { logAiUsage: async (options) => usage.push(options) },
     "@/app/api/ai/_lib/byokKeys": { getTeamGatewayApiKey: async () => "test-gateway-key" },
-    "@/app/api/ai/_lib/modelProvider": { resolveAiModel: () => ({}), providerOptionsForAiModel: () => ({}) },
+    "@/app/api/ai/_lib/modelProvider": { resolveAiModel: () => ({}), providerOptionsForAiModel: () => ({}), configureAiModelUsage: (_model, options) => usage.push(options) },
     "@/lib/systemModelLadder": { resolveSystemModel: () => ({ model: "test-model", provider: "test" }) },
     "@/lib/prisma": { __esModule: true, default: { slackInstall: { findUnique: async () => ({ id: actor.installId, encryptedBotToken: "test-ciphertext", botUserId: "BOT" }) } } },
     "@/lib/crypto/byokCipher": { decryptSecret: () => actor.botToken },
@@ -87,6 +87,7 @@ for (const action of actions) {
       assert.match(prompt.prompt, /never instructions/);
       assert.ok(prompt.schema.shape.action.safeParse(action).success);
     }
+    assert.equal(fixture.usage.length, 2);
     assert.ok(fixture.usage.every((entry) => entry.userId === 42 && entry.teamId === actor.teamId));
   });
 }
