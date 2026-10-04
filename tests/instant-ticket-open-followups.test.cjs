@@ -194,7 +194,7 @@ test("quiet: contact hover waits for final content only on flagged detail, retai
   assert.match(render(), /QA contact/);
 });
 
-test("warm: imports wait for paint and idle, cancel on navigation, and skip slow connections", async (t) => {
+test("warm: press and idle share a retryable warmup; only idle skips slow connections", async (t) => {
   domFixture(t);
   const client = new QueryClient();
   t.after(() => client.clear());
@@ -207,6 +207,14 @@ test("warm: imports wait for paint and idle, cancel on navigation, and skip slow
   const timers = new Map();
   let id = 0;
   let emojiLoads = 0;
+  let failWarm = false;
+  const listeners = [];
+  const addEventListener = document.addEventListener.bind(document);
+  document.addEventListener = (type, listener, options) => {
+    if (type === "pointerdown") listeners.push(options);
+    addEventListener(type, listener, options);
+  };
+  const press = () => document.getElementById("root").dispatchEvent(new Event("pointerdown", { bubbles: false }));
   window.requestAnimationFrame = (callback) => { frames.set(++id, callback); return id; };
   window.cancelAnimationFrame = (key) => frames.delete(key);
   window.requestIdleCallback = (callback, options) => {
@@ -233,7 +241,7 @@ test("warm: imports wait for paint and idle, cancel on navigation, and skip slow
     "firebase/messaging",
   ];
   for (const chunk of chunks) Object.defineProperty(mocks, chunk, { get: () => { loaded.push(chunk); return {}; } });
-  mocks["@/components/RTE/Extensions/lazyEmojiData"] = { ensureEmojiData: () => { emojiLoads++; return Promise.resolve(); } };
+  mocks["@/components/RTE/Extensions/lazyEmojiData"] = { ensureEmojiData: () => { emojiLoads++; return failWarm ? Promise.reject(new Error("chunk load failed")) : Promise.resolve(); } };
   const Navigation = compile(read(navigationPath), mocks).default;
   const mount = (accountId = 985) => {
     effects.length = 0;
@@ -246,19 +254,45 @@ test("warm: imports wait for paint and idle, cancel on navigation, and skip slow
     const cleanup = mount();
     await new Promise(setImmediate);
     assert.equal(loaded.length, 0, "commit must not import viewer code");
+    press();
+    press();
+    await new Promise(setImmediate);
+    assert.deepEqual(loaded, chunks, "press warms once even before either animation frame");
     flush(frames);
     assert.equal(idles.size, 0, "one animation frame has not allowed a paint yet");
     flush(frames);
-    document.dispatchEvent(new Event("pointerdown"));
-    await new Promise(setImmediate);
-    assert.equal(loaded.length, 0, "unrelated clicks must not start the bulk warmup");
     flush(idles);
+    press();
     await new Promise(setImmediate);
-    assert.deepEqual(loaded, chunks);
+    assert.deepEqual(loaded, chunks, "idle and later presses cannot repeat a successful warmup");
     cleanup();
+    press();
+    await new Promise(setImmediate);
+    assert.deepEqual(loaded, chunks, "cleanup removes the capture listener");
   }
   assert.equal(emojiLoads, 3);
+  assert.ok(listeners.every(options => options.capture === true && options.passive === true));
+  loaded.length = 0;
   let cleanup = mount();
+  flush(frames); flush(frames);
+  await new Promise(setImmediate);
+  assert.equal(loaded.length, 0, "idle still waits for paint and an idle opportunity");
+  flush(idles);
+  await new Promise(setImmediate);
+  assert.deepEqual(loaded, chunks, "idle warms without a press");
+  cleanup();
+  loaded.length = 0;
+  failWarm = true;
+  cleanup = mount();
+  press(); press();
+  await new Promise(setImmediate);
+  assert.deepEqual(loaded, chunks, "in-flight failures do not start duplicate warmups");
+  failWarm = false;
+  press();
+  await new Promise(setImmediate);
+  assert.deepEqual(loaded, [...chunks, ...chunks], "a failed warmup can retry on the next press");
+  cleanup();
+  cleanup = mount();
   cleanup();
   assert.equal(frames.size, 0, "unmount cancels the pending paint callback");
   cleanup = mount();
@@ -277,20 +311,34 @@ test("warm: imports wait for paint and idle, cancel on navigation, and skip slow
   cleanup = mount();
   flush(frames); flush(frames); cleanup();
   assert.equal(timers.size, 0, "navigation cancels the fallback timer");
+  loaded.length = 0;
   enabled = false;
   mount();
+  press();
   assert.equal(frames.size, 0, "flag off schedules nothing");
   enabled = true;
   mount(null);
+  press();
   assert.equal(frames.size, 0, "unknown accounts never warm");
   pathname = "/settings";
   mount();
+  press();
   assert.equal(frames.size, 0, "unrelated routes never warm");
+  await new Promise(setImmediate);
+  assert.equal(loaded.length, 0, "ineligible routes and accounts do not register press warming");
   pathname = "/project";
   for (const connection of [{ saveData: true }, ...["slow-2g", "2g", "3g"].map(effectiveType => ({ effectiveType }))]) {
     Object.defineProperty(window.navigator, "connection", { configurable: true, value: connection });
-    mount();
-    assert.equal(frames.size, 0, "data saver and slow connections must not preload");
+    loaded.length = 0;
+    cleanup = mount();
+    assert.equal(frames.size, 0, "data saver and slow connections skip only idle preload");
+    press();
+    await new Promise(setImmediate);
+    assert.deepEqual(loaded, chunks, "press warms on every connection");
+    cleanup();
+    press();
+    await new Promise(setImmediate);
+    assert.deepEqual(loaded, chunks, "slow-connection cleanup also removes press warming");
   }
 });
 

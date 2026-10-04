@@ -85,23 +85,29 @@ export default function CachedTaskDetailNavigation({ children, accountId }: {
     const connection = (window.navigator as Navigator & {
       connection?: { saveData?: boolean; effectiveType?: string };
     }).connection;
-    if (connection?.saveData || ["slow-2g", "2g", "3g"].includes(connection?.effectiveType ?? "")) return;
-    let frame: number;
+    let frame: number | undefined;
     let idle: number | undefined;
     let timer: number | undefined;
+    let warming = false;
     const warm = () => {
+      if (warming) return;
+      warming = true;
       // Import only: no ticket requests, editor mounts or permission prompts.
-      void warmTaskDetail().catch(() => {});
+      void warmTaskDetail().catch(() => { warming = false; });
     };
+    document.addEventListener("pointerdown", warm, { capture: true, passive: true });
     // Leave a paint opportunity before warming code that the page does not need.
-    frame = window.requestAnimationFrame(() => {
+    if (!connection?.saveData && !["slow-2g", "2g", "3g"].includes(connection?.effectiveType ?? "")) {
       frame = window.requestAnimationFrame(() => {
-        if (window.requestIdleCallback) idle = window.requestIdleCallback(warm, { timeout: 5000 });
-        else timer = window.setTimeout(warm, 2000);
+        frame = window.requestAnimationFrame(() => {
+          if (window.requestIdleCallback) idle = window.requestIdleCallback(warm, { timeout: 5000 });
+          else timer = window.setTimeout(warm, 2000);
+        });
       });
-    });
+    }
     return () => {
-      window.cancelAnimationFrame(frame);
+      document.removeEventListener("pointerdown", warm, true);
+      if (frame !== undefined) window.cancelAnimationFrame(frame);
       if (idle !== undefined) window.cancelIdleCallback(idle);
       if (timer !== undefined) window.clearTimeout(timer);
     };
