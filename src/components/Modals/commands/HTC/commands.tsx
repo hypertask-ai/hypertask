@@ -100,7 +100,8 @@ const Commands = (props: Props) => {
   } = props;
   const composeTaskWriterEnabled = useFlag(HTPR_6929_COMPOSE_TASK_WRITER_FLAG);
   const newTaskWindowFlag = useFlag(HTPR_6937_NEW_TASK_WINDOW_FLAG);
-  const newTaskWindow = composeTaskWriterEnabled && newTaskWindowFlag && !props.isDemo && !props.isInteractive;
+  let newTaskWindow = false;
+  if (composeTaskWriterEnabled && newTaskWindowFlag && !props.isDemo && !props.isInteractive) newTaskWindow = true;
   const isApple = useDeviceContext();
   const composeEnabled = composeTaskWriterEnabled && !props.isDemo && !props.isInteractive;
   const [showCommands, setShowCommands] = useRecoilState(showCommandsAtom);

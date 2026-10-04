@@ -33,7 +33,8 @@ export default function ComposeTaskWriter({ active, onCreated, onBusyChange }: {
 }) {
   const enabled = useFlag(HTPR_6929_COMPOSE_TASK_WRITER_FLAG);
   const newTaskWindowFlag = useFlag(HTPR_6937_NEW_TASK_WINDOW_FLAG);
-  const newTaskWindow = enabled && newTaskWindowFlag;
+  let newTaskWindow = false;
+  if (enabled && newTaskWindowFlag) newTaskWindow = true;
   const isApple = useDeviceContext();
   const inView = useRecoilValue(inViewObjectAtom);
   const [recording, setRecording] = useState(false);

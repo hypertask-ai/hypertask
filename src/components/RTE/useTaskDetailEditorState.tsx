@@ -148,7 +148,8 @@ export function useTaskDetailEditorState({
   const composeEnabled = useFlag(HTPR_6929_COMPOSE_TASK_WRITER_FLAG);
   const newTaskWindowFlag = useFlag(HTPR_6937_NEW_TASK_WINDOW_FLAG);
   const [writerOpen, setShouldShowAITaskWriter] = useState(shouldTriggerAiTaskWriter);
-  const shouldShowAiTaskWriter = writerOpen && !(composeEnabled && newTaskWindowFlag);
+  let shouldShowAiTaskWriter = writerOpen;
+  if (composeEnabled && newTaskWindowFlag) shouldShowAiTaskWriter = false;
   const [aiTriggerData, setAiTriggerData] = useState({
     autoTrigger: false,
     initialPrompt: ''

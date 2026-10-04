@@ -142,7 +142,8 @@ const TiptapCreateTaskModal = () => {
   const { continueTourInModal, isTourActive, endTour } = useTourContext();
   const composeEnabled = useFlag(HTPR_6929_COMPOSE_TASK_WRITER_FLAG);
   const newTaskWindowFlag = useFlag(HTPR_6937_NEW_TASK_WINDOW_FLAG);
-  const newTaskWindow = composeEnabled && newTaskWindowFlag;
+  let newTaskWindow = false;
+  if (composeEnabled && newTaskWindowFlag) newTaskWindow = true;
   const setCommands = useSetRecoilState(showCommandsAtom);
   const [writerOpen, setShouldShowAITaskWriter] = useState(
     editMode === "Description-ai" ? true : false

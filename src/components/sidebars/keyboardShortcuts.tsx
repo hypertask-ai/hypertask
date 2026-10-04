@@ -27,7 +27,8 @@ const KeyboardShortcuts = () => {
   let includeComposeTaskShortcut = false;
   if (composeTaskWriterEnabled) includeComposeTaskShortcut = true;
   const newTaskWindowFlag = useFlag(HTPR_6937_NEW_TASK_WINDOW_FLAG);
-  const newTaskWindow = composeTaskWriterEnabled && newTaskWindowFlag;
+  let newTaskWindow = false;
+  if (composeTaskWriterEnabled && newTaskWindowFlag) newTaskWindow = true;
   const agentLogNameEnabled = useFlag(HTPR_6662_AGENT_LOG_NAME_FLAG);
   let historyToggleLabel = "Toggle history events";
   if (agentLogNameEnabled) {

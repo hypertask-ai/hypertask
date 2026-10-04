@@ -33,6 +33,8 @@ export function TaskDetailEditorPanels(context: TaskDetailEditorPresentation) {
 
   const composeEnabled = useFlag(HTPR_6929_COMPOSE_TASK_WRITER_FLAG);
   const newTaskWindowFlag = useFlag(HTPR_6937_NEW_TASK_WINDOW_FLAG);
+  let newTaskWindow = false;
+  if (composeEnabled && newTaskWindowFlag) newTaskWindow = true;
   const setCommands = useSetRecoilState(showCommandsAtom);
   const instantTicketOpen = useFlag(HTPR_6752_INSTANT_TICKET_OPEN_FLAG);
   const mainContainer = instantTicketOpen && !editor && mode === "read-edit-description" ? (
@@ -162,7 +164,7 @@ export function TaskDetailEditorPanels(context: TaskDetailEditorPresentation) {
           <button
             className="hidden"
             onClick={() => {
-              if (composeEnabled && newTaskWindowFlag) setCommands({ show: true, mode: CommandMode.Command, paletteTab: "compose" });
+              if (newTaskWindow) setCommands({ show: true, mode: CommandMode.Command, paletteTab: "compose" });
               else setShouldShowAITaskWriter((prev) => !prev);
             }}
             id={divIds.popoverTriggerButtonId}

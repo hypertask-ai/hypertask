@@ -84,7 +84,8 @@ import "./Modals/commands/HTC/AllCommands";
 const HypertasksCommands = ({ callbackHandler, contextOptions, focusProxy }: IHTCProps) => {
   const composeEnabled = useFlag(HTPR_6929_COMPOSE_TASK_WRITER_FLAG);
   const newTaskWindowFlag = useFlag(HTPR_6937_NEW_TASK_WINDOW_FLAG);
-  const newTaskWindow = composeEnabled && newTaskWindowFlag;
+  let newTaskWindow = false;
+  if (composeEnabled && newTaskWindowFlag) newTaskWindow = true;
   const ticketPrefixEnabled = useFlag(HTPR_6868_TICKET_PREFIX_FLAG);
   const {
   queryClient, copyCurrentUrlEnabled, rowShortcutsEnabled, myTasksViewsEnabled, myTasksTableColumnsEnabled,

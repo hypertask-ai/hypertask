@@ -649,7 +649,7 @@ test('lazy attachment previews cannot suspend the palette or lose the Compose dr
 });
 
 test('real shared gallery paints image blobs, file icons and removable tiles without uploads', async (t) => {
-  await withPalette(t, { open: false }, async ({ source, stub, jiti, mountProbe, dom }) => {
+  await withPalette(t, { open: false, newWindow: true }, async ({ source, stub, jiti, mountProbe, dom, flags, rerender }) => {
     const savedCreate = URL.createObjectURL, savedRevoke = URL.revokeObjectURL;
     const revoked = [];
     URL.createObjectURL = () => 'blob:compose-thumbnail';
@@ -673,6 +673,14 @@ test('real shared gallery paints image blobs, file icons and removable tiles wit
       assert.equal(document.querySelector('img[alt="image.png"]').getAttribute('src'), 'blob:compose-thumbnail');
       assert.ok(document.querySelector('.lucide-paperclip'));
       assert.ok(document.body.textContent.includes('brief.txt'));
+      for (const offFlag of [flag, newFlag]) {
+        flags[offFlag] = false;
+        await rerender();
+        assert.equal(document.querySelector('.lucide-x').getAttribute('role'), null, 'flag-off shared removal markup stays unchanged');
+        assert.equal(document.querySelector('.lucide-x').getAttribute('aria-label'), null);
+        flags[offFlag] = true;
+        await rerender();
+      }
       await React.act(async () => document.querySelector('[aria-label="Remove image.png"]').dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true })));
       assert.equal(document.querySelector('img[alt="image.png"]'), null);
       assert.deepEqual(revoked, ['blob:compose-thumbnail']);
