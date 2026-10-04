@@ -111,6 +111,7 @@ async function handleConnect(
   }
   const actor = await resolveSlackActor(payload.slackTeamId, payload.slackUserId);
   if (actor) {
+    await setSlackAutoLinkDisabled(actor.installId, payload.slackUserId, null);
     await postSlackResponseUrl(
       payload.responseUrl,
       confirmBlock(`Connected as ${actor.user.displayName || actor.user.email}.`),

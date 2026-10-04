@@ -130,6 +130,10 @@ for (const userId of [6, 985]) {
     options.enabledIds = [];
     assert.equal((await fixture.resolveSlackActor("T1", "U1")).user.id, userId);
     assert.equal(await feature.isSlackAppEnabled("T1", "U1"), false);
+    await handleSlackCommand({ ...payload, text: "connect" }, "https://app.hypertask.ai");
+    assert.equal(fixture.redis.strings.size, 0);
+    options.enabledIds = [userId];
+    assert.equal((await fixture.resolveSlackActor("T1", "U1")).user.id, userId);
   });
 }
 

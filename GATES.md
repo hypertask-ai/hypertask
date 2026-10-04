@@ -63,13 +63,20 @@ Initial evidence: Review comment dated 2026-10-03T22:07:13Z on PR https://github
   EXPECT: EXISTING PR SYNCHRONIZED
   EVIDENCE: automatic-evidence=v1; definition-sha256=530edf6785b326019c1a0813a2c266344dfa5cfee65a7d1d8752d5d78257126f; exit=0; EXPECT=matched; output-sha256=b3bfd407330201943b6865e7f9253372eefe5ccbcfe2afd1c1e3a905134e2bbc; output-bytes=25; shell=/bin/sh; cwd=/home/valentin/projects/ht-wt-6817; path=af190f486cbf/32 entries
 
-- [x] G11: Required regression, typecheck and lint gates pass again after fetching and synchronizing production.
+- [ ] G11: Required regression, typecheck and lint gates pass again after fetching and synchronizing production.
   EVIDENCE: Fetched origin production and htpr-6817, then rebased all five ticket commits onto production 6539e3ccc7ca642b7da5125a1bb2a9ed2cb25a00 without conflicts. Re-ran every runnable gate with --reverify after the rebase: G0 through G6, G8, and G9 passed. npm test executed 848 Node files and 89 TypeScript files; 6,634 cases passed, zero failed, and one pre-existing opt-in Redis redemption case skipped. The relevant Slack and flag suite passed all 109 cases with no skips, including the real local Redis test. Refreshed the worktree-local Prisma client and directly repeated the typecheck/lint wrapper: npx tsc --noEmit -p . passed with zero diagnostics and npm run lint passed across all 24 PR code/test files with zero warnings. No source changes followed these checks.
 
-- [ ] G12: Every successful authenticated connection confirmation clears the old disconnect marker, including when the newly connected account has its flag off.
+- [ ] G12: Successful explicit connections and authenticated confirmations clear the old disconnect marker regardless of the account's flag.
   CHECK: node --test --test-reporter=tap tests/slack-app-identity.test.cjs
   EXPECT: /# fail 0\b/
   EVIDENCE: pending
 
-- [ ] G13: The PR passes feature-flag evaluation and final CI has no failures caused by this change.
+- [ ] G13: The current PR passes local feature-flag evaluation against fetched production.
+  CHECK: node .github/scripts/feature-flag-gate.mjs "$(gh pr view 1021 -R hypertask-ai/hypertask --json title --jq .title)" "$(git rev-parse origin/production)" "$(git rev-parse HEAD)"
+  EXPECT: No changed file matches the UI-change path filter.
+  EVIDENCE: pending
+
+- [ ] G14: Final PR CI and both review statuses have no failures after the reconnect fix.
+  CHECK: gh pr checks 1021 -R hypertask-ai/hypertask && printf 'ALL PR CHECKS PASSED\n'
+  EXPECT: ALL PR CHECKS PASSED
   EVIDENCE: pending
