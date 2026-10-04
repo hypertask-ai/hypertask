@@ -20,6 +20,21 @@ const task = read(
   "src/components/PageComponents/Kanban/KanbanTaskComponents/task.tsx",
 );
 
+test("card code starts loading with the board module, before sections mount", () => {
+  const moduleSetup = section.slice(0, section.indexOf("export const Section"));
+  assert.match(
+    moduleSetup,
+    /if \(typeof window !== "undefined"\) \{\s*void loadTask\(\)\.catch\(\(\) => \{\}\);\s*\}/,
+  );
+  assert.match(section, /const Task = dynamic\(loadTask, \{/);
+  assert.match(section, /ssr: false/);
+});
+
+test("cards reuse the board's static Draggable export", () => {
+  assert.match(task, /import \{ Draggable \} from "@hello-pangea\/dnd"/);
+  assert.doesNotMatch(task, /const Draggable = dynamic/);
+});
+
 test("large boards progressively mount cards near the viewport", () => {
   assert.match(section, /LARGE_BOARD_PROGRESSIVE_RENDER_THRESHOLD = 40/);
   assert.match(section, /new IntersectionObserver/);

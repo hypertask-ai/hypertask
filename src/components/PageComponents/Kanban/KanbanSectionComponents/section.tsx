@@ -4,6 +4,10 @@ import dynamic from "next/dynamic";
 import { getViewAppliedArchivedTasks } from "@/utils/helperFunctions/Views/ArchivedTasksHelper";
 import React, { useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 const loadTask = () => import("../KanbanTaskComponents/task");
+// Start the card download with the board code; the mount effect handles retries.
+if (typeof window !== "undefined") {
+  void loadTask().catch(() => {});
+}
 const Task = dynamic(loadTask, {
   ssr: false,
   loading: () => <TaskSkeleton />,
