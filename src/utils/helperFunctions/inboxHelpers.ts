@@ -159,7 +159,9 @@ export function expandInboxApiResponse(raw: {
 export const getInboxTabs = (
   notifications: INotification[],
   splitsNoImportant: readonly InboxSplitKey[] = [],
-  showImportantSplit = false
+  showImportantSplit = false,
+  nowMs?: number,
+  locale?: string,
 ): InboxStructuredDataCompact => {
   const noImportant = new Set(splitsNoImportant);
   const autoSplitsAllowed: NotificationType[] = [
@@ -233,7 +235,7 @@ export const getInboxTabs = (
         // Gates apply to the user inbox only: agent-inbox rows (agentId set) keep
         // their old behavior, as do rows without task data (old client caches).
         const gated = notification.agentId == null && !!task;
-        const staleCutoff = Date.now() - inboxConfig.staleDays * 24 * 60 * 60 * 1000;
+        const staleCutoff = (nowMs ?? Date.now()) - inboxConfig.staleDays * 24 * 60 * 60 * 1000;
         // The staleness clock ticks on HUMAN activity (comments, column moves,
         // creation), not on updatedAt: the inne due-date bot bumps updatedAt every
         // morning, which would keep its tasks "alive" forever and their old mentions
@@ -250,7 +252,7 @@ export const getInboxTabs = (
           ? Math.max(...activityTimes)
           : task?.updatedAt
             ? new Date(task.updatedAt).getTime()
-            : Date.now();
+            : (nowMs ?? Date.now());
         // Inbox rows and client cache rebuilds do not carry board sections or
         // isDone flags. The payload and every cache-rebuild caller would need a
         // per-project done-title map before replacing this name fallback.
@@ -427,7 +429,7 @@ export const getInboxTabs = (
         projectId,
       };
     })
-    .sort((a, b) => a.splitName.localeCompare(b.splitName));
+    .sort((a, b) => a.splitName.localeCompare(b.splitName, locale));
 
   const allIndices = notifications.flatMap((notification, i) =>
     !notification || notification.waitingOnSynthetic ? [] : [i]

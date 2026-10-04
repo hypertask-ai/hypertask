@@ -14,6 +14,7 @@ export const LUNA_FREE_PLAN_FLAG = "htpr-6722-latest-models";
 export const HTPR_6752_INSTANT_TICKET_OPEN_FLAG = "htpr-6752-instant-ticket-open";
 export const HTPR_6892_CMDK_VERSION_FLAG = "htpr-6892-cmdk-version";
 export const HTPR_6899_STABLE_LAYOUT_FLAG = "htpr-6899-stable-layout";
+export const HTPR_6934_SERVER_FIRST_SCREEN_FLAG = "htpr-6934-server-first-screen";
 
 export const LOCAL_WRITING_ASSISTANCE_FLAG =
   "htpr-5908-local-writing-assistance";
