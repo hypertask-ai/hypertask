@@ -1,0 +1,1667 @@
+{
+  "commit": "fb9ef851b6bb3a5b8ef84d2425df5a6f7d19ac3b",
+  "cases": {
+    "[\"page\",\"get\",{}]": {
+      "status": 200,
+      "body": {
+        "page": {
+          "publicId": "fixture-page",
+          "id": 60,
+          "title": "Page",
+          "contentHtml": "<p>original</p>",
+          "version": 3,
+          "taskId": 50,
+          "subPages": [
+            {
+              "id": 61,
+              "title": "Child",
+              "publicId": "child-page"
+            }
+          ],
+          "updatedAt": "2026-08-17T00:00:00.000Z"
+        }
+      },
+      "calls": [
+        "page",
+        "task-access"
+      ],
+      "effects": []
+    },
+    "[\"page\",\"get\",{\"allowed\":false}]": {
+      "status": 404,
+      "body": {
+        "error": "Page not found"
+      },
+      "calls": [
+        "page",
+        "task-access"
+      ],
+      "effects": []
+    },
+    "[\"page\",\"get\",{\"missing\":true}]": {
+      "status": 404,
+      "body": {
+        "error": "Page not found"
+      },
+      "calls": [
+        "page"
+      ],
+      "effects": []
+    },
+    "[\"page\",\"get\",{\"unauthorized\":true}]": {
+      "status": 401,
+      "body": {
+        "error": "Unauthorized"
+      },
+      "calls": [],
+      "effects": []
+    },
+    "[\"page\",\"get\",{\"projectStatus\":\"Archive\"}]": {
+      "status": 404,
+      "body": {
+        "error": "Page not found"
+      },
+      "calls": [
+        "page",
+        "task-access"
+      ],
+      "effects": []
+    },
+    "[\"page\",\"get\",{\"teamless\":true}]": {
+      "status": 404,
+      "body": {
+        "error": "Page not found"
+      },
+      "calls": [
+        "page",
+        "task-access"
+      ],
+      "effects": []
+    },
+    "[\"page\",\"patch\",{}]": {
+      "status": 200,
+      "body": {
+        "page": {
+          "publicId": "fixture-page",
+          "id": 60,
+          "version": 4
+        }
+      },
+      "calls": [
+        "page",
+        "task-access"
+      ],
+      "effects": [
+        [
+          "title",
+          {
+            "where": {
+              "id": 60
+            },
+            "data": {
+              "title": "New"
+            },
+            "select": {
+              "publicId": true,
+              "id": true,
+              "version": true
+            }
+          }
+        ],
+        [
+          "update",
+          {
+            "id": 60,
+            "content": "text",
+            "contentType": "html",
+            "mode": "replace",
+            "userId": 7,
+            "agentId": null
+          }
+        ]
+      ]
+    },
+    "[\"page\",\"patch\",{\"allowed\":false}]": {
+      "status": 404,
+      "body": {
+        "error": "Page not found"
+      },
+      "calls": [
+        "page",
+        "task-access"
+      ],
+      "effects": []
+    },
+    "[\"page\",\"patch\",{\"missing\":true}]": {
+      "status": 404,
+      "body": {
+        "error": "Page not found"
+      },
+      "calls": [
+        "page"
+      ],
+      "effects": []
+    },
+    "[\"page\",\"patch\",{\"unauthorized\":true}]": {
+      "status": 401,
+      "body": {
+        "error": "Unauthorized"
+      },
+      "calls": [],
+      "effects": []
+    },
+    "[\"page\",\"patch\",{\"projectStatus\":\"Archive\"}]": {
+      "status": 404,
+      "body": {
+        "error": "Page not found"
+      },
+      "calls": [
+        "page",
+        "task-access"
+      ],
+      "effects": []
+    },
+    "[\"page\",\"patch\",{\"teamless\":true}]": {
+      "status": 404,
+      "body": {
+        "error": "Page not found"
+      },
+      "calls": [
+        "page",
+        "task-access"
+      ],
+      "effects": []
+    },
+    "[\"page\",\"versions\",{}]": {
+      "status": 200,
+      "body": {
+        "versions": [
+          {
+            "id": 91,
+            "version": 2,
+            "note": null,
+            "authorId": 7,
+            "agentId": null,
+            "createdAt": "2026-08-17T00:00:00.000Z"
+          }
+        ]
+      },
+      "calls": [
+        "page",
+        "task-access"
+      ],
+      "effects": [
+        [
+          "versions",
+          {
+            "pageId": 60
+          }
+        ]
+      ]
+    },
+    "[\"page\",\"versions\",{\"allowed\":false}]": {
+      "status": 404,
+      "body": {
+        "error": "Page not found"
+      },
+      "calls": [
+        "page",
+        "task-access"
+      ],
+      "effects": []
+    },
+    "[\"page\",\"versions\",{\"missing\":true}]": {
+      "status": 404,
+      "body": {
+        "error": "Page not found"
+      },
+      "calls": [
+        "page"
+      ],
+      "effects": []
+    },
+    "[\"page\",\"versions\",{\"unauthorized\":true}]": {
+      "status": 401,
+      "body": {
+        "error": "Unauthorized"
+      },
+      "calls": [],
+      "effects": []
+    },
+    "[\"page\",\"versions\",{\"projectStatus\":\"Archive\"}]": {
+      "status": 404,
+      "body": {
+        "error": "Page not found"
+      },
+      "calls": [
+        "page",
+        "task-access"
+      ],
+      "effects": []
+    },
+    "[\"page\",\"versions\",{\"teamless\":true}]": {
+      "status": 404,
+      "body": {
+        "error": "Page not found"
+      },
+      "calls": [
+        "page",
+        "task-access"
+      ],
+      "effects": []
+    },
+    "[\"page\",\"restore\",{}]": {
+      "status": 200,
+      "body": {
+        "page": {
+          "publicId": "fixture-page",
+          "id": 60,
+          "version": 4
+        }
+      },
+      "calls": [
+        "page",
+        "task-access"
+      ],
+      "effects": [
+        [
+          "restore",
+          {
+            "pageId": 60,
+            "versionId": 91,
+            "userId": 7,
+            "agentId": null
+          }
+        ]
+      ]
+    },
+    "[\"page\",\"restore\",{\"allowed\":false}]": {
+      "status": 404,
+      "body": {
+        "error": "Page not found"
+      },
+      "calls": [
+        "page",
+        "task-access"
+      ],
+      "effects": []
+    },
+    "[\"page\",\"restore\",{\"missing\":true}]": {
+      "status": 404,
+      "body": {
+        "error": "Page not found"
+      },
+      "calls": [
+        "page"
+      ],
+      "effects": []
+    },
+    "[\"page\",\"restore\",{\"unauthorized\":true}]": {
+      "status": 401,
+      "body": {
+        "error": "Unauthorized"
+      },
+      "calls": [],
+      "effects": []
+    },
+    "[\"page\",\"restore\",{\"projectStatus\":\"Archive\"}]": {
+      "status": 404,
+      "body": {
+        "error": "Page not found"
+      },
+      "calls": [
+        "page",
+        "task-access"
+      ],
+      "effects": []
+    },
+    "[\"page\",\"restore\",{\"teamless\":true}]": {
+      "status": 404,
+      "body": {
+        "error": "Page not found"
+      },
+      "calls": [
+        "page",
+        "task-access"
+      ],
+      "effects": []
+    },
+    "[\"page\",\"archive\",{}]": {
+      "status": 200,
+      "body": {
+        "ok": true
+      },
+      "calls": [
+        "page",
+        "task-access"
+      ],
+      "effects": [
+        [
+          "archive",
+          {
+            "id": 60,
+            "userId": 7,
+            "agentId": null
+          }
+        ]
+      ]
+    },
+    "[\"page\",\"archive\",{\"allowed\":false}]": {
+      "status": 404,
+      "body": {
+        "error": "Page not found"
+      },
+      "calls": [
+        "page",
+        "task-access"
+      ],
+      "effects": []
+    },
+    "[\"page\",\"archive\",{\"missing\":true}]": {
+      "status": 404,
+      "body": {
+        "error": "Page not found"
+      },
+      "calls": [
+        "page"
+      ],
+      "effects": []
+    },
+    "[\"page\",\"archive\",{\"unauthorized\":true}]": {
+      "status": 401,
+      "body": {
+        "error": "Unauthorized"
+      },
+      "calls": [],
+      "effects": []
+    },
+    "[\"page\",\"archive\",{\"projectStatus\":\"Archive\"}]": {
+      "status": 404,
+      "body": {
+        "error": "Page not found"
+      },
+      "calls": [
+        "page",
+        "task-access"
+      ],
+      "effects": []
+    },
+    "[\"page\",\"archive\",{\"teamless\":true}]": {
+      "status": 404,
+      "body": {
+        "error": "Page not found"
+      },
+      "calls": [
+        "page",
+        "task-access"
+      ],
+      "effects": []
+    },
+    "[\"page\",\"patch\",{\"malformed\":true}]": {
+      "status": 400,
+      "body": {
+        "error": "Request body must be valid JSON"
+      },
+      "calls": [],
+      "effects": []
+    },
+    "[\"page\",\"patch\",{\"body\":[]}]": {
+      "status": 400,
+      "body": {
+        "error": "Request body must be a JSON object"
+      },
+      "calls": [],
+      "effects": []
+    },
+    "[\"page\",\"patch\",{\"conflict\":true}]": {
+      "status": 409,
+      "body": {
+        "error": "version_conflict",
+        "current_version": 4,
+        "current_html": "fresh"
+      },
+      "calls": [
+        "page",
+        "task-access"
+      ],
+      "effects": [
+        [
+          "title",
+          {
+            "where": {
+              "id": 60
+            },
+            "data": {
+              "title": "New"
+            },
+            "select": {
+              "publicId": true,
+              "id": true,
+              "version": true
+            }
+          }
+        ],
+        [
+          "update",
+          {
+            "id": 60,
+            "content": "text",
+            "contentType": "html",
+            "mode": "replace",
+            "userId": 7,
+            "agentId": null
+          }
+        ]
+      ]
+    },
+    "[\"page\",\"patch\",{\"body\":{\"title\":\"Only title\"}}]": {
+      "status": 200,
+      "body": {
+        "page": {
+          "publicId": "fixture-page",
+          "id": 60,
+          "version": 3
+        }
+      },
+      "calls": [
+        "page",
+        "task-access"
+      ],
+      "effects": [
+        [
+          "title",
+          {
+            "where": {
+              "id": 60
+            },
+            "data": {
+              "title": "Only title"
+            },
+            "select": {
+              "publicId": true,
+              "id": true,
+              "version": true
+            }
+          }
+        ]
+      ]
+    },
+    "[\"page\",\"restore\",{\"malformed\":true}]": {
+      "status": 400,
+      "body": {
+        "error": "Request body must be valid JSON"
+      },
+      "calls": [],
+      "effects": []
+    },
+    "[\"page\",\"restore\",{\"body\":{\"version_id\":\"91\"}}]": {
+      "status": 400,
+      "body": {
+        "error": "version_id must be a positive integer"
+      },
+      "calls": [],
+      "effects": []
+    },
+    "[\"page\",\"restore\",{\"versionMissing\":true}]": {
+      "status": 404,
+      "body": {
+        "error": "Version not found"
+      },
+      "calls": [
+        "page",
+        "task-access"
+      ],
+      "effects": [
+        [
+          "restore",
+          {
+            "pageId": 60,
+            "versionId": 91,
+            "userId": 7,
+            "agentId": null
+          }
+        ]
+      ]
+    },
+    "[\"agent\",\"PATCH\",\"id\",false,{\"displayName\":\"Renamed\"}]": {
+      "status": 200,
+      "body": {
+        "success": true,
+        "agent": {
+          "id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+          "displayName": "Renamed",
+          "createdAt": "2026-01-01T00:00:00.000Z",
+          "visibility": "PRIVATE",
+          "photoURL": null,
+          "revokedAt": null,
+          "archivedAt": null,
+          "runtimeType": "EXTERNAL",
+          "prompt": null,
+          "modelOptionId": null,
+          "heartbeatAt": null,
+          "slug": "renamed",
+          "postsToImportant": false
+        }
+      },
+      "calls": [
+        "names",
+        "owned-row",
+        "update",
+        "names"
+      ]
+    },
+    "[\"agent\",\"PATCH\",\"id\",true,{\"displayName\":\"Renamed\"}]": {
+      "status": 404,
+      "body": {
+        "success": false,
+        "error": "Agent does not exist"
+      },
+      "calls": [
+        "names"
+      ]
+    },
+    "[\"agent\",\"PATCH\",\"slug\",false,{\"displayName\":\"Renamed\"}]": {
+      "status": 200,
+      "body": {
+        "success": true,
+        "agent": {
+          "id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+          "displayName": "Renamed",
+          "createdAt": "2026-01-01T00:00:00.000Z",
+          "visibility": "PRIVATE",
+          "photoURL": null,
+          "revokedAt": null,
+          "archivedAt": null,
+          "runtimeType": "EXTERNAL",
+          "prompt": null,
+          "modelOptionId": null,
+          "heartbeatAt": null,
+          "slug": "renamed",
+          "postsToImportant": false
+        }
+      },
+      "calls": [
+        "names",
+        "owned-row",
+        "update",
+        "names"
+      ]
+    },
+    "[\"agent\",\"PATCH\",\"slug\",true,{\"displayName\":\"Renamed\"}]": {
+      "status": 404,
+      "body": {
+        "success": false,
+        "error": "Agent does not exist"
+      },
+      "calls": [
+        "names"
+      ]
+    },
+    "[\"agent\",\"DELETE\",\"id\",false,{\"displayName\":\"Renamed\"}]": {
+      "status": 200,
+      "body": {
+        "success": true,
+        "agent": {
+          "id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"
+        },
+        "cleanup": {
+          "board_memberships": 2,
+          "task_assignments": 3,
+          "comment_tombstones": 4
+        }
+      },
+      "calls": [
+        "names",
+        "delete-owned"
+      ]
+    },
+    "[\"agent\",\"DELETE\",\"id\",true,{\"displayName\":\"Renamed\"}]": {
+      "status": 404,
+      "body": {
+        "success": false,
+        "error": "Agent does not exist"
+      },
+      "calls": [
+        "names"
+      ]
+    },
+    "[\"agent\",\"DELETE\",\"slug\",false,{\"displayName\":\"Renamed\"}]": {
+      "status": 200,
+      "body": {
+        "success": true,
+        "agent": {
+          "id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"
+        },
+        "cleanup": {
+          "board_memberships": 2,
+          "task_assignments": 3,
+          "comment_tombstones": 4
+        }
+      },
+      "calls": [
+        "names",
+        "delete-owned"
+      ]
+    },
+    "[\"agent\",\"DELETE\",\"slug\",true,{\"displayName\":\"Renamed\"}]": {
+      "status": 404,
+      "body": {
+        "success": false,
+        "error": "Agent does not exist"
+      },
+      "calls": [
+        "names"
+      ]
+    },
+    "[\"agent\",\"PATCH\",\"spaced-id\",false,{\"displayName\":\"Renamed\"}]": {
+      "status": 200,
+      "body": {
+        "success": true,
+        "agent": {
+          "id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+          "displayName": "Renamed",
+          "createdAt": "2026-01-01T00:00:00.000Z",
+          "visibility": "PRIVATE",
+          "photoURL": null,
+          "revokedAt": null,
+          "archivedAt": null,
+          "runtimeType": "EXTERNAL",
+          "prompt": null,
+          "modelOptionId": null,
+          "heartbeatAt": null,
+          "slug": "renamed",
+          "postsToImportant": false
+        }
+      },
+      "calls": [
+        "names",
+        "owned-row",
+        "update",
+        "names"
+      ]
+    },
+    "[\"agent\",\"PATCH\",\"uppercase-id\",false,{\"displayName\":\"Renamed\"}]": {
+      "status": 404,
+      "body": {
+        "success": false,
+        "error": "Agent does not exist"
+      },
+      "calls": [
+        "names"
+      ]
+    },
+    "[\"agent\",\"PATCH\",\"duplicate-slug\",false,{\"displayName\":\"Renamed\"}]": {
+      "status": 200,
+      "body": {
+        "success": true,
+        "agent": {
+          "id": "22222222-2222-4222-8222-222222222222",
+          "displayName": "Renamed",
+          "createdAt": "2026-02-01T00:00:00.000Z",
+          "visibility": "PRIVATE",
+          "photoURL": null,
+          "revokedAt": null,
+          "archivedAt": null,
+          "runtimeType": "EXTERNAL",
+          "prompt": null,
+          "modelOptionId": null,
+          "heartbeatAt": null,
+          "slug": "renamed",
+          "postsToImportant": false
+        }
+      },
+      "calls": [
+        "names",
+        "owned-row",
+        "update",
+        "names"
+      ]
+    },
+    "[\"agent\",\"PATCH\",\"uuid-slug\",false,{\"displayName\":\"Renamed\"}]": {
+      "status": 200,
+      "body": {
+        "success": true,
+        "agent": {
+          "id": "22222222-2222-4222-8222-222222222222",
+          "displayName": "Renamed",
+          "createdAt": "2026-02-01T00:00:00.000Z",
+          "visibility": "PRIVATE",
+          "photoURL": null,
+          "revokedAt": null,
+          "archivedAt": null,
+          "runtimeType": "EXTERNAL",
+          "prompt": null,
+          "modelOptionId": null,
+          "heartbeatAt": null,
+          "slug": "renamed",
+          "postsToImportant": false
+        }
+      },
+      "calls": [
+        "names",
+        "owned-row",
+        "update",
+        "names"
+      ]
+    },
+    "[\"agent\",\"PATCH\",\"unknown-id\",false,{\"displayName\":\"Renamed\"}]": {
+      "status": 404,
+      "body": {
+        "success": false,
+        "error": "Agent does not exist"
+      },
+      "calls": [
+        "names"
+      ]
+    },
+    "[\"agent\",\"PATCH\",\"unknown-slug\",false,{\"displayName\":\"Renamed\"}]": {
+      "status": 404,
+      "body": {
+        "success": false,
+        "error": "Agent does not exist"
+      },
+      "calls": [
+        "names"
+      ]
+    },
+    "[\"agent\",\"PATCH\",\"id\",false,{\"photoURL\":\"https://fixture.invalid/photo\"}]": {
+      "status": 200,
+      "body": {
+        "success": true,
+        "agent": {
+          "id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+          "displayName": "Same Name",
+          "createdAt": "2026-01-01T00:00:00.000Z",
+          "visibility": "PRIVATE",
+          "photoURL": "https://fixture.invalid/photo",
+          "revokedAt": null,
+          "archivedAt": null,
+          "runtimeType": "EXTERNAL",
+          "prompt": null,
+          "modelOptionId": null,
+          "heartbeatAt": null,
+          "slug": "same-name",
+          "postsToImportant": false
+        }
+      },
+      "calls": [
+        "names",
+        "owned-row",
+        "update",
+        "names"
+      ]
+    },
+    "[\"guest\",\"guest_fixture\",false]": {
+      "reads": [
+        "project.findUnique",
+        "user.findUnique",
+        "task.findMany"
+      ],
+      "writes": [
+        [
+          "reaction.deleteMany",
+          {
+            "where": {
+              "taskId": {
+                "in": [
+                  50
+                ]
+              }
+            }
+          }
+        ],
+        [
+          "savedContent.deleteMany",
+          {
+            "where": {
+              "projectId": 15
+            }
+          }
+        ],
+        [
+          "comment.deleteMany",
+          {
+            "where": {
+              "taskId": {
+                "in": [
+                  50
+                ]
+              }
+            }
+          }
+        ],
+        [
+          "description.deleteMany",
+          {
+            "where": {
+              "taskId": {
+                "in": [
+                  50
+                ]
+              }
+            }
+          }
+        ],
+        [
+          "assignees.deleteMany",
+          {
+            "where": {
+              "taskId": {
+                "in": [
+                  50
+                ]
+              }
+            }
+          }
+        ],
+        [
+          "taskLabel.deleteMany",
+          {
+            "where": {
+              "taskId": {
+                "in": [
+                  50
+                ]
+              }
+            }
+          }
+        ],
+        [
+          "notification.deleteMany",
+          {
+            "where": {
+              "projectId": 15
+            }
+          }
+        ],
+        [
+          "taskReadState.deleteMany",
+          {
+            "where": {
+              "taskId": {
+                "in": [
+                  50
+                ]
+              }
+            }
+          }
+        ],
+        [
+          "follower.deleteMany",
+          {
+            "where": {
+              "taskId": {
+                "in": [
+                  50
+                ]
+              }
+            }
+          }
+        ],
+        [
+          "priority.deleteMany",
+          {
+            "where": {
+              "OR": [
+                {
+                  "projectId": 15
+                },
+                {
+                  "taskId": {
+                    "in": [
+                      50
+                    ]
+                  }
+                }
+              ]
+            }
+          }
+        ],
+        [
+          "estimate.deleteMany",
+          {
+            "where": {
+              "OR": [
+                {
+                  "projectId": 15
+                },
+                {
+                  "taskId": {
+                    "in": [
+                      50
+                    ]
+                  }
+                }
+              ]
+            }
+          }
+        ],
+        [
+          "reminder.deleteMany",
+          {
+            "where": {
+              "taskId": {
+                "in": [
+                  50
+                ]
+              }
+            }
+          }
+        ],
+        [
+          "timeEntry.deleteMany",
+          {
+            "where": {
+              "taskId": {
+                "in": [
+                  50
+                ]
+              }
+            }
+          }
+        ],
+        [
+          "taskSharing.deleteMany",
+          {
+            "where": {
+              "taskId": {
+                "in": [
+                  50
+                ]
+              }
+            }
+          }
+        ],
+        [
+          "taskMute.deleteMany",
+          {
+            "where": {
+              "taskId": {
+                "in": [
+                  50
+                ]
+              }
+            }
+          }
+        ],
+        [
+          "invite.deleteMany",
+          {
+            "where": {
+              "projectId": 15
+            }
+          }
+        ],
+        [
+          "task.deleteMany",
+          {
+            "where": {
+              "projectId": 15
+            }
+          }
+        ],
+        [
+          "label.deleteMany",
+          {
+            "where": {
+              "projectId": 15
+            }
+          }
+        ],
+        [
+          "project_View.updateMany",
+          {
+            "where": {
+              "projectId": 15
+            },
+            "data": {
+              "default_view_id": null
+            }
+          }
+        ],
+        [
+          "view_Last_Used.deleteMany",
+          {
+            "where": {
+              "view": {
+                "project_view": {
+                  "projectId": 15
+                }
+              }
+            }
+          }
+        ],
+        [
+          "user_Project_View.deleteMany",
+          {
+            "where": {
+              "project_view": {
+                "projectId": 15
+              }
+            }
+          }
+        ],
+        [
+          "view.deleteMany",
+          {
+            "where": {
+              "project_view": {
+                "projectId": 15
+              }
+            }
+          }
+        ],
+        [
+          "project_View.deleteMany",
+          {
+            "where": {
+              "projectId": 15
+            }
+          }
+        ],
+        [
+          "section.deleteMany",
+          {
+            "where": {
+              "projectId": 15
+            }
+          }
+        ],
+        [
+          "member.deleteMany",
+          {
+            "where": {
+              "projectId": 15
+            }
+          }
+        ],
+        [
+          "project.deleteMany",
+          {
+            "where": {
+              "id": 15
+            }
+          }
+        ]
+      ],
+      "projectArgs": {
+        "where": {
+          "id": 15
+        },
+        "select": {
+          "ownerId": true
+        }
+      }
+    },
+    "[\"guest\",\"real-user\",false]": {
+      "error": "refusing to cascade-delete non-guest project 15",
+      "reads": [
+        "project.findUnique",
+        "user.findUnique"
+      ],
+      "writes": [],
+      "projectArgs": {
+        "where": {
+          "id": 15
+        },
+        "select": {
+          "ownerId": true
+        }
+      }
+    },
+    "[\"guest\",\"guest_fixture\",true]": {
+      "reads": [
+        "project.findUnique"
+      ],
+      "writes": [],
+      "projectArgs": {
+        "where": {
+          "id": 15
+        },
+        "select": {
+          "ownerId": true
+        }
+      }
+    },
+    "[\"report\"]": {
+      "body": [
+        {
+          "id": 1,
+          "taskId": 50,
+          "userId": 7,
+          "userName": "Unknown user",
+          "note": null,
+          "task": {
+            "uniqueIndex": null,
+            "ticketNumber": null,
+            "title": null,
+            "projectId": 15,
+            "projectName": null
+          },
+          "startedAt": "2026-08-17T00:00:00.000Z",
+          "endedAt": "2026-08-17T00:01:00.000Z",
+          "pausedAt": null,
+          "createdAt": null,
+          "seconds": 60,
+          "canManage": false
+        }
+      ],
+      "planned": {
+        "json": [
+          {
+            "id": 1,
+            "taskId": 50,
+            "userId": 7,
+            "note": null,
+            "startedAt": "2026-08-17T00:00:00.000Z",
+            "endedAt": "2026-08-17T00:01:00.000Z",
+            "pausedAt": null,
+            "createdAt": null,
+            "task": {
+              "id": 50,
+              "uniqueIndex": null,
+              "ticketNumber": null,
+              "title": null,
+              "projectId": 15,
+              "project": {
+                "title": null
+              }
+            },
+            "user": {
+              "displayName": null
+            }
+          }
+        ],
+        "count": 4
+      },
+      "args": {
+        "where": {
+          "userId": 7,
+          "task": {
+            "status": {
+              "not": "Deleted"
+            },
+            "project": {
+              "teamId": {
+                "not": null
+              },
+              "OR": [
+                {
+                  "ownerId": 7
+                },
+                {
+                  "members": {
+                    "some": {
+                      "userId": 7,
+                      "agentId": null
+                    }
+                  }
+                }
+              ],
+              "status": {
+                "in": [
+                  "Normal",
+                  "Archive"
+                ]
+              }
+            }
+          }
+        },
+        "include": {
+          "task": {
+            "select": {
+              "id": true,
+              "uniqueIndex": true,
+              "ticketNumber": true,
+              "title": true,
+              "projectId": true,
+              "project": {
+                "select": {
+                  "title": true
+                }
+              }
+            }
+          },
+          "user": {
+            "select": {
+              "displayName": true
+            }
+          }
+        },
+        "orderBy": [
+          {
+            "endedAt": {
+              "sort": "asc",
+              "nulls": "first"
+            }
+          },
+          {
+            "startedAt": "desc"
+          }
+        ],
+        "take": 1000
+      }
+    },
+    "[\"login\",false]": {
+      "body": {
+        "success": true,
+        "user": {
+          "id": 7,
+          "uid": null,
+          "displayName": null,
+          "photoURL": null,
+          "email": "fixture@example.invalid",
+          "joinedAt": null,
+          "emailVerified": null,
+          "updatedAt": null,
+          "googleCalendarGeneration": null,
+          "mcpTokensRevokedAt": null,
+          "stripe_customer_id": null,
+          "UserSettingId": "70",
+          "accountId": null,
+          "UserSetting": {
+            "id": "70",
+            "userId": 7,
+            "notification": null,
+            "notificationPreference": null,
+            "commentsStacked": null,
+            "shareReadReceipts": null,
+            "scrollSetting": null,
+            "displayAvatar": null,
+            "onboardingTourStatus": null,
+            "onboardingTutorialStatus": null,
+            "trialStatus": null,
+            "isVerified": true,
+            "productTours": null,
+            "aiModelPreferences": null,
+            "snippets": null,
+            "muteAnnouncements": null,
+            "allTasksDateRange": null,
+            "playGifs": null,
+            "autoDescriptionSuggestions": null,
+            "notificationMatrix": null,
+            "dictationLanguage": null,
+            "inboxAdvanceOnSend": null,
+            "emojiFrequency": null,
+            "calendarViews": null
+          },
+          "userPicture": {
+            "id": "71",
+            "userId": 7,
+            "photoSet": null,
+            "basePhotoURL": null,
+            "nameSet": null,
+            "displayName": null
+          }
+        },
+        "isNewUser": false,
+        "redirectUrl": "/onboarding?projectId=undefined&teamTitle=MyTeam&id=",
+        "message": "Email verified and signed in successfully!"
+      },
+      "cookies": "nookies_user=%7B%22id%22%3A7%7D; Path=/; Expires=<relative>; Max-Age=6048000; SameSite=lax, fixture-session=synthetic-session; Path=/, signup_source=email_code; Path=/; Expires=<relative>; Max-Age=604800; SameSite=lax",
+      "effects": [
+        [
+          "setting",
+          {
+            "where": {
+              "id": 70
+            },
+            "data": {
+              "isVerified": true
+            }
+          }
+        ],
+        [
+          "user",
+          {
+            "where": {
+              "id": 7
+            },
+            "data": {
+              "emailVerified": true
+            }
+          }
+        ],
+        [
+          "auto-join",
+          [
+            7,
+            "fixture@example.invalid"
+          ]
+        ],
+        [
+          "adopt",
+          [
+            null,
+            7
+          ]
+        ],
+        [
+          "self-fetch",
+          "https://fixture.invalid/api/projects/getAll",
+          {
+            "method": "POST",
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": "{\"userId\":7}"
+          }
+        ]
+      ],
+      "planned": {
+        "json": [
+          {
+            "id": 7,
+            "uid": null,
+            "displayName": null,
+            "photoURL": null,
+            "email": "fixture@example.invalid",
+            "joinedAt": null,
+            "emailVerified": null,
+            "updatedAt": null,
+            "googleCalendarGeneration": null,
+            "mcpTokensRevokedAt": null,
+            "stripe_customer_id": null,
+            "UserSettingId": "70",
+            "accountId": null,
+            "UserSetting": {
+              "id": "70",
+              "userId": 7,
+              "notification": null,
+              "notificationPreference": null,
+              "commentsStacked": null,
+              "shareReadReceipts": null,
+              "scrollSetting": null,
+              "displayAvatar": null,
+              "onboardingTourStatus": null,
+              "onboardingTutorialStatus": null,
+              "trialStatus": null,
+              "isVerified": true,
+              "productTours": null,
+              "aiModelPreferences": null,
+              "snippets": null,
+              "muteAnnouncements": null,
+              "allTasksDateRange": null,
+              "playGifs": null,
+              "autoDescriptionSuggestions": null,
+              "notificationMatrix": null,
+              "dictationLanguage": null,
+              "inboxAdvanceOnSend": null,
+              "emojiFrequency": null,
+              "calendarViews": null
+            },
+            "userPicture": {
+              "id": "71",
+              "userId": 7,
+              "photoSet": null,
+              "basePhotoURL": null,
+              "nameSet": null,
+              "displayName": null
+            }
+          }
+        ],
+        "count": 3
+      },
+      "args": {
+        "where": {
+          "id": 7
+        },
+        "include": {
+          "UserSetting": true,
+          "userPicture": true
+        }
+      }
+    },
+    "[\"login\",true]": {
+      "body": {
+        "success": true,
+        "user": {
+          "id": 7,
+          "email": "fixture@example.invalid",
+          "UserSetting": {
+            "id": 70
+          }
+        },
+        "isNewUser": false,
+        "redirectUrl": "/onboarding?projectId=undefined&teamTitle=MyTeam&id=",
+        "message": "Email verified and signed in successfully!"
+      },
+      "cookies": "nookies_user=%7B%22id%22%3A7%7D; Path=/; Expires=<relative>; Max-Age=6048000; SameSite=lax, fixture-session=synthetic-session; Path=/, signup_source=email_code; Path=/; Expires=<relative>; Max-Age=604800; SameSite=lax",
+      "effects": [
+        [
+          "setting",
+          {
+            "where": {
+              "id": 70
+            },
+            "data": {
+              "isVerified": true
+            }
+          }
+        ],
+        [
+          "user",
+          {
+            "where": {
+              "id": 7
+            },
+            "data": {
+              "emailVerified": true
+            }
+          }
+        ],
+        [
+          "auto-join",
+          [
+            7,
+            "fixture@example.invalid"
+          ]
+        ],
+        [
+          "adopt",
+          [
+            null,
+            7
+          ]
+        ],
+        [
+          "self-fetch",
+          "https://fixture.invalid/api/projects/getAll",
+          {
+            "method": "POST",
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": "{\"userId\":7}"
+          }
+        ]
+      ],
+      "planned": {
+        "json": [
+          {
+            "id": 7,
+            "uid": null,
+            "displayName": null,
+            "photoURL": null,
+            "email": "fixture@example.invalid",
+            "joinedAt": null,
+            "emailVerified": null,
+            "updatedAt": null,
+            "googleCalendarGeneration": null,
+            "mcpTokensRevokedAt": null,
+            "stripe_customer_id": null,
+            "UserSettingId": "70",
+            "accountId": null,
+            "UserSetting": {
+              "id": "70",
+              "userId": 7,
+              "notification": null,
+              "notificationPreference": null,
+              "commentsStacked": null,
+              "shareReadReceipts": null,
+              "scrollSetting": null,
+              "displayAvatar": null,
+              "onboardingTourStatus": null,
+              "onboardingTutorialStatus": null,
+              "trialStatus": null,
+              "isVerified": true,
+              "productTours": null,
+              "aiModelPreferences": null,
+              "snippets": null,
+              "muteAnnouncements": null,
+              "allTasksDateRange": null,
+              "playGifs": null,
+              "autoDescriptionSuggestions": null,
+              "notificationMatrix": null,
+              "dictationLanguage": null,
+              "inboxAdvanceOnSend": null,
+              "emojiFrequency": null,
+              "calendarViews": null
+            },
+            "userPicture": {
+              "id": "71",
+              "userId": 7,
+              "photoSet": null,
+              "basePhotoURL": null,
+              "nameSet": null,
+              "displayName": null
+            }
+          }
+        ],
+        "count": 3
+      },
+      "args": {
+        "where": {
+          "id": 7
+        },
+        "include": {
+          "UserSetting": true,
+          "userPicture": true
+        }
+      }
+    },
+    "[\"tree\",0]": {
+      "body": "{\"id\":1,\"task_id\":1,\"title\":\"Root\",\"uniqueIndex\":0}",
+      "count": 1
+    },
+    "[\"tree\",1]": {
+      "body": "{\"id\":1,\"task_id\":1,\"title\":\"Root\",\"uniqueIndex\":0,\"children\":[{\"id\":2,\"task_id\":2,\"title\":\"First\",\"ticketNumber\":\"T-2\",\"uniqueIndex\":2},{\"id\":3,\"task_id\":3,\"title\":\"Later\",\"ticketNumber\":\"T-3\",\"uniqueIndex\":3}]}",
+      "count": 2
+    },
+    "[\"tree\",2]": {
+      "body": "{\"id\":1,\"task_id\":1,\"title\":\"Root\",\"uniqueIndex\":0,\"children\":[{\"id\":2,\"task_id\":2,\"title\":\"First\",\"ticketNumber\":\"T-2\",\"uniqueIndex\":2,\"children\":[{\"id\":8,\"task_id\":8,\"title\":\"Leaf\",\"ticketNumber\":\"T-8\"}]},{\"id\":3,\"task_id\":3,\"title\":\"Later\",\"ticketNumber\":\"T-3\",\"uniqueIndex\":3,\"children\":[]}]}",
+      "count": 3
+    },
+    "[\"tree\",2147483648]": {
+      "body": "{\"id\":1,\"task_id\":1,\"title\":\"Root\",\"uniqueIndex\":0,\"children\":[{\"id\":2,\"task_id\":2,\"title\":\"First\",\"ticketNumber\":\"T-2\",\"uniqueIndex\":2,\"children\":[{\"id\":8,\"task_id\":8,\"title\":\"Leaf\",\"ticketNumber\":\"T-8\",\"children\":[]}]},{\"id\":3,\"task_id\":3,\"title\":\"Later\",\"ticketNumber\":\"T-3\",\"uniqueIndex\":3,\"children\":[]}]}",
+      "count": 4
+    },
+    "[\"tree\",null]": {
+      "body": "{\"id\":1,\"task_id\":1,\"title\":\"Root\",\"uniqueIndex\":0,\"children\":[{\"id\":2,\"task_id\":2,\"title\":\"First\",\"ticketNumber\":\"T-2\",\"uniqueIndex\":2,\"children\":[{\"id\":8,\"task_id\":8,\"title\":\"Leaf\",\"ticketNumber\":\"T-8\",\"children\":[]}]},{\"id\":3,\"task_id\":3,\"title\":\"Later\",\"ticketNumber\":\"T-3\",\"uniqueIndex\":3,\"children\":[]}]}",
+      "count": 4
+    },
+    "[\"deepTree\"]": {
+      "body": "{\"id\":1,\"task_id\":1,\"title\":\"Task 0\",\"uniqueIndex\":0,\"children\":[{\"id\":2,\"task_id\":2,\"title\":\"Task 1\",\"uniqueIndex\":1,\"children\":[{\"id\":3,\"task_id\":3,\"title\":\"Task 2\",\"uniqueIndex\":2,\"children\":[{\"id\":4,\"task_id\":4,\"title\":\"Task 3\",\"uniqueIndex\":3,\"children\":[{\"id\":5,\"task_id\":5,\"title\":\"Task 4\",\"uniqueIndex\":4,\"children\":[{\"id\":6,\"task_id\":6,\"title\":\"Task 5\",\"uniqueIndex\":5,\"children\":[{\"id\":7,\"task_id\":7,\"title\":\"Task 6\",\"uniqueIndex\":6,\"children\":[{\"id\":8,\"task_id\":8,\"title\":\"Task 7\",\"uniqueIndex\":7,\"children\":[{\"id\":9,\"task_id\":9,\"title\":\"Task 8\",\"uniqueIndex\":8,\"children\":[{\"id\":10,\"task_id\":10,\"title\":\"Task 9\",\"uniqueIndex\":9,\"children\":[{\"id\":11,\"task_id\":11,\"title\":\"Task 10\",\"uniqueIndex\":10,\"children\":[{\"id\":12,\"task_id\":12,\"title\":\"Task 11\",\"uniqueIndex\":11,\"children\":[{\"id\":13,\"task_id\":13,\"title\":\"Task 12\",\"uniqueIndex\":12,\"children\":[{\"id\":14,\"task_id\":14,\"title\":\"Task 13\",\"uniqueIndex\":13,\"children\":[{\"id\":15,\"task_id\":15,\"title\":\"Task 14\",\"uniqueIndex\":14,\"children\":[{\"id\":16,\"task_id\":16,\"title\":\"Task 15\",\"uniqueIndex\":15,\"children\":[{\"id\":17,\"task_id\":17,\"title\":\"Task 16\",\"uniqueIndex\":16,\"children\":[{\"id\":18,\"task_id\":18,\"title\":\"Task 17\",\"uniqueIndex\":17,\"children\":[{\"id\":19,\"task_id\":19,\"title\":\"Task 18\",\"uniqueIndex\":18,\"children\":[{\"id\":20,\"task_id\":20,\"title\":\"Task 19\",\"uniqueIndex\":19,\"children\":[{\"id\":21,\"task_id\":21,\"title\":\"Task 20\",\"uniqueIndex\":20,\"children\":[{\"id\":22,\"task_id\":22,\"title\":\"Task 21\",\"uniqueIndex\":21,\"children\":[{\"id\":23,\"task_id\":23,\"title\":\"Task 22\",\"uniqueIndex\":22,\"children\":[{\"id\":24,\"task_id\":24,\"title\":\"Task 23\",\"uniqueIndex\":23,\"children\":[{\"id\":25,\"task_id\":25,\"title\":\"Task 24\",\"uniqueIndex\":24,\"children\":[{\"id\":26,\"task_id\":26,\"title\":\"Task 25\",\"uniqueIndex\":25,\"children\":[{\"id\":27,\"task_id\":27,\"title\":\"Task 26\",\"uniqueIndex\":26,\"children\":[{\"id\":28,\"task_id\":28,\"title\":\"Task 27\",\"uniqueIndex\":27,\"children\":[{\"id\":29,\"task_id\":29,\"title\":\"Task 28\",\"uniqueIndex\":28,\"children\":[{\"id\":30,\"task_id\":30,\"title\":\"Task 29\",\"uniqueIndex\":29,\"children\":[{\"id\":31,\"task_id\":31,\"title\":\"Task 30\",\"uniqueIndex\":30,\"children\":[{\"id\":32,\"task_id\":32,\"title\":\"Task 31\",\"uniqueIndex\":31,\"children\":[{\"id\":33,\"task_id\":33,\"title\":\"Task 32\",\"uniqueIndex\":32,\"children\":[{\"id\":34,\"task_id\":34,\"title\":\"Task 33\",\"uniqueIndex\":33,\"children\":[{\"id\":35,\"task_id\":35,\"title\":\"Task 34\",\"uniqueIndex\":34,\"children\":[{\"id\":36,\"task_id\":36,\"title\":\"Task 35\",\"uniqueIndex\":35,\"children\":[{\"id\":37,\"task_id\":37,\"title\":\"Task 36\",\"uniqueIndex\":36,\"children\":[{\"id\":38,\"task_id\":38,\"title\":\"Task 37\",\"uniqueIndex\":37,\"children\":[{\"id\":39,\"task_id\":39,\"title\":\"Task 38\",\"uniqueIndex\":38,\"children\":[{\"id\":40,\"task_id\":40,\"title\":\"Task 39\",\"uniqueIndex\":39,\"children\":[{\"id\":41,\"task_id\":41,\"title\":\"Task 40\",\"uniqueIndex\":40,\"children\":[{\"id\":42,\"task_id\":42,\"title\":\"Task 41\",\"uniqueIndex\":41,\"children\":[{\"id\":43,\"task_id\":43,\"title\":\"Task 42\",\"uniqueIndex\":42,\"children\":[{\"id\":44,\"task_id\":44,\"title\":\"Task 43\",\"uniqueIndex\":43,\"children\":[{\"id\":45,\"task_id\":45,\"title\":\"Task 44\",\"uniqueIndex\":44,\"children\":[{\"id\":46,\"task_id\":46,\"title\":\"Task 45\",\"uniqueIndex\":45,\"children\":[{\"id\":47,\"task_id\":47,\"title\":\"Task 46\",\"uniqueIndex\":46,\"children\":[{\"id\":48,\"task_id\":48,\"title\":\"Task 47\",\"uniqueIndex\":47,\"children\":[{\"id\":49,\"task_id\":49,\"title\":\"Task 48\",\"uniqueIndex\":48,\"children\":[{\"id\":50,\"task_id\":50,\"title\":\"Task 49\",\"uniqueIndex\":49,\"children\":[]}]}]}]}]}]}]}]}]}]}]}]}]}]}]}]}]}]}]}]}]}]}]}]}]}]}]}]}]}]}]}]}]}]}]}]}]}]}]}]}]}]}]}]}]}]}]}]}]}]}",
+      "count": 51
+    },
+    "[\"agentDetail\"]": {
+      "args": {
+        "where": {
+          "id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+          "userId": 7
+        },
+        "select": {
+          "id": true,
+          "displayName": true,
+          "visibility": true,
+          "photoURL": true,
+          "createdAt": true,
+          "revokedAt": true,
+          "archivedAt": true,
+          "userId": true,
+          "permissions": true,
+          "runtimeType": true,
+          "prompt": true,
+          "modelOptionId": true,
+          "heartbeatAt": true,
+          "mcpTokenJti": true,
+          "runtimeGeneration": true,
+          "members": {
+            "where": {
+              "status": "Accepted",
+              "project": {
+                "status": "Normal",
+                "teamId": {
+                  "not": null
+                },
+                "OR": [
+                  {
+                    "ownerId": 7
+                  },
+                  {
+                    "members": {
+                      "some": {
+                        "userId": 7,
+                        "agentId": null
+                      }
+                    }
+                  }
+                ]
+              }
+            },
+            "select": {
+              "project": {
+                "select": {
+                  "id": true,
+                  "name": true,
+                  "title": true,
+                  "team": {
+                    "select": {
+                      "id": true,
+                      "title": true
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "planned": {
+        "json": [
+          {
+            "id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+            "displayName": null,
+            "visibility": null,
+            "photoURL": null,
+            "createdAt": null,
+            "revokedAt": null,
+            "archivedAt": null,
+            "userId": 7,
+            "permissions": null,
+            "runtimeType": null,
+            "prompt": null,
+            "modelOptionId": null,
+            "heartbeatAt": null,
+            "mcpTokenJti": null,
+            "runtimeGeneration": null,
+            "members": [
+              {
+                "project": {
+                  "id": 15,
+                  "name": null,
+                  "title": null,
+                  "team": {
+                    "id": "fixture-team",
+                    "title": null
+                  }
+                }
+              }
+            ]
+          }
+        ],
+        "count": 4
+      }
+    }
+  }
+}

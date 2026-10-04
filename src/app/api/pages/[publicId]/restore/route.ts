@@ -1,10 +1,8 @@
 import { cookies } from 'next/headers'
 import { NextRequest, NextResponse } from 'next/server'
 
-import prisma from '@/lib/prisma'
 import { isValidUser } from '@/utils/edgeHelpers'
 import { getPage, restorePageVersion } from '@/utils/controllers/pages/pageService'
-import { getProjectWhere } from '@/utils/controllers/projects/getAllIncludes'
 
 type RouteContext = { params: Promise<{ publicId: string }> }
 type RestorePageBody = { version_id?: unknown }
@@ -44,22 +42,10 @@ export async function POST(request: NextRequest, { params }: RouteContext) {
     }
 
     const { publicId } = await params
-    const existingPage = await getPage({ publicId })
+    const existingPage = await getPage({ publicId, userId })
     if (!existingPage) {
       return NextResponse.json({ error: 'Page not found' }, { status: 404 })
     }
-
-    const task = await prisma.task.findFirst({
-      where: {
-        id: existingPage.taskId,
-        project: {
-          status: 'Normal',
-          ...getProjectWhere(userId, null),
-        },
-      },
-      select: { id: true },
-    })
-    if (!task) return NextResponse.json({ error: 'Page not found' }, { status: 404 })
 
     try {
       const page = await restorePageVersion({

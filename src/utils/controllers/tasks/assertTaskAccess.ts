@@ -4,7 +4,7 @@ import { getProjectWhere, taskWriteAccessWhere } from "@/utils/controllers/proje
 
 export function taskAccessWhere(
   userId: number,
-  taskId: number,
+  taskId: number | undefined,
   options: {
     agentId?: string | null;
     projectStatus?: Status;
@@ -16,7 +16,7 @@ export function taskAccessWhere(
     ? taskWriteAccessWhere(userId, options.agentId)
     : getProjectWhere(userId, options.agentId);
   return {
-    id: taskId,
+    ...(taskId === undefined ? {} : { id: taskId }),
     ...(options.taskStatus ? { status: options.taskStatus } : {}),
     project: {
       ...(options.projectStatus ? { status: options.projectStatus } : {}),

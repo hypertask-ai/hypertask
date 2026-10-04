@@ -10,7 +10,6 @@ import {
   type PageUpdateMode,
   updatePage,
 } from '@/utils/controllers/pages/pageService'
-import { getProjectWhere } from '@/utils/controllers/projects/getAllIncludes'
 
 type RouteContext = { params: Promise<{ publicId: string }> }
 
@@ -36,19 +35,6 @@ function isRequestBody(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === 'object' && !Array.isArray(value)
 }
 
-async function canAccessTask(taskId: number, userId: number) {
-  return prisma.task.findFirst({
-    where: {
-      id: taskId,
-      project: {
-        status: 'Normal',
-        ...getProjectWhere(userId, null),
-      },
-    },
-    select: { id: true },
-  })
-}
-
 export async function GET(_request: NextRequest, { params }: RouteContext) {
   try {
     const userCookie = (await cookies()).get('nookies_user')
@@ -58,8 +44,8 @@ export async function GET(_request: NextRequest, { params }: RouteContext) {
     const userId = user.id
 
     const { publicId } = await params
-    const page = await getPage({ publicId })
-    if (!page || !(await canAccessTask(page.taskId, userId))) {
+    const page = await getPage({ publicId, userId })
+    if (!page) {
       return NextResponse.json({ error: 'Page not found' }, { status: 404 })
     }
 
@@ -151,8 +137,8 @@ export async function PATCH(request: NextRequest, { params }: RouteContext) {
     }
 
     const { publicId } = await params
-    const existingPage = await getPage({ publicId })
-    if (!existingPage || !(await canAccessTask(existingPage.taskId, userId))) {
+    const existingPage = await getPage({ publicId, userId })
+    if (!existingPage) {
       return NextResponse.json({ error: 'Page not found' }, { status: 404 })
     }
 

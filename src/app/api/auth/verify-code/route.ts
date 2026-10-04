@@ -171,6 +171,7 @@ export async function POST(request: NextRequest) {
       }
       // Refetch user to get updated isVerified status
       const updatedUser = await prisma.user.findUnique({
+        relationLoadStrategy: 'join',
         where: { id: userData.id },
         include: { UserSetting: true, userPicture: true },
       })

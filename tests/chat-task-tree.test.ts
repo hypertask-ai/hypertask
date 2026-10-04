@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 
 // HTPR-6509: the AI chat task-tree tool now loads the ancestor chain in one
-// recursive query and the subtree one level at a time. These tests pin the
+// recursive query and the subtree in one authorized recursive read. These tests pin the
 // output the per-node version produced: tree shape, sibling order, pruning of
 // deleted and inaccessible subtrees, depth limits, and the ancestor-walk
 // errors, plus the query budget that motivated the change.
@@ -83,11 +83,33 @@ function fakeDb(rows: Row[], expectedProjectWhere: unknown) {
         return result.map((task) => pick(task, select));
       },
     },
+    project: {
+      async findMany({ where }: any) {
+        calls.findMany++;
+        assert.deepEqual(where, expectedProjectWhere);
+        return [{ id: 15 }];
+      },
+    },
     // Mirrors the recursive CTE: walk up from the anchor, at most 256 rows,
     // stop at a missing parent or before revisiting a task. The SQL itself was
     // checked against PostgreSQL 16 for the same cases.
-    async $queryRaw(sql: { values: unknown[] }) {
+    async $queryRaw(sql: { text: string; values: unknown[] }) {
       calls.queryRaw++;
+      if (sql.text.includes("bounds")) {
+        const [rootId, maxDepth] = sql.values as [number, number | null];
+        const result: Row[] = [];
+        let level = [rootId];
+        let hop = 0;
+        while (level.length && (maxDepth === null || hop < maxDepth)) {
+          const children = rows.filter((task) =>
+            task.accessible && task.status !== "Deleted" && level.includes(task.parentTaskId!)
+          );
+          result.push(...children);
+          level = children.map((task) => task.id);
+          hop++;
+        }
+        return result.sort((a, b) => a.uniqueIndex - b.uniqueIndex);
+      }
       const [anchorId, maxHops] = sql.values as [number, number];
       const byId = new Map(rows.map((task) => [task.id, task]));
       const chain: { id: number; parentTaskId: number | null }[] = [];
@@ -188,8 +210,8 @@ async function main() {
     });
     // Key order is part of the JSON the model sees.
     assert.deepEqual(Object.keys(tree), ["id", "task_id", "title", "ticketNumber", "uniqueIndex", "children"]);
-    // Root lookup plus one query per level, including the final empty level.
-    assert.deepEqual(db.calls, { findFirst: 1, findMany: 4, queryRaw: 0 });
+    // Root lookup, shared board access and one recursive subtree read.
+    assert.deepEqual(db.calls, { findFirst: 1, findMany: 1, queryRaw: 1 });
   }
 
   {
@@ -234,7 +256,7 @@ async function main() {
     assert.equal(rows.length, 50);
     const db = fakeDb(rows, projectWhere);
     await buildTaskTree(1, USER_ID, undefined, db as any);
-    assert.equal(db.calls.findFirst + db.calls.findMany, 5, "50-node tree loads in 5 queries");
+    assert.equal(db.calls.findFirst + db.calls.findMany + db.calls.queryRaw, 3, "50-node tree loads in 3 queries");
   }
 
   // Ancestor walk.

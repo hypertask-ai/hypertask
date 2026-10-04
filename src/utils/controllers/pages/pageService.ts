@@ -1,6 +1,7 @@
 import { Prisma } from '@prisma/client'
 
 import prisma from '@/lib/prisma'
+import { taskAccessWhere } from '@/utils/controllers/tasks/assertTaskAccess'
 import {
   convertToPlain,
   deletePageFromTurbopuffer,
@@ -175,14 +176,22 @@ type GetPageArgs =
   | { publicId: string; id?: never }
   | { id: number; publicId?: never }
 
-export async function getPage(args: GetPageArgs) {
+export async function getPage(args: GetPageArgs & { userId?: number }) {
   const where = 'id' in args
     ? { id: args.id }
     : { publicId: args.publicId }
 
   return prisma.page.findUnique({
     relationLoadStrategy: 'join',
-    where,
+    where: {
+      ...where,
+      ...(args.userId === undefined ? {} : {
+        task: taskAccessWhere(args.userId, undefined, {
+          agentId: null,
+          projectStatus: 'Normal',
+        }),
+      }),
+    },
     include: {
       // HTPR-6509: the page viewer links back to the task and MCP pages/get
       // echoes these five fields; nothing reads the rest of the task row.
