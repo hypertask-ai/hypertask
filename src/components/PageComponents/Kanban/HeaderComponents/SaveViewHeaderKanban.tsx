@@ -32,6 +32,32 @@ export const SaveView = (props: BoardProps | ControlledProps) => {
 
 const ShellSaveView = ({ dirty: isDirty, busy, onReset, onSaveClick }: ControlledProps) => {
   const styleGuideEnabled = useFlag(HTPR_6930_MY_TASKS_KANBAN_REUSE_FLAG);
+  const saveButton = (
+  <button
+    type="button"
+    tabIndex={isDirty ? 0 : -1}
+    disabled={busy}
+    onClick={onSaveClick}
+    className={styleGuideEnabled
+      ? "h-8 rounded-[4px] bg-shadcn-primary px-2 text-primary-foreground transition-colors hover:opacity-90"
+      : "h-8 rounded-full bg-hover-active px-2 text-[#E28C28] transition-colors hover:text-white-black"}
+  >
+    Save view
+  </button>
+  );
+  const resetButton = (
+  <button
+    type="button"
+    tabIndex={isDirty ? 0 : -1}
+    disabled={busy}
+    onClick={onReset}
+    className={styleGuideEnabled
+      ? "h-8 rounded-[4px] px-2 text-text-light-gray transition-colors hover:bg-hover-active hover:text-white-black"
+      : "h-8 rounded-full bg-hover-active px-2 text-text-light-gray transition-colors hover:text-white-black"}
+  >
+    Reset
+  </button>
+  );
   return (
   <div
     aria-hidden={!isDirty}
@@ -41,28 +67,17 @@ const ShellSaveView = ({ dirty: isDirty, busy, onReset, onSaveClick }: Controlle
         : "pointer-events-none max-w-0 translate-x-2 opacity-0"
     }`}
   >
-    <button
-      type="button"
-      tabIndex={isDirty ? 0 : -1}
-      disabled={busy}
-      onClick={onSaveClick}
-      className={styleGuideEnabled
-        ? "h-8 rounded-[4px] bg-shadcn-primary px-2 text-primary-foreground transition-colors hover:opacity-90"
-        : "h-8 rounded-full bg-hover-active px-2 text-[#E28C28] transition-colors hover:text-white-black"}
-    >
-      Save view
-    </button>
-    <button
-      type="button"
-      tabIndex={isDirty ? 0 : -1}
-      disabled={busy}
-      onClick={onReset}
-      className={styleGuideEnabled
-        ? "h-8 rounded-[4px] px-2 text-text-light-gray transition-colors hover:bg-hover-active hover:text-white-black"
-        : "h-8 rounded-full bg-hover-active px-2 text-text-light-gray transition-colors hover:text-white-black"}
-    >
-      Reset
-    </button>
+    {styleGuideEnabled ? (
+      <>
+        {resetButton}
+        {saveButton}
+      </>
+    ) : (
+      <>
+        {saveButton}
+        {resetButton}
+      </>
+    )}
   </div>
   );
 };
