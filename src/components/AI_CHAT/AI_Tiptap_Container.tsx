@@ -362,7 +362,7 @@ export function AI_Tiptap_Container({
               rows={1}
               placeholder={controlledComposer.placeholder}
               aria-label={controlledComposer.ariaLabel}
-              className="block w-full resize-none bg-transparent py-2 text-dense outline-none placeholder:text-text-light-gray disabled:opacity-50"
+              className={composeTaskWriterEnabled ? undefined : "block w-full resize-none bg-transparent py-2 text-dense outline-none placeholder:text-text-light-gray disabled:opacity-50"}
             />
             )
           ) : editor ? (

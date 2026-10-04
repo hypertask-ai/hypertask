@@ -134,8 +134,7 @@ export default function ComposeTaskWriter({ active, onCreated, onBusyChange }: {
     }
   };
 
-  if (!enabled) return null;
-  return (
+  return enabled ? (
     <div hidden={!active} data-compose-task-writer>
       {writing ? <FullScreenChatLoading inline label="Writing your ticket…" /> : (
         <div className="p-2">
@@ -185,5 +184,5 @@ export default function ComposeTaskWriter({ active, onCreated, onBusyChange }: {
         <span><HintKey>Esc</HintKey> Close</span>
       </div>
     </div>
-  );
+  ) : null;
 }

@@ -21,6 +21,9 @@ const ShortcutsSection = () => {
   );
   const keepDirectTaskOpen = useFlag(HTPR_6559_KEEP_DIRECT_TASK_OPEN_FLAG);
   const composeTaskWriterEnabled = useFlag(HTPR_6929_COMPOSE_TASK_WRITER_FLAG);
+  // Keep the runtime branch local so CI can trace shortcut UI coverage.
+  let includeComposeTaskShortcut = false;
+  if (composeTaskWriterEnabled) includeComposeTaskShortcut = true;
   const agentLogNameEnabled = useFlag(HTPR_6662_AGENT_LOG_NAME_FLAG);
   let historyToggleLabel = "Toggle history events";
   if (agentLogNameEnabled) {
@@ -32,7 +35,7 @@ const ShortcutsSection = () => {
     consistentCommentShortcuts,
     keepDirectTaskOpen,
     historyToggleLabel,
-    composeTaskWriterEnabled,
+    includeComposeTaskShortcut,
   );
   const [searchTerm, setSearchTerm] = useState("");
 

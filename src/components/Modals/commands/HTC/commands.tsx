@@ -98,7 +98,8 @@ const Commands = (props: Props) => {
     appShellRailOn,
     scope,
   } = props;
-  const composeEnabled = useFlag(HTPR_6929_COMPOSE_TASK_WRITER_FLAG) && !props.isDemo && !props.isInteractive;
+  const composeTaskWriterEnabled = useFlag(HTPR_6929_COMPOSE_TASK_WRITER_FLAG);
+  const composeEnabled = composeTaskWriterEnabled && !props.isDemo && !props.isInteractive;
   const [showCommands, setShowCommands] = useRecoilState(showCommandsAtom);
   const isCompose = composeEnabled && showCommands.paletteTab === "compose";
   const [writing, setWriting] = useState(false);
@@ -621,7 +622,7 @@ const Commands = (props: Props) => {
     if (composeEnabled && !isCompose) inputRef.current?.focus();
   }, [composeEnabled, isCompose]);
 
-  const modeSwitch = composeEnabled ? (
+  const modeSwitch = composeTaskWriterEnabled && !isDemo && !isInteractive ? (
     <div className="absolute -top-12 left-0 flex w-full justify-center">
       <SettingsScopeTabs
         tabs={[{ id: "search", label: "Search" }, { id: "compose", label: "Compose" }]}

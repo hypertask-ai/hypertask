@@ -552,19 +552,20 @@ export const useSessionAndChatHistory = (
     ? sessions.find((session) => session.id === activeSession)
     : sessions[0];
   useEffect(() => {
-    if (!composeEnabled || !composeIntro || !isTaskScoped ||
-        taskId !== composeIntro.taskId || currentSession?.taskId !== composeIntro.taskId) return;
-    const id = `compose-task-${composeIntro.taskId}`;
-    if (consumedComposeIntro.current !== id && !currentSession.messages.some((message) => message.id === id)) {
-      consumedComposeIntro.current = id;
-      // An ordinary stored assistant message, not an AI turn: opening a composed
-      // ticket must not spend credits or let the model rewrite it a second time.
-      addMessageToSessionQuery(currentSession.id, {
-        id, sessionId: currentSession.id, role: "assistant", isDelivered: true,
-        createdAt: new Date(), content: composeIntro.content,
-      });
+    if (composeEnabled && composeIntro && isTaskScoped &&
+        taskId === composeIntro.taskId && currentSession?.taskId === composeIntro.taskId) {
+      const id = `compose-task-${composeIntro.taskId}`;
+      if (consumedComposeIntro.current !== id && !currentSession.messages.some((message) => message.id === id)) {
+        consumedComposeIntro.current = id;
+        // An ordinary stored assistant message, not an AI turn: opening a composed
+        // ticket must not spend credits or let the model rewrite it a second time.
+        addMessageToSessionQuery(currentSession.id, {
+          id, sessionId: currentSession.id, role: "assistant", isDelivered: true,
+          createdAt: new Date(), content: composeIntro.content,
+        });
+      }
+      setComposeIntro(null);
     }
-    setComposeIntro(null);
   }, [composeEnabled, composeIntro, isTaskScoped, taskId, currentSession, addMessageToSessionQuery, setComposeIntro]);
 
   // `currentSession` is `undefined` both when there is genuinely nothing to
