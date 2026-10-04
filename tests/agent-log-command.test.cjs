@@ -33,12 +33,12 @@ function evaluate(text, bindings) {
   return new Function(...Object.keys(bindings), `${js}; return result;`)(...Object.values(bindings));
 }
 
-function gatedValue(file, name, bindings, extraNames = []) {
+function gatedValue(file, name, bindings, extraNames = [], flagName = "agentLogNameEnabled") {
   const { source, declaration } = initializer(file, name);
   const names = new Set([name, ...extraNames]);
   const statements = declaration.parent.parent.parent.statements.filter((node) =>
     (ts.isVariableStatement(node) && node.declarationList.declarations.some((item) => names.has(item.name.getText(source)))) ||
-    (ts.isIfStatement(node) && node.expression.getText(source) === "agentLogNameEnabled")
+    (ts.isIfStatement(node) && node.expression.getText(source) === flagName)
   );
   return evaluate(`(() => { ${statements.map((node) => node.getText(source)).join("\n")} return ${name}; })()`, bindings);
 }
@@ -102,6 +102,28 @@ test("the palette calls the flag in its component body and passes it through the
   assert.match(memo.text, /getCommands\(\{[\s\S]*?\.\.\.contextOptions,/);
   assert.ok(memo.declaration.initializer.arguments[1].elements.some((node) => node.getText(memo.source) === "getCommands"));
   assert.deepEqual(getAllCommands({ context: "Task" }), getAllCommands({ context: "Task" }, false));
+});
+
+test("both shortcut-help surfaces advertise only the active Ctrl/Cmd+J action", () => {
+  for (const [file, dataName] of [
+    ["src/components/Modals/Settings/ShortcutsSection.tsx", "shortcutGroups"],
+    ["src/components/sidebars/keyboardShortcuts.tsx", "mainData"],
+  ]) {
+    for (const enabled of [false, true]) {
+      const includeComposeTaskShortcut = gatedValue(file, "includeComposeTaskShortcut", { composeTaskWriterEnabled: enabled }, [], "composeTaskWriterEnabled");
+      for (const isApple of [false, true]) {
+        const shortcuts = evaluate(initializer(file, dataName).text, {
+          getKeyboardShortcuts, isApple, appShellRailOn: false,
+          consistentCommentShortcuts: false, keepDirectTaskOpen: false,
+          historyToggleLabel: "Toggle history events", includeComposeTaskShortcut,
+        });
+        const titles = shortcuts.flatMap((group) => group.sub)
+          .filter((item) => item.pressKey.join(" ") === `${isApple ? "CMD" : "CTRL"} J`)
+          .map((item) => item.shortTitle);
+        assert.deepEqual(titles, enabled ? ["Compose task"] : ["Add task with AI Task Writer", "Write with AI"]);
+      }
+    }
+  }
 });
 
 test("both shortcut-help surfaces follow the flag and preserve Windows and Apple keys", () => {

@@ -118,7 +118,7 @@ export const getKeyboardShortcuts = (
       title: "Board",
       sub: [
         { shortTitle: "Add task", pressKey: ["C"] },
-        { shortTitle: "Add task with AI Task Writer", pressKey: [cmdControl, "J"] },
+        ...(composeTaskWriter ? [] : [{ shortTitle: "Add task with AI Task Writer", pressKey: [cmdControl, "J"] }]),
         { shortTitle: "Add sub-task", pressKey: [cmdControl, "SHIFT", "+"] },
         { shortTitle: "Add task at top", pressKey: [cmdControl, "SHIFT", "C"] },
         { shortTitle: "Add task at bottom", pressKey: ["SHIFT", "C"] },
@@ -164,7 +164,7 @@ export const getKeyboardShortcuts = (
           : [
               { shortTitle: "Save/edit text entry", pressKey: [cmdControl, "ENTER"] },
             ]),
-        { shortTitle: "Write with AI", pressKey: [cmdControl, "J"] },
+        ...(composeTaskWriter ? [] : [{ shortTitle: "Write with AI", pressKey: [cmdControl, "J"] }]),
         { shortTitle: "Assign a user", pressKey: ["A"] },
         { shortTitle: "Blocked by person", pressKey: ["SHIFT", "B"] },
         { shortTitle: "Start / stop timer", pressKey: ["W"] },

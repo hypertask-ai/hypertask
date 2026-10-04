@@ -172,6 +172,9 @@ existing board-aware task writer, creates in the current URL board's first
 active column (or the remembered `previousBoard` off-board), then opens the
 ticket with its regular AI chat. Shift+Enter adds a line. The initial assistant
 message is stored without a model call; follow-ups use normal task chat tools.
+A creation finishing after leaving Compose does not replace subsequent navigation.
+Shortcut help shows Compose instead of the superseded board and task-detail
+`Mod+J` actions while the flag is on.
 Writer failure saves the raw note and explains the fallback. Create failure
 keeps the note and images for retry. With the flag off, both shortcuts and the
 palette keep their previous behavior, including the board's legacy AI writer.

@@ -250,6 +250,23 @@ test('pending creation blocks tab clicks and dismissing Search commands without 
   });
 });
 
+test('late creation success or failure cannot override navigation after Compose unmounts', async (t) => {
+  for (const succeeds of [false, true]) {
+    await withPalette(t, { tab: 'compose', strict: true }, async ({ type, press, finish, fail, set, values, navigations, cacheAdds, viewedTasks }) => {
+      await type('Create without stealing navigation');
+      await press('Enter', { code: 'Enter' });
+      await React.act(async () => set('showCommandsAtom', { show: false, mode: 0 }));
+      if (succeeds) await finish();
+      else await fail();
+      assert.deepEqual(navigations, []);
+      assert.deepEqual(cacheAdds, []);
+      assert.deepEqual(viewedTasks, []);
+      assert.equal(values.get('composeTaskChatIntroAtom'), null);
+      assert.equal(values.get('showAIChatInterfaceAtom'), undefined);
+    });
+  }
+});
+
 test('Enter sends the current board and opens its detail with regular task-scoped chat and exact no-model greeting', async (t) => {
   await withPalette(t, { tab: 'compose' }, async ({ type, press, requests, finish, navigations, values, cacheAdds, viewedTasks, capture }) => {
     await type('Fix login button spacing');

@@ -34,6 +34,7 @@ export default function ComposeTaskWriter({ active, onCreated, onBusyChange }: {
   const [addingImages, setAddingImages] = useState(false);
   const pendingImages = useRef(0);
   const sending = useRef(false);
+  const mounted = useRef(false);
   const input = useRef<HTMLTextAreaElement>(null);
   const user = useRecoilValue(currentUserAtom);
   const currentProject = useRecoilValue(currentProjectAtom);
@@ -51,7 +52,13 @@ export default function ComposeTaskWriter({ active, onCreated, onBusyChange }: {
 
   const filesRef = useRef(files);
   filesRef.current = files;
-  useEffect(() => () => discardUnboundCreateTaskUploads(filesRef.current), []);
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+      discardUnboundCreateTaskUploads(filesRef.current);
+    };
+  }, []);
   useEffect(() => {
     if (!active || writing) return;
     let cancelled = false;
@@ -113,8 +120,10 @@ export default function ComposeTaskWriter({ active, onCreated, onBusyChange }: {
         const projects: IProject[] = await globalAPIHandlers.getAllProjectsMinimal();
         project = projects.find((item) => item.id === projectId);
       }
+      if (!mounted.current) return;
       if (!project) throw new Error("Your last board is unavailable. Open a board and try again.");
       const { task, writerFailed } = await createComposedTask({ text, files, project, userId: user.id });
+      if (!mounted.current) return;
       createTaskGlobally({ task, sectionId: task.sectionId!, position: "top" });
       setIntro({ taskId: task.id, content: composeTaskAssistantMessage(task.ticketNumber ?? `${project.uniqueIdentifier ?? "TASK"}-${task.uniqueIndex}`, writerFailed) });
       updateActiveItemAndItemInView(task);
@@ -126,11 +135,13 @@ export default function ComposeTaskWriter({ active, onCreated, onBusyChange }: {
       router.push(`/detail/project-${projectId}/${task.uniqueIndex}`);
       onCreated();
     } catch (failure) {
-      setError(failure instanceof Error ? failure.message : "Couldn’t create the task. Your note is still here — try again.");
+      if (mounted.current) setError(failure instanceof Error ? failure.message : "Couldn’t create the task. Your note is still here — try again.");
     } finally {
       sending.current = false;
-      setWriting(false);
-      onBusyChange(false);
+      if (mounted.current) {
+        setWriting(false);
+        onBusyChange(false);
+      }
     }
   };
 
