@@ -14,7 +14,7 @@ const suites = [...new Set([
 test('existing MCP and extracted REST operation regressions pass with their original behavioral assertions', () => {
   const env = { ...process.env }
   delete env.NODE_TEST_CONTEXT
-  const result = spawnSync(process.execPath, ['--test', '--test-concurrency=4', ...suites], {
+  const result = spawnSync(process.execPath, ['--test', '--test-reporter=tap', '--test-concurrency=4', ...suites], {
     cwd: root, env, encoding: 'utf8', timeout: 300000, maxBuffer: 32 * 1024 * 1024,
   })
   const output = result.stdout + result.stderr
