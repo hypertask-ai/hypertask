@@ -1,8 +1,5 @@
 import type { INotification } from "@/models/model";
-import {
-  getInitialInboxSplitIndex,
-  type InboxSplitKey,
-} from "@/lib/inboxSplitSettings";
+import { getInitialInboxSplitIndex, type InboxSplitKey } from "@/lib/inboxSplitSettings";
 import { getInboxTabs, resolveInboxStructuredData } from "@/utils/helperFunctions/inboxHelpers";
 
 export function projectInboxFirstScreen({
@@ -43,9 +40,13 @@ export function projectInboxDateGroup(date: string, now: string, timeZone: strin
     return Date.UTC(p.year, p.month - 1, p.day, p.hour, p.minute, p.second);
   };
   const midnight = (calendarDay: number) => {
-    let result = calendarDay;
-    for (let i = 0; i < 3; i++) result += calendarDay - wallTime(result);
-    return result;
+    const candidates = [-86_400_000, 86_400_000].map((delta) => {
+      const sample = calendarDay + delta;
+      return calendarDay - (wallTime(sample) - sample);
+    });
+    // Native Date chooses the earlier instant in a fold, the later one in a gap.
+    const exact = candidates.filter((candidate) => wallTime(candidate) === calendarDay);
+    return exact.length ? Math.min(...exact) : Math.max(...candidates);
   };
   const day = (value: string) => {
     const timestamp = Date.parse(value);

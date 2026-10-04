@@ -113,9 +113,11 @@ test("timezone grouping matches the existing renderer including DST, weeks and m
     .replace("(date: Date): string", "(date)").replace("const now = new Date();", "const now = new Date(clock);");
   const originalTZ = process.env.TZ;
   try {
-    for (const zone of ["UTC", "America/Los_Angeles", "Europe/London", "Asia/Kathmandu", "Pacific/Auckland"]) {
+    for (const zone of ["UTC", "America/Los_Angeles", "Europe/London", "Asia/Kathmandu", "Pacific/Auckland",
+      "Asia/Beirut", "America/Havana", "America/Sao_Paulo", "Pacific/Apia"]) {
       process.env.TZ = zone;
-      for (const clock of [now, "2026-03-09T12:00:00.000Z", "2026-11-02T12:00:00.000Z", "2027-01-01T12:00:00.000Z"]) {
+      for (const clock of [now, "2026-03-09T12:00:00.000Z", "2026-03-30T12:00:00.000Z", "2026-11-02T12:00:00.000Z",
+        "2027-01-01T12:00:00.000Z", "2018-11-05T12:00:00.000Z", "2011-12-31T12:00:00.000Z"]) {
         const legacy = vm.runInNewContext(`${body}; getDateGroup`, { Date, clock });
         for (const days of [0, 1, 2, 6, 7, 10, 14, 40, 400]) {
           const date = new Date(Date.parse(clock) - days * 86_400_000).toISOString();
