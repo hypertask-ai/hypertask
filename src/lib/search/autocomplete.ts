@@ -51,6 +51,15 @@ export function searchCompletion(text: string, names: Names = {}, commenterEnabl
       return { kind: 'value', operator: last.operator as SearchOperator, value: tail.replace(/^[@#"]/, '').replace(/"$/, ''), start: last.start, end: text.length, negated: last.negated }
     }
   }
+  const phrases: Record<string, SearchOperator> = { 'created by': 'from', by: 'from', 'assigned to': 'assignee', 'commented by': 'commenter' }
+  const natural = text.match(new RegExp(`(?:^|\\s)(-?)(created\\s+by|assigned\\s+to|commented\\s+by|by|${SEARCH_OPERATORS.join('|')})\\s+(\\S+)$`, 'i'))
+  if (natural && (text.slice(0, natural.index).match(/(?<!\\)"/g)?.length ?? 0) % 2 === 0) {
+    const trigger = natural[2].toLowerCase().replace(/\s+/g, ' ')
+    const operator = phrases[trigger] ?? trigger as SearchOperator
+    if (operator !== 'commenter' || commenterEnabled) {
+      return { kind: 'value', operator, value: natural[3].replace(/^[@#"]/, '').replace(/"$/, ''), start: text.length - natural[0].trimStart().length, end: text.length, negated: natural[1] === '-' }
+    }
+  }
   const active = activeSearchValue(text, names, commenterEnabled)
   if (active) return { ...active, kind: 'value', operator: active.operator as SearchOperator, end: active.end ?? text.length }
   // Do not offer operators inside quoted text or a value already being typed.
