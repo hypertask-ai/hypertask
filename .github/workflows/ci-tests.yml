@@ -95,7 +95,7 @@ jobs:
           }
 
           expected=$(printf '%s\n' app-smoke ci-tests ai-review claude-review feature-flag-gate next-public-secrets pr-title secret-scan | sort)
-          expected=$(printf '%s\n' "$expected" browser-smoke | sort)
+          expected=$(printf '%s\n' "$expected" browser-smoke premerge-evidence | sort)
           actual=$(jq -r '
             [.rules[] | select(.type == "required_status_checks") |
               .parameters.required_status_checks[].context] | unique | sort | .[]

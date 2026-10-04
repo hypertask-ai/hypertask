@@ -1,0 +1,7 @@
+[Unit]
+Description=Publish required premerge browser evidence statuses
+[Service]
+Type=oneshot
+Environment="PATH=%h/.local/bin:/usr/local/bin:/usr/bin:/bin"
+ExecStart=/usr/bin/python3 %h/.local/lib/hypertask/premerge-evidence/premerge-evidence.py
+TimeoutStartSec=30min
