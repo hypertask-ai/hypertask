@@ -989,3 +989,46 @@ test('row highlight flag off keeps the previous inset highlight', async (t) => {
     assert.match(selected().className, /bg-active-elementBg/)
   })
 })
+
+test('phone layout keeps board tabs in scrollable flow under the search input and selecting a board filters results', async (t) => {
+  await withSearch(t, { flags: { 'htpr-6909-search-one-board-tabs': true } }, async ({ input, type, press, complete, state, dom }) => {
+    Object.defineProperties(dom.window, { innerWidth: { value: 390 }, innerHeight: { value: 844 } })
+    await type('login')
+    await press('Enter')
+    const tasks = [
+      { taskId: 1, projectId: 7, projectTitle: 'Product Board', uniqueIndex: 1, taskTitle: 'Result', highlight: {} },
+      { taskId: 2, projectId: 8, projectTitle: 'Other Board', uniqueIndex: 2, taskTitle: 'Second', highlight: {} },
+    ]
+    await complete(undefined, tasks, ['All', 'Product Board', 'Other Board'])
+    const labels = [...document.querySelectorAll('span.footer_tags')]
+    assert.deepEqual(labels.map((node) => node.textContent), ['All', 'Product Board', 'Other Board'])
+    const row = labels[0].parentElement.parentElement.parentElement
+    const scroller = row.parentElement
+    assert.ok(input().compareDocumentPosition(scroller) & 4, 'tabs follow the search input')
+    assert.equal(scroller.nextElementSibling, document.getElementById('tasks-list'), 'tabs immediately precede results')
+    assert.ok(scroller.classList.contains('overflow-x-auto'))
+    assert.ok(!scroller.classList.contains('hidden'), 'phone row is visible')
+    assert.equal(document.querySelector('.inbox_footer, .inbox_title'), null, 'tabs avoid fixed footer CSS')
+    assert.ok(row.classList.contains('flex-nowrap'))
+    assert.ok(row.classList.contains('@md:flex-wrap'), 'desktop wrapping is preserved')
+    assert.ok(row.classList.contains('min-h-[44px]'), 'phone tabs retain a tappable height')
+    await React.act(async () => labels[2].parentElement.parentElement.click())
+    assert.equal(state().activeSplit, 2)
+    assert.equal(document.getElementById('task_1'), null)
+    assert.ok(document.getElementById('task_2'))
+  })
+})
+
+test('layout flag off retains the original desktop row and fixed mobile footer', async (t) => {
+  await withSearch(t, { flags: { [layoutFlag]: false } }, async ({ type, tick, complete }) => {
+    await type('login')
+    await tick()
+    await complete(undefined, undefined, ['All', 'Product Board'])
+    const footer = document.querySelector('.inbox_footer')
+    assert.equal(footer.className, 'flex inbox_footer @md:hidden no-scrollbar scrollbar-none gap-3 w-100 bg-hoverCardBackground  h-20 @md:h-8 inbox_title px-4')
+    const desktop = [...document.querySelectorAll('span.footer_tags')][0].parentElement.parentElement.parentElement.parentElement
+    assert.equal(desktop.className, 'hidden @md:block w-full overflow-x-auto scrollbar-none no-scrollbar @md:px-9 mt-4')
+    assert.equal(desktop.firstElementChild.className, 'flex flex-wrap grow gap-3')
+    assert.ok(document.getElementById('tasks-list').compareDocumentPosition(footer) & 4)
+  })
+})
