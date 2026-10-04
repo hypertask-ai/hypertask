@@ -24,6 +24,31 @@ test('operator prefixes match only the real parser operators, including aliases 
   }
 })
 
+test('HTPR-6935 natural value completions include every parser operator and supported phrase in the replacement range', () => {
+  for (const [phrase, operator] of [...SEARCH_OPERATORS.map((operator) => [operator, operator]), ['by', 'from'], ['created by', 'from'], ['assigned to', 'assignee'], ['commented by', 'commenter']]) {
+    for (const leading of ['', 'bug ', 'bug -']) {
+      const query = `${leading}${phrase} valentin`
+      const completion = searchCompletion(query, {}, true)
+      assert.ok(completion, query)
+      assert.equal(completion.kind, 'value', query)
+      assert.equal(completion.operator, operator, query)
+      assert.equal(completion.value, 'valentin', query)
+      assert.equal(completion.start, leading.trim() ? 4 : 0, query)
+      assert.equal(completion.end, query.length, query)
+      assert.equal(Boolean(completion.negated), leading.endsWith('-'), query)
+    }
+  }
+  const completion = searchCompletion('bug ASSIGNED   TO valentin', {}, true)
+  assert.equal(completion.operator, 'assignee')
+  assert.equal(completion.start, 4)
+  for (const query of ['bug valentin', 'platform valentin', 'unrecognised valentin', '"from valentin', '"commented by valentin', 'from valentin ']) {
+    assert.equal(searchCompletion(query, {}, true), null, query)
+  }
+  assert.equal(searchCompletion('commented by valentin'), null)
+  assert.equal(searchCompletion('commenter valentin'), null)
+  assert.equal(searchCompletion('from:@valentin').start, 0)
+})
+
 test('all operators get either access-scoped entity lookups or valid local values', () => {
   const now = new Date('2026-10-01T23:45:00Z')
   const server = readFileSync(path.join(root, 'src/lib/search/filters.ts'), 'utf8')

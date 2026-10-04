@@ -752,6 +752,49 @@ test('generic value suggestions become the right entity chip without dropping pr
   })
 })
 
+for (const [query, operator, leftover] of [
+  ['from valentin', 'from', ''],
+  ['by valentin', 'from', ''],
+  ['created by valentin', 'from', ''],
+  ['assigned to valentin', 'assignee', ''],
+  ['assignee valentin', 'assignee', ''],
+  ['commented by valentin', 'commenter', ''],
+  ['commenter valentin', 'commenter', ''],
+  ['bug from valentin', 'from', 'bug'],
+  ['bug assigned to valentin', 'assignee', 'bug'],
+  ['bug valentin', 'from', 'bug'],
+  ['platform valentin', 'from', 'platform'],
+  ['-from valentin', 'from', ''],
+]) {
+  test(`HTPR-6935 Enter absorbs only recognised operator phrases: ${query}`, async (t) => {
+    await withSearch(t, { people: [{ id: 6, name: 'Valentin Yeo', email: 'valentin@example.test' }], flags: { 'htpr-6880-search-commenter': true } }, async ({ type, tick, selected, press, input, requests }) => {
+      await type(query)
+      await tick(180)
+      assert.match(selected().textContent, /Valentin Yeo/)
+      await press('Enter')
+      const canonical = `${query.startsWith('-') ? '-' : ''}${operator}:6`
+      assert.equal(requests.at(-1).body.searchQuery, [leftover, canonical].filter(Boolean).join(' '))
+      assert.equal(input().value, leftover)
+      const chip = document.querySelector(`[aria-label="Remove ${operator}:Valentin Yeo filter"]`)
+      assert.ok(chip)
+      assert.equal(chip.textContent.startsWith('-'), query.startsWith('-'))
+    })
+  })
+}
+
+for (const [query, operator, canonical] of [['in pro', 'in', 'in:7'], ['board pro', 'board', 'board:7'], ['label bu', 'label', 'label:bug']]) {
+  test(`HTPR-6935 Tab absorbs entity operator words: ${query}`, async (t) => {
+    await withSearch(t, {}, async ({ type, tick, press, input, lookups, requests }) => {
+      await type(query)
+      await tick(180)
+      assert.equal(lookups.at(-1).get('operator'), operator)
+      await press('Tab')
+      assert.equal(requests.at(-1).body.searchQuery, canonical)
+      assert.equal(input().value, '')
+    })
+  })
+}
+
 test('suggestions keep IME, native Shift+Tab and quoted free text safe', async (t) => {
   await withSearch(t, {}, async ({ type, tick, input, press, requests, lookups }) => {
     await type('from:mal')
