@@ -165,7 +165,8 @@ test('the reused sender adds the question first and streams the reply without se
     source('src/hooks/Inbox/useGetNotifications.ts', { INBOX_QUERY_KEY: ['inbox'] })
     source('src/hooks/MultiPages/AIChat/aiChatShared.ts', { parseAiStreamErrorContent: (content) => content })
     const { createAiChatSend } = createJiti(__filename, { alias: { '@': path.join(root, 'src') }, interopDefault: true, fsCache: false })(path.join(root, 'src/hooks/MultiPages/AIChat/aiChatSend.ts'))
-    for (const preserveComposer of [true, false]) {
+    for (const [fullscreenEnabled, requestedPreservation] of [[true, true], [true, false], [false, false], [false, true]]) {
+      const preserveComposer = fullscreenEnabled && requestedPreservation
       const messages = []
       const cleared = []
       const processed = []
@@ -188,8 +189,8 @@ test('the reused sender adds the question first and streams the reply without se
         currentUser: { id: 985 }, streamingSessionRef: ref(), streamingAssistantMessageRef: ref(), streamingRequestRef: ref(),
         setCurrentStreamingSession() {}, chatRoute: '/api/ai/chat/stream', setAgentStatus() {}, updateSessionTitle() {},
         queryClient: { refetchQueries: async () => {} }, drainQueuedMessage() {}, handleSendMessageRef: ref(),
-      })
-      await handleSendMessage('Where is my work?', preserveComposer ? { preserveComposer: true } : undefined)
+      }, fullscreenEnabled ? { preserveComposer: true } : undefined)
+      await handleSendMessage('Where is my work?', requestedPreservation ? { preserveComposer: true } : undefined)
       assert.equal(payload.message, 'Where is my work?')
       assert.equal(payload.session_id, 'new')
       assert.deepEqual(payload.chat_history, [])

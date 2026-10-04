@@ -15,7 +15,7 @@ type Context = Pick<ReturnType<typeof useAiChatSessions>, "isByokBlocked" | "fil
   Pick<ReturnType<typeof useAiChatState>, "isTyping" | "editor" | "messageQueueRef" | "setQueuedMessages" | "sendInFlightRef" | "surface" | "inViewObject" | "currentProject" | "setIsTyping" | "addMessageToSessionQuery" | "scopedProjectId" | "isFullScreenChat" | "taskId" | "dockedProjectId" | "setAiChatBoardSessionMap" | "modelTeamId" | "contextList" | "currentAiOption" | "spansAllBoards" | "boardScopeIsExplicit" | "pathname" | "currentUser" | "streamingSessionRef" | "streamingAssistantMessageRef" | "setCurrentStreamingSession" | "streamingRequestRef" | "token" | "turnFailureState" | "setAgentStatus" | "updateSessionTitle" | "queryClient" | "updateLastMessageInSessionCache" | "appendMessageToSessionCache"> &
   Pick<ReturnType<typeof useAiChatAttachments>, "waitForChatSession" | "buildGuestBoard" | "processAttachments">;
 
-export function createAiChatSend(context: Context) {
+export function createAiChatSend(context: Context, searchHandoff?: { preserveComposer: true }) {
   const {
   isByokBlocked, isTyping, editor, fileUpload, messageQueueRef,
   setQueuedMessages, sendInFlightRef, surface, inViewObject, waitForChatSession,
@@ -34,6 +34,7 @@ export function createAiChatSend(context: Context) {
     options?: { htmlForAttachments?: string; preserveComposer?: boolean }
   ) => {
     if (isByokBlocked) return;
+    const preserveComposer = searchHandoff?.preserveComposer && options?.preserveComposer;
 
     // While a turn is streaming, composer Send/Enter appends to the FIFO queue
     // instead of starting a second stream (HTPR-5695). Use isTyping (not only
@@ -91,7 +92,7 @@ export function createAiChatSend(context: Context) {
         return;
       }
 
-    const processedAttachments = options?.preserveComposer ? [] : await processAttachments(
+    const processedAttachments = preserveComposer ? [] : await processAttachments(
       editorHtmlForAttachments,
       fileUpload.fileItems
     );
@@ -110,7 +111,7 @@ export function createAiChatSend(context: Context) {
 
     // Clear input
     // editor?.commands.blur();
-    if (!options?.preserveComposer) editor?.commands.clearContent();
+    if (!preserveComposer) editor?.commands.clearContent();
 
     setIsTyping(true);
 
@@ -253,7 +254,7 @@ export function createAiChatSend(context: Context) {
         throw new Error("Network response was not ok or body is missing");
       }
 
-      if (!options?.preserveComposer) fileUpload.clearFiles();
+      if (!preserveComposer) fileUpload.clearFiles();
 
       // Create a new assistant message to update incrementally. The same UUID
       // is sent to the stream route so server persistence is idempotent.

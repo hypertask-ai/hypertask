@@ -27,9 +27,6 @@ export default async function Page(
   }
   const currentUser: IUser = JSON.parse(userObjString.value);
   const sessionUser = await getSessionUser(new Headers(await headers()));
-  const askAiFullscreenEnabled = !!sessionUser &&
-    sessionUser.userId === currentUser.id &&
-    await isFeatureEnabled(HTPR_6936_ASK_AI_FULLSCREEN_FLAG, sessionUser.userId);
 
   const searchTerm: string = searchParams?.searchTerm
     ? searchParams.searchTerm.toString()
@@ -69,7 +66,11 @@ export default async function Page(
         _includeArchived={includeArchived}
         _fromProject={fromProject}
         currentUser={currentUser}
-        askAiFullscreenEnabled={askAiFullscreenEnabled}
+        askAiFullscreenEnabled={
+          !!sessionUser &&
+          sessionUser.userId === currentUser.id &&
+          await isFeatureEnabled(HTPR_6936_ASK_AI_FULLSCREEN_FLAG, sessionUser.userId)
+        }
       />
     </Suspense>
   );

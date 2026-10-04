@@ -7,6 +7,8 @@ import { createAiChatKeyboard } from "./aiChatKeyboard";
 import { useAiChatAttachments } from "./useAiChatAttachments";
 import { createAiChatSend } from "./aiChatSend";
 import { useAiChatPresentation } from "./useAiChatPresentation";
+import { useFlag } from "@/hooks/useFlag";
+import { HTPR_6936_ASK_AI_FULLSCREEN_FLAG } from "@/lib/flags/keys";
 
 // Type-only: a value import would pull tiptap back into every page's initial
 // chunk and undo the dynamic mount below (HTPR-4508).
@@ -44,6 +46,7 @@ import { useAiChatPresentation } from "./useAiChatPresentation";
 
 
 export function useAiChat() {
+  const askAiFullscreenEnabled = useFlag(HTPR_6936_ASK_AI_FULLSCREEN_FLAG);
   const {
   lastWorkspaceFocusRef, turnFailureState, queryClient, currentUser, currentProject,
   showAiChatInterface, setShowAIChat, setAiChatAutoOpenSuppressed, setAiChatExplicitOpenAt, aiChatExplicitOpenAt,
@@ -96,7 +99,7 @@ export function useAiChat() {
     streamingAssistantMessageRef, setCurrentStreamingSession, streamingRequestRef, chatRoute, token,
     turnFailureState, setAgentStatus, updateSessionTitle, queryClient, updateLastMessageInSessionCache,
     appendMessageToSessionCache, drainQueuedMessage, handleSendMessageRef,
-  });
+  }, askAiFullscreenEnabled ? { preserveComposer: true } : undefined);
   const {
   toggleSidebarMode, togglePopover, minimizeChat, restoreChat, retryStream,
   editMessage, tiptapKeydown, layoutKeydown,
