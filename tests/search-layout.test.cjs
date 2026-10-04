@@ -599,14 +599,83 @@ test('Enter submits values and recents without retaining focus, but operator com
   })
 })
 
-test('URL results blur only layout-on input; empty search and legacy autocomplete keep focus', async (t) => {
+for (const enabled of [true, false]) {
+  for (const operator of enabled ? ['commenter', 'assignee', 'label'] : ['assignee', 'label']) {
+    for (const freeText of ['', 'qzxw6913']) {
+      test(`chip Enter submits and releases focus: ${operator}, layout ${enabled}, text ${Boolean(freeText)}`, async (t) => {
+        await withSearch(t, { flags: { [layoutFlag]: enabled, 'htpr-6880-search-commenter': true } }, async ({ input, type, tick, press, selected, options, requests, prompts, aiOpened, complete, state, dom }) => {
+          await type(`${operator}:${operator === 'commenter' ? '@' : ''}`)
+          await tick(180)
+          assert.match(selected().textContent, operator === 'label' ? /Bug/ : /Malcolm Stern/)
+          await press(operator === 'label' ? 'Enter' : 'Tab')
+          const chip = document.querySelector('[aria-label^="Remove "]')
+          assert.ok(chip, 'highlighted value is accepted as a chip')
+          const chipQuery = `${operator}:${operator === 'label' ? 'bug' : '77'}`
+          assert.equal(requests.at(-1).body.searchQuery, chipQuery)
+          await React.act(async () => { input().focus(); input().click() })
+          if (freeText) {
+            await type(freeText)
+            await tick(180)
+            if (enabled) {
+              assert.equal(options().length, 1, 'completed query has only Ask AI, not a completion')
+              await press('ArrowUp')
+              assert.match(selected().textContent, /^Ask AI/)
+            }
+          }
+          const before = requests.length
+          await press('Enter', { keyCode: 13 })
+          const query = [chipQuery, freeText].filter(Boolean).join(' ')
+          assert.equal(requests.length, before + 1, 'Enter submits instead of handing a complete query to AI')
+          assert.equal(requests.at(-1).body.searchQuery, query)
+          assert.ok(document.activeElement === document.body, 'Enter releases search input focus')
+          assert.equal(input().getAttribute('aria-expanded'), 'false')
+          assert.deepEqual(prompts, [])
+          assert.equal(aiOpened(), 0)
+          assert.ok(document.querySelector('[aria-label^="Remove "]') === chip, 'submission retains the committed chip')
+          await complete(undefined, [1, 2, 3].map((taskId) => ({ taskId, projectId: 7, uniqueIndex: taskId, projectTitle: 'Product Board', taskTitle: 'Result', highlight: {} })))
+          const resultKey = async (key, keyCode) => React.act(async () => document.activeElement.dispatchEvent(new dom.window.KeyboardEvent('keydown', { key, keyCode, bubbles: true, cancelable: true })))
+          for (const [key, code, index] of [['j', 74, 1], ['j', 74, 2], ['k', 75, 1]]) {
+            await resultKey(key, code)
+            assert.equal(state().selectedIndex, index)
+            assert.equal(state().inputValue, query)
+            assert.equal(input().value, freeText)
+          }
+          await resultKey('/', 191)
+          assert.ok(document.activeElement === input(), 'refocus restores editing')
+          await React.act(async () => input().blur())
+          await React.act(async () => input().parentElement.parentElement.click())
+          assert.ok(document.activeElement === input(), 'refocus restores editing')
+        })
+      })
+    }
+  }
+}
+
+test('lone Ask AI Enter submits plain text even when the row is explicitly highlighted; clicking still asks AI', async (t) => {
+  await withSearch(t, {}, async ({ type, tick, press, options, requests, input, prompts }) => {
+    await type('qzxw6913')
+    await tick(180)
+    assert.equal(options().length, 1)
+    await press('ArrowUp')
+    await press('Enter', { keyCode: 13 })
+    assert.equal(requests.at(-1)?.body.searchQuery, 'qzxw6913')
+    assert.ok(document.activeElement === document.body, 'Enter releases search input focus')
+    assert.equal(input().getAttribute('aria-expanded'), 'false')
+    assert.deepEqual(prompts, [])
+    await type('another complete query')
+    await React.act(async () => options()[0].click())
+    assert.deepEqual(prompts, ['another complete query'])
+  })
+})
+
+test('URL results retain legacy focus, but explicit Enter releases it in either layout', async (t) => {
   for (const enabled of [true, false]) {
     await withSearch(t, { query: 'login', flags: { [layoutFlag]: enabled } }, async ({ input, complete }) => {
       await complete()
       assert.equal(document.activeElement, enabled ? document.body : input())
     })
     await withSearch(t, { flags: { [layoutFlag]: enabled } }, async ({ input }) => {
-      assert.equal(document.activeElement, input())
+      assert.ok(document.activeElement === input(), 'refocus restores editing')
     })
   }
   await withSearch(t, { query: 'login' }, async ({ input, complete }) => {
@@ -618,9 +687,9 @@ test('URL results blur only layout-on input; empty search and legacy autocomplet
   await withSearch(t, { flags: { [layoutFlag]: false } }, async ({ input, type, press, complete }) => {
     await type('login')
     await press('Enter', { keyCode: 13 })
-    assert.equal(document.activeElement, input())
+    assert.ok(document.activeElement === document.body, 'Enter releases search input focus')
     await complete()
-    assert.equal(document.activeElement, input())
+    assert.ok(document.activeElement === document.body, 'Enter releases search input focus')
   })
 })
 

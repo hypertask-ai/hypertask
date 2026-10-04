@@ -83,7 +83,7 @@ test('suggestions retain writing focus; result arrows leave it so Enter opens th
       await press('Enter', 13)
       assert.equal(requests.at(-1).searchQuery, 'login')
       assert.equal(state.typedTasks.length, 2)
-      assert.equal(document.activeElement === input, enabled)
+      assert.equal(document.activeElement === input, false, 'explicit Enter submission leaves writing mode in either autocomplete mode')
       await press('ArrowDown', 40)
       assert.notEqual(document.activeElement, input)
       assert.equal(state.selectedIndex, 1)
