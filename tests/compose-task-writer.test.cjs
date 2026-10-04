@@ -232,8 +232,8 @@ test('actual create endpoint rejects disabled Compose before database work and p
 test('empty task detection rejects named tasks, meaningful text and media with positive empty controls', () => {
   const { isEmptyComposeTarget } = createJiti(__filename)(path.join(root, 'src/lib/ai/composeTaskTarget.ts'));
   for (const title of ['', 'Enter task title here', 'New Task']) {
-    for (const description of [null, '', '<p></p>', '<p>&nbsp;</p>']) assert.equal(isEmptyComposeTarget({ title, description }), true);
-    for (const description of ['Written', '<p>Written</p>', '<p><img src="x"></p>']) assert.equal(isEmptyComposeTarget({ title, description }), false);
+    for (const description of [null, '', ' \n\t', '<p></p>', '<p>&nbsp;</p>', '<p>&#160;</p>', '<p><strong> </strong></p>', '<p>&nb<b></b>sp;</p>']) assert.equal(isEmptyComposeTarget({ title, description }), true);
+    for (const description of ['Written', '<p>Written</p>', '<p>&amp;</p>', '<scr<script>ipt>alert(1)</scr</script>ipt>', '<p><img src="x"></p>', '<video></video>', '<audio></audio>', '<iframe></iframe>', '<embed>', '<hr>']) assert.equal(isEmptyComposeTarget({ title, description }), false);
   }
   assert.equal(isEmptyComposeTarget({ title: 'Real ticket', description: '' }), false);
 });
@@ -324,6 +324,7 @@ test('save existing target enforces both flags, edit permissions, board match an
   assert.equal(result.body.newTask.id, 52);
   assert.deepEqual(updates[0][0], { id: 52, title: 'Written title', description: '<p>Written body</p>' });
   assert.equal(updates[0][1].id, 985);
+  assert.deepEqual(updates[0][3], { expectedTitle: target.title, expectedDescription: '' });
   assert.equal(broadcasts.length, 2);
 });
 

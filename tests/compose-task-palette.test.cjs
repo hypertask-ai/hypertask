@@ -605,7 +605,7 @@ test('file drop works under Compose alone; New Task also accepts document tiles 
   });
 });
 
-test('edit-mode and writer events retain inline writer with 6937 off but redirect with both flags on', async (t) => {
+test('edit-mode and empty writer events retain inline writer with 6937 off but redirect with both flags on', async (t) => {
   for (const enabled of [false, true]) for (const newWindow of [false, true]) {
     await withPalette(t, { enabled, newWindow, open: false }, async ({ source, jiti, mountProbe, dom, values }) => {
       source('src/components/PageComponents/TaskDetail/TopRow/CreateSummaryButton.tsx', { AI_TASK_WRITER_EVENT: 'test-open-writer' });
@@ -617,13 +617,70 @@ test('edit-mode and writer events retain inline writer with 6937 off but redirec
       function Probe() { useTaskDetailEditorEvents(context); return null; }
       await mountProbe(() => React.createElement(Probe));
       assert.equal(openings.at(-1), !(enabled && newWindow));
-      await React.act(async () => window.dispatchEvent(new dom.window.CustomEvent('test-open-writer', { detail: { targetId: 'description', prompt: 'Write' } })));
+      await React.act(async () => window.dispatchEvent(new dom.window.CustomEvent('test-open-writer', { detail: { targetId: 'description', prompt: '' } })));
       if (enabled && newWindow) {
         assert.equal(openings.at(-1), false);
         assert.equal(values.get('showCommandsAtom').paletteTab, 'compose');
       } else assert.equal(openings.at(-1), true);
     });
   }
+});
+
+test('targeted triggerAITaskWriter prompts render the existing task writer with both flags on without opening the palette', async (t) => {
+  await withPalette(t, { newWindow: true, open: false }, async ({ source, stub, jiti, mountProbe, dom, values }) => {
+    const task = { id: 52, title: 'Existing task', projectId: 7, description_: { content: '<p>Existing body</p>' } };
+    source('src/hooks/General/useCurrentUserCheckFromCookies.tsx', { default: () => null });
+    source('src/lib/contexts/TaskDetail/TaskProvider.tsx', { useTaskContext: () => ({ parsedTask: JSON.stringify(task) }) });
+    source('src/lib/contexts/TaskDetail/DescriptionProvider.tsx', { useDescriptionAndCommentsContext: () => ({}) });
+    source('src/hooks/General/useGetUserPreferences.tsx', { useGetUserPreferences: () => ({ data: {} }) });
+    source('src/hooks/General/useMobileVisualViewport.ts', { useMobileVisualViewport: () => null });
+    source('src/components/RTE/Tiptap.ts', { default: () => ({}) });
+    stub(require.resolve('@tanstack/react-query'), { useQueryClient: () => ({}) });
+    stub(require.resolve('next/navigation'), { useRouter: () => ({}), useSearchParams: () => new URLSearchParams() });
+    source('src/components/RTE/Components/EmojiGifPicker.tsx', { default: () => null, OPEN_EMOJI_GIF_PICKER_EVENT: 'test-emoji' });
+    source('src/lib/contexts/TaskDetail/TiptapProvider.tsx', { default: ({ children }) => children });
+    source('src/components/RTE/Components/TiptapBubbleMenu.tsx', { default: () => null });
+    source('src/components/RTE/Components/TiptapMainContainer.tsx', { default: () => null });
+    source('src/components/PageComponents/TaskDetail/CommentAndDescription/DescriptionContainer/InnerHtmlDescription.tsx', { default: () => null });
+    source('src/components/PageComponents/TaskDetail/AI Task Writer/AITaskWriterContainer.tsx', {
+      AITaskWriterWithProvider: ({ initialPrompt, autoTrigger, currentTask }) => React.createElement('div', {
+        'data-existing-writer': currentTask.id, 'data-auto-trigger': autoTrigger,
+      }, initialPrompt),
+    });
+    stub(require.resolve('next/dynamic'), { default: () => () => null });
+    const { triggerAITaskWriter } = jiti(path.join(root, 'src/components/PageComponents/TaskDetail/TopRow/CreateSummaryButton.tsx'));
+    const { useTaskDetailEditorState } = jiti(path.join(root, 'src/components/RTE/useTaskDetailEditorState.tsx'));
+    const { taskDetailEditorPresentation } = jiti(path.join(root, 'src/components/RTE/taskDetailEditorPresentation.tsx'));
+    const { useTaskDetailEditorEvents } = jiti(path.join(root, 'src/components/RTE/useTaskDetailEditorEvents.tsx'));
+    const { TaskDetailEditorPanels } = jiti(path.join(root, 'src/components/RTE/TaskDetailEditorPanels.tsx'));
+    let state;
+    function Probe() {
+      state = useTaskDetailEditorState({ id: 'description', mode: 'read-edit-description', shouldTriggerAiTaskWriter: true });
+      const context = { ...state, divIds: {}, getDefaultMode: () => 'AiTaskWriter', handleFocus() {} };
+      const presentation = { ...context, ...taskDetailEditorPresentation(context) };
+      useTaskDetailEditorEvents({ ...presentation, shouldShowFullAiTaskWriter: false });
+      return React.createElement(TaskDetailEditorPanels, presentation);
+    }
+    await mountProbe(() => React.createElement(Probe));
+    assert.equal(document.querySelector('[data-existing-writer]'), null);
+    const saved = global.CustomEvent;
+    global.CustomEvent = dom.window.CustomEvent;
+    try {
+      await React.act(async () => triggerAITaskWriter('another-editor', 'Ignore this'));
+      assert.equal(document.querySelector('[data-existing-writer]'), null);
+      await React.act(async () => triggerAITaskWriter('description', 'Summarize the existing task'));
+    } finally {
+      if (saved) global.CustomEvent = saved;
+      else delete global.CustomEvent;
+    }
+    assert.deepEqual(state.aiTriggerData, { autoTrigger: true, initialPrompt: 'Summarize the existing task' });
+    assert.equal(state.shouldShowAiTaskWriter, true);
+    const writer = document.querySelector('[data-existing-writer="52"]');
+    assert.ok(writer);
+    assert.equal(writer.textContent, 'Summarize the existing task');
+    assert.equal(writer.dataset.autoTrigger, 'true');
+    assert.equal(values.get('showCommandsAtom').show, false);
+  });
 });
 
 test('lazy attachment previews cannot suspend the palette or lose the Compose draft under either window flag', async (t) => {

@@ -249,6 +249,7 @@ const handler: NextApiHandler = async (
       if (!isEmptyComposeTarget(target)) return res.status(409).json({ message: "This task is no longer empty. Your note is still here." });
       const { updateTaskSingle } = await import("@/utils/controllers/tasks/single");
       const result = await updateTaskSingle({ id: taskId, title, description }, currentUser, agentId, {
+        expectedTitle: target.title,
         expectedDescription: target.description_?.content ?? "",
       });
       if (result.status !== 200) return res.status(result.status).json(result.json);

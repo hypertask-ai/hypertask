@@ -309,6 +309,31 @@ function loadUpdateController(
   };
 }
 
+test("expected title rejects a concurrent title-only edit under the mutation fence", async () => {
+  for (const expectedTitle of ["Enter task title here", ""]) {
+    for (const concurrentEdit of [false, true]) {
+      const { updateTaskSingle, calls } = loadUpdateController(OWNER_PROJECT, OWNER_PROJECT, {
+        initialTask: { title: expectedTitle },
+        stateAtFence: concurrentEdit ? { title: "Human title" } : undefined,
+      });
+      const result = await updateTaskSingle(
+        { id: TASK_ID, title: "AI title" },
+        { id: USER_ID },
+        null,
+        { expectedTitle, expectedDescription: "", skipAutoAssign: true, skipRecurrence: true },
+      );
+      assert.equal(result.status, concurrentEdit ? 409 : 200);
+      if (concurrentEdit) {
+        assert.equal(calls.order, undefined, "no task write or activity on conflict");
+        assert.equal(calls.sideEffects, 0);
+        const preserved = await updateTaskSingle({ id: TASK_ID }, { id: USER_ID }, null, { skipAutoAssign: true, skipRecurrence: true });
+        assert.equal(preserved.json.title, "Human title");
+        assert.equal(preserved.json.description_?.content, "");
+      } else assert.equal(result.json.title, "AI title");
+    }
+  }
+});
+
 test("board moves preserve each previous identity in the task transaction", async () => {
   const { updateTaskSingle, calls, aliases } = loadUpdateController(OWNER_PROJECT, MEMBER_PROJECT);
   for (const [projectId, uniqueIndex, ticketNumber] of [

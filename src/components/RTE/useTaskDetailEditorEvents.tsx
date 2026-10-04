@@ -119,7 +119,7 @@ export function useTaskDetailEditorEvents(context: TaskDetailEditorPresentation)
   useLayoutEffect(() => {
     const handleAITrigger = (event: CustomEvent<AITaskWriterEventDetail>) => {
       if (event.detail.targetId === id) {
-        if (newTaskWindow) {
+        if (newTaskWindow && !event.detail.prompt) {
           setCommands({ show: true, mode: CommandMode.Command, paletteTab: "compose" });
           return;
         }

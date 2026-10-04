@@ -148,12 +148,12 @@ export function useTaskDetailEditorState({
   const composeEnabled = useFlag(HTPR_6929_COMPOSE_TASK_WRITER_FLAG);
   const newTaskWindowFlag = useFlag(HTPR_6937_NEW_TASK_WINDOW_FLAG);
   const [writerOpen, setShouldShowAITaskWriter] = useState(shouldTriggerAiTaskWriter);
-  let shouldShowAiTaskWriter = writerOpen;
-  if (composeEnabled && newTaskWindowFlag) shouldShowAiTaskWriter = false;
   const [aiTriggerData, setAiTriggerData] = useState({
     autoTrigger: false,
     initialPrompt: ''
   });
+  let shouldShowAiTaskWriter = writerOpen;
+  if (composeEnabled && newTaskWindowFlag && !(aiTriggerData.autoTrigger && aiTriggerData.initialPrompt)) shouldShowAiTaskWriter = false;
   const suggestReplyAbortRef = useRef<AbortController | null>(null);
   const shouldShowInlineDraftAiRef = useRef(false);
   const [showSetLinkModal, setShowSetLinkModal] = useRecoilState(showSetLinkModalAtom);

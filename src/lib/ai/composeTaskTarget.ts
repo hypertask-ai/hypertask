@@ -7,5 +7,5 @@ export function isEmptyComposeTarget(task: {
   const description = task.description_?.content ?? task.description ?? "";
   return ["", "enter task title here", "new task"].includes(title) &&
     !/<(?:img|video|audio|iframe|embed|hr)\b/i.test(description) &&
-    !description.replace(/<[^>]*>/g, "").replace(/&nbsp;|&#160;/g, " ").trim();
+    !description.split(/<[^>]*>/).join("").replace(/&nbsp;|&#160;/g, " ").trim();
 }
