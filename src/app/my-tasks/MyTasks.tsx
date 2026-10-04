@@ -668,9 +668,9 @@ const MyTasks = ({
       if (boardId === null) next.delete("board");
       else next.set("board", String(boardId));
       const query = next.toString();
-      router.replace(`/my-tasks${query ? `?${query}` : ""}`, { scroll: false });
+      window.history.replaceState(null, "", `/my-tasks${query ? `?${query}` : ""}`);
     },
-    [router, searchParams]
+    [searchParams]
   );
 
   const replaceParams = useCallback(
