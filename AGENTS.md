@@ -19,7 +19,7 @@ CLI tickets are fixed in a **different repository**; server-side MCP/API changes
 - Tests: `zig build test` and `python3 scripts/parity_test.py`
 - MCP/API in this app repo still applies for server-side `/api/mcp/*` changes
 
-Work a CLI ticket in a worktree off `hypertask-ai/cli` the same way you would here: branch from `origin/main`, fix, test, PR, then comment the PR link on the ticket. Do not try to fix a CLI bug inside this repository, and do not park it as blocked. The Node CLI (`@hypertask/hypertask_cli`) is retired; do not extend it. A hidden `htz` symlink still points at `hypertask` for old scripts — do not use `htz` in new work.
+Work a CLI ticket in a worktree off `hypertask-ai/cli` the same way you would here: branch from `origin/main`, fix, test, PR, then comment the PR link on the ticket. Do not try to fix a CLI bug inside this repository, and do not park it as blocked. The Node CLI (`@hypertask/hypertask_cli`) is retired; do not extend it. A hidden `htz` symlink still points at `hypertask` for old scripts - do not use `htz` in new work.
 
 The product's managed-agents feature, agents API, agent chat and MCP tokens remain supported. The following token guidance is for those product integrations, not an alternative board-write identity for sessions; session writes still go only through `vcc`.
 
@@ -56,11 +56,11 @@ hypertask capabilities --json
 ```
 
 The CLI binaries currently available on the dev machine are:
-- `hypertask` — native Hypertask CLI (Zig, `hypertask 0.2.0 (zig)`); talks to `/api/mcp/*` and reads `~/.hypertask/config.json`.
-- `vcc` — board-write command for Valentin's Claude Code and Codex sessions, using identity "Valentins Claude Code". Use it for every ticket, comment, assignment and move; the plain `hypertask` CLI is read-only for sessions.
-- `ht` — low-level MCP helper (`ht METHOD /mcp/path [json-body]`).
-- `openwiki` — repo documentation CLI; use headless `openwiki -p "..."` / `openwiki --update -p "..."`.
-- `zsb` — browser automation/debugging CLI for the active remote browser/tab.
+- `hypertask` - native Hypertask CLI (Zig, `hypertask 0.2.0 (zig)`); talks to `/api/mcp/*` and reads `~/.hypertask/config.json`.
+- `vcc` - board-write command for Valentin's Claude Code and Codex sessions, using identity "Valentins Claude Code". Use it for every ticket, comment, assignment and move; the plain `hypertask` CLI is read-only for sessions.
+- `ht` - low-level MCP helper (`ht METHOD /mcp/path [json-body]`).
+- `openwiki` - repo documentation CLI; use headless `openwiki -p "..."` / `openwiki --update -p "..."`.
+- `zsb` - browser automation/debugging CLI for the active remote browser/tab.
 
 A hidden `htz -> hypertask` symlink remains for old scripts. Do not use `htz` in new commands or docs.
 
@@ -71,9 +71,9 @@ When referencing a Hypertask ticket in conversation, write the full clickable ap
 ## Ticket comments
 
 - `--text` takes either plain text (auto-converted to `<p>`/`<ul>` HTML) **or** complete, well-formed HTML (passed through as-is). Don't mix them: once `--text` contains any HTML tag (e.g. an `<a>`), the backend stops converting markdown, so bare newlines won't render as paragraphs and the comment looks unformatted.
-- For links (PRs, related tickets, commits), use HTML anchors — bare URLs and `#1234` are not auto-linked: `<a href="https://github.com/valentinyeo/hypertasks/pull/1288">PR #1288</a>`.
+- For links (PRs, related tickets, commits), use HTML anchors - bare URLs and `#1234` are not auto-linked: `<a href="https://github.com/valentinyeo/hypertasks/pull/1288">PR #1288</a>`.
 - Supported inline tags: `<p>`, `<strong>`, `<code>`, `<a>`, `<ul>`/`<li>`, `<h2>`.
-- Write comments only via `vcc` (identity "Valentins Claude Code"), never in Valentin's name. Edit in place with `vcc comment update <id> --text ...` instead of deleting and reposting — keeps the thread tidy.
+- Write comments only via `vcc` (identity "Valentins Claude Code"), never in Valentin's name. Edit in place with `vcc comment update <id> --text ...` instead of deleting and reposting - keeps the thread tidy.
 - Keep it short: one summary line, then **Gap / Fix / Status**. Skip the wall of explanation.
 - Before moving a fixed ticket to **Done**, its final comment must explain **what changed in plain language**. In 1–2 sentences, state the user-visible problem, what now works differently, and what the user will notice. A PR link, file list, or technical-only explanation does not satisfy this rule.
 
@@ -84,7 +84,7 @@ The moment you actually start working a ticket (writing code / doing the fix, no
 1. Claim via `vcc`: `vcc comment add <PREFIX-NNN> --text "<p><strong>Claimed.</strong> Session working it now.</p>"`. **No session ever writes in Valentin's name: no ticket, comment, assignment or move goes through his user token. All board writes use `vcc`, identity "Valentins Claude Code". Never assign userId 6. Only Valentin assigns himself. A ticket he assigned himself or moved by hand stays exactly as he left it.**
 2. Move it to In Progress: `vcc task move <PREFIX-NNN> --section "In Progress"`.
 
-Signal: **Claimed. comment + In Progress = in flight, do not touch.** Abdul self-assigns tickets he picks up; **never work a ticket assigned to Abdul** — leave it and pick another.
+Signal: **Claimed. comment + In Progress = in flight, do not touch.** Abdul self-assigns tickets he picks up; **never work a ticket assigned to Abdul** - leave it and pick another.
 
 ## Repository Workflow
 
@@ -99,11 +99,25 @@ Follow the branch/deploy model from `CLAUDE.md` and `openwiki/deployment.md`:
 - Branches older than 2026-07-06 should be rebased onto `origin/production` before preview work.
 - Multiple sessions and worktrees may be active at once. Never use `git stash`; it is shared across worktrees. Never reset, checkout, or revert files you did not intentionally change.
 - Before committing, inspect `git status --short --branch` and separate your changes from pre-existing dirty worktree changes.
-- While a Vercel preview is still building/queued, never poll it by repeatedly navigating/reloading a browser tab (zsb/agent-browser/Playwright) — on zsb that's Valentin's real Edge pane, and looping reloads a heavy React app for no gain. Poll headlessly instead (`curl -s -o /dev/null -w "%{http_code}" <preview-url>` or `gh pr checks`), and only open the browser once the deployment is actually ready to verify.
+- While a Vercel preview is still building/queued, never poll it by repeatedly navigating/reloading a browser tab (zsb/agent-browser/Playwright) - on zsb that's Valentin's real Edge pane, and looping reloads a heavy React app for no gain. Poll headlessly instead (`curl -s -o /dev/null -w "%{http_code}" <preview-url>` or `gh pr checks`), and only open the browser once the deployment is actually ready to verify.
 
 ## CI contract
 
 Read the [canonical CI contract](https://hypertask.app/wiki/deployment) before changing workflows, runner services, rulesets, required checks, or preview behavior. App CI runs on GitHub-hosted `ubuntu-latest` runners (the repository is public, so hosted minutes are free). Preview verification is opt-in: use the automatic branch preview only when requested or justified by runtime risk. Do not treat it as a merge gate, and do not create extra preview deploys. Do not add a VPN runner or another host implicitly.
+
+## Reuse existing UI (enforced)
+
+Before UI code, follow `.claude/skills/reuse-existing-ui/SKILL.md`. The supported choice UI is the Ctrl+K command system, not a new dropdown. Shared kanban controls already support controlled callers; do not copy their markup.
+
+| Rule | Supported implementation | Enforcement in required `ci-tests` |
+|---|---|---|
+| No new native selects, dropdowns or floating choice panels | Ctrl+K in `src/components/Modals/commands/HTC/commands.tsx`; `OptionPickerModal` for options, `AssignModal` for board scope, `TableColumnsPicker` for columns, `BoardPriorityMode` for board sort, existing filter modals for filters | `hypertask-ui/no-new-choice-menus` in `npm run lint` |
+| No parallel Save, Reset or Save as view controls | `SaveView` from `src/components/PageComponents/Kanban/HeaderComponents/SaveViewHeaderKanban.tsx` and `SaveViewModal` from `src/components/Modals/ViewModals/SaveViewModal.tsx` | `hypertask-ui/no-new-view-save-actions` in `npm run lint` |
+| No new native checkboxes/radios, custom CheckRow controls, check icons or checkmark glyphs | `OptionPickerModal` with `checked`, the existing scope/column pickers, or `SelectionCheckbox` from `src/components/Common/selection-checkbox.tsx` for bulk rows | `hypertask-ui/no-new-selection-styles` in `npm run lint` |
+
+`eslint-local-rules/ui-patterns-baseline.json` records existing production debt per file and rule. New files get zero allowance; unchanged debt and removals pass. When removing legacy controls, lower their baseline count in the same PR so the old allowance cannot be reused. Never raise counts or add a copied file to the baseline to pass lint. Only the exact shared implementation files own raw save/selection rendering. An exceptional new paradigm needs a human-approved reason and expiry date on its offending line, not a blanket lint disable. These syntax checks supplement semantic review; they do not prove that a custom drawing or dynamically named control reuses the house UI.
+
+Run `npm run lint` and `node --test tests/ui-patterns.test.cjs`. The tests include historical reproductions from PRs #547, #571, #578 and #706, allowed shared imports, aliases and baseline overflow. See https://app.hypertask.ai/detail/project-4060/194.
 
 ## Stack Orientation
 

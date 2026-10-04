@@ -56,9 +56,9 @@ const noNewChoiceMenus = ratchet(
   (node, source, imports) => {
     const tag = name(node.name);
     const binding = imports.get(tag.split(".")[0]);
-    if (binding?.source === "lucide-react") return false;
+    if (["lucide-react", "@/components/Common/selection-checkbox"].includes(binding?.source)) return false;
     const imported = binding?.imported === "default" ? binding.source : binding?.imported;
-    if (tag === "select" || /(?:Dropdown|Select|Listbox|Menu|Popover)(?:\.|$)/.test(tag) || /(?:dropdown|select|listbox|menu|popover)/i.test(imported ?? "")) return true;
+    if (tag === "select" || [tag, imported ?? ""].some((value) => /(?:Dropdown|Select|Listbox|Menu|Popover)(?:\.|$)/.test(value)) || /(?:^|[\/.-])(?:react-)?(?:dropdown|select|listbox|menu|popover)(?:$|[\/.-])/i.test(binding?.source ?? "")) return true;
     if (["menu", "listbox"].includes(attribute(node, "role", source))) return true;
     const classes = attribute(node, "className", source);
     const body = source.getText(node.parent);
@@ -85,11 +85,36 @@ const noNewViewSaveActions = ratchet(
   ],
 );
 
+const noNewSelectionStyles = ratchet(
+  "no-new-selection-styles",
+  'Use OptionPickerModal options with checked for choices, TableColumnsPicker for columns, or AssignModal for scope. For bulk row selection reuse SelectionCheckbox from @/components/Common/selection-checkbox. Do not add a native checkbox/radio, custom CheckRow, check icon or checkmark glyph. Existing per-file debt cannot increase.',
+  (node, source, imports) => {
+    const tag = name(node.name);
+    const binding = imports.get(tag.split(".")[0]);
+    if (binding?.source === "@/components/Common/selection-checkbox") return false;
+    if (["checkbox", "radio"].includes(attribute(node, "type", source)) || ["checkbox", "radio"].includes(attribute(node, "role", source))) return true;
+    const imported = binding?.imported === "default" ? binding.source : binding?.imported;
+    if (/(?:Checkbox|CheckBox|CheckRow|Checkmark|CheckMark|CheckSquare)/i.test(`${tag} ${imported ?? ""}`)) return true;
+    if (binding?.source === "lucide-react" && ["Check", "CheckIcon", "CheckSquare", "SquareCheck"].includes(binding.imported)) return true;
+    return (node.parent.children ?? []).some((child) =>
+      (child.type === "JSXText" && /[✓✔☑]/.test(child.value)) ||
+      (child.type === "JSXExpressionContainer" && child.expression.type === "Literal" && /[✓✔☑]/.test(String(child.expression.value)))
+    );
+  },
+  [
+    "src/components/Modals/OptionPicker/index.tsx",
+    "src/components/PageComponents/Kanban/TableView/TableColumnsPicker.tsx",
+    "src/components/Modals/AssignToUser/AssignToUser.tsx",
+    "src/components/Common/selection-checkbox.tsx",
+  ],
+);
+
 export const uiPatternsPlugin = {
   meta: { name: "hypertask-ui-reuse", version: "1.0.0" },
   rules: {
     "no-new-choice-menus": noNewChoiceMenus,
     "no-new-view-save-actions": noNewViewSaveActions,
+    "no-new-selection-styles": noNewSelectionStyles,
   },
 };
 

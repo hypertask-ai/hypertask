@@ -103,3 +103,35 @@ test("allows shared view save controls and ordinary non-view form saves", async 
   assert.deepEqual(await lint(current, filename, "no-new-view-save-actions"), []);
   assert.equal((await lint(`${current}\nconst extra = <button>Save as view</button>;`, filename, "no-new-view-save-actions")).length, 1);
 });
+
+// HTPR-6422, ee15925f7 (#547): native CheckRow implementation.
+// HTPR-6461, 95f3471b5 (#578): new Show snoozed uses of that custom CheckRow.
+test("rejects historical native checkbox and repeated custom CheckRow usage", async () => {
+  for (const code of [
+    '<input type="checkbox" checked={checked} onChange={onChange} className="size-3.5 accent-shadcn-primary" />;',
+    '<CheckRow checked={config.filters.showSnoozed === true} label="Show snoozed" onChange={onChange} />;',
+    '<button role="checkbox" aria-checked={checked} />;',
+    '<input type="radio" />;',
+    'import { Check as Tick } from "lucide-react"; <Tick />;',
+    '<span>✓</span>;',
+    '<span>{"✔"}</span>;',
+  ]) {
+    const messages = await lint(code, undefined, "no-new-selection-styles");
+    assert.equal(messages.length, 1, code);
+    assert.match(messages[0].message, /OptionPickerModal.*SelectionCheckbox/);
+  }
+});
+
+test("selection reuse is allowed but new custom styles in a legacy file fail", async () => {
+  assert.deepEqual(await lint('import SelectionCheckbox from "@/components/Common/selection-checkbox"; <SelectionCheckbox isChecked={selected} onClick={toggle} />;'), []);
+  const filename = "src/app/my-tasks/MyTasksViewControls.tsx";
+  const current = readFileSync(resolve(root, filename), "utf8");
+  assert.deepEqual(await lint(current, filename), []);
+  assert.equal((await lint(`${current}\nconst extra = <input type="checkbox" />;`, filename, "no-new-selection-styles")).length, 1);
+});
+
+test("only the exact shared implementations own raw save and selection rendering", async () => {
+  assert.deepEqual(await lint('<button>Save as view</button>;', "src/components/PageComponents/Kanban/HeaderComponents/SaveViewHeaderKanban.tsx", "no-new-view-save-actions"), []);
+  assert.deepEqual(await lint('<input type="checkbox" />;', "src/components/Modals/OptionPicker/index.tsx", "no-new-selection-styles"), []);
+  assert.equal((await lint('<input type="checkbox" />;', "src/components/Modals/OptionPicker/Copy.tsx", "no-new-selection-styles")).length, 1);
+});
