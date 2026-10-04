@@ -63,6 +63,8 @@ import {
   HTPR_6662_AGENT_LOG_NAME_FLAG,
   HTPR_6861_MOBILE_PAGE_BACK_ROW_FLAG,
   INBOX_ARCHIVE_CLUSTER_FLAG,
+  HTPR_6567_COMMAND_SCOPE_PICKER_FLAG,
+  MY_TASKS_FILTER_PARITY_FLAG,
   MY_TASKS_TABLE_COLUMNS_FLAG,
   MY_TASKS_VIEWS_FLAG,
 } from "@/lib/flags/keys";
@@ -138,6 +140,8 @@ const Commands = (props: Props) => {
   const copyCurrentUrlEnabled = useFlag("htpr-6112-copy-current-url");
   const inboxClusterEnabled = useFlag(INBOX_ARCHIVE_CLUSTER_FLAG);
   const myTasksViewsEnabled = useFlag(MY_TASKS_VIEWS_FLAG);
+  const commandScopePickerEnabled = useFlag(HTPR_6567_COMMAND_SCOPE_PICKER_FLAG);
+  const myTasksFilterParityEnabled = useFlag(MY_TASKS_FILTER_PARITY_FLAG);
   const myTasksTableColumnsEnabled = useFlag(MY_TASKS_TABLE_COLUMNS_FLAG);
   const commentLongPressEnabled = useFlag(HTPR_6514_COMMENT_LONG_PRESS_FLAG);
   const mobilePageBackRowEnabled = useFlag(HTPR_6861_MOBILE_PAGE_BACK_ROW_FLAG);
@@ -177,6 +181,17 @@ const Commands = (props: Props) => {
         commandMode: CommandMode.GoToBoard,
         keywords: `${project.title} board project go open switch`,
       }));
+    let scopeCommand: ICommandList | undefined;
+    if (commandScopePickerEnabled && onMyTasks && myTasksViewsEnabled && myTasksFilterParityEnabled) {
+      scopeCommand = {
+        key: "myTasksScope",
+        name: "Scope",
+        // Keep the board row's mobile icon; selection is handled by key below.
+        commandMode: CommandMode.GoToBoard,
+        keywords: "scope boards project select filter my tasks",
+      };
+    }
+    if (scopeCommand) boardCommands.unshift(scopeCommand);
     // HTPR-6160: the inbox sorts by recency, so the noisiest tickets are invisible
     // until you scroll. These rank by pile size instead. Own group: every group's
     // commandLists get frecency-sorted below, and brand-new keys score 0.
@@ -365,6 +380,8 @@ const Commands = (props: Props) => {
     onCalendar,
     onMyTasks,
     myTasksViewsEnabled,
+    commandScopePickerEnabled,
+    myTasksFilterParityEnabled,
     myTasksTableColumnsEnabled,
     projects,
     showByokApiKeys,
@@ -550,6 +567,11 @@ const Commands = (props: Props) => {
         void pageActions.onDelete();
         return;
       }
+      if (command.key === "myTasksScope") {
+        resetShowCommands();
+        if (onMyTasks && commandScopePickerEnabled) window.dispatchEvent(new Event("my-tasks-scope-picker"));
+        return;
+      }
       if (command.key === "toggleTableTitleWrap") {
         setTableTitleWrap((prev) => !prev);
         resetShowCommands();
@@ -592,7 +614,10 @@ const Commands = (props: Props) => {
   const commandGroups = (
     <CommandGroups
       handleMouseMove={handleMouseMove}
-      filterCommands={filterCommands}
+      filterCommands={commandScopePickerEnabled ? filterCommands : filterCommands.map((filteredGroup) => ({
+        ...filteredGroup,
+        commandLists: filteredGroup.commandLists.filter((command) => command.key !== "myTasksScope"),
+      }))}
       selectedCommand={selectedCommand}
       handleMouseLeave={handleMouseLeave}
       handleMouseEnter={handleMouseEnter}

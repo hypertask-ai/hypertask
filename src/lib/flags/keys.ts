@@ -76,6 +76,7 @@ export const HTPR_6879_SEARCH_ESC_BACK_FLAG = "htpr-6879-search-esc-back";
 export const HTPR_6880_SEARCH_COMMENTER_FLAG = "htpr-6880-search-commenter";
 export const HTPR_6881_SEARCH_FUZZY_PERSON_FLAG = "htpr-6881-search-fuzzy-person";
 export const HTPR_6885_SINGLE_UNDO_TOAST_FLAG = "htpr-6885-single-undo-toast";
+export const HTPR_6567_COMMAND_SCOPE_PICKER_FLAG = "htpr-6567-command-scope-picker";
 export const MY_TASKS_VIEWS_FLAG = "htpr-6422-my-tasks-views";
 export const MY_TASKS_BULK_SELECTION_FLAG =
   "htpr-6444-my-tasks-bulk-selection";

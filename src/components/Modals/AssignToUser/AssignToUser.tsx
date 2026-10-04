@@ -32,6 +32,8 @@ import {
   sortAssigneeOptionsByRecency,
 } from "@/lib/assigneeRecency";
 import UserAvatar from "@/components/Common/UserAvatar";
+import { useFlag } from "@/hooks/useFlag";
+import { HTPR_6567_COMMAND_SCOPE_PICKER_FLAG } from "@/lib/flags/keys";
 
 interface IProps {
   onClose: any; // Change 'any' to the specific function type if possible
@@ -51,6 +53,10 @@ interface IProps {
   extraUsers?: IUser[];
   bulkTaskIds?: number[];
   onBulkAssign?: (user: IUser | IAgent) => Promise<void>;
+  boardPicker?: {
+    options: { id: number | null; label: string; checked: boolean }[];
+    onSelect: (id: number | null) => void;
+  };
 }
 
 const AssignModal = ({
@@ -67,7 +73,10 @@ const AssignModal = ({
   extraUsers = [],
   bulkTaskIds,
   onBulkAssign,
+  boardPicker: boardPickerProp,
 }: IProps) => {
+  const commandScopePickerEnabled = useFlag(HTPR_6567_COMMAND_SCOPE_PICKER_FLAG);
+  const boardPicker = commandScopePickerEnabled ? boardPickerProp : undefined;
   const [selectedIndex, setSelectedIndex] = useState(0);
   const [hoveredIndex, setHoveredIndex] = useState<number | null>(null);
   const { handleMouseEnter, handleMouseLeave, handleMouseMove } =
@@ -105,12 +114,18 @@ const AssignModal = ({
   const { data: membersAndOwner } = useGetAllMembersForAssign(
     ["assign", project?.id ?? currentProject?.id],
     project?.id ?? currentProject?.id!,
+    undefined,
+    { enabled: !boardPicker },
+  );
+  const filteredBoards = boardPicker?.options.filter((board) =>
+    board.label.toLowerCase().includes(assignKeyword.trim().toLowerCase()),
   );
 
   const handleChange = (e: any) => {
     setAssignKeyword(e.target.value);
     setSelectedIndex(0);
     setHoveredIndex(null);
+    if (boardPicker) return;
     setFilteredUsers(() =>
       finalArray.filter((user) =>
         e.target.value
@@ -174,6 +189,7 @@ const AssignModal = ({
   };
 
   const onOpenHandler = () => {
+    if (boardPicker) return;
     const members: IUser[] =
       membersAndOwner.members?.map(({ user }: { user: IUser }) => user) || [];
     const owner: IUser | undefined = membersAndOwner.owner;
@@ -267,6 +283,25 @@ const AssignModal = ({
   };
 
   const handleKeyDown = (event: any) => {
+    if (boardPicker && filteredBoards) {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        event.stopImmediatePropagation();
+        onClose();
+      } else if (event.key === "Enter" && filteredBoards[selectedIndex]) {
+        event.preventDefault();
+        boardPicker.onSelect(filteredBoards[selectedIndex].id);
+      } else if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+        event.preventDefault();
+        const next = selectedIndex + (event.key === "ArrowDown" ? 1 : -1);
+        if (next >= 0 && next < filteredBoards.length) {
+          setSelectedIndex(next);
+          setHoveredIndex(null);
+          document.getElementById(`scope-board-${next}`)?.scrollIntoView({ block: "nearest" });
+        }
+      }
+      return;
+    }
     if (event.keyCode === KeyCodes.ESCAPE) {
       event.preventDefault();
       onClose();
@@ -317,11 +352,11 @@ const AssignModal = ({
   };
 
   useEffect(() => {
-    document.addEventListener("keydown", handleKeyDown);
+    document.addEventListener("keydown", handleKeyDown, !!boardPicker);
     return () => {
-      document.removeEventListener("keydown", handleKeyDown);
+      document.removeEventListener("keydown", handleKeyDown, !!boardPicker);
     };
-  }, [filteredUsers, selectedIndex]);
+  }, [filteredUsers, filteredBoards, selectedIndex]);
 
   useEffect(() => {
     onOpenHandler();
@@ -378,6 +413,9 @@ const AssignModal = ({
       </div>
     );
 
+  let placeholder = includePeople ? "Type user name" : "Type agent name";
+  if (boardPicker) placeholder = "Type board name";
+
   return (
     <ModalContainerCustom
       id="assignees-modal"
@@ -393,15 +431,36 @@ const AssignModal = ({
         <ModalInput
           onChange={handleChange}
           value={assignKeyword}
-          placeholder={includePeople ? "Type user name" : "Type agent name"}
+          placeholder={placeholder}
           autofocus={true}
         />
         <ModalListContainer className="max-h-[364px]"
           handleMouseMove={handleMouseMove}
           id="assignees-list"
         >
-          {renderSection("People", people, 0)}
-          {renderSection("Agents", agents, people.length)}
+          {commandScopePickerEnabled && boardPicker ? (
+            <div>
+              <h3 className="px-4 pt-2.5 pb-1 text-text-light-gray font-semibold text-micro uppercase tracking-wider">Boards</h3>
+              {filteredBoards?.map((board, index) => (
+                <ModalRowElementContainer
+                  key={board.id ?? "all"}
+                  id={`scope-board-${index}`}
+                  handleMouseLeave={handleMouseLeave}
+                  onMouseEnter={() => handleMouseEnter(index)}
+                  onClick={() => boardPicker.onSelect(board.id)}
+                  isSelected={hoveredIndex === index || (hoveredIndex === null && selectedIndex === index)}
+                >
+                  <p className="font-medium">{board.label}</p>
+                  {board.checked ? <Check size={16} strokeWidth={1.75} /> : null}
+                </ModalRowElementContainer>
+              ))}
+            </div>
+          ) : (
+            <>
+              {renderSection("People", people, 0)}
+              {renderSection("Agents", agents, people.length)}
+            </>
+          )}
         </ModalListContainer>
       </ModalBody>
     </ModalContainerCustom>

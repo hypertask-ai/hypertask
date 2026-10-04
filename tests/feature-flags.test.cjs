@@ -420,6 +420,7 @@ test("declared flags remain listed with ticket details and can be changed", asyn
         mode: "OWNER_AND_QA",
         updatedAt: null,
       },
+      { key: "htpr-6567-command-scope-picker", mode: "OWNER_AND_QA", updatedAt: null },
       { key: "htpr-6662-agent-log-name", mode: "OWNER_AND_QA", updatedAt: null },
       {
         key: "htpr-6688-search-autocomplete",
