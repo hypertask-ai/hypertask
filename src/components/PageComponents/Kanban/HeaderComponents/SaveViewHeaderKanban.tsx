@@ -30,7 +30,9 @@ export const SaveView = (props: BoardProps | ControlledProps) => {
   return <BoardSaveView {...props} />;
 };
 
-const ShellSaveView = ({ dirty: isDirty, busy, onReset, onSaveClick }: ControlledProps) => (
+const ShellSaveView = ({ dirty: isDirty, busy, onReset, onSaveClick }: ControlledProps) => {
+  const styleGuideEnabled = useFlag(HTPR_6930_MY_TASKS_KANBAN_REUSE_FLAG);
+  return (
   <div
     aria-hidden={!isDirty}
     className={`flex h-8 shrink-0 items-center gap-2 overflow-hidden whitespace-nowrap text-content font-medium transition-all duration-150 ${
@@ -44,7 +46,9 @@ const ShellSaveView = ({ dirty: isDirty, busy, onReset, onSaveClick }: Controlle
       tabIndex={isDirty ? 0 : -1}
       disabled={busy}
       onClick={onSaveClick}
-      className="h-8 rounded-full bg-hover-active px-2 text-[#E28C28] transition-colors hover:text-white-black"
+      className={styleGuideEnabled
+        ? "h-8 rounded-[4px] bg-shadcn-primary px-2 text-primary-foreground transition-colors hover:opacity-90"
+        : "h-8 rounded-full bg-hover-active px-2 text-[#E28C28] transition-colors hover:text-white-black"}
     >
       Save view
     </button>
@@ -53,12 +57,15 @@ const ShellSaveView = ({ dirty: isDirty, busy, onReset, onSaveClick }: Controlle
       tabIndex={isDirty ? 0 : -1}
       disabled={busy}
       onClick={onReset}
-      className="h-8 rounded-full bg-hover-active px-2 text-text-light-gray transition-colors hover:text-white-black"
+      className={styleGuideEnabled
+        ? "h-8 rounded-[4px] px-2 text-text-light-gray transition-colors hover:bg-hover-active hover:text-white-black"
+        : "h-8 rounded-full bg-hover-active px-2 text-text-light-gray transition-colors hover:text-white-black"}
     >
       Reset
     </button>
   </div>
-);
+  );
+};
 
 const BoardSaveView = ({
   project,
