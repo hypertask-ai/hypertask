@@ -1,11 +1,17 @@
 "use client";
 
+import { ModalRowElementContainer } from "@/components/Common/CommonModalComponents";
+import { ViewControlButton } from "@/components/PageComponents/Kanban/HeaderComponents/ShellViewControls";
+import MyTasksInvolvementPicker from "./MyTasksInvolvementPicker";
+import MyTasksGroupPicker from "./MyTasksGroupPicker";
+import MyTasksSortPicker from "./MyTasksSortPicker";
 import AssignModal from "@/components/Modals/AssignToUser/AssignToUser";
 import useClickOutside from "@/hooks/MultiPages/useClickOutside";
 import { useFlag } from "@/hooks/useFlag";
 import { MOBILE_TARGET } from "@/lib/configs/general.config";
 import { EstimateConstants, PriorityConstants } from "@/lib/constants/constants";
 import {
+  HTPR_6930_MY_TASKS_KANBAN_REUSE_FLAG,
   HTPR_6567_COMMAND_SCOPE_PICKER_FLAG,
   MY_TASKS_FILTER_PARITY_FLAG,
   MY_TASKS_SCOPES_FLAG,
@@ -29,7 +35,7 @@ import {
   type MyTasksGroupBy,
   type MyTasksViewConfig,
 } from "@/models/MyTasksView";
-import { ArrowUpDown, Columns3, Layers, LayoutGrid, SlidersHorizontal, UserRound } from "lucide-react";
+import { Check, ArrowUpDown, Columns3, Layers, LayoutGrid, SlidersHorizontal, UserRound } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 
 interface Props {
@@ -88,7 +94,27 @@ export const CheckRow = ({
   checked: boolean;
   label: string;
   onChange: () => void;
-}) => (
+}) => {
+  const kanbanReuseEnabled = useFlag(HTPR_6930_MY_TASKS_KANBAN_REUSE_FLAG);
+  return kanbanReuseEnabled ? (
+    <ModalRowElementContainer
+      isSelected={false}
+      role="checkbox"
+      aria-checked={checked}
+      tabIndex={0}
+      onClick={onChange}
+      onKeyDown={(event) => {
+        if (event.key === " " || event.key === "Enter") {
+          event.preventDefault();
+          event.stopPropagation();
+          onChange();
+        }
+      }}
+    >
+      <span>{label}</span>
+      {checked && <Check size={16} strokeWidth={1.75} />}
+    </ModalRowElementContainer>
+  ) : (
   <label className="flex cursor-pointer items-center gap-2 rounded-[4px] px-1 py-1 text-content text-white-black hover:bg-hover-active">
     <input
       type="checkbox"
@@ -98,7 +124,8 @@ export const CheckRow = ({
     />
     <span className="min-w-0 truncate">{label}</span>
   </label>
-);
+  );
+};
 
 const inputClass =
   "h-8 rounded-[4px] border-0 bg-transparent px-2 text-content text-white-black outline-none focus:bg-active-modal-element";
@@ -116,7 +143,9 @@ const MyTasksViewControls = ({
 }: Props) => {
   const myTasksViewsEnabled = useFlag(MY_TASKS_VIEWS_FLAG);
   const filterParityEnabled = useFlag(MY_TASKS_FILTER_PARITY_FLAG);
-  const commandScopePickerEnabled = useFlag(HTPR_6567_COMMAND_SCOPE_PICKER_FLAG);
+  const kanbanReuseEnabled = useFlag(HTPR_6930_MY_TASKS_KANBAN_REUSE_FLAG);
+  const commandScopePickerFlag = useFlag(HTPR_6567_COMMAND_SCOPE_PICKER_FLAG);
+  const commandScopePickerEnabled = commandScopePickerFlag || kanbanReuseEnabled;
   const myTasksTableColumnsFlag = useFlag(MY_TASKS_TABLE_COLUMNS_FLAG);
   const myTasksScopesFlag = useFlag(MY_TASKS_SCOPES_FLAG);
   const myTasksSnoozeFlag = useFlag(MY_TASKS_SNOOZE_FLAG);
@@ -152,6 +181,28 @@ const MyTasksViewControls = ({
     window.addEventListener("my-tasks-scope-picker", openScope);
     return () => window.removeEventListener("my-tasks-scope-picker", openScope);
   }, [commandScopePickerEnabled, myTasksViewsEnabled, filterParityEnabled]);
+
+  useEffect(() => {
+    if (!kanbanReuseEnabled) return;
+    const openPicker = (picker: "involvement" | "sort" | "group") => {
+      setScopeOpen(false);
+      setFilterOpen(false);
+      setInvolvementOpen(picker === "involvement" && myTasksScopesEnabled);
+      setSortOpen(picker === "sort" && myTasksViewsEnabled);
+      setGroupOpen(picker === "group" && timeGroupOn);
+    };
+    const openInvolvement = () => openPicker("involvement");
+    const openSort = () => openPicker("sort");
+    const openGroup = () => openPicker("group");
+    window.addEventListener("my-tasks-involvement-picker", openInvolvement);
+    window.addEventListener("my-tasks-sort-picker", openSort);
+    window.addEventListener("my-tasks-group-picker", openGroup);
+    return () => {
+      window.removeEventListener("my-tasks-involvement-picker", openInvolvement);
+      window.removeEventListener("my-tasks-sort-picker", openSort);
+      window.removeEventListener("my-tasks-group-picker", openGroup);
+    };
+  }, [kanbanReuseEnabled, myTasksScopesEnabled, myTasksViewsEnabled, timeGroupOn]);
 
   const scopes = normalizeMyTasksScopes(config.scopes);
   const involvementCount =
@@ -293,7 +344,7 @@ const MyTasksViewControls = ({
           <CheckRow
             checked={config.boardIds === null}
             label="All boards"
-            onChange={() => setBoards(null)}
+            onChange={() => setBoards(kanbanReuseEnabled && config.boardIds === null ? [] : null)}
           />
           <div className="max-h-36 overflow-y-auto">
             {boards.map((board) => (
@@ -383,7 +434,10 @@ const MyTasksViewControls = ({
               <span className="text-meta font-semibold">{involvementCount}</span>
             )}
           </button>
-          {involvementOpen && (
+          {kanbanReuseEnabled && involvementOpen && (
+            <MyTasksInvolvementPicker scopes={scopes} onToggle={toggleScope} onClose={() => setInvolvementOpen(false)} />
+          )}
+          {!kanbanReuseEnabled && involvementOpen && (
             <div className="absolute right-0 top-full z-40 mt-1 w-56 space-y-1 rounded-[5px] bg-modalBackground p-2 shadow-md">
               <Field label="Involvement">
                 {INVOLVEMENT_OPTIONS.map((option) => (
@@ -448,7 +502,7 @@ const MyTasksViewControls = ({
                     { id: null, label: "All boards", checked: config.boardIds === null },
                     ...boards.map((board) => ({ id: board.id, label: board.title, checked: selectedBoardIds.includes(board.id) })),
                   ],
-                  onSelect: (id) => id === null ? setBoards(null) : toggleBoard(id),
+                  onSelect: (id) => id === null ? setBoards(kanbanReuseEnabled && config.boardIds === null ? [] : null) : toggleBoard(id),
                 }}
               />
             ) : scopePanel)}
@@ -509,7 +563,7 @@ const MyTasksViewControls = ({
                   <CheckRow
                     checked={config.boardIds === null}
                     label="All boards"
-                    onChange={() => setBoards(null)}
+                    onChange={() => setBoards(kanbanReuseEnabled && config.boardIds === null ? [] : null)}
                   />
                   <div className="max-h-36 overflow-y-auto">
                     {boards.map((board) => (
@@ -758,6 +812,24 @@ const MyTasksViewControls = ({
 
       {myTasksViewsEnabled ? (
       <div ref={sortRef} className="relative">
+        {kanbanReuseEnabled ? (
+          <ViewControlButton
+            label="Sort My Tasks"
+            tooltipLeft={-72}
+            className={`${MOBILE_TARGET} @md:min-h-0 @md:min-w-0`}
+            active={
+              config.sort.field !== DEFAULT_MY_TASKS_VIEW_CONFIG.sort.field ||
+              config.sort.direction !== DEFAULT_MY_TASKS_VIEW_CONFIG.sort.direction
+            }
+            expanded={sortOpen}
+            onClick={() => {
+              closeOtherMenus();
+              setSortOpen(!sortOpen);
+            }}
+          >
+            <ArrowUpDown size={18} strokeWidth={1.75} />
+          </ViewControlButton>
+        ) : (
         <button
           type="button"
           aria-label="Sort My Tasks"
@@ -774,7 +846,11 @@ const MyTasksViewControls = ({
           <ArrowUpDown size={16} strokeWidth={1.5} />
           <span className="hidden @md:inline">Sort</span>
         </button>
-        {sortOpen && (
+        )}
+        {kanbanReuseEnabled && sortOpen && (
+          <MyTasksSortPicker sort={config.sort} onSortChange={(sort) => onChange({ ...config, sort })} onClose={() => setSortOpen(false)} />
+        )}
+        {!kanbanReuseEnabled && sortOpen && (
           <div className="absolute right-0 top-full z-40 mt-1 w-56 space-y-3 rounded-[5px] bg-modalBackground p-3 shadow-md">
             <Field label="Field">
               <select
@@ -842,10 +918,13 @@ const MyTasksViewControls = ({
           >
             <Layers size={16} strokeWidth={1.5} />
             <span className="hidden @md:inline">
-              {groupBy === "time" ? "Time" : "Board"}
+              {kanbanReuseEnabled ? `Group: ${groupBy === "time" ? "Due date" : "Board"}` : groupBy === "time" ? "Time" : "Board"}
             </span>
           </button>
-          {groupOpen && (
+          {kanbanReuseEnabled && groupOpen && (
+            <MyTasksGroupPicker groupBy={groupBy} onChange={(next) => onChange({ ...config, groupBy: next })} onClose={() => setGroupOpen(false)} />
+          )}
+          {!kanbanReuseEnabled && groupOpen && (
             <div className="absolute right-0 top-full z-40 mt-1 w-44 space-y-1 rounded-[5px] bg-modalBackground p-2 shadow-md">
               {(
                 [

@@ -7,6 +7,9 @@ import {
   ModalRowElementContainer,
 } from "@/components/Common/CommonModalComponents";
 import useHandleMouseGlobal from "@/hooks/General/useHandleMouse";
+import { useFlag } from "@/hooks/useFlag";
+import { HTPR_6930_MY_TASKS_KANBAN_REUSE_FLAG } from "@/lib/flags/keys";
+import { Check } from "lucide-react";
 import { ChangeEvent, useEffect, useMemo, useState } from "react";
 import { ModalBody } from "reactstrap";
 
@@ -18,6 +21,7 @@ export interface PickerOption {
   id: string | number | null;
   label: string;
   hint?: string;
+  checked?: boolean;
 }
 
 interface Props {
@@ -37,6 +41,8 @@ const OptionPickerModal: React.FC<Props> = ({
   onSelect,
   onClose,
 }) => {
+  const kanbanReuseEnabled = useFlag(HTPR_6930_MY_TASKS_KANBAN_REUSE_FLAG);
+  const checkedIcon = kanbanReuseEnabled ? <Check size={16} strokeWidth={1.75} /> : null;
   const [keyword, setKeyword] = useState("");
   const [selectedIndex, setSelectedIndex] = useState(0);
   const { handleMouseEnter, handleMouseLeave, handleMouseMove, elRef } =
@@ -133,6 +139,7 @@ const OptionPickerModal: React.FC<Props> = ({
               >
                 <span>{option.label}</span>
                 {option.hint && <span>{option.hint}</span>}
+                {option.checked && checkedIcon}
               </ModalRowElementContainer>
             ))
           )}

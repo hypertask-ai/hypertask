@@ -1,9 +1,11 @@
 "use client";
 
+import { SaveView } from "@/components/PageComponents/Kanban/HeaderComponents/SaveViewHeaderKanban";
+import SaveViewModal from "@/components/Modals/ViewModals/SaveViewModal";
 import useClickOutside from "@/hooks/MultiPages/useClickOutside";
 import { useFlag } from "@/hooks/useFlag";
 import { MOBILE_TARGET } from "@/lib/configs/general.config";
-import { MY_TASKS_VIEWS_FLAG } from "@/lib/flags/keys";
+import { HTPR_6930_MY_TASKS_KANBAN_REUSE_FLAG, MY_TASKS_VIEWS_FLAG } from "@/lib/flags/keys";
 import { MY_TASKS_OVERDUE_BADGES_FLAG } from "@/lib/flags/keys";
 import type { MyTasksSavedView } from "@/models/MyTasksView";
 import { House, MoreHorizontal, Plus } from "lucide-react";
@@ -15,9 +17,9 @@ interface Props {
   dirty: boolean;
   busy: boolean;
   onSelect: (viewId: number | null) => void;
-  onSave: () => void;
+  onSave: () => void | Promise<void>;
   onReset: () => void;
-  onSaveAs: (name: string) => void;
+  onSaveAs: (name: string) => void | Promise<void>;
   onRename: (viewId: number, name: string) => void;
   onDelete: (viewId: number) => void;
   onSetDefault: (viewId: number) => void;
@@ -40,6 +42,8 @@ const MyTasksViewTabs = ({
   overdueAll = 0,
   overdueByViewId = {},
 }: Props) => {
+  const kanbanReuseEnabled = useFlag(HTPR_6930_MY_TASKS_KANBAN_REUSE_FLAG);
+  const [saveOpen, setSaveOpen] = useState(false);
   const myTasksViewsEnabled = useFlag(MY_TASKS_VIEWS_FLAG);
   const overdueBadgesEnabled = useFlag(MY_TASKS_OVERDUE_BADGES_FLAG);
   const [actionsOpen, setActionsOpen] = useState(false);
@@ -119,7 +123,16 @@ const MyTasksViewTabs = ({
         })}
       </div>
 
-      {dirty && (
+      {kanbanReuseEnabled && (
+        <SaveView variant="shell" dirty={dirty} busy={busy} onReset={onReset} onSaveClick={() => setSaveOpen(true)} />
+      )}
+      {kanbanReuseEnabled && saveOpen && (
+        <SaveViewModal toggle={() => setSaveOpen(false)} personal={{
+          canSaveCurrent: Boolean(activeView), busy,
+          onSaveCurrent: onSave, onCreate: onSaveAs, onReset,
+        }} />
+      )}
+      {!kanbanReuseEnabled && dirty && (
         <div className="flex shrink-0 items-center gap-1 text-meta">
           <button
             type="button"
@@ -142,7 +155,7 @@ const MyTasksViewTabs = ({
         </div>
       )}
 
-      <button
+      {!kanbanReuseEnabled && <button
         type="button"
         disabled={busy}
         onClick={saveAs}
@@ -150,7 +163,7 @@ const MyTasksViewTabs = ({
       >
         <Plus size={14} strokeWidth={1.5} />
         <span className="hidden @md:inline">Save as view</span>
-      </button>
+      </button>}
 
       {activeView && (
         <div ref={actionsRef} className="relative shrink-0">

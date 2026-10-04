@@ -1,5 +1,7 @@
 'use client'
 
+import { useFlag } from "@/hooks/useFlag"
+import { HTPR_6930_MY_TASKS_KANBAN_REUSE_FLAG } from "@/lib/flags/keys"
 import Tooltip from "@/components/Common/Tooltip"
 import { MobileViewContext } from "@/lib/contexts/mobileContext"
 import { useRecoilState, useSetRecoilState } from "@/lib/state"
@@ -97,13 +99,15 @@ const ShellViewControls = ({ project }: { project: IProject }) => {
   )
 }
 
-const ViewControlButton = ({
+export const ViewControlButton = ({
   active = false,
   children,
   keyCombination = [],
   label,
   onClick,
   tooltipLeft,
+  expanded,
+  className = "",
 }: {
   active?: boolean
   children: React.ReactNode
@@ -111,12 +115,17 @@ const ViewControlButton = ({
   label: string
   onClick: () => void
   tooltipLeft: number
-}) => (
+  expanded?: boolean
+  className?: string
+}) => {
+  const kanbanReuseEnabled = useFlag(HTPR_6930_MY_TASKS_KANBAN_REUSE_FLAG)
+  return (
   <button
     type="button"
     aria-label={label}
+    aria-expanded={kanbanReuseEnabled ? expanded : undefined}
     onClick={onClick}
-    className={`group relative flex size-8 items-center justify-center transition-colors ${active ? "text-[#6FB6FF] hover:text-[#A3D0FF]" : "text-text-light-gray hover:text-white-black"}`}
+    className={`group relative flex size-8 items-center justify-center transition-colors ${active ? (kanbanReuseEnabled ? "text-shadcn-primary hover:text-white-black" : "text-[#6FB6FF] hover:text-[#A3D0FF]") : "text-text-light-gray hover:text-white-black"} ${kanbanReuseEnabled ? className : ""}`}
   >
     {children}
     <Tooltip
@@ -126,6 +135,7 @@ const ViewControlButton = ({
       keyCombination={keyCombination}
     />
   </button>
-)
+  )
+}
 
 export default ShellViewControls
