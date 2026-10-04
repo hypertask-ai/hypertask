@@ -63,6 +63,8 @@ premerge_evidence:
   cache_refresh_seconds: 600
   evidence: "~/.local/state/vcc-evidence/<TICKET>/premerge.md and its recording"
   exact_head_commit_required: true
+  open_production_pull_request_required: true
+  publisher_serialization: shared_user_lock_validation_through_status_post
   fail_closed_on: [github_read_error, live_flag_uncertainty, missing_or_failed_click, stale_commit, missing_recording, status_write_error]
   production_enforcement: production-required-checks-ruleset
   activation_prerequisite: statuses_seeded_on_all_open_production_pull_requests

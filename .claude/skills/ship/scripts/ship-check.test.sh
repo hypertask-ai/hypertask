@@ -4,6 +4,7 @@ cd "$(dirname "$0")"; fails=0
 ok() { echo "ok   $*"; }; bad() { echo "FAIL $*"; fails=$((fails+1)); }
 E=$(mktemp -d); export VCC_EVIDENCE_DIR=$E
 trap 'rm -rf "$E"' EXIT
+export PREMERGE_STATUS_STATE="$E/publisher-state"
 # Live fixtures may read GitHub, but tests never publish real commit statuses.
 real_gh=$(command -v gh); mkdir -p "$E/read-bin"
 printf '#!/usr/bin/env bash\nif [[ $1 == api && $2 == */statuses/* ]]; then exit 0; fi\nexec %q "$@"\n' "$real_gh" > "$E/read-bin/gh"
@@ -31,6 +32,8 @@ G 0 vcc task move HTPR-6570 --section '"In Progress"'
 gh() {
   if [[ ${1:-} == pr && ${2:-} == view && ${3:-} == 822 && "$*" == *'--json title'* ]]; then
     echo 'Invalid PR title'
+  elif [[ ${1:-} == pr && ${2:-} == view && ${3:-} == 838 && "$*" == *'--json headRefOid,baseRefName,state'* ]]; then
+    command gh pr view 838 -R hypertask-ai/hypertask --json headRefOid --jq .headRefOid # Pin the skills-only fixture as open.
   else command gh "$@"; fi
 }
 export -f gh
@@ -211,11 +214,22 @@ if args[:2] == ['pr', 'list']:
                        [{'context': 'premerge-evidence', 'state': os.environ.get('FLAG_ROLLUP', 'SUCCESS')}]}]))
     sys.exit(0)
 if args[:2] == ['pr', 'view']:
-    if args[args.index('--json') + 1] == 'headRefOid':
+    if args[args.index('--json') + 1] == 'headRefOid,baseRefName,state':
         if os.environ.get('FLAG_HEAD_ERROR'):
             sys.exit(1)
-        raced = os.environ.get('FLAG_HEAD_RACE') and os.environ.get('FLAG_LOG') and sum('headRefOid' in line for line in open(os.environ['FLAG_LOG'])) > 1
-        print('c' * 40 if raced else os.environ.get('FLAG_HEAD', 'a' * 40))
+        calls = sum('headRefOid' in line for line in open(os.environ['FLAG_LOG'])) if os.environ.get('FLAG_LOG') else 1
+        if os.environ.get('FLAG_PR_STATE', 'OPEN') != 'OPEN' or os.environ.get('FLAG_BASE', 'production') != 'production' or (os.environ.get('FLAG_BASE_RACE') and calls > 1):
+            sys.exit(0)
+        if os.environ.get('FLAG_ASSERT_LOCK'):
+            import fcntl
+            with open(os.environ['PREMERGE_STATUS_STATE'] + '/publish.lock', 'w') as lock:
+                try:
+                    fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                except BlockingIOError:
+                    pass
+                else:
+                    sys.exit(1)
+        print('c' * 40 if os.environ.get('FLAG_HEAD_RACE') and calls > 1 else os.environ.get('FLAG_HEAD', 'a' * 40))
         sys.exit(0)
     title = 'YPER4-999 [' + os.environ.get('FLAG_TYPE', 'BUGFIX') + '] Fixture'
     if args[args.index('--json') + 1] == 'title':
@@ -226,7 +240,21 @@ if args[:2] == ['pr', 'view']:
 if args[0] != 'api':
     sys.exit(1)
 url = args[1]
+if os.environ.get('FLAG_ASSERT_LOCK'):
+    import fcntl
+    with open(os.environ['PREMERGE_STATUS_STATE'] + '/publish.lock', 'w') as lock:
+        try:
+            fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError:
+            pass
+        else:
+            sys.exit(1)
 if '/statuses/' in url:
+    if os.environ.get('FLAG_BLOCK_POST'):
+        with open(os.environ['FLAG_BLOCK_POST'] + '/ready', 'w') as ready:
+            ready.write('ready')
+        with open(os.environ['FLAG_BLOCK_POST'] + '/release') as release:
+            release.read()
     sys.exit(1 if os.environ.get('FLAG_POST_ERROR') else 0)
 if os.environ.get('FLAG_GH_ERROR'):
     sys.exit(1)
@@ -388,10 +416,15 @@ cp "$E/flag-source/base" "$E/flag-source/head"
 F 0 ''
 
 # Required current-head commit status: assert the exact API endpoint and payload.
+# Control the lock oracle: the same metadata call works unlocked only when assertion is disabled.
+env FLAG_ASSERT_LOCK=1 PREMERGE_STATUS_STATE="$PREMERGE_STATUS_STATE" "$E/flag-bin/gh" pr view 999 --json headRefOid,baseRefName,state >/dev/null 2>&1 \
+  && bad 'unlocked publisher accepted by lock oracle' || ok 'lock oracle rejects an unlocked publisher'
+"$E/flag-bin/gh" pr view 999 --json headRefOid,baseRefName,state >/dev/null 2>&1 \
+  && ok 'lock oracle positive control' || bad 'lock oracle control failed'
 S() {
   local want=$1 state=$2 description=$3 got out; shift 3
   : > "$E/status-log"
-  out=$(env PATH="$E/flag-bin:$PATH" PYTHONPATH="$E/flag-http" FLAG_SOURCE="$E/flag-source" FLAG_LOG="$E/status-log" AGENT_TOKEN=fixture HYPERTASKS_JWT_TOKEN= "$@" ./ship-check premerge-status 999 2>&1); got=$?
+  out=$(env PATH="$E/flag-bin:$PATH" PYTHONPATH="$E/flag-http" FLAG_SOURCE="$E/flag-source" FLAG_LOG="$E/status-log" FLAG_ASSERT_LOCK=1 AGENT_TOKEN=fixture HYPERTASKS_JWT_TOKEN= "$@" ./ship-check premerge-status 999 2>&1); got=$?
   if [ "$got" = "$want" ] && python3 - "$E/status-log" "$state" "$description" <<'PY'
 import json, sys
 calls = [json.loads(line) for line in open(sys.argv[1])]
@@ -417,6 +450,10 @@ S 1 failure 'complete PR diff' FLAG_COUNT=2
 S 1 failure 'unchanged PR head' FLAG_HEAD_RACE=1
 S 1 none '' FLAG_HEAD_ERROR=1
 S 1 none '' FLAG_HEAD=invalid
+S 1 none '' FLAG_BASE=main
+S 1 none '' FLAG_PR_STATE=MERGED
+S 1 none '' FLAG_PR_STATE=CLOSED
+S 1 failure 'unchanged PR head' FLAG_BASE_RACE=1
 S 1 success 'no released flag touched' FLAG_POST_ERROR=1 # POST failure must still return nonzero.
 F 2 'cannot post premerge-evidence' FLAG_POST_ERROR=1
 printf 'const released = useFlag(RELEASED_FLAG);\n' > "$E/flag-source/base"; cp "$E/flag-source/base" "$E/flag-source/head"

@@ -401,12 +401,16 @@ except Exception as error:
 PY
 }
 
-check_premerge_status() {
+check_premerge_status() (
   [ "$REPO" = hypertask-ai/hypertask ] || return 0
-  local sha current out state=failure description rc=1
-  sha=$(gh pr view "$1" -R "$REPO" --json headRefOid --jq .headRefOid 2>/dev/null) \
+  local sha current out lock state=failure description rc=1
+  local state_dir=${PREMERGE_STATUS_STATE:-$HOME/.local/state/premerge-evidence}
+  mkdir -p "$state_dir" && exec {lock}>"$state_dir/publish.lock" \
+    && flock -x -w 600 "$lock" || fail "cannot lock premerge publisher; no success posted"
+  local query='select(.state == "OPEN" and .baseRefName == "production").headRefOid'
+  sha=$(gh pr view "$1" -R "$REPO" --json headRefOid,baseRefName,state --jq "$query" 2>/dev/null) \
     || fail "cannot read PR $1 head; no success posted"
-  [[ $sha =~ ^[0-9a-f]{40}$ ]] || fail "cannot read full PR $1 head; no success posted"
+  [[ $sha =~ ^[0-9a-f]{40}$ ]] || fail "premerge status requires an open production PR with a full head sha; no status posted"
   if out=$(check_premerge "$1" "$sha"); then
     case "$out" in
       'no released flag touched') state=success; description=$out; rc=0 ;;
@@ -420,7 +424,7 @@ check_premerge_status() {
       description=${description##* (}; description=${description%)}
     fi
   fi
-  current=$(gh pr view "$1" -R "$REPO" --json headRefOid --jq .headRefOid 2>/dev/null) || current=''
+  current=$(gh pr view "$1" -R "$REPO" --json headRefOid,baseRefName,state --jq "$query" 2>/dev/null) || current=''
   if [ "$current" != "$sha" ]; then
     state=failure; description='cannot confirm unchanged PR head; retry'; rc=1
   fi
@@ -430,7 +434,7 @@ check_premerge_status() {
     || fail "cannot post premerge-evidence for PR $1; retry before merging"
   echo "premerge-evidence: $state ($description)"
   return "$rc"
-}
+)
 
 guard() {
   local cmd seg t c pr out checks env='([A-Za-z_][A-Za-z0-9_]*=[^[:space:]]*[[:space:]]+)*'
