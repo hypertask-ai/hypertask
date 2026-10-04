@@ -33,7 +33,7 @@ import {
 } from "@/lib/assigneeRecency";
 import UserAvatar from "@/components/Common/UserAvatar";
 import { useFlag } from "@/hooks/useFlag";
-import { HTPR_6567_COMMAND_SCOPE_PICKER_FLAG } from "@/lib/flags/keys";
+import { HTPR_6930_MY_TASKS_KANBAN_REUSE_FLAG, HTPR_6567_COMMAND_SCOPE_PICKER_FLAG } from "@/lib/flags/keys";
 
 interface IProps {
   onClose: any; // Change 'any' to the specific function type if possible
@@ -76,7 +76,8 @@ const AssignModal = ({
   boardPicker: boardPickerProp,
 }: IProps) => {
   const commandScopePickerEnabled = useFlag(HTPR_6567_COMMAND_SCOPE_PICKER_FLAG);
-  const boardPicker = commandScopePickerEnabled ? boardPickerProp : undefined;
+  const kanbanReuseEnabled = useFlag(HTPR_6930_MY_TASKS_KANBAN_REUSE_FLAG);
+  const boardPicker = commandScopePickerEnabled || kanbanReuseEnabled ? boardPickerProp : undefined;
   const [selectedIndex, setSelectedIndex] = useState(0);
   const [hoveredIndex, setHoveredIndex] = useState<number | null>(null);
   const { handleMouseEnter, handleMouseLeave, handleMouseMove } =
@@ -438,7 +439,7 @@ const AssignModal = ({
           handleMouseMove={handleMouseMove}
           id="assignees-list"
         >
-          {commandScopePickerEnabled && boardPicker ? (
+          {(commandScopePickerEnabled || kanbanReuseEnabled) && boardPicker ? (
             <div>
               <h3 className="px-4 pt-2.5 pb-1 text-text-light-gray font-semibold text-micro uppercase tracking-wider">Boards</h3>
               {filteredBoards?.map((board, index) => (

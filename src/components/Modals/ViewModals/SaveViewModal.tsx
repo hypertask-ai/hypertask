@@ -1,6 +1,6 @@
 import { ModalContainerCustom, ModalHeaderComp, ModalInput, ModalListContainer, ModalRowElementContainer } from "@/components/Common/CommonModalComponents";
 import useHandleMouseGlobal from "@/hooks/General/useHandleMouse";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import useCurrentUser from "@/hooks/General/useCurrentUserCheckFromCookies"
 import { TCreate_view_body, TUpdate_view_body } from "@/models/Views/model"
 import { buildDefaultTitle, getActiveBoardLayoutPreferenceFromProject, getActiveColumnsViewFromProject, getActiveEmptySectionSettingFromProject, getActiveFiltersFromProject, getActiveSortingModeFromProject, getActiveSortingOrderFromProject, getActiveSortingStackFromProject, getActiveStalenessOverrideFromProject,
@@ -13,7 +13,22 @@ import toast from "react-hot-toast";
 import axios from "axios";
 import { useQueryClient } from "@tanstack/react-query";
 
-type TProps = {
+import { useFlag } from "@/hooks/useFlag";
+import { HTPR_6930_MY_TASKS_KANBAN_REUSE_FLAG } from "@/lib/flags/keys";
+
+type PersonalOptions = {
+    canSaveCurrent: boolean;
+    busy: boolean;
+    onSaveCurrent: () => void | Promise<void>;
+    onCreate: (name: string) => void | Promise<void>;
+    onReset: () => void;
+};
+type TProps = { toggle: () => void } & (
+    { project: IProject; personal?: never } |
+    { personal: PersonalOptions; project?: never }
+);
+
+type BoardProps = {
     toggle: () => void,
     project: IProject
 }
@@ -57,12 +72,37 @@ const Screens: TOption[] = [
     },
 ]
 type TScreen = "SaveThisView" | "SaveForTeam" | "SaveForMe"
-const SaveViewModal: React.FC<TProps> = ({ toggle, project }) => {
-    const { setSelectedIndex, selectedIndex, handleKeydown } = useHandleKeydownBasic(enterHandler)
+const SaveViewModal: React.FC<TProps> = (props) => {
+    const kanbanReuseEnabled = useFlag(HTPR_6930_MY_TASKS_KANBAN_REUSE_FLAG);
+    if (props.personal) {
+        if (!kanbanReuseEnabled) return null;
+        const personal = props.personal;
+        const personalScreens: TOption[] = [
+            { index: 0, title: "Save this view", id: "SaveThisView", options: [
+                ...(personal.canSaveCurrent ? ["Save to current view"] : []),
+                "New personal view",
+                "Reset",
+            ] },
+            { index: 2, title: "New personal view", id: "SaveForMe", options: ["Save view"] },
+        ];
+        return <SaveViewModalContent toggle={props.toggle} initialScreen={personalScreens[0]} busy={personal.busy}
+            onSelect={async (screen, index, name) => {
+                if (screen.id === "SaveForMe") {
+                    await personal.onCreate(name);
+                    props.toggle();
+                    return;
+                }
+                const option = screen.options?.[index];
+                if (option === "New personal view") return personalScreens[1];
+                if (option === "Save to current view") await personal.onSaveCurrent();
+                else if (option === "Reset") personal.onReset();
+                props.toggle();
+            }} />;
+    }
+    return <BoardSaveViewModal toggle={props.toggle} project={props.project} />;
+};
 
-    const { handleMouseEnter, handleMouseLeave, handleMouseMove, elRef } = useHandleMouseGlobal({ setSelectedIndex })
-    const [currentScreen, setCurrentScreen] = useState<TOption>(Screens[0]);
-    const [viewTitle, setViewTitle] = useState("");
+const BoardSaveViewModal = ({ toggle, project }: BoardProps) => {
     const { updateView, resetView, saveAsDefaultHandler} = useKanbanViews(project)
     const queryClient = useQueryClient()
     const getExplicitBoardLayout = () => savedBoardLayoutFromExplicitSurface(
@@ -101,64 +141,71 @@ const SaveViewModal: React.FC<TProps> = ({ toggle, project }) => {
         }
     }
 
-    async function enterHandler(index: number) {
-        try {
-            // if we're on screen 1. we're only routing to other screens
-            if (currentScreen.id === "SaveThisView") {
-                //  this could be currentScreen.index === index, but then it could've been ambigous
-                if (currentScreen.index === 0) {
-                    if (index === 1){
-                        await waitForBoardViewMutations(project.id)
-                        await saveAsDefaultHandler(buildCreateBody(getLatestProject()))
-                        return toggle()
-                        
-                    } 
-
-                    else if (index === 0) {
-                        await waitForBoardViewMutations(project.id)
-                        const latestProject = getLatestProject()
-                        const currentView = latestProject.project_view?.user_project_views[0]?.appliedView
-                        const latestBody = buildCreateBody(latestProject)
-                        if (!currentView) {
-                            await saveAsDefaultHandler(latestBody)
-                            return toggle()
-                        } 
-                        const body: TUpdate_view_body = {
-                            projectId: latestProject.id,
-                            view_settings: latestBody.view_settings,
-                            viewId: currentView.id
-                        }
-                        await updateView(body)
-                        return toggle()
-                    }
-                    else if(index===4){
-                        await waitForBoardViewMutations(project.id)
-                        await resetView("ResetCurrent")
-                        return toggle()
-                    }
-                }
-
-                setCurrentScreen(Screens[index - 1])
-                return;
-            }
-
-            else{
-                const trimmedTitle = viewTitle.trim()
-                if (!trimmedTitle) return toast.error("Give your view a name first")
+    const onSelect = async (currentScreen: TOption, index: number, viewTitle: string) => {
+        if (currentScreen.id === "SaveThisView") {
+            if (index === 1) {
                 await waitForBoardViewMutations(project.id)
-                await saveAsDefaultHandler({ ...buildCreateBody(getLatestProject()), setAsDefault: false, visibility: currentScreen.id === "SaveForTeam" ? "Public" : "Private", viewTitle: trimmedTitle })
+                await saveAsDefaultHandler(buildCreateBody(getLatestProject()))
                 return toggle()
-            } 
+            } else if (index === 0) {
+                await waitForBoardViewMutations(project.id)
+                const latestProject = getLatestProject()
+                const currentView = latestProject.project_view?.user_project_views[0]?.appliedView
+                const latestBody = buildCreateBody(latestProject)
+                if (!currentView) {
+                    await saveAsDefaultHandler(latestBody)
+                    return toggle()
+                }
+                const body: TUpdate_view_body = {
+                    projectId: latestProject.id,
+                    view_settings: latestBody.view_settings,
+                    viewId: currentView.id
+                }
+                await updateView(body)
+                return toggle()
+            } else if (index === 4) {
+                await waitForBoardViewMutations(project.id)
+                await resetView("ResetCurrent")
+                return toggle()
+            }
+            return Screens[index - 1]
+        }
+        await waitForBoardViewMutations(project.id)
+        await saveAsDefaultHandler({ ...buildCreateBody(getLatestProject()), setAsDefault: false, visibility: currentScreen.id === "SaveForTeam" ? "Public" : "Private", viewTitle })
+        return toggle()
+    }
+    return <SaveViewModalContent toggle={toggle} initialScreen={Screens[0]} onSelect={onSelect} />
+}
+
+const SaveViewModalContent = ({ toggle, initialScreen, onSelect, busy }: {
+    toggle: () => void;
+    initialScreen: TOption;
+    onSelect: (screen: TOption, index: number, name: string) => Promise<TOption | void>;
+    busy?: boolean;
+}) => {
+    const { setSelectedIndex, selectedIndex, handleKeydown } = useHandleKeydownBasic(enterHandler)
+    const { handleMouseEnter, handleMouseLeave, handleMouseMove, elRef } = useHandleMouseGlobal({ setSelectedIndex })
+    const [currentScreen, setCurrentScreen] = useState<TOption>(initialScreen)
+    const [viewTitle, setViewTitle] = useState("")
+    const pending = useRef(false)
+
+    async function enterHandler(index: number) {
+        if (busy || (busy !== undefined && pending.current)) return
+        const name = viewTitle.trim()
+        if (currentScreen.index !== 0 && !name) return toast.error("Give your view a name first")
+        pending.current = true
+        try {
+            const nextScreen = await onSelect(currentScreen, index, name)
+            if (nextScreen) setCurrentScreen(nextScreen)
         } catch (error) {
-            console.log("🚀 ~ enterHandler ~ error:", error)
             toast.error(
-                axios.isAxiosError(error) &&
-                typeof error.response?.data?.message === "string"
+                axios.isAxiosError(error) && typeof error.response?.data?.message === "string"
                     ? error.response.data.message
                     : "Could not save the view"
             )
-        } 
-
+        } finally {
+            pending.current = false
+        }
     }
 
     const handleChange = (e: any) => {

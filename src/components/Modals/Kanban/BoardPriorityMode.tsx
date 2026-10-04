@@ -4,21 +4,32 @@ import useKanbanViews from "@/hooks/Homepage/Views/useKanbanViews";
 import { currentProjectAtom } from "@/store";
 import styles from '@/styles/linksModal.module.scss'
 import { getActiveSortingModeFromProject, getActiveSortingOrderFromProject, getActiveSortingStackFromProject, MAX_SORT_LEVELS } from "@/utils/helperFunctions/Views/ViewsHelperFunctions";
-import type { SortingMode, SortingOrder } from "@prisma/client";
+import { SortingMode, type SortingOrder } from "@prisma/client";
 import { ChangeEvent, Fragment, useEffect, useRef, useState } from "react";
 import { ArrowDownNarrowWide, ArrowDownWideNarrow, Check, X } from "lucide-react";
 import { ModalBody } from "reactstrap";
 import { useRecoilState } from "@/lib/state";
 import { sortingModeLabel, TBoardSortingLevel } from "@/models/Views/model";
 
-type Props = {
-    closeHandler: (refresh?: boolean) => void;
-    sort?: TBoardSortingLevel | null;
-    onSortChange?: (sort: TBoardSortingLevel | null) => void | Promise<void>;
-    maxLevels?: number;
+import { useFlag } from "@/hooks/useFlag";
+import { HTPR_6930_MY_TASKS_KANBAN_REUSE_FLAG } from "@/lib/flags/keys";
+
+export type PickerSortingLevel<ExtraMode extends string = never> = {
+    mode: SortingMode | ExtraMode;
+    order: SortingOrder;
 }
 
-const ascendingSortingModes = new Set<SortingMode>([
+type Props<ExtraMode extends string> = {
+    closeHandler: (refresh?: boolean) => void;
+    sort?: PickerSortingLevel<ExtraMode> | null;
+    onSortChange?: (sort: PickerSortingLevel<ExtraMode> | null) => void | Promise<void>;
+    maxLevels?: number;
+    allowClear?: boolean;
+    modes?: SortingMode[];
+    extraModes?: { id: ExtraMode; label: string }[];
+}
+
+const ascendingSortingModes = new Set<string>([
     "DueDate",
     "CreatedAt",
     "Assignee",
@@ -26,11 +37,14 @@ const ascendingSortingModes = new Set<SortingMode>([
     "TicketNumber",
 ])
 
-const BoardPriorityMode = (props: Props) => {
+const BoardPriorityMode = <ExtraMode extends string = never,>(props: Props<ExtraMode>) => {
+    const kanbanReuseEnabled = useFlag(HTPR_6930_MY_TASKS_KANBAN_REUSE_FLAG);
     const [_currentProject, __] = useRecoilState(currentProjectAtom)
     const { setBoardSortingViewAndReturn } = useKanbanViews(_currentProject)
     const { closeHandler, onSortChange, sort, maxLevels = MAX_SORT_LEVELS } = props
+    const extraModes = kanbanReuseEnabled && onSortChange ? props.extraModes ?? [] : []
     const isControlled = onSortChange !== undefined
+    const replaceSingleLevel = kanbanReuseEnabled && isControlled && maxLevels === 1
 
     // ---------------- refs
     const currentHoveredDiv = useRef<number | null>(null);
@@ -48,16 +62,25 @@ const BoardPriorityMode = (props: Props) => {
     const [keyword, setKeyword] = useState('');
     const [loading, setLoading] = useState<boolean>(false);
     const [modal, _] = useState<boolean>(true);
-    const [levels, setLevels] = useState<TBoardSortingLevel[]>(
+    const [levels, setLevels] = useState<PickerSortingLevel<ExtraMode>[]>(
         isControlled
             ? sort ? [sort] : []
             : activeSortingView === "Manual"
             ? []
             : [{ mode: activeSortingView, order: activeSortingOrder }, ...getActiveSortingStackFromProject(_currentProject)]
     );
-    const [selectedPriority, setSelectedPriority] = useState<SortingMode>();
-    const priorityModes: SortingMode[] = ["UpdatedAt", "Priority", "DueDate", "Size", "Assignee", "Title", "TicketNumber", "TimeInColumn", "TimeOnBoard", "TimeWithoutComment", "CreatedAt", "SectionChangedAt", "LastCommentAt", "Manual"]
-    const [filteredPriorities, setFilteredPriorities] = useState<SortingMode[]>(priorityModes);
+    const [selectedPriority, setSelectedPriority] = useState<SortingMode | ExtraMode>();
+    const defaultModes: SortingMode[] = ["UpdatedAt", "Priority", "DueDate", "Size", "Assignee", "Title", "TicketNumber", "TimeInColumn", "TimeOnBoard", "TimeWithoutComment", "CreatedAt", "SectionChangedAt", "LastCommentAt", "Manual"]
+    const priorityModes: (SortingMode | ExtraMode)[] = [
+        ...(kanbanReuseEnabled && isControlled ? props.modes ?? defaultModes : defaultModes),
+        ...extraModes.map((option) => option.id),
+    ];
+    const labelFor = (mode: SortingMode | ExtraMode) => {
+        const extra = extraModes.find((option) => option.id === mode);
+        const boardMode = Object.values(SortingMode).find((value) => value === mode);
+        return extra?.label ?? (boardMode ? sortingModeLabel(boardMode) : mode);
+    };
+    const [filteredPriorities, setFilteredPriorities] = useState<(SortingMode | ExtraMode)[]>(priorityModes);
 
     const onKeyChange = (e: ChangeEvent<HTMLInputElement>) => {
 
@@ -69,7 +92,7 @@ const BoardPriorityMode = (props: Props) => {
 
     }
 
-    const persistLevels = async (nextLevels: TBoardSortingLevel[], closeAfter = false) => {
+    const persistLevels = async (nextLevels: PickerSortingLevel<ExtraMode>[], closeAfter = false) => {
         setLevels(nextLevels)
         if (isControlled) {
             await onSortChange?.(nextLevels[0] ?? null)
@@ -77,7 +100,11 @@ const BoardPriorityMode = (props: Props) => {
             return
         }
         if (!_currentProject) return
-        const [primary, ...stack] = nextLevels
+        const boardLevels = nextLevels.filter((level): level is TBoardSortingLevel =>
+            Object.values(SortingMode).some((mode) => mode === level.mode)
+        )
+        if (boardLevels.length !== nextLevels.length) return
+        const [primary, ...stack] = boardLevels
         writeQueue.current = writeQueue.current
             .catch(() => {})
             .then(() =>
@@ -100,7 +127,9 @@ const BoardPriorityMode = (props: Props) => {
     }
 
     const removeLevel = (index: number) => {
-        persistLevels(levels.filter((_, levelIndex) => levelIndex !== index))
+        const nextLevels = levels.filter((_, levelIndex) => levelIndex !== index)
+        if (kanbanReuseEnabled && props.allowClear === false && nextLevels.length === 0) return
+        persistLevels(nextLevels)
     }
 
     // -------------------- ON MODAL LOAD
@@ -110,21 +139,21 @@ const BoardPriorityMode = (props: Props) => {
     }
 
     // ==================== set priority api handler
-    const setPriorirty = async (sorting_mode: SortingMode) => {
+    const setPriorirty = async (sorting_mode: SortingMode | ExtraMode) => {
         try {
             if (sorting_mode === "Manual") {
                 await persistLevels([], true)
                 return
             }
-            if (levels.length === maxLevels || levels.some((level) => level.mode === sorting_mode)) return
-            const sorting_order: SortingOrder = ascendingSortingModes.has(sorting_mode)
+            if ((!replaceSingleLevel && levels.length === maxLevels) || levels.some((level) => level.mode === sorting_mode)) return
+            const sorting_order: SortingOrder = (ascendingSortingModes.has(sorting_mode) || extraModes.some((option) => option.id === sorting_mode))
                 ? "Ascending"
                 : "Descending"
             // Stay open after adding a level: stacking is the point, and closing would force a
             // reopen for every tie-breaker. Manual (above) is terminal, so it still closes.
             setKeyword('')
             await persistLevels(
-                [...levels, { mode: sorting_mode, order: sorting_order }],
+                [...(replaceSingleLevel ? [] : levels), { mode: sorting_mode, order: sorting_order }],
                 maxLevels === 1
             )
         } catch (error) {
@@ -238,14 +267,14 @@ const BoardPriorityMode = (props: Props) => {
         // console.log("🚀 ~ useEffect ~ filteredPriorities_:")
         const filteredPriorities_ = priorityModes.filter((priority) =>
             (priority === "Manual" || !levels.some((level) => level.mode === priority)) &&
-            (levels.length < maxLevels || priority === "Manual") &&
-            (keyword.length === 0 || sortingModeLabel(priority).toLowerCase().indexOf(keyword.toLowerCase()) > -1)
+            (replaceSingleLevel || levels.length < maxLevels || priority === "Manual") &&
+            (keyword.length === 0 || labelFor(priority).toLowerCase().indexOf(keyword.toLowerCase()) > -1)
         )
         setFilteredPriorities(filteredPriorities_)
         setSelectedPriority(filteredPriorities_[0])
         document.getElementById(`priority_mode:0`)?.scrollIntoView({ behavior: 'smooth', block: 'center' })
 
-    }, [keyword, levels])
+    }, [keyword, levels, replaceSingleLevel, props.modes, props.extraModes])
 
     return (
         <ModalContainerCustom
@@ -283,16 +312,16 @@ const BoardPriorityMode = (props: Props) => {
                                             >
                                                 <div className="flex flex-grow items-center space-x-4">
                                                     <span className="text-micro text-[#C2CFA5]">{index + 1}</span>
-                                                    <p className="font-medium">{sortingModeLabel(level.mode)}</p>
+                                                    <p className="font-medium">{labelFor(level.mode)}</p>
                                                 </div>
                                                 <div className="flex items-center gap-3">
                                                     <ToggleSortingOrder
                                                         selectedOption={level.order}
                                                         handleSortOrder={(order) => handleSortOrder(index, order)}
                                                     />
-                                                    <button
+                                                    {!(kanbanReuseEnabled && props.allowClear === false) && <button
                                                         type="button"
-                                                        aria-label={`Remove ${sortingModeLabel(level.mode)} sort`}
+                                                        aria-label={`Remove ${labelFor(level.mode)} sort`}
                                                         onClick={(event) => {
                                                             event.stopPropagation()
                                                             removeLevel(index)
@@ -300,7 +329,7 @@ const BoardPriorityMode = (props: Props) => {
                                                         className="text-text-light-gray"
                                                     >
                                                         <X size={14} strokeWidth={1.75} />
-                                                    </button>
+                                                    </button>}
                                                 </div>
                                             </ModalRowElementContainer>
                                             {index < levels.length - 1 && (
@@ -314,7 +343,7 @@ const BoardPriorityMode = (props: Props) => {
                                 <ModalInput
                                     onChange={onKeyChange}
                                     value={keyword}
-                                    placeholder={levels.length > 0 ? "Add another sort…" : "How do you want to sort?"}
+                                    placeholder={replaceSingleLevel ? "How do you want to sort?" : levels.length > 0 ? "Add another sort…" : "How do you want to sort?"}
                                 />
                             </div>
                             <ModalListContainer
@@ -322,7 +351,7 @@ const BoardPriorityMode = (props: Props) => {
                                 className="max-h-[364px]"
                             >
                                 {
-                                    levels.length === maxLevels && (
+                                    !replaceSingleLevel && levels.length === maxLevels && (
                                         <li className="px-[18px] py-2 text-meta font-normal text-text-light-gray">
                                             Remove a level to add another.
                                         </li>
@@ -342,7 +371,7 @@ const BoardPriorityMode = (props: Props) => {
                                                 <div className="flex-grow flex space-x-4 items-center">
 
                                                 <p className="font-medium">
-                                                  {sortingModeLabel(priority)}
+                                                  {labelFor(priority)}
                                                 </p>
                                                 </div>
                                                 {

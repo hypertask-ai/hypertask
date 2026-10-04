@@ -55,7 +55,10 @@ import {
   HTPR_6868_TICKET_PREFIX_FLAG,
   HTPR_6662_AGENT_LOG_NAME_FLAG,
   HTPR_6861_MOBILE_PAGE_BACK_ROW_FLAG,
+  HTPR_6930_MY_TASKS_KANBAN_REUSE_FLAG,
   HTPR_6567_COMMAND_SCOPE_PICKER_FLAG,
+  MY_TASKS_SCOPES_FLAG,
+  MY_TASKS_TIME_GROUP_FLAG,
   MY_TASKS_FILTER_PARITY_FLAG,
   MY_TASKS_TABLE_COLUMNS_FLAG,
   MY_TASKS_VIEWS_FLAG,
@@ -131,7 +134,10 @@ const Commands = (props: Props) => {
   const autoTaskDescriptionsEnabled = useFlag("htpr-6177-auto-task-descriptions");
   const copyCurrentUrlEnabled = useFlag("htpr-6112-copy-current-url");
   const myTasksViewsEnabled = useFlag(MY_TASKS_VIEWS_FLAG);
-  const commandScopePickerEnabled = useFlag(HTPR_6567_COMMAND_SCOPE_PICKER_FLAG);
+  const kanbanReuseEnabled = useFlag(HTPR_6930_MY_TASKS_KANBAN_REUSE_FLAG);
+  const commandScopePickerFlag = useFlag(HTPR_6567_COMMAND_SCOPE_PICKER_FLAG);
+  const myTasksScopesEnabled = useFlag(MY_TASKS_SCOPES_FLAG);
+  const myTasksTimeGroupEnabled = useFlag(MY_TASKS_TIME_GROUP_FLAG);
   const myTasksFilterParityEnabled = useFlag(MY_TASKS_FILTER_PARITY_FLAG);
   const myTasksTableColumnsEnabled = useFlag(MY_TASKS_TABLE_COLUMNS_FLAG);
   const commentLongPressEnabled = useFlag(HTPR_6514_COMMENT_LONG_PRESS_FLAG);
@@ -173,7 +179,7 @@ const Commands = (props: Props) => {
         keywords: `${project.title} board project go open switch`,
       }));
     let scopeCommand: ICommandList | undefined;
-    if (commandScopePickerEnabled && onMyTasks && myTasksViewsEnabled && myTasksFilterParityEnabled) {
+    if ((commandScopePickerFlag || kanbanReuseEnabled) && onMyTasks && myTasksViewsEnabled && myTasksFilterParityEnabled) {
       scopeCommand = {
         key: "myTasksScope",
         name: "Scope",
@@ -183,6 +189,22 @@ const Commands = (props: Props) => {
       };
     }
     if (scopeCommand) boardCommands.unshift(scopeCommand);
+    const myTasksPickerCommands: ICommandList[] = [];
+    if (kanbanReuseEnabled && onMyTasks) {
+      if (myTasksScopesEnabled) myTasksPickerCommands.push({
+        key: "myTasksInvolvement", name: "Involvement", commandMode: CommandMode.GoToBoard,
+        keywords: "involvement assigned created mentioned watching my tasks",
+      });
+      if (myTasksViewsEnabled) myTasksPickerCommands.push({
+        key: "myTasksSort", name: "Sort", commandMode: CommandMode.GoToBoard,
+        keywords: "sort order field direction my tasks",
+      });
+      if (myTasksTimeGroupEnabled) myTasksPickerCommands.push({
+        key: "myTasksGroup", name: "Group by", commandMode: CommandMode.GoToBoard,
+        keywords: "group due date time board my tasks",
+      });
+    }
+    boardCommands.push(...myTasksPickerCommands);
     const registryGroups = getCommands({
       context: "Others",
       ...contextOptions,
@@ -343,7 +365,10 @@ const Commands = (props: Props) => {
     onCalendar,
     onMyTasks,
     myTasksViewsEnabled,
-    commandScopePickerEnabled,
+    commandScopePickerFlag,
+    kanbanReuseEnabled,
+    myTasksScopesEnabled,
+    myTasksTimeGroupEnabled,
     myTasksFilterParityEnabled,
     myTasksTableColumnsEnabled,
     projects,
@@ -527,7 +552,17 @@ const Commands = (props: Props) => {
       }
       if (command.key === "myTasksScope") {
         resetShowCommands();
-        if (onMyTasks && commandScopePickerEnabled) window.dispatchEvent(new Event("my-tasks-scope-picker"));
+        if (onMyTasks && (commandScopePickerFlag || kanbanReuseEnabled)) window.dispatchEvent(new Event("my-tasks-scope-picker"));
+        return;
+      }
+      const myTasksPickerEvents: Record<string, string> = {
+        myTasksInvolvement: "my-tasks-involvement-picker",
+        myTasksSort: "my-tasks-sort-picker",
+        myTasksGroup: "my-tasks-group-picker",
+      };
+      if (myTasksPickerEvents[command.key]) {
+        resetShowCommands();
+        if (onMyTasks && kanbanReuseEnabled) window.dispatchEvent(new Event(myTasksPickerEvents[command.key]));
         return;
       }
       if (command.key === "toggleTableTitleWrap") {
@@ -572,9 +607,17 @@ const Commands = (props: Props) => {
   const commandGroups = (
     <CommandGroups
       handleMouseMove={handleMouseMove}
-      filterCommands={commandScopePickerEnabled ? filterCommands : filterCommands.map((filteredGroup) => ({
-        ...filteredGroup,
-        commandLists: filteredGroup.commandLists.filter((command) => command.key !== "myTasksScope"),
+      filterCommands={kanbanReuseEnabled ? filterCommands.map((paletteGroup) => ({
+        ...paletteGroup,
+        commandLists: paletteGroup.commandLists.filter((paletteRow) =>
+          !["myTasksInvolvement", "myTasksSort", "myTasksGroup"].includes(paletteRow.key) || onMyTasks
+        ),
+      })) : filterCommands.map((legacyPaletteGroup) => ({
+        ...legacyPaletteGroup,
+        commandLists: legacyPaletteGroup.commandLists.filter((legacyPaletteRow) =>
+          (legacyPaletteRow.key !== "myTasksScope" || commandScopePickerFlag) &&
+          !["myTasksInvolvement", "myTasksSort", "myTasksGroup"].includes(legacyPaletteRow.key)
+        ),
       }))}
       selectedCommand={selectedCommand}
       handleMouseLeave={handleMouseLeave}
