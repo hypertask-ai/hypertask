@@ -24,7 +24,6 @@ import {
   CONFIRMED_PROPOSAL_HEADING_FLAG,
   LAZY_EMOJI_LIST_FLAG,
   LOCAL_WRITING_ASSISTANCE_FLAG,
-  INBOX_ARCHIVE_CLUSTER_FLAG,
   PAGE_MENTIONS_FLAG,
   SHORTCUT_NUDGES_FLAG,
   SHARED_AGENT_CHAT_FLAG,
@@ -60,6 +59,7 @@ import {
   HTPR_6881_SEARCH_FUZZY_PERSON_FLAG,
   HTPR_6885_SINGLE_UNDO_TOAST_FLAG,
   HTPR_6880_SEARCH_COMMENTER_FLAG,
+  HTPR_6930_MY_TASKS_KANBAN_REUSE_FLAG,
   HTPR_6567_COMMAND_SCOPE_PICKER_FLAG,
   MY_TASKS_VIEWS_FLAG,
   MY_TASKS_BULK_SELECTION_FLAG,
@@ -111,6 +111,7 @@ const FEATURE_FLAG_QA_USER = {
 
 // Hide and reject retired flags without changing stored rows needed by older deployments.
 export const RETIRED_FEATURE_FLAG_KEYS = new Set([
+  "htpr-6160-inbox-archive-cluster",
   "htpr-6157-new-task-auto-description",
   "htpr-6322-agent-chat-parked-reply",
   "hyfa-43-factory-owner-preview",
@@ -511,12 +512,6 @@ const FEATURE_FLAG_DEFINITIONS = [
       "Offers the board's canvas pages in the @ menu, so a comment or description can link a page like it links a task.",
   },
   {
-    key: INBOX_ARCHIVE_CLUSTER_FLAG,
-    shippedOn: "2026-09-06",
-    description:
-      "Adds Ctrl+K entries for the five biggest ticket piles in the inbox, and names the row archive action after what it already does.",
-  },
-  {
     key: COLUMN_ALL_VIEWS_FLAG,
     shippedOn: "2026-09-07",
     description:
@@ -637,6 +632,11 @@ const FEATURE_FLAG_DEFINITIONS = [
     shippedOn: "2026-09-14",
     description:
       "Hides search results that do not contain every word you typed, and when you open search from a board, shows that board's matches first.",
+  },
+  {
+    key: HTPR_6930_MY_TASKS_KANBAN_REUSE_FLAG,
+    shippedOn: "2026-10-04",
+    description: "My Tasks reuses kanban Save view, sorting, and Ctrl+K pickers with matching checkmarks.",
   },
   {
     key: HTPR_6567_COMMAND_SCOPE_PICKER_FLAG,

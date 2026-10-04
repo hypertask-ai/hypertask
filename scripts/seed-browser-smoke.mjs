@@ -47,6 +47,7 @@ async function createBoard({ ownerId, teamId, googleAccountId, title, suffix }) 
       ownerId,
       teamId,
       googleAccountId,
+      uniqueIdentifier: suffix.toUpperCase(),
       sections: sectionTitles,
     },
   });

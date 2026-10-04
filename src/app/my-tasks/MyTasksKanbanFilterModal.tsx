@@ -7,7 +7,7 @@ import type {
   CalendarUserSummary,
 } from "@/lib/calendarSync/contract";
 import type { SerializableFilterSettings } from "@/lib/filterSettingsMutations";
-import { HTPR_6567_COMMAND_SCOPE_PICKER_FLAG, MY_TASKS_FILTER_PARITY_FLAG, MY_TASKS_SNOOZE_FLAG } from "@/lib/flags/keys";
+import { HTPR_6930_MY_TASKS_KANBAN_REUSE_FLAG, HTPR_6567_COMMAND_SCOPE_PICKER_FLAG, MY_TASKS_FILTER_PARITY_FLAG, MY_TASKS_SNOOZE_FLAG } from "@/lib/flags/keys";
 import type { MyTasksBoardMetadata, MyTasksViewConfig } from "@/models/MyTasksView";
 import { MyTasksFilterProvider } from "@/lib/myTasksFilterContext";
 import { CheckRow, Field } from "./MyTasksViewControls";
@@ -43,12 +43,13 @@ export default function MyTasksKanbanFilterModal({
   snoozeEnabled = false,
 }: Props) {
   const filterParityEnabled = useFlag(MY_TASKS_FILTER_PARITY_FLAG);
-  const commandScopePickerEnabled = useFlag(HTPR_6567_COMMAND_SCOPE_PICKER_FLAG);
+  const kanbanReuseEnabled = useFlag(HTPR_6930_MY_TASKS_KANBAN_REUSE_FLAG);
+  const commandScopePickerFlag = useFlag(HTPR_6567_COMMAND_SCOPE_PICKER_FLAG);
   const snoozeFlag = useFlag(MY_TASKS_SNOOZE_FLAG);
   const updateScopeFilters = (filters: Partial<MyTasksViewConfig["filters"]>) => {
     if (config && onViewChange) onViewChange({ ...config, filters: { ...config.filters, ...filters } });
   };
-  const scopeFilters = commandScopePickerEnabled && config && onViewChange ? (
+  const scopeFilters = (kanbanReuseEnabled || commandScopePickerFlag) && config && onViewChange ? (
     <div className="px-4 py-2 space-y-4">
       <Field label="Columns">
         {boards.filter((board) => config.boardIds === null || config.boardIds.includes(board.id)).map((board) => (

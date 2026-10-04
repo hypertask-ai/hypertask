@@ -212,7 +212,7 @@ export enum CommandMode {
   AgentChatAddAgent,
   AgentChatNextTeam,
   AgentChatPreviousTeam,
-  ArchiveInboxCluster,
+  ArchiveInboxCluster, // Retired; reserve the persisted ordinal for old tabs.
   // Retired; keep the ordinal so a persisted MyTasksSnooze mode does not
   // remap a later appended command during deploy.
   MyTasksSnooze,

@@ -19,11 +19,11 @@ function createFixture(source = fs.readFileSync(path.join(root, rowPath), "utf8"
   const cache = new Map();
   const { window } = new JSDOM("");
   const empty = () => null;
+  const tooltips = [];
   const mocks = {
+    "../Common/Tooltip": { __esModule: true, default: (props) => { tooltips.push(props); return null; } },
     "@/utils/undoActions/helperFuncs": { cn: (...args) => twMerge(clsx(args)) },
     "@/hooks/useFlag": { useFlag: () => false },
-    "@/lib/flags/keys": { INBOX_ARCHIVE_CLUSTER_FLAG: "inbox-archive-cluster" },
-    "@/lib/inboxClusters": { inboxArchiveTooltip: () => "Archive" },
     "@/lib/nativeAgent/agentMessageEnvelope": { decodeAgentMessage: (text) => text },
     "@/utils/helperFunctions/helperFunctions": {
       convertToPlain: (html) => { const el = window.document.createElement("div"); el.innerHTML = html; return el.textContent; },
@@ -80,7 +80,7 @@ function createFixture(source = fs.readFileSync(path.join(root, rowPath), "utf8"
         handleMouseEnter() {}, handleMouseLeave() {}, openTask() {}, markAsDone() {}, eHandler() {},
       })))));
   }
-  return { render };
+  return { render, tooltips };
 }
 
 module.exports = { createFixture, rowPath };
@@ -105,6 +105,14 @@ if (require.main === module) {
     assert.match(slot.querySelector("span").className, /md:invisible/);
     assert.equal(slot.querySelectorAll("svg").length, 2);
     assert.match(slot.querySelector("button").parentElement.className, /absolute right-0/);
+  });
+  test("row archive tooltip uses the normal label and E shortcut", () => {
+    fixture.tooltips.length = 0;
+    row({ selected: true });
+    const archiveTooltip = fixture.tooltips.find(({ keyCombination }) => keyCombination?.includes("E"));
+    assert.ok(archiveTooltip);
+    assert.equal(archiveTooltip.text, "Archive");
+    assert.deepEqual(Array.from(archiveTooltip.keyCombination), ["E"]);
   });
   test("disabled actions preserve the timestamp and bulk selection suppresses icons", () => {
     const disabled = row({ selected: true, disableButtons: true });

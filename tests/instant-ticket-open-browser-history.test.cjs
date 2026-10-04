@@ -31,6 +31,8 @@ test("real history Back replaces Next's stale source tree after detail RSC; Forw
   const previous = Object.fromEntries(names.map((name) => [name, global[name]]));
   Object.assign(global, { window: dom.window, document: dom.window.document, Event: dom.window.Event, IS_REACT_ACT_ENVIRONMENT: true });
   window.scrollTo = () => {};
+  window.requestAnimationFrame = () => 1;
+  window.cancelAnimationFrame = () => {};
   const client = new QueryClient();
   const renderer = createRoot(document.getElementById("root"));
   t.after(async () => {
