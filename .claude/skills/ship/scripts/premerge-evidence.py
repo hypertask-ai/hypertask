@@ -47,6 +47,36 @@ def fingerprint(row, evidence, checker_sha):
     return digest.hexdigest()
 
 
+def fetch_checker():
+    result = subprocess.run(['gh', 'api', '-H', 'Accept: application/vnd.github.raw',
+                             f'repos/{REPO}/contents/.claude/skills/ship/scripts/ship-check?ref=production'],
+                            capture_output=True, timeout=60, check=True)
+    if not result.stdout:
+        raise ValueError('production ship-check is empty; refusing the sweep')
+    return result.stdout
+
+
+def open_prs():
+    result = subprocess.run(['gh', 'pr', 'list', '-R', REPO, '--state', 'open', '--base', 'production',
+                             '--limit', '1000', '--json', 'number,title,headRefOid,statusCheckRollup'],
+                            capture_output=True, text=True, timeout=60, check=True)
+    rows = json.loads(result.stdout)
+    if len(rows) >= 1000:
+        raise ValueError('open PR list may be truncated; refusing an incomplete sweep')
+    return rows
+
+
+def revoke_passing(state):
+    (state / 'cache.json').unlink(missing_ok=True)
+    for row in open_prs():
+        if any(s.get('context') == 'premerge-evidence' and s.get('state') == 'SUCCESS'
+               for s in row['statusCheckRollup'] or []):
+            subprocess.run(['gh', 'api', f'repos/{REPO}/statuses/{row["headRefOid"]}', '--method', 'POST',
+                            '-f', 'context=premerge-evidence', '-f', 'state=failure',
+                            '-f', 'description=cannot load current premerge rules; retry'],
+                           capture_output=True, timeout=60, check=True)
+
+
 def sweep():
     state = Path(os.environ.get('PREMERGE_STATUS_STATE', Path.home() / '.local/state/premerge-evidence'))
     evidence = Path(os.environ.get('VCC_EVIDENCE_DIR', Path.home() / '.local/state/vcc-evidence'))
@@ -56,25 +86,19 @@ def sweep():
             fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
         except BlockingIOError:
             return
-        # The sweep contract forbids new statuses on fetch failure, including failure statuses.
-        # Previous statuses remain until a successful sweep; never execute a stale checker.
-        result = subprocess.run(['gh', 'api', '-H', 'Accept: application/vnd.github.raw',
-                                 f'repos/{REPO}/contents/.claude/skills/ship/scripts/ship-check?ref=production'],
-                                capture_output=True, timeout=60, check=True)
-        if not result.stdout:
-            raise ValueError('production ship-check is empty; refusing the sweep')
-        checker_sha = hashlib.sha256(result.stdout).hexdigest()
+        # Never execute a stale checker. Without current rules, passing statuses turn red so merges fail closed.
+        try:
+            checker_bytes = fetch_checker()
+        except Exception:
+            revoke_passing(state)
+            raise
+        checker_sha = hashlib.sha256(checker_bytes).hexdigest()
         checker = state / 'ship-check'
         temporary = state / 'ship-check.tmp'
-        temporary.write_bytes(result.stdout)
+        temporary.write_bytes(checker_bytes)
         temporary.chmod(0o755)
         temporary.replace(checker)
-        result = subprocess.run(['gh', 'pr', 'list', '-R', REPO, '--state', 'open', '--base', 'production',
-                                 '--limit', '1000', '--json', 'number,title,headRefOid,statusCheckRollup'],
-                                capture_output=True, text=True, timeout=60, check=True)
-        rows = json.loads(result.stdout)
-        if len(rows) >= 1000:
-            raise ValueError('open PR list may be truncated; refusing an incomplete sweep')
+        rows = open_prs()
         cache_file = state / 'cache.json'
         try:
             cache = json.loads(cache_file.read_text())

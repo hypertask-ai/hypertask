@@ -37,7 +37,12 @@ root = pathlib.Path(os.environ['POSTER_TEST_ROOT'])
 args = sys.argv[1:]
 with (root / 'calls').open('a') as log:
     log.write(json.dumps(args) + '\\n')
-if args[:1] == ['api']:
+if args[:2] == ['api', 'repos/hypertask-ai/hypertask/statuses/' + 'a' * 40]:
+    assert args[2:] == ['--method', 'POST', '-f', 'context=premerge-evidence', '-f', 'state=failure',
+                        '-f', 'description=cannot load current premerge rules; retry']
+    with (root / 'statuses').open('a') as log:
+        log.write('failure\\n')
+elif args[:1] == ['api']:
     assert args == ['api', '-H', 'Accept: application/vnd.github.raw',
                     'repos/hypertask-ai/hypertask/contents/.claude/skills/ship/scripts/ship-check?ref=production']
     if (root / 'fetch-error').exists():
@@ -98,31 +103,27 @@ print('premerge-evidence: success (fixture)')
         self.assertEqual(sum(c[0] == 'api' for c in calls), 3)
         self.assertEqual(sum(c[:2] == ['pr', 'list'] for c in calls), 3)
 
-    def test_fetch_failure_after_deleted_evidence_publishes_nothing_new(self):
+    def test_fetch_failure_after_deleted_evidence_revokes_passing_statuses(self):
         folder = self.root / 'evidence/YPER4-999'
         folder.mkdir(parents=True)
         record = folder / 'premerge.md'
         record.write_text('Recording: click.webm\nClick: PASS fixture\n')
         (folder / 'click.webm').write_bytes(b'recording fixture')
         self.assertEqual(self.sweep().returncode, 0)
-        cache = (self.state / 'cache.json').read_bytes()
         checker = (self.state / 'ship-check').read_bytes()
         record.unlink()
         (self.root / 'fetch-error').touch()
         result = self.sweep()
         self.assertNotEqual(result.returncode, 0)
         self.assertIn('FAIL: premerge-evidence operation failed', result.stderr)
+        # The stale checker never runs; every passing head turns red instead.
         self.assertEqual(len(self.publications()), 2)
-        self.assertEqual((self.state / 'cache.json').read_bytes(), cache)
+        self.assertEqual((self.root / 'statuses').read_text().splitlines(), ['failure', 'failure'])
+        self.assertFalse((self.state / 'cache.json').exists())
         self.assertEqual((self.state / 'ship-check').read_bytes(), checker)
-        calls = [json.loads(line) for line in self.log.read_text().splitlines()]
-        self.assertEqual(sum(c[:2] == ['pr', 'list'] for c in calls), 1)
         (self.root / 'fetch-error').unlink()
         self.assertEqual(self.sweep().returncode, 0)
-        self.assertEqual(len(self.publications()), 3)
-        self.assertEqual(self.publications()[-1][1], '999')
-        self.assertNotEqual(json.loads(cache)['999']['fingerprint'],
-                            json.loads((self.state / 'cache.json').read_text())['999']['fingerprint'])
+        self.assertEqual(sorted(p[1] for p in self.publications()[2:]), ['998', '999'])
 
     def test_empty_fetch_fails_without_publishing(self):
         self.production.write_bytes(b'')
