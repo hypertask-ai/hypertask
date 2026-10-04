@@ -1,0 +1,40 @@
+{
+  "name": "hypertask_agents",
+  "does": "List owned agent identities, inspect live team presence, or create, revoke, archive or permanently delete an owned agent.",
+  "use_when": "Use for agent identity administration or to see which agents are active on a team.",
+  "do_not_use_when": "Do not use for ticket assignees or webhook delivery; use hypertask_tasks assign or hypertask_webhooks instead.",
+  "parameters_and_caveats": "action selects an operation; input contains only that operation’s documented fields. response_format defaults to concise for reads; detailed retains full fields. limit defaults to 20 (maximum 50) and offset defaults to 0 for bounded read results; use returned pagination or narrower filters. Human or management credentials are required for administration; presence requires team_id. Creating returns a credential once, and delete is irreversible.",
+  "actions": {
+    "list": {
+      "tool": "hypertask_list_agents",
+      "read_only": true,
+      "permission": "management_read"
+    },
+    "presence": {
+      "tool": "hypertask_agent_presence",
+      "read_only": true,
+      "permission": "data"
+    },
+    "create": {
+      "tool": "hypertask_create_agent",
+      "read_only": false,
+      "permission": "management_write"
+    },
+    "revoke": {
+      "tool": "hypertask_revoke_agent",
+      "read_only": false,
+      "permission": "management_write"
+    },
+    "archive": {
+      "tool": "hypertask_archive_agent",
+      "read_only": false,
+      "permission": "management_write"
+    },
+    "delete": {
+      "tool": "hypertask_delete_agent",
+      "read_only": false,
+      "permission": "management_write"
+    }
+  },
+  "input_examples": []
+}

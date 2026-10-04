@@ -1,0 +1,46 @@
+{
+  "name": "hypertask_webhooks",
+  "does": "Read or manage a managed agent’s signed outbound webhook and test or replay deliveries.",
+  "use_when": "Use to configure an agent callback or diagnose a specific failed delivery.",
+  "do_not_use_when": "Do not use for generic HTTP requests or agent creation; callbacks must belong to the authenticated agent or an owned agent.",
+  "parameters_and_caveats": "action selects an operation; input contains only that operation’s documented fields. response_format defaults to concise for reads; detailed retains full fields. limit defaults to 20 (maximum 50) and offset defaults to 0 for bounded read results; use returned pagination or narrower filters. agent_id=self means the authenticated managed agent; humans supply an owned agent id. Test and replay send real deliveries, and configure or rotate returns a signing secret once.",
+  "actions": {
+    "get": {
+      "tool": "hypertask_agent_webhook",
+      "legacy_action": "get",
+      "read_only": true,
+      "permission": "data"
+    },
+    "configure": {
+      "tool": "hypertask_agent_webhook",
+      "legacy_action": "configure",
+      "read_only": false,
+      "permission": "data"
+    },
+    "test": {
+      "tool": "hypertask_agent_webhook",
+      "legacy_action": "test",
+      "read_only": false,
+      "permission": "data"
+    },
+    "replay": {
+      "tool": "hypertask_agent_webhook",
+      "legacy_action": "replay",
+      "read_only": false,
+      "permission": "data"
+    },
+    "rotate": {
+      "tool": "hypertask_agent_webhook",
+      "legacy_action": "rotate",
+      "read_only": false,
+      "permission": "data"
+    },
+    "delete": {
+      "tool": "hypertask_agent_webhook",
+      "legacy_action": "delete",
+      "read_only": false,
+      "permission": "data"
+    }
+  },
+  "input_examples": []
+}

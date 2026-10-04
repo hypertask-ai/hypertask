@@ -1,0 +1,30 @@
+{
+  "name": "hypertask_user_context",
+  "does": "Orient to the authenticated user, their accessible boards and account connections, or update their own profile.",
+  "use_when": "Use at the start of a session to discover accessible projects and permissions, or when the user requests a profile change.",
+  "do_not_use_when": "Do not use for filtered board lists or task searches; use hypertask_projects or hypertask_search instead.",
+  "parameters_and_caveats": "action selects an operation; input contains only that operation’s documented fields. response_format defaults to concise for reads; detailed retains full fields. limit defaults to 20 (maximum 50) and offset defaults to 0 for bounded read results; use returned pagination or narrower filters. Identifiers and required fields depend on the selected action; writes keep existing authorization and confirmation rules.",
+  "actions": {
+    "hello": {
+      "tool": "hypertask_hello",
+      "read_only": true,
+      "permission": "data"
+    },
+    "get": {
+      "tool": "hypertask_get_user_context",
+      "read_only": true,
+      "permission": "data"
+    },
+    "profile": {
+      "tool": "hypertask_update_profile",
+      "read_only": false,
+      "permission": "human_data"
+    },
+    "connections": {
+      "tool": "hypertask_list_connections",
+      "read_only": true,
+      "permission": "management_read"
+    }
+  },
+  "input_examples": []
+}

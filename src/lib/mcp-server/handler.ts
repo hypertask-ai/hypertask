@@ -11,6 +11,9 @@ import { MCP_ATTACHMENT_MAX_REQUEST_BYTES } from '@/lib/mcp/attachments/constant
 import { extractBearerToken, validateMcpAuth } from '@/lib/mcp/auth'
 import { hasAnyManagementPermission } from '@/lib/mcp/managementPermissions'
 import { resolvePortableTools } from './listQueryContract'
+import { selectMcpTools } from './consolidated-tools'
+import { isFeatureEnabled, HTPR_6804_MCP_TOOLS_FLAG } from '@/lib/flags'
+import type { ManagementPermissions } from '@/lib/mcp/managementPermissions'
 import { NextRequest } from 'next/server'
 import { handleMcpHttp } from './mcp-http'
 import {
@@ -39,6 +42,7 @@ async function verifyToken(_request: Request, bearerToken?: string): Promise<Aut
       token: bearerToken,
       clientId: String(ctx.user.id),
       scopes: ['mcp:management'],
+      extra: { managementPermissions: ctx.management.permissions, teamScoped: Boolean(ctx.management.teamId) },
     }
   }
 
@@ -52,6 +56,7 @@ async function verifyToken(_request: Request, bearerToken?: string): Promise<Aut
     clientId: String(ctx.user.id),
     scopes: ['mcp:full'],
     expiresAt,
+    extra: { agent: Boolean(ctx.agentId) },
   }
 }
 
@@ -110,9 +115,17 @@ export async function mcpHandler(request: Request): Promise<Response> {
 
     const userId = Number(authInfo.clientId)
     if (Number.isFinite(userId)) telemetryUserId = userId
-    const portableTools = resolvePortableTools(MCP_TOOLS as PortableTool[])
+    const portableTools = selectMcpTools(
+      resolvePortableTools(MCP_TOOLS as PortableTool[]),
+      Number.isFinite(userId) && await isFeatureEnabled(HTPR_6804_MCP_TOOLS_FLAG, userId),
+      {
+        managementPermissions: authInfo.extra?.managementPermissions as ManagementPermissions | undefined,
+        teamScoped: authInfo.extra?.teamScoped === true,
+        agent: authInfo.extra?.agent === true,
+      },
+    )
     if (isLegacySseRequest(working)) {
-      return handleLegacySseRequest(working, authInfo, portableTools)
+      return handleLegacySseRequest(working, authInfo, resolvePortableTools(MCP_TOOLS as PortableTool[]))
     }
 
     return handleMcpHttp(working, {

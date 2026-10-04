@@ -1,0 +1,40 @@
+{
+  "name": "hypertask_drafts",
+  "does": "Create, list, update, publish or delete unpublished ticket comment or description drafts.",
+  "use_when": "Use to prepare text for review before it becomes a visible ticket update.",
+  "do_not_use_when": "Do not use to post immediately; use hypertask_comments add or hypertask_tasks update instead.",
+  "parameters_and_caveats": "action selects an operation; input contains only that operation’s documented fields. response_format defaults to concise for reads; detailed retains full fields. limit defaults to 20 (maximum 50) and offset defaults to 0 for bounded read results; use returned pagination or narrower filters. Identifiers and required fields depend on the selected action; writes keep existing authorization and confirmation rules.",
+  "actions": {
+    "create": {
+      "tool": "hypertask_draft",
+      "legacy_action": "create",
+      "read_only": false,
+      "permission": "data"
+    },
+    "list": {
+      "tool": "hypertask_draft",
+      "legacy_action": "list",
+      "read_only": true,
+      "permission": "data"
+    },
+    "update": {
+      "tool": "hypertask_draft",
+      "legacy_action": "update",
+      "read_only": false,
+      "permission": "data"
+    },
+    "publish": {
+      "tool": "hypertask_draft",
+      "legacy_action": "publish",
+      "read_only": false,
+      "permission": "data"
+    },
+    "delete": {
+      "tool": "hypertask_draft",
+      "legacy_action": "delete",
+      "read_only": false,
+      "permission": "data"
+    }
+  },
+  "input_examples": []
+}

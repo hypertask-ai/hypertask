@@ -1,0 +1,104 @@
+{
+  "name": "hypertask_tasks",
+  "does": "Read, create, update, move, assign and relate tickets, including context, trees and description versions.",
+  "use_when": "Use when working with a known ticket or a filtered board queue; list finds overdue work and context includes comments and recent activity.",
+  "do_not_use_when": "Do not use for fuzzy text discovery or editing comments; use hypertask_search or hypertask_comments instead.",
+  "parameters_and_caveats": "action selects an operation; input contains only that operation’s documented fields. response_format defaults to concise for reads; detailed retains full fields. limit defaults to 20 (maximum 50) and offset defaults to 0 for bounded read results; use returned pagination or narrower filters. Prefer ticket_number (for example HTPR-1234); get accepts identifier arrays, while context requires task_id and project_id. Normal, Archive and Deleted describe storage state, not workflow columns; section names describe workflow.",
+  "actions": {
+    "list": {
+      "tool": "hypertask_list_tasks",
+      "read_only": true,
+      "permission": "data"
+    },
+    "get": {
+      "tool": "hypertask_get_tasks",
+      "read_only": true,
+      "permission": "data"
+    },
+    "context": {
+      "tool": "hypertask_task_context",
+      "read_only": true,
+      "permission": "data"
+    },
+    "tree": {
+      "tool": "hypertask_get_task_tree",
+      "read_only": true,
+      "permission": "data"
+    },
+    "next": {
+      "tool": "hypertask_next_tasks",
+      "read_only": true,
+      "permission": "data"
+    },
+    "versions": {
+      "tool": "hypertask_task_description_history",
+      "legacy_action": "versions",
+      "read_only": true,
+      "permission": "data"
+    },
+    "restore": {
+      "tool": "hypertask_task_description_history",
+      "legacy_action": "restore",
+      "read_only": false,
+      "permission": "data"
+    },
+    "link": {
+      "tool": "hypertask_link_tasks",
+      "legacy_action": "link",
+      "read_only": false,
+      "permission": "data"
+    },
+    "links": {
+      "tool": "hypertask_link_tasks",
+      "legacy_action": "list",
+      "read_only": true,
+      "permission": "data"
+    },
+    "unlink": {
+      "tool": "hypertask_link_tasks",
+      "legacy_action": "unlink",
+      "read_only": false,
+      "permission": "data"
+    },
+    "create": {
+      "tool": "hypertask_create_task",
+      "read_only": false,
+      "permission": "data"
+    },
+    "update": {
+      "tool": "hypertask_update_task",
+      "read_only": false,
+      "permission": "data"
+    },
+    "move": {
+      "tool": "hypertask_move_task_between_boards",
+      "read_only": false,
+      "permission": "data"
+    },
+    "assign": {
+      "tool": "hypertask_assign_user",
+      "read_only": false,
+      "permission": "data"
+    }
+  },
+  "input_examples": [
+    {
+      "action": "create",
+      "input": {
+        "project_id": 15,
+        "title": "Fix the checkout retry",
+        "description": "Reproduce the retry and add coverage.",
+        "content_type": "markdown",
+        "priority": 2
+      }
+    },
+    {
+      "action": "update",
+      "input": {
+        "ticket_number": "HTPR-1234",
+        "section_id": 42,
+        "due_date": "2026-10-05"
+      }
+    }
+  ]
+}

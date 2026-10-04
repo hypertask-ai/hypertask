@@ -13,13 +13,16 @@ const require = createRequire(import.meta.url)
 const ts = require('typescript') as typeof import('typescript')
 const root = process.cwd()
 const token = 'transport-test-token'
-const flags = { stateless: false, deferred: false }
+const flags = { stateless: false, deferred: false, catalog: false }
+const echoCalls: unknown[] = []
 const echoTool = {
   name: 'echo',
   description: 'Repeat the text',
   parameters: z.object({ text: z.string() }),
-  execute: async (args: unknown, bearer: string, invocation: unknown) =>
-    JSON.stringify({ args, bearer, invocation }),
+  execute: async (args: unknown, bearer: string, invocation: unknown) => {
+    echoCalls.push({ args, bearer, invocation })
+    return JSON.stringify({ args, bearer, invocation })
+  },
 }
 
 // Exercise the actual route, auth wrapper and transports; only product data,
@@ -37,10 +40,29 @@ function loadRoutes() {
     loaded.require = (request: string) => {
       if (request === '@/lib/telemetry/mcpSseAnalytics') return { recordLegacyMcpRequest: () => {} }
       if (request === './tools') return { MCP_TOOLS: [echoTool] }
+      if (request === './consolidated-tools') return {
+        selectMcpTools: (tools: typeof echoTool[], enabled: boolean, caller: { managementPermissions?: unknown } = {}) => {
+          if (!enabled) return tools
+          const permitted = !caller.managementPermissions
+          const execute = async (...args: Parameters<typeof echoTool.execute>) => {
+            if (!permitted) throw new Error('This action is not allowed by this credential')
+            return echoTool.execute(...args)
+          }
+          return [
+            ...(permitted ? [{ ...echoTool, name: 'consolidated_echo',
+              inputSchema: { type: 'object', properties: { text: { type: 'string' } }, required: ['text'] },
+              outputSchema: { type: 'object' }, execute }] : []),
+            { ...echoTool, hidden: true, outputSchema: { type: 'object' }, execute },
+          ]
+        },
+      }
       if (request === '@/lib/mcp/auth') return {
         extractBearerToken: (header: string | null) => header?.match(/^Bearer (.+)$/)?.[1] ?? null,
         validateMcpAuth: async (request: Request) => {
           const bearer = request.headers.get('authorization')
+          if (bearer === 'Bearer restricted-owner') {
+            return { user: { id: 6 }, management: { permissions: { management: ['read'] } } }
+          }
           return bearer === `Bearer ${token}` || bearer === 'Bearer another-user'
             ? { user: { id: bearer === `Bearer ${token}` ? 6 : 7 } }
             : null
@@ -50,6 +72,7 @@ function loadRoutes() {
         HTPR_6530_MCP_LIST_QUERY_FLAG: 'list-query',
         HTPR_6531_DEFERRED_MCP_TOOLS_FLAG: 'deferred',
         HTPR_6532_STATELESS_MCP_FLAG: 'stateless',
+        HTPR_6804_MCP_TOOLS_FLAG: 'catalog',
         isFeatureEnabled: async (flag: string) => flags[flag as keyof typeof flags] ?? false,
       }
       if (request.startsWith('.') || request.startsWith('@/')) {
@@ -202,6 +225,55 @@ test('actual routes preserve legacy SSE across instances and support MCP 2 strea
       assert.equal((await post({ jsonrpc: '2.0', id: 6, method: 'tools/list' })).status, 404)
     }
 
+    await t.test('open SSE sessions use the live catalog flag and each relayed credential scope', async () => {
+      flags.catalog = true
+      const stream = frames(await first.sse.GET(request('/sse')))
+      streams.push(stream)
+      try {
+        const endpoint = await stream.next()
+        const session = new URL(endpoint.data, 'http://localhost').searchParams.get('sessionId')!
+        const post = (body: unknown, bearer = token) => second.message.POST(request(endpoint.data, 'POST', body, bearer))
+        const rpc = async (id: number, method: string, params?: unknown, bearer = token) => {
+          assert.equal((await post({ jsonrpc: '2.0', id, method, params }, bearer)).status, 202)
+          return JSON.parse((await stream.next()).data)
+        }
+        assert.equal((await post(initialize)).status, 202)
+        await stream.next()
+        assert.equal((await post({ jsonrpc: '2.0', method: 'notifications/initialized' })).status, 202)
+        const listed = await rpc(10, 'tools/list')
+        assert.deepEqual(listed.result.tools.map((tool: { name: string }) => tool.name), ['consolidated_echo'])
+        assert.equal(listed.result.tools[0].outputSchema.type, 'object')
+        for (const name of ['consolidated_echo', 'echo']) {
+          const called = await rpc(11, 'tools/call', { name, arguments: { text: 'flagged works' } })
+          assert.equal(called.result.structuredContent.args.text, 'flagged works')
+          assert.equal(called.result.structuredContent.invocation.sessionId, session)
+          assert.equal(called.result.structuredContent.invocation.requestId, '11')
+        }
+        flags.catalog = false
+        const disabled = await rpc(12, 'tools/list')
+        assert.deepEqual(disabled.result.tools.map((tool: { name: string }) => tool.name), ['echo'])
+        const callsBeforeDenied = echoCalls.length
+        const rejected = await rpc(13, 'tools/call', { name: 'consolidated_echo', arguments: { text: 'must not execute' } })
+        assert.ok(rejected.error || rejected.result.isError)
+        assert.equal(echoCalls.length, callsBeforeDenied)
+        const legacy = await rpc(14, 'tools/call', { name: 'echo', arguments: { text: 'legacy restored' } })
+        assert.equal(JSON.parse(legacy.result.content[0].text).args.text, 'legacy restored')
+        flags.catalog = true
+        assert.deepEqual((await rpc(15, 'tools/list')).result.tools.map((tool: { name: string }) => tool.name), ['consolidated_echo'])
+        assert.deepEqual((await rpc(16, 'tools/list', undefined, 'restricted-owner')).result.tools, [])
+        for (const name of ['consolidated_echo', 'echo']) {
+          const denied = await rpc(17, 'tools/call', { name, arguments: { text: 'restricted' } }, 'restricted-owner')
+          assert.ok(denied.error || denied.result.isError)
+        }
+        assert.equal(echoCalls.length, callsBeforeDenied + 1)
+        assert.equal((await post({ jsonrpc: '2.0', id: 18, method: 'tools/list' }, 'another-user')).status, 403)
+        assert.equal((await rpc(19, 'tools/call', { name: 'consolidated_echo', arguments: { text: 'owner restored' } })).result.isError, undefined)
+      } finally {
+        await stream.reader.cancel()
+        flags.catalog = false
+      }
+    })
+
     flags.stateless = false
     flags.deferred = false
     for (const body of [initialize, { jsonrpc: '2.0', id: 2, method: 'tools/list' }, {
@@ -234,6 +306,7 @@ test('actual routes preserve legacy SSE across instances and support MCP 2 strea
   } finally {
     flags.stateless = false
     flags.deferred = false
+    flags.catalog = false
     if (previousUrl === undefined) delete process.env.REDIS_URL
     else process.env.REDIS_URL = previousUrl
     await Promise.all(streams.map((stream) => stream.reader.cancel().catch(() => {})))

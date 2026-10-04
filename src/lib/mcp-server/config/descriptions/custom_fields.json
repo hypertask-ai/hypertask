@@ -1,0 +1,20 @@
+{
+  "name": "hypertask_custom_fields",
+  "does": "List custom field definitions on a board or set one custom field value on a ticket.",
+  "use_when": "Use when a ticket needs board-specific typed metadata rather than its standard priority or due date.",
+  "do_not_use_when": "Do not use for ordinary ticket fields; use hypertask_tasks update instead.",
+  "parameters_and_caveats": "action selects an operation; input contains only that operation’s documented fields. response_format defaults to concise for reads; detailed retains full fields. limit defaults to 20 (maximum 50) and offset defaults to 0 for bounded read results; use returned pagination or narrower filters. Identifiers and required fields depend on the selected action; writes keep existing authorization and confirmation rules.",
+  "actions": {
+    "list": {
+      "tool": "hypertask_list_custom_fields",
+      "read_only": true,
+      "permission": "data"
+    },
+    "set": {
+      "tool": "hypertask_set_custom_field_value",
+      "read_only": false,
+      "permission": "data"
+    }
+  },
+  "input_examples": []
+}

@@ -93,6 +93,7 @@ export const HTPR_6516_AGENT_ATTRIBUTION_FLAG =
   "htpr-6516-agent-attribution";
 export const HTPR_6512_SEED_TEAM_AGENT_FLAG = "htpr-6512-seed-team-agent";
 export const HTPR_6533_MCP_CLIENT_EVAL_FLAG = "htpr-6533-mcp-client-eval";
+export const HTPR_6804_MCP_TOOLS_FLAG = "htpr-6804-mcp-tools";
 export const HTPR_6470_PROJECT_DELETE_FLAG = "htpr-6470-project-delete";
 export const HTPR_6536_QA_LOGIN_FLAG = "htpr-6536-qa-login";
 export const HTPR_6551_QUIET_RUN_ACTIVITY_FLAG =

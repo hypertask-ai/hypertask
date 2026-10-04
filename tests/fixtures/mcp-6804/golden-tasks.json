@@ -1,0 +1,635 @@
+{
+  "ticket": "https://app.hypertask.ai/detail/project-15/6804",
+  "purpose": "Golden task data for the separately owned evaluation harness; never run mutations against production or shared previews.",
+  "tasks": [
+    {
+      "id": "orient",
+      "prompt": "Show who I am, my available boards, and the conventions I should follow.",
+      "credential": "full-human",
+      "fixture": "isolated seeded board 15; HTPR-1234=task 1234, HTPR-1235=task 1235; Review=section 42; other example identifiers must be seeded before execution",
+      "expected_calls": [
+        {
+          "tool": "hypertask_user_context",
+          "action": "hello",
+          "input": {}
+        }
+      ],
+      "assertions": [
+        "Use only consolidated advertised tools.",
+        "Make no mutations.",
+        "Keep requests targeted and follow pagination if needed."
+      ],
+      "mutates": false
+    },
+    {
+      "id": "overdue",
+      "prompt": "Find my overdue active tickets on board 15, due before 2026-10-03.",
+      "credential": "full-human",
+      "fixture": "isolated seeded board 15; HTPR-1234=task 1234, HTPR-1235=task 1235; Review=section 42; other example identifiers must be seeded before execution",
+      "expected_calls": [
+        {
+          "tool": "hypertask_tasks",
+          "action": "list",
+          "input": {
+            "project_id": 15,
+            "assigned_to": "me",
+            "due_date_before": "2026-10-03T00:00:00Z",
+            "status": "Normal"
+          }
+        }
+      ],
+      "assertions": [
+        "Use only consolidated advertised tools.",
+        "Make no mutations.",
+        "Keep requests targeted and follow pagination if needed."
+      ],
+      "mutates": false
+    },
+    {
+      "id": "review-comment",
+      "prompt": "Move HTPR-1234 to the Review column and comment that the patch is ready.",
+      "credential": "full-human",
+      "fixture": "isolated seeded board 15; HTPR-1234=task 1234, HTPR-1235=task 1235; Review=section 42; other example identifiers must be seeded before execution",
+      "expected_calls": [
+        {
+          "tool": "hypertask_projects",
+          "action": "manifest",
+          "input": {
+            "project_id": 15
+          }
+        },
+        {
+          "tool": "hypertask_tasks",
+          "action": "update",
+          "input": {
+            "ticket_number": "HTPR-1234",
+            "section_id": 42
+          }
+        },
+        {
+          "tool": "hypertask_comments",
+          "action": "add",
+          "input": {
+            "ticket_number": "HTPR-1234",
+            "text": "The patch is ready for review."
+          }
+        }
+      ],
+      "assertions": [
+        "Use only consolidated advertised tools.",
+        "Do not retry a successful mutation.",
+        "Keep requests targeted and follow pagination if needed."
+      ],
+      "mutates": true
+    },
+    {
+      "id": "create-ticket",
+      "prompt": "Create an urgent checkout retry ticket on board 15 with a Markdown reproduction.",
+      "credential": "full-human",
+      "fixture": "isolated seeded board 15; HTPR-1234=task 1234, HTPR-1235=task 1235; Review=section 42; other example identifiers must be seeded before execution",
+      "expected_calls": [
+        {
+          "tool": "hypertask_tasks",
+          "action": "create",
+          "input": {
+            "project_id": 15,
+            "title": "Checkout retries charge twice",
+            "priority": 1,
+            "description": "1. Submit checkout.\n2. Retry after the timeout.",
+            "content_type": "markdown"
+          }
+        }
+      ],
+      "assertions": [
+        "Use only consolidated advertised tools.",
+        "Do not retry a successful mutation.",
+        "Keep requests targeted and follow pagination if needed."
+      ],
+      "mutates": true
+    },
+    {
+      "id": "get-ticket",
+      "prompt": "Show the current title, column and due date for HTPR-1234.",
+      "credential": "full-human",
+      "fixture": "isolated seeded board 15; HTPR-1234=task 1234, HTPR-1235=task 1235; Review=section 42; other example identifiers must be seeded before execution",
+      "expected_calls": [
+        {
+          "tool": "hypertask_tasks",
+          "action": "get",
+          "input": {
+            "ticket_number": [
+              "HTPR-1234"
+            ]
+          }
+        }
+      ],
+      "assertions": [
+        "Use only consolidated advertised tools.",
+        "Make no mutations.",
+        "Keep requests targeted and follow pagination if needed."
+      ],
+      "mutates": false
+    },
+    {
+      "id": "agent-yesterday",
+      "prompt": "What did the agent do on HTPR-1234 yesterday? Use its comments and activity, not assumptions.",
+      "credential": "full-human",
+      "fixture": "isolated seeded board 15; HTPR-1234=task 1234, HTPR-1235=task 1235; Review=section 42; other example identifiers must be seeded before execution",
+      "expected_calls": [
+        {
+          "tool": "hypertask_comments",
+          "action": "list",
+          "input": {
+            "ticket_number": "HTPR-1234",
+            "include_activity": true
+          }
+        }
+      ],
+      "assertions": [
+        "Use only consolidated advertised tools.",
+        "Make no mutations.",
+        "Keep requests targeted and follow pagination if needed."
+      ],
+      "mutates": false
+    },
+    {
+      "id": "ticket-context",
+      "prompt": "Summarize the blockers, subtasks and recent discussion for the ticket with task id 1234 on board 15.",
+      "credential": "full-human",
+      "fixture": "isolated seeded board 15; HTPR-1234=task 1234, HTPR-1235=task 1235; Review=section 42; other example identifiers must be seeded before execution",
+      "expected_calls": [
+        {
+          "tool": "hypertask_tasks",
+          "action": "context",
+          "input": {
+            "task_id": 1234,
+            "project_id": 15
+          }
+        }
+      ],
+      "assertions": [
+        "Use only consolidated advertised tools.",
+        "Make no mutations.",
+        "Keep requests targeted and follow pagination if needed."
+      ],
+      "mutates": false
+    },
+    {
+      "id": "next-work",
+      "prompt": "Pick three unblocked Todo tickets from board 15.",
+      "credential": "full-human",
+      "fixture": "isolated seeded board 15; HTPR-1234=task 1234, HTPR-1235=task 1235; Review=section 42; other example identifiers must be seeded before execution",
+      "expected_calls": [
+        {
+          "tool": "hypertask_tasks",
+          "action": "next",
+          "input": {
+            "project_id": 15,
+            "section": "Todo",
+            "exclude_blocked": true,
+            "limit": 3
+          }
+        }
+      ],
+      "assertions": [
+        "Use only consolidated advertised tools.",
+        "Make no mutations.",
+        "Keep requests targeted and follow pagination if needed."
+      ],
+      "mutates": false
+    },
+    {
+      "id": "link-blocker",
+      "prompt": "Record HTPR-1234 as blocked by HTPR-1235.",
+      "credential": "full-human",
+      "fixture": "isolated seeded board 15; HTPR-1234=task 1234, HTPR-1235=task 1235; Review=section 42; other example identifiers must be seeded before execution",
+      "expected_calls": [
+        {
+          "tool": "hypertask_tasks",
+          "action": "link",
+          "input": {
+            "source_ticket_number": "HTPR-1234",
+            "target_ticket_number": "HTPR-1235",
+            "relation_type": "BlockedBy"
+          }
+        }
+      ],
+      "assertions": [
+        "Use only consolidated advertised tools.",
+        "Do not retry a successful mutation.",
+        "Keep requests targeted and follow pagination if needed."
+      ],
+      "mutates": true
+    },
+    {
+      "id": "search-failure",
+      "prompt": "Find checkout failure tickets on board 15 with a red linked PR.",
+      "credential": "full-human",
+      "fixture": "isolated seeded board 15; HTPR-1234=task 1234, HTPR-1235=task 1235; Review=section 42; other example identifiers must be seeded before execution",
+      "expected_calls": [
+        {
+          "tool": "hypertask_search",
+          "action": "tasks",
+          "input": {
+            "project_id": 15,
+            "query": "checkout",
+            "filter": {
+              "has_pr": "red"
+            }
+          }
+        }
+      ],
+      "assertions": [
+        "Use only consolidated advertised tools.",
+        "Make no mutations.",
+        "Keep requests targeted and follow pagination if needed."
+      ],
+      "mutates": false
+    },
+    {
+      "id": "semantic-evidence",
+      "prompt": "Find relevant evidence about checkout idempotency in board 15 documents and cite the returned passage sources.",
+      "credential": "full-human",
+      "fixture": "isolated seeded board 15; HTPR-1234=task 1234, HTPR-1235=task 1235; Review=section 42; other example identifiers must be seeded before execution",
+      "expected_calls": [
+        {
+          "tool": "hypertask_search",
+          "action": "semantic",
+          "input": {
+            "project_id": 15,
+            "query": "checkout idempotency retries"
+          }
+        }
+      ],
+      "assertions": [
+        "Use only consolidated advertised tools.",
+        "Make no mutations.",
+        "Keep requests targeted and follow pagination if needed."
+      ],
+      "mutates": false
+    },
+    {
+      "id": "help-instructions",
+      "prompt": "Find the product documentation on moving tickets between boards.",
+      "credential": "full-human",
+      "fixture": "isolated seeded board 15; HTPR-1234=task 1234, HTPR-1235=task 1235; Review=section 42; other example identifiers must be seeded before execution",
+      "expected_calls": [
+        {
+          "tool": "hypertask_search",
+          "action": "help",
+          "input": {
+            "query": "move tickets between boards"
+          }
+        }
+      ],
+      "assertions": [
+        "Use only consolidated advertised tools.",
+        "Make no mutations.",
+        "Keep requests targeted and follow pagination if needed."
+      ],
+      "mutates": false
+    },
+    {
+      "id": "build-board",
+      "prompt": "Create a release board in team team-example with Todo, Review and Done, and a Todo release-notes task.",
+      "credential": "full-human",
+      "fixture": "isolated seeded board 15; HTPR-1234=task 1234, HTPR-1235=task 1235; Review=section 42; other example identifiers must be seeded before execution",
+      "expected_calls": [
+        {
+          "tool": "hypertask_projects",
+          "action": "create",
+          "input": {
+            "team_id": "team-example",
+            "title": "Release plan",
+            "sections": [
+              {
+                "title": "Todo"
+              },
+              {
+                "title": "Review"
+              },
+              {
+                "title": "Done"
+              }
+            ],
+            "tasks": [
+              {
+                "title": "Write release notes",
+                "section_title": "Todo",
+                "priority": 3
+              }
+            ]
+          }
+        }
+      ],
+      "assertions": [
+        "Use only consolidated advertised tools.",
+        "Do not retry a successful mutation.",
+        "Keep requests targeted and follow pagination if needed."
+      ],
+      "mutates": true
+    },
+    {
+      "id": "playbook",
+      "prompt": "Read the definition of done for board 15.",
+      "credential": "full-human",
+      "fixture": "isolated seeded board 15; HTPR-1234=task 1234, HTPR-1235=task 1235; Review=section 42; other example identifiers must be seeded before execution",
+      "expected_calls": [
+        {
+          "tool": "hypertask_projects",
+          "action": "playbook",
+          "input": {
+            "project_id": 15
+          }
+        }
+      ],
+      "assertions": [
+        "Use only consolidated advertised tools.",
+        "Make no mutations.",
+        "Keep requests targeted and follow pagination if needed."
+      ],
+      "mutates": false
+    },
+    {
+      "id": "column-settings",
+      "prompt": "List board 15 columns and show which columns automatically assign agents.",
+      "credential": "full-human",
+      "fixture": "isolated seeded board 15; HTPR-1234=task 1234, HTPR-1235=task 1235; Review=section 42; other example identifiers must be seeded before execution",
+      "expected_calls": [
+        {
+          "tool": "hypertask_sections",
+          "action": "list",
+          "input": {
+            "project_id": 15
+          }
+        }
+      ],
+      "assertions": [
+        "Use only consolidated advertised tools.",
+        "Make no mutations.",
+        "Keep requests targeted and follow pagination if needed."
+      ],
+      "mutates": false
+    },
+    {
+      "id": "label-create",
+      "prompt": "Create the Security label on board 15 after checking whether it already exists.",
+      "credential": "full-human",
+      "fixture": "isolated seeded board 15; HTPR-1234=task 1234, HTPR-1235=task 1235; Review=section 42; other example identifiers must be seeded before execution",
+      "expected_calls": [
+        {
+          "tool": "hypertask_labels",
+          "action": "list",
+          "input": {
+            "project_id": 15
+          }
+        },
+        {
+          "tool": "hypertask_labels",
+          "action": "create",
+          "input": {
+            "project_id": 15,
+            "name": "Security"
+          }
+        }
+      ],
+      "assertions": [
+        "Use only consolidated advertised tools.",
+        "Do not retry a successful mutation.",
+        "Keep requests targeted and follow pagination if needed."
+      ],
+      "mutates": true
+    },
+    {
+      "id": "custom-value",
+      "prompt": "Set the Release custom field to v2.1 on task 1234.",
+      "credential": "full-human",
+      "fixture": "isolated seeded board 15; HTPR-1234=task 1234, HTPR-1235=task 1235; Review=section 42; other example identifiers must be seeded before execution",
+      "expected_calls": [
+        {
+          "tool": "hypertask_custom_fields",
+          "action": "list",
+          "input": {
+            "project_id": 15
+          }
+        },
+        {
+          "tool": "hypertask_custom_fields",
+          "action": "set",
+          "input": {
+            "task_id": 1234,
+            "field_name": "Release",
+            "value": "v2.1"
+          }
+        }
+      ],
+      "assertions": [
+        "Use only consolidated advertised tools.",
+        "Do not retry a successful mutation.",
+        "Keep requests targeted and follow pagination if needed."
+      ],
+      "mutates": true
+    },
+    {
+      "id": "inbox-triage",
+      "prompt": "List my inbox, then archive notification 5678 after I confirm it is handled.",
+      "credential": "full-human",
+      "fixture": "isolated seeded board 15; HTPR-1234=task 1234, HTPR-1235=task 1235; Review=section 42; other example identifiers must be seeded before execution",
+      "expected_calls": [
+        {
+          "tool": "hypertask_inbox",
+          "action": "list",
+          "input": {}
+        },
+        {
+          "tool": "hypertask_inbox",
+          "action": "archive",
+          "input": {
+            "notification_ids": [
+              5678
+            ]
+          }
+        }
+      ],
+      "assertions": [
+        "Use only consolidated advertised tools.",
+        "Do not retry a successful mutation.",
+        "Keep requests targeted and follow pagination if needed."
+      ],
+      "mutates": true
+    },
+    {
+      "id": "page-update",
+      "prompt": "Append a Markdown QA checklist to page page-example without overwriting someone else’s edit.",
+      "credential": "full-human",
+      "fixture": "isolated seeded board 15; HTPR-1234=task 1234, HTPR-1235=task 1235; Review=section 42; other example identifiers must be seeded before execution",
+      "expected_calls": [
+        {
+          "tool": "hypertask_pages",
+          "action": "get",
+          "input": {
+            "page_id": "page-example",
+            "format": "markdown"
+          }
+        },
+        {
+          "tool": "hypertask_pages",
+          "action": "update",
+          "input": {
+            "page_id": "page-example",
+            "content": "## QA\n- [ ] Retry checkout",
+            "content_type": "markdown",
+            "mode": "append",
+            "if_version": 3
+          }
+        }
+      ],
+      "assertions": [
+        "Use only consolidated advertised tools.",
+        "Do not retry a successful mutation.",
+        "Keep requests targeted and follow pagination if needed."
+      ],
+      "mutates": true
+    },
+    {
+      "id": "agent-cleanup",
+      "prompt": "List my owned agents including revoked identities, but do not delete anything.",
+      "credential": "full-human",
+      "fixture": "isolated seeded board 15; HTPR-1234=task 1234, HTPR-1235=task 1235; Review=section 42; other example identifiers must be seeded before execution",
+      "expected_calls": [
+        {
+          "tool": "hypertask_agents",
+          "action": "list",
+          "input": {}
+        }
+      ],
+      "assertions": [
+        "Use only consolidated advertised tools.",
+        "Make no mutations.",
+        "Keep requests targeted and follow pagination if needed."
+      ],
+      "mutates": false
+    },
+    {
+      "id": "webhook-inspect",
+      "prompt": "Inspect the outbound webhook configured for this agent without sending a test delivery.",
+      "credential": "owned-agent",
+      "fixture": "isolated seeded board 15; HTPR-1234=task 1234, HTPR-1235=task 1235; Review=section 42; other example identifiers must be seeded before execution",
+      "expected_calls": [
+        {
+          "tool": "hypertask_webhooks",
+          "action": "get",
+          "input": {
+            "agent_id": "self"
+          }
+        }
+      ],
+      "assertions": [
+        "Use only consolidated advertised tools.",
+        "Make no mutations.",
+        "Keep requests targeted and follow pagination if needed."
+      ],
+      "mutates": false
+    },
+    {
+      "id": "time-log",
+      "prompt": "Log 25 minutes on HTPR-1234 for reproducing the retry bug.",
+      "credential": "full-human",
+      "fixture": "isolated seeded board 15; HTPR-1234=task 1234, HTPR-1235=task 1235; Review=section 42; other example identifiers must be seeded before execution",
+      "expected_calls": [
+        {
+          "tool": "hypertask_time",
+          "action": "log",
+          "input": {
+            "task_identifier": "HTPR-1234",
+            "minutes": 25,
+            "note": "Reproduced retry bug"
+          }
+        }
+      ],
+      "assertions": [
+        "Use only consolidated advertised tools.",
+        "Do not retry a successful mutation.",
+        "Keep requests targeted and follow pagination if needed."
+      ],
+      "mutates": true
+    },
+    {
+      "id": "view-inspect",
+      "prompt": "List saved views for board 15 before choosing one to switch to.",
+      "credential": "full-human",
+      "fixture": "isolated seeded board 15; HTPR-1234=task 1234, HTPR-1235=task 1235; Review=section 42; other example identifiers must be seeded before execution",
+      "expected_calls": [
+        {
+          "tool": "hypertask_views",
+          "action": "list",
+          "input": {
+            "project_id": 15
+          }
+        }
+      ],
+      "assertions": [
+        "Use only consolidated advertised tools.",
+        "Make no mutations.",
+        "Keep requests targeted and follow pagination if needed."
+      ],
+      "mutates": false
+    },
+    {
+      "id": "skill-inspect",
+      "prompt": "List board 15 skills and identify the review checklist, without changing instructions.",
+      "credential": "full-human",
+      "fixture": "isolated seeded board 15; HTPR-1234=task 1234, HTPR-1235=task 1235; Review=section 42; other example identifiers must be seeded before execution",
+      "expected_calls": [
+        {
+          "tool": "hypertask_skills",
+          "action": "list",
+          "input": {
+            "project_id": 15
+          }
+        }
+      ],
+      "assertions": [
+        "Use only consolidated advertised tools.",
+        "Make no mutations.",
+        "Keep requests targeted and follow pagination if needed."
+      ],
+      "mutates": false
+    },
+    {
+      "id": "decision-draft",
+      "prompt": "Ask whether HTPR-1234 should retry automatically, then prepare an unpublished comment draft explaining the options.",
+      "credential": "full-human",
+      "fixture": "isolated seeded board 15; HTPR-1234=task 1234, HTPR-1235=task 1235; Review=section 42; other example identifiers must be seeded before execution",
+      "expected_calls": [
+        {
+          "tool": "hypertask_decisions",
+          "action": "create",
+          "input": {
+            "ticket_number": "HTPR-1234",
+            "question": "Should checkout retry automatically?",
+            "options": [
+              "Retry automatically",
+              "Require confirmation"
+            ]
+          }
+        },
+        {
+          "tool": "hypertask_drafts",
+          "action": "create",
+          "input": {
+            "ticket_number": "HTPR-1234",
+            "text": "Options: retry automatically or require confirmation.",
+            "draft_type": "comment"
+          }
+        }
+      ],
+      "assertions": [
+        "Use only consolidated advertised tools.",
+        "Do not retry a successful mutation.",
+        "Keep requests targeted and follow pagination if needed."
+      ],
+      "mutates": true
+    }
+  ]
+}
