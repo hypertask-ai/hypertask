@@ -4,7 +4,7 @@ import { type ModelMessage, type ToolSet, streamText, stepCountIs, generateText 
 
 import { failHeartbeatExecution } from "@/app/api/ai/_lib/heartbeatExecution";
 
-import { logAiUsage } from "@/app/api/ai/_lib/aiUsage";
+import { configureAiModelUsage } from "@/app/api/ai/_lib/modelProvider";
 import { previousModelForFailedStream } from "@/app/api/ai/chat/stream/modelFallback";
 import { hasVisibleCompletion, buildEmptyCompletionSummary } from "@/app/api/ai/chat/stream/bulkTools";
 import { reportHandledChatError, errorMessage, userFacingErrorMessage, userFacingErrorDetails, reportEmptyCompletion } from "@/lib/ai/chatStream/errors";
@@ -27,6 +27,15 @@ export async function generateModelReply(state: StreamState, inputs: { instructi
   let result!: ReturnType<typeof streamText>;
   for (let attempt = 0; attempt < 2; attempt++) {
     let fallbackError: unknown;
+    configureAiModelUsage(state.selected.model, {
+      userId: dbUser.id,
+      teamId: gatewayTags.teamId ?? null,
+      projectId: usageProjectId,
+      taskId: contextTaskId,
+      agentId: actingAgent?.id ?? null,
+      provider: state.selected.usageProvider,
+      feature: "chat",
+    });
     result = streamText({
       model: state.selected.model,
       instructions,
@@ -41,21 +50,7 @@ export async function generateModelReply(state: StreamState, inputs: { instructi
           outputTokens: usage.outputTokens ?? undefined,
         };
         state.generationFinishedWithError = finishReason === "error";
-        await logAiUsage({
-          userId: dbUser.id,
-          teamId: gatewayTags.teamId ?? null,
-          projectId: usageProjectId,
-          taskId: contextTaskId,
-          // Without this an agent's own turns land as agentId: null, so the
-          // team is billed for work nobody can trace back to the agent.
-          agentId: actingAgent?.id ?? null,
-          provider: state.selected.usageProvider,
-          model: state.selected.modelId,
-          feature: "chat",
-          inputTokens: usage.inputTokens ?? 0,
-          outputTokens: usage.outputTokens ?? 0,
-          totalTokens: usage.totalTokens ?? 0,
-        });
+
       },
       onError: async ({ error }) => {
         if (
@@ -200,19 +195,7 @@ export async function generateModelReply(state: StreamState, inputs: { instructi
           outputTokens:
             (state.turnUsage?.outputTokens ?? 0) + (retry.usage.outputTokens ?? 0),
         };
-        await logAiUsage({
-          userId: dbUser.id,
-          teamId: gatewayTags.teamId ?? null,
-          projectId: usageProjectId,
-          taskId: contextTaskId,
-          agentId: actingAgent?.id ?? null,
-          provider: state.selected.usageProvider,
-          model: state.selected.modelId,
-          feature: "chat",
-          inputTokens: retry.usage.inputTokens ?? 0,
-          outputTokens: retry.usage.outputTokens ?? 0,
-          totalTokens: retry.usage.totalTokens ?? 0,
-        });
+
         const retryText = retry.text?.trim() ?? "";
         if (retryText) {
           state.generationFinishedWithError = retry.finishReason === "error";

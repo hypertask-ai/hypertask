@@ -1,4 +1,6 @@
 import { reportError } from "@/lib/errors/reportError";
+import { configureAiModelUsage } from "@/app/api/ai/_lib/modelProvider";
+import { renderPrompt } from "@/lib/ai/prompts/registry";
 import { NextRequest, NextResponse } from "next/server";
 import { htmlToText } from "@/app/api/ai/_lib/currentTaskContext";
 import { generateText, stepCountIs } from "ai";
@@ -24,7 +26,6 @@ import {
 } from "@/app/api/ai/_lib/currentTaskContext";
 import { sanitizeRichHtml } from "@/utils/helperFunctions/sanitizeRichHtml";
 import { resolveSkills } from "@/app/api/ai/_lib/skills";
-import { logAiUsage } from "@/app/api/ai/_lib/aiUsage";
 import {
   aiModelOptions,
   getAiModelDefinition,
@@ -355,22 +356,19 @@ export async function POST(request: NextRequest) {
       sourceMessageImmutable,
     });
 
+    configureAiModelUsage(selected.model, {
+      userId: requestUser.id,
+      teamId: selected.teamId,
+      projectId: body.projectId,
+      taskId: usageTaskId,
+      provider: selected.usageProvider,
+      feature: "hyper-mentioned",
+    });
     const result = await generateText({
       model: selected.model,
-      instructions: `You are HyperAI, an assistant inside Hypertask.
-Return only a valid HTML fragment using basic tags like <p>, <ul>, <li>, <strong>, and <a>.
-${HOUSE_OUTPUT_STYLE}
-The user mentioned you inside one specific ticket. The context block labelled "THIS TICKET" is that ticket and is the subject of the request — answer about THIS TICKET. Treat any "OTHER PROJECT CONTEXT" only as background from this board or OTHER BOARDS the user can access; use it for cross-references and never summarise or describe a different ticket as if it were the one the user asked about.
-Never claim you lack access to a board. If you cannot find something, say you could not find it.
-When mentioning a ticket you already resolved from context (you know its projectId and ticket number, e.g. HTPR-1234), wrap it in <a href="/detail/project-{projectId}/{uniqueIndex}">HTPR-1234</a> rather than plain text.
-You have ${HYPER_AI_TOOL_COUNT} Hypertask tools backed by the same MCP capability registry. Use them when the user asks you to inspect or change Hypertask data; do not claim a supported job is unavailable.
-Every mutation is protected by cross-message confirmation. The first exact write call returns confirmation_required and changes nothing. Summarize the exact proposed write, ask the user to confirm in a later comment, and end the turn. Set confirmed=true only when the CURRENT user comment explicitly approves that earlier proposal. Never treat the same comment that requested a write as confirmation, and never alter the proposal while confirming it.
-Read-only calls do not need confirmation. Default ambiguous references like "this task" or "this board" to the current task and project in the request context.
-Do not include markdown fences, greetings, or sign-offs.${
-        skillResolution.systemPromptAddition
+      instructions: renderPrompt("hyper-mentioned-instructions-1", (HOUSE_OUTPUT_STYLE), (HYPER_AI_TOOL_COUNT), (skillResolution.systemPromptAddition
           ? `\n\n${skillResolution.systemPromptAddition}`
-          : ""
-      }`,
+          : "")),
       messages: [
         {
           role: "user",
@@ -407,18 +405,6 @@ Do not include markdown fences, greetings, or sign-offs.${
         tools: executedToolNames,
       });
     }
-    await logAiUsage({
-      userId: requestUser.id,
-      teamId: selected.teamId,
-      projectId: body.projectId,
-      taskId: usageTaskId,
-      provider: selected.usageProvider,
-      model: selected.modelId,
-      feature: "hyper-mentioned",
-      inputTokens: result.usage.inputTokens ?? 0,
-      outputTokens: result.usage.outputTokens ?? 0,
-      totalTokens: result.usage.totalTokens ?? 0,
-    });
 
     const botUserId = parseInt(process.env.NEXT_PUBLIC_HYPERAI_ID || "332", 10);
     const botUser = await prisma.user.findUnique({ where: { id: botUserId } });
@@ -488,7 +474,6 @@ function ensureHtmlFragment(value: string) {
   if (/<[a-z][\s\S]*>/i.test(trimmed)) return trimmed;
   return `<p>${escapeHtml(trimmed)}</p>`;
 }
-
 
 function escapeHtml(value: string) {
   return value

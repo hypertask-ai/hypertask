@@ -5,7 +5,6 @@
 // earlier ticket (an earlier test) only appears under "Related tickets".
 const test = require("node:test");
 const assert = require("node:assert/strict");
-const fs = require("node:fs");
 const path = require("node:path");
 const { JSDOM } = require("jsdom");
 
@@ -158,9 +157,8 @@ test("titles from briefs use the first line and stay short", () => {
 });
 
 test("board research rules no longer tell the writer to replace the draft", () => {
-  const source = fs.readFileSync(
-    path.join(root, "src/app/api/ai/_lib/taskWriterBoardResearch.ts"),
-    "utf8"
+  const { TASK_WRITER_BOARD_RESEARCH_RULES: source } = jiti(
+    path.join(root, "src/app/api/ai/_lib/taskWriterBoardResearch.ts")
   );
   assert.doesNotMatch(source, /stop drafting/i);
   assert.doesNotMatch(source, /<h1 id="ai-generated-task-title">Possible duplicate/);

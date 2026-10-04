@@ -22,9 +22,9 @@ export function errorMessage(error: unknown) {
     console.error("[ai/chat/stream] internal error", error);
     return "Sorry, an error occurred while processing your request.";
   }
-  // Tool loops and the error ticket need the provider's real text. The SDK
-  // sometimes hands us a plain object, not an Error, and the generic fallback
-  // then files a ticket with no cause.
+  // Tool loops need the provider's real text. The SDK
+  // sometimes hands us a plain object, not an Error; keep its cause available
+  // to the model without persisting a provider's echoed request body.
   return toErrorMessage(
     error,
     "Sorry, an error occurred while processing your request.",
@@ -146,14 +146,16 @@ export async function reportHandledChatError(
   ) {
     return;
   }
-  const normalized =
-    error instanceof Error ? error : new Error(errorMessage(error));
+  const normalized = new Error("AI chat request failed");
+  const errorName = error instanceof Error && /^[A-Za-z][A-Za-z0-9_]{0,80}$/.test(error.name)
+    ? error.name : "ChatError";
   await reportError({
     message: normalized.message,
     stack: normalized.stack,
     url: "/api/ai/chat/stream",
     source: "handled",
-    extra: { stage, ...handledErrorExtra(error), ...extra },
+    fingerprintKey: `ai-chat:${stage}:${errorName}`,
+    extra: { stage, errorName, ...handledErrorExtra(error), ...extra },
   });
 }
 

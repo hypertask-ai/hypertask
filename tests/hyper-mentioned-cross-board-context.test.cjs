@@ -62,7 +62,9 @@ test("HyperAI mention retrieval spans only boards the mentioning user can access
 
 test("cross-board context stays identifiable and does not produce false access claims", () => {
   const editorSource = read("src/app/api/ai/_lib/editorAi.ts");
-  const routeSource = read("src/app/api/ai/hyper-mentioned/route.ts");
+  const load = require("jiti")(__filename, { alias: { "@": path.join(__dirname, "..", "src") }, fsCache: false });
+  const { PROMPTS } = load(path.join(__dirname, "../src/lib/ai/prompts/registry.ts"));
+  const routeSource = PROMPTS["hyper-mentioned-instructions-1"].parts.join("");
 
   assert.match(editorSource, /row\.ticketNumber \? `ticketNumber:/);
   assert.match(editorSource, /row\.taskTicketNumber \? `ticketNumber:/);

@@ -1,3 +1,4 @@
+import { renderPrompt } from "@/lib/ai/prompts/registry";
 import { generateObject, NoObjectGeneratedError } from "ai";
 import { createHash, randomUUID } from "node:crypto";
 import { z } from "zod";
@@ -5,7 +6,7 @@ import { z } from "zod";
 import prisma from "@/lib/prisma";
 import { scheduleJobById } from "@/lib/qstash";
 import { getRedis } from "@/lib/redis";
-import { logAiUsage } from "@/app/api/ai/_lib/aiUsage";
+import { configureAiModelUsage } from "@/app/api/ai/_lib/modelProvider";
 import { getTeamGatewayApiKey } from "@/app/api/ai/_lib/byokKeys";
 import {
   convertHtmlToText,
@@ -76,12 +77,6 @@ const taskSummaryResultSchema = z.object({
       "True only when the task description is detailed, current, actionable, and complements the comments."
     ),
 });
-
-type SummaryUsage = {
-  inputTokens?: number;
-  outputTokens?: number;
-  totalTokens?: number;
-};
 
 type SummarySource = {
   index: number;
@@ -447,41 +442,21 @@ async function generateTaskSummary(args: {
     args.systemModel.model,
     args.gatewayApiKey
   );
+  configureAiModelUsage(model, {
+    userId: args.userId,
+    teamId: args.teamId,
+    projectId: args.projectId,
+    taskId: args.taskId,
+    agentId: args.agentId,
+    provider: args.systemModel.provider,
+    feature: "summary",
+  });
   try {
     const result = await generateObject({
       model,
       schema: taskSummaryResultSchema,
-      system: `Return both the task briefing and the description-quality verdict from this one request.
-
-Write the summary as a scannable briefing for two readers at once: someone opening the task for the first time, and someone catching up after time away. Apply BLUF (bottom line up front) and the pyramid principle to EACH section independently: the single most important point comes first, supporting detail follows.
-
-The summary field must contain EXACTLY these two markdown sections, nothing before or after:
-
-## What this is
-- 2-3 bullets about the TASK ITSELF, not who did what. First bullet = the core goal or hypothesis in one line so a newcomer instantly gets it. Then the key constraint or decision, and the current status.
-
-## Recent activity
-- 3-5 bullets, ordered by IMPORTANCE first and recency second. Never pure chronology.
-
-HARD RULES:
-- Every bullet is ONE short line, max ~12 words, telegraphic. A summary, not a retelling.
-- NO filler openings. Never write "This task aims to", "This ticket is about", "The goal is". Start with the substance.
-- Amplify real human decisions, approvals, objections, and scope changes. Put them at the top of Recent activity.
-- Agent/bot @mention pings, re-pings, and bot-to-bot coordination: include only if nothing more important happened, and compress to ONE short line. Never a bullet each.
-- Attribute actions to the person by name. No invented task or project IDs. No citations, footnotes, or bracketed numbers.
-- Use "- " markdown bullets and the two "## " headers exactly as shown.
-
-Set descriptionGoodEnough to true only when the task description is sufficiently detailed, current, actionable, and complements the comments. Set it to false when the description is empty, too thin, outdated, redundant, or not actionable.`,
-      prompt: `Task title: ${args.title}
-Ticket: ${args.ticketNumber}
-
-Task description:
-${args.description || "(empty)"}
-
-SOURCE DATA:
-${formatSources(args.sources)}
-
-Summary:`,
+      system: renderPrompt("task-summaries-system-2"),
+      prompt: renderPrompt("task-summaries-prompt-3", (args.title), (args.ticketNumber), (args.description || "(empty)"), (formatSources(args.sources))),
       maxRetries: 2,
       maxOutputTokens: 700,
       abortSignal: args.abortSignal,
@@ -492,8 +467,6 @@ Summary:`,
       ),
     });
 
-    await logSummaryUsage(args, result.usage);
-
     return {
       summary: result.object.summary.trim() || "Not enough content for summary",
       descriptionGoodEnough:
@@ -502,7 +475,6 @@ Summary:`,
   } catch (error) {
     if (!NoObjectGeneratedError.isInstance(error)) throw error;
 
-    await logSummaryUsage(args, error.usage);
     const recoveredSummary = recoverSummaryText(error.text);
     if (!recoveredSummary) return null;
 
@@ -515,32 +487,6 @@ Summary:`,
       descriptionGoodEnough: false,
     };
   }
-}
-
-async function logSummaryUsage(
-  args: {
-    userId: number;
-    teamId?: string | null;
-    projectId?: number | null;
-    taskId: number;
-    agentId?: string | null;
-    systemModel: SystemModel;
-  },
-  usage?: SummaryUsage,
-) {
-  await logAiUsage({
-    userId: args.userId,
-    teamId: args.teamId,
-    projectId: args.projectId,
-    taskId: args.taskId,
-    agentId: args.agentId,
-    provider: args.systemModel.provider,
-    model: args.systemModel.model,
-    feature: "summary",
-    inputTokens: usage?.inputTokens ?? 0,
-    outputTokens: usage?.outputTokens ?? 0,
-    totalTokens: usage?.totalTokens ?? 0,
-  });
 }
 
 function recoverSummaryText(text?: string) {

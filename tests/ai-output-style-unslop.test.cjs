@@ -1,40 +1,30 @@
 const assert = require("node:assert/strict");
-const fs = require("./refactored-module-source.cjs");
 const path = require("node:path");
 const test = require("node:test");
 
 const root = path.resolve(__dirname, "..");
+const load = require("jiti")(__filename, {
+  alias: { "@": path.join(root, "src") },
+  fsCache: false,
+});
+const { HOUSE_OUTPUT_STYLE } = load(path.join(root, "src/app/api/ai/_lib/editorAiPrompts.ts"));
+const { AGENT_SYSTEM_PROMPT } = load(path.join(root, "src/lib/ai/chatStream/prompt.ts"));
 
-// HTPR-5587: every AI surface shares HOUSE_OUTPUT_STYLE, so the anti-slop
-// rules must live there (em dash ban, chatbot phrases, word blacklist).
-// Chat additionally gets ADHD shaping (action-first steps, one next action);
-// that must NOT leak into the shared block, because the rewrite modes
-// (ImproveReadability etc.) are forbidden from adding content to user text.
 test("shared house style bans AI tells", () => {
-  const src = fs.readFileSync(
-    path.join(root, "src/app/api/ai/_lib/editorAi.ts"),
-    "utf8",
-  );
-  const block = src.split("HOUSE_OUTPUT_STYLE = `")[1].split("`;")[0];
-  assert.match(block, /Never output an em dash/);
-  assert.match(block, /Great question/);
-  assert.match(block, /I hope this helps/);
-  assert.match(block, /delve, pivotal, crucial/);
+  assert.match(HOUSE_OUTPUT_STYLE, /Never output an em dash/);
+  assert.match(HOUSE_OUTPUT_STYLE, /Great question/);
+  assert.match(HOUSE_OUTPUT_STYLE, /I hope this helps/);
+  assert.match(HOUSE_OUTPUT_STYLE, /delve, pivotal, crucial/);
   assert.doesNotMatch(
-    block,
+    HOUSE_OUTPUT_STYLE,
     /next action|numbered steps/i,
     "action shaping must stay out of the shared block: rewrite modes may not add content",
   );
 });
 
 test("chat prompt adds action-first shaping on top", () => {
-  const src = fs.readFileSync(
-    path.join(root, "src/app/api/ai/chat/stream/route.ts"),
-    "utf8",
-  );
-  const prompt = src.split("AGENT_SYSTEM_PROMPT = `")[1].split("`;")[0];
-  assert.match(prompt, /\$\{HOUSE_OUTPUT_STYLE\}/);
-  assert.match(prompt, /numbered steps in execution order/);
-  assert.match(prompt, /End with one next action/);
-  assert.match(prompt, /Cap lists at 5 items/);
+  assert.ok(AGENT_SYSTEM_PROMPT.includes(HOUSE_OUTPUT_STYLE));
+  assert.match(AGENT_SYSTEM_PROMPT, /numbered steps in execution order/);
+  assert.match(AGENT_SYSTEM_PROMPT, /End with one next action/);
+  assert.match(AGENT_SYSTEM_PROMPT, /Cap lists at 5 items/);
 });

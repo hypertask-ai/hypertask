@@ -1,6 +1,7 @@
+import { configureAiModelUsage } from "@/app/api/ai/_lib/modelProvider";
+import { renderPrompt } from "@/lib/ai/prompts/registry";
 import { type AiGatewayTags, isAiGatewayEnabled, resolveAiModel, providerOptionsForAiModel } from "@/app/api/ai/_lib/modelProvider";
 import { generateText } from "ai";
-import { logAiUsage } from "@/app/api/ai/_lib/aiUsage";
 
 export function fallbackTitle(message: string) {
   return message
@@ -34,28 +35,23 @@ export async function generateConversationTitle(
   }
   try {
     const model = resolveAiModel("openai", "gpt-6-luna", byokApiKey);
+    if (usageContext) configureAiModelUsage(model, {
+      ...usageContext,
+      teamId: tags?.teamId ?? null,
+      provider: "openai",
+      feature: "chat",
+    });
     const result = await generateText({
       model,
       instructions:
-        "Write a very short chat thread title (at most 8 words). No quotes. No trailing punctuation. Output only the title text.",
+        renderPrompt("title-instructions-1"),
       messages: [{ role: "user", content: content || message }],
       temperature: 1,
       maxRetries: 1,
       abortSignal,
       providerOptions: providerOptionsForAiModel(model, "chat", tags),
     });
-    if (usageContext) {
-      await logAiUsage({
-        ...usageContext,
-        teamId: tags?.teamId ?? null,
-        provider: "openai",
-        model: "gpt-6-luna",
-        feature: "chat",
-        inputTokens: result.usage.inputTokens ?? 0,
-        outputTokens: result.usage.outputTokens ?? 0,
-        totalTokens: result.usage.totalTokens ?? 0,
-      });
-    }
+
     const cleaned = fallbackTitle(result.text);
     return cleaned || fallback;
   } catch (error) {

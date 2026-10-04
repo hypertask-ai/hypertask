@@ -149,9 +149,6 @@ test("task summary and description verdict share one model request", async () =>
       return { messageId: `retry-${scheduledRetries.length}` };
     },
   });
-  stubModule("src/app/api/ai/_lib/aiUsage.ts", {
-    logAiUsage: async (row) => usageRows.push(row),
-  });
   stubModule("src/app/api/ai/_lib/byokKeys.ts", {
     getTeamGatewayApiKey: async (lookup) => {
       assert.deepEqual(lookup, { trustedTeamId: "team-hypertask" });
@@ -160,6 +157,7 @@ test("task summary and description verdict share one model request", async () =>
     },
   });
   stubModule("src/app/api/ai/_lib/modelProvider.ts", {
+    configureAiModelUsage: (_model, context) => usageRows.push(context),
     resolveAiModel: (provider, model, credential) => {
       assert.equal(provider, "gateway");
       assert.equal(model, "google/gemini-test");
@@ -200,7 +198,7 @@ test("task summary and description verdict share one model request", async () =>
   assert.equal(descriptionWrites.length, 1);
   assert.equal(descriptionWrites[0].data.flaggedIncomplete, true);
   assert.equal(usageRows.length, 1);
-  assert.equal(usageRows[0].totalTokens, 160);
+  assert.equal(usageRows[0].feature, "summary");
   assert.equal(usageRows[0].taskId, 42);
   assert.equal(usageRows[0].agentId, null);
 
@@ -304,7 +302,7 @@ test("task summary and description verdict share one model request", async () =>
   assert.equal(descriptionWrites.length, 2);
   assert.equal(descriptionWrites[1].data.flaggedIncomplete, false);
   assert.equal(usageRows.length, 2);
-  assert.equal(usageRows[1].totalTokens, 175);
+  assert.equal(usageRows[1].feature, "summary");
 
   invalidStructuredText = "## What this is\n- Truncated before recent activity";
   const unavailable = await generateAndStoreTaskSummary(42, { force: true });
@@ -314,7 +312,7 @@ test("task summary and description verdict share one model request", async () =>
   assert.equal(summaryWrites.length, 2);
   assert.equal(descriptionWrites.length, 2);
   assert.equal(usageRows.length, 3);
-  assert.equal(usageRows[2].totalTokens, 175);
+  assert.equal(usageRows[2].feature, "summary");
 
   invalidStructuredText = null;
   generationError = { name: "TimeoutError" };

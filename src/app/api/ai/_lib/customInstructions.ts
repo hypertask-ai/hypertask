@@ -1,8 +1,9 @@
+import { renderPrompt } from "@/lib/ai/prompts/registry";
+import { configureAiModelUsage } from "@/app/api/ai/_lib/modelProvider";
 import { generateText, type UserContent } from "ai";
 import { parse } from "node-html-parser";
 
 import prisma from "@/lib/prisma";
-import { logAiUsage } from "@/app/api/ai/_lib/aiUsage";
 import { getProjectWhere } from "@/utils/controllers/projects/getAllIncludes";
 import { getByokOrTeamGatewayApiKeyForProvider } from "@/app/api/ai/_lib/byokKeys";
 import {
@@ -266,8 +267,8 @@ async function extractBinaryDocumentTextWithOpenAI(
 
   const isImage = mediaType.startsWith("image/");
   const prompt = isImage
-    ? "Describe this image in clear, searchable prose for use as AI custom-instruction context. Include visible text, decisions, data, diagrams, and notable details."
-    : "Extract the useful textual content from this document for use as AI custom-instruction context. Preserve decisions, requirements, examples, data, and headings. Omit boilerplate.";
+    ? renderPrompt("custom-instruction-image")
+    : renderPrompt("custom-instruction-document");
   const content: UserContent = [
     { type: "text", text: `${prompt}\n\nFile: ${fileName}` },
     { type: "file", mediaType, data: new URL(url) },
@@ -278,6 +279,11 @@ async function extractBinaryDocumentTextWithOpenAI(
     gatewayApiKey
   );
 
+  if (usageContext) configureAiModelUsage(model, {
+    ...usageContext,
+    provider: aiUsageProviderForCredential("openai", gatewayApiKey),
+    feature: "custom-instructions",
+  });
   const result = await generateText({
     model,
     messages: [{ role: "user", content }],
@@ -289,20 +295,6 @@ async function extractBinaryDocumentTextWithOpenAI(
       gatewayTags
     ),
   });
-
-  if (usageContext) {
-    await logAiUsage({
-      ...usageContext,
-      provider: aiUsageProviderForCredential("openai", gatewayApiKey),
-      model: isImage
-        ? CUSTOM_INSTRUCTION_VISION_MODEL
-        : CUSTOM_INSTRUCTION_MODEL,
-      feature: "custom-instructions",
-      inputTokens: result.usage.inputTokens ?? 0,
-      outputTokens: result.usage.outputTokens ?? 0,
-      totalTokens: result.usage.totalTokens ?? 0,
-    });
-  }
 
   return result.text.trim();
 }

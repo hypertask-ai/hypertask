@@ -1,7 +1,7 @@
+import { configureAiModelUsage } from "@/app/api/ai/_lib/modelProvider";
 import { waitUntil } from "@vercel/functions";
 import { generateText } from "ai";
 
-import { logAiUsage } from "@/app/api/ai/_lib/aiUsage";
 import { getTeamGatewayApiKey } from "@/app/api/ai/_lib/byokKeys";
 import {
   gatewayProviderOptionsForModel,
@@ -71,6 +71,15 @@ export async function classifyTaskAgainstLabels(
   }
 
   const model = resolveGatewayModel(MODEL, gatewayApiKey);
+  configureAiModelUsage(model, {
+    userId: tags?.userId ?? generalConfig.hyperAiId,
+    teamId: tags?.teamId,
+    projectId: tags?.projectId,
+    taskId: tags?.taskId,
+    agentId: tags?.agentId,
+    provider: "google",
+    feature: "smart-label",
+  });
   const result = await generateText({
     model,
     instructions:
@@ -83,19 +92,6 @@ export async function classifyTaskAgainstLabels(
       "smart-label",
       tags
     ),
-  });
-  await logAiUsage({
-    userId: tags?.userId ?? generalConfig.hyperAiId,
-    teamId: tags?.teamId,
-    projectId: tags?.projectId,
-    taskId: tags?.taskId,
-    agentId: tags?.agentId,
-    provider: "google",
-    model: MODEL,
-    feature: "smart-label",
-    inputTokens: result.usage.inputTokens ?? 0,
-    outputTokens: result.usage.outputTokens ?? 0,
-    totalTokens: result.usage.totalTokens ?? 0,
   });
 
   const matchingLabelIds = parseMatchingLabelIds(
