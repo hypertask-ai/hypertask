@@ -19,9 +19,7 @@ const AssignModal = dynamic(
 const RemoveSubtaskModal = dynamic(
   () => import("@/components/Modals/SubtaskLinkingModal/RemoveSubtask")
 );
-const Draggable = dynamic(() =>
-  import("@hello-pangea/dnd").then((x) => x.Draggable)
-);
+import { Draggable } from "@hello-pangea/dnd";
 import globalConstants from "@/lib/constants";
 import { useDeviceContext } from "@/lib/contexts/deviceContext";
 import { HTPR_6752_INSTANT_TICKET_OPEN_FLAG } from "@/lib/flags/keys";
