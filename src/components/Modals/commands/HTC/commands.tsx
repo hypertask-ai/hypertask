@@ -14,6 +14,7 @@ import {
   currentProjectAtom,
   frequentlyUsedHTCAton,
   tableTitleWrapAtom,
+  showCommandsAtom,
 } from "@/store";
 import { currentPageActionsAtom } from "@/store/currentPageActions";
 import { usePathname } from "next/navigation";
@@ -59,6 +60,7 @@ import {
   GOOGLE_CALENDAR_FLAG,
   HTPR_6514_COMMENT_LONG_PRESS_FLAG,
   HTPR_6892_CMDK_VERSION_FLAG,
+  HTPR_6929_COMPOSE_TASK_WRITER_FLAG,
   HTPR_6868_TICKET_PREFIX_FLAG,
   HTPR_6662_AGENT_LOG_NAME_FLAG,
   HTPR_6861_MOBILE_PAGE_BACK_ROW_FLAG,
@@ -68,6 +70,8 @@ import {
   MY_TASKS_TABLE_COLUMNS_FLAG,
   MY_TASKS_VIEWS_FLAG,
 } from "@/lib/flags/keys";
+import { SettingsScopeTabs } from "../../Settings/SettingsScopeTabs";
+import ComposeTaskWriter from "./ComposeTaskWriter";
 import { myTasksRoute } from "@/lib/constants/constants";
 
 type Props = {
@@ -94,6 +98,10 @@ const Commands = (props: Props) => {
     appShellRailOn,
     scope,
   } = props;
+  const composeEnabled = useFlag(HTPR_6929_COMPOSE_TASK_WRITER_FLAG) && !props.isDemo && !props.isInteractive;
+  const [showCommands, setShowCommands] = useRecoilState(showCommandsAtom);
+  const isCompose = composeEnabled && showCommands.paletteTab === "compose";
+  const [writing, setWriting] = useState(false);
   const { resetShowCommands } = useHypertasksRecoilStates()
   const isMobile = useContext(MobileViewContext);
   const { endTour } = useTourContext();
@@ -445,6 +453,7 @@ const Commands = (props: Props) => {
     endTour()
   }, []);
   const handleKeyDown = (e: KeyboardEvent) => {
+    if (isCompose) return;
     if (e.key === "Tab" || e.key === "Escape") {
       e.preventDefault();
       return;
@@ -493,6 +502,7 @@ const Commands = (props: Props) => {
     selectedCommand,
     filterCommands,
     hoveredGroup,
+    isCompose,
   ]);
 
   const handleMouseEnter = (
@@ -572,6 +582,10 @@ const Commands = (props: Props) => {
         if (onMyTasks && commandScopePickerEnabled) window.dispatchEvent(new Event("my-tasks-scope-picker"));
         return;
       }
+      if (composeEnabled && command.commandMode === CommandMode.CreateTaskWithAiWriter) {
+        setShowCommands((previous) => ({ ...previous, paletteTab: "compose" }));
+        return;
+      }
       if (command.key === "toggleTableTitleWrap") {
         setTableTitleWrap((prev) => !prev);
         resetShowCommands();
@@ -586,10 +600,39 @@ const Commands = (props: Props) => {
     }
 
   const toggle = () => {
+    if (writing) return;
     setModal(!modal);
     resetShowCommands()
     callback && callback()
   };
+
+  useEffect(() => {
+    if (!composeEnabled) return;
+    const close = (event: KeyboardEvent) => {
+      if (event.key !== "Escape") return;
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      toggle();
+    };
+    document.addEventListener("keydown", close, true);
+    return () => document.removeEventListener("keydown", close, true);
+  }, [composeEnabled, writing]);
+  useEffect(() => {
+    if (composeEnabled && !isCompose) inputRef.current?.focus();
+  }, [composeEnabled, isCompose]);
+
+  const modeSwitch = composeEnabled ? (
+    <div className="absolute -top-12 left-0 flex w-full justify-center">
+      <SettingsScopeTabs
+        tabs={[{ id: "search", label: "Search" }, { id: "compose", label: "Compose" }]}
+        activeId={isCompose ? "compose" : "search"}
+        onSelect={(paletteTab) => setShowCommands((previous) => ({ ...previous, paletteTab: paletteTab as "search" | "compose" }))}
+        ariaLabel="Commands mode"
+        className="flex-none rounded-[5px] bg-modalBackground p-1"
+      />
+    </div>
+  ) : null;
+  const compose = composeEnabled ? <ComposeTaskWriter active={isCompose} onBusyChange={setWriting} onCreated={resetShowCommands} /> : null;
 
   const searchInput = (
     <div className="flex items-center gap-2.5 rounded-[4px] px-4 ring-1 ring-inset ring-hypertasks-purple">
@@ -607,6 +650,7 @@ const Commands = (props: Props) => {
           }
         }}
         className="px-0"
+        {...(composeEnabled ? { onBlur: undefined } : {})}
       />
     </div>
   );
@@ -633,15 +677,17 @@ const Commands = (props: Props) => {
         isOpen={modal}
         onClose={toggle}
         ariaLabel="Command center"
-        fullHeight
+        aboveSlot={modeSwitch}
+        fullHeight={!isCompose}
         keyboardAware
-        bottomSlot={searchInput}
+        bottomSlot={isCompose ? undefined : searchInput}
       >
-        {commentLongPressEnabled ? (
+        {compose}
+        {!isCompose && (commentLongPressEnabled ? (
           <div data-htpr-6514-comment-long-press="">{commandGroups}</div>
         ) : (
           commandGroups
-        )}
+        ))}
       </MobileBottomSheet>
     );
   }
@@ -663,7 +709,7 @@ const Commands = (props: Props) => {
         // makes it centre on the space actually available. The variable is published by
         // AI_Chat_Sidebar and is 0px whenever the panel is closed or on mobile.
         modalClassName="pr-[var(--ht-ai-sidebar-width,0px)]"
-        contentClassName="rounded-[5px] overflow-hidden"
+        contentClassName={composeEnabled ? "rounded-[5px] overflow-visible" : "rounded-[5px] overflow-hidden"}
       >
         {isInteractive && (
           <TutorialTooltip
@@ -674,7 +720,10 @@ const Commands = (props: Props) => {
           />
         )}
 
+        {modeSwitch}
         <ModalBody className="  p-0 rounded-[5px]">
+          {compose}
+          {!isCompose && <>
           <div className="flex items-center gap-2.5 border-b border-light-black-border-1 px-4">
             <Search strokeWidth={1.75} size={13} className="shrink-0 text-text-light-gray" />
             <ModalInput
@@ -691,6 +740,7 @@ const Commands = (props: Props) => {
                  }
                }}
                className="px-0"
+               {...(composeEnabled ? { onBlur: undefined } : {})}
             />
           </div>
           {mobilePageBackRowEnabled ? (
@@ -712,6 +762,7 @@ const Commands = (props: Props) => {
               v {buildId}{buildTimeLabel && ` · ${buildTimeLabel}`}
             </div>
           )}
+          </>}
         </ModalBody>
       </ModalContainerCustom>
   );

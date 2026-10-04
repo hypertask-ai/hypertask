@@ -7,6 +7,7 @@ import { getSessionUser } from "@/lib/auth/getSessionUser";
 import { AGENT_CHAT_STOP_AND_TIMEOUT_FEATURE_FLAG } from "@/lib/agentRuns/model";
 
 import {
+  HTPR_6929_COMPOSE_TASK_WRITER_FLAG,
   HTPR_6752_INSTANT_TICKET_OPEN_FLAG,
   HTPR_6873_QUICK_ENTRY_GROW_FLAG,
   HTPR_6892_CMDK_VERSION_FLAG,
@@ -167,6 +168,11 @@ const RETIRED_CLIENT_FEATURE_FLAGS = {
 } as const;
 
 const FEATURE_FLAG_DEFINITIONS = [
+  {
+    key: HTPR_6929_COMPOSE_TASK_WRITER_FLAG,
+    shippedOn: "2026-10-04",
+    description: "Adds Ctrl+J Compose to Commands: write a ticket from a note and images, then refine it in task-scoped AI chat.",
+  },
   {
     key: HTPR_6804_MCP_TOOLS_FLAG,
     shippedOn: "2026-10-03",

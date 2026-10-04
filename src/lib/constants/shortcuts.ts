@@ -28,6 +28,7 @@ export const getKeyboardShortcuts = (
   consistentCommentShortcuts = false,
   keepDirectTaskOpen = false,
   historyToggleLabel = "Toggle history events",
+  composeTaskWriter = false,
 ): IShortcut[] => {
   const cmdControl = isApple ? "CMD" : "CTRL";
   const altOptions = isApple ? "OPT" : "ALT";
@@ -84,6 +85,7 @@ export const getKeyboardShortcuts = (
         { shortTitle: "Move focus up", pressKey: ["K"] },
         { shortTitle: "Move focus", pressKey: ["←", "⭡", "⭣", "→"] },
         { shortTitle: "Open Hypertask Command", pressKey: [cmdControl, "K"] },
+        ...(composeTaskWriter ? [{ shortTitle: "Compose task", pressKey: [cmdControl, "J"] }] : []),
         { shortTitle: "Undo latest action", pressKey: [cmdControl, "Z"] },
         { shortTitle: "Use snippet", pressKey: [";"] },
         { shortTitle: "Show or hide archived tasks", pressKey: ["G", null, "X"] },

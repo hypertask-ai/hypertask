@@ -41,7 +41,7 @@ import {
 import { resolveSkills } from "@/app/api/ai/_lib/skills";
 import { getProjectTeamProviderContext } from "@/app/api/ai/_lib/providerGate";
 import { isAiFeatureEnabled } from "@/lib/systemModelLadder";
-import { isFeatureEnabled } from "@/lib/flags";
+import { isFeatureEnabled, HTPR_6929_COMPOSE_TASK_WRITER_FLAG } from "@/lib/flags";
 import { doneColumnTitles } from "@/lib/doneColumns";
 import prisma from "@/lib/prisma";
 import { projectContentAccessWhere } from "@/utils/controllers/projects/getAllIncludes";
@@ -87,7 +87,7 @@ export const taskWriterRequestSchema = z.object({
   /** User-authored briefs only; used for board search when research is on. */
   userRetrievalTexts: z.array(z.string()).max(20).optional().default([]),
   byokProviderFlags: z.array(byokProviderFlagSchema).optional().default([]),
-  requestKind: z.enum(["manual", "auto-description"]).optional().default("manual"),
+  requestKind: z.enum(["manual", "auto-description", "compose-task"]).optional().default("manual"),
 });
 
 export type TaskWriterRequest = z.infer<typeof taskWriterRequestSchema>;
@@ -138,6 +138,13 @@ export async function prepareTaskWriterRun(
   userId: number,
   agentId?: string | null
 ) {
+  if (body.requestKind === "compose-task" &&
+      !(await isFeatureEnabled(HTPR_6929_COMPOSE_TASK_WRITER_FLAG, userId))) {
+    const error = new AiFeatureDisabledError();
+    error.message = "Compose task writer is turned off";
+    throw error;
+  }
+
   // The retrieval below searches by projectId alone, so membership has to be
   // proven here. getProjectTeamProviderContext does not: it returns an empty
   // context for an unreachable project, which reads as "no AI settings" and

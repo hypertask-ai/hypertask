@@ -312,6 +312,7 @@ export default function GlobalProvider({
   // ------------------------ context & hooks
   useMobileToastAutoDismiss(); // PERT-92: resume stuck dismiss timers after a tap
   useMobileToastAutoDismiss(SINGLE_UNDO_TOASTER_ID);
+  const composeTaskWriterEnabled = useFlag("htpr-6929-compose-task-writer");
   const singleUndoToast = useFlag(HTPR_6885_SINGLE_UNDO_TOAST_FLAG);
   useEffect(() => {
     undoToastSettings.single = singleUndoToast;
@@ -1441,6 +1442,8 @@ export default function GlobalProvider({
       {authenticatedUserId !== null &&
         showCommands.show &&
         shouldRenderGlobalCommandMenu(pathname) && <HypertasksCommands />}
+
+      {composeTaskWriterEnabled && authenticatedUserId !== null && showCommands.show && pathname === "/new" && <HypertasksCommands />}
 
       <BoardStartupContext.Provider
         value={{

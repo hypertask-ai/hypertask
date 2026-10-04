@@ -53,6 +53,7 @@ export interface AppSheetProps extends RootSheetProps {
   isOpen?: boolean;
   onClose: () => void;
   children: React.ReactNode;
+  aboveSlot?: React.ReactNode;
   ariaLabel?: string;
   /** Optional id of visible title element (preferred over ariaLabel when set). */
   labelledBy?: string;
@@ -89,6 +90,7 @@ export const AppSheet: React.FC<AppSheetProps> = ({
   isOpen = true,
   onClose,
   children,
+  aboveSlot,
   ariaLabel = "Sheet",
   labelledBy,
   showHandle = true,
@@ -165,6 +167,7 @@ export const AppSheet: React.FC<AppSheetProps> = ({
           className={cn(panelClassName)}
           style={containerStyle}
         >
+          {aboveSlot}
           {headerEl}
           <Sheet.Content
             disableScroll={customScroller}

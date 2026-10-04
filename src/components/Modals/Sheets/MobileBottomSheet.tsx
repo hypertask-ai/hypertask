@@ -3,12 +3,15 @@
 import type { CSSProperties, ReactNode } from "react";
 import { useMobileVisualViewport } from "@/hooks/General/useMobileVisualViewport";
 import { cn } from "@/utils/undoActions/helperFuncs";
+import { useFlag } from "@/hooks/useFlag";
+import { HTPR_6929_COMPOSE_TASK_WRITER_FLAG } from "@/lib/flags/keys";
 import { AppSheet, SheetScroller } from "./AppSheet";
 
 interface MobileBottomSheetProps {
   isOpen?: boolean;
   onClose: () => void;
   children: ReactNode;
+  aboveSlot?: ReactNode;
   bottomSlot?: ReactNode;
   ariaLabel?: string;
   labelledBy?: string;
@@ -28,6 +31,7 @@ export const MobileBottomSheet = ({
   isOpen = true,
   onClose,
   children,
+  aboveSlot: requestedAboveSlot,
   bottomSlot,
   ariaLabel = "Sheet",
   labelledBy,
@@ -39,6 +43,8 @@ export const MobileBottomSheet = ({
   zIndex = 10000,
   onCloseEnd,
 }: MobileBottomSheetProps) => {
+  const composeTaskWriterEnabled = useFlag(HTPR_6929_COMPOSE_TASK_WRITER_FLAG);
+  const aboveSlot = composeTaskWriterEnabled ? requestedAboveSlot : undefined;
   const viewport = useMobileVisualViewport(isOpen);
   const keyboardOpen = keyboardAware && (viewport?.bottomInset ?? 0) > 0;
   const availableHeight = viewport?.visibleHeight ?? 0;
@@ -48,7 +54,10 @@ export const MobileBottomSheet = ({
         viewport.layoutHeight * MOBILE_SHEET_MAX_HEIGHT_RATIO
       )
     : 0;
-  const sheetHeight = keyboardOpen ? availableHeight : restingHeight;
+  // Leave room for controls above the sheet when the keyboard fills the viewport.
+  const sheetHeight = keyboardOpen
+    ? Math.max(0, availableHeight - (aboveSlot ? 48 : 0))
+    : restingHeight;
   const containerStyle: CSSProperties = {
     bottom: keyboardAware ? viewport?.bottomInset ?? 0 : 0,
     maxHeight: sheetHeight > 0 ? `${sheetHeight}px` : "82svh",
@@ -76,7 +85,8 @@ export const MobileBottomSheet = ({
       defaultLibraryHeader={false}
       zIndex={zIndex}
       onCloseEnd={onCloseEnd}
-      panelClassName="!overflow-hidden !rounded-t-[5px] !border-0 !bg-modalBackground text-white-black shadow-customshadow-2"
+      aboveSlot={aboveSlot}
+      panelClassName={cn("!overflow-hidden !rounded-t-[5px] !border-0 !bg-modalBackground text-white-black shadow-customshadow-2", aboveSlot && "!overflow-visible")}
       bodyClassName="flex min-h-0 flex-1 flex-col overflow-hidden !bg-modalBackground"
       backdropClassName="bg-pageBackground opacity-60"
       headerClassName="!shrink-0 !bg-modalBackground !shadow-none"

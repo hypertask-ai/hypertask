@@ -14,7 +14,6 @@ import {
   Image as ImageIcon,
   Layers,
   ListTodo,
-  Paperclip,
   Square,
   SquareKanban,
   User,
@@ -50,6 +49,10 @@ import { useGetAllTeamsMinimal } from "@/hooks/MultiPages/useGetAllTeamsMinimal"
 import { sortBoardsByRecent } from "@/utils/aiChat/sortBoardsByRecent";
 import { extractPastedImageFiles } from "@/utils/aiChat/extractPastedImageFiles";
 import { AiChatComposerActionRow } from "./AiChatComposerActionRow";
+import { AttachmentButton } from "./AttachmentButton";
+import { AiComposerTextarea } from "./AiComposerTextarea";
+import { useFlag } from "@/hooks/useFlag";
+import { HTPR_6929_COMPOSE_TASK_WRITER_FLAG } from "@/lib/flags/keys";
 import { SendMessageButton } from "./SendMessageButton";
 export { SendMessageButton } from "./SendMessageButton";
 import { QueuedMessagesStrip } from "@/components/Common/QueuedMessagesStrip";
@@ -91,6 +94,8 @@ export function AI_Tiptap_Container({
 }: {
   controlledComposer?: ControlledComposer;
 } = {}) {
+  const composeTaskWriterEnabled = useFlag(HTPR_6929_COMPOSE_TASK_WRITER_FLAG);
+  const ComposerTextarea = composeTaskWriterEnabled ? AiComposerTextarea : "textarea";
   const pathname = usePathname();
   const isMbl = useContext(MobileViewContext);
   const [controlledEditor, setControlledEditor] = useState<Editor | null>(null);
@@ -344,7 +349,7 @@ export function AI_Tiptap_Container({
                 onEditor={setControlledEditor}
               />
             ) : (
-            <textarea
+            <ComposerTextarea
               ref={controlledComposer.inputRef}
               value={controlledComposer.value}
               onChange={(event) =>
@@ -779,31 +784,6 @@ function ContextIcon({ type }: { type: string }) {
     return <Clipboard size={14} className="shrink-0 text-icon-dark-gray" strokeWidth={1.75} />;
   }
   return <User size={14} className="shrink-0 text-icon-dark-gray" strokeWidth={1.75} />;
-}
-
-function AttachmentButton({
-  disabled,
-  onClick,
-}: {
-  disabled: boolean;
-  onClick: (e?: any) => void;
-}) {
-  const isApple = useDeviceContext();
-  return (
-    <button
-      className="relative group rounded-sm text-icon-dark-gray hover:text-white-black"
-      onClick={(e) => onClick(e)}
-      disabled={disabled}
-      aria-label="Attach files"
-    >
-      <Tooltip
-        {...aiTaskWriterConfig.shortcutsAndTooltips.ai_chat.attachment_button(
-          isApple
-        )}
-      />
-      <Paperclip size={16} strokeWidth={1.75} />
-    </button>
-  );
 }
 
 function ScreenshotButton({ onClick }: { onClick: () => void }) {

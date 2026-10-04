@@ -1,5 +1,8 @@
 "use client";
 
+import { SettingsScopeTabs } from "./SettingsScopeTabs";
+import { useFlag } from "@/hooks/useFlag";
+import { HTPR_6929_COMPOSE_TASK_WRITER_FLAG } from "@/lib/flags/keys";
 import dynamic from "next/dynamic";
 import { useRouter } from "next/navigation";
 import {
@@ -263,6 +266,7 @@ const SECTION_COMPONENTS: Record<SettingsSectionId, ComponentType> = {
 };
 
 const SettingsShell: React.FC<SettingsShellProps> = ({ section }) => {
+  const composeTaskWriterEnabled = useFlag(HTPR_6929_COMPOSE_TASK_WRITER_FLAG);
   const activeSection = normalizeSettingsSection(section);
   const activeTab = getSettingsTabForSection(activeSection);
   const mbl = useMobileView();
@@ -557,28 +561,36 @@ const SettingsShell: React.FC<SettingsShellProps> = ({ section }) => {
           ) : (
             <div className="w-full shrink-0">
               <div className="mx-auto flex w-full max-w-[760px] items-center gap-4 px-6 py-3">
-                <div
-                  aria-label="Settings scopes"
-                  className="no-scrollbar flex min-w-0 flex-1 items-center gap-1 overflow-x-auto"
-                  role="tablist"
-                >
-                  {SETTINGS_TABS.map((tab) => (
-                    <button
-                      key={tab.id}
-                      type="button"
-                      aria-selected={activeTab.id === tab.id}
-                      className={cn(
-                        "shrink-0 rounded-[5px] px-3 py-1.5 text-content font-medium text-text-light-gray transition hover:text-white-black focus-visible:bg-hover-active focus-visible:outline-none",
-                        activeTab.id === tab.id &&
-                          "bg-active-modal-element text-white-black",
-                      )}
-                      onClick={() => setSettingsSection(tab.defaultSection)}
-                      role="tab"
-                    >
-                      {tab.label}
-                    </button>
-                  ))}
-                </div>
+                {composeTaskWriterEnabled ? <SettingsScopeTabs
+                  tabs={SETTINGS_TABS}
+                  activeId={activeTab.id}
+                  onSelect={(id) => {
+                    const tab = SETTINGS_TABS.find((item) => item.id === id);
+                    if (tab) setSettingsSection(tab.defaultSection);
+                  }}
+                /> : (
+                  <div
+                    aria-label="Settings scopes"
+                    className="no-scrollbar flex min-w-0 flex-1 items-center gap-1 overflow-x-auto"
+                    role="tablist"
+                  >
+                    {SETTINGS_TABS.map((tab) => (
+                      <button
+                        key={tab.id}
+                        type="button"
+                        aria-selected={activeTab.id === tab.id}
+                        className={cn(
+                          "shrink-0 rounded-[5px] px-3 py-1.5 text-content font-medium text-text-light-gray transition hover:text-white-black focus-visible:bg-hover-active focus-visible:outline-none",
+                          activeTab.id === tab.id && "bg-active-modal-element text-white-black",
+                        )}
+                        onClick={() => setSettingsSection(tab.defaultSection)}
+                        role="tab"
+                      >
+                        {tab.label}
+                      </button>
+                    ))}
+                  </div>
+                )}
                 {/* The Profile tab is user-global ("only affects you"), so the
                     team picker is a no-op there and misleadingly implies
                     per-project scoping — hide it. (HTPR notification-scope fix) */}
