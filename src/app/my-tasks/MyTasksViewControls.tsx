@@ -436,7 +436,7 @@ const MyTasksViewControls = ({
             >
               <UserRound size={18} strokeWidth={1.75} />
               {involvementCount > 0 && (
-                <span className="absolute -right-0.5 -top-0.5 text-[9px] font-semibold leading-none">{involvementCount}</span>
+                <span className="absolute -right-0.5 -top-0.5 text-micro font-semibold leading-none">{involvementCount}</span>
               )}
             </ViewControlButton>
           ) : (
@@ -533,7 +533,7 @@ const MyTasksViewControls = ({
             >
               <LayoutGrid size={18} strokeWidth={1.75} />
               {scopeCount > 0 && (
-                <span className="absolute -right-0.5 -top-0.5 text-[9px] font-semibold leading-none">{scopeCount}</span>
+                <span className="absolute -right-0.5 -top-0.5 text-micro font-semibold leading-none">{scopeCount}</span>
               )}
             </ViewControlButton>
           ) : (
@@ -593,7 +593,7 @@ const MyTasksViewControls = ({
             >
               <SlidersHorizontal size={18} strokeWidth={1.75} />
               {kanbanFilterCount > 0 && (
-                <span className="absolute -right-0.5 -top-0.5 text-[9px] font-semibold leading-none">{kanbanFilterCount}</span>
+                <span className="absolute -right-0.5 -top-0.5 text-micro font-semibold leading-none">{kanbanFilterCount}</span>
               )}
             </ViewControlButton>
           ) : (
@@ -640,7 +640,7 @@ const MyTasksViewControls = ({
             >
               <SlidersHorizontal size={18} strokeWidth={1.75} />
               {flatFilterCount > 0 && (
-                <span className="absolute -right-0.5 -top-0.5 text-[9px] font-semibold leading-none">{flatFilterCount}</span>
+                <span className="absolute -right-0.5 -top-0.5 text-micro font-semibold leading-none">{flatFilterCount}</span>
               )}
             </ViewControlButton>
           ) : (

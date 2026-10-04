@@ -29,10 +29,8 @@ const config: Config = {
       },
       colors: {
         "view-control-active": {
-          DEFAULT: "rgb(35, 131, 226)",
-          hover: "rgb(25, 105, 185)",
-          dark: "#6FB6FF",
-          "dark-hover": "#A3D0FF",
+          DEFAULT: "var(--color-rich-text-link)",
+          hover: "var(--color-white-black)",
         },
         "pageBackground":"var(--color-page-background)",
         "hypertasks-green":"#C2CFA5",

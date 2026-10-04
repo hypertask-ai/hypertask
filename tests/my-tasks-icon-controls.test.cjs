@@ -130,7 +130,7 @@ test("all six non-default controls are active and retain compact count badges", 
   for (const [label, count] of [[labels[0], "4"], [labels[2], "1"], [labels[3], "1"]]) {
     const badge = trigger(label).querySelector("span.absolute");
     assert.equal(badge.textContent, count);
-    assert.match(badge.className, /-right-0\.5 -top-0\.5/);
+    assert.match(badge.className, /-right-0\.5 -top-0\.5 text-micro/);
   }
   assert.match(trigger(labels[5]).textContent, /Group: Board/);
   config.boardIds = [2, 1];
@@ -151,20 +151,15 @@ test("6938 off preserves existing labelled controls and shared active styling", 
   assert.match(trigger("Sort board").className, /text-view-control-active/);
 });
 
-test("active semantic tokens use contrasting blues in both themes", () => {
-  const config = read("tailwind.config.ts");
-  assert.match(config, /"view-control-active": \{\s+DEFAULT: "rgb\(35, 131, 226\)"/);
-  assert.match(config, /hover: "rgb\(25, 105, 185\)"/);
-  assert.match(config, /dark: "#6FB6FF"/);
-  assert.match(config, /"dark-hover": "#A3D0FF"/);
-  assert.match(read(shellFile), /dark:text-view-control-active-dark dark:hover:text-view-control-active-dark-hover/);
-  const luminance = (rgb) => rgb.map((value) => value / 255).map((value) =>
-    value <= 0.04045 ? value / 12.92 : ((value + 0.055) / 1.055) ** 2.4)
-    .reduce((total, value, index) => total + value * [0.2126, 0.7152, 0.0722][index], 0);
-  for (const [color, background] of [[[35, 131, 226], [255, 255, 255]], [[111, 182, 255], [30, 30, 30]],
-    [[25, 105, 185], [255, 255, 255]], [[163, 208, 255], [30, 30, 30]]]) {
-    const levels = [luminance(color), luminance(background)].sort((a, b) => b - a);
-    assert.ok((levels[0] + 0.05) / (levels[1] + 0.05) >= 3, "icon contrast >= 3:1");
+test("active semantic token reuses the theme link color defined in all six palettes", () => {
+  const config = load("tailwind.config.ts").default;
+  assert.deepEqual(config.theme.extend.colors["view-control-active"], {
+    DEFAULT: "var(--color-rich-text-link)",
+    hover: "var(--color-white-black)",
+  });
+  assert.match(read(shellFile), /iconControlsEnabled \? "text-view-control-active hover:text-view-control-active-hover"/);
+  for (const theme of ["light", "dark", "amoled", "graphite", "porcelain", "dia"]) {
+    assert.match(read(`src/styles/tailwindThemes/${theme}.css`), /--color-rich-text-link:\s*#[0-9a-f]{6}/i, theme);
   }
 });
 
