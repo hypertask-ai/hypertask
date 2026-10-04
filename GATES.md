@@ -2,11 +2,11 @@
 
 Follow-up: The 2026-10-03T23:46:30Z review found that an authenticated confirmation could retain the previous account's disconnect marker when the new account's flag was off. The final CI reconciliation failure reported trusted production checkout drift after production changed, while the PR's own feature-flag gate, tests and browser smoke passed.
 
-OWNS: GATES.md, src/lib/slack/**, src/app/api/slack/events/route.ts, tests/slack-app-*
+OWNS: GATES.md, src/lib/slack/**, src/app/api/slack/events/route.ts, tests/slack-app-*, tests/feature-flags.test.cjs
 
 Scope: Fix every finding in the latest reviews of the existing PR, add a regression per finding, preserve behavior outside the existing ticket flag, and update only origin htpr-6817.
 
-Toolchain: Ubuntu bash, Node 24, npm, TypeScript, git, authenticated gh, and local Redis for the atomic-script integration test. No board writes, secrets, other worktree edits, new PR, merge, or flag rollout. All code work stays in /home/valentin/projects/ht-wt-6817. The user explicitly authorizes the final fetch, rebase if needed, and push.
+Toolchain: Ubuntu bash, Node 24, npm, TypeScript, git, authenticated gh, and local Redis for the atomic-script integration test. No board writes, secrets, other worktree edits, new PR, merge, or flag rollout. All code work stays in /home/valentin/projects/ht-wt-6817. The user explicitly authorizes the final fetch, rebase if needed, and push. G10 pins this session's fetched production snapshot because other sessions can advance the shared origin/production reference while verification runs; it does not require continuously rebasing against unrelated later merges.
 
 Initial evidence: Review comment dated 2026-10-03T22:07:13Z on PR https://github.com/hypertask-ai/hypertask/pull/1021 lists one major and three minor findings. Both failed review statuses refer to reviewer run 37157237999. Its failed log confirms CONCERNS, not a separate CI execution defect. Before fixes, the four regression files had 23 tests: 15 passed, 8 failed, none skipped. Both the in-memory and real Redis tests lost turn 0. The pre-existing relevant suite had 100 passing tests.
 
@@ -58,8 +58,8 @@ Initial evidence: Review comment dated 2026-10-03T22:07:13Z on PR https://github
   EXPECT: SLACK APP REPOSITORY PASSED
   EVIDENCE: automatic-evidence=v1; definition-sha256=10ac06dcb364661a3b239768bb4726d58c70bae66954938e94c313f12133b1bf; exit=0; EXPECT=matched; output-sha256=a825ad4cbb137fb03a61d43c60cd096e43b0ab8db0d680897572dc855ee17d0c; output-bytes=28; shell=/bin/sh; cwd=/home/valentin/projects/ht-wt-6817; path=af190f486cbf/32 entries
 
-- [ ] G10: The pushed branch includes fetched production and matches the existing PR head.
-  CHECK: git merge-base --is-ancestor origin/production HEAD && test "$(git rev-parse HEAD)" = "$(git ls-remote origin refs/heads/htpr-6817 | cut -f1)" && test "$(git rev-parse HEAD)" = "$(gh pr view 1021 -R hypertask-ai/hypertask --json headRefOid --jq .headRefOid)" && printf 'EXISTING PR SYNCHRONIZED\n'
+- [ ] G10: The pushed branch includes the production snapshot fetched for final verification and matches the existing PR head.
+  CHECK: git merge-base --is-ancestor bc26c407d9159fbb6035fbc0d2bef9bbc613a5b8 HEAD && test "$(git rev-parse HEAD)" = "$(git ls-remote origin refs/heads/htpr-6817 | cut -f1)" && test "$(git rev-parse HEAD)" = "$(gh pr view 1021 -R hypertask-ai/hypertask --json headRefOid --jq .headRefOid)" && printf 'EXISTING PR SYNCHRONIZED\n'
   EXPECT: EXISTING PR SYNCHRONIZED
   EVIDENCE: pending
 
