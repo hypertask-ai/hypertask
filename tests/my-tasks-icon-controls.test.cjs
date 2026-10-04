@@ -85,7 +85,7 @@ test.beforeEach(() => {
 test.afterEach(() => { act(() => reactRoot.unmount()); dom.window.close(); });
 const labels = ["My Tasks involvement", "Configure table columns", "My Tasks scope", "Filter My Tasks", "Sort My Tasks", "Group My Tasks"];
 const boards = [{ id: 1, title: "Product", labels: [], sections: [] }, { id: 2, title: "Infra", labels: [], sections: [] }];
-const controlProps = (config) => ({ boards, config, onChange: noop, scopesEnabled: true,
+const controlProps = (config) => ({ variant: "icons", boards, config, onChange: noop, scopesEnabled: true,
   tableColumnsEnabled: true, timeGroupEnabled: true, onOpenTableColumns: noop, onOpenKanbanFilters: noop });
 const trigger = (label) => document.querySelector(`button[aria-label="${label}"]`);
 

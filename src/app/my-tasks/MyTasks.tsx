@@ -1193,6 +1193,7 @@ const boardTabCounts = useMemo(() => {
         </span>
         {((viewsEnabled && myTasksViewsEnabled) || myTasksTimeGroupEnabled) && (
           <MyTasksViewControls
+            variant={iconControlsEnabled ? "icons" : "labels"}
             boards={boards}
             config={viewConfig}
             onChange={updateViewConfig}

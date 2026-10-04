@@ -42,6 +42,7 @@ import { Check, ArrowUpDown, Columns3, Layers, LayoutGrid, SlidersHorizontal, Us
 import { useEffect, useMemo, useRef, useState } from "react";
 
 interface Props {
+  variant?: "icons" | "labels";
   boards: MyTasksBoardMetadata[];
   config: MyTasksViewConfig;
   onChange: (config: MyTasksViewConfig) => void;
@@ -134,6 +135,7 @@ const inputClass =
   "h-8 rounded-[4px] border-0 bg-transparent px-2 text-content text-white-black outline-none focus:bg-active-modal-element";
 
 const MyTasksViewControls = ({
+  variant = "labels",
   boards,
   config,
   onChange,
@@ -145,7 +147,8 @@ const MyTasksViewControls = ({
   snoozeEnabled: snoozeEnabledProp = false,
 }: Props) => {
   const myTasksViewsEnabled = useFlag(MY_TASKS_VIEWS_FLAG);
-  const iconControlsEnabled = useFlag(HTPR_6938_MY_TASKS_ICON_CONTROLS_FLAG);
+  const iconControlsFlag = useFlag(HTPR_6938_MY_TASKS_ICON_CONTROLS_FLAG);
+  const iconControlsEnabled = iconControlsFlag && variant === "icons";
   const filterParityEnabled = useFlag(MY_TASKS_FILTER_PARITY_FLAG);
   const kanbanReuseEnabled = useFlag(HTPR_6930_MY_TASKS_KANBAN_REUSE_FLAG);
   const commandScopePickerFlag = useFlag(HTPR_6567_COMMAND_SCOPE_PICKER_FLAG);
