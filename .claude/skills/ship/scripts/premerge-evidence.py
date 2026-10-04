@@ -29,11 +29,11 @@ def install():
     subprocess.run(['systemctl', '--user', 'enable', '--now', 'premerge-evidence.timer'], check=True)
 
 
-def fingerprint(row, evidence):
+def fingerprint(row, evidence, checker_sha):
     ticket = row['title'].split()[0]
     folder = evidence / ticket
     record = folder / 'premerge.md'
-    digest = hashlib.sha256(json.dumps([row['headRefOid'], row['title']], sort_keys=True).encode())
+    digest = hashlib.sha256(json.dumps([row['headRefOid'], row['title'], checker_sha], sort_keys=True).encode())
     if record.is_file():
         text = record.read_bytes()
         digest.update(text)
@@ -56,6 +56,18 @@ def sweep():
             fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
         except BlockingIOError:
             return
+        # Fetch before publishing anything: a stale installed checker must never be a fallback.
+        result = subprocess.run(['gh', 'api', '-H', 'Accept: application/vnd.github.raw',
+                                 f'repos/{REPO}/contents/.claude/skills/ship/scripts/ship-check?ref=production'],
+                                capture_output=True, timeout=60, check=True)
+        if not result.stdout:
+            raise ValueError('production ship-check is empty; refusing the sweep')
+        checker_sha = hashlib.sha256(result.stdout).hexdigest()
+        checker = state / 'ship-check'
+        temporary = state / 'ship-check.tmp'
+        temporary.write_bytes(result.stdout)
+        temporary.chmod(0o755)
+        temporary.replace(checker)
         result = subprocess.run(['gh', 'pr', 'list', '-R', REPO, '--state', 'open', '--base', 'production',
                                  '--limit', '1000', '--json', 'number,title,headRefOid,statusCheckRollup'],
                                 capture_output=True, text=True, timeout=60, check=True)
@@ -72,7 +84,7 @@ def sweep():
             key = str(row['number'])
             try:
                 try:
-                    signature = fingerprint(row, evidence)
+                    signature = fingerprint(row, evidence, checker_sha)
                 except (OSError, UnicodeError):
                     signature = None  # Let the publisher fail closed on unreadable evidence.
                 statuses = [s for s in (row['statusCheckRollup'] or []) if s.get('context') == 'premerge-evidence']
@@ -84,7 +96,7 @@ def sweep():
                     updated[key] = previous
                     continue
                 env = dict(os.environ, SHIP_REPO=REPO, SHIP_BASE='production')
-                result = subprocess.run([str(HERE / 'ship-check'), 'premerge-status', key],
+                result = subprocess.run([str(checker), 'premerge-status', key],
                                         capture_output=True, text=True, timeout=600, env=env)
                 print(f'PR #{key}: {result.stdout.strip()}', flush=True)
                 match = re.search(r'^premerge-evidence: (success|failure) ', result.stdout, re.M)
