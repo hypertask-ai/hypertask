@@ -358,7 +358,7 @@ for (const depth of [0, 1, 2, 2147483648, undefined]) test(`tree depth ${depth}:
     await assert.rejects(tree.buildTaskTree(999, 7, depth, db), { message: "Task not found in tree build" });
   }
   assert.equal(results[1].body, results[0].body);
-  assert.equal(results[1].count, depth === 0 ? 1 : depth === 1 ? 2 : 3);
+  assert.equal(results[1].count, depth === 0 ? 1 : 2);
   console.log(`tree depth ${depth} delegate calls: ${results[0].count} -> ${results[1].count}`);
 });
 test("50-node deep tree retains JSON and has a constant read budget", async () => {
@@ -372,7 +372,7 @@ test("50-node deep tree retains JSON and has a constant read budget", async () =
   }
   assert.equal(results[1].body, results[0].body);
   assert.equal(results[0].count, 51);
-  assert.equal(results[1].count, 3);
+  assert.equal(results[1].count, 2);
   console.log(`50-node chain delegate calls: ${results[0].count} -> ${results[1].count}`);
 });
 

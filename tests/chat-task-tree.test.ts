@@ -210,8 +210,8 @@ async function main() {
     });
     // Key order is part of the JSON the model sees.
     assert.deepEqual(Object.keys(tree), ["id", "task_id", "title", "ticketNumber", "uniqueIndex", "children"]);
-    // Root lookup, shared board access and one recursive subtree read.
-    assert.deepEqual(db.calls, { findFirst: 1, findMany: 1, queryRaw: 1 });
+    // Root lookup and one recursive subtree read with statement-time board access.
+    assert.deepEqual(db.calls, { findFirst: 1, findMany: 0, queryRaw: 1 });
   }
 
   {
@@ -256,7 +256,7 @@ async function main() {
     assert.equal(rows.length, 50);
     const db = fakeDb(rows, projectWhere);
     await buildTaskTree(1, USER_ID, undefined, db as any);
-    assert.equal(db.calls.findFirst + db.calls.findMany + db.calls.queryRaw, 3, "50-node tree loads in 3 queries");
+    assert.equal(db.calls.findFirst + db.calls.findMany + db.calls.queryRaw, 2, "50-node tree loads in 2 queries");
   }
 
   // Ancestor walk.

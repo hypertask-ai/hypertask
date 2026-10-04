@@ -41,6 +41,9 @@ const { ResizableMedia } = load("src/components/RTE/Extensions/resizableMedia/re
 });
 const { renderPageContent } = load("src/utils/controllers/pages/pageService.ts", {
   "@/lib/prisma": { default: {} },
+  "@/utils/controllers/tasks/assertTaskAccess": require("./task-route-loader.cjs").load(
+    "src/utils/controllers/tasks/assertTaskAccess.ts", { "@/lib/prisma": { default: {} } },
+  ),
   "@/utils/controllers/turbopuffer/turbopufferHelper": { convertToPlain: (html) => require("node-html-parser").parse(html).text },
   "@/utils/helperFunctions/markdownToHtml": {},
   "@/utils/helperFunctions/sanitizeRichHtml": jiti(path.join(root, "src/utils/helperFunctions/sanitizeRichHtml.ts")),
@@ -93,6 +96,12 @@ async function withMedia(context, html, run) {
 function imageHtml(width, height) {
   return `<p>Saved text<img src="${source}"${width ? ` width="${width}"` : ""}${height ? ` height="${height}"` : ""}></p>`;
 }
+
+test("page content rendering retains saved image dimensions after access consolidation", () => {
+  const rendered = renderPageContent({ content: imageHtml("430", "287"), contentType: "html" });
+  assert.equal(rendered.html, imageHtml("430", "287"));
+  assert.equal(rendered.text, "Saved text");
+});
 
 for (const height of ["287", "286.6666666666667"]) {
   test(`page resize round-trip preserves width on image load with height ${height}`, async (context) => {

@@ -113,8 +113,8 @@ Baseline: `fb9ef851b6bb3a5b8ef84d2425df5a6f7d19ac3b`, production including slice
 
 | Operation | Before | After | Measurement and preserved contract |
 | --- | --- | --- | --- |
-| AI tree, 50-node chain, unlimited depth | 51 | 3 | Production helper delegate calls: root lookup, shared authorized-board lookup, one recursive subtree query; exact serialized tree and key order match |
-| AI tree, 50-node four-level fixture | 5 | 3 | Existing tree regression fixture; archived children, deleted/inaccessible subtree pruning and depth-limit omission of `children` remain unchanged |
+| AI tree, 50-node chain, unlimited depth | 51 | 2 | Production helper delegate calls: root lookup and one recursive subtree query with statement-time board authorization; exact serialized tree and key order match |
+| AI tree, 50-node four-level fixture | 5 | 2 | Existing tree regression fixture; archived children, deleted/inaccessible subtree pruning and depth-limit omission of `children` remain unchanged |
 | AI tree, depth 0 / depth 1 | 1 / 2 | 1 / 2 | Existing shallow-query paths retained; ancestor lookup remains its existing two reads |
 | Page GET, PATCH, versions, archive and restore access preflight | 2 | 1 | Actual page service and routes against the same isolated store; page projection, 401/404 bodies, conflict/validation errors and mutation arguments match baseline |
 | `listReport` populated entry relations | 4 | 1 | Generated Prisma SQL planner adapter calls, with identical decoded JSON, access/filter arguments, 1000-row limit, ordering and `canManage` behavior |
@@ -123,7 +123,7 @@ Baseline: `fb9ef851b6bb3a5b8ef84d2425df5a6f7d19ac3b`, production including slice
 | Guest board owner safety check | 2 | 1 | Generated Prisma SQL planner adapter calls plus actual guard/delete-order contract comparison; task enumeration and all ordered deletes are unchanged |
 | Email-code login refreshed User/UserSetting/UserPicture | 3 | 1 | Generated Prisma SQL planner adapter calls; full response, cookie values, missing-user fallback and side-effect order match baseline |
 
-The recursive subtree query receives board IDs from the existing `getProjectWhere` predicate rather than duplicating its owner/member policy in SQL. It filters access and Deleted status at every recursive edge, so an accessible grandchild behind a denied or deleted parent cannot appear. Archived child tasks and a Deleted root retain their existing treatment. A bigint depth parameter preserves valid depth values above the PostgreSQL integer range. The original ancestor cycle/access/depth errors are unchanged.
+The recursive subtree query evaluates the human `getProjectWhere` policy within its own statement: a non-null team and either ownership or a human membership. It does not trust preloaded board IDs after ownership or membership is revoked. It filters access and Deleted status at every recursive edge, so an accessible grandchild behind a denied or deleted parent cannot appear. Archived child tasks and a Deleted root retain their existing treatment. A bigint depth parameter preserves valid depth values above the PostgreSQL integer range. The original ancestor cycle/access/depth errors are unchanged.
 
 Page lookup accepts an optional authenticated `userId` and combines the same Normal-project, team-scoped task predicate with the unique page lookup. `taskAccessWhere` can omit the task ID when used on the page's task relation. All five operations across the four touched route files use this predicate instead of a second task query. Calls without `userId`, including existing MCP consumers, keep exactly their old selection and unfiltered service contract. Existing cookie/profile authentication is intentionally retained here. No write/access policy is widened to teamless or archived boards, and no new task-status restriction is added.
 
@@ -131,7 +131,7 @@ Agent UUID fast lookup still checks `userId`. It falls back to the full name res
 
 ### Named-hot-path audit and remaining work after slice 3
 
-- Section 5 tree: ancestor batching was already present. This slice replaces breadth-wise subtree round trips with one recursive subtree read after the root and shared board-access reads. Depths 0 and 1 stay at their existing budgets. For a leaf requested at depth 2 or unlimited depth, the constant three-read path can cost one more read than the former two-read path; no universal latency improvement is claimed.
+- Section 5 tree: ancestor batching was already present. This slice replaces breadth-wise subtree round trips with one authorized recursive subtree read after the root lookup. Depths 0 and 1 stay at their existing budgets. A leaf requested at depth 2 or unlimited depth retains the former two-read budget; no universal latency improvement is claimed.
 - Section 5 sessions and bootstrap: slice 2 already batched session lists, favorites and user settings. They are rechecked, not changed again. Pagination, dropping message/skill bodies, or removing full user fields changes JSON and requires a separate compatibility/feature migration. The optimized app-shell bootstrap and task-open loaders remain untouched.
 - Section 5 pages: duplicate access preflights removed on every route that called `getPage`; existing projected task fields remain for service consumers. Create/list/search access and parsing remain separate Section 2/3 work.
 - Section 5 time reports: admin-project batching already existed. Only the remaining nested entry relations are batched here.

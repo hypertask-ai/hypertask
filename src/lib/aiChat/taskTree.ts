@@ -7,7 +7,7 @@ import { getProjectWhere } from "@/utils/controllers/projects/getAllIncludes";
 // error semantics but load the ancestor chain in one recursive query and the
 // subtree with a single authorized recursive read.
 
-type Db = Pick<PrismaClient, "$queryRaw" | "task" | "project">;
+type Db = Pick<PrismaClient, "$queryRaw" | "task">;
 
 export type TaskTreeNode = {
   id: number;
@@ -160,26 +160,29 @@ export async function buildTaskTree(
       orderBy: { uniqueIndex: "asc" },
     });
   } else {
-    // Compute board access through the shared predicate before recursion. A
-    // hidden or deleted parent must prune its descendants, not just its own row.
-    const projects = await db.project.findMany({
-      where: getProjectWhere(userId),
-      select: { id: true },
-    });
-    const projectIds = projects.map(({ id }) => id);
+    // Mirror getProjectWhere(userId) in this statement so revoked ownership or
+    // membership cannot leave stale access IDs. Denied parents prune descendants.
     rows = await db.$queryRaw<ChildRow[]>(Prisma.sql`
       WITH RECURSIVE bounds AS (
         SELECT ${rootId}::integer AS root_id, ${depth ?? null}::bigint AS max_depth,
-          ${projectIds}::integer[] AS project_ids
+          ${userId}::integer AS user_id
+      ), accessible_projects AS (
+        SELECT p.id FROM "Project" p CROSS JOIN bounds b
+        WHERE p."teamId" IS NOT NULL AND (
+          p."ownerId" = b.user_id OR EXISTS (
+            SELECT 1 FROM "Member" m
+            WHERE m."projectId" = p.id AND m."userId" = b.user_id AND m."agentId" IS NULL
+          )
+        )
       ), subtree AS (
         SELECT t.id, t."parentTaskId", t."ticketNumber", t.title, t."uniqueIndex", 1 AS hop
         FROM "Task" t CROSS JOIN bounds b
         WHERE t."parentTaskId" = b.root_id AND t.status <> 'Deleted'
-          AND t."projectId" = ANY(b.project_ids)
+          AND t."projectId" IN (SELECT id FROM accessible_projects)
         UNION ALL
         SELECT t.id, t."parentTaskId", t."ticketNumber", t.title, t."uniqueIndex", s.hop + 1
         FROM subtree s JOIN "Task" t ON t."parentTaskId" = s.id CROSS JOIN bounds b
-        WHERE t.status <> 'Deleted' AND t."projectId" = ANY(b.project_ids)
+        WHERE t.status <> 'Deleted' AND t."projectId" IN (SELECT id FROM accessible_projects)
           AND (b.max_depth IS NULL OR s.hop < b.max_depth)
       )
       SELECT DISTINCT id, "parentTaskId", "ticketNumber", title, "uniqueIndex"
