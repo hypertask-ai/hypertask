@@ -40,6 +40,7 @@ type SlackCreateTaskEvent = {
 
 export async function createSlackTaskFromThread(
   event: SlackCreateTaskEvent,
+  capacityAllowed?: boolean,
 ): Promise<void> {
   const install = await prisma.slackInstall.findUnique({
     where: { slackTeamId: event.slackTeamId },
@@ -54,7 +55,7 @@ export async function createSlackTaskFromThread(
   if (!install) return;
 
   const botToken = decryptSecret(install.encryptedBotToken);
-  if (!(await claimSlackActionCapacity(event.slackTeamId, event.slackUserId))) {
+  if (!(capacityAllowed ?? await claimSlackActionCapacity(event.slackTeamId, event.slackUserId))) {
     await postSlackThreadReply(
       botToken,
       event.channelId,

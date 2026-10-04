@@ -2,14 +2,15 @@ const test = require("node:test");
 const assert = require("node:assert/strict");
 const { actor, loadTs } = require("./slack-app-fixtures.cjs");
 
-function fixture(enabled) {
-  const work = [], dispatched = [], receipts = new Set(), watched = [];
+function fixture(enabled, capacity = true) {
+  const work = [], dispatched = [], receipts = new Set(), watched = [], claims = [], flagChecks = [];
   const { POST } = loadTs("src/app/api/slack/events/route.ts", {
     "@vercel/functions": { waitUntil: (promise) => work.push(promise) },
     "@/lib/slack/signature": { verifySlackSignature: () => true },
-    "@/lib/slack/feature": { isSlackAppEnabled: typeof enabled === "function" ? enabled : async () => enabled },
-    "@/lib/slack/taskCreate": { createSlackTaskFromThread: async (input) => dispatched.push({ action: "create", input }) },
-    "@/lib/slack/chat": { handleSlackChat: async (input) => dispatched.push({ action: "chat", input }), postSlackAssistantWelcome: async (input) => dispatched.push({ action: "welcome", input }) },
+    "@/lib/slack/feature": { isSlackAppEnabled: async (...args) => { flagChecks.push(args); return typeof enabled === "function" ? enabled(...args) : enabled; } },
+    "@/lib/slack/rateLimit": { claimSlackActionCapacity: async (...args) => { claims.push(args); return capacity; } },
+    "@/lib/slack/taskCreate": { createSlackTaskFromThread: async (input, capacityAllowed) => dispatched.push({ action: "create", input, capacityAllowed }) },
+    "@/lib/slack/chat": { handleSlackChat: async (input, capacityAllowed) => dispatched.push({ action: "chat", input, capacityAllowed }), postSlackAssistantWelcome: async (input) => dispatched.push({ action: "welcome", input }) },
     "@/lib/slack/assistant": { saveSlackAssistantContext: async (...input) => dispatched.push({ action: "context", input }) },
     "@/lib/slack/taskCreateIntent": {
       hasSlackCreateTaskIntent: (text) => /create a task/.test(text),
@@ -28,7 +29,7 @@ function fixture(enabled) {
     await Promise.all(work.splice(0));
     return response;
   }
-  return { send, dispatched, watched, receipts };
+  return { send, dispatched, watched, receipts, claims, flagChecks };
 }
 
 for (const userId of [6, 985, 42]) {
@@ -46,6 +47,33 @@ for (const userId of [6, 985, 42]) {
     assert.ok(checked.includes(userId));
     assert.equal(instance.dispatched[0].action, userId === 42 ? "create" : "chat");
   });
+}
+
+for (const enabled of [false, true]) {
+  for (const event of [
+    { type: "app_mention", channel: "C1", user: "U1", ts: "1.0", text: "<@BOT> create a task Fix login in Web" },
+    { type: "app_mention", channel: "C1", user: "U1", ts: "1.0", text: "<@BOT> show projects" },
+    { type: "message", channel_type: "im", channel: "D1", user: "U1", ts: "1.0", text: "show projects" },
+  ]) {
+    test(`throttled ${event.type} does not resolve identity with flag ${enabled}`, async () => {
+      const instance = fixture(() => assert.fail("identity resolution before capacity"), false);
+      await instance.send(event);
+      await instance.send(event);
+      assert.deepEqual(instance.claims, [["T1", "U1"]]);
+      assert.equal(instance.flagChecks.length, 0);
+      assert.equal(instance.dispatched.length, 1);
+      assert.equal(instance.dispatched[0].capacityAllowed, false);
+    });
+
+    test(`admitted ${event.type} checks capacity before identity with flag ${enabled}`, async () => {
+      const instance = fixture(() => { assert.equal(instance.claims.length, 1); return enabled; });
+      await instance.send(event);
+      assert.deepEqual(instance.claims, [["T1", "U1"]]);
+      assert.equal(instance.flagChecks.length, 1);
+      assert.equal(instance.dispatched.length, 1);
+      assert.equal(instance.dispatched[0].capacityAllowed, true);
+    });
+  }
 }
 
 for (const enabled of [false, true]) {

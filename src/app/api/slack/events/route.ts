@@ -17,6 +17,7 @@ import {
 } from "@/lib/slack/references";
 import { latestSlackTs } from "@/lib/slack/idle";
 import { isSlackAppEnabled } from "@/lib/slack/feature";
+import { claimSlackActionCapacity } from "@/lib/slack/rateLimit";
 import { saveSlackAssistantContext } from "@/lib/slack/assistant";
 import { verifySlackSignature } from "@/lib/slack/signature";
 import { claimSlackEventOnce } from "@/lib/slack/taskCreateIntent";
@@ -103,7 +104,11 @@ export async function POST(request: NextRequest) {
     // Email resolution can call Slack, so keep it after the acknowledgement.
     waitUntil(
       (async () => {
-        const slackAppEnabled = await isSlackAppEnabled(
+        // Routing can auto-link users, so charge once before resolving the flag.
+        const capacityAllowed = isGeneralChatEvent(event)
+          ? await claimSlackActionCapacity(slackTeamId, event.user)
+          : undefined;
+        const slackAppEnabled = capacityAllowed !== false && await isSlackAppEnabled(
           slackTeamId,
           event.user ?? event.assistant_thread?.user_id,
         );
@@ -115,7 +120,7 @@ export async function POST(request: NextRequest) {
             slackTeamId,
             slackUserId: event.user,
             threadTs: event.thread_ts ?? event.ts,
-          });
+          }, capacityAllowed);
         } else if (route === "general_chat" && isGeneralChatEvent(event)) {
           const { handleSlackChat } = await import("@/lib/slack/chat");
           await handleSlackChat({
@@ -125,7 +130,7 @@ export async function POST(request: NextRequest) {
             slackUserId: event.user,
             text: event.text,
             threadTs: event.thread_ts ?? event.ts,
-          });
+          }, capacityAllowed);
         } else if (route === "assistant_welcome") {
           const thread = event.assistant_thread!;
           const { postSlackAssistantWelcome } = await import("@/lib/slack/chat");

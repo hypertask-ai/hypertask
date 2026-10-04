@@ -4,8 +4,8 @@ const { actor, loadTs, memoryRedis } = require("./slack-app-fixtures.cjs");
 
 const actions = ["create_task", "get_task", "list_tasks", "search_tasks", "move_task", "add_comment", "assign_user", "add_follower", "remove_follower", "update_task", "list_projects", "list_sections", "list_inbox", "archive_inbox"];
 
-function chatFixture(enabled, action, resolvedActor = actor) {
-  const executed = [], messages = [], usage = [], prompts = [], history = [];
+function chatFixture(enabled, action, resolvedActor = actor, capacity = true) {
+  const executed = [], messages = [], usage = [], prompts = [], history = [], claims = [], resolutions = [];
   const loaded = loadTs("src/lib/slack/chat.ts", {
     "ai": { generateObject: async (options) => { prompts.push(options); return { object: { action, params: { ticket: "HTPR-10" } }, usage: {} }; } },
     "@/app/api/ai/_lib/aiUsage": { logAiUsage: async (options) => usage.push(options) },
@@ -15,9 +15,9 @@ function chatFixture(enabled, action, resolvedActor = actor) {
     "@/lib/prisma": { __esModule: true, default: { slackInstall: { findUnique: async () => ({ id: actor.installId, encryptedBotToken: "test-ciphertext", botUserId: "BOT" }) } } },
     "@/lib/crypto/byokCipher": { decryptSecret: () => actor.botToken },
     "@/lib/slack/actions": { executeSlackAction: async (...args) => { executed.push(args); return [{ type: "section", text: { type: "mrkdwn", text: "Result" } }]; } },
-    "@/lib/slack/userLink": { resolveSlackActor: async () => resolvedActor },
+    "@/lib/slack/userLink": { resolveSlackActor: async (...args) => { resolutions.push(args); return resolvedActor; } },
     "@/lib/slack/feature": { isSlackAppEnabled: async () => enabled },
-    "@/lib/slack/rateLimit": { claimSlackActionCapacity: async () => true },
+    "@/lib/slack/rateLimit": { claimSlackActionCapacity: async (...args) => { claims.push(args); return capacity; } },
     "@/lib/slack/api": {
       postSlackMessage: async (...args) => messages.push({ kind: "dm", args }),
       postSlackEphemeralMessage: async (...args) => messages.push({ kind: "private", args }),
@@ -28,7 +28,45 @@ function chatFixture(enabled, action, resolvedActor = actor) {
       saveSlackAssistantContext: async (...args) => history.push(args),
     },
   });
-  return { ...loaded, executed, messages, usage, prompts, history };
+  return { ...loaded, executed, messages, usage, prompts, history, claims, resolutions };
+}
+
+for (const capacityAllowed of [undefined, false, true]) {
+  test(`chat reuses event capacity ${capacityAllowed} without bypassing identity authorization`, async () => {
+    const fixture = chatFixture(true, "list_tasks", actor, false);
+    await fixture.handleSlackChat({ channelId: "D1", channelType: "im", slackTeamId: "T1", slackUserId: "U1", text: "list tasks", threadTs: "1.0" }, capacityAllowed);
+    assert.equal(fixture.claims.length, capacityAllowed === undefined ? 1 : 0);
+    assert.equal(fixture.resolutions.length, capacityAllowed === true ? 1 : 0);
+    assert.equal(fixture.executed.length, capacityAllowed === true ? 1 : 0);
+    if (capacityAllowed !== true) assert.match(JSON.stringify(fixture.messages), /Too many Slack actions/);
+  });
+
+  test(`thread creation reuses event capacity ${capacityAllowed} without bypassing identity authorization`, async () => {
+    const replies = [], claims = [], resolutions = [];
+    const { createSlackTaskFromThread } = loadTs("src/lib/slack/taskCreate.ts", {
+      "ai": {},
+      "@/app/api/ai/_lib/aiUsage": {},
+      "@/app/api/ai/_lib/byokKeys": {},
+      "@/app/api/ai/_lib/modelProvider": {},
+      "@/lib/crypto/byokCipher": { decryptSecret: () => actor.botToken },
+      "@/lib/mcp/tasks/services": {},
+      "@/lib/mcp-server/utils/task-link": {},
+      "@/lib/prisma": { __esModule: true, default: { slackInstall: { findUnique: async () => ({ id: actor.installId, encryptedBotToken: "test", defaultProjectId: 15, team: { aiProviderSettings: {} } }) } } },
+      "@/lib/slack/api": { postSlackThreadReply: async (...args) => replies.push(args) },
+      "@/lib/slack/idle": {},
+      "@/lib/slack/rateLimit": { claimSlackActionCapacity: async (...args) => { claims.push(args); return false; } },
+      "@/lib/slack/taskCreateIntent": {},
+      "@/lib/slack/threadSummary": {},
+      "@/lib/slack/userLink": { resolveSlackActor: async (...args) => { resolutions.push(args); return null; } },
+      "@/lib/systemModelLadder": {},
+      "@/utils/helperFunctions/escapeHtml": {},
+      "@/utils/controllers/projects/getAllIncludes": {},
+    });
+    await createSlackTaskFromThread({ channelId: "C1", slackTeamId: "T1", slackUserId: "U1", threadTs: "1.0" }, capacityAllowed);
+    assert.equal(claims.length, capacityAllowed === undefined ? 1 : 0);
+    assert.equal(resolutions.length, capacityAllowed === true ? 1 : 0);
+    assert.match(JSON.stringify(replies), capacityAllowed === true ? /\/ht connect/ : /Too many Slack actions/);
+  });
 }
 
 for (const action of actions) {

@@ -74,14 +74,14 @@ export async function handleSlackChat(input: {
   slackUserId: string;
   text: string;
   threadTs: string;
-}): Promise<void> {
+}, capacityAllowed?: boolean): Promise<void> {
   const install = await loadSlackInstall(input.slackTeamId);
   if (!install) return;
   const botToken = decryptSecret(install.encryptedBotToken);
 
   try {
     if (
-      !(await claimSlackActionCapacity(input.slackTeamId, input.slackUserId))
+      !(capacityAllowed ?? await claimSlackActionCapacity(input.slackTeamId, input.slackUserId))
     ) {
       const blocks = errorBlock(
         "Too many Slack actions. Try again in a minute.",
