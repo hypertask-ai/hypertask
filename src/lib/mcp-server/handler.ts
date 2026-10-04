@@ -125,7 +125,7 @@ export async function mcpHandler(request: Request): Promise<Response> {
       },
     )
     if (isLegacySseRequest(working)) {
-      return handleLegacySseRequest(working, authInfo, portableTools)
+      return handleLegacySseRequest(working, authInfo, resolvePortableTools(MCP_TOOLS as PortableTool[]))
     }
 
     return handleMcpHttp(working, {
