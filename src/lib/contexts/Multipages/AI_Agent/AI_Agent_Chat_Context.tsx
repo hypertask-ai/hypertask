@@ -1,6 +1,8 @@
 "use client";
 import type { FileItem } from "@/components/Common/AttachmentsUpload/FileUploadHandler";
 import { useAiChat } from "@/hooks/MultiPages/AIChat/useAiChat";
+import { useFlag } from "@/hooks/useFlag";
+import { HTPR_6936_ASK_AI_FULLSCREEN_FLAG } from "@/lib/flags/keys";
 import { isControlQFocusShortcut } from "@/lib/aiChat/chatFocusShortcut";
 import { useRecoilState } from "@/lib/state";
 import { aiChatPendingPromptAtom } from "@/store";
@@ -22,6 +24,7 @@ import {
   useEffect,
   useLayoutEffect,
   useRef,
+  useState,
 } from "react";
 import { ChatContext, useAiChatContext } from "./chatContext";
 
@@ -174,11 +177,27 @@ export const ChatRuntime = memo(function ChatRuntime({
   handleSendMessageRef.current = contextProps.handleSendMessage;
   const { editor, fileItems } = contextProps;
   const pathname = usePathname();
+  const askAiFullscreenEnabled = useFlag(HTPR_6936_ASK_AI_FULLSCREEN_FLAG);
+  const [failedFullScreenQuery, setFailedFullScreenQuery] = useState<string | null>(null);
+  useEffect(() => {
+    if (!failedFullScreenQuery || !editor) return;
+    editor.commands.insertContentAt(editor.state.doc.content.size, {
+      type: "paragraph",
+      content: [{ type: "text", text: failedFullScreenQuery }],
+    });
+    editor.commands.focus("end");
+    setFailedFullScreenQuery(null);
+  }, [failedFullScreenQuery, editor]);
   const pendingFullScreenSessionRef = useRef<{
     prompt: typeof pendingAiChatPrompt;
     previousSessionId: string | null;
   } | null>(null);
   useEffect(() => {
+    if (pendingAiChatPrompt && typeof pendingAiChatPrompt !== "string" && !askAiFullscreenEnabled) {
+      pendingFullScreenSessionRef.current = null;
+      setPendingAiChatPrompt(null);
+      return;
+    }
     if (
       !pendingAiChatPrompt ||
       contextProps.isByokBlocked ||
@@ -195,7 +214,12 @@ export const ChatRuntime = memo(function ChatRuntime({
           prompt: pendingAiChatPrompt,
           previousSessionId: contextProps.activeSession,
         };
-        void contextProps.startNewSession().catch(() => {});
+        void contextProps.startNewSession().catch(() => {
+          if (pendingFullScreenSessionRef.current?.prompt !== pendingAiChatPrompt) return;
+          pendingFullScreenSessionRef.current = null;
+          setPendingAiChatPrompt(null);
+          setFailedFullScreenQuery(pendingAiChatPrompt.query);
+        });
         return;
       }
       if (
@@ -226,6 +250,7 @@ export const ChatRuntime = memo(function ChatRuntime({
     }
   }, [
     pendingAiChatPrompt,
+    askAiFullscreenEnabled,
     contextProps.isByokBlocked,
     contextProps.isTyping,
     contextProps.sessions.length,

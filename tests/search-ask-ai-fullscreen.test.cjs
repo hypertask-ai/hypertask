@@ -15,6 +15,7 @@ async function withRuntime(config, check) {
   const stub = (filename, exports) => { require.cache[filename] = { id: filename, filename, loaded: true, exports } }
   const source = (file, exports) => stub(path.join(root, file), exports)
   let pathname = config.pathname ?? '/search'
+  let fullscreenEnabled = config.fullscreenEnabled ?? true
   let pending = config.prompt
   let setter
   const sent = []
@@ -30,6 +31,7 @@ async function withRuntime(config, check) {
   let reactRoot
   try {
     source('src/hooks/MultiPages/AIChat/useAiChat.ts', { useAiChat: () => context })
+    source('src/hooks/useFlag.tsx', { useFlag: (key) => { assert.equal(key, flag); return fullscreenEnabled } })
     source('src/lib/state.tsx', { useRecoilState: () => {
       const pair = React.useState(config.prompt)
       pending = pair[0]
@@ -47,6 +49,7 @@ async function withRuntime(config, check) {
       sent, created: () => created, pending: () => pending,
       update: async (patch, route = pathname) => { context = { ...context, ...patch }; pathname = route; await render() },
       handoff: async (prompt) => React.act(async () => setter(prompt)),
+      setFlag: async (enabled) => { fullscreenEnabled = enabled; await render() },
     })
   } finally {
     if (reactRoot) await React.act(async () => reactRoot.unmount())
@@ -83,8 +86,51 @@ test('fullscreen handoff waits for /chat, history and a new session, then sends 
   })
 })
 
+test('fullscreen handoff is cancelled when the flag turns off before readiness or during session creation', async () => {
+  for (const duringCreation of [false, true]) {
+    const prompt = { query: 'Where is my work?', fullScreen: true }
+    await withRuntime({ prompt, pathname: '/chat', context: { chatHistoryReady: duringCreation, editor: { isEmpty: false }, fileItems: [{}] } }, async ({ update, setFlag, sent, created, pending, handoff }) => {
+      assert.equal(created(), duringCreation ? 1 : 0)
+      await setFlag(false)
+      assert.equal(pending(), null)
+      const newSession = { id: 'new', messages: [] }
+      await update({ chatHistoryReady: true, activeSession: 'new', currentSession: newSession, sessions: [newSession] })
+      assert.deepEqual(sent, [])
+      await setFlag(true)
+      assert.deepEqual(sent, [], 'enabling the flag must not revive a cancelled handoff')
+      await handoff(prompt)
+      assert.equal(created(), duringCreation ? 2 : 1, 'cancellation resets the session latch')
+    })
+  }
+})
+
+test('failed session creation recovers the question without replacing a draft or retrying automatically', async () => {
+  for (const delayedEditor of [false, true]) {
+    const inserted = []
+    const editor = { isEmpty: false, state: { doc: { content: { size: 12 } } }, commands: { insertContentAt: (...args) => inserted.push(args), focus() {} } }
+    let attempts = 0
+    const startNewSession = async () => { if (++attempts === 1) throw new Error('Session unavailable') }
+    const prompt = { query: 'Recover my question', fullScreen: true }
+    await withRuntime({ prompt, pathname: '/chat', strictMode: true, context: { startNewSession, editor: delayedEditor ? null : editor, fileItems: [{}] } }, async ({ update, sent, pending, handoff }) => {
+      assert.equal(pending(), null)
+      assert.equal(attempts, 1)
+      await update({ editor })
+      assert.deepEqual(inserted, [[12, { type: 'paragraph', content: [{ type: 'text', text: prompt.query }] }]])
+      await update({})
+      assert.equal(attempts, 1, 'no automatic retry loop')
+      assert.deepEqual(sent, [])
+      await handoff(prompt)
+      assert.equal(attempts, 2, 'a later explicit attempt can create a session even with the same prompt')
+      const newSession = { id: 'new', messages: [] }
+      await update({ activeSession: 'new', currentSession: newSession, sessions: [newSession] })
+      assert.deepEqual(sent, [{ sessionId: 'new', query: prompt.query, options: { preserveComposer: true } }])
+      assert.equal(inserted.length, 1)
+    })
+  }
+})
+
 test('legacy prompt retains readiness guards and uses the existing conversation without starting a new one', async () => {
-  await withRuntime({ prompt: 'Legacy question', context: { isByokBlocked: true } }, async ({ update, sent, created, pending }) => {
+  await withRuntime({ prompt: 'Legacy question', fullscreenEnabled: false, context: { isByokBlocked: true } }, async ({ update, sent, created, pending }) => {
     assert.equal(pending(), 'Legacy question')
     await update({ isByokBlocked: false, isTyping: true })
     assert.deepEqual(sent, [])
@@ -191,6 +237,13 @@ test('the reused sender adds the question first and streams the reply without se
         queryClient: { refetchQueries: async () => {} }, drainQueuedMessage() {}, handleSendMessageRef: ref(),
       }, fullscreenEnabled ? { preserveComposer: true } : undefined)
       await handleSendMessage('Where is my work?', requestedPreservation ? { preserveComposer: true } : undefined)
+      if (requestedPreservation && !fullscreenEnabled) {
+        assert.equal(payload, undefined, 'a revoked preservation request must cancel, never consume the composer')
+        assert.deepEqual(messages, [])
+        assert.deepEqual(cleared, [])
+        assert.deepEqual(processed, [])
+        continue
+      }
       assert.equal(payload.message, 'Where is my work?')
       assert.equal(payload.session_id, 'new')
       assert.deepEqual(payload.chat_history, [])

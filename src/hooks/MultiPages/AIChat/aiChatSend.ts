@@ -34,7 +34,8 @@ export function createAiChatSend(context: Context, searchHandoff?: { preserveCom
     options?: { htmlForAttachments?: string; preserveComposer?: boolean }
   ) => {
     if (isByokBlocked) return;
-    const preserveComposer = searchHandoff?.preserveComposer && options?.preserveComposer;
+    if (options?.preserveComposer && !searchHandoff?.preserveComposer) return;
+    const preserveComposer = options?.preserveComposer;
 
     // While a turn is streaming, composer Send/Enter appends to the FIFO queue
     // instead of starting a second stream (HTPR-5695). Use isTyping (not only
