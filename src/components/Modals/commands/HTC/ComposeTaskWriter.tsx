@@ -138,10 +138,9 @@ export default function ComposeTaskWriter({ active, onCreated, onBusyChange }: {
       if (mounted.current) setError(failure instanceof Error ? failure.message : "Couldn’t create the task. Your note is still here — try again.");
     } finally {
       sending.current = false;
-      if (mounted.current) {
-        setWriting(false);
-        onBusyChange(false);
-      }
+      if (mounted.current) setWriting(false);
+      // The palette can outlive Compose when the feature flag turns off.
+      onBusyChange(false);
     }
   };
 

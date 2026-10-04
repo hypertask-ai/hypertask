@@ -267,6 +267,21 @@ test('late creation success or failure cannot override navigation after Compose 
   }
 });
 
+test('turning the flag off during creation restores Search commands once creation settles', async (t) => {
+  await withPalette(t, { tab: 'compose', dismissCommand: true }, async ({ type, press, flags, rerender, finish, values, navigations }) => {
+    await type('Do not open this task after disabling Compose');
+    await press('Enter', { code: 'Enter' });
+    flags[flag] = false;
+    await rerender();
+    assert.equal(document.querySelector('[data-compose-task-writer]'), null);
+    await finish();
+    assert.deepEqual(navigations, []);
+    const command = [...document.querySelectorAll('[data-search-commands] button')].find((button) => button.textContent === 'Wrap task titles');
+    await React.act(async () => command.click());
+    assert.equal(values.get('showCommandsAtom').show, false);
+  });
+});
+
 test('Enter sends the current board and opens its detail with regular task-scoped chat and exact no-model greeting', async (t) => {
   await withPalette(t, { tab: 'compose' }, async ({ type, press, requests, finish, navigations, values, cacheAdds, viewedTasks, capture }) => {
     await type('Fix login button spacing');
