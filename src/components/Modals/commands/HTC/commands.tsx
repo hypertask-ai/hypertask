@@ -710,7 +710,7 @@ const Commands = (props: Props) => {
         // makes it centre on the space actually available. The variable is published by
         // AI_Chat_Sidebar and is 0px whenever the panel is closed or on mobile.
         modalClassName="pr-[var(--ht-ai-sidebar-width,0px)]"
-        contentClassName={composeEnabled ? "rounded-[5px] overflow-visible" : "rounded-[5px] overflow-hidden"}
+        contentClassName={composeTaskWriterEnabled && !isDemo && !isInteractive ? "rounded-[5px] overflow-visible" : "rounded-[5px] overflow-hidden"}
       >
         {isInteractive && (
           <TutorialTooltip
