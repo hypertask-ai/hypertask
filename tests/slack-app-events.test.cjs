@@ -1,0 +1,110 @@
+const test = require("node:test");
+const assert = require("node:assert/strict");
+const { actor, loadTs } = require("./slack-app-fixtures.cjs");
+
+function fixture(enabled, capacity = true) {
+  const work = [], dispatched = [], receipts = new Set(), watched = [], claims = [], flagChecks = [];
+  const { POST } = loadTs("src/app/api/slack/events/route.ts", {
+    "@vercel/functions": { waitUntil: (promise) => work.push(promise) },
+    "@/lib/slack/signature": { verifySlackSignature: () => true },
+    "@/lib/slack/feature": { isSlackAppEnabled: async (...args) => { flagChecks.push(args); return typeof enabled === "function" ? enabled(...args) : enabled; } },
+    "@/lib/slack/rateLimit": { claimSlackActionCapacity: async (...args) => { claims.push(args); return capacity; } },
+    "@/lib/slack/taskCreate": { createSlackTaskFromThread: async (input, capacityAllowed) => dispatched.push({ action: "create", input, capacityAllowed }) },
+    "@/lib/slack/chat": { handleSlackChat: async (input, capacityAllowed) => dispatched.push({ action: "chat", input, capacityAllowed }), postSlackAssistantWelcome: async (input) => dispatched.push({ action: "welcome", input }) },
+    "@/lib/slack/assistant": { saveSlackAssistantContext: async (...input) => dispatched.push({ action: "context", input }) },
+    "@/lib/slack/taskCreateIntent": {
+      hasSlackCreateTaskIntent: (text) => /create a task/.test(text),
+      claimSlackEventOnce: async (_db, id) => { if (receipts.has(id)) return false; receipts.add(id); return true; },
+    },
+    "@/lib/slack/uninstall": {},
+    "@/lib/prisma": { __esModule: true, default: {
+      slackInstall: { findUnique: async () => ({ id: actor.installId, teamId: actor.teamId }) },
+      slackWatchedThread: { findUnique: async () => null, upsert: async (input) => watched.push(input) },
+      task: { findMany: async ({ where }) => { assert.equal(where.project.teamId, actor.teamId); return [{ id: 10, project: { teamId: actor.teamId } }, { id: 11, project: { teamId: "FOREIGN" } }]; } },
+    } },
+  });
+  async function send(event, eventId = "Ev1") {
+    const response = await POST(new Request("https://app.hypertask.ai/api/slack/events", { method: "POST", body: JSON.stringify({ type: "event_callback", event_id: eventId, team_id: "T1", event }) }));
+    assert.equal(response.status, 200);
+    await Promise.all(work.splice(0));
+    return response;
+  }
+  return { send, dispatched, watched, receipts, claims, flagChecks };
+}
+
+for (const userId of [6, 985, 42]) {
+  test(`first-contact user ${userId} chooses creation routing by their own flag, not an ordinary installer`, async () => {
+    const checked = [];
+    let resolved = 0;
+    const { isSlackAppEnabled } = loadTs("src/lib/slack/feature.ts", {
+      "@/lib/prisma": { __esModule: true, default: { slackInstall: { findUnique: async () => ({ id: actor.installId, installedByUserId: 42, userLinks: [] }) } } },
+      "@/lib/flags": { HTPR_6817_SLACK_APP_FLAG: "htpr-6817-slack-app", isFeatureEnabled: async (_key, id) => { checked.push(id); return id === 6 || id === 985; } },
+      "@/lib/slack/userLink": { getSlackAutoLinkDisabledUserId: async () => null, resolveSlackActor: async () => { resolved++; return { ...actor, user: { ...actor.user, id: userId } }; } },
+    });
+    const instance = fixture(isSlackAppEnabled);
+    await instance.send({ type: "app_mention", channel: "C1", user: "U1", ts: "1.0", text: "<@BOT> create a task Fix login in Web" });
+    assert.equal(resolved, 1);
+    assert.ok(checked.includes(userId));
+    assert.equal(instance.dispatched[0].action, userId === 42 ? "create" : "chat");
+  });
+}
+
+for (const enabled of [false, true]) {
+  for (const event of [
+    { type: "app_mention", channel: "C1", user: "U1", ts: "1.0", text: "<@BOT> create a task Fix login in Web" },
+    { type: "app_mention", channel: "C1", user: "U1", ts: "1.0", text: "<@BOT> show projects" },
+    { type: "message", channel_type: "im", channel: "D1", user: "U1", ts: "1.0", text: "show projects" },
+  ]) {
+    test(`throttled ${event.type} does not resolve identity with flag ${enabled}`, async () => {
+      const instance = fixture(() => assert.fail("identity resolution before capacity"), false);
+      await instance.send(event);
+      await instance.send(event);
+      assert.deepEqual(instance.claims, [["T1", "U1"]]);
+      assert.equal(instance.flagChecks.length, 0);
+      assert.equal(instance.dispatched.length, 1);
+      assert.equal(instance.dispatched[0].capacityAllowed, false);
+    });
+
+    test(`admitted ${event.type} checks capacity before identity with flag ${enabled}`, async () => {
+      const instance = fixture(() => { assert.equal(instance.claims.length, 1); return enabled; });
+      await instance.send(event);
+      assert.deepEqual(instance.claims, [["T1", "U1"]]);
+      assert.equal(instance.flagChecks.length, 1);
+      assert.equal(instance.dispatched.length, 1);
+      assert.equal(instance.dispatched[0].capacityAllowed, true);
+    });
+  }
+}
+
+for (const enabled of [false, true]) {
+  test(`signed event dispatch and retry handling with flag ${enabled ? "on" : "off"}`, async () => {
+    const instance = fixture(enabled);
+    const mention = { type: "app_mention", channel: "C1", user: "U1", ts: "1.0", text: "<@BOT> create a task Fix login in Web" };
+    await instance.send(mention);
+    await instance.send(mention);
+    assert.equal(instance.dispatched.length, 1);
+    assert.equal(instance.dispatched[0].action, enabled ? "chat" : "create");
+    assert.equal(instance.dispatched[0].input.slackUserId, "U1");
+    await instance.send({ ...mention, text: "show projects" }, "Ev2");
+    assert.equal(instance.dispatched[1].action, "chat");
+    await instance.send({ type: "assistant_thread_started", assistant_thread: { channel_id: "D1", thread_ts: "1.0", user_id: "U1", context: { team_id: "T1", channel_id: "C1" } } }, "Ev3");
+    assert.equal(instance.dispatched[2].action, "welcome");
+    assert.equal(Boolean(instance.dispatched[2].input.assistantThread), enabled);
+    const changed = { type: "assistant_thread_context_changed", assistant_thread: { channel_id: "D1", thread_ts: "1.0", user_id: "U1", context: { team_id: "T1", channel_id: "C2" } } };
+    await instance.send(changed, "Ev4");
+    await instance.send(changed, "Ev4");
+    assert.equal(instance.dispatched.filter((item) => item.action === "context").length, enabled ? 1 : 0);
+    await instance.send({ type: "message", channel_type: "im", channel: "D1", user: "U1", ts: "2.0", thread_ts: "1.0", text: "move it" }, "Ev5");
+    assert.equal(instance.dispatched.at(-1).action, "chat");
+    assert.equal(instance.dispatched.at(-1).input.threadTs, "1.0");
+  });
+
+  test(`ambient channel watching stays team-scoped with flag ${enabled ? "on" : "off"}`, async () => {
+    const instance = fixture(enabled);
+    await instance.send({ type: "message", channel_type: "channel", channel: "C1", user: "U1", ts: "1.0", text: "See HTPR-10" });
+    assert.equal(instance.dispatched.length, 0);
+    assert.equal(instance.watched.length, 1);
+    assert.deepEqual(instance.watched[0].create.matchedTaskIds, [10]);
+    assert.equal(instance.watched[0].create.installId, actor.installId);
+  });
+}

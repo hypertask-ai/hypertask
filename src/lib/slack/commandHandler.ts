@@ -1,4 +1,5 @@
 import prisma from "@/lib/prisma";
+import { isSlackAppEnabled } from "@/lib/slack/feature";
 import { executeSlackAction, type SlackAction } from "@/lib/slack/actions";
 import { runAsLinkedSlackUser } from "@/lib/slack/authorization";
 import {
@@ -21,6 +22,7 @@ import { claimSlackEventOnce } from "@/lib/slack/taskCreateIntent";
 import {
   isSlackInstallTeamMember,
   resolveSlackActor,
+  setSlackAutoLinkDisabled,
 } from "@/lib/slack/userLink";
 
 export type SlackCommandPayload = {
@@ -100,8 +102,16 @@ async function handleConnect(
     await handleConnectConfirmation(payload, rawConfirmation);
     return;
   }
+  if (await isSlackAppEnabled(payload.slackTeamId, payload.slackUserId)) {
+    const install = await prisma.slackInstall.findUnique({
+      where: { slackTeamId: payload.slackTeamId },
+      select: { id: true },
+    });
+    if (install) await setSlackAutoLinkDisabled(install.id, payload.slackUserId, null);
+  }
   const actor = await resolveSlackActor(payload.slackTeamId, payload.slackUserId);
   if (actor) {
+    await setSlackAutoLinkDisabled(actor.installId, payload.slackUserId, null);
     await postSlackResponseUrl(
       payload.responseUrl,
       confirmBlock(`Connected as ${actor.user.displayName || actor.user.email}.`),
@@ -262,6 +272,7 @@ async function handleConnectConfirmation(
     }
   }
 
+  await setSlackAutoLinkDisabled(confirmation.installId, confirmation.slackUserId, null);
   await postSlackResponseUrl(
     payload.responseUrl,
     confirmBlock("Slack account connected to Hypertask."),
@@ -275,6 +286,10 @@ async function handleDisconnect(payload: SlackCommandPayload): Promise<void> {
     select: { id: true },
   });
   if (install) {
+    if (await isSlackAppEnabled(payload.slackTeamId, payload.slackUserId)) {
+      const actor = await resolveSlackActor(payload.slackTeamId, payload.slackUserId);
+      if (actor) await setSlackAutoLinkDisabled(install.id, payload.slackUserId, actor.user.id);
+    }
     await prisma.slackUserLink.deleteMany({
       where: { installId: install.id, slackUserId: payload.slackUserId },
     });
