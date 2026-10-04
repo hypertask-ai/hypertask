@@ -17,8 +17,16 @@ const pullDownCommandHosts = [
   "src/components/PageComponents/Calendar/index.tsx",
 ];
 
-test("pull-down command hosts load the palette synchronously", () => {
+test("pull-down command hosts retain synchronous keyboard activation", () => {
   for (const relativePath of pullDownCommandHosts) {
+    if (relativePath === "src/app/inbox/Inbox.tsx") {
+      const source = readSource(relativePath);
+      assert.match(source, /const HypertasksCommands = loadedCommands \?\? commands/);
+      assert.match(source, /useLayoutEffect\(\(\) => \{[\s\S]*?commandFocusProxy\.current\?\.focus\(\{ preventScroll: true \}\)/);
+      assert.match(source, /<input[\s\S]*?ref=\{commandFocusProxy\}[\s\S]*?type="search"[\s\S]*?inputMode="search"/);
+      assert.match(source, /focusProxy=\{commandFocusProxy\}/);
+      continue;
+    }
     const source = readSource(relativePath);
 
     assert.match(
@@ -41,7 +49,7 @@ test("mobile command input focuses only through the synchronous callback ref", (
 
   assert.match(
     source,
-    /if \(!input \|\| !isMobile\) return;[\s\S]*?el\.focus\(\{ preventScroll: true \}\);/,
+    /if \(!input \|\| \(!isMobile && !focusProxy\)\) return;[\s\S]*?el\.focus\(\{ preventScroll: true \}\);/,
   );
   assert.match(source, /autoFocus=\{!isMobile\}[\s\S]*?id="htc-mobile-search"/);
 });
@@ -178,4 +186,65 @@ test("mobile commands select no row until the user searches", async () => {
       }
     }
   }
+});
+
+function sourceCallback(source, startText, endText, hook, bindings) {
+  const start = source.indexOf(startText), end = source.indexOf(endText, start);
+  assert.ok(start >= 0 && end > start, `missing ${startText}`);
+  const js = require("typescript").transpileModule(source.slice(start, end), {
+    compilerOptions: { target: 7 },
+  }).outputText;
+  let callback;
+  new Function(hook, ...Object.keys(bindings), js)(
+    (fn) => { callback = fn; return fn; }, ...Object.values(bindings),
+  );
+  return callback;
+}
+
+test("Inbox cold commit focuses its existing proxy synchronously and warm commit leaves focus to the palette", () => {
+  const inbox = readSource("src/app/inbox/Inbox.tsx");
+  const calls = [];
+  const proxy = { value: "old", focus: (options) => { assert.deepEqual(options, { preventScroll: true }); calls.push("focus"); }, blur: () => calls.push("blur") };
+  const effect = (show, loaded, active = null) => sourceCallback(
+    inbox, "  useLayoutEffect(() => {\n    // iOS needs", "  useEffect(() => {\n    // Fetch the visible split", "useLayoutEffect",
+    { showCommands: { show }, HypertasksCommands: loaded, commandFocusProxy: { current: proxy }, document: { activeElement: active } },
+  )();
+  effect(true, undefined);
+  assert.deepEqual(calls, ["focus"], "focus happens before any promise/microtask");
+  effect(true, () => null);
+  assert.deepEqual(calls, ["focus"], "a warm synchronous mount must not steal focus");
+  effect(false, undefined, proxy);
+  assert.deepEqual(calls, ["focus", "blur"]);
+  assert.equal(proxy.value, "", "closing discards pending input before a later open");
+});
+
+test("loaded command input takes proxy text and selection at focus transfer, including characters typed during animation", () => {
+  const dom = new JSDOM('<input id="proxy" type="search"><input id="real" type="search">');
+  const proxy = dom.window.document.getElementById("proxy");
+  const real = dom.window.document.getElementById("real");
+  const frames = [], values = [];
+  let allowFocus = false;
+  const actualFocus = real.focus.bind(real);
+  real.focus = () => { if (allowFocus) actualFocus(); };
+  proxy.value = "z"; proxy.focus();
+  const commands = readSource("src/components/Modals/commands/HTC/commands.tsx");
+  const callback = sourceCallback(
+    commands, "  const setInputRef = useCallback(", "  useEffect(() => {\n    if (!isMobile)", "useCallback",
+    {
+      inputRef: { current: null }, isMobile: true, focusProxy: { current: proxy },
+      onKeyChangeRef: { current: (event) => values.push(event.target.value) },
+      document: dom.window.document, requestAnimationFrame: (fn) => frames.push(fn),
+    },
+  );
+  callback(real);
+  assert.equal(dom.window.document.activeElement, proxy, "failed sheet focus retains the active keyboard input");
+  proxy.value = "zoom now"; proxy.setSelectionRange(2, 6);
+  allowFocus = true; frames.shift()();
+  assert.equal(dom.window.document.activeElement, real);
+  assert.equal(real.value, "zoom now");
+  assert.equal(values.at(-1), "zoom now", "controlled search state receives every buffered character");
+  assert.equal(real.selectionStart, 2); assert.equal(real.selectionEnd, 6);
+  callback(null);
+  for (const frame of frames) frame();
+  dom.window.close();
 });

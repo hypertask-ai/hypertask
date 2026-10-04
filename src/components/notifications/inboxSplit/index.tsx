@@ -74,6 +74,7 @@ import toast from "react-hot-toast";
 
 interface Props {
   onLoadCallback: () => void;
+  onContentReady?: () => void;
   selectedReset: INotification | null | undefined;
   _notifications: INotification[];
   index: number;
@@ -288,6 +289,7 @@ const MaybeSwipeable = ({
   );
 
 const InboxSplit = ({
+  onContentReady,
   selectedReset,
   _notifications,
   value,
@@ -337,6 +339,9 @@ const InboxSplit = ({
   const { navigate, navigateToTask } = useHypertasksNavigate();
   const taskRef = useRef<HTMLDivElement>(null);
   const activeSplitRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (value === index) onContentReady?.();
+  }, [value, index, onContentReady]);
   const router = useRouter();
   const isApple = useDeviceContext();
   const currentHoveredDiv = useRef<number | null>(null);
