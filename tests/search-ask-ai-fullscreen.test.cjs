@@ -86,6 +86,29 @@ test('fullscreen handoff waits for /chat, history and a new session, then sends 
   })
 })
 
+test('cold phone history selecting the previous conversation is not mistaken for the new fullscreen session', async () => {
+  const prompt = { query: 'what tasks are open on QA Sandbox', fullScreen: true }
+  const inserted = []
+  const editor = { isEmpty: true, state: { doc: { content: { size: 0 } } }, commands: { insertContentAt: (...args) => inserted.push(args), focus() {} } }
+  for (const messages of [[], [{ role: 'human', content: 'Previous question' }]]) {
+    const oldSession = { id: 'old', messages }
+    await withRuntime({ prompt, pathname: '/chat', strictMode: true, context: { activeSession: null, currentSession: oldSession, sessions: [oldSession], editor } }, async ({ update, sent, created, pending }) => {
+      assert.equal(created(), 1)
+      await update({ activeSession: 'old' })
+      assert.deepEqual(sent, [], 'history initialization must not send into an old empty conversation')
+      assert.equal(pending(), prompt, 'history initialization must not recover the query into the composer')
+      assert.deepEqual(inserted, [])
+      const newSession = { id: 'new', messages: [] }
+      await update({ activeSession: 'new', currentSession: newSession, sessions: [newSession, oldSession] })
+      assert.deepEqual(sent, [{ sessionId: 'new', query: prompt.query, options: { preserveComposer: true } }])
+      assert.equal(pending(), null)
+      assert.equal(created(), 1)
+      await update({})
+      assert.equal(sent.length, 1)
+    })
+  }
+})
+
 test('busy sender keeps the fullscreen prompt and retries once on sender settlement without a loop', async () => {
   const prompt = { query: 'Keep my question', fullScreen: true }
   let busy = true
