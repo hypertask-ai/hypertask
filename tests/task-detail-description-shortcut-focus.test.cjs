@@ -79,12 +79,12 @@ test("only a pending Ctrl+D request focuses the editable description", () => {
   );
 });
 
-test("Ctrl+J opens the AI writer after a mounted description changes mode", () => {
+test("legacy Ctrl+J opens the inline writer only when the New Task window is off", () => {
   const syncStart = tiptap.indexOf(
     "// Ctrl/Cmd+J changes the parent edit mode",
   );
   const syncEnd = tiptap.indexOf(
-    "}, [mode, shouldTriggerAiTaskWriter]);",
+    "}, [mode, shouldTriggerAiTaskWriter, newTaskWindow]);",
     syncStart,
   );
   const writerSync = tiptap.slice(syncStart, syncEnd);
@@ -92,7 +92,7 @@ test("Ctrl+J opens the AI writer after a mounted description changes mode", () =
   assert.ok(syncStart >= 0 && syncEnd > syncStart);
   assert.match(
     writerSync,
-    /setShouldShowAITaskWriter\(shouldTriggerAiTaskWriter\)/,
+    /setShouldShowAITaskWriter\(shouldTriggerAiTaskWriter && !newTaskWindow\)/,
   );
   assert.doesNotMatch(writerSync, /mode === "create-comment"/);
 });

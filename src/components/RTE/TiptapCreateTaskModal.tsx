@@ -1,3 +1,7 @@
+import { HTPR_6929_COMPOSE_TASK_WRITER_FLAG, HTPR_6937_NEW_TASK_WINDOW_FLAG } from "@/lib/flags/keys";
+import { useSetRecoilState } from "@/lib/state";
+import { showCommandsAtom } from "@/store";
+import { CommandMode } from "@/models/enums";
 import React, {
   useCallback,
   useContext,
@@ -136,7 +140,11 @@ const TiptapCreateTaskModal = () => {
     uploadingStateCreateTaskModalAtom
   );
   const { continueTourInModal, isTourActive, endTour } = useTourContext();
-  const [shouldShowAiTaskWriter, setShouldShowAITaskWriter] = useState(
+  const composeEnabled = useFlag(HTPR_6929_COMPOSE_TASK_WRITER_FLAG);
+  const newTaskWindowFlag = useFlag(HTPR_6937_NEW_TASK_WINDOW_FLAG);
+  const newTaskWindow = composeEnabled && newTaskWindowFlag;
+  const setCommands = useSetRecoilState(showCommandsAtom);
+  const [writerOpen, setShouldShowAITaskWriter] = useState(
     editMode === "Description-ai" ? true : false
   );
   const [hasOpenedClassicForm, setHasOpenedClassicForm] = useState(false);
@@ -163,11 +171,16 @@ const TiptapCreateTaskModal = () => {
         ? GUEST_DEMO_TASK_PROMPT
         : undefined)
   );
+  const shouldShowAiTaskWriter = writerOpen && !newTaskWindow;
   const closeAiTaskWriter = () => {
     aiPromptRef.current = undefined;
     setShouldShowAITaskWriter(false);
   };
   const toggleAiTaskWriterVisibility = () => {
+    if (newTaskWindow) {
+      setCommands({ show: true, mode: CommandMode.Command, paletteTab: "compose" });
+      return;
+    }
     if (shouldShowAiTaskWriter) aiPromptRef.current = undefined;
     setShouldShowAITaskWriter((current) => !current);
   };
@@ -584,6 +597,10 @@ const TiptapCreateTaskModal = () => {
   };
 
   const toggleAiTaskWriter = () => {
+    if (newTaskWindow) {
+      setCommands({ show: true, mode: CommandMode.Command, paletteTab: "compose" });
+      return;
+    }
     // editor?.chain().focus().toggleHighlight({ color: "#b89bdd" });
     editor?.chain().selectAll().setHighlight({ color: "#F0D8FF" }).run();
     document.getElementById(divIds.popoverContainer)?.scrollIntoView({
@@ -755,6 +772,7 @@ const TiptapCreateTaskModal = () => {
     }
     // // [ctrl] + [j]
     if (cmdControl && e.keyCode === KeyCodes.J) {
+      if (newTaskWindow) return;
       e.preventDefault();
       console.log("🚀 ~ handleKeyDown ~ endTour");
       endTour()

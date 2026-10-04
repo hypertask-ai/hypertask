@@ -1,3 +1,4 @@
+import { HTPR_6929_COMPOSE_TASK_WRITER_FLAG, HTPR_6937_NEW_TASK_WINDOW_FLAG } from "@/lib/flags/keys";
 // Tiptap.tsx
 import { Dispatch, SetStateAction, useState, useRef } from "react";
 import { IAttachment, IEditorAttachmentFile, IUser, RedirectAPIParams, RedirectMode } from "@/models/model";
@@ -144,7 +145,10 @@ export function useTaskDetailEditorState({
   const [toggleHighlight, setToggleHighlight] = useState<boolean>(false);
   const [trigger, setTrigger] = useState(false);
   const [filesDropped, setFilesDropped] = useState<File[]>([]);
-  const [shouldShowAiTaskWriter, setShouldShowAITaskWriter] = useState(shouldTriggerAiTaskWriter);
+  const composeEnabled = useFlag(HTPR_6929_COMPOSE_TASK_WRITER_FLAG);
+  const newTaskWindowFlag = useFlag(HTPR_6937_NEW_TASK_WINDOW_FLAG);
+  const [writerOpen, setShouldShowAITaskWriter] = useState(shouldTriggerAiTaskWriter);
+  const shouldShowAiTaskWriter = writerOpen && !(composeEnabled && newTaskWindowFlag);
   const [aiTriggerData, setAiTriggerData] = useState({
     autoTrigger: false,
     initialPrompt: ''

@@ -38,6 +38,7 @@ function renderPalette({ enabled = true, mobile = false, env = buildEnv, rows = 
     : null;
   const mocks = {
     react: React,
+    "react-dom": require("react-dom"),
     "react/jsx-runtime": require("react/jsx-runtime"),
     "next/navigation": { usePathname: () => "/project" },
     reactstrap: {

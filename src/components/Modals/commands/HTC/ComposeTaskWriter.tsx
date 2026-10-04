@@ -1,10 +1,15 @@
-import { useContext, useEffect, useRef, useState } from "react";
+import { Suspense, useContext, useEffect, useRef, useState } from "react";
 import { useRecoilValue, useSetRecoilState } from "@/lib/state";
-import { currentProjectAtom, currentUserAtom, lastUsedBoardsAtom, composeTaskChatIntroAtom, showAIChatInterfaceAtom, isAiChatSidebarModeAtom, aiChatAutoOpenSuppressedAtom, aiChatExplicitOpenAtAtom, dockedChatScopeAtom } from "@/store";
+import { currentProjectAtom, currentUserAtom, lastUsedBoardsAtom, composeTaskChatIntroAtom, showAIChatInterfaceAtom, isAiChatSidebarModeAtom, aiChatAutoOpenSuppressedAtom, aiChatExplicitOpenAtAtom, dockedChatScopeAtom, inViewObjectAtom } from "@/store";
 import { useRouter } from "next/navigation";
 import { parseCookies } from "nookies";
 import { MobileViewContext } from "@/lib/contexts/mobileContext";
 import { useFileUpload } from "@/components/Common/AttachmentsUpload/FileUploadHandler";
+import axios from "axios";
+import { isEmptyComposeTarget } from "@/lib/ai/composeTaskTarget";
+import AudioButton from "@/components/RTE/Components/AudioButton";
+import { getShortcutDisplay } from "@/lib/utils/keyboardShortcuts";
+import { useDeviceContext } from "@/lib/contexts/deviceContext";
 import ImageGallery from "@/components/Common/AttachmentsUpload/ImageGalleryView";
 import { AttachmentButton } from "@/components/AI_CHAT/AttachmentButton";
 import { SendMessageButton } from "@/components/AI_CHAT/SendMessageButton";
@@ -17,7 +22,7 @@ import globalAPIHandlers from "@/utils/api/global";
 import useAddDeleteTaskInBoards from "@/hooks/MultiPages/useAddDeleteTaskInBoards";
 import { useProjectQuery } from "@/hooks/General/useProjectQuery";
 import { useFlag } from "@/hooks/useFlag";
-import { HTPR_6929_COMPOSE_TASK_WRITER_FLAG } from "@/lib/flags/keys";
+import { HTPR_6929_COMPOSE_TASK_WRITER_FLAG, HTPR_6937_NEW_TASK_WINDOW_FLAG } from "@/lib/flags/keys";
 import { discardUnboundCreateTaskUploads } from "@/lib/createTaskAttachmentUploads";
 import type { IProject } from "@/models/model";
 
@@ -27,6 +32,13 @@ export default function ComposeTaskWriter({ active, onCreated, onBusyChange }: {
   onBusyChange: (busy: boolean) => void;
 }) {
   const enabled = useFlag(HTPR_6929_COMPOSE_TASK_WRITER_FLAG);
+  const newTaskWindowFlag = useFlag(HTPR_6937_NEW_TASK_WINDOW_FLAG);
+  const newTaskWindow = enabled && newTaskWindowFlag;
+  const isApple = useDeviceContext();
+  const inView = useRecoilValue(inViewObjectAtom);
+  const [recording, setRecording] = useState(false);
+  const [transcribing, setTranscribing] = useState(false);
+  const dictating = recording || transcribing;
   const mobile = Boolean(useContext(MobileViewContext));
   const [text, setText] = useState("");
   const [writing, setWriting] = useState(false);
@@ -49,6 +61,12 @@ export default function ComposeTaskWriter({ active, onCreated, onBusyChange }: {
   const { createTaskGlobally } = useAddDeleteTaskInBoards();
   const { updateActiveItemAndItemInView } = useProjectQuery();
   const { fileItems, files, fileInputRef, handleDroppedFiles, handleAttachmentClick, removeFile } = useFileUpload();
+
+  useEffect(() => {
+    if (!newTaskWindow || !active || !input.current) return;
+    input.current.style.height = "auto";
+    input.current.style.height = `${Math.max(240, Math.min(input.current.scrollHeight, 440))}px`;
+  }, [newTaskWindow, active, text]);
 
   const filesRef = useRef(files);
   filesRef.current = files;
@@ -88,8 +106,8 @@ export default function ComposeTaskWriter({ active, onCreated, onBusyChange }: {
   }, [enabled, active, writing, addingImages, handleAttachmentClick]);
 
   const addImages = async (images: File[]) => {
-    if (sending.current) return;
-    if (images.some((file) => !file.type.startsWith("image/"))) {
+    if (sending.current || dictating) return;
+    if (!newTaskWindow && images.some((file) => !file.type.startsWith("image/") && !/\.(?:png|jpe?g|gif|webp|heic|heif|avif)$/i.test(file.name))) {
       setError("Choose images to attach.");
       return;
     }
@@ -107,13 +125,23 @@ export default function ComposeTaskWriter({ active, onCreated, onBusyChange }: {
   };
 
   const send = async () => {
-    if (!enabled || sending.current || pendingImages.current > 0 || !text.trim()) return;
+    if (!enabled || sending.current || pendingImages.current > 0 || dictating || !text.trim()) return;
     sending.current = true;
     setWriting(true);
     onBusyChange(true);
     setError(null);
     try {
-      const projectId = composeTaskBoardId(window.location.href, parseCookies().previousBoard, lastUsedBoards);
+      let existingTaskId: number | undefined;
+      let targetProjectId: number | undefined;
+      const detail = window.location.pathname.match(/^\/detail\/project-(\d+)\/(\d+)$/);
+      if (newTaskWindow && detail && inView?.taskId) {
+        const { data: task } = await axios.get("/api/tasks/single", { params: { id: inView.taskId } });
+        if (task.projectId === Number(detail[1]) && task.uniqueIndex === Number(detail[2]) && isEmptyComposeTarget(task)) {
+          existingTaskId = task.id;
+          targetProjectId = task.projectId;
+        }
+      }
+      const projectId = targetProjectId ?? composeTaskBoardId(window.location.href, parseCookies().previousBoard, lastUsedBoards);
       if (!projectId || !user?.id) throw new Error("Open a board first, then try again. Your note is still here.");
       let project = currentProject?.id === projectId ? currentProject : undefined;
       if (!project) {
@@ -122,9 +150,9 @@ export default function ComposeTaskWriter({ active, onCreated, onBusyChange }: {
       }
       if (!mounted.current) return;
       if (!project) throw new Error("Your last board is unavailable. Open a board and try again.");
-      const { task, writerFailed } = await createComposedTask({ text, files, project, userId: user.id });
+      const { task, writerFailed } = await createComposedTask({ text, files, project, userId: user.id, ...(existingTaskId ? { existingTaskId } : {}) });
       if (!mounted.current) return;
-      createTaskGlobally({ task, sectionId: task.sectionId!, position: "top" });
+      if (!existingTaskId) createTaskGlobally({ task, sectionId: task.sectionId!, position: "top" });
       setIntro({ taskId: task.id, content: composeTaskAssistantMessage(task.ticketNumber ?? `${project.uniqueIdentifier ?? "TASK"}-${task.uniqueIndex}`, writerFailed) });
       updateActiveItemAndItemInView(task);
       setScope(projectId);
@@ -135,7 +163,7 @@ export default function ComposeTaskWriter({ active, onCreated, onBusyChange }: {
       router.push(`/detail/project-${projectId}/${task.uniqueIndex}`);
       onCreated();
     } catch (failure) {
-      if (mounted.current) setError(failure instanceof Error ? failure.message : "Couldn’t create the task. Your note is still here — try again.");
+      if (mounted.current) setError(failure instanceof Error ? failure.message : "Couldn’t create the task. Your note is still here. Try again.");
     } finally {
       sending.current = false;
       if (mounted.current) setWriting(false);
@@ -144,25 +172,44 @@ export default function ComposeTaskWriter({ active, onCreated, onBusyChange }: {
     }
   };
 
+  // A lazy thumbnail must not suspend the modal portal and remount its draft.
+  const attachments = fileItems.length > 0 && (
+    <Suspense fallback={null}>
+      <ImageGallery files={fileItems} images={[]} allowDelete shouldUpload={false} mode="others" variant="chat"
+        handleRemove={(name: string) => {
+          discardUnboundCreateTaskUploads(files.filter((file) => file.name === name));
+          removeFile(name);
+        }} />
+    </Suspense>
+  );
+
   return enabled ? (
-    <div hidden={!active} data-compose-task-writer>
+    <div hidden={!active} data-compose-task-writer className="max-h-[65dvh] overflow-y-auto"
+      onDragOver={(event) => { if (!writing && event.dataTransfer.types.includes("Files")) event.preventDefault(); }}
+      onDrop={(event) => {
+        if (!event.dataTransfer.files.length) return;
+        event.preventDefault();
+        void addImages(Array.from(event.dataTransfer.files));
+      }}>
       {writing ? <FullScreenChatLoading inline label="Writing your ticket…" /> : (
         <div className="p-2">
           <div className="flex w-full flex-col rounded-[5px] bg-ai-tiptap px-3 py-2">
+            {newTaskWindow && attachments}
             <AiComposerTextarea
               ref={input}
               value={text}
               onChange={(event) => setText(event.target.value)}
-              rows={mobile ? 3 : 2}
+              rows={newTaskWindow ? 10 : mobile ? 3 : 2}
               placeholder="Describe the task"
               aria-label="Describe the task"
-              className="min-h-16 text-content"
+              className={newTaskWindow ? "min-h-60 max-h-[440px] overflow-y-auto text-content caret-hypertasks-ai-purple" : "min-h-16 text-content"}
               onPaste={(event) => {
                 const images = extractPastedImageFiles(event.clipboardData?.items);
                 if (!images.length) return;
                 event.preventDefault();
                 void addImages(images);
               }}
+              disabled={dictating}
               onKeyDown={(event) => {
                 if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) {
                   event.preventDefault();
@@ -171,16 +218,24 @@ export default function ComposeTaskWriter({ active, onCreated, onBusyChange }: {
                 }
               }}
             />
-            {fileItems.length > 0 && <ImageGallery files={fileItems} images={[]} allowDelete shouldUpload={false} mode="others" handleRemove={(name: string) => {
-              discardUnboundCreateTaskUploads(files.filter((file) => file.name === name));
-              removeFile(name);
-            }} variant="chat" />}
+            {!newTaskWindow && attachments}
             <div className="flex w-full items-center justify-between pt-2">
-              <AttachmentButton disabled={addingImages} mobile={mobile} onClick={handleAttachmentClick} />
-              <SendMessageButton disabled={addingImages || !text.trim()} mobile={mobile} onClick={() => void send()} />
+              <div className="flex min-w-0 flex-1 items-center gap-2">
+                {!recording && <AttachmentButton disabled={addingImages || dictating} mobile={mobile} onClick={handleAttachmentClick} />}
+                {newTaskWindow && active && <AudioButton id="compose-task-audio-button" ariaLabel="Start dictation" editor={null}
+                  defaultContent={text} hasText={Boolean(text.trim())} toggleRecording={setRecording} onProcessingChange={setTranscribing}
+                  disabled={addingImages} mobilePrimaryTone="ai" mobilePresentation="compact"
+                  callbackHandler={(transcript, replace) => {
+                    if (replace) {
+                      const plain = new DOMParser().parseFromString(transcript, "text/html").body.textContent ?? "";
+                      setText((previous) => `${previous} ${plain}`.trim());
+                    } else setText((previous) => previous + transcript);
+                  }} />}
+              </div>
+              <SendMessageButton disabled={addingImages || dictating || !text.trim()} mobile={mobile} onClick={() => void send()} />
             </div>
           </div>
-          <input type="file" accept="image/*" multiple hidden ref={fileInputRef} onChange={(event) => {
+          <input type="file" accept={newTaskWindow ? undefined : "image/*"} multiple hidden ref={fileInputRef} onChange={(event) => {
             void addImages(Array.from(event.target.files ?? []));
             event.target.value = "";
           }} />
@@ -189,8 +244,8 @@ export default function ComposeTaskWriter({ active, onCreated, onBusyChange }: {
       )}
       <div className="flex flex-wrap items-center gap-4 border-t border-light-black-border-1 px-4 py-2 text-micro text-text-light-gray">
         <span><HintKey>Enter</HintKey> Send</span>
-        <span><HintKey>Ctrl+U</HintKey> Add images</span>
-        <span><HintKey>Ctrl+K</HintKey> Search</span>
+        <span><HintKey>{newTaskWindow ? getShortcutDisplay({ key: 85, modifiers: ["ctrl"], description: "Attach" }, isApple).join("+") : "Ctrl+U"}</HintKey> {newTaskWindow ? "Attach files" : "Add images"}</span>
+        <span><HintKey>{newTaskWindow ? getShortcutDisplay({ key: 75, modifiers: ["ctrl"], description: "Search" }, isApple).join("+") : "Ctrl+K"}</HintKey> Search</span>
         <span><HintKey>Esc</HintKey> Close</span>
       </div>
     </div>

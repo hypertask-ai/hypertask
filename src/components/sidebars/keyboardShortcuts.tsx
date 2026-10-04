@@ -1,3 +1,4 @@
+import { HTPR_6937_NEW_TASK_WINDOW_FLAG } from "@/lib/flags/keys";
 import { useContext, useEffect, useState } from "react";
 import { useRecoilState, useRecoilValue } from "@/lib/state";
 import { appShellRailAtom, showShortcutsAtom } from "@/store";
@@ -25,6 +26,8 @@ const KeyboardShortcuts = () => {
   // Keep the runtime branch local so CI can trace shortcut UI coverage.
   let includeComposeTaskShortcut = false;
   if (composeTaskWriterEnabled) includeComposeTaskShortcut = true;
+  const newTaskWindowFlag = useFlag(HTPR_6937_NEW_TASK_WINDOW_FLAG);
+  const newTaskWindow = composeTaskWriterEnabled && newTaskWindowFlag;
   const agentLogNameEnabled = useFlag(HTPR_6662_AGENT_LOG_NAME_FLAG);
   let historyToggleLabel = "Toggle history events";
   if (agentLogNameEnabled) {
@@ -39,6 +42,7 @@ const KeyboardShortcuts = () => {
     keepDirectTaskOpen,
     historyToggleLabel,
     includeComposeTaskShortcut,
+    newTaskWindow,
   );
 
   // ====================== ON INPUT KEY CHANGE

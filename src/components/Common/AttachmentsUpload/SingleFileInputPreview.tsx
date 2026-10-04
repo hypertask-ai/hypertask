@@ -212,6 +212,15 @@ interface ISingleFile {
         {
           allowDelete && handleRemove && (!shouldUpload || progressPercentage === 100) ? (
             <X size={18}
+              aria-label={`Remove ${file.name}`}
+              role="button"
+              tabIndex={0}
+              onKeyDown={(event) => {
+                if (event.key === "Enter" || event.key === " ") {
+                  event.preventDefault();
+                  handleRemove(file.name);
+                }
+              }}
               className="absolute z-10 top-0 right-0 text-white-black rounded-full cursor-pointer xs:text-subheading sm:text-emphasis bg-red-600"
               onClick={() => handleRemove(file.name)}
               strokeWidth={1.75}

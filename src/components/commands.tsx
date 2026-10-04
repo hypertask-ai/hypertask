@@ -12,7 +12,7 @@ import { createCommandModalCallbacks } from "./commandModalCallbacks";
 import { createCommandDispatcher } from "./commandDispatcher";
 import { useEffect } from "react";
 import { useFlag } from "@/hooks/useFlag";
-import { HTPR_6868_TICKET_PREFIX_FLAG } from "@/lib/flags/keys";
+import { HTPR_6868_TICKET_PREFIX_FLAG, HTPR_6929_COMPOSE_TASK_WRITER_FLAG, HTPR_6937_NEW_TASK_WINDOW_FLAG } from "@/lib/flags/keys";
 
 
 
@@ -82,6 +82,9 @@ import "./Modals/commands/HTC/AllCommands";
 
 
 const HypertasksCommands = ({ callbackHandler, contextOptions, focusProxy }: IHTCProps) => {
+  const composeEnabled = useFlag(HTPR_6929_COMPOSE_TASK_WRITER_FLAG);
+  const newTaskWindowFlag = useFlag(HTPR_6937_NEW_TASK_WINDOW_FLAG);
+  const newTaskWindow = composeEnabled && newTaskWindowFlag;
   const ticketPrefixEnabled = useFlag(HTPR_6868_TICKET_PREFIX_FLAG);
   const {
   queryClient, copyCurrentUrlEnabled, rowShortcutsEnabled, myTasksViewsEnabled, myTasksTableColumnsEnabled,
@@ -145,6 +148,7 @@ const HypertasksCommands = ({ callbackHandler, contextOptions, focusProxy }: IHT
   const {
   handleAction,
   } = createCommandDispatcher({
+    newTaskWindow,
     copyCurrentUrlEnabled, boardCloseHandler, setShowCommands, setCommandMode, undoLatest,
     _currentProject, setBoardZoomedOutByProject, currentUser, openSettings, setShowShortcuts,
     switchToTheme, followTaskHandler, unFollowTaskHandler, hasBulkSelection, bulkSelection,

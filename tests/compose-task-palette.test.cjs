@@ -7,6 +7,7 @@ const { JSDOM } = require('jsdom');
 const { createJiti } = require('jiti');
 const root = path.resolve(__dirname, '..');
 const flag = 'htpr-6929-compose-task-writer';
+const newFlag = 'htpr-6937-new-task-window';
 
 async function withPalette(t, config, check) {
   const dom = new JSDOM('<div id="root"></div>', { url: `https://example.test${config.url ?? '/project?id=7'}` });
@@ -26,11 +27,12 @@ async function withPalette(t, config, check) {
   const cached = new Map(Object.entries(require.cache));
   const stub = (filename, exports) => { require.cache[filename] = { id: filename, filename, loaded: true, exports }; };
   const source = (file, exports) => stub(path.join(root, file), exports);
-  const flags = { [flag]: config.enabled ?? true };
-  const atomNames = ['boardLayoutAtom', 'calendarSettingsAtom', 'currentProjectAtom', 'currentUserAtom', 'frequentlyUsedHTCAton', 'tableTitleWrapAtom', 'showCommandsAtom', 'lastUsedBoardsAtom', 'composeTaskChatIntroAtom', 'showAIChatInterfaceAtom', 'isAiChatSidebarModeAtom', 'aiChatAutoOpenSuppressedAtom', 'aiChatExplicitOpenAtAtom', 'dockedChatScopeAtom', 'showCreateTaskModalAtom', 'showShortcutsAtom', 'showSidebarAtom', 'showBoardManagerAtom'];
+  const flags = { [flag]: config.enabled ?? true, [newFlag]: config.newWindow ?? false };
+  const atomNames = ['boardLayoutAtom', 'calendarSettingsAtom', 'currentProjectAtom', 'currentUserAtom', 'frequentlyUsedHTCAton', 'tableTitleWrapAtom', 'showCommandsAtom', 'lastUsedBoardsAtom', 'composeTaskChatIntroAtom', 'showAIChatInterfaceAtom', 'isAiChatSidebarModeAtom', 'aiChatAutoOpenSuppressedAtom', 'aiChatExplicitOpenAtAtom', 'dockedChatScopeAtom', 'showCreateTaskModalAtom', 'showShortcutsAtom', 'showSidebarAtom', 'showBoardManagerAtom', 'inViewObjectAtom', 'uploadingStateCreateTaskModalAtom'];
   const atoms = Object.fromEntries(atomNames.map((name) => [name, name]));
   const project = { id: 7, title: 'QA Sandbox', uniqueIdentifier: 'QASA' };
   const values = new Map(Object.entries({
+    inViewObjectAtom: config.inView ?? { taskId: null },
     currentProjectAtom: config.project ?? project, currentUserAtom: { id: 985, uid: 'qa' },
     boardLayoutAtom: 'board', calendarSettingsAtom: {}, frequentlyUsedHTCAton: {}, lastUsedBoardsAtom: config.recency ?? {},
     showCommandsAtom: { show: config.open ?? true, mode: 0, paletteTab: config.tab ?? 'search' }, composeTaskChatIntroAtom: null,
@@ -61,7 +63,10 @@ async function withPalette(t, config, check) {
     source('src/hooks/MultiPages/useGetAllProjectsMinimal.ts', { useGetAllProjectsMinimal: () => ({ data: [] }) });
     source('src/utils/helperFunctions/Views/ViewsHelperFunctions.ts', { getActiveEmptySectionSettingFromProject: () => '', getActiveStalenessFromProject: () => false });
     source('src/styles/linksModal.module.scss', { default: { links_modal: 'links_modal' } });
-    source('src/components/Common/Tooltip.tsx', { default: () => null });
+    source('src/components/Common/Tooltip.tsx', { default: ({ text, keyCombination }) => React.createElement('span', { 'data-tooltip': text }, keyCombination.join('+')) });
+    const axios = { get: async () => ({ data: config.targetTask }) };
+    stub(require.resolve('axios'), { default: axios });
+    source('src/components/RTE/Components/AudioButton.tsx', { default: (props) => React.createElement('button', { 'aria-label': props.ariaLabel, onClick: () => props.callbackHandler(' spoken note') }, 'Mic') });
     source('src/hooks/MultiPages/useClickOutside.ts', { default: () => {} });
     source('src/lib/constants/index.ts', { default: {} });
     source('src/utils/helperFunctions/helperFunctions.ts', { processFiles: config.processImages ?? (async (files, start) => [...files].map((file, id) => ({ id: start + id, file }))) });
@@ -76,7 +81,8 @@ async function withPalette(t, config, check) {
     source('src/utils/api/global/apiHelpers/createTaskGloballycontroller.ts', {});
     const compose = jiti(path.join(root, 'src/lib/ai/composeTask.ts'));
     source('src/lib/ai/composeTask.ts', { ...compose, createComposedTask: (body) => new Promise((resolve, reject) => requests.push({ body, resolve, reject })) });
-    source('src/components/Common/AttachmentsUpload/ImageGalleryView.tsx', { default: ({ files, handleRemove }) => React.createElement('div', { 'data-thumbnails': true }, files.map(({ file }) => React.createElement('button', { key: file.name, onClick: () => handleRemove(file.name), 'aria-label': `Remove ${file.name}` }, file.name))) });
+    const Thumbnails = ({ files, handleRemove }) => React.createElement('div', { 'data-thumbnails': true }, files.map(({ file }) => React.createElement('button', { key: file.name, onClick: () => handleRemove(file.name), 'aria-label': `Remove ${file.name}` }, React.createElement('img', { alt: file.name }), file.name)));
+    source('src/components/Common/AttachmentsUpload/ImageGalleryView.tsx', { default: config.previewLoad ? React.lazy(() => config.previewLoad.then(() => ({ default: Thumbnails }))) : Thumbnails });
     const commands = [{ group: 'Board', commandLists: [{ key: 'createTaskWithAiWriter', name: 'AI Task Writer', commandMode: 135 }] }];
     const enums = jiti(path.join(root, 'src/models/enums.ts'));
     commands[0].commandLists[0].commandMode = enums.CommandMode.CreateTaskWithAiWriter;
@@ -105,7 +111,7 @@ async function withPalette(t, config, check) {
       const shown = useValue('showCommandsAtom');
       useCommandCenterShortcut(Object.hasOwn(config, 'userId') ? config.userId : 985, config.apple ?? false, dom.window.location.pathname, config.trial ?? false, false, toggleShowCommands);
       return React.createElement(React.Fragment, null,
-        shown.show ? React.createElement(Palette, { isOpen: true }) : null,
+        shown.show ? React.createElement(React.Suspense, { fallback: React.createElement('div', { 'data-palette-suspended': true }) }, React.createElement(Palette, { isOpen: true })) : null,
         React.createElement(Probe));
     }
     reactRoot = require('react-dom/client').createRoot(document.getElementById('root'));
@@ -513,5 +519,187 @@ test('actual phone sheet reserves visible space for Compose tabs only while the 
     assert.equal(sheet.containerStyle.height, '280px');
     assert.equal(sheet.aboveSlot, undefined);
     assert.doesNotMatch(sheet.panelClassName, /!overflow-visible/);
+  });
+});
+
+test('New Task label, purple sparkle, dictation, tooltips and Tab require both flags on desktop and phone', async (t) => {
+  for (const enabled of [false, true]) for (const newWindow of [false, true]) for (const mobile of [false, true]) {
+    await withPalette(t, { enabled, newWindow, mobile, apple: true }, async ({ press, clickTab, input, type, values }) => {
+      const both = enabled && newWindow;
+      assert.equal(Boolean(document.querySelector('[data-tooltip="Search"]')), both);
+      if (!enabled) {
+        assert.equal(document.querySelector('[role="tablist"]'), null);
+        return;
+      }
+      const tab = [...document.querySelectorAll('[role="tab"]')].find((node) => node.textContent.startsWith(both ? 'New Task' : 'Compose'));
+      assert.ok(tab);
+      if (both) {
+        assert.ok(tab.querySelector('.lucide-sparkles'));
+        assert.match(tab.className, /text-hypertasks-ai-purple/);
+        assert.equal(document.querySelector('[data-tooltip="Search"]').textContent, 'CMD+K');
+        assert.equal(document.querySelector('[data-tooltip="New Task"]').textContent, 'CMD+J');
+        const search = document.querySelector('input[type="search"]');
+        const switched = await press('Tab', {}, search);
+        assert.equal(switched.defaultPrevented, true);
+      } else await clickTab('Compose');
+      assert.equal(Boolean(document.querySelector('[aria-label="Start dictation"]')), both);
+      assert.equal(input().rows, both ? 10 : mobile ? 3 : 2);
+      await type('Typed');
+      if (both) {
+        await React.act(async () => document.querySelector('[aria-label="Start dictation"]').click());
+        assert.equal(input().value, 'Typed spoken note');
+        const otherControl = document.querySelector('[aria-label="Attach files"]');
+        assert.equal((await press('Tab', {}, otherControl)).defaultPrevented, false);
+        assert.equal(values.get('showCommandsAtom').paletteTab, 'compose');
+        assert.equal((await press('Tab', { shiftKey: true }, input())).defaultPrevented, true);
+        assert.equal(values.get('showCommandsAtom').paletteTab, 'search');
+      } else {
+        assert.equal((await press('Tab', {}, input())).defaultPrevented, false);
+        assert.equal(values.get('showCommandsAtom').paletteTab, 'compose');
+      }
+    });
+  }
+});
+
+test('Ctrl+J fills only the visible new empty task when both flags are on and never inserts a second cache task', async (t) => {
+  for (const newWindow of [false, true]) for (const title of ['Enter task title here', 'Already written']) {
+    const targetTask = { id: 52, projectId: 7, uniqueIndex: 4, title, description_: { content: '<p></p>' } };
+    await withPalette(t, { newWindow, url: '/detail/project-7/4', open: false, inView: { taskId: 52 }, targetTask, previousBoard: 'project-8|&|view' }, async ({ press, type, requests, finish, cacheAdds, values }) => {
+      await press('j', { ctrlKey: true }, document.body);
+      await type('Write this task');
+      await press('Enter');
+      const fills = newWindow && title === 'Enter task title here';
+      assert.equal(requests[0].body.existingTaskId, fills ? 52 : undefined);
+      assert.equal(requests[0].body.project.id, fills ? 7 : 8);
+      await finish();
+      assert.equal(cacheAdds.length, fills ? 0 : 1);
+      assert.equal(values.get('showAIChatInterfaceAtom'), true);
+    });
+  }
+});
+
+test('file drop works under Compose alone; New Task also accepts document tiles above the input', async (t) => {
+  for (const newWindow of [false, true]) await withPalette(t, { tab: 'compose', newWindow }, async ({ dom, input, press, type, requests, fail }) => {
+    const file = new dom.window.File(['png'], 'finder.png', { type: '' });
+    const drop = new dom.window.Event('drop', { bubbles: true, cancelable: true });
+    Object.defineProperty(drop, 'dataTransfer', { value: { files: [file] } });
+    await React.act(async () => input().dispatchEvent(drop));
+    assert.equal(drop.defaultPrevented, true);
+    assert.ok(document.querySelector('img[alt="finder.png"]'));
+    assert.ok(document.querySelector('[aria-label="Remove finder.png"]'));
+    if (newWindow) {
+      assert.ok(document.querySelector('[data-thumbnails]').compareDocumentPosition(input()) & dom.window.Node.DOCUMENT_POSITION_FOLLOWING);
+      const doc = new dom.window.File(['text'], 'brief.txt', { type: 'text/plain' });
+      const fileInput = document.querySelector('input[type="file"]');
+      Object.defineProperty(fileInput, 'files', { configurable: true, value: [doc] });
+      await React.act(async () => fileInput.dispatchEvent(new dom.window.Event('change', { bubbles: true })));
+      assert.ok(document.querySelector('[aria-label="Remove brief.txt"]'));
+      await React.act(async () => document.querySelector('[aria-label="Remove brief.txt"]').click());
+      assert.equal(document.querySelector('[aria-label="Remove brief.txt"]'), null);
+    }
+    await type('Keep attachments');
+    await press('Enter');
+    assert.deepEqual(requests[0].body.files, [file]);
+    await fail();
+  });
+});
+
+test('edit-mode and writer events retain inline writer with 6937 off but redirect with both flags on', async (t) => {
+  for (const enabled of [false, true]) for (const newWindow of [false, true]) {
+    await withPalette(t, { enabled, newWindow, open: false }, async ({ source, jiti, mountProbe, dom, values }) => {
+      source('src/components/PageComponents/TaskDetail/TopRow/CreateSummaryButton.tsx', { AI_TASK_WRITER_EVENT: 'test-open-writer' });
+      source('src/components/RTE/Components/EmojiGifPicker.tsx', { OPEN_EMOJI_GIF_PICKER_EVENT: 'test-emoji' });
+      const { useTaskDetailEditorEvents } = jiti(path.join(root, 'src/components/RTE/useTaskDetailEditorEvents.tsx'));
+      const openings = [];
+      const context = { mode: 'read-edit-description', id: 'description', shouldTriggerAiTaskWriter: true,
+        setShouldShowAITaskWriter: (value) => openings.push(value), setAiTriggerData() {}, divIds: {}, currentTask: {}, handleFocus() {} };
+      function Probe() { useTaskDetailEditorEvents(context); return null; }
+      await mountProbe(() => React.createElement(Probe));
+      assert.equal(openings.at(-1), !(enabled && newWindow));
+      await React.act(async () => window.dispatchEvent(new dom.window.CustomEvent('test-open-writer', { detail: { targetId: 'description', prompt: 'Write' } })));
+      if (enabled && newWindow) {
+        assert.equal(openings.at(-1), false);
+        assert.equal(values.get('showCommandsAtom').paletteTab, 'compose');
+      } else assert.equal(openings.at(-1), true);
+    });
+  }
+});
+
+test('lazy attachment previews cannot suspend the palette or lose the Compose draft under either window flag', async (t) => {
+  for (const newWindow of [false, true]) {
+    let resolvePreview;
+    const previewLoad = new Promise((resolve) => { resolvePreview = resolve; });
+    await withPalette(t, { tab: 'compose', newWindow, previewLoad }, async ({ dom, input, type, press, requests }) => {
+      await type('Keep this note while the thumbnail loads');
+      const field = input();
+      const picker = document.querySelector('[data-compose-task-writer] input[type="file"]');
+      const image = new dom.window.File(['png'], 'lazy.png', { type: 'image/png' });
+      Object.defineProperty(picker, 'files', { configurable: true, value: [image] });
+      await React.act(async () => picker.dispatchEvent(new dom.window.Event('change', { bubbles: true })));
+      assert.equal(document.querySelector('[data-palette-suspended]'), null, 'lazy previews stay inside the attachment boundary');
+      assert.equal(input(), field);
+      assert.equal(input().value, 'Keep this note while the thumbnail loads');
+      await React.act(async () => resolvePreview());
+      assert.ok(document.querySelector('img[alt="lazy.png"]'));
+      await press('Enter', {}, input());
+      assert.equal(requests.at(-1).body.text, 'Keep this note while the thumbnail loads');
+      assert.equal(requests.at(-1).body.files[0], image);
+    });
+  }
+});
+
+test('real shared gallery paints image blobs, file icons and removable tiles without uploads', async (t) => {
+  await withPalette(t, { open: false }, async ({ source, stub, jiti, mountProbe, dom }) => {
+    const savedCreate = URL.createObjectURL, savedRevoke = URL.revokeObjectURL;
+    const revoked = [];
+    URL.createObjectURL = () => 'blob:compose-thumbnail';
+    URL.revokeObjectURL = (url) => revoked.push(url);
+    try {
+      source('src/styles/AttachmentView.scss', {});
+      stub(require.resolve('react-circular-progressbar/dist/styles.css'), {});
+      source('src/lib/storage/uploadViaApi.ts', { uploadSingleFileViaApi: () => assert.fail('Preview must not upload') });
+      const Preview = jiti(path.join(root, 'src/components/Common/AttachmentsUpload/SingleFileInputPreview.tsx')).default;
+      stub(require.resolve('next/dynamic'), { default: () => Preview });
+      delete require.cache[path.join(root, 'src/components/Common/AttachmentsUpload/ImageGalleryView.tsx')];
+      const Gallery = jiti(path.join(root, 'src/components/Common/AttachmentsUpload/ImageGalleryView.tsx')).default;
+      const image = new dom.window.File(['png'], 'image.png', { type: 'image/png' });
+      const doc = new dom.window.File(['text'], 'brief.txt', { type: 'text/plain' });
+      function Probe() {
+        const [files, setFiles] = React.useState([{ id: 0, file: image }, { id: 1, file: doc }]);
+        return React.createElement(Gallery, { files, images: [], allowDelete: true, shouldUpload: false, mode: 'others', variant: 'chat',
+          handleRemove: (name) => setFiles((old) => old.filter(({ file }) => file.name !== name)) });
+      }
+      await mountProbe(() => React.createElement(Probe));
+      assert.equal(document.querySelector('img[alt="image.png"]').getAttribute('src'), 'blob:compose-thumbnail');
+      assert.ok(document.querySelector('.lucide-paperclip'));
+      assert.ok(document.body.textContent.includes('brief.txt'));
+      await React.act(async () => document.querySelector('[aria-label="Remove image.png"]').dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true })));
+      assert.equal(document.querySelector('img[alt="image.png"]'), null);
+      assert.deepEqual(revoked, ['blob:compose-thumbnail']);
+      await React.act(async () => document.querySelector('[aria-label="Remove brief.txt"]').dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true })));
+      assert.equal(document.querySelector('[aria-label="Remove brief.txt"]'), null);
+    } finally {
+      URL.createObjectURL = savedCreate;
+      URL.revokeObjectURL = savedRevoke;
+    }
+  });
+});
+
+test('direct AI writer commands redirect to New Task instead of opening a parallel inline or create form', async (t) => {
+  await withPalette(t, { open: false }, async ({ jiti }) => {
+    const { createCommandDispatcher } = jiti(path.join(root, 'src/components/commandDispatcher.ts'));
+    const { CommandMode } = jiti(path.join(root, 'src/models/enums.ts'));
+    for (const newTaskWindow of [false, true]) {
+      const opens = [], legacy = [];
+      const { handleAction } = createCommandDispatcher({ newTaskWindow, setShowCommands: (value) => opens.push(value), setCommandMode() {},
+        toggleCreateTaskGlobally: () => legacy.push('form'), openAiWriterHandler: () => legacy.push('inline'), boardCloseHandler() {} });
+      handleAction(CommandMode.CreateTaskWithAiWriter);
+      handleAction(CommandMode.OpenAiTaskWriter);
+      assert.deepEqual(legacy, newTaskWindow ? [] : ['form', 'inline']);
+      if (newTaskWindow) assert.deepEqual(opens, [
+        { show: true, mode: CommandMode.Command, paletteTab: 'compose' },
+        { show: true, mode: CommandMode.Command, paletteTab: 'compose' },
+      ]);
+    }
   });
 });

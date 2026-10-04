@@ -19,6 +19,7 @@ interface IProps {
   projectIdentifier: string;
   title: string;
   requestKind?: "compose-task";
+  existingTaskId?: number;
   ranking?: string;
   sectionId: number;
   section_title: string;

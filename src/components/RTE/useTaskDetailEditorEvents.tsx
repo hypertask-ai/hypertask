@@ -1,3 +1,8 @@
+import { useFlag } from "@/hooks/useFlag";
+import { HTPR_6929_COMPOSE_TASK_WRITER_FLAG, HTPR_6937_NEW_TASK_WINDOW_FLAG } from "@/lib/flags/keys";
+import { useSetRecoilState } from "@/lib/state";
+import { showCommandsAtom } from "@/store";
+import { CommandMode } from "@/models/enums";
 // Tiptap.tsx
 import { useEffect, useLayoutEffect } from "react";
 import toast from "react-hot-toast";
@@ -18,12 +23,17 @@ export function useTaskDetailEditorEvents(context: TaskDetailEditorPresentation)
   const { setShouldShowAITaskWriter, shouldTriggerAiTaskWriter, mode, reply, editor, isMbl, isSelected, handleFocus, shouldShowFullAiTaskWriter, divIds, calculatePopoverPosition, updateDrafts, editorContent, setEditorContent, defaultContent, resetDraft, discardDraft, setResetDraft, id, setAiTriggerData, currentTask, suggestReplyAbortRef, shouldShowInlineDraftAiRef, setTrigger, setEmojiGifPicker, handleOutsideClickDescription, handleOutsideClickComment } = context;
 
 
+  const composeEnabled = useFlag(HTPR_6929_COMPOSE_TASK_WRITER_FLAG);
+  const newTaskWindowFlag = useFlag(HTPR_6937_NEW_TASK_WINDOW_FLAG);
+  const newTaskWindow = composeEnabled && newTaskWindowFlag;
+  const setCommands = useSetRecoilState(showCommandsAtom);
+
   useEffect(() => {
     // Ctrl/Cmd+J changes the parent edit mode after this editor has already
     // mounted. Keep the local writer surface in sync for descriptions and
     // existing comments as well as the new-comment composer.
-    setShouldShowAITaskWriter(shouldTriggerAiTaskWriter);
-  }, [mode, shouldTriggerAiTaskWriter]);
+    setShouldShowAITaskWriter(shouldTriggerAiTaskWriter && !newTaskWindow);
+  }, [mode, shouldTriggerAiTaskWriter, newTaskWindow]);
 
   useEffect(() => {
     if (reply) {
@@ -108,6 +118,10 @@ export function useTaskDetailEditorEvents(context: TaskDetailEditorPresentation)
   useLayoutEffect(() => {
     const handleAITrigger = (event: CustomEvent<AITaskWriterEventDetail>) => {
       if (event.detail.targetId === id) {
+        if (newTaskWindow) {
+          setCommands({ show: true, mode: CommandMode.Command, paletteTab: "compose" });
+          return;
+        }
         setAiTriggerData({
           autoTrigger: true,
           initialPrompt: event.detail.prompt
@@ -118,7 +132,7 @@ export function useTaskDetailEditorEvents(context: TaskDetailEditorPresentation)
 
     window.addEventListener(AI_TASK_WRITER_EVENT, handleAITrigger as EventListener);
     return () => window.removeEventListener(AI_TASK_WRITER_EVENT, handleAITrigger as EventListener);
-  }, [id]);
+  }, [id, newTaskWindow, setCommands]);
 
   // Ctrl+K "Suggest reply": generate a draft reply into this comment composer.
   // The editor's update listener persists it as the user's private Comment

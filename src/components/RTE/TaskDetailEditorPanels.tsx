@@ -1,3 +1,7 @@
+import { HTPR_6929_COMPOSE_TASK_WRITER_FLAG, HTPR_6937_NEW_TASK_WINDOW_FLAG } from "@/lib/flags/keys";
+import { useSetRecoilState } from "@/lib/state";
+import { showCommandsAtom } from "@/store";
+import { CommandMode } from "@/models/enums";
 
 import { useFlag } from "@/hooks/useFlag";
 import { HTPR_6752_INSTANT_TICKET_OPEN_FLAG } from "@/lib/flags/keys";
@@ -27,6 +31,9 @@ import type { TaskDetailEditorPresentation } from "./taskDetailEditorPresentatio
 export function TaskDetailEditorPanels(context: TaskDetailEditorPresentation) {
   const { divIds, handleReadOnlyContentClick, isMbl, id, newCommentAttachments, creatorname, trigger, allowEdit, isRecording, saveInFlight, mode, uploadingDescription, toggleHighlightHandler, createdAt, editor, stack, user, isSelected, handleCallback, sendComment, handleFocus, getAttachments, handleKeydown, handleCommentEscape, inInbox, currentTask, handleTaskOptions, handleFileDrop, filesDropped, resetDropFiles, discardDraft, toggleAiTaskWriter, shouldShowInlineDraftAi, setShouldShowAITaskWriter, setAiTriggerData, inViewObject, hasCommentDraft, audioTiptapCallback, toggleRecording, allowPerks, toggleHighlight, shouldShowAiTaskWriter, shouldShowFullAiTaskWriter, getBackgroundContent, handleEscape, handleAISave, handleTitleAndDescriptionReturn, getDefaultMode, taskWriterOpening, editMode, mobileExistingEditOpen, mobileEditViewport, mobileEditHeight, mobileEditSaving, cancelMobileExistingEdit, showSetLinkModal, setShowSetLinkModal, setLinkHandlerCallback, emojiGifPicker, setEmojiGifPicker } = context;
 
+  const composeEnabled = useFlag(HTPR_6929_COMPOSE_TASK_WRITER_FLAG);
+  const newTaskWindowFlag = useFlag(HTPR_6937_NEW_TASK_WINDOW_FLAG);
+  const setCommands = useSetRecoilState(showCommandsAtom);
   const instantTicketOpen = useFlag(HTPR_6752_INSTANT_TICKET_OPEN_FLAG);
   const mainContainer = instantTicketOpen && !editor && mode === "read-edit-description" ? (
     <InnerHTMLDescription
@@ -154,7 +161,10 @@ export function TaskDetailEditorPanels(context: TaskDetailEditorPresentation) {
 
           <button
             className="hidden"
-            onClick={() => setShouldShowAITaskWriter((prev) => !prev)}
+            onClick={() => {
+              if (composeEnabled && newTaskWindowFlag) setCommands({ show: true, mode: CommandMode.Command, paletteTab: "compose" });
+              else setShouldShowAITaskWriter((prev) => !prev);
+            }}
             id={divIds.popoverTriggerButtonId}
           />
         </TiptapProvider>

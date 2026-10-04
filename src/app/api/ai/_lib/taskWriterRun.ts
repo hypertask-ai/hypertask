@@ -1,3 +1,5 @@
+import { taskWriteAccessWhere } from "@/utils/controllers/projects/getAllIncludes";
+import { isEmptyComposeTarget } from "@/lib/ai/composeTaskTarget";
 /**
  * @fileoverview
  * Shared AI Task Writer / Write with AI harness.
@@ -41,7 +43,7 @@ import {
 import { resolveSkills } from "@/app/api/ai/_lib/skills";
 import { getProjectTeamProviderContext } from "@/app/api/ai/_lib/providerGate";
 import { isAiFeatureEnabled } from "@/lib/systemModelLadder";
-import { isFeatureEnabled, HTPR_6929_COMPOSE_TASK_WRITER_FLAG } from "@/lib/flags";
+import { isFeatureEnabled, HTPR_6929_COMPOSE_TASK_WRITER_FLAG, HTPR_6937_NEW_TASK_WINDOW_FLAG } from "@/lib/flags";
 import { doneColumnTitles } from "@/lib/doneColumns";
 import prisma from "@/lib/prisma";
 import { projectContentAccessWhere } from "@/utils/controllers/projects/getAllIncludes";
@@ -87,6 +89,7 @@ export const taskWriterRequestSchema = z.object({
   /** User-authored briefs only; used for board search when research is on. */
   userRetrievalTexts: z.array(z.string()).max(20).optional().default([]),
   byokProviderFlags: z.array(byokProviderFlagSchema).optional().default([]),
+  existingTaskId: z.number().int().positive().optional(),
   requestKind: z.enum(["manual", "auto-description", "compose-task"]).optional().default("manual"),
 });
 
@@ -143,6 +146,18 @@ export async function prepareTaskWriterRun(
     const error = new AiFeatureDisabledError();
     error.message = "Compose task writer is turned off";
     throw error;
+  }
+
+  if (body.existingTaskId != null) {
+    if (body.requestKind !== "compose-task" ||
+        !(await isFeatureEnabled(HTPR_6937_NEW_TASK_WINDOW_FLAG, userId))) {
+      throw new AiFeatureDisabledError();
+    }
+    const target = await prisma.task.findFirst({
+      where: { id: body.existingTaskId, projectId: body.projectId, status: "Normal", project: taskWriteAccessWhere(userId, agentId) },
+      include: { description_: { select: { content: true } } },
+    });
+    if (!target || !isEmptyComposeTarget(target)) throw new ProjectAccessError();
   }
 
   // The retrieval below searches by projectId alone, so membership has to be

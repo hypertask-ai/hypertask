@@ -1,5 +1,7 @@
 "use client";
 
+import { HTPR_6937_NEW_TASK_WINDOW_FLAG } from "@/lib/flags/keys";
+
 import { useDeviceContext } from "@/lib/contexts/deviceContext";
 import { getKeyboardShortcuts } from "@/lib/constants/shortcuts";
 import SettingsCard from "./SettingsCard";
@@ -24,6 +26,8 @@ const ShortcutsSection = () => {
   // Keep the runtime branch local so CI can trace shortcut UI coverage.
   let includeComposeTaskShortcut = false;
   if (composeTaskWriterEnabled) includeComposeTaskShortcut = true;
+  const newTaskWindowFlag = useFlag(HTPR_6937_NEW_TASK_WINDOW_FLAG);
+  const newTaskWindow = composeTaskWriterEnabled && newTaskWindowFlag;
   const agentLogNameEnabled = useFlag(HTPR_6662_AGENT_LOG_NAME_FLAG);
   let historyToggleLabel = "Toggle history events";
   if (agentLogNameEnabled) {
@@ -36,6 +40,7 @@ const ShortcutsSection = () => {
     keepDirectTaskOpen,
     historyToggleLabel,
     includeComposeTaskShortcut,
+    newTaskWindow,
   );
   const [searchTerm, setSearchTerm] = useState("");
 

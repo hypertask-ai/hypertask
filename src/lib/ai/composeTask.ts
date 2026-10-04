@@ -1,3 +1,4 @@
+import { isBrowserRenderableImage } from "@/lib/media/browserRenderableImage";
 import type { IProject, ITask } from "@/models/model";
 import axios from "axios";
 import { taskWriterRoute } from "@/lib/constants/APIRouteConstants";
@@ -33,14 +34,14 @@ export function composeTaskAssistantMessage(ticket: string, writerFailed = false
 }
 
 export async function createComposedTask({
-  text, files, project, userId,
-}: { text: string; files: File[]; project: IProject; userId: number }): Promise<{ task: ITask; writerFailed: boolean }> {
+  text, files, project, userId, existingTaskId,
+}: { text: string; files: File[]; project: IProject; userId: number; existingTaskId?: number }): Promise<{ task: ITask; writerFailed: boolean }> {
   // Resolve the destination before spending AI credits; omitting sectionId uses
   // the same first active column as the regular create-task form.
-  const defaults = await axios.get("/api/tasks/createGlobally", {
+  const defaults = existingTaskId ? null : await axios.get("/api/tasks/createGlobally", {
     params: { projectId: project.id, position: "top" },
   });
-  if (!defaults.data?.sectionId) throw new Error("This board has no column to create a task in.");
+  if (!existingTaskId && !defaults?.data?.sectionId) throw new Error("This board has no column to create a task in.");
   const uploads = await Promise.all(files.map(async (file) => {
     let upload = startCreateTaskUpload(file);
     if (createTaskUploadById(upload.id)?.status === "upload-failed") {
@@ -51,7 +52,9 @@ export async function createComposedTask({
     return { fileName: file.name, url, mimeType: file.type };
   }));
   const rawDescription = `<p>${escapeHtml(text).replace(/\n/g, "<br>")}</p>` +
-    uploads.map(({ url, fileName }) => `<p><img src="${escapeHtml(url)}" alt="${escapeHtml(fileName)}"></p>`).join("");
+    uploads.map(({ url, fileName, mimeType }) => isBrowserRenderableImage(mimeType, fileName)
+      ? `<p><img src="${escapeHtml(url)}" alt="${escapeHtml(fileName)}"></p>`
+      : `<p><a href="${escapeHtml(url)}">${escapeHtml(fileName)}</a></p>`).join("");
   let title = text;
   let description = rawDescription;
   let writerFailed = false;
@@ -69,7 +72,8 @@ export async function createComposedTask({
         modelSelected: project.ai_custom_instructions?.[0]?.model_selected ?? undefined,
         aiMode: "AiTaskWriter",
         requestKind: "compose-task",
-        images64: uploads,
+        ...(existingTaskId ? { existingTaskId } : {}),
+        images64: uploads.filter((file) => isBrowserRenderableImage(file.mimeType, file.fileName)),
         taskDescription: media.html,
       }),
     });
@@ -82,17 +86,23 @@ export async function createComposedTask({
     if (!written.title || !written.description.trim()) throw new Error("Task writer returned an incomplete ticket");
     title = written.title;
     description = restoreTaskWriterMedia(written.description, media.media);
+    for (const file of uploads) {
+      if (!isBrowserRenderableImage(file.mimeType, file.fileName) && !description.includes(file.url)) {
+        description += `<p><a href="${escapeHtml(file.url)}">${escapeHtml(file.fileName)}</a></p>`;
+      }
+    }
   } catch {
     writerFailed = true;
   }
   const created = await createNewTaskGloballyAPIHandler({
     userId, projectId: project.id, projectIdentifier: project.uniqueIdentifier ?? "TASK",
     title, ...{ description },
-    sectionId: defaults.data.sectionId, section_title: defaults.data.section,
-    ranking: defaults.data.ranking, assignees: [], requestKind: "compose-task",
+    sectionId: defaults?.data.sectionId, section_title: defaults?.data.section,
+    ranking: defaults?.data.ranking, assignees: [], requestKind: "compose-task",
+    ...(existingTaskId ? { existingTaskId } : {}),
   });
   const task = created?.resposne?.newTask;
-  if (created?.error || !task?.id) throw new Error("Couldn’t create the task. Your note is still here — try again.");
+  if (created?.error || !task?.id) throw new Error("Couldn’t create the task. Your note is still here. Try again.");
   bindCreateTaskUploads(task.id, files);
   return { task, writerFailed };
 }

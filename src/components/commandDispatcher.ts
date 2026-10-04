@@ -16,7 +16,7 @@ import type { createBoardCommandActions } from "./boardCommandActions";
 import type { createGeneralCommandActions } from "./generalCommandActions";
 import type { createCommandModalCallbacks } from "./commandModalCallbacks";
 
-type Context = Pick<IHTCProps, "callbackHandler"> &
+type Context = { newTaskWindow?: boolean } & Pick<IHTCProps, "callbackHandler"> &
   Pick<ReturnType<typeof useCommandsState>, "copyCurrentUrlEnabled" | "boardCloseHandler" | "setShowCommands" | "setCommandMode" | "undoLatest" | "_currentProject" | "setBoardZoomedOutByProject" | "currentUser" | "openSettings" | "setShowShortcuts" | "switchToTheme" | "followTaskHandler" | "unFollowTaskHandler" | "hasBulkSelection" | "bulkSelection" | "archiveHandler" | "removeNotificationHandler" | "setShowQuickTips" | "openAnnouncements" | "setShowTaskHistory" | "setToggleAllCommentsSignal" | "saveEmptySectionsAPI" | "toggleShowArchivedOnBoard" | "paletteContextOptions" | "setArchiveBoardScope" | "toggleBoardLayout" | "onMyTasks" | "myTasksViewsEnabled" | "myTasksTableColumnsEnabled" | "setMyTasksColumnsPickerRequest" | "changeBoardLayout" | "pathname" | "goToProjectShortcut" | "router" | "setRailExpanded" | "setAppShellRail" | "inViewObject" | "toggleCreateTaskGlobally" | "duplicateTaskHandler" | "openAiWriterHandler" | "summarizeTicketHandler" | "viewSubTasksHandler" | "commentFunctionHandler" | "isMbl" | "setShowAiChatInterface" | "showAiChatInterface" | "setAiChatAutoOpenSuppressed" | "setAiChatExplicitOpenAt" | "setAiChatPinned" | "aiChatPinned" | "setIsSidebarMode" | "copyURLFunctionHandler" | "moveTaskToInboxHandler" | "starTaskHandler" | "setReminderHandler" | "myTasksSnoozeEnabled" | "removeParentHandler" | "removeSubtaskHandler" | "commentAudioSpeechToText" | "toggleTimeTrackingHandler" | "setCalendarSettings" | "endTour" | "setSelectedTourId" | "startTour"> &
   Pick<ReturnType<typeof createBoardCommandActions>, "acceptTaskHandler" | "saveTaskTemplateHandler" | "generateStatusUpdateHandler" | "toggleStalenessHandler" | "toggleStalenessViewHandler" | "toggleAutoArchiveHandler" | "sortByStalenessHandler"> &
   Pick<ReturnType<typeof createGeneralCommandActions>, "hideActiveColumn" | "markUnread" | "GoToHandler" | "toggleBoardTimeTrackingHandler" | "redirectToTrash" | "GoToOnboarding" | "copyCurrentPageURL" | "subscribeGoogleCalendar" | "copyBranchNameHandler" | "assignToMeHandler" | "deleteAllChats"> &
@@ -45,6 +45,10 @@ export function createCommandDispatcher(context: Context) {
 
 
   const handleAction = (mode?: CommandMode, action?: string) => {
+    if (context.newTaskWindow && (mode === CommandMode.CreateTaskWithAiWriter || mode === CommandMode.OpenAiTaskWriter)) {
+      setShowCommands({ show: true, mode: CommandMode.Command, paletteTab: "compose" });
+      return;
+    }
     if (mode === CommandMode.CopyViewURL && !copyCurrentUrlEnabled) {
       boardCloseHandler();
       return;

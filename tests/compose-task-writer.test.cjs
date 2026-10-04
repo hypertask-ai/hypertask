@@ -176,6 +176,7 @@ test('shared server writer gates compose before accessing a board; legacy writer
 test('actual create endpoint rejects disabled Compose before database work and preserves legacy/auth checks', async () => {
   let enabled = false, session = { userId: 985 }, flagReads = 0, userReads = 0, boardReads = 0;
   const stubs = {
+    '@/lib/ai/composeTaskTarget': createJiti(__filename)(path.join(root, 'src/lib/ai/composeTaskTarget.ts')),
     '@/lib/flags': { HTPR_6929_COMPOSE_TASK_WRITER_FLAG: flag, isFeatureEnabled: async (key, userId) => {
       assert.equal(key, flag); assert.equal(userId, 985); flagReads++; return enabled;
     } },
@@ -226,4 +227,142 @@ test('actual create endpoint rejects disabled Compose before database work and p
   result = await post({ requestKind: 'compose-task' });
   assert.equal(result.code, 401);
   assert.equal(flagReads, 2, 'unauthenticated requests cannot read the flag');
+});
+
+test('empty task detection rejects named tasks, meaningful text and media with positive empty controls', () => {
+  const { isEmptyComposeTarget } = createJiti(__filename)(path.join(root, 'src/lib/ai/composeTaskTarget.ts'));
+  for (const title of ['', 'Enter task title here', 'New Task']) {
+    for (const description of [null, '', '<p></p>', '<p>&nbsp;</p>']) assert.equal(isEmptyComposeTarget({ title, description }), true);
+    for (const description of ['Written', '<p>Written</p>', '<p><img src="x"></p>']) assert.equal(isEmptyComposeTarget({ title, description }), false);
+  }
+  assert.equal(isEmptyComposeTarget({ title: 'Real ticket', description: '' }), false);
+});
+
+test('existing target is forwarded to both writer and save with no new column/ranking; attachments remain linked', async () => {
+  await withWriter({}, async ({ createComposedTask, defaults, project, writes, creates, linked }) => {
+    const file = { name: 'screen.png', type: 'image/png' };
+    await createComposedTask({ text: 'Fill this task', files: [file], project, userId: 985, existingTaskId: 52 });
+    assert.deepEqual(defaults, []);
+    assert.equal(writes[0].body.existingTaskId, 52);
+    assert.equal(creates[0].existingTaskId, 52);
+    assert.equal(creates[0].sectionId, undefined);
+    assert.equal(creates[0].ranking, undefined);
+    assert.equal(linked.length, 1);
+    assert.deepEqual(linked[0].files, [file]);
+  });
+});
+
+test('document attachments stay links rather than broken images and are still bound to the ticket', async () => {
+  await withWriter({ writerThrows: true }, async ({ createComposedTask, project, creates, writes, linked }) => {
+    const file = { name: 'brief.txt', type: 'text/plain' };
+    await createComposedTask({ text: 'Use the brief', files: [file], project, userId: 985 });
+    assert.deepEqual(writes[0].body.images64, []);
+    assert.match(creates[0].description, /<a href="https:\/\/files.hypertask.app\/brief.txt">brief.txt<\/a>/);
+    assert.doesNotMatch(creates[0].description, /<img/);
+    assert.deepEqual(linked[0].files, [file]);
+  });
+});
+
+test('save existing target enforces both flags, edit permissions, board match and empty state before normal update controller', async () => {
+  const newFlag = 'htpr-6937-new-task-window';
+  const { isEmptyComposeTarget } = createJiti(__filename)(path.join(root, 'src/lib/ai/composeTaskTarget.ts'));
+  let compose = true, newWindow = false, authorized = true, target = null;
+  const taskReads = [], updates = [], broadcasts = [], flags = [];
+  const stubs = {
+    '@/lib/ai/composeTaskTarget': { isEmptyComposeTarget },
+    '@/lib/flags': { HTPR_6929_COMPOSE_TASK_WRITER_FLAG: flag, HTPR_6937_NEW_TASK_WINDOW_FLAG: newFlag,
+      isFeatureEnabled: async (key) => { flags.push(key); return key === flag ? compose : newWindow; } },
+    '@/lib/prisma': { __esModule: true, default: {
+      user: { findUnique: async () => ({ id: 985 }) },
+      project: { findFirst: async () => authorized ? { id: 7 } : null },
+      task: { findFirst: async (query) => { taskReads.push(query); return target; } },
+    } },
+    '@/lib/auth/getSessionUser': { getSessionUser: async () => ({ userId: 985 }) },
+    '@/lib/auth/session': { SESSION_COOKIE: 'session', verifySession: () => null },
+    '@/lib/auth/resolveActingAgent': { resolveActingAgent: () => ({ ok: true, agentId: null }) },
+    '@/utils/controllers/projects/getAllIncludes': { taskWriteAccessWhere: (userId, agentId) => ({ canWrite: { userId, agentId } }) },
+    '@/utils/controllers/tasks/single': { updateTaskSingle: async (...args) => { updates.push(args); return { status: 200, json: { ...target, title: args[0].title, id: args[0].id } }; } },
+    '@/lib/realtime/server': { broadcastBoardChange: async (...args) => broadcasts.push(args), broadcastTaskChange: async (...args) => broadcasts.push(args) },
+    '@prisma/client': {}, '@/utils/generateRank': {}, '@vercel/functions': {},
+    '@/utils/controllers/tasks/getNextUniqueTaskIndex': {}, '@/lib/mcp/webhooks/taskEvents': {},
+    '@/lib/mcp/webhooks/outbox': {}, '@/lib/agentWebhooks/outbox': {}, '@/utils/controllers/activities/createAssignedActivity': {},
+  };
+  const code = require('typescript').transpileModule(require('node:fs').readFileSync(path.join(root, 'src/pages/api/tasks/createGlobally.ts'), 'utf8'), {
+    compilerOptions: { esModuleInterop: true, module: require('typescript').ModuleKind.CommonJS },
+  }).outputText;
+  const mod = { exports: {} };
+  new Function('module', 'exports', 'require', code)(mod, mod.exports, (request) => {
+    assert.ok(request in stubs, `Unexpected dependency: ${request}`);
+    return stubs[request];
+  });
+  const post = async (extra = {}) => {
+    const res = { status(code) { this.code = code; return this; }, json(body) { this.body = body; return this; } };
+    await mod.exports.default({ method: 'POST', headers: {}, cookies: {}, body: {
+      title: 'Written title', description: '<p>Written body</p>', projectId: 7, userId: 985, requestKind: 'compose-task', existingTaskId: 52, ...extra,
+    } }, res);
+    return res;
+  };
+  assert.equal((await post()).code, 403);
+  assert.deepEqual(flags, [flag, newFlag]);
+  assert.equal(taskReads.length, 0);
+  compose = false; newWindow = true;
+  assert.equal((await post()).code, 403);
+  assert.equal(taskReads.length, 0);
+  compose = true; authorized = false;
+  assert.equal((await post()).code, 403);
+  assert.equal(taskReads.length, 0);
+  authorized = true;
+  assert.equal((await post()).code, 403, 'inaccessible/cross-board task is rejected');
+  assert.deepEqual(taskReads.at(-1).where, { id: 52, projectId: 7, status: 'Normal', project: { canWrite: { userId: 985, agentId: null } } });
+  target = { id: 52, title: 'Already filled', projectId: 7, description_: { content: '<p>Existing</p>' } };
+  assert.equal((await post()).code, 409);
+  assert.equal(updates.length, 0);
+  assert.equal((await post({ existingTaskId: -1 })).code, 400);
+  target = { id: 52, title: 'Enter task title here', projectId: 7, uniqueIndex: 4, description_: { content: '' } };
+  const result = await post();
+  assert.equal(result.code, 200);
+  assert.equal(result.body.newTask.id, 52);
+  assert.deepEqual(updates[0][0], { id: 52, title: 'Written title', description: '<p>Written body</p>' });
+  assert.equal(updates[0][1].id, 985);
+  assert.equal(broadcasts.length, 2);
+});
+
+test('writer existing-task requests gate new flag and task edit scope before any AI or board retrieval', async () => {
+  const cached = new Map(Object.entries(require.cache));
+  const newFlag = 'htpr-6937-new-task-window';
+  let compose = true, newWindow = false, target = null;
+  const taskQueries = []; let boardReads = 0;
+  const source = (file, exports) => {
+    const filename = path.join(root, file);
+    require.cache[filename] = { id: filename, filename, loaded: true, exports };
+  };
+  try {
+    source('src/lib/flags.ts', { HTPR_6929_COMPOSE_TASK_WRITER_FLAG: flag, HTPR_6937_NEW_TASK_WINDOW_FLAG: newFlag,
+      isFeatureEnabled: async (key) => key === flag ? compose : newWindow });
+    source('src/lib/prisma.ts', { default: {
+      task: { findFirst: async (query) => { taskQueries.push(query); return target; } },
+      project: { findFirst: async () => { boardReads++; return null; } },
+    } });
+    for (const file of ['src/app/api/ai/_lib/editorAi.ts', 'src/app/api/ai/_lib/currentTaskContext.ts', 'src/app/api/ai/_lib/providerGate.ts', 'src/app/api/ai/_lib/skills.ts', 'src/utils/controllers/turbopuffer/turbopufferHelper.ts']) source(file, {});
+    source('src/utils/controllers/projects/getAllIncludes.ts', { projectContentAccessWhere: () => ({}), taskWriteAccessWhere: (userId, agentId) => ({ writer: userId, agentId }) });
+    const jiti = createJiti(__filename, { alias: { '@': path.join(root, 'src') }, interopDefault: true, fsCache: false });
+    const { prepareTaskWriterRun, taskWriterRequestSchema, AiFeatureDisabledError, ProjectAccessError } = jiti(path.join(root, 'src/app/api/ai/_lib/taskWriterRun.ts'));
+    const body = taskWriterRequestSchema.parse({ projectId: 7, PROMPT: 'note', requestKind: 'compose-task', existingTaskId: 52 });
+    await assert.rejects(prepareTaskWriterRun(body, 985), AiFeatureDisabledError);
+    assert.equal(taskQueries.length, 0);
+    compose = false; newWindow = true;
+    await assert.rejects(prepareTaskWriterRun(body, 985), AiFeatureDisabledError);
+    assert.equal(taskQueries.length, 0);
+    compose = true;
+    await assert.rejects(prepareTaskWriterRun(body, 985), ProjectAccessError);
+    assert.deepEqual(taskQueries[0].where, { id: 52, projectId: 7, status: 'Normal', project: { writer: 985, agentId: undefined } });
+    assert.equal(boardReads, 0);
+    target = { title: '', description_: { content: '' } };
+    await assert.rejects(prepareTaskWriterRun(body, 985), ProjectAccessError);
+    assert.equal(boardReads, 1, 'an editable empty task still takes the normal board gate');
+    await assert.rejects(prepareTaskWriterRun({ ...body, requestKind: 'manual' }, 985), AiFeatureDisabledError);
+  } finally {
+    for (const key of Object.keys(require.cache)) if (!cached.has(key)) delete require.cache[key];
+    for (const [key, value] of cached) require.cache[key] = value;
+  }
 });
