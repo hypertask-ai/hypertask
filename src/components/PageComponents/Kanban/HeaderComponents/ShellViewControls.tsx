@@ -107,6 +107,7 @@ export const ViewControlButton = ({
   onClick,
   tooltipLeft,
   expanded,
+  className = "",
 }: {
   active?: boolean
   children: React.ReactNode
@@ -115,6 +116,7 @@ export const ViewControlButton = ({
   onClick: () => void
   tooltipLeft: number
   expanded?: boolean
+  className?: string
 }) => {
   const kanbanReuseEnabled = useFlag(HTPR_6930_MY_TASKS_KANBAN_REUSE_FLAG)
   return (
@@ -123,7 +125,7 @@ export const ViewControlButton = ({
     aria-label={label}
     aria-expanded={kanbanReuseEnabled ? expanded : undefined}
     onClick={onClick}
-    className={`group relative flex size-8 items-center justify-center transition-colors ${active ? "text-[#6FB6FF] hover:text-[#A3D0FF]" : "text-text-light-gray hover:text-white-black"}`}
+    className={`group relative flex size-8 items-center justify-center transition-colors ${active ? "text-[#6FB6FF] hover:text-[#A3D0FF]" : "text-text-light-gray hover:text-white-black"} ${kanbanReuseEnabled ? className : ""}`}
   >
     {children}
     <Tooltip

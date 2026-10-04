@@ -816,7 +816,11 @@ const MyTasksViewControls = ({
           <ViewControlButton
             label="Sort My Tasks"
             tooltipLeft={-72}
-            active={true}
+            className={`${MOBILE_TARGET} @md:min-h-0 @md:min-w-0`}
+            active={
+              config.sort.field !== DEFAULT_MY_TASKS_VIEW_CONFIG.sort.field ||
+              config.sort.direction !== DEFAULT_MY_TASKS_VIEW_CONFIG.sort.direction
+            }
             expanded={sortOpen}
             onClick={() => {
               closeOtherMenus();
