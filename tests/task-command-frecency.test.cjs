@@ -93,7 +93,7 @@ test("command usage updates immutably and keeps the archive toggle excluded", ()
   );
 });
 
-test("task comment commands remember usage and rank within their group", async () => {
+test("task comment commands remember usage without changing their pinned order", async () => {
   const dom = new JSDOM('<div id="root"></div>', {
     url: "https://app.hypertask.ai/detail/project-15/5971",
   });
@@ -282,6 +282,10 @@ test("task comment commands remember usage and rank within their group", async (
     await React.act(async () => reactRoot.render(renderPalette()));
     assert.equal(container.querySelector('[data-command="editcomment"]'), null);
     assert.equal(container.querySelector('[data-group="Frequently used"]'), null);
+    assert.equal(container.querySelector('[data-group]').dataset.group, "Comment");
+    const initialCommentCommands = Array.from(
+      container.querySelectorAll('[data-group="Comment"] [data-command]'),
+    ).map((element) => element.dataset.command);
 
     for (let use = 0; use < 5; use += 1) {
       await React.act(async () => {
@@ -298,7 +302,7 @@ test("task comment commands remember usage and rank within their group", async (
     const commentCommands = Array.from(
       container.querySelectorAll('[data-group="Comment"] [data-command]'),
     ).map((element) => element.dataset.command);
-    assert.equal(commentCommands[0], "deletemessage");
+    assert.deepEqual(commentCommands, initialCommentCommands);
     assert.equal(commentCommands.includes("editcomment"), false);
     assert.equal(container.querySelector('[data-group="Frequently used"]'), null);
   } finally {
