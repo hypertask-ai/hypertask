@@ -1,0 +1,487 @@
+{
+  "sessions": {
+    "args": {
+      "where": {
+        "userId": 7,
+        "OR": [
+          {
+            "agentId": null
+          },
+          {
+            "agent": {
+              "runtimeType": {
+                "not": "EXTERNAL"
+              }
+            }
+          }
+        ]
+      },
+      "include": {
+        "messages": {
+          "orderBy": {
+            "createdAt": "asc"
+          },
+          "include": {
+            "attachments": true,
+            "authorAgent": {
+              "select": {
+                "displayName": true
+              }
+            }
+          }
+        }
+      },
+      "orderBy": {
+        "updatedAt": "desc"
+      }
+    },
+    "json": {
+      "success": true,
+      "sessions": [
+        {
+          "id": "80",
+          "createdAt": null,
+          "updatedAt": null,
+          "userId": 7,
+          "taskId": null,
+          "projectId": null,
+          "agentId": null,
+          "teamId": null,
+          "title": null,
+          "messages": [
+            {
+              "id": "81",
+              "createdAt": null,
+              "content": null,
+              "role": null,
+              "sessionId": "80",
+              "isDelivered": null,
+              "replyToMessageId": null,
+              "authorUserId": null,
+              "authorAgentId": "fixture-agent",
+              "attachments": [
+                {
+                  "id": 82,
+                  "createdAt": null,
+                  "fileType": null,
+                  "fileSource": null,
+                  "fileName": null,
+                  "fileSize": null,
+                  "descriptionId": null,
+                  "commentId": null,
+                  "chatMessageId": "81",
+                  "AI_Custom_Instructions_id": null,
+                  "taskId": null
+                }
+              ],
+              "authorAgent": {
+                "displayName": "Fixture Agent"
+              }
+            }
+          ]
+        }
+      ]
+    },
+    "queryCount": 4
+  },
+  "favorites": {
+    "args": {
+      "where": {
+        "userSetting": {
+          "userId": 7
+        }
+      },
+      "include": {
+        "project": {
+          "select": {
+            "id": true,
+            "name": true,
+            "title": true,
+            "ownerId": true,
+            "status": true,
+            "teamId": true,
+            "googleAccountId": true,
+            "uniqueIdentifier": true,
+            "owner": {
+              "select": {
+                "id": true,
+                "displayName": true,
+                "photoURL": true,
+                "email": true
+              }
+            },
+            "members": {
+              "include": {
+                "user": {
+                  "select": {
+                    "id": true,
+                    "displayName": true,
+                    "photoURL": true,
+                    "email": true
+                  }
+                },
+                "agent": {
+                  "select": {
+                    "id": true,
+                    "userId": true,
+                    "displayName": true,
+                    "photoURL": true,
+                    "createdAt": true,
+                    "revokedAt": true,
+                    "runtimeType": true,
+                    "heartbeatAt": true,
+                    "permissions": true
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "orderBy": {
+        "index": "asc"
+      }
+    },
+    "json": [
+      {
+        "id": "90",
+        "userSettingId": "70",
+        "projectId": 15,
+        "index": null,
+        "project": {
+          "id": 15,
+          "name": null,
+          "title": null,
+          "ownerId": 7,
+          "status": "Normal",
+          "teamId": null,
+          "googleAccountId": null,
+          "uniqueIdentifier": null,
+          "owner": {
+            "id": 7,
+            "displayName": "Fixture User",
+            "photoURL": null,
+            "email": null
+          },
+          "members": [
+            {
+              "id": 91,
+              "projectId": 15,
+              "userId": 7,
+              "agentId": "fixture-agent",
+              "status": null,
+              "role": null,
+              "invitedAt": null,
+              "acceptedAt": null,
+              "user": {
+                "id": 7,
+                "displayName": "Fixture User",
+                "photoURL": null,
+                "email": null
+              },
+              "agent": {
+                "id": "fixture-agent",
+                "userId": 7,
+                "displayName": "Fixture Agent",
+                "photoURL": null,
+                "createdAt": null,
+                "revokedAt": null,
+                "runtimeType": null,
+                "heartbeatAt": null,
+                "permissions": null
+              }
+            }
+          ]
+        }
+      }
+    ],
+    "queryCount": 6
+  },
+  "user": {
+    "args": {
+      "where": {
+        "id": 7
+      },
+      "select": {
+        "id": true,
+        "uid": true,
+        "displayName": true,
+        "photoURL": true,
+        "email": true,
+        "joinedAt": true,
+        "UserSettingId": true,
+        "accountId": true,
+        "stripe_customer_id": true,
+        "UserSetting": true
+      }
+    },
+    "json": {
+      "status": 200,
+      "res": {
+        "id": 7,
+        "uid": null,
+        "displayName": "Fixture User",
+        "photoURL": null,
+        "email": null,
+        "joinedAt": null,
+        "UserSettingId": "70",
+        "accountId": null,
+        "stripe_customer_id": null,
+        "UserSetting": {
+          "id": "70",
+          "userId": 7,
+          "notification": null,
+          "notificationPreference": null,
+          "commentsStacked": null,
+          "shareReadReceipts": null,
+          "scrollSetting": null,
+          "displayAvatar": null,
+          "onboardingTourStatus": null,
+          "onboardingTutorialStatus": null,
+          "trialStatus": null,
+          "isVerified": null,
+          "productTours": null,
+          "aiModelPreferences": null,
+          "snippets": null,
+          "muteAnnouncements": null,
+          "allTasksDateRange": null,
+          "playGifs": null,
+          "autoDescriptionSuggestions": null,
+          "notificationMatrix": null,
+          "dictationLanguage": null,
+          "inboxAdvanceOnSend": null,
+          "emojiFrequency": null,
+          "calendarViews": null
+        }
+      }
+    },
+    "queryCount": 2
+  },
+  "page": {
+    "args": {
+      "where": {
+        "publicId": "fixture-page"
+      },
+      "include": {
+        "task": {
+          "select": {
+            "id": true,
+            "ticketNumber": true,
+            "title": true,
+            "projectId": true,
+            "uniqueIndex": true
+          }
+        },
+        "subPages": {
+          "select": {
+            "id": true,
+            "title": true,
+            "publicId": true
+          }
+        }
+      }
+    },
+    "json": {
+      "id": 60,
+      "publicId": "fixture-page",
+      "title": null,
+      "contentHtml": null,
+      "contentText": null,
+      "taskId": 50,
+      "parentPageId": null,
+      "projectId": 15,
+      "version": null,
+      "createdById": null,
+      "agentId": null,
+      "archived": null,
+      "createdAt": null,
+      "updatedAt": null,
+      "task": {
+        "id": 50,
+        "ticketNumber": null,
+        "title": null,
+        "projectId": 15,
+        "uniqueIndex": null
+      },
+      "subPages": [
+        {
+          "id": 61,
+          "title": null,
+          "publicId": "fixture-child"
+        }
+      ]
+    },
+    "queryCount": 3
+  },
+  "project": {
+    "args": {
+      "where": {
+        "id": 15,
+        "status": "Normal"
+      },
+      "include": {
+        "tasks": {
+          "include": {
+            "assignees": {
+              "include": {
+                "user": true
+              }
+            }
+          },
+          "where": {
+            "status": "Normal"
+          }
+        },
+        "section": {
+          "where": {
+            "deleted": false,
+            "visibility": true
+          },
+          "orderBy": {
+            "ranking": "asc"
+          }
+        },
+        "owner": true,
+        "ai_custom_instructions": true
+      }
+    },
+    "json": {
+      "status": 200,
+      "json": {
+        "id": 15,
+        "name": null,
+        "title": null,
+        "description": null,
+        "ownerId": 7,
+        "createdAt": null,
+        "sections": [],
+        "status": "Normal",
+        "googleAccountId": null,
+        "teamId": null,
+        "sorting_mode": null,
+        "uniqueIdentifier": null,
+        "timeTrackingEnabled": null,
+        "showTimeTotals": null,
+        "stalenessEnabled": null,
+        "staleWarnDays": null,
+        "staleHotDays": null,
+        "staleNudgeEnabled": null,
+        "autoArchiveAfterDays": null,
+        "cyclesEnabled": null,
+        "playbook": null,
+        "targetDate": null,
+        "tasks": [
+          {
+            "id": 50,
+            "uniqueIndex": null,
+            "ticketNumber": null,
+            "ranking": null,
+            "section": null,
+            "title": null,
+            "description": null,
+            "projectId": 15,
+            "cycleId": null,
+            "status": "Normal",
+            "userId": 7,
+            "createdAt": null,
+            "sectionChangedAt": null,
+            "lastCommentAt": null,
+            "staleNudgedAt": null,
+            "waitingOnUserId": null,
+            "waitingOnSetById": null,
+            "waitingOnSetAt": null,
+            "dueDate": null,
+            "startDate": null,
+            "recurrence": null,
+            "riskLevel": null,
+            "acceptanceCriteria": null,
+            "verifyCommand": null,
+            "dueDateNotifiedAt": null,
+            "deletedAt": null,
+            "archivedAt": null,
+            "updatedAt": null,
+            "permanentlyDeleteAt": null,
+            "hardDeleteProcessingAt": null,
+            "totalComments": null,
+            "sectionId": null,
+            "descriptionJson": null,
+            "descriptionId": null,
+            "parentTaskId": null,
+            "updatedByUserIds": [],
+            "agentId": null,
+            "agentTaskCreatedPendingAt": null,
+            "agentTaskCreatedReadyAt": null,
+            "agentTaskCreatedEmittedAt": null,
+            "assignees": [
+              {
+                "id": 92,
+                "assignerId": null,
+                "taskId": 50,
+                "userId": 7,
+                "agentAssignerId": null,
+                "agentId": null,
+                "assignedAt": null,
+                "snoozeUntil": null,
+                "user": {
+                  "id": 7,
+                  "uid": null,
+                  "displayName": "Fixture User",
+                  "photoURL": null,
+                  "email": null,
+                  "joinedAt": null,
+                  "emailVerified": null,
+                  "updatedAt": null,
+                  "googleCalendarGeneration": null,
+                  "mcpTokensRevokedAt": null,
+                  "stripe_customer_id": null,
+                  "UserSettingId": "70",
+                  "accountId": null
+                }
+              }
+            ]
+          }
+        ],
+        "section": [
+          {
+            "id": 93,
+            "section_title": null,
+            "projectId": 15,
+            "visibility": true,
+            "deleted": false,
+            "ranking": null,
+            "isDone": null,
+            "autoAssignUserId": null,
+            "autoAssignAgentId": null
+          }
+        ],
+        "owner": {
+          "id": 7,
+          "uid": null,
+          "displayName": "Fixture User",
+          "photoURL": null,
+          "email": null,
+          "joinedAt": null,
+          "emailVerified": null,
+          "updatedAt": null,
+          "googleCalendarGeneration": null,
+          "mcpTokensRevokedAt": null,
+          "stripe_customer_id": null,
+          "UserSettingId": "70",
+          "accountId": null
+        },
+        "ai_custom_instructions": [
+          {
+            "id": 94,
+            "visibility": null,
+            "projectId": 15,
+            "customInstruction": null,
+            "source_selected": null,
+            "model_selected": null,
+            "lastUpdatedAt": null
+          }
+        ]
+      }
+    },
+    "queryCount": 7
+  }
+}

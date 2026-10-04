@@ -25,6 +25,7 @@ const favoriteProjectSelect = {
 
 export const getFavoritesForUser = (userId: number) =>
   prisma.favorites.findMany({
+    relationLoadStrategy: "join",
     where: { userSetting: { userId } },
     include: {
       project: {

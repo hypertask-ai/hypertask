@@ -1,24 +1,16 @@
 import prisma from "@/lib/prisma";
-import { isValidUser } from "@/utils/edgeHelpers";
-import { cookies } from "next/headers";
+import { loadCurrentUser } from "@/lib/auth/currentUser";
+import { unauthorized } from "@/lib/api/response";
 import { NextRequest, NextResponse } from "next/server";
 
 export async function GET(request: NextRequest) {
   try {
-    const cookieStore = await cookies();
-    const userCookie = cookieStore.get("nookies_user");
-
-    if (!userCookie?.value) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
-
-    const { isValid, user } = isValidUser(userCookie.value);
-
-    if (!isValid || !user) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
+    const currentUser = await loadCurrentUser(request.headers, true);
+    if (!currentUser) return unauthorized();
+    const { user } = currentUser;
 
     const sessions = await prisma.chatSession.findMany({
+      relationLoadStrategy: "join",
       where: {
         userId: user.id,
         // External agents (self-hosted runtimes) are only chatted with from
