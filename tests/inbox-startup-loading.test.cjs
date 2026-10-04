@@ -27,7 +27,7 @@ const startupEffects = () => {
   return inbox.slice(start, end);
 };
 
-function fixture({ fetched = true, ready = true, opened = false, loaded = false, idle = true } = {}) {
+function fixture({ fetched = true, ready = true, idle = true } = {}) {
   const calls = [];
   const listeners = new Map();
   const frames = new Map();
@@ -63,9 +63,7 @@ function fixture({ fetched = true, ready = true, opened = false, loaded = false,
     },
     notificationsQuery: { isFetched: fetched },
     inboxContentReady: ready,
-    showCommands: { show: opened },
-    HypertasksCommands: loaded ? () => null : undefined,
-    warmInboxOverlays: () => calls.push("overlays"),
+    warmInboxReminder: () => calls.push("reminder"),
     loadInboxSplit: () => { calls.push("split"); return Promise.resolve(); },
   };
   const callbacks = effects(startupEffects(), bindings);
@@ -76,15 +74,15 @@ function fixture({ fetched = true, ready = true, opened = false, loaded = false,
   return { calls, listeners, frames, idles, timers, callbacks, advance };
 }
 
-test("closed inbox overlays have no runtime static import, and both reminder paths share the deferred modal", () => {
+test("commands stay static while both reminder paths share the deferred modal", () => {
   const rejectStatic = (source, module) => assert.doesNotMatch(source, new RegExp(`import[^;\\n]+from ["']${module}["']`));
-  assert.throws(() => rejectStatic('import Commands from "@/components/commands";', "@/components/commands"), assert.AssertionError);
-  rejectStatic(inbox, "@/components/commands");
+  assert.throws(() => rejectStatic('import Reminder from "@/components/Modals/RemindMe/RemindMeComponent";', "@/components/Modals/RemindMe/RemindMeComponent"), assert.AssertionError);
+  assert.match(inbox, /import HypertasksCommands from "@\/components\/commands";/);
   for (const source of [reminder, split]) rejectStatic(source, "@/components/Modals/RemindMe/RemindMeComponent");
   assert.match(reminder, /InboxReminder = dynamic\(loadInboxReminder, \{ ssr: false \}\)/);
   assert.match(split, /import \{ InboxReminder as RemindMeComponent \} from "\.\/RemindMeInbox"/);
   assert.match(reminder, /showRemindMeModal &&\s*<InboxReminder/);
-  assert.match(inbox, /showCommands\.show && HypertasksCommands && \(/);
+  assert.match(inbox, /showCommands\.show && \(/);
 });
 
 test("split code starts on mount without waiting for data or overlay visibility", () => {
@@ -92,8 +90,8 @@ test("split code starts on mount without waiting for data or overlay visibility"
   const cleanup = f.callbacks[0]();
   assert.deepEqual(f.calls, ["split"]);
   assert.deepEqual([...f.listeners.keys()], ["pointerdown", "touchstart", "keydown"]);
-  f.listeners.get("touchstart")();
-  assert.deepEqual(f.calls, ["split", "overlays"], "explicit first-press intent warms before touchend");
+  for (const event of ["pointerdown", "touchstart", "keydown"]) f.listeners.get(event)();
+  assert.deepEqual(f.calls, ["split", "reminder", "reminder", "reminder"], "press and key intent warm the reminder");
   cleanup();
   assert.equal(f.listeners.size, 0);
 });
@@ -101,19 +99,19 @@ test("split code starts on mount without waiting for data or overlay visibility"
 test("automatic warming waits for authoritative data and a committed active split, then two paint frames and idle", () => {
   for (const [fetched, ready] of [[false, false], [false, true], [true, false]]) {
     const f = fixture({ fetched, ready });
-    f.callbacks[2]();
+    f.callbacks[1]();
     assert.equal(f.frames.size, 0);
     assert.deepEqual(f.calls, []);
   }
   const f = fixture();
-  const cleanup = f.callbacks[2]();
+  const cleanup = f.callbacks[1]();
   f.advance();
   assert.equal(f.idles.size, 0);
   f.advance();
   assert.equal(f.idles.size, 1);
   assert.deepEqual(f.calls, []);
   [...f.idles.values()][0]();
-  assert.deepEqual(f.calls, ["overlays"]);
+  assert.deepEqual(f.calls, ["reminder"]);
   cleanup();
   assert.equal(f.idles.size, 0);
   assert.match(inbox, /notificationsQuery\.isFetched && notificationsQuery\.isSuccess &&\s*__notifications === _notificationsTQ\?\.structuredData\?\.data/);
@@ -130,28 +128,25 @@ test("automatic warming waits for authoritative data and a committed active spli
 test("paint/idle/timer warmups cancel on unmount; browsers without idle callbacks keep the existing page", () => {
   for (const stage of [0, 1, 2]) {
     const f = fixture();
-    const cleanup = f.callbacks[2]();
+    const cleanup = f.callbacks[1]();
     for (let i = 0; i < stage; i++) f.advance();
     cleanup();
     assert.equal(f.frames.size + f.idles.size + f.timers.size, 0);
     assert.deepEqual(f.calls, []);
   }
   const f = fixture({ idle: false });
-  const cleanup = f.callbacks[2]();
+  const cleanup = f.callbacks[1]();
   f.advance(); f.advance();
   assert.equal(f.timers.size, 1);
   cleanup();
   assert.equal(f.timers.size, 0);
 });
 
-test("first programmatic open loads missing commands, and warmed commands use the synchronous component, not React.lazy", () => {
-  for (const [opened, loaded, count] of [[false, false, 0], [true, true, 0], [true, false, 1]]) {
-    const f = fixture({ opened, loaded });
-    f.callbacks[1]();
-    assert.equal(f.calls.length, count);
-  }
-  assert.match(inbox, /loadedCommands = module\.default/);
-  assert.match(inbox, /const HypertasksCommands = loadedCommands \?\? commands/);
-  assert.doesNotMatch(inbox, /Suspense|React\.lazy|loading:\s*\(/);
-  assert.match(inbox, /setCommands\(\(\) => Commands\)/);
+test("command opens never wait for loading or warming", () => {
+  assert.doesNotMatch(inbox, /loadCommands|loadedCommands|setCommands|const \[commands|Suspense|React\.lazy|loading:\s*\(/);
+  const start = inbox.indexOf("  const warmInboxReminder = useCallback(");
+  const end = inbox.indexOf("  useEffect(", start);
+  assert.ok(start >= 0 && end > start);
+  assert.match(inbox.slice(start, end), /void loadInboxReminder\(\)\.catch/);
+  assert.doesNotMatch(inbox.slice(start, end), /[Cc]ommands/);
 });
