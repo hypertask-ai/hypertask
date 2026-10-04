@@ -333,7 +333,7 @@ test("auto-merge waits for app smoke and runs when it completes", async () => {
   );
   assert.match(
     ciWorkflow,
-    /expected=\$\(printf '%s\\n' "\$expected" browser-smoke \| sort\)/,
+    /expected=\$\(printf '%s\\n' "\$expected" browser-smoke premerge-evidence \| sort\)/,
   );
 });
 
@@ -349,6 +349,7 @@ test("CI policy keeps the protected smoke producer live and required", async () 
     "pr-title",
     "next-public-secrets",
     "secret-scan",
+    "premerge-evidence",
   ];
 
   assert.equal(policy.topology.repository_default_branch, "production");
