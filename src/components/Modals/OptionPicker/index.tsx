@@ -88,6 +88,9 @@ const OptionPickerModal: React.FC<Props> = ({
       event.preventDefault();
       selectAt(selectedIndex);
     } else if (event.key === "Escape") {
+      // Own the Escape so page-level back handlers (My Tasks) do not also fire.
+      event.preventDefault();
+      event.stopImmediatePropagation();
       onClose();
     }
   };
