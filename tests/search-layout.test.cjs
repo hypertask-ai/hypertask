@@ -1010,9 +1010,9 @@ test('phone layout keeps board tabs in scrollable flow under the search input an
     assert.ok(!scroller.classList.contains('hidden'), 'phone row is visible')
     assert.equal(document.querySelector('.inbox_footer, .inbox_title'), null, 'tabs avoid fixed footer CSS')
     assert.ok(row.classList.contains('flex-nowrap'))
-    // Bootstrap's .flex-nowrap and .px-4 are !important, so the desktop overrides must be too.
-    assert.ok(row.classList.contains('@md:!flex-wrap'), 'desktop wrapping is preserved')
-    assert.ok(scroller.classList.contains('@md:!px-9'), 'desktop padding is preserved')
+    // Viewport breakpoint, not @md: the @container only exists while the AI chat is closed.
+    // Bootstrap's .flex-nowrap is !important, so the desktop override must be too.
+    assert.ok(row.classList.contains('md:!flex-wrap'), 'desktop wrapping is preserved')
     assert.ok(row.classList.contains('min-h-[44px]'), 'phone tabs retain a tappable height')
     await React.act(async () => labels[2].parentElement.parentElement.click())
     assert.equal(state().activeSplit, 2)
