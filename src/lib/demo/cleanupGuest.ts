@@ -12,15 +12,12 @@ export async function deleteGuestProjectCascade(
 ): Promise<void> {
   const project = await prisma.project.findUnique({
     where: { id: projectId },
-    select: { ownerId: true },
+    relationLoadStrategy: "join",
+    select: { owner: { select: { uid: true } } },
   });
   if (!project) return;
 
-  const guest = await prisma.user.findUnique({
-    where: { id: project.ownerId },
-    select: { uid: true },
-  });
-  if (!guest?.uid?.startsWith(GUEST_UID_PREFIX)) {
+  if (!project.owner.uid?.startsWith(GUEST_UID_PREFIX)) {
     throw new Error(
       `refusing to cascade-delete non-guest project ${projectId}`,
     );

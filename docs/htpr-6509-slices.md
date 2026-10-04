@@ -104,3 +104,63 @@ The session route adopts `loadCurrentUser(request.headers, true)` and `unauthori
 - `node tests/task-route-typecheck.cjs` invokes full `npx tsc --noEmit -p .`: baseline and final both have the same 15 pre-existing diagnostics, 0 new, compiler exit 2. This is baseline parity, not a clean full-project typecheck.
 - `npm run lint` with ignore/unignore patterns covering every changed TS/CJS file passes. `git diff --check` passes.
 - No build, live QA, database-backed query-plan/latency measurement, push, PR or board write is performed. The build script includes production migrations and is outside this local-only task. Large/unbounded JSON payloads are intentionally retained, and join cost at production scale remains unmeasured.
+
+## Slice 3: remaining eligible hot-path reads and page authorization
+
+Baseline: `fb9ef851b6bb3a5b8ef84d2425df5a6f7d19ac3b`, production including slices 1 and 2. Type: `[REFACTOR]`, identical public behavior, no flag. Only this worktree and its existing `htpr-6509-s3` branch are used. No URLs, methods, status codes, JSON projections, authentication policy, mutation arguments or notification/indexing behavior are intentionally changed.
+
+### Changed operations and query evidence
+
+| Operation | Before | After | Measurement and preserved contract |
+| --- | --- | --- | --- |
+| AI tree, 50-node chain, unlimited depth | 51 | 2 | Production helper delegate calls: root lookup and one recursive subtree query with statement-time board authorization; exact serialized tree and key order match |
+| AI tree, 50-node four-level fixture | 5 | 2 | Existing tree regression fixture; archived children, deleted/inaccessible subtree pruning and depth-limit omission of `children` remain unchanged |
+| AI tree, depth 0 / depth 1 | 1 / 2 | 1 / 2 | Existing shallow-query paths retained; ancestor lookup remains its existing two reads |
+| Page GET, PATCH, versions, archive and restore access preflight | 2 | 1 | Actual page service and routes against the same isolated store; page projection, 401/404 bodies, conflict/validation errors and mutation arguments match baseline |
+| `listReport` populated entry relations | 4 | 1 | Generated Prisma SQL planner adapter calls, with identical decoded JSON, access/filter arguments, 1000-row limit, ordering and `canManage` behavior |
+| Agent detail selected agent/membership/board/team read | 4 | 1 | Generated Prisma SQL planner adapter calls with identical selections and decoded relation JSON; other detail reads are unchanged |
+| Agent PATCH using an owned canonical UUID | 3 | 2 | Scalar ownership/slug read delegate calls, excluding the update; no initial full owned-name list, still one fresh collision-safe slug calculation after mutation |
+| Guest board owner safety check | 2 | 1 | Generated Prisma SQL planner adapter calls plus actual guard/delete-order contract comparison; task enumeration and all ordered deletes are unchanged |
+| Email-code login refreshed User/UserSetting/UserPicture | 3 | 1 | Generated Prisma SQL planner adapter calls; full response, cookie values, missing-user fallback and side-effect order match baseline |
+
+The recursive subtree query evaluates the human `getProjectWhere` policy within its own statement: a non-null team and either ownership or a human membership. It does not trust preloaded board IDs after ownership or membership is revoked. It filters access and Deleted status at every recursive edge, so an accessible grandchild behind a denied or deleted parent cannot appear. Archived child tasks and a Deleted root retain their existing treatment. A bigint depth parameter preserves valid depth values above the PostgreSQL integer range. The original ancestor cycle/access/depth errors are unchanged.
+
+Page lookup accepts an optional authenticated `userId` and combines the same Normal-project, team-scoped task predicate with the unique page lookup. `taskAccessWhere` can omit the task ID when used on the page's task relation. All five operations across the four touched route files use this predicate instead of a second task query. Calls without `userId`, including existing MCP consumers, keep exactly their old selection and unfiltered service contract. Existing cookie/profile authentication is intentionally retained here. No write/access policy is widened to teamless or archived boards, and no new task-status restriction is added.
+
+Agent UUID fast lookup still checks `userId`. It falls back to the full name resolver on a miss, preserving UUID-shaped slugs, suffix collisions, trimmed IDs, case-sensitive ID matching and existing 404s. Slug-based PATCH still loads names before and after a rename; the second read is not redundant because names may have changed. Unknown UUIDs can incur one extra lookup before the preserved slug fallback.
+
+### Named-hot-path audit and remaining work after slice 3
+
+- Section 5 tree: ancestor batching was already present. This slice replaces breadth-wise subtree round trips with one authorized recursive subtree read after the root lookup. Depths 0 and 1 stay at their existing budgets. A leaf requested at depth 2 or unlimited depth retains the former two-read budget; no universal latency improvement is claimed.
+- Section 5 sessions and bootstrap: slice 2 already batched session lists, favorites and user settings. They are rechecked, not changed again. Pagination, dropping message/skill bodies, or removing full user fields changes JSON and requires a separate compatibility/feature migration. The optimized app-shell bootstrap and task-open loaders remain untouched.
+- Section 5 pages: duplicate access preflights removed on every route that called `getPage`; existing projected task fields remain for service consumers. Create/list/search access and parsing remain separate Section 2/3 work.
+- Section 5 time reports: admin-project batching already existed. Only the remaining nested entry relations are batched here.
+- Section 5 agents: detail relations and canonical-ID PATCH preflight improved. Full owned-name sets remain necessary for slug collision suffixes. Slug PATCH and DELETE name resolution retain their existing contract; UUID DELETE optimization is not claimed.
+- Section 5 guests: the cron already processes four independent guests concurrently. This slice only consolidates the board-owner guard. Destructive cascade order, retry behavior, scoping and the cron response are unchanged; cross-guest bulk deletion is not attempted.
+- Section 5 skills: GET returns full skill rows, including bodies. There is no duplicate nested read to remove without changing that public payload, so the route is untouched.
+- Section 5 login: only the refreshed-user relations are batched. The self-HTTP call has no session cookie, while `/api/projects/getAll` requires one. Replacing it with a controller call would populate `prevBoard`, alter redirects and add `previousBoard` cookies where the current request gets none. That repair is deliberately deferred as a behavior change; full refreshed user fields are also part of the response.
+- Section 2: page access is consolidated on the four touched routes using the slice-1 predicate. Broader project-access promotion, domain interfaces, remaining inline task checks and route-entry loader adoption are still open.
+- Sections 1, 3, 4, 6 and 7: no additional completion beyond slices 1 and 2 is claimed. Migration, parser/membership/rate-limit rollout, dead/external endpoints, legacy board/detail caller changes and generated client work remain as listed above. The separate service-layer and envelope efforts still own their respective MCP and response conventions.
+
+No entire numbered section is complete. Eligible identical-output reads have been improved, not the ticket's proposed pagination or field-removal behavior.
+
+### Slice 3 verification and limits
+
+- Before production edits: `node --test tests/htpr-6509-s3-contracts.test.cjs`, 27 passed, 0 failed. The final suite retains those contracts and compares current production modules against frozen synthetic results and query arguments captured by executing the pinned baseline modules. Normal tests do not rewrite fixtures or require Git history, so shallow CI checkouts work; derived cookie expiry timestamps are normalized while values and Max-Age remain pinned. Later-added ownership edge cases and real Prisma relation fixtures expand the final suite to 37 passed, 0 failed.
+- Existing regressions: 80 passed, 0 failed across the ten CJS files enumerated in `GATES.md`, covering slices 1/2, shared task access, guest cron, agent ownership/credential lifecycle, login security and time-report permissions.
+- `node --import tsx tests/chat-task-tree.test.ts`: passed, including the existing ancestor error and 50-node fixtures.
+- `HTPR_6509_S3_SQL=1 node --test tests/htpr-6509-s3-sql.test.cjs`: 1 passed, 0 failed, 0 skipped. The actual emitted CTE executes against a disposable PostgreSQL 16 container with synthetic Task rows, proving depth limits, large depth values, SQL syntax, archived children, NULL sibling ordering and denied/deleted-parent pruning. The container is automatically removed; no live database is accessed.
+- Full `npx tsc --noEmit -p .`, invoked by `node tests/task-route-typecheck.cjs`: baseline and final have the same 15 pre-existing diagnostics, 0 new, compiler exit 2. This is baseline parity, not a clean project-wide typecheck.
+- `node tests/htpr-6509-s3-verify.cjs lint` invokes `npm run lint` with ignore/unignore patterns covering all 15 changed TS/CJS files. It passes. The scope oracle pins this worktree/branch, checks all 18 changed paths against an explicit allowlist, exercises negative controls and runs `git diff --check`.
+- Verification uses the available Node v22.22.2 runtime. CI targets Node 24; that runtime is not installed here, so Node-24 execution is not claimed.
+- No build, live QA, production query-plan/latency benchmark, push, PR or board write is claimed. The build command includes production migrations, so it is not run. SQL count evidence for relations is synthetic generated-planner evidence, not production performance data. Deep-tree reads preload authorized board IDs; large board sets, subtree sorting and relation-join costs remain unbenchmarked.
+
+### Honest remaining-slice estimate
+
+These are planning ranges, assuming roughly forty changed files per slice and existing endpoint/JSON compatibility. They are not completion commitments.
+
+| Section | More slices estimated | Basis and dependencies |
+| --- | --- | --- |
+| 1: migrate remaining writes | 6-9 | The checkout still has 33 task, 26 project, 7 section and 17 notification Pages files, including reads. Used-write migrations require App routes, legacy removal and contract tests, plus service integration after the separate MCP effort; dead-route ownership remains separate |
+| 4: dead/external endpoints and envelope coordination | 2-3 | One safe dead-endpoint/caller audit/removal slice, one external-route organization/compatibility slice, and potentially one coordination cleanup after the envelope conventions land |
+| 7: generated typed client with task callers consuming it | 3-5 | Schema/OpenAPI generation, client/runtime error compatibility, then task-caller adoption and regression coverage after the separate schema/envelope effort. Moving every remaining frontend fetch would add further slices beyond this minimum acceptance criterion |

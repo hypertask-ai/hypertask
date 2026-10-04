@@ -383,6 +383,7 @@ export async function listReport(
   const seesOthers = adminProjectIds.length > 0;
 
   const entries = await prisma.timeEntry.findMany({
+    relationLoadStrategy: "join",
     where: {
       ...(options.taskId ? { taskId: options.taskId } : {}),
       ...(seesOthers

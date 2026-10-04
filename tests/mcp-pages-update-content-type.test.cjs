@@ -41,9 +41,10 @@ function harness(contentHtml, { authorized = true, accessible = true } = {}) {
   };
   const snapshots = [];
   const indexed = [];
+  const reads = [];
   const tx = {
     page: {
-      findUnique: async () => ({ ...page }),
+      findUnique: async (args) => { reads.push(args); return { ...page }; },
       updateMany: async ({ where, data }) => {
         assert.equal(where.version, page.version);
         page = { ...page, ...data, version: page.version + data.version.increment };
@@ -54,6 +55,9 @@ function harness(contentHtml, { authorized = true, accessible = true } = {}) {
   };
   const service = load("src/utils/controllers/pages/pageService.ts", {
     "@/lib/prisma": { $transaction: async (callback) => callback(tx), page: tx.page },
+    "@/utils/controllers/tasks/assertTaskAccess": require("./task-route-loader.cjs").load(
+      "src/utils/controllers/tasks/assertTaskAccess.ts", { "@/lib/prisma": { default: {} } },
+    ),
     "@/utils/controllers/turbopuffer/turbopufferHelper": {
       convertToPlain: (html) => require("node-html-parser").parse(html).text,
       upsertPageToTurbopuffer: async (id) => { indexed.push(id); },
@@ -77,7 +81,7 @@ function harness(contentHtml, { authorized = true, accessible = true } = {}) {
   const { POST } = load("src/lib/mcp/operations/pages/update/operation.ts", stubs);
   const { GET } = load("src/lib/mcp/operations/pages/get/operation.ts", stubs);
   return {
-    service, snapshots, indexed, page: () => page,
+    service, snapshots, indexed, reads, page: () => page,
     post: (body) => POST(new Request("https://app.hypertask.ai/api/mcp/pages/update", {
       method: "POST", headers: { "content-type": "application/json" },
       body: JSON.stringify({ id: 1, ...body }),
@@ -85,6 +89,22 @@ function harness(contentHtml, { authorized = true, accessible = true } = {}) {
     get: () => GET({ nextUrl: new URL("https://app.hypertask.ai/api/mcp/pages/get?id=1") }),
   };
 }
+
+test("page access consolidation leaves MCP reads unscoped and filters browser reads only", async () => {
+  const h = harness(canvas.wrapHtmlCanvas(original));
+  await h.service.getPage({ id: 1 });
+  assert.deepEqual(h.reads.at(-1).where, { id: 1 });
+  await h.service.getPage({ publicId: "canvas-page", userId: 99 });
+  assert.deepEqual(h.reads.at(-1).where, {
+    publicId: "canvas-page",
+    task: { project: {
+      status: "Normal", teamId: { not: null },
+      OR: [{ ownerId: 99 }, { members: { some: { userId: 99, agentId: null } } }],
+    } },
+  });
+  assert.equal(h.snapshots.length, 0);
+  assert.equal(canvas.decodeHtmlCanvas(h.page().contentHtml), original);
+});
 
 for (const boundary of ["route", "service"]) {
   test(`${boundary}: omitted type preserves a canvas and its exact raw payload`, async () => {

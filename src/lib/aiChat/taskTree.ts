@@ -5,7 +5,7 @@ import { getProjectWhere } from "@/utils/controllers/projects/getAllIncludes";
 // HTPR-6509: the AI chat task-tree tool used to issue one query per ancestor
 // hop and two queries per tree node. These helpers keep the exact output and
 // error semantics but load the ancestor chain in one recursive query and the
-// subtree one level at a time.
+// subtree with a single authorized recursive read.
 
 type Db = Pick<PrismaClient, "$queryRaw" | "task">;
 
@@ -107,7 +107,7 @@ function toTreeNode(task: {
   return node;
 }
 
-// Builds the subtree with one query per level. A node at depth 0 has no
+// A node at depth 0 has no
 // `children` key; any other node gets `children`, empty when it has none.
 export async function buildTaskTree(
   rootId: number,
@@ -133,19 +133,20 @@ export async function buildTaskTree(
   }
 
   const root = toTreeNode(task);
-  let level = [root];
-  let remainingDepth = depth;
+  if (depth === 0) return root;
 
-  while (remainingDepth !== 0 && level.length > 0) {
-    const childrenByParent = new Map<number, TaskTreeNode[]>();
-    for (const node of level) {
-      node.children = [];
-      childrenByParent.set(node.id, node.children);
-    }
-
-    const rows = await db.task.findMany({
+  type ChildRow = {
+    id: number;
+    parentTaskId: number | null;
+    ticketNumber: string | null;
+    title: string;
+    uniqueIndex: number | null;
+  };
+  let rows: ChildRow[];
+  if (depth === 1) {
+    rows = await db.task.findMany({
       where: {
-        parentTaskId: { in: level.map((node) => node.id) },
+        parentTaskId: rootId,
         status: { not: "Deleted" },
         project: getProjectWhere(userId),
       },
@@ -158,15 +159,52 @@ export async function buildTaskTree(
       },
       orderBy: { uniqueIndex: "asc" },
     });
+  } else {
+    // Mirror getProjectWhere(userId) in this statement so revoked ownership or
+    // membership cannot leave stale access IDs. Denied parents prune descendants.
+    rows = await db.$queryRaw<ChildRow[]>(Prisma.sql`
+      WITH RECURSIVE bounds AS (
+        SELECT ${rootId}::integer AS root_id, ${depth ?? null}::bigint AS max_depth,
+          ${userId}::integer AS user_id
+      ), accessible_projects AS (
+        SELECT p.id FROM "Project" p CROSS JOIN bounds b
+        WHERE p."teamId" IS NOT NULL AND (
+          p."ownerId" = b.user_id OR EXISTS (
+            SELECT 1 FROM "Member" m
+            WHERE m."projectId" = p.id AND m."userId" = b.user_id AND m."agentId" IS NULL
+          )
+        )
+      ), subtree AS (
+        SELECT t.id, t."parentTaskId", t."ticketNumber", t.title, t."uniqueIndex", 1 AS hop
+        FROM "Task" t CROSS JOIN bounds b
+        WHERE t."parentTaskId" = b.root_id AND t.status <> 'Deleted'
+          AND t."projectId" IN (SELECT id FROM accessible_projects)
+        UNION ALL
+        SELECT t.id, t."parentTaskId", t."ticketNumber", t.title, t."uniqueIndex", s.hop + 1
+        FROM subtree s JOIN "Task" t ON t."parentTaskId" = s.id CROSS JOIN bounds b
+        WHERE t.status <> 'Deleted' AND t."projectId" IN (SELECT id FROM accessible_projects)
+          AND (b.max_depth IS NULL OR s.hop < b.max_depth)
+      )
+      SELECT DISTINCT id, "parentTaskId", "ticketNumber", title, "uniqueIndex"
+      FROM subtree ORDER BY "uniqueIndex" ASC
+    `);
+  }
 
+  const rowsByParent = new Map<number, ChildRow[]>();
+  for (const row of rows) {
+    if (row.parentTaskId == null) continue;
+    const siblings = rowsByParent.get(row.parentTaskId) ?? [];
+    siblings.push(row);
+    rowsByParent.set(row.parentTaskId, siblings);
+  }
+  let level = [root];
+  let remainingDepth = depth;
+
+  while (remainingDepth !== 0 && level.length > 0) {
     const nextLevel: TaskTreeNode[] = [];
-    for (const row of rows) {
-      const siblings =
-        row.parentTaskId == null ? undefined : childrenByParent.get(row.parentTaskId);
-      if (!siblings) continue;
-      const child = toTreeNode(row);
-      siblings.push(child);
-      nextLevel.push(child);
+    for (const node of level) {
+      node.children = (rowsByParent.get(node.id) ?? []).map(toTreeNode);
+      for (const child of node.children) nextLevel.push(child);
     }
 
     level = nextLevel;
