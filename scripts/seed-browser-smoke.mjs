@@ -3,6 +3,7 @@ import { createRequire } from "node:module";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
 import { fileURLToPath } from "node:url";
+import { localFlagModes, readPlainQaFlags } from "./premerge-local-flags.mjs";
 
 const stateFile = process.env.BROWSER_SMOKE_STATE_FILE;
 if (!stateFile) throw new Error("BROWSER_SMOKE_STATE_FILE is required");
@@ -14,7 +15,8 @@ if (!process.env.DATABASE_URL || !["127.0.0.1", "localhost"].includes(new URL(pr
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const fixtureFile = path.join(path.dirname(stateFile), "card-fixture.json");
 // A dated, credential-free copy of the live modes. Refresh it when release modes change.
-const { modes } = JSON.parse(await readFile(path.join(root, "e2e/smoke/production-flag-modes.json"), "utf8"));
+let { modes } = JSON.parse(await readFile(path.join(root, "e2e/smoke/production-flag-modes.json"), "utf8"));
+const localPremerge = process.env.PREMERGE_LOCAL === "1";
 const instantOpenControl = process.argv.includes("--instant-open-control");
 if (instantOpenControl) modes["htpr-6752-instant-ticket-open"] = "EVERYONE";
 for (const [key, mode] of Object.entries(modes)) {
@@ -36,7 +38,7 @@ const { SESSION_TTL_SECONDS, signSession } = jiti(
 
 const runKey = `${process.env.GITHUB_RUN_ID ?? process.pid}-${process.env.GITHUB_RUN_ATTEMPT ?? "1"}-${randomUUID()}`;
 
-async function createBoard({ ownerId, teamId, title, suffix }) {
+async function createBoard({ ownerId, teamId, googleAccountId, title, suffix }) {
   const sectionTitles = ["To do", "Done"];
   const project = await prisma.project.create({
     data: {
@@ -44,6 +46,7 @@ async function createBoard({ ownerId, teamId, title, suffix }) {
       title,
       ownerId,
       teamId,
+      googleAccountId,
       sections: sectionTitles,
     },
   });
@@ -67,6 +70,7 @@ async function createBoard({ ownerId, teamId, title, suffix }) {
       uniqueIndex: 1,
       ticketNumber: `${suffix.toUpperCase()}-1`,
       title: `${title} fixture`,
+      updatedAt: new Date(),
       description: "",
       description_: {
         create: { content: "<p>This seeded ticket must open from its board card.</p>", creatorId: ownerId },
@@ -85,7 +89,8 @@ async function seedSessionFixtures(flags) {
   const user = await prisma.user.create({
     data: {
       uid: `browser-smoke-${runKey}`,
-      email: `browser-smoke-${runKey}@example.invalid`,
+      ...(localPremerge ? { id: 985 } : {}),
+      email: localPremerge ? "valentin@hypertask.ai" : `browser-smoke-${runKey}@example.invalid`,
       displayName: "Browser smoke user",
       UserSetting: {
         create: {
@@ -97,7 +102,7 @@ async function seedSessionFixtures(flags) {
     },
     include: { UserSetting: true },
   });
-  if (user.id === 6 || user.id === 985) {
+  if (user.id === 6 || (!localPremerge && user.id === 985)) {
     throw new Error("Disposable browser smoke user received a reserved id");
   }
   if (!user.UserSetting) {
@@ -161,12 +166,14 @@ async function seedSessionFixtures(flags) {
   const board = await createBoard({
     ownerId: user.id,
     teamId: team.id,
+    googleAccountId: googleAccount.id,
     title: "Browser smoke board",
     suffix: "board",
   });
   const demoBoard = await createBoard({
     ownerId: user.id,
     teamId: team.id,
+    googleAccountId: googleAccount.id,
     title: "Browser smoke demo board",
     suffix: "demo",
   });
@@ -235,6 +242,19 @@ async function seedSessionFixtures(flags) {
     description: "This seeded ticket must open from its board card.",
     detailPath: `/detail/project-${board.id}/${board.task.uniqueIndex}`,
     flags,
+    ...(localPremerge ? { searchRows: [board, demoBoard].map(project => ({
+      id: String(project.task.id),
+      ticketNumber: project.task.ticketNumber,
+      title: project.task.title,
+      descriptionText: "This seeded ticket must open from its board card.",
+      projectId: project.id,
+      creatorName: user.displayName,
+      status: project.task.status,
+      updatedAt: project.task.updatedAt.toISOString(),
+      searchText: project.task.title,
+      uniqueIndex: project.task.uniqueIndex,
+      projectTitle: project.title,
+    })) } : {}),
   }));
   await appendFile(
     process.env.GITHUB_OUTPUT,
@@ -243,10 +263,19 @@ async function seedSessionFixtures(flags) {
 }
 
 try {
+  if (localPremerge) {
+    const { FEATURE_FLAG_KEYS } = jiti(path.join(root, "src/lib/flags.ts"));
+    const overrides = process.argv.slice(2);
+    if (overrides.some((value, index) => index % 2 === 0 && value !== "--flag") || overrides.length % 2) {
+      throw new Error("Invalid local flag arguments");
+    }
+    modes = localFlagModes(FEATURE_FLAG_KEYS, await readPlainQaFlags(), overrides.filter((_, index) => index % 2));
+    await writeFile(path.join(path.dirname(stateFile), "flag-modes.json"), JSON.stringify({ modes }));
+  }
   for (const [key, mode] of Object.entries(modes)) {
     await prisma.featureFlag.upsert({ where: { key }, create: { key, mode }, update: { mode } });
   }
-  const flags = Object.fromEntries(Object.entries(modes).map(([key, mode]) => [key, mode === "EVERYONE"]));
+  const flags = Object.fromEntries(Object.entries(modes).map(([key, mode]) => [key, mode === "EVERYONE" || (localPremerge && mode === "OWNER_AND_QA")]));
   if (instantOpenControl) {
     // Exercise the released path even while production has contained it with OFF.
     const fixture = JSON.parse(await readFile(fixtureFile, "utf8"));

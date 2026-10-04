@@ -367,6 +367,29 @@ P() {
 echo 999 > "$E/YPER4-999/pr"
 P 0 premerge 999
 P 0 pr YPER4-999
+# Use the seed's board path and premerge-local's actual print block, not a hand-written URL.
+board_line=$(node - "$(cd ../../../.. && pwd)" <<'JS'
+const fs = require('node:fs');
+const { spawnSync } = require('node:child_process');
+const root = process.argv[2];
+const seed = fs.readFileSync(root + '/scripts/seed-browser-smoke.mjs', 'utf8');
+const board_path = seed.match(/board_path=([^\\]+)\\n/)[1].replace('${board.id}', '7283');
+const script = fs.readFileSync(root + '/scripts/premerge-local.sh', 'utf8');
+const print = script.slice(script.indexOf("printf 'Build URL:"));
+const result = spawnSync('bash', ['-c', print], { encoding: 'utf8', env: {
+  ...process.env, url: 'http://127.0.0.1:3100', board_path,
+  BROWSER_SMOKE_STATE_FILE: '/unused', account: '985', flags: 'htpr-1-released=EVERYONE',
+}, stdio: ['ignore', 'pipe', 'pipe', 'pipe'] });
+if (result.status !== 0) throw new Error(result.stderr);
+console.log(result.output[3].split('\n').find(line => line.startsWith('Board:')));
+JS
+)
+[ -n "$board_line" ] || bad 'premerge-local emitted no Board line'
+BOARD_LINE="$board_line" node - "$premerge" <<'JS'
+const fs = require('node:fs');
+fs.writeFileSync(process.argv[2], fs.readFileSync(process.argv[2], 'utf8').replace(/^Board:.*$/m, () => process.env.BOARD_LINE));
+JS
+P 0 premerge 999
 cp "$premerge" "$E/record"
 for change in \
   's/^Commit:.*/Commit: deadbeef/|must name PR head sha' \
@@ -376,7 +399,10 @@ for change in \
   's/=EVERYONE/=OFF/|record each released flag' \
   's/=EVERYONE/=EVERYONE-invalid/|record each released flag' \
   '/^Board:/d|missing Board:' \
-  's@/projects/project-7283@/demo@|real board URL' \
+  's@^Board:.*@Board: http://127.0.0.1:3100/demo@|real board URL' \
+  's@^Board:.*@Board: http://127.0.0.1:3100/project?surface=board@|real board URL' \
+  's@^Board:.*@Board: http://127.0.0.1:3100/project?id=0@|real board URL' \
+  's@^Board:.*@Board: http://127.0.0.1:3100/project?id=1\&id=2@|real board URL' \
   '/^Build:/d|missing Build:' \
   's/Click: PASS/Click: FAIL/|missing passing click' \
   '/^Recording:/d|missing passing click' \
