@@ -112,6 +112,79 @@ const VIEWS: Array<{
   { name: 'new-task modal', path: process.env.SMOKE_POSTDEPLOY === '1' ? `/new?board=${process.env.SMOKE_TASK_PATH?.match(/^\/detail\/project-(\d+)\//)?.[1]}` : '/new', title: 'New', selector: '#createTaskModal' },
 ]
 
+test('My Tasks Tab keeps the chosen split without server navigation', async ({ page }, testInfo) => {
+  test.skip(!process.env.BROWSER_SMOKE_PR, 'isolated PR fixtures only')
+  await page.setViewportSize(testInfo.project.name === 'Mobile'
+    ? { width: 390, height: 844 }
+    : { width: 1440, height: 900 })
+  const boards = [process.env.SMOKE_BOARD_PATH!, process.env.SMOKE_DEMO_BOARD_PATH!].map((boardPath, index) => ({
+    id: Number(new URL(boardPath, 'http://localhost').searchParams.get('id')),
+    title: index === 0 ? 'Browser smoke board' : 'Browser smoke demo board',
+    sections: [], labels: [], members: [],
+  }))
+  // Exercise unreleased flags without changing the seed's production-mode snapshot.
+  await page.route('**/api/flags', (route) => route.fulfill({ json: { flags: {
+    'htpr-6421-my-tasks-shortcuts-width': true,
+    'htpr-6455-my-tasks-time-group': true,
+    'htpr-6458-my-tasks-live-updates': true,
+  } } }))
+  await page.route('**/api/my-tasks?*', (route) => route.fulfill({ json: {
+    sections: [], tabs: ['All'], boards, accessibleProjectIds: boards.map((board) => board.id),
+  } }))
+  const listResponse = page.waitForResponse((response) => new URL(response.url()).pathname === '/api/my-tasks')
+  await page.goto('/my-tasks?view=all', { waitUntil: 'load' })
+  await listResponse
+  const splits = page.locator('.footer_tags_main:visible')
+  const selected = splits.locator('.font-semibold > span.footer_tags')
+  await expect(splits).toHaveCount(3)
+  await expect(selected).toHaveText('All')
+  await page.evaluate(() => (document.activeElement as HTMLElement).blur())
+
+  let serverNavigations = 0
+  let releaseNavigation!: () => void
+  const navigationHeld = new Promise<void>((resolve) => { releaseNavigation = resolve })
+  // A slow RSC response exposes a stale split immediately, rather than relying on network timing.
+  await page.route('**/my-tasks?*', async (route) => {
+    if (route.request().headers().rsc !== '1') return route.continue()
+    serverNavigations++
+    await navigationHeld
+    await route.continue().catch(() => {})
+  })
+  const assertSplit = async (index: number) => {
+    const title = index === 0 ? 'All' : boards[index - 1].title
+    await expect(selected, 'Tab must keep the chosen split').toHaveText(title)
+    await expect(page.locator('body'), 'Tab must not move focus into an unrelated control').toBeFocused()
+    await expect(page).toHaveURL((url) => url.searchParams.get('board') === (index === 0 ? null : String(boards[index - 1].id)))
+    // Keep observing after React effects and any delayed navigation have had time to run.
+    expect(await page.evaluate(async () => {
+      const samples: string[] = []
+      const until = performance.now() + 250
+      while (performance.now() < until) {
+        samples.push(document.querySelector('.footer_tags_main .font-semibold > span.footer_tags')?.textContent ?? '')
+        await new Promise(requestAnimationFrame)
+      }
+      return [...new Set(samples)]
+    })).toEqual([title])
+  }
+  try {
+    for (const index of [1, 2, 0, 1, 2]) {
+      await page.keyboard.press('Tab')
+      await assertSplit(index)
+    }
+    await page.keyboard.press('Shift+Tab')
+    await assertSplit(1)
+    await page.keyboard.press('Tab')
+    await page.keyboard.press('Tab')
+    await page.keyboard.press('Tab')
+    await assertSplit(1)
+    releaseNavigation()
+    await assertSplit(1)
+    expect(serverNavigations, 'split selection must not request a server redraw').toBe(0)
+  } finally {
+    releaseNavigation()
+  }
+})
+
 test('seeded board card opens a ticket and stays open', { tag: ['@id:board-card-click'] }, async ({ page }, testInfo) => {
   test.skip(!process.env.BROWSER_SMOKE_PR, 'isolated PR fixtures only')
   const fixture = JSON.parse(readFileSync(path.join(__dirname, '.state', 'card-fixture.json'), 'utf8')) as {
