@@ -66,7 +66,7 @@ export default function ComposeTaskWriter({ active, onCreated, onBusyChange }: {
   useEffect(() => {
     if (!newTaskWindow || !active || !input.current) return;
     input.current.style.height = "auto";
-    input.current.style.height = `${Math.max(240, Math.min(input.current.scrollHeight, 440))}px`;
+    input.current.style.height = `${Math.max(64, Math.min(input.current.scrollHeight, 208))}px`;
   }, [newTaskWindow, active, text]);
 
   const filesRef = useRef(files);
@@ -200,10 +200,10 @@ export default function ComposeTaskWriter({ active, onCreated, onBusyChange }: {
               ref={input}
               value={text}
               onChange={(event) => setText(event.target.value)}
-              rows={newTaskWindow ? 10 : mobile ? 3 : 2}
+              rows={mobile ? 3 : 2}
               placeholder="Describe the task"
               aria-label="Describe the task"
-              className={newTaskWindow ? "min-h-60 max-h-[440px] overflow-y-auto text-content caret-hypertasks-ai-purple" : "min-h-16 text-content"}
+              className={newTaskWindow ? "min-h-16 max-h-52 overflow-y-auto text-content caret-hypertasks-ai-purple" : "min-h-16 text-content"}
               onPaste={(event) => {
                 const images = extractPastedImageFiles(event.clipboardData?.items);
                 if (!images.length) return;
