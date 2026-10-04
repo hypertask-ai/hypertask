@@ -672,6 +672,8 @@ const Inbox = ({
 
   // Set active split on initial render when notifications first load: URL-selected split, or the first tab.
   useEffect(() => {
+    // Do not replace a cold cached ticket URL while its source inbox is still mounted.
+    if (window.location.pathname.startsWith("/detail/") && window.history.state?.cachedTaskDetail) return;
     const tabs = _notificationsTQ?.structuredData?.tabs ?? [];
     const initialSplitIndex = getInitialInboxSplitIndex({
       tabs,
