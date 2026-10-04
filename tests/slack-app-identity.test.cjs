@@ -4,6 +4,7 @@ const { actor, loadTs, memoryRedis } = require("./slack-app-fixtures.cjs");
 
 function identityFixture(options = {}) {
   const writes = [];
+  const membershipChecks = [];
   const redis = memoryRedis();
   const teamUser = { ...actor.user, emailVerified: true, ...options.teamUser };
   const prisma = {
@@ -16,6 +17,7 @@ function identityFixture(options = {}) {
         assert.equal(where.id, actor.installId);
         assert.equal(where.team.OR[1].members.some.status, "Accepted");
         const id = where.team.OR[0].googleAccount.is.userId;
+        membershipChecks.push(id);
         return (options.allowedIds ?? [42, 6]).includes(id) ? { id: actor.installId } : null;
       },
     },
@@ -40,7 +42,7 @@ function identityFixture(options = {}) {
       return { ok: true, user: { is_email_confirmed: true, profile: { email: " PERSON@EXAMPLE.COM " }, ...options.slackUser } };
     } },
   });
-  return { ...loaded, prisma, redis, writes };
+  return { ...loaded, membershipChecks, prisma, redis, writes };
 }
 
 test("auto-match uses a confirmed Slack email and exactly one verified installing-team member", async () => {
@@ -103,6 +105,24 @@ test("stale links are removed and a concurrent link cannot escape the installing
   const concurrent = identityFixture({ collision: true, collisionUser: { ...actor.user, id: 99 } });
   assert.equal(await concurrent.resolveSlackActor("T1", "U1"), null);
 });
+
+for (const userId of [6, 985, 42]) {
+  for (const isMember of [false, true]) {
+    test(`concurrent user ${userId}'s rollout controls membership validation (${isMember ? "member" : "nonmember"})`, async () => {
+      const candidateId = userId === 42 ? 6 : 42;
+      const fixture = identityFixture({
+        installerId: 42, enabledIds: [6, 985], teamUser: { id: candidateId },
+        collision: true, collisionUser: { ...actor.user, id: userId },
+        allowedIds: isMember ? [candidateId, userId] : [candidateId],
+      });
+      const result = await fixture.resolveSlackActor("T1", "U1");
+      if (userId !== 42 && !isMember) assert.equal(result, null);
+      else assert.equal(result.user.id, userId);
+      assert.deepEqual(fixture.membershipChecks, userId === 42 ? [] : [userId]);
+      assert.deepEqual(fixture.writes, [{ installId: actor.installId, slackUserId: actor.slackUserId, userId: candidateId }]);
+    });
+  }
+}
 
 test("disconnect suppression lasts until explicit connect, and flag off leaves legacy mapping unchanged", async () => {
   const fixture = identityFixture();

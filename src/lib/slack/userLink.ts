@@ -151,6 +151,7 @@ export async function resolveSlackActor(
     }
   }
 
+  if (user) slackAppEnabled = await isFeatureEnabled(HTPR_6817_SLACK_APP_FLAG, user.id);
   if (slackAppEnabled && user && !(await isSlackInstallTeamMember(install.id, user.id))) {
     return null;
   }
