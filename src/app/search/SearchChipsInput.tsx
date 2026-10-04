@@ -301,7 +301,8 @@ export default function SearchChipsInput({ value, onChange, onRun, boardId, inpu
       setSelectedIndex((current) => Math.max(0, Math.min(rows.length - 1, current + (moveDown ? 1 : -1))));
       return;
     }
-    if (open && rows.length && !(layoutEnabled && event.key === "Enter" && selectedRow?.kind === "ai" && selectedIndex !== 0) && (event.key === "Enter" || (event.key === "Tab" && (!autocompleteEnabled || !event.shiftKey)))) {
+    // A lone Ask AI row is not a completion: Enter still runs the search.
+    if (open && rows.length && !(layoutEnabled && event.key === "Enter" && selectedRow?.kind === "ai" && (selectedIndex !== 0 || rows.length === 1)) && (event.key === "Enter" || (event.key === "Tab" && (!autocompleteEnabled || !event.shiftKey)))) {
       event.preventDefault();
       event.stopPropagation();
       choose(selectedRow);
@@ -318,9 +319,9 @@ export default function SearchChipsInput({ value, onChange, onRun, boardId, inpu
       event.preventDefault();
       event.stopPropagation();
       setEditing(false);
-      if (layoutEnabled) setDismissed(true);
+      setDismissed(true);
       onRun(value);
-      if (layoutEnabled && value.trim().length >= 2) inputRef.current?.blur();
+      if (value.trim().length >= 2) inputRef.current?.blur();
     }
   }
 

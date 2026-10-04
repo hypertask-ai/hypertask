@@ -46,6 +46,11 @@ const SearchFilter = ({ project, toggleFilter }: ISearchFilter) => {
         value={keyword}
         placeholder={`Find in view...`}
         onKeyDown={(e: any) => {
+          if (e.key === "Enter" && !e.nativeEvent.isComposing) {
+            e.preventDefault();
+            e.stopPropagation();
+            e.currentTarget.blur();
+          }
           if (e.key === "Escape") {
             e.preventDefault();
             e.stopPropagation();
