@@ -432,6 +432,7 @@ test("declared flags remain listed with ticket details and can be changed", asyn
         updatedAt: null,
       },
       { key: "htpr-6752-instant-ticket-open", mode: "OWNER_AND_QA", updatedAt: null },
+      { key: "htpr-6804-mcp-tools", mode: "OWNER_AND_QA", updatedAt: null },
       { key: "htpr-6860-mobile-page-hide-dock", mode: "OWNER_AND_QA", updatedAt: null },
       { key: "htpr-6861-mobile-page-back-row", mode: "OWNER_AND_QA", updatedAt: null },
       { key: "htpr-6865-search-layout", mode: "OWNER_AND_QA", updatedAt: null },

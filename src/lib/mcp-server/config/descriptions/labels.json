@@ -1,0 +1,20 @@
+{
+  "name": "hypertask_labels",
+  "does": "List the labels on a board or create a new board label.",
+  "use_when": "Use to discover valid label names before filtering or labeling tickets.",
+  "do_not_use_when": "Do not use to attach labels to a ticket; use hypertask_tasks create or update instead.",
+  "parameters_and_caveats": "action selects an operation; input contains only that operation’s documented fields. response_format defaults to concise for reads; detailed retains full fields. limit defaults to 20 (maximum 50) and offset defaults to 0 for bounded read results; use returned pagination or narrower filters. Identifiers and required fields depend on the selected action; writes keep existing authorization and confirmation rules.",
+  "actions": {
+    "list": {
+      "tool": "hypertask_list_labels",
+      "read_only": true,
+      "permission": "data"
+    },
+    "create": {
+      "tool": "hypertask_create_label",
+      "read_only": false,
+      "permission": "data"
+    }
+  },
+  "input_examples": []
+}

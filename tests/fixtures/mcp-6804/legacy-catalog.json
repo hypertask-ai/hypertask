@@ -1,0 +1,553 @@
+[
+  {
+    "name": "hypertask_hello",
+    "description": "Returns a welcome map.",
+    "inputSchema": {
+      "type": "object"
+    }
+  },
+  {
+    "name": "hypertask_agent_presence",
+    "description": "Returns live agent status.",
+    "inputSchema": {
+      "type": "object"
+    }
+  },
+  {
+    "name": "hypertask_list_agents",
+    "description": "Returns owned agents.",
+    "inputSchema": {
+      "type": "object"
+    }
+  },
+  {
+    "name": "hypertask_agent_webhook",
+    "description": "Returns webhook settings.",
+    "inputSchema": {
+      "type": "object"
+    }
+  },
+  {
+    "name": "hypertask_create_agent",
+    "description": "Returns the new agent token.",
+    "inputSchema": {
+      "type": "object"
+    }
+  },
+  {
+    "name": "hypertask_revoke_agent",
+    "description": "Returns revoke confirmation.",
+    "inputSchema": {
+      "type": "object"
+    }
+  },
+  {
+    "name": "hypertask_archive_agent",
+    "description": "Returns the archived agent.",
+    "inputSchema": {
+      "type": "object"
+    }
+  },
+  {
+    "name": "hypertask_delete_agent",
+    "description": "Returns delete confirmation.",
+    "inputSchema": {
+      "type": "object"
+    }
+  },
+  {
+    "name": "hypertask_mint_token",
+    "description": "Returns a new MCP token.",
+    "inputSchema": {
+      "type": "object"
+    }
+  },
+  {
+    "name": "hypertask_revoke_token",
+    "description": "Returns token revoke result.",
+    "inputSchema": {
+      "type": "object"
+    }
+  },
+  {
+    "name": "hypertask_list_connections",
+    "description": "Returns OAuth connections.",
+    "inputSchema": {
+      "type": "object"
+    }
+  },
+  {
+    "name": "hypertask_get_user_context",
+    "description": "Returns user and boards.",
+    "inputSchema": {
+      "type": "object"
+    }
+  },
+  {
+    "name": "hypertask_update_profile",
+    "description": "Returns the updated profile.",
+    "inputSchema": {
+      "type": "object"
+    }
+  },
+  {
+    "name": "hypertask_list_tasks",
+    "description": "Returns matching tasks.",
+    "inputSchema": {
+      "type": "object"
+    }
+  },
+  {
+    "name": "hypertask_get_tasks",
+    "description": "Returns named task details.",
+    "inputSchema": {
+      "type": "object"
+    }
+  },
+  {
+    "name": "hypertask_task_context",
+    "description": "Returns task context.",
+    "inputSchema": {
+      "type": "object"
+    }
+  },
+  {
+    "name": "hypertask_task_description_history",
+    "description": "Returns description versions.",
+    "inputSchema": {
+      "type": "object"
+    }
+  },
+  {
+    "name": "hypertask_get_task_tree",
+    "description": "Returns the task tree.",
+    "inputSchema": {
+      "type": "object"
+    }
+  },
+  {
+    "name": "hypertask_next_tasks",
+    "description": "Returns the next tasks.",
+    "inputSchema": {
+      "type": "object"
+    }
+  },
+  {
+    "name": "hypertask_link_tasks",
+    "description": "Returns the task relation.",
+    "inputSchema": {
+      "type": "object"
+    }
+  },
+  {
+    "name": "hypertask_search_tasks",
+    "description": "Returns keyword matches.",
+    "inputSchema": {
+      "type": "object"
+    }
+  },
+  {
+    "name": "hypertask_rag_retrieval",
+    "description": "Returns semantic matches.",
+    "inputSchema": {
+      "type": "object"
+    }
+  },
+  {
+    "name": "hypertask_search_help_docs",
+    "description": "Returns help articles.",
+    "inputSchema": {
+      "type": "object"
+    }
+  },
+  {
+    "name": "hypertask_find_related_tasks",
+    "description": "Returns related tasks.",
+    "inputSchema": {
+      "type": "object"
+    }
+  },
+  {
+    "name": "hypertask_list_projects",
+    "description": "Returns accessible boards.",
+    "inputSchema": {
+      "type": "object"
+    }
+  },
+  {
+    "name": "hypertask_project_admin",
+    "description": "Returns the board change.",
+    "inputSchema": {
+      "type": "object"
+    }
+  },
+  {
+    "name": "hypertask_board_manifest",
+    "description": "Returns the board manifest.",
+    "inputSchema": {
+      "type": "object"
+    }
+  },
+  {
+    "name": "hypertask_get_board_playbook",
+    "description": "Returns the board playbook.",
+    "inputSchema": {
+      "type": "object"
+    }
+  },
+  {
+    "name": "hypertask_board_config",
+    "description": "Returns board instructions.",
+    "inputSchema": {
+      "type": "object"
+    }
+  },
+  {
+    "name": "hypertask_create_board",
+    "description": "Returns the new board.",
+    "inputSchema": {
+      "type": "object"
+    }
+  },
+  {
+    "name": "hypertask_rename_board",
+    "description": "Returns the renamed board.",
+    "inputSchema": {
+      "type": "object"
+    }
+  },
+  {
+    "name": "hypertask_list_project_members",
+    "description": "Returns board members.",
+    "inputSchema": {
+      "type": "object"
+    }
+  },
+  {
+    "name": "hypertask_create_label",
+    "description": "Returns the created label.",
+    "inputSchema": {
+      "type": "object"
+    }
+  },
+  {
+    "name": "hypertask_list_labels",
+    "description": "Returns board labels.",
+    "inputSchema": {
+      "type": "object"
+    }
+  },
+  {
+    "name": "hypertask_list_custom_fields",
+    "description": "Returns custom fields.",
+    "inputSchema": {
+      "type": "object"
+    }
+  },
+  {
+    "name": "hypertask_set_custom_field_value",
+    "description": "Returns the field value.",
+    "inputSchema": {
+      "type": "object"
+    }
+  },
+  {
+    "name": "hypertask_inbox_list",
+    "description": "Returns inbox items.",
+    "inputSchema": {
+      "type": "object"
+    }
+  },
+  {
+    "name": "hypertask_inbox_archive",
+    "description": "Returns archived ids.",
+    "inputSchema": {
+      "type": "object"
+    }
+  },
+  {
+    "name": "hypertask_inbox_unarchive",
+    "description": "Returns restored ids.",
+    "inputSchema": {
+      "type": "object"
+    }
+  },
+  {
+    "name": "hypertask_move_task_to_inbox",
+    "description": "Returns inbox routing.",
+    "inputSchema": {
+      "type": "object"
+    }
+  },
+  {
+    "name": "hypertask_section",
+    "description": "Returns the column.",
+    "inputSchema": {
+      "type": "object"
+    }
+  },
+  {
+    "name": "hypertask_get_comments_for_task",
+    "description": "Returns task comments.",
+    "inputSchema": {
+      "type": "object"
+    }
+  },
+  {
+    "name": "hypertask_add_comment_to_task",
+    "description": "Returns the comment.",
+    "inputSchema": {
+      "type": "object"
+    }
+  },
+  {
+    "name": "hypertask_update_comment",
+    "description": "Returns the updated comment.",
+    "inputSchema": {
+      "type": "object"
+    }
+  },
+  {
+    "name": "hypertask_delete_comment",
+    "description": "Returns comment deletion.",
+    "inputSchema": {
+      "type": "object"
+    }
+  },
+  {
+    "name": "hypertask_create_page",
+    "description": "Returns the created page.",
+    "inputSchema": {
+      "type": "object"
+    }
+  },
+  {
+    "name": "hypertask_get_page",
+    "description": "Returns the page.",
+    "inputSchema": {
+      "type": "object"
+    }
+  },
+  {
+    "name": "hypertask_update_page",
+    "description": "Returns the updated page.",
+    "inputSchema": {
+      "type": "object"
+    }
+  },
+  {
+    "name": "hypertask_list_pages",
+    "description": "Returns task or board pages.",
+    "inputSchema": {
+      "type": "object"
+    }
+  },
+  {
+    "name": "hypertask_search_pages",
+    "description": "Returns matching pages.",
+    "inputSchema": {
+      "type": "object"
+    }
+  },
+  {
+    "name": "hypertask_page_history",
+    "description": "Returns page history.",
+    "inputSchema": {
+      "type": "object"
+    }
+  },
+  {
+    "name": "hypertask_report",
+    "description": "Returns the report.",
+    "inputSchema": {
+      "type": "object"
+    }
+  },
+  {
+    "name": "hypertask_list_views",
+    "description": "Returns saved views.",
+    "inputSchema": {
+      "type": "object"
+    }
+  },
+  {
+    "name": "hypertask_get_view",
+    "description": "Returns one saved view.",
+    "inputSchema": {
+      "type": "object"
+    }
+  },
+  {
+    "name": "hypertask_create_view",
+    "description": "Returns the created view.",
+    "inputSchema": {
+      "type": "object"
+    }
+  },
+  {
+    "name": "hypertask_update_view",
+    "description": "Returns the updated view.",
+    "inputSchema": {
+      "type": "object"
+    }
+  },
+  {
+    "name": "hypertask_delete_view",
+    "description": "Returns view deletion.",
+    "inputSchema": {
+      "type": "object"
+    }
+  },
+  {
+    "name": "hypertask_switch_view",
+    "description": "Returns the active view.",
+    "inputSchema": {
+      "type": "object"
+    }
+  },
+  {
+    "name": "hypertask_list_skills",
+    "description": "Returns skills.",
+    "inputSchema": {
+      "type": "object"
+    }
+  },
+  {
+    "name": "hypertask_get_skill",
+    "description": "Returns one skill.",
+    "inputSchema": {
+      "type": "object"
+    }
+  },
+  {
+    "name": "hypertask_create_skill",
+    "description": "Returns the created skill.",
+    "inputSchema": {
+      "type": "object"
+    }
+  },
+  {
+    "name": "hypertask_update_skill",
+    "description": "Returns the updated skill.",
+    "inputSchema": {
+      "type": "object"
+    }
+  },
+  {
+    "name": "hypertask_delete_skill",
+    "description": "Returns skill deletion.",
+    "inputSchema": {
+      "type": "object"
+    }
+  },
+  {
+    "name": "hypertask_import_skills",
+    "description": "Returns imported skills.",
+    "inputSchema": {
+      "type": "object"
+    }
+  },
+  {
+    "name": "hypertask_attach_files",
+    "description": "Returns attachment URLs.",
+    "inputSchema": {
+      "type": "object"
+    }
+  },
+  {
+    "name": "hypertask_update_task",
+    "description": "Returns the updated task.",
+    "inputSchema": {
+      "type": "object"
+    }
+  },
+  {
+    "name": "hypertask_create_task",
+    "description": "Returns the created task.",
+    "inputSchema": {
+      "type": "object"
+    }
+  },
+  {
+    "name": "hypertask_move_task_between_boards",
+    "description": "Returns the moved task.",
+    "inputSchema": {
+      "type": "object"
+    }
+  },
+  {
+    "name": "hypertask_assign_user",
+    "description": "Returns the assignees.",
+    "inputSchema": {
+      "type": "object"
+    }
+  },
+  {
+    "name": "hypertask_decision_request",
+    "description": "Returns the decision.",
+    "inputSchema": {
+      "type": "object"
+    }
+  },
+  {
+    "name": "hypertask_draft",
+    "description": "Returns the draft.",
+    "inputSchema": {
+      "type": "object"
+    }
+  },
+  {
+    "name": "hypertask_time",
+    "description": "Returns timer or report.",
+    "inputSchema": {
+      "type": "object"
+    }
+  },
+  {
+    "name": "hypertask_pause_timer",
+    "description": "Returns the paused timer.",
+    "inputSchema": {
+      "type": "object"
+    }
+  },
+  {
+    "name": "hypertask_resume_timer",
+    "description": "Returns the resumed timer.",
+    "inputSchema": {
+      "type": "object"
+    }
+  },
+  {
+    "name": "hypertask_search_tools",
+    "description": "Returns matching tools.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "query": {
+          "type": "string"
+        },
+        "limit": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "query"
+      ]
+    }
+  },
+  {
+    "name": "hypertask_describe_tool",
+    "description": "Returns one tool schema.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "name"
+      ]
+    }
+  }
+]

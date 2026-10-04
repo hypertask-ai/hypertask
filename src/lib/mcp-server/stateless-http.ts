@@ -3,6 +3,7 @@ import { z } from 'zod'
 import type { AuthInfo } from '@modelcontextprotocol/sdk/server/auth/types.js'
 import { listToolsDeferred, parseStructuredContent, toolsForConnect } from './deferred-tools'
 import { listMetaTools } from './deferred-tools'
+import { executeToolResult, toolErrorResult } from './tool-response'
 
 export const MCP_SERVER_INFO = {
   name: 'hyperTask',
@@ -23,6 +24,10 @@ export type PortableTool = {
   name: string
   description: string
   parameters: z.ZodObject<z.ZodRawShape>
+  inputSchema?: Record<string, unknown>
+  outputSchema?: Record<string, unknown>
+  input_examples?: unknown[]
+  hidden?: boolean
   execute: (
     args: unknown,
     token: string,
@@ -99,6 +104,7 @@ function jsonSchemaFor(parameters: z.ZodType): Record<string, unknown> {
 
 export type StatelessMcpOptions = {
   deferred?: boolean
+  sessionId?: string
 }
 
 const deferredByRequest = new WeakMap<Request, true>()
@@ -184,7 +190,8 @@ async function dispatchMethod(
   message: JsonRpcMessage,
   request: Request,
   auth: StatelessMcpAuth,
-  tools: readonly PortableTool[]
+  tools: readonly PortableTool[],
+  options: StatelessMcpOptions,
 ): Promise<unknown> {
   const id = (message.id ?? null) as JsonRpcId
   const method = typeof message.method === 'string' ? message.method : ''
@@ -217,19 +224,31 @@ async function dispatchMethod(
         })
       }
       return jsonRpcResult(id, {
-        tools: tools.map((tool) => ({
+        tools: tools.filter((tool) => !tool.hidden).map((tool) => ({
           name: tool.name,
           description: tool.description,
-          inputSchema: jsonSchemaFor(tool.parameters),
+          inputSchema: tool.inputSchema ?? jsonSchemaFor(tool.parameters),
+          ...(tool.outputSchema ? { outputSchema: tool.outputSchema } : {}),
+          ...(tool.input_examples?.length ? { input_examples: tool.input_examples } : {}),
         })),
       })
     case 'tools/call': {
       const name = typeof params.name === 'string' ? params.name : ''
       const tool = tools.find((candidate) => candidate.name === name)
       if (!tool) {
+        if (tools.some((candidate) => candidate.inputSchema)) {
+          return jsonRpcResult(id, toolErrorResult(new Error(`Unknown tool ${name || '(missing)'}. Refresh tools/list and choose an advertised tool name`)))
+        }
         return jsonRpcError(id, -32602, `Unknown tool: ${name || '(missing)'}`)
       }
       const rawArgs = params.arguments === undefined ? {} : params.arguments
+      if (tool.outputSchema) {
+        return jsonRpcResult(id, await executeToolResult(tool, rawArgs, auth.token, {
+          requestId: id === null ? crypto.randomUUID() : String(id),
+          clientFingerprint: crypto.createHash('sha256').update(auth.token).digest('hex'),
+          ...(options.sessionId ? { sessionId: options.sessionId } : {}),
+        }))
+      }
       const parsed = tool.parameters.safeParse(rawArgs)
       if (!parsed.success) {
         return jsonRpcError(id, -32602, 'Invalid tool arguments', parsed.error.flatten())
@@ -239,6 +258,7 @@ async function dispatchMethod(
         const text = await tool.execute(parsed.data, auth.token, {
           requestId,
           clientFingerprint: crypto.createHash('sha256').update(auth.token).digest('hex'),
+          ...(options.sessionId ? { sessionId: options.sessionId } : {}),
         })
         if (deferred) {
           const structured = parseStructuredContent(text)
@@ -347,10 +367,10 @@ export async function handleStatelessMcpRequest(
       continue
     }
     if (isNotification(candidate)) {
-      await dispatchMethod(candidate, request, caller, tools)
+      await dispatchMethod(candidate, request, caller, tools, options)
       continue
     }
-    const result = await dispatchMethod(candidate, request, caller, tools)
+    const result = await dispatchMethod(candidate, request, caller, tools, options)
     if (result !== null) responses.push(result)
   }
 
