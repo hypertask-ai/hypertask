@@ -138,7 +138,7 @@ export default function ComposeTaskWriter({ active, onCreated, onBusyChange }: {
     <div hidden={!active} data-compose-task-writer>
       {writing ? <FullScreenChatLoading inline label="Writing your ticket…" /> : (
         <div className="p-2">
-          <div className="flex w-full flex-col rounded-[5px] bg-ai-tiptap p-2">
+          <div className="flex w-full flex-col rounded-[5px] bg-ai-tiptap px-3 py-2">
             <AiComposerTextarea
               ref={input}
               value={text}

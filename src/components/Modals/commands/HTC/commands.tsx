@@ -565,6 +565,7 @@ const Commands = (props: Props) => {
   }, []);
     
     function updateCommandFrequency(command: ICommandList) {
+      if (writing) return;
       if (!findCommandPosition(filterCommands, command)) return;
       if (isDemo) return callback()
       if(isInteractive) return callback(command)
@@ -629,6 +630,8 @@ const Commands = (props: Props) => {
         activeId={isCompose ? "compose" : "search"}
         onSelect={(paletteTab) => setShowCommands((previous) => ({ ...previous, paletteTab: paletteTab as "search" | "compose" }))}
         ariaLabel="Commands mode"
+        disabled={writing}
+        buttonClassName="rounded-[4px]"
         className="flex-none rounded-[5px] bg-modalBackground p-1"
       />
     </div>

@@ -130,6 +130,7 @@ test("task comment commands remember usage and rank within their group", async (
     currentProjectAtom: { default: null },
     frequentlyUsedHTCAton: { default: savedUsage },
     tableTitleWrapAtom: { default: false },
+    showCommandsAtom: { default: { show: true } },
   };
 
   try {

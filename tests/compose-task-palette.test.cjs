@@ -80,6 +80,7 @@ async function withPalette(t, config, check) {
     const commands = [{ group: 'Board', commandLists: [{ key: 'createTaskWithAiWriter', name: 'AI Task Writer', commandMode: 135 }] }];
     const enums = jiti(path.join(root, 'src/models/enums.ts'));
     commands[0].commandLists[0].commandMode = enums.CommandMode.CreateTaskWithAiWriter;
+    if (config.dismissCommand) commands[0].commandLists.push({ key: 'toggleTableTitleWrap', name: 'Wrap task titles', commandMode: 1 });
     source('src/components/Modals/commands/HTC/AllCommands.ts', { getAllCommands: () => commands.map((group) => ({ ...group, commandLists: [...group.commandLists] })), getBoardMenuCommands: (items) => items, getMobileCommandGroups: (items) => items });
     source('src/hooks/MultiPages/HTC/useHTC.tsx', { default: (all) => {
       const [keyword, setKeyword] = React.useState('');
@@ -223,6 +224,29 @@ test('switch and Ctrl+K/Ctrl+J toggle modes inside the palette without losing th
     const esc = await press('Escape');
     assert.equal(esc.defaultPrevented, true);
     assert.equal(values.get('showCommandsAtom').show, false);
+  });
+});
+
+test('pending creation blocks tab clicks and dismissing Search commands without losing the retry draft', async (t) => {
+  await withPalette(t, { tab: 'compose', dismissCommand: true }, async ({ type, press, clickTab, fail, input, values }) => {
+    await type('Keep this retry draft');
+    await press('Enter', { code: 'Enter' });
+    assert.ok([...document.querySelectorAll('[role="tab"]')].every((tab) => tab.disabled));
+    await clickTab('Search');
+    assert.equal(values.get('showCommandsAtom').paletteTab, 'compose');
+    await press('k', { ctrlKey: true }, document.body);
+    assert.equal(values.get('showCommandsAtom').paletteTab, 'search');
+    const command = [...document.querySelectorAll('[data-search-commands] button')].find((button) => button.textContent === 'Wrap task titles');
+    await React.act(async () => command.click());
+    assert.equal(values.get('showCommandsAtom').show, true);
+    await fail();
+    await clickTab('Compose');
+    assert.equal(input().value, 'Keep this retry draft');
+    assert.match(document.body.textContent, /Couldn’t create the task/);
+    await clickTab('Search');
+    const resumedCommand = [...document.querySelectorAll('[data-search-commands] button')].find((button) => button.textContent === 'Wrap task titles');
+    await React.act(async () => resumedCommand.click());
+    assert.equal(values.get('showCommandsAtom').show, false, 'commands resume once creation settles');
   });
 });
 

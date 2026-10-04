@@ -2,12 +2,15 @@ import { cn } from "@/utils/undoActions/helperFuncs";
 
 export function SettingsScopeTabs({
   tabs, activeId, onSelect, ariaLabel = "Settings scopes", className,
+  buttonClassName, disabled = false,
 }: {
   tabs: readonly { id: string; label: string }[];
   activeId: string;
   onSelect: (id: string) => void;
   ariaLabel?: string;
   className?: string;
+  buttonClassName?: string;
+  disabled?: boolean;
 }) {
   return (
     <div
@@ -20,9 +23,11 @@ export function SettingsScopeTabs({
           key={tab.id}
           type="button"
           aria-selected={activeId === tab.id}
+          disabled={disabled}
           className={cn(
             "shrink-0 rounded-[5px] px-3 py-1.5 text-content font-medium text-text-light-gray transition hover:text-white-black focus-visible:bg-hover-active focus-visible:outline-none",
             activeId === tab.id && "bg-active-modal-element text-white-black",
+            buttonClassName,
           )}
           onClick={() => onSelect(tab.id)}
           role="tab"

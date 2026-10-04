@@ -57,6 +57,7 @@ stub("src/lib/contexts/TourContext.tsx", { useTourContext: () => ({ endTour: noo
 stub("src/hooks/MultiPages/useGetAllProjectsMinimal.ts", { useGetAllProjectsMinimal: () => ({ data: [{ id: 1, title: "Alpha" }] }) });
 stub("src/components/PageComponents/Interactive-Onboarding/Components/TutorialTip.tsx", { default: () => null });
 stub("src/components/Modals/Sheets/index.ts", { MobileBottomSheet: box });
+stub("src/components/Modals/commands/HTC/ComposeTaskWriter.tsx", { default: () => null });
 stub("src/components/Modals/commands/HTC/AllCommands.ts", {
   getAllCommands: () => [], getMobileCommandGroups: (groups) => groups, getBoardMenuCommands: (groups) => groups,
 });
