@@ -479,6 +479,8 @@ export const useGetNotifications = (userId: number) => {
           readinessLocalOutcomeRef.current!,
         ),
       staleTime: INBOX_QUERY_STALE_TIME_MS,
+      // Prefetch defaults to no retries; keep the client observer's three.
+      retry: 3,
     });
   }, [hydrated, userId, queryClient, queryKey, getStartedAt]);
   const query = useQuery({

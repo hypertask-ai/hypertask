@@ -56,6 +56,26 @@ test("first commit starts the account-scoped fenced read; hydrated observers reu
   } finally { client.clear(); }
 });
 
+test("early read retains the observer's retry behavior after a transient failure", async () => {
+  const client = new QueryClient({ defaultOptions: { queries: { retryDelay: 0 } } });
+  const queryKey = ["inbox", "data", 985];
+  let calls = 0;
+  try {
+    initialRead({
+      hydrated: false, userId: 985, queryClient: client, queryKey,
+      getStartedAt: () => 42, readinessLatchRef: { current: {} },
+      readinessLocalOutcomeRef: { current: {} }, INBOX_QUERY_STALE_TIME_MS: 30000,
+      fetchInboxPayload: async () => {
+        if (++calls === 1) throw Error("transient network failure");
+        return { accountId: 985, dataOrigin: "network" };
+      },
+    })();
+    const result = await client.fetchQuery({ queryKey, queryFn: () => { throw Error("duplicate observer read"); } });
+    assert.equal(result.accountId, 985);
+    assert.equal(calls, 2);
+  } finally { client.clear(); }
+});
+
 test("early reads keep the pre-hydration publication boundary and current access/revision fences", () => {
   assert.match(hook, /const query = useQuery\(\{\s*queryKey,\s*\.\.\.\(hydrated[\s\S]*?"hydrating"[\s\S]*?enabled: false/);
   assert.match(hook, /if \(!hydrated\) return;/);
