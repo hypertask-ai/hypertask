@@ -122,7 +122,6 @@ export function createCommandDispatcher(context: Context) {
       case CommandMode.SearchTask:
       case CommandMode.GotoInbox:
       case CommandMode.GotoSnippets:
-      case CommandMode.ArchiveInboxCluster:
       case CommandMode.GoToBoard:
       case CommandMode.GotoInboxArchives:
       case CommandMode.GotoReminders:
@@ -522,11 +521,6 @@ function dispatchCommandGroup2(context: Context, mode?: CommandMode, action?: st
         break;
       case CommandMode.GotoSnippets:
         GoToHandler("/snippets");
-        break;
-      case CommandMode.ArchiveInboxCluster:
-        // The inbox owns the archive + undo wiring; this only names the row.
-        callbackHandler?.(action, "ArchiveInboxCluster");
-        boardCloseHandler();
         break;
       case CommandMode.GoToBoard: {
         const projectId = Number(action);

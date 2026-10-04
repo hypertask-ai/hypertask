@@ -26,7 +26,6 @@ export const HTPR_6902_N_QUICK_ADD_FLAG = "htpr-6902-n-quick-add";
 export const HTPR_6914_SHIFT_C_QUICK_ADD_FLAG = "htpr-6914-shift-c-quick-add";
 export const HTPR_6873_QUICK_ENTRY_GROW_FLAG = "htpr-6873-quick-entry-grow";
 export const AUTO_TASK_DESCRIPTIONS_FLAG = "htpr-6177-auto-task-descriptions";
-export const INBOX_ARCHIVE_CLUSTER_FLAG = "htpr-6160-inbox-archive-cluster";
 export const FIGMA_CONNECT_FLAG = "htpr-6136-figma-connect";
 export const GOOGLE_CALENDAR_FLAG = "htpr-3533-google-calendar";
 export const PAGE_MENTIONS_FLAG = "htpr-5898-page-mentions";

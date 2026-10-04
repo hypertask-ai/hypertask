@@ -14,9 +14,6 @@ import RemindMeInbox from "./inboxSplit/RemindMeInbox";
 import { format } from "date-fns";
 import { cn } from "@/utils/undoActions/helperFuncs";
 import { inboxConfig } from "@/lib/configs/inbox.config";
-import { inboxArchiveTooltip } from "@/lib/inboxClusters";
-import { INBOX_ARCHIVE_CLUSTER_FLAG } from "@/lib/flags/keys";
-import { useFlag } from "@/hooks/useFlag";
 import { decodeAgentMessage } from "@/lib/nativeAgent/agentMessageEnvelope";
 import type { ArchiveShortcutSource } from "@/lib/notifications/archiveShortcutNudge";
 
@@ -38,7 +35,6 @@ interface Props {
 const NotificationRow = (props: Props) => {
     const { handleMouseEnter, selected, handleMouseLeave, openTask, taskRef, index, eHandler, disableButtons = false, appShellRail = false } = props
     const { notification, isIbxSlctd, selectedIds } = useNotificationContext();
-    const clusterArchiveEnabled = useFlag(INBOX_ARCHIVE_CLUSTER_FLAG);
     const flipMentionHierarchy = notification.type === "Mentioned" && Boolean(notification.commentId) && Boolean(notification.task);
 
     const handleClick = () => {
@@ -96,7 +92,7 @@ const NotificationRow = (props: Props) => {
                         <Tooltip
                             left={-195}
                             bottom={-40}
-                            text={inboxArchiveTooltip(clusterArchiveEnabled ? notification.clusterCount : undefined)}
+                            text="Archive"
                             keyCombination={["E"]}
                         />
                         <ArchiveNotificationIcon color={inboxConfig.bulkSelectionStyling.archive_reminder_icon(isIbxSlctd)} height={18} width={18} show={selected} />

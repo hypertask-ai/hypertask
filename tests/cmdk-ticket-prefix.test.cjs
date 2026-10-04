@@ -48,20 +48,18 @@ function flagBindings(file, enabled) {
   return result;
 }
 
-function paletteGroups(enabled, frequent = {}) {
+function paletteGroups(enabled, frequent = {}, contextOptions) {
   const bindings = {
     ...registry, ...flagBindings(palette, enabled), CommandMode,
     useMemo: (callback) => callback(),
     boardLayout: "board", calendarSettings: { showWeekends: true },
     currentProject: { id: 15 }, frequentlyUsed: frequent, projects: [],
-    contextOptions: undefined, appShellRailOn: false, onAgentChat: false,
+    contextOptions, appShellRailOn: false, onAgentChat: false,
     onCalendar: false, onMyTasks: false, isMobile: false, showByokApiKeys: false,
     pinCommentActions: false, pageActions: null,
     getActiveEmptySectionSettingFromProject: () => "Hidden",
     getActiveStalenessFromProject: () => false,
     getHTCFrecencyScore: () => 0,
-    isInboxClusterCommandKey: () => false,
-    INBOX_CLUSTER_COMMAND_GROUP: "Inbox clusters",
   };
   const source = ts.createSourceFile(palette, read(palette), ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
   const names = new Set(["excludeTicketPrefixCommand", "includeTicketPrefixCommand", "isTicketPrefixCommandVisible"]);
@@ -105,6 +103,21 @@ function searchCommands(groups, query) {
 function prefixResult(enabled, query = "ticket prefix") {
   return searchCommands(paletteGroups(enabled), query).find((command) => command.key === prefixKey);
 }
+
+test("retired inbox archives stay absent from palette search and remembered commands", () => {
+  const groups = paletteGroups(false, {
+    "archiveInboxCluster-10": { frequency: 100, lastUsedAt: Date.now() },
+    createTask: { frequency: 1, lastUsedAt: Date.now() },
+  }, {
+    context: "Others",
+    inboxClusters: [{ notificationId: "10", ticketNumber: "HTPR-6905", count: 7 }],
+  });
+  const commands = groups.flatMap((group) => group.commandLists);
+  assert.ok(commands.some(({ key }) => key === "createTask"));
+  assert.equal(groups[0].group, "Frequently used");
+  assert.ok(commands.every(({ key, name }) => !key.startsWith("archiveInboxCluster-") && !name.startsWith("Archive cluster:")));
+  assert.ok(searchCommands(groups, "archive").every(({ name }) => !name.startsWith("Archive cluster:")));
+});
 
 test("flag on: ticket prefix search finds the board-general settings command", () => {
   const command = prefixResult(true);

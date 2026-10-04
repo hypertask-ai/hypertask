@@ -38,7 +38,7 @@ function fixture({ empty = false, hold = false } = {}) {
     notification(20, 2, "Comment"),
   ];
   const earner = { ...notification(9, 1, "Mentioned"), createdAt: readAt, commentId: 90, comment: { id: 90, text: "Please look" } };
-  const gates = Object.fromEntries(["agents", "users", "readStates", "comments", "unread", "clusters"].map((name) => [name, deferred()]));
+  const gates = Object.fromEntries(["agents", "users", "readStates", "comments", "unread"].map((name) => [name, deferred()]));
   const calls = [];
   const read = (name, args, rows) => {
     calls.push({ name, args });
@@ -64,9 +64,10 @@ function fixture({ empty = false, hold = false } = {}) {
         }
         return [];
       },
-      groupBy: (args) => args.where.seen === false
-        ? read("unread", args, [{ taskId: 2, _count: { _all: 3 } }])
-        : read("clusters", args, [{ taskId: 1, _count: { _all: 7 } }, { taskId: 2, _count: { _all: 4 } }]),
+      groupBy: (args) => {
+        assert.equal(args.where.seen, false, "only unread notification counts are queried");
+        return read("unread", args, [{ taskId: 2, _count: { _all: 3 } }]);
+      },
     },
     agent: { findMany: (args) => read("agents", args, [agent]) },
     user: { findMany: (args) => read("users", args, [human]) },
@@ -95,14 +96,14 @@ function assertResults(result, f) {
     ...f.representatives[0],
     type: f.earner.type, comment: f.earner.comment, commentId: f.earner.commentId,
     fromUserId: human.id, fromUser: human, fromAgentId: null, fromAgent: null,
-    directReply: false, directReplyTypes: [], unreadCount: 2, clusterCount: 7,
+    directReply: false, directReplyTypes: [], unreadCount: 2,
     activeNotificationTypes: ["TaskDueDate", "Mentioned"],
     agentOnlyTypes: ["TaskDueDate"], mutedTypes: ["TaskDueDate"],
     recentActors: [{ displayName: "Human", photoURL: null }, { displayName: "Agent", photoURL: null }],
     earnedAt: readAt,
   });
   assert.deepEqual(second, {
-    ...f.representatives[1], directReply: false, directReplyTypes: [], unreadCount: 3, clusterCount: 4,
+    ...f.representatives[1], directReply: false, directReplyTypes: [], unreadCount: 3,
     activeNotificationTypes: ["Comment"], agentOnlyTypes: [], mutedTypes: [],
     recentActors: [{ displayName: "Human", photoURL: null }],
   });
@@ -124,7 +125,7 @@ test("read states and counts run alongside actors, and earning rows do not wait 
     assert.ok(!f.calls.some(({ name }) => name === "comments"), "unread comments still require read timestamps");
     f.gates.readStates.resolve();
     await turn();
-    for (const name of ["comments", "unread", "clusters"]) {
+    for (const name of ["comments", "unread"]) {
       assert.ok(f.calls.some((call) => call.name === name), `${name} must start while actors are pending`);
     }
     f.gates.agents.resolve();
@@ -138,7 +139,7 @@ test("read states and counts run alongside actors, and earning rows do not wait 
   assertResults(await resultPromise, f);
 });
 
-test("earning rows start before unread and cluster aggregates finish", async () => {
+test("earning rows start before unread aggregates finish", async () => {
   const f = fixture({ hold: true });
   const resultPromise = f.run();
   try {
