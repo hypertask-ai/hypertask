@@ -12,7 +12,6 @@ const readSource = (relativePath) =>
   fs.readFileSync(path.join(root, relativePath), "utf8");
 
 const pullDownCommandHosts = [
-  "src/app/inbox/Inbox.tsx",
   "src/app/inbox/agent/AgentInbox.tsx",
   "src/components/PageComponents/Calendar/index.tsx",
 ];

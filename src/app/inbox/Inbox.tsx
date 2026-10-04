@@ -21,11 +21,8 @@ import {
   TRemoveFromInboxMode,
 } from "@/models/model";
 import Goback from "@/assets/gobackicon.svg";
-// import InboxSplit from '@/components/notifications/inboxSplit';
-const InboxSplit = dynamic(
-  () => import("@/components/notifications/inboxSplit"),
-  { ssr: false },
-);
+const loadInboxSplit = () => import("@/components/notifications/inboxSplit");
+const InboxSplit = dynamic(loadInboxSplit, { ssr: false });
 
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
@@ -43,9 +40,11 @@ import {
 } from "@/store";
 import Tooltip from "@/components/Common/Tooltip";
 import { useUndoContext } from "@/hooks/General/useUndo";
-// Keep the command center in the page bundle: a pull-down must mount and focus
-// its input during the committing touchend, before mobile user activation ends.
-import HypertasksCommands from "@/components/commands";
+let loadedCommands: typeof import("@/components/commands").default | undefined;
+const loadCommands = () => import("@/components/commands").then((module) => {
+  loadedCommands = module.default;
+  return module;
+});
 import { useQueryClient } from "@tanstack/react-query";
 import Image from "next/image";
 import toast from "react-hot-toast";
@@ -60,7 +59,7 @@ import {
   useBulkSelectionContext,
 } from "@/lib/contexts/Inbox/BulkSelectionContext";
 import { ArchiveNotificationIcon } from "@/lib/IconsLocal";
-import RemindMeInbox from "@/components/notifications/inboxSplit/RemindMeInbox";
+import RemindMeInbox, { loadInboxReminder } from "@/components/notifications/inboxSplit/RemindMeInbox";
 import { inboxConfig } from "@/lib/configs/inbox.config";
 import { KeyCodes } from "@/lib/constants/keyboard-handler";
 import { useInboxZeroStyling } from "@/hooks/Inbox/useInboxZeroStyling";
@@ -128,6 +127,48 @@ const Inbox = ({
   const { toggleShowCommands, toggleCreateTaskGlobally } =
     useHypertasksRecoilStates();
   const [showCommands, setShowCommands] = useRecoilState(showCommandsAtom);
+  const [commands, setCommands] = useState(() => loadedCommands);
+  // The warmed component mounts synchronously in the pull-down's flushSync.
+  const HypertasksCommands = loadedCommands ?? commands;
+  const [inboxContentReady, setInboxContentReady] = useState(false);
+  const onInboxContentReady = useCallback(() => setInboxContentReady(true), []);
+  const warmInboxOverlays = useCallback(() => {
+    void loadCommands().then(({ default: Commands }) => {
+      setCommands(() => Commands);
+    }).catch(() => {});
+    void loadInboxReminder().catch(() => {});
+  }, []);
+  useEffect(() => {
+    // Discover the visible split while the hydrated query starts its read.
+    void loadInboxSplit().catch(() => {});
+    document.addEventListener("pointerdown", warmInboxOverlays, { capture: true, passive: true });
+    document.addEventListener("touchstart", warmInboxOverlays, { capture: true, passive: true });
+    document.addEventListener("keydown", warmInboxOverlays, true);
+    return () => {
+      document.removeEventListener("pointerdown", warmInboxOverlays, true);
+      document.removeEventListener("touchstart", warmInboxOverlays, true);
+      document.removeEventListener("keydown", warmInboxOverlays, true);
+    };
+  }, [warmInboxOverlays]);
+  useEffect(() => {
+    if (showCommands.show && !HypertasksCommands) warmInboxOverlays();
+  }, [showCommands.show, HypertasksCommands, warmInboxOverlays]);
+  useEffect(() => {
+    if (!notificationsQuery.isFetched || !inboxContentReady) return;
+    let idle: number | undefined;
+    let timer: number | undefined;
+    let frame = window.requestAnimationFrame(() => {
+      frame = window.requestAnimationFrame(() => {
+        if (window.requestIdleCallback) idle = window.requestIdleCallback(warmInboxOverlays, { timeout: 5000 });
+        else timer = window.setTimeout(warmInboxOverlays, 2000);
+      });
+    });
+    return () => {
+      window.cancelAnimationFrame(frame);
+      if (idle !== undefined) window.cancelIdleCallback(idle);
+      if (timer !== undefined) window.clearTimeout(timer);
+    };
+  }, [notificationsQuery.isFetched, inboxContentReady, warmInboxOverlays]);
   const [__notifications, _setNotifications] = useState<INotification[][]>();
   const [showInboxSearch, setShowInboxSearch] = useState(false);
   const [showManageSplits, setShowManageSplits] = useState(false);
@@ -816,6 +857,12 @@ const Inbox = ({
                     key={`split-${globalFocus.currSplit}`}
                     updateNotification={updateUnseenNotification}
                     onLoadCallback={initialScroll}
+                    onContentReady={
+                      notificationsQuery.isFetched && notificationsQuery.isSuccess &&
+                      __notifications === _notificationsTQ?.structuredData?.data
+                        ? onInboxContentReady
+                        : undefined
+                    }
                     selectedReset={_selectedInbox}
                     originProject={originProject}
                     value={globalFocus.currSplit}
@@ -893,7 +940,7 @@ const Inbox = ({
             </Link>
           )}
         </div>
-        {showCommands.show && (
+        {showCommands.show && HypertasksCommands && (
           <HypertasksCommands
             callbackHandler={htcCallbackHandler}
           />

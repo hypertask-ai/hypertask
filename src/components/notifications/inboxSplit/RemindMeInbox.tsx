@@ -1,5 +1,7 @@
 import Tooltip from "@/components/Common/Tooltip";
-import RemindMeComponent from "@/components/Modals/RemindMe/RemindMeComponent";
+import dynamic from "next/dynamic";
+export const loadInboxReminder = () => import("@/components/Modals/RemindMe/RemindMeComponent");
+export const InboxReminder = dynamic(loadInboxReminder, { ssr: false });
 import globalConstants from "@/lib/constants";
 import { useBulkSelectionContext } from "@/lib/contexts/Inbox/BulkSelectionContext";
 import { returnIfModalOrInputActive } from "@/utils/helperFunctions/helperFunctions";
@@ -98,7 +100,7 @@ const RemindMeInbox: React.FC<ArchiveTaskNotificationProps> = ({ children, show,
                 {children}
             </button>
             {showRemindMeModal &&
-                <RemindMeComponent
+                <InboxReminder
                     closeHandler={toggleRemindMeModal}
                     isBulkMode={mode === "Bulk"}
                     bulkItems={selectedNotifications.map(x => ({ taskId: x.taskId, projectId: x.projectId }))}
