@@ -3,6 +3,12 @@
 cd "$(dirname "$0")"; fails=0
 ok() { echo "ok   $*"; }; bad() { echo "FAIL $*"; fails=$((fails+1)); }
 E=$(mktemp -d); export VCC_EVIDENCE_DIR=$E
+trap 'rm -rf "$E"' EXIT
+export PREMERGE_STATUS_STATE="$E/publisher-state"
+# Live fixtures may read GitHub, but tests never publish real commit statuses.
+real_gh=$(command -v gh); mkdir -p "$E/read-bin"
+printf '#!/usr/bin/env bash\nif [[ $1 == api && $2 == */statuses/* ]]; then exit 0; fi\nexec %q "$@"\n' "$real_gh" > "$E/read-bin/gh"
+chmod +x "$E/read-bin/gh"; export PATH="$E/read-bin:$PATH"
 G() { local want=$1; shift; echo "{\"tool_input\":{\"command\":$(jq -Rn --arg c "$*" '$c')}}" | ./ship-check guard >/dev/null 2>&1; local got=$?; [ "$got" = "$want" ] && ok "$got <- $*" || bad "want $want got $got <- $*"; }
 DONE='--section "Done"'
 M='gh pr merge'
@@ -26,6 +32,8 @@ G 0 vcc task move HTPR-6570 --section '"In Progress"'
 gh() {
   if [[ ${1:-} == pr && ${2:-} == view && ${3:-} == 822 && "$*" == *'--json title'* ]]; then
     echo 'Invalid PR title'
+  elif [[ ${1:-} == pr && ${2:-} == view && ${3:-} == 838 && "$*" == *'--json headRefOid,baseRefName,state'* ]]; then
+    command gh pr view 838 -R hypertask-ai/hypertask --json headRefOid --jq .headRefOid # Pin the skills-only fixture as open.
   else command gh "$@"; fi
 }
 export -f gh
@@ -195,16 +203,63 @@ cat > "$E/flag-bin/gh" <<'MOCK'
 #!/usr/bin/env python3
 import base64, json, os, sys, urllib.parse
 args = sys.argv[1:]
+if os.environ.get('FLAG_LOG'):
+    with open(os.environ['FLAG_LOG'], 'a') as log:
+        log.write(json.dumps(args) + '\n')
+if args[:2] == ['pr', 'list']:
+    if os.environ.get('FLAG_LIST_ERROR'):
+        sys.exit(1)
+    print(json.dumps([{'number': 999, 'title': 'YPER4-999 [BUGFIX] Fixture', 'headRefOid': 'a' * 40,
+                       'statusCheckRollup': [] if os.environ.get('FLAG_MISSING_STATUS') else
+                       [{'context': 'premerge-evidence', 'state': os.environ.get('FLAG_ROLLUP', 'SUCCESS')}]}]))
+    sys.exit(0)
 if args[:2] == ['pr', 'view']:
+    if args[args.index('--json') + 1] == 'headRefOid,baseRefName,state':
+        if os.environ.get('FLAG_HEAD_ERROR'):
+            sys.exit(1)
+        calls = sum('headRefOid' in line for line in open(os.environ['FLAG_LOG'])) if os.environ.get('FLAG_LOG') else 1
+        if os.environ.get('FLAG_PR_STATE', 'OPEN') != 'OPEN' or os.environ.get('FLAG_BASE', 'production') != 'production' or (os.environ.get('FLAG_BASE_RACE') and calls > 1):
+            sys.exit(0)
+        if os.environ.get('FLAG_ASSERT_LOCK'):
+            import fcntl
+            with open(os.environ['PREMERGE_STATUS_STATE'] + '/publish.lock', 'w') as lock:
+                try:
+                    fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                except BlockingIOError:
+                    pass
+                else:
+                    sys.exit(1)
+        print('c' * 40 if os.environ.get('FLAG_HEAD_RACE') and calls > 1 else os.environ.get('FLAG_HEAD', 'a' * 40))
+        sys.exit(0)
     title = 'YPER4-999 [' + os.environ.get('FLAG_TYPE', 'BUGFIX') + '] Fixture'
     if args[args.index('--json') + 1] == 'title':
         print(title)
     else:
         print(json.dumps({'number': 999, 'title': title, 'state': os.environ.get('FLAG_PR_STATE', 'OPEN'), 'mergeCommit': {'oid': 'a' * 40}, 'baseRefName': 'production'}))
     sys.exit(0)
-if args[0] != 'api' or os.environ.get('FLAG_GH_ERROR'):
+if args[0] != 'api':
     sys.exit(1)
 url = args[1]
+if os.environ.get('FLAG_ASSERT_FRESH') and '/pulls/' in url:
+    assert urllib.parse.parse_qs(urllib.parse.urlsplit(url).query).get('premerge'), 'mutable PR read must be fresh'
+if os.environ.get('FLAG_ASSERT_LOCK'):
+    import fcntl
+    with open(os.environ['PREMERGE_STATUS_STATE'] + '/publish.lock', 'w') as lock:
+        try:
+            fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError:
+            pass
+        else:
+            sys.exit(1)
+if '/statuses/' in url:
+    if os.environ.get('FLAG_BLOCK_POST'):
+        with open(os.environ['FLAG_BLOCK_POST'] + '/ready', 'w') as ready:
+            ready.write('ready')
+        with open(os.environ['FLAG_BLOCK_POST'] + '/release') as release:
+            release.read()
+    sys.exit(1 if os.environ.get('FLAG_POST_ERROR') else 0)
+if os.environ.get('FLAG_GH_ERROR'):
+    sys.exit(1)
 if '/contents/' in url:
     if os.environ.get('FLAG_SOURCE_ERROR'):
         sys.exit(1)
@@ -362,5 +417,95 @@ printf 'export function useFlag(key: string) { return true; }\n' > "$E/flag-sour
 cp "$E/flag-source/base" "$E/flag-source/head"
 F 0 ''
 
-rm -rf "$E"
-echo "failures: $fails"; [ "$fails" = 0 ] && echo 'All ship-check tests passed'
+# Required current-head commit status: assert the exact API endpoint and payload.
+# Control the lock oracle: the same metadata call works unlocked only when assertion is disabled.
+env FLAG_ASSERT_LOCK=1 PREMERGE_STATUS_STATE="$PREMERGE_STATUS_STATE" "$E/flag-bin/gh" pr view 999 --json headRefOid,baseRefName,state >/dev/null 2>&1 \
+  && bad 'unlocked publisher accepted by lock oracle' || ok 'lock oracle rejects an unlocked publisher'
+"$E/flag-bin/gh" pr view 999 --json headRefOid,baseRefName,state >/dev/null 2>&1 \
+  && ok 'lock oracle positive control' || bad 'lock oracle control failed'
+S() {
+  local want=$1 state=$2 description=$3 got out; shift 3
+  : > "$E/status-log"
+  out=$(env PATH="$E/flag-bin:$PATH" PYTHONPATH="$E/flag-http" FLAG_SOURCE="$E/flag-source" FLAG_LOG="$E/status-log" FLAG_ASSERT_LOCK=1 FLAG_ASSERT_FRESH=1 AGENT_TOKEN=fixture HYPERTASKS_JWT_TOKEN= "$@" ./ship-check premerge-status 999 2>&1); got=$?
+  if [ "$got" = "$want" ] && python3 - "$E/status-log" "$state" "$description" <<'PY'
+import json, sys
+calls = [json.loads(line) for line in open(sys.argv[1])]
+posts = [c for c in calls if c[0] == 'api' and '/statuses/' in c[1]]
+if sys.argv[2] == 'none':
+    assert not posts
+else:
+    assert len(posts) == 1, posts
+    call = posts[0]
+    assert call[1] == 'repos/hypertask-ai/hypertask/statuses/' + 'a' * 40, call
+    assert '--method' in call and call[call.index('--method') + 1] == 'POST'
+    assert 'context=premerge-evidence' in call and 'state=' + sys.argv[2] in call, call
+    description = next(c.removeprefix('description=') for c in call if c.startswith('description='))
+    assert len(description) <= 140 and sys.argv[3] in description, call
+PY
+  then ok "status: $state $description"; else bad "status: $state got $got $out"; fi
+}
+printf 'const plain = 1;\n' > "$E/flag-source/base"; cp "$E/flag-source/base" "$E/flag-source/head"
+S 0 success 'no released flag touched'
+S 1 failure 'cannot read the PR diff' FLAG_GH_ERROR=1
+S 1 failure 'cannot read the PR diff' FLAG_SOURCE_ERROR=1
+S 1 failure 'complete PR diff' FLAG_COUNT=2
+S 1 failure 'unchanged PR head' FLAG_HEAD_RACE=1
+S 1 none '' FLAG_HEAD_ERROR=1
+S 1 none '' FLAG_HEAD=invalid
+S 1 none '' FLAG_BASE=main
+S 1 none '' FLAG_PR_STATE=MERGED
+S 1 none '' FLAG_PR_STATE=CLOSED
+S 1 failure 'unchanged PR head' FLAG_BASE_RACE=1
+S 1 success 'no released flag touched' FLAG_POST_ERROR=1 # POST failure must still return nonzero.
+F 2 'cannot post premerge-evidence' FLAG_POST_ERROR=1
+printf 'const released = useFlag(RELEASED_FLAG);\n' > "$E/flag-source/base"; cp "$E/flag-source/base" "$E/flag-source/head"
+S 1 failure 'htpr-1-released: record'
+cp "$E/record" "$premerge"
+S 0 success 'click record ok'
+sed -i 's/Click: PASS/Click: FAIL/' "$premerge"
+S 1 failure 'missing passing click'
+sed -i 's/Click: FAIL/Click: PASS/' "$premerge"
+: > "$E/status-log"
+P 0 pr YPER4-999 FLAG_LOG="$E/status-log"
+python3 - "$E/status-log" <<'PY' && ok 'pr gate posts status' || bad 'pr gate omitted status'
+import json, sys
+assert any('context=premerge-evidence' in json.loads(l) for l in open(sys.argv[1]))
+PY
+
+# The sweep uses one list call, skips unchanged heads and notices changed/deleted evidence.
+W() {
+  local want=$1 posts=$2 out got; shift 2
+  : > "$E/status-log"
+  out=$(env PATH="$E/flag-bin:$PATH" PYTHONPATH="$E/flag-http" FLAG_SOURCE="$E/flag-source" FLAG_LOG="$E/status-log" PREMERGE_STATUS_STATE="$E/sweep-state" AGENT_TOKEN=fixture HYPERTASKS_JWT_TOKEN= "$@" python3 ./premerge-evidence.py 2>&1); got=$?
+  if [ "$got" = "$want" ] && python3 - "$E/status-log" "$posts" <<'PY'
+import json, sys
+calls = [json.loads(line) for line in open(sys.argv[1])]
+assert sum(c[:2] == ['pr', 'list'] for c in calls) == 1
+assert sum(c[0] == 'api' and '/statuses/' in c[1] for c in calls) == int(sys.argv[2]), calls
+PY
+  then ok "sweep: $posts posts"; else bad "sweep: want $want $posts posts got $got $out"; fi
+}
+W 0 1
+W 0 0
+sed -i 's/Click: PASS/Click: FAIL/' "$premerge"
+W 0 1
+W 0 0 FLAG_ROLLUP=FAILURE
+sed -i 's/Click: FAIL/Click: PASS/' "$premerge"
+W 0 1 FLAG_ROLLUP=FAILURE
+W 0 1 FLAG_MISSING_STATUS=1
+printf 'changed recording' > "$E/YPER4-999/click.webm"
+W 0 1
+rm "$E/YPER4-999/click.webm"
+W 0 1
+W 0 0 FLAG_ROLLUP=FAILURE
+python3 - "$E/sweep-state/cache.json" <<'PY'
+import json, sys
+path = sys.argv[1]; cache = json.load(open(path)); cache['999']['checked'] = 0
+json.dump(cache, open(path, 'w'))
+PY
+W 0 1 FLAG_ROLLUP=FAILURE
+W 1 0 FLAG_LIST_ERROR=1
+W 1 1 FLAG_POST_ERROR=1
+W 0 1
+
+echo "failures: $fails"; [ "$fails" = 0 ] && echo 'ALL PASS: All ship-check tests passed'
