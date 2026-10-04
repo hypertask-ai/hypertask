@@ -355,11 +355,6 @@ test("declared flags remain listed with ticket details and can be changed", asyn
         updatedAt: null,
       },
       {
-        key: "htpr-6514-comment-long-press",
-        mode: "OWNER_AND_QA",
-        updatedAt: null,
-      },
-      {
         key: "htpr-6516-agent-attribution",
         mode: "OWNER_AND_QA",
         updatedAt: null,

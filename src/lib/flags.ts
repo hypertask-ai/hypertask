@@ -73,7 +73,6 @@ import {
   MY_TASKS_OVERDUE_BADGES_FLAG,
   LUNA_FREE_PLAN_FLAG,
   HTPR_6427_ROW_SHORTCUTS_FLAG,
-  HTPR_6514_COMMENT_LONG_PRESS_FLAG,
   HTPR_6516_AGENT_ATTRIBUTION_FLAG,
   HTPR_6512_SEED_TEAM_AGENT_FLAG,
   HTPR_6533_MCP_CLIENT_EVAL_FLAG,
@@ -287,12 +286,6 @@ const FEATURE_FLAG_DEFINITIONS = [
     shippedOn: "2026-09-16",
     description:
       "When Owner or QA opens Agent Chat or lists a team that has no live agent they can see, seed a Hyper AI agent on a board of that team so the roster is not empty.",
-  },
-  {
-    key: HTPR_6514_COMMENT_LONG_PRESS_FLAG,
-    shippedOn: "2026-09-15",
-    description:
-      "On a phone, press and hold a comment to open the Command Center with comment actions at the top and Edit first. Swipe on a comment is off so it does not fight the task swipe.",
   },
   {
     key: HTPR_6427_ROW_SHORTCUTS_FLAG,

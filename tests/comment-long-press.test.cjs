@@ -1,6 +1,8 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const path = require("node:path");
+const fs = require("node:fs");
+const ts = require("typescript");
 const { createJiti } = require("jiti");
 
 const root = path.resolve(__dirname, "..");
@@ -17,6 +19,66 @@ const { pinCommentGroupFirst } = jiti(
 const { isCommentCreatedByUser } = jiti(
   path.join(root, "src/lib/htc/isCommentCreatedByUser.ts")
 );
+
+test("comment rows always use long press and cancel it on movement, release or unmount", (t) => {
+  const source = fs.readFileSync(path.join(root,
+    "src/components/PageComponents/TaskDetail/CommentAndDescription/CommentContainer/SwipeableCommentRow.tsx"), "utf8");
+  const js = ts.transpileModule(source, {
+    compilerOptions: { jsx: ts.JsxEmit.ReactJSX, module: ts.ModuleKind.CommonJS },
+  }).outputText;
+  let cleanup;
+  const mocks = {
+    react: {
+      useRef: (current) => ({ current }),
+      useEffect: (effect) => { cleanup = effect(); },
+    },
+    "react/jsx-runtime": require("react/jsx-runtime"),
+  };
+  const exports = {};
+  new Function("require", "exports", js)((name) => {
+    assert.ok(name in mocks, `Unexpected dependency: ${name}`);
+    return mocks[name];
+  }, exports);
+  const previousWindow = global.window;
+  t.after(() => { global.window = previousWindow; });
+  let timer;
+  global.window = {
+    setTimeout: (callback, delay) => {
+      assert.equal(delay, 500);
+      timer = callback;
+      return 1;
+    },
+    clearTimeout: () => { timer = null; },
+  };
+  let opened = 0;
+  const row = exports.default({ children: "Comment", onMore: () => { opened++; } });
+  const { props } = row;
+  const press = { pointerType: "touch", pointerId: 1, clientX: 0, clientY: 0 };
+  assert.equal(props.children, "Comment");
+  assert.equal(props.onTouchMove, undefined);
+  assert.equal(props.style.touchAction, "pan-y");
+  props.onPointerDown(press);
+  timer();
+  assert.equal(opened, 1);
+  let prevented = 0;
+  const click = { preventDefault: () => { prevented++; }, stopPropagation: () => { prevented++; } };
+  props.onClickCapture(click);
+  assert.equal(prevented, 2);
+  props.onClickCapture(click);
+  assert.equal(prevented, 2);
+  props.onPointerDown(press);
+  props.onPointerMove({ ...press, clientX: 11 });
+  assert.equal(timer, null);
+  for (const cancel of [props.onPointerUp, props.onPointerCancel, cleanup]) {
+    props.onPointerDown(press);
+    assert.equal(typeof timer, "function");
+    cancel();
+    assert.equal(timer, null);
+  }
+  props.onPointerDown({ ...press, pointerType: "mouse", button: 2 });
+  assert.equal(timer, null);
+  assert.equal(opened, 1);
+});
 
 test("comment commands already list Edit comment first", () => {
   const groups = getAllCommands({

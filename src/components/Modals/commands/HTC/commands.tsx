@@ -51,7 +51,6 @@ import { MobileBottomSheet } from "@/components/Modals/Sheets";
 import { useFlag } from "@/hooks/useFlag";
 import {
   GOOGLE_CALENDAR_FLAG,
-  HTPR_6514_COMMENT_LONG_PRESS_FLAG,
   HTPR_6892_CMDK_VERSION_FLAG,
   HTPR_6929_COMPOSE_TASK_WRITER_FLAG,
   HTPR_6868_TICKET_PREFIX_FLAG,
@@ -149,7 +148,6 @@ const Commands = (props: Props) => {
   const myTasksTimeGroupEnabled = useFlag(MY_TASKS_TIME_GROUP_FLAG);
   const myTasksFilterParityEnabled = useFlag(MY_TASKS_FILTER_PARITY_FLAG);
   const myTasksTableColumnsEnabled = useFlag(MY_TASKS_TABLE_COLUMNS_FLAG);
-  const commentLongPressEnabled = useFlag(HTPR_6514_COMMENT_LONG_PRESS_FLAG);
   const mobilePageBackRowEnabled = useFlag(HTPR_6861_MOBILE_PAGE_BACK_ROW_FLAG);
   const currentPageActions = useRecoilValue(currentPageActionsAtom);
   const pageActions = mobilePageBackRowEnabled && isMobile && currentPageActions &&
@@ -291,7 +289,7 @@ const Commands = (props: Props) => {
     ].map((group) => ({
       ...group,
       commandLists:
-        commentLongPressEnabled && pinCommentActions && group.group === "Comment"
+        pinCommentActions && group.group === "Comment"
           ? group.commandLists
           : [...group.commandLists].sort(
               (left, right) => scoreCommand(right) - scoreCommand(left)
@@ -299,7 +297,7 @@ const Commands = (props: Props) => {
     }));
     if (contextOptions?.context === "Task") {
       const taskGroups = getMobileCommandGroups(commandGroups, isMobile);
-      return commentLongPressEnabled && pinCommentActions
+      return pinCommentActions
         ? pinCommentGroupFirst(taskGroups)
         : taskGroups;
     }
@@ -352,7 +350,7 @@ const Commands = (props: Props) => {
           }],
         }, ...mobileGroups]
       : mobileGroups;
-    return commentLongPressEnabled && pinCommentActions
+    return pinCommentActions
       ? pinCommentGroupFirst(rankedGroups)
       : rankedGroups;
   }, [
@@ -361,7 +359,6 @@ const Commands = (props: Props) => {
     calendarSettings.showWeekends,
     contextOptions,
     getCommands,
-    commentLongPressEnabled,
     pinCommentActions,
     pageActions,
     copyCurrentUrlEnabled,
@@ -688,11 +685,7 @@ const Commands = (props: Props) => {
         bottomSlot={isCompose ? undefined : searchInput}
       >
         {compose}
-        {!isCompose && (commentLongPressEnabled ? (
-          <div data-htpr-6514-comment-long-press="">{commandGroups}</div>
-        ) : (
-          commandGroups
-        ))}
+        {!isCompose && commandGroups}
       </MobileBottomSheet>
     );
   }
@@ -750,14 +743,8 @@ const Commands = (props: Props) => {
           </div>
           {mobilePageBackRowEnabled ? (
             <div data-htpr-6861-page-actions="">
-              {commentLongPressEnabled ? (
-                <div data-htpr-6514-comment-long-press="">{commandGroups}</div>
-              ) : (
-                commandGroups
-              )}
+              {commandGroups}
             </div>
-          ) : commentLongPressEnabled ? (
-            <div data-htpr-6514-comment-long-press="">{commandGroups}</div>
           ) : (
             commandGroups
           )}
