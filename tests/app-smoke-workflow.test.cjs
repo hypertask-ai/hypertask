@@ -295,7 +295,7 @@ test("app smoke validates the head before isolated build and route checks", asyn
   assert.match(isolated, /--log-opt max-file=1/);
   assert.match(
     nextConfig,
-    /webpackBuildWorker: process\.env\.CORE_APP_SMOKE === "true"/,
+    /webpackBuildWorker: true/,
   );
   assert.match(
     nextConfig,
