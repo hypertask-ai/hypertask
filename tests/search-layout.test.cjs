@@ -956,7 +956,10 @@ test('shared highlight uses inbox theme tokens and extends behind both tip colum
   assert.equal(rule('[data-search-layout-row] > *')['z-index'], '1')
   const gutters = []
   css.walkDecls('--search-row-gutter', (node) => gutters.push([node.value, node.parent.parent.params]))
-  assert.deepEqual(gutters, [['1rem', undefined], ['2.25rem', '(min-width: 768px)']])
+  // The list uses px-4, which Bootstrap forces to 1.5rem at every width.
+  const bootstrap = fs.readFileSync(require.resolve('bootstrap/dist/css/bootstrap.css'), 'utf8')
+  assert.match(bootstrap, /\.px-4 \{\s*padding-right: 1\.5rem !important;\s*padding-left: 1\.5rem !important;/)
+  assert.deepEqual(gutters, [['1.5rem', undefined]])
   assert.equal(rule('[data-search-layout-tips] > [data-search-layout-row]:nth-child(odd)')['--search-row-right'], 'calc(-100% - 1.5rem - var(--search-row-gutter))')
   assert.equal(rule('[data-search-layout-tips] > [data-search-layout-row]:nth-child(even)')['--search-row-left'], 'calc(-100% - 1.5rem - var(--search-row-gutter))')
   const inbox = fs.readFileSync(path.join(root, 'src/components/notifications/inboxSplit/index.tsx'), 'utf8')

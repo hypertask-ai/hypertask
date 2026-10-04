@@ -12,7 +12,8 @@
   --border-search-filter-date: #f59e0b;
   --border-search-filter-has: #06b6d4;
   --bg-search-highlight: var(--bg-mention-highlight);
-  --search-row-gutter: 1rem;
+  /* Matches the list padding: Bootstrap .px-4 forces 1.5rem with !important. */
+  --search-row-gutter: 1.5rem;
 }
 
 [data-search-layout-row] {
@@ -38,10 +39,6 @@ button[data-search-layout-row]:hover::before {
 }
 
 @container (min-width: 768px) {
-  .search-autocomplete {
-    --search-row-gutter: 2.25rem;
-  }
-
   /* Both tip columns share the full list highlight and its far-left accent. */
   [data-search-layout-tips] > [data-search-layout-row]:nth-child(odd) {
     --search-row-right: calc(-100% - 1.5rem - var(--search-row-gutter));
