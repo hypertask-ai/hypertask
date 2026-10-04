@@ -266,6 +266,13 @@ F 2 'registry defaults cannot prove' AGENT_TOKEN=
 F 2 'record a browser click-through' AGENT_TOKEN= FLAG_PUBLIC='{"flags":{"htpr-1-released":true}}'
 F 0 '' AGENT_TOKEN= FLAG_PUBLIC='{"flags":{"htpr-1-released":false}}'
 F 2 'registry defaults cannot prove' AGENT_TOKEN= FLAG_PUBLIC='{"flags":{"htpr-1-released":"yes"}}'
+# A dynamic read forces evidence; NOT_EVERYONE is accepted only where the plain QA read shows the flag off.
+printf 'const released = useFlag(RELEASED_FLAG);\nconst other = useFlag(dynamicKey);\n' > "$E/flag-source/head"
+printf 'Commit: %s\nAccount: 985 QA\nFlags: htpr-1-released=NOT_EVERYONE\nBoard: http://127.0.0.1:3100/projects/project-1\nBuild: http://127.0.0.1:3100\nClick: PASS opens\nRecording: v.webm\n' "$(printf 'a%.0s' {1..40})" > "$E/YPER4-999/premerge.md"; printf x > "$E/YPER4-999/v.webm"
+F 0 '' FLAG_STATUS=added AGENT_TOKEN= FLAG_PUBLIC='{"flags":{"htpr-1-released":false}}'
+F 2 'record each released flag' FLAG_STATUS=added AGENT_TOKEN= FLAG_PUBLIC='{"flags":{"htpr-1-released":true}}'
+F 2 'record each released flag' FLAG_STATUS=added
+rm "$E/YPER4-999/premerge.md" "$E/YPER4-999/v.webm"; cp "$E/flag-source/base" "$E/flag-source/head"
 # A flag the PR adds itself is not in the base registry and starts unreleased.
 printf 'const added = useFlag("htpr-2-new");\n' > "$E/flag-source/head"
 F 2 'unresolved flag reads' FLAG_STATUS=added AGENT_TOKEN= FLAG_PUBLIC='{"flags":{"htpr-1-released":true}}' # not defined by the PR

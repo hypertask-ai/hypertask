@@ -379,7 +379,9 @@ try:
     states = dict(part.strip().split('=', 1) for part in fields['Flags'].split(','))
     if any(states.get(key) != 'EVERYONE' for key in released):
         raise ValueError(message + ' (record each released flag as EVERYONE)')
+    # When only the plain QA read is available, NOT_EVERYONE is the honest record for a flag it sees off.
     if any(states.get(key) not in ('OFF', 'OWNER_ONLY', 'OWNER_AND_QA', 'EVERYONE')
+           and not (states.get(key) == 'NOT_EVERYONE' and modes.get(key) == 'NOT_EVERYONE')
            or (live and key in modes and (states[key] == 'EVERYONE' if modes[key] == 'NOT_EVERYONE' else states[key] != modes[key])) for key in touched):
         raise ValueError(message + ' (record the live state of every touched flag)')
     if not re.match(r'PASS\s+\S', fields.get('Click', '')) or not fields.get('Recording'):
