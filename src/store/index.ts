@@ -89,7 +89,7 @@ export const composeTaskChatIntroAtom = atom<{ taskId: number; content: string }
 
 // A query handed from Search's "Ask AI" to the single general AI chat, which
 // consumes and auto-sends it when the chat mounts/opens, then clears it.
-export const aiChatPendingPromptAtom = atom<string | null>({
+export const aiChatPendingPromptAtom = atom<string | { query: string; fullScreen: true } | null>({
     key: "aiChatPendingPromptAtom",
     default: null,
 });

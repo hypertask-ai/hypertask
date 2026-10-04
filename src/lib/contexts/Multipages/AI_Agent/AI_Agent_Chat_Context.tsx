@@ -11,6 +11,7 @@ import { IChatMessage, IChatSession, MentionItem } from "@/models/model";
 // initial chunk and defeat the dynamic mount below (HTPR-4508).
 import type { Editor } from "@tiptap/react";
 import dynamic from "next/dynamic";
+import { usePathname } from "next/navigation";
 import {
   ChangeEvent,
   Dispatch,
@@ -83,7 +84,7 @@ export interface ChatContextType {
   dropDownButtonAICallback: (selectedAiModel: TAiModal) => void;
   handleRemoveContext: (index: number) => void;
   handleAddContext(): void;
-  handleSendMessage: (retryContent?: string) => Promise<void>;
+  handleSendMessage: (retryContent?: string, options?: { preserveComposer?: boolean }) => Promise<void>;
   tiptapKeydown: (event: any) => void;
   layoutKeydown: (event: any) => void;
   handleMessageListScroll: (element?: HTMLElement | null) => void;
@@ -172,6 +173,11 @@ export const ChatRuntime = memo(function ChatRuntime({
   const handleSendMessageRef = useRef(contextProps.handleSendMessage);
   handleSendMessageRef.current = contextProps.handleSendMessage;
   const { editor, fileItems } = contextProps;
+  const pathname = usePathname();
+  const pendingFullScreenSessionRef = useRef<{
+    prompt: typeof pendingAiChatPrompt;
+    previousSessionId: string | null;
+  } | null>(null);
   useEffect(() => {
     if (
       !pendingAiChatPrompt ||
@@ -181,8 +187,30 @@ export const ChatRuntime = memo(function ChatRuntime({
     ) {
       return;
     }
-    const query = pendingAiChatPrompt;
+    if (typeof pendingAiChatPrompt !== "string") {
+      // A warm side-panel runtime must not consume this before /chat is ready.
+      if (pathname !== "/chat" || !contextProps.chatHistoryReady) return;
+      if (pendingFullScreenSessionRef.current?.prompt !== pendingAiChatPrompt) {
+        pendingFullScreenSessionRef.current = {
+          prompt: pendingAiChatPrompt,
+          previousSessionId: contextProps.activeSession,
+        };
+        void contextProps.startNewSession().catch(() => {});
+        return;
+      }
+      if (
+        !contextProps.currentSession ||
+        contextProps.activeSession === pendingFullScreenSessionRef.current.previousSessionId ||
+        contextProps.currentSession.messages.length > 0
+      ) return;
+    }
+    const query = typeof pendingAiChatPrompt === "string" ? pendingAiChatPrompt : pendingAiChatPrompt.query;
+    pendingFullScreenSessionRef.current = null;
     setPendingAiChatPrompt(null);
+    if (typeof pendingAiChatPrompt !== "string") {
+      void handleSendMessageRef.current(query, { preserveComposer: true }).catch(() => {});
+      return;
+    }
     // handleSendMessage() sends the composer's existing attachments and clears
     // its editor, so only auto-send when the composer is CLEAN — otherwise we'd
     // mis-send the user's attachments or wipe their unsent draft. With an empty
@@ -201,6 +229,11 @@ export const ChatRuntime = memo(function ChatRuntime({
     contextProps.isByokBlocked,
     contextProps.isTyping,
     contextProps.sessions.length,
+    contextProps.chatHistoryReady,
+    contextProps.activeSession,
+    contextProps.currentSession,
+    contextProps.startNewSession,
+    pathname,
     editor,
     fileItems,
     setPendingAiChatPrompt,

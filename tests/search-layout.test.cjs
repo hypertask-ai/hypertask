@@ -10,7 +10,7 @@ const layoutFlag = 'htpr-6865-search-layout'
 const prerequisites = ['htpr-6369-search-operators', 'htpr-6370-search-chips', 'htpr-6688-search-autocomplete']
 
 async function withSearch(t, config, check) {
-  const dom = new JSDOM('<div id="root"></div>', { url: 'https://example.test/search' })
+  const dom = new JSDOM('<div id="root"></div>', { url: config.url ?? 'https://example.test/search' })
   const globals = ['window', 'document', 'navigator', 'HTMLElement', 'localStorage', 'IS_REACT_ACT_ENVIRONMENT', 'fetch']
     .map((key) => [key, Object.getOwnPropertyDescriptor(global, key)])
   Object.assign(global, { window: dom.window, document: dom.window.document, HTMLElement: dom.window.HTMLElement, localStorage: dom.window.localStorage, IS_REACT_ACT_ENVIRONMENT: true })
@@ -70,7 +70,7 @@ async function withSearch(t, config, check) {
     source('src/lib/constants/keyboard-handler.ts', { KeyCodes: { ARROW_DOWN: 40, ARROW_UP: 38, ENTER: 13, ESCAPE: 27, J: 74, K: 75, TAB: 9, FORWARD_SLASH: 191 } })
     const post = (_url, body) => new Promise((resolve) => requests.push({ body, resolve }))
     stub(require.resolve('axios'), { default: { post }, post })
-    stub(require.resolve('next/navigation'), { useRouter: () => ({ replace(url) { navigations.push(url) }, push(url) { navigations.push(url) }, back() {} }) })
+    stub(require.resolve('next/navigation'), { useRouter: () => ({ replace(url) { navigations.push(url) }, push(url) { navigations.push(url); if (config.browserHistory) dom.window.history.pushState(null, '', url) }, back() {} }) })
     stub(require.resolve('@tanstack/react-query'), { useQueryClient: () => ({ invalidateQueries() {}, setQueryData(_key, data) { cache.history = data.history } }) })
     const baseline = config.baseline && process.env.SEARCH_LAYOUT_BASELINE_DIR
     const jiti = createJiti(__filename, { alias: { ...(baseline ? { '@/lib/search': path.join(baseline, 'search') } : {}), '@': path.join(root, 'src') }, interopDefault: true, fsCache: false, jsx: { runtime: 'automatic' } })
@@ -82,7 +82,7 @@ async function withSearch(t, config, check) {
     let counter = 0
     const render = async (query = config.query ?? '', reset = false) => React.act(async () => {
       if (reset) counter++
-      reactRoot.render(React.createElement(SearchComp, { key: counter, _searchTerm: query, _includeArchived: false, currentUser: {} }))
+      reactRoot.render(React.createElement(SearchComp, { key: counter, _searchTerm: query, _includeArchived: false, currentUser: {}, askAiFullscreenEnabled: config.askAiFullscreenEnabled }))
     })
     await render()
     t.mock.timers.enable({ apis: ['setTimeout'] })
@@ -446,6 +446,83 @@ test('Ask AI suggestion reuses the general chat handoff, not document search', a
     assert.equal(aiOpened(), 1)
     assert.equal(requests.length, 0)
   })
+})
+
+test('Ask AI fullscreen flag sends click and keyboard selections to /chat and Back restores the draft query', async (t) => {
+  const flag = 'htpr-6936-ask-ai-fullscreen'
+  for (const keyboard of [false, true]) {
+    await withSearch(t, { flags: { [flag]: true }, askAiFullscreenEnabled: true, browserHistory: true, url: 'https://example.test/search?fromProject=7&includeArchived=1&index=2#results' }, async ({ type, press, options, prompts, aiOpened, requests, navigations, dom, render, input }) => {
+      const question = 'Where is A&B? 日本語 #work'
+      await type(question)
+      if (keyboard) {
+        await press('ArrowUp')
+        await press('Tab')
+      } else {
+        await React.act(async () => options()[0].click())
+      }
+      assert.deepEqual(prompts, [{ query: question, fullScreen: true }])
+      assert.equal(aiOpened(), 0)
+      assert.equal(requests.length, 0, 'Ask AI does not submit task search')
+      const chatUrl = new URL(navigations.at(-1), dom.window.location)
+      assert.equal(chatUrl.pathname, '/chat')
+      const returnUrl = new URL(chatUrl.searchParams.get('return_to'), dom.window.location)
+      assert.equal(returnUrl.searchParams.get('searchTerm'), question)
+      assert.equal(returnUrl.searchParams.get('fromProject'), '7')
+      assert.equal(returnUrl.searchParams.get('includeArchived'), '1')
+      assert.equal(returnUrl.searchParams.get('index'), '2')
+      assert.equal(returnUrl.hash, '#results')
+      t.mock.timers.reset()
+      await new Promise((resolve) => {
+        dom.window.addEventListener('popstate', resolve, { once: true })
+        dom.window.history.back()
+      })
+      assert.equal(dom.window.location.href, returnUrl.href)
+      await render(returnUrl.searchParams.get('searchTerm'), true)
+      assert.equal(input().value, question)
+    })
+  }
+})
+
+test('Ask AI fullscreen requires both the server gate and client flag; off retains the exact string/panel handoff', async (t) => {
+  const flag = 'htpr-6936-ask-ai-fullscreen'
+  for (const [client, server] of [[false, false], [false, true], [true, false]]) {
+    await withSearch(t, { flags: { [flag]: client }, askAiFullscreenEnabled: server }, async ({ type, options, prompts, aiOpened, navigations, requests, dom }) => {
+      await type('help me find work')
+      await React.act(async () => options()[0].click())
+      assert.deepEqual(prompts, ['help me find work'])
+      assert.equal(aiOpened(), 1)
+      assert.equal(navigations.length, 0)
+      assert.equal(requests.length, 0)
+      assert.equal(dom.window.location.href, 'https://example.test/search')
+    })
+  }
+})
+
+test('ordinary Enter still submits task search with the fullscreen flag on or off', async (t) => {
+  const flag = 'htpr-6936-ask-ai-fullscreen'
+  for (const enabled of [true, false]) {
+    await withSearch(t, { flags: { [flag]: enabled }, askAiFullscreenEnabled: enabled }, async ({ type, press, prompts, aiOpened, requests, navigations }) => {
+      await type('find my work')
+      await press('Enter')
+      assert.equal(requests.at(-1).body.searchQuery, 'find my work')
+      assert.deepEqual(prompts, [])
+      assert.equal(aiOpened(), 0)
+      assert.ok(navigations.every((url) => url.startsWith('/search?')))
+    })
+  }
+})
+
+test('legacy Ask AI row also uses the fullscreen gate without changing the old off path', async (t) => {
+  const flag = 'htpr-6936-ask-ai-fullscreen'
+  for (const enabled of [true, false]) {
+    await withSearch(t, { flags: { [flag]: enabled, [layoutFlag]: false }, askAiFullscreenEnabled: enabled }, async ({ type, prompts, aiOpened, navigations }) => {
+      await type('help me find work')
+      await React.act(async () => document.getElementById('ask-ai-row').click())
+      assert.deepEqual(prompts, enabled ? [{ query: 'help me find work', fullScreen: true }] : ['help me find work'])
+      assert.equal(aiOpened(), enabled ? 0 : 1)
+      assert.equal(navigations.length, enabled ? 1 : 0)
+    })
+  }
 })
 
 test('value ghost for from:mal uses the authorized people response; Tab accepts the selected chip and runs search', async (t) => {

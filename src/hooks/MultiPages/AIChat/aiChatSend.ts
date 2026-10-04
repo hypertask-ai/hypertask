@@ -31,7 +31,7 @@ export function createAiChatSend(context: Context) {
 
   const handleSendMessage = async (
     retryContent?: string,
-    options?: { htmlForAttachments?: string }
+    options?: { htmlForAttachments?: string; preserveComposer?: boolean }
   ) => {
     if (isByokBlocked) return;
 
@@ -91,7 +91,7 @@ export function createAiChatSend(context: Context) {
         return;
       }
 
-    const processedAttachments = await processAttachments(
+    const processedAttachments = options?.preserveComposer ? [] : await processAttachments(
       editorHtmlForAttachments,
       fileUpload.fileItems
     );
@@ -110,7 +110,7 @@ export function createAiChatSend(context: Context) {
 
     // Clear input
     // editor?.commands.blur();
-    editor?.commands.clearContent();
+    if (!options?.preserveComposer) editor?.commands.clearContent();
 
     setIsTyping(true);
 
@@ -253,7 +253,7 @@ export function createAiChatSend(context: Context) {
         throw new Error("Network response was not ok or body is missing");
       }
 
-      fileUpload.clearFiles();
+      if (!options?.preserveComposer) fileUpload.clearFiles();
 
       // Create a new assistant message to update incrementally. The same UUID
       // is sent to the stream route so server persistence is idempotent.
