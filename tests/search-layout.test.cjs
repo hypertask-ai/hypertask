@@ -70,7 +70,7 @@ async function withSearch(t, config, check) {
     source('src/lib/constants/keyboard-handler.ts', { KeyCodes: { ARROW_DOWN: 40, ARROW_UP: 38, ENTER: 13, ESCAPE: 27, J: 74, K: 75, TAB: 9, FORWARD_SLASH: 191 } })
     const post = (_url, body) => new Promise((resolve) => requests.push({ body, resolve }))
     stub(require.resolve('axios'), { default: { post }, post })
-    stub(require.resolve('next/navigation'), { useRouter: () => ({ replace(url) { navigations.push(url) }, push(url) { navigations.push(url); if (config.browserHistory) dom.window.history.pushState(null, '', url) }, back() {} }) })
+    stub(require.resolve('next/navigation'), { useSearchParams: () => new URLSearchParams(dom.window.location.search), useRouter: () => ({ replace(url) { navigations.push(url) }, push(url) { navigations.push(url); if (config.browserHistory) dom.window.history.pushState(null, '', url) }, back() {} }) })
     stub(require.resolve('@tanstack/react-query'), { useQueryClient: () => ({ invalidateQueries() {}, setQueryData(_key, data) { cache.history = data.history } }) })
     const baseline = config.baseline && process.env.SEARCH_LAYOUT_BASELINE_DIR
     const jiti = createJiti(__filename, { alias: { ...(baseline ? { '@/lib/search': path.join(baseline, 'search') } : {}), '@': path.join(root, 'src') }, interopDefault: true, fsCache: false, jsx: { runtime: 'automatic' } })
@@ -451,7 +451,7 @@ test('Ask AI suggestion reuses the general chat handoff, not document search', a
 test('Ask AI fullscreen flag sends click and keyboard selections to /chat and Back restores the draft query', async (t) => {
   const flag = 'htpr-6936-ask-ai-fullscreen'
   for (const keyboard of [false, true]) {
-    await withSearch(t, { flags: { [flag]: true }, askAiFullscreenEnabled: true, browserHistory: true, url: 'https://example.test/search?fromProject=7&includeArchived=1&index=2#results' }, async ({ type, press, options, prompts, aiOpened, requests, navigations, dom, render, input }) => {
+    await withSearch(t, { flags: { [flag]: true }, askAiFullscreenEnabled: true, browserHistory: true, url: 'https://example.test/search?fromProject=7&includeArchived=1&index=2#results' }, async ({ type, press, options, prompts, aiOpened, requests, navigations, dom, render, input, complete, state }) => {
       const question = 'Where is A&B? 日本語 #work'
       await type(question)
       if (keyboard) {
@@ -477,8 +477,14 @@ test('Ask AI fullscreen flag sends click and keyboard selections to /chat and Ba
         dom.window.history.back()
       })
       assert.equal(dom.window.location.href, returnUrl.href)
-      await render(returnUrl.searchParams.get('searchTerm'), true)
+      // Back reuses the server props cached before the native replaceState.
+      await render('', true)
       assert.equal(input().value, question)
+      assert.equal(requests.length, 1)
+      assert.equal(requests[0].body.searchQuery, question)
+      await complete()
+      assert.equal(state().isSearchDraft, false)
+      assert.equal(document.getElementById('task_1').textContent.includes('Result'), true)
     })
   }
 })
@@ -494,6 +500,21 @@ test('Ask AI fullscreen requires both the server gate and client flag; off retai
       assert.equal(navigations.length, 0)
       assert.equal(requests.length, 0)
       assert.equal(dom.window.location.href, 'https://example.test/search')
+    })
+  }
+})
+
+test('fullscreen restoration requires both gates; off keeps the production server-prop search query', async (t) => {
+  const flag = 'htpr-6936-ask-ai-fullscreen'
+  for (const [client, server] of [[false, false], [false, true], [true, false]]) {
+    await withSearch(t, { flags: { [flag]: client }, askAiFullscreenEnabled: server, url: 'https://example.test/search?searchTerm=URL+question', query: 'Production query' }, async ({ input, requests, complete, render, state }) => {
+      assert.equal(input().value, 'Production query')
+      assert.equal(requests[0].body.searchQuery, 'Production query')
+      await complete()
+      assert.equal(state().isSearchDraft, false)
+      await render('', true)
+      assert.equal(input().value, '')
+      assert.equal(requests.length, 1, 'flag off does not restore from client URL params')
     })
   }
 })
