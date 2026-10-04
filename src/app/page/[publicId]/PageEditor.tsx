@@ -1,5 +1,6 @@
 "use client";
 
+import { Plugin, PluginKey } from "@tiptap/pm/state";
 import { EditorContent } from "@tiptap/react";
 import { ArrowLeft, ChevronLeft, Trash2 } from "lucide-react";
 import dynamic from "next/dynamic";
@@ -317,14 +318,41 @@ const PageEditor = ({ _page, _user }: PageEditorProps) => {
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
-      if (!(galleryEnabled && galleryItems) && shouldReturnFromPageOnEscape(event, showCommands.show)) {
-        void returnToTask();
+      if ((galleryEnabled && galleryItems) || !shouldReturnFromPageOnEscape(event, showCommands.show)) return;
+      if (document.querySelector(
+        '.modal, [role="dialog"], [role="menu"], [role="listbox"], .tippy-box[data-state="visible"], [data-radix-popper-content-wrapper]',
+      )) return;
+
+      const focused = document.activeElement as HTMLElement | null;
+      if (focused?.closest('.ProseMirror, [contenteditable="true"], input, textarea, select, [role="textbox"]')) {
+        event.preventDefault();
+        focused.blur();
+        return;
       }
+
+      event.preventDefault();
+      void returnToTask();
     };
 
-    document.addEventListener("keydown", handleKeyDown);
-    return () => document.removeEventListener("keydown", handleKeyDown);
-  }, [galleryEnabled, galleryItems, returnToTask, showCommands.show]);
+    // Suggestion plugins get first refusal, before ProseMirror's Escape fallback.
+    const escapePluginKey = new PluginKey("pageEscapeBlur");
+    editor?.registerPlugin(new Plugin({
+      key: escapePluginKey,
+      props: {
+        handleKeyDown: (_view, event) => {
+          handleKeyDown(event);
+          return event.defaultPrevented;
+        },
+      },
+    }));
+
+    // Let editor and document-level layer handlers consume Escape first.
+    window.addEventListener("keydown", handleKeyDown);
+    return () => {
+      editor?.unregisterPlugin(escapePluginKey);
+      window.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [editor, galleryEnabled, galleryItems, returnToTask, showCommands.show]);
 
   useEffect(() => {
     if (!editor) return;
