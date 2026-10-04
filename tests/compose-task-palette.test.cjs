@@ -5,6 +5,7 @@ const { test } = require('node:test');
 const React = require('react');
 const { JSDOM } = require('jsdom');
 const { createJiti } = require('jiti');
+const query = require('@tanstack/react-query');
 const root = path.resolve(__dirname, '..');
 const flag = 'htpr-6929-compose-task-writer';
 const newFlag = 'htpr-6937-new-task-window';
@@ -43,7 +44,8 @@ async function withPalette(t, config, check) {
   const useValue = (atom) => React.useSyncExternalStore(subscribe, () => values.get(atom));
   const setters = new Map(atomNames.map((name) => [name, (next) => set(name, next)]));
   const state = { useRecoilValue: useValue, useRecoilState: (atom) => [useValue(atom), setters.get(atom)], useSetRecoilState: (atom) => setters.get(atom) };
-  const requests = [], navigations = [], cacheAdds = [], viewedTasks = [], loadedBoards = [];
+  const requests = [], navigations = [], cacheAdds = [], cacheUpdates = [], viewedTasks = [], loadedBoards = [];
+  const queryClient = new query.QueryClient({ defaultOptions: { queries: { retry: false, gcTime: Infinity } } });
   let legacyJ = 0, reactRoot;
   const legacy = (e) => { if (e.ctrlKey && e.code === 'KeyJ' && !e.shiftKey) legacyJ++; };
   const resetShowCommands = () => set('showCommandsAtom', { show: false, mode: 0 });
@@ -73,6 +75,7 @@ async function withPalette(t, config, check) {
     source('src/utils/api/global/index.ts', { default: { getAllProjectsMinimal: async () => { loadedBoards.push(true); return config.boards ?? [project, { ...project, id: 8 }]; } } });
     source('src/hooks/MultiPages/useAddDeleteTaskInBoards.tsx', { default: () => ({ createTaskGlobally: (body) => cacheAdds.push(body) }) });
     source('src/hooks/General/useProjectQuery.ts', { useProjectQuery: () => ({ updateActiveItemAndItemInView: (task) => viewedTasks.push(task) }) });
+    source('src/hooks/MultiPages/useUpdateTaskInBoards.tsx', { default: () => ({ updateTaskInCache: (...args) => cacheUpdates.push(args) }) });
     const jiti = createJiti(__filename, { alias: { '@': path.join(root, 'src') }, interopDefault: true, fsCache: false, jsx: { runtime: 'automatic' } });
     // Exercise the real greeting/board resolution, but defer the network workflow
     // (covered independently in compose-task-writer.test.cjs) to inspect UI state.
@@ -110,7 +113,7 @@ async function withPalette(t, config, check) {
     function Harness() {
       const shown = useValue('showCommandsAtom');
       useCommandCenterShortcut(Object.hasOwn(config, 'userId') ? config.userId : 985, config.apple ?? false, dom.window.location.pathname, config.trial ?? false, false, toggleShowCommands);
-      return React.createElement(React.Fragment, null,
+      return React.createElement(query.QueryClientProvider, { client: queryClient },
         shown.show ? React.createElement(React.Suspense, { fallback: React.createElement('div', { 'data-palette-suspended': true }) }, React.createElement(Palette, { isOpen: true })) : null,
         React.createElement(Probe));
     }
@@ -128,7 +131,7 @@ async function withPalette(t, config, check) {
       input().dispatchEvent(new dom.window.Event('input', { bubbles: true }));
     });
     const clickTab = async (label) => React.act(async () => [...document.querySelectorAll('[role="tab"]')].find((button) => button.textContent === label).click());
-    const finish = async (writerFailed = false) => React.act(async () => requests.at(-1).resolve({ writerFailed, task: { id: 91, projectId: requests.at(-1).body.project.id, sectionId: 12, uniqueIndex: 44, ticketNumber: 'QASA-44' } }));
+    const finish = async (writerFailed = false, task = { id: 91, projectId: requests.at(-1).body.project.id, sectionId: 12, uniqueIndex: 44, ticketNumber: 'QASA-44' }) => React.act(async () => requests.at(-1).resolve({ writerFailed, task }));
     const fail = async () => React.act(async () => requests.at(-1).reject(new Error('Couldn’t create the task. Your note is still here — try again.')));
     const rerender = async () => React.act(async () => reactRoot.render(React.createElement(config.strict ? React.StrictMode : React.Fragment, null, React.createElement(Harness))));
     const mountProbe = async (component) => { Probe = component; await rerender(); };
@@ -150,10 +153,11 @@ async function withPalette(t, config, check) {
       await React.act(async () => reactRoot.render(React.createElement(config.strict ? React.StrictMode : React.Fragment, null, React.createElement(Harness))));
       assert.equal(document.getElementById('root').innerHTML, current);
     };
-    await check({ dom, input, type, press, clickTab, finish, fail, rerender, flags, values, set, requests, navigations, cacheAdds, viewedTasks, loadedBoards, shells, capture, baseline, source, stub, jiti, mountProbe, legacyJ: () => legacyJ });
+    await check({ dom, input, type, press, clickTab, finish, fail, rerender, flags, values, set, requests, navigations, cacheAdds, cacheUpdates, queryClient, viewedTasks, loadedBoards, shells, capture, baseline, source, stub, jiti, mountProbe, legacyJ: () => legacyJ });
   } finally {
     document.removeEventListener('keydown', legacy);
     if (reactRoot) await React.act(async () => reactRoot.unmount());
+    queryClient.clear();
     for (const key of Object.keys(require.cache)) if (!cached.has(key)) delete require.cache[key];
     for (const [key, value] of cached) require.cache[key] = value;
     for (const [key, descriptor] of globals) descriptor ? Object.defineProperty(global, key, descriptor) : delete global[key];
@@ -577,6 +581,55 @@ test('Ctrl+J fills only the visible new empty task when both flags are on and ne
       assert.equal(values.get('showAIChatInterfaceAtom'), true);
     });
   }
+});
+
+for (const writerFailed of [false, true]) test(`same-task fill updates the mounted detail and board with all saved fields (writerFailed=${writerFailed})`, async (t) => {
+  const targetTask = { id: 52, projectId: 7, sectionId: 12, uniqueIndex: 4, title: 'Enter task title here', description_: { content: '<p></p>' }, project: { id: 7, title: 'QA Sandbox' } };
+  await withPalette(t, { newWindow: true, url: '/detail/project-7/4', open: false, inView: { taskId: 52 }, targetTask }, async ({ press, type, finish, cacheAdds, cacheUpdates, queryClient, values, source, jiti, mountProbe }) => {
+    const Context = React.createContext(null);
+    let detailState, pendingFetch;
+    global.fetch = (_url, { signal }) => new Promise((resolve) => { pendingFetch = { signal, resolve }; });
+    source('src/hooks/General/useGetUserPreferences.tsx', { useGetUserPreferences: () => ({ data: {} }) });
+    source('src/lib/contexts/TaskDetail/FollowersProvider.tsx', { FollowersProvider: ({ children }) => children });
+    source('src/lib/contexts/TaskDetail/TaskProvider.tsx', {
+      TasksProvider: ({ parsedTask, children }) => {
+        const [currentTask, setCurrentTask] = React.useState(() => JSON.parse(parsedTask));
+        const [description, setDescription] = React.useState(currentTask.description_.content);
+        detailState = { currentTask, setCurrentTask, description, setDescription, editMode: null, hasDraft: false, hasDraftInit: false };
+        return React.createElement(Context.Provider, { value: detailState }, children);
+      },
+      useTaskContext: () => React.useContext(Context),
+    });
+    source('src/app/detail/[...slug]/TaskDetailComp.tsx', { default: () => React.createElement('h1', { 'data-task-title': true }, React.useContext(Context).currentTask.title) });
+    source('src/app/unauthorized/page.tsx', { default: () => null });
+    source('src/utils/api/Task Detail/index.ts', { fetchCommentsHelper: () => assert.fail('cached detail must not block on comments') });
+    const Detail = jiti(path.join(root, 'src/components/Modals/SwipeUnread/EmbeddedTaskDetail.tsx')).default;
+    const { cachedTaskDetailKey } = jiti(path.join(root, 'src/lib/navigation/cachedTaskDetail.ts'));
+    const key = cachedTaskDetailKey(985, 52);
+    queryClient.setQueryData(key, targetTask);
+    await mountProbe(() => React.createElement(Detail, { taskId: 52, projectId: 7, uniqueIndex: 4, initialTask: targetTask, embedded: false }));
+    assert.equal(document.querySelector('[data-task-title]').textContent, targetTask.title);
+    assert.ok(pendingFetch, 'the old detail fetch is in flight');
+    await press('j', { ctrlKey: true }, document.body);
+    await type('Write this task');
+    await press('Enter');
+    const savedTask = { id: 52, projectId: 7, sectionId: 12, uniqueIndex: 4, ticketNumber: 'QASA-4', title: 'Saved writer title', description_: { content: '<p>Saved writer body</p>', attachments: [{ id: 9 }] }, priority: { id: 2 }, estimate: { id: 3 }, assignees: [{ userId: 985 }] };
+    await finish(writerFailed, savedTask);
+    await React.act(async () => { await new Promise((resolve) => setImmediate(resolve)); });
+    assert.equal(document.querySelector('[data-task-title]').textContent, savedTask.title);
+    assert.equal(detailState.description, savedTask.description_.content);
+    for (const [field, value] of Object.entries(savedTask)) {
+      assert.deepEqual(queryClient.getQueryData(key)[field], value, field);
+      assert.deepEqual(detailState.currentTask[field], value, field);
+    }
+    assert.deepEqual(detailState.currentTask.project, targetTask.project, 'retain detail-only fields missing from the save response');
+    assert.deepEqual(cacheUpdates, [[savedTask, 52, 7, 12]]);
+    assert.deepEqual(cacheAdds, []);
+    assert.equal(values.get('composeTaskChatIntroAtom').content, `I filled in QASA-4 from your note. Want me to refine it? I can tighten the title, add acceptance criteria or split it into sub-tasks.${writerFailed ? '\n\nThe task writer was unavailable, so I kept your original text as the title and description.' : ''}`);
+    assert.equal(pendingFetch.signal.aborted, true, 'cancel the old snapshot before publishing the saved task');
+    await React.act(async () => pendingFetch.resolve({ ok: true, status: 200, json: async () => targetTask }));
+    assert.equal(document.querySelector('[data-task-title]').textContent, savedTask.title, 'a stale fetch cannot overwrite the saved title');
+  });
 });
 
 test('file drop works under Compose alone; New Task also accepts document tiles above the input', async (t) => {

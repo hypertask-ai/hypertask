@@ -26,8 +26,8 @@ export function composeTaskBoardId(
     .map(([id]) => Number(id)).find((id) => Number.isInteger(id) && id > 0);
 }
 
-export function composeTaskAssistantMessage(ticket: string, writerFailed = false): string {
-  const greeting = `I created ${ticket} from your note. Want me to refine it? I can tighten the title, add acceptance criteria or split it into sub-tasks.`;
+export function composeTaskAssistantMessage(ticket: string, writerFailed = false, filledExistingTask = false): string {
+  const greeting = `I ${filledExistingTask ? "filled in" : "created"} ${ticket} from your note. Want me to refine it? I can tighten the title, add acceptance criteria or split it into sub-tasks.`;
   return writerFailed
     ? `${greeting}\n\nThe task writer was unavailable, so I kept your original text as the title and description.`
     : greeting;

@@ -21,10 +21,13 @@ import { composeTaskBoardId, composeTaskAssistantMessage, createComposedTask } f
 import globalAPIHandlers from "@/utils/api/global";
 import useAddDeleteTaskInBoards from "@/hooks/MultiPages/useAddDeleteTaskInBoards";
 import { useProjectQuery } from "@/hooks/General/useProjectQuery";
+import UpdateKanban from "@/hooks/MultiPages/useUpdateTaskInBoards";
+import { useQueryClient } from "@tanstack/react-query";
+import { cachedTaskDetailKey } from "@/lib/navigation/cachedTaskDetail";
 import { useFlag } from "@/hooks/useFlag";
 import { HTPR_6929_COMPOSE_TASK_WRITER_FLAG, HTPR_6937_NEW_TASK_WINDOW_FLAG } from "@/lib/flags/keys";
 import { discardUnboundCreateTaskUploads } from "@/lib/createTaskAttachmentUploads";
-import type { IProject } from "@/models/model";
+import type { IProject, ITask } from "@/models/model";
 
 export default function ComposeTaskWriter({ active, onCreated, onBusyChange }: {
   active: boolean;
@@ -61,6 +64,8 @@ export default function ComposeTaskWriter({ active, onCreated, onBusyChange }: {
   const router = useRouter();
   const { createTaskGlobally } = useAddDeleteTaskInBoards();
   const { updateActiveItemAndItemInView } = useProjectQuery();
+  const { updateTaskInCache } = UpdateKanban();
+  const queryClient = useQueryClient();
   const { fileItems, files, fileInputRef, handleDroppedFiles, handleAttachmentClick, removeFile } = useFileUpload();
 
   useEffect(() => {
@@ -153,8 +158,14 @@ export default function ComposeTaskWriter({ active, onCreated, onBusyChange }: {
       if (!project) throw new Error("Your last board is unavailable. Open a board and try again.");
       const { task, writerFailed } = await createComposedTask({ text, files, project, userId: user.id, ...(existingTaskId ? { existingTaskId } : {}) });
       if (!mounted.current) return;
-      if (!existingTaskId) createTaskGlobally({ task, sectionId: task.sectionId!, position: "top" });
-      setIntro({ taskId: task.id, content: composeTaskAssistantMessage(task.ticketNumber ?? `${project.uniqueIdentifier ?? "TASK"}-${task.uniqueIndex}`, writerFailed) });
+      if (existingTaskId) {
+        const queryKey = cachedTaskDetailKey(user.id, task.id);
+        await queryClient.cancelQueries({ queryKey });
+        if (!mounted.current) return;
+        queryClient.setQueryData<ITask>(queryKey, (previous) => ({ ...previous, ...task }));
+        updateTaskInCache(task, task.id, task.projectId, task.sectionId);
+      } else createTaskGlobally({ task, sectionId: task.sectionId!, position: "top" });
+      setIntro({ taskId: task.id, content: composeTaskAssistantMessage(task.ticketNumber ?? `${project.uniqueIdentifier ?? "TASK"}-${task.uniqueIndex}`, writerFailed, Boolean(existingTaskId)) });
       updateActiveItemAndItemInView(task);
       setScope(projectId);
       setSidebar(true);

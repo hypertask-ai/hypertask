@@ -120,6 +120,11 @@ for (const [label, config] of [
 test('initial assistant greeting is exact and contains no model request', async () => {
   await withWriter({}, ({ composeTaskAssistantMessage, writes, creates }) => {
     assert.equal(composeTaskAssistantMessage('QASA-44'), 'I created QASA-44 from your note. Want me to refine it? I can tighten the title, add acceptance criteria or split it into sub-tasks.');
+    const filled = 'I filled in QASA-44 from your note. Want me to refine it? I can tighten the title, add acceptance criteria or split it into sub-tasks.';
+    assert.equal(composeTaskAssistantMessage('QASA-44', false, true), filled);
+    const fallback = '\n\nThe task writer was unavailable, so I kept your original text as the title and description.';
+    assert.equal(composeTaskAssistantMessage('QASA-44', true, true), filled + fallback);
+    assert.equal(composeTaskAssistantMessage('QASA-44', true), composeTaskAssistantMessage('QASA-44') + fallback);
     assert.equal(writes.length, 0);
     assert.equal(creates.length, 0);
   });
