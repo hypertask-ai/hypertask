@@ -125,18 +125,27 @@ export function selectMcpTools(
         const input = { ...oldInput, ...legacyArguments(args.input, action, tool) }
         const supportsOffset = 'offset' in tool.parameters.shape
         const supportsLimit = 'limit' in tool.parameters.shape
+        const supportsCursor = 'cursor' in tool.parameters.shape
+        const cursorPaginated = supportsCursor && Boolean(input.cursor)
+        const offset = cursorPaginated ? 0 : Number(input.offset ?? args.offset)
+        let readLimit = args.limit
+        let endpointCap: number | undefined
         if (action.read_only && supportsLimit) {
           const limitSchema = z.toJSONSchema(tool.parameters.shape.limit, { unrepresentable: 'any', io: 'input' }) as { maximum?: number }
-          // Limit-only endpoints must include the skipped rows before local slicing.
-          const prefix = supportsOffset ? 0 : args.offset
-          input.limit = Math.min(Math.min(Number(input.limit ?? args.limit), args.limit) + prefix, limitSchema.maximum ?? 50)
+          const maximum = limitSchema.maximum ?? 50
+          readLimit = Math.min(Number(input.limit ?? args.limit), args.limit, maximum)
+          // Local windows need a prefix and lookahead; cursor endpoints must not skip an overfetched row.
+          const prefix = supportsOffset || cursorPaginated ? 0 : offset
+          const lookahead = !supportsOffset && !supportsCursor ? 1 : 0
+          input.limit = Math.min(readLimit + prefix + lookahead, maximum)
+          if (lookahead) endpointCap = maximum
         }
-        if (action.read_only && supportsOffset) input.offset ??= args.offset
+        if (action.read_only && supportsOffset) input.offset = offset
         try {
           // Validate the selected branch before any REST call; the old implementation retains its refinements.
           const validated = tool.parameters.parse(input)
           const text = await dispatch(action, validated, token, invocation)
-          return formatToolResponse(text, args.response_format, action.read_only, args.limit, Number(input.offset ?? args.offset), supportsOffset)
+          return formatToolResponse(text, args.response_format, action.read_only, readLimit, offset, supportsOffset || cursorPaginated, endpointCap)
         } catch (error) {
           if (error instanceof z.ZodError) {
             throw new z.ZodError(error.issues.map((issue) => ({ ...issue, path: ['input', ...issue.path.map((field) => RENAMED_PARAMETERS[String(field)] ?? field)] })))

@@ -30,7 +30,8 @@ const { MCP_TOOLS } = load('src/lib/mcp-server/tools/index.ts')
 const { resolvePortableTools } = load('src/lib/mcp-server/listQueryContract.ts')
 const { selectMcpTools } = load('src/lib/mcp-server/consolidated-tools.ts')
 const { CONSOLIDATED_TOOL_DESCRIPTIONS: definitions } = load('src/lib/mcp-server/config/consolidated-descriptions.ts')
-const { executeToolResult, formatToolResponse, actionableToolError, bindConsolidatedSseTools } = load('src/lib/mcp-server/tool-response.ts')
+const { executeToolResult, formatToolResponse, actionableToolError } = load('src/lib/mcp-server/tool-response.ts')
+const { handleStatelessMcpRequest } = load('src/lib/mcp-server/stateless-http.ts')
 const { handleMcpHttp } = load('src/lib/mcp-server/mcp-http.ts')
 const { mcpHandler } = load('src/lib/mcp-server/handler.ts')
 const flags = load('src/lib/flags.ts')
@@ -310,9 +311,11 @@ test('response dispatcher forwards filters, renamed parameters and supported pag
   const { calls, tools } = spyTools()
   await executeToolResult(toolNamed(tools, 'hypertask_tasks'), { action: 'list', input: { project_id: 15, cursor: 'cursor-example', filter: { section: 'Review' } }, limit: 5, offset: 7 }, 'fixture-token')
   assert.equal(calls.at(-1).args.limit, 5)
-  assert.equal(calls.at(-1).args.offset, 7)
+  assert.equal(calls.at(-1).args.offset, 0)
   assert.equal(calls.at(-1).args.cursor, 'cursor-example')
   assert.deepEqual(calls.at(-1).args.filter, { section: 'Review' })
+  await executeToolResult(toolNamed(tools, 'hypertask_tasks'), { action: 'list', input: { project_id: 15 }, limit: 5, offset: 7 }, 'fixture-token')
+  assert.equal(calls.at(-1).args.offset, 7)
   await executeToolResult(toolNamed(tools, 'hypertask_search'), { action: 'help', input: { query: 'checkout' } }, 'fixture-token')
   assert.equal(calls.at(-1).args.limit, 6)
   const viewId = '00000000-0000-4000-8000-000000000001'
@@ -342,11 +345,79 @@ test('limit-only reads fetch the prefix needed for subsequent local pages withou
         response_format: 'detailed', limit, offset,
       }, 'fixture-token')
       assert.notEqual(result.isError, true)
-      const fetched = Math.min(Math.min(inputLimit ?? limit, limit) + offset, maximum)
+      const readLimit = Math.min(inputLimit ?? limit, limit, maximum)
+      const fetched = Math.min(readLimit + offset + 1, maximum)
       assert.equal(calls.at(-1).name, name)
       assert.equal(calls.at(-1).args.limit, fetched)
-      assert.deepEqual(result.structuredContent.data.documents, rows.slice(offset, Math.min(offset + limit, fetched)))
+      assert.deepEqual(result.structuredContent.data.documents, rows.slice(offset, Math.min(offset + readLimit, fetched)))
     }
+  }
+})
+
+test('lookahead advertises subsequent local windows and discloses limit-only endpoint caps', async () => {
+  const rows = Array.from({ length: 30 }, (_, id) => ({ id, title: `Hit ${id}` }))
+  let total = rows.length
+  const calls = []
+  const tools = selectMcpTools(legacy.map((tool) => ({ ...tool, execute: async (args) => {
+    calls.push(args)
+    return JSON.stringify({ documents: rows.slice(0, Math.min(total, args.limit)) })
+  } })), true)
+  const search = toolNamed(tools, 'hypertask_search')
+  for (const [action, maximum] of [['semantic', 25], ['help', 6]]) {
+    const read = async (limit, offset, inputLimit) => {
+      const result = await executeToolResult(search, { action, input: { query: 'checkout', ...(inputLimit ? { limit: inputLimit } : {}) }, response_format: 'detailed', limit, offset }, 'fixture-token')
+      assert.notEqual(result.isError, true)
+      return result.structuredContent
+    }
+    total = rows.length
+    const first = await read(2, 0)
+    assert.equal(calls.at(-1).limit, 3)
+    assert.deepEqual(first.data.documents, rows.slice(0, 2))
+    assert.equal(first.pagination.has_more, true)
+    assert.equal(first.pagination.next_offset, 2)
+    const nested = await read(5, 2, 2)
+    assert.equal(calls.at(-1).limit, 5)
+    assert.equal(nested.pagination.limit, 2)
+    assert.deepEqual(nested.data.documents, rows.slice(2, 4))
+    assert.equal(nested.pagination.has_more, true)
+    const capped = await read(5, maximum - 2)
+    assert.equal(calls.at(-1).limit, maximum)
+    assert.deepEqual(capped.data.documents, rows.slice(maximum - 2, maximum))
+    assert.equal(capped.pagination.truncated, true)
+    assert.equal(capped.pagination.has_more, false)
+    assert.equal(capped.pagination.next_offset, undefined)
+    assert.match(capped.pagination.guidance, /endpoint.*cap.*narrow/i)
+    const beyond = await read(2, maximum)
+    assert.deepEqual(beyond.data.documents, [])
+    assert.equal(beyond.pagination.truncated, true)
+    assert.match(beyond.pagination.guidance, /endpoint.*cap.*narrow/i)
+    total = 2
+    const last = await read(2, 0)
+    assert.equal(last.pagination.has_more, false)
+    assert.equal(last.pagination.truncated, undefined)
+  }
+})
+
+test('cursor-backed reads never overfetch or reapply a local offset to a supplied cursor', async () => {
+  const rows = Array.from({ length: 40 }, (_, id) => ({ id, title: `Task ${id}` }))
+  const calls = []
+  const tools = selectMcpTools(legacy.map((tool) => ({ ...tool, execute: async (args) => {
+    calls.push(args)
+    const start = Number(args.cursor ?? 0)
+    return JSON.stringify({ tasks: rows.slice(start, start + args.limit), next_cursor: String(start + args.limit) })
+  } })), true)
+  const tasks = toolNamed(tools, 'hypertask_tasks')
+  for (const [input, limit, offset, expectedStart, expectedLimit] of [
+    [{}, 5, 0, 0, 5],
+    [{ cursor: '5' }, 5, 5, 5, 5],
+    [{ cursor: '10', limit: 2 }, 5, 10, 10, 2],
+  ]) {
+    const result = await executeToolResult(tasks, { action: 'next', input: { project_id: 15, ...input }, limit, offset, response_format: 'detailed' }, 'fixture-token')
+    assert.notEqual(result.isError, true)
+    assert.equal(calls.at(-1).limit, expectedLimit)
+    assert.deepEqual(result.structuredContent.data.tasks, rows.slice(expectedStart, expectedStart + expectedLimit))
+    assert.equal(result.structuredContent.pagination.next_cursor, String(expectedStart + expectedLimit))
+    assert.equal(result.structuredContent.pagination.has_more, true)
   }
 })
 
@@ -442,20 +513,17 @@ test('response errors preserve partial upload receipts without echoing internal 
   assert.equal(ajv.validate(tool.outputSchema, result.structuredContent), true)
 })
 
-test('response SSE binding uses the same hidden aliases, output schemas and actionable errors', async () => {
-  const handlers = new Map()
-  const server = { server: { setRequestHandler: (schema, handler) => handlers.set(schema.shape.method.value, handler) } }
+test('shared SSE RPC responses preserve hidden aliases, output schemas, session identity and actionable errors', async () => {
   const { tools, calls } = spyTools()
-  bindConsolidatedSseTools(server, tools, 'session-fixture')
-  assert.equal((await handlers.get('tools/list')()).tools.length, definitions.length)
-  const result = await handlers.get('tools/call')({ params: { name: 'hypertask_create_task', arguments: { project_id: 15, title: 'Fixture' } } }, { authInfo: { token: 'fixture-token' }, requestId: 9 })
-  assert.notEqual(result.isError, true)
+  const rpc = async (method, params) => (await handleStatelessMcpRequest(request(method, params), { token: 'fixture-token', clientId: '985' }, tools, { sessionId: 'session-fixture' })).json()
+  assert.equal((await rpc('tools/list')).result.tools.length, definitions.length)
+  const result = await rpc('tools/call', { name: 'hypertask_create_task', arguments: { project_id: 15, title: 'Fixture' } })
+  assert.notEqual(result.result.isError, true)
+  assert.ok(result.result.structuredContent)
   assert.equal(calls.at(-1).invocation.sessionId, 'session-fixture')
-  const failed = await handlers.get('tools/call')({ params: { name: 'hypertask_tasks', arguments: { action: 'create' } } }, { authInfo: { token: 'fixture-token' }, requestId: 10 })
-  assert.equal(failed.isError, true)
-  handlers.clear()
-  bindConsolidatedSseTools(server, legacy, 'off-session')
-  assert.equal(handlers.size, 0)
+  assert.equal(calls.at(-1).invocation.requestId, '1')
+  const failed = await rpc('tools/call', { name: 'hypertask_tasks', arguments: { action: 'create' } })
+  assert.equal(failed.result.isError, true)
 })
 
 test('golden tasks are 20 to 30 realistic data-only tasks with valid consolidated calls', () => {

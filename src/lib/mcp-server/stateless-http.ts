@@ -104,6 +104,7 @@ function jsonSchemaFor(parameters: z.ZodType): Record<string, unknown> {
 
 export type StatelessMcpOptions = {
   deferred?: boolean
+  sessionId?: string
 }
 
 const deferredByRequest = new WeakMap<Request, true>()
@@ -189,7 +190,8 @@ async function dispatchMethod(
   message: JsonRpcMessage,
   request: Request,
   auth: StatelessMcpAuth,
-  tools: readonly PortableTool[]
+  tools: readonly PortableTool[],
+  options: StatelessMcpOptions,
 ): Promise<unknown> {
   const id = (message.id ?? null) as JsonRpcId
   const method = typeof message.method === 'string' ? message.method : ''
@@ -244,6 +246,7 @@ async function dispatchMethod(
         return jsonRpcResult(id, await executeToolResult(tool, rawArgs, auth.token, {
           requestId: id === null ? crypto.randomUUID() : String(id),
           clientFingerprint: crypto.createHash('sha256').update(auth.token).digest('hex'),
+          ...(options.sessionId ? { sessionId: options.sessionId } : {}),
         }))
       }
       const parsed = tool.parameters.safeParse(rawArgs)
@@ -255,6 +258,7 @@ async function dispatchMethod(
         const text = await tool.execute(parsed.data, auth.token, {
           requestId,
           clientFingerprint: crypto.createHash('sha256').update(auth.token).digest('hex'),
+          ...(options.sessionId ? { sessionId: options.sessionId } : {}),
         })
         if (deferred) {
           const structured = parseStructuredContent(text)
@@ -363,10 +367,10 @@ export async function handleStatelessMcpRequest(
       continue
     }
     if (isNotification(candidate)) {
-      await dispatchMethod(candidate, request, caller, tools)
+      await dispatchMethod(candidate, request, caller, tools, options)
       continue
     }
-    const result = await dispatchMethod(candidate, request, caller, tools)
+    const result = await dispatchMethod(candidate, request, caller, tools, options)
     if (result !== null) responses.push(result)
   }
 

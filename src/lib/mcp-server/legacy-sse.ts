@@ -5,8 +5,10 @@ import type { ServerResponse } from 'node:http'
 import { PassThrough, Readable } from 'node:stream'
 import crypto from 'node:crypto'
 import Redis from 'ioredis'
-import { MCP_SERVER_INFO, type PortableTool } from './stateless-http'
-import { bindConsolidatedSseTools } from './tool-response'
+import { handleStatelessMcpRequest, MCP_SERVER_INFO, type PortableTool } from './stateless-http'
+import { selectMcpTools } from './consolidated-tools'
+import { HTPR_6804_MCP_TOOLS_FLAG, isFeatureEnabled } from '@/lib/flags'
+import type { ManagementPermissions } from '@/lib/mcp/managementPermissions'
 
 type RelayMessage = {
   replyChannel: string
@@ -125,7 +127,6 @@ export async function handleLegacySseRequest(
         }
       })
     }
-    bindConsolidatedSseTools(server, tools, transport.sessionId)
     let closed = false
     let timer: ReturnType<typeof setTimeout> | undefined
     const cleanup = () => {
@@ -154,7 +155,26 @@ export async function handleLegacySseRequest(
           result = 'SSE session belongs to another user'
         } else {
           try {
-            await transport.handleMessage(incoming.body, { authInfo: incoming.authInfo })
+            const method = (incoming.body as { method?: unknown } | null)?.method
+            const userId = Number(incoming.authInfo.clientId)
+            const enabled = (method === 'tools/list' || method === 'tools/call') &&
+              Number.isFinite(userId) && await isFeatureEnabled(HTPR_6804_MCP_TOOLS_FLAG, userId)
+            if (enabled) {
+              // Resolve per message; flag changes and same-owner credentials must not reuse the opening scope.
+              const catalog = selectMcpTools(tools, true, {
+                managementPermissions: incoming.authInfo.extra?.managementPermissions as ManagementPermissions | undefined,
+                teamScoped: incoming.authInfo.extra?.teamScoped === true,
+                agent: incoming.authInfo.extra?.agent === true,
+              })
+              const rpcResponse = await handleStatelessMcpRequest(new Request('http://localhost/mcp', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(incoming.body),
+              }), incoming.authInfo, catalog, { sessionId: transport.sessionId })
+              if (rpcResponse.status !== 202) await transport.send(await rpcResponse.json())
+            } else {
+              await transport.handleMessage(incoming.body, { authInfo: incoming.authInfo })
+            }
           } catch {
             status = 400
             result = 'Invalid message'

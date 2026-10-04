@@ -1,7 +1,5 @@
 import { z } from 'zod'
-import { CallToolRequestSchema, ListToolsRequestSchema, type CallToolResult } from '@modelcontextprotocol/sdk/types.js'
-import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
-import crypto from 'node:crypto'
+import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js'
 import type { PortableTool } from './stateless-http'
 
 export const CONSOLIDATED_OUTPUT_SCHEMA = {
@@ -25,29 +23,6 @@ export const CONSOLIDATED_OUTPUT_SCHEMA = {
   },
   required: ['data', 'response_format'],
 } as const
-
-export function bindConsolidatedSseTools(server: McpServer, tools: readonly PortableTool[], sessionId: string): void {
-  if (!tools.some((tool) => tool.inputSchema)) return
-  server.server.setRequestHandler(ListToolsRequestSchema, async () => ({
-    tools: tools.filter((tool) => !tool.hidden).map((tool) => ({
-      name: tool.name,
-      description: tool.description,
-      inputSchema: tool.inputSchema as { type: 'object' },
-      outputSchema: tool.outputSchema as { type: 'object' },
-      ...(tool.input_examples?.length ? { input_examples: tool.input_examples } : {}),
-    })),
-  }))
-  server.server.setRequestHandler(CallToolRequestSchema, async (request, extra) => {
-    const tool = tools.find((candidate) => candidate.name === request.params.name)
-    if (!tool) return toolErrorResult(new Error('Unknown tool. Refresh tools/list and choose an advertised tool name'))
-    const token = extra.authInfo?.token
-    if (!token) return toolErrorResult(new Error('Missing MCP bearer token'))
-    return executeToolResult(tool, request.params.arguments ?? {}, token, {
-      requestId: String(extra.requestId), sessionId,
-      clientFingerprint: crypto.createHash('sha256').update(token).digest('hex'),
-    })
-  })
-}
 
 export function actionableToolError(error: unknown): string {
   if (error instanceof z.ZodError) {
@@ -174,6 +149,7 @@ export function formatToolResponse(
   limit: number,
   offset: number,
   serverPaginated: boolean,
+  endpointCap?: number,
 ): string {
   if (/^Error:/i.test(text)) throw new Error(text)
   let data: unknown
@@ -181,6 +157,7 @@ export function formatToolResponse(
   const original = data as Record<string, unknown> | null
   let hasMore = false
   let truncated = false
+  let capReached = false
   let returnedRows = 0
   // Only resource collections are pageable; document nodes and configuration arrays are indivisible.
   function bound(value: unknown, depth = 0, collection = true): unknown {
@@ -192,7 +169,13 @@ export function formatToolResponse(
         if (depth <= 1) hasMore = true
         truncated = true
       }
-      if (depth <= 1) returnedRows = Math.max(returnedRows, rows.length)
+      if (depth <= 1) {
+        returnedRows = Math.max(returnedRows, rows.length)
+        if (endpointCap !== undefined && value.length >= endpointCap) {
+          capReached = true
+          truncated = true
+        }
+      }
       return rows.map((row) => bound(row, depth + 1, false))
     }
     if (!value || typeof value !== 'object') return value
@@ -215,7 +198,9 @@ export function formatToolResponse(
         ...(hasMore && returnedRows > 0 ? { next_offset: offset + returnedRows } : {}),
         ...(truncated || original?.truncated === true ? { truncated: true } : {}),
         ...(typeof nextCursor === 'string' ? { next_cursor: nextCursor } : {}),
-        ...(hasMore || truncated || original?.truncated === true ? { guidance: 'Prefer many small, targeted searches using project, section, date or assignee filters. Continue with next_cursor or next_offset when supported; narrow filters for truncated nested collections.' } : {}),
+        ...(hasMore || truncated || original?.truncated === true ? { guidance: capReached
+          ? `The endpoint row cap is ${endpointCap}; narrow the query or filters to retrieve results beyond that cap. Continue with next_offset only within the available window.`
+          : 'Prefer many small, targeted searches using project, section, date or assignee filters. Continue with next_cursor or next_offset when supported; narrow filters for truncated nested collections.' } : {}),
       },
     } : {}),
   })
