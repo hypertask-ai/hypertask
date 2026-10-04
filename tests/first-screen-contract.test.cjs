@@ -236,6 +236,19 @@ test("flag SSR uses only a matching seed and never another account's flags", () 
   assert.equal(renderToString(flagTree(985)), "<output>false</output>");
   assert.equal(renderToString(flagTree(985, { ...seed, evaluatedAt: "bad" })), "<output>false</output>");
 });
+test("partial flag seeds preserve unrelated flags and never replace a newer cache entry", () => {
+  const seed = { accountId: 985, evaluatedAt: now, values: { example: true } };
+  const key = featureFlagsQueryKey(985), evaluatedAt = Date.parse(now);
+  for (const updatedAt of [evaluatedAt - 1000, evaluatedAt + 1000]) {
+    const client = new QueryClient();
+    client.setQueryData(key, { example: false, unrelated: true }, { updatedAt });
+    assert.equal(renderToString(flagTree(985, seed, client)), "<output>true</output>");
+    assert.deepEqual(client.getQueryData(key), { example: updatedAt < evaluatedAt, unrelated: true });
+    assert.equal(client.getQueryState(key).dataUpdatedAt, Math.max(updatedAt, evaluatedAt));
+    client.clear();
+  }
+});
+
 test("unseeded flags retain false through first hydration even with a populated cache", async () => {
   const renders = [];
   function Reader() {

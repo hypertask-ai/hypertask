@@ -46,11 +46,11 @@ export function FeatureFlagProvider({
 }) {
   const queryClient = useQueryClient();
   const [initialSeed] = useState(() => {
-    if (userId === null || initialFlags?.accountId !== userId ||
-        !Number.isFinite(Date.parse(initialFlags.evaluatedAt))) return undefined;
-    queryClient.setQueryData(featureFlagsQueryKey(userId), initialFlags.values, {
-      updatedAt: Date.parse(initialFlags.evaluatedAt),
-    });
+    const key = featureFlagsQueryKey(userId ?? 0), updatedAt = Date.parse(initialFlags?.evaluatedAt ?? "");
+    if (userId === null || initialFlags?.accountId !== userId || !Number.isFinite(updatedAt)) return undefined;
+    if ((queryClient.getQueryState(key)?.dataUpdatedAt ?? 0) <= updatedAt) {
+      queryClient.setQueryData<Record<string, boolean>>(key, (current) => ({ ...current, ...initialFlags.values }), { updatedAt });
+    }
     return initialFlags;
   });
   const seed = initialSeed?.accountId === userId ? initialSeed : undefined;
