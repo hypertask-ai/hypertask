@@ -74,11 +74,15 @@ test("hydration-sensitive queries isolate their pre-hydration cache keys", () =>
   );
   assert.match(
     flags,
-    /FeatureFlagsContext\.Provider value=\{hydrated \? \(query\.data \?\? \{\}\) : \{\}\}/,
+    /const values = hydrated \? \(query\.data \?\? seed\?\.values \?\? \{\}\) : \(seed\?\.values \?\? \{\}\)/,
   );
   assert.match(
     flags,
-    /const enabled = useContext\(FeatureFlagsContext\)\[key\] === true;\s*return useHydrated\(\) && enabled/,
+    /return \(seeded \|\| hydrated\) && values\[key\] === true/,
+  );
+  assert.match(
+    flags,
+    /initialFlags\?\.accountId !== userId/,
   );
 });
 

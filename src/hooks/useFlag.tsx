@@ -4,6 +4,7 @@ import {
   createContext,
   useContext,
   useEffect,
+  useMemo,
   useState,
   type ReactNode,
 } from "react";
@@ -18,7 +19,9 @@ import {
 } from "@/lib/realtime/shared";
 import { useHydrated } from "@/hooks/General/useHydrated";
 
-const FeatureFlagsContext = createContext<Record<string, boolean>>({});
+import type { FirstScreenFlags } from "@/lib/firstScreen/contract";
+
+const FeatureFlagsContext = createContext<{ values: Record<string, boolean>; seeded: boolean }>({ values: {}, seeded: false });
 const FLAGS_ROUTE = "/api/flags";
 const FLAGS_REFRESH_MS = 60_000;
 export const FEATURE_FLAGS_QUERY_PREFIX = ["feature-flags"] as const;
@@ -35,15 +38,28 @@ async function fetchFeatureFlags(): Promise<Record<string, boolean>> {
 export function FeatureFlagProvider({
   children,
   userId,
+  initialFlags,
 }: {
   children: ReactNode;
   userId: number | null;
+  initialFlags?: FirstScreenFlags;
 }) {
   const queryClient = useQueryClient();
+  const [initialSeed] = useState(() => {
+    if (userId === null || initialFlags?.accountId !== userId ||
+        !Number.isFinite(Date.parse(initialFlags.evaluatedAt))) return undefined;
+    queryClient.setQueryData(featureFlagsQueryKey(userId), initialFlags.values, {
+      updatedAt: Date.parse(initialFlags.evaluatedAt),
+    });
+    return initialFlags;
+  });
+  const seed = initialSeed?.accountId === userId ? initialSeed : undefined;
   const [realtimeConnected, setRealtimeConnected] = useState(false);
   const query = useQuery({
     queryKey: featureFlagsQueryKey(userId ?? 0),
     queryFn: fetchFeatureFlags,
+    initialData: seed?.values,
+    initialDataUpdatedAt: seed ? Date.parse(seed.evaluatedAt) : undefined,
     enabled: userId !== null,
     refetchInterval: realtimeConnected ? false : FLAGS_REFRESH_MS,
     refetchIntervalInBackground: !realtimeConnected,
@@ -107,14 +123,17 @@ export function FeatureFlagProvider({
   }, [queryClient, userId]);
 
   const hydrated = useHydrated();
+  const values = hydrated ? (query.data ?? seed?.values ?? {}) : (seed?.values ?? {});
+  const context = useMemo(() => ({ values, seeded: seed !== undefined }), [values, seed]);
   return (
-    <FeatureFlagsContext.Provider value={hydrated ? (query.data ?? {}) : {}}>
+    <FeatureFlagsContext.Provider value={context}>
       {children}
     </FeatureFlagsContext.Provider>
   );
 }
 
 export function useFlag(key: string): boolean {
-  const enabled = useContext(FeatureFlagsContext)[key] === true;
-  return useHydrated() && enabled;
+  const { values, seeded } = useContext(FeatureFlagsContext);
+  const hydrated = useHydrated();
+  return (seeded || hydrated) && values[key] === true;
 }

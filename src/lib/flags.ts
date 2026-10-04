@@ -7,6 +7,7 @@ import { getSessionUser } from "@/lib/auth/getSessionUser";
 import { AGENT_CHAT_STOP_AND_TIMEOUT_FEATURE_FLAG } from "@/lib/agentRuns/model";
 
 import {
+  HTPR_6934_SERVER_FIRST_SCREEN_FLAG,
   HTPR_6929_COMPOSE_TASK_WRITER_FLAG,
   HTPR_6752_INSTANT_TICKET_OPEN_FLAG,
   HTPR_6873_QUICK_ENTRY_GROW_FLAG,
@@ -169,6 +170,11 @@ const RETIRED_CLIENT_FEATURE_FLAGS = {
 } as const;
 
 const FEATURE_FLAG_DEFINITIONS = [
+  {
+    key: HTPR_6934_SERVER_FIRST_SCREEN_FLAG,
+    shippedOn: "2026-10-04",
+    description: "Prepares a shared board and inbox first-render contract. Server payloads are not enabled by this step.",
+  },
   {
     key: HTPR_6929_COMPOSE_TASK_WRITER_FLAG,
     shippedOn: "2026-10-04",

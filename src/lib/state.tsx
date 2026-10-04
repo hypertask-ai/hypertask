@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, type ReactNode } from "react";
+import { createContext, useCallback, useContext, useState, type ReactNode } from "react";
 import {
   Provider as JotaiProvider,
   atom as jotaiAtom,
@@ -16,6 +16,13 @@ import { useHydrated } from "@/hooks/General/useHydrated";
 // A late streamed consumer must still see SSR defaults even if storage or an
 // already-mounted sibling has populated the live store (including selectors).
 const hydrationDefaults = createStore();
+const initialAtomDefaults = new Map<WritableAtom<any, [any], any>, unknown>();
+const seedableAtoms = new WeakMap<JotaiAtom<unknown>, WritableAtom<any, [any], any>>();
+const InitialSnapshotContext = createContext<{
+  store: ReturnType<typeof createStore>;
+  initialized: Set<WritableAtom<any, [any], any>>;
+} | null>(null);
+export type StateInitialValues = readonly (readonly [ResettableAtom<any>, unknown])[];
 
 type SetStateAction<T> = T | ((prev: T) => T);
 type ResettableAtom<T> = WritableAtom<T, [SetStateAction<T> | typeof RESET], void>;
@@ -214,6 +221,7 @@ export function atom<T>(options: RecoilAtomOptions<T>): ResettableAtom<T> {
     : options.default;
   const baseAtom = jotaiAtom<T>(initialValue);
   hydrationDefaults.set(baseAtom, options.default);
+  initialAtomDefaults.set(baseAtom, options.default);
 
   const recoilShapedAtom = jotaiAtom(
     (get) => get(baseAtom),
@@ -232,6 +240,7 @@ export function atom<T>(options: RecoilAtomOptions<T>): ResettableAtom<T> {
     }
   ) as ResettableAtom<T>;
 
+  seedableAtoms.set(recoilShapedAtom, baseAtom);
   recoilShapedAtom.debugLabel = options.key;
   return recoilShapedAtom;
 }
@@ -260,7 +269,15 @@ export function useRecoilValue<T>(recoilAtom: JotaiAtom<T>) {
   // Child mount effects initialize shared state before parent subscriptions exist.
   const value = useAtomValueRawSync(recoilAtom);
   const hydrated = useHydrated();
-  return hydrated ? value : hydrationDefaults.get(recoilAtom);
+  const initialSnapshot = useContext(InitialSnapshotContext);
+  if (!hydrated && initialSnapshot) {
+    initialAtomDefaults.forEach((defaultValue, atom) => {
+      if (initialSnapshot.initialized.has(atom)) return;
+      initialSnapshot.store.set(atom, defaultValue);
+      initialSnapshot.initialized.add(atom);
+    });
+  }
+  return hydrated ? value : (initialSnapshot?.store ?? hydrationDefaults).get(recoilAtom);
 }
 
 export function useSetRecoilState<T>(
@@ -274,8 +291,34 @@ export const useResetRecoilState = <T,>(recoilAtom: ResettableAtom<T>) => {
   return useCallback(() => setAtom(RESET), [setAtom]);
 };
 
-export const StateRoot = ({ children }: { children: ReactNode }) => (
-  <JotaiProvider>{children}</JotaiProvider>
-);
+export const StateRoot = ({ children, initialValues }: {
+  children: ReactNode;
+  initialValues?: StateInitialValues;
+}) => {
+  // Mount-only adoption. A later route/account must remount this existing root,
+  // not replay a seed over user input or introduce a nested state island.
+  const [initial] = useState(() => {
+    if (!initialValues) return null;
+    const live = createStore();
+    const snapshot = createStore();
+    initialAtomDefaults.forEach((value, atom) => snapshot.set(atom, value));
+    for (const [atom, value] of initialValues) {
+      const base = seedableAtoms.get(atom);
+      if (!base) throw new Error("Initial state requires a Hypertask atom");
+      // Seed backing atoms directly so initial rendering never writes storage.
+      live.set(base, value);
+      snapshot.set(base, value);
+    }
+    return { live, snapshot: { store: snapshot, initialized: new Set(initialAtomDefaults.keys()) } };
+  });
+  if (!initial) return <JotaiProvider>{children}</JotaiProvider>;
+  return (
+    <JotaiProvider store={initial.live}>
+      <InitialSnapshotContext.Provider value={initial.snapshot}>
+        {children}
+      </InitialSnapshotContext.Provider>
+    </JotaiProvider>
+  );
+};
 
 export const RecoilRoot = StateRoot;

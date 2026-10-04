@@ -112,6 +112,22 @@ test("every declared flag without a stored row is on for the owner and QA, nobod
   }
 });
 
+test("server first-screen flag is registered but unused and scoped flag seeds reuse server evaluation", async () => {
+  const key = flags.HTPR_6934_SERVER_FIRST_SCREEN_FLAG;
+  assert.equal(key, "htpr-6934-server-first-screen");
+  assert.equal((await flags.listFeatureFlagModes()).find(row => row.key === key).mode, "OWNER_AND_QA");
+  const { getFirstScreenFlagSeed } = jiti(path.join(root, "src/lib/firstScreen/serverFlags.ts"));
+  const clock = "2026-10-04T00:30:00.000Z";
+  assert.deepEqual(await getFirstScreenFlagSeed(985, [key, "missing"], clock), {
+    accountId: 985, evaluatedAt: clock, values: { [key]: true, missing: false },
+  });
+  assert.deepEqual(await getFirstScreenFlagSeed(7, [key], clock), {
+    accountId: 7, evaluatedAt: clock, values: { [key]: false },
+  });
+  await assert.rejects(getFirstScreenFlagSeed(0, [key], clock), /scope/);
+  await assert.rejects(getFirstScreenFlagSeed(985, [key], "bad"), /scope/);
+});
+
 test("stable layout has its own dated Owner + QA flag and respects OFF", async () => {
   assert.equal(flags.HTPR_6899_STABLE_LAYOUT_FLAG, "htpr-6899-stable-layout");
   const listed = await flags.listFeatureFlagModes();
@@ -449,6 +465,7 @@ test("declared flags remain listed with ticket details and can be changed", asyn
       { key: "htpr-6914-shift-c-quick-add", mode: "OWNER_AND_QA", updatedAt: null },
       { key: "htpr-6929-compose-task-writer", mode: "OWNER_AND_QA", updatedAt: null },
       { key: "htpr-6930-my-tasks-kanban-reuse", mode: "OWNER_AND_QA", updatedAt: null },
+      { key: "htpr-6934-server-first-screen", mode: "OWNER_AND_QA", updatedAt: null },
       { key: "htpr-6938-my-tasks-icon-controls", mode: "OWNER_AND_QA", updatedAt: null },
     ],
   );
