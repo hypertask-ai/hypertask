@@ -173,3 +173,22 @@ test("cached lint rechecks unchanged UI after baseline or matcher edits", () => 
     rmSync(fixture, { recursive: true, force: true });
   }
 });
+
+test("expression-literal types and roles cannot bypass picker reuse", async () => {
+  for (const code of [
+    '<input type={"checkbox"} />;',
+    '<input type={"radio"} />;',
+    '<button role={"checkbox"} />;',
+    '<div role={"listbox"} />;',
+    '<div role={`menu`} />;',
+  ]) assert.equal((await lint(code)).length, 1, code);
+});
+
+test("ordinary saves beside preview, review or shared view controls remain valid", async () => {
+  for (const code of [
+    'const preview = "ticket"; <button onClick={onSave}>Save</button>;',
+    'const ReviewForm = () => <button onClick={onSave}>Save</button>;',
+    'const ProfileForm = () => <><SaveView /><button onClick={onSave}>Save</button></>;',
+    '<button onClick={saveAs}>Download file</button>;',
+  ]) assert.deepEqual(await lint(code), [], code);
+});

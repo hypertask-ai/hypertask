@@ -21,6 +21,12 @@ function name(node) {
 function attribute(node, key, source) {
   const value = node.attributes.find((item) => item.type === "JSXAttribute" && item.name.name === key)?.value;
   if (value?.type === "Literal") return String(value.value);
+  if (value?.type === "JSXExpressionContainer") {
+    if (value.expression.type === "Literal") return String(value.expression.value);
+    if (value.expression.type === "TemplateLiteral" && value.expression.expressions.length === 0) {
+      return value.expression.quasis.map((part) => part.value.cooked).join("");
+    }
+  }
   return value ? source.getText(value) : "";
 }
 
@@ -80,10 +86,16 @@ const noNewViewSaveActions = ratchet(
     if (!["button", "span", "a", "Button"].includes(name(node.name))) return false;
     if (!attribute(node, "onClick", source) && name(node.name) !== "button" && name(node.name) !== "Button") return false;
     const body = source.getText(node.parent);
-    if (/\bsave\s+(?:as\s+(?:new\s+)?)?view\b/i.test(body)) return true;
-    return /view/i.test(source.text) && (
-      />\s*(?:Save|Reset(?: changes| view)?)\s*</i.test(body) ||
-      /\b(?:onSave|onReset|saveAs)\b/.test(attribute(node, "onClick", source))
+    if (/\b(?:save\s+(?:as\s+(?:new\s+)?)?view|reset\s+view)\b/i.test(body)) return true;
+    const handler = attribute(node, "onClick", source);
+    if (/\b(?:onSaveView|saveView|resetView)\b/.test(handler)) return true;
+    const owner = source.getAncestors(node).findLast((ancestor) =>
+      ["FunctionDeclaration", "FunctionExpression", "ArrowFunctionExpression"].includes(ancestor.type)
+    );
+    const ownerName = owner?.id?.name ?? owner?.parent?.id?.name ?? "";
+    return /View/.test(ownerName) && (
+      />\s*(?:Save|Reset(?: changes)?)\s*</i.test(body) ||
+      /\b(?:onSave|onReset)\b/.test(handler)
     );
   },
   [
