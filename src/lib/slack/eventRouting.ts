@@ -5,6 +5,7 @@ export type SlackEvent = {
     channel_id?: string;
     thread_ts?: string;
     user_id?: string;
+    context?: { channel_id?: string; team_id?: string; enterprise_id?: string };
   };
   // tokens_revoked payload fields (HTPR-4857): Slack sends user IDs, split
   // by OAuth kind.
@@ -26,6 +27,7 @@ export type SlackEvent = {
 
 export type SlackEventRoute =
   | "assistant_welcome"
+  | "assistant_context"
   | "create_task"
   | "general_chat"
   | "ambient_message"
@@ -38,8 +40,23 @@ const HUMAN_MESSAGE_SUBTYPES = new Set([
   "thread_broadcast",
 ]);
 
-export function routeSlackEvent(event: SlackEvent | undefined): SlackEventRoute {
-  if (isCreateTaskMention(event)) return "create_task";
+export function routeSlackEvent(
+  event: SlackEvent | undefined,
+  slackAppEnabled = false,
+): SlackEventRoute {
+  if (
+    slackAppEnabled &&
+    event?.type === "assistant_thread_context_changed" &&
+    event.assistant_thread?.channel_id &&
+    event.assistant_thread.thread_ts &&
+    event.assistant_thread.user_id
+  ) {
+    return "assistant_context";
+  }
+  if (
+    isCreateTaskMention(event) &&
+    (!slackAppEnabled || /\b(?:from|for|of)\s+(?:this|the)\s+(?:thread|discussion|conversation)\b|\b(?:this|the)\s+(?:thread|discussion|conversation)\s+as\s+a\s+(?:task|ticket)\b/i.test(event.text))
+  ) return "create_task";
   if (isGeneralChatEvent(event)) return "general_chat";
   if (
     event?.type === "assistant_thread_started" &&
@@ -52,8 +69,10 @@ export function routeSlackEvent(event: SlackEvent | undefined): SlackEventRoute 
   return "ignore";
 }
 
-export function extractSlackMentionText(text: string): string {
-  return text.replace(/<@[A-Z0-9]+>/gi, "").trim();
+export function extractSlackMentionText(text: string, botUserId?: string): string {
+  return botUserId
+    ? text.split(`<@${botUserId}>`).join("").trim()
+    : text.replace(/<@[A-Z0-9]+>/gi, "").trim();
 }
 
 export function isCreateTaskMention(
