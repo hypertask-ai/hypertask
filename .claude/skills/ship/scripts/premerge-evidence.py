@@ -56,7 +56,8 @@ def sweep():
             fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
         except BlockingIOError:
             return
-        # Fetch before publishing anything: a stale installed checker must never be a fallback.
+        # The sweep contract forbids new statuses on fetch failure, including failure statuses.
+        # Previous statuses remain until a successful sweep; never execute a stale checker.
         result = subprocess.run(['gh', 'api', '-H', 'Accept: application/vnd.github.raw',
                                  f'repos/{REPO}/contents/.claude/skills/ship/scripts/ship-check?ref=production'],
                                 capture_output=True, timeout=60, check=True)

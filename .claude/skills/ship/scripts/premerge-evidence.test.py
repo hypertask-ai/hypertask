@@ -98,10 +98,16 @@ print('premerge-evidence: success (fixture)')
         self.assertEqual(sum(c[0] == 'api' for c in calls), 3)
         self.assertEqual(sum(c[:2] == ['pr', 'list'] for c in calls), 3)
 
-    def test_fetch_failure_leaves_stale_checker_cache_and_statuses_untouched(self):
+    def test_fetch_failure_after_deleted_evidence_publishes_nothing_new(self):
+        folder = self.root / 'evidence/YPER4-999'
+        folder.mkdir(parents=True)
+        record = folder / 'premerge.md'
+        record.write_text('Recording: click.webm\nClick: PASS fixture\n')
+        (folder / 'click.webm').write_bytes(b'recording fixture')
         self.assertEqual(self.sweep().returncode, 0)
         cache = (self.state / 'cache.json').read_bytes()
         checker = (self.state / 'ship-check').read_bytes()
+        record.unlink()
         (self.root / 'fetch-error').touch()
         result = self.sweep()
         self.assertNotEqual(result.returncode, 0)
@@ -111,6 +117,12 @@ print('premerge-evidence: success (fixture)')
         self.assertEqual((self.state / 'ship-check').read_bytes(), checker)
         calls = [json.loads(line) for line in self.log.read_text().splitlines()]
         self.assertEqual(sum(c[:2] == ['pr', 'list'] for c in calls), 1)
+        (self.root / 'fetch-error').unlink()
+        self.assertEqual(self.sweep().returncode, 0)
+        self.assertEqual(len(self.publications()), 3)
+        self.assertEqual(self.publications()[-1][1], '999')
+        self.assertNotEqual(json.loads(cache)['999']['fingerprint'],
+                            json.loads((self.state / 'cache.json').read_text())['999']['fingerprint'])
 
     def test_empty_fetch_fails_without_publishing(self):
         self.production.write_bytes(b'')
