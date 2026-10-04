@@ -237,6 +237,10 @@ if args[:2] == ['pr', 'view']:
     else:
         print(json.dumps({'number': 999, 'title': title, 'state': os.environ.get('FLAG_PR_STATE', 'OPEN'), 'mergeCommit': {'oid': 'a' * 40}, 'baseRefName': 'production'}))
     sys.exit(0)
+if args == ['api', '-H', 'Accept: application/vnd.github.raw', 'repos/hypertask-ai/hypertask/contents/.claude/skills/ship/scripts/ship-check?ref=production']:
+    with open('ship-check') as checker:
+        print(checker.read(), end='')
+    sys.exit(0)
 if args[0] != 'api':
     sys.exit(1)
 url = args[1]
@@ -325,8 +329,8 @@ F 2 'registry defaults cannot prove' AGENT_TOKEN= FLAG_PUBLIC='{"flags":{"htpr-1
 printf 'const released = useFlag(RELEASED_FLAG);\nconst other = useFlag(dynamicKey);\n' > "$E/flag-source/head"
 printf 'Commit: %s\nAccount: 985 QA\nFlags: htpr-1-released=NOT_EVERYONE\nBoard: http://127.0.0.1:3100/projects/project-1\nBuild: http://127.0.0.1:3100\nClick: PASS opens\nRecording: v.webm\n' "$(printf 'a%.0s' {1..40})" > "$E/YPER4-999/premerge.md"; printf x > "$E/YPER4-999/v.webm"
 F 0 '' FLAG_STATUS=added AGENT_TOKEN= FLAG_PUBLIC='{"flags":{"htpr-1-released":false}}'
-F 2 'record each released flag' FLAG_STATUS=added AGENT_TOKEN= FLAG_PUBLIC='{"flags":{"htpr-1-released":true}}'
-F 2 'record each released flag' FLAG_STATUS=added
+F 2 'expected Flags: htpr-1-released=EVERYONE' FLAG_STATUS=added AGENT_TOKEN= FLAG_PUBLIC='{"flags":{"htpr-1-released":true}}'
+F 2 'expected Flags: htpr-1-released=EVERYONE' FLAG_STATUS=added
 rm "$E/YPER4-999/premerge.md" "$E/YPER4-999/v.webm"; cp "$E/flag-source/base" "$E/flag-source/head"
 # A flag the PR adds itself is not in the base registry and starts unreleased.
 printf 'const added = useFlag("htpr-2-new");\n' > "$E/flag-source/head"
@@ -356,7 +360,7 @@ RECORD
 F 2 'recording must be non-empty'
 printf 'recording fixture' > "$E/YPER4-999/click.webm"
 F 0 ''
-F 0 '' FLAG_HTTP_ERROR=1
+F 2 'live flag modes unavailable' FLAG_HTTP_ERROR=1
 # Hookless commands use the same current-head guard; merged records stay valid.
 P() {
   local want=$1 mode=$2 id=$3 out got; shift 3
@@ -395,9 +399,9 @@ for change in \
   's/^Commit:.*/Commit: deadbeef/|must name PR head sha' \
   '/^Account:/d|missing Account:' \
   's/^Account:.*/Account: /|missing Account:' \
-  '/^Flags:/d|missing Flags:' \
-  's/=EVERYONE/=OFF/|record each released flag' \
-  's/=EVERYONE/=EVERYONE-invalid/|record each released flag' \
+  '/^Flags:/d|missing Flags:; expected Flags: htpr-1-released=EVERYONE' \
+  's/=EVERYONE/=OFF/|expected Flags: htpr-1-released=EVERYONE' \
+  's/=EVERYONE/=EVERYONE-invalid/|expected Flags: htpr-1-released=EVERYONE' \
   '/^Board:/d|missing Board:' \
   's@^Board:.*@Board: http://127.0.0.1:3100/demo@|real board URL' \
   's@^Board:.*@Board: http://127.0.0.1:3100/project?surface=board@|real board URL' \
@@ -411,6 +415,35 @@ for change in \
   sed "${change%%|*}" "$E/record" > "$premerge"
   F 2 "${change#*|}"
 done
+cp "$E/record" "$premerge"
+# premerge-local records only released flags. Live non-Everyone flags may be omitted.
+printf 'const released = useFlag(RELEASED_FLAG);\nconst other = useFlag("htpr-2-other");\n' > "$E/flag-source/head"
+for mode in OFF OWNER_ONLY OWNER_AND_QA; do
+  live_modes="{\"flags\":[{\"key\":\"htpr-1-released\",\"mode\":\"EVERYONE\"},{\"key\":\"htpr-2-other\",\"mode\":\"$mode\"}]}"
+  F 0 '' FLAG_HTTP="$live_modes"
+  sed 's/htpr-1-released=EVERYONE/htpr-1-released=EVERYONE, htpr-2-other=EVERYONE/' "$E/record" > "$premerge"
+  F 2 "expected Flags: htpr-2-other=$mode" FLAG_HTTP="$live_modes"
+  sed "s/htpr-2-other=EVERYONE/htpr-2-other=$mode/" "$premerge" > "$E/matching-record"
+  cp "$E/matching-record" "$premerge"
+  F 0 '' FLAG_HTTP="$live_modes"
+  cp "$E/record" "$premerge"
+done
+F 0 '' AGENT_TOKEN= FLAG_PUBLIC='{"flags":{"htpr-1-released":true,"htpr-2-other":false}}'
+F 2 'expected Flags: htpr-2-other=EVERYONE' FLAG_HTTP='{"flags":[{"key":"htpr-1-released","mode":"EVERYONE"},{"key":"htpr-2-other","mode":"EVERYONE"}]}'
+F 2 'live state unknown for htpr-2-other'
+F 2 'live flag modes unavailable' FLAG_HTTP_ERROR=1
+F 2 'live flag modes unavailable' AGENT_TOKEN= FLAG_PUBLIC='{"flags":{"htpr-1-released":true,"htpr-2-other":"unknown"}}'
+sed 's/htpr-1-released=EVERYONE/htpr-1-released=EVERYONE, htpr-2-other=EVERYONE/' "$E/record" > "$premerge"
+F 2 'expected Flags: htpr-2-other=NOT_EVERYONE' AGENT_TOKEN= FLAG_PUBLIC='{"flags":{"htpr-1-released":true,"htpr-2-other":false}}'
+sed 's/htpr-2-other=EVERYONE/htpr-2-other=NOT_EVERYONE/' "$premerge" > "$E/matching-record"
+cp "$E/matching-record" "$premerge"
+F 0 '' AGENT_TOKEN= FLAG_PUBLIC='{"flags":{"htpr-1-released":true,"htpr-2-other":false}}'
+# Unknown live keys are still allowed only for a flag newly defined by this PR.
+printf 'export const RELEASED_FLAG = "htpr-1-released";\nexport const NEW_FLAG = "htpr-2-other";\n' > "$E/flag-source/keys-head"
+sed 's/htpr-2-other=NOT_EVERYONE/htpr-2-other=OWNER_AND_QA/' "$premerge" > "$E/matching-record"
+cp "$E/matching-record" "$premerge"
+F 0 ''
+rm "$E/flag-source/keys-head"
 cp "$E/record" "$premerge"
 # Whole files, server reads, literals, removed reads and renames are covered.
 printf 'const released = isFeatureEnabled(\n  "htpr-1-released", userId);\n' > "$E/flag-source/base"
@@ -534,4 +567,5 @@ W 1 0 FLAG_LIST_ERROR=1
 W 1 1 FLAG_POST_ERROR=1
 W 0 1
 
+python3 ./premerge-evidence.test.py && ok 'poster regressions' || bad 'poster regressions'
 echo "failures: $fails"; [ "$fails" = 0 ] && echo 'ALL PASS: All ship-check tests passed'

@@ -29,11 +29,11 @@ def install():
     subprocess.run(['systemctl', '--user', 'enable', '--now', 'premerge-evidence.timer'], check=True)
 
 
-def fingerprint(row, evidence):
+def fingerprint(row, evidence, checker_sha):
     ticket = row['title'].split()[0]
     folder = evidence / ticket
     record = folder / 'premerge.md'
-    digest = hashlib.sha256(json.dumps([row['headRefOid'], row['title']], sort_keys=True).encode())
+    digest = hashlib.sha256(json.dumps([row['headRefOid'], row['title'], checker_sha], sort_keys=True).encode())
     if record.is_file():
         text = record.read_bytes()
         digest.update(text)
@@ -47,6 +47,46 @@ def fingerprint(row, evidence):
     return digest.hexdigest()
 
 
+def fetch_checker():
+    result = subprocess.run(['gh', 'api', '-H', 'Accept: application/vnd.github.raw',
+                             f'repos/{REPO}/contents/.claude/skills/ship/scripts/ship-check?ref=production'],
+                            capture_output=True, timeout=60, check=True)
+    if not result.stdout:
+        raise ValueError('production ship-check is empty; refusing the sweep')
+    return result.stdout
+
+
+def open_prs():
+    result = subprocess.run(['gh', 'pr', 'list', '-R', REPO, '--state', 'open', '--base', 'production',
+                             '--limit', '1000', '--json', 'number,title,headRefOid,statusCheckRollup'],
+                            capture_output=True, text=True, timeout=60, check=True)
+    rows = json.loads(result.stdout)
+    if len(rows) >= 1000:
+        raise ValueError('open PR list may be truncated; refusing an incomplete sweep')
+    return rows
+
+
+def revoke_passing(state):
+    # Hold the publisher lock so an in-flight ship-check cannot re-post success after the revocation.
+    with (state / 'publish.lock').open('w') as publisher:
+        fcntl.flock(publisher, fcntl.LOCK_EX)
+        (state / 'cache.json').unlink(missing_ok=True)
+        failed = []
+        for row in open_prs():
+            if not any(s.get('context') == 'premerge-evidence' and s.get('state') == 'SUCCESS'
+                       for s in row['statusCheckRollup'] or []):
+                continue
+            try:
+                subprocess.run(['gh', 'api', f'repos/{REPO}/statuses/{row["headRefOid"]}', '--method', 'POST',
+                                '-f', 'context=premerge-evidence', '-f', 'state=failure',
+                                '-f', 'description=cannot load current premerge rules; retry'],
+                               capture_output=True, timeout=60, check=True)
+            except Exception:
+                failed.append(str(row['number']))
+        if failed:
+            raise ValueError('could not revoke premerge-evidence on PR ' + ', '.join(failed))
+
+
 def sweep():
     state = Path(os.environ.get('PREMERGE_STATUS_STATE', Path.home() / '.local/state/premerge-evidence'))
     evidence = Path(os.environ.get('VCC_EVIDENCE_DIR', Path.home() / '.local/state/vcc-evidence'))
@@ -56,12 +96,19 @@ def sweep():
             fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
         except BlockingIOError:
             return
-        result = subprocess.run(['gh', 'pr', 'list', '-R', REPO, '--state', 'open', '--base', 'production',
-                                 '--limit', '1000', '--json', 'number,title,headRefOid,statusCheckRollup'],
-                                capture_output=True, text=True, timeout=60, check=True)
-        rows = json.loads(result.stdout)
-        if len(rows) >= 1000:
-            raise ValueError('open PR list may be truncated; refusing an incomplete sweep')
+        # Never execute a stale checker. Without current rules, passing statuses turn red so merges fail closed.
+        try:
+            checker_bytes = fetch_checker()
+        except Exception:
+            revoke_passing(state)
+            raise
+        checker_sha = hashlib.sha256(checker_bytes).hexdigest()
+        checker = state / 'ship-check'
+        temporary = state / 'ship-check.tmp'
+        temporary.write_bytes(checker_bytes)
+        temporary.chmod(0o755)
+        temporary.replace(checker)
+        rows = open_prs()
         cache_file = state / 'cache.json'
         try:
             cache = json.loads(cache_file.read_text())
@@ -72,7 +119,7 @@ def sweep():
             key = str(row['number'])
             try:
                 try:
-                    signature = fingerprint(row, evidence)
+                    signature = fingerprint(row, evidence, checker_sha)
                 except (OSError, UnicodeError):
                     signature = None  # Let the publisher fail closed on unreadable evidence.
                 statuses = [s for s in (row['statusCheckRollup'] or []) if s.get('context') == 'premerge-evidence']
@@ -84,7 +131,7 @@ def sweep():
                     updated[key] = previous
                     continue
                 env = dict(os.environ, SHIP_REPO=REPO, SHIP_BASE='production')
-                result = subprocess.run([str(HERE / 'ship-check'), 'premerge-status', key],
+                result = subprocess.run([str(checker), 'premerge-status', key],
                                         capture_output=True, text=True, timeout=600, env=env)
                 print(f'PR #{key}: {result.stdout.strip()}', flush=True)
                 match = re.search(r'^premerge-evidence: (success|failure) ', result.stdout, re.M)

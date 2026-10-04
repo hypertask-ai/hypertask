@@ -20,12 +20,14 @@ Use this premerge record. The recording must show the changed path working, not 
 ```text
 Commit: <full PR head sha>
 Account: <user id and role, never credentials>
-Flags: <key>=EVERYONE, <other key>=<live mode>
+Flags: <released key>=EVERYONE
 Board: <real board URL, not /demo>
 Build: <preview or local PR build URL>
 Click: PASS <changed path and result>
 Recording: <video file next to premerge.md>
 ```
+
+List every touched Everyone flag as `key=EVERYONE`, separated by commas. A touched flag may be omitted when the live read confirms it is not on for Everyone. If listed, its value must agree with the live read; plain QA's off result can be recorded as `NOT_EVERYONE`. Unavailable live reads or unknown existing keys still block the check.
 
 ### Disposable local PR build
 

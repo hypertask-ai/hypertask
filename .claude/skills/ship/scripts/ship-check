@@ -373,6 +373,11 @@ try:
     record = folder / 'premerge.md'
     reason = ', '.join(sorted(released)) if released else 'unresolved flag reads'
     message = f'{reason}: record a browser click-through on a real board against this PR build with live flag states in {record}'
+    if not live:
+        raise ValueError(message + ' (live flag modes unavailable; retry before merging)')
+    missing_live = touched - modes.keys() - added
+    if missing_live:
+        raise ValueError(message + ' (live state unknown for ' + ', '.join(sorted(missing_live)) + ')')
     if not record.is_file():
         raise ValueError(message)
     fields = {key: value.strip() for key, value in re.findall(r'^(\w+):([^\n]*)', record.read_text(), re.M)}
@@ -380,7 +385,9 @@ try:
         raise ValueError(f'{record} must name PR head sha {sha}; repeat the click-through after each push')
     for field in ('Account', 'Flags', 'Board', 'Build'):
         if not fields.get(field):
-            raise ValueError(message + f' (missing {field}:)')
+            expected = ', '.join(f'{key}=EVERYONE' for key in sorted(released))
+            hint = f'; expected Flags: {expected}' if field == 'Flags' and expected else ''
+            raise ValueError(message + f' (missing {field}:{hint})')
     board = urllib.parse.urlsplit(fields['Board'])
     board_ids = urllib.parse.parse_qs(board.query).get('id', [])
     canonical_board = board.path == '/project' and len(board_ids) == 1 and re.fullmatch(r'[1-9][0-9]*', board_ids[0])
@@ -388,13 +395,19 @@ try:
     if board.scheme not in ('http', 'https') or not board.netloc or re.search(r'\s', fields['Board']) or not (canonical_board or legacy_board):
         raise ValueError(message + ' (Board: must name a real board URL, not /demo)')
     states = dict(part.strip().split('=', 1) for part in fields['Flags'].split(','))
-    if any(states.get(key) != 'EVERYONE' for key in released):
-        raise ValueError(message + ' (record each released flag as EVERYONE)')
-    # When only the plain QA read is available, NOT_EVERYONE is the honest record for a flag it sees off.
-    if any(states.get(key) not in ('OFF', 'OWNER_ONLY', 'OWNER_AND_QA', 'EVERYONE')
-           and not (states.get(key) == 'NOT_EVERYONE' and modes.get(key) == 'NOT_EVERYONE')
-           or (live and key in modes and (states[key] == 'EVERYONE' if modes[key] == 'NOT_EVERYONE' else states[key] != modes[key])) for key in touched):
-        raise ValueError(message + ' (record the live state of every touched flag)')
+    for key in sorted(touched):
+        mode = modes.get(key)
+        if key not in states and key in modes and mode != 'EVERYONE':
+            continue
+        # Plain QA proves only not-Everyone; an explicit non-Everyone mode remains compatible.
+        valid = states.get(key) in ('OFF', 'OWNER_ONLY', 'OWNER_AND_QA', 'EVERYONE')
+        if mode == 'NOT_EVERYONE':
+            valid = states.get(key) in ('OFF', 'OWNER_ONLY', 'OWNER_AND_QA', 'NOT_EVERYONE')
+        elif key in modes:
+            valid = valid and states.get(key) == mode
+        if not valid:
+            expected = mode or 'OWNER_AND_QA'
+            raise ValueError(message + f' (expected Flags: {key}={expected})')
     if not re.match(r'PASS\s+\S', fields.get('Click', '')) or not fields.get('Recording'):
         raise ValueError(message + ' (missing passing click or recording)')
     video = (folder / fields['Recording']).resolve()
