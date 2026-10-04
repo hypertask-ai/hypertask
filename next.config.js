@@ -92,9 +92,13 @@ const nextConfig = {
     ],
   },
   experimental: {
-    // The smoke build runs server tracing beside the client compiler. This
-    // keeps the required real build below ten minutes without changing Vercel.
-    webpackBuildWorker: process.env.CORE_APP_SMOKE === "true",
+    // Release each compiler's heap before page collection and file tracing.
+    // Otherwise webpack stays in the main process through the peak (YPER4-184).
+    webpackBuildWorker: true,
+    webpackMemoryOptimizations: true,
+    cpus: 2,
+    // The smoke build runs server tracing beside the client compiler to stay
+    // below ten minutes. Production keeps tracing sequential to limit memory.
     parallelServerBuildTraces: process.env.CORE_APP_SMOKE === "true",
     // Tree-shake heavy barrel-export libs so only the icons/helpers actually
     // imported get bundled, not the whole package (HTPR-3815).
