@@ -214,7 +214,8 @@ export const ChatRuntime = memo(function ChatRuntime({
       if (pendingFullScreenSessionRef.current?.prompt !== pendingAiChatPrompt) {
         pendingFullScreenSessionRef.current = {
           prompt: pendingAiChatPrompt,
-          previousSessionId: contextProps.activeSession,
+          // Cold phone history exposes the current session before activeSession is set.
+          previousSessionId: contextProps.currentSession?.id ?? contextProps.activeSession,
           sending: false,
         };
         void contextProps.startNewSession().catch(() => {
@@ -228,7 +229,7 @@ export const ChatRuntime = memo(function ChatRuntime({
       if (pendingFullScreenSessionRef.current.sending) return;
       if (
         !contextProps.currentSession ||
-        contextProps.activeSession === pendingFullScreenSessionRef.current.previousSessionId
+        contextProps.currentSession.id === pendingFullScreenSessionRef.current.previousSessionId
       ) return;
     }
     const query = typeof pendingAiChatPrompt === "string" ? pendingAiChatPrompt : pendingAiChatPrompt.query;
