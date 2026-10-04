@@ -135,3 +135,41 @@ test("only the exact shared implementations own raw save and selection rendering
   assert.deepEqual(await lint('<input type="checkbox" />;', "src/components/Modals/OptionPicker/index.tsx", "no-new-selection-styles"), []);
   assert.equal((await lint('<input type="checkbox" />;', "src/components/Modals/OptionPicker/Copy.tsx", "no-new-selection-styles")).length, 1);
 });
+
+test("cached lint rechecks unchanged UI after baseline or matcher edits", () => {
+  const { mkdtempSync, mkdirSync, writeFileSync, rmSync } = require("node:fs");
+  const { execFileSync } = require("node:child_process");
+  mkdirSync(resolve(root, ".cache"), { recursive: true });
+  const fixture = mkdtempSync(resolve(root, ".cache/ui-patterns-"));
+  try {
+    mkdirSync(resolve(fixture, "eslint-local-rules"));
+    mkdirSync(resolve(fixture, "src"));
+    const modulePath = resolve(fixture, "eslint-local-rules/ui-patterns.mjs");
+    const baselinePath = resolve(fixture, "eslint-local-rules/ui-patterns-baseline.json");
+    const moduleCode = readFileSync(resolve(root, "eslint-local-rules/ui-patterns.mjs"), "utf8");
+    writeFileSync(modulePath, moduleCode);
+    writeFileSync(baselinePath, JSON.stringify({ "no-new-choice-menus": { "src/Test.tsx": 1 } }));
+    writeFileSync(resolve(fixture, "src/Test.tsx"), '<select />;');
+    const run = () => Number(execFileSync(process.execPath, ["--input-type=module", "-e", `
+      import { createRequire } from "node:module";
+      const require = createRequire(${JSON.stringify(resolve(root, "package.json"))});
+      const { ESLint } = require("eslint");
+      const parser = require("@typescript-eslint/parser");
+      const { uiPatternsLintConfig } = await import(${JSON.stringify(modulePath)});
+      const eslint = new ESLint({ cwd: ${JSON.stringify(fixture)}, overrideConfigFile: true,
+        overrideConfig: { ...uiPatternsLintConfig, languageOptions: { parser, parserOptions: { ecmaFeatures: { jsx: true } } } },
+        cache: true, cacheStrategy: "content", cacheLocation: ${JSON.stringify(resolve(fixture, ".eslintcache"))} });
+      const results = await eslint.lintFiles(["src/Test.tsx"]);
+      console.log(results.reduce((sum, result) => sum + result.errorCount, 0));
+    `], { encoding: "utf8" }).trim());
+    assert.equal(run(), 0);
+    writeFileSync(baselinePath, '{}');
+    assert.equal(run(), 1, "baseline edits must invalidate a prior green result");
+    writeFileSync(resolve(fixture, "src/Test.tsx"), '<input />;');
+    assert.equal(run(), 0);
+    writeFileSync(modulePath, moduleCode.replace('tag === "select"', '(tag === "select" || tag === "input")'));
+    assert.equal(run(), 1, "matcher edits must invalidate a prior green result");
+  } finally {
+    rmSync(fixture, { recursive: true, force: true });
+  }
+});

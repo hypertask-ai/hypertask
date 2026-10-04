@@ -1,9 +1,16 @@
 import { readFileSync } from "node:fs";
+import { createHash } from "node:crypto";
 import { dirname, relative } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const root = dirname(dirname(fileURLToPath(import.meta.url)));
-const baseline = JSON.parse(readFileSync(new URL("./ui-patterns-baseline.json", import.meta.url), "utf8"));
+const baselineText = readFileSync(new URL("./ui-patterns-baseline.json", import.meta.url), "utf8");
+const baseline = JSON.parse(baselineText);
+// ESLint's content cache hashes plugin metadata, not imported rule functions.
+const cacheVersion = createHash("sha256")
+  .update(readFileSync(fileURLToPath(import.meta.url)))
+  .update(baselineText)
+  .digest("hex");
 
 function name(node) {
   if (node?.type === "JSXIdentifier") return node.name;
@@ -110,7 +117,7 @@ const noNewSelectionStyles = ratchet(
 );
 
 export const uiPatternsPlugin = {
-  meta: { name: "hypertask-ui-reuse", version: "1.0.0" },
+  meta: { name: "hypertask-ui-reuse", version: cacheVersion },
   rules: {
     "no-new-choice-menus": noNewChoiceMenus,
     "no-new-view-save-actions": noNewViewSaveActions,
