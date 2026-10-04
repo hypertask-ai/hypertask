@@ -104,7 +104,7 @@ export async function resolveSlackActor(
   const botToken = decryptSecret(install.encryptedBotToken);
   let user: LinkedSlackUser | null = install.userLinks[0]?.user ?? null;
   const disconnectedUserId = await getSlackAutoLinkDisabledUserId(install.id, slackUserId);
-  const slackAppEnabled = await isFeatureEnabled(
+  let slackAppEnabled = await isFeatureEnabled(
     HTPR_6817_SLACK_APP_FLAG,
     disconnectedUserId ?? user?.id ?? install.installedByUserId,
   );
@@ -124,13 +124,10 @@ export async function resolveSlackActor(
       }).catch(() => null),
       listSlackInstallTeamMembers(install.teamId),
     ]);
-    const match = selectConfirmedUniqueTeamMember(
-      slackAppEnabled && (slackResult?.user?.is_bot || slackResult?.user?.deleted)
-        ? null
-        : slackResult?.user,
-      teamMembers,
-    );
+    const match = selectConfirmedUniqueTeamMember(slackResult?.user, teamMembers);
     if (match) {
+      slackAppEnabled = await isFeatureEnabled(HTPR_6817_SLACK_APP_FLAG, match.id);
+      if (slackAppEnabled && (slackResult?.user?.is_bot || slackResult?.user?.deleted)) return null;
       try {
         const link = await prisma.slackUserLink.create({
           data: {

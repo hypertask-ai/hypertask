@@ -70,6 +70,24 @@ for (const [name, options] of [
   });
 }
 
+for (const installerId of [42, 6]) {
+  for (const userId of [6, 985, 42]) {
+    for (const slackUser of [{ is_bot: true }, { deleted: true }]) {
+      test(`first-contact hardening for user ${userId} ignores installer ${installerId}'s flag (${slackUser.is_bot ? "bot" : "deleted"})`, async () => {
+        const fixture = identityFixture({ installerId, enabledIds: [6, 985], allowedIds: [userId], teamUser: { id: userId }, slackUser });
+        const result = await fixture.resolveSlackActor("T1", "U1");
+        if (userId === 42) {
+          assert.equal(result.user.id, userId);
+          assert.equal(fixture.writes.length, 1);
+        } else {
+          assert.equal(result, null);
+          assert.equal(fixture.writes.length, 0);
+        }
+      });
+    }
+  }
+}
+
 test("ambiguous verified matches are never linked", () => {
   const { selectConfirmedUniqueTeamMember } = identityFixture();
   assert.equal(selectConfirmedUniqueTeamMember({ is_email_confirmed: true, profile: { email: actor.user.email } }, [
