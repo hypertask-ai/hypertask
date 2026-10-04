@@ -89,7 +89,7 @@ async function withPage(options, run) {
   focusCount = 0;
   returnCount = 0;
   galleryProps = undefined;
-  editor = { isEditable: options.editable ?? true, commands: { focus: () => { focusCount += 1; } }, on: noop, off: noop };
+  editor = { isEditable: options.editable ?? true, commands: { focus: () => { focusCount += 1; } }, on: noop, off: noop, registerPlugin: noop, unregisterPlugin: noop };
   const reactRoot = createRoot(document.getElementById("root"));
   const click = async (selector, init = {}) => React.act(async () => {
     document.querySelector(selector).dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true, cancelable: true, ...init }));

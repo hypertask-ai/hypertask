@@ -33,7 +33,7 @@ test("the slim utility row survives", () => {
 test("Page keyboard return stays global when focus is outside the editor", () => {
   assert.match(
     source,
-    /document\.addEventListener\("keydown", handleKeyDown\)/,
+    /window\.addEventListener\("keydown", handleKeyDown\)/,
   );
   assert.match(
     source,
@@ -41,7 +41,7 @@ test("Page keyboard return stays global when focus is outside the editor", () =>
   );
   assert.match(
     source,
-    /document\.removeEventListener\("keydown", handleKeyDown\)/,
+    /window\.removeEventListener\("keydown", handleKeyDown\)/,
   );
   assert.match(source, /flushTitleSave\(\);[\s\S]*flushContentSave\(\);/);
   assert.match(
