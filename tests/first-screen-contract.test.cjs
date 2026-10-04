@@ -125,6 +125,8 @@ test("timezone grouping matches the existing renderer including DST, weeks and m
     }
     assert.equal(projectInboxDateGroup("2026-10-03T23:30:00.000Z", now, "UTC"), "yesterday");
     assert.equal(projectInboxDateGroup("2026-10-03T23:30:00.000Z", now, "America/Los_Angeles"), "today");
+    assert.throws(() => projectInboxDateGroup("2026-10-03T23:30:00", now, "UTC"), /date/);
+    assert.throws(() => projectInboxDateGroup(now, "bad", "UTC"), /date/);
   } finally {
     if (originalTZ === undefined) delete process.env.TZ; else process.env.TZ = originalTZ;
   }
@@ -134,7 +136,8 @@ test("unknown, invalid and other-account display preferences are explicitly inel
   assert.equal(hasFirstScreenDisplayPreferences(display, 985), true);
   for (const value of [undefined, null, {}, { ...display, version: 0 }, { ...display, accountId: 7 },
     { ...display, timeZone: "unknown" }, { ...display, locale: "not_a_locale" }, { ...display, railCollapsed: undefined },
-    { ...display, boardLayout: "calendar" }]) assert.equal(hasFirstScreenDisplayPreferences(value, 985), false);
+    { ...display, boardLayout: "calendar" }, { ...display, locale: ["en-US"] },
+    { ...display, timeZone: ["UTC"] }]) assert.equal(hasFirstScreenDisplayPreferences(value, 985), false);
 });
 
 const scoped = atom({ key: "first-screen-scope", default: "default" });

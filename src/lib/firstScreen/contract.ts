@@ -33,7 +33,7 @@ export function hasFirstScreenDisplayPreferences(
       !["board", "table"].includes(p.boardLayout ?? "") ||
       !["porcelain", "graphite", "amoled", "dia"].includes(p.theme ?? "") ||
       typeof p.railCollapsed !== "boolean" || typeof p.quickTips !== "boolean" ||
-      typeof p.draftsFirst !== "boolean" || !p.timeZone || !p.locale) return false;
+      typeof p.draftsFirst !== "boolean" || typeof p.timeZone !== "string" || typeof p.locale !== "string") return false;
   try {
     new Intl.DateTimeFormat(p.locale, { timeZone: p.timeZone }).format(0);
     return true;

@@ -48,7 +48,9 @@ export function projectInboxDateGroup(date: string, now: string, timeZone: strin
     return result;
   };
   const day = (value: string) => {
-    const p = parts(new Date(value).getTime());
+    const timestamp = Date.parse(value);
+    if (!Number.isFinite(timestamp) || new Date(timestamp).toISOString() !== value) throw new Error("Invalid first-screen date");
+    const p = parts(timestamp);
     return Date.UTC(p.year, p.month - 1, p.day);
   };
   const today = day(now);
