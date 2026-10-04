@@ -1,10 +1,14 @@
-# Task API consolidation: first slice
+# Task API consolidation: slices
 
 Ticket: https://app.hypertask.ai/detail/project-15/6509
 
 Type: `[REFACTOR]`. No product behavior change or feature flag. Baseline commit: `33c5a4ad1a05b375185b42a6c1bd7b7115d63514`.
 
-## Changed operations and compatibility
+## Slice 1: task route helpers and task-list batching
+
+Shipped in PR #1026 (`dd6ed1827`). The following evidence describes that slice, not new work in slice 2.
+
+### Changed operations and compatibility
 
 | URL | Methods | Preserved contract |
 | --- | --- | --- |
@@ -46,22 +50,57 @@ This worktree has three App Router task route files and 33 Pages Router task rou
 
 No numbered section of the entire ticket is fully complete.
 
-## Follow-up PRs
+## Remaining work after slice 2
 
 1. Section 1: remaining Pages task operations, project/section/notification writes, caller migrations and the MCP service adapter after the separate service-layer work. All 33 Pages task files remain.
-2. Section 2: remaining route-entry loader adoption, project access promotion and domain interfaces, and other inline task-access checks. The existing task-access helpers already had production callers before this slice; no claim that this first PR creates their first callers.
-3. Section 3: remaining REST JSON readers, page-ID parsers, team membership callers, webhook signature sharing and rate limiting.
+2. Section 2: remaining route-entry loader adoption, project access promotion and domain interfaces, and other inline task-access checks. The existing task-access helpers already had production callers before slice 1.
+3. Section 3: remaining REST JSON readers, page-ID parsers, team membership callers, webhook signature sharing and rate limiting. Slice 2 only adopts the existing current-user and unauthorized-response helpers on its one touched GET route; it has no request body to parse.
 4. Section 4: dead endpoints, external-only route organization and coordination with the separate response-envelope rollout. No dead endpoints are removed here.
-5. Section 5: all named tree/session/bootstrap/page/time-report/agent/guest/login hot paths remain untouched.
-6. Section 6: comment fan-out batching, legacy board loaders, archived inbox counts and payload narrowing of legacy parent/subtask relations. Payload narrowing needs a separately reviewed compatibility plan.
+5. Section 5: session-list pagination/body removal needs a caller/compatibility migration, not a query-only change. Page-route access lookups remain separate. Agent slug resolution still requires the full owned-name set to preserve collision suffixes; guest cleanup, skill payloads and login self-HTTP need separate review. Tree ancestors, breadth-wise subtree loading, narrowed favorites/user/page selections and time-report admin batching already existed at the slice-2 baseline; see the inventory below.
+6. Section 6: retiring `/api/projects/detail` in favor of `getBoardTasks` changes the response shape and requires caller migration. The obsolete `src/pages/api/projects/detailHelper.ts` is already absent. Comment fan-out and archived-count grouping already existed at baseline; neither is rewritten here. Legacy parent/subtask payload narrowing needs a separately reviewed compatibility plan, since those full fields remain in the public JSON.
 7. Section 7: Zod/OpenAPI-derived typed client and frontend adoption after schema conventions land.
 
 The task-open loaders, app-shell bootstrap, `src/app/api/mcp` and `src/lib/mcp-server` are untouched. Only the shared MCP JSON-body helper receives an optional callback argument; its default contract has regression coverage.
 
-## Verification
+## Slice 1 verification
 
 - Before implementation: `node --test tests/task-route-consolidation.test.cjs`, 16 passed, 0 failed. The same contract assertions are run after implementation.
 - Regression commands and gate evidence are in `GATES.md`. The expanded run includes task-cycle, description-history, malformed MCP JSON, session resolution, cookie identity, property realtime, task-write choke points and task-single authentication tests.
 - Full `npx tsc --noEmit -p .`: 15 unrelated diagnostics at baseline and after the change. The baseline native compiler used exit 2; the final default TypeScript 6.0.3 compiler used exit 1 after the shared dependency symlink changed externally. `tests/task-route-typecheck.cjs` reruns that exact command, accepts both compilers' diagnostic exit codes, and rejects any diagnostic not present in the baseline or unexpected compiler stderr. No changed production file has a diagnostic.
 - `npm run lint` is scoped with ignore/unignore patterns to every changed TypeScript/CJS file; `git diff --check` checks whitespace.
 - No full Next build or database-backed/live QA is claimed. The build script runs production migrations, which are outside this worktree-only, no-shared-state task.
+
+## Slice 2: relation-read batching
+
+Baseline: `dd6ed1827` (production including slice 1). Sections 5 and 6 gain five explicit Prisma `relationLoadStrategy: "join"` read opt-ins. The singleton otherwise defaults to `query`, so nested relations previously required separate SQL adapter calls. No columns, relation filters, limits, ordering, URLs, statuses or JSON keys are removed or added. No flag is required for identical-output performance work.
+
+### Changed operations and measured query counts
+
+| Operation | Before | After | Preserved contract |
+| --- | --- | --- | --- |
+| `/api/ai-chat/all-sessions` GET | 4 | 1 | `{ success: true, sessions }`, all message bodies, attachments, agent author names, external-agent exclusion, updatedAt/message ordering, empty-list session creation, existing 401/500 bodies |
+| `getFavoritesForUser` | 6 | 1 | Ordered favorites with the same selected project, owner, member, user and public-agent fields |
+| `getUserById` | 2 | 1 | Existing selected user fields plus full UserSetting, including null profile and error fallback |
+| `getPage` | 3 | 1 | Page scalars, the same five task fields and child-page projection; missing page stays null |
+| `/api/projects/detail` POST controller | 7 | 1 | Full project/task/assignee/user scalars, visible sections in ranking order, owner and custom instructions; existing 400/200 bodies |
+
+Counts are real generated-Prisma SQL planner adapter calls for populated synthetic fixtures, not live database measurements. `tests/htpr-6509-query-contracts.json` pins the existing selections and serialized bodies; the test runs the exact same production reads with the old `query` strategy and the new explicit opt-in, decodes both through Prisma and compares them with the pinned contract. The adapter rejects writes and never connects to a database. The fixtures include messages/attachments, agent authors, favorite members/users/agents, page children and board tasks/assignees/sections. Empty/missing roots and session creation/failure responses are tested separately.
+
+The session route adopts `loadCurrentUser(request.headers, true)` and `unauthorized()`. It retains the legacy profile precondition and profile identity, now using the same signed-session loader as slice 1. Requiring the profile to match the signed session repeats the existing `src/proxy.ts` API invariant, rather than changing public API authentication policy. Better Auth resolution can add its existing session-adapter lookup; the table excludes authentication and the unchanged empty-list creation path. The other four opt-ins only change controller read strategy; their entry-point authorization is untouched.
+
+### Already present at baseline, not claimed as slice-2 fixes
+
+- Comment human fan-out uses one replay dedupe read, batched mutes/reminders and createMany per chunk of ten under the existing task-inbox lock. Agent fan-out uses batched dedupe and createMany. Reminder invocation, broadcasts and replay behavior remain untouched. Existing fan-out/mute regression tests pass.
+- Archived inbox metadata already uses GROUP BY on (type, taskId), one task-to-board lookup and the existing access recheck. Its three regression tests pass.
+- AI task-tree ancestor lookup already uses a bounded recursive query plus one access query. Subtrees already load breadth-wise, one query per level, not two queries per node. A single-query authorized subtree remains a possible follow-up, but is not necessary for this relation-read slice.
+- Time reports already precompute admin project IDs. Favorite/user/page field narrowing also already existed. None is counted as new slice-2 work.
+- `getBoardTasks` has a different projected/hydrated client contract from legacy project detail. Replacing the latter with the former would violate this slice's identical-JSON constraint.
+
+### Slice 2 verification and limits
+
+- Before production edits: `HTPR_6509_BASELINE=1 node --test tests/htpr-6509-query-batching.test.cjs`, 12 passed, 0 failed. Baseline capture switches were removed afterward so normal tests cannot rewrite the fixture or disable batching assertions. A fixture bug in child-page SQL matching was corrected during final verification.
+- After edits: `node --test tests/htpr-6509-query-batching.test.cjs`, 14 passed, 0 failed, including two signed-session identity invariant checks added after helper adoption.
+- Existing regressions: 88 passed, 0 failed across the 11 CJS files enumerated in `GATES.md`.
+- `node tests/task-route-typecheck.cjs` invokes full `npx tsc --noEmit -p .`: baseline and final both have the same 15 pre-existing diagnostics, 0 new, compiler exit 2. This is baseline parity, not a clean full-project typecheck.
+- `npm run lint` with ignore/unignore patterns covering every changed TS/CJS file passes. `git diff --check` passes.
+- No build, live QA, database-backed query-plan/latency measurement, push, PR or board write is performed. The build script includes production migrations and is outside this local-only task. Large/unbounded JSON payloads are intentionally retained, and join cost at production scale remains unmeasured.

@@ -181,6 +181,7 @@ export async function getPage(args: GetPageArgs) {
     : { publicId: args.publicId }
 
   return prisma.page.findUnique({
+    relationLoadStrategy: 'join',
     where,
     include: {
       // HTPR-6509: the page viewer links back to the task and MCP pages/get

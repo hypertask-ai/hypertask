@@ -14,6 +14,7 @@ const projectDetail = async (projectId:number) => {
                 // return res.status(400).json({ message: "Project id is required" });
             }
             let project = await prisma.project.findFirst({
+                relationLoadStrategy: "join",
                 where: {
                     id: projectId,
                     status:"Normal"

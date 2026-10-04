@@ -6,6 +6,7 @@ const getUserById= async (userId:number):Promise<any> => {
    
         try {
             const user = await prisma.user.findUnique({
+                relationLoadStrategy: "join",
                 where: {
                     id:userId 
                 },
