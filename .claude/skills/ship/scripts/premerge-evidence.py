@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Reconcile current-head evidence statuses without polling each completed PR."""
+import base64
 import fcntl
 import hashlib
 import json
@@ -48,12 +49,16 @@ def fingerprint(row, evidence, checker_sha):
 
 
 def fetch_checker():
-    result = subprocess.run(['gh', 'api', '-H', 'Accept: application/vnd.github.raw',
-                             f'repos/{REPO}/contents/.claude/skills/ship/scripts/ship-check?ref=production'],
+    # gh 2.45 ignores a raw Accept header here, so decode the contents API's base64 body.
+    result = subprocess.run(['gh', 'api', f'repos/{REPO}/contents/.claude/skills/ship/scripts/ship-check?ref=production'],
                             capture_output=True, timeout=60, check=True)
-    if not result.stdout:
-        raise ValueError('production ship-check is empty; refusing the sweep')
-    return result.stdout
+    body = json.loads(result.stdout)
+    if body.get('encoding') != 'base64':
+        raise ValueError('production ship-check is not base64 encoded; refusing the sweep')
+    checker = base64.b64decode(body['content'])
+    if not checker.startswith(b'#!'):
+        raise ValueError('production ship-check is empty or not a script; refusing the sweep')
+    return checker
 
 
 def open_prs():

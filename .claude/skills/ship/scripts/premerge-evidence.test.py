@@ -46,11 +46,12 @@ if args[:2] == ['api', 'repos/hypertask-ai/hypertask/statuses/' + 'a' * 40]:
     with (root / 'statuses').open('a') as log:
         log.write('failure\\n')
 elif args[:1] == ['api']:
-    assert args == ['api', '-H', 'Accept: application/vnd.github.raw',
-                    'repos/hypertask-ai/hypertask/contents/.claude/skills/ship/scripts/ship-check?ref=production']
+    assert args == ['api', 'repos/hypertask-ai/hypertask/contents/.claude/skills/ship/scripts/ship-check?ref=production']
     if (root / 'fetch-error').exists():
         sys.exit(1)
-    sys.stdout.buffer.write((root / 'production-check').read_bytes())
+    import base64
+    content = base64.encodebytes((root / 'production-check').read_bytes()).decode()
+    print(json.dumps({'name': 'ship-check', 'encoding': 'base64', 'content': content}))
 elif args[:2] == ['pr', 'list']:
     assert args[args.index('--base') + 1] == 'production'
     print(json.dumps([{'number': n, 'title': f'YPER4-{n} [INFRA] Fixture',
