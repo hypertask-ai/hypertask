@@ -64,7 +64,7 @@ exit 20
   }
 });
 
-test('down handles process titles with spaces and does not kill a reused PID', { timeout: 10_000 }, async () => {
+test('down guards reused PIDs and cleans the local server and credentials during a Docker outage', { timeout: 10_000 }, async () => {
   const root = mkdtempSync(path.join(os.tmpdir(), 'premerge-local-pid-'));
   const child = spawn(process.execPath, ['-e', 'process.title="premerge test";process.send("ready");setInterval(()=>{},1000)'], {
     detached: true, stdio: ['ignore', 'ignore', 'ignore', 'ipc'],
@@ -86,13 +86,52 @@ test('down handles process titles with spaces and does not kill a reused PID', {
     assert.equal(reused.status, 0);
     assert.equal(process.kill(child.pid, 0), true);
     writeFileSync(path.join(state, 'server.pid'), `${child.pid} ${started}\n`);
+    writeFileSync(path.join(state, 'credentials.env'), 'disposable fixture');
+    writeFileSync(path.join(state, 'smoke-state.json'), 'disposable fixture');
+    writeFileSync(path.join(root, 'bin/docker'), '#!/bin/sh\nexit 1\n', { mode: 0o755 });
     const exited = once(child, 'exit');
     const down = spawnSync('bash', [candidate, 'down'], { encoding: 'utf8', env });
-    assert.equal(down.status, 0);
+    assert.equal(down.status, 1);
+    assert.match(down.stderr, /Docker unavailable.*Rerun down/);
     await exited;
     assert.equal(child.signalCode, 'SIGTERM');
+    for (const file of ['server.pid', 'credentials.env', 'smoke-state.json']) {
+      assert.throws(() => readFileSync(path.join(state, file)), { code: 'ENOENT' });
+    }
   } finally {
     if (child.exitCode === null && child.signalCode === null) process.kill(-child.pid, 'SIGKILL');
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('background server closes captured output descriptors, with a retained-stderr control', () => {
+  const root = mkdtempSync(path.join(os.tmpdir(), 'premerge-local-fds-'));
+  try {
+    const nextDir = path.join(root, 'node_modules/next/dist/bin');
+    mkdirSync(nextDir, { recursive: true });
+    writeFileSync(path.join(nextDir, 'next'), 'setInterval(()=>{},1000);');
+    const launch = readFileSync(script, 'utf8').split('\n').find(line => line.startsWith('setsid node '));
+    assert.ok(launch);
+    for (const retainStderr of [false, true]) {
+      const line = retainStderr ? launch.replace(' 4>&-', '') : launch;
+      const result = spawnSync('bash', ['-c', `exec 3>&1 4>&2 9>"$state/lock"\n${line}\nprintf '%s' "$!" >"$state/pid"\n`], {
+        encoding: 'utf8', timeout: 1000,
+        env: { ...process.env, root, state: root, app_port: '3100' },
+      });
+      try {
+        if (retainStderr) assert.equal(result.error?.code, 'ETIMEDOUT');
+        else {
+          assert.equal(result.error, undefined);
+          assert.equal(result.status, 0);
+          assert.equal(result.stdout, '');
+          assert.equal(result.stderr, '');
+        }
+      } finally {
+        const pid = Number(readFileSync(path.join(root, 'pid'), 'utf8'));
+        try { process.kill(-pid, 'SIGKILL'); } catch (error) { if (error.code !== 'ESRCH') throw error; }
+      }
+    }
+  } finally {
     rmSync(root, { recursive: true, force: true });
   }
 });

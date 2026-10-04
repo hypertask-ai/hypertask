@@ -34,16 +34,23 @@ stop() {
       if kill -0 -- "-$pid" 2>/dev/null; then kill -KILL -- "-$pid" 2>/dev/null || true; fi
     fi
   fi
-  for service in postgres redis soketi; do
-    if docker container inspect "$prefix-$service" >/dev/null 2>&1; then
-      docker rm -f -v "$prefix-$service" >/dev/null
-    fi
-  done
+  local result=0
+  if command -v docker >/dev/null && docker info >/dev/null 2>&1; then
+    for service in postgres redis soketi; do
+      if docker container inspect "$prefix-$service" >/dev/null 2>&1; then
+        docker rm -f -v "$prefix-$service" >/dev/null || result=1
+      fi
+    done
+  else
+    echo 'Docker unavailable. Rerun down when Docker returns to remove containers.' >&2
+    result=1
+  fi
   rm -f "$state/server.pid" "$state/credentials.env" "$state/postgres.env" "$state/soketi.env" "$state/smoke-state.json" "$state/card-fixture.json" "$state/fixtures.out"
+  return "$result"
 }
+if [ "$action" = down ]; then stop; exit 0; fi
 command -v docker >/dev/null || { echo 'Docker is required.' >&2; exit 1; }
 docker info >/dev/null 2>&1 || { echo 'Docker daemon is unavailable.' >&2; exit 1; }
-if [ "$action" = down ]; then stop; exit 0; fi
 
 for file in .env .env.local .env.production .env.production.local; do
   if [ -e "$file" ] || [ -L "$file" ]; then
@@ -65,7 +72,7 @@ cleanup() {
   local result=$?
   trap - EXIT
   if [ "$result" -ne 0 ]; then
-    stop
+    stop || true
     echo "Local setup failed. Private logs: $state" >&4
   fi
   exit "$result"
@@ -126,7 +133,7 @@ export BROWSER_SMOKE_STATE_FILE="$state/smoke-state.json" GITHUB_OUTPUT="$state/
 npx --no-install prisma migrate deploy
 node scripts/seed-browser-smoke.mjs
 npx --no-install next build --webpack
-setsid node "$root/node_modules/next/dist/bin/next" start -H 127.0.0.1 -p "$app_port" >"$state/server.log" 2>&1 9>&- 3>&- &
+setsid node "$root/node_modules/next/dist/bin/next" start -H 127.0.0.1 -p "$app_port" >"$state/server.log" 2>&1 9>&- 3>&- 4>&- < /dev/null &
 pid=$!
 printf '%s %s\n' "$pid" "$(sed 's/.*) //' "/proc/$pid/stat" | awk '{print $20}')" >"$state/server.pid"
 ready=false
