@@ -57,7 +57,7 @@ async function withSearch(t, config, check) {
       useRecoilState: (atom) => [atom === SearchTaskIndexAtom ? 0 : { show: false }, () => {}],
       useSetRecoilState: () => (prompt) => prompts.push(prompt), useRecoilValue: () => false,
     })
-    source('src/lib/contexts/mobileContext.tsx', { MobileViewContext: React.createContext(false) })
+    source('src/lib/contexts/mobileContext.tsx', { MobileViewContext: React.createContext(config.mobile ?? false) })
     source('src/components/ProviderGlobal/useGlobalUIState.ts', { useGlobalUIState: () => ({ openAIChatInterface() { aiOpened++ } }) })
     source('src/components/commands.tsx', { default: () => null })
     source('src/components/PageComponents/Kanban/HeaderComponents/AppShellRail.tsx', { default: () => null })
@@ -148,7 +148,11 @@ test('flag off retains the floating popover, duplicate legacy history, Ask AI an
     await tick(1)
     assert.equal(requests.length, 1)
     await complete()
-    assert.ok(document.getElementById('task_1'))
+    const row = document.getElementById('task_1')
+    assert.match(row.className, /@md:border-l-4.*sm:px-2/)
+    assert.match(row.className, /@md:bg-active-elementBg border-l-selected-item-border/)
+    assert.equal(row.hasAttribute('data-selected'), false)
+    assert.equal(document.querySelector('[data-search-layout-row]'), null)
     capture('off-results')
   })
 })
@@ -888,5 +892,100 @@ test('Escape closes retained layout suggestions after focus moved elsewhere, kee
     assert.equal(escape.defaultPrevented, true)
     assert.equal(input().value, 'board:', 'Escape closes the list without clearing the query')
     otherInput.remove()
+  })
+})
+
+test('layout rows share the inbox highlight without changing content insets on desktop and phone', async (t) => {
+  for (const mobile of [false, true]) {
+    await withSearch(t, { mobile, history: ['login'], flags: { 'htpr-6911-search-row-highlight': true } }, async ({ options, selected, type, tick, press, complete, capture, state }) => {
+      const assertRow = (row) => {
+        assert.ok(row.hasAttribute('data-search-layout-row'))
+        assert.doesNotMatch(row.className, /rounded-sm|bg-active-elementBg|border-l-4/)
+      }
+      options().forEach(assertRow)
+      assert.match(selected().textContent, /login/)
+      assert.match(document.querySelector('[data-search-layout]').parentElement.className, /px-4 @md:px-9/)
+      await press('ArrowDown')
+      assert.match(selected().textContent, /^from:/)
+      await press('ArrowDown')
+      assert.match(selected().textContent, /^assignee:/)
+      assert.ok(selected().parentElement.hasAttribute('data-search-layout-tips'))
+      capture(mobile ? 'highlight-phone-tips' : 'highlight-desktop-tips')
+      await type('from:mal')
+      await tick(180)
+      options().forEach(assertRow)
+      assert.match(selected().textContent, /Malcolm Stern/)
+      await press('ArrowUp')
+      assert.match(selected().textContent, /^Ask AI/)
+      capture(mobile ? 'highlight-phone-ai' : 'highlight-desktop-ai')
+      await type('login')
+      await press('Enter')
+      await complete(undefined, [1, 2].map((taskId) => ({ taskId, projectId: 7, taskTitle: 'login', highlight: {} })))
+      const rows = [...document.querySelectorAll('#tasks-list > li')]
+      rows.forEach(assertRow)
+      assert.equal(rows[0].dataset.selected, 'true')
+      assert.equal(rows[1].dataset.selected, 'false')
+      assert.match(rows[0].parentElement.className, /px-4 @md:px-9/)
+      assert.doesNotMatch(rows[0].firstElementChild.className, /px-4/)
+      const content = rows.map((row) => row.innerHTML)
+      await React.act(async () => state().setSelectedIndex(1))
+      assert.equal(rows[0].dataset.selected, 'false')
+      assert.equal(rows[1].dataset.selected, 'true')
+      assert.deepEqual(rows.map((row) => row.innerHTML), content)
+      await React.act(async () => state().setSelectedIndex(null))
+      assert.ok(rows.every((row) => row.dataset.selected === 'false'))
+      await React.act(async () => state().setSelectedIndex(0))
+      capture(mobile ? 'highlight-phone-results' : 'highlight-desktop-results')
+    })
+  }
+})
+
+test('shared highlight uses inbox theme tokens and extends behind both tip columns', () => {
+  const css = require('postcss').parse(fs.readFileSync(path.join(root, 'src/app/search/search-autocomplete.css'), 'utf8'))
+  const rule = (selector) => {
+    let found
+    css.walkRules(selector, (node) => { found = node })
+    assert.ok(found, selector)
+    return Object.fromEntries(found.nodes.filter((node) => node.type === 'decl').map((node) => [node.prop, node.value]))
+  }
+  const highlight = rule('[data-search-layout-row]:is([data-selected="true"], [aria-selected="true"])::before,\nbutton[data-search-layout-row]:hover::before')
+  assert.equal(highlight.position, 'absolute')
+  assert.equal(highlight['inset-block'], '0')
+  assert.equal(highlight.left, 'var(--search-row-left, calc(-1 * var(--search-row-gutter)))')
+  assert.equal(highlight.right, 'var(--search-row-right, calc(-1 * var(--search-row-gutter)))')
+  assert.equal(highlight['background-color'], 'var(--active-elementBg)')
+  assert.equal(highlight['border-left'], '4px solid var(--border-active)')
+  assert.equal(highlight['pointer-events'], 'none')
+  assert.equal(rule('[data-search-layout-row] > *')['z-index'], '1')
+  const gutters = []
+  css.walkDecls('--search-row-gutter', (node) => gutters.push([node.value, node.parent.parent.params]))
+  // The list uses px-4, which Bootstrap forces to 1.5rem at every width.
+  const bootstrap = fs.readFileSync(require.resolve('bootstrap/dist/css/bootstrap.css'), 'utf8')
+  assert.match(bootstrap, /\.px-4 \{\s*padding-right: 1\.5rem !important;\s*padding-left: 1\.5rem !important;/)
+  assert.deepEqual(gutters, [['1.5rem', undefined]])
+  assert.equal(rule('[data-search-layout-tips] > [data-search-layout-row]:nth-child(odd)')['--search-row-right'], 'calc(-100% - 1.5rem - var(--search-row-gutter))')
+  assert.equal(rule('[data-search-layout-tips] > [data-search-layout-row]:nth-child(even)')['--search-row-left'], 'calc(-100% - 1.5rem - var(--search-row-gutter))')
+  const inbox = fs.readFileSync(path.join(root, 'src/components/notifications/inboxSplit/index.tsx'), 'utf8')
+  assert.match(inbox, /md:border-l-4/)
+  assert.match(inbox, /md:bg-active-elementBg border-l-selected-item-border/)
+  const tailwind = fs.readFileSync(path.join(root, 'tailwind.config.ts'), 'utf8')
+  assert.match(tailwind, /"active-elementBg":"var\(--active-elementBg\)"/)
+  assert.match(tailwind, /"selected-item-border":"var\(--border-active\)"/)
+  for (const theme of ['light', 'dark']) {
+    const tokens = require('postcss').parse(fs.readFileSync(path.join(root, `src/styles/tailwindThemes/${theme}.css`), 'utf8'))
+    for (const token of ['--active-elementBg', '--border-active']) {
+      const values = []
+      tokens.walkDecls(token, (node) => values.push(node.value))
+      assert.ok(values.length && values.every(Boolean), `${theme} defines ${token}`)
+    }
+  }
+})
+
+test('row highlight flag off keeps the previous inset highlight', async (t) => {
+  await withSearch(t, { history: ['login'], flags: { 'htpr-6911-search-row-highlight': false } }, async ({ selected }) => {
+    assert.ok(selected())
+    assert.equal(selected().hasAttribute('data-search-layout-row'), false)
+    assert.match(selected().className, /rounded-sm/)
+    assert.match(selected().className, /bg-active-elementBg/)
   })
 })

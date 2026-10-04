@@ -449,6 +449,7 @@ test("declared flags remain listed with ticket details and can be changed", asyn
       { key: "htpr-6899-stable-layout", mode: "OWNER_AND_QA", updatedAt: null },
       { key: "htpr-6902-n-quick-add", mode: "OWNER_AND_QA", updatedAt: null },
       { key: "htpr-6909-search-one-board-tabs", mode: "OWNER_AND_QA", updatedAt: null },
+      { key: "htpr-6911-search-row-highlight", mode: "OWNER_AND_QA", updatedAt: null },
       { key: "htpr-6914-shift-c-quick-add", mode: "OWNER_AND_QA", updatedAt: null },
     ],
   );
