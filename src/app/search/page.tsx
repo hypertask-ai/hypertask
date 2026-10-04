@@ -1,4 +1,8 @@
-import { cookies } from "next/headers";
+import { cookies, headers } from "next/headers";
+import { getSessionUser } from "@/lib/auth/getSessionUser";
+// eslint-disable-next-line @typescript-eslint/no-restricted-imports -- This server component authorizes the search-only fullscreen behavior.
+import { isFeatureEnabled } from "@/lib/flags";
+import { HTPR_6936_ASK_AI_FULLSCREEN_FLAG } from "@/lib/flags/keys";
 import SearchComp from "./SearchComp";
 import { Metadata } from "next";
 import { Suspense } from "react";
@@ -22,6 +26,7 @@ export default async function Page(
     return redirect("/login");
   }
   const currentUser: IUser = JSON.parse(userObjString.value);
+  const sessionUser = await getSessionUser(new Headers(await headers()));
 
   const searchTerm: string = searchParams?.searchTerm
     ? searchParams.searchTerm.toString()
@@ -61,6 +66,11 @@ export default async function Page(
         _includeArchived={includeArchived}
         _fromProject={fromProject}
         currentUser={currentUser}
+        askAiFullscreenEnabled={
+          !!sessionUser &&
+          sessionUser.userId === currentUser.id &&
+          await isFeatureEnabled(HTPR_6936_ASK_AI_FULLSCREEN_FLAG, sessionUser.userId)
+        }
       />
     </Suspense>
   );

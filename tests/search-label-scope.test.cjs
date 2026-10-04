@@ -71,7 +71,7 @@ async function withSearch(t, config, check) {
     source('src/lib/constants/keyboard-handler.ts', { KeyCodes: { ARROW_DOWN: 40, ARROW_UP: 38, ENTER: 13, ESCAPE: 27, J: 74, K: 75, TAB: 9 } })
     const post = (_url, body) => new Promise((resolve) => requests.push({ body, resolve }))
     stub(require.resolve('axios'), { default: { post }, post })
-    stub(require.resolve('next/navigation'), { useRouter: () => ({ replace(url) { navigations.push(url) }, push() {}, back() {} }) })
+    stub(require.resolve('next/navigation'), { useSearchParams: () => new URLSearchParams(dom.window.location.search), useRouter: () => ({ replace(url) { navigations.push(url) }, push() {}, back() {} }) })
     stub(require.resolve('@tanstack/react-query'), { useQueryClient: () => ({ invalidateQueries() {}, setQueryData(_key, data) { cache.history = data.history } }) })
     const jiti = createJiti(__filename, { alias: { '@': path.join(root, 'src') }, interopDefault: true, fsCache: false, jsx: { runtime: 'automatic' } })
     const { useSearch } = jiti(path.join(root, 'src/hooks/Search/useSearch.ts'))

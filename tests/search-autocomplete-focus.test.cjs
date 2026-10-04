@@ -56,7 +56,7 @@ test('suggestions retain writing focus; result arrows leave it so Enter opens th
       ] }, tabs: ['All'] } }
     }
     stub(require.resolve('axios'), { default: { post }, post })
-    stub(require.resolve('next/navigation'), { useRouter: () => ({ replace() {}, push(url) { opened.push(url) }, back() {} }) })
+    stub(require.resolve('next/navigation'), { useSearchParams: () => new URLSearchParams(dom.window.location.search), useRouter: () => ({ replace() {}, push(url) { opened.push(url) }, back() {} }) })
     stub(require.resolve('@tanstack/react-query'), { useQueryClient: () => ({ invalidateQueries() {}, setQueryData() {} }) })
     const jiti = require('jiti')(__filename, { alias: { '@': path.join(root, 'src') }, interopDefault: true, fsCache: false, jsx: { runtime: 'automatic' } })
     const { useSearch } = jiti(path.join(root, 'src/hooks/Search/useSearch.ts'))

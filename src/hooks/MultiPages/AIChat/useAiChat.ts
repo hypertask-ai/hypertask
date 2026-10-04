@@ -1,12 +1,15 @@
 
 export { type AiChatProcessedAttachment } from "./aiChatShared";
 
+import { useState } from "react";
 import { useAiChatState } from "./useAiChatState";
 import { useAiChatSessions } from "./useAiChatSessions";
 import { createAiChatKeyboard } from "./aiChatKeyboard";
 import { useAiChatAttachments } from "./useAiChatAttachments";
 import { createAiChatSend } from "./aiChatSend";
 import { useAiChatPresentation } from "./useAiChatPresentation";
+import { useFlag } from "@/hooks/useFlag";
+import { HTPR_6936_ASK_AI_FULLSCREEN_FLAG } from "@/lib/flags/keys";
 
 // Type-only: a value import would pull tiptap back into every page's initial
 // chunk and undo the dynamic mount below (HTPR-4508).
@@ -44,6 +47,9 @@ import { useAiChatPresentation } from "./useAiChatPresentation";
 
 
 export function useAiChat() {
+  // Failed preparation can finish without changing isTyping; wake the search handoff too.
+  const [sendSettledVersion, setSendSettledVersion] = useState(0);
+  const askAiFullscreenEnabled = useFlag(HTPR_6936_ASK_AI_FULLSCREEN_FLAG);
   const {
   lastWorkspaceFocusRef, turnFailureState, queryClient, currentUser, currentProject,
   showAiChatInterface, setShowAIChat, setAiChatAutoOpenSuppressed, setAiChatExplicitOpenAt, aiChatExplicitOpenAt,
@@ -96,7 +102,10 @@ export function useAiChat() {
     streamingAssistantMessageRef, setCurrentStreamingSession, streamingRequestRef, chatRoute, token,
     turnFailureState, setAgentStatus, updateSessionTitle, queryClient, updateLastMessageInSessionCache,
     appendMessageToSessionCache, drainQueuedMessage, handleSendMessageRef,
-  });
+  }, askAiFullscreenEnabled ? {
+    preserveComposer: true,
+    onSettled: () => setSendSettledVersion((version) => version + 1),
+  } : undefined);
   const {
   toggleSidebarMode, togglePopover, minimizeChat, restoreChat, retryStream,
   editMessage, tiptapKeydown, layoutKeydown,
@@ -122,6 +131,7 @@ export function useAiChat() {
     minimizeChat,
     restoreChat,
     isTyping,
+    sendSettledVersion,
     isRecording,
     queuedMessages,
     removeQueuedMessage,
