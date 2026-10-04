@@ -421,6 +421,40 @@ test('cursor-backed reads never overfetch or reapply a local offset to a supplie
   }
 })
 
+test('nested limits validate before fetch-budget rewrites and reject invalid values without execution', async () => {
+  const { calls, tools } = spyTools()
+  for (const [name, action, input] of [
+    ['hypertask_search', 'semantic', { query: 'checkout' }],
+    ['hypertask_search', 'help', { query: 'checkout' }],
+    ['hypertask_tasks', 'next', { project_id: 15, cursor: 'next' }],
+    ['hypertask_tasks', 'list', { project_id: 15 }],
+  ]) {
+    for (const limit of [-1, 0, 1.5, '-1', '0', '1.5', 'invalid', null]) {
+      const count = calls.length
+      const result = await executeToolResult(toolNamed(tools, name), {
+        action, input: { ...input, limit }, limit: 5, offset: 2,
+      }, 'fixture-token')
+      assert.equal(result.isError, true, `${name}/${action}: ${JSON.stringify(limit)}`)
+      assert.match(result.content[0].text, /input.limit/)
+      assert.equal(calls.length, count)
+      assert.equal(result.structuredContent, undefined)
+    }
+  }
+  for (const [action, limit] of [['semantic', 26], ['help', 7]]) {
+    const count = calls.length
+    const invalid = await executeToolResult(toolNamed(tools, 'hypertask_search'), { action, input: { query: 'checkout', limit } }, 'fixture-token')
+    assert.equal(invalid.isError, true)
+    assert.match(invalid.content[0].text, /input.limit/)
+    assert.equal(calls.length, count)
+  }
+  for (const limit of [2, '2']) {
+    const valid = await executeToolResult(toolNamed(tools, 'hypertask_search'), { action: 'semantic', input: { query: 'checkout', limit }, limit: 5, offset: 2 }, 'fixture-token')
+    assert.notEqual(valid.isError, true)
+    assert.equal(calls.at(-1).args.limit, 5)
+    assert.equal(valid.structuredContent.pagination.limit, 2)
+  }
+})
+
 test('both cursor spellings imply continuation even without an upstream has_more field', () => {
   const tasks = [{ id: 1, title: 'First page' }]
   for (const cursor of [{ nextCursor: 'next' }, { next_cursor: 'next' }, { nextCursor: null, next_cursor: 'next' }]) {
