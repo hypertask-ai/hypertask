@@ -117,6 +117,7 @@ test("both shortcut-help surfaces follow the flag and preserve Windows and Apple
         const shortcuts = evaluate(initializer(file, dataName).text, {
           getKeyboardShortcuts, isApple, appShellRailOn: false,
           consistentCommentShortcuts: false, keepDirectTaskOpen: false, historyToggleLabel,
+          includeComposeTaskShortcut: false,
         });
         const shortcut = shortcuts.flatMap((group) => group.sub).find((item) => item.pressKey.join(" ") === `${isApple ? "CMD" : "CTRL"} SHIFT H`);
         assert.equal(shortcut.shortTitle, historyToggleLabel);
