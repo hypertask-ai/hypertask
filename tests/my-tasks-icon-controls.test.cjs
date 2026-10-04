@@ -152,12 +152,12 @@ test("6938 off preserves existing labelled controls and shared active styling", 
 });
 
 test("active semantic tokens use contrasting blues in both themes", () => {
-  const css = read("src/app/globals.css");
   const config = read("tailwind.config.ts");
-  assert.match(config, /"view-control-active": "rgb\(var\(--view-control-active\)/);
-  assert.match(config, /"view-control-active-hover": "rgb\(var\(--view-control-active-hover\)/);
-  assert.match(css, /:root[\s\S]*--view-control-active: 35 131 226/);
-  assert.match(css, /\.dark[\s\S]*--view-control-active: 111 182 255;\s+--view-control-active-hover: 163 208 255/);
+  assert.match(config, /"view-control-active": \{\s+DEFAULT: "rgb\(35, 131, 226\)"/);
+  assert.match(config, /hover: "rgb\(25, 105, 185\)"/);
+  assert.match(config, /dark: "#6FB6FF"/);
+  assert.match(config, /"dark-hover": "#A3D0FF"/);
+  assert.match(read(shellFile), /dark:text-view-control-active-dark dark:hover:text-view-control-active-dark-hover/);
   const luminance = (rgb) => rgb.map((value) => value / 255).map((value) =>
     value <= 0.04045 ? value / 12.92 : ((value + 0.055) / 1.055) ** 2.4)
     .reduce((total, value, index) => total + value * [0.2126, 0.7152, 0.0722][index], 0);

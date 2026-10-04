@@ -128,7 +128,7 @@ export const ViewControlButton = ({
     aria-label={label}
     aria-expanded={kanbanReuseEnabled || iconControlsEnabled ? expanded : undefined}
     onClick={onClick}
-    className={`group relative flex size-8 items-center justify-center transition-colors ${active ? (iconControlsEnabled ? "text-view-control-active hover:text-view-control-active-hover" : kanbanReuseEnabled ? "text-shadcn-primary hover:text-white-black" : "text-[#6FB6FF] hover:text-[#A3D0FF]") : "text-text-light-gray hover:text-white-black"} ${kanbanReuseEnabled || iconControlsEnabled ? className : ""}`}
+    className={`group relative flex size-8 items-center justify-center transition-colors ${active ? (iconControlsEnabled ? "text-view-control-active hover:text-view-control-active-hover dark:text-view-control-active-dark dark:hover:text-view-control-active-dark-hover" : kanbanReuseEnabled ? "text-shadcn-primary hover:text-white-black" : "text-[#6FB6FF] hover:text-[#A3D0FF]") : "text-text-light-gray hover:text-white-black"} ${kanbanReuseEnabled || iconControlsEnabled ? className : ""}`}
   >
     {children}
     <Tooltip
