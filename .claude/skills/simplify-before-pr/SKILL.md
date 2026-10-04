@@ -19,7 +19,7 @@ Scope is the ticket's own diff, nothing else: `git diff --name-only pub/producti
    - Eliminate redundant code and abstractions.
    - Improve readability through clear variable and function names.
    - Consolidate related logic.
-   - Remove unnecessary comments that describe obvious code.
+   - **Comment Sicko:** keep a code comment only when it explains a non-obvious reason. Delete comments that restate the code. Stay inside this ticket's diff. Source: pstack no-comments, https://github.com/cursor/plugins/tree/main/pstack.
    - Avoid nested ternary operators — prefer switch statements or if/else chains for multiple conditions.
    - Choose clarity over brevity — explicit code is often better than overly compact code.
 5. **Maintain balance — leave these alone** (also from the source plugin, kept close to its own wording). Avoid over-simplification that could:

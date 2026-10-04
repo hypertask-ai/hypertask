@@ -1,5 +1,19 @@
 # Changelog
 
+## 1.1.0 - 2026-10-04
+
+Adopt selected pstack rules for the Agent Kit:
+https://app.hypertask.ai/detail/project-4060/195.
+
+- Confirm bug causes at runtime. Undo a failed fix before testing a new cause.
+  Helpers get three short, attributed principle files.
+- Add blast-radius before wide changes ship and three-model design review
+  only for the valentin-review lane. Ordinary work keeps ai-review.
+- Check benchmark conditions, repeated runs and variance before reporting.
+  Keep code comments only for non-obvious reasons.
+- Add report-only weekly feature-map upkeep with a systemd user timer,
+  dry-run and isolated tests. Leave map fixes for a separate ticket.
+
 ## 2026-10-01
 
 These skills are for Valentin's own `/ship` sessions. Board writes go

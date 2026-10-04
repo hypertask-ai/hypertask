@@ -9,6 +9,19 @@ Use at `/ship`'s fix step for a slow board, inbox or task view. This is the how-
 
 **Flag rule (matches `fix-bug` and `INDEX.md`):** speed work with identical intended behavior is a bug fix, no flag, even when the improvement is visible. A behavior change is a feature: load `ship-feature-behind-flag`, not a disguised flag-free speed fix. Existing Merge Rules row 4 still governs speed rollout: one speed change at a time, never automatically switched on in working hours. No flag does not bypass review, deployment or QA gates.
 
+## Check each measured number
+
+Use this benchmark checklist before reporting a baseline, speedup or regression. Answer from runs, not guesses about code.
+
+- State the claim and read the measurement script: what is timed, counted or omitted? Confirm the work ran inside the timed region and produced correct results. Count errors, retries and non-success responses; a fast failure is not a speedup.
+- Keep baseline and after conditions the same: production build and settings, versions, data, browser, viewport, network/CPU, cache state and concurrency. Check host load (`uptime`, `nproc`). If noise cannot be removed, alternate baseline and after runs and record it. If live baseline and fixed build conditions differ, say the comparison is inconclusive.
+- Run each side at least five times per cache state, alternating sides where safe. Keep all samples. Report median, range and the existing p90. A gap smaller than run-to-run variance is no measurable difference; use the harness statistics for a close call.
+- Name the limiter from a separate profile run, not a timed sample. Check the load generator is not the bottleneck. Run both sides with production tuning; say when that is not possible.
+- Check physical limits and the share of work changed. Removing a small part cannot explain a larger whole-path gain. Pair microbenchmarks with the real path the user waits on.
+- Report the verdict, unit, sample count, range, baseline vs after and limiter. Use inconclusive when conditions differ, tuning or limiter is unknown, or correct output and completed work were not checked. Link the raw runs privately with secrets removed.
+
+Source: adapted from pstack benchmark-checklist, https://github.com/cursor/plugins/tree/main/pstack.
+
 ## Steps
 
 1. **Reproduce before editing.** Resolve the shared company pack from `$COMPANY_SKILLS_DIR` or `~/projects/company-skills`, read `skills/speed-check/SKILL.md`, then its `measure.md` at this step. Use only the QA-normal saved login (user 2343) and QA Sandbox fixture, never owner/customer credentials. Run at least five cold and five warm samples for the ticket's surface and profile; keep the full before summary, per-run JSON, release/commit, exact command and conditions. The board-to-task path is distinct from direct task load. If the ticket cannot reproduce, say Can't verify and stop rather than inventing a cause.

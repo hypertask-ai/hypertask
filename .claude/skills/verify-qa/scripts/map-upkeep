@@ -1,0 +1,87 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+install() {
+  local repo target units
+  repo=$(git worktree list --porcelain | sed -n '1s/^worktree //p')
+  [[ $repo == /* ]] || { echo 'Cannot find the main checkout.' >&2; return 1; }
+  target="$HOME/.local/lib/hypertask/verify-map-upkeep"
+  units="$HOME/.config/systemd/user"
+  mkdir -p "$target" "$units"
+  if [[ $(realpath "$0") != "$target/map-upkeep" ]]; then
+    cp "$0" "$target/map-upkeep"
+  fi
+  chmod +x "$target/map-upkeep"
+  cat > "$units/verify-map-upkeep.service" <<EOF
+[Unit]
+Description=Report stale verify-qa feature maps
+[Service]
+Type=oneshot
+WorkingDirectory=$repo
+Environment="PATH=%h/.local/bin:/usr/local/bin:/usr/bin:/bin"
+ExecStart="%h/.local/lib/hypertask/verify-map-upkeep/map-upkeep"
+TimeoutStartSec=2h
+UMask=0077
+EOF
+  cat > "$units/verify-map-upkeep.timer" <<'EOF'
+[Unit]
+Description=Weekly verify-qa feature map report
+[Timer]
+OnCalendar=weekly
+Persistent=true
+[Install]
+WantedBy=timers.target
+EOF
+  systemctl --user daemon-reload
+  systemctl --user enable --now verify-map-upkeep.timer
+}
+
+mode=${1:-run}
+if [[ $# -gt 1 ]]; then
+  echo 'Usage: map-upkeep [--install|--dry-run]' >&2
+  exit 2
+fi
+case "$mode" in
+  --install) install; exit 0 ;;
+  run|--dry-run) ;;
+  *) echo 'Usage: map-upkeep [--install|--dry-run]' >&2; exit 2 ;;
+esac
+
+state="$HOME/.local/state/verify-map-upkeep"
+day=$(date -u +%F)
+report="$state/$day.md"
+prompt="Audit .claude/skills/verify-qa and reference/feature-map against source and the live app at https://app.hypertask.ai. This is a report-only pstack maintain-verification-skill pass, not /ship. Do not claim or move tickets. Do not edit repo files, commit, push, open a PR, remove worktrees or create tickets.
+Read verify-qa/SKILL.md and every feature-map file. Check INDEX.md against the files for missing, duplicate and dead entries. For every feature, trace source entry points with path:line citations, note likely drift and build a short live read-only recipe. Check recent production changes for missing mapped surfaces; require a concrete source path.
+Use one fresh isolated headless browser session, never zsb or Valentin's browser, login, cookies or credentials. Use only an existing QA state named by verify-qa, and check the user identity before use. Never refresh or create a login. If none is valid, cover public pages and mark protected paths unreachable. Never print secrets. Health-check before judging features and again after errors. Recover the browser session after failed drives and continue other features.
+Live checks are read-only. Do not change tasks, comments, views, preferences, plans, flags or other live data. Do not send AI prompts, email, payments or destructive requests. For write-only recipes, inspect the read-only surface and record the write path as unreachable. Do not treat a screenshot as proof of persistence. Required bootstrap/query POSTs may be used only when verify-qa and source confirm they are reads. If read-only operation cannot be assured, mark the case unreachable.
+Distinguish confirmed map drift, harness gaps and product regressions. Do not paper over regressions in maps. Report every feature with source coverage, live evidence or an exact unreachable reason and closest covered path. End with clean only if all features have source and live coverage without drift; stale for proven map drift; otherwise blocked. Include remaining gaps and suggested map edits, never apply them. Return the full concise Markdown report as your final stdout; the wrapper appends it to $report. Leave this worktree in place."
+command=(hax --provider=codex --model=gpt-6.1-sol --effort=high --no-session -p "$prompt")
+
+if [[ $mode == --dry-run ]]; then
+  echo 'Fresh detached worktree off origin/production; report only; no PR.'
+  printf '%q ' "${command[@]}"
+  printf '\nReport: %s\n' "$report"
+  exit 0
+fi
+
+umask 077
+mkdir -p "$state/worktrees"
+exec 9> "$state/lock"
+flock -n 9 || { echo 'An upkeep run is already active.' >&2; exit 1; }
+repo=$(git rev-parse --show-toplevel)
+worktree=$(mktemp -d "$state/worktrees/$day-XXXXXX")
+printf '\n# Verify map upkeep %s\n\nWorktree: %s\n' "$(date -u +%FT%TZ)" "$worktree" >> "$report"
+if ! git -C "$repo" fetch origin production >> "$report" 2>&1 ||
+   ! git -C "$repo" worktree add --detach "$worktree" origin/production >> "$report" 2>&1; then
+  echo 'Outcome: blocked. Could not prepare the production worktree.' >> "$report"
+  exit 1
+fi
+cd "$worktree"
+printf 'Commit: %s\n\n' "$(git rev-parse HEAD)" >> "$report"
+if "${command[@]}" >> "$report" 2> "$worktree.stderr"; then
+  printf '\nRun completed. Worktree retained: %s\n' "$worktree" >> "$report"
+else
+  printf 'Outcome: blocked. Codex run failed; private log: %s.stderr\n' "$worktree" >> "$report"
+  exit 1
+fi
+printf 'Report: %s\nWorktree: %s\n' "$report" "$worktree"

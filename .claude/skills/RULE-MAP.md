@@ -76,6 +76,22 @@ ones, so older comments that cite them still point at the same rule.
 | 123 | A scanner finding is a candidate until you confirm it by reading the route or curling a local build. A confirmed security fix uses `--lane valentin-review`. | fix-bug, `reference/security-findings.md` |
 | 126 | Before the pull request, a UI change matches the style guide and `node scripts/design-lint.mjs` exits 0. | design-compliance |
 
+## Pstack additions
+
+These rules live in skill text only. No hook or CI check enforces runner
+compliance. The upkeep test checks the script, not the truth of its reports.
+
+| Rule | Skill | Enforcement |
+|---|---|---|
+| Confirm the proposed bug cause by watching runtime behaviour before fixing it. | fix-bug | Skill text, not enforced |
+| Undo your failed cause-driven fix and re-test the cause; never stack unproven fixes. | fix-bug | Skill text, not enforced |
+| Helper prompts use fix-root-causes, prove-it-works and test-behavior-not-implementation principles, not a whole playbook. | fix-bug/principles | Skill text, not enforced |
+| Prove material safety facts beyond the diff by running real code before the PR. | blast-radius, ship | Skill text, not enforced |
+| Check measured numbers under matching conditions with repeated runs, variance and baseline vs after. | fix-slow-page | Skill text, not enforced |
+| Before coding in valentin-review, judge design reviews from all three named Codex models. Ordinary ai-review must not use interrogate. | interrogate, ship | Skill text, not enforced |
+| Keep code comments only for non-obvious reasons; remove code restatements. | simplify-before-pr | Skill text, not enforced |
+| Weekly map upkeep reports source/live drift read-only, never as Valentin, with no edits or PR. | verify-qa, scripts/map-upkeep | Skill text for agent conduct, not enforced; script installs the timer and saves output |
+
 ## Logins
 
 The session passes `--state` explicitly.
