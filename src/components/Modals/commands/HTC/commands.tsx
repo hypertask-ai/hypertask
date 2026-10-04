@@ -78,6 +78,7 @@ type Props = {
   showByokApiKeys?: boolean;
   appShellRailOn?: boolean;
   scope?: "board";
+  focusProxy?: { current: HTMLInputElement | null };
 };
 
 const Commands = (props: Props) => {
@@ -91,6 +92,7 @@ const Commands = (props: Props) => {
     showByokApiKeys,
     appShellRailOn,
     scope,
+    focusProxy,
   } = props;
   const composeTaskWriterEnabled = useFlag(HTPR_6929_COMPOSE_TASK_WRITER_FLAG);
   const composeEnabled = composeTaskWriterEnabled && !props.isDemo && !props.isInteractive;
@@ -405,10 +407,12 @@ const Commands = (props: Props) => {
   // console.log("🚀 ~ Commands ~ modal:", modal)
   const [first, setfirst] = useState(false);
 
+  const onKeyChangeRef = useRef(onKeyChange);
+  onKeyChangeRef.current = onKeyChange;
   const setInputRef = useCallback(
     (input: HTMLInputElement | null) => {
       inputRef.current = input;
-      if (!input || !isMobile) return;
+      if (!input || (!isMobile && !focusProxy)) return;
       // The palette lives in a bottom sheet (react-modal-sheet). While the sheet
       // plays its enter animation the input is not yet focusable, so a single
       // focus() during the opening commit (or one frame later) silently no-ops
@@ -420,13 +424,30 @@ const Commands = (props: Props) => {
       let tries = 0;
       const focusUntilLanded = () => {
         const el = inputRef.current;
-        if (!el || document.activeElement === el) return;
+        if (!el) return;
+        const proxy = focusProxy?.current;
+        const transferring = proxy && (document.activeElement === proxy || (tries === 0 && proxy.value));
+        const selectionStart = proxy?.selectionStart ?? null;
+        const selectionEnd = proxy?.selectionEnd ?? null;
+        if (transferring) {
+          // Read at the successful focus attempt, not chunk resolution: typing
+          // can continue in the proxy while the bottom sheet animates in.
+          el.value = proxy.value;
+          onKeyChangeRef.current({ target: proxy } as React.ChangeEvent<HTMLInputElement>);
+        }
         el.focus({ preventScroll: true });
+        if (document.activeElement === el) {
+          if (transferring) {
+            el.setSelectionRange(selectionStart, selectionEnd);
+            proxy.value = "";
+          }
+          return;
+        }
         if (++tries < 30) requestAnimationFrame(focusUntilLanded);
       };
       focusUntilLanded();
     },
-    [isMobile]
+    [isMobile, focusProxy]
   );
 
   useEffect(() => {

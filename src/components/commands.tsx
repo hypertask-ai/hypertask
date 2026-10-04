@@ -81,7 +81,7 @@ import "./Modals/commands/HTC/AllCommands";
 
 
 
-const HypertasksCommands = ({ callbackHandler, contextOptions }: IHTCProps) => {
+const HypertasksCommands = ({ callbackHandler, contextOptions, focusProxy }: IHTCProps) => {
   const ticketPrefixEnabled = useFlag(HTPR_6868_TICKET_PREFIX_FLAG);
   const {
   queryClient, copyCurrentUrlEnabled, rowShortcutsEnabled, myTasksViewsEnabled, myTasksTableColumnsEnabled,
@@ -195,6 +195,7 @@ const HypertasksCommands = ({ callbackHandler, contextOptions }: IHTCProps) => {
         commandMode,
       })}
       {renderCommandModals2({
+        focusProxy,
         isMbl, commandMode, handleAction, paletteContextOptions, billing,
         appShellRailOn, showCommands, currentUser, boardCloseHandler, _currentProject,
         refreshRowTaskList, relationPicker, activeTaskId, callbackHandler, archiveHandler,

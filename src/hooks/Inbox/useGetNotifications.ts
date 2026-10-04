@@ -464,6 +464,25 @@ export const useGetNotifications = (userId: number) => {
     return startedAtRef.current;
   }, [userId]);
   const queryKey = useMemo(() => inboxDataQueryKey(userId), [userId]);
+  // Start the existing fenced read on the first client commit, not the extra
+  // hydrated render. The observer still isolates pre-hydration publication.
+  useEffect(() => {
+    if (hydrated) return;
+    void queryClient.prefetchQuery({
+      queryKey,
+      queryFn: () =>
+        fetchInboxPayload(
+          userId,
+          queryClient,
+          getStartedAt(),
+          readinessLatchRef.current!,
+          readinessLocalOutcomeRef.current!,
+        ),
+      staleTime: INBOX_QUERY_STALE_TIME_MS,
+      // Prefetch defaults to no retries; keep the client observer's three.
+      retry: 3,
+    });
+  }, [hydrated, userId, queryClient, queryKey, getStartedAt]);
   const query = useQuery({
     queryKey,
     ...(hydrated

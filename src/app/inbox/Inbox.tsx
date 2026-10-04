@@ -6,6 +6,7 @@ import {
   ReactNode,
   useCallback,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -21,11 +22,8 @@ import {
   TRemoveFromInboxMode,
 } from "@/models/model";
 import Goback from "@/assets/gobackicon.svg";
-// import InboxSplit from '@/components/notifications/inboxSplit';
-const InboxSplit = dynamic(
-  () => import("@/components/notifications/inboxSplit"),
-  { ssr: false },
-);
+const loadInboxSplit = () => import("@/components/notifications/inboxSplit");
+const InboxSplit = dynamic(loadInboxSplit, { ssr: false });
 
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
@@ -43,9 +41,11 @@ import {
 } from "@/store";
 import Tooltip from "@/components/Common/Tooltip";
 import { useUndoContext } from "@/hooks/General/useUndo";
-// Keep the command center in the page bundle: a pull-down must mount and focus
-// its input during the committing touchend, before mobile user activation ends.
-import HypertasksCommands from "@/components/commands";
+let loadedCommands: typeof import("@/components/commands").default | undefined;
+const loadCommands = () => import("@/components/commands").then((module) => {
+  loadedCommands = module.default;
+  return module;
+});
 import { useQueryClient } from "@tanstack/react-query";
 import Image from "next/image";
 import toast from "react-hot-toast";
@@ -128,6 +128,60 @@ const Inbox = ({
   const { toggleShowCommands, toggleCreateTaskGlobally } =
     useHypertasksRecoilStates();
   const [showCommands, setShowCommands] = useRecoilState(showCommandsAtom);
+  const [commands, setCommands] = useState(() => loadedCommands);
+  const HypertasksCommands = loadedCommands ?? commands;
+  const commandFocusProxy = useRef<HTMLInputElement>(null);
+  const [inboxContentReady, setInboxContentReady] = useState(false);
+  const onInboxContentReady = useCallback(() => setInboxContentReady(true), []);
+  const warmCommands = useCallback(() => {
+    if (loadedCommands) return;
+    void loadCommands().then(({ default: Commands }) => {
+      setCommands(() => Commands);
+    }).catch(() => {});
+  }, []);
+  useLayoutEffect(() => {
+    // iOS needs a focused input during the pull-down's committing touchend.
+    // The mounted proxy keeps that keyboard session alive until the chunk loads.
+    if (showCommands.show && !HypertasksCommands) {
+      commandFocusProxy.current?.focus({ preventScroll: true });
+    } else if (!showCommands.show && commandFocusProxy.current) {
+      if (document.activeElement === commandFocusProxy.current) {
+        commandFocusProxy.current.blur();
+      }
+      commandFocusProxy.current.value = "";
+    }
+  }, [showCommands.show, HypertasksCommands]);
+  useEffect(() => {
+    // Fetch the visible split in parallel with the first client-commit read.
+    void loadInboxSplit().catch(() => {});
+    document.addEventListener("pointerdown", warmCommands, { capture: true, passive: true });
+    document.addEventListener("touchstart", warmCommands, { capture: true, passive: true });
+    document.addEventListener("keydown", warmCommands, true);
+    return () => {
+      document.removeEventListener("pointerdown", warmCommands, true);
+      document.removeEventListener("touchstart", warmCommands, true);
+      document.removeEventListener("keydown", warmCommands, true);
+    };
+  }, [warmCommands]);
+  useEffect(() => {
+    if (showCommands.show && !HypertasksCommands) warmCommands();
+  }, [showCommands.show, HypertasksCommands, warmCommands]);
+  useEffect(() => {
+    if (!notificationsQuery.isFetched || !inboxContentReady) return;
+    let idle: number | undefined;
+    let timer: number | undefined;
+    let frame = window.requestAnimationFrame(() => {
+      frame = window.requestAnimationFrame(() => {
+        if (window.requestIdleCallback) idle = window.requestIdleCallback(warmCommands, { timeout: 5000 });
+        else timer = window.setTimeout(warmCommands, 2000);
+      });
+    });
+    return () => {
+      window.cancelAnimationFrame(frame);
+      if (idle !== undefined) window.cancelIdleCallback(idle);
+      if (timer !== undefined) window.clearTimeout(timer);
+    };
+  }, [notificationsQuery.isFetched, inboxContentReady, warmCommands]);
   const [__notifications, _setNotifications] = useState<INotification[][]>();
   const [showInboxSearch, setShowInboxSearch] = useState(false);
   const [showManageSplits, setShowManageSplits] = useState(false);
@@ -665,6 +719,26 @@ const Inbox = ({
 
   return (
     <>
+      <input
+        ref={commandFocusProxy}
+        id="inbox-command-focus-proxy"
+        type="search"
+        inputMode="search"
+        autoComplete="off"
+        autoCorrect="off"
+        autoCapitalize="none"
+        spellCheck={false}
+        tabIndex={-1}
+        aria-label="Command search"
+        className="fixed left-0 top-0 h-px w-px opacity-0 pointer-events-none text-[16px]"
+        onKeyDown={(event) => {
+          if (event.key === "Escape" || (event.key.toLowerCase() === "k" &&
+            ((isApple && event.metaKey) || (!isApple && event.ctrlKey)))) {
+            event.preventDefault();
+            setShowCommands((prev) => ({ ...prev, show: false }));
+          }
+        }}
+      />
       <span
         aria-hidden="true"
         className="hidden"
@@ -816,6 +890,12 @@ const Inbox = ({
                     key={`split-${globalFocus.currSplit}`}
                     updateNotification={updateUnseenNotification}
                     onLoadCallback={initialScroll}
+                    onContentReady={
+                      notificationsQuery.isFetched && notificationsQuery.isSuccess &&
+                      __notifications === _notificationsTQ?.structuredData?.data
+                        ? onInboxContentReady
+                        : undefined
+                    }
                     selectedReset={_selectedInbox}
                     originProject={originProject}
                     value={globalFocus.currSplit}
@@ -893,9 +973,10 @@ const Inbox = ({
             </Link>
           )}
         </div>
-        {showCommands.show && (
+        {showCommands.show && HypertasksCommands && (
           <HypertasksCommands
             callbackHandler={htcCallbackHandler}
+            focusProxy={commandFocusProxy}
           />
         )}
       </BulkSelectionProvider>
