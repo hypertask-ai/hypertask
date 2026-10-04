@@ -101,7 +101,7 @@ const jiti = require('jiti')(__filename, { alias: { '@': path.join(root, 'src') 
 const { parseSearchWithNames, parseSearchWithChipNames } = jiti(path.join(root, 'src/lib/search/serverOperators.ts'))
 const { searchFilterWhere } = jiti(path.join(root, 'src/lib/search/filters.ts'))
 const handler = jiti(path.join(root, 'src/pages/api/search/document.ts')).default
-const { GET } = jiti(path.join(root, 'src/app/api/mcp/tasks/search/route.ts'))
+const { GET } = jiti(path.join(root, 'src/lib/mcp/operations/tasks/search/operation.ts'))
 const { NextRequest } = require('next/server')
 async function filter(query, fuzzy = true, chips = false) {
   reset(fuzzy, chips)

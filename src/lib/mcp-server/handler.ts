@@ -15,6 +15,8 @@ import { selectMcpTools } from './consolidated-tools'
 import { isFeatureEnabled, HTPR_6804_MCP_TOOLS_FLAG } from '@/lib/flags'
 import type { ManagementPermissions } from '@/lib/mcp/managementPermissions'
 import { NextRequest } from 'next/server'
+import { withMcpExecutionContext } from '@/lib/mcp/operationContext'
+import type { McpAuthContext } from '@/lib/mcp/auth/types'
 import { handleMcpHttp } from './mcp-http'
 import {
   handleStatelessMcpRequest,
@@ -42,7 +44,7 @@ async function verifyToken(_request: Request, bearerToken?: string): Promise<Aut
       token: bearerToken,
       clientId: String(ctx.user.id),
       scopes: ['mcp:management'],
-      extra: { managementPermissions: ctx.management.permissions, teamScoped: Boolean(ctx.management.teamId) },
+      extra: { managementPermissions: ctx.management.permissions, teamScoped: Boolean(ctx.management.teamId), mcpAuthContext: ctx },
     }
   }
 
@@ -56,7 +58,7 @@ async function verifyToken(_request: Request, bearerToken?: string): Promise<Aut
     clientId: String(ctx.user.id),
     scopes: ['mcp:full'],
     expiresAt,
-    extra: { agent: Boolean(ctx.agentId) },
+    extra: { agent: Boolean(ctx.agentId), mcpAuthContext: ctx },
   }
 }
 
@@ -128,10 +130,12 @@ export async function mcpHandler(request: Request): Promise<Response> {
       return handleLegacySseRequest(working, authInfo, resolvePortableTools(MCP_TOOLS as PortableTool[]))
     }
 
-    return handleMcpHttp(working, {
-      authenticate: async () => authInfo,
-      tools: portableTools,
-    })
+    return withMcpExecutionContext(authInfo.token, authInfo.extra?.mcpAuthContext as McpAuthContext, () =>
+      handleMcpHttp(working, {
+        authenticate: async () => authInfo,
+        tools: portableTools,
+      }),
+    )
   } finally {
     recordLegacyMcpRequest(request, telemetryUserId, timestamp)
   }

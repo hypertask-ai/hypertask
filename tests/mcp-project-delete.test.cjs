@@ -6,7 +6,7 @@ const ts = require("typescript");
 
 const routePath = path.resolve(
   __dirname,
-  "../src/app/api/mcp/projects/archive/route.ts",
+  "../src/lib/mcp/operations/projects/archive/operation.ts",
 );
 
 function loadRoute({ authenticated = true, enabled = true, result } = {}) {

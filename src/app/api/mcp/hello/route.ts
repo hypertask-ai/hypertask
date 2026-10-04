@@ -1,4 +1,4 @@
-import { handleHelloRequest } from '@/lib/mcp/hello/getHelloPayload'
+import { GET as executeGET, POST as executePOST } from '@/lib/mcp/operations/hello/operation'
 
-export const GET = handleHelloRequest
-export const POST = handleHelloRequest
+export const GET = executeGET
+export const POST = executePOST

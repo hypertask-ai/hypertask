@@ -1,4 +1,4 @@
-import { getCreateTaskInputSchema, CreateTaskInputSchema } from '../validations/task.validation';
+import { getCreateTaskInputSchema } from '../validations/task.validation';
 import { TOOL_METADATA } from '../config/tool-metadata';
 import { executeWithService } from '../utils/executeWithService';
 import { TaskService } from '../lib/services/task.service';
@@ -24,7 +24,7 @@ export const createTaskTool = {
   ) => {
     // Normalize input (coerce project_id/section_id from strings - AI agents sometimes pass "1511")
     const normalizedArgs = normalizeCreateTaskInput((args || {}) as Record<string, any>);
-    const validatedInput = CreateTaskInputSchema.parse(normalizedArgs);
+    const validatedInput = normalizedArgs;
 
     return executeWithService(
       context,

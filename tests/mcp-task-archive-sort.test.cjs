@@ -5,7 +5,7 @@ const path = require("node:path");
 const ts = require("typescript");
 
 const root = path.resolve(__dirname, "..");
-const routePath = path.join(root, "src/app/api/mcp/tasks/route.ts");
+const routePath = path.join(root, "src/lib/mcp/operations/tasks/operation.ts");
 const routeJavascript = ts.transpileModule(fs.readFileSync(routePath, "utf8"), {
   compilerOptions: {
     esModuleInterop: true,

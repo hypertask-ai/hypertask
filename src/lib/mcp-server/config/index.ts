@@ -1,6 +1,4 @@
 export interface McpServerConfig {
-  apiUrl: string
-  requestTimeout: number
   createBoardRequestTimeoutMs: number
   attachmentRequestTimeoutMs: number
   limits: {
@@ -22,8 +20,6 @@ let config: McpServerConfig | undefined
 export function getConfig(): McpServerConfig {
   if (!config) {
     config = {
-      apiUrl: (process.env.MCP_SELF_API_URL ?? 'https://app.hypertask.ai/api').replace(/\/$/, ''),
-      requestTimeout: envNumber('REQUEST_TIMEOUT', 30000),
       createBoardRequestTimeoutMs: envNumber('CREATE_BOARD_REQUEST_TIMEOUT_MS', 120000),
       // Longer than the route's absolute 630s batch deadline, shorter than MCP's 800s cap.
       attachmentRequestTimeoutMs: envNumber('ATTACHMENT_REQUEST_TIMEOUT_MS', 660000),

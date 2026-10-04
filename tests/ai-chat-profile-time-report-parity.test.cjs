@@ -60,7 +60,7 @@ test("AI Chat profile updates share the MCP write path and preserve profile-set 
   const controller = read(
     "src/utils/controllers/users/updateOwnProfile.ts",
   );
-  const mcpRoute = read("src/app/api/mcp/user/profile/route.ts");
+  const mcpRoute = read("src/lib/mcp/operations/user/profile/operation.ts");
 
   assert.match(body, /inputSchema: getUpdateProfileInputSchema\(\)/);
   assert.match(body, /if \(actingAgentId\)/);

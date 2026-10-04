@@ -1,4 +1,4 @@
-import { getSectionCrudBaseSchema, SectionCrudInputSchema } from '../validations/project.validation';
+import { getSectionCrudBaseSchema } from '../validations/project.validation';
 import { TOOL_METADATA } from '../config/tool-metadata';
 import { executeWithService } from '../utils/executeWithService';
 import { SectionService } from '../lib/services/section.service';
@@ -14,7 +14,7 @@ export const sectionTool = {
   description: TOOL_METADATA.SECTION_CRUD.description,
   parameters: getSectionCrudBaseSchema(),
   execute: async (args: unknown, context: unknown) => {
-    const validatedInput = SectionCrudInputSchema.parse(args);
+    const validatedInput = args;
     return executeWithService(context, SectionService, 'manageSection', validatedInput);
   },
 };

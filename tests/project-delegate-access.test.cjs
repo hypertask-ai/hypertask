@@ -167,8 +167,8 @@ test("human board discovery remains byte-for-byte unchanged", () => {
 
 test("every MCP board-discovery payload uses the narrow listing scope", () => {
   const discoverySources = [
-    "src/app/api/mcp/projects/route.ts",
-    "src/app/api/mcp/user/context/route.ts",
+    "src/lib/mcp/operations/projects/operation.ts",
+    "src/lib/mcp/operations/user/context/operation.ts",
     "src/lib/mcp/hello/getHelloPayload.ts",
   ];
 

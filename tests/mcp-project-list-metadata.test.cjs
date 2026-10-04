@@ -4,7 +4,7 @@ const fs = require("node:fs");
 const path = require("node:path");
 
 const source = fs.readFileSync(
-  path.resolve(__dirname, "../src/app/api/mcp/projects/route.ts"),
+  path.resolve(__dirname, "../src/lib/mcp/operations/projects/operation.ts"),
   "utf8",
 );
 

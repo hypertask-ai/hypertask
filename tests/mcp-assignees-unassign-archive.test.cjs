@@ -33,7 +33,7 @@ test("assignee lookup status filter: unassign allows any status, assign stays No
   assert.equal(assigneeLookupStatusFilter("assign"), "Normal");
   assert.equal(assigneeLookupStatusFilter("unassign"), undefined);
 
-  const routeSource = read("src/app/api/mcp/assignees/assign/route.ts");
+  const routeSource = read("src/lib/mcp/operations/assignees/assign/operation.ts");
   assert.match(
     routeSource,
     /assigneeLookupStatusFilter\(\s*allowNonNormalStatus\s*\?\s*"unassign"\s*:\s*"assign"\s*\)/,

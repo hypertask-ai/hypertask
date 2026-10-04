@@ -16,7 +16,7 @@ const read = (p) => fs.readFileSync(path.join(root, p), "utf8");
 
 const update = read("src/app/api/mcp/time/update/route.ts");
 const remove = read("src/app/api/mcp/time/delete/route.ts");
-const lib = read("src/app/api/mcp/time/_lib.ts");
+const lib = read("src/lib/mcp/operations/time/helpers.ts");
 
 test("both routes exist and are POST, matching the other time endpoints", () => {
   // start / stop / log / status / running / report are all POST. A route that

@@ -1,7 +1,4 @@
-import {
-  getMoveTaskBetweenBoardsBaseSchema,
-  MoveTaskBetweenBoardsInputSchema,
-} from '../validations/task.validation';
+import { getMoveTaskBetweenBoardsBaseSchema } from '../validations/task.validation';
 import { TOOL_METADATA } from '../config/tool-metadata';
 import { executeWithService } from '../utils/executeWithService';
 import { TaskService } from '../lib/services/task.service';
@@ -20,7 +17,7 @@ export const moveTaskBetweenBoardsTool = {
   parameters: MoveTaskBetweenBoardsBaseSchema,
   execute: async (args: unknown, context: any) => {
     const normalizedArgs = normalizeTaskInput(args as Record<string, any>);
-    const validatedInput = MoveTaskBetweenBoardsInputSchema.parse(normalizedArgs);
+    const validatedInput = normalizedArgs;
 
     return executeWithService(
       context,

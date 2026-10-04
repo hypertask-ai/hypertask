@@ -1,4 +1,4 @@
-import { validateAndSanitizeImportSkillsInput, getImportSkillsBaseSchema } from '../validations/skill.validation';
+import { getImportSkillsBaseSchema } from '../validations/skill.validation';
 import { SkillService } from '../lib/services/skill.service';
 import { executeWithService } from '../utils/executeWithService';
 import { TOOL_METADATA } from '../config/tool-metadata';
@@ -12,7 +12,7 @@ export const importSkillsTool = {
   description: TOOL_METADATA.IMPORT_SKILLS.description,
   parameters: getImportSkillsBaseSchema(),
   execute: async (args: unknown, context: any) => {
-    const validatedInput = validateAndSanitizeImportSkillsInput(args);
+    const validatedInput = args;
     return executeWithService(context, SkillService, 'importSkills', validatedInput);
   },
 };

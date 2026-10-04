@@ -13,11 +13,11 @@ const { createTaskCardActionHandler } = jiti(
   path.join(root, 'src/lib/mcp/tasks/cardActionHandler.ts'),
 )
 const taskRouteSource = require('node:fs').readFileSync(
-  path.join(root, 'src/app/api/mcp/tasks/route.ts'),
+  path.join(root, 'src/lib/mcp/operations/tasks/operation.ts'),
   'utf8',
 )
 const taskContextRouteSource = require('node:fs').readFileSync(
-  path.join(root, 'src/app/api/mcp/tasks/context/route.ts'),
+  path.join(root, 'src/lib/mcp/operations/tasks/context/operation.ts'),
   'utf8',
 )
 const handlerSource = require('node:fs').readFileSync(

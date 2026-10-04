@@ -74,7 +74,7 @@ function harness({ ownerId = 99, ownerAgents = [], members = [], status = "Norma
   }).default;
   const userRecord = { loadSessionUserRecord: async (id) => ({ id }) };
   const realtime = { broadcastBoardChange: async (...args) => { broadcasts.push(args); } };
-  const route = loadTs("src/app/api/mcp/projects/[projectId]/route.ts", {
+  const route = loadTs("src/lib/mcp/operations/projects/[projectId]/operation.ts", {
     "next/server": { NextResponse: Response },
     "@/lib/mcp/auth": {
       validateMcpAuth: async () => auth,

@@ -37,7 +37,7 @@ function loadRoute({ agentId = "agent-1", records } = {}) {
     },
   ];
   const dependencies = [
-    "src/app/api/mcp/inbox/list/route.ts",
+    "src/lib/mcp/operations/inbox/list/operation.ts",
     "src/lib/mcp/auth.ts",
     "src/lib/mcp/agents.ts",
     "src/utils/controllers/notifications/getAll.ts",
@@ -131,7 +131,7 @@ function loadRoute({ agentId = "agent-1", records } = {}) {
       cache: false,
     },
   );
-  const route = jiti(path.join(root, "src/app/api/mcp/inbox/list/route.ts"));
+  const route = jiti(path.join(root, "src/lib/mcp/operations/inbox/list/operation.ts"));
   return { ...route, calls };
 }
 

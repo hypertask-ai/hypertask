@@ -83,12 +83,12 @@ test("management-only keys can authenticate the MCP transport without gaining da
 
 test("admin routes expose agents, tokens, rotation, and connection inventory", () => {
   const routes = {
-    "src/app/api/mcp/admin/agents/route.ts": ["GET", "POST", "DELETE"],
+    "src/lib/mcp/operations/admin/agents/operation.ts": ["GET", "POST", "DELETE"],
     "src/app/api/mcp/admin/agents/[agentId]/token/route.ts": ["POST"],
-    "src/app/api/mcp/agents/[agentId]/route.ts": ["DELETE", "PATCH"],
-    "src/app/api/mcp/agents/[agentId]/archive/route.ts": ["POST"],
-    "src/app/api/mcp/admin/tokens/route.ts": ["POST", "DELETE"],
-    "src/app/api/mcp/admin/connections/route.ts": ["GET"],
+    "src/lib/mcp/operations/agents/[agentId]/operation.ts": ["DELETE", "PATCH"],
+    "src/lib/mcp/operations/agents/[agentId]/archive/operation.ts": ["POST"],
+    "src/lib/mcp/operations/admin/tokens/operation.ts": ["POST", "DELETE"],
+    "src/lib/mcp/operations/admin/connections/operation.ts": ["GET"],
   };
 
   for (const [route, methods] of Object.entries(routes)) {
@@ -98,13 +98,13 @@ test("admin routes expose agents, tokens, rotation, and connection inventory", (
     }
   }
 
-  const agents = read("src/app/api/mcp/admin/agents/route.ts");
+  const agents = read("src/lib/mcp/operations/admin/agents/operation.ts");
   const rotation = read(
     "src/app/api/mcp/admin/agents/[agentId]/token/route.ts",
   );
-  const tokens = read("src/app/api/mcp/admin/tokens/route.ts");
+  const tokens = read("src/lib/mcp/operations/admin/tokens/operation.ts");
   const accountTokens = read("src/lib/mcp/accountTokens.ts");
-  const connections = read("src/app/api/mcp/admin/connections/route.ts");
+  const connections = read("src/lib/mcp/operations/admin/connections/operation.ts");
   for (const handler of [
     "handleListAgentsRequest",
     "handleCreateAgentRequest",

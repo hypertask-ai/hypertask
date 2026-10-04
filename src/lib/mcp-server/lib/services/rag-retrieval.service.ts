@@ -1,6 +1,7 @@
 import { NextRequest } from 'next/server'
 
 import { validateMcpAuth } from '@/lib/mcp/auth'
+import { bindMcpOperationContext, getMcpExecutionContext } from '@/lib/mcp/operationContext'
 import {
   retrieveBoardKnowledge,
   type BoardKnowledgeSearchResponse,
@@ -23,6 +24,8 @@ export class RagRetrievalService {
     const request = new NextRequest('http://localhost/api/mcp/rag-retrieval', {
       headers: { Authorization: `Bearer ${bearerToken}` },
     })
+    const executionContext = getMcpExecutionContext(bearerToken)
+    if (executionContext) bindMcpOperationContext(request, executionContext, true)
     const ctx = await validateMcpAuth(request)
     if (!ctx) {
       throw new Error('Unauthorized. Invalid or missing authentication token.')

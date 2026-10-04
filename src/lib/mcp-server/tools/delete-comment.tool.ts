@@ -1,10 +1,7 @@
 import { CommentService } from '../lib/services/comment.service';
 import { executeWithService } from '../utils/executeWithService';
 import { TOOL_METADATA } from '../config/tool-metadata';
-import {
-  getDeleteCommentBaseSchema,
-  DeleteCommentInputSchema,
-} from '../validations/comment.validation';
+import { getDeleteCommentBaseSchema } from '../validations/comment.validation';
 
 /**
  * Tool: delete_comment
@@ -15,7 +12,7 @@ export const deleteCommentTool = {
   description: TOOL_METADATA.DELETE_COMMENT.description,
   parameters: getDeleteCommentBaseSchema(),
   execute: async (args: unknown, context: any) => {
-    const validatedInput = DeleteCommentInputSchema.parse(args);
+    const validatedInput = args;
     return executeWithService(
       context,
       CommentService,

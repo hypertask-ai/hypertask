@@ -1,4 +1,4 @@
-import { AssignUserInputSchema, getAssignUserBaseSchema } from '../validations/task.validation';
+import { getAssignUserBaseSchema } from '../validations/task.validation';
 import { TaskService } from '../lib/services/task.service';
 import { executeWithService } from '../utils/executeWithService';
 import { TOOL_METADATA } from '../config/tool-metadata';
@@ -14,7 +14,7 @@ export const assignUserTool = {
   parameters: getAssignUserBaseSchema(),
   execute: async (args: unknown, context: any) => {
     const normalizedArgs = normalizeTaskInput(args as Record<string, any>);
-    const validatedInput = AssignUserInputSchema.parse(normalizedArgs);
+    const validatedInput = normalizedArgs;
 
     return executeWithService(context, TaskService, 'assignUser', validatedInput);
   },

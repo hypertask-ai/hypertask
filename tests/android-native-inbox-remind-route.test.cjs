@@ -4,7 +4,7 @@ const path = require('node:path')
 const test = require('node:test')
 
 const route = fs.readFileSync(
-  path.join(process.cwd(), 'src/app/api/mcp/inbox/archive/route.ts'),
+  path.join(process.cwd(), 'src/lib/mcp/operations/inbox/archive/operation.ts'),
   'utf8'
 )
 

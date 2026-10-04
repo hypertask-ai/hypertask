@@ -16,9 +16,9 @@ const functionSource = (source, name, nextName) => {
   return source.slice(start, end);
 };
 
-const pauseRoute = read("src/app/api/mcp/time/pause/route.ts");
-const resumeRoute = read("src/app/api/mcp/time/resume/route.ts");
-const stopRoute = read("src/app/api/mcp/time/stop/route.ts");
+const pauseRoute = read("src/lib/mcp/operations/time/pause/operation.ts");
+const resumeRoute = read("src/lib/mcp/operations/time/resume/operation.ts");
+const stopRoute = read("src/lib/mcp/operations/time/stop/operation.ts");
 const timeTracking = read("src/lib/timeTracking.ts");
 const timeEntryWriter = read("src/lib/timeEntryWriter.ts");
 const pauseLib = functionSource(timeTracking, "pauseTimer", "resumeTimer");

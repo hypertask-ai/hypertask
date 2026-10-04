@@ -1,10 +1,7 @@
 import { TOOL_METADATA } from '../config/tool-metadata'
 import { RagRetrievalService } from '../lib/services/rag-retrieval.service'
 import { executeWithService } from '../utils/executeWithService'
-import {
-  getRagRetrievalBaseSchema,
-  RagRetrievalInputSchema,
-} from '../validations/rag-retrieval.validation'
+import { getRagRetrievalBaseSchema } from '../validations/rag-retrieval.validation'
 
 /**
  * Tool: rag_retrieval
@@ -15,7 +12,7 @@ export const ragRetrievalTool = {
   description: TOOL_METADATA.RAG_RETRIEVAL.description,
   parameters: getRagRetrievalBaseSchema(),
   execute: async (args: unknown, context: any) => {
-    const validatedInput = RagRetrievalInputSchema.parse(args)
+    const validatedInput = args
     return executeWithService(
       context,
       RagRetrievalService,

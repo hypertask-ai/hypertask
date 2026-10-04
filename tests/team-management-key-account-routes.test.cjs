@@ -5,8 +5,8 @@ const { NextRequest } = require("next/server");
 
 const root = path.resolve(__dirname, "..");
 const stubbedPaths = [
-  "src/app/api/mcp/admin/tokens/route.ts",
-  "src/app/api/mcp/admin/connections/route.ts",
+  "src/lib/mcp/operations/admin/tokens/operation.ts",
+  "src/lib/mcp/operations/admin/connections/operation.ts",
   "src/app/api/mcp/admin/team-gateway-keys/route.ts",
   "src/lib/mcp/auth.ts",
   "src/lib/mcp/accountTokens.ts",
@@ -92,9 +92,9 @@ const jiti = require("jiti")(
   },
 );
 
-const tokens = jiti(path.join(root, "src/app/api/mcp/admin/tokens/route.ts"));
+const tokens = jiti(path.join(root, "src/lib/mcp/operations/admin/tokens/operation.ts"));
 const connections = jiti(
-  path.join(root, "src/app/api/mcp/admin/connections/route.ts"),
+  path.join(root, "src/lib/mcp/operations/admin/connections/operation.ts"),
 );
 const gateway = jiti(
   path.join(root, "src/app/api/mcp/admin/team-gateway-keys/route.ts"),

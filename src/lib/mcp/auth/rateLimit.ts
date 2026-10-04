@@ -4,10 +4,11 @@ import { getRedis } from '@/lib/redis';
 import { decideMcpRateLimit, MCP_RATE_LIMIT_WINDOW_SECONDS } from '@/lib/mcp/rateLimitDecision';
 import { extractBearerToken, validateMcpAuth } from './session';
 import type { McpAuthContext } from './types';
+import { getMcpOperationContext } from '../operationContext';
 
-// Default/anonymous tier — unauthenticated or invalid-token traffic (HTPR-4135). Unchanged.
+// Default/anonymous tier - unauthenticated or invalid-token traffic (HTPR-4135). Unchanged.
 const MCP_RATE_LIMIT_PER_MINUTE = Number(process.env.MCP_RATE_LIMIT_PER_MINUTE) || 120
-// Agent tier — successfully authenticated agent JWTs (agentId claim) or valid htk_ API
+// Agent tier - successfully authenticated agent JWTs (agentId claim) or valid htk_ API
 // keys get a higher published limit instead of being treated as anonymous scraping
 // traffic (HTPR-4431). Picked as 5x default; tune via env if it's wrong in practice.
 const MCP_AGENT_RATE_LIMIT_PER_MINUTE = Number(process.env.MCP_AGENT_RATE_LIMIT_PER_MINUTE) || 600
@@ -27,10 +28,11 @@ export function classifyMcpRateLimitCount(
 /**
  * Per-token rate limit for /api/mcp/* routes (HTPR-4135), backed by Redis so the
  * count is shared across serverless instances. Keys on a hash of the bearer token
- * (never the raw token). Fails open on any storage error — never blocks
+ * (never the raw token). Fails open on any storage error - never blocks
  * legitimate traffic because our own infra hiccupped.
  */
 export async function checkMcpRateLimit(request: NextRequest): Promise<NextResponse | null> {
+  if (getMcpOperationContext(request)?.rateLimitChecked) return null
   const token = extractBearerToken(request.headers.get('Authorization'))
   if (!token) return null
 
@@ -73,8 +75,8 @@ export async function checkMcpRateLimit(request: NextRequest): Promise<NextRespo
  * Which per-minute limit applies given the already-resolved auth context (or null if
  * the token failed validation) and the raw bearer token. Only a successfully
  * authenticated agent JWT (agentId set) or a successfully authenticated htk_ API key
- * gets the relaxed tier. Anything else — invalid tokens, human JWTs, htmk_ management
- * keys — stays on the strict default tier. Exported for direct unit testing.
+ * gets the relaxed tier. Anything else - invalid tokens, human JWTs, htmk_ management
+ * keys - stays on the strict default tier. Exported for direct unit testing.
  */
 export function resolveMcpRateLimit(ctx: McpAuthContext | null, token: string): number {
   const isAgentTier = ctx !== null && (ctx.agentId !== null || token.startsWith('htk_'))

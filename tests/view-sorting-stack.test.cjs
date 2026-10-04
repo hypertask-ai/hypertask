@@ -377,11 +377,11 @@ test("view services reject an unknown empty-section setting before writing", asy
 
 test("MCP view routes forward board_empty_sections to the shared service", () => {
   const createRoute = fs.readFileSync(
-    path.join(root, "src/app/api/mcp/view/route.ts"),
+    path.join(root, "src/lib/mcp/operations/view/operation.ts"),
     "utf8",
   );
   const updateRoute = fs.readFileSync(
-    path.join(root, "src/app/api/mcp/view/[viewId]/route.ts"),
+    path.join(root, "src/lib/mcp/operations/view/[viewId]/operation.ts"),
     "utf8",
   );
 

@@ -10,6 +10,7 @@ import { HTPR_6542_TEAM_SCOPED_MANAGEMENT_KEYS_FLAG, isFeatureEnabled } from '@/
 import { ACCOUNT_MANAGEMENT_KEY_PREFIX, getManagementKeyTeam, TEAM_MANAGEMENT_KEY_PREFIX } from '@/lib/mcp/managementKeyTeamScope';
 import { JWT_MCP_AUDIENCE, validateJwtToken } from './verifyJwt';
 import type { McpAuthContext, ValidateMcpAuthOptions } from './types';
+import { getMcpOperationContext } from '../operationContext';
 
 export const MANAGEMENT_KEY_PREFIX = ACCOUNT_MANAGEMENT_KEY_PREFIX
 export const isManagementKeyToken = (token: string) =>
@@ -42,6 +43,13 @@ export async function validateMcpAuth(
   request: NextRequest,
   options: ValidateMcpAuthOptions = {}
 ): Promise<McpAuthContext | null> {
+  const operationContext = getMcpOperationContext(request)
+  if (operationContext) {
+    const ctx = operationContext.auth
+    if (ctx.management && !options.deferManagementPermissionCheck &&
+      !hasDataPermission(ctx.management.permissions)) return null
+    return ctx
+  }
   const token = extractBearerToken(request.headers.get('Authorization'))
 
   if (!token) {
@@ -167,7 +175,7 @@ export async function validateManagementAuth(
   }
 
   if (isManagementKeyToken(token)) {
-    const managementCtx = await validateManagementApiKey(token)
+    const managementCtx = getMcpOperationContext(request)?.auth ?? await validateManagementApiKey(token)
     const permissions = managementCtx?.management?.permissions ?? {}
     let hasRequiredPermission = hasAnyManagementPermission(permissions)
     if (requiredAction === 'write') {
@@ -197,7 +205,7 @@ export async function validateManagementAuth(
 
   // Management endpoints accept only real MCP tokens (aud mcp-api). The same
   // JWT_SECRET signs calendar-feed/email-link tokens, and validateJwtToken
-  // keeps a legacy no-audience fallback for old MCP clients — without this
+  // keeps a legacy no-audience fallback for old MCP clients - without this
   // gate any same-secret JWT could mint a persistent management key.
   const unverified = jwt.decode(token) as jwt.JwtPayload | null
   const aud = unverified?.aud
@@ -207,7 +215,7 @@ export async function validateManagementAuth(
     return null
   }
 
-  const ctx = await validateJwtToken(token)
+  const ctx = getMcpOperationContext(request)?.auth ?? await validateJwtToken(token)
   if (!ctx) return null
   // Agent-bound JWTs are data credentials for bots; letting one mint or
   // revoke keys would escalate a leaked bot token to account admin.

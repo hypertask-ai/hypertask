@@ -1,10 +1,7 @@
 import { TOOL_METADATA } from '../config/tool-metadata';
 import { ReportService } from '../lib/services/report.service';
 import { executeWithService } from '../utils/executeWithService';
-import {
-  getReportCrudBaseSchema,
-  ReportCrudInputSchema,
-} from '../validations/report.validation';
+import { getReportCrudBaseSchema } from '../validations/report.validation';
 
 /**
  * Tool: report
@@ -17,7 +14,7 @@ export const reportTool = {
   description: TOOL_METADATA.REPORT_CRUD.description,
   parameters: getReportCrudBaseSchema(),
   execute: async (args: unknown, context: unknown) => {
-    const validatedInput = ReportCrudInputSchema.parse(args);
+    const validatedInput = args;
     return executeWithService(
       context,
       ReportService,
