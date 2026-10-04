@@ -67,7 +67,12 @@ export function redactAiCaptureProperties(
 }
 
 export type AiChatTurnRecord = {
-  userId: number;
+  event?: "$ai_generation" | "ai_chat_turn";
+  userId: number | null;
+  feature?: string;
+  costUsd?: number | null;
+  promptId?: string;
+  promptVersion?: string;
   projectId?: number | null;
   taskId?: number | null;
   agentId?: string | null;
@@ -101,7 +106,10 @@ export function buildAiChatTurnCapture(
     $ai_output_tokens: turn.outputTokens ?? 0,
     $ai_latency: turn.latencyMs / 1000,
     $ai_model_parameters: {},
-    ht_feature: "chat",
+    ht_feature: turn.feature ?? "chat",
+    $ai_total_cost_usd: turn.costUsd ?? undefined,
+    ht_prompt_id: turn.promptId ?? null,
+    ht_prompt_version: turn.promptVersion ?? null,
     ht_user_id: turn.userId,
     ht_project_id: turn.projectId ?? null,
     ht_task_id: turn.taskId ?? null,
@@ -118,7 +126,7 @@ export function buildAiChatTurnCapture(
     httpStatus = 0;
   }
   properties.$ai_http_status = httpStatus;
-  return { distinctId: String(turn.userId), event: "$ai_generation", properties };
+  return { distinctId: turn.userId == null ? "ai-system" : String(turn.userId), event: turn.event ?? "$ai_generation", properties };
 }
 
 function stringifyAiError(error: unknown) {

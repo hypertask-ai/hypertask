@@ -6,10 +6,10 @@ import { cookies } from "next/headers";
 import { createAnthropic } from "@ai-sdk/anthropic";
 import type { LanguageModelV4 } from "@ai-sdk/provider";
 import { createOpenAI } from "@ai-sdk/openai";
-import { wrapLanguageModel, type FilePart, type LanguageModel, type LanguageModelMiddleware, type ToolSet, type UserContent } from "ai";
+import { wrapLanguageModel, type FilePart, type LanguageModel, type ToolSet, type UserContent } from "ai";
 import { searchComments, searchTasks, type TurbopufferCommentRow, type TurbopufferTaskRow } from "@/utils/controllers/turbopuffer/turbopufferHelper";
 import { retrieveCustomInstructionFileContext } from "@/app/api/ai/_lib/customInstructions";
-import { logAiUsage } from "@/app/api/ai/_lib/aiUsage";
+import { configureAiModelUsage, inheritAiModelUsage } from "@/app/api/ai/_lib/modelProvider";
 import { getByokOrTeamGatewayApiKeyForProvider, getByokOrTeamGatewayApiKeyForModelOption, getTeamGatewayApiKey, type ByokProviderFlag } from "@/app/api/ai/_lib/byokKeys";
 import { sharedAiAllowanceErrorMessage } from "@/app/api/ai/_lib/sharedAllowance";
 import { previousModelForFailedStream } from "@/app/api/ai/chat/stream/modelFallback";
@@ -376,61 +376,6 @@ function gatewayTagsForLookup(args?: {
   return { teamId, projectId, userId };
 }
 
-function editorUsageMiddleware(args: {
-  userId?: number | null;
-  teamId?: string | null;
-  projectId?: number | null;
-  taskId?: number | null;
-  agentId?: string | null;
-  provider: string;
-  model: () => string;
-}): LanguageModelMiddleware {
-  const logUsage = async (usage: {
-    inputTokens: { total?: number };
-    outputTokens: { total?: number };
-  }) => {
-    if (!args.userId) return;
-    const inputTokens = usage.inputTokens.total ?? 0;
-    const outputTokens = usage.outputTokens.total ?? 0;
-    await logAiUsage({
-      userId: args.userId,
-      teamId: args.teamId,
-      projectId: args.projectId,
-      taskId: args.taskId,
-      agentId: args.agentId,
-      provider: args.provider,
-      model: args.model(),
-      feature: "editor",
-      inputTokens,
-      outputTokens,
-      totalTokens: inputTokens + outputTokens,
-    });
-  };
-
-  return {
-    specificationVersion: "v4",
-    wrapGenerate: async ({ doGenerate }) => {
-      const result = await doGenerate();
-      await logUsage(result.usage);
-      return result;
-    },
-    wrapStream: async ({ doStream }) => {
-      const result = await doStream();
-      return {
-        ...result,
-        stream: result.stream.pipeThrough(
-          new TransformStream({
-            async transform(chunk, controller) {
-              if (chunk.type === "finish") await logUsage(chunk.usage);
-              controller.enqueue(chunk);
-            },
-          })
-        ),
-      };
-    },
-  };
-}
-
 export async function selectTiptapModel(args?: {
   teamId?: unknown;
   projectId?: number | null;
@@ -449,17 +394,14 @@ export async function selectTiptapModel(args?: {
     teamContext: args?.teamContext,
   });
 
-  selected.model = wrapLanguageModel({
-    model: selected.model as Parameters<typeof wrapLanguageModel>[0]["model"],
-    middleware: editorUsageMiddleware({
-      userId: args?.userId,
-      teamId: selected.teamId,
-      projectId: args?.projectId,
-      taskId: args?.taskId,
-      agentId: args?.agentId,
-      provider: selected.usageProvider,
-      model: () => selected.modelId,
-    }),
+  configureAiModelUsage(selected.model, {
+    userId: args?.userId,
+    teamId: selected.teamId,
+    projectId: args?.projectId,
+    taskId: args?.taskId,
+    agentId: args?.agentId,
+    provider: selected.usageProvider,
+    feature: "editor",
   });
   return selected;
 }
@@ -849,6 +791,7 @@ export async function selectTaskWriterModel(args: {
           : undefined,
       },
     );
+    inheritAiModelUsage(fallback.model, selected.model);
     selected.modelId = fallback.modelId;
     return fallback.model as LanguageModelV4;
   };
@@ -955,6 +898,7 @@ export async function selectTaskWriterModel(args: {
       },
     },
   });
+  inheritAiModelUsage(selected.model, selectedModel.model);
   return selected;
 }
 

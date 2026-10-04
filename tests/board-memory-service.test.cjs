@@ -21,7 +21,7 @@ const lockCalls = [];
 const leaseChecks = [];
 const releasedClaims = [];
 const revisionBumps = [];
-const usageRows = [];
+const usageContexts = [];
 const writes = [];
 class StubBoardMemoryBusyError extends Error {}
 
@@ -62,9 +62,6 @@ stubPackage("ai", {
     };
   },
 });
-stubModule("src/app/api/ai/_lib/aiUsage.ts", {
-  logAiUsage: async (row) => usageRows.push(row),
-});
 stubModule("src/app/api/ai/_lib/byokKeys.ts", {
   getByokOrTeamGatewayApiKeyForProvider: async () => "gateway-key",
 });
@@ -77,6 +74,10 @@ stubModule("src/app/api/ai/_lib/customInstructions.ts", {
   },
 });
 stubModule("src/app/api/ai/_lib/modelProvider.ts", {
+  configureAiModelUsage: (model, context) => {
+    assert.equal(model, "memory-model");
+    usageContexts.push(context);
+  },
   aiUsageProviderForCredential: () => "gateway",
   gatewayProviderOptionsForModel: () => ({ gateway: { tags: ["memory"] } }),
   resolveAiModel: () => "memory-model",
@@ -173,7 +174,7 @@ test.beforeEach(() => {
   leaseChecks.length = 0;
   releasedClaims.length = 0;
   revisionBumps.length = 0;
-  usageRows.length = 0;
+  usageContexts.length = 0;
   writes.length = 0;
 });
 
@@ -210,7 +211,7 @@ test("denied board access stops learning before model and storage work", async (
   );
 
   assert.equal(generateCalls, 0);
-  assert.deepEqual(usageRows, []);
+  assert.deepEqual(usageContexts, []);
   assert.deepEqual(writes, []);
 });
 
@@ -282,8 +283,14 @@ test("enabled board memory deduplicates facts and stores embedded rows", async (
     learned: ["Use member instead of customer.", "Headings use sentence case."],
   });
   assert.equal(generateCalls, 1);
-  assert.equal(usageRows.length, 1);
-  assert.equal(usageRows[0].totalTokens, 60);
+  assert.equal(usageContexts.length, 1);
+  assert.deepEqual(usageContexts[0], {
+    userId: 6,
+    teamId: "team-hypertask",
+    projectId: 15,
+    provider: "gateway",
+    feature: "custom-instructions",
+  });
   assert.equal(writes.length, 1);
   assert.deepEqual(leaseChecks, [15]);
   assert.deepEqual(
@@ -329,7 +336,7 @@ test("a duplicate signal stops before inference and storage", async () => {
 
   assert.deepEqual(result, { enabled: true, learned: [] });
   assert.equal(generateCalls, 0);
-  assert.deepEqual(usageRows, []);
+  assert.deepEqual(usageContexts, []);
   assert.deepEqual(writes, []);
 });
 
@@ -351,7 +358,7 @@ test("a provider failure releases the claimed signal for retry", async () => {
   assert.equal(generateCalls, 1);
   assert.deepEqual(releasedClaims, [{ input, token: "claim-token" }]);
   assert.deepEqual(completedClaims, []);
-  assert.deepEqual(usageRows, []);
+  assert.equal(usageContexts.length, 1);
   assert.deepEqual(writes, []);
 });
 

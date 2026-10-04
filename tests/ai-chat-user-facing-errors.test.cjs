@@ -227,11 +227,13 @@ test('no send("error") call site uses model-facing errorMessage', () => {
 });
 
 test("board agent instructions never let the model answer as the agent after a failed hypertask_ask_agent call", () => {
-  const start = routeSource.indexOf("### 4.3. BOARD AGENTS");
-  const end = routeSource.indexOf("### 5. METADATA FILTERING LOGIC", start);
+  const load = require("jiti")(__filename, { alias: { "@": path.join(__dirname, "..", "src") }, fsCache: false });
+  const { AGENT_SYSTEM_PROMPT } = load(path.join(__dirname, "../src/lib/ai/chatStream/prompt.ts"));
+  const start = AGENT_SYSTEM_PROMPT.indexOf("### 4.3. BOARD AGENTS");
+  const end = AGENT_SYSTEM_PROMPT.indexOf("### 5. METADATA FILTERING LOGIC", start);
   assert.notEqual(start, -1, "BOARD AGENTS system prompt section must exist");
   assert.notEqual(end, -1, "METADATA FILTERING LOGIC section must follow it");
-  const section = routeSource.slice(start, end);
+  const section = AGENT_SYSTEM_PROMPT.slice(start, end);
 
   // The synthesize-and-attribute instruction only fires on success; a
   // generic "success: false" guard (not a list of the tool's specific error

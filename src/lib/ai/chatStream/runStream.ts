@@ -160,7 +160,8 @@ export async function runChatStream(controller: ReadableStreamDefaultController<
     }
   };
 
-  // HTPR-6320: one turn = one PostHog AI observability generation. Declared
+  // Turn outcomes are separate from modelProvider's per-generation events.
+  // Declared
   // outside the try below so every exit path, including the catch and
   // finally, can name its outcome.
   // All of it is best effort and never changes what the user receives.
@@ -173,11 +174,12 @@ export async function runChatStream(controller: ReadableStreamDefaultController<
   state.turnOutcomeRecorded = false;
   state.recordTurnOutcome = (
     outcome: AiChatTurnOutcome,
-    error?: unknown,
+    _error?: unknown,
   ) => {
     if (state.turnOutcomeRecorded) return;
     state.turnOutcomeRecorded = true;
     const observation = recordAiChatTurn({
+      event: "ai_chat_turn",
       userId: dbUser.id,
       projectId: usageProjectId,
       taskId: contextTaskId,
@@ -189,7 +191,7 @@ export async function runChatStream(controller: ReadableStreamDefaultController<
       latencyMs: Date.now() - state.generationStartedAt,
       inputTokens: state.turnUsage?.inputTokens,
       outputTokens: state.turnUsage?.outputTokens,
-      error,
+      error: outcome === "failed" ? "AI chat turn failed" : undefined,
     }).catch((observationError) => {
       console.warn(
         "[ai/chat/stream] turn observation failed",

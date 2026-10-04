@@ -12,13 +12,12 @@ import {
   taskWriterCandidateUrl,
 } from "../src/app/api/ai/_lib/taskWriterBoardResearch";
 
+import { TASK_AUTHORING_STYLE } from "../src/app/api/ai/_lib/editorAiPrompts";
+
 test("shared source fidelity stays free of board-research exceptions", () => {
-  const authoringStyle = readFileSync(
-    resolve("src/app/api/ai/_lib/editorAi.ts"),
-    "utf8"
-  );
+  const authoringStyle = TASK_AUTHORING_STYLE;
   assert.equal(
-    /export const TASK_AUTHORING_STYLE[\s\S]*?BOARD RESEARCH/.test(authoringStyle),
+    /BOARD RESEARCH/.test(authoringStyle),
     false,
     "research rules must not live in the shared authoring style"
   );

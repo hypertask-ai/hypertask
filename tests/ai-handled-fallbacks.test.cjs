@@ -119,6 +119,30 @@ test("all AI route fallback catches report handled errors", () => {
   assert.deepEqual(missing, [], "Unhandled fallback catches");
 });
 
+test("AI route catches never report the same error twice", () => {
+  function duplicates(source) {
+    const lines = [];
+    function visit(node) {
+      if (ts.isCatchClause(node)) {
+        const calls = nodesWithin(node.block, ts.isCallExpression).filter((call) =>
+          ["reportError", "reportHandledChatError"].includes(call.expression.getText()),
+        );
+        if (calls.length > 1) lines.push(source.getLineAndCharacterOfPosition(node.getStart()).line + 1);
+      }
+      ts.forEachChild(node, visit);
+    }
+    visit(source);
+    return lines;
+  }
+  const fixture = parse("fixture.ts", 'try {} catch (error) { await reportError({ source: "handled" }); await reportError({ source: "server" }); return []; }');
+  assert.equal(duplicates(fixture).length, 1, "The audit must detect duplicate reports");
+  const nested = parse("fixture.ts", 'try {} catch (error) { await reportError({ source: "handled" }); try {} catch (inner) { await reportError({ source: "handled" }); } }');
+  assert.deepEqual(duplicates(nested), [], "Separate nested catches are not duplicates");
+  assert.deepEqual(files.flatMap((filename) =>
+    duplicates(parse(filename)).map((line) => `${path.relative(root, filename)}:${line}`),
+  ), []);
+});
+
 test("coverage detects generic, empty, streaming and nested fallbacks, not just known copy", () => {
   for (const fallback of [
     'return NextResponse.json({ error: "New friendly wording" }, { status: 500 });',
@@ -220,6 +244,7 @@ function routeStubs(error, reports) {
     "@/lib/errors/reportError": { reportError: async (payload) => reports.push(payload) },
     "@/app/api/ai/_lib/requestUser": { getAiRequestUser: async () => ({ id: 7 }) },
     "@/app/api/ai/_lib/aiUsage": {},
+    "@/app/api/ai/_lib/modelProvider": { configureAiModelUsage() {} },
     "@/app/api/ai/_lib/editorAi": {
       errorMessage: (value) => value instanceof Error ? value.message : "Sorry, an error occurred while processing your request.",
       getCurrentUserFromCookies: async () => ({ id: 7 }),

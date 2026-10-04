@@ -1,4 +1,5 @@
 import { reportError } from "@/lib/errors/reportError";
+import { configureAiModelUsage } from "@/app/api/ai/_lib/modelProvider";
 import { NextRequest, NextResponse } from "next/server";
 import { generateText } from "ai";
 import { z } from "zod";
@@ -17,7 +18,6 @@ import {
 } from "@/app/api/ai/_lib/taskWriterRun";
 import { extractTaskWriterProperties } from "@/app/api/ai/_lib/taskWriterProperties";
 import { taskTitleFromBrief } from "@/lib/ai/taskWriterDuplicateGuard";
-import { logAiUsage } from "@/app/api/ai/_lib/aiUsage";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -85,6 +85,15 @@ export async function POST(request: NextRequest) {
       usageTaskId,
     } = await prepareTaskWriterRun(body, userId, ctx.agentId);
 
+    configureAiModelUsage(selected.model, {
+      userId,
+      teamId: selected.teamId,
+      projectId: body.projectId,
+      taskId: usageTaskId,
+      agentId: ctx.agentId,
+      provider: selected.usageProvider,
+      feature: "task-writer",
+    });
     const { text, usage } = await generateText({
       model: selected.model,
       instructions,
@@ -93,19 +102,6 @@ export async function POST(request: NextRequest) {
       maxRetries: 2,
       providerOptions: selected.providerOptions,
       ...selected.settings,
-    });
-    await logAiUsage({
-      userId,
-      teamId: selected.teamId,
-      projectId: body.projectId,
-      taskId: usageTaskId,
-      agentId: ctx.agentId,
-      provider: selected.usageProvider,
-      model: selected.modelId,
-      feature: "task-writer",
-      inputTokens: usage.inputTokens ?? 0,
-      outputTokens: usage.outputTokens ?? 0,
-      totalTokens: usage.totalTokens ?? 0,
     });
 
     // The streaming route filters invented <img> tags chunk by chunk; one pass

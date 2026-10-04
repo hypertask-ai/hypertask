@@ -1,0 +1,29 @@
+{
+  "chatPrompt": "e084097193b9ef6e4bde11c718bff7d872bb3396fc4e0f669cf3076a3a91e3f8",
+  "tools": {
+    "chat": {
+      "hypertask_list_projects": "487661ce26febaed1d8381685129815ad1ea64cfdf7bac22fdb6fd31389299a9",
+      "hypertask_list_tasks": "eefcd65c3c06c1ed2ebf8667442792dfc0254ae58f63b6b7d4904479c0ff27bf",
+      "hypertask_search_tasks": "7157b33bdaf03a1bd562623a7f334955023484189aee56598c34420387993a82",
+      "hypertask_get_tasks": "f74501ad3ae21749c540af81f7100a40cb0c7e9e741ea48e9993fe6d7ccc0e14",
+      "hypertask_create_task": "8c62a27c23a34352b6a7a6d3a623e89348f8946e32b3c5f933df0ba74324c761",
+      "hypertask_update_task": "45f3b7fc582bd0f4a31f5ca6a2aa650b65c0d359ead85032f21aba73d03cf131",
+      "hypertask_get_comments": "5fcd535c80406d63b2888856e30eaceaaadfbe9dbcbb58fa67bcb4bcef950db4",
+      "hypertask_add_comment": "1dabc3d20c5bf5065449eeda966b502bd2a34c609e8f62171f0dc7295a754960",
+      "hypertask_list_labels": "d749121d47d46230bff0de61f18125e3da56a060b64be38efd42f2c603c408f1",
+      "hypertask_assign_user": "f483ae7d765072dfecead7eb43d037514a6138526838f6a841cbee5df532cc9c"
+    },
+    "mcp": {
+      "hypertask_list_projects": "09bc105ee78939e9e662b2c4b0f92b7d4a103a960528b90bfc2faa30be396c60",
+      "hypertask_list_tasks": "c13818830dd569df37634618a9453200a0c769d771cccb3b4e2dd2a6ad047076",
+      "hypertask_search_tasks": "6be3ce11d84adc2e19d9b25e5830558038bdf9f93f4aa08eb34690cbd95c1763",
+      "hypertask_get_tasks": "4ecd93258a3dc6a06aba14efad0d7c5b2a32afdb5c2c526ee40d8364d0c41e65",
+      "hypertask_create_task": "d90f8c3589e5a5920d6c7aa368ecd909b8e0196b93f8223e749f7c23ed5d63bb",
+      "hypertask_update_task": "7424d545928e7c0f2d9ac61764526ced96b1ac80affb812e1a25821bd936d945",
+      "hypertask_get_comments_for_task": "6bf67586297beebd0c1bb36f9774e027874063ca1d6e877ae798f24922eb74e3",
+      "hypertask_add_comment_to_task": "cd50f6e0ba248db10ea908551acf5bb2b59d90e948b413c40e0c7af926fd5f85",
+      "hypertask_list_labels": "a6bd96057e32f9054d31196b5075b76cc579e6bdb03fb27e3ed0195e16de38c4",
+      "hypertask_assign_user": "ebbf516d90adb42bc4bf51cd05acaa75678581a0264340b60920f953ce7ad0e8"
+    }
+  }
+}
