@@ -9,7 +9,7 @@ const path = require('node:path');
 const script = path.resolve(__dirname, '../scripts/premerge-local.sh');
 
 test('premerge-local rejects unknown arguments and extra arguments before touching Docker', () => {
-  for (const args of [['help'], ['--help'], ['UP'], ['up', 'down'], ['down', 'extra']]) {
+  for (const args of [['help'], ['--help'], ['UP'], ['up', 'down'], ['down', 'extra'], ['down', '--flag', 'key=OFF'], ['up', '--flag'], ['up', '--flag', 'key=INVALID'], ['up', '--flag', 'key=OFF=EVERYONE']]) {
     const result = spawnSync('bash', [script, ...args], { encoding: 'utf8' });
     assert.equal(result.status, 2);
     assert.match(result.stderr, /Usage: scripts\/premerge-local\.sh \[up\|down\]/);
@@ -45,6 +45,11 @@ exit 20
     assert.match(result.stderr, /Refusing \.env:.*No credentials were read/);
     assert.equal(result.stdout, '');
     assert.equal(readFileSync(path.join(root, '.env'), 'utf8'), 'DATABASE_URL=must-not-be-read\n');
+    const flagged = spawnSync('bash', [candidate, 'up', '--flag', 'htpr-1-fixture=OFF', '--flag', 'htpr-2-fixture=OWNER_AND_QA'], {
+      encoding: 'utf8', env: { ...process.env, PATH: `${path.join(root, 'bin')}:${process.env.PATH}` },
+    });
+    assert.equal(flagged.status, 1);
+    assert.match(flagged.stderr, /Refusing \.env/);
 
     // Positive control: retaining any inherited variable makes the Docker probe fail.
     const control = spawnSync(path.join(root, 'bin/docker'), ['info'], {
@@ -85,7 +90,8 @@ test('down guards reused PIDs and cleans the local server and credentials during
     const reused = spawnSync('bash', [candidate, 'down'], { encoding: 'utf8', env });
     assert.equal(reused.status, 0);
     assert.equal(process.kill(child.pid, 0), true);
-    writeFileSync(path.join(state, 'server.pid'), `${child.pid} ${started}\n`);
+    writeFileSync(path.join(state, 'search.pid'), `${child.pid} ${started}\n`);
+    writeFileSync(path.join(state, 'flag-modes.json'), 'disposable fixture');
     writeFileSync(path.join(state, 'credentials.env'), 'disposable fixture');
     writeFileSync(path.join(state, 'smoke-state.json'), 'disposable fixture');
     writeFileSync(path.join(root, 'bin/docker'), '#!/bin/sh\nexit 1\n', { mode: 0o755 });
@@ -95,7 +101,7 @@ test('down guards reused PIDs and cleans the local server and credentials during
     assert.match(down.stderr, /Docker unavailable.*Rerun down/);
     await exited;
     assert.equal(child.signalCode, 'SIGTERM');
-    for (const file of ['server.pid', 'credentials.env', 'smoke-state.json']) {
+    for (const file of ['server.pid', 'search.pid', 'flag-modes.json', 'credentials.env', 'smoke-state.json']) {
       assert.throws(() => readFileSync(path.join(state, file)), { code: 'ENOENT' });
     }
   } finally {
@@ -110,9 +116,11 @@ test('background server closes captured output descriptors, with a retained-stde
     const nextDir = path.join(root, 'node_modules/next/dist/bin');
     mkdirSync(nextDir, { recursive: true });
     writeFileSync(path.join(nextDir, 'next'), 'setInterval(()=>{},1000);');
-    const launch = readFileSync(script, 'utf8').split('\n').find(line => line.startsWith('setsid node '));
-    assert.ok(launch);
-    for (const retainStderr of [false, true]) {
+    mkdirSync(path.join(root, 'scripts'));
+    writeFileSync(path.join(root, 'scripts/premerge-local-search.mjs'), 'setInterval(()=>{},1000);');
+    const launches = readFileSync(script, 'utf8').split('\n').filter(line => line.startsWith('setsid node '));
+    assert.equal(launches.length, 2);
+    for (const launch of launches) for (const retainStderr of [false, true]) {
       const line = retainStderr ? launch.replace(' 4>&-', '') : launch;
       const result = spawnSync('bash', ['-c', `exec 3>&1 4>&2 9>"$state/lock"\n${line}\nprintf '%s' "$!" >"$state/pid"\n`], {
         encoding: 'utf8', timeout: 1000,
