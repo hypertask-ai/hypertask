@@ -40,6 +40,7 @@ export interface Message {
 // Define the context type
 export interface ChatContextType {
   isTyping: boolean;
+  sendSettledVersion: number;
   isRecording: boolean;
   queuedMessages: {
     id: string;
@@ -87,7 +88,7 @@ export interface ChatContextType {
   dropDownButtonAICallback: (selectedAiModel: TAiModal) => void;
   handleRemoveContext: (index: number) => void;
   handleAddContext(): void;
-  handleSendMessage: (retryContent?: string, options?: { preserveComposer?: boolean }) => Promise<void>;
+  handleSendMessage: (retryContent?: string, options?: { preserveComposer?: boolean }) => Promise<boolean>;
   tiptapKeydown: (event: any) => void;
   layoutKeydown: (event: any) => void;
   handleMessageListScroll: (element?: HTMLElement | null) => void;
@@ -191,6 +192,7 @@ export const ChatRuntime = memo(function ChatRuntime({
   const pendingFullScreenSessionRef = useRef<{
     prompt: typeof pendingAiChatPrompt;
     previousSessionId: string | null;
+    sending: boolean;
   } | null>(null);
   useEffect(() => {
     if (pendingAiChatPrompt && typeof pendingAiChatPrompt !== "string" && !askAiFullscreenEnabled) {
@@ -213,28 +215,48 @@ export const ChatRuntime = memo(function ChatRuntime({
         pendingFullScreenSessionRef.current = {
           prompt: pendingAiChatPrompt,
           previousSessionId: contextProps.activeSession,
+          sending: false,
         };
         void contextProps.startNewSession().catch(() => {
           if (pendingFullScreenSessionRef.current?.prompt !== pendingAiChatPrompt) return;
           pendingFullScreenSessionRef.current = null;
-          setPendingAiChatPrompt(null);
+          setPendingAiChatPrompt((pending) => pending === pendingAiChatPrompt ? null : pending);
           setFailedFullScreenQuery(pendingAiChatPrompt.query);
         });
         return;
       }
+      if (pendingFullScreenSessionRef.current.sending) return;
       if (
         !contextProps.currentSession ||
-        contextProps.activeSession === pendingFullScreenSessionRef.current.previousSessionId ||
-        contextProps.currentSession.messages.length > 0
+        contextProps.activeSession === pendingFullScreenSessionRef.current.previousSessionId
       ) return;
     }
     const query = typeof pendingAiChatPrompt === "string" ? pendingAiChatPrompt : pendingAiChatPrompt.query;
-    pendingFullScreenSessionRef.current = null;
-    setPendingAiChatPrompt(null);
     if (typeof pendingAiChatPrompt !== "string") {
-      void handleSendMessageRef.current(query, { preserveComposer: true }).catch(() => {});
+      const handoff = pendingFullScreenSessionRef.current!;
+      const recoverQuestion = () => {
+        if (pendingFullScreenSessionRef.current !== handoff) return;
+        pendingFullScreenSessionRef.current = null;
+        setPendingAiChatPrompt((pending) => pending === pendingAiChatPrompt ? null : pending);
+        setFailedFullScreenQuery(query);
+      };
+      // A manual send may have filled the fresh conversation while we waited.
+      if (contextProps.currentSession!.messages.length > 0) {
+        recoverQuestion();
+        return;
+      }
+      handoff.sending = true;
+      void handleSendMessageRef.current(query, { preserveComposer: true }).then((accepted) => {
+        if (pendingFullScreenSessionRef.current !== handoff) return;
+        handoff.sending = false;
+        if (!accepted) return; // Retry only when readiness or sender settlement changes.
+        pendingFullScreenSessionRef.current = null;
+        setPendingAiChatPrompt((pending) => pending === pendingAiChatPrompt ? null : pending);
+      }).catch(recoverQuestion);
       return;
     }
+    pendingFullScreenSessionRef.current = null;
+    setPendingAiChatPrompt(null);
     // handleSendMessage() sends the composer's existing attachments and clears
     // its editor, so only auto-send when the composer is CLEAN — otherwise we'd
     // mis-send the user's attachments or wipe their unsent draft. With an empty
@@ -253,6 +275,7 @@ export const ChatRuntime = memo(function ChatRuntime({
     askAiFullscreenEnabled,
     contextProps.isByokBlocked,
     contextProps.isTyping,
+    contextProps.sendSettledVersion,
     contextProps.sessions.length,
     contextProps.chatHistoryReady,
     contextProps.activeSession,

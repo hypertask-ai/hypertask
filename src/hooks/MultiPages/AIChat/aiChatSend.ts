@@ -15,7 +15,7 @@ type Context = Pick<ReturnType<typeof useAiChatSessions>, "isByokBlocked" | "fil
   Pick<ReturnType<typeof useAiChatState>, "isTyping" | "editor" | "messageQueueRef" | "setQueuedMessages" | "sendInFlightRef" | "surface" | "inViewObject" | "currentProject" | "setIsTyping" | "addMessageToSessionQuery" | "scopedProjectId" | "isFullScreenChat" | "taskId" | "dockedProjectId" | "setAiChatBoardSessionMap" | "modelTeamId" | "contextList" | "currentAiOption" | "spansAllBoards" | "boardScopeIsExplicit" | "pathname" | "currentUser" | "streamingSessionRef" | "streamingAssistantMessageRef" | "setCurrentStreamingSession" | "streamingRequestRef" | "token" | "turnFailureState" | "setAgentStatus" | "updateSessionTitle" | "queryClient" | "updateLastMessageInSessionCache" | "appendMessageToSessionCache"> &
   Pick<ReturnType<typeof useAiChatAttachments>, "waitForChatSession" | "buildGuestBoard" | "processAttachments">;
 
-export function createAiChatSend(context: Context, searchHandoff?: { preserveComposer: true }) {
+export function createAiChatSend(context: Context, searchHandoff?: { preserveComposer: true; onSettled: () => void }) {
   const {
   isByokBlocked, isTyping, editor, fileUpload, messageQueueRef,
   setQueuedMessages, sendInFlightRef, surface, inViewObject, waitForChatSession,
@@ -32,9 +32,9 @@ export function createAiChatSend(context: Context, searchHandoff?: { preserveCom
   const handleSendMessage = async (
     retryContent?: string,
     options?: { htmlForAttachments?: string; preserveComposer?: boolean }
-  ) => {
-    if (isByokBlocked) return;
-    if (options?.preserveComposer && !searchHandoff?.preserveComposer) return;
+  ): Promise<boolean> => {
+    if (isByokBlocked) return false;
+    if (options?.preserveComposer && !searchHandoff?.preserveComposer) return false;
     const preserveComposer = options?.preserveComposer;
 
     // While a turn is streaming, composer Send/Enter appends to the FIFO queue
@@ -44,7 +44,7 @@ export function createAiChatSend(context: Context, searchHandoff?: { preserveCom
     // the message that is still being prepared.
     if (retryContent === undefined && isTyping) {
       const content = (editor?.getText() ?? "").trim();
-      if (!content) return;
+      if (!content) return false;
       const files = [...fileUpload.fileItems];
       const queued = {
         id: crypto.randomUUID(),
@@ -56,10 +56,10 @@ export function createAiChatSend(context: Context, searchHandoff?: { preserveCom
       setQueuedMessages(messageQueueRef.current);
       editor?.commands.clearContent();
       fileUpload.clearFiles();
-      return;
+      return true;
     }
 
-    if (sendInFlightRef.current) return;
+    if (sendInFlightRef.current) return false;
 
     //Step 1: Process content and get context
     const htmlContent = retryContent ?? editor?.getHTML() ?? "";
@@ -72,7 +72,7 @@ export function createAiChatSend(context: Context, searchHandoff?: { preserveCom
       content = retryContent;
     }
 
-    if (!content.trim()) return;
+    if (!content.trim()) return false;
     sendInFlightRef.current = true;
     const taskAwareChatSurface =
       surface === "task_detail" || surface === "inbox";
@@ -85,12 +85,13 @@ export function createAiChatSend(context: Context, searchHandoff?: { preserveCom
       const session = await waitForChatSession();
       if (!session) {
         toast.error("AI chat is still loading. Please try again.");
-        return;
+        if (preserveComposer) throw new Error("AI chat session is unavailable");
+        return false;
       }
 
       if (isGuestBoardBuild(currentProject)) {
         await buildGuestBoard(content.trim(), session);
-        return;
+        return true;
       }
 
     const processedAttachments = preserveComposer ? [] : await processAttachments(
@@ -311,12 +312,14 @@ export function createAiChatSend(context: Context, searchHandoff?: { preserveCom
       }
     } finally {
       sendInFlightRef.current = false;
+      searchHandoff?.onSettled();
       // Auto-send the next queued follow-up once this turn settles (including
       // cancel/error). Keep the queue on Stop — only session switches clear it.
       queueMicrotask(() => {
         drainQueuedMessage();
       });
     }
+    return true;
   };
   handleSendMessageRef.current = handleSendMessage;
   return {

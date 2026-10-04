@@ -23,9 +23,9 @@ async function withRuntime(config, check) {
   let context = {
     editor: null, editorEnabled: false, fileItems: [], sessions: [{ id: 'old' }],
     activeSession: 'old', currentSession: { id: 'old', messages: [{ role: 'human', content: 'Previous question' }] },
-    chatHistoryReady: true, isByokBlocked: false, isTyping: false,
+    chatHistoryReady: true, isByokBlocked: false, isTyping: false, sendSettledVersion: 0,
     layoutKeydown() {}, startNewSession: async () => { created++ },
-    handleSendMessage: async (query, options) => { sent.push({ sessionId: context.currentSession.id, query, ...(options ? { options } : {}) }) },
+    handleSendMessage: async (query, options) => { sent.push({ sessionId: context.currentSession.id, query, ...(options ? { options } : {}) }); return true },
     ...config.context,
   }
   let reactRoot
@@ -84,6 +84,67 @@ test('fullscreen handoff waits for /chat, history and a new session, then sends 
     await handoff({ query: 'Another question', fullScreen: true })
     assert.equal(created(), 2, 'a second selection gets its own new conversation')
   })
+})
+
+test('busy sender keeps the fullscreen prompt and retries once on sender settlement without a loop', async () => {
+  const prompt = { query: 'Keep my question', fullScreen: true }
+  let busy = true
+  const attempts = []
+  const handleSendMessage = async (...args) => { attempts.push(args); return !busy }
+  await withRuntime({ prompt, pathname: '/chat', strictMode: true, context: { handleSendMessage } }, async ({ update, pending, created }) => {
+    const newSession = { id: 'new', messages: [] }
+    await update({ activeSession: 'new', currentSession: newSession, sessions: [newSession] })
+    assert.equal(attempts.length, 1)
+    assert.equal(pending(), prompt, 'a rejected busy send must not clear the question')
+    await update({})
+    assert.equal(attempts.length, 1, 'no readiness change means no retry loop')
+    busy = false
+    await update({ sendSettledVersion: 1 })
+    assert.deepEqual(attempts, [[prompt.query, { preserveComposer: true }], [prompt.query, { preserveComposer: true }]])
+    assert.equal(pending(), null)
+    assert.equal(created(), 1, 'busy retries reuse the fresh session')
+    await update({ sendSettledVersion: 2 })
+    assert.equal(attempts.length, 2, 'accepted prompts cannot be sent twice')
+  })
+})
+
+test('an asynchronous accepted send is not duplicated and cannot clear a newer search prompt', async () => {
+  const prompt = { query: 'First question', fullScreen: true }
+  let finish
+  let attempts = 0
+  const handleSendMessage = () => { attempts++; return new Promise((resolve) => { finish = resolve }) }
+  await withRuntime({ prompt, pathname: '/chat', strictMode: true, context: { handleSendMessage } }, async ({ update, pending, handoff }) => {
+    const newSession = { id: 'new', messages: [] }
+    await update({ activeSession: 'new', currentSession: newSession, sessions: [newSession] })
+    assert.equal(pending(), prompt, 'clear only after acknowledgement')
+    await update({ currentSession: { ...newSession } })
+    assert.equal(attempts, 1)
+    await update({ isTyping: true })
+    const next = { query: 'Next question', fullScreen: true }
+    await handoff(next)
+    await React.act(async () => finish(true))
+    assert.equal(pending(), next, 'an older acknowledgement cannot discard a newer handoff')
+  })
+})
+
+test('failed send preparation and a manually filled fresh session recover the question without overwriting a draft', async () => {
+  for (const filledSession of [false, true]) {
+    const prompt = { query: 'Recover the unsent question', fullScreen: true }
+    const inserted = []
+    const editor = { isEmpty: false, state: { doc: { content: { size: 12 } } }, commands: { insertContentAt: (...args) => inserted.push(args), focus() {} } }
+    let attempts = 0
+    const handleSendMessage = async () => { attempts++; throw new Error('Send preparation failed') }
+    await withRuntime({ prompt, pathname: '/chat', context: { handleSendMessage, editor, fileItems: [{}] } }, async ({ update, pending }) => {
+      const newSession = { id: 'new', messages: filledSession ? [{ role: 'human', content: 'Manual question' }] : [] }
+      await update({ activeSession: 'new', currentSession: newSession, sessions: [newSession] })
+      assert.equal(pending(), null)
+      assert.equal(attempts, filledSession ? 0 : 1)
+      assert.deepEqual(inserted, [[12, { type: 'paragraph', content: [{ type: 'text', text: prompt.query }] }]])
+      await update({ sendSettledVersion: 1 })
+      assert.equal(inserted.length, 1)
+      assert.equal(attempts, filledSession ? 0 : 1, 'failed preparation must not auto-retry')
+    })
+  }
 })
 
 test('fullscreen handoff is cancelled when the flag turns off before readiness or during session creation', async () => {
@@ -224,26 +285,46 @@ test('the reused sender adds the question first and streams the reply without se
       }
       const ref = () => ({ current: null })
       const session = { id: 'new', messages: [] }
+      let settlements = 0
+      const sendInFlightRef = { current: false }
+      let availableSession = session
       const { handleSendMessage } = createAiChatSend({
         isByokBlocked: false, isTyping: false,
         editor: { getText: () => 'Unsent draft', commands: { clearContent: () => cleared.push('draft') } },
         fileUpload: { fileItems: [{ name: 'unsent.txt' }], clearFiles: () => cleared.push('files') },
-        sendInFlightRef: { current: false }, waitForChatSession: async () => session,
+        sendInFlightRef, waitForChatSession: async () => availableSession,
         processAttachments: async (...args) => { processed.push(args); return [{ mimeType: 'text/plain', fileName: 'unsent.txt', url: '/draft' }] },
         setIsTyping() {}, addMessageToSessionQuery: (_id, message) => messages.push(message),
         isFullScreenChat: true, currentAiOption: { id: 'model', model: 'model', source: 'openai' },
         currentUser: { id: 985 }, streamingSessionRef: ref(), streamingAssistantMessageRef: ref(), streamingRequestRef: ref(),
         setCurrentStreamingSession() {}, chatRoute: '/api/ai/chat/stream', setAgentStatus() {}, updateSessionTitle() {},
         queryClient: { refetchQueries: async () => {} }, drainQueuedMessage() {}, handleSendMessageRef: ref(),
-      }, fullscreenEnabled ? { preserveComposer: true } : undefined)
-      await handleSendMessage('Where is my work?', requestedPreservation ? { preserveComposer: true } : undefined)
+      }, fullscreenEnabled ? { preserveComposer: true, onSettled: () => settlements++ } : undefined)
+      const options = requestedPreservation ? { preserveComposer: true } : undefined
+      if (preserveComposer) {
+        sendInFlightRef.current = true
+        assert.equal(await handleSendMessage('Where is my work?', options), false, 'busy preparation is not acceptance')
+        assert.equal(settlements, 0, 'a rejected send must not trigger an automatic retry loop')
+        sendInFlightRef.current = false
+        availableSession = undefined
+        await assert.rejects(handleSendMessage('Where is my work?', options), /session is unavailable/)
+        assert.equal(sendInFlightRef.current, false)
+        assert.equal(settlements, 1, 'even preparation that never starts typing wakes waiting prompts')
+        assert.deepEqual(messages, [])
+        assert.deepEqual(cleared, [])
+        availableSession = session
+      }
+      const accepted = await handleSendMessage('Where is my work?', options)
       if (requestedPreservation && !fullscreenEnabled) {
+        assert.equal(accepted, false)
         assert.equal(payload, undefined, 'a revoked preservation request must cancel, never consume the composer')
         assert.deepEqual(messages, [])
         assert.deepEqual(cleared, [])
         assert.deepEqual(processed, [])
         continue
       }
+      assert.equal(accepted, true)
+      assert.equal(settlements, fullscreenEnabled ? (preserveComposer ? 2 : 1) : 0)
       assert.equal(payload.message, 'Where is my work?')
       assert.equal(payload.session_id, 'new')
       assert.deepEqual(payload.chat_history, [])
