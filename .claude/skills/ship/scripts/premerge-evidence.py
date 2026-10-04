@@ -67,14 +67,24 @@ def open_prs():
 
 
 def revoke_passing(state):
-    (state / 'cache.json').unlink(missing_ok=True)
-    for row in open_prs():
-        if any(s.get('context') == 'premerge-evidence' and s.get('state') == 'SUCCESS'
-               for s in row['statusCheckRollup'] or []):
-            subprocess.run(['gh', 'api', f'repos/{REPO}/statuses/{row["headRefOid"]}', '--method', 'POST',
-                            '-f', 'context=premerge-evidence', '-f', 'state=failure',
-                            '-f', 'description=cannot load current premerge rules; retry'],
-                           capture_output=True, timeout=60, check=True)
+    # Hold the publisher lock so an in-flight ship-check cannot re-post success after the revocation.
+    with (state / 'publish.lock').open('w') as publisher:
+        fcntl.flock(publisher, fcntl.LOCK_EX)
+        (state / 'cache.json').unlink(missing_ok=True)
+        failed = []
+        for row in open_prs():
+            if not any(s.get('context') == 'premerge-evidence' and s.get('state') == 'SUCCESS'
+                       for s in row['statusCheckRollup'] or []):
+                continue
+            try:
+                subprocess.run(['gh', 'api', f'repos/{REPO}/statuses/{row["headRefOid"]}', '--method', 'POST',
+                                '-f', 'context=premerge-evidence', '-f', 'state=failure',
+                                '-f', 'description=cannot load current premerge rules; retry'],
+                               capture_output=True, timeout=60, check=True)
+            except Exception:
+                failed.append(str(row['number']))
+        if failed:
+            raise ValueError('could not revoke premerge-evidence on PR ' + ', '.join(failed))
 
 
 def sweep():

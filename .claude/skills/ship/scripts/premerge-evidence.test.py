@@ -40,6 +40,9 @@ with (root / 'calls').open('a') as log:
 if args[:2] == ['api', 'repos/hypertask-ai/hypertask/statuses/' + 'a' * 40]:
     assert args[2:] == ['--method', 'POST', '-f', 'context=premerge-evidence', '-f', 'state=failure',
                         '-f', 'description=cannot load current premerge rules; retry']
+    if (root / 'post-error-once').exists():
+        (root / 'post-error-once').unlink()
+        sys.exit(1)
     with (root / 'statuses').open('a') as log:
         log.write('failure\\n')
 elif args[:1] == ['api']:
@@ -118,12 +121,33 @@ print('premerge-evidence: success (fixture)')
         self.assertIn('FAIL: premerge-evidence operation failed', result.stderr)
         # The stale checker never runs; every passing head turns red instead.
         self.assertEqual(len(self.publications()), 2)
-        self.assertEqual((self.root / 'statuses').read_text().splitlines(), ['failure', 'failure'])
+        self.assertEqual(len((self.root / 'statuses').read_text().splitlines()), 2)
         self.assertFalse((self.state / 'cache.json').exists())
         self.assertEqual((self.state / 'ship-check').read_bytes(), checker)
         (self.root / 'fetch-error').unlink()
         self.assertEqual(self.sweep().returncode, 0)
         self.assertEqual(sorted(p[1] for p in self.publications()[2:]), ['998', '999'])
+
+    def test_revocation_waits_for_publisher_lock_and_tries_every_pr(self):
+        import fcntl, threading, time
+        self.assertEqual(self.sweep().returncode, 0)
+        (self.root / 'fetch-error').touch()
+        (self.root / 'post-error-once').touch()
+        lock = (self.state / 'publish.lock').open('w')
+        fcntl.flock(lock, fcntl.LOCK_EX)
+        released = []
+        def release():
+            time.sleep(1)
+            released.append(time.time())
+            fcntl.flock(lock, fcntl.LOCK_UN)
+            lock.close()
+        threading.Thread(target=release).start()
+        result = self.sweep()
+        finished = time.time()
+        self.assertNotEqual(result.returncode, 0)
+        self.assertTrue(released and finished >= released[0])
+        # First PR's post fails, the second is still revoked.
+        self.assertEqual(len((self.root / 'statuses').read_text().splitlines()), 1)
 
     def test_empty_fetch_fails_without_publishing(self):
         self.production.write_bytes(b'')
