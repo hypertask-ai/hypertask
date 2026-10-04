@@ -732,7 +732,11 @@ const Inbox = ({
         aria-label="Command search"
         className="fixed left-0 top-0 h-px w-px opacity-0 pointer-events-none text-[16px]"
         onKeyDown={(event) => {
-          if (event.key === "Escape") setShowCommands((prev) => ({ ...prev, show: false }));
+          if (event.key === "Escape" || (event.key.toLowerCase() === "k" &&
+            ((isApple && event.metaKey) || (!isApple && event.ctrlKey)))) {
+            event.preventDefault();
+            setShowCommands((prev) => ({ ...prev, show: false }));
+          }
         }}
       />
       <span

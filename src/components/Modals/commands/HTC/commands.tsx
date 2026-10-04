@@ -440,7 +440,10 @@ const Commands = (props: Props) => {
         }
         el.focus({ preventScroll: true });
         if (document.activeElement === el) {
-          if (transferring) el.setSelectionRange(selectionStart, selectionEnd);
+          if (transferring) {
+            el.setSelectionRange(selectionStart, selectionEnd);
+            proxy.value = "";
+          }
           return;
         }
         if (++tries < 30) requestAnimationFrame(focusUntilLanded);

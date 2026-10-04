@@ -244,7 +244,39 @@ test("loaded command input takes proxy text and selection at focus transfer, inc
   assert.equal(real.value, "zoom now");
   assert.equal(values.at(-1), "zoom now", "controlled search state receives every buffered character");
   assert.equal(real.selectionStart, 2); assert.equal(real.selectionEnd, 6);
+  assert.equal(proxy.value, "", "successful transfer consumes the buffer");
+  real.value = "edited search";
+  callback(null);
+  callback(real);
+  assert.equal(real.value, "edited search", "remounting Search after Compose cannot restore a stale buffered query");
   callback(null);
   for (const frame of frames) frame();
   dom.window.close();
+});
+
+test("cold proxy keeps Escape and the existing platform Ctrl/Cmd+K dismissal", () => {
+  const ts = require("typescript");
+  const source = readSource("src/app/inbox/Inbox.tsx");
+  const tree = ts.createSourceFile("Inbox.tsx", source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+  let handlerSource;
+  const visit = (node) => {
+    if (ts.isJsxSelfClosingElement(node) && node.tagName.getText(tree) === "input" &&
+      node.attributes.properties.some((a) => a.name?.getText(tree) === "id" && a.initializer?.text === "inbox-command-focus-proxy")) {
+      const attribute = node.attributes.properties.find((a) => a.name?.getText(tree) === "onKeyDown");
+      handlerSource = attribute.initializer.expression.getText(tree);
+    }
+    ts.forEachChild(node, visit);
+  };
+  visit(tree); assert.ok(handlerSource);
+  const js = ts.transpileModule(`return (${handlerSource});`, { compilerOptions: { target: 7 } }).outputText;
+  for (const [isApple, key, ctrlKey, metaKey, closes] of [
+    [false, "Escape", false, false, true], [false, "k", true, false, true],
+    [true, "k", false, true, true], [false, "k", false, false, false],
+    [true, "k", true, false, false],
+  ]) {
+    let show = true, prevented = false;
+    const handler = new Function("isApple", "setShowCommands", js)(isApple, (update) => { show = update({ show: true }).show; });
+    handler({ key, ctrlKey, metaKey, preventDefault: () => { prevented = true; } });
+    assert.equal(show, !closes); assert.equal(prevented, closes);
+  }
 });
