@@ -187,8 +187,8 @@ const SearchComp = ({
               ) : (
                 <div>
                   {results && !(oneBoardTabsFlagEnabled && tabs.length <= 2) && (
-                    <div className={cn("hidden @md:block w-full overflow-x-auto scrollbar-none no-scrollbar @md:px-9 mt-4", layoutEnabled && "px-4")}>
-                      <div className="flex flex-wrap grow gap-3">
+                    <div className={cn("hidden @md:block w-full overflow-x-auto scrollbar-none no-scrollbar @md:px-9 mt-4", layoutEnabled && "block px-4")}>
+                      <div className={layoutEnabled ? "flex grow gap-3 [flex-wrap:nowrap] md:[flex-wrap:wrap] min-h-[44px] md:min-h-0 [&>div]:shrink-0 md:[&>div]:shrink" : "flex flex-wrap grow gap-3"}>
                         {tabs.map((item, index) => (
                           <SplitTitle
                             key={`split-alltasks-${index}`}
@@ -271,7 +271,7 @@ const SearchComp = ({
                         </span>
                       </div>
                     )}
-                  {results && !(oneBoardTabsFlagEnabled && tabs.length <= 2) && (
+                  {!layoutEnabled && results && !(oneBoardTabsFlagEnabled && tabs.length <= 2) && (
                     <div className="flex inbox_footer @md:hidden no-scrollbar scrollbar-none gap-3 w-100 bg-hoverCardBackground  h-20 @md:h-8 inbox_title px-4">
                       {tabs.map((item, index) => (
                         <SplitTitle
