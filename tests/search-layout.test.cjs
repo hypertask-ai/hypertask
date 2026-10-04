@@ -578,41 +578,50 @@ test('Enter blurs immediately, j/k and arrows select results, Enter opens, and s
   })
 })
 
-test('Enter submits values and recents without retaining focus, but operator completion stays focused', async (t) => {
-  await withSearch(t, {}, async ({ input, type, tick, press, requests }) => {
-    await type('fr')
-    await press('Enter', { keyCode: 13 })
-    assert.equal(input().value, 'from:')
-    assert.equal(requests.length, 0)
-    assert.equal(document.activeElement, input())
-    await type('from:mal')
-    await tick(180)
-    await press('Enter', { keyCode: 13 })
-    assert.equal(requests.at(-1).body.searchQuery, 'from:77')
-    assert.equal(document.activeElement, document.body)
+for (const [key, keyCode] of [['Enter', 13], ['Tab', 9]]) {
+  test(`${key} suggestion acceptance keeps focus for operators, values and recents`, async (t) => {
+    await withSearch(t, {}, async ({ input, type, tick, press, requests, complete }) => {
+      await type('fr')
+      await press(key, { keyCode })
+      assert.equal(input().value, 'from:')
+      assert.equal(requests.length, 0)
+      assert.equal(document.activeElement, input())
+      await type('from:mal')
+      await tick(180)
+      await press(key, { keyCode })
+      assert.equal(requests.at(-1).body.searchQuery, 'from:77')
+      assert.ok(document.activeElement === input(), 'accepting a value keeps writing focus')
+      await complete()
+      assert.ok(document.activeElement === input(), 'accepted value results do not steal focus')
+    })
+    await withSearch(t, { history: ['login'] }, async ({ input, press, requests, complete }) => {
+      await press(key, { keyCode })
+      assert.equal(input().value, 'login')
+      assert.equal(requests.at(-1).body.searchQuery, 'login')
+      assert.ok(document.activeElement === input(), 'accepting a recent search keeps writing focus')
+      await complete()
+      assert.ok(document.activeElement === input(), 'recent search results do not steal focus')
+    })
   })
-  await withSearch(t, { history: ['login'] }, async ({ input, press, requests }) => {
-    await press('Enter', { keyCode: 13 })
-    assert.equal(input().value, 'login')
-    assert.equal(requests.at(-1).body.searchQuery, 'login')
-    assert.equal(document.activeElement, document.body)
-  })
-})
+}
 
 for (const enabled of [true, false]) {
   for (const operator of enabled ? ['commenter', 'assignee', 'label'] : ['assignee', 'label']) {
-    for (const freeText of ['', 'qzxw6913']) {
-      test(`chip Enter submits and releases focus: ${operator}, layout ${enabled}, text ${Boolean(freeText)}`, async (t) => {
+    for (const [freeText, acceptKey] of [['', 'Enter'], ['', 'Tab'], ['qzxw6913', 'Enter'], ['qzxw6913', 'Tab']]) {
+      test(`chip Enter submits and releases focus: ${operator}, layout ${enabled}, text ${Boolean(freeText)}, accepted with ${acceptKey}`, async (t) => {
         await withSearch(t, { flags: { [layoutFlag]: enabled, 'htpr-6880-search-commenter': true } }, async ({ input, type, tick, press, selected, options, requests, prompts, aiOpened, complete, state, dom }) => {
           await type(`${operator}:${operator === 'commenter' ? '@' : ''}`)
           await tick(180)
           assert.match(selected().textContent, operator === 'label' ? /Bug/ : /Malcolm Stern/)
-          await press(operator === 'label' ? 'Enter' : 'Tab')
+          await press(acceptKey, { keyCode: acceptKey === 'Enter' ? 13 : 9 })
           const chip = document.querySelector('[aria-label^="Remove "]')
           assert.ok(chip, 'highlighted value is accepted as a chip')
+          assert.equal(input().value, '')
+          assert.ok(document.activeElement === input(), 'accepting a highlighted suggestion keeps writing focus')
           const chipQuery = `${operator}:${operator === 'label' ? 'bug' : '77'}`
           assert.equal(requests.at(-1).body.searchQuery, chipQuery)
-          await React.act(async () => { input().focus(); input().click() })
+          await complete()
+          assert.ok(document.activeElement === input(), 'accepted suggestion results do not steal focus')
           if (freeText) {
             await type(freeText)
             await tick(180)

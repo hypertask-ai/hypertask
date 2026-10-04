@@ -306,7 +306,6 @@ export default function SearchChipsInput({ value, onChange, onRun, boardId, inpu
       event.preventDefault();
       event.stopPropagation();
       choose(selectedRow);
-      if (layoutEnabled && event.key === "Enter" && (selectedRow.kind === 'value' || selectedRow.kind === 'recent')) inputRef.current?.blur();
       return;
     }
     if (event.key === "Backspace" && event.currentTarget.selectionStart === 0 && event.currentTarget.selectionEnd === 0 && chips.length) {
