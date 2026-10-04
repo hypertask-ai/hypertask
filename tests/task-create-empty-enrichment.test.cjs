@@ -166,6 +166,10 @@ function loadCreateRoute() {
     "@/lib/auth/getSessionUser": {
       getSessionUser: async () => ({ userId: 6 }),
     },
+    "@/lib/flags": {
+      HTPR_6929_COMPOSE_TASK_WRITER_FLAG: "htpr-6929-compose-task-writer",
+      isFeatureEnabled: async () => { throw new Error("Legacy create must not read the Compose flag"); },
+    },
     "@/lib/auth/session": {
       SESSION_COOKIE: "ht_session",
       verifySession: () => null,

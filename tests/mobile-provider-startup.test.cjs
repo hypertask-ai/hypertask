@@ -92,7 +92,8 @@ test("closed boards do not mount or preload the AI chat provider", () => {
     "cold /chat and flagged mobile /agents/chat wait for ChatProvider; /detail renders at once and reads the chat optionally (HTPR-6752)",
   );
   assert.match(chatClient, /loading: \(\) => <FullScreenChatLoading \/>/);
-  assert.match(fullScreenLoading, /role="status"[\s\S]*Loading AI chat/);
+  assert.match(fullScreenLoading, /label = "Loading AI chat"/);
+  assert.match(fullScreenLoading, /role="status"[\s\S]*\{label\}/);
   assert.match(chatHook, /from "@\/lib\/aiChat\/chatOpenSession"/);
   assert.doesNotMatch(
     chatHook,

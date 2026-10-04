@@ -159,3 +159,22 @@ These fire from raw keydown listeners and will NOT show up when scanning `AllCom
 - Agent Chat's `@` mention popover (`AgentChatClient.tsx` composer keydown) — a live-typing autocomplete, not a discrete action, so there's no `CommandMode` for it. The rest of Agent Chat's keyboard map (roster cycle, send, open-links, add agent, team cycle) IS in `AllCommands.ts` now, via a page-scoped command group that dispatches a `window` CustomEvent back into the component (see Agent Chat above).
 
 When auditing whether a key is free, grep for the letter in ALL of: `src/app`, `src/components`, `src/hooks`, `src/lib/contexts` — the palette alone is not the truth.
+
+## Compose task writer (Owner + QA)
+
+Behind `htpr-6929-compose-task-writer`, `Ctrl+J` (`Cmd+J` on Apple)
+opens Commands in Compose from any signed-in app surface. `Ctrl+K` opens or
+switches to the unchanged Search mode. The existing phone Commands button
+opens the same palette with Search and Compose tabs.
+
+Compose accepts a note and images (paperclip, `Ctrl+U`, paste). Enter runs the
+existing board-aware task writer, creates in the current URL board's first
+active column (or the remembered `previousBoard` off-board), then opens the
+ticket with its regular AI chat. Shift+Enter adds a line. The initial assistant
+message is stored without a model call; follow-ups use normal task chat tools.
+A creation finishing after leaving Compose does not replace subsequent navigation.
+Shortcut help shows Compose instead of the superseded board and task-detail
+`Mod+J` actions while the flag is on.
+Writer failure saves the raw note and explains the fallback. Create failure
+keeps the note and images for retry. With the flag off, both shortcuts and the
+palette keep their previous behavior, including the board's legacy AI writer.

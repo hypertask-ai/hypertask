@@ -54,6 +54,7 @@ function keyboardFixture(pathname, isApple = false, authenticatedUserId = 1) {
   let toggles = 0;
   const bindings = {
     ...shortcuts, document, pathname, isApple, authenticatedUserId, areGlobalShortcutsEnabled,
+    composeEnabled: false,
     showTrialModal: false, showEmailVerificationModal: false, favorites: [],
     showCommands, handleKeyUp: () => {},
     isFavoriteBoardShortcut: jiti(path.join(root, "src/lib/constants/shortcuts.ts")).isFavoriteBoardShortcut,

@@ -61,6 +61,7 @@ function renderPalette({ enabled = true, mobile = false, env = buildEnv, rows = 
     },
     "./AllCommands": { getAllCommands: () => commands, getMobileCommandGroups: (groups) => groups, getBoardMenuCommands: (groups) => groups },
     "./MobileCommandIcon": { MobileCommandIcon: () => null },
+    "./ComposeTaskWriter": defaultExport(() => null),
     "@/utils/getCurrentUser": { getCurrentUserFromCookies: () => null },
     "@/lib/contexts/deviceContext": { useDeviceContext: () => false },
     nookies: {},

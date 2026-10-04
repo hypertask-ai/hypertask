@@ -62,6 +62,7 @@ export interface IShowHypertaskHTC {
     mode: CommandMode,
     show: boolean,
     scope?: "board",
+    paletteTab?: "search" | "compose",
     payload?: any,
     commentIndex?: number
 }
@@ -79,6 +80,11 @@ export const fcmAtom = atom<IFcmHookData>({
         permissionStatus: "default"
     },
     effects_UNSTABLE: [persistAtom],
+});
+
+export const composeTaskChatIntroAtom = atom<{ taskId: number; content: string } | null>({
+    key: "composeTaskChatIntro",
+    default: null,
 });
 
 // A query handed from Search's "Ask AI" to the single general AI chat, which

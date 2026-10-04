@@ -64,3 +64,14 @@ export const isCommandCenterShortcut = (
   !event.shiftKey &&
   (event.ctrlKey || (isApple && event.metaKey)) &&
   isCommandMenuRoute(pathname);
+
+export const isComposePaletteShortcut = (
+  event: CommandCenterKeyboardEvent & { isComposing?: boolean },
+  isApple: boolean,
+  pathname: string | null,
+) =>
+  !event.isComposing &&
+  (event.code === "KeyJ" || event.code === "KeyK") &&
+  !event.altKey && !event.shiftKey &&
+  (event.ctrlKey || (isApple && event.metaKey)) &&
+  (isCommandMenuRoute(pathname) || pathname === "/new");

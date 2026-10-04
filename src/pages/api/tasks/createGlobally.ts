@@ -1,5 +1,6 @@
 import { NextApiHandler, NextApiRequest, NextApiResponse } from "next";
 import { Prisma } from "@prisma/client";
+import { isFeatureEnabled, HTPR_6929_COMPOSE_TASK_WRITER_FLAG } from "@/lib/flags";
 import generateRank from "@/utils/generateRank";
 import { IAgent, IEstimate, ILabel, IPriority, ITask, IUser } from "@/models/model";
 import { waitUntil } from "@vercel/functions";
@@ -176,6 +177,10 @@ const handler: NextApiHandler = async (
       Number(requestedUserId) !== session.userId
     ) {
       return res.status(403).json({ message: "Forbidden" });
+    }
+    if (req.body.requestKind === "compose-task" &&
+        !(await isFeatureEnabled(HTPR_6929_COMPOSE_TASK_WRITER_FLAG, session.userId))) {
+      return res.status(403).json({ message: "Compose task writer is turned off" });
     }
     const projectId = Number(requestedProjectId);
     if (!Number.isInteger(projectId) || projectId <= 0) {

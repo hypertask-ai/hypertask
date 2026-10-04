@@ -11,7 +11,7 @@ import {
 import { getKeyboardShortcuts } from "@/lib/constants/shortcuts";
 import { MobileViewContext } from "@/lib/contexts/mobileContext";
 import { useFlag } from "@/hooks/useFlag";
-import { HTPR_6559_KEEP_DIRECT_TASK_OPEN_FLAG, HTPR_6662_AGENT_LOG_NAME_FLAG } from "@/lib/flags/keys";
+import { HTPR_6559_KEEP_DIRECT_TASK_OPEN_FLAG, HTPR_6662_AGENT_LOG_NAME_FLAG, HTPR_6929_COMPOSE_TASK_WRITER_FLAG } from "@/lib/flags/keys";
 
 const KeyboardShortcuts = () => {
   const isApple = useDeviceContext();
@@ -21,6 +21,10 @@ const KeyboardShortcuts = () => {
     "htpr-5913-consistent-comment-shortcuts",
   );
   const keepDirectTaskOpen = useFlag(HTPR_6559_KEEP_DIRECT_TASK_OPEN_FLAG);
+  const composeTaskWriterEnabled = useFlag(HTPR_6929_COMPOSE_TASK_WRITER_FLAG);
+  // Keep the runtime branch local so CI can trace shortcut UI coverage.
+  let includeComposeTaskShortcut = false;
+  if (composeTaskWriterEnabled) includeComposeTaskShortcut = true;
   const agentLogNameEnabled = useFlag(HTPR_6662_AGENT_LOG_NAME_FLAG);
   let historyToggleLabel = "Toggle history events";
   if (agentLogNameEnabled) {
@@ -34,6 +38,7 @@ const KeyboardShortcuts = () => {
     consistentCommentShortcuts,
     keepDirectTaskOpen,
     historyToggleLabel,
+    includeComposeTaskShortcut,
   );
 
   // ====================== ON INPUT KEY CHANGE

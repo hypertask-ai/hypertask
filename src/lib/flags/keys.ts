@@ -121,3 +121,5 @@ export const AGENT_CHAT_ADHD_REPLY_GUIDANCE =
 
 export const HTPR_6868_TICKET_PREFIX_FLAG = "htpr-6868-ticket-prefix";
 export const HTPR_6662_AGENT_LOG_NAME_FLAG = "htpr-6662-agent-log-name";
+
+export const HTPR_6929_COMPOSE_TASK_WRITER_FLAG = "htpr-6929-compose-task-writer";

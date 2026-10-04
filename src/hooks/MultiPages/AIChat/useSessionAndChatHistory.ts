@@ -1,4 +1,6 @@
-import { currentUserAtom } from "@/store";
+import { useFlag } from "@/hooks/useFlag";
+import { HTPR_6929_COMPOSE_TASK_WRITER_FLAG } from "@/lib/flags/keys";
+import { currentUserAtom, composeTaskChatIntroAtom } from "@/store";
 import type { ApiResponse } from "@/utils/axiosClient";
 import {
   AI_Chat_API,
@@ -6,7 +8,7 @@ import {
 } from "@/utils/api/ai_chat";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { useRecoilValue } from "@/lib/state";
+import { useRecoilState, useRecoilValue } from "@/lib/state";
 import { IChatMessage, IChatSession, IUser } from "@/models/model";
 import { usePathname } from "next/navigation";
 
@@ -34,6 +36,11 @@ export const useSessionAndChatHistory = (
   // active on a different ticket (HTPR-6100).
   isTaskScoped = false
 ) => {
+  const composeEnabled = useFlag(HTPR_6929_COMPOSE_TASK_WRITER_FLAG);
+  const [pendingComposeIntro, setComposeIntro] = useRecoilState(composeTaskChatIntroAtom);
+  let composeIntro: typeof pendingComposeIntro = null;
+  if (composeEnabled) composeIntro = pendingComposeIntro;
+  const consumedComposeIntro = useRef<string | null>(null);
   const currentUser = useRecoilValue(currentUserAtom);
   const pathname = usePathname();
   const isDemo = pathname?.startsWith("/demo") ?? false;
@@ -546,6 +553,23 @@ export const useSessionAndChatHistory = (
   const currentSession = activeSession
     ? sessions.find((session) => session.id === activeSession)
     : sessions[0];
+  useEffect(() => {
+    if (composeEnabled && composeIntro && isTaskScoped &&
+        taskId === composeIntro.taskId && currentSession?.taskId === composeIntro.taskId) {
+      const id = `compose-task-${composeIntro.taskId}`;
+      if (consumedComposeIntro.current !== id && !currentSession.messages.some((message) => message.id === id)) {
+        consumedComposeIntro.current = id;
+        // An ordinary stored assistant message, not an AI turn: opening a composed
+        // ticket must not spend credits or let the model rewrite it a second time.
+        addMessageToSessionQuery(currentSession.id, {
+          id, sessionId: currentSession.id, role: "assistant", isDelivered: true,
+          createdAt: new Date(), content: composeIntro.content,
+        });
+      }
+      setComposeIntro(null);
+    }
+  }, [composeEnabled, composeIntro, isTaskScoped, taskId, currentSession, addMessageToSessionQuery, setComposeIntro]);
+
   // `currentSession` is `undefined` both when there is genuinely nothing to
   // show yet (no session selected, no sessions exist) and, transiently,
   // when `activeSession` is set but `sessions` hasn't caught up. Consumers
