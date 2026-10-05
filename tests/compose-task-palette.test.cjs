@@ -1251,3 +1251,16 @@ test('task-writing progress needs its own flag', async (t) => {
     assert.equal(requests[0].body.onProgress, undefined);
   });
 });
+
+test('progress steps keep the New Task window height', async (t) => {
+  await withPalette(t, { newWindow: true, tab: 'compose' }, async ({ type, press }) => {
+    const proto = Object.getPrototypeOf(document.createElement('div'));
+    const original = Object.getOwnPropertyDescriptor(Object.getPrototypeOf(proto), 'offsetHeight') ?? Object.getOwnPropertyDescriptor(proto, 'offsetHeight');
+    Object.defineProperty(proto, 'offsetHeight', { configurable: true, get: () => 184 });
+    t.after(() => { delete proto.offsetHeight; if (original) Object.defineProperty(proto, 'offsetHeight', original); });
+    await type('Write this ticket');
+    await press('Enter', { code: 'Enter' });
+    const status = document.querySelector('[role="status"]');
+    assert.equal(status.closest('[style]')?.style.minHeight, '184px');
+  });
+});
