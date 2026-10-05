@@ -484,9 +484,10 @@ export default async function requireAuthMiddleware(request: NextRequest) {
   // before the proxy, but Fetch Metadata still distinguishes documents.
   const forwardedHeaders = new Headers(request.headers);
   forwardedHeaders.delete('x-ht-board-document-route');
-  if (request.nextUrl.pathname === '/project') {
+  forwardedHeaders.delete('x-ht-inbox-document-route');
+  if (request.nextUrl.pathname === '/project' || request.nextUrl.pathname === '/inbox') {
     if (request.headers.get('sec-fetch-dest') === 'document') {
-      forwardedHeaders.set('x-ht-board-document-route', request.nextUrl.pathname + request.nextUrl.search);
+      forwardedHeaders.set(request.nextUrl.pathname === '/inbox' ? 'x-ht-inbox-document-route' : 'x-ht-board-document-route', request.nextUrl.pathname + request.nextUrl.search);
     }
     response.headers.set('Cache-Control', 'private, no-store');
     response.headers.set('CDN-Cache-Control', 'no-store');

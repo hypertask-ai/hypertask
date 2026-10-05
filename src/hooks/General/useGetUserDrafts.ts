@@ -1,6 +1,8 @@
 import { IDraft, IProject, ITask } from "@/models/model";
 import { useQuery } from "@tanstack/react-query";
 import axios from "axios";
+import { useFirstScreenSurface } from "@/lib/firstScreen/SurfaceContext";
+import { getInboxDocument } from "@/lib/firstScreen/inboxDocument";
 import { useMemo } from "react";
 
 export const USER_DRAFTS_QUERY_KEY = (userId: number | undefined) =>
@@ -31,12 +33,14 @@ export const useGetUserDrafts = (
   userId: number | undefined,
   initialData?: IUserDraft[]
 ) => {
+  const document = getInboxDocument(useFirstScreenSurface(userId), userId ?? 0);
   const query = useQuery({
     queryKey: USER_DRAFTS_QUERY_KEY(userId),
     queryFn: getUserDrafts,
     enabled: Boolean(userId),
     refetchOnWindowFocus: true,
     refetchOnMount: true,
+    ...(document ? { staleTime: 30 * 1000 } : {}),
     gcTime: 60 * 1000 * 60,
     initialData: initialData ?? [],
   });

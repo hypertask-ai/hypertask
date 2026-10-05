@@ -5,6 +5,8 @@ import {
   releaseRealtimeClientIfIdle,
 } from "@/lib/realtime/client";
 import { INBOX_EVENT, userChannel } from "@/lib/realtime/shared";
+import { useFirstScreenSurface } from "@/lib/firstScreen/SurfaceContext";
+import { getInboxDocument } from "@/lib/firstScreen/inboxDocument";
 import { runRealtimeReconciliation } from "@/lib/realtime/latencyCanary";
 
 export const createInboxRealtimeEventHandler = (
@@ -18,6 +20,7 @@ export const createInboxRealtimeEventHandler = (
 // unread count updates live without a page refresh.
 export function useInboxRealtime(userId: number | null | undefined): void {
   const queryClient = useQueryClient();
+  const seeded = Boolean(getInboxDocument(useFirstScreenSurface(userId), userId ?? 0));
   const wasConnected = useRef(false);
 
   useEffect(() => {
@@ -25,6 +28,15 @@ export function useInboxRealtime(userId: number | null | undefined): void {
 
     let cancelled = false;
     let unsubscribe: (() => void) | undefined;
+    let caughtUp = false;
+    const catchUp = () => {
+      if (!seeded || cancelled || caughtUp) return;
+      caughtUp = true;
+      void queryClient.refetchQueries({ queryKey: ["inbox", "data", userId], exact: true });
+    };
+    // Realtime can be unavailable. Still reconcile through the normal fenced
+    // query, never write the unfenced document to the durable snapshot.
+    const catchUpTimer = seeded ? setTimeout(catchUp, 1500) : undefined;
 
     const refetch = (trigger: "event" | "reconnect" = "event") => {
       void runRealtimeReconciliation({
@@ -60,6 +72,8 @@ export function useInboxRealtime(userId: number | null | undefined): void {
       const channel = client.subscribe(channelName);
       const onInboxEvent = createInboxRealtimeEventHandler(refetch);
       channel.bind(INBOX_EVENT, onInboxEvent);
+      channel.bind("pusher:subscription_succeeded", catchUp);
+      if (channel.subscribed) catchUp();
       // Reconnect safety-net: pull once after a dropped connection recovers.
       // Skipped on the INITIAL connection (HTPR-3998) — the queries are already
       // fetching on mount, so refetching there just doubled every page load.
@@ -74,6 +88,7 @@ export function useInboxRealtime(userId: number | null | undefined): void {
 
       unsubscribe = () => {
         channel.unbind(INBOX_EVENT, onInboxEvent);
+        channel.unbind("pusher:subscription_succeeded", catchUp);
         client.connection.unbind("connected", onConnected);
         client.unsubscribe(channelName);
         releaseRealtimeClientIfIdle(client);
@@ -82,7 +97,8 @@ export function useInboxRealtime(userId: number | null | undefined): void {
 
     return () => {
       cancelled = true;
+      clearTimeout(catchUpTimer);
       unsubscribe?.();
     };
-  }, [userId, queryClient]);
+  }, [userId, queryClient, seeded]);
 }

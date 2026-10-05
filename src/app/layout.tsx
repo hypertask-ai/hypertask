@@ -22,6 +22,7 @@ import {
 import { buildThemeBootScript } from "@/lib/themeBootScript";
 import { buildEarlyAppShellBootstrapScript } from "@/lib/appShellBootstrap/client";
 import { getServerBoardDocument } from "@/lib/firstScreen/serverBoardDocument";
+import { getServerInboxDocument } from "@/lib/firstScreen/serverInboxDocument";
 import type { BoardDisplay } from "@/lib/firstScreen/boardDisplay";
 
 export async function generateViewport() {
@@ -55,7 +56,8 @@ export default async function RootLayout(
   // correct state. The old client-side correction rerendered the complete app
   // provider subtree immediately after hydration and made a server-action
   // round trip solely to identify Apple devices.
-  const [device, firstScreen] = await Promise.all([isMobileDevice(), getServerBoardDocument()]);
+  const [device, boardDocument, inboxDocument] = await Promise.all([isMobileDevice(), getServerBoardDocument(), getServerInboxDocument()]);
+  const firstScreen = boardDocument ?? inboxDocument;
   // Performance identity comes from the HTTP-only, HMAC-signed session. The
   // client-writable nookies_user cookie is a claim, not authentication.
   const analyticsSession = verifySession(

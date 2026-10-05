@@ -307,7 +307,8 @@ test('integration retains the old import/readiness path, offscreen policy and gl
   assert.match(global, /mobileCreateTaskButtonVisible && <MobileCreateTaskButton/);
   assert.match(global, /mobilePullCommandVisible && \(\s*<MobilePullDownCommand/);
   assert.match(global, /<CachedTaskDetailNavigation accountId={authenticatedUserId}>/);
-  assert.doesNotMatch(source('src/app/inbox/page.tsx'), /FirstScreenSurfaceProvider|initialFlags=|initialValues=/, 'inbox remains unseeded until step 4');
+  assert.match(source('src/app/inbox/page.tsx'), /getServerInboxDocument/);
+  assert.doesNotMatch(source('src/app/inbox/page.tsx'), /FirstScreenSurfaceProvider|initialFlags=|initialValues=/, 'inbox shares the existing root, never a state island');
   assert.match(source('src/utils/Providers.tsx'), /initialFlags=\{snapshot\?\.flags\}/);
   assert.match(source('src/app/[...boardURL]/page.tsx'), /if \(firstScreen\)/);
 });

@@ -25,6 +25,7 @@ import Goback from "@/assets/gobackicon.svg";
 const loadInboxSplit = () => import("@/components/notifications/inboxSplit");
 const ClientInboxSplit = dynamic(loadInboxSplit, { ssr: false });
 const SeededInboxSplit = dynamic(() => import("@/components/notifications/inboxSplit"));
+import { getInboxDocument } from "@/lib/firstScreen/inboxDocument";
 import { useFirstScreenSurface } from "@/lib/firstScreen/SurfaceContext";
 import FirstScreenMobileChrome from "@/components/Global/FirstScreenMobileChrome";
 
@@ -55,7 +56,7 @@ import toast from "react-hot-toast";
 import { undoToastSettings } from "@/components/undoToast";
 import useGlobalFocusHandler from "@/hooks/Inbox/useGlobalFocusHandler";
 import { useDeviceContext } from "@/lib/contexts/deviceContext";
-import { type InboxTabMeta } from "@/utils/helperFunctions/helperFunctions";
+import { type InboxQueryPayload, type InboxTabMeta } from "@/utils/helperFunctions/helperFunctions";
 import useHypertasksRecoilStates from "@/hooks/RecoilRoot/useHypertasksRecoilStates";
 import { useStarAndPin } from "@/hooks/Task Detail/useStarAndPin";
 import {
@@ -103,9 +104,16 @@ const Inbox = ({
   originProject: string;
 }) => {
   const snapshot = useFirstScreenSurface(currentUser.id);
-  const [seeded] = useState(() => Boolean(snapshot));
-  const InboxSplit = seeded ? SeededInboxSplit : ClientInboxSplit;
   const queryClient = useQueryClient();
+  const [inboxDocument] = useState(() => {
+    const candidate = getInboxDocument(snapshot, currentUser.id);
+    const cached = queryClient.getQueryData<InboxQueryPayload>(inboxDataQueryKey(currentUser.id));
+    // A later client navigation must use its live cache, not replay this root's
+    // original document. Optimistic/network publications remove the marker.
+    return cached?.serverDocumentGeneration === candidate?.scope.generation ? candidate : null;
+  });
+  const [seeded] = useState(() => Boolean(inboxDocument));
+  const InboxSplit = seeded ? SeededInboxSplit : ClientInboxSplit;
   const isMbl = useMobileView();
   const [appShellRail] = useRecoilState(appShellRailAtom);
   const appShellRailOn = appShellRail && !isMbl;
@@ -117,8 +125,8 @@ const Inbox = ({
     queryParams?.showAll === "true" ? "ShowAll" : undefined,
   );
   const lastgClick = useRef<number | null>(null);
-  const preselectedSplitProcessed = useRef<boolean>(false);
-  const initialResetToFirstDone = useRef<boolean>(false);
+  const preselectedSplitProcessed = useRef<boolean>(Boolean(inboxDocument));
+  const initialResetToFirstDone = useRef<boolean>(Boolean(inboxDocument));
   const router = useRouter();
   const searchParams = useSearchParams();
   const preselectedProject = queryParams?.projectId;
@@ -188,7 +196,7 @@ const Inbox = ({
       if (timer !== undefined) window.clearTimeout(timer);
     };
   }, [notificationsQuery.isFetched, inboxContentReady, warmCommands]);
-  const [__notifications, _setNotifications] = useState<INotification[][]>();
+  const [__notifications, _setNotifications] = useState<INotification[][] | undefined>(() => inboxDocument?.data.payload.structuredData.data);
   const [showInboxSearch, setShowInboxSearch] = useState(false);
   const [showManageSplits, setShowManageSplits] = useState(false);
   const [inboxSearch, setInboxSearch] = useState("");
@@ -247,8 +255,8 @@ const Inbox = ({
       ),
     );
   }, [__notifications, inboxSearch, tutorialInboxNotificationIds]);
-  const [_notifications, setNotifications] = useState<INotification[]>();
-  const [_selectedInbox, setSelectedInbox] = useState<INotification | null>();
+  const [_notifications, setNotifications] = useState<INotification[] | undefined>(() => inboxDocument?.data.payload.structuredData.data[inboxDocument.selection.split ?? 0]);
+  const [_selectedInbox, setSelectedInbox] = useState<INotification | null | undefined>(() => inboxDocument?.data.payload.structuredData.data[inboxDocument.selection.split ?? 0]?.[0]);
   const [initialIndexReset, setInitialIndexReset] = useState<number>(
     globalFocus.currIdx ?? 0,
   );
@@ -677,7 +685,12 @@ const Inbox = ({
     }
   };
 
+  const initialDocumentRows = useRef(inboxDocument?.data.payload.structuredData.data);
   useEffect(() => {
+    // The first split is already painted and focused. Do not scroll it again
+    // while hydration attaches; live changes retain the existing handler.
+    if (initialDocumentRows.current === _notificationsTQ?.structuredData?.data && inboxDocument) return;
+    initialDocumentRows.current = undefined;
     newCommentsHandler();
   }, [_notificationsTQ?.structuredData?.data, trigger]);
 

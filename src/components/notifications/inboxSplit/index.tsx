@@ -59,6 +59,7 @@ import { inboxConfig } from "@/lib/configs/inbox.config";
 import { cn } from "@/utils/undoActions/helperFuncs";
 import InboxZeroState from "@/components/Common/InboxZeroState";
 import { useInboxZero } from "@/lib/contexts/InboxZeroContext";
+import { getInboxDocument } from "@/lib/firstScreen/inboxDocument";
 import { useGetUserPreferences } from "@/hooks/General/useGetUserPreferences";
 import { usePrefetchInboxTaskDetail } from "@/hooks/Inbox/usePrefetchInboxTaskDetail";
 import { IUserDraft, useGetUserDrafts } from "@/hooks/General/useGetUserDrafts";
@@ -312,6 +313,7 @@ const InboxSplit = ({
   draftSearchQuery = "",
 }: Props) => {
   const snapshot = useFirstScreenSurface();
+  const inboxDocument = getInboxDocument(snapshot, snapshot?.scope.accountId ?? 0);
   const isMbl = useContext(MobileViewContext);
   // Notification whose snooze picker is open, set by a right swipe.
   const [snoozeTarget, setSnoozeTarget] = useState<INotification | null>(null);
@@ -338,7 +340,7 @@ const InboxSplit = ({
   const shortcutNudgesEnabled = useFlag(SHORTCUT_NUDGES_FLAG);
   const [showSubtaskLinkingModal, setShowSubtaskLinkingModal] =
     useState<boolean>(false);
-  const currentUser = useCurrentUser();
+  const currentUser = useCurrentUser() ?? inboxDocument?.data.user;
   const instantTicketOpen = useFlag(HTPR_6752_INSTANT_TICKET_OPEN_FLAG);
   const { navigate, navigateToTask } = useHypertasksNavigate();
   const taskRef = useRef<HTMLDivElement>(null);
@@ -357,7 +359,7 @@ const InboxSplit = ({
   const controller: { [key: number]: { pressed: boolean } } = {
     ...globalConstants.multipleKeys,
   };
-  const { data: userPreferences } = useGetUserPreferences();
+  const { data: userPreferences, dataUpdatedAt: preferencesUpdatedAt } = useGetUserPreferences();
   const { drafts } = useGetUserDrafts(currentUser?.id);
   const activeDrafts = useMemo(() => {
     const keyword = draftSearchQuery.trim().toLowerCase();
@@ -1253,7 +1255,7 @@ const InboxSplit = ({
                         selectedSplit={selectedSplit}
                         isIbxSlctd={isBulkSelected}
                         notification={notification}
-                        displayAvatar={userPreferences?.displayAvatar}
+                        displayAvatar={preferencesUpdatedAt === 0 && inboxDocument ? inboxDocument.data.displayAvatar : userPreferences?.displayAvatar}
                       >
                         <MaybeSwipeable
                           enabled={isMbl && !isWaitingOnSynthetic}

@@ -61,7 +61,7 @@ test("hydration-sensitive queries isolate their pre-hydration cache keys", () =>
 
   assert.match(
     inbox,
-    /const query = useQuery\(\{\s*queryKey,\s*\.\.\.\(hydrated\s*\?\s*\{\}\s*:\s*\{[\s\S]*?"hydrating"[\s\S]*?enabled: false/,
+    /const query = useQuery\(\{\s*queryKey,\s*\.\.\.\(hydrated \|\| document\s*\?\s*\{\}\s*:\s*\{[\s\S]*?"hydrating"[\s\S]*?enabled: false/,
   );
   assert.match(
     inbox,
