@@ -687,10 +687,8 @@ const Commands = (props: Props) => {
     </div>
   ) : null;
   const compose = composeEnabled ? <ComposeTaskWriter active={isCompose} destinationProject={newTaskWindow ? composeProjectRef.current : undefined} onBusyChange={setWriting} onCreated={async () => {
-    if (newTaskWindow) {
-      const closed = composeOnCreatedRef.current?.();
-      if (isMobile) await closed;
-    }
+    if (newTaskWindow && isMobile) await composeOnCreatedRef.current?.();
+    else if (newTaskWindow) composeOnCreatedRef.current?.();
     resetShowCommands();
   }} /> : null;
 
