@@ -29,7 +29,7 @@ mock('src/utils/controllers/users/fetch_preferences.ts', { fetchUserPreferenceCo
 } });
 const { signSession } = require('../src/lib/auth/session.ts');
 const { DEFAULT_TABLE_COLUMNS } = require('../src/utils/helperFunctions/Views/TableColumnsHelperFunctions.ts');
-const { BOARD_DISPLAY_COOKIE } = require('../src/lib/firstScreen/boardDisplay.ts');
+const { BOARD_DISPLAY_COOKIE, parseBoardDisplay } = require('../src/lib/firstScreen/boardDisplay.ts');
 const { readInboxDocument, getServerInboxDocument } = require('../src/lib/firstScreen/serverInboxDocument.ts');
 const { getInboxDocument } = require('../src/lib/firstScreen/inboxDocument.ts');
 const { projectInboxDateGroup } = require('../src/lib/firstScreen/inbox.ts');
@@ -130,6 +130,23 @@ test('failure and 800ms deadline return the old path and a late read cannot publ
 test('RSC navigation and requests without the proxy document hint cannot initialize the live root', async () => {
   reset(); requestHeaders.set('rsc', '1'); assert.equal(await getServerInboxDocument(), null); assert.deepEqual(calls, []);
   reset(); requestHeaders.delete('x-ht-inbox-document-route'); assert.equal(await getServerInboxDocument(), null); assert.deepEqual(calls, []);
+});
+
+test('blocked dismissal storage cannot escape the mirror effect or leave a misleading display cookie', () => {
+  const source = fs.readFileSync(path.join(root, 'src/lib/firstScreen/BoardDisplayMirror.tsx'), 'utf8');
+  const start = source.indexOf('    const mirror =');
+  const body = source.slice(start, source.indexOf('    mirror();', start));
+  const js = require('typescript').transpileModule(body, { compilerOptions: { target: 7 } }).outputText;
+  const document = { documentElement: { dataset: { theme: 'porcelain' } }, cookie: 'old mirror' };
+  const bindings = { document, BOARD_DISPLAY_COOKIE, parseBoardDisplay, location: { protocol: 'https:' }, window: { innerWidth: 390 }, navigator: { language: 'en-US' },
+    accountId: 985, boardLayout: 'board', railCollapsed: true, quickTips: false, fcm: { permissionStatus: 'default', statusToggleFromDB: 'false' }, ...display.board,
+    localStorage: { getItem: () => { throw Error('storage blocked'); } } };
+  const mirror = storage => new Function(...Object.keys(bindings), js + '\nmirror();')(...Object.values({ ...bindings, localStorage: storage }));
+  assert.doesNotThrow(() => mirror(bindings.localStorage));
+  assert.equal(document.cookie, `${BOARD_DISPLAY_COOKIE}=; Path=/; Max-Age=0; SameSite=Lax; Secure`);
+  mirror({ getItem: () => 'true' });
+  const encoded = document.cookie.split(';')[0].slice(BOARD_DISPLAY_COOKIE.length + 1);
+  assert.equal(JSON.parse(decodeURIComponent(encoded)).inbox.nudgeDismissed, true);
 });
 
 test('inbox HTML and Flight use dynamic private no-store with replaced caller route hints', () => {
