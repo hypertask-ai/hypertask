@@ -21,6 +21,14 @@
   }
 }
 
+// Keep Tailwind utility widths above this fallback in the cascade.
+@layer base {
+  :where([data-hover-tooltip-portal]) > * {
+    width: max-content;
+    max-width: calc(100vw - 16px);
+  }
+}
+
 @starting-style {
   [data-hover-tooltip-portal] [data-hover-tooltip-content] {
     transform: scale(0);

@@ -22,7 +22,7 @@ test("ticket property tooltips overlay the viewport instead of widening the rail
   assert.match(portal, /viewportWidth - tooltipRect\.width - 8/);
   assert.match(portal, /window\.addEventListener\("scroll", updatePosition, true\)/);
   assert.match(tooltip, /max-w-\[calc\(100vw-16px\)\]/);
-  assert.match(tooltip, /whitespace-normal break-words/);
+  assert.match(tooltip, /w-max max-w-\[calc\(100vw-16px\)\] py-\[6px\] px-2 whitespace-normal break-words/);
 
   for (const source of propertySources) {
     const tooltipCount = source.match(/<Tooltip/g)?.length ?? 0;

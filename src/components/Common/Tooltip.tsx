@@ -118,7 +118,7 @@ const LegacyTooltip = ({keyCombination,bottom, text,left, groupHoverId="",should
                     border-light-black-border-1 border-[1px]
                     bg-labelComponent gap-2 max-w-[calc(100vw-16px)]
 
-                    py-[6px] px-2 whitespace-normal break-words text-dense xl:text-content fixed
+                    w-max py-[6px] px-2 whitespace-normal break-words text-dense xl:text-content fixed
                     rounded-[4px]
                      `}>
                 <span className="min-w-0 break-words text-black">
@@ -211,10 +211,9 @@ const TopLayerTooltip = ({keyCombination,bottom, text,left, groupHoverId="",shou
         style={portal ? {left: 0, top: 0} : {bottom, left}}
         className={`sm:flex hidden items-center font-semibold
           border-light-black-border-1 border-[1px] bg-labelComponent gap-2
-          max-w-[calc(100vw-16px)] py-[6px] px-2 text-dense xl:text-content absolute rounded-[4px]
-          ${portal ? "whitespace-normal break-words" : "whitespace-nowrap"}`}
+          w-max max-w-[calc(100vw-16px)] py-[6px] px-2 whitespace-normal break-words text-dense xl:text-content absolute rounded-[4px]`}
       >
-        <span className={portal ? "min-w-0 break-words text-black" : "text-black"}>
+        <span className="min-w-0 break-words text-black">
           {text}
         </span>
         {keyCombination.length > 0 && <div>

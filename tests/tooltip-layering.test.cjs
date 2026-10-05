@@ -69,7 +69,7 @@ async function withTooltipFixture(check) {
   const stubs = {
     "src/hooks/useFlag.tsx": { useFlag: () => fixtureTopLayer },
     "src/utils/generateTime.ts": { default: () => "Just now" },
-    "src/utils/helperFunctions/helperFunctions.ts": { convertToPlain: (text) => text },
+    "src/utils/helperFunctions/helperFunctions.ts": { convertToPlain: (text) => text, formatDateToGMT: () => "5 October 2026, 12:00 GMT" },
     "src/utils/undoActions/helperFuncs.ts": { cn: (...classes) => classes.filter(Boolean).join(" ") },
   };
   const previousModules = Object.keys(stubs).map((file) => require.cache[path.join(root, file)]);
@@ -124,6 +124,119 @@ async function withTooltipFixture(check) {
 
 const reactionFile = "src/components/PageComponents/TaskDetail/CommentAndDescription/CommentContainer/CommentEmojiTooltip.tsx";
 
+test("label tooltips size to their text in both legacy and top-layer placements", async () => {
+  await withTooltipFixture(async ({ load, container, render, setFlag }) => {
+    const Tooltip = load("src/components/Common/Tooltip.tsx");
+    const anchor = document.createElement("button");
+    document.body.append(anchor);
+    for (const enabled of [true, false]) {
+      setFlag(enabled);
+      for (const portal of [false, true]) {
+        for (const text of ["Copy task ID", "A long related-ticket title that must remain a single line", "Superhuman Command"]) {
+          await render(React.createElement("div", { className: "relative group" }, React.createElement(Tooltip, {
+            text, keyCombination: ["ctrl", "K"], left: 0, bottom: -40, portal,
+            anchorElement: portal ? anchor : null,
+          })));
+          await React.act(async () => container.firstElementChild.dispatchEvent(new window.MouseEvent("mouseenter")));
+          const surface = enabled
+            ? document.querySelector("[data-hover-tooltip-portal]").firstElementChild
+            : portal ? document.body.querySelector(".fixed") : container.firstElementChild.firstElementChild;
+          // One line sized to the text; wrapping only past the viewport cap.
+          const singleLine = surface.classList.contains("whitespace-nowrap")
+            || (surface.classList.contains("w-max") && surface.classList.contains("max-w-[calc(100vw-16px)]"));
+          assert.ok(singleLine, `flag=${enabled}, portal=${portal}: ${text}`);
+          assert.equal(surface.firstElementChild.textContent.trim(), text);
+          await render(null);
+        }
+      }
+    }
+  });
+});
+
+test("rich and tutorial tooltips retain legacy widths and wrapping, while shortcut labels remain nowrap", async () => {
+  await withTooltipFixture(async ({ load, container, render, setFlag }) => {
+    const layout = (surface) => [surface, ...surface.querySelectorAll("*")].map((element) =>
+      [...element.classList].filter((name) => /(?:^|:)(?:whitespace-|text-wrap|break-|(?:min-|max-)?w-)/.test(name)).sort());
+    const cases = [
+      ["src/components/Common/ReactTooltip.tsx", { className: "scale-100", children: "A wrapping reaction hovercard" }, "sm:w-[200px]"],
+      ["src/components/PageComponents/Interactive-Onboarding/Components/TutorialTip.tsx", { top: 15, left: 0, text: "A wrapping tutorial tip", className: "w-[240px]" }, "w-[240px]"],
+      ["src/components/Common/TimeTooltip.tsx", { time: new Date(), bottom: -5, left: 55 }, "whitespace-nowrap"],
+    ];
+    for (const [file, props, required] of cases) {
+      const Component = load(file);
+      let legacyLayout;
+      for (const enabled of [false, true]) {
+        setFlag(enabled);
+        await render(React.createElement("div", { className: "relative group" }, React.createElement(Component, props)));
+        const surface = enabled ? document.querySelector("[data-hover-tooltip-portal]").firstElementChild : container.firstElementChild.firstElementChild;
+        assert.ok(surface.classList.contains(required), file);
+        if (enabled) assert.deepEqual(layout(surface), legacyLayout, file);
+        else legacyLayout = layout(surface);
+        await render(null);
+      }
+    }
+    setFlag(true);
+    const ReactionTooltip = load(reactionFile);
+    await render(React.createElement("div", { className: "relative group" }, React.createElement(ReactionTooltip)));
+    await React.act(async () => container.firstElementChild.dispatchEvent(new window.MouseEvent("mouseenter")));
+    const rows = document.querySelector("[data-hover-tooltip-portal]").firstElementChild.children;
+    assert.equal(rows.length, 2);
+    for (const row of rows) assert.ok(row.classList.contains("whitespace-nowrap"));
+    const person = read("src/components/Common/PersonHovercard.tsx");
+    assert.match(person, /className=\{`relative \$\{topLayer[^\n]+ w-\[272px\]/);
+    assert.match(person, /\{surface\}[\s\S]+: surface\}/, "both person hovercard paths reuse the fixed-width surface");
+  });
+});
+
+test("portal children have zero-specificity intrinsic sizing without overriding explicit widths", () => {
+  const styles = read("src/styles/_tooltip-portal.scss");
+  assert.match(styles, /@layer base\s*\{\s*:where\(\[data-hover-tooltip-portal\]\)\s*>\s*\*\s*\{\s*width:\s*max-content;\s*max-width:\s*calc\(100vw - 16px\);\s*\}\s*\}/);
+});
+
+test("intrinsic-width labels stay clamped on narrow viewports and after content resize", async () => {
+  await withTooltipFixture(async ({ load, container, render, observers }) => {
+    Object.defineProperty(window, "innerWidth", { value: 320, configurable: true });
+    Object.defineProperty(window, "innerHeight", { value: 240, configurable: true });
+    const nativeBounds = window.HTMLElement.prototype.getBoundingClientRect;
+    let width = 280;
+    window.HTMLElement.prototype.getBoundingClientRect = function () {
+      if (this.id === "small-trigger") return new window.DOMRect(300, 220, 12, 12);
+      if (this.parentElement?.hasAttribute("data-hover-tooltip-portal")) {
+        const portal = this.parentElement;
+        const left = parseFloat(portal.style.left) + (parseFloat(this.style.left) || 0);
+        const top = this.style.bottom ? parseFloat(portal.style.top) + parseFloat(portal.style.height) - parseFloat(this.style.bottom) - 30 : parseFloat(portal.style.top);
+        return new window.DOMRect(left, top, width, 30);
+      }
+      return nativeBounds.call(this);
+    };
+    const Tooltip = load("src/components/Common/Tooltip.tsx");
+    for (const portal of [false, true]) {
+      width = 280;
+      await render(React.createElement("button", { id: "small-trigger", className: "relative group" }, React.createElement(Tooltip, {
+        text: "A long related-ticket title", keyCombination: [], left: 0, bottom: -40, portal,
+      })));
+      await React.act(async () => container.firstElementChild.dispatchEvent(new window.MouseEvent("mouseenter")));
+      const surface = document.querySelector("[data-hover-tooltip-portal]").firstElementChild;
+      const checkBounds = () => {
+        const bounds = surface.getBoundingClientRect();
+        assert.equal(bounds.right, window.innerWidth - 8);
+        assert.ok(bounds.left >= 8);
+        assert.ok(bounds.top >= 0);
+        assert.ok(bounds.bottom <= window.innerHeight);
+      };
+      checkBounds();
+      width = 304;
+      const observer = observers.find((entry) => entry.elements.has(surface));
+      assert.ok(observer);
+      await React.act(async () => observer.callback());
+      checkBounds();
+      await React.act(async () => window.dispatchEvent(new window.Event("resize")));
+      checkBounds();
+      await render(null);
+    }
+  });
+});
+
 test("notification tooltip rect aligns beside its trigger, not the offsetParent origin", async () => {
   await withTooltipFixture(async ({ load, container, render, setFlag }) => {
     const nativeBounds = window.HTMLElement.prototype.getBoundingClientRect;
@@ -155,6 +268,7 @@ test("notification tooltip rect aligns beside its trigger, not the offsetParent 
       assert.notEqual(bounds.left, container.getBoundingClientRect().left);
       assert.equal(popup.style.width, "15px");
       assert.equal(popup.textContent, "Mark Done   E");
+      assert.ok(popup.firstElementChild.classList.contains("whitespace-nowrap"), file);
       triggerRect = new window.DOMRect(450, 280, 15, 20);
       await React.act(async () => window.dispatchEvent(new window.Event("scroll")));
       assert.equal(popup.firstElementChild.getBoundingClientRect().left, triggerRect.right);
