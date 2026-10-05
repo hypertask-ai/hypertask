@@ -110,7 +110,7 @@ const LegacyTooltip = ({keyCombination,bottom, text,left, groupHoverId="",should
             <div
             ref={tooltipRef}
                 style={{left:liveAnchorRect.left, top:liveAnchorRect.bottom + 8}}
-                className={`sm:flex
+                className={`pointer-events-none sm:flex
                     hidden
                     items-center
                     z-[9999]
@@ -156,7 +156,7 @@ const LegacyTooltip = ({keyCombination,bottom, text,left, groupHoverId="",should
             <div
             ref={tooltipRef}
                 style={{bottom:bottom, left:left}}
-                className={`sm:flex
+                className={`pointer-events-none sm:flex
                     hidden
                     items-center
                     z-[9999]

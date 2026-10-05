@@ -81,8 +81,8 @@ export const inboxConfig = {
     tooltipOffsets: {
         bulkArchive: { left: -220, bottom: 19 },
         bulkReminder: { left: -274, bottom: 19 },
-        selectAll: { left: 22, bottom: 32 },
-        selectAllGlobal: { left: 22, bottom: 0 },
+        selectAll: { left: 48, bottom: 32 },
+        selectAllGlobal: { left: 48, bottom: 0 },
         goToarchiveButton: { left: -156, bottom: -5 },
         goToAiChatButton: { left: -125, bottom: -10 },
         backButton: { left: 45, bottom: 2 },
