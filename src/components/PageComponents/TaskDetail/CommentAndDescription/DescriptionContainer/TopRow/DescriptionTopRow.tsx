@@ -20,7 +20,7 @@ const DescriptionTopRow: React.FC<IProps> = ({ name, pfp, isUploadingDescription
   const { cachedLayout } = useTaskContext();
   return (
     <div
-      className={cn("flex justify-between", cachedLayout && "h-6 overflow-hidden", isMbl ? taskDetailSpacing.mobile.descriptionContainer : "")}>
+      className={cn("flex justify-between", cachedLayout && (isMbl ? "h-6 overflow-hidden" : "h-[21px] overflow-hidden"), isMbl ? taskDetailSpacing.mobile.descriptionContainer : "")}>
       <span className='text-meta text-text-light-gray'>
         {
           !isUploadingDescription ?

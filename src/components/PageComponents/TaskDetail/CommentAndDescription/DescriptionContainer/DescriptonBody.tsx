@@ -90,6 +90,7 @@ const DescriptonBody = ({ draftTQ }: any) => {
         descriptionClass="pb-1 flex justify-start gap-[6px]"
       /> : <InnerHTMLDescription
         id="description-input"
+        className={cachedLayout && !isMbl ? "!min-h-[80px] !mb-0" : undefined}
         descriptionText={linkedContent ?? ""}
         attachmentsFromProps={cachedLayout ? descriptionAttachments : []}
         setCarousalItems={cachedLayout ? setCarousalItems : undefined}

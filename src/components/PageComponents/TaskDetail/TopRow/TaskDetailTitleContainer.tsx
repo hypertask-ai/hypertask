@@ -50,7 +50,7 @@ const TaskDetailTitleContainer = ({ containerRef, toggleDueDate }: TaskDetailTit
         dataAttribute="task-detail"
         containerRef={containerRef}
         showScrollShadow={isScrolled}
-        hasSummary={cachedLayout || hasSummary}
+        hasSummary={(_mbl && cachedLayout) || hasSummary}
         titleRowContent={
           <>
             <TaskTitle />
@@ -59,8 +59,8 @@ const TaskDetailTitleContainer = ({ containerRef, toggleDueDate }: TaskDetailTit
         }
       >
         {/* --------------------------- TASK SUMMARY --------------------------- */}
-        {/* The collapsed summary has a known one-line height, even before its text arrives. */}
-        {cachedLayout ? (
+        {/* Mobile reserves its summary slot; desktop must not add space for an absent summary. */}
+        {cachedLayout && (_mbl || hasSummary) ? (
           <div data-task-summary-slot className={_mbl ? "h-10 w-full shrink-0" : "h-[21px] w-full shrink-0"}>
             {summary}
           </div>
