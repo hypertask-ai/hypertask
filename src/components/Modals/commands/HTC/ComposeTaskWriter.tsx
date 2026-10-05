@@ -40,7 +40,8 @@ export default function ComposeTaskWriter({ active, destinationProject, onCreate
   const enabled = useFlag(HTPR_6929_COMPOSE_TASK_WRITER_FLAG);
   const newTaskWindow = useFlag(HTPR_6937_NEW_TASK_WINDOW_FLAG) && enabled;
   const progressFlag = useFlag(HTPR_6951_TASK_WRITING_PROGRESS_FLAG);
-  const showProgress = progressFlag && newTaskWindow;
+  let showProgress = false;
+  if (progressFlag && newTaskWindow) showProgress = true;
   const taskContext = useContext(TaskContext);
   const taskContextRef = useRef(taskContext);
   taskContextRef.current = taskContext;
