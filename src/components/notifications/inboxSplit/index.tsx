@@ -1152,6 +1152,7 @@ const InboxSplit = ({
     <>
       <div
         ref={activeSplitRef}
+        data-testid="inbox-list"
         // onMouseMove={handleMouseMove}
         hidden={inboxConfig.visibility.hidden(value, index)}
         style={{

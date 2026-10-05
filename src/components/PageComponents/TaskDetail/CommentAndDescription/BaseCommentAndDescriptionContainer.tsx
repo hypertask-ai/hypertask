@@ -14,6 +14,7 @@ const BaseCommentAndDescriptionContainer:FC<BaseCommentAndDescriptionContainerPr
     return (
     <div
       ref={ref}
+      data-testid="ticket-thread"
       style={{ flex: 1 }}
       className={cn(`
         scrollbar-none no-scrollbar

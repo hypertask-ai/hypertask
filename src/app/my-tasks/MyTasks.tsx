@@ -1162,6 +1162,7 @@ const boardTabCounts = useMemo(() => {
   const content = (
     <div
       suppressHydrationWarning
+      data-testid="my-tasks-panel"
       className={`py-9 h-screen min-h-0 overflow-hidden bg-containerBackground flex-col rounded-[4px] my-0 ${myTasksShortcutsWidthEnabled ? "w-full" : "global-view-width"} flex linksModal ${styles.links_modal}`}
     >
       {viewsEnabled && myTasksViewsEnabled && (
@@ -1184,9 +1185,9 @@ const boardTabCounts = useMemo(() => {
         </div>
       )}
 
-      <div className="flex gap-2 px-[16px] @md:!px-[88px]">
+      <div data-testid="my-tasks-toolbar" className="flex gap-2 px-[16px] @md:!px-[88px]">
         <span className="flex items-baseline gap-2 font-bold text-subheading text-white-black">
-          <p>My Tasks</p>
+          <p data-testid="my-tasks-title">My Tasks</p>
           <span className="text-content font-normal text-text-light-gray">
             {totalCount}
           </span>
@@ -1291,11 +1292,11 @@ const boardTabCounts = useMemo(() => {
         )}
       </div>
 
-      <div className="hidden @md:block w-full overflow-x-auto scrollbar-none no-scrollbar @md:px-[78px] @lg:px-[73px] mt-4">
+      <div data-testid="my-tasks-splits-desktop" className="hidden @md:block w-full overflow-x-auto scrollbar-none no-scrollbar @md:px-[78px] @lg:px-[73px] mt-4">
         <div className="flex flex-wrap grow">{splitTitles}</div>
       </div>
 
-      <div className="mt-3 flex-1 min-h-0 w-full">
+      <div data-testid="my-tasks-list" className="mt-3 flex-1 min-h-0 w-full">
         <MyTasksBulkSelectionProvider
           enabled={myTasksBulkSelectionEnabled}
           resetSelectionKey={`${activeViewId ?? "all"}:${activeSplit}:${prioritySelection
@@ -1323,7 +1324,7 @@ const boardTabCounts = useMemo(() => {
         </MyTasksBulkSelectionProvider>
       </div>
 
-      <div className="flex inbox_footer @md:hidden no-scrollbar scrollbar-none @md:gap-8 w-100 bg-hoverCardBackground h-20 @md:h-8 inbox_title">
+      <div data-testid="my-tasks-splits-phone" className="flex inbox_footer @md:hidden no-scrollbar scrollbar-none @md:gap-8 w-100 bg-hoverCardBackground h-20 @md:h-8 inbox_title">
         {splitTitles}
       </div>
       {myTasksTableColumnsEnabled && tableColumnsFeatureEnabled && columnsPickerOpen ? (

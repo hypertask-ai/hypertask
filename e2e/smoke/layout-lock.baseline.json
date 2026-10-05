@@ -1,0 +1,801 @@
+{
+  "viewports": {
+    "Desktop": {
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      },
+      "screens": {
+        "ticket": {
+          "landmarks": {
+            "title": {
+              "selector": "#title-input",
+              "box": {
+                "x": 130,
+                "y": 36,
+                "width": 668,
+                "height": 37
+              }
+            },
+            "description": {
+              "selector": "[data-testid=\"ticket-description\"]",
+              "contentHeight": true,
+              "box": {
+                "x": 112,
+                "y": 105,
+                "width": 524,
+                "height": 207
+              }
+            },
+            "first-comment": {
+              "selector": ":nth-match([data-testid=\"ticket-comment\"], 1)",
+              "contentHeight": true,
+              "box": {
+                "x": 112,
+                "y": 320,
+                "width": 524,
+                "height": 90
+              }
+            },
+            "last-comment": {
+              "selector": ":nth-match([data-testid=\"ticket-comment\"], 2)",
+              "contentHeight": true,
+              "box": {
+                "x": 112,
+                "y": 426,
+                "width": 524,
+                "height": 90
+              }
+            },
+            "composer": {
+              "selector": "[data-testid=\"comment-composer\"]",
+              "box": {
+                "x": 112,
+                "y": 532,
+                "width": 524,
+                "height": 152
+              }
+            },
+            "properties": {
+              "selector": "[data-task-properties-rail]",
+              "contentHeight": true,
+              "box": {
+                "x": 644,
+                "y": 105,
+                "width": 312,
+                "height": 443
+              }
+            }
+          },
+          "order": [
+            [
+              "title"
+            ],
+            [
+              "description",
+              "properties"
+            ],
+            [
+              "first-comment"
+            ],
+            [
+              "last-comment"
+            ],
+            [
+              "composer"
+            ]
+          ]
+        },
+        "inbox": {
+          "landmarks": {
+            "panel": {
+              "selector": "[data-testid=\"inbox-panel\"]",
+              "box": {
+                "x": 48,
+                "y": 0,
+                "width": 1392,
+                "height": 900
+              }
+            },
+            "list": {
+              "selector": "[data-testid=\"inbox-list\"]:visible",
+              "contentHeight": true,
+              "box": {
+                "x": 48,
+                "y": 113,
+                "width": 1392,
+                "height": 776
+              }
+            },
+            "splits": {
+              "selector": ".inbox-text-left",
+              "box": {
+                "x": 48,
+                "y": 0,
+                "width": 1392,
+                "height": 56
+              }
+            },
+            "search": {
+              "selector": ".app-shell-rail [aria-label=\"Search\"]",
+              "box": {
+                "x": 6,
+                "y": 272,
+                "width": 36,
+                "height": 34
+              }
+            }
+          },
+          "order": [
+            [
+              "panel",
+              "splits"
+            ],
+            [
+              "list"
+            ],
+            [
+              "search"
+            ]
+          ]
+        },
+        "my-tasks": {
+          "landmarks": {
+            "panel": {
+              "selector": "[data-testid=\"my-tasks-panel\"]",
+              "box": {
+                "x": 48,
+                "y": 0,
+                "width": 1392,
+                "height": 900
+              }
+            },
+            "title": {
+              "selector": "[data-testid=\"my-tasks-title\"]",
+              "box": {
+                "x": 136,
+                "y": 36,
+                "width": 77,
+                "height": 27
+              }
+            },
+            "toolbar": {
+              "selector": "[data-testid=\"my-tasks-toolbar\"]",
+              "box": {
+                "x": 48,
+                "y": 36,
+                "width": 1392,
+                "height": 27
+              }
+            },
+            "list": {
+              "selector": "[data-testid=\"my-tasks-list\"]",
+              "box": {
+                "x": 48,
+                "y": 135,
+                "width": 1392,
+                "height": 729
+              }
+            },
+            "splits": {
+              "selector": "[data-testid=\"my-tasks-splits-desktop\"]",
+              "box": {
+                "x": 48,
+                "y": 87,
+                "width": 1392,
+                "height": 32
+              }
+            }
+          },
+          "order": [
+            [
+              "panel"
+            ],
+            [
+              "title",
+              "toolbar"
+            ],
+            [
+              "splits"
+            ],
+            [
+              "list"
+            ]
+          ]
+        },
+        "board": {
+          "landmarks": {
+            "toolbar": {
+              "selector": "div:has(> [aria-label=\"Filter board\"])",
+              "box": {
+                "x": 885,
+                "y": 24,
+                "width": 120,
+                "height": 32
+              }
+            },
+            "todo-column": {
+              "selector": ".section-container:has([data-title=\"To do\"])",
+              "contentHeight": true,
+              "box": {
+                "x": 63,
+                "y": 72,
+                "width": 463,
+                "height": 756
+              }
+            },
+            "done-column": {
+              "selector": ".section-container:has([data-title=\"Done\"])",
+              "contentHeight": true,
+              "box": {
+                "x": 542,
+                "y": 72,
+                "width": 463,
+                "height": 756
+              }
+            },
+            "column-title": {
+              "selector": "[data-title=\"To do\"] .kanban-column-title",
+              "box": {
+                "x": 72,
+                "y": 81,
+                "width": 33,
+                "height": 20
+              }
+            },
+            "card": {
+              "selector": "[data-title=\"To do\"] [id^=\"task-\"]:has(a[href^=\"/detail/\"])",
+              "contentHeight": true,
+              "box": {
+                "x": 72,
+                "y": 109,
+                "width": 445,
+                "height": 60
+              }
+            }
+          },
+          "order": [
+            [
+              "toolbar"
+            ],
+            [
+              "done-column",
+              "todo-column"
+            ],
+            [
+              "column-title"
+            ],
+            [
+              "card"
+            ]
+          ]
+        },
+        "new-task": {
+          "landmarks": {
+            "window": {
+              "selector": "#createTaskModal .modal-content",
+              "box": {
+                "x": 0,
+                "y": 0,
+                "width": 1440,
+                "height": 900
+              }
+            },
+            "title": {
+              "selector": "#title-input-container-create-task-modal",
+              "contentHeight": true,
+              "box": {
+                "x": 216,
+                "y": 0,
+                "width": 1008,
+                "height": 97
+              }
+            },
+            "description": {
+              "selector": "#description-container-create-task-modal",
+              "contentHeight": true,
+              "box": {
+                "x": 220,
+                "y": 97,
+                "width": 676,
+                "height": 198
+              }
+            },
+            "properties": {
+              "selector": "[data-task-properties-rail]",
+              "contentHeight": true,
+              "box": {
+                "x": 912,
+                "y": 97,
+                "width": 312,
+                "height": 350
+              }
+            },
+            "back": {
+              "selector": "[data-testid=\"new-task-back\"]",
+              "box": {
+                "x": 40,
+                "y": 40,
+                "width": 40,
+                "height": 40
+              }
+            }
+          },
+          "order": [
+            [
+              "title",
+              "window"
+            ],
+            [
+              "back"
+            ],
+            [
+              "description",
+              "properties"
+            ]
+          ]
+        },
+        "app-shell": {
+          "landmarks": {
+            "navigation": {
+              "selector": ".app-shell-rail",
+              "box": {
+                "x": 0,
+                "y": 0,
+                "width": 48,
+                "height": 900
+              }
+            },
+            "board-switch": {
+              "selector": "[aria-label=\"Your Kanban boards\"]",
+              "box": {
+                "x": 6,
+                "y": 32,
+                "width": 36,
+                "height": 34
+              }
+            },
+            "inbox": {
+              "selector": "[aria-label=\"Go to inbox\"]",
+              "box": {
+                "x": 6,
+                "y": 82,
+                "width": 36,
+                "height": 34
+              }
+            },
+            "search": {
+              "selector": ".app-shell-rail [aria-label=\"Search\"]",
+              "box": {
+                "x": 6,
+                "y": 272,
+                "width": 36,
+                "height": 34
+              }
+            },
+            "settings": {
+              "selector": "[data-testid=\"app-shell-settings\"]",
+              "box": {
+                "x": 6,
+                "y": 854,
+                "width": 36,
+                "height": 34
+              }
+            }
+          },
+          "order": [
+            [
+              "navigation"
+            ],
+            [
+              "board-switch"
+            ],
+            [
+              "inbox"
+            ],
+            [
+              "search"
+            ],
+            [
+              "settings"
+            ]
+          ]
+        }
+      }
+    },
+    "Mobile": {
+      "viewport": {
+        "width": 390,
+        "height": 844
+      },
+      "screens": {
+        "ticket": {
+          "landmarks": {
+            "title": {
+              "selector": "#title-input",
+              "box": {
+                "x": 18,
+                "y": 8,
+                "width": 274,
+                "height": 37
+              }
+            },
+            "description": {
+              "selector": "[data-testid=\"ticket-description\"]",
+              "contentHeight": true,
+              "box": {
+                "x": 10,
+                "y": 216,
+                "width": 370,
+                "height": 267
+              }
+            },
+            "first-comment": {
+              "selector": ":nth-match([data-testid=\"ticket-comment\"], 1)",
+              "contentHeight": true,
+              "box": {
+                "x": 10,
+                "y": 499,
+                "width": 370,
+                "height": 88
+              }
+            },
+            "last-comment": {
+              "selector": ":nth-match([data-testid=\"ticket-comment\"], 2)",
+              "contentHeight": true,
+              "box": {
+                "x": 10,
+                "y": 587,
+                "width": 370,
+                "height": 88
+              }
+            },
+            "composer": {
+              "selector": "[data-testid=\"comment-composer\"]",
+              "box": {
+                "x": 0,
+                "y": 775,
+                "width": 390,
+                "height": 69
+              }
+            },
+            "properties": {
+              "selector": "[data-task-properties-rail]",
+              "contentHeight": true,
+              "box": {
+                "x": 10,
+                "y": -160,
+                "width": 370,
+                "height": 360
+              }
+            }
+          },
+          "order": [
+            [
+              "properties"
+            ],
+            [
+              "title"
+            ],
+            [
+              "description"
+            ],
+            [
+              "first-comment"
+            ],
+            [
+              "last-comment"
+            ],
+            [
+              "composer"
+            ]
+          ]
+        },
+        "board": {
+          "landmarks": {
+            "toolbar": {
+              "selector": "[data-testid=\"mobile-top-bar\"]",
+              "box": {
+                "x": 0,
+                "y": 0,
+                "width": 390,
+                "height": 48
+              }
+            },
+            "todo-column": {
+              "selector": ".section-container:has([data-title=\"To do\"])",
+              "contentHeight": true,
+              "box": {
+                "x": 4,
+                "y": 56,
+                "width": 300,
+                "height": 703
+              }
+            },
+            "done-column": {
+              "selector": ".section-container:has([data-title=\"Done\"])",
+              "contentHeight": true,
+              "box": {
+                "x": 316,
+                "y": 56,
+                "width": 300,
+                "height": 703
+              }
+            },
+            "column-title": {
+              "selector": "[data-title=\"To do\"] .kanban-column-title",
+              "box": {
+                "x": 13,
+                "y": 65,
+                "width": 33,
+                "height": 20
+              }
+            },
+            "card": {
+              "selector": "[data-title=\"To do\"] [id^=\"task-\"]:has(a[href^=\"/detail/\"])",
+              "contentHeight": true,
+              "box": {
+                "x": 13,
+                "y": 93,
+                "width": 282,
+                "height": 62
+              }
+            }
+          },
+          "order": [
+            [
+              "toolbar"
+            ],
+            [
+              "done-column",
+              "todo-column"
+            ],
+            [
+              "column-title"
+            ],
+            [
+              "card"
+            ]
+          ]
+        },
+        "inbox": {
+          "landmarks": {
+            "panel": {
+              "selector": "[data-testid=\"inbox-panel\"]",
+              "box": {
+                "x": 0,
+                "y": 56,
+                "width": 390,
+                "height": 723
+              }
+            },
+            "list": {
+              "selector": "[data-testid=\"inbox-list\"]:visible",
+              "contentHeight": true,
+              "box": {
+                "x": 0,
+                "y": 178,
+                "width": 390,
+                "height": 602
+              }
+            },
+            "splits": {
+              "selector": "nav[aria-label=\"Inbox splits\"]",
+              "box": {
+                "x": 0,
+                "y": 779,
+                "width": 390,
+                "height": 65
+              }
+            },
+            "search": {
+              "selector": "[aria-label=\"Commands\"]",
+              "box": {
+                "x": 228,
+                "y": 0,
+                "width": 94,
+                "height": 48
+              }
+            }
+          },
+          "order": [
+            [
+              "search"
+            ],
+            [
+              "panel"
+            ],
+            [
+              "list"
+            ],
+            [
+              "splits"
+            ]
+          ]
+        },
+        "my-tasks": {
+          "landmarks": {
+            "panel": {
+              "selector": "[data-testid=\"my-tasks-panel\"]",
+              "box": {
+                "x": 0,
+                "y": 56,
+                "width": 390,
+                "height": 723
+              }
+            },
+            "title": {
+              "selector": "[data-testid=\"my-tasks-title\"]",
+              "box": {
+                "x": 16,
+                "y": 92,
+                "width": 77,
+                "height": 27
+              }
+            },
+            "toolbar": {
+              "selector": "[data-testid=\"my-tasks-toolbar\"]",
+              "box": {
+                "x": 0,
+                "y": 92,
+                "width": 390,
+                "height": 27
+              }
+            },
+            "list": {
+              "selector": "[data-testid=\"my-tasks-list\"]",
+              "box": {
+                "x": 0,
+                "y": 135,
+                "width": 390,
+                "height": 608
+              }
+            },
+            "splits": {
+              "selector": "[data-testid=\"my-tasks-splits-phone\"]",
+              "box": {
+                "x": 0,
+                "y": 760,
+                "width": 390,
+                "height": 84
+              }
+            }
+          },
+          "order": [
+            [
+              "panel"
+            ],
+            [
+              "title",
+              "toolbar"
+            ],
+            [
+              "list"
+            ],
+            [
+              "splits"
+            ]
+          ]
+        },
+        "app-shell": {
+          "landmarks": {
+            "toolbar": {
+              "selector": "[data-testid=\"mobile-top-bar\"]",
+              "box": {
+                "x": 0,
+                "y": 0,
+                "width": 390,
+                "height": 48
+              }
+            },
+            "board-switch": {
+              "selector": "[aria-label=\"Switch board\"]",
+              "box": {
+                "x": 14,
+                "y": 0,
+                "width": 44,
+                "height": 48
+              }
+            },
+            "search": {
+              "selector": "[aria-label=\"Commands\"]",
+              "box": {
+                "x": 228,
+                "y": 0,
+                "width": 94,
+                "height": 48
+              }
+            },
+            "navigation": {
+              "selector": "nav[aria-label=\"Primary navigation\"]",
+              "box": {
+                "x": 0,
+                "y": 779,
+                "width": 390,
+                "height": 65
+              }
+            },
+            "search-link": {
+              "selector": "nav[aria-label=\"Primary navigation\"] a[href=\"/search\"]",
+              "box": {
+                "x": 312,
+                "y": 780,
+                "width": 78,
+                "height": 64
+              }
+            }
+          },
+          "order": [
+            [
+              "board-switch",
+              "search",
+              "toolbar"
+            ],
+            [
+              "navigation",
+              "search-link"
+            ]
+          ]
+        },
+        "new-task": {
+          "landmarks": {
+            "window": {
+              "selector": "#createTaskModal .modal-content",
+              "box": {
+                "x": 0,
+                "y": 0,
+                "width": 390,
+                "height": 844
+              }
+            },
+            "title": {
+              "selector": "#title-input-container-create-task-modal",
+              "contentHeight": true,
+              "box": {
+                "x": 0,
+                "y": 0,
+                "width": 390,
+                "height": 105
+              }
+            },
+            "description": {
+              "selector": "#description-container-create-task-modal",
+              "contentHeight": true,
+              "box": {
+                "x": 18,
+                "y": 353,
+                "width": 354,
+                "height": 197
+              }
+            },
+            "properties": {
+              "selector": "[data-task-properties-rail]",
+              "contentHeight": true,
+              "box": {
+                "x": 18,
+                "y": 105,
+                "width": 354,
+                "height": 224
+              }
+            }
+          },
+          "order": [
+            [
+              "title",
+              "window"
+            ],
+            [
+              "properties"
+            ],
+            [
+              "description"
+            ]
+          ]
+        }
+      }
+    }
+  },
+  "sourceCommit": "fc38d8b752ac871f03e8f189d5961fa5f2dd7004",
+  "flagMode": "live-like",
+  "flagSnapshotSha256": "dbe55bec498b41eea368b0b8f51e532ef208dfb6565338725bb755822439f505"
+}

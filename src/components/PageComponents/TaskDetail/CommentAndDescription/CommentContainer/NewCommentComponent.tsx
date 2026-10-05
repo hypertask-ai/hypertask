@@ -482,6 +482,7 @@ const NewCommentComponent = (
                       onClick={handleOpenCommentEditor}
                       ref={tiptapContainerRef}
                       id="comment"
+                      data-testid="comment-composer"
                       className={`flex flex-col relative z-10 justify-between items-center my-[8px] outline-none w-full bg-comment-description shadow-md rounded-md
                       border-l-4
 
@@ -542,6 +543,7 @@ const NewCommentComponent = (
                     } as CSSProperties}
                     ref={tiptapContainerRef}
                     id="comment"
+                    data-testid="comment-composer"
                     className="fixed left-0 flex w-full flex-col rounded-[5px] bg-cardBackground shadow-md outline-none pb-[env(safe-area-inset-bottom)]"
                   >
                     <div

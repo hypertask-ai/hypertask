@@ -457,6 +457,7 @@ const BackButton = () => {
         <>
 
             <div
+                data-testid="new-task-back"
                 className="fixed xs:hidden sm:flex gap-2  items-center  flex-col xl:flex-row xl:left-10 left-5"
                 style={{
                     zIndex: 3,
