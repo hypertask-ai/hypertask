@@ -65,6 +65,8 @@ export default function ComposeTaskWriter({ active, destinationProject, onCreate
   const sending = useRef(false);
   const mounted = useRef(false);
   const input = useRef<HTMLTextAreaElement>(null);
+  const composer = useRef<HTMLDivElement>(null);
+  const [writingHeight, setWritingHeight] = useState<number>();
   const user = useRecoilValue(currentUserAtom);
   const currentProject = useRecoilValue(currentProjectAtom);
   const lastUsedBoards = useRecoilValue(lastUsedBoardsAtom);
@@ -146,6 +148,8 @@ export default function ComposeTaskWriter({ active, destinationProject, onCreate
   const send = async () => {
     if (!enabled || sending.current || pendingImages.current > 0 || dictating || !text.trim()) return;
     sending.current = true;
+    // Keep the window the same size while the progress steps replace the composer.
+    setWritingHeight(showProgress ? composer.current?.offsetHeight : undefined);
     setWriting(true);
     setStage(null);
     onBusyChange(true);
@@ -242,8 +246,12 @@ export default function ComposeTaskWriter({ active, destinationProject, onCreate
         event.preventDefault();
         void addImages(Array.from(event.dataTransfer.files));
       }}>
-      {writing ? <FullScreenChatLoading inline label={showProgress && stage ? stage : "Writing your ticket…"} /> : (
-        <div className="p-2">
+      {writing ? (
+        <div className="flex items-center justify-center" style={writingHeight ? { minHeight: writingHeight } : undefined}>
+          <FullScreenChatLoading inline label={showProgress && stage ? stage : "Writing your ticket…"} />
+        </div>
+      ) : (
+        <div ref={composer} className="p-2">
           <div className="flex w-full flex-col rounded-[5px] bg-ai-tiptap px-3 py-2">
             {newTaskWindow && attachments}
             <AiComposerTextarea
