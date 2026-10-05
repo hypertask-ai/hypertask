@@ -225,7 +225,13 @@ test("card Links defer normal clicks to the cached navigator and preserve modifi
   assert.equal(opens, 1);
   flagEnabled = false;
   const disabled = exportsObject.default({ taskHref: "/detail/project-6859/43", children: "Cached ticket", openDetail: () => opens++ });
-  assert.equal(disabled.props.children.find((child) => child?.type === "a").props.onClick, undefined, "flag-off Links retain production click handling");
+  const disabledLink = disabled.props.children.find((child) => child?.type === "a");
+  assert.equal(typeof disabledLink.props.onClick, "function", "flag-off Links must also defer to the parent navigator");
+  let prevented = false;
+  disabledLink.props.onClick({ button: 0, preventDefault: () => { prevented = true; } });
+  disabled.props.onClick();
+  assert.equal(prevented, true);
+  assert.equal(opens, 2);
 });
 
 test("background history refreshes preserve the mounted cached detail, but route/account changes do not", (t) => {
