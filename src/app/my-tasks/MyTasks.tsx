@@ -169,11 +169,17 @@ const MyTasks = ({
     initialNearestSnoozeUntil,
   );
   const liveUpdatesEnabled = useFlag(MY_TASKS_LIVE_UPDATES_FLAG);
-  const [activeSplit, setActiveSplit] = useState(() =>
+  const [activeSplit, setActiveSplitState] = useState(() =>
     myTasksShortcutsWidthEnabled
       ? getMyTasksSplitIndex(initialSections, boardParam)
       : 0
   );
+  const activeSplitRef = useRef(activeSplit);
+  const setActiveSplit = useCallback((split: number) => {
+    // Count every key press even before React commits the previous selection.
+    activeSplitRef.current = split;
+    setActiveSplitState(split);
+  }, []);
 
   const myTasksViewsEnabled = useFlag(MY_TASKS_VIEWS_FLAG);
   const myTasksTimeGroupFlag = useFlag(MY_TASKS_TIME_GROUP_FLAG);
@@ -879,7 +885,7 @@ const MyTasks = ({
       event.preventDefault();
       const direction = event.shiftKey ? -1 : 1;
       updateSplit(
-        (activeSplit + direction + activeTabs.length) % activeTabs.length,
+        (activeSplitRef.current + direction + activeTabs.length) % activeTabs.length,
       );
     };
 
