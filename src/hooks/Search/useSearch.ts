@@ -37,7 +37,7 @@ export function useSearch(
 ) {
   const commenterFlagEnabled = useFlag(HTPR_6880_SEARCH_COMMENTER_FLAG);
   const { data: searchCache } = useGetSearchCache();
-  const { data: allProjects } = useGetAllProjectsMinimal([
+  const { data: allProjects, refetch: refetchProjects } = useGetAllProjectsMinimal([
     "projectsAllMinimal",
   ]);
   const [searchTaskIndex, setSearchTaskIndex] =
@@ -131,12 +131,12 @@ export function useSearch(
     return "";
   }
 
-  function currentSearchKey(searchTerm: string, showArchived: boolean) {
+  function currentSearchKey(searchTerm: string, showArchived: boolean, searchProjects = projects) {
     return JSON.stringify([
       searchTerm.trim(),
       showArchived,
       _fromProject,
-      projects.map((project) => project.id),
+      searchProjects.map((project) => project.id),
       searchOperatorsEnabled,
     ]);
   }
@@ -298,7 +298,7 @@ export function useSearch(
    * @param boardsArray - Array of board names to search through
    * @returns Object containing matching board names and their indexes
    */
-  function searchBoards(input: string, showArchived = includeArchived): {
+  function searchBoards(input: string, showArchived = includeArchived, searchProjects = projects): {
     searchProjectIds: number[];
     archive: null | "Normal" | "Archive";
     processedSearchTerm: string;
@@ -317,12 +317,12 @@ export function useSearch(
     }
 
     if (lowerInput.includes("board:")) {
-      for (const project of projects) {
+      for (const project of searchProjects) {
         if (lowerInput.includes(("board:" + project.title).toLowerCase()))
           searchProjectIds.push(project.id);
       }
 
-      for (const project of projects) {
+      for (const project of searchProjects) {
         if (lowerInput.includes(("board:" + project.title).toLowerCase()))
           lowerInput = lowerInput.replaceAll(
             ("board:" + project.title).toLowerCase(),
@@ -375,6 +375,14 @@ export function useSearch(
     const showArchived = options?.showArchived ?? includeArchived;
     const requestId = beginSearch(searchTerm, showArchived);
     try {
+      const searchProjects: IProject[] = projects.length > 0
+        ? projects
+        : (await refetchProjects({ throwOnError: true })).data ?? [];
+      if (!searchRequestGate.isLatest(requestId)) return;
+      if (searchProjects.length === 0)
+        return handleStatesOnResponse(searchConfig.responseMessages.fail);
+      lastSearchKey.current = currentSearchKey(searchTerm, showArchived, searchProjects);
+
       // Draft results must not navigate: a delayed URL render can overwrite newer typing.
       if (!options?.live) router.replace(
         searchUrl(
@@ -386,13 +394,13 @@ export function useSearch(
       const { searchProjectIds, processedSearchTerm, archive } =
         searchOperatorsEnabled
           ? { searchProjectIds: [], processedSearchTerm: searchTerm, archive: defaultSearchArchiveStatus(showArchived) }
-          : searchBoards(searchTerm, showArchived);
+          : searchBoards(searchTerm, showArchived, searchProjects);
 
       const response = await axios.post(searchDocumentsRoute, {
         projectIds:
           searchProjectIds.length > 0
             ? searchProjectIds
-            : projects.map((item) => item.id),
+            : searchProjects.map((item) => item.id),
         searchQuery: processedSearchTerm,
         archive,
         contextProjectId: _fromProject,
@@ -854,6 +862,7 @@ export function useSearch(
 
   // Keep URL navigation authoritative while avoiding the duplicate request
   // caused by our own router.replace after an already-started search.
+  // Board loading must not reset a local draft or invalidate its waiting search.
   useEffect(() => {
     setIncludeArchived(_includeArchived);
     setInputValue(_searchTerm);
@@ -869,7 +878,7 @@ export function useSearch(
       lastSearchKey.current = currentSearchKey("", _includeArchived);
       handleStatesOnResponse(searchConfig.responseMessages.default);
     }
-  }, [projects, _includeArchived, _searchTerm, _fromProject, searchOperatorsEnabled, searchEscBackEnabled]);
+  }, [_searchTerm.length >= 2 ? projects : null, _includeArchived, _searchTerm, _fromProject, searchOperatorsEnabled, searchEscBackEnabled]);
 
   useEffect(() => {
     if (!searchAutocompleteEnabled || !projects.length) return;
