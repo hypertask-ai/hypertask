@@ -33,9 +33,11 @@ export function composeTaskAssistantMessage(ticket: string, writerFailed = false
     : greeting;
 }
 
+export type ComposeTaskStage = "Reading past tickets" | "Understanding the context" | "Writing the ticket" | "Saving the ticket";
+
 export async function createComposedTask({
-  text, files, project, userId, existingTaskId,
-}: { text: string; files: File[]; project: IProject; userId: number; existingTaskId?: number }): Promise<{ task: ITask; writerFailed: boolean }> {
+  text, files, project, userId, existingTaskId, onProgress,
+}: { text: string; files: File[]; project: IProject; userId: number; existingTaskId?: number; onProgress?: (stage: ComposeTaskStage) => void }): Promise<{ task: ITask; writerFailed: boolean }> {
   // Resolve the destination before spending AI credits; omitting sectionId uses
   // the same first active column as the regular create-task form.
   const defaults = existingTaskId ? null : await axios.get("/api/tasks/createGlobally", {
@@ -60,6 +62,7 @@ export async function createComposedTask({
   let writerFailed = false;
   try {
     const media = extractTaskWriterMedia(rawDescription, createTaskWriterMediaTokenFactory(rawDescription, text));
+    onProgress?.("Reading past tickets");
     const response = await fetch(taskWriterRoute, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -78,7 +81,32 @@ export async function createComposedTask({
       }),
     });
     if (!response.ok) throw new Error("Task writer unavailable");
-    const html = await response.text();
+    let html = "";
+    if (onProgress && response.body) {
+      // Headers arrive after server retrieval and prompt preparation. The model
+      // can use that context while we wait for its first visible output.
+      onProgress("Understanding the context");
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let receivedText = false;
+      try {
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          if (!value.length) continue;
+          html += decoder.decode(value, { stream: true });
+          if (!receivedText && html.includes("<")) {
+            receivedText = true;
+            onProgress("Writing the ticket");
+          }
+        }
+        html += decoder.decode();
+      } finally {
+        reader.releaseLock();
+      }
+    } else {
+      html = await response.text();
+    }
     // This endpoint streams raw HTML on success, but SSE error frames can arrive
     // after a 200. A partial answer must not be mistaken for a completed ticket.
     if (/^event:\s*(?:error|done)\b/m.test(html)) throw new Error("Task writer interrupted");
@@ -94,6 +122,7 @@ export async function createComposedTask({
   } catch {
     writerFailed = true;
   }
+  onProgress?.("Saving the ticket");
   const created = await createNewTaskGloballyAPIHandler({
     userId, projectId: project.id, projectIdentifier: project.uniqueIdentifier ?? "TASK",
     title, ...{ description },

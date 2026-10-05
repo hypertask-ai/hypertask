@@ -10,6 +10,7 @@ import {
   HTPR_6934_SERVER_FIRST_SCREEN_FLAG,
   HTPR_6929_COMPOSE_TASK_WRITER_FLAG,
   HTPR_6937_NEW_TASK_WINDOW_FLAG,
+  HTPR_6951_TASK_WRITING_PROGRESS_FLAG,
   HTPR_6752_INSTANT_TICKET_OPEN_FLAG,
   HTPR_6873_QUICK_ENTRY_GROW_FLAG,
   HTPR_6892_CMDK_VERSION_FLAG,
@@ -176,6 +177,11 @@ const FEATURE_FLAG_DEFINITIONS = [
     key: HTPR_6934_SERVER_FIRST_SCREEN_FLAG,
     shippedOn: "2026-10-04",
     description: "Prepares a shared board and inbox first-render contract. Server payloads are not enabled by this step.",
+  },
+  {
+    key: HTPR_6951_TASK_WRITING_PROGRESS_FLAG,
+    shippedOn: "2026-10-05",
+    description: "Shows the Task Writer's current step in the New Task window instead of only a spinner. Requires the New Task window flag.",
   },
   {
     key: HTPR_6937_NEW_TASK_WINDOW_FLAG,

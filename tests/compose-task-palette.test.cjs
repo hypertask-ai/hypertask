@@ -28,7 +28,7 @@ async function withPalette(t, config, check) {
   const cached = new Map(Object.entries(require.cache));
   const stub = (filename, exports) => { require.cache[filename] = { id: filename, filename, loaded: true, exports }; };
   const source = (file, exports) => stub(path.join(root, file), exports);
-  const flags = { [flag]: config.enabled ?? true, [newFlag]: config.newWindow ?? false };
+  const flags = { [flag]: config.enabled ?? true, [newFlag]: config.newWindow ?? false, 'htpr-6951-task-writing-progress': config.progress ?? config.newWindow ?? false };
   const TaskContext = React.createContext(undefined);
   const atomNames = ['boardLayoutAtom', 'calendarSettingsAtom', 'currentProjectAtom', 'currentUserAtom', 'frequentlyUsedHTCAton', 'tableTitleWrapAtom', 'showCommandsAtom', 'lastUsedBoardsAtom', 'composeTaskChatIntroAtom', 'showAIChatInterfaceAtom', 'isAiChatSidebarModeAtom', 'aiChatAutoOpenSuppressedAtom', 'aiChatExplicitOpenAtAtom', 'dockedChatScopeAtom', 'showCreateTaskModalAtom', 'showShortcutsAtom', 'showSidebarAtom', 'showBoardManagerAtom', 'inViewObjectAtom', 'uploadingStateCreateTaskModalAtom'];
   const atoms = Object.fromEntries(atomNames.map((name) => [name, name]));
@@ -1201,4 +1201,53 @@ test('New Task keeps the palette width Search uses', () => {
   const source = fs.readFileSync(path.join(root, 'src/components/Modals/commands/HTC/commands.tsx'), 'utf8');
   assert.match(source, /paletteModalSizing sm:top-\[24%\] sm:min-w-\[560px\]/);
   assert.doesNotMatch(source, /w-\[1120px\]/);
+});
+
+test('both flags enable stage labels in the existing live status and retries reset progress', async (t) => {
+  for (const mobile of [false, true]) {
+    await withPalette(t, { newWindow: true, mobile, tab: 'compose' }, async ({ type, press, requests, fail, input }) => {
+      await type('Write this ticket');
+      await press('Enter', { code: 'Enter' });
+      const progress = requests[0].body.onProgress;
+      assert.equal(typeof progress, 'function');
+      const status = document.querySelector('[role="status"]');
+      assert.equal(status.getAttribute('aria-live'), 'polite');
+      const classes = status.className;
+      for (const stage of ['Reading past tickets', 'Understanding the context', 'Writing the ticket', 'Saving the ticket']) {
+        await React.act(async () => progress(stage));
+        assert.equal(status.textContent, stage);
+        assert.equal(status.className, classes, 'progress does not change layout or theme classes');
+        assert.ok(status.querySelector('.animate-spin'));
+      }
+      await fail();
+      assert.equal(input().value, 'Write this ticket');
+      assert.ok(document.querySelector('[role="alert"]'));
+      await press('Enter', { code: 'Enter' });
+      assert.equal(document.querySelector('[role="status"]').textContent, 'Writing your ticket…');
+    });
+  }
+});
+
+test('new-window flag off preserves the legacy loading label and omits progress', async (t) => {
+  for (const mobile of [false, true]) {
+    await withPalette(t, { newWindow: false, mobile, tab: 'compose' }, async ({ type, press, requests }) => {
+      await type('Legacy note');
+      await press('Enter', { code: 'Enter' });
+      assert.equal(requests[0].body.onProgress, undefined);
+      assert.equal(document.querySelector('[role="status"]').textContent, 'Writing your ticket…');
+    });
+    await withPalette(t, { enabled: false, newWindow: true, mobile }, async ({ requests }) => {
+      assert.equal(document.querySelector('[data-compose-task-writer]'), null);
+      assert.equal(document.querySelector('[role="status"]'), null);
+      assert.equal(requests.length, 0);
+    });
+  }
+});
+
+test('task-writing progress needs its own flag', async (t) => {
+  await withPalette(t, { newWindow: true, progress: false, tab: 'compose' }, async ({ type, press, requests }) => {
+    await type('Write this ticket');
+    await press('Enter', { code: 'Enter' });
+    assert.equal(requests[0].body.onProgress, undefined);
+  });
 });

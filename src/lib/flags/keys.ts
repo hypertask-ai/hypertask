@@ -126,3 +126,4 @@ export const HTPR_6662_AGENT_LOG_NAME_FLAG = "htpr-6662-agent-log-name";
 export const HTPR_6929_COMPOSE_TASK_WRITER_FLAG = "htpr-6929-compose-task-writer";
 
 export const HTPR_6937_NEW_TASK_WINDOW_FLAG = "htpr-6937-new-task-window";
+export const HTPR_6951_TASK_WRITING_PROGRESS_FLAG = "htpr-6951-task-writing-progress";
