@@ -64,7 +64,24 @@ if (mode === 'build') {
     assert.equal(proof.proof.length, 4);
     for (const r of proof.proof) { assert.deepEqual(r.errors, []); nonempty(r.video); assert.equal(r.documentRequestsDuringTicket, 0); assert.ok(r.titleOpen && r.bodyOpen && r.close && r.back && r.realtime); }
   }
-  for (const r of inbox.proof) { assert.ok(r.messages && r.reminder && r.splits && r.archiveUndo && r.localSnapshotNavigation); if (r.device === 'phone') assert.ok(r.pullDownFocus && r.commandTyping); }
+  const navigation = artifact('navigation-counterfactual'); assert.equal(navigation.cases.length, 6);
+  for (const device of ['phone', 'desktop']) {
+    const baseline = navigation.cases.find(r => r.kind === 'before' && r.mode === 'OFF' && r.device === device); assert.ok(baseline);
+    assert.equal(baseline.documentRequestsDuringSecondTicket, device === 'phone' ? 1 : 0);
+    for (const r of navigation.cases.filter(r => r.device === device)) {
+      assert.deepEqual(r.errors, []); assert.equal(r.finalTitle, 'SSR4 second inbox message'); assert.ok(r.finalBody && r.cachedFrames > 0);
+      assert.equal(r.documentRequestsDuringSecondTicket, baseline.documentRequestsDuringSecondTicket);
+      assert.deepEqual(r.backPaths, baseline.backPaths); assert.equal(r.loadingFrames > 0, baseline.loadingFrames > 0);
+    }
+    for (const flag of ['OWNER_AND_QA', 'OFF']) {
+      const counterfactual = navigation.cases.find(r => r.kind === 'after' && r.mode === flag && r.device === device); assert.ok(counterfactual);
+      for (const proof of [inbox, board]) assert.equal(proof.proof.filter(r => r.flag === flag && r.device === device).length, 1);
+      const r = inbox.proof.find(r => r.flag === flag && r.device === device);
+      assert.ok(r.primaryTicketOnly && r.messages && r.reminder && r.splits && r.archiveUndo && r.localSnapshotNavigation);
+      assert.equal(r.secondTicketDocumentRequests, baseline.documentRequestsDuringSecondTicket); assert.deepEqual(r.secondTicketBackPaths, baseline.backPaths);
+      if (device === 'phone') assert.ok(r.pullDownFocus && r.commandTyping);
+    }
+  }
   for (const r of board.proof) { assert.ok(r.tableRoundTrip); if (r.device === 'desktop') assert.ok(r.dragRoundTrip); }
   console.log('INTERACTIONS VERIFIED');
 } else if (mode === 'delivery') {
