@@ -155,7 +155,8 @@ export const WelcomeScreen = () => {
       ?.filter((section) => !section.deleted)
       .map((section) => ({
         ...section,
-        items: section.items.filter(
+        // HTPR-6947: a column can arrive before its tasks are loaded.
+        items: (section.items ?? []).filter(
           (task) => !task.status || task.status === "Normal"
         ),
       }));
