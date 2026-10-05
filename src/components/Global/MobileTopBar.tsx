@@ -13,6 +13,13 @@ const MobileTitleSheet = lazy(() => import("./MobileTitleSheet"));
 const MobileHeaderStrip = lazy(() => import("./MobileHeaderStrip"));
 const ClientTopBarActions = lazy(() => import("./MobileTopBarActions"));
 
+export async function loadFirstScreenControls() {
+  const [header, actions] = await Promise.all([
+    import("./MobileHeaderStrip"), import("./MobileTopBarActions"),
+  ]);
+  return { HeaderStrip: header.default, TopBarActions: actions.default };
+}
+
 const MobileTopBar = ({
   currentUser,
   boardUsable,

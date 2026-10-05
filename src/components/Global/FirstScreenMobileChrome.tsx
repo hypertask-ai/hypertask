@@ -8,7 +8,15 @@ import { agentChatMobileFullscreenAtom, mobileCommentComposerOpenAtom } from "@/
 import { useFlag } from "@/hooks/useFlag";
 import { HTPR_6476_MOBILE_AGENT_CHAT_FULLSCREEN_FLAG } from "@/lib/flags/keys";
 
-const ChromeContent = dynamic(() => import("./FirstScreenMobileChromeContent"));
+const MobileTopBar = dynamic(async () => {
+  const { default: TopBar, loadFirstScreenControls } = await import("./MobileTopBar");
+  // Resolve the existing chunks before any header hydration subscription updates.
+  const { HeaderStrip, TopBarActions } = await loadFirstScreenControls();
+  return function SeededTopBar({ currentUser }: { currentUser: IUser }) {
+    return <TopBar currentUser={currentUser} boardUsable headerStrip={HeaderStrip} topBarActions={TopBarActions} />;
+  };
+});
+const MobileTabBar = dynamic(() => import("./MobileTabBar"));
 
 export default function FirstScreenMobileChrome({ currentUser }: { currentUser: IUser }) {
   const snapshot = useFirstScreenSurface(currentUser.id);
@@ -16,5 +24,8 @@ export default function FirstScreenMobileChrome({ currentUser }: { currentUser: 
   const fullscreenEnabled = useFlag(HTPR_6476_MOBILE_AGENT_CHAT_FULLSCREEN_FLAG);
   const composerOpen = useRecoilValue(mobileCommentComposerOpenAtom);
   if (!snapshot || (fullscreenEnabled && fullscreen)) return null;
-  return <ChromeContent currentUser={currentUser} showDock={snapshot.scope.route === "/project" && !composerOpen} />;
+  return <>
+    <MobileTopBar currentUser={currentUser} />
+    {snapshot.scope.route === "/project" && !composerOpen && <MobileTabBar currentUserId={currentUser.id} />}
+  </>;
 }
