@@ -45,8 +45,8 @@ const DescriptonBody = ({ draftTQ }: any) => {
   const isEditing =
     editMode === "description" ||
     editMode === "description-ai" ||
-    hasDraft ||
-    hasDraftInit;
+    // Restoring a draft must not open the phone modal or arm its Back guard.
+    (!isMbl && (hasDraft || hasDraftInit));
   const content =
     uploadingDescription?.content ??
     draftTQ?.find((draft: IDraft) => isMeaningfulDescriptionDraft(draft))
