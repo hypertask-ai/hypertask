@@ -281,9 +281,12 @@ test("involvement picker stays open, shows Check membership and falls back to as
   assert.equal(document.querySelector('input[type="checkbox"]'), null);
 });
 
-test("group picker checks current value, closes on select and uses the existing time and board values", (context) => {
+test("HTPR-6958 keeps Group by in phone Commands and the desktop toolbar without adding a phone row", (context) => {
+  render(Harness);
+  assert.equal(document.querySelector('[aria-label="Group My Tasks"]').parentElement.className, "relative");
   enabled = true; render(Harness);
   assert.ok(button("Group: Due date"));
+  assert.equal(document.querySelector('[aria-label="Group My Tasks"]').parentElement.className, "relative hidden @md:block");
   act(() => window.dispatchEvent(new Event("my-tasks-group-picker")));
   assert.ok(button("Due dateOverdue, Later, No due date").querySelector("svg"));
   click(button("Board")); act(() => context.mock.timers.tick(1));

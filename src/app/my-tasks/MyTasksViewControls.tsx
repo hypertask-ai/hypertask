@@ -1010,8 +1010,9 @@ const MyTasksViewControls = ({
       </div>
       ) : null}
 
+      {/* With shared pickers, phone Commands owns Group by so a sixth touch target cannot wrap the toolbar. */}
       {timeGroupOn && (
-        <div ref={groupRef} className="relative">
+        <div ref={groupRef} className={kanbanReuseEnabled ? "relative hidden @md:block" : "relative"}>
           {iconControlsEnabled ? (
             <ViewControlButton
               label="Group My Tasks"
