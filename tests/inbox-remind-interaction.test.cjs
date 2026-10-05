@@ -16,7 +16,18 @@ const { buildInboxQueryCache } = jiti(path.join(root, "src/utils/helperFunctions
 const { updateInboxOptimistically } = jiti(path.join(root, "src/lib/inboxSync/optimistic.ts"));
 const { QueryClient } = require("@tanstack/react-query");
 
-function fixture(mobile, shortcutPeers = false) {
+const inboxSource = ts.createSourceFile("inbox.tsx", fs.readFileSync(path.join(root, "src/components/notifications/inboxSplit/index.tsx"), "utf8"), ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+let clickCapture;
+function visit(node) {
+  if (ts.isJsxAttribute(node) && node.name.getText(inboxSource) === "onClickCapture") clickCapture = node.initializer.expression.getText(inboxSource);
+  ts.forEachChild(node, visit);
+}
+visit(inboxSource);
+assert.ok(clickCapture, "exercise the real enclosing Inbox Link capture handler");
+const captureModule = { exports: {} };
+vm.runInNewContext(ts.transpileModule(`export function handler(instantTicketOpen, notification, openTask, globalIndex) { return ${clickCapture}; }`, { compilerOptions: { module: ts.ModuleKind.CommonJS } }).outputText, { exports: captureModule.exports });
+
+function fixture(mobile, shortcutPeers = false, instantTicketOpen = true) {
   const dom = new JSDOM('<div id="root"></div>', { url: "https://app.hypertask.ai/inbox?split=All" });
   global.window = dom.window;
   global.document = dom.window.document;
@@ -102,41 +113,48 @@ function fixture(mobile, shortcutPeers = false) {
   act(() => reactRoot.render(React.createElement(React.Fragment, null,
     shortcutPeers && React.createElement(Remind, { show: false }),
     shortcutPeers && React.createElement(Remind, { show: true, mode: "Bulk" }),
-    React.createElement(Row, { divId: 1, divType: "inbox", index: 0, selected: true, openTask: () => navigation.push("task detail") },
-      React.createElement("span", { id: "title" }, "Own QA task"), React.createElement(Remind, { show: true })))));
-  const click = async (el) => act(async () => { el.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true })); });
+    React.createElement("a", { href: "/detail/project-7049/6946", onClickCapture: captureModule.exports.handler(instantTicketOpen, { type: "TaskMovedToInbox" }, () => navigation.push("task detail"), 0) },
+      React.createElement(Row, { divId: 1, divType: "inbox", index: 0, selected: true, openTask: () => navigation.push("task detail") },
+        React.createElement("span", { id: "title" }, "Own QA task"), React.createElement(Remind, { show: true }))))));
+  const click = async (el) => {
+    for (const type of ["pointerdown", "mousedown", "mouseup", "click"]) {
+      await act(async () => { el.dispatchEvent(new dom.window.MouseEvent(type, { bubbles: true, cancelable: true, button: 0 })); });
+    }
+  };
   return { requests, navigation, options, queryClient, queryKey, reconciliations, click, close: () => { queryClient.clear(); act(() => reactRoot.unmount()); dom.window.close(); delete global.window; delete global.document; delete global.IS_REACT_ACT_ENVIRONMENT; } };
 }
 
-for (const mobile of [false, true]) {
-  for (const trigger of ["mouse", "H"]) {
-    for (const label of ["Later today", "Tomorrow"]) {
-      test(`${mobile ? "phone" : "desktop"} ${trigger}: ${label} consumes the portal click, snoozes once and closes without opening the task`, async () => {
-        const f = fixture(mobile);
-        try {
-          if (trigger === "mouse") await f.click(document.querySelector("#inbox-1 button"));
-          else act(() => document.dispatchEvent(new window.KeyboardEvent("keydown", { key: "h", keyCode: 72, bubbles: true })));
-          assert.ok(document.querySelector('[role="dialog"]'));
-          assert.ok(!document.querySelector("#inbox-1 [role=option]"), "picker options live in a DOM portal outside the row");
-          const option = [...document.querySelectorAll('[role="option"]')].find((el) => el.textContent.startsWith(label));
-          await f.click(option);
-          assert.equal(f.requests.length, 1);
-          assert.equal(f.requests[0].url, "/api/queues/inboxReminder");
-          const payload = f.queryClient.getQueryData(f.queryKey);
-          assert.deepEqual(payload.notifications.map((row) => row.taskId), [6947], "snoozing removes the task and its sibling notifications only");
-          assert.ok(payload.structuredData.tabs.every((tab) => tab.length === 1), "tab counts and lists update together");
-          assert.deepEqual(Array.from(f.reconciliations[0].queryKey), f.queryKey);
-          assert.equal(f.reconciliations[0].exact, true);
-          assert.equal(f.requests[0].body.taskId, 6946);
-          assert.equal(f.requests[0].body.projectId, 7049);
-          assert.equal(f.requests[0].body.userId, 985);
-          assert.equal(f.requests[0].body.remindAt, f.options.find((o) => o.display === label).date);
-          assert.ok(!f.navigation.includes("task detail"), "React portal events must not open the parent Inbox row");
-          assert.equal(document.querySelector('[role="dialog"]'), null);
-          await f.click(document.querySelector("#title"));
-          assert.ok(f.navigation.includes("task detail"), "ordinary row clicks must still open the task");
-        } finally { f.close(); }
-      });
+for (const instantTicketOpen of [false, true]) {
+  for (const mobile of [false, true]) {
+    for (const trigger of ["mouse", "H"]) {
+      for (const label of ["Later today", "Tomorrow"]) {
+        test(`instant open ${instantTicketOpen ? "on" : "off"}: ${mobile ? "phone" : "desktop"} ${trigger}: ${label} consumes the portal click, snoozes once and closes without opening the task`, async () => {
+          const f = fixture(mobile, false, instantTicketOpen);
+          try {
+            if (trigger === "mouse") await f.click(document.querySelector("#inbox-1 button"));
+            else act(() => document.dispatchEvent(new window.KeyboardEvent("keydown", { key: "h", keyCode: 72, bubbles: true })));
+            assert.ok(document.querySelector('[role="dialog"]'));
+            assert.ok(!document.querySelector("#inbox-1 [role=option]"), "picker options live in a DOM portal outside the row");
+            const option = [...document.querySelectorAll('[role="option"]')].find((el) => el.textContent.startsWith(label));
+            await f.click(option);
+            assert.equal(f.requests.length, 1);
+            assert.equal(f.requests[0].url, "/api/queues/inboxReminder");
+            const payload = f.queryClient.getQueryData(f.queryKey);
+            assert.deepEqual(payload.notifications.map((row) => row.taskId), [6947], "snoozing removes the task and its sibling notifications only");
+            assert.ok(payload.structuredData.tabs.every((tab) => tab.length === 1), "tab counts and lists update together");
+            assert.deepEqual(Array.from(f.reconciliations[0].queryKey), f.queryKey);
+            assert.equal(f.reconciliations[0].exact, true);
+            assert.equal(f.requests[0].body.taskId, 6946);
+            assert.equal(f.requests[0].body.projectId, 7049);
+            assert.equal(f.requests[0].body.userId, 985);
+            assert.equal(f.requests[0].body.remindAt, f.options.find((o) => o.display === label).date);
+            assert.ok(!f.navigation.includes("task detail"), "React portal events must not open the parent Inbox row");
+            assert.equal(document.querySelector('[role="dialog"]'), null);
+            await f.click(document.querySelector("#title"));
+            assert.ok(f.navigation.includes("task detail"), "ordinary row clicks must still open the task");
+          } finally { f.close(); }
+        });
+      }
     }
   }
 }
