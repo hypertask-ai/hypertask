@@ -115,7 +115,7 @@ test("both shortcut-help surfaces advertise only the active Ctrl/Cmd+J action", 
         const shortcuts = evaluate(initializer(file, dataName).text, {
           getKeyboardShortcuts, isApple, appShellRailOn: false,
           consistentCommentShortcuts: false, keepDirectTaskOpen: false,
-          historyToggleLabel: "Toggle history events", includeComposeTaskShortcut,
+          historyToggleLabel: "Toggle history events", includeComposeTaskShortcut, newTaskWindow: false,
         });
         const titles = shortcuts.flatMap((group) => group.sub)
           .filter((item) => item.pressKey.join(" ") === `${isApple ? "CMD" : "CTRL"} J`)
@@ -139,7 +139,7 @@ test("both shortcut-help surfaces follow the flag and preserve Windows and Apple
         const shortcuts = evaluate(initializer(file, dataName).text, {
           getKeyboardShortcuts, isApple, appShellRailOn: false,
           consistentCommentShortcuts: false, keepDirectTaskOpen: false, historyToggleLabel,
-          includeComposeTaskShortcut: false,
+          includeComposeTaskShortcut: false, newTaskWindow: false,
         });
         const shortcut = shortcuts.flatMap((group) => group.sub).find((item) => item.pressKey.join(" ") === `${isApple ? "CMD" : "CTRL"} SHIFT H`);
         assert.equal(shortcut.shortTitle, historyToggleLabel);
@@ -148,4 +148,13 @@ test("both shortcut-help surfaces follow the flag and preserve Windows and Apple
   }
   assert.match(initializer("src/components/sidebars/keyboardShortcuts.tsx", "filteredShortcuts").text, /^mainData\s*\.map/);
   assert.ok(getKeyboardShortcuts(false).flatMap((group) => group.sub).some((item) => item.shortTitle === "Toggle history events"));
+});
+
+
+test("New Task shortcut label requires both task writer flags", () => {
+  for (const compose of [false, true]) for (const window of [false, true]) {
+    const titles = getKeyboardShortcuts(false, false, false, false, "Toggle history events", compose, compose && window)
+      .flatMap((group) => group.sub).filter((item) => item.pressKey.join(" ") === "CTRL J").map((item) => item.shortTitle);
+    assert.deepEqual(titles, compose ? [window ? "New Task" : "Compose task"] : ["Add task with AI Task Writer", "Write with AI"]);
+  }
 });

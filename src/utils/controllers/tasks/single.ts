@@ -66,6 +66,9 @@ type UpdateTaskSingleOptions = {
   trustedCaller?: boolean;
   // Compare under the mutation fence so a restore cannot replace a newer edit.
   expectedDescription?: string;
+  expectedTitle?: string;
+  expectedProjectId?: number;
+  expectedStatus?: Status;
   // Every section-ID change creates activity. This only supplies actor detail
   // and the post-commit notification used by move-specific callers.
   taskMovedActivity?: Pick<
@@ -75,6 +78,8 @@ type UpdateTaskSingleOptions = {
 };
 
 class TaskDescriptionChangedError extends Error {}
+class TaskTitleChangedError extends Error {}
+class TaskTargetChangedError extends Error {}
 
 export const TASK_IDENTITY_CONFLICT_CODE = "TASK_IDENTITY_CONFLICT";
 
@@ -246,6 +251,15 @@ export async function updateTaskSingle(
           include: { description_: { select: { content: true } } },
         });
         if (!currentState) throw new Error("Task not found");
+        if (
+          (options.expectedProjectId !== undefined && currentState.projectId !== options.expectedProjectId) ||
+          (options.expectedStatus !== undefined && currentState.status !== options.expectedStatus)
+        ) {
+          throw new TaskTargetChangedError();
+        }
+        if (options.expectedTitle !== undefined && currentState.title !== options.expectedTitle) {
+          throw new TaskTitleChangedError();
+        }
         if (
           options.expectedDescription !== undefined &&
           (currentState.description_?.content ?? "") !==
@@ -702,6 +716,18 @@ export async function updateTaskSingle(
       moveActivity,
     };
   } catch (error) {
+    if (error instanceof TaskTargetChangedError) {
+      return {
+        status: 409,
+        json: { message: "This task moved or changed status. Your note is still here." },
+      };
+    }
+    if (error instanceof TaskTitleChangedError) {
+      return {
+        status: 409,
+        json: { message: "This task is no longer empty. Your note is still here." },
+      };
+    }
     if (error instanceof TaskDescriptionChangedError) {
       return {
         status: 409,

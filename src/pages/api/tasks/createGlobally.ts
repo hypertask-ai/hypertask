@@ -1,6 +1,7 @@
+import { isEmptyComposeTarget } from "@/lib/ai/composeTaskTarget";
 import { NextApiHandler, NextApiRequest, NextApiResponse } from "next";
 import { Prisma } from "@prisma/client";
-import { isFeatureEnabled, HTPR_6929_COMPOSE_TASK_WRITER_FLAG } from "@/lib/flags";
+import { isFeatureEnabled, HTPR_6929_COMPOSE_TASK_WRITER_FLAG, HTPR_6937_NEW_TASK_WINDOW_FLAG } from "@/lib/flags";
 import generateRank from "@/utils/generateRank";
 import { IAgent, IEstimate, ILabel, IPriority, ITask, IUser } from "@/models/model";
 import { waitUntil } from "@vercel/functions";
@@ -182,6 +183,10 @@ const handler: NextApiHandler = async (
         !(await isFeatureEnabled(HTPR_6929_COMPOSE_TASK_WRITER_FLAG, session.userId))) {
       return res.status(403).json({ message: "Compose task writer is turned off" });
     }
+    if (req.body.existingTaskId != null && (req.body.requestKind !== "compose-task" ||
+        !(await isFeatureEnabled(HTPR_6937_NEW_TASK_WINDOW_FLAG, session.userId)))) {
+      return res.status(403).json({ message: "New Task window is turned off" });
+    }
     const projectId = Number(requestedProjectId);
     if (!Number.isInteger(projectId) || projectId <= 0) {
       return res.status(400).json({ message: "Invalid project id" });
@@ -230,6 +235,29 @@ const handler: NextApiHandler = async (
     });
     if (!authorizedProject) {
       return res.status(403).json({ message: "Forbidden" });
+    }
+    if (req.body.existingTaskId != null) {
+      const taskId = Number(req.body.existingTaskId);
+      if (!Number.isSafeInteger(taskId) || taskId <= 0) {
+        return res.status(400).json({ message: "Invalid task id" });
+      }
+      const target = await prisma.task.findFirst({
+        where: { id: taskId, projectId, status: "Normal", project: taskWriteAccessWhere(userId, agentId) },
+        include: { description_: { select: { content: true } } },
+      });
+      if (!target) return res.status(403).json({ message: "Forbidden" });
+      if (!isEmptyComposeTarget(target)) return res.status(409).json({ message: "This task is no longer empty. Your note is still here." });
+      const { updateTaskSingle } = await import("@/utils/controllers/tasks/single");
+      const result = await updateTaskSingle({ id: taskId, title, description }, currentUser, agentId, {
+        expectedTitle: target.title,
+        expectedDescription: target.description_?.content ?? "",
+        expectedProjectId: target.projectId,
+        expectedStatus: target.status,
+      });
+      if (result.status !== 200) return res.status(result.status).json(result.json);
+      const { broadcastBoardChange, broadcastTaskChange } = await import("@/lib/realtime/server");
+      await Promise.all([broadcastBoardChange(projectId, { originUserId: userId }), broadcastTaskChange(taskId)]);
+      return res.status(200).json({ newTask: result.json });
     }
     // Task creation receives existing, persisted project-label records. New
     // labels use the label creation route before this request.

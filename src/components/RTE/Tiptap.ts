@@ -1,3 +1,4 @@
+import { HTPR_6929_COMPOSE_TASK_WRITER_FLAG, HTPR_6937_NEW_TASK_WINDOW_FLAG } from "@/lib/flags/keys";
 import Highlight from "@tiptap/extension-highlight";
 import OrderedList from "@tiptap/extension-ordered-list";
 import TaskItem from "@tiptap/extension-task-item";
@@ -97,6 +98,10 @@ const useTiptap = ({
   placeholder,
 }: IProps) => {
   const isApple = useDeviceContext();
+  const composeEnabled = useFlag(HTPR_6929_COMPOSE_TASK_WRITER_FLAG);
+  const newTaskWindowFlag = useFlag(HTPR_6937_NEW_TASK_WINDOW_FLAG);
+  let newTaskWindow = false;
+  if (mode === "read-edit-description" && composeEnabled && newTaskWindowFlag) newTaskWindow = true;
   // HTPR-6059: with the flag on, the emoji dataset downloads only when the
   // first colon is typed (see suggestion.js items). With the flag off, the
   // eager fetch below restores the old availability, as one async chunk
@@ -193,7 +198,7 @@ const useTiptap = ({
             ? getRandomElement(
                 globalConstants.CommentTips(isApple, createNewComment)
               )
-            : isMobileView
+            : isMobileView || newTaskWindow
               ? "Add a description…"
               : getRandomElement(globalConstants.DescriptionTips(isApple))),
         emptyEditorClass: `${styles.is_editor_empty}`,

@@ -451,7 +451,7 @@ export const AudioButton = ({
         reader.onerror = reject;
       });
 
-    const htmlContent = editor?.getHTML();
+    const htmlContent = editor?.getHTML() ?? "";
     const textContent = defaultContent ?? editor?.getText();
 
     try {
@@ -523,6 +523,7 @@ export const AudioButton = ({
   };
 
   const handleKeydown = (e: KeyboardEvent) => {
+    if (disabled) return;
     if (e.key === "Escape" && recordingRef.current) {
       e.preventDefault();
       stopRecording(false);

@@ -63,6 +63,8 @@ export interface IShowHypertaskHTC {
     show: boolean,
     scope?: "board",
     paletteTab?: "search" | "compose",
+    composeProject?: IProject,
+    composeOnCreated?: () => void | Promise<void>,
     payload?: any,
     commentIndex?: number
 }

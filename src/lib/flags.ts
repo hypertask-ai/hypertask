@@ -9,6 +9,7 @@ import { AGENT_CHAT_STOP_AND_TIMEOUT_FEATURE_FLAG } from "@/lib/agentRuns/model"
 import {
   HTPR_6934_SERVER_FIRST_SCREEN_FLAG,
   HTPR_6929_COMPOSE_TASK_WRITER_FLAG,
+  HTPR_6937_NEW_TASK_WINDOW_FLAG,
   HTPR_6752_INSTANT_TICKET_OPEN_FLAG,
   HTPR_6873_QUICK_ENTRY_GROW_FLAG,
   HTPR_6892_CMDK_VERSION_FLAG,
@@ -175,6 +176,11 @@ const FEATURE_FLAG_DEFINITIONS = [
     key: HTPR_6934_SERVER_FIRST_SCREEN_FLAG,
     shippedOn: "2026-10-04",
     description: "Prepares a shared board and inbox first-render contract. Server payloads are not enabled by this step.",
+  },
+  {
+    key: HTPR_6937_NEW_TASK_WINDOW_FLAG,
+    shippedOn: "2026-10-04",
+    description: "Turns Compose into a larger New Task window with dictation and one Ctrl+J, filling an empty task when opened there. Requires the Compose task writer flag.",
   },
   {
     key: HTPR_6929_COMPOSE_TASK_WRITER_FLAG,

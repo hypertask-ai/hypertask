@@ -18,7 +18,7 @@ import {
 } from "@/store";
 import { currentPageActionsAtom } from "@/store/currentPageActions";
 import { usePathname } from "next/navigation";
-import { Search } from "lucide-react";
+import { Search, Sparkles } from "lucide-react";
 import { ModalBody } from "reactstrap";
 import styles from "@/styles/linksModal.module.scss";
 import { ICommandList } from "./HTCTypes";
@@ -53,6 +53,7 @@ import {
   GOOGLE_CALENDAR_FLAG,
   HTPR_6892_CMDK_VERSION_FLAG,
   HTPR_6929_COMPOSE_TASK_WRITER_FLAG,
+  HTPR_6937_NEW_TASK_WINDOW_FLAG,
   HTPR_6868_TICKET_PREFIX_FLAG,
   HTPR_6662_AGENT_LOG_NAME_FLAG,
   HTPR_6861_MOBILE_PAGE_BACK_ROW_FLAG,
@@ -65,6 +66,9 @@ import {
   MY_TASKS_VIEWS_FLAG,
 } from "@/lib/flags/keys";
 import { SettingsScopeTabs } from "../../Settings/SettingsScopeTabs";
+import Tooltip from "@/components/Common/Tooltip";
+import { useDeviceContext } from "@/lib/contexts/deviceContext";
+import { getShortcutDisplay } from "@/lib/utils/keyboardShortcuts";
 import ComposeTaskWriter from "./ComposeTaskWriter";
 import { myTasksRoute } from "@/lib/constants/constants";
 
@@ -95,9 +99,23 @@ const Commands = (props: Props) => {
     focusProxy,
   } = props;
   const composeTaskWriterEnabled = useFlag(HTPR_6929_COMPOSE_TASK_WRITER_FLAG);
+  const newTaskWindowFlag = useFlag(HTPR_6937_NEW_TASK_WINDOW_FLAG);
+  let newTaskWindow = false;
+  if (composeTaskWriterEnabled && newTaskWindowFlag && !props.isDemo && !props.isInteractive) newTaskWindow = true;
+  const isApple = useDeviceContext();
   const composeEnabled = composeTaskWriterEnabled && !props.isDemo && !props.isInteractive;
   const [showCommands, setShowCommands] = useRecoilState(showCommandsAtom);
   const isCompose = composeEnabled && showCommands.paletteTab === "compose";
+  // Ctrl+K and Ctrl+J replace the palette state, so remember the form's handoff while the palette stays open.
+  const composeProjectRef = useRef<IProject | undefined>(undefined);
+  const composeOnCreatedRef = useRef<(() => void | Promise<void>) | undefined>(undefined);
+  if (!showCommands.show) {
+    composeProjectRef.current = undefined;
+    composeOnCreatedRef.current = undefined;
+  } else if (showCommands.composeProject || showCommands.composeOnCreated) {
+    composeProjectRef.current = showCommands.composeProject;
+    composeOnCreatedRef.current = showCommands.composeOnCreated;
+  }
   const [writing, setWriting] = useState(false);
   const { resetShowCommands } = useHypertasksRecoilStates()
   const isMobile = useContext(MobileViewContext);
@@ -455,6 +473,7 @@ const Commands = (props: Props) => {
     endTour()
   }, []);
   const handleKeyDown = (e: KeyboardEvent) => {
+    if (newTaskWindow && e.key === "Tab") return;
     if (isCompose) return;
     if (e.key === "Tab" || e.key === "Escape") {
       e.preventDefault();
@@ -505,6 +524,7 @@ const Commands = (props: Props) => {
     filterCommands,
     hoveredGroup,
     isCompose,
+    newTaskWindow,
   ]);
 
   const handleMouseEnter = (
@@ -595,7 +615,8 @@ const Commands = (props: Props) => {
         if (onMyTasks && kanbanReuseEnabled) window.dispatchEvent(new Event(myTasksPickerEvents[command.key]));
         return;
       }
-      if (composeEnabled && command.commandMode === CommandMode.CreateTaskWithAiWriter) {
+      if (composeEnabled && (command.commandMode === CommandMode.CreateTaskWithAiWriter ||
+          (newTaskWindow && command.commandMode === CommandMode.OpenAiTaskWriter))) {
         setShowCommands((previous) => ({ ...previous, paletteTab: "compose" }));
         return;
       }
@@ -634,10 +655,28 @@ const Commands = (props: Props) => {
     if (composeEnabled && !isCompose) inputRef.current?.focus();
   }, [composeEnabled, isCompose]);
 
+  useEffect(() => {
+    if (!newTaskWindow) return;
+    const switchTab = (event: KeyboardEvent) => {
+      if (event.key !== "Tab" || event.altKey || event.ctrlKey || event.metaKey || event.isComposing || writing) return;
+      const target = event.target as HTMLElement;
+      // Leave attachment dialogs, mic controls and other focus traps alone.
+      if (!target.matches('#htc-mobile-search, #htc-search, [data-compose-task-writer] textarea, [aria-label="Commands mode"] [role="tab"]')) return;
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      setShowCommands((previous) => ({ ...previous, paletteTab: isCompose ? "search" : "compose" }));
+    };
+    document.addEventListener("keydown", switchTab, true);
+    return () => document.removeEventListener("keydown", switchTab, true);
+  }, [newTaskWindow, isCompose, writing, setShowCommands]);
+
   const modeSwitch = composeTaskWriterEnabled && !isDemo && !isInteractive ? (
     <div className="absolute -top-12 left-0 flex w-full justify-center">
       <SettingsScopeTabs
-        tabs={[{ id: "search", label: "Search" }, { id: "compose", label: "Compose" }]}
+        tabs={newTaskWindow ? [
+          { id: "search", label: <>Search<Tooltip portal left={0} bottom={-45} text="Search" keyCombination={getShortcutDisplay({ key: 75, modifiers: ["ctrl"], description: "Search" }, isApple)} /></> },
+          { id: "compose", className: "text-hypertasks-ai-purple hover:text-hypertasks-ai-purple", label: <><span className="flex items-center gap-2"><Sparkles size={18} strokeWidth={1.75} aria-hidden />New Task</span><Tooltip portal left={0} bottom={-45} text="New Task" keyCombination={getShortcutDisplay({ key: 74, modifiers: ["ctrl"], description: "New Task" }, isApple)} /></> },
+        ] : [{ id: "search", label: "Search" }, { id: "compose", label: "Compose" }]}
         activeId={isCompose ? "compose" : "search"}
         onSelect={(paletteTab) => setShowCommands((previous) => ({ ...previous, paletteTab: paletteTab as "search" | "compose" }))}
         ariaLabel="Commands mode"
@@ -647,7 +686,11 @@ const Commands = (props: Props) => {
       />
     </div>
   ) : null;
-  const compose = composeEnabled ? <ComposeTaskWriter active={isCompose} onBusyChange={setWriting} onCreated={resetShowCommands} /> : null;
+  const compose = composeEnabled ? <ComposeTaskWriter active={isCompose} destinationProject={newTaskWindow ? composeProjectRef.current : undefined} onBusyChange={setWriting} onCreated={async () => {
+    if (newTaskWindow && isMobile) await composeOnCreatedRef.current?.();
+    else if (newTaskWindow) composeOnCreatedRef.current?.();
+    resetShowCommands();
+  }} /> : null;
 
   const searchInput = (
     <div className="flex items-center gap-2.5 rounded-[4px] px-4 ring-1 ring-inset ring-hypertasks-purple">
@@ -721,7 +764,7 @@ const Commands = (props: Props) => {
         autoFocus={false}
         backdrop={isInteractive?false:true}
         keyboard={false}
-        className={`paletteModalSizing sm:max-h-fit sm:top-[24%] sm:min-w-[560px] ${styles.links_modal} ${isInteractive ? "relative group" : ""}`}
+        className={`paletteModalSizing ${newTaskWindow && isCompose ? "sm:!w-[1120px] sm:!min-w-0 sm:!max-w-[calc(100vw-2rem)] sm:!top-[15%]" : "sm:top-[24%] sm:min-w-[560px]"} sm:max-h-fit ${styles.links_modal} ${isInteractive ? "relative group" : ""}`}
         // The palette is centred by auto margins inside a viewport-wide fixed box, so with
         // the AI chat panel open it centred on the window and ran underneath the panel
         // (159px of overlap on a 914px-wide window). Padding the box by the panel width
@@ -748,7 +791,7 @@ const Commands = (props: Props) => {
             <ModalInput
                ref={setInputRef}
                autoFocus
-               id="htc"
+               id={newTaskWindow ? "htc-search" : "htc"}
                placeholder={isDemo ? "Press Enter to select" : "Type a command or search..."}
                onChange={onKeyChange}
                value={keyword}

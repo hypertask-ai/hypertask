@@ -345,8 +345,12 @@ test("a disabled board's empty Time row is absent before and after its summary l
 
 function editorPanels(flag) {
   return load("src/components/RTE/TaskDetailEditorPanels.tsx", {
-    useFlag: () => flag,
+    useFlag: (key) => key === "instant" && flag,
     HTPR_6752_INSTANT_TICKET_OPEN_FLAG: "instant",
+    HTPR_6929_COMPOSE_TASK_WRITER_FLAG: "compose",
+    HTPR_6937_NEW_TASK_WINDOW_FLAG: "new-task",
+    useSetRecoilState: () => noop,
+    showCommandsAtom: "commands",
     createPortal: noop,
     TiptapProvider: ({ children }) => children,
     TiptapBubbleMenu: noop,

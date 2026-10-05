@@ -1,3 +1,8 @@
+import { HTPR_6929_COMPOSE_TASK_WRITER_FLAG, HTPR_6937_NEW_TASK_WINDOW_FLAG } from "@/lib/flags/keys";
+import { useRecoilValue, useSetRecoilState } from "@/lib/state";
+import { showCommandsAtom } from "@/store";
+import { CommandMode } from "@/models/enums";
+import { isComposePaletteShortcut } from "@/lib/constants/commandCenterShortcut";
 import React, {
   useCallback,
   useContext,
@@ -136,7 +141,13 @@ const TiptapCreateTaskModal = () => {
     uploadingStateCreateTaskModalAtom
   );
   const { continueTourInModal, isTourActive, endTour } = useTourContext();
-  const [shouldShowAiTaskWriter, setShouldShowAITaskWriter] = useState(
+  const composeEnabled = useFlag(HTPR_6929_COMPOSE_TASK_WRITER_FLAG);
+  const newTaskWindowFlag = useFlag(HTPR_6937_NEW_TASK_WINDOW_FLAG);
+  let newTaskWindow = false;
+  if (composeEnabled && newTaskWindowFlag) newTaskWindow = true;
+  const setCommands = useSetRecoilState(showCommandsAtom);
+  const showCommands = useRecoilValue(showCommandsAtom);
+  const [writerOpen, setShouldShowAITaskWriter] = useState(
     editMode === "Description-ai" ? true : false
   );
   const [hasOpenedClassicForm, setHasOpenedClassicForm] = useState(false);
@@ -163,11 +174,20 @@ const TiptapCreateTaskModal = () => {
         ? GUEST_DEMO_TASK_PROMPT
         : undefined)
   );
+  const shouldShowAiTaskWriter = writerOpen && !newTaskWindow;
   const closeAiTaskWriter = () => {
     aiPromptRef.current = undefined;
     setShouldShowAITaskWriter(false);
   };
+  const closeComposedTaskForm = () =>
+    isMbl && window.location.pathname !== "/new"
+      ? closeBackDismissBeforeNavigation(window, "createTaskModal", () => closeHandler(true))
+      : closeHandler(true);
   const toggleAiTaskWriterVisibility = () => {
+    if (newTaskWindow) {
+      setCommands({ show: true, mode: CommandMode.Command, paletteTab: "compose", composeProject: formValues.currentProject ?? _currentProject ?? undefined, composeOnCreated: closeComposedTaskForm });
+      return;
+    }
     if (shouldShowAiTaskWriter) aiPromptRef.current = undefined;
     setShouldShowAITaskWriter((current) => !current);
   };
@@ -207,6 +227,18 @@ const TiptapCreateTaskModal = () => {
   const projectForContext =
     formValues.currentProject ?? _currentProject ?? undefined;
   const projectId = projectForContext?.id;
+  useEffect(() => {
+    if (!newTaskWindow) return;
+    const openNewTask = (event: KeyboardEvent) => {
+      if (event.code !== "KeyJ" || !isComposePaletteShortcut(event, isApple, pathname)) return;
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      setCommands({ show: true, mode: CommandMode.Command, paletteTab: "compose", composeProject: projectForContext, composeOnCreated: closeComposedTaskForm });
+    };
+    // Keep the form's selected board before the global shortcut reads the URL.
+    window.addEventListener("keydown", openNewTask, true);
+    return () => window.removeEventListener("keydown", openNewTask, true);
+  }, [newTaskWindow, isApple, pathname, projectForContext, setCommands, closeComposedTaskForm]);
   const { data: projectLabels } = useGetAllProjectLabels(
     projectId ?? undefined,
   );
@@ -584,6 +616,10 @@ const TiptapCreateTaskModal = () => {
   };
 
   const toggleAiTaskWriter = () => {
+    if (newTaskWindow) {
+      setCommands({ show: true, mode: CommandMode.Command, paletteTab: "compose", composeProject: formValues.currentProject ?? _currentProject ?? undefined, composeOnCreated: closeComposedTaskForm });
+      return;
+    }
     // editor?.chain().focus().toggleHighlight({ color: "#b89bdd" });
     editor?.chain().selectAll().setHighlight({ color: "#F0D8FF" }).run();
     document.getElementById(divIds.popoverContainer)?.scrollIntoView({
@@ -729,7 +765,7 @@ const TiptapCreateTaskModal = () => {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   const handleKeyDown = (e: any) => {
     var cmdControl = (isApple && e.metaKey) || (!isApple && e.ctrlKey);
-    if (showAssignModal || isRecording) return;
+    if (showAssignModal || isRecording || (newTaskWindow && showCommands.show)) return;
     if (cmdControl && e.key === "Enter") {
       // When AI Task Writer is visible and focused, let it handle Ctrl+Enter to send the prompt
       if (shouldShowAiTaskWriter) {
@@ -755,6 +791,7 @@ const TiptapCreateTaskModal = () => {
     }
     // // [ctrl] + [j]
     if (cmdControl && e.keyCode === KeyCodes.J) {
+      if (newTaskWindow) return;
       e.preventDefault();
       console.log("🚀 ~ handleKeyDown ~ endTour");
       endTour()

@@ -479,6 +479,7 @@ test("declared flags remain listed with ticket details and can be changed", asyn
       { key: "htpr-6930-my-tasks-kanban-reuse", mode: "OWNER_AND_QA", updatedAt: null },
       { key: "htpr-6934-server-first-screen", mode: "OWNER_AND_QA", updatedAt: null },
       { key: "htpr-6936-ask-ai-fullscreen", mode: "OWNER_AND_QA", updatedAt: null },
+      { key: "htpr-6937-new-task-window", mode: "OWNER_AND_QA", updatedAt: null },
       { key: "htpr-6938-my-tasks-icon-controls", mode: "OWNER_AND_QA", updatedAt: null },
     ],
   );

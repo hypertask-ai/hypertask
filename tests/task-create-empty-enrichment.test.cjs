@@ -129,6 +129,7 @@ function loadCreateRoute() {
     drafts: { createMany: async () => undefined },
   };
   const stubs = {
+    "@/lib/ai/composeTaskTarget": execute(compile("src/lib/ai/composeTaskTarget.ts"), {}),
     "@prisma/client": {
       Prisma: { PrismaClientKnownRequestError: class extends Error {} },
     },
