@@ -986,3 +986,17 @@ jobs:
             -d chat_id="$TG_CHAT" --data-urlencode text="$MESSAGE" || \
             echo "::warning::Rollback alert could not be delivered"
           [ "$(echo "$RESULT" | jq -r '.action')" != "failed" ]
+
+  mcp-reachability:
+    if: ${{ github.event_name == 'push' || (github.event_name == 'schedule' && github.event.schedule == '*/30 * * * *') || github.event_name == 'workflow_dispatch' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - name: Check MCP reachability
+        env:
+          TG_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TG_CHAT: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: bash .github/scripts/mcp-reachability.sh
