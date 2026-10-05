@@ -81,19 +81,36 @@ function html(Component, isMobile, props = {}) {
   return renderToStaticMarkup(React.createElement(mobile.Provider, { value: isMobile }, React.createElement(Component, props)));
 }
 
-test("cached summary fills an existing slot instead of changing title padding or inserting a row", () => {
+test("cached mobile summary fills its existing slot without changing its geometry", () => {
   cachedLayout = true;
-  for (const isMobile of [false, true]) {
-    late = false;
-    const before = html(title, isMobile, { toggleDueDate: noop });
-    late = true;
-    const after = html(title, isMobile, { toggleDueDate: noop });
-    assert.match(before, /data-summary-space="true"/);
-    const slot = /<div[^>]*data-task-summary-slot[^>]*>/;
-    assert.match(before, slot);
-    assert.equal(before.match(slot)[0], after.match(slot)[0], "the summary slot must retain its exact geometry");
-    assert.match(after, /data-part="summary"/);
+  late = false;
+  const before = html(title, true, { toggleDueDate: noop });
+  late = true;
+  const after = html(title, true, { toggleDueDate: noop });
+  assert.match(before, /data-summary-space="true"/);
+  const slot = /<div[^>]*data-task-summary-slot[^>]*>/;
+  assert.match(before, slot);
+  assert.equal(before.match(slot)[0], after.match(slot)[0]);
+  assert.match(after, /data-part="summary"/);
+});
+
+test("cached desktop title reserves a summary row only when the ticket has a summary", () => {
+  for (const summaryPresent of [false, true]) {
+    late = summaryPresent;
+    cachedLayout = false;
+    const legacy = html(title, false, { toggleDueDate: noop });
+    cachedLayout = true;
+    const cached = html(title, false, { toggleDueDate: noop });
+    const padding = /data-summary-space="[^"]+"/;
+    assert.equal(cached.match(padding)[0], legacy.match(padding)[0]);
+    if (summaryPresent) {
+      assert.match(cached, /data-task-summary-slot[^>]*h-\[21px\]/);
+      assert.match(cached, /data-part="summary"/);
+    } else {
+      assert.doesNotMatch(cached, /data-task-summary-slot/);
+    }
   }
+  late = false;
 });
 
 test("cached mobile property and description rows paint in normal flow without the virtualizer's 500px estimate", () => {
@@ -249,9 +266,9 @@ const body = load("src/components/PageComponents/TaskDetail/CommentAndDescriptio
   "@/components/Common/AttachmentsView": { default: () => null },
   "@/hooks/Task Detail/CommentAndDescriptionHooks/useSaveContent": { default: () => ({ redirectAPI: noop }) },
   "@/hooks/General/useHasDrafts": { isMeaningfulDescriptionDraft: () => false },
-  "./InnerHtmlDescription": { default: ({ id, descriptionText, setCarousalItems }) => {
+  "./InnerHtmlDescription": { default: ({ id, descriptionText, setCarousalItems, className }) => {
     assert.equal(setCarousalItems, cachedLayout ? noop : undefined, "only cached static images add the attachment-gallery action");
-    return React.createElement("div", { id, dangerouslySetInnerHTML: { __html: descriptionText } });
+    return React.createElement("div", { id, className, dangerouslySetInnerHTML: { __html: descriptionText } });
   } },
   "../ContextMenu": { HighlightMenu: () => null },
   "../ContextMenu/QuoteButton": { default: () => null },
@@ -259,6 +276,33 @@ const body = load("src/components/PageComponents/TaskDetail/CommentAndDescriptio
   "../BackgroundTaskAttachments": { default: () => null },
   "@/utils/helperFunctions/linkifyHtml": { linkifyHtml: content => content },
 }).default;
+
+const author = load("src/components/PageComponents/TaskDetail/CommentAndDescription/DescriptionContainer/TopRow/DescriptionTopRow.tsx", {
+  ...common,
+  "./DescriptionTopRight": { default: marker("author-actions") },
+  "../../Common/CreatedBy": { default: marker("creator") },
+  "@/lib/configs/taskDetail.config": { taskDetailSpacing: { mobile: { descriptionContainer: "" } } },
+}).default;
+
+test("cached desktop author uses the settled row height without changing mobile", () => {
+  cachedLayout = true;
+  assert.match(html(author, false), /h-\[21px\]/);
+  assert.doesNotMatch(html(author, false), /h-6/);
+  assert.match(html(author, true), /h-6/);
+  cachedLayout = false;
+  assert.doesNotMatch(html(author, false), /h-\[21px\]|h-6/);
+});
+
+test("cached desktop static body uses the settled editor height and margin without changing mobile", () => {
+  cachedLayout = true;
+  secondaryPanelsReady = true;
+  editMode = null;
+  assert.match(html(body, false, { draftTQ: [] }), /class="!min-h-\[80px\] !mb-0"/);
+  assert.doesNotMatch(html(body, true, { draftTQ: [] }), /!min-h|!mb-0/);
+  cachedLayout = false;
+  secondaryPanelsReady = false;
+  assert.doesNotMatch(html(body, false, { draftTQ: [] }), /!min-h|!mb-0/);
+});
 
 test("real cached description retains its first-painted HTML until editing starts, not just until secondary panels settle", () => {
   cachedLayout = true;
