@@ -249,7 +249,7 @@ test('web posts the untouched input in both search flows only when operators are
   const source = readFileSync(path.join(root, 'src/hooks/Search/useSearch.ts'), 'utf8')
   assert.match(source, /useFlag\(HTPR_6369_SEARCH_OPERATORS_FLAG\)/)
   for (const term of ['_searchTerm', 'searchTerm']) {
-    assert.match(source, new RegExp(`searchOperatorsEnabled\\s*\\? \\{ searchProjectIds: \\[\\], processedSearchTerm: ${term}, archive: defaultSearchArchiveStatus\\(showArchived\\) \\}\\s*: searchBoards\\(${term}, showArchived\\)`))
+    assert.match(source, new RegExp(`searchOperatorsEnabled\\s*\\? \\{ searchProjectIds: \\[\\], processedSearchTerm: ${term}, archive: defaultSearchArchiveStatus\\(showArchived\\) \\}\\s*: searchBoards\\(${term}, showArchived${term === 'searchTerm' ? ', searchProjects' : ''}\\)`))
   }
   assert.equal(source.match(/searchQuery: processedSearchTerm/g)?.length, 2)
 })
