@@ -4,6 +4,7 @@ import { currentProjectAtom, currentUserAtom, lastUsedBoardsAtom, composeTaskCha
 import { useRouter } from "next/navigation";
 import { parseCookies } from "nookies";
 import { MobileViewContext } from "@/lib/contexts/mobileContext";
+import { TaskContext } from "@/lib/contexts/TaskDetail/TaskProvider";
 import { useFileUpload } from "@/components/Common/AttachmentsUpload/FileUploadHandler";
 import axios from "axios";
 import { isEmptyComposeTarget } from "@/lib/ai/composeTaskTarget";
@@ -36,9 +37,8 @@ export default function ComposeTaskWriter({ active, destinationProject, onCreate
   onBusyChange: (busy: boolean) => void;
 }) {
   const enabled = useFlag(HTPR_6929_COMPOSE_TASK_WRITER_FLAG);
-  const newTaskWindowFlag = useFlag(HTPR_6937_NEW_TASK_WINDOW_FLAG);
-  let newTaskWindow = false;
-  if (enabled && newTaskWindowFlag) newTaskWindow = true;
+  const newTaskWindow = useFlag(HTPR_6937_NEW_TASK_WINDOW_FLAG) && enabled;
+  const taskContext = useContext(TaskContext);
   const isApple = useDeviceContext();
   const inView = useRecoilValue(inViewObjectAtom);
   const [recording, setRecording] = useState(false);
@@ -175,6 +175,10 @@ export default function ComposeTaskWriter({ active, destinationProject, onCreate
           project: previous?.project ? { ...previous.project, ...task.project } : task.project,
         })) ?? task;
         updateTaskInCache(task, task.id, task.projectId, task.sectionId);
+        // Board quick-add can open a regular detail provider, not the cached view.
+        taskContext?.setCurrentTask((current) => current?.id === task.id && current.projectId === task.projectId
+          ? { ...current, title: task.title }
+          : current);
       } else createTaskGlobally({ task, sectionId: task.sectionId!, position: "top" });
       // The phone form's history cleanup must finish before opening the task and chat.
       if (mobile && newTaskWindow) await onCreated();

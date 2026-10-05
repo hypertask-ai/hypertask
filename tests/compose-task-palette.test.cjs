@@ -29,6 +29,7 @@ async function withPalette(t, config, check) {
   const stub = (filename, exports) => { require.cache[filename] = { id: filename, filename, loaded: true, exports }; };
   const source = (file, exports) => stub(path.join(root, file), exports);
   const flags = { [flag]: config.enabled ?? true, [newFlag]: config.newWindow ?? false };
+  const TaskContext = React.createContext(undefined);
   const atomNames = ['boardLayoutAtom', 'calendarSettingsAtom', 'currentProjectAtom', 'currentUserAtom', 'frequentlyUsedHTCAton', 'tableTitleWrapAtom', 'showCommandsAtom', 'lastUsedBoardsAtom', 'composeTaskChatIntroAtom', 'showAIChatInterfaceAtom', 'isAiChatSidebarModeAtom', 'aiChatAutoOpenSuppressedAtom', 'aiChatExplicitOpenAtAtom', 'dockedChatScopeAtom', 'showCreateTaskModalAtom', 'showShortcutsAtom', 'showSidebarAtom', 'showBoardManagerAtom', 'inViewObjectAtom', 'uploadingStateCreateTaskModalAtom'];
   const atoms = Object.fromEntries(atomNames.map((name) => [name, name]));
   const project = { id: 7, title: 'QA Sandbox', uniqueIdentifier: 'QASA' };
@@ -57,6 +58,7 @@ async function withPalette(t, config, check) {
     source('src/store/currentPageActions.ts', { currentPageActionsAtom: 'currentPageActionsAtom' });
     source('src/lib/state.tsx', state);
     source('src/hooks/useFlag.tsx', { useFlag: (key) => flags[key] ?? false });
+    source('src/lib/contexts/TaskDetail/TaskProvider.tsx', { TaskContext, useTaskContext: () => React.useContext(TaskContext) });
     source('src/lib/contexts/deviceContext.tsx', { useDeviceContext: () => config.apple ?? false });
     source('src/lib/contexts/mobileContext.tsx', { MobileViewContext: React.createContext(config.mobile ?? false) });
     source('src/hooks/RecoilRoot/useHypertasksRecoilStates.ts', { default: () => ({ resetShowCommands, toggleShowCommands }) });
@@ -76,7 +78,7 @@ async function withPalette(t, config, check) {
     source('src/hooks/MultiPages/useAddDeleteTaskInBoards.tsx', { default: () => ({ createTaskGlobally: (body) => cacheAdds.push(body) }) });
     source('src/hooks/General/useProjectQuery.ts', { useProjectQuery: () => ({ updateActiveItemAndItemInView: (task) => viewedTasks.push(task) }) });
     source('src/hooks/MultiPages/useUpdateTaskInBoards.tsx', { default: () => ({ updateTaskInCache: (...args) => cacheUpdates.push(args) }) });
-    const jiti = createJiti(__filename, { alias: { '@': path.join(root, 'src') }, interopDefault: true, fsCache: false, jsx: { runtime: 'automatic' } });
+    const jiti = createJiti(__filename, { alias: { '@': path.join(root, 'src') }, interopDefault: true, fsCache: false, extensions: ['.js', '.jsx', '.ts', '.tsx', '.json'], jsx: { runtime: 'automatic' } });
     // Exercise the real greeting/board resolution, but defer the network workflow
     // (covered independently in compose-task-writer.test.cjs) to inspect UI state.
     source('src/lib/deriveCurrentBoardBilling.ts', { deriveCurrentBoardBilling: () => null });
@@ -113,12 +115,16 @@ async function withPalette(t, config, check) {
     const { useCommandCenterShortcut } = jiti(path.join(root, 'src/hooks/General/useCommandCenterShortcut.ts'));
     let Palette = jiti(path.join(root, 'src/components/Modals/commands/HTC/commands.tsx')).default;
     let Probe = () => null;
+    let headerState;
     function Harness() {
       const shown = useValue('showCommandsAtom');
+      const [currentTask, setCurrentTask] = React.useState(config.headerTask);
+      headerState = { parsedTask: JSON.stringify(config.headerTask ?? {}), currentTask, setCurrentTask, editMode: null };
       useCommandCenterShortcut(Object.hasOwn(config, 'userId') ? config.userId : 985, config.apple ?? false, dom.window.location.pathname, config.trial ?? false, false, toggleShowCommands);
       return React.createElement(query.QueryClientProvider, { client: queryClient },
-        shown.show ? React.createElement(React.Suspense, { fallback: React.createElement('div', { 'data-palette-suspended': true }) }, React.createElement(Palette, { isOpen: true })) : null,
-        React.createElement(Probe));
+        React.createElement(TaskContext.Provider, { value: config.headerTask ? headerState : undefined },
+          shown.show ? React.createElement(React.Suspense, { fallback: React.createElement('div', { 'data-palette-suspended': true }) }, React.createElement(Palette, { isOpen: true })) : null,
+          React.createElement(Probe)));
     }
     reactRoot = require('react-dom/client').createRoot(document.getElementById('root'));
     await React.act(async () => reactRoot.render(React.createElement(config.strict ? React.StrictMode : React.Fragment, null, React.createElement(Harness))));
@@ -128,7 +134,7 @@ async function withPalette(t, config, check) {
       await React.act(async () => target.dispatchEvent(event));
       return event;
     };
-    const input = () => document.querySelector('textarea');
+    const input = () => document.querySelector(config.headerTask ? '[data-compose-task-writer] textarea' : 'textarea');
     const type = async (value) => React.act(async () => {
       Object.getOwnPropertyDescriptor(dom.window.HTMLTextAreaElement.prototype, 'value').set.call(input(), value);
       input().dispatchEvent(new dom.window.Event('input', { bubbles: true }));
@@ -156,7 +162,7 @@ async function withPalette(t, config, check) {
       await React.act(async () => reactRoot.render(React.createElement(config.strict ? React.StrictMode : React.Fragment, null, React.createElement(Harness))));
       assert.equal(document.getElementById('root').innerHTML, current);
     };
-    await check({ dom, input, type, press, clickTab, finish, fail, rerender, flags, values, set, requests, navigations, cacheAdds, cacheUpdates, queryClient, viewedTasks, loadedBoards, shells, capture, baseline, source, stub, jiti, mountProbe, legacyJ: () => legacyJ });
+    await check({ dom, input, type, press, clickTab, finish, fail, rerender, flags, values, set, requests, navigations, cacheAdds, cacheUpdates, queryClient, viewedTasks, loadedBoards, shells, capture, baseline, source, stub, jiti, mountProbe, headerState: () => headerState, legacyJ: () => legacyJ });
   } finally {
     document.removeEventListener('keydown', legacy);
     if (reactRoot) await React.act(async () => reactRoot.unmount());
@@ -804,6 +810,47 @@ for (const writerFailed of [false, true]) test(`same-task fill updates the mount
     await React.act(async () => pendingFetch.resolve({ ok: true, status: 200, json: async () => targetTask }));
     assert.equal(document.querySelector('[data-task-title]').textContent, savedTask.title, 'a stale fetch cannot overwrite the saved title');
   });
+});
+
+test('board quick-add same-task fill updates the real desktop header, with either flag off unchanged', async (t) => {
+  // Quick-add cards have no description_ payload, so instant open falls back
+  // to the regular detail provider, which does not subscribe to the query cache.
+  const targetTask = { id: 52, projectId: 7, sectionId: 12, uniqueIndex: 4, title: 'Enter task title here', description: '' };
+  for (const enabled of [false, true]) for (const newWindow of [false, true]) {
+    await withPalette(t, { enabled, newWindow, headerTask: targetTask, targetTask, open: false, previousBoard: 'project-7|&|view', url: '/detail/project-7/4', inView: { taskId: 52 } }, async ({ source, jiti, mountProbe, press, type, finish, headerState, queryClient, cacheAdds, cacheUpdates, requests }) => {
+      source('src/utils/api/Task Detail/index.ts', { updateTask: () => assert.fail('a fill must not save the placeholder title') });
+      source('src/hooks/MultiPages/Route/useHypertasksNavigate.ts', { default: () => ({ navigate() {} }) });
+      source('src/components/Modals/Common Modals/ConfirmActionModal.tsx', { default: () => null });
+      source('src/hooks/General/useAutosizeTextarea.ts', { default: () => {} });
+      source('src/hooks/General/useDebounce.jsx', { default: () => () => {} });
+      source('src/components/PageComponents/TaskDetail/TopRow/RunningTimerIndicator.tsx', { default: () => null });
+      const { findCachedTaskDetail } = jiti(path.join(root, 'src/lib/navigation/cachedTaskDetail.ts'));
+      assert.equal(findCachedTaskDetail(queryClient, 985, 7, 4, targetTask), undefined, 'the quick-add card cannot use instant open');
+      const Title = jiti(path.join(root, 'src/components/PageComponents/TaskDetail/TopRow/TaskTitle.tsx')).default;
+      await mountProbe(() => React.createElement(Title));
+      const header = document.getElementById('title-input');
+      assert.equal(header.value, targetTask.title);
+      await press('j', { ctrlKey: true }, document.body);
+      if (!enabled) {
+        assert.equal(document.querySelector('[data-compose-task-writer]'), null);
+        assert.equal(header.value, targetTask.title);
+        assert.equal(requests.length, 0);
+        return;
+      }
+      await type('Write the empty board task');
+      await press('Enter');
+      const saved = { ...targetTask, title: 'Release checklist', description_: { content: '<p>Tests and rollout</p>' } };
+      await finish(false, newWindow ? saved : { ...saved, id: 91, uniqueIndex: 5 });
+      assert.equal(document.getElementById('title-input'), header, 'the header stays mounted without a reload');
+      assert.equal(header.value, newWindow ? saved.title : targetTask.title);
+      assert.equal(headerState().currentTask.title, newWindow ? saved.title : targetTask.title);
+      assert.equal(headerState().parsedTask, JSON.stringify(targetTask), 'the initialization snapshot remains unchanged');
+      assert.equal(requests[0].body.existingTaskId, newWindow ? targetTask.id : undefined);
+      assert.equal(cacheAdds.length, newWindow ? 0 : 1);
+      assert.equal(cacheUpdates.length, newWindow ? 1 : 0);
+      if (newWindow) assert.equal(queryClient.getQueryData(['cached-task-detail', 985, 52]).title, saved.title);
+    });
+  }
 });
 
 test('file drop works under Compose alone; New Task also accepts document tiles above the input', async (t) => {
