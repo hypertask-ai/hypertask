@@ -1,4 +1,4 @@
-.portal {
+[data-hover-tooltip-portal] {
   --z-hover-tooltip: 1000000000;
   position: fixed;
   inset: auto;
@@ -22,7 +22,7 @@
 }
 
 @starting-style {
-  .portal [data-hover-tooltip-content] {
+  [data-hover-tooltip-portal] [data-hover-tooltip-content] {
     transform: scale(0);
   }
 }

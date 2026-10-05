@@ -2,7 +2,6 @@
 
 import { ReactNode, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import styles from "./TooltipPortal.module.scss";
 
 interface Props {
   children: ReactNode | ((rect: DOMRect) => ReactNode);
@@ -137,7 +136,7 @@ const TooltipPortal = ({
   return <>
     <span ref={portalAnchorRef} aria-hidden="true" style={{ position: "absolute", width: 0, height: 0, pointerEvents: "none" }} />
     {open && rect && typeof document !== "undefined" && createPortal(
-      <div ref={portalRef} className={styles.portal} popover="manual" data-hover-tooltip-portal data-interactive={interactive || undefined}>
+      <div ref={portalRef} popover="manual" data-hover-tooltip-portal data-interactive={interactive || undefined}>
         {typeof children === "function" ? children(rect) : children}
       </div>,
       anchor?.closest("dialog[open]") ?? document.body,

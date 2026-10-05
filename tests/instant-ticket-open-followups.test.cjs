@@ -167,8 +167,9 @@ test("quiet: contact hover waits for final content only on flagged detail, retai
     "@/lib/agents/pageHref": { agentPageHref: () => null },
     "next/link": { __esModule: true, default: "a" },
     "next/navigation": { usePathname: () => pathname },
-    "@/hooks/useFlag": { useFlag: (key) => { assert.equal(key, flag); return enabled; } },
-    "@/lib/flags/keys": { HTPR_6752_INSTANT_TICKET_OPEN_FLAG: flag },
+    "./TooltipPortal": { __esModule: true, default: pass },
+    "@/hooks/useFlag": { useFlag: (key) => { if (key === "htpr-6950-tooltip-top-layer") return false; assert.equal(key, flag); return enabled; } },
+    "@/lib/flags/keys": { HTPR_6752_INSTANT_TICKET_OPEN_FLAG: flag, HTPR_6950_TOOLTIP_TOP_LAYER_FLAG: "htpr-6950-tooltip-top-layer" },
     "@floating-ui/react": { useFloating: () => ({ refs: { setFloating: noop }, context: {}, floatingStyles: {} }), useInteractions: () => ({ getFloatingProps: (props) => props }), FloatingFocusManager: pass, FloatingPortal: pass },
     "lucide-react": { Check: () => null, Copy: () => null },
   };
