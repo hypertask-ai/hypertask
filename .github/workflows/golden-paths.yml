@@ -1,0 +1,67 @@
+name: Production Golden Paths
+
+# Independent of deploy pushes. No rollback, provisioning or stored app token.
+on:
+  schedule:
+    - cron: "17 */2 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: production-golden-paths
+  cancel-in-progress: false
+
+jobs:
+  monitor:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: "24"
+      - name: Restore daily green heartbeat receipt
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: ${{ runner.temp }}/golden-paths-heartbeat.json
+          key: golden-paths-heartbeat-${{ github.run_id }}-${{ github.run_attempt }}
+          restore-keys: golden-paths-heartbeat-
+      - name: Fresh login and golden paths
+        id: monitor
+        env:
+          # Existing accounts only, one with a Firebase uid and one without.
+          # Each mailbox refresh token grants gmail.readonly, not app access.
+          # Exact setup and scope restrictions: docs/golden-paths.md.
+          HYPERTASK_HEALTH_FIREBASE_EMAIL: ${{ secrets.HYPERTASK_HEALTH_FIREBASE_EMAIL }}
+          HYPERTASK_HEALTH_NO_FIREBASE_EMAIL: ${{ secrets.HYPERTASK_HEALTH_NO_FIREBASE_EMAIL }}
+          HYPERTASK_HEALTH_FIREBASE_MAIL_REFRESH_TOKEN: ${{ secrets.HYPERTASK_HEALTH_FIREBASE_MAIL_REFRESH_TOKEN }}
+          HYPERTASK_HEALTH_NO_FIREBASE_MAIL_REFRESH_TOKEN: ${{ secrets.HYPERTASK_HEALTH_NO_FIREBASE_MAIL_REFRESH_TOKEN }}
+          HYPERTASK_HEALTH_MAIL_CLIENT_ID: ${{ secrets.HYPERTASK_HEALTH_MAIL_CLIENT_ID }}
+          HYPERTASK_HEALTH_MAIL_CLIENT_SECRET: ${{ secrets.HYPERTASK_HEALTH_MAIL_CLIENT_SECRET }}
+          HYPERTASK_HEALTH_PROJECT_ID: ${{ secrets.HYPERTASK_HEALTH_PROJECT_ID }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          GOLDEN_PATHS_STATE_FILE: ${{ runner.temp }}/golden-paths-heartbeat.json
+        run: node .github/scripts/golden-paths.mjs
+      - name: Persist daily green heartbeat receipt
+        if: always() && steps.monitor.outcome == 'success'
+        uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: ${{ runner.temp }}/golden-paths-heartbeat.json
+          key: golden-paths-heartbeat-${{ github.run_id }}-${{ github.run_attempt }}
+      - name: Alert if the monitor could not start or persist its heartbeat
+        if: failure() && steps.monitor.outcome != 'failure'
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: |
+          if [ -z "$TELEGRAM_BOT_TOKEN" ] || [ -z "$TELEGRAM_CHAT_ID" ]; then
+            echo '::error::NOT CONFIGURED: TELEGRAM_BOT_TOKEN or TELEGRAM_CHAT_ID'
+            exit 1
+          fi
+          curl --fail --silent --show-error --max-time 20 --output /dev/null \
+            "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
+            --data-urlencode "chat_id=${TELEGRAM_CHAT_ID}" \
+            --data-urlencode "text=Golden paths FAIL: workflow setup or heartbeat persistence failed. https://github.com/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
