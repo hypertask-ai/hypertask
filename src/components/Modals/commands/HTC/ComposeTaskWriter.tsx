@@ -255,7 +255,7 @@ export default function ComposeTaskWriter({ active, destinationProject, onCreate
           <div className="flex w-full flex-col rounded-[5px] bg-ai-tiptap px-3 py-2">
             {newTaskWindow && attachments && (mobile ? attachments : (
               // Reserve space for the textarea, actions and footer without clipping their tooltips.
-              <div className="max-h-[calc(65dvh-20rem)] overflow-y-auto">{attachments}</div>
+              <div className="max-h-[max(6rem,calc(65dvh-20rem))] overflow-y-auto">{attachments}</div>
             ))}
             <AiComposerTextarea
               ref={input}

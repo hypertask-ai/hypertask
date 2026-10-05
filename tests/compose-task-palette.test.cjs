@@ -1209,7 +1209,7 @@ test('New Task desktop leaves action tooltips unclipped and scrolls only attachm
       const previews = writer.querySelector('[data-thumbnails]');
       assert.equal(previews.children.length, 30);
       if (newWindow && !mobile) {
-        assert.equal(previews.parentElement.className, 'max-h-[calc(65dvh-20rem)] overflow-y-auto');
+        assert.equal(previews.parentElement.className, 'max-h-[max(6rem,calc(65dvh-20rem))] overflow-y-auto');
         assert.equal(previews.parentElement.contains(input()), false, 'text and actions stay outside attachment scrolling');
       } else assert.equal(previews.parentElement.className, 'flex w-full flex-col rounded-[5px] bg-ai-tiptap px-3 py-2');
       assert.equal(input().className.includes('max-h-52 overflow-y-auto'), newWindow);
