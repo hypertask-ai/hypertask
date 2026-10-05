@@ -54,9 +54,10 @@ test("a push attempt that yields no token falls back to the email action", () =>
   );
   // Both layouts already route pushDenied to the email action; widening the
   // flag is what makes the unsupported case recover too.
-  assert.equal(nudge.match(/pushDenied \? enableEmail : enablePush/g).length, 2);
+  assert.match(nudge, /const denied = !hydrated && inboxDocument \? inboxDocument\.data\.nudge\.pushDenied : pushDenied;/);
+  assert.equal(nudge.match(/denied \? enableEmail : enablePush/g).length, 2);
   assert.equal(
-    nudge.match(/pushDenied \? "Get updates by email" : "Enable notifications"/g).length,
+    nudge.match(/denied \? "Get updates by email" : "Enable notifications"/g).length,
     2,
   );
 });
