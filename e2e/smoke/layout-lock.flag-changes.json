@@ -3,21 +3,53 @@
     "flag": "htpr-6422-my-tasks-views",
     "ticket": "https://app.hypertask.ai/detail/project-15/6422",
     "screen": "my-tasks/Desktop",
-    "landmarks": ["title", "toolbar", "list", "splits"],
+    "landmarks": [
+      "title",
+      "toolbar",
+      "list",
+      "splits"
+    ],
     "reason": "The ticket asks for 'view tabs on top', above the existing My Tasks heading, controls, board splits and task list."
   },
   {
     "flag": "htpr-6422-my-tasks-views",
     "ticket": "https://app.hypertask.ai/detail/project-15/6422",
     "screen": "my-tasks/Mobile",
-    "landmarks": ["title"],
+    "landmarks": [
+      "title"
+    ],
     "reason": "The ticket asks for 'view tabs on top', moving the heading down. Toolbar and list remain locked because the time-group flag also causes unrequested resizing of those landmarks."
   },
   {
     "flag": "htpr-6556-mobile-description-first",
     "ticket": "https://app.hypertask.ai/detail/project-15/6556",
     "screen": "new-task/Mobile",
-    "landmarks": ["title", "description", "properties"],
+    "landmarks": [
+      "title",
+      "description",
+      "properties"
+    ],
     "reason": "Valentin asks to 'collapse the properties and the title' so the user 'focuses only on the task description'. The title and properties disappear and the description moves up into their space."
+  },
+  {
+    "flag": "htpr-6455-my-tasks-time-group",
+    "ticket": "https://app.hypertask.ai/detail/project-15/6958",
+    "screen": "my-tasks/Mobile",
+    "landmarks": [
+      "toolbar",
+      "list"
+    ],
+    "reason": "UNREQUESTED move, tracked as a bug to fix, not an approved change. Remove this entry in that fix."
+  },
+  {
+    "flag": "htpr-6899-stable-layout",
+    "ticket": "https://app.hypertask.ai/detail/project-15/6959",
+    "screen": "ticket/Desktop",
+    "landmarks": [
+      "first-comment",
+      "last-comment",
+      "composer"
+    ],
+    "reason": "UNREQUESTED move, tracked as a bug to fix, not an approved change. The flag stays Off until fixed. Remove this entry in that fix."
   }
 ]
