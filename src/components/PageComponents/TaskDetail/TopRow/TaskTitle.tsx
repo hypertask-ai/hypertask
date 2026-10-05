@@ -174,11 +174,12 @@ const TaskTitle = () => {
         onChange={onChangeTitle}
         onKeyDown={(e) => {
           var cmdControl = (isApple && e.metaKey) || (!isApple && e.ctrlKey);
-          if (_mbl) {
-            if (e.key === "Enter") handleTitleSave(true);
-          } else {
-            if (e.key === "Enter" && (e.ctrlKey || e.metaKey))
-              handleTitleSave(true);
+          if (e.key === "Enter" && !e.nativeEvent.isComposing) {
+            e.preventDefault();
+            handleTitleSave(true);
+            return;
+          }
+          if (!_mbl) {
             // [cmd/ctrl][j]
             if (e.keyCode === 74 && cmdControl) {
               e.preventDefault();
