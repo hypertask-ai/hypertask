@@ -39,7 +39,6 @@ test("flag off renders production tooltips and flag on renders the top-layer por
     }
     window.HTMLElement.prototype.showPopover = function () { this.dataset.topLayer = "shown"; };
     stub("src/hooks/useFlag.tsx", { useFlag: (key) => key === flag && enabled });
-    stub("src/components/Common/TooltipPortal.module.scss", { default: { portal: "tooltip-portal" } });
     stub("src/utils/undoActions/helperFuncs.ts", { cn: (...classes) => require("tailwind-merge").twMerge(require("clsx").clsx(classes)) });
     stub("src/utils/helperFunctions/helperFunctions.ts", { formatDateToGMT: () => "5 October 2026, 12:00 GMT", convertToPlain: (text) => text });
     stub("src/utils/generateTime.ts", { default: () => "just now" });

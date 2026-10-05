@@ -22,7 +22,7 @@ function sourceFiles(directory) {
 }
 
 test("the shared hover-tooltip layer clears every numeric app layer", () => {
-  const styles = read("src/components/Common/TooltipPortal.module.scss");
+  const styles = read("src/styles/_tooltip-portal.scss");
   const definitions = [...styles.matchAll(/--z-hover-tooltip:\s*(\d+)/g)];
   assert.equal(definitions.length, 1);
   const tooltipLayer = Number(definitions[0][1]);
@@ -68,7 +68,7 @@ test("real tooltip components escape clipped and transformed ancestors without c
     "src/utils/undoActions/helperFuncs.ts",
     "src/utils/helperFunctions/helperFunctions.ts",
     "src/hooks/useFlag.tsx",
-    "src/components/Common/TooltipPortal.module.scss",
+    "src/styles/_tooltip-portal.scss",
   ].map((file) => path.join(root, file));
   const previousModules = stubPaths.map((file) => require.cache[file]);
   let reactRoot;
