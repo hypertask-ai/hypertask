@@ -10,9 +10,10 @@ interface Props {
   groupHoverId?: string;
   anchorElement?: Element | null;
   anchorRect?: DOMRect | null;
-  placement?: "inline" | "below" | "fixed";
+  placement?: "inline" | "trigger" | "below" | "fixed";
   adjustToViewport?: boolean;
   interactive?: boolean;
+  onPosition?: () => void;
 }
 
 const TooltipPortal = ({
@@ -25,6 +26,7 @@ const TooltipPortal = ({
   placement = "inline",
   adjustToViewport = true,
   interactive = false,
+  onPosition,
 }: Props) => {
   const portalAnchorRef = useRef<HTMLSpanElement>(null);
   const portalRef = useRef<HTMLDivElement>(null);
@@ -43,7 +45,7 @@ const TooltipPortal = ({
 
     const groupClass = `group${groupHoverId}`;
     let trigger: Element | null = parent;
-    if (placement === "inline") {
+    if (placement === "inline" || placement === "trigger") {
       while (trigger && !trigger.classList.contains(groupClass)) trigger = trigger.parentElement;
     }
     trigger ??= parent;
@@ -80,8 +82,10 @@ const TooltipPortal = ({
       let top = placement === "below" ? nextRect.bottom + 8 : placement === "fixed" ? 0 : nextRect.top;
       portal.style.left = `${left}px`;
       portal.style.top = `${top}px`;
-      portal.style.width = `${placement === "inline" ? nextRect.width : 0}px`;
-      portal.style.height = `${placement === "inline" ? nextRect.height : 0}px`;
+      const relative = placement === "inline" || placement === "trigger";
+      portal.style.width = `${relative ? nextRect.width : 0}px`;
+      portal.style.height = `${relative ? nextRect.height : 0}px`;
+      onPosition?.();
       if (!adjustToViewport || placement === "fixed") return;
       const tooltipRect = portal.firstElementChild?.getBoundingClientRect();
       if (!tooltipRect) return;
@@ -107,7 +111,7 @@ const TooltipPortal = ({
       window.removeEventListener("resize", updatePosition);
       observer?.disconnect();
     };
-  }, [anchor, anchorRect, open, placement, adjustToViewport, !!rect]);
+  }, [anchor, anchorRect, open, placement, adjustToViewport, onPosition, !!rect]);
 
   useLayoutEffect(() => {
     const portal = portalRef.current;

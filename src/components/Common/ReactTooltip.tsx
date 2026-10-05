@@ -92,7 +92,7 @@ const TopLayerReactTooltip = ({
   className,
   setPosition = true,
 }: Props) => (
-  <TooltipPortal hover={!className?.split(/\s+/).includes("scale-100")} groupHoverId={groupHoverId} adjustToViewport={shouldReAdjustToViewport}>
+  <TooltipPortal placement="trigger" hover={!className?.split(/\s+/).includes("scale-100")} groupHoverId={groupHoverId} adjustToViewport={shouldReAdjustToViewport}>
     {(rect) => {
       const showAbove = rect.top >= 190;
       return <ReactTooltipContent
