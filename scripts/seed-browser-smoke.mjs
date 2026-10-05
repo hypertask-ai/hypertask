@@ -299,7 +299,7 @@ try {
   if (instantOpenControl || allFlagsOn || liveLikeControl) {
     // Controls reuse the logged-in user and fixtures, changing only local flag rows.
     const fixture = JSON.parse(await readFile(fixtureFile, "utf8"));
-    await writeFile(fixtureFile, JSON.stringify({ ...fixture, flags }));
+    await writeFile(fixtureFile, JSON.stringify({ ...fixture, flags, allFlagsOn }));
   } else {
     await seedSessionFixtures(flags);
   }

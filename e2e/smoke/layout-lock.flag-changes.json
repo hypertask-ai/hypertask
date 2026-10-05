@@ -1,0 +1,23 @@
+[
+  {
+    "flag": "htpr-6422-my-tasks-views",
+    "ticket": "https://app.hypertask.ai/detail/project-15/6422",
+    "screen": "my-tasks/Desktop",
+    "landmarks": ["title", "toolbar", "list", "splits"],
+    "reason": "The ticket asks for 'view tabs on top', above the existing My Tasks heading, controls, board splits and task list."
+  },
+  {
+    "flag": "htpr-6422-my-tasks-views",
+    "ticket": "https://app.hypertask.ai/detail/project-15/6422",
+    "screen": "my-tasks/Mobile",
+    "landmarks": ["title"],
+    "reason": "The ticket asks for 'view tabs on top', moving the heading down. Toolbar and list remain locked because the time-group flag also causes unrequested resizing of those landmarks."
+  },
+  {
+    "flag": "htpr-6556-mobile-description-first",
+    "ticket": "https://app.hypertask.ai/detail/project-15/6556",
+    "screen": "new-task/Mobile",
+    "landmarks": ["title", "description", "properties"],
+    "reason": "Valentin asks to 'collapse the properties and the title' so the user 'focuses only on the task description'. The title and properties disappear and the description moves up into their space."
+  }
+]

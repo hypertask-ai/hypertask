@@ -9,7 +9,8 @@
 import { test, expect, type Page } from '@playwright/test'
 import { readFileSync, existsSync, writeFileSync } from 'node:fs'
 import { createHash } from 'node:crypto'
-import { layoutDifferences, verticalOrder, LAYOUT_CHANGE_MESSAGE, type Box, type Screen } from './lib/layout-lock'
+import { layoutDifferences, validateFlagChanges, verticalOrder, LAYOUT_CHANGE_MESSAGE, type Box, type Screen, type FlagChange } from './lib/layout-lock'
+import { FEATURE_FLAG_KEYS } from '../../src/lib/flags'
 import path from 'node:path'
 import { withRealtime } from './lib/realtime'
 
@@ -17,6 +18,7 @@ const fixturePath = path.join(path.dirname(process.env.BROWSER_SMOKE_STATE_FILE 
 
 const baselinePath = path.join(__dirname, 'layout-lock.baseline.json')
 const update = process.env.LAYOUT_LOCK_UPDATE === '1'
+const flagChanges = JSON.parse(readFileSync(path.join(__dirname, 'layout-lock.flag-changes.json'), 'utf8')) as FlagChange[]
 test.use({ storageState: process.env.BROWSER_SMOKE_STATE_FILE || 'e2e/smoke/.state/smoke-state.json' })
 
 type Baseline = {
@@ -26,6 +28,14 @@ type Baseline = {
   viewports: Record<string, { viewport: { width: number; height: number }; screens: Record<string, Screen> }>
 }
 type Targets = Record<string, { selector: string; contentHeight?: boolean }>
+
+test.beforeAll(() => {
+  const baseline = JSON.parse(readFileSync(baselinePath, 'utf8')) as Baseline
+  const screens = Object.fromEntries(Object.entries(baseline.viewports).flatMap(([device, viewport]) =>
+    Object.entries(viewport.screens).map(([screen, value]) => [`${screen}/${device}`, value]),
+  ))
+  expect(validateFlagChanges(flagChanges, FEATURE_FLAG_KEYS, screens), 'layout flag change ratchet must shrink when flags retire').toEqual([])
+})
 
 const target = (selector: string, contentHeight = false) => ({ selector, ...(contentHeight ? { contentHeight } : {}) })
 
@@ -98,7 +108,7 @@ for (const name of [...screens, 'ticket from board card']) {
   const fromBoard = name === 'ticket from board card'
   const screen = fromBoard ? 'ticket' : name
   test(`layout baseline: ${name}`, async ({ page }, testInfo) => {
-    const fixture = JSON.parse(readFileSync(fixturePath, 'utf8')) as { taskId: number; detailPath: string; flags: Record<string, boolean> }
+    const fixture = JSON.parse(readFileSync(fixturePath, 'utf8')) as { taskId: number; detailPath: string; flags: Record<string, boolean>; allFlagsOn?: boolean }
     const phone = testInfo.project.name === 'Mobile'
     const route = screen === 'ticket' ? fixture.detailPath
       : screen === 'new-task' ? '/new'
@@ -144,6 +154,7 @@ for (const name of [...screens, 'ticket from board card']) {
       previous = next
       return stable
     }, { intervals: [100, 200, 400], timeout: 10_000 }).toBe(true)
+    await testInfo.attach('layout-measurement', { body: JSON.stringify({ screen: `${name}/${testInfo.project.name}`, actual, flags }), contentType: 'application/json' })
     if (update && !fromBoard) {
       expect(testInfo.config.workers, 'baseline updates must be serial (--workers=1)').toBe(1)
       expect(process.env.LAYOUT_LOCK_SOURCE_COMMIT, 'record the origin/production source commit').toMatch(/^[a-f0-9]{40}$/)
@@ -168,7 +179,9 @@ for (const name of [...screens, 'ticket from board card']) {
       const expected = baseline.viewports[testInfo.project.name]
       expect(page.viewportSize()).toEqual(expected.viewport)
       expect(Object.keys(expected.screens[screen].landmarks).sort(), 'baseline must cover every declared landmark').toEqual(Object.keys(targets).sort())
-      expect(layoutDifferences(`${name}/${testInfo.project.name}`, expected.screens[screen], actual)).toEqual([])
+      expect(layoutDifferences(`${screen}/${testInfo.project.name}`, expected.screens[screen], actual, fixture.allFlagsOn
+        ? { entries: flagChanges, registry: FEATURE_FLAG_KEYS, flags }
+        : undefined)).toEqual([])
     }
   })
 }
@@ -181,7 +194,7 @@ test.beforeEach(async ({ page }, testInfo) => {
 })
 
 test('layout lock: comment composer is the end of the ticket thread', async ({ page }) => {
-  const fixture = JSON.parse(readFileSync(fixturePath, 'utf8')) as { taskId: number; detailPath: string; flags: Record<string, boolean> }
+  const fixture = JSON.parse(readFileSync(fixturePath, 'utf8')) as { taskId: number; detailPath: string; flags: Record<string, boolean>; allFlagsOn?: boolean }
   for (const entry of ['direct', 'board card']) {
     await test.step(entry, async () => {
       const flagsResponse = page.waitForResponse((response) => new URL(response.url()).pathname === '/api/flags' && response.ok())

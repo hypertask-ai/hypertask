@@ -2,7 +2,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
-const { layoutDifferences, verticalOrder, LAYOUT_CHANGE_MESSAGE } = require('jiti')(__filename)('../e2e/smoke/lib/layout-lock.ts');
+const { layoutDifferences, validateFlagChanges, verticalOrder, LAYOUT_CHANGE_MESSAGE } = require('jiti')(__filename)('../e2e/smoke/lib/layout-lock.ts');
 
 const box = (y, width = 300, height = 40) => ({ x: 16, y, width, height });
 const baseline = {
@@ -49,6 +49,80 @@ test('vertical reordering fails even when every box stays within pixel tolerance
   const failures = layoutDifferences('board/Desktop', expected, { a: box(10), b: box(0) });
   assert.equal(failures.length, 1);
   assert.match(failures[0], /b: vertical order changed: expected a before b/);
+});
+
+const flag = 'htpr-6422-my-tasks-views';
+const change = {
+  flag, ticket: 'https://app.hypertask.ai/detail/project-15/6422', screen: 'ticket/Desktop',
+  landmarks: ['composer'], reason: 'The ticket explicitly requests this landmark change.',
+};
+const allowances = (entries = [change]) => ({ entries, registry: [flag], flags: { [flag]: true } });
+
+test('all-flags-on allows only listed landmarks under enabled registered flags, not live-like drift', () => {
+  const boxes = actual();
+  boxes.composer.y += 56;
+  assert.deepEqual(layoutDifferences('ticket/Desktop', baseline, boxes, allowances()), []);
+  assert.equal(layoutDifferences('ticket/Desktop', baseline, boxes).length, 1);
+  for (const options of [allowances([]), { ...allowances(), registry: [] }, { ...allowances(), flags: { [flag]: false } }]) {
+    const failures = layoutDifferences('ticket/Desktop', baseline, boxes, options);
+    assert.equal(failures.length, 1);
+    assert.match(failures[0], /ticket\/Desktop: composer:.*must be listed.*registered flag.*ticket that asked for this change/);
+  }
+  assert.equal(layoutDifferences('ticket/Mobile', baseline, boxes, allowances()).length, 1);
+});
+
+test('one listed landmark cannot hide another unrequested drift or a different screen', () => {
+  const boxes = actual();
+  boxes.composer.y += 56;
+  boxes.title.y += 56;
+  const failures = layoutDifferences('ticket/Desktop', baseline, boxes, allowances());
+  assert.equal(failures.length, 1);
+  assert.match(failures[0], /ticket\/Desktop: title:/);
+  assert.deepEqual(layoutDifferences('ticket/Desktop', baseline, { ...actual(), composer: null }, allowances()), []);
+});
+
+test('vertical reordering requires both involved landmarks to be listed', () => {
+  const expected = { landmarks: { a: { selector: '#a', box: box(0) }, b: { selector: '#b', box: box(10) } }, order: [['a'], ['b']] };
+  const boxes = { a: box(10), b: box(0) };
+  const failures = layoutDifferences('ticket/Desktop', expected, boxes, allowances([{ ...change, landmarks: ['b'] }]));
+  assert.equal(failures.length, 1);
+  assert.match(failures[0], /ticket\/Desktop: a: vertical order changed/);
+  assert.deepEqual(layoutDifferences('ticket/Desktop', expected, boxes, allowances([{ ...change, landmarks: ['a', 'b'] }])), []);
+});
+
+test('retired or unknown flags fail the ratchet even when the layout did not move', () => {
+  assert.deepEqual(validateFlagChanges([change], [flag], { 'ticket/Desktop': baseline }), []);
+  const failures = validateFlagChanges([change], [], { 'ticket/Desktop': baseline });
+  assert.equal(failures.length, 1);
+  assert.match(failures[0], /ticket\/Desktop: htpr-6422-my-tasks-views: flag no longer exists in the registry/);
+  assert.match(failures[0], /Remove.*entry and update the live-like baseline instead/);
+});
+
+test('ratchet requires the matching full ticket URL, reason, exact screen and unique existing landmarks', () => {
+  for (const invalid of [
+    { ...change, ticket: 'https://app.hypertask.ai/detail/project-15/6556' },
+    { ...change, ticket: 'HTPR-6422' }, { ...change, reason: '' },
+    { ...change, screen: 'ticket' }, { ...change, landmarks: [] },
+    { ...change, landmarks: ['typo'] }, { ...change, landmarks: ['composer', 'composer'] },
+  ]) assert.ok(validateFlagChanges([invalid], [flag], { 'ticket/Desktop': baseline }).length);
+  assert.match(validateFlagChanges([change, change], [flag], { 'ticket/Desktop': baseline })[0], /duplicate/);
+});
+
+test('spec validates the registry in both modes and applies allowances only to all-flags-on fixtures', () => {
+  const spec = fs.readFileSync(path.join(__dirname, '../e2e/smoke/layout-lock.spec.ts'), 'utf8');
+  const seed = fs.readFileSync(path.join(__dirname, '../scripts/seed-browser-smoke.mjs'), 'utf8');
+  assert.match(spec, /import \{ FEATURE_FLAG_KEYS \} from '\.\.\/\.\.\/src\/lib\/flags'/);
+  assert.match(spec, /test\.beforeAll\([\s\S]*validateFlagChanges\(flagChanges, FEATURE_FLAG_KEYS, screens\)/);
+  assert.match(spec, /layoutDifferences\([\s\S]*fixture\.allFlagsOn\s*\? \{ entries: flagChanges, registry: FEATURE_FLAG_KEYS, flags \}\s*: undefined/);
+  assert.match(seed, /JSON\.stringify\(\{ \.\.\.fixture, flags, allFlagsOn \}\)/);
+  const entries = JSON.parse(fs.readFileSync(path.join(__dirname, '../e2e/smoke/layout-lock.flag-changes.json'), 'utf8'));
+  const committed = JSON.parse(fs.readFileSync(path.join(__dirname, '../e2e/smoke/layout-lock.baseline.json'), 'utf8'));
+  const screens = Object.fromEntries(Object.entries(committed.viewports).flatMap(([device, viewport]) =>
+    Object.entries(viewport.screens).map(([screen, value]) => [`${screen}/${device}`, value])));
+  const keys = require('jiti')(__filename)('../src/lib/flags/keys.ts');
+  const definitions = fs.readFileSync(path.join(__dirname, '../src/lib/flags.ts'), 'utf8').split('const FEATURE_FLAG_DEFINITIONS = [')[1].split('export const FEATURE_FLAG_KEYS')[0];
+  const registry = [...definitions.matchAll(/key: ([A-Z_0-9]+),/g)].map(match => keys[match[1]]).filter(Boolean);
+  assert.deepEqual(validateFlagChanges(entries, registry, screens), []);
 });
 
 test('vertical order groups same-row landmarks deterministically', () => {
