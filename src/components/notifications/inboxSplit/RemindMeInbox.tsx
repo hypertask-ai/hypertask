@@ -39,7 +39,7 @@ const RemindMeInbox: React.FC<ArchiveTaskNotificationProps> = ({ children, show,
     // eslint-disable-next-line react-hooks/exhaustive-deps
     const handleKeyDown = (e: any) => {
         if (
-            showRemindMeModal || returnIfModalOrInputActive()) return;
+            !show || e.defaultPrevented || showRemindMeModal || returnIfModalOrInputActive()) return;
 
         // =========== press [g]
         if (e.keyCode === 71) {
@@ -98,11 +98,14 @@ const RemindMeInbox: React.FC<ArchiveTaskNotificationProps> = ({ children, show,
                 {children}
             </button>
             {showRemindMeModal &&
-                <RemindMeComponent
-                    closeHandler={toggleRemindMeModal}
-                    isBulkMode={mode === "Bulk"}
-                    bulkItems={selectedNotifications.map(x => ({ taskId: x.taskId, projectId: x.projectId }))}
-                />}
+                // Portal clicks still bubble through the React tree to the Inbox row.
+                <div onClick={(e) => e.stopPropagation()}>
+                    <RemindMeComponent
+                        closeHandler={toggleRemindMeModal}
+                        isBulkMode={mode === "Bulk"}
+                        bulkItems={selectedNotifications.map(x => ({ taskId: x.taskId, projectId: x.projectId }))}
+                    />
+                </div>}
 
         </>
     )
