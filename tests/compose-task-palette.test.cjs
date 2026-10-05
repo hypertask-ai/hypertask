@@ -1066,3 +1066,9 @@ test('modified Enter in New Task over a populated form never also saves the form
     assert.deepEqual(saves, newTaskWindow ? [] : ['Save', 'SaveAndClose', 'SaveAndNew'], 'flag off leaves all legacy form saves unchanged');
   }
 });
+
+test('New Task keeps the palette width Search uses', () => {
+  const source = fs.readFileSync(path.join(root, 'src/components/Modals/commands/HTC/commands.tsx'), 'utf8');
+  assert.match(source, /paletteModalSizing sm:top-\[24%\] sm:min-w-\[560px\]/);
+  assert.doesNotMatch(source, /w-\[1120px\]/);
+});

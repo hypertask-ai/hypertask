@@ -764,7 +764,7 @@ const Commands = (props: Props) => {
         autoFocus={false}
         backdrop={isInteractive?false:true}
         keyboard={false}
-        className={`paletteModalSizing ${newTaskWindow && isCompose ? "sm:!w-[1120px] sm:!min-w-0 sm:!max-w-[calc(100vw-2rem)] sm:!top-[15%]" : "sm:top-[24%] sm:min-w-[560px]"} sm:max-h-fit ${styles.links_modal} ${isInteractive ? "relative group" : ""}`}
+        className={`paletteModalSizing sm:top-[24%] sm:min-w-[560px] sm:max-h-fit ${styles.links_modal} ${isInteractive ? "relative group" : ""}`}
         // The palette is centred by auto margins inside a viewport-wide fixed box, so with
         // the AI chat panel open it centred on the window and ran underneath the panel
         // (159px of overlap on a 914px-wide window). Padding the box by the panel width
