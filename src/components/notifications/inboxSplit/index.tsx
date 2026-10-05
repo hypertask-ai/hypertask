@@ -1,5 +1,7 @@
 "use client";
 
+import { useFirstScreenSurface, type FirstScreenSnapshot } from "@/lib/firstScreen/SurfaceContext";
+import { projectInboxDateGroup } from "@/lib/firstScreen/inbox";
 import type { INotification, TRemoveFromInboxMode } from "@/models/model";
 import { useRouter } from "next/navigation";
 import {
@@ -199,13 +201,14 @@ const getDateGroupLabel = (group: string): string => {
 const groupInboxItemsByDate = (
   items: InboxTimelineItem[],
   oldestFirst = false,
+  snapshot?: FirstScreenSnapshot | null,
 ): GroupedInboxItems => {
   const groups: GroupedInboxItems = {};
 
   const groupedByDate: { [key: string]: InboxTimelineItem[] } = {};
 
   items.forEach((item) => {
-    const group = getDateGroup(item.date);
+    const group = snapshot ? projectInboxDateGroup(item.date.toISOString(), snapshot.now, snapshot.display.timeZone) : getDateGroup(item.date);
 
     if (!groupedByDate[group]) {
       groupedByDate[group] = [];
@@ -308,6 +311,7 @@ const InboxSplit = ({
   queryKey,
   draftSearchQuery = "",
 }: Props) => {
+  const snapshot = useFirstScreenSurface();
   const isMbl = useContext(MobileViewContext);
   // Notification whose snooze picker is open, set by a right swipe.
   const [snoozeTarget, setSnoozeTarget] = useState<INotification | null>(null);
@@ -407,8 +411,9 @@ const InboxSplit = ({
     return groupInboxItemsByDate(
       timelineItems,
       selectedSplit === "Blocked by you",
+      snapshot,
     );
-  }, [_notifications, activeDrafts, selectedSplit]);
+  }, [_notifications, activeDrafts, selectedSplit, snapshot]);
   const groupedInboxEntries = Object.entries(groupedInboxItems);
   const keyboardRows = useMemo<InboxKeyboardTimelineRow[]>(
     () =>

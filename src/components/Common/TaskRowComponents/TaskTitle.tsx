@@ -2,6 +2,7 @@ import TaskLabelComponent from '@/components/Modals/CreateLabel/TaskLabelCompone
 import EstimateLabelComponent from '@/components/Modals/TaskEstimate/EstimateLabelComponent';
 import PriorityLabelComponent from '@/components/Modals/TaskPriority/PriorityLabelComponent';
 import DueDateLabel from '@/components/Labels/DueDateLabel';
+import { useFirstScreenSurface } from '@/lib/firstScreen/SurfaceContext';
 import Tooltip from '@/components/Common/Tooltip';
 import { INotification, ITask } from '@/models/model';
 import React, { useContext, useRef, useState } from 'react'
@@ -26,7 +27,8 @@ interface IRenderMessageTag {
 
 export const TaskMetaChips: React.FC<{ task: ITask; showDueDate?: boolean }> = ({ task, showDueDate }) => {
     const { isIbxSlctd } = useNotificationContext();
-    const [now] = useState(() => Date.now());
+    const snapshot = useFirstScreenSurface();
+    const [now] = useState(() => snapshot ? Date.parse(snapshot.now) : Date.now());
     const MAX_LABELS = 3;
     const labels = (task.taskLabels ?? []).filter(l => l.label?.value);
     const extra = labels.length - MAX_LABELS;
@@ -151,7 +153,8 @@ const RenderMessageTag: React.FC<IRenderMessageTag> = ({ notification, selectedS
 const TitleContainer: React.FC<ITitleContainer> = ({ notification, className, task, hideDueDate }) => {
 
     const { isIbxSlctd, selectedSplit } = useNotificationContext();
-    const [now] = useState(() => Date.now());
+    const snapshot = useFirstScreenSurface();
+    const [now] = useState(() => snapshot ? Date.parse(snapshot.now) : Date.now());
     const isOverdue = !!task?.dueDate && new Date(task.dueDate).getTime() < now;
     const isBlockedByMe =
         task.waitingOnUserId != null &&
@@ -163,7 +166,7 @@ const TitleContainer: React.FC<ITitleContainer> = ({ notification, className, ta
 
     return (
         <div
-            suppressHydrationWarning
+            suppressHydrationWarning={!snapshot}
             className={className ? className : defaultClassName}
         >
             <span

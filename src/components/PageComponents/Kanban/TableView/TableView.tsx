@@ -1,4 +1,5 @@
 "use client";
+import { useFirstScreenSurface } from "@/lib/firstScreen/SurfaceContext";
 import { TableViewProps, TABLE_GRID_CLASS, isTaskRow, SECTION_CAP } from "./tableViewShared";
 export { renderAssigneeAvatars } from "./tableViewShared";
 
@@ -242,6 +243,7 @@ const TableView = ({
   const {
   renderTaskRow,
   } = createTableRowRenderer({
+    snapshot: useFirstScreenSurface(currentUser?.id),
     selectedIndex, dragOverSectionId, currentProjectSectionIds, sortState, openTask,
     customFieldBySortColumn, frozenColumnOffset, getTicketText, _currentProject, sectionTitleBySid,
     timeTotals, timeNow, draggedTaskRef, clearTaskDrag, handleMouseEnter,

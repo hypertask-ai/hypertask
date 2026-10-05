@@ -1,3 +1,4 @@
+import { useFirstScreenSurface } from "@/lib/firstScreen/SurfaceContext";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useRecoilValue } from "@/lib/state";
@@ -108,7 +109,8 @@ export const taskTimeEntriesQueryKey = (taskId: number) =>
   ["time", "entries", taskId] as const;
 
 export function useTimerNow(running: boolean) {
-  const [now, setNow] = useState(() => Date.now());
+  const snapshot = useFirstScreenSurface();
+  const [now, setNow] = useState(() => snapshot ? Date.parse(snapshot.now) : Date.now());
 
   useEffect(() => {
     if (!running) return;

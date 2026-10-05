@@ -7,14 +7,15 @@ export interface StalenessThresholds {
 }
 
 export function daysSince(
-  date: Date | string | null | undefined
+  date: Date | string | null | undefined,
+  now?: number,
 ): number | null {
   if (!date) return null;
 
   const timestamp = date instanceof Date ? date.getTime() : new Date(date).getTime();
   if (Number.isNaN(timestamp)) return null;
 
-  return Math.max(0, Math.floor((Date.now() - timestamp) / 86_400_000));
+  return Math.max(0, Math.floor(((now ?? Date.now()) - timestamp) / 86_400_000));
 }
 
 export type StalenessLevel = "none" | "warn" | "hot";

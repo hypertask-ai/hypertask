@@ -170,11 +170,11 @@ export const myTasksSortFromTable = (
 };
 
 
-export const taskInColumnDays = (t: ITask) => daysSince(t.sectionChangedAt ?? t.createdAt);
+export const taskInColumnDays = (t: ITask, now?: number) => daysSince(t.sectionChangedAt ?? t.createdAt, now);
 
-export const taskNoCommentDays = (t: ITask) => daysSince(t.lastCommentAt ?? t.createdAt);
+export const taskNoCommentDays = (t: ITask, now?: number) => daysSince(t.lastCommentAt ?? t.createdAt, now);
 
-export const taskOnBoardDays = (t: ITask) => daysSince(t.createdAt);
+export const taskOnBoardDays = (t: ITask, now?: number) => daysSince(t.createdAt, now);
 
 
 // tieBreakByRanking must be false for every level except the last: ranking is unique per task, so
@@ -196,6 +196,7 @@ export const getSortComparator = (
   tieBreakByRanking = true,
   timeTotals = new Map(),
   nowMs = Date.now(),
+  stalenessNow?: number,
 ) => {
   const order: SortingOrder = direction === "desc" ? "Descending" : "Ascending";
   const flip = direction === "desc" ? -1 : 1;
@@ -228,9 +229,9 @@ export const getSortComparator = (
   if (column === "priority") return sortByPriorityAndRankingOrder(order, tieBreakByRanking);
   if (column === "size") return sortBySizeAndRankingOrder(order, tieBreakByRanking);
   if (column === "due") return sortByDueDateOrder(order);
-  if (column === "inColumn") return (a: ITask, b: ITask) => flip * ((taskInColumnDays(a) ?? -1) - (taskInColumnDays(b) ?? -1));
-  if (column === "noComment") return (a: ITask, b: ITask) => flip * ((taskNoCommentDays(a) ?? -1) - (taskNoCommentDays(b) ?? -1));
-  if (column === "onBoard") return (a: ITask, b: ITask) => flip * ((taskOnBoardDays(a) ?? -1) - (taskOnBoardDays(b) ?? -1));
+  if (column === "inColumn") return (a: ITask, b: ITask) => flip * ((taskInColumnDays(a, stalenessNow) ?? -1) - (taskInColumnDays(b, stalenessNow) ?? -1));
+  if (column === "noComment") return (a: ITask, b: ITask) => flip * ((taskNoCommentDays(a, stalenessNow) ?? -1) - (taskNoCommentDays(b, stalenessNow) ?? -1));
+  if (column === "onBoard") return (a: ITask, b: ITask) => flip * ((taskOnBoardDays(a, stalenessNow) ?? -1) - (taskOnBoardDays(b, stalenessNow) ?? -1));
   if (column === "time") {
     return (a: ITask, b: ITask) =>
       flip *

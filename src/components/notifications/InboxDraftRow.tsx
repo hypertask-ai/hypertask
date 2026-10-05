@@ -1,6 +1,8 @@
 "use client";
 
 import { useState } from "react";
+import { useFirstScreenSurface } from "@/lib/firstScreen/SurfaceContext";
+import { projectDisplayDate } from "@/lib/firstScreen/display";
 import axios from "axios";
 import { useQueryClient } from "@tanstack/react-query";
 import toast from "react-hot-toast";
@@ -30,6 +32,7 @@ const InboxDraftRow = ({
   onFocus,
   onOpen,
 }: InboxDraftRowProps) => {
+  const snapshot = useFirstScreenSurface(userId);
   const queryClient = useQueryClient();
   const [isArchiving, setIsArchiving] = useState(false);
 
@@ -95,7 +98,7 @@ const InboxDraftRow = ({
             Draft
           </span>
           <span className="shrink-0 text-dense font-semibold text-text-light-gray md:hidden">
-            {formatDateDifference(updatedAt)}
+            {snapshot ? projectDisplayDate(updatedAt, snapshot) : formatDateDifference(updatedAt)}
           </span>
         </span>
 
@@ -109,7 +112,7 @@ const InboxDraftRow = ({
         </span>
 
         <span className="hidden min-w-[57px] shrink-0 text-dense text-text-light-gray md:block">
-          {formatDateDifference(updatedAt)}
+          {snapshot ? projectDisplayDate(updatedAt, snapshot) : formatDateDifference(updatedAt)}
         </span>
       </button>
 

@@ -21,6 +21,7 @@ function createFixture(source = fs.readFileSync(path.join(root, rowPath), "utf8"
   const empty = () => null;
   const tooltips = [];
   const mocks = {
+    "@/lib/firstScreen/SurfaceContext": { useFirstScreenSurface: () => null },
     "../Common/Tooltip": { __esModule: true, default: (props) => { tooltips.push(props); return null; } },
     "@/utils/undoActions/helperFuncs": { cn: (...args) => twMerge(clsx(args)) },
     "@/hooks/useFlag": { useFlag: () => false },

@@ -1,3 +1,4 @@
+import { useFirstScreenSurface } from "@/lib/firstScreen/SurfaceContext";
 import { useCallback, useEffect, useMemo } from "react";
 import { ITask } from "@/models/model";
 import type { IAllCommands } from "@/models/model";
@@ -14,6 +15,7 @@ type Context = Pick<TableViewProps, "myTasksSort" | "_currentProject" | "enableM
   Pick<ReturnType<typeof useTableState>, "sortState" | "customFieldBySortColumnRef" | "sectionOrderBySid" | "timeTotals" | "timeNow" | "sections" | "expanded" | "myTasksBulk" | "setExcludedTaskIds" | "persistedActiveItem" | "showArchivedOnBoard" | "isApple" | "myTasksSnoozeEnabled" | "setSelectedIndex" | "updateActiveItemAndItemInView" | "setExpanded">;
 
 export function useTableRows(context: Context) {
+  const snapshot = useFirstScreenSurface();
   const {
   sortState, myTasksSort, _currentProject, customFieldBySortColumnRef, sectionOrderBySid,
   timeTotals, timeNow, sections, expanded, enableMyTasksBulkSelection,
@@ -49,6 +51,7 @@ export function useTableRows(context: Context) {
           index === sortState.length - 1,
           timeTotals,
           timeNow,
+          snapshot ? Date.parse(snapshot.now) : undefined,
         )
       );
       const sortTasks = (tasks: ITask[]) =>
@@ -106,6 +109,7 @@ export function useTableRows(context: Context) {
     isPrioritySort,
     crossBoardPrioritySortEnabled,
     savedViewPrioritySort,
+    snapshot,
   ]);
 
   useEffect(() => {
