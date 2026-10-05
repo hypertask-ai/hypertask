@@ -58,13 +58,20 @@ async function runStep(page, agent, step, fixture) {
       await page.waitForSelector(step.arg, { visible: true, timeout: 30_000 });
       return page.click(step.arg);
     case 'input':
-      return page.locator(step.arg).fill(step.value);
+      await page.waitForSelector(step.arg, { visible: true, timeout: 30_000 });
+      return page.type(step.arg, step.value);
     case 'createFixtureTask':
       return createFixtureTask(page, fixture);
     case 'saveTask': {
-      const saved = page.waitForResponse((res) => /\/api\/tasks\/(create|createGlobally)$/.test(new URL(res.url()).pathname) && res.request().method() === 'POST', { timeout: 30_000 });
-      const [response] = await Promise.all([saved, page.locator('::-p-text(Save & close)').click()]);
+      const saved = page.waitForResponse((res) => {
+        if (new URL(res.url()).pathname !== '/api/tasks/create' || res.request().method() !== 'POST') return false;
+        const body = JSON.parse(res.request().postData() || '{}');
+        return body.title === step.value && (!fixture || body.projectId === fixture.project.id);
+      }, { timeout: 30_000 });
+      const [response] = await Promise.all([saved, page.locator('button::-p-text(Create task)').click()]);
       if (!response.ok()) throw new Error(`Task save failed: HTTP ${response.status()}`);
+      const task = await response.json();
+      if (!task?.id || task.title !== step.value) throw new Error('Task save returned no matching task');
       return;
     }
     case 'verifyCreatedTask':
@@ -190,6 +197,9 @@ async function runFlow(browser, flow) {
       }
     }
 
+    await mkdir(SCREENSHOT_DIR, { recursive: true });
+    result.screenshotPath = path.join(SCREENSHOT_DIR, `${flow.id}-${Date.now()}.png`);
+    await page.screenshot({ path: result.screenshotPath, fullPage: true });
     result.ok = true;
     result.reportPath = agent.reportFile || null;
   } catch (err) {
