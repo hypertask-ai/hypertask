@@ -39,13 +39,12 @@ probe() {
           valid=true
           ;;
         firewall)
-          # Vercel also represents all sources as separate IPv4/IPv6 Ip CIDRs.
+          # MCP clients cannot solve the platform challenge, so mcp.hypertask.ai
+          # needs an all-sources system bypass (stored as 0.0.0.0/0 and ::/0).
+          # The other hosts are covered by the live probes above.
           if jq -e '
-            .result as $rules | ["app.hypertask.ai", "mcp.hypertask.ai"] | all(.[];
-              . as $host | [$rules[] | select(.Domain == $host and .Action == "bypass" and .SourceIp == null)] as $entries |
-              any($entries[]; has("SourceIp") and .Ip == null) or
-              (any($entries[]; .Ip == "0.0.0.0/0") and any($entries[]; .Ip == "::/0"))
-            )
+            [.result[] | select(.Domain == "mcp.hypertask.ai" and .Action == "bypass")] as $entries |
+            any($entries[]; .Ip == "0.0.0.0/0") and any($entries[]; .Ip == "::/0")
           ' "$CHECK_DIR/body" >/dev/null 2>&1; then valid=true; fi
           ;;
       esac
@@ -80,7 +79,7 @@ fi
 
 if [ -n "$FAILURES" ]; then
   MSG="🔴 hypertasks: API reachability check failed.
-${FAILURES}Likely fix: the Vercel firewall system bypass for the affected host on project hypertasks-prod. Ensure all-sources bypass entries for BOTH app.hypertask.ai and mcp.hypertask.ai."
+${FAILURES}Likely fix: the Vercel firewall system bypass for the affected host on project hypertasks-prod. Ensure all-sources bypass entries for mcp.hypertask.ai."
   notify "$MSG"
   echo "::error::$MSG"
   exit 1

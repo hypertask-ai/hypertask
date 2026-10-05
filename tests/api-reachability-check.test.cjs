@@ -26,7 +26,7 @@ const HEALTHY = [
 const PROJECT_ID = "prj_oEok2iMNFPzj6AWe1KQBaIAcPaAf";
 const TEAM_ID = "team_yureFlJZ6ibwebaOOkKc5whs";
 const BYPASS_URL = `https://api.vercel.com/v1/security/firewall/bypass?projectId=${PROJECT_ID}&teamId=${TEAM_ID}`;
-const BYPASS_RULES = ["app.hypertask.ai", "mcp.hypertask.ai"].map((Domain) => ({ Domain, Action: "bypass", SourceIp: null }));
+const BYPASS_RULES = ["0.0.0.0/0", "::/0"].map((Ip) => ({ Domain: "mcp.hypertask.ai", Action: "bypass", Ip }));
 const firewallResponse = (result) => ({ status: "200", body: JSON.stringify({ result }) });
 
 const CURL_STUB = `#!/usr/bin/env node
@@ -205,15 +205,16 @@ test("multiple failed URLs share one alert and local failure needs no Telegram s
     if (telegram) {
       const text = alerts[0].find((arg) => arg.startsWith("text="));
       for (const url of URLS) assert.ok(text.includes(`${url}: status=403, x-vercel-mitigated=(empty)`));
-      assert.match(text, /BOTH app\.hypertask\.ai and mcp\.hypertask\.ai/);
+      assert.match(text, /Ensure all-sources bypass entries for mcp\.hypertask\.ai\./);
+      assert.doesNotMatch(text, /BOTH|bypass entries for app\.hypertask\.ai/);
     }
   }
 });
 
-test("firewall guard accepts both all-sources entries and authenticates only the Vercel request", async () => {
+test("firewall guard accepts MCP IPv4 and IPv6 all-sources entries without requiring an app bypass and authenticates only the Vercel request", async () => {
   for (const rules of [
     BYPASS_RULES,
-    BYPASS_RULES.flatMap(({ Domain, Action }) => ["0.0.0.0/0", "::/0"].map((Ip) => ({ Domain, Action, Ip }))),
+    [...BYPASS_RULES, { Domain: "app.hypertask.ai", Action: "bypass", Ip: "80.190.82.74" }],
   ]) {
     const output = await runProbe({}, false, [firewallResponse(rules)]);
     assert.equal(output.status, 0, output.stdout + output.stderr);
@@ -234,12 +235,14 @@ test("firewall guard rejects missing, IP-scoped, malformed, challenged and faile
   const cases = [
     firewallResponse([]),
     ...BYPASS_RULES.map((_, index) => firewallResponse(BYPASS_RULES.filter((_, other) => index !== other))),
-    ...BYPASS_RULES.map((_, index) => firewallResponse(BYPASS_RULES.map((rule, other) => index === other ? { ...rule, SourceIp: "192.0.2.1" } : rule))),
+    firewallResponse([{ Domain: "mcp.hypertask.ai", Action: "bypass", Ip: "80.190.82.74" }]),
+    firewallResponse([{ Domain: "app.hypertask.ai", Action: "bypass", Ip: "80.190.82.74" }]),
     ...BYPASS_RULES.map((_, index) => firewallResponse(BYPASS_RULES.map((rule, other) => index === other ? { ...rule, Ip: "192.0.2.1" } : rule))),
     ...BYPASS_RULES.map((_, index) => firewallResponse(BYPASS_RULES.map((rule, other) => index === other ? { ...rule, Action: "block" } : rule))),
+    firewallResponse(BYPASS_RULES.map((rule) => ({ ...rule, Action: "block" }))),
+    ...["app.hypertask.ai", "wrong.example"].map((Domain) => firewallResponse(BYPASS_RULES.map((rule) => ({ ...rule, Domain })))),
+    ...BYPASS_RULES.map((_, index) => firewallResponse(BYPASS_RULES.map((rule, other) => index === other ? { ...rule, Domain: "app.hypertask.ai" } : rule))),
     firewallResponse(BYPASS_RULES.map(({ Domain, Action }) => ({ Domain, Action }))),
-    firewallResponse(BYPASS_RULES.map(({ Domain, Action }) => ({ Domain, Action, Ip: "0.0.0.0/0" }))),
-    firewallResponse(BYPASS_RULES.map(({ Domain, Action }) => ({ Domain, Action, Ip: "::/0" }))),
     { status: "200", body: "not JSON" },
     { status: "200", body: "{}" },
     { status: "200", body: '{"result":null}' },
@@ -260,7 +263,8 @@ test("firewall guard rejects missing, IP-scoped, malformed, challenged and faile
     const text = alerts[0].find((arg) => arg.startsWith("text="));
     assert.ok(text.includes(`${BYPASS_URL}: status=${response.status}, x-vercel-mitigated=`));
     assert.match(text, /Vercel firewall system bypass.*project hypertasks-prod/);
-    assert.match(text, /BOTH app\.hypertask\.ai and mcp\.hypertask\.ai/);
+    assert.match(text, /Ensure all-sources bypass entries for mcp\.hypertask\.ai\./);
+    assert.doesNotMatch(text, /BOTH|bypass entries for app\.hypertask\.ai/);
     assert.doesNotMatch(text, /stub-vercel-token/);
   }
 });
