@@ -214,21 +214,30 @@ test("real cached range extractor pins every natural-flow top row even after scr
   assert.deepEqual(original({}), [1, 20, 21], "flag-off still pins only the existing description row");
 });
 
-test("late comments remain below the desktop composer and empty cached threads have no estimated-height gap", () => {
-  cachedLayout = true;
+test("desktop composer follows the entire virtualized thread with stable layout on and off", () => {
   secondaryPanelsReady = true;
-  const output = html(thread, false);
-  assert.match(output, /data-index="2"[^>]*>.*data-part="composer"/);
-  assert.equal((output.match(/data-part="composer"/g) || []).length, 1);
-  assert.doesNotMatch(output, /height:1500px/, "an empty cached thread must use its real top-row height");
-  assert.ok(output.indexOf('data-part="pages"') > output.indexOf('data-part="composer"'));
-  commentCount = 1;
-  const afterComments = html(thread, false);
-  assert.match(afterComments, /data-part="comment"/);
-  assert.match(afterComments, /<div style="min-height:2000px;/, "cached desktop comments keep production's expandable container");
-  assert.ok(afterComments.indexOf('data-part="comment"') > afterComments.indexOf('data-part="composer"'));
-  assert.equal((afterComments.match(/data-part="composer"/g) || []).length, 1);
+  for (const cached of [true, false]) {
+    cachedLayout = cached;
+    for (const count of [0, 1, 30]) {
+      commentCount = count;
+      const output = html(thread, false);
+      assert.equal((output.match(/data-part="composer"/g) || []).length, 1);
+      assert.ok(output.indexOf('data-part="composer"') > output.lastIndexOf('data-part="comment"'));
+      assert.match(output, /<\/div><div data-part="composer">/, "composer must be outside the virtualized height wrapper, not inside a row");
+      if (cached && !count) {
+        assert.doesNotMatch(output, /min-height:/, "empty cached threads use their real top-row height, not estimates");
+      } else {
+        assert.match(output, new RegExp(`<div style="min-height:${context().virtualizer.getTotalSize()}px;`), "reserve the full virtualized height for absolutely positioned comments");
+      }
+      if (cached) {
+        assert.match(output, /data-index="2"[^>]*position:relative/, "stable-layout top rows retain natural flow");
+        assert.ok(output.indexOf('data-part="pages"') > output.indexOf('data-part="composer"'));
+      }
+      assert.doesNotMatch(html(thread, true), /data-part="composer"/, "mobile keeps its separate composer");
+    }
+  }
   commentCount = 0;
+  cachedLayout = true;
 });
 
 let editMode = null;
