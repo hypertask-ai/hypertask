@@ -10,6 +10,7 @@ const read = (relativePath) =>
   fs.readFileSync(path.join(root, relativePath), "utf8");
 const jiti = createJiti(__filename, {
   interopDefault: true,
+  jsx: true,
   moduleCache: false,
   alias: { "@": path.join(root, "src") },
 });
@@ -26,6 +27,7 @@ const {
 // browser bundle does. The default jiti above re-evaluates per import.
 const jitiShared = createJiti(__filename, {
   interopDefault: true,
+  jsx: true,
   alias: { "@": path.join(root, "src") },
 });
 const { revokeBoardAccess: revokeBoardAccessShared } = jitiShared(
@@ -100,6 +102,7 @@ const useFakeLocalStorage = () => {
 const reloadedRevocationTombstone = () =>
   createJiti(__filename, {
     interopDefault: true,
+  jsx: true,
     moduleCache: false,
     alias: { "@": path.join(root, "src") },
   })(path.join(root, "src/lib/boardSync/revocationTombstone.ts"));

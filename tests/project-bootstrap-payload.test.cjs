@@ -15,7 +15,7 @@ const getAllRouteSource = read("src/pages/api/projects/getAll.ts");
 const boardTasksSource = read(
   "src/utils/controllers/projects/getBoardTasks.ts"
 );
-const clientSource = read("src/utils/api/Homepage/index.ts");
+const clientSource = read("src/utils/api/Homepage/index.ts") + read("src/lib/firstScreen/boardPayload.ts");
 const landingSource = read("src/app/[...boardURL]/LandingPage.tsx");
 const schemaSource = read("src/prisma/schema.prisma");
 const boardTaskTagsSource = read(

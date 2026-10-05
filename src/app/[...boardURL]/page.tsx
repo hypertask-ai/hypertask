@@ -1,4 +1,8 @@
 import { IUser } from "@/models/model";
+import { getServerBoardDocument } from "@/lib/firstScreen/serverBoardDocument";
+
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
 import { cookies } from "next/headers";
 import LandingPage from "./LandingPage";
 import { Metadata } from "next";
@@ -68,6 +72,10 @@ export default async function Page(
     redirect(buildCanonicalBoardUrl(pathResolution.projectId, searchParams));
   }
 
+  const firstScreen = await getServerBoardDocument();
+  if (firstScreen) {
+    return <LandingPage slugs={String(firstScreen.data.projectId)} user={firstScreen.data.user} authenticated />;
+  }
   const cookieStore = await cookies();
 
   let userObjString: any = cookieStore.get("nookies_user");

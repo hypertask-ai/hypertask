@@ -24,7 +24,7 @@ function bindingTarget(properties) {
   };
 }
 
-async function mountBoardRealtime(t, { realtime = false, subscribed = false } = {}) {
+async function mountBoardRealtime(t, { realtime = false, subscribed = false, seeded = false } = {}) {
   const dom = new JSDOM("<div id='root'></div>", {
     url: "https://app.hypertask.ai/project?id=15",
     pretendToBeVisual: true,
@@ -65,6 +65,8 @@ async function mountBoardRealtime(t, { realtime = false, subscribed = false } = 
   const mocks = {
     react: React,
     "@tanstack/react-query": { useQueryClient: () => queryClient },
+    "@/lib/firstScreen/SurfaceContext": { useFirstScreenSurface: () => null },
+    "@/lib/firstScreen/boardDocument": { getBoardDocument: () => seeded ? {} : null },
     "@/hooks/useFlag": { useFlag: () => flag },
     "@/lib/flags/keys": { SCOPED_BOARD_REFETCH_FLAG: "scoped" },
     "@/lib/realtime/client": {
@@ -118,7 +120,7 @@ async function mountBoardRealtime(t, { realtime = false, subscribed = false } = 
   };
   await render();
   return {
-    channel, connection, timers, fullReconciles, scopedReconciles, triggers, planningRefetches,
+    queryClient, channel, connection, timers, fullReconciles, scopedReconciles, triggers, planningRefetches,
     connects: () => connects,
     subscribes: () => subscribes,
     timerStarts: () => timerStarts,
@@ -164,6 +166,24 @@ test("flag hydration preserves the subscription and routes subsequent real event
   assert.equal(board.fullReconciles.length, 2);
   assert.deepEqual(board.triggers, ["event", "event"]);
   assert.equal(board.subscribes(), 1);
+});
+
+test("a document catches the subscription gap with a scoped background read, then re-proves access on reconnect", async (t) => {
+  const board = await mountBoardRealtime(t, { realtime: true, seeded: true });
+  assert.equal(board.fullReconciles.length, 0);
+  assert.equal(board.scopedReconciles.length, 0);
+  board.channel.subscribed = true;
+  await board.emit(board.channel, "pusher:subscription_succeeded");
+  assert.deepEqual(board.scopedReconciles, [[board.queryClient, 15, 8, { background: true }]]);
+  assert.equal(board.fullReconciles.length, 0);
+  await board.emit(board.channel, "pusher:subscription_succeeded");
+  assert.equal(board.scopedReconciles.length, 1);
+  board.connection.state = "connecting";
+  await board.emit(board.connection, "state_change", { previous: "connected", current: "connecting" });
+  board.connection.state = "connected";
+  await board.emit(board.connection, "connected");
+  await board.emit(board.channel, "pusher:subscription_succeeded");
+  assert.equal(board.fullReconciles.length, 1);
 });
 
 test("a real dropped connection reconciles once after subscription recovery", async (t) => {

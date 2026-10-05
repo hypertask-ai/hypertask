@@ -1,5 +1,15 @@
 "use client";
-import { ReactNode, useContext, useEffect, useMemo, useRef } from "react";
+import { ReactNode, useContext, useEffect, useMemo, useRef, useState } from "react";
+import { FirstScreenSurfaceProvider } from "@/lib/firstScreen/SurfaceContext";
+import { getBoardDocument, type BoardDocument } from "@/lib/firstScreen/boardDocument";
+import { adoptBoardDocument, excludeBoardDocumentRestore } from "@/lib/firstScreen/boardAdoption";
+import type { BoardDisplay } from "@/lib/firstScreen/boardDisplay";
+import BoardDisplayMirror from "@/lib/firstScreen/BoardDisplayMirror";
+import { currentUserAtom, currentProjectAtom, boardLayoutAtom, boardLayoutPreferenceAtom, appShellRailAtom,
+  appShellRailExpandedAtom, showQuickTipsAtom, showEmptyViewTabsAtom, hiddenViewTabIdsAtom, viewTabsOrderAtom,
+  tableVisibleColumnsAtom, tableColumnWidthsAtom, tableTitleWrapAtom, openAiChatByDefaultAtom,
+  aiChatAutoOpenSuppressedAtom, aiChatPinnedAtom } from "@/store";
+import type { StateInitialValues } from "@/lib/state";
 import { usePathname } from "next/navigation";
 import { Toaster } from "react-hot-toast";
 import { MobileViewContext } from "@/lib/contexts/mobileContext";
@@ -43,17 +53,29 @@ type QueryBoundary = {
   persister: DisposableQueryPersister;
 };
 
-const createQueryBoundary = (accountId: number | null): QueryBoundary => ({
-  accountId,
-  client: new QueryClient({
-    defaultOptions: {
-      queries: {
-        gcTime: 1000 * 60 * 60 * 4,
-      },
-    },
-  }),
-  persister: createQueryPersister(accountId),
-});
+const createQueryBoundary = (accountId: number | null, snapshot: BoardDocument | null): QueryBoundary => {
+  const client = new QueryClient({
+    defaultOptions: { queries: { gcTime: 1000 * 60 * 60 * 4 } },
+  });
+  const persister = createQueryPersister(accountId);
+  if (!snapshot) return { accountId, client, persister };
+  adoptBoardDocument(client, snapshot);
+  return { accountId, client, persister: { ...persister,
+    restoreClient: async () => excludeBoardDocumentRestore(await persister.restoreClient(), snapshot),
+  } };
+};
+
+const boardInitialValues = (snapshot: BoardDocument | null): StateInitialValues | undefined => {
+  if (!snapshot) return undefined;
+  const display = snapshot.display as BoardDisplay;
+  return [[currentUserAtom, snapshot.data.user], [currentProjectAtom, snapshot.data.projects.updatedProjects[0]],
+    [boardLayoutAtom, snapshot.selection.surface], [boardLayoutPreferenceAtom, display.boardLayout],
+    [appShellRailAtom, display.board.railOn], [appShellRailExpandedAtom, !display.railCollapsed], [showQuickTipsAtom, display.quickTips],
+    [showEmptyViewTabsAtom, display.board.showEmptyViewTabs], [hiddenViewTabIdsAtom, display.board.hiddenViewTabIds],
+    [viewTabsOrderAtom, display.board.viewTabsOrder], [tableVisibleColumnsAtom, display.board.tableColumns],
+    [tableColumnWidthsAtom, display.board.tableWidths], [tableTitleWrapAtom, display.board.tableTitleWrap],
+    [openAiChatByDefaultAtom, display.board.openChat], [aiChatAutoOpenSuppressedAtom, display.board.chatSuppressed], [aiChatPinnedAtom, display.board.chatPinned]];
+};
 
 /** Public share links: read-only, never the signed-in app shell. */
 function isPublicSharePath(pathname: string | null | undefined): boolean {
@@ -93,18 +115,24 @@ export default function Provider({
   initialIsMobile,
   initialIsApple,
   authenticatedUserId,
+  firstScreen,
 }: {
   children: ReactNode;
   initialIsMobile: boolean;
   initialIsApple: boolean;
   authenticatedUserId: number | null;
+  firstScreen?: BoardDocument | null;
 }) {
   const pathname = usePathname();
   const publicShare = isPublicSharePath(pathname);
-
+  // A document seed is adopted only at the existing account boundary's mount,
+  // never on a later RSC navigation over a live edit or cached ticket/back tree.
+  const [initialDocument] = useState(() => getBoardDocument(firstScreen ?? null, authenticatedUserId ?? 0));
+  const snapshot = initialDocument?.scope.accountId === authenticatedUserId ? initialDocument : null;
+  const initialValues = useMemo(() => boardInitialValues(snapshot), [snapshot]);
   const queryBoundary = useMemo(
-    () => createQueryBoundary(authenticatedUserId),
-    [authenticatedUserId],
+    () => createQueryBoundary(authenticatedUserId, snapshot),
+    [authenticatedUserId, snapshot],
   );
   const previousQueryBoundary = useRef(queryBoundary);
 
@@ -139,7 +167,7 @@ export default function Provider({
   }, []);
 
   return (
-    <>
+    <FirstScreenSurfaceProvider snapshot={snapshot}>
       <ThemeListener />
       {/* <RootErrorBoundary> */}
       <PersistQueryClientProvider
@@ -158,7 +186,7 @@ export default function Provider({
           {/* MobileViewProvider wraps UndoProvider: the undo pipeline reads
               the viewport to anchor the toast left on mobile (HTPR-5564). */}
           <MobileViewProvider initialIsMobile={initialIsMobile}>
-            <StateRoot>
+            <StateRoot key={`state-account-${authenticatedUserId ?? "guest"}`} initialValues={initialValues}>
               <UndoProvider>
                 <MobileBlockingProvider>
                   <AuthProvider authenticatedUserId={authenticatedUserId}>
@@ -166,7 +194,8 @@ export default function Provider({
                       {publicShare ? (
                         <PublicShell>{children}</PublicShell>
                       ) : (
-                        <FeatureFlagProvider userId={authenticatedUserId}>
+                        <FeatureFlagProvider userId={authenticatedUserId} initialFlags={snapshot?.flags}>
+                          <BoardDisplayMirror accountId={authenticatedUserId} />
                           <GlobalProvider authenticatedUserId={authenticatedUserId}>
                             {children}
                           </GlobalProvider>
@@ -183,6 +212,6 @@ export default function Provider({
       {/* </RootErrorBoundary> */}
       {/* <QueryClientProvider client={queryClient}> */}
       {/* </QueryClientProvider> */}
-    </>
+    </FirstScreenSurfaceProvider>
   );
 }

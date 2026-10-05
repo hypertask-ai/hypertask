@@ -535,7 +535,7 @@ test("the provider uses signed account scope and logout clears the query databas
 
   assert.match(layout, /authenticatedUserId=\{analyticsSession\?\.id \?\? null\}/);
   assert.match(provider, /createQueryPersister\(accountId\)/);
-  assert.match(provider, /createQueryBoundary\(authenticatedUserId\)/);
+  assert.match(provider, /createQueryBoundary\(authenticatedUserId, snapshot\)/);
   assert.match(provider, /key=\{`query-account-/);
   assert.match(provider, /previous\.client\.clear\(\)/);
   assert.match(provider, /previous\.persister\.dispose\(\)/);

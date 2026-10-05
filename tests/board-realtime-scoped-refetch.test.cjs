@@ -356,7 +356,9 @@ test("an event missed during initial connection is recovered after subscription"
       "@/lib/realtime/latencyCanary": {
         runRealtimeReconciliation: ({ reconcile }) => reconcile(),
       },
-      "@/hooks/useFlag": { useFlag: () => false },
+      "@/lib/firstScreen/SurfaceContext": { useFirstScreenSurface: () => null },
+    "@/lib/firstScreen/boardDocument": { getBoardDocument: () => null },
+    "@/hooks/useFlag": { useFlag: () => false },
       "@/lib/flags/keys": { SCOPED_BOARD_REFETCH_FLAG: "scoped" },
       "@/lib/realtime/boardRealtimeEventHandler": {
         createBoardRealtimeEventHandler: (refetch) => () => refetch("event"),
@@ -468,7 +470,9 @@ function mountFallbackHook(t, { connect, queryClient, accountId = USER_ID } = {}
       "@/lib/realtime/latencyCanary": {
         runRealtimeReconciliation: ({ reconcile }) => reconcile(),
       },
-      "@/hooks/useFlag": { useFlag: () => false },
+      "@/lib/firstScreen/SurfaceContext": { useFirstScreenSurface: () => null },
+    "@/lib/firstScreen/boardDocument": { getBoardDocument: () => null },
+    "@/hooks/useFlag": { useFlag: () => false },
       "@/lib/flags/keys": { SCOPED_BOARD_REFETCH_FLAG: "scoped" },
       "@/lib/realtime/boardRealtimeEventHandler": { createBoardRealtimeEventHandler },
     },

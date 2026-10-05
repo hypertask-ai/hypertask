@@ -15,6 +15,8 @@ import {
 import { useEffect, useLayoutEffect, useRef } from "react";
 import { discardEarlyBoardBootstrap } from "@/lib/boardBootstrap/earlyBoardBootstrap";
 import { useHydrated } from "@/hooks/General/useHydrated";
+import { useFirstScreenSurface } from "@/lib/firstScreen/SurfaceContext";
+import { getBoardDocument } from "@/lib/firstScreen/boardDocument";
 import { MOBILE_BOARD_SWITCHER_QUERY_KEY } from "@/hooks/MultiPages/useGetAllAccessibleBoardList";
 import {
   persistBoardRevocationFallback,
@@ -289,6 +291,7 @@ export const useGetAllBoards = (
   const accountIdRef = useRef(user.id);
   const optionsRef = useRef(options);
   const renderedProjectId = normalizeRequestedProjectId(slugs);
+  const document = getBoardDocument(useFirstScreenSurface(user.id), user.id, renderedProjectId);
   const currentScopeRef = useRef({
     accountId: user.id,
     projectId: renderedProjectId,
@@ -311,7 +314,7 @@ export const useGetAllBoards = (
   } | null>(null);
   const projectAuthorizationScopeRef = useRef<{
     scopeKey: string;
-  } | null>(null);
+  } | null>(document ? { scopeKey: `${user.id}:${renderedProjectId}` } : null);
   const mountedRef = useRef(true);
   const currentScopeKey = `${user.id}:${renderedProjectId ?? "none"}`;
   const requiresScopedAuthorization = Boolean(options?.onProjectsAuthorized);
@@ -326,8 +329,8 @@ export const useGetAllBoards = (
 
   const query = useQuery({
     queryKey: PROJECTS_ALL_QUERY_KEY,
-    enabled: options?.enabled ?? true,
-    ...(hydrated
+    enabled: (options?.enabled ?? true) && (!document || hydrated),
+    ...(hydrated || document
       ? {}
       : {
           queryKey: PROJECTS_ALL_HYDRATING_QUERY_KEY,
@@ -553,6 +556,12 @@ export const useGetAllBoards = (
       return;
     }
 
+    // Complete the account-wide metadata in place. The signed document already
+    // authorized the active board, so reuse its live side cache on this read.
+    if (document && projectAuthorizationScopeRef.current?.scopeKey === currentScopeKey) {
+      void query.refetch().catch(() => undefined);
+      return;
+    }
     let cancelled = false;
     requestGenerationRef.current += 1;
     inFlightRequestRef.current = null;
@@ -576,6 +585,7 @@ export const useGetAllBoards = (
     };
   }, [
     currentScopeKey,
+    document,
     hydrated,
     query.refetch,
     queryClient,

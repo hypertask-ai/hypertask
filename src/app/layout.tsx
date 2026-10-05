@@ -12,7 +12,7 @@ import authConfig from "@/lib/configs/auth.config";
 import { DIV_ID_CONSTANTS } from "@/lib/configs/general.config";
 import { inter } from "@/lib/fonts/inter";
 import { newsreader } from "@/lib/fonts/newsreader";
-import { ibmPlexSans } from "@/lib/fonts/ibmPlexSans";
+import { ibmPlexSans, IBM_PLEX_SANS_LATIN_FONT_HREF } from "@/lib/fonts/ibmPlexSans";
 import { SESSION_COOKIE, verifySession } from "@/lib/auth/session";
 import {
   normalizeThemePreference,
@@ -21,6 +21,8 @@ import {
 } from "@/lib/themePreferences";
 import { buildThemeBootScript } from "@/lib/themeBootScript";
 import { buildEarlyAppShellBootstrapScript } from "@/lib/appShellBootstrap/client";
+import { getServerBoardDocument } from "@/lib/firstScreen/serverBoardDocument";
+import type { BoardDisplay } from "@/lib/firstScreen/boardDisplay";
 
 export async function generateViewport() {
   const device = await isMobileDevice(); // execute the function
@@ -53,7 +55,7 @@ export default async function RootLayout(
   // correct state. The old client-side correction rerendered the complete app
   // provider subtree immediately after hydration and made a server-action
   // round trip solely to identify Apple devices.
-  const device = await isMobileDevice();
+  const [device, firstScreen] = await Promise.all([isMobileDevice(), getServerBoardDocument()]);
   // Performance identity comes from the HTTP-only, HMAC-signed session. The
   // client-writable nookies_user cookie is a claim, not authentication.
   const analyticsSession = verifySession(
@@ -94,6 +96,9 @@ export default async function RootLayout(
       data-theme={themeValue}
     >
       <head>
+        {firstScreen && ["amoled", "graphite", "porcelain"].includes(firstScreen.display.theme) && (
+          <link rel="preload" href={IBM_PLEX_SANS_LATIN_FONT_HREF} as="font" type="font/woff2" crossOrigin="anonymous" />
+        )}
         <meta
           name="theme-color"
           content={initialThemeColor}
@@ -163,9 +168,10 @@ export default async function RootLayout(
         <DeploySkewGuard />
         <SpeedInsights />
         <Provider
-          initialIsMobile={device.isMobile}
+          initialIsMobile={firstScreen ? (firstScreen.display as BoardDisplay).isMobile : device.isMobile}
           initialIsApple={device.isApple}
           authenticatedUserId={analyticsSession?.id ?? null}
+          firstScreen={firstScreen}
         >
           {children}
         </Provider>

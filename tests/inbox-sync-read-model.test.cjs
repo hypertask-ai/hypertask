@@ -9,6 +9,7 @@ const read = (relativePath) =>
   fs.readFileSync(path.join(root, relativePath), "utf8");
 const jiti = createJiti(__filename, {
   interopDefault: true,
+  jsx: true,
   moduleCache: false,
   alias: { "@": path.join(root, "src") },
 });
@@ -282,6 +283,7 @@ test("the local revision fence is synchronously visible across tabs", () => {
   try {
     const isolatedJiti = createJiti(__filename, {
       interopDefault: true,
+  jsx: true,
       moduleCache: false,
       alias: { "@": path.join(root, "src") },
     });
