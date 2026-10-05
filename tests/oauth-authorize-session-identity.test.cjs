@@ -20,6 +20,8 @@ function stubModule(filename, exports) {
 let requestCookies = {};
 let userLookup;
 let createdCode;
+let userUid;
+let userExists = true;
 
 const nextHeaders = require("next/headers");
 nextHeaders.cookies = async () => ({
@@ -40,7 +42,10 @@ stubModule(path.join(root, "src/lib/prisma.ts"), {
     user: {
       findUnique: async (args) => {
         userLookup = args;
-        return { uid: `firebase-${args.where.id}`, email: `user-${args.where.id}@example.test` };
+        return userExists ? {
+          uid: userUid === undefined ? `firebase-${args.where.id}` : userUid,
+          email: `user-${args.where.id}@example.test`,
+        } : null;
       },
     },
     agent: {
@@ -70,7 +75,7 @@ const jiti = require("jiti")(
   },
 );
 const { signSession } = jiti(path.join(root, "src/lib/auth/session.ts"));
-const { GET } = jiti(path.join(root, "src/app/oauth/authorize/route.ts"));
+const { GET, POST } = jiti(path.join(root, "src/app/oauth/authorize/route.ts"));
 
 const VICTIM_ID = 42;
 const ATTACKER_ID = 99;
@@ -102,6 +107,8 @@ function reset() {
   requestCookies = {};
   userLookup = undefined;
   createdCode = undefined;
+  userUid = undefined;
+  userExists = true;
 }
 
 test.after(() => {
@@ -140,3 +147,37 @@ test("OAuth code identity comes exclusively from the signed session", async () =
   assert.equal(createdCode.firebase_uid, `firebase-${ATTACKER_ID}`);
   assert.notEqual(createdCode.user_id, VICTIM_ID);
 });
+
+for (const uid of [null, ""]) {
+  test(`a user with uid ${JSON.stringify(uid)} uses only the signed session ID`, async () => {
+    reset();
+    userUid = uid;
+    requestCookies.nookies_user = forgedProfileCookie(VICTIM_ID);
+    requestCookies.ht_session = signSession({ id: ATTACKER_ID });
+
+    const response = await GET(authorizeRequest());
+
+    assert.equal(response.status, 307);
+    assert.equal(new URL(response.headers.get("location")).pathname, "/oauth/success");
+    assert.equal(createdCode.user_id, ATTACKER_ID);
+    assert.equal(createdCode.firebase_uid, String(ATTACKER_ID));
+  });
+}
+
+for (const method of ["GET", "POST"]) {
+  test(`a signed session for a missing user cannot authorize via ${method}`, async () => {
+    reset();
+    userExists = false;
+    requestCookies.ht_session = signSession({ id: ATTACKER_ID });
+    const getRequest = authorizeRequest();
+    const response = method === "GET" ? await GET(getRequest) : await POST(new NextRequest(getRequest.url, {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: getRequest.nextUrl.searchParams,
+    }));
+
+    assert.equal(response.status, method === "GET" ? 307 : 303);
+    assert.equal(new URL(response.headers.get("location")).pathname, "/login");
+    assert.equal(createdCode, undefined);
+  });
+}

@@ -157,8 +157,7 @@ async function exchangeRefreshToken(formData: FormData) {
     !stored ||
     stored.clientId !== clientId ||
     !stored.user.email ||
-    !stored.user.uid ||
-    stored.firebaseUid !== stored.user.uid ||
+    stored.firebaseUid !== (stored.user.uid || String(stored.user.id)) ||
     (stored.user.mcpTokensRevokedAt &&
       stored.createdAt <= stored.user.mcpTokensRevokedAt)
   ) {
@@ -236,7 +235,7 @@ async function exchangeRefreshToken(formData: FormData) {
             familyId: stored.familyId,
             clientId,
             userId: stored.user.id,
-            firebaseUid: stored.user.uid,
+            firebaseUid: stored.firebaseUid,
             accessTokenJti: nextAccessIdentity.jti,
             accessTokenExpiresAt: nextAccessIdentity.expiresAt,
             expiresAt: nextRefreshExpiry,
@@ -454,10 +453,17 @@ export async function POST(request: NextRequest) {
     }
 
     // Do not burn a valid one-time code for a request that cannot mint a token.
-    if (!authCode.user.uid || !authCode.user.email) {
+    if (!authCode.user.email) {
       return NextResponse.json(
         { error: 'server_error', error_description: 'User data incomplete' },
         { status: 500 }
+      )
+    }
+
+    if (authCode.firebase_uid !== (authCode.user.uid || String(authCode.user.id))) {
+      return NextResponse.json(
+        { error: 'invalid_grant', error_description: 'Authorization code identity does not match' },
+        { status: 400 }
       )
     }
 

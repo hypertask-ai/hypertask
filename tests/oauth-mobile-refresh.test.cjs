@@ -9,6 +9,7 @@ const root = path.resolve(__dirname, '..')
 process.env.JWT_SECRET = 'oauth-mobile-refresh-test-secret-32-chars'
 process.env.JWT_ISSUER = 'https://app.hypertask.ai'
 process.env.JWT_OAUTH_AUDIENCE = 'hypertask-native-test'
+process.env.SESSION_SECRET = 'oauth-mobile-refresh-session-test-secret'
 
 function stubModule(relativePath, exports) {
   const filename = path.join(root, relativePath)
@@ -131,17 +132,54 @@ function transactionClient() {
   }
 }
 
+let requestCookies = {}
+let approvedGrant = null
+const nextHeaders = require('next/headers')
+nextHeaders.cookies = async () => ({
+  get: (name) => requestCookies[name] === undefined
+    ? undefined
+    : { name, value: requestCookies[name] },
+})
+stubModule('src/utils/controllers/logs/createLog.ts', { default: async () => {} })
+stubModule('src/lib/mcp/clientTelemetry.ts', { logMcpCliUsage: () => {} })
+
 stubModule('src/lib/prisma.ts', {
   default: {
     $transaction: async (callback) => callback(transactionClient()),
+    user: {
+      findUnique: async ({ where }) => where.id === owner.id ? owner : null,
+      findFirst: async () => {
+        assert.fail('OAuth access tokens must resolve by signed userId, not sub or email')
+      },
+    },
+    revokedToken: {
+      findFirst: async ({ where }) => revokedAccessTokens.find((row) =>
+        row.user_id === where.user_id && where.jti.in.includes(row.jti)
+      ) ?? null,
+    },
     oAuthAuthorizationCode: {
-      findUnique: async () => ({ ...authCode, used: authorizationCodeUsed }),
+      create: async ({ data }) => {
+        Object.assign(authCode, data)
+        authorizationCodeUsed = false
+        return authCode
+      },
+      findUnique: async ({ where }) => where.code === authCode.code
+        ? { ...authCode, used: authorizationCodeUsed }
+        : null,
+    },
+    oAuthClientGrant: {
+      findUnique: async () => approvedGrant,
+      upsert: async ({ create }) => {
+        approvedGrant = create
+        return create
+      },
     },
     oAuthClient: {
-      findUnique: async () => ({
+      findUnique: async ({ where }) => where.client_id === clientId ? {
         client_id: clientId,
+        redirect_uris: ['hypertask-native://oauth/callback', 'https://client.example.test/callback'],
         grant_types: ['authorization_code', 'refresh_token'],
-      }),
+      } : null,
     },
     oAuthRefreshToken: {
       findUnique: async ({ where }) => {
@@ -164,6 +202,9 @@ const jiti = require('jiti')(
 )
 const { POST: exchangeToken } = jiti(path.join(root, 'src/app/oauth/token/route.ts'))
 const { POST: revokeToken } = jiti(path.join(root, 'src/app/oauth/revoke/route.ts'))
+const { GET: authorizeGet, POST: authorizePost } = jiti(path.join(root, 'src/app/oauth/authorize/route.ts'))
+const { signSession } = jiti(path.join(root, 'src/lib/auth/session.ts'))
+const { validateMcpAuth } = jiti(path.join(root, 'src/lib/mcp/auth.ts'))
 
 function formRequest(pathname, values) {
   return new NextRequest(`https://app.hypertask.ai${pathname}`, {
@@ -332,3 +373,100 @@ test('a refresh token replayed concurrently still revokes the winning successor'
   assert.ok(refreshRows.get(winnerHash).revokedAt instanceof Date)
   assert.equal(revokedAccessTokens.at(-1).jti, jwt.decode(winner.access_token).jti)
 })
+
+for (const uid of [null, '', 'firebase-owner']) {
+  test(`signed-in user with uid ${JSON.stringify(uid)} authorizes, exchanges and authenticates MCP`, async (t) => {
+    for (const redirectUri of ['https://client.example.test/callback', 'hypertask-native://oauth/callback']) {
+      await t.test(redirectUri, async () => {
+        owner.uid = uid
+        owner.mcpTokensRevokedAt = null
+        approvedGrant = null
+        claimedOwnerId = null
+        refreshRows.clear()
+        revokedAccessTokens.length = 0
+        requestCookies = {
+          ht_session: signSession({ id: owner.id }),
+          nookies_user: JSON.stringify({ id: 99, uid: 'firebase-victim' }),
+        }
+        const expectedSubject = uid || String(owner.id)
+        const params = {
+          response_type: 'code',
+          client_id: clientId,
+          redirect_uri: redirectUri,
+          code_challenge: challenge,
+          code_challenge_method: 'S256',
+          state: 'identity-test-state',
+        }
+        const authorizeUrl = new URL('https://app.hypertask.ai/oauth/authorize')
+        authorizeUrl.search = new URLSearchParams(params).toString()
+        const consent = await authorizeGet(new NextRequest(authorizeUrl))
+        assert.equal(consent.status, 307)
+        const consentUrl = new URL(consent.headers.get('location'))
+        assert.equal(consentUrl.pathname, '/oauth/consent')
+        const approved = await authorizePost(formRequest('/oauth/authorize',
+          Object.fromEntries(consentUrl.searchParams),
+        ))
+        assert.equal(approved.status, 303)
+        const successUrl = new URL(approved.headers.get('location'))
+        assert.equal(successUrl.pathname, '/oauth/success')
+        const callback = new URL(successUrl.searchParams.get('redirect_uri'))
+        assert.equal(callback.searchParams.get('state'), params.state)
+        assert.equal(authCode.user_id, owner.id)
+        assert.equal(authCode.firebase_uid, expectedSubject)
+
+        const exchange = await exchangeToken(formRequest('/oauth/token', {
+          grant_type: 'authorization_code',
+          code: callback.searchParams.get('code'),
+          redirect_uri: redirectUri,
+          client_id: clientId,
+          code_verifier: verifier,
+        }))
+        const initial = await exchange.json()
+        assert.equal(exchange.status, 200, JSON.stringify(initial))
+        assert.equal(jwt.decode(initial.access_token).sub, expectedSubject)
+        assert.equal(jwt.decode(initial.access_token).userId, owner.id)
+        const mcpRequest = (token) => new NextRequest('https://app.hypertask.ai/api/mcp/tasks', {
+          headers: { Authorization: `Bearer ${token}` },
+        })
+        assert.equal((await validateMcpAuth(mcpRequest(initial.access_token)))?.user.id, owner.id)
+
+        if (redirectUri.startsWith('hypertask-native:')) {
+          const initialHash = crypto.createHash('sha256').update(initial.refresh_token).digest('hex')
+          const initialRow = refreshRows.get(initialHash)
+          assert.equal(initialRow.firebaseUid, expectedSubject)
+          initialRow.firebaseUid = 'wrong-identity'
+          const mismatch = await exchangeToken(formRequest('/oauth/token', {
+            grant_type: 'refresh_token',
+            refresh_token: initial.refresh_token,
+            client_id: clientId,
+          }))
+          assert.equal(mismatch.status, 400)
+          assert.equal((await mismatch.json()).error, 'invalid_grant')
+          assert.equal(initialRow.revokedAt, null)
+          initialRow.firebaseUid = expectedSubject
+
+          const refresh = await exchangeToken(formRequest('/oauth/token', {
+            grant_type: 'refresh_token',
+            refresh_token: initial.refresh_token,
+            client_id: clientId,
+          }))
+          const refreshed = await refresh.json()
+          assert.equal(refresh.status, 200, JSON.stringify(refreshed))
+          assert.equal(jwt.decode(refreshed.access_token).sub, expectedSubject)
+          assert.equal(jwt.decode(refreshed.access_token).userId, owner.id)
+          assert.notEqual(refreshed.refresh_token, initial.refresh_token)
+          const refreshedHash = crypto.createHash('sha256').update(refreshed.refresh_token).digest('hex')
+          assert.equal(refreshRows.get(refreshedHash).firebaseUid, expectedSubject)
+          assert.equal((await validateMcpAuth(mcpRequest(refreshed.access_token)))?.user.id, owner.id)
+          assert.equal(await validateMcpAuth(mcpRequest(initial.access_token)), null)
+        } else {
+          assert.equal(initial.refresh_token, undefined)
+        }
+
+        const reconnect = await authorizeGet(new NextRequest(authorizeUrl))
+        assert.equal(new URL(reconnect.headers.get('location')).pathname, '/oauth/success')
+        assert.equal(authCode.firebase_uid, expectedSubject)
+      })
+    }
+  })
+}

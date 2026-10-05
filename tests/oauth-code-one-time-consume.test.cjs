@@ -245,7 +245,7 @@ test('two requests that read the same unused code can mint only one token', asyn
   }
 })
 
-test('PKCE, expiry, client, and redirect failures do not consume the code', async (t) => {
+test('PKCE, expiry, client, redirect and identity failures do not consume the code', async (t) => {
   const scenarios = [
     {
       name: 'PKCE verifier',
@@ -276,6 +276,18 @@ test('PKCE, expiry, client, and redirect failures do not consume the code', asyn
       request: { redirect_uri: 'https://client.example.test/other' },
       error: 'invalid_grant',
       description: 'redirect_uri does not match',
+    },
+    {
+      name: 'Firebase identity mismatch',
+      authCode: { firebase_uid: 'firebase-other-user' },
+      error: 'invalid_grant',
+      description: 'Authorization code identity does not match',
+    },
+    {
+      name: 'fallback identity mismatch',
+      authCode: { user: { uid: null }, firebase_uid: String(owner.id + 1) },
+      error: 'invalid_grant',
+      description: 'Authorization code identity does not match',
     },
   ]
 

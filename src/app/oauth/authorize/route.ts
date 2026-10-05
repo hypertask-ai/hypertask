@@ -134,7 +134,7 @@ async function resolveAgentId(
 async function issueCodeAndRedirect(
   request: NextRequest,
   validated: ValidatedRequest,
-  user: { id: number; uid: string },
+  user: { id: number; uid: string | null },
   agentIdToStore: string | null,
   redirectStatus: 303 | 307
 ) {
@@ -150,7 +150,7 @@ async function issueCodeAndRedirect(
         client_id: validated.clientId,
         redirect_uri: validated.redirectUri,
         code_challenge: validated.codeChallenge,
-        firebase_uid: user.uid,
+        firebase_uid: user.uid || String(user.id),
         user_id: user.id,
         agent_id: agentIdToStore,
         expires_at: expiresAt,
@@ -205,7 +205,7 @@ async function currentSessionUser() {
     select: { uid: true },
   })
 
-  if (!dbUser || !dbUser.uid) return { id: session.id, uid: null }
+  if (!dbUser) return null
   return { id: session.id, uid: dbUser.uid }
 }
 
@@ -226,10 +226,6 @@ export async function GET(request: NextRequest) {
       })
 
       return NextResponse.redirect(loginUrl.toString())
-    }
-
-    if (!user.uid) {
-      return invalid('User Firebase UID not found', 'server_error', 500)
     }
 
     const agent = await resolveAgentId(validated.agentIdParam, user.id)
@@ -293,10 +289,6 @@ export async function POST(request: NextRequest) {
       copyFormParams(form, loginUrl)
 
       return NextResponse.redirect(loginUrl.toString(), 303)
-    }
-
-    if (!user.uid) {
-      return invalid('User Firebase UID not found', 'server_error', 500)
     }
 
     const agent = await resolveAgentId(validated.agentIdParam, user.id)
