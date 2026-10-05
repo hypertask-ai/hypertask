@@ -544,10 +544,15 @@ export default function GlobalProvider({
   );
   const lastUsedBoardsForCycle = useRecoilValue(lastUsedBoardsAtom);
   const setAgentChatTeamCycle = useSetRecoilState(agentChatTeamCycleAtom);
+  // HTPR-6853: warm caches without subscribing the shell to unused results.
   useGetAllProjectsMinimal(["projectsAllMinimal"], undefined, {
     enabled: secondaryStartupEnabled,
+    notifyOnChangeProps: [],
   });
-  useGetHyperAI(undefined, { enabled: secondaryStartupEnabled });
+  useGetHyperAI(undefined, {
+    enabled: secondaryStartupEnabled,
+    notifyOnChangeProps: [],
+  });
   useInboxRealtime(secondaryStartupEnabled ? (currentUser?.id ?? null) : null);
   const { data: announcementsTQ } = useGetAnnouncements(
     currentUser?.id,

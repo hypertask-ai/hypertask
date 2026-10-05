@@ -51,7 +51,12 @@ const useGlobalPathCheck = (currentUser: IUser | null) => {
       !pathname?.startsWith("/detail") &&
       !pathname?.startsWith("/drafts")
     ) {
-      setGlobalFocus({ currIdx: 0, currSplit: 0 });
+      // HTPR-6853: an already-reset focus must not notify the app shell.
+      setGlobalFocus((current) =>
+        current.currIdx === 0 && current.currSplit === 0
+          ? current
+          : { currIdx: 0, currSplit: 0 }
+      );
     }
 
     // Reset specific page indexes

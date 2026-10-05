@@ -977,4 +977,5 @@ const ArchivedTasksOnBoard = ({
   return <>{children(archivedTasks)}</>;
 };
 
-export default HomePage;
+// HTPR-6853: unchanged board props must not repeat work on shell updates.
+export default React.memo(HomePage);

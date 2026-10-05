@@ -4,6 +4,7 @@ import { isValidUser } from "@/utils/edgeHelpers";
 import { parseCookies } from "nookies";
 import { useEffect, useLayoutEffect, useState, useRef } from "react";
 import { useRecoilState, useRecoilValue } from "@/lib/state";
+import { replaceEqualDeep } from "@tanstack/react-query";
 
 const useCurrentUser = (authenticatedUserId?: number | null) => {
   const [currentUser, setCurrentUser] = useState<any>(null);
@@ -23,8 +24,8 @@ const useCurrentUser = (authenticatedUserId?: number | null) => {
         user &&
         (authenticatedUserId == null || user.id === authenticatedUserId)
       ) {
-        setCurrentUser(user);
-        setRecoilCurrentUser(user);
+        setCurrentUser((current: any) => replaceEqualDeep(current, user));
+        setRecoilCurrentUser((current: any) => replaceEqualDeep(current, user));
         lastSyncedRef.current = user;
       } else if (authenticatedUserId != null) {
         setCurrentUser(null);
@@ -48,7 +49,8 @@ const useCurrentUser = (authenticatedUserId?: number | null) => {
       recoilUser !== lastSyncedRef.current &&
       (authenticatedUserId == null || recoilUser.id === authenticatedUserId)
     ) {
-      setCurrentUser(recoilUser);
+      // HTPR-6853: an equal profile must not republish the local mirror.
+      setCurrentUser((current: any) => replaceEqualDeep(current, recoilUser));
       lastSyncedRef.current = recoilUser;
     }
   }, [authenticatedUserId, recoilUser]);

@@ -76,7 +76,7 @@ test("HTPR-6072: the pending delete lookup is guarded against a ref, not a closu
     "expected a ref kept in sync with currentProject.id on every render",
   );
   const toggleMatch = src.match(
-    /const toggleDeleteModal = async[\s\S]*?getAllSubTasks\(task\.id\)[\s\S]{0,120}/,
+    /const toggleDeleteModal = (?:useCallback\()?async[\s\S]*?getAllSubTasks\(task\.id\)[\s\S]{0,120}/,
   );
   assert.ok(toggleMatch, "expected toggleDeleteModal's lookup to still exist");
   assert.ok(
@@ -171,7 +171,7 @@ test("HTPR-6072: a failed sub-task lookup does not leave taskInfo set with no mo
     "utf8",
   );
   const toggleMatch = src.match(
-    /const toggleDeleteModal = async[\s\S]*?\n  \};/,
+    /const toggleDeleteModal = (?:useCallback\()?async[\s\S]*?\n  \}(?:, \[\]\))?;/,
   );
   assert.ok(toggleMatch, "expected toggleDeleteModal to still exist");
   assert.ok(

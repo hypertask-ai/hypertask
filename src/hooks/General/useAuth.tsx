@@ -30,7 +30,7 @@ import { useRecoilState } from "@/lib/state";
 import { currentUserAtom } from "@/store";
 import useCurrentUser from "./useCurrentUserCheckFromCookies";
 import { getCurrentUserById } from "@/utils/api/Homepage";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { replaceEqualDeep, useQuery, useQueryClient } from "@tanstack/react-query";
 import { getViewFromProject } from "@/utils/helperFunctions/Views/ViewsHelperFunctions";
 import { addUserToTeamFromShareRoute } from "@/lib/constants/APIRouteConstants";
 import { MobileViewContext } from "@/lib/contexts/mobileContext";
@@ -134,9 +134,11 @@ export const AuthProvider = ({
   /**
    * Query to fetch user data when user cookie is available
    */
-  const { data } = useQuery({
+  useQuery({
     ...getUserProfileQueryOptions(authenticatedAccountId),
     queryFn: fetchUserById,
+    // HTPR-6853: fetchUserById publishes the profile; no result fields are read.
+    notifyOnChangeProps: [],
   });
 
   
@@ -543,7 +545,8 @@ export const AuthProvider = ({
         path: authConfig.cookies.options.path,
       },
     );
-    _setCurrentUser(transformedUser);
+    // HTPR-6853: equal refreshes keep the profile reference for atom consumers.
+    _setCurrentUser((current: IUser | null) => replaceEqualDeep(current, transformedUser));
   };
 
   /**

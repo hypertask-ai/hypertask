@@ -1,7 +1,7 @@
 import { getAllSubTasks } from "@/app/[...boardURL]/serverActions";
 import { ITask } from "@/models/model";
 import { boardSearchAtom, currentProjectAtom } from "@/store";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRecoilState } from "@/lib/state";
 import toast from "react-hot-toast";
 
@@ -32,7 +32,7 @@ const useKanbanModalStates = () => {
   );
   const [showSaveModal, setShowSaveModal] = useState(false);
   const [tasksToDelete, setTasksToDelete] = useState<number[]|undefined>([])
-  const toggleSaveViewsModal = () => setShowSaveModal((prev) => !prev);
+  const toggleSaveViewsModal = useCallback(() => setShowSaveModal((prev) => !prev), []);
 
   // HTPR-6072: the board tree no longer remounts on a board switch, so these
   // modals must close explicitly instead of getting torn down for free.
@@ -46,27 +46,27 @@ const useKanbanModalStates = () => {
     setShowSaveModal(false);
   }, [currentProject?.id]);
 
-  const toggleViewsModal = (switchToManage?: boolean) => {
+  const toggleViewsModal = useCallback((switchToManage?: boolean) => {
     if (switchToManage) {
       setManageViewsModal(true);
       setShowViewsModal(false);
       return;
     }
     setShowViewsModal((prev) => !prev);
-  };
+  }, []);
 
   // Closing the search also clears the keyword so the render-time filter drops.
-  const toggleSearchTasks = (val: boolean) =>
+  const toggleSearchTasks = useCallback((val: boolean) =>
     setBoardSearch((s) => ({
       open: val,
       keyword:
         val && s.projectId === currentProject?.id ? s.keyword : "",
       projectId: val ? currentProject?.id ?? null : null,
-    }));
+    })), [currentProject?.id, setBoardSearch]);
 
-  const toggleManageViewsModal = () => setManageViewsModal((prev) => !prev);
+  const toggleManageViewsModal = useCallback(() => setManageViewsModal((prev) => !prev), []);
 
-  const toggleDeleteModal = async (state: boolean, task?: ITaskDeleteInfo) => {
+  const toggleDeleteModal = useCallback(async (state: boolean, task?: ITaskDeleteInfo) => {
     if (state) {
         if(!task) return
         setTaskInfo(task)
@@ -93,9 +93,10 @@ const useKanbanModalStates = () => {
         setTaskInfo(undefined)
         setTasksToDelete(undefined)
     }
-  };
+  }, []);
 
-  return {
+  // HTPR-6853: unchanged modal inputs must not fan out to board consumers.
+  return useMemo(() => ({
     showSaveModal,
     toggleSaveViewsModal,
     showManageViewsModal,
@@ -113,7 +114,11 @@ const useKanbanModalStates = () => {
     setTasksToDelete,
     showSearchTasks,
     toggleSearchTasks,
-  };
+  }), [
+    showSaveModal, toggleSaveViewsModal, showManageViewsModal, toggleManageViewsModal,
+    toggleViewsModal, showViewsModal, showManageColumnsModal, showDeleteTaskModal,
+    toggleDeleteModal, taskInfo, tasksToDelete, showSearchTasks, toggleSearchTasks,
+  ]);
 };
 
 export default useKanbanModalStates;

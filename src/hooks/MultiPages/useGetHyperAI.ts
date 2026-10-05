@@ -1,16 +1,19 @@
 import { getHyperRoute } from "@/lib/constants/APIRouteConstants";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, type UseQueryOptions } from "@tanstack/react-query";
 import axios from "axios";
 import { consumeEarlyAppShellBootstrapSlice } from "@/lib/appShellBootstrap/client";
 
 export const useGetHyperAI = (
   initialData?: any,
-  options?: { enabled?: boolean },
+  options?: { enabled?: boolean; notifyOnChangeProps?: UseQueryOptions["notifyOnChangeProps"] },
 ) => {
   return useQuery({
     queryKey: ["hyper-ai"],
     queryFn: () => getHyperObject(),
     enabled: options?.enabled ?? true,
+    ...(options?.notifyOnChangeProps === undefined
+      ? {}
+      : { notifyOnChangeProps: options.notifyOnChangeProps }),
     initialData: initialData ?? [],
   });
 };
