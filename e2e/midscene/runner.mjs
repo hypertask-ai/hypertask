@@ -98,6 +98,13 @@ async function runStep(page, agent, step, fixture) {
       if (!bytes?.includes(`Nightly QA upload: ${fixture.title}`)) throw new Error('Uploaded attachment bytes did not match');
       return;
     }
+    case 'saveReminder': {
+      const saved = page.waitForResponse((res) => new URL(res.url()).pathname === '/api/queues/inboxReminder' && res.request().method() === 'POST', { timeout: 30_000 });
+      const [response] = await Promise.all([saved, page.locator('::-p-xpath(//*[@id="assignModal"]//*[@role="option"][span[normalize-space(.)="Tomorrow"]])').click()]);
+      if (!response.ok()) throw new Error(`Reminder save failed: HTTP ${response.status()}`);
+      await page.waitForSelector('#assignModal', { hidden: true, timeout: 30_000 });
+      return { status: response.status(), dialogClosed: true };
+    }
     case 'verifyReminder': {
       const reminders = await api(page, '/api/reminders/getAll');
       if (!reminders.some((r) => r.taskId === fixture.tasks[0] && Date.parse(r.remindAt) > Date.now())) {
