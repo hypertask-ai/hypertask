@@ -119,7 +119,9 @@ async function withPalette(t, config, check) {
     function Harness() {
       const shown = useValue('showCommandsAtom');
       const [currentTask, setCurrentTask] = React.useState(config.headerTask);
-      headerState = { parsedTask: JSON.stringify(config.headerTask ?? {}), currentTask, setCurrentTask, editMode: null };
+      const [description, setDescription] = React.useState(config.headerTask?.description_?.content ?? '');
+      const [editorState, setEditorState] = React.useState({ editMode: null, hasDraft: false, hasDraftInit: false });
+      headerState = { parsedTask: JSON.stringify(config.headerTask ?? {}), currentTask, setCurrentTask, description, setDescription, ...editorState, setEditorState };
       useCommandCenterShortcut(Object.hasOwn(config, 'userId') ? config.userId : 985, config.apple ?? false, dom.window.location.pathname, config.trial ?? false, false, toggleShowCommands);
       return React.createElement(query.QueryClientProvider, { client: queryClient },
         React.createElement(TaskContext.Provider, { value: config.headerTask ? headerState : undefined },
@@ -812,7 +814,7 @@ for (const writerFailed of [false, true]) test(`same-task fill updates the mount
   });
 });
 
-test('board quick-add same-task fill updates the real desktop header, with either flag off unchanged', async (t) => {
+test('board quick-add same-task fill updates the mounted header, description editor and properties, with either flag off unchanged', async (t) => {
   // Quick-add cards have no description_ payload, so instant open falls back
   // to the regular detail provider, which does not subscribe to the query cache.
   const targetTask = { id: 52, projectId: 7, sectionId: 12, uniqueIndex: 4, title: 'Enter task title here', description: '' };
@@ -827,7 +829,45 @@ test('board quick-add same-task fill updates the real desktop header, with eithe
       const { findCachedTaskDetail } = jiti(path.join(root, 'src/lib/navigation/cachedTaskDetail.ts'));
       assert.equal(findCachedTaskDetail(queryClient, 985, 7, 4, targetTask), undefined, 'the quick-add card cannot use instant open');
       const Title = jiti(path.join(root, 'src/components/PageComponents/TaskDetail/TopRow/TaskTitle.tsx')).default;
-      await mountProbe(() => React.createElement(Title));
+      const noop = () => null;
+      source('src/components/Common/AttachmentsView/index.tsx', { default: noop });
+      source('src/hooks/Task Detail/CommentAndDescriptionHooks/useSaveContent.ts', { default: () => ({ redirectAPI: () => assert.fail('sync must not save a description') }) });
+      source('src/lib/contexts/TaskDetail/DescriptionProvider.tsx', { useDescriptionAndCommentsContext: () => ({ ...headerState(), descriptionAttachments: [], setDescriptionAttachments: noop }) });
+      source('src/hooks/General/useHasDrafts.ts', { isMeaningfulDescriptionDraft: () => false });
+      source('src/components/PageComponents/TaskDetail/CommentAndDescription/ContextMenu/index.tsx', { HighlightMenu: noop });
+      source('src/components/PageComponents/TaskDetail/CommentAndDescription/ContextMenu/QuoteButton.tsx', { default: noop });
+      source('src/components/PageComponents/TaskDetail/CommentAndDescription/BackgroundTaskAttachments.tsx', { default: noop });
+      source('src/components/PageComponents/TaskDetail/CommentAndDescription/DescriptionContainer/InnerHtmlDescription.tsx', { default: noop });
+      const { useTaskDetailEditorFocus } = jiti(path.join(root, 'src/components/RTE/useTaskDetailEditorFocus.tsx'));
+      const syncs = [];
+      source('src/components/RTE/TipTapTaskDetail.tsx', { default: (props) => {
+        // Keep a separate mounted editor document and exercise its real idle sync hook.
+        const [html, setHtml] = React.useState(props.defaultContent ?? '');
+        const htmlRef = React.useRef(html);
+        htmlRef.current = html;
+        const [editor] = React.useState(() => ({
+          getHTML: () => htmlRef.current, setEditable: noop,
+          view: { dispatch: noop, state: { tr: {} } },
+          commands: { setContent: (content, options) => { syncs.push(options); setHtml(content); } },
+        }));
+        useTaskDetailEditorFocus({ ...props, editor, currentTask: headerState().currentTask,
+          isReadOnlyContent: true, inViewObject: {},
+          mobileEditSnapshotRef: React.useRef(null), mobileEditSessionActiveRef: React.useRef(false),
+          pendingGuestDescriptionFocusTaskRef: React.useRef(null), handledDescriptionFocusNonceRef: React.useRef(null),
+        });
+        return React.createElement('div', { id: 'description-input', dangerouslySetInnerHTML: { __html: html } });
+      } });
+      const Body = jiti(path.join(root, 'src/components/PageComponents/TaskDetail/CommentAndDescription/DescriptionContainer/DescriptonBody.tsx')).default;
+      let labels = [];
+      await mountProbe(() => {
+        const priority = query.useQuery({ queryKey: ['priority', 52], queryFn: async () => null, initialData: null, staleTime: Infinity }).data;
+        const estimate = query.useQuery({ queryKey: ['estimate', 52], queryFn: async () => null, initialData: null, staleTime: Infinity }).data;
+        const taskLabels = query.useQuery({ queryKey: ['taskLabels', 52], queryFn: async () => labels, initialData: [], staleTime: Infinity }).data;
+        return React.createElement(React.Fragment, null, React.createElement(Title), React.createElement(Body, { draftTQ: [] }),
+          React.createElement('output', { 'data-properties': true }, JSON.stringify({ priority, estimate, taskLabels })));
+      });
+      const descriptionNode = document.getElementById('description-input');
+      assert.equal(descriptionNode.textContent, '');
       const header = document.getElementById('title-input');
       assert.equal(header.value, targetTask.title);
       await press('j', { ctrlKey: true }, document.body);
@@ -839,8 +879,15 @@ test('board quick-add same-task fill updates the real desktop header, with eithe
       }
       await type('Write the empty board task');
       await press('Enter');
-      const saved = { ...targetTask, title: 'Release checklist', description_: { content: '<p>Tests and rollout</p>' } };
+      const saved = { ...targetTask, title: 'Release checklist', description_: { content: '<p>Tests and rollout</p>', attachments: [] }, priority: { id: 2 }, estimate: { id: 3 }, taskLabels: [{ id: 9 }], assignees: [{ userId: 985 }], dueDate: '2026-10-10', startDate: '2026-10-09', acceptanceCriteria: 'All checks pass' };
+      labels = saved.taskLabels;
       await finish(false, newWindow ? saved : { ...saved, id: 91, uniqueIndex: 5 });
+      await React.act(async () => { await new Promise((resolve) => setTimeout(resolve, 10)); });
+      assert.equal(document.getElementById('description-input'), descriptionNode, 'the editor stays mounted');
+      assert.equal(descriptionNode.textContent, newWindow ? 'Tests and rollout' : '');
+      assert.deepEqual(syncs, newWindow ? [{ emitUpdate: false }] : []);
+      assert.deepEqual(JSON.parse(document.querySelector('[data-properties]').textContent), newWindow ? { priority: saved.priority, estimate: saved.estimate, taskLabels: saved.taskLabels } : { priority: null, estimate: null, taskLabels: [] });
+      if (newWindow) for (const [field, value] of Object.entries(saved)) assert.deepEqual(headerState().currentTask[field], value, field);
       assert.equal(document.getElementById('title-input'), header, 'the header stays mounted without a reload');
       assert.equal(header.value, newWindow ? saved.title : targetTask.title);
       assert.equal(headerState().currentTask.title, newWindow ? saved.title : targetTask.title);
@@ -851,6 +898,42 @@ test('board quick-add same-task fill updates the real desktop header, with eithe
       if (newWindow) assert.equal(queryClient.getQueryData(['cached-task-detail', 985, 52]).title, saved.title);
     });
   }
+});
+
+test('a pending server fill preserves description work started while the writer was running', async (t) => {
+  for (const editorState of [{ editMode: 'description' }, { editMode: 'description-ai' }, { hasDraft: true }, { hasDraftInit: true }, { uploadingDescription: { content: 'Uploading' } }]) {
+    const targetTask = { id: 52, projectId: 7, sectionId: 12, uniqueIndex: 4, title: 'Enter task title here', description_: { content: '' } };
+    await withPalette(t, { newWindow: true, headerTask: targetTask, targetTask, tab: 'compose', url: '/detail/project-7/4', inView: { taskId: 52 } }, async ({ type, press, finish, headerState }) => {
+      await type('Fill the task');
+      await press('Enter');
+      const local = { ...targetTask, description_: { content: '<p>Unsaved work</p>' }, description: 'Unsaved work', descriptionJson: { local: true } };
+      await React.act(async () => {
+        headerState().setCurrentTask(local);
+        headerState().setDescription(local.description_.content);
+        headerState().setEditorState(editorState);
+      });
+      await finish(false, { ...targetTask, title: 'Saved title', priority: { id: 2 }, description_: { content: '<p>Server fill</p>' }, description: 'Server fill', descriptionJson: { server: true } });
+      assert.equal(headerState().currentTask.title, 'Saved title');
+      assert.deepEqual(headerState().currentTask.priority, { id: 2 });
+      for (const field of ['description', 'description_', 'descriptionJson']) assert.deepEqual(headerState().currentTask[field], local[field], field);
+      assert.equal(headerState().description, local.description_.content);
+      await React.act(async () => headerState().setEditorState({ editMode: null }));
+      assert.equal(headerState().description, local.description_.content, 'ending editing must not replay an old fill');
+    });
+  }
+});
+
+test('a pending fill cannot replace another task mounted before its response', async (t) => {
+  const targetTask = { id: 52, projectId: 7, sectionId: 12, uniqueIndex: 4, title: 'Enter task title here', description_: { content: '' } };
+  await withPalette(t, { newWindow: true, headerTask: targetTask, targetTask, tab: 'compose', url: '/detail/project-7/4', inView: { taskId: 52 } }, async ({ type, press, finish, headerState }) => {
+    await type('Fill the task');
+    await press('Enter');
+    const otherTask = { ...targetTask, id: 53, uniqueIndex: 5, title: 'Other task' };
+    await React.act(async () => { headerState().setCurrentTask(otherTask); headerState().setDescription('Other description'); });
+    await finish(false, { ...targetTask, title: 'Saved title', description_: { content: '<p>Server fill</p>' } });
+    assert.deepEqual(headerState().currentTask, otherTask);
+    assert.equal(headerState().description, 'Other description');
+  });
 });
 
 test('file drop works under Compose alone; New Task also accepts document tiles above the input', async (t) => {
