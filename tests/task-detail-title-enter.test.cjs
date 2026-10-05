@@ -26,7 +26,8 @@ function load(relative, dependencies) {
   return exports.default;
 }
 
-async function withTitle(t, { mobile = false, status = 200, id = 42 } = {}) {
+async function withTitle(t, { mobile = false, status = 200, id = 42, hydrate = false,
+  beforeHydration, initialTitle = "Original title" } = {}) {
   const dom = new JSDOM("<div id='root'></div><div id='description' tabindex='0'></div>", {
     url: "https://app.hypertask.ai/detail/project-7049/1",
   });
@@ -37,10 +38,10 @@ async function withTitle(t, { mobile = false, status = 200, id = 42 } = {}) {
     Object.defineProperty(global, key, { configurable: true, writable: true, value });
   }
   // React's input-event support is detected when react-dom/client is loaded.
-  const { createRoot } = require("react-dom/client");
-  const mounted = createRoot(document.getElementById("root"));
+  const { createRoot, hydrateRoot } = require("react-dom/client");
+  let mounted;
   t.after(async () => {
-    await React.act(async () => mounted.unmount());
+    if (mounted) await React.act(async () => mounted.unmount());
     dom.window.close();
     for (const [key, descriptor] of previous) {
       if (descriptor) Object.defineProperty(global, key, descriptor);
@@ -48,7 +49,7 @@ async function withTitle(t, { mobile = false, status = 200, id = 42 } = {}) {
     }
   });
   const Context = React.createContext(null);
-  const task = { id, projectId: 7049, sectionId: 19409, title: "Original title" };
+  const task = { id, projectId: 7049, sectionId: 19409, title: initialTitle };
   const requests = [], cache = [], errors = [];
   let state, pendingSave;
   const toast = Object.assign(noop, { error: (message) => errors.push(message) });
@@ -82,7 +83,18 @@ async function withTitle(t, { mobile = false, status = 200, id = 42 } = {}) {
       parsedTask: JSON.stringify(task), focusOn: (id) => document.getElementById(id)?.focus() };
     return React.createElement(Context.Provider, { value: state }, React.createElement(Title));
   }
-  await React.act(async () => mounted.render(React.createElement(Provider)));
+  const rootElement = document.getElementById("root");
+  if (hydrate) {
+    const { renderToString } = require("react-dom/server");
+    rootElement.innerHTML = renderToString(React.createElement(Provider));
+    await beforeHydration?.(document.getElementById("title-input"), dom.window);
+    await React.act(async () => {
+      mounted = hydrateRoot(rootElement, React.createElement(Provider));
+    });
+  } else {
+    mounted = createRoot(rootElement);
+    await React.act(async () => mounted.render(React.createElement(Provider)));
+  }
   const input = document.getElementById("title-input");
   return {
     input, requests, cache, errors, state: () => state,
@@ -164,3 +176,34 @@ test("Enter on an unsaved draft keeps its local title without a nonexistent-task
   assert.equal(title.input.value, "Draft rename");
   assert.deepEqual(title.requests, []);
 });
+
+for (const mobile of [false, true]) {
+  test(`direct-link ${mobile ? "mobile" : "desktop"} title waits for hydration, then Enter persists across reload`, async (t) => {
+    let savedTitle = "Original title";
+    await t.test("server HTML cannot accept an edit without save handlers", async (t) => {
+      const title = await withTitle(t, {
+        mobile, hydrate: true,
+        beforeHydration(input, window) {
+          assert.equal(input.value, savedTitle);
+          assert.equal(input.readOnly, true, "a visible server title must not accept unsaveable edits");
+          input.dispatchEvent(new window.KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
+        },
+      });
+      assert.equal(title.input.readOnly, false, "hydration enables the existing title editor");
+      assert.deepEqual(title.requests, [], "hydration alone must not rename a task");
+      await title.type("Early rename");
+      await title.press("Enter");
+      assert.deepEqual(title.requests, [{ id: 42, title: "Early rename" }]);
+      savedTitle = title.requests[0].title;
+      assert.equal(title.input.value, savedTitle);
+      await title.autosave();
+      assert.ok(title.requests.every((request) => request.title === savedTitle));
+    });
+    await t.test("reload uses the saved title", async (t) => {
+      const title = await withTitle(t, { mobile, hydrate: true, initialTitle: savedTitle });
+      assert.equal(title.input.value, "Early rename");
+      assert.equal(title.state().currentTask.title, "Early rename");
+      assert.deepEqual(title.requests, []);
+    });
+  });
+}

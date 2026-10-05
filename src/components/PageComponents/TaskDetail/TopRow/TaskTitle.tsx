@@ -38,6 +38,7 @@ const TaskTitle = () => {
   const [confirm, setConfirm] = useState<boolean>(false);
   const isApple = useDeviceContext();
   const [value, setValue] = useState<string>(_parsedTask.title);
+  const [ready, setReady] = useState(false);
   const textAreaRef = useRef<HTMLTextAreaElement>(null);
 
   const debounceSave = useDebounce(() => {
@@ -143,6 +144,9 @@ const TaskTitle = () => {
   // Neccessary Evil
   useEffect(() => {
     setValue(currentTask?.title ?? _parsedTask.title);
+    // Hydration resets a textarea's DOM value before its ref attaches. Only
+    // accept edits once handlers and this initial title sync are ready.
+    setReady(true);
   }, [currentTask?.title, _parsedTask.title]);
 
   return (
@@ -162,6 +166,7 @@ const TaskTitle = () => {
         rows={1}
         tabIndex={0}
         id="title-input"
+        readOnly={!ready}
         value={value ?? ""}
         onFocus={(e) => {
           e.target.selectionStart = e.target.value.length;
