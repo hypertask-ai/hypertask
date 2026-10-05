@@ -18,7 +18,7 @@ import { AiComposerTextarea } from "@/components/AI_CHAT/AiComposerTextarea";
 import FullScreenChatLoading from "@/components/AI_CHAT/FullScreenChatLoading";
 import { HintKey } from "@/components/Common/CommonModalComponents";
 import { extractPastedImageFiles } from "@/utils/aiChat/extractPastedImageFiles";
-import { composeTaskBoardId, composeTaskAssistantMessage, createComposedTask } from "@/lib/ai/composeTask";
+import { composeTaskBoardId, composeTaskAssistantMessage, createComposedTask, type ComposeTaskStage } from "@/lib/ai/composeTask";
 import globalAPIHandlers from "@/utils/api/global";
 import useAddDeleteTaskInBoards from "@/hooks/MultiPages/useAddDeleteTaskInBoards";
 import { useProjectQuery } from "@/hooks/General/useProjectQuery";
@@ -55,6 +55,7 @@ export default function ComposeTaskWriter({ active, destinationProject, onCreate
   const mobile = Boolean(useContext(MobileViewContext));
   const [text, setText] = useState("");
   const [writing, setWriting] = useState(false);
+  const [stage, setStage] = useState<ComposeTaskStage | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [addingImages, setAddingImages] = useState(false);
   const pendingImages = useRef(0);
@@ -143,6 +144,7 @@ export default function ComposeTaskWriter({ active, destinationProject, onCreate
     if (!enabled || sending.current || pendingImages.current > 0 || dictating || !text.trim()) return;
     sending.current = true;
     setWriting(true);
+    setStage(null);
     onBusyChange(true);
     setError(null);
     try {
@@ -165,7 +167,10 @@ export default function ComposeTaskWriter({ active, destinationProject, onCreate
       }
       if (!mounted.current) return;
       if (!project) throw new Error("Your last board is unavailable. Open a board and try again.");
-      const { task: savedTask, writerFailed } = await createComposedTask({ text, files, project, userId: user.id, ...(existingTaskId ? { existingTaskId } : {}) });
+      const { task: savedTask, writerFailed } = await createComposedTask({
+        text, files, project, userId: user.id, ...(existingTaskId ? { existingTaskId } : {}),
+        ...(newTaskWindow ? { onProgress: (next: ComposeTaskStage) => { if (mounted.current) setStage(next); } } : {}),
+      });
       let task = savedTask;
       if (!mounted.current) return;
       if (existingTaskId) {
@@ -234,7 +239,7 @@ export default function ComposeTaskWriter({ active, destinationProject, onCreate
         event.preventDefault();
         void addImages(Array.from(event.dataTransfer.files));
       }}>
-      {writing ? <FullScreenChatLoading inline label="Writing your ticket…" /> : (
+      {writing ? <FullScreenChatLoading inline label={newTaskWindow && stage ? stage : "Writing your ticket…"} /> : (
         <div className="p-2">
           <div className="flex w-full flex-col rounded-[5px] bg-ai-tiptap px-3 py-2">
             {newTaskWindow && attachments}

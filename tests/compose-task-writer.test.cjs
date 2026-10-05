@@ -19,6 +19,7 @@ async function withWriter(config, check) {
   global.fetch = async (url, options) => {
     writes.push({ url, body: JSON.parse(options.body) });
     if (config.writerThrows) throw new Error('Network unavailable');
+    if (config.response) return config.response;
     return { ok: config.writerOk ?? true, text: async () => config.html ?? '<h1 id="ai-generated-task-title">Fix checkout spacing</h1><p>Match the screenshot.</p>' };
   };
   try {
@@ -33,6 +34,7 @@ async function withWriter(config, check) {
     });
     source('src/utils/api/global/apiHelpers/createTaskGloballycontroller.ts', { default: async (body) => {
       creates.push(body);
+      if (config.onCreate) await config.onCreate(body);
       if (config.createThrows) throw new Error('Create failed');
       if (config.createFails) return { error: true };
       if (config.missingTask) return { error: false, resposne: {} };
@@ -402,4 +404,87 @@ test('writer existing-task requests gate new flag and task edit scope before any
     for (const key of Object.keys(require.cache)) if (!cached.has(key)) delete require.cache[key];
     for (const [key, value] of cached) require.cache[key] = value;
   }
+});
+
+test('progress follows response headers and first output; Saving waits for the complete writer stream', async () => {
+  let headers, stream, saveFinished, saveStarted;
+  const response = new Promise((resolve) => { headers = resolve; });
+  const saving = new Promise((resolve) => { saveStarted = resolve; });
+  const save = new Promise((resolve) => { saveFinished = resolve; });
+  const stages = [];
+  let stageChanged;
+  const nextStage = () => new Promise((resolve) => { stageChanged = resolve; });
+  const onProgress = (stage) => { stages.push(stage); stageChanged?.(); };
+  await withWriter({ response, onCreate: async () => { saveStarted(); await save; } }, async ({ createComposedTask, project, creates }) => {
+    let changed = nextStage();
+    const task = createComposedTask({ text: 'Fix spacing', files: [], project, userId: 985, onProgress });
+    await changed;
+    assert.deepEqual(stages, ['Reading past tickets']);
+    assert.equal(creates.length, 0);
+    changed = nextStage();
+    headers(new Response(new ReadableStream({ start(controller) { stream = controller; } })));
+    await changed;
+    assert.deepEqual(stages, ['Reading past tickets', 'Understanding the context']);
+    assert.equal(creates.length, 0);
+    changed = nextStage();
+    stream.enqueue(new TextEncoder().encode('<h1 id="ai-generated-task-title">Fix spacing</h1>'));
+    await changed;
+    assert.equal(stages.at(-1), 'Writing the ticket');
+    assert.equal(creates.length, 0, 'partial model output must not start saving');
+    const body = new TextEncoder().encode('<p>Keep café spacing.</p>');
+    const split = body.indexOf(0xc3) + 1;
+    stream.enqueue(body.slice(0, split));
+    stream.enqueue(body.slice(split));
+    stream.close();
+    await saving;
+    assert.deepEqual(stages, ['Reading past tickets', 'Understanding the context', 'Writing the ticket', 'Saving the ticket']);
+    assert.equal(creates.length, 1, 'Saving coincides with the real save request');
+    assert.equal(creates[0].description, '<p>Keep café spacing.</p>');
+    saveFinished();
+    assert.equal((await task).writerFailed, false);
+  });
+});
+
+for (const interrupted of [false, true]) {
+  test(`progress stream failure keeps the raw-note fallback and then saves: interrupted=${interrupted}`, async () => {
+    const stages = [];
+    const response = new Response(new ReadableStream({ start(controller) {
+      controller.enqueue(new TextEncoder().encode('<h1 id="ai-generated-task-title">Partial</h1>'));
+      if (interrupted) controller.error(new Error('Disconnected'));
+      else {
+        controller.enqueue(new TextEncoder().encode('\nevent: error\ndata: {"content":"failed"}\n\nevent: done\n'));
+        controller.close();
+      }
+    } }));
+    await withWriter({ response, onCreate: () => assert.equal(stages.at(-1), 'Saving the ticket') }, async ({ createComposedTask, project, creates }) => {
+      const result = await createComposedTask({ text: 'Keep the raw note', files: [], project, userId: 985, onProgress: (stage) => stages.push(stage) });
+      assert.equal(result.writerFailed, true);
+      assert.equal(creates[0].title, 'Keep the raw note');
+      assert.equal(creates[0].description, '<p>Keep the raw note</p>');
+      assert.equal(stages.at(-1), 'Saving the ticket');
+    });
+  });
+}
+
+test('without a progress callback the legacy response.text path stays unchanged', async () => {
+  let textReads = 0;
+  const response = { ok: true, get body() { throw new Error('Legacy must not read the stream directly'); }, text: async () => { textReads++; return '<h1 id="ai-generated-task-title">Legacy</h1><p>Body</p>'; } };
+  await withWriter({ response }, async ({ createComposedTask, project, creates }) => {
+    assert.equal((await createComposedTask({ text: 'Legacy', files: [], project, userId: 985 })).writerFailed, false);
+    assert.equal(textReads, 1);
+    assert.equal(creates[0].description, '<p>Body</p>');
+  });
+});
+
+test('an error-only stream never claims that the model is writing', async () => {
+  const stages = [];
+  const response = new Response(new ReadableStream({ start(controller) {
+    for (const chunk of ['ev', 'ent: error\ndata: {"content":"failed"}\n\n', 'event: done\n']) controller.enqueue(new TextEncoder().encode(chunk));
+    controller.close();
+  } }));
+  await withWriter({ response }, async ({ createComposedTask, project }) => {
+    const result = await createComposedTask({ text: 'Original note', files: [], project, userId: 985, onProgress: (stage) => stages.push(stage) });
+    assert.equal(result.writerFailed, true);
+    assert.deepEqual(stages, ['Reading past tickets', 'Understanding the context', 'Saving the ticket']);
+  });
 });
