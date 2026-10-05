@@ -26,6 +26,7 @@ type UseTaskCommentsRealtimeOptions = {
   currentUserId?: number | null;
   taskProjectId?: number | null;
   taskUniqueIndex?: number | string | null;
+  currentTaskTitle?: string;
   setCurrentTask?: Dispatch<SetStateAction<ITask | null>>;
   setDescription?: Dispatch<SetStateAction<string>>;
   setDescriptionAttachments?: Dispatch<SetStateAction<IAttachment[]>>;
@@ -74,6 +75,8 @@ export function useTaskCommentsRealtime(
     preserveEditorContent = false,
     hasPullRequests = false,
   } = options;
+  const currentTaskTitleRef = useRef(options.currentTaskTitle);
+  currentTaskTitleRef.current = options.currentTaskTitle;
 
   useEffect(() => {
     if (taskId == null) return;
@@ -102,6 +105,7 @@ export function useTaskCommentsRealtime(
       refreshInFlight = true;
       const includeTaskRefetch = shouldRefetchTask.current;
       const includeTaskContentSync = shouldSyncTaskContent.current;
+      const titleAtFetchStart = currentTaskTitleRef.current;
       shouldRefetchTask.current = false;
       shouldSyncTaskContent.current = false;
 
@@ -133,13 +137,20 @@ export function useTaskCommentsRealtime(
               task,
             })
           ) {
-            setCurrentTask?.((currentTask) =>
-              mergeRealtimeTaskDetail(
+            setCurrentTask?.((currentTask) => {
+              const refreshed = mergeRealtimeTaskDetail(
                 currentTask,
                 task,
                 includeTaskContentSync
-              )
-            );
+              );
+              // A pre-rename response must not reset the title and feed the
+              // old value into the title editor's pending autosave.
+              return currentTask &&
+                titleAtFetchStart !== undefined &&
+                currentTask.title !== titleAtFetchStart
+                ? { ...refreshed, title: currentTask.title }
+                : refreshed;
+            });
             if (includeTaskContentSync) {
               setDescription?.(task.description_?.content ?? "");
               setDescriptionAttachments?.(

@@ -9,7 +9,7 @@ const React = require("react");
 const root = path.resolve(__dirname, "..");
 const noop = () => null;
 
-function load(relative, dependencies) {
+function load(relative, dependencies, exportName = "default") {
   const source = fs.readFileSync(path.join(root, relative), "utf8");
   const js = ts.transpileModule(source, {
     compilerOptions: { jsx: ts.JsxEmit.ReactJSX, module: ts.ModuleKind.CommonJS },
@@ -23,11 +23,11 @@ function load(relative, dependencies) {
     assert.ok(name in dependencies, `Unexpected dependency ${name}`);
     return dependencies[name];
   }, exports);
-  return exports.default;
+  return exportName ? exports[exportName] : exports;
 }
 
 async function withTitle(t, { mobile = false, status = 200, id = 42, hydrate = false,
-  beforeHydration, initialTitle = "Original title" } = {}) {
+  beforeHydration, initialTitle = "Original title", lateLoad = false } = {}) {
   const dom = new JSDOM("<div id='root'></div><div id='description' tabindex='0'></div>", {
     url: "https://app.hypertask.ai/detail/project-7049/1",
   });
@@ -49,9 +49,34 @@ async function withTitle(t, { mobile = false, status = 200, id = 42, hydrate = f
     }
   });
   const Context = React.createContext(null);
-  const task = { id, projectId: 7049, sectionId: 19409, title: initialTitle };
+  const task = { id, projectId: 7049, sectionId: 19409, uniqueIndex: 1, title: initialTitle };
   const requests = [], cache = [], errors = [];
-  let state, pendingSave;
+  let state, pendingSave, resolveLoad, loadStarted = false;
+  const realtimeHandlers = new Map();
+  let useRealtime = noop;
+  if (lateLoad) {
+    const originalFetch = global.fetch;
+    t.after(() => { global.fetch = originalFetch; });
+    global.fetch = () => {
+      loadStarted = true;
+      return new Promise((resolve) => { resolveLoad = resolve; });
+    };
+    const shared = { COMMENT_EVENT: "comment:changed", TASK_EVENT: "task:changed", taskChannel: (id) => `private-task-${id}` };
+    const refresh = load("src/lib/realtime/taskDetailRefresh.ts", { "./shared": shared }, null);
+    const channel = { subscribed: true,
+      bind: (event, handler) => realtimeHandlers.set(event, handler),
+      unbind: (event) => realtimeHandlers.delete(event) };
+    const client = { subscribe: () => channel, unsubscribe: noop,
+      connection: { state: "connected", bind: noop, unbind: noop } };
+    const queryClient = { cancelQueries: async () => {}, setQueryData: noop, invalidateQueries: async () => {} };
+    useRealtime = load("src/hooks/realtime/useTaskCommentsRealtime.ts", {
+      "@tanstack/react-query": { useQueryClient: () => queryClient },
+      "@/lib/realtime/client": { connectRealtimeClient: async () => client, releaseRealtimeClientIfIdle: noop },
+      "@/lib/realtime/shared": shared,
+      "@/lib/realtime/taskDetailRefresh": refresh,
+      "@/lib/realtime/taskCommentsRefresh": { refreshTaskComments: async () => {} },
+    }, "useTaskCommentsRealtime");
+  }
   const toast = Object.assign(noop, { error: (message) => errors.push(message) });
   const Title = load("src/components/PageComponents/TaskDetail/TopRow/TaskTitle.tsx", {
     "@/lib/contexts/TaskDetail/TaskProvider": { useTaskContext: () => React.useContext(Context) },
@@ -79,6 +104,8 @@ async function withTitle(t, { mobile = false, status = 200, id = 42, hydrate = f
   function Provider() {
     const [currentTask, setCurrentTask] = React.useState(task);
     const [editMode, setEditMode] = React.useState("title");
+    useRealtime(id, { taskProjectId: task.projectId, taskUniqueIndex: task.uniqueIndex,
+      currentTaskTitle: currentTask.title, setCurrentTask, hasPullRequests: true });
     state = { currentTask, setCurrentTask, editMode, setEditMode,
       parsedTask: JSON.stringify(task), focusOn: (id) => document.getElementById(id)?.focus() };
     return React.createElement(Context.Provider, { value: state }, React.createElement(Title));
@@ -98,6 +125,13 @@ async function withTitle(t, { mobile = false, status = 200, id = 42, hydrate = f
   const input = document.getElementById("title-input");
   return {
     input, requests, cache, errors, state: () => state,
+    async refresh() { await React.act(async () => realtimeHandlers.get("task:changed")()); },
+    async completeLoad(title = initialTitle) {
+      assert.ok(loadStarted, "the initial realtime load started before the rename");
+      await React.act(async () => {
+        resolveLoad({ ok: true, json: async () => ({ ...task, title, section: "Doing" }) });
+      });
+    },
     async type(value) {
       await React.act(async () => {
         Object.getOwnPropertyDescriptor(dom.window.HTMLTextAreaElement.prototype, "value").set.call(input, value);
@@ -207,3 +241,31 @@ for (const mobile of [false, true]) {
     });
   });
 }
+
+for (const mobile of [false, true]) {
+  test(`a late initial load after ${mobile ? "mobile" : "desktop"} Enter cannot write back the old title`, async (t) => {
+    const title = await withTitle(t, { mobile, lateLoad: true });
+    await title.type("Early rename");
+    await title.press("Enter");
+    assert.deepEqual(title.requests, [{ id: 42, title: "Early rename" }]);
+    await title.completeLoad();
+    const refreshedTitle = title.state().currentTask.title;
+    const displayedTitle = title.input.value;
+    assert.equal(title.state().currentTask.section, "Doing", "unrelated refreshed fields still apply");
+    await title.autosave();
+    assert.deepEqual(title.requests, [{ id: 42, title: "Early rename" }, { id: 42, title: "Early rename" }], "the pending autosave must never PUT the old title");
+    assert.equal(refreshedTitle, "Early rename", "a pre-rename response cannot replace the optimistic title");
+    assert.equal(displayedTitle, "Early rename");
+    await title.refresh();
+    await title.completeLoad("Other tab rename");
+    assert.equal(title.input.value, "Other tab rename", "a later request can still apply another tab's rename");
+  });
+}
+
+test("a title refresh without a concurrent local rename still accepts the remote title", async (t) => {
+  const title = await withTitle(t, { lateLoad: true });
+  await title.completeLoad("Remote rename");
+  assert.equal(title.state().currentTask.title, "Remote rename");
+  assert.equal(title.input.value, "Remote rename");
+  assert.deepEqual(title.requests, [], "a remote refresh must not schedule a title save");
+});
