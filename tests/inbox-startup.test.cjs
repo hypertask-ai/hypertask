@@ -22,7 +22,7 @@ function initialRead(bindings) {
   const start = hook.indexOf("  // Start the existing fenced read on the first client commit");
   const end = hook.indexOf("  const query = useQuery", start);
   assert.ok(start >= 0 && end > start);
-  return callbacks(hook.slice(start, end), { document: null, ...bindings })[0];
+  return callbacks(hook.slice(start, end), { document: null, requireProjectAccess: false, ...bindings })[0];
 }
 
 test("first commit starts the account-scoped fenced read; hydrated observers reuse its in-flight request", async () => {

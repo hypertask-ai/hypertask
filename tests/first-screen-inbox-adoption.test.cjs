@@ -29,6 +29,7 @@ test('document adopts complete live inbox/count/draft keys with server update ti
     assert.equal(c.getQueryData(['inbox', 'data', 985]).structuredData, snapshot.data.payload.structuredData);
     assert.equal(c.getQueryState(['inbox', 'data', 985]).dataUpdatedAt, Date.parse(now));
     assert.equal(c.getQueryData(['inbox', 'data', 985]).readModelRevision, undefined);
+    assert.equal(c.getQueryData(['inbox', 'data', 985]).serverDocumentGeneration, snapshot.scope.generation);
     assert.equal(c.getQueryData(['inbox', 'data', 986]), undefined);
     assert.deepEqual(c.getQueryData(['inbox', 'count', 985]), { all: 1, unseen: 1 });
     assert.deepEqual(c.getQueryData(['drafts for user:', 985]), snapshot.data.drafts);
