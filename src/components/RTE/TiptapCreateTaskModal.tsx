@@ -179,9 +179,13 @@ const TiptapCreateTaskModal = () => {
     aiPromptRef.current = undefined;
     setShouldShowAITaskWriter(false);
   };
+  const closeComposedTaskForm = () =>
+    isMbl && window.location.pathname !== "/new"
+      ? closeBackDismissBeforeNavigation(window, "createTaskModal", () => closeHandler(true))
+      : closeHandler(true);
   const toggleAiTaskWriterVisibility = () => {
     if (newTaskWindow) {
-      setCommands({ show: true, mode: CommandMode.Command, paletteTab: "compose", composeProject: formValues.currentProject ?? _currentProject ?? undefined, composeOnCreated: () => closeHandler(true) });
+      setCommands({ show: true, mode: CommandMode.Command, paletteTab: "compose", composeProject: formValues.currentProject ?? _currentProject ?? undefined, composeOnCreated: closeComposedTaskForm });
       return;
     }
     if (shouldShowAiTaskWriter) aiPromptRef.current = undefined;
@@ -229,12 +233,12 @@ const TiptapCreateTaskModal = () => {
       if (event.code !== "KeyJ" || !isComposePaletteShortcut(event, isApple, pathname)) return;
       event.preventDefault();
       event.stopImmediatePropagation();
-      setCommands({ show: true, mode: CommandMode.Command, paletteTab: "compose", composeProject: projectForContext, composeOnCreated: () => closeHandler(true) });
+      setCommands({ show: true, mode: CommandMode.Command, paletteTab: "compose", composeProject: projectForContext, composeOnCreated: closeComposedTaskForm });
     };
     // Keep the form's selected board before the global shortcut reads the URL.
     window.addEventListener("keydown", openNewTask, true);
     return () => window.removeEventListener("keydown", openNewTask, true);
-  }, [newTaskWindow, isApple, pathname, projectForContext, setCommands, closeHandler]);
+  }, [newTaskWindow, isApple, pathname, projectForContext, setCommands, closeComposedTaskForm]);
   const { data: projectLabels } = useGetAllProjectLabels(
     projectId ?? undefined,
   );
@@ -613,7 +617,7 @@ const TiptapCreateTaskModal = () => {
 
   const toggleAiTaskWriter = () => {
     if (newTaskWindow) {
-      setCommands({ show: true, mode: CommandMode.Command, paletteTab: "compose", composeProject: formValues.currentProject ?? _currentProject ?? undefined, composeOnCreated: () => closeHandler(true) });
+      setCommands({ show: true, mode: CommandMode.Command, paletteTab: "compose", composeProject: formValues.currentProject ?? _currentProject ?? undefined, composeOnCreated: closeComposedTaskForm });
       return;
     }
     // editor?.chain().focus().toggleHighlight({ color: "#b89bdd" });

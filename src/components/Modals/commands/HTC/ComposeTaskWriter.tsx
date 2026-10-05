@@ -32,7 +32,7 @@ import type { IProject, ITask } from "@/models/model";
 export default function ComposeTaskWriter({ active, destinationProject, onCreated, onBusyChange }: {
   active: boolean;
   destinationProject?: IProject;
-  onCreated: () => void;
+  onCreated: () => void | Promise<void>;
   onBusyChange: (busy: boolean) => void;
 }) {
   const enabled = useFlag(HTPR_6929_COMPOSE_TASK_WRITER_FLAG);
@@ -176,6 +176,8 @@ export default function ComposeTaskWriter({ active, destinationProject, onCreate
         })) ?? task;
         updateTaskInCache(task, task.id, task.projectId, task.sectionId);
       } else createTaskGlobally({ task, sectionId: task.sectionId!, position: "top" });
+      // The phone form's history cleanup must finish before opening the task and chat.
+      if (mobile && newTaskWindow) await onCreated();
       setIntro({ taskId: task.id, content: composeTaskAssistantMessage(task.ticketNumber ?? `${project.uniqueIdentifier ?? "TASK"}-${task.uniqueIndex}`, writerFailed, Boolean(existingTaskId)) });
       updateActiveItemAndItemInView(task);
       setScope(projectId);
@@ -184,7 +186,7 @@ export default function ComposeTaskWriter({ active, destinationProject, onCreate
       setExplicitOpen(Date.now());
       setShowChat(true);
       router.push(`/detail/project-${projectId}/${task.uniqueIndex}`);
-      onCreated();
+      if (!mobile || !newTaskWindow) onCreated();
     } catch (failure) {
       if (mounted.current) setError(failure instanceof Error ? failure.message : "Couldn’t create the task. Your note is still here. Try again.");
     } finally {

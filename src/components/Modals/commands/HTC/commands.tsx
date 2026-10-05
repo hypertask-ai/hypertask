@@ -108,7 +108,7 @@ const Commands = (props: Props) => {
   const isCompose = composeEnabled && showCommands.paletteTab === "compose";
   // Ctrl+K and Ctrl+J replace the palette state, so remember the form's handoff while the palette stays open.
   const composeProjectRef = useRef<IProject | undefined>(undefined);
-  const composeOnCreatedRef = useRef<(() => void) | undefined>(undefined);
+  const composeOnCreatedRef = useRef<(() => void | Promise<void>) | undefined>(undefined);
   if (!showCommands.show) {
     composeProjectRef.current = undefined;
     composeOnCreatedRef.current = undefined;
@@ -686,8 +686,11 @@ const Commands = (props: Props) => {
       />
     </div>
   ) : null;
-  const compose = composeEnabled ? <ComposeTaskWriter active={isCompose} destinationProject={newTaskWindow ? composeProjectRef.current : undefined} onBusyChange={setWriting} onCreated={() => {
-    if (newTaskWindow) composeOnCreatedRef.current?.();
+  const compose = composeEnabled ? <ComposeTaskWriter active={isCompose} destinationProject={newTaskWindow ? composeProjectRef.current : undefined} onBusyChange={setWriting} onCreated={async () => {
+    if (newTaskWindow) {
+      const closed = composeOnCreatedRef.current?.();
+      if (isMobile) await closed;
+    }
     resetShowCommands();
   }} /> : null;
 

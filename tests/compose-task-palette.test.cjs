@@ -97,7 +97,10 @@ async function withPalette(t, config, check) {
         hoveredGroup: 0, setHoveredGroupIndex() {}, setCurrentCommandIndex() {}, setSelectedCommand() {}, handleCommandSelect() {} };
     } });
     source('src/components/Modals/commands/HTC/CommandGroup.tsx', { default: ({ filterCommands, onClickHandler }) => React.createElement('div', { 'data-search-commands': true }, filterCommands.flatMap((group) => group.commandLists.map((command) => React.createElement('button', { key: `${group.group}-${command.key}`, onClick: () => onClickHandler(command) }, command.name)))) });
-    stub(require.resolve('next/navigation'), { useRouter: () => ({ push: (url) => navigations.push(url) }), usePathname: () => dom.window.location.pathname });
+    stub(require.resolve('next/navigation'), { useRouter: () => ({ push: (url) => {
+      navigations.push(url);
+      if (config.navigate) dom.window.history.pushState({}, '', url);
+    } }), usePathname: () => dom.window.location.pathname });
     stub(require.resolve('nookies'), { parseCookies: () => ({ previousBoard: config.previousBoard }) });
     const shell = ({ children, ...props }) => {
       shells.push(props);
@@ -642,7 +645,9 @@ test('creation-form New Task handlers forward the selected board ahead of stale 
   const ts = require('typescript');
   const file = ts.createSourceFile('form.tsx', fs.readFileSync(path.join(root, 'src/components/RTE/TiptapCreateTaskModal.tsx'), 'utf8'), ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
   const handlers = new Map();
+  let closeForm;
   const visit = (node) => {
+    if (ts.isVariableDeclaration(node) && node.name.getText(file) === 'closeComposedTaskForm') closeForm = node.initializer.getText(file);
     if (ts.isVariableDeclaration(node) && ['toggleAiTaskWriter', 'toggleAiTaskWriterVisibility'].includes(node.name.getText(file))) handlers.set(node.name.getText(file), node.initializer.getText(file));
     ts.forEachChild(node, visit);
   };
@@ -652,7 +657,7 @@ test('creation-form New Task handlers forward the selected board ahead of stale 
   for (const handler of handlers.values()) {
     let command;
     const closes = [];
-    const invoke = new Function('newTaskWindow', 'setCommands', 'CommandMode', 'formValues', '_currentProject', 'closeHandler', `return (${handler});`)(true, (value) => { command = value; }, { Command: 0 }, { currentProject: selected }, stale, (saved) => closes.push(saved));
+    const invoke = new Function('newTaskWindow', 'setCommands', 'CommandMode', 'formValues', '_currentProject', 'closeHandler', 'isMbl', `const closeComposedTaskForm = ${closeForm}; return (${handler});`)(true, (value) => { command = value; }, { Command: 0 }, { currentProject: selected }, stale, (saved) => closes.push(saved), false);
     invoke();
     assert.equal(command.composeProject, selected);
     assert.equal(command.paletteTab, 'compose');
@@ -665,23 +670,26 @@ test('creation-form New Task handlers forward the selected board ahead of stale 
 test('creation-form New Task handoff preserves board and dismissal, and closes only after flagged success on desktop and phone', async (t) => {
   const ts = require('typescript');
   const file = ts.createSourceFile('form.tsx', fs.readFileSync(path.join(root, 'src/components/RTE/TiptapCreateTaskModal.tsx'), 'utf8'), ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
-  let effect;
+  let effect, closeForm;
   const visit = (node) => {
+    if (ts.isVariableDeclaration(node) && node.name.getText(file) === 'closeComposedTaskForm') closeForm = node.initializer.getText(file);
     if (ts.isCallExpression(node) && node.expression.getText(file) === 'useEffect' && node.arguments[0].getText(file).includes('const openNewTask')) effect = node.getText(file);
     ts.forEachChild(node, visit);
   };
   visit(file);
   assert.ok(effect);
-  const javascript = ts.transpileModule(effect, { compilerOptions: { target: ts.ScriptTarget.ES2020 } }).outputText;
+  const javascript = ts.transpileModule(`const closeComposedTaskForm = ${closeForm}; ${effect}`, { compilerOptions: { target: ts.ScriptTarget.ES2020 } }).outputText;
   for (const mobile of [false, true]) for (const newWindow of [false, true]) for (const outcome of ['created', 'escape', 'search-close', 'failure']) {
-    await withPalette(t, { mobile, newWindow, open: false, url: '/project?id=7' }, async ({ mountProbe, set, press, type, requests, legacyJ, jiti, finish, fail, values, input }) => {
-      const selected = { id: 8, title: 'Form board' };
+    await withPalette(t, { mobile, newWindow, open: false, navigate: true, url: '/project?id=1', project: { id: 1, title: 'URL board' } }, async ({ mountProbe, set, press, type, requests, legacyJ, jiti, finish, fail, values, input }) => {
+      const selected = { id: 2, title: 'Form board' };
       const closes = [];
-      const closeHandler = (saved) => closes.push(saved);
+      let disarm = () => {};
+      const closeHandler = (saved) => { closes.push(saved); disarm(); };
+      const { armBackDismiss, closeBackDismissBeforeNavigation } = jiti(path.join(root, 'src/lib/mobile/backDismiss.ts'));
       const { isComposePaletteShortcut } = jiti(path.join(root, 'src/lib/constants/commandCenterShortcut.ts'));
       const { CommandMode } = jiti(path.join(root, 'src/models/enums.ts'));
-      const runEffect = new Function('useEffect', 'newTaskWindow', 'isApple', 'pathname', 'projectForContext', 'setCommands', 'CommandMode', 'isComposePaletteShortcut', 'closeHandler', javascript);
-      function Probe() { runEffect(React.useEffect, newWindow, false, '/project', selected, (value) => set('showCommandsAtom', value), CommandMode, isComposePaletteShortcut, closeHandler); return null; }
+      const runEffect = new Function('useEffect', 'newTaskWindow', 'isApple', 'pathname', 'projectForContext', 'setCommands', 'CommandMode', 'isComposePaletteShortcut', 'closeHandler', 'isMbl', 'closeBackDismissBeforeNavigation', javascript);
+      function Probe() { runEffect(React.useEffect, newWindow, false, '/project', selected, (value) => set('showCommandsAtom', value), CommandMode, isComposePaletteShortcut, closeHandler, mobile, closeBackDismissBeforeNavigation); return null; }
       await mountProbe(() => React.createElement(Probe));
       await press('j', { ctrlKey: true }, document.body);
       assert.equal(legacyJ(), 0, 'only one shortcut handles the opening');
@@ -704,7 +712,7 @@ test('creation-form New Task handoff preserves board and dismissal, and closes o
         return;
       }
       await press('Enter');
-      assert.equal(requests[0].body.project.id, newWindow ? 8 : 7, 'flag off retains the global Compose destination');
+      assert.equal(requests[0].body.project.id, newWindow ? 2 : 1, 'flag off retains the global Compose destination');
       assert.deepEqual(closes, [], 'an in-flight creation does not close the form');
       if (outcome === 'failure') {
         await fail();
@@ -712,9 +720,20 @@ test('creation-form New Task handoff preserves board and dismissal, and closes o
         assert.equal(input().value, 'Create on the selected board');
         await press('Enter');
       }
-      await finish(outcome === 'failure');
+      let popped = Promise.resolve();
+      if (mobile && newWindow) {
+        disarm = armBackDismiss(window, { key: 'createTaskModal', onBack: () => {} });
+        popped = new Promise((resolve) => window.addEventListener('popstate', resolve, { once: true }));
+      }
+      await React.act(async () => {
+        await finish(outcome === 'failure');
+        await popped;
+      });
       assert.deepEqual(closes, newWindow ? [true] : [], 'only flagged handoff success closes without discard, including fallback/retry');
       assert.equal(values.get('showCommandsAtom').show, false);
+      assert.equal(window.location.pathname, `/detail/project-${newWindow ? 2 : 1}/44`, 'phone history cleanup must finish before pushing the new task');
+      assert.equal(values.get('showAIChatInterfaceAtom'), true);
+      assert.equal(values.get('composeTaskChatIntroAtom').taskId, 91);
     });
   }
 });
