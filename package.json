@@ -34,7 +34,7 @@
     "@better-auth/infra": "^0.4.11",
     "@better-auth/passkey": "~1.6.33",
     "@dicebear/bottts-neutral": "9.4.3",
-    "@dicebear/core": "9.4.3",
+    "@dicebear/core": "10.7.0",
     "@emoji-mart/data": "^1.1.2",
     "@emoji-mart/react": "^1.1.1",
     "@eslint/compat": "^2.1.1",
