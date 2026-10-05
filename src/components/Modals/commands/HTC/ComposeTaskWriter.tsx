@@ -239,7 +239,7 @@ export default function ComposeTaskWriter({ active, destinationProject, onCreate
   );
 
   return enabled ? (
-    <div hidden={!active} data-compose-task-writer className={newTaskWindow ? "max-h-[65dvh] overflow-y-auto" : undefined}
+    <div hidden={!active} data-compose-task-writer className={newTaskWindow && mobile ? "max-h-[65dvh] overflow-y-auto" : undefined}
       onDragOver={(event) => { if (!writing && event.dataTransfer.types.includes("Files")) event.preventDefault(); }}
       onDrop={(event) => {
         if (!event.dataTransfer.files.length) return;
@@ -253,7 +253,10 @@ export default function ComposeTaskWriter({ active, destinationProject, onCreate
       ) : (
         <div ref={composer} className="p-2">
           <div className="flex w-full flex-col rounded-[5px] bg-ai-tiptap px-3 py-2">
-            {newTaskWindow && attachments}
+            {newTaskWindow && attachments && (mobile ? attachments : (
+              // Reserve space for the textarea, actions and footer without clipping their tooltips.
+              <div className="max-h-[max(6rem,calc(65dvh-20rem))] overflow-y-auto">{attachments}</div>
+            ))}
             <AiComposerTextarea
               ref={input}
               value={text}
