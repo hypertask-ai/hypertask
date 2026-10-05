@@ -1,7 +1,7 @@
 import { useEffect } from "react";
 import { isCommandCenterShortcut, isComposePaletteShortcut } from "@/lib/constants/commandCenterShortcut";
 import { useFlag } from "@/hooks/useFlag";
-import { HTPR_6929_COMPOSE_TASK_WRITER_FLAG, HTPR_6937_NEW_TASK_WINDOW_FLAG } from "@/lib/flags/keys";
+import { HTPR_6929_COMPOSE_TASK_WRITER_FLAG } from "@/lib/flags/keys";
 import { useSetRecoilState } from "@/lib/state";
 import { showCommandsAtom } from "@/store";
 import { CommandMode } from "@/models/enums";
@@ -15,7 +15,6 @@ export function useCommandCenterShortcut(
   toggleShowCommands: () => void,
 ) {
   const composeEnabled = useFlag(HTPR_6929_COMPOSE_TASK_WRITER_FLAG);
-  const newTaskWindow = useFlag(HTPR_6937_NEW_TASK_WINDOW_FLAG);
   const setShowCommands = useSetRecoilState(showCommandsAtom);
   useEffect(() => {
     const handleCommandCenterShortcut = (e: KeyboardEvent) => {
@@ -25,12 +24,7 @@ export function useCommandCenterShortcut(
         e.preventDefault();
         // Supersede the legacy board Ctrl+J before its handler can create a task.
         e.stopImmediatePropagation();
-        setShowCommands((previous) => ({
-          show: true,
-          mode: CommandMode.Command,
-          paletteTab: e.code === "KeyJ" ? "compose" : "search",
-          ...(newTaskWindow && previous.show && previous.composeProject ? { composeProject: previous.composeProject } : {}),
-        }));
+        setShowCommands({ show: true, mode: CommandMode.Command, paletteTab: e.code === "KeyJ" ? "compose" : "search" });
         return;
       }
       if (!isCommandCenterShortcut(e, isApple, pathname)) return;
@@ -50,7 +44,6 @@ export function useCommandCenterShortcut(
     showEmailVerificationModal,
     toggleShowCommands,
     composeEnabled,
-    newTaskWindow,
     setShowCommands,
   ]);
 }

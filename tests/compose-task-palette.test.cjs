@@ -692,7 +692,6 @@ test('explicit form destination wins over URL, recency and an empty task detail'
       await press('k', { ctrlKey: true });
       await press('j', { ctrlKey: true });
       assert.equal(input().value, 'Create on my selected board');
-      assert.equal(values.get('showCommandsAtom').composeProject, destinationProject);
       await press('Enter');
       assert.equal(requests[0].body.project, destinationProject);
       assert.equal(requests[0].body.existingTaskId, undefined, 'the creation form must not fill the task behind it');
