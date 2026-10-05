@@ -16,9 +16,11 @@
     "ticket": "https://app.hypertask.ai/detail/project-15/6422",
     "screen": "my-tasks/Mobile",
     "landmarks": [
-      "title"
+      "title",
+      "toolbar",
+      "list"
     ],
-    "reason": "The ticket asks for 'view tabs on top', moving the heading down. Toolbar and list remain locked because the time-group flag also causes unrequested resizing of those landmarks."
+    "reason": "The ticket asks for 'view tabs on top', which moves the heading, controls and list down on phone too. The time-group drift that this entry used to leave exposed is fixed in PR 1100."
   },
   {
     "flag": "htpr-6556-mobile-description-first",
