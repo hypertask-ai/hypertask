@@ -77,8 +77,8 @@ if (mode === 'build') {
   assert.ok(pr.body.includes('Open the inbox on app.hypertask.ai on a phone with an owner or QA account: your messages should appear within a few seconds instead of about nine.'));
   assert.ok(pr.body.includes('https://claude.ai/code/session_01K4hkRqsVXWsG1mhkqxhtLk'));
   assert.match(run(path.join(os.homedir(), '.agents/skills/ship/scripts/ship-check'), ['premerge-status', '1070']), /premerge-evidence: success/);
-  const checks = JSON.parse(run('gh', ['pr', 'checks', '1070', '--repo', 'hypertask-ai/hypertask', '--required', '--json', 'name,state,bucket']));
-  assert.ok(checks.length); for (const c of checks) assert.equal(c.bucket, 'pass', c.name + ': ' + c.state);
+  const checks = run('gh', ['pr', 'checks', '1070', '--repo', 'hypertask-ai/hypertask', '--required']).trim().split('\n');
+  assert.ok(checks.length); for (const check of checks) assert.match(check, /\tpass\t/, check);
   console.log('DELIVERY VERIFIED');
 } else if (mode === 'scope') {
   assert.equal(run('git', ['branch', '--show-current']).trim(), 'htpr-6934-ssr-4');
