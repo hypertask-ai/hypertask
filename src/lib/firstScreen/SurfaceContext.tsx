@@ -1,6 +1,6 @@
 "use client";
 
-import { createContext, useContext, type ReactNode } from "react";
+import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
 import { usePathname } from "next/navigation";
 import { hasFirstScreenDisplayPreferences, type FirstScreenInitialModel, type FirstScreenWireValue } from "./contract";
 
@@ -12,7 +12,13 @@ export function FirstScreenSurfaceProvider({ snapshot, children }: {
   snapshot: FirstScreenSnapshot;
   children: ReactNode;
 }) {
-  return <SurfaceContext.Provider value={snapshot}>{children}</SurfaceContext.Provider>;
+  const [now, setNow] = useState(snapshot.now);
+  useEffect(() => {
+    // Keep hydration exact; subsequent real time changes are live, not a replay.
+    const timer = setInterval(() => setNow(new Date().toISOString()), 60_000);
+    return () => clearInterval(timer);
+  }, []);
+  return <SurfaceContext.Provider value={now === snapshot.now ? snapshot : { ...snapshot, now }}>{children}</SurfaceContext.Provider>;
 }
 
 export function useFirstScreenSurface(accountId?: number | null) {

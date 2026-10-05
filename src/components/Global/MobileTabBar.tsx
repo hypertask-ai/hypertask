@@ -34,12 +34,16 @@ const MobileTabBar = ({ currentUserId }: MobileTabBarProps) => {
   const { toggleAIChatInterface, showAiChatInterface, closeAIChatInterface } =
     useGlobalUIState();
   useEffect(() => {
+    if (snapshot) {
+      setCurrentDay(projectDisplayDay(snapshot));
+      return;
+    }
     let midnightTimer: ReturnType<typeof setTimeout> | undefined;
 
     const refreshDay = () => {
       if (midnightTimer) clearTimeout(midnightTimer);
       const now = new Date();
-      setCurrentDay(snapshot ? projectDisplayDay({ ...snapshot, now: now.toISOString() }) : now.getDate());
+      setCurrentDay(now.getDate());
 
       const nextMidnight = new Date(now);
       nextMidnight.setHours(24, 0, 0, 0);
@@ -58,7 +62,7 @@ const MobileTabBar = ({ currentUserId }: MobileTabBarProps) => {
       if (midnightTimer) clearTimeout(midnightTimer);
       document.removeEventListener("visibilitychange", refreshWhenVisible);
     };
-  }, []);
+  }, [snapshot]);
 
   // Hide the dock whenever the AI chat is open: it overlays the chat and covered
   // the composer with the keyboard up. Back (the gesture / Android button) now

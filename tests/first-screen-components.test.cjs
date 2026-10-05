@@ -130,6 +130,13 @@ function table() {
     enableMyTasksBulkSelection: false, visibleColumns: columns.map(key => ({ key })) });
   return React.createElement('ul', null, renderTaskRow(task, 0));
 }
+const { projectDisplayDate, projectDisplayDay } = load(path.join(root, 'src/lib/firstScreen/display.ts'));
+function Clock() {
+  const clock = useFirstScreenSurface(985);
+  return React.createElement(React.Fragment, null,
+    React.createElement('output', null, `${clock.now}|${projectDisplayDay(clock)}|${projectDisplayDate('2026-10-04T00:29:00.000Z', clock)}`),
+    React.createElement(Chrome, { currentUser: user }));
+}
 function stream(tree) {
   return new Promise((resolve, reject) => {
     const output = new PassThrough(); const chunks = [];
@@ -137,7 +144,7 @@ function stream(tree) {
     const rendered = renderToPipeableStream(tree, { onAllReady() { rendered.pipe(output); }, onError: reject });
   });
 }
-async function hydrate(tree, html) {
+async function hydrate(tree, html, afterHydration) {
   const dom = new JSDOM(`<!doctype html><div id="root">${html}</div>`, { url: 'https://example.test/project', pretendToBeVisual: true });
   const keys = ['self', 'window', 'document', 'HTMLElement', 'Element', 'Node', 'ResizeObserver', 'requestAnimationFrame', 'cancelAnimationFrame', 'IS_REACT_ACT_ENVIRONMENT'];
   const saved = Object.fromEntries(keys.map(key => [key, global[key]]));
@@ -165,6 +172,7 @@ async function hydrate(tree, html) {
     };
     assert.deepEqual(structure(after), structure(before), 'DOM, text and CSS declarations must be identical');
     assert.deepEqual(nodes.filter(node => !node.isConnected).map(node => node.outerHTML), [], 'hydration must attach to existing nodes');
+    if (afterHydration) await afterHydration();
   } finally {
     if (instance) await React.act(async () => instance.unmount());
     dom.window.close();
@@ -190,7 +198,7 @@ if (process.env.FIRST_SCREEN_SSR_FIXTURE) {
       const [a, b] = await Promise.all(trees.map(stream));
       return [a, b, await stream(trees[0])];
     }
-    const child = fixture === 'card' ? card() : fixture === 'table' ? table() : fixture === 'draft' ? draft() : fixture.startsWith('row:') ? row(fixture.slice(4)) : React.createElement(Chrome, { currentUser: user });
+    const child = fixture === 'clock' ? React.createElement(Clock) : fixture === 'card' ? card() : fixture === 'table' ? table() : fixture === 'draft' ? draft() : fixture.startsWith('row:') ? row(fixture.slice(4)) : React.createElement(Chrome, { currentUser: user });
     return stream(wrap(child, seed, fixture.startsWith('chrome:')));
   };
   if (fixture.startsWith('chrome:')) {
@@ -253,6 +261,24 @@ test('mobile chrome reuses named board header and dock markup, while inbox keeps
       await hydrate(tree, html);
     }
   } finally { global.Date = OriginalDate; }
+});
+
+test('seeded clock stays exact through hydration then advances timestamps and display-timezone calendar day', async () => {
+  pathname = '/project';
+  const original = { Date, setInterval, clearInterval }; let tick, cleared = false;
+  global.Date = class extends original.Date { constructor(...args) { super(...(args.length ? args : ['2026-10-04T07:30:00.000Z'])); } };
+  global.setInterval = (callback, delay) => { assert.equal(delay, 60_000); tick = callback; return 42; };
+  global.clearInterval = id => { if (id === 42) cleared = true; else original.clearInterval(id); };
+  try {
+    const html = serverFixture('clock');
+    await hydrate(wrap(React.createElement(Clock)), html, async () => {
+      assert.equal(document.querySelector('output').textContent, '2026-10-04T00:30:00.000Z|3|1min');
+      await React.act(async () => tick());
+      assert.equal(document.querySelector('output').textContent, '2026-10-04T07:30:00.000Z|4|5:29 PM');
+      assert.equal(document.querySelector('nav a[href="/calendar"] .tabular-nums').textContent, '4');
+    });
+    assert.equal(cleared, true);
+  } finally { Object.assign(global, original); }
 });
 
 test('unseeded, mismatched-account, flag-off, unknown-preference and off-route chrome does not take ownership', async () => {
