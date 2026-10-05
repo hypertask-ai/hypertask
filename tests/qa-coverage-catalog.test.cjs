@@ -66,7 +66,7 @@ test("QA coverage catalog stays tied to the checks that run", () => {
   );
 
   const browserSource = sourceText("e2e/smoke/prod.spec.ts");
-  const browserViews = [...browserSource.matchAll(/\{ name: '([^']+)'/g)].map(
+  const browserViews = [...browserSource.matchAll(/\{ name: '([^']+)', path:/g)].map(
     (match) => match[1],
   );
   assert.deepEqual(
