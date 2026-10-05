@@ -7,23 +7,53 @@ export const QA_USER_ID = 2343;
 export const APP_ORIGIN = 'https://app.hypertask.ai';
 export const QA_BOARD_TITLE = 'QA Sandbox';
 
-export async function api(page, route, method = 'GET', body) {
+export async function api(page, route, method = 'GET', body, { retryNetworkErrors = false, confirmAbsent } = {}) {
   if (new URL(page.url()).origin !== APP_ORIGIN || !route.startsWith('/api/')) {
     throw new Error('QA API requests must stay on the production app origin');
   }
-  const response = await page.evaluate(async ({ route, method, body }) => {
-    const res = await fetch(route, {
-      method,
-      headers: { 'Content-Type': 'application/json' },
-      ...(body === undefined ? {} : { body: JSON.stringify(body) }),
-    });
-    return { status: res.status, body: await res.json().catch(() => null) };
-  }, { route, method, body });
-  if (response.status < 200 || response.status >= 300) {
-    // Do not log response bodies: auth and upload responses can contain secrets.
-    throw new Error(`${method} ${route.split('?')[0]} failed: HTTP ${response.status}`);
+  // Omit query strings and bodies: upload grants and auth responses can contain secrets.
+  const request = `${method} ${APP_ORIGIN}${route.split('?')[0]}`;
+  const attempts = retryNetworkErrors ? 3 : 1;
+  for (let attempt = 1; attempt <= attempts; attempt++) {
+    let response;
+    try {
+      response = await page.evaluate(async ({ route, method, body }) => {
+        let res;
+        try {
+          res = await fetch(route, {
+            method,
+            headers: { 'Content-Type': 'application/json' },
+            ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+          });
+        } catch (err) {
+          // Chromium's fetch rejection is distinct from evaluation/application errors.
+          if (err instanceof TypeError && err.message === 'Failed to fetch') {
+            return { networkError: err.message };
+          }
+          throw err;
+        }
+        return { status: res.status, body: await res.json().catch(() => null) };
+      }, { route, method, body });
+    } catch (err) {
+      console.warn(`${request} failed: status unavailable (evaluation error)`);
+      throw err;
+    }
+    if (response.networkError) {
+      const message = `${request} failed: status unavailable (${response.networkError}), attempt ${attempt}/${attempts}`;
+      console.warn(message);
+      // A lost response may follow a successful delete; do not delete again or mask HTTP errors.
+      if (retryNetworkErrors && confirmAbsent && await confirmAbsent()) return;
+      if (attempt === attempts) throw new Error(message);
+      await new Promise((resolve) => setTimeout(resolve, 250 * 2 ** (attempt - 1)));
+      continue;
+    }
+    if (response.status < 200 || response.status >= 300) {
+      const message = `${request} failed: HTTP ${response.status}`;
+      console.warn(message);
+      throw new Error(message);
+    }
+    return response.body;
   }
-  return response.body;
 }
 
 export function assertQaBoard(identity, project, members) {
@@ -98,16 +128,20 @@ export async function cleanupQa(page, fixture) {
   }
   for (const id of fixture.tasks) {
     try {
-      await api(page, '/api/queues/tasks/taskDeleteReminder', 'POST', { taskId: id });
+      await api(page, '/api/queues/tasks/taskDeleteReminder', 'POST', { taskId: id }, { retryNetworkErrors: true });
     } catch (err) { errors.push(err.message); }
     try {
-      await api(page, `/api/tasks/deleteTask?taskId=${id}`, 'DELETE');
+      await api(page, `/api/tasks/deleteTask?taskId=${id}`, 'DELETE', undefined, {
+        retryNetworkErrors: true,
+        // The board excludes soft-deleted tasks, so query the owned id directly.
+        confirmAbsent: async () => await api(page, '/api/tasks/getTaskMinimal', 'POST', { id }) === null,
+      });
     } catch (err) { errors.push(err.message); }
   }
   // Permanent task deletion clears attachment rows but not storage objects.
   for (const upload of fixture.uploads) {
     try {
-      await api(page, '/api/tasks/uploadFinalize', 'POST', { grant: upload.grant, discard: upload.keys });
+      await api(page, '/api/tasks/uploadFinalize', 'POST', { grant: upload.grant, discard: upload.keys }, { retryNetworkErrors: true });
       for (const url of upload.urls || []) {
         const response = await fetch(url, { method: 'HEAD', cache: 'no-store' });
         if (response.status !== 404) throw new Error(`QA storage cleanup could not be confirmed: HTTP ${response.status}`);
@@ -115,8 +149,12 @@ export async function cleanupQa(page, fixture) {
     } catch (err) { errors.push(err.message); }
   }
   for (const id of new Set([...(fixture.sessions || []), fixture.sessionId].filter(Boolean))) {
-    try { await api(page, `/api/ai-chat/delete-session?delete=${encodeURIComponent(id)}`, 'DELETE'); }
-    catch (err) { errors.push(err.message); }
+    try {
+      await api(page, `/api/ai-chat/delete-session?delete=${encodeURIComponent(id)}`, 'DELETE', undefined, {
+        retryNetworkErrors: true,
+        confirmAbsent: async () => !(await api(page, '/api/ai-chat/all-sessions')).sessions.some((session) => session.id === id),
+      });
+    } catch (err) { errors.push(err.message); }
   }
   if (fixture.filePath) await unlink(fixture.filePath).catch((err) => errors.push(err.message));
   if ((await findCreatedTask(page, fixture)).length) errors.push('QA fixture task still exists');
