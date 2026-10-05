@@ -493,7 +493,7 @@ export function createMcpToken(
 /**
  * Creates a JWT token for OAuth 2.1 access (MCP client authentication)
  *
- * @param firebaseUid Firebase user UID (used as 'sub')
+ * @param subject Firebase UID, or database user ID string when no UID exists
  * @param userId Database user ID
  * @param email User email
  * @param clientId OAuth client registration bound to this credential
@@ -506,7 +506,7 @@ export function createMcpToken(
 const MCP_OAUTH_TOKEN_EXPIRY = 90 * 24 * 60 * 60; // 90 days
 
 export function createOAuthToken(
-  firebaseUid: string,
+  subject: string,
   userId: number,
   email: string,
   clientId: string,
@@ -528,7 +528,7 @@ export function createOAuthToken(
   // Don't include 'iss' and 'aud' in payload - jwt.sign() will add them via options
   const issuedAt = Date.now()
   const payload: Record<string, unknown> = {
-    sub: firebaseUid,
+    sub: subject,
     userId: userId,
     email: email,
     [OAUTH_CLIENT_ID_CLAIM]: clientId,
