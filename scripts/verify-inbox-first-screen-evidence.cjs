@@ -75,7 +75,7 @@ if (mode === 'build') {
   assert.equal(pr.title, 'HTPR-6934 [BUGFIX] Send the inbox first screen from the server for owner and QA (switch htpr-6934-server-first-screen)');
   for (const section of ['Summary for non-engineers', 'What went wrong', 'What changes', 'What you will see', 'Watch out for', 'Technical notes and decisions']) assert.ok(pr.body.includes('## ' + section));
   assert.ok(pr.body.includes('Open the inbox on app.hypertask.ai on a phone with an owner or QA account: your messages should appear within a few seconds instead of about nine.'));
-  assert.ok(pr.body.includes('https://claude.ai/code/session_01K4hkRqsVXWsG1mhkqxhtLk'));
+  assert.equal(pr.body.trimEnd().split('\n').at(-1), 'https://claude.ai/code/session_01K4hkRqsVXWsG1mhkqxhtLk');
   assert.match(run(path.join(os.homedir(), '.agents/skills/ship/scripts/ship-check'), ['premerge-status', '1070']), /premerge-evidence: success/);
   const checks = run('gh', ['pr', 'checks', '1070', '--repo', 'hypertask-ai/hypertask', '--required']).trim().split('\n');
   assert.ok(checks.length); for (const check of checks) assert.match(check, /\tpass\t/, check);
