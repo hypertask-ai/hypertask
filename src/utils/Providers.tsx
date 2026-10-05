@@ -3,9 +3,11 @@ import { ReactNode, useContext, useEffect, useMemo, useRef, useState } from "rea
 import { FirstScreenSurfaceProvider } from "@/lib/firstScreen/SurfaceContext";
 import { getBoardDocument, type BoardDocument } from "@/lib/firstScreen/boardDocument";
 import { adoptBoardDocument, excludeBoardDocumentRestore } from "@/lib/firstScreen/boardAdoption";
+import { getInboxDocument, type InboxDocument } from "@/lib/firstScreen/inboxDocument";
+import { adoptInboxDocument, excludeInboxDocumentRestore } from "@/lib/firstScreen/inboxAdoption";
 import type { BoardDisplay } from "@/lib/firstScreen/boardDisplay";
 import BoardDisplayMirror from "@/lib/firstScreen/BoardDisplayMirror";
-import { currentUserAtom, currentProjectAtom, boardLayoutAtom, boardLayoutPreferenceAtom, appShellRailAtom,
+import { globalNotificationFocusAtom, currentUserAtom, currentProjectAtom, boardLayoutAtom, boardLayoutPreferenceAtom, appShellRailAtom,
   appShellRailExpandedAtom, showQuickTipsAtom, showEmptyViewTabsAtom, hiddenViewTabIdsAtom, viewTabsOrderAtom,
   tableVisibleColumnsAtom, tableColumnWidthsAtom, tableTitleWrapAtom, openAiChatByDefaultAtom,
   aiChatAutoOpenSuppressedAtom, aiChatPinnedAtom } from "@/store";
@@ -53,15 +55,21 @@ type QueryBoundary = {
   persister: DisposableQueryPersister;
 };
 
-const createQueryBoundary = (accountId: number | null, snapshot: BoardDocument | null): QueryBoundary => {
+const createQueryBoundary = (accountId: number | null, snapshot: BoardDocument | InboxDocument | null): QueryBoundary => {
   const client = new QueryClient({
     defaultOptions: { queries: { gcTime: 1000 * 60 * 60 * 4 } },
   });
   const persister = createQueryPersister(accountId);
   if (!snapshot) return { accountId, client, persister };
-  adoptBoardDocument(client, snapshot);
+  const inbox = getInboxDocument(snapshot, accountId ?? 0);
+  const board = getBoardDocument(snapshot, accountId ?? 0);
+  if (inbox) adoptInboxDocument(client, inbox);
+  if (board) adoptBoardDocument(client, board);
   return { accountId, client, persister: { ...persister,
-    restoreClient: async () => excludeBoardDocumentRestore(await persister.restoreClient(), snapshot),
+    restoreClient: async () => {
+      const restored = await persister.restoreClient();
+      return inbox ? excludeInboxDocumentRestore(restored, inbox) : board ? excludeBoardDocumentRestore(restored, board) : restored;
+    },
   } };
 };
 
@@ -74,6 +82,14 @@ const boardInitialValues = (snapshot: BoardDocument | null): StateInitialValues 
     [showEmptyViewTabsAtom, display.board.showEmptyViewTabs], [hiddenViewTabIdsAtom, display.board.hiddenViewTabIds],
     [viewTabsOrderAtom, display.board.viewTabsOrder], [tableVisibleColumnsAtom, display.board.tableColumns],
     [tableColumnWidthsAtom, display.board.tableWidths], [tableTitleWrapAtom, display.board.tableTitleWrap],
+    [openAiChatByDefaultAtom, display.board.openChat], [aiChatAutoOpenSuppressedAtom, display.board.chatSuppressed], [aiChatPinnedAtom, display.board.chatPinned]];
+};
+
+const inboxInitialValues = (snapshot: InboxDocument): StateInitialValues => {
+  const display = snapshot.display as BoardDisplay;
+  return [[currentUserAtom, snapshot.data.user], [globalNotificationFocusAtom, { currIdx: 0, currSplit: snapshot.selection.split ?? 0 }],
+    [appShellRailAtom, display.board.railOn], [appShellRailExpandedAtom, !display.railCollapsed],
+    [showQuickTipsAtom, snapshot.data.isInboxZero ? false : display.quickTips],
     [openAiChatByDefaultAtom, display.board.openChat], [aiChatAutoOpenSuppressedAtom, display.board.chatSuppressed], [aiChatPinnedAtom, display.board.chatPinned]];
 };
 
@@ -121,15 +137,18 @@ export default function Provider({
   initialIsMobile: boolean;
   initialIsApple: boolean;
   authenticatedUserId: number | null;
-  firstScreen?: BoardDocument | null;
+  firstScreen?: BoardDocument | InboxDocument | null;
 }) {
   const pathname = usePathname();
   const publicShare = isPublicSharePath(pathname);
   // A document seed is adopted only at the existing account boundary's mount,
   // never on a later RSC navigation over a live edit or cached ticket/back tree.
-  const [initialDocument] = useState(() => getBoardDocument(firstScreen ?? null, authenticatedUserId ?? 0));
+  const [initialDocument] = useState(() => getBoardDocument(firstScreen ?? null, authenticatedUserId ?? 0) ?? getInboxDocument(firstScreen ?? null, authenticatedUserId ?? 0));
   const snapshot = initialDocument?.scope.accountId === authenticatedUserId ? initialDocument : null;
-  const initialValues = useMemo(() => boardInitialValues(snapshot), [snapshot]);
+  const initialValues = useMemo(() => {
+    const inbox = getInboxDocument(snapshot, authenticatedUserId ?? 0);
+    return inbox ? inboxInitialValues(inbox) : boardInitialValues(getBoardDocument(snapshot, authenticatedUserId ?? 0));
+  }, [snapshot, authenticatedUserId]);
   const queryBoundary = useMemo(
     () => createQueryBoundary(authenticatedUserId, snapshot),
     [authenticatedUserId, snapshot],

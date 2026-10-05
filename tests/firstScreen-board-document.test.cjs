@@ -146,7 +146,8 @@ test('only a seeded Plex-theme document preloads the existing critical font; OFF
 test('personalized HTML and Flight are dynamic and explicitly private no-store; proxy overwrites route spoofing', () => {
   const proxy = fs.readFileSync(path.join(root, 'src/proxy.ts'), 'utf8');
   assert.ok(proxy.includes("forwardedHeaders.delete('x-ht-board-document-route')"));
-  assert.match(proxy, /if \(request\.headers\.get\('sec-fetch-dest'\) === 'document'\) \{\s*forwardedHeaders\.set\('x-ht-board-document-route'/);
+  assert.match(proxy, /if \(request\.headers\.get\('sec-fetch-dest'\) === 'document'\)/);
+  assert.match(proxy, /forwardedHeaders\.set\(request\.nextUrl\.pathname === '\/inbox' \? 'x-ht-inbox-document-route' : 'x-ht-board-document-route'/);
   for (const header of ['Cache-Control', 'CDN-Cache-Control', 'Vercel-CDN-Cache-Control']) assert.ok(proxy.includes(`response.headers.set('${header}'`));
   assert.ok(proxy.includes("'private, no-store'"));
   const page = fs.readFileSync(path.join(root, 'src/app/[...boardURL]/page.tsx'), 'utf8');

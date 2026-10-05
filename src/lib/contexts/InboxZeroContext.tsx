@@ -19,10 +19,11 @@ export const useInboxZero = () => {
 
 interface InboxZeroProviderProps {
   children: ReactNode;
+  initialIsInboxZero?: boolean;
 }
 
-export const InboxZeroProvider = ({ children }: InboxZeroProviderProps) => {
-  const [isInboxZero, setIsInboxZero] = useState(false);
+export const InboxZeroProvider = ({ children, initialIsInboxZero = false }: InboxZeroProviderProps) => {
+  const [isInboxZero, setIsInboxZero] = useState(initialIsInboxZero);
 
   return (
     <InboxZeroContext.Provider value={{ isInboxZero, setIsInboxZero }}>

@@ -4,6 +4,7 @@ import { TABLE_COLUMN_KEYS } from "@/utils/helperFunctions/Views/TableColumnsHel
 export const BOARD_DISPLAY_COOKIE = "ht_board_display_v1";
 export type BoardDisplay = FirstScreenDisplayPreferences & {
   isMobile: boolean;
+  inbox?: { nudgeDismissed: boolean; pushPermission: NotificationPermission; pushEnabled: boolean };
   board: {
     railOn: boolean;
     showEmptyViewTabs: boolean;

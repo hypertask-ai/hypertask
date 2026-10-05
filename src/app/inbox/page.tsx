@@ -2,7 +2,11 @@ import { IUser } from "@/models/model";
 import { cookies } from "next/headers";
 import Inbox from "./Inbox";
 import { Metadata } from "next";
-import { Suspense } from "react";
+import BoardDocumentBoundary from "@/lib/firstScreen/BoardDocumentBoundary";
+import { getServerInboxDocument } from "@/lib/firstScreen/serverInboxDocument";
+
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
 import { InboxZeroProvider } from "@/lib/contexts/InboxZeroContext";
 import { redirect } from "next/navigation";
 import getProjectById from "@/utils/controllers/projects/getById";
@@ -54,7 +58,8 @@ export default async function InboxPage(
   let previousBoardString = cookieStore.get("previousBoard");
   if (!userObjString) return redirect("/login");
 
-  const userObj = parseUserCookie(userObjString);
+  const firstScreen = await getServerInboxDocument();
+  const userObj = firstScreen?.data.user ?? parseUserCookie(userObjString);
   if (!userObj) return redirect("/login");
 
   let homePageLink = "/";
@@ -72,17 +77,17 @@ export default async function InboxPage(
   }
 
   return (
-    <InboxZeroProvider>
+    <InboxZeroProvider initialIsInboxZero={firstScreen?.data.isInboxZero}>
       <div className="relative min-h-screen inbox-page-shell">
         <div className="relative z-10">
-          <Suspense fallback={<>Loading...</>}>
+          <BoardDocumentBoundary route="/inbox" fallback={<>Loading...</>}>
             <Inbox
               currentUser={userObj}
               queryParams={searchParams}
               homepageRouter={homePageLink}
               originProject={originProject}
             />
-          </Suspense>
+          </BoardDocumentBoundary>
         </div>
       </div>
     </InboxZeroProvider>

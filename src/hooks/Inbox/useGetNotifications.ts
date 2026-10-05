@@ -29,6 +29,7 @@ import {
 import { filterInboxReadModelByProjectAccess } from "@/lib/inboxSync/contract";
 import { useHydrated } from "@/hooks/General/useHydrated";
 import { useFirstScreenSurface } from "@/lib/firstScreen/SurfaceContext";
+import { getInboxDocument } from "@/lib/firstScreen/inboxDocument";
 import { getBoardDocument } from "@/lib/firstScreen/boardDocument";
 
 export const INBOX_QUERY_KEY = ["inbox"] as const;
@@ -213,6 +214,7 @@ const fetchInboxPayload = async (
   startedAt?: number,
   readinessLatch?: ReturnType<typeof createInboxReadinessLatch>,
   readinessLocalOutcome?: LocalReadinessOutcomeRef,
+  requireProjectAccess = false,
 ): Promise<InboxQueryPayload> => {
   const revision = reserveInboxReadModelRevision(userId);
   latestNetworkRequestRevisionByAccount.set(userId, revision);
@@ -241,6 +243,12 @@ const fetchInboxPayload = async (
   let response: InboxQueryPayload;
   try {
     response = await getAllNotifications(userId);
+    if (requireProjectAccess) {
+      const access = await fetchInboxAccessibleProjectIds(queryClient, userId);
+      if (access.accountId !== userId) throw new Error("Inbox access account does not match document account");
+      const filtered = filterInboxReadModelByProjectAccess({ ...response, revision }, access.projectIds);
+      response = buildInboxQueryCache(filtered.notifications, filtered.splitsNoImportant, filtered.showImportantSplit);
+    }
   } catch (error) {
     if (isInboxAuthorizationError(error)) {
       latestAuthorizationFailureRevisionByAccount.set(userId, revision);
@@ -430,7 +438,8 @@ export const useGetNotificationCount = (
   options?: { enabled?: boolean },
 ) => {
   const hydrated = useHydrated();
-  const document = getBoardDocument(useFirstScreenSurface(userId), userId);
+  const snapshot = useFirstScreenSurface(userId);
+  const document = getBoardDocument(snapshot, userId) ?? getInboxDocument(snapshot, userId);
   return useQuery({
     ...notificationCountQueryOptions(userId),
     enabled: options?.enabled ?? true,
@@ -450,6 +459,13 @@ export const useGetNotificationCount = (
 
 export const useGetNotifications = (userId: number) => {
   const hydrated = useHydrated();
+  const document = getInboxDocument(useFirstScreenSurface(userId), userId);
+  const documentAccessRef = useRef({ accountId: userId, required: false });
+  if (documentAccessRef.current.accountId !== userId) {
+    documentAccessRef.current = { accountId: userId, required: false };
+  }
+  if (document) documentAccessRef.current.required = true;
+  const requireProjectAccess = documentAccessRef.current.required;
   const queryClient = useQueryClient();
   const searchParams = useSearchParams();
   const parameter = searchParams?.get(BOARD_SYNC_PILOT_PARAM) ?? null;
@@ -472,7 +488,7 @@ export const useGetNotifications = (userId: number) => {
   // Start the existing fenced read on the first client commit, not the extra
   // hydrated render. The observer still isolates pre-hydration publication.
   useEffect(() => {
-    if (hydrated) return;
+    if (hydrated || document) return;
     void queryClient.prefetchQuery({
       queryKey,
       queryFn: () =>
@@ -482,15 +498,16 @@ export const useGetNotifications = (userId: number) => {
           getStartedAt(),
           readinessLatchRef.current!,
           readinessLocalOutcomeRef.current!,
+          requireProjectAccess,
         ),
       staleTime: INBOX_QUERY_STALE_TIME_MS,
       // Prefetch defaults to no retries; keep the client observer's three.
       retry: 3,
     });
-  }, [hydrated, userId, queryClient, queryKey, getStartedAt]);
+  }, [hydrated, document, userId, queryClient, queryKey, getStartedAt, requireProjectAccess]);
   const query = useQuery({
     queryKey,
-    ...(hydrated
+    ...(hydrated || document
       ? {}
       : {
           queryKey: [...queryKey, "hydrating"] as const,
@@ -503,6 +520,7 @@ export const useGetNotifications = (userId: number) => {
         getStartedAt(),
         readinessLatchRef.current!,
         readinessLocalOutcomeRef.current!,
+        requireProjectAccess,
       ),
     initialData: () => emptyInboxPayload(userId),
     // The empty initialData is only a render placeholder. Age 0 keeps the

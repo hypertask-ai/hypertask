@@ -7,6 +7,7 @@ const { createJiti } = require("jiti");
 const jiti = createJiti(__filename, {
   alias: { "@": path.join(root, "src") },
   interopDefault: true,
+  jsx: true,
   moduleCache: false,
 });
 const {

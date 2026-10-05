@@ -4,6 +4,9 @@ import { Bell, X } from "lucide-react";
 import { useContext, useEffect, useState } from "react";
 
 import { MobileViewContext } from "@/lib/contexts/mobileContext";
+import { useFirstScreenSurface } from "@/lib/firstScreen/SurfaceContext";
+import { getInboxDocument } from "@/lib/firstScreen/inboxDocument";
+import { useHydrated } from "@/hooks/General/useHydrated";
 import { useNotificationNudge } from "@/hooks/notifications/useNotificationNudge";
 import { MOBILE_TARGET } from "@/lib/configs/general.config";
 import { cn } from "@/utils/undoActions/helperFuncs";
@@ -18,8 +21,13 @@ const InboxNotifyNudge = () => {
   const { bothOff, pushDenied, pending, enablePush, enableEmail } =
     useNotificationNudge();
   const mbl = useContext(MobileViewContext);
-  const [mounted, setMounted] = useState(false);
-  const [dismissed, setDismissed] = useState(true);
+  const snapshot = useFirstScreenSurface();
+  const hydrated = useHydrated();
+  const inboxDocument = !hydrated ? getInboxDocument(snapshot, snapshot?.scope.accountId ?? 0) : null;
+  const [mounted, setMounted] = useState(Boolean(inboxDocument));
+  const [dismissed, setDismissed] = useState(() => inboxDocument ? !inboxDocument.data.nudge.visible : true);
+  const visible = !hydrated && inboxDocument ? inboxDocument.data.nudge.visible : bothOff && !dismissed;
+  const denied = !hydrated && inboxDocument ? inboxDocument.data.nudge.pushDenied : pushDenied;
 
   useEffect(() => {
     setMounted(true);
@@ -37,9 +45,10 @@ const InboxNotifyNudge = () => {
       // Storage can be unavailable in restricted browser contexts.
     }
     setDismissed(true);
+    window.dispatchEvent(new Event("ht-inbox-display-change"));
   };
 
-  if (!mounted || !bothOff || dismissed) return null;
+  if (!mounted || !visible) return null;
 
   // Mobile gets its own shape (HTPR-4721). The desktop row puts the message and
   // both actions on one line, which crushes the text at 390px, so the message
@@ -76,11 +85,11 @@ const InboxNotifyNudge = () => {
               "text-dense font-semibold text-hypertasks-green disabled:cursor-wait disabled:opacity-50"
             )}
             disabled={pending !== null}
-            onClick={pushDenied ? enableEmail : enablePush}
+            onClick={denied ? enableEmail : enablePush}
           >
-            {pushDenied ? "Get updates by email" : "Enable notifications"}
+            {denied ? "Get updates by email" : "Enable notifications"}
           </button>
-          {!pushDenied && (
+          {!denied && (
             <button
               type="button"
               className={cn(
@@ -130,11 +139,11 @@ const InboxNotifyNudge = () => {
           type="button"
           className="text-dense font-semibold text-hypertasks-green underline-offset-2 hover:underline focus-visible:outline-none disabled:cursor-wait disabled:opacity-50"
           disabled={pending !== null}
-          onClick={pushDenied ? enableEmail : enablePush}
+          onClick={denied ? enableEmail : enablePush}
         >
-          {pushDenied ? "Get updates by email" : "Enable notifications"}
+          {denied ? "Get updates by email" : "Enable notifications"}
         </button>
-        {!pushDenied && (
+        {!denied && (
           <button
             type="button"
             className="text-meta text-text-light-gray underline-offset-2 hover:text-white-black hover:underline focus-visible:outline-none disabled:cursor-wait disabled:opacity-50"

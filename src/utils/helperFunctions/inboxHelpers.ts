@@ -63,6 +63,7 @@ export type InboxQueryPayload = {
   splitsNoImportant: InboxSplitKey[];
   showImportantSplit: boolean;
   accountId?: number;
+  serverDocumentGeneration?: string;
   dataOrigin?: "placeholder" | "indexeddb" | "network" | "optimistic";
   readModelRevision?: import("@/lib/inboxSync/revision").InboxReadModelRevision;
 };
