@@ -124,7 +124,7 @@ async function withTooltipFixture(check) {
 
 const reactionFile = "src/components/PageComponents/TaskDetail/CommentAndDescription/CommentContainer/CommentEmojiTooltip.tsx";
 
-test("label tooltips keep nowrap text in both legacy and top-layer placements", async () => {
+test("label tooltips size to their text in both legacy and top-layer placements", async () => {
   await withTooltipFixture(async ({ load, container, render, setFlag }) => {
     const Tooltip = load("src/components/Common/Tooltip.tsx");
     const anchor = document.createElement("button");
@@ -141,9 +141,10 @@ test("label tooltips keep nowrap text in both legacy and top-layer placements", 
           const surface = enabled
             ? document.querySelector("[data-hover-tooltip-portal]").firstElementChild
             : portal ? document.body.querySelector(".fixed") : container.firstElementChild.firstElementChild;
-          assert.ok(surface.classList.contains("whitespace-nowrap"), `flag=${enabled}, portal=${portal}: ${text}`);
-          assert.ok(!surface.classList.contains("whitespace-normal"));
-          assert.ok(!surface.querySelector(".break-words"));
+          // One line sized to the text; wrapping only past the viewport cap.
+          const singleLine = surface.classList.contains("whitespace-nowrap")
+            || (surface.classList.contains("w-max") && surface.classList.contains("max-w-[calc(100vw-16px)]"));
+          assert.ok(singleLine, `flag=${enabled}, portal=${portal}: ${text}`);
           assert.equal(surface.firstElementChild.textContent.trim(), text);
           await render(null);
         }
