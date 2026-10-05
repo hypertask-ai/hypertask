@@ -247,7 +247,7 @@ export default function ComposeTaskWriter({ active, destinationProject, onCreate
                 {!recording && <AttachmentButton disabled={addingImages || dictating} mobile={mobile} onClick={handleAttachmentClick} />}
                 {newTaskWindow && <AudioButton id="compose-task-audio-button" ariaLabel="Start dictation" editor={null}
                   defaultContent={text} hasText={Boolean(text.trim())} toggleRecording={setRecording} onProcessingChange={setTranscribing}
-                  disabled={!active || addingImages} projectId={destinationProject?.id} mobilePrimaryTone="ai" mobilePresentation="compact"
+                  disabled={!active || addingImages} projectId={destinationProject?.id} mobilePrimaryTone="primary" mobilePresentation="compact"
                   callbackHandler={(transcript, replace) => {
                     if (replace) {
                       const plain = new DOMParser().parseFromString(transcript, "text/html").body.textContent ?? "";

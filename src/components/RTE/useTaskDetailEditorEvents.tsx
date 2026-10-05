@@ -26,7 +26,7 @@ export function useTaskDetailEditorEvents(context: TaskDetailEditorPresentation)
   const composeEnabled = useFlag(HTPR_6929_COMPOSE_TASK_WRITER_FLAG);
   const newTaskWindowFlag = useFlag(HTPR_6937_NEW_TASK_WINDOW_FLAG);
   let newTaskWindow = false;
-  if (composeEnabled && newTaskWindowFlag) newTaskWindow = true;
+  if (mode === "read-edit-description" && composeEnabled && newTaskWindowFlag) newTaskWindow = true;
   const setCommands = useSetRecoilState(showCommandsAtom);
 
   useEffect(() => {

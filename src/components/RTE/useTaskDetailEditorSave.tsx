@@ -173,7 +173,7 @@ export function useTaskDetailEditorSave(getContext: () => TaskDetailEditorContex
   const newTaskWindowFlag = useFlag(HTPR_6937_NEW_TASK_WINDOW_FLAG);
   const setCommands = useSetRecoilState(showCommandsAtom);
   const toggleAiTaskWriter = () => {
-    if (composeEnabled && newTaskWindowFlag) {
+    if (mode === "read-edit-description" && composeEnabled && newTaskWindowFlag) {
       setCommands({ show: true, mode: CommandMode.Command, paletteTab: "compose" });
       return;
     }

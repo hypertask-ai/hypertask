@@ -153,7 +153,7 @@ export function useTaskDetailEditorState({
     initialPrompt: ''
   });
   let shouldShowAiTaskWriter = writerOpen;
-  if (composeEnabled && newTaskWindowFlag && !(aiTriggerData.autoTrigger && aiTriggerData.initialPrompt)) shouldShowAiTaskWriter = false;
+  if (mode === "read-edit-description" && composeEnabled && newTaskWindowFlag && !(aiTriggerData.autoTrigger && aiTriggerData.initialPrompt)) shouldShowAiTaskWriter = false;
   const suggestReplyAbortRef = useRef<AbortController | null>(null);
   const shouldShowInlineDraftAiRef = useRef(false);
   const [showSetLinkModal, setShowSetLinkModal] = useRecoilState(showSetLinkModalAtom);

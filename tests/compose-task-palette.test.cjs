@@ -615,6 +615,7 @@ test('dictation stays mounted across Search switches and disabling New Task rele
   }
   await withPalette(t, { newWindow: true, tab: 'compose', AudioButton }, async ({ type, press, input, flags, rerender, requests }) => {
     await type('Keep my typed note');
+    assert.equal(audioProps.mobilePrimaryTone, 'primary', 'dictation confirmation uses canonical primary tokens');
     await React.act(async () => audioProps.toggleRecording(true));
     assert.equal(input().disabled, true);
     await press('k', { ctrlKey: true }, document.body);
@@ -833,61 +834,83 @@ test('edit-mode and empty writer events retain inline writer with 6937 off but r
   }
 });
 
-test('targeted triggerAITaskWriter prompts render the existing task writer with both flags on without opening the palette', async (t) => {
-  await withPalette(t, { newWindow: true, open: false }, async ({ source, stub, jiti, mountProbe, dom, values }) => {
-    const task = { id: 52, title: 'Existing task', projectId: 7, description_: { content: '<p>Existing body</p>' } };
-    source('src/hooks/General/useCurrentUserCheckFromCookies.tsx', { default: () => null });
-    source('src/lib/contexts/TaskDetail/TaskProvider.tsx', { useTaskContext: () => ({ parsedTask: JSON.stringify(task) }) });
-    source('src/lib/contexts/TaskDetail/DescriptionProvider.tsx', { useDescriptionAndCommentsContext: () => ({}) });
-    source('src/hooks/General/useGetUserPreferences.tsx', { useGetUserPreferences: () => ({ data: {} }) });
-    source('src/hooks/General/useMobileVisualViewport.ts', { useMobileVisualViewport: () => null });
-    source('src/components/RTE/Tiptap.ts', { default: () => ({}) });
-    stub(require.resolve('@tanstack/react-query'), { useQueryClient: () => ({}) });
-    stub(require.resolve('next/navigation'), { useRouter: () => ({}), useSearchParams: () => new URLSearchParams() });
-    source('src/components/RTE/Components/EmojiGifPicker.tsx', { default: () => null, OPEN_EMOJI_GIF_PICKER_EVENT: 'test-emoji' });
-    source('src/lib/contexts/TaskDetail/TiptapProvider.tsx', { default: ({ children }) => children });
-    source('src/components/RTE/Components/TiptapBubbleMenu.tsx', { default: () => null });
-    source('src/components/RTE/Components/TiptapMainContainer.tsx', { default: () => null });
-    source('src/components/PageComponents/TaskDetail/CommentAndDescription/DescriptionContainer/InnerHtmlDescription.tsx', { default: () => null });
-    source('src/components/PageComponents/TaskDetail/AI Task Writer/AITaskWriterContainer.tsx', {
-      AITaskWriterWithProvider: ({ initialPrompt, autoTrigger, currentTask }) => React.createElement('div', {
-        'data-existing-writer': currentTask.id, 'data-auto-trigger': autoTrigger,
-      }, initialPrompt),
+test('description prompts and comment AI toggle, mode trigger, hidden trigger and reply events keep their writer with both flags on', async (t) => {
+  for (const mode of ['read-edit-description', 'create-comment', 'read-edit-comments']) for (const mobile of [false, true]) {
+    await withPalette(t, { newWindow: true, open: false, mobile }, async ({ source, stub, jiti, mountProbe, dom, values }) => {
+      const task = { id: 52, title: 'Existing task', projectId: 7, description_: { content: '<p>Existing body</p>' } };
+      source('src/hooks/General/useCurrentUserCheckFromCookies.tsx', { default: () => null });
+      source('src/lib/contexts/TaskDetail/TaskProvider.tsx', { useTaskContext: () => ({ parsedTask: JSON.stringify(task) }) });
+      source('src/lib/contexts/TaskDetail/DescriptionProvider.tsx', { useDescriptionAndCommentsContext: () => ({}) });
+      source('src/hooks/General/useGetUserPreferences.tsx', { useGetUserPreferences: () => ({ data: {} }) });
+      source('src/hooks/General/useMobileVisualViewport.ts', { useMobileVisualViewport: () => null });
+      source('src/components/RTE/Tiptap.ts', { default: () => ({}) });
+      stub(require.resolve('@tanstack/react-query'), { useQueryClient: () => ({}) });
+      stub(require.resolve('next/navigation'), { useRouter: () => ({}), useSearchParams: () => new URLSearchParams() });
+      source('src/components/RTE/Components/EmojiGifPicker.tsx', { default: () => null, OPEN_EMOJI_GIF_PICKER_EVENT: 'test-emoji' });
+      source('src/lib/contexts/TaskDetail/TiptapProvider.tsx', { default: ({ children }) => children });
+      source('src/components/RTE/Components/TiptapBubbleMenu.tsx', { default: () => null });
+      source('src/components/RTE/Components/TiptapMainContainer.tsx', { default: () => null });
+      source('src/components/PageComponents/TaskDetail/CommentAndDescription/DescriptionContainer/InnerHtmlDescription.tsx', { default: () => null });
+      source('src/components/PageComponents/TaskDetail/AI Task Writer/AITaskWriterContainer.tsx', {
+        AITaskWriterWithProvider: ({ initialPrompt, autoTrigger, currentTask }) => React.createElement('div', {
+          'data-existing-writer': currentTask.id, 'data-auto-trigger': autoTrigger,
+        }, initialPrompt),
+      });
+      stub(require.resolve('next/dynamic'), { default: () => () => null });
+      const { triggerAITaskWriter } = jiti(path.join(root, 'src/components/PageComponents/TaskDetail/TopRow/CreateSummaryButton.tsx'));
+      const { useTaskDetailEditorState } = jiti(path.join(root, 'src/components/RTE/useTaskDetailEditorState.tsx'));
+      const { useTaskDetailEditorSave } = jiti(path.join(root, 'src/components/RTE/useTaskDetailEditorSave.tsx'));
+      const { taskDetailEditorPresentation } = jiti(path.join(root, 'src/components/RTE/taskDetailEditorPresentation.tsx'));
+      const { useTaskDetailEditorEvents } = jiti(path.join(root, 'src/components/RTE/useTaskDetailEditorEvents.tsx'));
+      const { TaskDetailEditorPanels } = jiti(path.join(root, 'src/components/RTE/TaskDetailEditorPanels.tsx'));
+      let state;
+      function Probe() {
+        state = useTaskDetailEditorState({ id: 'description', mode, isMbl: mobile, reply: mode === 'create-comment' ? '<p>Quoted reply</p>' : undefined, shouldTriggerAiTaskWriter: true });
+        const context = { ...state, divIds: { popoverTriggerButtonId: 'test-hidden-writer' }, getDefaultMode: () => 'AiTaskWriter', handleFocus() {} };
+        Object.assign(context, useTaskDetailEditorSave(() => context));
+        const presentation = { ...context, ...taskDetailEditorPresentation(context), handleReadOnlyContentClick() {} };
+        useTaskDetailEditorEvents({ ...presentation, shouldShowFullAiTaskWriter: false });
+        return React.createElement(React.Fragment, null, React.createElement(TaskDetailEditorPanels, presentation),
+          React.createElement('button', { 'data-comment-ai-toggle': true, onClick: context.toggleAiTaskWriter }, 'Toggle comment AI'));
+      }
+      await mountProbe(() => React.createElement(Probe));
+      const isDescription = mode === 'read-edit-description';
+      assert.equal(Boolean(document.querySelector('[data-existing-writer]')), !isDescription, 'comment edit-mode trigger is not suppressed');
+      if (!isDescription) {
+        await React.act(async () => document.getElementById('test-hidden-writer').click());
+        assert.equal(state.shouldShowAiTaskWriter, false);
+        await React.act(async () => document.getElementById('test-hidden-writer').click());
+        assert.equal(state.shouldShowAiTaskWriter, true);
+        await React.act(async () => document.querySelector('[data-comment-ai-toggle]').click());
+        assert.equal(state.shouldShowAiTaskWriter, false);
+        await React.act(async () => document.querySelector('[data-comment-ai-toggle]').click());
+        assert.equal(state.shouldShowAiTaskWriter, true);
+        assert.equal(values.get('showCommandsAtom').show, false, 'comment toggles never open New Task');
+      }
+      const saved = global.CustomEvent;
+      global.CustomEvent = dom.window.CustomEvent;
+      try {
+        await React.act(async () => triggerAITaskWriter('another-editor', 'Ignore this'));
+        assert.equal(Boolean(document.querySelector('[data-existing-writer]')), !isDescription);
+        if (!isDescription) {
+          await React.act(async () => triggerAITaskWriter('description', ''));
+          assert.equal(state.shouldShowAiTaskWriter, true, 'empty comment/reply events retain the inline writer');
+          assert.equal(values.get('showCommandsAtom').show, false);
+        }
+        await React.act(async () => triggerAITaskWriter('description', 'Summarize the existing task'));
+      } finally {
+        if (saved) global.CustomEvent = saved;
+        else delete global.CustomEvent;
+      }
+      assert.deepEqual(state.aiTriggerData, { autoTrigger: true, initialPrompt: 'Summarize the existing task' });
+      assert.equal(state.shouldShowAiTaskWriter, true);
+      const writer = document.querySelector('[data-existing-writer="52"]');
+      assert.ok(writer);
+      assert.equal(writer.textContent, 'Summarize the existing task');
+      assert.equal(writer.dataset.autoTrigger, 'true');
+      assert.equal(values.get('showCommandsAtom').show, false);
     });
-    stub(require.resolve('next/dynamic'), { default: () => () => null });
-    const { triggerAITaskWriter } = jiti(path.join(root, 'src/components/PageComponents/TaskDetail/TopRow/CreateSummaryButton.tsx'));
-    const { useTaskDetailEditorState } = jiti(path.join(root, 'src/components/RTE/useTaskDetailEditorState.tsx'));
-    const { taskDetailEditorPresentation } = jiti(path.join(root, 'src/components/RTE/taskDetailEditorPresentation.tsx'));
-    const { useTaskDetailEditorEvents } = jiti(path.join(root, 'src/components/RTE/useTaskDetailEditorEvents.tsx'));
-    const { TaskDetailEditorPanels } = jiti(path.join(root, 'src/components/RTE/TaskDetailEditorPanels.tsx'));
-    let state;
-    function Probe() {
-      state = useTaskDetailEditorState({ id: 'description', mode: 'read-edit-description', shouldTriggerAiTaskWriter: true });
-      const context = { ...state, divIds: {}, getDefaultMode: () => 'AiTaskWriter', handleFocus() {} };
-      const presentation = { ...context, ...taskDetailEditorPresentation(context) };
-      useTaskDetailEditorEvents({ ...presentation, shouldShowFullAiTaskWriter: false });
-      return React.createElement(TaskDetailEditorPanels, presentation);
-    }
-    await mountProbe(() => React.createElement(Probe));
-    assert.equal(document.querySelector('[data-existing-writer]'), null);
-    const saved = global.CustomEvent;
-    global.CustomEvent = dom.window.CustomEvent;
-    try {
-      await React.act(async () => triggerAITaskWriter('another-editor', 'Ignore this'));
-      assert.equal(document.querySelector('[data-existing-writer]'), null);
-      await React.act(async () => triggerAITaskWriter('description', 'Summarize the existing task'));
-    } finally {
-      if (saved) global.CustomEvent = saved;
-      else delete global.CustomEvent;
-    }
-    assert.deepEqual(state.aiTriggerData, { autoTrigger: true, initialPrompt: 'Summarize the existing task' });
-    assert.equal(state.shouldShowAiTaskWriter, true);
-    const writer = document.querySelector('[data-existing-writer="52"]');
-    assert.ok(writer);
-    assert.equal(writer.textContent, 'Summarize the existing task');
-    assert.equal(writer.dataset.autoTrigger, 'true');
-    assert.equal(values.get('showCommandsAtom').show, false);
-  });
+  }
 });
 
 test('lazy attachment previews cannot suspend the palette or lose the Compose draft under either window flag', async (t) => {
@@ -975,4 +998,52 @@ test('direct AI writer commands redirect to New Task instead of opening a parall
       ]);
     }
   });
+});
+
+test('modified Enter in New Task over a populated form never also saves the form, and flag off retains form shortcuts', async (t) => {
+  const ts = require('typescript');
+  const file = ts.createSourceFile('form.tsx', fs.readFileSync(path.join(root, 'src/components/RTE/TiptapCreateTaskModal.tsx'), 'utf8'), ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+  let handler, listener;
+  const visit = (node) => {
+    if (ts.isVariableDeclaration(node) && node.name.getText(file) === 'handleKeyDown') handler = node.initializer.getText(file);
+    if (ts.isCallExpression(node) && node.expression.getText(file) === 'useEffect' && node.arguments[0].getText(file).includes('document.addEventListener("keydown", handleKeyDown')) listener = node.getText(file);
+    ts.forEachChild(node, visit);
+  };
+  visit(file);
+  assert.ok(handler);
+  assert.ok(listener);
+  const runHandler = new Function('isApple', 'showAssignModal', 'isRecording', 'newTaskWindow', 'showCommands', 'shouldShowAiTaskWriter', 'CtrlEnterHandler', 'editor', `${ts.transpileModule(`const handler = ${handler};`, { compilerOptions: { target: ts.ScriptTarget.ES2020 } }).outputText} return handler;`);
+  const runListener = new Function('useEffect', 'handleKeyDown', ts.transpileModule(listener, { compilerOptions: { target: ts.ScriptTarget.ES2020 } }).outputText);
+  for (const apple of [false, true]) for (const modifiers of [{}, { altKey: true }, { altKey: true, shiftKey: true }, { shiftKey: true }]) {
+    await withPalette(t, { newWindow: true, apple, tab: 'compose' }, async ({ mountProbe, values, type, press, requests, finish, clickTab }) => {
+      const formSaves = [];
+      function Probe() {
+        const handleKeyDown = runHandler(apple, false, false, true, values.get('showCommandsAtom'), false, (action) => formSaves.push(action), { isFocused: false });
+        runListener(React.useEffect, handleKeyDown);
+        return React.createElement('input', { value: 'Populated original task title', readOnly: true });
+      }
+      await mountProbe(() => React.createElement(Probe));
+      await type('Only create this palette task');
+      const commandKey = apple ? { metaKey: true } : { ctrlKey: true };
+      await press('Enter', { code: 'Enter', ...commandKey, ...modifiers });
+      assert.deepEqual(formSaves, [], 'document capture must not save the populated form');
+      assert.equal(requests.length, modifiers.shiftKey ? 0 : 1);
+      if (modifiers.shiftKey) await press('Enter', { code: 'Enter', ...commandKey });
+      await press('k', commandKey, document.body);
+      await press('Enter', { code: 'Enter', ...commandKey, altKey: true, shiftKey: true }, document.body);
+      assert.deepEqual(formSaves, [], 'the form stays suspended on Search too');
+      await finish();
+      assert.equal(requests.length + formSaves.length, 1, 'exactly one task is created');
+      await press('Enter', { code: 'Enter', ...commandKey }, document.body);
+      assert.deepEqual(formSaves, ['Save'], 'form shortcuts resume after the palette closes');
+    });
+  }
+  for (const newTaskWindow of [false, true]) {
+    const saves = [];
+    const handle = runHandler(false, false, false, newTaskWindow, { show: true }, false, (action) => saves.push(action), { isFocused: false });
+    handle({ key: 'Enter', ctrlKey: true });
+    handle({ key: 'Enter', ctrlKey: true, altKey: true });
+    handle({ key: 'Enter', ctrlKey: true, altKey: true, shiftKey: true });
+    assert.deepEqual(saves, newTaskWindow ? [] : ['Save', 'SaveAndClose', 'SaveAndNew'], 'flag off leaves all legacy form saves unchanged');
+  }
 });

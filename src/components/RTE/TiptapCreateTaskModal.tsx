@@ -1,5 +1,5 @@
 import { HTPR_6929_COMPOSE_TASK_WRITER_FLAG, HTPR_6937_NEW_TASK_WINDOW_FLAG } from "@/lib/flags/keys";
-import { useSetRecoilState } from "@/lib/state";
+import { useRecoilValue, useSetRecoilState } from "@/lib/state";
 import { showCommandsAtom } from "@/store";
 import { CommandMode } from "@/models/enums";
 import { isComposePaletteShortcut } from "@/lib/constants/commandCenterShortcut";
@@ -146,6 +146,7 @@ const TiptapCreateTaskModal = () => {
   let newTaskWindow = false;
   if (composeEnabled && newTaskWindowFlag) newTaskWindow = true;
   const setCommands = useSetRecoilState(showCommandsAtom);
+  const showCommands = useRecoilValue(showCommandsAtom);
   const [writerOpen, setShouldShowAITaskWriter] = useState(
     editMode === "Description-ai" ? true : false
   );
@@ -760,7 +761,7 @@ const TiptapCreateTaskModal = () => {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   const handleKeyDown = (e: any) => {
     var cmdControl = (isApple && e.metaKey) || (!isApple && e.ctrlKey);
-    if (showAssignModal || isRecording) return;
+    if (showAssignModal || isRecording || (newTaskWindow && showCommands.show)) return;
     if (cmdControl && e.key === "Enter") {
       // When AI Task Writer is visible and focused, let it handle Ctrl+Enter to send the prompt
       if (shouldShowAiTaskWriter) {
