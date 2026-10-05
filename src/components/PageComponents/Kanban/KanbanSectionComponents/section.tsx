@@ -1,6 +1,7 @@
 /* eslint-disable react/jsx-key */
 /* eslint-disable react-hooks/exhaustive-deps */
 import dynamic from "next/dynamic";
+import { useFirstScreenSurface } from "@/lib/firstScreen/SurfaceContext";
 import { getViewAppliedArchivedTasks } from "@/utils/helperFunctions/Views/ArchivedTasksHelper";
 import React, { useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 const loadTask = () => import("../KanbanTaskComponents/task");
@@ -8,6 +9,7 @@ const loadTask = () => import("../KanbanTaskComponents/task");
 if (typeof window !== "undefined") {
   void loadTask().catch(() => {});
 }
+const SeededTask = dynamic(() => import("../KanbanTaskComponents/task"));
 const Task = dynamic(loadTask, {
   ssr: false,
   loading: () => <TaskSkeleton />,
@@ -136,6 +138,9 @@ export const Section = ({
   dragDisabled?: boolean;
   project: IProject;
 }) => {
+  const snapshot = useFirstScreenSurface();
+  const [seeded] = useState(() => Boolean(snapshot));
+  const TaskRenderer = seeded ? SeededTask : Task;
   const currentProject = project;
   const activeItem = useRecoilValue(activeItemAtom);
   const active = useRecoilValue(isActiveSectionSelector(index));
@@ -149,7 +154,7 @@ export const Section = ({
   const [revealedTaskIds, setRevealedTaskIds] = useState<Set<number>>(
     () => new Set(),
   );
-  const [taskModuleReady, setTaskModuleReady] = useState(false);
+  const [taskModuleReady, setTaskModuleReady] = useState(seeded);
   const [taskModuleFailed, setTaskModuleFailed] = useState(false);
   const [mobileSectionNearViewport, setMobileSectionNearViewport] = useState(
     index === 0,
@@ -502,7 +507,7 @@ export const Section = ({
               {(section.items ?? []).map((task: ITask, i: number) => {
                 const shouldRenderTask =
                   !progressiveRendering ||
-                  typeof IntersectionObserver === "undefined" ||
+                  (!seeded && typeof IntersectionObserver === "undefined") ||
                   renderAllTasks ||
                   (shouldWarmInitialTasks &&
                     i < INITIAL_PROGRESSIVE_TASKS_PER_SECTION) ||
@@ -534,7 +539,7 @@ export const Section = ({
                           keyboardAccessible={taskModuleFailed}
                         />
                       ) : (
-                        <Task
+                        <TaskRenderer
                           task={task}
                           archiveNotification={archiveNotification}
                           tasksPlayList={tasksPlayList}
@@ -565,7 +570,7 @@ export const Section = ({
               })}
               {archivedTasksForSection.map((task: ITask, i: number) => {
                 return (
-                  <Task
+                  <TaskRenderer
                     task={task}
                     archiveNotification={archiveNotification}
                     tasksPlayList={archivedTasksPlayList}

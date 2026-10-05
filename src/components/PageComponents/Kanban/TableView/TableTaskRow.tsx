@@ -1,3 +1,5 @@
+import type { FirstScreenSnapshot } from "@/lib/firstScreen/SurfaceContext";
+import { projectDisplayDate } from "@/lib/firstScreen/display";
 import { ITask } from "@/models/model";
 import PriorityLabelComponent from "@/components/Modals/TaskPriority/PriorityLabelComponent";
 import EstimateLabelComponent from "@/components/Modals/TaskEstimate/EstimateLabelComponent";
@@ -17,14 +19,14 @@ import type { useTableActions } from "./useTableActions";
 import type { useTableColumns } from "./useTableColumns";
 import { taskInColumnDays, taskNoCommentDays, taskOnBoardDays, SortColumn, isCustomFieldSortColumn, getCustomFieldValue, customFieldIdFromSortColumn, LABEL_CLASS, renderAssigneeAvatars, TABLE_GRID_CLASS } from "./tableViewShared";
 
-type Context = Pick<TableViewProps, "_currentProject" | "enableMyTasksBulkSelection"> &
+type Context = { snapshot?: FirstScreenSnapshot | null } & Pick<TableViewProps, "_currentProject" | "enableMyTasksBulkSelection"> &
   Pick<ReturnType<typeof useTableState>, "selectedIndex" | "dragOverSectionId" | "currentProjectSectionIds" | "sortState" | "customFieldBySortColumn" | "sectionTitleBySid" | "timeTotals" | "timeNow" | "draggedTaskRef" | "myTasksBulk"> &
   Pick<ReturnType<typeof useTableActions>, "openTask" | "getTicketText" | "clearTaskDrag" | "handleMouseEnter" | "handleMouseLeave"> &
   Pick<ReturnType<typeof useTableColumns>, "frozenColumnOffset" | "gridTemplateColumns" | "visibleColumns">;
 
 export function createTableRowRenderer(context: Context) {
   const {
-  selectedIndex, dragOverSectionId, currentProjectSectionIds, sortState, openTask,
+  snapshot, selectedIndex, dragOverSectionId, currentProjectSectionIds, sortState, openTask,
   customFieldBySortColumn, frozenColumnOffset, getTicketText, _currentProject, sectionTitleBySid,
   timeTotals, timeNow, draggedTaskRef, clearTaskDrag, handleMouseEnter,
   handleMouseLeave, gridTemplateColumns, enableMyTasksBulkSelection, myTasksBulk, visibleColumns,
@@ -45,7 +47,7 @@ export function createTableRowRenderer(context: Context) {
       sortState.length > 0
     );
     const openCurrentTask = () => openTask(task, flatIndex);
-    const stalenessTooltip = `${taskInColumnDays(task) ?? 0}d in column · ${taskNoCommentDays(task) ?? 0}d since last comment · ${taskOnBoardDays(task) ?? 0}d on board`;
+    const stalenessTooltip = `${taskInColumnDays(task, snapshot ? Date.parse(snapshot.now) : undefined) ?? 0}d in column · ${taskNoCommentDays(task, snapshot ? Date.parse(snapshot.now) : undefined) ?? 0}d since last comment · ${taskOnBoardDays(task, snapshot ? Date.parse(snapshot.now) : undefined) ?? 0}d on board`;
 
     const renderCell = (column: SortColumn) => {
       if (isCustomFieldSortColumn(column)) {
@@ -162,7 +164,7 @@ export function createTableRowRenderer(context: Context) {
             </span>
           );
         case "inColumn": {
-          const days = taskInColumnDays(task);
+          const days = taskInColumnDays(task, snapshot ? Date.parse(snapshot.now) : undefined);
           const level = stalenessLevel(days, {
             warnDays: _currentProject?.staleWarnDays,
             hotDays: _currentProject?.staleHotDays,
@@ -180,7 +182,7 @@ export function createTableRowRenderer(context: Context) {
           );
         }
         case "noComment": {
-          const days = taskNoCommentDays(task);
+          const days = taskNoCommentDays(task, snapshot ? Date.parse(snapshot.now) : undefined);
           const level = stalenessLevel(days, {
             warnDays: _currentProject?.staleWarnDays,
             hotDays: _currentProject?.staleHotDays,
@@ -198,7 +200,7 @@ export function createTableRowRenderer(context: Context) {
           );
         }
         case "onBoard": {
-          const days = taskOnBoardDays(task);
+          const days = taskOnBoardDays(task, snapshot ? Date.parse(snapshot.now) : undefined);
           const level = stalenessLevel(days, {
             warnDays: _currentProject?.staleWarnDays,
             hotDays: _currentProject?.staleHotDays,
@@ -218,21 +220,21 @@ export function createTableRowRenderer(context: Context) {
         case "time": {
           const total = displayedBoardTimeSeconds(timeTotals.get(task.id), timeNow);
           return (
-            <span key="time" className="block truncate text-right text-text-light-gray" suppressHydrationWarning>
+            <span key="time" className="block truncate text-right text-text-light-gray" suppressHydrationWarning={!snapshot}>
               {total > 0 ? formatElapsed(total) : ""}
             </span>
           );
         }
         case "created":
           return (
-            <span key="created" className="block text-text-light-gray text-right truncate" suppressHydrationWarning>
-              {task.createdAt && formatDateWithYearIfPast(task.createdAt)}
+            <span key="created" className="block text-text-light-gray text-right truncate" suppressHydrationWarning={!snapshot}>
+              {task.createdAt && (snapshot ? projectDisplayDate(task.createdAt, snapshot, "created") : formatDateWithYearIfPast(task.createdAt))}
             </span>
           );
         case "updated":
           return (
-            <span key="updated" className="block text-text-light-gray text-right truncate" suppressHydrationWarning>
-              {task.updatedAt && formatDateDifference(task.updatedAt)}
+            <span key="updated" className="block text-text-light-gray text-right truncate" suppressHydrationWarning={!snapshot}>
+              {task.updatedAt && (snapshot ? projectDisplayDate(task.updatedAt, snapshot) : formatDateDifference(task.updatedAt))}
             </span>
           );
         default:

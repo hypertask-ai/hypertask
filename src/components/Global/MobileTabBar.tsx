@@ -1,6 +1,8 @@
 "use client";
 
 import Link from "next/link";
+import { useFirstScreenSurface } from "@/lib/firstScreen/SurfaceContext";
+import { projectDisplayDay } from "@/lib/firstScreen/display";
 import { useEffect, useRef, useState } from "react";
 import { usePathname } from "next/navigation";
 import { FaInbox } from "react-icons/fa";
@@ -25,7 +27,8 @@ const MobileTabBar = ({ currentUserId }: MobileTabBarProps) => {
   const pathname = usePathname();
   const dockRef = useRef<HTMLElement>(null);
   const dockOwner = useRef({});
-  const [currentDay, setCurrentDay] = useState(() => new Date().getDate());
+  const snapshot = useFirstScreenSurface(currentUserId);
+  const [currentDay, setCurrentDay] = useState(() => snapshot ? projectDisplayDay(snapshot) : new Date().getDate());
   const { data: notificationCount } = useGetNotificationCount(currentUserId);
   const { navigateToBoard } = useAppShellSurfaceShortcuts({ listen: false });
   const { toggleAIChatInterface, showAiChatInterface, closeAIChatInterface } =
@@ -36,7 +39,7 @@ const MobileTabBar = ({ currentUserId }: MobileTabBarProps) => {
     const refreshDay = () => {
       if (midnightTimer) clearTimeout(midnightTimer);
       const now = new Date();
-      setCurrentDay(now.getDate());
+      setCurrentDay(snapshot ? projectDisplayDay({ ...snapshot, now: now.toISOString() }) : now.getDate());
 
       const nextMidnight = new Date(now);
       nextMidnight.setHours(24, 0, 0, 0);
@@ -142,7 +145,7 @@ const MobileTabBar = ({ currentUserId }: MobileTabBarProps) => {
               strokeWidth={1.75}
             />
             <span
-              suppressHydrationWarning
+              suppressHydrationWarning={!snapshot}
               className="absolute inset-x-0 bottom-px text-center text-micro font-medium leading-none tabular-nums"
             >
               {currentDay}

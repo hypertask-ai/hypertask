@@ -1,5 +1,8 @@
 import { INotification, TRemoveFromInboxMode } from "@/models/model";
 import formatDateDifference from "@/utils/generateTime";
+import { useFirstScreenSurface } from "@/lib/firstScreen/SurfaceContext";
+import { projectDisplayDate } from "@/lib/firstScreen/display";
+import { projectCommentPreview, projectPlainText } from "@/lib/firstScreen/comment";
 import { Circle } from "lucide-react";
 import UserAvatar from "../Common/UserAvatar";
 
@@ -109,6 +112,7 @@ const NotificationRow = (props: Props) => {
 
 const CreatedAtDesktop = ({ hidden = false }: { hidden?: boolean }) => {
     const { notification, isIbxSlctd } = useNotificationContext();
+    const snapshot = useFirstScreenSurface(notification.userId);
     // HTPR-4955: the bracket beside the sender now carries the unread count,
     // so repeating it as a "· N unread" suffix here is noise.
 
@@ -122,11 +126,11 @@ const CreatedAtDesktop = ({ hidden = false }: { hidden?: boolean }) => {
                     // visibility (not display) keeps the space, so nothing reflows
                     hidden && "md:invisible"
                 )}
-                suppressHydrationWarning
+                suppressHydrationWarning={!snapshot}
                 style={{
                     fontSize: 13 }}
             >
-                {formatDateDifference(notification.createdAt)}
+                {snapshot ? projectDisplayDate(notification.createdAt, snapshot) : formatDateDifference(notification.createdAt)}
             </span>
         </>
     )
@@ -134,6 +138,7 @@ const CreatedAtDesktop = ({ hidden = false }: { hidden?: boolean }) => {
 
 const CreatedAtMobile = () => {
     const { notification, isIbxSlctd } = useNotificationContext();
+    const snapshot = useFirstScreenSurface(notification.userId);
     // HTPR-4955: the bracket beside the sender now carries the unread count,
     // so repeating it as a "· N unread" suffix here is noise.
     return (
@@ -144,11 +149,11 @@ const CreatedAtMobile = () => {
                     "flex items-center md:hidden font-semibold"
                 )}>
             <span
-                suppressHydrationWarning
+                suppressHydrationWarning={!snapshot}
                 style={{
                     fontSize: 13 }}
             >
-                {formatDateDifference(notification.createdAt)}
+                {snapshot ? projectDisplayDate(notification.createdAt, snapshot) : formatDateDifference(notification.createdAt)}
             </span>
         </div>
     )
@@ -184,15 +189,17 @@ function extractMentionSnippet(html: string, userId: string): string | null {
 
 export const NotificationContent = () => {
     const { notification, isIbxSlctd } = useNotificationContext();
+    const snapshot = useFirstScreenSurface(notification.userId);
+    const plain = snapshot ? projectPlainText : convertToPlain;
     const flipMentionHierarchy = notification.type === "Mentioned" && Boolean(notification.commentId) && Boolean(notification.task);
     const dueDate = notification.task?.dueDate ? new Date(notification.task.dueDate) : null;
     const formattedDueDate = dueDate
-        ? format(dueDate, dueDate.getFullYear() === new Date().getFullYear() ? "dd MMM" : "dd MMM yyyy")
+        ? snapshot ? projectDisplayDate(dueDate, snapshot, "changed") : format(dueDate, dueDate.getFullYear() === new Date().getFullYear() ? "dd MMM" : "dd MMM yyyy")
         : null;
 
     return (
         <div
-            suppressHydrationWarning
+            suppressHydrationWarning={!snapshot}
             className={cn(
                 inboxConfig.bulkSelectionStyling.content(isIbxSlctd),
                 flipMentionHierarchy
@@ -202,14 +209,14 @@ export const NotificationContent = () => {
             )}
         >
             <span
-                suppressHydrationWarning
+                suppressHydrationWarning={!snapshot}
                 className="truncate line-clamp-1 xs:max-w-[92vw] md:max-w-full xs:whitespace-pre-wrap md:whitespace-nowrap"
                 style={{
                     fontSize: 13 }}
             >
-                {typeof window !== "undefined" &&
+                {(snapshot || typeof window !== "undefined") &&
                     notification.type === "Comment"
-                    ? renderCommentPreview(notification.comment?.text ?? "")
+                    ? snapshot ? projectCommentPreview(notification.comment?.text ?? "").text : renderCommentPreview(notification.comment?.text ?? "")
                     : notification.type === "Assigned"
                         ? "Assigned to you"
                         : notification.type === "TaskArchived"
@@ -221,11 +228,11 @@ export const NotificationContent = () => {
                                     : notification.type === "Mentioned"
                                         ? notification.commentId ?
                                             flipMentionHierarchy
-                                                ? renderCommentMentionSimple(notification.comment?.text ?? "", notification.userId)
+                                                ? renderCommentMentionSimple(notification.comment?.text ?? "", notification.userId, Boolean(snapshot))
                                                 : <>
 
                                                     Mentioned in:&nbsp;
-                                                    {renderCommentMentionSimple(notification.comment?.text ?? "", notification.userId)}
+                                                    {renderCommentMentionSimple(notification.comment?.text ?? "", notification.userId, Boolean(snapshot))}
                                                 </>
                                             :
                                             `Mentioned in`
@@ -249,12 +256,12 @@ export const NotificationContent = () => {
                                                             : notification.type === "TaskUpdateDescription"
                                                                 ? "Description updated"
                                                                 : notification.type === "AgentMessage"
-                                                                    ? convertToPlain(decodeAgentMessage(notification.message))
+                                                                    ? plain(decodeAgentMessage(notification.message))
                                                                     : notification.type === "Reacted" && !notification.commentId
                                                                     ? `Reacted with ${notification.reaction?.emoji
                                                                     } on description`
                                                                     : `Reacted with ${notification.reaction?.emoji
-                                                                    } on ${convertToPlain(
+                                                                    } on ${plain(
                                                                         notification.comment?.text ?? ""
                                                                     )} `
 
@@ -409,7 +416,11 @@ function renderCommentPreview(html: string) {
     return div.textContent?.trim() || convertToPlain(html);
 }
 
-export function renderCommentMentionSimple(html: string, currentUserId: string | number) {
+export function renderCommentMentionSimple(html: string, currentUserId: string | number, seeded = false) {
+    if (seeded) {
+        const preview = projectCommentPreview(html, currentUserId);
+        return preview.mention ? <>{preview.mention.before}<span className="bg-mention-highlight text-mention-highlight" style={{ borderRadius: "4px", padding: "2px 4px" }}>@{preview.mention.name}</span>{preview.mention.after}</> : preview.text;
+    }
     // Extract the inner text (plain) from your HTML.
     // Assumes structure: <p><span ...mention...>Username</span> Rest of message</p>
     // We'll use regex to extract.

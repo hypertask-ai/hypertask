@@ -23,7 +23,10 @@ import {
 } from "@/models/model";
 import Goback from "@/assets/gobackicon.svg";
 const loadInboxSplit = () => import("@/components/notifications/inboxSplit");
-const InboxSplit = dynamic(loadInboxSplit, { ssr: false });
+const ClientInboxSplit = dynamic(loadInboxSplit, { ssr: false });
+const SeededInboxSplit = dynamic(() => import("@/components/notifications/inboxSplit"));
+import { useFirstScreenSurface } from "@/lib/firstScreen/SurfaceContext";
+import FirstScreenMobileChrome from "@/components/Global/FirstScreenMobileChrome";
 
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
@@ -99,6 +102,9 @@ const Inbox = ({
   homepageRouter: string;
   originProject: string;
 }) => {
+  const snapshot = useFirstScreenSurface(currentUser.id);
+  const [seeded] = useState(() => Boolean(snapshot));
+  const InboxSplit = seeded ? SeededInboxSplit : ClientInboxSplit;
   const queryClient = useQueryClient();
   const isMbl = useMobileView();
   const [appShellRail] = useRecoilState(appShellRailAtom);
@@ -719,6 +725,7 @@ const Inbox = ({
 
   return (
     <>
+      <FirstScreenMobileChrome currentUser={currentUser} />
       <input
         ref={commandFocusProxy}
         id="inbox-command-focus-proxy"

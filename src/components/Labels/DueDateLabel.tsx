@@ -1,4 +1,6 @@
 import { format } from 'date-fns';
+import { useFirstScreenSurface } from '@/lib/firstScreen/SurfaceContext';
+import { projectDisplayDate } from '@/lib/firstScreen/display';
 import React, { useCallback, useMemo, useState } from 'react';
 import { Calendar } from "lucide-react";
 import LabelWrapper from './LabelWrapper';
@@ -25,11 +27,12 @@ const DueDateLabel: React.FC<DueDateLabelProps> = ({ dueDate, flexBasis, fontSiz
     () => (dueDate instanceof Date ? dueDate : new Date(dueDate)),
     [dueDate]
   );
+  const snapshot = useFirstScreenSurface();
   const dueDateTime = dueDateObj.getTime();
   const currentYear = new Date().getFullYear();
   const formattedDate = useMemo(
-    () => format(dueDateObj, dueDateObj.getFullYear() === currentYear ? "LLL dd" : "LLL dd, y"),
-    [currentYear, dueDateObj]
+    () => snapshot ? projectDisplayDate(dueDateObj, snapshot, "due") : format(dueDateObj, dueDateObj.getFullYear() === currentYear ? "LLL dd" : "LLL dd, y"),
+    [currentYear, dueDateObj, snapshot]
   );
   const [tooltipDate, setTooltipDate] = useState<{
     dueDateTime: number;
@@ -77,7 +80,7 @@ const DueDateLabel: React.FC<DueDateLabelProps> = ({ dueDate, flexBasis, fontSiz
         className='whitespace-nowrap'
         onClick={handleOnClick}
         style={dateTextStyle}
-        suppressHydrationWarning
+        suppressHydrationWarning={!snapshot}
       >
         {formattedDate}
       </span>

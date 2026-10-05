@@ -302,6 +302,8 @@ const NO_CHAT_RESTORE_ROUTES = [
   "/verify-email",
 ];
 
+import { useFirstScreenSurface } from "@/lib/firstScreen/SurfaceContext";
+
 export default function GlobalProvider({
   children,
   authenticatedUserId,
@@ -321,6 +323,7 @@ export default function GlobalProvider({
   const isApple = useDeviceContext();
   const mbl = useContext(MobileViewContext);
   const pathname = usePathname();
+  const routeOwnsMobileChrome = Boolean(useFirstScreenSurface(authenticatedUserId));
   const myTasksShortcutsWidthEnabled = useFlag(MY_TASKS_SHORTCUTS_WIDTH_FLAG);
   useAppShellSurfaceShortcuts();
   const startupUser = useRecoilValue(currentUserAtom);
@@ -1414,11 +1417,11 @@ export default function GlobalProvider({
       (agentChatMobileFullscreenFlag && isAgentChatPath(pathname)) ? null : (
         showMobileShellPath && currentUser && (
         <>
-          <MobileTopBar
+          {!routeOwnsMobileChrome && <MobileTopBar
             currentUser={currentUser}
             boardUsable={mobileBoardControlsReady}
-          />
-          {showMobileBottomNav && mobileBoardControlsReady && (
+          />}
+          {!routeOwnsMobileChrome && showMobileBottomNav && mobileBoardControlsReady && (
             mobilePageHideDockFlag && isTicketPagePath(pathname) ? null : (
               <MobileTabBar currentUserId={currentUser.id} />
             )

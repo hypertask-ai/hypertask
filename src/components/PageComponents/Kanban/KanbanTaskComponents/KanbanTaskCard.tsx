@@ -1,5 +1,6 @@
 import { DraggableProvided, DraggableStateSnapshot } from "@hello-pangea/dnd";
 import React from "react";
+import { useFirstScreenSurface } from "@/lib/firstScreen/SurfaceContext";
 
 import { IAgent, IProject, ITask, IUser } from "@/models/model";
 import { TBoardSubtaskSetting } from "@/models/Views/model";
@@ -211,11 +212,13 @@ const TaskStalenessLine = ({
   project?: IProject;
   task: ITask;
 }) => {
+  const snapshot = useFirstScreenSurface();
   if (!enabled) return null;
 
-  const columnDays = daysSince(task.sectionChangedAt ?? task.createdAt);
-  const commentDays = daysSince(task.lastCommentAt ?? task.createdAt);
-  const boardDays = daysSince(task.createdAt);
+  const now = snapshot ? Date.parse(snapshot.now) : undefined;
+  const columnDays = daysSince(task.sectionChangedAt ?? task.createdAt, now);
+  const commentDays = daysSince(task.lastCommentAt ?? task.createdAt, now);
+  const boardDays = daysSince(task.createdAt, now);
   const thresholds = {
     warnDays: project?.staleWarnDays,
     hotDays: project?.staleHotDays,

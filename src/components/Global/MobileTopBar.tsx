@@ -1,7 +1,7 @@
 /* eslint-disable @next/next/no-img-element */
 "use client";
 
-import { lazy, Suspense, useEffect, useRef, useState } from "react";
+import { lazy, Suspense, useEffect, useRef, useState, type ComponentType } from "react";
 import { usePathname } from "next/navigation";
 import { PanelLeft } from "lucide-react";
 import { useRecoilValue } from "@/lib/state";
@@ -11,15 +11,21 @@ import { MOBILE_TARGET } from "@/lib/configs/general.config";
 
 const MobileTitleSheet = lazy(() => import("./MobileTitleSheet"));
 const MobileHeaderStrip = lazy(() => import("./MobileHeaderStrip"));
-const MobileTopBarActions = lazy(() => import("./MobileTopBarActions"));
+const ClientTopBarActions = lazy(() => import("./MobileTopBarActions"));
 
 const MobileTopBar = ({
   currentUser,
   boardUsable,
+  headerStrip,
+  topBarActions,
 }: {
   currentUser: IUser;
   boardUsable: boolean;
+  headerStrip?: ComponentType<{ calendarTitle?: string | null }>;
+  topBarActions?: ComponentType<{ currentUser: IUser; onCalendar: boolean }>;
 }) => {
+  const HeaderStrip = headerStrip ?? MobileHeaderStrip;
+  const MobileTopBarActions = topBarActions ?? ClientTopBarActions;
   const pathname = usePathname();
   const calendarTitle = useRecoilValue(mobileTopBarTitleAtom);
   const [showBoards, setShowBoards] = useState(false);
@@ -107,7 +113,7 @@ const MobileTopBar = ({
                 </span>
               )}
             >
-              <MobileHeaderStrip calendarTitle={calendarTitle} />
+              <HeaderStrip calendarTitle={calendarTitle} />
             </Suspense>
           ) : (
             <span className="flex min-w-0 items-center truncate text-dense font-semibold text-white-black">

@@ -5,6 +5,7 @@ import { resolveBoardSwitchIntent } from "@/lib/analytics/boardSwitchLatency";
 
 import { useLandingSection } from "./LandingPageSection";
 import type { SectionCompProps } from "./LandingPageSection";
+import FirstScreenMobileChrome from "@/components/Global/FirstScreenMobileChrome";
 import type { LandingPageInput } from "./LandingPageShared";
 
 
@@ -1195,6 +1196,7 @@ const boardRender =
 
 return (
     <Suspense fallback={<></>}>
+      <FirstScreenMobileChrome currentUser={user} />
 
       {data &&
       Array.isArray(data.updatedProjects) &&
