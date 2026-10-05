@@ -17,7 +17,6 @@
 }
 
 :root {
-  --z-hover-tooltip: 1000000000;
   // Mobile keeps its existing 20px inset. Desktop uses a 4px focus rail plus
   // a 48px control gutter, so tabs, date labels, and sender text share x=52px.
   --inbox-text-left-offset: 20px;
@@ -26,34 +25,6 @@
 @media (min-width: 768px) {
   :root {
     --inbox-text-left-offset: 52px;
-  }
-}
-
-[data-hover-tooltip-portal] {
-  position: fixed;
-  inset: auto;
-  margin: 0;
-  padding: 0;
-  border: 0;
-  overflow: visible;
-  background: transparent;
-  color: inherit;
-  pointer-events: none;
-  z-index: var(--z-hover-tooltip);
-
-  &[data-interactive] > * {
-    pointer-events: auto;
-  }
-
-  &::backdrop {
-    background: transparent;
-    pointer-events: none;
-  }
-}
-
-@starting-style {
-  [data-hover-tooltip-portal] [data-hover-tooltip-content] {
-    transform: scale(0);
   }
 }
 

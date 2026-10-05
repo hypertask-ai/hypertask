@@ -7,6 +7,7 @@ import { getSessionUser } from "@/lib/auth/getSessionUser";
 import { AGENT_CHAT_STOP_AND_TIMEOUT_FEATURE_FLAG } from "@/lib/agentRuns/model";
 
 import {
+  HTPR_6950_TOOLTIP_TOP_LAYER_FLAG,
   HTPR_6934_SERVER_FIRST_SCREEN_FLAG,
   HTPR_6929_COMPOSE_TASK_WRITER_FLAG,
   HTPR_6937_NEW_TASK_WINDOW_FLAG,
@@ -173,6 +174,11 @@ const RETIRED_CLIENT_FEATURE_FLAGS = {
 } as const;
 
 const FEATURE_FLAG_DEFINITIONS = [
+  {
+    key: HTPR_6950_TOOLTIP_TOP_LAYER_FLAG,
+    shippedOn: "2026-10-05",
+    description: "Keeps hover tooltips above other interface layers without being clipped or covered.",
+  },
   {
     key: HTPR_6934_SERVER_FIRST_SCREEN_FLAG,
     shippedOn: "2026-10-04",

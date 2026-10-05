@@ -22,7 +22,7 @@ function sourceFiles(directory) {
 }
 
 test("the shared hover-tooltip layer clears every numeric app layer", () => {
-  const styles = read("src/styles/globals.scss");
+  const styles = read("src/components/Common/TooltipPortal.module.scss");
   const definitions = [...styles.matchAll(/--z-hover-tooltip:\s*(\d+)/g)];
   assert.equal(definitions.length, 1);
   const tooltipLayer = Number(definitions[0][1]);
@@ -37,7 +37,7 @@ test("the shared hover-tooltip layer clears every numeric app layer", () => {
   assert.ok(![1000000001].every((layer) => tooltipLayer > layer), "the layer oracle rejects an excessive overlay");
 });
 
-test("all custom hover implementations use the shared top-layer portal", () => {
+test("all custom hover implementations gate the shared top-layer portal", () => {
   const implementations = [
     "src/components/Common/Tooltip.tsx",
     "src/components/Common/ReactTooltip.tsx",
@@ -51,7 +51,7 @@ test("all custom hover implementations use the shared top-layer portal", () => {
   for (const file of implementations) {
     const source = read(file);
     assert.match(source, /<TooltipPortal(?:\s|>)/, file);
-    assert.doesNotMatch(source, /z-\[999(?:0|9|999999)\]/, file);
+    assert.match(source, /useFlag\(HTPR_6950_TOOLTIP_TOP_LAYER_FLAG\)/, file);
   }
   const portal = read("src/components/Common/TooltipPortal.tsx");
   assert.match(portal, /createPortal\(/);
@@ -67,6 +67,8 @@ test("real tooltip components escape clipped and transformed ancestors without c
   const stubPaths = [
     "src/utils/undoActions/helperFuncs.ts",
     "src/utils/helperFunctions/helperFunctions.ts",
+    "src/hooks/useFlag.tsx",
+    "src/components/Common/TooltipPortal.module.scss",
   ].map((file) => path.join(root, file));
   const previousModules = stubPaths.map((file) => require.cache[file]);
   let reactRoot;
@@ -85,7 +87,12 @@ test("real tooltip components escape clipped and transformed ancestors without c
     stubPaths.forEach((file, index) => {
       require.cache[file] = {
         id: file, filename: file, loaded: true,
-        exports: index === 0 ? { cn: (...classes) => classes.filter(Boolean).join(" ") } : { formatDateToGMT: () => "5 October 2026, 12:00 GMT" },
+        exports: [
+          { cn: (...classes) => classes.filter(Boolean).join(" ") },
+          { formatDateToGMT: () => "5 October 2026, 12:00 GMT" },
+          { useFlag: (key) => key === "htpr-6950-tooltip-top-layer" },
+          { default: { portal: "tooltip-portal" } },
+        ][index],
       };
     });
     const jiti = createJiti(__filename, { interopDefault: true, jsx: true, alias: { "@": path.join(root, "src") } });
@@ -105,6 +112,10 @@ test("real tooltip components escape clipped and transformed ancestors without c
       }))));
       assert.equal(document.querySelector("[data-hover-tooltip-portal]"), null, "no hover flag before hover");
       const group = container.firstElementChild;
+      await React.act(async () => container.querySelector("#anchor").focus());
+      assert.equal(Boolean(document.querySelector("[data-hover-tooltip-portal]")), portal, "focus opening matches the production portal prop");
+      await React.act(async () => container.querySelector("#anchor").blur());
+      assert.equal(document.querySelector("[data-hover-tooltip-portal]"), null, "focusout closes the portal");
       const trigger = portal ? container.querySelector("#anchor") : group;
       await React.act(async () => trigger.dispatchEvent(new window.MouseEvent("mouseenter")));
       const popup = document.querySelector("[data-hover-tooltip-portal]");

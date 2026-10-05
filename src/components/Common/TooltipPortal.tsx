@@ -2,10 +2,12 @@
 
 import { ReactNode, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import styles from "./TooltipPortal.module.scss";
 
 interface Props {
   children: ReactNode | ((rect: DOMRect) => ReactNode);
   hover?: boolean;
+  focus?: boolean;
   groupHoverId?: string;
   anchorElement?: Element | null;
   anchorRect?: DOMRect | null;
@@ -17,6 +19,7 @@ interface Props {
 const TooltipPortal = ({
   children,
   hover = false,
+  focus = false,
   groupHoverId = "",
   anchorElement = null,
   anchorRect = null,
@@ -50,7 +53,7 @@ const TooltipPortal = ({
     setOpen(trigger.matches(":hover"));
     trigger.addEventListener("mouseenter", show);
     trigger.addEventListener("mouseleave", hide);
-    if (placement === "below") {
+    if (focus) {
       trigger.addEventListener("focusin", show);
       trigger.addEventListener("focusout", hide);
     }
@@ -60,7 +63,7 @@ const TooltipPortal = ({
       trigger.removeEventListener("focusin", show);
       trigger.removeEventListener("focusout", hide);
     };
-  }, [anchorElement, anchorRect, groupHoverId, hover, placement]);
+  }, [anchorElement, anchorRect, groupHoverId, hover, focus, placement]);
 
   useLayoutEffect(() => {
     if (!open || (!anchor && !anchorRect && placement !== "fixed")) return;
@@ -134,7 +137,7 @@ const TooltipPortal = ({
   return <>
     <span ref={portalAnchorRef} aria-hidden="true" style={{ position: "absolute", width: 0, height: 0, pointerEvents: "none" }} />
     {open && rect && typeof document !== "undefined" && createPortal(
-      <div ref={portalRef} popover="manual" data-hover-tooltip-portal data-interactive={interactive || undefined}>
+      <div ref={portalRef} className={styles.portal} popover="manual" data-hover-tooltip-portal data-interactive={interactive || undefined}>
         {typeof children === "function" ? children(rect) : children}
       </div>,
       anchor?.closest("dialog[open]") ?? document.body,

@@ -8,7 +8,7 @@ import { agentPageHref } from "@/lib/agents/pageHref";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useFlag } from "@/hooks/useFlag";
-import { HTPR_6752_INSTANT_TICKET_OPEN_FLAG } from "@/lib/flags/keys";
+import { HTPR_6752_INSTANT_TICKET_OPEN_FLAG, HTPR_6950_TOOLTIP_TOP_LAYER_FLAG } from "@/lib/flags/keys";
 import {
   autoUpdate,
   flip,
@@ -55,7 +55,8 @@ type PersonHovercardSurfaceProps = {
   onFloatingFocusLeave?: () => void;
 };
 
-const PersonHovercardSurface = ({
+const PersonHovercardSurfaceContent = ({
+  topLayer = false,
   quiet,
   projectId,
   subject,
@@ -67,7 +68,7 @@ const PersonHovercardSurface = ({
   onFloatingPointerLeave,
   onFloatingFocusEnter,
   onFloatingFocusLeave,
-}: PersonHovercardSurfaceProps) => {
+}: PersonHovercardSurfaceProps & { topLayer?: boolean }) => {
   const [internalOpen, setInternalOpen] = useState(false);
   const [copied, setCopied] = useState(false);
   const controlled = externallyOpen !== undefined;
@@ -139,91 +140,100 @@ const PersonHovercardSurface = ({
     );
   }
 
+  const surface = (
+    <FloatingFocusManager context={context} modal={false} initialFocus={-1}>
+      <section
+        ref={refs.setFloating}
+        style={floatingStyles}
+        aria-labelledby={profile ? headingId : undefined}
+        aria-label={profile ? undefined : "Person contact details"}
+        className={`relative ${topLayer ? "" : "z-[999999999]"} w-[272px] rounded-[4px] border-thin border-border-light-gray-thin bg-modalBackground p-3 text-white-black shadow-[0_12px_36px_rgba(0,0,0,0.28)]`}
+        {...getFloatingProps({
+          onPointerEnter: onFloatingPointerEnter,
+          onPointerLeave: onFloatingPointerLeave,
+          onFocus: onFloatingFocusEnter,
+          onBlur: onFloatingFocusLeave,
+        })}
+      >
+        {profileHref && profile && (
+          <Link
+            href={profileHref}
+            aria-label={`Open ${profile.displayName} agent page`}
+            className="absolute inset-0 z-10 cursor-pointer rounded-[3px] outline-none focus-visible:ring-1 focus-visible:ring-hypertasks-purple"
+          />
+        )}
+        {profile ? (
+          <div className="flex min-w-0 items-start gap-2.5">
+            <UserAvatar
+              agentId={profile.kind === "agent" ? profile.id : undefined}
+              alt=""
+              name={profile.displayName}
+              photoURL={profile.photoURL ?? ""}
+              size={28}
+            />
+            <div className="min-w-0 flex-1">
+              <p id={headingId} className="truncate text-content font-semibold">
+                {profile.displayName}
+              </p>
+              {email && (
+                <button
+                  type="button"
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    void copyEmail();
+                  }}
+                  className="group mt-1 flex min-h-[28px] max-w-full items-center gap-1.5 rounded-[3px] text-left text-dense text-text-light-gray outline-none hover:text-white-black focus-visible:ring-1 focus-visible:ring-hypertasks-purple"
+                  aria-label={`Copy ${email}`}
+                >
+                  <span className="truncate">{email}</span>
+                  {copied ? (
+                    <Check size={14} aria-hidden="true" className="shrink-0 text-green-500" />
+                  ) : (
+                    <Copy size={14} aria-hidden="true" className="shrink-0" />
+                  )}
+                  <span className="sr-only" aria-live="polite">
+                    {copied ? "Email copied" : ""}
+                  </span>
+                </button>
+              )}
+            </div>
+          </div>
+        ) : query.isError ? (
+          <p className="text-dense text-text-light-gray">Contact details unavailable</p>
+        ) : (
+          <p className="text-dense text-text-light-gray">Loading contact…</p>
+        )}
+      </section>
+    </FloatingFocusManager>
+  );
+
   return (
     <>
       {reference}
       {open && (!instantTicketOpen || quiet === false || !detailRoute || profile || query.isError) && (
         <FloatingPortal>
-          <TooltipPortal placement="fixed" anchorElement={refs.domReference.current} interactive>
-          <FloatingFocusManager context={context} modal={false} initialFocus={-1}>
-            <section
-              ref={refs.setFloating}
-              style={floatingStyles}
-              aria-labelledby={profile ? headingId : undefined}
-              aria-label={profile ? undefined : "Person contact details"}
-              className="relative w-[272px] rounded-[4px] border-thin border-border-light-gray-thin bg-modalBackground p-3 text-white-black shadow-[0_12px_36px_rgba(0,0,0,0.28)]"
-              {...getFloatingProps({
-                onPointerEnter: onFloatingPointerEnter,
-                onPointerLeave: onFloatingPointerLeave,
-                onFocus: onFloatingFocusEnter,
-                onBlur: onFloatingFocusLeave,
-              })}
-            >
-              {profileHref && profile && (
-                <Link
-                  href={profileHref}
-                  aria-label={`Open ${profile.displayName} agent page`}
-                  className="absolute inset-0 z-10 cursor-pointer rounded-[3px] outline-none focus-visible:ring-1 focus-visible:ring-hypertasks-purple"
-                />
-              )}
-              {profile ? (
-                <div className="flex min-w-0 items-start gap-2.5">
-                  <UserAvatar
-                    agentId={profile.kind === "agent" ? profile.id : undefined}
-                    alt=""
-                    name={profile.displayName}
-                    photoURL={profile.photoURL ?? ""}
-                    size={28}
-                  />
-                  <div className="min-w-0 flex-1">
-                    <p id={headingId} className="truncate text-content font-semibold">
-                      {profile.displayName}
-                    </p>
-                    {email && (
-                      <button
-                        type="button"
-                        onClick={(event) => {
-                          event.stopPropagation();
-                          void copyEmail();
-                        }}
-                        className="group mt-1 flex min-h-[28px] max-w-full items-center gap-1.5 rounded-[3px] text-left text-dense text-text-light-gray outline-none hover:text-white-black focus-visible:ring-1 focus-visible:ring-hypertasks-purple"
-                        aria-label={`Copy ${email}`}
-                      >
-                        <span className="truncate">{email}</span>
-                        {copied ? (
-                          <Check size={14} aria-hidden="true" className="shrink-0 text-green-500" />
-                        ) : (
-                          <Copy size={14} aria-hidden="true" className="shrink-0" />
-                        )}
-                        <span className="sr-only" aria-live="polite">
-                          {copied ? "Email copied" : ""}
-                        </span>
-                      </button>
-                    )}
-                  </div>
-                </div>
-              ) : query.isError ? (
-                <p className="text-dense text-text-light-gray">Contact details unavailable</p>
-              ) : (
-                <p className="text-dense text-text-light-gray">Loading contact…</p>
-              )}
-            </section>
-          </FloatingFocusManager>
-          </TooltipPortal>
+          {topLayer ? (
+            <TooltipPortal placement="fixed" anchorElement={refs.domReference.current} interactive>
+              {surface}
+            </TooltipPortal>
+          ) : surface}
         </FloatingPortal>
       )}
     </>
   );
 };
 
+const PersonHovercardSurface = (props: PersonHovercardSurfaceProps) => {
+  const topLayer = useFlag(HTPR_6950_TOOLTIP_TOP_LAYER_FLAG);
+  return topLayer ? <PersonHovercardSurfaceContent {...props} topLayer /> : <PersonHovercardSurfaceContent {...props} />;
+};
+
 const PersonHovercard = ({ projectId, subject, children }: PersonHovercardProps) => {
+  const topLayer = useFlag(HTPR_6950_TOOLTIP_TOP_LAYER_FLAG);
   const instantTicketOpen = useFlag(HTPR_6752_INSTANT_TICKET_OPEN_FLAG);
   if (!projectId || !subject) return children;
-  return (
-    <PersonHovercardSurface projectId={projectId} subject={subject} quiet={instantTicketOpen ? true : false}>
-      {children}
-    </PersonHovercardSurface>
-  );
+  const surfaceProps = { projectId, subject, quiet: instantTicketOpen ? true : false, children };
+  return topLayer ? <PersonHovercardSurface {...surfaceProps} /> : <PersonHovercardSurfaceContent {...surfaceProps} />;
 };
 
 const ParentPersonHovercard = ({
@@ -233,6 +243,7 @@ const ParentPersonHovercard = ({
   projectId?: number;
   subject?: PersonHovercardSubject | null;
 }) => {
+  const topLayer = useFlag(HTPR_6950_TOOLTIP_TOP_LAYER_FLAG);
   const instantTicketOpen = useFlag(HTPR_6752_INSTANT_TICKET_OPEN_FLAG);
   const markerRef = useRef<HTMLSpanElement>(null);
   const closeTimerRef = useRef<number | null>(null);
@@ -282,23 +293,23 @@ const ParentPersonHovercard = ({
     anchor.setAttribute("aria-expanded", String(open));
   }, [anchor, open]);
 
+  const surfaceProps = {
+    projectId,
+    subject,
+    anchor,
+    quiet: instantTicketOpen ? true : false,
+    externallyOpen: open,
+    onExternallyOpenChange: setOpen,
+    onFloatingPointerEnter: cancelClose,
+    onFloatingPointerLeave: scheduleClose,
+    onFloatingFocusEnter: cancelClose,
+    onFloatingFocusLeave: scheduleClose,
+  };
+
   return (
     <>
       <span ref={markerRef} hidden />
-      {anchor && subject && (
-        <PersonHovercardSurface
-          projectId={projectId}
-          subject={subject}
-          anchor={anchor}
-          quiet={instantTicketOpen ? true : false}
-          externallyOpen={open}
-          onExternallyOpenChange={setOpen}
-          onFloatingPointerEnter={cancelClose}
-          onFloatingPointerLeave={scheduleClose}
-          onFloatingFocusEnter={cancelClose}
-          onFloatingFocusLeave={scheduleClose}
-        />
-      )}
+      {anchor && subject && (topLayer ? <PersonHovercardSurface {...surfaceProps} /> : <PersonHovercardSurfaceContent {...surfaceProps} />)}
     </>
   );
 };
