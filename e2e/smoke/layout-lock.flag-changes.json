@@ -32,17 +32,5 @@
       "properties"
     ],
     "reason": "Valentin asks to 'collapse the properties and the title' so the user 'focuses only on the task description'. The title and properties disappear and the description moves up into their space."
-  },
-  {
-    "flag": "htpr-6899-stable-layout",
-    "ticket": "https://app.hypertask.ai/detail/project-15/6899",
-    "screen": "ticket/Desktop",
-    "landmarks": [
-      "first-comment",
-      "last-comment",
-      "composer"
-    ],
-    "reason": "UNREQUESTED: the flag's ticket never asked for this move. Tracked as debt; the bug's fix removes this entry.",
-    "bug": "https://app.hypertask.ai/detail/project-15/6959"
   }
 ]
