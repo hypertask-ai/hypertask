@@ -231,4 +231,4 @@ const useTaskDetailGlobalStateContext = () => {
   return context;
 };
 
-export { TasksProvider, useTaskDetailGlobalStateContext as useTaskContext };
+export { TaskContext, TasksProvider, useTaskDetailGlobalStateContext as useTaskContext };

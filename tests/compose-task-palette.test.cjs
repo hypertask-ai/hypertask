@@ -29,6 +29,7 @@ async function withPalette(t, config, check) {
   const stub = (filename, exports) => { require.cache[filename] = { id: filename, filename, loaded: true, exports }; };
   const source = (file, exports) => stub(path.join(root, file), exports);
   const flags = { [flag]: config.enabled ?? true, [newFlag]: config.newWindow ?? false };
+  const TaskContext = React.createContext(undefined);
   const atomNames = ['boardLayoutAtom', 'calendarSettingsAtom', 'currentProjectAtom', 'currentUserAtom', 'frequentlyUsedHTCAton', 'tableTitleWrapAtom', 'showCommandsAtom', 'lastUsedBoardsAtom', 'composeTaskChatIntroAtom', 'showAIChatInterfaceAtom', 'isAiChatSidebarModeAtom', 'aiChatAutoOpenSuppressedAtom', 'aiChatExplicitOpenAtAtom', 'dockedChatScopeAtom', 'showCreateTaskModalAtom', 'showShortcutsAtom', 'showSidebarAtom', 'showBoardManagerAtom', 'inViewObjectAtom', 'uploadingStateCreateTaskModalAtom'];
   const atoms = Object.fromEntries(atomNames.map((name) => [name, name]));
   const project = { id: 7, title: 'QA Sandbox', uniqueIdentifier: 'QASA' };
@@ -57,6 +58,7 @@ async function withPalette(t, config, check) {
     source('src/store/currentPageActions.ts', { currentPageActionsAtom: 'currentPageActionsAtom' });
     source('src/lib/state.tsx', state);
     source('src/hooks/useFlag.tsx', { useFlag: (key) => flags[key] ?? false });
+    source('src/lib/contexts/TaskDetail/TaskProvider.tsx', { TaskContext, useTaskContext: () => React.useContext(TaskContext) });
     source('src/lib/contexts/deviceContext.tsx', { useDeviceContext: () => config.apple ?? false });
     source('src/lib/contexts/mobileContext.tsx', { MobileViewContext: React.createContext(config.mobile ?? false) });
     source('src/hooks/RecoilRoot/useHypertasksRecoilStates.ts', { default: () => ({ resetShowCommands, toggleShowCommands }) });
@@ -76,7 +78,7 @@ async function withPalette(t, config, check) {
     source('src/hooks/MultiPages/useAddDeleteTaskInBoards.tsx', { default: () => ({ createTaskGlobally: (body) => cacheAdds.push(body) }) });
     source('src/hooks/General/useProjectQuery.ts', { useProjectQuery: () => ({ updateActiveItemAndItemInView: (task) => viewedTasks.push(task) }) });
     source('src/hooks/MultiPages/useUpdateTaskInBoards.tsx', { default: () => ({ updateTaskInCache: (...args) => cacheUpdates.push(args) }) });
-    const jiti = createJiti(__filename, { alias: { '@': path.join(root, 'src') }, interopDefault: true, fsCache: false, jsx: { runtime: 'automatic' } });
+    const jiti = createJiti(__filename, { alias: { '@': path.join(root, 'src') }, interopDefault: true, fsCache: false, extensions: ['.js', '.jsx', '.ts', '.tsx', '.json'], jsx: { runtime: 'automatic' } });
     // Exercise the real greeting/board resolution, but defer the network workflow
     // (covered independently in compose-task-writer.test.cjs) to inspect UI state.
     source('src/lib/deriveCurrentBoardBilling.ts', { deriveCurrentBoardBilling: () => null });
@@ -113,12 +115,18 @@ async function withPalette(t, config, check) {
     const { useCommandCenterShortcut } = jiti(path.join(root, 'src/hooks/General/useCommandCenterShortcut.ts'));
     let Palette = jiti(path.join(root, 'src/components/Modals/commands/HTC/commands.tsx')).default;
     let Probe = () => null;
+    let headerState;
     function Harness() {
       const shown = useValue('showCommandsAtom');
+      const [currentTask, setCurrentTask] = React.useState(config.headerTask);
+      const [description, setDescription] = React.useState(config.headerTask?.description_?.content ?? '');
+      const [editorState, setEditorState] = React.useState({ editMode: null, hasDraft: false, hasDraftInit: false });
+      headerState = { parsedTask: JSON.stringify(config.headerTask ?? {}), currentTask, setCurrentTask, description, setDescription, ...editorState, setEditorState };
       useCommandCenterShortcut(Object.hasOwn(config, 'userId') ? config.userId : 985, config.apple ?? false, dom.window.location.pathname, config.trial ?? false, false, toggleShowCommands);
       return React.createElement(query.QueryClientProvider, { client: queryClient },
-        shown.show ? React.createElement(React.Suspense, { fallback: React.createElement('div', { 'data-palette-suspended': true }) }, React.createElement(Palette, { isOpen: true })) : null,
-        React.createElement(Probe));
+        React.createElement(TaskContext.Provider, { value: config.headerTask ? headerState : undefined },
+          shown.show ? React.createElement(React.Suspense, { fallback: React.createElement('div', { 'data-palette-suspended': true }) }, React.createElement(Palette, { isOpen: true })) : null,
+          React.createElement(Probe)));
     }
     reactRoot = require('react-dom/client').createRoot(document.getElementById('root'));
     await React.act(async () => reactRoot.render(React.createElement(config.strict ? React.StrictMode : React.Fragment, null, React.createElement(Harness))));
@@ -128,7 +136,7 @@ async function withPalette(t, config, check) {
       await React.act(async () => target.dispatchEvent(event));
       return event;
     };
-    const input = () => document.querySelector('textarea');
+    const input = () => document.querySelector(config.headerTask ? '[data-compose-task-writer] textarea' : 'textarea');
     const type = async (value) => React.act(async () => {
       Object.getOwnPropertyDescriptor(dom.window.HTMLTextAreaElement.prototype, 'value').set.call(input(), value);
       input().dispatchEvent(new dom.window.Event('input', { bubbles: true }));
@@ -156,7 +164,7 @@ async function withPalette(t, config, check) {
       await React.act(async () => reactRoot.render(React.createElement(config.strict ? React.StrictMode : React.Fragment, null, React.createElement(Harness))));
       assert.equal(document.getElementById('root').innerHTML, current);
     };
-    await check({ dom, input, type, press, clickTab, finish, fail, rerender, flags, values, set, requests, navigations, cacheAdds, cacheUpdates, queryClient, viewedTasks, loadedBoards, shells, capture, baseline, source, stub, jiti, mountProbe, legacyJ: () => legacyJ });
+    await check({ dom, input, type, press, clickTab, finish, fail, rerender, flags, values, set, requests, navigations, cacheAdds, cacheUpdates, queryClient, viewedTasks, loadedBoards, shells, capture, baseline, source, stub, jiti, mountProbe, headerState: () => headerState, legacyJ: () => legacyJ });
   } finally {
     document.removeEventListener('keydown', legacy);
     if (reactRoot) await React.act(async () => reactRoot.unmount());
@@ -803,6 +811,128 @@ for (const writerFailed of [false, true]) test(`same-task fill updates the mount
     assert.equal(pendingFetch.signal.aborted, true, 'cancel the old snapshot before publishing the saved task');
     await React.act(async () => pendingFetch.resolve({ ok: true, status: 200, json: async () => targetTask }));
     assert.equal(document.querySelector('[data-task-title]').textContent, savedTask.title, 'a stale fetch cannot overwrite the saved title');
+  });
+});
+
+test('board quick-add same-task fill updates the mounted header, description editor and properties, with either flag off unchanged', async (t) => {
+  // Quick-add cards have no description_ payload, so instant open falls back
+  // to the regular detail provider, which does not subscribe to the query cache.
+  const targetTask = { id: 52, projectId: 7, sectionId: 12, uniqueIndex: 4, title: 'Enter task title here', description: '' };
+  for (const enabled of [false, true]) for (const newWindow of [false, true]) {
+    await withPalette(t, { enabled, newWindow, headerTask: targetTask, targetTask, open: false, previousBoard: 'project-7|&|view', url: '/detail/project-7/4', inView: { taskId: 52 } }, async ({ source, jiti, mountProbe, press, type, finish, headerState, queryClient, cacheAdds, cacheUpdates, requests }) => {
+      source('src/utils/api/Task Detail/index.ts', { updateTask: () => assert.fail('a fill must not save the placeholder title') });
+      source('src/hooks/MultiPages/Route/useHypertasksNavigate.ts', { default: () => ({ navigate() {} }) });
+      source('src/components/Modals/Common Modals/ConfirmActionModal.tsx', { default: () => null });
+      source('src/hooks/General/useAutosizeTextarea.ts', { default: () => {} });
+      source('src/hooks/General/useDebounce.jsx', { default: () => () => {} });
+      source('src/components/PageComponents/TaskDetail/TopRow/RunningTimerIndicator.tsx', { default: () => null });
+      const { findCachedTaskDetail } = jiti(path.join(root, 'src/lib/navigation/cachedTaskDetail.ts'));
+      assert.equal(findCachedTaskDetail(queryClient, 985, 7, 4, targetTask), undefined, 'the quick-add card cannot use instant open');
+      const Title = jiti(path.join(root, 'src/components/PageComponents/TaskDetail/TopRow/TaskTitle.tsx')).default;
+      const noop = () => null;
+      source('src/components/Common/AttachmentsView/index.tsx', { default: noop });
+      source('src/hooks/Task Detail/CommentAndDescriptionHooks/useSaveContent.ts', { default: () => ({ redirectAPI: () => assert.fail('sync must not save a description') }) });
+      source('src/lib/contexts/TaskDetail/DescriptionProvider.tsx', { useDescriptionAndCommentsContext: () => ({ ...headerState(), descriptionAttachments: [], setDescriptionAttachments: noop }) });
+      source('src/hooks/General/useHasDrafts.ts', { isMeaningfulDescriptionDraft: () => false });
+      source('src/components/PageComponents/TaskDetail/CommentAndDescription/ContextMenu/index.tsx', { HighlightMenu: noop });
+      source('src/components/PageComponents/TaskDetail/CommentAndDescription/ContextMenu/QuoteButton.tsx', { default: noop });
+      source('src/components/PageComponents/TaskDetail/CommentAndDescription/BackgroundTaskAttachments.tsx', { default: noop });
+      source('src/components/PageComponents/TaskDetail/CommentAndDescription/DescriptionContainer/InnerHtmlDescription.tsx', { default: noop });
+      const { useTaskDetailEditorFocus } = jiti(path.join(root, 'src/components/RTE/useTaskDetailEditorFocus.tsx'));
+      const syncs = [];
+      source('src/components/RTE/TipTapTaskDetail.tsx', { default: (props) => {
+        // Keep a separate mounted editor document and exercise its real idle sync hook.
+        const [html, setHtml] = React.useState(props.defaultContent ?? '');
+        const htmlRef = React.useRef(html);
+        htmlRef.current = html;
+        const [editor] = React.useState(() => ({
+          getHTML: () => htmlRef.current, setEditable: noop,
+          view: { dispatch: noop, state: { tr: {} } },
+          commands: { setContent: (content, options) => { syncs.push(options); setHtml(content); } },
+        }));
+        useTaskDetailEditorFocus({ ...props, editor, currentTask: headerState().currentTask,
+          isReadOnlyContent: true, inViewObject: {},
+          mobileEditSnapshotRef: React.useRef(null), mobileEditSessionActiveRef: React.useRef(false),
+          pendingGuestDescriptionFocusTaskRef: React.useRef(null), handledDescriptionFocusNonceRef: React.useRef(null),
+        });
+        return React.createElement('div', { id: 'description-input', dangerouslySetInnerHTML: { __html: html } });
+      } });
+      const Body = jiti(path.join(root, 'src/components/PageComponents/TaskDetail/CommentAndDescription/DescriptionContainer/DescriptonBody.tsx')).default;
+      let labels = [];
+      await mountProbe(() => {
+        const priority = query.useQuery({ queryKey: ['priority', 52], queryFn: async () => null, initialData: null, staleTime: Infinity }).data;
+        const estimate = query.useQuery({ queryKey: ['estimate', 52], queryFn: async () => null, initialData: null, staleTime: Infinity }).data;
+        const taskLabels = query.useQuery({ queryKey: ['taskLabels', 52], queryFn: async () => labels, initialData: [], staleTime: Infinity }).data;
+        return React.createElement(React.Fragment, null, React.createElement(Title), React.createElement(Body, { draftTQ: [] }),
+          React.createElement('output', { 'data-properties': true }, JSON.stringify({ priority, estimate, taskLabels })));
+      });
+      const descriptionNode = document.getElementById('description-input');
+      assert.equal(descriptionNode.textContent, '');
+      const header = document.getElementById('title-input');
+      assert.equal(header.value, targetTask.title);
+      await press('j', { ctrlKey: true }, document.body);
+      if (!enabled) {
+        assert.equal(document.querySelector('[data-compose-task-writer]'), null);
+        assert.equal(header.value, targetTask.title);
+        assert.equal(requests.length, 0);
+        return;
+      }
+      await type('Write the empty board task');
+      await press('Enter');
+      const saved = { ...targetTask, title: 'Release checklist', description_: { content: '<p>Tests and rollout</p>', attachments: [] }, priority: { id: 2 }, estimate: { id: 3 }, taskLabels: [{ id: 9 }], assignees: [{ userId: 985 }], dueDate: '2026-10-10', startDate: '2026-10-09', acceptanceCriteria: 'All checks pass' };
+      labels = saved.taskLabels;
+      await finish(false, newWindow ? saved : { ...saved, id: 91, uniqueIndex: 5 });
+      await React.act(async () => { await new Promise((resolve) => setTimeout(resolve, 10)); });
+      assert.equal(document.getElementById('description-input'), descriptionNode, 'the editor stays mounted');
+      assert.equal(descriptionNode.textContent, newWindow ? 'Tests and rollout' : '');
+      assert.deepEqual(syncs, newWindow ? [{ emitUpdate: false }] : []);
+      assert.deepEqual(JSON.parse(document.querySelector('[data-properties]').textContent), newWindow ? { priority: saved.priority, estimate: saved.estimate, taskLabels: saved.taskLabels } : { priority: null, estimate: null, taskLabels: [] });
+      if (newWindow) for (const [field, value] of Object.entries(saved)) assert.deepEqual(headerState().currentTask[field], value, field);
+      assert.equal(document.getElementById('title-input'), header, 'the header stays mounted without a reload');
+      assert.equal(header.value, newWindow ? saved.title : targetTask.title);
+      assert.equal(headerState().currentTask.title, newWindow ? saved.title : targetTask.title);
+      assert.equal(headerState().parsedTask, JSON.stringify(targetTask), 'the initialization snapshot remains unchanged');
+      assert.equal(requests[0].body.existingTaskId, newWindow ? targetTask.id : undefined);
+      assert.equal(cacheAdds.length, newWindow ? 0 : 1);
+      assert.equal(cacheUpdates.length, newWindow ? 1 : 0);
+      if (newWindow) assert.equal(queryClient.getQueryData(['cached-task-detail', 985, 52]).title, saved.title);
+    });
+  }
+});
+
+test('a pending server fill preserves description work started while the writer was running', async (t) => {
+  for (const editorState of [{ editMode: 'description' }, { editMode: 'description-ai' }, { hasDraft: true }, { hasDraftInit: true }, { uploadingDescription: { content: 'Uploading' } }]) {
+    const targetTask = { id: 52, projectId: 7, sectionId: 12, uniqueIndex: 4, title: 'Enter task title here', description_: { content: '' } };
+    await withPalette(t, { newWindow: true, headerTask: targetTask, targetTask, tab: 'compose', url: '/detail/project-7/4', inView: { taskId: 52 } }, async ({ type, press, finish, headerState }) => {
+      await type('Fill the task');
+      await press('Enter');
+      const local = { ...targetTask, description_: { content: '<p>Unsaved work</p>' }, description: 'Unsaved work', descriptionJson: { local: true } };
+      await React.act(async () => {
+        headerState().setCurrentTask(local);
+        headerState().setDescription(local.description_.content);
+        headerState().setEditorState(editorState);
+      });
+      await finish(false, { ...targetTask, title: 'Saved title', priority: { id: 2 }, description_: { content: '<p>Server fill</p>' }, description: 'Server fill', descriptionJson: { server: true } });
+      assert.equal(headerState().currentTask.title, 'Saved title');
+      assert.deepEqual(headerState().currentTask.priority, { id: 2 });
+      for (const field of ['description', 'description_', 'descriptionJson']) assert.deepEqual(headerState().currentTask[field], local[field], field);
+      assert.equal(headerState().description, local.description_.content);
+      await React.act(async () => headerState().setEditorState({ editMode: null }));
+      assert.equal(headerState().description, local.description_.content, 'ending editing must not replay an old fill');
+    });
+  }
+});
+
+test('a pending fill cannot replace another task mounted before its response', async (t) => {
+  const targetTask = { id: 52, projectId: 7, sectionId: 12, uniqueIndex: 4, title: 'Enter task title here', description_: { content: '' } };
+  await withPalette(t, { newWindow: true, headerTask: targetTask, targetTask, tab: 'compose', url: '/detail/project-7/4', inView: { taskId: 52 } }, async ({ type, press, finish, headerState }) => {
+    await type('Fill the task');
+    await press('Enter');
+    const otherTask = { ...targetTask, id: 53, uniqueIndex: 5, title: 'Other task' };
+    await React.act(async () => { headerState().setCurrentTask(otherTask); headerState().setDescription('Other description'); });
+    await finish(false, { ...targetTask, title: 'Saved title', description_: { content: '<p>Server fill</p>' } });
+    assert.deepEqual(headerState().currentTask, otherTask);
+    assert.equal(headerState().description, 'Other description');
   });
 });
 

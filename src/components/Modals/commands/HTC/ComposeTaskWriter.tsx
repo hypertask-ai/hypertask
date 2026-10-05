@@ -4,6 +4,7 @@ import { currentProjectAtom, currentUserAtom, lastUsedBoardsAtom, composeTaskCha
 import { useRouter } from "next/navigation";
 import { parseCookies } from "nookies";
 import { MobileViewContext } from "@/lib/contexts/mobileContext";
+import { TaskContext } from "@/lib/contexts/TaskDetail/TaskProvider";
 import { useFileUpload } from "@/components/Common/AttachmentsUpload/FileUploadHandler";
 import axios from "axios";
 import { isEmptyComposeTarget } from "@/lib/ai/composeTaskTarget";
@@ -24,6 +25,7 @@ import { useProjectQuery } from "@/hooks/General/useProjectQuery";
 import UpdateKanban from "@/hooks/MultiPages/useUpdateTaskInBoards";
 import { useQueryClient } from "@tanstack/react-query";
 import { cachedTaskDetailKey } from "@/lib/navigation/cachedTaskDetail";
+import { mergeRealtimeTaskDetail, refreshTaskDetailQueryCache, shouldPreserveTaskEditorContent } from "@/lib/realtime/taskDetailRefresh";
 import { useFlag } from "@/hooks/useFlag";
 import { HTPR_6929_COMPOSE_TASK_WRITER_FLAG, HTPR_6937_NEW_TASK_WINDOW_FLAG } from "@/lib/flags/keys";
 import { discardUnboundCreateTaskUploads } from "@/lib/createTaskAttachmentUploads";
@@ -36,9 +38,10 @@ export default function ComposeTaskWriter({ active, destinationProject, onCreate
   onBusyChange: (busy: boolean) => void;
 }) {
   const enabled = useFlag(HTPR_6929_COMPOSE_TASK_WRITER_FLAG);
-  const newTaskWindowFlag = useFlag(HTPR_6937_NEW_TASK_WINDOW_FLAG);
-  let newTaskWindow = false;
-  if (enabled && newTaskWindowFlag) newTaskWindow = true;
+  const newTaskWindow = useFlag(HTPR_6937_NEW_TASK_WINDOW_FLAG) && enabled;
+  const taskContext = useContext(TaskContext);
+  const taskContextRef = useRef(taskContext);
+  taskContextRef.current = taskContext;
   const isApple = useDeviceContext();
   const inView = useRecoilValue(inViewObjectAtom);
   const [recording, setRecording] = useState(false);
@@ -174,7 +177,22 @@ export default function ComposeTaskWriter({ active, destinationProject, onCreate
           ...task,
           project: previous?.project ? { ...previous.project, ...task.project } : task.project,
         })) ?? task;
+        await refreshTaskDetailQueryCache({ queryClient, taskId: task.id, fetchTask: async () => task });
+        if (!mounted.current) return;
         updateTaskInCache(task, task.id, task.projectId, task.sectionId);
+        // Board quick-add can open a regular detail provider, not the cached view.
+        const context = taskContextRef.current;
+        if (context?.currentTask?.id === task.id && context.currentTask.projectId === task.projectId) {
+          const syncContent = !shouldPreserveTaskEditorContent(context);
+          context.setCurrentTask((current) => current?.id === task.id && current.projectId === task.projectId
+            ? mergeRealtimeTaskDetail(current, {
+              ...current,
+              ...task,
+              project: current.project ? { ...current.project, ...task.project } : task.project,
+            }, syncContent)
+            : current);
+          if (syncContent) context.setDescription(task.description_?.content ?? "");
+        }
       } else createTaskGlobally({ task, sectionId: task.sectionId!, position: "top" });
       // The phone form's history cleanup must finish before opening the task and chat.
       if (mobile && newTaskWindow) await onCreated();
