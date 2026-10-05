@@ -33,6 +33,9 @@ export async function readInboxDocument(route: string, displayCookie: string | u
   if (performance.now() > deadline || response.status !== 200 || !("notifications" in response.json) ||
       preferences.status !== 200) return null;
   const raw = JSON.parse(JSON.stringify(response.json)) as { notifications: INotification[]; splitsNoImportant: InboxDocument["data"]["payload"]["splitsNoImportant"]; showImportantSplit: boolean };
+  // Projectless agent rows need an agent-access proof, not a board-access proof.
+  // Until the controller supplies that scope, keep the complete legacy path.
+  if (raw.notifications.some(row => row.userId === user.id && row.type === "AgentMessage" && !row.task && !row.projectId)) return null;
   const accessible = new Set(projectIds);
   // Use the existing signed inbox controller and its fresh project-content
   // access proof. Never serialize its stale compact tabs or another account.

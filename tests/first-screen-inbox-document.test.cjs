@@ -89,6 +89,12 @@ test('controller visibility is retained for guest, hidden section, archived remi
   assert.equal(snapshot.data.counts.all, 1); user.email = 'qa@example.invalid';
 });
 
+test('projectless agent messages keep the complete legacy path instead of silently losing rows and counts', async () => {
+  reset(); response.json.notifications.push(row(2, null, { type: 'AgentMessage', taskId: null, task: null, project: null, fromAgentId: 42 }));
+  assert.equal(await readInboxDocument('/inbox?split=All', JSON.stringify(display)), null);
+  assert.equal(response.json.notifications.length, 2, 'the signed controller response is untouched');
+});
+
 test('authoritative empty selection seeds the existing zero image once, but an All draft prevents false zero', async () => {
   reset(); response.json.notifications = []; drafts = [];
   const empty = await readInboxDocument('/inbox', JSON.stringify(display));
