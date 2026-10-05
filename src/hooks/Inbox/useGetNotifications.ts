@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef } from "react";
 import {
   getAllNotifications,
   getInboxAccessibleProjectIds,
@@ -460,7 +460,12 @@ export const useGetNotificationCount = (
 export const useGetNotifications = (userId: number) => {
   const hydrated = useHydrated();
   const document = getInboxDocument(useFirstScreenSurface(userId), userId);
-  const [requireProjectAccess] = useState(Boolean(document));
+  const documentAccessRef = useRef({ accountId: userId, required: false });
+  if (documentAccessRef.current.accountId !== userId) {
+    documentAccessRef.current = { accountId: userId, required: false };
+  }
+  if (document) documentAccessRef.current.required = true;
+  const requireProjectAccess = documentAccessRef.current.required;
   const queryClient = useQueryClient();
   const searchParams = useSearchParams();
   const parameter = searchParams?.get(BOARD_SYNC_PILOT_PARAM) ?? null;
@@ -499,7 +504,7 @@ export const useGetNotifications = (userId: number) => {
       // Prefetch defaults to no retries; keep the client observer's three.
       retry: 3,
     });
-  }, [hydrated, document, userId, queryClient, queryKey, getStartedAt]);
+  }, [hydrated, document, userId, queryClient, queryKey, getStartedAt, requireProjectAccess]);
   const query = useQuery({
     queryKey,
     ...(hydrated || document

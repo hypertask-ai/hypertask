@@ -89,6 +89,19 @@ test('the normal query key supplies the very first SSR render despite the legacy
   } finally { c.clear(); }
 });
 
+test('late account resolution enables document access filtering and keeps it after reconciliation without leaking across accounts', () => {
+  const source = fs.readFileSync(path.join(root, 'src/hooks/Inbox/useGetNotifications.ts'), 'utf8');
+  const start = source.indexOf('  const documentAccessRef =');
+  const end = source.indexOf('\n  const queryClient =', start);
+  assert.ok(start > 0 && end > start);
+  const read = new Function('userId', 'document', 'useRef', source.slice(start, end) + '\nreturn requireProjectAccess;');
+  const ref = { current: { accountId: 0, required: false } };
+  assert.equal(read(0, null, () => ref), false);
+  assert.equal(read(985, snapshot, () => ref), true);
+  assert.equal(read(985, null, () => ref), true);
+  assert.equal(read(986, null, () => ref), false);
+});
+
 function realtimeEffect(seed, fakeClient, queryClient) {
   const source = fs.readFileSync(path.join(root, 'src/hooks/realtime/useInboxRealtime.ts'), 'utf8');
   const start = source.indexOf('  useEffect(() => {'); const end = source.lastIndexOf('\n}');
