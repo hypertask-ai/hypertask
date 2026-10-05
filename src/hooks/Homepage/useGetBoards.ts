@@ -5,6 +5,7 @@ import {
   BOARD_TASKS_KEY,
   fetchBoardTasks,
   getAllProjects,
+  hydrateBoardWithPayload,
   type ProjectsAuthorizationDecision,
 } from "@/utils/api/Homepage";
 import {
@@ -364,6 +365,9 @@ export const useGetAllBoards = (
             projectAuthorization: projectAuthorizationScopeRef.current,
             resolvedAuthorization: resolvedAuthorizationRequestRef.current,
           });
+        const boardTaskUpdatesAtStart = requestProjectId
+          ? queryClient.getQueryState(BOARD_TASKS_KEY(requestProjectId, requestAccountId))?.dataUpdateCount ?? 0
+          : 0;
         const rawBoardPayloadPromise = requestProjectId
           ? needsProjectAuthorization
             ? fetchBoardTasks(
@@ -517,6 +521,15 @@ export const useGetAllBoards = (
           // already-authorized local board instead of publishing an empty
           // network shell over it. Normal query retries still recover online.
           throw new ActiveBoardPayloadUnavailableError();
+        }
+        if (document && requestProjectId != null && isCurrent()) {
+          const taskState = queryClient.getQueryState<BoardTasksPayload>(BOARD_TASKS_KEY(requestProjectId, requestAccountId));
+          const index = projects.updatedProjects.findIndex(project => project.id === requestProjectId);
+          // Metadata may arrive after subscription catch-up. Keep its access
+          // decision, but never republish the seed over a newer live payload.
+          if (index >= 0 && taskState?.data && taskState.dataUpdateCount > boardTaskUpdatesAtStart) {
+            projects.updatedProjects[index] = hydrateBoardWithPayload(projects.updatedProjects[index], taskState.data);
+          }
         }
         return {
           ...projects,

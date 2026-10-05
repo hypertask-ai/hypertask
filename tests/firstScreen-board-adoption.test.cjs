@@ -156,6 +156,57 @@ test('the real board query hydrates the same DOM node from normal live keys, the
   }
 });
 
+test('delayed document metadata preserves a newer scoped catch-up without resurrecting a revoked board', async () => {
+  const React = require('react');
+  const { createRoot } = require('react-dom/client');
+  const { JSDOM } = require('jsdom');
+  const { QueryClientProvider } = require('@tanstack/react-query');
+  const { FirstScreenSurfaceProvider } = require('../src/lib/firstScreen/SurfaceContext.tsx');
+  const { useGetAllBoards } = require('../src/hooks/Homepage/useGetBoards.ts');
+  const { patchProjectIntoCache } = require('../src/utils/api/Homepage/index.ts');
+  const axios = require('axios').default;
+  const originalPost = axios.post;
+  const seed = { ...snapshot, fetchedAt: new Date().toISOString(), now: new Date().toISOString(),
+    display: { version: 1, accountId: 985, timeZone: 'UTC', locale: 'en-US', boardLayout: 'board',
+      theme: 'porcelain', railCollapsed: true, quickTips: true, draftsFirst: false } };
+  try {
+    for (const revoked of [false, true]) {
+      const cache = new QueryClient({ defaultOptions: { queries: { gcTime: Infinity, retry: false } } });
+      adoptBoardDocument(cache, seed);
+      const dom = new JSDOM('<div id="root"></div>', { url: 'https://example.invalid/project?id=15' });
+      const previous = { window: global.window, document: global.document, IS_REACT_ACT_ENVIRONMENT: global.IS_REACT_ACT_ENVIRONMENT };
+      Object.assign(global, { window: dom.window, document: dom.window.document, IS_REACT_ACT_ENVIRONMENT: true });
+      let releaseMetadata, metadataStarted, query, pending;
+      const started = new Promise(resolve => { metadataStarted = resolve; });
+      axios.post = async url => {
+        assert.equal(url, '/api/projects/getAll'); metadataStarted();
+        return new Promise(resolve => { releaseMetadata = () => resolve({ data: revoked ? [] : [project] }); });
+      };
+      function Board() { query = useGetAllBoards({ id: 985 }, '15', { enabled: false }); return null; }
+      const instance = createRoot(document.getElementById('root'));
+      try {
+        await React.act(async () => instance.render(React.createElement(FirstScreenSurfaceProvider, { snapshot: seed },
+          React.createElement(QueryClientProvider, { client: cache }, React.createElement(Board)))));
+        await React.act(async () => { pending = query.refetch(); await started; });
+        const newer = { ...seed.data.payload, tasks: [{ id: 1, title: 'Edit between document and subscription' }] };
+        await React.act(async () => {
+          cache.setQueryData(['boardTasks', 985, 15], newer);
+          patchProjectIntoCache(cache, 15, newer, 985);
+          releaseMetadata(); await pending;
+        });
+        const result = cache.getQueryData(['projectsAll']);
+        assert.equal(result.projectsCompleteness, 'all-authorized');
+        assert.deepEqual(result.updatedProjects.map(p => p.id), revoked ? [] : [15]);
+        if (!revoked) assert.equal(result.updatedProjects[0].tasks[0].title, newer.tasks[0].title);
+      } finally {
+        releaseMetadata?.();
+        await React.act(async () => instance.unmount()); cache.clear(); dom.window.close();
+        for (const [key, value] of Object.entries(previous)) { if (value === undefined) delete global[key]; else global[key] = value; }
+      }
+    }
+  } finally { axios.post = originalPost; }
+});
+
 test('document critical references do not stream real cards into JavaScript-only hidden segments', async () => {
   const React = require('react');
   const { renderToPipeableStream } = require('react-dom/server');
