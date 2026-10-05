@@ -42,6 +42,16 @@ test("the nudge cannot squash or grow the bounded mobile inbox scroller", () => 
   );
 });
 
+test("the notification document initializes hydration only, never a later client remount", () => {
+  const start = nudge.indexOf('  const inboxDocument =');
+  const end = nudge.indexOf('\n  useEffect(', start);
+  const readState = new Function('hydrated', 'snapshot', 'getInboxDocument', 'useState', 'bothOff', 'pushDenied', nudge.slice(start, end) + '\nreturn { mounted, dismissed, visible };');
+  const snapshot = { scope: { accountId: 985 }, data: { nudge: { visible: true, pushDenied: false } } };
+  const state = hydrated => readState(hydrated, snapshot, value => value, value => [typeof value === 'function' ? value() : value], true, false);
+  assert.deepEqual(state(false), { mounted: true, dismissed: false, visible: true });
+  assert.deepEqual(state(true), { mounted: false, dismissed: true, visible: false });
+});
+
 test("a push attempt that yields no token falls back to the email action", () => {
   // Web push is unsupported on iOS Safari outside an installed PWA, in-app
   // browsers, and the Android WebView shell. retrieveToken() returns nothing

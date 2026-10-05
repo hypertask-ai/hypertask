@@ -22,8 +22,8 @@ const InboxNotifyNudge = () => {
     useNotificationNudge();
   const mbl = useContext(MobileViewContext);
   const snapshot = useFirstScreenSurface();
-  const inboxDocument = getInboxDocument(snapshot, snapshot?.scope.accountId ?? 0);
   const hydrated = useHydrated();
+  const inboxDocument = !hydrated ? getInboxDocument(snapshot, snapshot?.scope.accountId ?? 0) : null;
   const [mounted, setMounted] = useState(Boolean(inboxDocument));
   const [dismissed, setDismissed] = useState(() => inboxDocument ? !inboxDocument.data.nudge.visible : true);
   const visible = !hydrated && inboxDocument ? inboxDocument.data.nudge.visible : bothOff && !dismissed;
