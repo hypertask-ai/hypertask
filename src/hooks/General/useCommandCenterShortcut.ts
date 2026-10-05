@@ -1,7 +1,7 @@
 import { useEffect } from "react";
 import { isCommandCenterShortcut, isComposePaletteShortcut } from "@/lib/constants/commandCenterShortcut";
 import { useFlag } from "@/hooks/useFlag";
-import { HTPR_6929_COMPOSE_TASK_WRITER_FLAG } from "@/lib/flags/keys";
+import { HTPR_6929_COMPOSE_TASK_WRITER_FLAG, HTPR_6937_NEW_TASK_WINDOW_FLAG } from "@/lib/flags/keys";
 import { useSetRecoilState } from "@/lib/state";
 import { showCommandsAtom } from "@/store";
 import { CommandMode } from "@/models/enums";
@@ -15,6 +15,7 @@ export function useCommandCenterShortcut(
   toggleShowCommands: () => void,
 ) {
   const composeEnabled = useFlag(HTPR_6929_COMPOSE_TASK_WRITER_FLAG);
+  const newTaskWindow = useFlag(HTPR_6937_NEW_TASK_WINDOW_FLAG);
   const setShowCommands = useSetRecoilState(showCommandsAtom);
   useEffect(() => {
     const handleCommandCenterShortcut = (e: KeyboardEvent) => {
@@ -28,7 +29,7 @@ export function useCommandCenterShortcut(
           show: true,
           mode: CommandMode.Command,
           paletteTab: e.code === "KeyJ" ? "compose" : "search",
-          ...(previous.show && previous.composeProject ? { composeProject: previous.composeProject } : {}),
+          ...(newTaskWindow && previous.show && previous.composeProject ? { composeProject: previous.composeProject } : {}),
         }));
         return;
       }
@@ -49,6 +50,7 @@ export function useCommandCenterShortcut(
     showEmailVerificationModal,
     toggleShowCommands,
     composeEnabled,
+    newTaskWindow,
     setShowCommands,
   ]);
 }
