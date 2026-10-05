@@ -1388,6 +1388,8 @@ const InboxSplit = ({
                                   appShellRail ? "min-w-0 flex-1" : "w-full"
                                 }
                                 onClickCapture={instantTicketOpen && notification.type !== "Invited" ? (event) => {
+                                  // React capture also reaches portals rendered outside this row.
+                                  if (!event.currentTarget.contains(event.target as Node)) return;
                                   const control = (event.target as Element).closest("button, input, select, textarea, a");
                                   if (control && control !== event.currentTarget) return;
                                   event.stopPropagation();

@@ -143,7 +143,7 @@ test("inbox Link clicks open once, preserve modified browser clicks and row cont
   const notification = { type: "Mentioned", task };
   const opens = [];
   const onClick = handler(true, notification, (...args) => opens.push(args), 3);
-  const anchor = {};
+  const anchor = { contains: () => true };
   for (const modifier of [{}, { ctrlKey: true }, { metaKey: true }, { shiftKey: true }, { altKey: true }, { button: 1 }]) {
     let prevented = false;
     let stopped = false;
