@@ -15,10 +15,12 @@ test("ticket property tooltips overlay the viewport instead of widening the rail
     "src/components/PageComponents/TaskDetail/AssigneesContainer.tsx",
   ].map(read);
 
-  assert.match(tooltip, /portalAnchorRef\.current\?\.parentElement/);
-  assert.match(tooltip, /createPortal\(/);
-  assert.match(tooltip, /viewportWidth - tooltipRect\.width - 8/);
-  assert.match(tooltip, /window\.addEventListener\("scroll", updateAnchorRect, true\)/);
+  const portal = read("src/components/Common/TooltipPortal.tsx");
+  assert.match(tooltip, /<TooltipPortal/);
+  assert.match(portal, /portalAnchorRef\.current\?\.parentElement/);
+  assert.match(portal, /createPortal\(/);
+  assert.match(portal, /viewportWidth - tooltipRect\.width - 8/);
+  assert.match(portal, /window\.addEventListener\("scroll", updatePosition, true\)/);
   assert.match(tooltip, /max-w-\[calc\(100vw-16px\)\]/);
   assert.match(tooltip, /whitespace-normal break-words/);
 

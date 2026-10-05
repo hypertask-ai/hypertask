@@ -1,0 +1,28 @@
+[data-hover-tooltip-portal] {
+  --z-hover-tooltip: 1000000000;
+  position: fixed;
+  inset: auto;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  overflow: visible;
+  background: transparent;
+  color: inherit;
+  pointer-events: none;
+  z-index: var(--z-hover-tooltip);
+
+  &[data-interactive] > * {
+    pointer-events: auto;
+  }
+
+  &::backdrop {
+    background: transparent;
+    pointer-events: none;
+  }
+}
+
+@starting-style {
+  [data-hover-tooltip-portal] [data-hover-tooltip-content] {
+    transform: scale(0);
+  }
+}

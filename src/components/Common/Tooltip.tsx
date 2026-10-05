@@ -1,5 +1,9 @@
+import { useFlag } from "@/hooks/useFlag";
+import { HTPR_6950_TOOLTIP_TOP_LAYER_FLAG } from "@/lib/flags/keys";
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import TooltipPortal from "./TooltipPortal";
+import KBDElement from "./kbd";
 
 interface Props {
     bottom:number;
@@ -11,10 +15,9 @@ interface Props {
     portal?:boolean;
     anchorRect?:DOMRect | null;
     anchorElement?:HTMLElement | null;
-  }
+}
 
-
-const Tooltip = ({keyCombination,bottom, text,left, groupHoverId="",shouldReAdjustToViewport=true,portal=false,anchorRect=null,anchorElement=null}:Props) => {
+const LegacyTooltip = ({keyCombination,bottom, text,left, groupHoverId="",shouldReAdjustToViewport=true,portal=false,anchorRect=null,anchorElement=null}:Props) => {
     const tooltipRef = useRef<HTMLDivElement>(null);
     const portalAnchorRef = useRef<HTMLSpanElement>(null);
     const [hoveredAnchor, setHoveredAnchor] = useState<HTMLElement | null>(null);
@@ -81,11 +84,11 @@ const Tooltip = ({keyCombination,bottom, text,left, groupHoverId="",shouldReAdju
     useEffect(() => {
       if (portal || !shouldReAdjustToViewport)return
       const tooltipElement = tooltipRef.current;
-  
+
       if (tooltipElement) {
         const tooltipRect = tooltipElement.getBoundingClientRect();
         const viewportWidth = window.innerWidth;
-  
+
         // Adjust left position if tooltip is going beyond the viewport
         if (tooltipRect.right > viewportWidth) {
           const newLeft = left - (tooltipRect.right - viewportWidth);
@@ -154,14 +157,14 @@ const Tooltip = ({keyCombination,bottom, text,left, groupHoverId="",shouldReAdju
             ref={tooltipRef}
                 style={{bottom:bottom, left:left}}
                 className={`sm:flex
-                    hidden 
+                    hidden
                     items-center
                     z-[9999]
                     font-semibold
                     border-light-black-border-1 border-[1px]
-                    bg-labelComponent gap-2 
+                    bg-labelComponent gap-2
 
-                    py-[6px] px-2 whitespace-nowrap text-dense xl:text-content absolute  
+                    py-[6px] px-2 whitespace-nowrap text-dense xl:text-content absolute
                     sm:scale-0 ${groupHoverCN} rounded-[4px]
                      `}>
                 <span className=" text-black">
@@ -170,28 +173,63 @@ const Tooltip = ({keyCombination,bottom, text,left, groupHoverId="",shouldReAdju
                 {keyCombination.length> 0 && <div>
                   {
                     keyCombination.map((key)=>
-                    
+
                     !key?
                       <span key={"then"} className= "px-1 text-black">
                           then
                       </span>
                       :
-                      
+
                       <kbd
                         key={key}
-                          className={`px-1 pt-[2px] mx-[1.5px] rounded-[2px] pb-0 border-gray-200 
+                          className={`px-1 pt-[2px] mx-[1.5px] rounded-[2px] pb-0 border-gray-200
                               bg-[#555B64]  dark:border-gray-500`}
                           >
                           {key}
                       </kbd>
-                    
-                    
+
+
                     )
                   }
                 </div>}
             </div>
-        
+
     )
 }
 
-export default Tooltip
+const TopLayerTooltip = ({keyCombination,bottom, text,left, groupHoverId="",shouldReAdjustToViewport=true,portal=false,anchorRect=null,anchorElement=null}:Props) => (
+    <TooltipPortal
+      hover
+      focus={portal}
+      groupHoverId={groupHoverId}
+      anchorRect={anchorRect}
+      anchorElement={anchorElement}
+      placement={portal ? "below" : "inline"}
+      adjustToViewport={shouldReAdjustToViewport}
+    >
+      <div
+        style={portal ? {left: 0, top: 0} : {bottom, left}}
+        className={`sm:flex hidden items-center font-semibold
+          border-light-black-border-1 border-[1px] bg-labelComponent gap-2
+          max-w-[calc(100vw-16px)] py-[6px] px-2 text-dense xl:text-content absolute rounded-[4px]
+          ${portal ? "whitespace-normal break-words" : "whitespace-nowrap"}`}
+      >
+        <span className={portal ? "min-w-0 break-words text-black" : "text-black"}>
+          {text}
+        </span>
+        {keyCombination.length > 0 && <div>
+          {keyCombination.map((key) => !key ?
+            <span key={"then"} className="px-1 text-black">then</span> :
+            <KBDElement key={key} content={key} className="px-1 font-semibold text-dense xl:text-content" />
+          )}
+        </div>}
+      </div>
+    </TooltipPortal>
+);
+
+const Tooltip = (props: Props) => {
+  const topLayer = useFlag(HTPR_6950_TOOLTIP_TOP_LAYER_FLAG);
+  return topLayer ? <TopLayerTooltip {...props} /> : <LegacyTooltip {...props} />;
+};
+
+export default Tooltip;

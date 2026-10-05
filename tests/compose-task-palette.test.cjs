@@ -9,6 +9,7 @@ const query = require('@tanstack/react-query');
 const root = path.resolve(__dirname, '..');
 const flag = 'htpr-6929-compose-task-writer';
 const newFlag = 'htpr-6937-new-task-window';
+const tooltipFlag = 'htpr-6950-tooltip-top-layer';
 
 async function withPalette(t, config, check) {
   const dom = new JSDOM('<div id="root"></div>', { url: `https://example.test${config.url ?? '/project?id=7'}` });
@@ -28,7 +29,7 @@ async function withPalette(t, config, check) {
   const cached = new Map(Object.entries(require.cache));
   const stub = (filename, exports) => { require.cache[filename] = { id: filename, filename, loaded: true, exports }; };
   const source = (file, exports) => stub(path.join(root, file), exports);
-  const flags = { [flag]: config.enabled ?? true, [newFlag]: config.newWindow ?? false, 'htpr-6951-task-writing-progress': config.progress ?? config.newWindow ?? false };
+  const flags = { [flag]: config.enabled ?? true, [newFlag]: config.newWindow ?? false, 'htpr-6951-task-writing-progress': config.progress ?? config.newWindow ?? false, [tooltipFlag]: config.topLayer ?? false };
   const TaskContext = React.createContext(undefined);
   const atomNames = ['boardLayoutAtom', 'calendarSettingsAtom', 'currentProjectAtom', 'currentUserAtom', 'frequentlyUsedHTCAton', 'tableTitleWrapAtom', 'showCommandsAtom', 'lastUsedBoardsAtom', 'composeTaskChatIntroAtom', 'showAIChatInterfaceAtom', 'isAiChatSidebarModeAtom', 'aiChatAutoOpenSuppressedAtom', 'aiChatExplicitOpenAtAtom', 'dockedChatScopeAtom', 'showCreateTaskModalAtom', 'showShortcutsAtom', 'showSidebarAtom', 'showBoardManagerAtom', 'inViewObjectAtom', 'uploadingStateCreateTaskModalAtom'];
   const atoms = Object.fromEntries(atomNames.map((name) => [name, name]));
@@ -595,11 +596,11 @@ test('Ctrl+J fills only the visible new empty task when both flags are on and ne
 });
 
 test('New Task tab tooltips appear on keyboard focus and Tab leaves unrelated tablists alone', async (t) => {
-  await withPalette(t, { newWindow: true, realTooltip: true }, async ({ press, values, dom }) => {
+  for (const topLayer of [false, true]) await withPalette(t, { newWindow: true, realTooltip: true, topLayer }, async ({ press, values, dom }) => {
     const tabs = [...document.querySelectorAll('[aria-label="Commands mode"] [role="tab"]')];
     for (const [tab, shortcut] of [[tabs[0], 'CTRL'], [tabs[1], 'CTRL']]) {
       await React.act(async () => tab.focus());
-      const portal = document.body.querySelector('[class*="z-[9999]"].fixed');
+      const portal = document.body.querySelector(topLayer ? '[data-hover-tooltip-portal]' : '[class*="z-[9999]"].fixed');
       assert.ok(portal, 'the actual Tooltip portal opens on the focusable tab');
       assert.ok(portal.textContent.includes(tab.textContent));
       assert.ok(portal.textContent.includes(shortcut));
@@ -607,6 +608,8 @@ test('New Task tab tooltips appear on keyboard focus and Tab leaves unrelated ta
     const otherTab = document.createElement('button');
     otherTab.setAttribute('role', 'tab');
     document.body.append(otherTab);
+    await React.act(async () => otherTab.focus());
+    assert.equal(document.body.querySelector(topLayer ? '[data-hover-tooltip-portal]' : '[class*="z-[9999]"].fixed'), null, 'focusout closes the tooltip');
     assert.equal((await press('Tab', {}, otherTab)).defaultPrevented, false);
     assert.equal(values.get('showCommandsAtom').paletteTab, 'search');
     otherTab.remove();
