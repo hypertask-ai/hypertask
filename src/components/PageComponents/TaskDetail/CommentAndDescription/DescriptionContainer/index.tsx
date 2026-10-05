@@ -116,6 +116,7 @@ const DescriptionContainer = (
     <div
       tabIndex={0}
       id={descriptionContainerId}
+      data-testid="ticket-description"
       {...(_mbl
         ? { ...bind }
         : {

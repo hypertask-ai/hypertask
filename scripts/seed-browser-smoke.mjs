@@ -19,7 +19,8 @@ let { modes } = JSON.parse(await readFile(path.join(root, "e2e/smoke/production-
 const localPremerge = process.env.PREMERGE_LOCAL === "1";
 const instantOpenControl = process.argv.includes("--instant-open-control");
 const allFlagsOn = process.argv.includes("--all-flags-on");
-if (instantOpenControl && allFlagsOn) throw new Error("Choose one browser smoke flag control");
+const liveLikeControl = process.argv.includes("--live-like-control");
+if ([instantOpenControl, allFlagsOn, liveLikeControl].filter(Boolean).length > 1) throw new Error("Choose one browser smoke flag control");
 if (instantOpenControl) modes["htpr-6752-instant-ticket-open"] = "EVERYONE";
 for (const [key, mode] of Object.entries(modes)) {
   if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(key) || !["OFF", "OWNER_ONLY", "OWNER_AND_QA", "EVERYONE"].includes(mode)) {
@@ -278,6 +279,10 @@ try {
   if (allFlagsOn) {
     const { FEATURE_FLAG_KEYS } = jiti(path.join(root, "src/lib/flags.ts"));
     modes = Object.fromEntries(FEATURE_FLAG_KEYS.map(key => [key, "EVERYONE"]));
+  } else if (liveLikeControl) {
+    const { FEATURE_FLAG_KEYS } = jiti(path.join(root, "src/lib/flags.ts"));
+    // Match the CI plain-user layout even when the local fixture is QA user 985.
+    modes = Object.fromEntries(FEATURE_FLAG_KEYS.map(key => [key, modes[key] === "EVERYONE" ? "EVERYONE" : "OFF"]));
   } else if (localPremerge) {
     const { FEATURE_FLAG_KEYS } = jiti(path.join(root, "src/lib/flags.ts"));
     const overrides = process.argv.slice(2);
@@ -291,7 +296,7 @@ try {
     await prisma.featureFlag.upsert({ where: { key }, create: { key, mode }, update: { mode } });
   }
   const flags = Object.fromEntries(Object.entries(modes).map(([key, mode]) => [key, mode === "EVERYONE" || (localPremerge && mode === "OWNER_AND_QA")]));
-  if (instantOpenControl || allFlagsOn) {
+  if (instantOpenControl || allFlagsOn || liveLikeControl) {
     // Controls reuse the logged-in user and fixtures, changing only local flag rows.
     const fixture = JSON.parse(await readFile(fixtureFile, "utf8"));
     await writeFile(fixtureFile, JSON.stringify({ ...fixture, flags }));

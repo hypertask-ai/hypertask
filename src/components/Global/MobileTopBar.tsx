@@ -89,6 +89,7 @@ const MobileTopBar = ({
     <>
       <header
         ref={headerRef}
+        data-testid="mobile-top-bar"
         className="fixed inset-x-0 top-0 z-[300] flex items-stretch gap-[10px] bg-containerBackground px-[14px] will-change-transform md:hidden"
         // Height is the 48px bar PLUS the status-bar inset, and the inset is the
         // padding — so the icon row keeps its full 48px inside the gray band and

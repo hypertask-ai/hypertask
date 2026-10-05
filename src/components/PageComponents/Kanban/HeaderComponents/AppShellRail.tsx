@@ -387,7 +387,7 @@ const AppShellRail = ({
           </button>
         </RailItem>
         <RailItem wide={wide} label="Settings">
-          <button tabIndex={-1} onClick={() => openSettings()} className="group relative flex h-full w-full items-center justify-center text-text-light-gray hover:text-white-black">
+          <button data-testid="app-shell-settings" tabIndex={-1} onClick={() => openSettings()} className="group relative flex h-full w-full items-center justify-center text-text-light-gray hover:text-white-black">
             <IconoirSettings size={18} strokeWidth={1.5} />
             <Tooltip left={tooltipLeft} bottom={-8} text="Settings" keyCombination={["\\"]} />
           </button>

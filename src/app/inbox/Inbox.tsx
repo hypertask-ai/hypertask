@@ -820,6 +820,7 @@ const Inbox = ({
           }`}
         >
           <div
+            data-testid="inbox-panel"
             className={`search_inbox_container min-h-screen inbox_tag_mobile_view ${
               // Rail mode: hug the bottom (12px, matching the card's mx-[12px]
               // gutters) and rise with the quick-tips bar via --quick-tips-h,

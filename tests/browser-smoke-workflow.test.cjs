@@ -106,7 +106,9 @@ test("required browser smoke runs layout lock with live modes and every registry
   assert.ok(job.indexOf(runs[0]) < job.indexOf("--all-flags-on"));
   assert.ok(job.indexOf(runs[1], job.indexOf("--all-flags-on")) > job.indexOf("--all-flags-on"));
   assert.match(seed, /FEATURE_FLAG_KEYS\.map\(key => \[key, "EVERYONE"\]\)/);
-  assert.match(seed, /instantOpenControl \|\| allFlagsOn/);
+  assert.match(seed, /instantOpenControl \|\| allFlagsOn \|\| liveLikeControl/);
+  assert.match(seed, /process\.argv\.includes\("--live-like-control"\)/);
+  assert.match(seed, /modes\[key\] === "EVERYONE" \? "EVERYONE" : "OFF"/);
   assert.match(seed, /prisma\.comment\.createMany/);
   assert.match(config, /prod\|layout-lock/);
   assert.match(layout, /\['direct', 'board card'\]/);
