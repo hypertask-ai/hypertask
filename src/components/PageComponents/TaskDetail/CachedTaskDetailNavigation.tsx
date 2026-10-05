@@ -68,7 +68,11 @@ export default function CachedTaskDetailNavigation({ children, accountId }: {
     if (!location) return;
     const restoreSourceRoute = (event: PopStateEvent) => {
       if (!event.state?.__NA || !event.state?.__PRIVATE_NEXTJS_INTERNALS_TREE ||
-          cachedTaskDetailLocation(window.location.pathname, accountId, event.state)) return;
+          // Same-task modal Back must reach its dismiss listener even if Next
+          // stripped the cached marker, just as rendering retains that location.
+          cachedTaskDetailLocation(window.location.pathname, accountId, {
+            cachedTaskDetail: event.state?.cachedTaskDetail ?? previousLocation.current,
+          })) return;
       // Next's native-history restore can cache detail RSC in the source route's slot.
       // Revalidate the source URL instead of traversing that stale route payload.
       event.stopImmediatePropagation();
