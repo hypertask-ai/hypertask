@@ -29,8 +29,9 @@ import { HTPR_6929_COMPOSE_TASK_WRITER_FLAG, HTPR_6937_NEW_TASK_WINDOW_FLAG } fr
 import { discardUnboundCreateTaskUploads } from "@/lib/createTaskAttachmentUploads";
 import type { IProject, ITask } from "@/models/model";
 
-export default function ComposeTaskWriter({ active, onCreated, onBusyChange }: {
+export default function ComposeTaskWriter({ active, destinationProject, onCreated, onBusyChange }: {
   active: boolean;
+  destinationProject?: IProject;
   onCreated: () => void;
   onBusyChange: (busy: boolean) => void;
 }) {
@@ -42,7 +43,12 @@ export default function ComposeTaskWriter({ active, onCreated, onBusyChange }: {
   const inView = useRecoilValue(inViewObjectAtom);
   const [recording, setRecording] = useState(false);
   const [transcribing, setTranscribing] = useState(false);
-  const dictating = recording || transcribing;
+  const dictating = newTaskWindow && (recording || transcribing);
+  useEffect(() => {
+    if (newTaskWindow) return;
+    setRecording(false);
+    setTranscribing(false);
+  }, [newTaskWindow]);
   const mobile = Boolean(useContext(MobileViewContext));
   const [text, setText] = useState("");
   const [writing, setWriting] = useState(false);
@@ -84,7 +90,7 @@ export default function ComposeTaskWriter({ active, onCreated, onBusyChange }: {
     };
   }, []);
   useEffect(() => {
-    if (!active || writing) return;
+    if (!active || writing || dictating) return;
     let cancelled = false;
     let tries = 0;
     const focus = () => {
@@ -96,7 +102,7 @@ export default function ComposeTaskWriter({ active, onCreated, onBusyChange }: {
     };
     focus();
     return () => { cancelled = true; };
-  }, [active, writing, mobile]);
+  }, [active, writing, mobile, dictating]);
   useEffect(() => {
     if (!enabled || !active || writing) return;
     const attachShortcut = (event: KeyboardEvent) => {
@@ -140,29 +146,34 @@ export default function ComposeTaskWriter({ active, onCreated, onBusyChange }: {
       let existingTaskId: number | undefined;
       let targetProjectId: number | undefined;
       const detail = window.location.pathname.match(/^\/detail\/project-(\d+)\/(\d+)$/);
-      if (newTaskWindow && detail && inView?.taskId) {
+      if (newTaskWindow && !destinationProject && detail && inView?.taskId) {
         const { data: task } = await axios.get("/api/tasks/single", { params: { id: inView.taskId } });
         if (task.projectId === Number(detail[1]) && task.uniqueIndex === Number(detail[2]) && isEmptyComposeTarget(task)) {
           existingTaskId = task.id;
           targetProjectId = task.projectId;
         }
       }
-      const projectId = targetProjectId ?? composeTaskBoardId(window.location.href, parseCookies().previousBoard, lastUsedBoards);
+      const projectId = destinationProject?.id ?? targetProjectId ?? composeTaskBoardId(window.location.href, parseCookies().previousBoard, lastUsedBoards);
       if (!projectId || !user?.id) throw new Error("Open a board first, then try again. Your note is still here.");
-      let project = currentProject?.id === projectId ? currentProject : undefined;
+      let project = destinationProject ?? (currentProject?.id === projectId ? currentProject : undefined);
       if (!project) {
         const projects: IProject[] = await globalAPIHandlers.getAllProjectsMinimal();
         project = projects.find((item) => item.id === projectId);
       }
       if (!mounted.current) return;
       if (!project) throw new Error("Your last board is unavailable. Open a board and try again.");
-      const { task, writerFailed } = await createComposedTask({ text, files, project, userId: user.id, ...(existingTaskId ? { existingTaskId } : {}) });
+      const { task: savedTask, writerFailed } = await createComposedTask({ text, files, project, userId: user.id, ...(existingTaskId ? { existingTaskId } : {}) });
+      let task = savedTask;
       if (!mounted.current) return;
       if (existingTaskId) {
         const queryKey = cachedTaskDetailKey(user.id, task.id);
         await queryClient.cancelQueries({ queryKey });
         if (!mounted.current) return;
-        queryClient.setQueryData<ITask>(queryKey, (previous) => ({ ...previous, ...task }));
+        task = queryClient.setQueryData<ITask>(queryKey, (previous) => ({
+          ...previous,
+          ...task,
+          project: previous?.project ? { ...previous.project, ...task.project } : task.project,
+        })) ?? task;
         updateTaskInCache(task, task.id, task.projectId, task.sectionId);
       } else createTaskGlobally({ task, sectionId: task.sectionId!, position: "top" });
       setIntro({ taskId: task.id, content: composeTaskAssistantMessage(task.ticketNumber ?? `${project.uniqueIdentifier ?? "TASK"}-${task.uniqueIndex}`, writerFailed, Boolean(existingTaskId)) });
@@ -196,7 +207,7 @@ export default function ComposeTaskWriter({ active, onCreated, onBusyChange }: {
   );
 
   return enabled ? (
-    <div hidden={!active} data-compose-task-writer className="max-h-[65dvh] overflow-y-auto"
+    <div hidden={!active} data-compose-task-writer className={newTaskWindow ? "max-h-[65dvh] overflow-y-auto" : undefined}
       onDragOver={(event) => { if (!writing && event.dataTransfer.types.includes("Files")) event.preventDefault(); }}
       onDrop={(event) => {
         if (!event.dataTransfer.files.length) return;
@@ -234,9 +245,9 @@ export default function ComposeTaskWriter({ active, onCreated, onBusyChange }: {
             <div className="flex w-full items-center justify-between pt-2">
               <div className="flex min-w-0 flex-1 items-center gap-2">
                 {!recording && <AttachmentButton disabled={addingImages || dictating} mobile={mobile} onClick={handleAttachmentClick} />}
-                {newTaskWindow && active && <AudioButton id="compose-task-audio-button" ariaLabel="Start dictation" editor={null}
+                {newTaskWindow && <AudioButton id="compose-task-audio-button" ariaLabel="Start dictation" editor={null}
                   defaultContent={text} hasText={Boolean(text.trim())} toggleRecording={setRecording} onProcessingChange={setTranscribing}
-                  disabled={addingImages} mobilePrimaryTone="ai" mobilePresentation="compact"
+                  disabled={!active || addingImages} projectId={destinationProject?.id} mobilePrimaryTone="ai" mobilePresentation="compact"
                   callbackHandler={(transcript, replace) => {
                     if (replace) {
                       const plain = new DOMParser().parseFromString(transcript, "text/html").body.textContent ?? "";

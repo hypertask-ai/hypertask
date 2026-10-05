@@ -334,6 +334,37 @@ test("expected title rejects a concurrent title-only edit under the mutation fen
   }
 });
 
+test("Compose fill compares board and lifecycle status under the mutation fence before writing", async () => {
+  for (const concurrentState of [
+    {},
+    { projectId: MEMBER_PROJECT },
+    { status: "Archive", archivedAt: new Date() },
+    { status: "Deleted", deletedAt: new Date() },
+  ]) {
+    const { updateTaskSingle, calls } = loadUpdateController(OWNER_PROJECT, OWNER_PROJECT, {
+      initialTask: { title: "Enter task title here" },
+      stateAtFence: concurrentState,
+    });
+    const result = await updateTaskSingle(
+      { id: TASK_ID, title: "AI title" },
+      { id: USER_ID },
+      null,
+      { expectedTitle: "Enter task title here", expectedDescription: "", expectedProjectId: OWNER_PROJECT, expectedStatus: "Normal", skipAutoAssign: true, skipRecurrence: true },
+    );
+    const conflict = Object.keys(concurrentState).length > 0;
+    assert.equal(result.status, conflict ? 409 : 200, JSON.stringify(concurrentState));
+    if (conflict) {
+      assert.equal(calls.order, undefined, "no task write or activity on target conflict");
+      assert.equal(calls.sideEffects, 0, "no post-commit effects on target conflict");
+      assert.match(result.json.message, /moved or changed status/);
+    } else {
+      assert.equal(result.json.projectId, OWNER_PROJECT);
+      assert.equal(result.json.status, "Normal");
+      assert.equal(result.json.title, "AI title");
+    }
+  }
+});
+
 test("board moves preserve each previous identity in the task transaction", async () => {
   const { updateTaskSingle, calls, aliases } = loadUpdateController(OWNER_PROJECT, MEMBER_PROJECT);
   for (const [projectId, uniqueIndex, ticketNumber] of [

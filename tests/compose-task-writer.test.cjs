@@ -234,6 +234,37 @@ test('actual create endpoint rejects disabled Compose before database work and p
   assert.equal(flagReads, 2, 'unauthenticated requests cannot read the flag');
 });
 
+test('standalone dictation improvement never prefixes undefined and disabled mics leave Search keys alone', async () => {
+  const ts = require('typescript');
+  const file = ts.createSourceFile('audio.tsx', require('node:fs').readFileSync(path.join(root, 'src/components/RTE/Components/AudioButton.tsx'), 'utf8'), ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+  let htmlContent, textContent, improveBlock, keyHandler;
+  const visit = (node) => {
+    if (ts.isVariableDeclaration(node)) {
+      const name = node.name.getText(file);
+      if (name === 'htmlContent') htmlContent = node.initializer.getText(file);
+      if (name === 'textContent') textContent = node.initializer.getText(file);
+      if (name === 'handleKeydown') keyHandler = node.initializer.getText(file);
+    }
+    if (ts.isIfStatement(node) && node.expression.getText(file) === 'shouldImprove.current') improveBlock = node.thenStatement.getText(file);
+    ts.forEachChild(node, visit);
+  };
+  visit(file);
+  assert.ok(htmlContent && textContent && improveBlock && keyHandler);
+  const delivered = [];
+  const improve = new Function('editor', 'defaultContent', 'response', 'canDeliver', 'callbackHandler', `return async () => { const htmlContent = ${htmlContent}; const textContent = ${textContent}; ${improveBlock} };`)(null, 'Typed note', { json: async () => ({ response_html: '<p>Spoken note</p>' }) }, () => true, (...args) => delivered.push(args));
+  await improve();
+  assert.deepEqual(delivered, [['<p>Spoken note</p>', true]]);
+  for (const disabled of [false, true]) {
+    const stops = [];
+    const javascript = ts.transpileModule(`const handler = ${keyHandler};`, { compilerOptions: { target: ts.ScriptTarget.ES2020 } }).outputText;
+    const handler = new Function('disabled', 'recordingRef', 'stopRecording', `${javascript}; return handler;`)(disabled, { current: true }, (send) => stops.push(send));
+    let prevented = false;
+    handler({ key: 'Enter', keyCode: 13, preventDefault: () => { prevented = true; } });
+    assert.deepEqual(stops, disabled ? [] : [true]);
+    assert.equal(prevented, !disabled);
+  }
+});
+
 test('empty task detection rejects named tasks, meaningful text and media with positive empty controls', () => {
   const { isEmptyComposeTarget } = createJiti(__filename)(path.join(root, 'src/lib/ai/composeTaskTarget.ts'));
   for (const title of ['', 'Enter task title here', 'New Task']) {
@@ -323,13 +354,13 @@ test('save existing target enforces both flags, edit permissions, board match an
   assert.equal((await post()).code, 409);
   assert.equal(updates.length, 0);
   assert.equal((await post({ existingTaskId: -1 })).code, 400);
-  target = { id: 52, title: 'Enter task title here', projectId: 7, uniqueIndex: 4, description_: { content: '' } };
+  target = { id: 52, title: 'Enter task title here', projectId: 7, status: 'Normal', uniqueIndex: 4, description_: { content: '' } };
   const result = await post();
   assert.equal(result.code, 200);
   assert.equal(result.body.newTask.id, 52);
   assert.deepEqual(updates[0][0], { id: 52, title: 'Written title', description: '<p>Written body</p>' });
   assert.equal(updates[0][1].id, 985);
-  assert.deepEqual(updates[0][3], { expectedTitle: target.title, expectedDescription: '' });
+  assert.deepEqual(updates[0][3], { expectedTitle: target.title, expectedDescription: '', expectedProjectId: 7, expectedStatus: 'Normal' });
   assert.equal(broadcasts.length, 2);
 });
 

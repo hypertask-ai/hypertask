@@ -12,9 +12,9 @@ const newFlag = 'htpr-6937-new-task-window';
 
 async function withPalette(t, config, check) {
   const dom = new JSDOM('<div id="root"></div>', { url: `https://example.test${config.url ?? '/project?id=7'}` });
-  const globals = ['window', 'document', 'navigator', 'HTMLElement', 'localStorage', 'IS_REACT_ACT_ENVIRONMENT', 'File', 'requestAnimationFrame', 'fetch']
+  const globals = ['window', 'document', 'navigator', 'HTMLElement', 'localStorage', 'IS_REACT_ACT_ENVIRONMENT', 'File', 'requestAnimationFrame', 'fetch', 'DOMParser']
     .map((key) => [key, Object.getOwnPropertyDescriptor(global, key)]);
-  Object.assign(global, { window: dom.window, document: dom.window.document, HTMLElement: dom.window.HTMLElement, localStorage: dom.window.localStorage, File: dom.window.File, IS_REACT_ACT_ENVIRONMENT: true, requestAnimationFrame: (fn) => fn() });
+  Object.assign(global, { DOMParser: dom.window.DOMParser, window: dom.window, document: dom.window.document, HTMLElement: dom.window.HTMLElement, localStorage: dom.window.localStorage, File: dom.window.File, IS_REACT_ACT_ENVIRONMENT: true, requestAnimationFrame: (fn) => fn() });
   Object.defineProperty(global, 'navigator', { configurable: true, value: dom.window.navigator });
   dom.window.HTMLElement.prototype.attachEvent = () => {};
   dom.window.HTMLElement.prototype.detachEvent = () => {};
@@ -36,7 +36,7 @@ async function withPalette(t, config, check) {
     inViewObjectAtom: config.inView ?? { taskId: null },
     currentProjectAtom: config.project ?? project, currentUserAtom: { id: 985, uid: 'qa' },
     boardLayoutAtom: 'board', calendarSettingsAtom: {}, frequentlyUsedHTCAton: {}, lastUsedBoardsAtom: config.recency ?? {},
-    showCommandsAtom: { show: config.open ?? true, mode: 0, paletteTab: config.tab ?? 'search' }, composeTaskChatIntroAtom: null,
+    showCommandsAtom: { show: config.open ?? true, mode: 0, paletteTab: config.tab ?? 'search', composeProject: config.destinationProject }, composeTaskChatIntroAtom: null,
   }));
   const listeners = new Set();
   const set = (atom, next) => { values.set(atom, typeof next === 'function' ? next(values.get(atom)) : next); listeners.forEach((fn) => fn()); };
@@ -65,10 +65,10 @@ async function withPalette(t, config, check) {
     source('src/hooks/MultiPages/useGetAllProjectsMinimal.ts', { useGetAllProjectsMinimal: () => ({ data: [] }) });
     source('src/utils/helperFunctions/Views/ViewsHelperFunctions.ts', { getActiveEmptySectionSettingFromProject: () => '', getActiveStalenessFromProject: () => false });
     source('src/styles/linksModal.module.scss', { default: { links_modal: 'links_modal' } });
-    source('src/components/Common/Tooltip.tsx', { default: ({ text, keyCombination }) => React.createElement('span', { 'data-tooltip': text }, keyCombination.join('+')) });
+    if (!config.realTooltip) source('src/components/Common/Tooltip.tsx', { default: ({ text, keyCombination }) => React.createElement('span', { 'data-tooltip': text }, keyCombination.join('+')) });
     const axios = { get: async () => ({ data: config.targetTask }) };
     stub(require.resolve('axios'), { default: axios });
-    source('src/components/RTE/Components/AudioButton.tsx', { default: (props) => React.createElement('button', { 'aria-label': props.ariaLabel, onClick: () => props.callbackHandler(' spoken note') }, 'Mic') });
+    source('src/components/RTE/Components/AudioButton.tsx', { default: config.AudioButton ?? ((props) => React.createElement('button', { 'aria-label': props.ariaLabel, onClick: () => props.callbackHandler(' spoken note') }, 'Mic')) });
     source('src/hooks/MultiPages/useClickOutside.ts', { default: () => {} });
     source('src/lib/constants/index.ts', { default: {} });
     source('src/utils/helperFunctions/helperFunctions.ts', { processFiles: config.processImages ?? (async (files, start) => [...files].map((file, id) => ({ id: start + id, file }))) });
@@ -583,8 +583,127 @@ test('Ctrl+J fills only the visible new empty task when both flags are on and ne
   }
 });
 
+test('New Task tab tooltips appear on keyboard focus and Tab leaves unrelated tablists alone', async (t) => {
+  await withPalette(t, { newWindow: true, realTooltip: true }, async ({ press, values, dom }) => {
+    const tabs = [...document.querySelectorAll('[aria-label="Commands mode"] [role="tab"]')];
+    for (const [tab, shortcut] of [[tabs[0], 'CTRL'], [tabs[1], 'CTRL']]) {
+      await React.act(async () => tab.focus());
+      const portal = document.body.querySelector('[class*="z-[9999]"].fixed');
+      assert.ok(portal, 'the actual Tooltip portal opens on the focusable tab');
+      assert.ok(portal.textContent.includes(tab.textContent));
+      assert.ok(portal.textContent.includes(shortcut));
+    }
+    const otherTab = document.createElement('button');
+    otherTab.setAttribute('role', 'tab');
+    document.body.append(otherTab);
+    assert.equal((await press('Tab', {}, otherTab)).defaultPrevented, false);
+    assert.equal(values.get('showCommandsAtom').paletteTab, 'search');
+    otherTab.remove();
+    const event = new dom.window.KeyboardEvent('keydown', { key: 'Tab', bubbles: true, cancelable: true });
+    await React.act(async () => tabs[1].dispatchEvent(event));
+    assert.equal(event.defaultPrevented, true);
+    assert.equal(values.get('showCommandsAtom').paletteTab, 'compose');
+  });
+});
+
+test('dictation stays mounted across Search switches and disabling New Task releases the input lock', async (t) => {
+  let audioProps, mounts = 0, unmounts = 0;
+  function AudioButton(props) {
+    audioProps = props;
+    React.useEffect(() => { mounts++; return () => { unmounts++; }; }, []);
+    return React.createElement('button', { 'aria-label': props.ariaLabel }, 'Mic');
+  }
+  await withPalette(t, { newWindow: true, tab: 'compose', AudioButton }, async ({ type, press, input, flags, rerender, requests }) => {
+    await type('Keep my typed note');
+    await React.act(async () => audioProps.toggleRecording(true));
+    assert.equal(input().disabled, true);
+    await press('k', { ctrlKey: true }, document.body);
+    assert.equal(audioProps.disabled, true, 'the hidden mic cannot intercept Search keys');
+    await press('j', { ctrlKey: true }, document.body);
+    assert.equal(mounts, 1);
+    assert.equal(unmounts, 0, 'switching tabs must not discard the recording');
+    await React.act(async () => { audioProps.toggleRecording(false); audioProps.callbackHandler('<p>Spoken text</p>', true); });
+    assert.equal(input().value, 'Keep my typed note Spoken text');
+    assert.equal(input().disabled, false);
+    await React.act(async () => audioProps.toggleRecording(true));
+    flags[newFlag] = false;
+    await rerender();
+    assert.equal(input().disabled, false, 'flag off restores editable legacy Compose');
+    flags[newFlag] = true;
+    await rerender();
+    assert.equal(input().disabled, false, 're-enabling the flag must not resurrect stale recording state');
+    await press('Enter');
+    assert.equal(requests[0].body.text, 'Keep my typed note Spoken text');
+  });
+});
+
+test('creation-form New Task handlers forward the selected board ahead of stale current board', () => {
+  const ts = require('typescript');
+  const file = ts.createSourceFile('form.tsx', fs.readFileSync(path.join(root, 'src/components/RTE/TiptapCreateTaskModal.tsx'), 'utf8'), ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+  const handlers = new Map();
+  const visit = (node) => {
+    if (ts.isVariableDeclaration(node) && ['toggleAiTaskWriter', 'toggleAiTaskWriterVisibility'].includes(node.name.getText(file))) handlers.set(node.name.getText(file), node.initializer.getText(file));
+    ts.forEachChild(node, visit);
+  };
+  visit(file);
+  assert.equal(handlers.size, 2);
+  const selected = { id: 8, title: 'Selected board' }, stale = { id: 7, title: 'URL board' };
+  for (const handler of handlers.values()) {
+    let command;
+    const invoke = new Function('newTaskWindow', 'setCommands', 'CommandMode', 'formValues', '_currentProject', `return (${handler});`)(true, (value) => { command = value; }, { Command: 0 }, { currentProject: selected }, stale);
+    invoke();
+    assert.equal(command.composeProject, selected);
+    assert.equal(command.paletteTab, 'compose');
+  }
+});
+
+test('creation-form New Task shortcut captures its board before the global URL fallback', async (t) => {
+  const ts = require('typescript');
+  const file = ts.createSourceFile('form.tsx', fs.readFileSync(path.join(root, 'src/components/RTE/TiptapCreateTaskModal.tsx'), 'utf8'), ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+  let effect;
+  const visit = (node) => {
+    if (ts.isCallExpression(node) && node.expression.getText(file) === 'useEffect' && node.arguments[0].getText(file).includes('const openNewTask')) effect = node.getText(file);
+    ts.forEachChild(node, visit);
+  };
+  visit(file);
+  assert.ok(effect);
+  const javascript = ts.transpileModule(effect, { compilerOptions: { target: ts.ScriptTarget.ES2020 } }).outputText;
+  for (const newWindow of [false, true]) await withPalette(t, { newWindow, open: false, url: '/project?id=7' }, async ({ mountProbe, set, press, type, requests, legacyJ, jiti }) => {
+    const selected = { id: 8, title: 'Form board' };
+    const { isComposePaletteShortcut } = jiti(path.join(root, 'src/lib/constants/commandCenterShortcut.ts'));
+    const { CommandMode } = jiti(path.join(root, 'src/models/enums.ts'));
+    const runEffect = new Function('useEffect', 'newTaskWindow', 'isApple', 'pathname', 'projectForContext', 'setCommands', 'CommandMode', 'isComposePaletteShortcut', javascript);
+    function Probe() { runEffect(React.useEffect, newWindow, false, '/project', selected, (value) => set('showCommandsAtom', value), CommandMode, isComposePaletteShortcut); return null; }
+    await mountProbe(() => React.createElement(Probe));
+    await press('j', { ctrlKey: true }, document.body);
+    assert.equal(legacyJ(), 0, 'only one shortcut handles the opening');
+    await type('Create on the selected board');
+    await press('Enter');
+    assert.equal(requests[0].body.project.id, newWindow ? 8 : 7, 'flag off retains the global Compose destination');
+  });
+});
+
+test('explicit form destination wins over URL, recency and an empty task detail', async (t) => {
+  const destinationProject = { id: 8, title: 'Selected board', uniqueIdentifier: 'FORM' };
+  for (const url of ['/project?id=7', '/settings', '/detail/project-7/4']) {
+    const targetTask = { id: 52, projectId: 7, uniqueIndex: 4, title: '', description: '' };
+    await withPalette(t, { newWindow: true, tab: 'compose', url, destinationProject, previousBoard: 'project-9|&|view', recency: { 10: 99 }, inView: { taskId: 52 }, targetTask }, async ({ type, press, requests, finish, navigations, input, values }) => {
+      await type('Create on my selected board');
+      await press('k', { ctrlKey: true });
+      await press('j', { ctrlKey: true });
+      assert.equal(input().value, 'Create on my selected board');
+      assert.equal(values.get('showCommandsAtom').composeProject, destinationProject);
+      await press('Enter');
+      assert.equal(requests[0].body.project, destinationProject);
+      assert.equal(requests[0].body.existingTaskId, undefined, 'the creation form must not fill the task behind it');
+      await finish();
+      assert.deepEqual(navigations, ['/detail/project-8/44']);
+    });
+  }
+});
+
 for (const writerFailed of [false, true]) test(`same-task fill updates the mounted detail and board with all saved fields (writerFailed=${writerFailed})`, async (t) => {
-  const targetTask = { id: 52, projectId: 7, sectionId: 12, uniqueIndex: 4, title: 'Enter task title here', description_: { content: '<p></p>' }, project: { id: 7, title: 'QA Sandbox' } };
+  const targetTask = { id: 52, projectId: 7, sectionId: 12, uniqueIndex: 4, title: 'Enter task title here', description_: { content: '<p></p>' }, project: { id: 7, title: 'QA Sandbox', uniqueIdentifier: 'QASA', team: { id: 'team-a', title: 'Old team' } } };
   await withPalette(t, { newWindow: true, url: '/detail/project-7/4', open: false, inView: { taskId: 52 }, targetTask }, async ({ press, type, finish, cacheAdds, cacheUpdates, queryClient, values, source, jiti, mountProbe }) => {
     const Context = React.createContext(null);
     let detailState, pendingFetch;
@@ -613,17 +732,18 @@ for (const writerFailed of [false, true]) test(`same-task fill updates the mount
     await press('j', { ctrlKey: true }, document.body);
     await type('Write this task');
     await press('Enter');
-    const savedTask = { id: 52, projectId: 7, sectionId: 12, uniqueIndex: 4, ticketNumber: 'QASA-4', title: 'Saved writer title', description_: { content: '<p>Saved writer body</p>', attachments: [{ id: 9 }] }, priority: { id: 2 }, estimate: { id: 3 }, assignees: [{ userId: 985 }] };
+    const savedTask = { id: 52, projectId: 7, sectionId: 12, uniqueIndex: 4, ticketNumber: 'QASA-4', title: 'Saved writer title', description_: { content: '<p>Saved writer body</p>', attachments: [{ id: 9 }] }, priority: { id: 2 }, estimate: { id: 3 }, assignees: [{ userId: 985 }], project: { team: { id: 'team-a', title: 'Saved team' } } };
+    const mergedTask = { ...targetTask, ...savedTask, project: { ...targetTask.project, ...savedTask.project } };
     await finish(writerFailed, savedTask);
     await React.act(async () => { await new Promise((resolve) => setImmediate(resolve)); });
     assert.equal(document.querySelector('[data-task-title]').textContent, savedTask.title);
     assert.equal(detailState.description, savedTask.description_.content);
-    for (const [field, value] of Object.entries(savedTask)) {
+    for (const [field, value] of Object.entries(mergedTask)) {
       assert.deepEqual(queryClient.getQueryData(key)[field], value, field);
       assert.deepEqual(detailState.currentTask[field], value, field);
     }
-    assert.deepEqual(detailState.currentTask.project, targetTask.project, 'retain detail-only fields missing from the save response');
-    assert.deepEqual(cacheUpdates, [[savedTask, 52, 7, 12]]);
+    assert.deepEqual(detailState.currentTask.project, mergedTask.project, 'retain board metadata while refreshing the team-only updateTaskSingle response');
+    assert.deepEqual(cacheUpdates, [[mergedTask, 52, 7, 12]]);
     assert.deepEqual(cacheAdds, []);
     assert.equal(values.get('composeTaskChatIntroAtom').content, `I filled in QASA-4 from your note. Want me to refine it? I can tighten the title, add acceptance criteria or split it into sub-tasks.${writerFailed ? '\n\nThe task writer was unavailable, so I kept your original text as the title and description.' : ''}`);
     assert.equal(pendingFetch.signal.aborted, true, 'cancel the old snapshot before publishing the saved task');

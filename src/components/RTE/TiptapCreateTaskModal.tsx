@@ -2,6 +2,7 @@ import { HTPR_6929_COMPOSE_TASK_WRITER_FLAG, HTPR_6937_NEW_TASK_WINDOW_FLAG } fr
 import { useSetRecoilState } from "@/lib/state";
 import { showCommandsAtom } from "@/store";
 import { CommandMode } from "@/models/enums";
+import { isComposePaletteShortcut } from "@/lib/constants/commandCenterShortcut";
 import React, {
   useCallback,
   useContext,
@@ -179,7 +180,7 @@ const TiptapCreateTaskModal = () => {
   };
   const toggleAiTaskWriterVisibility = () => {
     if (newTaskWindow) {
-      setCommands({ show: true, mode: CommandMode.Command, paletteTab: "compose" });
+      setCommands({ show: true, mode: CommandMode.Command, paletteTab: "compose", composeProject: formValues.currentProject ?? _currentProject ?? undefined });
       return;
     }
     if (shouldShowAiTaskWriter) aiPromptRef.current = undefined;
@@ -221,6 +222,18 @@ const TiptapCreateTaskModal = () => {
   const projectForContext =
     formValues.currentProject ?? _currentProject ?? undefined;
   const projectId = projectForContext?.id;
+  useEffect(() => {
+    if (!newTaskWindow) return;
+    const openNewTask = (event: KeyboardEvent) => {
+      if (event.code !== "KeyJ" || !isComposePaletteShortcut(event, isApple, pathname)) return;
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      setCommands({ show: true, mode: CommandMode.Command, paletteTab: "compose", composeProject: projectForContext });
+    };
+    // Keep the form's selected board before the global shortcut reads the URL.
+    window.addEventListener("keydown", openNewTask, true);
+    return () => window.removeEventListener("keydown", openNewTask, true);
+  }, [newTaskWindow, isApple, pathname, projectForContext, setCommands]);
   const { data: projectLabels } = useGetAllProjectLabels(
     projectId ?? undefined,
   );
@@ -599,7 +612,7 @@ const TiptapCreateTaskModal = () => {
 
   const toggleAiTaskWriter = () => {
     if (newTaskWindow) {
-      setCommands({ show: true, mode: CommandMode.Command, paletteTab: "compose" });
+      setCommands({ show: true, mode: CommandMode.Command, paletteTab: "compose", composeProject: formValues.currentProject ?? _currentProject ?? undefined });
       return;
     }
     // editor?.chain().focus().toggleHighlight({ color: "#b89bdd" });

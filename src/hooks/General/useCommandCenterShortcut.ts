@@ -24,7 +24,12 @@ export function useCommandCenterShortcut(
         e.preventDefault();
         // Supersede the legacy board Ctrl+J before its handler can create a task.
         e.stopImmediatePropagation();
-        setShowCommands({ show: true, mode: CommandMode.Command, paletteTab: e.code === "KeyJ" ? "compose" : "search" });
+        setShowCommands((previous) => ({
+          show: true,
+          mode: CommandMode.Command,
+          paletteTab: e.code === "KeyJ" ? "compose" : "search",
+          ...(previous.show && previous.composeProject ? { composeProject: previous.composeProject } : {}),
+        }));
         return;
       }
       if (!isCommandCenterShortcut(e, isApple, pathname)) return;

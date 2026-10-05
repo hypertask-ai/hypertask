@@ -651,7 +651,7 @@ const Commands = (props: Props) => {
       if (event.key !== "Tab" || event.altKey || event.ctrlKey || event.metaKey || event.isComposing || writing) return;
       const target = event.target as HTMLElement;
       // Leave attachment dialogs, mic controls and other focus traps alone.
-      if (!target.matches('#htc-mobile-search, #htc-search, [data-compose-task-writer] textarea, [role="tab"]')) return;
+      if (!target.matches('#htc-mobile-search, #htc-search, [data-compose-task-writer] textarea, [aria-label="Commands mode"] [role="tab"]')) return;
       event.preventDefault();
       event.stopImmediatePropagation();
       setShowCommands((previous) => ({ ...previous, paletteTab: isCompose ? "search" : "compose" }));
@@ -664,8 +664,8 @@ const Commands = (props: Props) => {
     <div className="absolute -top-12 left-0 flex w-full justify-center">
       <SettingsScopeTabs
         tabs={newTaskWindow ? [
-          { id: "search", label: <span className="group relative">Search<Tooltip portal left={0} bottom={-45} text="Search" keyCombination={getShortcutDisplay({ key: 75, modifiers: ["ctrl"], description: "Search" }, isApple)} /></span> },
-          { id: "compose", className: "text-hypertasks-ai-purple hover:text-hypertasks-ai-purple", label: <span className="group relative flex items-center gap-2"><Sparkles size={18} strokeWidth={1.75} aria-hidden />New Task<Tooltip portal left={0} bottom={-45} text="New Task" keyCombination={getShortcutDisplay({ key: 74, modifiers: ["ctrl"], description: "New Task" }, isApple)} /></span> },
+          { id: "search", label: <>Search<Tooltip portal left={0} bottom={-45} text="Search" keyCombination={getShortcutDisplay({ key: 75, modifiers: ["ctrl"], description: "Search" }, isApple)} /></> },
+          { id: "compose", className: "text-hypertasks-ai-purple hover:text-hypertasks-ai-purple", label: <><span className="flex items-center gap-2"><Sparkles size={18} strokeWidth={1.75} aria-hidden />New Task</span><Tooltip portal left={0} bottom={-45} text="New Task" keyCombination={getShortcutDisplay({ key: 74, modifiers: ["ctrl"], description: "New Task" }, isApple)} /></> },
         ] : [{ id: "search", label: "Search" }, { id: "compose", label: "Compose" }]}
         activeId={isCompose ? "compose" : "search"}
         onSelect={(paletteTab) => setShowCommands((previous) => ({ ...previous, paletteTab: paletteTab as "search" | "compose" }))}
@@ -676,7 +676,7 @@ const Commands = (props: Props) => {
       />
     </div>
   ) : null;
-  const compose = composeEnabled ? <ComposeTaskWriter active={isCompose} onBusyChange={setWriting} onCreated={resetShowCommands} /> : null;
+  const compose = composeEnabled ? <ComposeTaskWriter active={isCompose} destinationProject={newTaskWindow ? showCommands.composeProject : undefined} onBusyChange={setWriting} onCreated={resetShowCommands} /> : null;
 
   const searchInput = (
     <div className="flex items-center gap-2.5 rounded-[4px] px-4 ring-1 ring-inset ring-hypertasks-purple">

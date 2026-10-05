@@ -251,6 +251,8 @@ const handler: NextApiHandler = async (
       const result = await updateTaskSingle({ id: taskId, title, description }, currentUser, agentId, {
         expectedTitle: target.title,
         expectedDescription: target.description_?.content ?? "",
+        expectedProjectId: target.projectId,
+        expectedStatus: target.status,
       });
       if (result.status !== 200) return res.status(result.status).json(result.json);
       const { broadcastBoardChange, broadcastTaskChange } = await import("@/lib/realtime/server");
