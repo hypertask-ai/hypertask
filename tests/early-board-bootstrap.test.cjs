@@ -17,8 +17,8 @@ const landingSource = read("src/app/[...boardURL]/LandingPage.tsx");
 
 test("the authenticated board starts its critical requests before LandingPage hydration", () => {
   const scriptPosition = pageSource.indexOf('id="ht-early-board-bootstrap"');
-  const landingPagePosition = pageSource.indexOf(
-    "<LandingPage\n        slugs={slugs}",
+  const landingPagePosition = pageSource.search(
+    /<LandingPage\b[^>]*\bslugs=\{slugs\}/,
   );
 
   assert.ok(
