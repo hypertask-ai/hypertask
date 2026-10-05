@@ -1,7 +1,7 @@
 import { reportError } from "@/lib/errors/reportError";
 import { configureAiModelUsage } from "@/app/api/ai/_lib/modelProvider";
 import { renderPrompt } from "@/lib/ai/prompts/registry";
-import { generateText } from "ai";
+import { generateText, Output } from "ai";
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 
@@ -30,6 +30,11 @@ const taskQuestionsRequestSchema = z.object({
 });
 
 const TASK_QUESTIONS_INSTRUCTIONS = renderPrompt("task-questions-context-1");
+// HTPR-6953: structured output, so a stray quote in a question can no longer
+// break a hand-rolled JSON.parse of the model text.
+const taskQuestionsOutputSchema = z.object({
+  questions: z.array(z.string()),
+});
 
 type TaskComment = {
   creatorId: number | null;
@@ -208,6 +213,7 @@ export async function POST(request: NextRequest) {
       model,
       instructions: TASK_QUESTIONS_INSTRUCTIONS,
       prompt: renderPrompt("task-questions-prompt-2", (viewerBlock), (task.title), (task.status), (task.section), (description || "(empty)"), (formattedComments)),
+      output: Output.object({ schema: taskQuestionsOutputSchema }),
       maxOutputTokens: 500,
       maxRetries: 2,
       providerOptions: providerOptionsForAiModel(
@@ -217,20 +223,10 @@ export async function POST(request: NextRequest) {
       ),
     });
 
-    const json = result.text
-      .trim()
-      .replace(/^```json\s*/i, "")
-      .replace(/\s*```$/, "");
-    if (!json) throw new Error("Model returned empty content");
-
-    const generated = JSON.parse(json) as { questions?: unknown };
-    const questions = Array.isArray(generated.questions)
-      ? generated.questions
-          .filter((question): question is string => typeof question === "string")
-          .map((question) => question.trim())
-          .filter(Boolean)
-          .slice(0, 5)
-      : [];
+    const questions = result.output.questions
+      .map((question) => question.trim())
+      .filter(Boolean)
+      .slice(0, 5);
     if (questions.length === 0) {
       throw new Error("Model returned no usable questions");
     }
