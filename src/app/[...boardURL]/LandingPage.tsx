@@ -6,6 +6,9 @@ import { resolveBoardSwitchIntent } from "@/lib/analytics/boardSwitchLatency";
 import { useLandingSection } from "./LandingPageSection";
 import type { SectionCompProps } from "./LandingPageSection";
 import FirstScreenMobileChrome from "@/components/Global/FirstScreenMobileChrome";
+import { useFirstScreenSurface } from "@/lib/firstScreen/SurfaceContext";
+import BoardDocumentBoundary from "@/lib/firstScreen/BoardDocumentBoundary";
+import { getBoardDocument } from "@/lib/firstScreen/boardDocument";
 import type { LandingPageInput } from "./LandingPageShared";
 
 
@@ -101,6 +104,7 @@ const pendingProgrammaticSurfaceRef = useRef<"board" | "table" | null>(null)
 const requestedProjectId = Number.isInteger(Number(slugs)) && Number(slugs) > 0
   ? Number(slugs)
   : null
+const document = getBoardDocument(useFirstScreenSurface(user.id), user.id, requestedProjectId);
 const isGuest = isGuestUser(user);
 const boardAccessKey = `${user.id}:${requestedProjectId ?? "none"}`
 const readinessRouteEntryId = useMemo(
@@ -123,7 +127,7 @@ const readinessTraceScope = useCommittedBoardReadinessTrace({
 const [boardAccess, setBoardAccess] = useState<{
   key: string;
   status: "pending" | "local" | "authorized" | "denied";
-}>({ key: boardAccessKey, status: "pending" })
+}>({ key: boardAccessKey, status: document ? "authorized" : "pending" })
 const [networkAccess, setNetworkAccess] = useState<{
   key: string;
   generation: number;
@@ -131,7 +135,7 @@ const [networkAccess, setNetworkAccess] = useState<{
 }>({
   key: boardAccessKey,
   generation: 0,
-  requestId: null,
+  requestId: document?.scope.generation ?? null,
 })
 // Resolve the browser preference during the first render so the prepared
 // IndexedDB read can start in the first layout-effect pass.
@@ -1195,7 +1199,7 @@ const boardRender =
       : null)
 
 return (
-    <Suspense fallback={<></>}>
+    <BoardDocumentBoundary fallback={<></>}>
       <FirstScreenMobileChrome currentUser={user} />
 
       {data &&
@@ -1235,8 +1239,7 @@ return (
           </div>
         )
       ) : null}
-    </Suspense>
-
+    </BoardDocumentBoundary>
 )
 
 }
@@ -1267,7 +1270,7 @@ return (
      >
           <KanbanModalsProvider>
             {appShellRailOn ? (
-              <Suspense fallback={<div className="h-[56px] shrink-0" aria-label="Loading Board controls" />}>
+              <BoardDocumentBoundary fallback={<div className="h-[56px] shrink-0" aria-label="Loading Board controls" />}>
                 <AppShellRail
                   variant="board"
                   currentUser={_currentUser}
@@ -1291,14 +1294,14 @@ return (
                     <GuestAuthLinks />
                   </div>
                 )}
-              </Suspense>
+              </BoardDocumentBoundary>
             ) : isMbl ? (
               // Mobile runs the global app shell instead: MobileTopBar owns the
               // title, board/view switching and settings; the splits row and
               // tab bar own navigation. Spacing comes from the shell wrapper.
               null
             ) : (
-              <Suspense fallback={<div className="h-[48px]" aria-label="Loading Board controls" />}>
+              <BoardDocumentBoundary fallback={<div className="h-[48px]" aria-label="Loading Board controls" />}>
                 <div className="h-[48px] relative">
                   <Header
                     currentUser={_currentUser}
@@ -1313,7 +1316,7 @@ return (
                 </div>
 
                 {_currentProject && <ViewTabsBar project={_currentProject} />}
-              </Suspense>
+              </BoardDocumentBoundary>
             )}
 
           {_currentProject && (
@@ -1335,7 +1338,7 @@ return (
               : 'bg-pageBackground homepage-container-tag flex-col gap-4 flex items-center'}
             >
             {boardLayout === "table" ? (
-              <Suspense
+              <BoardDocumentBoundary
                 fallback={(
                   <div
                     aria-label="Loading table view"
@@ -1351,7 +1354,7 @@ return (
                   _activeSortingMode={_activeSortingMode}
                   handleBoardChange={debouncedHandleBoardChange}
                 />
-              </Suspense>
+              </BoardDocumentBoundary>
             ) : (
             <HomePage
               filteredSections={filteredSectionsForActiveView}

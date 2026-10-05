@@ -947,6 +947,8 @@ export interface IProjectsAll {
   accountId?: number;
   /** Distinguishes an authenticated server bootstrap from local task hydration. */
   dataOrigin?: "network" | "indexeddb";
+  projectsCompleteness?: "active-board-only" | "all-authorized";
+  serverDocumentGeneration?: string;
   /** Exact scoped request that produced this network payload. */
   networkRequestScopeKey?: string;
   networkRequestGeneration?: number;

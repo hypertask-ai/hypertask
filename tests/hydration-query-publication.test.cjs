@@ -65,12 +65,12 @@ test("hydration-sensitive queries isolate their pre-hydration cache keys", () =>
   );
   assert.match(
     inbox,
-    /enabled: options\?\.enabled \?\? true,\s*\.\.\.\(useHydrated\(\)\s*\?\s*\{\}\s*:\s*\{[\s\S]*?"hydrating"[\s\S]*?enabled: false/,
+    /enabled: options\?\.enabled \?\? true,\s*\.\.\.\(hydrated \|\| document\s*\?\s*\{\}\s*:\s*\{[\s\S]*?"hydrating"[\s\S]*?enabled: false/,
   );
   assert.match(inbox, /if \(!hydrated\) return;/);
   assert.match(
     boards,
-    /queryKey: PROJECTS_ALL_QUERY_KEY,\s*enabled: options\?\.enabled \?\? true,\s*\.\.\.\(hydrated\s*\?\s*\{\}\s*:\s*\{[\s\S]*?PROJECTS_ALL_HYDRATING_QUERY_KEY[\s\S]*?enabled: false/,
+    /queryKey: PROJECTS_ALL_QUERY_KEY,\s*enabled: \(options\?\.enabled \?\? true\) && \(!document \|\| hydrated\),\s*\.\.\.\(hydrated \|\| document\s*\?\s*\{\}\s*:\s*\{[\s\S]*?PROJECTS_ALL_HYDRATING_QUERY_KEY[\s\S]*?enabled: false/,
   );
   assert.match(
     flags,

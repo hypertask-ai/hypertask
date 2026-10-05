@@ -112,7 +112,9 @@ const MobileTopBar = ({
 
         {/* Clip the scrolling strip so it never collides with the pinned edges. */}
         <div className="relative flex min-w-0 flex-1 items-stretch overflow-hidden">
-          {deferredControlsReady ? (
+          {deferredControlsReady ? headerStrip ? (
+            <HeaderStrip calendarTitle={calendarTitle} />
+          ) : (
             <Suspense
               fallback={(
                 <span className="flex min-w-0 items-center truncate text-dense font-semibold text-white-black">
@@ -129,14 +131,16 @@ const MobileTopBar = ({
           )}
         </div>
 
-        {deferredControlsReady && (
+        {deferredControlsReady && (topBarActions ? (
+          <MobileTopBarActions currentUser={currentUser} onCalendar={onCalendar} />
+        ) : (
           <Suspense fallback={null}>
             <MobileTopBarActions
               currentUser={currentUser}
               onCalendar={onCalendar}
             />
           </Suspense>
-        )}
+        ))}
       </header>
 
       {showBoards && (

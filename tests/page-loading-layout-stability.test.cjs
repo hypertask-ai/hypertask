@@ -48,6 +48,7 @@ function boardRender(pending) {
   const controls = pending ? React.lazy(() => new Promise(() => {})) : row;
   return load("src/app/[...boardURL]/LandingPage.tsx", {
     Suspense: React.Suspense,
+    BoardDocumentBoundary: React.Suspense,
     KanbanModalsProvider: ({ children }) => children,
     AppShellRail: noop,
     ViewTabsBar: controls,

@@ -12,6 +12,8 @@ import {
 } from "@/lib/boardSync/reconcileActiveBoardQuery";
 import { runRealtimeReconciliation } from "@/lib/realtime/latencyCanary";
 import { useFlag } from "@/hooks/useFlag";
+import { useFirstScreenSurface } from "@/lib/firstScreen/SurfaceContext";
+import { getBoardDocument } from "@/lib/firstScreen/boardDocument";
 import { SCOPED_BOARD_REFETCH_FLAG } from "@/lib/flags/keys";
 import { createBoardRealtimeEventHandler } from "@/lib/realtime/boardRealtimeEventHandler";
 
@@ -32,6 +34,7 @@ export function useBoardRealtime(
   options?: { accountId?: number },
 ): void {
   const queryClient = useQueryClient();
+  const seeded = Boolean(getBoardDocument(useFirstScreenSurface(options?.accountId), options?.accountId ?? 0, projectId));
   const scopedRefetch = useFlag(SCOPED_BOARD_REFETCH_FLAG);
   const pickEventReconcile = () => {
     if (scopedRefetch) return reconcileActiveBoardTasks;
@@ -188,9 +191,9 @@ export function useBoardRealtime(
         stopFallback();
         if (initialCatchUpComplete) return;
         initialCatchUpComplete = true;
-        void reconcileActiveBoardQuery(queryClient, projectId).catch(
-          () => undefined,
-        );
+        void (seeded && options?.accountId !== undefined
+          ? reconcileActiveBoardTasks(queryClient, projectId, options.accountId, { background: true })
+          : reconcileActiveBoardQuery(queryClient, projectId)).catch(() => undefined);
         void queryClient
           .refetchQueries({
             exact: true,
@@ -273,5 +276,6 @@ export function useBoardRealtime(
     options?.accountId,
     projectId,
     queryClient,
+    seeded,
   ]);
 }

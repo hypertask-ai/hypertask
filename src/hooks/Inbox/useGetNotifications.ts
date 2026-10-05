@@ -28,6 +28,8 @@ import {
 } from "@/lib/inboxSync/revision";
 import { filterInboxReadModelByProjectAccess } from "@/lib/inboxSync/contract";
 import { useHydrated } from "@/hooks/General/useHydrated";
+import { useFirstScreenSurface } from "@/lib/firstScreen/SurfaceContext";
+import { getBoardDocument } from "@/lib/firstScreen/boardDocument";
 
 export const INBOX_QUERY_KEY = ["inbox"] as const;
 export const INBOX_QUERY_STALE_TIME_MS = 30 * 1000;
@@ -426,11 +428,13 @@ export const notificationCountQueryOptions = (userId: number) => ({
 export const useGetNotificationCount = (
   userId: number,
   options?: { enabled?: boolean },
-) =>
-  useQuery({
+) => {
+  const hydrated = useHydrated();
+  const document = getBoardDocument(useFirstScreenSurface(userId), userId);
+  return useQuery({
     ...notificationCountQueryOptions(userId),
     enabled: options?.enabled ?? true,
-    ...(useHydrated()
+    ...(hydrated || document
       ? {}
       : {
           queryKey: [
@@ -442,6 +446,7 @@ export const useGetNotificationCount = (
     initialData: { all: 0, unseen: 0 },
     initialDataUpdatedAt: 0,
   });
+};
 
 export const useGetNotifications = (userId: number) => {
   const hydrated = useHydrated();

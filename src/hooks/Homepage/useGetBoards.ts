@@ -5,6 +5,7 @@ import {
   BOARD_TASKS_KEY,
   fetchBoardTasks,
   getAllProjects,
+  hydrateBoardWithPayload,
   type ProjectsAuthorizationDecision,
 } from "@/utils/api/Homepage";
 import {
@@ -15,6 +16,8 @@ import {
 import { useEffect, useLayoutEffect, useRef } from "react";
 import { discardEarlyBoardBootstrap } from "@/lib/boardBootstrap/earlyBoardBootstrap";
 import { useHydrated } from "@/hooks/General/useHydrated";
+import { useFirstScreenSurface } from "@/lib/firstScreen/SurfaceContext";
+import { getBoardDocument } from "@/lib/firstScreen/boardDocument";
 import { MOBILE_BOARD_SWITCHER_QUERY_KEY } from "@/hooks/MultiPages/useGetAllAccessibleBoardList";
 import {
   persistBoardRevocationFallback,
@@ -289,6 +292,7 @@ export const useGetAllBoards = (
   const accountIdRef = useRef(user.id);
   const optionsRef = useRef(options);
   const renderedProjectId = normalizeRequestedProjectId(slugs);
+  const document = getBoardDocument(useFirstScreenSurface(user.id), user.id, renderedProjectId);
   const currentScopeRef = useRef({
     accountId: user.id,
     projectId: renderedProjectId,
@@ -311,7 +315,7 @@ export const useGetAllBoards = (
   } | null>(null);
   const projectAuthorizationScopeRef = useRef<{
     scopeKey: string;
-  } | null>(null);
+  } | null>(document ? { scopeKey: `${user.id}:${renderedProjectId}` } : null);
   const mountedRef = useRef(true);
   const currentScopeKey = `${user.id}:${renderedProjectId ?? "none"}`;
   const requiresScopedAuthorization = Boolean(options?.onProjectsAuthorized);
@@ -326,8 +330,8 @@ export const useGetAllBoards = (
 
   const query = useQuery({
     queryKey: PROJECTS_ALL_QUERY_KEY,
-    enabled: options?.enabled ?? true,
-    ...(hydrated
+    enabled: (options?.enabled ?? true) && (!document || hydrated),
+    ...(hydrated || document
       ? {}
       : {
           queryKey: PROJECTS_ALL_HYDRATING_QUERY_KEY,
@@ -361,6 +365,9 @@ export const useGetAllBoards = (
             projectAuthorization: projectAuthorizationScopeRef.current,
             resolvedAuthorization: resolvedAuthorizationRequestRef.current,
           });
+        const boardTaskUpdatesAtStart = requestProjectId
+          ? queryClient.getQueryState(BOARD_TASKS_KEY(requestProjectId, requestAccountId))?.dataUpdateCount ?? 0
+          : 0;
         const rawBoardPayloadPromise = requestProjectId
           ? needsProjectAuthorization
             ? fetchBoardTasks(
@@ -515,6 +522,15 @@ export const useGetAllBoards = (
           // network shell over it. Normal query retries still recover online.
           throw new ActiveBoardPayloadUnavailableError();
         }
+        if (document && requestProjectId != null && isCurrent()) {
+          const taskState = queryClient.getQueryState<BoardTasksPayload>(BOARD_TASKS_KEY(requestProjectId, requestAccountId));
+          const index = projects.updatedProjects.findIndex(project => project.id === requestProjectId);
+          // Metadata may arrive after subscription catch-up. Keep its access
+          // decision, but never republish the seed over a newer live payload.
+          if (index >= 0 && taskState?.data && taskState.dataUpdateCount > boardTaskUpdatesAtStart) {
+            projects.updatedProjects[index] = hydrateBoardWithPayload(projects.updatedProjects[index], taskState.data);
+          }
+        }
         return {
           ...projects,
           networkRequestScopeKey: requestScopeKey,
@@ -553,6 +569,12 @@ export const useGetAllBoards = (
       return;
     }
 
+    // Complete the account-wide metadata in place. The signed document already
+    // authorized the active board, so reuse its live side cache on this read.
+    if (document && projectAuthorizationScopeRef.current?.scopeKey === currentScopeKey) {
+      void query.refetch().catch(() => undefined);
+      return;
+    }
     let cancelled = false;
     requestGenerationRef.current += 1;
     inFlightRequestRef.current = null;
@@ -576,6 +598,7 @@ export const useGetAllBoards = (
     };
   }, [
     currentScopeKey,
+    document,
     hydrated,
     query.refetch,
     queryClient,

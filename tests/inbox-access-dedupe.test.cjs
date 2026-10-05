@@ -17,6 +17,7 @@ const root = path.join(__dirname, "..");
 const jiti = require("jiti")(__filename, {
   alias: { "@": path.join(root, "src") },
   interopDefault: true,
+  jsx: true,
   cache: false,
 });
 

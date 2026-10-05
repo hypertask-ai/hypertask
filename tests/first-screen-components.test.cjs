@@ -307,9 +307,9 @@ test('integration retains the old import/readiness path, offscreen policy and gl
   assert.match(global, /mobileCreateTaskButtonVisible && <MobileCreateTaskButton/);
   assert.match(global, /mobilePullCommandVisible && \(\s*<MobilePullDownCommand/);
   assert.match(global, /<CachedTaskDetailNavigation accountId={authenticatedUserId}>/);
-  for (const page of ['src/app/layout.tsx', 'src/utils/Providers.tsx', 'src/app/[...boardURL]/page.tsx', 'src/app/inbox/page.tsx']) {
-    assert.doesNotMatch(source(page), /FirstScreenSurfaceProvider|initialFlags=|initialValues=/, `${page} must stay unseeded`);
-  }
+  assert.doesNotMatch(source('src/app/inbox/page.tsx'), /FirstScreenSurfaceProvider|initialFlags=|initialValues=/, 'inbox remains unseeded until step 4');
+  assert.match(source('src/utils/Providers.tsx'), /initialFlags=\{snapshot\?\.flags\}/);
+  assert.match(source('src/app/[...boardURL]/page.tsx'), /if \(firstScreen\)/);
 });
 
 }

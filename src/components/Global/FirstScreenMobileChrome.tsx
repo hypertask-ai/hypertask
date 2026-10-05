@@ -12,7 +12,7 @@ const MobileTopBar = dynamic(async () => {
   const { default: TopBar, loadFirstScreenControls } = await import("./MobileTopBar");
   // Resolve the existing chunks before any header hydration subscription updates.
   const { HeaderStrip, TopBarActions } = await loadFirstScreenControls();
-  return function SeededTopBar({ currentUser }: { currentUser: IUser }) {
+  return function SeededTopBar({ currentUser }: { currentUser: IUser; boardUsable?: boolean }) {
     return <TopBar currentUser={currentUser} boardUsable headerStrip={HeaderStrip} topBarActions={TopBarActions} />;
   };
 });
@@ -25,7 +25,7 @@ export default function FirstScreenMobileChrome({ currentUser }: { currentUser: 
   const composerOpen = useRecoilValue(mobileCommentComposerOpenAtom);
   if (!snapshot || (fullscreenEnabled && fullscreen)) return null;
   return <>
-    <MobileTopBar currentUser={currentUser} />
+    <MobileTopBar currentUser={currentUser} boardUsable />
     {snapshot.scope.route === "/project" && !composerOpen && <MobileTabBar currentUserId={currentUser.id} />}
   </>;
 }

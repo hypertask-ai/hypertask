@@ -210,6 +210,8 @@ export const publishPreparedLocalBoard = async ({
     queryClient.getQueryState<ProjectsAllWithIndex>(PROJECTS_ALL_QUERY_KEY)
       ?.dataUpdateCount ?? 0;
   if (
+    (currentCache?.serverDocumentGeneration && currentCache.accountId === currentScope.accountId &&
+      currentCache.updatedProjects.some(project => project.id === proof.projectId && isBoardPayloadHydrated(project))) ||
     didNetworkResultPublishAfterAuthorization({
       updateCountAtAuthorization: proof.queryUpdateCountAtAuthorization,
       currentUpdateCount,

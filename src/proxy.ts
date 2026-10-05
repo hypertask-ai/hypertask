@@ -480,6 +480,24 @@ async function authMiddleware(request: NextRequest) {
 
 export default async function requireAuthMiddleware(request: NextRequest) {
   const response = await authMiddleware(request);
+  // Replace, never trust, the caller's route hint. Next strips Flight headers
+  // before the proxy, but Fetch Metadata still distinguishes documents.
+  const forwardedHeaders = new Headers(request.headers);
+  forwardedHeaders.delete('x-ht-board-document-route');
+  if (request.nextUrl.pathname === '/project') {
+    if (request.headers.get('sec-fetch-dest') === 'document') {
+      forwardedHeaders.set('x-ht-board-document-route', request.nextUrl.pathname + request.nextUrl.search);
+    }
+    response.headers.set('Cache-Control', 'private, no-store');
+    response.headers.set('CDN-Cache-Control', 'no-store');
+    response.headers.set('Vercel-CDN-Cache-Control', 'no-store');
+  }
+  if (response.headers.get('x-middleware-next') === '1') {
+    const forwarding = NextResponse.next({ request: { headers: forwardedHeaders } });
+    forwarding.headers.forEach((value, name) => {
+      if (name.startsWith('x-middleware-')) response.headers.set(name, value);
+    });
+  }
   const { isValid, user } = isValidUser(request.cookies.get('nookies_user')?.value);
   const loggedIn = isValid && user && request.cookies.has('ht_session');
   const htIn = request.cookies.get('ht_in');

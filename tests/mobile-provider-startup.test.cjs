@@ -14,7 +14,7 @@ test("request device flags seed the client providers before hydration", () => {
   const mobile = read("src/lib/contexts/mobileContext.tsx");
 
   assert.match(layout, /const device = await isMobileDevice\(\)/);
-  assert.match(layout, /initialIsMobile=\{device\.isMobile\}/);
+  assert.match(layout, /initialIsMobile=\{firstScreen \? \(firstScreen\.display as BoardDisplay\)\.isMobile : device\.isMobile\}/);
   assert.match(layout, /initialIsApple=\{device\.isApple\}/);
   assert.match(providers, /<DeviceProvider initialIsApple=\{initialIsApple\}>/);
   assert.match(
