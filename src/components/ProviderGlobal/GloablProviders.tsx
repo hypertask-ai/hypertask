@@ -259,7 +259,7 @@ import {
   isAgentChatPath,
   isTicketPagePath,
 } from "../Global/mobileShellVisibility";
-import { BoardStartupContext } from "@/lib/contexts/boardStartupContext";
+import { BoardStartupProvider } from "@/lib/contexts/boardStartupContext";
 import {
   MOBILE_BOARD_CONTROLS_RECOVERY_TIMEOUT_MS,
   shouldShowMobileBoardControls,
@@ -1448,7 +1448,7 @@ export default function GlobalProvider({
 
       {composeTaskWriterEnabled && authenticatedUserId !== null && showCommands.show && pathname === "/new" && <HypertasksCommands />}
 
-      <BoardStartupContext.Provider
+      <BoardStartupProvider
         value={{
           releaseSecondaryStartup,
           markBoardUsable,
@@ -1487,7 +1487,7 @@ export default function GlobalProvider({
             </AIChatClosedLayout>
           )}
         </ChatRuntimeHost>
-      </BoardStartupContext.Provider>
+      </BoardStartupProvider>
       {ReactQueryDevtools ? <ReactQueryDevtools initialIsOpen={false} /> : null}
     </div>
   );

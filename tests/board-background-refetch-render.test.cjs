@@ -199,14 +199,14 @@ test("a background refetch with temporarily missing data keeps the rendered boar
 
 // Exercise the shell's actual route slot, not a hand-written copy of its wrappers.
 const providerSource = fs.readFileSync(path.join(__dirname, "../src/components/ProviderGlobal/GloablProviders.tsx"), "utf8");
-const workspaceStart = providerSource.indexOf("<BoardStartupContext.Provider");
-const workspaceEnd = providerSource.indexOf("</BoardStartupContext.Provider>", workspaceStart);
+const workspaceStart = providerSource.indexOf("<BoardStartupProvider");
+const workspaceEnd = providerSource.indexOf("</BoardStartupProvider>", workspaceStart);
 assert.ok(workspaceStart >= 0 && workspaceEnd > workspaceStart);
-const workspace = providerSource.slice(workspaceStart, workspaceEnd + "</BoardStartupContext.Provider>".length);
+const workspace = providerSource.slice(workspaceStart, workspaceEnd + "</BoardStartupProvider>".length);
 const shellModule = { exports: {} };
 const shellSource = `
   const { Suspense } = require("react");
-  const { BoardStartupContext, ChatRuntimeHost, ChatRuntime, AIChatPanels,
+  const { BoardStartupProvider, ChatRuntimeHost, ChatRuntime, AIChatPanels,
     AIChatClosedLayout, CachedTaskDetailNavigation, FullScreenChatLoading } = dependencies;
   const releaseSecondaryStartup = () => {};
   const markBoardUsable = () => {};
@@ -248,7 +248,7 @@ for (const chatMounted of [false, true]) {
     const runtimeReady = new Promise((resolve) => { releaseRuntime = resolve; });
     const ChatRuntime = React.lazy(() => runtimeReady);
     const dependencies = {
-      BoardStartupContext: React.createContext({}),
+      BoardStartupProvider: load("./src/lib/contexts/boardStartupContext.tsx").BoardStartupProvider,
       ChatRuntimeHost: load("./src/components/ProviderGlobal/ChatRuntimeHost.tsx").default,
       ChatRuntime,
       AIChatPanels: noopComponent,
