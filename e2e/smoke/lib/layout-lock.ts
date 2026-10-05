@@ -1,7 +1,8 @@
 export type Box = { x: number; y: number; width: number; height: number }
 export type Landmark = { selector: string; box: Box; contentHeight?: boolean }
 export type Screen = { landmarks: Record<string, Landmark>; order: string[][] }
-export type FlagChange = { flag: string; ticket: string; screen: string; landmarks: string[]; reason: string }
+// bug: set when the flag's ticket never asked for this move; the entry is tracked debt, removed by that bug's fix.
+export type FlagChange = { flag: string; ticket: string; screen: string; landmarks: string[]; reason: string; bug?: string }
 type FlagChanges = { entries: readonly FlagChange[]; registry: readonly string[]; flags: Record<string, boolean> }
 
 export const LAYOUT_CHANGE_MESSAGE = "Layout changed. Only change e2e/smoke/layout-lock.baseline.json when the ticket asks for this layout change; put Valentin's quote in the PR."
@@ -30,6 +31,9 @@ export function validateFlagChanges(entries: readonly FlagChange[], registry: re
     const ticketNumber = /^htpr-(\d+)-/.exec(entry.flag)?.[1]
     if (!ticketNumber || entry.ticket !== `https://app.hypertask.ai/detail/project-15/${ticketNumber}` || !entry.reason?.trim()) {
       failures.push(`${entry.screen}: ${entry.flag}: list the flag's full ticket URL and the requested layout change as the reason.`)
+    }
+    if (entry.bug !== undefined && !/^https:\/\/app\.hypertask\.ai\/detail\/project-15\/\d+$/.test(entry.bug)) {
+      failures.push(`${entry.screen}: ${entry.flag}: bug must be the full URL of the board 15 bug that removes this entry.`)
     }
     const names = screens[entry.screen]?.landmarks
     if (!names || !Array.isArray(entry.landmarks) || !entry.landmarks.length || entry.landmarks.some(name => !Object.hasOwn(names, name)) || new Set(entry.landmarks).size !== entry.landmarks.length) {

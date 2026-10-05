@@ -33,23 +33,25 @@
   },
   {
     "flag": "htpr-6455-my-tasks-time-group",
-    "ticket": "https://app.hypertask.ai/detail/project-15/6958",
+    "ticket": "https://app.hypertask.ai/detail/project-15/6455",
     "screen": "my-tasks/Mobile",
     "landmarks": [
       "toolbar",
       "list"
     ],
-    "reason": "UNREQUESTED move, tracked as a bug to fix, not an approved change. Remove this entry in that fix."
+    "reason": "UNREQUESTED: the flag's ticket never asked for this move. Tracked as debt; the bug's fix removes this entry.",
+    "bug": "https://app.hypertask.ai/detail/project-15/6958"
   },
   {
     "flag": "htpr-6899-stable-layout",
-    "ticket": "https://app.hypertask.ai/detail/project-15/6959",
+    "ticket": "https://app.hypertask.ai/detail/project-15/6899",
     "screen": "ticket/Desktop",
     "landmarks": [
       "first-comment",
       "last-comment",
       "composer"
     ],
-    "reason": "UNREQUESTED move, tracked as a bug to fix, not an approved change. The flag stays Off until fixed. Remove this entry in that fix."
+    "reason": "UNREQUESTED: the flag's ticket never asked for this move. Tracked as debt; the bug's fix removes this entry.",
+    "bug": "https://app.hypertask.ai/detail/project-15/6959"
   }
 ]
