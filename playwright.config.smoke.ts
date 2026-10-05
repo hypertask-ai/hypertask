@@ -34,10 +34,10 @@ export default defineConfig({
   },
   globalSetup: './e2e/smoke/global-setup.ts',
   projects: [
-    { name: 'Desktop', testMatch: /prod\.spec\.ts/, use: { ...devices['Desktop Chrome'] } },
+    { name: 'Desktop', testMatch: /(?:prod|layout-lock)\.spec\.ts/, use: { ...devices['Desktop Chrome'] } },
     // browserName pinned: the iPhone 13 device descriptor defaults to WebKit,
     // but the workflow only installs the Chromium binary (HTPR-6199 review).
-    { name: 'Mobile', testMatch: /prod\.spec\.ts/, use: { ...devices['iPhone 13'], browserName: 'chromium' } },
+    { name: 'Mobile', testMatch: /(?:prod|layout-lock)\.spec\.ts/, use: { ...devices['iPhone 13'], browserName: 'chromium' } },
 
     // HTPR-6636 phase 2 , customer journeys, opt-in via HT_QA_JOURNEYS=1
     // (every test here self-skips otherwise, so this is harmless in

@@ -188,6 +188,7 @@ const CommentsContainer = () => {
         key={comment.id}
         tabIndex={i}
         id={`comment-${i}`}
+        data-testid="ticket-comment"
         onMouseDownCapture={rememberPressStart}
         onClick={handleSingleTap}
         onDoubleClick={handleDesktopDoubleClick}
@@ -284,7 +285,7 @@ const CommentsContainer = () => {
       </div>
     );
     return !comment.activity ? (
-      <div {...bind} className={`py-1`} id={`comment-${comment.id}`}>
+      <div {...bind} className={`py-1`} id={`comment-${comment.id}`} data-testid="ticket-comment">
         {isFirstNewComment ? (
           <div className="flex items-center gap-2 px-1 pb-1 pt-2 text-micro font-semibold uppercase text-amber-500">
             <div className="h-px flex-1 border-t border-amber-500/45" />

@@ -93,6 +93,29 @@ test("required browser smoke clicks its seeded ticket under live modes and the i
   assert.match(smoke, /expect\(documentRequests,[^\n]+\.toBe\(0\)/);
 });
 
+test("required browser smoke runs layout lock with live modes and every registry flag enabled", async () => {
+  const [workflow, seed, config, layout] = await Promise.all([
+    source(".github/workflows/ci-tests.yml"),
+    source("scripts/seed-browser-smoke.mjs"),
+    source("playwright.config.smoke.ts"),
+    source("e2e/smoke/layout-lock.spec.ts"),
+  ]);
+  const job = workflow.slice(workflow.indexOf("  browser-smoke:"), workflow.indexOf("  production-test-warning:"));
+  const runs = job.match(/npx playwright test[^\n]*e2e\/smoke\/layout-lock\.spec\.ts/g);
+  assert.equal(runs?.length, 2);
+  assert.ok(job.indexOf(runs[0]) < job.indexOf("--all-flags-on"));
+  assert.ok(job.indexOf(runs[1], job.indexOf("--all-flags-on")) > job.indexOf("--all-flags-on"));
+  assert.match(seed, /FEATURE_FLAG_KEYS\.map\(key => \[key, "EVERYONE"\]\)/);
+  assert.match(seed, /instantOpenControl \|\| allFlagsOn/);
+  assert.match(seed, /prisma\.comment\.createMany/);
+  assert.match(config, /prod\|layout-lock/);
+  assert.match(layout, /\['direct', 'board card'\]/);
+  assert.match(layout, /toHaveCount\(2\)/);
+  assert.match(layout, /composer top must be below the last comment bottom/);
+  assert.match(layout, /only the composer area may follow the last comment/);
+  assert.match(layout, /toBeLessThanOrEqual\(640\)/);
+});
+
 test("browser fixture seeding rejects a nonlocal database before any write", () => {
   const { spawnSync } = require("node:child_process");
   const result = spawnSync(process.execPath, ["scripts/seed-browser-smoke.mjs"], {
