@@ -106,10 +106,16 @@ const Commands = (props: Props) => {
   const composeEnabled = composeTaskWriterEnabled && !props.isDemo && !props.isInteractive;
   const [showCommands, setShowCommands] = useRecoilState(showCommandsAtom);
   const isCompose = composeEnabled && showCommands.paletteTab === "compose";
-  // Ctrl+K and Ctrl+J replace the palette state, so remember the creation form's board while the palette stays open.
+  // Ctrl+K and Ctrl+J replace the palette state, so remember the form's handoff while the palette stays open.
   const composeProjectRef = useRef<IProject | undefined>(undefined);
-  if (!showCommands.show) composeProjectRef.current = undefined;
-  else if (showCommands.composeProject) composeProjectRef.current = showCommands.composeProject;
+  const composeOnCreatedRef = useRef<(() => void) | undefined>(undefined);
+  if (!showCommands.show) {
+    composeProjectRef.current = undefined;
+    composeOnCreatedRef.current = undefined;
+  } else if (showCommands.composeProject || showCommands.composeOnCreated) {
+    composeProjectRef.current = showCommands.composeProject;
+    composeOnCreatedRef.current = showCommands.composeOnCreated;
+  }
   const [writing, setWriting] = useState(false);
   const { resetShowCommands } = useHypertasksRecoilStates()
   const isMobile = useContext(MobileViewContext);
@@ -680,7 +686,10 @@ const Commands = (props: Props) => {
       />
     </div>
   ) : null;
-  const compose = composeEnabled ? <ComposeTaskWriter active={isCompose} destinationProject={newTaskWindow ? composeProjectRef.current : undefined} onBusyChange={setWriting} onCreated={resetShowCommands} /> : null;
+  const compose = composeEnabled ? <ComposeTaskWriter active={isCompose} destinationProject={newTaskWindow ? composeProjectRef.current : undefined} onBusyChange={setWriting} onCreated={() => {
+    if (newTaskWindow) composeOnCreatedRef.current?.();
+    resetShowCommands();
+  }} /> : null;
 
   const searchInput = (
     <div className="flex items-center gap-2.5 rounded-[4px] px-4 ring-1 ring-inset ring-hypertasks-purple">

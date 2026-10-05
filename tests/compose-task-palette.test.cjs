@@ -650,14 +650,18 @@ test('creation-form New Task handlers forward the selected board ahead of stale 
   const selected = { id: 8, title: 'Selected board' }, stale = { id: 7, title: 'URL board' };
   for (const handler of handlers.values()) {
     let command;
-    const invoke = new Function('newTaskWindow', 'setCommands', 'CommandMode', 'formValues', '_currentProject', `return (${handler});`)(true, (value) => { command = value; }, { Command: 0 }, { currentProject: selected }, stale);
+    const closes = [];
+    const invoke = new Function('newTaskWindow', 'setCommands', 'CommandMode', 'formValues', '_currentProject', 'closeHandler', `return (${handler});`)(true, (value) => { command = value; }, { Command: 0 }, { currentProject: selected }, stale, (saved) => closes.push(saved));
     invoke();
     assert.equal(command.composeProject, selected);
     assert.equal(command.paletteTab, 'compose');
+    assert.deepEqual(closes, [], 'opening New Task leaves the form intact');
+    command.composeOnCreated();
+    assert.deepEqual(closes, [true], 'successful handoff closes without a discard prompt');
   }
 });
 
-test('creation-form New Task shortcut captures its board before the global URL fallback', async (t) => {
+test('creation-form New Task handoff preserves board and dismissal, and closes only after flagged success on desktop and phone', async (t) => {
   const ts = require('typescript');
   const file = ts.createSourceFile('form.tsx', fs.readFileSync(path.join(root, 'src/components/RTE/TiptapCreateTaskModal.tsx'), 'utf8'), ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
   let effect;
@@ -668,19 +672,50 @@ test('creation-form New Task shortcut captures its board before the global URL f
   visit(file);
   assert.ok(effect);
   const javascript = ts.transpileModule(effect, { compilerOptions: { target: ts.ScriptTarget.ES2020 } }).outputText;
-  for (const newWindow of [false, true]) await withPalette(t, { newWindow, open: false, url: '/project?id=7' }, async ({ mountProbe, set, press, type, requests, legacyJ, jiti }) => {
-    const selected = { id: 8, title: 'Form board' };
-    const { isComposePaletteShortcut } = jiti(path.join(root, 'src/lib/constants/commandCenterShortcut.ts'));
-    const { CommandMode } = jiti(path.join(root, 'src/models/enums.ts'));
-    const runEffect = new Function('useEffect', 'newTaskWindow', 'isApple', 'pathname', 'projectForContext', 'setCommands', 'CommandMode', 'isComposePaletteShortcut', javascript);
-    function Probe() { runEffect(React.useEffect, newWindow, false, '/project', selected, (value) => set('showCommandsAtom', value), CommandMode, isComposePaletteShortcut); return null; }
-    await mountProbe(() => React.createElement(Probe));
-    await press('j', { ctrlKey: true }, document.body);
-    assert.equal(legacyJ(), 0, 'only one shortcut handles the opening');
-    await type('Create on the selected board');
-    await press('Enter');
-    assert.equal(requests[0].body.project.id, newWindow ? 8 : 7, 'flag off retains the global Compose destination');
-  });
+  for (const mobile of [false, true]) for (const newWindow of [false, true]) for (const outcome of ['created', 'escape', 'search-close', 'failure']) {
+    await withPalette(t, { mobile, newWindow, open: false, url: '/project?id=7' }, async ({ mountProbe, set, press, type, requests, legacyJ, jiti, finish, fail, values, input }) => {
+      const selected = { id: 8, title: 'Form board' };
+      const closes = [];
+      const closeHandler = (saved) => closes.push(saved);
+      const { isComposePaletteShortcut } = jiti(path.join(root, 'src/lib/constants/commandCenterShortcut.ts'));
+      const { CommandMode } = jiti(path.join(root, 'src/models/enums.ts'));
+      const runEffect = new Function('useEffect', 'newTaskWindow', 'isApple', 'pathname', 'projectForContext', 'setCommands', 'CommandMode', 'isComposePaletteShortcut', 'closeHandler', javascript);
+      function Probe() { runEffect(React.useEffect, newWindow, false, '/project', selected, (value) => set('showCommandsAtom', value), CommandMode, isComposePaletteShortcut, closeHandler); return null; }
+      await mountProbe(() => React.createElement(Probe));
+      await press('j', { ctrlKey: true }, document.body);
+      assert.equal(legacyJ(), 0, 'only one shortcut handles the opening');
+      await type('Create on the selected board');
+      assert.deepEqual(closes, [], 'opening and typing leave the form unchanged');
+      await press('k', { ctrlKey: true });
+      if (outcome !== 'search-close') await press('j', { ctrlKey: true });
+      if (outcome === 'escape' || outcome === 'search-close') {
+        await press('Escape');
+        assert.equal(values.get('showCommandsAtom').show, false);
+        assert.deepEqual(closes, [], 'dismissing either tab leaves the original form open');
+        // Remove the form listener and reopen independently. A cancelled
+        // handoff must not close the old form after unrelated creation.
+        await mountProbe(() => null);
+        await press('j', { ctrlKey: true }, document.body);
+        await type('An unrelated task');
+        await press('Enter');
+        await finish();
+        assert.deepEqual(closes, [], 'dismissal clears the handoff');
+        return;
+      }
+      await press('Enter');
+      assert.equal(requests[0].body.project.id, newWindow ? 8 : 7, 'flag off retains the global Compose destination');
+      assert.deepEqual(closes, [], 'an in-flight creation does not close the form');
+      if (outcome === 'failure') {
+        await fail();
+        assert.deepEqual(closes, [], 'a failed creation keeps the form open');
+        assert.equal(input().value, 'Create on the selected board');
+        await press('Enter');
+      }
+      await finish(outcome === 'failure');
+      assert.deepEqual(closes, newWindow ? [true] : [], 'only flagged handoff success closes without discard, including fallback/retry');
+      assert.equal(values.get('showCommandsAtom').show, false);
+    });
+  }
 });
 
 test('explicit form destination wins over URL, recency and an empty task detail', async (t) => {

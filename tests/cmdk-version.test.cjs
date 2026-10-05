@@ -25,6 +25,7 @@ function renderPalette({ enabled = true, mobile = false, env = buildEnv, rows = 
   const atoms = {
     calendarSettingsAtom: { default: { showWeekends: true } },
     boardLayoutAtom: { default: "board" },
+    showCommandsAtom: { default: { show: false, mode: 0 } },
   };
   const commands = [{ group: "Board", commandLists: Array.from({ length: rows }, (_, index) => ({
     key: index === 0 ? "createTask" : index === 1 ? "createBoard" : `command-${index}`,
