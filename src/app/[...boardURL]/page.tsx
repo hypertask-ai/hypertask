@@ -73,8 +73,9 @@ export default async function Page(
   }
 
   const firstScreen = await getServerBoardDocument();
+  // RSC adds a bootstrap sibling. Keep the adopted board's client owner intact.
   if (firstScreen) {
-    return <LandingPage slugs={String(firstScreen.data.projectId)} user={firstScreen.data.user} authenticated />;
+    return <LandingPage key="board" slugs={String(firstScreen.data.projectId)} user={firstScreen.data.user} authenticated />;
   }
   const cookieStore = await cookies();
 
@@ -187,6 +188,7 @@ export default async function Page(
         />
       ) : null}
       <LandingPage
+        key="board"
         slugs={slugs}
         user={userObj}
         authenticated={authenticated}
