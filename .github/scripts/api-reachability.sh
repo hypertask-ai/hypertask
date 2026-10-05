@@ -21,7 +21,7 @@ probe() {
     : > "$CHECK_DIR/headers"
     : > "$CHECK_DIR/body"
     status=$(curl -s --max-time 20 -D "$CHECK_DIR/headers" -o "$CHECK_DIR/body" \
-      -w '%{http_code}' "$@" "$url") || status=000
+      -w '%{http_code}' "$@" "$url" 2>/dev/null) || status=000
     mitigated=$(awk 'tolower($0) ~ /^x-vercel-mitigated:/ {sub(/^[^:]*:[ \t]*/, ""); sub(/\r$/, ""); print length($0) ? $0 : "(empty)"}' "$CHECK_DIR/headers")
     valid=false
     if [ "$status" = "$expected" ] && ! grep -qi '^x-vercel-mitigated:' "$CHECK_DIR/headers"; then
@@ -35,13 +35,26 @@ probe() {
         authorization)
           if jq -e '.token_endpoint | type == "string" and length > 0' "$CHECK_DIR/body" >/dev/null 2>&1; then valid=true; fi
           ;;
+        app)
+          valid=true
+          ;;
+        firewall)
+          # Vercel also represents all sources as separate IPv4/IPv6 Ip CIDRs.
+          if jq -e '
+            .result as $rules | ["app.hypertask.ai", "mcp.hypertask.ai"] | all(.[];
+              . as $host | [$rules[] | select(.Domain == $host and .Action == "bypass" and .SourceIp == null)] as $entries |
+              any($entries[]; has("SourceIp") and .Ip == null) or
+              (any($entries[]; .Ip == "0.0.0.0/0") and any($entries[]; .Ip == "::/0"))
+            )
+          ' "$CHECK_DIR/body" >/dev/null 2>&1; then valid=true; fi
+          ;;
       esac
     fi
     echo "[$attempt] $url: status=$status, x-vercel-mitigated=${mitigated:-none}, valid=$valid"
     if [ "$valid" = "true" ]; then return 0; fi
     if [ "$attempt" -lt 3 ]; then sleep 2; fi
   done
-  FAILURES+="$url: status=$status, x-vercel-mitigated=${mitigated:-none} (expected $expected with valid $check metadata)"$'\n'
+  FAILURES+="$url: status=$status, x-vercel-mitigated=${mitigated:-none} (expected $expected with valid $check response)"$'\n'
 }
 
 probe "https://mcp.hypertask.ai/mcp" 401 initialize \
@@ -49,13 +62,28 @@ probe "https://mcp.hypertask.ai/mcp" 401 initialize \
   -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-03-26","capabilities":{},"clientInfo":{"name":"prod-health","version":"1.0"}}}'
 probe "https://mcp.hypertask.ai/.well-known/oauth-protected-resource" 200 resource
 probe "https://app.hypertask.ai/.well-known/oauth-authorization-server" 200 authorization
+probe "https://api.hypertask.ai/api/mcp/tasks" 401 app
+probe "https://app.hypertask.ai/api/mcp/tasks" 401 app
+probe "https://app.hypertask.ai/api/ai-chat/all-sessions" 401 app
+# Live unauthenticated POST {} returns 401 from the app, not a platform challenge.
+probe "https://app.hypertask.ai/api/ai/chat/stream" 401 app \
+  -X POST -H 'content-type: application/json' -d '{}'
+
+if [ -n "${VERCEL_TOKEN:-}" ]; then
+  PROJECT_ID=${PROJECT_ID:-prj_oEok2iMNFPzj6AWe1KQBaIAcPaAf}
+  TEAM_ID=${TEAM_ID:-team_yureFlJZ6ibwebaOOkKc5whs}
+  probe "https://api.vercel.com/v1/security/firewall/bypass?projectId=$PROJECT_ID&teamId=$TEAM_ID" 200 firewall \
+    -H "Authorization: Bearer $VERCEL_TOKEN"
+else
+  echo "No VERCEL_TOKEN; skipped firewall bypass setting guard."
+fi
 
 if [ -n "$FAILURES" ]; then
-  MSG="🔴 hypertasks: MCP reachability check failed.
-${FAILURES}Likely fix: the Vercel firewall system bypass for mcp.hypertask.ai on project hypertasks-prod."
+  MSG="🔴 hypertasks: API reachability check failed.
+${FAILURES}Likely fix: the Vercel firewall system bypass for the affected host on project hypertasks-prod. Ensure all-sources bypass entries for BOTH app.hypertask.ai and mcp.hypertask.ai."
   notify "$MSG"
   echo "::error::$MSG"
   exit 1
 fi
 
-echo "MCP reachability checks passed."
+echo "API reachability checks passed."
