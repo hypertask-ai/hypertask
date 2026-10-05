@@ -2,6 +2,7 @@ import { INotification } from '@/models/model'
 import formatDateDifference from '@/utils/generateTime';
 import { convertToPlain } from '@/utils/helperFunctions/helperFunctions';
 import React from 'react'
+import TooltipPortal from '@/components/Common/TooltipPortal'
 import { Check } from "lucide-react";
 
 interface Props {
@@ -39,7 +40,9 @@ const NotificationComment = (props: Props) => {
                 >
                     <Check size={15} color={(notification.status) === 'Archive' ? 'green' : '#8E9093'} strokeWidth={1.75} />
                 </button>
-                <span className="absolute scale-0 transition-transform rounded bg-white p-2 text-meta text-black group-hover:scale-100">Mark Done   <kbd className="border-gray-200 rounded-lg dark:bg-gray-600 dark:text-gray-100 dark:border-gray-500 px-0.5 py-0.5">E</kbd></span>
+                <TooltipPortal hover>
+                    <span data-hover-tooltip-content className="absolute scale-100 transition-transform rounded bg-white p-2 text-meta text-black">Mark Done   <kbd className="border-gray-200 rounded-lg dark:bg-gray-600 dark:text-gray-100 dark:border-gray-500 px-0.5 py-0.5">E</kbd></span>
+                </TooltipPortal>
             </div>
         </div>
     )

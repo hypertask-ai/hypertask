@@ -1,6 +1,7 @@
 "use client";
 
 import UserAvatar from "@/components/Common/UserAvatar";
+import TooltipPortal from "./TooltipPortal";
 import { usePersonHovercard } from "@/hooks/MultiPages/usePersonHovercard";
 import type { PersonHovercardSubject } from "@/models/personHovercard";
 import { agentPageHref } from "@/lib/agents/pageHref";
@@ -143,13 +144,14 @@ const PersonHovercardSurface = ({
       {reference}
       {open && (!instantTicketOpen || quiet === false || !detailRoute || profile || query.isError) && (
         <FloatingPortal>
+          <TooltipPortal placement="fixed" anchorElement={refs.domReference.current} interactive>
           <FloatingFocusManager context={context} modal={false} initialFocus={-1}>
             <section
               ref={refs.setFloating}
               style={floatingStyles}
               aria-labelledby={profile ? headingId : undefined}
               aria-label={profile ? undefined : "Person contact details"}
-              className="relative z-[999999999] w-[272px] rounded-[4px] border-thin border-border-light-gray-thin bg-modalBackground p-3 text-white-black shadow-[0_12px_36px_rgba(0,0,0,0.28)]"
+              className="relative w-[272px] rounded-[4px] border-thin border-border-light-gray-thin bg-modalBackground p-3 text-white-black shadow-[0_12px_36px_rgba(0,0,0,0.28)]"
               {...getFloatingProps({
                 onPointerEnter: onFloatingPointerEnter,
                 onPointerLeave: onFloatingPointerLeave,
@@ -207,6 +209,7 @@ const PersonHovercardSurface = ({
               )}
             </section>
           </FloatingFocusManager>
+          </TooltipPortal>
         </FloatingPortal>
       )}
     </>
