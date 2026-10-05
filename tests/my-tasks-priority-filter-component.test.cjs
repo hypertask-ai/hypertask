@@ -52,7 +52,7 @@ stubModule(require.resolve("next/navigation"), {
     back: () => { backCalls += 1; },
     replace: () => {},
   }),
-  useSearchParams: () => new URLSearchParams(),
+  useSearchParams: () => new URLSearchParams(global.window?.location.search),
 });
 stubSourceModule("src/components/PageComponents/Kanban/TableView/TableView.tsx", {
   default: (props) => {
@@ -293,3 +293,53 @@ test("Escape closes the menu instead of navigating back", () => {
   delete global.document;
   delete global.IS_REACT_ACT_ENVIRONMENT;
 });
+
+for (const viewsEnabled of [false, true]) {
+  test(`board grouping counts every Tab before a render (saved views ${viewsEnabled})`, () => {
+    const dom = new JSDOM("<div id='root'></div>", { url: "https://app.hypertask.ai/my-tasks?view=all&board=10" });
+    global.window = dom.window;
+    global.document = dom.window.document;
+    global.IS_REACT_ACT_ENVIRONMENT = true;
+    flagValues["htpr-6312-my-tasks-priority-filter"] = false;
+    flagValues["htpr-6421-my-tasks-shortcuts-width"] = true;
+    flagValues["htpr-6422-my-tasks-views"] = viewsEnabled;
+    const boardSections = [10, 20, 30, 40].map((projectId) => ({
+      id: projectId, projectId, section_title: `Board ${projectId}`,
+      items: [{ id: projectId, projectId }],
+    }));
+    const reactRoot = createRoot(document.getElementById("root"));
+    const press = (shiftKey = false) => document.dispatchEvent(
+      new dom.window.KeyboardEvent("keydown", { key: "Tab", shiftKey, bubbles: true, cancelable: true }),
+    );
+    try {
+      act(() => reactRoot.render(React.createElement(MyTasks, {
+        sections: boardSections, tabs: ["All", ...boardSections.map((section) => section.section_title)],
+        currentUser: { id: 6 }, viewsEnabled,
+      })));
+      assert.deepEqual(lastViewItems(), [10]);
+      // Hold React commits until the burst finishes to expose render-captured state.
+      for (const [shiftKey, expectedBoards, expectedItems] of [
+        [false, [20, 30, 40], [40]],
+        [true, [30, 20, 10], [10]],
+        [false, [20, 30, 40, null, 10, 20], [20]],
+        [true, [10, null, 40, 30, 20, 10], [10]],
+      ]) {
+        act(() => {
+          for (const boardId of expectedBoards) {
+            press(shiftKey);
+            assert.equal(new URL(window.location.href).searchParams.get("board"), boardId === null ? null : String(boardId));
+          }
+        });
+        assert.deepEqual(lastViewItems(), expectedItems);
+      }
+    } finally {
+      act(() => reactRoot.unmount());
+      flagValues["htpr-6421-my-tasks-shortcuts-width"] = false;
+      flagValues["htpr-6422-my-tasks-views"] = false;
+      dom.window.close();
+      delete global.window;
+      delete global.document;
+      delete global.IS_REACT_ACT_ENVIRONMENT;
+    }
+  });
+}

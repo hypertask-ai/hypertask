@@ -112,7 +112,8 @@ const VIEWS: Array<{
   { name: 'new-task modal', path: process.env.SMOKE_POSTDEPLOY === '1' ? `/new?board=${process.env.SMOKE_TASK_PATH?.match(/^\/detail\/project-(\d+)\//)?.[1]}` : '/new', title: 'New', selector: '#createTaskModal' },
 ]
 
-test('My Tasks Tab keeps the chosen split without server navigation', async ({ page }, testInfo) => {
+for (const groupBy of ['time', 'board'] as const) {
+test(`My Tasks Tab keeps the chosen split without server navigation (${groupBy} grouping)`, async ({ page }, testInfo) => {
   test.skip(!process.env.BROWSER_SMOKE_PR, 'isolated PR fixtures only')
   await page.setViewportSize(testInfo.project.name === 'Mobile'
     ? { width: 390, height: 844 }
@@ -122,6 +123,12 @@ test('My Tasks Tab keeps the chosen split without server navigation', async ({ p
     title: index === 0 ? 'Browser smoke board' : 'Browser smoke demo board',
     sections: [], labels: [], members: [],
   }))
+  boards.push(...[91001, 91002].map((id) => ({
+    id, title: `Browser smoke board ${id}`, sections: [], labels: [], members: [],
+  })))
+  const sections = boards.map((board) => ({
+    id: board.id, projectId: board.id, section_title: board.title, items: [],
+  }))
   // Exercise unreleased flags without changing the seed's production-mode snapshot.
   await page.route('**/api/flags', (route) => route.fulfill({ json: { flags: {
     'htpr-6421-my-tasks-shortcuts-width': true,
@@ -129,14 +136,18 @@ test('My Tasks Tab keeps the chosen split without server navigation', async ({ p
     'htpr-6458-my-tasks-live-updates': true,
   } } }))
   await page.route('**/api/my-tasks?*', (route) => route.fulfill({ json: {
-    sections: [], tabs: ['All'], boards, accessibleProjectIds: boards.map((board) => board.id),
+    sections, tabs: ['All', ...boards.map((board) => board.title)], boards, accessibleProjectIds: boards.map((board) => board.id),
   } }))
   const listResponse = page.waitForResponse((response) => new URL(response.url()).pathname === '/api/my-tasks')
   await page.goto('/my-tasks?view=all', { waitUntil: 'load' })
   await listResponse
-  const splits = page.locator('.footer_tags_main:visible')
+  if (groupBy === 'board') {
+    await page.getByRole('button', { name: 'Group My Tasks', exact: true }).click()
+    await page.getByRole('button', { name: 'Board', exact: true }).click()
+  }
+  const splits = page.locator('.footer_tags_main:visible:not(.table-hscroll .footer_tags_main)')
   const selected = splits.locator('.font-semibold > span.footer_tags')
-  await expect(splits).toHaveCount(3)
+  await expect(splits).toHaveCount(boards.length + 1)
   await expect(selected).toHaveText('All')
   await page.evaluate(() => (document.activeElement as HTMLElement).blur())
 
@@ -167,16 +178,27 @@ test('My Tasks Tab keeps the chosen split without server navigation', async ({ p
     })).toEqual([title])
   }
   try {
-    for (const index of [1, 2, 0, 1, 2]) {
+    for (const index of [1, 2, 3, 4, 0, 1, 2]) {
       await page.keyboard.press('Tab')
       await assertSplit(index)
     }
     await page.keyboard.press('Shift+Tab')
     await assertSplit(1)
-    await page.keyboard.press('Tab')
-    await page.keyboard.press('Tab')
-    await page.keyboard.press('Tab')
-    await assertSplit(1)
+    let index = 1
+    for (const count of [3, 6]) {
+      for (const direction of [1, -1]) {
+        for (let press = 0; press < count; press++) {
+          await page.keyboard.press(direction === 1 ? 'Tab' : 'Shift+Tab')
+          await page.waitForTimeout(80)
+          index = (index + direction + boards.length + 1) % (boards.length + 1)
+          const title = index === 0 ? 'All' : boards[index - 1].title
+          // Read immediately, not with a polling assertion that could slow the burst.
+          expect(await selected.textContent(), `rapid press ${press + 1} must select ${title}`).toBe(title)
+          expect(new URL(page.url()).searchParams.get('board')).toBe(index === 0 ? null : String(boards[index - 1].id))
+        }
+        await assertSplit(index)
+      }
+    }
     releaseNavigation()
     await assertSplit(1)
     expect(serverNavigations, 'split selection must not request a server redraw').toBe(0)
@@ -184,6 +206,7 @@ test('My Tasks Tab keeps the chosen split without server navigation', async ({ p
     releaseNavigation()
   }
 })
+}
 
 test('seeded board card opens a ticket and stays open', { tag: ['@id:board-card-click'] }, async ({ page }, testInfo) => {
   test.skip(!process.env.BROWSER_SMOKE_PR, 'isolated PR fixtures only')
