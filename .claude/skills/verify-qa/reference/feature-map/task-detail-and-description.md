@@ -3,7 +3,7 @@
 ## How a customer reaches it
 
 `https://app.hypertask.ai/detail/project-<id>/<taskNumber>`, opened from a
-board card or a deep link.
+board card, an Inbox notification, or a deep link.
 
 ## How to drive it
 
@@ -35,6 +35,13 @@ is about. Edit the task from a second context or the API while the first
 tab has it open, wait for the poll interval, and screenshot the still-open
 tab **without reloading**. A reload would fetch fresh from the server and
 pass even with the bug present, hiding exactly what broke.
+
+For desktop composer placement, open a ticket with several comments from both
+Inbox and its board at 1920x1080 and 1440x900. Scroll to the last comment and
+capture it above the Send box, with no overlap or estimated-height gap. Check
+empty and one-comment threads, repeat with `htpr-6899-stable-layout` and
+`htpr-6752-instant-ticket-open` on and off in a disposable local build, and
+confirm the separate fixed mobile composer at 390x844 is unchanged.
 
 ## Cleanup
 

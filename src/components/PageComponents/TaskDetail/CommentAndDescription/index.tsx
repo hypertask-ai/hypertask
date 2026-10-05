@@ -157,10 +157,7 @@ const CommentAndDescriptionContainer = (props: ITaskInfoContainer) => {
               />
             );
           } else if (currentItemIndex === descriptionBottomVirtualIndex) {
-            contentToRender = <>
-              <div id="bottom-description" className="h-0" />
-              {cachedLayout && !_mbl && secondaryPanelsReady !== false && <Suspense fallback={null}><NewCommentComponent /></Suspense>}
-            </>;
+            contentToRender = <div id="bottom-description" className="h-0" />;
           } else if (
             currentItemIndex >= commentsStartVirtualIndex &&
             currentItemIndex < commentsStartVirtualIndex + numberOfComments
@@ -229,7 +226,7 @@ const CommentAndDescriptionContainer = (props: ITaskInfoContainer) => {
           );
         })}
       </div>
-      {!cachedLayout && !_mbl && secondaryPanelsReady !== false && (instantTicketOpen ? <Suspense fallback={null}><NewCommentComponent /></Suspense> : <NewCommentComponent />)}
+      {!_mbl && secondaryPanelsReady !== false && (instantTicketOpen ? <Suspense fallback={null}><NewCommentComponent /></Suspense> : <NewCommentComponent />)}
       {cachedLayout && !uploadingDescription && !hasDraft && <DescriptionPages />}
       {cachedLayout && _mbl && currentTask && (
         <TaskInfoLateDetails currentTask={currentTask} removeRelationHandler={removeRelationHandler} />
