@@ -75,10 +75,20 @@ export default function CachedTaskDetailNavigation({ children, accountId }: {
         if (event.type === "popstate" || historyLocation.pathname !== null || !window.history.state?.cachedTaskDetail) {
           historyLocation.pathname = currentPathname;
         }
+        // Next can acknowledge the pathname before React renders this traversal,
+        // while its RSC children still show the previous task.
+        if (event.type === "popstate" && currentPathname !== pathname && instantTicketOpen &&
+            accountId !== null && currentUser?.id === accountId) {
+          const route = currentPathname.match(/^\/detail\/project-(\d+)\/(\d+)$/);
+          const task = route ? findCachedTaskDetail(queryClient, accountId, Number(route[1]), Number(route[2])) : undefined;
+          if (task) previousLocation.current = {
+            accountId, taskId: task.id, projectId: task.projectId, uniqueIndex: task.uniqueIndex,
+          };
+        }
         notify();
       }, true),
     };
-  }, [pathname, historyLocation]);
+  }, [pathname, historyLocation, instantTicketOpen, accountId, currentUser?.id, queryClient]);
   const nativePathname = useSyncExternalStore(
     subtaskLink ? routeLocation.subscribe : subscribeToLocation,
     subtaskLink ? routeLocation.getSnapshot : browserPathname,

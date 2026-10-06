@@ -335,6 +335,10 @@ test("an acknowledged Next task page keeps its composer mounted when its authori
     render();
   });
   assert.equal(document.querySelector('[data-testid="comment-composer"]'), composer, "preseeded ordinary Next navigation must retain its child tree");
+  window.addEventListener("popstate", () => {
+    nextPath = window.location.pathname;
+    render();
+  });
   const traverse = method => React.act(async () => {
     await new Promise(resolve => {
       window.addEventListener("popstate", () => setImmediate(resolve), { once: true });
