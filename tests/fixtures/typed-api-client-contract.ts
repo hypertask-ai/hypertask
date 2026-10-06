@@ -123,3 +123,35 @@ void setTaskPriority<{ arbitrary: true }>({ taskId: 12, priority_index: 1, Prior
 // @ts-expect-error wire date is not a hydrated Date
 const wrongWriteDate: z.output<typeof taskPropertyResponseSchema>["dueDate"] = new Date();
 void wrongWriteDate;
+
+import type { Section, Notification } from "@prisma/client";
+import { createSection, updateSection, setNotificationSeen, unarchiveNotification, archiveNotifications, toggleNotificationArchive, sectionCreateRoute, sectionUpdateRoute, notificationSeenRoute, notificationUnarchiveRoute, notificationBulkArchiveRoute } from "@/lib/api/typedClient";
+import { sectionResponseSchema } from "@/lib/api/contracts/sectionWrites";
+import { notificationResponseSchema } from "@/lib/api/contracts/notificationWrites";
+
+type SectionFields = "id" | "projectId" | "section_title" | "visibility" | "deleted" | "ranking" | "isDone";
+type NotificationFields = "id" | "type" | "userId" | "taskId" | "projectId" | "status" | "seen";
+export type SectionProducerParity = Assert<Equal<Pick<z.output<typeof sectionResponseSchema>, SectionFields>, Pick<Section, SectionFields>>>;
+export type NotificationProducerParity = Assert<Equal<Pick<z.output<typeof notificationResponseSchema>, NotificationFields>, Pick<Notification, NotificationFields>>>;
+export type SectionCreateData = Assert<Equal<Awaited<ReturnType<typeof createSection>>["data"], z.output<typeof sectionCreateRoute.success>>>;
+export type SectionUpdateData = Assert<Equal<Awaited<ReturnType<typeof updateSection>>["data"], z.output<typeof sectionUpdateRoute.success>>>;
+export type NotificationSeenData = Assert<Equal<Awaited<ReturnType<typeof setNotificationSeen>>["data"], z.output<typeof notificationSeenRoute.success>>>;
+export type NotificationUnarchiveData = Assert<Equal<Awaited<ReturnType<typeof unarchiveNotification>>["data"], z.output<typeof notificationUnarchiveRoute.success>>>;
+export type NotificationBulkData = Assert<Equal<Awaited<ReturnType<typeof archiveNotifications>>["data"], z.output<typeof notificationBulkArchiveRoute.success>>>;
+export type SectionUpdateInput = Assert<Equal<Parameters<typeof updateSection>[0], z.input<typeof sectionUpdateRoute.body>>>;
+export type NotificationSeenInput = Assert<Equal<Parameters<typeof setNotificationSeen>[0], z.input<typeof notificationSeenRoute.query>>>;
+export type NotificationArchiveResponse = Assert<Equal<Awaited<ReturnType<typeof toggleNotificationArchive>>, Response>>;
+void createSection({ projectId: 15, title: "Next" });
+void updateSection({ userId: 985, sectionId: 12, newSection: { ranking: "A0150" } });
+void setNotificationSeen({ notificationId: 12, seen: 0 });
+void unarchiveNotification({ notificationId: 12 });
+// @ts-expect-error section IDs are numeric
+void updateSection({ sectionId: "12", newSection: { deleted: true } });
+// @ts-expect-error read query uses the legacy numeric switch, not a boolean
+void setNotificationSeen({ notificationId: 12, seen: true });
+// @ts-expect-error archive query retains the caller's user ID
+void toggleNotificationArchive({ id: "12", taskId: null, type: "Comment" }, {});
+// @ts-expect-error bulk caller sends Archive, not a new status
+void archiveNotifications({ notificationIds: [], status: "Deleted" }, {});
+// @ts-expect-error caller cannot invent the response type
+void createSection<{ arbitrary: true }>({ projectId: 15, title: "Next" });

@@ -143,3 +143,4 @@ export const HTPR_6951_TASK_WRITING_PROGRESS_FLAG = "htpr-6951-task-writing-prog
 export const HTPR_6926_MCP_ROUTE_WRAPPER_FLAG = "htpr-6926-mcp-route-wrapper";
 
 export const HTPR_6975_TYPED_WRITES_FLAG = "htpr-6975-typed-writes";
+export const HTPR_6979_TYPED_WRITES_FLAG = "htpr-6979-typed-writes-sections-notifications";

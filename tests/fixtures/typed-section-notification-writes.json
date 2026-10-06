@@ -1,0 +1,810 @@
+{
+  "createSection": [
+    {
+      "phase": "section-create",
+      "method": "POST",
+      "path": "/api/section/create",
+      "query": {},
+      "body": {
+        "projectId": 1,
+        "title": "Typed on section"
+      },
+      "status": 200,
+      "clientHeader": "htpr-6925",
+      "data": {
+        "message": "Section created successfully",
+        "section": {
+          "id": 10,
+          "section_title": "Typed on section",
+          "projectId": 1,
+          "visibility": true,
+          "deleted": false,
+          "ranking": "A0190.000000000000000",
+          "isDone": null
+        },
+        "project_view": {
+          "id": "1213fb55-9a8b-4e69-a799-2a46256231c8",
+          "createdAt": "2026-10-06T21:10:01.811Z",
+          "projectId": 1,
+          "default_view_order": null,
+          "default_view_id": null,
+          "user_project_views": [
+            {
+              "appliedView": null,
+              "unsavedView": {
+                "id": "0ac66e97-2388-4125-acda-6bae907c1f77",
+                "userId": 985,
+                "createdAt": "2026-10-06T21:10:01.906Z",
+                "visibility": "Private",
+                "title": null,
+                "project_view_id": "1213fb55-9a8b-4e69-a799-2a46256231c8",
+                "slug": null,
+                "lastUsedAt": null,
+                "board_sorting_mode": "Manual",
+                "board_sorting_order": "Descending",
+                "board_subtask_setting": "Flattened_Card",
+                "board_empty_sections": "Show",
+                "board_empty_sections_staged": false,
+                "board_staleness": null,
+                "board_show_archived": null,
+                "board_filters": {
+                  "addedFilters": [],
+                  "matchFilters": "ANY"
+                },
+                "board_columns_view": [
+                  {
+                    "id": 1,
+                    "isDone": false,
+                    "deleted": false,
+                    "ranking": "A0100",
+                    "projectId": 1,
+                    "visibility": true,
+                    "section_title": "To do",
+                    "autoAssignUserId": null,
+                    "autoAssignAgentId": null
+                  },
+                  {
+                    "id": 10,
+                    "title": "Typed on section",
+                    "isDone": null,
+                    "deleted": false,
+                    "ranking": "A0190.000000000000000",
+                    "projectId": 1,
+                    "visibility": true,
+                    "section_title": "Typed on section",
+                    "autoAssignUserId": null,
+                    "autoAssignAgentId": null
+                  }
+                ],
+                "board_sorting_stack": [],
+                "table_sort_column": null,
+                "table_sort_direction": null,
+                "board_layout": null
+              },
+              "userId": 985,
+              "project_view_id": "1213fb55-9a8b-4e69-a799-2a46256231c8",
+              "view_order": null
+            }
+          ],
+          "default_view": null,
+          "allViews": [
+            {
+              "id": "0ac66e97-2388-4125-acda-6bae907c1f77",
+              "userId": 985,
+              "createdAt": "2026-10-06T21:10:01.906Z",
+              "visibility": "Private",
+              "title": null,
+              "project_view_id": "1213fb55-9a8b-4e69-a799-2a46256231c8",
+              "slug": null,
+              "lastUsedAt": null,
+              "board_sorting_mode": "Manual",
+              "board_sorting_order": "Descending",
+              "board_subtask_setting": "Flattened_Card",
+              "board_empty_sections": "Show",
+              "board_empty_sections_staged": false,
+              "board_staleness": null,
+              "board_show_archived": null,
+              "board_filters": {
+                "addedFilters": [],
+                "matchFilters": "ANY"
+              },
+              "board_columns_view": [
+                {
+                  "id": 1,
+                  "isDone": false,
+                  "deleted": false,
+                  "ranking": "A0100",
+                  "projectId": 1,
+                  "visibility": true,
+                  "section_title": "To do",
+                  "autoAssignUserId": null,
+                  "autoAssignAgentId": null
+                },
+                {
+                  "id": 10,
+                  "title": "Typed on section",
+                  "isDone": null,
+                  "deleted": false,
+                  "ranking": "A0190.000000000000000",
+                  "projectId": 1,
+                  "visibility": true,
+                  "section_title": "Typed on section",
+                  "autoAssignUserId": null,
+                  "autoAssignAgentId": null
+                }
+              ],
+              "board_sorting_stack": [],
+              "table_sort_column": null,
+              "table_sort_direction": null,
+              "board_layout": null,
+              "owner": {
+                "photoURL": "https://files.hypertask.app/tasks/attachments/1757584422625image.png"
+              },
+              "ViewLastUsed": []
+            }
+          ]
+        }
+      }
+    },
+    {
+      "phase": "section-create",
+      "method": "POST",
+      "path": "/api/section/create",
+      "query": {},
+      "body": {
+        "projectId": 1,
+        "title": "Typed off section"
+      },
+      "status": 200,
+      "clientHeader": null,
+      "data": {
+        "message": "Section created successfully",
+        "section": {
+          "id": 11,
+          "section_title": "Typed off section",
+          "projectId": 1,
+          "visibility": true,
+          "deleted": false,
+          "ranking": "A0190.000000000000000",
+          "isDone": null
+        },
+        "project_view": {
+          "id": "1213fb55-9a8b-4e69-a799-2a46256231c8",
+          "createdAt": "2026-10-06T21:10:01.811Z",
+          "projectId": 1,
+          "default_view_order": null,
+          "default_view_id": null,
+          "user_project_views": [
+            {
+              "appliedView": null,
+              "unsavedView": {
+                "id": "0ac66e97-2388-4125-acda-6bae907c1f77",
+                "userId": 985,
+                "createdAt": "2026-10-06T21:10:01.906Z",
+                "visibility": "Private",
+                "title": null,
+                "project_view_id": "1213fb55-9a8b-4e69-a799-2a46256231c8",
+                "slug": null,
+                "lastUsedAt": null,
+                "board_sorting_mode": "Manual",
+                "board_sorting_order": "Descending",
+                "board_subtask_setting": "Flattened_Card",
+                "board_empty_sections": "Show",
+                "board_empty_sections_staged": false,
+                "board_staleness": null,
+                "board_show_archived": null,
+                "board_filters": {
+                  "addedFilters": [],
+                  "matchFilters": "ANY"
+                },
+                "board_columns_view": [
+                  {
+                    "id": 1,
+                    "isDone": false,
+                    "deleted": false,
+                    "ranking": "A0100",
+                    "projectId": 1,
+                    "visibility": true,
+                    "section_title": "To do",
+                    "autoAssignUserId": null,
+                    "autoAssignAgentId": null
+                  },
+                  {
+                    "id": 11,
+                    "title": "Typed off section",
+                    "isDone": null,
+                    "deleted": false,
+                    "ranking": "A0190.000000000000000",
+                    "projectId": 1,
+                    "visibility": true,
+                    "section_title": "Typed off section",
+                    "autoAssignUserId": null,
+                    "autoAssignAgentId": null
+                  }
+                ],
+                "board_sorting_stack": [],
+                "table_sort_column": null,
+                "table_sort_direction": null,
+                "board_layout": null
+              },
+              "userId": 985,
+              "project_view_id": "1213fb55-9a8b-4e69-a799-2a46256231c8",
+              "view_order": null
+            }
+          ],
+          "default_view": null,
+          "allViews": [
+            {
+              "id": "0ac66e97-2388-4125-acda-6bae907c1f77",
+              "userId": 985,
+              "createdAt": "2026-10-06T21:10:01.906Z",
+              "visibility": "Private",
+              "title": null,
+              "project_view_id": "1213fb55-9a8b-4e69-a799-2a46256231c8",
+              "slug": null,
+              "lastUsedAt": null,
+              "board_sorting_mode": "Manual",
+              "board_sorting_order": "Descending",
+              "board_subtask_setting": "Flattened_Card",
+              "board_empty_sections": "Show",
+              "board_empty_sections_staged": false,
+              "board_staleness": null,
+              "board_show_archived": null,
+              "board_filters": {
+                "addedFilters": [],
+                "matchFilters": "ANY"
+              },
+              "board_columns_view": [
+                {
+                  "id": 1,
+                  "isDone": false,
+                  "deleted": false,
+                  "ranking": "A0100",
+                  "projectId": 1,
+                  "visibility": true,
+                  "section_title": "To do",
+                  "autoAssignUserId": null,
+                  "autoAssignAgentId": null
+                },
+                {
+                  "id": 11,
+                  "title": "Typed off section",
+                  "isDone": null,
+                  "deleted": false,
+                  "ranking": "A0190.000000000000000",
+                  "projectId": 1,
+                  "visibility": true,
+                  "section_title": "Typed off section",
+                  "autoAssignUserId": null,
+                  "autoAssignAgentId": null
+                }
+              ],
+              "board_sorting_stack": [],
+              "table_sort_column": null,
+              "table_sort_direction": null,
+              "board_layout": null,
+              "owner": {
+                "photoURL": "https://files.hypertask.app/tasks/attachments/1757584422625image.png"
+              },
+              "ViewLastUsed": []
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "updateSection": [
+    {
+      "phase": "section-rename",
+      "method": "POST",
+      "path": "/api/section/update",
+      "query": {},
+      "body": {
+        "userId": 985,
+        "sectionId": 10,
+        "newSection": {
+          "section_title": "Typed on section renamed",
+          "isDone": false
+        }
+      },
+      "status": 200,
+      "clientHeader": "htpr-6925",
+      "data": {
+        "id": 10,
+        "section_title": "Typed on section renamed",
+        "projectId": 1,
+        "visibility": true,
+        "deleted": false,
+        "ranking": "A0190.000000000000000",
+        "isDone": false,
+        "autoAssignUserId": null,
+        "autoAssignAgentId": null
+      }
+    },
+    {
+      "phase": "section-reorder",
+      "method": "POST",
+      "path": "/api/section/update",
+      "query": {},
+      "body": {
+        "userId": 985,
+        "sectionId": 10,
+        "newSection": {
+          "ranking": "A0060.674068278249585"
+        }
+      },
+      "status": 200,
+      "clientHeader": "htpr-6925",
+      "data": {
+        "id": 10,
+        "section_title": "Typed on section renamed",
+        "projectId": 1,
+        "visibility": true,
+        "deleted": false,
+        "ranking": "A0060.674068278249585",
+        "isDone": false,
+        "autoAssignUserId": null,
+        "autoAssignAgentId": null
+      }
+    },
+    {
+      "phase": "section-delete",
+      "method": "POST",
+      "path": "/api/section/update",
+      "query": {},
+      "body": {
+        "userId": 985,
+        "sectionId": 10,
+        "newSection": {
+          "id": 10,
+          "title": "Typed on section",
+          "isDone": false,
+          "deleted": true,
+          "ranking": "A0060.674068278249585",
+          "projectId": 1,
+          "visibility": true,
+          "section_title": "Typed on section renamed",
+          "autoAssignUserId": null,
+          "autoAssignAgentId": null
+        }
+      },
+      "status": 204,
+      "clientHeader": "htpr-6925",
+      "data": ""
+    },
+    {
+      "phase": "section-rename",
+      "method": "POST",
+      "path": "/api/section/update",
+      "query": {},
+      "body": {
+        "userId": 985,
+        "sectionId": 11,
+        "newSection": {
+          "section_title": "Typed off section renamed",
+          "isDone": false
+        }
+      },
+      "status": 200,
+      "clientHeader": null,
+      "data": {
+        "id": 11,
+        "section_title": "Typed off section renamed",
+        "projectId": 1,
+        "visibility": true,
+        "deleted": false,
+        "ranking": "A0190.000000000000000",
+        "isDone": false,
+        "autoAssignUserId": null,
+        "autoAssignAgentId": null
+      }
+    },
+    {
+      "phase": "section-reorder",
+      "method": "POST",
+      "path": "/api/section/update",
+      "query": {},
+      "body": {
+        "userId": 985,
+        "sectionId": 11,
+        "newSection": {
+          "ranking": "A0075.721448506259364"
+        }
+      },
+      "status": 200,
+      "clientHeader": null,
+      "data": {
+        "id": 11,
+        "section_title": "Typed off section renamed",
+        "projectId": 1,
+        "visibility": true,
+        "deleted": false,
+        "ranking": "A0075.721448506259364",
+        "isDone": false,
+        "autoAssignUserId": null,
+        "autoAssignAgentId": null
+      }
+    },
+    {
+      "phase": "section-delete",
+      "method": "POST",
+      "path": "/api/section/update",
+      "query": {},
+      "body": {
+        "userId": 985,
+        "sectionId": 11,
+        "newSection": {
+          "id": 11,
+          "title": "Typed off section",
+          "isDone": false,
+          "deleted": true,
+          "ranking": "A0075.721448506259364",
+          "projectId": 1,
+          "visibility": true,
+          "section_title": "Typed off section renamed",
+          "autoAssignUserId": null,
+          "autoAssignAgentId": null
+        }
+      },
+      "status": 204,
+      "clientHeader": null,
+      "data": ""
+    }
+  ],
+  "setNotificationSeen": [
+    {
+      "phase": "notification-read",
+      "method": "GET",
+      "path": "/api/notifications/markAsUnseen",
+      "query": {
+        "notificationId": "6",
+        "seen": "0"
+      },
+      "body": null,
+      "status": 200,
+      "clientHeader": "htpr-6925",
+      "data": {
+        "id": 6,
+        "type": "TaskMovedToInbox",
+        "userId": 985,
+        "agentId": null,
+        "archivedAt": null,
+        "returnedFromReminders": null,
+        "directReply": false,
+        "agentReplyConsumedAt": null,
+        "agentReplyCommentId": null,
+        "createdAt": "2026-10-06T21:15:26.098Z",
+        "seen": true,
+        "status": "Normal",
+        "fromUserId": 985,
+        "fromAgentId": null,
+        "reactionId": null,
+        "projectId": 1,
+        "memberId": null,
+        "assignId": null,
+        "commentId": null,
+        "member_team_Id": null,
+        "taskId": 1,
+        "notification_inviteId": null,
+        "message": null
+      }
+    },
+    {
+      "phase": "notification-read",
+      "method": "GET",
+      "path": "/api/notifications/markAsUnseen",
+      "query": {
+        "notificationId": "7",
+        "seen": "0"
+      },
+      "body": null,
+      "status": 200,
+      "clientHeader": null,
+      "data": {
+        "id": 7,
+        "type": "TaskMovedToInbox",
+        "userId": 985,
+        "agentId": null,
+        "archivedAt": null,
+        "returnedFromReminders": null,
+        "directReply": false,
+        "agentReplyConsumedAt": null,
+        "agentReplyCommentId": null,
+        "createdAt": "2026-10-06T21:15:56.437Z",
+        "seen": true,
+        "status": "Normal",
+        "fromUserId": 985,
+        "fromAgentId": null,
+        "reactionId": null,
+        "projectId": 1,
+        "memberId": null,
+        "assignId": null,
+        "commentId": null,
+        "member_team_Id": null,
+        "taskId": 1,
+        "notification_inviteId": null,
+        "message": null
+      }
+    }
+  ],
+  "toggleNotificationArchive": [
+    {
+      "phase": "notification-archive",
+      "method": "GET",
+      "path": "/api/notifications/markAsDone",
+      "query": {
+        "id": "6",
+        "taskId": "1",
+        "userId": "985",
+        "type": "TaskMovedToInbox"
+      },
+      "body": null,
+      "status": 200,
+      "clientHeader": "htpr-6925",
+      "data": {
+        "id": 6,
+        "type": "TaskMovedToInbox",
+        "userId": 985,
+        "agentId": null,
+        "archivedAt": "2026-10-06T21:15:47.866Z",
+        "returnedFromReminders": null,
+        "directReply": false,
+        "agentReplyConsumedAt": null,
+        "agentReplyCommentId": null,
+        "createdAt": "2026-10-06T21:15:26.098Z",
+        "seen": true,
+        "status": "Archive",
+        "fromUserId": 985,
+        "fromAgentId": null,
+        "reactionId": null,
+        "projectId": 1,
+        "memberId": null,
+        "assignId": null,
+        "commentId": null,
+        "member_team_Id": null,
+        "taskId": 1,
+        "notification_inviteId": null,
+        "message": null
+      }
+    },
+    {
+      "phase": "notification-archive-for-undo",
+      "method": "GET",
+      "path": "/api/notifications/markAsDone",
+      "query": {
+        "id": "6",
+        "taskId": "1",
+        "userId": "985",
+        "type": "TaskMovedToInbox"
+      },
+      "body": null,
+      "status": 200,
+      "clientHeader": "htpr-6925",
+      "data": {
+        "id": 6,
+        "type": "TaskMovedToInbox",
+        "userId": 985,
+        "agentId": null,
+        "archivedAt": "2026-10-06T21:15:51.438Z",
+        "returnedFromReminders": null,
+        "directReply": false,
+        "agentReplyConsumedAt": null,
+        "agentReplyCommentId": null,
+        "createdAt": "2026-10-06T21:15:26.098Z",
+        "seen": true,
+        "status": "Archive",
+        "fromUserId": 985,
+        "fromAgentId": null,
+        "reactionId": null,
+        "projectId": 1,
+        "memberId": null,
+        "assignId": null,
+        "commentId": null,
+        "member_team_Id": null,
+        "taskId": 1,
+        "notification_inviteId": null,
+        "message": null
+      }
+    },
+    {
+      "phase": "notification-archive",
+      "method": "GET",
+      "path": "/api/notifications/markAsDone",
+      "query": {
+        "id": "7",
+        "taskId": "1",
+        "userId": "985",
+        "type": "TaskMovedToInbox"
+      },
+      "body": null,
+      "status": 200,
+      "clientHeader": null,
+      "data": {
+        "id": 7,
+        "type": "TaskMovedToInbox",
+        "userId": 985,
+        "agentId": null,
+        "archivedAt": "2026-10-06T21:16:17.582Z",
+        "returnedFromReminders": null,
+        "directReply": false,
+        "agentReplyConsumedAt": null,
+        "agentReplyCommentId": null,
+        "createdAt": "2026-10-06T21:15:56.437Z",
+        "seen": true,
+        "status": "Archive",
+        "fromUserId": 985,
+        "fromAgentId": null,
+        "reactionId": null,
+        "projectId": 1,
+        "memberId": null,
+        "assignId": null,
+        "commentId": null,
+        "member_team_Id": null,
+        "taskId": 1,
+        "notification_inviteId": null,
+        "message": null
+      }
+    },
+    {
+      "phase": "notification-archive-for-undo",
+      "method": "GET",
+      "path": "/api/notifications/markAsDone",
+      "query": {
+        "id": "7",
+        "taskId": "1",
+        "userId": "985",
+        "type": "TaskMovedToInbox"
+      },
+      "body": null,
+      "status": 200,
+      "clientHeader": null,
+      "data": {
+        "id": 7,
+        "type": "TaskMovedToInbox",
+        "userId": 985,
+        "agentId": null,
+        "archivedAt": "2026-10-06T21:16:21.963Z",
+        "returnedFromReminders": null,
+        "directReply": false,
+        "agentReplyConsumedAt": null,
+        "agentReplyCommentId": null,
+        "createdAt": "2026-10-06T21:15:56.437Z",
+        "seen": true,
+        "status": "Archive",
+        "fromUserId": 985,
+        "fromAgentId": null,
+        "reactionId": null,
+        "projectId": 1,
+        "memberId": null,
+        "assignId": null,
+        "commentId": null,
+        "member_team_Id": null,
+        "taskId": 1,
+        "notification_inviteId": null,
+        "message": null
+      }
+    }
+  ],
+  "unarchiveNotification": [
+    {
+      "phase": "notification-unarchive",
+      "method": "POST",
+      "path": "/api/notifications/unArchiveNotificationById",
+      "query": {},
+      "body": {
+        "notificationId": 6
+      },
+      "status": 200,
+      "clientHeader": "htpr-6925",
+      "data": {
+        "id": 6,
+        "type": "TaskMovedToInbox",
+        "userId": 985,
+        "agentId": null,
+        "archivedAt": null,
+        "returnedFromReminders": null,
+        "directReply": false,
+        "agentReplyConsumedAt": null,
+        "agentReplyCommentId": null,
+        "createdAt": "2026-10-06T21:15:26.098Z",
+        "seen": true,
+        "status": "Normal",
+        "fromUserId": 985,
+        "fromAgentId": null,
+        "reactionId": null,
+        "projectId": 1,
+        "memberId": null,
+        "assignId": null,
+        "commentId": null,
+        "member_team_Id": null,
+        "taskId": 1,
+        "notification_inviteId": null,
+        "message": null
+      }
+    },
+    {
+      "phase": "notification-unarchive",
+      "method": "POST",
+      "path": "/api/notifications/unArchiveNotificationById",
+      "query": {},
+      "body": {
+        "notificationId": 7
+      },
+      "status": 200,
+      "clientHeader": null,
+      "data": {
+        "id": 7,
+        "type": "TaskMovedToInbox",
+        "userId": 985,
+        "agentId": null,
+        "archivedAt": null,
+        "returnedFromReminders": null,
+        "directReply": false,
+        "agentReplyConsumedAt": null,
+        "agentReplyCommentId": null,
+        "createdAt": "2026-10-06T21:15:56.437Z",
+        "seen": true,
+        "status": "Normal",
+        "fromUserId": 985,
+        "fromAgentId": null,
+        "reactionId": null,
+        "projectId": 1,
+        "memberId": null,
+        "assignId": null,
+        "commentId": null,
+        "member_team_Id": null,
+        "taskId": 1,
+        "notification_inviteId": null,
+        "message": null
+      }
+    }
+  ],
+  "archiveNotifications": [
+    {
+      "phase": "notification-bulk-archive",
+      "method": "POST",
+      "path": "/api/notifications/(un)archiveBulk",
+      "query": {},
+      "body": {
+        "notificationIds": [
+          {
+            "taskId": 1,
+            "userId": 985,
+            "notificationId": 6
+          }
+        ],
+        "status": "Archive"
+      },
+      "status": 200,
+      "clientHeader": "htpr-6925",
+      "data": {
+        "message": "Notifications processed successfully",
+        "archivedCount": 1,
+        "deletedCount": 0
+      }
+    },
+    {
+      "phase": "notification-bulk-archive",
+      "method": "POST",
+      "path": "/api/notifications/(un)archiveBulk",
+      "query": {},
+      "body": {
+        "notificationIds": [
+          {
+            "taskId": 1,
+            "userId": 985,
+            "notificationId": 7
+          }
+        ],
+        "status": "Archive"
+      },
+      "status": 200,
+      "clientHeader": null,
+      "data": {
+        "message": "Notifications processed successfully",
+        "archivedCount": 1,
+        "deletedCount": 0
+      }
+    }
+  ]
+}

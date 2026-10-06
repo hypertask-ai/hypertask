@@ -12,7 +12,7 @@ test("semantic compiler proves response types, producer parity and invalid calle
   assert.deepEqual(parsed.errors, []);
   const options = { ...parsed.options, noEmit: true, incremental: false };
   const program = ts.createProgram([fixture], options);
-  const files = [fixture, path.join(root, "src/lib/api/typedClient.ts"), path.join(root, "src/lib/api/contracts/settingsReads.ts"), path.join(root, "src/lib/api/contracts/taskReads.ts"), path.join(root, "src/lib/api/contracts/taskWrites.ts")];
+  const files = [fixture, path.join(root, "src/lib/api/typedClient.ts"), path.join(root, "src/lib/api/contracts/settingsReads.ts"), path.join(root, "src/lib/api/contracts/taskReads.ts"), path.join(root, "src/lib/api/contracts/taskWrites.ts"), path.join(root, "src/lib/api/contracts/sectionWrites.ts"), path.join(root, "src/lib/api/contracts/notificationWrites.ts")];
   const diagnostics = [...program.getOptionsDiagnostics(), ...program.getGlobalDiagnostics(), ...files.flatMap((file) => {
     const source = program.getSourceFile(file);
     assert.ok(source, file);
@@ -28,6 +28,8 @@ test("semantic compiler proves response types, producer parity and invalid calle
     if (file === path.join(root, "src/lib/api/contracts/settingsReads.ts")) return source.replaceAll("enabled: z.boolean()", "enabled: z.string()");
     if (file === path.join(root, "src/lib/api/contracts/taskReads.ts")) return source.replaceAll("startDate: z.string()", "startDate: z.number()");
     if (file === path.join(root, "src/lib/api/contracts/taskWrites.ts")) return source.replaceAll("priority_index: z.number().int()", "priority_index: z.string()");
+    if (file === path.join(root, "src/lib/api/contracts/sectionWrites.ts")) return source.replaceAll("visibility: z.boolean()", "visibility: z.string()");
+    if (file === path.join(root, "src/lib/api/contracts/notificationWrites.ts")) return source.replaceAll("seen: z.boolean()", "seen: z.string()");
     return file === fixture ? `${source}\nconst semanticNegativeControl: boolean = 123;\nvoid semanticNegativeControl;\n` : source;
   };
   const negative = ts.createProgram([fixture], options, host);
@@ -36,4 +38,7 @@ test("semantic compiler proves response types, producer parity and invalid calle
   assert.ok(negativeDiagnostics.some(({ code }) => code === 2344), "producer parity must reject intentional response contract drift");
   assert.ok(negativeDiagnostics.some((diagnostic) => diagnostic.code === 2344 && diagnostic.file.text.split("\n")[diagnostic.file.getLineAndCharacterOfPosition(diagnostic.start).line].includes("PriorityProducerParity")), "write producer parity rejects priority contract drift");
   assert.ok(negativeDiagnostics.some((diagnostic) => diagnostic.code === 2344 && diagnostic.file.text.split("\n")[diagnostic.file.getLineAndCharacterOfPosition(diagnostic.start).line].includes("CycleProducerParity")), "cycle producer parity must reject a changed wire date type");
+  for (const name of ["SectionProducerParity", "NotificationProducerParity"]) {
+    assert.ok(negativeDiagnostics.some((diagnostic) => diagnostic.code === 2344 && diagnostic.file.text.split("\n")[diagnostic.file.getLineAndCharacterOfPosition(diagnostic.start).line].includes(name)), `${name} rejects intentional contract drift`);
+  }
 });
