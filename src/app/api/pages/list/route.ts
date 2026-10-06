@@ -3,6 +3,9 @@ import { NextRequest, NextResponse } from 'next/server'
 
 import prisma from '@/lib/prisma'
 import { isValidUser } from '@/utils/edgeHelpers'
+import { parsePositiveInt } from '@/lib/parsePositiveInt'
+import { loadCurrentUser } from '@/lib/auth/currentUser'
+import { HTPR_6924_REST_COMPAT_FLAG, isFeatureEnabled } from '@/lib/flags'
 import { listPages } from '@/utils/controllers/pages/pageService'
 import { getProjectWhere } from '@/utils/controllers/projects/getAllIncludes'
 
@@ -15,13 +18,30 @@ function parseTaskId(value: string | null): number | null {
 
 export async function GET(request: NextRequest) {
   try {
-    const userCookie = (await cookies()).get('nookies_user')
-    if (!userCookie?.value) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    const { isValid, user } = isValidUser(userCookie.value)
-    if (!isValid || !user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    const userId = user.id
+    const currentUser = await loadCurrentUser(request.headers, true).catch(() => null)
+    let restCompat = false
+    if (currentUser) {
+      try {
+        restCompat = await isFeatureEnabled(HTPR_6924_REST_COMPAT_FLAG, currentUser.userId)
+      } catch {
+        // A failed flag probe must leave the legacy HTTP contract unchanged.
+      }
+    }
 
-    const taskId = parseTaskId(request.nextUrl.searchParams.get('task_id'))
+    let userId: number
+    if (restCompat && currentUser) {
+      userId = currentUser.userId
+    } else {
+      const userCookie = (await cookies()).get('nookies_user')
+      if (!userCookie?.value) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+      const { isValid, user } = isValidUser(userCookie.value)
+      if (!isValid || !user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+      userId = user.id
+    }
+
+    const taskId = restCompat
+      ? parsePositiveInt(request.nextUrl.searchParams.get('task_id'))
+      : parseTaskId(request.nextUrl.searchParams.get('task_id'))
     if (taskId === null) {
       return NextResponse.json({ error: 'task_id must be a positive integer' }, { status: 400 })
     }

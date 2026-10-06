@@ -11,6 +11,7 @@ import {
   HTPR_6934_SERVER_FIRST_SCREEN_FLAG,
   HTPR_6923_APP_ROUTER_WRITES_FLAG,
   HTPR_6925_TYPED_API_CLIENT_FLAG,
+  HTPR_6924_REST_COMPAT_FLAG,
   HTPR_6929_COMPOSE_TASK_WRITER_FLAG,
   HTPR_6937_NEW_TASK_WINDOW_FLAG,
   HTPR_6951_TASK_WRITING_PROGRESS_FLAG,
@@ -186,6 +187,11 @@ const FEATURE_FLAG_DEFINITIONS = [
     key: HTPR_6925_TYPED_API_CLIENT_FLAG,
     shippedOn: "2026-10-06",
     description: "Validates skills and board memory settings reads with shared typed API contracts.",
+  },
+  {
+    key: HTPR_6924_REST_COMPAT_FLAG,
+    shippedOn: "2026-10-06",
+    description: "Uses shared authentication and input readers for page REST routes while preserving legacy responses. Later compatibility migrations use the same switch.",
   },
   {
     key: HTPR_6950_TOOLTIP_TOP_LAYER_FLAG,
