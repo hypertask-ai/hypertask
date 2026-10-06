@@ -120,6 +120,28 @@ check_deployed() {
   if [ "$REPO" != hypertask-ai/hypertask ]; then
     local tag cmp releases runs jobs
     if ! tag=$(gh release view -R "$REPO" --json tagName --jq .tagName 2>/dev/null); then
+      if [ -n "${SHIP_WORKER:-}" ]; then
+        releases=$(gh release list -R "$REPO" --limit 1 --json tagName 2>/dev/null) || fail "could not read releases in $REPO"
+        jq -e 'length == 0' <<<"$releases" >/dev/null || fail "no release found in $REPO"
+        [[ ${SHIP_CHECKOUT:-} == /* ]] || fail "set SHIP_CHECKOUT to the local checkout of $REPO"
+        [[ $SHIP_WORKER =~ ^[A-Za-z0-9._/\ -]+$ && $SHIP_WORKER != /* && /$SHIP_WORKER/ != *'/../'* ]] \
+          || fail "SHIP_WORKER must be a relative worker directory inside SHIP_CHECKOUT"
+        [[ $sha =~ ^[0-9a-f]{40}$ ]] || fail "invalid merge sha for worker deployment: $sha"
+        local deployment version worker="$SHIP_CHECKOUT/$SHIP_WORKER"
+        local -a wrangler
+        read -r -a wrangler <<<"${SHIP_WRANGLER:-npx wrangler}"
+        deployment=$(cd "$worker" && "${wrangler[@]}" deployments status --json 2>/dev/null) \
+          || fail "could not read worker deployment in $worker"
+        id=$(jq -er '.versions | select(type == "array" and length == 1) | .[0]
+          | select(.percentage == 100) | .version_id | select(type == "string" and length > 0)' <<<"$deployment" 2>/dev/null) \
+          || fail "worker deployment must have exactly one version at 100%"
+        version=$(cd "$worker" && "${wrangler[@]}" versions view "$id" --json 2>/dev/null) \
+          || fail "could not read worker version $id"
+        jq -e --arg sha "$sha" --arg tag "${sha:0:12}" \
+          '.annotations["workers/message"] == $sha or .annotations["workers/tag"] == $tag' <<<"$version" >/dev/null 2>&1 \
+          || fail "worker version $id does not match merge $sha"
+        echo "deployed ok (worker $id)"; return
+      fi
       if [[ $REPO == hypertask-ai/docs && $BASE == main ]]; then
         releases=$(gh release list -R "$REPO" --limit 1 --json tagName 2>/dev/null) || fail "could not read releases in $REPO"
         jq -e 'length == 0' <<<"$releases" >/dev/null || fail "no release found in $REPO"

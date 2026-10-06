@@ -23,6 +23,11 @@ if [ -n "${SHIP_REPO:-}" ] && [ "$SHIP_REPO" != hypertask-ai/hypertask ]; then
   [[ $SHIP_REPO =~ ^[A-Za-z0-9._-]+/[A-Za-z0-9._-]+$ && $SHIP_BASE =~ ^[A-Za-z0-9._/-]+$ && $SHIP_CHECKOUT =~ ^/[A-Za-z0-9._/\ -]+$ ]] \
     || { echo "ship-gates: invalid SHIP_REPO, SHIP_BASE or SHIP_CHECKOUT" >&2; exit 1; }
   ENVP="SHIP_REPO=$SHIP_REPO SHIP_BASE=$SHIP_BASE SHIP_CHECKOUT='$SHIP_CHECKOUT' "
+  if [ -n "${SHIP_WORKER:-}" ]; then
+    [[ $SHIP_WORKER =~ ^[A-Za-z0-9._/\ -]+$ && $SHIP_WORKER != /* && /$SHIP_WORKER/ != *'/../'* ]] \
+      || { echo "ship-gates: SHIP_WORKER must be a relative worker directory inside SHIP_CHECKOUT" >&2; exit 1; }
+    ENVP+="SHIP_WORKER='$SHIP_WORKER' "
+  fi
 fi
 node --input-type=module - "$L" "$ID" "$T" "$C" "$U" "$PWD" "$ENVP" <<'JS'
 import { dirname } from 'node:path';
@@ -53,7 +58,7 @@ await withFileLock(root, ledger, () => {
   // Never let --approve authorize a CHECK added by another ledger author.
   // Allowed: the bare ship-check call, optionally behind the exact env prefix ship-gates writes for CLI tickets.
   const escape = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  const generatedCheck = new RegExp(`^(SHIP_REPO=[A-Za-z0-9._-]+/[A-Za-z0-9._-]+ SHIP_BASE=[A-Za-z0-9._/-]+ SHIP_CHECKOUT='/[A-Za-z0-9._/ -]+' )?${escape(quote(check))} [a-z]+ (HTPR|HYFA|YPER4)-[0-9]+$`);
+  const generatedCheck = new RegExp(`^(SHIP_REPO=[A-Za-z0-9._-]+/[A-Za-z0-9._-]+ SHIP_BASE=[A-Za-z0-9._/-]+ SHIP_CHECKOUT='/[A-Za-z0-9._/ -]+' (SHIP_WORKER='[A-Za-z0-9._/ -]+' )?)?${escape(quote(check))} [a-z]+ (HTPR|HYFA|YPER4)-[0-9]+$`);
   for (const gate of doc.gates) {
     const match = gate.id.match(/^((?:HTPR|HYFA|YPER4)-[0-9]+)\.(ticket|pr|merged|deployed|proof|done|cleaned)$/);
     if (!match && !gate.check) continue;
