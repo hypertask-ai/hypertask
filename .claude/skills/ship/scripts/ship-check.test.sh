@@ -13,6 +13,20 @@ G() { local want=$1; shift; echo "{\"tool_input\":{\"command\":$(jq -Rn --arg c 
 DONE='--section "Done"'
 M='gh pr merge'
 
+# Concatenated assignment fragments cannot bypass missing Done evidence.
+for prefix in 'FOO=pre"fix"' "FOO='a'b\"c\""; do
+  G 2 "$prefix vcc task move YPER4-999 $DONE"
+  G 2 "$prefix vcc tasks move 'YPER4-999' $DONE"
+done
+# Unsupported assignment prefixes fail closed, with an actionable message.
+for prefix in 'FOO="unterminated' '1FOO=bad' 'FOO=pre\ fix'; do
+  for protected in "vcc task move YPER4-999 $DONE" "$M 999"; do
+    out=$(jq -Rn --arg c "$prefix $protected" '{tool_input:{command:$c}}' | ./ship-check guard 2>&1); got=$?
+    [ "$got" = 2 ] && [[ $out == *'cannot parse the leading environment assignments'* ]] \
+      && ok "unparseable prefix blocked: $prefix $protected" || bad "prefix bypass: $got $out"
+  done
+done
+
 # Binding is required, and must match the ticket.
 G 2 vcc task move YPER4-118 $DONE
 ./ship-check bind YPER4-118 830 >/dev/null && ok "bind YPER4-118 to 830" || bad "bind YPER4-118"
@@ -39,6 +53,11 @@ gh() {
 export -f gh
 G 2 $M 822 -R hypertask-ai/hypertask
 G 2 FOO=1 $M 822 -R hypertask-ai/hypertask
+for prefix in 'FOO=pre"fix"' "FOO='a'b\"c\""; do
+  G 2 "$prefix $M 822 -R hypertask-ai/hypertask"
+  SHIP_CHECK_PLAIN_QA_STATE=/nonexistent AGENT_TOKEN= HYPERTASKS_JWT_TOKEN= G 2 "$prefix $M 809 -R hypertask-ai/hypertask"
+  G 0 "$prefix $M 838 -R hypertask-ai/hypertask"
+done
 SHIP_CHECK_PLAIN_QA_STATE=/nonexistent AGENT_TOKEN= HYPERTASKS_JWT_TOKEN= G 2 $M 809 -R hypertask-ai/hypertask # No live modes or premerge evidence.
 G 0 $M 838 -R hypertask-ai/hypertask # Skills-only PR, no product flag reads.
 G 2 $M 838 -R hypertask-ai/hypertask '&&' $M 822 -R hypertask-ai/hypertask
@@ -262,6 +281,48 @@ W 1 'FAIL: set SHIP_CHECKOUT' SHIP_CHECKOUT=
 W 1 'FAIL: SHIP_WORKER must be a relative worker directory' SHIP_WORKER=../worker
 W 1 'FAIL: SHIP_WORKER must be a relative worker directory' SHIP_WORKER=/worker
 W 0 'deployed ok (release v1)' RELEASE_TAG=v1 WRANGLER_ERROR=1
+
+# Done guards use segment worker settings, including ship-gates' quoted paths.
+(
+  export PATH="$E/worker-bin:$PATH" SHIP_REPO=valentinyeo/agent-fleet SHIP_BASE=htpr-5009-mdx-write-guard-v2
+  export SHIP_CHECKOUT= SHIP_WORKER= WORKER_SHA="$worker_sha" DEPLOYMENT_FIXTURE="$worker_deployment" VERSION_FIXTURE="$worker_version"
+  worker_env="SHIP_REPO=$SHIP_REPO SHIP_BASE=$SHIP_BASE"
+  worker_cmd="$worker_env SHIP_CHECKOUT=$E/worker-checkout SHIP_WORKER=workers/docs-agent vcc task move YPER4-999 $DONE"
+  G 0 "$worker_cmd"
+  G 2 "$worker_env SHIP_CHECKOUT=$E/worker-checkout vcc task move YPER4-999 $DONE"
+  G 2 "$worker_env SHIP_CHECKOUT=$E/worker-checkout vcc task move YPER4-999 $DONE # SHIP_WORKER=workers/docs-agent"
+  G 2 "$worker_env SHIP_CHECKOUT=$E/worker-checkout vcc task move YPER4-999 $DONE SHIP_WORKER=workers/docs-agent"
+  G 2 "$worker_env SHIP_WORKER=workers/docs-agent vcc task move YPER4-999 $DONE # SHIP_CHECKOUT=$E/worker-checkout"
+  for prefix in 'FOO=pre"fix"' "FOO='a'b\"c\""; do
+    G 0 "$prefix $worker_cmd"
+    VERSION_FIXTURE='{}' G 2 "$prefix $worker_cmd"
+  done
+  G 2 "$worker_cmd && $worker_env SHIP_CHECKOUT=$E/worker-checkout vcc task move YPER4-999 $DONE"
+  G 2 "$worker_cmd && $worker_env SHIP_WORKER=workers/docs-agent vcc task move YPER4-999 $DONE"
+  mkdir -p "$E/worker checkout/workers/docs agent"
+  for quote in "'" '"'; do
+    quoted_cmd="SHIP_REPO=${quote}$SHIP_REPO${quote} SHIP_BASE=${quote}$SHIP_BASE${quote} SHIP_CHECKOUT=${quote}$E/worker checkout${quote} SHIP_WORKER=${quote}workers/docs agent${quote} vcc task move YPER4-999 $DONE"
+    G 0 "$quoted_cmd"
+    VERSION_FIXTURE='{}' G 2 "$quoted_cmd"
+    G 2 "$quoted_cmd && $worker_env SHIP_CHECKOUT=${quote}$E/worker checkout${quote} vcc task move YPER4-999 $DONE"
+    G 2 "$quoted_cmd && $worker_env SHIP_WORKER=${quote}workers/docs agent${quote} vcc task move YPER4-999 $DONE"
+  done
+  mixed_cmd="SHIP_REPO=valentinyeo/'agent-'\"fleet\" SHIP_BASE=htpr-5009-'mdx-write-'\"guard-v2\" SHIP_CHECKOUT=$E/'worker '\"checkout\" SHIP_WORKER=workers/'docs '\"agent\" vcc task move YPER4-999 $DONE"
+  G 0 "$mixed_cmd"
+  VERSION_FIXTURE='{}' G 2 "$mixed_cmd"
+  G 0 "$worker_env SHIP_CHECKOUT=$E/worker-checkout SHIP_WORKER=wrong SHIP_WORKER=workers/docs-agent vcc task move YPER4-999 $DONE"
+  export SHIP_CHECKOUT="$E/worker-checkout" SHIP_WORKER=workers/docs-agent
+  G 0 vcc task move YPER4-999 $DONE
+  for suffix in SHIP_REPO=hypertask-ai/other SHIP_BASE=wrong SHIP_CHECKOUT=/nonexistent SHIP_WORKER=wrong; do
+    G 0 "vcc task move YPER4-999 $DONE # $suffix"
+    G 0 "vcc task move YPER4-999 $DONE $suffix"
+  done
+  G 2 "$worker_env SHIP_WORKER='' vcc task move YPER4-999 $DONE"
+  G 2 "$worker_env SHIP_CHECKOUT=\"\" vcc task move YPER4-999 $DONE"
+) > "$E/worker-guard-results"
+cat "$E/worker-guard-results"
+passes=$((passes + $(grep -c '^ok   ' "$E/worker-guard-results")))
+fails=$((fails + $(grep -c '^FAIL ' "$E/worker-guard-results")))
 
 # Generated worker CHECKs must carry the settings and remain safe to approve again.
 python3 - "$PWD/ship-gates" "$HOME/.agents/skills/unlazy" "$E" <<'PY'
