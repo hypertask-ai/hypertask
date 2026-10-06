@@ -5,8 +5,10 @@ import { hasDataPermission, hasManagementReadPermission, hasManagementWritePermi
 import type { PortableTool } from './stateless-http'
 import { CONSOLIDATED_OUTPUT_SCHEMA, formatToolResponse } from './tool-response'
 import { createMetaTools } from './deferred-tools'
+import { annotationsForActions } from './config/tool-annotations'
+import type { AgentRole } from '@/lib/mcp/agents/scopes'
 
-export type ToolCaller = { managementPermissions?: ManagementPermissions; agent?: boolean; teamScoped?: boolean }
+export type ToolCaller = { managementPermissions?: ManagementPermissions; agent?: boolean; teamScoped?: boolean; agentRole?: AgentRole }
 type Action = { tool: string; legacy_action?: string; read_only: boolean; permission: string }
 type Description = { name: string; does: string; use_when: string; do_not_use_when: string; parameters_and_caveats: string; actions: Record<string, Action>; input_examples: unknown[] }
 
@@ -17,6 +19,7 @@ const RENAMED_PARAMETERS: Record<string, string> = {
 }
 
 function canCall(action: Action, caller: ToolCaller): boolean {
+  if (caller.agentRole === 'read' && !action.read_only) return false
   const permissions = caller.managementPermissions
   if (caller.teamScoped && ['hypertask_mint_token', 'hypertask_revoke_token', 'hypertask_list_connections'].includes(action.tool)) return false
   if (action.permission.startsWith('management_')) {
@@ -68,8 +71,29 @@ export function selectMcpTools(
   legacyTools: readonly PortableTool[],
   enabled: boolean,
   caller: ToolCaller = {},
+  v2 = false,
 ): readonly PortableTool[] {
-  if (!enabled) return legacyTools
+  if (!enabled) {
+    if (!v2) return legacyTools
+    return legacyTools.flatMap((tool) => {
+      const actions = (CONSOLIDATED_TOOL_DESCRIPTIONS as Description[]).flatMap((definition) => Object.values(definition.actions)).filter((action) => action.tool === tool.name)
+      const allowed = actions.filter((action) => canCall(action, caller))
+      if (!allowed.length) return []
+      const names = allowed.map((action) => action.legacy_action).filter((name): name is string => Boolean(name))
+      const restricted = allowed.length !== actions.length
+      return [{
+        ...tool,
+        annotations: annotationsForActions(allowed),
+        ...(restricted && names.length ? { parameters: tool.parameters.extend({ action: z.enum(names as [string, ...string[]]) }) } : {}),
+        execute: async (raw: unknown, token: string, invocation?: Parameters<PortableTool['execute']>[2]) => {
+          const requested = (raw as Record<string, unknown>)?.action
+          const action = actions.find((candidate) => candidate.legacy_action === requested) ?? actions[0]
+          if (!canCall(action, caller)) throw new Error('This action is not allowed by this credential. Reconnect with the required scope or a human account.')
+          return tool.execute(raw, token, invocation)
+        },
+      }]
+    })
+  }
   const byName = new Map(legacyTools.map((tool) => [tool.name, tool]))
   const definitions = CONSOLIDATED_TOOL_DESCRIPTIONS as Description[]
   const dispatch = async (action: Action, input: unknown, token: string, invocation?: Parameters<PortableTool['execute']>[2]) => {
@@ -114,6 +138,7 @@ export function selectMcpTools(
       description: `Does: ${definition.does}\nUse when: ${definition.use_when}\nDo not use when: ${definition.do_not_use_when}\nParameters and caveats: ${definition.parameters_and_caveats}`,
       parameters,
       inputSchema: schema,
+      ...(v2 ? { annotations: annotationsForActions(Object.values(actions)) } : {}),
       outputSchema: CONSOLIDATED_OUTPUT_SCHEMA,
       input_examples: definition.input_examples.filter((example) => names.includes((example as { action: string }).action)),
       execute: async (raw: unknown, token: string, invocation?: Parameters<PortableTool['execute']>[2]) => {
@@ -162,10 +187,15 @@ export function selectMcpTools(
   for (const tool of legacyTools) {
     if (catalog.some((entry) => entry.name === tool.name)) continue
     const actions = definitions.flatMap((definition) => Object.values(definition.actions)).filter((action) => action.tool === tool.name)
+    const allowed = v2 ? actions.filter((action) => canCall(action, caller)) : actions
+    if (v2 && !allowed.length) continue
+    const names = allowed.map((action) => action.legacy_action).filter((name): name is string => Boolean(name))
     if (!actions.length) throw new Error(`Legacy tool ${tool.name} is missing from the consolidated catalog`)
     catalog.push({
       ...tool,
       hidden: true,
+      ...(v2 ? { annotations: annotationsForActions(allowed) } : {}),
+      ...(v2 && allowed.length !== actions.length && names.length ? { parameters: tool.parameters.extend({ action: z.enum(names as [string, ...string[]]) }) } : {}),
       outputSchema: { type: 'object', additionalProperties: true },
       execute: async (raw, token, invocation) => {
         const requested = (raw as Record<string, unknown>)?.action
@@ -174,7 +204,7 @@ export function selectMcpTools(
       },
     })
   }
-  catalog.push(...createMetaTools(() => catalog).map((tool) => ({
+  catalog.push(...createMetaTools(() => catalog, v2).map((tool) => ({
     ...tool, hidden: true, outputSchema: { type: 'object', additionalProperties: true },
   })))
   return catalog

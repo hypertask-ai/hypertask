@@ -23,13 +23,15 @@ Replace repeated REST scaffolding with one wrapper for rate limit, authenticatio
 
 Review the current auth path before adding token-hash caching, bounded logging/throttling and scope derivation. Production already splits authentication into `src/lib/mcp/auth/{session,verifyJwt,rateLimit,mcpAuthErrors,types}.ts`; do not repeat the historical monolith split. Request-local context reuse in section 1 is not cross-request Redis caching or a revocation grace window.
 
-## Section 4: remaining
+## Section 4: implemented locally in PR A, deployment pending
 
-Add destructive/read-only/idempotent annotations, cover both catalogs with scope-aware registration, wire the standards name check, and inspect OAuth discovery/CIMD support. Consolidated tools already have output schemas and structured content from https://app.hypertask.ai/detail/project-15/6804; retain those and address high-traffic legacy tools separately. Do not bump the SDK or transport packages in that slice. Re-test the bounded-body transport rebuild if a later dependency update changes them.
+PR A of https://app.hypertask.ai/detail/project-15/6927 adds tool annotations and scope-aware legacy registration behind `htpr-6927-mcp-v2`, default Owner + QA. Consolidated annotations aggregate the actions permitted to the caller. Standards tests cover complete catalog names, OAuth discovery metadata and the 401 protected-resource challenge linkage. Consolidated tools already have output schemas and structured content from https://app.hypertask.ai/detail/project-15/6804; retain those and address high-traffic legacy tools separately. Do not bump the SDK or transport packages in that slice. Re-test the bounded-body transport rebuild if a later dependency update changes them.
 
-## Section 5: remaining
+CIMD is unsupported: registration issues stored UUID client IDs and authorization requires a registered client. URL-based client metadata needs a security-reviewed resolver with SSRF protection, bounded HTTPS fetching, redirect controls and exact client/redirect validation; discovery metadata alone cannot enable it.
 
-Simplify the large task-update pipeline, tool definition/import boilerplate, response serialization and shared priority typing. Evaluate independent-read concurrency, search over-fetch and batched board creation. Re-check current production before removing legacy permission shapes or comments.
+## Section 5: update orchestration implemented locally; broader simplification remaining
+
+PR A adds a versioned update selector and explicit validation, preflight, persistence and receipt stages behind the same `htpr-6927-mcp-v2` flag. Independent user/section reads overlap after task access checks, with V1 error precedence retained. Existing field modules, ordering, partial-failure receipts, idempotency, lease cleanup and awaited broadcasts are unchanged. Tool definition/import boilerplate, response serialization and shared priority typing remain follow-up work. Evaluate independent-read concurrency, search over-fetch and batched board creation. Re-check current production before removing legacy permission shapes or comments.
 
 ## Section 6: remaining
 
