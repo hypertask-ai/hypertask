@@ -54,6 +54,10 @@ test("descriptors expose inputs, method/path, success and actual error shapes", 
   assert.equal(client.taskCycleRoute.query.safeParse({ taskId: 12, cursor: 0 }).success, false);
   assert.equal(client.taskCycleRoute.body.safeParse({}).success, false);
   assert.equal(client.boardDetailRoute.method, "POST");
+  assert.equal(client.boardDetailRoute.validate, "deferred");
+  assert.equal(client.compactTaskRelationsRoute.validate, "deferred");
+  assert.equal(client.descriptionVersionsRoute.validate, undefined);
+  assert.equal(client.taskCycleRoute.validate, undefined);
   assert.equal(client.boardDetailRoute.path(), "/api/projects/boardTasks");
   assert.deepEqual(client.boardDetailRoute.body.parse({ projectId: 1, userId: 985 }), { projectId: 1, userId: 985 });
   assert.deepEqual(client.compactTaskRelationsRoute.query.parse({ compat: "htpr-6924" }), { compat: "htpr-6924" });
@@ -73,6 +77,10 @@ for (const [name, method, path, data, invoke] of [
   test(`${name}: preserves bare Axios transport, signal, rejection and drift data`, async (t) => {
     const signal = new AbortController().signal;
     const seen = [];
+    const checks = [];
+    const previousWindow = global.window;
+    global.window = { requestIdleCallback: (check) => { checks.push(check); } };
+    t.after(() => { if (previousWindow === undefined) delete global.window; else global.window = previousWindow; });
     t.mock.method(axios.defaults, "adapter", async (config) => {
       seen.push(config);
       return { data: JSON.stringify(data), status: 200, statusText: "OK", headers: {}, config };
@@ -97,7 +105,10 @@ for (const [name, method, path, data, invoke] of [
     const drift = { future: true };
     t.mock.method(axios.defaults, "adapter", async (config) => ({ data: drift, status: 200, headers: {}, config }));
     assert.equal((await invoke(signal)).data, drift);
+    assert.equal(warnings.length, name === "board" ? 0 : 1);
+    checks.forEach((check) => check());
     assert.equal(warnings.length, 1);
+    assert.equal(warnings[0][0], `Typed API contract mismatch: ${name === "board" ? "getBoardDetail" : "getDescriptionVersions"}`);
   });
 }
 
@@ -117,4 +128,65 @@ test("cycle keeps native fetch, paging/query encoding, HTTP and AbortError seman
   t.mock.method(global, "fetch", async () => Response.json({ future: true }));
   assert.deepEqual(await client.getTaskCycle({ taskId: fixtures.taskId }), { future: true });
   assert.equal(warnings.length, 1);
+});
+
+for (const scheduler of ["idle", "timer"]) {
+  for (const valid of [true, false]) {
+    test(`board returns raw ${valid ? "valid" : "drift"} data before ${scheduler} validation and warns only later`, async (t) => {
+      const data = valid ? structuredClone(fixtures.board) : { future: true };
+      const previousWindow = global.window;
+      const scheduled = [];
+      global.window = scheduler === "idle" ? {
+        requestIdleCallback(check, options) { scheduled.push({ check, options }); return 1; },
+        setTimeout() { assert.fail("Idle-capable browsers must not use timers"); },
+      } : { setTimeout(check, delay) { scheduled.push({ check, delay }); return 1; } };
+      t.after(() => { if (previousWindow === undefined) delete global.window; else global.window = previousWindow; });
+      const schema = client.boardDetailRoute.success;
+      const safeParse = schema.safeParse.bind(schema);
+      let parsed = 0;
+      t.mock.method(schema, "safeParse", (answer) => { parsed++; assert.equal(answer, data); return safeParse(answer); });
+      const warnings = [];
+      t.mock.method(console, "warn", (...args) => warnings.push(args));
+      t.mock.method(axios.defaults, "adapter", async (config) => ({ data, status: 200, headers: {}, config }));
+      const response = await client.getBoardDetail({ projectId: fixtures.projectId, userId: 985 });
+      assert.equal(response.data, data);
+      assert.equal(parsed, 0);
+      assert.deepEqual(warnings, []);
+      assert.equal(scheduled.length, 1);
+      if (scheduler === "idle") assert.deepEqual(scheduled[0].options, { timeout: 1000 });
+      else assert.equal(scheduled[0].delay, 0);
+      scheduled[0].check();
+      assert.equal(parsed, 1);
+      assert.equal(response.data, data);
+      assert.equal(warnings.length, valid ? 0 : 1);
+      if (!valid) {
+        assert.equal(warnings[0][0], "Typed API contract mismatch: getBoardDetail");
+        assert.deepEqual(warnings[0][1], safeParse(data).error.issues);
+      }
+    });
+  }
+}
+
+test("board diagnostics do not run or schedule in a non-browser", async (t) => {
+  assert.equal(typeof window, "undefined");
+  const data = { future: true };
+  t.mock.method(client.boardDetailRoute.success, "safeParse", () => assert.fail("Server must not validate deferred diagnostics"));
+  t.mock.method(global, "setTimeout", () => assert.fail("Server must not schedule browser diagnostics"));
+  t.mock.method(console, "warn", () => assert.fail("Server must not warn on deferred diagnostics"));
+  t.mock.method(axios.defaults, "adapter", async (config) => ({ data, status: 200, headers: {}, config }));
+  assert.equal((await client.getBoardDetail({ projectId: fixtures.projectId, userId: 985 })).data, data);
+});
+
+test("board HTTP rejection and cancellation never schedule deferred validation", async (t) => {
+  const previousWindow = global.window;
+  global.window = {
+    requestIdleCallback() { assert.fail("Rejected reads must not schedule"); },
+    setTimeout() { assert.fail("Rejected reads must not schedule"); },
+  };
+  t.after(() => { if (previousWindow === undefined) delete global.window; else global.window = previousWindow; });
+  t.mock.method(client.boardDetailRoute.success, "safeParse", () => assert.fail("Rejected reads must not validate"));
+  for (const error of [new axios.AxiosError("denied"), new axios.CanceledError()]) {
+    t.mock.method(axios.defaults, "adapter", async () => { throw error; });
+    await assert.rejects(client.getBoardDetail({ projectId: fixtures.projectId, userId: 985 }), (caught) => caught === error);
+  }
 });

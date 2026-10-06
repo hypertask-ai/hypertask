@@ -66,6 +66,7 @@ export type ReadRouteDescriptor<Path extends z.ZodType = z.ZodType> = {
   query: z.ZodType;
   body: z.ZodType;
   success: z.ZodType;
+  validate?: "sync" | "deferred";
   errors: Record<number, z.ZodType>;
 };
 
@@ -96,6 +97,7 @@ export const boardDetailRoute = {
   query: z.undefined(),
   body: boardDetailBodySchema,
   success: boardDetailResponseSchema,
+  validate: "deferred",
   errors: { 400: boardReadErrorSchema, 401: boardReadErrorSchema, 403: boardReadErrorSchema, 405: boardReadErrorSchema },
 } satisfies ReadRouteDescriptor;
 
@@ -108,10 +110,23 @@ export const compactTaskRelationsRoute = {
   query: z.object({ compat: z.literal("htpr-6924") }),
   body: compactTaskRelationsBodySchema,
   success: compactTaskRelationsResponseSchema,
+  validate: "deferred",
   errors: { 401: boardReadErrorSchema, 405: boardReadErrorSchema },
 } satisfies ReadRouteDescriptor;
 
-function validateRead<Schema extends z.ZodType>(name: string, schema: Schema, data: z.output<Schema>): z.output<Schema> {
+function validateRead<Schema extends z.ZodType>(name: string, schema: Schema, data: z.output<Schema>, validate: ReadRouteDescriptor["validate"] = "sync"): z.output<Schema> {
+  if (validate === "deferred") {
+    // Large answers are diagnostic only; never delay board hydration or replace its data.
+    if (typeof window !== "undefined") {
+      const check = () => { validateRead(name, schema, data); };
+      if (typeof window.requestIdleCallback === "function") {
+        window.requestIdleCallback(check, { timeout: 1000 });
+      } else {
+        window.setTimeout(check, 0);
+      }
+    }
+    return data;
+  }
   const result = schema.safeParse(data);
   if (result.success) return result.data;
   // Match slice 1: drift is diagnostic, never a new user-visible failure.
@@ -148,6 +163,6 @@ export async function getBoardDetail(body: BoardDetailBody, signal?: AbortSignal
     signal,
     headers: { "X-Hypertask-Client": "htpr-6925" },
   });
-  response.data = validateRead("getBoardDetail", route.success, response.data);
+  response.data = validateRead("getBoardDetail", route.success, response.data, route.validate);
   return response;
 }

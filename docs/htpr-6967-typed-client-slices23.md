@@ -6,7 +6,7 @@ All adoption uses the existing `htpr-6925-typed-api-client` switch. Its registry
 
 ## Route convention
 
-`src/lib/api/typedClient.ts` exports small read descriptors: method, path parameters and path builder, query and body schemas, success schema, and status-indexed error schemas. `z.undefined()` means no input in that location. Caller inputs use `z.input`; successful wire answers use `z.output`. The descriptors describe existing routes, not a new server wrapper or response envelope.
+`src/lib/api/typedClient.ts` exports small read descriptors: method, path parameters and path builder, query and body schemas, success schema, and status-indexed error schemas. `z.undefined()` means no input in that location. Caller inputs use `z.input`; successful wire answers use `z.output`. The descriptors describe existing routes, not a new server wrapper or response envelope. The optional `validate` policy defaults to synchronous checks; board detail and the contract-only compact relations list declare `validate: "deferred"` because their payloads scale with board size.
 
 Concrete readers retain the original transport: Axios for description history and board detail, native fetch for cycles. They forward AbortSignal, make one request, and add `X-Hypertask-Client: htpr-6925`. Schema drift warns and returns raw parsed data; HTTP errors keep the existing rejection semantics. Error schemas document the wire answers without rewriting exceptions. Dates remain strings and loose objects preserve additional fields.
 
@@ -15,6 +15,8 @@ Concrete readers retain the original transport: Axios for description history an
 - GET `/api/tasks/{taskId}/description-versions`: existing history modal, including its unchanged restore mutation.
 - GET `/api/tasks/cycle`: existing cycle picker, including search, cancellation and unchanged POST assignment.
 - POST `/api/projects/boardTasks`: existing board hydration and warming hooks. This is a read despite using POST. The early bootstrap and React Query cache still win when populated; no second request is added to validate already-loaded data. Nested board parent/subtask projections are validated with the board answer.
+
+Board detail returns the raw answer without synchronous parsing. In the browser, its diagnostic check runs via `requestIdleCallback` with a 1000 ms timeout, or `setTimeout(..., 0)` when idle callbacks are unavailable. The later check preserves the same mismatch warning and never replaces the returned data; non-browser reads skip deferred diagnostics. History and cycle remain synchronous. Slice 1 and flag OFF transports are unchanged.
 
 The board schema deliberately describes a wire projection, not the broader hydrated `IProject` and `ITask` interfaces. Unknown producer fields remain intact for existing hydration. No new model or parallel cache is introduced.
 
