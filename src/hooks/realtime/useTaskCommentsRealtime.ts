@@ -27,6 +27,7 @@ type UseTaskCommentsRealtimeOptions = {
   taskProjectId?: number | null;
   taskUniqueIndex?: number | string | null;
   currentTaskTitle?: string;
+  currentTaskAssignees?: ITask["assignees"];
   setCurrentTask?: Dispatch<SetStateAction<ITask | null>>;
   setDescription?: Dispatch<SetStateAction<string>>;
   setDescriptionAttachments?: Dispatch<SetStateAction<IAttachment[]>>;
@@ -77,6 +78,8 @@ export function useTaskCommentsRealtime(
   } = options;
   const currentTaskTitleRef = useRef(options.currentTaskTitle);
   currentTaskTitleRef.current = options.currentTaskTitle;
+  const currentTaskAssigneesRef = useRef(options.currentTaskAssignees);
+  currentTaskAssigneesRef.current = options.currentTaskAssignees;
 
   useEffect(() => {
     if (taskId == null) return;
@@ -106,6 +109,7 @@ export function useTaskCommentsRealtime(
       const includeTaskRefetch = shouldRefetchTask.current;
       const includeTaskContentSync = shouldSyncTaskContent.current;
       const titleAtFetchStart = currentTaskTitleRef.current;
+      const assigneesAtFetchStart = currentTaskAssigneesRef.current;
       shouldRefetchTask.current = false;
       shouldSyncTaskContent.current = false;
 
@@ -138,11 +142,20 @@ export function useTaskCommentsRealtime(
             })
           ) {
             setCurrentTask?.((currentTask) => {
-              const refreshed = mergeRealtimeTaskDetail(
+              let refreshed = mergeRealtimeTaskDetail(
                 currentTask,
                 task,
                 includeTaskContentSync
               );
+              // The picker saves independently; a pre-selection response must
+              // not replace newer local rows after the picker closes.
+              if (
+                currentTask &&
+                assigneesAtFetchStart !== undefined &&
+                currentTask.assignees !== assigneesAtFetchStart
+              ) {
+                refreshed = { ...refreshed, assignees: currentTask.assignees };
+              }
               // A pre-rename response must not reset the title and feed the
               // old value into the title editor's pending autosave.
               return currentTask &&

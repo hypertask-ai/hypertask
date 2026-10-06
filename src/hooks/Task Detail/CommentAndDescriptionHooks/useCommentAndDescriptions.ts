@@ -1,6 +1,6 @@
 /* eslint-disable react-hooks/exhaustive-deps */
 import { useFlag } from "@/hooks/useFlag";
-import { HTPR_6752_INSTANT_TICKET_OPEN_FLAG } from "@/lib/flags/keys";
+import { HTPR_6752_INSTANT_TICKET_OPEN_FLAG, HTPR_6962_KEEP_ASSIGNEE_FLAG } from "@/lib/flags/keys";
 import { useTaskContext } from "@/lib/contexts/TaskDetail/TaskProvider";
 import { IAttachment, IComment } from "@/models/model";
 import {
@@ -153,6 +153,7 @@ const useDescriptionAndCommentsStates = () => {
     emojiClickHandlerDescriptionr,
   } = useDescriptionReactions();
   const instantTicketOpen = useFlag(HTPR_6752_INSTANT_TICKET_OPEN_FLAG);
+  const keepAssignee = useFlag(HTPR_6962_KEEP_ASSIGNEE_FLAG);
   const _parsedTask = useMemo(() => JSON.parse(parsed_task), [parsed_task]);
   const [descriptionAttachments, setDescriptionAttachments] = useState<
     IAttachment[]
@@ -231,6 +232,7 @@ const useDescriptionAndCommentsStates = () => {
     taskProjectId: _parsedTask?.projectId,
     taskUniqueIndex: _parsedTask?.uniqueIndex,
     currentTaskTitle: currentTask?.title,
+    currentTaskAssignees: keepAssignee ? currentTask?.assignees : undefined,
     hasPullRequests: (_parsedTask?.pullRequests?.length ?? 0) > 0,
     setCurrentTask,
     setDescription,
