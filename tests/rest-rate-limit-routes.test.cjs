@@ -9,7 +9,7 @@ const limitHeaders = [['content-type', 'application/json'], ['retry-after', '17'
 
 for (const [operation, bucket] of Object.entries(chat)) {
   test(`${operation}: trusted ON is charged once; below-limit response, queries and side effects are unchanged`, async () => {
-    const result = await run(operation, 'ON');
+    const result = await run(operation, 'ON', operation === 'allSessions' ? { query: { compat: null } } : {});
     assert.deepEqual(result.limits, [[985, bucket]]);
     assert.deepEqual(contract(result), baseline[operation]);
     assert.deepEqual(result.probes.filter(([kind]) => kind === 'flag'), [['flag', 'htpr-6924-rest-compat', 985]]);
