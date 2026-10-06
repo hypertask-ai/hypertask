@@ -312,3 +312,30 @@ else process.exit(99);
   const repeated = fs.readFileSync(callsPath, 'utf8').trim().split('\n').map(JSON.parse);
   assert.deepEqual(repeated.map((args) => args.slice(0, 2)), [['tasks', 'list'], ['tasks', 'get']]);
 });
+
+test('CLI reporter resolves legacy screenshots beside the results rather than its current working directory', (t) => {
+  const failure = failureFixture(t);
+  const dir = path.dirname(failure.screenshotPath);
+  const runDir = path.join(dir, 'midscene_run');
+  fs.mkdirSync(path.join(runDir, 'screenshots'), { recursive: true });
+  const absoluteScreenshot = path.join(runDir, 'screenshots', 'signed-in-create-task-failure.png');
+  fs.copyFileSync(failure.screenshotPath, absoluteScreenshot);
+  failure.screenshotPath = 'midscene_run/screenshots/signed-in-create-task-failure.png';
+  const resultsPath = path.join(runDir, 'results-latest.json');
+  fs.writeFileSync(resultsPath, JSON.stringify({ startedAt: new Date().toISOString(), results: [failure] }));
+  const fakeCli = path.join(dir, 'vcc');
+  fs.writeFileSync(fakeCli, `#!/usr/bin/env node
+const args = process.argv.slice(2);
+if (args[0] !== 'tasks' || args[1] !== 'list') process.exit(99);
+console.log(JSON.stringify({ success: true, tasks: [] }));
+`, { mode: 0o755 });
+  const run = spawnSync(process.execPath, ['e2e/midscene/postprocess.mjs', path.join(dir, 'state.json'), resultsPath,
+    '1', '15', 'Bugs', '1', String(Date.now() / 1000)], {
+    encoding: 'utf8', env: { ...process.env, PATH: `${dir}${path.delimiter}${process.env.PATH}` },
+  });
+  assert.equal(run.status, 0, run.stderr);
+  const planLine = run.stdout.split('\n').find((line) => line.startsWith('DRY RUN:'));
+  const plan = JSON.parse(planLine.slice(planLine.indexOf('{')));
+  assert.equal(plan.screenshotPath, absoluteScreenshot);
+  assert.match(plan.description, /Failing step: 5\. aiTap/);
+});

@@ -16,6 +16,7 @@ export default {
     { action: 'saveTask', arg: 'Create task', value: 'midscene flow check' },
     { action: 'aiWaitFor', arg: 'a task card with the title "midscene flow check" is visible on the board' },
     { action: 'goto', arg: 'https://app.hypertask.ai/demo' },
+    { action: 'waitForTaskCard', arg: 'midscene flow check' },
     {
       action: 'aiAssert',
       arg: 'a task card with the title "midscene flow check" is visible on the board',

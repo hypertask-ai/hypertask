@@ -21,7 +21,7 @@ import { PuppeteerAgent } from '@midscene/web/puppeteer';
 import { flows, getFlow } from './flows/index.mjs';
 import { api, prepareQa, createFixtureTask, findCreatedTask, cleanupQaAfterFlow, observeFixtures, uploadFixture, resolveStep, APP_ORIGIN } from './qa-session.mjs';
 
-const RESULTS_DIR = 'midscene_run';
+const RESULTS_DIR = path.resolve('midscene_run');
 const RESULTS_FILE = path.join(RESULTS_DIR, 'results-latest.json');
 const SCREENSHOT_DIR = path.join(RESULTS_DIR, 'screenshots');
 
@@ -74,6 +74,12 @@ async function runStep(page, agent, step, fixture) {
       if (!task?.id || task.title !== step.value) throw new Error('Task save returned no matching task');
       return;
     }
+    case 'waitForTaskCard':
+      // Persisted data and network idle do not imply that React has rendered the card.
+      await page.waitForFunction((title) => [...document.querySelectorAll('.kanban-task-card')].some((card) =>
+        card.getClientRects().length > 0 && [...card.querySelectorAll('p')].some((text) => text.textContent.trim() === title)),
+      { timeout: 30_000 }, step.arg);
+      return;
     case 'verifyCreatedTask':
       if ((await findCreatedTask(page, fixture)).length !== 1) throw new Error('Expected one persisted QA task');
       return;
@@ -178,8 +184,11 @@ async function runFlow(browser, flow) {
   let fixture;
   let stopObserving;
   let agent;
+  let beforeStepScreenshot;
   try {
+    result.failedStep = 'Browser viewport setup';
     await page.setViewport({ width: 1440, height: 1000 });
+    beforeStepScreenshot = await page.screenshot().catch(() => null);
     result.failedStep = 'QA sign-in and private board ownership check';
     if (flow.signedIn) {
       fixture = await prepareQa(page, flow);
@@ -190,6 +199,8 @@ async function runFlow(browser, flow) {
     for (const [index, template] of flow.steps.entries()) {
       const step = resolveStep(template, fixture?.values || {});
       result.failedStep = `${index + 1}. ${step.action}: ${step.arg}`;
+      // Retain real browser evidence if a failed step closes the page or breaks screenshots.
+      beforeStepScreenshot = await page.screenshot().catch(() => beforeStepScreenshot);
       const output = await runStep(page, agent, step, fixture);
       if (process.argv.includes('--force-failure') && process.argv[process.argv.indexOf('--force-failure') + 1] === flow.id) {
         throw new Error('Forced failure for reporter dry-run verification');
@@ -204,9 +215,11 @@ async function runFlow(browser, flow) {
       }
     }
 
+    result.failedStep = 'Capture completed flow screenshot';
     await mkdir(SCREENSHOT_DIR, { recursive: true });
-    result.screenshotPath = path.join(SCREENSHOT_DIR, `${flow.id}-${Date.now()}.png`);
-    await page.screenshot({ path: result.screenshotPath, fullPage: true });
+    const completedScreenshotPath = path.join(SCREENSHOT_DIR, `${flow.id}-${Date.now()}.png`);
+    await page.screenshot({ path: completedScreenshotPath, fullPage: true });
+    result.screenshotPath = completedScreenshotPath;
     result.ok = true;
     result.reportPath = agent.reportFile || null;
   } catch (err) {
@@ -216,7 +229,11 @@ async function runFlow(browser, flow) {
       const screenshotPath = path.join(SCREENSHOT_DIR, `${flow.id}-${Date.now()}.png`);
       await page.screenshot({ path: screenshotPath, fullPage: true }).catch(async (err) => {
         console.warn(`[${flow.id}] Full-page screenshot failed: ${err.message}; capturing viewport`);
-        await page.screenshot({ path: screenshotPath });
+        await page.screenshot({ path: screenshotPath }).catch(async () => {
+          if (!beforeStepScreenshot) throw err;
+          await writeFile(screenshotPath, beforeStepScreenshot);
+          result.error += '; screenshot shows the last available pre-step viewport';
+        });
       });
       result.screenshotPath = screenshotPath;
     } catch {
