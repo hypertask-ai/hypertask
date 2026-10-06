@@ -42,6 +42,8 @@ export default function CyclePicker({
   taskId: number;
 }) {
   const typedClient = useFlag(HTPR_6967_TYPED_TASK_READS_FLAG);
+  let cycleReader: typeof getTaskCycle | undefined;
+  if (typedClient) cycleReader = getTaskCycle;
   const [cycles, setCycles] = useState<ICycle[]>([]);
   const [enabled, setEnabled] = useState(true);
   const [keyword, setKeyword] = useState("");
@@ -53,8 +55,8 @@ export default function CyclePicker({
     const timer = window.setTimeout(async () => {
       try {
         let body: CycleListResponse;
-        if (typedClient) {
-          body = await getTaskCycle({ taskId, ...(keyword.trim() ? { query: keyword.trim() } : {}) }, controller.signal);
+        if (cycleReader) {
+          body = await cycleReader({ taskId, ...(keyword.trim() ? { query: keyword.trim() } : {}) }, controller.signal);
         } else {
           const params = new URLSearchParams({ taskId: String(taskId) });
           if (keyword.trim()) params.set("query", keyword.trim());
@@ -74,7 +76,7 @@ export default function CyclePicker({
       window.clearTimeout(timer);
       controller.abort();
     };
-  }, [keyword, taskId, typedClient]);
+  }, [keyword, taskId, cycleReader]);
 
   const assign = async (cycle: ICycle | null) => {
     if (saving || (cycle && !cycle.assignable)) return;

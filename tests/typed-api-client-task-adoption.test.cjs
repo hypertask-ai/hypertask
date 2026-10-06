@@ -37,7 +37,7 @@ function ui(file, flag, data, error) {
     if (name === "react/jsx-runtime") return require(name);
     return new Proxy({}, { get: (_, property) => property === "__esModule" ? true : String(property) });
   }, loadedModule, loadedModule.exports);
-  return { calls, states, effects, timers, toasts, render: (props) => { cursor = 0; return loadedModule.exports.default(props); } };
+  return { calls, states, effects, timers, toasts, cycleReader: mocks["@/lib/api/typedClient"].getTaskCycle, render: (props) => { cursor = 0; return loadedModule.exports.default(props); } };
 }
 function elements(tree) {
   if (!tree || typeof tree !== "object") return [];
@@ -99,7 +99,7 @@ for (const flag of [false, undefined, true]) {
     elements(h.render(props)).find((node) => node.props?.id === "cycle-none").props.onClick(); await flush();
     assert.deepEqual(h.calls.at(-1), ["fetch", "/api/tasks/cycle", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ taskId: 12, cycleId: null }) }]);
     assert.equal(changed, 1); cleanup(); assert.equal(signal.aborted, true);
-    assert.deepEqual(h.effects[0].dependencies, ["", 12, flag]);
+    assert.deepEqual(h.effects[0].dependencies, ["", 12, flag ? h.cycleReader : undefined]);
   });
 }
 
