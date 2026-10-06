@@ -370,15 +370,15 @@ for (const view of VIEWS) {
     // route is misbehaving; either way this is not a passing check.
     expect(page.url(), `${view.path} redirected to ${page.url()}`).not.toContain(LOGIN_PATH)
 
-    const title = await page.title()
+    // Metadata can settle after the view's content; assert the live page, not a snapshot.
     if (view.title) {
-      expect(title, `${view.path} titled "${title}", expected "${view.title}"`).toBe(view.title)
+      await expect(page, `${view.path} has the expected title`).toHaveTitle(view.title, { timeout: 15_000 })
     }
     if (view.titlePattern) {
-      expect(title, `${view.path} titled "${title}", expected it to match ${view.titlePattern}`).toMatch(view.titlePattern)
+      await expect(page, `${view.path} has the expected title pattern`).toHaveTitle(view.titlePattern, { timeout: 15_000 })
     }
     if (view.notTitle) {
-      expect(title, `${view.path} titled "${title}"`).not.toMatch(view.notTitle)
+      await expect(page, `${view.path} has no fallback title`).not.toHaveTitle(view.notTitle, { timeout: 15_000 })
     }
 
     const bodyText = await page.locator('body').innerText()

@@ -1,3 +1,4 @@
+import { withTaskWriteFlag } from "@/lib/api/task-writes/route";
 import type { NextApiHandler } from "next";
 import prisma from "@/lib/prisma";
 import { broadcastBoardChange, broadcastInboxChange } from "@/lib/realtime/server";
@@ -107,4 +108,6 @@ const handler: NextApiHandler = async (req, res) => {
   }
 };
 
-export default handler;
+export default withTaskWriteFlag(handler, "POST", async () =>
+  (await import("@/lib/api/task-writes/waiting-on")).POST,
+);

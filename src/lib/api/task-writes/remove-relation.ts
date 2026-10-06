@@ -1,26 +1,21 @@
-import { withTaskWriteFlag } from "@/lib/api/task-writes/route";
+import { NextResponse } from "next/server";
+import { z } from "zod";
+import { taskWriteRoute } from "./route";
 import { removeRelatedTask } from "@/utils/controllers/tasks/removeRelatedTask";
 import prisma from "@/lib/prisma";
 import { broadcastBoardChange } from "@/lib/realtime/server";
-import { NextApiHandler, NextApiRequest, NextApiResponse } from "next";
-import { getSessionUser } from "@/lib/auth/getSessionUser";
 import { getProjectWhere } from "@/utils/controllers/projects/getAllIncludes";
 
-const handler: NextApiHandler = async (
-  req: NextApiRequest,
-  res: NextApiResponse
-) => {
-  if (req.method === "POST") {
-    const session = await getSessionUser(
-      new Headers(req.headers as Record<string, string>)
-    );
-    if (!session) {
-      return res.status(401).json({ message: "Unauthorized" });
-    }
+export const POST = taskWriteRoute({
+  schema: z.custom<Record<string, any>>(() => true),
+  validationMessage: "Invalid request",
+  allowNullBody: true,
+  operation: async (body, session) => {
+    const req = { body };
     try {
       const { relationId } = req.body;
       if (!relationId) {
-        return res.status(200).json("Missing Required Data");
+        return NextResponse.json("Missing Required Data", { status: 200 });
       }
 
       const relation = await prisma.taskRelations.findFirst({
@@ -35,7 +30,7 @@ const handler: NextApiHandler = async (
         },
       });
       if (!relation) {
-        return res.status(404).json({ message: "Relation not found" });
+        return NextResponse.json({ message: "Relation not found" }, { status: 404 });
       }
 
       const response = await removeRelatedTask(relationId);
@@ -47,16 +42,10 @@ const handler: NextApiHandler = async (
         ])).forEach((projectId) => void broadcastBoardChange(projectId));
       }
 
-      return res.status(response.status).json(response);
+      return NextResponse.json(response, { status: response.status });
     } catch (error) {
       console.log("🚀 ~ error:", error);
-      return res.status(200).json(undefined);
+      return new NextResponse(null, { status: 200 });
     }
-  } else {
-    return res.status(405).json({ message: "Method not allowed" });
-  }
-};
-
-export default withTaskWriteFlag(handler, "POST", async () =>
-  (await import("@/lib/api/task-writes/remove-relation")).POST,
-);
+  },
+});
