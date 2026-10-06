@@ -483,7 +483,7 @@ const TaskInfo = (props: ITaskInfoContainer) => {
             bottom={-40}
             tooltipText="Set start date"
             key={"start date"}
-            KeyCombination={[]}
+            KeyCombination={null}
           />
           <TaskInfoValue
             onClick={() =>
@@ -517,7 +517,7 @@ const TaskInfo = (props: ITaskInfoContainer) => {
             bottom={-40}
             tooltipText="Change repeat"
             key={"repeats"}
-            KeyCombination={[]}
+            KeyCombination={null}
           />
           <TaskInfoValue
             onClick={() =>
