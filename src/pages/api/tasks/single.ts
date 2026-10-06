@@ -1,4 +1,5 @@
 import { NextApiHandler, NextApiRequest, NextApiResponse } from "next";
+import { withTaskWriteFlag } from "@/lib/api/task-writes/route";
 import {
   deleteTaskSingle,
   getTaskSingle,
@@ -251,4 +252,6 @@ const handler: NextApiHandler = async (
   }
 };
 
-export default handler;
+export default withTaskWriteFlag(handler, "PUT", async () =>
+  (await import("@/lib/api/task-writes/update")).PUT,
+);

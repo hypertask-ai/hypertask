@@ -488,6 +488,7 @@ test("declared flags remain listed with ticket details and can be changed", asyn
       { key: "htpr-6911-search-row-highlight", mode: "OWNER_AND_QA", updatedAt: null },
       { key: "htpr-6914-shift-c-quick-add", mode: "OWNER_AND_QA", updatedAt: null },
       { key: "htpr-6921-slack-marketplace", mode: "OWNER_AND_QA", updatedAt: null },
+      { key: "htpr-6923-app-router-writes", mode: "OWNER_AND_QA", updatedAt: null },
       { key: "htpr-6925-typed-api-client", mode: "OWNER_AND_QA", updatedAt: null },
       { key: "htpr-6929-compose-task-writer", mode: "OWNER_AND_QA", updatedAt: null },
       { key: "htpr-6930-my-tasks-kanban-reuse", mode: "OWNER_AND_QA", updatedAt: null },

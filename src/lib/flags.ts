@@ -175,7 +175,14 @@ const RETIRED_CLIENT_FEATURE_FLAGS = {
   "htpr-6035-agent-chat-skills": true,
 } as const;
 
+export const HTPR_6923_APP_ROUTER_WRITES_FLAG = "htpr-6923-app-router-writes";
+
 const FEATURE_FLAG_DEFINITIONS = [
+  {
+    key: HTPR_6923_APP_ROUTER_WRITES_FLAG,
+    shippedOn: "2026-10-06",
+    description: "Uses shared App-style handlers for legacy task writes while keeping the original URLs and responses.",
+  },
   {
     key: HTPR_6925_TYPED_API_CLIENT_FLAG,
     shippedOn: "2026-10-06",
