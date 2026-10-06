@@ -13,7 +13,7 @@ const handler: NextApiHandler = async (req: NextApiRequest, res: NextApiResponse
                 let retired = false;
                 try {
                     const currentUser = await loadCurrentUser(
-                        new Headers(req.headers as Record<string, string>), true
+                        new Headers(req.headers as Record<string, string>)
                     );
                     if (currentUser) {
                         retired = await isFeatureEnabled(HTPR_6924_REST_COMPAT_FLAG, currentUser.userId);
