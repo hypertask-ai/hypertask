@@ -132,6 +132,7 @@ export const HTPR_6925_TYPED_API_CLIENT_FLAG = "htpr-6925-typed-api-client";
 export const HTPR_6966_SKILLS_ACCESS_DENIAL_FLAG = "htpr-6966-skills-access-denial";
 export const HTPR_6929_COMPOSE_TASK_WRITER_FLAG = "htpr-6929-compose-task-writer";
 
+export const HTPR_6970_PHONE_NEW_TASK_TITLE_FLAG = "htpr-6970-phone-new-task-title";
 export const HTPR_6937_NEW_TASK_WINDOW_FLAG = "htpr-6937-new-task-window";
 export const HTPR_6951_TASK_WRITING_PROGRESS_FLAG = "htpr-6951-task-writing-progress";
 

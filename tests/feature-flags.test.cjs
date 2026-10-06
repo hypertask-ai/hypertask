@@ -62,6 +62,15 @@ test.beforeEach(() => {
   ]);
 });
 
+test("phone New Task title fix defaults to Everyone as a bugfix", async () => {
+  const key = flags.HTPR_6970_PHONE_NEW_TASK_TITLE_FLAG;
+  assert.equal(key, "htpr-6970-phone-new-task-title");
+  assert.equal(flags.defaultFeatureFlagMode(key), "EVERYONE");
+  const entry = (await flags.listFeatureFlagModes()).find(entry => entry.key === key);
+  assert.equal(entry.kind, "bugfix");
+  assert.equal(entry.mode, "EVERYONE");
+});
+
 test("admin access requires the signed, active owner", async () => {
   assert.equal(await flags.isFeatureFlagOwner(new Headers()), true);
   sessionUserId = 7;
@@ -104,7 +113,7 @@ test("every feature flag without a stored row is on for the owner and QA, nobody
   // owner-only, or the QA account cannot verify the feature before Valentin looks at it.
   assert.ok(flags.FEATURE_FLAG_KEYS.length > 0);
   // Explicit defaults and bugfix defaults are checked separately.
-  const explicit = new Set(["htpr-6926-mcp-route-wrapper", "htpr-6966-skills-access-denial"]);
+  const explicit = new Set(["htpr-6926-mcp-route-wrapper", "htpr-6966-skills-access-denial", "htpr-6970-phone-new-task-title"]);
   for (const key of flags.FEATURE_FLAG_KEYS.filter((k) => !explicit.has(k))) {
     assert.deepEqual(
       await Promise.all([6, 985, 7].map((userId) => flags.isFeatureEnabled(key, userId))),
@@ -520,6 +529,7 @@ test("declared flags remain listed with ticket details and can be changed", asyn
       { key: "htpr-6951-task-writing-progress", mode: "OWNER_AND_QA", updatedAt: null },
       { key: "htpr-6964-flags-page-type-search", mode: "OWNER_AND_QA", updatedAt: null },
       { key: "htpr-6966-skills-access-denial", mode: "EVERYONE", updatedAt: null },
+      { key: "htpr-6970-phone-new-task-title", mode: "EVERYONE", updatedAt: null },
     ],
   );
   listed.forEach(({ key, description, ticketUrl, shippedOn }) => {

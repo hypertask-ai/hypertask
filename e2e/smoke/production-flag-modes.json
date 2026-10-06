@@ -86,6 +86,8 @@
     "htpr-6885-single-undo-toast": "EVERYONE",
     "htpr-6892-cmdk-version": "EVERYONE",
     "htpr-6902-n-quick-add": "OWNER_AND_QA",
-    "htpr-6909-search-one-board-tabs": "OWNER_AND_QA"
+    "htpr-6909-search-one-board-tabs": "OWNER_AND_QA",
+    "htpr-6929-compose-task-writer": "OWNER_AND_QA",
+    "htpr-6937-new-task-window": "OWNER_AND_QA"
   }
 }

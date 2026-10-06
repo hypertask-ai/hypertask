@@ -253,6 +253,31 @@ test('layout lock: comment composer is the end of the ticket thread', async ({ p
   }
 })
 
+test('layout lock: phone New Task title has a real height and accepts a tap', async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name !== 'Mobile', 'phone title invariant')
+  const fixture = JSON.parse(readFileSync(fixturePath, 'utf8')) as { flags: Record<string, boolean> }
+  test.skip(!fixture.flags['htpr-6970-phone-new-task-title'], 'phone title fix is off')
+  const flagsResponse = page.waitForResponse(response => new URL(response.url()).pathname === '/api/flags' && response.ok())
+  await page.goto(withRealtime(process.env.SMOKE_BOARD_PATH!), { waitUntil: 'load' })
+  const { flags } = await (await flagsResponse).json() as { flags: Record<string, boolean> }
+  for (const [key, enabled] of Object.entries(fixture.flags)) expect(flags[key] === true, `phone title flag ${key}`).toBe(enabled)
+  await expect(page.locator('.kanban-column-title').first()).toBeVisible()
+  await page.evaluate(() => (document.activeElement as HTMLElement).blur())
+  await page.keyboard.press('c')
+  await expect(page.locator('#createTaskModal')).toBeVisible()
+  const expand = page.getByRole('button', { name: /^Title:/ })
+  if (await expand.count()) await expand.tap()
+  const title = page.locator('#title-input-modal')
+  // Assert the field itself, outside the htpr-6556 landmark allowance.
+  await expect.poll(async () => (await title.boundingBox())?.height ?? 0).toBeGreaterThanOrEqual(24)
+  expect(await title.evaluate(field => {
+    const box = field.getBoundingClientRect()
+    return document.elementFromPoint(box.x + box.width / 2, box.y + box.height / 2) === field
+  }), 'phone title centre must hit the textarea, not an overlay or its wrapper').toBe(true)
+  await title.tap()
+  await expect(title).toBeFocused()
+})
+
 test('layout lock: desktop New Task window stays narrow and inside the viewport', async ({ page }, testInfo) => {
   test.skip(testInfo.project.name !== 'Desktop', 'desktop window invariant')
   const fixture = JSON.parse(readFileSync(fixturePath, 'utf8')) as { flags: Record<string, boolean> }

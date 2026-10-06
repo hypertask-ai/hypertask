@@ -152,6 +152,16 @@ test('committed baseline contains measured boxes and complete vertical order for
   }
 });
 
+test('phone title hit-target invariant is independent of allowed landmark drift', () => {
+  const spec = fs.readFileSync(path.join(__dirname, '../e2e/smoke/layout-lock.spec.ts'), 'utf8');
+  const invariant = spec.slice(spec.indexOf("test('layout lock: phone New Task title"), spec.indexOf("test('layout lock: desktop New Task"));
+  assert.match(invariant, /#title-input-modal/);
+  assert.match(invariant, /toBeGreaterThanOrEqual\(24\)/);
+  assert.match(invariant, /document\.elementFromPoint[\s\S]*=== field/);
+  assert.match(invariant, /await title\.tap\(\)[\s\S]*toBeFocused\(\)/);
+  assert.doesNotMatch(invariant, /layoutDifferences|flagChanges/);
+});
+
 test('spec covers six screens, updates serially from live-like flags, and never changes the baseline on ordinary runs', () => {
   const spec = fs.readFileSync(path.join(__dirname, '../e2e/smoke/layout-lock.spec.ts'), 'utf8');
   assert.match(spec, /\['ticket', 'board', 'inbox', 'my-tasks', 'new-task', 'app-shell'\]/);
