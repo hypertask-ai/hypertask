@@ -10,6 +10,7 @@ function harness(name, flag, options = {}) {
   const calls = [];
   const states = [];
   const callbacks = [];
+  const memos = [];
   const effects = [];
   const mutations = [];
   let query;
@@ -27,7 +28,7 @@ function harness(name, flag, options = {}) {
       return [states[index], (value) => { states[index] = typeof value === "function" ? value(states[index]) : value; }];
     },
     useCallback: (callback, dependencies) => { callbacks.push({ callback, dependencies }); return callback; },
-    useMemo: (callback) => callback(),
+    useMemo: (callback, dependencies) => { const value = callback(); memos.push({ value, dependencies }); return value; },
     useEffect: (callback, dependencies) => effects.push({ callback, dependencies }),
   };
   const mocks = {
@@ -56,7 +57,7 @@ function harness(name, flag, options = {}) {
     throw new Error(`Unexpected UI dependency: ${specifier}`);
   }, loadedModule, loadedModule.exports);
   const render = (props = {}) => { cursor = 0; return loadedModule.exports.default(props); };
-  return { render, calls, states, callbacks, effects, mutations, get query() { return query; } };
+  return { render, calls, states, callbacks, memos, effects, mutations, get query() { return query; } };
 }
 
 function text(node) {
@@ -75,14 +76,17 @@ for (const flag of [false, undefined, true]) {
       const h = harness("SkillLibrary", flag, { data: { skills: [personal, board, other] } });
       h.render({ scope, projectId: 15, teamId: "team-1" });
       assert.equal(h.effects.length, 1);
-      await h.callbacks[0].callback();
+      await h.callbacks.at(-1).callback();
       assert.deepEqual(h.calls, flag ? [["typed-skills", { projectId: 15, teamId: "team-1" }]] : [["old", "/api/ai/skills", { params: { projectId: 15, teamId: "team-1" } }]]);
       assert.deepEqual(h.states[0], scope === "user" ? [personal] : [board]);
       assert.equal(h.states[1], false); assert.equal(h.states[2], null);
-      if (flag) assert.ok(h.callbacks[0].dependencies.includes(true), "flag changes must refresh the load callback");
+      if (flag) {
+        assert.ok(h.memos.at(-1).dependencies.includes(true), "flag changes must refresh the selected read");
+        assert.ok(h.callbacks.at(-1).dependencies.includes(h.memos.at(-1).value), "load callback must follow the selected read");
+      }
     }
     const h = harness("SkillLibrary", flag);
-    h.render({ scope: "user" }); await h.callbacks[0].callback();
+    h.render({ scope: "user" }); await h.callbacks.at(-1).callback();
     assert.deepEqual(h.calls, flag ? [["typed-skills", {}]] : [["old", "/api/ai/skills", { params: {} }]]);
     assert.match(text(h.render({ scope: "user" })), /No skills yet/);
   });
@@ -106,7 +110,7 @@ for (const flag of [false, undefined, true]) {
     const error = { response: { data: { error: "Read denied" } } };
     const skills = harness("SkillLibrary", flag, { error });
     assert.match(text(skills.render({ scope: "user" })), /Loading skills/);
-    await skills.callbacks[0].callback();
+    await skills.callbacks.at(-1).callback();
     assert.equal(skills.states[2], "Read denied"); assert.equal(skills.states[1], false);
     const memory = harness("BoardMemorySection", flag, { error, queryResult: { isError: true } });
     assert.match(text(memory.render()), /Board memory could not be loaded/);

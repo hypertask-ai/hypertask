@@ -44,20 +44,22 @@ export default function BoardMemorySection() {
   const projectId = project?.id;
   const queryClient = useQueryClient();
   const queryKey = boardMemoryQueryKey(projectId);
+  let queryFn;
+  if (typedClient) {
+    queryFn = async () => {
+      if (projectId) return (await getBoardMemory(projectId)).data;
+    };
+  } else {
+    queryFn = async () => (
+      await axios.get<BoardMemoryState>(boardMemoryRoute, {
+        params: { projectId },
+      })
+    ).data;
+  }
   const { data, isError, isLoading } = useQuery({
     enabled: Boolean(projectId),
     queryKey,
-    queryFn: async () => {
-      if (typedClient) {
-        if (projectId) return (await getBoardMemory(projectId)).data;
-      } else {
-        return (
-          await axios.get<BoardMemoryState>(boardMemoryRoute, {
-            params: { projectId },
-          })
-        ).data;
-      }
-    },
+    queryFn,
   });
   const toggleMutation = useMutation({
     mutationFn: async (enabled: boolean) =>

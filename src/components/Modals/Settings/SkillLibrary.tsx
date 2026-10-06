@@ -56,18 +56,22 @@ export default function SkillLibrary({
     [projectId, teamId]
   );
 
+  let readSkills;
+  if (typedClient) {
+    readSkills = () => listSkills(params);
+  } else {
+    readSkills = () => axios.get<{ skills: Skill[] }>("/api/ai/skills", {
+      params,
+    });
+  }
+  // Memoize by request inputs so the selected callback does not trigger a reload every render.
+  const fetchSkills = useMemo(() => readSkills, [params, typedClient]);
+
   const loadSkills = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      let response;
-      if (typedClient) {
-        response = await listSkills(params);
-      } else {
-        response = await axios.get<{ skills: Skill[] }>("/api/ai/skills", {
-          params,
-        });
-      }
+      const response = await fetchSkills();
       setSkills(
         response.data.skills.filter((skill) =>
           scope === "project" ? skill.projectId === projectId : skill.userId !== null
@@ -78,7 +82,7 @@ export default function SkillLibrary({
     } finally {
       setLoading(false);
     }
-  }, [params, projectId, scope, typedClient]);
+  }, [fetchSkills, projectId, scope]);
 
   useEffect(() => {
     void loadSkills();
