@@ -83,6 +83,17 @@ export function mergeRealtimeTaskDetail<T extends RealtimeTaskStaleness>(
   };
 }
 
+const pendingTaskAssigneeWrites = new Map<number, number>();
+
+export function beginTaskAssigneeWrite(taskId: number): () => void {
+  pendingTaskAssigneeWrites.set(taskId, (pendingTaskAssigneeWrites.get(taskId) ?? 0) + 1);
+  return () => {
+    const remaining = (pendingTaskAssigneeWrites.get(taskId) ?? 0) - 1;
+    if (remaining > 0) pendingTaskAssigneeWrites.set(taskId, remaining);
+    else pendingTaskAssigneeWrites.delete(taskId);
+  };
+}
+
 export function preserveTaskAssigneesChangedDuringFetch<
   T extends RealtimeTaskIdentity & { assignees?: unknown },
 >(
@@ -91,12 +102,13 @@ export function preserveTaskAssigneesChangedDuringFetch<
   assigneesAtFetchStart: T["assignees"],
   keepAssignee: boolean,
 ): T {
-  // Assignment saves independently of detail reads, including the first load.
+  // A read can start after the optimistic toggle but before its write commits.
   return keepAssignee &&
     currentTask &&
     currentTask.id === fetchedTask.id &&
     currentTask.projectId === fetchedTask.projectId &&
-    currentTask.assignees !== assigneesAtFetchStart
+    (currentTask.assignees !== assigneesAtFetchStart ||
+      (currentTask.id != null && pendingTaskAssigneeWrites.has(currentTask.id)))
     ? { ...fetchedTask, assignees: currentTask.assignees }
     : fetchedTask;
 }
