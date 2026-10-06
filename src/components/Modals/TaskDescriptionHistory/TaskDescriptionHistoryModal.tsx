@@ -44,6 +44,8 @@ const DescriptionPreview = ({ content }: { content: string }) => (
 
 const TaskDescriptionHistoryModal = ({ taskId, onClose, onRestored }: Props) => {
   const typedClient = useFlag(HTPR_6967_TYPED_TASK_READS_FLAG);
+  let descriptionReader: typeof getDescriptionVersions | undefined;
+  if (typedClient) descriptionReader = getDescriptionVersions;
   const [data, setData] = useState<VersionResponse | null>(null);
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
@@ -58,8 +60,8 @@ const TaskDescriptionHistoryModal = ({ taskId, onClose, onRestored }: Props) => 
     const loadVersions = async () => {
       try {
         let response: VersionResponse;
-        if (typedClient) {
-          response = (await getDescriptionVersions(taskId, controller.signal)).data;
+        if (descriptionReader) {
+          response = (await descriptionReader(taskId, controller.signal)).data;
         } else {
           const { data } = await axios.get<VersionResponse>(
             taskDescriptionVersionsRoute(String(taskId)),

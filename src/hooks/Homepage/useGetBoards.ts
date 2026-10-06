@@ -291,6 +291,8 @@ export const useGetAllBoards = (
   }
 ) => {
   const typedClient = useFlag(HTPR_6967_TYPED_TASK_READS_FLAG);
+  let boardReader: typeof getBoardDetail | undefined;
+  if (typedClient) boardReader = getBoardDetail;
   const hydrated = useHydrated();
   const queryClient = useQueryClient();
   const accountIdRef = useRef(user.id);
@@ -378,7 +380,7 @@ export const useGetAllBoards = (
                 requestProjectId,
                 requestAccountId,
                 signal,
-                typedClient ? getBoardDetail : undefined,
+                boardReader,
               )
               // This request exists only to prove and hydrate the current
               // network result. It must not write BOARD_TASKS_KEY: account-wide
@@ -394,7 +396,7 @@ export const useGetAllBoards = (
                     requestProjectId,
                     requestAccountId,
                     boardSignal,
-                    typedClient ? getBoardDetail : undefined,
+                    boardReader,
                   ),
                 // Realtime and command refetches keep the existing five-minute
                 // task cache once this route's authorization has resolved.
@@ -664,6 +666,8 @@ export const useWarmProjectsAllQuery = ({
   enabled?: boolean;
 }) => {
   const typedClient = useFlag(HTPR_6967_TYPED_TASK_READS_FLAG);
+  let boardReader: typeof getBoardDetail | undefined;
+  if (typedClient) boardReader = getBoardDetail;
   const queryClient = useQueryClient();
 
   useEffect(() => {
@@ -675,7 +679,7 @@ export const useWarmProjectsAllQuery = ({
         // obtains a fresh scoped authorization response on navigation.
         queryKey: BOARD_TASKS_KEY(Number(projectId), user.id),
         queryFn: ({ signal }) =>
-          fetchBoardTasks(Number(projectId), user.id, signal, typedClient ? getBoardDetail : undefined),
+          fetchBoardTasks(Number(projectId), user.id, signal, boardReader),
         staleTime: BOARD_TASKS_STALE_TIME_MS,
       })
       .catch(() => undefined);

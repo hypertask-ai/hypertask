@@ -83,7 +83,7 @@ for (const flag of [false, undefined, true]) {
     global.window = { setTimeout: (callback, delay) => { h.timers.push({ callback, delay }); return 1; }, clearTimeout() {} };
     t.after(() => { if (previousWindow === undefined) delete global.window; else global.window = previousWindow; });
     let changed = 0;
-    const props = { taskId: 12, assignedCycle: null, closeHandler() {}, onChange: () => changed++, typedClient: flag };
+    const props = { taskId: 12, assignedCycle: null, closeHandler() {}, onChange: () => changed++, readCycle: flag ? async (...args) => { h.calls.push(["typed-cycle", ...args]); return data; } : undefined };
     h.render(props); const cleanup = h.effects[0].callback();
     assert.equal(h.timers[0].delay, 0); await h.timers[0].callback();
     const signal = h.calls[0].at(-1).signal ?? h.calls[0].at(-1);
@@ -99,7 +99,7 @@ for (const flag of [false, undefined, true]) {
     elements(h.render(props)).find((node) => node.props?.id === "cycle-none").props.onClick(); await flush();
     assert.deepEqual(h.calls.at(-1), ["fetch", "/api/tasks/cycle", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ taskId: 12, cycleId: null }) }]);
     assert.equal(changed, 1); cleanup(); assert.equal(signal.aborted, true);
-    assert.deepEqual(h.effects[0].dependencies, ["", 12, flag]);
+    assert.deepEqual(h.effects[0].dependencies, ["", 12, props.readCycle]);
   });
 }
 
@@ -107,7 +107,7 @@ test("the cycle entry passes only this ticket's evaluated switch to the picker",
   const source = fs.readFileSync(path.join(root, "src/components/PageComponents/TaskDetail/TaskInfoColumn/TaskInfo.tsx"), "utf8");
   assert.match(source, /import \{ HTPR_6967_TYPED_TASK_READS_FLAG \} from "@\/lib\/flags\/keys"/);
   assert.match(source, /const typedClient = useFlag\(HTPR_6967_TYPED_TASK_READS_FLAG\);/);
-  assert.match(source, /<CyclePicker\s+typedClient=\{typedClient\}/);
+  assert.match(source, /<CyclePicker\s+readCycle=\{typedClient \? getTaskCycle : undefined\}/);
   assert.doesNotMatch(source, /HTPR_6925_TYPED_API_CLIENT_FLAG/);
 });
 

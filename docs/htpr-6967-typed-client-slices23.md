@@ -13,10 +13,10 @@ Concrete readers retain the original transport: Axios for description history an
 ## Adopted reads
 
 - GET `/api/tasks/{taskId}/description-versions`: existing history modal, including its unchanged restore mutation.
-- GET `/api/tasks/cycle`: existing cycle picker, including search, cancellation and unchanged POST assignment. Its sole task-info caller evaluates the ticket switch and passes it into the picker, so the entry point owns the transport choice.
+- GET `/api/tasks/cycle`: existing cycle picker, including search, cancellation and unchanged POST assignment. Its sole task-info caller evaluates the ticket switch and selects the reader passed into the picker, so the entry point owns the transport choice.
 - POST `/api/projects/boardTasks`: existing board hydration and warming hooks. This is a read despite using POST. The early bootstrap and React Query cache still win when populated; no second request is added to validate already-loaded data. Nested board parent/subtask projections are validated with the board answer.
 
-Board detail returns the raw answer without synchronous parsing. In the browser, its diagnostic check runs via `requestIdleCallback` with a 1000 ms timeout, or `setTimeout(..., 0)` when idle callbacks are unavailable. The later check preserves the same mismatch warning and never replaces the returned data; non-browser reads skip deferred diagnostics. History and cycle remain synchronous. Slice 1 and flag OFF transports are unchanged.
+Board detail returns the raw answer without synchronous parsing. In the browser, its diagnostic check runs via `requestIdleCallback` with a 1000 ms timeout, or `setTimeout(..., 0)` when idle callbacks are unavailable. The later check preserves the same mismatch warning and never replaces the returned data; non-browser reads skip deferred diagnostics. History and cycle remain synchronous. Slice 1 and flag OFF transports are unchanged. Transport selection happens at render time so the flag checker can verify the actual choices, not just callback-local branches. The existing late-details render block is extracted unchanged into `TaskInfoLateDetails.tsx`, keeping unrelated legacy exports separate from the gated cycle entry.
 
 The board schema deliberately describes a wire projection, not the broader hydrated `IProject` and `ITask` interfaces. Unknown producer fields remain intact for existing hydration. No new model or parallel cache is introduced.
 
