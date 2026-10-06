@@ -60,7 +60,9 @@ export default function CachedTaskDetailNavigation({ children, accountId }: {
   }), [accountId]);
   if (pathname !== historyLocation.nextPathname) {
     historyLocation.nextPathname = pathname;
-    if (pathname === historyLocation.pathname) historyLocation.pathname = null;
+    if (historyLocation.pathname !== null && typeof window !== "undefined" && pathname === browserPathname()) {
+      historyLocation.pathname = null;
+    }
   }
   // A history traversal owns the address until Next acknowledges it. Otherwise
   // Next Links must still render their new route before committing pushState.

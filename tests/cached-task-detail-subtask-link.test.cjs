@@ -239,6 +239,27 @@ for (const enabled of [true, false]) {
         render();
       });
       assertContent(child);
+      // A Link can commit a different URL before an older history response
+      // acknowledges its original target. Only the current address may retire it.
+      await React.act(async () => {
+        nextPath = href(parent);
+        render();
+      });
+      await React.act(async () => {
+        window.history.pushState(window.history.state, "", href(parent));
+        render();
+      });
+      assertContent(parent);
+      await React.act(async () => {
+        nextPath = href(child);
+        render();
+      });
+      assert.equal(document.querySelector("article").textContent, parent.title + parent.description_.content + parent.comments, "an old history acknowledgement must not override a newer Link address");
+      await React.act(async () => {
+        nextPath = href(parent);
+        render();
+      });
+      assertContent(parent);
     }
   });
 }
