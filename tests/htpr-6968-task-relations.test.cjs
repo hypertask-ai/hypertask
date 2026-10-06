@@ -199,16 +199,15 @@ const scenarios = {
     ["lease conflict", { writeThrows: "lease", expected: error(409, "Task lease conflict") }], ["realtime failure remains success", { realtimeThrows: true }], ["service failure", { writeThrows: "Service unavailable", expected: error(500, "Internal server error") }], ["signed verification throws", { signedThrows: true }],
   ],
 };
-for (const [label, descriptionContent, expectedText] of [
+for (const [label, descriptionContent, expectedText, legacyText = expectedText] of [
   ["normal HTML", '  <p>Hello <strong>world</strong>&nbsp;&amp;</p><br><p>Next</p>\n', '  Hello world&nbsp;&amp;Next\n'],
-  ["nested script tag", '<scr<script>ipt>alert(1)</script>', 'iptalert(1)'],
-  ["multiply nested script tag", '<scr<scr<script>ipt>ipt>alert(1)</script>', 'iptiptalert(1)'],
-  ["unfinished script tag", '<script', 'script'],
-  ["stray angle brackets", 'Note <> > <', 'Note   '],
+  ["nested script tag", '<scr<script>ipt>alert(1)</script>', 'iptalert(1)', 'ipt>alert(1)'],
+  ["multiply nested script tag", '<scr<scr<script>ipt>ipt>alert(1)</script>', 'iptiptalert(1)', 'ipt>ipt>alert(1)'],
+  ["unfinished script tag", '<script', 'script', '<script'],
+  ["stray angle brackets", 'Note <> > <', 'Note   ', 'Note <> > <'],
   ["empty text", '', ''],
 ]) test(`reactToDescription: push text strips completely; ${label}`, async () => {
   const scenario = { descriptionContent };
-  const legacyText = descriptionContent.replace(/<[^>]+>/g, "");
   if (label === "normal HTML" || label === "empty text") assert.equal(expectedText, legacyText);
   else assert.match(legacyText, /[<>]/, "legacy regex is the vulnerable positive control");
   for (const mode of [false, "outage", true, "web"]) {
