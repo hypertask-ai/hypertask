@@ -129,6 +129,7 @@ function loadCreateRoute() {
     drafts: { createMany: async () => undefined },
   };
   const stubs = {
+    "@/lib/api/task-writes/route": { withTaskWriteFlag: (handler) => handler },
     "@/lib/ai/composeTaskTarget": execute(compile("src/lib/ai/composeTaskTarget.ts"), {}),
     "@prisma/client": {
       Prisma: { PrismaClientKnownRequestError: class extends Error {} },
@@ -222,6 +223,11 @@ function loadCreateRoute() {
       broadcastBoardChange: async () => undefined,
     },
   };
+
+  stubs["@/pages/api/queues/FAST/generateSummary"] = stubs["../queues/FAST/generateSummary"];
+  stubs["@/lib/api/task-writes/create-global-effects"] = execute(
+    compile("src/lib/api/task-writes/create-global-effects.ts"), stubs,
+  );
 
   return {
     handler: execute(

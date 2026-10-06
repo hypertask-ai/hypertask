@@ -10,6 +10,55 @@ const legacyHashes = {
   update: "fd86e539628986d289b1a2bcfa7356d99d9fcfa5ac56b6475af1e91ad28c829b",
   move: "513aeab45ad20296fe90f8685e6010ca77527ec998a20bd6c9dd00f3133b3381",
 };
+const lifecycleHashes = {
+  "create": "ac3bf10430d38d203068e2c6f94588275b5f2f4a778cf4163884f8e8a62a31b8",
+  "global": "e0fc2c38b61e70aaa8a80a106b2fb52d55b0ddac095c91dfd8e1fe5a6cc8df6e",
+  "archive": "c37913de3aaa395f5a45ce66155863ad6670d21f03c2c09037c747dad4e54cb2"
+};
+function lifecycleLegacySources() {
+  const unwrap = (file) => read(file)
+    .replace('import { withTaskWriteFlag } from "@/lib/api/task-writes/route";\n', "")
+    .replace(/export default withTaskWriteFlag\([\s\S]*?\n\);/, "export default handler;");
+  let create = unwrap("src/pages/api/tasks/create.ts")
+    .replace('import { createFullScreenTaskAndReturn } from "@/lib/api/task-writes/create-fullscreen";\n', "");
+  // Restore only the legacy blank-line padding removed from the moved file.
+  const fullscreenPadding = { 17: 16, 35: 12, 62: 8, 68: 4 };
+  const fullscreen = read("src/lib/api/task-writes/create-fullscreen.ts").split("\n")
+    .map((line, index) => {
+      if (!fullscreenPadding[index]) return line;
+      assert.equal(line, "", "only blank legacy padding is normalized");
+      return " ".repeat(fullscreenPadding[index]);
+    })
+    .join("\n").split("export const createFullScreenTaskAndReturn")[1];
+  create = create.replace('export { createFullScreenTaskAndReturn } from "@/lib/api/task-writes/create-fullscreen";\n', "export const createFullScreenTaskAndReturn" + fullscreen);
+  const effects = read("src/lib/api/task-writes/create-global-effects.ts");
+  const types = effects.slice(effects.indexOf("type TaskCreatedGlobally"), effects.indexOf("function schedulePostCreateWork("));
+  const helpers = effects.slice(effects.indexOf("function schedulePostCreateWork("), effects.indexOf("\nexport {"))
+    .replaceAll('"@/pages/api/queues/FAST/generateSummary"', '"../queues/FAST/generateSummary"');
+  let global = unwrap("src/pages/api/tasks/createGlobally.ts")
+    .replace(/^import \{ schedulePostCreateWork[^\n]+\n/m, "")
+    .replace('import { IAgent, ILabel, IUser } from "@/models/model";\n', 'import { IAgent, IEstimate, ILabel, IPriority, ITask, IUser } from "@/models/model";\nimport { waitUntil } from "@vercel/functions";\nimport {\n  ITaskAssignedActivity,\n  ITaskEstimateActivity,\n  ITaskPriorityActivity,\n} from "@/models/ActivityModels.ts";\n')
+    .replace('import { getSessionUser }', 'import { assignmentActivityUserSelect } from "@/utils/controllers/activities/createAssignedActivity";\nimport { getSessionUser }')
+    .replace("const handler: NextApiHandler", types.replace(/\n$/, "") + "const handler: NextApiHandler")
+    .replace("\nexport default handler;", helpers + "\nexport default handler;");
+  return { create, global, archive: unwrap("src/pages/api/tasks/(un)archive.ts") };
+}
+function lifecycle() {
+  const sources = lifecycleLegacySources();
+  for (const [kind, source] of Object.entries(sources)) {
+    assert.equal(crypto.createHash("sha256").update(source).digest("hex"), lifecycleHashes[kind], kind + " legacy bytes");
+  }
+  const route = read("src/lib/api/task-writes/route.ts");
+  assert.ok(route.includes("HTPR_6923_APP_ROUTER_WRITES_FLAG"));
+  assert.ok(route.includes("if (!enabled || !session || !headers) return legacy(req, res)"));
+  for (const [page, handler] of [["create", "create"], ["createGlobally", "create-global"], ["(un)archive", "archive"]]) {
+    assert.ok(read(`src/pages/api/tasks/${page}.ts`).includes(`withTaskWriteFlag(handler, "POST"`));
+    assert.ok(read(`src/pages/api/tasks/${page}.ts`).includes(`/task-writes/${handler}`));
+    assert.ok(!fs.existsSync(path.join(root, `src/app/api/tasks/${page}/route.ts`)), "no URL twin");
+  }
+  assert.throws(() => assert.equal(crypto.createHash("sha256").update(sources.create + "changed").digest("hex"), lifecycleHashes.create), "pin mutation control");
+  console.log("lifecycle verification passed");
+}
 const deadCandidates = [
   "tasks/getAll", "tasks/linkPullRequest", "projects/detail", "projects/views/sync-view",
   "section/getAll", "section/getByTaskId", "notifications/mute",
@@ -148,9 +197,9 @@ function commit() {
   assert.throws(() => assert.ok(allowed.has("src/lib/mcp/auth.ts")), "scope control rejects a sibling file");
   console.log(`local commit verified: ${git("rev-parse", "HEAD")}; ${productionLines} production/doc changed lines; only GATES.md is local`);
 }
-module.exports = { legacyHashes, inventory, callerFiles };
+module.exports = { legacyHashes, lifecycleHashes, lifecycleLegacySources, inventory, callerFiles };
 if (require.main === module) {
-  const commands = { plan, flag, regression, quality, commit };
+  const commands = { plan, flag, regression, quality, commit, lifecycle };
   assert.ok(commands[process.argv[2]], "known verification mode required");
   Promise.resolve(commands[process.argv[2]]()).catch((error) => { console.error(error); process.exitCode = 1; });
 }

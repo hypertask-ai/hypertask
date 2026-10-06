@@ -1,6 +1,6 @@
 const test = require("node:test");
 const assert = require("node:assert");
-const fs = require("node:fs");
+const fs = require("./refactored-module-source.cjs");
 const path = require("node:path");
 
 const read = (p) => fs.readFileSync(path.join(__dirname, "..", p), "utf8");
