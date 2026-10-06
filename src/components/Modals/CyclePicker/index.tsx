@@ -13,8 +13,6 @@ import {
 } from "@/components/Common/CommonModalComponents";
 import type { ICycle } from "@/models/model";
 import { cycleDateRange } from "@/lib/cycles";
-import { useFlag } from "@/hooks/useFlag";
-import { HTPR_6967_TYPED_TASK_READS_FLAG } from "@/lib/flags/keys";
 import { getTaskCycle } from "@/lib/api/typedClient";
 
 const CYCLE_API_PATH = "/api/tasks/cycle";
@@ -35,13 +33,14 @@ export default function CyclePicker({
   closeHandler,
   onChange,
   taskId,
+  typedClient,
 }: {
   assignedCycle: ICycle | null;
   closeHandler: () => void;
   onChange: (cycle: ICycle | null) => void;
   taskId: number;
+  typedClient?: boolean;
 }) {
-  const typedClient = useFlag(HTPR_6967_TYPED_TASK_READS_FLAG);
   const [cycles, setCycles] = useState<ICycle[]>([]);
   const [enabled, setEnabled] = useState(true);
   const [keyword, setKeyword] = useState("");
