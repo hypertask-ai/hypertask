@@ -252,6 +252,7 @@ async function authMiddleware(request: NextRequest) {
       currentPath.startsWith('/verify-email') ||
       // HTPR-4857: public Slack Marketplace install page (flag-gated in the page itself).
       currentPath === '/add-to-slack' ||
+      currentPath === '/slack/support' ||
       // HTPR-6536: QA password login. The page 404s without env.
       currentPath === '/qa/login' ||
       currentPath.startsWith('/qa/login/') ||
@@ -440,6 +441,7 @@ async function authMiddleware(request: NextRequest) {
     !checkIfOnboarded(user) &&
     currentPath !== onboarding &&
     currentPath !== '/add-to-slack' &&
+    currentPath !== '/slack/support' &&
     currentPath !== '/qa/login' &&
     !currentPath.startsWith(share) &&
     !currentPath.startsWith('/cli-auth')

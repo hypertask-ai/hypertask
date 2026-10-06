@@ -36,6 +36,7 @@ import {
   MY_TASKS_PRIORITY_FILTER_FLAG,
   HTPR_4228_ADMIN_ONLY_TIME_REPORTS_FLAG,
   HTPR_4857_ADD_TO_SLACK_FLAG,
+  HTPR_6921_SLACK_MARKETPLACE_FLAG,
   HTPR_6817_SLACK_APP_FLAG,
   HTPR_6283_AGENT_CHAT_LIVE_SORT_FLAG,
   HTPR_6284_AGENT_MENTION_ROUTING_FLAG,
@@ -330,6 +331,12 @@ const FEATURE_FLAG_DEFINITIONS = [
     shippedOn: "2026-10-03",
     description:
       "Completes Slack app parity with conversational task creation, assistant thread context and persistent per-person account disconnection. Existing Slack behavior remains unchanged when off.",
+  },
+  {
+    key: HTPR_6921_SLACK_MARKETPLACE_FLAG,
+    shippedOn: "2026-10-06",
+    description:
+      "Enables the public Slack support page and privacy, terms, and support links on Add to Slack. Anonymous visitors can access support only when set to Everyone.",
   },
   {
     key: HTPR_4857_ADD_TO_SLACK_FLAG,

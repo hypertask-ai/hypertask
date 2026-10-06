@@ -47,6 +47,8 @@
       "request_url": "https://app.hypertask.ai/api/slack/events",
       "bot_events": [
         "app_mention",
+        "app_uninstalled",
+        "tokens_revoked",
         "assistant_thread_started",
         "assistant_thread_context_changed",
         "message.channels",
