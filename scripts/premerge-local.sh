@@ -20,7 +20,10 @@ done
 root=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd -P)
 # Inherited production variables must not reach npm, Prisma, the seed or Next.
 if [ "${PREMERGE_CLEAN_ENV:-}" != "$root" ]; then
-  exec env -i PATH="$PATH" HOME="$HOME" XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-/tmp}" HT_HEAVY_SLOTS="${HT_HEAVY_SLOTS:-}" CI="${CI:-}" ${GITHUB_ACTIONS+GITHUB_ACTIONS="$GITHUB_ACTIONS"} PREMERGE_CLEAN_ENV="$root" bash "$root/scripts/premerge-local.sh" "$action" "${flag_overrides[@]}"
+  launcher=()
+  # Group setup and its foreground jobs so down also cancels a queued build.
+  if [ "$action" = up ]; then launcher=(setsid --wait); fi
+  exec "${launcher[@]}" env -i PATH="$PATH" HOME="$HOME" XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-}" HT_HEAVY_SLOTS="${HT_HEAVY_SLOTS:-}" CI="${CI:-}" ${GITHUB_ACTIONS+GITHUB_ACTIONS="$GITHUB_ACTIONS"} PREMERGE_CLEAN_ENV="$root" bash "$root/scripts/premerge-local.sh" "$action" "${flag_overrides[@]}"
 fi
 if [ "$action" = sweep ] || [ "$action" = --install ]; then
   exec python3 "$root/scripts/premerge-local-sweep.py" "$action"
@@ -35,7 +38,7 @@ if [ "$action" = down ] && [ -f "$state/run.pid" ]; then
   if read -r pid started <"$state/run.pid" &&
      [[ $pid =~ ^[1-9][0-9]*$ ]] && [ -r "/proc/$pid/stat" ] &&
      [ "$(sed 's/.*) //' "/proc/$pid/stat" | awk '{print $20}')" = "$started" ]; then
-    kill -TERM "$pid" 2>/dev/null || true
+    kill -TERM -- "-$pid" 2>/dev/null || true
   fi
   flock -w 30 9 || { echo 'Premerge-local cleanup is still running.' >&2; exit 1; }
 else

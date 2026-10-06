@@ -67,11 +67,36 @@ test('down stops the owning run, checks PID reuse, and still cleans server state
       const operations = readFileSync(f.log, 'utf8');
       if (reused) assert.doesNotMatch(operations, /kill /);
       else {
-        assert.match(operations, new RegExp(`kill -TERM ${process.pid}\\n`));
-        assert.match(operations, new RegExp(`kill -TERM -- -${process.pid}\\n`));
+        assert.equal(operations.split(`kill -TERM -- -${process.pid}\n`).length - 1, 3);
+        assert.doesNotMatch(operations, new RegExp(`kill -TERM ${process.pid}\\n`));
       }
     } finally { rmSync(f.dir, { recursive: true, force: true }); }
   }
+});
+
+test('setup and its foreground jobs run in their own process group', () => {
+  const f = fixture();
+  try {
+    const fixtureRoot = path.join(f.dir, 'repo');
+    mkdirSync(path.join(fixtureRoot, 'scripts'), { recursive: true });
+    const candidate = path.join(fixtureRoot, 'scripts/premerge-local.sh');
+    const setup = source.slice(0, source.indexOf('# Logs can contain'));
+    const mocks = f.mocks.replace('return 0;', '[ "$1" = info ];');
+    writeFileSync(candidate, setup.replace('set +x', `set +x\nlog='${f.log}'\n${mocks}`) + `
+printf 'setup %s\\n' "$$"
+ps -o pgid= -p "$$"
+bash -c 'ps -o pgid= -p "$$"'
+`);
+    const env = { ...process.env };
+    delete env.PREMERGE_CLEAN_ENV;
+    const result = spawnSync('bash', [candidate, 'up'], { env, encoding: 'utf8' });
+    assert.equal(result.status, 0, result.stderr);
+    const [setupPid, setupGroup, childGroup] = result.stdout.trim().split('\n').map(line => line.trim().replace('setup ', ''));
+    assert.match(setupPid, /^[1-9][0-9]*$/);
+    assert.equal(setupGroup, setupPid);
+    assert.equal(childGroup, setupPid);
+    assert.notEqual(setupGroup, String(process.pid));
+  } finally { rmSync(f.dir, { recursive: true, force: true }); }
 });
 
 test('stale sweep and opt-in hourly user timer pass isolated Python tests', () => {

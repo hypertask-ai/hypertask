@@ -75,13 +75,14 @@ def sweep_containers():
     for name in names:
         if not re.fullmatch(r'ht-premerge-[0-9a-f]{16}-(postgres|redis|soketi)', name):
             continue
-        result = subprocess.run(['docker', 'inspect', '--format', '{{.Created}}', name],
+        result = subprocess.run(['docker', 'inspect', '--format', '{{.Id}} {{.Created}}', name],
                                 capture_output=True, text=True)
         if result.returncode:
             continue
-        created = datetime.datetime.fromisoformat(result.stdout.strip().replace('Z', '+00:00'))
+        container_id, timestamp = result.stdout.strip().split()
+        created = datetime.datetime.fromisoformat(timestamp.replace('Z', '+00:00'))
         if (now - created).total_seconds() > MAX_AGE:
-            subprocess.run(['docker', 'rm', '-f', '-v', name], check=True, stdout=subprocess.DEVNULL)
+            subprocess.run(['docker', 'rm', '-f', '-v', container_id], check=True, stdout=subprocess.DEVNULL)
             print(f'Removed stale premerge container {name}.')
 
 

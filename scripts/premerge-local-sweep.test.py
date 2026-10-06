@@ -73,20 +73,25 @@ class SweepTests(unittest.TestCase):
         unrelated = 'ht-premerge-not-ours-postgres'
         now = datetime.datetime.now(datetime.timezone.utc)
         removed = []
+        old_id = 'a' * 64
+        young_id = 'b' * 64
 
         def docker(args, **kwargs):
             if args[1] == 'ps':
                 return subprocess.CompletedProcess(args, 0, '\n'.join([old, young, unrelated]))
             if args[1] == 'inspect':
+                self.assertEqual(args[3], '{{.Id}} {{.Created}}')
                 age = 13 if args[-1] == old else 1
-                return subprocess.CompletedProcess(args, 0, (now - datetime.timedelta(hours=age)).isoformat())
+                container_id = old_id if args[-1] == old else young_id
+                # The name may now refer to a replacement; removal must use this ID.
+                return subprocess.CompletedProcess(args, 0, f'{container_id} {(now - datetime.timedelta(hours=age)).isoformat()}')
             self.assertEqual(args[:4], ['docker', 'rm', '-f', '-v'])
             removed.append(args[-1])
             return subprocess.CompletedProcess(args, 0)
 
         with patch.object(sweep.shutil, 'which', return_value='/mock/docker'), patch.object(sweep.subprocess, 'run', side_effect=docker):
             sweep.sweep_containers()
-        self.assertEqual(removed, [old])
+        self.assertEqual(removed, [old_id])
 
     def test_install_is_explicit_and_only_writes_fixture_home(self):
         with tempfile.TemporaryDirectory() as temp:

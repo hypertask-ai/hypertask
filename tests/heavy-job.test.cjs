@@ -1,7 +1,7 @@
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
 const { spawn, spawnSync } = require('node:child_process');
-const { mkdtempSync, readFileSync, rmSync, mkdirSync, writeFileSync } = require('node:fs');
+const { mkdtempSync, readFileSync, rmSync, mkdirSync, writeFileSync, symlinkSync, statSync } = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 
@@ -96,6 +96,59 @@ test('default is max(2, nproc/6), override is validated, and arguments stay inta
     const result = spawnSync('bash', [script, 'printf', '%s', 'a b'], { env, encoding: 'utf8' });
     assert.equal(result.status, 0);
     assert.equal(result.stdout, 'a b');
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+
+test('lock directory is private under XDG_RUNTIME_DIR or HOME, and slot contents are preserved', async () => {
+  for (const fallback of [false, true]) {
+    const { dir, env } = fixture();
+    try {
+      const configuration = { ...env, HOME: dir };
+      if (fallback) delete configuration.XDG_RUNTIME_DIR;
+      const lockDir = path.join(dir, fallback ? '.cache/ht-heavy' : 'ht-heavy');
+      mkdirSync(lockDir, { recursive: true, mode: 0o755 });
+      const slot = path.join(lockDir, 'slot-0');
+      writeFileSync(slot, 'keep this content');
+      const result = await run(configuration, 'console.log("ran")').done;
+      assert.equal(result.status, 0);
+      assert.equal(result.stdout, 'ran\n');
+      assert.equal(statSync(lockDir).mode & 0o777, 0o700);
+      assert.equal(statSync(lockDir).uid, process.getuid());
+      assert.equal(readFileSync(slot, 'utf8'), 'keep this content');
+    } finally { rmSync(dir, { recursive: true, force: true }); }
+  }
+});
+
+test('symlink slots are refused without modifying the target or running the command', async () => {
+  for (const dangling of [false, true]) {
+    const { dir, env } = fixture();
+    try {
+      const lockDir = path.join(dir, 'ht-heavy');
+      mkdirSync(lockDir, { mode: 0o700 });
+      const target = path.join(dir, 'target');
+      if (!dangling) writeFileSync(target, 'do not truncate');
+      symlinkSync(target, path.join(lockDir, 'slot-0'));
+      const result = await run(env, 'console.log("must not run")').done;
+      assert.equal(result.status, 2);
+      assert.equal(result.stdout, '');
+      assert.match(result.stderr, /Refusing symlink heavy-job slot/);
+      if (dangling) assert.throws(() => readFileSync(target), { code: 'ENOENT' });
+      else assert.equal(readFileSync(target, 'utf8'), 'do not truncate');
+    } finally { rmSync(dir, { recursive: true, force: true }); }
+  }
+});
+
+test('symlink lock directories are refused without creating slots in the target', async () => {
+  const { dir, env } = fixture();
+  try {
+    const target = path.join(dir, 'target');
+    mkdirSync(target);
+    symlinkSync(target, path.join(dir, 'ht-heavy'));
+    const result = await run(env, 'console.log("must not run")').done;
+    assert.equal(result.status, 2);
+    assert.equal(result.stdout, '');
+    assert.match(result.stderr, /Refusing symlink heavy-job lock directory/);
+    assert.throws(() => readFileSync(path.join(target, 'slot-0')), { code: 'ENOENT' });
   } finally { rmSync(dir, { recursive: true, force: true }); }
 });
 
