@@ -25,9 +25,9 @@ import { useProjectQuery } from "@/hooks/General/useProjectQuery";
 import UpdateKanban from "@/hooks/MultiPages/useUpdateTaskInBoards";
 import { useQueryClient } from "@tanstack/react-query";
 import { cachedTaskDetailKey } from "@/lib/navigation/cachedTaskDetail";
-import { mergeRealtimeTaskDetail, refreshTaskDetailQueryCache, shouldPreserveTaskEditorContent } from "@/lib/realtime/taskDetailRefresh";
+import { mergeRealtimeTaskDetail, preserveTaskAssigneesChangedDuringFetch, refreshTaskDetailQueryCache, shouldPreserveTaskEditorContent } from "@/lib/realtime/taskDetailRefresh";
 import { useFlag } from "@/hooks/useFlag";
-import { HTPR_6929_COMPOSE_TASK_WRITER_FLAG, HTPR_6937_NEW_TASK_WINDOW_FLAG, HTPR_6951_TASK_WRITING_PROGRESS_FLAG } from "@/lib/flags/keys";
+import { HTPR_6929_COMPOSE_TASK_WRITER_FLAG, HTPR_6937_NEW_TASK_WINDOW_FLAG, HTPR_6951_TASK_WRITING_PROGRESS_FLAG, HTPR_6962_KEEP_ASSIGNEE_FLAG } from "@/lib/flags/keys";
 import { discardUnboundCreateTaskUploads } from "@/lib/createTaskAttachmentUploads";
 import type { IProject, ITask } from "@/models/model";
 
@@ -39,6 +39,7 @@ export default function ComposeTaskWriter({ active, destinationProject, onCreate
 }) {
   const enabled = useFlag(HTPR_6929_COMPOSE_TASK_WRITER_FLAG);
   const newTaskWindow = useFlag(HTPR_6937_NEW_TASK_WINDOW_FLAG) && enabled;
+  const keepAssignee = useFlag(HTPR_6962_KEEP_ASSIGNEE_FLAG);
   const progressFlag = useFlag(HTPR_6951_TASK_WRITING_PROGRESS_FLAG);
   let showProgress = false;
   if (progressFlag && newTaskWindow) showProgress = true;
@@ -154,6 +155,7 @@ export default function ComposeTaskWriter({ active, destinationProject, onCreate
     setStage(null);
     onBusyChange(true);
     setError(null);
+    const assigneesAtFetchStart = taskContextRef.current?.currentTask?.assignees;
     try {
       let existingTaskId: number | undefined;
       let targetProjectId: number | undefined;
@@ -184,11 +186,16 @@ export default function ComposeTaskWriter({ active, destinationProject, onCreate
         const queryKey = cachedTaskDetailKey(user.id, task.id);
         await queryClient.cancelQueries({ queryKey });
         if (!mounted.current) return;
-        task = queryClient.setQueryData<ITask>(queryKey, (previous) => ({
-          ...previous,
-          ...task,
-          project: previous?.project ? { ...previous.project, ...task.project } : task.project,
-        })) ?? task;
+        task = queryClient.setQueryData<ITask>(queryKey, (previous) => preserveTaskAssigneesChangedDuringFetch(
+          taskContextRef.current?.currentTask ?? null,
+          {
+            ...previous,
+            ...task,
+            project: previous?.project ? { ...previous.project, ...task.project } : task.project,
+          },
+          assigneesAtFetchStart,
+          keepAssignee,
+        )) ?? task;
         await refreshTaskDetailQueryCache({ queryClient, taskId: task.id, fetchTask: async () => task });
         if (!mounted.current) return;
         updateTaskInCache(task, task.id, task.projectId, task.sectionId);
@@ -197,11 +204,11 @@ export default function ComposeTaskWriter({ active, destinationProject, onCreate
         if (context?.currentTask?.id === task.id && context.currentTask.projectId === task.projectId) {
           const syncContent = !shouldPreserveTaskEditorContent(context);
           context.setCurrentTask((current) => current?.id === task.id && current.projectId === task.projectId
-            ? mergeRealtimeTaskDetail(current, {
+            ? preserveTaskAssigneesChangedDuringFetch(current, mergeRealtimeTaskDetail(current, {
               ...current,
               ...task,
               project: current.project ? { ...current.project, ...task.project } : task.project,
-            }, syncContent)
+            }, syncContent), assigneesAtFetchStart, keepAssignee)
             : current);
           if (syncContent) context.setDescription(task.description_?.content ?? "");
         }

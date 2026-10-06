@@ -25,7 +25,7 @@ function load(relative, dependencies, exportName = "default") {
   return exportName ? exports[exportName] : exports;
 }
 
-async function withPicker(t, { enabled = true, initialAssignees = [], rejectSave = false } = {}) {
+async function withPicker(t, { enabled = true, initialAssignees = [], rejectSave = false, loadPath = "realtime" } = {}) {
   const dom = new JSDOM("<div id='root'></div>", { url: "https://app.hypertask.ai/detail/project-6859/61" });
   const previous = new Map();
   for (const [key, value] of Object.entries({ window: dom.window, document: dom.window.document,
@@ -49,8 +49,14 @@ async function withPicker(t, { enabled = true, initialAssignees = [], rejectSave
     }
   });
   const user = { id: 2343, displayName: "QA user" };
+  const taskContext = React.createContext(null);
   const task = { id: 55840, projectId: 6859, uniqueIndex: 61, title: "HTPR-6962 QA", sectionId: 1,
-    assignees: initialAssignees, project: { id: 6859 } };
+    assignees: initialAssignees, project: { id: 6859 }, description_: { id: 1 } };
+  const reactQuery = require("@tanstack/react-query");
+  const cachedQueryKey = ["cached-task-detail", user.id, task.id];
+  const cachedQueryClient = new reactQuery.QueryClient({ defaultOptions: { queries: { retry: false, gcTime: Infinity } } });
+  t.after(() => cachedQueryClient.clear());
+  let resolveReaction, pendingReaction;
   const requests = [], handlers = new Map();
   const queryClient = { cancelQueries: async () => {}, setQueryData: noop, invalidateQueries: async () => {}, refetchQueries: noop };
   const shared = { COMMENT_EVENT: "comment:changed", TASK_EVENT: "task:changed", taskChannel: id => `private-task-${id}` };
@@ -80,7 +86,7 @@ async function withPicker(t, { enabled = true, initialAssignees = [], rejectSave
   }, null);
   const keyCodes = { ESCAPE: 27, ENTER: 13, ARROW_DOWN: 40, ARROW_UP: 38 };
   const div = ({ children, id, onClick }) => React.createElement("div", { id, onClick }, children);
-  const members = { members: [{ user }], owner: user, boardAgents: [] };
+  let members = { members: [{ user }], owner: user, boardAgents: [] };
   const Assign = load("src/components/Modals/AssignToUser/AssignToUser.tsx", {
     "lucide-react": { Bot: noop, Check: () => React.createElement("span", { "data-checked": true }) },
     "reactstrap": { ModalBody: div },
@@ -117,27 +123,61 @@ async function withPicker(t, { enabled = true, initialAssignees = [], rejectSave
   const useNavigation = load("src/app/detail/[...slug]/useTaskDetailNavigationActions.tsx", {
     ...common, "@/components/undoToast": { undoToastSettings: {} }, "@/lib/constants/TaskDetail": { descriptionContainerId: "description" },
   }, "useTaskDetailNavigationActions");
-  function Provider() {
-    const [currentTask, setCurrentTask] = React.useState(task);
+  const useReactions = load("src/hooks/Task Detail/CommentAndDescriptionHooks/useDescriptionReactions.ts", {
+    "@/lib/constants/constants": {}, "@/lib/constants/TaskDetail": {}, "@/store": {},
+    "@/lib/contexts/TaskDetail/TaskProvider": { useTaskContext: () => state },
+    "axios": { default: { post: () => new Promise(resolve => { resolveReaction = resolve; }) } },
+    "@/hooks/useFlag": { useFlag: () => enabled }, "@/lib/flags/keys": {},
+    "@/lib/realtime/taskDetailRefresh": refresh,
+    "@/lib/state": { useRecoilState: () => [user, noop] },
+    "@/lib/contexts/deviceContext": { useDeviceContext: () => false },
+  });
+  function Provider({ children, parsedTask } = {}) {
+    const [currentTask, setCurrentTask] = React.useState(() => parsedTask ? JSON.parse(parsedTask) : task);
     const [showAssignModal, setShowAssignModal] = React.useState(false);
     const lastM_APress = React.useRef(null);
-    useRealtime(task.id, { taskProjectId: task.projectId, taskUniqueIndex: task.uniqueIndex,
-      currentTaskTitle: currentTask.title, currentTaskAssignees: enabled ? currentTask.assignees : undefined,
+    useRealtime(loadPath === "realtime" ? task.id : null, { taskProjectId: task.projectId, taskUniqueIndex: task.uniqueIndex,
+      currentTaskTitle: currentTask.title, currentTaskAssignees: currentTask.assignees, keepAssignee: enabled,
       setCurrentTask, hasPullRequests: true });
     state = { currentTask, setCurrentTask, showAssignModal, setShowAssignModal, lastM_APress,
-      updateTaskInCache: noop, _setActiveItem: noop, setInViewObject: noop, queryClient };
+      updateTaskInCache: noop, _setActiveItem: noop, setInViewObject: noop, queryClient, setDescription: noop, parsedTask: JSON.stringify(task), focusOn: noop };
     Object.assign(state, useActions(() => state));
     Object.assign(state, useNavigation(() => state));
-    return React.createElement(Assignees, { slugs: ["project-6859", "61"], currentTask, showAssigneeModal: showAssignModal,
-      toggleAssigneeModal: state.toggleModal, showTooltip: false });
+    state.reactions = useReactions();
+    return React.createElement(taskContext.Provider, { value: state }, children ?? React.createElement(Assignees, { slugs: ["project-6859", "61"], currentTask, showAssigneeModal: showAssignModal,
+      toggleAssigneeModal: state.toggleModal, showTooltip: false }));
   }
+  const preferences = { commentsStacked: true };
+  const Embedded = load("src/components/Modals/SwipeUnread/EmbeddedTaskDetail.tsx", {
+    "@tanstack/react-query": reactQuery,
+    "@/app/unauthorized/page": { default: noop },
+    "@/lib/navigation/cachedTaskDetail": { cachedTaskDetailKey: () => cachedQueryKey, TaskAccessDeniedError: class extends Error {} },
+    "@/lib/contexts/TaskDetail/TaskProvider": { TasksProvider: Provider, useTaskContext: () => React.useContext(taskContext) },
+    "@/lib/realtime/taskDetailRefresh": refresh,
+    "@/app/detail/[...slug]/TaskDetailComp": { default: () => {
+      const context = React.useContext(taskContext);
+      return React.createElement(Assignees, { slugs: ["project-6859", "61"], currentTask: context.currentTask,
+        showAssigneeModal: context.showAssignModal, toggleAssigneeModal: context.toggleModal, showTooltip: false });
+    } },
+    "@/hooks/General/useGetUserPreferences": { useGetUserPreferences: () => ({ data: preferences }) },
+    "@/hooks/useFlag": { useFlag: key => key === "htpr-6962-keep-assignee" && enabled },
+    "@/lib/flags/keys": { HTPR_6962_KEEP_ASSIGNEE_FLAG: "htpr-6962-keep-assignee" },
+    "@/lib/constants": constants,
+    "@/lib/contexts/TaskDetail/FollowersProvider": { FollowersProvider: ({ children }) => children },
+    "@/lib/state": { useRecoilValue: () => user },
+    "@/store": {},
+    "@/utils/api/Task Detail": { fetchCommentsHelper: async () => [] },
+  });
   const { createRoot } = require("react-dom/client");
   mounted = createRoot(document.getElementById("root"));
-  await React.act(async () => mounted.render(React.createElement(Provider)));
+  await React.act(async () => mounted.render(loadPath === "initial"
+    ? React.createElement(reactQuery.QueryClientProvider, { client: cachedQueryClient },
+      React.createElement(Embedded, { taskId: task.id, projectId: task.projectId, uniqueIndex: task.uniqueIndex, initialTask: task, embedded: false }))
+    : React.createElement(Provider)));
   return {
     requests, state: () => state, serverRows: () => serverRows,
     row: () => document.getElementById("root").firstElementChild.textContent,
-    async open() { await React.act(async () => state.aHandler()); },
+    async open() { state.lastM_APress.current = null; await React.act(async () => state.aHandler()); },
     async select() { await React.act(async () => document.getElementById(`task_${user.id}`).click()); },
     async escape() {
       await React.act(async () => document.dispatchEvent(new dom.window.KeyboardEvent("keydown", { key: "Escape", keyCode: 27, bubbles: true, cancelable: true })));
@@ -145,15 +185,31 @@ async function withPicker(t, { enabled = true, initialAssignees = [], rejectSave
     },
     async completeLoad(rows = initialAssignees) {
       assert.ok(loadStarted, "the refetch starts before selecting a person");
-      await React.act(async () => resolveLoad({ ok: true, json: async () => ({ ...task, section: "Doing", assignees: rows }) }));
+      await React.act(async () => {
+        const loaded = loadPath === "initial" ? new Promise(resolve => {
+          const unsubscribe = cachedQueryClient.getQueryCache().subscribe(event => {
+            if (event.type === "updated" && event.action.type === "success") { unsubscribe(); resolve(); }
+          });
+        }) : undefined;
+        resolveLoad({ ok: true, status: 200, json: async () => ({ ...task, section: "Doing", assignees: rows }) });
+        await loaded;
+      });
+      await React.act(async () => { await new Promise(resolve => setTimeout(resolve, 0)); });
     },
-    async refresh() { await React.act(async () => handlers.get("task:changed")()); },
+    async startReaction() { await React.act(async () => { pendingReaction = state.reactions.emojiClickHandlerDescriptionr({ unified: "1f44d" }); }); },
+    async completeReaction() { await React.act(async () => { resolveReaction({ data: [{ emoji: "thumbs-up" }] }); await pendingReaction; }); },
+    async refreshMembers() { members = { ...members }; await React.act(async () => state.setCurrentTask(current => ({ ...current }))); },
+    checked: () => Boolean(document.querySelector("[data-checked]")),
+    async refresh() { await React.act(async () => {
+      if (loadPath === "initial") void cachedQueryClient.refetchQueries({ queryKey: cachedQueryKey });
+      else handlers.get("task:changed")();
+    }); },
   };
 }
 
-for (const enabled of [true, false]) {
-  test(`closing the picker then receiving a pre-selection response ${enabled ? "keeps the assignee" : "retains the flag-off path"}`, async t => {
-    const picker = await withPicker(t, { enabled });
+for (const loadPath of ["realtime", "initial"]) for (const enabled of [true, false]) {
+  test(`${loadPath}: closing the picker then receiving a pre-selection response ${enabled ? "keeps the assignee" : "retains the flag-off path"}`, async t => {
+    const picker = await withPicker(t, { enabled, loadPath });
     await picker.open();
     await picker.select();
     assert.match(picker.row(), /QA user/);
@@ -224,3 +280,70 @@ test("assigning a person preserves hidden agent assignees", async t => {
   assert.equal(picker.row(), "AssigneesQA user");
   assert.deepEqual(picker.state().currentTask.assignees.map(row => row.agentId || row.userId), ["agent-1", 2343]);
 });
+
+for (const enabled of [true, false]) {
+  test(`initial response while the picker is open ${enabled ? "keeps" : "resets"} the row and reopening tick`, async t => {
+    const picker = await withPicker(t, { enabled, loadPath: "initial" });
+    await picker.open();
+    await picker.select();
+    assert.equal(picker.checked(), true);
+    await picker.completeLoad();
+    assert.equal(picker.checked(), true, "the open picker does not reset its own optimistic list on task props");
+    assert.equal(picker.row().includes("The Assignees"), !enabled);
+    await picker.refreshMembers();
+    assert.equal(picker.checked(), enabled, "members revalidation builds ticks from current task assignees");
+    await picker.escape();
+    await picker.open();
+    assert.equal(picker.checked(), enabled, "reopening derives ticks from the guarded task row");
+    await picker.escape();
+  });
+}
+
+test("initial and subsequent revalidation accept server assignees when no local pick occurred", async t => {
+  const rows = [{ id: 1, userId: 2343, user: { id: 2343, displayName: "QA user" }, agent: null }];
+  const picker = await withPicker(t, { loadPath: "initial" });
+  await picker.completeLoad(rows);
+  assert.equal(picker.row(), "AssigneesQA user");
+  await picker.refresh();
+  await picker.completeLoad([]);
+  assert.equal(picker.row(), "AssigneesThe Assignees");
+});
+
+test("a pick during a subsequent cached-query revalidation wins over that response", async t => {
+  const picker = await withPicker(t, { loadPath: "initial" });
+  await picker.completeLoad();
+  await picker.refresh();
+  await picker.open();
+  await picker.select();
+  await picker.escape();
+  await picker.completeLoad();
+  assert.equal(picker.row(), "AssigneesQA user");
+});
+
+test("the shared assignee rule preserves empty removals and formerly undefined rows, but not other tasks or flag-off changes", () => {
+  const { preserveTaskAssigneesChangedDuringFetch: preserve } = load("src/lib/realtime/taskDetailRefresh.ts", { "./shared": {} }, null);
+  const start = [{ userId: 2343 }];
+  const fetched = { id: 1, projectId: 2, assignees: start, title: "Server title" };
+  const current = { ...fetched, assignees: [] };
+  assert.equal(preserve(current, fetched, start, true).assignees, current.assignees);
+  assert.equal(preserve(current, fetched, undefined, true).assignees, current.assignees);
+  assert.equal(preserve(current, fetched, current.assignees, true), fetched);
+  assert.equal(preserve(current, fetched, start, false), fetched);
+  assert.equal(preserve({ ...current, id: 3 }, fetched, start, true), fetched);
+  assert.equal(preserve({ ...current, projectId: 3 }, fetched, start, true), fetched);
+  assert.equal(preserve(null, fetched, start, true), fetched);
+  assert.equal(preserve(current, fetched, start, true).title, "Server title");
+});
+
+for (const enabled of [true, false]) {
+  test(`description reaction finishing after a pick ${enabled ? "preserves the assignee" : "retains the flag-off replacement"}`, async t => {
+    const picker = await withPicker(t, { enabled });
+    await picker.startReaction();
+    await picker.open();
+    await picker.select();
+    await picker.escape();
+    await picker.completeReaction();
+    assert.equal(picker.row(), enabled ? "AssigneesQA user" : "AssigneesThe Assignees");
+    assert.deepEqual(picker.state().currentTask.description_.reactions, [{ emoji: "thumbs-up" }]);
+  });
+}

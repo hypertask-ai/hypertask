@@ -5,12 +5,12 @@ import { useEffect, useRef, type ReactNode, type RefObject } from "react";
 import Unauthorized from "@/app/unauthorized/page";
 import { cachedTaskDetailKey, TaskAccessDeniedError } from "@/lib/navigation/cachedTaskDetail";
 import { useTaskContext } from "@/lib/contexts/TaskDetail/TaskProvider";
-import { mergeRealtimeTaskDetail, shouldPreserveTaskEditorContent } from "@/lib/realtime/taskDetailRefresh";
+import { mergeRealtimeTaskDetail, preserveTaskAssigneesChangedDuringFetch, shouldPreserveTaskEditorContent } from "@/lib/realtime/taskDetailRefresh";
 
 import TaskDetail from "@/app/detail/[...slug]/TaskDetailComp";
 import { useGetUserPreferences } from "@/hooks/General/useGetUserPreferences";
 import { useFlag } from "@/hooks/useFlag";
-import { HTPR_6899_STABLE_LAYOUT_FLAG } from "@/lib/flags/keys";
+import { HTPR_6899_STABLE_LAYOUT_FLAG, HTPR_6962_KEEP_ASSIGNEE_FLAG } from "@/lib/flags/keys";
 import globalConstants from "@/lib/constants";
 import { FollowersProvider } from "@/lib/contexts/TaskDetail/FollowersProvider";
 import { TasksProvider } from "@/lib/contexts/TaskDetail/TaskProvider";
@@ -28,9 +28,12 @@ type EmbeddedTaskDetailProps = {
   embedded?: boolean;
 };
 
-function RefreshCachedTask({ task, error, refetch, children }: { task: ITask; error: Error | null; refetch: () => Promise<unknown>; children: ReactNode }) {
-  const { setCurrentTask, setDescription, editMode, hasDraft, hasDraftInit, uploadingDescription } = useTaskContext();
+function RefreshCachedTask({ task, dataUpdatedAt, error, refetch, currentTaskRef, assigneeSnapshotRef, children }: { task: ITask; dataUpdatedAt: number; error: Error | null; refetch: () => Promise<unknown>; currentTaskRef: RefObject<ITask | null>; assigneeSnapshotRef: RefObject<{ assignees: ITask["assignees"] } | null>; children: ReactNode }) {
+  const keepAssignee = useFlag(HTPR_6962_KEEP_ASSIGNEE_FLAG);
+  const { currentTask, setCurrentTask, setDescription, editMode, hasDraft, hasDraftInit, uploadingDescription } = useTaskContext();
+  currentTaskRef.current = currentTask;
   const previousTask = useRef(task);
+  const previousUpdatedAt = useRef(dataUpdatedAt);
   const preserveContent = shouldPreserveTaskEditorContent({ hasDraft, hasDraftInit, editMode, uploadingDescription });
   const editing = Boolean(editMode) || preserveContent;
   useEffect(() => {
@@ -43,17 +46,25 @@ function RefreshCachedTask({ task, error, refetch, children }: { task: ITask; er
     window.location.replace(window.location.href);
   }, [error, editing, refetch]);
   useEffect(() => {
-    if (previousTask.current === task) return;
+    // Structural sharing can retain task identity after an identical server read.
+    if (previousTask.current === task && (!keepAssignee || previousUpdatedAt.current === dataUpdatedAt)) return;
     previousTask.current = task;
+    previousUpdatedAt.current = dataUpdatedAt;
     const preserveContent = shouldPreserveTaskEditorContent({ hasDraft, hasDraftInit, editMode, uploadingDescription });
+    const assigneeSnapshot = assigneeSnapshotRef.current;
     setCurrentTask((current) => {
-      const refreshed = mergeRealtimeTaskDetail(current, task, !preserveContent);
+      const refreshed = preserveTaskAssigneesChangedDuringFetch(
+        current,
+        mergeRealtimeTaskDetail(current, task, !preserveContent),
+        assigneeSnapshot?.assignees,
+        keepAssignee && assigneeSnapshot !== null,
+      );
       return editMode === "title" && current ? { ...refreshed, title: current.title } : refreshed;
     });
     if (!preserveContent) setDescription(task.description_?.content ?? "");
     // Reconcile a new server snapshot once, not when editing ends.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [task]);
+  }, [task, dataUpdatedAt]);
   if (error instanceof TaskAccessDeniedError) return <Unauthorized />;
   return children;
 }
@@ -85,9 +96,14 @@ const EmbeddedTaskDetail = ({
   const queryClient = useQueryClient();
   const { data: preferences } = useGetUserPreferences();
   const stableLayoutFlag = useFlag(HTPR_6899_STABLE_LAYOUT_FLAG);
+  const currentTaskRef = useRef<ITask | null>(initialTask ?? null);
+  const assigneeSnapshotRef = useRef<{ assignees: ITask["assignees"] } | null>(null);
   const taskQuery = useQuery({
     queryKey: embedded ? ["swipe-unread-task-detail", taskId] : cachedTaskDetailKey(currentUser?.id, taskId),
-    queryFn: ({ signal }) => fetchTaskDetail(taskId, projectId, uniqueIndex, signal),
+    queryFn: async ({ signal }) => {
+      assigneeSnapshotRef.current = { assignees: currentTaskRef.current?.assignees };
+      return fetchTaskDetail(taskId, projectId, uniqueIndex, signal);
+    },
     initialData: initialTask,
     ...(embedded ? {} : { retry: false, refetchOnMount: "always" as const }),
   });
@@ -153,7 +169,7 @@ const EmbeddedTaskDetail = ({
       scrollElementRef={scrollElementRef}
     >
       {embedded ? detail : (
-        <RefreshCachedTask task={task} error={taskQuery.error} refetch={taskQuery.refetch}>
+        <RefreshCachedTask task={task} dataUpdatedAt={taskQuery.dataUpdatedAt} error={taskQuery.error} refetch={taskQuery.refetch} currentTaskRef={currentTaskRef} assigneeSnapshotRef={assigneeSnapshotRef}>
           {detail}
         </RefreshCachedTask>
       )}

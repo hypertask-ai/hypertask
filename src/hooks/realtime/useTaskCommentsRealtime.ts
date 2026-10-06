@@ -8,6 +8,7 @@ import {
 import { taskChannel, COMMENT_EVENT, TASK_EVENT } from "@/lib/realtime/shared";
 import {
   mergeRealtimeTaskDetail,
+  preserveTaskAssigneesChangedDuringFetch,
   refreshTaskDetailQueryCache,
   shouldApplyRealtimeTaskDetail,
   shouldRefetchTaskDetail,
@@ -28,6 +29,7 @@ type UseTaskCommentsRealtimeOptions = {
   taskUniqueIndex?: number | string | null;
   currentTaskTitle?: string;
   currentTaskAssignees?: ITask["assignees"];
+  keepAssignee?: boolean;
   setCurrentTask?: Dispatch<SetStateAction<ITask | null>>;
   setDescription?: Dispatch<SetStateAction<string>>;
   setDescriptionAttachments?: Dispatch<SetStateAction<IAttachment[]>>;
@@ -73,6 +75,7 @@ export function useTaskCommentsRealtime(
     setCurrentTask,
     setDescription,
     setDescriptionAttachments,
+    keepAssignee = false,
     preserveEditorContent = false,
     hasPullRequests = false,
   } = options;
@@ -142,20 +145,12 @@ export function useTaskCommentsRealtime(
             })
           ) {
             setCurrentTask?.((currentTask) => {
-              let refreshed = mergeRealtimeTaskDetail(
+              const refreshed = preserveTaskAssigneesChangedDuringFetch(
                 currentTask,
-                task,
-                includeTaskContentSync
+                mergeRealtimeTaskDetail(currentTask, task, includeTaskContentSync),
+                assigneesAtFetchStart,
+                keepAssignee,
               );
-              // The picker saves independently; a pre-selection response must
-              // not replace newer local rows after the picker closes.
-              if (
-                currentTask &&
-                assigneesAtFetchStart !== undefined &&
-                currentTask.assignees !== assigneesAtFetchStart
-              ) {
-                refreshed = { ...refreshed, assignees: currentTask.assignees };
-              }
               // A pre-rename response must not reset the title and feed the
               // old value into the title editor's pending autosave.
               return currentTask &&
@@ -381,6 +376,7 @@ export function useTaskCommentsRealtime(
     setCurrentTask,
     setDescription,
     setDescriptionAttachments,
+    keepAssignee,
     preserveEditorContent,
     hasPullRequests,
   ]);
