@@ -64,7 +64,8 @@ for (const enabled of [true, false]) {
       assert.ok(name in mocks, `Unexpected dependency: ${name}`);
       return mocks[name];
     }, exports);
-    const render = () => renderer.render(React.createElement(exports.default, { accountId: 2343 }, serverChildren));
+    const render = () => renderer.render(React.createElement(React.StrictMode, null,
+      React.createElement(exports.default, { accountId: 2343 }, serverChildren)));
     const assertContent = task => {
       assert.equal(document.querySelector("article").textContent, task.title + task.description_.content + task.comments);
       assert.equal(window.location.pathname, href(task));
@@ -103,6 +104,11 @@ for (const enabled of [true, false]) {
         serverChildren = React.createElement(Detail, { initialTask: target });
         render();
       });
+      if (enabled) {
+        assert.equal(document.querySelector("article").textContent, target.title + target.description_.content + target.comments, "Next's new route must retire the cached overlay before its history insertion effect runs");
+        assert.equal(window.history.pushState, originalPush, "subscribing must not wrap Next's history methods");
+        assert.equal(window.history.replaceState, originalReplace);
+      }
       await React.act(async () => window.history[target === related ? "replaceState" : "pushState"](window.history.state, "", href(target)));
       if (enabled) assertContent(target);
       else {
@@ -115,6 +121,27 @@ for (const enabled of [true, false]) {
         await traverse("forward");
         assertContent(child);
       }
+    }
+    // Cached playlist opens publish native events without changing Next's route.
+    const sourcePath = nextPath;
+    for (const task of [parent, child, parent]) {
+      await React.act(async () => cache.openCachedTaskDetail({ queryClient: client, accountId: 2343, projectId: task.projectId, uniqueIndex: task.uniqueIndex, href: href(task), task }));
+      assertContent(task);
+      assert.equal(nextPath, sourcePath);
+    }
+    if (enabled) {
+      await React.act(async () => {
+        nextPath = href(child);
+        serverChildren = React.createElement(Detail, { initialTask: child });
+        render();
+      });
+      assert.equal(document.querySelector("article").textContent, child.title + child.description_.content + child.comments, "a new Next route must invalidate the last native-event override");
+      await React.act(async () => window.history.pushState(window.history.state, "", href(child)));
+      assertContent(child);
+      await traverse("back");
+      assertContent(parent);
+      await traverse("forward");
+      assertContent(child);
     }
   });
 }

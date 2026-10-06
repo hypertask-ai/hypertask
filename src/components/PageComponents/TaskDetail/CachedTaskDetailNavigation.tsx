@@ -2,7 +2,7 @@
 
 import { usePathname, useRouter } from "next/navigation";
 import { useQueryClient } from "@tanstack/react-query";
-import { useEffect, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
 import type { ITask } from "@/models/model";
 import { useRecoilValue } from "@/lib/state";
 import { currentUserAtom } from "@/store";
@@ -22,25 +22,6 @@ const subscribeToLocation = (notify: () => void) => {
   return () => {
     window.removeEventListener("popstate", notify);
     window.removeEventListener("cached-task-detail-navigation", notify);
-  };
-};
-const subscribeToHistoryLocation = (notify: () => void) => {
-  const unsubscribe = subscribeToLocation(notify);
-  // Next task links commit history without popstate or our cached-open event.
-  const restore = (["pushState", "replaceState"] as const).map((method) => {
-    const original = window.history[method];
-    const observed: typeof original = function (this: History, ...args) {
-      original.apply(this, args);
-      notify();
-    };
-    window.history[method] = observed;
-    return () => {
-      if (window.history[method] === observed) window.history[method] = original;
-    };
-  });
-  return () => {
-    unsubscribe();
-    restore.forEach((restoreMethod) => restoreMethod());
   };
 };
 const browserPathname = () => window.location.pathname;
@@ -73,8 +54,23 @@ export default function CachedTaskDetailNavigation({ children, accountId }: {
   const previousLocation = useRef<CachedTaskDetailLocation | undefined>(undefined);
   const [taskDetail, setTaskDetail] = useState(() => loadedTaskDetail);
   const EmbeddedTaskDetail = taskDetail ?? loadedTaskDetail;
-  // Cached opens retain Next's source tree, so popstate must update the view independently.
-  const nativePathname = useSyncExternalStore(subtaskLink ? subscribeToHistoryLocation : subscribeToLocation, browserPathname, serverPathname);
+  // Next renders its new pathname before committing history. Native events can
+  // override that route for cached opens, but not outlive a subsequent Next route.
+  const routeLocation = useMemo(() => {
+    let currentPathname = pathname;
+    return {
+      getSnapshot: () => currentPathname,
+      subscribe: (notify: () => void) => subscribeToLocation(() => {
+        currentPathname = browserPathname();
+        notify();
+      }),
+    };
+  }, [pathname]);
+  const nativePathname = useSyncExternalStore(
+    subtaskLink ? routeLocation.subscribe : subscribeToLocation,
+    subtaskLink ? routeLocation.getSnapshot : browserPathname,
+    serverPathname,
+  );
   // Next can replace custom history state while refreshing the same route.
   const location = cachedTaskDetailLocation(
     nativePathname ?? pathname,

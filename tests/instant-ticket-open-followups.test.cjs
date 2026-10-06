@@ -228,7 +228,7 @@ test("warm: press and idle share a retryable warmup; only idle skips slow connec
   window.clearTimeout = (key) => timers.delete(key);
   const flush = (queue) => { const callbacks = [...queue.values()]; queue.clear(); callbacks.forEach((callback) => callback()); };
   const mocks = navigationMocks(client, () => enabled, () => pathname, {
-    ...React, useRef: (initial) => ({ current: initial }), useState: (initial) => [initial(), () => {}], useEffect: (effect) => effects.push(effect), useSyncExternalStore: (subscribe, snapshot) => snapshot(),
+    ...React, useMemo: (factory) => factory(), useRef: (initial) => ({ current: initial }), useState: (initial) => [initial(), () => {}], useEffect: (effect) => effects.push(effect), useSyncExternalStore: (subscribe, snapshot) => snapshot(),
   });
   const chunks = [
     "@/components/Modals/SwipeUnread/EmbeddedTaskDetail",
