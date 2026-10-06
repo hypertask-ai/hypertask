@@ -1,24 +1,18 @@
-import { withTaskWriteFlag } from "@/lib/api/task-writes/route";
-import { NextApiHandler, NextApiRequest, NextApiResponse } from "next";
+import { NextResponse } from "next/server";
+import { z } from "zod";
+import { taskWriteRoute, type TaskWriteRoute } from "./route";
 import tasksSearchAll from "@/utils/controllers/tasks/searchAll";
 import getRecentlyWorkedTasks from "@/utils/controllers/tasks/getRecentlyWorkedTasks";
-import { getSessionUser } from "@/lib/auth/getSessionUser";
 import prisma from "@/lib/prisma";
 import { getProjectWhere } from "@/utils/controllers/projects/getAllIncludes";
 
-const handler: NextApiHandler = async (
-  req: NextApiRequest,
-  res: NextApiResponse
-) => {
-  if (req.method === "POST") {
-    const session = await getSessionUser(
-      new Headers(req.headers as Record<string, string>)
-    );
-    if (!session) {
-      return res.status(401).json({ message: "Unauthorized" });
-    }
+const route = taskWriteRoute({
+  schema: z.custom<Record<string, any>>(() => true),
+  validationMessage: "Missing required field",
+  allowNullBody: true,
+  operation: async (body, session) => {
     try {
-      const { projectIds, searchQuery, mode, currentTaskId } = req.body;
+      const { projectIds, searchQuery, mode, currentTaskId } = body;
 
       if (mode === "recent") {
         const response = await getRecentlyWorkedTasks({
@@ -26,11 +20,11 @@ const handler: NextApiHandler = async (
           projectIds,
           currentTaskId: Number(currentTaskId),
         });
-        return res.status(response.status).json(response.json);
+        return NextResponse.json(response.json, { status: response.status });
       }
 
       if (!projectIds || !searchQuery) {
-        return res.status(200).json("Missing Required Data");
+        return NextResponse.json("Missing Required Data", { status: 200 });
       }
 
       const requestedProjectIds = (Array.isArray(projectIds) ? projectIds : [])
@@ -53,16 +47,14 @@ const handler: NextApiHandler = async (
       );
       // Assuming otherResponse and response are arrays of objects
 
-      return res.status(response.status).json(response.json);
+      return NextResponse.json(response.json, { status: response.status });
     } catch (error) {
       console.log(error);
-      return res.status(200).json([]);
+      return NextResponse.json([], { status: 200 });
     }
-  } else {
-    return res.status(405).json({ message: "Method not allowed" });
-  }
-};
+  },
+});
 
-export default withTaskWriteFlag(handler, "POST", async () =>
-  (await import("@/lib/api/task-writes/search-all")).POST,
-);
+export const POST: TaskWriteRoute = async (request, session) => {
+  return route(request, session);
+};

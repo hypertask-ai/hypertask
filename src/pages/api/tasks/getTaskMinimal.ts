@@ -1,3 +1,4 @@
+import { withTaskWriteFlag } from "@/lib/api/task-writes/route";
 import { NextApiHandler, NextApiRequest, NextApiResponse } from "next";
 
 import tasksGetTask from "@/utils/controllers/tasks/getTask";
@@ -23,4 +24,8 @@ const handler: NextApiHandler = async (
   }
 };
 
-export default handler;
+// Legacy accepts every method and does not require authentication.
+export default ((req, res) => withTaskWriteFlag(
+  handler, req.method ?? "", async () =>
+    (await import("@/lib/api/task-writes/minimal-read")).READ,
+)(req, res)) satisfies NextApiHandler;

@@ -1,3 +1,4 @@
+import { withTaskWriteFlag } from "@/lib/api/task-writes/route";
 import { NextApiHandler, NextApiRequest, NextApiResponse } from "next";
 import tasksGetTask from "@/utils/controllers/tasks/getTask";
 import { httpStatusConfig } from "@/lib/configs/http-status.config";
@@ -51,4 +52,12 @@ const handler: NextApiHandler = async (
   }
 };
 
-export default handler;
+const flaggedHandler = withTaskWriteFlag(handler, "GET", async () =>
+  (await import("@/lib/api/task-writes/task-read")).GET,
+);
+
+export default function handlerWithHeaders(req: NextApiRequest, res: NextApiResponse) {
+  res.setHeader("Cache-Control", "private, no-store");
+  res.setHeader("Vary", "Cookie");
+  return flaggedHandler(req, res);
+}

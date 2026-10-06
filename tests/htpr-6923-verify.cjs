@@ -224,6 +224,85 @@ function slice5() {
   })) assert.equal(crypto.createHash("sha256").update(read(file)).digest("hex"), hash, "compatibility migration remains untouched");
   console.log("slice5 structural verification passed");
 }
+const slice5bRoutes = {
+  "getArchivedTasks": {
+    "module": "archived-read",
+    "method": "GET",
+    "hash": "29952f4bcde2dcef19135af00574a2a1373e03c5c6d6ef4825b081b989299811"
+  },
+  "getArchivedTasksByProject": {
+    "module": "archived-project-read",
+    "method": "GET",
+    "hash": "9b6efe3cbce75cf692a97b7951ff4a8a5a02c870ed19a92edad04f557c2e24c0"
+  },
+  "getTask": {
+    "module": "task-read",
+    "method": "GET",
+    "hash": "5c3fe5f24649ad569a849fdef4aea86c70bda630533421e950e100cac5bcb2e9"
+  },
+  "getTaskMinimal": {
+    "module": "minimal-read",
+    "method": "READ",
+    "hash": "0b5fa4385e7cbffea28526960e637cd570b688e7b41a86cd1b1fbfcaec0f4bde"
+  },
+  "getUnscheduled": {
+    "module": "unscheduled-read",
+    "method": "GET",
+    "hash": "43e09a1683d70787c07a5babc918314c29d9d3a3ea0da491c40d64733d9b15eb"
+  },
+  "detailMeta": {
+    "module": "detail-meta-read",
+    "method": "GET",
+    "hash": "ab576cb5dbd4a7dd2bd5b7c57ce3866a037aa58dd1cc3b81fa798bc883add40f"
+  },
+  "searchAll": {
+    "module": "search-all",
+    "method": "POST",
+    "hash": "c53d5edb70cbf2274d49f51dbbb78252de7e4cf592b0cec5f4b1f45825a5622c"
+  },
+  "searchByParam": {
+    "module": "search-by-param",
+    "method": "GET",
+    "hash": "f517dc658552ffe33d972ce64824c5a9777578e0c64a56d9dcc885a7da7c04c7"
+  },
+  "searchOrphans": {
+    "module": "search-orphans",
+    "method": "GET",
+    "hash": "4f23124348d24a0e3c2353b8f4c10a9a38bbf766b9842d5ff1192a9ba75ff1d9"
+  }
+};
+function slice5bLegacySources() {
+  return Object.fromEntries(Object.keys(slice5bRoutes).map(name => {
+    let source = read(`src/pages/api/tasks/${name}.ts`)
+      .replace('import { withTaskWriteFlag } from "@/lib/api/task-writes/route";\n', "");
+    if (name === "detailMeta") {
+      source = source.slice(0, source.indexOf("\nconst flaggedHandler ="))
+        .replace("async function handler(", "export default async function handler(");
+    } else {
+      if (name === "getTask" || name === "getTaskMinimal") {
+        const marker = name === "getTask" ? "const flaggedHandler =" : "// Legacy accepts every method";
+        source = source.slice(0, source.indexOf(marker)) + "export default handler;\n";
+      } else {
+        source = source.replace(/export default withTaskWriteFlag\([\s\S]*?\n\);/, "export default handler;");
+      }
+    }
+    return [name, source];
+  }));
+}
+function slice5b() {
+  const sources = slice5bLegacySources();
+  for (const [name, { module, method, hash }] of Object.entries(slice5bRoutes)) {
+    assert.equal(crypto.createHash("sha256").update(sources[name]).digest("hex"), hash, name + " legacy bytes");
+    assert.throws(() => assert.equal(crypto.createHash("sha256").update(sources[name] + "changed").digest("hex"), hash), "pin mutation control");
+    const page = read(`src/pages/api/tasks/${name}.ts`);
+    assert.ok(page.includes("withTaskWriteFlag("));
+    assert.ok(page.includes(`(await import("@/lib/api/task-writes/${module}")).${method}`));
+    assert.ok(read(`src/lib/api/task-writes/${module}.ts`).includes(`export const ${method}`));
+    assert.ok(!fs.existsSync(path.join(root, `src/app/api/tasks/${name}/route.ts`)), "no URL twin");
+  }
+  slice5(); // Includes the unchanged getAll route/controller compatibility pins.
+  console.log("slice5b structural verification passed");
+}
 const deadCandidates = [
   "tasks/getAll", "tasks/linkPullRequest", "projects/detail", "projects/views/sync-view",
   "section/getAll", "section/getByTaskId", "notifications/mute",
@@ -362,9 +441,9 @@ function commit() {
   assert.throws(() => assert.ok(allowed.has("src/lib/mcp/auth.ts")), "scope control rejects a sibling file");
   console.log(`local commit verified: ${git("rev-parse", "HEAD")}; ${productionLines} production/doc changed lines; only GATES.md is local`);
 }
-module.exports = { slice5Routes, slice5LegacySources, attachmentRoutes, attachmentLegacySources, legacyHashes, lifecycleHashes, lifecycleLegacySources, slice3Routes, slice3LegacySources, inventory, callerFiles };
+module.exports = { slice5bRoutes, slice5bLegacySources, slice5Routes, slice5LegacySources, attachmentRoutes, attachmentLegacySources, legacyHashes, lifecycleHashes, lifecycleLegacySources, slice3Routes, slice3LegacySources, inventory, callerFiles };
 if (require.main === module) {
-  const commands = { attachments, plan, flag, regression, quality, commit, lifecycle, slice3, slice5 };
+  const commands = { attachments, plan, flag, regression, quality, commit, lifecycle, slice3, slice5, slice5b };
   assert.ok(commands[process.argv[2]], "known verification mode required");
   Promise.resolve(commands[process.argv[2]]()).catch((error) => { console.error(error); process.exitCode = 1; });
 }
