@@ -1,6 +1,7 @@
 import { NextApiHandler, NextApiRequest, NextApiResponse } from "next";
 import tasksGetAll from "@/utils/controllers/tasks/getAll";
 import { loadCurrentUser } from "@/lib/auth/currentUser";
+import { HTPR_6924_REST_COMPAT_FLAG, isFeatureEnabled } from "@/lib/flags";
 
 
 const handler: NextApiHandler = async (req: NextApiRequest, res: NextApiResponse) => {
@@ -17,7 +18,17 @@ const handler: NextApiHandler = async (req: NextApiRequest, res: NextApiResponse
             if (!projectId) {
                 return res.status(200).json("Missing Required Data");
             }
-            const response = await tasksGetAll(projectId, session.userId )
+            let compact = false;
+            if (req.query?.compat === "htpr-6924") {
+                try {
+                    compact = await isFeatureEnabled(HTPR_6924_REST_COMPAT_FLAG, session.userId);
+                } catch {
+                    // A failed flag probe must preserve the legacy response.
+                }
+            }
+            const response = compact
+                ? await tasksGetAll(projectId, session.userId, "compact")
+                : await tasksGetAll(projectId, session.userId)
             // const tasks = await prisma.task.findMany({
             //     where: {
             //         projectId: parseInt(projectId as string),
