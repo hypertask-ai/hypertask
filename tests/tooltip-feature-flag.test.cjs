@@ -17,7 +17,7 @@ test("the tooltip feature is registered with its ship date and Owner + QA defaul
   assert.match(definitions, /const DEFAULT_FEATURE_FLAG_MODE: FeatureFlagMode = "OWNER_AND_QA"/);
 });
 
-test("flag off renders production tooltips and flag on renders the top-layer portal for every moved component", async () => {
+test("flag off renders production tooltips and flag on renders the top-layer portal for every moved component", async (t) => {
   const dom = new JSDOM("<!doctype html><div id='root'></div><button id='external'>External anchor</button>", { url: "https://app.hypertask.ai/project" });
   const globals = new Map();
   const browserGlobals = {
@@ -114,6 +114,22 @@ test("flag off renders production tooltips and flag on renders the top-layer por
         await React.act(async () => trigger.dispatchEvent(new window.MouseEvent("mouseenter")));
       }
     };
+    for (const state of [false, true]) {
+      await t.test(`default Tooltip accepts null shortcuts with flag ${state ? "on" : "off"}`, async () => {
+        enabled = state;
+        await assert.doesNotReject(() => mount(Tooltip, {
+          text: "Set cycle", keyCombination: null, bottom: -40, left: 0,
+        }, `null shortcuts ${state}`, "hover"));
+        const tooltips = state
+          ? [...document.querySelectorAll("[data-hover-tooltip-portal]")]
+          : legacyElements("z-[9999]");
+        assert.equal(tooltips.length, 1);
+        assert.equal(tooltips[0].textContent, "Set cycle");
+        assert.equal(tooltips[0].querySelectorAll("kbd").length, 0);
+        assert.equal(tooltips[0].querySelector("span").parentElement.children.length, 1, "no shortcut container");
+      });
+      await React.act(async () => reactRoot.render(null));
+    }
     for (const [name, Component, props, text, legacyClass, interaction] of cases) {
       for (const state of [false, true, false]) {
         enabled = state;
