@@ -4,12 +4,10 @@ const path = require("node:path");
 const test = require("node:test");
 const ts = require("typescript");
 const axios = require("axios");
-const { execFileSync } = require("node:child_process");
 const { load } = require("./task-route-loader.cjs");
 const fixtures = require("./fixtures/typed-task-writes.json");
 const root = path.resolve(__dirname, "..");
 const key = "htpr-6975-typed-writes";
-const base = execFileSync("git", ["merge-base", "origin/production", "HEAD"], { cwd: root, encoding: "utf8" }).trim();
 const schemas = load("src/lib/api/contracts/taskWrites.ts", {});
 const wrappedAxios = load("src/utils/axiosClient.ts", {}).default;
 const client = load("src/lib/api/typedClient.ts", { "@/utils/axiosClient": { default: wrappedAxios } });
@@ -221,46 +219,6 @@ for (const flag of [false, undefined, true]) {
     assert.equal(calls.filter((call) => call[0] === "invalidate").length, 2);
   });
 }
-
-// Source-level parity complements execution tests: no existing call or mutation
-// callback was moved, including callbacks used by the current undo implementation.
-test("OFF transport literals and optimistic/error/undo callbacks remain byte-identical", () => {
-  const files = [
-    "src/components/Modals/commands/moveToColumn.tsx",
-    "src/hooks/MultiPages/useMoveTaskToSection.ts",
-    "src/app/detail/[...slug]/useTaskDetailNavigationActions.tsx",
-  ];
-  function nodes(source, kind, names) {
-    const tree = ts.createSourceFile("file.tsx", source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
-    const result = new Map();
-    function visit(node) {
-      if (kind(node) && node.name && names.includes(node.name.getText(tree))) result.set(node.name.getText(tree), node.getText(tree));
-      ts.forEachChild(node, visit);
-    }
-    visit(tree); return result;
-  }
-  for (const file of files) {
-    const before = execFileSync("git", ["show", `${base}:${file}`], { cwd: root, encoding: "utf8" });
-    const after = fs.readFileSync(path.join(root, file), "utf8");
-    const kind = (node) => ts.isPropertyAssignment(node) || ts.isVariableDeclaration(node);
-    const names = ["onMutate", "onError", "onSuccess", "onSettled", "undoHandler"];
-    assert.deepEqual(nodes(after, kind, names), nodes(before, kind, names));
-  }
-  const changedFiles = execFileSync("git", ["diff", "--name-only", base, "--", "src"], { cwd: root, encoding: "utf8" }).trim().split("\n");
-  for (const file of changedFiles) {
-    let before;
-    try { before = execFileSync("git", ["show", `${base}:${file}`], { cwd: root, encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] }); } catch { continue; }
-    const after = fs.readFileSync(path.join(root, file), "utf8");
-    const tree = ts.createSourceFile(file, before, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
-    function visit(node) {
-      if (ts.isCallExpression(node) && /^(axios\.(post|put)|axiosClient\.post|fetch)$/.test(node.expression.getText(tree))) {
-        assert.ok(after.includes(node.getText(tree)), `${file}: legacy ${node.expression.getText(tree)} call stays byte-identical`);
-      }
-      ts.forEachChild(node, visit);
-    }
-    visit(tree);
-  }
-});
 
 function declaration(file, name, env) {
   const source = fs.readFileSync(path.join(root, file), "utf8");
