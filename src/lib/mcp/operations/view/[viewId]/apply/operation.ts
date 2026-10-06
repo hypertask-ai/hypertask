@@ -1,5 +1,6 @@
+import { wrapMcpRoute, validateMcpRouteAuth as validateMcpAuth, checkMcpRouteRateLimit as checkMcpRateLimit } from '@/lib/mcp/routeWrapper'
 import { NextRequest, NextResponse } from "next/server";
-import { validateMcpAuth, checkMcpRateLimit } from "@/lib/mcp/auth";
+
 import { applyView } from "@/lib/mcp/views/services";
 
 /**
@@ -7,6 +8,7 @@ import { applyView } from "@/lib/mcp/views/services";
  * Passing the board's default view id returns them to the default (all tasks) view.
  */
 export async function POST(request: NextRequest, props: { params: Promise<{ viewId: string }> }) {
+  return wrapMcpRoute(async (request: NextRequest) => {
   try {
     const rateLimited = await checkMcpRateLimit(request);
     if (rateLimited) return rateLimited;
@@ -28,4 +30,6 @@ export async function POST(request: NextRequest, props: { params: Promise<{ view
       { status: 400 },
     );
   }
+
+  })(request)
 }

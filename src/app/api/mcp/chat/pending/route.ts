@@ -1,5 +1,6 @@
+import { wrapMcpRoute, checkMcpRouteRateLimit as checkMcpRateLimit, validateMcpRouteAuth as validateMcpAuth } from '@/lib/mcp/routeWrapper'
 import { NextRequest, NextResponse } from "next/server";
-import { checkMcpRateLimit, validateMcpAuth } from "@/lib/mcp/auth";
+
 import prisma from "@/lib/prisma";
 
 export const runtime = "nodejs";
@@ -16,6 +17,7 @@ type PendingChatMessage = {
 
 /** GET /api/mcp/chat/pending */
 export async function GET(request: NextRequest) {
+  return wrapMcpRoute(async (request: NextRequest) => {
   try {
     const rateLimited = await checkMcpRateLimit(request);
     if (rateLimited) return rateLimited;
@@ -115,4 +117,6 @@ export async function GET(request: NextRequest) {
       { status: 500 },
     );
   }
+
+  })(request)
 }

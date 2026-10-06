@@ -1,5 +1,6 @@
+import { wrapMcpRoute, validateMcpRouteAuth as validateMcpAuth, checkMcpRouteRateLimit as checkMcpRateLimit } from '@/lib/mcp/routeWrapper'
 import { NextRequest, NextResponse } from "next/server";
-import { validateMcpAuth, checkMcpRateLimit } from "@/lib/mcp/auth";
+
 import prisma from "@/lib/prisma";
 import { findTaskByIdentifier } from "@/lib/mcp/tasks/resolveTask";
 import { getProjectWhere } from "@/utils/controllers/projects/getAllIncludes";
@@ -200,6 +201,7 @@ async function buildTreeNode(
  * Optional `depth` (non-negative int) limits how many descendant levels are expanded below the root.
  */
 export async function GET(request: NextRequest) {
+  return wrapMcpRoute(async (request: NextRequest) => {
   try {
     const rateLimited = await checkMcpRateLimit(request);
     if (rateLimited) return rateLimited;
@@ -275,4 +277,6 @@ export async function GET(request: NextRequest) {
       { status: 500 }
     );
   }
+
+  })(request)
 }

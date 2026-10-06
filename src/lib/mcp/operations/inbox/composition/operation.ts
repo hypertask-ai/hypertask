@@ -1,6 +1,7 @@
+import { wrapMcpRoute, validateMcpRouteAuth as validateMcpAuth, checkMcpRouteRateLimit as checkMcpRateLimit } from '@/lib/mcp/routeWrapper'
 import { NextRequest, NextResponse } from 'next/server'
 import prisma from '@/lib/prisma'
-import { validateMcpAuth, createUnauthorizedResponse, checkMcpRateLimit } from '@/lib/mcp/auth'
+import { createUnauthorizedResponse } from '@/lib/mcp/auth'
 import { inboxConfig, agentSplitName, staleSplitName } from '@/lib/configs/inbox.config'
 import { generalConfig } from '@/lib/configs/general.config'
 import {
@@ -40,6 +41,7 @@ const SPLIT_BY_TYPE: Record<string, string> = {
 type ActorKind = 'human' | 'agent' | 'self'
 
 export async function GET(request: NextRequest) {
+  return wrapMcpRoute(async (request: NextRequest) => {
     try {
         const rateLimited = await checkMcpRateLimit(request)
         if (rateLimited) return rateLimited
@@ -345,4 +347,6 @@ export async function GET(request: NextRequest) {
             { status: 500 }
         )
     }
+
+  })(request)
 }

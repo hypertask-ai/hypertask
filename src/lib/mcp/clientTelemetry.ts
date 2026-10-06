@@ -25,12 +25,13 @@ export function identifyMcpCli(userAgent: string | null): McpCliIdentity | null 
 export function logMcpCliUsage(
   request: Pick<Request, 'headers' | 'method' | 'url'>,
   token: string,
-  context: McpCliAuthContext
+  context: McpCliAuthContext,
+  log: typeof console.info = console.info,
 ): void {
   const identity = identifyMcpCli(request.headers.get('User-Agent'))
   if (!identity) return
 
-  console.info('[MCP CLI Usage]', {
+  log('[MCP CLI Usage]', {
     event: 'mcp_cli_usage',
     ...identity,
     tokenFingerprint: createHash('sha256').update(token).digest('hex'),

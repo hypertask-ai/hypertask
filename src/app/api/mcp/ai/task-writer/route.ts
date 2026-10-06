@@ -1,14 +1,11 @@
+import { wrapMcpRoute, validateMcpRouteAuth as validateMcpAuth, checkMcpRouteRateLimit as checkMcpRateLimit } from '@/lib/mcp/routeWrapper'
 import { reportError } from "@/lib/errors/reportError";
 import { configureAiModelUsage } from "@/app/api/ai/_lib/modelProvider";
 import { NextRequest, NextResponse } from "next/server";
 import { generateText } from "ai";
 import { z } from "zod";
 
-import {
-  validateMcpAuth,
-  checkMcpRateLimit,
-  createUnauthorizedResponse,
-} from "@/lib/mcp/auth";
+import { createUnauthorizedResponse } from '@/lib/mcp/auth'
 import { errorMessage, filterOneImagePass } from "@/app/api/ai/_lib/editorAi";
 import {
   AiFeatureDisabledError,
@@ -50,6 +47,7 @@ const requestSchema = z
 // diverge from what the same user gets in the UI.
 
 export async function POST(request: NextRequest) {
+  return wrapMcpRoute(async (request: NextRequest) => {
   const rateLimited = await checkMcpRateLimit(request);
   if (rateLimited) return rateLimited;
   const ctx = await validateMcpAuth(request);
@@ -160,4 +158,6 @@ export async function POST(request: NextRequest) {
       { status: 500 }
     );
   }
+
+  })(request)
 }

@@ -1,6 +1,7 @@
+import { wrapMcpRoute, validateMcpRouteAuth as validateMcpAuth, checkMcpRouteRateLimit as checkMcpRateLimit, mcpRouteUnauthorizedResponse as mcpUnauthorizedResponse, readMcpRouteJsonBody as readJsonBody } from '@/lib/mcp/routeWrapper'
 import { NextRequest, NextResponse } from 'next/server'
 import { Prisma } from '@prisma/client'
-import { validateMcpAuth, checkMcpRateLimit, mcpUnauthorizedResponse } from '@/lib/mcp/auth'
+
 import type { McpAgentSummary } from '@/lib/mcp/agents'
 import {
   getMcpSessionAgentSummary,
@@ -34,7 +35,7 @@ import {
   normalizeIdempotencyKey,
   withIdempotency,
 } from '@/lib/mcp/idempotency/idempotencyStore'
-import { readJsonBody } from '@/lib/mcp/readJsonBody'
+
 import { buildMcpTaskUrl } from '@/lib/mcp/boards/links'
 import {
   commentReactionInclude,
@@ -226,6 +227,7 @@ function applyDurableCommentAttribution<T extends object>(
  * Supports pagination and sorting by creation date for the default comments-only response.
  */
 export async function GET(request: NextRequest) {
+  return wrapMcpRoute(async (request: NextRequest) => {
   try {
     // Validate authentication
     const rateLimited = await checkMcpRateLimit(request)
@@ -397,6 +399,8 @@ export async function GET(request: NextRequest) {
       { status: 500 }
     )
   }
+
+  })(request)
 }
 
 /**
@@ -405,6 +409,7 @@ export async function GET(request: NextRequest) {
  * Adds a comment to a task.
  */
 export async function POST(request: NextRequest) {
+  return wrapMcpRoute(async (request: NextRequest) => {
   try {
     // Validate authentication
     const rateLimited = await checkMcpRateLimit(request)
@@ -965,4 +970,6 @@ export async function POST(request: NextRequest) {
       { status: 500 }
     )
   }
+
+  })(request)
 }

@@ -88,6 +88,7 @@ import {
   HTPR_6512_SEED_TEAM_AGENT_FLAG,
   HTPR_6533_MCP_CLIENT_EVAL_FLAG,
   HTPR_6804_MCP_TOOLS_FLAG,
+  HTPR_6926_MCP_ROUTE_WRAPPER_FLAG,
   HTPR_6927_MCP_V2_FLAG,
   HTPR_6470_PROJECT_DELETE_FLAG,
   HTPR_6536_QA_LOGIN_FLAG,
@@ -237,6 +238,12 @@ const FEATURE_FLAG_DEFINITIONS = [
     key: HTPR_6929_COMPOSE_TASK_WRITER_FLAG,
     shippedOn: "2026-10-04",
     description: "Adds Ctrl+J Compose to Commands: write a ticket from a note and images, then refine it in task-scoped AI chat.",
+  },
+  {
+    key: HTPR_6926_MCP_ROUTE_WRAPPER_FLAG,
+    shippedOn: "2026-10-04",
+    description:
+      "Uses shared REST MCP scaffolding with request-local auth reuse and bounded auth logging for selected routes. Decisions refresh within 30 seconds per instance.",
   },
   {
     key: HTPR_6927_MCP_V2_FLAG,

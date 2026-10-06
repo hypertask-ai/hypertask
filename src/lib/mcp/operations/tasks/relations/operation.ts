@@ -1,6 +1,7 @@
+import { wrapMcpRoute, checkMcpRouteRateLimit as checkMcpRateLimit, validateMcpRouteAuth as validateMcpAuth } from '@/lib/mcp/routeWrapper'
 import type { Prisma } from '@prisma/client'
 import { NextRequest, NextResponse } from 'next/server'
-import { checkMcpRateLimit, validateMcpAuth } from '@/lib/mcp/auth'
+
 import prisma from '@/lib/prisma'
 import { buildMcpTaskUrl } from '@/lib/mcp/boards/links'
 import { normalizeTaskRelationType } from '@/lib/mcp/tasks/relationType'
@@ -42,6 +43,7 @@ const ticketFor = (v: unknown): string | null =>
   typeof v === 'string' && v.trim() !== '' ? v.trim() : null
 
 export async function POST(request: NextRequest) {
+  return wrapMcpRoute(async (request: NextRequest) => {
   const rateLimited = await checkMcpRateLimit(request)
   if (rateLimited) return rateLimited
 
@@ -198,9 +200,12 @@ export async function POST(request: NextRequest) {
       { status: 500 }
     )
   }
+
+  })(request)
 }
 
 export async function GET(request: NextRequest) {
+  return wrapMcpRoute(async (request: NextRequest) => {
   const rateLimited = await checkMcpRateLimit(request)
   if (rateLimited) return rateLimited
 
@@ -299,11 +304,14 @@ export async function GET(request: NextRequest) {
       { status: 500 }
     )
   }
+
+  })(request)
 }
 
 // Remove a relation between two tasks, so a mistakenly-declared dependency can be
 // cleared (not just retyped). Idempotent: deleting a non-existent relation is 200.
 export async function DELETE(request: NextRequest) {
+  return wrapMcpRoute(async (request: NextRequest) => {
   const rateLimited = await checkMcpRateLimit(request)
   if (rateLimited) return rateLimited
 
@@ -415,4 +423,6 @@ export async function DELETE(request: NextRequest) {
       { status: 500 }
     )
   }
+
+  })(request)
 }

@@ -1,3 +1,4 @@
+import { wrapMcpRoute, checkMcpRouteRateLimit as checkMcpRateLimit, validateMcpRouteAuth as validateMcpAuth } from '@/lib/mcp/routeWrapper'
 import { reportError } from "@/lib/errors/reportError";
 import { NextRequest, NextResponse } from 'next/server'
 import { getTeamGatewayFunding } from '@/app/api/ai/_lib/byokKeys'
@@ -6,13 +7,7 @@ import {
   gatewayBillingPeriodRange,
   gatewayGet,
 } from '@/app/api/settings/ai-usage/gatewayUsage'
-import {
-  checkMcpRateLimit,
-  extractBearerToken,
-  isManagementKeyToken,
-  type McpAuthContext,
-  validateMcpAuth,
-} from '@/lib/mcp/auth'
+import { extractBearerToken, isManagementKeyToken, type McpAuthContext } from '@/lib/mcp/auth'
 import {
   hasDataPermission,
   hasUsageReadPermission,
@@ -270,6 +265,7 @@ async function getTeamUsage(ctx: McpAuthContext, request: NextRequest) {
  * data.
  */
 export async function GET(request: NextRequest) {
+  return wrapMcpRoute(async (request: NextRequest) => {
   try {
     const rateLimited = await checkMcpRateLimit(request)
     if (rateLimited) return rateLimited
@@ -382,4 +378,6 @@ export async function GET(request: NextRequest) {
     console.error('[MCP AI Usage] Error:', error)
     return NextResponse.json({ success: false, error: 'Internal server error' }, { status: 500 })
   }
+
+  })(request)
 }

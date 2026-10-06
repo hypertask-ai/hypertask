@@ -30,7 +30,18 @@ export function managementAgentTokenScope(
   }
 }
 
+export type McpAuthFailureSnapshot = {
+  verifiedJwt?: import('jsonwebtoken').JwtPayload | null
+  user?: { id: number; mcpTokensRevokedAt: Date | null } | null
+  revokedToken?: { jti: string } | null
+  oauthClient?: { client_id: string } | null
+  agent?: { id: string; mcpTokenJti: string | null; revokedAt: Date | null }
+}
+
 export type ValidateMcpAuthOptions = {
+  /** Opt-in REST wrapper logging and request-local verification reuse. */
+  boundedLogging?: boolean
+  failureSnapshot?: McpAuthFailureSnapshot
   /**
    * Return a verified htmk_ context without requiring data scope. The caller
    * must enforce the management permission before performing any action.

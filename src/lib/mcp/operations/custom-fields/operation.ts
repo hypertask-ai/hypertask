@@ -1,7 +1,8 @@
+import { wrapMcpRoute, checkMcpRouteRateLimit as checkMcpRateLimit, validateMcpRouteAuth as validateMcpAuth } from '@/lib/mcp/routeWrapper'
 import { CustomFieldType } from "@prisma/client";
 import { NextRequest, NextResponse } from "next/server";
 
-import { checkMcpRateLimit, validateMcpAuth } from "@/lib/mcp/auth";
+
 import { validateProjectAccess } from "@/lib/mcp/tasks/services";
 import {
   CustomFieldValidationError,
@@ -78,6 +79,7 @@ async function authenticate(request: NextRequest) {
 
 /** GET /api/mcp/custom-fields?project_id=123 */
 export async function GET(request: NextRequest) {
+  return wrapMcpRoute(async (request: NextRequest) => {
   try {
     const auth = await authenticate(request);
     if (!auth.ctx) return auth.response!;
@@ -113,10 +115,13 @@ export async function GET(request: NextRequest) {
       { status: 500 }
     );
   }
+
+  })(request)
 }
 
 /** POST /api/mcp/custom-fields */
 export async function POST(request: NextRequest) {
+  return wrapMcpRoute(async (request: NextRequest) => {
   try {
     const auth = await authenticate(request);
     if (!auth.ctx) return auth.response!;
@@ -213,4 +218,6 @@ export async function POST(request: NextRequest) {
       { status: 500 }
     );
   }
+
+  })(request)
 }

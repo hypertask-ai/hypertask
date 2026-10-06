@@ -1,9 +1,10 @@
+import { wrapMcpRoute, validateMcpRouteAuth as validateMcpAuth, checkMcpRouteRateLimit as checkMcpRateLimit, readMcpRouteJsonBody as readJsonBody } from '@/lib/mcp/routeWrapper'
 import { NextRequest, NextResponse } from 'next/server'
-import { validateMcpAuth, createUnauthorizedResponse, checkMcpRateLimit } from '@/lib/mcp/auth'
+import { createUnauthorizedResponse } from '@/lib/mcp/auth'
 import prisma from '@/lib/prisma'
 import { validateProjectAccess } from '@/lib/mcp/tasks/services'
 import { broadcastBoardChange } from '@/lib/realtime/server'
-import { readJsonBody } from '@/lib/mcp/readJsonBody'
+
 import { readListQuery, tryApplyCollectionQuery } from '@/lib/mcp/readListQuery'
 
 /**
@@ -15,6 +16,7 @@ import { readListQuery, tryApplyCollectionQuery } from '@/lib/mcp/readListQuery'
  * Auth: MCP JWT (Bearer token)
  */
 export async function GET(request: NextRequest, props: { params: Promise<{ projectId: string }> }) {
+  return wrapMcpRoute(async (request: NextRequest) => {
   const params = await props.params;
   try {
     const rateLimited = await checkMcpRateLimit(request)
@@ -79,6 +81,8 @@ export async function GET(request: NextRequest, props: { params: Promise<{ proje
       { status: 500 }
     )
   }
+
+  })(request)
 }
 
 /**
@@ -93,6 +97,7 @@ export async function GET(request: NextRequest, props: { params: Promise<{ proje
  * Auth: MCP JWT (Bearer token)
  */
 export async function POST(request: NextRequest, props: { params: Promise<{ projectId: string }> }) {
+  return wrapMcpRoute(async (request: NextRequest) => {
   const params = await props.params;
   try {
     const rateLimited = await checkMcpRateLimit(request)
@@ -215,4 +220,6 @@ export async function POST(request: NextRequest, props: { params: Promise<{ proj
       { status: 500 }
     )
   }
+
+  })(request)
 }

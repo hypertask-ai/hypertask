@@ -1,5 +1,6 @@
+import { wrapMcpRoute, checkMcpRouteRateLimit as checkMcpRateLimit, validateMcpRouteAuth as validateMcpAuth } from '@/lib/mcp/routeWrapper'
 import { NextRequest, NextResponse } from 'next/server'
-import { checkMcpRateLimit, validateMcpAuth } from '@/lib/mcp/auth'
+
 import {
   handleRelatedTasksGet,
   handleRelatedTasksPost,
@@ -26,6 +27,7 @@ function parsePositiveInteger(value: unknown): number | null {
 }
 
 export async function GET(request: NextRequest) {
+  return wrapMcpRoute(async (request: NextRequest) => {
   const rateLimited = await checkMcpRateLimit(request)
   if (rateLimited) return rateLimited
   const ctx = await validateMcpAuth(request)
@@ -99,9 +101,12 @@ export async function GET(request: NextRequest) {
     taskId: task.id,
     limit: limitParam === null ? null : Number(limitParam),
   })
+
+  })(request)
 }
 
 export async function POST(request: NextRequest) {
+  return wrapMcpRoute(async (request: NextRequest) => {
   const rateLimited = await checkMcpRateLimit(request)
   if (rateLimited) return rateLimited
   const ctx = await validateMcpAuth(request)
@@ -204,4 +209,6 @@ export async function POST(request: NextRequest) {
   }
 
   return handleRelatedTasksPost(request, ctx, body)
+
+  })(request)
 }

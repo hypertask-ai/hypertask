@@ -1,5 +1,6 @@
+import { wrapMcpRoute, checkMcpRouteRateLimit as checkMcpRateLimit, mcpRouteUnauthorizedResponse as mcpUnauthorizedResponse, validateMcpRouteAuth as validateMcpAuth } from '@/lib/mcp/routeWrapper'
 import { NextRequest, NextResponse } from 'next/server'
-import { checkMcpRateLimit, mcpUnauthorizedResponse, validateMcpAuth } from '@/lib/mcp/auth'
+
 import { findTaskByIdentifier, TaskIdentifierAmbiguityError } from '@/lib/mcp/tasks/resolveTask'
 import prisma from '@/lib/prisma'
 
@@ -15,6 +16,7 @@ export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ taskId: string }> },
 ) {
+  return wrapMcpRoute(async (request: NextRequest) => {
   try {
     const rateLimited = await checkMcpRateLimit(request)
     if (rateLimited) return rateLimited
@@ -73,4 +75,6 @@ export async function GET(
     console.error('[MCP] task agent activity read failed', error)
     return noStore({ success: false, error: 'Failed to read task agent activity' }, 500)
   }
+
+  })(request)
 }

@@ -1,6 +1,7 @@
+import { wrapMcpRoute, checkMcpRouteRateLimit as checkMcpRateLimit, validateMcpRouteAuth as validateMcpAuth } from '@/lib/mcp/routeWrapper'
 import { NextRequest, NextResponse } from 'next/server'
 import crypto from 'crypto'
-import { checkMcpRateLimit, validateMcpAuth } from '@/lib/mcp/auth'
+
 import prisma from '@/lib/prisma'
 import { getProjectWhere } from '@/utils/controllers/projects/getAllIncludes'
 import {
@@ -65,6 +66,7 @@ function serialize(sub: {
  * List a board's outbound webhook subscriptions. Secrets are masked.
  */
 export async function GET(request: NextRequest) {
+  return wrapMcpRoute(async (request: NextRequest) => {
   try {
     const rateLimited = await checkMcpRateLimit(request)
     if (rateLimited) return rateLimited
@@ -136,6 +138,8 @@ export async function GET(request: NextRequest) {
     console.error('[MCP Webhooks] GET error:', error)
     return NextResponse.json({ success: false, error: 'Internal server error' }, { status: 500 })
   }
+
+  })(request)
 }
 
 /**
@@ -145,6 +149,7 @@ export async function GET(request: NextRequest) {
  * Returns the generated `secret` ONCE (used to verify the HMAC signature).
  */
 export async function POST(request: NextRequest) {
+  return wrapMcpRoute(async (request: NextRequest) => {
   try {
     const rateLimited = await checkMcpRateLimit(request)
     if (rateLimited) return rateLimited
@@ -301,6 +306,8 @@ export async function POST(request: NextRequest) {
     console.error('[MCP Webhooks] POST error:', error)
     return NextResponse.json({ success: false, error: 'Internal server error' }, { status: 500 })
   }
+
+  })(request)
 }
 
 /**
@@ -308,6 +315,7 @@ export async function POST(request: NextRequest) {
  * Remove a subscription the caller can access (scoped by board access).
  */
 export async function DELETE(request: NextRequest) {
+  return wrapMcpRoute(async (request: NextRequest) => {
   try {
     const rateLimited = await checkMcpRateLimit(request)
     if (rateLimited) return rateLimited
@@ -384,4 +392,6 @@ export async function DELETE(request: NextRequest) {
     console.error('[MCP Webhooks] DELETE error:', error)
     return NextResponse.json({ success: false, error: 'Internal server error' }, { status: 500 })
   }
+
+  })(request)
 }

@@ -1,5 +1,6 @@
+import { wrapMcpRoute, checkMcpRouteRateLimit as checkMcpRateLimit, validateMcpRouteAuth as validateMcpAuth } from '@/lib/mcp/routeWrapper'
 import { NextRequest, NextResponse } from 'next/server'
-import { checkMcpRateLimit, validateMcpAuth } from '@/lib/mcp/auth'
+
 import { columnRoleFor } from '@/lib/mcp/boards/columnRole'
 import prisma from '@/lib/prisma'
 import { getProjectWhere } from '@/utils/controllers/projects/getAllIncludes'
@@ -13,6 +14,7 @@ export async function GET(
   request: NextRequest,
   props: { params: Promise<{ projectId: string }> }
 ) {
+  return wrapMcpRoute(async (request: NextRequest) => {
   const params = await props.params
 
   try {
@@ -101,4 +103,6 @@ export async function GET(
       { status: 500 }
     )
   }
+
+  })(request)
 }

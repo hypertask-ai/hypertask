@@ -281,6 +281,7 @@ function loadCommentsRoute({
     },
   }
   const mockRequire = (request) => {
+    if (request === "@/lib/mcp/routeWrapper") return require("./helpers/mcp-route-wrapper.cjs").loadRouteWrapper(modules)
     if (modules[request]) return modules[request]
     throw new Error(`Unexpected import: ${request}`)
   }

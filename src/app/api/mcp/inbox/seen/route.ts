@@ -1,11 +1,13 @@
+import { wrapMcpRoute, checkMcpRouteRateLimit as checkMcpRateLimit, validateMcpRouteAuth as validateMcpAuth } from '@/lib/mcp/routeWrapper'
 import { NextRequest, NextResponse } from 'next/server'
-import { checkMcpRateLimit, createUnauthorizedResponse, validateMcpAuth } from '@/lib/mcp/auth'
+import { createUnauthorizedResponse } from '@/lib/mcp/auth'
 import prisma from '@/lib/prisma'
 import { broadcastInboxChange } from '@/lib/realtime/server'
 
 const MAX_NOTIFICATION_IDS = 100
 
 export async function POST(request: NextRequest) {
+  return wrapMcpRoute(async (request: NextRequest) => {
   try {
     const rateLimited = await checkMcpRateLimit(request)
     if (rateLimited) return rateLimited
@@ -92,4 +94,6 @@ export async function POST(request: NextRequest) {
       { status: 500 }
     )
   }
+
+  })(request)
 }

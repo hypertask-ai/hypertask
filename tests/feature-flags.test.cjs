@@ -502,6 +502,7 @@ test("declared flags remain listed with ticket details and can be changed", asyn
       { key: "htpr-6923-app-router-writes", mode: "OWNER_AND_QA", updatedAt: null },
       { key: "htpr-6924-rest-compat", mode: "OWNER_AND_QA", updatedAt: null },
       { key: "htpr-6925-typed-api-client", mode: "OWNER_AND_QA", updatedAt: null },
+      { key: "htpr-6926-mcp-route-wrapper", mode: "OFF", updatedAt: null },
       { key: "htpr-6927-mcp-v2", mode: "OWNER_AND_QA", updatedAt: null },
       { key: "htpr-6929-compose-task-writer", mode: "OWNER_AND_QA", updatedAt: null },
       { key: "htpr-6930-my-tasks-kanban-reuse", mode: "OWNER_AND_QA", updatedAt: null },

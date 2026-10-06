@@ -1,5 +1,6 @@
+import { wrapMcpRoute, validateMcpRouteAuth as validateMcpAuth, checkMcpRouteRateLimit as checkMcpRateLimit } from '@/lib/mcp/routeWrapper'
 import { NextRequest, NextResponse } from 'next/server'
-import { validateMcpAuth, createUnauthorizedResponse, checkMcpRateLimit } from '@/lib/mcp/auth'
+import { createUnauthorizedResponse } from '@/lib/mcp/auth'
 import { getMcpSessionAgentSummary } from '@/lib/mcp/agents'
 import notificationGetAll from '@/utils/controllers/notifications/getAll'
 import { getStructuredInboxForAgent } from '@/utils/controllers/notifications/getStructuredInboxForAgent'
@@ -30,6 +31,7 @@ function positiveInteger(value: string | null): number | null {
  * }
  */
 export async function GET(request: NextRequest) {
+  return wrapMcpRoute(async (request: NextRequest) => {
     let userObj: {id: number, email: string} | null = null
     try {
         const rateLimited = await checkMcpRateLimit(request)
@@ -193,4 +195,6 @@ export async function GET(request: NextRequest) {
             { status: 500 }
         )
     }
+
+  })(request)
 }

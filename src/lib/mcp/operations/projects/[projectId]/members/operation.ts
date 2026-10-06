@@ -1,5 +1,6 @@
+import { wrapMcpRoute, validateMcpRouteAuth as validateMcpAuth, checkMcpRouteRateLimit as checkMcpRateLimit, readMcpRouteJsonBody as readJsonBody } from '@/lib/mcp/routeWrapper'
 import { NextRequest, NextResponse } from "next/server";
-import { validateMcpAuth, checkMcpRateLimit } from "@/lib/mcp/auth";
+
 import { validateProjectAccess } from "@/lib/mcp/tasks/services";
 import { getProjectMembers } from "@/utils/controllers/projects/getProjectMembers";
 import prisma from "@/lib/prisma";
@@ -7,7 +8,7 @@ import { addMemberController } from "@/pages/api/invite/createInviteLink";
 import { addAgentToBoard } from "@/utils/controllers/agents/boardMembers";
 import { addExistingUserToProject } from "@/utils/controllers/members/addExistingUserToProject";
 import isProjectAdmin from "@/utils/controllers/projects/isProjectAdmin";
-import { readJsonBody } from "@/lib/mcp/readJsonBody";
+
 import {
   mcpAddedMemberResponse,
   mcpPendingInviteResponse,
@@ -30,6 +31,7 @@ import {
  * Errors: 401 (invalid/missing JWT), 403 (no permission), 404 (project not found)
  */
 export async function GET(request: NextRequest, props: { params: Promise<{ projectId: string }> }) {
+  return wrapMcpRoute(async (request: NextRequest) => {
   const params = await props.params;
   try {
     const rateLimited = await checkMcpRateLimit(request);
@@ -111,9 +113,12 @@ export async function GET(request: NextRequest, props: { params: Promise<{ proje
       { status: 500 }
     );
   }
+
+  })(request)
 }
 
 export async function POST(request: NextRequest, props: { params: Promise<{ projectId: string }> }) {
+  return wrapMcpRoute(async (request: NextRequest) => {
   const params = await props.params;
   try {
     const rateLimited = await checkMcpRateLimit(request);
@@ -317,4 +322,6 @@ export async function POST(request: NextRequest, props: { params: Promise<{ proj
       { status: 500 }
     );
   }
+
+  })(request)
 }

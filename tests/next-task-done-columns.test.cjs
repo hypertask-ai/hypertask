@@ -101,6 +101,7 @@ function loadRoute({ tasks, sectionsByProject }) {
   }
   const routeModule = { exports: {} }
   const mockRequire = (request) => {
+    if (request === '@/lib/mcp/routeWrapper') return require('./helpers/mcp-route-wrapper.cjs').loadRouteWrapper({ '@/lib/mcp/auth': mockRequire('@/lib/mcp/auth') })
     if (request === 'next/server') {
       return {
         NextResponse: {

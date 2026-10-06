@@ -1,5 +1,6 @@
+import { wrapMcpRoute, checkMcpRouteRateLimit as checkMcpRateLimit, validateMcpRouteAuth as validateMcpAuth } from '@/lib/mcp/routeWrapper'
 import { NextRequest, NextResponse } from 'next/server'
-import { checkMcpRateLimit, validateMcpAuth } from '@/lib/mcp/auth'
+
 import prisma from '@/lib/prisma'
 import { findTaskByIdentifier } from '@/lib/mcp/tasks/resolveTask'
 import { createCommentService } from '@/utils/controllers/comments/createCommentService'
@@ -29,6 +30,7 @@ const MAX_SUMMARY = 5000
  * Body: { task_id | ticket_number, project_id?, reason, attempts_summary? }.
  */
 export async function POST(request: NextRequest) {
+  return wrapMcpRoute(async (request: NextRequest) => {
   try {
     const rateLimited = await checkMcpRateLimit(request)
     if (rateLimited) return rateLimited
@@ -149,4 +151,6 @@ export async function POST(request: NextRequest) {
     console.error('[MCP Task Escalate] Error:', error)
     return NextResponse.json({ success: false, error: 'Internal server error' }, { status: 500 })
   }
+
+  })(request)
 }
