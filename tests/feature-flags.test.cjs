@@ -194,6 +194,21 @@ test("typed settings API client defaults to Owner + QA and respects OFF", async 
   assert.deepEqual(await Promise.all([6, 985, 7].map((userId) => flags.isFeatureEnabled(key, userId))), [false, false, false]);
 });
 
+test("typed task reads have their own dated Owner + QA flag and respect OFF independently of settings", async () => {
+  const key = flags.HTPR_6967_TYPED_TASK_READS_FLAG;
+  assert.equal(key, "htpr-6967-typed-task-reads");
+  const entry = (await flags.listFeatureFlagModes()).find((flag) => flag.key === key);
+  assert.equal(entry.mode, "OWNER_AND_QA");
+  assert.equal(entry.shippedOn, "2026-10-06");
+  assert.equal(entry.ticketUrl, "https://app.hypertask.ai/detail/project-15/6967");
+  assert.deepEqual(await Promise.all([6, 985, 7].map((userId) => flags.isFeatureEnabled(key, userId))), [true, true, false]);
+  listedRows = [{ key, mode: "OFF", updatedAt: new Date() }];
+  assert.equal((await flags.featureFlagsForUser(985))[key], false);
+  assert.equal((await flags.featureFlagsForUser(985))[flags.HTPR_6925_TYPED_API_CLIENT_FLAG], true);
+  row = { mode: "OFF", updatedAt: new Date() };
+  assert.deepEqual(await Promise.all([6, 985, 7].map((userId) => flags.isFeatureEnabled(key, userId))), [false, false, false]);
+});
+
 test("search Ask AI fullscreen has its own Owner + QA flag and respects OFF", async () => {
   const key = flags.HTPR_6936_ASK_AI_FULLSCREEN_FLAG;
   assert.equal(key, "htpr-6936-ask-ai-fullscreen");
@@ -539,6 +554,7 @@ test("declared flags remain listed with ticket details and can be changed", asyn
       { key: "htpr-6962-keep-assignee", mode: "EVERYONE", updatedAt: null },
       { key: "htpr-6964-flags-page-type-search", mode: "OWNER_AND_QA", updatedAt: null },
       { key: "htpr-6966-skills-access-denial", mode: "EVERYONE", updatedAt: null },
+      { key: "htpr-6967-typed-task-reads", mode: "OWNER_AND_QA", updatedAt: null },
       { key: "htpr-6970-phone-new-task-title", mode: "EVERYONE", updatedAt: null },
     ],
   );

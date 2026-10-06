@@ -44,7 +44,7 @@ const invalidDate: z.output<typeof skillResponseSchema>["createdAt"] = new Date(
 void invalidDate;
 
 import type { Cycle, DocVersion, Task } from "@prisma/client";
-import { getDescriptionVersions, getTaskCycle, getBoardDetail, descriptionVersionsRoute, taskCycleRoute, boardDetailRoute, compactTaskRelationsRoute } from "@/lib/api/typedClient";
+import { getDescriptionVersions, getTaskCycle, getBoardDetail, descriptionVersionsRoute, taskCycleRoute, boardDetailRoute } from "@/lib/api/typedClient";
 import { descriptionVersionsResponseSchema, taskCycleResponseSchema, boardDetailResponseSchema, cycleResponseSchema, taskRelationSchema } from "@/lib/api/contracts/taskReads";
 
 type JsonCycle = Omit<Cycle, "startDate" | "endDate" | "rolledOverAt" | "createdAt"> & { startDate: string; endDate: string; rolledOverAt: string | null };
@@ -80,6 +80,3 @@ void getTaskCycle<{ arbitrary: true }>({ taskId: 12 });
 void getBoardDetail<{ arbitrary: true }>({ projectId: 15, userId: 985 });
 // @ts-expect-error route path params are inferred
 void descriptionVersionsRoute.path({ taskId: "12" });
-// @ts-expect-error negotiated relation query cannot use a different opt-in
-const badCompat: z.input<typeof compactTaskRelationsRoute.query> = { compat: "other" };
-void badCompat;

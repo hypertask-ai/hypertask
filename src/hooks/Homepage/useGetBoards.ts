@@ -15,7 +15,7 @@ import {
 } from "@tanstack/react-query";
 import { useEffect, useLayoutEffect, useRef } from "react";
 import { useFlag } from "@/hooks/useFlag";
-import { HTPR_6925_TYPED_API_CLIENT_FLAG } from "@/lib/flags/keys";
+import { HTPR_6967_TYPED_TASK_READS_FLAG } from "@/lib/flags/keys";
 import { getBoardDetail } from "@/lib/api/typedClient";
 import { discardEarlyBoardBootstrap } from "@/lib/boardBootstrap/earlyBoardBootstrap";
 import { useHydrated } from "@/hooks/General/useHydrated";
@@ -290,7 +290,7 @@ export const useGetAllBoards = (
     onCriticalBoardRequestSettled?: () => void;
   }
 ) => {
-  const typedClient = useFlag(HTPR_6925_TYPED_API_CLIENT_FLAG);
+  const typedClient = useFlag(HTPR_6967_TYPED_TASK_READS_FLAG);
   const hydrated = useHydrated();
   const queryClient = useQueryClient();
   const accountIdRef = useRef(user.id);
@@ -663,7 +663,7 @@ export const useWarmProjectsAllQuery = ({
   projectId?: number | string | null;
   enabled?: boolean;
 }) => {
-  const typedClient = useFlag(HTPR_6925_TYPED_API_CLIENT_FLAG);
+  const typedClient = useFlag(HTPR_6967_TYPED_TASK_READS_FLAG);
   const queryClient = useQueryClient();
 
   useEffect(() => {

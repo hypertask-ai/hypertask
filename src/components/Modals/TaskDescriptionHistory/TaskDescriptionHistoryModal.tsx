@@ -13,7 +13,7 @@ import { useEffect, useMemo, useState } from "react";
 import toast from "react-hot-toast";
 
 import { useFlag } from "@/hooks/useFlag";
-import { HTPR_6925_TYPED_API_CLIENT_FLAG } from "@/lib/flags/keys";
+import { HTPR_6967_TYPED_TASK_READS_FLAG } from "@/lib/flags/keys";
 import { getDescriptionVersions } from "@/lib/api/typedClient";
 
 type DescriptionVersion = {
@@ -43,7 +43,7 @@ const DescriptionPreview = ({ content }: { content: string }) => (
 );
 
 const TaskDescriptionHistoryModal = ({ taskId, onClose, onRestored }: Props) => {
-  const typedClient = useFlag(HTPR_6925_TYPED_API_CLIENT_FLAG);
+  const typedClient = useFlag(HTPR_6967_TYPED_TASK_READS_FLAG);
   const [data, setData] = useState<VersionResponse | null>(null);
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);

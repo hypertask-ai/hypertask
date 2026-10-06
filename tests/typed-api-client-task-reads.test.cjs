@@ -13,7 +13,6 @@ for (const [name, schema, data, bad] of [
   ["versions", schemas.descriptionVersionsResponseSchema, fixtures.versions, { hasMore: "false" }],
   ["cycle", schemas.taskCycleResponseSchema, fixtures.cycle, { nextCursor: "1" }],
   ["board", schemas.boardDetailResponseSchema, fixtures.board, { tasks: null }],
-  ["relations", schemas.compactTaskRelationsResponseSchema, fixtures.relations, null],
 ]) {
   test(`${name}: real disposable-build response parses without losing fields`, () => {
     assert.deepEqual(schema.parse(data), data);
@@ -40,10 +39,6 @@ test("nested malformed fields and wrong nullability are rejected", () => {
   assert.ok(parent);
   parent.subTasks[0].title = 42;
   assert.equal(schemas.boardDetailResponseSchema.safeParse(board).success, false);
-  const relations = copy(fixtures.relations);
-  assert.ok(relations.some((row) => row.parentTask));
-  relations.find((row) => row.parentTask).parentTask.subTasks = null;
-  assert.equal(schemas.compactTaskRelationsResponseSchema.safeParse(relations).success, false);
 });
 
 test("descriptors expose inputs, method/path, success and actual error shapes", () => {
@@ -55,13 +50,11 @@ test("descriptors expose inputs, method/path, success and actual error shapes", 
   assert.equal(client.taskCycleRoute.body.safeParse({}).success, false);
   assert.equal(client.boardDetailRoute.method, "POST");
   assert.equal(client.boardDetailRoute.validate, "deferred");
-  assert.equal(client.compactTaskRelationsRoute.validate, "deferred");
   assert.equal(client.descriptionVersionsRoute.validate, undefined);
   assert.equal(client.taskCycleRoute.validate, undefined);
   assert.equal(client.boardDetailRoute.path(), "/api/projects/boardTasks");
   assert.deepEqual(client.boardDetailRoute.body.parse({ projectId: 1, userId: 985 }), { projectId: 1, userId: 985 });
-  assert.deepEqual(client.compactTaskRelationsRoute.query.parse({ compat: "htpr-6924" }), { compat: "htpr-6924" });
-  for (const [name, route] of [["versions", client.descriptionVersionsRoute], ["cycle", client.taskCycleRoute], ["board", client.boardDetailRoute], ["relations", client.compactTaskRelationsRoute]]) {
+  for (const [name, route] of [["versions", client.descriptionVersionsRoute], ["cycle", client.taskCycleRoute], ["board", client.boardDetailRoute]]) {
     assert.ok(route.success);
     const error = fixtures.errors[name];
     assert.deepEqual(route.errors[error.status].parse(error.body), error.body);

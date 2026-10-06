@@ -130,6 +130,7 @@ export const HTPR_6662_AGENT_LOG_NAME_FLAG = "htpr-6662-agent-log-name";
 
 export const HTPR_6923_APP_ROUTER_WRITES_FLAG = "htpr-6923-app-router-writes";
 export const HTPR_6925_TYPED_API_CLIENT_FLAG = "htpr-6925-typed-api-client";
+export const HTPR_6967_TYPED_TASK_READS_FLAG = "htpr-6967-typed-task-reads";
 export const HTPR_6966_SKILLS_ACCESS_DENIAL_FLAG = "htpr-6966-skills-access-denial";
 export const HTPR_6929_COMPOSE_TASK_WRITER_FLAG = "htpr-6929-compose-task-writer";
 

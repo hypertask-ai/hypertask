@@ -6,8 +6,6 @@ import {
   boardDetailBodySchema,
   boardDetailResponseSchema,
   boardReadErrorSchema,
-  compactTaskRelationsBodySchema,
-  compactTaskRelationsResponseSchema,
   descriptionVersionsPathSchema,
   descriptionVersionsResponseSchema,
   taskCycleQuerySchema,
@@ -99,19 +97,6 @@ export const boardDetailRoute = {
   success: boardDetailResponseSchema,
   validate: "deferred",
   errors: { 400: boardReadErrorSchema, 401: boardReadErrorSchema, 403: boardReadErrorSchema, 405: boardReadErrorSchema },
-} satisfies ReadRouteDescriptor;
-
-// No frontend currently calls getAll. Describe the negotiated projection without
-// adding another board request or opting existing callers into the server flag.
-export const compactTaskRelationsRoute = {
-  method: "POST",
-  pathParams: z.undefined(),
-  path: () => "/api/tasks/getAll",
-  query: z.object({ compat: z.literal("htpr-6924") }),
-  body: compactTaskRelationsBodySchema,
-  success: compactTaskRelationsResponseSchema,
-  validate: "deferred",
-  errors: { 401: boardReadErrorSchema, 405: boardReadErrorSchema },
 } satisfies ReadRouteDescriptor;
 
 function validateRead<Schema extends z.ZodType>(name: string, schema: Schema, data: z.output<Schema>, validate: ReadRouteDescriptor["validate"] = "sync"): z.output<Schema> {

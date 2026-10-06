@@ -46,24 +46,6 @@ export const taskRelationSchema = z.looseObject({
   projectId: id,
   sectionId: id.nullable(),
 });
-export const compactTaskRelationsBodySchema = z.object({ projectId: id });
-export const compactTaskRelationsResponseSchema = z.array(z.looseObject({
-  id,
-  title: z.string(),
-  uniqueIndex: z.number().int(),
-  ranking: z.string(),
-  userId: id,
-  projectId: id,
-  section: z.string(),
-  sectionId: id.nullable(),
-  createdAt: z.string(),
-  sectionChangedAt: z.string(),
-  lastCommentAt: z.string().nullable(),
-  assignees: z.array(z.looseObject({ user: z.looseObject({ id }).nullable() })),
-  comments: z.array(z.looseObject({ id, notifications: z.array(z.looseObject({ id })) })),
-  subTasks: z.array(taskRelationSchema.extend({ createdAt: z.string() })),
-  parentTask: taskRelationSchema.extend({ subTasks: z.array(taskRelationSchema) }).nullable(),
-}));
 
 export const boardDetailBodySchema = z.object({ projectId: id, userId: id });
 export const boardDetailResponseSchema = z.looseObject({

@@ -4,7 +4,7 @@ const path = require("node:path");
 const test = require("node:test");
 const ts = require("typescript");
 const { load } = require("./task-route-loader.cjs");
-const key = "htpr-6925-typed-api-client";
+const key = "htpr-6967-typed-task-reads";
 const root = path.resolve(__dirname, "..");
 const flush = () => new Promise(setImmediate);
 
@@ -20,7 +20,7 @@ function ui(file, flag, data, error) {
   const mocks = {
     react,
     "@/hooks/useFlag": { useFlag: (requested) => { assert.equal(requested, key); return flag; } },
-    "@/lib/flags/keys": { HTPR_6925_TYPED_API_CLIENT_FLAG: key },
+    "@/lib/flags/keys": { HTPR_6967_TYPED_TASK_READS_FLAG: key },
     "@/lib/api/typedClient": {
       getDescriptionVersions: (...args) => read("typed-versions", ...args),
       getTaskCycle: async (...args) => (await read("typed-cycle", ...args)).data,
@@ -133,7 +133,7 @@ for (const flag of [false, undefined, true]) {
     const api = load("src/hooks/Homepage/useGetBoards.ts", {
       react: { useRef: (current) => ({ current }), useEffect: (callback) => effects.push(callback), useLayoutEffect: (callback) => callback() },
       "@/hooks/useFlag": { useFlag: (requested) => { assert.equal(requested, key); return flag; } },
-      "@/lib/flags/keys": { HTPR_6925_TYPED_API_CLIENT_FLAG: key }, "@/lib/api/typedClient": { getBoardDetail: typedRead },
+      "@/lib/flags/keys": { HTPR_6967_TYPED_TASK_READS_FLAG: key }, "@/lib/api/typedClient": { getBoardDetail: typedRead },
       "@tanstack/react-query": { useQueryClient: () => cache, useQuery: (config) => { query = config; return {}; } },
       "@/hooks/General/useHydrated": { useHydrated: () => true }, "@/lib/firstScreen/SurfaceContext": { useFirstScreenSurface: () => null },
       "@/lib/firstScreen/boardDocument": { getBoardDocument: () => null }, "@/lib/boardBootstrap/earlyBoardBootstrap": {},
