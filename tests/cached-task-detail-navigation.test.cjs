@@ -250,8 +250,8 @@ test("background history refreshes preserve the mounted cached detail, but route
     "@tanstack/react-query": { useQueryClient: () => queryClient },
     "@/lib/state": { useRecoilValue: () => ({ id: currentAccountId }) },
     "@/store": { currentUserAtom: {} },
-  "@/hooks/useFlag": { useFlag: () => flagEnabled },
-  "@/lib/flags/keys": { HTPR_6752_INSTANT_TICKET_OPEN_FLAG: "htpr-6752-instant-ticket-open" },
+  "@/hooks/useFlag": { useFlag: (key) => key === "htpr-6972-subtask-link" ? false : flagEnabled },
+  "@/lib/flags/keys": { HTPR_6752_INSTANT_TICKET_OPEN_FLAG: "htpr-6752-instant-ticket-open", HTPR_6972_SUBTASK_LINK_FLAG: "htpr-6972-subtask-link" },
     "@/components/Modals/SwipeUnread/EmbeddedTaskDetail": { __esModule: true, default: Detail },
     "@/lib/navigation/cachedTaskDetail": cache,
   };

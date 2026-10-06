@@ -6,10 +6,15 @@ const React = require("react");
 const { JSDOM } = require("jsdom");
 const { createRoot } = require("react-dom/client");
 const ts = require("typescript");
+const { QueryClient } = require("@tanstack/react-query");
+const { execFileSync } = require("node:child_process");
 
 function load(relativePath, stubs) {
   const filename = path.join(__dirname, "..", relativePath);
-  const javascript = ts.transpileModule(fs.readFileSync(filename, "utf8"), {
+  const source = process.env.VISITED_TASK_BASELINE && relativePath.endsWith("useTaskDetailState.tsx")
+    ? execFileSync("git", ["show", `origin/production:${relativePath}`], { cwd: path.join(__dirname, ".."), encoding: "utf8" })
+    : fs.readFileSync(filename, "utf8");
+  const javascript = ts.transpileModule(source, {
     compilerOptions: {
       module: ts.ModuleKind.CommonJS,
       target: ts.ScriptTarget.ES2020,
@@ -47,10 +52,19 @@ test("real task detail reads the provider snapshot without duplicate props and r
     },
   });
   const seeds = [];
+  const queryClient = new QueryClient();
+  let embedded = true;
+  let authenticatedUserId = 2343;
+  let subtaskLink = true;
+  const cachedKey = id => ["cached-task-detail", 2343, id];
   const stubs = {
     "@/store": {},
     "@/lib/state": { useRecoilState: () => [null, noop], useSetRecoilState: () => noop },
-    "@tanstack/react-query": { useQueryClient: emptyHook },
+    "@tanstack/react-query": { useQueryClient: () => queryClient },
+    "@/hooks/General/useAuth": { useAuth: () => ({ authenticatedUserId }) },
+    "@/hooks/useFlag": { useFlag: () => subtaskLink },
+    "@/lib/flags/keys": { HTPR_6972_SUBTASK_LINK_FLAG: "htpr-6972-subtask-link" },
+    "@/lib/navigation/cachedTaskDetail": { cachedTaskDetailKey: (accountId, id) => ["cached-task-detail", accountId, id] },
     "next/navigation": { useRouter: emptyHook, useSearchParams: emptyHook },
     "@/hooks/MultiPages/useGetPriorityForTask": {
       useGetPriorityForTask: (...args) => { seeds.push(args); return {}; },
@@ -78,13 +92,14 @@ test("real task detail reads the provider snapshot without duplicate props and r
   const { useTaskDetailState } = load("src/app/detail/[...slug]/useTaskDetailState.tsx", stubs);
   let state;
   function Consumer() {
-    state = useTaskDetailState({ _slugs: ["project-6859", "43"], _currentUser: { id: 2343 }, embedded: true });
+    state = useTaskDetailState({ _slugs: ["project-6859", "43"], _currentUser: { id: 2343 }, embedded });
     return React.createElement("span", null, state._parsedTask.title);
   }
   const root = createRoot(dom.window.document.getElementById("root"));
   t.after(async () => {
     await React.act(async () => root.unmount());
     dom.window.close();
+    queryClient.clear();
     for (const [key, descriptor] of previous) {
       if (descriptor) Object.defineProperty(global, key, descriptor);
       else delete global[key];
@@ -119,4 +134,26 @@ test("real task detail reads the provider snapshot without duplicate props and r
   assert.deepEqual(providerInputs.at(-1).task, nextTask);
   assert.deepEqual(seeds.at(-1).slice(1), [43, 3]);
   assert.equal(dom.window.document.querySelector("span").textContent, nextTask.title);
+  assert.equal(queryClient.getQueryData(cachedKey(nextTask.id)), undefined, "embedded detail must not publish a native-navigation seed");
+  embedded = false;
+  subtaskLink = false;
+  await render(nextTask);
+  assert.equal(queryClient.getQueryData(cachedKey(nextTask.id)), undefined, "flag-off routes keep the original cache behavior");
+  subtaskLink = true;
+  authenticatedUserId = 985;
+  await render(nextTask);
+  assert.equal(queryClient.getQueryData(cachedKey(nextTask.id)), undefined, "an old server account cannot seed the signed-in account's cache");
+  authenticatedUserId = 2343;
+  await render(nextTask);
+  assert.deepEqual(queryClient.getQueryData(cachedKey(nextTask.id)), nextTask, "visited authorized routes remain available while Back/Forward waits for RSC");
+  const refreshed = { ...nextTask, title: "Newer authorized cache response" };
+  queryClient.setQueryData(cachedKey(nextTask.id), refreshed);
+  await render({ ...nextTask, title: "Older route snapshot" });
+  assert.deepEqual(queryClient.getQueryData(cachedKey(nextTask.id)), refreshed, "mounting a visited route must not overwrite a newer query response");
+  queryClient.removeQueries({ queryKey: cachedKey(nextTask.id), exact: true });
+  const denied = new Error("Access denied");
+  await assert.rejects(queryClient.fetchQuery({ queryKey: cachedKey(nextTask.id), retry: false, queryFn: () => { throw denied; } }));
+  await render(nextTask);
+  assert.equal(queryClient.getQueryState(cachedKey(nextTask.id)).error, denied, "an old route snapshot must not clear a denied task's query state");
+  assert.equal(queryClient.getQueryData(cachedKey(nextTask.id)), undefined);
 });

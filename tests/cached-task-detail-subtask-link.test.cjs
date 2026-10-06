@@ -40,11 +40,14 @@ for (const enabled of [true, false]) {
     const href = task => `/detail/project-${task.projectId}/${task.uniqueIndex}`;
     const Detail = ({ initialTask }) => React.createElement("article", null, initialTask.title, initialTask.description_.content, initialTask.comments);
     let nextPath = "/project";
+    // Next's route boundary reads current router context, not a frozen task view.
+    const ServerDetail = () => React.createElement(Detail, { initialTask: nextPath === href(parent) ? parent : nextPath === href(related) ? related : child });
     let serverChildren = React.createElement("div", null, "Board");
     const router = { replace: () => assert.fail("a task-page navigation must not replace the parent's history entry"), refresh: () => assert.fail("task Back must not refresh the board") };
     const relativePath = "src/components/PageComponents/TaskDetail/CachedTaskDetailNavigation.tsx";
-    const source = process.env.SUBTASK_LINK_BASELINE
-      ? execFileSync("git", ["show", `origin/production:${relativePath}`], { cwd: root, encoding: "utf8" })
+    const baseline = process.env.SUBTASK_LINK_BASELINE === "1" ? "origin/production" : process.env.SUBTASK_LINK_BASELINE;
+    const source = baseline
+      ? execFileSync("git", ["show", `${baseline}:${relativePath}`], { cwd: root, encoding: "utf8" })
       : fs.readFileSync(path.join(root, relativePath), "utf8");
     const compiled = ts.transpileModule(source, { compilerOptions: { jsx: ts.JsxEmit.ReactJSX, module: ts.ModuleKind.CommonJS } }).outputText;
     const mocks = {
@@ -88,7 +91,7 @@ for (const enabled of [true, false]) {
     window.addEventListener("popstate", () => {
       if (!followHistory) return;
       nextPath = window.location.pathname;
-      serverChildren = React.createElement(Detail, { initialTask: nextPath === href(parent) ? parent : child });
+      serverChildren = React.createElement(ServerDetail);
       render();
     });
     // Next Link/router.push commits the new pathname and children, without
@@ -103,7 +106,7 @@ for (const enabled of [true, false]) {
       assertContent(sourceTask);
       await React.act(async () => {
         nextPath = href(target);
-        serverChildren = React.createElement(Detail, { initialTask: target });
+        serverChildren = React.createElement(ServerDetail);
         render();
       });
       if (enabled) {
@@ -134,7 +137,7 @@ for (const enabled of [true, false]) {
     if (enabled) {
       await React.act(async () => {
         nextPath = href(child);
-        serverChildren = React.createElement(Detail, { initialTask: child });
+        serverChildren = React.createElement(ServerDetail);
         render();
       });
       assert.equal(document.querySelector("article").textContent, child.title + child.description_.content + child.comments, "a new Next route must invalidate the last native-event override");
@@ -149,7 +152,7 @@ for (const enabled of [true, false]) {
         await React.act(async () => {
           cache.openCachedTaskDetail({ queryClient: client, accountId: 2343, projectId: target.projectId, uniqueIndex: target.uniqueIndex, href: href(target), task: target });
           nextPath = href(target);
-          serverChildren = React.createElement(Detail, { initialTask: target });
+          serverChildren = React.createElement(ServerDetail);
           render();
         });
       }
@@ -160,13 +163,13 @@ for (const enabled of [true, false]) {
       assertContent(child);
       await React.act(async () => {
         nextPath = href(parent);
-        serverChildren = React.createElement(Detail, { initialTask: parent });
+        serverChildren = React.createElement(ServerDetail);
         render();
       });
       assert.equal(document.querySelector("article").textContent, child.title + child.description_.content + child.comments, "a Next update older than Forward must keep the child in the address");
       await React.act(async () => {
         nextPath = href(child);
-        serverChildren = React.createElement(Detail, { initialTask: child });
+        serverChildren = React.createElement(ServerDetail);
         render();
       });
       assertContent(child);
@@ -175,13 +178,13 @@ for (const enabled of [true, false]) {
       await React.act(async () => {
         cache.openCachedTaskDetail({ queryClient: client, accountId: 2343, projectId: parent.projectId, uniqueIndex: parent.uniqueIndex, href: href(parent), task: parent });
         nextPath = href(parent);
-        serverChildren = React.createElement(Detail, { initialTask: parent });
+        serverChildren = React.createElement(ServerDetail);
         render();
       });
       await React.act(async () => {
         window.history.replaceState({ ...window.history.state, cachedTaskDetail: undefined }, "", href(parent));
         nextPath = href(child);
-        serverChildren = React.createElement(Detail, { initialTask: child });
+        serverChildren = React.createElement(ServerDetail);
         render();
       });
       assert.equal(document.querySelector("article").textContent, child.title + child.description_.content + child.comments, "Next Link renders before pushState even after native opens");
@@ -194,20 +197,20 @@ for (const enabled of [true, false]) {
       assertContent(child);
       await React.act(async () => {
         nextPath = href(parent);
-        serverChildren = React.createElement(Detail, { initialTask: parent });
+        serverChildren = React.createElement(ServerDetail);
         render();
       });
       assertContent(child);
       await React.act(async () => {
         nextPath = href(child);
-        serverChildren = React.createElement(Detail, { initialTask: child });
+        serverChildren = React.createElement(ServerDetail);
         render();
       });
       assertContent(child);
       // Acknowledgement releases history precedence for the next ordinary Link.
       await React.act(async () => {
         nextPath = href(related);
-        serverChildren = React.createElement(Detail, { initialTask: related });
+        serverChildren = React.createElement(ServerDetail);
         render();
       });
       assert.equal(document.querySelector("article").textContent, related.title + related.description_.content + related.comments);
@@ -218,13 +221,13 @@ for (const enabled of [true, false]) {
       await React.act(async () => {
         cache.openCachedTaskDetail({ queryClient: client, accountId: 2343, projectId: parent.projectId, uniqueIndex: parent.uniqueIndex, href: href(parent), task: parent });
         nextPath = href(child);
-        serverChildren = React.createElement(Detail, { initialTask: child });
+        serverChildren = React.createElement(ServerDetail);
         render();
       });
       assertContent(parent);
       await React.act(async () => {
         nextPath = href(parent);
-        serverChildren = React.createElement(Detail, { initialTask: parent });
+        serverChildren = React.createElement(ServerDetail);
         render();
       });
       assertContent(parent);
@@ -232,7 +235,7 @@ for (const enabled of [true, false]) {
       assertContent(child);
       await React.act(async () => {
         nextPath = href(related);
-        serverChildren = React.createElement(Detail, { initialTask: related });
+        serverChildren = React.createElement(ServerDetail);
         render();
       });
       assertContent(child);

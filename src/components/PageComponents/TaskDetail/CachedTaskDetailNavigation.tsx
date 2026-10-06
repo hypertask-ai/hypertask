@@ -8,7 +8,7 @@ import { useRecoilValue } from "@/lib/state";
 import { currentUserAtom } from "@/store";
 import { useFlag } from "@/hooks/useFlag";
 import { HTPR_6752_INSTANT_TICKET_OPEN_FLAG, HTPR_6972_SUBTASK_LINK_FLAG } from "@/lib/flags/keys";
-import { cachedTaskDetailKey, cachedTaskDetailLocation, type CachedTaskDetailLocation } from "@/lib/navigation/cachedTaskDetail";
+import { cachedTaskDetailKey, cachedTaskDetailLocation, findCachedTaskDetail, type CachedTaskDetailLocation } from "@/lib/navigation/cachedTaskDetail";
 
 let loadedTaskDetail: typeof import("@/components/Modals/SwipeUnread/EmbeddedTaskDetail").default | undefined;
 const loadTaskDetail = () => import("@/components/Modals/SwipeUnread/EmbeddedTaskDetail").then((module) => {
@@ -57,7 +57,6 @@ export default function CachedTaskDetailNavigation({ children, accountId }: {
   const historyLocation = useMemo(() => ({
     pathname: null as string | null,
     nextPathname: null as string | null,
-    views: new Map<string, ReactNode>(),
   }), [accountId]);
   if (pathname !== historyLocation.nextPathname) {
     historyLocation.nextPathname = pathname;
@@ -71,7 +70,9 @@ export default function CachedTaskDetailNavigation({ children, accountId }: {
       getSnapshot: () => historyLocation.pathname === null ? currentPathname : browserPathname(),
       subscribe: (notify: () => void) => subscribeToLocation((event) => {
         currentPathname = browserPathname();
-        if (event.type === "popstate" || historyLocation.pathname !== null) historyLocation.pathname = currentPathname;
+        if (event.type === "popstate" || historyLocation.pathname !== null || !window.history.state?.cachedTaskDetail) {
+          historyLocation.pathname = currentPathname;
+        }
         notify();
       }, true),
     };
@@ -82,13 +83,20 @@ export default function CachedTaskDetailNavigation({ children, accountId }: {
     serverPathname,
   );
   // Next can replace custom history state while refreshing the same route.
-  const location = cachedTaskDetailLocation(
+  const markedLocation = cachedTaskDetailLocation(
     nativePathname ?? pathname,
     instantTicketOpen && currentUser?.id === accountId ? accountId : null,
     typeof window === "undefined" ? null : {
       cachedTaskDetail: window.history.state?.cachedTaskDetail ?? previousLocation.current,
     },
   );
+  const route = (nativePathname ?? pathname)?.match(/^\/detail\/project-(\d+)\/(\d+)$/);
+  const routeTask = subtaskLink && !markedLocation && instantTicketOpen && accountId !== null && currentUser?.id === accountId && route
+    ? findCachedTaskDetail(queryClient, accountId, Number(route[1]), Number(route[2]))
+    : undefined;
+  const location = markedLocation ?? (routeTask && accountId !== null ? {
+    accountId, taskId: routeTask.id, projectId: routeTask.projectId, uniqueIndex: routeTask.uniqueIndex,
+  } : undefined);
   previousLocation.current = location;
   useEffect(() => {
     if (!location) return;
@@ -142,9 +150,9 @@ export default function CachedTaskDetailNavigation({ children, accountId }: {
       if (timer !== undefined) window.clearTimeout(timer);
     };
   }, [instantTicketOpen, accountId, currentUser?.id, pathname]);
-  const task = location && queryClient.getQueryData<ITask>(
+  const task = location && (queryClient.getQueryData<ITask>(
     cachedTaskDetailKey(location.accountId, location.taskId),
-  );
+  ) ?? routeTask);
   useEffect(() => {
     if (location && !task) router.replace(window.location.pathname + window.location.search + window.location.hash);
   }, [location, task, router]);
@@ -159,17 +167,12 @@ export default function CachedTaskDetailNavigation({ children, accountId }: {
     });
     return () => { cancelled = true; };
   }, [showDetail, EmbeddedTaskDetail, router]);
-  // Next can discard the marker and leave the previous route's children mounted
-  // during RSC loading. Reuse only a visited view for the exact address/account.
+  // A Suspense fallback would remount the board and replay its startup navigation.
   if (!showDetail || !EmbeddedTaskDetail) {
-    if (subtaskLink && instantTicketOpen && currentUser?.id === accountId && nativePathname) {
-      if (nativePathname !== pathname) return historyLocation.views.get(nativePathname) ?? null;
-      historyLocation.views.set(nativePathname, children);
-    }
+    if (subtaskLink && historyLocation.pathname !== null && nativePathname !== pathname) return null;
     return children;
   }
-  // A Suspense fallback would remount the board and replay its startup navigation.
-  const detail = (
+  return (
     <EmbeddedTaskDetail
       key={`${location.accountId}:${location.taskId}`}
       taskId={location.taskId}
@@ -179,6 +182,4 @@ export default function CachedTaskDetailNavigation({ children, accountId }: {
       embedded={false}
     />
   );
-  if (subtaskLink && nativePathname) historyLocation.views.set(nativePathname, detail);
-  return detail;
 }
