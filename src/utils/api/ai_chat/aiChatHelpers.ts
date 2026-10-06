@@ -95,7 +95,7 @@ export const AI_Chat_API = {
     );
   },
 
-  getSessionPage: async (options: ChatSessionScope & { cursor?: string; limit?: number } = {}, signal?: AbortSignal): Promise<ApiResponse<TChatSessionsWireResponse>> =>
+  getSessionPage: async (options: ChatSessionScope & { cursor?: string; limit?: number; emptyOnly?: boolean } = {}, signal?: AbortSignal): Promise<ApiResponse<TChatSessionsWireResponse>> =>
     axiosClient.get<TChatSessionsWireResponse>(globalConstants.getAllAiChatSessionsRoute, {
       params: { compat: "htpr-6924", ...options }, signal,
     }),

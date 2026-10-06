@@ -30,7 +30,7 @@ async function pagedSessions(request: NextRequest, userId: number) {
   const sessionId = params.get("sessionId");
   if (params.has("sessionId")) {
     if (!sessionId || !uuidPattern.test(sessionId) ||
-        ["cursor", "limit", "taskId", "projectId"].some((key) => params.has(key))) return invalid();
+        ["cursor", "limit", "taskId", "projectId", "emptyOnly"].some((key) => params.has(key))) return invalid();
     const session = await prisma.chatSession.findFirst({
       relationLoadStrategy: "join",
       where: { ...visible, id: sessionId },
@@ -51,6 +51,8 @@ async function pagedSessions(request: NextRequest, userId: number) {
     if (!/^[1-9]\d*$/.test(value) || !Number.isSafeInteger(Number(value))) return invalid();
     scope[key] = Number(value);
   }
+  if (params.has("emptyOnly") && params.get("emptyOnly") !== "true") return invalid();
+  const emptyOnly = params.get("emptyOnly") === "true";
   let cursor: { updatedAt: Date; id: string } | undefined;
   if (params.has("cursor")) {
     const encoded = params.get("cursor")!;
@@ -70,6 +72,7 @@ async function pagedSessions(request: NextRequest, userId: number) {
     relationLoadStrategy: "join",
     where: {
       ...visible, ...scope,
+      ...(emptyOnly ? { messages: { none: {} } } : {}),
       ...(cursor ? { AND: [{ OR: [
         { updatedAt: { lt: cursor.updatedAt } },
         { updatedAt: cursor.updatedAt, id: { lt: cursor.id } },
@@ -81,7 +84,7 @@ async function pagedSessions(request: NextRequest, userId: number) {
   });
   const hasMore = rows.length > limit;
   const page = rows.slice(0, limit);
-  if (!page.length && !cursor && !Object.keys(scope).length) {
+  if (!page.length && !cursor && !Object.keys(scope).length && !emptyOnly) {
     page.push(await prisma.chatSession.create({ data: { userId }, select: summarySelect }));
   }
   const sessions = page.map(({ _count, ...session }) => ({

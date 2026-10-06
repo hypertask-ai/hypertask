@@ -18,3 +18,18 @@ test('synthetic delegate evidence bounds summary rows and projects no transcript
   assert.ok(Buffer.byteLength(summaryText) < Buffer.byteLength(legacyText));
   console.log(JSON.stringify({ synthetic: true, sessions: rows.length, queryCount: paged.calls.length, fetchedRowBound: paged.calls[0].take, returnedRows: JSON.parse(summaryText).sessions.length, legacyBytes: Buffer.byteLength(legacyText), summaryBytes: Buffer.byteLength(summaryText) }));
 });
+
+
+test('emptyOnly is validated, filters before paging, and never creates an empty session on lookup', async () => {
+  const { session, id } = require('./ai-chat-session-fixture.cjs');
+  const f = fixture({ rows: [session(9), session(1, { messages: [] })] });
+  const result = await f.get('compat=htpr-6924&emptyOnly=true&limit=1');
+  assert.equal(result.status, 200);
+  assert.deepEqual((await result.json()).sessions.map((row) => row.id), [id(1)]);
+  assert.deepEqual(f.calls[0].where.messages, { none: {} });
+  const none = fixture({ rows: [session(9)] });
+  assert.deepEqual((await (await none.get('compat=htpr-6924&emptyOnly=true')).json()).sessions, []);
+  assert.equal(none.writes.length, 0);
+  assert.equal((await f.get('compat=htpr-6924&emptyOnly=false')).status, 400);
+  assert.equal((await f.get(`compat=htpr-6924&sessionId=${id(1)}&emptyOnly=true`)).status, 400);
+});

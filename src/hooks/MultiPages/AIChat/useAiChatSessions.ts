@@ -9,7 +9,7 @@ import { shouldBlockAiDueToByokProvider } from "@/lib/byokSelectedProviderGate";
 import { isGuestCookieUser } from "@/lib/demo/isGuestClient";
 import type { useAiChatState } from "./useAiChatState";
 
-type Context = Pick<ReturnType<typeof useAiChatState>, "sessionIntentGenerationRef" | "sessionSetupRef" | "resolvedBoardSessionRef" | "clearMessageQueue" | "selectSessionInHistory" | "createSession" | "isFullScreenChat" | "setDockedChatScope" | "currentProject" | "previousProjectIdRef" | "deleteSessionInHistory" | "messageQueueRef" | "setQueuedMessages" | "sendInFlightRef" | "modelBilling" | "currentAiOption" | "pathname" | "currentUser" | "taskId" | "sessionsRef" | "dockedChatScope" | "sessionContextKey" | "chatHistoryReadyRef" | "aiChatBoardSessionMap" | "setAiChatBoardSessionMap" | "setRecentChatBoardIds" | "shouldLoadChatHistory" | "resolveHistorySession">;
+type Context = Pick<ReturnType<typeof useAiChatState>, "sessionIntentGenerationRef" | "sessionSetupRef" | "resolvedBoardSessionRef" | "clearMessageQueue" | "selectSessionInHistory" | "createSession" | "isFullScreenChat" | "setDockedChatScope" | "currentProject" | "previousProjectIdRef" | "deleteSessionInHistory" | "messageQueueRef" | "setQueuedMessages" | "sendInFlightRef" | "modelBilling" | "currentAiOption" | "pathname" | "currentUser" | "taskId" | "sessionsRef" | "dockedChatScope" | "sessionContextKey" | "chatHistoryReadyRef" | "aiChatBoardSessionMap" | "setAiChatBoardSessionMap" | "setRecentChatBoardIds" | "shouldLoadChatHistory" | "resolveHistorySession" | "getDisplayedSession">;
 
 export function useAiChatSessions(context: Context) {
   const {
@@ -18,7 +18,7 @@ export function useAiChatSessions(context: Context) {
   deleteSessionInHistory, messageQueueRef, setQueuedMessages, sendInFlightRef, modelBilling,
   currentAiOption, pathname, currentUser, taskId, sessionsRef,
   dockedChatScope, sessionContextKey, chatHistoryReadyRef, aiChatBoardSessionMap, setAiChatBoardSessionMap,
-  setRecentChatBoardIds, shouldLoadChatHistory, resolveHistorySession,
+  setRecentChatBoardIds, shouldLoadChatHistory, resolveHistorySession, getDisplayedSession,
   } = context;
   const restCompat = useFlag(HTPR_6924_REST_COMPAT_FLAG);
   let setupFlagKey = "legacy";
@@ -137,7 +137,7 @@ export function useAiChatSessions(context: Context) {
           if (sessionIntentGenerationRef.current !== generation) return undefined;
         }
         if (!chatHistoryReadyRef.current || sessionIntentGenerationRef.current !== generation) return undefined;
-        const selected = sessionsRef.current[0];
+        const selected = getDisplayedSession();
         return selected?.userId === userId ? selected : undefined;
       }
       // Match on taskId alone, same as the find-or-create init effect in
@@ -202,7 +202,7 @@ export function useAiChatSessions(context: Context) {
         return createdSession;
       }
       if (!needsBoardSession || typeof projectId !== "number") {
-        return currentSessions[0];
+        return restCompat ? getDisplayedSession() : currentSessions[0];
       }
       if (!isCurrentIntent()) return undefined;
 
@@ -210,15 +210,12 @@ export function useAiChatSessions(context: Context) {
       // user may have deliberately selected another session since then, so the
       // currently selected/front session is the correct one.
       if (previousProjectIdRef.current === projectId) {
+        if (restCompat) {
+          resolvedBoardSessionRef.current = null;
+          return getDisplayedSession();
+        }
         const resolved = resolvedBoardSessionRef.current;
         if (resolved?.projectId === projectId) {
-          if (restCompat && !currentSessions.some((session) => session.id === resolved.session.id)) {
-            const stillExists = await resolveHistorySession(resolved.session.id);
-            if (!isCurrentIntent()) return undefined;
-            if (stillExists) return stillExists;
-            resolvedBoardSessionRef.current = null;
-            return currentSessions[0];
-          }
           if (currentSessions[0].id === resolved.session.id) {
             resolvedBoardSessionRef.current = null;
             return currentSessions[0];
@@ -240,10 +237,14 @@ export function useAiChatSessions(context: Context) {
               projectId,
               session: mappedSession,
             };
-            selectSessionInHistory(mappedSession.id);
+            if (restCompat) {
+              await selectSessionInHistory(mappedSession.id);
+              if (!isCurrentIntent()) return undefined;
+            }
+            else selectSessionInHistory(mappedSession.id);
           }
           previousProjectIdRef.current = projectId;
-          return mappedSession;
+          return restCompat ? getDisplayedSession() : mappedSession;
         }
 
         setAiChatBoardSessionMap((previousMap) => {
@@ -258,9 +259,10 @@ export function useAiChatSessions(context: Context) {
         if (!isCurrentIntent()) return undefined;
         if (scopedSession) {
           resolvedBoardSessionRef.current = { projectId, session: scopedSession };
-          selectSessionInHistory(scopedSession.id);
+          await selectSessionInHistory(scopedSession.id);
+          if (!isCurrentIntent()) return undefined;
           previousProjectIdRef.current = projectId;
-          return scopedSession;
+          return getDisplayedSession();
         }
       }
 
@@ -269,14 +271,16 @@ export function useAiChatSessions(context: Context) {
         if (!isCurrentIntent()) return undefined;
         if (emptySession) {
           resolvedBoardSessionRef.current = { projectId, session: emptySession };
-          selectSessionInHistory(emptySession.id);
+          await selectSessionInHistory(emptySession.id);
+          if (!isCurrentIntent()) return undefined;
           previousProjectIdRef.current = projectId;
-          return emptySession;
+          return getDisplayedSession();
         }
       }
+      if (restCompat && getDisplayedSession()?.id !== currentSessions[0]?.id) return getDisplayedSession();
       if ((currentSessions[0].messages?.length ?? 0) === 0) {
         previousProjectIdRef.current = projectId;
-        return currentSessions[0];
+        return restCompat ? getDisplayedSession() : currentSessions[0];
       }
 
       const emptySession = currentSessions.find(
@@ -286,7 +290,7 @@ export function useAiChatSessions(context: Context) {
         resolvedBoardSessionRef.current = { projectId, session: emptySession };
         selectSessionInHistory(emptySession.id);
         previousProjectIdRef.current = projectId;
-        return emptySession;
+        return restCompat ? getDisplayedSession() : emptySession;
       }
 
       // Reuse empty sessions above to avoid creating one on every board visit.
@@ -296,7 +300,7 @@ export function useAiChatSessions(context: Context) {
         resolvedBoardSessionRef.current = { projectId, session: createdSession };
         previousProjectIdRef.current = projectId;
       }
-      return createdSession;
+      return restCompat ? getDisplayedSession() : createdSession;
     })();
 
     sessionSetupRef.current = { key: setupKey, promise };
@@ -318,7 +322,7 @@ export function useAiChatSessions(context: Context) {
     sessionContextKey,
     selectSessionInHistory,
     setAiChatBoardSessionMap,
-    taskId, restCompat, resolveHistorySession, setupFlagKey,
+    taskId, restCompat, resolveHistorySession, getDisplayedSession, setupFlagKey,
   ]);
 
   useEffect(() => {

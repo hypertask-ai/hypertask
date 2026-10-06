@@ -14,6 +14,7 @@ function matches(row, where) {
   if (where.OR && !where.OR.some((clause) => matches(row, clause))) return false;
   for (const [key, value] of Object.entries(where)) {
     if (key === 'AND' || key === 'OR') continue;
+    if (key === 'messages') { if (value.none && row.messages.length) return false; continue; }
     if (key === 'agent') { if (row.runtimeType === value.runtimeType.not) return false; continue; }
     if (value && typeof value === 'object' && !(value instanceof Date)) {
       if ('lt' in value && !(row[key] < value.lt)) return false;
