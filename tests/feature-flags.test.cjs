@@ -244,11 +244,6 @@ test("declared flags remain listed with ticket details and can be changed", asyn
       { key: "htpr-6141-ai-first-task-writer", mode: "OWNER_AND_QA", updatedAt: null },
       { key: "htpr-6154-chat-stop-and-timeout", mode: "OWNER_AND_QA", updatedAt: null },
       { key: "htpr-6155-chat-agent-brief", mode: "OWNER_AND_QA", updatedAt: null },
-      {
-        key: "htpr-6166-scoped-board-refetch",
-        mode: "OWNER_AND_QA",
-        updatedAt: null,
-      },
       { key: "htpr-6175-quick-entry-cards", mode: "OWNER_AND_QA", updatedAt: null },
       {
         key: "htpr-6177-auto-task-descriptions",
@@ -720,6 +715,23 @@ test("the 19 retired infra flags are hidden, immutable and enabled for old tabs"
     const clientFlags = await flags.featureFlagsForUser(userId);
     for (const key of retiredInfraKeys) assert.equal(clientFlags[key], true, key);
   }
+});
+
+test("the retired scoped refetch flag is hidden, immutable and enabled for old tabs", async () => {
+  const key = "htpr-6166-scoped-board-refetch";
+  listedRows = [
+    { key, mode: "OFF", updatedAt: new Date() },
+    { key: "htpr-6536-qa-login", mode: "OWNER_AND_QA", updatedAt: null },
+  ];
+  const listedKeys = new Set((await flags.listFeatureFlagModes()).map(({ key }) => key));
+  assert.ok(listedKeys.has("htpr-6536-qa-login"), "positive control remains listed");
+  assert.equal(flags.FEATURE_FLAG_KEYS.includes(key), false);
+  assert.equal(listedKeys.has(key), false);
+  for (const userId of [985, 42]) {
+    assert.equal((await flags.featureFlagsForUser(userId))[key], true);
+  }
+  await assert.rejects(flags.setFeatureFlagMode(key, "EVERYONE"), /Unknown feature flag/);
+  await assert.rejects(flags.setFeatureFlagKeep(key, true), /Unknown feature flag/);
 });
 
 test("the removed inbox archive flag is hidden, disabled and cannot be restored", async () => {

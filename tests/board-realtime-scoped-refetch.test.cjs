@@ -20,7 +20,6 @@ const {
 );
 const {
   createBoardRealtimeEventHandler,
-  shouldUseScopedBoardReconcile,
 } = jiti(
   path.join(root, "src/lib/realtime/boardRealtimeEventHandler.ts"),
 );
@@ -242,49 +241,14 @@ test("the full reconcile still expires the board snapshot and refetches the list
   assert.deepEqual(operations[1], ["refetch", PROJECTS_ALL_KEY]);
 });
 
-test("the hook routing uses the scoped path only for flagged change events", () => {
-  assert.equal(
-    shouldUseScopedBoardReconcile({
-      scopedRefetch: true,
-      trigger: "event",
-      userId: USER_ID,
-    }),
-    true,
-  );
-  assert.equal(
-    shouldUseScopedBoardReconcile({
-      scopedRefetch: false,
-      trigger: "event",
-      userId: USER_ID,
-    }),
-    false,
-  );
-  assert.equal(
-    shouldUseScopedBoardReconcile({
-      scopedRefetch: true,
-      trigger: "reconnect",
-      userId: USER_ID,
-    }),
-    false,
-  );
-  assert.equal(
-    shouldUseScopedBoardReconcile({
-      scopedRefetch: true,
-      trigger: "event",
-      userId: undefined,
-    }),
-    false,
-  );
-});
-
 test("useBoardRealtime still wires the extracted handler and scoped route", () => {
   const source = require("fs").readFileSync(
     path.join(root, "src/hooks/realtime/useBoardRealtime.ts"),
     "utf8",
   );
   assert.match(source, /createBoardRealtimeEventHandler/);
-  assert.match(source, /useFlag\(SCOPED_BOARD_REFETCH_FLAG\)/);
-  assert.match(source, /if \(scopedRefetch\) return reconcileActiveBoardTasks/);
+  assert.doesNotMatch(source, /useFlag|SCOPED_BOARD_REFETCH_FLAG|eventReconcileRef/);
+  assert.match(source, /trigger === "event" &&\s+userId !== undefined\s+\? runScopedReconcile\(userId\)/);
   assert.match(source, /reconcileActiveBoardTasks/);
 });
 
@@ -357,9 +321,7 @@ test("an event missed during initial connection is recovered after subscription"
         runRealtimeReconciliation: ({ reconcile }) => reconcile(),
       },
       "@/lib/firstScreen/SurfaceContext": { useFirstScreenSurface: () => null },
-    "@/lib/firstScreen/boardDocument": { getBoardDocument: () => null },
-    "@/hooks/useFlag": { useFlag: () => false },
-      "@/lib/flags/keys": { SCOPED_BOARD_REFETCH_FLAG: "scoped" },
+      "@/lib/firstScreen/boardDocument": { getBoardDocument: () => null },
       "@/lib/realtime/boardRealtimeEventHandler": {
         createBoardRealtimeEventHandler: (refetch) => () => refetch("event"),
       },
@@ -471,9 +433,7 @@ function mountFallbackHook(t, { connect, queryClient, accountId = USER_ID } = {}
         runRealtimeReconciliation: ({ reconcile }) => reconcile(),
       },
       "@/lib/firstScreen/SurfaceContext": { useFirstScreenSurface: () => null },
-    "@/lib/firstScreen/boardDocument": { getBoardDocument: () => null },
-    "@/hooks/useFlag": { useFlag: () => false },
-      "@/lib/flags/keys": { SCOPED_BOARD_REFETCH_FLAG: "scoped" },
+      "@/lib/firstScreen/boardDocument": { getBoardDocument: () => null },
       "@/lib/realtime/boardRealtimeEventHandler": { createBoardRealtimeEventHandler },
     },
   );
@@ -486,7 +446,7 @@ function mountFallbackHook(t, { connect, queryClient, accountId = USER_ID } = {}
   };
 }
 
-test("unavailable realtime silently updates only the visible board even with the scoped flag off", async (t) => {
+test("unavailable realtime silently updates only the visible board without a flag", async (t) => {
   const { queryClient, operations, cachedProjects } = buildQueryClient(buildProjects());
   const before = cachedProjects();
   const harness = mountFallbackHook(t, { queryClient });

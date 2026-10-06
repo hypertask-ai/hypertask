@@ -52,7 +52,6 @@ import {
   HTPR_6868_TICKET_PREFIX_FLAG,
   HTPR_6662_AGENT_LOG_NAME_FLAG,
   POSTHOG_ERROR_ALERT_FLAG,
-  SCOPED_BOARD_REFETCH_FLAG,
   MY_TASKS_CROSS_BOARD_PRIORITY_SORT_FLAG,
   MY_TASKS_SHORTCUTS_WIDTH_FLAG,
   HTPR_6372_SEARCH_RANKING_FLAG,
@@ -124,6 +123,7 @@ const FEATURE_FLAG_QA_USER = {
 export const RETIRED_FEATURE_FLAG_KEYS = new Set([
   "htpr-6160-inbox-archive-cluster",
   "htpr-6157-new-task-auto-description",
+  "htpr-6166-scoped-board-refetch",
   "htpr-6322-agent-chat-parked-reply",
   "hyfa-43-factory-owner-preview",
   "htpr-6072-shallow-board-switch",
@@ -153,7 +153,7 @@ export const RETIRED_FEATURE_FLAG_KEYS = new Set([
   "htpr-6673-capture-user-signed-up-in-posthog",
 ]);
 // Old tabs read these infra flags as enabled; keep them until old deployments and tabs expire.
-// Existing product retirement dates: remove htpr-6072 after 2026-10-06, htpr-6254 and htpr-6035 after 2026-10-16.
+// Existing product retirement dates: remove htpr-6072 after 2026-10-06, htpr-6254 and htpr-6035 after 2026-10-16, htpr-6166 after 2026-10-20.
 const RETIRED_CLIENT_FEATURE_FLAGS = {
   "htpr-6091-feature-flags": true,
   "htpr-6133-feature-flag-details": true,
@@ -177,6 +177,7 @@ const RETIRED_CLIENT_FEATURE_FLAGS = {
   "htpr-6072-shallow-board-switch": true,
   "htpr-6254-heic-heif-attachments": true,
   "htpr-6035-agent-chat-skills": true,
+  "htpr-6166-scoped-board-refetch": true,
 } as const;
 
 export type FeatureFlagKind = "feature" | "bugfix" | "improvement";
@@ -640,13 +641,6 @@ const FEATURE_FLAG_DEFINITIONS = [
     shippedOn: "2026-09-08",
     description:
       "Sorts the Agent Chat list by most recent chat message instead of a fixed order, and reorders live as messages arrive.",
-  },
-  {
-    key: SCOPED_BOARD_REFETCH_FLAG,
-    kind: "improvement",
-    shippedOn: "2026-09-12",
-    description:
-      "On a live board change, reloads only the board that changed instead of every board in the account, so updates appear with one request. Other boards' names still refresh when the tab reconnects or you move between boards.",
   },
   {
     key: MY_TASKS_SHORTCUTS_WIDTH_FLAG,
