@@ -30,8 +30,8 @@ function fixture(kind, scenario, flagMode) {
       if (scenario.authThrows) throw new Error("Auth lookup unavailable");
       return session;
     } },
+    "@/lib/flags/keys": { HTPR_6923_APP_ROUTER_WRITES_FLAG: "htpr-6923-app-router-writes" },
     "@/lib/flags": {
-      HTPR_6923_APP_ROUTER_WRITES_FLAG: "htpr-6923-app-router-writes",
       isFeatureEnabled: async (key, userId) => {
         flags.push({ key, userId });
         if (flagMode === "throw") throw new Error("Flag lookup unavailable");
@@ -213,7 +213,8 @@ test("flag-off does not load the new handler; flag-on failures never retry legac
     const fx = fixture("update", {}, mode);
     const { withTaskWriteFlag } = load("src/lib/api/task-writes/route.ts", {
       "@/lib/auth/getSessionUser": { getSessionUser: async () => fx.session },
-      "@/lib/flags": { HTPR_6923_APP_ROUTER_WRITES_FLAG: "htpr-6923-app-router-writes", isFeatureEnabled: async () => mode },
+      "@/lib/flags/keys": { HTPR_6923_APP_ROUTER_WRITES_FLAG: "htpr-6923-app-router-writes" },
+      "@/lib/flags": { isFeatureEnabled: async () => mode },
     });
     let legacy = 0;
     let loaded = 0;

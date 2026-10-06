@@ -2,7 +2,8 @@ import type { NextApiHandler } from "next";
 import { NextResponse } from "next/server";
 import type { z } from "zod";
 import { getSessionUser, type SessionUser } from "@/lib/auth/getSessionUser";
-import { HTPR_6923_APP_ROUTER_WRITES_FLAG, isFeatureEnabled } from "@/lib/flags";
+import { isFeatureEnabled } from "@/lib/flags";
+import { HTPR_6923_APP_ROUTER_WRITES_FLAG } from "@/lib/flags/keys";
 
 // Pages has already parsed JSON. This narrow Web-request interface avoids a
 // second parse/serialization and also accepts a real App Router Request.
