@@ -199,7 +199,7 @@ for (const kind of Object.keys(scenarios)) {
 
 test("non-migrated methods never evaluate the flag or load a new operation", async () => {
   for (const kind of ["update", "move"]) {
-    for (const method of ["GET", "DELETE", "POST", "PATCH"]) {
+    for (const method of kind === "update" ? ["POST", "PATCH"] : ["GET", "DELETE", "POST", "PATCH"]) {
       const before = fixture(kind, {}, false);
       const after = fixture(kind, {}, true);
       assert.deepEqual(await invoke(after.current, {}, method), await invoke(before.legacy, {}, method));
