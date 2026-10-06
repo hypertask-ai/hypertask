@@ -11,10 +11,8 @@ import {
   reconcileActiveBoardTasks,
 } from "@/lib/boardSync/reconcileActiveBoardQuery";
 import { runRealtimeReconciliation } from "@/lib/realtime/latencyCanary";
-import { useFlag } from "@/hooks/useFlag";
 import { useFirstScreenSurface } from "@/lib/firstScreen/SurfaceContext";
 import { getBoardDocument } from "@/lib/firstScreen/boardDocument";
-import { SCOPED_BOARD_REFETCH_FLAG } from "@/lib/flags/keys";
 import { createBoardRealtimeEventHandler } from "@/lib/realtime/boardRealtimeEventHandler";
 
 export { createBoardRealtimeEventHandler } from "@/lib/realtime/boardRealtimeEventHandler";
@@ -35,19 +33,7 @@ export function useBoardRealtime(
 ): void {
   const queryClient = useQueryClient();
   const seeded = Boolean(getBoardDocument(useFirstScreenSurface(options?.accountId), options?.accountId ?? 0, projectId));
-  const scopedRefetch = useFlag(SCOPED_BOARD_REFETCH_FLAG);
-  const pickEventReconcile = () => {
-    if (scopedRefetch) return reconcileActiveBoardTasks;
-    return reconcileActiveBoardQuery;
-  };
-  const eventReconcile = pickEventReconcile();
-  const eventReconcileRef = useRef(eventReconcile);
   const wasConnected = useRef(false);
-
-  // Flag hydration changes event routing, not the board's subscription lifecycle.
-  useEffect(() => {
-    eventReconcileRef.current = eventReconcile;
-  }, [eventReconcile]);
 
   useEffect(() => {
     if (projectId == null) return;
@@ -86,7 +72,6 @@ export function useBoardRealtime(
       const userId = options?.accountId;
       const reconcile = () =>
         Promise.all([
-          eventReconcileRef.current === reconcileActiveBoardTasks &&
           trigger === "event" &&
           userId !== undefined
             ? runScopedReconcile(userId)
