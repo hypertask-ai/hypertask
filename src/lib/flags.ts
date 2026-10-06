@@ -7,6 +7,7 @@ import { getSessionUser } from "@/lib/auth/getSessionUser";
 import { AGENT_CHAT_STOP_AND_TIMEOUT_FEATURE_FLAG } from "@/lib/agentRuns/model";
 
 import {
+  HTPR_6966_SKILLS_ACCESS_DENIAL_FLAG,
   HTPR_6964_FLAGS_PAGE_TYPE_SEARCH_FLAG,
   HTPR_6950_TOOLTIP_TOP_LAYER_FLAG,
   HTPR_6934_SERVER_FIRST_SCREEN_FLAG,
@@ -192,6 +193,12 @@ type FeatureFlagDefinition = {
 };
 
 const FEATURE_FLAG_DEFINITIONS = [
+  {
+    key: HTPR_6966_SKILLS_ACCESS_DENIAL_FLAG,
+    shippedOn: "2026-10-06",
+    description: "Returns missing or inaccessible skills projects as 404 without filing production error tickets.",
+    kind: "bugfix",
+  },
   {
     key: HTPR_6964_FLAGS_PAGE_TYPE_SEARCH_FLAG,
     shippedOn: "2026-10-06",

@@ -99,12 +99,12 @@ test("feature flag modes enforce owner, QA, everyone, and off access", () => {
   assert.equal(flags.featureFlagModeEnabled("OFF", true, true), false);
 });
 
-test("every declared flag without a stored row is on for the owner and QA, nobody else", async () => {
+test("every feature flag without a stored row is on for the owner and QA, nobody else", async () => {
   // HTPR-6192: this is the point of the ticket. A flag whose rollout was never chosen must not be
   // owner-only, or the QA account cannot verify the feature before Valentin looks at it.
   assert.ok(flags.FEATURE_FLAG_KEYS.length > 0);
-  // HTPR-6926: a definition may set its own defaultMode; those flags are checked separately below.
-  const explicit = new Set(["htpr-6926-mcp-route-wrapper"]);
+  // Explicit defaults and bugfix defaults are checked separately.
+  const explicit = new Set(["htpr-6926-mcp-route-wrapper", "htpr-6966-skills-access-denial"]);
   for (const key of flags.FEATURE_FLAG_KEYS.filter((k) => !explicit.has(k))) {
     assert.deepEqual(
       await Promise.all([6, 985, 7].map((userId) => flags.isFeatureEnabled(key, userId))),
@@ -524,6 +524,7 @@ test("declared flags remain listed with ticket details and can be changed", asyn
       { key: "htpr-6950-tooltip-top-layer", mode: "OWNER_AND_QA", updatedAt: null },
       { key: "htpr-6951-task-writing-progress", mode: "OWNER_AND_QA", updatedAt: null },
       { key: "htpr-6964-flags-page-type-search", mode: "OWNER_AND_QA", updatedAt: null },
+      { key: "htpr-6966-skills-access-denial", mode: "EVERYONE", updatedAt: null },
     ],
   );
   listed.forEach(({ key, description, ticketUrl, shippedOn }) => {
