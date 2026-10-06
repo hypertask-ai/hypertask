@@ -358,4 +358,22 @@ test("an acknowledged Next task page keeps its composer mounted when its authori
   const forwardDetail = document.querySelector("article");
   await React.act(async () => { nextPath = href(child); render(); });
   assert.equal(document.querySelector("article"), forwardDetail, "Forward's pathname acknowledgement must not remount its history view");
+  await React.act(async () => { nextPath = href(parent); render(); });
+  assert.equal(document.querySelector("article").textContent, parent.title, "a breadcrumb from an already cached view must hand off before its new RSC children arrive");
+  await React.act(async () => { window.history.pushState({}, "", href(parent)); render(); });
+  assert.equal(document.querySelector("article").textContent, parent.title);
+  const related = { ...parent, id: 46, uniqueIndex: 47, title: "Related title" };
+  await React.act(async () => {
+    nextPath = href(related);
+    nextTask = related;
+    render();
+  });
+  const normalComposer = document.querySelector('[data-testid="comment-composer"]');
+  assert.ok(normalComposer, "an uncached Link must still render Next children");
+  await React.act(async () => {
+    window.history.pushState({}, "", href(related));
+    client.setQueryData(cache.cachedTaskDetailKey(2343, related.id), related);
+    render();
+  });
+  assert.equal(document.querySelector('[data-testid="comment-composer"]'), normalComposer, "seeding the new normal Next page must not resurrect the retired cached view");
 });

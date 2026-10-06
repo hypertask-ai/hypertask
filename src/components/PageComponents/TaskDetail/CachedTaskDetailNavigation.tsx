@@ -108,8 +108,13 @@ export default function CachedTaskDetailNavigation({ children, accountId }: {
     !markedLocation && instantTicketOpen && accountId !== null && currentUser?.id === accountId && route
     ? findCachedTaskDetail(queryClient, accountId, Number(route[1]), Number(route[2]))
     : undefined;
-  const location = markedLocation ?? (routeTask && accountId !== null ? {
-    accountId, taskId: routeTask.id, projectId: routeTask.projectId, uniqueIndex: routeTask.uniqueIndex,
+  // An already mounted cached view can hand off a Link before its new RSC arrives.
+  const cachedTask = routeTask ?? (subtaskLink && previousLocation.current?.accountId === accountId && !markedLocation &&
+    instantTicketOpen && accountId !== null && currentUser?.id === accountId && route
+    ? findCachedTaskDetail(queryClient, accountId, Number(route[1]), Number(route[2]))
+    : undefined);
+  const location = markedLocation ?? (cachedTask && accountId !== null ? {
+    accountId, taskId: cachedTask.id, projectId: cachedTask.projectId, uniqueIndex: cachedTask.uniqueIndex,
   } : undefined);
   previousLocation.current = location;
   useEffect(() => {
@@ -166,7 +171,7 @@ export default function CachedTaskDetailNavigation({ children, accountId }: {
   }, [instantTicketOpen, accountId, currentUser?.id, pathname]);
   const task = location && (queryClient.getQueryData<ITask>(
     cachedTaskDetailKey(location.accountId, location.taskId),
-  ) ?? routeTask);
+  ) ?? cachedTask);
   useEffect(() => {
     if (location && !task) router.replace(window.location.pathname + window.location.search + window.location.hash);
   }, [location, task, router]);
