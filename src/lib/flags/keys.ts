@@ -140,3 +140,5 @@ export const HTPR_6937_NEW_TASK_WINDOW_FLAG = "htpr-6937-new-task-window";
 export const HTPR_6951_TASK_WRITING_PROGRESS_FLAG = "htpr-6951-task-writing-progress";
 
 export const HTPR_6926_MCP_ROUTE_WRAPPER_FLAG = "htpr-6926-mcp-route-wrapper";
+
+export const HTPR_6975_TYPED_WRITES_FLAG = "htpr-6975-typed-writes";

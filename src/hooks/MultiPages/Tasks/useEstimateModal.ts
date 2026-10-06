@@ -1,3 +1,6 @@
+import { useFlag } from "@/hooks/useFlag";
+import { HTPR_6975_TYPED_WRITES_FLAG } from "@/lib/flags/keys";
+import { setTaskEstimate } from "@/lib/api/typedClient";
 import { useGetEstimateForTask } from "@/hooks/MultiPages/useGetEstimateForTask";
 import globalConstants from "@/lib/constants";
 import { IEstimateConstants } from "@/lib/constants/constants";
@@ -13,6 +16,9 @@ export const useEstimateModal = (
   previousSize?: IEstimateConstants
 ) => {
   const queryClient = useQueryClient();
+  const typedClient = useFlag(HTPR_6975_TYPED_WRITES_FLAG);
+  let typedWrite: typeof setTaskEstimate | undefined;
+  if (typedClient) typedWrite = setTaskEstimate;
   const currentProject = useRecoilValue(currentProjectAtom);
   const inViewObject = useRecoilValue(inViewObjectAtom);
   const calendarTaskFilters = useRecoilValue(calendarTaskFiltersAtom)
@@ -32,7 +38,8 @@ export const useEstimateModal = (
           estimate_index: estimate.estimate_index,
           estimate_value: estimate.estimate_value,
         };
-        await axios.post("/api/estimate/setEstimate", body);
+        if (typedWrite) await typedWrite(body);
+        else await axios.post("/api/estimate/setEstimate", body);
         queryClient.refetchQueries({
           queryKey: [globalConstants.CommentsTQPrefixKey, inViewObject.taskId],
         });

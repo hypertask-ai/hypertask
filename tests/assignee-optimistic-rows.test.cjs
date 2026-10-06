@@ -1,14 +1,9 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
-const path = require("node:path");
-
-const root = path.resolve(__dirname, "..");
-const jiti = require("jiti")(path.join(root, "tests/board-menu-entry.cjs"), {
-  interopDefault: true,
-  alias: { "@": path.join(root, "src") },
-});
-const { assigneeIntentForOption, toAssigneeRows } = jiti(
-  path.join(root, "src/hooks/Task Detail/useAssignTaskUser.ts")
+const { load } = require("./task-route-loader.cjs");
+const { assigneeIntentForOption, toAssigneeRows } = load(
+  "src/hooks/Task Detail/useAssignTaskUser.ts",
+  { "@/hooks/useFlag": {}, "@/lib/api/typedClient": {}, "@/lib/constants": {} },
 );
 
 // The assign menu paints a toggle before the server answers, so it has to hand

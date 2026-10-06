@@ -1,3 +1,6 @@
+import { useFlag } from "@/hooks/useFlag";
+import { HTPR_6975_TYPED_WRITES_FLAG } from "@/lib/flags/keys";
+import { setTaskPriority } from "@/lib/api/typedClient";
 import { useGetPriorityForTask } from "@/hooks/MultiPages/useGetPriorityForTask";
 import globalConstants from "@/lib/constants";
 import { IPrioritiesConstants } from "@/lib/constants/constants";
@@ -12,6 +15,9 @@ export const usePriorityModal = (
   closeHandler: (param?: boolean | IPrioritiesConstants) => void,
 ) => {
   const queryClient = useQueryClient();
+  const typedClient = useFlag(HTPR_6975_TYPED_WRITES_FLAG);
+  let typedWrite: typeof setTaskPriority | undefined;
+  if (typedClient) typedWrite = setTaskPriority;
   const currentProject = useRecoilValue(currentProjectAtom);
   const inViewObject = useRecoilValue(inViewObjectAtom);
   const calendarTaskFilters = useRecoilValue(calendarTaskFiltersAtom)
@@ -31,7 +37,8 @@ export const usePriorityModal = (
           priority_index: priority.priority_index,
           Priority_Value: priority.Priority_Value,
         };
-        await axios.post("/api/priority/setPriority", body);
+        if (typedWrite) await typedWrite(body);
+        else await axios.post("/api/priority/setPriority", body);
         // Board cards read priority from ["projectsAll"]; refetch it so the new
         // priority shows immediately on navigate-back instead of waiting for the
         // next incidental refetch (30s staleTime / window-focus). HTPR-4139.

@@ -568,6 +568,7 @@ test("declared flags remain listed with ticket details and can be changed", asyn
       { key: "htpr-6967-typed-task-reads", mode: "OWNER_AND_QA", updatedAt: null },
       { key: "htpr-6970-phone-new-task-title", mode: "EVERYONE", updatedAt: null },
       { key: "htpr-6972-subtask-link", mode: "EVERYONE", updatedAt: null },
+      { key: "htpr-6975-typed-writes", mode: "OWNER_AND_QA", updatedAt: null },
     ],
   );
   listed.forEach(({ key, description, ticketUrl, shippedOn }) => {
@@ -917,4 +918,16 @@ test("every registered flag has a valid kind and only registered explicit relate
   assert.deepEqual(await Promise.all([6, 985, 7].map(id => flags.isFeatureEnabled(entry.key, id))), [true, true, false]);
   row = { mode: "OFF", updatedAt: new Date() };
   assert.equal(await flags.isFeatureEnabled(entry.key, 6), false);
+});
+
+
+test("typed property writes default Owner + QA and respect OFF", async () => {
+  const key = flags.HTPR_6975_TYPED_WRITES_FLAG;
+  assert.equal(key, "htpr-6975-typed-writes");
+  const entry = (await flags.listFeatureFlagModes()).find((flag) => flag.key === key);
+  assert.equal(entry.mode, "OWNER_AND_QA");
+  assert.equal(entry.shippedOn, "2026-10-06");
+  assert.deepEqual(await Promise.all([6, 985, 7].map((userId) => flags.isFeatureEnabled(key, userId))), [true, true, false]);
+  row = { mode: "OFF", updatedAt: new Date() };
+  assert.deepEqual(await Promise.all([6, 985, 7].map((userId) => flags.isFeatureEnabled(key, userId))), [false, false, false]);
 });

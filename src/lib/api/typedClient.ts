@@ -1,5 +1,7 @@
 import axios from "axios";
 import type { AxiosResponse } from "axios";
+import axiosClient from "@/utils/axiosClient";
+import * as taskWrites from "@/lib/api/contracts/taskWrites";
 import { z } from "zod";
 
 import {
@@ -150,4 +152,166 @@ export async function getBoardDetail(body: BoardDetailBody, signal?: AbortSignal
   });
   response.data = validateRead("getBoardDetail", route.success, response.data, route.validate);
   return response;
+}
+
+// Writes keep each caller's transport and HTTP rejection behavior.
+type WriteRouteDescriptor = Omit<ReadRouteDescriptor, "method"> & { method: "POST" | "PUT" };
+
+export const moveTaskRoute = {
+  method: "PUT",
+  pathParams: z.undefined(),
+  path: () => "/api/tasks/moveTask",
+  query: z.undefined(),
+  body: taskWrites.moveTaskBodySchema,
+  success: taskWrites.moveTaskResponseSchema,
+  validate: "deferred",
+  errors: { 400: taskWrites.taskWriteErrorSchema, 401: taskWrites.taskWriteErrorSchema, 403: taskWrites.taskWriteErrorSchema, 404: taskWrites.taskWriteErrorSchema, 405: taskWrites.taskWriteErrorSchema, 409: taskWrites.taskWriteErrorSchema, 500: taskWrites.taskWriteErrorSchema },
+} satisfies WriteRouteDescriptor;
+
+export const taskDueDateRoute = {
+  method: "POST",
+  pathParams: z.undefined(),
+  path: () => "/api/tasks/setDueDate",
+  query: z.undefined(),
+  body: taskWrites.dueDateBodySchema,
+  success: taskWrites.taskPropertyResponseSchema,
+  validate: "deferred",
+  errors: { 400: taskWrites.taskWriteErrorSchema, 401: taskWrites.taskWriteErrorSchema, 403: taskWrites.taskWriteErrorSchema, 404: taskWrites.taskWriteErrorSchema, 405: taskWrites.taskWriteErrorSchema, 409: taskWrites.taskWriteErrorSchema, 500: taskWrites.taskWriteErrorSchema },
+} satisfies WriteRouteDescriptor;
+
+export const taskStartDateRoute = {
+  method: "POST",
+  pathParams: z.undefined(),
+  path: () => "/api/tasks/setStartDate",
+  query: z.undefined(),
+  body: taskWrites.startDateBodySchema,
+  success: taskWrites.taskPropertyResponseSchema,
+  validate: "deferred",
+  errors: { 400: taskWrites.taskWriteErrorSchema, 401: taskWrites.taskWriteErrorSchema, 403: taskWrites.taskWriteErrorSchema, 404: taskWrites.taskWriteErrorSchema, 405: taskWrites.taskWriteErrorSchema, 409: taskWrites.taskWriteErrorSchema, 500: taskWrites.taskWriteErrorSchema },
+} satisfies WriteRouteDescriptor;
+
+export const taskWaitingOnRoute = {
+  method: "POST",
+  pathParams: z.undefined(),
+  path: () => "/api/tasks/waiting-on",
+  query: z.undefined(),
+  body: taskWrites.waitingOnBodySchema,
+  success: taskWrites.waitingOnResponseSchema,
+  errors: { 400: taskWrites.taskWriteErrorSchema, 401: taskWrites.taskWriteErrorSchema, 403: taskWrites.taskWriteErrorSchema, 404: taskWrites.taskWriteErrorSchema, 405: taskWrites.taskWriteErrorSchema, 409: taskWrites.taskWriteErrorSchema, 500: taskWrites.taskWriteErrorSchema },
+} satisfies WriteRouteDescriptor;
+
+export const taskPriorityRoute = {
+  method: "POST",
+  pathParams: z.undefined(),
+  path: () => "/api/priority/setPriority",
+  query: z.undefined(),
+  body: taskWrites.priorityBodySchema,
+  success: taskWrites.priorityResponseSchema,
+  errors: { 400: taskWrites.taskWriteErrorSchema, 401: taskWrites.taskWriteErrorSchema, 403: taskWrites.taskWriteErrorSchema, 404: taskWrites.taskWriteErrorSchema, 405: taskWrites.taskWriteErrorSchema, 409: taskWrites.taskWriteErrorSchema, 500: taskWrites.taskWriteErrorSchema },
+} satisfies WriteRouteDescriptor;
+
+export const taskEstimateRoute = {
+  method: "POST",
+  pathParams: z.undefined(),
+  path: () => "/api/estimate/setEstimate",
+  query: z.undefined(),
+  body: taskWrites.estimateBodySchema,
+  success: taskWrites.estimateResponseSchema,
+  errors: { 400: taskWrites.taskWriteErrorSchema, 401: taskWrites.taskWriteErrorSchema, 403: taskWrites.taskWriteErrorSchema, 404: taskWrites.taskWriteErrorSchema, 405: taskWrites.taskWriteErrorSchema, 409: taskWrites.taskWriteErrorSchema, 500: taskWrites.taskWriteErrorSchema },
+} satisfies WriteRouteDescriptor;
+
+export const taskAssigneeRoute = {
+  method: "POST",
+  pathParams: z.undefined(),
+  path: () => "/api/assignees/assign",
+  query: z.undefined(),
+  body: taskWrites.assigneeBodySchema,
+  success: taskWrites.assigneeResponseSchema,
+  errors: { 400: taskWrites.taskWriteErrorSchema, 401: taskWrites.taskWriteErrorSchema, 403: taskWrites.taskWriteErrorSchema, 404: taskWrites.taskWriteErrorSchema, 405: taskWrites.taskWriteErrorSchema, 409: taskWrites.taskWriteErrorSchema, 500: taskWrites.taskWriteErrorSchema },
+} satisfies WriteRouteDescriptor;
+
+export const taskLabelRoute = {
+  method: "POST",
+  pathParams: z.undefined(),
+  path: () => "/api/labels/assignLabel",
+  query: z.undefined(),
+  body: taskWrites.labelBodySchema,
+  success: taskWrites.labelResponseSchema,
+  errors: { 400: taskWrites.taskWriteErrorSchema, 401: taskWrites.taskWriteErrorSchema, 403: taskWrites.taskWriteErrorSchema, 404: taskWrites.taskWriteErrorSchema, 405: taskWrites.taskWriteErrorSchema, 409: taskWrites.taskWriteErrorSchema, 500: taskWrites.taskWriteErrorSchema },
+} satisfies WriteRouteDescriptor;
+
+export async function setTaskDueDate(body: taskWrites.DueDateBody) {
+  const route = taskDueDateRoute;
+  const response = await axios.post<z.output<typeof route.success>>(route.path(), body, {
+    headers: { "X-Hypertask-Client": "htpr-6925" },
+  });
+  response.data = validateRead("setTaskDueDate", route.success, response.data, route.validate);
+  return response;
+}
+
+export async function setTaskStartDate(body: taskWrites.StartDateBody) {
+  const route = taskStartDateRoute;
+  const response = await axios.post<z.output<typeof route.success>>(route.path(), body, {
+    headers: { "X-Hypertask-Client": "htpr-6925" },
+  });
+  response.data = validateRead("setTaskStartDate", route.success, response.data, route.validate);
+  return response;
+}
+
+export async function setTaskWaitingOn(body: taskWrites.WaitingOnBody) {
+  const route = taskWaitingOnRoute;
+  const response = await axios.post<z.output<typeof route.success>>(route.path(), body, {
+    headers: { "X-Hypertask-Client": "htpr-6925" },
+  });
+  response.data = validateRead("setTaskWaitingOn", route.success, response.data);
+  return response;
+}
+
+export async function setTaskPriority(body: taskWrites.PriorityBody) {
+  const route = taskPriorityRoute;
+  const response = await axios.post<z.output<typeof route.success>>(route.path(), body, {
+    headers: { "X-Hypertask-Client": "htpr-6925" },
+  });
+  response.data = validateRead("setTaskPriority", route.success, response.data);
+  return response;
+}
+
+export async function setTaskEstimate(body: taskWrites.EstimateBody) {
+  const route = taskEstimateRoute;
+  const response = await axios.post<z.output<typeof route.success>>(route.path(), body, {
+    headers: { "X-Hypertask-Client": "htpr-6925" },
+  });
+  response.data = validateRead("setTaskEstimate", route.success, response.data);
+  return response;
+}
+
+export async function assignTaskUser(body: taskWrites.AssigneeBody) {
+  const route = taskAssigneeRoute;
+  const response = await axios.post<z.output<typeof route.success>>(route.path(), body, {
+    headers: { "X-Hypertask-Client": "htpr-6925" },
+  });
+  response.data = validateRead("assignTaskUser", route.success, response.data);
+  return response;
+}
+
+export async function assignTaskLabel(body: taskWrites.LabelBody) {
+  const route = taskLabelRoute;
+  const response = await axiosClient.post<z.output<typeof route.success>>(route.path().slice(4), body, {
+    headers: { "X-Hypertask-Client": "htpr-6925" },
+  });
+  response.data = validateRead("assignTaskLabel", route.success, response.data);
+  return response;
+}
+
+export async function moveTask(body: taskWrites.MoveTaskBody) {
+  return fetch(moveTaskRoute.path(), {
+    method: moveTaskRoute.method,
+    headers: { "Content-Type": "application/json", "X-Hypertask-Client": "htpr-6925" },
+    body: JSON.stringify(body),
+  });
+}
+
+// Native-fetch callers keep their distinct status checks and JSON error handling.
+export async function readMoveTaskResponse(response: Response): Promise<z.output<typeof moveTaskRoute.success>> {
+  return validateRead("moveTask", moveTaskRoute.success, await response.json(), moveTaskRoute.validate);
 }

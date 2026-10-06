@@ -74,6 +74,9 @@ async function withPicker(t, { enabled = true, initialAssignees = [], rejectSave
   const assignees = load("src/lib/assignees.ts", {}, null);
   const constants = { default: { CommentsTQPrefixKey: "comments" } };
   const assign = load("src/hooks/Task Detail/useAssignTaskUser.ts", {
+    "@/hooks/useFlag": { useFlag: () => false },
+    "@/lib/flags/keys": { HTPR_6975_TYPED_WRITES_FLAG: "htpr-6975-typed-writes" },
+    "@/lib/api/typedClient": {},
     "axios": { default: { post: async (url, body) => {
       requests.push({ url, body });
       if (holdSave) await new Promise(resolve => { resolveSave = resolve; });
@@ -124,7 +127,8 @@ async function withPicker(t, { enabled = true, initialAssignees = [], rejectSave
     ...common, "@prisma/client": {}, "@/utils/helperFunctions/hasFigmaEmbed": { hasFigmaEmbed: () => false },
   }, "useTaskDetailCommentActions");
   const useNavigation = load("src/app/detail/[...slug]/useTaskDetailNavigationActions.tsx", {
-    ...common, "@/components/undoToast": { undoToastSettings: {} }, "@/lib/constants/TaskDetail": { descriptionContainerId: "description" },
+    ...common, "@/hooks/useFlag": { useFlag: () => false }, "@/lib/flags/keys": { HTPR_6975_TYPED_WRITES_FLAG: "htpr-6975-typed-writes" }, "@/lib/api/typedClient": {},
+    "@/components/undoToast": { undoToastSettings: {} }, "@/lib/constants/TaskDetail": { descriptionContainerId: "description" },
   }, "useTaskDetailNavigationActions");
   const useReactions = load("src/hooks/Task Detail/CommentAndDescriptionHooks/useDescriptionReactions.ts", {
     "@/lib/constants/constants": {}, "@/lib/constants/TaskDetail": {}, "@/store": {},
