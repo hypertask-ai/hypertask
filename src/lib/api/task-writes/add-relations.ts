@@ -1,29 +1,24 @@
-import { withTaskWriteFlag } from "@/lib/api/task-writes/route";
+import { NextResponse } from "next/server";
+import { z } from "zod";
+import { taskWriteRoute } from "./route";
 import {
   addRelatedTasks,
   isTaskRelationType,
 } from "@/utils/controllers/tasks/addRelatedTasks";
 import prisma from "@/lib/prisma";
 import { broadcastBoardChange } from "@/lib/realtime/server";
-import { NextApiHandler, NextApiRequest, NextApiResponse } from "next";
-import { getSessionUser } from "@/lib/auth/getSessionUser";
 
-const handler: NextApiHandler = async (
-  req: NextApiRequest,
-  res: NextApiResponse
-) => {
-  if (req.method === "POST") {
-    const session = await getSessionUser(
-      new Headers(req.headers as Record<string, string>)
-    );
-    if (!session) {
-      return res.status(401).json({ message: "Unauthorized" });
-    }
+export const POST = taskWriteRoute({
+  schema: z.custom<Record<string, any>>(() => true),
+  validationMessage: "Invalid request",
+  allowNullBody: true,
+  operation: async (body, session) => {
+    const req = { body };
     const userId = session.userId;
     try {
       const { relations } = req.body;
       if (!relations) {
-        return res.status(200).json("Missing Required Data");
+        return NextResponse.json("Missing Required Data", { status: 200 });
       }
       const invalidRelationType = relations.relatedTasks?.some(
         (related: any) =>
@@ -31,7 +26,7 @@ const handler: NextApiHandler = async (
           !isTaskRelationType(related.relationType)
       );
       if (invalidRelationType) {
-        return res.status(400).json({ message: "Invalid relation type" });
+        return NextResponse.json({ message: "Invalid relation type" }, { status: 400 });
       }
 
       const response = await addRelatedTasks(relations, userId);
@@ -49,16 +44,10 @@ const handler: NextApiHandler = async (
         projectIds.forEach((projectId) => void broadcastBoardChange(projectId));
       }
 
-      return res.status(response.status).json(response.json);
+      return NextResponse.json(response.json, { status: response.status });
     } catch (error) {
       console.log("🚀 ~ error:", error);
-      return res.status(200).json(undefined);
+      return new NextResponse(null, { status: 200 });
     }
-  } else {
-    return res.status(405).json({ message: "Method not allowed" });
-  }
-};
-
-export default withTaskWriteFlag(handler, "POST", async () =>
-  (await import("@/lib/api/task-writes/add-relations")).POST,
-);
+  },
+});

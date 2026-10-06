@@ -1,3 +1,4 @@
+import { withTaskWriteFlag } from "@/lib/api/task-writes/route";
 import prisma from "@/lib/prisma";
 import { IComment } from "@/models/model";
 import { sendDataNewCommentFCM } from "@/utils/controllers/FCM";
@@ -176,4 +177,6 @@ const sendNotification = async(reaction:any,afterAppDomain:string,userId:number)
 
 }
 
-export default handler;
+export default withTaskWriteFlag(handler, "POST", async () =>
+  (await import("@/lib/api/task-writes/description-reaction")).POST,
+);

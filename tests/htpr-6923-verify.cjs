@@ -59,6 +59,101 @@ function lifecycle() {
   assert.throws(() => assert.equal(crypto.createHash("sha256").update(sources.create + "changed").digest("hex"), lifecycleHashes.create), "pin mutation control");
   console.log("lifecycle verification passed");
 }
+const slice3Routes = {
+  "recoverTask": {
+    "module": "recover",
+    "method": "POST",
+    "hash": "345c9a672ef944ce46895d185d87f64e7defd17265a08725e8f78dea72ac3d29"
+  },
+  "deleteTask": {
+    "module": "delete",
+    "method": "DELETE",
+    "hash": "d45c197575d3bb033423577d0decdc0f92028a9ee3123a1da236a97d9d17b02e"
+  },
+  "setDueDate": {
+    "module": "due-date",
+    "method": "POST",
+    "hash": "4857ca934023b79b4065cc3e7dd8ef058f882e2a18062600b35302e842ee525f"
+  },
+  "setStartDate": {
+    "module": "start-date",
+    "method": "POST",
+    "hash": "d07cc8fdcb98c639e23482d4c16523bf77873442ed8571e00b577928e68cea76"
+  },
+  "setRecurrence": {
+    "module": "recurrence",
+    "method": "POST",
+    "hash": "3217ca8cb57633e0f2cc5f86d88f5d6f5fa330fc593faf718ef12a4a601810e6"
+  },
+  "addParent": {
+    "module": "add-parent",
+    "method": "POST",
+    "hash": "e6180619e7f83250629a9b4094b91ce376ab0f29545012955ca20569b21cbfec"
+  },
+  "removeParent": {
+    "module": "remove-parent",
+    "method": "POST",
+    "hash": "3758ae47ad5c10b47c43b302436058d8113101587b1bf9a6b1e002c9c022853b"
+  },
+  "addRelations": {
+    "module": "add-relations",
+    "method": "POST",
+    "hash": "b4dabfb101a497d43d9b1f78500dcf2dc1c820b6ec51cd0b3192e3680d968c0c"
+  },
+  "removeRelation": {
+    "module": "remove-relation",
+    "method": "POST",
+    "hash": "61f845062e293bbaccbbe2a49bc842dcff05c3e12b15e48faa51514a64aff720"
+  },
+  "waiting-on": {
+    "module": "waiting-on",
+    "method": "POST",
+    "hash": "9c3e0b9650c507251cbc91c7acf350029753e86b75382d200dad6b965c11c7ff"
+  },
+  "reactToDescription": {
+    "module": "description-reaction",
+    "method": "POST",
+    "hash": "778e00b93cd8ec2a0744b137a32228675ec8494a569a47f10660ad61587bbdfe"
+  },
+  "linkPullRequest": {
+    "module": "link-pull-request",
+    "method": "POST",
+    "hash": "d81cc3abc8687818dcd24699c629d2a993c21488c4093ffe722ef2c54404ddb3"
+  }
+};
+function slice3LegacySources() {
+  return Object.fromEntries(Object.keys(slice3Routes).map((name) => {
+    let source = read(`src/pages/api/tasks/${name}.ts`)
+      .replace('import { withTaskWriteFlag } from "@/lib/api/task-writes/route";\n', "")
+      .replace(/\n\nexport default withTaskWriteFlag[\s\S]*$/, "");
+    if (name === "recoverTask") source = source.replace(" async function handler(", "export default  async function handler(") + "\n";
+    else if (name === "deleteTask") source = source.replace("async function handler(", "export default async function handler(") + "\n";
+    else if (name === "linkPullRequest") source = source.replace("const handler = createLinkPullRequestHandler(", "export default createLinkPullRequestHandler(") + "\n";
+    else source += "\n\nexport default handler;" + (name === "reactToDescription" ? "" : "\n");
+    return [name, source];
+  }));
+}
+function slice3() {
+  const sources = slice3LegacySources();
+  for (const [name, { module, method, hash }] of Object.entries(slice3Routes)) {
+    assert.equal(crypto.createHash("sha256").update(sources[name]).digest("hex"), hash, name + " legacy bytes");
+    const page = read(`src/pages/api/tasks/${name}.ts`);
+    assert.ok(page.includes(`withTaskWriteFlag(handler, "${method}"`));
+    assert.ok(page.includes(`/task-writes/${module}`));
+    assert.ok(!fs.existsSync(path.join(root, `src/app/api/tasks/${name}/route.ts`)), "no URL twin");
+    assert.throws(() => assert.equal(crypto.createHash("sha256").update(sources[name] + "changed").digest("hex"), hash), "pin mutation control");
+  }
+  const route = read("src/lib/api/task-writes/route.ts");
+  assert.ok(route.includes("HTPR_6923_APP_ROUTER_WRITES_FLAG"));
+  assert.ok(route.includes("if (!enabled || !session || !headers) return legacy(req, res)"));
+  assert.ok(read("src/pages/api/tasks/linkPullRequest.ts").includes("export function createLinkPullRequestHandler"), "retain exported factory and URL pending external review");
+  // Relocated diagnostic strings are not HTTP callers; exclude only those logs.
+  const corpora = [filesAt(root, "src"), filesAt(cli, "."), filesAt(root, "e2e")]
+    .map(corpus => corpus.map(row => ({ ...row, text: row.text.replace(/console\.(?:warn|error)\("\/api\/tasks\/linkPullRequest[^\n]*/g, "") })));
+  for (const corpus of corpora) assert.equal(callerFiles("tasks/linkPullRequest", corpus).length, 0, "PR URL retained despite zero tracked callers");
+  assert.throws(() => assert.equal(callerFiles("tasks/linkPullRequest", [{ file: "fixture.ts", text: 'fetch("/api/tasks/linkPullRequest")' }]).length, 0), "absence control detects a live caller");
+  console.log("slice3 structural verification passed");
+}
 const deadCandidates = [
   "tasks/getAll", "tasks/linkPullRequest", "projects/detail", "projects/views/sync-view",
   "section/getAll", "section/getByTaskId", "notifications/mute",
@@ -197,9 +292,9 @@ function commit() {
   assert.throws(() => assert.ok(allowed.has("src/lib/mcp/auth.ts")), "scope control rejects a sibling file");
   console.log(`local commit verified: ${git("rev-parse", "HEAD")}; ${productionLines} production/doc changed lines; only GATES.md is local`);
 }
-module.exports = { legacyHashes, lifecycleHashes, lifecycleLegacySources, inventory, callerFiles };
+module.exports = { legacyHashes, lifecycleHashes, lifecycleLegacySources, slice3Routes, slice3LegacySources, inventory, callerFiles };
 if (require.main === module) {
-  const commands = { plan, flag, regression, quality, commit, lifecycle };
+  const commands = { plan, flag, regression, quality, commit, lifecycle, slice3 };
   assert.ok(commands[process.argv[2]], "known verification mode required");
   Promise.resolve(commands[process.argv[2]]()).catch((error) => { console.error(error); process.exitCode = 1; });
 }

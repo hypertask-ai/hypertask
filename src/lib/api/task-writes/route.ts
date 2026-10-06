@@ -1,4 +1,4 @@
-import type { NextApiHandler } from "next";
+import type { NextApiHandler, NextApiRequest } from "next";
 import { NextResponse } from "next/server";
 import type { z } from "zod";
 import { getSessionUser, type SessionUser } from "@/lib/auth/getSessionUser";
@@ -9,6 +9,8 @@ import { HTPR_6923_APP_ROUTER_WRITES_FLAG } from "@/lib/flags/keys";
 // second parse/serialization and also accepts a real App Router Request.
 export type TaskWriteRequest = Pick<Request, "headers" | "json"> & {
   cookies?: Partial<Record<string, string>>;
+  query?: NextApiRequest["query"];
+  url?: string;
 };
 export type TaskWriteRoute = (
   request: TaskWriteRequest,
@@ -19,6 +21,8 @@ export function taskWriteRoute<Body, Actor = SessionUser>(options: {
   schema: z.ZodType<Body>;
   validationMessage: string;
   validateBeforeAuth?: boolean;
+  // Some legacy handlers catch null-body destructuring with nonstandard JSON.
+  allowNullBody?: boolean;
   prepare?: (session: SessionUser) => Promise<Actor>;
   operation: (body: Body, actor: Actor, request: TaskWriteRequest) => Promise<NextResponse | undefined>;
 }): TaskWriteRoute {
@@ -36,7 +40,7 @@ export function taskWriteRoute<Body, Actor = SessionUser>(options: {
     try {
       const raw = await request.json();
       // Legacy destructuring of null/undefined throws before required-field checks.
-      if (raw == null) throw new Error("Missing body");
+      if (raw == null && !options.allowNullBody) throw new Error("Missing body");
       const parsed = options.schema.safeParse(raw);
       if (!parsed.success) {
         return NextResponse.json(
@@ -86,12 +90,14 @@ export function withTaskWriteFlag(
     if (!enabled || !session || !headers) return legacy(req, res);
     const route = await loadRoute();
     // Never retry legacy after dispatch: the operation may already have written.
-    const response = await route({ headers, cookies: req.cookies, json: async () => req.body }, session);
+    const response = await route({ headers, cookies: req.cookies, query: req.query, json: async () => req.body }, session);
     // Creation historically leaves unresolved sections/ranks without a response.
     if (!response) return;
     response.headers.forEach((value, name) => {
       if (name !== "content-type") res.setHeader(name, value);
     });
-    return res.status(response.status).json(await response.json());
+    // Relation failures historically send an empty 200, not JSON null.
+    const text = await response.text();
+    return res.status(response.status).json(text ? JSON.parse(text) : undefined);
   };
 }

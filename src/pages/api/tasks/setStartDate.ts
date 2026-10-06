@@ -1,3 +1,4 @@
+import { withTaskWriteFlag } from "@/lib/api/task-writes/route";
 import { NextApiHandler } from "next";
 import { updateTaskSingle } from "@/utils/controllers/tasks/single";
 import { broadcastBoardChange, broadcastTaskChange } from "@/lib/realtime/server";
@@ -58,4 +59,6 @@ const handler: NextApiHandler = async (req, res) => {
   }
 };
 
-export default handler;
+export default withTaskWriteFlag(handler, "POST", async () =>
+  (await import("@/lib/api/task-writes/start-date")).POST,
+);

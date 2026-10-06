@@ -1,3 +1,4 @@
+import { withTaskWriteFlag } from "@/lib/api/task-writes/route";
 import { NextApiHandler } from "next";
 import prisma from "@/lib/prisma";
 import createTaskDueDateActivity from "@/utils/controllers/activities/createTaskDueDateActivity";
@@ -100,4 +101,6 @@ const handler: NextApiHandler = async (req, res) => {
   }
 };
 
-export default handler;
+export default withTaskWriteFlag(handler, "POST", async () =>
+  (await import("@/lib/api/task-writes/due-date")).POST,
+);

@@ -1,3 +1,4 @@
+import { withTaskWriteFlag } from "@/lib/api/task-writes/route";
 import { permanentlyDeleteTask } from "@/utils/controllers/tasks/invokeTaskDelete";
 import type { NextApiRequest, NextApiResponse } from "next";
 import prisma from "@/lib/prisma";
@@ -5,7 +6,7 @@ import { broadcastBoardChange } from "@/lib/realtime/server";
 import { getSessionUser } from "@/lib/auth/getSessionUser";
 import { taskWriteAccessWhere } from "@/utils/controllers/projects/getAllIncludes";
 
-export default async function handler(
+async function handler(
   req: NextApiRequest,
   res: NextApiResponse,
 ) {
@@ -53,3 +54,7 @@ export default async function handler(
     return res.status(500).json(error);
   }
 }
+
+export default withTaskWriteFlag(handler, "DELETE", async () =>
+  (await import("@/lib/api/task-writes/delete")).DELETE,
+);

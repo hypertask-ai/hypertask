@@ -1,3 +1,4 @@
+import { withTaskWriteFlag } from "@/lib/api/task-writes/route";
 import type { NextApiHandler } from "next";
 import {
   linkTaskPullRequest,
@@ -65,8 +66,12 @@ export function createLinkPullRequestHandler({
   };
 }
 
-export default createLinkPullRequestHandler({
+const handler = createLinkPullRequestHandler({
   verifySession,
   linkTaskPullRequest,
   broadcastTaskChange,
 });
+
+export default withTaskWriteFlag(handler, "POST", async () =>
+  (await import("@/lib/api/task-writes/link-pull-request")).POST,
+);
