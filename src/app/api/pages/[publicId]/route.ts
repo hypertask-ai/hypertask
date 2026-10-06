@@ -3,6 +3,10 @@ import { NextRequest, NextResponse } from 'next/server'
 
 import prisma from '@/lib/prisma'
 import { isValidUser } from '@/utils/edgeHelpers'
+import { readJsonBody } from '@/lib/mcp/readJsonBody'
+import { parsePositiveInt } from '@/lib/parsePositiveInt'
+import { loadCurrentUser } from '@/lib/auth/currentUser'
+import { HTPR_6924_REST_COMPAT_FLAG, isFeatureEnabled } from '@/lib/flags'
 import {
   getPage,
   PageConflictError,
@@ -35,13 +39,28 @@ function isRequestBody(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === 'object' && !Array.isArray(value)
 }
 
-export async function GET(_request: NextRequest, { params }: RouteContext) {
+export async function GET(request: NextRequest, { params }: RouteContext) {
   try {
-    const userCookie = (await cookies()).get('nookies_user')
-    if (!userCookie?.value) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    const { isValid, user } = isValidUser(userCookie.value)
-    if (!isValid || !user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    const userId = user.id
+    const currentUser = await loadCurrentUser(request.headers, true).catch(() => null)
+    let restCompat = false
+    if (currentUser) {
+      try {
+        restCompat = await isFeatureEnabled(HTPR_6924_REST_COMPAT_FLAG, currentUser.userId)
+      } catch {
+        // A failed flag probe must leave the legacy HTTP contract unchanged.
+      }
+    }
+
+    let userId: number
+    if (restCompat && currentUser) {
+      userId = currentUser.userId
+    } else {
+      const userCookie = (await cookies()).get('nookies_user')
+      if (!userCookie?.value) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+      const { isValid, user } = isValidUser(userCookie.value)
+      if (!isValid || !user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+      userId = user.id
+    }
 
     const { publicId } = await params
     const page = await getPage({ publicId, userId })
@@ -69,20 +88,44 @@ export async function GET(_request: NextRequest, { params }: RouteContext) {
 
 export async function PATCH(request: NextRequest, { params }: RouteContext) {
   try {
-    const userCookie = (await cookies()).get('nookies_user')
-    if (!userCookie?.value) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    const { isValid, user } = isValidUser(userCookie.value)
-    if (!isValid || !user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    const userId = user.id
+    const currentUser = await loadCurrentUser(request.headers, true).catch(() => null)
+    let restCompat = false
+    if (currentUser) {
+      try {
+        restCompat = await isFeatureEnabled(HTPR_6924_REST_COMPAT_FLAG, currentUser.userId)
+      } catch {
+        // A failed flag probe must leave the legacy HTTP contract unchanged.
+      }
+    }
+
+    let userId: number
+    if (restCompat && currentUser) {
+      userId = currentUser.userId
+    } else {
+      const userCookie = (await cookies()).get('nookies_user')
+      if (!userCookie?.value) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+      const { isValid, user } = isValidUser(userCookie.value)
+      if (!isValid || !user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+      userId = user.id
+    }
 
     let parsedBody: unknown
-    try {
-      parsedBody = await request.json()
-    } catch {
-      return NextResponse.json({ error: 'Request body must be valid JSON' }, { status: 400 })
-    }
-    if (!isRequestBody(parsedBody)) {
-      return NextResponse.json({ error: 'Request body must be a JSON object' }, { status: 400 })
+    if (restCompat) {
+      const result = await readJsonBody<Record<string, unknown>>(request, {
+        invalidJson: () => NextResponse.json({ error: 'Request body must be valid JSON' }, { status: 400 }),
+        invalidObject: () => NextResponse.json({ error: 'Request body must be a JSON object' }, { status: 400 }),
+      })
+      if (!result.ok) return result.response
+      parsedBody = result.body
+    } else {
+      try {
+        parsedBody = await request.json()
+      } catch {
+        return NextResponse.json({ error: 'Request body must be valid JSON' }, { status: 400 })
+      }
+      if (!isRequestBody(parsedBody)) {
+        return NextResponse.json({ error: 'Request body must be a JSON object' }, { status: 400 })
+      }
     }
     const body = parsedBody as UpdatePageBody
 
@@ -122,7 +165,9 @@ export async function PATCH(request: NextRequest, { params }: RouteContext) {
 
     let ifVersion: number | undefined
     if (hasContent && body.if_version !== undefined) {
-      const parsedVersion = positiveInteger(body.if_version)
+      const parsedVersion = restCompat
+        ? (typeof body.if_version === 'number' ? parsePositiveInt(body.if_version, { safe: false, max: Infinity }) : null)
+        : positiveInteger(body.if_version)
       if (parsedVersion === null) {
         return NextResponse.json(
           { error: 'if_version must be a positive integer' },

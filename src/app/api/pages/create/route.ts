@@ -3,6 +3,10 @@ import { NextRequest, NextResponse } from 'next/server'
 
 import prisma from '@/lib/prisma'
 import { isValidUser } from '@/utils/edgeHelpers'
+import { readJsonBody } from '@/lib/mcp/readJsonBody'
+import { parsePositiveInt } from '@/lib/parsePositiveInt'
+import { loadCurrentUser } from '@/lib/auth/currentUser'
+import { HTPR_6924_REST_COMPAT_FLAG, isFeatureEnabled } from '@/lib/flags'
 import { getProjectWhere } from '@/utils/controllers/projects/getAllIncludes'
 import {
   createPage,
@@ -31,24 +35,50 @@ function isRequestBody(value: unknown): value is Record<string, unknown> {
 
 export async function POST(request: NextRequest) {
   try {
-    const userCookie = (await cookies()).get('nookies_user')
-    if (!userCookie?.value) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    const { isValid, user } = isValidUser(userCookie.value)
-    if (!isValid || !user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    const userId = user.id
+    const currentUser = await loadCurrentUser(request.headers, true).catch(() => null)
+    let restCompat = false
+    if (currentUser) {
+      try {
+        restCompat = await isFeatureEnabled(HTPR_6924_REST_COMPAT_FLAG, currentUser.userId)
+      } catch {
+        // A failed flag probe must leave the legacy HTTP contract unchanged.
+      }
+    }
+
+    let userId: number
+    if (restCompat && currentUser) {
+      userId = currentUser.userId
+    } else {
+      const userCookie = (await cookies()).get('nookies_user')
+      if (!userCookie?.value) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+      const { isValid, user } = isValidUser(userCookie.value)
+      if (!isValid || !user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+      userId = user.id
+    }
 
     let parsedBody: unknown
-    try {
-      parsedBody = await request.json()
-    } catch {
-      return NextResponse.json({ error: 'Request body must be valid JSON' }, { status: 400 })
-    }
-    if (!isRequestBody(parsedBody)) {
-      return NextResponse.json({ error: 'Request body must be a JSON object' }, { status: 400 })
+    if (restCompat) {
+      const result = await readJsonBody<Record<string, unknown>>(request, {
+        invalidJson: () => NextResponse.json({ error: 'Request body must be valid JSON' }, { status: 400 }),
+        invalidObject: () => NextResponse.json({ error: 'Request body must be a JSON object' }, { status: 400 }),
+      })
+      if (!result.ok) return result.response
+      parsedBody = result.body
+    } else {
+      try {
+        parsedBody = await request.json()
+      } catch {
+        return NextResponse.json({ error: 'Request body must be valid JSON' }, { status: 400 })
+      }
+      if (!isRequestBody(parsedBody)) {
+        return NextResponse.json({ error: 'Request body must be a JSON object' }, { status: 400 })
+      }
     }
     const body = parsedBody as CreatePageBody
 
-    const taskId = positiveInteger(body.task_id)
+    const taskId = restCompat
+      ? (typeof body.task_id === 'number' ? parsePositiveInt(body.task_id, { safe: false, max: Infinity }) : null)
+      : positiveInteger(body.task_id)
     if (taskId === null) {
       return NextResponse.json({ error: 'task_id must be a positive integer' }, { status: 400 })
     }
@@ -69,7 +99,9 @@ export async function POST(request: NextRequest) {
 
     let parentPageId: number | undefined
     if (body.parent_page_id !== undefined) {
-      const parsedParentPageId = positiveInteger(body.parent_page_id)
+      const parsedParentPageId = restCompat
+        ? (typeof body.parent_page_id === 'number' ? parsePositiveInt(body.parent_page_id, { safe: false, max: Infinity }) : null)
+        : positiveInteger(body.parent_page_id)
       if (parsedParentPageId === null) {
         return NextResponse.json(
           { error: 'parent_page_id must be a positive integer' },
