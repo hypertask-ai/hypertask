@@ -509,6 +509,7 @@ test("declared flags remain listed with ticket details and can be changed", asyn
       { key: "htpr-6938-my-tasks-icon-controls", mode: "OWNER_AND_QA", updatedAt: null },
       { key: "htpr-6950-tooltip-top-layer", mode: "OWNER_AND_QA", updatedAt: null },
       { key: "htpr-6951-task-writing-progress", mode: "OWNER_AND_QA", updatedAt: null },
+      { key: "htpr-6964-flags-page-type-search", mode: "OWNER_AND_QA", updatedAt: null },
     ],
   );
   listed.forEach(({ key, description, ticketUrl, shippedOn }) => {
@@ -772,4 +773,48 @@ test("bugfix defaults enable everyone, respect stored Off and list the same runt
   const released = await bugfixFlags.setFeatureFlagMode(key, "EVERYONE");
   assert.equal(released.mode, "EVERYONE");
   assert.ok(released.releasedAt instanceof Date, "persisting the release starts the normal cleanup countdown");
+});
+
+test("historical Bug labels are display-only and preserve Owner + QA defaults and stored modes", async () => {
+  const key = flags.HTPR_6951_TASK_WRITING_PROGRESS_FLAG;
+  assert.equal((await flags.listFeatureFlagModes()).find(entry => entry.key === key).kind, "bugfix");
+  assert.deepEqual(await flags.featureFlagCandidateUserIds(key), [6, 985]);
+  for (const mode of [null, "OFF", "OWNER_ONLY", "OWNER_AND_QA", "EVERYONE"]) {
+    row = mode ? { mode } : null;
+    listedRows = row ? [{ key, ...row }] : [];
+    const entry = (await flags.listFeatureFlagModes()).find(entry => entry.key === key);
+    assert.equal(entry.kind, "bugfix");
+    assert.equal(entry.mode, mode ?? "OWNER_AND_QA");
+    assert.deepEqual(await Promise.all([6, 985, 7].map(id => flags.isFeatureEnabled(key, id))),
+      [6, 985, 7].map(id => flags.featureFlagModeEnabled(mode ?? "OWNER_AND_QA", id === 6, id === 985)));
+  }
+});
+
+test("listed related keys cannot mutate registered flag metadata", async () => {
+  const key = flags.HTPR_6951_TASK_WRITING_PROGRESS_FLAG;
+  const first = (await flags.listFeatureFlagModes()).find(entry => entry.key === key);
+  const expected = [...first.related];
+  first.related.length = 0;
+  const second = (await flags.listFeatureFlagModes()).find(entry => entry.key === key);
+  assert.deepEqual(second.related, expected);
+  assert.notEqual(second.related, first.related);
+});
+
+test("every registered flag has a valid kind and only registered explicit related keys", async () => {
+  const rows = await flags.listFeatureFlagModes();
+  assert.equal(rows.length, flags.FEATURE_FLAG_KEYS.length);
+  for (const entry of rows) {
+    assert.ok(["bugfix", "feature", "improvement"].includes(entry.kind), entry.key);
+    for (const key of entry.related ?? []) {
+      assert.ok(flags.FEATURE_FLAG_KEYS.includes(key), `${entry.key} relates to ${key}`);
+      assert.notEqual(entry.key, key);
+    }
+  }
+  const entry = rows.find(({ key }) => key === flags.HTPR_6964_FLAGS_PAGE_TYPE_SEARCH_FLAG);
+  assert.equal(entry.kind, "feature");
+  assert.equal(entry.mode, "OWNER_AND_QA");
+  assert.equal(entry.ticketId, "HTPR-6964");
+  assert.deepEqual(await Promise.all([6, 985, 7].map(id => flags.isFeatureEnabled(entry.key, id))), [true, true, false]);
+  row = { mode: "OFF", updatedAt: new Date() };
+  assert.equal(await flags.isFeatureEnabled(entry.key, 6), false);
 });

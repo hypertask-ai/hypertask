@@ -15,6 +15,7 @@ export const HTPR_6752_INSTANT_TICKET_OPEN_FLAG = "htpr-6752-instant-ticket-open
 export const HTPR_6892_CMDK_VERSION_FLAG = "htpr-6892-cmdk-version";
 export const HTPR_6899_STABLE_LAYOUT_FLAG = "htpr-6899-stable-layout";
 export const HTPR_6950_TOOLTIP_TOP_LAYER_FLAG = "htpr-6950-tooltip-top-layer";
+export const HTPR_6964_FLAGS_PAGE_TYPE_SEARCH_FLAG = "htpr-6964-flags-page-type-search";
 export const HTPR_6934_SERVER_FIRST_SCREEN_FLAG = "htpr-6934-server-first-screen";
 
 export const LOCAL_WRITING_ASSISTANCE_FLAG =

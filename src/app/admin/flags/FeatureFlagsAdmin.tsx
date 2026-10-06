@@ -1,13 +1,18 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   ADMIN_FEATURE_FLAGS_QUERY_KEY,
   FEATURE_FLAGS_QUERY_PREFIX,
+  useFlag,
 } from "@/hooks/useFlag";
-import type { FeatureFlagMode, FeatureFlagRow } from "@/lib/flags";
+import LabelWrapper from "@/components/Labels/LabelWrapper";
+import { ModalInput } from "@/components/Common/CommonModalComponents";
+import { HTPR_6964_FLAGS_PAGE_TYPE_SEARCH_FLAG } from "@/lib/flags/keys";
+import { matchesFeatureFlagSearch, relatedFeatureFlags } from "@/lib/flags/discovery";
+import type { FeatureFlagMode, FeatureFlagRow, FeatureFlagKind } from "@/lib/flags";
 import {
   clusterFeatureFlagsByReleaseDate,
   countFeatureFlagsByAudience,
@@ -16,6 +21,11 @@ import {
 import { featureFlagRemovalState } from "@/lib/flags/removal";
 
 const ADMIN_FLAGS_ROUTE = "/api/admin/flags";
+const KIND_LABELS: Record<FeatureFlagKind, string> = {
+  bugfix: "Bug",
+  feature: "Feature",
+  improvement: "Improvement",
+};
 const OPTIONS: { mode: FeatureFlagMode; label: string }[] = [
   { mode: "OWNER_ONLY", label: "Only me" },
   { mode: "OWNER_AND_QA", label: "Owner + QA" },
@@ -63,6 +73,9 @@ export default function FeatureFlagsAdmin({
   flagKey?: string;
 }) {
   const queryClient = useQueryClient();
+  const discoveryEnabled = useFlag(HTPR_6964_FLAGS_PAGE_TYPE_SEARCH_FLAG);
+  const [search, setSearch] = useState("");
+  const [highlightedKey, setHighlightedKey] = useState<string | null>(null);
   const [sortDirection, setSortDirection] = useState<"desc" | "asc">("desc");
   const [audienceFilter, setAudienceFilter] = useState<FeatureFlagAudienceFilter>("ALL");
   const flags = useQuery({
@@ -113,14 +126,28 @@ export default function FeatureFlagsAdmin({
       if (flagKey) {
         return [["", (flags.data?.flags ?? []).filter((flag) => flag.key === flagKey)] as [string, FeatureFlagRow[]]];
       }
+      const rows = flags.data?.flags ?? [];
       return clusterFeatureFlagsByReleaseDate(
-        flags.data?.flags ?? [],
+        discoveryEnabled ? rows.filter((flag) => matchesFeatureFlagSearch(flag, search)) : rows,
         sortDirection,
         audienceFilter,
       );
     },
-    [flagKey, flags.data?.flags, sortDirection, audienceFilter],
+    [flagKey, flags.data?.flags, sortDirection, audienceFilter, discoveryEnabled, search],
   );
+
+  useEffect(() => {
+    if (!discoveryEnabled || flagKey) return;
+    const hash = window.location.hash;
+    if (hash.startsWith("#flag-")) setHighlightedKey(hash.slice(6));
+  }, [discoveryEnabled, flagKey]);
+
+  useEffect(() => {
+    if (!discoveryEnabled || !highlightedKey) return;
+    const card = document.getElementById(`flag-${highlightedKey}`);
+    card?.scrollIntoView({ behavior: "smooth", block: "start" });
+    card?.focus({ preventScroll: true });
+  }, [discoveryEnabled, highlightedKey, flags.isLoading]);
 
   return (
     <main className="min-h-screen bg-pageBackground px-4 py-8 text-white-black sm:px-8">
@@ -139,6 +166,31 @@ export default function FeatureFlagsAdmin({
           <p className="mt-2 text-content text-text-light-gray">
             {counts.UNRELEASED} unreleased {counts.UNRELEASED === 1 ? "flag" : "flags"} waiting for release
           </p>
+        )}
+
+        {discoveryEnabled && !flagKey && (
+          <div className="sticky top-0 z-10 mt-6 bg-pageBackground py-3">
+            <label htmlFor="flag-search" className="sr-only">Search flags</label>
+            <ModalInput
+              id="flag-search"
+              autofocus={false}
+              onBlur={undefined}
+              className="rounded-sm bg-comment-description px-3"
+              placeholder="Search by ticket ID or words…"
+              value={search}
+              onChange={(event) => {
+                setSearch(event.target.value);
+                setHighlightedKey(null);
+              }}
+              onKeyDown={(event) => {
+                if (event.key === "Escape") {
+                  event.preventDefault();
+                  setSearch("");
+                  setHighlightedKey(null);
+                }
+              }}
+            />
+          </div>
         )}
 
         {!flagKey && (
@@ -193,12 +245,21 @@ export default function FeatureFlagsAdmin({
             <div className="overflow-hidden rounded-[5px] border border-border-light-gray-thin bg-cardBackground">
           {rows.map((flag) => {
             const ticket = /^(htpr|yper4)-([1-9]\d*)-[a-z0-9]+(?:-[a-z0-9]+)*$/.exec(flag.key);
+            const related = discoveryEnabled ? relatedFeatureFlags(flag, flags.data?.flags ?? []) : [];
+            let cardClassName = "flex flex-col gap-3 border-b border-border-light-gray-thin p-4 last:border-b-0 sm:flex-row sm:items-center sm:justify-between";
+            if (discoveryEnabled) cardClassName += " scroll-mt-24";
+            if (discoveryEnabled && highlightedKey === flag.key) cardClassName += " bg-hover-active";
             return (
             <div
               key={flag.key}
-              className="flex flex-col gap-3 border-b border-border-light-gray-thin p-4 last:border-b-0 sm:flex-row sm:items-center sm:justify-between"
+              id={discoveryEnabled ? `flag-${flag.key}` : undefined}
+              tabIndex={discoveryEnabled ? -1 : undefined}
+              className={cardClassName}
             >
               <div className="min-w-0 sm:max-w-lg">
+                {discoveryEnabled && (
+                  <LabelWrapper className="mb-2">{KIND_LABELS[flag.kind ?? "feature"]}</LabelWrapper>
+                )}
                 {flagKey ? (
                   <>
                     <code className="break-all text-dense text-white-black">{flag.key}</code>
@@ -239,6 +300,28 @@ export default function FeatureFlagsAdmin({
                 )}
                 {!flagKey && (
                   <p className="mt-1 text-content text-text-light-gray">{flag.description}</p>
+                )}
+                {related.length > 0 && (
+                  <p className="mt-2 text-meta text-text-light-gray">
+                    Related: {related.map((other, index) => (
+                      <span key={other.key}>
+                        {index > 0 && " · "}
+                        <a
+                          href={`${flagKey ? "/admin/flags" : ""}#flag-${other.key}`}
+                          title={other.ticketTitle ?? other.description}
+                          className="break-all underline underline-offset-2 hover:text-white-black focus-visible:text-white-black"
+                          onClick={flagKey ? undefined : (event) => {
+                            event.preventDefault();
+                            setSearch("");
+                            setAudienceFilter("ALL");
+                            setHighlightedKey(other.key);
+                          }}
+                        >
+                          {other.key}
+                        </a>
+                      </span>
+                    ))}
+                  </p>
                 )}
                 {(() => {
                     const removal = featureFlagRemovalState(flag);
