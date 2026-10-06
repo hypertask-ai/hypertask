@@ -281,8 +281,9 @@ test("an acknowledged Next task page keeps its composer mounted when its authori
     for (const name of names) global[name] = previous[name];
   });
   let nextPath = href(parent);
+  let nextTask = parent;
   const NextDetail = () => React.createElement("article", null,
-    nextPath === href(parent) ? parent.title : child.title,
+    nextTask.title,
     React.createElement("textarea", { "data-testid": "comment-composer", defaultValue: "Draft stays here" }));
   const CachedDetail = ({ initialTask }) => React.createElement("article", null, initialTask.title);
   const relativePath = "src/components/PageComponents/TaskDetail/CachedTaskDetailNavigation.tsx";
@@ -330,6 +331,7 @@ test("an acknowledged Next task page keeps its composer mounted when its authori
     client.setQueryData(cache.cachedTaskDetailKey(2343, child.id), child);
     window.history.pushState({}, "", href(child));
     nextPath = href(child);
+    nextTask = child;
     render();
   });
   assert.equal(document.querySelector('[data-testid="comment-composer"]'), composer, "preseeded ordinary Next navigation must retain its child tree");
@@ -341,13 +343,15 @@ test("an acknowledged Next task page keeps its composer mounted when its authori
   });
   await traverse("back");
   assert.equal(document.querySelector("article").textContent, parent.title, "unacknowledged Back uses the route cache, not stale Next children");
+  const backDetail = document.querySelector("article");
+  // Next can acknowledge the pathname while its RSC children still show the child.
   await React.act(async () => { nextPath = href(parent); render(); });
-  const acknowledgedComposer = document.querySelector('[data-testid="comment-composer"]');
-  assert.ok(acknowledgedComposer, "Next acknowledgement retires the cached fallback");
+  assert.equal(document.querySelector("article"), backDetail, "an early Next pathname acknowledgement must retain the already mounted history view");
   await React.act(async () => render());
-  assert.equal(document.querySelector('[data-testid="comment-composer"]'), acknowledgedComposer);
+  assert.equal(document.querySelector("article"), backDetail);
   await traverse("forward");
   assert.equal(document.querySelector("article").textContent, child.title, "unacknowledged Forward still uses the cached subtask");
+  const forwardDetail = document.querySelector("article");
   await React.act(async () => { nextPath = href(child); render(); });
-  assert.ok(document.querySelector('[data-testid="comment-composer"]'), "Forward acknowledgement returns ownership to Next");
+  assert.equal(document.querySelector("article"), forwardDetail, "Forward's pathname acknowledgement must not remount its history view");
 });

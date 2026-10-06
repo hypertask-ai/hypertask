@@ -101,8 +101,7 @@ export default function CachedTaskDetailNavigation({ children, accountId }: {
   const location = markedLocation ?? (routeTask && accountId !== null ? {
     accountId, taskId: routeTask.id, projectId: routeTask.projectId, uniqueIndex: routeTask.uniqueIndex,
   } : undefined);
-  // A temporary history fallback must not become a retained cached-open marker.
-  previousLocation.current = markedLocation;
+  previousLocation.current = location;
   useEffect(() => {
     if (!location) return;
     const restoreSourceRoute = (event: PopStateEvent) => {
