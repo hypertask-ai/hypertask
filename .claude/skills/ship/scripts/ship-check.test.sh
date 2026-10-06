@@ -263,6 +263,33 @@ W 1 'FAIL: SHIP_WORKER must be a relative worker directory' SHIP_WORKER=../worke
 W 1 'FAIL: SHIP_WORKER must be a relative worker directory' SHIP_WORKER=/worker
 W 0 'deployed ok (release v1)' RELEASE_TAG=v1 WRANGLER_ERROR=1
 
+# Done guards use segment worker settings, including ship-gates' quoted paths.
+(
+  export PATH="$E/worker-bin:$PATH" SHIP_REPO=valentinyeo/agent-fleet SHIP_BASE=htpr-5009-mdx-write-guard-v2
+  export SHIP_CHECKOUT= SHIP_WORKER= WORKER_SHA="$worker_sha" DEPLOYMENT_FIXTURE="$worker_deployment" VERSION_FIXTURE="$worker_version"
+  worker_env="SHIP_REPO=$SHIP_REPO SHIP_BASE=$SHIP_BASE"
+  worker_cmd="$worker_env SHIP_CHECKOUT=$E/worker-checkout SHIP_WORKER=workers/docs-agent vcc task move YPER4-999 $DONE"
+  G 0 "$worker_cmd"
+  G 2 "$worker_env SHIP_CHECKOUT=$E/worker-checkout vcc task move YPER4-999 $DONE"
+  G 2 "$worker_cmd && $worker_env SHIP_CHECKOUT=$E/worker-checkout vcc task move YPER4-999 $DONE"
+  G 2 "$worker_cmd && $worker_env SHIP_WORKER=workers/docs-agent vcc task move YPER4-999 $DONE"
+  mkdir -p "$E/worker checkout/workers/docs agent"
+  for quote in "'" '"'; do
+    quoted_cmd="SHIP_REPO=${quote}$SHIP_REPO${quote} SHIP_BASE=${quote}$SHIP_BASE${quote} SHIP_CHECKOUT=${quote}$E/worker checkout${quote} SHIP_WORKER=${quote}workers/docs agent${quote} vcc task move YPER4-999 $DONE"
+    G 0 "$quoted_cmd"
+    VERSION_FIXTURE='{}' G 2 "$quoted_cmd"
+    G 2 "$quoted_cmd && $worker_env SHIP_CHECKOUT=${quote}$E/worker checkout${quote} vcc task move YPER4-999 $DONE"
+    G 2 "$quoted_cmd && $worker_env SHIP_WORKER=${quote}workers/docs agent${quote} vcc task move YPER4-999 $DONE"
+  done
+  export SHIP_CHECKOUT="$E/worker-checkout" SHIP_WORKER=workers/docs-agent
+  G 0 vcc task move YPER4-999 $DONE
+  G 2 "$worker_env SHIP_WORKER='' vcc task move YPER4-999 $DONE"
+  G 2 "$worker_env SHIP_CHECKOUT=\"\" vcc task move YPER4-999 $DONE"
+) > "$E/worker-guard-results"
+cat "$E/worker-guard-results"
+passes=$((passes + $(grep -c '^ok   ' "$E/worker-guard-results")))
+fails=$((fails + $(grep -c '^FAIL ' "$E/worker-guard-results")))
+
 # Generated worker CHECKs must carry the settings and remain safe to approve again.
 python3 - "$PWD/ship-gates" "$HOME/.agents/skills/unlazy" "$E" <<'PY'
 import os, pathlib, subprocess, sys

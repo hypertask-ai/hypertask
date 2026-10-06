@@ -492,13 +492,27 @@ check_premerge_status() (
 )
 
 guard() {
-  local cmd seg t c pr out checks env='([A-Za-z_][A-Za-z0-9_]*=[^[:space:]]*[[:space:]]+)*'
+  local cmd seg t c pr out checks env setting v value="(\"[^\"]*\"|'[^']*'|[^[:space:]\"']*)"
+  local checkout=${SHIP_CHECKOUT:-} worker=${SHIP_WORKER:-}
+  local SHIP_CHECKOUT=$checkout SHIP_WORKER=$worker
+  export SHIP_CHECKOUT SHIP_WORKER
+  env="([A-Za-z_][A-Za-z0-9_]*=$value[[:space:]]+)*"
   cmd=$(jq -r '.tool_input.command // empty')
-  # Check every command segment on its own, with its own repo and base overrides.
+  # Reset to process defaults so segment overrides cannot leak into later commands.
   while IFS= read -r seg; do
     REPO=${SHIP_REPO:-hypertask-ai/hypertask}; BASE=${SHIP_BASE:-production}
-    [[ $seg =~ SHIP_REPO=([^[:space:]]+) ]] && REPO=${BASH_REMATCH[1]}
-    [[ $seg =~ SHIP_BASE=([^[:space:]]+) ]] && BASE=${BASH_REMATCH[1]}
+    SHIP_CHECKOUT=$checkout; SHIP_WORKER=$worker
+    for setting in SHIP_REPO SHIP_BASE SHIP_CHECKOUT SHIP_WORKER; do
+      if [[ $seg =~ (^|[[:space:]])$setting=$value([[:space:]]|$) ]]; then
+        v=${BASH_REMATCH[2]}
+        [[ $v == \"* || $v == \'* ]] && v=${v:1:${#v}-2}
+        case $setting in
+          SHIP_REPO) REPO=$v ;;
+          SHIP_BASE) BASE=$v ;;
+          *) printf -v "$setting" '%s' "$v" ;;
+        esac
+      fi
+    done
     # PR merge: the PR must be named right and its ticket must exist.
     if [[ $seg =~ ^[[:space:]]*${env}gh[[:space:]]+pr[[:space:]]+merge([[:space:]]|$) ]]; then
       [[ $seg =~ (-R|--repo)[[:space:]=]+([^[:space:]]+) ]] && REPO=${BASH_REMATCH[2]}
@@ -509,7 +523,7 @@ guard() {
     fi
     # Move to Done: needs the merge and the deploy; app tickets also need proof.md.
     if [[ $seg =~ ^[[:space:]]*${env}vcc[[:space:]]+tasks?[[:space:]]+move[[:space:]]+[\"\']?((HTPR|HYFA|YPER4)-[0-9]+)[\"\']?[[:space:]].*--section[[:space:]=]+[\"\']?Done ]]; then
-      t=${BASH_REMATCH[2]}
+      t=${BASH_REMATCH[3]}
       checks="merged deployed"; [[ $t == HTPR-* ]] && checks="merged deployed proof"
       for c in $checks; do
         out=$("check_$c" "$t") || { echo "ship-check blocked moving $t to Done: ${out#FAIL: }. Follow .claude/skills/verify-qa/SKILL.md first." >&2; exit 2; }
