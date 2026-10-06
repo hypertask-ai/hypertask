@@ -49,7 +49,7 @@ Repo skills live in the app repo at `.claude/skills/`; their index is `.claude/s
 
 ## Local premerge board click
 
-Use `scripts/premerge-local.sh up` from the PR worktree to build and serve the CI browser-smoke app with disposable Docker services and a seeded signed-in board. It prints URLs, a Playwright storage-state path and the `premerge.md` starting lines. Follow `.claude/skills/verify-qa/SKILL.md` "Disposable local PR build" to capture the changed-path click and recording, confirming the snapshot matches live flag modes. Finish with `scripts/premerge-local.sh down`. This needs Docker, Node 24 and no `.env` files; it never uses a production database and does not replace live QA after deploy.
+Use `scripts/premerge-local.sh up` as a managed background task from the PR worktree to build and serve the CI browser-smoke app with disposable Docker services and a seeded signed-in board. It prints URLs, a Playwright storage-state path and the `premerge.md` starting lines. Follow `.claude/skills/verify-qa/SKILL.md` "Disposable local PR build" to capture the changed-path click and recording, confirming the snapshot matches live flag modes. Keep the task alive during QA, then finish with `scripts/premerge-local.sh down` from another command. Exiting or interrupting the task also stops its servers and containers. This needs Docker, Node 24 and no `.env` files; it never uses a production database and does not replace live QA after deploy.
 
 ## Rules that hold the whole session
 

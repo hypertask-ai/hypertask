@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.1.2 - 2026-10-06
+
+- Queue heavy local lint, tests, typecheck and disposable webpack builds across
+  worktrees. CI is unchanged. Prefer safe changed-file lint before a PR.
+- Keep disposable QA servers tied to their owning run, with cleanup on exit
+  and interruption. Add a 12-hour stale-resource sweep and an opt-in hourly
+  systemd user timer, installed by the manager only after merge.
+  https://app.hypertask.ai/detail/project-4060/202
+
 ## 1.1.1 - 2026-10-06
 
 - Bug fixes now use ticket-named flags defaulting to Everyone with the same

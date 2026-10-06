@@ -1,0 +1,7 @@
+[Unit]
+Description=Stop stale disposable premerge servers and containers
+[Service]
+Type=oneshot
+Environment="PATH=%h/.local/bin:/usr/local/bin:/usr/bin:/bin"
+ExecStart=/usr/bin/python3 %h/.local/lib/hypertask/premerge-local/premerge-local-sweep.py sweep
+TimeoutStartSec=5min

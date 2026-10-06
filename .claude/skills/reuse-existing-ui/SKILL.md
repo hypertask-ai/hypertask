@@ -28,7 +28,7 @@ Use before `fix-bug` or `ship-feature-behind-flag` on any ticket touching UI. Th
 
 ## Enforced reuse checks
 
-Run `npm run lint` before hand-off. The required `ci-tests` job runs the same command with caching. `eslint-local-rules/ui-patterns.mjs` enforces:
+Run `npm run lint:changed` before hand-off. It includes committed, staged, unstaged and untracked JavaScript/TypeScript changes against `origin/production`, and falls back to full lint when lint configuration, rules or dependencies change. The required `ci-tests` job runs full `npm run lint` with caching. `eslint-local-rules/ui-patterns.mjs` enforces:
 
 - `hypertask-ui/no-new-choice-menus`: use Ctrl+K commands and `OptionPickerModal`, `AssignModal`, `TableColumnsPicker`, `BoardPriorityMode` or existing filter modals instead of new dropdowns or native selects.
 - `hypertask-ui/no-new-view-save-actions`: import the existing kanban `SaveView` and `SaveViewModal`, never a parallel Save as view button.

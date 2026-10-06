@@ -39,7 +39,7 @@ This skill also lives in `~/.agents/skills/vcc` so Codex sessions load it (type 
 
 The session that built a change also QAs it on the live site. Valentin never QAs code and never reads diffs; he only tries the finished feature.
 
-1. **Before the PR:** tests, eslint on touched files, `tsc --noEmit`, and the webpack build pass locally. Push the branch and open the PR as soon as a first version works, so the CI reviewers (ai-review, claude-review) run in parallel with any extra review; do not hold the PR back for local review rounds.
+1. **Before the PR:** targeted tests via `npm run test:file -- <files>`, `npm run lint:changed`, `npm run typecheck`, and the webpack build pass locally. Push the branch and open the PR as soon as a first version works, so the CI reviewers (ai-review, claude-review) run in parallel with any extra review; do not hold the PR back for local review rounds.
 2. **Merge:** only after every required check is green and the live health check passed (last completed production App Smoke `run app-smoke` = success). A feature needs Valentin's plain yes in chat (feature freeze), quoted on the ticket with the date. If `revert-guard` blocks moving your own recent code, ask him once in plain words and, on his yes, add the `intentional-revert` label.
 3. **Watch the deploy:** poll the GitHub Production deployment for the merge sha until `success` (about 3 minutes). Never poll by reloading his browser tab.
 4. **Verify live yourself, with evidence:**

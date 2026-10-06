@@ -1,0 +1,7 @@
+[Unit]
+Description=Sweep disposable premerge resources older than 12 hours
+[Timer]
+OnCalendar=hourly
+Persistent=true
+[Install]
+WantedBy=timers.target
