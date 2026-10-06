@@ -161,10 +161,17 @@ const sendNotification = async(reaction:any,afterAppDomain:string,userId:number)
           );
 
         if(notification) {
+            let notificationBody = reaction.description.content;
+            let previousBody;
+            do {
+                previousBody = notificationBody;
+                notificationBody = notificationBody.replace(/<[^>]+>/g, '');
+            } while (notificationBody !== previousBody);
+            notificationBody = notificationBody.replace(/[<>]/g, '');
             const body = {
                 type:"newComment",
                 notificationTitle:`${reaction.user.displayName} reacted ${reaction.emoji} on description`,
-                notificationBody:`${reaction.description.content.replace(/<[^>]+>/g, '')}`,
+                notificationBody,
                 devices,
                 payload:"",
                 taskTitle:reaction.task.title,

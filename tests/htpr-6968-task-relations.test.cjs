@@ -49,7 +49,7 @@ function fixture(name, scenario, mode) {
   const task = { id: 42, projectId: 15, dueDate, waitingOnUserId: scenario.oldWaitingOn ?? 1234 };
   const result = scenario.result ?? { status: 200, json: task, oldTask: { dueDate: scenario.unchangedDue ? dueDate : null } };
   const relationResult = scenario.result ?? { status: 200, json: [{ id: 9, targetTask: { projectId: scenario.sameBoard ? 15 : 16 } }] };
-  const reaction = { id: 3, taskId: 42, userId: 985, emoji: "😃", task: { id: 42, projectId: 15, uniqueIndex: 42, userId: 1234, title: "Task" }, user: actor, description: { creatorId: scenario.selfReaction ? 985 : 1234, content: "<p>Note</p>" } };
+  const reaction = { id: 3, taskId: 42, userId: 985, emoji: "😃", task: { id: 42, projectId: 15, uniqueIndex: 42, userId: 1234, title: "Task" }, user: actor, description: { creatorId: scenario.selfReaction ? 985 : 1234, content: scenario.descriptionContent ?? "<p>Note</p>" } };
   const queue = { cancelTaskDeleteJob: record("cancel-delete", undefined, scenario.queueThrows && "Queue unavailable") };
   const recovery = { TaskHardDeleteInProgressError: DeleteError, updateTaskAndSubtasks: record("restore", task, scenario.writeThrows) };
   const dueQueue = { cancelDueDateJob: record("cancel-due", undefined, scenario.queueThrows && "Queue unavailable"), scheduleDueDateJob: record("schedule-due", undefined, scenario.scheduleThrows && "Queue unavailable") };
@@ -182,6 +182,8 @@ const scenarios = {
   ],
   reactToDescription: [
     ["create with notification and push", {}], ["self reaction no notification", { selfReaction: true }], ["no notification no push", { noNotification: true }],
+    ["normal HTML push retains legacy text", { descriptionContent: '  <p>Hello <strong>world</strong>&nbsp;&amp;</p><br><p>Next</p>\n' }],
+    ["empty push retains legacy text", { descriptionContent: "" }],
     ["toggle existing", { existingReaction: true }], ["alreadyReacted true deletes", { existingReaction: true, body: { ...defaults.reactToDescription, alreadyReacted: true } }],
     ["alreadyReacted false with existing deletes", { existingReaction: true, body: { ...defaults.reactToDescription, alreadyReacted: false } }],
     ["no existing creates even alreadyReacted true", { body: { ...defaults.reactToDescription, alreadyReacted: true } }],
@@ -197,6 +199,28 @@ const scenarios = {
     ["lease conflict", { writeThrows: "lease", expected: error(409, "Task lease conflict") }], ["realtime failure remains success", { realtimeThrows: true }], ["service failure", { writeThrows: "Service unavailable", expected: error(500, "Internal server error") }], ["signed verification throws", { signedThrows: true }],
   ],
 };
+for (const [label, descriptionContent, expectedText] of [
+  ["normal HTML", '  <p>Hello <strong>world</strong>&nbsp;&amp;</p><br><p>Next</p>\n', '  Hello world&nbsp;&amp;Next\n'],
+  ["nested script tag", '<scr<script>ipt>alert(1)</script>', 'iptalert(1)'],
+  ["multiply nested script tag", '<scr<scr<script>ipt>ipt>alert(1)</script>', 'iptiptalert(1)'],
+  ["unfinished script tag", '<script', 'script'],
+  ["stray angle brackets", 'Note <> > <', 'Note   '],
+  ["empty text", '', ''],
+]) test(`reactToDescription: push text strips completely; ${label}`, async () => {
+  const scenario = { descriptionContent };
+  const legacyText = descriptionContent.replace(/<[^>]+>/g, "");
+  if (label === "normal HTML" || label === "empty text") assert.equal(expectedText, legacyText);
+  else assert.match(legacyText, /[<>]/, "legacy regex is the vulnerable positive control");
+  for (const mode of [false, "outage", true, "web"]) {
+    const fx = fixture("reactToDescription", scenario, mode);
+    assert.deepEqual(await invoke(fx, "reactToDescription", scenario, mode === "web" ? "web" : "current"), { status: 200, body: [{ id: 3 }] });
+    const pushes = fx.effects.filter(([effect]) => effect === "push");
+    assert.equal(pushes.length, 1);
+    const text = pushes[0][1].notificationBody;
+    assert.equal(text, mode === true || mode === "web" ? expectedText : legacyText);
+    if (mode === true || mode === "web") assert.doesNotMatch(text, /[<>]/);
+  }
+});
 scenarios.setRecurrence.push(...RECURRENCE_RULES.map(recurrence => [recurrence, { body: { taskId: 42, recurrence } }]));
 scenarios.addRelations.push(...taskRelationTypes.map(relationType => [relationType, { body: { relations: { currentTaskId: "42", relatedTasks: [{ projectId: 16, uniqueIndex: 43, relationType }] } } }]));
 for (const name of Object.keys(slice3Routes)) {
