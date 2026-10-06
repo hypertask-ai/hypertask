@@ -1,3 +1,5 @@
+import { createSection } from "@/lib/api/typedClient";
+import { HTPR_6979_TYPED_WRITES_FLAG } from "@/lib/flags/keys";
 import { renderCommandModals1 } from "./commandModalPanels1";
 import { renderCommandModals2 } from "./commandModalPanels2";
 
@@ -86,6 +88,9 @@ const HypertasksCommands = ({ callbackHandler, contextOptions, focusProxy }: IHT
   const newTaskWindowFlag = useFlag(HTPR_6937_NEW_TASK_WINDOW_FLAG);
   let newTaskWindow = false;
   if (composeEnabled && newTaskWindowFlag) newTaskWindow = true;
+  const typedWrites = useFlag(HTPR_6979_TYPED_WRITES_FLAG);
+  let createSectionWriter: typeof createSection | undefined;
+  if (typedWrites) createSectionWriter = createSection;
   const ticketPrefixEnabled = useFlag(HTPR_6868_TICKET_PREFIX_FLAG);
   const {
   queryClient, copyCurrentUrlEnabled, rowShortcutsEnabled, myTasksViewsEnabled, myTasksTableColumnsEnabled,
@@ -145,6 +150,7 @@ const HypertasksCommands = ({ callbackHandler, contextOptions, focusProxy }: IHT
     renameBoard, removeMemberFromBoard, addAgentToBoard, removeAgentFromBoard, inviteNewMembersToBoard,
     setShowCommands, setCommandMode,
     ...(ticketPrefixEnabled ? { ticketPrefixEnabled: true } : {}),
+    createSectionWriter,
   });
   const {
   handleAction,

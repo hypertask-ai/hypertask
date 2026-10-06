@@ -1,3 +1,5 @@
+import { updateSection as writeSection } from "@/lib/api/typedClient";
+import { HTPR_6979_TYPED_WRITES_FLAG } from "@/lib/flags/keys";
 import { IMember, IProject, IProjectsAll, ISection, IUser } from "@/models/model";
 import type { IAgent } from "@/models/model";
 import { currentProjectAtom, currentUserAtom, showCommandsAtom } from "@/store";
@@ -50,6 +52,9 @@ import { MobileViewContext } from "@/lib/contexts/mobileContext";
 
 const ManageColumns = ({ toggleModal }: { toggleModal: (add: boolean) => void }) => {
   const queryClient = useQueryClient();
+  const typedWrites = useFlag(HTPR_6979_TYPED_WRITES_FLAG);
+  let typedWrite: typeof writeSection | undefined;
+  if (typedWrites) typedWrite = writeSection;
   const isMobile = useContext(MobileViewContext);
   const [title, setTitle] = useState("");
   const [updating, setUpdating] = useState<boolean>(false);
@@ -187,7 +192,11 @@ const ManageColumns = ({ toggleModal }: { toggleModal: (add: boolean) => void })
         // Only the ranking. Sending the full section would trigger the
         // service's section_title branch, which bulk-rewrites every task in
         // the section on each drag.
-        await axios.post(`/api/section/update`, {
+        typedWrite ? await typedWrite({
+          userId: currentUser?.id,
+          sectionId: updatedSection.id,
+          newSection: { ranking },
+        }) : await axios.post(`/api/section/update`, {
           userId: currentUser?.id,
           sectionId: updatedSection.id,
           newSection: { ranking },
@@ -240,7 +249,11 @@ const ManageColumns = ({ toggleModal }: { toggleModal: (add: boolean) => void })
       if (saveMode === "DELETE") {
         sendUpdateSection = { ...section, deleted: !section.deleted };
         updatedSections = updateSection(sections, sendUpdateSection, "Delete");
-        await axios.post(`/api/section/update`, {
+        typedWrite ? await typedWrite({
+          userId: currentUser?.id,
+          sectionId: section.id,
+          newSection: { ...sendUpdateSection },
+        }) : await axios.post(`/api/section/update`, {
           userId: currentUser?.id,
           sectionId: section.id,
           newSection: sendUpdateSection,
@@ -262,7 +275,14 @@ const ManageColumns = ({ toggleModal }: { toggleModal: (add: boolean) => void })
           section_title: nextTitle,
           isDone: nextIsDone,
         };
-        await axios.post(`/api/section/update`, {
+        typedWrite ? await typedWrite({
+          userId: currentUser?.id,
+          sectionId: section.id,
+          newSection: {
+            section_title: nextTitle,
+            isDone: nextIsDone,
+          },
+        }) : await axios.post(`/api/section/update`, {
           userId: currentUser?.id,
           sectionId: section.id,
           newSection: {

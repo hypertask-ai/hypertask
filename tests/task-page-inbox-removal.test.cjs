@@ -149,6 +149,9 @@ function makeFlow(t, initialTask, currentTask, playlist = [task]) {
     client.clear();
   });
   const focus = loadSource("src/hooks/Inbox/useGlobalFocusHandler.tsx", {
+    "@/lib/api/typedClient": {},
+    "@/hooks/useFlag": { useFlag: () => false },
+    "@/lib/flags/keys": { HTPR_6979_TYPED_WRITES_FLAG: "htpr-6979-typed-writes-sections-notifications" },
     "@/store": atoms,
     "@/lib/state": state,
     "@tanstack/react-query": query,

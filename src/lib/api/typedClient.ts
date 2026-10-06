@@ -2,6 +2,8 @@ import axios from "axios";
 import type { AxiosResponse } from "axios";
 import axiosClient from "@/utils/axiosClient";
 import * as taskWrites from "@/lib/api/contracts/taskWrites";
+import * as sectionWrites from "@/lib/api/contracts/sectionWrites";
+import * as notificationWrites from "@/lib/api/contracts/notificationWrites";
 import { z } from "zod";
 
 import {
@@ -155,7 +157,7 @@ export async function getBoardDetail(body: BoardDetailBody, signal?: AbortSignal
 }
 
 // Writes keep each caller's transport and HTTP rejection behavior.
-type WriteRouteDescriptor = Omit<ReadRouteDescriptor, "method"> & { method: "POST" | "PUT" };
+type WriteRouteDescriptor = Omit<ReadRouteDescriptor, "method"> & { method: "GET" | "POST" | "PUT" };
 
 export const moveTaskRoute = {
   method: "PUT",
@@ -314,4 +316,126 @@ export async function moveTask(body: taskWrites.MoveTaskBody) {
 // Native-fetch callers keep their distinct status checks and JSON error handling.
 export async function readMoveTaskResponse(response: Response): Promise<z.output<typeof moveTaskRoute.success>> {
   return validateRead("moveTask", moveTaskRoute.success, await response.json(), moveTaskRoute.validate);
+}
+
+export const sectionCreateRoute = {
+  method: "POST",
+  pathParams: z.undefined(),
+  path: () => "/api/section/create",
+  query: z.undefined(),
+  body: sectionWrites.createSectionBodySchema,
+  success: sectionWrites.createSectionResponseSchema,
+  errors: { 400: sectionWrites.sectionWriteErrorSchema, 401: sectionWrites.sectionWriteErrorSchema, 403: sectionWrites.sectionWriteErrorSchema, 404: sectionWrites.sectionWriteErrorSchema, 405: sectionWrites.sectionWriteErrorSchema, 500: sectionWrites.sectionCreateServerErrorSchema },
+} satisfies WriteRouteDescriptor;
+
+export const sectionUpdateRoute = {
+  method: "POST",
+  pathParams: z.undefined(),
+  path: () => "/api/section/update",
+  query: z.undefined(),
+  body: sectionWrites.updateSectionBodySchema,
+  success: sectionWrites.updateSectionResponseSchema,
+  errors: { 400: sectionWrites.sectionWriteErrorSchema, 401: sectionWrites.sectionWriteErrorSchema, 403: sectionWrites.sectionWriteErrorSchema, 404: sectionWrites.sectionWriteErrorSchema, 405: sectionWrites.sectionWriteErrorSchema, 500: sectionWrites.sectionWriteErrorSchema },
+} satisfies WriteRouteDescriptor;
+
+export const notificationSeenRoute = {
+  method: "GET",
+  pathParams: z.undefined(),
+  path: () => "/api/notifications/markAsUnseen",
+  query: notificationWrites.notificationSeenQuerySchema,
+  body: z.undefined(),
+  success: notificationWrites.notificationResponseSchema,
+  errors: { 400: notificationWrites.notificationWriteErrorSchema, 401: notificationWrites.notificationWriteErrorSchema, 403: notificationWrites.notificationWriteErrorSchema, 404: notificationWrites.notificationWriteErrorSchema, 405: notificationWrites.notificationWriteErrorSchema, 500: notificationWrites.notificationWriteErrorSchema },
+} satisfies WriteRouteDescriptor;
+
+export const notificationArchiveRoute = {
+  method: "GET",
+  pathParams: z.undefined(),
+  path: () => "/api/notifications/markAsDone",
+  query: notificationWrites.notificationArchiveQuerySchema,
+  body: z.undefined(),
+  success: notificationWrites.notificationResponseSchema,
+  errors: { 400: notificationWrites.notificationWriteErrorSchema, 401: notificationWrites.notificationWriteErrorSchema, 403: notificationWrites.notificationWriteErrorSchema, 404: notificationWrites.notificationWriteErrorSchema, 405: notificationWrites.notificationWriteErrorSchema, 500: notificationWrites.notificationWriteErrorSchema, 409: notificationWrites.notificationWriteErrorSchema },
+} satisfies WriteRouteDescriptor;
+
+export const notificationUnarchiveRoute = {
+  method: "POST",
+  pathParams: z.undefined(),
+  path: () => "/api/notifications/unArchiveNotificationById",
+  query: z.undefined(),
+  body: notificationWrites.notificationUnarchiveBodySchema,
+  success: notificationWrites.notificationResponseSchema,
+  errors: { 400: notificationWrites.notificationWriteErrorSchema, 401: notificationWrites.notificationWriteErrorSchema, 403: notificationWrites.notificationWriteErrorSchema, 404: notificationWrites.notificationWriteErrorSchema, 405: notificationWrites.notificationWriteErrorSchema, 500: notificationWrites.notificationUnarchiveErrorSchema },
+} satisfies WriteRouteDescriptor;
+
+export const notificationBulkArchiveRoute = {
+  method: "POST",
+  pathParams: z.undefined(),
+  path: () => "/api/notifications/(un)archiveBulk",
+  query: z.undefined(),
+  body: notificationWrites.notificationBulkArchiveBodySchema,
+  success: notificationWrites.notificationBulkArchiveResponseSchema,
+  errors: { 400: notificationWrites.notificationWriteErrorSchema, 401: notificationWrites.notificationWriteErrorSchema, 403: notificationWrites.notificationWriteErrorSchema, 404: notificationWrites.notificationWriteErrorSchema, 405: notificationWrites.notificationWriteErrorSchema, 500: notificationWrites.notificationWriteErrorSchema },
+} satisfies WriteRouteDescriptor;
+
+export async function createSection(body: sectionWrites.CreateSectionBody) {
+  const route = sectionCreateRoute;
+  const response = await axios.post<z.output<typeof route.success>>(route.path(), body, {
+    headers: { "X-Hypertask-Client": "htpr-6925" },
+  });
+  response.data = validateRead("createSection", route.success, response.data);
+  return response;
+}
+
+export async function updateSection(body: sectionWrites.UpdateSectionBody) {
+  const route = sectionUpdateRoute;
+  const response = await axios.post<z.output<typeof route.success>>(route.path(), body, {
+    headers: { "X-Hypertask-Client": "htpr-6925" },
+  });
+  response.data = validateRead("updateSection", route.success, response.data);
+  return response;
+}
+
+export async function unarchiveNotification(body: notificationWrites.NotificationUnarchiveBody) {
+  const route = notificationUnarchiveRoute;
+  const response = await axios.post<z.output<typeof route.success>>(route.path(), body, {
+    headers: { "X-Hypertask-Client": "htpr-6925" },
+  });
+  response.data = validateRead("unarchiveNotification", route.success, response.data);
+  return response;
+}
+
+export async function setNotificationSeen(query: notificationWrites.NotificationSeenQuery) {
+  const route = notificationSeenRoute;
+  const response = await axios.get<z.output<typeof route.success>>(`${route.path()}?notificationId=${query.notificationId}&seen=${query.seen}`, {
+    headers: { "X-Hypertask-Client": "htpr-6925" },
+  });
+  response.data = validateRead("setNotificationSeen", route.success, response.data);
+  return response;
+}
+
+export async function toggleNotificationArchive(query: notificationWrites.NotificationArchiveQuery, headers: Record<string, string>) {
+  const route = notificationArchiveRoute;
+  const response = await fetch(`${route.path()}?id=${query.id}&taskId=${query.taskId}&userId=${query.userId}&type=${query.type}${query.tutorial ? "&tutorial=1" : ""}`, {
+    method: route.method,
+    headers: { ...headers, "X-Hypertask-Client": "htpr-6925" },
+  });
+  // The caller only checks status. Diagnose a clone without consuming its body.
+  if (response.ok) {
+    try {
+      validateRead("toggleNotificationArchive", route.success, await response.clone().json());
+    } catch (error) {
+      console.warn("Typed API contract mismatch: toggleNotificationArchive", error);
+    }
+  }
+  return response;
+}
+
+export async function archiveNotifications(body: notificationWrites.NotificationBulkArchiveBody, headers: Record<string, string>) {
+  const route = notificationBulkArchiveRoute;
+  const response = await axiosClient.post<z.output<typeof route.success>>(route.path().slice(4), body, {
+    headers: { ...headers, "X-Hypertask-Client": "htpr-6925" },
+  });
+  response.data = validateRead("archiveNotifications", route.success, response.data);
+  return response;
 }

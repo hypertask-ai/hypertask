@@ -1,3 +1,6 @@
+import { useFlag } from "@/hooks/useFlag";
+import { updateSection as writeSection } from "@/lib/api/typedClient";
+import { HTPR_6979_TYPED_WRITES_FLAG } from "@/lib/flags/keys";
 /* eslint-disable react-hooks/exhaustive-deps */
 import React, { useCallback, useContext, useMemo, useRef, useState } from "react";
 import { useRecoilValue } from "@/lib/state";
@@ -219,6 +222,9 @@ const HomePage = ({
   const { archiveNotificationGetter } = useGlobalFocusHandler()
   const { currentSetting } = useSubTask()
   const queryClient = useQueryClient();
+  const typedWrites = useFlag(HTPR_6979_TYPED_WRITES_FLAG);
+  let typedWrite: typeof writeSection | undefined;
+  if (typedWrites) typedWrite = writeSection;
   const { setBoardColumnsViewAPI } = useKanbanViews(_currentProject);
   useBoardRealtime(_currentProject?.id, {
     accountId: currentUser.id,
@@ -353,7 +359,11 @@ const HomePage = ({
       // the ranking write failed: the view kept the new order, the board kept
       // the old one, and the column snapped back on reload (HTPR-5047).
       try {
-        await axios.post(`/api/section/update`, {
+        typedWrite ? await typedWrite({
+          userId: currentUser.id,
+          sectionId: updatedSectionId,
+          newSection: { ranking },
+        }) : await axios.post(`/api/section/update`, {
           userId: currentUser.id,
           sectionId: updatedSectionId,
           newSection: { ranking },
@@ -367,6 +377,7 @@ const HomePage = ({
       console.log("🚀 ~ handleColumnDragEnd ~ error:", error);
     }
   }, [
+    typedWrite,
     _currentProject,
     currentUser.id,
     displaySections,
