@@ -816,6 +816,24 @@ test("mutable feature flag policy declarations fail closed", async (t) => {
   assert.equal((await evaluate("HTPR-1 [FEATURE] update widget", allowedBase, allowedHead, allowed.dir)).pass, true);
 });
 
+test("the production per-flag default lookup passes but a mutated find alias fails", async (t) => {
+  const source = fs.readFileSync(path.join(root, "src/lib/flags.ts"), "utf8");
+  const lookup = source.match(/(?:export )?function defaultFeatureFlagMode\(key: string\): FeatureFlagMode \{[\s\S]*?\n\}/)?.[0];
+  assert.ok(lookup, "test the actual production lookup");
+  for (const mutate of [false, true]) {
+    const { dir, git } = makeRepo(t);
+    const base = commit(git, "base");
+    writeFile(dir, "src/lib/flags.ts", flagsSource(["OTHER_FLAG"], "OWNER_AND_QA",
+      `const DEFAULT_BUGFIX_FLAG_MODE = "EVERYONE";\n${lookup}\n` +
+      (mutate ? 'const definition = FEATURE_FLAG_DEFINITIONS.find(({ key }) => key === OTHER_FLAG);\nconst alias = definition;\nalias.defaultMode = "EVERYONE";\n' : "")));
+    writeFile(dir, "src/components/Widget.tsx", 'import { useFlag } from "@/hooks/useFlag";\nimport { OTHER_FLAG } from "@/lib/flags/keys";\nexport const Widget = () => useFlag(OTHER_FLAG) ? <div /> : null;\n');
+    const head = commit(git, "default lookup");
+    const result = await evaluate("HTPR-1 [FEATURE] update widget", base, head, dir);
+    assert.equal(result.pass, !mutate, result.reason);
+    if (mutate) assert.match(result.reason, /must not be reassigned, aliased, or mutated/);
+  }
+});
+
 test("an imported registered key used by useFlag passes", async (t) => {
   const { dir, git } = makeRepo(t);
   const base = commit(git, "base");

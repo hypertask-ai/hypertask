@@ -6,23 +6,33 @@ import path from "node:path";
 import { localFlagModes, readPlainQaFlags } from "./premerge-local-flags.mjs";
 
 test("live Everyone modes survive; all other registry keys are Owner + QA", () => {
-  assert.deepEqual(localFlagModes(["released", "off", "new"], { released: true, off: false, retired: true }), {
+  assert.deepEqual(localFlagModes({ released: "OWNER_AND_QA", off: "OWNER_AND_QA", new: "OWNER_AND_QA" }, { released: true, off: false, retired: true }), {
     released: "EVERYONE", off: "OWNER_AND_QA", new: "OWNER_AND_QA",
   });
 });
 
+test("unreleased and new flags use their own defaults, with live releases and overrides preserved", () => {
+  const defaults = { feature: "OWNER_AND_QA", bugfix: "EVERYONE", explicit: "OFF", owner: "OWNER_ONLY", released: "OFF" };
+  assert.deepEqual(localFlagModes(defaults, { feature: false, bugfix: false, released: true }), {
+    ...defaults, released: "EVERYONE",
+  });
+  assert.deepEqual(localFlagModes(defaults, { released: true }, ["bugfix=OFF", "explicit=OWNER_AND_QA"]), {
+    ...defaults, released: "EVERYONE", bugfix: "OFF", explicit: "OWNER_AND_QA",
+  });
+});
+
 test("repeatable overrides apply in order, including disabling a live released flag", () => {
-  assert.deepEqual(localFlagModes(["released", "new"], { released: true }, ["released=OFF", "new=OWNER_ONLY", "new=OWNER_AND_QA"]), {
+  assert.deepEqual(localFlagModes({ released: "OWNER_AND_QA", new: "OWNER_AND_QA" }, { released: true }, ["released=OFF", "new=OWNER_ONLY", "new=OWNER_AND_QA"]), {
     released: "OFF", new: "OWNER_AND_QA",
   });
   for (const value of ["unknown=OFF", "new=INVALID", "new=OFF=EVERYONE", "new", "new=", "=OFF"]) {
-    assert.throws(() => localFlagModes(["new"], { released: true }, [value]), /Invalid --flag/);
+    assert.throws(() => localFlagModes({ new: "OWNER_AND_QA" }, { released: true }, [value]), /Invalid --flag/);
   }
 });
 
 test("unreadable or invalid live views fail closed, not back to the stale snapshot", () => {
   for (const live of [null, [], {}, "invalid", { key: "yes" }]) {
-    assert.throws(() => localFlagModes(["key"], live), /Invalid plain QA/);
+    assert.throws(() => localFlagModes({ key: "OWNER_AND_QA" }, live), /Invalid plain QA/);
   }
 });
 

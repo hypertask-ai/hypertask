@@ -988,12 +988,11 @@ export function featureFlagModeEnabled(
 const DEFAULT_FEATURE_FLAG_MODE: FeatureFlagMode = "OWNER_AND_QA";
 const DEFAULT_BUGFIX_FLAG_MODE: FeatureFlagMode = "EVERYONE";
 
-function defaultFeatureFlagMode(key: string): FeatureFlagMode {
+export function defaultFeatureFlagMode(key: string): FeatureFlagMode {
   const definition: FeatureFlagDefinition | undefined = FEATURE_FLAG_DEFINITIONS.find(({ key: declaredKey }) => declaredKey === key);
-  if (definition && definition.defaultMode) return definition.defaultMode;
-  return definition && "kind" in definition && definition.kind === "bugfix"
+  return definition?.defaultMode ?? (definition?.kind === "bugfix"
     ? DEFAULT_BUGFIX_FLAG_MODE
-    : DEFAULT_FEATURE_FLAG_MODE;
+    : DEFAULT_FEATURE_FLAG_MODE);
 }
 
 /**

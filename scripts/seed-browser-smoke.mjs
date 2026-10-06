@@ -284,12 +284,13 @@ try {
     // Match the CI plain-user layout even when the local fixture is QA user 985.
     modes = Object.fromEntries(FEATURE_FLAG_KEYS.map(key => [key, modes[key] === "EVERYONE" ? "EVERYONE" : "OFF"]));
   } else if (localPremerge) {
-    const { FEATURE_FLAG_KEYS } = jiti(path.join(root, "src/lib/flags.ts"));
+    const { FEATURE_FLAG_KEYS, defaultFeatureFlagMode } = jiti(path.join(root, "src/lib/flags.ts"));
+    const defaults = Object.fromEntries(FEATURE_FLAG_KEYS.map(key => [key, defaultFeatureFlagMode(key)]));
     const overrides = process.argv.slice(2);
     if (overrides.some((value, index) => index % 2 === 0 && value !== "--flag") || overrides.length % 2) {
       throw new Error("Invalid local flag arguments");
     }
-    modes = localFlagModes(FEATURE_FLAG_KEYS, await readPlainQaFlags(), overrides.filter((_, index) => index % 2));
+    modes = localFlagModes(defaults, await readPlainQaFlags(), overrides.filter((_, index) => index % 2));
     await writeFile(path.join(path.dirname(stateFile), "flag-modes.json"), JSON.stringify({ modes }));
   }
   for (const [key, mode] of Object.entries(modes)) {
