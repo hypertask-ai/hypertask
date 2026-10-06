@@ -20,6 +20,7 @@ import {
   HTPR_6967_TYPED_TASK_READS_FLAG,
   HTPR_6975_TYPED_WRITES_FLAG,
   HTPR_6979_TYPED_WRITES_FLAG,
+  HTPR_6980_INSTANT_COLUMN_DELETE_FLAG,
   HTPR_6924_REST_COMPAT_FLAG,
   HTPR_6929_COMPOSE_TASK_WRITER_FLAG,
   HTPR_6937_NEW_TASK_WINDOW_FLAG,
@@ -201,6 +202,12 @@ type FeatureFlagDefinition = {
 };
 
 const FEATURE_FLAG_DEFINITIONS = [
+  {
+    key: HTPR_6980_INSTANT_COLUMN_DELETE_FLAG,
+    kind: "bugfix",
+    shippedOn: "2026-10-07",
+    description: "Removes a board column immediately after confirming deletion and restores it if deletion fails.",
+  },
   {
     key: HTPR_6979_TYPED_WRITES_FLAG,
     shippedOn: "2026-10-06",

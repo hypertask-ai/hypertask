@@ -1,5 +1,5 @@
 import { updateSection as writeSection } from "@/lib/api/typedClient";
-import { HTPR_6979_TYPED_WRITES_FLAG } from "@/lib/flags/keys";
+import { HTPR_6979_TYPED_WRITES_FLAG, HTPR_6980_INSTANT_COLUMN_DELETE_FLAG } from "@/lib/flags/keys";
 import { IMember, IProject, IProjectsAll, ISection, IUser } from "@/models/model";
 import type { IAgent } from "@/models/model";
 import { currentProjectAtom, currentUserAtom, showCommandsAtom } from "@/store";
@@ -53,6 +53,7 @@ import { MobileViewContext } from "@/lib/contexts/mobileContext";
 const ManageColumns = ({ toggleModal }: { toggleModal: (add: boolean) => void }) => {
   const queryClient = useQueryClient();
   const typedWrites = useFlag(HTPR_6979_TYPED_WRITES_FLAG);
+  const instantColumnDelete = useFlag(HTPR_6980_INSTANT_COLUMN_DELETE_FLAG);
   let typedWrite: typeof writeSection | undefined;
   if (typedWrites) typedWrite = writeSection;
   const isMobile = useContext(MobileViewContext);
@@ -237,11 +238,12 @@ const ManageColumns = ({ toggleModal }: { toggleModal: (add: boolean) => void })
     section: ISection,
     saveMode?: string,
     updatedRank?: string,
-    overrides?: { section_title?: string; isDone?: boolean }
+    overrides?: { section_title?: string; isDone?: boolean },
+    rollbackDelete?: () => void
   ) => {
     try {
       var updatedSections = [...sections];
-      if (!section || updating) return;
+      if (!section || (updating && !rollbackDelete)) return;
       setUpdating(true);
       var sendUpdateSection: ISection;
 
@@ -337,6 +339,10 @@ const ManageColumns = ({ toggleModal }: { toggleModal: (add: boolean) => void })
       }
     } catch (error) {
       console.log("🚀 ~ handleSectionUpdateVis ~ error:", error);
+      if (rollbackDelete) {
+        rollbackDelete();
+        toast.error("Column could not be deleted");
+      }
     } finally {
       setUpdating(false);
     }
@@ -596,6 +602,59 @@ const ManageColumns = ({ toggleModal }: { toggleModal: (add: boolean) => void })
 
   // CONFIRM DELETE
   const confirmDelete = async () => {
+    if (instantColumnDelete && editSection && currentProject) {
+      const queryKey = [
+        globalConstants.GetAllManageColumnsPrefixKey,
+        currentProject.id,
+        currentUser.id,
+      ];
+      // Cancel stale reads synchronously, then remove the column before waiting
+      // for queued saves or the server. All board section lists need the patch.
+      void queryClient.cancelQueries({ queryKey: ["projectsAll"], exact: true });
+      void queryClient.cancelQueries({ queryKey: ["projectsAllMinimal"] });
+      void queryClient.cancelQueries({ queryKey, exact: true });
+      const previousProjects = queryClient.getQueryData<IProjectsAll>(["projectsAll"]);
+      const previousMinimal = queryClient.getQueriesData<IProject[]>({
+        queryKey: ["projectsAllMinimal"],
+      });
+      const previousColumns = queryClient.getQueryData<ISection[]>(queryKey);
+      const removeSection = (list?: ISection[]) =>
+        list?.filter((section) =>
+          (section.id ?? section.sectionId) !== editSection.id
+        );
+      const patch = (project: IProject) =>
+        project.id === currentProject.id
+          ? {
+              ...project,
+              section: removeSection(project.section),
+              sections: removeSection(project.sections) ?? project.sections,
+              filteredSections: removeSection(project.filteredSections) ?? project.filteredSections,
+            }
+          : project;
+      const rollback = () => {
+        setCurrentProject(currentProject);
+        if (previousProjects) queryClient.setQueryData(["projectsAll"], previousProjects);
+        for (const [key, data] of previousMinimal) {
+          if (data) queryClient.setQueryData(key, data);
+        }
+        if (previousColumns) queryClient.setQueryData(queryKey, previousColumns);
+      };
+      setCurrentProject(patch(currentProject));
+      queryClient.setQueryData<IProjectsAll>(["projectsAll"], (cached) =>
+        cached ? { ...cached, updatedProjects: cached.updatedProjects.map(patch) } : cached
+      );
+      queryClient.setQueriesData<IProject[]>(
+        { queryKey: ["projectsAllMinimal"] },
+        (cached) => cached?.map(patch)
+      );
+      queryClient.setQueryData<ISection[]>(queryKey, (cached) => removeSection(cached));
+      setEditMode(false);
+      setDeleteModal(false);
+      await queueSave(() =>
+        handleSectionUpdateVis(editSection, "DELETE", undefined, undefined, rollback)
+      );
+      return;
+    }
     // Queued and awaited: firing this while a row save is still in flight used to
     // hit the `updating` guard, drop the delete, and still close the dialog and
     // return to the list as though the column had gone.
