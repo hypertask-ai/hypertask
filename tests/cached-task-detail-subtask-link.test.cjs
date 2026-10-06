@@ -40,11 +40,14 @@ for (const enabled of [true, false]) {
     const href = task => `/detail/project-${task.projectId}/${task.uniqueIndex}`;
     const Detail = ({ initialTask }) => React.createElement("article", null, initialTask.title, initialTask.description_.content, initialTask.comments);
     let nextPath = "/project";
+    // Next's route boundary reads current router context, not a frozen task view.
+    const ServerDetail = () => React.createElement(Detail, { initialTask: nextPath === href(parent) ? parent : nextPath === href(related) ? related : child });
     let serverChildren = React.createElement("div", null, "Board");
     const router = { replace: () => assert.fail("a task-page navigation must not replace the parent's history entry"), refresh: () => assert.fail("task Back must not refresh the board") };
     const relativePath = "src/components/PageComponents/TaskDetail/CachedTaskDetailNavigation.tsx";
-    const source = process.env.SUBTASK_LINK_BASELINE
-      ? execFileSync("git", ["show", `origin/production:${relativePath}`], { cwd: root, encoding: "utf8" })
+    const baseline = process.env.SUBTASK_LINK_BASELINE === "1" ? "origin/production" : process.env.SUBTASK_LINK_BASELINE;
+    const source = baseline
+      ? execFileSync("git", ["show", `${baseline}:${relativePath}`], { cwd: root, encoding: "utf8" })
       : fs.readFileSync(path.join(root, relativePath), "utf8");
     const compiled = ts.transpileModule(source, { compilerOptions: { jsx: ts.JsxEmit.ReactJSX, module: ts.ModuleKind.CommonJS } }).outputText;
     const mocks = {
@@ -84,9 +87,11 @@ for (const enabled of [true, false]) {
         window.history[method]();
       });
     });
+    let followHistory = true;
     window.addEventListener("popstate", () => {
+      if (!followHistory) return;
       nextPath = window.location.pathname;
-      serverChildren = React.createElement(Detail, { initialTask: nextPath === href(parent) ? parent : child });
+      serverChildren = React.createElement(ServerDetail);
       render();
     });
     // Next Link/router.push commits the new pathname and children, without
@@ -101,7 +106,7 @@ for (const enabled of [true, false]) {
       assertContent(sourceTask);
       await React.act(async () => {
         nextPath = href(target);
-        serverChildren = React.createElement(Detail, { initialTask: target });
+        serverChildren = React.createElement(ServerDetail);
         render();
       });
       if (enabled) {
@@ -132,7 +137,7 @@ for (const enabled of [true, false]) {
     if (enabled) {
       await React.act(async () => {
         nextPath = href(child);
-        serverChildren = React.createElement(Detail, { initialTask: child });
+        serverChildren = React.createElement(ServerDetail);
         render();
       });
       assert.equal(document.querySelector("article").textContent, child.title + child.description_.content + child.comments, "a new Next route must invalidate the last native-event override");
@@ -142,6 +147,233 @@ for (const enabled of [true, false]) {
       assertContent(parent);
       await traverse("forward");
       assertContent(child);
+      // Keep both markers intact to isolate a stale Next update from RSC views.
+      for (const target of [parent, child]) {
+        await React.act(async () => {
+          cache.openCachedTaskDetail({ queryClient: client, accountId: 2343, projectId: target.projectId, uniqueIndex: target.uniqueIndex, href: href(target), task: target });
+          nextPath = href(target);
+          serverChildren = React.createElement(ServerDetail);
+          render();
+        });
+      }
+      followHistory = false;
+      await traverse("back");
+      assertContent(parent);
+      await traverse("forward");
+      assertContent(child);
+      await React.act(async () => {
+        nextPath = href(parent);
+        serverChildren = React.createElement(ServerDetail);
+        render();
+      });
+      assert.equal(document.querySelector("article").textContent, child.title + child.description_.content + child.comments, "a Next update older than Forward must keep the child in the address");
+      await React.act(async () => {
+        nextPath = href(child);
+        serverChildren = React.createElement(ServerDetail);
+        render();
+      });
+      assertContent(child);
+      followHistory = true;
+      // Next may also strip the marker while history waits for new RSC children.
+      await React.act(async () => {
+        cache.openCachedTaskDetail({ queryClient: client, accountId: 2343, projectId: parent.projectId, uniqueIndex: parent.uniqueIndex, href: href(parent), task: parent });
+        nextPath = href(parent);
+        serverChildren = React.createElement(ServerDetail);
+        render();
+      });
+      await React.act(async () => {
+        window.history.replaceState({ ...window.history.state, cachedTaskDetail: undefined }, "", href(parent));
+        nextPath = href(child);
+        serverChildren = React.createElement(ServerDetail);
+        render();
+      });
+      assert.equal(document.querySelector("article").textContent, child.title + child.description_.content + child.comments, "Next Link renders before pushState even after native opens");
+      await React.act(async () => window.history.pushState(window.history.state, "", href(child)));
+      assertContent(child);
+      followHistory = false;
+      await traverse("back");
+      assertContent(parent);
+      await traverse("forward");
+      assertContent(child);
+      await React.act(async () => {
+        nextPath = href(parent);
+        serverChildren = React.createElement(ServerDetail);
+        render();
+      });
+      assertContent(child);
+      await React.act(async () => {
+        nextPath = href(child);
+        serverChildren = React.createElement(ServerDetail);
+        render();
+      });
+      assertContent(child);
+      // Acknowledgement releases history precedence for the next ordinary Link.
+      await React.act(async () => {
+        nextPath = href(related);
+        serverChildren = React.createElement(ServerDetail);
+        render();
+      });
+      assert.equal(document.querySelector("article").textContent, related.title + related.description_.content + related.comments);
+      await React.act(async () => window.history.pushState(window.history.state, "", href(related)));
+      assertContent(related);
+      await traverse("back");
+      assertContent(child);
+      await React.act(async () => {
+        cache.openCachedTaskDetail({ queryClient: client, accountId: 2343, projectId: parent.projectId, uniqueIndex: parent.uniqueIndex, href: href(parent), task: parent });
+        nextPath = href(child);
+        serverChildren = React.createElement(ServerDetail);
+        render();
+      });
+      assertContent(parent);
+      await React.act(async () => {
+        nextPath = href(parent);
+        serverChildren = React.createElement(ServerDetail);
+        render();
+      });
+      assertContent(parent);
+      await traverse("back");
+      assertContent(child);
+      await React.act(async () => {
+        nextPath = href(related);
+        serverChildren = React.createElement(ServerDetail);
+        render();
+      });
+      assertContent(child);
+      // A Link can commit a different URL before an older history response
+      // acknowledges its original target. Only the current address may retire it.
+      await React.act(async () => {
+        nextPath = href(parent);
+        render();
+      });
+      await React.act(async () => {
+        window.history.pushState(window.history.state, "", href(parent));
+        render();
+      });
+      assertContent(parent);
+      await React.act(async () => {
+        nextPath = href(child);
+        render();
+      });
+      assert.equal(document.querySelector("article").textContent, parent.title + parent.description_.content + parent.comments, "an old history acknowledgement must not override a newer Link address");
+      await React.act(async () => {
+        nextPath = href(parent);
+        render();
+      });
+      assertContent(parent);
     }
   });
 }
+
+test("an acknowledged Next task page keeps its composer mounted when its authorized cache is seeded", async (t) => {
+  const parent = { id: 42, projectId: 6859, uniqueIndex: 43, title: "Parent title", description_: { content: "Parent description" } };
+  const child = { ...parent, id: 44, uniqueIndex: 45, title: "Child title" };
+  const href = task => `/detail/project-${task.projectId}/${task.uniqueIndex}`;
+  const dom = new JSDOM('<div id="root"></div>', { url: "https://app.hypertask.ai" + href(parent) });
+  const names = ["window", "document", "Event", "IS_REACT_ACT_ENVIRONMENT"];
+  const previous = Object.fromEntries(names.map(name => [name, global[name]]));
+  Object.assign(global, { window: dom.window, document: dom.window.document, Event: dom.window.Event, IS_REACT_ACT_ENVIRONMENT: true });
+  const client = new QueryClient();
+  const renderer = createRoot(document.getElementById("root"));
+  t.after(async () => {
+    await React.act(async () => renderer.unmount());
+    client.clear();
+    dom.window.close();
+    for (const name of names) global[name] = previous[name];
+  });
+  let nextPath = href(parent);
+  let nextTask = parent;
+  const NextDetail = () => React.createElement("article", null,
+    nextTask.title,
+    React.createElement("textarea", { "data-testid": "comment-composer", defaultValue: "Draft stays here" }));
+  const CachedDetail = ({ initialTask }) => React.createElement("article", null, initialTask.title);
+  const relativePath = "src/components/PageComponents/TaskDetail/CachedTaskDetailNavigation.tsx";
+  const baseline = process.env.SUBTASK_LINK_BASELINE === "1" ? "origin/production" : process.env.SUBTASK_LINK_BASELINE;
+  const source = baseline
+    ? execFileSync("git", ["show", `${baseline}:${relativePath}`], { cwd: root, encoding: "utf8" })
+    : fs.readFileSync(path.join(root, relativePath), "utf8");
+  const compiled = ts.transpileModule(source, { compilerOptions: { jsx: ts.JsxEmit.ReactJSX, module: ts.ModuleKind.CommonJS } }).outputText;
+  const mocks = {
+    react: React,
+    "react/jsx-runtime": require("react/jsx-runtime"),
+    "next/navigation": { usePathname: () => nextPath, useRouter: () => ({ replace: () => assert.fail("cached history must not fetch"), refresh: () => assert.fail("cached history must not refresh") }) },
+    "@tanstack/react-query": { useQueryClient: () => client },
+    "@/lib/state": { useRecoilValue: () => ({ id: 2343 }) },
+    "@/store": { currentUserAtom: {} },
+    "@/hooks/useFlag": { useFlag: () => true },
+    "@/lib/flags/keys": flags,
+    "@/lib/navigation/cachedTaskDetail": cache,
+    "@/components/Modals/SwipeUnread/EmbeddedTaskDetail": { __esModule: true, default: CachedDetail },
+  };
+  const exports = {};
+  new Function("require", "exports", compiled)(name => {
+    assert.ok(name in mocks, `Unexpected dependency: ${name}`);
+    return mocks[name];
+  }, exports);
+  const render = () => renderer.render(React.createElement(React.StrictMode, null,
+    React.createElement(exports.default, { accountId: 2343 }, React.createElement(NextDetail))));
+  await React.act(async () => render());
+  const composer = document.querySelector('[data-testid="comment-composer"]');
+  assert.ok(composer);
+  composer.value = "Unsent comment";
+  await React.act(async () => {
+    client.setQueryData(cache.cachedTaskDetailKey(2343, parent.id), parent);
+    render();
+  });
+  assert.equal(composer.isConnected, true, "seeding an acknowledged route must not detach its composer");
+  assert.equal(document.querySelector('[data-testid="comment-composer"]'), composer);
+  assert.equal(composer.value, "Unsent comment");
+  await React.act(async () => {
+    render();
+    window.dispatchEvent(new Event("cached-task-detail-navigation"));
+  });
+  assert.equal(document.querySelector('[data-testid="comment-composer"]'), composer, "a same-address notification must not replace Next children");
+  await React.act(async () => {
+    client.setQueryData(cache.cachedTaskDetailKey(2343, child.id), child);
+    window.history.pushState({}, "", href(child));
+    nextPath = href(child);
+    nextTask = child;
+    render();
+  });
+  assert.equal(document.querySelector('[data-testid="comment-composer"]'), composer, "preseeded ordinary Next navigation must retain its child tree");
+  window.addEventListener("popstate", () => {
+    nextPath = window.location.pathname;
+    render();
+  });
+  const traverse = method => React.act(async () => {
+    await new Promise(resolve => {
+      window.addEventListener("popstate", () => setImmediate(resolve), { once: true });
+      window.history[method]();
+    });
+  });
+  await traverse("back");
+  assert.equal(document.querySelector("article").textContent, parent.title, "unacknowledged Back uses the route cache, not stale Next children");
+  const backDetail = document.querySelector("article");
+  // Next can acknowledge the pathname while its RSC children still show the child.
+  await React.act(async () => { nextPath = href(parent); render(); });
+  assert.equal(document.querySelector("article"), backDetail, "an early Next pathname acknowledgement must retain the already mounted history view");
+  await React.act(async () => render());
+  assert.equal(document.querySelector("article"), backDetail);
+  await traverse("forward");
+  assert.equal(document.querySelector("article").textContent, child.title, "unacknowledged Forward still uses the cached subtask");
+  const forwardDetail = document.querySelector("article");
+  await React.act(async () => { nextPath = href(child); render(); });
+  assert.equal(document.querySelector("article"), forwardDetail, "Forward's pathname acknowledgement must not remount its history view");
+  await React.act(async () => { nextPath = href(parent); render(); });
+  assert.equal(document.querySelector("article").textContent, parent.title, "a breadcrumb from an already cached view must hand off before its new RSC children arrive");
+  await React.act(async () => { window.history.pushState({}, "", href(parent)); render(); });
+  assert.equal(document.querySelector("article").textContent, parent.title);
+  const related = { ...parent, id: 46, uniqueIndex: 47, title: "Related title" };
+  await React.act(async () => {
+    nextPath = href(related);
+    nextTask = related;
+    render();
+  });
+  const normalComposer = document.querySelector('[data-testid="comment-composer"]');
+  assert.ok(normalComposer, "an uncached Link must still render Next children");
+  await React.act(async () => {
+    window.history.pushState({}, "", href(related));
+    client.setQueryData(cache.cachedTaskDetailKey(2343, related.id), related);
+    render();
+  });
+  assert.equal(document.querySelector('[data-testid="comment-composer"]'), normalComposer, "seeding the new normal Next page must not resurrect the retired cached view");
+});
