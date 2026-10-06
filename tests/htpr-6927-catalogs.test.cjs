@@ -85,6 +85,31 @@ test('every legacy, consolidated and discovery tool has top-level safety hints w
   assert.equal(annotations.hypertask_get_tasks.openWorldHint, false)
 })
 
+test('every tool with destructive schema or metadata actions is annotated conservatively', () => {
+  const { TOOL_ANNOTATIONS, annotationsForActions } = load('src/lib/mcp-server/config/tool-annotations.ts')
+  const destructiveAction = /(?:^|_)(?:update|delete|remove|replace|archive|revoke|restore|unlink)(?:_|$)/
+  const connected = load('src/lib/mcp-server/deferred-tools.ts').toolsForConnect(selectMcpTools(legacy, true, {}, true), true)
+  const tools = [...selectMcpTools(legacy, false, {}, true), ...connected]
+  assert.deepEqual(new Set(tools.map((tool) => tool.name).filter((name) => name in TOOL_ANNOTATIONS)), new Set(Object.keys(TOOL_ANNOTATIONS)))
+  function verify(annotations) {
+    for (const tool of tools) {
+      const schema = tool.inputSchema ?? z.toJSONSchema(tool.parameters, { unrepresentable: 'any', io: 'input' })
+      const schemaActions = schema.properties?.action?.enum ?? []
+      const metadataActions = definitions.flatMap((definition) => Object.entries(definition.actions).filter(([, action]) => action.tool === tool.name || definition.name === tool.name).flatMap(([name, action]) => [name, action.legacy_action].filter(Boolean)))
+      if ([tool.name.replace(/^hypertask_/, ''), ...schemaActions, ...metadataActions].some((action) => destructiveAction.test(action))) {
+        assert.equal(tool.annotations.destructiveHint, true, tool.name)
+        assert.equal((annotations[tool.name] ?? tool.annotations).destructiveHint, true, tool.name)
+      }
+    }
+  }
+  verify(TOOL_ANNOTATIONS)
+  assert.throws(() => verify({ ...TOOL_ANNOTATIONS, hypertask_add_comment_to_task: { ...TOOL_ANNOTATIONS.hypertask_add_comment_to_task, destructiveHint: false } }), /hypertask_add_comment_to_task/)
+  assert.equal(annotationsForActions([{ tool: 'hypertask_add_comment_to_task', read_only: false }]).destructiveHint, true)
+  assert.equal(annotationsForActions([{ tool: 'hypertask_get_tasks', read_only: false }]).destructiveHint, true)
+  assert.equal(annotationsForActions([{ tool: 'hypertask_create_task', read_only: false }]).destructiveHint, false)
+  assert.equal(annotationsForActions([{ tool: 'hypertask_add_comment_to_task', read_only: true }]).destructiveHint, false)
+})
+
 test('legacy scopes reuse consolidated policy for management, team and agent read credentials', async () => {
   for (const caller of [
     { managementPermissions: { management: ['read'] } },
