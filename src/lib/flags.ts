@@ -901,6 +901,8 @@ const LEGACY_BUGFIX_DISPLAY_KINDS: Partial<Record<string, FeatureFlagKind>> = {
   [MY_TASKS_SHORTCUTS_WIDTH_FLAG]: "bugfix",
   [HTPR_6911_SEARCH_ROW_HIGHLIGHT_FLAG]: "bugfix",
   [HTPR_6372_SEARCH_RANKING_FLAG]: "bugfix",
+  ["htpr-6141-ai-first-task-writer"]: "bugfix",
+  [AGENT_CHAT_STOP_AND_TIMEOUT_FEATURE_FLAG]: "bugfix",
 };
 
 export type FeatureFlagRow = {
