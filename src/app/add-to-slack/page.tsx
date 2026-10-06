@@ -1,11 +1,12 @@
 import type { Metadata } from "next";
 import { headers } from "next/headers";
+import Link from "next/link";
 import { notFound } from "next/navigation";
 
 import { getRequestBaseUrl } from "@/lib/auth/requestBaseUrl";
 import { getServerCookieUser } from "@/lib/auth/serverUser";
 import { isFeatureEnabled } from "@/lib/flags";
-import { HTPR_4857_ADD_TO_SLACK_FLAG } from "@/lib/flags/keys";
+import { HTPR_4857_ADD_TO_SLACK_FLAG, HTPR_6921_SLACK_MARKETPLACE_FLAG } from "@/lib/flags/keys";
 import { SLACK_BOT_SCOPES, buildSlackAuthorizeUrl } from "@/lib/slack/authorize";
 
 export const dynamic = "force-dynamic";
@@ -17,7 +18,7 @@ const SCOPE_PURPOSES: Record<string, string> = {
   "assistant:write": "Answer inside Slack's assistant sidebar",
   "channels:history":
     "Summarize public-channel threads you explicitly ask it to watch",
-  commands: "Support the /hypertask slash command",
+  commands: "Support the /ht slash command",
   "groups:history": "Same as channels:history, for private channels you add it to",
   "im:history": "Reply to your direct messages with the bot",
   "chat:write": "Post summaries, task links, and replies as the bot",
@@ -33,6 +34,10 @@ export default async function AddToSlackPage() {
     notFound();
   }
 
+  const marketplaceEnabled = await isFeatureEnabled(
+    HTPR_6921_SLACK_MARKETPLACE_FLAG,
+    user?.id ?? -1,
+  );
   const headerList = await headers();
   // Allowlist-validated host; falls back to the canonical app origin, so a
   // poisoned forwarded-host header cannot steer the Slack redirect_uri.
@@ -73,7 +78,8 @@ export default async function AddToSlackPage() {
         <p className="text-content leading-relaxed text-text-light-gray">
           After Slack adds the bot, sign in to Hypertask to connect it to your
           team. When you remove the app from your workspace, we delete the bot
-          token and everything stored for it.
+          token, watched-thread checkpoints, and account links. Tasks and comments
+          already created in Hypertask remain; recent chat history expires in Redis.
         </p>
         {authorizeUrl ? (
           <a
@@ -85,6 +91,15 @@ export default async function AddToSlackPage() {
         ) : (
           <p className="text-content text-text-light-gray">
             Slack installation is not configured yet. Please try again later.
+          </p>
+        )}
+        {marketplaceEnabled && (
+          <p className="text-dense text-text-light-gray">
+            <a href="https://hypertask.ai/privacy/" className="underline">Privacy policy</a>
+            {" · "}
+            <a href="https://hypertask.ai/terms/" className="underline">Terms</a>
+            {" · "}
+            <Link href="/slack/support" className="underline">Slack app support</Link>
           </p>
         )}
       </section>

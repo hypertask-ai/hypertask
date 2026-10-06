@@ -20,7 +20,9 @@ test("all configured endpoints and assistant/chat events are documented", () => 
     assert.ok(fs.existsSync(path.join(root, "src/app", apiPath, "route.ts")));
   }
   for (const event of manifest.settings.event_subscriptions.bot_events) assert.ok(doc.includes(`\`${event}\``), event);
-  assert.ok(manifest.settings.event_subscriptions.bot_events.includes("assistant_thread_context_changed"));
+  for (const event of ["assistant_thread_context_changed", "app_uninstalled", "tokens_revoked"]) {
+    assert.ok(manifest.settings.event_subscriptions.bot_events.includes(event), event);
+  }
   assert.equal(manifest.features.app_home.messages_tab_enabled, true);
   assert.equal(manifest.features.app_home.messages_tab_read_only, false);
   assert.equal(manifest.settings.interactivity.is_enabled, false);

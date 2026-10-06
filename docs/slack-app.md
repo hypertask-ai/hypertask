@@ -47,7 +47,7 @@ Apply `docs/slack-app-manifest.json` to the official Hypertask app, not the Work
 
 No new ingress endpoint is needed. Keep interactivity disabled: task-card buttons are URL links. Do not configure the Worker's unsigned no-op interactions endpoint.
 
-Subscribe to `app_mention`, `message.im`, `message.channels`, `message.groups`, `assistant_thread_started` and `assistant_thread_context_changed`. Existing signed uninstall/token-revocation handling remains active. Event IDs and command trigger IDs prevent retries from repeating writes. Vercel background work performs the model/tool actions after acknowledgement. The existing shared Redis rate limit fails closed.
+Subscribe to `app_mention`, `message.im`, `message.channels`, `message.groups`, `assistant_thread_started`, `assistant_thread_context_changed`, `app_uninstalled` and `tokens_revoked`. Existing signed uninstall/token-revocation handling remains active. Event IDs and command trigger IDs prevent retries from repeating writes. Vercel background work performs the model/tool actions after acknowledgement. The existing shared Redis rate limit fails closed.
 
 Runtime configuration uses `SLACK_CLIENT_ID`, `SLACK_CLIENT_SECRET`, `SLACK_SIGNING_SECRET`, the app's existing encrypted-secret configuration, `REDIS_URL` and the team's AI gateway configuration. Never expose any of their values in documentation, test output or logs.
 

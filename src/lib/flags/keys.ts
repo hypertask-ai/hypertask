@@ -49,6 +49,7 @@ export const MY_TASKS_PRIORITY_FILTER_FLAG =
 export const HTPR_4228_ADMIN_ONLY_TIME_REPORTS_FLAG =
   "htpr-4228-admin-only-time-reports";
 export const HTPR_4857_ADD_TO_SLACK_FLAG = "htpr-4857-add-to-slack";
+export const HTPR_6921_SLACK_MARKETPLACE_FLAG = "htpr-6921-slack-marketplace";
 export const HTPR_6817_SLACK_APP_FLAG = "htpr-6817-slack-app";
 export const MY_TASKS_CROSS_BOARD_PRIORITY_SORT_FLAG =
   "htpr-6215-my-tasks-cross-board-priority-sort";

@@ -48,6 +48,8 @@ export default defineConfig([
       "src/app/admin/comp/page.tsx",
       // HTPR-4857: server component; gates the public /add-to-slack page.
       "src/app/add-to-slack/page.tsx",
+      // HTPR-6921: server component; gates the public Slack support page.
+      "src/app/slack/support/page.tsx",
       // HTPR-6536: server component; gates the public /qa/login page.
       "src/app/qa/login/page.tsx",
       // Server component; gates ticket-number detail URL resolution.
