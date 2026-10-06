@@ -97,7 +97,7 @@ test('existing history hook keeps cache/transcript on 429, invalidates failed op
     '@/lib/state': { useRecoilValue: () => ({ id: 985, uid: 'fixture-user' }), useRecoilState: () => [null, () => {}] },
     'next/navigation': { usePathname: () => '/project' },
     react: { useCallback: (fn) => fn, useEffect: () => {}, useRef: (current) => ({ current }), useState: (initial) => [initial, (value) => states.push(value)] },
-    '@tanstack/react-query': { useInfiniteQuery: () => ({}), useQueryClient: () => queryClient, useQuery: (options) => { query = options; return { data: cache, isSuccess: true }; } },
+    '@tanstack/react-query': { useQueryClient: () => queryClient, useQuery: (options) => { query = options; return { data: cache, isSuccess: true }; } },
     '@/utils/api/ai_chat': { AI_Chat_API: { getAllSessions: async () => { throw failure; }, createSessionNext: async () => { throw failure; }, deleteSession: async () => { throw failure; }, updateSession: async () => { throw failure; } } },
   });
   const history = hooks.useSessionAndChatHistory();

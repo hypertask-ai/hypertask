@@ -31,9 +31,6 @@ stubModule(require.resolve("next/navigation"), {
   useRouter: () => ({ push: () => {} }),
   usePathname: () => "/project",
 });
-stubModule(require.resolve("@tanstack/react-query"), {
-  useQueryClient: () => ({ refetchQueries: async () => {} }),
-});
 stubSourceModule("src/hooks/useFlag.tsx", {
   useFlag: () => false,
 });

@@ -18,8 +18,7 @@ import {
 } from "lucide-react";
 import { usePathname, useRouter } from "next/navigation";
 import { useFlag } from "@/hooks/useFlag";
-import { useQueryClient } from "@tanstack/react-query";
-import { HTPR_6752_INSTANT_TICKET_OPEN_FLAG, HTPR_6924_REST_COMPAT_FLAG } from "@/lib/flags/keys";
+import { HTPR_6752_INSTANT_TICKET_OPEN_FLAG } from "@/lib/flags/keys";
 import Tooltip from "../Common/Tooltip";
 import { format } from "date-fns";
 import { useContext, useEffect, useMemo, useRef, useState } from "react";
@@ -38,22 +37,20 @@ import {
   showAIChatInterfaceAtom,
 } from "@/store";
 
-type HistorySession = Pick<IChatSession, "id" | "title" | "updatedAt" | "createdAt">;
-
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
 
-function getSessionUpdatedTime(session: HistorySession): number {
+function getSessionUpdatedTime(session: IChatSession): number {
   const t = new Date(session.updatedAt).getTime();
   return Number.isNaN(t) ? 0 : t;
 }
 
-function partitionSessionsByRecency(sessions: HistorySession[]): {
-  previous7Days: HistorySession[];
-  older: HistorySession[];
+function partitionSessionsByRecency(sessions: IChatSession[]): {
+  previous7Days: IChatSession[];
+  older: IChatSession[];
 } {
   const cutoff = Date.now() - 7 * MS_PER_DAY;
-  const previous7Days: HistorySession[] = [];
-  const older: HistorySession[] = [];
+  const previous7Days: IChatSession[] = [];
+  const older: IChatSession[] = [];
   for (const s of sessions) {
     (getSessionUpdatedTime(s) >= cutoff ? previous7Days : older).push(s);
   }
@@ -65,7 +62,7 @@ function ChatSessionRow({
   isActive,
   onSelect,
 }: {
-  chat: HistorySession;
+  chat: IChatSession;
   isActive: boolean;
   onSelect: () => void;
 }) {
@@ -93,10 +90,8 @@ function ChatSessionRow({
 }
 
 export const ChatHeader = () => {
-  const queryClient = useQueryClient();
   const router = useRouter();
   const pathname = usePathname();
-  const restCompat = useFlag(HTPR_6924_REST_COMPAT_FLAG);
   const instantTicketOpen = useFlag(HTPR_6752_INSTANT_TICKET_OPEN_FLAG);
   const quietTicketOpen = instantTicketOpen && pathname?.startsWith("/detail/");
   const {
@@ -104,7 +99,7 @@ export const ChatHeader = () => {
     minimizeChat,
     toggleSidebarMode,
     isSidebarMode,
-    sessions, historySessions, hasMoreSessions, isLoadingMoreSessions, pagingError, loadMoreSessions,
+    sessions,
     currentSession,
     isSessionPending,
     startNewSession,
@@ -128,24 +123,10 @@ export const ChatHeader = () => {
   );
   const dropdownRef = useRef<HTMLDivElement>(null);
   const overflowRef = useRef<HTMLDivElement>(null);
-  const historyEndRef = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    if (restCompat && isDropdownOpen) {
-      void queryClient.refetchQueries({ queryKey: ["chat-session-summaries"], type: "active", stale: true });
-    }
-  }, [restCompat, isDropdownOpen, queryClient]);
-  useEffect(() => {
-    if (!restCompat || !isDropdownOpen || !hasMoreSessions || isLoadingMoreSessions || pagingError || !historyEndRef.current) return;
-    const observer = new IntersectionObserver((entries) => {
-      if (entries.some((entry) => entry.isIntersecting)) void loadMoreSessions();
-    }, { root: historyEndRef.current.parentElement });
-    observer.observe(historyEndRef.current);
-    return () => observer.disconnect();
-  }, [restCompat, isDropdownOpen, hasMoreSessions, isLoadingMoreSessions, pagingError, loadMoreSessions]);
 
   const { previous7Days, older } = useMemo(
-    () => partitionSessionsByRecency((restCompat ? historySessions : sessions) ?? []),
-    [sessions, historySessions, restCompat]
+    () => partitionSessionsByRecency(sessions ?? []),
+    [sessions]
   );
 
   // currentSession is the one canonical resolved session (title, messages,
@@ -214,25 +195,14 @@ export const ChatHeader = () => {
       <div
         id="ai-chat-session-history"
         className={`absolute mt-2 max-h-[min(60svh,15rem)] w-64 max-w-[calc(100vw-1rem)] overflow-y-auto rounded-md bg-modalBackground shadow-lg scrollbar-none z-[1200] ${alignmentClass}`}
-        onScroll={(event) => {
-          const menu = event.currentTarget;
-          if (restCompat && hasMoreSessions && !isLoadingMoreSessions && menu.scrollTop + menu.clientHeight >= menu.scrollHeight - 40) {
-            void loadMoreSessions();
-          }
-        }}
       >
-        {restCompat && pagingError && (
-          <p role="alert" className="px-3 py-2 text-content">
-            Couldn’t load older chats. Scroll to try again.
-          </p>
-        )}
         {previous7Days.length > 0 && (
           <div className="pt-1">
             <div className="px-3 pb-1 pt-1 text-micro font-medium text-icon-dark-gray">
               Previous 7 days
             </div>
             <ul className="pb-1">
-              {previous7Days.map((chat: HistorySession) => (
+              {previous7Days.map((chat: IChatSession) => (
                 <ChatSessionRow
                   key={chat.id}
                   chat={chat}
@@ -255,7 +225,7 @@ export const ChatHeader = () => {
               Older
             </div>
             <ul>
-              {older.map((chat: HistorySession) => (
+              {older.map((chat: IChatSession) => (
                 <ChatSessionRow
                   key={chat.id}
                   chat={chat}
@@ -269,7 +239,6 @@ export const ChatHeader = () => {
             </ul>
           </div>
         )}
-        {restCompat && hasMoreSessions && <div ref={historyEndRef} className="h-1" aria-hidden />}
       </div>
     ) : null;
 

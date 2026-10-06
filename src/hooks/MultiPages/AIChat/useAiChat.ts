@@ -9,7 +9,7 @@ import { useAiChatAttachments } from "./useAiChatAttachments";
 import { createAiChatSend } from "./aiChatSend";
 import { useAiChatPresentation } from "./useAiChatPresentation";
 import { useFlag } from "@/hooks/useFlag";
-import { HTPR_6936_ASK_AI_FULLSCREEN_FLAG, HTPR_6924_REST_COMPAT_FLAG } from "@/lib/flags/keys";
+import { HTPR_6936_ASK_AI_FULLSCREEN_FLAG } from "@/lib/flags/keys";
 
 // Type-only: a value import would pull tiptap back into every page's initial
 // chunk and undo the dynamic mount below (HTPR-4508).
@@ -49,7 +49,6 @@ import { HTPR_6936_ASK_AI_FULLSCREEN_FLAG, HTPR_6924_REST_COMPAT_FLAG } from "@/
 export function useAiChat() {
   // Failed preparation can finish without changing isTyping; wake the search handoff too.
   const [sendSettledVersion, setSendSettledVersion] = useState(0);
-  const sessionPagingEnabled = useFlag(HTPR_6924_REST_COMPAT_FLAG);
   const askAiFullscreenEnabled = useFlag(HTPR_6936_ASK_AI_FULLSCREEN_FLAG);
   const {
   lastWorkspaceFocusRef, turnFailureState, queryClient, currentUser, currentProject,
@@ -66,7 +65,7 @@ export function useAiChat() {
   messageListRef, hasAttemptedRestoreRef, previousProjectIdRef, toggleCreateTaskGlobally, token,
   dockedProjectId, scopedProjectId, boardScopeIsExplicit, editor, editorEnabled,
   editorMountProps, taskId, shouldLoadChatHistory, createSession, activeSession,
-  currentSession, showWelcomeScreen, isSessionPending, restCompat, sessions, historySessions, hasMoreSessions, isLoadingMoreSessions, pagingError, loadMoreSessions, resolveHistorySession, getDisplayedSession, selectSessionInHistory,
+  currentSession, showWelcomeScreen, isSessionPending, sessions, selectSessionInHistory,
   chatHistoryReady, addMessageToSessionQuery, updateLastMessageInSessionCache, appendMessageToSessionCache, updateSessionTitle,
   deleteSessionInHistory, sessionsRef, chatHistoryReadyRef, sessionSetupRef, resolvedBoardSessionRef,
   sessionIntentGenerationRef, sessionContextKey, clearMessageQueue,
@@ -81,7 +80,7 @@ export function useAiChat() {
     deleteSessionInHistory, messageQueueRef, setQueuedMessages, sendInFlightRef, modelBilling,
     currentAiOption, pathname, currentUser, taskId, sessionsRef,
     dockedChatScope, sessionContextKey, chatHistoryReadyRef, aiChatBoardSessionMap, setAiChatBoardSessionMap,
-    setRecentChatBoardIds, shouldLoadChatHistory, resolveHistorySession, getDisplayedSession,
+    setRecentChatBoardIds, shouldLoadChatHistory,
   });
   const {
   handleCancelStream, audioTiptapCallback, toggleRecording, processAttachments, buildGuestBoard,
@@ -94,7 +93,6 @@ export function useAiChat() {
   const {
   handleSendMessage,
   } = createAiChatSend({
-    restCompat, getDisplayedSession,
     isByokBlocked, isTyping, editor, fileUpload, messageQueueRef,
     setQueuedMessages, sendInFlightRef, surface, inViewObject, waitForChatSession,
     currentProject, buildGuestBoard, processAttachments, setIsTyping, addMessageToSessionQuery,
@@ -128,9 +126,6 @@ export function useAiChat() {
     toggleCreateTaskGlobally, inViewObject, setShowRenameChatModal, currentSession, updateSessionTitle,
   });
 
-  let gatedLoadMoreSessions = loadMoreSessions;
-  if (!sessionPagingEnabled) gatedLoadMoreSessions = async () => {};
-
   return {
     minimized,
     minimizeChat,
@@ -141,9 +136,7 @@ export function useAiChat() {
     queuedMessages,
     removeQueuedMessage,
     isByokBlocked,
-    sessions, historySessions, hasMoreSessions, isLoadingMoreSessions, pagingError,
-    sessionPagingEnabled,
-    loadMoreSessions: gatedLoadMoreSessions,
+    sessions,
     activeSession,
     currentSession,
     showWelcomeScreen,

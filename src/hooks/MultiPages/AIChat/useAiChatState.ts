@@ -11,7 +11,7 @@ import { useMcpToken } from "@/components/Modals/McpToken/hooks/useMcpToken";
 import { FileItem } from "@/components/Common/AttachmentsUpload/FileUploadHandler";
 import { useAiChatModelPreference } from "./useAiChatModelPreference";
 import { useFlag } from "@/hooks/useFlag";
-import { HTPR_6278_CHAT_TURN_FAILURE_FLAG, HTPR_6924_REST_COMPAT_FLAG } from "@/lib/flags/keys";
+import { HTPR_6278_CHAT_TURN_FAILURE_FLAG } from "@/lib/flags/keys";
 import { useQueryClient } from "@tanstack/react-query";
 import { aiOptionsWithoutOpenRouter } from "./aiChatShared";
 
@@ -20,9 +20,6 @@ export function useAiChatState() {
   const lastWorkspaceFocusRef = useRef<HTMLElement | null>(null);
   // HTPR-6278: surfacing real server refusals and silent stream ends instead
   // of the blanket "Connection lost" message.
-  const restCompat = useFlag(HTPR_6924_REST_COMPAT_FLAG);
-  let sessionPagingContext = "legacy";
-  if (restCompat) sessionPagingContext = HTPR_6924_REST_COMPAT_FLAG;
   const turnFailureState = useFlag(HTPR_6278_CHAT_TURN_FAILURE_FLAG);
   const queryClient = useQueryClient();
   const currentUser = useRecoilValue(currentUserAtom);
@@ -224,7 +221,7 @@ export function useAiChatState() {
     currentSession,
     showWelcomeScreen,
     isSessionPending,
-    sessions, historySessions, hasMoreSessions, isLoadingMoreSessions, pagingError, loadMoreSessions, resolveHistorySession, getDisplayedSession,
+    sessions,
     selectSession: selectSessionInHistory,
     isSuccess: chatHistoryReady,
     addMessageToSessionQuery,
@@ -258,7 +255,6 @@ export function useAiChatState() {
     // land a send into a conversation the user has since navigated away
     // from (HTPR-6100).
     taskId ?? "no-task",
-    sessionPagingContext,
   ].join(":");
   const setupContextRef = useRef(sessionContextKey);
   if (setupContextRef.current !== sessionContextKey) {
@@ -295,7 +291,7 @@ export function useAiChatState() {
   messageListRef, hasAttemptedRestoreRef, previousProjectIdRef, toggleCreateTaskGlobally, token,
   dockedProjectId, scopedProjectId, boardScopeIsExplicit, editor, editorEnabled,
   editorMountProps, taskId, shouldLoadChatHistory, createSession, activeSession,
-  currentSession, showWelcomeScreen, isSessionPending, sessions, historySessions, hasMoreSessions, isLoadingMoreSessions, pagingError, loadMoreSessions, resolveHistorySession, getDisplayedSession, restCompat, selectSessionInHistory,
+  currentSession, showWelcomeScreen, isSessionPending, sessions, selectSessionInHistory,
   chatHistoryReady, addMessageToSessionQuery, updateLastMessageInSessionCache, appendMessageToSessionCache, updateSessionTitle,
   deleteSessionInHistory, sessionsRef, chatHistoryReadyRef, sessionSetupRef, resolvedBoardSessionRef,
   sessionIntentGenerationRef, sessionContextKey, clearMessageQueue,

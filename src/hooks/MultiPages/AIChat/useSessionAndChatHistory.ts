@@ -1,23 +1,21 @@
 import { useFlag } from "@/hooks/useFlag";
-import { HTPR_6929_COMPOSE_TASK_WRITER_FLAG, HTPR_6924_REST_COMPAT_FLAG } from "@/lib/flags/keys";
+import { HTPR_6929_COMPOSE_TASK_WRITER_FLAG } from "@/lib/flags/keys";
 import { currentUserAtom, composeTaskChatIntroAtom } from "@/store";
 import type { ApiResponse } from "@/utils/axiosClient";
 import {
   AI_Chat_API,
   type TAllChatSessionsResponse,
-  type ChatSessionScope,
 } from "@/utils/api/ai_chat";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useRecoilState, useRecoilValue } from "@/lib/state";
 import { IChatMessage, IChatSession, IUser } from "@/models/model";
 import { usePathname } from "next/navigation";
-import { usePagedChatHistory } from "./usePagedChatHistory";
 
 const createDemoSession = (user: IUser): IChatSession => {
   const now = new Date();
   return {
-    id: `demo-chat-${now.getTime()}-${crypto.randomUUID()}`,
+    id: `demo-chat-${now.getTime()}-${Math.random().toString(36).slice(2, 8)}`,
     createdAt: now,
     updatedAt: now,
     userId: user.id,
@@ -38,7 +36,6 @@ export const useSessionAndChatHistory = (
   // active on a different ticket (HTPR-6100).
   isTaskScoped = false
 ) => {
-  const restCompat = useFlag(HTPR_6924_REST_COMPAT_FLAG);
   const composeEnabled = useFlag(HTPR_6929_COMPOSE_TASK_WRITER_FLAG);
   const [pendingComposeIntro, setComposeIntro] = useRecoilState(composeTaskChatIntroAtom);
   let composeIntro: typeof pendingComposeIntro = null;
@@ -63,24 +60,6 @@ export const useSessionAndChatHistory = (
   currentTaskIdRef.current = taskId;
 
   const hasRequiredData = !!currentUser?.uid;
-  let paged = false;
-  if (restCompat && !isDemo) paged = true;
-  const pagedHistory = usePagedChatHistory(paged, currentUser, taskId, historyEnabled, isTaskScoped);
-  const cacheKey = ["chat-sessions", currentUser?.uid];
-  const cacheIdentity = `${currentUser?.uid}:${currentUser?.id}:${paged}`;
-  const cacheIdentityRef = useRef(cacheIdentity);
-  cacheIdentityRef.current = cacheIdentity;
-  const identity = `${cacheIdentity}:${taskId}`;
-  const identityRef = useRef(identity);
-  identityRef.current = identity;
-  const previousIdentityRef = useRef(identity);
-  useEffect(() => {
-    if (previousIdentityRef.current === identity) return;
-    previousIdentityRef.current = identity;
-    setActiveSession(null);
-    setMounted(false);
-    startingSessionForTaskRef.current = null;
-  }, [identity]);
 
   // ChatProvider stays mounted so global shortcuts keep working, but the
   // session payload is secondary startup data. Do not request it until the
@@ -90,24 +69,18 @@ export const useSessionAndChatHistory = (
     isLoading: isLoadingSessions,
     isFetching: isFetchingSessions,
     isError: isErrorSessions,
-    isSuccess: legacySessionsReady,
+    isSuccess: isSuccessSessions,
   } = useQuery({
-    queryKey: cacheKey,
+    queryKey: ["chat-sessions", currentUser?.uid],
     queryFn: () => {
       if (!currentUser?.uid) {
         throw new Error("Missing required user data");
       }
       return AI_Chat_API.getAllSessions();
     },
-    enabled: historyEnabled && hasRequiredData && !isDemo && !paged,
+    enabled: historyEnabled && hasRequiredData && !isDemo,
     staleTime: 1000 * 60 * 3,
   });
-
-
-  const resolveHistorySession = useCallback(async (sessionId?: string, scope?: ChatSessionScope) => sessionsData?.data.sessions.find((session) =>
-    sessionId ? session.id === sessionId :
-      (!scope?.taskId || session.taskId === scope.taskId) &&
-      (!scope?.projectId || session.projectId === scope.projectId)), [sessionsData]);
 
   const startNewSession = useCallback(async (
     shouldCommit: () => boolean = () => true
@@ -128,7 +101,6 @@ export const useSessionAndChatHistory = (
       return session;
     }
 
-    const requestedIdentity = identityRef.current;
     try {
       const res = await AI_Chat_API.createSessionNext(taskId);
       const body = res.data;
@@ -140,10 +112,10 @@ export const useSessionAndChatHistory = (
 
       const newSession = body.session;
       const newSessionId = newSession.id;
-      if (!shouldCommit() || requestedIdentity !== identityRef.current) return;
+      if (!shouldCommit()) return;
 
       queryClient.setQueryData<ApiResponse<TAllChatSessionsResponse>>(
-        cacheKey,
+        ["chat-sessions", currentUser?.uid],
         (old) => {
           const nextSessions = [newSession, ...(old?.data?.sessions ?? [])];
           if (!old) {
@@ -172,16 +144,15 @@ export const useSessionAndChatHistory = (
     } catch (error) {
       console.log("🚀 ~ useSessionAndChatHistory ~ error:", error);
     }
-  }, [hasRequiredData, currentUser?.uid, currentUser?.id, isDemo, queryClient, taskId, paged]);
+  }, [hasRequiredData, currentUser?.uid, isDemo, queryClient, taskId]);
 
   const selectSession = useCallback(
-    async (sessionId: string) => {
+    (sessionId: string) => {
       if (!hasRequiredData || !currentUser?.uid) {
         console.warn("Cannot select session: missing user data");
         return;
       }
 
-      const requestedIdentity = identityRef.current;
       try {
         if (isDemo) {
           setDemoSessions((previous) => {
@@ -196,7 +167,7 @@ export const useSessionAndChatHistory = (
         }
 
         queryClient.setQueryData<ApiResponse<TAllChatSessionsResponse>>(
-          cacheKey,
+          ["chat-sessions", currentUser.uid],
           (old) => {
             if (!old?.data?.sessions?.length) return old;
 
@@ -219,10 +190,10 @@ export const useSessionAndChatHistory = (
         setActiveSession(sessionId);
         setMounted(true);
       } catch (error) {
-        if (requestedIdentity === identityRef.current) console.error("Error selecting session:", error);
+        console.error("Error selecting session:", error);
       }
     },
-    [hasRequiredData, currentUser?.uid, currentUser?.id, isDemo, queryClient, paged, resolveHistorySession]
+    [hasRequiredData, currentUser?.uid, isDemo, queryClient]
   );
 
   const addMessageToSessionQuery = useCallback(
@@ -238,8 +209,6 @@ export const useSessionAndChatHistory = (
         return;
       }
 
-      const requestedIdentity = identityRef.current;
-      const requestedCacheIdentity = cacheIdentityRef.current;
       try {
         if (isDemo) {
           setDemoSessions((previous) =>
@@ -259,7 +228,7 @@ export const useSessionAndChatHistory = (
 
         // Optimistically update the cache: find session by id, append message, move it to front
         queryClient.setQueryData<ApiResponse<TAllChatSessionsResponse>>(
-          cacheKey,
+          ["chat-sessions", currentUser.uid],
           (old) => {
             if (!old?.data?.sessions?.length) return old;
 
@@ -279,7 +248,7 @@ export const useSessionAndChatHistory = (
               ...target,
               messages: nextMessages,
               projectId: target.projectId ?? projectId,
-              updatedAt: paged ? target.updatedAt : new Date(),
+              updatedAt: new Date(),
             };
             const rest = sessionsList.filter((_, i) => i !== index);
             return {
@@ -295,12 +264,11 @@ export const useSessionAndChatHistory = (
         if (!queryOnly) {
           AI_Chat_API.addMessage(sessionId, message)
             .then((res) => {
-              if (paged ? requestedCacheIdentity !== cacheIdentityRef.current : requestedIdentity !== identityRef.current) return;
               const persistedMessage = res.data?.message;
               if (!persistedMessage) return;
 
               queryClient.setQueryData<ApiResponse<TAllChatSessionsResponse>>(
-                cacheKey,
+                ["chat-sessions", currentUser.uid],
                 (old) => {
                   if (!old?.data?.sessions?.length) return old;
 
@@ -316,7 +284,7 @@ export const useSessionAndChatHistory = (
                   const updatedSession = {
                     ...target,
                     messages: nextMessages,
-                    updatedAt: paged ? target.updatedAt : new Date(),
+                    updatedAt: new Date(),
                   };
 
                   const rest = sessionsList.filter((_, i) => i !== index);
@@ -338,7 +306,7 @@ export const useSessionAndChatHistory = (
         console.error("Error adding message to session:", error);
       }
     },
-    [hasRequiredData, currentUser?.uid, currentUser?.id, isDemo, queryClient, paged]
+    [hasRequiredData, currentUser?.uid, isDemo, queryClient]
   );
 
   const updateLastMessageInSessionCache = useCallback(
@@ -364,8 +332,6 @@ export const useSessionAndChatHistory = (
         return;
       }
 
-      const requestedIdentity = identityRef.current;
-      const requestedCacheIdentity = cacheIdentityRef.current;
       const trimmed = title.trim();
       if (!trimmed) return;
 
@@ -382,7 +348,7 @@ export const useSessionAndChatHistory = (
         }
 
         queryClient.setQueryData<ApiResponse<TAllChatSessionsResponse>>(
-          cacheKey,
+          ["chat-sessions", currentUser.uid],
           (old) => {
             if (!old?.data?.sessions?.length) return old;
 
@@ -396,7 +362,7 @@ export const useSessionAndChatHistory = (
             const updatedSession = {
               ...target,
               title: trimmed,
-              updatedAt: paged ? target.updatedAt : new Date(),
+              updatedAt: new Date(),
             };
             const rest = sessionsList.filter((_, i) => i !== index);
             return {
@@ -410,21 +376,19 @@ export const useSessionAndChatHistory = (
         );
 
         const res = await AI_Chat_API.updateSession(sessionId, trimmed);
-        if (paged ? requestedCacheIdentity !== cacheIdentityRef.current : requestedIdentity !== identityRef.current) return;
         if (!res.data?.success) {
           await queryClient.invalidateQueries({
-            queryKey: cacheKey,
+            queryKey: ["chat-sessions", currentUser.uid],
           });
         }
       } catch (error) {
-        if (paged ? requestedCacheIdentity !== cacheIdentityRef.current : requestedIdentity !== identityRef.current) return;
         console.error("Error updating session title:", error);
         await queryClient.invalidateQueries({
-          queryKey: cacheKey,
+          queryKey: ["chat-sessions", currentUser.uid],
         });
       }
     },
-    [hasRequiredData, currentUser?.uid, currentUser?.id, isDemo, queryClient, paged]
+    [hasRequiredData, currentUser?.uid, isDemo, queryClient]
   );
 
   const deleteSession = useCallback(
@@ -434,9 +398,7 @@ export const useSessionAndChatHistory = (
         return;
       }
 
-      const queryKey = cacheKey;
-      const requestedIdentity = identityRef.current;
-      const requestedCacheIdentity = cacheIdentityRef.current;
+      const queryKey = ["chat-sessions", currentUser.uid] as const;
       const snapshot = queryClient.getQueryData<
         ApiResponse<TAllChatSessionsResponse>
       >(queryKey);
@@ -458,8 +420,8 @@ export const useSessionAndChatHistory = (
         }
 
         await AI_Chat_API.deleteSession(sessionId);
-        if (paged ? requestedCacheIdentity !== cacheIdentityRef.current : requestedIdentity !== identityRef.current) return;
-        if (onlySessionInCache && !paged) {
+
+        if (onlySessionInCache) {
           await queryClient.invalidateQueries({ queryKey });
           return;
         }
@@ -477,7 +439,7 @@ export const useSessionAndChatHistory = (
               data: {
                 ...old.data,
                 success: true,
-                sessions: paged ? old.data.sessions.filter((session) => session.id !== sessionId) : nextSessions,
+                sessions: nextSessions,
               },
             } as ApiResponse<TAllChatSessionsResponse>;
           }
@@ -488,7 +450,7 @@ export const useSessionAndChatHistory = (
         }
       } catch (error) {
         console.error("Error deleting chat session:", error);
-        if (requestedIdentity === identityRef.current) await queryClient.invalidateQueries({ queryKey });
+        await queryClient.invalidateQueries({ queryKey });
       }
     },
     [
@@ -497,7 +459,7 @@ export const useSessionAndChatHistory = (
       demoSessions,
       hasRequiredData,
       isDemo,
-      queryClient, paged,
+      queryClient,
     ]
   );
 
@@ -522,9 +484,8 @@ export const useSessionAndChatHistory = (
       }
 
       try {
-        if (paged) return;
         // Wait for the latestSessionQuery to complete
-        if (!legacySessionsReady) return;
+        if (!isSuccessSessions) return;
 
         const sessions = sessionsData?.data?.sessions ?? [];
 
@@ -573,11 +534,11 @@ export const useSessionAndChatHistory = (
     hasRequiredData,
     historyEnabled,
     isDemo,
-    legacySessionsReady,
+    isSuccessSessions,
     isTaskScoped,
     sessionsData,
     taskId,
-    startNewSession, paged,
+    startNewSession,
   ]);
 
   const sessions = isDemo ? demoSessions : sessionsData?.data.sessions || [];
@@ -589,7 +550,7 @@ export const useSessionAndChatHistory = (
   // active at all; if `activeSession` is set but genuinely missing from
   // `sessions` (deleted, or a transient refetch gap), report no session
   // rather than keep showing a possibly-deleted one indefinitely.
-  const currentSession = paged ? pagedHistory.currentSession : activeSession
+  const currentSession = activeSession
     ? sessions.find((session) => session.id === activeSession)
     : sessions[0];
   useEffect(() => {
@@ -600,14 +561,14 @@ export const useSessionAndChatHistory = (
         consumedComposeIntro.current = id;
         // An ordinary stored assistant message, not an AI turn: opening a composed
         // ticket must not spend credits or let the model rewrite it a second time.
-        (paged ? pagedHistory.addMessageToSessionQuery : addMessageToSessionQuery)(currentSession.id, {
+        addMessageToSessionQuery(currentSession.id, {
           id, sessionId: currentSession.id, role: "assistant", isDelivered: true,
           createdAt: new Date(), content: composeIntro.content,
         });
       }
       setComposeIntro(null);
     }
-  }, [composeEnabled, composeIntro, isTaskScoped, taskId, currentSession, addMessageToSessionQuery, paged, pagedHistory.addMessageToSessionQuery, setComposeIntro]);
+  }, [composeEnabled, composeIntro, isTaskScoped, taskId, currentSession, addMessageToSessionQuery, setComposeIntro]);
 
   // `currentSession` is `undefined` both when there is genuinely nothing to
   // show yet (no session selected, no sessions exist) and, transiently,
@@ -632,10 +593,6 @@ export const useSessionAndChatHistory = (
     (isLoadingSessions || (isFetchingSessions && Boolean(activeSession)));
   const showWelcomeScreen = !isSessionPending && (currentSession?.messages?.length ?? 0) === 0;
 
-  const getDisplayedSession = useCallback(() => currentSession, [currentSession]);
-  if (paged) return pagedHistory;
-  const isSuccessSessions = legacySessionsReady;
-
   return {
     isLoading: isDemo ? false : isLoadingSessions,
     isError: isDemo ? false : isErrorSessions,
@@ -645,14 +602,11 @@ export const useSessionAndChatHistory = (
     isSuccess: isDemo ? demoSessions.length > 0 : isSuccessSessions,
     activeSession,
     currentSession,
-    getDisplayedSession,
     showWelcomeScreen,
     isSessionPending,
     mounted: hasRequiredData ? mounted : false,
     hasRequiredData,
     sessions,
-    historySessions: sessions, hasMoreSessions: false, isLoadingMoreSessions: false, pagingError: false,
-    loadMoreSessions: async () => {}, resolveHistorySession,
     setActiveSession,
     startNewSession,
     selectSession,

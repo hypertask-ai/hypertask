@@ -1,5 +1,3 @@
-import { useFlag } from "@/hooks/useFlag";
-import { HTPR_6924_REST_COMPAT_FLAG } from "@/lib/flags/keys";
 import { useCallback, useEffect, useRef } from "react";
 import globalConstants from "@/lib/constants";
 import { IChatSession } from "@/models/model";
@@ -9,7 +7,7 @@ import { shouldBlockAiDueToByokProvider } from "@/lib/byokSelectedProviderGate";
 import { isGuestCookieUser } from "@/lib/demo/isGuestClient";
 import type { useAiChatState } from "./useAiChatState";
 
-type Context = Pick<ReturnType<typeof useAiChatState>, "sessionIntentGenerationRef" | "sessionSetupRef" | "resolvedBoardSessionRef" | "clearMessageQueue" | "selectSessionInHistory" | "createSession" | "isFullScreenChat" | "setDockedChatScope" | "currentProject" | "previousProjectIdRef" | "deleteSessionInHistory" | "messageQueueRef" | "setQueuedMessages" | "sendInFlightRef" | "modelBilling" | "currentAiOption" | "pathname" | "currentUser" | "taskId" | "sessionsRef" | "dockedChatScope" | "sessionContextKey" | "chatHistoryReadyRef" | "aiChatBoardSessionMap" | "setAiChatBoardSessionMap" | "setRecentChatBoardIds" | "shouldLoadChatHistory" | "resolveHistorySession" | "getDisplayedSession">;
+type Context = Pick<ReturnType<typeof useAiChatState>, "sessionIntentGenerationRef" | "sessionSetupRef" | "resolvedBoardSessionRef" | "clearMessageQueue" | "selectSessionInHistory" | "createSession" | "isFullScreenChat" | "setDockedChatScope" | "currentProject" | "previousProjectIdRef" | "deleteSessionInHistory" | "messageQueueRef" | "setQueuedMessages" | "sendInFlightRef" | "modelBilling" | "currentAiOption" | "pathname" | "currentUser" | "taskId" | "sessionsRef" | "dockedChatScope" | "sessionContextKey" | "chatHistoryReadyRef" | "aiChatBoardSessionMap" | "setAiChatBoardSessionMap" | "setRecentChatBoardIds" | "shouldLoadChatHistory">;
 
 export function useAiChatSessions(context: Context) {
   const {
@@ -18,11 +16,8 @@ export function useAiChatSessions(context: Context) {
   deleteSessionInHistory, messageQueueRef, setQueuedMessages, sendInFlightRef, modelBilling,
   currentAiOption, pathname, currentUser, taskId, sessionsRef,
   dockedChatScope, sessionContextKey, chatHistoryReadyRef, aiChatBoardSessionMap, setAiChatBoardSessionMap,
-  setRecentChatBoardIds, shouldLoadChatHistory, resolveHistorySession, getDisplayedSession,
+  setRecentChatBoardIds, shouldLoadChatHistory,
   } = context;
-  const restCompat = useFlag(HTPR_6924_REST_COMPAT_FLAG);
-  let setupFlagKey = "legacy";
-  if (restCompat) setupFlagKey = HTPR_6924_REST_COMPAT_FLAG;
 
   // User intent wins over transient automatic board setup. Clearing this ref
   // here means an explicit session click cannot be routed back to the session
@@ -129,17 +124,6 @@ export function useAiChatSessions(context: Context) {
     // project-wide board session map below would let a session another
     // ticket in the same project last sent from win here too (HTPR-6100).
     if (taskId !== undefined) {
-      if (restCompat) {
-        const generation = sessionIntentGenerationRef.current;
-        const deadline = Date.now() + timeoutMs;
-        while (!chatHistoryReadyRef.current && Date.now() < deadline) {
-          await new Promise((resolve) => setTimeout(resolve, 50));
-          if (sessionIntentGenerationRef.current !== generation) return undefined;
-        }
-        if (!chatHistoryReadyRef.current || sessionIntentGenerationRef.current !== generation) return undefined;
-        const selected = getDisplayedSession();
-        return selected?.userId === userId ? selected : undefined;
-      }
       // Match on taskId alone, same as the find-or-create init effect in
       // useSessionAndChatHistory - sessions are already scoped to the
       // signed-in user server-side, so requiring userId here too just adds
@@ -165,7 +149,7 @@ export function useAiChatSessions(context: Context) {
       !isFullScreenChat &&
       dockedChatScope === null &&
       !pathname?.startsWith("/inbox");
-    const setupKey = `${setupFlagKey}:${sessionContextKey}:${
+    const setupKey = `${sessionContextKey}:${
       needsBoardSession ? `board:${projectId}` : "current"
     }`;
     const inFlight = sessionSetupRef.current;
@@ -177,13 +161,13 @@ export function useAiChatSessions(context: Context) {
     const promise = (async () => {
       const deadline = Date.now() + timeoutMs;
       while (
-        (restCompat ? !chatHistoryReadyRef.current :
-          !sessionsRef.current.some((session) => session.userId === userId) && !chatHistoryReadyRef.current) &&
+        !sessionsRef.current.some((session) => session.userId === userId) &&
+        !chatHistoryReadyRef.current &&
         Date.now() < deadline
       ) {
         await new Promise((resolve) => setTimeout(resolve, 50));
       }
-      if (!isCurrentIntent() || (restCompat && !chatHistoryReadyRef.current)) return undefined;
+      if (!isCurrentIntent()) return undefined;
 
       // React Query changes cache keys with the account, but a render can still
       // momentarily expose the previous array. Never resolve a send through a
@@ -202,7 +186,7 @@ export function useAiChatSessions(context: Context) {
         return createdSession;
       }
       if (!needsBoardSession || typeof projectId !== "number") {
-        return restCompat ? getDisplayedSession() : currentSessions[0];
+        return currentSessions[0];
       }
       if (!isCurrentIntent()) return undefined;
 
@@ -210,10 +194,6 @@ export function useAiChatSessions(context: Context) {
       // user may have deliberately selected another session since then, so the
       // currently selected/front session is the correct one.
       if (previousProjectIdRef.current === projectId) {
-        if (restCompat) {
-          resolvedBoardSessionRef.current = null;
-          return getDisplayedSession();
-        }
         const resolved = resolvedBoardSessionRef.current;
         if (resolved?.projectId === projectId) {
           if (currentSessions[0].id === resolved.session.id) {
@@ -229,22 +209,17 @@ export function useAiChatSessions(context: Context) {
       if (mappedSessionId) {
         const mappedSession = currentSessions.find(
           (session) => session.id === mappedSessionId
-        ) ?? (restCompat ? await resolveHistorySession(mappedSessionId) : undefined);
-        if (!isCurrentIntent()) return undefined;
+        );
         if (mappedSession) {
           if (mappedSession.id !== currentSessions[0].id) {
             resolvedBoardSessionRef.current = {
               projectId,
               session: mappedSession,
             };
-            if (restCompat) {
-              await selectSessionInHistory(mappedSession.id);
-              if (!isCurrentIntent()) return undefined;
-            }
-            else selectSessionInHistory(mappedSession.id);
+            selectSessionInHistory(mappedSession.id);
           }
           previousProjectIdRef.current = projectId;
-          return restCompat ? getDisplayedSession() : mappedSession;
+          return mappedSession;
         }
 
         setAiChatBoardSessionMap((previousMap) => {
@@ -254,33 +229,9 @@ export function useAiChatSessions(context: Context) {
         });
       }
 
-      if (restCompat) {
-        const scopedSession = await resolveHistorySession(undefined, { projectId });
-        if (!isCurrentIntent()) return undefined;
-        if (scopedSession) {
-          resolvedBoardSessionRef.current = { projectId, session: scopedSession };
-          await selectSessionInHistory(scopedSession.id);
-          if (!isCurrentIntent()) return undefined;
-          previousProjectIdRef.current = projectId;
-          return getDisplayedSession();
-        }
-      }
-
-      if (restCompat) {
-        const emptySession = await resolveHistorySession(undefined, undefined, true);
-        if (!isCurrentIntent()) return undefined;
-        if (emptySession) {
-          resolvedBoardSessionRef.current = { projectId, session: emptySession };
-          await selectSessionInHistory(emptySession.id);
-          if (!isCurrentIntent()) return undefined;
-          previousProjectIdRef.current = projectId;
-          return getDisplayedSession();
-        }
-      }
-      if (restCompat && getDisplayedSession()?.id !== currentSessions[0]?.id) return getDisplayedSession();
       if ((currentSessions[0].messages?.length ?? 0) === 0) {
         previousProjectIdRef.current = projectId;
-        return restCompat ? getDisplayedSession() : currentSessions[0];
+        return currentSessions[0];
       }
 
       const emptySession = currentSessions.find(
@@ -290,7 +241,7 @@ export function useAiChatSessions(context: Context) {
         resolvedBoardSessionRef.current = { projectId, session: emptySession };
         selectSessionInHistory(emptySession.id);
         previousProjectIdRef.current = projectId;
-        return restCompat ? getDisplayedSession() : emptySession;
+        return emptySession;
       }
 
       // Reuse empty sessions above to avoid creating one on every board visit.
@@ -300,16 +251,15 @@ export function useAiChatSessions(context: Context) {
         resolvedBoardSessionRef.current = { projectId, session: createdSession };
         previousProjectIdRef.current = projectId;
       }
-      return restCompat ? getDisplayedSession() : createdSession;
+      return createdSession;
     })();
 
     sessionSetupRef.current = { key: setupKey, promise };
-    const clearSetup = () => {
+    void promise.finally(() => {
       if (sessionSetupRef.current?.promise === promise) {
         sessionSetupRef.current = null;
       }
-    };
-    void promise.then(clearSetup, clearSetup);
+    });
     return promise;
   }, [
     aiChatBoardSessionMap,
@@ -322,7 +272,7 @@ export function useAiChatSessions(context: Context) {
     sessionContextKey,
     selectSessionInHistory,
     setAiChatBoardSessionMap,
-    taskId, restCompat, resolveHistorySession, getDisplayedSession, setupFlagKey,
+    taskId,
   ]);
 
   useEffect(() => {
@@ -340,7 +290,7 @@ export function useAiChatSessions(context: Context) {
   }, [currentProject?.id, setRecentChatBoardIds]);
 
   useEffect(() => {
-    if (shouldLoadChatHistory) void ensureSessionForCurrentBoard().catch((error) => console.error("Error resolving chat session:", error));
+    if (shouldLoadChatHistory) void ensureSessionForCurrentBoard();
   }, [ensureSessionForCurrentBoard, shouldLoadChatHistory]);
   return {
   selectSession, startNewSession, deleteSession, fileUpload, handleSendMessageRef,

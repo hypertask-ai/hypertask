@@ -18,6 +18,7 @@ function matches(row, where) {
     if (key === 'agent') { if (row.runtimeType === value.runtimeType.not) return false; continue; }
     if (value && typeof value === 'object' && !(value instanceof Date)) {
       if ('lt' in value && !(row[key] < value.lt)) return false;
+      if ('in' in value && !value.in.includes(row[key])) return false;
     } else if (value instanceof Date ? +row[key] !== +value : row[key] !== value) return false;
   }
   return true;
@@ -28,11 +29,18 @@ function project(row, args) {
 }
 function fixture(options = {}) {
   const rows = options.rows ?? Array.from({ length: 8 }, (_, n) => session(n + 1));
-  const calls = [], writes = [], flags = [], limits = [];
+  const calls = [], writes = [], flags = [], limits = [], redisCalls = [];
+  const cache = options.cache ?? new Map();
+  const redis = {
+    get: async (key) => { redisCalls.push(['get', key]); if (options.redisError) throw new Error('cache unavailable'); return cache.get(key) ?? null; },
+    set: async (...args) => { redisCalls.push(['set', ...args]); if (options.redisError) throw new Error('cache unavailable'); cache.set(args[0], args[1]); return 'OK'; },
+  };
+  const userId = options.userId ?? 6;
   const chatSession = {
     findMany: async (args) => {
       calls.push(args);
       if (options.dbError) throw new Error('isolated query failure');
+      options.beforeQuery?.(args, rows);
       const sorted = rows.filter((row) => matches(row, args.where)).sort((a, b) => +b.updatedAt - +a.updatedAt || (Array.isArray(args.orderBy) ? b.id.localeCompare(a.id) : 0));
       return sorted.slice(0, args.take ?? sorted.length).map((row) => project(row, args));
     },
@@ -41,12 +49,13 @@ function fixture(options = {}) {
   };
   const { GET } = load('src/app/api/ai-chat/all-sessions/route.ts', {
     '@/lib/prisma': { default: { chatSession } },
-    '@/lib/auth/currentUser': { loadCurrentUser: async () => options.unauthorized ? null : { userId: 6, user: { id: 6 } } },
+    '@/lib/auth/currentUser': { loadCurrentUser: async () => options.unauthorized ? null : { userId, user: { id: userId } } },
+    '@/lib/redis': { getRedis: async () => redis },
     '@/lib/flags': { HTPR_6924_REST_COMPAT_FLAG: flag, isFeatureEnabled: async (...args) => { flags.push(args); if (options.flagError) throw new Error('flag unavailable'); return options.on ?? true; } },
-    '@/lib/api/rateLimit': { checkRestRateLimit: async (...args) => { limits.push(args); return null; } },
+    '@/lib/api/rateLimit': { checkRestRateLimit: async (...args) => { limits.push(args); return options.limited ? Response.json({ error: 'Rate limit exceeded. Please try again shortly.' }, { status: 429, headers: { 'Retry-After': '17' } }) : null; } },
     '@/lib/api/response': { unauthorized: () => Response.json({ error: 'Unauthorized' }, { status: 401 }) },
     'next/server': { NextResponse: Response },
   });
-  return { rows, calls, writes, flags, limits, get: (query = '') => GET(new Request(`https://example.test/api/ai-chat/all-sessions${query ? '?' + query : ''}`)) };
+  return { rows, calls, writes, flags, limits, cache, redisCalls, get: (query = '') => GET(new Request(`https://example.test/api/ai-chat/all-sessions${query ? '?' + query : ''}`)) };
 }
 module.exports = { assert, fixture, session, id, flag };

@@ -1,3 +1,15 @@
+/* Opt-in API: server flag htpr-6924-rest-compat AND ?compat=htpr-6924.
+ * List: { success, sessions: summaries, nextCursor }; limit 1..100 (default 30),
+ * optional taskId, projectId (board-only unless taskId is supplied), emptyOnly=true.
+ * Detail: sessionId alone returns { success, session } with its full transcript.
+ * Ordering is snapshotted as updatedAt DESC, id DESC; opaque cursors expire after
+ * 15 minutes (410: restart). New/updated sessions appear in order on a fresh list.
+ * The snapshot stores IDs only; each page rechecks owner, visibility and scope.
+ * Initial ordering costs one ID-only scan; transcript/summary reads stay bounded.
+ * Without both opt-ins the legacy response and query remain unchanged.
+ */
+import { randomUUID } from "node:crypto";
+import { getRedis } from "@/lib/redis";
 import { HTPR_6924_REST_COMPAT_FLAG, isFeatureEnabled } from "@/lib/flags";
 import { checkRestRateLimit } from "@/lib/api/rateLimit";
 import prisma from "@/lib/prisma";
@@ -44,55 +56,73 @@ async function pagedSessions(request: NextRequest, userId: number) {
   const limitText = params.get("limit") ?? "30";
   if (!/^[1-9]\d*$/.test(limitText) || Number(limitText) > 100) return invalid();
   const limit = Number(limitText);
-  const scope: { taskId?: number; projectId?: number } = {};
+  const scope: { taskId?: number | null; projectId?: number } = {};
   for (const key of ["taskId", "projectId"] as const) {
     if (!params.has(key)) continue;
     const value = params.get(key)!;
     if (!/^[1-9]\d*$/.test(value) || !Number.isSafeInteger(Number(value))) return invalid();
     scope[key] = Number(value);
   }
+  if (scope.projectId !== undefined && scope.taskId === undefined) scope.taskId = null;
   if (params.has("emptyOnly") && params.get("emptyOnly") !== "true") return invalid();
   const emptyOnly = params.get("emptyOnly") === "true";
-  let cursor: { updatedAt: Date; id: string } | undefined;
+  let cursor: { snapshot: string; offset: number } | undefined;
   if (params.has("cursor")) {
     const encoded = params.get("cursor")!;
     if (!encoded || encoded.length > 512 || !/^[A-Za-z0-9_-]+$/.test(encoded)) return invalid();
     try {
       const decoded = JSON.parse(Buffer.from(encoded, "base64url").toString("utf8"));
-      if (!decoded || typeof decoded.updatedAt !== "string" || typeof decoded.id !== "string" ||
-          !uuidPattern.test(decoded.id) || Object.keys(decoded).sort().join(",") !== "id,updatedAt") return invalid();
-      const updatedAt = new Date(decoded.updatedAt);
-      if (!Number.isFinite(updatedAt.getTime()) || updatedAt.toISOString() !== decoded.updatedAt) return invalid();
-      cursor = { updatedAt, id: decoded.id };
+      if (!decoded || typeof decoded.snapshot !== "string" || !uuidPattern.test(decoded.snapshot) ||
+          !Number.isSafeInteger(decoded.offset) || decoded.offset < 1 ||
+          Object.keys(decoded).sort().join(",") !== "offset,snapshot") return invalid();
+      cursor = decoded;
     } catch {
       return invalid();
     }
   }
-  const rows = await prisma.chatSession.findMany({
+  const where = { ...visible, ...scope, ...(emptyOnly ? { messages: { none: {} } } : {}) };
+  const snapshot = cursor?.snapshot ?? randomUUID();
+  const cacheKey = `ai-chat:session-page:${userId}:${scope.taskId ?? ""}:${scope.projectId ?? ""}:${emptyOnly}:${snapshot}`;
+  let ids: string[];
+  if (cursor) {
+    const cached = await (await getRedis()).get(cacheKey);
+    if (!cached) return NextResponse.json(
+      { success: false, error: "Session cursor expired; restart pagination" }, { status: 410 }
+    );
+    ids = JSON.parse(cached);
+    if (cursor.offset >= ids.length) return invalid();
+  } else {
+    // A mutable updatedAt keyset skips unseen sessions moved ahead of the cursor.
+    // Freeze membership/order, not transcripts, so concurrent writes cannot move IDs.
+    ids = (await prisma.chatSession.findMany({
+      where, select: { id: true }, orderBy: [{ updatedAt: "desc" }, { id: "desc" }],
+    })).map(({ id }) => id);
+    if (ids.length > limit) {
+      await (await getRedis()).set(cacheKey, JSON.stringify(ids), "EX", 15 * 60);
+    }
+  }
+  const offset = cursor?.offset ?? 0;
+  const pageIds = ids.slice(offset, offset + limit);
+  const rows = pageIds.length ? await prisma.chatSession.findMany({
     relationLoadStrategy: "join",
-    where: {
-      ...visible, ...scope,
-      ...(emptyOnly ? { messages: { none: {} } } : {}),
-      ...(cursor ? { AND: [{ OR: [
-        { updatedAt: { lt: cursor.updatedAt } },
-        { updatedAt: cursor.updatedAt, id: { lt: cursor.id } },
-      ] }] } : {}),
-    },
+    where: { ...where, id: { in: pageIds } },
     select: summarySelect,
-    orderBy: [{ updatedAt: "desc" }, { id: "desc" }],
-    take: limit + 1,
+    take: limit,
+  }) : [];
+  const byId = new Map(rows.map((row) => [row.id, row]));
+  const page = pageIds.flatMap((id) => {
+    const row = byId.get(id);
+    return row ? [row] : [];
   });
-  const hasMore = rows.length > limit;
-  const page = rows.slice(0, limit);
-  if (!page.length && !cursor && !Object.keys(scope).length && !emptyOnly) {
+  if (!ids.length && !cursor && !Object.keys(scope).length && !emptyOnly) {
     page.push(await prisma.chatSession.create({ data: { userId }, select: summarySelect }));
   }
   const sessions = page.map(({ _count, ...session }) => ({
     ...session, hasMessages: _count.messages > 0,
   }));
-  const last = sessions[sessions.length - 1];
-  const nextCursor = hasMore && last ? Buffer.from(JSON.stringify({
-    updatedAt: last.updatedAt.toISOString(), id: last.id,
+  const nextOffset = offset + pageIds.length;
+  const nextCursor = nextOffset < ids.length ? Buffer.from(JSON.stringify({
+    snapshot, offset: nextOffset,
   })).toString("base64url") : null;
   return NextResponse.json({ success: true, sessions, nextCursor });
 }
