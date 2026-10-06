@@ -369,7 +369,7 @@ const CreateTaskModalBody: React.FC<IProps> = ({ }) => {
                     </div>
                 )}
                 <div className={descriptionFirstMobile && expandedMobileSection !== "title" ? "hidden" : "contents"}>
-                    <TaskTitleModal mobileCompact={descriptionFirstMobile} />
+                    <TaskTitleModal mobileCompact={descriptionFirstMobile} mobileTitleVisible={!descriptionFirstMobile || expandedMobileSection === "title"} />
                 </div>
 
                 {parentTaskInfo && (
