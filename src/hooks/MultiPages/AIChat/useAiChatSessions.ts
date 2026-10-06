@@ -1,3 +1,4 @@
+import { useFlag } from "@/hooks/useFlag";
 import { HTPR_6924_REST_COMPAT_FLAG } from "@/lib/flags/keys";
 import { useCallback, useEffect, useRef } from "react";
 import globalConstants from "@/lib/constants";
@@ -8,7 +9,7 @@ import { shouldBlockAiDueToByokProvider } from "@/lib/byokSelectedProviderGate";
 import { isGuestCookieUser } from "@/lib/demo/isGuestClient";
 import type { useAiChatState } from "./useAiChatState";
 
-type Context = Pick<ReturnType<typeof useAiChatState>, "sessionIntentGenerationRef" | "sessionSetupRef" | "resolvedBoardSessionRef" | "clearMessageQueue" | "selectSessionInHistory" | "createSession" | "isFullScreenChat" | "setDockedChatScope" | "currentProject" | "previousProjectIdRef" | "deleteSessionInHistory" | "messageQueueRef" | "setQueuedMessages" | "sendInFlightRef" | "modelBilling" | "currentAiOption" | "pathname" | "currentUser" | "taskId" | "sessionsRef" | "dockedChatScope" | "sessionContextKey" | "chatHistoryReadyRef" | "aiChatBoardSessionMap" | "setAiChatBoardSessionMap" | "setRecentChatBoardIds" | "shouldLoadChatHistory" | "resolveHistorySession" | "restCompat">;
+type Context = Pick<ReturnType<typeof useAiChatState>, "sessionIntentGenerationRef" | "sessionSetupRef" | "resolvedBoardSessionRef" | "clearMessageQueue" | "selectSessionInHistory" | "createSession" | "isFullScreenChat" | "setDockedChatScope" | "currentProject" | "previousProjectIdRef" | "deleteSessionInHistory" | "messageQueueRef" | "setQueuedMessages" | "sendInFlightRef" | "modelBilling" | "currentAiOption" | "pathname" | "currentUser" | "taskId" | "sessionsRef" | "dockedChatScope" | "sessionContextKey" | "chatHistoryReadyRef" | "aiChatBoardSessionMap" | "setAiChatBoardSessionMap" | "setRecentChatBoardIds" | "shouldLoadChatHistory" | "resolveHistorySession">;
 
 export function useAiChatSessions(context: Context) {
   const {
@@ -17,8 +18,11 @@ export function useAiChatSessions(context: Context) {
   deleteSessionInHistory, messageQueueRef, setQueuedMessages, sendInFlightRef, modelBilling,
   currentAiOption, pathname, currentUser, taskId, sessionsRef,
   dockedChatScope, sessionContextKey, chatHistoryReadyRef, aiChatBoardSessionMap, setAiChatBoardSessionMap,
-  setRecentChatBoardIds, shouldLoadChatHistory, resolveHistorySession, restCompat,
+  setRecentChatBoardIds, shouldLoadChatHistory, resolveHistorySession,
   } = context;
+  const restCompat = useFlag(HTPR_6924_REST_COMPAT_FLAG);
+  let setupFlagKey = "legacy";
+  if (restCompat) setupFlagKey = HTPR_6924_REST_COMPAT_FLAG;
 
   // User intent wins over transient automatic board setup. Clearing this ref
   // here means an explicit session click cannot be routed back to the session
@@ -150,7 +154,7 @@ export function useAiChatSessions(context: Context) {
       !isFullScreenChat &&
       dockedChatScope === null &&
       !pathname?.startsWith("/inbox");
-    const setupKey = `${restCompat ? HTPR_6924_REST_COMPAT_FLAG : "legacy"}:${sessionContextKey}:${
+    const setupKey = `${setupFlagKey}:${sessionContextKey}:${
       needsBoardSession ? `board:${projectId}` : "current"
     }`;
     const inFlight = sessionSetupRef.current;
@@ -296,7 +300,7 @@ export function useAiChatSessions(context: Context) {
     sessionContextKey,
     selectSessionInHistory,
     setAiChatBoardSessionMap,
-    taskId, restCompat, resolveHistorySession,
+    taskId, restCompat, resolveHistorySession, setupFlagKey,
   ]);
 
   useEffect(() => {

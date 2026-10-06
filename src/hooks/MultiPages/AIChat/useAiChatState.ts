@@ -21,6 +21,8 @@ export function useAiChatState() {
   // HTPR-6278: surfacing real server refusals and silent stream ends instead
   // of the blanket "Connection lost" message.
   const restCompat = useFlag(HTPR_6924_REST_COMPAT_FLAG);
+  let sessionPagingContext = "legacy";
+  if (restCompat) sessionPagingContext = HTPR_6924_REST_COMPAT_FLAG;
   const turnFailureState = useFlag(HTPR_6278_CHAT_TURN_FAILURE_FLAG);
   const queryClient = useQueryClient();
   const currentUser = useRecoilValue(currentUserAtom);
@@ -256,7 +258,7 @@ export function useAiChatState() {
     // land a send into a conversation the user has since navigated away
     // from (HTPR-6100).
     taskId ?? "no-task",
-    restCompat ? HTPR_6924_REST_COMPAT_FLAG : "legacy",
+    sessionPagingContext,
   ].join(":");
   const setupContextRef = useRef(sessionContextKey);
   if (setupContextRef.current !== sessionContextKey) {

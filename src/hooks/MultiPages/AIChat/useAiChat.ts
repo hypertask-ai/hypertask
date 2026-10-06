@@ -66,7 +66,7 @@ export function useAiChat() {
   messageListRef, hasAttemptedRestoreRef, previousProjectIdRef, toggleCreateTaskGlobally, token,
   dockedProjectId, scopedProjectId, boardScopeIsExplicit, editor, editorEnabled,
   editorMountProps, taskId, shouldLoadChatHistory, createSession, activeSession,
-  currentSession, showWelcomeScreen, isSessionPending, sessions, historySessions, hasMoreSessions, isLoadingMoreSessions, pagingError, loadMoreSessions, resolveHistorySession, restCompat, selectSessionInHistory,
+  currentSession, showWelcomeScreen, isSessionPending, sessions, historySessions, hasMoreSessions, isLoadingMoreSessions, pagingError, loadMoreSessions, resolveHistorySession, selectSessionInHistory,
   chatHistoryReady, addMessageToSessionQuery, updateLastMessageInSessionCache, appendMessageToSessionCache, updateSessionTitle,
   deleteSessionInHistory, sessionsRef, chatHistoryReadyRef, sessionSetupRef, resolvedBoardSessionRef,
   sessionIntentGenerationRef, sessionContextKey, clearMessageQueue,
@@ -81,7 +81,7 @@ export function useAiChat() {
     deleteSessionInHistory, messageQueueRef, setQueuedMessages, sendInFlightRef, modelBilling,
     currentAiOption, pathname, currentUser, taskId, sessionsRef,
     dockedChatScope, sessionContextKey, chatHistoryReadyRef, aiChatBoardSessionMap, setAiChatBoardSessionMap,
-    setRecentChatBoardIds, shouldLoadChatHistory, resolveHistorySession, restCompat,
+    setRecentChatBoardIds, shouldLoadChatHistory, resolveHistorySession,
   });
   const {
   handleCancelStream, audioTiptapCallback, toggleRecording, processAttachments, buildGuestBoard,
@@ -127,6 +127,9 @@ export function useAiChat() {
     toggleCreateTaskGlobally, inViewObject, setShowRenameChatModal, currentSession, updateSessionTitle,
   });
 
+  let gatedLoadMoreSessions = loadMoreSessions;
+  if (!sessionPagingEnabled) gatedLoadMoreSessions = async () => {};
+
   return {
     minimized,
     minimizeChat,
@@ -138,7 +141,8 @@ export function useAiChat() {
     removeQueuedMessage,
     isByokBlocked,
     sessions, historySessions, hasMoreSessions, isLoadingMoreSessions, pagingError,
-    loadMoreSessions: sessionPagingEnabled ? loadMoreSessions : async () => {},
+    sessionPagingEnabled,
+    loadMoreSessions: gatedLoadMoreSessions,
     activeSession,
     currentSession,
     showWelcomeScreen,

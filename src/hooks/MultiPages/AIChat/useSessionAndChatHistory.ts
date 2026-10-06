@@ -19,7 +19,7 @@ import { usePathname } from "next/navigation";
 const createDemoSession = (user: IUser): IChatSession => {
   const now = new Date();
   return {
-    id: `demo-chat-${now.getTime()}-${Math.random().toString(36).slice(2, 8)}`,
+    id: `demo-chat-${now.getTime()}-${crypto.randomUUID()}`,
     createdAt: now,
     updatedAt: now,
     userId: user.id,
@@ -65,7 +65,8 @@ export const useSessionAndChatHistory = (
   currentTaskIdRef.current = taskId;
 
   const hasRequiredData = !!currentUser?.uid;
-  const paged = restCompat && !isDemo;
+  let paged = false;
+  if (restCompat && !isDemo) paged = true;
   const cacheKey = paged
     ? ["chat-session-transcripts", currentUser?.uid, currentUser?.id, HTPR_6924_REST_COMPAT_FLAG, "loaded"]
     : ["chat-sessions", currentUser?.uid];
@@ -167,10 +168,16 @@ export const useSessionAndChatHistory = (
         (!scope?.taskId || session.taskId === scope.taskId) &&
         (!scope?.projectId || session.projectId === scope.projectId))?.id;
     }
-    if (!id || requestedIdentity !== identityRef.current) return;
+    if (!id || requestedIdentity !== identityRef.current || requestedSelection !== selectionRef.current) return;
     const existing = queryClient.getQueryData<ApiResponse<TAllChatSessionsResponse>>(cacheKey)
       ?.data.sessions.find((session) => session.id === id);
-    if (existing) return existing;
+    if (existing) {
+      queryClient.setQueryData<ApiResponse<TAllChatSessionsResponse>>(cacheKey, (old) => old ? {
+        ...old,
+        data: { ...old.data, sessions: [existing, ...old.data.sessions.filter((session) => session.id !== id)] },
+      } : old);
+      return existing;
+    }
     let incoming: IChatSession | null;
     try {
       incoming = await queryClient.fetchQuery({
@@ -271,6 +278,8 @@ export const useSessionAndChatHistory = (
       const newSession = body.session;
       const newSessionId = newSession.id;
       if (!shouldCommit() || requestedIdentity !== identityRef.current) return;
+      // A committed New chat supersedes any older transcript still loading.
+      if (paged) selectionRef.current += 1;
 
       queryClient.setQueryData<ApiResponse<TAllChatSessionsResponse>>(
         cacheKey,

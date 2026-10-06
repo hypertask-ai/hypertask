@@ -45,6 +45,7 @@ async function withHistory(config, check) {
   let resolver, history;
   const mapChanges = [];
   const useAiChatSessions = config.boardMap ? load('src/hooks/MultiPages/AIChat/useAiChatSessions.ts', {
+    '@/hooks/useFlag': { useFlag: (key) => key === flag && enabled },
     '@/lib/constants': { default: {} }, '@/lib/contexts/deviceContext': { useDeviceContext: () => false },
     '@/components/Common/AttachmentsUpload/FileUploadHandler': { useFileUpload: () => ({}) },
     '@/lib/byokSelectedProviderGate': { shouldBlockAiDueToByokProvider: () => false },
@@ -58,7 +59,8 @@ async function withHistory(config, check) {
         sessionsRef, chatHistoryReadyRef, sessionIntentGenerationRef: React.useRef(0), sessionSetupRef: React.useRef(null), resolvedBoardSessionRef: React.useRef(null), previousProjectIdRef: React.useRef(undefined),
         messageQueueRef: React.useRef([]), sendInFlightRef: React.useRef(false), currentProject: { id: 4 }, currentUser: user, pathname: '/board', sessionContextKey: 'fixture-board', dockedChatScope: null,
         aiChatBoardSessionMap: config.boardMap, setAiChatBoardSessionMap: (update) => mapChanges.push(update(config.boardMap)), setRecentChatBoardIds: () => {}, setQueuedMessages: () => {},
-        clearMessageQueue: () => {}, selectSessionInHistory: history.selectSession, createSession: history.startNewSession, deleteSessionInHistory: history.deleteSession, resolveHistorySession: history.resolveHistorySession, restCompat: enabled, shouldLoadChatHistory: false,
+        clearMessageQueue: () => {}, selectSessionInHistory: history.selectSession, createSession: history.startNewSession, deleteSessionInHistory: history.deleteSession, resolveHistorySession: history.resolveHistorySession, shouldLoadChatHistory: false,
+        isFullScreenChat: !!config.fullscreen, setDockedChatScope: () => {},
       });
     }
     return React.createElement('div', { 'data-ready': history.isSuccess, 'data-pending': history.isSessionPending }, history.currentSession?.messages.map((message) => React.createElement('p', { key: message.id }, message.content))); }
@@ -165,6 +167,44 @@ test('selection races discard stale active selection and optimistic messages sur
     assert.equal(history().sessions[0].id, id(9), 'stale fetch must not reorder the send resolver cache');
     assert.equal(history().currentSession.messages.at(-1).id, 'optimistic');
   });
+});
+
+test('cached older selection keeps displayed conversation and send target aligned on fullscreen and initialized boards', async () => {
+  for (const fullscreen of [false, true]) {
+    await withHistory({ boardMap: { 4: id(9) }, fullscreen }, async ({ history, resolver, requests, flush }) => {
+      await React.act(async () => resolver().ensureSessionForCurrentBoard()); await flush();
+      await React.act(async () => resolver().selectSession(id(1))); await flush();
+      const transcriptRequests = requests.filter(([type]) => type === 'transcript').length;
+      await React.act(async () => resolver().selectSession(id(9))); await flush();
+      assert.equal(requests.filter(([type]) => type === 'transcript').length, transcriptRequests, 'cached selection needs no transcript request');
+      assert.equal(history().currentSession.id, id(9));
+      assert.equal(history().sessions[0].id, id(9));
+      let target;
+      await React.act(async () => { target = await resolver().ensureSessionForCurrentBoard(); });
+      assert.equal(target.id, history().currentSession.id, 'the next send belongs to the displayed cached conversation');
+    });
+  }
+});
+
+test('New chat invalidates a pending older transcript so its late completion cannot become the send target', async () => {
+  for (const fullscreen of [false, true]) {
+    const older = deferred();
+    await withHistory({ boardMap: { 4: id(9) }, fullscreen, transcript: (sessionId) => sessionId === id(1) ? older.promise : session(9) }, async ({ history, resolver, flush }) => {
+      await React.act(async () => resolver().ensureSessionForCurrentBoard()); await flush();
+      let selection;
+      await React.act(async () => { selection = history().selectSession(id(1)); });
+      assert.equal(history().isSuccess, false);
+      await React.act(async () => resolver().startNewSession()); await flush();
+      assert.equal(history().currentSession.id, id(50));
+      assert.equal(history().isSuccess, true);
+      await React.act(async () => { older.resolve(session(1)); await selection; }); await flush();
+      assert.equal(history().currentSession.id, id(50));
+      assert.equal(history().sessions[0].id, id(50), 'a stale transcript must not prepend itself after New chat');
+      let target;
+      await React.act(async () => { target = await resolver().ensureSessionForCurrentBoard(); });
+      assert.equal(target.id, history().currentSession.id, 'the next send remains in the new displayed conversation');
+    });
+  }
 });
 
 test('paging error retains already loaded chats and retries without duplicates', async () => {
