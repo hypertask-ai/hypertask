@@ -177,7 +177,7 @@ test('cached older selection keeps displayed conversation and send target aligne
       await React.act(async () => resolver().selectSession(id(1))); await flush();
       const transcriptRequests = requests.filter(([type]) => type === 'transcript').length;
       await React.act(async () => resolver().selectSession(id(9))); await flush();
-      assert.equal(requests.filter(([type]) => type === 'transcript').length, transcriptRequests, 'cached selection needs no transcript request');
+      assert.equal(requests.filter(([type]) => type === 'transcript').length, transcriptRequests + 1, 'explicit cached selection revalidates its transcript');
       assert.equal(history().currentSession.id, id(9));
       assert.equal(history().sessions[0].id, id(9));
       let target;
@@ -307,11 +307,14 @@ test('real history menu pages on end visibility/scroll, preserves list order, ex
     observe(target) { this.target = target; } disconnect() { this.disconnected = true; }
   };
   let enabled = true, loads = 0, selected;
+  const refreshes = [];
+  const queryClient = { refetchQueries: async (options) => { refreshes.push(options); } };
   const state = { sessions: [session(9)], historySessions: [session(9), session(1)], currentSession: session(9), hasMoreSessions: true,
     isLoadingMoreSessions: false, pagingError: false, loadMoreSessions: async () => { loads++; }, selectSession: (value) => { selected = value; } };
   const tooltip = () => ({ text: '', keyCombination: [] });
   const mocks = {
     '@/lib/contexts/Multipages/AI_Agent/AI_Agent_Chat_Context': { useAiChatContext: () => state },
+    '@tanstack/react-query': { useQueryClient: () => queryClient },
     'next/navigation': { usePathname: () => '/chat', useRouter: () => ({ push() {} }) },
     '@/hooks/useFlag': { useFlag: (key) => key === flag && enabled },
     '@/lib/flags/keys': { HTPR_6924_REST_COMPAT_FLAG: flag },
@@ -332,6 +335,7 @@ test('real history menu pages on end visibility/scroll, preserves list order, ex
   try {
     await render();
     await React.act(async () => document.querySelector('button[title]').click());
+    assert.deepEqual(refreshes, [{ queryKey: ['chat-session-summaries'], type: 'active', stale: true }]);
     const menu = document.getElementById('ai-chat-session-history');
     assert.deepEqual([...menu.querySelectorAll('li button')].map((button) => button.textContent), ['Chat 9', 'Chat 1']);
     assert.equal(observers.at(-1).options.root, menu);
@@ -353,6 +357,8 @@ test('real history menu pages on end visibility/scroll, preserves list order, ex
     await React.act(async () => menu.querySelector('li button').click());
     assert.equal(selected, id(9));
     assert.equal(document.getElementById('ai-chat-session-history'), null);
+    await React.act(async () => document.querySelector('button[title]').click());
+    assert.equal(refreshes.length, 1, 'flag-off history does not refresh the summary cache');
   } finally {
     await React.act(async () => root.unmount()); dom.window.close();
     for (const [key, descriptor] of original) { if (descriptor) Object.defineProperty(global, key, descriptor); else delete global[key]; }
@@ -406,6 +412,97 @@ test('429 delete and rename retain transcript; failed optimistic title is restor
 });
 
 
+test('cross-context reopen revalidates only the selected cached transcript despite unchanged summaries', async () => {
+  const rows = [session(9), session(1)], detail = deferred(); let revalidating = false;
+  await withHistory({ rows, transcript: (sessionId) => revalidating && sessionId === id(9) ? detail.promise : rows.find((row) => row.id === sessionId) }, async ({ history, client, requests, flush }) => {
+    const cached = history().currentSession;
+    await React.act(async () => history().selectSession(id(1))); await flush();
+    const summaryKey = ['chat-session-summaries', 'user-6', 6, flag, 'history'];
+    const summaries = client.getQueryData(summaryKey);
+    const message = { id: 'second-context', sessionId: id(9), content: 'sent in another browser', role: 'human', createdAt: new Date() };
+    await withHistory({ rows, message: async (sessionId, saved) => {
+      const index = rows.findIndex((row) => row.id === sessionId);
+      rows[index] = { ...rows[index], updatedAt: new Date('2026-02-01'), messages: [...rows[index].messages, saved] };
+      return response({ message: saved });
+    } }, async (second) => {
+      assert.notEqual(second.client, client, 'browser contexts have independent query caches');
+      await React.act(async () => second.history().addMessageToSessionQuery(id(9), message)); await second.flush();
+      assert.ok(second.requests.some(([type, sessionId]) => type === 'message' && sessionId === id(9)));
+    });
+    assert.equal(client.getQueryData(summaryKey), summaries, 'the first context has not refreshed its summaries');
+    const before = requests.length;
+    revalidating = true; let selecting;
+    await React.act(async () => { selecting = history().selectSession(id(9)); }); await flush();
+    assert.deepEqual(requests.slice(before), [['transcript', id(9), 6]], 'only the selected session is revalidated');
+    assert.equal(history().currentSession, cached, 'the cached transcript displays before the fetch completes');
+    assert.equal(history().sessions[0].id, id(9));
+    assert.equal(history().isSuccess, true, 'background revalidation does not block sending into the displayed session');
+    await React.act(async () => { detail.resolve(rows[0]); await selecting; }); await flush();
+    assert.equal(history().currentSession.messages.at(-1).content, message.content);
+    assert.match(document.getElementById('root').textContent, /sent in another browser/);
+  });
+});
+
+test('cached revalidation ignores late results after another selection or New chat', async () => {
+  for (const newChat of [false, true]) {
+    const detail = deferred(); let revalidating = false;
+    await withHistory({ transcript: (sessionId) => revalidating && sessionId === id(1) ? detail.promise : session(Number(sessionId.slice(-12))) }, async ({ history, client, flush }) => {
+      await React.act(async () => history().selectSession(id(1))); await flush();
+      await React.act(async () => history().selectSession(id(9))); await flush();
+      revalidating = true; let selecting;
+      await React.act(async () => { selecting = history().selectSession(id(1)); }); await flush();
+      assert.equal(history().currentSession.id, id(1));
+      assert.equal(history().isSuccess, true);
+      await React.act(async () => newChat ? history().startNewSession() : history().selectSession(id(9))); await flush();
+      await React.act(async () => { detail.resolve(session(1, { title: 'stale result', messages: [{ id: 'stale', content: 'must not merge' }] })); await selecting; }); await flush();
+      assert.equal(history().currentSession.id, id(newChat ? 50 : 9));
+      assert.equal(history().sessions[0].id, history().currentSession.id);
+      assert.equal(history().isSuccess, true);
+      assert.equal(client.getQueryData(['chat-session-transcripts', 'user-6', 6, flag, 'loaded']).data.sessions.find((row) => row.id === id(1)).title, 'Chat 1');
+    });
+  }
+});
+
+test('cached revalidation failures keep the displayed transcript usable', async () => {
+  let failing = false;
+  const original = console.error; console.error = () => {};
+  try {
+    await withHistory({ transcript: () => failing ? Promise.reject(new Error('429')) : session(9) }, async ({ history, flush }) => {
+      failing = true;
+      await React.act(async () => history().selectSession(id(9))); await flush();
+      assert.equal(history().currentSession.id, id(9));
+      assert.equal(history().isSuccess, true);
+      assert.equal(history().isError, false);
+    });
+  } finally { console.error = original; }
+});
+
+test('summary focus and history-open refresh match legacy stale query options without draining pages', async () => {
+  const focused = query.focusManager.isFocused();
+  try {
+    for (const on of [false, true]) await withHistory({ on }, async ({ history, client, requests, flush }) => {
+      const key = on ? ['chat-session-summaries', 'user-6', 6, flag, 'history'] : ['chat-sessions', 'user-6'];
+      const cachedQuery = client.getQueryCache().find({ queryKey: key, exact: true });
+      assert.equal(cachedQuery.options.staleTime, 1000 * 60 * 3);
+      assert.equal(cachedQuery.options.refetchOnWindowFocus ?? true, true);
+      assert.equal(cachedQuery.options.refetchOnMount ?? true, true);
+      const count = () => requests.filter(([type]) => type === (on ? 'page' : 'legacy')).length;
+      await React.act(async () => query.focusManager.setFocused(false));
+      await React.act(async () => query.focusManager.setFocused(true)); await flush();
+      assert.equal(count(), 1, 'fresh queries do not refetch on focus');
+      await React.act(async () => client.setQueryData(key, (old) => old, { updatedAt: Date.now() - 180001 }));
+      await React.act(async () => query.focusManager.setFocused(false));
+      await React.act(async () => query.focusManager.setFocused(true)); await flush();
+      assert.equal(count(), 2, 'stale history refetches its first page on focus');
+      await React.act(async () => client.setQueryData(key, (old) => old, { updatedAt: Date.now() - 180001 }));
+      await React.act(async () => client.refetchQueries({ queryKey: key, type: 'active', stale: true })); await flush();
+      assert.equal(count(), 3, 'opening stale history refreshes without changing the legacy stale policy');
+      assert.equal(history().isSuccess, true);
+      if (on) assert.ok(requests.filter(([type]) => type === 'page').every(([, options]) => !options.cursor));
+    });
+  } finally { query.focusManager.setFocused(focused); }
+});
+
 test('newer summaries refresh cached transcripts and replace acknowledged content, titles and removed messages', async () => {
   await withHistory({}, async ({ history, rows, client, requests, flush }) => {
     const initial = history().currentSession;
@@ -423,7 +520,7 @@ test('newer summaries refresh cached transcripts and replace acknowledged conten
     assert.deepEqual(history().currentSession.messages.map(({ id }) => id), ['remote']);
     const count = requests.filter(([type]) => type === 'transcript').length;
     await React.act(async () => history().selectSession(initial.id)); await flush();
-    assert.equal(requests.filter(([type]) => type === 'transcript').length, count, 'unchanged summaries still reuse the transcript');
+    assert.equal(requests.filter(([type]) => type === 'transcript').length, count + 1, 'explicit reopen revalidates even unchanged summaries');
   });
 });
 

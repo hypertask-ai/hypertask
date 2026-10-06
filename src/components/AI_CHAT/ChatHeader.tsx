@@ -18,6 +18,7 @@ import {
 } from "lucide-react";
 import { usePathname, useRouter } from "next/navigation";
 import { useFlag } from "@/hooks/useFlag";
+import { useQueryClient } from "@tanstack/react-query";
 import { HTPR_6752_INSTANT_TICKET_OPEN_FLAG, HTPR_6924_REST_COMPAT_FLAG } from "@/lib/flags/keys";
 import Tooltip from "../Common/Tooltip";
 import { format } from "date-fns";
@@ -92,6 +93,7 @@ function ChatSessionRow({
 }
 
 export const ChatHeader = () => {
+  const queryClient = useQueryClient();
   const router = useRouter();
   const pathname = usePathname();
   const restCompat = useFlag(HTPR_6924_REST_COMPAT_FLAG);
@@ -127,6 +129,11 @@ export const ChatHeader = () => {
   const dropdownRef = useRef<HTMLDivElement>(null);
   const overflowRef = useRef<HTMLDivElement>(null);
   const historyEndRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (restCompat && isDropdownOpen) {
+      void queryClient.refetchQueries({ queryKey: ["chat-session-summaries"], type: "active", stale: true });
+    }
+  }, [restCompat, isDropdownOpen, queryClient]);
   useEffect(() => {
     if (!restCompat || !isDropdownOpen || !hasMoreSessions || isLoadingMoreSessions || pagingError || !historyEndRef.current) return;
     const observer = new IntersectionObserver((entries) => {

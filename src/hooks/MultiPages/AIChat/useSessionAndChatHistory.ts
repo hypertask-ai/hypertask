@@ -155,6 +155,7 @@ export const useSessionAndChatHistory = (
     },
     enabled: historyEnabled && hasRequiredData && paged,
     staleTime: 1000 * 60 * 3,
+    refetchOnWindowFocus: true,
   });
 
   // ChatProvider stays mounted so global shortcuts keep working, but the
@@ -179,7 +180,7 @@ export const useSessionAndChatHistory = (
   });
 
 
-  const resolveHistorySession = useCallback(async (sessionId?: string, scope?: ChatSessionScope, emptyOnly = false) => {
+  const resolveHistorySession = useCallback(async (sessionId?: string, scope?: ChatSessionScope, emptyOnly = false, revalidate = false) => {
     const requestedIdentity = identityRef.current;
     const requestedSelection = selectionRef.current;
     if (!paged) return sessionsData?.data.sessions.find((session) =>
@@ -214,7 +215,7 @@ export const useSessionAndChatHistory = (
       ?.data.sessions.find((session) => session.id === id);
     summary ??= summaryQuery.data?.data.sessions.find((session) => session.id === id);
     const version = transcriptVersionsRef.current.get(id) ?? (existing ? new Date(existing.updatedAt).getTime() : 0);
-    if (existing && (!summary || new Date(summary.updatedAt).getTime() <= version)) {
+    if (!revalidate && existing && (!summary || new Date(summary.updatedAt).getTime() <= version)) {
       queryClient.setQueryData<ApiResponse<TAllChatSessionsResponse>>(cacheKey, (old) => old ? {
         ...old,
         data: { ...old.data, sessions: [existing, ...old.data.sessions.filter((session) => session.id !== id)] },
@@ -391,16 +392,20 @@ export const useSessionAndChatHistory = (
 
       const selection = ++selectionRef.current;
       const requestedIdentity = identityRef.current;
+      const cached = paged && queryClient.getQueryData<ApiResponse<TAllChatSessionsResponse>>(cacheKey)
+        ?.data.sessions.some((session) => session.id === sessionId);
       try {
         if (paged) {
           setActiveSession(sessionId);
-          setTranscriptPending(true);
+          setTranscriptPending(!cached);
           setTranscriptError(false);
-          const selected = await resolveHistorySession(sessionId);
+          if (cached) setMounted(true);
+          // History metadata may still be stale after a write in another browser.
+          const selected = await resolveHistorySession(sessionId, undefined, false, true);
           if (selection !== selectionRef.current || requestedIdentity !== identityRef.current) return;
-          if (!selected) setTranscriptError(true);
+          if (!selected && !cached) setTranscriptError(true);
           setTranscriptPending(false);
-          setMounted(Boolean(selected));
+          setMounted(Boolean(selected || cached));
           return;
         }
         if (isDemo) {
@@ -441,7 +446,7 @@ export const useSessionAndChatHistory = (
       } catch (error) {
         if (selection === selectionRef.current && requestedIdentity === identityRef.current) {
           setTranscriptPending(false);
-          setTranscriptError(true);
+          setTranscriptError(!cached);
         }
         if (requestedIdentity === identityRef.current) console.error("Error selecting session:", error);
       }
