@@ -151,6 +151,60 @@ D 1 'FAIL: latest release' RELEASE_TAG=v1 COMPARE_FIXTURE=behind
 D 1 'FAIL: latest release' RELEASE_TAG=v1 COMPARE_FIXTURE=diverged
 D 1 'FAIL: could not compare' RELEASE_TAG=v1 COMPARE_ERROR=1
 
+# Docs/main deploys to Cloudflare Pages without releases.
+cat > "$E/mock-bin/gh" <<'MOCK'
+#!/usr/bin/env bash
+case "$1:$2" in
+  pr:view) printf '{"number":838,"title":"YPER4-999 [INFRA] Fixture","state":"MERGED","mergeCommit":{"oid":"ec45678a2"},"baseRefName":"%s"}\n' "$SHIP_BASE" ;;
+  release:view) exit 1 ;;
+  release:list) [ "${RELEASE_ERROR:-0}" = 0 ] || exit 1; echo "${RELEASES_FIXTURE:-[]}" ;;
+  api:*/actions/workflows/*)
+    [[ "$2" == 'repos/hypertask-ai/docs/actions/workflows/deploy.yml/runs?head_sha=ec45678a2&event=push&per_page=100' ]] || exit 1
+    [ "${RUN_ERROR:-0}" = 0 ] || exit 1; echo "$RUNS_FIXTURE" ;;
+  api:*/actions/runs/*)
+    [[ "$2" == 'repos/hypertask-ai/docs/actions/runs/456/jobs?per_page=100' ]] || exit 1
+    [ "${JOBS_ERROR:-0}" = 0 ] || exit 1; echo "$JOBS_FIXTURE" ;;
+  *) exit 1 ;;
+esac
+MOCK
+docs_publish='{"workflow_runs":[{"id":456,"name":"Build and Deploy","path":".github/workflows/deploy.yml","event":"push","head_branch":"main","conclusion":"success","head_sha":"ec45678a2"}]}'
+DD() {
+  local want=$1 expected=$2 out got; shift 2
+  out=$(env PATH="$E/mock-bin:$PATH" SHIP_REPO=hypertask-ai/docs SHIP_BASE=main RUNS_FIXTURE="$docs_publish" JOBS_FIXTURE='{"jobs":[{"name":"Build and deploy to Cloudflare Pages","conclusion":"success"}]}' "$@" ./ship-check deployed YPER4-999); got=$?
+  if [ "$got" = "$want" ] && [[ $out == "$expected"* ]]; then ok "docs: $out"
+  else bad "docs: want $want $expected got $got $out"; fi
+}
+DD 0 'deployed ok (workflow)'
+DD 1 'FAIL: no successful production publishing push' RUNS_FIXTURE='{"workflow_runs":[]}'
+for change in \
+  '.name = "Publish hypertask.app"' \
+  '.path = ".github/workflows/preview.yml"' \
+  '.event = "pull_request"' \
+  '.event = "workflow_dispatch"' \
+  '.head_branch = "master"' \
+  '.conclusion = "failure"' \
+  '.conclusion = null' \
+  '.conclusion = "cancelled"' \
+  '.head_sha = "different"'; do
+  runs=$(jq ".workflow_runs[0] |= ($change)" <<<"$docs_publish")
+  DD 1 'FAIL: no successful production publishing push' RUNS_FIXTURE="$runs"
+done
+for jobs in \
+  '{"jobs":[]}' \
+  '{"jobs":[{"name":"Build and deploy to Cloudflare Pages","conclusion":"skipped"}]}' \
+  '{"jobs":[{"name":"Build and deploy to Cloudflare Pages","conclusion":"failure"}]}' \
+  '{"jobs":[{"name":"Build and deploy to Cloudflare Pages","conclusion":null}]}' \
+  '{"jobs":[{"name":"deploy","conclusion":"success"}]}'; do
+  DD 1 'FAIL: no successful production deploy job' JOBS_FIXTURE="$jobs"
+done
+DD 1 'FAIL: could not read publishing jobs' JOBS_ERROR=1
+DD 1 'FAIL: could not read workflow runs' RUN_ERROR=1
+DD 1 'FAIL: could not read publishing workflow identity' RUNS_FIXTURE='invalid'
+DD 1 'FAIL: could not read releases' RELEASE_ERROR=1
+DD 1 'FAIL: no release found' RELEASES_FIXTURE='[{"tagName":"v1"}]'
+DD 1 'FAIL: no release found' SHIP_BASE=master
+DD 1 'FAIL: no release found' SHIP_REPO=hypertask-ai/other
+
 # Duplicates: HTPR-6823 was fixed by HTPR-6801's merged PR 837.
 ./ship-check duplicate HTPR-6823 HTPR-6801 830 >/dev/null && bad "duplicate accepted another ticket's PR" || ok "duplicate rejects a PR of another ticket"
 ./ship-check duplicate HTPR-6823 HTPR-6801 837 >/dev/null && ok "duplicate binds HTPR-6823 to PR 837" || bad "duplicate bind"
