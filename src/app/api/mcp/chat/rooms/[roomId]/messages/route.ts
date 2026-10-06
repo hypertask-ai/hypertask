@@ -1,5 +1,6 @@
+import { wrapMcpRoute, checkMcpRouteRateLimit as checkMcpRateLimit, validateMcpRouteAuth as validateMcpAuth } from '@/lib/mcp/routeWrapper'
 import { NextRequest, NextResponse } from "next/server";
-import { checkMcpRateLimit, validateMcpAuth } from "@/lib/mcp/auth";
+
 import { loadAgentTokenRoom } from "@/lib/agents/roomAccess";
 import {
   AgentRoomError,
@@ -54,6 +55,7 @@ export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ roomId: string }> },
 ) {
+  return wrapMcpRoute(async (request: NextRequest) => {
   const { roomId } = await params;
   const auth = await roomAgent(request, roomId);
   if (auth.response) return auth.response;
@@ -66,12 +68,15 @@ export async function GET(
       { status: 500 },
     );
   }
+
+  })(request)
 }
 
 export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ roomId: string }> },
 ) {
+  return wrapMcpRoute(async (request: NextRequest) => {
   const { roomId } = await params;
   const auth = await roomAgent(request, roomId);
   if (auth.response) return auth.response;
@@ -100,4 +105,6 @@ export async function POST(
       { status },
     );
   }
+
+  })(request)
 }

@@ -1,5 +1,6 @@
+import { wrapMcpRoute, validateMcpRouteAuth as validateMcpAuth, checkMcpRouteRateLimit as checkMcpRateLimit } from '@/lib/mcp/routeWrapper'
 import { NextRequest, NextResponse } from 'next/server'
-import { validateMcpAuth, checkMcpRateLimit } from '@/lib/mcp/auth'
+
 import { getProjectWhere } from '@/utils/controllers/projects/getAllIncludes'
 import prisma from '@/lib/prisma'
 import { createSection } from '@/lib/mcp/sections/services'
@@ -45,6 +46,7 @@ export interface CreateSectionSuccessResponse {
  * Authentication: Bearer token (JWT or API key) in Authorization header
  */
 export async function POST(request: NextRequest, props: { params: Promise<{ projectId: string }> }) {
+  return wrapMcpRoute(async (request: NextRequest) => {
   const params = await props.params;
   try {
     const rateLimited = await checkMcpRateLimit(request)
@@ -193,6 +195,8 @@ export async function POST(request: NextRequest, props: { params: Promise<{ proj
       { status: 500 }
     )
   }
+
+  })(request)
 }
 
 /**
@@ -206,6 +210,7 @@ export async function POST(request: NextRequest, props: { params: Promise<{ proj
  * Authentication: Bearer token (JWT or API key) in Authorization header
  */
 export async function GET(request: NextRequest, props: { params: Promise<{ projectId: string }> }) {
+  return wrapMcpRoute(async (request: NextRequest) => {
   const params = await props.params;
   try {
     // Validate authentication
@@ -345,4 +350,6 @@ export async function GET(request: NextRequest, props: { params: Promise<{ proje
       { status: 500 }
     )
   }
+
+  })(request)
 }

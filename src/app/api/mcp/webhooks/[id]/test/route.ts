@@ -1,5 +1,6 @@
+import { wrapMcpRoute, checkMcpRouteRateLimit as checkMcpRateLimit, validateMcpRouteAuth as validateMcpAuth } from '@/lib/mcp/routeWrapper'
 import { NextRequest, NextResponse } from 'next/server'
-import { checkMcpRateLimit, validateMcpAuth } from '@/lib/mcp/auth'
+
 import prisma from '@/lib/prisma'
 import { getProjectWhere } from '@/utils/controllers/projects/getAllIncludes'
 import { deliverWebhook } from '@/lib/mcp/webhooks/delivery'
@@ -14,6 +15,7 @@ export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  return wrapMcpRoute(async (request: NextRequest) => {
   try {
     const rateLimited = await checkMcpRateLimit(request)
     if (rateLimited) return rateLimited
@@ -54,4 +56,6 @@ export async function POST(
     console.error('[MCP Webhooks] test error:', error)
     return NextResponse.json({ success: false, error: 'Internal server error' }, { status: 500 })
   }
+
+  })(request)
 }

@@ -103,13 +103,24 @@ test("every declared flag without a stored row is on for the owner and QA, nobod
   // HTPR-6192: this is the point of the ticket. A flag whose rollout was never chosen must not be
   // owner-only, or the QA account cannot verify the feature before Valentin looks at it.
   assert.ok(flags.FEATURE_FLAG_KEYS.length > 0);
-  for (const key of flags.FEATURE_FLAG_KEYS) {
+  // HTPR-6926: a definition may set its own defaultMode; those flags are checked separately below.
+  const explicit = new Set(["htpr-6926-mcp-route-wrapper"]);
+  for (const key of flags.FEATURE_FLAG_KEYS.filter((k) => !explicit.has(k))) {
     assert.deepEqual(
       await Promise.all([6, 985, 7].map((userId) => flags.isFeatureEnabled(key, userId))),
       [true, true, false],
       `${key} should default to owner and QA`,
     );
   }
+});
+
+test("an explicit defaultMode wins when no row is stored (HTPR-6926 MCP route wrapper starts Off)", async () => {
+  const key = "htpr-6926-mcp-route-wrapper";
+  assert.deepEqual(
+    await Promise.all([6, 985, 7].map((userId) => flags.isFeatureEnabled(key, userId))),
+    [false, false, false],
+  );
+  assert.equal((await flags.listFeatureFlagModes()).find((row) => row.key === key).mode, "OFF");
 });
 
 test("server first-screen flag is registered but unused and scoped flag seeds reuse server evaluation", async () => {
@@ -502,6 +513,7 @@ test("declared flags remain listed with ticket details and can be changed", asyn
       { key: "htpr-6923-app-router-writes", mode: "OWNER_AND_QA", updatedAt: null },
       { key: "htpr-6924-rest-compat", mode: "OWNER_AND_QA", updatedAt: null },
       { key: "htpr-6925-typed-api-client", mode: "OWNER_AND_QA", updatedAt: null },
+      { key: "htpr-6926-mcp-route-wrapper", mode: "OFF", updatedAt: null },
       { key: "htpr-6927-mcp-v2", mode: "OWNER_AND_QA", updatedAt: null },
       { key: "htpr-6929-compose-task-writer", mode: "OWNER_AND_QA", updatedAt: null },
       { key: "htpr-6930-my-tasks-kanban-reuse", mode: "OWNER_AND_QA", updatedAt: null },

@@ -1,5 +1,6 @@
+import { wrapMcpRoute, validateMcpRouteAuth as validateMcpAuth, checkMcpRouteRateLimit as checkMcpRateLimit } from '@/lib/mcp/routeWrapper'
 import { NextRequest, NextResponse } from 'next/server'
-import { validateMcpAuth, checkMcpRateLimit } from '@/lib/mcp/auth'
+
 import prisma from '@/lib/prisma'
 import { validateBoardManifest } from '@/lib/mcp/boards/validateManifest'
 import { createBoardFromManifest } from '@/lib/mcp/boards/createBoardFromManifest'
@@ -38,6 +39,7 @@ export async function POST(
   props: { params: Promise<{ teamId: string }> },
   dependencies: BoardRouteDependencies = boardRouteDependencies
 ) {
+  return wrapMcpRoute(async (request: NextRequest) => {
   const params = await props.params;
   const correlationId = request.headers.get('X-Correlation-ID')
 
@@ -266,4 +268,6 @@ export async function POST(
       { status: 500 }
     )
   }
+
+  })(request)
 }

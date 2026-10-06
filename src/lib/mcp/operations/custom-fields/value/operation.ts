@@ -1,7 +1,8 @@
+import { wrapMcpRoute, checkMcpRouteRateLimit as checkMcpRateLimit, validateMcpRouteAuth as validateMcpAuth } from '@/lib/mcp/routeWrapper'
 import { CustomFieldType } from "@prisma/client";
 import { NextRequest, NextResponse } from "next/server";
 
-import { checkMcpRateLimit, validateMcpAuth } from "@/lib/mcp/auth";
+
 import prisma from "@/lib/prisma";
 import { validateProjectAccess } from "@/lib/mcp/tasks/services";
 import {
@@ -25,6 +26,7 @@ function isPositiveInteger(value: unknown): value is number {
 
 /** POST /api/mcp/custom-fields/value */
 export async function POST(request: NextRequest) {
+  return wrapMcpRoute(async (request: NextRequest) => {
   try {
     const rateLimited = await checkMcpRateLimit(request);
     if (rateLimited) return rateLimited;
@@ -193,4 +195,6 @@ export async function POST(request: NextRequest) {
       { status: 500 }
     );
   }
+
+  })(request)
 }

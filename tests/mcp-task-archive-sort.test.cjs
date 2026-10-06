@@ -95,7 +95,9 @@ function loadRoute() {
   new Function("module", "exports", "require", routeJavascript)(
     routeModule,
     routeModule.exports,
-    (request) => stubs[request] ?? require(request),
+    (request) => request === "@/lib/mcp/routeWrapper"
+      ? require("./helpers/mcp-route-wrapper.cjs").loadRouteWrapper(stubs)
+      : stubs[request] ?? require(request),
   );
 
   return { GET: routeModule.exports.GET, taskQueries };

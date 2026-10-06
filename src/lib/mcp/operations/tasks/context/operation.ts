@@ -1,6 +1,7 @@
+import { wrapMcpRoute, checkMcpRouteRateLimit as checkMcpRateLimit, validateMcpRouteAuth as validateMcpAuth } from '@/lib/mcp/routeWrapper'
 import { NextRequest, NextResponse } from 'next/server';
 import { Prisma } from '@prisma/client';
-import { checkMcpRateLimit, validateMcpAuth } from '@/lib/mcp/auth';
+
 import prisma from '@/lib/prisma';
 import { extractPrLinks } from '@/lib/mcp/tasks/extractPrLinks';
 import {
@@ -71,6 +72,7 @@ function parseRequiredPositiveInteger(
  * Returns a read-only context pack for one accessible task.
  */
 export async function GET(request: NextRequest) {
+  return wrapMcpRoute(async (request: NextRequest) => {
   try {
     const rateLimited = await checkMcpRateLimit(request);
     if (rateLimited) return rateLimited;
@@ -326,4 +328,6 @@ export async function GET(request: NextRequest) {
       { status: 500 }
     );
   }
+
+  })(request)
 }

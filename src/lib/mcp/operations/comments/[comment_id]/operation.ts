@@ -1,5 +1,6 @@
+import { wrapMcpRoute, validateMcpRouteAuth as validateMcpAuth, checkMcpRouteRateLimit as checkMcpRateLimit } from '@/lib/mcp/routeWrapper'
 import { NextRequest, NextResponse } from 'next/server'
-import { validateMcpAuth, checkMcpRateLimit } from '@/lib/mcp/auth'
+
 import type { McpAgentSummary } from '@/lib/mcp/agents'
 import { mapVisibleMcpAgent, mcpVisibleAgentSelect } from '@/lib/mcp/agents'
 import { resolvePublicAgentDisplayName } from '@/lib/agents/publicAgent'
@@ -54,6 +55,7 @@ export interface UpdateCommentResponse {
  * Updates a comment. User must be the comment creator.
  */
 export async function PATCH(request: NextRequest, props: { params: Promise<{ comment_id: string }> }) {
+  return wrapMcpRoute(async (request: NextRequest) => {
   const params = await props.params;
   try {
     const rateLimited = await checkMcpRateLimit(request)
@@ -374,6 +376,8 @@ export async function PATCH(request: NextRequest, props: { params: Promise<{ com
       { status: 500 }
     )
   }
+
+  })(request)
 }
 
 /**
@@ -382,6 +386,7 @@ export async function PATCH(request: NextRequest, props: { params: Promise<{ com
  * Deletes a comment. User must have access to the task's project.
  */
 export async function DELETE(request: NextRequest, props: { params: Promise<{ comment_id: string }> }) {
+  return wrapMcpRoute(async (request: NextRequest) => {
   const params = await props.params;
   try {
     const rateLimited = await checkMcpRateLimit(request)
@@ -518,4 +523,6 @@ export async function DELETE(request: NextRequest, props: { params: Promise<{ co
       { status: 500 }
     )
   }
+
+  })(request)
 }

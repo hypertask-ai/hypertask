@@ -12,7 +12,7 @@ const source = fs.readFileSync(
 test("tasks/move adopts a mutation lease and releases it after the write (HTPR-6391)", () => {
   assert.match(
     source,
-    /import \{ withAdoptedAgentMutationLease \} from "@\/lib\/mcp\/tasks\/agentMutationLeaseAdoption";/
+    /import \{ [^\n]*withMcpRouteMutationLease as withAdoptedAgentMutationLease[^\n]* \} from '@\/lib\/mcp\/routeWrapper'/
   );
   assert.doesNotMatch(source, /withAgentMutationLeaseAdoption/);
 

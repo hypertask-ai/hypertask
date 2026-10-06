@@ -6,7 +6,7 @@ import { LogType, Prisma, Status } from '@prisma/client';
 import { isOAuthAccessTokenPayload, JWT_LEGACY_OAUTH_AUDIENCE, JWT_OAUTH_AUDIENCE, JWT_OAUTH_ISSUER, oauthClientIdFromPayload, OAUTH_CLIENT_ID_CLAIM, oauthLegacyRevocationJti } from '@/lib/mcp/oauthTokenContract';
 import { HTPR_6542_TEAM_SCOPED_MANAGEMENT_KEYS_FLAG, isFeatureEnabled } from '@/lib/flags';
 import { agentWithinTeamWhere, getManagementKeyTeam } from '@/lib/mcp/managementKeyTeamScope';
-import type { AgentTokenTeamScope, McpAuthContext } from './types';
+import type { AgentTokenTeamScope, McpAuthContext, ValidateMcpAuthOptions } from './types';
 
 const JWT_SECRET = process.env.JWT_SECRET as string
 const JWT_ISSUER = process.env.JWT_ISSUER || 'hypertask'
@@ -44,9 +44,41 @@ export function tokenRevocationJtis(
 // UX nice-to-have status pill; upgrade to Redis if cross-instance accuracy matters.
 const mcpConnectionLogThrottle = new Map<number, number>()
 
-export function verifyMcpJwtToken(token: string): jwt.JwtPayload | null {
+const AUTH_LOG_MAX_ENTRIES = 1_000
+const AUTH_LOG_REPEAT_MS = 30_000
+const boundedJwtLogThrottle = new Map<string, number>()
+const boundedConnectionLogThrottle = new Map<number, number>()
+
+function boundedLogValue(value: unknown, depth = 0): unknown {
+  if (typeof value === 'string') return value.slice(0, 200)
+  if (value instanceof Error) return { name: value.name.slice(0, 200), message: value.message.slice(0, 200) }
+  if (value && typeof value === 'object') {
+    if (depth >= 3) return '[omitted]'
+    if (Array.isArray(value)) return value.slice(0, 10).map(item => boundedLogValue(item, depth + 1))
+    return Object.fromEntries(Object.entries(value).slice(0, 20).map(([key, item]) => [key.slice(0, 200), boundedLogValue(item, depth + 1)]))
+  }
+  return value
+}
+
+export function boundedMcpAuthLog(...args: unknown[]): void {
+  const bounded = args.map(value => boundedLogValue(value))
+  // The bounded rendering itself is the dedupe key (capped), so no hash is needed.
+  const key = JSON.stringify(bounded).slice(0, 1000)
+  const now = Date.now()
+  const previous = boundedJwtLogThrottle.get(key)
+  if (previous !== undefined && now - previous < AUTH_LOG_REPEAT_MS) return
+  boundedJwtLogThrottle.delete(key)
+  if (boundedJwtLogThrottle.size >= AUTH_LOG_MAX_ENTRIES) {
+    boundedJwtLogThrottle.delete(boundedJwtLogThrottle.keys().next().value!)
+  }
+  boundedJwtLogThrottle.set(key, now)
+  console.log(...bounded)
+}
+
+export function verifyMcpJwtToken(token: string, options: ValidateMcpAuthOptions = {}): jwt.JwtPayload | null {
+  const log = options.boundedLogging ? boundedMcpAuthLog : console.log
   if (!JWT_SECRET) {
-    console.log('[MCP Auth] JWT_SECRET not configured')
+    log('[MCP Auth] JWT_SECRET not configured')
     return null // JWT not configured
   }
 
@@ -55,7 +87,7 @@ export function verifyMcpJwtToken(token: string): jwt.JwtPayload | null {
   try {
     decodedWithoutVerify = jwt.decode(token, { complete: false }) as jwt.JwtPayload
     if (decodedWithoutVerify) {
-      console.log('[MCP Auth] Token decoded (unverified):', {
+      log('[MCP Auth] Token decoded (unverified):', {
         userId: decodedWithoutVerify.userId,
         sub: decodedWithoutVerify.sub,
         iss: decodedWithoutVerify.iss,
@@ -65,12 +97,12 @@ export function verifyMcpJwtToken(token: string): jwt.JwtPayload | null {
       })
     }
   } catch (err) {
-    console.log('[MCP Auth] Failed to decode token:', err)
+    log('[MCP Auth] Failed to decode token:', err)
     return null
   }
 
   if (!decodedWithoutVerify) {
-    console.log('[MCP Auth] Token decode returned null')
+    log('[MCP Auth] Token decode returned null')
     return null
   }
 
@@ -84,43 +116,43 @@ export function verifyMcpJwtToken(token: string): jwt.JwtPayload | null {
         issuer: JWT_ISSUER,
         audience: JWT_MCP_AUDIENCE,
       }) as jwt.JwtPayload
-      console.log('[MCP Auth] JWT verified with current format (mcp-api)')
+      log('[MCP Auth] JWT verified with current format (mcp-api)')
     } catch (err: any) {
-      console.log('[MCP Auth] Current format failed:', err?.message)
+      log('[MCP Auth] Current format failed:', err?.message)
       // Try legacy format (hypertasks-mcp audience, hypertasks issuer)
       try {
         decoded = jwt.verify(token, JWT_SECRET, {
           issuer: 'hypertasks', // Legacy issuer
           audience: JWT_LEGACY_MCP_AUDIENCE,
         }) as jwt.JwtPayload
-        console.log('[MCP Auth] JWT verified with legacy format (hypertasks-mcp)')
+        log('[MCP Auth] JWT verified with legacy format (hypertasks-mcp)')
       } catch (err2: any) {
-        console.log('[MCP Auth] Legacy format failed:', err2?.message)
+        log('[MCP Auth] Legacy format failed:', err2?.message)
         try {
           decoded = jwt.verify(token, JWT_SECRET, {
             issuer: JWT_OAUTH_ISSUER,
             audience: [JWT_OAUTH_AUDIENCE, JWT_LEGACY_OAUTH_AUDIENCE],
           }) as jwt.JwtPayload
-          console.log('[MCP Auth] JWT verified as OAuth access token')
+          log('[MCP Auth] JWT verified as OAuth access token')
         } catch (errOAuth: any) {
-          console.log('[MCP Auth] OAuth format failed:', errOAuth?.message)
+          log('[MCP Auth] OAuth format failed:', errOAuth?.message)
           // Only tokens minted before MCP audiences were introduced may use the
           // compatibility path. A present audience belongs to another token contract.
           if (decodedWithoutVerify.aud !== undefined) {
-            console.log('[MCP Auth] Token has an unsupported audience:', decodedWithoutVerify.aud)
+            log('[MCP Auth] Token has an unsupported audience:', decodedWithoutVerify.aud)
             return null
           }
           try {
             decoded = jwt.verify(token, JWT_SECRET, {
               issuer: ['hypertasks', JWT_ISSUER, JWT_OAUTH_ISSUER],
             }) as jwt.JwtPayload
-            console.log('[MCP Auth] Legacy audience-less JWT verified')
+            log('[MCP Auth] Legacy audience-less JWT verified')
           } catch (err3: any) {
-            console.log('[MCP Auth] All verification attempts failed')
-            console.log('[MCP Auth] Signature error details:', err3?.message)
-            console.log('[MCP Auth] JWT_SECRET exists:', !!JWT_SECRET, 'Length:', JWT_SECRET?.length)
-            console.log('[MCP Auth] Token issuer:', decodedWithoutVerify?.iss, 'Expected:', ['hypertasks', JWT_ISSUER])
-            console.log('[MCP Auth] Token audience:', decodedWithoutVerify?.aud, 'Expected:', [JWT_LEGACY_MCP_AUDIENCE, JWT_MCP_AUDIENCE])
+            log('[MCP Auth] All verification attempts failed')
+            log('[MCP Auth] Signature error details:', err3?.message)
+            log('[MCP Auth] JWT_SECRET exists:', !!JWT_SECRET, 'Length:', JWT_SECRET?.length)
+            log('[MCP Auth] Token issuer:', decodedWithoutVerify?.iss, 'Expected:', ['hypertasks', JWT_ISSUER])
+            log('[MCP Auth] Token audience:', decodedWithoutVerify?.aud, 'Expected:', [JWT_LEGACY_MCP_AUDIENCE, JWT_MCP_AUDIENCE])
             return null
           }
         }
@@ -217,8 +249,10 @@ export function presentedAgentTokenGeneration(decoded: jwt.JwtPayload): string |
 /**
  * Validates JWT token for MCP API access
  */
-export async function validateJwtToken(token: string): Promise<McpAuthContext | null> {
-  const decoded = verifyMcpJwtToken(token)
+export async function validateJwtToken(token: string, options: ValidateMcpAuthOptions = {}): Promise<McpAuthContext | null> {
+  const log = options.boundedLogging ? boundedMcpAuthLog : console.log
+  const decoded = verifyMcpJwtToken(token, options)
+  if (options.failureSnapshot) options.failureSnapshot.verifiedJwt = decoded
   if (!decoded) return null
 
   const isOAuthAccessToken = isOAuthAccessTokenPayload(decoded)
@@ -265,6 +299,7 @@ export async function validateJwtToken(token: string): Promise<McpAuthContext | 
       return null
     }
 
+    if (options.failureSnapshot) options.failureSnapshot.user = user ?? null
     if (!user) {
       return null
     }
@@ -276,8 +311,9 @@ export async function validateJwtToken(token: string): Promise<McpAuthContext | 
           where: { client_id: oauthClientId },
           select: { client_id: true },
         })
+        if (options.failureSnapshot) options.failureSnapshot.oauthClient = client
         if (!client) {
-          console.log('[MCP Auth] OAuth client was removed')
+          log('[MCP Auth] OAuth client was removed')
           return null
         }
       }
@@ -294,8 +330,9 @@ export async function validateJwtToken(token: string): Promise<McpAuthContext | 
       },
     })
 
+    if (options.failureSnapshot) options.failureSnapshot.revokedToken = revokedToken
     if (revokedToken) {
-      console.log('[MCP Auth] Token has been revoked')
+      log('[MCP Auth] Token has been revoked')
       return null
     }
 
@@ -312,7 +349,7 @@ export async function validateJwtToken(token: string): Promise<McpAuthContext | 
             : null
       
       if (tokenIssuedAt && tokenIssuedAt < user.mcpTokensRevokedAt) {
-        console.log('[MCP Auth] Token was issued before user revoked all tokens:', {
+        log('[MCP Auth] Token was issued before user revoked all tokens:', {
           tokenIssuedAt: tokenIssuedAt.toISOString(),
           revokedAt: user.mcpTokensRevokedAt.toISOString(),
         })
@@ -369,16 +406,19 @@ export async function validateJwtToken(token: string): Promise<McpAuthContext | 
         },
       })
       if (!agent) {
-        console.log('[MCP Auth] Invalid or revoked agent on token:', rawAgentId)
+        log('[MCP Auth] Invalid or revoked agent on token:', rawAgentId)
         return null
+      }
+      if (options.failureSnapshot) {
+        options.failureSnapshot.agent = { id: agent.id, mcpTokenJti: agent.mcpTokenJti, revokedAt: null }
       }
       const storedGeneration = storedAgentTokenGeneration(agent)
       if (!storedGeneration) {
-        console.log('[MCP Auth] No stored token for agent (revoked):', rawAgentId)
+        log('[MCP Auth] No stored token for agent (revoked):', rawAgentId)
         return null
       }
       if (presentedAgentTokenGeneration(decoded) !== storedGeneration) {
-        console.log('[MCP Auth] Agent token generation does not match — rotated or revoked')
+        log('[MCP Auth] Agent token generation does not match \u2014 rotated or revoked')
         return null
       }
       // An OAuth access token carries the generation instead of the bearer
@@ -403,7 +443,7 @@ export async function validateJwtToken(token: string): Promise<McpAuthContext | 
         !carriesOAuthGeneration &&
         (!agent.mcpTokenHash || hashAgentToken(token) !== agent.mcpTokenHash)
       ) {
-        console.log('[MCP Auth] Agent token does not match the stored digest')
+        log('[MCP Auth] Agent token does not match the stored digest')
         return null
       }
       agentId = agent.id
@@ -411,16 +451,21 @@ export async function validateJwtToken(token: string): Promise<McpAuthContext | 
     }
 
     const now = Date.now()
-    const lastLogged = mcpConnectionLogThrottle.get(user.id)
+    const connectionThrottle = options.boundedLogging ? boundedConnectionLogThrottle : mcpConnectionLogThrottle
+    const lastLogged = connectionThrottle.get(user.id)
     if (!lastLogged || now - lastLogged > 30 * 60 * 1000) {
-      mcpConnectionLogThrottle.set(user.id, now)
+      if (options.boundedLogging && !connectionThrottle.has(user.id) && connectionThrottle.size >= AUTH_LOG_MAX_ENTRIES) {
+        connectionThrottle.delete(connectionThrottle.keys().next().value!)
+      }
+      connectionThrottle.set(user.id, now)
       void createLog({
         log: 'mcp_connected',
         type: LogType.Signup,
         status: Status.Normal,
         LoggedById: user.id,
       }).catch((err) => {
-        console.error('[MCP Auth] Failed to log mcp_connected:', err)
+        if (options.boundedLogging) boundedMcpAuthLog('[MCP Auth] Failed to log mcp_connected:', err)
+        else console.error('[MCP Auth] Failed to log mcp_connected:', err)
       })
     }
 

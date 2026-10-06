@@ -23,6 +23,7 @@ function load(relativePath, stubs) {
   const loaded = new Module(filename);
   loaded.filename = filename;
   loaded.require = (request) => {
+    if (request === "@/lib/mcp/routeWrapper") return require("./helpers/mcp-route-wrapper.cjs").loadRouteWrapper(stubs);
     if (Object.hasOwn(stubs, request)) return stubs[request];
     if (["@prisma/client", "react", "react/jsx-runtime"].includes(request)) return require(request);
     throw new Error(`Unexpected dependency: ${request}`);

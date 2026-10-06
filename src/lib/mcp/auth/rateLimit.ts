@@ -31,7 +31,10 @@ export function classifyMcpRateLimitCount(
  * (never the raw token). Fails open on any storage error - never blocks
  * legitimate traffic because our own infra hiccupped.
  */
-export async function checkMcpRateLimit(request: NextRequest): Promise<NextResponse | null> {
+export async function checkMcpRateLimit(
+  request: NextRequest,
+  resolveAuth?: () => Promise<McpAuthContext | null>,
+): Promise<NextResponse | null> {
   if (getMcpOperationContext(request)?.rateLimitChecked) return null
   const token = extractBearerToken(request.headers.get('Authorization'))
   if (!token) return null
@@ -54,7 +57,7 @@ export async function checkMcpRateLimit(request: NextRequest): Promise<NextRespo
     let limit = MCP_AGENT_RATE_LIMIT_PER_MINUTE
     if (countOutcome === 'resolve-tier') {
       // ponytail: this double-validates with each route; memoize per request if it becomes a hot path.
-      const ctx = await validateMcpAuth(request)
+      const ctx = await (resolveAuth ? resolveAuth() : validateMcpAuth(request))
       limit = resolveMcpRateLimit(ctx, token)
     }
 

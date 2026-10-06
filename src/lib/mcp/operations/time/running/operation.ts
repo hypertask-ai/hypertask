@@ -1,8 +1,10 @@
-import { validateMcpAuth, checkMcpRateLimit } from "@/lib/mcp/auth";
+import { wrapMcpRoute, validateMcpRouteAuth as validateMcpAuth, checkMcpRouteRateLimit as checkMcpRateLimit } from '@/lib/mcp/routeWrapper'
+
 import { elapsedSeconds, listRunning } from "@/lib/timeTracking";
 import { NextRequest, NextResponse } from "next/server";
 
 export async function GET(request: NextRequest) {
+  return wrapMcpRoute(async (request: NextRequest) => {
   const rateLimited = await checkMcpRateLimit(request);
   if (rateLimited) return rateLimited;
   const ctx = await validateMcpAuth(request);
@@ -30,4 +32,6 @@ export async function GET(request: NextRequest) {
   }));
 
   return NextResponse.json({ success: true, timers });
+
+  })(request)
 }

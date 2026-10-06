@@ -1,11 +1,8 @@
+import { wrapMcpRoute, validateMcpRouteAuth as validateMcpAuth, checkMcpRouteRateLimit as checkMcpRateLimit } from '@/lib/mcp/routeWrapper'
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 
-import {
-  validateMcpAuth,
-  checkMcpRateLimit,
-  createUnauthorizedResponse,
-} from "@/lib/mcp/auth";
+import { createUnauthorizedResponse } from '@/lib/mcp/auth'
 import {
   getAccessibleSkill,
   skillErrorResponse,
@@ -38,6 +35,7 @@ const updateSchema = z.object({
 type RouteContext = { params: Promise<{ skill_id: string }> };
 
 export async function GET(request: NextRequest, context: RouteContext) {
+  return wrapMcpRoute(async (request: NextRequest) => {
   const auth = await authenticate(request);
   if (auth instanceof NextResponse) return auth;
 
@@ -47,9 +45,12 @@ export async function GET(request: NextRequest, context: RouteContext) {
   } catch (error) {
     return skillErrorResponse(error);
   }
+
+  })(request)
 }
 
 export async function PATCH(request: NextRequest, context: RouteContext) {
+  return wrapMcpRoute(async (request: NextRequest) => {
   const auth = await authenticate(request);
   if (auth instanceof NextResponse) return auth;
 
@@ -71,9 +72,12 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
   } catch (error) {
     return skillErrorResponse(error);
   }
+
+  })(request)
 }
 
 export async function DELETE(request: NextRequest, context: RouteContext) {
+  return wrapMcpRoute(async (request: NextRequest) => {
   const auth = await authenticate(request);
   if (auth instanceof NextResponse) return auth;
 
@@ -84,6 +88,8 @@ export async function DELETE(request: NextRequest, context: RouteContext) {
   } catch (error) {
     return skillErrorResponse(error);
   }
+
+  })(request)
 }
 
 async function authenticate(request: NextRequest) {

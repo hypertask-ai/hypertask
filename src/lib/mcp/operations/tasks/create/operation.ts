@@ -1,4 +1,5 @@
-import { validateMcpAuth, checkMcpRateLimit } from '@/lib/mcp/auth';
+import { wrapMcpRoute, validateMcpRouteAuth as validateMcpAuth, checkMcpRouteRateLimit as checkMcpRateLimit, readMcpRouteJsonBody as readJsonBody } from '@/lib/mcp/routeWrapper'
+
 import type { McpAgentSummary } from '@/lib/mcp/agents';
 import { getMcpSessionAgentSummary } from '@/lib/mcp/agents';
 import { NextRequest, NextResponse } from 'next/server';
@@ -10,7 +11,7 @@ import { sanitizeRichHtml } from '@/utils/helperFunctions/sanitizeRichHtml';
 import { IdempotencyInProgressError, normalizeIdempotencyKey, withIdempotency } from '@/lib/mcp/idempotency/idempotencyStore';
 import { buildFieldError } from '@/lib/mcp/fieldError';
 import { requireRole } from '@/lib/mcp/agents/scopes';
-import { readJsonBody } from '@/lib/mcp/readJsonBody';
+
 import { isFeatureEnabled } from '@/lib/flags';
 import { HTPR_6561_DESCRIPTION_STRUCTURE_FLAG } from '@/lib/flags/keys';
 import { isAcceptedRichTextInput } from '@/utils/helperFunctions/markdownToHtml';
@@ -25,6 +26,7 @@ export interface CreateTaskResponse {
 }
 
 export async function POST(request: NextRequest) {
+  return wrapMcpRoute(async (request: NextRequest) => {
     const correlationId = request.headers.get('X-Correlation-ID');
 
     try {
@@ -280,4 +282,6 @@ export async function POST(request: NextRequest) {
             { status: 500 }
         );
     }
+
+  })(request)
 }

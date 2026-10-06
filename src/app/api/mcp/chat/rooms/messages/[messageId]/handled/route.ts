@@ -1,6 +1,7 @@
+import { wrapMcpRoute, checkMcpRouteRateLimit as checkMcpRateLimit, validateMcpRouteAuth as validateMcpAuth } from '@/lib/mcp/routeWrapper'
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
-import { checkMcpRateLimit, validateMcpAuth } from "@/lib/mcp/auth";
+
 import { loadAgentTokenRoom } from "@/lib/agents/roomAccess";
 import { markAgentRoomMessageHandled } from "@/lib/agents/roomService";
 
@@ -10,6 +11,7 @@ export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ messageId: string }> },
 ) {
+  return wrapMcpRoute(async (request: NextRequest) => {
   const rateLimited = await checkMcpRateLimit(request);
   if (rateLimited) return rateLimited;
   const ctx = await validateMcpAuth(request);
@@ -43,4 +45,6 @@ export async function POST(
   }
   await markAgentRoomMessageHandled({ messageId, agentId: ctx.agentId });
   return NextResponse.json({ success: true });
+
+  })(request)
 }

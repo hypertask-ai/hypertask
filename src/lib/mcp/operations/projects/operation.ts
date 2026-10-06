@@ -1,5 +1,6 @@
+import { wrapMcpRoute, validateMcpRouteAuth as validateMcpAuth, checkMcpRouteRateLimit as checkMcpRateLimit } from '@/lib/mcp/routeWrapper'
 import { NextRequest, NextResponse } from 'next/server'
-import { validateMcpAuth, checkMcpRateLimit } from '@/lib/mcp/auth'
+
 import { getProjectListingWhere } from '@/utils/controllers/projects/getAllIncludes'
 import prisma from '@/lib/prisma'
 import {
@@ -62,6 +63,7 @@ export interface ListProjectsResponse {
  * Authentication: Bearer token (JWT or API key) in Authorization header
  */
 export async function GET(request: NextRequest) {
+  return wrapMcpRoute(async (request: NextRequest) => {
   try {
     // Validate authentication
     const rateLimited = await checkMcpRateLimit(request)
@@ -256,4 +258,6 @@ export async function GET(request: NextRequest) {
       { status: 500 }
     )
   }
+
+  })(request)
 }

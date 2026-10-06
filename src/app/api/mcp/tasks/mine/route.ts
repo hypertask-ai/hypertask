@@ -1,5 +1,6 @@
+import { wrapMcpRoute, checkMcpRouteRateLimit as checkMcpRateLimit, validateMcpRouteAuth as validateMcpAuth } from '@/lib/mcp/routeWrapper'
 import { NextRequest, NextResponse } from 'next/server'
-import { checkMcpRateLimit, validateMcpAuth } from '@/lib/mcp/auth'
+
 import {
   getMyTasksSummary,
   MY_TASKS_DEFAULT_LIMIT,
@@ -20,6 +21,7 @@ function parsePositiveInteger(raw: string | null): number | null {
  * hypertask_my_tasks tool returns, so the CLI, MCP and the chat agree.
  */
 export async function GET(request: NextRequest) {
+  return wrapMcpRoute(async (request: NextRequest) => {
   try {
     const rateLimited = await checkMcpRateLimit(request)
     if (rateLimited) return rateLimited
@@ -88,4 +90,6 @@ export async function GET(request: NextRequest) {
       { status: 500 }
     )
   }
+
+  })(request)
 }

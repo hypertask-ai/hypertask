@@ -1,5 +1,6 @@
+import { wrapMcpRoute, validateMcpRouteAuth as validateMcpAuth, checkMcpRouteRateLimit as checkMcpRateLimit, withMcpRouteMutationLease as withAdoptedAgentMutationLease } from '@/lib/mcp/routeWrapper'
 import { NextRequest, NextResponse } from "next/server";
-import { validateMcpAuth, checkMcpRateLimit } from "@/lib/mcp/auth";
+
 import type { McpAgentSummary } from "@/lib/mcp/agents";
 import {
   getMcpSessionAgentSummary,
@@ -14,7 +15,7 @@ import { IUser } from "@/models/model";
 import { broadcastBoardChange, broadcastTaskChange } from "@/lib/realtime/server";
 import { assigneeLookupStatusFilter } from "@/lib/mcp/tasks/activeTaskMutation";
 import { boardAgentVisibilityWhere } from "@/lib/agents/visibility";
-import { withAdoptedAgentMutationLease } from "@/lib/mcp/tasks/agentMutationLeaseAdoption";
+
 
 export interface McpAssigneeResponseItem {
   userId: number;
@@ -104,6 +105,7 @@ async function findTaskByIdentifier(
 }
 
 export async function POST(request: NextRequest) {
+  return wrapMcpRoute(async (request: NextRequest) => {
   try {
     const rateLimited = await checkMcpRateLimit(request);
     if (rateLimited) return rateLimited;
@@ -471,4 +473,6 @@ export async function POST(request: NextRequest) {
       { status: 500 }
     );
   }
+
+  })(request)
 }

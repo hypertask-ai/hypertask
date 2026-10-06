@@ -1,5 +1,6 @@
+import { wrapMcpRoute, checkMcpRouteRateLimit as checkMcpRateLimit, validateMcpRouteAuth as validateMcpAuth } from '@/lib/mcp/routeWrapper'
 import { NextRequest, NextResponse } from "next/server";
-import { checkMcpRateLimit, validateMcpAuth } from "@/lib/mcp/auth";
+
 import prisma from "@/lib/prisma";
 import { MANAGER_LOOP_ACTIVITY_FLAG, isFeatureEnabled } from "@/lib/flags";
 import { broadcastChatSession } from "@/lib/agents/chatBroadcast";
@@ -32,6 +33,7 @@ function requireAgentToken(ctxAgentId: string | null): NextResponse | null {
  * the already stored entry instead of creating a second one.
  */
 export async function POST(request: NextRequest) {
+  return wrapMcpRoute(async (request: NextRequest) => {
   try {
     const rateLimited = await checkMcpRateLimit(request);
     if (rateLimited) return rateLimited;
@@ -156,4 +158,6 @@ export async function POST(request: NextRequest) {
       { status: 500 }
     );
   }
+
+  })(request)
 }

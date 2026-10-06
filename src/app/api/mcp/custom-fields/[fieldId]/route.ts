@@ -1,6 +1,7 @@
+import { wrapMcpRoute, checkMcpRouteRateLimit as checkMcpRateLimit, validateMcpRouteAuth as validateMcpAuth } from '@/lib/mcp/routeWrapper'
 import { NextRequest, NextResponse } from "next/server";
 
-import { checkMcpRateLimit, validateMcpAuth } from "@/lib/mcp/auth";
+
 import { validateProjectAccess } from "@/lib/mcp/tasks/services";
 import { deleteCustomField, getCustomFieldById } from "@/utils/controllers/customFields";
 
@@ -9,6 +10,7 @@ export async function DELETE(
   request: NextRequest,
   props: { params: Promise<{ fieldId: string }> }
 ) {
+  return wrapMcpRoute(async (request: NextRequest) => {
   try {
     const rateLimited = await checkMcpRateLimit(request);
     if (rateLimited) return rateLimited;
@@ -66,4 +68,6 @@ export async function DELETE(
       { status: 500 }
     );
   }
+
+  })(request)
 }

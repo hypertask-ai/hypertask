@@ -88,6 +88,7 @@ import {
   HTPR_6512_SEED_TEAM_AGENT_FLAG,
   HTPR_6533_MCP_CLIENT_EVAL_FLAG,
   HTPR_6804_MCP_TOOLS_FLAG,
+  HTPR_6926_MCP_ROUTE_WRAPPER_FLAG,
   HTPR_6927_MCP_V2_FLAG,
   HTPR_6470_PROJECT_DELETE_FLAG,
   HTPR_6536_QA_LOGIN_FLAG,
@@ -183,6 +184,8 @@ export type FeatureFlagKind = "feature" | "bugfix" | "improvement";
 type FeatureFlagDefinition = {
   key: string;
   kind?: FeatureFlagKind;
+  // HTPR-6926: mode used when no row is saved; wins over kind.
+  defaultMode?: FeatureFlagMode;
   description: string;
   shippedOn: string;
   related?: readonly string[];
@@ -237,6 +240,15 @@ const FEATURE_FLAG_DEFINITIONS = [
     key: HTPR_6929_COMPOSE_TASK_WRITER_FLAG,
     shippedOn: "2026-10-04",
     description: "Adds Ctrl+J Compose to Commands: write a ticket from a note and images, then refine it in task-scoped AI chat.",
+  },
+  {
+    key: HTPR_6926_MCP_ROUTE_WRAPPER_FLAG,
+    shippedOn: "2026-10-06",
+    description:
+      "MCP API calls run through one shared route wrapper that checks the login once per call and keeps auth logs short. Switching takes up to 30 seconds to apply.",
+    // Off until switched on: every agent token resolves to its human owner, so Owner + QA would
+    // move all of Valentin's agents onto the new path at deploy (Infra Manager, 2026-10-06).
+    defaultMode: "OFF",
   },
   {
     key: HTPR_6927_MCP_V2_FLAG,
@@ -975,6 +987,7 @@ const DEFAULT_BUGFIX_FLAG_MODE: FeatureFlagMode = "EVERYONE";
 
 function defaultFeatureFlagMode(key: string): FeatureFlagMode {
   const definition: FeatureFlagDefinition | undefined = FEATURE_FLAG_DEFINITIONS.find(({ key: declaredKey }) => declaredKey === key);
+  if (definition && definition.defaultMode) return definition.defaultMode;
   return definition && "kind" in definition && definition.kind === "bugfix"
     ? DEFAULT_BUGFIX_FLAG_MODE
     : DEFAULT_FEATURE_FLAG_MODE;
