@@ -129,6 +129,17 @@ export function useAiChatSessions(context: Context) {
     // project-wide board session map below would let a session another
     // ticket in the same project last sent from win here too (HTPR-6100).
     if (taskId !== undefined) {
+      if (restCompat) {
+        const generation = sessionIntentGenerationRef.current;
+        const deadline = Date.now() + timeoutMs;
+        while (!chatHistoryReadyRef.current && Date.now() < deadline) {
+          await new Promise((resolve) => setTimeout(resolve, 50));
+          if (sessionIntentGenerationRef.current !== generation) return undefined;
+        }
+        if (!chatHistoryReadyRef.current || sessionIntentGenerationRef.current !== generation) return undefined;
+        const selected = sessionsRef.current[0];
+        return selected?.userId === userId ? selected : undefined;
+      }
       // Match on taskId alone, same as the find-or-create init effect in
       // useSessionAndChatHistory - sessions are already scoped to the
       // signed-in user server-side, so requiring userId here too just adds
@@ -201,6 +212,13 @@ export function useAiChatSessions(context: Context) {
       if (previousProjectIdRef.current === projectId) {
         const resolved = resolvedBoardSessionRef.current;
         if (resolved?.projectId === projectId) {
+          if (restCompat && !currentSessions.some((session) => session.id === resolved.session.id)) {
+            const stillExists = await resolveHistorySession(resolved.session.id);
+            if (!isCurrentIntent()) return undefined;
+            if (stillExists) return stillExists;
+            resolvedBoardSessionRef.current = null;
+            return currentSessions[0];
+          }
           if (currentSessions[0].id === resolved.session.id) {
             resolvedBoardSessionRef.current = null;
             return currentSessions[0];

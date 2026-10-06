@@ -30,10 +30,10 @@ async function withHistory(config, check) {
       return response({ success: true, sessions: summaries, nextCursor: options.cursor || options.taskId || options.projectId || visible.length <= 1 ? null : 'next' });
     },
     getSessionTranscript: async (sessionId) => { requests.push(['transcript', sessionId, user.id]); if (config.transcript) return config.transcript(sessionId, user); return rows.find((row) => row.id === sessionId && row.userId === user.id) ?? null; },
-    createSessionNext: async (scope) => { requests.push(['create', scope]); if (config.createError) throw config.createError; const row = session(50, { taskId: scope ?? null, messages: [] }); rows.unshift(row); return response({ success: true, session: row }); },
-    addMessage: async (sessionId, message) => { requests.push(['message', sessionId, message.id]); return response({ message }); },
-    updateSession: async (sessionId, title) => { requests.push(['rename', sessionId]); if (config.renameError) throw config.renameError; const row = rows.find((row) => row.id === sessionId); row.title = title; return response({ success: true, session: row }); },
-    deleteSession: async (sessionId) => { requests.push(['delete', sessionId]); if (config.deleteError) throw config.deleteError; rows.splice(rows.findIndex((row) => row.id === sessionId), 1); if (!rows.length) rows.push(session(60, { messages: [] })); return response({ message: 'Deleted' }); },
+    createSessionNext: async (scope) => { requests.push(['create', scope]); if (config.create) return config.create(scope); if (config.createError) throw config.createError; const row = session(50, { taskId: scope ?? null, messages: [] }); rows.unshift(row); return response({ success: true, session: row }); },
+    addMessage: async (sessionId, message) => { requests.push(['message', sessionId, message.id]); if (config.message) return config.message(sessionId, message); return response({ message }); },
+    updateSession: async (sessionId, title) => { requests.push(['rename', sessionId]); if (config.rename) return config.rename(sessionId, title); if (config.renameError) throw config.renameError; const row = rows.find((row) => row.id === sessionId); row.title = title; return response({ success: true, session: row }); },
+    deleteSession: async (sessionId) => { requests.push(['delete', sessionId]); if (config.delete) return config.delete(sessionId); if (config.deleteError) throw config.deleteError; rows.splice(rows.findIndex((row) => row.id === sessionId), 1); if (!rows.length) rows.push(session(60, { messages: [] })); return response({ message: 'Deleted' }); },
   };
   const { useSessionAndChatHistory } = load('src/hooks/MultiPages/AIChat/useSessionAndChatHistory.ts', {
     '@/hooks/useFlag': { useFlag: (key) => key === flag ? enabled : !!config.compose },
@@ -57,12 +57,13 @@ async function withHistory(config, check) {
       const chatHistoryReadyRef = React.useRef(history.isSuccess); chatHistoryReadyRef.current = history.isSuccess;
       resolver = useAiChatSessions({
         sessionsRef, chatHistoryReadyRef, sessionIntentGenerationRef: React.useRef(0), sessionSetupRef: React.useRef(null), resolvedBoardSessionRef: React.useRef(null), previousProjectIdRef: React.useRef(undefined),
-        messageQueueRef: React.useRef([]), sendInFlightRef: React.useRef(false), currentProject: { id: 4 }, currentUser: user, pathname: '/board', sessionContextKey: 'fixture-board', dockedChatScope: null,
+        messageQueueRef: React.useRef([]), sendInFlightRef: React.useRef(false), currentProject: { id: 4 }, currentUser: user, taskId, pathname: '/board', sessionContextKey: 'fixture-board', dockedChatScope: null,
         aiChatBoardSessionMap: config.boardMap, setAiChatBoardSessionMap: (update) => mapChanges.push(update(config.boardMap)), setRecentChatBoardIds: () => {}, setQueuedMessages: () => {},
         clearMessageQueue: () => {}, selectSessionInHistory: history.selectSession, createSession: history.startNewSession, deleteSessionInHistory: history.deleteSession, resolveHistorySession: history.resolveHistorySession, shouldLoadChatHistory: false,
         isFullScreenChat: !!config.fullscreen, setDockedChatScope: () => {},
       });
     }
+    if (config.observe) config.observe(history, taskId);
     return React.createElement('div', { 'data-ready': history.isSuccess, 'data-pending': history.isSessionPending }, history.currentSession?.messages.map((message) => React.createElement('p', { key: message.id }, message.content))); }
   const root = require('react-dom/client').createRoot(document.getElementById('root'));
   const flush = async () => { for (let i = 0; i < 4; i++) await React.act(async () => { await new Promise((resolve) => setTimeout(resolve, 5)); }); };
@@ -97,7 +98,7 @@ test('client API negotiates only explicit page/detail calls and accepts both wir
 
 test('late transcript merge preserves streaming content and optimistic message IDs', () => {
   const incoming = session(1), local = { ...incoming, messages: [{ ...incoming.messages[0], content: 'streaming newer' }, { id: 'optimistic', content: 'new turn' }] };
-  const merged = wire.mergeSessionTranscript(incoming, local);
+  const merged = wire.mergeSessionTranscript(incoming, local, new Set(local.messages.map(({ id }) => id)));
   assert.deepEqual(merged.messages.map((message) => message.id), ['message-1', 'optimistic']);
   assert.equal(merged.messages[0].content, 'streaming newer');
 });
@@ -402,4 +403,272 @@ test('429 delete and rename retain transcript; failed optimistic title is restor
       assert.equal(history().currentSession.messages[0].id, 'message-9');
     });
   } finally { console.error = original; }
+});
+
+
+test('newer summaries refresh cached transcripts and replace acknowledged content, titles and removed messages', async () => {
+  await withHistory({}, async ({ history, rows, client, requests, flush }) => {
+    const initial = history().currentSession;
+    rows[0] = { ...initial, title: 'Changed in another tab', updatedAt: new Date('2026-02-01'), messages: [
+      { ...initial.messages[0], content: 'edited remotely' }, { id: 'remote', content: 'another tab', createdAt: new Date('2026-02-01') },
+    ] };
+    await React.act(async () => client.invalidateQueries({ queryKey: ['chat-session-summaries'] })); await flush();
+    await React.act(async () => history().selectSession(initial.id)); await flush();
+    assert.equal(requests.filter(([type]) => type === 'transcript').length, 2);
+    assert.equal(history().currentSession.title, 'Changed in another tab');
+    assert.deepEqual(history().currentSession.messages.map(({ content }) => content), ['edited remotely', 'another tab']);
+    rows[0] = { ...rows[0], updatedAt: new Date('2026-03-01'), messages: [rows[0].messages[1]] };
+    await React.act(async () => client.invalidateQueries({ queryKey: ['chat-session-summaries'] })); await flush();
+    await React.act(async () => history().selectSession(initial.id)); await flush();
+    assert.deepEqual(history().currentSession.messages.map(({ id }) => id), ['remote']);
+    const count = requests.filter(([type]) => type === 'transcript').length;
+    await React.act(async () => history().selectSession(initial.id)); await flush();
+    assert.equal(requests.filter(([type]) => type === 'transcript').length, count, 'unchanged summaries still reuse the transcript');
+  });
+});
+
+test('newer summaries preserve only pending local writes during refresh, then accept server edits after acknowledgement', async () => {
+  const write = deferred(), transcript = deferred(); let refreshing = false;
+  await withHistory({ message: () => write.promise, transcript: (sessionId) => refreshing ? transcript.promise : session(Number(sessionId.slice(-12))) }, async ({ history, rows, client, flush }) => {
+    const pending = { id: 'local-write', sessionId: id(9), content: 'pending', role: 'human', createdAt: new Date() };
+    await React.act(async () => history().addMessageToSessionQuery(id(9), pending)); await flush();
+    rows[0] = { ...rows[0], updatedAt: new Date('2026-02-01'), messages: [{ ...rows[0].messages[0], content: 'remote edit' }] };
+    await React.act(async () => client.invalidateQueries({ queryKey: ['chat-session-summaries'] })); await flush();
+    refreshing = true; let selection;
+    await React.act(async () => { selection = history().selectSession(id(9)); });
+    await React.act(async () => history().appendMessageToSessionCache(id(9), { id: 'stream', content: 'streaming', isDelivered: false, createdAt: new Date() }));
+    await React.act(async () => { transcript.resolve(rows[0]); await selection; }); await flush();
+    assert.deepEqual(history().currentSession.messages.map(({ content }) => content), ['remote edit', 'pending', 'streaming']);
+    await React.act(async () => write.resolve(response({ message: pending }))); await flush();
+    rows[0] = { ...rows[0], updatedAt: new Date('2026-03-01'), messages: [...rows[0].messages, { ...pending, content: 'server edited acknowledged write' }] };
+    refreshing = false;
+    await React.act(async () => client.invalidateQueries({ queryKey: ['chat-session-summaries'] })); await flush();
+    transcript.promise = Promise.resolve(rows[0]); refreshing = true;
+    await React.act(async () => history().selectSession(id(9))); await flush();
+    assert.equal(history().currentSession.messages.find(({ id }) => id === pending.id).content, 'server edited acknowledged write');
+    assert.equal(history().currentSession.messages.at(-1).content, 'streaming');
+  });
+});
+
+test('task initialization remains single-flight when paging and summary refresh finish during creation', async () => {
+  const creating = deferred();
+  await withHistory({ taskId: 93, create: () => creating.promise }, async ({ history, requests, client, flush }) => {
+    assert.equal(requests.filter(([type]) => type === 'create').length, 1);
+    await React.act(async () => history().loadMoreSessions()); await flush();
+    await React.act(async () => client.invalidateQueries({ queryKey: ['chat-session-summaries'] })); await flush();
+    assert.equal(history().isError, false);
+    assert.equal(requests.filter(([type]) => type === 'create').length, 1);
+    await React.act(async () => creating.resolve(response({ success: true, session: session(50, { taskId: 93, messages: [] }) }))); await flush();
+    assert.equal(history().currentSession?.taskId, 93);
+    assert.equal(history().isSuccess, true);
+    assert.equal(history().isLoading, false);
+  });
+});
+
+test('task initialization rejects an old creation after navigation without disturbing the new task', async () => {
+  const creating = deferred();
+  await withHistory({ taskId: 93, rows: [session(9), session(2, { taskId: 92 })], create: () => creating.promise }, async ({ history, setTask, render, flush }) => {
+    setTask(92); await render();
+    await React.act(async () => creating.resolve(response({ success: true, session: session(50, { taskId: 93, messages: [] }) }))); await flush();
+    assert.equal(history().currentSession.taskId, 92);
+    assert.equal(history().isSuccess, true);
+  });
+});
+
+test('background streaming and acknowledged writes cannot redirect the next send away from the displayed conversation', async () => {
+  for (const fullscreen of [false, true]) {
+    const write = deferred();
+    await withHistory({ boardMap: { 4: id(9) }, fullscreen, message: () => write.promise }, async ({ history, resolver, flush }) => {
+      await React.act(async () => resolver().ensureSessionForCurrentBoard()); await flush();
+      const message = { id: 'background', content: 'old turn', createdAt: new Date() };
+      await React.act(async () => history().addMessageToSessionQuery(id(9), message));
+      await React.act(async () => resolver().selectSession(id(1))); await flush();
+      await React.act(async () => history().appendMessageToSessionCache(id(9), { id: 'stream', content: 'old streaming turn', createdAt: new Date() }));
+      await React.act(async () => write.resolve(response({ message }))); await flush();
+      let target; await React.act(async () => { target = await resolver().ensureSessionForCurrentBoard(); });
+      assert.equal(target.id, history().currentSession.id);
+      assert.equal(target.id, id(1));
+    });
+  }
+});
+
+test('refresh removes deleted entries in its covered range, including loaded transcripts, without dropping older pages', async () => {
+  const rows = [session(9), session(8), session(1)];
+  await withHistory({ rows, page: async (options) => {
+    const visible = options.cursor ? rows.slice(1) : rows.slice(0, 1);
+    return response({ success: true, sessions: visible.map(({ messages, ...row }) => ({ ...row, hasMessages: messages.length > 0 })), nextCursor: options.cursor ? null : 'next' });
+  } }, async ({ history, rows, client, flush }) => {
+    await React.act(async () => history().loadMoreSessions()); await flush();
+    await React.act(async () => history().selectSession(id(8))); await flush();
+    rows.splice(rows.findIndex((row) => row.id === id(9)), 1);
+    await React.act(async () => client.invalidateQueries({ queryKey: ['chat-session-summaries'] })); await flush();
+    assert.deepEqual(history().historySessions.map(({ id }) => id), [id(8), id(1)]);
+    assert.equal(history().sessions.some((row) => row.id === id(9)), false);
+    assert.equal(history().currentSession.id, id(8));
+  });
+});
+
+
+test('task sends wait for the displayed transcript rather than using another cached task session', async () => {
+  const loading = deferred(); let delayed = false;
+  await withHistory({ taskId: 91, boardMap: {}, rows: [session(9), session(1, { taskId: 91 }), session(2, { taskId: 91 })], transcript: (sessionId) => delayed ? loading.promise : session(Number(sessionId.slice(-12)), { taskId: 91 }) }, async ({ history, resolver, flush }) => {
+    delayed = true; let selection;
+    await React.act(async () => { selection = history().selectSession(id(2)); });
+    let target; await React.act(async () => { target = await resolver().ensureSessionForCurrentBoard(0); });
+    assert.equal(target, undefined, 'an unloaded selection cannot send into the old cached task session');
+    await React.act(async () => { loading.resolve(session(2, { taskId: 91 })); await selection; }); await flush();
+    await React.act(async () => { target = await resolver().ensureSessionForCurrentBoard(0); });
+    assert.equal(target.id, history().currentSession.id);
+  });
+});
+
+test('late failed initialization cannot mark a newer explicit selection unready', async () => {
+  const loading = deferred();
+  const original = console.error; console.error = () => {};
+  try {
+    await withHistory({ taskId: 91, transcript: (sessionId) => sessionId === id(1) ? loading.promise : session(9) }, async ({ history, flush }) => {
+      await React.act(async () => history().selectSession(id(9))); await flush();
+      await React.act(async () => loading.reject(new Error('stale 429'))); await flush();
+      assert.equal(history().currentSession.id, id(9));
+      assert.equal(history().isSuccess, true);
+      assert.equal(history().isError, false);
+    });
+  } finally { console.error = original; }
+});
+
+test('New chat intent rejects a pending older transcript before creation commits', async () => {
+  const older = deferred(), creating = deferred();
+  await withHistory({ create: () => creating.promise, transcript: (sessionId) => sessionId === id(1) ? older.promise : session(9) }, async ({ history, flush }) => {
+    let selection, creation;
+    await React.act(async () => { selection = history().selectSession(id(1)); });
+    await React.act(async () => { creation = history().startNewSession(); });
+    await React.act(async () => { older.resolve(session(1)); await selection; }); await flush();
+    assert.equal(history().isSuccess, false, 'old transcript must not enable sends during the New chat request');
+    await React.act(async () => { creating.resolve(response({ success: true, session: session(50, { messages: [] }) })); await creation; }); await flush();
+    assert.equal(history().currentSession.id, id(50));
+    assert.equal(history().isSuccess, true);
+  });
+});
+
+test('an old page cannot resurrect a deleted entry after a newer first-page refresh', async () => {
+  const olderPage = deferred(); let refreshed = false;
+  await withHistory({ page: (options) => {
+    if (options.cursor) return olderPage.promise;
+    const { messages, ...row } = session(refreshed ? 6 : 9);
+    return response({ success: true, sessions: [{ ...row, hasMessages: true }], nextCursor: 'next' });
+  } }, async ({ history, client, flush }) => {
+    let paging; await React.act(async () => { paging = history().loadMoreSessions(); });
+    refreshed = true;
+    await React.act(async () => client.invalidateQueries({ queryKey: ['chat-session-summaries'], exact: false }, { cancelRefetch: false })); await flush();
+    const { messages, ...removed } = session(8);
+    await React.act(async () => { olderPage.resolve(response({ success: true, sessions: [{ ...removed, hasMessages: true }], nextCursor: null })); await paging; }); await flush();
+    assert.deepEqual(history().historySessions.map(({ id }) => id), [id(6)]);
+    assert.equal(history().hasMoreSessions, true, 'stale page cannot replace the refreshed cursor');
+    assert.equal(history().isLoadingMoreSessions, false);
+  });
+});
+
+test('first-page refresh cannot drop a new local session created after its request began', async () => {
+  const refreshing = deferred(); let delay = false;
+  await withHistory({ page: () => {
+    if (delay) return refreshing.promise;
+    const { messages, ...row } = session(9);
+    return response({ success: true, sessions: [{ ...row, hasMessages: true }], nextCursor: null });
+  } }, async ({ history, client, flush }) => {
+    delay = true; let refresh;
+    await React.act(async () => { refresh = client.invalidateQueries({ queryKey: ['chat-session-summaries'] }); });
+    await React.act(async () => history().startNewSession()); await flush();
+    const { messages, ...row } = session(9);
+    await React.act(async () => { refreshing.resolve(response({ success: true, sessions: [{ ...row, hasMessages: true }], nextCursor: null })); await refresh; }); await flush();
+    assert.equal(history().currentSession.id, id(50));
+    assert.equal(history().historySessions.some((row) => row.id === id(50)), true);
+  });
+});
+
+test('a refreshed deletion clears a resolved board bridge instead of sending into its missing conversation', async () => {
+  const rows = [session(9), session(1, { projectId: 4 })];
+  await withHistory({ rows, boardMap: { 4: id(1) }, page: () => response({ success: true, sessions: rows.map(({ messages, ...row }) => ({ ...row, hasMessages: true })), nextCursor: null }) }, async ({ history, resolver, client, flush }) => {
+    await React.act(async () => resolver().ensureSessionForCurrentBoard()); await flush();
+    assert.equal(history().currentSession.id, id(1));
+    rows.splice(rows.findIndex((row) => row.id === id(1)), 1);
+    await React.act(async () => client.invalidateQueries({ queryKey: ['chat-session-summaries'] })); await flush();
+    assert.equal(history().currentSession.id, id(9));
+    let target; await React.act(async () => { target = await resolver().ensureSessionForCurrentBoard(); }); await flush();
+    assert.equal(target.id, history().currentSession.id);
+  });
+});
+
+
+test('a transcript snapshot cannot erase a local write acknowledged while that snapshot was loading', async () => {
+  const writing = deferred(), detail = deferred(); let loading = false;
+  await withHistory({ message: () => writing.promise, transcript: () => loading ? detail.promise : session(9) }, async ({ history, rows, client, flush }) => {
+    const message = { id: 'ack-during-fetch', content: 'just saved', createdAt: new Date() };
+    await React.act(async () => history().addMessageToSessionQuery(id(9), message));
+    rows[0] = { ...rows[0], updatedAt: new Date('2026-02-01') };
+    await React.act(async () => client.invalidateQueries({ queryKey: ['chat-session-summaries'] })); await flush();
+    loading = true; let selection;
+    await React.act(async () => { selection = history().selectSession(id(9)); });
+    await React.act(async () => writing.resolve(response({ message }))); await flush();
+    await React.act(async () => { detail.resolve(rows[0]); await selection; }); await flush();
+    assert.equal(history().currentSession.messages.at(-1).id, message.id);
+  });
+});
+
+test('navigation never exposes another cached task conversation as ready before initialization selects the destination', async () => {
+  const snapshots = [];
+  await withHistory({ taskId: 91, rows: [session(9), session(1, { taskId: 91 }), session(2, { taskId: 92 })], observe: (history, taskId) => snapshots.push({ taskId, ready: history.isSuccess, selected: history.currentSession?.taskId }) }, async ({ history, setTask, render }) => {
+    setTask(92); await render();
+    assert.equal(history().currentSession.taskId, 92);
+    assert.ok(snapshots.filter(({ ready }) => ready).every(({ taskId, selected }) => taskId === selected));
+  });
+});
+
+test('deleting the active task conversation starts exactly one replacement task initialization', async () => {
+  await withHistory({ taskId: 93 }, async ({ history, requests, flush }) => {
+    assert.equal(history().currentSession.taskId, 93);
+    await React.act(async () => history().deleteSession(history().currentSession.id)); await flush();
+    assert.equal(history().currentSession?.taskId, 93);
+    assert.equal(history().isSuccess, true);
+    assert.equal(requests.filter(([type]) => type === 'create').length, 2);
+  });
+});
+
+
+test('acknowledgements after task navigation are no longer treated as pending when that task is reopened', async () => {
+  const writing = deferred();
+  await withHistory({ taskId: 91, rows: [session(9), session(1, { taskId: 91 }), session(2, { taskId: 92 })], message: () => writing.promise }, async ({ history, rows, setTask, render, flush }) => {
+    const message = { id: 'saved-after-navigation', content: 'pending turn', createdAt: new Date() };
+    await React.act(async () => history().addMessageToSessionQuery(id(1), message));
+    setTask(92); await render();
+    await React.act(async () => writing.resolve(response({ message }))); await flush();
+    const index = rows.findIndex((row) => row.id === id(1));
+    rows[index] = { ...rows[index], updatedAt: new Date('2026-02-01'), messages: [{ ...message, content: 'edited after acknowledgement' }] };
+    setTask(91); await render();
+    assert.equal(history().currentSession.messages[0].content, 'edited after acknowledgement');
+  });
+});
+
+test('a failed rename after task navigation rolls back its cached title before reopening', async () => {
+  const renaming = deferred(); const original = console.error; console.error = () => {};
+  try {
+    await withHistory({ taskId: 91, rows: [session(9), session(1, { taskId: 91 }), session(2, { taskId: 92 })], rename: () => renaming.promise }, async ({ history, setTask, render, flush }) => {
+      let rename; await React.act(async () => { rename = history().updateSessionTitle(id(1), 'not saved'); });
+      setTask(92); await render();
+      await React.act(async () => { renaming.reject(new Error('429')); await rename; }); await flush();
+      setTask(91); await render();
+      assert.equal(history().currentSession.title, 'Chat 1');
+    });
+  } finally { console.error = original; }
+});
+
+test('a completed delete after task navigation removes its old transcript without changing the destination', async () => {
+  const deleting = deferred();
+  await withHistory({ taskId: 91, rows: [session(9), session(1, { taskId: 91 }), session(2, { taskId: 92 })], delete: () => deleting.promise }, async ({ history, rows, setTask, render, flush }) => {
+    let deletion; await React.act(async () => { deletion = history().deleteSession(id(1)); });
+    setTask(92); await render();
+    rows.splice(rows.findIndex((row) => row.id === id(1)), 1);
+    await React.act(async () => { deleting.resolve(response({ success: true })); await deletion; }); await flush();
+    assert.equal(history().currentSession.taskId, 92);
+    assert.equal(history().sessions.some((row) => row.id === id(1)), false);
+  });
 });

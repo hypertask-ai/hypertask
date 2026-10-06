@@ -46,11 +46,13 @@ export function mergeSessionHistory<T extends { id: string; updatedAt: Date }>(n
   );
 }
 
-export function mergeSessionTranscript(incoming: IChatSession, local?: IChatSession): IChatSession {
+export function mergeSessionTranscript(incoming: IChatSession, local?: IChatSession, pendingMessageIds: ReadonlySet<string> = new Set()): IChatSession {
   if (!local) return incoming;
   const messages = new Map(incoming.messages.map((message) => [message.id, message]));
-  for (const message of local.messages) messages.set(message.id, message);
-  return { ...incoming, ...local, messages: [...messages.values()] };
+  for (const message of local.messages) {
+    if (pendingMessageIds.has(message.id)) messages.set(message.id, message);
+  }
+  return { ...incoming, messages: [...messages.values()] };
 }
 
 type TCreateChatSessionNextResponse = {
