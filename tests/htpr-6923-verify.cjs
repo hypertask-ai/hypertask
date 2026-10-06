@@ -154,6 +154,45 @@ function slice3() {
   assert.throws(() => assert.equal(callerFiles("tasks/linkPullRequest", [{ file: "fixture.ts", text: 'fetch("/api/tasks/linkPullRequest")' }]).length, 0), "absence control detects a live caller");
   console.log("slice3 structural verification passed");
 }
+const attachmentRoutes = {
+  "uploadUrl": {
+    "module": "upload-url",
+    "method": "POST",
+    "hash": "d3faf1aebf825e27bba5cb9f935db38a0ac862576ca1688c1193c64d11ec2e8d"
+  },
+  "uploadFinalize": {
+    "module": "upload-finalize",
+    "method": "POST",
+    "hash": "01d48f1d642c0d7a64efc47680bf97795a21c6ebba2712345c89183e252683d8"
+  },
+  "downloadAttachment": {
+    "module": "download-attachment",
+    "method": "GET",
+    "hash": "072e4872015008699263a5de8eac474a9bd205b4db1d5971ec4eca22a4c16ca7"
+  }
+};
+function attachmentLegacySources() {
+  return Object.fromEntries(Object.keys(attachmentRoutes).map(name => [name,
+    read(`src/pages/api/tasks/${name}.ts`)
+      .replace('import { withTaskWriteFlag } from "@/lib/api/task-writes/route";\n', "")
+      .replace(/\n\nexport default withTaskWriteFlag[\s\S]*$/, "\n")
+      .replace("async function handler(", "export default async function handler("),
+  ]));
+}
+function attachments() {
+  const sources = attachmentLegacySources();
+  for (const [name, { module, method, hash }] of Object.entries(attachmentRoutes)) {
+    assert.equal(crypto.createHash("sha256").update(sources[name]).digest("hex"), hash, name + " legacy bytes");
+    const page = read(`src/pages/api/tasks/${name}.ts`);
+    assert.ok(page.includes(`withTaskWriteFlag(handler, "${method}"`));
+    assert.ok(page.includes(`/task-writes/${module}`));
+    assert.ok(!fs.existsSync(path.join(root, `src/app/api/tasks/${name}/route.ts`)), "no URL twin");
+    assert.throws(() => assert.equal(crypto.createHash("sha256").update(sources[name] + "changed").digest("hex"), hash), "pin mutation control");
+  }
+  assert.equal(crypto.createHash("sha256").update(read("src/pages/api/tasks/n8nUpload.ts")).digest("hex"), "d314ad36c6533f9386be38b762917c8474bba3ad681a9b475714ab7c0c4d9740", "multipart route stays unchanged");
+  assert.ok(read("src/pages/api/tasks/n8nUpload.ts").includes("bodyParser: false"));
+  console.log("attachments structural verification passed");
+}
 const deadCandidates = [
   "tasks/getAll", "tasks/linkPullRequest", "projects/detail", "projects/views/sync-view",
   "section/getAll", "section/getByTaskId", "notifications/mute",
@@ -292,9 +331,9 @@ function commit() {
   assert.throws(() => assert.ok(allowed.has("src/lib/mcp/auth.ts")), "scope control rejects a sibling file");
   console.log(`local commit verified: ${git("rev-parse", "HEAD")}; ${productionLines} production/doc changed lines; only GATES.md is local`);
 }
-module.exports = { legacyHashes, lifecycleHashes, lifecycleLegacySources, slice3Routes, slice3LegacySources, inventory, callerFiles };
+module.exports = { attachmentRoutes, attachmentLegacySources, legacyHashes, lifecycleHashes, lifecycleLegacySources, slice3Routes, slice3LegacySources, inventory, callerFiles };
 if (require.main === module) {
-  const commands = { plan, flag, regression, quality, commit, lifecycle, slice3 };
+  const commands = { attachments, plan, flag, regression, quality, commit, lifecycle, slice3 };
   assert.ok(commands[process.argv[2]], "known verification mode required");
   Promise.resolve(commands[process.argv[2]]()).catch((error) => { console.error(error); process.exitCode = 1; });
 }

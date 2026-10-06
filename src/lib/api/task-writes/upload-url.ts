@@ -1,4 +1,8 @@
-import { withTaskWriteFlag } from "@/lib/api/task-writes/route";
+import { NextResponse } from "next/server";
+import { z } from "zod";
+import { parseCookies } from "better-auth/cookies";
+import { getSessionUser } from "@/lib/auth/getSessionUser";
+import { taskWriteRoute, type TaskWriteRoute } from "./route";
 import { SESSION_COOKIE, verifySession } from "@/lib/auth/session";
 import {
   DIRECT_UPLOAD_MAX_FILES,
@@ -22,7 +26,6 @@ import {
 import { signUploadGrant } from "@/lib/storage/uploadGrant";
 import { TASK_ATTACHMENT_PREFIX } from "@/lib/storage/uploadTaskAttachmentToS3";
 import { randomUUID } from "node:crypto";
-import type { NextApiRequest, NextApiResponse } from "next";
 
 /**
  * Mints short-lived signed PUT URLs so the browser can upload attachments
@@ -60,22 +63,6 @@ class UploadUrlRequestError extends Error {
     super(message);
     this.name = "UploadUrlRequestError";
   }
-}
-
-// Duplicated from n8nUpload on purpose: that route's auth branch is pinned by a
-// test that loads its transpiled source in isolation, and sharing the resolver
-// would pull Prisma into that harness. Keep the two in sync (HTPR-5520).
-async function resolveBetterAuthSession(
-  req: NextApiRequest
-): Promise<{ id: number } | null> {
-  const { getSessionUser } = await import("@/lib/auth/getSessionUser");
-  const headers = new Headers();
-  for (const [name, value] of Object.entries(req.headers)) {
-    if (typeof value === "string") headers.set(name, value);
-    else if (Array.isArray(value)) headers.set(name, value.join("; "));
-  }
-  const session = await getSessionUser(headers);
-  return session ? { id: session.userId } : null;
 }
 
 export function parseRequestedFiles(body: unknown): ParsedRequestFile[] {
@@ -206,105 +193,98 @@ export async function signUpload(
   );
 }
 
-async function handler(
-  req: NextApiRequest,
-  res: NextApiResponse
-) {
-  if (req.method !== "POST") {
-    return res.status(405).json({ error: "Method not allowed" });
-  }
-
-  // A signed PUT is a write capability on public attachment storage. Accept the
-  // same two session sources as the buffered upload route (HTPR-5520).
-  const session =
-    verifySession(req.cookies[SESSION_COOKIE]) ??
-    (await resolveBetterAuthSession(req));
-  if (!session) {
-    return res
-      .status(401)
-      .json({ error: "Unauthorized", code: "SESSION_REQUIRED" });
-  }
-
-  try {
-    const taskLinkRequested = req.body?.purpose === "task-attachment-link";
-    if (req.body?.purpose !== undefined && !taskLinkRequested) {
-      throw new UploadUrlRequestError("Invalid upload purpose", 400);
-    }
-    if (taskLinkRequested) {
-      const { isFeatureEnabled } = await import("@/lib/flags");
-      if (!(await isFeatureEnabled("htpr-5993-optimistic-task-uploads", session.id))) {
-        throw new UploadUrlRequestError("Background task uploads are disabled", 403);
+const route = taskWriteRoute({
+  schema: z.custom<Record<string, any>>(() => true),
+  validationMessage: "Invalid request",
+  allowNullBody: true,
+  operation: async (body, session) => {
+    try {
+      const taskLinkRequested = body?.purpose === "task-attachment-link";
+      if (body?.purpose !== undefined && !taskLinkRequested) {
+        throw new UploadUrlRequestError("Invalid upload purpose", 400);
       }
-    }
-    const files = parseRequestedFiles(req.body);
-
-    // Keys first, then signatures, because a preview's key is its original's
-    // with a suffix (HTPR-6264) and so cannot be minted until that one exists.
-    // The client never picks a key here either: it only says which entry a
-    // preview belongs to, and the derivation is the server's.
-    const keys: string[] = [];
-    const contentTypes: string[] = [];
-    files.forEach((file, index) => {
-      if (file.previewOfIndex !== undefined) {
-        keys[index] = heicPreviewKey(keys[file.previewOfIndex]);
-        contentTypes[index] = HEIC_PREVIEW_CONTENT_TYPE;
-        return;
+      if (taskLinkRequested) {
+        const { isFeatureEnabled } = await import("@/lib/flags");
+        if (!(await isFeatureEnabled("htpr-5993-optimistic-task-uploads", session.userId))) {
+          throw new UploadUrlRequestError("Background task uploads are disabled", 403);
+        }
       }
-      keys[index] = `${TASK_ATTACHMENT_PREFIX}/${Date.now()}_${randomUUID()}_${safeDirectUploadNameSegment(
-        file.name
-      )}`;
-      contentTypes[index] = directUploadContentType(file.type);
-    });
+      const files = parseRequestedFiles(body);
 
-    const uploads: DirectUploadTicket[] = await Promise.all(
-      files.map(async (file, index) => {
-        const key = keys[index];
-        const contentType = contentTypes[index];
-        const uploadUrl = await signUpload(key, contentType, file.size);
-        return {
-          uploadUrl,
-          key,
-          fileUrl: getHypertasksStoragePublicUrl(key),
-          contentType,
-          fileName: file.name,
-        };
-      })
-    );
+      // Keys first, then signatures, because a preview's key is its original's
+      // with a suffix (HTPR-6264) and so cannot be minted until that one exists.
+      // The client never picks a key here either: it only says which entry a
+      // preview belongs to, and the derivation is the server's.
+      const keys: string[] = [];
+      const contentTypes: string[] = [];
+      files.forEach((file, index) => {
+        if (file.previewOfIndex !== undefined) {
+          keys[index] = heicPreviewKey(keys[file.previewOfIndex]);
+          contentTypes[index] = HEIC_PREVIEW_CONTENT_TYPE;
+          return;
+        }
+        keys[index] = `${TASK_ATTACHMENT_PREFIX}/${Date.now()}_${randomUUID()}_${safeDirectUploadNameSegment(
+          file.name
+        )}`;
+        contentTypes[index] = directUploadContentType(file.type);
+      });
 
-    // The grant names exactly these keys for exactly this user, so finalizing
-    // or discarding them is a capability rather than a bucket-wide permission.
-    const grant = signUploadGrant(
-      {
-        userId: session.id,
-        keys: uploads.map((upload) => upload.key),
-        ...(taskLinkRequested
-          ? {
-              // A preview is storage, not an attachment: it must never become a
-              // row of its own, so it is not offered as a linkable file
-              // (HTPR-6264).
-              taskLinkFiles: uploads
-                .filter((_, index) => files[index].previewOfIndex === undefined)
-                .map((upload) => ({
-                  key: upload.key,
-                  fileName: upload.fileName,
-                  contentType: upload.contentType,
-                })),
-            }
-          : {}),
-      },
-      DIRECT_UPLOAD_URL_TTL_SECONDS
-    );
+      const uploads: DirectUploadTicket[] = await Promise.all(
+        files.map(async (file, index) => {
+          const key = keys[index];
+          const contentType = contentTypes[index];
+          const uploadUrl = await signUpload(key, contentType, file.size);
+          return {
+            uploadUrl,
+            key,
+            fileUrl: getHypertasksStoragePublicUrl(key),
+            contentType,
+            fileName: file.name,
+          };
+        })
+      );
 
-    return res.status(200).json({ success: true, uploads, grant });
-  } catch (error) {
-    if (error instanceof UploadUrlRequestError) {
-      return res.status(error.status).json({ error: error.message });
+      // The grant names exactly these keys for exactly this user, so finalizing
+      // or discarding them is a capability rather than a bucket-wide permission.
+      const grant = signUploadGrant(
+        {
+          userId: session.userId,
+          keys: uploads.map((upload) => upload.key),
+          ...(taskLinkRequested
+            ? {
+                // A preview is storage, not an attachment: it must never become a
+                // row of its own, so it is not offered as a linkable file
+                // (HTPR-6264).
+                taskLinkFiles: uploads
+                  .filter((_, index) => files[index].previewOfIndex === undefined)
+                  .map((upload) => ({
+                    key: upload.key,
+                    fileName: upload.fileName,
+                    contentType: upload.contentType,
+                  })),
+              }
+            : {}),
+        },
+        DIRECT_UPLOAD_URL_TTL_SECONDS
+      );
+
+      return NextResponse.json({ success: true, uploads, grant }, { status: 200 });
+    } catch (error) {
+      if (error instanceof UploadUrlRequestError) {
+        return NextResponse.json({ error: error.message }, { status: error.status });
+      }
+      console.error("[uploadUrl] Could not sign upload", error);
+      return NextResponse.json({ error: "Could not prepare the upload" }, { status: 500 });
     }
-    console.error("[uploadUrl] Could not sign upload", error);
-    return res.status(500).json({ error: "Could not prepare the upload" });
-  }
-}
+  },
+});
 
-export default withTaskWriteFlag(handler, "POST", async () =>
-  (await import("@/lib/api/task-writes/upload-url")).POST,
-);
+export const POST: TaskWriteRoute = async (request) => {
+  // Preserve uploads' signed-cookie-first auth and their SESSION_REQUIRED body.
+  const signed = verifySession(request.cookies ? request.cookies[SESSION_COOKIE] : parseCookies(request.headers.get("cookie") ?? "").get(SESSION_COOKIE));
+  const session = signed
+    ? { userId: signed.id, source: "legacy" as const, needsBridge: true as const }
+    : await getSessionUser(request.headers);
+  if (!session) return NextResponse.json({ error: "Unauthorized", code: "SESSION_REQUIRED" }, { status: 401 });
+  return route(request, session);
+};

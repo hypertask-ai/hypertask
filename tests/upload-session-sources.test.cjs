@@ -21,7 +21,10 @@ process.env.SESSION_SECRET ||= "upload-session-test-secret";
 const root = path.resolve(__dirname, "..");
 const jiti = require("jiti")(__filename, {
   interopDefault: true,
-  alias: { "@": path.join(root, "src") },
+  alias: {
+    "@/lib/api/task-writes/route": path.join(root, "tests/task-write-legacy-stub.cjs"),
+    "@": path.join(root, "src"),
+  },
 });
 
 const { signSession, SESSION_COOKIE } = jiti(
@@ -49,6 +52,7 @@ function loadRoute(sessionUser = null, { flagEnabled = true } = {}) {
   const uploaded = [];
   const seenHeaders = [];
   const stubs = {
+    "@/lib/api/task-writes/route": { withTaskWriteFlag: (handler) => handler },
     "@/lib/auth/getSessionUser": {
       getSessionUser: async (headers) => {
         seenHeaders.push(headers);
@@ -245,6 +249,7 @@ function loadFinalizeRoute({
     },
   };
   const stubs = {
+    "@/lib/api/task-writes/route": { withTaskWriteFlag: (handler) => handler },
     "@/lib/auth/session": {
       SESSION_COOKIE: "ht_session",
       verifySession: () => ({ id: 6 }),
@@ -313,7 +318,10 @@ function loadFinalizeRoute({
       path.join(root, `tests/upload-finalize-${++finalizeLoadId}.cjs`),
       {
         interopDefault: true,
-        alias: { "@": path.join(root, "src") },
+        alias: {
+          "@/lib/api/task-writes/route": path.join(root, "tests/task-write-legacy-stub.cjs"),
+          "@": path.join(root, "src"),
+        },
         cache: false,
       },
     );
