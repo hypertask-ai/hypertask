@@ -12,7 +12,7 @@ test('premerge-local rejects unknown arguments and extra arguments before touchi
   for (const args of [['help'], ['--help'], ['UP'], ['up', 'down'], ['down', 'extra'], ['down', '--flag', 'key=OFF'], ['up', '--flag'], ['up', '--flag', 'key=INVALID'], ['up', '--flag', 'key=OFF=EVERYONE']]) {
     const result = spawnSync('bash', [script, ...args], { encoding: 'utf8' });
     assert.equal(result.status, 2);
-    assert.match(result.stderr, /Usage: scripts\/premerge-local\.sh \[up\|down\]/);
+    assert.match(result.stderr, /Usage: scripts\/premerge-local\.sh \[up\|down\|sweep\|--install\]/);
     assert.equal(result.stdout, '');
   }
 });

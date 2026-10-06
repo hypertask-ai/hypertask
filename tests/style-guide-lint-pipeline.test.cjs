@@ -24,7 +24,7 @@ function lint(code, filename = "src/components/StyleGuidePipelineProbe.tsx") {
     writeFileSync(path.join(fixture, filename), code);
     mkdirSync(path.join(fixture, "eslint-local-rules"));
     writeFileSync(path.join(fixture, "eslint-local-rules/style-guide-suppressions.json"), JSON.stringify(baseline));
-    const [command, ...args] = scripts.lint.split(" ");
+    const [command, ...args] = scripts.lint.replace(/^bash scripts\/heavy-job\.sh /, "").split(" ");
     assert.equal(command, "eslint");
     const result = spawnSync(process.execPath, [
       eslint, ...args, "--config", path.join(root, "eslint.config.mjs"), "--format", "json",

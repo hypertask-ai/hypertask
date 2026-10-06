@@ -385,7 +385,8 @@ const root = process.argv[2];
 const seed = fs.readFileSync(root + '/scripts/seed-browser-smoke.mjs', 'utf8');
 const board_path = seed.match(/board_path=([^\\]+)\\n/)[1].replace('${board.id}', '7283');
 const script = fs.readFileSync(root + '/scripts/premerge-local.sh', 'utf8');
-const print = script.slice(script.indexOf("printf 'Build URL:"));
+const start = script.indexOf("printf 'Build URL:");
+const print = script.slice(start, script.indexOf("\n# Keep the owning run alive", start));
 const result = spawnSync('bash', ['-c', print], { encoding: 'utf8', env: {
   ...process.env, url: 'http://127.0.0.1:3100', board_path,
   BROWSER_SMOKE_STATE_FILE: '/unused', account: '985', flags: 'htpr-1-released=EVERYONE',

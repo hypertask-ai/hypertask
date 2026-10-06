@@ -3,10 +3,10 @@ set -euo pipefail
 # Never allow caller tracing to reveal disposable credentials.
 set +x
 
-usage() { echo 'Usage: scripts/premerge-local.sh [up|down] [--flag key=MODE ...]' >&2; }
+usage() { echo 'Usage: scripts/premerge-local.sh [up|down|sweep|--install] [--flag key=MODE ...]' >&2; }
 action=up
 if [ "$#" -gt 0 ]; then
-  case "$1" in up|down) action=$1; shift ;; --flag) ;; *) usage; exit 2 ;; esac
+  case "$1" in up|down|sweep|--install) action=$1; shift ;; --flag) ;; *) usage; exit 2 ;; esac
 fi
 flag_overrides=()
 while [ "$#" -gt 0 ]; do
@@ -20,7 +20,13 @@ done
 root=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd -P)
 # Inherited production variables must not reach npm, Prisma, the seed or Next.
 if [ "${PREMERGE_CLEAN_ENV:-}" != "$root" ]; then
-  exec env -i PATH="$PATH" HOME="$HOME" PREMERGE_CLEAN_ENV="$root" bash "$root/scripts/premerge-local.sh" "$action" "${flag_overrides[@]}"
+  launcher=()
+  # Group setup and its foreground jobs so down also cancels a queued build.
+  if [ "$action" = up ]; then launcher=(setsid --wait); fi
+  exec "${launcher[@]}" env -i PATH="$PATH" HOME="$HOME" XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-}" HT_HEAVY_SLOTS="${HT_HEAVY_SLOTS:-}" CI="${CI:-}" ${GITHUB_ACTIONS+GITHUB_ACTIONS="$GITHUB_ACTIONS"} PREMERGE_CLEAN_ENV="$root" bash "$root/scripts/premerge-local.sh" "$action" "${flag_overrides[@]}"
+fi
+if [ "$action" = sweep ] || [ "$action" = --install ]; then
+  exec python3 "$root/scripts/premerge-local-sweep.py" "$action"
 fi
 cd "$root"
 umask 077
@@ -28,7 +34,16 @@ state="$root/e2e/smoke/.state/premerge-local"
 mkdir -p "$state"
 chmod 700 "$state"
 exec 9>"$state/lock"
-flock -n 9 || { echo 'Another premerge-local command is running in this worktree.' >&2; exit 1; }
+if [ "$action" = down ] && [ -f "$state/run.pid" ]; then
+  if read -r pid started <"$state/run.pid" &&
+     [[ $pid =~ ^[1-9][0-9]*$ ]] && [ -r "/proc/$pid/stat" ] &&
+     [ "$(sed 's/.*) //' "/proc/$pid/stat" | awk '{print $20}')" = "$started" ]; then
+    kill -TERM -- "-$pid" 2>/dev/null || true
+  fi
+  flock -w 30 9 || { echo 'Premerge-local cleanup is still running.' >&2; exit 1; }
+else
+  flock -n 9 || { echo 'Another premerge-local command is running in this worktree.' >&2; exit 1; }
+fi
 key=$(printf '%s' "$root" | sha256sum | cut -c1-16)
 prefix="ht-premerge-$key"
 
@@ -36,7 +51,8 @@ stop() {
   local process_file
   for process_file in server.pid search.pid; do
     if [ -f "$state/$process_file" ]; then
-      read -r pid started <"$state/$process_file"
+      read -r pid started <"$state/$process_file" || continue
+      [[ $pid =~ ^[0-9]+$ ]] || continue
       # Guard PID reuse, stripping Next's process title (which contains spaces).
       if [ -r "/proc/$pid/stat" ] && [ "$(sed 's/.*) //' "/proc/$pid/stat" | awk '{print $20}')" = "$started" ]; then
         kill -TERM -- "-$pid" 2>/dev/null || true
@@ -59,10 +75,10 @@ stop() {
     echo 'Docker unavailable. Rerun down when Docker returns to remove containers.' >&2
     result=1
   fi
-  rm -f "$state/server.pid" "$state/search.pid" "$state/credentials.env" "$state/postgres.env" "$state/soketi.env" "$state/smoke-state.json" "$state/card-fixture.json" "$state/fixtures.out" "$state/flag-modes.json"
+  rm -f "$state/server.pid" "$state/search.pid" "$state/run.pid" "$state/credentials.env" "$state/postgres.env" "$state/soketi.env" "$state/smoke-state.json" "$state/card-fixture.json" "$state/fixtures.out" "$state/flag-modes.json"
   return "$result"
 }
-if [ "$action" = down ]; then stop; exit 0; fi
+if [ "$action" = down ]; then stop; exit $?; fi
 command -v docker >/dev/null || { echo 'Docker is required.' >&2; exit 1; }
 docker info >/dev/null 2>&1 || { echo 'Docker daemon is unavailable.' >&2; exit 1; }
 
@@ -84,9 +100,9 @@ for service in postgres redis soketi; do
 done
 cleanup() {
   local result=$?
-  trap - EXIT
+  trap - EXIT INT TERM
+  stop || { [ "$result" -ne 0 ] || result=1; }
   if [ "$result" -ne 0 ]; then
-    stop || true
     echo "Local setup failed. Private logs: $state" >&4
   fi
   exit "$result"
@@ -95,6 +111,7 @@ exec 4>&2
 trap cleanup EXIT
 trap 'exit 130' INT
 trap 'exit 143' TERM
+printf '%s %s\n' "$$" "$(sed 's/.*) //' "/proc/$$/stat" | awk '{print $20}')" >"$state/run.pid"
 
 # Logs can contain connection strings. Keep them private and never echo them.
 exec 3>&1
@@ -158,7 +175,7 @@ for ((attempt=0; attempt<30; attempt++)); do
   sleep 1
 done
 curl -fsS --max-time 2 -o /dev/null "$TURBOPUFFER_BASE_URL/health"
-npx --no-install next build --webpack
+HT_HEAVY_WAIT_FD=4 bash "$root/scripts/heavy-job.sh" npx --no-install next build --webpack
 setsid node "$root/node_modules/next/dist/bin/next" start -H 127.0.0.1 -p "$app_port" >"$state/server.log" 2>&1 9>&- 3>&- 4>&- < /dev/null &
 pid=$!
 printf '%s %s\n' "$pid" "$(sed 's/.*) //' "/proc/$pid/stat" | awk '{print $20}')" >"$state/server.pid"
@@ -175,3 +192,7 @@ account=$(node -e 'const s=require(process.argv[1]);console.log(JSON.parse(decod
 flags=$(node -e 'const {modes}=require(process.argv[1]);console.log(Object.entries(modes).map(([k,v])=>k+"="+v).join(", "))' "$state/flag-modes.json")
 printf 'Build URL: %s\nBoard URL: %s%s\nStorage state: %s\nCommit: %s\nAccount: %s (disposable QA, board owner)\nFlags: %s\nBoard: %s%s\nBuild: %s\n' \
   "$url" "$url" "$board_path" "$BROWSER_SMOKE_STATE_FILE" "$(git rev-parse HEAD)" "$account" "$flags" "$url" "$board_path" "$url" >&3
+
+# Keep the owning run alive so success, interruption and explicit down share cleanup.
+printf 'Local QA is ready. Keep this run open; use down when finished.\n' >&3
+wait "$pid"
