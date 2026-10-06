@@ -252,6 +252,13 @@ const handler: NextApiHandler = async (
   }
 };
 
-export default withTaskWriteFlag(handler, "PUT", async () =>
-  (await import("@/lib/api/task-writes/update")).PUT,
+export default withTaskWriteFlag(
+  withTaskWriteFlag(
+    withTaskWriteFlag(handler, "GET", async () =>
+      (await import("@/lib/api/task-writes/single-read-delete")).GET,
+    ),
+    "DELETE", async () =>
+      (await import("@/lib/api/task-writes/single-read-delete")).DELETE,
+  ),
+  "PUT", async () => (await import("@/lib/api/task-writes/update")).PUT,
 );

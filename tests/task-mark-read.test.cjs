@@ -163,6 +163,7 @@ for (const scenario of [
     t.mock.method(console, "log", () => {});
     const controller = loadController(scenario);
     const { default: handler } = loadModule("src/pages/api/tasks/markRead.ts", {
+      "@/lib/api/task-writes/route": { withTaskWriteFlag: (handler) => handler },
       "@/utils/controllers/tasks/markRead": controller,
       "@/lib/auth/getSessionUser": {
         getSessionUser: async () => scenario.session === null ? null : { userId },

@@ -193,6 +193,37 @@ function attachments() {
   assert.ok(read("src/pages/api/tasks/n8nUpload.ts").includes("bodyParser: false"));
   console.log("attachments structural verification passed");
 }
+const slice5Routes = {
+  single: { module: "single-read-delete", methods: ["GET", "DELETE"], hash: legacyHashes.update },
+  markRead: { module: "mark-read", methods: ["POST"], hash: "5aa66631b3772ce09f2631bea22e6fd23362bedbc4c4745511550b34e4e2f60b" },
+  "move-task-to-different-board": { module: "move-to-different-board", methods: ["POST"], hash: "d402863e6c1201860ef1a35fec10e063384633783a92da4311847966f0cbf559" },
+};
+function slice5LegacySources() {
+  return Object.fromEntries(Object.keys(slice5Routes).map(name => [name,
+    read(`src/pages/api/tasks/${name}.ts`)
+      .replace('import { withTaskWriteFlag } from "@/lib/api/task-writes/route";\n', "")
+      .replace(/export default withTaskWriteFlag\([\s\S]*$/, "export default handler;\n"),
+  ]));
+}
+function slice5() {
+  const sources = slice5LegacySources();
+  for (const [name, { module, methods, hash }] of Object.entries(slice5Routes)) {
+    assert.equal(crypto.createHash("sha256").update(sources[name]).digest("hex"), hash, name + " legacy bytes");
+    assert.throws(() => assert.equal(crypto.createHash("sha256").update(sources[name] + "changed").digest("hex"), hash), "pin mutation control");
+    const page = read(`src/pages/api/tasks/${name}.ts`);
+    for (const method of methods) {
+      assert.ok(page.includes(`"${method}"`));
+      assert.ok(page.includes(`(await import("@/lib/api/task-writes/${module}")).${method}`));
+      assert.ok(read(`src/lib/api/task-writes/${module}.ts`).includes(`export const ${method}`));
+    }
+    assert.ok(!fs.existsSync(path.join(root, `src/app/api/tasks/${name}/route.ts`)), "no URL twin");
+  }
+  for (const [file, hash] of Object.entries({
+    "src/pages/api/tasks/getAll.ts": "56e86d106a40a875868233e66ad56474d5701236228f78a9345d427c65761d80",
+    "src/utils/controllers/tasks/getAll.ts": "b82c469dbf01bdb976e32a93a35cff0e8b3f3139fb39923913d52c2655dbea89",
+  })) assert.equal(crypto.createHash("sha256").update(read(file)).digest("hex"), hash, "compatibility migration remains untouched");
+  console.log("slice5 structural verification passed");
+}
 const deadCandidates = [
   "tasks/getAll", "tasks/linkPullRequest", "projects/detail", "projects/views/sync-view",
   "section/getAll", "section/getByTaskId", "notifications/mute",
@@ -331,9 +362,9 @@ function commit() {
   assert.throws(() => assert.ok(allowed.has("src/lib/mcp/auth.ts")), "scope control rejects a sibling file");
   console.log(`local commit verified: ${git("rev-parse", "HEAD")}; ${productionLines} production/doc changed lines; only GATES.md is local`);
 }
-module.exports = { attachmentRoutes, attachmentLegacySources, legacyHashes, lifecycleHashes, lifecycleLegacySources, slice3Routes, slice3LegacySources, inventory, callerFiles };
+module.exports = { slice5Routes, slice5LegacySources, attachmentRoutes, attachmentLegacySources, legacyHashes, lifecycleHashes, lifecycleLegacySources, slice3Routes, slice3LegacySources, inventory, callerFiles };
 if (require.main === module) {
-  const commands = { attachments, plan, flag, regression, quality, commit, lifecycle, slice3 };
+  const commands = { attachments, plan, flag, regression, quality, commit, lifecycle, slice3, slice5 };
   assert.ok(commands[process.argv[2]], "known verification mode required");
   Promise.resolve(commands[process.argv[2]]()).catch((error) => { console.error(error); process.exitCode = 1; });
 }
