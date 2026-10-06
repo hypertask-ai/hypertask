@@ -7,6 +7,7 @@ import { getSessionUser } from "@/lib/auth/getSessionUser";
 import { AGENT_CHAT_STOP_AND_TIMEOUT_FEATURE_FLAG } from "@/lib/agentRuns/model";
 
 import {
+  HTPR_6964_FLAGS_PAGE_TYPE_SEARCH_FLAG,
   HTPR_6950_TOOLTIP_TOP_LAYER_FLAG,
   HTPR_6934_SERVER_FIRST_SCREEN_FLAG,
   HTPR_6923_APP_ROUTER_WRITES_FLAG,
@@ -178,7 +179,22 @@ const RETIRED_CLIENT_FEATURE_FLAGS = {
   "htpr-6035-agent-chat-skills": true,
 } as const;
 
+export type FeatureFlagKind = "feature" | "bugfix" | "improvement";
+type FeatureFlagDefinition = {
+  key: string;
+  kind?: FeatureFlagKind;
+  description: string;
+  shippedOn: string;
+  related?: readonly string[];
+};
+
 const FEATURE_FLAG_DEFINITIONS = [
+  {
+    key: HTPR_6964_FLAGS_PAGE_TYPE_SEARCH_FLAG,
+    shippedOn: "2026-10-06",
+    description: "Shows flag kinds and related changes, with a search field that stays visible while scrolling.",
+    kind: "feature",
+  },
   {
     key: HTPR_6923_APP_ROUTER_WRITES_FLAG,
     shippedOn: "2026-10-06",
@@ -203,16 +219,19 @@ const FEATURE_FLAG_DEFINITIONS = [
     key: HTPR_6934_SERVER_FIRST_SCREEN_FLAG,
     shippedOn: "2026-10-04",
     description: "Prepares a shared board and inbox first-render contract. Server payloads are not enabled by this step.",
+    kind: "improvement",
   },
   {
     key: HTPR_6951_TASK_WRITING_PROGRESS_FLAG,
     shippedOn: "2026-10-05",
     description: "Shows the Task Writer's current step in the New Task window instead of only a spinner. Requires the New Task window flag.",
+    related: [HTPR_6937_NEW_TASK_WINDOW_FLAG, HTPR_6929_COMPOSE_TASK_WRITER_FLAG],
   },
   {
     key: HTPR_6937_NEW_TASK_WINDOW_FLAG,
     shippedOn: "2026-10-04",
     description: "Turns Compose into a larger New Task window with dictation and one Ctrl+J, filling an empty task when opened there. Requires the Compose task writer flag.",
+    related: [HTPR_6929_COMPOSE_TASK_WRITER_FLAG],
   },
   {
     key: HTPR_6929_COMPOSE_TASK_WRITER_FLAG,
@@ -229,6 +248,7 @@ const FEATURE_FLAG_DEFINITIONS = [
     shippedOn: "2026-10-03",
     description:
       "Advertises consolidated MCP tools with action parameters, concise structured responses and actionable errors while retaining callable legacy names.",
+    kind: "improvement",
   },
   {
     key: HTPR_6354_AI_CHAT_ALERTS_FLAG,
@@ -247,6 +267,7 @@ const FEATURE_FLAG_DEFINITIONS = [
     shippedOn: "2026-10-03",
     description:
       "Keeps cached tickets steady while comments, summaries, pages and properties load.",
+    related: [HTPR_6752_INSTANT_TICKET_OPEN_FLAG],
   },
   {
     key: HTPR_6752_INSTANT_TICKET_OPEN_FLAG,
@@ -361,6 +382,7 @@ const FEATURE_FLAG_DEFINITIONS = [
     shippedOn: "2026-10-06",
     description:
       "Enables the public Slack support page and privacy, terms, and support links on Add to Slack. Anonymous visitors can access support only when set to Everyone.",
+    kind: "improvement",
   },
   {
     key: HTPR_4857_ADD_TO_SLACK_FLAG,
@@ -412,6 +434,7 @@ const FEATURE_FLAG_DEFINITIONS = [
   },
   {
     key: "htpr-5993-optimistic-task-uploads",
+    kind: "improvement",
     shippedOn: "2026-09-04",
     description: "Saves new tasks immediately while their attachments continue uploading.",
   },
@@ -456,6 +479,7 @@ const FEATURE_FLAG_DEFINITIONS = [
     shippedOn: "2026-10-03",
     description:
       "Shows one compact undo confirmation at the bottom left, replacing the previous card and fading after five seconds.",
+    kind: "improvement",
   },
   {
     key: HTPR_6872_PAGE_IMAGE_GALLERY_FLAG,
@@ -467,6 +491,7 @@ const FEATURE_FLAG_DEFINITIONS = [
     key: HTPR_6662_AGENT_LOG_NAME_FLAG,
     shippedOn: "2026-10-03",
     description: "Names the task history toggle Show agent log or Hide agent log in Ctrl+K and Toggle agent log in shortcut help.",
+    kind: "improvement",
   },
   {
     key: HTPR_6868_TICKET_PREFIX_FLAG,
@@ -478,12 +503,14 @@ const FEATURE_FLAG_DEFINITIONS = [
     shippedOn: "2026-10-03",
     description:
       "On mobile ticket pages (/page/...): hide the bottom bar, the same as the ticket screen.",
+    kind: "improvement",
   },
   {
     key: HTPR_6861_MOBILE_PAGE_BACK_ROW_FLAG,
     shippedOn: "2026-10-03",
     description:
       "On mobile ticket pages: use the Settings-style back row, inset the title, and move page deletion into Commands.",
+    kind: "improvement",
   },
   {
     key: HTPR_6476_MOBILE_AGENT_CHAT_FULLSCREEN_FLAG,
@@ -521,16 +548,20 @@ const FEATURE_FLAG_DEFINITIONS = [
     key: HTPR_6873_QUICK_ENTRY_GROW_FLAG,
     shippedOn: "2026-10-03",
     description: "Lets the board and table quick-entry box grow to eight lines, then scroll, with Create task and close buttons.",
+    kind: "improvement",
+    related: ["htpr-6175-quick-entry-cards"],
   },
   {
     key: HTPR_6902_N_QUICK_ADD_FLAG,
     shippedOn: "2026-10-03",
     description: "N opens the existing quick-entry box in the focused board or table column when quick-entry cards are enabled. C keeps opening the full editor.",
+    related: ["htpr-6175-quick-entry-cards"],
   },
   {
     key: HTPR_6914_SHIFT_C_QUICK_ADD_FLAG,
     shippedOn: "2026-10-03",
     description: "Shift+C opens the quick add box like N",
+    related: ["htpr-6175-quick-entry-cards"],
   },
   {
     key: "htpr-6175-quick-entry-cards",
@@ -587,6 +618,7 @@ const FEATURE_FLAG_DEFINITIONS = [
   },
   {
     key: LAZY_EMOJI_LIST_FLAG,
+    kind: "improvement",
     shippedOn: "2026-09-08",
     description:
       "Downloads the editor's big emoji list only when you type a colon, instead of on every task open. Nothing visible changes.",
@@ -611,6 +643,7 @@ const FEATURE_FLAG_DEFINITIONS = [
   },
   {
     key: SCOPED_BOARD_REFETCH_FLAG,
+    kind: "improvement",
     shippedOn: "2026-09-12",
     description:
       "On a live board change, reloads only the board that changed instead of every board in the account, so updates appear with one request. Other boards' names still refresh when the tab reconnects or you move between boards.",
@@ -631,26 +664,31 @@ const FEATURE_FLAG_DEFINITIONS = [
     key: HTPR_6370_SEARCH_CHIPS_FLAG,
     shippedOn: "2026-09-28",
     description: "Shows search operators as removable chips with people, board and label suggestions.",
+    related: [HTPR_6369_SEARCH_OPERATORS_FLAG],
   },
   {
     key: HTPR_6688_SEARCH_AUTOCOMPLETE_FLAG,
     shippedOn: "2026-10-01",
     description: "Completes search operators and values with keyboard suggestions, coloured filters, an active filter frame, search tips and highlighted result titles.",
+    related: [HTPR_6369_SEARCH_OPERATORS_FLAG, HTPR_6370_SEARCH_CHIPS_FLAG],
   },
   {
     key: HTPR_6865_SEARCH_LAYOUT_FLAG,
     shippedOn: "2026-10-03",
     description: "Shows one aligned search suggestion list with recents, tips, people emails and grey value completion; searches only after acceptance or Enter. Requires search autocomplete, chips and operators.",
+    related: [HTPR_6369_SEARCH_OPERATORS_FLAG, HTPR_6370_SEARCH_CHIPS_FLAG, HTPR_6688_SEARCH_AUTOCOMPLETE_FLAG],
   },
   {
     key: HTPR_6882_SEARCH_MATCH_HIGHLIGHTS_FLAG,
     shippedOn: "2026-10-03",
     description: "Shows why search results matched with inbox-style person highlights, label and board pills, safe text highlights and comment authors. Requires the search layout flag.",
+    related: [HTPR_6865_SEARCH_LAYOUT_FLAG],
   },
   {
     key: HTPR_6911_SEARCH_ROW_HIGHLIGHT_FLAG,
     shippedOn: "2026-10-03",
     description: "Gives selected search results and suggestions the inbox highlight: background edge to edge and the accent bar on the far left. Requires the search layout flag.",
+    related: [HTPR_6865_SEARCH_LAYOUT_FLAG],
   },
   {
     key: HTPR_6936_ASK_AI_FULLSCREEN_FLAG,
@@ -666,16 +704,19 @@ const FEATURE_FLAG_DEFINITIONS = [
     key: HTPR_6878_SEARCH_LABEL_SCOPE_FLAG,
     shippedOn: "2026-10-03",
     description: "Scopes search label suggestions to picked boards, shows ticket counts and combines same-name labels across boards. Requires the search layout flag.",
+    related: [HTPR_6865_SEARCH_LAYOUT_FLAG],
   },
   {
     key: HTPR_6879_SEARCH_ESC_BACK_FLAG,
     shippedOn: "2026-10-03",
     description: "Escape restores the previous search in this tab or recents and tips; empty searches never hide that list, and board chips omit the extra hash. Requires search layout.",
+    related: [HTPR_6865_SEARCH_LAYOUT_FLAG],
   },
   {
     key: HTPR_6880_SEARCH_COMMENTER_FLAG,
     shippedOn: "2026-10-03",
     description: "Finds tasks commented on by a person and shows their newest matching comment; combines typed text with that person’s comments. The picker requires the search layout flag.",
+    related: [HTPR_6865_SEARCH_LAYOUT_FLAG],
   },
   {
     key: HTPR_6881_SEARCH_FUZZY_PERSON_FLAG,
@@ -692,11 +733,13 @@ const FEATURE_FLAG_DEFINITIONS = [
     key: HTPR_6938_MY_TASKS_ICON_CONTROLS_FLAG,
     shippedOn: "2026-10-04",
     description: "My Tasks uses icon-only controls, visible blue active states, remembered views and board tabs, and overdue tooltips.",
+    kind: "improvement",
   },
   {
     key: HTPR_6930_MY_TASKS_KANBAN_REUSE_FLAG,
     shippedOn: "2026-10-04",
     description: "My Tasks reuses kanban Save view, sorting, and Ctrl+K pickers with matching checkmarks.",
+    kind: "improvement",
   },
   {
     key: HTPR_6567_COMMAND_SCOPE_PICKER_FLAG,
@@ -759,6 +802,7 @@ const FEATURE_FLAG_DEFINITIONS = [
   },
   {
     key: LUNA_FREE_PLAN_FLAG,
+    kind: "improvement",
     shippedOn: "2026-09-30",
     description:
       "Lets Free plans use GPT 6 Luna and makes it their default AI model. Without it Free plans default to Gemini 3.5 Flash Lite.",
@@ -775,7 +819,7 @@ const FEATURE_FLAG_DEFINITIONS = [
   // writes the date they expect to merge, so it can be a day early if the pull request sits
   // overnight; run the same command after merging to correct it. Upgrade path if that ever
   // matters: generate this map from git at build time.
-] as const satisfies readonly { key: string; description: string; shippedOn: string; kind?: "feature" | "bugfix" | "improvement" }[];
+] as const satisfies readonly FeatureFlagDefinition[];
 
 export const FEATURE_FLAG_KEYS = FEATURE_FLAG_DEFINITIONS.map(({ key }) => key);
 // HTPR-6128 explicitly exempts this bootstrap mode: gating flag infrastructure by itself is circular.
@@ -822,8 +866,34 @@ export async function isFeatureFlagOwner(headers: Headers): Promise<boolean> {
   return session ? isFeatureFlagOwnerUser(session.userId) : false;
 }
 
+// Historical bug flags predate kind-based defaults. Classify them for display only:
+// adding kind: "bugfix" to their definitions would release missing rows to Everyone.
+const LEGACY_BUGFIX_DISPLAY_KINDS: Partial<Record<string, FeatureFlagKind>> = {
+  [HTPR_6951_TASK_WRITING_PROGRESS_FLAG]: "bugfix",
+  [HTPR_6561_DESCRIPTION_STRUCTURE_FLAG]: "bugfix",
+  [HTPR_6554_LIGHT_COMMENT_SEPARATION_FLAG]: "bugfix",
+  [HTPR_6559_KEEP_DIRECT_TASK_OPEN_FLAG]: "bugfix",
+  [HTPR_6553_AGENT_CHAT_POLLING_FLAG]: "bugfix",
+  [HTPR_6516_AGENT_ATTRIBUTION_FLAG]: "bugfix",
+  [HTPR_6512_SEED_TEAM_AGENT_FLAG]: "bugfix",
+  [LOCAL_WRITING_ASSISTANCE_FLAG]: "bugfix",
+  [HTPR_6278_CHAT_TURN_FAILURE_FLAG]: "bugfix",
+  ["htpr-6112-copy-current-url"]: "bugfix",
+  ["htpr-6129-mobile-agent-chat-viewport"]: "bugfix",
+  [HTPR_6407_MOBILE_AGENT_CHAT_LAYOUT_FLAG]: "bugfix",
+  ["htpr-6363-task-writer-research"]: "bugfix",
+  [AUTO_TASK_DESCRIPTIONS_FLAG]: "bugfix",
+  [SHORTCUT_NUDGES_FLAG]: "bugfix",
+  [CONFIRMED_PROPOSAL_HEADING_FLAG]: "bugfix",
+  [MY_TASKS_SHORTCUTS_WIDTH_FLAG]: "bugfix",
+  [HTPR_6911_SEARCH_ROW_HIGHLIGHT_FLAG]: "bugfix",
+  [HTPR_6372_SEARCH_RANKING_FLAG]: "bugfix",
+};
+
 export type FeatureFlagRow = {
   key: string;
+  kind?: FeatureFlagKind;
+  related?: readonly string[];
   mode: FeatureFlagMode;
   updatedAt: Date | null;
   releasedAt: Date | null;
@@ -859,10 +929,12 @@ function withFeatureFlagMetadata(
   row: Pick<FeatureFlagRow, "key" | "mode" | "updatedAt" | "releasedAt" | "keep" | "removalTaskId">,
   ticketTitleByNumber: Map<number, string>,
 ): FeatureFlagRow {
-  const definition = FEATURE_FLAG_DEFINITIONS.find(({ key }) => key === row.key);
+  const definition: FeatureFlagDefinition | undefined = FEATURE_FLAG_DEFINITIONS.find(({ key }) => key === row.key);
   const ticketNumber = FEATURE_FLAG_KEY_TICKET_NUMBER.exec(row.key)?.[1];
   return {
     ...row,
+    kind: definition?.kind ?? LEGACY_BUGFIX_DISPLAY_KINDS[row.key] ?? "feature",
+    related: definition?.related ? [...(definition.related ?? [])] : undefined,
     description: definition?.description ?? LEGACY_FEATURE_FLAG_DESCRIPTION,
     shippedOn: definition?.shippedOn ?? null,
     ticketId: ticketNumber ? `HTPR-${ticketNumber}` : null,
@@ -902,7 +974,7 @@ const DEFAULT_FEATURE_FLAG_MODE: FeatureFlagMode = "OWNER_AND_QA";
 const DEFAULT_BUGFIX_FLAG_MODE: FeatureFlagMode = "EVERYONE";
 
 function defaultFeatureFlagMode(key: string): FeatureFlagMode {
-  const definition = FEATURE_FLAG_DEFINITIONS.find(({ key: declaredKey }) => declaredKey === key);
+  const definition: FeatureFlagDefinition | undefined = FEATURE_FLAG_DEFINITIONS.find(({ key: declaredKey }) => declaredKey === key);
   return definition && "kind" in definition && definition.kind === "bugfix"
     ? DEFAULT_BUGFIX_FLAG_MODE
     : DEFAULT_FEATURE_FLAG_MODE;

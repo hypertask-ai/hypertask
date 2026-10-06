@@ -11,6 +11,7 @@ import type { FeatureFlagRow } from "../src/lib/flags";
 function row(overrides: Partial<FeatureFlagRow>): FeatureFlagRow {
   return {
     key: "some-flag",
+    kind: "feature",
     mode: "OWNER_ONLY",
     updatedAt: null,
     releasedAt: null,
