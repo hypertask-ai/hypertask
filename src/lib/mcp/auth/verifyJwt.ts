@@ -62,7 +62,8 @@ function boundedLogValue(value: unknown, depth = 0): unknown {
 
 export function boundedMcpAuthLog(...args: unknown[]): void {
   const bounded = args.map(value => boundedLogValue(value))
-  const key = createHash('sha256').update(JSON.stringify(bounded)).digest('hex')
+  // The bounded rendering itself is the dedupe key (capped), so no hash is needed.
+  const key = JSON.stringify(bounded).slice(0, 1000)
   const now = Date.now()
   const previous = boundedJwtLogThrottle.get(key)
   if (previous !== undefined && now - previous < AUTH_LOG_REPEAT_MS) return

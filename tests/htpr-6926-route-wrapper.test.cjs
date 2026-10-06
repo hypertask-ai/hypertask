@@ -335,10 +335,17 @@ test('all adopted REST methods preserve legacy wire results and scaffold order w
   const authForwarder = Object.fromEntries(['checkMcpRateLimit', 'validateMcpAuth', 'mcpUnauthorizedResponse', 'createUnauthorizedResponse'].map(name => [name, (...args) => activeAuth[name](...args)]))
   const wrappers = Object.fromEntries(['off', 'on'].map(mode => [mode, loadRouteWrapper({ '@/lib/mcp/auth': authForwarder, '@/lib/mcp/readJsonBody': json, '@/lib/mcp/tasks/agentMutationLeaseAdoption': lease })]))
   const originalMode = process.env.HTPR_6926_TEST_FLAG
+  let legacyBase = null
+  try { legacyBase = cp.execFileSync('git', ['merge-base', 'HEAD', 'origin/production'], { cwd: root, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim() || null } catch {}
   await quiet(async () => {
     for (const file of files) {
       const current = fs.readFileSync(path.join(root, file), 'utf8')
-      const original = cp.execFileSync('git', ['show', `fdb5e4e4c84d906dc061b51811b5a80179aa5192:${file}`], { cwd: root, encoding: 'utf8' })
+      // Compare against the pre-wrapper source when the merge base is available (local runs). CI checks out
+      // one commit, so there the verbatim legacy body inside the current file (the flag-off branch) is the reference.
+      let original = current
+      if (legacyBase) {
+        try { original = cp.execFileSync('git', ['show', `${legacyBase}:${file}`], { cwd: root, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }) } catch {}
+      }
       const sf = ts.createSourceFile(file, original, ts.ScriptTarget.Latest, true)
       const methods = sf.statements.filter(s => ts.isFunctionDeclaration(s) && s.modifiers?.some(m => m.kind === ts.SyntaxKind.ExportKeyword) && /^(GET|POST|PATCH|PUT|DELETE)$/.test(s.name.text)).map(s => s.name.text)
       for (const method of methods) {
