@@ -789,6 +789,13 @@ test("bugfix defaults enable everyone, respect stored Off and list the same runt
     .replace("key: HTPR_6950_TOOLTIP_TOP_LAYER_FLAG,", 'key: HTPR_6950_TOOLTIP_TOP_LAYER_FLAG, kind: "bugfix",'));
   const bugfixFlags = jiti(fixture);
   const key = "htpr-6950-tooltip-top-layer";
+  assert.equal(bugfixFlags.defaultFeatureFlagMode(key), "EVERYONE");
+  const { localFlagModes } = await import("../scripts/premerge-local-flags.mjs");
+  const defaults = Object.fromEntries(bugfixFlags.FEATURE_FLAG_KEYS.map(key => [key, bugfixFlags.defaultFeatureFlagMode(key)]));
+  const seeded = localFlagModes(defaults, { "htpr-6136-figma-connect": false });
+  assert.equal(seeded[key], "EVERYONE");
+  assert.equal(seeded["htpr-6926-mcp-route-wrapper"], "OFF");
+  assert.equal(seeded["htpr-6136-figma-connect"], "OWNER_AND_QA");
   assert.equal(await bugfixFlags.isFeatureEnabled(key, 2343), true);
   assert.equal(await bugfixFlags.featureFlagCandidateUserIds(key), null);
   assert.equal((await bugfixFlags.listFeatureFlagModes()).find(entry => entry.key === key).mode, "EVERYONE");
@@ -800,6 +807,24 @@ test("bugfix defaults enable everyone, respect stored Off and list the same runt
   const released = await bugfixFlags.setFeatureFlagMode(key, "EVERYONE");
   assert.equal(released.mode, "EVERYONE");
   assert.ok(released.releasedAt instanceof Date, "persisting the release starts the normal cleanup countdown");
+});
+
+test("explicit defaults beat bugfix classification in runtime and local seeds", async (t) => {
+  const fs = require("node:fs");
+  const os = require("node:os");
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "explicit-bugfix-flags-"));
+  t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+  const { localFlagModes } = await import("../scripts/premerge-local-flags.mjs");
+  const key = "htpr-6950-tooltip-top-layer";
+  for (const mode of ["OFF", "OWNER_ONLY", "OWNER_AND_QA", "EVERYONE"]) {
+    const fixture = path.join(dir, `flags-${mode}.ts`);
+    fs.writeFileSync(fixture, fs.readFileSync(path.join(root, "src/lib/flags.ts"), "utf8")
+      .replace("key: HTPR_6950_TOOLTIP_TOP_LAYER_FLAG,", `key: HTPR_6950_TOOLTIP_TOP_LAYER_FLAG, kind: "bugfix", defaultMode: "${mode}",`));
+    const fixtureFlags = jiti(fixture);
+    assert.equal(fixtureFlags.defaultFeatureFlagMode(key), mode);
+    assert.equal((await fixtureFlags.listFeatureFlagModes()).find(entry => entry.key === key).mode, mode);
+    assert.equal(localFlagModes({ [key]: fixtureFlags.defaultFeatureFlagMode(key) }, { released: true })[key], mode);
+  }
 });
 
 test("historical Bug labels are display-only and preserve Owner + QA defaults and stored modes", async () => {
