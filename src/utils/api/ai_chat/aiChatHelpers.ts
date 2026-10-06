@@ -20,6 +20,39 @@ export type TAllChatSessionsResponse = {
   sessions: IChatSession[];
 };
 
+export type ChatSessionSummary = Pick<IChatSession,
+  "id" | "createdAt" | "updatedAt" | "userId" | "taskId" | "projectId" | "title"
+> & { agentId: string | null; teamId: string | null; hasMessages: boolean };
+export type TPagedChatSessionsResponse = {
+  success: boolean;
+  sessions: ChatSessionSummary[];
+  nextCursor: string | null;
+};
+export type TChatSessionsWireResponse = TAllChatSessionsResponse | TPagedChatSessionsResponse;
+export type ChatSessionScope = { taskId?: number; projectId?: number };
+export const isPagedChatSessions = (body: TChatSessionsWireResponse): body is TPagedChatSessionsResponse =>
+  "nextCursor" in body;
+
+export function mergeSessionHistory<T extends { id: string; updatedAt: Date }>(newer: T[], older: T[]): T[] {
+  const byId = new Map(older.map((session) => [session.id, session]));
+  for (const session of newer) {
+    const previous = byId.get(session.id);
+    if (!previous || new Date(session.updatedAt).getTime() >= new Date(previous.updatedAt).getTime()) {
+      byId.set(session.id, session);
+    }
+  }
+  return [...byId.values()].sort((a, b) =>
+    new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime() || b.id.localeCompare(a.id)
+  );
+}
+
+export function mergeSessionTranscript(incoming: IChatSession, local?: IChatSession): IChatSession {
+  if (!local) return incoming;
+  const messages = new Map(incoming.messages.map((message) => [message.id, message]));
+  for (const message of local.messages) messages.set(message.id, message);
+  return { ...incoming, ...local, messages: [...messages.values()] };
+}
+
 type TCreateChatSessionNextResponse = {
   success: boolean;
   session: IChatSession;
@@ -58,6 +91,23 @@ export const AI_Chat_API = {
     return axiosClient.get<TAllChatSessionsResponse>(
       globalConstants.getAllAiChatSessionsRoute
     );
+  },
+
+  getSessionPage: async (options: ChatSessionScope & { cursor?: string; limit?: number } = {}, signal?: AbortSignal): Promise<ApiResponse<TChatSessionsWireResponse>> =>
+    axiosClient.get<TChatSessionsWireResponse>(globalConstants.getAllAiChatSessionsRoute, {
+      params: { compat: "htpr-6924", ...options }, signal,
+    }),
+
+  getSessionTranscript: async (sessionId: string, signal?: AbortSignal): Promise<IChatSession | null> => {
+    const response = await axiosClient.get<{ success: boolean; session: IChatSession } | TAllChatSessionsResponse>(
+      globalConstants.getAllAiChatSessionsRoute,
+      { params: { compat: "htpr-6924", sessionId }, signal }
+    );
+    if ("session" in response.data) return response.data.session;
+    // A rolled-back server may ignore the detail parameter. Ask for the old
+    // contract explicitly rather than treating a summary as an empty transcript.
+    const legacy = await AI_Chat_API.getAllSessions();
+    return legacy.data.sessions.find((session) => session.id === sessionId) ?? null;
   },
 
   /**

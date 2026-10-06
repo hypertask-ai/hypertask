@@ -2,7 +2,7 @@
 import type { FileItem } from "@/components/Common/AttachmentsUpload/FileUploadHandler";
 import { useAiChat } from "@/hooks/MultiPages/AIChat/useAiChat";
 import { useFlag } from "@/hooks/useFlag";
-import { HTPR_6936_ASK_AI_FULLSCREEN_FLAG } from "@/lib/flags/keys";
+import { HTPR_6936_ASK_AI_FULLSCREEN_FLAG, HTPR_6924_REST_COMPAT_FLAG } from "@/lib/flags/keys";
 import { isControlQFocusShortcut } from "@/lib/aiChat/chatFocusShortcut";
 import { useRecoilState } from "@/lib/state";
 import { aiChatPendingPromptAtom } from "@/store";
@@ -72,6 +72,11 @@ export interface ChatContextType {
     onEditor: (editor: Editor | null) => void;
   };
   sessions: IChatSession[];
+  historySessions: Pick<IChatSession, "id" | "title" | "updatedAt" | "createdAt">[];
+  hasMoreSessions: boolean;
+  isLoadingMoreSessions: boolean;
+  pagingError: boolean;
+  loadMoreSessions: () => Promise<void>;
   currentSession: IChatSession | undefined;
   showWelcomeScreen: boolean;
   isSessionPending: boolean;
@@ -178,6 +183,7 @@ export const ChatRuntime = memo(function ChatRuntime({
   handleSendMessageRef.current = contextProps.handleSendMessage;
   const { editor, fileItems } = contextProps;
   const pathname = usePathname();
+  const restCompat = useFlag(HTPR_6924_REST_COMPAT_FLAG);
   const askAiFullscreenEnabled = useFlag(HTPR_6936_ASK_AI_FULLSCREEN_FLAG);
   const [failedFullScreenQuery, setFailedFullScreenQuery] = useState<string | null>(null);
   useEffect(() => {
@@ -204,7 +210,8 @@ export const ChatRuntime = memo(function ChatRuntime({
       !pendingAiChatPrompt ||
       contextProps.isByokBlocked ||
       contextProps.isTyping ||
-      !contextProps.sessions.length
+      !contextProps.sessions.length ||
+      (restCompat && !contextProps.chatHistoryReady)
     ) {
       return;
     }
@@ -272,7 +279,7 @@ export const ChatRuntime = memo(function ChatRuntime({
       editor.commands.focus("end");
     }
   }, [
-    pendingAiChatPrompt,
+    pendingAiChatPrompt, restCompat,
     askAiFullscreenEnabled,
     contextProps.isByokBlocked,
     contextProps.isTyping,

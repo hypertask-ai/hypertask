@@ -1,3 +1,4 @@
+import { HTPR_6924_REST_COMPAT_FLAG } from "@/lib/flags/keys";
 import { useCallback, useEffect, useRef } from "react";
 import globalConstants from "@/lib/constants";
 import { IChatSession } from "@/models/model";
@@ -7,7 +8,7 @@ import { shouldBlockAiDueToByokProvider } from "@/lib/byokSelectedProviderGate";
 import { isGuestCookieUser } from "@/lib/demo/isGuestClient";
 import type { useAiChatState } from "./useAiChatState";
 
-type Context = Pick<ReturnType<typeof useAiChatState>, "sessionIntentGenerationRef" | "sessionSetupRef" | "resolvedBoardSessionRef" | "clearMessageQueue" | "selectSessionInHistory" | "createSession" | "isFullScreenChat" | "setDockedChatScope" | "currentProject" | "previousProjectIdRef" | "deleteSessionInHistory" | "messageQueueRef" | "setQueuedMessages" | "sendInFlightRef" | "modelBilling" | "currentAiOption" | "pathname" | "currentUser" | "taskId" | "sessionsRef" | "dockedChatScope" | "sessionContextKey" | "chatHistoryReadyRef" | "aiChatBoardSessionMap" | "setAiChatBoardSessionMap" | "setRecentChatBoardIds" | "shouldLoadChatHistory">;
+type Context = Pick<ReturnType<typeof useAiChatState>, "sessionIntentGenerationRef" | "sessionSetupRef" | "resolvedBoardSessionRef" | "clearMessageQueue" | "selectSessionInHistory" | "createSession" | "isFullScreenChat" | "setDockedChatScope" | "currentProject" | "previousProjectIdRef" | "deleteSessionInHistory" | "messageQueueRef" | "setQueuedMessages" | "sendInFlightRef" | "modelBilling" | "currentAiOption" | "pathname" | "currentUser" | "taskId" | "sessionsRef" | "dockedChatScope" | "sessionContextKey" | "chatHistoryReadyRef" | "aiChatBoardSessionMap" | "setAiChatBoardSessionMap" | "setRecentChatBoardIds" | "shouldLoadChatHistory" | "resolveHistorySession" | "restCompat">;
 
 export function useAiChatSessions(context: Context) {
   const {
@@ -16,7 +17,7 @@ export function useAiChatSessions(context: Context) {
   deleteSessionInHistory, messageQueueRef, setQueuedMessages, sendInFlightRef, modelBilling,
   currentAiOption, pathname, currentUser, taskId, sessionsRef,
   dockedChatScope, sessionContextKey, chatHistoryReadyRef, aiChatBoardSessionMap, setAiChatBoardSessionMap,
-  setRecentChatBoardIds, shouldLoadChatHistory,
+  setRecentChatBoardIds, shouldLoadChatHistory, resolveHistorySession, restCompat,
   } = context;
 
   // User intent wins over transient automatic board setup. Clearing this ref
@@ -149,7 +150,7 @@ export function useAiChatSessions(context: Context) {
       !isFullScreenChat &&
       dockedChatScope === null &&
       !pathname?.startsWith("/inbox");
-    const setupKey = `${sessionContextKey}:${
+    const setupKey = `${restCompat ? HTPR_6924_REST_COMPAT_FLAG : "legacy"}:${sessionContextKey}:${
       needsBoardSession ? `board:${projectId}` : "current"
     }`;
     const inFlight = sessionSetupRef.current;
@@ -161,13 +162,13 @@ export function useAiChatSessions(context: Context) {
     const promise = (async () => {
       const deadline = Date.now() + timeoutMs;
       while (
-        !sessionsRef.current.some((session) => session.userId === userId) &&
-        !chatHistoryReadyRef.current &&
+        (restCompat ? !chatHistoryReadyRef.current :
+          !sessionsRef.current.some((session) => session.userId === userId) && !chatHistoryReadyRef.current) &&
         Date.now() < deadline
       ) {
         await new Promise((resolve) => setTimeout(resolve, 50));
       }
-      if (!isCurrentIntent()) return undefined;
+      if (!isCurrentIntent() || (restCompat && !chatHistoryReadyRef.current)) return undefined;
 
       // React Query changes cache keys with the account, but a render can still
       // momentarily expose the previous array. Never resolve a send through a
@@ -209,7 +210,8 @@ export function useAiChatSessions(context: Context) {
       if (mappedSessionId) {
         const mappedSession = currentSessions.find(
           (session) => session.id === mappedSessionId
-        );
+        ) ?? (restCompat ? await resolveHistorySession(mappedSessionId) : undefined);
+        if (!isCurrentIntent()) return undefined;
         if (mappedSession) {
           if (mappedSession.id !== currentSessions[0].id) {
             resolvedBoardSessionRef.current = {
@@ -229,6 +231,27 @@ export function useAiChatSessions(context: Context) {
         });
       }
 
+      if (restCompat) {
+        const scopedSession = await resolveHistorySession(undefined, { projectId });
+        if (!isCurrentIntent()) return undefined;
+        if (scopedSession) {
+          resolvedBoardSessionRef.current = { projectId, session: scopedSession };
+          selectSessionInHistory(scopedSession.id);
+          previousProjectIdRef.current = projectId;
+          return scopedSession;
+        }
+      }
+
+      if (restCompat) {
+        const emptySession = await resolveHistorySession(undefined, undefined, true);
+        if (!isCurrentIntent()) return undefined;
+        if (emptySession) {
+          resolvedBoardSessionRef.current = { projectId, session: emptySession };
+          selectSessionInHistory(emptySession.id);
+          previousProjectIdRef.current = projectId;
+          return emptySession;
+        }
+      }
       if ((currentSessions[0].messages?.length ?? 0) === 0) {
         previousProjectIdRef.current = projectId;
         return currentSessions[0];
@@ -255,11 +278,12 @@ export function useAiChatSessions(context: Context) {
     })();
 
     sessionSetupRef.current = { key: setupKey, promise };
-    void promise.finally(() => {
+    const clearSetup = () => {
       if (sessionSetupRef.current?.promise === promise) {
         sessionSetupRef.current = null;
       }
-    });
+    };
+    void promise.then(clearSetup, clearSetup);
     return promise;
   }, [
     aiChatBoardSessionMap,
@@ -272,7 +296,7 @@ export function useAiChatSessions(context: Context) {
     sessionContextKey,
     selectSessionInHistory,
     setAiChatBoardSessionMap,
-    taskId,
+    taskId, restCompat, resolveHistorySession,
   ]);
 
   useEffect(() => {
@@ -290,7 +314,7 @@ export function useAiChatSessions(context: Context) {
   }, [currentProject?.id, setRecentChatBoardIds]);
 
   useEffect(() => {
-    if (shouldLoadChatHistory) void ensureSessionForCurrentBoard();
+    if (shouldLoadChatHistory) void ensureSessionForCurrentBoard().catch((error) => console.error("Error resolving chat session:", error));
   }, [ensureSessionForCurrentBoard, shouldLoadChatHistory]);
   return {
   selectSession, startNewSession, deleteSession, fileUpload, handleSendMessageRef,
