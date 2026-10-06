@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Live tests for ship-check against real tickets (needs gh and hypertask auth).
-cd "$(dirname "$0")"; fails=0
-ok() { echo "ok   $*"; }; bad() { echo "FAIL $*"; fails=$((fails+1)); }
+cd "$(dirname "$0")"; fails=0; passes=0
+ok() { echo "ok   $*"; passes=$((passes+1)); }; bad() { echo "FAIL $*"; fails=$((fails+1)); }
 E=$(mktemp -d); export VCC_EVIDENCE_DIR=$E
 trap 'rm -rf "$E"' EXIT
 export PREMERGE_STATUS_STATE="$E/publisher-state"
@@ -204,6 +204,109 @@ DD 1 'FAIL: could not read releases' RELEASE_ERROR=1
 DD 1 'FAIL: no release found' RELEASES_FIXTURE='[{"tagName":"v1"}]'
 DD 1 'FAIL: no release found' SHIP_BASE=master
 DD 1 'FAIL: no release found' SHIP_REPO=hypertask-ai/other
+
+# Manual worker deployments must bind the only active version to the full merge SHA.
+mkdir -p "$E/worker-bin" "$E/worker-checkout/workers/docs-agent"
+cat > "$E/worker-bin/gh" <<'MOCK'
+#!/usr/bin/env bash
+case "$1:$2" in
+  pr:view) printf '{"number":838,"title":"YPER4-999 [INFRA] Fixture","state":"MERGED","mergeCommit":{"oid":"%s"},"baseRefName":"%s"}\n' "$WORKER_SHA" "$SHIP_BASE" ;;
+  release:view) [ -n "${RELEASE_TAG:-}" ] && echo "$RELEASE_TAG" ;;
+  release:list) [ "${RELEASE_ERROR:-0}" = 0 ] || exit 1; echo "${RELEASES_FIXTURE:-[]}" ;;
+  api:*/compare/*) echo identical ;;
+  *) exit 1 ;;
+esac
+MOCK
+cat > "$E/worker-bin/wrangler" <<'MOCK'
+#!/usr/bin/env bash
+[[ $PWD == "$SHIP_CHECKOUT/$SHIP_WORKER" ]] || exit 1
+case "$*" in
+  'deployments status --json') [ "${WRANGLER_ERROR:-0}" = 0 ] || exit 1; echo "$DEPLOYMENT_FIXTURE" ;;
+  'versions view worker-version --json') [ "${VERSION_ERROR:-0}" = 0 ] || exit 1; echo "$VERSION_FIXTURE" ;;
+  *) exit 1 ;;
+esac
+MOCK
+cat > "$E/worker-bin/npx" <<'MOCK'
+#!/usr/bin/env bash
+[[ $1 == wrangler ]] || exit 1
+shift
+exec "$(dirname "$0")/wrangler" "$@"
+MOCK
+chmod +x "$E/worker-bin/"*
+worker_sha=f2619e33637f2577b609be8b52234910ee61b802
+worker_deployment='{"versions":[{"version_id":"worker-version","percentage":100}]}'
+worker_version="{\"annotations\":{\"workers/message\":\"$worker_sha\"}}"
+W() {
+  local want=$1 expected=$2 out got; shift 2
+  out=$(env PATH="$E/worker-bin:$PATH" SHIP_REPO=valentinyeo/agent-fleet SHIP_BASE=htpr-5009-mdx-write-guard-v2 SHIP_CHECKOUT="$E/worker-checkout" SHIP_WORKER=workers/docs-agent WORKER_SHA="$worker_sha" DEPLOYMENT_FIXTURE="$worker_deployment" VERSION_FIXTURE="$worker_version" "$@" ./ship-check deployed YPER4-999); got=$?
+  if [ "$got" = "$want" ] && [[ $out == "$expected"* ]]; then ok "worker: $out"
+  else bad "worker: want $want $expected got $got $out"; fi
+}
+W 0 'deployed ok (worker worker-version)'
+W 0 'deployed ok (worker worker-version)' VERSION_FIXTURE="{\"annotations\":{\"workers/tag\":\"${worker_sha:0:12}\"}}"
+W 1 'FAIL: worker version worker-version does not match merge' VERSION_FIXTURE='{"annotations":{"workers/message":"wrong","workers/tag":"wrong"}}'
+W 1 'FAIL: worker version worker-version does not match merge' VERSION_FIXTURE="{\"annotations\":{\"workers/message\":\"${worker_sha:0:12}\",\"workers/tag\":\"$worker_sha\"}}"
+W 1 'FAIL: worker version worker-version does not match merge' VERSION_FIXTURE='{}'
+W 1 'FAIL: worker version worker-version does not match merge' VERSION_FIXTURE='invalid'
+W 1 'FAIL: worker deployment must have exactly one version at 100%' DEPLOYMENT_FIXTURE='{"versions":[{"version_id":"worker-version","percentage":50},{"version_id":"other-version","percentage":50}]}'
+W 1 'FAIL: worker deployment must have exactly one version at 100%' DEPLOYMENT_FIXTURE='{"versions":[{"version_id":"worker-version","percentage":100},{"version_id":"other-version","percentage":0}]}'
+W 1 'FAIL: worker deployment must have exactly one version at 100%' DEPLOYMENT_FIXTURE='{"versions":[{"version_id":"worker-version","percentage":99}]}'
+W 1 'FAIL: worker deployment must have exactly one version at 100%' DEPLOYMENT_FIXTURE='{"versions":[]}'
+W 1 'FAIL: worker deployment must have exactly one version at 100%' DEPLOYMENT_FIXTURE='invalid'
+W 1 'FAIL: could not read worker deployment' WRANGLER_ERROR=1
+W 1 'FAIL: could not read worker version' VERSION_ERROR=1
+W 1 'FAIL: no release found' SHIP_WORKER=
+W 1 'FAIL: could not read releases' RELEASE_ERROR=1
+W 1 'FAIL: no release found' RELEASES_FIXTURE='[{"tagName":"v1"}]'
+W 1 'FAIL: set SHIP_CHECKOUT' SHIP_CHECKOUT=
+W 1 'FAIL: SHIP_WORKER must be a relative worker directory' SHIP_WORKER=../worker
+W 1 'FAIL: SHIP_WORKER must be a relative worker directory' SHIP_WORKER=/worker
+W 0 'deployed ok (release v1)' RELEASE_TAG=v1 WRANGLER_ERROR=1
+
+# Generated worker CHECKs must carry the settings and remain safe to approve again.
+python3 - "$PWD/ship-gates" "$HOME/.agents/skills/unlazy" "$E" <<'PY'
+import os, pathlib, subprocess, sys
+script, unlazy, tmp = sys.argv[1:]
+p = pathlib.Path(tmp)
+home = p / 'gate-home'
+ship = home / '.agents/skills/ship/scripts'
+ship.mkdir(parents=True)
+(home / '.agents/skills/unlazy').symlink_to(unlazy, target_is_directory=True)
+check = ship / 'ship-check'
+check.write_text('''#!/usr/bin/env python3
+import os, sys
+assert os.environ['SHIP_REPO'] == 'valentinyeo/agent-fleet'
+assert os.environ['SHIP_BASE'] == 'htpr-5009-mdx-write-guard-v2'
+assert os.environ['SHIP_CHECKOUT'] == '/tmp/worker checkout'
+assert os.environ['SHIP_WORKER'] == 'workers/docs agent'
+print(dict(ticket='ticket ok', pr='title ok', merged='merged ok',
+           deployed='deployed ok (worker fixture)', done='done ok', cleaned='cleaned ok')[sys.argv[1]])
+''')
+check.chmod(0o755)
+repo = p / 'gate-repo'
+repo.mkdir()
+approval = p / 'gate-approvals'
+approval.mkdir(mode=0o700)
+env = dict(os.environ, HOME=str(home), UNLAZY_APPROVAL_DIR=str(approval),
+           CLAUDE_CODE_SESSION_ID='worker-gates-fixture', SHIP_REPO='valentinyeo/agent-fleet',
+           SHIP_BASE='htpr-5009-mdx-write-guard-v2', SHIP_CHECKOUT='/tmp/worker checkout',
+           SHIP_WORKER='workers/docs agent')
+for _ in range(2):
+    r = subprocess.run(['bash', script, 'YPER4-999'], cwd=repo, env=env, text=True, capture_output=True)
+    assert r.returncode == 0 and 'ALL MET' in r.stderr, r.stdout + r.stderr
+ledger = repo / '.unlazy/s-worker-g/GATES.md'
+text = ledger.read_text()
+prefix = "SHIP_REPO=valentinyeo/agent-fleet SHIP_BASE=htpr-5009-mdx-write-guard-v2 SHIP_CHECKOUT='/tmp/worker checkout' SHIP_WORKER='workers/docs agent' "
+assert text.count('  CHECK: ' + prefix) == 6
+assert text.count('automatic-evidence=v1') == 6
+for worker in ['/absolute', '../outside', "workers/a';touch bad"]:
+    r = subprocess.run(['bash', script, 'YPER4-999'], cwd=repo,
+                       env=dict(env, SHIP_WORKER=worker), text=True, capture_output=True)
+    assert r.returncode != 0 and 'SHIP_WORKER must be a relative worker directory' in r.stderr
+    assert ledger.read_text() == text
+print('worker CHECK persistence passed')
+PY
+[ "$?" = 0 ] && ok 'worker CHECK persistence and validation' || bad 'worker CHECK persistence and validation'
 
 # Duplicates: HTPR-6823 was fixed by HTPR-6801's merged PR 837.
 ./ship-check duplicate HTPR-6823 HTPR-6801 830 >/dev/null && bad "duplicate accepted another ticket's PR" || ok "duplicate rejects a PR of another ticket"
@@ -629,4 +732,4 @@ W 1 1 FLAG_POST_ERROR=1
 W 0 1
 
 python3 ./premerge-evidence.test.py && ok 'poster regressions' || bad 'poster regressions'
-echo "failures: $fails"; [ "$fails" = 0 ] && echo 'ALL PASS: All ship-check tests passed'
+echo "$passes passed, $fails failed"; [ "$fails" = 0 ] && echo 'ALL PASS: All ship-check tests passed'
