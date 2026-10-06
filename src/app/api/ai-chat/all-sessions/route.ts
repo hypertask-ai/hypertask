@@ -1,3 +1,5 @@
+import { HTPR_6924_REST_COMPAT_FLAG, isFeatureEnabled } from "@/lib/flags";
+import { checkRestRateLimit } from "@/lib/api/rateLimit";
 import prisma from "@/lib/prisma";
 import { loadCurrentUser } from "@/lib/auth/currentUser";
 import { unauthorized } from "@/lib/api/response";
@@ -8,6 +10,17 @@ export async function GET(request: NextRequest) {
     const currentUser = await loadCurrentUser(request.headers, true);
     if (!currentUser) return unauthorized();
     const { user } = currentUser;
+
+    let restCompat = false;
+    try {
+      restCompat = await isFeatureEnabled(HTPR_6924_REST_COMPAT_FLAG, currentUser.userId);
+    } catch {
+      // Flag lookup failure preserves the legacy route.
+    }
+    if (restCompat) {
+      const limited = await checkRestRateLimit(currentUser.userId, "read");
+      if (limited) return limited;
+    }
 
     const sessions = await prisma.chatSession.findMany({
       relationLoadStrategy: "join",

@@ -1,3 +1,6 @@
+import { readJsonBody } from "@/lib/mcp/readJsonBody";
+import { loadCurrentUser } from "@/lib/auth/currentUser";
+import { HTPR_6924_REST_COMPAT_FLAG, isFeatureEnabled } from "@/lib/flags";
 import { NextRequest, NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import prisma from "@/lib/prisma";
@@ -53,7 +56,18 @@ async function getCurrentUserFromCookies() {
 
 export async function GET(request: NextRequest) {
   try {
-    const user = await getCurrentUserFromCookies();
+    const currentUser = await loadCurrentUser(request.headers, true).catch(() => null);
+    let restCompat = false;
+    if (currentUser) {
+      try {
+        restCompat = await isFeatureEnabled(HTPR_6924_REST_COMPAT_FLAG, currentUser.userId);
+      } catch {
+        // Flag lookup failure preserves the legacy entry path.
+      }
+    }
+    const user = restCompat && currentUser
+      ? currentUser.user
+      : await getCurrentUserFromCookies();
     if (!user?.id) {
       return NextResponse.json(
         { success: false, error: "Unauthorized" },
@@ -100,7 +114,18 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
-    const user = await getCurrentUserFromCookies();
+    const currentUser = await loadCurrentUser(request.headers, true).catch(() => null);
+    let restCompat = false;
+    if (currentUser) {
+      try {
+        restCompat = await isFeatureEnabled(HTPR_6924_REST_COMPAT_FLAG, currentUser.userId);
+      } catch {
+        // Flag lookup failure preserves the legacy entry path.
+      }
+    }
+    const user = restCompat && currentUser
+      ? currentUser.user
+      : await getCurrentUserFromCookies();
     if (!user?.id) {
       return NextResponse.json(
         { success: false, error: "Unauthorized" },
@@ -109,20 +134,29 @@ export async function POST(request: NextRequest) {
     }
 
     let body: Record<string, unknown>;
-    try {
-      body = await request.json();
-    } catch {
-      return NextResponse.json(
-        { success: false, error: "Invalid JSON" },
-        { status: 400 },
-      );
-    }
+    if (restCompat) {
+      const result = await readJsonBody<Record<string, unknown>>(request, {
+        invalidJson: () => NextResponse.json({ success: false, error: "Invalid JSON" }, { status: 400 }),
+        invalidObject: () => NextResponse.json({ success: false, error: "Invalid preferences" }, { status: 400 }),
+      });
+      if (!result.ok) return result.response;
+      body = result.body;
+    } else {
+      try {
+        body = await request.json();
+      } catch {
+        return NextResponse.json(
+          { success: false, error: "Invalid JSON" },
+          { status: 400 },
+        );
+      }
 
-    if (!body || typeof body !== "object" || Array.isArray(body)) {
-      return NextResponse.json(
-        { success: false, error: "Invalid preferences" },
-        { status: 400 },
-      );
+      if (!body || typeof body !== "object" || Array.isArray(body)) {
+        return NextResponse.json(
+          { success: false, error: "Invalid preferences" },
+          { status: 400 },
+        );
+      }
     }
 
     let calendarViewsOperation: CalendarViewsOperation | undefined;
