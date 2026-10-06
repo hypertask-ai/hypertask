@@ -1,3 +1,5 @@
+import { readJsonBody } from "@/lib/mcp/readJsonBody";
+import { checkRestRateLimit } from "@/lib/api/rateLimit";
 import prisma from "@/lib/prisma";
 import { getSessionUser } from "@/lib/auth/getSessionUser";
 import { NextRequest, NextResponse } from "next/server";
@@ -9,7 +11,7 @@ import {
   loadUserAgentChatSession,
   userTeamIds,
 } from "@/lib/agents/chatAccess";
-import { isFeatureEnabled, SHARED_AGENT_CHAT_FLAG } from "@/lib/flags";
+import { isFeatureEnabled, SHARED_AGENT_CHAT_FLAG, HTPR_6924_REST_COMPAT_FLAG } from "@/lib/flags";
 
 export const runtime = "nodejs";
 
@@ -25,9 +27,40 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const parsed = createSessionSchema.safeParse(
-      await request.json().catch(() => ({}))
-    );
+    let restCompat = false;
+    try {
+      restCompat = await isFeatureEnabled(HTPR_6924_REST_COMPAT_FLAG, userId);
+    } catch {
+      // Flag lookup failure preserves the legacy route.
+    }
+    if (restCompat) {
+      const limited = await checkRestRateLimit(userId, "write");
+      if (limited) return limited;
+    }
+
+    let body: Awaited<ReturnType<typeof request.json>>;
+    if (restCompat) {
+      // Capture once: preserve accepted non-objects and the original parse error/fallback.
+      let jsonError: unknown;
+      const result = await readJsonBody<typeof body>({
+        json: async () => {
+          try {
+            body = await request.json().catch(() => ({}));
+            return body;
+          } catch (error) {
+            jsonError = error;
+            throw error;
+          }
+        },
+      } as Request, {
+        invalidJson: () => { throw jsonError },
+        invalidObject: () => NextResponse.json({ error: "Request body must be a JSON object" }, { status: 400 }),
+      });
+      if (result.ok) body = result.body;
+    } else {
+      body = await request.json().catch(() => ({}));
+    }
+    const parsed = createSessionSchema.safeParse(body);
     if (!parsed.success) {
       return NextResponse.json(
         { error: "Invalid task ID" },

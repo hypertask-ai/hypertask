@@ -1,3 +1,4 @@
+import { checkRestRateLimit } from '@/lib/api/rateLimit'
 import { cookies } from 'next/headers'
 import { NextRequest, NextResponse } from 'next/server'
 
@@ -42,6 +43,11 @@ export async function POST(request: NextRequest, { params }: RouteContext) {
       const { isValid, user } = isValidUser(userCookie.value)
       if (!isValid || !user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
       userId = user.id
+    }
+
+    if (restCompat && currentUser) {
+      const limited = await checkRestRateLimit(currentUser.userId, 'write')
+      if (limited) return limited
     }
 
     let parsedBody: unknown

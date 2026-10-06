@@ -1,3 +1,6 @@
+import { readJsonBody } from "@/lib/mcp/readJsonBody";
+import { loadCurrentUser } from "@/lib/auth/currentUser";
+import { HTPR_6924_REST_COMPAT_FLAG, isFeatureEnabled } from "@/lib/flags";
 import { NextRequest, NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { isValidUser } from "@/utils/edgeHelpers";
@@ -21,7 +24,18 @@ export async function GET(request: NextRequest) {
   try {
     const cookieStore = await cookies();
     const userCookie = cookieStore.get("nookies_user");
-    const { isValid, user } = isValidUser(userCookie?.value);
+    const currentUser = await loadCurrentUser(request.headers, true).catch(() => null);
+    let restCompat = false;
+    if (currentUser) {
+      try {
+        restCompat = await isFeatureEnabled(HTPR_6924_REST_COMPAT_FLAG, currentUser.userId);
+      } catch {
+        // Flag lookup failure preserves the legacy entry path.
+      }
+    }
+    const { isValid, user } = restCompat && currentUser
+      ? { isValid: true, user: currentUser.user }
+      : isValidUser(userCookie?.value);
 
     if (!isValid || !user) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -61,13 +75,45 @@ export async function POST(request: NextRequest) {
   try {
     const cookieStore = await cookies();
     const userCookie = cookieStore.get("nookies_user");
-    const { isValid, user } = isValidUser(userCookie?.value);
+    const currentUser = await loadCurrentUser(request.headers, true).catch(() => null);
+    let restCompat = false;
+    if (currentUser) {
+      try {
+        restCompat = await isFeatureEnabled(HTPR_6924_REST_COMPAT_FLAG, currentUser.userId);
+      } catch {
+        // Flag lookup failure preserves the legacy entry path.
+      }
+    }
+    const { isValid, user } = restCompat && currentUser
+      ? { isValid: true, user: currentUser.user }
+      : isValidUser(userCookie?.value);
 
     if (!isValid || !user) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const body = await request.json();
+    let body: Awaited<ReturnType<typeof request.json>>;
+    if (restCompat) {
+      // Capture once: preserve accepted non-objects and the original parse error/fallback.
+      let jsonError: unknown;
+      const result = await readJsonBody<typeof body>({
+        json: async () => {
+          try {
+            body = await request.json();
+            return body;
+          } catch (error) {
+            jsonError = error;
+            throw error;
+          }
+        },
+      } as Request, {
+        invalidJson: () => { throw jsonError },
+        invalidObject: () => NextResponse.json({ error: "Request body must be a JSON object" }, { status: 400 }),
+      });
+      if (result.ok) body = result.body;
+    } else {
+      body = await request.json();
+    }
     const { projectId, name, type, options } = body;
 
     if (!projectId || !name || !type) {
@@ -116,13 +162,45 @@ export async function PATCH(request: NextRequest) {
   try {
     const cookieStore = await cookies();
     const userCookie = cookieStore.get("nookies_user");
-    const { isValid, user } = isValidUser(userCookie?.value);
+    const currentUser = await loadCurrentUser(request.headers, true).catch(() => null);
+    let restCompat = false;
+    if (currentUser) {
+      try {
+        restCompat = await isFeatureEnabled(HTPR_6924_REST_COMPAT_FLAG, currentUser.userId);
+      } catch {
+        // Flag lookup failure preserves the legacy entry path.
+      }
+    }
+    const { isValid, user } = restCompat && currentUser
+      ? { isValid: true, user: currentUser.user }
+      : isValidUser(userCookie?.value);
 
     if (!isValid || !user) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const body = await request.json();
+    let body: Awaited<ReturnType<typeof request.json>>;
+    if (restCompat) {
+      // Capture once: preserve accepted non-objects and the original parse error/fallback.
+      let jsonError: unknown;
+      const result = await readJsonBody<typeof body>({
+        json: async () => {
+          try {
+            body = await request.json();
+            return body;
+          } catch (error) {
+            jsonError = error;
+            throw error;
+          }
+        },
+      } as Request, {
+        invalidJson: () => { throw jsonError },
+        invalidObject: () => NextResponse.json({ error: "Request body must be a JSON object" }, { status: 400 }),
+      });
+      if (result.ok) body = result.body;
+    } else {
+      body = await request.json();
+    }
     const { fieldId, name, showInRail, showInTable } = body;
     if (!fieldId) {
       return NextResponse.json({ error: "fieldId required" }, { status: 400 });
@@ -170,7 +248,18 @@ export async function DELETE(request: NextRequest) {
   try {
     const cookieStore = await cookies();
     const userCookie = cookieStore.get("nookies_user");
-    const { isValid, user } = isValidUser(userCookie?.value);
+    const currentUser = await loadCurrentUser(request.headers, true).catch(() => null);
+    let restCompat = false;
+    if (currentUser) {
+      try {
+        restCompat = await isFeatureEnabled(HTPR_6924_REST_COMPAT_FLAG, currentUser.userId);
+      } catch {
+        // Flag lookup failure preserves the legacy entry path.
+      }
+    }
+    const { isValid, user } = restCompat && currentUser
+      ? { isValid: true, user: currentUser.user }
+      : isValidUser(userCookie?.value);
 
     if (!isValid || !user) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
