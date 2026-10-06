@@ -1,3 +1,4 @@
+import { withTaskWriteFlag } from "@/lib/api/task-writes/route";
 import { SESSION_COOKIE, verifySession } from "@/lib/auth/session";
 import { isHeicPreviewUrl } from "@/lib/media/heicPreview";
 import {
@@ -65,7 +66,7 @@ export function parseKeys(
   });
 }
 
-export default async function handler(
+async function handler(
   req: NextApiRequest,
   res: NextApiResponse
 ) {
@@ -273,3 +274,7 @@ async function resolveBetterAuthSession(
   const session = await getSessionUser(headers);
   return session ? { id: session.userId } : null;
 }
+
+export default withTaskWriteFlag(handler, "POST", async () =>
+  (await import("@/lib/api/task-writes/upload-finalize")).POST,
+);

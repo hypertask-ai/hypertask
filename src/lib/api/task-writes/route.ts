@@ -98,6 +98,10 @@ export function withTaskWriteFlag(
     });
     // Relation failures historically send an empty 200, not JSON null.
     const text = await response.text();
+    // Download errors use Pages' text send contract, not a JSON string.
+    if (text && !response.headers.get("content-type")?.includes("application/json")) {
+      return res.status(response.status).send(text);
+    }
     return res.status(response.status).json(text ? JSON.parse(text) : undefined);
   };
 }

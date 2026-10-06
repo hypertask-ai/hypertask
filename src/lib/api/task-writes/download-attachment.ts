@@ -1,5 +1,6 @@
-import { withTaskWriteFlag } from "@/lib/api/task-writes/route";
-import { NextApiRequest, NextApiResponse } from "next";
+import { NextResponse } from "next/server";
+import { z } from "zod";
+import { taskWriteRoute, type TaskWriteRoute } from "./route";
 import prisma from "@/lib/prisma";
 
 import {
@@ -7,32 +8,17 @@ import {
   HYPERTASKS_S3_BUCKET,
   parseHypertasksStorageKeyFromUrl,
 } from "@/lib/storage/hypertasksS3";
-import { getSessionUser } from "@/lib/auth/getSessionUser";
 
-async function handler(
-  req: NextApiRequest,
-  res: NextApiResponse
-) {
-  const session = await getSessionUser(
-    new Headers(req.headers as Record<string, string>)
-  );
-  if (!session) {
-    res.status(401).json({ message: "Unauthorized" });
-    return;
-  }
-  if (req.method !== "GET") {
-    res.status(405).json({ message: "Method not allowed" });
-    return;
-  }
-  if (req.method === "GET") {
+const route = taskWriteRoute({
+  schema: z.custom<Record<string, string | string[]>>(() => true),
+  validationMessage: "File name is required",
+  operation: async (query, session) => {
     const userId = session.userId;
-
     const s3 = getHypertasksS3Client();
-    const { fileName, fileSource } = req.query;
+    const { fileName, fileSource } = query;
 
     if (!fileSource || !fileName) {
-      res.status(400).send("File name is required");
-      return;
+      return new NextResponse("File name is required", { status: 400, headers: { "content-type": "text/html; charset=utf-8" } });
     }
 
     try {
@@ -59,8 +45,7 @@ async function handler(
         if (attachment.chatMessage) {
           // Chat message attachment: only the session owner may download
           if (attachment.chatMessage.session.userId !== userId) {
-            res.status(403).send("Forbidden");
-            return;
+            return new NextResponse("Forbidden", { status: 403, headers: { "content-type": "text/html; charset=utf-8" } });
           }
         } else if (projectId != null) {
           // Task/description/comment attachment: verify project membership
@@ -75,8 +60,7 @@ async function handler(
             select: { id: true },
           });
           if (!project) {
-            res.status(403).send("Forbidden");
-            return;
+            return new NextResponse("Forbidden", { status: 403, headers: { "content-type": "text/html; charset=utf-8" } });
           }
         }
         // If attachment exists but has no resolvable project/chatMessage (e.g. AI_Custom_Instructions),
@@ -94,17 +78,25 @@ async function handler(
 
       const downloadUrl = s3.getSignedUrl("getObject", params);
 
-      res.setHeader("Cache-Control", "no-store");
-      res.setHeader("Pragma", "no-cache"); // For compatibility with older browsers
-      res.setHeader("Expires", "0");
-
-      res.status(200).json({ downloadUrl });
+      return NextResponse.json({ downloadUrl }, { status: 200, headers: { "Cache-Control": "no-store", Pragma: "no-cache", Expires: "0" } });
     } catch (err) {
       console.error("Error fetching file from S3:", err);
-      res.status(500).send("Error fetching file");
+      return new NextResponse("Error fetching file", { status: 500, headers: { "content-type": "text/html; charset=utf-8" } });
     }
+  },
+});
+
+export const GET: TaskWriteRoute = async (request, session) => {
+  let query = request.query;
+  if (!query) {
+    const params = new URL(request.url!).searchParams;
+    query = Object.fromEntries([...new Set(params.keys())].map((key) => {
+      const values = params.getAll(key);
+      return [key, values.length === 1 ? values[0] : values];
+    }));
   }
-}
+  return route({ headers: request.headers, json: async () => query }, session);
+};
 
 const getKey = (url: string) => {
   const key = parseHypertasksStorageKeyFromUrl(url);
@@ -113,7 +105,3 @@ const getKey = (url: string) => {
   }
   return key;
 };
-
-export default withTaskWriteFlag(handler, "GET", async () =>
-  (await import("@/lib/api/task-writes/download-attachment")).GET,
-);
