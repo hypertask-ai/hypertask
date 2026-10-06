@@ -1,3 +1,6 @@
+import { useFlag } from "@/hooks/useFlag";
+import { HTPR_6975_TYPED_WRITES_FLAG } from "@/lib/flags/keys";
+import { setTaskStartDate } from "@/lib/api/typedClient";
 /* eslint-disable react-hooks/exhaustive-deps */
 import {
   ModalContainerCustom,
@@ -36,6 +39,9 @@ const StartDateModal: React.FC<Props> = ({
   mode = "Update",
 }) => {
   const [inViewObject] = useRecoilState(inViewObjectAtom);
+  const typedClient = useFlag(HTPR_6975_TYPED_WRITES_FLAG);
+  let typedWrite: typeof setTaskStartDate | undefined;
+  if (typedClient) typedWrite = setTaskStartDate;
   const taskId = mode === "Update" ? inViewObject.taskId : null;
   const { data: task } = useGetSingleTask(taskId);
   const currentStartDate =
@@ -79,7 +85,7 @@ const StartDateModal: React.FC<Props> = ({
     const date = selected.date ? new Date(selected.date) : undefined;
     if (mode === "Update" && inViewObject.taskId) {
       try {
-        const result = await setStartDateApiHandler(date, inViewObject.taskId);
+        const result = await setStartDateApiHandler(date, inViewObject.taskId, typedWrite);
         if (result === undefined) {
           toast.error("Could not update the start date. Try again.");
           return;

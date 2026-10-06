@@ -80,3 +80,46 @@ void getTaskCycle<{ arbitrary: true }>({ taskId: 12 });
 void getBoardDetail<{ arbitrary: true }>({ projectId: 15, userId: 985 });
 // @ts-expect-error route path params are inferred
 void descriptionVersionsRoute.path({ taskId: "12" });
+
+import type { Priority, Estimate, TaskLabel, Assignees } from "@prisma/client";
+import { setTaskPriority, setTaskEstimate, setTaskDueDate, setTaskStartDate, setTaskWaitingOn, assignTaskUser, assignTaskLabel, moveTask, readMoveTaskResponse, taskPriorityRoute, taskEstimateRoute, taskDueDateRoute, taskStartDateRoute, taskWaitingOnRoute, taskAssigneeRoute, taskLabelRoute, moveTaskRoute } from "@/lib/api/typedClient";
+import { taskPropertyResponseSchema, waitingOnResponseSchema, priorityResponseSchema, estimateResponseSchema, assigneeResponseSchema, labelResponseSchema } from "@/lib/api/contracts/taskWrites";
+
+type JsonPriority = Omit<Priority, "createdAt"> & { createdAt: string };
+type JsonEstimate = Omit<Estimate, "createdAt" | "updatedAt"> & { createdAt: string; updatedAt: string | null };
+type PriorityRow = Extract<z.output<typeof priorityResponseSchema>, { id: string }>;
+type EstimateRow = Extract<z.output<typeof estimateResponseSchema>, { id: string }>;
+export type PriorityProducerParity = Assert<Equal<Pick<PriorityRow, keyof JsonPriority>, Pick<JsonPriority, keyof JsonPriority>>>;
+export type EstimateProducerParity = Assert<Equal<Pick<EstimateRow, keyof JsonEstimate>, Pick<JsonEstimate, keyof JsonEstimate>>>;
+type PropertyFields = RelationFields | "section";
+export type PropertyProducerParity = Assert<Equal<Pick<z.output<typeof taskPropertyResponseSchema>, PropertyFields>, Pick<Task, PropertyFields>>>;
+export type WaitingProducerParity = Assert<Equal<Pick<z.output<typeof waitingOnResponseSchema>, "id" | "waitingOnUserId" | "waitingOnSetById">, Pick<Task, "id" | "waitingOnUserId" | "waitingOnSetById">>>;
+export type LabelProducerParity = Assert<Equal<Pick<z.output<typeof labelResponseSchema>[number], keyof TaskLabel>, TaskLabel>>;
+export type AssigneeProducerParity = Assert<Equal<Pick<z.output<typeof assigneeResponseSchema>["body"][number], "id" | "taskId" | "userId" | "agentId">, Pick<Assignees, "id" | "taskId" | "userId" | "agentId">>>;
+export type PriorityWriteData = Assert<Equal<Awaited<ReturnType<typeof setTaskPriority>>["data"], z.output<typeof taskPriorityRoute.success>>>;
+export type EstimateWriteData = Assert<Equal<Awaited<ReturnType<typeof setTaskEstimate>>["data"], z.output<typeof taskEstimateRoute.success>>>;
+export type DueDateWriteData = Assert<Equal<Awaited<ReturnType<typeof setTaskDueDate>>["data"], z.output<typeof taskDueDateRoute.success>>>;
+export type StartDateWriteData = Assert<Equal<Awaited<ReturnType<typeof setTaskStartDate>>["data"], z.output<typeof taskStartDateRoute.success>>>;
+export type WaitingOnWriteData = Assert<Equal<Awaited<ReturnType<typeof setTaskWaitingOn>>["data"], z.output<typeof taskWaitingOnRoute.success>>>;
+export type AssigneeWriteData = Assert<Equal<Awaited<ReturnType<typeof assignTaskUser>>["data"], z.output<typeof taskAssigneeRoute.success>>>;
+export type LabelWriteData = Assert<Equal<Awaited<ReturnType<typeof assignTaskLabel>>["data"], z.output<typeof taskLabelRoute.success>>>;
+export type MoveWriteData = Assert<Equal<Awaited<ReturnType<typeof readMoveTaskResponse>>, z.output<typeof moveTaskRoute.success>>>;
+export type PriorityInput = Assert<Equal<Parameters<typeof setTaskPriority>[0], z.input<typeof taskPriorityRoute.body>>>;
+export type MoveInput = Assert<Equal<Parameters<typeof moveTask>[0], z.input<typeof moveTaskRoute.body>>>;
+void setTaskPriority({ taskId: 12, priority_index: 0, Priority_Value: "No Priority" });
+void setTaskDueDate({ taskId: 12, dueDate: new Date() });
+void setTaskStartDate({ taskId: 12, startDate: null });
+void assignTaskUser({ taskId: 12, agentId: "agent-id", intent: "unassign" });
+// @ts-expect-error no string task ID
+void setTaskPriority({ taskId: "12", priority_index: 1, Priority_Value: "High" });
+// @ts-expect-error no unsupported assignee intent
+void assignTaskUser({ taskId: 12, userId: 985, intent: "remove" });
+// @ts-expect-error section ID is required
+void moveTask({ taskId: 12, projectId: 15, section_title: "Doing" });
+// @ts-expect-error labels use string IDs
+void assignTaskLabel({ taskId: 12, labelId: 42 });
+// @ts-expect-error caller cannot choose a response type
+void setTaskPriority<{ arbitrary: true }>({ taskId: 12, priority_index: 1, Priority_Value: "High" });
+// @ts-expect-error wire date is not a hydrated Date
+const wrongWriteDate: z.output<typeof taskPropertyResponseSchema>["dueDate"] = new Date();
+void wrongWriteDate;

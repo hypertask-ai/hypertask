@@ -1,3 +1,6 @@
+import { useFlag } from "@/hooks/useFlag";
+import { HTPR_6975_TYPED_WRITES_FLAG } from "@/lib/flags/keys";
+import { moveTask, readMoveTaskResponse } from "@/lib/api/typedClient";
 import { IComment, ITaskLabel, ISection } from "@/models/model";
 import toast from "react-hot-toast";
 import { undoToastSettings } from "@/components/undoToast";
@@ -6,6 +9,7 @@ import { descriptionContainerId } from "@/lib/constants/TaskDetail";
 import globalConstants from "@/lib/constants";
 import type { TaskDetailContext } from "./TaskDetailContext";
 export function useTaskDetailNavigationActions(getContext: () => TaskDetailContext) {
+  const typedClient = useFlag(HTPR_6975_TYPED_WRITES_FLAG);
   const { updateCommentsActivityQuery, comments, currentTask, setComments, sectionsForProjectTQ, movingItem, setCurrentTask, setMovingItem, removeFromListWithStatus, moveItem, getProjectIdxAndAllData, setTasksPlayList, currentUser, navigate, setEditMode, focusOn, lastGPress, defaultCommentFocus, scrollVirtualize, editModeCheck, markAsDone, copyTaskURL, undoAction, queryClient, navigateToPreviousTask, showCreateLabelModal, setShowCreateLabelModal, _parsedTask, updateTaskInCache, currentProject, lastM_APress, setShowMoveTaskToBoard, currentId } = getContext();
 
 
@@ -39,7 +43,7 @@ export function useTaskDetailNavigationActions(getContext: () => TaskDetailConte
       );
 
       setMovingItem(true);
-      const response = await fetch(taskDetailConfig.apiEndpoints.moveTask, {
+      const response = typedClient ? await moveTask({ projectId: currentTask.projectId, taskId: currentTask.id, section_title: sectionToMoveTo.section_title, sectionId: sectionToMoveTo.id!, section: sectionToMoveTo.section_title }) : await fetch(taskDetailConfig.apiEndpoints.moveTask, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -52,7 +56,7 @@ export function useTaskDetailNavigationActions(getContext: () => TaskDetailConte
       });
 
       if (response.status === taskDetailConfig.httpStatus.ok) {
-        const data = await response.json();
+        const data = typedClient ? await readMoveTaskResponse(response) : await response.json();
         taskUpdateCommentsInCache(data.newComment);
 
         if (!sectionToMoveTo.visibility)

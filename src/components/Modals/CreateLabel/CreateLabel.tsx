@@ -1,3 +1,6 @@
+import { useFlag } from "@/hooks/useFlag";
+import { HTPR_6975_TYPED_WRITES_FLAG } from "@/lib/flags/keys";
+import { assignTaskLabel } from "@/lib/api/typedClient";
 import { useGetAllProjectLabels } from "@/hooks/MultiPages/useGetAllProjectLabels";
 import { ICurrentInViewObject, inViewObjectAtom } from "@/store";
 import { ChangeEvent, useCallback, useEffect, useRef, useState, useMemo } from "react";
@@ -114,6 +117,9 @@ const CreateLabel: React.FC<Props> = ({
   onBulkLabel,
 }) => {
   const [label, setLabel] = useState("");
+  const typedClient = useFlag(HTPR_6975_TYPED_WRITES_FLAG);
+  let typedWrite: typeof assignTaskLabel | undefined;
+  if (typedClient) typedWrite = assignTaskLabel;
   const labelInputRef = useRef<HTMLInputElement>(null);
   const [inViewObject, __] = useRecoilState(inViewObjectAtom);
   const {
@@ -229,7 +235,7 @@ const CreateLabel: React.FC<Props> = ({
         updateLabelOptimistically(labelToToggle, newCheckState);
 
         // Make the API call
-        const response = await axiosClient.post("/labels/assignLabel", {
+        const response = typedWrite ? await typedWrite({ taskId: inViewObject.taskId!, labelId: labelToToggle.id }) : await axiosClient.post("/labels/assignLabel", {
           taskId: inViewObject.taskId,
           labelId: labelToToggle.id,
         });
@@ -259,6 +265,7 @@ const CreateLabel: React.FC<Props> = ({
       isLoading,
       onBulkLabel,
       taskIds,
+      typedWrite,
     ]
   );
 

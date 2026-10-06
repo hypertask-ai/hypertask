@@ -1,3 +1,6 @@
+import { useFlag } from "@/hooks/useFlag";
+import { HTPR_6975_TYPED_WRITES_FLAG } from "@/lib/flags/keys";
+import { moveTask, readMoveTaskResponse } from "@/lib/api/typedClient";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { IProjectsAll, ITask } from "@/models/model";
 import UpdateKanban from "@/hooks/MultiPages/useUpdateTaskInBoards";
@@ -14,6 +17,9 @@ type MoveTaskToSectionInput = {
 };
 
 const useMoveTaskToSection = () => {
+  const typedClient = useFlag(HTPR_6975_TYPED_WRITES_FLAG);
+  let typedWrite: typeof moveTask | undefined;
+  if (typedClient) typedWrite = moveTask;
   const queryClient = useQueryClient();
   const { moveItem } = UpdateKanban();
 
@@ -39,7 +45,7 @@ const useMoveTaskToSection = () => {
       destinationSectionTitle,
     }: MoveTaskToSectionInput) => {
       const ranking = getDestinationEndRanking(projectId, destinationSectionId, taskId);
-      const response = await fetch("/api/tasks/moveTask", {
+      const response = typedWrite ? await typedWrite({ projectId, taskId, section_title: destinationSectionTitle, sectionId: destinationSectionId, section: destinationSectionTitle, ranking }) : await fetch("/api/tasks/moveTask", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -51,7 +57,7 @@ const useMoveTaskToSection = () => {
           ranking,
         }),
       });
-      const data = await response.json().catch(() => null);
+      const data = await (typedClient && response.ok ? readMoveTaskResponse(response) : response.json()).catch(() => null);
       if (!response.ok) throw new Error(data?.message ?? "Unable to move task");
       return data;
     },
