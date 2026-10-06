@@ -128,13 +128,43 @@ check_deployed() {
           || fail "SHIP_WORKER must be a relative worker directory inside SHIP_CHECKOUT"
         [[ $sha =~ ^[0-9a-f]{40}$ ]] || fail "invalid merge sha for worker deployment: $sha"
         local deployment version worker="$SHIP_CHECKOUT/$SHIP_WORKER"
-        local -a wrangler=(npx wrangler)
-        deployment=$(cd "$worker" && "${wrangler[@]}" deployments status --json 2>/dev/null) \
+        local name= account_id= line field checkout neutral parent contents
+        local config_re="^[[:space:]]*(name|account_id)[[:space:]]*=[[:space:]]*([\"'])([A-Za-z0-9_-]+)\\2[[:space:]]*(#.*)?$"
+        [ -f "$worker/wrangler.toml" ] && [ -r "$worker/wrangler.toml" ] || fail "could not read worker wrangler.toml"
+        while IFS= read -r line || [ -n "$line" ]; do
+          [[ $line =~ ^[[:space:]]*\[ ]] && break
+          if [[ $line =~ ^[[:space:]]*(name|account_id)[[:space:]]*= ]]; then
+            [[ $line =~ $config_re ]] || fail "invalid worker name or account_id in wrangler.toml"
+            field=${BASH_REMATCH[1]}
+            [ -z "${!field}" ] || fail "duplicate worker $field in wrangler.toml"
+            printf -v "$field" '%s' "${BASH_REMATCH[3]}"
+          fi
+        done < "$worker/wrangler.toml"
+        [[ $name =~ ^[A-Za-z0-9_-]+$ && $account_id =~ ^[0-9a-f]{32}$ ]] \
+          || fail "missing or invalid worker name or account_id in wrangler.toml"
+        checkout=$(cd "$SHIP_CHECKOUT" && pwd -P) || fail "could not read SHIP_CHECKOUT"
+        neutral="${XDG_CACHE_HOME:-$HOME/.cache}/ship-check-wrangler"
+        [[ $neutral == /* && ! -L $neutral ]] || fail "unsafe neutral wrangler directory"
+        mkdir -p "$neutral" || fail "could not create neutral wrangler directory"
+        neutral=$(cd "$neutral" && pwd -P) || fail "could not read neutral wrangler directory"
+        [[ $neutral != "$checkout" && $neutral != "$checkout/"* ]] || fail "neutral wrangler directory must be outside SHIP_CHECKOUT"
+        contents=$(find "$neutral" -mindepth 1 -maxdepth 1 -print -quit) || fail "could not inspect neutral wrangler directory"
+        [ -z "$contents" ] || fail "neutral wrangler directory must be empty"
+        # npx also searches ancestors for local packages and executables.
+        parent=$neutral
+        while :; do
+          [[ ! -e $parent/package.json && ! -e $parent/node_modules && ! -e $parent/.git ]] \
+            || fail "neutral wrangler directory must be outside checkouts and local npm packages"
+          [ "$parent" = / ] && break
+          parent=${parent%/*}; parent=${parent:-/}
+        done
+        local -a wrangler=(npx --yes wrangler@3.114.17)
+        deployment=$(cd "$neutral" && CLOUDFLARE_ACCOUNT_ID="$account_id" "${wrangler[@]}" deployments status --name "$name" --json 2>/dev/null) \
           || fail "could not read worker deployment in $worker"
         id=$(jq -er '.versions | select(type == "array" and length == 1) | .[0]
           | select(.percentage == 100) | .version_id | select(type == "string" and length > 0)' <<<"$deployment" 2>/dev/null) \
           || fail "worker deployment must have exactly one version at 100%"
-        version=$(cd "$worker" && "${wrangler[@]}" versions view "$id" --json 2>/dev/null) \
+        version=$(cd "$neutral" && CLOUDFLARE_ACCOUNT_ID="$account_id" "${wrangler[@]}" versions view "$id" --name "$name" --json 2>/dev/null) \
           || fail "could not read worker version $id"
         jq -e --arg sha "$sha" --arg tag "${sha:0:12}" \
           '.annotations["workers/message"] == $sha or .annotations["workers/tag"] == $tag' <<<"$version" >/dev/null 2>&1 \
