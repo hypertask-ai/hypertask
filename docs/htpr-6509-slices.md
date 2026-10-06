@@ -164,3 +164,158 @@ These are planning ranges, assuming roughly forty changed files per slice and ex
 | 1: migrate remaining writes | 6-9 | The checkout still has 33 task, 26 project, 7 section and 17 notification Pages files, including reads. Used-write migrations require App routes, legacy removal and contract tests, plus service integration after the separate MCP effort; dead-route ownership remains separate |
 | 4: dead/external endpoints and envelope coordination | 2-3 | One safe dead-endpoint/caller audit/removal slice, one external-route organization/compatibility slice, and potentially one coordination cleanup after the envelope conventions land |
 | 7: generated typed client with task callers consuming it | 3-5 | Schema/OpenAPI generation, client/runtime error compatibility, then task-caller adoption and regression coverage after the separate schema/envelope effort. Moving every remaining frontend fetch would add further slices beyond this minimum acceptance criterion |
+
+## HTPR-6923: remaining Pages Router migration
+
+Ticket: https://app.hypertask.ai/detail/project-15/6923. Baseline: `fdb5e4e4c84d906dc061b51811b5a80179aa5192`. This section supersedes the historical no-flag assumption **for this migration only**: Valentin requires server flag `htpr-6923-app-router-writes`, registered in `src/lib/flags.ts`, using the existing `DEFAULT_FEATURE_FLAG_MODE = "OWNER_AND_QA"`. No flag mode is changed by this work.
+
+### URL ownership and compatibility design
+
+Slice 1 keeps `/api/tasks/single` and `/api/tasks/moveTask` owned by Pages Router; no conflicting `src/app/api/tasks/{single,moveTask}/route.ts` is installed. Their default export dispatches **PUT only** after resolving the signed session and checking the flag for that session's user ID. Off, unauthenticated, or a flag-lookup outage calls the original handler; its complete body is byte-pinned and unchanged. Other methods bypass even the flag lookup. Body/cookie-supplied user IDs never choose the cohort. Flag checking adds read-only preflight work for PUT; it does not change the old handler's own authentication or authorization.
+
+On calls shared Web-request handlers in `src/lib/api/task-writes/{update,move}.ts`, via `taskWriteRoute` (authentication, compatibility Zod schemas, legacy validation order and error bodies). The narrow request interface accepts App Router `Request` directly; Pages passes its already-parsed body without a second JSON parse or serialization. Zod deliberately implements the existing truthiness requirements, retains unknown update fields and does not tighten accepted types. Null/missing bodies keep the old 500, not a new validation envelope. Update's required-field check precedes authentication; move's authentication and actor lookup precede validation, as before.
+
+Both paths use the existing shared `updateTaskSingle` mutation choke point, preserving board permissions, agent ownership, transactions, activity, leases, indexing, webhooks and notifications. Route-specific description-reference work, move activity/notification callbacks and realtime broadcasts retain their order and failure policy. Flag-on never retries legacy after loading/executing the operation, since a failed response could follow a committed write. No user-facing UI or frontend helper changes are necessary: the URLs, verbs, statuses and JSON stay the same.
+
+The operations extracted by https://app.hypertask.ai/detail/project-15/6478 live in `src/lib/mcp/operations/`; their MCP task payloads and error envelopes differ from the Pages contracts. Do **not** invoke MCP HTTP handlers as replacements for legacy REST or broaden their auth to accept cookies. Slice 12 owns a service adapter using those in-process operations and request-local authenticated context, retaining each surface's input/output mapping. This slice already shares their underlying mutation choke point, not their transport contract.
+
+For later physical router transfers, extract the original Pages implementation verbatim to `src/lib/api/task-writes/legacy/` (domain-equivalent directories for projects/section/notifications), then install the App route at the **same URL**, deleting its Pages twin in the same change. The off branch adapts App input to that preserved implementation, including query arrays, cookies, headers, response status/JSON and any response headers. Streaming/multipart/configured upload routes need their own adapter and explicit tests, not the JSON wrapper. Apply this per endpoint within its domain slice; never put the entire ownership transfer into one oversized final PR. Slice 12 transfers the two slice-1 owners once this adapter is proven. The legacy implementation cannot be deleted while Off must still run it. Removing the flag/old branch after release is a separate owner-approved follow-up, not part of this ticket's compatibility promise.
+
+### Whole-ticket plan: 12 slices
+
+The inventory below assigns every existing file exactly once to its primary domain slice (33 task, 26 project, 7 section and 17 notification files = 83). Mixed GET/write files retain their reads until their ownership transfer; POST does not necessarily mean a write. These are scope boundaries, not a claim that every group fits 800 lines: split a domain group further if its implementation exceeds that budget.
+
+| Slice | Scope and caller work |
+| --- | --- |
+| 1 (this change) | PUT task update and in-board move: `single.ts`, `moveTask.ts`; shared Web handlers, Zod-compatible wrapper, server flag and old/new contract tests. No URL/caller changes. |
+| 2 | Task creation and lifecycle: `create`, `createGlobally`, `(un)archive`, `recoverTask`, `deleteTask`; test fullscreen/global variants and queue/inbox effects. Creation's unresolved-section/no-response legacy branch requires a separate compatibility decision, not a silent fix. |
+| 3 | Task schedule, parent/relation, waiting-on, description reaction and PR linking writes. Preserve task-update pipeline and public JSON; handle zero-caller PR endpoint as below. |
+| 4 | Task attachments: signed upload URL, finalize, n8n upload and download. Preserve upload limits, body-parser/multipart configuration, streaming headers and external URL contracts. |
+| 5 | Remaining task reads, markRead and cross-board move. Also transfer `single`'s retained GET/DELETE with their original contracts; do not narrow parent/subtask fields. |
+| 6 | Project core writes and remaining reads; preserve membership/owner policy. `projects/detail` is **reserved for the sibling compatibility ticket**, not changed here. |
+| 7 | Project view create/update/delete/rename/switch/unsaved/reset writes; existing shared view UI and callers stay on their current URLs. |
+| 8 | Project view order/default-order/smart-split writes and zero-caller sync-view review; preserve exceptional old status codes. |
+| 9 | All seven section endpoints: four writes and three POST reads. Preserve ranking and board access; remove only proven-dead route shells after review. |
+| 10 | Inbox/task-notification mutations (including GET writes), task-seen and follower email; preserve user scoping and realtime/inbox fan-out. |
+| 11 | Notification preferences, matrix, splits and push status plus remaining notification reads. Review zero-caller mute without removing the shared mute model/services. |
+| 12 | MCP service adapter atop the shared in-process operations from the service-layer ticket; transfer slice-1 URL ownership; final same-URL twin/dead-shell audit. Update direct imports of removed Pages modules to shared services. No MCP wrapper/auth cache or update-pipeline redesign. |
+
+Caller migration in each slice means moving **server-side imports of Pages helpers** to their extracted operations and removing obsolete internal/self-HTTP wiring only when responses are proven identical. App frontend callers, native CLI and external integrations retain their old URLs and JSON. Frontend typed-client adoption is not this ticket.
+
+Sibling exclusions: https://app.hypertask.ai/detail/project-15/6924 owns session paging, board detail and parent/subtask payload compatibility; https://app.hypertask.ai/detail/project-15/6925 owns the Zod/OpenAPI typed frontend client; https://app.hypertask.ai/detail/project-15/6926 owns MCP REST wrapping and cached auth; https://app.hypertask.ai/detail/project-15/6927 owns MCP tool annotations, task update pipeline and dead legacy MCP server. No files in those scopes change in slice 1.
+
+### Dead-endpoint evidence and disposition
+
+`node tests/htpr-6923-verify.cjs plan` scans tracked text source in `src`, **all tracked text in the native CLI repo** `/home/valentin/projects/hypertask-cli-zig` (observed HEAD `455ae8bf6ab094304f70ec1902d504e30880f104`), and `e2e`. It searches route-qualified paths, shortened paths and source imports, excluding only each route's own declaration. Exact route boundaries exclude prefix siblings such as createGlobally. A known live task-single URL and an injected dead-route caller prove the negative checker detects callers. Counts below are file references (including conservative controller/import/comment matches), not traffic measurements. Update/move are selected for their multiple interactive callers, not measured production traffic.
+
+| Zero-caller route | src / CLI / e2e | Disposition |
+| --- | --- | --- |
+| `/api/tasks/getAll` | 0 / 0 / 0 | Slice 5: remove unused route shell once external-use review clears it; keep its shared controller until import audit passes. |
+| `/api/tasks/linkPullRequest` | 0 / 0 / 0 | Slice 3: retain shared PR-link service/MCP operation; candidate to drop the unused Pages shell. |
+| `/api/projects/detail` | 0 / 0 / 0 | Sibling compatibility ticket owns retirement; do not delete here even though static route callers are absent. |
+| `/api/projects/views/sync-view` | 0 / 0 / 0 | Slice 8: candidate dead write; do not silently map its unusual 101 error to another status. |
+| `/api/section/getAll` | 0 / 0 / 0 | Slice 9: candidate unused POST read. |
+| `/api/section/getByTaskId` | 0 / 0 / 0 | Slice 9: candidate unused POST read. |
+| `/api/notifications/mute` | 0 / 0 / 0 | Slice 11: candidate unused route, not proof that notification mute itself is dead. |
+
+Zero tracked callers is not proof of zero unknown external use. No dead endpoint is removed in slice 1. Before removal, re-run the audit at the new base, inspect runtime/external support evidence and any route construction by interpolation (especially generic axios helpers using `"/api" + url` and route constants). Keep externally supported routes at identical URLs even without frontend callers. `n8nUpload`, download and signed-upload routes demonstrably have callers and are **not** dead. The unrelated dead MCP server stays with its sibling ticket.
+
+### Per-file inventory
+
+Counts are src / CLI / e2e; reads are included so none of the remaining 33 task files is silently omitted. Paths describe current files; domain slices create the corresponding shared operations and later same-path App owner.
+
+| Current file | Primary slice | Disposition | Caller files (src / CLI / e2e) |
+| --- | --- | --- | --- |
+| `src/pages/api/notifications/(un)archiveBulk.ts` | 10 | Migrate / preserve contract | 3 / 0 / 0 |
+| `src/pages/api/notifications/access.ts` | 11 | Migrate / preserve contract | 2 / 0 / 0 |
+| `src/pages/api/notifications/changePushNotificationStatus.ts` | 11 | Migrate / preserve contract | 1 / 0 / 0 |
+| `src/pages/api/notifications/getAll.ts` | 11 | Migrate / preserve contract | 9 / 0 / 0 |
+| `src/pages/api/notifications/getAllInbox.ts` | 11 | Migrate / preserve contract | 2 / 0 / 0 |
+| `src/pages/api/notifications/getByTask.ts` | 10 | Migrate / preserve contract | 2 / 0 / 0 |
+| `src/pages/api/notifications/getCount.ts` | 11 | Migrate / preserve contract | 3 / 0 / 0 |
+| `src/pages/api/notifications/getPushNotificationStatus.ts` | 11 | Migrate / preserve contract | 1 / 0 / 0 |
+| `src/pages/api/notifications/markAsDone.ts` | 10 | Migrate / preserve contract | 5 / 0 / 0 |
+| `src/pages/api/notifications/markAsUnseen.ts` | 10 | Migrate / preserve contract | 1 / 0 / 0 |
+| `src/pages/api/notifications/matrix.ts` | 11 | Migrate / preserve contract | 1 / 0 / 0 |
+| `src/pages/api/notifications/moveTaskToInbox.ts` | 10 | Migrate / preserve contract | 4 / 0 / 1 |
+| `src/pages/api/notifications/mute.ts` | 11 | Zero-caller candidate; retain pending review | 0 / 0 / 0 |
+| `src/pages/api/notifications/preference.ts` | 11 | Migrate / preserve contract | 1 / 0 / 0 |
+| `src/pages/api/notifications/sendEmailToFollower.ts` | 10 | Migrate / preserve contract | 3 / 0 / 0 |
+| `src/pages/api/notifications/splits.ts` | 11 | Migrate / preserve contract | 1 / 0 / 0 |
+| `src/pages/api/notifications/unArchiveNotificationById.ts` | 10 | Migrate / preserve contract | 1 / 0 / 0 |
+| `src/pages/api/projects/archive.ts` | 6 | Migrate / preserve contract | 2 / 1 / 0 |
+| `src/pages/api/projects/boardTasks.ts` | 6 | Migrate / preserve contract | 4 / 0 / 4 |
+| `src/pages/api/projects/create.ts` | 6 | Migrate / preserve contract | 5 / 0 / 2 |
+| `src/pages/api/projects/delete.ts` | 6 | Migrate / preserve contract | 2 / 0 / 0 |
+| `src/pages/api/projects/detail.ts` | 6 | Zero-caller candidate; retain pending review | 0 / 0 / 0 |
+| `src/pages/api/projects/getAll.ts` | 6 | Migrate / preserve contract | 14 / 0 / 2 |
+| `src/pages/api/projects/getAllMinimal.ts` | 6 | Migrate / preserve contract | 10 / 0 / 0 |
+| `src/pages/api/projects/getArchived.ts` | 6 | Migrate / preserve contract | 1 / 0 / 0 |
+| `src/pages/api/projects/getFavorites.ts` | 6 | Migrate / preserve contract | 1 / 0 / 0 |
+| `src/pages/api/projects/getFirst.ts` | 6 | Migrate / preserve contract | 5 / 0 / 0 |
+| `src/pages/api/projects/lastActivity.ts` | 6 | Migrate / preserve contract | 2 / 0 / 0 |
+| `src/pages/api/projects/leave.ts` | 6 | Migrate / preserve contract | 1 / 0 / 0 |
+| `src/pages/api/projects/removeMember.ts` | 6 | Migrate / preserve contract | 1 / 0 / 0 |
+| `src/pages/api/projects/setMemberRole.ts` | 6 | Migrate / preserve contract | 1 / 0 / 0 |
+| `src/pages/api/projects/update.ts` | 6 | Migrate / preserve contract | 5 / 0 / 0 |
+| `src/pages/api/projects/views/create-view.ts` | 7 | Migrate / preserve contract | 1 / 0 / 0 |
+| `src/pages/api/projects/views/delete-rename-view.ts` | 7 | Migrate / preserve contract | 1 / 0 / 0 |
+| `src/pages/api/projects/views/reset-order.ts` | 8 | Migrate / preserve contract | 1 / 0 / 0 |
+| `src/pages/api/projects/views/reset-to-default.ts` | 7 | Migrate / preserve contract | 1 / 0 / 0 |
+| `src/pages/api/projects/views/set-default-order.ts` | 8 | Migrate / preserve contract | 1 / 0 / 0 |
+| `src/pages/api/projects/views/smart-split.ts` | 8 | Migrate / preserve contract | 1 / 0 / 0 |
+| `src/pages/api/projects/views/switch-view.ts` | 7 | Migrate / preserve contract | 1 / 0 / 0 |
+| `src/pages/api/projects/views/sync-view.ts` | 8 | Zero-caller candidate; retain pending review | 0 / 0 / 0 |
+| `src/pages/api/projects/views/unsaved-view.ts` | 7 | Migrate / preserve contract | 2 / 0 / 0 |
+| `src/pages/api/projects/views/update-order.ts` | 8 | Migrate / preserve contract | 1 / 0 / 0 |
+| `src/pages/api/projects/views/update-view.ts` | 7 | Migrate / preserve contract | 1 / 0 / 0 |
+| `src/pages/api/section/create.ts` | 9 | Migrate / preserve contract | 1 / 0 / 0 |
+| `src/pages/api/section/getAll.ts` | 9 | Zero-caller candidate; retain pending review | 0 / 0 / 0 |
+| `src/pages/api/section/getByTaskId.ts` | 9 | Zero-caller candidate; retain pending review | 0 / 0 / 0 |
+| `src/pages/api/section/getProjectSections.ts` | 9 | Migrate / preserve contract | 3 / 0 / 0 |
+| `src/pages/api/section/rename.ts` | 9 | Migrate / preserve contract | 2 / 0 / 0 |
+| `src/pages/api/section/resetRanks.ts` | 9 | Migrate / preserve contract | 1 / 0 / 0 |
+| `src/pages/api/section/update.ts` | 9 | Migrate / preserve contract | 3 / 0 / 0 |
+| `src/pages/api/tasks/(un)archive.ts` | 2 | Migrate / preserve contract | 2 / 0 / 0 |
+| `src/pages/api/tasks/addParent.ts` | 3 | Migrate / preserve contract | 1 / 0 / 0 |
+| `src/pages/api/tasks/addRelations.ts` | 3 | Migrate / preserve contract | 1 / 0 / 0 |
+| `src/pages/api/tasks/create.ts` | 2 | Migrate / preserve contract | 3 / 3 / 5 |
+| `src/pages/api/tasks/createGlobally.ts` | 2 | Migrate / preserve contract | 6 / 0 / 1 |
+| `src/pages/api/tasks/deleteTask.ts` | 2 | Migrate / preserve contract | 1 / 0 / 4 |
+| `src/pages/api/tasks/detailMeta.ts` | 5 | Migrate / preserve contract | 2 / 0 / 0 |
+| `src/pages/api/tasks/downloadAttachment.ts` | 4 | Migrate / preserve contract | 1 / 0 / 0 |
+| `src/pages/api/tasks/getAll.ts` | 5 | Zero-caller candidate; retain pending review | 0 / 0 / 0 |
+| `src/pages/api/tasks/getArchivedTasks.ts` | 5 | Migrate / preserve contract | 2 / 0 / 0 |
+| `src/pages/api/tasks/getArchivedTasksByProject.ts` | 5 | Migrate / preserve contract | 1 / 0 / 0 |
+| `src/pages/api/tasks/getTask.ts` | 5 | Migrate / preserve contract | 6 / 0 / 0 |
+| `src/pages/api/tasks/getTaskMinimal.ts` | 5 | Migrate / preserve contract | 3 / 0 / 1 |
+| `src/pages/api/tasks/getUnscheduled.ts` | 5 | Migrate / preserve contract | 1 / 0 / 0 |
+| `src/pages/api/tasks/linkPullRequest.ts` | 3 | Zero-caller candidate; retain pending review | 0 / 0 / 0 |
+| `src/pages/api/tasks/markRead.ts` | 5 | Migrate / preserve contract | 3 / 0 / 0 |
+| `src/pages/api/tasks/move-task-to-different-board.ts` | 5 | Migrate / preserve contract | 2 / 0 / 0 |
+| `src/pages/api/tasks/moveTask.ts` | 1 | Migrate / preserve contract | 7 / 0 / 1 |
+| `src/pages/api/tasks/n8nUpload.ts` | 4 | Migrate / preserve contract | 4 / 0 / 0 |
+| `src/pages/api/tasks/reactToDescription.ts` | 3 | Migrate / preserve contract | 1 / 0 / 0 |
+| `src/pages/api/tasks/recoverTask.ts` | 2 | Migrate / preserve contract | 1 / 0 / 0 |
+| `src/pages/api/tasks/removeParent.ts` | 3 | Migrate / preserve contract | 1 / 0 / 0 |
+| `src/pages/api/tasks/removeRelation.ts` | 3 | Migrate / preserve contract | 1 / 0 / 0 |
+| `src/pages/api/tasks/searchAll.ts` | 5 | Migrate / preserve contract | 3 / 0 / 0 |
+| `src/pages/api/tasks/searchByParam.ts` | 5 | Migrate / preserve contract | 2 / 0 / 0 |
+| `src/pages/api/tasks/searchOrphans.ts` | 5 | Migrate / preserve contract | 1 / 0 / 0 |
+| `src/pages/api/tasks/setDueDate.ts` | 3 | Migrate / preserve contract | 3 / 0 / 0 |
+| `src/pages/api/tasks/setRecurrence.ts` | 3 | Migrate / preserve contract | 1 / 0 / 0 |
+| `src/pages/api/tasks/setStartDate.ts` | 3 | Migrate / preserve contract | 1 / 0 / 0 |
+| `src/pages/api/tasks/single.ts` | 1 | Migrate / preserve contract | 36 / 0 / 0 |
+| `src/pages/api/tasks/uploadFinalize.ts` | 4 | Migrate / preserve contract | 4 / 0 / 2 |
+| `src/pages/api/tasks/uploadUrl.ts` | 4 | Migrate / preserve contract | 2 / 0 / 1 |
+| `src/pages/api/tasks/waiting-on.ts` | 3 | Migrate / preserve contract | 2 / 0 / 0 |
+
+### Slice 1 local verification
+
+- `node --test tests/htpr-6923-task-writes.test.cjs`: 47 passed, 0 failed. Executes original handlers, real flag dispatcher (On, Off, lookup outage) and shared Web handlers with isolated dependencies; compares status/JSON, query/mutation arguments, actor attribution, permission denial, validation/auth precedence, activity/notification callbacks and realtime effects. Independent SHA-256 pins prevent old/new implementations drifting together. Off does not load operations; failure after dispatch cannot retry a write.
+- `node tests/htpr-6923-verify.cjs regression`: invokes `npm run test:file --` for the 11 suites listed in that script; 169 passed, 0 failed (including the 47 above). Covers the shared controller/access gates, Pages runtime imports, MCP service/permission contracts, task route consolidation and UI enforcement.
+- `node tests/htpr-6923-verify.cjs flag`: invokes `npm run test:file -- tests/feature-flag-gate.test.cjs tests/feature-flags.test.cjs`; 65 gate tests and 27 registry/mode tests passed. Additional ticket-specific assertions execute the actual registry with a synthetic database: Owner and QA enabled, ordinary caller disabled, no stored flag row.
+- `npm run lint`: passed with 0 errors and 21 existing warnings. Full `npx tsc --noEmit --pretty false`: exit 2, the same 15 pre-existing diagnostics as the independently captured baseline, 0 new; `node tests/htpr-6923-verify.cjs quality` rejects any changed diagnostic. This is baseline parity, **not a clean project-wide typecheck**.
+- `node tests/htpr-6923-verify.cjs plan` checks complete inventory/caller counts and positive controls. `git diff --check` passes. Local automatic proof is retained in `GATES.md`; it is intentionally not part of the code commit because recording that commit's evidence changes the ledger.
+- Verification used Node v22.22.2 and the existing installed dependencies linked from `/home/valentin/projects/hypertask/node_modules`; CI's Node 24/lockfile install is not claimed. No build, live/production data access, push, PR, deployment, board write or dead-endpoint deletion. The build command includes production migrations and is deliberately not run.
+- Remaining risk: PUT Off pays an extra signed-session/flag preflight before its unchanged original auth; no latency benchmark is claimed. Router ownership transfer, create/archive and MCP adapter are planned, not implemented in this slice.

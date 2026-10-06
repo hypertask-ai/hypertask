@@ -9,6 +9,7 @@ import { AGENT_CHAT_STOP_AND_TIMEOUT_FEATURE_FLAG } from "@/lib/agentRuns/model"
 import {
   HTPR_6950_TOOLTIP_TOP_LAYER_FLAG,
   HTPR_6934_SERVER_FIRST_SCREEN_FLAG,
+  HTPR_6923_APP_ROUTER_WRITES_FLAG,
   HTPR_6925_TYPED_API_CLIENT_FLAG,
   HTPR_6929_COMPOSE_TASK_WRITER_FLAG,
   HTPR_6937_NEW_TASK_WINDOW_FLAG,
@@ -176,6 +177,11 @@ const RETIRED_CLIENT_FEATURE_FLAGS = {
 } as const;
 
 const FEATURE_FLAG_DEFINITIONS = [
+  {
+    key: HTPR_6923_APP_ROUTER_WRITES_FLAG,
+    shippedOn: "2026-10-06",
+    description: "Uses shared App-style handlers for legacy task writes while keeping the original URLs and responses.",
+  },
   {
     key: HTPR_6925_TYPED_API_CLIENT_FLAG,
     shippedOn: "2026-10-06",
