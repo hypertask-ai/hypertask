@@ -6,6 +6,9 @@ import toast from "react-hot-toast";
 import type { ReactNode } from "react";
 
 import { boardMemoryRoute } from "@/lib/constants/APIRouteConstants";
+import { useFlag } from "@/hooks/useFlag";
+import { HTPR_6925_TYPED_API_CLIENT_FLAG } from "@/lib/flags/keys";
+import { getBoardMemory } from "@/lib/api/typedClient";
 
 import SettingsCard from "./SettingsCard";
 import SettingsSectionShell from "./SettingsSectionShell";
@@ -36,6 +39,7 @@ const formatLearnedAt = (value: string) =>
   }).format(new Date(value));
 
 export default function BoardMemorySection() {
+  const typedClient = useFlag(HTPR_6925_TYPED_API_CLIENT_FLAG);
   const { project } = useSettingsTeam();
   const projectId = project?.id;
   const queryClient = useQueryClient();
@@ -43,12 +47,17 @@ export default function BoardMemorySection() {
   const { data, isError, isLoading } = useQuery({
     enabled: Boolean(projectId),
     queryKey,
-    queryFn: async () =>
-      (
-        await axios.get<BoardMemoryState>(boardMemoryRoute, {
-          params: { projectId },
-        })
-      ).data,
+    queryFn: async () => {
+      if (typedClient) {
+        if (projectId) return (await getBoardMemory(projectId)).data;
+      } else {
+        return (
+          await axios.get<BoardMemoryState>(boardMemoryRoute, {
+            params: { projectId },
+          })
+        ).data;
+      }
+    },
   });
   const toggleMutation = useMutation({
     mutationFn: async (enabled: boolean) =>

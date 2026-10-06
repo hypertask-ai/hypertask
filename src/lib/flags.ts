@@ -9,6 +9,7 @@ import { AGENT_CHAT_STOP_AND_TIMEOUT_FEATURE_FLAG } from "@/lib/agentRuns/model"
 import {
   HTPR_6950_TOOLTIP_TOP_LAYER_FLAG,
   HTPR_6934_SERVER_FIRST_SCREEN_FLAG,
+  HTPR_6925_TYPED_API_CLIENT_FLAG,
   HTPR_6929_COMPOSE_TASK_WRITER_FLAG,
   HTPR_6937_NEW_TASK_WINDOW_FLAG,
   HTPR_6951_TASK_WRITING_PROGRESS_FLAG,
@@ -175,6 +176,11 @@ const RETIRED_CLIENT_FEATURE_FLAGS = {
 } as const;
 
 const FEATURE_FLAG_DEFINITIONS = [
+  {
+    key: HTPR_6925_TYPED_API_CLIENT_FLAG,
+    shippedOn: "2026-10-06",
+    description: "Validates skills and board memory settings reads with shared typed API contracts.",
+  },
   {
     key: HTPR_6950_TOOLTIP_TOP_LAYER_FLAG,
     shippedOn: "2026-10-05",

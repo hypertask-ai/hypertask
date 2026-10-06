@@ -3,6 +3,10 @@
 import axios from "axios";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
+import { useFlag } from "@/hooks/useFlag";
+import { HTPR_6925_TYPED_API_CLIENT_FLAG } from "@/lib/flags/keys";
+import { listSkills } from "@/lib/api/typedClient";
+
 import SettingsCard from "./SettingsCard";
 import SettingsToggle from "./SettingsToggle";
 
@@ -35,6 +39,7 @@ export default function SkillLibrary({
   projectId?: number;
   teamId?: string | null;
 }) {
+  const typedClient = useFlag(HTPR_6925_TYPED_API_CLIENT_FLAG);
   const [skills, setSkills] = useState<Skill[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -55,9 +60,14 @@ export default function SkillLibrary({
     setLoading(true);
     setError(null);
     try {
-      const response = await axios.get<{ skills: Skill[] }>("/api/ai/skills", {
-        params,
-      });
+      let response;
+      if (typedClient) {
+        response = await listSkills(params);
+      } else {
+        response = await axios.get<{ skills: Skill[] }>("/api/ai/skills", {
+          params,
+        });
+      }
       setSkills(
         response.data.skills.filter((skill) =>
           scope === "project" ? skill.projectId === projectId : skill.userId !== null
@@ -68,7 +78,7 @@ export default function SkillLibrary({
     } finally {
       setLoading(false);
     }
-  }, [params, projectId, scope]);
+  }, [params, projectId, scope, typedClient]);
 
   useEffect(() => {
     void loadSkills();
