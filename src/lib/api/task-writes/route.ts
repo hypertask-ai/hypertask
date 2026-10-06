@@ -7,18 +7,20 @@ import { HTPR_6923_APP_ROUTER_WRITES_FLAG } from "@/lib/flags/keys";
 
 // Pages has already parsed JSON. This narrow Web-request interface avoids a
 // second parse/serialization and also accepts a real App Router Request.
-export type TaskWriteRequest = Pick<Request, "headers" | "json">;
+export type TaskWriteRequest = Pick<Request, "headers" | "json"> & {
+  cookies?: Partial<Record<string, string>>;
+};
 export type TaskWriteRoute = (
   request: TaskWriteRequest,
   session?: SessionUser,
-) => Promise<NextResponse>;
+) => Promise<NextResponse | undefined>;
 
 export function taskWriteRoute<Body, Actor = SessionUser>(options: {
   schema: z.ZodType<Body>;
   validationMessage: string;
   validateBeforeAuth?: boolean;
   prepare?: (session: SessionUser) => Promise<Actor>;
-  operation: (body: Body, actor: Actor) => Promise<NextResponse>;
+  operation: (body: Body, actor: Actor, request: TaskWriteRequest) => Promise<NextResponse | undefined>;
 }): TaskWriteRoute {
   return async (request, authenticatedSession) => {
     let session = authenticatedSession;
@@ -57,7 +59,7 @@ export function taskWriteRoute<Body, Actor = SessionUser>(options: {
         return NextResponse.json({ message: "Internal server error" }, { status: 500 });
       }
     }
-    return options.operation(body, actor);
+    return options.operation(body, actor, request);
   };
 }
 
@@ -84,7 +86,12 @@ export function withTaskWriteFlag(
     if (!enabled || !session || !headers) return legacy(req, res);
     const route = await loadRoute();
     // Never retry legacy after dispatch: the operation may already have written.
-    const response = await route({ headers, json: async () => req.body }, session);
+    const response = await route({ headers, cookies: req.cookies, json: async () => req.body }, session);
+    // Creation historically leaves unresolved sections/ranks without a response.
+    if (!response) return;
+    response.headers.forEach((value, name) => {
+      if (name !== "content-type") res.setHeader(name, value);
+    });
     return res.status(response.status).json(await response.json());
   };
 }

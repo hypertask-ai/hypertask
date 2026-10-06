@@ -4,6 +4,8 @@ const { readRefactoredSource } = require("../src/app/detail/[...slug]/taskDetail
 
 const root = path.resolve(__dirname, "..");
 const modules = {
+  "src/pages/api/tasks/createGlobally.ts": ["../../../lib/api/task-writes/create-global-effects.ts"],
+  "src/pages/api/tasks/create.ts": ["../../../lib/api/task-writes/create-fullscreen.ts"],
   "src/components/commands.tsx": [
     "useCommandsState.ts", "boardCommandActions.ts", "commandDispatcher.ts",
     "generalCommandActions.ts", "commandModalCallbacks.ts", "commandModals.ts",

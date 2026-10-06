@@ -183,6 +183,8 @@ test('shared server writer gates compose before accessing a board; legacy writer
 test('actual create endpoint rejects disabled Compose before database work and preserves legacy/auth checks', async () => {
   let enabled = false, session = { userId: 985 }, flagReads = 0, userReads = 0, boardReads = 0;
   const stubs = {
+    '@/lib/api/task-writes/route': { withTaskWriteFlag: (handler) => handler },
+    '@/lib/api/task-writes/create-global-effects': {},
     '@/lib/ai/composeTaskTarget': createJiti(__filename)(path.join(root, 'src/lib/ai/composeTaskTarget.ts')),
     '@/lib/flags': { HTPR_6929_COMPOSE_TASK_WRITER_FLAG: flag, isFeatureEnabled: async (key, userId) => {
       assert.equal(key, flag); assert.equal(userId, 985); flagReads++; return enabled;
@@ -307,6 +309,8 @@ test('save existing target enforces both flags, edit permissions, board match an
   let compose = true, newWindow = false, authorized = true, target = null;
   const taskReads = [], updates = [], broadcasts = [], flags = [];
   const stubs = {
+    '@/lib/api/task-writes/route': { withTaskWriteFlag: (handler) => handler },
+    '@/lib/api/task-writes/create-global-effects': {},
     '@/lib/ai/composeTaskTarget': { isEmptyComposeTarget },
     '@/lib/flags': { HTPR_6929_COMPOSE_TASK_WRITER_FLAG: flag, HTPR_6937_NEW_TASK_WINDOW_FLAG: newFlag,
       isFeatureEnabled: async (key) => { flags.push(key); return key === flag ? compose : newWindow; } },

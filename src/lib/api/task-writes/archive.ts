@@ -1,41 +1,27 @@
-import { withTaskWriteFlag } from "@/lib/api/task-writes/route";
-import { NextApiHandler } from "next";
+import { NextResponse } from "next/server";
+import { z } from "zod";
+import { parseCookies } from "better-auth/cookies";
+import { taskWriteRoute, type TaskWriteRoute } from "./route";
 import prisma from "@/lib/prisma";
 import sendNotificationForTask from "@/utils/controllers/notifications/creation-service/createAndSendNotificationTaskMove";
 import createArchiveActivity from "@/utils/controllers/activities/createArchiveActivity";
 import { IUser } from "@/models/model";
-import { cancelDueDateJob } from "../queues/duedateQueue";
+import { cancelDueDateJob } from "@/pages/api/queues/duedateQueue";
 import { updateTaskSingle } from "@/utils/controllers/tasks/single";
 import { broadcastInboxForTask } from "@/utils/controllers/notifications/broadcastInboxForTask";
 import {
   broadcastBoardChange,
   broadcastTaskChange,
 } from "@/lib/realtime/server";
-import { getSessionUser } from "@/lib/auth/getSessionUser";
 import { SESSION_COOKIE, verifySession } from "@/lib/auth/session";
 import { resolveActingAgent } from "@/lib/auth/resolveActingAgent";
 
-const handler: NextApiHandler = async (req, res) => {
-  if (req.method !== "POST") {
-    return res.status(405).json({ message: "Method not allowed" });
-  }
-
-  try {
-    const { taskId, status, agentId } = req.body;
-    // Pages API auth is route-local: require a verified session (Better Auth or
-    // signed ht_session).
-    const session = await getSessionUser(
-      new Headers(req.headers as Record<string, string>),
-    );
-    if (!session) {
-      return res.status(401).json({ message: "Unauthorized" });
-    }
-    if (!taskId || !status) {
-      return res.status(400).json({ message: "Missing required field" });
-    }
-
+const route = taskWriteRoute({
+  schema: z.custom<Record<string, any>>((body) => !!((body as any)?.taskId && (body as any)?.status)),
+  validationMessage: "Missing required field",
+  operation: async ({ taskId, status, agentId }, session, request) => {
     const actingUserId = session.userId;
-    const signedSession = verifySession(req.cookies[SESSION_COOKIE]);
+    const signedSession = verifySession(request.cookies ? request.cookies[SESSION_COOKIE] : parseCookies(request.headers.get("cookie") ?? "").get(SESSION_COOKIE));
 
     // HTPR-6376: agent actor comes from the signed session claim. Body agentId
     // may confirm that claim but cannot forge one.
@@ -44,7 +30,7 @@ const handler: NextApiHandler = async (req, res) => {
       bodyAgentId: agentId,
     });
     if (!actingAgent.ok) {
-      return res.status(actingAgent.status).json({ message: actingAgent.message });
+      return NextResponse.json({ message: actingAgent.message }, { status: actingAgent.status });
     }
 
     // Audit display comes from the verified session's user row.
@@ -65,10 +51,10 @@ const handler: NextApiHandler = async (req, res) => {
         : Promise.resolve(null),
     ]);
     if (actingAgent.agentId && !agent) {
-      return res.status(403).json({ message: "Forbidden" });
+      return NextResponse.json({ message: "Forbidden" }, { status: 403 });
     }
     if (!sessionUser) {
-      return res.status(401).json({ message: "Unauthorized" });
+      return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
     }
 
     const user = {
@@ -98,7 +84,7 @@ const handler: NextApiHandler = async (req, res) => {
     // Same as setDueDate: stop before the activity and the queue work when
     // the write was refused (HTPR-4982).
     if (writeStatus !== 200) {
-      return res.status(writeStatus).json(updatedTask);
+      return NextResponse.json(updatedTask, { status: writeStatus });
     }
 
     if (status === "Archive") {
@@ -134,15 +120,20 @@ const handler: NextApiHandler = async (req, res) => {
       originUserId: user.id,
     });
 
-    return res.status(200).json(updatedTask);
+    return NextResponse.json(updatedTask, { status: 200 });
+  },
+});
+
+export const POST: TaskWriteRoute = async (request, session) => {
+  try {
+    const body = await request.json();
+    // The legacy 500 exposes req.body in its pre-auth destructuring error text.
+    const req = { body };
+    const { taskId } = req.body;
+    void taskId;
+    return await route({ ...request, headers: request.headers, json: async () => body }, session);
   } catch (error) {
     console.error(error);
-    return res
-      .status(500)
-      .json({ message: "Internal server error", error: String(error) });
+    return NextResponse.json({ message: "Internal server error", error: String(error) }, { status: 500 });
   }
 };
-
-export default withTaskWriteFlag(handler, "POST", async () =>
-  (await import("@/lib/api/task-writes/archive")).POST,
-);
