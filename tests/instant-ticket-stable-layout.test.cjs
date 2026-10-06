@@ -39,7 +39,7 @@ const common = {
   "@/lib/contexts/TaskDetail/TaskProvider": { useTaskContext: context },
   "@/lib/contexts/mobileContext": { MobileViewContext: mobile },
   "@/hooks/useFlag": { useFlag: () => cachedLayout },
-  "@/lib/flags/keys": { HTPR_6752_INSTANT_TICKET_OPEN_FLAG: "instant" },
+  "@/lib/flags/keys": { HTPR_6752_INSTANT_TICKET_OPEN_FLAG: "instant", HTPR_6967_TYPED_TASK_READS_FLAG: "htpr-6967-typed-task-reads" },
   "@/utils/undoActions/helperFuncs": { cn: (...values) => values.filter(Boolean).join(" ") },
 };
 const title = load("src/components/PageComponents/TaskDetail/TopRow/TaskDetailTitleContainer.tsx", {
@@ -150,6 +150,7 @@ test("flag-off title and mobile virtual rows retain the original layout and page
 
 const rail = load("src/components/PageComponents/TaskDetail/TaskInfoColumn/TaskInfo.tsx", {
   ...common,
+  "@/lib/api/typedClient": { getTaskCycle: noop },
   axios: { default: {} },
   "react-hot-toast": { default: {} },
   "@tanstack/react-query": { useQueryClient: () => ({}) },
