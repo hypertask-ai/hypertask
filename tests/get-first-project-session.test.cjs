@@ -30,6 +30,10 @@ function responseRecorder() {
 
 process.env.SESSION_SECRET = "get-first-project-test-secret";
 
+stubModule("src/lib/api/task-writes/route.ts", {
+  withTaskWriteFlag: (handler) => handler,
+});
+
 const controllerCalls = [];
 stubModule("src/utils/controllers/projects/getFirst.ts", {
   default: async (userId) => {

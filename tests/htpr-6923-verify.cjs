@@ -59,6 +59,129 @@ function lifecycle() {
   assert.throws(() => assert.equal(crypto.createHash("sha256").update(sources.create + "changed").digest("hex"), lifecycleHashes.create), "pin mutation control");
   console.log("lifecycle verification passed");
 }
+const projectCoreRoutes = {
+  "create": {
+    "module": "create",
+    "method": "POST",
+    "hash": "a9ebbf5249d3ef76026479eefcf86edd4c2c38c1f963666c7c24746380f7b5db",
+    "signed": false,
+    "named": false
+  },
+  "update": {
+    "module": "update",
+    "method": "POST",
+    "hash": "7cfb2f6a5202378f01b0d31e0e4a17e26e6045c1f47cf626fdc4b934655134e7",
+    "signed": false,
+    "named": false
+  },
+  "archive": {
+    "module": "archive",
+    "method": "POST",
+    "hash": "40585eeceaca720654df44497a937ee629844eb155226415a763334b9a697ad0",
+    "signed": false,
+    "named": true
+  },
+  "delete": {
+    "module": "delete",
+    "method": "POST",
+    "hash": "4063fe7de1152798473de9b7d7a0c1a9441d3ccda84827867b7a99a73af16c01",
+    "signed": false,
+    "named": true
+  },
+  "leave": {
+    "module": "leave",
+    "method": "POST",
+    "hash": "56a194256bee2e4bbc7edcc30f4d0a7f5e78cecb12dee71b899bddfdd34bc7df",
+    "signed": false,
+    "named": true
+  },
+  "removeMember": {
+    "module": "remove-member",
+    "method": "POST",
+    "hash": "9dde2456651fbde80cb9e018a36d18fce510afd3e4314501273c16bebbdeade1",
+    "signed": true,
+    "named": false
+  },
+  "setMemberRole": {
+    "module": "set-member-role",
+    "method": "POST",
+    "hash": "028c851d2bb1afd9dc70b1c9b32c5542f85fc0d605fbe350e87284c10f34c4c8",
+    "signed": false,
+    "named": false
+  },
+  "boardTasks": {
+    "module": "board-read",
+    "method": "POST",
+    "hash": "0ccc7b872e11f1103e6e6b7b0a596248fb0454a3ddbbca553d58f8ad74fe75a3",
+    "signed": false,
+    "named": false
+  },
+  "getAll": {
+    "module": "all-read",
+    "method": "POST",
+    "hash": "56db7430b2c8dd703aa7ffb13d940641dfab95f5141875e1f30b26f7d0e5ec02",
+    "signed": true,
+    "named": false
+  },
+  "getAllMinimal": {
+    "module": "minimal-read",
+    "method": "GET",
+    "hash": "7f048fa79af45aa2d6c2bb14a43a6059a876f3f4a7255470a98dc7852b1c6c82",
+    "signed": true,
+    "named": false
+  },
+  "getFirst": {
+    "module": "first-read",
+    "method": "GET",
+    "hash": "4bdc73ef2ea6f2ad374cc97a96a759c8cdcdd4d64e8bf2325f8df83b6dc9fc4a",
+    "signed": true,
+    "named": false
+  },
+  "getArchived": {
+    "module": "archived-read",
+    "method": "GET",
+    "hash": "e1747ed0c66c96020548c6e21b502fa3b7f84981161a62b99d80421003280408",
+    "signed": false,
+    "named": false
+  },
+  "getFavorites": {
+    "module": "favorites-read",
+    "method": "GET",
+    "hash": "049e73589e1e5b07c61aa524f256fc7b7a54b9b25441d804b89fe3b2a1493704",
+    "signed": false,
+    "named": false
+  },
+  "lastActivity": {
+    "module": "last-activity-read",
+    "method": "GET",
+    "hash": "5db7f359e2c676bc40ef110a7924fc71753dbd3c062e27d0324b5b7733cb8c4b",
+    "signed": false,
+    "named": false
+  }
+};
+function projectCoreLegacySources() {
+  return Object.fromEntries(Object.entries(projectCoreRoutes).map(([name, { named }]) => {
+    let source = read(`src/pages/api/projects/${name}.ts`)
+      .replace('import { withTaskWriteFlag } from "@/lib/api/task-writes/route";\n', "");
+    source = named
+      ? source.slice(0, source.indexOf("\n\nexport default withTaskWriteFlag")).replace("async function handler", "export default async function handler")
+      : source.replace(/export default withTaskWriteFlag\([\s\S]*?\n\);/, "export default handler;");
+    return [name, source];
+  }));
+}
+function projectCore() {
+  const sources = projectCoreLegacySources();
+  for (const [name, { module, method, hash }] of Object.entries(projectCoreRoutes)) {
+    assert.equal(crypto.createHash("sha256").update(sources[name]).digest("hex"), hash, name + " legacy bytes");
+    const page = read(`src/pages/api/projects/${name}.ts`);
+    assert.ok(page.includes(`withTaskWriteFlag(handler, "${method}"`));
+    assert.ok(page.includes(`/project-writes/${module}`));
+    assert.ok(read(`src/lib/api/project-writes/${module}.ts`).includes("taskWriteRoute("));
+    assert.ok(!fs.existsSync(path.join(root, `src/app/api/projects/${name}/route.ts`)), "no URL twin");
+  }
+  assert.throws(() => assert.equal(crypto.createHash("sha256").update(sources.create + "changed").digest("hex"), projectCoreRoutes.create.hash), "pin mutation control");
+  console.log("project core verification passed");
+}
 const slice3Routes = {
   "recoverTask": {
     "module": "recover",
@@ -441,9 +564,9 @@ function commit() {
   assert.throws(() => assert.ok(allowed.has("src/lib/mcp/auth.ts")), "scope control rejects a sibling file");
   console.log(`local commit verified: ${git("rev-parse", "HEAD")}; ${productionLines} production/doc changed lines; only GATES.md is local`);
 }
-module.exports = { slice5bRoutes, slice5bLegacySources, slice5Routes, slice5LegacySources, attachmentRoutes, attachmentLegacySources, legacyHashes, lifecycleHashes, lifecycleLegacySources, slice3Routes, slice3LegacySources, inventory, callerFiles };
+module.exports = { projectCoreRoutes, projectCoreLegacySources, slice5bRoutes, slice5bLegacySources, slice5Routes, slice5LegacySources, attachmentRoutes, attachmentLegacySources, legacyHashes, lifecycleHashes, lifecycleLegacySources, slice3Routes, slice3LegacySources, inventory, callerFiles };
 if (require.main === module) {
-  const commands = { attachments, plan, flag, regression, quality, commit, lifecycle, slice3, slice5, slice5b };
+  const commands = { "project-core": projectCore, attachments, plan, flag, regression, quality, commit, lifecycle, slice3, slice5, slice5b };
   assert.ok(commands[process.argv[2]], "known verification mode required");
   Promise.resolve(commands[process.argv[2]]()).catch((error) => { console.error(error); process.exitCode = 1; });
 }

@@ -18,6 +18,7 @@ function load(file, stubs = {}) {
   mod.filename = filename;
   mod.require = request => {
     if (request === "@/lib/mcp/routeWrapper") return require("./helpers/mcp-route-wrapper.cjs").loadRouteWrapper(stubs);
+    if (request === "@/lib/api/task-writes/route") return { withTaskWriteFlag: (handler) => handler };
     if (Object.hasOwn(stubs, request)) return stubs[request];
     if (["@prisma/client", "react", "react/jsx-runtime"].includes(request)) return require(request);
     throw new Error(`Unexpected import ${request} in ${file}`);

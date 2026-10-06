@@ -19,6 +19,7 @@ function loadRoute(verifySession) {
   const controllerCalls = [];
   const loadedModule = { exports: {} };
   const stubs = {
+    "@/lib/api/task-writes/route": { withTaskWriteFlag: (handler) => handler },
     "@/lib/auth/session": {
       SESSION_COOKIE: "ht_session",
       verifySession,
