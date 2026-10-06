@@ -1,22 +1,17 @@
-import { withTaskWriteFlag } from "@/lib/api/task-writes/route";
-import { NextApiHandler, NextApiRequest, NextApiResponse } from "next";
+import { NextResponse } from "next/server";
+import { z } from "zod";
+import { taskWriteRoute, type TaskWriteRequest, type TaskWriteRoute } from "./route";
+import { taskReadQuery } from "./read-query";
 import prisma from "@/lib/prisma";
-import { getSessionUser } from "@/lib/auth/getSessionUser";
 
-const handler: NextApiHandler = async (
-  req: NextApiRequest,
-  res: NextApiResponse
-) => {
-  if (req.method === "GET") {
-    const session = await getSessionUser(
-      new Headers(req.headers as Record<string, string>)
-    );
-    if (!session) {
-      return res.status(401).json({ message: "Unauthorized" });
-    }
+const route = taskWriteRoute({
+  schema: z.custom<NonNullable<TaskWriteRequest["query"]>>(() => true),
+  validationMessage: "Missing required field",
+  allowNullBody: true,
+  operation: async (query, session) => {
     const userId = session.userId;
     try {
-      const { searchQuery } = req.query;
+      const { searchQuery } = query;
 
       const projectIds = await fetchidlist(userId);
 
@@ -56,7 +51,7 @@ const handler: NextApiHandler = async (
                   userId: userId,
                   commentId: null
                 }
-              }, 
+              },
             },
             orderBy: {
               createdAt: "desc",
@@ -90,19 +85,17 @@ const handler: NextApiHandler = async (
             },
           });
 
-      return res.status(200).json(tasks);
+      return NextResponse.json(tasks, { status: 200 });
     } catch (error) {
       console.log("🚀 ~ error:", error);
-      return res.status(200).json([]);
+      return NextResponse.json([], { status: 200 });
     }
-  } else {
-    return res.status(405).json({ message: "Method not allowed" });
-  }
-};
+  },
+});
 
-export default withTaskWriteFlag(handler, "GET", async () =>
-  (await import("@/lib/api/task-writes/unscheduled-read")).GET,
-);
+export const GET: TaskWriteRoute = async (request, session) => {
+  return route({ headers: request.headers, json: async () => taskReadQuery(request) }, session);
+};
 
 const fetchidlist = async (id: number) => {
   try {
