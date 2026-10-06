@@ -12,6 +12,10 @@ import { History, RotateCcw, X } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import toast from "react-hot-toast";
 
+import { useFlag } from "@/hooks/useFlag";
+import { HTPR_6925_TYPED_API_CLIENT_FLAG } from "@/lib/flags/keys";
+import { getDescriptionVersions } from "@/lib/api/typedClient";
+
 type DescriptionVersion = {
   id: number;
   version: number;
@@ -39,6 +43,7 @@ const DescriptionPreview = ({ content }: { content: string }) => (
 );
 
 const TaskDescriptionHistoryModal = ({ taskId, onClose, onRestored }: Props) => {
+  const typedClient = useFlag(HTPR_6925_TYPED_API_CLIENT_FLAG);
   const [data, setData] = useState<VersionResponse | null>(null);
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
@@ -52,10 +57,16 @@ const TaskDescriptionHistoryModal = ({ taskId, onClose, onRestored }: Props) => 
     setLoading(true);
     const loadVersions = async () => {
       try {
-        const { data: response } = await axios.get<VersionResponse>(
-          taskDescriptionVersionsRoute(String(taskId)),
-          { signal: controller.signal },
-        );
+        let response: VersionResponse;
+        if (typedClient) {
+          response = (await getDescriptionVersions(taskId, controller.signal)).data;
+        } else {
+          const { data } = await axios.get<VersionResponse>(
+            taskDescriptionVersionsRoute(String(taskId)),
+            { signal: controller.signal },
+          );
+          response = data;
+        }
         if (controller.signal.aborted) return;
         setData(response);
         setSelectedId(response.versions[0]?.id ?? null);
@@ -67,7 +78,7 @@ const TaskDescriptionHistoryModal = ({ taskId, onClose, onRestored }: Props) => 
     };
     void loadVersions();
     return () => controller.abort();
-  }, [taskId]);
+  }, [taskId, typedClient]);
 
   const selected = useMemo(
     () => data?.versions.find((version) => version.id === selectedId) ?? null,

@@ -42,3 +42,44 @@ void getBoardMemory<{ arbitrary: true }>(15);
 // @ts-expect-error serialized skill dates are strings
 const invalidDate: z.output<typeof skillResponseSchema>["createdAt"] = new Date();
 void invalidDate;
+
+import type { Cycle, DocVersion, Task } from "@prisma/client";
+import { getDescriptionVersions, getTaskCycle, getBoardDetail, descriptionVersionsRoute, taskCycleRoute, boardDetailRoute, compactTaskRelationsRoute } from "@/lib/api/typedClient";
+import { descriptionVersionsResponseSchema, taskCycleResponseSchema, boardDetailResponseSchema, cycleResponseSchema, taskRelationSchema } from "@/lib/api/contracts/taskReads";
+
+type JsonCycle = Omit<Cycle, "startDate" | "endDate" | "rolledOverAt" | "createdAt"> & { startDate: string; endDate: string; rolledOverAt: string | null };
+type JsonVersion = Pick<DocVersion, "id" | "version" | "contentText" | "authorId" | "agentId"> & { createdAt: string };
+type RelationFields = "id" | "uniqueIndex" | "ticketNumber" | "title" | "status" | "projectId" | "sectionId";
+export type VersionsData = Assert<Equal<Awaited<ReturnType<typeof getDescriptionVersions>>["data"], z.output<typeof descriptionVersionsResponseSchema>>>;
+export type CycleData = Assert<Equal<Awaited<ReturnType<typeof getTaskCycle>>, z.output<typeof taskCycleResponseSchema>>>;
+export type BoardData = Assert<Equal<Awaited<ReturnType<typeof getBoardDetail>>["data"], z.output<typeof boardDetailResponseSchema>>>;
+export type CycleProducerParity = Assert<Equal<Pick<z.output<typeof cycleResponseSchema>, keyof JsonCycle>, Pick<JsonCycle, keyof JsonCycle>>>;
+export type VersionProducerParity = Assert<Equal<Pick<z.output<typeof descriptionVersionsResponseSchema>["versions"][number], keyof JsonVersion>, Pick<JsonVersion, keyof JsonVersion>>>;
+export type RelationProducerParity = Assert<Equal<Pick<z.output<typeof taskRelationSchema>, RelationFields>, Pick<Task, RelationFields>>>;
+export type VersionsMethod = Assert<Equal<typeof descriptionVersionsRoute.method, "GET">>;
+export type BoardMethod = Assert<Equal<typeof boardDetailRoute.method, "POST">>;
+export type CycleQueryIsInferred = Assert<Equal<Parameters<typeof getTaskCycle>[0], z.input<typeof taskCycleRoute.query>>>;
+export type BoardBodyIsInferred = Assert<Equal<Parameters<typeof getBoardDetail>[0], z.input<typeof boardDetailRoute.body>>>;
+
+void getDescriptionVersions(12, new AbortController().signal);
+void getTaskCycle({ taskId: 12, cursor: 20, query: "Cycle 2" });
+void getBoardDetail({ projectId: 15, userId: 985 });
+// @ts-expect-error numeric task ID only
+void getDescriptionVersions("12");
+// @ts-expect-error task ID is required
+void getTaskCycle({ cursor: 20 });
+// @ts-expect-error cursor is numeric
+void getTaskCycle({ taskId: 12, cursor: "20" });
+// @ts-expect-error preserve existing board request body
+void getBoardDetail({ projectId: 15 });
+// @ts-expect-error no caller-selected response
+void getDescriptionVersions<{ arbitrary: true }>(12);
+// @ts-expect-error no caller-selected response
+void getTaskCycle<{ arbitrary: true }>({ taskId: 12 });
+// @ts-expect-error no caller-selected response
+void getBoardDetail<{ arbitrary: true }>({ projectId: 15, userId: 985 });
+// @ts-expect-error route path params are inferred
+void descriptionVersionsRoute.path({ taskId: "12" });
+// @ts-expect-error negotiated relation query cannot use a different opt-in
+const badCompat: z.input<typeof compactTaskRelationsRoute.query> = { compat: "other" };
+void badCompat;

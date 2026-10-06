@@ -1,0 +1,33 @@
+# Typed client slices 2 and 3
+
+Ticket: https://app.hypertask.ai/detail/project-15/6967
+
+All adoption uses the existing `htpr-6925-typed-api-client` switch. Its registry and stored modes are unchanged. Slice 1 settings readers are unchanged.
+
+## Route convention
+
+`src/lib/api/typedClient.ts` exports small read descriptors: method, path parameters and path builder, query and body schemas, success schema, and status-indexed error schemas. `z.undefined()` means no input in that location. Caller inputs use `z.input`; successful wire answers use `z.output`. The descriptors describe existing routes, not a new server wrapper or response envelope.
+
+Concrete readers retain the original transport: Axios for description history and board detail, native fetch for cycles. They forward AbortSignal, make one request, and add `X-Hypertask-Client: htpr-6925`. Schema drift warns and returns raw parsed data; HTTP errors keep the existing rejection semantics. Error schemas document the wire answers without rewriting exceptions. Dates remain strings and loose objects preserve additional fields.
+
+## Adopted reads
+
+- GET `/api/tasks/{taskId}/description-versions`: existing history modal, including its unchanged restore mutation.
+- GET `/api/tasks/cycle`: existing cycle picker, including search, cancellation and unchanged POST assignment.
+- POST `/api/projects/boardTasks`: existing board hydration and warming hooks. This is a read despite using POST. The early bootstrap and React Query cache still win when populated; no second request is added to validate already-loaded data. Nested board parent/subtask projections are validated with the board answer.
+
+The board schema deliberately describes a wire projection, not the broader hydrated `IProject` and `ITask` interfaces. Unknown producer fields remain intact for existing hydration. No new model or parallel cache is introduced.
+
+## Contract-only read and prerequisite correction
+
+POST `/api/tasks/getAll?compat=htpr-6924` has a descriptor and compact parent/subtask contract only. There is no frontend caller for `/api/tasks/getAll` in this checkout. Adding one would duplicate board loading and negotiate another server flag. The compact schema also accepts the additional fields in the unnegotiated legacy shape.
+
+The request named PR 1113 as new App Router board/relations routes. Actual merged PR 1113 adds shared entry checks; PR 1119 negotiates retirement of legacy project detail toward `/api/projects/boardTasks` and adds compact relations to the Pages task reader. This slice uses those shipped producers, not nonexistent App Router replacements. AI chat paging, writes and OpenAPI remain out of scope.
+
+Local click-through exposed a prerequisite cycle-entry crash: the label supplied `null` shortcut keys to a tooltip expecting an array. Its value is now the empty array. This one-line crash repair is needed to open the picker under either switch state and does not require another feature flag.
+
+## Verification
+
+`tests/fixtures/typed-api-task-reads.json` contains real HTTP responses captured from the disposable local build as account 985, using only local seeded parent/subtask, history and cycle data. It includes unauthenticated and denied responses. Focused tests cover these fixtures, schema-negative controls, transport/error/cancellation parity, semantic producer types and invalid callers, ON/OFF/unresolved adoption, bootstrap preservation, and mutations remaining legacy.
+
+Browser proof and the gate ledger are in `~/.local/state/vcc-evidence/HTPR-6967/slice23/`; `~/.local/state/vcc-evidence/HTPR-6967/premerge.md` binds the tested source to the final commit. OFF is a browser-only evaluated-flag override, including bootstrap flags, not a stored flag-mode change. Live verification still belongs to the later ship session.

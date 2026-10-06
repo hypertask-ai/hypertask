@@ -12,7 +12,7 @@ test("semantic compiler proves response types, producer parity and invalid calle
   assert.deepEqual(parsed.errors, []);
   const options = { ...parsed.options, noEmit: true, incremental: false };
   const program = ts.createProgram([fixture], options);
-  const files = [fixture, path.join(root, "src/lib/api/typedClient.ts"), path.join(root, "src/lib/api/contracts/settingsReads.ts")];
+  const files = [fixture, path.join(root, "src/lib/api/typedClient.ts"), path.join(root, "src/lib/api/contracts/settingsReads.ts"), path.join(root, "src/lib/api/contracts/taskReads.ts")];
   const diagnostics = [...program.getOptionsDiagnostics(), ...program.getGlobalDiagnostics(), ...files.flatMap((file) => {
     const source = program.getSourceFile(file);
     assert.ok(source, file);
@@ -26,10 +26,12 @@ test("semantic compiler proves response types, producer parity and invalid calle
   host.readFile = (file) => {
     const source = readFile(file);
     if (file === path.join(root, "src/lib/api/contracts/settingsReads.ts")) return source.replaceAll("enabled: z.boolean()", "enabled: z.string()");
+    if (file === path.join(root, "src/lib/api/contracts/taskReads.ts")) return source.replaceAll("startDate: z.string()", "startDate: z.number()");
     return file === fixture ? `${source}\nconst semanticNegativeControl: boolean = 123;\nvoid semanticNegativeControl;\n` : source;
   };
   const negative = ts.createProgram([fixture], options, host);
   const negativeDiagnostics = negative.getSemanticDiagnostics(negative.getSourceFile(fixture));
   assert.ok(negativeDiagnostics.some(({ code }) => code === 2322), "semantic checker must catch an actual incompatible assignment");
   assert.ok(negativeDiagnostics.some(({ code }) => code === 2344), "producer parity must reject intentional response contract drift");
+  assert.ok(negativeDiagnostics.some((diagnostic) => diagnostic.code === 2344 && diagnostic.file.text.split("\n")[diagnostic.file.getLineAndCharacterOfPosition(diagnostic.start).line].includes("CycleProducerParity")), "cycle producer parity must reject a changed wire date type");
 });

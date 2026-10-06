@@ -406,7 +406,7 @@ const TaskInfo = (props: ITaskInfoContainer) => {
             left={0}
             bottom={-40}
             tooltipText="Set cycle"
-            KeyCombination={null}
+            KeyCombination={[]}
           />
           <TaskInfoValue
             onClick={() => setShowCyclePicker(true)}

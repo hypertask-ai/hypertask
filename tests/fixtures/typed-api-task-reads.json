@@ -1,0 +1,412 @@
+{
+  "source": "Disposable local PR build, account 985; no production data",
+  "projectId": 1,
+  "taskId": 1,
+  "versions": {
+    "current": {
+      "contentText": "This seeded ticket must open from its board card."
+    },
+    "hasMore": false,
+    "versions": [
+      {
+        "id": 1,
+        "version": 1,
+        "contentText": "Earlier local description",
+        "authorId": 985,
+        "agentId": null,
+        "createdAt": "2026-10-06T12:28:13.853Z",
+        "actor": {
+          "displayName": "Browser smoke user",
+          "type": "user"
+        }
+      }
+    ]
+  },
+  "cycle": {
+    "enabled": true,
+    "assignedCycle": {
+      "id": 1,
+      "projectId": 1,
+      "number": 1,
+      "startDate": "2026-10-05T00:00:00.000Z",
+      "endDate": "2026-10-19T00:00:00.000Z",
+      "rolledOverAt": null,
+      "createdAt": "2026-10-06T12:28:13.791Z"
+    },
+    "cycles": [
+      {
+        "id": 2,
+        "projectId": 1,
+        "number": 2,
+        "startDate": "2026-10-19T00:00:00.000Z",
+        "endDate": "2026-11-02T00:00:00.000Z",
+        "rolledOverAt": null,
+        "createdAt": "2026-10-06T12:28:13.818Z",
+        "assignable": true
+      },
+      {
+        "id": 1,
+        "projectId": 1,
+        "number": 1,
+        "startDate": "2026-10-05T00:00:00.000Z",
+        "endDate": "2026-10-19T00:00:00.000Z",
+        "rolledOverAt": null,
+        "createdAt": "2026-10-06T12:28:13.791Z",
+        "assignable": true
+      }
+    ],
+    "nextCursor": null
+  },
+  "board": {
+    "project": {
+      "id": 1,
+      "name": "browser-smoke-board-1382090-1-d81886b5-d517-4624-8794-1dd4ff816ceb",
+      "title": "Browser smoke board",
+      "ownerId": 985,
+      "createdAt": "2026-10-06T12:25:49.828Z",
+      "status": "Normal",
+      "googleAccountId": "0664503b-48c3-4551-b3cc-012d6a694a74",
+      "teamId": "aa67bb84-87c0-4c7c-bce6-6020d992c869",
+      "sorting_mode": "Priority",
+      "uniqueIdentifier": "BOARD",
+      "timeTrackingEnabled": false,
+      "showTimeTotals": false,
+      "stalenessEnabled": false,
+      "staleWarnDays": null,
+      "staleHotDays": null,
+      "staleNudgeEnabled": false,
+      "autoArchiveAfterDays": null,
+      "cyclesEnabled": true,
+      "_count": {
+        "section": 0
+      },
+      "section": [
+        {
+          "id": 1,
+          "section_title": "To do",
+          "projectId": 1,
+          "visibility": true,
+          "deleted": false,
+          "ranking": "A0100",
+          "isDone": false,
+          "autoAssignUserId": null,
+          "autoAssignAgentId": null
+        },
+        {
+          "id": 2,
+          "section_title": "Done",
+          "projectId": 1,
+          "visibility": true,
+          "deleted": false,
+          "ranking": "A0200",
+          "isDone": true,
+          "autoAssignUserId": null,
+          "autoAssignAgentId": null
+        }
+      ],
+      "sections": [
+        "To do",
+        "Done"
+      ],
+      "targetDate": null,
+      "members": [
+        {
+          "id": 1,
+          "projectId": 1,
+          "userId": 985,
+          "agentId": null,
+          "status": "Accepted",
+          "role": "Member",
+          "invitedAt": null,
+          "acceptedAt": null,
+          "user": {
+            "id": 985,
+            "displayName": "Browser smoke user",
+            "photoURL": "https://files.hypertask.app/tasks/attachments/1757584422625image.png",
+            "email": "valentin@hypertask.ai"
+          },
+          "agent": null
+        }
+      ],
+      "owner": {
+        "id": 985,
+        "displayName": "Browser smoke user",
+        "photoURL": "https://files.hypertask.app/tasks/attachments/1757584422625image.png",
+        "email": "valentin@hypertask.ai"
+      },
+      "cycles": [
+        {
+          "id": 1,
+          "projectId": 1,
+          "number": 1,
+          "startDate": "2026-10-05T00:00:00.000Z",
+          "endDate": "2026-10-19T00:00:00.000Z",
+          "rolledOverAt": null,
+          "createdAt": "2026-10-06T12:28:13.791Z"
+        },
+        {
+          "id": 2,
+          "projectId": 1,
+          "number": 2,
+          "startDate": "2026-10-19T00:00:00.000Z",
+          "endDate": "2026-11-02T00:00:00.000Z",
+          "rolledOverAt": null,
+          "createdAt": "2026-10-06T12:28:13.818Z"
+        }
+      ],
+      "team": {
+        "id": "aa67bb84-87c0-4c7c-bce6-6020d992c869",
+        "title": "Browser smoke",
+        "activeSubscriptionPlanId": null,
+        "compedUntil": null,
+        "compedPlan": "Pro",
+        "subscriptionPlan": [],
+        "byokApiKeys": [],
+        "totalSeats": 1,
+        "googleAccountId": "0664503b-48c3-4551-b3cc-012d6a694a74",
+        "stripe_customer_id": null,
+        "allowedEmailDomains": [],
+        "googleAccount": {
+          "userId": 985
+        },
+        "team_activity": {
+          "hasCompletedTrial": false
+        }
+      },
+      "project_view": null,
+      "ai_custom_instructions": []
+    },
+    "tasks": [
+      {
+        "id": 1,
+        "uniqueIndex": 1,
+        "ticketNumber": "BOARD-1",
+        "ranking": "A0100",
+        "section": "To do",
+        "title": "Browser smoke board fixture",
+        "projectId": 1,
+        "cycleId": 1,
+        "status": "Normal",
+        "userId": 985,
+        "createdAt": "2026-10-06T12:25:49.864Z",
+        "sectionChangedAt": "2026-10-06T12:25:49.864Z",
+        "lastCommentAt": null,
+        "waitingOnUserId": null,
+        "waitingOnSetById": null,
+        "waitingOnSetAt": null,
+        "dueDate": null,
+        "startDate": null,
+        "recurrence": null,
+        "riskLevel": null,
+        "acceptanceCriteria": null,
+        "verifyCommand": null,
+        "updatedAt": "2026-10-06T12:25:49.849Z",
+        "totalComments": 0,
+        "sectionId": 1,
+        "descriptionId": null,
+        "parentTaskId": null,
+        "updatedByUserIds": [],
+        "agentId": null,
+        "agentTaskCreatedPendingAt": null,
+        "agentTaskCreatedReadyAt": null,
+        "agentTaskCreatedEmittedAt": null,
+        "_count": {
+          "notifications": 0,
+          "relatedFromTasks": 0,
+          "relatedToTasks": 0
+        },
+        "assignees": [],
+        "taskLabels": [],
+        "notifications": [],
+        "priority": null,
+        "estimate": null,
+        "subTasks": [
+          {
+            "id": 3,
+            "uniqueIndex": 2,
+            "ticketNumber": "WEB-2",
+            "title": "Typed client local subtask",
+            "status": "Normal",
+            "projectId": 1,
+            "sectionId": 1
+          }
+        ],
+        "parentTask": null,
+        "savedContent": [],
+        "description_": {
+          "content": "<p>This seeded ticket must open from its board card.</p>"
+        },
+        "customFieldValues": [],
+        "blockingTasks": [],
+        "waitingOnUser": null
+      },
+      {
+        "id": 3,
+        "uniqueIndex": 2,
+        "ticketNumber": "WEB-2",
+        "ranking": "A0200",
+        "section": "To do",
+        "title": "Typed client local subtask",
+        "projectId": 1,
+        "cycleId": null,
+        "status": "Normal",
+        "userId": 985,
+        "createdAt": "2026-10-06T12:28:13.875Z",
+        "sectionChangedAt": "2026-10-06T12:28:13.875Z",
+        "lastCommentAt": null,
+        "waitingOnUserId": null,
+        "waitingOnSetById": null,
+        "waitingOnSetAt": null,
+        "dueDate": null,
+        "startDate": null,
+        "recurrence": null,
+        "riskLevel": null,
+        "acceptanceCriteria": null,
+        "verifyCommand": null,
+        "updatedAt": "2026-10-06T12:28:13.858Z",
+        "totalComments": 0,
+        "sectionId": 1,
+        "descriptionId": null,
+        "parentTaskId": 1,
+        "updatedByUserIds": [],
+        "agentId": null,
+        "agentTaskCreatedPendingAt": null,
+        "agentTaskCreatedReadyAt": null,
+        "agentTaskCreatedEmittedAt": null,
+        "_count": {
+          "notifications": 0,
+          "relatedFromTasks": 0,
+          "relatedToTasks": 0
+        },
+        "assignees": [],
+        "taskLabels": [],
+        "notifications": [],
+        "priority": null,
+        "estimate": null,
+        "subTasks": [],
+        "parentTask": {
+          "id": 1,
+          "sectionId": 1,
+          "ticketNumber": "BOARD-1",
+          "title": "Browser smoke board fixture"
+        },
+        "savedContent": [],
+        "description_": {
+          "content": "<p>Local subtask description.</p>"
+        },
+        "customFieldValues": [],
+        "blockingTasks": [],
+        "waitingOnUser": null
+      }
+    ],
+    "allViews": []
+  },
+  "relations": [
+    {
+      "id": 1,
+      "title": "Browser smoke board fixture",
+      "uniqueIndex": 1,
+      "ranking": "A0100",
+      "userId": 985,
+      "projectId": 1,
+      "section": "To do",
+      "sectionId": 1,
+      "createdAt": "2026-10-06T12:25:49.864Z",
+      "sectionChangedAt": "2026-10-06T12:25:49.864Z",
+      "lastCommentAt": null,
+      "assignees": [],
+      "comments": [
+        {
+          "id": 1,
+          "notifications": []
+        },
+        {
+          "id": 2,
+          "notifications": []
+        }
+      ],
+      "subTasks": [
+        {
+          "id": 3,
+          "uniqueIndex": 2,
+          "ticketNumber": "WEB-2",
+          "title": "Typed client local subtask",
+          "status": "Normal",
+          "projectId": 1,
+          "sectionId": 1,
+          "createdAt": "2026-10-06T12:28:13.875Z"
+        }
+      ],
+      "parentTask": null
+    },
+    {
+      "id": 3,
+      "title": "Typed client local subtask",
+      "uniqueIndex": 2,
+      "ranking": "A0200",
+      "userId": 985,
+      "projectId": 1,
+      "section": "To do",
+      "sectionId": 1,
+      "createdAt": "2026-10-06T12:28:13.875Z",
+      "sectionChangedAt": "2026-10-06T12:28:13.875Z",
+      "lastCommentAt": null,
+      "assignees": [],
+      "comments": [],
+      "subTasks": [],
+      "parentTask": {
+        "id": 1,
+        "uniqueIndex": 1,
+        "ticketNumber": "BOARD-1",
+        "title": "Browser smoke board fixture",
+        "status": "Normal",
+        "projectId": 1,
+        "sectionId": 1,
+        "subTasks": [
+          {
+            "id": 3,
+            "uniqueIndex": 2,
+            "ticketNumber": "WEB-2",
+            "title": "Typed client local subtask",
+            "status": "Normal",
+            "projectId": 1,
+            "sectionId": 1
+          }
+        ]
+      }
+    }
+  ],
+  "errors": {
+    "versions": {
+      "status": 401,
+      "body": {
+        "error": "Unauthorized"
+      }
+    },
+    "cycle": {
+      "status": 401,
+      "body": {
+        "error": "Unauthorized"
+      }
+    },
+    "board": {
+      "status": 401,
+      "body": {
+        "error": "Unauthorized",
+        "code": "SESSION_REQUIRED"
+      }
+    },
+    "relations": {
+      "status": 401,
+      "body": {
+        "message": "Unauthorized"
+      }
+    },
+    "boardDenied": {
+      "status": 403,
+      "body": {
+        "message": "No access to this board"
+      }
+    }
+  }
+}
